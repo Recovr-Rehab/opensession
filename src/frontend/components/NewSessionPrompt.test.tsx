@@ -25,6 +25,7 @@ function field(overrides: Partial<Parameters<typeof NewSessionPrompt>[0]> = {}) 
 		disabled: false,
 		images: [],
 		files: [],
+		attaching: null,
 		onRemoveImage: () => {},
 		onRemoveFile: () => {},
 		onAddAttachments: () => {},
@@ -72,6 +73,16 @@ test("attachments share the prompt's scroller", () => {
 
 	expect(html).toContain('aria-label="Open image preview"');
 	expect(html).toContain("notes.txt");
+});
+
+// A pasted screenshot is uploaded before it is attached, and during a slow
+// load that takes seconds. Without this row the card looks like it ignored
+// the paste, and the second paste leaves you with two of the same picture.
+test("a file still being staged says so", () => {
+	const { html } = field({ attaching: "Attaching 1 image…" });
+
+	expect(html).toContain("Attaching 1 image…");
+	expect(html).toContain('role="status"');
 });
 
 test("a busy create disables the field", () => {

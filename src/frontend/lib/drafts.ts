@@ -33,6 +33,11 @@ export interface ComposerDraft {
   pastedTexts: PastedTextAttachment[];
 }
 
+/** The one draft the new-session palette keeps, wherever it is rendered: the
+ *  overlay and the inline card are the same composer, so a prompt typed into
+ *  one is already in the other. */
+export const NEW_SESSION_DRAFT_KEY = "new-session";
+
 const EMPTY: ComposerDraft = { text: "", images: [], files: [], pastedTexts: [] };
 const drafts = new Map<string, ComposerDraft>();
 /** Text last confirmed by the server. Persisted beside each local draft so a
@@ -83,12 +88,30 @@ function persistNow(key: string) {
       sessionStorage.removeItem(SS_PREFIX + key);
       return;
     }
-    const json = JSON.stringify({
+    const serialize = (draft: ComposerDraft) =>
+      JSON.stringify({
+        ...draft,
+        ...(syncedText.has(key) ? { syncedText: syncedText.get(key) } : {}),
+      });
+    const json = serialize(d);
+    if (json.length <= MAX_PERSIST_BYTES) {
+      sessionStorage.setItem(SS_PREFIX + key, json);
+      return;
+    }
+    // Over the cap, so something has to give — but never the whole draft.
+    // An attachment normally rides as a ~90-character `/media?path=` ref;
+    // only the inline fallback for an image the server refused (lib/images.ts)
+    // is measured in megabytes, so that is what gets left behind. A reload
+    // then loses those images and keeps everything written, rather than
+    // silently dropping the text along with them.
+    const lean = serialize({
       ...d,
-      ...(syncedText.has(key) ? { syncedText: syncedText.get(key) } : {}),
+      images: d.images.filter((src) => !src.startsWith("data:")),
+      files: d.files.filter((file) => !file.dataUrl),
     });
-    if (json.length > MAX_PERSIST_BYTES) sessionStorage.removeItem(SS_PREFIX + key);
-    else sessionStorage.setItem(SS_PREFIX + key, json);
+    if (lean.length <= MAX_PERSIST_BYTES)
+      sessionStorage.setItem(SS_PREFIX + key, lean);
+    else sessionStorage.removeItem(SS_PREFIX + key);
   } catch {
     // Quota or private-mode failure — the in-memory copy still holds the draft.
   }
@@ -153,9 +176,18 @@ function writeLocal(
   next: ComposerDraft,
   opts?: { notifyText?: boolean },
 ): void {
-  const had = !isEmpty(loadDraft(key));
-  const previousText = loadDraft(key).text;
+  const previous = loadDraft(key);
+  const had = !isEmpty(previous);
+  const previousText = previous.text;
   const has = !isEmpty(next);
+  // An attachment can land in the store without passing through the composer
+  // that staged it: the upload outlives the composer (lib/attachments.ts), so
+  // an open one has to hear about it or it goes on showing the draft as it was
+  // when the paste happened. Rare by nature, unlike a keystroke, so this costs
+  // the sidebar nothing.
+  const attachmentsChanged =
+    previous.images.length !== next.images.length ||
+    previous.files.length !== next.files.length;
   if (has) {
     drafts.set(key, next);
     schedulePersist(key);
@@ -171,7 +203,12 @@ function writeLocal(
       sessionStorage.removeItem(SS_PREFIX + key);
     } catch {}
   }
-  if (had !== has || (opts?.notifyText && previousText !== next.text)) emit();
+  if (
+    had !== has ||
+    attachmentsChanged ||
+    (opts?.notifyText && previousText !== next.text)
+  )
+    emit();
 }
 
 /** Merge a partial update into the stored draft; an all-empty result deletes it. */

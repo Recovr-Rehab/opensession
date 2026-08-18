@@ -7,7 +7,7 @@ import React, {
 	useState,
 } from "react";
 import { fetchFileMentions, fetchSkillMentions } from "../lib/api";
-import { saveDraft } from "../lib/drafts";
+import { saveDraft, NEW_SESSION_DRAFT_KEY as DRAFT_KEY } from "../lib/drafts";
 import { imageFilesFromPaste, type FileAttachment } from "../lib/images";
 import { peopleMentionMatches } from "../lib/people";
 import { insertPastedSessionId } from "../lib/session-url";
@@ -24,6 +24,7 @@ import { useFileMentions } from "./useFileMentions";
 import { ImageThumbs } from "./ImageThumbs";
 import { FileChips } from "./FileChips";
 import { cn } from "../ui/cn";
+import { Spinner } from "../ui/spinner";
 
 /** One scroll surface for the prompt and its attachments. Keeping the image in
  *  this flow means it travels with the text instead of pinning over it.
@@ -78,6 +79,10 @@ interface Props {
 	disabled: boolean;
 	images: string[];
 	files: FileAttachment[];
+	/** What is still being written to disk, or null when nothing is. A pasted
+	 *  screenshot is not attached until its upload lands, and during a slow
+	 *  load that is seconds of a card that looks like it ignored the paste. */
+	attaching: string | null;
 	onRemoveImage: (index: number) => void;
 	onRemoveFile: (index: number) => void;
 	onAddAttachments: (picked: FileList | File[]) => void;
@@ -119,6 +124,7 @@ export function NewSessionPrompt({
 	disabled,
 	images,
 	files,
+	attaching,
 	onRemoveImage,
 	onRemoveFile,
 	onAddAttachments,
@@ -158,8 +164,13 @@ export function NewSessionPrompt({
 	//
 	// A pending write always reads from this ref, never from a captured value:
 	// a flush that landed a keystroke behind would be worse than no flush.
-	const draft = useRef({ text, images, files });
-	draft.current = { text, images, files };
+	//
+	// The text is all this writes. Attachments are staged asynchronously and
+	// commit to the store themselves (lib/attachments.ts), because that upload
+	// outlives the palette; a second writer here would put the pre-upload array
+	// back over a completion that landed between the last render and the flush.
+	const draft = useRef({ text });
+	draft.current = { text };
 	// Non-null exactly while the store is behind the field, which is what makes
 	// "nothing pending" a safe reason for a flush to do nothing.
 	const draftTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -167,7 +178,7 @@ export function NewSessionPrompt({
 		if (draftTimer.current == null) return;
 		clearTimeout(draftTimer.current);
 		draftTimer.current = null;
-		saveDraft("new-session", draft.current);
+		saveDraft(DRAFT_KEY, draft.current);
 	}, []);
 	const dropPendingDraftWrite = useCallback(() => {
 		if (draftTimer.current == null) return;
@@ -179,9 +190,9 @@ export function NewSessionPrompt({
 		if (draftTimer.current != null) clearTimeout(draftTimer.current);
 		draftTimer.current = setTimeout(() => {
 			draftTimer.current = null;
-			saveDraft("new-session", draft.current);
+			saveDraft(DRAFT_KEY, draft.current);
 		}, DRAFT_MS);
-	}, [text, images, files]);
+	}, [text]);
 
 	// Every exit that is not a create: the palette being dismissed or navigated
 	// away from (the cleanup), the tab being closed, reloaded or backgrounded.
@@ -464,6 +475,15 @@ export function NewSessionPrompt({
 			</div>
 			<ImageThumbs images={images} onRemove={onRemoveImage} disabled={disabled} />
 			<FileChips files={files} onRemove={onRemoveFile} disabled={disabled} />
+			{attaching && (
+				<div
+					className="mb-2 flex items-center gap-2 text-label text-dim"
+					role="status"
+				>
+					<Spinner />
+					{attaching}
+				</div>
+			)}
 		</div>
 	);
 }

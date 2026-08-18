@@ -1,8 +1,29 @@
-import React, { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect, useRef, useCallback } from "react";
 import { fetchWorktrees, fetchModels, fetchConnections, fetchSandboxStatus, requestSandboxPrewarm, suggestBranch, fetchProviderAccounts, fetchRepos, createWorkspaceApi, updateWorkspaceApi, ApiError, type ProviderAccountOption, type ModelOption, type SandboxStatusInfo } from "../lib/api";
 import { getCurrentUser } from "./UserPicker";
-import { splitAttachments, type FileAttachment } from "../lib/images";
-import { loadDraft, clearDraft } from "../lib/drafts";
+import { type FileAttachment } from "../lib/images";
+import {
+  loadDraft,
+  saveDraft,
+  clearDraft,
+  onDraftsChanged,
+  NEW_SESSION_DRAFT_KEY as DRAFT_KEY,
+} from "../lib/drafts";
+import {
+  addStaging,
+  attachToDraft,
+  attachingLabel,
+  countStaging,
+  dropStagingAttachments,
+  isStaging,
+  NOTHING_STAGING,
+  removeDraftFile,
+  removeDraftImage,
+  sameFiles,
+  sameImages,
+  subtractStaging,
+  type StagingCount,
+} from "../lib/attachments";
 import { getDefaultModelPref } from "../lib/default-model-pref";
 import { baseModelId, modelEngine } from "./ModelEffortSelect";
 import { getSendKeyPref, onSendKeyChanged } from "../lib/send-key-pref";
@@ -467,7 +488,7 @@ export function NewSession({ onBack, inline, focusSeq, send, addHandler, connect
   // button's gate; and the text once typing stops, which is what the branch
   // name is suggested from.
   const [initialPrompt] = useState(
-    () => prefillPrompt || prefill.prompt || loadDraft("new-session").text,
+    () => prefillPrompt || prefill.prompt || loadDraft(DRAFT_KEY).text,
   );
   const promptText = useRef(initialPrompt);
   const promptHandle = useRef<NewSessionPromptHandle | null>(null);
@@ -480,8 +501,23 @@ export function NewSession({ onBack, inline, focusSeq, send, addHandler, connect
   // auto-suggesting so we never clobber what they typed. A prefilled branch
   // (deep link) counts as already-owned.
   const [branchEdited, setBranchEdited] = useState(!!prefill.branch);
-  const [images, setImages] = useState<string[]>(() => loadDraft("new-session").images);
-  const [files, setFiles] = useState<FileAttachment[]>(() => loadDraft("new-session").files);
+  // Attachments live in the draft store, and this is its mirror. Staging a
+  // file outlives the palette (lib/attachments.ts), so the store is what an
+  // upload writes to and what a reopened palette reads back; keeping a second
+  // copy authoritative here is what used to lose a screenshot pasted just
+  // before the card closed.
+  const [images, setImages] = useState<string[]>(() => loadDraft(DRAFT_KEY).images);
+  const [files, setFiles] = useState<FileAttachment[]>(() => loadDraft(DRAFT_KEY).files);
+  const [staging, setStaging] = useState<StagingCount>(NOTHING_STAGING);
+  const adoptDraftAttachments = useCallback(() => {
+    const stored = loadDraft(DRAFT_KEY);
+    setImages((prev) => (sameImages(prev, stored.images) ? prev : stored.images));
+    setFiles((prev) => (sameFiles(prev, stored.files) ? prev : stored.files));
+  }, []);
+  // An upload that lands while this palette is open belongs on screen even
+  // though it was staged by the instance that closed: the store fires on an
+  // attachment change for exactly this.
+  useEffect(() => onDraftsChanged(adoptDraftAttachments), [adoptDraftAttachments]);
   // One status for both completion protocols: "savingDraft" resolves through a
   // promise, "creating" waits for a WebSocket message, and "failed" carries the
   // message either of them ended on. A single boolean could not say which
@@ -779,7 +815,11 @@ export function NewSession({ onBack, inline, focusSeq, send, addHandler, connect
         // for a session that already has it (a "Create" closes the palette, and
         // the field flushes on the way out).
         promptHandle.current?.dropPendingDraftWrite();
-        clearDraft("new-session");
+        // Same reasoning for a file still on its way to disk: it belongs to
+        // the prompt that just went out, so it must not write itself back
+        // into the draft this is clearing.
+        dropStagingAttachments(DRAFT_KEY);
+        clearDraft(DRAFT_KEY);
         // "Create more" stays in the palette and resets for the next task (App
         // still navigates into the created session behind the overlay). The
         // other two close it: "Create" lets App drop us into the new session,
@@ -821,10 +861,19 @@ export function NewSession({ onBack, inline, focusSeq, send, addHandler, connect
   }, [connected, status.kind]);
 
   async function addAttachments(picked: FileList | File[]) {
-    const { images: imgs, files: fls, rejected } = await splitAttachments(picked);
-    if (imgs.length) setImages((prev) => [...prev, ...imgs]);
-    if (fls.length) setFiles((prev) => [...prev, ...fls]);
-    if (rejected.length) alert(`Couldn't attach:\n${rejected.join("\n")}`);
+    const staging = countStaging(picked);
+    setStaging((current) => addStaging(current, staging));
+    try {
+      // The staging commits to the draft store itself, so a screenshot pasted
+      // while the app is still loading survives this palette closing before
+      // its upload lands. Adopt the store rather than the result: it is the
+      // one place that has both these files and anything else that arrived.
+      const { rejected } = await attachToDraft(DRAFT_KEY, picked);
+      adoptDraftAttachments();
+      if (rejected.length) alert(`Couldn't attach:\n${rejected.join("\n")}`);
+    } finally {
+      setStaging((current) => subtractStaging(current, staging));
+    }
   }
 
   // "Save as draft" doesn't start a session at all: it parks the prompt on a
@@ -848,7 +897,11 @@ export function NewSession({ onBack, inline, focusSeq, send, addHandler, connect
       // Same as a create: the text now lives on the workspace, so the field's
       // pending write must not put it back in the palette's draft.
       promptHandle.current?.dropPendingDraftWrite();
-      clearDraft("new-session");
+      // Only the text travels: a workspace draft has nowhere to keep a file.
+      // So the attachments stay in the palette's own draft rather than being
+      // cleared with it — parking a prompt should not quietly destroy the
+      // screenshot that was attached to it.
+      saveDraft(DRAFT_KEY, { text: "" });
       setStatus({ kind: "idle" });
       window.dispatchEvent(new Event("opensession:workspaces-changed"));
       onDraftSaved?.(ws);
@@ -929,6 +982,10 @@ export function NewSession({ onBack, inline, focusSeq, send, addHandler, connect
 
   const canCreate =
     !busy &&
+    // An attachment is not attached until its upload lands, and the create
+    // reads the list as it stands. Creating a second earlier would send the
+    // prompt without the screenshot it is about, silently.
+    !isStaging(staging) &&
     // A draft is just the prompt text parked on a workspace: none of the
     // session-create gates (connection, repo, sandbox, branch) apply.
     (createAction === "draft"
@@ -1102,8 +1159,15 @@ export function NewSession({ onBack, inline, focusSeq, send, addHandler, connect
           disabled={busy}
           images={images}
           files={files}
-          onRemoveImage={(i) => setImages((p) => p.filter((_, idx) => idx !== i))}
-          onRemoveFile={(i) => setFiles((p) => p.filter((_, idx) => idx !== i))}
+          attaching={attachingLabel(staging)}
+          onRemoveImage={(i) => {
+            removeDraftImage(DRAFT_KEY, i);
+            adoptDraftAttachments();
+          }}
+          onRemoveFile={(i) => {
+            removeDraftFile(DRAFT_KEY, i);
+            adoptDraftAttachments();
+          }}
           onAddAttachments={(picked) => void addAttachments(picked)}
           sendKey={sendKey}
           canCreate={canCreate}
@@ -1324,7 +1388,9 @@ export function NewSession({ onBack, inline, focusSeq, send, addHandler, connect
                   ? "Saving…"
                   : status.kind === "creating"
                     ? "Creating…"
-                    : CREATE_LABELS[createAction]}
+                    : isStaging(staging)
+                      ? "Attaching…"
+                      : CREATE_LABELS[createAction]}
                 {/* The hint has to match the preference — a bare ↩ next to a
                     field that only creates on ⌘↩ is what made Enter look
                     broken in the first place. */}
@@ -1356,8 +1422,10 @@ export function NewSession({ onBack, inline, focusSeq, send, addHandler, connect
                 // are still worth reading, and picking one is how you change
                 // what Enter will do. A create in flight is the one thing that
                 // closes it off, and then it greys out with the main button
-                // beside it, so the pair still reads as one busy control.
-                disabled={busy}
+                // beside it, so the pair still reads as one busy control. An
+                // attachment on its way to disk holds the same pair the same
+                // way, for the second or two it takes.
+                disabled={busy || isStaging(staging)}
                 aria-haspopup="menu"
                 aria-expanded={createMenuOpen}
                 aria-label="Create options"
