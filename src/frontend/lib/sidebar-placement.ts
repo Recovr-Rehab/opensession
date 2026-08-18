@@ -54,10 +54,13 @@ export function sessionWasAutoCreated(session: {
  */
 export function rowWasAutoCreated(row: WsRow): boolean {
 	const ordinarySessions = row.sessions.filter((session) => !session.automation);
-	if (ordinarySessions.some(sessionWasAutoCreated)) return true;
+	// Once a person joins the workspace it is shared work, not machine clutter:
+	// hiding the whole row would also hide that person's sessions.
+	if (ordinarySessions.length > 0)
+		return ordinarySessions.every(sessionWasAutoCreated);
 	// An automation-only row is still an automation run even if its container
 	// happened to be minted by the machine identity.
-	if (row.sessions.length > 0 && ordinarySessions.length === 0) return false;
+	if (row.sessions.length > 0) return false;
 	return (
 		row.workspace?.createdBy.trim().toLowerCase() ===
 		AUTOMATION_MACHINE_IDENTITY

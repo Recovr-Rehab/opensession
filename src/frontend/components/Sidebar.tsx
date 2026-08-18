@@ -1637,7 +1637,7 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 								(c.startedBy || "").toLowerCase() === focus,
 						) ||
 						((r.owner === "" || focus === currentUser.toLowerCase()) &&
-							r.sessions.some((c) => getLane(c.id))))) &&
+							r.sessions.some((c) => isClaimed(c))))) &&
 			(!rowIsFeedOnly(r) || r.running || r.status === "needsinput");
 		const showAutoCreated = filter.autoCreated !== "hide";
 		const placed = placeSidebarRows(wsRows, (r) => ({

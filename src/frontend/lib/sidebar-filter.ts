@@ -106,9 +106,9 @@ export type SortBy = "updated" | "created";
 // PR rows entirely.
 export type PrsFilter = "default" | "all" | "none";
 // Workspaces an agent started for itself through the automation machine
-// identity. They sit in the ordinary lanes and say so with a robot beside the
-// name (components/sidebar/AutoCreatedMark), so this is the way to get them out
-// of the list on a day when there are more of them than you can read.
+// identity. They stay out of the list by default. When shown, they sit in the
+// ordinary lanes and say so with a robot beside the name
+// (components/sidebar/AutoCreatedMark).
 export type AutoCreatedFilter = "show" | "hide";
 // A registered project with no work in it still draws a band, so a repo you
 // just connected has somewhere to start from (see renderRepoGroups). On an
@@ -119,13 +119,14 @@ export type EmptyProjectsFilter = "show" | "hide";
 export const DEFAULT_PROJECT = DEFAULT_REPO_ID;
 export const FILTER_KEY = "opensession-sidebar-filter";
 // Bumped when the grouping's shape or its default changes. Because setFilter
-// persists the whole state, a grouping stored before the bump is ambiguous —
-// most people got it by touching Repo or Person, not by choosing it — so a
+// persists the whole state, a grouping stored before the bump is ambiguous:
+// most people got it by touching Repo or Person, not by choosing it. A
 // blob carrying the default of its day keeps its repo/person/sort but takes
 // the new default. Anything written at the current version says what it
 // means: since v3, "auto" is what an unpicked axis stores. v4 split the one
-// grouping into the `sections` / `groupBy` pair.
-export const FILTER_VERSION = 4;
+// grouping into the `sections` / `groupBy` pair. v5 hides agent-created work
+// until someone asks to see it.
+export const FILTER_VERSION = 5;
 
 const SECTIONS: Sections[] = ["inbox", "status", "none"];
 const GROUP_BYS: GroupBy[] = ["none", "repo"];
@@ -307,16 +308,16 @@ interface StoredGrouping {
  * "auto" on an axis means nobody chose it, so the default decides and keeps
  * deciding.
  *
- * v4 stores the two separately and says what it means. Older blobs stored one
- * compound value, and since setFilter persists the whole state that value may
- * only be the default of its day — so v2's "repo-status" and pre-v2's
- * "status" read as unset, and every other value decomposes into the pair it
- * stood for. v3 is exempt: it already stored "auto" for an unpicked grouping,
- * so whatever it names is a real choice.
+ * v4 and later store the two separately and say what they mean. Older blobs
+ * stored one compound value, and since setFilter persists the whole state that
+ * value may only be the default of its day. So v2's "repo-status" and
+ * pre-v2's "status" read as unset, and every other value decomposes into the
+ * pair it stood for. v3 is exempt: it already stored "auto" for an unpicked
+ * grouping, so whatever it names is a real choice.
  */
 function storedGrouping(v: any): StoredGrouping {
 	const unset: StoredGrouping = { sections: "auto", groupBy: "auto" };
-	if (v?.v === FILTER_VERSION) {
+	if (v?.v === FILTER_VERSION || v?.v === 4) {
 		// The axis shipped as `lanes` before the control was renamed, within
 		// the same version. Same values, so read either key rather than
 		// resetting the pick of anyone who set one in between.
@@ -348,7 +349,10 @@ export function readStoredFilter(): StoredFilterState {
 					: "me",
 			sort: v.sort === "created" ? "created" : "updated",
 			prs: v.prs === "all" || v.prs === "none" ? v.prs : "default",
-			autoCreated: v.autoCreated === "hide" ? "hide" : "show",
+			// v4's "show" was the default rather than a deliberate opt-in. Move
+			// every older browser to the safer default; a v5 pick says what it means.
+			autoCreated:
+				v.v === FILTER_VERSION && v.autoCreated === "show" ? "show" : "hide",
 			emptyProjects: v.emptyProjects === "hide" ? "hide" : "show",
 		};
 	} catch {
@@ -359,7 +363,7 @@ export function readStoredFilter(): StoredFilterState {
 			person: "me",
 			sort: "updated",
 			prs: "default",
-			autoCreated: "show",
+			autoCreated: "hide",
 			emptyProjects: "show",
 		};
 	}

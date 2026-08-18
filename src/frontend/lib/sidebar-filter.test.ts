@@ -55,6 +55,15 @@ describe("readStoredFilter", () => {
 		const stored = readStoredFilter();
 		expect(stored.sections).toBe("auto");
 		expect(stored.groupBy).toBe("auto");
+		expect(stored.autoCreated).toBe("hide");
+	});
+
+	test("agent-created work is only shown after a current-version opt-in", () => {
+		write({ v: 4, autoCreated: "show" });
+		expect(readStoredFilter().autoCreated).toBe("hide");
+
+		write({ v: FILTER_VERSION, autoCreated: "show" });
+		expect(readStoredFilter().autoCreated).toBe("show");
 	});
 
 	test("a pick at the current version is honoured", () => {
@@ -68,10 +77,11 @@ describe("readStoredFilter", () => {
 	// inside this same version. Same values, so a blob written in between
 	// still says what it means rather than falling back to the default.
 	test("the pre-rename key is still read", () => {
-		write({ v: FILTER_VERSION, lanes: "status", groupBy: "repo" });
+		write({ v: 4, lanes: "status", groupBy: "repo" });
 		const stored = readStoredFilter();
 		expect(stored.sections).toBe("status");
 		expect(stored.groupBy).toBe("repo");
+		expect(stored.autoCreated).toBe("hide");
 	});
 
 	test("the axes are picked independently", () => {

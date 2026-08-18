@@ -188,9 +188,9 @@ describe("sidebar row placement", () => {
 		]);
 	});
 
-	// Machine-started work has no band of its own: it lands in the ordinary
-	// lanes wearing a robot, and the `autoCreated` filter is what removes it.
-	// The lens still has to admit it, since its owner is nobody.
+	// Machine-started work has no band of its own: when someone opts in, it lands
+	// in the ordinary lanes wearing a robot. The lens still has to admit it then,
+	// since its owner is nobody.
 	test("files ordinary machine-created work into the status lanes", () => {
 		const candidate = row(
 			"native-parity",
@@ -318,5 +318,19 @@ describe("sidebar row placement", () => {
 		expect(
 			sessionWasAutoCreated(session("theirs", { createdBy: "Kent" })),
 		).toBe(false);
+	});
+
+	test("does not classify a mixed human and machine workspace as auto-created", () => {
+		const mixed = row(
+			"shared-work",
+			[
+				session("probe", { createdBy: "Automation" }),
+				session("follow-up", { createdBy: "Kent", startedBy: "Kent" }),
+			],
+			{ owner: "automation" },
+		);
+
+		expect(rowWasAutoCreated(mixed)).toBe(false);
+		expect(rowAutoCreatedInLens(mixed, "me")).toBe(false);
 	});
 });

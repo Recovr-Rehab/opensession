@@ -251,7 +251,7 @@ export function FilterPopover({
 	// that change which rows the list holds count: density is a look.
 	const advancedChanged =
 		(filter.prs === "default" ? 0 : 1) +
-		(filter.autoCreated === "show" ? 0 : 1) +
+		(filter.autoCreated === "hide" ? 0 : 1) +
 		(filter.emptyProjects === "show" ? 0 : 1);
 
 	return createPortal(
