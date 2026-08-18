@@ -1635,10 +1635,10 @@ html.wco .app-body.sidebar-collapsed .wco-chrome {
    Accent on both would spend the one distinction the two pills exist to draw.
 
    It reaches 4px rather than the mention's 5px, and that one pixel keeps it out
-   of the word-spacing trade. A pasted link often sits inside a full sentence,
-   where widening every space is visibly worse than drawing this wash one pixel
-   tighter. At 4px the wash lands inside the space the type already gives it,
-   under the neighbouring word's own side bearing.
+   of the word-spacing trade. The projection reserves one thin display-only
+   space outside each end of the painted token, in both the field and mirror.
+   That gives this link real margin without widening every ordinary space in the
+   draft or moving the painted text away from the native caret.
 
    Where the mention paints its wash on a pseudo-element, this one paints on
    the span, and that is the difference between the two that is NOT taste. A
@@ -1648,7 +1648,7 @@ html.wco .app-body.sidebar-collapsed .wco-chrome {
    pill around the id. `box-decoration-break: clone` gives each line fragment
    its own capsule.
 
-   The 4px then has to come from somewhere that is not padding, because
+   The painted 4px still has to come from somewhere that is not padding, because
    horizontal padding on an inline box moves every glyph after it and the
    mirror may not move a glyph. Two offset copies of the box do it instead: an
    outer box-shadow is clipped to OUTSIDE the border box, so each copy shows

@@ -82,6 +82,13 @@ export function composerMentionRanges(
  */
 export const SESSION_GLYPH_SLOT = "\u2007\u2007";
 
+/**
+ * Display-only room outside a session pill. It lives in the textarea value as
+ * well as the mirror, so the painted chip gains real margin without moving its
+ * text away from the native caret. The projection omits it at a field edge.
+ */
+export const SESSION_PILL_MARGIN = "\u2009";
+
 /** One session id in the draft, as offsets into it. */
 export interface SessionRange {
 	start: number;
@@ -185,23 +192,39 @@ function mentionHtml(text: string, range: MentionRange): string {
  * `o` would leave `s-01a0…`, which reads as damage.
  */
 function sessionHtml(text: string, range: SessionRange): string {
+	const shown = text.slice(range.start, range.end);
+	const leadingMargin = shown.startsWith(SESSION_PILL_MARGIN)
+		? SESSION_PILL_MARGIN
+		: "";
+	const trailingMargin = shown.endsWith(SESSION_PILL_MARGIN)
+		? SESSION_PILL_MARGIN
+		: "";
+	const token = shown.slice(
+		leadingMargin.length,
+		shown.length - trailingMargin.length,
+	);
+	const before = esc(leadingMargin);
+	const after = esc(trailingMargin);
 	if (range.label) {
-		const shown = text.slice(range.start, range.end);
-		const slot = shown.startsWith(SESSION_GLYPH_SLOT)
+		const slot = token.startsWith(SESSION_GLYPH_SLOT)
 			? SESSION_GLYPH_SLOT.length
 			: 0;
 		return (
+			before +
 			`<span class="cmp-session cmp-session-named">` +
-			(slot ? `<span class="cmp-sglyph">${esc(shown.slice(0, slot))}</span>` : "") +
-			`${esc(shown.slice(slot))}</span>`
+			(slot ? `<span class="cmp-sglyph">${esc(token.slice(0, slot))}</span>` : "") +
+			`${esc(token.slice(slot))}</span>` +
+			after
 		);
 	}
-	const prefixEnd = text.indexOf("-", range.start) + 1;
-	const prefix = esc(text.slice(range.start, prefixEnd));
-	const rest = esc(text.slice(prefixEnd, range.end));
+	const prefixEnd = token.indexOf("-") + 1;
+	const prefix = esc(token.slice(0, prefixEnd));
+	const rest = esc(token.slice(prefixEnd));
 	return (
+		before +
 		`<span class="cmp-session"><span class="cmp-sid">${prefix}</span>` +
-		`${rest}</span>`
+		`${rest}</span>` +
+		after
 	);
 }
 

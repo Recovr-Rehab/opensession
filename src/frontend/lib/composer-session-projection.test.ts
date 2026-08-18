@@ -1,6 +1,9 @@
 import { beforeEach, describe, expect, test } from "bun:test";
 import { setSessionTitles } from "./markdown";
-import { SESSION_GLYPH_SLOT } from "./composer-highlight";
+import {
+	SESSION_GLYPH_SLOT,
+	SESSION_PILL_MARGIN,
+} from "./composer-highlight";
 import {
 	applyComposerSessionEdit,
 	composerCanonicalSelection,
@@ -17,12 +20,14 @@ describe("composer session projection", () => {
 	test("shows the title, behind a slot for the chat glyph, while retaining the canonical id", () => {
 		const label = `${SESSION_GLYPH_SLOT}Clean pasted session links`;
 		const projected = projectComposerSessions(`Compare ${ID} now`);
-		expect(projected.displayText).toBe(`Compare ${label} now`);
+		expect(projected.displayText).toBe(
+			`Compare ${SESSION_PILL_MARGIN}${label}${SESSION_PILL_MARGIN} now`,
+		);
 		expect(projected.canonicalText).toBe(`Compare ${ID} now`);
 		expect(projected.sessions).toEqual([
 			{
 				start: 8,
-				end: 8 + label.length,
+				end: 8 + SESSION_PILL_MARGIN.length + label.length + SESSION_PILL_MARGIN.length,
 				id: ID,
 				canonicalStart: 8,
 				canonicalEnd: 47,
@@ -36,7 +41,7 @@ describe("composer session projection", () => {
 		expect(
 			applyComposerSessionEdit(
 				projected,
-				`Please compare ${SESSION_GLYPH_SLOT}Clean pasted session links now`,
+				`Please compare ${SESSION_PILL_MARGIN}${SESSION_GLYPH_SLOT}Clean pasted session links${SESSION_PILL_MARGIN} now`,
 			).canonicalText,
 		).toBe(`Please compare ${ID} now`);
 	});
@@ -46,7 +51,7 @@ describe("composer session projection", () => {
 		expect(
 			applyComposerSessionEdit(
 				projected,
-				`Compare ${SESSION_GLYPH_SLOT}Clean pasted sesion links now`,
+				`Compare ${SESSION_PILL_MARGIN}${SESSION_GLYPH_SLOT}Clean pasted sesion links${SESSION_PILL_MARGIN} now`,
 			).canonicalText,
 		).toBe("Compare  now");
 	});
@@ -66,12 +71,20 @@ describe("composer session projection", () => {
 		]);
 		const label = `${SESSION_GLYPH_SLOT}Same title`;
 		const projected = projectComposerSessions(`${ID} ${OTHER_ID}`);
-		expect(projected.displayText).toBe(`${label} ${label}`);
+		expect(projected.displayText).toBe(
+			`${label}${SESSION_PILL_MARGIN} ${SESSION_PILL_MARGIN}${label}`,
+		);
 		expect(
-			applyComposerSessionEdit(projected, label, 0, 0, {
-				start: 0,
-				end: label.length + 1,
-			}).canonicalText,
+			applyComposerSessionEdit(
+				projected,
+				SESSION_PILL_MARGIN + label,
+				0,
+				0,
+				{
+					start: 0,
+					end: label.length + SESSION_PILL_MARGIN.length + 1,
+				},
+			).canonicalText,
 		).toBe(OTHER_ID);
 	});
 
@@ -86,8 +99,10 @@ describe("composer session projection", () => {
 	test("maps a canonical caret past the token into display text", () => {
 		const projected = projectComposerSessions(`Compare ${ID} now`);
 		const label = `${SESSION_GLYPH_SLOT}Clean pasted session links`;
-		expect(composerDisplayOffset(projected, 47)).toBe(8 + label.length);
-		expect(composerDisplayOffset(projected, 51)).toBe(12 + label.length);
+		const projectedLength =
+			SESSION_PILL_MARGIN.length + label.length + SESSION_PILL_MARGIN.length;
+		expect(composerDisplayOffset(projected, 47)).toBe(8 + projectedLength);
+		expect(composerDisplayOffset(projected, 51)).toBe(12 + projectedLength);
 	});
 
 	test("leaves session ids inside code untouched", () => {
@@ -102,7 +117,20 @@ describe("composer session projection", () => {
 		const canonical = applyComposerSessionEdit(empty, `Compare ${ID}`).canonicalText;
 		expect(canonical).toBe(`Compare ${ID}`);
 		expect(projectComposerSessions(canonical).displayText).toBe(
-			`Compare ${SESSION_GLYPH_SLOT}Clean pasted session links`,
+			`Compare ${SESSION_PILL_MARGIN}${SESSION_GLYPH_SLOT}Clean pasted session links`,
 		);
+	});
+
+	test("keeps display-only margins inside the atomic token and off field edges", () => {
+		const label = `${SESSION_GLYPH_SLOT}Clean pasted session links`;
+		expect(projectComposerSessions(ID).displayText).toBe(label);
+		const projected = projectComposerSessions(`Before ${ID} after`);
+		expect(
+			composerCanonicalSelection(
+				projected,
+				projected.sessions[0]!.start,
+				projected.sessions[0]!.start + SESSION_PILL_MARGIN.length,
+			),
+		).toEqual({ start: 7, end: 46 });
 	});
 });

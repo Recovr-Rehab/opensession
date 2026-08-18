@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test";
 import {
 	composerHighlightHtml,
 	SESSION_GLYPH_SLOT,
+	SESSION_PILL_MARGIN,
 	composerMentionRanges,
 	composerSessionRanges,
 	needsComposerHighlight,
@@ -131,6 +132,25 @@ describe("session ids in the mirror", () => {
 			'look at <span class="cmp-session cmp-session-named">' +
 				`<span class="cmp-sglyph">${SESSION_GLYPH_SLOT}</span>` +
 				"Clean pasted open session links</span> first​",
+		);
+	});
+
+	test("keeps projected margin outside the painted session pill", () => {
+		const label = SESSION_GLYPH_SLOT + "Clean pasted session links";
+		const shown = SESSION_PILL_MARGIN + label + SESSION_PILL_MARGIN;
+		expect(
+			composerHighlightHtml(`before ${shown} after`, [], [
+				{
+					start: 7,
+					end: 7 + shown.length,
+					id: ID,
+					label,
+				},
+			]),
+		).toBe(
+			`before ${SESSION_PILL_MARGIN}<span class="cmp-session cmp-session-named">` +
+				`<span class="cmp-sglyph">${SESSION_GLYPH_SLOT}</span>` +
+				`Clean pasted session links</span>${SESSION_PILL_MARGIN} after​`,
 		);
 	});
 

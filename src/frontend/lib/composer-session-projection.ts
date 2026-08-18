@@ -1,6 +1,7 @@
 import {
 	composerSessionRanges,
 	SESSION_GLYPH_SLOT,
+	SESSION_PILL_MARGIN,
 	type SessionRange,
 } from "./composer-highlight";
 import { sessionTitleFor } from "./markdown";
@@ -59,8 +60,12 @@ export function projectComposerSessions(
 		// sent message does, so the slot it is painted into comes first.
 		const title = sessionTitleFor(range.id);
 		const label = title ? SESSION_GLYPH_SLOT + title : undefined;
+		const token = label ?? range.id;
+		const leadingMargin = range.start > 0 ? SESSION_PILL_MARGIN : "";
+		const trailingMargin =
+			range.end < canonicalText.length ? SESSION_PILL_MARGIN : "";
 		const start = displayText.length;
-		displayText += label ?? range.id;
+		displayText += leadingMargin + token + trailingMargin;
 		sessions.push({
 			start,
 			end: displayText.length,
