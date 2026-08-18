@@ -114,11 +114,15 @@ function FilterRow({
 	value,
 	options,
 	onSelect,
+	footer,
 }: {
 	label: string;
 	value: string;
 	options: SelectOption[];
 	onSelect: (value: string) => void;
+	/** Rows under the options, below a rule: a setting about the things the
+	 *  options name, rather than another one of them to pick. */
+	footer?: React.ReactNode;
 }) {
 	const current = options.find((option) => option.value === value);
 	return (
@@ -133,6 +137,12 @@ function FilterRow({
 			</Menu.Trigger>
 			<Menu.Popup align="end" sideOffset={6}>
 				<ValueOptions value={value} options={options} onSelect={onSelect} />
+				{footer && (
+					<>
+						<Menu.Separator />
+						{footer}
+					</>
+				)}
 			</Menu.Popup>
 		</Menu.Root>
 	);
@@ -167,35 +177,6 @@ function FilterSubmenu({
 				<ValueOptions value={value} options={options} onSelect={onSelect} />
 			</Menu.Popup>
 		</Menu.SubmenuRoot>
-	);
-}
-
-/** A panel row that is itself the switch: the setting's name on the left, its
- *  state drawn on the right. The switch is a picture (`SwitchIndicator`), so
- *  the press stays on the row rather than on a control inside it, the way the
- *  binary settings in the Advanced menu read. */
-function FilterToggleRow({
-	label,
-	on,
-	onToggle,
-}: {
-	label: string;
-	on: boolean;
-	onToggle: (on: boolean) => void;
-}) {
-	return (
-		<button
-			type="button"
-			role="switch"
-			aria-checked={on}
-			className={FILTER_ROW}
-			onClick={() => onToggle(!on)}
-		>
-			<span className="shrink-0 text-dim">{label}</span>
-			<span className="ml-auto flex items-center">
-				<SwitchIndicator on={on} />
-			</span>
-		</button>
 	);
 }
 
@@ -274,11 +255,14 @@ export function FilterPopover({
 		{ value: "everyone", label: "Everyone" },
 	];
 
-	// How much of what is now out of sight is doing something. Only the two
-	// that change which rows the list holds count: density is a look.
+	// How much of what is now out of sight is doing something. Only the three
+	// that change which rows the list holds count: density is a look, and sort
+	// is an order. Empty projects counts here even though the Repo picker is
+	// its other door, because this is the number that explains a short list.
 	const advancedChanged =
 		(filter.prs === "default" ? 0 : 1) +
-		(filter.autoCreated === "hide" ? 0 : 1);
+		(filter.autoCreated === "hide" ? 0 : 1) +
+		(filter.emptyProjects === "show" ? 0 : 1);
 
 	return createPortal(
 		<>
@@ -306,11 +290,31 @@ export function FilterPopover({
 					]}
 					onSelect={(v) => onChange({ groupBy: v as GroupBy })}
 				/>
+				{/* The projects, and under them the one setting about the set of
+				    them rather than about which one you are in. It is in two
+				    places on purpose: here, under the list of projects it is
+				    about, and in Advanced with the other things that decide what
+				    the list holds. Whichever you open, it reads and writes the
+				    same setting. */}
 				<FilterRow
 					label="Repo"
 					value={filter.repo}
 					options={repoOptions}
 					onSelect={(v) => onChange({ repo: v })}
+					footer={
+						<Menu.CheckboxItem
+							checked={filter.emptyProjects === "hide"}
+							onCheckedChange={(hide) =>
+								onChange({ emptyProjects: hide ? "hide" : "show" })
+							}
+						>
+							{/* "when empty", not "empty projects": the list above it has
+							    just named the projects, so the row only has to say what
+							    happens to one. */}
+							<span className="grow truncate">Hide when empty</span>
+							<SwitchIndicator on={filter.emptyProjects === "hide"} />
+						</Menu.CheckboxItem>
+					}
 				/>
 				<FilterRow
 					label="Person"
@@ -390,6 +394,24 @@ export function FilterPopover({
 							<span className="grow truncate">Show auto created</span>
 							<SwitchIndicator on={filter.autoCreated === "show"} />
 						</Menu.CheckboxItem>
+						{/* A registered project with no work in it still draws a band,
+						    so a repo you just connected has somewhere to start from,
+						    and on an instance with more projects than you work in that
+						    is a screen of empty headings. Scoping the list to one
+						    project shows that project either way, empty or not.
+
+						    Its other door is the Repo picker, under the projects it is
+						    about. Here it sits with the rest of what decides which rows
+						    the list holds, and counts towards the "N changed" above. */}
+						<Menu.CheckboxItem
+							checked={filter.emptyProjects === "hide"}
+							onCheckedChange={(hide) =>
+								onChange({ emptyProjects: hide ? "hide" : "show" })
+							}
+						>
+							<span className="grow truncate">Hide empty projects</span>
+							<SwitchIndicator on={filter.emptyProjects === "hide"} />
+						</Menu.CheckboxItem>
 						{/* Desktop only, because that is the whole of what the
 						    preference does: a phone row is a tap target and keeps its
 						    own padding at either setting (see SIDEBAR_DENSITY_VARS),
@@ -409,21 +431,6 @@ export function FilterPopover({
 						)}
 					</Menu.Popup>
 				</Menu.Root>
-				{/* A registered project with no work in it still draws a band, so a
-				    repo you just connected has somewhere to start from, and on an
-				    instance with more projects than you work in that is a screen of
-				    empty headings. It is the one setting here about the set of
-				    projects rather than about which slice of the list you want, so
-				    it sits at the bottom on its own rather than in among the
-				    pickers. Scoping the list to one project shows that project
-				    either way, empty or not. */}
-				<FilterToggleRow
-					label="Hide empty projects"
-					on={filter.emptyProjects === "hide"}
-					onToggle={(hide) =>
-						onChange({ emptyProjects: hide ? "hide" : "show" })
-					}
-				/>
 			</div>
 		</>,
 		document.body,
