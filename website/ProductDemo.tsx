@@ -4,10 +4,13 @@ import posterDarkUrl from "./demo-poster-dark.webp";
 import phoneUrl from "./demo-phone.webp";
 import phoneDarkUrl from "./demo-phone-dark.webp";
 
-/* The width the app is laid out at before it is scaled to fit the window. It
-   is what decides how large the product reads: a wider layout means smaller
-   UI and more of the real interface in the same frame. */
-const desktopDemoWidth = 1080;
+/* The width the app is laid out at before it is scaled to fit the window, and
+   so what decides how large the product reads. The window stands for a
+   14-inch MacBook Pro's screen, which is 1512pt across, so this draws the UI
+   at 1.2x life size: enough over life to stay readable on a page you look at
+   from desk distance, and the same zoom the phone beside it carries. Keep it
+   in step with scripts/capture-demo-poster.ts. */
+const desktopDemoWidth = 1260;
 
 export function ProductDemo() {
 	const previewRef = useRef<HTMLElement>(null);

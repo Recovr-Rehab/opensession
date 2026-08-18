@@ -27,8 +27,16 @@ import {
 const ROOT = join(import.meta.dir, "..");
 const DIST = join(ROOT, ".website-dist");
 
-/** The app's layout width in the preview. Keep in step with ProductDemo.tsx. */
-const APP_WIDTH = 1080;
+/**
+ * The app's layout width in the preview. Keep in step with ProductDemo.tsx.
+ *
+ * It is a zoom, not a taste. The window stands for a 14-inch MacBook Pro's
+ * screen, which is 1512pt across, so laying the app out at 1260 draws its UI
+ * at 1.2x life size: a page is looked at from desk distance rather than held,
+ * and at 1.0x the product in it stops being readable. The phone below carries
+ * the same 1.2x, which is what keeps the two from disagreeing.
+ */
+const APP_WIDTH = 1260;
 /**
  * The desktop window's aspect: a 3:2 stage less an even 5.6% inset on all four
  * sides, which is 0.888W by 0.5547W. Narrower windows crop the poster from the
@@ -36,10 +44,13 @@ const APP_WIDTH = 1080;
  */
 const APP_HEIGHT = Math.round((APP_WIDTH * 0.5547) / 0.888);
 
-/** The phone beside it: an iPhone's own logical size, so the app lays out the
- *  way it does on a real one rather than at a made-up narrow width. */
-const PHONE_WIDTH = 393;
-const PHONE_HEIGHT = 852;
+/**
+ * The phone beside it, at the same 1.2x. An iPhone 17 Pro is 393pt across a
+ * 68mm screen in a 71.9mm body, and the poster fills the body, so 346pt is
+ * that device's UI drawn 1.2x life. The shape stays the device's own.
+ */
+const PHONE_WIDTH = 346;
+const PHONE_HEIGHT = Math.round((PHONE_WIDTH * 852) / 393);
 
 const SHOTS = [
   { name: "demo-poster", width: APP_WIDTH, height: APP_HEIGHT, mobile: false, dpr: 2 },
