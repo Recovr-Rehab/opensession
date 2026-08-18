@@ -4,8 +4,7 @@ import { tmpdir } from "os";
 import { join } from "path";
 import type { UnifiedSession } from "../../server/types";
 
-// Both workspaces.ts and unfurl.ts resolve module-scope state (the workspace
-// directory, the UI host) at import, so redirect them before importing.
+// Unfurl modules resolve their state directory and UI host at import.
 const scratch = mkdtempSync(join(tmpdir(), "opensession-unfurl-"));
 const previousStateDir = process.env.OPENSESSION_STATE_DIR;
 const previousUiBase = process.env.OPENSESSION_UI_BASE;
@@ -16,7 +15,6 @@ process.env.OPENSESSION_UI_BASE = "https://os.example.test";
 process.env.OPENSESSION_SESSION_CARD_BASE = "https://media.example.test";
 process.env.OPENSESSION_SESSION_CARD_SECRET = "test-session-social-card-secret-32-bytes";
 
-const { createWorkspace } = await import("../../server/workspaces");
 const { cardTitle, handleLinkShared, unfurlForSession } = await import("./unfurl");
 
 afterAll(() => {
@@ -102,23 +100,13 @@ function session(patch: Partial<UnifiedSession>): UnifiedSession {
 }
 
 describe("cardTitle", () => {
-	test("leads with the workspace name and keeps the session title beside it", () => {
-		const ws = createWorkspace({ name: "Keep the video playing", createdBy: "Kent" });
+	test("uses the session title even when it belongs to a workspace", () => {
 		expect(
-			cardTitle(session({ title: "Fix the seek bar", workspaceId: ws.id })),
-		).toEqual({ title: "Keep the video playing", session: "Fix the seek bar" });
+			cardTitle(session({ title: "Fix the seek bar", workspaceId: "ws-1" })),
+		).toEqual({ title: "Fix the seek bar" });
 	});
 
-	test("prints one name when the session's title still matches its workspace", () => {
-		const ws = createWorkspace({ name: "Ship the unfurl", createdBy: "Kent" });
-		expect(cardTitle(session({ title: "Ship the unfurl", workspaceId: ws.id }))).toEqual({
-			title: "Ship the unfurl",
-			session: undefined,
-		});
-	});
-
-	// Slack and Linear agent runs have no workspace to be named after.
-	test("falls back to the session title when there is no workspace", () => {
+	test("uses the session title when there is no workspace", () => {
 		expect(cardTitle(session({ title: "Triage the ticket" }))).toEqual({
 			title: "Triage the ticket",
 		});

@@ -26,6 +26,7 @@ const {
 	socialSessionIdFromPath,
 } = await import("./session-social-card");
 const { invalidateSessionsCache } = await import("./session-cache");
+const { patchUiPrefs } = await import("./ui-prefs");
 
 const signedRouteSessionId = "slack-C123-1719860000.000000";
 const sessionsDir = join(scratch, ".opensession-sessions");
@@ -78,35 +79,47 @@ describe("session social card", () => {
 			title: "Ship dynamic social cards",
 			owner: "Test Person",
 			repo: "opensession",
-			model: "GPT-5.6 Sol",
-			mode: "code",
+			model: "gpt-5.6-sol",
+			accent: "#1d82bc",
 		});
 	});
 
-	test("gives a retired workspace preset a readable fallback label", () => {
+	test("uses the creator's published accent", () => {
+		patchUiPrefs("Test Person", { accent: "coral" });
+		expect(sessionSocialCardData(session()).accent).toBe("#dd233a");
+		patchUiPrefs("Test Person", { accent: null });
+	});
+
+	test("uses the model slug for the footer", () => {
 		expect(
 			sessionSocialCardData(
 				session({ model: "workspace-preset/ws-gone/opus-fable" }),
 			).model,
-		).toBe("Opus Fable");
+		).toBe("opus-fable");
 	});
 
-	test("wraps long titles into at most two bounded lines", () => {
+	test("truncates long titles to one fixed-size line", () => {
 		const lines = socialCardTitleLines(
 			"Make Open Session links feel alive on every surface",
 		);
-		expect(lines).toHaveLength(2);
-		expect(lines[0].length).toBeLessThanOrEqual(31);
-		expect(lines[1].length).toBeLessThanOrEqual(31);
+		expect(lines).toHaveLength(1);
+		expect(lines[0]).toBe("Make Open Session links…");
 	});
 
-	test("keeps the vector gradient translucent and escapes dynamic text", () => {
+	test("matches the card geometry and escapes dynamic text", () => {
 		const svg = sessionSocialCardSvg({
 			title: "Fix <cards> & links",
 			owner: 'Test "Person"',
+			repo: "opensession",
+			model: "gpt-5.6-sol",
+			accent: "#dd233a",
 		});
-		expect(svg).toContain('id="openSessionVector"');
-		expect(svg).toContain('stop-opacity="0.70"');
+		expect(svg).toContain('<rect width="8" height="630" fill="#dd233a"/>');
+		expect(svg).toContain('x="56" y="40"');
+		expect(svg).toContain('x="56" y="542"');
+		expect(svg).toContain('x="1144" y="542"');
+		expect(svg).toContain('stop-opacity="0.05"');
+		expect(svg).toContain("M68.8375 226.509C-37.3322 147.543");
 		expect(svg).toContain("Fix &lt;cards&gt; &amp; links");
 		expect(svg).not.toContain("Fix <cards>");
 	});

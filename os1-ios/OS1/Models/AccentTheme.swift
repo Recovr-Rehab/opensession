@@ -242,10 +242,10 @@ final class AccentStore {
     static let shared = AccentStore()
 
     /// Shares the `os1.appearance.*` namespace with the light/dark setting it
-    /// sits beside; like that one, it is this device's choice rather than
-    /// account state, so it stays in `UserDefaults` and is not mirrored into
-    /// the server's ui-prefs.
+    /// sits beside. The device still owns the selection; publishing its value
+    /// lets generated session cards use the same colour.
     static let defaultsKey = "os1.appearance.accent"
+    private static let prefKey = "accent"
 
     @ObservationIgnored private let defaults: UserDefaults
 
@@ -253,6 +253,7 @@ final class AccentStore {
         didSet {
             guard theme != oldValue else { return }
             defaults.set(theme.rawValue, forKey: Self.defaultsKey)
+            Self.publish(theme)
         }
     }
 
@@ -273,6 +274,17 @@ final class AccentStore {
         theme = AccentTheme(rawValue: normalized) ?? .default
         if normalized != stored {
             defaults.set(normalized, forKey: Self.defaultsKey)
+        }
+        Self.publish(theme)
+    }
+
+    private static func publish(_ theme: AccentTheme) {
+        let user = ServerConfig.shared.userName
+        Task {
+            _ = try? await SettingsAPI.updateUiPrefs(
+                user: user,
+                prefs: [prefKey: theme.rawValue]
+            )
         }
     }
 }

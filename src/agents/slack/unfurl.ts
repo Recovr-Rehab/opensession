@@ -123,25 +123,17 @@ function reviewLabel(decision?: string): string {
   }
 }
 
-/**
- * What the card is named after. A session is a tab inside a workspace, and the
- * workspace is what the app titles the page with, so the headline is the
- * workspace name and the session's own title drops to a context bit beside the
- * status. Workspace-less sessions (Slack and Linear agent runs) keep their own
- * title as the headline, and a lone session whose title still matches its
- * workspace prints it once.
- */
-export function cardTitle(s: UnifiedSession): { title: string; session?: string } {
+/** Social cards are named after the linked session, not its parent workspace. */
+export function cardTitle(s: UnifiedSession): { title: string } {
   return sessionCardTitle(s);
 }
 
 /** Build the Block Kit unfurl body for one session. */
 export function unfurlForSession(s: UnifiedSession, url: string): { blocks: any[] } {
   const card = sessionSocialCardData(s);
-  const { title, sessionTitle } = card;
+  const { title } = card;
 
   const bits: string[] = [statusChip(s)];
-  if (sessionTitle) bits.push(esc(sessionTitle));
   if (s.repo) bits.push(s.branch ? `${s.repo} · \`${s.branch}\`` : s.repo);
   if (card.model) bits.push(card.model);
   if (s.mode) bits.push(s.mode);

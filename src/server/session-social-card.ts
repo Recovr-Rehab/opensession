@@ -10,29 +10,31 @@ import sharp from "sharp";
 import { createHmac, randomBytes, timingSafeEqual } from "crypto";
 import { chmodSync, readFileSync, writeFileSync } from "fs";
 import {
+	DEFAULT_ACCENT_THEME,
+	getAccentThemeOption,
+	isAccentTheme,
+} from "../shared/accent-theme";
+import {
 	configuredIntegration,
 	configuredServer,
 	productName,
 } from "./config";
-import { modelLabel } from "./models";
 import { teamDirectory, type DirectoryPerson } from "./people";
 import { stateDir } from "./paths";
 import { findSessionAsync } from "./session-cache";
 import type { UnifiedSession } from "./types";
-import { resolveWorkspaceModelPreset } from "./workspace-model-presets";
-import { getWorkspace } from "./workspaces";
+import { getUiPrefs } from "./ui-prefs";
 
 export const SESSION_CARD_WIDTH = 1200;
 export const SESSION_CARD_HEIGHT = 630;
 
 export interface SessionSocialCardData {
 	title: string;
-	sessionTitle?: string;
 	owner: string;
 	repo?: string;
 	model?: string;
-	mode?: string;
 	person?: DirectoryPerson;
+	accent: string;
 }
 
 function clean(value: string | null | undefined): string {
@@ -48,36 +50,14 @@ function samePerson(person: DirectoryPerson, ref: string): boolean {
 
 export function sessionCardTitle(
 	session: UnifiedSession,
-): { title: string; session?: string } {
+): { title: string } {
 	const sessionTitle = clean(session.title) || session.id;
-	const workspace = session.workspaceId ? getWorkspace(session.workspaceId) : null;
-	const workspaceName = clean(workspace?.name);
-	if (!workspaceName) return { title: sessionTitle };
-	return {
-		title: workspaceName,
-		session: sessionTitle !== workspaceName ? sessionTitle : undefined,
-	};
+	return { title: sessionTitle };
 }
 
 function sessionModelLabel(session: UnifiedSession): string | undefined {
 	if (!session.model) return undefined;
-	const captured = session.presetNote
-		?.match(/^## Workspace model preset · ([^\n]+)/m)?.[1]
-		?.trim();
-	if (captured) return captured;
-	const preset = resolveWorkspaceModelPreset(session.model);
-	if (preset?.label) return preset.label;
-	const presetSlug = session.model.match(
-		/(?:^|\/)workspace-preset\/[^/]+\/([^/]+)$/,
-	)?.[1];
-	if (presetSlug) {
-		return presetSlug
-			.split("-")
-			.filter(Boolean)
-			.map((part) => `${part[0]?.toUpperCase() || ""}${part.slice(1)}`)
-			.join(" ");
-	}
-	return modelLabel(session.model);
+	return session.model.split("/").filter(Boolean).at(-1);
 }
 
 export function sessionSocialCardData(
@@ -87,14 +67,17 @@ export function sessionSocialCardData(
 	const ownerRef = clean(session.createdBy || session.startedBy) || productName();
 	const person = teamDirectory().find((candidate) => samePerson(candidate, ownerRef));
 	const model = sessionModelLabel(session);
+	const savedAccent = getUiPrefs(person?.name || ownerRef).accent;
+	const accentTheme = isAccentTheme(savedAccent)
+		? savedAccent
+		: DEFAULT_ACCENT_THEME;
 	return {
 		title: heading.title,
-		...(heading.session ? { sessionTitle: heading.session } : {}),
 		owner: person?.fullName || ownerRef,
 		...(session.repo ? { repo: session.repo } : {}),
 		...(model ? { model } : {}),
-		...(session.mode ? { mode: session.mode } : {}),
 		...(person ? { person } : {}),
+		accent: getAccentThemeOption(accentTheme).light,
 	};
 }
 
@@ -124,28 +107,15 @@ function initials(name: string): string {
 		.toUpperCase();
 }
 
-/** Two display lines that keep the title readable at social-card size. */
+/** The card uses one fixed-size title line, so long names end before the artwork. */
 export function socialCardTitleLines(title: string): string[] {
-	const words = clean(title).split(" ").filter(Boolean);
-	if (!words.length) return [productName()];
-	const lines: string[] = [];
-	for (const word of words) {
-		const next = lines.length ? `${lines[lines.length - 1]} ${word}` : word;
-		if (next.length <= 22 || lines.length === 0) {
-			if (!lines.length) lines.push(next);
-			else lines[lines.length - 1] = next;
-			continue;
-		}
-		if (lines.length === 1) {
-			lines.push(word);
-			continue;
-		}
-		lines[1] = `${lines[1]} ${word}`;
-	}
-	if (lines.length > 2) lines.length = 2;
-	if (lines[1]?.length > 31) lines[1] = `${lines[1].slice(0, 30).trimEnd()}…`;
-	if (lines[0].length > 31) lines[0] = `${lines[0].slice(0, 30).trimEnd()}…`;
-	return lines;
+	const value = clean(title) || productName();
+	if (value.length <= 25) return [value];
+	const rawCandidate = value.slice(0, 24);
+	const candidate = rawCandidate.trimEnd();
+	if (/\s$/.test(rawCandidate)) return [`${candidate}…`];
+	const boundary = candidate.lastIndexOf(" ");
+	return [`${candidate.slice(0, boundary > 14 ? boundary : candidate.length)}…`];
 }
 
 const avatarCache = new Map<string, string>();
@@ -197,91 +167,68 @@ async function avatarDataUrl(person?: DirectoryPerson): Promise<string> {
 	return "";
 }
 
-function pillWidth(value: string): number {
-	return Math.min(270, Math.max(92, value.length * 10 + 38));
-}
-
-function pillLabel(value: string): string {
-	return value.length > 24 ? `${value.slice(0, 23).trimEnd()}…` : value;
+function footerLabel(value: string): string {
+	return value.length > 28 ? `${value.slice(0, 27).trimEnd()}…` : value;
 }
 
 /** SVG source is exported so the visual can be inspected without PNG decoding. */
 export function sessionSocialCardSvg(
 	data: SessionSocialCardData,
 	avatar = "",
+	jetBrainsMono = "",
 ): string {
-	const titleLines = socialCardTitleLines(data.title);
-	const subtitle = clean(data.sessionTitle);
-	const repo = clean(data.repo);
-	const model = clean(data.model);
-	const mode = clean(data.mode);
-	const pills = [repo, model, mode && `${mode[0].toUpperCase()}${mode.slice(1)}`]
-		.filter(Boolean)
-		.map(pillLabel);
-	let pillX = 142;
-	const pillMarkup = pills
-		.map((label) => {
-			const width = pillWidth(label);
-			const item = `<g transform="translate(${pillX} 548)"><rect width="${width}" height="38" rx="19" fill="#FFFFFF" fill-opacity="0.72"/><text x="19" y="25" fill="#48474C" font-size="16" font-weight="560">${xml(label)}</text></g>`;
-			pillX += width + 10;
-			return item;
-		})
-		.join("");
+	const title = socialCardTitleLines(data.title)[0];
+	const repo = footerLabel(clean(data.repo));
+	const model = footerLabel(clean(data.model));
 	const avatarMarkup = avatar
-		? `<image href="${avatar}" x="72" y="528" width="58" height="58" preserveAspectRatio="xMidYMid slice" clip-path="url(#avatarClip)"/>`
-		: `<rect x="72" y="528" width="58" height="58" rx="29" fill="#232228"/><text x="101" y="565" text-anchor="middle" fill="#FFFFFF" font-size="19" font-weight="650">${xml(initials(data.owner))}</text>`;
-	const titleMarkup = titleLines
-		.map(
-			(line, index) =>
-				`<text x="72" y="${index === 0 ? 291 : 369}" fill="#1E1D22" font-size="70" font-weight="620" letter-spacing="-2.5">${xml(line)}</text>`,
-		)
-		.join("");
-	const subtitleY = titleLines.length > 1 ? 418 : 340;
+		? `<image href="${avatar}" x="56" y="123" width="48" height="48" preserveAspectRatio="xMidYMid slice" clip-path="url(#avatarClip)"/>`
+		: `<rect x="56" y="123" width="48" height="48" rx="8" fill="${xml(data.accent)}"/><text x="80" y="148" text-anchor="middle" dominant-baseline="middle" fill="#FFFFFF" font-size="18" font-weight="600">${xml(initials(data.owner))}</text>`;
+	const fontFace = jetBrainsMono
+		? `<style>@font-face { font-family: 'JetBrains Mono'; font-style: normal; font-weight: 500; src: url('${jetBrainsMono}') format('truetype'); }</style>`
+		: "";
 
 	return `<svg xmlns="http://www.w3.org/2000/svg" width="${SESSION_CARD_WIDTH}" height="${SESSION_CARD_HEIGHT}" viewBox="0 0 ${SESSION_CARD_WIDTH} ${SESSION_CARD_HEIGHT}" font-family="Inter, Arial, sans-serif">
 <defs>
-  <linearGradient id="bg" x1="70" y1="36" x2="1115" y2="612" gradientUnits="userSpaceOnUse">
-    <stop stop-color="#F8F7F4"/>
-    <stop offset="0.54" stop-color="#F4F2ED"/>
-    <stop offset="1" stop-color="#ECEAE5"/>
+  ${fontFace}
+  <linearGradient id="artGradient" x1="199.5" y1="0" x2="199.5" y2="630" gradientUnits="userSpaceOnUse">
+    <stop stop-color="#000000" stop-opacity="0.01"/>
+    <stop offset="1" stop-color="#000000" stop-opacity="0.05"/>
   </linearGradient>
-  <linearGradient id="openSessionVector" x1="742" y1="86" x2="1180" y2="552" gradientUnits="userSpaceOnUse">
-    <stop stop-color="#7664FF" stop-opacity="0.70"/>
-    <stop offset="0.48" stop-color="#EB74A7" stop-opacity="0.58"/>
-    <stop offset="1" stop-color="#FFBE66" stop-opacity="0.30"/>
-  </linearGradient>
-  <radialGradient id="vectorGlow" cx="0" cy="0" r="1" gradientTransform="translate(964 314) rotate(94) scale(300 330)" gradientUnits="userSpaceOnUse">
-    <stop stop-color="#FFFFFF" stop-opacity="0.54"/>
-    <stop offset="1" stop-color="#FFFFFF" stop-opacity="0"/>
-  </radialGradient>
-  <clipPath id="markClip"><rect x="758" y="78" width="430" height="474" rx="124"/></clipPath>
-  <clipPath id="avatarClip"><circle cx="101" cy="557" r="29"/></clipPath>
+  <clipPath id="avatarClip"><rect x="56" y="123" width="48" height="48" rx="8"/></clipPath>
 </defs>
-<rect width="1200" height="630" fill="url(#bg)"/>
-<g clip-path="url(#markClip)">
-  <rect x="758" y="78" width="430" height="474" fill="url(#openSessionVector)"/>
-  <path d="M758 78H973C892 132 881 196 925 246C971 297 1014 319 1001 392C990 456 947 508 897 552H758V78Z" fill="#FFFFFF" fill-opacity="0.42"/>
-  <path d="M1188 78H976C1049 133 1052 188 1011 235C971 281 928 313 944 383C959 448 1009 508 1054 552H1188V78Z" fill="#292631" fill-opacity="0.16"/>
-  <rect x="758" y="78" width="430" height="474" fill="url(#vectorGlow)"/>
+<rect width="1200" height="630" fill="#FFFFFF"/>
+<rect width="8" height="630" fill="${xml(data.accent)}"/>
+<g transform="translate(801 0)">
+  <path d="M68.8375 226.509C-37.3322 147.543 -7.34262 36.0198 68.8375 0H399V630H84.0041C208.443 571.121 289.104 390.338 68.8375 226.509Z" fill="url(#artGradient)"/>
 </g>
-<g transform="translate(72 60)">
-  <rect width="42" height="42" rx="12" fill="#232228"/>
-  <path d="M8 8H21C16 12 15 17 18 21C21 24 25 26 24 31C23 34 21 36 18 38H8V8Z" fill="#FFFFFF"/>
-  <text x="58" y="29" fill="#232228" font-size="22" font-weight="620" letter-spacing="-0.5">${xml(productName())}</text>
-</g>
-${titleMarkup}
-${subtitle ? `<text x="74" y="${subtitleY}" fill="#6E6C73" font-size="25" font-weight="450">${xml(subtitle)}</text>` : ""}
+<text x="56" y="40" dominant-baseline="hanging" fill="#000000" font-size="56" font-weight="600" letter-spacing="-2">${xml(title)}</text>
 ${avatarMarkup}
-<text x="142" y="517" fill="#706E75" font-size="15" font-weight="540" letter-spacing="1.1">STARTED BY ${xml(data.owner.toUpperCase())}</text>
-${pillMarkup}
+<rect x="56.5" y="123.5" width="47" height="47" rx="7.5" fill="none" stroke="#000000" stroke-opacity="0.25"/>
+<text x="120" y="147" dominant-baseline="middle" fill="#000000" font-size="36" font-weight="500">${xml(data.owner)}</text>
+<text x="56" y="542" dominant-baseline="hanging" fill="#000000" fill-opacity="0.5" font-family="JetBrains Mono, monospace" font-size="36" font-weight="500">${xml(repo)}</text>
+<text x="1144" y="542" dominant-baseline="hanging" text-anchor="end" fill="#000000" fill-opacity="0.5" font-family="JetBrains Mono, monospace" font-size="36" font-weight="500">${xml(model)}</text>
 </svg>`;
+}
+
+let jetBrainsMonoDataUrl = "";
+
+async function socialCardMonoFont(): Promise<string> {
+	if (jetBrainsMonoDataUrl) return jetBrainsMonoDataUrl;
+	const bytes = await Bun.file(
+		new URL("./fonts/JetBrainsMono-Medium.ttf", import.meta.url),
+	).arrayBuffer();
+	jetBrainsMonoDataUrl = `data:font/ttf;base64,${Buffer.from(bytes).toString("base64")}`;
+	return jetBrainsMonoDataUrl;
 }
 
 export async function renderSessionSocialCard(
 	data: SessionSocialCardData,
 ): Promise<Buffer> {
-	const avatar = await avatarDataUrl(data.person);
-	return sharp(Buffer.from(sessionSocialCardSvg(data, avatar))).png().toBuffer();
+	const [avatar, monoFont] = await Promise.all([
+		avatarDataUrl(data.person),
+		socialCardMonoFont(),
+	]);
+	return sharp(Buffer.from(sessionSocialCardSvg(data, avatar, monoFont))).png().toBuffer();
 }
 
 function publicBase(): string {
@@ -331,7 +278,7 @@ function validCardToken(sessionId: string, token: string): boolean {
 }
 
 function socialDescription(data: SessionSocialCardData): string {
-	return [data.sessionTitle, data.owner, data.repo, data.model].filter(Boolean).join(" · ");
+	return [data.owner, data.repo, data.model].filter(Boolean).join(" · ");
 }
 
 function replaceMeta(htmlSource: string, key: string, value: string): string {

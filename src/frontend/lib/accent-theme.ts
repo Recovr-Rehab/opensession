@@ -1,3 +1,13 @@
+import {
+	ACCENT_THEME_OPTIONS,
+	type AccentTheme,
+	DEFAULT_ACCENT_THEME,
+	getAccentThemeOption,
+	isAccentTheme,
+} from "../../shared/accent-theme";
+import { getCurrentUser } from "../components/UserPicker";
+import { saveUiPrefsApi } from "./api";
+
 /**
  * Seven accents, ordered as a walk around the hue wheel from the blues.
  *
@@ -16,29 +26,17 @@
  * changing a hex re-themes everyone who chose that slot, while renaming one
  * drops them back to the default. Migrate instead: see `getAccentTheme`.
  */
-export const ACCENT_THEME_OPTIONS = [
-	{ value: "sky", label: "Sky", light: "#1d82bc", dark: "#2495d6" },
-	{ value: "indigo", label: "Indigo", light: "#6361f5", dark: "#767bf6" },
-	{ value: "coral", label: "Coral", light: "#dd233a", dark: "#f73648" },
-	{ value: "orange", label: "Tangerine", light: "#d3571c", dark: "#eb6221" },
-	{ value: "lime", label: "Honey", light: "#eec75c", dark: "#eec75c" },
-	{ value: "green", label: "Clover", light: "#1e8e45", dark: "#24a351" },
-	{ value: "mono", label: "Black", light: "#000000", dark: "#ffffff" },
-] as const;
-
-export type AccentTheme = (typeof ACCENT_THEME_OPTIONS)[number]["value"];
-
-export const DEFAULT_ACCENT_THEME: AccentTheme = "sky";
+export {
+	ACCENT_THEME_OPTIONS,
+	type AccentTheme,
+	DEFAULT_ACCENT_THEME,
+	getAccentThemeOption,
+	isAccentTheme,
+};
 
 const KEY = "opensession-accent";
 const CHANGE_EVENT = "opensession-accent-changed";
-const VALID_THEMES = new Set<AccentTheme>(
-	ACCENT_THEME_OPTIONS.map((option) => option.value),
-);
-
-export function isAccentTheme(value: string | null): value is AccentTheme {
-	return value !== null && VALID_THEMES.has(value as AccentTheme);
-}
+const PREF_KEY = "accent";
 
 /**
  * Selections that outlived their colour. Each maps to the nearest hue still in
@@ -63,10 +61,6 @@ export function getAccentTheme(): AccentTheme {
 	return isAccentTheme(stored) ? stored : DEFAULT_ACCENT_THEME;
 }
 
-export function getAccentThemeOption(theme: AccentTheme) {
-	return ACCENT_THEME_OPTIONS.find((option) => option.value === theme)!;
-}
-
 /** Black's fill inverts with the page, so it is the only accent whose glyph
  *  changes with the appearance. Honey's white glyph is the palette's one
  *  deliberate low-contrast pairing; see its block in base.css. */
@@ -81,9 +75,14 @@ export function applyAccentTheme(theme: AccentTheme = getAccentTheme()) {
 	document.documentElement.dataset.accent = theme;
 }
 
+function publishAccentTheme(theme: AccentTheme) {
+	void saveUiPrefsApi(getCurrentUser(), { [PREF_KEY]: theme }).catch(() => {});
+}
+
 export function setAccentTheme(theme: AccentTheme) {
 	localStorage.setItem(KEY, theme);
 	applyAccentTheme(theme);
+	publishAccentTheme(theme);
 	window.dispatchEvent(new Event(CHANGE_EVENT));
 }
 
@@ -108,5 +107,7 @@ if (
 
 	// The inline bootstrap applies this before paint; repeat it on import so the
 	// contract still holds if that bootstrap is ever removed.
-	applyAccentTheme();
+	const theme = getAccentTheme();
+	applyAccentTheme(theme);
+	publishAccentTheme(theme);
 }
