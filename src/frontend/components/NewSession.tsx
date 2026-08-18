@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback } from "react";
-import { fetchWorktrees, fetchModels, fetchConnections, fetchSandboxStatus, requestSandboxPrewarm, suggestBranch, fetchProviderAccounts, fetchRepos, createWorkspaceApi, updateWorkspaceApi, ApiError, type ProviderAccountOption, type ModelOption, type SandboxStatusInfo } from "../lib/api";
+import { fetchWorktrees, fetchModels, fetchConnections, fetchSandboxStatus, requestSandboxPrewarm, suggestBranch, suggestRepos, type RepoSuggestion, configuredNewSessionRepo, fetchProviderAccounts, fetchRepos, createWorkspaceApi, updateWorkspaceApi, ApiError, type ProviderAccountOption, type ModelOption, type SandboxStatusInfo } from "../lib/api";
 import { getCurrentUser } from "./UserPicker";
 import { type FileAttachment } from "../lib/images";
 import {
@@ -29,7 +29,8 @@ import { baseModelId, modelEngine } from "./ModelEffortSelect";
 import { getSendKeyPref, onSendKeyChanged } from "../lib/send-key-pref";
 import { effectiveSendKey, MOD_ENTER_GLYPH } from "../lib/send-key";
 import { isApple } from "../lib/platform";
-import { NO_REPO } from "../lib/session-repo";
+import { AUTO_REPO, NO_REPO } from "../lib/session-repo";
+import { getDefaultRepoPref, setDefaultRepoPref } from "../lib/default-repo-pref";
 import { repoSelectionHint, toggleRepoSelection } from "../lib/repo-selection";
 import {
   NewSessionPrompt,
@@ -47,6 +48,7 @@ import {
   IconMessage,
   IconStack,
   IconNewBranch,
+  IconSparkle,
 } from "./icons";
 import type { WSServerMessage, Workspace } from "../lib/types";
 import { VoiceInput } from "./VoiceInput";
@@ -308,18 +310,27 @@ const INLINE_CARD = cn(
 	composerBox,
 );
 
-function lastSelectedRepo(): string | null {
+/**
+ * The repo a fresh palette starts on, for someone who hasn't set a preference.
+ *
+ * This used to be stickiness: whatever you picked last was silently pinned as
+ * your default. That reading can't coexist with Auto — pick a repo once and
+ * Auto would never be your default again — so the sticky value is carried over
+ * into the real preference ONCE and the key retired. Someone who demonstrably
+ * always worked in one repo keeps landing there; everyone else meets Auto.
+ */
+function migratedRepoPref(): string {
+  const preferred = getDefaultRepoPref();
+  if (preferred) return preferred;
   try {
-    return localStorage.getItem(LAST_REPO_KEY) || null;
+    const sticky = localStorage.getItem(LAST_REPO_KEY);
+    if (!sticky) return "";
+    setDefaultRepoPref(sticky);
+    localStorage.removeItem(LAST_REPO_KEY);
+    return sticky;
   } catch {
-    return null;
+    return "";
   }
-}
-
-function rememberSelectedRepo(repo: string) {
-  try {
-    localStorage.setItem(LAST_REPO_KEY, repo);
-  } catch {}
 }
 
 // The repo the sidebar is currently filtered to (persisted by Sidebar.tsx under
@@ -348,7 +359,7 @@ function readPrefill() {
   // repo the last code session used.
   const repo =
     repoParam ||
-    (mode === "ask" ? NO_REPO : lastSelectedRepo() || filteredRepo() || "");
+    (mode === "ask" ? NO_REPO : migratedRepoPref() || filteredRepo() || "");
   return {
     mode,
     prompt: params.get("prompt") || "",
@@ -418,13 +429,7 @@ export function NewSession({ onBack, inline, focusSeq, send, addHandler, connect
     if (forceRepo) return;
     if (next === "ask") setRepo(NO_REPO);
     else if (repo === NO_REPO)
-      setRepo(
-        lastSelectedRepo() ||
-          configuredDefaultRepo ||
-          repos.find((p) => p.default)?.id ||
-          repos[0]?.id ||
-          "",
-      );
+      setRepo(migratedRepoPref() || configuredDefaultRepo || AUTO_REPO);
   }
 
   // The three modes the server stores, from the two axes above. Ask reads (a
@@ -449,8 +454,16 @@ export function NewSession({ onBack, inline, focusSeq, send, addHandler, connect
         sharedCheckout: item.sharedCheckout,
       }));
       setRepos(options);
+      // The workspace's configured choice (which may itself be Auto) is what a
+      // user with no preference of their own starts on; the repo flagged
+      // `default` is only the last resort behind it.
+      const workspaceChoice = configuredNewSessionRepo();
       setConfiguredDefaultRepo(
-        options.find((item) => item.default)?.id || options[0]?.id || "",
+        (workspaceChoice === AUTO_REPO || options.some((i) => i.id === workspaceChoice)
+          ? workspaceChoice
+          : "") ||
+          options.find((item) => item.default)?.id ||
+          AUTO_REPO,
       );
     }).catch(() => {
       if (!live) return;
@@ -465,12 +478,39 @@ export function NewSession({ onBack, inline, focusSeq, send, addHandler, connect
       // "No repo" is a real choice, not an unresolved id — without this it
       // fails the `repos.some(...)` membership test below and gets replaced by
       // the configured default the moment /repos lands.
+      // "No repo" and "Auto" are real choices, not unresolved ids: neither is
+      // in `repos`, so without this both lose to the configured default the
+      // moment /repos lands.
       if (forceRepo === NO_REPO || current === NO_REPO) return current;
+      if (current === AUTO_REPO) return current;
       if (forceRepo && repos.some((item) => item.id === forceRepo)) return forceRepo;
       if (repos.some((item) => item.id === current)) return current;
       return configuredDefaultRepo;
     });
   }, [configuredDefaultRepo, forceRepo, repos]);
+  /**
+   * What Auto made of the prompt. Resolved on the same beat the branch name is
+   * (once typing has stopped), because it reads what the draft SAYS.
+   *
+   * It lands late — a classification runs ~13s — so this is a fill-in, never a
+   * gate: the picker shows "Auto" immediately and names the repo when it
+   * knows. A Create that beats it doesn't wait either; it hands the same
+   * decision to the server (AUTO_REPO), which resolves it before cutting
+   * anything.
+   */
+  const [autoResolved, setAutoResolved] = useState<RepoSuggestion | null>(null);
+  const [autoResolving, setAutoResolving] = useState(false);
+  // Keyed on the exact text it answered for: an edited prompt invalidates the
+  // answer rather than quietly attaching the previous one's repo.
+  const autoAnsweredFor = useRef("");
+  const autoSeqRef = useRef(0);
+  /**
+   * The repo the REST of the palette acts on. Auto is a picker value, not a
+   * checkout: the branch picker, the prompt's repo context and the create all
+   * want the repo it resolved to, and nothing at all until it has.
+   */
+  const effectiveRepo = repo === AUTO_REPO ? (autoResolved?.repo ?? "") : repo;
+
   /** A repo's picker label, falling back to its id before `/repos` lands. */
   const repoOptionLabel = (id: string) =>
     repos.find((item) => item.id === id)?.label || id;
@@ -767,14 +807,14 @@ export function NewSession({ onBack, inline, focusSeq, send, addHandler, connect
   // Inside a workspace, snap back to the shared sibling branch, not "New branch".
   useEffect(() => {
     setSelectedWorktree(forceBranch || "__new__");
-    if (!repo) {
+    if (!effectiveRepo || effectiveRepo === NO_REPO) {
       setWorktrees([]);
       return;
     }
-    fetchWorktrees(repo)
+    fetchWorktrees(effectiveRepo)
       .then(setWorktrees)
       .catch(() => setWorktrees([]));
-  }, [repo, forceBranch]);
+  }, [effectiveRepo, forceBranch]);
 
   // Auto-suggest a branch name from the prompt (a Haiku call, once typing has
   // stopped), but only while the field is "ours" — once the user types in it
@@ -798,6 +838,28 @@ export function NewSession({ onBack, inline, focusSeq, send, addHandler, connect
       if (branch) setNewBranch(branch);
     })();
   }, [settledPrompt, mode, selectedWorktree, branchEdited]);
+
+  useEffect(() => {
+    if (repo !== AUTO_REPO) {
+      setAutoResolved(null);
+      setAutoResolving(false);
+      autoAnsweredFor.current = "";
+      return;
+    }
+    const text = settledPrompt.trim();
+    if (text.length < 10 || text === autoAnsweredFor.current) return;
+    const seq = ++autoSeqRef.current;
+    setAutoResolving(true);
+    void (async () => {
+      const suggestion = await suggestRepos(text, permission === "ask" ? "ask" : "code");
+      // Superseded by a newer prompt, or the picker moved off Auto while we
+      // were out — either way this answer is for a question nobody asked.
+      if (seq !== autoSeqRef.current) return;
+      autoAnsweredFor.current = text;
+      setAutoResolved(suggestion);
+      setAutoResolving(false);
+    })();
+  }, [repo, settledPrompt, permission]);
 
   // Registered from mount and gated on a ref set synchronously in handleCreate:
   // session_created is announced before the worktree even boots, so it can
@@ -936,7 +998,29 @@ export function NewSession({ onBack, inline, focusSeq, send, addHandler, connect
       selectedWorktree === "__new__"
         ? newBranch.trim() || slugifyBranch(prompt)
         : selectedWorktree;
-    const attachRepos = extraRepos.filter((id) => id !== repo);
+    // On Auto, send what it resolved; if it hasn't yet, send the sentinel and
+    // let the server decide rather than making anyone watch a ~13s spinner.
+    // Either way the session records a real repo — "auto" never persists.
+    const createRepo =
+      repo === AUTO_REPO
+        ? autoResolved
+          ? (autoResolved.repo ?? NO_REPO)
+          : AUTO_REPO
+        : repo;
+    const attachRepos =
+      repo === AUTO_REPO
+        ? (autoResolved?.extras ?? [])
+        : extraRepos.filter((id) => id !== createRepo);
+    // Auto resolving to "no repo" makes this a scratch session, the same as
+    // picking No repo by hand would. Unresolved stays "code": the server is
+    // about to decide, and a code session with a repo is what it decides
+    // between (an Ask keeps its own mode either way).
+    const createMode =
+      repo === AUTO_REPO && permission !== "ask"
+        ? createRepo === NO_REPO
+          ? ("scratch" as const)
+          : ("code" as const)
+        : mode;
 
     // With "Create more" off, App tears down the palette when the
     // session_created event arrives (and drops us into the new session).
@@ -947,12 +1031,19 @@ export function NewSession({ onBack, inline, focusSeq, send, addHandler, connect
     // stacking a fresh worktree off it for a new branch. Unscoped, the default
     // is a brand-new Workspace + first Session created together.
     const worktreeMode =
-      mode === "ask" ? "ask" : mode === "code" && selectedWorktree === "__new__" ? "stack" : "share";
+      createMode === "ask"
+        ? "ask"
+        : createMode === "code" && selectedWorktree === "__new__"
+          ? "stack"
+          : "share";
     onCreateStarted?.({
       prompt,
-      mode,
-      repo,
-      branch: mode === "code" ? branch : null,
+      mode: createMode,
+      // The optimistic shell wants somewhere to file the session. An Auto that
+      // hasn't answered has nowhere yet, so it borrows the configured default
+      // for the moment before session_created replaces the whole record.
+      repo: createRepo === AUTO_REPO ? configuredDefaultRepo : createRepo,
+      branch: createMode === "code" ? branch : null,
       ...(workspaceId ? { workspaceId } : {}),
       ...(model ? { model } : {}),
       ...(images.length ? { images } : {}),
@@ -961,17 +1052,19 @@ export function NewSession({ onBack, inline, focusSeq, send, addHandler, connect
     });
     send({
       type: "create_session",
-      mode,
-      repo,
+      mode: createMode,
+      repo: createRepo,
       // Repos to work in beside `repo`. The server cuts each an isolated
       // worktree on this session's branch before the first turn runs, so the
       // agent is told about them in the same breath as its own checkout.
-      ...(canAddRepos && attachRepos.length ? { attachRepos } : {}),
+      ...(attachRepos.length && (canAddRepos || repo === AUTO_REPO)
+        ? { attachRepos }
+        : {}),
       ...(workspaceId
         ? { workspaceId: workspaceId, worktreeMode }
         : { createWorkspace: {} }),
       ...(modelWorkspaceId ? { modelWorkspaceId } : {}),
-      branch: mode === "code" ? branch : "",
+      branch: createMode === "code" ? branch : "",
       prompt,
       user: getCurrentUser(),
       ...(model ? { model } : {}),
@@ -1078,29 +1171,53 @@ export function NewSession({ onBack, inline, focusSeq, send, addHandler, connect
                 icon: <IconMessage size={20} />,
                 singleOnly: true,
               },
+              // Last, and on its own: the other rows name a place, this one
+              // defers the choice to what you type. It can't be one of several
+              // — deciding is the whole of it.
+              {
+                value: AUTO_REPO,
+                label: "Auto",
+                icon: <IconSparkle size={20} />,
+                singleOnly: true,
+              },
             ]}
             onChange={(nextRepo) => {
               setRepo(nextRepo);
               // A plain pick is "work here", not "and here too": it replaces
               // the whole selection, which is what it did before any of this.
+              // It does NOT become your default either — that is a setting
+              // now (Settings → Preferences), not a thing the picker infers.
               setExtraRepos([]);
-              if (nextRepo !== NO_REPO) rememberSelectedRepo(nextRepo);
             }}
             extraValues={extraRepos}
             onToggleExtra={
               canAddRepos
                 ? (id) => {
+                    // Adding a repo BESIDE Auto means nothing — there is no
+                    // first repo yet to put a second one next to. So on Auto a
+                    // modifier-click is just a pick, which is also the only
+                    // reading that leaves the picker in a coherent state.
+                    if (repo === AUTO_REPO) {
+                      setRepo(id);
+                      setExtraRepos([]);
+                      return;
+                    }
                     const next = toggleRepoSelection(
                       { repo, extras: extraRepos },
                       id,
                     );
                     setRepo(next.repo);
                     setExtraRepos(next.extras);
-                    rememberSelectedRepo(next.repo);
                   }
                 : undefined
             }
-            multiHint={repoSelectionHint(extraRepos, repoOptionLabel, MULTI_MODIFIER)}
+            multiHint={
+              repo === AUTO_REPO
+                ? autoResolved?.reason
+                  ? `Chose ${autoResolved.repo ? repoOptionLabel(autoResolved.repo) : "no repo"} — ${autoResolved.reason}.`
+                  : "Picks the repository from what you type."
+                : repoSelectionHint(extraRepos, repoOptionLabel, MULTI_MODIFIER)
+            }
             // A feed workspace is repo-less by construction (its subject is a
             // Tella video, not a checkout), so its create doesn't offer one.
             disabled={busy || forceMode === "scratch"}
@@ -1109,14 +1226,31 @@ export function NewSession({ onBack, inline, focusSeq, send, addHandler, connect
           >
             {repo === NO_REPO ? (
               <IconMessage className="shrink-0" size={18} />
+            ) : repo === AUTO_REPO && !autoResolved?.repo ? (
+              <IconSparkle className="shrink-0" size={18} />
             ) : (
-              <RepoTile name={repo} />
+              <RepoTile name={effectiveRepo || repo} />
             )}
             <span className="truncate">
               {repo === NO_REPO
                 ? "No repo"
-                : repoOptionLabel(repo) || repo || "No repositories"}
+                : repo === AUTO_REPO
+                  ? // Auto names what it picked as soon as it knows, because
+                    // that — not the word "Auto" — is what you need to see
+                    // before committing a session to it. Until then it says
+                    // what it is doing rather than showing a spinner.
+                    autoResolved
+                    ? autoResolved.repo
+                      ? repoOptionLabel(autoResolved.repo)
+                      : "No repo"
+                    : autoResolving
+                      ? "Choosing…"
+                      : "Auto"
+                  : repoOptionLabel(repo) || repo || "No repositories"}
             </span>
+            {repo === AUTO_REPO && autoResolved && (
+              <span className="shrink-0 text-label font-medium text-dim">Auto</span>
+            )}
             {/* The trigger has room for one repo, so the rest ride as a count —
                 the same shorthand the session header's repo pill uses. */}
             {extraRepos.length > 0 && (
@@ -1161,7 +1295,7 @@ export function NewSession({ onBack, inline, focusSeq, send, addHandler, connect
           textareaRef={promptRef}
           valueRef={promptText}
           handle={promptHandle}
-          repo={repo}
+          repo={effectiveRepo}
           // Ask sessions read and explain; they never touch the code. Asking
           // "what to work on" in that mode invites a prompt the session
           // cannot carry out.

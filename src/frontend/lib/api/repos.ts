@@ -74,13 +74,28 @@ export async function uploadRepoIconApi(
 
 const REPO_FETCH_RETRY_DELAYS_MS = [250, 750, 1_500];
 
+/**
+ * The workspace's own answer to "which repo does a new session start in?" — a
+ * repo id, or "auto". Captured from the /repos payload rather than returned by
+ * fetchRepos, whose RepoInfo[] every caller already destructures; the picker
+ * reads it in the same `.then()` that sets the repo list.
+ */
+let workspaceNewSessionRepo = "";
+
+/** The workspace default seen on the last /repos fetch ("" before one lands). */
+export function configuredNewSessionRepo(): string {
+	return workspaceNewSessionRepo;
+}
+
 export async function fetchRepos(): Promise<RepoInfo[]> {
 	for (let attempt = 0; ; attempt++) {
 		try {
-			const data = await request<{ repos?: RepoInfo[] }>(
+			const data = await request<{ repos?: RepoInfo[]; newSessionRepo?: string }>(
 				"/repos",
 				{ label: "Failed to load repositories" },
 			);
+			if (typeof data?.newSessionRepo === "string")
+				workspaceNewSessionRepo = data.newSessionRepo;
 			// Recorded here rather than at the call sites: every tile reads the
 			// assignment, and the tile takes a repo id, not a RepoInfo.
 			rememberRepoColors(data?.repos ?? []);

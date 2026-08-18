@@ -33,7 +33,7 @@ import {
 import { attachRepo, switchPrimaryRepo, workspaceOwningWorktree } from "../session-repos";
 import { getAllSessions, getTranscriptPath } from "../sessions";
 import { writeJsonAtomic } from "../shared/atomic-write";
-import { configuredIdentity, defaultRepo } from "../config";
+import { configuredIdentity, defaultRepo, newSessionRepoDefault } from "../config";
 import { searchSkills } from "../skills";
 import { handleSlashCommand } from "../slash-commands";
 import { suggestBranchName } from "../suggest-branch";
@@ -318,6 +318,10 @@ export async function handleWorkspaceRoutes(
 					iconRev: repoIconRevision(icon),
 				};
 			}),
+			// What the New-session picker starts on for users with no personal
+			// preference of their own: a repo id, or "auto". Rides this fetch
+			// because it is the same thing the picker is already loading.
+			newSessionRepo: newSessionRepoDefault(),
 		});
 	}
 

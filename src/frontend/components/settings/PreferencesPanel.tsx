@@ -2,8 +2,10 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import {
 	fetchModels,
 	fetchPersonalPrompt,
+	fetchRepos,
 	savePersonalPrompt,
 	type ModelOption,
+	type RepoInfo,
 } from "../../lib/api";
 import { BASE_PATH } from "../../lib/base";
 import {
@@ -19,6 +21,12 @@ import {
 	onDefaultModelPrefChanged,
 	setDefaultModelPref,
 } from "../../lib/default-model-pref";
+import {
+	getDefaultRepoPref,
+	onDefaultRepoPrefChanged,
+	setDefaultRepoPref,
+} from "../../lib/default-repo-pref";
+import { AUTO_REPO } from "../../lib/session-repo";
 import {
 	getDeskVoicePref,
 	onDeskVoiceChanged,
@@ -361,6 +369,14 @@ export function PreferencesPanel() {
 		() => onDefaultModelPrefChanged(() => setModelPref(getDefaultModelPref())),
 		[],
 	);
+	// Per-user default repo for NEW sessions ("" = no preference — the
+	// workspace's own default from GET /api/repos applies, which may be Auto).
+	const [repoPref, setRepoPref] = useState<string>(getDefaultRepoPref);
+	const [repoOptions, setRepoOptions] = useState<RepoInfo[]>([]);
+	useEffect(
+		() => onDefaultRepoPrefChanged(() => setRepoPref(getDefaultRepoPref())),
+		[],
+	);
 	const [turnActivity, setTurnActivity] =
 		useState<TurnActivityPref>(getTurnActivityPref);
 	useEffect(
@@ -370,6 +386,11 @@ export function PreferencesPanel() {
 	useEffect(() => {
 		fetchModels()
 			.then((m) => setModelOptions(m.models))
+			.catch(() => {});
+	}, []);
+	useEffect(() => {
+		fetchRepos()
+			.then(setRepoOptions)
 			.catch(() => {});
 	}, []);
 
@@ -398,6 +419,30 @@ export function PreferencesPanel() {
 								})),
 							]}
 							onChange={setDefaultModelPref}
+						/>
+					}
+				/>
+				<SettingRow
+					title="Default repository"
+					desc="Where a new session starts. On Auto it reads your prompt and picks."
+					control={
+						<Select
+							label="Default repository"
+							value={
+								repoPref === AUTO_REPO ||
+								repoOptions.some((r) => r.id === repoPref)
+									? repoPref
+									: ""
+							}
+							options={[
+								{ value: "", label: "Use the workspace default" },
+								{ value: AUTO_REPO, label: "Auto" },
+								...repoOptions.map((r) => ({
+									value: r.id,
+									label: r.label || r.id,
+								})),
+							]}
+							onChange={setDefaultRepoPref}
 						/>
 					}
 				/>
