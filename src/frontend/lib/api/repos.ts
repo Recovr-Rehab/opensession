@@ -25,6 +25,24 @@ export interface RepoInfo {
 	iconRev?: number | null;
 }
 
+/**
+ * Set the workspace's default repository for new sessions — a repo id, "auto",
+ * or "" to clear it back to the fallback. Admin-facing (Settings →
+ * Repositories); the per-user preference overrides it.
+ */
+export async function setNewSessionRepoApi(repo: string): Promise<string> {
+	const data = await request<{ newSessionRepo?: string }>(
+		"/repos/new-session-default",
+		{
+			method: "PUT",
+			body: { repo },
+			label: "Failed to set the default repository",
+		},
+	);
+	workspaceNewSessionRepo = data?.newSessionRepo ?? repo;
+	return workspaceNewSessionRepo;
+}
+
 /** Set a repo's tile color, or fetch/clear its icon (Settings → Setup). */
 export async function setRepoAppearanceApi(
 	id: string,

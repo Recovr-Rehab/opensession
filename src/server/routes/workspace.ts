@@ -33,7 +33,9 @@ import {
 import { attachRepo, switchPrimaryRepo, workspaceOwningWorktree } from "../session-repos";
 import { getAllSessions, getTranscriptPath } from "../sessions";
 import { writeJsonAtomic } from "../shared/atomic-write";
-import { configuredIdentity, defaultRepo, newSessionRepoDefault } from "../config";
+import { configuredIdentity, configuredRepos, defaultRepo, newSessionRepoDefault } from "../config";
+import { persistRawConfig, rawConfig, withConfigMutationLock } from "../config-mutation";
+import { AUTO_REPO } from "../worktree";
 import { searchSkills } from "../skills";
 import { handleSlashCommand } from "../slash-commands";
 import { suggestBranchName } from "../suggest-branch";
@@ -323,6 +325,30 @@ export async function handleWorkspaceRoutes(
 			// because it is the same thing the picker is already loading.
 			newSessionRepo: newSessionRepoDefault(),
 		});
+	}
+
+	// Where new sessions start for everyone without a preference of their own.
+	// Kept apart from the per-repo `default` flag on purpose: that one is a
+	// server-wide fallback that must always name a real checkout, so it cannot
+	// carry "auto" (see newSessionRepoDefault in config.ts).
+	if (path === "/api/repos/new-session-default" && req.method === "PUT") {
+		const body = await req.json().catch(() => null);
+		const value = typeof body?.repo === "string" ? body.repo.trim() : "";
+		if (value && value !== AUTO_REPO && !(value in configuredRepos())) {
+			return Response.json(
+				{ error: `Unknown repository: ${value}` },
+				{ status: 400 },
+			);
+		}
+		await withConfigMutationLock(async () => {
+			const config = rawConfig();
+			// "" clears the setting rather than storing an empty choice, so the
+			// key's absence keeps meaning "fall back" everywhere that reads it.
+			if (value) config.newSessionRepo = value;
+			else delete config.newSessionRepo;
+			persistRawConfig(config);
+		});
+		return Response.json({ newSessionRepo: newSessionRepoDefault() });
 	}
 
 	// The owner's GitHub avatar, so the tile picker can OFFER the picture
