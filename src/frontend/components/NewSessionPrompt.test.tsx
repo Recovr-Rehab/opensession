@@ -25,7 +25,7 @@ function field(overrides: Partial<Parameters<typeof NewSessionPrompt>[0]> = {}) 
 		disabled: false,
 		images: [],
 		files: [],
-		attaching: null,
+		staging: { images: 0, files: 0 },
 		onRemoveImage: () => {},
 		onRemoveFile: () => {},
 		onAddAttachments: () => {},
@@ -76,13 +76,34 @@ test("attachments share the prompt's scroller", () => {
 });
 
 // A pasted screenshot is uploaded before it is attached, and during a slow
-// load that takes seconds. Without this row the card looks like it ignored
-// the paste, and the second paste leaves you with two of the same picture.
-test("a file still being staged says so", () => {
-	const { html } = field({ attaching: "Attaching 1 image…" });
+// load that takes seconds. Without something standing in for it the card
+// looks like it ignored the paste, and the second paste leaves you with two
+// of the same picture.
+test("an image still being staged holds its place", () => {
+	const { html } = field({ staging: { images: 1, files: 0 } });
 
+	// The tile itself, in the row the picture will land in.
+	expect(html).toContain("animate-pulse");
+	// And the same news for a reader who cannot see it.
 	expect(html).toContain("Attaching 1 image…");
 	expect(html).toContain('role="status"');
+});
+
+test("a staged file holds its place too", () => {
+	const { html } = field({ staging: { images: 0, files: 1 } });
+
+	expect(html).toContain("animate-pulse");
+	expect(html).toContain("Attaching 1 file…");
+});
+
+test("a staged image's ghost does not survive its arrival", () => {
+	const { html } = field({
+		images: ["data:image/png;base64,iVBORw0KGgo="],
+		staging: { images: 0, files: 0 },
+	});
+
+	expect(html).not.toContain("animate-pulse");
+	expect(html).not.toContain("Attaching");
 });
 
 test("a busy create disables the field", () => {

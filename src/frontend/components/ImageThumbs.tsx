@@ -6,11 +6,18 @@ interface Props {
   images: string[];
   onRemove: (index: number) => void;
   disabled?: boolean;
+  /**
+   * Images still on their way to disk. A paste is not attached until its
+   * upload lands, which during a slow load is seconds of a composer that looks
+   * like it ignored you — so each one stands here as a ghost tile until its
+   * picture replaces it.
+   */
+  pending?: number;
 }
 
 /** Removable thumbnail row for pasted/dropped image attachments. */
-export function ImageThumbs({ images, onRemove, disabled }: Props) {
-  if (images.length === 0) return null;
+export function ImageThumbs({ images, onRemove, disabled, pending = 0 }: Props) {
+  if (images.length === 0 && pending < 1) return null;
   return (
     <div className="mb-2 flex flex-wrap gap-2">
       {images.map((src, i) => (
@@ -45,6 +52,17 @@ export function ImageThumbs({ images, onRemove, disabled }: Props) {
             ×
           </button>
         </div>
+      ))}
+      {/* The shape the picture will take, in the place it will take it: the
+          app's skeleton language (a bordered block that breathes) rather than
+          a spinner, which in this product means an agent is working. 100px is
+          a 16:9 screenshot at this height, so the common paste barely moves
+          when the real thumbnail lands. */}
+      {Array.from({ length: pending }, (_, i) => (
+        <div
+          key={`staging-${i}`}
+          className="h-14 w-[100px] animate-pulse rounded-control border border-line-strong bg-hover"
+        />
       ))}
     </div>
   );

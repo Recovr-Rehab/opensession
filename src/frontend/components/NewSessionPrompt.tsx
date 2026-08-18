@@ -8,6 +8,7 @@ import React, {
 } from "react";
 import { fetchFileMentions, fetchSkillMentions } from "../lib/api";
 import { saveDraft, NEW_SESSION_DRAFT_KEY as DRAFT_KEY } from "../lib/drafts";
+import { attachingLabel, type StagingCount } from "../lib/attachments";
 import { imageFilesFromPaste, type FileAttachment } from "../lib/images";
 import { peopleMentionMatches } from "../lib/people";
 import { insertPastedSessionId } from "../lib/session-url";
@@ -24,7 +25,6 @@ import { useFileMentions } from "./useFileMentions";
 import { ImageThumbs } from "./ImageThumbs";
 import { FileChips } from "./FileChips";
 import { cn } from "../ui/cn";
-import { Spinner } from "../ui/spinner";
 
 /** One scroll surface for the prompt and its attachments. Keeping the image in
  *  this flow means it travels with the text instead of pinning over it.
@@ -79,10 +79,11 @@ interface Props {
 	disabled: boolean;
 	images: string[];
 	files: FileAttachment[];
-	/** What is still being written to disk, or null when nothing is. A pasted
-	 *  screenshot is not attached until its upload lands, and during a slow
-	 *  load that is seconds of a card that looks like it ignored the paste. */
-	attaching: string | null;
+	/** What is still being written to disk. A pasted screenshot is not attached
+	 *  until its upload lands, and during a slow load that is seconds of a card
+	 *  that looks like it ignored the paste, so each one holds its place in the
+	 *  attachment row as a ghost. */
+	staging: StagingCount;
 	onRemoveImage: (index: number) => void;
 	onRemoveFile: (index: number) => void;
 	onAddAttachments: (picked: FileList | File[]) => void;
@@ -124,7 +125,7 @@ export function NewSessionPrompt({
 	disabled,
 	images,
 	files,
-	attaching,
+	staging,
 	onRemoveImage,
 	onRemoveFile,
 	onAddAttachments,
@@ -473,16 +474,25 @@ export function NewSessionPrompt({
 					{...noAutofill}
 				/>
 			</div>
-			<ImageThumbs images={images} onRemove={onRemoveImage} disabled={disabled} />
-			<FileChips files={files} onRemove={onRemoveFile} disabled={disabled} />
-			{attaching && (
-				<div
-					className="mb-2 flex items-center gap-2 text-label text-dim"
-					role="status"
-				>
-					<Spinner />
-					{attaching}
-				</div>
+			<ImageThumbs
+				images={images}
+				pending={staging.images}
+				onRemove={onRemoveImage}
+				disabled={disabled}
+			/>
+			<FileChips
+				files={files}
+				pending={staging.files}
+				onRemove={onRemoveFile}
+				disabled={disabled}
+			/>
+			{/* The ghost tiles are the whole message on screen, and they say
+			    nothing out loud. This is the same news for a reader who cannot
+			    see them. */}
+			{attachingLabel(staging) && (
+				<span className="sr-only" role="status">
+					{attachingLabel(staging)}
+				</span>
 			)}
 		</div>
 	);

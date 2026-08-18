@@ -12,7 +12,6 @@ import {
 import {
   addStaging,
   attachToDraft,
-  attachingLabel,
   countStaging,
   dropStagingAttachments,
   isStaging,
@@ -1309,7 +1308,7 @@ export function NewSession({ onBack, inline, focusSeq, send, addHandler, connect
           disabled={busy}
           images={images}
           files={files}
-          attaching={attachingLabel(staging)}
+          staging={staging}
           onRemoveImage={(i) => {
             removeDraftImage(DRAFT_KEY, i);
             adoptDraftAttachments();
