@@ -116,7 +116,7 @@ export function PrFileTree({
       className="relative flex min-h-0 shrink-0 flex-col bg-raised"
       style={{ width: renderedWidth, maxWidth: `calc(100% - ${MIN_DIFF_WIDTH}px)` }}
     >
-      <div className="flex h-10 shrink-0 items-center gap-2 px-3 text-label font-medium text-fg shadow-[inset_0_-1px_0_var(--divider)]">
+      <div className="flex h-11 shrink-0 items-center gap-2 px-3 text-label font-medium text-fg shadow-[inset_0_-1px_0_var(--divider)]">
         <span className="min-w-0 flex-1 truncate">Changed files</span>
         <span className="text-meta font-normal tabular-nums text-faint">{paths.length}</span>
       </div>
