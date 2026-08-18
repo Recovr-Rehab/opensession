@@ -59,6 +59,8 @@ export interface WSClientData {
 	feedEpoch?: string;
 	/** Most recent session join, used to collapse a user's multiple sockets. */
 	watchJoinedAt?: number;
+	/** Monotonic guard for async watch lookup. A later watch/unwatch/close wins. */
+	watchRequest?: number;
 	/** This socket is served by the transcript store instead of a file watcher. */
 	transcriptV2?: boolean;
 	/** User-agent provenance for presence diagnostics. */

@@ -38,7 +38,9 @@ import { suggestBranchName } from "../suggest-branch";
 import { transitionRunState } from "../run-state";
 import {
 	findSession,
+	findSessionAsync,
 	getCachedSessions,
+	getCachedSessionsAsync,
 	invalidateSessionsCache,
 	maybePersistEffort,
 	maybePersistFastMode,
@@ -92,7 +94,7 @@ interface SessionsResponseSnapshot {
 	text: string;
 	hash: string;
 	expiresAt: number;
-	gzip?: Blob;
+	gzip?: Promise<Blob>;
 }
 /**
  * Which slice of the session list a request asked for.
@@ -198,10 +200,10 @@ const sessionsResponseSnapshots: Map<
 	SessionsResponseSnapshot
 > = ((globalThis as any).__osSessionsResponseSnapshots ??= new Map());
 
-function sessionsListResponse(
+async function sessionsListResponse(
 	req: Request,
 	snapshot: SessionsResponseSnapshot,
-): Response {
+): Promise<Response> {
 	const gzip = (req.headers.get("Accept-Encoding") || "").includes("gzip");
 	const etag = `"${snapshot.hash}${gzip ? "-gzip" : ""}"`;
 	const headers = new Headers({
@@ -214,12 +216,13 @@ function sessionsListResponse(
 	if (req.headers.get("If-None-Match") === etag)
 		return new Response(null, { status: 304, headers });
 	if (!gzip) return new Response(snapshot.text, { headers });
-	if (!snapshot.gzip) {
-		snapshot.gzip = new Blob([
-			Bun.gzipSync(new TextEncoder().encode(snapshot.text)),
-		]);
-	}
-	return new Response(snapshot.gzip, { headers });
+	if (!snapshot.gzip)
+		snapshot.gzip = new Response(
+			new Blob([snapshot.text])
+				.stream()
+				.pipeThrough(new CompressionStream("gzip")),
+		).blob();
+	return new Response(await snapshot.gzip, { headers });
 }
 
 /**
@@ -538,7 +541,7 @@ export async function handleSessionsRoutes(
 		// workspace would grow an entry per workspace forever.
 		const scope = archivedScope(url.searchParams, variant);
 		if (scope) {
-			const rows = getCachedSessions()
+			const rows = (await getCachedSessionsAsync())
 				.filter((s) => s.archived && inWorkspaceGroup(s, scope))
 				.map(enrichSession);
 			const text = JSON.stringify(
@@ -547,7 +550,7 @@ export async function handleSessionsRoutes(
 					: rows.map(sessionListRow),
 			);
 			// Still ETagged, so a client polling its workspace settles into 304s.
-			return sessionsListResponse(req, {
+			return await sessionsListResponse(req, {
 				text,
 				hash: Bun.hash(text).toString(16),
 				expiresAt: 0,
@@ -555,8 +558,8 @@ export async function handleSessionsRoutes(
 		}
 		const cached = sessionsResponseSnapshots.get(variant);
 		if (cached && cached.expiresAt > Date.now())
-			return sessionsListResponse(req, cached);
-		const enriched = getCachedSessions().map(enrichSession);
+			return await sessionsListResponse(req, cached);
+		const enriched = (await getCachedSessionsAsync()).map(enrichSession);
 		const sessions = enriched;
 		const sliced =
 			variant === "include"
@@ -575,7 +578,7 @@ export async function handleSessionsRoutes(
 			expiresAt: Date.now() + SESSIONS_RESPONSE_TTL_MS,
 		};
 		sessionsResponseSnapshots.set(variant, snapshot);
-		return sessionsListResponse(req, snapshot);
+		return await sessionsListResponse(req, snapshot);
 	}
 
 	// Deliver a follow-up prompt to an existing session. REST shape for the
@@ -716,7 +719,7 @@ export async function handleSessionsRoutes(
 		const sessionId = decodeURIComponent(
 			path.match(/^\/api\/sessions\/(.+)\/transcript$/)![1],
 		);
-		const session = findSession(sessionId);
+		const session = await findSessionAsync(sessionId);
 		if (!session)
 			return Response.json({ error: "Session not found" }, { status: 404 });
 		// Engine-spanning read: the transcript file plus, for sessions with
@@ -1263,7 +1266,7 @@ export async function handleSessionsRoutes(
 		const m = path.match(/^\/api\/sessions\/([^/]+)$/);
 		if (m && req.method === "GET") {
 			const sessionId = decodeURIComponent(m[1]);
-			const session = getCachedSessions().find(
+			const session = (await getCachedSessionsAsync()).find(
 				(s) => s.id === sessionId || s.aliasIds?.includes(sessionId),
 			);
 			if (!session)

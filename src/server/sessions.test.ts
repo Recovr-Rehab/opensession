@@ -116,6 +116,27 @@ function uuidV7ForDate(iso: string): string {
 }
 
 describe("getAllSessions", () => {
+	it("keeps the cooperative request scan byte-for-byte equivalent", async () => {
+		writeSession("bks-cooperative-scan", {
+			title: "Cooperative scan",
+			model: "claude-fable-5",
+			workspaceId: "ws-cooperative",
+		});
+		const { getAllSessions, getAllSessionsAsync } = await import(
+			`./sessions.ts?test=${crypto.randomUUID()}`
+		);
+		const select = (sessions: UnifiedSession[]) =>
+			sessions.map(({ id, title, source, model, workspaceId }) => ({
+				id,
+				title,
+				source,
+				model,
+				workspaceId,
+			}));
+
+		expect(select(await getAllSessionsAsync())).toEqual(select(getAllSessions()));
+	});
+
 	it("keeps Codex worker sessions visible even when they have no workspace", async () => {
 		writeSession("bks-codex-worker", {
 			title: "Codex worker with no workspace",

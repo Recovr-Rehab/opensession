@@ -1,4 +1,5 @@
 import { readdirSync, readFileSync, statSync, unlinkSync, writeFileSync } from "fs";
+import { opendir } from "fs/promises";
 import { OPENSESSION_SESSIONS_DIR } from "./paths";
 import { statePath } from "./paths";
 import { existsSync } from "fs";
@@ -11,6 +12,7 @@ import { getStatusOverride } from "./status-overrides";
 import { getReviewRequest } from "./review-requests";
 import { getGeneratedTitle } from "./generated-titles";
 import { ensureSessionWorkspaces } from "./session-workspace";
+import { warmWorkspaceNamesAsync } from "./workspaces";
 import { findCodexRollout } from "./codex-accounts";
 import { providerFor } from "./models";
 import { parseTranscript, parseTranscriptAsync } from "./jsonl-parser";
@@ -677,10 +679,13 @@ function findTranscriptPath(
 // burst of rebuilds shares one index while newly-written transcripts still show
 // up within a couple seconds.
 let transcriptIndexCache: { map: Map<string, string>; ts: number } | null = null;
+let transcriptIndexRefresh: Promise<void> | null = null;
+let transcriptIndexGeneration = 0;
 const TRANSCRIPT_INDEX_TTL = 2000;
 function transcriptIndex(): Map<string, string> {
   if (transcriptIndexCache && Date.now() - transcriptIndexCache.ts < TRANSCRIPT_INDEX_TTL)
     return transcriptIndexCache.map;
+  transcriptIndexGeneration++;
   const map = new Map<string, string>();
   let projectDirs: string[];
   try {
@@ -704,6 +709,57 @@ function transcriptIndex(): Map<string, string> {
   }
   transcriptIndexCache = { map, ts: Date.now() };
   return map;
+}
+
+async function warmTranscriptIndexAsync(): Promise<void> {
+  while (
+    !transcriptIndexCache ||
+    Date.now() - transcriptIndexCache.ts >= TRANSCRIPT_INDEX_TTL
+  ) {
+    if (!transcriptIndexRefresh) {
+      const generation = ++transcriptIndexGeneration;
+      transcriptIndexRefresh = (async () => {
+        const map = new Map<string, string>();
+        let projects;
+        try {
+          projects = await opendir(CLAUDE_PROJECTS_DIR);
+        } catch {
+          projects = null;
+        }
+        try {
+          if (projects) for await (const project of projects) {
+            if (!project.isDirectory()) continue;
+            let entries;
+            try {
+              entries = await opendir(`${CLAUDE_PROJECTS_DIR}/${project.name}`);
+            } catch {
+              continue;
+            }
+            let indexed = 0;
+            for await (const entry of entries) {
+              if (!entry.isFile() || !entry.name.endsWith(".jsonl")) continue;
+              const id = entry.name.slice(0, -".jsonl".length);
+              if (!map.has(id))
+                map.set(id, `${CLAUDE_PROJECTS_DIR}/${project.name}/${entry.name}`);
+              if (++indexed % 256 === 0) await Bun.sleep(0);
+            }
+            // One project directory can hold thousands of transcripts. Yield
+            // after each directory so a cold reverse-index build never delays a
+            // WebSocket handshake behind a batch of large readdir calls.
+            await Bun.sleep(0);
+          }
+        } catch {
+          // The state root can change under tests and dev tooling. A partial
+          // reverse index is safe; direct transcript paths still resolve.
+        }
+        if (transcriptIndexGeneration === generation)
+          transcriptIndexCache = { map, ts: Date.now() };
+      })().finally(() => {
+        transcriptIndexRefresh = null;
+      });
+    }
+    await transcriptIndexRefresh;
+  }
 }
 
 function findTranscriptBySessionId(sessionId: string): string | null {
@@ -827,9 +883,8 @@ function overlaySidecarExtras(session: UnifiedSession): UnifiedSession {
   return session;
 }
 
-function scanSlackSessions(): UnifiedSession[] {
+function* slackSessionRows(): Generator<UnifiedSession> {
   if (!existsSync(SLACK_SESSIONS_DIR)) return [];
-  const sessions: UnifiedSession[] = [];
 
   for (const file of readdirSync(SLACK_SESSIONS_DIR)) {
     if (!file.endsWith(".json") || SKIP_FILES.has(file)) continue;
@@ -846,7 +901,7 @@ function scanSlackSessions(): UnifiedSession[] {
     // Use a stable ID based on filename
     const id = `slack-${file.replace(".json", "")}`;
 
-    sessions.push(overlaySidecarExtras({
+    yield overlaySidecarExtras({
       id,
       claudeSessionId: data.claudeSessionId || null,
       source: "slack",
@@ -884,14 +939,16 @@ function scanSlackSessions(): UnifiedSession[] {
       // an engine session; without it every pi read falls to the claude-slot
       // ride and the run-start arm can't resume the pi session.
       piSessionId: data.piSessionId || undefined,
-    }));
+    });
   }
-  return sessions;
 }
 
-function scanLinearSessions(): UnifiedSession[] {
+function scanSlackSessions(): UnifiedSession[] {
+  return [...slackSessionRows()];
+}
+
+function* linearSessionRows(): Generator<UnifiedSession> {
   if (!existsSync(LINEAR_SESSIONS_DIR)) return [];
-  const sessions: UnifiedSession[] = [];
 
   for (const file of readdirSync(LINEAR_SESSIONS_DIR)) {
     if (!file.endsWith(".json")) continue;
@@ -915,7 +972,7 @@ function scanLinearSessions(): UnifiedSession[] {
 
     const id = `linear-${data.branch}`;
 
-    sessions.push(overlaySidecarExtras({
+    yield overlaySidecarExtras({
       id,
       claudeSessionId: data.claudeSessionId,
       source: "linear",
@@ -948,14 +1005,16 @@ function scanLinearSessions(): UnifiedSession[] {
       model: data.model,
       // Same pi-slot mapping as the slack scan (agent-session-sync writes it).
       piSessionId: data.piSessionId || undefined,
-    }));
+    });
   }
-  return sessions;
 }
 
-function scanNativeSessions(): UnifiedSession[] {
+function scanLinearSessions(): UnifiedSession[] {
+  return [...linearSessionRows()];
+}
+
+function* nativeSessionRows(): Generator<UnifiedSession> {
   if (!existsSync(SESSIONS_DIR)) return [];
-  const sessions: UnifiedSession[] = [];
 
   for (const file of readdirSync(SESSIONS_DIR)) {
     if (!file.endsWith(".json") || SKIP_FILES.has(file)) continue;
@@ -967,7 +1026,7 @@ function scanNativeSessions(): UnifiedSession[] {
     // has an id, these don't, so they'd otherwise become bogus id:undefined rows.
     if (!data || !data.id) continue;
 
-    sessions.push({
+    yield {
       id: data.id,
       claudeSessionId: data.claudeSessionId,
       source: "opensession",
@@ -1038,7 +1097,30 @@ function scanNativeSessions(): UnifiedSession[] {
         data.opencodeSessionId ||
           (isOpencodeSessionId(data.claudeSessionId) ? data.claudeSessionId : null)
       ),
-    });
+    };
+  }
+}
+
+function scanNativeSessions(): UnifiedSession[] {
+  return [...nativeSessionRows()];
+}
+
+/**
+ * Read a synchronous row iterator without monopolising Bun's event loop.
+ *
+ * Session files still use the existing, battle-tested synchronous parser; the
+ * async list path merely yields between small batches. This keeps workspace
+ * filing, PR-cache overlays and every other process-local side effect on the
+ * main thread while allowing WebSocket upgrades and transcript reads through
+ * during an 8,000-file cold scan.
+ */
+async function collectSessionRows(
+  rows: Generator<UnifiedSession>,
+): Promise<UnifiedSession[]> {
+  const sessions: UnifiedSession[] = [];
+  for (const session of rows) {
+    sessions.push(session);
+    if (sessions.length % 32 === 0) await Bun.sleep(0);
   }
   return sessions;
 }
@@ -1063,10 +1145,11 @@ function getRunningPids(): Map<string, number> {
   return running;
 }
 
-export function getAllSessions(): UnifiedSession[] {
-  const slackSessions = scanSlackSessions();
-  const linearSessions = scanLinearSessions();
-  const nativeSessions = scanNativeSessions();
+function* assembleSessionSteps(
+  slackSessions: UnifiedSession[],
+  linearSessions: UnifiedSession[],
+  nativeSessions: UnifiedSession[],
+): Generator<void, UnifiedSession[]> {
   const runningPids = getRunningPids();
 
   // Merge all sessions, deduplicating by engine id (Claude session or Codex
@@ -1080,6 +1163,7 @@ export function getAllSessions(): UnifiedSession[] {
     ...linearSessions,
     ...slackSessions,
   ]) {
+    yield;
     const engineKeys = sessionEngineKeys(session);
     let existing: UnifiedSession | undefined;
     for (const key of engineKeys) {
@@ -1128,8 +1212,9 @@ export function getAllSessions(): UnifiedSession[] {
   // Sessions with no branch of their own inherit their workspace's, so every session
   // in a workspace resolves to the same PR. Read each workspace once.
   const workspaceOf = prWorkspaceReader();
-  if (prsBySession.size > 0)
+  if (prsBySession.size > 0) {
     for (const session of allSessions) {
+      yield;
       const branch = sessionPrBranch(session, workspaceOf(session));
       if (!branch) continue;
       const repoId = session.repo || defaultRepo().id;
@@ -1141,7 +1226,9 @@ export function getAllSessions(): UnifiedSession[] {
       if (list) list.push(...found);
       else discoveredByBranch.set(key, [...found]);
     }
+  }
   for (const session of allSessions) {
+    yield;
     const primaryBranch = sessionPrBranch(session, workspaceOf(session));
     if (primaryBranch) {
       const sessionRepoId = session.repo || defaultRepo().id;
@@ -1244,6 +1331,7 @@ export function getAllSessions(): UnifiedSession[] {
 
   // Apply the cross-source archive registry
   for (const session of allSessions) {
+    yield;
     if (!session.archived && isArchivedId(session.id)) {
       session.archived = true;
       session.archivedReason = getArchiveReason(session.id) || "manual";
@@ -1254,6 +1342,7 @@ export function getAllSessions(): UnifiedSession[] {
   // keyed by unified id or merged alias id. Sits UNDER a manual rename (applied
   // next) but OVER the derived first-line title.
   for (const session of allSessions) {
+    yield;
     const generated =
       getGeneratedTitle(session.id) ??
       session.aliasIds?.map((a) => getGeneratedTitle(a)).find(Boolean);
@@ -1263,6 +1352,7 @@ export function getAllSessions(): UnifiedSession[] {
   // Apply cross-source manual title overrides (rename). Keyed by the unified id
   // or any merged alias id, so a rename sticks across the dedup in this scan.
   for (const session of allSessions) {
+    yield;
     const override =
       getTitleOverride(session.id) ??
       session.aliasIds?.map((a) => getTitleOverride(a)).find(Boolean);
@@ -1275,6 +1365,7 @@ export function getAllSessions(): UnifiedSession[] {
   // Apply manual status-lane overrides. Keyed by unified id or any merged alias
   // id (same as the rename registry) so a pinned lane survives the dedup scan.
   for (const session of allSessions) {
+    yield;
     const status =
       getStatusOverride(session.id) ??
       session.aliasIds?.map((a) => getStatusOverride(a)).find(Boolean);
@@ -1284,6 +1375,7 @@ export function getAllSessions(): UnifiedSession[] {
   // Apply pending review requests (the info panel's Reviewer picker), keyed by
   // unified id or any merged alias id like the registries above.
   for (const session of allSessions) {
+    yield;
     const review =
       getReviewRequest(session.id) ??
       session.aliasIds?.map((a) => getReviewRequest(a)).find(Boolean);
@@ -1303,6 +1395,56 @@ export function getAllSessions(): UnifiedSession[] {
   );
 
   return allSessions;
+}
+
+function assembleSessions(
+  slackSessions: UnifiedSession[],
+  linearSessions: UnifiedSession[],
+  nativeSessions: UnifiedSession[],
+): UnifiedSession[] {
+  const steps = assembleSessionSteps(slackSessions, linearSessions, nativeSessions);
+  while (true) {
+    const step = steps.next();
+    if (step.done) return step.value;
+  }
+}
+
+async function assembleSessionsAsync(
+  slackSessions: UnifiedSession[],
+  linearSessions: UnifiedSession[],
+  nativeSessions: UnifiedSession[],
+): Promise<UnifiedSession[]> {
+  const steps = assembleSessionSteps(slackSessions, linearSessions, nativeSessions);
+  let batch = 0;
+  while (true) {
+    const step = steps.next();
+    if (step.done) return step.value;
+    if (++batch % 32 === 0) await Bun.sleep(0);
+  }
+}
+
+export function getAllSessions(): UnifiedSession[] {
+  return assembleSessions(
+    scanSlackSessions(),
+    scanLinearSessions(),
+    scanNativeSessions(),
+  );
+}
+
+/** Cooperative counterpart for request paths that can await a cold scan. */
+export async function getAllSessionsAsync(): Promise<UnifiedSession[]> {
+  // Warm the indexes before row parsing starts. Running these in the same
+  // Promise.all as the scans lets the first transcript miss fall back to the
+  // synchronous builders while the cooperative warm-up is still in flight.
+  await Promise.all([warmWorkspaceNamesAsync(), warmTranscriptIndexAsync()]);
+  const [slackSessions, linearSessions, nativeSessions] = await Promise.all([
+    collectSessionRows(slackSessionRows()),
+    collectSessionRows(linearSessionRows()),
+    collectSessionRows(nativeSessionRows()),
+  ]);
+  // These overlays read and mutate process-local state, so they deliberately
+  // remain on the server thread rather than crossing a Worker boundary.
+  return await assembleSessionsAsync(slackSessions, linearSessions, nativeSessions);
 }
 
 export function deleteSession(session: UnifiedSession): void {

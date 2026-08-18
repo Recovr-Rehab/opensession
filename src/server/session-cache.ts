@@ -6,7 +6,7 @@
 
 import { existsSync, readFileSync } from "fs";
 import { OPENSESSION_SESSIONS_DIR } from "./paths";
-import { getAllSessions } from "./sessions";
+import { getAllSessions, getAllSessionsAsync } from "./sessions";
 import { activeRunRecords } from "./run-journal";
 import {
 	getRunState,
@@ -30,6 +30,8 @@ const g = globalThis as any;
 
 // Cache sessions with short TTL
 let sessionsCache: { data: UnifiedSession[]; ts: number } | null = null;
+let sessionsRefresh: Promise<void> | null = null;
+let sessionsCacheGeneration = 0;
 // The UI polls every 5s and live run changes also arrive over WebSocket. Keep
 // the expensive multi-thousand-file fallback scan out of every poll wave;
 // in-process mutations invalidate this cache immediately.
@@ -37,6 +39,7 @@ const CACHE_TTL = 10_000;
 
 /** Drop the cached list so the next getCachedSessions() re-reads from disk. */
 export function invalidateSessionsCache(): void {
+	sessionsCacheGeneration++;
 	sessionsCache = null;
 	// The list ROUTE caches its serialized response on top of this cache, and
 	// that copy outliving its source is what made an archive take up to five
@@ -46,11 +49,7 @@ export function invalidateSessionsCache(): void {
 	(g.__osSessionsResponseSnapshots as Map<string, unknown> | undefined)?.clear();
 }
 
-export function getCachedSessions(): UnifiedSession[] {
-	if (sessionsCache && Date.now() - sessionsCache.ts < CACHE_TTL) {
-		return sessionsCache.data;
-	}
-	const data = getAllSessions();
+function enrichCachedSessions(data: UnifiedSession[]): UnifiedSession[] {
 	// Earliest run-start per session id, from the run journal — feeds the "in
 	// progress" elapsed ticker and survives a page refresh (a session can carry
 	// its bks id and its engine session id across records; key on both).
@@ -96,6 +95,42 @@ export function getCachedSessions(): UnifiedSession[] {
 	}
 	sessionsCache = { data, ts: Date.now() };
 	return data;
+}
+
+export function getCachedSessions(): UnifiedSession[] {
+	if (sessionsCache && Date.now() - sessionsCache.ts < CACHE_TTL) {
+		return sessionsCache.data;
+	}
+	// Supersede any cooperative scan already in flight. Its generation check
+	// prevents the older snapshot from replacing this synchronous result.
+	sessionsCacheGeneration++;
+	return enrichCachedSessions(getAllSessions());
+}
+
+/**
+ * Return the same fresh cache as getCachedSessions(), but let request traffic
+ * through while thousands of session files are read.
+ *
+ * Explicit invalidation remains a hard freshness boundary. If a write lands
+ * during the cooperative scan, its generation bump discards that scan and the
+ * single flight retries rather than publishing a snapshot from before the
+ * write. Synchronous callers keep their existing read-after-write contract.
+ */
+export async function getCachedSessionsAsync(): Promise<UnifiedSession[]> {
+	while (!sessionsCache || Date.now() - sessionsCache.ts >= CACHE_TTL) {
+		if (!sessionsRefresh) {
+			const generation = ++sessionsCacheGeneration;
+			sessionsRefresh = getAllSessionsAsync()
+				.then((data) => {
+					if (sessionsCacheGeneration === generation) enrichCachedSessions(data);
+				})
+				.finally(() => {
+					sessionsRefresh = null;
+				});
+		}
+		await sessionsRefresh;
+	}
+	return sessionsCache.data;
 }
 
 /**
@@ -187,6 +222,12 @@ export function findSession(sessionId: string): UnifiedSession | undefined {
 	return getCachedSessions().find((s) => s.id === sessionId);
 }
 
+export async function findSessionAsync(
+	sessionId: string,
+): Promise<UnifiedSession | undefined> {
+	return (await getCachedSessionsAsync()).find((s) => s.id === sessionId);
+}
+
 /** Canonical id followed by every historical alias for this session. Asset
  * stores and other id-keyed sidecars use this to survive session deduping. */
 export function sessionIdsFor(
@@ -233,7 +274,7 @@ export function updateSessionFile(
 		const rev = (current as { rev?: unknown }).rev;
 		(next as { rev?: number }).rev = (typeof rev === "number" ? rev : 0) + 1;
 		writeJsonAtomic(path, next);
-		sessionsCache = null;
+		invalidateSessionsCache();
 	};
 	const prev = sessionFileLocks.get(sessionId);
 	let done: Promise<void>;

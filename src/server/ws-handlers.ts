@@ -24,7 +24,13 @@ import { handleCreateSessionMessage } from "./session-create";
 import { runnerWsClose, runnerWsMessage, runnerWsOpen } from "./runner-ws";
 import { sandboxPortalRelayClose, sandboxPortalRelayMessage, sandboxPortalRelayOpen } from "./sandbox-portal-relay";
 import { type Sandbox } from "./sandbox";
-import { findSession, invalidateSessionsCache, maybePersistEffort, maybePersistFastMode } from "./session-cache";
+import {
+	findSession,
+	findSessionAsync,
+	invalidateSessionsCache,
+	maybePersistEffort,
+	maybePersistFastMode,
+} from "./session-cache";
 import { engineUserTexts, mergedSessionTranscript, mergedSessionTranscriptAsync, v2MirrorFiles, v2TranscriptHasDrift } from "./sessions";
 import { handleSlashCommand } from "./slash-commands";
 import { maybeRecapOnReturn } from "./recap";
@@ -507,7 +513,11 @@ export const websocketHandlers: WebSocketHandler<WSClientData> = {
 
 			case "watch": {
 				const sessionId = msg.sessionId;
-				const session = findSession(sessionId);
+				const data = ws.data;
+				const watchRequest = (data.watchRequest ?? 0) + 1;
+				data.watchRequest = watchRequest;
+				const session = await findSessionAsync(sessionId);
+				if (data.watchRequest !== watchRequest) return;
 				if (!session) {
 					ws.send(
 						JSON.stringify({ type: "error", message: "Session not found" }),
@@ -520,7 +530,6 @@ export const websocketHandlers: WebSocketHandler<WSClientData> = {
 				releaseTranscriptV2(ws);
 				leaveSession(ws);
 
-				const data = ws.data;
 				data.watchingSessionId = sessionId;
 				data.supportsFeed = msg.supportsFeed === true;
 				data.sinceFeedSeq =
@@ -610,6 +619,7 @@ export const websocketHandlers: WebSocketHandler<WSClientData> = {
 					// a file here, so no "load earlier" paging — the next run's seeded
 					// file restores it.
 					const merged = await mergedSessionTranscriptAsync(session);
+					if (data.watchRequest !== watchRequest) return;
 					if (merged.length) {
 						truncated = merged.length > 120;
 						entries = truncated ? merged.slice(-120) : merged;
@@ -646,6 +656,7 @@ export const websocketHandlers: WebSocketHandler<WSClientData> = {
 				// stop streaming transcript events and clear their ghost presence.
 				// Mirrors the disconnect/close cleanup; leaveSession broadcasts
 				// presence to the viewers who remain.
+				ws.data.watchRequest = (ws.data.watchRequest ?? 0) + 1;
 				stopAllWatchesForClient(ws);
 				releaseTranscriptV2(ws);
 				leaveSession(ws);
@@ -1261,6 +1272,7 @@ export const websocketHandlers: WebSocketHandler<WSClientData> = {
 		if (sandboxWsClose(ws)) return;
 		if (runnerWsClose(ws)) return;
 		if (sandboxPortalRelayClose(ws)) return;
+		ws.data.watchRequest = (ws.data.watchRequest ?? 0) + 1;
 		allClients.delete(ws);
 		stopAllWatchesForClient(ws);
 		releaseTranscriptV2(ws);

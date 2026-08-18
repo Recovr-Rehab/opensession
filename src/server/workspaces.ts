@@ -31,6 +31,7 @@ import {
   readdirSync,
   rmSync,
 } from "fs";
+import { readdir, readFile } from "fs/promises";
 import { writeJsonAtomic } from "./shared/atomic-write";
 import { randomUUID } from "crypto";
 import type { AttachedRepo, ExternalRef } from "./types";
@@ -216,10 +217,13 @@ let workspaceNameCache: {
   dir: string;
   names: Map<string, string>;
 } | null = null;
+let workspaceNameRefresh: Promise<void> | null = null;
+let workspaceNameGeneration = 0;
 
 function workspaceNameMap(): Map<string, string> {
   const dir = workspacesDir();
   if (workspaceNameCache?.dir === dir) return workspaceNameCache.names;
+  workspaceNameGeneration++;
   const names = new Map<string, string>();
   if (existsSync(dir))
     for (const file of readdirSync(dir)) {
@@ -234,6 +238,36 @@ function workspaceNameMap(): Map<string, string> {
   return names;
 }
 
+/** Build the cold workspace-name index without holding the event loop. */
+export async function warmWorkspaceNamesAsync(): Promise<void> {
+  const dir = workspacesDir();
+  while (workspaceNameCache?.dir !== dir) {
+    if (!workspaceNameRefresh) {
+      const generation = ++workspaceNameGeneration;
+      workspaceNameRefresh = (async () => {
+        const names = new Map<string, string>();
+        if (existsSync(dir)) {
+          let read = 0;
+          for (const file of await readdir(dir)) {
+            if (!file.endsWith(".json")) continue;
+            try {
+              const p = JSON.parse(await readFile(`${dir}/${file}`, "utf8"));
+              if (typeof p?.id === "string" && typeof p?.name === "string")
+                names.set(p.id, p.name);
+            } catch {}
+            if (++read % 32 === 0) await Bun.sleep(0);
+          }
+        }
+        if (workspaceNameGeneration === generation)
+          workspaceNameCache = { dir, names };
+      })().finally(() => {
+        workspaceNameRefresh = null;
+      });
+    }
+    await workspaceNameRefresh;
+  }
+}
+
 /** The workspace's display name, or null when there is no such workspace. */
 export function workspaceName(id: string): string | null {
   if (!safeId(id)) return null;
@@ -244,6 +278,7 @@ export function workspaceName(id: string): string | null {
 function saveWorkspace(workspace: Workspace): Workspace {
   const dir = workspacesDir();
   writeJsonAtomic(`${dir}/${workspace.id}.json`, workspace);
+  workspaceNameGeneration++;
   if (workspaceNameCache?.dir === dir)
     workspaceNameCache.names.set(workspace.id, workspace.name);
   return workspace;
@@ -544,6 +579,7 @@ export function deleteWorkspace(id: string): boolean {
   if (!existsSync(f)) return false;
   try {
     rmSync(f);
+    workspaceNameGeneration++;
     if (workspaceNameCache?.dir === dir) workspaceNameCache.names.delete(id);
     // A deleted workspace's scratch dir (scratch-mode sessions — see
     // worktree.ts ensureScratchDir) goes with it; safeId() already rules
