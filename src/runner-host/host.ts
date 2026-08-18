@@ -111,7 +111,11 @@ const RUN_WS_URL = process.env.OPENSESSION_RUN_WS_URL || "";
 const RUN_WS_TOKEN = process.env.OPENSESSION_RUN_WS_TOKEN || "";
 
 /** The currently attached opensession, whichever transport carried it. */
-let client: { write: (line: string) => void; raw: unknown } | null = null;
+let client: {
+  write: (line: string) => void;
+  drain?: () => void;
+  raw: unknown;
+} | null = null;
 let ended = false;
 let exiting = false; // stops the WS redial loop once we're done
 let terminal: StreamEvent | undefined;
@@ -135,6 +139,7 @@ const pendingAsks = new Map<
 // (re)attach; lines carry stable uuids and upsert server-side, so
 // re-delivery is exact.
 const { TranscriptRelay } = await import("./transcript-relay");
+const { SocketWriteQueue } = await import("./socket-write-queue");
 const transcriptRelay = new TranscriptRelay();
 {
   const { setTranscriptForwarder } = await import("../server/transcript-forward");
@@ -357,13 +362,30 @@ if (RUN_WS_URL) {
             (client.raw as any)?.end?.();
           } catch {}
         }
-        client = { write: (line) => socket.write(line), raw: socket };
+        const writer = new SocketWriteQueue(
+          (data) => socket.write(data),
+          32 * 1024 * 1024,
+          () => {
+            log("socket client stopped reading; closing for a clean replay");
+            try {
+              socket.end();
+            } catch {}
+          },
+        );
+        client = {
+          write: (line) => writer.write(line),
+          drain: () => writer.drain(),
+          raw: socket,
+        };
         (socket as any).__read = ndjsonReader(handleClientMsg, "host");
         log("opensession attached");
         sendHello();
       },
       data(socket, data) {
         (socket as any).__read?.(data);
+      },
+      drain(socket) {
+        if (client?.raw === socket) client.drain?.();
       },
       close(socket) {
         if (client?.raw === socket) {
