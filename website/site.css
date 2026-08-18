@@ -264,8 +264,10 @@ summary:focus-visible {
 	   14px above its own bottom edge, so any overshoot cuts the one control a
 	   visitor is meant to recognise. One value, in container-width units, so
 	   the frame reads as an even margin rather than a window pushed off
-	   centre. */
-	inset: 5.6cqw;
+	   centre. The demo lays out at a fixed app width and scales to fit, so
+	   this number sets how large the app reads: more margin is the same
+	   screenshot, smaller. */
+	inset: 9cqw;
 	overflow: hidden;
 	/* It is a <figure>, and a figure's UA margin offsets an absolutely
 	   positioned box even with all four insets set. */
