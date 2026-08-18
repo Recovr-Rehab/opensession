@@ -186,6 +186,9 @@ export interface BridgeAccountPin {
   user?: string;
   /** Allow extra-usage credits when judging the pin/walk usability. */
   usageCredits?: boolean;
+  /** Accounts this turn already burned, skipped on every path. Drives the pi
+   *  provider's in-turn account walk (see resolveAccount's excludeIds). */
+  excludeIds?: readonly string[];
 }
 
 /** Pick the account to serve a bridge/pi request (utilization-gated).
@@ -220,6 +223,7 @@ export function pickBridgeAccount(
     strictPin: pin?.accountStrict,
     designatedIds: ids,
     allowExtraUsage: pin?.usageCredits,
+    excludeIds: pin?.excludeIds,
   });
   if ("account" in resolved) return resolved.account;
   const refusal = resolved.refusal;

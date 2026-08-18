@@ -1099,6 +1099,14 @@ export interface AccountRequest {
   /** When non-empty, ONLY these accounts may serve, walked in list order. */
   designatedIds?: readonly string[];
   allowExtraUsage?: boolean;
+  /** Accounts this caller has already burned THIS turn, skipped on every path
+   *  (pin, sticky, designated, pool). An in-turn account walk needs this on
+   *  top of the sideline, because some refusals deliberately do not sideline:
+   *  the pi provider's rolling hourly cap is local admission control that
+   *  frees within the hour, and its sideline map is shared with opencode, so
+   *  it must never bench a healthy account cross-engine. Without an explicit
+   *  exclusion the re-pick hands back the account that just refused. */
+  excludeIds?: readonly string[];
   /** false = peek: judge eligibility without consuming the round-robin turn. */
   recordPick?: boolean;
 }
@@ -1118,7 +1126,9 @@ export function resolveAccount(req: AccountRequest): AccountResolution {
     !a.owner || (!!user && userMatchesAny(user, [a.owner]));
   const designated = (id: string) => !ids?.length || ids.includes(id);
   const nameOf = (id: string) => getAccountById(id)?.name || id;
+  const excluded = req.excludeIds?.length ? new Set(req.excludeIds) : undefined;
   const usableForRun = (id: string): ClaudeAccount | undefined => {
+    if (excluded?.has(id)) return undefined;
     const a = getUsableAccountById(id, model, allowExtraUsage);
     return a && ownedByUser(a) ? a : undefined;
   };
@@ -1160,7 +1170,7 @@ export function resolveAccount(req: AccountRequest): AccountResolution {
     }
     return { refusal: { kind: "designated-dry", tried: ids.map(nameOf).join(", ") } };
   }
-  const picked = selectAccount(undefined, user, model, allowExtraUsage, req.recordPick ?? true);
+  const picked = selectAccount(excluded, user, model, allowExtraUsage, req.recordPick ?? true);
   if (picked) return { account: picked, reason: picked.owner ? "personal" : "pool" };
   return { refusal: hasAccounts() ? { kind: "pool-dry" } : { kind: "none-configured" } };
 }

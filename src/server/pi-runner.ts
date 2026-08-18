@@ -180,6 +180,7 @@ import { stateDir } from "./paths";
 import { audit, summarizeText } from "./audit";
 import { journalSet, buildRunJournalRecord, journalClear, registerActiveRunProbe } from "./run-journal";
 import { isClaudeUsageLimitError, isCodexUsageLimitError } from "./runner-shared";
+import { PI_MAX_ACCOUNT_ATTEMPTS } from "./pi-anthropic-provider";
 import { ensureAnthropicBridge } from "./anthropic-bridge";
 import {
   opencodeProviders,
@@ -1220,9 +1221,65 @@ export function makePiBashTool(input: {
 
 const THINKING_LEVELS = new Set(["low", "medium", "high", "xhigh", "max"]);
 
+/** State carried ACROSS the attempts of one logical pi turn. */
+interface PiAccountWalk {
+  /** Provider account ids this turn has already burned, fed into the picker
+   *  so a replay lands somewhere new. The sideline alone cannot drive this:
+   *  it is shared cross-engine with opencode, and some refusals deliberately
+   *  do not set it (local admission control that frees within the hour). */
+  excluded: Set<string>;
+  /** Set by an attempt that wants to be replayed on another account. */
+  rotate: boolean;
+  /** The first attempt's user-line uuid, reused by every replay so the
+   *  transcript row upserts instead of duplicating the person's message. */
+  promptEntryId?: string;
+}
+
+/**
+ * One logical pi turn, across however many provider accounts it takes.
+ *
+ * This is opencode-runner's account-rotation discipline, which pi lacked: a
+ * usage limit ended the whole run while the rest of the pool sat idle, and
+ * the sideline it recorded only helped the NEXT prompt. agent-runner cannot
+ * rescue that either, because an explicit engine choice pins the model
+ * fallback to "none" rather than silently crossing into an opencode fallback,
+ * so one capped account was simply the end of the turn.
+ *
+ * The anthropic side runs the same walk one level down, inside
+ * pi-anthropic-provider's stream, because it picks its account per REQUEST.
+ * pi/openai picks once at bind time (the seeded credential is built before
+ * the SDK is even imported), so there is no per-request catch to rotate from
+ * and the loop belongs here. Both sides share one contract: the same attempt
+ * budget, an exclusion set threaded into the picker, rotation only while
+ * nothing has streamed, and a strict pin that refuses rather than moving onto
+ * an account the person did not choose.
+ */
 export async function* runPi(
   opts: RunAgentOpts,
   model: string
+): AsyncGenerator<StreamEvent> {
+  const walk: PiAccountWalk = { excluded: new Set(), rotate: false };
+  for (let attempt = 0; attempt < PI_MAX_ACCOUNT_ATTEMPTS; attempt++) {
+    walk.rotate = false;
+    yield* runPiAttempt(opts, model, walk);
+    if (!walk.rotate) return;
+  }
+  // Nothing but a usage limit sets rotate, so every attempt was capped.
+  yield {
+    type: "error",
+    content:
+      `pi: rotated through ${PI_MAX_ACCOUNT_ATTEMPTS} accounts and every one was ` +
+      "usage-limited, so there is no usable account left for this model.",
+    provider: PROVIDER,
+    model,
+    usageLimitExhausted: true,
+  };
+}
+
+async function* runPiAttempt(
+  opts: RunAgentOpts,
+  model: string,
+  walk: PiAccountWalk
 ): AsyncGenerator<StreamEvent> {
   // Config gate first: the clearest refusal when the engine is off entirely.
   if (!piEngineEnabled()) {
@@ -1331,8 +1388,70 @@ export async function* runPi(
   let mcpBridge: PiMcpBridge | undefined;
   let sawSettled = false;
   // pi/openai only: the picked codex account — visible to the catch/terminal
-  // paths so a usage-limit end can sideline it (markCodexExhausted).
+  // paths so the account walk can rotate off it. Set as soon as the pick
+  // succeeds, BEFORE the seed and refresh-window checks, because those two
+  // failures are exactly the ones worth trying another account for.
   let pickedOpenai: CodexAccount | undefined;
+  // The same account, but only once it is genuinely serving this turn. The
+  // SIDELINE keys on this rather than on the pick: markCodexExhausted benches
+  // an account for hours, cross-engine, shared with opencode, and a local
+  // auth.json we could not read (or a token inside pi's refresh window) is a
+  // fault of this box, not a verdict on the account's usage. Rotating off it
+  // is right; benching it globally is not.
+  let sidelineableOpenai: CodexAccount | undefined;
+  // Has the reader seen anything yet? Set by the event pump for every event
+  // but `init`. A rotation replays the whole attempt, so it may only run
+  // while this is false: otherwise the replay would re-emit output that has
+  // already been streamed and persisted. (The anthropic side's equivalent
+  // gate is `partial.content.length === 0` — same rule, same reason.)
+  let sawStreamedOutput = false;
+
+  /** Another codex account that could serve this turn, or undefined when the
+   *  pool is dry or only accounts pi cannot seed (api_key) are left. A STRICT
+   *  pin never rotates: excluding the pinned id would make pickOpenaiAccount
+   *  skip its pin branch and widen into the pool, which is the one thing a
+   *  hard pin exists to prevent. */
+  const nextCodexAccount = (): CodexAccount | undefined => {
+    if (!pickedOpenai) return undefined;
+    if (opts.accountStrict && opts.accountId) return undefined;
+    const next = pickOpenaiAccount(
+      parsed.modelID,
+      readOpencodeBridgeConfig()?.openaiAccounts,
+      opts.accountAffinityKey || journal?.osSessionId || cwd,
+      undefined,
+      user,
+      opts.accountId,
+      opts.accountStrict,
+      new Set([...walk.excluded, pickedOpenai.id])
+    );
+    if ("error" in next || next.kind === "api_key") return undefined;
+    return next;
+  };
+
+  /** Take the rotation, or return false and let the caller surface the
+   *  failure. Records the burn, audits the switch and closes this attempt's
+   *  audit; runPi replays the attempt on the next account. */
+  const takeAccountRotation = (errorText: string): boolean => {
+    if (sawStreamedOutput || !pickedOpenai) return false;
+    const next = nextCodexAccount();
+    if (!next) return false;
+    console.warn(
+      `[pi-runner] usage limit on codex account "${pickedOpenai.name}" ` +
+        `(${parsed.modelID}): retrying this turn on "${next.name}"`
+    );
+    audit({
+      ...auditBase,
+      direction: "out",
+      kind: "account_switch",
+      account: maskOpenaiAccount(pickedOpenai),
+      account_switch_to: maskOpenaiAccount(next),
+    });
+    walk.excluded.add(pickedOpenai.id);
+    walk.rotate = true;
+    reachedTerminal = true;
+    endTurn({ ok: false, pi_session_id: piSessionId, error: errorText });
+    return true;
+  };
 
   // Everything from here on runs inside the try: a throw anywhere after the
   // registry writes above must still deregister in the finally, or the
@@ -1343,7 +1462,15 @@ export async function* runPi(
     // death here re-runs from scratch and a restart mid-turn takes the
     // continuation re-prompt path (nothing in-process survives to reattach) —
     // and persist the user line under the unified id with a stable uuid.
-    const userLine = transcriptLineUser(prompt, opts.promptEntryId, undefined, opts.images);
+    // A replay must reuse the FIRST attempt's uuid: the store upserts by id,
+    // so a freshly minted one would show the person's message twice.
+    const userLine = transcriptLineUser(
+      prompt,
+      opts.promptEntryId || walk.promptEntryId,
+      undefined,
+      opts.images
+    );
+    walk.promptEntryId ??= String(userLine.uuid);
     if (journal?.osSessionId) {
       journalSet(
         buildRunJournalRecord(opts, {
@@ -1403,7 +1530,11 @@ export async function* runPi(
       // that account excluded until a home account (or a real dry pool)
       // surfaces. An EXPLICIT api_key pin still errors: silently ignoring a
       // pin would mask a configuration mistake.
-      const excludedApiKey = new Set<string>();
+      // Two independent exclusions, kept apart on purpose: accounts skipped
+      // because pi cannot seed them (api_key), and accounts this TURN already
+      // burned on a usage limit. Only the first means "your pool is
+      // misconfigured", so the error below must count that set alone.
+      const skippedApiKey = new Set<string>();
       let picked: ReturnType<typeof pickOpenaiAccount>;
       for (;;) {
         picked = pickOpenaiAccount(
@@ -1414,7 +1545,7 @@ export async function* runPi(
           user,
           opts.accountId,
           opts.accountStrict,
-          excludedApiKey
+          new Set([...walk.excluded, ...skippedApiKey])
         );
         if ("error" in picked || picked.kind !== "api_key") break;
         if (opts.accountId && picked.id === opts.accountId) {
@@ -1424,16 +1555,16 @@ export async function* runPi(
               "accounts only. Use an opencode/openai/* model for API-key billing."
           );
         }
-        excludedApiKey.add(picked.id);
+        skippedApiKey.add(picked.id);
       }
       if ("error" in picked) {
-        if (excludedApiKey.size) {
+        if (skippedApiKey.size) {
           // The pool had accounts, but every eligible one was api_key: a
           // configuration boundary, NOT exhaustion — hopping models wouldn't
           // fix it, so no usageLimitExhausted.
           throw new Error(
             `pi/openai: only API-key codex accounts are currently eligible ` +
-              `(${excludedApiKey.size} skipped), which the pi engine does not support — ` +
+              `(${skippedApiKey.size} skipped), which the pi engine does not support — ` +
               "ChatGPT-subscription (kind: home) accounts only. Use an " +
               "opencode/openai/* model for API-key billing."
           );
@@ -1444,6 +1575,12 @@ export async function* runPi(
         err.usageLimitExhausted = true;
         throw err;
       }
+      // Visible to the terminal/catch paths from HERE, not after the seed
+      // checks below: an account whose token cannot be seeded, or that sits
+      // inside pi's refresh window, genuinely cannot serve this turn. That is
+      // the condition markCodexExhausted encodes, and the one the account
+      // walk most needs to be able to rotate off.
+      pickedOpenai = picked;
       const built = buildSeededOpenaiAuth(picked);
       if ("error" in built) {
         // Expired/unreadable ChatGPT access token = the same condition as a
@@ -1473,7 +1610,7 @@ export async function* runPi(
         err.usageLimitExhausted = true;
         throw err;
       }
-      pickedOpenai = picked;
+      sidelineableOpenai = picked;
       seededOpenaiCredential = built.seeded.openai;
       openaiPickReason = pickOut.reason;
     }
@@ -2008,6 +2145,9 @@ export async function* runPi(
     const queue: StreamEvent[] = [];
     let wake: (() => void) | null = null;
     const push = (ev: StreamEvent) => {
+      // Anything but `init` is output the reader has now seen, which closes
+      // the account walk — a replay would re-emit it.
+      if (ev.type !== "init") sawStreamedOutput = true;
       queue.push(ev);
       const w = wake;
       wake = null;
@@ -2367,14 +2507,16 @@ export async function* runPi(
     // other engine's pick) skips it — shared sideline state with opencode,
     // same per-(account, model) key.
     const sidelineOnUsageLimit = (usageLimit: boolean) => {
-      if (usageLimit && pickedOpenai) {
-        markCodexExhausted(pickedOpenai.id, parsed.modelID);
+      if (usageLimit && sidelineableOpenai) {
+        markCodexExhausted(sidelineableOpenai.id, parsed.modelID);
       }
     };
     let terminal: StreamEvent;
+    let terminalUsageLimit = false;
     if (!failed.ok) {
       const message = String((failed.error as Error)?.message || failed.error);
       const usageLimit = isPiUsageLimitShape(message, parsed.providerID);
+      terminalUsageLimit = usageLimit;
       sidelineOnUsageLimit(usageLimit);
       terminal = {
         type: "error",
@@ -2386,6 +2528,7 @@ export async function* runPi(
     } else if (lastStopReason === "error" || lastStopReason === "aborted") {
       const message = lastErrorMessage || `run ended with stopReason ${lastStopReason}`;
       const usageLimit = isPiUsageLimitShape(message, parsed.providerID);
+      terminalUsageLimit = usageLimit;
       sidelineOnUsageLimit(usageLimit);
       terminal = {
         type: "error",
@@ -2403,6 +2546,15 @@ export async function* runPi(
         model,
         ...(sawUsage ? { usage: { ...usageTotal } } : {}),
       };
+    }
+    // Rotate rather than end the turn. This is the COMMON half of the walk:
+    // a provider usage limit normally arrives as an in-band terminal (pi's
+    // own error result), not as a throw, so without this the openai walk
+    // would only ever engage on pre-init failures. takeAccountRotation is a
+    // no-op once anything has streamed, so a limit that lands mid-answer
+    // still surfaces here instead of replaying what the reader already saw.
+    if (terminalUsageLimit && takeAccountRotation(String(terminal.content))) {
+      return;
     }
     reachedTerminal = true;
     endTurn({
@@ -2439,9 +2591,14 @@ export async function* runPi(
     // stray shape in one of those must not sideline a healthy account for
     // 60 min across both engines. The in-band terminal branches (provider
     // messages only) keep classifier-driven sidelines.
-    if (e?.usageLimitExhausted === true && pickedOpenai) {
-      markCodexExhausted(pickedOpenai.id, parsed.modelID);
+    if (e?.usageLimitExhausted === true && sidelineableOpenai) {
+      markCodexExhausted(sidelineableOpenai.id, parsed.modelID);
     }
+    // Rotate rather than end the turn. Gated on the explicit flag for the
+    // same reason the sideline above is: this catch also sees non-provider
+    // throws from the run body (fs, journal, SDK init), and a stray
+    // usage-limit shape in one of those must not burn a healthy account.
+    if (e?.usageLimitExhausted === true && takeAccountRotation(message)) return;
     reachedTerminal = true;
     endTurn({ ok: false, pi_session_id: piSessionId, error: message });
     yield {

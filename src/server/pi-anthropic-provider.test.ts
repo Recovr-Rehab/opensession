@@ -461,6 +461,71 @@ describe("buildPiAnthropicProvider", () => {
     expect((stillUsable as any).id).toBe("pi-cap-acc");
   });
 
+  test("a usage-limited account rotates to the next one inside the same turn", async () => {
+    // Two designated accounts, both with their rolling hourly cap tripped.
+    // The cap refuses BEFORE any SDK spawn, so this drives the whole account
+    // walk hermetically: attempt 1 is refused on cap-a and rotates, attempt 2
+    // is refused on cap-b, and only a dry pool ends the turn.
+    designate(["cap-a", "cap-b"]);
+    seedAccounts(["cap-a", "cap-b"]);
+    accounts.__setUsageCacheForTest("cap-a", freshUsage);
+    accounts.__setUsageCacheForTest("cap-b", freshUsage);
+    const limit = 300; // bridgeMaxRequestsPerHour default (no opencode config in this seam)
+    for (let i = 0; i < limit; i++) {
+      admitBridgeRequest("cap-a", 1);
+      admitBridgeRequest("cap-b", 1);
+    }
+    const provider = buildPiAnthropicProvider({
+      unifiedSessionId: "os-rotate",
+      builtinModels: [model],
+    }) as any;
+    const events: any[] = [];
+    for await (const ev of provider.streamSimple(model, {
+      messages: [{ role: "user", content: "hi" }],
+    })) {
+      events.push(ev);
+    }
+    // ONE `start` for the whole walk: a rotation replays the attempt, never
+    // the pi-visible stream, so the reader still sees one assistant message.
+    expect(events.map((e) => e.type)).toEqual(["start", "error"]);
+    // The surfaced error names the SECOND account — proof the turn moved off
+    // the first instead of dying on it (the behaviour before this walk).
+    const message = events[1].error.errorMessage as string;
+    expect(message).toContain("cap-b");
+    expect(isPiUsageLimitShape(message, "anthropic")).toBe(true);
+    // Neither account was sidelined on the way through: the rolling cap is
+    // local admission control, and the sideline map is shared with opencode.
+    const stillPickable = pickBridgeAccount("claude-sonnet-5");
+    expect((stillPickable as any).id).toBe("cap-a");
+  });
+
+  test("a strict pin refuses instead of rotating off the pinned account", async () => {
+    designate(["pin-strict", "pin-other"]);
+    seedAccounts(["pin-strict", "pin-other"]);
+    accounts.__setUsageCacheForTest("pin-strict", freshUsage);
+    accounts.__setUsageCacheForTest("pin-other", freshUsage);
+    const limit = 300;
+    for (let i = 0; i < limit; i++) admitBridgeRequest("pin-strict", 1);
+    const provider = buildPiAnthropicProvider({
+      unifiedSessionId: "os-pin",
+      accountId: "pin-strict",
+      accountStrict: true,
+      builtinModels: [model],
+    }) as any;
+    const events: any[] = [];
+    for await (const ev of provider.streamSimple(model, {
+      messages: [{ role: "user", content: "hi" }],
+    })) {
+      events.push(ev);
+    }
+    expect(events.map((e) => e.type)).toEqual(["start", "error"]);
+    // The pinned account's own refusal — a hard pin must never silently
+    // rotate onto an account the person deliberately did not choose.
+    const message = events[1].error.errorMessage as string;
+    expect(message).toContain("pin-strict");
+    expect(message).not.toContain("pin-other");
+  });
+
   test("a pre-aborted signal ends with reason aborted before any SDK work", async () => {
     designate(["pi-test-acc-1"]);
     const provider = buildPiAnthropicProvider({

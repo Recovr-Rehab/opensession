@@ -55,11 +55,25 @@
  *    when the engine is disabled or no account exists, so the run fails as
  *    early and as clearly as the bridge path did.
  *  - Usage-limit-shaped SDK failures markExhausted the picked account and
- *    surface with their original message, which isPiUsageLimitShape's
- *    anthropic arm already classifies (isClaudeUsageLimitError shapes, 429,
- *    "no designated bridge account"); the per-account rolling hourly cap
- *    (admitBridgeRequest — shared counter with the bridge) refuses with a
- *    429-worded error for the same reason.
+ *    then ROTATE: the turn is replayed on the next usable account, up to
+ *    PI_MAX_ACCOUNT_ATTEMPTS, and only a dry pool surfaces the error (whose
+ *    original message isPiUsageLimitShape's anthropic arm classifies:
+ *    isClaudeUsageLimitError shapes, 429, "no designated bridge account").
+ *    This is opencode-runner's MAX_ACCOUNT_ATTEMPTS discipline, which pi
+ *    lacked: it sidelined the account and surfaced the failure, so one capped
+ *    account ended the run while the rest of the pool sat idle and the
+ *    sideline only helped the next prompt. agent-runner cannot rescue that
+ *    either, because an explicit engine choice pins preferredFallback to
+ *    "none" rather than crossing into an opencode fallback. The per-account
+ *    rolling hourly cap (admitBridgeRequest, shared counter with the bridge)
+ *    refuses 429-worded for the same classifier, and rotates too, but is
+ *    exempt from the sideline: it is local admission control that frees
+ *    within the hour, and the sideline map is shared with opencode.
+ *    Rotation is bounded to a turn that has streamed NOTHING yet, so a
+ *    failure mid-answer still surfaces plainly instead of replaying text the
+ *    reader already saw. Known gap: the provider has no channel back to
+ *    pi-runner's transcript, so a switch is visible in the audit log and the
+ *    server log, not as a runner_notice the way opencode's is.
  *  - Audit parity with the bridge (this replaces its per-request audit for pi
  *    traffic): `pi_anthropic_request` in/out with summarizeText, unified
  *    session attribution, account, tokens, duration — never raw text dumps,
@@ -459,16 +473,20 @@ interface CapturedToolUse {
   input: unknown;
 }
 
+/** How many accounts one turn may burn before giving up. opencode-runner's
+ *  MAX_ACCOUNT_ATTEMPTS backstop, same reason: a pathological pool must not
+ *  loop forever. */
+export const PI_MAX_ACCOUNT_ATTEMPTS = 4;
+
 async function* runSdkStream(
   opts: PiAnthropicProviderOpts,
   model: PiCatalogModel,
   context: PiStreamContext,
   options: PiStreamCallOptions | undefined
 ): AsyncGenerator<PiStreamEvent> {
-  const signal = options?.signal;
-  const requestId = crypto.randomUUID();
-  const started = Date.now();
-
+  // Shared across attempts: a rotation replays the turn from scratch, so the
+  // assistant message under construction is the one thing that must survive.
+  // Its emptiness is also what makes a replay safe (see the catch).
   const partial: PiAssistantMessageShape = {
     role: "assistant",
     content: [],
@@ -491,6 +509,41 @@ async function* runSdkStream(
       timestamp: Date.now(),
     },
   });
+
+  // Accounts this turn has already burned. The sideline alone cannot drive
+  // the walk: the rolling-cap refusal deliberately does not sideline, so
+  // without an explicit exclusion the re-pick hands back the same account.
+  const excluded = new Set<string>();
+  for (let attempt = 0; attempt < PI_MAX_ACCOUNT_ATTEMPTS; attempt++) {
+    const rotate = { retry: false };
+    yield* runSdkAttempt(opts, model, context, options, partial, fail, excluded, rotate);
+    if (!rotate.retry) return;
+  }
+  // Nothing but a usage limit sets rotate.retry, so reaching here means every
+  // attempt was capped. Worded so isPiUsageLimitShape still classifies it.
+  yield fail(
+    "error",
+    `pi-anthropic: rotated through ${PI_MAX_ACCOUNT_ATTEMPTS} accounts and every one was ` +
+      "usage-limited, so there is no usable Claude account left for this model."
+  );
+}
+
+/** One attempt on one account. Sets `rotate.retry` instead of yielding a
+ *  terminal error when the failure is a usage limit, nothing has streamed
+ *  yet, and another account can serve. */
+async function* runSdkAttempt(
+  opts: PiAnthropicProviderOpts,
+  model: PiCatalogModel,
+  context: PiStreamContext,
+  options: PiStreamCallOptions | undefined,
+  partial: PiAssistantMessageShape,
+  fail: (reason: "aborted" | "error", message: string) => PiStreamEvent,
+  excluded: Set<string>,
+  rotate: { retry: boolean }
+): AsyncGenerator<PiStreamEvent> {
+  const signal = options?.signal;
+  const requestId = crypto.randomUUID();
+  const started = Date.now();
 
   // Store key: the stream option sessionId is the pi session id on agent
   // turns (stable across a conversation) and a FRESH uuid on pi's
@@ -533,6 +586,7 @@ async function* runSdkStream(
       accountStrict: opts.accountStrict,
       usageCredits: opts.usageCredits,
       user: opts.user,
+      excludeIds: excluded.size ? [...excluded] : undefined,
     });
     if ("error" in picked) throw new Error(picked.error);
     account = picked;
@@ -844,13 +898,34 @@ async function* runSdkStream(
     // A failed continuation may mean the resumed SDK session is dead (config
     // dir swept/wiped): evict the mapping so the next turn replays fresh.
     if (plannedContinuation) piSdkSessionStore().delete(storeKey);
+    const localCap = e?.piLocalRateCap === true;
+    const usageShaped = isClaudeUsageLimitError(message, true);
     // Usage-limit-shaped death: sideline the picked designated account before
     // surfacing (claude-direct's markExhausted discipline); the preserved
     // message is what isPiUsageLimitShape classifies upstream. The local
     // rolling-cap refusal is exempt (tagged at the throw): it is 429-worded
     // for the classifier but is not account exhaustion.
-    if (account && !e?.piLocalRateCap && isClaudeUsageLimitError(message, true)) {
+    if (account && !localCap && usageShaped) {
       markExhausted(account.id, model.id);
+    }
+    // Rotate rather than fail, when another account can serve. Gated on an
+    // empty `partial.content`: every content event pushes there before it is
+    // yielded, so this is an exact "has the reader seen anything yet" test,
+    // and a failure mid-answer surfaces instead of replaying what they saw.
+    // A cross-account move is already handled downstream: SDK sessions live
+    // in per-account config dirs, so planSdkTurn treats it as divergence and
+    // replays the conversation fresh on the new account.
+    let rotateTo: ClaudeAccount | undefined;
+    if (account && (usageShaped || localCap) && partial.content.length === 0) {
+      excluded.add(account.id);
+      const next = pickBridgeAccount(model.id, {
+        accountId: opts.accountId,
+        accountStrict: opts.accountStrict,
+        usageCredits: opts.usageCredits,
+        user: opts.user,
+        excludeIds: [...excluded],
+      });
+      if (!("error" in next)) rotateTo = next;
     }
     audit({
       ...auditBase,
@@ -859,7 +934,16 @@ async function* runSdkStream(
       ...(account ? { account: account.name } : {}),
       duration_ms: Date.now() - started,
       error: message,
+      ...(rotateTo ? { account_switch_to: rotateTo.name } : {}),
     });
+    if (rotateTo && account) {
+      console.warn(
+        `[pi-anthropic] usage limit on "${account.name}" (${model.id}): ` +
+          `retrying this turn on "${rotateTo.name}"`
+      );
+      rotate.retry = true;
+      return;
+    }
     yield fail("error", message);
   }
 }

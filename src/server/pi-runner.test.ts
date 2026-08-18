@@ -587,6 +587,65 @@ describe("runPi pi/openai account wiring (no engine, no network)", () => {
     expect(err.usageLimitExhausted).toBe(true);
   });
 
+  /** A "home" codex account whose ChatGPT token expires inside pi's 6-minute
+   *  refresh window — the placeholder refresh deliberately fails there, so the
+   *  turn ends flagged (dry-pool parity) with a message NAMING the account.
+   *  That is what lets a rotation test assert which account the turn ended on
+   *  without an engine or a network call. */
+  const expiringHomeAccount = (id: string): Record<string, unknown> => {
+    const home = join(dir, `codex-home-${id}`);
+    mkdirSync(home, { recursive: true });
+    const payload = Buffer.from(
+      JSON.stringify({ exp: Math.floor((Date.now() + 120_000) / 1000) })
+    ).toString("base64url");
+    writeFileSync(
+      join(home, "auth.json"),
+      JSON.stringify({ tokens: { access_token: `h.${payload}.s` } })
+    );
+    return { id, name: id, kind: "home", value: home, createdAt: new Date().toISOString() };
+  };
+
+  test("a usage-limited codex account rotates to the next one inside the same turn", async () => {
+    writeFileSync(
+      storePath,
+      JSON.stringify({
+        accounts: [expiringHomeAccount("rot-a"), expiringHomeAccount("rot-b")],
+      })
+    );
+    // Non-strict pin: attempt 1 is deterministically rot-a. Burning it adds
+    // it to the walk's exclusion, which makes the picker skip its pin branch,
+    // so attempt 2 falls to the pool and lands on rot-b.
+    const events = await collect("pi/openai/gpt-5.6-sol", { accountId: "rot-a" });
+    const errors = events.filter((e) => e.type === "error");
+    // ONE terminal for the whole walk: a rotation replays the attempt, never
+    // the caller-visible stream.
+    expect(errors).toHaveLength(1);
+    // Names the SECOND account — proof the turn moved off the first instead
+    // of dying on it, which is what it did before this walk existed.
+    expect(String(errors[0].content)).toContain("rot-b");
+    expect(String(errors[0].content)).not.toContain("rot-a");
+    expect(errors[0].usageLimitExhausted).toBe(true);
+  });
+
+  test("a strict pin refuses instead of rotating off the pinned account", async () => {
+    writeFileSync(
+      storePath,
+      JSON.stringify({
+        accounts: [expiringHomeAccount("pin-a"), expiringHomeAccount("pin-b")],
+      })
+    );
+    const events = await collect("pi/openai/gpt-5.6-sol", {
+      accountId: "pin-a",
+      accountStrict: true,
+    });
+    const errors = events.filter((e) => e.type === "error");
+    expect(errors).toHaveLength(1);
+    // A hard pin is an explicit choice: never silently move onto an account
+    // the person did not pick.
+    expect(String(errors[0].content)).toContain("pin-a");
+    expect(String(errors[0].content)).not.toContain("pin-b");
+  });
+
   test("a transcript alias admits only one run and is cleaned up", async () => {
     writeFileSync(storePath, JSON.stringify({ accounts: [] }));
     const transcriptSessionId = `pi-shared-transcript-${crypto.randomUUID()}`;
