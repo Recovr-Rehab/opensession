@@ -348,7 +348,10 @@ export const TranscriptBlocks = React.memo(function TranscriptBlocks({
 				}
 				const key =
 					block.kind === "turn"
-						? block.items[0].id
+						// History prepends can extend the start of an existing turn. Its
+						// tail survives that merge, so key the wrapper there and keep its
+						// measured height and visibility state instead of remounting it.
+						? block.items[block.items.length - 1].id
 						: block.kind === "walkthrough"
 							? "walkthrough"
 							: block.kind === "note"

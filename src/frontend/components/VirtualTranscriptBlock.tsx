@@ -24,7 +24,13 @@ export const VirtualTranscriptBlock = React.memo(function VirtualTranscriptBlock
 	className?: string;
 }) {
 	const ref = useRef<HTMLDivElement>(null);
-	const [visible, setVisible] = useState(true);
+	// A history page can extend one old turn by hundreds of steps. Start an
+	// offscreen block as its placeholder so that prepend never constructs the
+	// growing subtree once just to have the observer hide it on the next frame.
+	// SSR and browsers without IntersectionObserver keep the complete content.
+	const [visible, setVisible] = useState(
+		() => !enabled || typeof IntersectionObserver === "undefined",
+	);
 	const heightRef = useRef(96);
 
 	useEffect(() => {
