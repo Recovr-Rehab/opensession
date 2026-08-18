@@ -1297,10 +1297,7 @@ export function markExhausted(
 ): void {
   const account = readStore().find((a) => a.id === id);
   const cached = usageCache.get(id);
-  const scoped =
-    model && (model === "claude-fable-5" || model.toLowerCase().includes("fable"))
-      ? cached?.scopedLimits?.find((l) => l.label.toLowerCase() === "fable")
-      : undefined;
+  const scoped = scopedEntryForModel(cached, model);
   const resetsAt = scoped?.resetsAt
     ? Date.parse(scoped.resetsAt)
     : cached?.fiveHour?.resetsAt
@@ -1309,12 +1306,13 @@ export function markExhausted(
   const cachedUntil = Number.isFinite(resetsAt) && resetsAt > Date.now()
     ? resetsAt
     : Date.now() + DEFAULT_EXHAUST_MS;
-  // The longer of the two. Cached usage describes the 5-hour window; a stated
-  // reset can name a weekly one the cache knows nothing about, and taking the
-  // max means neither source can shorten a sideline the other justified.
+  // Attribute provider limits to the model that returned them. A bare id
+  // benches the subscription for every model, even when only one independent
+  // weekly bucket is spent. Callers without a model retain that account-wide
+  // fallback for failures that cannot be attributed.
   const until =
     statedResetAt && statedResetAt > cachedUntil ? statedResetAt : cachedUntil;
-  sidelines().set(exhaustionKey(id, scoped && model ? model : undefined), until);
+  sidelines().set(exhaustionKey(id, model), until);
   persistSidelines();
   console.warn(
     `[claude-accounts] ${account?.name || id}${model ? ` (${model})` : ""} marked exhausted until ${new Date(until).toISOString()}`

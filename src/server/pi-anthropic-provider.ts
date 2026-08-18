@@ -55,12 +55,12 @@
  *    when the engine is disabled or no account exists, so the run fails as
  *    early and as clearly as the bridge path did.
  *  - Usage-limit-shaped SDK failures markExhausted the picked account and
- *    then ROTATE: the turn is replayed on the next usable account, up to
- *    PI_MAX_ACCOUNT_ATTEMPTS, and only a dry pool surfaces the error (whose
+ *    then ROTATE: the turn is replayed across every usable account, and only
+ *    a dry pool surfaces the error (whose
  *    original message isPiUsageLimitShape's anthropic arm classifies:
  *    isClaudeUsageLimitError shapes, 429, "no designated bridge account").
- *    This is opencode-runner's MAX_ACCOUNT_ATTEMPTS discipline, which pi
- *    lacked: it sidelined the account and surfaced the failure, so one capped
+ *    This is the account-walk discipline pi lacked: it sidelined the account
+ *    and surfaced the failure, so one capped
  *    account ended the run while the rest of the pool sat idle and the
  *    sideline only helped the next prompt. agent-runner cannot rescue that
  *    either, because an explicit engine choice pins preferredFallback to
@@ -478,11 +478,6 @@ interface CapturedToolUse {
   input: unknown;
 }
 
-/** How many accounts one turn may burn before giving up. opencode-runner's
- *  MAX_ACCOUNT_ATTEMPTS backstop, same reason: a pathological pool must not
- *  loop forever. */
-export const PI_MAX_ACCOUNT_ATTEMPTS = 4;
-
 async function* runSdkStream(
   opts: PiAnthropicProviderOpts,
   model: PiCatalogModel,
@@ -519,18 +514,11 @@ async function* runSdkStream(
   // the walk: the rolling-cap refusal deliberately does not sideline, so
   // without an explicit exclusion the re-pick hands back the same account.
   const excluded = new Set<string>();
-  for (let attempt = 0; attempt < PI_MAX_ACCOUNT_ATTEMPTS; attempt++) {
+  for (;;) {
     const rotate = { retry: false };
     yield* runSdkAttempt(opts, model, context, options, partial, fail, excluded, rotate);
     if (!rotate.retry) return;
   }
-  // Nothing but a usage limit sets rotate.retry, so reaching here means every
-  // attempt was capped. Worded so isPiUsageLimitShape still classifies it.
-  yield fail(
-    "error",
-    `pi-anthropic: rotated through ${PI_MAX_ACCOUNT_ATTEMPTS} accounts and every one was ` +
-      "usage-limited, so there is no usable Claude account left for this model."
-  );
 }
 
 /** One attempt on one account. Sets `rotate.retry` instead of yielding a
@@ -926,7 +914,7 @@ async function* runSdkAttempt(
     let rotateTo: ClaudeAccount | undefined;
     // Why the pool could not serve, when it could not. Dropping this refusal
     // (the original bug) made a dry pool indistinguishable from a walk that
-    // never ran: four accounts were consulted and the reader was shown the
+    // never ran: multiple accounts were consulted and the reader was shown the
     // last one's sentence, so working rotation read as no rotation at all.
     let poolRefusal: string | undefined;
     if (account && (usageShaped || localCap) && partial.content.length === 0) {

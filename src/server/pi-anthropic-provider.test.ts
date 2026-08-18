@@ -462,18 +462,16 @@ describe("buildPiAnthropicProvider", () => {
   });
 
   test("a usage-limited account rotates to the next one inside the same turn", async () => {
-    // Two designated accounts, both with their rolling hourly cap tripped.
-    // The cap refuses BEFORE any SDK spawn, so this drives the whole account
-    // walk hermetically: attempt 1 is refused on cap-a and rotates, attempt 2
-    // is refused on cap-b, and only a dry pool ends the turn.
-    designate(["cap-a", "cap-b"]);
-    seedAccounts(["cap-a", "cap-b"]);
-    accounts.__setUsageCacheForTest("cap-a", freshUsage);
-    accounts.__setUsageCacheForTest("cap-b", freshUsage);
+    // More than the old four-account ceiling, all with their rolling hourly
+    // cap tripped. The cap refuses before any SDK spawn, so this proves the
+    // walk follows the picker until the real pool is dry.
+    const ids = ["cap-a", "cap-b", "cap-c", "cap-d", "cap-e", "cap-f"];
+    designate(ids);
+    seedAccounts(ids);
     const limit = 300; // bridgeMaxRequestsPerHour default (no opencode config in this seam)
-    for (let i = 0; i < limit; i++) {
-      admitBridgeRequest("cap-a", 1);
-      admitBridgeRequest("cap-b", 1);
+    for (const id of ids) {
+      accounts.__setUsageCacheForTest(id, freshUsage);
+      for (let i = 0; i < limit; i++) admitBridgeRequest(id, 1);
     }
     const provider = buildPiAnthropicProvider({
       unifiedSessionId: "os-rotate",
@@ -488,10 +486,10 @@ describe("buildPiAnthropicProvider", () => {
     // ONE `start` for the whole walk: a rotation replays the attempt, never
     // the pi-visible stream, so the reader still sees one assistant message.
     expect(events.map((e) => e.type)).toEqual(["start", "error"]);
-    // The surfaced error names the SECOND account — proof the turn moved off
-    // the first instead of dying on it (the behaviour before this walk).
+    // The surfaced error names account six. The old hard cap stopped after
+    // account four even though two eligible accounts remained.
     const message = events[1].error.errorMessage as string;
-    expect(message).toContain("cap-b");
+    expect(message).toContain("cap-f");
     expect(isPiUsageLimitShape(message, "anthropic")).toBe(true);
     // Neither account was sidelined on the way through: the rolling cap is
     // local admission control, and the sideline map is shared with opencode.

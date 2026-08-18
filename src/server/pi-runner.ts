@@ -180,7 +180,6 @@ import { stateDir } from "./paths";
 import { audit, summarizeText } from "./audit";
 import { journalSet, buildRunJournalRecord, journalClear, registerActiveRunProbe } from "./run-journal";
 import { isClaudeUsageLimitError, isCodexUsageLimitError } from "./runner-shared";
-import { PI_MAX_ACCOUNT_ATTEMPTS } from "./pi-anthropic-provider";
 import { ensureAnthropicBridge } from "./anthropic-bridge";
 import {
   opencodeProviders,
@@ -1249,8 +1248,8 @@ interface PiAccountWalk {
  * pi-anthropic-provider's stream, because it picks its account per REQUEST.
  * pi/openai picks once at bind time (the seeded credential is built before
  * the SDK is even imported), so there is no per-request catch to rotate from
- * and the loop belongs here. Both sides share one contract: the same attempt
- * budget, an exclusion set threaded into the picker, rotation only while
+ * and the loop belongs here. Both sides share one contract: an exclusion set
+ * threaded into the picker, rotation only while
  * nothing has streamed, and a strict pin that refuses rather than moving onto
  * an account the person did not choose.
  */
@@ -1259,21 +1258,11 @@ export async function* runPi(
   model: string
 ): AsyncGenerator<StreamEvent> {
   const walk: PiAccountWalk = { excluded: new Set(), rotate: false };
-  for (let attempt = 0; attempt < PI_MAX_ACCOUNT_ATTEMPTS; attempt++) {
+  for (;;) {
     walk.rotate = false;
     yield* runPiAttempt(opts, model, walk);
     if (!walk.rotate) return;
   }
-  // Nothing but a usage limit sets rotate, so every attempt was capped.
-  yield {
-    type: "error",
-    content:
-      `pi: rotated through ${PI_MAX_ACCOUNT_ATTEMPTS} accounts and every one was ` +
-      "usage-limited, so there is no usable account left for this model.",
-    provider: PROVIDER,
-    model,
-    usageLimitExhausted: true,
-  };
 }
 
 async function* runPiAttempt(

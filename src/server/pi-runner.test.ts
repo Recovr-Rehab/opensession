@@ -8,7 +8,7 @@
  * The engine turn itself is covered by the smoke harness
  * (POST /api/admin/pi-smoke) against a live bridge, not unit tests.
  */
-import { afterAll, beforeAll, describe, expect, test } from "bun:test";
+import { afterAll, beforeAll, describe, expect, spyOn, test } from "bun:test";
 import {
   mkdirSync,
   mkdtempSync,
@@ -606,23 +606,29 @@ describe("runPi pi/openai account wiring (no engine, no network)", () => {
   };
 
   test("a usage-limited codex account rotates to the next one inside the same turn", async () => {
+    const ids = ["rot-a", "rot-b", "rot-c", "rot-d", "rot-e", "rot-f"];
     writeFileSync(
       storePath,
       JSON.stringify({
-        accounts: [expiringHomeAccount("rot-a"), expiringHomeAccount("rot-b")],
+        accounts: ids.map(expiringHomeAccount),
       })
     );
     // Non-strict pin: attempt 1 is deterministically rot-a. Burning it adds
     // it to the walk's exclusion, which makes the picker skip its pin branch,
     // so attempt 2 falls to the pool and lands on rot-b.
+    const warnings = spyOn(console, "warn").mockImplementation(() => {});
     const events = await collect("pi/openai/gpt-5.6-sol", { accountId: "rot-a" });
+    const switches = warnings.mock.calls.filter(([message]) =>
+      String(message).includes("[pi-runner] usage limit on codex account")
+    );
+    warnings.mockRestore();
     const errors = events.filter((e) => e.type === "error");
     // ONE terminal for the whole walk: a rotation replays the attempt, never
     // the caller-visible stream.
     expect(errors).toHaveLength(1);
-    // Names the SECOND account — proof the turn moved off the first instead
-    // of dying on it, which is what it did before this walk existed.
-    expect(String(errors[0].content)).toContain("rot-b");
+    // Six failed accounts require five switches. The old hard ceiling only
+    // made three before stopping after its fourth attempt.
+    expect(switches).toHaveLength(5);
     expect(String(errors[0].content)).not.toContain("rot-a");
     expect(errors[0].usageLimitExhausted).toBe(true);
   });

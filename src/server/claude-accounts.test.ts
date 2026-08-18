@@ -486,7 +486,14 @@ describe("sidelines survive a restart", () => {
     const parsed = JSON.parse(originalStore);
     writeFileSync(
       storePath,
-      JSON.stringify({ accounts: [...parsed.accounts, blind("reboot"), blind("reboot-model")] })
+      JSON.stringify({
+        accounts: [
+          ...parsed.accounts,
+          blind("reboot"),
+          blind("reboot-model"),
+          blind("reboot-opus"),
+        ],
+      })
     );
     const fableSpent = {
       ...usage(10),
@@ -494,8 +501,14 @@ describe("sidelines survive a restart", () => {
     };
     accounts.__setUsageCacheForTest("reboot", fableSpent);
     accounts.__setUsageCacheForTest("reboot-model", fableSpent);
+    accounts.__setUsageCacheForTest("reboot-opus", usage(10));
     accounts.markExhausted("reboot");
     accounts.markExhausted("reboot-model", "claude-fable-5");
+    accounts.markExhausted(
+      "reboot-opus",
+      "claude-opus-5",
+      Date.now() + 2 * 60 * 60 * 1000,
+    );
     // What a `systemctl restart opensession` does to the in-memory map.
     accounts.__reloadSidelinesForTest();
   });
@@ -507,7 +520,9 @@ describe("sidelines survive a restart", () => {
     const rebooted = publics.find((a) => a.id === "reboot");
     expect(rebooted?.exhaustedUntil).not.toBeNull();
     expect(rebooted?.usable).toBe(false);
-    expect(accounts.pickAccount(new Set(["fresh", "maxed", "reboot-model"]))).toBeUndefined();
+    expect(
+      accounts.pickAccount(new Set(["fresh", "maxed", "reboot-model", "reboot-opus"]))
+    ).toBeUndefined();
   });
 
   test("a model-scoped sideline survives, and only for that model", () => {
@@ -518,5 +533,14 @@ describe("sidelines survive a restart", () => {
     expect((fable as number) - Date.now()).toBeGreaterThan(1000);
     const sonnet = accounts.earliestPoolReset(undefined, "claude-sonnet-5", "reboot-model");
     expect((sonnet as number) - Date.now()).toBeLessThan(1000);
+
+    const opus = accounts.earliestPoolReset(undefined, "claude-opus-5", "reboot-opus");
+    expect((opus as number) - Date.now()).toBeGreaterThan(60 * 60 * 1000);
+    const otherModel = accounts.earliestPoolReset(
+      undefined,
+      "claude-sonnet-5",
+      "reboot-opus",
+    );
+    expect((otherModel as number) - Date.now()).toBeLessThan(1000);
   });
 });
