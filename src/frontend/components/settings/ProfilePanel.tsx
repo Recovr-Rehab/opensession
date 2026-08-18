@@ -198,8 +198,11 @@ function PictureSection({
 			{error && <InlineAlert onDismiss={() => setError(null)}>{error}</InlineAlert>}
 			<SettingsHint>
 				PNG, JPEG, GIF or WebP, up to{" "}
-				{Math.round(profile.imageMaxBytes / 1024 / 1024)}MB. Remove it to go back
-				to your GitHub picture.
+				{Math.round(profile.imageMaxBytes / 1024 / 1024)}MB.
+				{profile.image &&
+					(profile.github
+						? " Remove it to go back to your GitHub picture."
+						: " Remove it to go back to your initial.")}
 			</SettingsHint>
 		</>
 	);
@@ -332,11 +335,11 @@ function DetailsSection({
 					</div>
 				</form>
 			</SettingsForm>
+			{/* One line, and the one that is not obvious from the labels: the rest
+			    of these fields say what they do. */}
 			<SettingsHint>
 				The first word of your name is how you are mentioned and how sessions are
-				attributed to you. Your email is the author on commits you start, your
-				timezone sets when schedules and reminders land, and other names are the
-				spellings that should still resolve to you.
+				attributed to you.
 			</SettingsHint>
 		</>
 	);

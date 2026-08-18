@@ -71,6 +71,10 @@ function memberFor(name: string): TeamMember | null {
 		team.find((m) => m.github?.trim().toLowerCase() === key) ||
 		team.find((m) => m.email?.trim().toLowerCase() === key) ||
 		team.find((m) => m.name.trim().split(/\s+/)[0]?.toLowerCase() === key) ||
+		// Aliases exist so a person's other spellings resolve to them, which is
+		// the same question this is asking. It only matters without sign-in,
+		// where the name is whatever the client calls itself.
+		team.find((m) => m.aliases?.some((a) => a.trim().toLowerCase() === key)) ||
 		null
 	);
 }
