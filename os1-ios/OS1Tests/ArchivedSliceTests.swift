@@ -142,19 +142,19 @@ final class ArchivedSliceTests: XCTestCase {
     }
 
     /// One conversation draws no tab strip, so its closed siblings would have
-    /// nowhere to be offered from. They move to the workspace info sheet, and
-    /// only ever to one of the two surfaces at a time.
-    func testHistoryMovesToTheInfoSheetWhenAWorkspaceIsDownToOneTab() {
+    /// nowhere to be offered from. They move to the session's overflow menu,
+    /// and only ever to one of the two surfaces at a time.
+    func testHistoryMovesToTheOverflowMenuWhenAWorkspaceIsDownToOneTab() {
         XCTAssertEqual(
             SessionsListViewModel.historyPlacement(liveTabs: 1, archived: 3),
-            .infoSheet
+            .actionsMenu
         )
         XCTAssertEqual(
             SessionsListViewModel.historyPlacement(liveTabs: 2, archived: 3),
             .tabStrip
         )
-        // Nothing closed, nothing to place: a lone session's sheet says
-        // nothing about history rather than showing an empty section.
+        // Nothing closed, nothing to place: a lone session's menu says
+        // nothing about history rather than carrying an empty submenu.
         XCTAssertEqual(
             SessionsListViewModel.historyPlacement(liveTabs: 1, archived: 0),
             SessionHistoryPlacement.none

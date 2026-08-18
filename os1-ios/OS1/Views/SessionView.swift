@@ -588,7 +588,8 @@ struct SessionView: View {
                     // Handed down rather than read from the environment: a
                     // toolbar's content is hoisted out of the view tree, and
                     // what reaches it there isn't something to bet a menu on.
-                    openPanel: openPanel
+                    openPanel: openPanel,
+                    workspaceHistory: workspaceHistory
                 )
             }
             #else
@@ -666,8 +667,7 @@ struct SessionView: View {
             WorktreeInfoView(
                 viewModel: viewModel,
                 sessions: tabs,
-                catalog: catalog,
-                history: workspaceHistory
+                catalog: catalog
             )
             .presentationDetents([.large])
             .presentationDragIndicator(.visible)
@@ -1367,6 +1367,10 @@ private struct SessionActionsMenu: View {
     /// where there is no strip to open a tab in, which keeps the entry out of
     /// the menu there rather than offering something that can't happen.
     let openPanel: OpenPanelAction
+    /// This workspace's closed sessions, when this menu is the surface
+    /// carrying them. Nil while the tab strip has them, which is what keeps
+    /// one list from being offered in two places at once.
+    var workspaceHistory: WorkspaceSessionHistory?
 
     @State private var pendingMerge: String?
     @State private var merging = false
@@ -1391,6 +1395,30 @@ private struct SessionActionsMenu: View {
                         ? "New session"
                         : "New session in this workspace"
                 )
+            }
+            // What was closed here, next to the way to open a new one: the
+            // two are the same errand, another conversation in this
+            // workspace. These rows normally hang off the tab strip's history
+            // button, so they appear exactly when there is no strip to hold
+            // them, which is also when someone is most likely to go looking
+            // for what was closed. High in the menu rather than beside the
+            // destructive rows where the web keeps it, because this menu is
+            // long enough to scroll on a phone and the entry that has no
+            // other home must not be the one below the fold. A submenu, since
+            // the list is usually one or two entries but can run to twenty.
+            if let workspaceHistory, !workspaceHistory.sessions.isEmpty {
+                Menu {
+                    SessionHistoryItems(
+                        sessions: workspaceHistory.sessions,
+                        restoringIds: workspaceHistory.restoringIds,
+                        onRestore: workspaceHistory.restore
+                    )
+                } label: {
+                    Label(
+                        "Closed sessions",
+                        systemImage: "clock.arrow.trianglehead.counterclockwise.rotate.90"
+                    )
+                }
             }
             Button {
                 showWorktreeInfo = true
@@ -1831,11 +1859,11 @@ struct SessionTabsView: View {
         )
     }
 
-    /// The closed sessions, for the info sheet, and only while there is no
+    /// The closed sessions, for the overflow menu, and only while there is no
     /// strip to hold them. Restoring from there lands the workspace back on
     /// two tabs, so the strip returns and takes the list with it.
-    private var infoSheetHistory: WorkspaceSessionHistory? {
-        guard historyPlacement == .infoSheet else { return nil }
+    private var overflowMenuHistory: WorkspaceSessionHistory? {
+        guard historyPlacement == .actionsMenu else { return nil }
         return WorkspaceSessionHistory(
             sessions: archivedTabs,
             restoringIds: restoringTabIds,
@@ -1875,7 +1903,7 @@ struct SessionTabsView: View {
                             onArchiveWorkspace()
                             dismiss()
                         },
-                        workspaceHistory: infoSheetHistory
+                        workspaceHistory: overflowMenuHistory
                     )
                     // What the transcript's asset chips and the overflow menu
                     // reach for. Installed here rather than passed down: the
@@ -1938,8 +1966,8 @@ struct SessionTabsView: View {
         // A strip is drawn for siblings to switch between. One tab needs no
         // switcher, and a bar holding a single pill only repeats the name the
         // header already carries, so this workspace's closed sessions travel
-        // to the info sheet instead (see `infoSheetHistory`) rather than
-        // keeping a whole bar alive for the history control.
+        // to the overflow menu instead (see `overflowMenuHistory`) rather
+        // than keeping a whole bar alive for the history control.
         .safeAreaBar(edge: .top, spacing: 0) {
             if visibleTabs.count > 1 {
                 SessionTabBar(
@@ -2365,10 +2393,33 @@ struct WorkspaceSessionHistory {
     let restore: (Session) -> Void
 }
 
-/// The closed sessions of one workspace. Selecting a row restores it rather
-/// than merely opening a read-only archived conversation, matching the web tab
-/// strip. iOS places this beside its tab pills; macOS puts it in the detail
-/// toolbar because the sidebar already serves as that platform's live tab list.
+/// The rows of a workspace's closed sessions, written once for the three
+/// surfaces that offer them: the strip's history button, the iOS overflow menu
+/// when there is no strip, and the macOS toolbar. Selecting a row restores it
+/// rather than merely opening a read-only archived conversation, matching the
+/// web tab strip.
+private struct SessionHistoryItems: View {
+    let sessions: [Session]
+    var restoringIds: Set<String> = []
+    let onRestore: (Session) -> Void
+
+    var body: some View {
+        ForEach(sessions) { session in
+            Button {
+                onRestore(session)
+            } label: {
+                Label(session.displayTitle, systemImage: "arrow.uturn.backward")
+            }
+            .disabled(restoringIds.contains(session.id))
+        }
+    }
+}
+
+/// The closed sessions of one workspace, as a menu of their own. iOS places
+/// this beside its tab pills; macOS puts it in the detail toolbar because the
+/// sidebar already serves as that platform's live tab list. Where there is no
+/// strip, the same rows hang off the overflow menu instead (see
+/// `SessionActionsMenu`).
 private struct SessionHistoryMenu: View {
     let sessions: [Session]
     var restoringIds: Set<String> = []
@@ -2376,14 +2427,11 @@ private struct SessionHistoryMenu: View {
 
     var body: some View {
         Menu {
-            ForEach(sessions) { session in
-                Button {
-                    onRestore(session)
-                } label: {
-                    Label(session.displayTitle, systemImage: "arrow.uturn.backward")
-                }
-                .disabled(restoringIds.contains(session.id))
-            }
+            SessionHistoryItems(
+                sessions: sessions,
+                restoringIds: restoringIds,
+                onRestore: onRestore
+            )
         } label: {
             Image(systemName: "clock.arrow.trianglehead.counterclockwise.rotate.90")
         }
