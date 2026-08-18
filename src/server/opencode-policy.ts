@@ -108,6 +108,7 @@ export const SHARED_INPROCESS_SERVERS = [
   "opensession-repos",
   "opensession-memory",
 	"opensession-portals",
+  "opensession-web",
   "opensession-walkthrough",
   "opensession-slack",
   "opensession-ask",

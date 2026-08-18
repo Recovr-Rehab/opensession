@@ -33,6 +33,7 @@ import { createSearchMcpServer } from "../agents/slack/search-tools";
 import { createAssetsMcpServer } from "../agents/slack/assets-tools";
 import { createWorkflowsMcpServer } from "../agents/slack/workflow-tools";
 import { createSelfDeployMcpServer } from "./self-deploy";
+import { createWebMcpServer } from "./web-mcp";
 import { papercutsEnabledForRepo } from "./papercuts";
 import { defaultRepo, productName } from "./config";
 import { REPOS, sessionRepoId } from "./worktree";
@@ -220,11 +221,20 @@ export function interactiveMcpServers(
 					// memory-tools.ts for the trust model.
 					"opensession-memory": createMemoryMcpServer({
 						user,
+						// Lets a write refresh THIS session's memory snapshot without
+						// disturbing anyone else's cached prompt prefix.
+						sessionId,
 						repos: () => {
 							const s = findSession(sessionId);
 							return s ? sessionRepoIds(s) : [];
 						},
 					}),
+					// Read the web: fetch a URL as text, search what was fetched,
+					// clone a GitHub repo instead of scraping it. Deliberately no
+					// search provider. The session id only picks which scratch dir a
+					// clone lands in; the tool list is the same for every session,
+					// which is what lets it ride the shared server pool.
+					"opensession-web": createWebMcpServer({ sessionId }),
 					// Portals are session-scoped supervised HTTP/WebSocket services.
 					// The old Preview tool was intentionally replaced rather than
 					// aliased: agents should choose Portals for live software.

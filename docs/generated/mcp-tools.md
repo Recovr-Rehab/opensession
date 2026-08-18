@@ -49,7 +49,8 @@ in-process tool (both name external MCP tools):
 | [`opensession-keychain`](#opensession-keychain) | 3 | interactive | yes | Needs a session id. |
 | [`opensession-publish`](#opensession-publish) | 4 | interactive | yes | Needs a session id. |
 | [`opensession-repos`](#opensession-repos) | 4 | interactive | yes | Needs a session id. |
-| [`opensession-memory`](#opensession-memory) | 3 | interactive | yes | Needs a session id. |
+| [`opensession-memory`](#opensession-memory) | 5 | interactive | yes | Needs a session id. |
+| [`opensession-web`](#opensession-web) | 3 | interactive | yes | Needs a session id. |
 | [`opensession-portals`](#opensession-portals) | 5 | interactive | yes | Needs a session id. |
 | [`opensession-walkthrough`](#opensession-walkthrough) | 2 | interactive | yes | Needs a session id. |
 | [`opensession-slack`](#opensession-slack) | 1 | interactive | yes | Needs a session id. |
@@ -64,7 +65,7 @@ in-process tool (both name external MCP tools):
 | [`opensession-github`](#opensession-github) | 4 | Slack loop | yes | – |
 | [`opensession-goal-self`](#opensession-goal-self) | 6 | goal wake | no | Only on a session that carries a goalId. |
 
-24 servers, 98 tools. "Shared server" is membership of
+25 servers, 103 tools. "Shared server" is membership of
 `SHARED_INPROCESS_SERVERS` (`src/server/opencode-policy.ts`): a run carrying
 any server outside that list falls back to a per-session engine server.
 
@@ -503,9 +504,21 @@ Durable repo / user / team memory, shared with Slack channel memory.
 
 ### `store_memory`
 
-`mcp__opensession-memory__store_memory` · input: `text` (string, required), `scope` ("repo" | "user" | "team"), `repo` (string)
+`mcp__opensession-memory__store_memory` · input: `text` (string, required), `scope` ("repo" | "user" | "team"), `repo` (string), `supersedes` (string[])
 
 Store a durable fact in memory so future sessions know it without being told. Scopes: 'repo' (default) = facts about this session's codebase (gotchas, operational quirks, decisions — things that don't belong in checked-in docs); 'user' = facts about the person prompting (preferences, context); 'team' = workspace-wide facts everyone (including Assistant in Slack) should know. Store only durable, non-obvious facts — never conversation state, never things already in the repo's docs.
+
+### `search_memory`
+
+`mcp__opensession-memory__search_memory` · input: `query` (string, required), `limit` (number), `includeArchived` (boolean)
+
+Search everything ever remembered for this session's scopes, including entries that are no longer injected — older facts held back to keep the Memory section a sane size, and entries superseded by a later correction. Reach for this before re-deriving something that smells familiar, or when the Memory section says entries were held back. Exact tokens work best: file names, error strings, flag names.
+
+### `supersede_memory`
+
+`mcp__opensession-memory__supersede_memory` · input: `ids` (string[], required)
+
+Archive memory entries that are wrong or obsolete, without storing a replacement. They stop being injected but stay reachable through search_memory. Use forget_memory only when an entry should not have been recorded at all.
 
 ### `list_memory`
 
@@ -518,6 +531,33 @@ List everything in this session's memory scopes (repo(s), user, team) with the i
 `mcp__opensession-memory__forget_memory` · input: `id` (string, required)
 
 Remove a memory entry by id (see list_memory or the [id] tags in the Memory section). Works on any of this session's scopes.
+
+## opensession-web
+
+Read a URL as text, search what was fetched, clone a GitHub repo. No web search.
+
+- **Source** `src/server/web-mcp.ts`
+- **Wired in** `src/server/interactive-mcp.ts`
+- **Runs** interactive
+- **Condition** Needs a session id.
+
+### `fetch_url`
+
+`mcp__opensession-web__fetch_url` · input: `url` (string, required), `mode` ("text" | "raw"), `headChars` (number), `refresh` (boolean)
+
+Fetch a URL and return its readable text. Returns the first part of the page inline plus a `handle`; the whole body is kept on disk for an hour, so use `read_page` with that handle to search the rest rather than re-fetching. This keeps a long page out of the conversation unless you ask for the part you need. A GitHub repository URL is CLONED instead of scraped, and the result is a local path you can read with the normal file tools. A GitHub file URL is read as raw text rather than as a rendered page. Private, loopback and link-local addresses are refused, redirects included. This does not search the web: pass a URL you already have.
+
+### `read_page`
+
+`mcp__opensession-web__read_page` · input: `handle` (string, required), `find` (string), `caseSensitive` (boolean), `context` (number), `offset` (number), `limit` (number)
+
+Read more of a page fetched earlier in this session, by its handle. Prefer `find` over paging: it returns just the passages containing your term, with context, plus how many times it occurs in the whole page. Use `offset` only when you genuinely want to read straight through. Pages expire an hour after they are fetched; fetch the URL again if a handle has gone.
+
+### `clone_repo`
+
+`mcp__opensession-web__clone_repo` · input: `repo` (string, required)
+
+Shallow-clone a public GitHub repository and return the local path, its file list and the head of its README. Use this instead of fetching GitHub pages when you want to read a project's actual source: the clone is real files, so read/grep/find work on it normally. The clone lands in scratch, not in the session's worktree.
 
 ## opensession-portals
 

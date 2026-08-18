@@ -51,6 +51,7 @@ import { createWorkflowsMcpServer } from "../agents/slack/workflow-tools";
 import { createRunnersMcpServer } from "./runners-mcp";
 import { createPortalsMcpServer } from "./portals-mcp";
 import { createSelfDeployMcpServer } from "./self-deploy";
+import { createWebMcpServer } from "./web-mcp";
 
 /**
  * The classes of run that carry in-process servers. One entry per wiring site,
@@ -247,6 +248,15 @@ export const MCP_SERVER_CATALOG: McpServerCatalogEntry[] = [
     condition: "Needs a session id.",
     note: "Write tools are interactive-only; automation runs get read-only memory injected into their prompt instead.",
     build: () => createMemoryMcpServer({ user: USER, repos: () => ["example"] }),
+  },
+  {
+    name: "opensession-web",
+    summary: "Read a URL as text, search what was fetched, clone a GitHub repo. No web search.",
+    source: "src/server/web-mcp.ts",
+    wiring: ["src/server/interactive-mcp.ts"],
+    runClasses: ["interactive"],
+    condition: "Needs a session id.",
+    build: () => createWebMcpServer({ sessionId: SESSION_ID }),
   },
   {
     name: "opensession-portals",

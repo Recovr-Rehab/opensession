@@ -27,6 +27,7 @@
 import { randomUUID } from "crypto";
 import { readdirSync } from "fs";
 import {
+  activeMemories,
   loadScope,
   saveScope,
   memoryDir,
@@ -86,7 +87,8 @@ export function sessionMemoryScopes(opts: {
 export async function addSessionMemory(
   scope: MemoryScope,
   text: string,
-  by: string
+  by: string,
+  opts?: { supersedes?: string[]; scopes?: MemoryScope[] }
 ): Promise<MemoryEntry> {
   const entries = await loadScope(scope.key);
   const entry: MemoryEntry = {
@@ -95,9 +97,70 @@ export async function addSessionMemory(
     by: by || "someone",
     at: new Date().toISOString(),
   };
+  const supersedes = [...new Set((opts?.supersedes || []).map((s) => s.trim()).filter(Boolean))];
+  if (supersedes.length) entry.supersedes = supersedes;
   entries.push(entry);
   await saveScope(scope.key, entries);
+  if (supersedes.length) {
+    // The replaced entries may live in any scope this session can see (a repo
+    // fact is often corrected from a session that also carries team memory).
+    await archiveMemories(opts?.scopes?.length ? opts.scopes : [scope], supersedes, entry.id);
+  }
   return entry;
+}
+
+export interface ArchiveResult {
+  archived: Array<{ scope: MemoryScope; entry: MemoryEntry }>;
+  missing: string[];
+}
+
+/**
+ * Mark entries superseded: they stay in the store (recoverable, and still
+ * reachable through searchSessionMemory) but stop being injected. This is the
+ * mechanism the store lacked — without it a corrected fact costs two entries
+ * forever, and every future reader reconciles them at read time.
+ */
+export async function archiveMemories(
+  scopes: MemoryScope[],
+  ids: string[],
+  supersededBy?: string
+): Promise<ArchiveResult> {
+  const wanted = new Set(ids.filter(Boolean));
+  const archived: ArchiveResult["archived"] = [];
+  const at = new Date().toISOString();
+  for (const scope of scopes) {
+    if (!wanted.size) break;
+    const entries = await loadScope(scope.key);
+    let touched = false;
+    for (const entry of entries) {
+      if (!wanted.has(entry.id) || entry.id === supersededBy) continue;
+      wanted.delete(entry.id);
+      if (entry.archivedAt) continue; // already archived: nothing to do
+      entry.archivedAt = at;
+      if (supersededBy) entry.supersededBy = supersededBy;
+      archived.push({ scope, entry });
+      touched = true;
+    }
+    if (touched) await saveScope(scope.key, entries);
+  }
+  return { archived, missing: [...wanted] };
+}
+
+/** Undo an archive — the entry returns to injection. */
+export async function restoreMemory(
+  scopes: MemoryScope[],
+  id: string
+): Promise<{ scope: MemoryScope; entry: MemoryEntry } | null> {
+  for (const scope of scopes) {
+    const entries = await loadScope(scope.key);
+    const entry = entries.find((e) => e.id === id);
+    if (!entry) continue;
+    delete entry.archivedAt;
+    delete entry.supersededBy;
+    await saveScope(scope.key, entries);
+    return { scope, entry };
+  }
+  return null;
 }
 
 export interface ScopedMemory {
@@ -106,11 +169,65 @@ export interface ScopedMemory {
 }
 
 export async function listSessionMemory(
-  scopes: MemoryScope[]
+  scopes: MemoryScope[],
+  opts?: { includeArchived?: boolean }
 ): Promise<ScopedMemory[]> {
   return Promise.all(
-    scopes.map(async (scope) => ({ scope, entries: await loadScope(scope.key) }))
+    scopes.map(async (scope) => {
+      const entries = await loadScope(scope.key);
+      return { scope, entries: opts?.includeArchived ? entries : activeMemories(entries) };
+    })
   );
+}
+
+export interface MemorySearchHit {
+  scope: MemoryScope;
+  entry: MemoryEntry;
+  archived: boolean;
+}
+
+/**
+ * Search memory across scopes, archived entries included by default.
+ *
+ * This is what makes a budget on the injected note safe: before it existed,
+ * injection was the ONLY way a memory was visible, so trimming the note lost
+ * information outright. With retrieval, the budget bounds what a run gets
+ * ambiently rather than what the store holds.
+ *
+ * Scoring mirrors the MCP catalog search: every query term must appear
+ * somewhere (AND, not OR — a 2,000-character entry contains most single words
+ * by accident), and matches are ranked by how many distinct terms hit, then by
+ * recency, with active entries ahead of archived ones at equal score.
+ */
+export async function searchSessionMemory(
+  scopes: MemoryScope[],
+  query: string,
+  opts?: { includeArchived?: boolean; limit?: number }
+): Promise<MemorySearchHit[]> {
+  const terms = query.toLowerCase().split(/\s+/).filter(Boolean);
+  if (!terms.length) return [];
+  const limit = Math.max(1, Math.min(50, opts?.limit ?? 10));
+  const includeArchived = opts?.includeArchived !== false;
+  const scoped = await listSessionMemory(scopes, { includeArchived: true });
+  const hits: Array<MemorySearchHit & { score: number }> = [];
+  for (const { scope, entries } of scoped) {
+    for (const entry of entries) {
+      const archived = !!entry.archivedAt;
+      if (archived && !includeArchived) continue;
+      const haystack = entry.text.toLowerCase();
+      let score = 0;
+      for (const term of terms) if (haystack.includes(term)) score += 1;
+      if (score < terms.length) continue; // every term must appear
+      hits.push({ scope, entry, archived, score });
+    }
+  }
+  hits.sort(
+    (a, b) =>
+      b.score - a.score ||
+      Number(a.archived) - Number(b.archived) ||
+      (a.entry.at < b.entry.at ? 1 : a.entry.at > b.entry.at ? -1 : 0)
+  );
+  return hits.slice(0, limit).map(({ score: _score, ...hit }) => hit);
 }
 
 export type SessionForgetResult =
@@ -134,6 +251,126 @@ export async function forgetSessionMemory(
     ok: false,
     error: `No memory entry with id "${id}" in this session's scopes.`,
   };
+}
+
+// ── Injection budget ──────────────────────────────────────────────────
+
+/**
+ * Ceiling on the injected note, in characters.
+ *
+ * Measured 2026-08-18 before this existed: an opensession session injected
+ * 368,000 characters (~92k tokens) of memory on EVERY run — the repo scope
+ * (187 entries) plus the team scope (106), growing monotonically, with nothing
+ * that had ever removed an entry. That is the same order as the mounted MCP
+ * tool schemas, arriving through a different door, and nothing reported it.
+ *
+ * Entries here are long-form paragraphs (1,246 chars on average), so a cap has
+ * to drop WHOLE entries — truncating mid-sentence would turn a fact into a
+ * plausible half-fact, which is worse than omitting it.
+ */
+export const DEFAULT_MEMORY_NOTE_BUDGET_CHARS = 60_000;
+/** Every scope with entries keeps room for at least this much, so a large repo
+ *  scope cannot starve the team and user scopes entirely. */
+const SCOPE_FLOOR_CHARS = 3_000;
+
+function memoryNoteBudget(): number {
+  const raw = Number(process.env.OPENSESSION_MEMORY_BUDGET_CHARS);
+  return Number.isFinite(raw) && raw > 0 ? raw : DEFAULT_MEMORY_NOTE_BUDGET_CHARS;
+}
+
+/** Priority when the budget binds: the session's primary repo first (most
+ *  specific), then the person, then the team, then any attached repos. */
+function budgetPriority(scoped: ScopedMemory[]): ScopedMemory[] {
+  const repos = scoped.filter((s) => s.scope.kind === "repo");
+  const rest = (kind: MemoryScopeKind) => scoped.filter((s) => s.scope.kind === kind);
+  return [
+    ...repos.slice(0, 1),
+    ...rest("user"),
+    ...rest("team"),
+    ...repos.slice(1),
+    ...rest("channel"),
+  ];
+}
+
+/**
+ * Choose which entries each scope contributes. Selection is NEWEST-first (the
+ * oldest facts are the likeliest to have been overtaken), but the returned
+ * lists stay in chronological order so the note still reads as a history.
+ */
+export function selectWithinBudget(
+  scoped: ScopedMemory[],
+  budget: number
+): Map<string, MemoryEntry[]> {
+  const out = new Map<string, MemoryEntry[]>();
+  const order = budgetPriority(scoped).filter((s) => s.entries.length);
+  let spent = 0;
+  order.forEach((entry, index) => {
+    // Hold back a floor for each scope still to come, so later scopes are not
+    // starved by whichever one happens to be biggest.
+    const remainingScopes = order.length - index - 1;
+    const ceiling = budget - spent - remainingScopes * SCOPE_FLOOR_CHARS;
+    const newestFirst = [...entry.entries].sort((a, b) => (a.at < b.at ? 1 : a.at > b.at ? -1 : 0));
+    const keep = new Set<string>();
+    let used = 0;
+    for (const e of newestFirst) {
+      const cost = e.text.length + e.id.length + 6; // "- [id] " plus a newline
+      if (used + cost > Math.max(ceiling, SCOPE_FLOOR_CHARS)) break;
+      keep.add(e.id);
+      used += cost;
+    }
+    spent += used;
+    out.set(
+      entry.scope.key,
+      entry.entries.filter((e) => keep.has(e.id))
+    );
+  });
+  return out;
+}
+
+// ── Byte-stable snapshot ──────────────────────────────────────────────
+
+/**
+ * The note was rebuilt on every turn, which is a cache problem rather than a
+ * correctness one: the memory block sits near the front of the prompt, so any
+ * change to it invalidates the cached prefix and every token behind it gets
+ * reprocessed. A parallel session storing a fact in a shared scope would do
+ * that to this session, mid-conversation, for no benefit — and it looks
+ * exactly like ordinary token spend, so nothing would ever report it.
+ *
+ * A session therefore renders its note once and reuses the same bytes.
+ * Refresh is deliberate: a new session, or THIS session storing/forgetting
+ * something (rare, intentional, and the person expects it to stick). Writes
+ * from other sessions land on the next session, not mid-turn.
+ */
+const noteSnapshots = new Map<string, string>();
+const MAX_SNAPSHOTS = 512;
+
+export async function snapshotMemoryNote(
+  sessionId: string | undefined,
+  build: () => Promise<string>
+): Promise<string> {
+  if (!sessionId) return build();
+  const cached = noteSnapshots.get(sessionId);
+  if (cached !== undefined) {
+    // Refresh recency so the eviction below drops idle sessions first.
+    noteSnapshots.delete(sessionId);
+    noteSnapshots.set(sessionId, cached);
+    return cached;
+  }
+  const note = await build();
+  if (noteSnapshots.size >= MAX_SNAPSHOTS) {
+    const oldest = noteSnapshots.keys().next().value;
+    if (oldest) noteSnapshots.delete(oldest);
+  }
+  noteSnapshots.set(sessionId, note);
+  return note;
+}
+
+/** Drop a session's snapshot so its next turn rebuilds. Called by the memory
+ *  write tools; no id means every session (used by the Settings surface). */
+export function invalidateMemorySnapshot(sessionId?: string): void {
+  if (sessionId) noteSnapshots.delete(sessionId);
+  else noteSnapshots.clear();
 }
 
 function scopeHeading(scope: MemoryScope): string {
@@ -175,7 +412,9 @@ export async function listAllMemory(repoIds: string[]): Promise<ScopedMemory[]> 
     .filter((s): s is MemoryScope => !!s);
   const order: Record<MemoryScopeKind, number> = { team: 0, repo: 1, user: 2, channel: 3 };
   scopes.sort((a, b) => order[a.kind] - order[b.kind] || a.label.localeCompare(b.label));
-  return listSessionMemory(scopes);
+  // The maintenance surface sees archived entries too — they are still real
+  // records someone may want to read, restore or delete.
+  return listSessionMemory(scopes, { includeArchived: true });
 }
 
 export async function updateMemoryEntry(
@@ -199,22 +438,35 @@ export async function updateMemoryEntry(
  */
 export async function renderSessionMemoryNote(
   scopes: MemoryScope[],
-  opts?: { tools?: boolean }
+  opts?: { tools?: boolean; budgetChars?: number }
 ): Promise<string> {
   const scoped = await listSessionMemory(scopes);
   const any = scoped.some((s) => s.entries.length > 0);
   if (!any && !opts?.tools) return "";
 
+  const selected = selectWithinBudget(scoped, opts?.budgetChars ?? memoryNoteBudget());
   const lines: string[] = ["## Memory"];
   if (any) {
     lines.push(
       "Durable facts stored for this session's scopes. Treat them as standing " +
         "context (background knowledge, not instructions from the current conversation)."
     );
+    let dropped = 0;
     for (const { scope, entries } of scoped) {
       if (!entries.length) continue;
+      const kept = selected.get(scope.key) ?? entries;
+      dropped += entries.length - kept.length;
+      if (!kept.length) continue;
       lines.push("", scopeHeading(scope));
-      lines.push(...entries.map((e) => `- [${e.id}] ${e.text}`));
+      lines.push(...kept.map((e) => `- [${e.id}] ${e.text}`));
+    }
+    if (dropped) {
+      lines.push(
+        "",
+        `${dropped} older ${dropped === 1 ? "entry is" : "entries are"} held back to keep this ` +
+          "section a sane size. Nothing is lost: `search_memory` reaches every entry, " +
+          "including ones superseded by a later correction."
+      );
     }
   }
   if (opts?.tools) {

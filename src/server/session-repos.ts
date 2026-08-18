@@ -29,6 +29,7 @@ import {
 import { sessionPrBranch } from "./session-pr-target";
 import {
 	renderSessionMemoryNote,
+	snapshotMemoryNote,
 	sessionMemoryScopes,
 } from "./session-memory";
 import { DESK_NOTE } from "./desk";
@@ -235,7 +236,7 @@ export async function buildSessionNote(
 			session.desk ? DESK_NOTE : "",
 			session.desk ? deskBriefingFor(user) : "",
 			buildReposNote(session),
-			await memoryNoteFor(user, sessionRepoIds(session)),
+			await memoryNoteFor(user, sessionRepoIds(session), session.id),
 		]
 			.filter(Boolean)
 			.join("\n\n") || undefined
@@ -250,13 +251,20 @@ export async function buildSessionNote(
 export async function memoryNoteFor(
 	user: string | undefined,
 	repos: string[],
+	/** Session the note is for. Given one, the rendered memory block is
+	 *  snapshotted and the SAME BYTES are reused every turn, so a parallel
+	 *  session storing a fact in a shared scope cannot invalidate this
+	 *  session's cached prompt prefix mid-conversation. The session's own
+	 *  memory writes refresh it (invalidateMemorySnapshot). */
+	sessionId?: string,
 ): Promise<string> {
 	const parts: string[] = [personalPromptNoteFor(user)];
 	try {
 		parts.push(
-			await renderSessionMemoryNote(
-				sessionMemoryScopes({ user, repos }),
-				{ tools: true },
+			await snapshotMemoryNote(sessionId, () =>
+				renderSessionMemoryNote(sessionMemoryScopes({ user, repos }), {
+					tools: true,
+				}),
 			),
 		);
 	} catch (e) {

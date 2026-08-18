@@ -1,5 +1,5 @@
 /**
- * Channel-scoped memory for the Slack agent, modelled on Claude Tag.
+ * Channel-scoped memory for the Slack agent.
  *
  * Scopes (mirrors Slack's visibility model):
  *   - Public channel  -> the shared `workspace` store (read + write). Anything
@@ -15,9 +15,16 @@
  */
 
 import { randomUUID } from "crypto";
+import { existsSync } from "fs";
 import { writeJsonAtomic } from "../../server/shared/atomic-write";
 
-export const MEMORY_DIR = `${process.env.HOME}/.michael-memory`;
+/** Former name of the store, from when the agent was called Michael. Read
+ *  when it exists and the current one does not: the store holds hundreds of
+ *  entries, and renaming a state directory without accepting the old name is
+ *  how the sessions-dir rename silently orphaned 459 stored media paths. */
+const LEGACY_MEMORY_DIR = `${process.env.HOME}/.michael-memory`;
+
+export const MEMORY_DIR = `${process.env.HOME}/.opensession-memory`;
 
 // Test seam: the snapshot harness (src/server/testing/) redirects the store so
 // a recorded fixture can never embed the team's real memories, and so a run's
@@ -25,9 +32,23 @@ export const MEMORY_DIR = `${process.env.HOME}/.michael-memory`;
 // to remember. Resolved per call; MEMORY_DIR itself stays the default.
 let memoryDirOverride: string | null = null;
 
-/** Directory backing the scope stores (MEMORY_DIR unless a test redirects it). */
+/**
+ * Directory backing the scope stores.
+ *
+ * Resolution order: a test override, then the current name, then the legacy
+ * name when it is the only one that exists. An instance that never migrates
+ * keeps working; `bun scripts/migrate-memory-dir.ts` moves it for real.
+ */
 export function memoryDir(): string {
-  return memoryDirOverride ?? MEMORY_DIR;
+  if (memoryDirOverride) return memoryDirOverride;
+  if (existsSync(MEMORY_DIR)) return MEMORY_DIR;
+  if (existsSync(LEGACY_MEMORY_DIR)) return LEGACY_MEMORY_DIR;
+  return MEMORY_DIR;
+}
+
+/** The legacy path, for the migration script and its test. */
+export function legacyMemoryDir(): string {
+  return LEGACY_MEMORY_DIR;
 }
 
 /** Point the memory store at another directory; returns the previous value. */
@@ -42,6 +63,25 @@ export interface MemoryEntry {
   text: string;
   by: string;
   at: string;
+  /** Ids this entry replaces. Set when a fact is corrected rather than added:
+   *  the model already writes "CORRECTION to memory X" in the prose, so this
+   *  is that same relation in a form the store can act on. */
+  supersedes?: string[];
+  /** Id of the entry that replaced this one. */
+  supersededBy?: string;
+  /** When this entry stopped being injected. Archived entries stay in the
+   *  file — recoverable, and reachable through search — but cost no prompt. */
+  archivedAt?: string;
+}
+
+/** Superseded entries are history, not standing context. */
+export function isArchivedMemory(entry: MemoryEntry): boolean {
+  return !!entry.archivedAt;
+}
+
+/** The entries that still count as current. */
+export function activeMemories(entries: MemoryEntry[]): MemoryEntry[] {
+  return entries.filter((e) => !isArchivedMemory(e));
 }
 
 export interface MemoryContext {
@@ -119,8 +159,10 @@ export interface MemoryView {
 
 export async function listMemory(ctx: MemoryContext): Promise<MemoryView> {
   const { writable, sharedReadonly } = resolveScopes(ctx);
-  const local = await loadScope(writable);
-  const shared = sharedReadonly ? await loadScope(sharedReadonly) : [];
+  // Archived entries are excluded everywhere a human or a prompt reads memory;
+  // only the maintenance surfaces ask for them explicitly.
+  const local = activeMemories(await loadScope(writable));
+  const shared = sharedReadonly ? activeMemories(await loadScope(sharedReadonly)) : [];
   return { local, shared, localIsWorkspace: writable === "workspace" };
 }
 

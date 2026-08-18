@@ -28,15 +28,19 @@
  *  - stdio servers spawn with getDefaultEnvironment() + the server's own
  *    configured env — never this process's env (it holds Open Session tokens).
  *
- * Lifecycle: connections open during creation because MCP has no offline tool
- * discovery — `tools/list` needs a live connection, so a resolved server
- * connects once at bridge build and the connection is reused for calls (the
- * "unused stdio servers never spawn" ideal is unreachable while the tool
- * catalog must exist up front; per-config catalog caching would fix it and is
- * deliberately out of v1). A server that fails to connect/list degrades to
- * absent tools (warn + audit), never a failed turn; a wedged call times out
- * and fails that call, not the turn. `close()` tears down every client and
- * connected in-process instance.
+ * Lifecycle: MCP has no offline tool discovery — `tools/list` needs a live
+ * connection — so the catalog is cached per config entry (mcp-tools-cache.ts)
+ * and a warm external server contributes its tools with NO connection at all.
+ * Its connect then happens on first real use, because `ensure()` is called
+ * inside each tool's `execute` rather than at build. A cold server (new,
+ * changed config, or past the cache TTL) connects once at build and populates
+ * the cache; in-process servers always list live, since an InMemoryTransport
+ * hop in this process costs nothing to open. This is the "unused stdio servers
+ * never spawn" case that v1 deferred. A server that fails to connect/list
+ * degrades to absent tools (warn + audit), never a failed turn; a wedged call
+ * times out and fails that call, not the turn; a cached tool that has since
+ * vanished upstream fails that one call and the entry is rewritten next build.
+ * `close()` tears down every client and connected in-process instance.
  *
  * The pi package is imported TYPE-ONLY here: the bridge must be importable
  * (tests, pi-runner module load) without triggering the pi dep tree's cold
@@ -53,6 +57,7 @@ import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
 import type { Transport } from "@modelcontextprotocol/sdk/shared/transport.js";
 import type { ToolDefinition } from "@earendil-works/pi-coding-agent";
 import { filterMcpServers, type McpScope } from "./runner-shared";
+import { readCachedTools, toolsCacheKey, writeCachedTools } from "./mcp-tools-cache";
 import { mcpSharedGrantHeader, mcpUserGrantHeader } from "./mcp-oauth";
 import { mcpRelayUrl, mintMcpRelayToken } from "./mcp-relay";
 import type { InProcessMcpServer } from "./inprocess-mcp";
@@ -316,14 +321,25 @@ export async function createPiMcpBridge(opts: {
   };
 
   // ── Resolve the server set ─────────────────────────────────────────────────
-  const entries: Array<{ name: string; factory: () => Promise<ServerConn> }> = [];
+  // `cacheKey` is set for external servers only: it keys the catalog cache on
+  // the server's own config entry, so editing command/args/env/url re-lists at
+  // once. In-process servers get none — listing them is a call in this process.
+  const entries: Array<{
+    name: string;
+    factory: () => Promise<ServerConn>;
+    cacheKey?: string;
+  }> = [];
   const external = filterMcpServers(
     opts.mcpServers,
     opts.user,
     opts.mcpGrantUser ? grantUsers : undefined,
   ) as Record<string, Record<string, unknown>>;
   for (const [name, cfg] of Object.entries(external)) {
-    entries.push({ name, factory: () => connectExternal(name, cfg) });
+    entries.push({
+      name,
+      factory: () => connectExternal(name, cfg),
+      cacheKey: toolsCacheKey(cfg),
+    });
   }
   for (const [name, v] of Object.entries(opts.inProcessMcp ?? {})) {
     if (!isInProcessServer(v)) continue;
@@ -334,20 +350,27 @@ export async function createPiMcpBridge(opts: {
   // ── List + register (deny BEFORE defineTool; dead servers degrade) ─────────
   const tools: ToolDefinition<any, any, any>[] = [];
   const seen = new Set<string>();
-  for (const { name, factory } of entries) {
+  for (const { name, factory, cacheKey } of entries) {
     const started = Date.now();
-    let listed: Array<Record<string, any>>;
-    try {
-      const conn = await withTimeout(
-        ensure(name, factory),
-        timeoutMs,
-        `MCP server "${name}" connect timed out`,
-      );
-      listed = await listAllTools(conn.client);
-    } catch (e) {
-      console.warn(`[pi-mcp-bridge] server "${name}" unavailable, skipping:`, e);
-      opts.onAudit?.({ server: name, tool: "tools/list", ok: false, ms: Date.now() - started });
-      continue;
+    // A cache hit is the whole point: no connect, no stdio child, no dial —
+    // the server is only reached if the model actually calls one of its tools.
+    let listed: Array<Record<string, any>> | undefined = cacheKey
+      ? (readCachedTools(name, cacheKey) as Array<Record<string, any>> | undefined)
+      : undefined;
+    if (!listed) {
+      try {
+        const conn = await withTimeout(
+          ensure(name, factory),
+          timeoutMs,
+          `MCP server "${name}" connect timed out`,
+        );
+        listed = await listAllTools(conn.client);
+        if (cacheKey) writeCachedTools(name, cacheKey, listed);
+      } catch (e) {
+        console.warn(`[pi-mcp-bridge] server "${name}" unavailable, skipping:`, e);
+        opts.onAudit?.({ server: name, tool: "tools/list", ok: false, ms: Date.now() - started });
+        continue;
+      }
     }
     for (const t of listed) {
       if (typeof t?.name !== "string" || !t.name) continue;
@@ -366,13 +389,23 @@ export async function createPiMcpBridge(opts: {
   // two-step surface instead. This is discovery, not an access grant: both
   // tools close over the already policy-filtered `tools` list above.
   const byName = new Map(tools.map((definition) => [definition.name, definition]));
+  // Fields are kept APART rather than concatenated into one haystack: a hit in
+  // the tool's NAME is real evidence, a hit in a 20,000-character vendor
+  // description is usually an accident. A flat substring count over a single
+  // haystack made every verbose tool match every query (a long enough
+  // description contains "run", "workflow", "agent" somewhere), and the
+  // alphabetical tie-break then handed the results to whichever server sorts
+  // first — so searching for a capability returned unrelated tools while the
+  // tool literally named after it never surfaced.
   const searchable = tools.map((definition) => ({
-    name: definition.name,
-    label: definition.label,
-    description: definition.description,
-    parameters: definition.parameters,
-    haystack: `${definition.name} ${definition.label} ${definition.description}`.toLowerCase(),
+    definition,
+    name: definition.name.toLowerCase(),
+    label: (definition.label || "").toLowerCase(),
+    description: (definition.description || "").toLowerCase(),
   }));
+  /** Description hits are damped by length, so a short precise description
+   *  outweighs an encyclopaedic one that merely contains the word. */
+  const describedWeight = (length: number) => Math.min(1, 400 / Math.max(length, 400));
   const searchCatalog: ToolDefinition<any, any, any> = {
     name: "mcp_search",
     label: "Search MCP tools",
@@ -393,19 +426,40 @@ export async function createPiMcpBridge(opts: {
       const requested = Number((params as { limit?: unknown })?.limit);
       const limit = Number.isFinite(requested) ? Math.max(1, Math.min(12, Math.floor(requested))) : 6;
       const terms = query.split(/\s+/).filter(Boolean);
+      const compact = query.replace(/[\s_-]+/g, "");
       const matches = searchable
-        .map((entry) => ({
-          entry,
-          score: terms.reduce((score, term) => score + (entry.haystack.includes(term) ? 1 : 0), 0),
-        }))
+        .map((entry) => {
+          const weight = describedWeight(entry.description.length);
+          let score = 0;
+          for (const term of terms) {
+            if (entry.name.includes(term)) score += 10;
+            else if (entry.label.includes(term)) score += 5;
+            else if (entry.description.includes(term)) score += 3 * weight;
+          }
+          // The whole query spelled as a tool name ("run workflow" →
+          // run_workflow) is the strongest signal there is.
+          if (compact && entry.name.replace(/[_-]/g, "").includes(compact)) score += 15;
+          return { entry, score };
+        })
         .filter(({ score }) => score > 0)
-        .sort((a, b) => b.score - a.score || a.entry.name.localeCompare(b.entry.name))
+        .sort(
+          (a, b) =>
+            b.score - a.score ||
+            // Then the more specific tool, not whichever server sorts first.
+            a.entry.description.length - b.entry.description.length ||
+            a.entry.name.localeCompare(b.entry.name),
+        )
         .slice(0, limit);
+      // Descriptions are trimmed here but schemas are not: the model needs the
+      // exact arguments to call, and some vendor descriptions are longer than
+      // everything else in the result put together.
+      const brief = (text: string) =>
+        text.length > 700 ? `${text.slice(0, 700)}… [truncated]` : text;
       const text = matches.length
         ? matches
             .map(
               ({ entry }) =>
-                `${entry.name}: ${entry.description}\narguments: ${JSON.stringify(entry.parameters)}`,
+                `${entry.definition.name}: ${brief(entry.definition.description || "")}\narguments: ${JSON.stringify(entry.definition.parameters)}`,
             )
             .join("\n\n")
         : `No permitted MCP tools matched "${query}". Try broader capability words.`;
