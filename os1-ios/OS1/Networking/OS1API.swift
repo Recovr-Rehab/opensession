@@ -1284,7 +1284,7 @@ enum OS1API {
         let name: String
         let fullName: String?
         let github: String?
-        /// A picture they uploaded themselves (Settings > Personal > Profile),
+        /// A picture they uploaded themselves (Settings > Personal > Account),
         /// as a server-relative `/media` URL. When set it outranks the GitHub
         /// face: it is the one they chose. Needs our bearer token like every
         /// other server path, so it loads through `authorizedRequest`.

@@ -2,7 +2,7 @@
  * Per-user profile picture: the one part of a person's profile that is not
  * identity of record.
  *
- * Everything else on Settings > Personal > Profile (name, email, timezone,
+ * Everything else on Settings > Personal > Account (name, email, timezone,
  * aliases) IS the roster. It lives in `identity.team` in config.json, because
  * commit attribution, mention matching and `allowedUsers` scoping all resolve
  * through it. A picture resolves nothing. It is machine state, an uploaded

@@ -50,7 +50,7 @@ export function getReviewTeams(): ReviewTeam[] {
  * Re-fetch the roster and tell every subscriber. The roster is otherwise
  * fetched once per page load, which is right for something an admin edits
  * rarely, and wrong the moment you edit your OWN row: your new name and
- * picture have to appear without a reload (Settings > Personal > Profile).
+ * picture have to appear without a reload (Settings > Personal > Account).
  */
 export function refreshPeople(): Promise<void> {
 	fetched = false;

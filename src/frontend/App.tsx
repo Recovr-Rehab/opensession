@@ -273,7 +273,6 @@ function isToolView(view: string): view is ToolView {
 
 // Non-tool settings sections, addressable as <base>/settings/<section>.
 const SETTINGS_SECTIONS = new Set<SettingsSectionKey>([
-	"profile",
 	"myAccounts",
 	"preferences",
 	"notifications",
@@ -309,6 +308,7 @@ const LEGACY_SETTINGS_SECTIONS: Record<string, SettingsSectionKey> = {
 	deskVoice: "preferences",
 	composer: "preferences",
 	keychain: "myAccounts",
+	profile: "myAccounts",
 };
 
 function parseRoute(pathname: string): Route {

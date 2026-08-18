@@ -87,7 +87,7 @@ describe("per-user flat-file stores", () => {
 	});
 });
 
-// Renaming yourself on Settings > Personal > Profile changes the display name
+// Renaming yourself on Settings > Personal > Account changes the display name
 // these stores file people under, so the state has to travel with the person.
 describe("renameUserState", () => {
 	beforeEach(() => {

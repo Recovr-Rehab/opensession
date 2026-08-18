@@ -15,7 +15,10 @@
  */
 
 export const SETTINGS_KEYWORDS: Record<string, string[]> = {
-	profile: [
+	myAccounts: [
+		// Your profile lives at the top of this page, so its words have to find
+		// it here.
+		"profile",
 		"avatar",
 		"picture",
 		"photo",
@@ -26,9 +29,6 @@ export const SETTINGS_KEYWORDS: Record<string, string[]> = {
 		"display name",
 		"timezone",
 		"my email",
-		"about me",
-	],
-	myAccounts: [
 		"oauth",
 		"sign in",
 		"connect account",

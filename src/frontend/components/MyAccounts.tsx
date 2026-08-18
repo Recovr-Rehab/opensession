@@ -29,14 +29,23 @@ import { IconTile } from "./BrandTile";
 import { useCurrentUser } from "./UserPicker";
 import { GithubAccounts } from "./Connections";
 import { KeychainSection } from "./settings/KeychainPanel";
+import { ProfileSection } from "./settings/ProfileSection";
 
 /**
- * Settings → Personal → My accounts: every per-user sign-in in one place —
- * OAuth-capable MCP servers (connect as yourself; your sessions then use
- * YOUR account, falling back to the workspace grant — src/server/mcp-oauth.ts),
- * the per-user GitHub auth section (PRs as yourself), and your keychain (the
- * credentials a session can borrow from you). Workspace-wide MCP grants stay
- * on the Connections page's server cards (admin surface).
+ * Settings → Personal → Account: everything about you on this instance.
+ *
+ * Your profile (picture, name, the roster fields you own — ProfileSection),
+ * then every per-user sign-in: OAuth-capable MCP servers (connect as yourself;
+ * your sessions then use YOUR account, falling back to the workspace grant —
+ * src/server/mcp-oauth.ts), the per-user GitHub auth section (PRs as
+ * yourself), and your keychain (the credentials a session can borrow from
+ * you). Workspace-wide MCP grants stay on the Connections page's server cards
+ * (admin surface).
+ *
+ * Profile and sign-ins were briefly two pages. They are one because they
+ * answer one question between them, and because split in two the GitHub login
+ * appeared on both: once as a read-only roster field, once as the account your
+ * PRs are opened with.
  */
 export function MyAccountsPanel() {
 	const currentUser = useCurrentUser();
@@ -109,12 +118,13 @@ export function MyAccountsPanel() {
 	return (
 		<SettingsPanel>
 			<SettingsHeader
-				title="My accounts"
-				description="Sessions act as you where you're connected, and fall back to the workspace account everywhere else."
+				title="Account"
+				description="Your profile, and the accounts your sessions act as."
 			/>
 			{error && (
 				<InlineAlert onDismiss={() => setError(null)}>{error}</InlineAlert>
 			)}
+			<ProfileSection />
 			<GithubAccounts personal />
 			<SettingsGroupLabel>Tools</SettingsGroupLabel>
 			{tools === null || (oauthServers.length === 0 && checking) ? (

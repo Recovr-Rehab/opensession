@@ -1,7 +1,7 @@
 import { ApiError, BASE, request } from "./request";
 
 /**
- * Your own profile (Settings > Personal > Profile). The server takes no member
+ * Your own profile (Settings > Personal > Account). The server takes no member
  * identifier on these routes: it resolves your row from your signed-in
  * identity, so there is no id to pass and no way to address anyone else.
  * `user` rides only for instances with sign-in turned off, where the client's

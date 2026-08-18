@@ -1,5 +1,5 @@
 /**
- * Your own profile: what Settings > Personal > Profile reads and writes.
+ * Your own profile: what Settings > Personal > Account reads and writes.
  *
  * AUTHZ, and the reason this is a route family of its own rather than a
  * relaxation of /api/setup/team: every /api/setup/* path is workspace-admin
