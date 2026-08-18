@@ -137,8 +137,8 @@ struct SessionsListView: View {
         /// Opened from the Action Button's "New Idea": the composer's mic
         /// starts listening with the sheet.
         var dictate = false
-        /// Set when the create joins an existing workspace as a new tab (the
-        /// session's ⋯ menu); nil starts a standalone session.
+        /// Set when the opening prompt should start in an existing workspace;
+        /// nil starts a standalone session.
         var workspaceId: String?
         /// A sessionless workspace's parked prompt, reopened in New Session.
         var draft: OS1API.WorkspaceDraft?
@@ -798,11 +798,9 @@ struct SessionsListView: View {
 
     /// Cmd+Option+N, and the palette row that shares it.
     ///
-    /// The same ladder the iPhone's "New session in this workspace" walks: a
-    /// session in a workspace gets an empty sibling straight away, a legacy
-    /// session without one has no strip to join so the composer asks for its
-    /// repo and mode, and with nothing selected there is no workspace to mean,
-    /// so it is a plain new session.
+    /// A session in a workspace opens a composer scoped to that workspace. A
+    /// legacy session without one has no workspace to join, and with nothing
+    /// selected there is no workspace to mean, so both use a plain composer.
     private func newSessionInCurrentWorkspace() {
         guard let current = selectedSession else {
             newSessionRequest = NewSessionRequest()
@@ -812,11 +810,10 @@ struct SessionsListView: View {
             newSessionRequest = NewSessionRequest(repo: current.effectiveRepo)
             return
         }
-        Task {
-            if let created = await openSiblingTab(of: current) {
-                selectedSessionID = created.id
-            }
-        }
+        newSessionRequest = NewSessionRequest(
+            repo: current.effectiveRepo,
+            workspaceId: current.workspaceId
+        )
     }
 
     /// A stable in-sidebar hierarchy avoids three unrelated icon buttons
@@ -1312,29 +1309,6 @@ struct SessionsListView: View {
         #endif
     }
 
-    /// The tab strip's "+" — a new session in a workspace opens as a tab right
-    /// away, with no composer sheet in between. The server mints an EMPTY
-    /// sibling that shares this workspace's worktree and branch; it carries no
-    /// run until its first message, so there is no prompt to collect up front,
-    /// and nothing the sheet would have asked for is still open (repo, branch
-    /// and mode all come from the workspace).
-    ///
-    /// The create is awaited rather than optimistic: writing the session file
-    /// is one round trip — no worktree to prepare — so the tab appears with a
-    /// real id from its first frame, and a failure lands before there's a tab
-    /// to tear down. The row is filed locally so the strip has it immediately
-    /// instead of on the next poll.
-    private func openSiblingTab(of source: Session) async -> Session? {
-        do {
-            let created = try await OS1API.newSiblingSession(from: source.id)
-            viewModel.addOptimistic(created)
-            return created
-        } catch {
-            createError = error.localizedDescription
-            return nil
-        }
-    }
-
     /// The background create finished: move the pending row (and the open
     /// conversation) onto the server's real id, or roll the pending row back
     /// and surface the error.
@@ -1726,10 +1700,9 @@ struct SessionsListView: View {
                     saveComposerDraft(draft, for: id)
                 },
                 onNewSession: {
-                    // The session's ⋯ → "New session in this workspace": a sibling
-                    // tab, not a standalone session. The workspace id comes from
-                    // the latest polled copy — the row NavigationPath retained
-                    // predates a workspace this session may have joined since.
+                    // The session's ⋯ → "New session in this workspace" opens a
+                    // composer scoped to the latest workspace. The row retained
+                    // by NavigationPath can predate a workspace it joined later.
                     let current = viewModel.sessions.first { $0.id == session.id } ?? session
                     guard current.workspaceId?.isEmpty == false else {
                         // A workspace-less legacy session has no strip to join,
@@ -1739,7 +1712,11 @@ struct SessionsListView: View {
                         newSessionRequest = NewSessionRequest(repo: session.effectiveRepo)
                         return nil
                     }
-                    return await openSiblingTab(of: current)
+                    newSessionRequest = NewSessionRequest(
+                        repo: current.effectiveRepo,
+                        workspaceId: current.workspaceId
+                    )
+                    return nil
                 },
                 onRenameWorkspace: { name in
                     guard let workspace = workspace(containing: session) else { return }

@@ -295,26 +295,6 @@ export async function fetchSkillMentions(
 }
 
 /**
- * Start a new sibling session in the source session's workspace. Returns the new
- * session's id plus its full session object (so the caller can render it
- * immediately, without waiting for the next sessions poll); it has no run yet —
- * its first prompt starts fresh. `mode` picks the worktree relationship: share
- * the workspace worktree (default), stack a new worktree branched off it, or
- * ask (no worktree).
- */
-export async function newSessionApi(
-	sourceId: string,
-	user: string,
-	mode?: "share" | "stack" | "ask",
-): Promise<{ id: string; session: UnifiedSession | null }> {
-	const body = await request<{ id: string; session?: UnifiedSession }>(
-		`/sessions/${encodeURIComponent(sourceId)}/new-session`,
-		{ method: "POST", body: { user, ...(mode ? { mode } : {}) } },
-	);
-	return { id: body.id, session: body.session || null };
-}
-
-/**
  * Promote an ask session to code: create a worktree and attach it (also
  * materializes the workspace's worktree if it doesn't own one yet). Returns the
  * new branch + worktree dir.

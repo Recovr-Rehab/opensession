@@ -1555,27 +1555,6 @@ enum OS1API {
         return body
     }
 
-    /// Open an empty sibling session in a session's workspace — the tab strip's
-    /// "+". It shares the source's worktree, branch and repo, and has no run
-    /// yet: its first prompt starts one. The server answers with the full row
-    /// so the new tab renders immediately instead of waiting for the poll.
-    static func newSiblingSession(from sourceId: String) async throws -> Session {
-        struct NewSessionResponse: Decodable {
-            let id: String
-            let session: Session?
-        }
-        var body: [String: Any] = ["mode": "share"]
-        let user = ServerConfig.shared.userName
-        if !user.isEmpty { body["user"] = user }
-        let response: NewSessionResponse = try await post(
-            "/api/sessions/\(sourceId)/new-session",
-            body: body
-        )
-        // A server old enough to omit the row still returns the id; the bare
-        // session decodes tolerantly and the poll fills the rest in.
-        return response.session ?? Session(id: response.id)
-    }
-
     /// What the server did with a message — or why it couldn't.
     ///
     /// The distinction that matters to the outbox is retryable vs terminal:

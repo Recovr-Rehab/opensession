@@ -133,7 +133,6 @@ import {
 	fetchWorkspaces,
 	updateWorkspaceApi,
 	deleteWorkspaceApi,
-	newSessionApi,
 	fetchRepos,
 	resolveWorkspaceApi,
 	type OpenPr,
@@ -2701,10 +2700,10 @@ export function App(
 
 	/**
 	 * Closing a workspace pane can empty the strip: a workspace whose sessions
-	 * are all closed has nothing else in it. You always have one session open, so
-	 * that close starts a fresh session from the one closed most recently (the
-	 * mirror of closing the last session tab, which now leaves the pane instead).
-	 * Returns whether it started one, since that navigation replaces the caller's.
+	 * are all closed has nothing else in it. Reopen the workspace composer from
+	 * its most recent session settings instead of creating an empty session.
+	 * Returns whether it opened that composer, since its navigation replaces the
+	 * caller's.
 	 */
 	function reopenSessionAfterPaneClose(closed: WorkspacePaneTab): boolean {
 		if (currentSession || workspaceSessions.length) return false;
@@ -2712,25 +2711,13 @@ export function App(
 		if (openWsPanes.some((pane) => pane !== closed)) return false;
 		const wsId = activeWorkspaceId;
 		if (!wsId) return false;
-		void (async () => {
-			// `archivedSessions` is this workspace's own closed list (scoped
-			// fetch + whatever was archived here), newest first, so the clone
-			// source is the session closed most recently.
-			const src = archivedSessions[0];
-			// A workspace that never had a session (a PR someone else opened) has
-			// nothing to clone, and its home is a fine place to land: the composer
-			// there starts the first one.
-			if (!src) {
-				dropPaneUrlSuffix(closed);
-				return;
-			}
-			try {
-				await createNewSessionFrom(src, "share");
-			} catch (e) {
-				console.error("New session failed:", e);
-				dropPaneUrlSuffix(closed);
-			}
-		})();
+		// `archivedSessions` is this workspace's own closed list (scoped
+		// fetch + whatever was archived here), newest first. Its worktree
+		// settings make the new-session composer a sibling when a person next
+		// sends a prompt, without materializing an empty durable session now.
+		const src = archivedSessions[0];
+		if (src) openNewSessionInWorkspace(src, "share");
+		dropPaneUrlSuffix(closed);
 		return true;
 	}
 
@@ -2861,75 +2848,39 @@ export function App(
 		excludeId: currentSession?.id,
 	});
 
-	async function createNewSessionFrom(
+	function openNewSessionInWorkspace(
 		src: UnifiedSession,
 		mode: "share" | "stack" | "ask",
-	): Promise<string> {
-		const { id, session } = await newSessionApi(src.id, getCurrentUser(), mode);
-		// Inject the created session so the viewer renders the new session immediately
-		// — no "Starting…" flash while the sessions poll catches up. If the
-		// server didn't return it, synthesize a close-enough copy from the source
-		// session. Sticky: a poll that was already in flight when the session was created
-		// resolves with a list that predates it and would drop a plain inject —
-		// flashing the "Starting…" placeholder until the next poll. The server
-		// persisted the session before responding, so the sticky copy is reconciled
-		// away by the first fresh poll either way.
-		const now = new Date().toISOString();
-		inject(
-			session ?? {
-				...src,
-				id,
-				source: "opensession",
-				claudeSessionId: null,
-				codexThreadId: undefined,
-				title: "New session",
-				createdAt: now,
-				lastActivity: now,
-				isRunning: false,
-				transcriptPath: null,
-				startedBy: getCurrentUser(),
-				archived: false,
-				waitingForInput: false,
-				queuedCount: 0,
-				prUrl: undefined,
-				prState: undefined,
-				automation: undefined,
-				plainThreadId: undefined,
-				goal: undefined,
-				loop: undefined,
-				...(mode === "ask"
-					? {
-							branch: null,
-							worktreeDir: null,
-							mode: "ask" as const,
-						}
-					: {}),
-			},
-			{ sticky: true },
-		);
-		setPendingSessionId(id);
-		// This create adds a session to an existing workspace — clear a stale flag
-		// from an earlier workspace create so any residual pending state words
-		// itself as "session", not "workspace".
-		setPendingNewWorkspace(false);
-		clearTimeout(pendingTimer.current);
-		pendingTimer.current = setTimeout(() => {
-			setPendingSessionId(null);
-			unstick(id);
-		}, 30000);
-		refresh();
-		navigate({ view: "session", id });
-		return id;
+	): void {
+		const workspace = src.workspaceId
+			? workspaces.find((item) => item.id === src.workspaceId)
+			: undefined;
+		setPalette({
+			open: true,
+			repo: src.repo || workspace?.repo,
+			...(src.workspaceId
+				? {
+					workspaceId: src.workspaceId,
+					modelWorkspaceId: src.workspaceId,
+				}
+				: {}),
+			// Sharing starts from the workspace's branch. Omitting the branch for
+			// a stack keeps NewSession on "New branch", which the create path
+			// resolves as a stacked worktree after the first prompt is sent.
+			...(mode === "share" && (src.branch || workspace?.branch)
+				? { branch: src.branch || workspace?.branch }
+				: {}),
+			...(mode === "ask" ? { mode: "ask" as const } : {}),
+		});
 	}
 
 	// Start a new session in the current workspace. The tab strip's + button and the
 	// SessionViewer ⋯ menu (the only reachable entry point on a phone, where the
-	// strip and its + are hidden/hover-revealed) both call this. It creates the
-	// sibling session instantly (browser-tab feel): shares the workspace worktree by
-	// default, or stacks/asks. No engine run until the first prompt.
+	// strip and its + are hidden/hover-revealed) both open its composer. The first
+	// prompt creates the session on the shared worktree by default, or stacked/Ask.
 	const handleNewSession = async (
 		mode: "share" | "stack" | "ask",
-		side: SplitSide | null = null,
+		_side: SplitSide | null = null,
 	) => {
 		const src = currentSession || mainSession(naturalSessions);
 		if (!src) {
@@ -2951,19 +2902,7 @@ export function App(
 			}
 			return;
 		}
-		try {
-			const id = await createNewSessionFrom(src, mode);
-			// A session born in the right bar belongs to it; the left bar is the
-			// default home, so a left-bar "+" needs no assignment.
-			if (side === "right" && tabOrderKey && activeTabSplit)
-				saveTabSplit(tabOrderKey, {
-					...toStoredSplit(activeTabSplit),
-					right: [...activeTabSplit.right, id],
-					rightActive: id,
-				});
-		} catch (e) {
-			console.error("New session failed:", e);
-		}
+		openNewSessionInWorkspace(src, mode);
 	};
 	const handleNewSessionRef = useRef(handleNewSession);
 	handleNewSessionRef.current = handleNewSession;
@@ -3054,15 +2993,7 @@ export function App(
 					openWsPanes[0] ??
 					null)
 				: null;
-		let replacementId: string | null = null;
-		if (wasOpen && !next && !survivingPane) {
-			try {
-				replacementId = await createNewSessionFrom(s, "share");
-			} catch (e) {
-				console.error("Replacement session failed:", e);
-				return;
-			}
-		}
+		const needsNewSessionComposer = wasOpen && !next && !survivingPane;
 		if (neverRan) {
 			remove(s.id);
 		} else {
@@ -3092,14 +3023,12 @@ export function App(
 			} else {
 				patch(s.id, { archived: false, archivedReason: undefined });
 			}
-			if (replacementId) {
-				remove(replacementId);
-				void deleteSessionApi(replacementId, false).catch((cleanupError) =>
-					console.error("Replacement cleanup failed:", cleanupError),
-				);
-			}
 			if (wasOpen) navigate({ view: "session", id: s.id });
 			return;
+		}
+		if (wasOpen && needsNewSessionComposer && activeWorkspaceId) {
+			navigate({ view: "workspace", id: activeWorkspaceId });
+			openNewSessionInWorkspace(s, "share");
 		}
 		refresh();
 	};
