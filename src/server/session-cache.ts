@@ -6,7 +6,11 @@
 
 import { existsSync, readFileSync } from "fs";
 import { OPENSESSION_SESSIONS_DIR } from "./paths";
-import { getAllSessions, getAllSessionsAsync } from "./sessions";
+import {
+	getAllSessions,
+	getAllSessionsAsync,
+	type SessionArchiveSlice,
+} from "./sessions";
 import { activeRunRecords } from "./run-journal";
 import {
 	getRunState,
@@ -28,10 +32,23 @@ export const SESSIONS_DIR = OPENSESSION_SESSIONS_DIR;
 
 const g = globalThis as any;
 
-// Cache sessions with short TTL
-let sessionsCache: { data: UnifiedSession[]; ts: number } | null = null;
-let sessionsRefresh: Promise<void> | null = null;
-let sessionsCacheGeneration = 0;
+type SessionsCache = { data: UnifiedSession[]; ts: number } | null;
+const CACHE_SLICES = ["include", "exclude", "only"] as const;
+const sessionsCaches: Record<SessionArchiveSlice, SessionsCache> = {
+	include: null,
+	exclude: null,
+	only: null,
+};
+const sessionsRefreshes: Record<SessionArchiveSlice, Promise<void> | null> = {
+	include: null,
+	exclude: null,
+	only: null,
+};
+const sessionsCacheGenerations: Record<SessionArchiveSlice, number> = {
+	include: 0,
+	exclude: 0,
+	only: 0,
+};
 // The UI polls every 5s and live run changes also arrive over WebSocket. Keep
 // the expensive multi-thousand-file fallback scan out of every poll wave;
 // in-process mutations invalidate this cache immediately.
@@ -39,8 +56,10 @@ const CACHE_TTL = 10_000;
 
 /** Drop the cached list so the next getCachedSessions() re-reads from disk. */
 export function invalidateSessionsCache(): void {
-	sessionsCacheGeneration++;
-	sessionsCache = null;
+	for (const slice of CACHE_SLICES) {
+		sessionsCacheGenerations[slice]++;
+		sessionsCaches[slice] = null;
+	}
 	// The list ROUTE caches its serialized response on top of this cache, and
 	// that copy outliving its source is what made an archive take up to five
 	// seconds to disappear from every client. Cleared through globalThis
@@ -49,7 +68,10 @@ export function invalidateSessionsCache(): void {
 	(g.__osSessionsResponseSnapshots as Map<string, unknown> | undefined)?.clear();
 }
 
-function enrichCachedSessions(data: UnifiedSession[]): UnifiedSession[] {
+function enrichCachedSessions(
+	slice: SessionArchiveSlice,
+	data: UnifiedSession[],
+): UnifiedSession[] {
 	// Earliest run-start per session id, from the run journal — feeds the "in
 	// progress" elapsed ticker and survives a page refresh (a session can carry
 	// its bks id and its engine session id across records; key on both).
@@ -93,18 +115,35 @@ function enrichCachedSessions(data: UnifiedSession[]): UnifiedSession[] {
 		if (rs !== "idle") s.runState = rs;
 		checkRunStateWedge(s.id, rs, liveEngineBusy);
 	}
-	sessionsCache = { data, ts: Date.now() };
+	const ts = Date.now();
+	sessionsCaches[slice] = { data, ts };
+	// An internal/legacy whole-list scan already paid for both halves. Seed the
+	// narrower caches when they are idle so the next UI poll does not rescan the
+	// same files immediately after a background index refresh.
+	if (slice === "include") {
+		if (!sessionsRefreshes.exclude && !sessionsCaches.exclude)
+			sessionsCaches.exclude = {
+				data: data.filter((session) => !session.archived),
+				ts,
+			};
+		if (!sessionsRefreshes.only && !sessionsCaches.only)
+			sessionsCaches.only = {
+				data: data.filter((session) => !!session.archived),
+				ts,
+			};
+	}
 	return data;
 }
 
 export function getCachedSessions(): UnifiedSession[] {
-	if (sessionsCache && Date.now() - sessionsCache.ts < CACHE_TTL) {
-		return sessionsCache.data;
+	const cached = sessionsCaches.include;
+	if (cached && Date.now() - cached.ts < CACHE_TTL) {
+		return cached.data;
 	}
 	// Supersede any cooperative scan already in flight. Its generation check
 	// prevents the older snapshot from replacing this synchronous result.
-	sessionsCacheGeneration++;
-	return enrichCachedSessions(getAllSessions());
+	sessionsCacheGenerations.include++;
+	return enrichCachedSessions("include", getAllSessions());
 }
 
 /**
@@ -116,21 +155,27 @@ export function getCachedSessions(): UnifiedSession[] {
  * single flight retries rather than publishing a snapshot from before the
  * write. Synchronous callers keep their existing read-after-write contract.
  */
-export async function getCachedSessionsAsync(): Promise<UnifiedSession[]> {
-	while (!sessionsCache || Date.now() - sessionsCache.ts >= CACHE_TTL) {
-		if (!sessionsRefresh) {
-			const generation = ++sessionsCacheGeneration;
-			sessionsRefresh = getAllSessionsAsync()
+export async function getCachedSessionsAsync(
+	slice: SessionArchiveSlice = "include",
+): Promise<UnifiedSession[]> {
+	while (
+		!sessionsCaches[slice] ||
+		Date.now() - sessionsCaches[slice]!.ts >= CACHE_TTL
+	) {
+		if (!sessionsRefreshes[slice]) {
+			const generation = ++sessionsCacheGenerations[slice];
+			sessionsRefreshes[slice] = getAllSessionsAsync(slice)
 				.then((data) => {
-					if (sessionsCacheGeneration === generation) enrichCachedSessions(data);
+					if (sessionsCacheGenerations[slice] === generation)
+						enrichCachedSessions(slice, data);
 				})
 				.finally(() => {
-					sessionsRefresh = null;
+					sessionsRefreshes[slice] = null;
 				});
 		}
-		await sessionsRefresh;
+		await sessionsRefreshes[slice];
 	}
-	return sessionsCache.data;
+	return sessionsCaches[slice]!.data;
 }
 
 /**
@@ -139,7 +184,10 @@ export async function getCachedSessionsAsync(): Promise<UnifiedSession[]> {
  * normal sessions refresh repopulates this cache.
  */
 export function peekCachedSessions(): UnifiedSession[] {
-	return sessionsCache?.data ?? [];
+	if (sessionsCaches.include) return sessionsCaches.include.data;
+	if (sessionsCaches.exclude && sessionsCaches.only)
+		return [...sessionsCaches.exclude.data, ...sessionsCaches.only.data];
+	return sessionsCaches.exclude?.data ?? sessionsCaches.only?.data ?? [];
 }
 
 // ── Run-state readers ─────────────────────────────────────────────────────────
@@ -225,7 +273,13 @@ export function findSession(sessionId: string): UnifiedSession | undefined {
 export async function findSessionAsync(
 	sessionId: string,
 ): Promise<UnifiedSession | undefined> {
-	return (await getCachedSessionsAsync()).find((s) => s.id === sessionId);
+	const cached = peekCachedSessions().find((s) => s.id === sessionId);
+	if (cached) return cached;
+	const live = (await getCachedSessionsAsync("exclude")).find(
+		(s) => s.id === sessionId,
+	);
+	if (live) return live;
+	return (await getCachedSessionsAsync("only")).find((s) => s.id === sessionId);
 }
 
 /** Canonical id followed by every historical alias for this session. Asset
@@ -312,6 +366,60 @@ export function touchNativeSession(
 	})).catch((e) => {
 		console.error(`Failed to update opensession session ${bksId}:`, e);
 	});
+}
+
+/**
+ * Persist an AUTOMATIC model switch (a usage-limit fallback hopping off an
+ * exhausted model) without overwriting a human's explicit choice.
+ *
+ * A run that hops models writes the fallback into the session file when the
+ * turn ends. Someone may have sent /model while that turn was in flight —
+ * which used to be refused outright, blocking the moment people most want it
+ * (a run that has just died on a usage limit, where the session still reads
+ * busy because the interrupted run counts as active). That refusal was never
+ * the real protection either: every surface sends /model as a prompt, so a
+ * switch made a moment before the turn ended raced this write regardless.
+ *
+ * The write is conditional instead: it lands only while the stored model is
+ * still the one the run last saw, so an explicit choice wins by construction
+ * rather than by timing. The history entry is appended to the FRESH list for
+ * the same reason — a run holds a copy taken at its start, and writing that
+ * back silently dropped any entry recorded in between.
+ *
+ * Resolves to whether the write landed, so a fallback walk that hops twice in
+ * one turn can keep its expectation in step.
+ */
+export function persistAutoModelSwitch(input: {
+	sessionId: string;
+	/** The stored model this run last saw; undefined when the session carries
+	 *  no explicit model (it is running the instance default). */
+	expectedModel?: string;
+	model: string;
+	entry: NonNullable<NativeSessionFile["modelHistory"]>[number];
+}): Promise<boolean> {
+	let applied = false;
+	return updateSessionFile(input.sessionId, (data) => {
+		if ((data.model || undefined) !== (input.expectedModel || undefined)) {
+			console.log(
+				`[model] keeping "${data.model}" on ${input.sessionId}: chosen during the run, ` +
+					`not reverting to the "${input.model}" fallback`,
+			);
+			return data;
+		}
+		applied = true;
+		return {
+			...data,
+			model: input.model,
+			modelHistory: [...(data.modelHistory || []), input.entry],
+			lastActivity: new Date().toISOString(),
+		};
+	}).then(
+		() => applied,
+		(e) => {
+			console.error(`Failed to persist model switch on ${input.sessionId}:`, e);
+			return false;
+		},
+	);
 }
 
 // Reasoning-effort values the composer/new-session pill can send. Model-specific

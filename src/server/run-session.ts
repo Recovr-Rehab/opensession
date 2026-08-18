@@ -108,6 +108,7 @@ import {
 	findSession,
 	getCachedSessions,
 	invalidateSessionsCache,
+	persistAutoModelSwitch,
 	recordRunOutcome,
 	touchNativeSession,
 	SESSIONS_DIR,
@@ -698,14 +699,19 @@ export function recordRecoveredRunEvent(osSessionId: string, event: StreamEvent)
 		if (!shouldPersistModelSwitch(event)) return;
 		if (session.model === to) return;
 		const reason = `auto-switch — ${modelLabel(event.fromModel)} ${event.switchReason || "out of credits"}`;
-		touchNativeSession(osSessionId, {
+		// Conditional: a /model sent while this recovered run was in flight must
+		// not be reverted by its fallback (see persistAutoModelSwitch).
+		void persistAutoModelSwitch({
+			sessionId: osSessionId,
+			expectedModel: session.model,
 			model: to,
-			modelHistory: [
-				...(session.modelHistory || []),
-				{ model: to, from: event.fromModel, at: new Date().toISOString(), by: reason },
-			],
-		});
-		invalidateSessionsCache();
+			entry: {
+				model: to,
+				from: event.fromModel,
+				at: new Date().toISOString(),
+				by: reason,
+			},
+		}).then(() => invalidateSessionsCache());
 		return;
 	}
 
@@ -1655,7 +1661,10 @@ async function runSessionPromptInner(
 			: routedEngine;
 	let effectiveProvider = provider;
 	let effectiveModel = session.model;
-	const modelHistory = [...(session.modelHistory || [])];
+	// The model this run last wrote (or started on): what an automatic switch
+	// must still find stored before it may overwrite the session's model. A
+	// human's /model lands in between and wins — see persistAutoModelSwitch.
+	let lastPersistedModel = session.model;
 	// Cumulative token/cost accounting — seeded from the session's stored total,
 	// folded per run, persisted + broadcast live (see the `usage_snapshot` and
 	// `done` cases). `usageBase` is the total as of the last *completed* run:
@@ -2258,17 +2267,22 @@ async function runSessionPromptInner(
 					});
 				}
 				if (persistSwitch && session.source === "opensession") {
-					modelHistory.push({
+					void persistAutoModelSwitch({
+						sessionId: session.id,
+						expectedModel: lastPersistedModel,
 						model: to,
-						from: event.fromModel,
-						at: new Date().toISOString(),
-						by: reason,
-					});
-					touchNativeSession(session.id, {
-						model: to,
-						modelHistory,
-					});
-					invalidateSessionsCache();
+						entry: {
+							model: to,
+							from: event.fromModel,
+							at: new Date().toISOString(),
+							by: reason,
+						},
+					}).then(() => invalidateSessionsCache());
+					// Track it either way: a walk that hops twice must expect what
+					// IT last wrote, and if the first write was refused (a human
+					// chose meanwhile) every later hop is refused too, which is
+					// exactly right — their choice stands.
+					lastPersistedModel = to;
 				} else if (
 					persistSwitch &&
 					syncAgentSessionEngine(session, { model: to })

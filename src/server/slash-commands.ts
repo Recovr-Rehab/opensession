@@ -18,7 +18,7 @@ import {
 	providerFor,
 	resolveModel,
 } from "./models";
-import { engineFamily, isAgentSessionBusy } from "./agent-runner";
+import { engineFamily } from "./agent-runner";
 import { userMatchesAny } from "./shared/user-mappings";
 import { syncAgentSessionEngine } from "./agent-session-sync";
 import { touchNativeSession } from "./session-cache";
@@ -87,15 +87,16 @@ export function handleSlashCommand(
 		].join("\n");
 	}
 	if (text.startsWith("/model ")) {
-		if (
-			isAgentSessionBusy(
-				session.claudeSessionId,
-				session.codexThreadId,
-				session.id,
-			)
-		) {
-			return "Can't change model while this session is running. Stop the run or wait for it to finish, then try again.";
-		}
+		// Deliberately NOT gated on a running turn. The switch applies from the
+		// next prompt either way (the model is read at dispatch), so a live turn
+		// is undisturbed, and refusing here blocked the one moment people most
+		// want to switch: right after a run died on a usage limit, while
+		// isAgentSessionBusy still reports the interrupted run as busy. Every
+		// surface came through here — the web model picker sends "/model <id>"
+		// as a prompt — so the refusal was universal, not a pi quirk.
+		// The one real hazard is handled where it happens: the end-of-turn
+		// fallback write in run-session.ts now only lands while the stored model
+		// is still what the run started on, so it cannot revert this choice.
 		const input = text.slice("/model ".length).trim();
 		const workspacePreset = resolveWorkspaceModelPreset(input, session.workspaceId);
 		const resolved = workspacePreset

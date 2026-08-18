@@ -66,7 +66,7 @@ import { tryGetSessionControl } from "../../server/session-control";
 import { pinForUser } from "../../server/pins";
 import { getUiPrefs } from "../../server/ui-prefs";
 import { STRIPE_CONFIRM_TOOLS } from "../../server/runner-shared";
-import { runAgent, cancelAgentRun, isAgentSessionBusy } from "../../server/agent-runner";
+import { runAgent, cancelAgentRun } from "../../server/agent-runner";
 import { shouldPersistModelSwitch, type ImageInput } from "../../server/run-events";
 import {
   registerSessionMcpServers,
@@ -561,14 +561,10 @@ export async function handleModelCommand(
     return true;
   }
 
-  if (isAgentSessionBusy(session.claudeSessionId, `slack-${sessionKey}`)) {
-    await sendSlackMessage(
-      channel,
-      "Can't change model while this session is running. Stop the run or wait for it to finish, then try again.",
-      threadTs
-    );
-    return true;
-  }
+  // No busy gate: the switch applies from the next message either way (the
+  // model is read at dispatch), and refusing blocked the moment people most
+  // want it — right after a run died on a usage limit. See the same removal
+  // in src/server/slash-commands.ts for the race this used to stand in for.
 
   const prevProvider = providerFor(session.model);
   session.model = resolved.id;
