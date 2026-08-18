@@ -1,6 +1,4 @@
 import type {
-	AutoCreatedFilter,
-	EmptyProjectsFilter,
 	FilterState,
 	GroupBy,
 	PrsFilter,
@@ -115,11 +113,15 @@ function FilterRow({
 	value,
 	options,
 	onSelect,
+	footer,
 }: {
 	label: string;
 	value: string;
 	options: SelectOption[];
 	onSelect: (value: string) => void;
+	/** Rows under the options, below a rule: a setting about the things the
+	 *  options name, rather than another one of them to pick. */
+	footer?: React.ReactNode;
 }) {
 	const current = options.find((option) => option.value === value);
 	return (
@@ -134,6 +136,12 @@ function FilterRow({
 			</Menu.Trigger>
 			<Menu.Popup align="end" sideOffset={6}>
 				<ValueOptions value={value} options={options} onSelect={onSelect} />
+				{footer && (
+					<>
+						<Menu.Separator />
+						{footer}
+					</>
+				)}
 			</Menu.Popup>
 		</Menu.Root>
 	);
@@ -246,12 +254,11 @@ export function FilterPopover({
 		{ value: "everyone", label: "Everyone" },
 	];
 
-	// How much of what is now out of sight is doing something. Only the three
+	// How much of what is now out of sight is doing something. Only the two
 	// that change which rows the list holds count: density is a look.
 	const advancedChanged =
 		(filter.prs === "default" ? 0 : 1) +
-		(filter.autoCreated === "hide" ? 0 : 1) +
-		(filter.emptyProjects === "show" ? 0 : 1);
+		(filter.autoCreated === "hide" ? 0 : 1);
 
 	return createPortal(
 		<>
@@ -275,11 +282,29 @@ export function FilterPopover({
 					]}
 					onSelect={(v) => onChange({ groupBy: v as GroupBy })}
 				/>
+				{/* The projects, and under them the one setting about the set of
+				    them rather than about which one you are in: a registered
+				    project with no work in it still draws a band, so a repo you
+				    just connected has somewhere to start from, and on an instance
+				    with more projects than you work in that is a screen of empty
+				    headings. It sits with the projects because that is what it is
+				    about; asking for one by name still shows it, empty or not. */}
 				<FilterRow
 					label="Repo"
 					value={filter.repo}
 					options={repoOptions}
 					onSelect={(v) => onChange({ repo: v })}
+					footer={
+						<Menu.CheckboxItem
+							checked={filter.emptyProjects === "hide"}
+							onCheckedChange={(hide) =>
+								onChange({ emptyProjects: hide ? "hide" : "show" })
+							}
+						>
+							<span className="grow truncate">Hide when empty</span>
+							<Menu.Check on={filter.emptyProjects === "hide"} />
+						</Menu.CheckboxItem>
+					}
 				/>
 				<FilterRow
 					label="Person"
@@ -338,38 +363,23 @@ export function FilterPopover({
 						    ordinary sections wearing a robot, so this is how you get a
 						    day's worth of them out of the way. A row you have open,
 						    one you pinned, and one asking for your review stay
-						    whatever this says. */}
-						<FilterSubmenu
-							label="Auto created"
-							value={filter.autoCreated}
-							options={[
-								{
-									value: "show",
-									label: "Shown",
-									icon: <IconRobot size={16} />,
-								},
-								{ value: "hide", label: "Hidden" },
-							]}
-							onSelect={(v) =>
-								onChange({ autoCreated: v as AutoCreatedFilter })
+						    whatever this says.
+
+						    A setting with only an on and an off is a row you flip, not
+						    a question with a submenu behind it: "Shown" and "Hidden"
+						    one level further in is a menu to read and two presses to
+						    answer what a tick answers in one. Named for what ticking
+						    it does, and it stays open on a press, the way every
+						    checkable menu row in the app does. */}
+						<Menu.CheckboxItem
+							checked={filter.autoCreated === "show"}
+							onCheckedChange={(shown) =>
+								onChange({ autoCreated: shown ? "show" : "hide" })
 							}
-						/>
-						{/* Projects with no workspaces in them. They draw a band so a
-						    repo you just connected has somewhere to start from, which
-						    on an instance with more projects than you work in is a
-						    screen of empty headings. Scoping the list to one project
-						    shows that project either way. */}
-						<FilterSubmenu
-							label="Empty projects"
-							value={filter.emptyProjects}
-							options={[
-								{ value: "show", label: "Shown" },
-								{ value: "hide", label: "Hidden" },
-							]}
-							onSelect={(v) =>
-								onChange({ emptyProjects: v as EmptyProjectsFilter })
-							}
-						/>
+						>
+							<span className="grow truncate">Show auto created</span>
+							<Menu.Check on={filter.autoCreated === "show"} />
+						</Menu.CheckboxItem>
 						{/* Desktop only, because that is the whole of what the
 						    preference does: a phone row is a tap target and keeps its
 						    own padding at either setting (see SIDEBAR_DENSITY_VARS),
