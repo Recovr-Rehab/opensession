@@ -59,6 +59,8 @@ import { displayName } from "../brand-logos";
 import { IconTile } from "./BrandTile";
 import { Tooltip } from "../ui/tooltip";
 import { Modal, useEnterOnMount } from "../ui/modal";
+import { useShortcutKeys } from "../hooks/useShortcutBindings";
+import { matchesShortcut } from "../lib/shortcuts";
 import { composerBox } from "../lib/composer-classes";
 import { askSurface } from "../lib/tinted-surface";
 import { cn } from "../ui/cn";
@@ -571,6 +573,7 @@ export function NewSession({ onBack, inline, focusSeq, send, addHandler, connect
     [],
   );
   const sendKey = effectiveSendKey(storedSendKey);
+  const attachKeys = useShortcutKeys("composer-attach");
 
   // Sandbox provider picker: the complete model engine + workspace run in the
   // selected environment; native Codex is the sole host-only family.
@@ -721,6 +724,15 @@ export function NewSession({ onBack, inline, focusSeq, send, addHandler, connect
     setCreateAction(
       CREATE_ACTIONS[(at + step + CREATE_ACTIONS.length) % CREATE_ACTIONS.length],
     );
+  }
+
+  function handleCardKeyDown(e: React.KeyboardEvent) {
+    if (!busy && matchesShortcut(e, "composer-attach")) {
+      e.preventDefault();
+      fileInputRef.current?.click();
+      return;
+    }
+    cycleCreateAction(e);
   }
 
   useEffect(() => {
@@ -1188,7 +1200,7 @@ export function NewSession({ onBack, inline, focusSeq, send, addHandler, connect
         {/* Footer toolbar */}
         <div className={cn(FOOTER, edges.bottom && EDGE_DIVIDER)}>
           <div className={FOOTER_LEFT}>
-            <Tooltip label="Attach a file">
+            <Tooltip label="Attach a file" shortcut={attachKeys ?? undefined}>
               <button
                 type="button"
                 className={FOOTER_ICON_BTN}
@@ -1494,6 +1506,7 @@ export function NewSession({ onBack, inline, focusSeq, send, addHandler, connect
         style={askSurfaceStyle}
         role="group"
         aria-label="New session"
+        onKeyDown={handleCardKeyDown}
       >
         {card}
       </div>
@@ -1527,7 +1540,7 @@ export function NewSession({ onBack, inline, focusSeq, send, addHandler, connect
         )}
         style={askSurfaceStyle}
         aria-label="New session"
-        onKeyDown={cycleCreateAction}
+        onKeyDown={handleCardKeyDown}
         // The prompt, not the repo picker Base UI would otherwise land on as the
         // first tabbable.
         initialFocus={promptRef}

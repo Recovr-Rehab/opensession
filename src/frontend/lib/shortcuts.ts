@@ -58,6 +58,7 @@ export type ShortcutId =
 	| "session-copy-link"
 	| "session-copy-transcript"
 	| "composer-note"
+	| "composer-attach"
 	| "composer-focus"
 	| "transcript-up"
 	| "transcript-down"
@@ -244,6 +245,13 @@ export const SHORTCUT_COMMANDS: ShortcutCommand[] = [
 		description: "Switch the composer between a prompt and a team note",
 		group: "Composer",
 		defaults: ["mod+n"],
+	},
+	{
+		id: "composer-attach",
+		title: "Attach files",
+		description: "Choose files to attach to the open session",
+		group: "Composer",
+		defaults: ["mod+u"],
 	},
 	{
 		id: "composer-focus",

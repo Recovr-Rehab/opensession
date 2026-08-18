@@ -6301,6 +6301,7 @@ export function SessionViewer({
 									onImagesChange={setImages}
 									files={files}
 									onFilesChange={setFiles}
+									attachmentShortcutActive={focused}
 									quote={quote}
 									onQuoteClear={clearQuote}
 									placeholder={

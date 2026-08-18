@@ -87,6 +87,7 @@ import {
 } from "../lib/send-key";
 import { getSendKeyPref, onSendKeyChanged } from "../lib/send-key-pref";
 import { isApple } from "../lib/platform";
+import { matchesShortcut } from "../lib/shortcuts";
 import { VoiceInput } from "./VoiceInput";
 import {
   getBusySendPrefs,
@@ -195,6 +196,9 @@ interface Props {
     onScheduled: () => void;
   }) => React.ReactNode;
   hint?: string;
+  /** Lets the focused session pane claim the attachment shortcut even when
+   * focus is in the transcript rather than the textarea. */
+  attachmentShortcutActive?: boolean;
   autoFocus?: boolean;
   /** Exposes the textarea so parents can focus it (e.g. keyboard shortcuts). */
   textareaRef?: React.RefObject<HTMLTextAreaElement | null>;
@@ -436,6 +440,7 @@ export function Composer({
   prefill,
   sendMenu,
   hint,
+  attachmentShortcutActive,
   autoFocus,
   textareaRef: externalRef,
   images,
@@ -468,6 +473,7 @@ export function Composer({
   );
   const isPhone = useIsPhone();
   const noteChord = useShortcutLabel("composer-note");
+  const attachChord = useShortcutLabel("composer-attach");
   const stopKeys = useShortcutKeys("run-stop");
   const effortUpLabel = useShortcutLabel("effort-up");
   const effortDownLabel = useShortcutLabel("effort-down");
@@ -589,6 +595,18 @@ export function Composer({
   const canAttachImages = !!onImagesChange;
   const canAttachFiles = !noteMode && !!onFilesChange;
   const canAttach = canAttachImages || canAttachFiles;
+
+  useEffect(() => {
+    if (!attachmentShortcutActive || !canAttach) return;
+    function onKeyDown(e: KeyboardEvent) {
+      if (e.defaultPrevented || e.repeat || !matchesShortcut(e, "composer-attach"))
+        return;
+      e.preventDefault();
+      fileInputRef.current?.click();
+    }
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [attachmentShortcutActive, canAttach]);
   // Whether the "+" has anything to show. Images keep the attachment row
   // available in note mode, while the mode row remains the way back out.
   const hasAddMenu =
@@ -1052,6 +1070,11 @@ export function Composer({
   }
 
   function handleKeyDown(e: React.KeyboardEvent) {
+    if (canAttach && matchesShortcut(e, "composer-attach")) {
+      e.preventDefault();
+      fileInputRef.current?.click();
+      return;
+    }
     // An undo that has to cross a session token replays canonical state; every
     // other ⌘Z is left to the field's own history.
     if (sessionNames.handleUndoRedoKey(e)) return;
@@ -1502,6 +1525,9 @@ export function Composer({
                       <span className="grow whitespace-nowrap">
                         {canAttachFiles ? "Attach files" : "Attach an image"}
                       </span>
+                      {!isPhone && attachChord && (
+                        <MenuShortcut>{attachChord}</MenuShortcut>
+                      )}
                     </button>
                   )}
                   {canAttach && mentionFetch && (
