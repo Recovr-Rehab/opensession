@@ -24,7 +24,7 @@
  */
 
 import { homeDir } from "./paths";
-import { getCachedSessions } from "./session-cache";
+import { getCachedSessionsAsync } from "./session-cache";
 import { mergedSessionTranscriptAsync } from "./sessions";
 import { opencodeOneShot } from "./opencode-oneshot";
 import { audit } from "./audit";
@@ -267,7 +267,7 @@ export async function sweepSessionIndex(): Promise<{
 	try {
 		const store = searchIndex();
 		const state = store.indexState();
-		const sessions = [...getCachedSessions()].sort(
+		const sessions = [...(await getCachedSessionsAsync())].sort(
 			(a, b) => (b.lastActivity || "").localeCompare(a.lastActivity || ""),
 		);
 		const now = Date.now();
