@@ -81,13 +81,44 @@ const VIDEO_MARKER = markerRe("(?:OPENSESSION|BACKSTAGE)_VIDEO");
 // authenticated media route, landing in the entry's existing `images` field.
 const IMAGE_MARKER = markerRe("OPENSESSION_IMAGE");
 
-function extractMarker(text: string, marker: RegExp): string[] {
+function markerPaths(text: string, marker: RegExp): string[] {
   if (!text) return [];
-  const out: string[] = [];
-  for (const m of text.matchAll(marker)) {
-    out.push(`/media?path=${encodeURIComponent(m[1])}`);
-  }
-  return out;
+  return [...text.matchAll(marker)].map((m) => m[1]);
+}
+
+function extractMarker(text: string, marker: RegExp): string[] {
+  return markerPaths(text, marker).map(
+    (path) => `/media?path=${encodeURIComponent(path)}`,
+  );
+}
+
+export interface MarkerMedia {
+  /** The absolute path the agent wrote, not a `/media` URL. */
+  path: string;
+  kind: "image" | "video";
+}
+
+/**
+ * The marked-up media of a message, in the order it was written, as paths on
+ * disk. The transcript wants `/media` URLs because it renders in a browser
+ * holding a session cookie; a surface that has to hand Slack the bytes wants
+ * the file. Both read the same grammar, so both read it from here.
+ */
+export function extractMediaMarkers(text: string): MarkerMedia[] {
+  if (!text) return [];
+  const found: Array<MarkerMedia & { at: number }> = [];
+  for (const m of text.matchAll(IMAGE_MARKER))
+    found.push({ path: m[1], kind: "image", at: m.index ?? 0 });
+  for (const m of text.matchAll(VIDEO_MARKER))
+    found.push({ path: m[1], kind: "video", at: m.index ?? 0 });
+  return found
+    .sort((a, b) => a.at - b.at)
+    .map(({ path, kind }) => ({ path, kind }));
+}
+
+/** Drops the marker lines, leaving the prose that surrounded them. */
+export function stripMediaMarkers(text: string): string {
+  return text.replace(IMAGE_MARKER, "").replace(VIDEO_MARKER, "");
 }
 
 export function extractVideoMarkers(text: string): string[] {

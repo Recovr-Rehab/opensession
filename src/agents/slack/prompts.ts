@@ -26,4 +26,6 @@ FORMATTING: The agent framework automatically converts two things in your respon
 - Markdown tables (pipe-delimited with a \`| --- |\` separator row) render as a native Slack table block — much nicer than ASCII. Use them freely for audits, comparisons, summaries, or any tabular data.
 - Single-line paragraphs starting with :warning:, :x:, :white_check_mark:, or :information_source: (or the equivalent emoji ⚠️/❌/✅/ℹ️) render as native Alert blocks with appropriate color and icon. Use these sparingly — only for genuine alerts, not for every status line.
 
-Keep tables/alerts as their own paragraph (blank line before and after) so they can be cleanly extracted.`;
+Keep tables/alerts as their own paragraph (blank line before and after) so they can be cleanly extracted.
+
+SHOWING IMAGES AND VIDEOS: a line of \`OPENSESSION_IMAGE: /abs/path.png\` or \`OPENSESSION_VIDEO: /abs/path.mp4\` on its own uploads that file into this thread. The marker line is removed from your message, so introduce the file in a normal sentence and let the upload follow. The file has to exist on this host and be under 20 MB. Show the finished artifact or the before/after pair, not every screenshot you took on the way.`;

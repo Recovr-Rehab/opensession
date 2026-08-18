@@ -29,6 +29,7 @@ import {
 } from "./slack-api";
 import type { SlackFileRef, ThreadContext } from "./slack-api";
 import { SlackStreamer, buildToolStatus, isSilentTool } from "./streamer";
+import { splitSlackMedia } from "./media";
 import { SlackProgress, taskCardTitle } from "./progress";
 import { createAdminMcpServer } from "./admin-tools";
 import { createGithubMcpServer } from "./github-tools";
@@ -1115,15 +1116,24 @@ export async function processMessage(
   session.lastActivity = new Date().toISOString();
   await persistSession(session);
 
+  // Media the reply asked to show comes out first, on the raw text: the
+  // markdown conversion below would read the underscores in a path as
+  // emphasis, and the 3000-char cap would drop or halve a marker line.
+  const shown = splitSlackMedia(resultText);
+
   // Send result to Slack via streamer (convert markdown -> Slack mrkdwn)
-  const formatted = resultText ? markdownToSlack(resultText) : "";
+  const formatted = shown.text ? markdownToSlack(shown.text) : "";
   const truncated = formatted
     ? formatted.length > 3000
       ? formatted.substring(0, 3000) + "...(truncated)"
       : formatted
-    : "Done! (no text output)";
+    // A reply that is only a marker line has already said everything it has to
+    // say; the upload is the message.
+    : shown.media.length > 0
+      ? ""
+      : "Done! (no text output)";
 
-  await streamer.stop(truncated);
+  await streamer.stop(truncated, shown);
   await streamer.clearStatus();
   // Errors surface as the card's red terminal state instead of a green check.
   await dismissStopButton(resultText.startsWith("Error") ? "Failed" : "Done");

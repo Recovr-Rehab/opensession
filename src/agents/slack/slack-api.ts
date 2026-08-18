@@ -12,7 +12,7 @@ import { readFileSync, statSync } from "fs";
 import { basename } from "path";
 
 const SLACK_BOT_TOKEN = process.env.SLACK_BOT_TOKEN;
-const MAX_SLACK_UPLOAD_BYTES = 20 * 1024 * 1024;
+export const MAX_SLACK_UPLOAD_BYTES = 20 * 1024 * 1024;
 
 // ---------------------------------------------------------------------------
 // File attachments
@@ -353,10 +353,17 @@ export async function postSlackFile(
   channel: string,
   path: string,
   initialComment: string,
-  opts?: { title?: string; altText?: string },
+  opts?: SlackUploadOptions,
   tokenOverride?: string,
 ): Promise<any> {
   return postSlackFiles(channel, [path], initialComment, opts, tokenOverride);
+}
+
+export interface SlackUploadOptions {
+  title?: string;
+  altText?: string;
+  /** Share into a thread rather than at the top of the channel. */
+  threadTs?: string;
 }
 
 /** Upload several local images and share them together as one Slack message. */
@@ -364,7 +371,7 @@ export async function postSlackFiles(
   channel: string,
   paths: string[],
   initialComment: string,
-  opts?: { title?: string; altText?: string },
+  opts?: SlackUploadOptions,
   tokenOverride?: string,
 ): Promise<any> {
   const files: Array<{ id: string; title: string }> = [];
@@ -399,16 +406,24 @@ export async function postSlackFiles(
     }
     files.push({
       id: reserved.file_id,
-      title: paths.length === 1
-        ? opts?.title || filename
-        : `${opts?.title || "Screenshot"} ${index + 1}`,
+      // Numbered only when the caller named the set. Without a title the
+      // filename is the better label: a batch can be a screenshot, a frame
+      // and a clip, and "Screenshot 3" is wrong for two of them.
+      title: opts?.title
+        ? paths.length === 1
+          ? opts.title
+          : `${opts.title} ${index + 1}`
+        : filename,
     });
   }
 
   const completed = await slackFormCall("files.completeUploadExternal", {
     files: JSON.stringify(files),
     channel_id: channel,
-    initial_comment: initialComment,
+    // An empty comment is not "no comment" to Slack: it posts the share with a
+    // blank line above the files.
+    ...(initialComment ? { initial_comment: initialComment } : {}),
+    ...(opts?.threadTs ? { thread_ts: opts.threadTs } : {}),
   }, tokenOverride);
   if (!completed?.ok) {
     throw new Error(

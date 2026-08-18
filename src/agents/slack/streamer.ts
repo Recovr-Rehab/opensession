@@ -11,9 +11,11 @@ import {
   sendSlackMessage,
   updateSlackMessage,
   postSlackBlocks,
+  postSlackFiles,
 } from "./slack-api";
 import { slackTeamId } from "./state";
 import { extractBlocks } from "./blocks";
+import { describeSkippedMedia, type SlackMedia, type SkippedMedia } from "./media";
 
 // ---------------------------------------------------------------------------
 // Tool status helpers
@@ -142,23 +144,35 @@ export class SlackStreamer {
     });
   }
 
-  /** Finalize the stream with the result text */
-  async stop(resultText: string): Promise<void> {
+  /**
+   * Finalize the stream with the result text, plus any media the reply asked
+   * to show (see media.ts — the caller splits it off before the text is
+   * converted and capped, so the paths survive both).
+   */
+  async stop(
+    resultText: string,
+    attachments?: { media: SlackMedia[]; skipped?: SkippedMedia[] },
+  ): Promise<void> {
     const { cleanedText, blocks } = extractBlocks(resultText);
     // If every paragraph was a block, streaming still needs *some* text.
     const streamText = cleanedText || (blocks.length > 0 ? " " : resultText);
+    // A reply whose whole content was a media marker leaves nothing to post,
+    // and a message of one space is a visible empty bubble above the upload.
+    // A stream that already exists still has to be closed with something.
+    const mediaOnly =
+      streamText.trim().length === 0 && (attachments?.media.length ?? 0) > 0;
 
     if (this.useStreaming && this.streamMessageTs) {
       await slackApiCall("chat.stopStream", {
         channel: this.channel,
         ts: this.streamMessageTs,
-        chunks: [{ type: "markdown_text", text: streamText }],
+        chunks: [{ type: "markdown_text", text: streamText || " " }],
       });
       this.streamMessageTs = null;
     } else if (this.fallbackTs) {
-      await updateSlackMessage(this.channel, this.fallbackTs, streamText);
+      await updateSlackMessage(this.channel, this.fallbackTs, streamText || " ");
       this.fallbackTs = null;
-    } else {
+    } else if (!mediaOnly) {
       await sendSlackMessage(this.channel, streamText, this.threadTs);
     }
 
@@ -172,6 +186,48 @@ export class SlackStreamer {
       } catch (e) {
         console.warn(`[slack] Failed to post ${type} block:`, e);
       }
+    }
+
+    await this.postMedia(attachments?.media || [], attachments?.skipped || []);
+  }
+
+  /**
+   * Upload the reply's marked media into the thread, as one share so a
+   * before/after pair stays together.
+   *
+   * Anything we couldn't send gets named. A marker that silently produces
+   * nothing is the failure this whole path exists to fix: the agent believes
+   * it showed you the screenshot either way.
+   */
+  private async postMedia(
+    media: SlackMedia[],
+    skipped: SkippedMedia[],
+  ): Promise<void> {
+    const unsent = [...skipped];
+    if (media.length > 0) {
+      try {
+        await postSlackFiles(
+          this.channel,
+          media.map((item) => item.path),
+          "",
+          { threadTs: this.threadTs },
+        );
+      } catch (e) {
+        console.warn("[slack] Failed to upload response media:", e);
+        for (const item of media) {
+          unsent.push({ path: item.path, reason: "the upload failed" });
+        }
+      }
+    }
+    if (unsent.length === 0) return;
+    try {
+      await sendSlackMessage(
+        this.channel,
+        `Couldn't attach ${describeSkippedMedia(unsent)}.`,
+        this.threadTs,
+      );
+    } catch (e) {
+      console.warn("[slack] Failed to report unsent media:", e);
     }
   }
 

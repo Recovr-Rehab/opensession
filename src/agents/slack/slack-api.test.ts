@@ -196,4 +196,41 @@ describe("Slack file uploads", () => {
       { id: "F2", title: "Editor 2" },
     ]);
   });
+
+  test("shares into a thread, titled by filename, with no empty comment", async () => {
+    const root = mkdtempSync(join(tmpdir(), "slack-thread-"));
+    const paths = [join(root, "after.png"), join(root, "demo.mp4")];
+    paths.forEach((path, index) => writeFileSync(path, `media-${index}`));
+    let reservation = 0;
+    let completion: URLSearchParams | undefined;
+    globalThis.fetch = (async (input, init) => {
+      const url = String(input);
+      if (url.endsWith("files.getUploadURLExternal")) {
+        reservation++;
+        return Response.json({
+          ok: true,
+          upload_url: `https://upload.example/${reservation}`,
+          file_id: `F${reservation}`,
+        });
+      }
+      if (url.endsWith("files.completeUploadExternal")) {
+        completion = init?.body as URLSearchParams;
+        return Response.json({ ok: true });
+      }
+      return new Response("ok");
+    }) as typeof fetch;
+
+    try {
+      await postSlackFiles("C123", paths, "", { threadTs: "1712.9" }, "xoxp-test");
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+
+    expect(completion?.get("thread_ts")).toBe("1712.9");
+    expect(completion?.has("initial_comment")).toBe(false);
+    expect(JSON.parse(completion?.get("files") || "[]")).toEqual([
+      { id: "F1", title: "after.png" },
+      { id: "F2", title: "demo.mp4" },
+    ]);
+  });
 });
