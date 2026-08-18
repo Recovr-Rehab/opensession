@@ -3,7 +3,6 @@ import type {
 	EmptyProjectsFilter,
 	FilterState,
 	GroupBy,
-	Sections,
 	PrsFilter,
 	SortBy,
 } from "../../lib/sidebar-filter";
@@ -258,27 +257,21 @@ export function FilterPopover({
 		<>
 			<div className={BACKDROP} onClick={onClose} />
 			<div className={FILTER_POPOVER} style={{ left, top, width }}>
-				{/* How the list is built, as the two questions it is: what the
-				    groups inside it are, and whether those sit under one band per
-				    project. One menu of five used to answer both at once
-				    ("Project and status", "Project and inbox", …), so changing
-				    the banding meant re-picking the sections along with it. */}
-				<FilterRow
-					label="Sections"
-					value={filter.sections}
-					options={[
-						{ value: "inbox", label: "Inbox" },
-						{ value: "status", label: "Status" },
-						{ value: "none", label: "None" },
-					]}
-					onSelect={(v) => onChange({ sections: v as Sections })}
-				/>
+				{/* The list is an inbox whichever of these is picked: its rows
+				    band by what they want from you and when they last moved. This
+				    is what sits above those bands — nothing, one band per project,
+				    or the status lanes, which stand in for them. It was two rows
+				    ("Sections" and "Group by") answering that as six combinations,
+				    two of which nobody needed: a list with no headings at all, and
+				    the status lanes nested under every project, which split the one
+				    "Needs input" heading status is for into one per project. */}
 				<FilterRow
 					label="Group by"
 					value={filter.groupBy}
 					options={[
 						{ value: "none", label: "Nothing" },
 						{ value: "repo", label: "Project" },
+						{ value: "status", label: "Status" },
 					]}
 					onSelect={(v) => onChange({ groupBy: v as GroupBy })}
 				/>

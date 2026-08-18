@@ -82,23 +82,25 @@ export function readExpanded(): Set<string> {
 }
 
 // ── Grouping / filtering controls (the filter popover) ─────────────────────
-// How the list is built is two questions, not one. "Sections" says what the
-// groups inside it are: an inbox's activity bands (Needs action / Recent /
-// Yesterday / …, on two-line rows), the status lanes (Needs input / In
-// progress / …), or none at all — one plain list where each row's own mark
-// carries its status. "Group by" says whether those sit inside one band per
-// project.
+// The list is an inbox. Its rows band by what they want from you and when
+// they last moved (Needs action / Recent / Yesterday / Earlier / Done), and
+// that shape is what an inbox is rather than something you pick. "Group by"
+// is the one question left: what sits above those bands — nothing, one band
+// per project, or the status lanes (Needs input / In progress / …), which
+// stand in for the bands rather than nesting inside them.
 //
-// This replaced a single menu whose five entries were the two answers written
-// as one ("Status", "Project", "Project and status", "Project and inbox",
-// "Inbox"), where changing the project banding meant re-picking the sections
-// along with it.
+// This replaced a pair of controls, "Sections" (inbox bands / status lanes /
+// none) and "Group by" (nothing / project), whose six combinations included
+// two nobody needed: a section-less list where every row carried its own
+// status mark, and the status lanes nested under each project, which turned
+// one "Needs input" heading into one per project with a row or two under
+// each. Scoping the list to a single project ("Repo") is how you read one
+// project's lanes now, and it costs no nesting.
 //
 // The list is narrowed to a single repo ("Repo") or a single person
 // ("Person"), and ordered by recency of activity or creation ("Sort by"). The
 // choices persist together per browser.
-export type Sections = "inbox" | "status" | "none";
-export type GroupBy = "none" | "repo";
+export type GroupBy = "none" | "repo" | "status";
 export type SortBy = "updated" | "created";
 // Session-less PR rows folded into the project lanes: the default shows your
 // own PRs + explicit review requests (the retired PR band's default sources),
@@ -125,24 +127,15 @@ export const FILTER_KEY = "opensession-sidebar-filter";
 // the new default. Anything written at the current version says what it
 // means: since v3, "auto" is what an unpicked axis stores. v4 split the one
 // grouping into the `sections` / `groupBy` pair. v5 hides agent-created work
-// until someone asks to see it.
-export const FILTER_VERSION = 5;
+// until someone asks to see it. v6 folded the pair back into one axis, minus
+// the two combinations it dropped.
+export const FILTER_VERSION = 6;
 
-const SECTIONS: Sections[] = ["inbox", "status", "none"];
-const GROUP_BYS: GroupBy[] = ["none", "repo"];
-
-/**
- * The sections to use when nobody picked any. A list of work you have not read
- * yet is an inbox; the status lanes are the deliberate choice, so they are
- * the one you ask for.
- */
-export function defaultSections(): Sections {
-	return "inbox";
-}
+const GROUP_BYS: GroupBy[] = ["none", "repo", "status"];
 
 /**
- * Whether to band by project when nobody said. A single project has nothing
- * to group by, so its sections stand on their own; several get one band each. It
+ * The grouping to use when nobody picked one. A single project has nothing
+ * to band by, so its inbox stands on its own; several get one band each. It
  * re-decides as projects are added, since the choice is stored as "auto"
  * rather than as its answer.
  *
@@ -156,7 +149,6 @@ export function defaultGroupBy(): GroupBy {
 }
 
 export interface FilterState {
-	sections: Sections;
 	groupBy: GroupBy;
 	repo: string; // a repo id, or "all"
 	// "me" (your workspaces — the default), "everyone" (literally all
@@ -169,19 +161,16 @@ export interface FilterState {
 	emptyProjects: EmptyProjectsFilter;
 }
 
-/** What either axis can be on disk: a pick, or "auto" for nobody's pick. */
-export type StoredSections = Sections | "auto";
+/** What the grouping can be on disk: a pick, or "auto" for nobody's pick. */
 export type StoredGroupBy = GroupBy | "auto";
 
-export interface StoredFilterState
-	extends Omit<FilterState, "sections" | "groupBy"> {
-	sections: StoredSections;
+export interface StoredFilterState extends Omit<FilterState, "groupBy"> {
 	groupBy: StoredGroupBy;
 }
 
 /**
  * The person lens is shared, not the sidebar's private business: the People
- * page, the facepiles and the sidebar's sections read and write this one value,
+ * page, the facepiles and the sidebar's groups read and write this one value,
  * so the person you pick is the sidebar you land in. Everything else in
  * `FilterState` still only has one reader (the sidebar's own popover), but it
  * rides along here because the whole state persists as one blob.
@@ -198,7 +187,6 @@ export function getFilter(): FilterState {
 		stored ||= readStoredFilter();
 		current = {
 			...stored,
-			sections: stored.sections === "auto" ? defaultSections() : stored.sections,
 			groupBy: stored.groupBy === "auto" ? defaultGroupBy() : stored.groupBy,
 		};
 	}
@@ -286,52 +274,49 @@ export function personLensFilter(picked: string, currentUser: string): string {
 		: personFilterFor(picked, currentUser);
 }
 
-/** The single grouping v3 and earlier stored, as the pair it always meant.
- *  "recently" is absent on purpose: it was never in the menu, and the sidebar
- *  drew it as the plain status sections, so it reads as unset like any other
- *  value nobody recognises. */
-const LEGACY_GROUPINGS: Record<string, StoredGrouping> = {
-	status: { sections: "status", groupBy: "none" },
-	repo: { sections: "none", groupBy: "repo" },
-	"repo-status": { sections: "status", groupBy: "repo" },
-	"repo-inbox": { sections: "inbox", groupBy: "repo" },
-	inbox: { sections: "inbox", groupBy: "none" },
+/** The single grouping v3 and earlier stored, as the one axis now says it.
+ *  "repo-status" lands on the status lanes: they were the deliberate half of
+ *  that pick, and the nesting is what went away. "recently" is absent on
+ *  purpose: it was never in the menu, and the sidebar drew it as the plain
+ *  status lanes, so it reads as unset like any other value nobody recognises. */
+const LEGACY_GROUPINGS: Record<string, StoredGroupBy> = {
+	status: "status",
+	repo: "repo",
+	"repo-status": "status",
+	"repo-inbox": "repo",
+	inbox: "none",
 };
 
-interface StoredGrouping {
-	sections: StoredSections;
-	groupBy: StoredGroupBy;
-}
-
 /**
- * Which sections and project banding a stored blob is actually asking for.
- * "auto" on an axis means nobody chose it, so the default decides and keeps
- * deciding.
+ * Which grouping a stored blob is actually asking for. "auto" means nobody
+ * chose, so the default decides and keeps deciding.
  *
- * v4 and later store the two separately and say what they mean. Older blobs
- * stored one compound value, and since setFilter persists the whole state that
- * value may only be the default of its day. So v2's "repo-status" and
- * pre-v2's "status" read as unset, and every other value decomposes into the
- * pair it stood for. v3 is exempt: it already stored "auto" for an unpicked
- * grouping, so whatever it names is a real choice.
+ * v6 stores the one axis and says what it means. v4 and v5 stored a
+ * `sections` / `groupBy` pair whose six combinations are now three: a blob
+ * that asked for the status lanes keeps them whatever it was banded by, since
+ * that is the half being kept, and a section-less list falls back to its
+ * project banding. Older blobs stored one compound value, and since setFilter
+ * persists the whole state that value may only be the default of its day. So
+ * v2's "repo-status" and pre-v2's "status" read as unset, and every other
+ * value maps to what it stood for. v3 is exempt: it already stored "auto" for
+ * an unpicked grouping, so whatever it names is a real choice.
  */
-function storedGrouping(v: any): StoredGrouping {
-	const unset: StoredGrouping = { sections: "auto", groupBy: "auto" };
-	if (v?.v === FILTER_VERSION || v?.v === 4) {
-		// The axis shipped as `lanes` before the control was renamed, within
-		// the same version. Same values, so read either key rather than
-		// resetting the pick of anyone who set one in between.
-		const picked = v.sections ?? v.lanes;
-		return {
-			sections: SECTIONS.includes(picked) ? picked : "auto",
-			groupBy: GROUP_BYS.includes(v.groupBy) ? v.groupBy : "auto",
-		};
+function storedGrouping(v: any): StoredGroupBy {
+	if (v?.v === FILTER_VERSION)
+		return GROUP_BYS.includes(v.groupBy) ? v.groupBy : "auto";
+	if (v?.v === 4 || v?.v === 5) {
+		// The sections axis shipped as `lanes` before the control was renamed,
+		// within v4. Same values, so read either key rather than dropping the
+		// pick of anyone who set one in between.
+		const sections = v.sections ?? v.lanes;
+		if (sections === "status") return "status";
+		return v.groupBy === "repo" || v.groupBy === "none" ? v.groupBy : "auto";
 	}
 	const legacy = LEGACY_GROUPINGS[v?.groupBy];
-	if (!legacy) return unset;
+	if (!legacy) return "auto";
 	if (v.v === 3) return legacy;
-	if (v.groupBy === "repo-status") return unset;
-	if (v.groupBy === "status" && v.v !== 2) return unset;
+	if (v.groupBy === "repo-status") return "auto";
+	if (v.groupBy === "status" && v.v !== 2) return "auto";
 	return legacy;
 }
 
@@ -339,7 +324,7 @@ export function readStoredFilter(): StoredFilterState {
 	try {
 		const v = JSON.parse(localStorage.getItem(FILTER_KEY) || "{}");
 		return {
-			...storedGrouping(v),
+			groupBy: storedGrouping(v),
 			repo: typeof v.repo === "string" ? v.repo : "all",
 			// Legacy stored "all" behaved as "you" in the lanes — map it to "me"
 			// so nobody's default flips to everyone.
@@ -350,14 +335,19 @@ export function readStoredFilter(): StoredFilterState {
 			sort: v.sort === "created" ? "created" : "updated",
 			prs: v.prs === "all" || v.prs === "none" ? v.prs : "default",
 			// v4's "show" was the default rather than a deliberate opt-in. Move
-			// every older browser to the safer default; a v5 pick says what it means.
+			// every older browser to the safer default; v5 was the version that
+			// made it a choice, so it and everything after it say what they mean.
+			// (Reading it as "at least v5" rather than "the current version" is
+			// what keeps the next version bump from silently re-hiding the rows
+			// of everyone who asked to see them.)
 			autoCreated:
-				v.v === FILTER_VERSION && v.autoCreated === "show" ? "show" : "hide",
+				typeof v.v === "number" && v.v >= 5 && v.autoCreated === "show"
+					? "show"
+					: "hide",
 			emptyProjects: v.emptyProjects === "hide" ? "hide" : "show",
 		};
 	} catch {
 		return {
-			sections: "auto",
 			groupBy: "auto",
 			repo: "all",
 			person: "me",
