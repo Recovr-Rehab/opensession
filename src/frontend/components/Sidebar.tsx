@@ -1305,7 +1305,12 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 					"",
 				),
 				createdAt: sessions[0]?.createdAt || "",
-				unread: sessions.some(
+				// Workers are left out here for the same reason they are left out of
+				// `status`, plus one of their own: a worker gets no tab in the strip
+				// (App's naturalSessions keeps it behind its parent), so opening the
+				// workspace marks every tab read and never the worker. Counting one
+				// left the row bold with nothing you could open to clear it.
+				unread: statusSources.some(
 					(c) => c.id !== selectedId && isUnread(c.id, c.lastActivity, reads),
 				),
 				// A tag on any session in the workspace marks the whole row: the

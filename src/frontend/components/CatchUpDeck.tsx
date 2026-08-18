@@ -122,6 +122,10 @@ export function CatchUpDeck({
 				// The Desk is a summonable overlay you already read as you talk to
 				// it (⌘J), not work to catch up on.
 				!s.desk &&
+				// A spawned worker is an implementation detail of its parent, the
+				// same rule the workspace rows apply, so it never puts a card in
+				// the queue on its own.
+				!s.parentSessionId &&
 				!!s.startedBy &&
 				s.startedBy.toLowerCase() === me &&
 				isUnread(s.id, s.lastActivity, reads),
