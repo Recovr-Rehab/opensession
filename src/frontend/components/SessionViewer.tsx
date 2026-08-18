@@ -172,7 +172,7 @@ import { PanelPageHeader } from "./PanelPageHeader";
 import { portalTargetFor, type PortalTarget } from "../lib/portals";
 import { StagingLink } from "./StagingLink";
 import { WorkspaceInfo } from "./WorkspaceInfo";
-import { WorkspacePeek } from "./WorkspacePeek";
+import { WorkspaceSummary } from "./WorkspaceSummary";
 import { SpinOffMenu } from "./SpinOffMenu";
 import {
 	IconSidebarRight,
@@ -257,6 +257,7 @@ import { ownedBy } from "../lib/sidebar-lanes";
 import { useSessionScroll } from "../hooks/useSessionScroll";
 import { useShortcutKeys, useShortcutLabel } from "../hooks/useShortcutBindings";
 import { useSidePanel } from "../hooks/useSidePanel";
+import { useWorkspaceSummaryOpen } from "../hooks/useWorkspaceSummary";
 import { sessionHasWorkspace } from "../lib/session-workspace";
 import { matchesShortcut } from "../lib/shortcuts";
 import { PulseDot } from "../ui/status";
@@ -4096,7 +4097,7 @@ export function SessionViewer({
 	const headerRef = useRef<HTMLDivElement>(null);
 	const headerActionsRef = useRef<HTMLDivElement>(null);
 	const [headerW, setHeaderW] = useState(0);
-	const [workspacePeekOpen, setWorkspacePeekOpen] = useState(false);
+	const [summaryOpen, setSummaryOpen] = useWorkspaceSummaryOpen();
 	useLayoutEffect(() => {
 		const el = headerRef.current;
 		if (!el) return;
@@ -5298,26 +5299,32 @@ export function SessionViewer({
 						/>
 					)}
 					{/* …and the rest of what a one-line strip can't say: changes,
-					    branch, conflicts, sources. One floating card, so the panel can
-					    stay shut without going blind (see WorkspacePeek's module doc). */}
+					    branch, conflicts, sources. This toggles the standing column
+					    that carries them (see WorkspaceSummary's module doc); it hides
+					    itself at the width where that column has nowhere to stand, the
+					    same 920px the column itself steps out at. */}
 					{!isPhone && hasRepoWork && !panelOpen && (
-						<WorkspacePeek
-							session={session}
-							anchor={headerActionsRef}
-							// The peek card's Changes row opens the panel already on its
-							// Changes page; its other rows land on the overview.
-							onOpenPanelTab={(tab) => {
-								setPanelPage(tab === "changes" ? "changes" : null);
-								setPanelOpen(true);
-							}}
-							onOpenPr={() => focusPrInReview()}
-							onOpenChecks={() => focusPrInReview(undefined, "checks")}
-							onOpenAssets={onOpenAssets}
-							send={connected ? send : undefined}
-							refreshTick={gitRefreshTick}
-							onOpenChange={setWorkspacePeekOpen}
-							tabStripVisible={tabStripVisible}
-						/>
+						<Tooltip
+							label={summaryOpen ? "Hide workspace summary" : "Show workspace summary"}
+						>
+							<Button
+								variant="ghost"
+								size="md"
+								className={cn(
+									"rounded-control text-dim hover:bg-hover hover:text-fg max-[920px]:hidden",
+									// Open reads as pressed rather than hovered, so the button
+									// and the column it holds open stay visibly one object.
+									summaryOpen && "bg-pressed text-fg",
+								)}
+								aria-pressed={summaryOpen}
+								// Not "Workspace summary": that is the column's own name, and
+								// two elements answering to it makes the button and the region
+								// indistinguishable to anything reading by name.
+								aria-label="Toggle workspace summary"
+								onClick={() => setSummaryOpen(!summaryOpen)}
+								icon={<IconListCircles size={20} />}
+							/>
+						</Tooltip>
 					)}
 					{!isPhone && panelAvailable && (
 						<Tooltip
@@ -5934,12 +5941,7 @@ export function SessionViewer({
 							onInputIntent={focusComposerForQuote}
 						/>
 						<div
-							className={cn(
-								VIEWER_MESSAGES,
-								workspacePeekOpen &&
-									headerW >= 1120 &&
-									"desktop:[&>*]:-translate-x-[160px]",
-							)}
+							className={VIEWER_MESSAGES}
 							ref={messagesRef}
 							onScroll={handleMessagesScroll}
 							onClick={handleMessagesClick}
@@ -6254,14 +6256,7 @@ export function SessionViewer({
 								)}
 							</div>
 
-							<div
-								className={cn(
-									VIEWER_INPUT,
-									workspacePeekOpen &&
-										headerW >= 1120 &&
-										"desktop:[&>*]:-translate-x-[160px]",
-								)}
-							>
+							<div className={VIEWER_INPUT}>
 								{noEngine ? (
 									<div className="mx-auto max-w-[var(--session-col)] text-label text-faint">
 										No engine session to resume
@@ -6483,6 +6478,25 @@ export function SessionViewer({
 				{(() => {
 				const rightRegion = (
 					<>
+				{/* The same column at its resting size. The panel is an expansion of
+				    it rather than a separate place, so opening the panel replaces the
+				    summary and closing it hands the column back. */}
+				{!isPhone && hasRepoWork && !panelOpen && summaryOpen && (
+					<WorkspaceSummary
+						session={session}
+						// The Changes row opens the panel already on its Changes page;
+						// every other row lands on the overview.
+						onOpenPanelTab={(tab) => {
+							setPanelPage(tab === "changes" ? "changes" : null);
+							setPanelOpen(true);
+						}}
+						onOpenPr={() => focusPrInReview()}
+						onOpenChecks={() => focusPrInReview(undefined, "checks")}
+						onOpenAssets={onOpenAssets}
+						send={connected ? send : undefined}
+						refreshTick={gitRefreshTick}
+					/>
+				)}
 				{!isPhone && panelAvailable && panelOpen && (
 					<div className={PANEL_OVERLAY} onClick={() => setPanelOpen(false)} />
 				)}
