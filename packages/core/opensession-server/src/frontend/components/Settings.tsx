@@ -436,11 +436,11 @@ function MobileSettings({
 					<div className="relative flex h-11 shrink-0 items-center justify-center px-3">
 						{detail && (
 							<button
-								className="absolute left-1 flex items-center gap-0.5 rounded-control border-none bg-transparent px-2 py-2 text-control-label font-medium text-accent"
+								className="absolute left-3 grid size-8 place-items-center rounded-full border-none bg-transparent p-0 text-accent"
 								onClick={() => onShowRoot?.()}
+								aria-label="Back to settings"
 							>
 								<IconChevronLeft size={22} />
-								Settings
 							</button>
 						)}
 						{/* The sheet's own title, and the only one on phones: the panel
@@ -451,7 +451,7 @@ function MobileSettings({
 							{detail ? shownLabel : "Settings"}
 						</span>
 						<button
-							className="absolute right-3 flex h-8 w-8 items-center justify-center rounded-full border-none bg-active text-dim"
+							className="absolute right-3 grid size-8 place-items-center rounded-full border-none bg-active p-0 text-dim"
 							onClick={dismiss}
 							aria-label="Close settings"
 						>
