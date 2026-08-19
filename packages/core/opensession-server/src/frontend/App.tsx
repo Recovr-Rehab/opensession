@@ -1159,6 +1159,16 @@ export function App(
 	// into a panel there is no root to pop to, so replace to home instead and the
 	// stack never grows.
 	function goBack() {
+		// A worker session sits a level below the session that spawned it, and it
+		// has no tab to leave by. Back therefore goes UP one level rather than out
+		// to the sidebar: it is the phone's spelling of the header breadcrumb, and
+		// the edge swipe gets it for free.
+		const parentId =
+			route.view === "session" ? currentSession?.parentSessionId : undefined;
+		if (parentId) {
+			navigate({ view: "session", id: parentId });
+			return;
+		}
 		const depth = entryDepth();
 		if (depth !== null && depth > 0)
 			popOr(depth, () => navigate({ view: "prs" }, { replace: true }));
@@ -4289,7 +4299,11 @@ export function App(
 							<button
 								className={MOBILE_BACK}
 								onClick={goBack}
-								aria-label="Back to sidebar"
+								aria-label={
+									route.view === "session" && currentSession?.parentSessionId
+										? "Back to the session that started this one"
+										: "Back to sidebar"
+								}
 							>
 								<svg width="11" height="18" viewBox="0 0 11 18" fill="none">
 									<path
@@ -4355,12 +4369,18 @@ export function App(
 								<span className={HEADER_TITLE_ROW}>
 									<span className={HEADER_TITLE_TEXT}>
 										{route.view === "session"
-											? (activeWorkspaceId
-												? workspaces.find((p) => p.id === activeWorkspaceId)?.name
-												: undefined) ||
-											currentSession?.title ||
-											""
-										: topbarTitle}
+											? // A worker names ITSELF here. The workspace name is what
+												// its parent shows, so borrowing it would leave the two
+												// reading identically with nothing to say you had gone a
+												// level down. Desktop says the same thing as a crumb.
+												currentSession?.parentSessionId
+												? currentSession.title
+												: (activeWorkspaceId
+														? workspaces.find((p) => p.id === activeWorkspaceId)?.name
+														: undefined) ||
+													currentSession?.title ||
+													""
+											: topbarTitle}
 									</span>
 								</span>
 								{route.view === "session" && currentSession && (
