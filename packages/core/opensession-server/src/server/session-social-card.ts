@@ -9,6 +9,7 @@
 import sharp from "sharp";
 import { createHmac, randomBytes, timingSafeEqual } from "crypto";
 import { chmodSync, readFileSync, writeFileSync } from "fs";
+import { repoLetter } from "../frontend/lib/repo-label";
 import {
 	DEFAULT_ACCENT_THEME,
 	getAccentThemeOption,
@@ -16,11 +17,18 @@ import {
 } from "../shared/accent-theme";
 import {
 	configuredIntegration,
+	configuredRepos,
 	configuredServer,
 	productName,
 } from "./config";
 import { teamDirectory, type DirectoryPerson } from "./people";
 import { stateDir } from "./paths";
+import { repoIconRevision, resolveRepoIcon } from "./repo-appearance";
+import {
+	REPO_TILE_INK,
+	assignRepoTileColors,
+	repoTileColor,
+} from "./repo-tile-colors";
 import { findSessionAsync } from "./session-cache";
 import type { UnifiedSession } from "./types";
 import { getUiPrefs } from "./ui-prefs";
@@ -30,17 +38,30 @@ export const SESSION_CARD_HEIGHT = 630;
 /**
  * Banner variant, for Slack. A Block Kit `image` block is always laid out at
  * the message column width, so the only thing that decides how much of the
- * conversation the card eats is its aspect ratio. Same width, half the
- * height, so Slack downscales a full-resolution render and it stays sharp.
+ * conversation the card eats is its aspect ratio. Two lines are all the card
+ * carries, so it is sized to two lines: a taller banner only adds blank
+ * paper to every message that quotes a session.
  */
 export const SESSION_CARD_BANNER_WIDTH = 1200;
-export const SESSION_CARD_BANNER_HEIGHT = 300;
+export const SESSION_CARD_BANNER_HEIGHT = 220;
 
 export type SessionCardVariant = "card" | "banner";
-const SESSION_CARD_VERSION = 3;
-const TITLE_MAX_WIDTH = 1088;
-const TITLE_FONT = "Inter SemiBold 56";
-const TITLE_LETTER_SPACING = -2 * 1024;
+const SESSION_CARD_VERSION = 4;
+/** Left margin, clear of the 8 px accent bar. */
+const PAD_X = 56;
+/** The repo tile in front of the title, and the gap after it. */
+const TILE_SIZE = 72;
+const TILE_GAP = 24;
+/** The metadata line: the person's avatar, then who and which model. */
+const META_SIZE = 32;
+const META_GAP = 22;
+const META_TEXT_SIZE = 26;
+const META_TEXT_X = PAD_X + META_SIZE + 14;
+const TITLE_SIZE = 48;
+const TITLE_X = PAD_X + TILE_SIZE + TILE_GAP;
+const TITLE_MAX_WIDTH = SESSION_CARD_WIDTH - TITLE_X - PAD_X;
+const TITLE_FONT = "Inter SemiBold 48";
+const TITLE_LETTER_SPACING = Math.round(-1.2 * 1024);
 
 export interface SessionSocialCardData {
 	title: string;
@@ -133,7 +154,7 @@ async function titleWidth(title: string): Promise<number> {
 	return metadata.width ?? 0;
 }
 
-/** Fit one 56 px Inter Semi Bold line inside the card's 1088 px measure. */
+/** Fit one 48 px Inter Semi Bold line inside the measure left of the tile. */
 export async function fitSocialCardTitle(title: string): Promise<string> {
 	const value = clean(title) || productName();
 	if ((await titleWidth(value)) <= TITLE_MAX_WIDTH) return value;
@@ -199,8 +220,101 @@ async function avatarDataUrl(person?: DirectoryPerson): Promise<string> {
 	return "";
 }
 
-function footerLabel(value: string): string {
+function metaLabel(value: string): string {
 	return value.length > 28 ? `${value.slice(0, 27).trimEnd()}…` : value;
+}
+
+/**
+ * A repo's own art, tile-sized, or "" when it wears a letter instead. Same two
+ * sources the /repo-icon route serves, in the same order: a generic
+ * `<id>-icon.png` shipped with the frontend, then whatever the repo's config
+ * points at. Keyed on the stored art's revision so an icon changed from
+ * Settings shows up on the next card rather than after a restart.
+ */
+async function repoIconDataUrl(repoId?: string): Promise<string> {
+	if (!repoId) return "";
+	const repo = configuredRepos()[repoId];
+	const configured = resolveRepoIcon(repo?.icon, repo?.repo);
+	const cacheKey = `repo:${repoId}:${configured ?? ""}:${repoIconRevision(configured) ?? 0}`;
+	const cached = avatarCache.get(cacheKey);
+	if (cached !== undefined) return cached;
+	const sources: Array<string | URL> = [];
+	if (/^[a-z0-9][a-z0-9_-]{0,40}$/i.test(repoId))
+		sources.push(new URL(`../frontend/${repoId}-icon.png`, import.meta.url));
+	if (configured) sources.push(configured);
+	for (const source of sources) {
+		try {
+			const file = Bun.file(source);
+			if (!(await file.exists())) continue;
+			const data = await compactAvatar(await file.arrayBuffer());
+			rememberAvatar(cacheKey, data);
+			return data;
+		} catch {}
+	}
+	rememberAvatar(cacheKey, "");
+	return "";
+}
+
+/**
+ * The tile color the rest of the app assigned this repo, so the card's tile is
+ * the one the sidebar and the phone already show rather than a third opinion.
+ */
+function repoTileColorFor(id: string): string {
+	const repos = configuredRepos();
+	if (!repos[id]) return repoTileColor(id);
+	const chosen: Record<string, string> = {};
+	for (const [key, repo] of Object.entries(repos)) {
+		const color = (repo as { color?: string }).color;
+		if (color) chosen[key] = color;
+	}
+	return (
+		assignRepoTileColors(Object.keys(repos), chosen)[id] ?? repoTileColor(id)
+	);
+}
+
+/**
+ * A squircle: the superellipse corner the UI wears through
+ * `corner-shape: squircle`, baked into a path because this rasterizes through
+ * librsvg, which has no such property. An `rx` rounded rect beside the app's
+ * real tiles reads as the wrong shape, and at 72 px it is obvious. Sampled
+ * along the curve rather than approximated with beziers, so the corner is the
+ * actual superellipse at any size.
+ */
+function squirclePath(
+	x: number,
+	y: number,
+	size: number,
+	radius = size * 0.32,
+	exponent = 4,
+	steps = 20,
+): string {
+	const r = Math.min(radius, size / 2);
+	const power = 2 / exponent;
+	const corner = (
+		cx: number,
+		cy: number,
+		sx: number,
+		sy: number,
+		reverse: boolean,
+	): string => {
+		let path = "";
+		for (let i = 0; i <= steps; i++) {
+			const t = ((reverse ? steps - i : i) / steps) * (Math.PI / 2);
+			const px = cx + sx * r * Math.cos(t) ** power;
+			const py = cy + sy * r * Math.sin(t) ** power;
+			path += `L${px.toFixed(2)} ${py.toFixed(2)}`;
+		}
+		return path;
+	};
+	return [
+		`M${(x + r).toFixed(2)} ${y.toFixed(2)}`,
+		`L${(x + size - r).toFixed(2)} ${y.toFixed(2)}`,
+		corner(x + size - r, y + r, 1, -1, true),
+		corner(x + size - r, y + size - r, 1, 1, false),
+		corner(x + r, y + size - r, -1, 1, true),
+		corner(x + r, y + r, -1, -1, false),
+		"Z",
+	].join("");
 }
 
 /** SVG source is exported so the visual can be inspected without PNG decoding. */
@@ -210,22 +324,38 @@ export function sessionSocialCardSvg(
 	jetBrainsMono = "",
 	displayTitle = clean(data.title) || productName(),
 	variant: SessionCardVariant = "card",
+	repoIcon = "",
 ): string {
 	const banner = variant === "banner";
 	const height = banner ? SESSION_CARD_BANNER_HEIGHT : SESSION_CARD_HEIGHT;
-	// The banner keeps the card's whole top block (accent bar, title, avatar,
-	// owner) and drops the empty middle, so the footer sits the same distance
-	// from the bottom edge as it does on the full card.
-	const footerY = height - 88;
+	// One block, centred on both shapes: the repo tile and the title on the
+	// first line, everything else demoted to the second. Nothing is pinned to
+	// the bottom edge any more, which is what lets the banner get shorter
+	// without opening a hole in the middle of it.
+	const blockTop = Math.round((height - (TILE_SIZE + META_GAP + META_SIZE)) / 2);
+	const tileCenter = blockTop + TILE_SIZE / 2;
+	const metaTop = blockTop + TILE_SIZE + META_GAP;
+	const metaCenter = metaTop + META_SIZE / 2;
 	const artScale = height / SESSION_CARD_HEIGHT;
 	const artTransform = banner
 		? `translate(${SESSION_CARD_WIDTH - 399 * artScale} 0) scale(${artScale})`
 		: "translate(801 0)";
-	const repo = footerLabel(clean(data.repo));
-	const model = footerLabel(clean(data.model));
+	const repoId = clean(data.repo);
+	const owner = metaLabel(clean(data.owner));
+	const model = metaLabel(clean(data.model));
+	const tile = squirclePath(PAD_X, blockTop, TILE_SIZE);
+	const hasTile = !!(repoIcon || repoId);
+	const titleX = hasTile ? TITLE_X : PAD_X;
+	// Art when the repo has any, the same colored letter the app falls back to
+	// when it does not.
+	const repoMarkup = !hasTile
+		? ""
+		: repoIcon
+			? `<image href="${repoIcon}" x="${PAD_X}" y="${blockTop}" width="${TILE_SIZE}" height="${TILE_SIZE}" preserveAspectRatio="xMidYMid slice" clip-path="url(#repoClip)"/>`
+			: `<path d="${tile}" fill="${xml(repoTileColorFor(repoId))}"/><path d="${tile}" fill="url(#tileSheen)"/><text x="${PAD_X + TILE_SIZE / 2}" y="${tileCenter + 1}" text-anchor="middle" dominant-baseline="middle" fill="${REPO_TILE_INK}" font-size="34" font-weight="600">${xml(repoLetter(repoId))}</text>`;
 	const avatarMarkup = avatar
-		? `<image href="${avatar}" x="56" y="123" width="48" height="48" preserveAspectRatio="xMidYMid slice" clip-path="url(#avatarClip)"/>`
-		: `<rect x="56" y="123" width="48" height="48" rx="8" fill="${xml(data.accent)}"/><text x="80" y="148" text-anchor="middle" dominant-baseline="middle" fill="#FFFFFF" font-size="18" font-weight="600">${xml(initials(data.owner))}</text>`;
+		? `<image href="${avatar}" x="${PAD_X}" y="${metaTop}" width="${META_SIZE}" height="${META_SIZE}" preserveAspectRatio="xMidYMid slice" clip-path="url(#avatarClip)"/>`
+		: `<circle cx="${PAD_X + META_SIZE / 2}" cy="${metaCenter}" r="${META_SIZE / 2}" fill="${xml(data.accent)}"/><text x="${PAD_X + META_SIZE / 2}" y="${metaCenter + 1}" text-anchor="middle" dominant-baseline="middle" fill="#FFFFFF" font-size="13" font-weight="600">${xml(initials(data.owner))}</text>`;
 	const fontFace = jetBrainsMono
 		? `<style>@font-face { font-family: 'JetBrains Mono'; font-style: normal; font-weight: 500; src: url('${jetBrainsMono}') format('truetype'); }</style>`
 		: "";
@@ -237,19 +367,23 @@ export function sessionSocialCardSvg(
     <stop stop-color="#000000" stop-opacity="0.01"/>
     <stop offset="1" stop-color="#000000" stop-opacity="0.08"/>
   </linearGradient>
-  <clipPath id="avatarClip"><rect x="56" y="123" width="48" height="48" rx="8"/></clipPath>
+  <linearGradient id="tileSheen" x1="0" y1="${blockTop}" x2="0" y2="${blockTop + TILE_SIZE}" gradientUnits="userSpaceOnUse">
+    <stop stop-color="#FFFFFF" stop-opacity="0.1"/>
+    <stop offset="1" stop-color="#000000" stop-opacity="0.06"/>
+  </linearGradient>
+  <clipPath id="repoClip"><path d="${tile}"/></clipPath>
+  <clipPath id="avatarClip"><circle cx="${PAD_X + META_SIZE / 2}" cy="${metaCenter}" r="${META_SIZE / 2}"/></clipPath>
 </defs>
 <rect width="1200" height="${height}" fill="#FFFFFF"/>
 <rect width="8" height="${height}" fill="${xml(data.accent)}"/>
 <g transform="${artTransform}">
   <path d="M68.8375 226.509C-37.3322 147.543 -7.34262 36.0198 68.8375 0H399V630H84.0041C208.443 571.121 289.104 390.338 68.8375 226.509Z" fill="url(#artGradient)"/>
 </g>
-<text x="56" y="40" dominant-baseline="hanging" fill="#000000" font-size="56" font-weight="600" letter-spacing="-2">${xml(displayTitle)}</text>
+${repoMarkup}
+${hasTile ? `<path d="${tile}" fill="none" stroke="#000000" stroke-opacity="0.12"/>` : ""}
+<text x="${titleX}" y="${tileCenter + 2}" dominant-baseline="middle" fill="#0A0A0B" font-size="${TITLE_SIZE}" font-weight="600" letter-spacing="-1.2">${xml(displayTitle)}</text>
 ${avatarMarkup}
-<rect x="56.5" y="123.5" width="47" height="47" rx="7.5" fill="none" stroke="#000000" stroke-opacity="0.25"/>
-<text x="120" y="147" dominant-baseline="middle" fill="#000000" font-size="36" font-weight="500">${xml(data.owner)}</text>
-<text x="56" y="${footerY}" dominant-baseline="hanging" fill="#000000" fill-opacity="0.5" font-family="JetBrains Mono, monospace" font-size="36" font-weight="500">${xml(repo)}</text>
-<text x="1144" y="${footerY}" dominant-baseline="hanging" text-anchor="end" fill="#000000" fill-opacity="0.5" font-family="JetBrains Mono, monospace" font-size="36" font-weight="500">${xml(model)}</text>
+<text x="${META_TEXT_X}" y="${metaCenter + 1}" dominant-baseline="middle" fill="#000000" fill-opacity="0.45" font-size="${META_TEXT_SIZE}" font-weight="500">${xml(owner)}${model ? ` · <tspan font-family="JetBrains Mono, monospace">${xml(model)}</tspan>` : ""}</text>
 </svg>`;
 }
 
@@ -268,13 +402,16 @@ export async function renderSessionSocialCard(
 	data: SessionSocialCardData,
 	variant: SessionCardVariant = "card",
 ): Promise<Buffer> {
-	const [avatar, monoFont, title] = await Promise.all([
+	const [avatar, repoIcon, monoFont, title] = await Promise.all([
 		avatarDataUrl(data.person),
+		repoIconDataUrl(data.repo),
 		socialCardMonoFont(),
 		fitSocialCardTitle(data.title),
 	]);
 	return sharp(
-		Buffer.from(sessionSocialCardSvg(data, avatar, monoFont, title, variant)),
+		Buffer.from(
+			sessionSocialCardSvg(data, avatar, monoFont, title, variant, repoIcon),
+		),
 	)
 		.png()
 		.toBuffer();

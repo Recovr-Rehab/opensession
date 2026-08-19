@@ -115,9 +115,14 @@ describe("session social card", () => {
 			accent: "#dd233a",
 		});
 		expect(svg).toContain('<rect width="8" height="630" fill="#dd233a"/>');
-		expect(svg).toContain('x="56" y="40"');
-		expect(svg).toContain('x="56" y="542"');
-		expect(svg).toContain('x="1144" y="542"');
+		// The repo tile is a real squircle path, not an `rx` rounded rect, and
+		// the title starts clear of it.
+		expect(svg).toContain('<clipPath id="repoClip"><path d="M');
+		expect(svg).toContain('x="152"');
+		expect(svg).toContain(">O</text>");
+		// Owner and model read as metadata rather than as a second heading.
+		expect(svg).toContain('fill-opacity="0.45"');
+		expect(svg).toContain("gpt-5.6-sol");
 		expect(svg).toContain('stop-opacity="0.08"');
 		expect(svg).toContain("M68.8375 226.509C-37.3322 147.543");
 		expect(svg).toContain("Fix &lt;cards&gt; &amp; links");
@@ -150,7 +155,7 @@ describe("session social card", () => {
 		expect(output).toContain("<title>Ship dynamic social cards · Open Session</title>");
 		expect(output).toContain('content="summary_large_image"');
 		expect(output).toMatch(
-			/content="https:\/\/media\.example\.test\/session-card\/sess-social-1\/[A-Za-z0-9_-]{32}\.png\?v=3"/,
+			/content="https:\/\/media\.example\.test\/session-card\/sess-social-1\/[A-Za-z0-9_-]{32}\.png\?v=4"/,
 		);
 		expect(output).toContain(
 			'property="og:url" content="https://os.example.test/session/sess-social-1"',
@@ -164,13 +169,13 @@ describe("session social card", () => {
 		).toBe("sess-social-1");
 		expect(socialSessionIdFromPath("/settings")).toBeNull();
 		expect(sessionSocialCardUrl("sess-social-1")).toMatch(
-			/^https:\/\/media\.example\.test\/session-card\/sess-social-1\/[A-Za-z0-9_-]{32}\.png\?v=3$/,
+			/^https:\/\/media\.example\.test\/session-card\/sess-social-1\/[A-Za-z0-9_-]{32}\.png\?v=4$/,
 		);
 	});
 
 	test("signs ids containing Slack timestamp dots", () => {
 		expect(sessionSocialCardUrl("slack-C123-1719860000.000000")).toMatch(
-			/^https:\/\/media\.example\.test\/session-card\/slack-C123-1719860000\.000000\/[A-Za-z0-9_-]{32}\.png\?v=3$/,
+			/^https:\/\/media\.example\.test\/session-card\/slack-C123-1719860000\.000000\/[A-Za-z0-9_-]{32}\.png\?v=4$/,
 		);
 	});
 
@@ -195,7 +200,7 @@ describe("session social card", () => {
 		expect(metadata.height).toBe(630);
 	});
 
-	test("serves the banner variant at full width and half the height", async () => {
+	test("serves the banner variant at full width, two lines tall", async () => {
 		const route = sessionSocialCardPublicRoutes().get("GET /session-card/*")!;
 		const url = new URL(sessionSocialCardUrl(signedRouteSessionId, "banner"));
 		expect(url.searchParams.get("s")).toBe("banner");
@@ -203,7 +208,7 @@ describe("session social card", () => {
 		expect(response.status).toBe(200);
 		const metadata = await sharp(await response.arrayBuffer()).metadata();
 		expect(metadata.width).toBe(1200);
-		expect(metadata.height).toBe(300);
+		expect(metadata.height).toBe(220);
 	});
 
 	test("renders the full card for an unrecognized shape", async () => {
