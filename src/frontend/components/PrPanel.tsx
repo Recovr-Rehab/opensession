@@ -29,6 +29,7 @@ import {
   fetchPrCodeFlow,
   fetchPrDiffGroups,
   fetchPrViewedFiles,
+  fetchPrFile,
   setPrFileViewed,
   fetchGitStatus,
   fetchReviewGuide,
@@ -1184,6 +1185,32 @@ export function PrPanel({
   // The pr-image endpoint serves blobs through the GitHub API — on hosts
   // without it, image files fall back to the plain binary-diff placeholder.
   const imageSrcs = caps.images ? prImageSrcs : undefined;
+  const fileActions = useMemo(() => {
+    const ref = pr?.headRefOid || pr?.headRefName;
+    const prUrl = pr?.url;
+    return {
+      providerName: provider.name,
+      url: (file: FileDiffMetadata) => {
+        if (provider.key !== "github" || !prUrl || !ref) return null;
+        try {
+          const url = new URL(prUrl);
+          url.pathname = `${url.pathname.replace(/\/pull\/\d+.*$/, "")}/blob/${encodeURIComponent(ref)}/${file.name
+            .split("/")
+            .map(encodeURIComponent)
+            .join("/")}`;
+          url.search = "";
+          url.hash = "";
+          return url.toString();
+        } catch {
+          return null;
+        }
+      },
+      loadContents:
+        provider.key === "github" && ref
+          ? (file: FileDiffMetadata) => fetchPrFile(activeRepoId, ref, file.name)
+          : undefined,
+    };
+  }, [pr?.headRefOid, pr?.headRefName, pr?.url, provider, activeRepoId]);
 
   // In-place edit mode on the review canvas. Only targets backed by one of the
   // session's own worktrees qualify (primary/attached repos — their worktree is
@@ -1378,6 +1405,7 @@ export function PrPanel({
         onRemovePending: handleRemovePending,
         onSubmit: handleAddPending,
         imageSrcs,
+        fileActions,
         editFile,
       },
     [
@@ -1398,6 +1426,7 @@ export function PrPanel({
       handleRemovePending,
       handleAddPending,
       imageSrcs,
+      fileActions,
       editFile,
       diffLoadPolicy.defaultExpandedFiles,
       diffLoadPolicy.allowExpandAll,
