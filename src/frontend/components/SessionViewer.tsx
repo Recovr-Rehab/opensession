@@ -6831,10 +6831,17 @@ function BusyInline({
 		<div
 			className={cn(
 				msgRow,
-				"-ml-2 mt-0.5 flex-row items-center gap-2 px-1 py-1.25 text-dim",
+				"mt-0.5 flex-row items-center gap-2 px-1 py-1.25 text-dim",
 			)}
 		>
-			<span className="grid size-5 shrink-0 place-items-center">
+			{/* The 8px pull hangs off the DOT, not off the row: msgRow centres
+			    itself in the reading column with `mx-auto`, and a `-ml-2` on the
+			    row overrides that auto (Tailwind emits `margin-left` after
+			    `margin-inline`), leaving `margin-right: auto` to shove the whole
+			    row against the scroller's left gutter. Here it lands the dot's
+			    centre on the work fold's chevron, which hangs out by the same
+			    8px from a box that stays centred. */}
+			<span className="-ml-2 grid size-5 shrink-0 place-items-center">
 				<PulseDot size={7} />
 			</span>
 			{since != null && <BusyElapsed since={since} />}
