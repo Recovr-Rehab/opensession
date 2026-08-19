@@ -28,6 +28,7 @@ import {
 	anchoredCommentPosition,
 	imageRegionBetween,
 	movedImageRegion,
+	regionHandleStep,
 	resizedImageRegion,
 	type ImageRegion,
 	type ImageRegionPoint,
@@ -571,24 +572,31 @@ const DIAGRAM_PADDING = 16;
 /** Corners first, then edges: the corner is what the hand reaches for, and on
  *  a short side it is the only handle that fits. `sx`/`sy` are the directions
  *  the handle lies in from the region's middle, which is both where it sits and
- *  which way it steps when the region is too small to hold it. */
+ *  which way it steps when the region is too small to hold it.
+ *
+ *  `mark` is what the handle draws, which is not the same thing as what it
+ *  catches. A corner is a bracket whose two bars run along the edges they
+ *  resize, meeting exactly on the corner; an edge is a short bar lying along
+ *  the line it moves. Both are white with a soft dark halo, because the picture
+ *  underneath is as likely to be a white settings pane as a dark one. */
 const REGION_HANDLES: {
 	id: RegionHandle;
 	/** The side whose length has to be long enough to hold this handle. */
 	axis?: "x" | "y";
 	position: string;
 	cursor: string;
+	mark: string;
 	sx: -1 | 0 | 1;
 	sy: -1 | 0 | 1;
 }[] = [
-	{ id: "nw", position: "left-0 top-0", sx: -1, sy: -1, cursor: "cursor-nwse-resize" },
-	{ id: "ne", position: "left-full top-0", sx: 1, sy: -1, cursor: "cursor-nesw-resize" },
-	{ id: "se", position: "left-full top-full", sx: 1, sy: 1, cursor: "cursor-nwse-resize" },
-	{ id: "sw", position: "left-0 top-full", sx: -1, sy: 1, cursor: "cursor-nesw-resize" },
-	{ id: "n", axis: "x", position: "left-1/2 top-0", sx: 0, sy: -1, cursor: "cursor-ns-resize" },
-	{ id: "s", axis: "x", position: "left-1/2 top-full", sx: 0, sy: 1, cursor: "cursor-ns-resize" },
-	{ id: "w", axis: "y", position: "left-0 top-1/2", sx: -1, sy: 0, cursor: "cursor-ew-resize" },
-	{ id: "e", axis: "y", position: "left-full top-1/2", sx: 1, sy: 0, cursor: "cursor-ew-resize" },
+	{ id: "nw", position: "left-0 top-0", sx: -1, sy: -1, cursor: "cursor-nwse-resize", mark: "absolute left-1/2 top-1/2 size-3.5 rounded-tl-[4px] border-l-[3px] border-t-[3px] phone:size-4" },
+	{ id: "ne", position: "left-full top-0", sx: 1, sy: -1, cursor: "cursor-nesw-resize", mark: "absolute right-1/2 top-1/2 size-3.5 rounded-tr-[4px] border-r-[3px] border-t-[3px] phone:size-4" },
+	{ id: "se", position: "left-full top-full", sx: 1, sy: 1, cursor: "cursor-nwse-resize", mark: "absolute right-1/2 bottom-1/2 size-3.5 rounded-br-[4px] border-r-[3px] border-b-[3px] phone:size-4" },
+	{ id: "sw", position: "left-0 top-full", sx: -1, sy: 1, cursor: "cursor-nesw-resize", mark: "absolute left-1/2 bottom-1/2 size-3.5 rounded-bl-[4px] border-l-[3px] border-b-[3px] phone:size-4" },
+	{ id: "n", axis: "x", position: "left-1/2 top-0", sx: 0, sy: -1, cursor: "cursor-ns-resize", mark: "h-[3px] w-5 rounded-full bg-white" },
+	{ id: "s", axis: "x", position: "left-1/2 top-full", sx: 0, sy: 1, cursor: "cursor-ns-resize", mark: "h-[3px] w-5 rounded-full bg-white" },
+	{ id: "w", axis: "y", position: "left-0 top-1/2", sx: -1, sy: 0, cursor: "cursor-ew-resize", mark: "h-5 w-[3px] rounded-full bg-white" },
+	{ id: "e", axis: "y", position: "left-full top-1/2", sx: 1, sy: 0, cursor: "cursor-ew-resize", mark: "h-5 w-[3px] rounded-full bg-white" },
 ];
 
 /** Touch-sized on a phone, pointer-sized otherwise. */
@@ -1209,7 +1217,9 @@ function ZoomableMedia({
 	const handlesOutside =
 		!!shownRegionBox &&
 		Math.min(shownRegionBox.width, shownRegionBox.height) < handleHit * 2;
-	const handleStep = handlesOutside ? Math.round(handleHit * 0.55) : 0;
+	const handleStep = shownRegionBox
+		? regionHandleStep(handleHit, shownRegionBox.width, shownRegionBox.height)
+		: 0;
 
 	return (
 		<div
@@ -1262,13 +1272,44 @@ function ZoomableMedia({
 						className="min-h-0 min-w-0 max-h-full max-w-full rounded-2xl border border-white/20 object-contain [transform-origin:0_0]"
 						style={{ viewTransitionName }}
 					/>
+					{commentMode && shownRegionBox && imageBox && (
+						/* What you chose stays at full brightness and everything else
+						   steps back, rather than the selection wearing a coloured wash.
+						   One spread shadow paints the whole surround; the wrapper clips
+						   it to the picture's own rounded box so it cannot leak over the
+						   scrim and the chrome. */
+						<div
+							className="pointer-events-none absolute overflow-hidden rounded-2xl"
+							style={{
+								left: imageBox.left,
+								top: imageBox.top,
+								width: imageBox.width,
+								height: imageBox.height,
+							}}
+							aria-hidden="true"
+						>
+							<div
+								className="absolute shadow-[0_0_0_9999px_rgb(0_0_0/0.5)]"
+								style={{
+									left: shownRegionBox.left - imageBox.left,
+									top: shownRegionBox.top - imageBox.top,
+									width: shownRegionBox.width,
+									height: shownRegionBox.height,
+								}}
+							/>
+						</div>
+					)}
 					{commentMode && shownRegionBox && (
 						<div
 							// The region is a thing you can take hold of, not a mark:
 							// press it to move it, press a handle to resize it.
 							// Dragging bare picture still starts a new one.
 							data-region-handle="move"
-							className="absolute cursor-move touch-none rounded-sm border-2 border-accent bg-[color-mix(in_srgb,var(--accent)_14%,transparent)] shadow-[0_0_0_1px_rgb(255_255_255/0.8),0_4px_20px_rgb(0_0_0/0.28)]"
+							// A hairline, not a coloured frame: the dimmed surround is
+							// what says where the selection is, so the line only has to
+							// trace it. The dark hairline under it keeps the white edge
+							// legible on a white screenshot.
+							className="absolute cursor-move touch-none rounded-[3px] border border-white shadow-[0_0_0_1px_rgb(0_0_0/0.22)]"
 							style={shownRegionBox}
 							aria-hidden="true"
 						>
@@ -1290,7 +1331,7 @@ function ZoomableMedia({
 									<span
 										key={handle.id}
 										data-region-handle={handle.id}
-										// The dot stays small so it cannot hide a small
+										// The mark stays small so it cannot hide a small
 										// region; the square around it is what the finger
 										// gets.
 										className={cn(
@@ -1304,7 +1345,12 @@ function ZoomableMedia({
 											transform: `translate(calc(-50% + ${handle.sx * handleStep}px), calc(-50% + ${handle.sy * handleStep}px))`,
 										}}
 									>
-										<span className="block size-2.5 rounded-full border border-black/25 bg-white shadow-[0_1px_3px_rgb(0_0_0/0.4)] phone:size-3" />
+										<span
+											className={cn(
+												"block border-white drop-shadow-[0_0_2px_rgb(0_0_0/0.5)]",
+												handle.mark,
+											)}
+										/>
 									</span>
 								))}
 						</div>
@@ -1816,7 +1862,7 @@ function MediaLightbox({
 
 			{commenting && !selection && (
 				<div className="pointer-events-none absolute inset-x-0 bottom-[calc(16px+env(safe-area-inset-bottom))] z-20 flex justify-center px-4">
-					<div className="pointer-events-auto flex items-center gap-1 rounded-full bg-black/70 py-1 pl-4 pr-1 shadow-[0_10px_40px_rgb(0_0_0/0.45)] backdrop-blur-md">
+					<div className="pointer-events-auto flex items-center gap-1 rounded-full border border-white/10 bg-black/55 py-1 pl-4 pr-1 shadow-[inset_0_1px_0_rgb(255_255_255/0.08),0_12px_44px_rgb(0_0_0/0.5)] backdrop-blur-2xl backdrop-saturate-150">
 						<span className="text-label font-medium text-white">
 							Drag over the part you mean
 						</span>
@@ -1832,16 +1878,23 @@ function MediaLightbox({
 			)}
 
 			{commentAnchor && (
-				<form
+				<motion.form
 					ref={commentCardRef}
 					/* Fixed and placed against the region: the remark and the pixels it
 					   is about read as one thing. Kept to a single row, because on a
 					   phone a taller card would cover the picture it is describing. */
-					className="fixed z-20 flex flex-col gap-1 rounded-2xl border border-white/15 bg-black/80 p-1.5 shadow-[0_10px_40px_rgb(0_0_0/0.45)] backdrop-blur-md"
+					className="fixed z-20 flex flex-col gap-1 rounded-[22px] border border-white/10 bg-black/55 p-1.5 shadow-[inset_0_1px_0_rgb(255_255_255/0.08),0_16px_50px_rgb(0_0_0/0.5)] backdrop-blur-2xl backdrop-saturate-150"
+					// It grows out of the corner of the region it belongs to, rather
+					// than fading in beside it.
+					initial={reduceMotion ? false : { opacity: 0, scale: 0.94 }}
+					animate={{ opacity: 1, scale: 1 }}
+					transition={{ type: "spring", duration: 0.3, bounce: 0.12 }}
 					style={{
 						left: commentAnchor.left,
 						top: commentAnchor.top,
 						width: commentCardWidth,
+						transformOrigin:
+							commentAnchor.placement === "above" ? "bottom left" : "top left",
 						// One frame of measurement before it knows which side of the
 						// region it fits on. Showing it first would place it, then move it.
 						visibility: commentCardSize ? undefined : "hidden",
@@ -1890,7 +1943,9 @@ function MediaLightbox({
 						</button>
 						<button
 							type="submit"
-							className="grid size-9 shrink-0 place-items-center rounded-full border-0 bg-white p-0 text-black transition-transform active:scale-[0.94] disabled:opacity-40 phone:size-11"
+							// The filled circle a message is sent with, in the app's own
+							// accent rather than a plain white chip.
+							className="grid size-9 shrink-0 place-items-center rounded-full border-0 bg-accent p-0 text-white transition-transform active:scale-[0.94] disabled:bg-white/15 disabled:text-white/40 phone:size-11"
 							disabled={!commentText.trim() || sendingComment}
 							aria-label={sendingComment ? "Sending comment" : "Send comment"}
 						>
@@ -1902,7 +1957,7 @@ function MediaLightbox({
 							{commentError}
 						</div>
 					)}
-				</form>
+				</motion.form>
 			)}
 
 			{/* What you are looking at gets its own line directly under the

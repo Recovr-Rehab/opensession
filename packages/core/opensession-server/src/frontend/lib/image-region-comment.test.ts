@@ -5,6 +5,7 @@ import {
 	imageRegionOutputSize,
 	imageRegionPixels,
 	movedImageRegion,
+	regionHandleStep,
 	resizedImageRegion,
 } from "./image-region-comment";
 import {
@@ -184,5 +185,26 @@ describe("a selection can be moved and resized", () => {
 		expect(resized.y).toBe(0);
 		expect(resized.x + resized.width).toBeLessThanOrEqual(1);
 		expect(resized.y + resized.height).toBeLessThanOrEqual(1);
+	});
+});
+
+describe("handles frame a region too small to hold them", () => {
+	test("a region with room keeps its handles on its corners", () => {
+		expect(regionHandleStep(36, 204, 77)).toBe(0);
+	});
+
+	test("a small region pushes them outward", () => {
+		expect(regionHandleStep(36, 34, 22)).toBeGreaterThan(0);
+	});
+
+	test("a stepped handle still covers the corner it belongs to", () => {
+		// The corner is what a person aims at. If the step reaches half the
+		// target, the handle clears the corner and that press draws a new
+		// selection instead of resizing this one.
+		for (const hit of [24, 36]) {
+			for (const size of [8, 20, 34, 51, 71]) {
+				expect(regionHandleStep(hit, size, size)).toBeLessThan(hit / 2);
+			}
+		}
 	});
 });

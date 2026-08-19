@@ -159,6 +159,25 @@ export function resizedImageRegion(
 	return { x: x0, y: y0, width: x1 - x0, height: y1 - y0 };
 }
 
+/**
+ * How far a resize handle steps out of the region it belongs to.
+ *
+ * A target big enough for a finger, centred on the corner of a small region,
+ * covers the region. Rather than shrink it under what a finger can hit, the
+ * handles step outward and frame the selection, leaving its middle free to
+ * press. The step stays under half the target on purpose: the corner is the
+ * point a person aims at, so the handle has to keep covering it. A gap there
+ * turns their press into a brand new selection.
+ */
+export function regionHandleStep(
+	hit: number,
+	width: number,
+	height: number,
+): number {
+	if (Math.min(width, height) >= hit * 2) return 0;
+	return Math.round(hit * 0.42);
+}
+
 export interface ScreenRect {
 	left: number;
 	top: number;
