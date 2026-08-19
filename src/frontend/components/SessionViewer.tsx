@@ -5327,6 +5327,10 @@ export function SessionViewer({
 							onOpenChecks={() => focusPrInReview(undefined, "checks")}
 							onOpenAssets={onOpenAssets}
 							onArchive={handleArchive}
+							// Already resolved across the workspace's sessions (the
+							// request may live on a sibling), and already folded
+							// together with a GitHub review that completes it.
+							reviewRequest={effectiveReview?.req ?? null}
 							running={isRunningLive}
 							send={connected ? send : undefined}
 							refreshTick={gitRefreshTick}

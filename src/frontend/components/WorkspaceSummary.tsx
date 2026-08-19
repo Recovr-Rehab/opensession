@@ -11,10 +11,22 @@ import { commitPrompt } from "../lib/commit-prompt";
 import { getCurrentUser } from "./UserPicker";
 import { pollWhileVisible, PR_WEBHOOK_FALLBACK_POLL_MS } from "../lib/poll";
 import { PrStatusBar } from "./PrStatusBar";
+import { reviewerStateMeta } from "./pr/PrRows";
+import { UserAvatar } from "./UserAvatar";
+import {
+	personNameForGithubLogin,
+	personNameForKey,
+	usePeople,
+} from "../lib/people";
 import { Popover } from "../ui/popover";
 import { Tooltip } from "../ui/tooltip";
 import { cn } from "../ui/cn";
-import type { GitStatusInfo, PrDetails, UnifiedSession } from "../lib/types";
+import type {
+	GitStatusInfo,
+	PrDetails,
+	PrReviewer,
+	UnifiedSession,
+} from "../lib/types";
 import {
 	WS_SUMMARY_ACTION,
 	WS_SUMMARY_CARD,
@@ -25,6 +37,7 @@ import {
 	WS_SUMMARY_RAIL,
 	WS_SUMMARY_ROW,
 	WS_SUMMARY_SECTION,
+	WS_SUMMARY_STATE,
 	WS_SUMMARY_THUMB,
 } from "../lib/workspace-summary-classes";
 import { IconClock, IconFile, IconListCircles } from "./icons";
@@ -87,6 +100,16 @@ interface Props {
 	/** Archive through the owning viewer, so it can select the neighbouring
 	 *  sidebar row. Offered by the PR block once the work has landed. */
 	onArchive?: () => void;
+	/**
+	 * The teammate this session's review was handed to, if anyone. Open
+	 * Session's own request, which is a different thing from the reviewers on
+	 * the pull request: this one is a person somebody here asked, and it is the
+	 * only one of the two that can be pending with no PR in sight.
+	 *
+	 * The workspace's request may live on a sibling session, so the viewer
+	 * resolves it (see `effectiveReview`) and hands the answer down.
+	 */
+	reviewRequest?: UnifiedSession["reviewRequest"] | null;
 	/** Live run state, so the PR block refetches the moment a turn ends. */
 	running?: boolean;
 	/** Prompt the session (Commit) via WS `prompt`. Absent while disconnected. */
@@ -117,6 +140,95 @@ function emptyData(): SummaryData {
 }
 
 const IMAGE_RE = /\.(png|jpe?g|gif|webp|avif|svg)$/i;
+
+/**
+ * One row per human, merged across the two ways a review lands on someone.
+ *
+ * The pull request has reviewers, and Open Session has its own "please review
+ * this" pointed at a teammate. They are not alternatives: the picker mirrors
+ * its picks into GitHub's reviewer list, so the same person arrives from both
+ * sides, once as a login and once as a name. Rendered as two lists that reads
+ * as "johnnylinsf · Awaiting review" directly above "Johnny · Review asked",
+ * which is one person, one fact, and two rows saying it differently.
+ *
+ * So: one row per person. GitHub's state wins when they have actually
+ * submitted something, because "Approved" says more than "we asked"; the
+ * request supplies the state otherwise, and the name, which is what a
+ * teammate is called here.
+ *
+ * GitHub also lists a person twice when they answer a request they were
+ * already on, so the latest state wins per login before any of this.
+ */
+const REVIEWERS_SHOWN = 4;
+
+type ReviewLine = {
+	key: string;
+	name: string;
+	login?: string;
+	state: string;
+	tone: string;
+};
+
+function reviewLines(
+	pr: PrDetails | null,
+	request: UnifiedSession["reviewRequest"] | null | undefined,
+): ReviewLine[] {
+	const lines: ReviewLine[] = [];
+	const seen = new Map<string, ReviewLine>();
+	const add = (line: ReviewLine) => {
+		const existing = seen.get(line.key);
+		if (existing) return existing;
+		seen.set(line.key, line);
+		lines.push(line);
+		return line;
+	};
+
+	// Whoever we asked, first: this is the row that exists even with no pull
+	// request open at all.
+	for (const key of [request?.to, ...(request?.recipients || [])]) {
+		if (!key) continue;
+		const name = personNameForKey(key);
+		add({
+			key: name.toLowerCase(),
+			name,
+			state: request?.accepted ? "Signed off" : "Review asked",
+			tone: request?.accepted ? "text-green" : "text-dim",
+		});
+	}
+
+	// Then the PR's own, folded onto the same person where they match. Only
+	// while it is open: once it lands the review is history, and the card is for
+	// what is still live.
+	if (pr?.state === "OPEN") {
+		const byLogin = new Map<string, PrReviewer>();
+		for (const reviewer of pr.reviewers || []) {
+			const previous = byLogin.get(reviewer.login);
+			if (!previous || previous.state === "PENDING")
+				byLogin.set(reviewer.login, reviewer);
+		}
+		for (const reviewer of byLogin.values()) {
+			const meta = reviewerStateMeta(reviewer.state);
+			const name = reviewer.isTeam
+				? reviewer.login
+				: personNameForGithubLogin(reviewer.login) || reviewer.login;
+			const line = add({
+				key: name.toLowerCase(),
+				name,
+				login: reviewer.isTeam ? undefined : reviewer.login,
+				state: meta.label,
+				tone: meta.tone === "muted" ? "text-dim" : `text-${meta.tone}`,
+			});
+			// Merged onto a request row: keep the request's name, take GitHub's
+			// verdict once there is one to take.
+			if (line.state !== meta.label && reviewer.state !== "PENDING") {
+				line.state = meta.label;
+				line.tone = meta.tone === "muted" ? "text-dim" : `text-${meta.tone}`;
+				line.login = line.login || reviewer.login;
+			}
+		}
+	}
+	return lines.slice(0, REVIEWERS_SHOWN);
+}
 
 /** How many assets the card lists before it defers to the Assets tab. The card
  *  scrolls, so this is about the list staying a summary rather than about the
@@ -183,6 +295,7 @@ function SummaryBody({
 	onOpenChecks,
 	onOpenAssets,
 	onArchive,
+	reviewRequest,
 	running,
 	send,
 	refreshTick,
@@ -277,6 +390,12 @@ function SummaryBody({
 		setTimeout(() => setPrompted(false), 4000);
 	}
 
+	// The roster arrives async and the name lookup below reads it, so subscribe
+	// here or a reviewer stays a bare person key until something else happens to
+	// re-render the card.
+	usePeople();
+	const reviewers = reviewLines(pr, reviewRequest);
+
 	const shown = assets.slice(0, ASSETS_SHOWN);
 
 	return (
@@ -328,6 +447,31 @@ function SummaryBody({
 				onOpenChecksTab={() => go(onOpenChecks)}
 				onArchive={onArchive ? () => go(onArchive) : undefined}
 			/>
+
+			{/* Who is holding it. The status row above says a review is needed;
+			    these say by whom, which is the next question and the one you act
+			    on. */}
+			{reviewers.map((reviewer) => (
+				<button
+					key={reviewer.key}
+					className={WS_SUMMARY_ROW}
+					onClick={() => go(onOpenPr)}
+					title={`${reviewer.name} · ${reviewer.state}`}
+				>
+					<span className={WS_SUMMARY_RAIL}>
+						<UserAvatar
+							name={reviewer.name}
+							login={reviewer.login}
+							size={16}
+							edge={false}
+						/>
+					</span>
+					<span className={WS_SUMMARY_LABEL}>{reviewer.name}</span>
+					<span className={cn(WS_SUMMARY_STATE, reviewer.tone)}>
+						{reviewer.state}
+					</span>
+				</button>
+			))}
 
 			{shown.length > 0 && (
 				<>

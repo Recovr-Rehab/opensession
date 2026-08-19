@@ -112,24 +112,11 @@ export const WS_SUMMARY_DIVIDER = "mx-4 my-2 h-px shrink-0 bg-line";
  *  Tone comes from the caller; this is only the shape. */
 export const WS_SUMMARY_STATE = "shrink-0 text-meta font-medium";
 
-/**
- * A reviewer's face in that rail. Round, because a person is not a file: the
- * assets beside it are square tiles, and the shape is what tells the two lists
- * apart before either label is read.
- *
- * `rounded-full`, not the `rounded-[999px]` this repo normally reaches for.
- * That spelling keeps base.css's squircle grant, which at 16px reads as a
- * rounded square rather than a face, and every other avatar in the app is a
- * true circle.
+/* A reviewer's face is drawn by `UserAvatar`, not by a class here: it resolves
+ * the roster picture, the GitHub fallback and the initials tile, and it wears
+ * the person mark the sidebar and the presence pile already use. A local
+ * avatar class was tried and only produced a second shape for the same thing.
  */
-export const WS_SUMMARY_AVATAR =
-	"size-4 rounded-full border border-line bg-panel object-cover";
-
-/** The same slot for a reviewer with no picture (a team, or a host that serves
- *  none): their initial, at the size the faces beside it are. */
-export const WS_SUMMARY_AVATAR_FALLBACK =
-	"grid size-4 place-items-center rounded-full border border-line bg-panel " +
-	"text-[9px] font-semibold text-faint";
 
 /** An asset's preview, centred in the rail above. A 16px tile inside a 20px
  *  slot, the same inset the sidebar gives its repo tiles: a filled image next
