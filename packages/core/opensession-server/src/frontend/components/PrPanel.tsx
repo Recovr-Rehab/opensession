@@ -68,6 +68,7 @@ import {
   IconDiffUnified,
   IconDotsHorizontal,
   IconFile,
+  IconGitMerge,
   IconGlobe,
   IconListCircles,
   IconMessages,
@@ -919,8 +920,11 @@ export function PrPanel({
       else await mergePrApi(sessionId, "squash", active?.repo, active?.branch);
       if (actionTargetKey === activeLoadTargetRef.current) await load(true);
     } catch (e: any) {
-      if (actionTargetKey === activeLoadTargetRef.current)
-        setMergeError(e.message || "Merge failed");
+      if (actionTargetKey === activeLoadTargetRef.current) {
+        const message = e.message || "Merge failed";
+        setMergeError(message);
+        toast(message);
+      }
     } finally {
       setMerging(false);
     }
@@ -1593,6 +1597,31 @@ export function PrPanel({
             }}
           >
             Review
+          </Button>
+        )}
+        {canMergeAfterReview && (
+          <Button
+            variant="success-strong"
+            size="sm"
+            className={
+              !pr.staging?.url && !(caps.reviewComments && !reviewing)
+                ? "ml-auto"
+                : undefined
+            }
+            icon={
+              !merging && !confirmMerge ? <IconGitMerge size={18} /> : undefined
+            }
+            disabled={merging}
+            onClick={handleMerge}
+            title="Squash and merge this pull request"
+          >
+            {merging
+              ? "Merging…"
+              : confirmMerge
+                ? "Confirm merge"
+                : headerCompact
+                  ? "Merge"
+                  : "Squash and merge"}
           </Button>
         )}
         <Menu.Root>

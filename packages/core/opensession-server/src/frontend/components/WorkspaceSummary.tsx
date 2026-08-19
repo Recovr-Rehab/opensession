@@ -143,6 +143,7 @@ function emptyData(): SummaryData {
 }
 
 const IMAGE_RE = /\.(png|jpe?g|gif|webp|avif|svg)$/i;
+const OPEN_KEY = "opensession-workspace-summary-open";
 
 /**
  * One identity per reviewer, merged across the two ways a review lands on
@@ -267,10 +268,17 @@ export function WorkspaceSummary({
 	tabStripVisible,
 	...body
 }: Props) {
-	const [open, setOpen] = useState(false);
-	useEffect(() => () => onOpenChange?.(false), [onOpenChange]);
+	const [open, setOpen] = useState(
+		() => localStorage.getItem(OPEN_KEY) === "true",
+	);
+	const initialOpen = useRef(open);
+	useEffect(() => {
+		onOpenChange?.(initialOpen.current);
+		return () => onOpenChange?.(false);
+	}, [onOpenChange]);
 	function changeOpen(nextOpen: boolean) {
 		setOpen(nextOpen);
+		localStorage.setItem(OPEN_KEY, String(nextOpen));
 		onOpenChange?.(nextOpen);
 	}
 	return (
