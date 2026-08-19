@@ -16,21 +16,33 @@
 
 import { AnimatePresence } from "motion/react";
 import { useSyncExternalStore } from "react";
+import { cn } from "./cn";
 import { AnimatedCheck } from "./copy";
 import { FloatingStatus } from "./floating-status";
 
 export type ToastVariant = "default" | "success" | "error";
 
-export type ToastOptions = {
-	variant?: ToastVariant;
-	/** ms before auto-dismiss. Default 3200 (success/default), 4200 (error). */
-	duration?: number;
+/** One action offered next to the message, for a toast that has to be
+ *  actionable rather than only informative ("Archived · Undo"). One at most:
+ *  a toast that needs a choice is a dialog. Label it with a verb. */
+export type ToastAction = {
+	label: string;
+	onClick: () => void;
 };
 
-type Toast = {
+export type ToastOptions = {
+	variant?: ToastVariant;
+	/** ms before auto-dismiss. Default 3200 (success/default), 4200 (error),
+	 *  7000 with an action, which has to outlast noticing and reaching it. */
+	duration?: number;
+	action?: ToastAction;
+};
+
+export type Toast = {
 	id: number;
 	message: string;
 	variant: ToastVariant;
+	action?: ToastAction;
 };
 
 // Cap the stack so a burst (e.g. archiving many sessions) can't wallpaper the
@@ -70,14 +82,15 @@ function inferVariant(message: string): ToastVariant {
 export function toast(message: string, opts: ToastOptions = {}): number {
 	const id = nextId++;
 	const variant = opts.variant ?? inferVariant(message);
-	toasts = [...toasts, { id, message, variant }];
+	toasts = [...toasts, { id, message, variant, action: opts.action }];
 	// Drop the oldest if we're over the cap.
 	if (toasts.length > MAX_VISIBLE) {
 		const overflow = toasts.slice(0, toasts.length - MAX_VISIBLE);
 		for (const t of overflow) clearToastTimer(t.id);
 		toasts = toasts.slice(toasts.length - MAX_VISIBLE);
 	}
-	const duration = opts.duration ?? (variant === "error" ? 4200 : 3200);
+	const duration =
+		opts.duration ?? (opts.action ? 7000 : variant === "error" ? 4200 : 3200);
 	timers.set(
 		id,
 		setTimeout(() => dismissToast(id), duration),
@@ -98,6 +111,12 @@ export function dismissToast(id: number) {
 	clearToastTimer(id);
 	toasts = toasts.filter((t) => t.id !== id);
 	emit();
+}
+
+/** The live stack, for tests and for anything that needs to read it without
+ *  subscribing through React. */
+export function activeToasts(): readonly Toast[] {
+	return toasts;
 }
 
 /**
@@ -129,7 +148,17 @@ function ToastCard({ toast: t }: { toast: Toast }) {
 			exit={{ opacity: 0, y: 8, scale: 0.96 }}
 			transition={{ type: "spring", duration: 0.34, bounce: 0.22 }}
 			onClick={() => dismissToast(t.id)}
-			className="pointer-events-auto cursor-default"
+			className={cn(
+				"pointer-events-auto cursor-default",
+				// The pill is nowrap by default, which a phone cannot afford: at
+				// 390px a message like "Archived 3 sessions · stopped 1 running
+				// turn" plus a button runs off both edges (measured). Wrap instead,
+				// and never grow past the host's padded width.
+				"max-w-full whitespace-normal",
+				// The action carries its own padding, so the pill gives its right
+				// edge back rather than sitting the button in a gutter.
+				t.action && "pr-1.5",
+			)}
 		>
 			{t.variant === "success" && (
 				<AnimatedCheck size={17} className="shrink-0 text-green" />
@@ -143,6 +172,21 @@ function ToastCard({ toast: t }: { toast: Toast }) {
 				</span>
 			)}
 			<span>{t.message}</span>
+			{t.action && (
+				<button
+					type="button"
+					onClick={(e) => {
+						// The card dismisses on click, so take the event: the action
+						// runs once, and the toast still goes away after it.
+						e.stopPropagation();
+						dismissToast(t.id);
+						t.action?.onClick();
+					}}
+					className="focus-ring -my-1 ml-1 shrink-0 cursor-pointer rounded-md px-2 py-1 text-label font-semibold text-accent hover:bg-hover"
+				>
+					{t.action.label}
+				</button>
+			)}
 		</FloatingStatus>
 	);
 }
