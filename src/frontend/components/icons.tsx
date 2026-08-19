@@ -318,6 +318,26 @@ export function IconCamera(p: IconProps) {
   );
 }
 
+// Picture: a framed photo, where IconCamera is the act of taking one. Both
+// exist because a profile picture is a FILE you replace, not a shot the app
+// captures. Frame spans the set's 4.75 → 19.25.
+export function IconImage(p: IconProps) {
+  return (
+    <Svg {...p}>
+      <rect {...stroke} x="4.75" y="4.75" width="14.5" height="14.5" rx="3" />
+      <circle {...stroke} cx="9.5" cy="9.5" r="1.25" fill="none" />
+      {/* The ridge runs into the frame's lower corners rather than stopping
+          inside it: a hill floating in the middle of the box reads as a shape
+          on a card, not as a photograph. */}
+      <path
+        {...stroke}
+        d="M5.25 17.25L9.6 12.65C10.1 12.12 10.94 12.12 11.44 12.65L15.75 17.25"
+      />
+      <path {...stroke} d="M13.5 14.85L15.1 13.2C15.6 12.68 16.43 12.68 16.93 13.2L18.75 15.1" />
+    </Svg>
+  );
+}
+
 // Arms run 4.75 → 19.25, the same 14.5 of the 24 grid the sidebar, chart and
 // link glyphs draw. The old 5.75 → 18.25 cross covered only 12.5, so a plus
 // rendered visibly smaller than whatever sat beside it at the same size, and
