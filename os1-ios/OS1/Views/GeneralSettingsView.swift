@@ -11,6 +11,7 @@ struct GeneralSettingsView: View {
     @State private var error: String?
     @State private var pickerItem: PhotosPickerItem?
     @State private var importing = false
+    @State private var iconHovered = false
     @FocusState private var nameFocused: Bool
 
     init() {
@@ -29,7 +30,6 @@ struct GeneralSettingsView: View {
                     LabeledContent {
                         HStack(spacing: 12) {
                             VStack(alignment: .trailing, spacing: 4) {
-                                uploadButton
                                 if settings?.organizationIconUrl != nil {
                                     Button("Remove icon", role: .destructive) {
                                         Task { await removeIcon() }
@@ -37,7 +37,7 @@ struct GeneralSettingsView: View {
                                     .disabled(saving)
                                 }
                             }
-                            organizationIcon
+                            organizationIconPicker
                         }
                     } label: {
                         VStack(alignment: .leading, spacing: 3) {
@@ -88,20 +88,32 @@ struct GeneralSettingsView: View {
         .frame(width: 56, height: 56)
         .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
         .overlay {
-            RoundedRectangle(cornerRadius: 14, style: .continuous)
-                .strokeBorder(OS1VisualStyle.border, lineWidth: 0.5)
+            ZStack {
+                RoundedRectangle(cornerRadius: 14, style: .continuous)
+                    .strokeBorder(OS1VisualStyle.border, lineWidth: 0.5)
+                if iconHovered {
+                    RoundedRectangle(cornerRadius: 14, style: .continuous)
+                        .fill(.black.opacity(0.5))
+                    Image(systemName: "arrow.up.to.line")
+                        .font(.system(size: 18, weight: .semibold))
+                        .foregroundStyle(.white)
+                }
+            }
         }
+        .onHover { iconHovered = $0 }
         .task(id: iconURL?.absoluteString) {
             if let iconURL { RepoImageCache.shared.ensureLoaded(iconURL) }
         }
     }
 
     @ViewBuilder
-    private var uploadButton: some View {
+    private var organizationIconPicker: some View {
         #if os(iOS)
         PhotosPicker(selection: $pickerItem, matching: .images) {
-            Text(settings?.organizationIconUrl == nil ? "Choose icon" : "Choose another icon")
+            organizationIcon
         }
+        .buttonStyle(.plain)
+        .accessibilityLabel(settings?.organizationIconUrl == nil ? "Choose icon" : "Choose another icon")
         .disabled(saving)
         .onChange(of: pickerItem) {
             guard let item = pickerItem else { return }
@@ -112,9 +124,13 @@ struct GeneralSettingsView: View {
             }
         }
         #else
-        Button(settings?.organizationIconUrl == nil ? "Choose icon" : "Choose another icon") {
+        Button {
             importing = true
+        } label: {
+            organizationIcon
         }
+        .buttonStyle(.plain)
+        .accessibilityLabel(settings?.organizationIconUrl == nil ? "Choose icon" : "Choose another icon")
         .disabled(saving)
         .fileImporter(isPresented: $importing, allowedContentTypes: [.image]) { result in
             guard case .success(let url) = result else { return }

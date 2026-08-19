@@ -119,14 +119,6 @@ export function GeneralPanel() {
 								</SettingRowDescription>
 							</SettingRowText>
 							<SettingRowControl className="flex flex-wrap items-center justify-end gap-2">
-								<Button
-									variant="soft"
-									icon={<IconArrowUpToLine size={20} />}
-									disabled={busy}
-									onClick={() => fileInput.current?.click()}
-								>
-									Upload icon
-								</Button>
 								{settings.organizationIconUrl && (
 									<Button
 										variant="ghost"
@@ -139,9 +131,12 @@ export function GeneralPanel() {
 										Remove
 									</Button>
 								)}
-								<div
-									aria-hidden="true"
-									className="flex size-14 shrink-0 items-center justify-center overflow-hidden rounded-lg bg-active text-section-title font-semibold text-dim outline outline-1 outline-divider"
+								<button
+									type="button"
+									disabled={busy}
+									onClick={() => fileInput.current?.click()}
+									aria-label={showIcon ? "Change organization icon" : "Upload organization icon"}
+									className="focus-ring group relative flex size-14 shrink-0 items-center justify-center overflow-hidden rounded-lg bg-active text-section-title font-semibold text-dim outline outline-1 outline-divider disabled:pointer-events-none"
 								>
 									{showIcon ? (
 										<img
@@ -153,7 +148,10 @@ export function GeneralPanel() {
 									) : (
 										initial
 									)}
-								</div>
+									<span className="pointer-events-none absolute inset-0 grid place-items-center rounded-[inherit] bg-black/50 text-white opacity-0 transition-opacity duration-150 group-hover:opacity-100 group-focus-visible:opacity-100">
+										<IconArrowUpToLine size={20} />
+									</span>
+								</button>
 								<input
 									ref={fileInput}
 									type="file"
