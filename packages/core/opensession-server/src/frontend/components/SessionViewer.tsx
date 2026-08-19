@@ -2129,6 +2129,7 @@ export function SessionViewer({
 	// or Plain thread still need somewhere to show the Agents tab.
 	const panelAvailable =
 		!hideRightPanel &&
+		!showReview &&
 		(hasWorkspace ||
 			hasPlain ||
 			workflowRuns.length > 0 ||
@@ -6977,7 +6978,7 @@ export function SessionViewer({
 				) : null}
 					</>
 				);
-				if (hideRightPanel) return null;
+				if (hideRightPanel || showReview) return null;
 				return rightPanelEl ? createPortal(rightRegion, rightPanelEl) : rightRegion;
 				})()}
 			</div>
