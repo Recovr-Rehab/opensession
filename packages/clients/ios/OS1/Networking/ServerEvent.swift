@@ -20,6 +20,13 @@ enum ServerEvent: Sendable {
     case streamEntry(sessionId: String, entry: TranscriptEntry)
     case streamDone(sessionId: String)
     case sessionStatus(sessionId: String, isRunning: Bool)
+    /// The create run is still preparing this session's worktree (git fetch,
+    /// worktree add, dep install). While not ready the viewer says so instead
+    /// of looking like an ordinary idle session with a missing transcript.
+    case workspaceStatus(sessionId: String, ready: Bool)
+    /// The session's model changed mid-run (a fallback, or a teammate's
+    /// switch): apply it now instead of waiting for the next sessions poll.
+    case modelChanged(sessionId: String, model: String, by: String?)
     /// Everyone with this session open right now, by display name. One entry
     /// per socket, so the same person can appear twice (two devices).
     case presence(sessionId: String, viewers: [String])
@@ -93,6 +100,12 @@ enum ServerEvent: Sendable {
         case "session_status":
             guard let id = frame.sessionId else { return .ignored }
             return .sessionStatus(sessionId: id, isRunning: frame.isRunning ?? false)
+        case "workspace_status":
+            guard let id = frame.sessionId else { return .ignored }
+            return .workspaceStatus(sessionId: id, ready: frame.ready ?? true)
+        case "model_changed":
+            guard let id = frame.sessionId, let model = frame.model else { return .ignored }
+            return .modelChanged(sessionId: id, model: model, by: frame.by)
         case "presence":
             guard let id = frame.sessionId else { return .ignored }
             return .presence(sessionId: id, viewers: frame.viewers ?? [])
@@ -366,6 +379,9 @@ private struct RawFrame: Decodable {
     }
 
     let isRunning: Bool?
+    let ready: Bool?
+    let model: String?
+    let by: String?
     let viewers: [String]?
     let viewing: [WireViewing]?
     let queued: [WireQueueItem]?

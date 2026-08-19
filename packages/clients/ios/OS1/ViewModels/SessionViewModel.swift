@@ -59,6 +59,15 @@ final class SessionViewModel {
     private(set) var queuedItems: [QueueItem] = []
     /// Steer receipts: delivering into the run at its next turn boundary.
     private(set) var steeredItems: [QueueItem] = []
+
+    /// The create run is still preparing this session's worktree. Seeded
+    /// from the sessions row and overridden by the live workspace_status
+    /// frame, so the state flips the moment the worktree is ready instead
+    /// of on the next poll.
+    private var workspaceReadyOverride: Bool?
+    var workspacePreparing: Bool {
+        workspaceReadyOverride.map { !$0 } ?? (session.workspacePreparing == true)
+    }
     /// Chips the server's queue no longer lists but whose message hasn't
     /// landed in the transcript yet. The queue drain broadcasts the emptied
     /// queue BEFORE the delivered prompt reaches the transcript (the ~1s
@@ -1485,6 +1494,12 @@ final class SessionViewModel {
                 // the chip/panel (served from the server's PR cache, so cheap).
                 loadPr()
             }
+
+        case .workspaceStatus(let id, let ready) where id == session.id:
+            workspaceReadyOverride = ready
+
+        case .modelChanged(let id, let model, _) where id == session.id:
+            session.model = model
 
         case .queueUpdate(let id, let queued, let steered) where id == session.id:
             hasDetailedQueue = true

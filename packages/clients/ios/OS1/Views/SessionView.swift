@@ -3412,6 +3412,9 @@ private struct SessionInputBar: View {
     private var composerPlaceholder: String {
         if noteMode { return "Only your team will see this" }
         if viewModel.quoteSelection.text != nil { return "Chat with selected text" }
+        if viewModel.workspacePreparing {
+            return "Setting up your workspace · messages queue until it's ready"
+        }
         guard viewModel.isRunning else { return "Message" }
         return busySend == "steer"
             ? "Message — steers this run"

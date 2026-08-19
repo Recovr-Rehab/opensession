@@ -35,6 +35,15 @@ struct Session: Identifiable, Decodable, Equatable, Hashable {
     /// Journaled start of the current run — only present while running.
     var runStartedAt: String?
     var waitingForInput: Bool?
+    /// The last run died on a terminal failure (usage limits exhausted,
+    /// credit or API errors). A human must act, so while idle the session
+    /// reads as Needs input rather than sinking into Backlog. Cleared by the
+    /// next run that ends cleanly.
+    var lastRunError: RunError?
+    /// The create run is still preparing this session's worktree (git fetch,
+    /// worktree add, dep install). The viewer says so and messages queue
+    /// until it flips off.
+    var workspacePreparing: Bool?
     var queuedCount: Int?
     var archived: Bool?
     /// Why the session was archived. Missing means a manual archive from a
@@ -192,8 +201,20 @@ struct Session: Identifiable, Decodable, Equatable, Hashable {
         case idle
     }
 
+    struct RunError: Decodable, Equatable, Hashable, Sendable {
+        var message: String?
+        var at: String?
+    }
+
+    /// A run that died on a terminal failure needs a human to act, exactly
+    /// like a blocked question. A live run means a retry is underway, so the
+    /// stale flag never overrides running states. Mirrors the web's
+    /// runNeedsAttention (frontend/lib/sidebar-lanes.tsx).
+    var runNeedsAttention: Bool { lastRunError != nil && isRunning != true }
+
     var status: Status {
         if waitingForInput == true { return .needsInput }
+        if runNeedsAttention { return .needsInput }
         if isRunning == true { return .running }
         return .idle
     }
@@ -216,6 +237,7 @@ struct Session: Identifiable, Decodable, Equatable, Hashable {
 
     var lane: Lane {
         if waitingForInput == true { return .needsInput }
+        if runNeedsAttention { return .needsInput }
         if isRunning == true { return .inProgress }
         if prState == "OPEN" { return .inReview }
         if prState == "MERGED" { return .done }
