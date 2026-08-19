@@ -22,10 +22,10 @@ import { UserAvatar } from "../UserAvatar";
 /**
  * Settings > Personal > Account, first block: who you are on this instance.
  *
- * At rest it is a portrait, not a form: your picture, your name, and the
- * handle everything else keys on. Editing is a dialog, so the page a person
- * opens to check something is not four input rectangles they have to read past
- * (and on a phone the fields get the whole screen instead of a card's width).
+ * At rest it is a portrait, not a form: your picture and your name. Editing is
+ * a dialog, so the page a person opens to check something is not four input
+ * rectangles they have to read past (and on a phone the fields get the whole
+ * screen instead of a card's width).
  *
  * The identifiers you cannot move yourself (your GitHub login, your Slack id)
  * are not listed as dead rows: the accounts below already show the GitHub one,
@@ -72,7 +72,7 @@ export function ProfileSection() {
 
 /**
  * The portrait on its way: the card it lands in, the picture at the size it
- * lands at, and the two lines under it.
+ * lands at, and the name under it.
  *
  * The lines are bars rather than text-height rectangles on purpose. A grey box
  * the size of a line of type reads as a disabled control, a thing you are not
@@ -86,7 +86,6 @@ function ProfileSkeleton() {
 			<SettingsForm className="items-center gap-0 py-7">
 				<SkeletonBar className="size-20 rounded-avatar" />
 				<SkeletonBar className="mt-4 h-3 w-40" />
-				<SkeletonBar className="mt-2.5 h-2.5 w-28" />
 			</SettingsForm>
 		</Skeleton>
 	);
@@ -204,11 +203,6 @@ function ProfileCard({
 		}
 	}
 
-	// Your handle, then whatever else is worth one line. The GitHub login is
-	// first because it is the name the rest of the instance matches on; without
-	// one the email is the thing a person recognizes themselves by.
-	const handle = profile.github ? `@${profile.github}` : profile.email;
-
 	return (
 		<>
 			<input
@@ -246,16 +240,12 @@ function ProfileCard({
 						)}
 					</span>
 				</button>
+				{/* Your name and nothing under it. The GitHub login is already on
+				    the account row below, and a timezone is a setting rather than
+				    something you recognize yourself by. */}
 				<div className="mt-3.5 text-item-title font-semibold text-fg">
 					{profile.name}
 				</div>
-				{(handle || profile.timezone) && (
-					<div className="mt-1 text-supporting text-dim">
-						{handle}
-						{handle && profile.timezone ? " · " : ""}
-						{profile.timezone}
-					</div>
-				)}
 			</SettingsForm>
 			{/* An error from the picture has to be visible when the dialog is shut,
 			    since removing can be triggered from inside it and then reported
