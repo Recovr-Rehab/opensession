@@ -4376,7 +4376,7 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 								// the sidebar's vertical overlay scrollbar — the scrollbar
 								// vanishes "under" the cards as it passes over them. Momentum
 								// scroll is on by default on modern iOS anyway.
-								"flex-none flex-row flex-nowrap gap-2 overflow-x-auto overflow-y-hidden pt-3 pr-3 pb-2.5 pl-4 [overscroll-behavior-x:contain] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+								"flex-none flex-row flex-nowrap gap-2 overflow-x-auto overflow-y-hidden pt-5 pr-3 pb-3 pl-4 [overscroll-behavior-x:contain] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
 							: // The tools are the first thing in the rail now that their
 								// heading is gone, so the top pad is theirs rather than a
 								// correction against a heading's box: it sets the tools off
@@ -4558,7 +4558,12 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 			<div className="block max-w-full min-w-0 flex-none">
 			<div
 				className={cn(
-					"mt-1 pb-0.5 pt-3",
+					// SIDEBAR_STICKY_BAND_ROW folds this into one fixed slot, but it is
+					// desktop-gated, so on phones the raw `mt-1 pt-3` stands. With the
+					// caption hidden and the chevron invisible-but-in-layout, that was a
+					// near-empty band between the tool cards and the first project, which
+					// read as the strip being bottom-heavy. Nothing to set off there.
+					"mt-1 pb-0.5 pt-3 phone:mt-0 phone:pt-0",
 					// A caption starts on the rail's 16px text column; the borrowed
 					// lens's strip is a filled bar, so it takes the rows' own 8px
 					// inset instead and lines up with the workspace pills under it.
@@ -4636,7 +4641,18 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 						</Tooltip>
 					) : (
 					<button
-						className="group/wstoggle flex min-w-0 items-center gap-[5px] [font:inherit]"
+						className={cn(
+							"group/wstoggle flex min-w-0 items-center gap-[5px] [font:inherit]",
+							// On phones the caption is hidden and the chevron only paints on
+							// hover, so while the band is open this button is a 22px row of
+							// nothing between the tool cards and the first project. That row
+							// is most of what made the strip read bottom-heavy, and an
+							// invisible tap target is not an affordance worth its space.
+							// Collapsed it stays: the chevron IS visible then
+							// (SIDEBAR_BAND_CHEVRON_COLLAPSED), and it is the only way to
+							// open the band back up.
+							isPhone && workspacesOpen && "hidden",
+						)}
 						onClick={() => toggleBand("workspaces")}
 						aria-expanded={workspacesOpen}
 						title={workspacesOpen ? "Collapse workspaces" : "Expand workspaces"}
