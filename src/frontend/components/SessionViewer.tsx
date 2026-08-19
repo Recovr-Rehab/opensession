@@ -5290,9 +5290,9 @@ export function SessionViewer({
 					)}
 					{/* Panel closed → surface the PR chip + its primary action (Merge/
 					    Push/Resolve) inline, grouped with the globe directly left of
-					    the side-panel toggle, so the header still tells you where the
-					    PR stands without opening the Workspace panel. */}
-					{!isPhone && hasRepoWork && !panelOpen && (
+					    the side-panel toggle. Review owns that action in its own header,
+					    so the global copy steps out while Review is open. */}
+					{!isPhone && hasRepoWork && !panelOpen && !showReview && (
 						<PrStatusBar
 							sessionId={session.id}
 							repo={session.repo || undefined}
