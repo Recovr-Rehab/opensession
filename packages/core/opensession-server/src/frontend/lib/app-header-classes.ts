@@ -170,27 +170,29 @@ export const APP_BRAND = "app-brand flex min-w-0 items-center gap-0.5";
 /**
  * The mark, as the Settings trigger. `order-1` seats it before the update pill
  * (which claims `order-3`); the 4px indent lines the MARK up with the list's
- * 16px text column below rather than with the bar's own 12px edge — the button
- * sits 4px in because the mark starts at the button's left edge, its 52px image
- * overhanging the 42px button by 5px a side against ~5px of transparent margin
+ * 16px text column below rather than with the bar's own 12px edge. The button
+ * sits 4px in because the mark starts at the button's left edge, its 58px image
+ * overhanging the 46px button by 6px a side against the transparent margin
  * baked into the untrimmed asset.
  */
 export const APP_LOGO_BUTTON =
-	"relative inline-flex size-[42px] items-center justify-center rounded-control " +
+	"relative inline-flex size-[46px] items-center justify-center rounded-control " +
 	"border-none bg-transparent p-0 text-inherit cursor-pointer " +
 	"[-webkit-tap-highlight-color:transparent] active:bg-hover " +
 	"phone:order-1 phone:ml-1";
 
 /**
- * Sized so the MARK measures ~42px, a hair under the 44px bar buttons opposite
+ * Sized so the MARK measures ~46px, a hair under the 48px bar buttons opposite
  * it. Those are outlines around air and this is solid ink, so equal boxes would
  * read mark-heavy; the pair balances with the mark the slightly smaller box.
- * The box runs bigger again than the mark — unlike a repo icon this asset isn't
- * trimmed (it is also the favicon and the og:image, which want their padding)
- * and carries its artwork on 80% of its canvas, so 52 × 0.8 ≈ 42px of ink. The
- * overflow past the button is transparent margin and touches nothing.
+ * The box runs bigger again than the mark, because unlike a repo icon this
+ * asset isn't trimmed (it is also the favicon and the og:image, which want
+ * their padding) and carries its artwork on 80% of its canvas, so 58 × 0.8 ≈
+ * 46px of ink. The overflow past the button is transparent margin and touches
+ * nothing. Both numbers moved together with the bar segments opposite, so the
+ * ink still starts on the button's own left edge and the 16px text column.
  */
-export const APP_LOGO_IMAGE = "block size-[52px]";
+export const APP_LOGO_IMAGE = "block size-[58px]";
 
 /**
  * Live connection dot on the avatar's corner (the desktop sidebar's chrome
@@ -380,20 +382,26 @@ export const APP_HEADER_ACTIONS_DETAIL =
 	`${HEADER_ACTIONS_BASE} phone:ml-2.5 phone:flex-none phone:gap-2.5`;
 
 /**
- * A segment of the grouped bar control (see `APP_HEADER_ACTIONS`): 44pt tall
- * and wider than it is high, with no chrome of its own — the capsule around it
+ * A segment of the grouped bar control (see `APP_HEADER_ACTIONS`): 48pt tall
+ * and wider than it is high, with no chrome of its own. The capsule around it
  * draws the border, fill and shadow. The glyph is thickened past its 1.5 stroke
  * because iOS nav-bar glyphs are bold and it reads spindly at this size
  * otherwise.
+ *
+ * It was 44 tall on a 25px glyph, which is the iOS nav-bar figure, and it read
+ * small against the sidebar under it: the tools and the sessions are 48px rows
+ * now, so the one control above them was the smallest thing on the screen. The
+ * step is 48/28, and `--header-h` grew with it (base.css) since the bar's 8px
+ * top pad left exactly 44px of room.
  */
 const MOBILE_BAR_SEGMENT =
-	"phone:relative phone:inline-flex phone:h-11 phone:w-13 phone:shrink-0 " +
+	"phone:relative phone:inline-flex phone:h-12 phone:w-14 phone:shrink-0 " +
 	"phone:items-center phone:justify-center phone:rounded-none " +
 	"phone:border-none phone:bg-transparent phone:p-0 phone:shadow-none " +
 	"phone:cursor-pointer phone:touch-manipulation " +
 	"phone:[-webkit-tap-highlight-color:transparent] " +
 	"phone:active:opacity-35 phone:active:duration-0 " +
-	"phone:[&_svg]:size-[25px] phone:[&_svg]:[stroke-width:2]";
+	"phone:[&_svg]:size-[28px] phone:[&_svg]:[stroke-width:2]";
 
 /**
  * Search — the trailing half of the pair. No rule divides it from the filter:

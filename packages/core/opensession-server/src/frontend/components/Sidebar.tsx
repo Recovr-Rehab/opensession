@@ -4495,11 +4495,13 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 						// leaving the row you're on. The pile opens the same lens menu
 						// the Feed page's own chips write, so the row is both a way in
 						// and the shortcut past it. It has to be a sibling of the row,
-						// not a child: a button can't nest one. Desktop only, even now
-						// that phones render the tools as rows with room for it: a pile
-						// laid over the row's right edge competes with the row's own tap
-						// where there is no hover to distinguish them.
-						if (tool.id !== "feed" || isPhone || team.length === 0) return row;
+						// not a child: a button can't nest one. Phones carry it too,
+						// now that the tools are rows there rather than cards: the row
+						// has the width for a pile at its right edge, and the pile is
+						// its own target laid over it rather than a hover reveal, so a
+						// tap on a face opens the lens and a tap anywhere else opens
+						// Feed.
+						if (tool.id !== "feed" || team.length === 0) return row;
 						return (
 							<div key={tool.id} className="group/team-lens relative">
 								{row}
@@ -4519,7 +4521,11 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 									onPick={(next) =>
 										setFilter({ person: personLensFilter(next, currentUser) })
 									}
-									className="absolute right-2 top-1/2 -translate-y-1/2 [--team-face-ring:var(--sidebar-bg)] group-hover/team-lens:[--team-face-ring:var(--row-chip)] data-[popup-open]:[--team-face-ring:var(--row-chip)]"
+									// Phones pad the trigger out to the row's own height so
+									// the faces are a thumb-sized target rather than a 24px
+									// one. It stays a pill either way, so the padding is only
+									// reach: nothing about it reads larger at rest.
+									className="absolute right-2 top-1/2 -translate-y-1/2 phone:py-2.5 [--team-face-ring:var(--sidebar-bg)] group-hover/team-lens:[--team-face-ring:var(--row-chip)] data-[popup-open]:[--team-face-ring:var(--row-chip)]"
 								/>
 							</div>
 						);
