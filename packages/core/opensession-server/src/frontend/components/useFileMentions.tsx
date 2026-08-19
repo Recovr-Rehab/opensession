@@ -16,6 +16,7 @@ import {
   type MentionAction,
   type MentionSuggestion,
 } from "../lib/mention-palette";
+import { emojiContextAt, emojiMentionSuggestions } from "../lib/emoji";
 
 /**
  * Find the active "@"-mention being typed at the caret. Returns the index of
@@ -26,7 +27,7 @@ import {
 interface TriggerContext {
   start: number;
   query: string;
-  kind: "file" | "skill";
+  kind: "file" | "skill" | "emoji";
 }
 
 function mentionContextAt(value: string, caret: number): { start: number; query: string } | null {
@@ -181,17 +182,22 @@ export function useFileMentions({ value, onChange, textareaRef, mentionFetch, pa
   }
 
   function sync() {
-    if (!mentionFetch && !skillsFetch) return;
     const el = textareaRef.current;
     if (!el) return;
     const caret = el.selectionStart ?? el.value.length;
     const slash = skillsFetch ? slashContextAt(el.value, caret) : null;
     const at = !slash && mentionFetch ? mentionContextAt(el.value, caret) : null;
+    // ":cr" opens the emoji picker. It needs no fetcher, so it stays available
+    // in every host the hook is wired into, including ones with no repository
+    // search behind them.
+    const colon = !slash && !at ? emojiContextAt(el.value, caret) : null;
     const ctx: TriggerContext | null = slash
       ? { ...slash, kind: "skill" }
       : at
         ? { ...at, kind: "file" }
-        : null;
+        : colon
+          ? { ...colon, kind: "emoji" }
+          : null;
     // Escape dismissed this exact token, and the caret has not left it since.
     // sync() runs on keyup, so without this the picker reopened between the
     // keydown that closed it and the release of the same key — Escape looked
@@ -223,6 +229,11 @@ export function useFileMentions({ value, onChange, textareaRef, mentionFetch, pa
       return;
     }
     const seq = ++fetchSeq.current;
+    if (mention.kind === "emoji") {
+      setSuggestions(emojiMentionSuggestions(mention.query));
+      setActiveIdx(0);
+      return;
+    }
     const local = mention.kind === "file"
       ? mergeMentionSuggestions(
           peopleMentionMatches(mention.query, people, currentUser),
@@ -329,7 +340,12 @@ export function useFileMentions({ value, onChange, textareaRef, mentionFetch, pa
       queueMicrotask(item.action);
       return;
     }
-    const insert = `${mention.kind === "skill" ? "/" : "@"}${item.insert} `;
+    // An emoji row replaces the whole ":shortcode" with the character, so the
+    // sent text carries the emoji itself rather than a code the reader has to
+    // decode. No trailing space: emoji usually end a sentence.
+    const insert = mention.kind === "emoji"
+      ? item.insert
+      : `${mention.kind === "skill" ? "/" : "@"}${item.insert} `;
     const next = before + insert + after;
     const nextCaret = before.length + insert.length;
     setMention(null);
@@ -405,8 +421,9 @@ export function useFileMentions({ value, onChange, textareaRef, mentionFetch, pa
             const isPerson = item.kind === "person";
             const isTool = item.kind === "tool";
             const isAction = item.kind === "action";
+            const isEmoji = item.kind === "emoji";
             const path = item.display;
-            const slash = isSession || isSkill || isPerson || isTool || isAction
+            const slash = isSession || isSkill || isPerson || isTool || isAction || isEmoji
               ? -1
               : path.lastIndexOf("/");
             const dir = slash >= 0 ? path.slice(0, slash + 1) : "";
@@ -435,7 +452,11 @@ export function useFileMentions({ value, onChange, textareaRef, mentionFetch, pa
                 }}
                 onMouseEnter={() => setActiveIdx(i)}
               >
-                {isPerson ? (
+                {isEmoji ? (
+                  <span className="flex size-5 shrink-0 items-center justify-center text-[17px] leading-none">
+                    {item.display}
+                  </span>
+                ) : isPerson ? (
                   <UserAvatar name={item.display} size={20} />
                 ) : isTool ? (
                   <IconTile name={item.insert} size={20} />
@@ -456,8 +477,12 @@ export function useFileMentions({ value, onChange, textareaRef, mentionFetch, pa
                     {isSkill ? <IconBolt size={16} /> : isDir ? <IconFolder size={16} /> : <IconFile size={16} />}
                   </span>
                 )}
-                <span className="shrink-0 font-medium text-fg">{label}</span>
-                {isTool ? (
+                {!isEmoji && <span className="shrink-0 font-medium text-fg">{label}</span>}
+                {isEmoji ? (
+                  <span className="overflow-hidden text-ellipsis font-medium text-fg">
+                    {item.sub}
+                  </span>
+                ) : isTool ? (
                   <span className="overflow-hidden text-ellipsis text-meta text-faint">
                     @{item.insert}
                   </span>

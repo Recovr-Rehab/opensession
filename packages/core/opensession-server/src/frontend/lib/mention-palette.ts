@@ -4,7 +4,8 @@ import type { FileMention } from "./api";
 export type MentionSuggestionKind =
 	| NonNullable<FileMention["kind"]>
 	| "tool"
-	| "action";
+	| "action"
+	| "emoji";
 
 export interface MentionSuggestion extends Omit<FileMention, "kind"> {
 	kind?: MentionSuggestionKind;
@@ -23,6 +24,7 @@ export interface MentionAction {
 }
 
 export type MentionCategory =
+	| "Emoji"
 	| "People"
 	| "Tools"
 	| "Sessions"
@@ -31,6 +33,7 @@ export type MentionCategory =
 	| "Skills";
 
 const CATEGORY_ORDER: MentionCategory[] = [
+	"Emoji",
 	"People",
 	"Tools",
 	"Sessions",
@@ -40,6 +43,7 @@ const CATEGORY_ORDER: MentionCategory[] = [
 ];
 
 export function mentionCategory(item: MentionSuggestion): MentionCategory {
+	if (item.kind === "emoji") return "Emoji";
 	if (item.kind === "person") return "People";
 	if (item.kind === "tool") return "Tools";
 	if (item.kind === "session") return "Sessions";
