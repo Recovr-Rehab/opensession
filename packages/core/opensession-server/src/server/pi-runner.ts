@@ -229,6 +229,7 @@ import { buildPiAnthropicProvider } from "./pi-anthropic-provider";
 import { createPiMcpBridge, type PiMcpBridge } from "./pi-mcp-bridge";
 import {
   DIAL_ORACLE_AGENTS,
+  DIAL_ORACLE_FALLBACKS,
   ORCHESTRATOR_WORKER_AGENTS,
   dialPreset,
   opencodeModelLabel,
@@ -414,6 +415,25 @@ export function buildPiThirdPartyProviderPlan(input: {
   };
 }
 
+const ORACLE_SYSTEM =
+  "You are a read-only senior engineering advisor. Give a concise, concrete second opinion. " +
+  "Do not claim to inspect files or run tools. State assumptions, tradeoffs, and recommended next steps.";
+
+/** Which one-shot failures earn a hop to the next oracle on the ladder.
+ *  An availability failure (dry pool, disabled subscription, timeout, a
+ *  provider blip) is exactly what a peer on another provider can answer
+ *  through. A malformed prompt or an unresolvable model id is not: the peer
+ *  would fail the same way, and the caller would wait another two minutes to
+ *  learn it. An empty answer with no stated reason gets one hop, since a
+ *  silent empty completion is more often the pool than the prompt. */
+const ORACLE_FALLOVER_SHAPES =
+  /usage[-_ ]?limit|weekly limit|no usable|exhausted|sidelined|rate[-_ ]?limit|quota|subscription access|disabled Claude|timed out|overloaded|too many requests|\b(429|500|502|503|529)\b|ECONNREFUSED|ECONNRESET|fetch failed|socket hang up/i;
+
+function oracleShouldFallOver(error: string | null): boolean {
+  if (!error) return true;
+  return ORACLE_FALLOVER_SHAPES.test(error);
+}
+
 function makePiDialOracleTool(
   oracleAgent: string,
   user?: string
@@ -442,19 +462,46 @@ function makePiDialOracleTool(
       if (!oracle) throw new Error(`Dial oracle "${oracleAgent}" is not configured`);
       // Dynamic import avoids a module cycle: one-shot.ts drives runPi, while
       // Pi's Dial oracle delegates its out-of-band consultation back to it.
-      const { oneShot } = await import("./one-shot");
-      const answer = await oneShot(prompt, {
-        model: oracle.model,
-        effort: oracle.variant,
-        user,
-        label: "pi-dial-oracle",
-        system:
-          "You are a read-only senior engineering advisor. Give a concise, concrete second opinion. " +
-          "Do not claim to inspect files or run tools. State assumptions, tradeoffs, and recommended next steps.",
-      });
-      if (signal?.aborted) throw new Error("Oracle request aborted");
-      if (!answer) throw new Error("The Dial oracle was unavailable; continue using your own judgment");
-      return { content: [{ type: "text", text: answer }], details: undefined };
+      const { oneShotDetailed } = await import("./one-shot");
+      // Walk this oracle's cross-provider ladder, the same courtesy
+      // interactiveFallbackModel does for a full session. A dry pool is a
+      // provider-wide condition, so the hop has to change bridges to be worth
+      // taking (DIAL_ORACLE_FALLBACKS).
+      const ladder = [oracleAgent, ...(DIAL_ORACLE_FALLBACKS[oracleAgent] || [])];
+      const failures: string[] = [];
+      for (let i = 0; i < ladder.length; i++) {
+        const name = ladder[i]!;
+        const agent = DIAL_ORACLE_AGENTS[name];
+        if (!agent) continue;
+        if (signal?.aborted) throw new Error("Oracle request aborted");
+        const { text, error } = await oneShotDetailed(prompt, {
+          model: agent.model,
+          effort: agent.variant,
+          user,
+          label: i === 0 ? "pi-dial-oracle" : `pi-dial-oracle-fallback`,
+          system: ORACLE_SYSTEM,
+        });
+        if (signal?.aborted) throw new Error("Oracle request aborted");
+        if (text) {
+          // Say who actually answered. A second opinion whose author is not
+          // the one the preset named is still useful, but the reader has to
+          // know which model's judgement they are weighing.
+          const note =
+            i === 0
+              ? ""
+              : `[${oracle.label} was unavailable (${failures[0]}). Answered by ${agent.label}.]\n\n`;
+          return { content: [{ type: "text", text: note + text }], details: undefined };
+        }
+        failures.push(error || "no answer");
+        if (!oracleShouldFallOver(error)) break;
+      }
+      // The reason is the useful part: "every Claude account is usage-limited
+      // until Friday" tells the caller to stop asking, where a bare
+      // "unavailable" sends whoever reads it to journalctl.
+      throw new Error(
+        `The Dial oracle was unavailable: ${failures.join("; ") || "no answer"}. ` +
+          "Continue using your own judgment."
+      );
     },
   };
 }

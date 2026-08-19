@@ -69,14 +69,30 @@ export function oneShotModel(model?: string): string | undefined {
   return toPiModel(requested);
 }
 
+/** What a one-shot did: the answer, or the reason there is not one.
+ *  `oneShot` collapses this to null by design, since every caller has a
+ *  deterministic fallback and must not have to catch. But a caller that can
+ *  ACT on the reason needs it to survive that collapse: the Dial oracle
+ *  retries on another provider when the pool is dry, and says so instead of
+ *  reporting a bare "unavailable" that sends the reader to journalctl. */
+export type OneShotResult = { text: string | null; error: string | null };
+
 /** Run one tool-less Pi prompt and return its settled assistant text. */
 export async function oneShot(
   prompt: string,
   opts: OneShotOpts = {},
 ): Promise<string | null> {
+  return (await oneShotDetailed(prompt, opts)).text;
+}
+
+/** As `oneShot`, but reports why an empty answer is empty. */
+export async function oneShotDetailed(
+  prompt: string,
+  opts: OneShotOpts = {},
+): Promise<OneShotResult> {
   // One-shots are real model calls. Import-heavy test suites rely on their
   // deterministic fallback paths and must never spend a model turn.
-  if (process.env.NODE_ENV === "test") return null;
+  if (process.env.NODE_ENV === "test") return { text: null, error: null };
 
   const model = oneShotModel(opts.model);
   const label = opts.label || "oneshot";
@@ -84,7 +100,10 @@ export async function oneShot(
     console.warn(
       `[oneshot:${label}] model "${opts.model || ""}" does not resolve to Pi; skipping`,
     );
-    return null;
+    return {
+      text: null,
+      error: `model "${opts.model || ""}" does not resolve to Pi`,
+    };
   }
 
   const releaseSlot = await acquireOneShotSlot();
@@ -142,9 +161,9 @@ export async function oneShot(
     });
     if (error) {
       console.warn(`[oneshot:${label}] failed: ${error}`);
-      return null;
+      return { text: null, error };
     }
-    return answer || null;
+    return { text: answer || null, error: answer ? null : "empty answer" };
   } catch (e) {
     const message = String((e as Error)?.message || e);
     console.warn(`[oneshot:${label}] failed: ${message}`);
@@ -156,7 +175,7 @@ export async function oneShot(
       error: message.slice(0, 500),
       duration_ms: Date.now() - startedAt,
     });
-    return null;
+    return { text: null, error: message };
   } finally {
     clearTimeout(timer);
     // The generator has disposed the SDK session before this block runs.

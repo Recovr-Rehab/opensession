@@ -1080,25 +1080,23 @@ export function steerAgentRun(
 }
 
 /**
- * Bare interrupt: no engine supports it anymore (it released a Claude run's
- * held steers at a turn boundary). Kept for caller compat — always false, so
- * callers fall back to the queue flap's other paths.
+ * NOTE for anyone reaching for a "graceful stop" here: there isn't one, and
+ * two stubs that returned a constant false used to pretend otherwise
+ * (`stopAgentRunTurn`, `interruptAgentRun`, removed 2026-08-19). Every call
+ * site guarded on them, so the graceful branch had never executed once and
+ * every audited stop recorded `graceful: false` as a constant rather than an
+ * observation.
+ *
+ * cancelAgentRun below is not a lesser fallback, it is the real stop: the
+ * abort is wired through to the engine on all three paths (opencode-runner
+ * installs `client.session.abort()` on the signal, pi-runner calls
+ * `liveSession.abort()`, and a run host forwards a `cancel` frame to its own
+ * cancelAgentRun). What it cannot promise is that the turn ends THIS instant:
+ * an abort is observed at the next await, so a tool call in flight finishes
+ * first (pi's bash tool does kill its process group immediately). If a real
+ * cooperative stop is ever wanted, build it on pi's steer primitives and give
+ * it a call site that can observe it, rather than restoring a constant.
  */
-export function interruptAgentRun(
-  _ids: Array<string | null | undefined>
-): boolean {
-  return false;
-}
-
-/**
- * Esc-style stop: the opencode engine has no graceful stop-turn — callers
- * fall back to the hard cancel (cancelAgentRun aborts the turn server-side).
- */
-export function stopAgentRunTurn(
-  _ids: Array<string | null | undefined>
-): boolean {
-  return false;
-}
 
 /**
  * Esc-style redirect: abort the current turn but keep the run alive,

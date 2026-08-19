@@ -7,7 +7,7 @@
  */
 
 import { requestUser, type RouteContext } from "./context";
-import { cancelAgentRun, isAgentSessionBusy, stopAgentRunTurn } from "../agent-runner";
+import { cancelAgentRun, isAgentSessionBusy } from "../agent-runner";
 import { archiveOlderThan, setArchived, unpinArchivedSessions } from "../archive";
 import { audit } from "../audit";
 import { pendingAsks } from "../asks";
@@ -1088,23 +1088,15 @@ export async function handleSessionsRoutes(
 			// Park the queue so the drain doesn't feed requeued steers into a
 			// fresh run as the stopped one winds down.
 			stoppedSessions.add(session.id);
-			const stopped = stopAgentRunTurn([
+			cancelAgentRun(
 				session.claudeSessionId,
 				session.codexThreadId,
 				session.id,
-			]);
-			if (!stopped) {
-				cancelAgentRun(
-					session.claudeSessionId,
-					session.codexThreadId,
-					session.id,
-				);
-			}
+			);
 			audit({
 				msg: "run_cancelled",
 				session_id: session.id,
 				source: "archive",
-				graceful: stopped,
 			});
 			transitionRunState(session.id, "cancel", { source: "archive" });
 			requeueSteerReceipts(session.id, engineUserTexts(session));

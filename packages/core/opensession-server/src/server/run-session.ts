@@ -19,8 +19,6 @@ import {
 	isAgentSessionCancelled,
 	cancelAgentRun,
 	steerAgentRun,
-	interruptAgentRun,
-	stopAgentRunTurn,
 	engineFamily,
 	interruptAndSteerAgentRun,
 	RESUME_CONTINUATION_PROMPT,
@@ -347,14 +345,15 @@ export function interruptQueuedPrompt(
 	const session = findSession(sessionId);
 	if (!session) return false;
 	if (queueId && (steeredReceipts.get(sessionId) || []).some((s) => s.id === queueId)) {
-		// Receipt stays visible until the message lands in the transcript (the
-		// usual reconcile) — dropping it here would lose it if the interrupt
-		// fires between release and delivery.
-		return interruptAgentRun([
-			session.claudeSessionId,
-			session.codexThreadId,
-			session.id,
-		]);
+		// A receipt means this message is already in the engine's history: the
+		// running turn reads it at its next step on its own, and there is
+		// nothing left to interrupt WITH. Delivering it again would duplicate
+		// it. The receipt stays visible until the message lands in the
+		// transcript (the usual reconcile) — dropping it here would lose it if
+		// the turn ended between release and delivery. Stopping the turn is the
+		// separate, explicit gesture (the Stop button), so say no rather than
+		// silently ending someone's run from a queue chip.
+		return false;
 	}
 	const queue = promptQueues.get(sessionId);
 	if (!queue) return false;
@@ -1038,7 +1037,7 @@ export function abortTurnAndDrain(
 	soloId?: string,
 ): boolean {
 	const ids = [session.claudeSessionId, session.codexThreadId, session.id];
-	const aborted = stopAgentRunTurn(ids) || cancelAgentRun(...ids);
+	const aborted = cancelAgentRun(...ids);
 	if (!aborted) return false;
 	// The user explicitly asked for delivery now — unpark an earlier Stop, and
 	// fold steer receipts the engine never got back in ahead so nothing is

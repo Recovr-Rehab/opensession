@@ -7,7 +7,7 @@
 
 import type { WebSocketHandler } from "bun";
 import type { WSClientData } from "./ws-hub";
-import { cancelAgentRun, interruptAndSteerAgentRun, isAgentSessionBusy, steerAgentRun, stopAgentRunTurn } from "./agent-runner";
+import { cancelAgentRun, interruptAndSteerAgentRun, isAgentSessionBusy, steerAgentRun } from "./agent-runner";
 import { audit } from "./audit";
 import { pendingAsks } from "./asks";
 import { resendPendingSlackComposer } from "./slack-compose";
@@ -1141,35 +1141,29 @@ export const websocketHandlers: WebSocketHandler<WSClientData> = {
 					// fresh run the moment the stopped one winds down.
 					stoppedSessions.add(sessionId);
 					if (session) {
-						// Esc-style: gracefully interrupt the current turn (the run
-						// winds down at the forced boundary with a clean transcript).
-						// Hard cancel only for runs with no interrupt support (codex,
-						// external processes); the full kill lives on session delete.
-						const stopped = stopAgentRunTurn([
+						// Abort the turn. This reaches the engine on every path
+						// (opencode's session.abort, pi's liveSession.abort, a run
+						// host's cancel frame), but lands at the next await, so a
+						// tool call already in flight finishes first. The composer
+						// says "Stopping…" for exactly that window rather than
+						// claiming the agent has already stopped.
+						cancelAgentRun(
 							session.claudeSessionId,
 							session.codexThreadId,
 							session.id,
-						]);
-						if (!stopped) {
-							cancelAgentRun(
-								session.claudeSessionId,
-								session.codexThreadId,
-								session.id,
-							);
-						}
+						);
 						// A stopped run's only trace is the runner's anonymous
 						// "cancelled" turn event — record who pulled the plug (stop
 						// button / Esc), or diagnosing "why did it go silent?" means
 						// inferring the gesture by elimination.
 						console.log(
-							`[ws] run stopped on ${sessionId} by ${data.user || "unknown"} (${stopped ? "graceful" : "hard-cancel"})`,
+							`[ws] run stopped on ${sessionId} by ${data.user || "unknown"}`,
 						);
 						audit({
 							msg: "run_cancelled",
 							session_id: sessionId,
 							source: "ui_stop",
 							user: data.user,
-							graceful: stopped,
 						});
 						transitionRunState(sessionId, "cancel", {
 							source: "ui_stop",

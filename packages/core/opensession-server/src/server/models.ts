@@ -238,6 +238,24 @@ export const DIAL_ORACLE_AGENTS: Record<
 };
 
 /**
+ * Where an oracle consultation goes when its own model cannot serve, the same
+ * courtesy interactiveFallbackModel does for a full session: degrade to a
+ * different senior model rather than fail the call.
+ *
+ * Every hop crosses PROVIDERS, which is the whole point. A dry pool is a
+ * provider-wide condition (the Claude weekly cap takes fable and opus out
+ * together, and it did on 2026-08-19), so a substitute on the same bridge
+ * answers with the same outage and only costs a second attempt to learn it.
+ * Ordering favours the strongest cross-provider peer, not the cheapest.
+ */
+export const DIAL_ORACLE_FALLBACKS: Record<string, string[]> = {
+  "oracle-fable": ["oracle-sol"],
+  "oracle-opus": ["oracle-sol"],
+  "oracle-sol": ["oracle-fable"],
+  "oracle-terra": ["oracle-opus"],
+};
+
+/**
  * The oracle agent a dial run can ACTUALLY consult on its server: the preset's
  * oracle when its provider matches the server's bridge, else the same-bridge
  * substitute (openai → Terra, anthropic → Opus). Unknown/native providers keep
