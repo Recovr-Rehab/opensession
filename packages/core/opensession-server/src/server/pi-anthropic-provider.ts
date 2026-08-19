@@ -208,15 +208,22 @@ type PiStreamEvent =
 
 // ── The passthrough block wording (the no-stop-nudging change) ───────────────
 
-/** PreToolUse block reason. Unlike the bridge's wording it never says "do not
- *  call more tools": the call is captured for client-side execution and the
- *  model is invited to emit every OTHER call it needs in the same turn, then
- *  end it — that keeps multi-tool batches one round-trip instead of nudging
- *  sequential models into max-turns. */
+/** PreToolUse block reason. Two things it must not do, both learned the hard
+ *  way. It must not say "do not call more tools" (the bridge's wording), which
+ *  nudges sequential models into max-turns instead of letting a multi-tool
+ *  batch go out in one round-trip. And it must not read as an INSTRUCTION TO
+ *  THE READER: an imperative here ("then end your turn") is obeyed, and then
+ *  narrated, so the person watching gets a transcript of "I'll end my turn so
+ *  the channel list returns" between every pair of tool calls, or a model that
+ *  reports itself blocked because it believes its tools never ran. The block
+ *  is ordinary plumbing, so it is worded as a status line: the call is on its
+ *  way, more calls are welcome, this one is done being asked for, and there is
+ *  nothing here to tell the person about. */
 export const PI_PASSTHROUGH_BLOCK_REASON =
-  "This tool call was captured and queued for client-side execution; its result will arrive " +
-  "in the next turn. If you need other tools run in this same batch, call each OTHER tool " +
-  "you need now — then end your turn. Do not retry this same call.";
+  "Accepted. This call runs after the current batch and its result comes back with the next " +
+  "one, so there is nothing to wait for and nothing to report. Call any other tools you need " +
+  "now. Do not repeat this call, and do not write a message about queueing, waiting, or " +
+  "ending the turn.";
 
 /** Generous turn budget: each blocked tool call costs a turn boundary, and
  *  multi-tool batches (or models that try tools one at a time) need headroom.

@@ -427,15 +427,26 @@ describe("images survive the turn", () => {
 });
 
 describe("PI_PASSTHROUGH_BLOCK_REASON (the no-stop-nudging wording)", () => {
-  test("says the call is queued client-side with the result arriving next turn", () => {
-    expect(PI_PASSTHROUGH_BLOCK_REASON).toMatch(/queued for client-side execution/);
-    expect(PI_PASSTHROUGH_BLOCK_REASON).toMatch(/next turn/);
+  test("says the call is accepted and its result comes back with the next batch", () => {
+    expect(PI_PASSTHROUGH_BLOCK_REASON).toMatch(/Accepted/);
+    expect(PI_PASSTHROUGH_BLOCK_REASON).toMatch(/comes back with the next/);
+    expect(PI_PASSTHROUGH_BLOCK_REASON).toMatch(/Do not repeat this call/);
   });
 
-  test("invites OTHER tool calls instead of forbidding them (unlike the bridge)", () => {
-    expect(PI_PASSTHROUGH_BLOCK_REASON).toMatch(/OTHER tool/);
+  test("invites other tool calls instead of forbidding them (unlike the bridge)", () => {
+    expect(PI_PASSTHROUGH_BLOCK_REASON).toMatch(/Call any other tools you need/);
     expect(PI_PASSTHROUGH_BLOCK_REASON).not.toMatch(/do not call more tools/i);
     expect(PI_PASSTHROUGH_BLOCK_REASON).not.toMatch(/do not add text/i);
+  });
+
+  // The regression this wording exists for: an imperative aimed at the reader
+  // ("then end your turn") gets obeyed AND narrated, so every pair of tool
+  // calls is separated by "I'll end my turn so the channel list returns".
+  test("never tells the reader to end its turn, or to narrate the wait", () => {
+    expect(PI_PASSTHROUGH_BLOCK_REASON).not.toMatch(/end your turn\b(?!.*do not)/i);
+    expect(PI_PASSTHROUGH_BLOCK_REASON).not.toMatch(/then end your turn/i);
+    expect(PI_PASSTHROUGH_BLOCK_REASON).toMatch(/nothing to wait for and nothing to report/);
+    expect(PI_PASSTHROUGH_BLOCK_REASON).toMatch(/do not write a message about queueing/);
   });
 });
 
