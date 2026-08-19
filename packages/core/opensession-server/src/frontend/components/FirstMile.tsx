@@ -323,7 +323,7 @@ export function FirstMile({ onDone }: { onDone: () => void }) {
 
 			<footer
 				className={cn(
-					"relative z-10 grid grid-cols-[1fr_auto_1fr] items-center border-t px-8 pt-3 transition-[border-color,background-color] phone:px-4",
+					"relative z-10 grid grid-cols-[1fr_auto_1fr] items-center border-t px-8 pt-1 transition-[border-color,background-color] phone:px-4",
 					footerSeparated
 						? "border-line bg-bg/95 backdrop-blur-xl"
 						: "border-transparent bg-[linear-gradient(to_bottom,transparent,var(--bg)_30%)]",
