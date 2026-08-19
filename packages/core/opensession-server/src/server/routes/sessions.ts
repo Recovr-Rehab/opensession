@@ -81,7 +81,9 @@ import { type Workspace, deleteWorkspace, getWorkspace, workspaceName } from "..
 import { prHostFor } from "../pr-host";
 import { getRepo, NO_REPO, removeWorktree, repoForPath } from "../worktree";
 import { preparingWorkspaces } from "../ws-hub";
-import { existsSync } from "fs";
+import { existsSync, readFileSync, statSync } from "fs";
+import { statePath } from "../paths";
+import { writeFileAtomic } from "../shared/atomic-write";
 import {
 	githubCredentialRequiredResponse,
 	githubMutationCredential,
@@ -199,6 +201,50 @@ const sessionsResponseSnapshots: Map<
 	SessionsVariant,
 	SessionsResponseSnapshot
 > = ((globalThis as any).__osSessionsResponseSnapshots ??= new Map());
+const sessionsResponseRefreshes: Map<
+	SessionsVariant,
+	Promise<SessionsResponseSnapshot>
+> = ((globalThis as any).__osSessionsResponseRefreshes ??= new Map());
+
+// The live list is expensive to rebuild from thousands of source files after a
+// process restart. Keep its last complete response as the one cold-start
+// fallback, then refresh in the background. The version in the filename is the
+// schema boundary: bump it whenever sessionListRow stops being backward
+// compatible with the current web client.
+const LIVE_LIST_DISK_VERSION = 1;
+const LIVE_LIST_DISK_MAX_AGE_MS = 7 * 24 * 60 * 60_000;
+const LIVE_LIST_DISK_SERVE_MS = 60_000;
+const LIVE_LIST_DISK_PATH = statePath(
+	`.opensession-session-list-v${LIVE_LIST_DISK_VERSION}.json`,
+);
+let triedDiskLiveList = false;
+
+function readDiskLiveList(): SessionsResponseSnapshot | null {
+	if (triedDiskLiveList) return null;
+	triedDiskLiveList = true;
+	try {
+		if (!existsSync(LIVE_LIST_DISK_PATH)) return null;
+		if (Date.now() - statSync(LIVE_LIST_DISK_PATH).mtimeMs > LIVE_LIST_DISK_MAX_AGE_MS)
+			return null;
+		const text = readFileSync(LIVE_LIST_DISK_PATH, "utf8");
+		if (!text.startsWith("[")) return null;
+		return {
+			text,
+			hash: Bun.hash(text).toString(16),
+			expiresAt: Date.now() + LIVE_LIST_DISK_SERVE_MS,
+		};
+	} catch {
+		return null;
+	}
+}
+
+function persistDiskLiveList(text: string): void {
+	try {
+		writeFileAtomic(LIVE_LIST_DISK_PATH, text, 0o600);
+	} catch (error) {
+		console.warn("[sessions] failed to persist the live-list startup cache:", error);
+	}
+}
 
 async function sessionsListResponse(
 	req: Request,
@@ -427,6 +473,39 @@ async function ripgrepFiles(
 	return [...hits];
 }
 
+function refreshSessionsResponse(
+	variant: SessionsVariant,
+): Promise<SessionsResponseSnapshot> {
+	const current = sessionsResponseRefreshes.get(variant);
+	if (current) return current;
+	const refresh = (async () => {
+		const slice =
+			variant === "exclude"
+				? "exclude"
+				: variant === "include"
+					? "include"
+					: "only";
+		const sliced = (await getCachedSessionsAsync(slice)).map(enrichSession);
+		const text = JSON.stringify(
+			variant === "only-slim"
+				? sliced.map(archivedIndexRow)
+				: sliced.map(sessionListRow),
+		);
+		const snapshot: SessionsResponseSnapshot = {
+			text,
+			hash: Bun.hash(text).toString(16),
+			expiresAt: Date.now() + SESSIONS_RESPONSE_TTL_MS,
+		};
+		sessionsResponseSnapshots.set(variant, snapshot);
+		if (variant === "exclude") persistDiskLiveList(text);
+		return snapshot;
+	})().finally(() => {
+		sessionsResponseRefreshes.delete(variant);
+	});
+	sessionsResponseRefreshes.set(variant, refresh);
+	return refresh;
+}
+
 export async function handleSessionsRoutes(
 	ctx: RouteContext,
 ): Promise<Response | undefined> {
@@ -559,25 +638,26 @@ export async function handleSessionsRoutes(
 		const cached = sessionsResponseSnapshots.get(variant);
 		if (cached && cached.expiresAt > Date.now())
 			return await sessionsListResponse(req, cached);
-		const slice =
-			variant === "exclude"
-				? "exclude"
-				: variant === "include"
-					? "include"
-					: "only";
-		const sliced = (await getCachedSessionsAsync(slice)).map(enrichSession);
-		const text = JSON.stringify(
-			variant === "only-slim"
-				? sliced.map(archivedIndexRow)
-				: sliced.map(sessionListRow),
+
+		// A process restart loses the in-memory list but not the last complete
+		// response. Serve that once so the sidebar can paint, while the ordinary
+		// cache refresh catches up in the background. In-process invalidations do
+		// not reuse disk because readDiskLiveList is intentionally one-shot.
+		if (variant === "exclude" && !cached) {
+			const disk = readDiskLiveList();
+			if (disk) {
+				sessionsResponseSnapshots.set(variant, disk);
+				void refreshSessionsResponse(variant).catch((error) =>
+					console.warn("[sessions] live-list background refresh failed:", error),
+				);
+				return await sessionsListResponse(req, disk);
+			}
+		}
+
+		return await sessionsListResponse(
+			req,
+			await refreshSessionsResponse(variant),
 		);
-		const snapshot: SessionsResponseSnapshot = {
-			text,
-			hash: Bun.hash(text).toString(16),
-			expiresAt: Date.now() + SESSIONS_RESPONSE_TTL_MS,
-		};
-		sessionsResponseSnapshots.set(variant, snapshot);
-		return await sessionsListResponse(req, snapshot);
 	}
 
 	// Deliver a follow-up prompt to an existing session. REST shape for the
