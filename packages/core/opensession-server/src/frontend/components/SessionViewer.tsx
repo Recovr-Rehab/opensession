@@ -112,6 +112,12 @@ import {
 	shareShippedChange,
 } from "../lib/api/shipped-changes";
 import { suggestedShippedChangeMessage } from "../lib/shipped-change-copy";
+import {
+	dismissSlackShare,
+	isSlackShareDismissed,
+	onSlackShareDismissChanged,
+	slackShareDismissKey,
+} from "../lib/slack-share-dismiss";
 import { latestFeaturedScreenshot } from "../../shared/shipped-change-media";
 import { useBackSwipe } from "../hooks/useBackSwipe";
 import { dedupeViewers, otherViewers } from "../lib/presence";
@@ -925,6 +931,25 @@ export function SessionViewer({
 			setShippedShare(null);
 		},
 		[session.id, mergedPr?.number],
+	);
+	// Closing the card is a decision about this PR, not a fold, so it sticks
+	// across reloads and devices (lib/slack-share-dismiss). The next merged PR
+	// in the same session gets its own card, and "Send to Slack…" in the
+	// composer menu still opens a composer, so closing loses nothing.
+	const shareDismissKey = mergedPr?.number
+		? slackShareDismissKey(session.id, mergedPr.number)
+		: "";
+	const [shareDismissed, setShareDismissed] = useState(() =>
+		isSlackShareDismissed(shareDismissKey),
+	);
+	useEffect(() => {
+		const sync = () => setShareDismissed(isSlackShareDismissed(shareDismissKey));
+		sync();
+		return onSlackShareDismissChanged(sync);
+	}, [shareDismissKey]);
+	const dismissShippedChangeShare = useCallback(
+		() => dismissSlackShare(shareDismissKey),
+		[shareDismissKey],
 	);
 	const sendShippedChangeToSlack = useCallback(async (message: string, channel: string, screenshots: string[]) => {
 		if (!mergedPr) return;
@@ -3377,7 +3402,7 @@ export function SessionViewer({
 	);
 	const shippedChangeShare = useMemo(
 		() =>
-			mergedPr
+			mergedPr && !shareDismissed
 				? {
 						prNumber: mergedPr.number!,
 						sessionId: session.id,
@@ -3390,6 +3415,7 @@ export function SessionViewer({
 						status: shippedChangeStatus,
 						onShare: sendShippedChangeToSlack,
 						onReconnectSlack: reconnectShippedSlack,
+						onCancel: dismissShippedChangeShare,
 						nextMessage: latestAssistantMessage,
 						...(shippedSent
 							? {
@@ -3409,6 +3435,8 @@ export function SessionViewer({
 			session.walkthrough?.summary,
 			sendShippedChangeToSlack,
 			reconnectShippedSlack,
+			dismissShippedChangeShare,
+			shareDismissed,
 			shippedChangeStatus,
 			shippedSent,
 			latestAssistantMessage,
