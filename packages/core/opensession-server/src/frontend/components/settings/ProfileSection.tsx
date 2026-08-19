@@ -340,9 +340,15 @@ function ProfileCard({
 									onClick={() => void removePicture()}
 									aria-label="Remove picture"
 									title="Remove picture"
-									className="focus-ring absolute -right-1.5 -top-1.5 grid size-7 place-items-center rounded-full bg-white text-black shadow-sm transition-colors hover:text-red disabled:pointer-events-none"
+									/* Only the mark is red: a destructive action on a corner
+									   badge has no word to say so, and a mark you recognize
+									   only once the pointer is on it is one you can hit by
+									   accident. The badge itself stays white, so the red
+									   holds against whatever picture is under it without a
+									   red disc shouting from the corner of a portrait. */
+									className="focus-ring absolute -right-1.5 -top-1.5 grid size-7 place-items-center rounded-full bg-white text-red shadow-sm transition-opacity hover:opacity-80 disabled:pointer-events-none"
 								>
-									<IconTrash size={15} dense />
+									<IconTrash size={16} />
 								</button>
 							)}
 						</div>
