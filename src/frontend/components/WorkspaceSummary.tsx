@@ -3,6 +3,7 @@ import {
 	fetchGitStatus,
 	fetchPr,
 	fetchSessionAssets,
+	setSessionReviewerApi,
 	sessionAssetPreviewUrl,
 	type SessionAssetFile,
 } from "../lib/api";
@@ -17,9 +18,11 @@ import {
 	personNameForGithubLogin,
 	personNameForKey,
 	usePeople,
+	useReviewTeams,
 } from "../lib/people";
 import { isBotAuthor } from "../lib/pr-comments";
 import { Popover } from "../ui/popover";
+import { Menu } from "../ui/menu";
 import { Tooltip } from "../ui/tooltip";
 import { cn } from "../ui/cn";
 import type {
@@ -41,7 +44,14 @@ import {
 	WS_SUMMARY_STATE,
 	WS_SUMMARY_THUMB,
 } from "../lib/workspace-summary-classes";
-import { IconClock, IconFile, IconListCircles, IconPeople } from "./icons";
+import {
+	IconChevronDown,
+	IconClock,
+	IconFile,
+	IconListCircles,
+	IconPeople,
+	IconStack,
+} from "./icons";
 
 /**
  * The session header's compact stand-in for the right Workspace panel: one
@@ -343,6 +353,9 @@ function SummaryBody({
 		() => lastKnown.get(session.id) ?? emptyData(),
 	);
 	const [prompted, setPrompted] = useState(false);
+	const [selectedReview, setSelectedReview] = useState(reviewRequest ?? null);
+	const [reviewError, setReviewError] = useState<string | null>(null);
+	const [reviewBusy, setReviewBusy] = useState(false);
 	const updateData = useCallback(
 		(patch: Partial<SummaryData>) => {
 			if (activeSessionId.current !== session.id) return;
@@ -398,6 +411,10 @@ function SummaryBody({
 	useEffect(() => {
 		if (refreshTick) load();
 	}, [refreshTick, load]);
+	useEffect(() => {
+		setSelectedReview(reviewRequest ?? null);
+		setReviewError(null);
+	}, [reviewRequest?.to, reviewRequest?.at, reviewRequest?.accepted?.at]);
 
 	const { pr, git, assets, diff } = data;
 	const additions = pr ? pr.additions : (diff?.additions ?? 0);
@@ -427,8 +444,9 @@ function SummaryBody({
 	// The roster arrives async and the name lookup below reads it, so subscribe
 	// here or a reviewer stays a bare person key until something else happens to
 	// re-render the card.
-	usePeople();
-	const reviewers = reviewLines(pr, reviewRequest, prReviewRequested);
+	const people = usePeople();
+	const reviewTeams = useReviewTeams();
+	const reviewers = reviewLines(pr, selectedReview, prReviewRequested);
 	const humanReviewers = reviewers
 		.filter((reviewer) => reviewer.human)
 		.slice(0, REVIEWERS_SHOWN);
@@ -437,6 +455,28 @@ function SummaryBody({
 		.slice(0, REVIEWERS_SHOWN);
 
 	const shown = assets.slice(0, ASSETS_SHOWN);
+
+	function pickReviewer(name: string | null, recipients?: string[]) {
+		if (reviewBusy) return;
+		const previous = selectedReview;
+		const next = name
+			? {
+					to: name,
+					...(recipients ? { recipients } : {}),
+					by: getCurrentUser(),
+					at: new Date().toISOString(),
+				}
+			: null;
+		setSelectedReview(next);
+		setReviewError(null);
+		setReviewBusy(true);
+		setSessionReviewerApi(session.id, name, getCurrentUser())
+			.catch((error: any) => {
+				setSelectedReview(previous);
+				setReviewError(error?.message || "Failed to set reviewer");
+			})
+			.finally(() => setReviewBusy(false));
+	}
 
 	return (
 		<>
@@ -488,8 +528,10 @@ function SummaryBody({
 				onArchive={onArchive ? () => go(onArchive) : undefined}
 			/>
 
-			{/* Automated reviewers keep their individual verdict rows. Human review
-			    gets a labelled band and a real Add action in its empty state. */}
+			{/* One review section for both the automated reading and the people asked
+			    to review. The final row owns the picker, so adding or changing a
+			    reviewer never requires opening the workspace panel. */}
+			<div className={WS_SUMMARY_SECTION}>Review</div>
 			{otherReviewers.map((reviewer) => (
 				<button
 					key={reviewer.key}
@@ -512,8 +554,7 @@ function SummaryBody({
 				</button>
 			))}
 
-			<div className={WS_SUMMARY_SECTION}>Human reviewers</div>
-			{humanReviewers.length ? (
+			{humanReviewers.length > 0 &&
 				humanReviewers.map((reviewer) => (
 					<button
 						key={reviewer.key}
@@ -534,18 +575,48 @@ function SummaryBody({
 							{reviewer.state}
 						</span>
 					</button>
-				))
-			) : (
-				<button
-					className={WS_SUMMARY_ROW}
-					onClick={() => go(() => onOpenPanelTab("info"))}
-				>
-					<span className={WS_SUMMARY_RAIL}>
-						<IconPeople size={20} className={WS_SUMMARY_ICON} />
-					</span>
-					<span className={WS_SUMMARY_LABEL}>No reviewers</span>
-					<span className={WS_SUMMARY_ACTION}>Add</span>
-				</button>
+				))}
+			{humanReviewers.length === 0 && (
+				<Menu.Root>
+					<Menu.Trigger
+						className={WS_SUMMARY_ROW}
+						disabled={reviewBusy}
+					>
+						<span className={WS_SUMMARY_RAIL}>
+							<IconPeople size={20} className={WS_SUMMARY_ICON} />
+						</span>
+						<span className={WS_SUMMARY_LABEL}>No reviewers</span>
+						<span className={cn(WS_SUMMARY_ACTION, "inline-flex items-center gap-0.5")}>
+							Add
+							<IconChevronDown size={14} />
+						</span>
+					</Menu.Trigger>
+					<Menu.Popup align="end" sideOffset={6} className="min-w-[200px]">
+					{people.map((person) => (
+						<Menu.Item key={person.name} onClick={() => pickReviewer(person.name)}>
+							<UserAvatar name={person.name} size={22} />
+							<span className="min-w-0 flex-1 truncate">{person.name}</span>
+							<Menu.Check on={selectedReview?.to === person.name} size={20} className="text-dim" />
+						</Menu.Item>
+					))}
+					{reviewTeams.length > 0 && <Menu.Separator />}
+					{reviewTeams.map((team) => (
+						<Menu.Item
+							key={team.github}
+							onClick={() => pickReviewer(team.github, team.members)}
+						>
+							<span className="grid size-[22px] place-items-center text-dim">
+								<IconStack size={20} />
+							</span>
+							<span className="min-w-0 flex-1 truncate">{team.name}</span>
+							<Menu.Check on={selectedReview?.to === team.github} size={20} className="text-dim" />
+						</Menu.Item>
+					))}
+					</Menu.Popup>
+				</Menu.Root>
+			)}
+			{reviewError && (
+				<div className="px-4 py-1 text-meta font-medium text-red">{reviewError}</div>
 			)}
 
 			{shown.length > 0 && (
