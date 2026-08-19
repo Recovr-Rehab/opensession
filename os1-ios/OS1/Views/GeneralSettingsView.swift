@@ -29,23 +29,16 @@ struct GeneralSettingsView: View {
                 Section {
                     LabeledContent {
                         HStack(spacing: 12) {
-                            VStack(alignment: .trailing, spacing: 4) {
-                                if settings?.organizationIconUrl != nil {
-                                    Button("Remove icon", role: .destructive) {
-                                        Task { await removeIcon() }
-                                    }
-                                    .disabled(saving)
+                            if settings?.organizationIconUrl != nil {
+                                Button("Remove icon", role: .destructive) {
+                                    Task { await removeIcon() }
                                 }
+                                .disabled(saving)
                             }
                             organizationIconPicker
                         }
                     } label: {
-                        VStack(alignment: .leading, spacing: 3) {
-                            Text("Organization icon")
-                            Text("Choose a square image that represents your organization.")
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
-                        }
+                        Text("Upload icon")
                     }
                     LabeledContent("Organization name") {
                         TextField("Open Session", text: $name)

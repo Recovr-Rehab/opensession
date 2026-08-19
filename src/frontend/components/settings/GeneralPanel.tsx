@@ -15,7 +15,6 @@ import {
 	SettingCardSkeleton,
 	SettingRow,
 	SettingRowControl,
-	SettingRowDescription,
 	SettingRowText,
 	SettingRowTitle,
 	SettingsHeader,
@@ -109,10 +108,7 @@ export function GeneralPanel() {
 
 	return (
 		<SettingsPanel>
-			<SettingsHeader
-				title="General"
-				description="Set the name and icon people see for this organization."
-			/>
+			<SettingsHeader title="General" className="phone:hidden" />
 			{loadError && !settings ? (
 				<InlineAlert onRetry={() => void load()}>{loadError}</InlineAlert>
 			) : settings ? (
@@ -120,10 +116,7 @@ export function GeneralPanel() {
 					<SettingCard>
 						<SettingRow className="items-center">
 							<SettingRowText>
-								<SettingRowTitle>Organization icon</SettingRowTitle>
-								<SettingRowDescription>
-									Choose a square image that represents your organization.
-								</SettingRowDescription>
+								<SettingRowTitle>Upload icon</SettingRowTitle>
 							</SettingRowText>
 							<SettingRowControl className="flex flex-wrap items-center justify-end gap-2">
 								{settings.organizationIconUrl && (
@@ -184,9 +177,6 @@ export function GeneralPanel() {
 						<SettingRow>
 							<SettingRowText>
 								<SettingRowTitle>Organization name</SettingRowTitle>
-								<SettingRowDescription>
-									The company or team sharing this workspace.
-								</SettingRowDescription>
 							</SettingRowText>
 							<input
 								className={NAME_INPUT_CLASS}
