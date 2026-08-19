@@ -122,6 +122,12 @@ describe("getAllSessions", () => {
 			model: "claude-fable-5",
 			workspaceId: "ws-cooperative",
 		});
+		writeSession("bks-cooperative-archived", {
+			title: "Archived cooperative scan",
+			model: "claude-fable-5",
+			workspaceId: "ws-cooperative-archived",
+			archived: true,
+		});
 		const { getAllSessions, getAllSessionsAsync } = await import(
 			`./sessions.ts?test=${crypto.randomUUID()}`
 		);
@@ -134,7 +140,96 @@ describe("getAllSessions", () => {
 				workspaceId,
 			}));
 
-		expect(select(await getAllSessionsAsync())).toEqual(select(getAllSessions()));
+		const full = getAllSessions();
+		expect(select(await getAllSessionsAsync())).toEqual(select(full));
+		expect(select(await getAllSessionsAsync("exclude"))).toEqual(
+			select(full.filter((session: UnifiedSession) => !session.archived)),
+		);
+		expect(select(await getAllSessionsAsync("only"))).toEqual(
+			select(full.filter((session: UnifiedSession) => session.archived)),
+		);
+	});
+
+	it("does not resurrect an archived session through a live source alias", async () => {
+		writeSession("bks-archived-shared-thread", {
+			title: "Archived shared thread",
+			model: "gpt-5.5",
+			codexThreadId: "codex-thread-archived",
+			archived: true,
+		});
+		writeSlackSession("C999-1719860000.000000", {
+			branch: "archived-thread-branch",
+			userId: "Alex",
+			worktreeDir: "/home/ubuntu/projects/opensession",
+			codexThreadId: "codex-thread-archived",
+			model: "gpt-5.5",
+			createdAt: "2026-07-02T18:01:00.000Z",
+			lastActivity: "2026-07-02T18:01:00.000Z",
+		});
+
+		const { getAllSessionsAsync } = await import(
+			`./sessions.ts?test=${crypto.randomUUID()}`
+		);
+		expect(
+			(await getAllSessionsAsync("exclude")).some(
+				(session: UnifiedSession) =>
+					session.codexThreadId === "codex-thread-archived",
+			),
+		).toBe(false);
+		const archived = (await getAllSessionsAsync("only")).filter(
+			(session: UnifiedSession) =>
+				session.codexThreadId === "codex-thread-archived",
+		);
+		expect(archived).toHaveLength(1);
+		expect(archived[0]).toMatchObject({
+			id: "bks-archived-shared-thread",
+			aliasIds: ["slack-C999-1719860000.000000"],
+			archived: true,
+		});
+	});
+
+	it("carries archive state from a merged-away alias to the canonical row", async () => {
+		const aliasId = "slack-C998-1719860000.000000";
+		writeSession("bks-live-canonical-archived-alias", {
+			title: "Canonical row with archived alias",
+			model: "gpt-5.5",
+			codexThreadId: "codex-thread-archived-alias",
+		});
+		writeSlackSession("C998-1719860000.000000", {
+			branch: "archived-alias-branch",
+			userId: "Alex",
+			worktreeDir: "/home/ubuntu/projects/opensession",
+			codexThreadId: "codex-thread-archived-alias",
+			model: "gpt-5.5",
+			createdAt: "2026-07-02T18:02:00.000Z",
+			lastActivity: "2026-07-02T18:02:00.000Z",
+		});
+
+		const { setArchived } = await import("./archive");
+		setArchived(aliasId, true);
+		try {
+			const { getAllSessionsAsync } = await import(
+				`./sessions.ts?test=${crypto.randomUUID()}`
+			);
+			expect(
+				(await getAllSessionsAsync("exclude")).some(
+					(session: UnifiedSession) =>
+						session.codexThreadId === "codex-thread-archived-alias",
+				),
+			).toBe(false);
+			const archived = (await getAllSessionsAsync("only")).filter(
+				(session: UnifiedSession) =>
+					session.codexThreadId === "codex-thread-archived-alias",
+			);
+			expect(archived).toHaveLength(1);
+			expect(archived[0]).toMatchObject({
+				id: "bks-live-canonical-archived-alias",
+				aliasIds: [aliasId],
+				archived: true,
+			});
+		} finally {
+			setArchived(aliasId, false);
+		}
 	});
 
 	it("keeps Codex worker sessions visible even when they have no workspace", async () => {

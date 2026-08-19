@@ -7,6 +7,7 @@ import { readdirSync, readFileSync, existsSync } from "fs";
 import { writeJsonAtomic } from "./shared/atomic-write";
 import { plainApiUrl } from "./config";
 import { homeDir, OPENSESSION_SESSIONS_DIR } from "./paths";
+import { invalidateSessionsCache } from "./session-cache";
 import type { NativeSessionFile } from "./types";
 
 const HOME = homeDir();
@@ -60,6 +61,7 @@ export function archiveSessionsForThread(threadId: string): number {
     });
     archived++;
   }
+  if (archived > 0) invalidateSessionsCache();
   return archived;
 }
 
