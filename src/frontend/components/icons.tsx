@@ -1343,6 +1343,18 @@ export function IconDotsHorizontal(p: IconProps) {
   );
 }
 
+// Six raised dots, the handle for a row that can be reordered.
+export function IconGripVertical(p: IconProps) {
+  return (
+    <Svg {...p}>
+      {[8, 12, 16].flatMap((cy) => [
+        <circle key={`l-${cy}`} cx="9" cy={cy} r="1.1" fill="currentColor" />,
+        <circle key={`r-${cy}`} cx="15" cy={cy} r="1.1" fill="currentColor" />,
+      ])}
+    </Svg>
+  );
+}
+
 // The Desk: a desk lamp — the same object the native app puts on this surface
 // (SF Symbols `lamp.desk`), so the two clients name the Desk with one mark.
 // Traced from that symbol onto the 24 grid: shade up and to the right, its
