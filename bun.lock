@@ -16,7 +16,8 @@
         "@modelcontextprotocol/sdk": "^1.29.0",
         "@pierre/diffs": "1.3.2",
         "@pierre/trees": "^1.0.0-beta.4",
-        "@rynfar/meridian": "1.51.0",
+        "@rynfar/meridian": "1.62.5",
+        "@rynfar/meridian-source": "github:rynfar/meridian#948a10a96014ada0649fb771ee799f1196194a48",
         "@shadcn/react": "^0.3.0",
         "@shikijs/langs": "3.23.0",
         "@shikijs/themes": "3.23.0",
@@ -67,7 +68,8 @@
         "@modelcontextprotocol/sdk": "^1.29.0",
         "@pierre/diffs": "1.3.2",
         "@pierre/trees": "^1.0.0-beta.4",
-        "@rynfar/meridian": "1.51.0",
+        "@rynfar/meridian": "1.62.5",
+        "@rynfar/meridian-source": "github:rynfar/meridian#948a10a96014ada0649fb771ee799f1196194a48",
         "@shadcn/react": "^0.3.0",
         "@shikijs/langs": "3.23.0",
         "@shikijs/themes": "3.23.0",
@@ -110,7 +112,6 @@
   "patchedDependencies": {
     "@pierre/trees@1.0.0-beta.4": "patches/@pierre%2Ftrees@1.0.0-beta.4.patch",
     "@base-ui/react@1.6.0": "patches/@base-ui%2Freact@1.6.0.patch",
-    "@rynfar/meridian@1.51.0": "patches/@rynfar%2Fmeridian@1.51.0.patch",
   },
   "packages": {
     "@antfu/install-pkg": ["@antfu/install-pkg@1.1.0", "", { "dependencies": { "package-manager-detector": "^1.3.0", "tinyexec": "^1.0.1" } }, "sha512-MGQsmw10ZyI+EJo45CdSER4zEb+p31LpDAFp2Z3gkSd1yqVZGi0Ebx++YTEMonJy4oChEMLsxZ64j8FH6sSqtQ=="],
@@ -525,7 +526,9 @@
 
     "@protobufjs/utf8": ["@protobufjs/utf8@1.1.2", "", {}, "sha512-b1UQwcEZ4yCnMCD8DAL1VlbvBJE9/IX4FTIp7BG1xYpf29SLazLSrqUkj4w7Y5y7cCVP6E5tcqqcI0xemPkHug=="],
 
-    "@rynfar/meridian": ["@rynfar/meridian@1.51.0", "", { "dependencies": { "@anthropic-ai/claude-agent-sdk": "^0.2.117", "@anthropic-ai/claude-code": "^2.1.198", "jsonc-parser": "^3.3.1", "libsql": "^0.5.29" }, "bin": { "meridian": "dist/cli.js", "claude-max-proxy": "dist/cli.js" } }, "sha512-NUGtdzScfpX+nq0Dptyvx9CjM0D7G8m3H1l0wz0xlmejCC12Fr2yPS0+OD1KbtCgp8C9fDViryLc/LaoeGtzHQ=="],
+    "@rynfar/meridian": ["@rynfar/meridian@1.62.5", "", { "dependencies": { "@anthropic-ai/claude-agent-sdk": "^0.2.117", "@anthropic-ai/claude-code": "^2.1.198", "jsonc-parser": "^3.3.1", "libsql": "^0.5.29" }, "bin": { "meridian": "dist/cli.js", "claude-max-proxy": "dist/cli.js" } }, "sha512-QIwnAe9hECey72tk12OhE3RxHdk6vY5JyisXzLFQntavCm+RXFogpSmYI0vqak0YLEqHJz14tSA4ayRuNubSxA=="],
+
+    "@rynfar/meridian-source": ["@rynfar/meridian@github:rynfar/meridian#948a10a", { "dependencies": { "@anthropic-ai/claude-agent-sdk": "^0.2.117", "@anthropic-ai/claude-code": "^2.1.198", "jsonc-parser": "^3.3.1", "libsql": "^0.5.29" }, "bin": { "meridian": "./dist/cli.js", "claude-max-proxy": "./dist/cli.js" } }, "rynfar-meridian-948a10a", "sha512-IpBD8zdYyY4cTkLKlgkdtPpV4uRDGcEkUo+Y7ihvw3qj7HmZfkkLotJDtGDpmBN2bdpgRun9/T5IAETy8JQhmg=="],
 
     "@shadcn/react": ["@shadcn/react@0.3.0", "", { "peerDependencies": { "@types/react": ">=19", "react": ">=19" }, "optionalPeers": ["@types/react", "react"] }, "sha512-iKN0NuYe850VDHlxEfvppFrpa7CMV3zArTHusXlaSmeFeQhohGbIqclv6WwPTs/44I8EkXQpcuRt6sXEVKkWqQ=="],
 

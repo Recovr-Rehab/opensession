@@ -13,19 +13,16 @@
  * anthropicTransport left at its "inprocess" default.
  */
 import { afterAll, afterEach, beforeAll, describe, expect, test } from "bun:test";
-import { existsSync, mkdtempSync, rmSync, statSync, writeFileSync } from "fs";
+import { existsSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from "fs";
 import { tmpdir } from "os";
 import { join } from "path";
 import {
   MAX_PI_SDK_SESSIONS,
   PI_PASSTHROUGH_BLOCK_REASON,
   buildPiAnthropicModels,
-  createPiPassthroughEarlyStopTracker,
   buildPiAnthropicProvider,
   IMAGE_ONLY_PROMPT,
   MAX_TURN_IMAGES,
-  notePiPassthroughAssistant,
-  notePiPassthroughUser,
   piImageBlockToAnthropic,
   piMessagesToAnthropic,
   piSdkSessionStore,
@@ -34,11 +31,16 @@ import {
   turnImages,
   rememberSdkTurn,
   shouldDeferClaudeText,
-  shouldStopPiPassthrough,
   usageFromSdkResult,
   type PiCatalogModel,
   type PiWireMessage,
 } from "./pi-anthropic-provider";
+import {
+  createEarlyStopTracker,
+  noteAssistantMessage,
+  noteUserContent,
+  shouldEarlyStop,
+} from "./meridian-passthrough";
 import {
   admitBridgeRequest,
   ensureAnthropicBridgeCwd,
@@ -144,6 +146,17 @@ const model = {
 const wire = (m: Partial<AnthropicMessage> & { role: "user" | "assistant" }): AnthropicMessage =>
   ({ content: "", ...m }) as AnthropicMessage;
 
+describe("Meridian source dependency", () => {
+  test("tracks the same release as the published package", () => {
+    const dependencyRoot = join(import.meta.dir, "../../../../../node_modules/@rynfar");
+    const published = JSON.parse(readFileSync(join(dependencyRoot, "meridian/package.json"), "utf8"));
+    const source = JSON.parse(
+      readFileSync(join(dependencyRoot, "meridian-source/package.json"), "utf8")
+    );
+    expect(source.version).toBe(published.version);
+  });
+});
+
 describe("ensureAnthropicBridgeCwd", () => {
   test("creates a missing SDK cwd and is idempotent", () => {
     const cwd = join(dir, "missing-state", "bridge-cwd");
@@ -217,17 +230,78 @@ describe("planSdkTurn (continuation vs replay)", () => {
     expect(plan.continuation).toBe(false);
     expect(plan.resume).toBeUndefined();
   });
+
+  test("checkpointed turn resumes at its assistant UUID with exact structured results", () => {
+    const tail: AnthropicMessage[] = [
+      wire({
+        role: "user",
+        content: [{ type: "tool_result", tool_use_id: "tool-1", content: "A" }],
+      }),
+      wire({
+        role: "user",
+        content: [{ type: "tool_result", tool_use_id: "tool-2", content: "B" }],
+      }),
+    ];
+    const plan = planSdkTurn(
+      {
+        sdkSessionId: "sdk-1",
+        messageCount: 2,
+        accountId: "acc-1",
+        passthroughToolCallAssistantUuid: "assistant-uuid",
+        passthroughToolCallIds: ["tool-1", "tool-2"],
+        lastUsedAt: Date.now(),
+      },
+      [messages[0], messages[1], ...tail]
+    );
+    expect(plan.continuation).toBe(true);
+    expect(plan.resume).toBe("sdk-1");
+    expect(plan.resumeSessionAt).toBe("assistant-uuid");
+    expect(plan.prompt).toBe("");
+    expect(plan.toolResults).toEqual([
+      { type: "tool_result", tool_use_id: "tool-1", content: "A" },
+      { type: "tool_result", tool_use_id: "tool-2", content: "B" },
+    ]);
+  });
+
+  test("checkpoint mismatch full-replays instead of resuming the hidden digest tail", () => {
+    const partial = [
+      wire({
+        role: "user",
+        content: [{ type: "tool_result", tool_use_id: "tool-1", content: "A" }],
+      }),
+    ];
+    const plan = planSdkTurn(
+      {
+        sdkSessionId: "sdk-1",
+        messageCount: 2,
+        accountId: "acc-1",
+        passthroughToolCallAssistantUuid: "assistant-uuid",
+        passthroughToolCallIds: ["tool-1", "tool-2"],
+        lastUsedAt: Date.now(),
+      },
+      [messages[0], messages[1], ...partial]
+    );
+    expect(plan.continuation).toBe(false);
+    expect(plan.resume).toBeUndefined();
+    expect(plan.resumeSessionAt).toBeUndefined();
+    expect(plan.prompt).toContain("A");
+  });
 });
 
 describe("SDK session store", () => {
   afterEach(() => piSdkSessionStore().clear());
 
-  test("rememberSdkTurn stores messageCount + 1 (this turn's reply joins the history)", () => {
-    rememberSdkTurn("pi:s1", "sdk-abc", 4, "acc-1");
+  test("rememberSdkTurn stores messageCount + 1 and its durable checkpoint", () => {
+    rememberSdkTurn("pi:s1", "sdk-abc", 4, "acc-1", {
+      assistantUuid: "assistant-uuid",
+      toolCallIds: ["tool-1"],
+    });
     expect(piSdkSessionStore().get("pi:s1")).toMatchObject({
       sdkSessionId: "sdk-abc",
       messageCount: 5,
       accountId: "acc-1",
+      passthroughToolCallAssistantUuid: "assistant-uuid",
+      passthroughToolCallIds: ["tool-1"],
     });
   });
 
@@ -430,42 +504,53 @@ describe("images survive the turn", () => {
   });
 });
 
-describe("Pi passthrough early stop", () => {
-  test("uses an opaque marker with no model-facing control-flow prose", () => {
-    expect(PI_PASSTHROUGH_BLOCK_REASON).toBe("[OPENSESSION_EXTERNAL_TOOL]");
-    expect(PI_PASSTHROUGH_BLOCK_REASON).not.toMatch(
-      /turn|batch|wait|queue|defer|result|repeat|call any|end/i
+describe("Pi passthrough durable checkpoint", () => {
+  test("uses Meridian's explicit model-facing stop instruction", () => {
+    expect(PI_PASSTHROUGH_BLOCK_REASON).toContain(
+      "This tool call has been forwarded to the client for execution."
     );
+    expect(PI_PASSTHROUGH_BLOCK_REASON).toContain("End your turn now.");
   });
 
-  test("stops only after every tool in a parallel batch has an observed block result", () => {
-    const tracker = createPiPassthroughEarlyStopTracker();
-    notePiPassthroughAssistant(tracker, [
-      { type: "text", text: "checking" },
-      { type: "tool_use", id: "tool-1", name: "read", input: {} },
-      { type: "tool_use", id: "tool-2", name: "grep", input: {} },
-    ]);
-    notePiPassthroughUser(tracker, [
+  test("settles only after every parallel call and retains its assistant UUID", () => {
+    const tracker = createEarlyStopTracker();
+    noteAssistantMessage(tracker, {
+      type: "assistant",
+      uuid: "assistant-uuid",
+      message: {
+        content: [
+          { type: "text", text: "checking" },
+          { type: "tool_use", id: "tool-1", name: "read", input: {} },
+          { type: "tool_use", id: "tool-2", name: "grep", input: {} },
+        ],
+      },
+    });
+    noteUserContent(tracker, [
       { type: "tool_result", tool_use_id: "tool-1", content: "blocked" },
     ]);
-    expect(shouldStopPiPassthrough(tracker)).toBe(false);
-    notePiPassthroughUser(tracker, [
+    expect(shouldEarlyStop(tracker)).toBe(false);
+    noteUserContent(tracker, [
       { type: "tool_result", tool_use_id: "tool-2", content: "blocked" },
     ]);
-    expect(shouldStopPiPassthrough(tracker)).toBe(true);
-    expect(shouldStopPiPassthrough(tracker)).toBe(false);
+    expect(shouldEarlyStop(tracker)).toBe(true);
+    expect(tracker.toolCallAssistantUuid).toBe("assistant-uuid");
+    expect(shouldEarlyStop(tracker)).toBe(false);
   });
 
-  test("handles the SDK delivering a blocked result before its assistant envelope", () => {
-    const tracker = createPiPassthroughEarlyStopTracker();
-    notePiPassthroughUser(tracker, [
+  test("handles a blocked result arriving before its assistant envelope", () => {
+    const tracker = createEarlyStopTracker();
+    noteUserContent(tracker, [
       { type: "tool_result", tool_use_id: "tool-1", content: "blocked" },
     ]);
-    expect(shouldStopPiPassthrough(tracker)).toBe(false);
-    notePiPassthroughAssistant(tracker, [
-      { type: "tool_use", id: "tool-1", name: "read", input: {} },
-    ]);
-    expect(shouldStopPiPassthrough(tracker)).toBe(true);
+    expect(shouldEarlyStop(tracker)).toBe(false);
+    noteAssistantMessage(tracker, {
+      type: "assistant",
+      uuid: "assistant-uuid",
+      message: {
+        content: [{ type: "tool_use", id: "tool-1", name: "read", input: {} }],
+      },
+    });
+    expect(shouldEarlyStop(tracker)).toBe(true);
   });
 });
 

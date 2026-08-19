@@ -31,8 +31,7 @@
   },
   "patchedDependencies": {
     "@base-ui/react@1.6.0": "patches/@base-ui%2Freact@1.6.0.patch",
-    "@pierre/trees@1.0.0-beta.4": "patches/@pierre%2Ftrees@1.0.0-beta.4.patch",
-    "@rynfar/meridian@1.51.0": "patches/@rynfar%2Fmeridian@1.51.0.patch"
+    "@pierre/trees@1.0.0-beta.4": "patches/@pierre%2Ftrees@1.0.0-beta.4.patch"
   },
   "dependencies": {
     "@anthropic-ai/claude-agent-sdk": "^0.2.104",
@@ -46,7 +45,8 @@
     "@modelcontextprotocol/sdk": "^1.29.0",
     "@pierre/diffs": "1.3.2",
     "@pierre/trees": "^1.0.0-beta.4",
-    "@rynfar/meridian": "1.51.0",
+    "@rynfar/meridian": "1.62.5",
+    "@rynfar/meridian-source": "github:rynfar/meridian#948a10a96014ada0649fb771ee799f1196194a48",
     "@shadcn/react": "^0.3.0",
     "@shikijs/langs": "3.23.0",
     "@shikijs/themes": "3.23.0",
