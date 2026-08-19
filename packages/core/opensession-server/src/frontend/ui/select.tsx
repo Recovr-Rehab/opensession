@@ -120,7 +120,7 @@ function Trigger(triggerProps: TriggerProps) {
 				),
 				// A select lifts slightly under the pointer; opening still reads like
 				// focus, with the border carrying that state as on every other field.
-				"transition-[border-color,box-shadow] enabled:hover:smooth-shadow-xs data-[popup-open]:border-accent",
+				"transition-[border-color,box-shadow] hover:border-line-strong enabled:hover:smooth-shadow-xs data-[popup-open]:border-accent",
 				className,
 			)}
 		>
