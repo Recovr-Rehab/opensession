@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback } from "react";
+import { AnimatePresence } from "motion/react";
 import { fetchWorktrees, fetchModels, fetchConnections, fetchSandboxStatus, requestSandboxPrewarm, suggestBranch, suggestRepos, type RepoSuggestion, configuredNewSessionRepo, fetchProviderAccounts, fetchRepos, createWorkspaceApi, updateWorkspaceApi, ApiError, type ProviderAccountOption, type ModelOption, type SandboxStatusInfo } from "../lib/api";
 import { getCurrentUser } from "./UserPicker";
 import { type FileAttachment } from "../lib/images";
@@ -35,6 +36,7 @@ import {
   NewSessionPrompt,
   type NewSessionPromptHandle,
 } from "./NewSessionPrompt";
+import { ComposerContextChip } from "./ComposerContextChip";
 import {
   IconPaperclip,
   IconChevronDown,
@@ -1290,6 +1292,27 @@ export function NewSession({ onBack, inline, focusSeq, send, addHandler, connect
           )}
         </div>
 
+        {/* Picked services, above the field like every other thing attached to
+            what you are about to send. The picker is two levels inside a menu,
+            so without this the only trace of a pick is a count on the overflow
+            button, and the pick governs the whole session rather than one
+            prompt. The row stays mounted so the last chip can animate out. */}
+        <div className="flex flex-wrap items-start gap-x-1 px-4">
+          <AnimatePresence initial={false}>
+            {selectedMcpServers.map((mcp) => (
+              <ComposerContextChip
+                key={mcp}
+                icon={<IconTile name={mcp} size={15} />}
+                label={displayName(mcp)}
+                title={`${displayName(mcp)} is on. A session gets only the services you pick here.`}
+                onRemove={() => toggleMcpServer(mcp, false)}
+                removeLabel={`Remove ${displayName(mcp)}`}
+                disabled={busy}
+              />
+            ))}
+          </AnimatePresence>
+        </div>
+
         {/* Prompt. It owns the draft: see NewSessionPrompt for why the text
             does not live in this component. */}
         <NewSessionPrompt
@@ -1461,11 +1484,20 @@ export function NewSession({ onBack, inline, focusSeq, send, addHandler, connect
                       <span className="truncate">Connected services</span>
                     </span>
                     <span className="flex flex-none items-center gap-1 text-dim">
-                      {selectedMcpServers.length ? `${selectedMcpServers.length} on` : "None"}
+                      {/* Nothing picked is not "none": an empty allowlist means
+                          the run gets every service you can see
+                          (filterMcpServers, scope "all"), so the readout says
+                          so rather than promising a session with no tools. */}
+                      {selectedMcpServers.length ? `${selectedMcpServers.length} on` : "All"}
                       <IconChevronRight className="shrink-0 text-faint" size={17} />
                     </span>
                   </Menu.SubmenuTrigger>
                   <Menu.Popup className="max-w-[min(360px,calc(100vw-1rem))]">
+                    {availableMcpServers.length > 0 && (
+                      <div className="max-w-[300px] px-2 pb-1 text-meta font-medium leading-snug text-faint">
+                        Picked services are the only ones the session gets.
+                      </div>
+                    )}
                     {availableMcpServers.length === 0 && (
                       <Menu.Item disabled className="text-faint">
                         No services available
