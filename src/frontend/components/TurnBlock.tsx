@@ -225,7 +225,7 @@ export const TurnBlock = React.memo(function TurnBlock({
             // inline notes keep reading as plain transcript, so they take no
             // rail until the fold is explicitly opened.
             expanded &&
-              "relative mb-2 ml-[5px] border-l border-line pl-0"
+              "relative mb-2 ml-[5px] border-l border-line pl-2.5"
           )}
         >
           {expanded && (
@@ -236,7 +236,7 @@ export const TurnBlock = React.memo(function TurnBlock({
                 userToggledRef.current = true;
                 setExpanded(false);
               }}
-              className="absolute inset-y-0 -left-[5px] z-10 w-[10px] cursor-pointer border-0 bg-transparent p-0 after:absolute after:inset-y-0 after:left-1/2 after:border-l after:border-transparent after:transition-colors hover:after:border-line-strong focus-visible:after:border-line-strong"
+              className="absolute inset-y-0 -left-2 w-4 cursor-pointer border-0 bg-transparent p-0 after:absolute after:inset-y-0 after:left-1/2 after:border-l after:border-transparent after:transition-colors hover:after:border-line-strong focus-visible:after:border-line-strong"
             />
           )}
           {sections.map((sec) =>
@@ -391,7 +391,7 @@ function ToolRunBlock({
         aria-label={`${expanded ? "Hide" : "Show"} ${items.length} grouped steps: ${label}${statusLabel ? `. ${statusLabel}` : ""}`}
         title={`${items.length} grouped steps`}
         onClick={() => setExpanded(!expanded)}
-        className="group flex w-full min-w-0 cursor-pointer items-center gap-2 rounded-control border-0 bg-transparent py-[3px] pr-1 pl-px text-left font-sans transition-colors hover:bg-hover/40 phone:min-h-10"
+        className="group flex w-full min-w-0 cursor-pointer items-center gap-2 rounded-control border-0 bg-transparent px-1 py-[3px] text-left font-sans transition-colors hover:bg-hover/40 phone:min-h-10"
       >
         {/* Open, the row is a heading for the steps under it, so it keeps the
             chevron rather than a stack of what is already on screen. Closed,
@@ -615,9 +615,12 @@ function TurnMessage({
 }) {
   return (
     <div
-      // The 4px inset matches the moved-left tool glyphs while leaving the
-      // rail's 5px gutter optically even on both sides.
-      className="mx-auto my-2 w-full max-w-[var(--session-col)] pl-1 pr-1"
+      // 7px, not the row's 4px: the fold header and the tool rows both pad by
+      // 4 and then draw a glyph inset ~5px into its own box, so text padded to
+      // 4 starts left of every other line in the turn. 7 sits just inside the
+      // chevron's ink — the glyph's own side bearing makes a true 9 read as an
+      // indent rather than an alignment.
+      className="mx-auto my-2 w-full max-w-[var(--session-col)] pr-1 pl-[7px]"
       data-eid={entry.id}
     >
       <ClampedBody
