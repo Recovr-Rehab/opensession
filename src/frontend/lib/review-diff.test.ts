@@ -15,7 +15,7 @@ describe("reviewDiffLoadPolicy", () => {
 
 	test("collapses multi-megabyte reviews without grouping the patch", () => {
 		expect(reviewDiffLoadPolicy(13_353_345, 489)).toEqual({
-			defaultExpandedFiles: 0,
+			defaultExpandedFiles: 2,
 			groupFiles: false,
 			allowExpandAll: false,
 		});
@@ -23,7 +23,7 @@ describe("reviewDiffLoadPolicy", () => {
 
 	test("also bounds reviews with many small files", () => {
 		expect(reviewDiffLoadPolicy(90_000, 100)).toEqual({
-			defaultExpandedFiles: 0,
+			defaultExpandedFiles: 2,
 			groupFiles: false,
 			allowExpandAll: false,
 		});

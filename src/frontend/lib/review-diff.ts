@@ -17,7 +17,7 @@ export function reviewDiffLoadPolicy(
 		patchLength >= LARGE_REVIEW_PATCH_LENGTH ||
 		fileCount >= LARGE_REVIEW_FILE_COUNT;
 	return {
-		defaultExpandedFiles: large ? 0 : Infinity,
+		defaultExpandedFiles: large ? 2 : Infinity,
 		groupFiles: !large,
 		allowExpandAll: !large,
 	};
