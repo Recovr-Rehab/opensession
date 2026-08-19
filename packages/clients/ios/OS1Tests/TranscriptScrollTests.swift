@@ -318,33 +318,38 @@ final class FoldStateTests: XCTestCase {
 
     func testAFoldYouOpenedStaysOpenAcrossRebuilds() {
         let store = FoldStateStore()
-        let state = store.fold(for: turn("t1"), preference: "collapsed")
+        let state = store.fold(for: turn("t1"), preference: TurnActivity(work: .folded))
         state.toggle()
         XCTAssertTrue(state.expanded)
         // The display pass rebuilds blocks constantly (every 1s append).
-        XCTAssertTrue(store.fold(for: turn("t1"), preference: "collapsed").expanded)
+        XCTAssertTrue(
+            store.fold(for: turn("t1"), preference: TurnActivity(work: .folded)).expanded
+        )
     }
 
     func testASettledFoldNeverReopensItself() {
         // A turn above the reader changing height on its own is how a
         // transcript loses your place, so only the live tail re-derives.
         let store = FoldStateStore()
-        let settled = store.fold(for: turn("t1"), preference: "collapsed")
+        let settled = store.fold(for: turn("t1"), preference: TurnActivity(work: .folded))
         XCTAssertFalse(settled.expanded)
-        _ = store.fold(for: turn("t1"), preference: "expanded")
+        _ = store.fold(for: turn("t1"), preference: TurnActivity(work: .open))
         XCTAssertFalse(settled.expanded)
     }
 
     func testTheLiveTurnFollowsThePreferenceUntilYouTouchIt() {
         let store = FoldStateStore()
-        let live = store.fold(for: turn("t1", live: true), preference: "collapsed")
+        let live = store.fold(
+            for: turn("t1", live: true),
+            preference: TurnActivity(work: .folded)
+        )
         XCTAssertFalse(live.expanded)
-        _ = store.fold(for: turn("t1", live: true), preference: "expanded")
+        _ = store.fold(for: turn("t1", live: true), preference: TurnActivity(work: .open))
         XCTAssertTrue(live.expanded, "a live fold may still adopt a new default")
 
         live.toggle()
         XCTAssertFalse(live.expanded)
-        _ = store.fold(for: turn("t1", live: true), preference: "expanded")
+        _ = store.fold(for: turn("t1", live: true), preference: TurnActivity(work: .open))
         XCTAssertFalse(live.expanded, "once you decide, the default stops winning")
     }
 
@@ -365,12 +370,12 @@ final class FoldStateTests: XCTestCase {
     func testFailuresAndMediaOnlyPullShortTurnsOpen() {
         var short = turn("t1", tools: 4)
         short.failureCount = 1
-        XCTAssertTrue(short.defaultExpanded(preference: "collapsed"))
+        XCTAssertTrue(short.defaultExpanded(preference: TurnActivity(work: .folded)))
 
         var long = turn("t2", tools: 40)
         long.failureCount = 1
         XCTAssertFalse(
-            long.defaultExpanded(preference: "collapsed"),
+            long.defaultExpanded(preference: TurnActivity(work: .folded)),
             "a 40-step fold is a wall on a phone; its header carries the signal"
         )
     }

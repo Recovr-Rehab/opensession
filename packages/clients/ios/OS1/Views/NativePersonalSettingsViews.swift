@@ -730,7 +730,7 @@ struct AppearanceSettingsView: View {
             get: {
                 SupportLocation.current(hiddenTools: hiddenTools, hiddenFeeds: hiddenFeeds)
             },
-            set: SupportLocation.set
+            set: { SupportLocation.set($0) }
         )
     }
 

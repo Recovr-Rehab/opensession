@@ -287,6 +287,9 @@ struct WorkTurn: Identifiable, Equatable {
 
     /// How the fold should start out, before any manual toggle.
     func defaultExpanded(preference: TurnActivity) -> Bool {
+        if !isLive, toolCount <= Self.pinOpenStepLimit, hasFailure || hasMedia {
+            return true
+        }
         // The default is open while the work is happening and folded the
         // moment it settles, which is also the only work setting where a
         // finished turn's notes can be put away, since the header then owns

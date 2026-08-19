@@ -576,7 +576,7 @@ struct SessionView: View {
             #endif
         }
         let chromeContent = transcriptContent
-            .environment(\.transcriptRepo, viewModel.session.effectiveRepo)
+            .environment(\.transcriptSessionId, viewModel.session.id)
             .safeAreaInset(edge: .top, spacing: 0) {
             VStack(spacing: 0) {
                 #if os(iOS)

@@ -8,6 +8,8 @@ enum SupportLocation: String, CaseIterable, Identifiable {
     case off
 
     var id: String { rawValue }
+    var showsSidebar: Bool { self == .sidebar }
+    var showsPage: Bool { self == .page }
 
     var label: String {
         switch self {

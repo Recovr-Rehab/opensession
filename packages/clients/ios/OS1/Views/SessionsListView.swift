@@ -2311,7 +2311,8 @@ struct SessionsListView: View {
             if !pinnedWorkspaces.isEmpty {
                 Section {
                     ForEach(
-                        visibleWorkspaces(pinnedWorkspaces, collapsedKey: "pinned")
+                        visibleWorkspaces(pinnedWorkspaces, collapsedKey: "pinned"),
+                        id: \.id
                     ) { workspace in
                         sessionRow(workspace)
                     }
