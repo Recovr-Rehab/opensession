@@ -940,7 +940,11 @@ function SummaryBody({
 							</button>
 						))
 					)}
-					{assetsHidden > 0 && (
+					{/* Only under the list, where the last row is the only thing that
+					    says the folder ends here. The strip answers it three times over
+					    already: the heading carries the count, the sliver of the next
+					    frame says it scrolls, and any tile opens the Assets tab. */}
+					{assetView === "list" && assetsHidden > 0 && (
 						<button className={WS_SUMMARY_ROW} onClick={() => go(onOpenAssets)}>
 							<span className={WS_SUMMARY_RAIL} />
 							<span className={cn(WS_SUMMARY_LABEL, "text-dim")}>
