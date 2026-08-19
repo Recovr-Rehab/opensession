@@ -15,7 +15,7 @@ log in one SQLite database (WAL): `<sessions dir>/transcripts.db`, managed by
   `seq`, which is what makes streamed assistant rewrites ("same id, last
   wins") work.
 - Session ids are **unified** ids (`bks-…`, `slack-…`, `linear-…`), never
-  engine session ids; `packages/core/opensession-server/src/server/opencode-transcript.ts` keeps the
+  engine session ids; `packages/core/opensession-server/src/server/transcript-persistence.ts` keeps the
   engine-id → unified-id map, so engine account rotation (many engine ids,
   one session) doesn't fragment a transcript.
 - Entries over 32 KB are stored twice: the full entry in a blob table, and a
@@ -61,8 +61,8 @@ the normal entry path is the point: blob-splitting bounds a 180KB handoff like
 any other oversized entry, and the ws protocol needs no new frame.
 
 - **Choke point**: `runOnModel` (`packages/core/opensession-server/src/server/agent-runner.ts`) — the single
-  dispatch for every engine (opencode, pi, claude-direct, codex-direct, the
-  test fake) and every model of a fallback walk. The opencode runner calls in
+  dispatch for every engine (pi, pi, claude-direct, codex-direct, the
+  test fake) and every model of a fallback walk. The pi runner calls in
   as well for the same-engine-restart handoff it prepends *below* that point;
   entry ids are content-derived, so overlapping calls upsert one row.
 - **Attribution rides the fence**, not the call site: `wrapContext(body,
@@ -104,12 +104,12 @@ Three sources today:
 | source | written at | content |
 | --- | --- | --- |
 | `tools` | `runOnModel` (every engine) | the run's tool scoping: MCP allowlist, in-process servers, tool denials, mode |
-| `mcp-servers` | the opencode runner | the servers that config actually mounts, the strips that narrow them, the subagents `task` can reach |
+| `mcp-servers` | the pi runner | the servers that config actually mounts, the strips that narrow them, the subagents `task` can reach |
 | `instructions` | each engine runner or adapter at its final-text point | the standing instruction text, which already folds in `AGENTS.local.md` / `CLAUDE.local.md` |
 
 **The tool schemas themselves are not recordable.** Every mounted tool's name,
 description and JSON schema is the largest single model input (roughly 104k
-tokens a run), and OpenCode neither persists nor exposes it: `/experimental/tool`
+tokens a run), and Pi neither persists nor exposes it: `/experimental/tool`
 returns only its own built-ins and `/mcp` returns a connection status per
 server. Capturing the schemas would mean connecting to every configured MCP
 server ourselves, per session. So what is recorded is the tool *surface* —
@@ -117,7 +117,7 @@ which servers were mounted and which tools were taken away — not the wording o
 each schema.
 
 The direct engines have no runner to log their `instructions` from — claude-direct
-and codex-direct assemble their own system prompt and never reach the opencode
+and codex-direct assemble their own system prompt and never reach the pi
 runner — so each adapter logs at the point its text is final: the append to the
 `claude_code` preset, and the thread's `developerInstructions`. Pi likewise logs
 beside its finalized `buildRunInstructions` result before that text joins the
@@ -140,7 +140,7 @@ serving, not as an alternate store.
   a per-session mutex where each caller overlays only the fields it owns.
 - **Engine boundary**: `packages/core/opensession-server/src/server/engine/` defines the `EngineAdapter`
   surface (`startTurn` as an event stream, plus steer/cancel/reattach) that
-  the transcript pipeline consumes; OpenCode is the production adapter.
+  the transcript pipeline consumes; Pi is the production adapter.
 - **Snapshot fixtures**: scripted sessions run through the real pipeline on a
   fake engine, freezing both the entries written here and the prompt/config
   the engine received. See [transcript-snapshots.md](transcript-snapshots.md);

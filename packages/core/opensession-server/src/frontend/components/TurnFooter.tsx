@@ -17,7 +17,7 @@ import {
 } from "./icons";
 import { useOpenAsset } from "../lib/open-asset";
 import { formatDuration, fullTime } from "../lib/time";
-import { friendlyModelSlug, opencodeModelParts } from "./ModelEffortSelect";
+import { friendlyModelSlug, routedModelParts } from "./ModelEffortSelect";
 import { canonicalToolName, useToolPathRoots } from "./ToolCallBlock";
 import { tidyPath, type PathRoot } from "../lib/tidy-path";
 import { useIsPhone } from "../hooks/useIsPhone";
@@ -276,11 +276,11 @@ function fileName(path: string): string {
   return path.split("/").pop() || path;
 }
 
-/** Friendly name for a per-message model id: opencode ids take their model
- * part, raw API ids drop the date suffix — "opencode/anthropic/claude-sonnet-5"
+/** Friendly name for a per-message model id: pi ids take their model
+ * part, raw API ids drop the date suffix — "pi/anthropic/claude-sonnet-5"
  * and "claude-sonnet-5-20250929" both read "Sonnet 5". */
 function messageModelLabel(id: string): string {
-  const slug = opencodeModelParts(id)?.model || id;
+  const slug = routedModelParts(id)?.model || id;
   return friendlyModelSlug(slug.replace(/-\d{8}$/, ""));
 }
 
@@ -616,7 +616,7 @@ function readTouchedFiles(entry: TranscriptEntry): TouchedFile[] {
     for (let at = v.indexOf("\n"); at >= 0; at = v.indexOf("\n", at + 1)) count++;
     return count;
   };
-  // Engines disagree on casing: opencode writes `filePath`/`oldString`, the
+  // Engines disagree on casing: pi writes `filePath`/`oldString`, the
   // Claude SDK `file_path`/`old_string`.
   const key = (...names: string[]) => {
     for (const n of names) if (typeof inp[n] === "string" && inp[n]) return inp[n] as string;

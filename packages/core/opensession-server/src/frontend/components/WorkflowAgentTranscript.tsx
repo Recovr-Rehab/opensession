@@ -12,7 +12,7 @@ import { TranscriptBlocks } from "./TranscriptBlocks";
  * breadcrumb-back header (mirrors SubagentPane's pattern).
  *
  * Source: GET /api/workflows/:runId/agents/:seq/transcript →
- * { entries: TranscriptEntry[] }, read off the agent's opencode session
+ * { entries: TranscriptEntry[] }, read off the agent's pi session
  * (outcome.engineSessionId). While the agent is running we poll every 2s so you
  * watch it work live; once it terminates the transcript is final and polling
  * stops. A 404 means the agent has no engine session yet (it hasn't started, or

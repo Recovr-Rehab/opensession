@@ -29,10 +29,7 @@ export type OverviewSession = {
   id: string;
   title?: string;
   createdAt?: string;
-} & Pick<
-  UnifiedSession,
-  "transcriptPath" | "opencodeSessionId" | "claudeSessionId"
->;
+} & Pick<UnifiedSession, "transcriptPath">;
 
 export interface WorkspaceMediaItem {
   kind: "image" | "video";

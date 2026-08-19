@@ -14,11 +14,9 @@
         "@lezer/highlight": "^1.2.3",
         "@lezer/rust": "^1.0.2",
         "@modelcontextprotocol/sdk": "^1.29.0",
-        "@opencode-ai/sdk": "1.18.18",
         "@pierre/diffs": "1.3.2",
         "@pierre/trees": "^1.0.0-beta.4",
         "@rynfar/meridian": "1.51.0",
-        "@rynfar/meridian-plugin-opencode-scrub": "0.2.0",
         "@shadcn/react": "^0.3.0",
         "@shikijs/langs": "3.23.0",
         "@shikijs/themes": "3.23.0",
@@ -35,7 +33,6 @@
         "mermaid": "^11.16.1",
         "modal": "0.9.0",
         "motion": "^12.42.2",
-        "opencode-with-claude": "1.6.18",
         "react": "^19.0.0",
         "react-dom": "^19.0.0",
         "sharp": "0.34.5",
@@ -68,11 +65,9 @@
         "@lezer/highlight": "^1.2.3",
         "@lezer/rust": "^1.0.2",
         "@modelcontextprotocol/sdk": "^1.29.0",
-        "@opencode-ai/sdk": "1.18.18",
         "@pierre/diffs": "1.3.2",
         "@pierre/trees": "^1.0.0-beta.4",
         "@rynfar/meridian": "1.51.0",
-        "@rynfar/meridian-plugin-opencode-scrub": "0.2.0",
         "@shadcn/react": "^0.3.0",
         "@shikijs/langs": "3.23.0",
         "@shikijs/themes": "3.23.0",
@@ -88,7 +83,6 @@
         "mermaid": "^11.16.1",
         "modal": "0.9.0",
         "motion": "^12.42.2",
-        "opencode-with-claude": "1.6.18",
         "react": "^19.0.0",
         "react-dom": "^19.0.0",
         "sharp": "0.34.5",
@@ -413,8 +407,6 @@
 
     "@nodelib/fs.walk": ["@nodelib/fs.walk@1.2.8", "", { "dependencies": { "@nodelib/fs.scandir": "2.1.5", "fastq": "^1.6.0" } }, "sha512-oGB+UxlgWcgQkgwo8GcEGwemoTFt3FIO9ababBmaGwXIoBKZ+GTy0pP185beGg7Llih/NSHSV2XAs1lnznocSg=="],
 
-    "@opencode-ai/sdk": ["@opencode-ai/sdk@1.18.18", "", { "dependencies": { "cross-spawn": "7.0.6" } }, "sha512-zJlwXskIR47V1dkPJqeKBgq7nejG1uU8lJaGIGqbX3MWRCT8vKn0fEotbxuPCKnTdmWsDyNGNg9q1qIliDSMDA=="],
-
     "@opentelemetry/api": ["@opentelemetry/api@1.9.1", "", {}, "sha512-gLyJlPHPZYdAk1JENA9LeHejZe1Ti77/pTeFm/nMXmQH/HFZlcS/O2XJB+L8fkbrNSqhdtlvjBVjxwUYanNH5Q=="],
 
     "@opentelemetry/api-logs": ["@opentelemetry/api-logs@0.217.0", "", { "dependencies": { "@opentelemetry/api": "^1.3.0" } }, "sha512-Cdq0jW2lknrNfrAm92MyEAvpe2cRsKjdnQLHUL6xRA4IVUnsWx6P65E7NcUO0Y+L4w1Aee5iV8FvjSwd+lrs9A=="],
@@ -534,8 +526,6 @@
     "@protobufjs/utf8": ["@protobufjs/utf8@1.1.2", "", {}, "sha512-b1UQwcEZ4yCnMCD8DAL1VlbvBJE9/IX4FTIp7BG1xYpf29SLazLSrqUkj4w7Y5y7cCVP6E5tcqqcI0xemPkHug=="],
 
     "@rynfar/meridian": ["@rynfar/meridian@1.51.0", "", { "dependencies": { "@anthropic-ai/claude-agent-sdk": "^0.2.117", "@anthropic-ai/claude-code": "^2.1.198", "jsonc-parser": "^3.3.1", "libsql": "^0.5.29" }, "bin": { "meridian": "dist/cli.js", "claude-max-proxy": "dist/cli.js" } }, "sha512-NUGtdzScfpX+nq0Dptyvx9CjM0D7G8m3H1l0wz0xlmejCC12Fr2yPS0+OD1KbtCgp8C9fDViryLc/LaoeGtzHQ=="],
-
-    "@rynfar/meridian-plugin-opencode-scrub": ["@rynfar/meridian-plugin-opencode-scrub@0.2.0", "", { "peerDependencies": { "@rynfar/meridian": "*" }, "optionalPeers": ["@rynfar/meridian"] }, "sha512-RaXNkIwPB2NmicdNvDmYLKbLz5KsnAlNt3XfuejstPpMZBbogxhi6JSsU3k6nHGj/yoYmbpLYMGD4Bv4v30Tvg=="],
 
     "@shadcn/react": ["@shadcn/react@0.3.0", "", { "peerDependencies": { "@types/react": ">=19", "react": ">=19" }, "optionalPeers": ["@types/react", "react"] }, "sha512-iKN0NuYe850VDHlxEfvppFrpa7CMV3zArTHusXlaSmeFeQhohGbIqclv6WwPTs/44I8EkXQpcuRt6sXEVKkWqQ=="],
 
@@ -1222,8 +1212,6 @@
     "openapi-fetch": ["openapi-fetch@0.14.1", "", { "dependencies": { "openapi-typescript-helpers": "^0.0.15" } }, "sha512-l7RarRHxlEZYjMLd/PR0slfMVse2/vvIAGm75/F7J6MlQ8/b9uUQmUF2kCPrQhJqMXSxmYWObVgeYXbFYzZR+A=="],
 
     "openapi-typescript-helpers": ["openapi-typescript-helpers@0.0.15", "", {}, "sha512-opyTPaunsklCBpTK8JGef6mfPhLSnyy5a0IN9vKtx3+4aExf+KxEqYwIy3hqkedXIB97u357uLMJsOnm3GVjsw=="],
-
-    "opencode-with-claude": ["opencode-with-claude@1.6.18", "", { "dependencies": { "@rynfar/meridian": "^1.50.0", "@rynfar/meridian-plugin-opencode-scrub": "^0.2.0" } }, "sha512-fHrWnze6oEn0+1YehXqnh04GxQBEBaEANCQJuGGbIpas6LkEh3L9MNWs3YXb8ARcsemQ+MIXbSIN5Tgu6WXx2A=="],
 
     "p-retry": ["p-retry@4.6.2", "", { "dependencies": { "@types/retry": "0.12.0", "retry": "^0.13.1" } }, "sha512-312Id396EbJdvRONlngUx0NydfrIQ5lsYu0znKVUzVvArzEIt08V1qhtyESbGVd1FGX7UKtiFp5uwKZdM8wIuQ=="],
 

@@ -1,7 +1,7 @@
 /**
  * Migrate a opensession session onto another engine — the "flip the model, let
  * the next turn hand off" affordance behind the opensession-sessions
- * `migrate_session_engine` tool and scripts/migrate-sessions-to-opencode.ts.
+ * `migrate_session_engine` tool and scripts/migrate-sessions-to-pi.ts.
  *
  * Deliberately does NOT start a run: it only sets `session.model` to an
  * engine-routed id (recording the switch in modelHistory, exactly like a
@@ -59,7 +59,7 @@ export function sessionHasJournaledRun(
   sessionId: string,
   data?: Pick<
     NativeSessionFile,
-    "claudeSessionId" | "codexThreadId" | "opencodeSessionId" | "piSessionId"
+    "claudeSessionId" | "codexThreadId" | "piSessionId"
   >
 ): boolean {
   const engineIds = new Set(
@@ -67,7 +67,6 @@ export function sessionHasJournaledRun(
       sessionId,
       data?.claudeSessionId,
       data?.codexThreadId,
-      data?.opencodeSessionId,
       data?.piSessionId,
     ].filter(Boolean) as string[]
   );
@@ -98,20 +97,16 @@ export function migrateSessionEngine(
 
   const resolved = resolveModel(targetModel);
   // The target must NAME an engine: an engine-prefixed id, or a preset id
-  // (dial/…, orchestrator/…) which the opencode engine resolves at dispatch. A
+  // (dial/…, orchestrator/…) which the pi engine resolves at dispatch. A
   // bare native slug ("claude-opus-5") names a model, not an engine, and is
   // rejected the way it always was.
-  const engine = resolved
-    ? (explicitEngineFor(resolved.id) ??
-      (resolved.provider === "opencode" ? "opencode" : null))
-    : null;
+  const engine = resolved ? explicitEngineFor(resolved.id) : null;
   if (!resolved || !engine) {
     return {
       ok: false,
       error:
         `"${targetModel}" is not an engine model id — expected ` +
-        "<engine>/<provider>/<model>, e.g. opencode/anthropic/claude-sonnet-5 " +
-        "or pi/anthropic/claude-opus-5.",
+        "pi/<provider>/<model>, e.g. pi/anthropic/claude-opus-5.",
     };
   }
   if (isAutomationOwnedSession(data) && engine !== "pi") {

@@ -144,7 +144,7 @@ a review checklist, a deployment runbook, a design vocabulary.
 
 Generic skills shipped by Open Session live in this repository under
 `.agents/skills/`. The installer links them into
-`~/.config/opencode/skills/`, so every project can use them without keeping
+`~/.config/pi/skills/`, so every project can use them without keeping
 source files under `~/.claude/skills`. Product-specific workflows belong in
 that product's repository instead.
 
@@ -162,7 +162,7 @@ publishable, and it deliberately carries no runtime code. See
 
 ## What not to extend
 
-**The runner.** `agent-runner.ts`, `opencode-runner.ts` and `host-client.ts` are
+**The runner.** `agent-runner.ts`, `pi-runner.ts` and `host-client.ts` are
 runner internals with a lot of load-bearing behaviour around restarts,
 reattachment and account rotation. Changes there need a real restart and are easy
 to get subtly wrong — a mistake usually shows up as sessions that look fine and

@@ -178,7 +178,7 @@ function cgroupCensus(): Record<string, unknown> {
 }
 
 /** Counts of the process fleets that have historically leaked or ballooned
- *  (2026-07-27: 664 mcp-proxies / 42GB RSS, 26 orphaned opencode scopes, a
+ *  (2026-07-27: 664 mcp-proxies / 42GB RSS, 26 orphaned pi scopes, a
  *  3-day goldenbuild dev stack). Surfacing them here lets the health-monitor
  *  automation name the offender in an alert instead of just "high load".
  *  /proc scan, 60s-cached — RestartOverlay polls this endpoint at 1.5s during
@@ -187,7 +187,6 @@ let censusCache: { at: number; data: Record<string, number> } | null = null;
 function processCensus(): Record<string, number> {
 	if (censusCache && Date.now() - censusCache.at < 60_000) return censusCache.data;
 	const counts = {
-		opencodeServers: 0,
 		mcpProxies: 0,
 		chrome: 0,
 		nextDev: 0,
@@ -204,8 +203,7 @@ function processCensus(): Record<string, number> {
 			} catch {
 				continue; // process exited mid-scan
 			}
-			if (cmd.includes("opencode serve")) counts.opencodeServers++;
-			else if (cmd.includes("mcp-proxy.")) counts.mcpProxies++;
+			if (cmd.includes("mcp-proxy.")) counts.mcpProxies++;
 			else if (cmd.includes("/chrome") && cmd.includes("--headless")) counts.chrome++;
 			// One per dev stack: a `just dev-next` stack spawns ~6 processes whose
 			// cmdline mentions "next dev" (bunx/concurrently/sh/bun/node), so count

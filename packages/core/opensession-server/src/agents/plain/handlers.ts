@@ -103,10 +103,10 @@ export interface PlainWebhookPayload {
   };
 }
 
-// --- Agent runner (opencode engine) ---
+// --- Agent runner (pi engine) ---
 
 /** Deny message for the money-moving Stripe tools on unattended Plain runs —
- *  stripped from the tool list at the engine layer (opencodeRunPolicy). */
+ *  stripped from the tool list at the engine layer (runToolPolicy). */
 const MONEY_TOOLS_DENY_MSG =
   `Money-moving Stripe actions (refunds/cancellations) can't run from a normal ${PLAIN_MENTION} note. ` +
   `They must be proposed by triage and then approved with an explicit '${PLAIN_MENTION} go ahead' on that proposal. ` +
@@ -138,7 +138,7 @@ async function runWorkTurn(
       // per-server allowedUsers — not the mount list. Narrow this to the
       // servers triage actually calls if that stops feeling like enough.
       mcpServers: "all",
-      // Kind "plain" = unattended on the opencode engine: untrusted customer
+      // Kind "plain" = unattended on the pi engine: untrusted customer
       // ticket text, so the deny-set below is stripped at the tool-list layer.
       // Kind-only journal (no osSessionId) — this loop tracks its own engine
       // session ids and must not be generically resumed after a restart.

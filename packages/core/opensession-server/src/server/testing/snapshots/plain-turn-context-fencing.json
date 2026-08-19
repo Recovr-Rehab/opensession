@@ -34,7 +34,7 @@
       "journalKind": "prompt",
       "mcpScope": "all",
       "mode": "scratch",
-      "model": "opencode/anthropic/claude-sonnet-5",
+      "model": "pi/anthropic/claude-sonnet-5",
       "prompt": {
         "injectedContext": [
           {
@@ -158,7 +158,7 @@
     },
     {
       "content": "The sweep re-reads every shard per tick.",
-      "model": "opencode/anthropic/claude-sonnet-5",
+      "model": "pi/anthropic/claude-sonnet-5",
       "seq": 5,
       "type": "assistant"
     },

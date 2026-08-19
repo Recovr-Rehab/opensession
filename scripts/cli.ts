@@ -4,7 +4,7 @@
  *
  * Reachable as `opensession` once install.sh has put the shim on PATH, and as
  * `bun run scripts/cli.ts` from a checkout. The surface mirrors what the
- * reference self-hosted tools (opencode, openclaw) expose, because that is the
+ * reference self-hosted tools (self-hosted tools, openclaw) expose, because that is the
  * bar this install experience is being measured against: onboard, update,
  * start/stop, doctor.
  *

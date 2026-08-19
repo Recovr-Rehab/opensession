@@ -59,7 +59,7 @@ describe("transcript snapshots", () => {
       title: "Earlier investigation",
       mode: "scratch",
       workspaceId: "ws-snap-attached",
-      opencodeSessionId: "ses_snap_attached",
+      piSessionId: "ses_snap_attached",
     });
     h.writeEngineTranscript("ses_snap_attached", [
         {

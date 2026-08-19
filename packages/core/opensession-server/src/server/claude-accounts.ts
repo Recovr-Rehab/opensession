@@ -353,9 +353,9 @@ async function fetchUsage(
 
 // ── Meridian-observed usage (accounts blind to the OAuth endpoint) ──────────
 //
-// Registered by opencode-runner at module load (injection — that module
+// Registered by pi-runner at module load (injection — that module
 // imports this one, so the dependency can't point back). Every live
-// meridian-mode opencode server exposes its proxy's GET /v1/usage/quota,
+// bridge-mode Pi run exposes its proxy's GET /v1/usage/quota,
 // whose SDK-observed half populates from rate-limit events on live requests
 // — so it works even for `claude setup-token` accounts whose token 403s on
 // USAGE_URL (usageScope "missing"). Those accounts get their usage picture
@@ -1103,7 +1103,7 @@ export interface AccountRequest {
    *  (pin, sticky, designated, pool). An in-turn account walk needs this on
    *  top of the sideline, because some refusals deliberately do not sideline:
    *  the pi provider's rolling hourly cap is local admission control that
-   *  frees within the hour, and its sideline map is shared with opencode, so
+   *  frees within the hour, and its sideline map is shared with pi, so
    *  it must never bench a healthy account cross-engine. Without an explicit
    *  exclusion the re-pick hands back the account that just refused. */
   excludeIds?: readonly string[];

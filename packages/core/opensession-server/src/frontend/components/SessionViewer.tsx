@@ -159,7 +159,7 @@ import {
 	EFFORTS,
 	baseModelId,
 	friendlyModelSlug,
-	opencodeModelParts,
+	routedModelParts,
 	workspacePresetLabel,
 } from "./ModelEffortSelect";
 import { AskCard } from "./AskCard";
@@ -652,21 +652,21 @@ function prettyModel(id: string): string {
 	// from, its slug is still a name and its storage path is not.
 	const preset = workspacePresetLabel(baseModelId(id), []);
 	if (preset) return preset;
-	// Opencode ids get their friendly name with no engine suffix — the engine
-	// is an implementation detail ("Sonnet 5", not "… · OpenCode").
-	const oc = opencodeModelParts(id);
+	// Pi ids get their friendly name with no engine suffix — the engine
+	// is an implementation detail ("Sonnet 5", not "… · Pi").
+	const oc = routedModelParts(id);
 	if (oc) return friendlyModelSlug(oc.model);
 	const isCodex = id.startsWith("gpt") || id.startsWith("codex");
 	const name = MODEL_NAMES[id] || id;
 	return `${name} · ${isCodex ? "Codex" : "Claude"}`;
 }
 /** Model label for the header/info metadata lines: the registry label, but
- * opencode ids always take the pure friendly-name path (the server's labels
+ * pi ids always take the pure friendly-name path (the server's labels
  * for them only refresh on restart). */
 function metadataModelLabel(effectiveModel: string, models: ModelOption[]): string {
 	const preset = workspacePresetLabel(baseModelId(effectiveModel), models);
 	if (preset) return preset;
-	if (opencodeModelParts(effectiveModel)) return prettyModel(effectiveModel);
+	if (routedModelParts(effectiveModel)) return prettyModel(effectiveModel);
 	return models.find((m) => m.id === effectiveModel)?.label || prettyModel(effectiveModel);
 }
 // An automatic fallback arrives as by = "auto-switch — <from label> <reason>",
@@ -2026,7 +2026,7 @@ export function SessionViewer({
 		}).catch(() => {});
 	}
 
-	// Sub-agents the session spawned directly (opencode task-tool children /
+	// Sub-agents the session spawned directly (pi task-tool children /
 	// SDK Task agents) — shown in the Agents tab next to workflow runs. Seeded
 	// here; the polling effect below (after isBusy exists) keeps them live.
 	const [subagents, setSubagents] = useState<SessionSubagentSnapshot[]>([]);

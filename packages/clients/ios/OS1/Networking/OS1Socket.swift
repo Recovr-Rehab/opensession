@@ -89,7 +89,7 @@ final class OS1Socket: SessionSocket {
     /// capability the web viewer sends: eligible watches are then served from
     /// the server's own transcript store, whose backward pages reach the first
     /// message. Without it the watch is served from the legacy mirror JSONL —
-    /// and sessions whose mirror file no longer exists (every opencode-engine
+    /// and sessions whose mirror file no longer exists (every owned-store
     /// session now) answer with a 120-entry tail, `truncated: true` and NO byte
     /// cursor, which left the reader unable to page past the last 120 entries.
     func watch(sessionId: String) {

@@ -15,7 +15,7 @@
 import { chmodSync, existsSync, mkdirSync } from "fs";
 import { join } from "path";
 import { INTEGRATIONS } from "../../packages/core/opensession-server/src/server/integrations/registry";
-import { configPath as engineConfigPath, setBridgeEnabled } from "../../packages/core/opensession-server/src/server/opencode-config";
+import { piConfigPath as engineConfigPath, setPiEnabled } from "../../packages/core/opensession-server/src/server/pi-config";
 import { backup, tailnetIp } from "./config-edit";
 import { CONFIG_PATH, ENV_PATH, HOME, OPENSESSION_HOME, REPO_ROOT, STAGED_UNIT_PATH } from "./paths";
 import { installRecipe, listRecipes } from "./recipes";
@@ -257,7 +257,7 @@ export async function onboard(opts: OnboardOptions = {}): Promise<number> {
   // no code path created. Only seeded when absent — an operator who turned the
   // engine off deliberately keeps that choice through a re-run.
   if (!existsSync(engineConfigPath())) {
-    setBridgeEnabled(true);
+    setPiEnabled(true);
     wrote(engineConfigPath(), "(engine enabled)");
   }
 
@@ -334,7 +334,7 @@ export async function onboard(opts: OnboardOptions = {}): Promise<number> {
   // it's what the default model uses — with the API-key route as the alternative.
   info(`3. ${bold("add model capacity")}     Workspace → Models: paste a`);
   info(`   ${dim("`claude setup-token` token, or sign in to ChatGPT by device code.")}`);
-  info(`   ${dim("Using API keys instead? `opencode auth login`, or Workspace → Models.")}`);
+  info(`   ${dim("Using API keys instead? Add one under Workspace → Models.")}`);
   info(`4. ${bold("create a session")}       a completed turn is the real proof`);
   info(`5. ${bold("opensession team add")}   put yourself on the roster (attribution, sign-in)`);
   if (answers.enabled.length) {

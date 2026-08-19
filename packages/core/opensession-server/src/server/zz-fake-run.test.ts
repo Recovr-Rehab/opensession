@@ -29,7 +29,7 @@ let sessionCache: typeof import("./session-cache");
 let runState: typeof import("./run-state");
 let queueState: typeof import("./queue-state");
 let fakeEngineMod: typeof import("./testing/fake-engine");
-let ocTranscript: typeof import("./opencode-transcript");
+let ocTranscript: typeof import("./transcript-persistence");
 let transcriptStoreMod: typeof import("./transcript-store");
 let restoreSessionsDir: (() => void) | null = null;
 let restoreJournal: (() => void) | null = null;
@@ -67,7 +67,7 @@ beforeAll(async () => {
 	runState = await import("./run-state");
 	queueState = await import("./queue-state");
 	fakeEngineMod = await import("./testing/fake-engine");
-	ocTranscript = await import("./opencode-transcript");
+	ocTranscript = await import("./transcript-persistence");
 	transcriptStoreMod = await import("./transcript-store");
 
 	// Redirect probe: a session file written to our temp dir must be visible
@@ -116,10 +116,9 @@ describe("fake-engine session runs (consumer loop end-to-end)", () => {
 		const data = sessionJson(sid);
 		// engineSessionPatch persisted the fake engine session for later resumes.
 		expect(
-			data.opencodeSessionId === "ses_zz_clean" ||
 				data.claudeSessionId === "ses_zz_clean",
 		).toBe(true);
-		expect(data.lastEngineProvider).toBe("opencode");
+		expect(data.lastEngineProvider).toBe("pi");
 		expect(data.usage?.inputTokens).toBe(100);
 		expect(data.lastRunError).toBeUndefined();
 		// Lifecycle fully settled: FSM at rest, engine not busy, queue empty.
@@ -171,7 +170,7 @@ describe("fake-engine session runs (consumer loop end-to-end)", () => {
 		const engineId = "ses_zz_error_chip";
 		writeSessionFile(sid);
 		sessionCache.invalidateSessionsCache();
-		ocTranscript.recordBksSessionFor(engineId, sid);
+		ocTranscript.recordEngineSessionOwner(engineId, sid);
 
 		sessionCache.recordRunOutcome(sid, "boom: unrecoverable test failure", {
 			engineSessionId: engineId,
@@ -192,7 +191,7 @@ describe("fake-engine session runs (consumer loop end-to-end)", () => {
 		const engineId = "ses_zz_stop_chip";
 		writeSessionFile(sid);
 		sessionCache.invalidateSessionsCache();
-		ocTranscript.recordBksSessionFor(engineId, sid);
+		ocTranscript.recordEngineSessionOwner(engineId, sid);
 
 		sessionCache.recordRunOutcome(sid, "Usage limit reached on every account", {
 			engineSessionId: engineId,
@@ -229,11 +228,11 @@ describe("fake-engine session runs (consumer loop end-to-end)", () => {
 
 		const data = sessionJson(sid);
 		expect(fake.calls.map((call) => call.model)).toEqual([
-			"opencode/openai/gpt-5.6-sol",
-			"opencode/openai/gpt-5.6-terra",
+			"pi/openai/gpt-5.6-sol",
+			"pi/openai/gpt-5.6-terra",
 		]);
 		expect(data.model).toBe("dial/medium");
-		expect(data.lastEngineModel).toBe("opencode/openai/gpt-5.6-terra");
+		expect(data.lastEngineModel).toBe("pi/openai/gpt-5.6-terra");
 		expect(data.modelHistory).toBeUndefined();
 	});
 
@@ -252,7 +251,7 @@ describe("fake-engine session runs (consumer loop end-to-end)", () => {
 
 		const data = sessionJson(sid);
 		expect(data.model).toBe("gpt-5.6-sol");
-		expect(data.lastEngineModel).toBe("opencode/openai/gpt-5.6-terra");
+		expect(data.lastEngineModel).toBe("pi/openai/gpt-5.6-terra");
 		expect(data.modelHistory).toBeUndefined();
 	});
 
@@ -270,7 +269,7 @@ describe("fake-engine session runs (consumer loop end-to-end)", () => {
 		await runSession.runSessionPromptAndDrain(sid, "keep going", "Test");
 
 		const data = sessionJson(sid);
-		expect(data.model).toBe("opencode/openai/gpt-5.6-terra");
+		expect(data.model).toBe("pi/openai/gpt-5.6-terra");
 		expect(data.modelHistory).toHaveLength(1);
 		expect(data.modelHistory[0].by).toContain("out of credits");
 	});
@@ -291,7 +290,7 @@ describe("fake-engine session runs (consumer loop end-to-end)", () => {
 
 		const data = sessionJson(sid);
 		expect(data.model).toBe("dial/medium");
-		expect(data.lastEngineModel).toBe("opencode/openai/gpt-5.6-luna");
+		expect(data.lastEngineModel).toBe("pi/openai/gpt-5.6-luna");
 		expect(data.modelHistory).toBeUndefined();
 	});
 

@@ -1,7 +1,7 @@
 /**
  * Where an Open Session install lives on disk.
  *
- * Layout, modelled on opencode's single dot-directory:
+ * Layout, modelled on self-hosted tools's single dot-directory:
  *
  *   ~/.opensession/
  *     bin/opensession     shim on PATH, execs the CLI in this checkout

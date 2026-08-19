@@ -16,7 +16,6 @@
 #   --repo <url>          OPENSESSION_REPO     source repository
 #   --no-modify-path      NO_MODIFY_PATH=1     do not touch shell profiles
 #   --no-onboard          NO_ONBOARD=1         install only, skip the wizard
-#   --no-engine           NO_ENGINE=1          do not install the OpenCode engine
 #                                              or the claude/codex model CLIs
 #   --no-tailscale        NO_TAILSCALE=1       do not install Tailscale
 #   --yes                 NO_PROMPT=1          accept defaults, never prompt
@@ -308,7 +307,6 @@ good "installed"
 #
 # Three binaries, all needed before a session can run a turn:
 #
-#   opencode  the engine that executes agent turns. Without it the server
 #             starts, the UI loads, and every session fails.
 #   claude    the bundled Anthropic bridge execs it, and `claude setup-token`
 #             is how you mint the account token for the default model.
@@ -356,31 +354,11 @@ step "Engine"
 if [ "$NO_ENGINE" = "1" ]; then
   muted "skipped (--no-engine)"
 else
-  install_cli opencode "opencode" \
-    "curl -fsSL https://opencode.ai/install | bash" "$HOME/.opencode/bin"
   install_cli claude "Claude Code" \
     "curl -fsSL https://claude.ai/install.sh | bash" "$HOME/.local/bin"
   install_cli codex "Codex" \
     "curl -fsSL https://chatgpt.com/codex/install.sh | sh" "$HOME/.local/bin"
 fi
-
-# Open Session owns a small set of generic skills that should be available in
-# every project. Keep their source in this repository and expose it through
-# OpenCode's standard global skill directory; never copy it into ~/.claude.
-step "Agent skills"
-GLOBAL_SKILLS="$HOME/.config/opencode/skills"
-mkdir -p "$GLOBAL_SKILLS"
-for skill in simplify pr-autofix audit-codebase; do
-  source="$DIR/.agents/skills/$skill"
-  target="$GLOBAL_SKILLS/$skill"
-  [ -d "$source" ] || continue
-  if [ -e "$target" ] && [ ! -L "$target" ]; then
-    warn "$target already exists; leaving it unchanged"
-    continue
-  fi
-  ln -sfn "$source" "$target"
-  good "$skill -> $source"
-done
 
 # ── network ─────────────────────────────────────────────────────────────────
 #
@@ -479,9 +457,7 @@ BUN="$BUN_BIN"
 
 # Put the user-local bins on PATH before handing off. Without this, a shim
 # invoked from a non-login shell (ssh, cron, systemd) runs with a PATH that
-# lacks bun and opencode — and the server resolves the engine through
-# Bun.which(), so it would silently find no engine at all.
-export PATH="\$(dirname "\$BUN"):\$HOME/.opencode/bin:\$HOME/.local/bin:\$PATH"
+export PATH="\$(dirname "\$BUN"):\$HOME/.local/bin:\$PATH"
 exec "\$BUN" "$DIR/scripts/cli.ts" "\$@"
 EOF
 chmod +x "$BIN_DIR/opensession"

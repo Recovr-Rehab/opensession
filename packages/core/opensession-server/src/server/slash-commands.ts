@@ -152,7 +152,7 @@ export function handleSlashCommand(
 			by: user,
 		});
 		// Compare underlying engine families, not resolveModel providers: a
-		// stored opencode/<provider>/<model> id reports provider "opencode",
+		// stored pi/<provider>/<model> id reports provider "pi",
 		// which would false-positive against a native id's "claude"/"codex".
 		const switchedProvider =
 			engineFamily(prevEffectiveModel) !== engineFamily(effectiveResolvedModel);

@@ -48,7 +48,7 @@ export type NoticeTone = "error" | "warn" | "info";
 const ERROR_PATTERNS: RegExp[] = [
   // run-session.ts, both terminal-failure choke points.
   /^run (failed|stopped):/,
-  // The per-turn time limit (turnTimeoutNotice in opencode-config.ts). The
+  // The per-turn time limit (turnTimeoutNotice in pi-config.ts). The
   // second form is the wording used before 2026-07-31 — transcripts keep it
   // forever, so it keeps its colour.
   /^stopped after \d/,

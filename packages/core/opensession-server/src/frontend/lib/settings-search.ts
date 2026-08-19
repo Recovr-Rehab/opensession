@@ -91,7 +91,7 @@ export const SETTINGS_KEYWORDS: Record<string, string[]> = {
 	members: ["team", "people", "teammates", "access"],
 	models: [
 		"engine",
-		"opencode",
+		"pi",
 		"claude accounts",
 		"codex",
 		"provider",

@@ -49,7 +49,7 @@ On top of the key ceiling, the money-moving tools are **confirm-listed**
 `mcp__stripe__cancel_subscription`, `mcp__stripe__update_subscription`, and
 the raw-API mutators `mcp__stripe__stripe_api_execute` /
 `mcp__stripe__stripe_api_write` (they can hit any endpoint the key permits).
-The opencode engine has no per-call approval card, so these tools are
+The pi engine has no per-call approval card, so these tools are
 STRIPPED from the model's tool list on every run — the server stays mounted
 and Stripe reads keep working. The instructions tell the agent to propose
 the action instead: unattended runs post it in their internal note for a

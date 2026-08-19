@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from "react";
 import { fetchSubagent, type SubagentTranscript } from "../lib/api";
-import { friendlyModelSlug, opencodeModelParts } from "./ModelEffortSelect";
+import { friendlyModelSlug, routedModelParts } from "./ModelEffortSelect";
 import { TranscriptBlocks } from "./TranscriptBlocks";
 import { EmptyState, InlineAlert, LoadingState } from "../ui/state";
 import { PANEL_BODY } from "../lib/session-panel-classes";
@@ -112,7 +112,7 @@ export function SubagentPane({
     if (resolvedLabel) onLabel?.(current.agentId, resolvedLabel);
   }, [current.agentId, resolvedLabel, onLabel]);
   const modelLabel = meta?.model
-    ? friendlyModelSlug(opencodeModelParts(meta.model)?.model ?? meta.model)
+    ? friendlyModelSlug(routedModelParts(meta.model)?.model ?? meta.model)
     : null;
 
   return (

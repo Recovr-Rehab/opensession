@@ -7,7 +7,6 @@ import {
 	type ModelOption,
 	type RepoInfo,
 } from "../../lib/api";
-import { useAvailableEngines } from "../../hooks/useEngines";
 import { BASE_PATH } from "../../lib/base";
 import {
 	getBusySendPrefs,
@@ -17,11 +16,6 @@ import {
 	type BusySendPref,
 	type BusySendPrefs,
 } from "../../lib/busy-send-pref";
-import {
-	getDefaultEnginePref,
-	onDefaultEnginePrefChanged,
-	setDefaultEnginePref,
-} from "../../lib/default-engine-pref";
 import {
 	getDefaultModelPref,
 	onDefaultModelPrefChanged,
@@ -389,17 +383,6 @@ export function PreferencesPanel() {
 		() => onDefaultModelPrefChanged(() => setModelPref(getDefaultModelPref())),
 		[],
 	);
-	// Per-user default engine for NEW sessions ("" = no preference — the
-	// instance decides, which today means the per-model default engine map,
-	// else OpenCode). Hidden on an instance with one engine: there is nothing
-	// to choose, and useAvailableEngines reports the same empty list for a
-	// server too old to answer.
-	const engineOptions = useAvailableEngines();
-	const [enginePref, setEnginePref] = useState<string>(getDefaultEnginePref);
-	useEffect(
-		() => onDefaultEnginePrefChanged(() => setEnginePref(getDefaultEnginePref())),
-		[],
-	);
 	// Per-user default repo for NEW sessions ("" = no preference — the
 	// workspace's own default from GET /api/repos applies, which may be Auto).
 	const [repoPref, setRepoPref] = useState<string>(getDefaultRepoPref);
@@ -457,29 +440,7 @@ export function PreferencesPanel() {
 						/>
 					}
 				/>
-				{engineOptions.length > 1 && (
-					<SettingRow
-						title="Default engine"
-						control={
-							<Select
-								label="Default engine"
-								value={
-									engineOptions.some((e) => e.id === enginePref)
-										? enginePref
-										: ""
-								}
-								options={[
-									{ value: "", label: "No preference" },
-									...engineOptions.map((e) => ({
-										value: e.id,
-										label: e.label,
-									})),
-								]}
-								onChange={setDefaultEnginePref}
-							/>
-						}
-					/>
-				)}
+
 				<SettingRow
 					title="Default repository"
 					desc="Where a new session starts. On Auto it reads your prompt and picks."

@@ -57,7 +57,7 @@ export interface TurnOutcome {
 /**
  * Tool calls that count as "this run reached somebody outside itself",
  * keyed the way runs name them (`mcp__<server>__<tool>`) plus the bare
- * opencode form (`<server>_<tool>`) that the engine's tool_use events carry.
+ * pi form (`<server>_<tool>`) that the engine's tool_use events carry.
  *
  * Deliberately a short, explicit list rather than a heuristic over tool names:
  * a wrong entry here either hides a real silent drop (missing effect → false

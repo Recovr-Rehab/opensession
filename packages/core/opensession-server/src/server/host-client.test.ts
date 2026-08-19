@@ -8,7 +8,7 @@ import {
   TranscriptStore,
   __setTranscriptStoreForTest,
 } from "./transcript-store";
-import { transcriptLineUser } from "./opencode-transcript";
+import { transcriptLineUser } from "./transcript-persistence";
 
 const roots: string[] = [];
 

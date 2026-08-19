@@ -5,7 +5,7 @@
  *
  * Why: today that answer is derived from ~18 scattered markers in three
  * storage tiers, and there are four independent "is it running?" derivations —
- * `isAgentSessionBusy` (OR of pendingStarts + activeOpencodeRuns + hostRuns),
+ * `isAgentSessionBusy` (OR of pendingStarts + activePiRuns + hostRuns),
  * the run journal (`ActiveRunRecord`), the recomputed `isRunning`/
  * `runStartedAt` on UnifiedSession, and `getRunningPids()` for external CLI
  * runs. They key on different ids and nothing ties them together, so they can
@@ -20,12 +20,12 @@
  * How the implicit markers map onto states:
  *   preparing    preparingWorkspaces (ws-hub.ts)
  *   starting     pendingStarts (agent-runner.ts markSessionStarting)
- *   running      activeOpencodeRuns / detachedRunKeys / hostRuns
+ *   running      activePiRuns / detachedRunKeys / hostRuns
  *   ask_blocked  running + pendingAsks (asks.ts)
  *   stopped      stoppedSessions latch (queue-state.ts)
  *   failed       runErrors / lastRunError (session-cache.ts recordRunOutcome)
  *   interrupted  journal ActiveRunRecord with no live driver (run-journal.ts)
- *   reattaching  tryReattachOpencodeRun in flight (opencode-runner.ts)
+ *   reattaching  tryReattachPiRun in flight (pi-runner.ts)
  *   idle         none of the above
  * Orthogonal context, deliberately NOT states: queued prompts / steer receipts
  * (delivery obligations), manualStatus (human display pin), detached-vs-child
@@ -46,7 +46,7 @@
  *   boot_journal_found       run-journal.ts takeInterruptedRuns
  *   reattach_start/ok/fail, resume_reprompt
  *                            agent-runner.ts resumeInterruptedRuns
- * Not wired yet: engine_died / shutdown_orphaned (opencode-runner.ts /
+ * Not wired yet: engine_died / shutdown_orphaned (pi-runner.ts /
  * run-session.ts), workspace_prepare/ready (ws-hub.ts), mid-run steer. The
  * leniency edges below keep those gaps silent instead of noisy.
  * Runner-internal wiring needs a real restart; so do WS-handler edits

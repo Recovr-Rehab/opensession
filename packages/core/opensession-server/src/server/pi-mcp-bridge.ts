@@ -13,9 +13,9 @@
  *    same helper every other runner enforces with.
  *  - `deniedToolIds` are dropped BEFORE a ToolDefinition is built, so the
  *    model never sees them. Ids follow the engine-neutral `<server>_<tool>`
- *    convention (opencodeDeniedToolIds); the broad forms `*_<tool>` and bare
+ *    convention (deniedToolIds); the broad forms `*_<tool>` and bare
  *    `<tool>` are honored too so the money-mover confirm set strips the same
- *    way it does on the opencode engine.
+ *    way it does on the pi engine.
  *
  * Wiring notes:
  *  - In-process servers (instances from inprocess-mcp.ts, built per-session
@@ -29,7 +29,7 @@
  *    classifyInProcessMcp). Accepting only the instance shape is what silently
  *    stripped every opensession-* server from hosted pi runs until 2026-08-19.
  *  - OAuth-granted http servers ride the local mcp-relay
- *    (mcpRelayUrl + mintMcpRelayToken, exactly like buildOpencodeMcpConfig):
+ *    (mcpRelayUrl + mintMcpRelayToken, exactly like buildPiMcpConfig):
  *    a fresh Authorization is injected per REQUEST by the relay, so
  *    short-lived tokens never sit in bridge state and can't expire mid-turn.
  *  - stdio servers spawn with getDefaultEnvironment() + the server's own
@@ -98,7 +98,7 @@ interface ServerConn {
 }
 
 /** `<server>_<tool>` denied-set membership, exact + the broad forms the
- *  money-mover confirm set uses (see opencodeDeniedToolIds: `*_<tool>` and
+ *  money-mover confirm set uses (see deniedToolIds: `*_<tool>` and
  *  bare `<tool>` over-block same-named tools by design there — mirror it). */
 function isDeniedTool(
   server: string,
@@ -259,7 +259,7 @@ export async function createPiMcpBridge(opts: {
   mcpServers: McpScope;
   user?: string;
   /** OAuth grant identity override (session creator) — same priority order
-   *  as buildOpencodeMcpConfig: creator first, prompter second. */
+   *  as buildPiMcpConfig: creator first, prompter second. */
   mcpGrantUser?: string;
   /** `<server>_<tool>` ids (plus broad `*_<tool>`/bare forms) dropped BEFORE
    *  registration — the model never sees them. */
@@ -290,7 +290,7 @@ export async function createPiMcpBridge(opts: {
     let transport: Transport;
     if (cfg.type === "http" || cfg.type === "sse" || cfg.url) {
       // OAuth-granted servers route through the local fresh-auth relay
-      // (mcp-relay.ts) — same path as buildOpencodeMcpConfig: tokens are
+      // (mcp-relay.ts) — same path as buildPiMcpConfig: tokens are
       // re-resolved per request and never appear in bridge state.
       const candidates = grantUsers.filter((u): u is string => !!u);
       const hasGrant =

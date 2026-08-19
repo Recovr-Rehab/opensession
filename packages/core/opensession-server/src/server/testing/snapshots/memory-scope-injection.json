@@ -34,7 +34,7 @@
       "journalKind": "prompt",
       "mcpScope": "all",
       "mode": "scratch",
-      "model": "opencode/anthropic/claude-sonnet-5",
+      "model": "pi/anthropic/claude-sonnet-5",
       "prompt": {
         "injectedContext": [],
         "visible": "what do you already know here?"
@@ -146,7 +146,7 @@
     },
     {
       "content": "Three standing facts.",
-      "model": "opencode/anthropic/claude-sonnet-5",
+      "model": "pi/anthropic/claude-sonnet-5",
       "seq": 4,
       "type": "assistant"
     }

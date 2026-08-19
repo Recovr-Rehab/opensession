@@ -474,7 +474,7 @@ export interface UnifiedSession {
 	};
 	aliasIds?: string[];
 	model?: string;
-	/** OpenCode reasoning variant for this session's runs; unset = model default. */
+	/** Pi reasoning variant for this session's runs; unset = model default. */
 	effort?: string;
 	/** OpenAI priority service tier for ChatGPT OAuth Codex runs. */
 	fastMode?: boolean;

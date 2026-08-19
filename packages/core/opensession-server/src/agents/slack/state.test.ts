@@ -68,12 +68,12 @@ describe("saveSession", () => {
 	});
 
 	test("an undefined in-memory field doesn't erase the stored one, null does", async () => {
-		const s = session({ threadTs: "3.3", model: "opencode/anthropic/claude-opus-5" });
+		const s = session({ threadTs: "3.3", model: "pi/anthropic/claude-opus-5" });
 		const key = getSessionKey(s.channel, s.threadTs);
 		await saveSession(s);
 		await saveSession(session({ threadTs: "3.3", claudeSessionId: null }));
 		const loaded = await loadSession(key);
-		expect(loaded?.model).toBe("opencode/anthropic/claude-opus-5");
+		expect(loaded?.model).toBe("pi/anthropic/claude-opus-5");
 		expect(loaded?.claudeSessionId).toBeNull();
 	});
 });

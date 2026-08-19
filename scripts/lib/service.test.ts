@@ -52,9 +52,6 @@ describe.skipIf(!onServiceHost)("systemd unit", () => {
 
   test("PATH carries bun and the engine", async () => {
     const path = (await renderUnit()).match(/^Environment="PATH=(.*)"$/m)?.[1] ?? "";
-    // Engine resolution goes through Bun.which("opencode"); a PATH without it
-    // means the server silently finds no engine at runtime.
-    expect(path).toContain(".opencode/bin");
     expect(path).toContain("/usr/bin");
     expect(path.split(":").every((p) => p.startsWith("/"))).toBe(true);
   });

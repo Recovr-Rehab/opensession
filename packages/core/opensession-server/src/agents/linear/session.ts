@@ -367,7 +367,7 @@ function makeActionStreamer(accessToken: string, linearSessionId: string) {
   };
 }
 
-// --- Headless agent runner (opencode engine) ---
+// --- Headless agent runner (pi engine) ---
 
 export async function runAgentHeadless(
   worktreeDir: string,
@@ -418,10 +418,10 @@ export async function runAgentHeadless(
       user: actorEmail,
       author: commitAuthor,
       // Teammate-driven runs keep AWS read access — also keeps the shared
-      // opencode server env identical across interactive kinds (a mixed
+      // run environment identical across interactive kinds (a mixed
       // aws/non-aws env would drain-respawn the server on every alternation).
       aws: true,
-      // Kind-only journal: gate marker for the opencode engine, no crash
+      // Kind-only journal: gate marker for the pi engine, no crash
       // journal — this loop tracks its own engine session ids per Linear
       // session and re-drives turns from Linear events.
       journal: { kind: "linear" },

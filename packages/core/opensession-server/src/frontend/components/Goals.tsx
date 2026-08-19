@@ -542,7 +542,7 @@ function formatNext(iso: string): string {
 }
 
 /** " (Claude)" / " (OpenAI Codex)" by the model's ACCOUNT POOL — the engine
- *  provider ("opencode"/"pi") says nothing about whose subscription pays, and
+ *  provider ("pi"/"pi") says nothing about whose subscription pays, and
  *  keying off it labeled every engine entry "(Claude)". Pool-less models get
  *  no suffix. */
 function accountPoolSuffix(m: ModelOption): string {

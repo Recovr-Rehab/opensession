@@ -386,7 +386,7 @@ export async function sweepDiskGc(opts: { dryRun?: boolean } = {}): Promise<Disk
     if (pct >= PRESSURE_PCT) {
       console.warn(
         `[disk-gc] still at ${pct.toFixed(1)}% after GC — look beyond worktrees ` +
-          `(docker build cache, ~/.opensession-opencode, /opt/firecracker)`,
+          `(docker build cache, ~/.opensession-pi, /opt/firecracker)`,
       );
     }
   }

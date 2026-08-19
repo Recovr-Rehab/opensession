@@ -1495,7 +1495,7 @@ export function NewSession({ onBack, inline, focusSeq, send, addHandler, connect
                   type="button"
                   className={cn(
                     FOOTER_ICON_BTN,
-						(branchPicked || sandboxProvider || modelEngine(effectiveModelId) !== "opencode" || selectedMcpServers.length > 0) &&
+						(branchPicked || sandboxProvider || modelEngine(effectiveModelId) !== "pi" || selectedMcpServers.length > 0) &&
                       paletteIconBtnOn,
                   )}
                   disabled={busy}

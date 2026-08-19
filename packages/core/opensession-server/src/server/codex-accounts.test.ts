@@ -9,7 +9,7 @@ import {
   markCodexExhausted,
   markCodexWedged,
 } from "./codex-accounts";
-import { pickOpenaiAccount } from "./opencode-openai-auth";
+import { pickOpenaiAccount } from "./openai-auth";
 
 // PINNED-HASH tests (pattern from meridian PR #615): session→account affinity
 // is a pure function of these scores. If any assertion here fails, the change

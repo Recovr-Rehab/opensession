@@ -5,7 +5,7 @@
  * pi-runner registers it via `runtime.registerNativeProvider` when
  * `~/.opensession-pi.json` has `anthropicTransport: "inprocess"` (the
  * default; "bridge" keeps the pre-2026-08 loopback path as rollback), so
- * `pi/anthropic/*` turns reach opencode/meridian's level: native token-level
+ * `pi/anthropic/*` turns reach pi/meridian's level: native token-level
  * streaming (SDK partial message events → pi text/thinking deltas), no
  * end-of-request replay assembly, and no stop-nudging — the PreToolUse block
  * reason invites the model to call every OTHER tool it needs in the same
@@ -46,10 +46,10 @@
  *    "aborted", which runPi's user-cancel path swallows quietly.
  *
  * Containment (all enforced here, not in prompts):
- *  - Account pick mirrors opencode/meridian: pickBridgeAccount (exported by
+ *  - Account pick mirrors pi/meridian: pickBridgeAccount (exported by
  *    the bridge) draws from the general claude-accounts pool with the run
  *    user's personal-first routing, honoring run-level pins (accountId/
- *    accountStrict/usageCredits). An opencode bridgeAccountIds designation,
+ *    accountStrict/usageCredits). An pi bridgeAccountIds designation,
  *    when set, still contains serving to exactly those ids (legacy override).
  *    Building the provider throws bridgeDesignationError()'s exact message
  *    when the engine is disabled or no account exists, so the run fails as
@@ -64,16 +64,16 @@
  *    account ended the run while the rest of the pool sat idle and the
  *    sideline only helped the next prompt. agent-runner cannot rescue that
  *    either, because an explicit engine choice pins preferredFallback to
- *    "none" rather than crossing into an opencode fallback. The per-account
+ *    "none" rather than crossing into an pi fallback. The per-account
  *    rolling hourly cap (admitBridgeRequest, shared counter with the bridge)
  *    refuses 429-worded for the same classifier, and rotates too, but is
  *    exempt from the sideline: it is local admission control that frees
- *    within the hour, and the sideline map is shared with opencode.
+ *    within the hour, and the sideline map is shared with pi.
  *    Rotation is bounded to a turn that has streamed NOTHING yet, so a
  *    failure mid-answer still surfaces plainly instead of replaying text the
  *    reader already saw. Known gap: the provider has no channel back to
  *    pi-runner's transcript, so a switch is visible in the audit log and the
- *    server log, not as a runner_notice the way opencode's is.
+ *    server log, not as a runner_notice the way pi's is.
  *  - Audit parity with the bridge (this replaces its per-request audit for pi
  *    traffic): `pi_anthropic_request` in/out with summarizeText, unified
  *    session attribution, account, tokens, duration — never raw text dumps,
@@ -676,7 +676,7 @@ async function* runSdkAttempt(
     // usage-limit-shaped for isPiUsageLimitShape (fallback walk engages), but
     // the tag keeps the catch from markExhausted-ing the account: the cap is
     // OUR local admission control, it frees within the hour, and the
-    // exhaustion sideline is shared with the opencode bridge — a synthetic
+    // exhaustion sideline is shared with the pi bridge — a synthetic
     // refusal must never bench the account cross-engine until the 5h reset.
     // ~1.6k tokens is a typical screenshot. The estimate only feeds our local
     // rolling cap, so rough is the right amount of precision here.

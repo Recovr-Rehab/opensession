@@ -58,7 +58,7 @@ root. Pins are `ARG`s — override with `--build-arg` per build:
 | `BUN_VERSION` | 1.3.14 | host `bun --version` |
 | `CLAUDE_VERSION` | 2.1.218 | host `claude --version` |
 | `NODE_MAJOR` | 24 | host Node LTS |
-| `OPENCODE_VERSION` | 1.18.18 | host opencode |
+| `PI_VERSION` | 1.18.18 | host pi |
 
 Rebuild whenever: the host Claude CLI or bun is bumped, `bun.lock` changes
 (any dep, incl. the Agent SDK / vendored codex binary), or **anything under
@@ -334,7 +334,7 @@ to `provider: "local"` (today's host behavior). Env override for the path:
   },
 
   // Remote runner bootstrap. Sandbox-engine models install the full runner +
-  // model CLIs. OpenCode models (OpenAI, Claude and other providers) keep
+  // model CLIs. Pi models (OpenAI, Claude and other providers) keep
   // their engine/auth on the host and install only Git/Bun/ripgrep/core
   // workspace tools:
   "runnerBundleUrl": null,     // tarball of the runner bundle (preferred)
@@ -346,7 +346,7 @@ to `provider: "local"` (today's host behavior). Env override for the path:
 ### Local Firecracker MicroVM (brain and workspace inside)
 
 The `microvm` provider runs the normal runner payload and selected engine
-inside a per-session Firecracker guest. OpenCode, Pi and native Claude use the
+inside a per-session Firecracker guest. Pi, Pi and native Claude use the
 same brain-inside run-ws/rpc-ws transport as remote providers; only native
 Codex stays host-only because its writable rotating `CODEX_HOME` is not safe to
 project across the boundary. Per-launch credentials are scoped and copied into
@@ -497,8 +497,8 @@ so no ingress URL is reachable from inside.
   local and they're lost when the sandbox is destroyed**. Host-side you still
   get the launch/journal/run-ws lines; grep the sandbox itself (`exec`) while
   it lives if you need a remote run's turn-level audit. (The persisted
-  opencode transcript had the same gap and is now mirrored host-side from the
-  dial-back stream — see `withOpencodeTranscriptMirror` in
+  pi transcript had the same gap and is now mirrored host-side from the
+  dial-back stream — see the transcript forwarder in
   `packages/core/opensession-server/src/server/sandbox/adapters/bootstrap.ts`; audit mirroring is a possible
   follow-up on the same hook.)
 

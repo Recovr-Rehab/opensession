@@ -459,14 +459,14 @@ const responseFor = (url: URL, method: string): Response => {
 			models: [
 				{
 					id: "anthropic/claude-fable-5",
-					provider: "opencode",
+					provider: "pi",
 					label: "Claude Fable 5",
 					aliases: [],
 					efforts: ["medium", "high"],
 				},
 				{
 					id: "anthropic/claude-opus-5",
-					provider: "opencode",
+					provider: "pi",
 					label: "Claude Opus 5",
 					aliases: [],
 					efforts: ["high"],
@@ -522,7 +522,7 @@ const responseFor = (url: URL, method: string): Response => {
 							endedAt: Date.parse(minutesAgo(35)),
 							model: "anthropic/claude-sonnet-5",
 							tokensOut: 1840,
-							source: "opencode",
+							source: "pi",
 						},
 						{
 							id: "agent-demo-review",
@@ -531,7 +531,7 @@ const responseFor = (url: URL, method: string): Response => {
 							status: "running",
 							startedAt: Date.parse(minutesAgo(35)),
 							model: "anthropic/claude-fable-5",
-							source: "opencode",
+							source: "pi",
 						},
 					]
 				: [],

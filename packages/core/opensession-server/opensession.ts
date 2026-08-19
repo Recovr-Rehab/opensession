@@ -8,8 +8,6 @@ import {
 	activeDetachedAgentRunCount,
 	resumeInterruptedRuns,
 } from "./src/server/agent-runner";
-import { enableOpencodeServerDetach } from "./src/server/opencode-detach";
-import { adoptDetachedOpencodeServers } from "./src/server/opencode-runner";
 import { startAccountHealthMonitor } from "./src/server/account-health";
 import { startAnalyticsPrewarm } from "./src/server/analytics";
 import { startDiskGc } from "./src/server/disk-gc";
@@ -557,18 +555,8 @@ if (!g.__opensessionBooted) {
 	// or steal live runs. State writes are additionally isolated (the
 	// devInstanceBootError guard at the top of this file enforces it).
 	const devInstance = isDevInstance();
-	let detachedAdoption: Promise<number> | undefined;
 	if (!devInstance) {
 	startLiveActivitySync();
-	// Detached engine servers (src/server/opencode-detach.ts): opt this — and
-	// only this — process into spawning `opencode serve` in transient systemd
-	// user scopes, so in-flight turns survive a `systemctl restart`. Runner-host
-	// and sandbox contexts never enable it. Kill switch: OPENSESSION_OC_DETACH=0.
-	enableOpencodeServerDetach();
-	// Begin adoption before agents, schedulers, or webhook intake can start a
-	// run. ensureOpencodeServer waits for this promise, preventing a fresh spawn
-	// from racing an older detached server with the same pool key.
-	detachedAdoption = adoptDetachedOpencodeServers();
 
 	// Public dial-back ingress for remote sandboxes (src/server/public-ingress.ts):
 	// a second, isolated listener serving ONLY the run-ws/rpc-ws upgrades +
@@ -745,17 +733,6 @@ if (!g.__opensessionBooted) {
 	if (!devInstance) {
 		setTimeout(() => {
 		void (async () => {
-		// Adopt detached `opencode serve` scopes that survived the restart FIRST —
-		// resumeInterruptedRuns reattaches journaled runs to these adopted pool
-		// entries (tryReattachOpencodeRun) instead of re-prompting their sessions.
-		try {
-			const adopted = await (detachedAdoption ?? adoptDetachedOpencodeServers());
-			if (adopted > 0) {
-				console.log(`[runner] Adopted ${adopted} detached opencode server(s) from before restart`);
-			}
-		} catch (e) {
-			console.error("[runner] Detached-server adoption failed:", e);
-		}
 		const shutdownRecords = readActiveShutdownSnapshot();
 		const resumedIds = resumeInterruptedRuns(
 			(bksSessionId, terminalEvent) => {
@@ -814,7 +791,7 @@ if (!g.__opensessionBooted) {
 					// never the interactive admin/sessions surface). Required for pi
 					// resumes: in-process engines hold no surviving stdio proxies, so
 					// without this the re-prompted run is tool-less. Harmless for
-					// opencode — its rebuilt proxies resolve through run-rpc's
+					// pi — its rebuilt proxies resolve through run-rpc's
 					// fail-closed automation fallback either way.
 					if (session.automation)
 						return automationResumeMcpForSession(session, bksSessionId);
@@ -988,8 +965,8 @@ if (!g.__opensessionBooted) {
 		} catch {}
 		// Wait for runner-driven runs (web UI / automations / loops) to settle —
 		// but ONLY the ones a restart would actually kill. Runs on DETACHED
-		// engine servers (opencode-detach.ts) survive the restart: their
-		// `opencode serve` scopes live outside this unit's cgroup and keep
+		// engine servers (pi-detach.ts) survive the restart: their
+		// detached run-host units live outside this unit's cgroup and keep
 		// executing, and the next boot adopts the servers + reattaches the runs
 		// from the journal. Waiting on those would just delay the restart.
 		const undrainable = () =>

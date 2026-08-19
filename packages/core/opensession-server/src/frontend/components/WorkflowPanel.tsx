@@ -17,7 +17,7 @@ import {
 	INFO_LABEL_CLASS,
 	INFO_SECTION_CLASS,
 } from "../lib/session-viewer-classes";
-import { friendlyModelSlug, opencodeModelParts } from "./ModelEffortSelect";
+import { friendlyModelSlug, routedModelParts } from "./ModelEffortSelect";
 import { WorkflowAgentTranscript } from "./WorkflowAgentTranscript";
 import { Badge } from "../ui/badge";
 
@@ -130,11 +130,11 @@ function fmtTokens(n: number): string {
 	return String(n);
 }
 
-/** "opencode/anthropic/claude-sonnet-5" → "Sonnet 5", and
+/** "pi/anthropic/claude-sonnet-5" → "Sonnet 5", and
  *  "…/claude-haiku-4-5-20251001" → "Haiku 4.5": the trailing release date is
  *  version noise that doubles the width of every row's model readout. */
 function shortModel(id: string): string {
-	const oc = opencodeModelParts(id);
+	const oc = routedModelParts(id);
 	return friendlyModelSlug((oc ? oc.model : id).replace(/-\d{8}$/, ""));
 }
 
@@ -371,7 +371,7 @@ export function WorkflowPanel({
 	);
 }
 
-/** Sub-agents the session spawned directly with the task tool (opencode child
+/** Sub-agents the session spawned directly with the task tool (pi child
  *  sessions / Claude-SDK Task agents) — one card in the same visual grammar as
  *  a workflow run: StatusMark rows with agent-type/model chips, tokens and
  *  duration. Clicking a row opens the sub-agent's real conversation in the

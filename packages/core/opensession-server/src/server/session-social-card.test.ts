@@ -65,7 +65,7 @@ function session(patch: Partial<UnifiedSession> = {}): UnifiedSession {
 		title: "Ship dynamic social cards",
 		createdBy: "Test Person",
 		startedBy: "Test",
-		model: "opencode/openai/gpt-5.6-sol",
+		model: "pi/openai/gpt-5.6-sol",
 		repo: "opensession",
 		mode: "code",
 		lastActivity: "2026-08-18T12:00:00Z",

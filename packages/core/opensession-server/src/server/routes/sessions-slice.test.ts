@@ -296,8 +296,8 @@ describe("sessionListRow", () => {
 	test("drops run-resume fields no list client reads", () => {
 		const row = sessionListRow(
 			archivedSession({
-				lastEngineModel: "opencode/anthropic/claude-opus-5",
-				lastEngineProvider: "opencode",
+				lastEngineModel: "pi/anthropic/claude-opus-5",
+				lastEngineProvider: "pi",
 				mcpServers: ["github", "linear"],
 				piSessionId: "pi-session",
 				presetNote: "Long workspace preset instructions",
@@ -327,7 +327,6 @@ describe("sessionListRow", () => {
 			archivedSession({
 				claudeSessionId: "ses_1",
 				codexThreadId: "thread_1",
-				opencodeSessionId: "ses_opencode",
 				piSessionId: "pi-session",
 				modelHistory: [{ model: "claude-opus-5", at: "2026-08-09" }],
 				transcriptPath: "/transcripts/ses_1.jsonl",
@@ -336,7 +335,6 @@ describe("sessionListRow", () => {
 		for (const detail of [
 			"claudeSessionId",
 			"codexThreadId",
-			"opencodeSessionId",
 			"piSessionId",
 			"modelHistory",
 			"transcriptPath",
@@ -437,7 +435,6 @@ describe("sessionRan", () => {
 		for (const id of [
 			"claudeSessionId",
 			"codexThreadId",
-			"opencodeSessionId",
 			"piSessionId",
 		] as const)
 			expect(sessionRan(archivedSession({ [id]: "x" } as never))).toBe(true);
@@ -449,7 +446,6 @@ describe("sessionRan", () => {
 				archivedSession({
 					claudeSessionId: null,
 					codexThreadId: undefined,
-					opencodeSessionId: undefined,
 					piSessionId: undefined,
 				}),
 			),

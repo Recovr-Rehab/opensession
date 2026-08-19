@@ -234,7 +234,7 @@ export async function handleSystemRoutes(
 			`[pi-smoke] admin trigger${by ? ` by ${by}` : ""}${dryRun ? " (dry-run)" : ""}`,
 		);
 		try {
-			// Dynamic import: the pi runner's module graph (opencode-runner and
+			// Dynamic import: the pi runner's module graph (pi-runner and
 			// friends) stays out of this hot route file; the heavy pi SDK import
 			// is itself dynamic inside the runner.
 			const { runPiSmokeTurn } = await import("../pi-runner");

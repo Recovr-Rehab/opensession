@@ -358,7 +358,7 @@ export const ToolCallBlock = React.memo(function ToolCallBlock({
   }
 
   // A Task/Agent call whose sub-agent transcript we can open in the sidebar.
-  // Claude-SDK results carry a structured agentId; opencode's task tool only
+  // Claude-SDK results carry a structured agentId; pi's task tool only
   // embeds the child session id in the result text (<task id="ses_…">) — the
   // subagent route accepts either. Before the result exists, the live
   // subagents map (fed by SessionViewer's poll) supplies the child id so a

@@ -48,7 +48,6 @@ export interface ServerSection {
 
 export interface PathsSection {
   claudeBin?: string;
-  opencodeBin?: string;
   worktreesDir?: string;
   mcpConfig?: string;
 }
@@ -280,7 +279,6 @@ export interface ResolvedServer {
 
 export interface ResolvedPaths {
   claudeBin: string;
-  opencodeBin: string | null;
   worktreesDir: string;
   mcpConfig: string;
 }
@@ -429,7 +427,6 @@ function parseConfig(text: string): OpenSessionConfig {
     if (paths) {
       cfg.paths = defined({
         claudeBin: str(paths.claudeBin),
-        opencodeBin: str(paths.opencodeBin),
         worktreesDir: str(paths.worktreesDir),
         mcpConfig: str(paths.mcpConfig),
       });
@@ -582,7 +579,6 @@ export function configuredPaths(): ResolvedPaths {
       p.claudeBin ||
       Bun.which("claude") ||
       "claude",
-    opencodeBin: process.env.OPENSESSION_OPENCODE_BIN || p.opencodeBin || null,
     worktreesDir:
       process.env.OPENSESSION_WORKTREES_DIR ||
       p.worktreesDir ||

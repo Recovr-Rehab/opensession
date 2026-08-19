@@ -8,7 +8,7 @@
  * any device; when the CLI exits with an auth.json in place, the directory is
  * registered as a "home"-kind pool account via addCodexAccount — after which
  * refresh stays CLI-managed exactly like a VPS-side login (see
- * opencode-openai-auth.ts for why the CLI must own the refresh-token family).
+ * pi-openai-auth.ts for why the CLI must own the refresh-token family).
  *
  * Live login attempts are parked on globalThis so hot reloads don't orphan
  * the child process or lose the URL/code mid-flow.

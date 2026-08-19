@@ -227,7 +227,7 @@ final class TranscriptGroupingTests: XCTestCase {
                 type: "assistant",
                 content: "Done.",
                 timestamp: "2026-01-01T00:00:12Z",
-                model: "opencode/anthropic/claude-sonnet-5"
+                model: "pi/anthropic/claude-sonnet-5"
             ),
         ])
 
@@ -237,7 +237,7 @@ final class TranscriptGroupingTests: XCTestCase {
         }
         XCTAssertEqual(footers.count, 1)
         XCTAssertEqual(footers[0].files.map(\.basename), ["App.tsx"])
-        XCTAssertEqual(footers[0].model, "opencode/anthropic/claude-sonnet-5")
+        XCTAssertEqual(footers[0].model, "pi/anthropic/claude-sonnet-5")
         XCTAssertEqual(TranscriptFormat.modelLabel(footers[0].model ?? ""), "Sonnet 5")
     }
 

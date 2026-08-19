@@ -480,7 +480,7 @@ export const runErrors: Map<string, { message: string; at: string }> =
  * `lastRunError` but wrote no transcript line, so for those the banner was the
  * only trace the run had died (bks-019fb757, 2026-07-31).
  *
- * `require` rather than a static import: opencode-transcript lazily requires
+ * `require` rather than a static import: pi-transcript lazily requires
  * this module back (its own cycle-breaker), and the transcript write must be
  * synchronous so it lands before the client re-reads the transcript.
  * Never throws — a dead transcript store must not break outcome recording.
@@ -492,8 +492,8 @@ function persistRunFailureNotice(
 ): void {
 	if (!engineSessionId) return;
 	try {
-		const m = require("./opencode-transcript") as typeof import("./opencode-transcript");
-		m.appendOpencodeTranscript(engineSessionId, [
+		const m = require("./transcript-persistence") as typeof import("./transcript-persistence");
+		m.appendTranscriptEntries(engineSessionId, [
 			m.transcriptLineRunnerNotice(`${label}: ${message}`),
 		]);
 	} catch {}

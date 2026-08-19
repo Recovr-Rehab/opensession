@@ -21,7 +21,7 @@
  * confidential. Tokens are stored per GitHub login
  * in ~/.opensession-github-auth.json (0600), are never returned by the API,
  * and are injected only as GH_TOKEN/GITHUB_TOKEN into interactive,
- * non-least-privilege runs (see opencode-runner.ts) — automation runs and
+ * non-least-privilege runs (see pi-runner.ts) — automation runs and
  * anything carrying deniedTools never see them, the same fail-closed posture
  * as `allowedUsers` MCP servers. The run's user resolves to a GitHub login
  * through the SAME identity table as commit attribution (identity.team in
@@ -515,7 +515,7 @@ const REFRESH_TICK_MS = 20 * 60_000;
  * Never at module scope, and never from a second process: a refresh ROTATES
  * the shared refresh-token string, so anything racing the server's ticker
  * invalidates the user's grant (dead until they reconnect). This module is
- * imported by opencode-runner, pi-runner, web-auth and half the routes, so at
+ * imported by pi-runner, pi-runner, web-auth and half the routes, so at
  * module scope every run host, script and one-off bun process rotated live
  * grants the moment it started. Dev instances skip it for the same reason.
  */

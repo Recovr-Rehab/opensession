@@ -132,7 +132,7 @@ export async function getAgentAwsEnv(): Promise<Record<string, string>> {
 }
 
 /**
- * File-vended credentials for opencode runs. An opencode server is a
+ * File-vended credentials for pi runs. A Pi run is a
  * long-lived (often shared) process whose env is fixed at spawn — injecting
  * the raw keys there would go stale at expiry, and rotating them through
  * `extraEnv` would churn the server config hash (= drain-respawn) on every

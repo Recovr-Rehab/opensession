@@ -766,18 +766,12 @@ export interface SandboxModelFamily {
   id: string;
   /** Human name for warnings. */
   label: string;
-  match: { provider: "claude" | "codex" | "opencode" | "pi" };
+  match: { provider: "claude" | "codex" | "pi" };
   sandboxable: boolean;
   hint?: string;
 }
 
 export const SANDBOX_MODEL_FAMILIES: SandboxModelFamily[] = [
-  {
-    id: "opencode",
-    label: "OpenCode",
-    match: { provider: "opencode" },
-    sandboxable: true,
-  },
   {
     id: "pi",
     label: "Pi",
@@ -787,12 +781,12 @@ export const SANDBOX_MODEL_FAMILIES: SandboxModelFamily[] = [
   {
     // Native Codex runs need a writable CODEX_HOME (refresh-token rotation) —
     // deliberately never mounted or uploaded into sandboxes. GPT-in-a-sandbox
-    // goes through opencode/openai/* instead.
+    // goes through pi/openai/* instead.
     id: "codex",
     label: "GPT (Codex)",
     match: { provider: "codex" },
     sandboxable: false,
-    hint: "Codex account state stays on the host; use an opencode/openai/* or pi/openai/* model for GPT in a sandbox",
+    hint: "Codex account state stays on the host; use an pi/openai/* or pi/openai/* model for GPT in a sandbox",
   },
   {
     id: "claude",

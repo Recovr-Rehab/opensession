@@ -36,7 +36,7 @@
         "snapshot-alpha"
       ],
       "mode": "scratch",
-      "model": "opencode/anthropic/claude-sonnet-5",
+      "model": "pi/anthropic/claude-sonnet-5",
       "prompt": {
         "injectedContext": [],
         "visible": "what can you reach on this turn?"
@@ -140,7 +140,7 @@
     },
     {
       "content": "Only alpha.",
-      "model": "opencode/anthropic/claude-sonnet-5",
+      "model": "pi/anthropic/claude-sonnet-5",
       "seq": 4,
       "type": "assistant"
     }

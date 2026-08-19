@@ -15,7 +15,7 @@ import { notifyMentions } from "./mentions";
 import { startWatching, stopAllWatchesForClient, transcriptRev } from "./file-watcher";
 import { INIT_WIRE_CLAMP_BYTES, entriesForWire, parseTranscriptAsync, parseTranscriptTail, parseTranscriptWindow } from "./jsonl-parser";
 import { providerFor } from "./models";
-import { appendOpencodeTranscript, clearTranscriptStoreDegraded, transcriptLineRunnerNotice } from "./opencode-transcript";
+import { appendTranscriptEntries, clearTranscriptStoreDegraded, transcriptLineRunnerNotice } from "./transcript-persistence";
 import { deleteQueuedPrompt, liftUserStop, persistQueues, promptQueues, queueDisplayState, recordSteer, reorderQueuedPrompt, requeueSteerReceipts, steeredReceipts, stoppedSessions, takeQueuedPrompt, updateQueuedPrompt } from "./queue-state";
 import { transitionRunState } from "./run-state";
 import { abortTurnAndDrain, drainQueue, enqueuePrompt, interruptQueuedPrompt, runSessionPrompt, runSessionPromptAndDrain, steerQueuedPrompt, watchExternalRunAndDrain } from "./run-session";
@@ -228,7 +228,7 @@ function clampV2InitEntries(entries: SeqEntry[]): SeqEntry[] {
  *  the session imported; empty history marks 'live-only'). Watermark = the
  *  TOTAL size of the §8 drift candidate set (session transcript file + oc
  *  mirror — the exact set v2TranscriptHasDrift compares against; measuring
- *  only transcriptPath would leave opencode sessions permanently
+ *  only transcriptPath would leave pi sessions permanently
  *  grown-beyond-watermark). Also the drift RE-import: idempotent upserts, and
  *  a completed import releases the failure-side store-degraded marker. */
 function v2ImportSession(
@@ -239,8 +239,6 @@ function v2ImportSession(
 	// which on a drift re-import is exactly what we're refreshing.
 	const entries = mergedSessionTranscript({
 		transcriptPath: session.transcriptPath ?? null,
-		opencodeSessionId: session.opencodeSessionId,
-		claudeSessionId: session.claudeSessionId ?? null,
 	});
 	v2FinishImport(session, entries);
 }
@@ -254,8 +252,6 @@ async function v2ImportSessionAsync(
 ): Promise<void> {
 	const entries = await mergedSessionTranscriptAsync({
 		transcriptPath: session.transcriptPath ?? null,
-		opencodeSessionId: session.opencodeSessionId,
-		claudeSessionId: session.claudeSessionId ?? null,
 	});
 	v2FinishImport(session, entries);
 }
@@ -277,7 +273,6 @@ function v2FinishImport(
 	);
 	clearTranscriptStoreDegraded(
 		session.id,
-		session.opencodeSessionId,
 		session.claudeSessionId,
 	);
 }
@@ -342,7 +337,7 @@ function serveTranscriptV2(
 			// the watch; big ones import in the background and THIS watch serves
 			// legacy (the next one upgrades). The ceiling measures the WHOLE §8
 			// candidate set (session transcript file + oc mirror) — transcriptPath
-			// alone undercounts opencode sessions, whose history mostly lives in
+			// alone undercounts pi sessions, whose history mostly lives in
 			// the mirror.
 			let mirrorSize = 0;
 			try {
@@ -615,7 +610,7 @@ export const websocketHandlers: WebSocketHandler<WSClientData> = {
 					// whose next run hasn't seeded the new id's file. Without this the
 					// thread renders blank until the next send (which seeds the file);
 					// serve history via the cross-engine fallback (old transcript file
-					// merged with OpenCode's SQLite store) instead. No byte cursor into
+					// merged with Pi's SQLite store) instead. No byte cursor into
 					// a file here, so no "load earlier" paging — the next run's seeded
 					// file restores it.
 					const merged = await mergedSessionTranscriptAsync(session);
@@ -1019,7 +1014,7 @@ export const websocketHandlers: WebSocketHandler<WSClientData> = {
 					// filtered out in jsonl-parser.
 					break;
 				}
-				// No in-band interrupt-and-steer (opencode runs, or a send carrying
+				// No in-band interrupt-and-steer (pi runs, or a send carrying
 				// files): queue the message durably, then abort the current turn so
 				// the drain delivers it as the immediate next turn — esc+enter
 				// semantics. If nothing is abortable either (external CLI/tmux run),
@@ -1142,7 +1137,7 @@ export const websocketHandlers: WebSocketHandler<WSClientData> = {
 					stoppedSessions.add(sessionId);
 					if (session) {
 						// Abort the turn. This reaches the engine on every path
-						// (opencode's session.abort, pi's liveSession.abort, a run
+						// (pi's session.abort, pi's liveSession.abort, a run
 						// host's cancel frame), but lands at the next await, so a
 						// tool call already in flight finishes first. The composer
 						// says "Stopping…" for exactly that window rather than
@@ -1175,7 +1170,7 @@ export const websocketHandlers: WebSocketHandler<WSClientData> = {
 						// the agent, this chip answers it for everyone reading the UI).
 						if (session.claudeSessionId) {
 							try {
-								appendOpencodeTranscript(session.claudeSessionId, [
+								appendTranscriptEntries(session.claudeSessionId, [
 									transcriptLineRunnerNotice(
 										`Stopped by ${data.user || "someone"}.`,
 									),

@@ -1,7 +1,7 @@
 # Minimal filesystem image for host-engine Firecracker workspaces.
 #
 # This is deliberately separate from deploy/sandbox/Dockerfile:
-# - no OpenCode or Claude CLI
+# - no engine or Claude CLI
 # - no Open Session runner source or dependencies
 # - no model/provider account directories
 #

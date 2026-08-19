@@ -2,7 +2,7 @@
  * Browser-based OAuth for HTTP MCP servers (the feeds design — "easy to
  * connect any MCP, per user as well").
  *
- * Replaces the unusable headless flow (opencode's CLI OAuth listens on the
+ * Replaces the unusable headless flow (pi's CLI OAuth listens on the
  * VPS's 127.0.0.1, unreachable from the user's browser): Open Session runs the
  * OAuth 2.1 + PKCE flow itself with a redirect to
  * `<publicBaseUrl>/api/connections/mcp-oauth/callback`, so a

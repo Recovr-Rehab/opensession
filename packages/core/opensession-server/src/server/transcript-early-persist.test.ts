@@ -12,7 +12,7 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { TranscriptStore } from "./transcript-store";
-import { transcriptLineUser } from "./opencode-transcript";
+import { transcriptLineUser } from "./transcript-persistence";
 import { parseJsonlLines } from "./jsonl-parser";
 
 function withStore(run: (store: TranscriptStore) => void) {

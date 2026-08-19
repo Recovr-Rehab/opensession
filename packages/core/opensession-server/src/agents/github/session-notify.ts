@@ -112,7 +112,7 @@ async function deliver(control: SessionControl, sessionIds: string[], message: s
     try {
       // Default busy behavior: fold into the running turn as a steer. Steering
       // is a non-interrupting history append the turn picks up at its next
-      // stopping point (steerOpencodeRun) — exactly right for an FYI; it only
+      // stopping point (steerPiRun) — exactly right for an FYI; it only
       // falls back to the queue when nothing is steerable (external run).
       const res = await control.deliverToSession(id, message, "GitHub");
       console.log(`[github] session notify → ${id}: ${res.status}`);

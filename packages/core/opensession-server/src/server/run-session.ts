@@ -43,15 +43,15 @@ import {
 	interactiveFallbackModel,
 	modelLabel,
 	providerFor,
+	type Provider,
 	routeModel,
 } from "./models";
 import {
-	appendOpencodeTranscript,
-	isOpencodeSessionId,
+	appendTranscriptEntries,
 	storeAppendUserLineEarly,
 	transcriptLineRunnerNotice,
 	transcriptLineUser,
-} from "./opencode-transcript";
+} from "./transcript-persistence";
 import { cacheMissNotice } from "@tellahq/opensession-protocol/notices";
 import { wrapContext, stripContext, isContextOnly } from "./prompt-context";
 import { takeVoiceHandoff } from "./desk-voice";
@@ -425,7 +425,7 @@ export function interruptQueuedPrompt(
 			images,
 		)
 	) {
-		// No in-band interrupt-and-steer (opencode): keep the item queued — it's
+		// No in-band interrupt-and-steer (pi): keep the item queued — it's
 		// the durable record — and abort the turn so the drain delivers it right
 		// away. Mark it (by id) as the solo delivery so the drain delivers ONLY
 		// this item; every other queued item stays put and drains at the next
@@ -829,10 +829,10 @@ export function attachSessionWatchersToTranscript(
 
 export function attachSessionWatchersToEngineTranscript(
 	sessionId: string,
-	// "opencode" and "pi" resolve to no transcript path (both keep their turns
+	// "pi" and "pi" resolve to no transcript path (both keep their turns
 	// in the owned store); those sessions stream through run events only, so
 	// this attaches nothing for them.
-	provider: "claude" | "codex" | "opencode" | "pi",
+	provider: "claude" | "codex" | "pi",
 	cwd: string,
 	engineSessionId: string,
 	attempt = 0,
@@ -1053,7 +1053,7 @@ export function watchExternalRunAndDrain(sessionId: string): void {
 }
 
 /**
- * Esc+Enter for engines with no in-band interrupt-and-steer (opencode): abort
+ * Esc+Enter for engines with no in-band interrupt-and-steer (pi): abort
  * the run's current turn — the same abort the Esc/stop path uses — and let the
  * drain watcher deliver the queue as the immediate next turn on the same
  * engine session. The interrupting message must already be in promptQueues
@@ -1066,7 +1066,6 @@ export function abortTurnAndDrain(
 	session: {
 		claudeSessionId?: string | null;
 		codexThreadId?: string | null;
-		opencodeSessionId?: string | null;
 		transcriptPath?: string | null;
 		id: string;
 	},
@@ -1323,7 +1322,6 @@ export async function maybeLaunchSandboxedRun(
 					? {
 							claudeSessionId: undefined,
 							codexThreadId: undefined,
-							opencodeSessionId: undefined,
 						}
 					: {}),
 			});
@@ -1702,7 +1700,7 @@ async function runSessionPromptInner(
 	// The engine session id depends on the session's model: codex models resume
 	// the codex thread, claude models the claude session. A missing engine id
 	// just means "first run on this provider" — a fresh thread/session starts.
-	// Native picker ids still dispatch through OpenCode. Once a session has run,
+	// Native picker ids still dispatch through Pi. Once a session has run,
 	// resume the engine that actually owns its session id rather than inferring a
 	// legacy provider from the unchanged user selection.
 	// An explicit engine choice on the model id (pi/, claude/, codex/), or the
@@ -1711,15 +1709,12 @@ async function runSessionPromptInner(
 	// routing changed, and that IS the cross-engine switch the handoff below
 	// exists for; without this the turn would hand the previous engine's
 	// session id to the new engine and resume nothing. Unrouted ids (native
-	// slugs, opencode/…) keep the historic order exactly.
+	// slugs, pi/…) keep the historic order exactly.
 	const routedEngine = routeModel(session.model, {
 		interactive: !session.automation,
 	}).engine;
-	const provider =
-		routedEngine === "opencode"
-			? session.lastEngineProvider || providerFor(session.model)
-			: routedEngine;
-	let effectiveProvider = provider;
+	const provider = routedEngine;
+	let effectiveProvider: Provider = provider;
 	let effectiveModel = session.model;
 	// The model this run last wrote (or started on): what an automatic switch
 	// must still find stored before it may overwrite the session's model. A
@@ -1735,14 +1730,6 @@ async function runSessionPromptInner(
 	// Which slot holds the id this provider resumes is the inverse of the write
 	// rule in engineSessionPatch, so both live together in sessions.ts.
 	const engineSessionId = engineSessionIdFor(session, provider);
-	// A claude session with no engine id yet is a *fresh* session (e.g. a new sibling
-	// session opened from the tab strip's +): its first prompt starts a new claude
-	// conversation, and finalSessionId is persisted below — same as codex, which
-	// already runs fresh with no thread id. (Previously this hard-errored, which
-	// blocked never-run sessions from ever receiving their first message.)
-	if (provider === "claude" && !engineSessionId) {
-		console.log(`[prompt] ${sessionId}: first claude run (no engine id yet)`);
-	}
 
 	// Durable intake (2026-07-24, bks-019f93ea): persist the user's message to
 	// the transcript store NOW — before the worktree/title/engine-spawn awaits —
@@ -1756,7 +1743,6 @@ async function runSessionPromptInner(
 		storeAppendUserLineEarly(
 			sessionId,
 			transcriptLineUser(content, durablePromptEntryId, undefined, images),
-			isOpencodeSessionId(engineSessionId) ? engineSessionId : undefined,
 		);
 	}
 
@@ -1771,10 +1757,10 @@ async function runSessionPromptInner(
 	const lastProvider = session.lastEngineProvider;
 	let switchHandoff: string | null = null;
 	// Prior-engine entries backing the handoff note — also passed to the runner
-	// so a fresh opencode session's persisted transcript is seeded with them
+	// so a fresh pi session's persisted transcript is seeded with them
 	// (keeps the UI transcript continuous across an engine migration).
 	let switchHandoffEntries: TranscriptEntry[] = [];
-	// Anthropic and OpenAI models both report provider "opencode", but they run
+	// Anthropic and OpenAI models both report provider "pi", but they run
 	// on different servers: a family switch (claude-* ↔ gpt-*) can't resume the
 	// engine session and starts fresh, so it needs the same bridge as a classic
 	// cross-provider switch. Detected via the model that last actually drove a
@@ -1782,8 +1768,8 @@ async function runSessionPromptInner(
 	// 2026-07-12; sessions from before lastEngineModel existed skip this and
 	// still get the runner's prior-transcript file seeding).
 	const familySwitch =
-		lastProvider === "opencode" &&
-		provider === "opencode" &&
+		lastProvider === "pi" &&
+		provider === "pi" &&
 		!!session.lastEngineModel &&
 		!!session.model &&
 		engineFamily(session.lastEngineModel) !== engineFamily(session.model);
@@ -1983,7 +1969,6 @@ async function runSessionPromptInner(
 		!isAutomationSession &&
 		session.externalRefs?.length &&
 		!session.claudeSessionId &&
-		!session.opencodeSessionId &&
 		!session.codexThreadId &&
 		!session.piSessionId
 	) {
@@ -2103,7 +2088,7 @@ async function runSessionPromptInner(
 	}
 
 	// Local detached run host for the pi engine: pi drives its turn in-process
-	// via the SDK, so unlike opencode there is no detachable engine server to
+	// via the SDK, so unlike pi there is no detachable engine server to
 	// outlive a restart. Instead the whole turn moves into a transient
 	// run-host unit (host-client.ts) that survives `systemctl restart` and is
 	// reattached by the boot sweep (resumeLocalHostRun). Transcript writes are
@@ -2213,12 +2198,12 @@ async function runSessionPromptInner(
 		// usage exhaustion stops the run so the human can choose what to do.
 		fallbackModel: interactiveFallbackModel(session.model),
 		images,
-		// Engine switch: seed the fresh opencode session's persisted transcript
+		// Engine switch: seed the fresh pi session's persisted transcript
 		// with the prior history (same entries the handoff note was built from)
 		// so the UI transcript stays continuous. Everything dispatches onto the
-		// opencode engine, so no provider gate — the picker id's provider can be
+		// pi engine, so no provider gate — the picker id's provider can be
 		// "codex"/"claude" (bare gpt-5.6-sol) while the run still lands on
-		// opencode; the old `provider === "opencode"` guard silently dropped the
+		// pi; the old `provider === "pi"` guard silently dropped the
 		// seed for exactly those switches.
 		seedTranscriptEntries:
 			switchHandoff && switchHandoffEntries.length
@@ -2473,7 +2458,7 @@ async function runSessionPromptInner(
 					const ocId = finalSessionId || session.claudeSessionId;
 					if (ocId) {
 						try {
-							appendOpencodeTranscript(ocId, [
+							appendTranscriptEntries(ocId, [
 								transcriptLineRunnerNotice(
 									cacheMissNotice(event.usage?.cacheCreationTokens),
 								),
