@@ -99,6 +99,7 @@ import { CodeFlow } from "./CodeFlow";
 import { revealDiffFile } from "../lib/diff-navigation";
 import { PrFileTree } from "./pr/PrFileTree";
 import { reviewDiffLoadPolicy } from "../lib/review-diff";
+import { BrandMark } from "./BrandTile";
 
 // Re-exported so existing importers of these (formerly local) helpers keep working.
 export { checkClass, isDeployment, formatPrCommentPrompt, CheckRow, PrStateIcon };
@@ -1594,36 +1595,48 @@ export function PrPanel({
             Review
           </Button>
         )}
-        {pr.state === "OPEN" && (
-          <Menu.Root>
-            <Tooltip label="Pull request actions">
-              <Menu.Trigger
-                render={
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    className="-mr-1.5"
-                    aria-label="Pull request actions"
-                    icon={<IconDotsHorizontal size={18} />}
-                  />
-                }
-              />
-            </Tooltip>
-            <Menu.Popup align="end">
-              <Menu.Item
-                className="text-red data-[highlighted]:bg-red-soft"
-                onClick={handleClose}
-                disabled={closing}
-              >
-                {closing
-                  ? "Closing…"
-                  : confirmClose
-                    ? "Confirm close pull request"
-                    : "Close pull request"}
-              </Menu.Item>
-            </Menu.Popup>
-          </Menu.Root>
-        )}
+        <Menu.Root>
+          <Tooltip label="Pull request actions">
+            <Menu.Trigger
+              render={
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="-mr-1.5"
+                  aria-label="Pull request actions"
+                  icon={<IconDotsHorizontal size={18} />}
+                />
+              }
+            />
+          </Tooltip>
+          <Menu.Popup align="end">
+            <Menu.Item
+              render={<a href={pr.url} target="_blank" rel="noopener" />}
+            >
+              <BrandMark name={provider.key} size={18} className={MENU_ICON} />
+              <span className="min-w-0 flex-1 truncate">
+                Open on {provider.name}
+              </span>
+            </Menu.Item>
+            {pr.state === "OPEN" && (
+              <>
+                <Menu.Separator />
+                <Menu.Item
+                  className="text-red data-[highlighted]:bg-red-soft"
+                  onClick={handleClose}
+                  disabled={closing}
+                >
+                  <IconX size={18} className={MENU_ICON} />
+                  {closing
+                    ? "Closing…"
+                    : confirmClose
+                      ? "Confirm close pull request"
+                      : "Close pull request"}
+                </Menu.Item>
+              </>
+            )}
+          </Menu.Popup>
+        </Menu.Root>
       </header>
 
       <div className="flex min-h-0 flex-1">
