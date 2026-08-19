@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef, useCallback } from "react";
 import { AnimatePresence } from "motion/react";
-import { fetchWorktrees, fetchModels, fetchConnections, fetchSandboxStatus, requestSandboxPrewarm, suggestBranch, suggestRepos, type RepoSuggestion, configuredNewSessionRepo, fetchProviderAccounts, fetchRepos, createWorkspaceApi, updateWorkspaceApi, ApiError, type ProviderAccountOption, type ModelOption, type SandboxStatusInfo } from "../lib/api";
+import { fetchWorktrees, fetchModels, fetchToolAccounts, fetchSandboxStatus, requestSandboxPrewarm, suggestBranch, suggestRepos, type RepoSuggestion, configuredNewSessionRepo, fetchProviderAccounts, fetchRepos, createWorkspaceApi, updateWorkspaceApi, ApiError, type ProviderAccountOption, type ModelOption, type SandboxStatusInfo } from "../lib/api";
 import { getCurrentUser } from "./UserPicker";
 import { type FileAttachment } from "../lib/images";
 import {
@@ -91,6 +91,9 @@ interface Props {
   connected: boolean;
   /** Prefill the prompt (e.g. from the Home "New session" box). */
   prefillPrompt?: string;
+  /** Services selected before the palette opens, such as from a command-menu
+   *  shortcut. They use the same chips and create payload as manual picks. */
+  initialMcpServers?: string[];
   forceMode?: "ask" | "code" | "scratch";
   /** When starting a session inside a workspace, the session joins that workspace… */
   workspaceId?: string;
@@ -388,7 +391,7 @@ function slugifyBranch(text: string): string {
   return slug || "new-session";
 }
 
-export function NewSession({ onBack, inline, focusSeq, send, addHandler, connected, prefillPrompt, forceMode, workspaceId, modelWorkspaceId, forceRepo, forceBranch, onCreateStarted, onDraftSaved }: Props) {
+export function NewSession({ onBack, inline, focusSeq, send, addHandler, connected, prefillPrompt, initialMcpServers, forceMode, workspaceId, modelWorkspaceId, forceRepo, forceBranch, onCreateStarted, onDraftSaved }: Props) {
   const [prefill] = useState(readPrefill);
   // What the session may do, and nothing else — the footer's Ask toggle. The
   // repo is a separate axis, so Scratch is not a third value here: it is what
@@ -706,15 +709,17 @@ export function NewSession({ onBack, inline, focusSeq, send, addHandler, connect
       .catch(() => {});
   }, [hasPromptText, shouldPrewarm, sandboxProvider, repo, busy]);
 
-  // MCP servers: empty by default (minimal context), users can opt in for
-  // specific ones. The list comes from mcp-config.json via the connections
-  // API so it never drifts from what's actually installed.
-  const [selectedMcpServers, setSelectedMcpServers] = useState<string[]>([]);
+  // An empty selection means every available service; one or more picks narrow
+  // the session to those services. Command-menu shortcuts seed this same state
+  // so their selection stays visible and removable before Create.
+  const [selectedMcpServers, setSelectedMcpServers] = useState<string[]>(
+    () => initialMcpServers || [],
+  );
   const [availableMcpServers, setAvailableMcpServers] = useState<string[]>([]);
   useEffect(() => {
-    fetchConnections()
+    fetchToolAccounts()
       .then((c) => {
-        setAvailableMcpServers((c.mcpServers || []).map((s) => s.name));
+        setAvailableMcpServers(c.servers.map((s) => s.name));
       })
       .catch(() => {});
   }, []);

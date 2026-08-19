@@ -55,6 +55,8 @@ import { suppressLayoutAnimations } from "./ui/motion";
 import { SessionViewer } from "./components/SessionViewer";
 import type { PortalTarget } from "./lib/portals";
 import { NewSession } from "./components/NewSession";
+import { IconTile } from "./components/BrandTile";
+import { displayName } from "./brand-logos";
 import type { NewSessionPrefill } from "./lib/new-session-link";
 import { shouldOpenCreatedSession } from "./lib/new-session-navigation";
 import {
@@ -136,6 +138,8 @@ import {
 	updateWorkspaceApi,
 	deleteWorkspaceApi,
 	fetchRepos,
+	fetchToolAccounts,
+	knownToolAccounts,
 	REPOS_CHANGED_EVENT,
 	resolveWorkspaceApi,
 	type OpenPr,
@@ -1171,6 +1175,7 @@ export function App(
 		repo?: string;
 		branch?: string;
 		mode?: "ask" | "code" | "scratch";
+		mcpServers?: string[];
 	}>(() =>
 		route.view === "new" ? { open: true, prompt: route.prompt } : { open: false },
 	);
@@ -1180,7 +1185,7 @@ export function App(
 	const [draftFocusSeq, setDraftFocusSeq] = useState(0);
 	const paletteOpenRef = useRef(palette.open);
 	paletteOpenRef.current = palette.open;
-	const openPalette = React.useCallback((prompt?: string) => {
+	const openPalette = React.useCallback((prompt?: string, mcpServers?: string[]) => {
 		// This is the global new-session action. It must not inherit the workspace
 		// behind it: without workspaceId, NewSession creates a workspace with its
 		// first session. Its model combinations are safe to use as a picker source,
@@ -1193,6 +1198,7 @@ export function App(
 		setPalette({
 			open: true,
 			prompt,
+			...(mcpServers?.length ? { mcpServers } : {}),
 			...(modelWorkspaceId ? { modelWorkspaceId } : {}),
 		});
 	}, [route, sessions]);
@@ -1368,6 +1374,21 @@ export function App(
 	// The ⌘K command palette. Sessions, PRs, and app actions share one overlay
 	// driven by its own state so it can open over any view.
 	const [searchOpen, setSearchOpen] = useState(false);
+	const [commandMcpServers, setCommandMcpServers] = useState<string[]>(() =>
+		(knownToolAccounts() || []).map((server) => server.name),
+	);
+	useEffect(() => {
+		if (!searchOpen) return;
+		let live = true;
+		fetchToolAccounts()
+			.then(({ servers }) => {
+				if (live) setCommandMcpServers(servers.map((server) => server.name));
+			})
+			.catch(() => {});
+		return () => {
+			live = false;
+		};
+	}, [searchOpen]);
 	// The Desk overlay (⌘J / the floating desk button): a standing concierge
 	// session on top of whatever view is open.
 	const [deskOpen, setDeskOpen] = useState(false);
@@ -3782,6 +3803,21 @@ export function App(
 			icon: <IconGear size={18} />,
 			run: () => navigate({ view: "settings" }),
 		},
+		...commandMcpServers
+			.slice()
+			.sort((a, b) => displayName(a).localeCompare(displayName(b)))
+			.map((server) => {
+				const name = displayName(server);
+				return {
+					id: `new-session-with-${server}`,
+					label: `New session with ${name}`,
+					description: `Start a session with only ${name} connected`,
+					category: "Tools" as const,
+					keywords: [server, name, "tool", "service", "connected"],
+					icon: <IconTile name={server} size={18} />,
+					run: () => openPalette(undefined, [server]),
+				};
+			}),
 	];
 	const openSession = (id: string, created?: UnifiedSession | null) => {
 		const known = sessions.some(
@@ -4986,6 +5022,7 @@ export function App(
 						forceRepo={palette.repo}
 						forceBranch={palette.branch}
 						forceMode={palette.mode}
+						initialMcpServers={palette.mcpServers}
 						onCreateStarted={(draft) => {
 							pendingCreateDraftRef.current = {
 								...draft,
