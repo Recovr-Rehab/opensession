@@ -107,7 +107,8 @@ import { PrStateIcon } from "./pr/PrStateIcon";
 import { ConversationView } from "./pr/PrViews";
 import { LinkPrControl } from "./pr/LinkPrControl";
 import { PrCard } from "./pr/PrCard";
-import { StackSection } from "./pr/Stack";
+import { StackLinkSection } from "./pr/Stack";
+import { PrStackChip } from "./pr/StackPopover";
 import { ReviewRail } from "./pr/ReviewRail";
 import { GitStatusRows } from "./pr/GitStatus";
 import { InlineAlert, LoadingState } from "../ui/state";
@@ -1941,6 +1942,19 @@ export function PrPanel({
             </a>
           </Tooltip>
         </h1>
+        {/* A stack is secondary navigation, not page content. Keep its compact
+            position/size chip in the identity bar and reveal the full rail in
+            the shared popover instead of spending permanent canvas height. */}
+        {caps.stacks && pr.stack && (
+          <PrStackChip
+            pr={pr}
+            tone={statusMark.tone}
+            size="bar"
+            headline={statusMark.label}
+            repo={active?.repo}
+            onOpenPr={onOpenPr}
+          />
+        )}
         {pr.staging?.url && (
           <Tooltip label="Open the preview environment">
             <a
@@ -2083,14 +2097,8 @@ export function PrPanel({
         </Menu.Root>
       </header>
 
-      {caps.stacks && (
-        <StackSection
-          pr={pr}
-          sessionId={sessionId}
-          repo={active?.repo}
-          onOpenPr={onOpenPr}
-          onLinked={load}
-        />
+      {caps.stacks && !pr.stack && (
+        <StackLinkSection pr={pr} sessionId={sessionId} onLinked={load} />
       )}
       {reviewBar}
 

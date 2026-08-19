@@ -24,8 +24,8 @@ import { StackNode, StackRail } from "./StackRail";
  * with the trunk as the last node, the way github.com draws a stack.
  */
 
-/* The rail and its nodes live in ./StackRail, shared with the review panel's
-   stack map (pr/Stack.tsx) so the two drawings of a stack cannot drift. */
+/* The rail and its nodes live in ./StackRail so this component stays focused
+   on the popup and its navigation rows. */
 
 const ROW = "flex items-stretch gap-2.5 pr-1.5 pl-3";
 
@@ -82,7 +82,7 @@ function StackRow({
 				</span>
 			</a>
 			<a
-				className={cn(PR_ROW_OUT, "self-center")}
+				className={cn(PR_ROW_OUT, "self-center phone:size-11")}
 				href={layer.url}
 				target="_blank"
 				rel="noopener"

@@ -5,10 +5,8 @@ import { cn } from "../../ui/cn";
  * top layer first with the trunk as the last node — the way github.com draws a
  * stack.
  *
- * Shared by the two places a stack is shown, so they cannot drift: the status
- * strip's popover (pr/StackPopover.tsx), where a person decides whether to
- * merge, and the review panel's stack map (pr/Stack.tsx), which says where the
- * PR being read sits in its chain.
+ * Kept separate from the popover's row composition so the state glyphs and
+ * line geometry remain one focused piece.
  */
 
 /** A node on the rail: the layer's state, as a ring rather than a filled dot —
@@ -96,9 +94,8 @@ export function StackNode({
  * node punched through with its own background can't sit on a row that changes
  * colour on hover).
  *
- * It is also why the rail is a 22px slot: that is the sidebar's leading column
- * (SIDEBAR_RAIL), so a stack row's title lands on the same rail as every other
- * railed row in the app.
+ * The rail is a 22px slot, matching the sidebar's leading column, so a stack
+ * row's title lands on the same rhythm as other railed rows in the app.
  */
 export function StackRail({
 	first,
