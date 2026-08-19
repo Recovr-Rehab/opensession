@@ -9,6 +9,7 @@ import {
 } from "../lib/api";
 import { fetchDiff } from "../lib/api";
 import { commitPrompt } from "../lib/commit-prompt";
+import { AGENT_NAME, GITHUB_BOT_LOGINS } from "../lib/brand";
 import { getCurrentUser } from "./UserPicker";
 import { pollWhileVisible, PR_WEBHOOK_FALLBACK_POLL_MS } from "../lib/poll";
 import { PrStatusBar } from "./PrStatusBar";
@@ -56,6 +57,7 @@ import {
 	IconFile,
 	IconListCircles,
 	IconPeople,
+	IconRobot,
 	IconStack,
 } from "./icons";
 
@@ -495,11 +497,41 @@ function SummaryBody({
 	const people = usePeople();
 	const reviewTeams = useReviewTeams();
 	const reviewers = reviewLines(pr, selectedReview, prReviewRequested);
+	const osReview = pr?.osReview;
+	const osReviewActive = Boolean(pr?.reviewActive);
+	const showOsReview = osReviewActive || Boolean(osReview);
+	let osReviewState = "Not reviewed yet";
+	if (osReviewActive) osReviewState = "Reviewing…";
+	else if (pr?.state === "MERGED") osReviewState = "Merged";
+	else if (pr?.state === "CLOSED") osReviewState = "Closed";
+	else if (osReview?.stale) osReviewState = "New commits since review";
+	else if (osReview?.findings)
+		osReviewState = `${osReview.findings} finding${osReview.findings === 1 ? "" : "s"}${
+			osReview.blocking ? `, ${osReview.blocking} blocking` : ""
+		}`;
+	else if (osReview) osReviewState = "No findings";
+	const osScore = osReview?.confidence;
+	const osScoreTone = osReview?.stale
+		? "text-faint"
+		: osScore && osScore >= 4
+			? "text-green"
+			: osScore === 3
+				? "text-yellow"
+				: osScore
+					? "text-red"
+					: "text-dim";
 	const humanReviewers = reviewers
 		.filter((reviewer) => reviewer.human)
 		.slice(0, REVIEWERS_SHOWN);
 	const otherReviewers = reviewers
-		.filter((reviewer) => !reviewer.human)
+		.filter(
+			(reviewer) =>
+				!reviewer.human &&
+				(!showOsReview ||
+					!GITHUB_BOT_LOGINS.has(
+						(reviewer.login || reviewer.key).toLowerCase(),
+					)),
+		)
 		.slice(0, REVIEWERS_SHOWN);
 
 	const shown = assets.slice(0, ASSETS_SHOWN);
@@ -587,6 +619,38 @@ function SummaryBody({
 			    to review. The final row owns the picker, so adding or changing a
 			    reviewer never requires opening the workspace panel. */}
 			<div className={WS_SUMMARY_SECTION}>Review</div>
+			{showOsReview && (
+				<button
+					className={WS_SUMMARY_ROW}
+					onClick={() => go(() => onOpenPanelTab("info"))}
+					title={`${AGENT_NAME}${osScore ? ` · ${osScore}/5` : ""} · ${osReviewState}`}
+				>
+					<span className={WS_SUMMARY_RAIL}>
+						<IconRobot size={20} className={WS_SUMMARY_ICON} />
+					</span>
+					<span className={WS_SUMMARY_LABEL}>
+						{AGENT_NAME}
+						{osScore ? (
+							<>
+								<span className="text-faint"> · </span>
+								<span className={cn("tabular-nums", osScoreTone)}>{osScore}/5</span>
+							</>
+						) : null}
+					</span>
+					<span
+						className={cn(
+							WS_SUMMARY_STATE,
+							osReview?.stale
+								? "text-faint"
+								: osReview?.blocking
+									? "text-red"
+									: "text-dim",
+						)}
+					>
+						{osReviewState}
+					</span>
+				</button>
+			)}
 			{otherReviewers.map((reviewer) => (
 				<button
 					key={reviewer.key}
