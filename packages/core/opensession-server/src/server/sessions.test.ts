@@ -116,6 +116,26 @@ function uuidV7ForDate(iso: string): string {
 }
 
 describe("getAllSessions", () => {
+	it("reads one native session without scanning the directory", async () => {
+		writeSession("os-direct-detail", {
+			title: "Direct detail",
+			model: "pi/dial/opus-fable",
+			workspaceId: "ws-direct",
+			piSessionId: "pi-direct",
+		});
+		const { readNativeSession } = await import(
+			`./sessions.ts?direct=${crypto.randomUUID()}`
+		);
+		expect(readNativeSession("os-direct-detail")).toMatchObject({
+			id: "os-direct-detail",
+			title: "Direct detail",
+			source: "opensession",
+			workspaceId: "ws-direct",
+			piSessionId: "pi-direct",
+		});
+		expect(readNativeSession("../os-direct-detail")).toBeUndefined();
+	});
+
 	it("keeps the cooperative request scan byte-for-byte equivalent", async () => {
 		writeSession("bks-cooperative-scan", {
 			title: "Cooperative scan",

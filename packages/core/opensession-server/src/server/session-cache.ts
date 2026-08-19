@@ -9,6 +9,7 @@ import { OPENSESSION_SESSIONS_DIR } from "./paths";
 import {
 	getAllSessions,
 	getAllSessionsAsync,
+	readNativeSession,
 	type SessionArchiveSlice,
 } from "./sessions";
 import { activeRunRecords } from "./run-journal";
@@ -275,9 +276,12 @@ export function findSession(sessionId: string): UnifiedSession | undefined {
 export async function findSessionAsync(
 	sessionId: string,
 ): Promise<UnifiedSession | undefined> {
-	// Correctness lookups keep the original fresh, atomic whole-list contract.
-	// The split caches can be different ages, and peekCachedSessions is allowed
-	// to be stale for autocomplete, so neither is safe for opening a session.
+	// Native ids map one-to-one to files we own. Reading that file lets a deep
+	// link and its transcript watch open while the sidebar's cold list scan runs
+	// in parallel. External and historical alias ids still need the full merged
+	// scan because only that scan knows which source won deduplication.
+	const native = readNativeSession(sessionId);
+	if (native) return native;
 	return (await getCachedSessionsAsync()).find(
 		(s) => s.id === sessionId || s.aliasIds?.includes(sessionId),
 	);

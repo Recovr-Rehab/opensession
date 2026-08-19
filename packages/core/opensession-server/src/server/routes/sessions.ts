@@ -1265,9 +1265,7 @@ export async function handleSessionsRoutes(
 		const m = path.match(/^\/api\/sessions\/([^/]+)$/);
 		if (m && req.method === "GET") {
 			const sessionId = decodeURIComponent(m[1]);
-			const session = (await getCachedSessionsAsync()).find(
-				(s) => s.id === sessionId || s.aliasIds?.includes(sessionId),
-			);
+			const session = await findSessionAsync(sessionId);
 			if (!session)
 				return Response.json({ error: "Session not found" }, { status: 404 });
 			return Response.json(enrichSession(session), {

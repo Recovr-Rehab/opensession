@@ -1016,6 +1016,108 @@ function scanLinearSessions(): UnifiedSession[] {
   return [...linearSessionRows()];
 }
 
+function nativeSessionRow(data: NativeSessionFile): UnifiedSession {
+  const archived = !!data.archived || isArchivedId(data.id);
+  return {
+    id: data.id,
+    claudeSessionId: data.claudeSessionId,
+    source: "opensession",
+    branch: data.branch || null,
+    worktreeDir: data.worktreeDir || null,
+    createdBy: data.createdBy || null,
+    createdByLogin: data.createdByLogin,
+    startedBy: data.createdBy,
+    title: data.title || data.branch || "Ask session",
+    mode: data.mode,
+    // Back-compat: older session files stored the repo under `project`.
+    repo: data.repo ?? (data as { project?: string }).project,
+    // Scratch has always been repo-less; newer repo-less Ask sessions say
+    // so outright. Both are surfaced as one flag so clients never have to
+    // read a missing `repo` as a decision (it usually isn't).
+    repoLess: data.repoLess || data.mode === "scratch" || undefined,
+    workspaceId: data.workspaceId ?? null,
+    parentSessionId: data.parentSessionId,
+    spawnedBy: data.spawnedBy,
+    desk: data.desk,
+    spawnDepth: data.spawnDepth,
+    attachedRepos: data.attachedRepos,
+    stackedOn: data.stackedOn,
+    linkedPrs: data.linkedPrs,
+    previewPath: data.previewPath,
+    walkthrough: data.walkthrough,
+    slackShares: data.slackShares,
+    automation:
+      data.automation ||
+      (data.createdBy?.endsWith(" (automation)")
+        ? data.createdBy.slice(0, -" (automation)".length)
+        : undefined),
+    automationId: data.automationId,
+    archived: archived || undefined,
+    archivedReason:
+      data.archivedReason ||
+      (archived ? getArchiveReason(data.id) || "manual" : undefined),
+    plainThreadId: data.plainThreadId,
+    externalRefs: data.externalRefs,
+    // The MCP allowlist the session was created with. Dropping it here left
+    // `sessionMcpScopeSource`'s "session" branch unreachable, so a session
+    // created with a picked set of servers ran its first turn scoped (the
+    // create path passes the picked list straight to the run) and every turn
+    // after it against all of them.
+    mcpServers: data.mcpServers,
+    model: data.model,
+    effort: data.effort,
+    fastMode: data.fastMode,
+    accountId: data.accountId,
+    codexThreadId: data.codexThreadId,
+    opencodeSessionId: data.opencodeSessionId,
+    piSessionId: data.piSessionId,
+    lastEngineProvider: data.lastEngineProvider,
+    lastEngineModel: data.lastEngineModel,
+    modelHistory: data.modelHistory,
+    usage: data.usage,
+    goal: data.goal,
+    goalId: data.goalId,
+    lastRunError: data.lastRunError,
+    loop: data.loop,
+    slackThreads: data.slackThreads,
+    sandbox: data.sandbox,
+    lastActivity: data.lastActivity,
+    createdAt: data.createdAt,
+    isRunning: false,
+    transcriptPath: null,
+  };
+}
+
+/** Read one native session directly. Opening a known session must not wait for
+ * the multi-thousand-file list scan that populates the sidebar. */
+export function readNativeSession(sessionId: string): UnifiedSession | undefined {
+  if (!/^[A-Za-z0-9_-]{1,160}$/.test(sessionId)) return undefined;
+  const data = readJsonSafe<NativeSessionFile>(`${SESSIONS_DIR}/${sessionId}.json`);
+  if (!data?.id || data.id !== sessionId) return undefined;
+  const session = nativeSessionRow(data);
+  session.transcriptPath = resolveTranscriptPath(
+    findTranscriptPath(session.worktreeDir, session.claudeSessionId),
+    session.codexThreadId,
+    session.model,
+    session.opencodeSessionId ||
+      (isOpencodeSessionId(session.claudeSessionId)
+        ? session.claudeSessionId
+        : null),
+  );
+  const generated = getGeneratedTitle(session.id);
+  if (generated) session.title = generated;
+  const title = getTitleOverride(session.id);
+  if (title) {
+    session.title = title;
+    session.titleOverridden = true;
+  }
+  const status = getStatusOverride(session.id);
+  if (status) session.manualStatus = status;
+  const review = getReviewRequest(session.id);
+  if (review) session.reviewRequest = review;
+  return session;
+}
+
 function* nativeSessionRows(): Generator<UnifiedSession> {
   if (!existsSync(SESSIONS_DIR)) return [];
 
@@ -1028,76 +1130,7 @@ function* nativeSessionRows(): Generator<UnifiedSession> {
     // prompt-queues.json, active-at-shutdown.json, …) — a real session always
     // has an id, these don't, so they'd otherwise become bogus id:undefined rows.
     if (!data || !data.id) continue;
-    const archived = !!data.archived || isArchivedId(data.id);
-
-    yield {
-      id: data.id,
-      claudeSessionId: data.claudeSessionId,
-      source: "opensession",
-      branch: data.branch || null,
-      worktreeDir: data.worktreeDir || null,
-      createdBy: data.createdBy || null,
-      createdByLogin: data.createdByLogin,
-      startedBy: data.createdBy,
-      title: data.title || data.branch || "Ask session",
-      mode: data.mode,
-      // Back-compat: older session files stored the repo under `project`.
-      repo: data.repo ?? (data as { project?: string }).project,
-      // Scratch has always been repo-less; newer repo-less Ask sessions say
-      // so outright. Both are surfaced as one flag so clients never have to
-      // read a missing `repo` as a decision (it usually isn't).
-      repoLess: data.repoLess || data.mode === "scratch" || undefined,
-      workspaceId: data.workspaceId ?? null,
-      parentSessionId: data.parentSessionId,
-      spawnedBy: data.spawnedBy,
-      desk: data.desk,
-      spawnDepth: data.spawnDepth,
-      attachedRepos: data.attachedRepos,
-      stackedOn: data.stackedOn,
-      linkedPrs: data.linkedPrs,
-      previewPath: data.previewPath,
-      walkthrough: data.walkthrough,
-      slackShares: data.slackShares,
-      automation:
-        data.automation ||
-        (data.createdBy?.endsWith(" (automation)")
-          ? data.createdBy.slice(0, -" (automation)".length)
-          : undefined),
-      automationId: data.automationId,
-      archived: archived || undefined,
-      archivedReason:
-        data.archivedReason ||
-        (archived ? getArchiveReason(data.id) || "manual" : undefined),
-      plainThreadId: data.plainThreadId,
-      externalRefs: data.externalRefs,
-      // The MCP allowlist the session was created with. Dropping it here left
-      // `sessionMcpScopeSource`'s "session" branch unreachable, so a session
-      // created with a picked set of servers ran its first turn scoped (the
-      // create path passes the picked list straight to the run) and every turn
-      // after it against all of them.
-      mcpServers: data.mcpServers,
-      model: data.model,
-      effort: data.effort,
-      fastMode: data.fastMode,
-      accountId: data.accountId,
-      codexThreadId: data.codexThreadId,
-      opencodeSessionId: data.opencodeSessionId,
-      piSessionId: data.piSessionId,
-      lastEngineProvider: data.lastEngineProvider,
-      lastEngineModel: data.lastEngineModel,
-      modelHistory: data.modelHistory,
-      usage: data.usage,
-      goal: data.goal,
-      goalId: data.goalId,
-      lastRunError: data.lastRunError,
-      loop: data.loop,
-      slackThreads: data.slackThreads,
-      sandbox: data.sandbox,
-      lastActivity: data.lastActivity,
-      createdAt: data.createdAt,
-      isRunning: false,
-      transcriptPath: null,
-    };
+    yield nativeSessionRow(data);
   }
 }
 

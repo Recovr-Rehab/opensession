@@ -1588,6 +1588,22 @@ export function App(
 		}
 	}, [route]);
 
+	// The list is the live slice, and archived sessions arrive as summaries, so
+	// the row it finds may be missing or partial. Hydrate the route directly,
+	// before the list finishes, so a deep link can hand off from the launch
+	// splash as soon as its one session is ready.
+	const listedSession: UnifiedSession | null =
+		route.view === "session"
+			? sessions.find(
+					(s) => s.id === route.id || s.aliasIds?.includes(route.id),
+				) || null
+			: null;
+	const currentSession = useHydratedSession(
+		route.view === "session" ? route.id : null,
+		listedSession,
+	);
+	const shellLoading = loading && !currentSession;
+
 	// Tear down the launch splash (rendered in index.html) once there is
 	// something to draw. Mounting is not that moment: React mounts as soon as the
 	// bundle parses, which needs no data, and the app is transparent all the way
@@ -1605,7 +1621,7 @@ export function App(
 			splash.classList.add("splash-hide");
 			removal = setTimeout(() => splash.remove(), SPLASH_EXIT_MS);
 		};
-		if (!loading) {
+		if (!shellLoading) {
 			// The window is only handed over when there is something in it: the
 			// desktop shell's vibrancy is gated on this class, and a transparent
 			// window with an empty app in it reads as no window at all. The cap
@@ -1620,13 +1636,13 @@ export function App(
 			clearTimeout(cap);
 			clearTimeout(removal);
 		};
-	}, [loading]);
+	}, [shellLoading]);
 
 	useEffect(() => {
-		if (loading) return;
+		if (shellLoading) return;
 		const timer = setTimeout(() => setLaunchComplete(true), SPLASH_EXIT_MS);
 		return () => clearTimeout(timer);
-	}, [loading]);
+	}, [shellLoading]);
 
 	// When a session is created from the New Session form or Ask box, jump straight into it
 	useEffect(() => {
@@ -1756,19 +1772,6 @@ export function App(
 			unstick(pendingSessionId);
 		}
 	}, [route, pendingSessionId, unstick]);
-
-	// The list is the live slice, and archived sessions arrive as summaries, so
-	// the row it finds may be missing or partial — see useHydratedSession.
-	const listedSession: UnifiedSession | null =
-		route.view === "session"
-			? sessions.find(
-					(s) => s.id === route.id || s.aliasIds?.includes(route.id),
-				) || null
-			: null;
-	const currentSession = useHydratedSession(
-		route.view === "session" ? route.id : null,
-		listedSession,
-	);
 
 	// The open session, read by the mount-once tab-shortcut handler (⌘⌥C / ⌘W —
 	// see the effect next to closeSession below).
