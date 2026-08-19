@@ -309,6 +309,19 @@ export async function promoteSessionApi(
 	);
 }
 
+/** Create an idle sibling tab. The first prompt starts its engine run. */
+export async function newSessionApi(
+	sourceId: string,
+	user: string,
+	mode?: "share" | "stack" | "ask",
+): Promise<{ id: string; session: UnifiedSession | null }> {
+	const body = await request<{ id: string; session?: UnifiedSession }>(
+		`/sessions/${encodeURIComponent(sourceId)}/new-session`,
+		{ method: "POST", body: { user, ...(mode ? { mode } : {}) } },
+	);
+	return { id: body.id, session: body.session || null };
+}
+
 export async function deleteSessionApi(
 	sessionId: string,
 	cleanWorktree: boolean,

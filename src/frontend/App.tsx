@@ -131,6 +131,7 @@ import {
 	deleteSessionApi,
 	renameSessionApi,
 	setSessionStatusApi,
+	newSessionApi,
 	fetchWorkspaces,
 	updateWorkspaceApi,
 	deleteWorkspaceApi,
@@ -2703,7 +2704,7 @@ export function App(
 	/**
 	 * A workspace always has at least one tab. Close its last session and dismiss
 	 * its last pane and there is nothing left to put in the strip, so the
-	 * workspace home — the composer that starts the next session — takes the slot
+	 * workspace home, the composer that starts the next session, takes the slot
 	 * rather than leaving a workspace with no tabs at all. It is the only tab
 	 * whenever it exists, which is why it carries no × of its own.
 	 */
@@ -3009,6 +3010,58 @@ export function App(
 		excludeId: currentSession?.id,
 	});
 
+	async function createNewSessionFrom(
+		src: UnifiedSession,
+		mode: "share" | "stack" | "ask",
+	): Promise<string> {
+		const { id, session } = await newSessionApi(src.id, getCurrentUser(), mode);
+		const now = new Date().toISOString();
+		// Render the real tab from the endpoint response immediately. The fallback
+		// keeps the interaction working against a server that returns only the id.
+		inject(
+			session ?? {
+				...src,
+				id,
+				source: "opensession",
+				claudeSessionId: null,
+				codexThreadId: undefined,
+				title: "New session",
+				createdAt: now,
+				lastActivity: now,
+				isRunning: false,
+				transcriptPath: null,
+				startedBy: getCurrentUser(),
+				archived: false,
+				waitingForInput: false,
+				queuedCount: 0,
+				prUrl: undefined,
+				prState: undefined,
+				automation: undefined,
+				plainThreadId: undefined,
+				goal: undefined,
+				loop: undefined,
+				...(mode === "ask"
+					? {
+							branch: null,
+							worktreeDir: null,
+							mode: "ask" as const,
+						}
+					: {}),
+			},
+			{ sticky: true },
+		);
+		setPendingSessionId(id);
+		setPendingNewWorkspace(false);
+		clearTimeout(pendingTimer.current);
+		pendingTimer.current = setTimeout(() => {
+			setPendingSessionId(null);
+			unstick(id);
+		}, 30_000);
+		refresh();
+		navigate({ view: "session", id });
+		return id;
+	}
+
 	function openNewSessionInWorkspace(
 		src: UnifiedSession,
 		mode: "share" | "stack" | "ask",
@@ -3037,13 +3090,11 @@ export function App(
 		});
 	}
 
-	// Start a new session in the current workspace. The tab strip's + button and the
-	// SessionViewer ⋯ menu (the only reachable entry point on a phone, where the
-	// strip and its + are hidden/hover-revealed) both open its composer. The first
-	// prompt creates the session on the shared worktree by default, or stacked/Ask.
+	// Open a real sibling tab immediately. Its first prompt starts the engine, so
+	// the lightweight create does no model work and keeps the interaction quick.
 	const handleNewSession = async (
 		mode: "share" | "stack" | "ask",
-		_side: SplitSide | null = null,
+		side: SplitSide | null = null,
 	) => {
 		const src = currentSession || mainSession(naturalSessions);
 		if (!src) {
@@ -3065,7 +3116,17 @@ export function App(
 			}
 			return;
 		}
-		openNewSessionInWorkspace(src, mode);
+		try {
+			const id = await createNewSessionFrom(src, mode);
+			if (side === "right" && tabOrderKey && activeTabSplit)
+				saveTabSplit(tabOrderKey, {
+					...toStoredSplit(activeTabSplit),
+					right: [...activeTabSplit.right, id],
+					rightActive: id,
+				});
+		} catch (e) {
+			console.error("New session failed:", e);
+		}
 	};
 	const handleNewSessionRef = useRef(handleNewSession);
 	handleNewSessionRef.current = handleNewSession;
