@@ -116,7 +116,7 @@
 	width: min(100% - 48px, 940px);
 	flex: 1;
 	margin-inline: auto;
-	padding: 42px 0 28px;
+	padding: 72px 0 28px;
 }
 
 .setup-panel {
@@ -134,7 +134,7 @@
 	padding: 20px 0 0;
 }
 
-.setup-step-copy > p:not(.setup-eyebrow) {
+.setup-step-copy > p {
 	max-width: 30ch;
 }
 
@@ -181,22 +181,13 @@
 	outline: none;
 }
 
-.setup-copy > p:not(.setup-eyebrow) {
+.setup-copy > p {
 	max-width: 58ch;
 	margin: 8px 0 0;
 	color: var(--muted);
 	font-size: 15px;
 	line-height: 1.5;
 	text-wrap: pretty;
-}
-
-.setup-copy .setup-eyebrow {
-	display: block;
-	margin: 0 0 8px;
-	color: rgba(var(--ink-rgb), 0.42);
-	font-size: 12px;
-	font-weight: 600;
-	letter-spacing: 0.02em;
 }
 
 .setup-choices {
@@ -936,7 +927,7 @@ a.setup-download-card:hover {
 		padding-top: 0;
 	}
 
-	.setup-step-copy > p:not(.setup-eyebrow) {
+	.setup-step-copy > p {
 		max-width: 34ch;
 	}
 }

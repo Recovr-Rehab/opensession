@@ -229,8 +229,9 @@ function StepLayout({
   return (
     <div className="setup-step-layout">
       <div className="setup-copy setup-step-copy">
-        <p className="setup-eyebrow">Step {step}</p>
-        <h1 tabIndex={-1}>{title}</h1>
+        <h1 tabIndex={-1}>
+          {step} {title}
+        </h1>
         <p>{description}</p>
         {brand}
       </div>
