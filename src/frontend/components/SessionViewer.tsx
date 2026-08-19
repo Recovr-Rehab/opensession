@@ -5331,6 +5331,7 @@ export function SessionViewer({
 							// request may live on a sibling), and already folded
 							// together with a GitHub review that completes it.
 							reviewRequest={effectiveReview?.req ?? null}
+							prReviewRequested={effectiveReview?.prReviewRequested}
 							running={isRunningLive}
 							send={connected ? send : undefined}
 							refreshTick={gitRefreshTick}
