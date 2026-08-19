@@ -34,7 +34,7 @@ import {
 } from "fs";
 import { basename, dirname, join, resolve } from "path";
 import { getAgentAwsEnv } from "./aws-creds";
-import { createWorkloadIdentityEnv } from "./workload-identity";
+import { createWorkloadIdentityEnv, type WorkloadIdentityContext } from "./workload-identity";
 import { audit } from "./audit";
 import { ensureRemoteSandboxPortalAgent, forgetRemoteSandboxPortalAgents, listPortalServices, listSandboxPortalServices } from "./portal-supervisor";
 import { revokeSandboxPortalGrants, revokeSandboxPortalRelay } from "./sandbox-portal-relay";
@@ -1414,10 +1414,25 @@ async function writeSandboxTunnelsEnv(
  *     convention): `<worktree>/.agents/start.sh` when present, else the
  *     repo's configured `previewCommand`.
  */
+export function sandboxPreviewIdentityContext(
+  sandbox: Pick<Sandbox, "id" | "provider">,
+  repoId: string,
+  trustProfile: "interactive" | "automation",
+): WorkloadIdentityContext {
+  return {
+    sandboxId: sandbox.id,
+    provider: sandbox.provider,
+    lifecycle: "preview",
+    repoId,
+    trustProfile,
+  };
+}
+
 export async function startSandboxPreview(
   sandbox: Sandbox,
   worktreeDir: string,
 	sessionId?: string,
+  trustProfile: "interactive" | "automation" = "interactive",
 ): Promise<PreviewStatus> {
 	if (usesOutboundSandboxPortalRelay(sandbox.provider) && !sessionId) throw new Error("A remote Sandbox Portal requires its session identity.");
 	const status = await getSandboxPreviewStatus(sandbox, worktreeDir, sessionId);
@@ -1506,12 +1521,13 @@ export async function startSandboxPreview(
   // A matching workload-identity grant is the sandbox credential boundary.
   // Retain the legacy instance credential path only for repositories that do
   // not have a grant yet, so migrations do not turn existing previews off.
-  const workloadIdentityEnv = createWorkloadIdentityEnv({
-    sandboxId: sandbox.id,
-    provider: sandbox.provider,
-    lifecycle: "preview",
-    repoId: repoForPath(worktreeDir).id,
-  });
+  const workloadIdentityEnv = createWorkloadIdentityEnv(
+    sandboxPreviewIdentityContext(
+      sandbox,
+      repoForPath(worktreeDir).id,
+      trustProfile,
+    ),
+  );
   const awsEnv = Object.keys(workloadIdentityEnv).length
     ? {}
     : await sandboxPreviewAwsEnv(sandbox, worktreeDir, true);

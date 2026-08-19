@@ -7,6 +7,7 @@ import {
   parsePreviewPortalRecipes,
   repoLifecycle,
   resolvePreviewBoot,
+  sandboxPreviewIdentityContext,
   startPreview,
 } from "./preview";
 
@@ -21,6 +22,25 @@ const PREVIEW_COMMAND = "/srv/opensession/bin/start-widget-preview";
 function existsIn(paths: string[]) {
   return (p: string) => paths.includes(p);
 }
+
+
+describe("sandbox preview identity", () => {
+  test("carries the sandbox trust profile into the preview grant", () => {
+    expect(
+      sandboxPreviewIdentityContext(
+        {id: "sandbox-1", provider: "daytona"},
+        "tella-fusion",
+        "interactive",
+      ),
+    ).toEqual({
+      sandboxId: "sandbox-1",
+      provider: "daytona",
+      lifecycle: "preview",
+      repoId: "tella-fusion",
+      trustProfile: "interactive",
+    });
+  });
+});
 
 describe("resolvePreviewBoot", () => {
   test("repo-committed .agents/start.sh wins over previewCommand", async () => {
