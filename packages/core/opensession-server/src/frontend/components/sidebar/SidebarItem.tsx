@@ -18,18 +18,23 @@ import {
 	SIDEBAR_SWIPE_ROW,
 	SIDEBAR_WS_DRAFT,
 } from "../../lib/sidebar-classes";
-import { isClaimed, pinnedLane, runNeedsAttention, stripPrTitlePrefix } from "../../lib/sidebar-lanes";
+import { isClaimed, mineStatus, pinnedLane, runNeedsAttention, stripPrTitlePrefix } from "../../lib/sidebar-lanes";
 import { sessionWasAutoCreated } from "../../lib/sidebar-placement";
 import { LONG_PRESS_MS, LONG_PRESS_SLOP, SWIPE_AXIS_LOCK_PX, SWIPE_COMMIT_MS, SWIPE_OPEN_THRESHOLD, SWIPE_REVEAL_PX, clampSwipe, fullSwipeThreshold, swipeCommitOffset, type SwipeAction } from "../../lib/sidebar-swipe";
-import { MINE_STATUS_META, type LaneChoice } from "../../lib/sidebar-types";
+import type { LaneChoice } from "../../lib/sidebar-types";
 import type { UnifiedSession } from "../../lib/types";
-import { Button } from "../../ui/button";
 import { cn } from "../../ui/cn";
 import { Popover } from "../../ui/popover";
 import { BottomSheet, SheetBody, SheetItem, SheetSeparator, SheetTitle } from "../../ui/sheet";
 import { Tooltip } from "../../ui/tooltip";
 import { RowCardPopup, useRowHoverCard } from "../SidebarRowCards";
 import { AutoCreatedMark } from "./AutoCreatedMark";
+import {
+	LanePickerPage,
+	LaneStatusMark,
+	SheetDrillInItem,
+	lanePickerLabel,
+} from "./MobileSheetPages";
 import { OriginMark } from "./OriginMark";
 import { IconArchive, IconInbox, IconMail, IconPencil, IconPin } from "../icons";
 import { SessionCardBody, WsPrStatusMark } from "../sidebar/HoverCards";
@@ -753,6 +758,9 @@ function MobileActionSheet({
 	onSetStatus?: (status: LaneChoice | null) => void;
 	onClose: () => void;
 }) {
+	const [page, setPage] = useState<"actions" | "status">("actions");
+	const currentLane = pinnedLane(session) ?? null;
+	const displayedLane = currentLane ?? mineStatus(session);
 	// Lock the page behind the sheet so a scroll drags the list, not the page.
 	useEffect(() => {
 		const prev = document.body.style.overflow;
@@ -763,7 +771,20 @@ function MobileActionSheet({
 	}, []);
 	return (
 		<BottomSheet label={`Actions for ${session.title}`} onClose={onClose}>
-			{(dismiss) => (
+			{(dismiss) => {
+				if (page === "status" && onSetStatus) {
+					return (
+						<LanePickerPage
+							current={currentLane}
+							onBack={() => setPage("actions")}
+							onSelect={(status) => {
+								onSetStatus(status);
+								dismiss();
+							}}
+						/>
+					);
+				}
+				return (
 				<SheetBody>
 					<SheetTitle>{session.title}</SheetTitle>
 					<SheetItem
@@ -799,68 +820,13 @@ function MobileActionSheet({
 								: "Add to my workspaces"}
 						</SheetItem>
 					)}
-					{/* Same lane chips as the workspace sheet — forcing a specific lane
-					    for a run from a phone. Lanes are per-user: the move happens in
-					    YOUR sidebar only. */}
 					{onSetStatus && (
-						<div className="px-4 py-2">
-							<div className="mb-1.5 text-meta font-semibold text-faint">
-								Move to lane
-							</div>
-							<div className="flex flex-wrap gap-1.5">
-								{MINE_STATUS_META.map((m) => {
-									const on = pinnedLane(session) === m.key;
-									return (
-										<Button
-											variant="ghost"
-											size="sm"
-											key={m.key}
-											type="button"
-											className="gap-1.5 whitespace-normal px-2 text-control-label leading-normal"
-											style={{
-												borderColor: on ? m.dotColor : "var(--border)",
-												color: on ? "var(--text)" : "var(--text-dim)",
-											}}
-											onClick={() => {
-												onSetStatus(on ? null : m.key);
-												dismiss();
-											}}
-										>
-											<span
-												style={{
-													width: 8,
-													height: 8,
-													borderRadius: "50%",
-													background: m.dotColor,
-													flexShrink: 0,
-												}}
-											/>
-											{m.label}
-										</Button>
-									);
-								})}
-								<Button
-									variant="ghost"
-									size="sm"
-									type="button"
-									className="whitespace-normal px-2 text-control-label leading-normal"
-									style={{
-										borderColor: !pinnedLane(session)
-											? "var(--text-dim)"
-											: "var(--border)",
-										color: !pinnedLane(session)
-											? "var(--text)"
-											: "var(--text-dim)",
-									}}
-									onClick={() => {
-										onSetStatus(null);
-										dismiss();
-									}}
-								>
-									Auto
-								</Button>
-							</div>
-						</div>
+						<SheetDrillInItem
+							icon={<LaneStatusMark value={displayedLane} />}
+							label="Status"
+							value={lanePickerLabel(displayedLane)}
+							onClick={() => setPage("status")}
+						/>
 					)}
 					<SheetSeparator />
 					<SheetItem
@@ -885,7 +851,8 @@ function MobileActionSheet({
 						Archive
 					</SheetItem>
 				</SheetBody>
-			)}
+				);
+			}}
 		</BottomSheet>
 	);
 }

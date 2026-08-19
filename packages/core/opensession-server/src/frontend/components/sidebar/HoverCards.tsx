@@ -11,10 +11,18 @@ import type { UnifiedSession } from "../../lib/types";
 import { Button } from "../../ui/button";
 import { cn } from "../../ui/cn";
 import { BottomSheet, SheetBody, SheetItem, SheetSeparator } from "../../ui/sheet";
+import {
+	LanePickerPage,
+	LaneStatusMark,
+	SheetDrillInItem,
+	SheetPageHeader,
+	lanePickerLabel,
+	type LanePickerValue,
+} from "./MobileSheetPages";
 import { openLightbox } from "../MediaLightbox";
 import { sessionPrTone } from "../../lib/pr-refs";
 import { CardFooter, CardPrChip, checksLabel, osReviewLabel } from "../SidebarRowCards";
-import { IconArchive, IconArrowUpRight, IconGitMerge, IconInbox, IconLink, IconMail, IconMoon, IconPencil, IconPin, IconPullRequest } from "../icons";
+import { IconArchive, IconArrowUpRight, IconClock, IconGitMerge, IconInbox, IconLink, IconMail, IconMoon, IconPencil, IconPin, IconPullRequest } from "../icons";
 import React, { useEffect, useState } from "react";
 
 // The session card, in the shape the workspace card already proved: what the
@@ -599,6 +607,15 @@ export function WsMobileSheet({
 }) {
 	const ov = useWsOverview(row);
 	const { prSession, prReady, prStatusBits } = wsPrInfo(row);
+	const [page, setPage] = useState<"actions" | "status" | "snooze">("actions");
+	const anyManual = row.sessions.some((session) => pinnedLane(session));
+	const firstLane = pinnedLane(row.sessions[0]) ?? null;
+	const currentLane: LanePickerValue = !anyManual
+		? null
+		: row.sessions.every((session) => pinnedLane(session) === firstLane)
+			? firstLane
+			: "mixed";
+	const displayedLane = currentLane ?? row.status;
 	// Lock the page behind the sheet so a scroll drags the list, not the page.
 	useEffect(() => {
 		const prev = document.body.style.overflow;
@@ -628,6 +645,44 @@ export function WsMobileSheet({
 					fn();
 					dismiss();
 				};
+				if (page === "status") {
+					return (
+						<LanePickerPage
+							current={currentLane}
+							onBack={() => setPage("actions")}
+							onSelect={(status) => {
+								onSetStatus(status);
+								dismiss();
+							}}
+						/>
+					);
+				}
+				if (page === "snooze") {
+					return (
+						<>
+							<SheetPageHeader title="Snooze" onBack={() => setPage("actions")} />
+							<SheetBody>
+								{snoozePresets().map((preset) => (
+									<SheetItem
+										key={preset.label}
+										onClick={closing(() =>
+											onSnooze(preset.until.toISOString()),
+										)}
+									>
+										<IconClock size={22} />
+										{preset.label}
+									</SheetItem>
+								))}
+								{snoozeUntil && (
+									<SheetItem onClick={closing(() => onSnooze(null))}>
+										<IconMoon size={22} />
+										Unsnooze
+									</SheetItem>
+								)}
+							</SheetBody>
+						</>
+					);
+				}
 				return (
 				<SheetBody>
 				<div className="px-2 pb-2.5 pt-1">
@@ -733,120 +788,25 @@ export function WsMobileSheet({
 						Copy link
 					</SheetItem>
 				)}
-				{/* Pin the workspace into a lane manually — tap a chip to move it there
-				    (tap the active one, or Auto, to release it back to the derived lane). */}
-				{row.sessions.length > 0 &&
-					(() => {
-						const anyManual = row.sessions.some((c) => pinnedLane(c));
-						const sharedManual =
-							anyManual &&
-							row.sessions.every(
-								(c) => pinnedLane(c) === pinnedLane(row.sessions[0]),
-							)
-								? (pinnedLane(row.sessions[0]) ?? null)
-								: null;
-						return (
-							<div className="px-4 py-2">
-								<div className="mb-1.5 text-meta font-semibold text-faint">
-									Move to lane
-								</div>
-								<div className="flex flex-wrap gap-1.5">
-									{MINE_STATUS_META.map((m) => {
-										const on = sharedManual === m.key;
-										return (
-											<Button
-										variant="ghost"
-										size="sm"
-												key={m.key}
-												type="button"
-												className="gap-1.5 whitespace-normal px-2 text-control-label leading-normal"
-												style={{
-													borderColor: on ? m.dotColor : "var(--border)",
-													color: on ? "var(--text)" : "var(--text-dim)",
-													background: on
-														? "color-mix(in srgb, var(--bg-panel), transparent)"
-														: "transparent",
-												}}
-												onClick={closing(() =>
-													onSetStatus(on ? null : m.key),
-												)}
-											>
-												<span
-													style={{
-														width: 8,
-														height: 8,
-														borderRadius: "50%",
-														background: m.dotColor,
-														flexShrink: 0,
-													}}
-												/>
-												{m.label}
-											</Button>
-										);
-									})}
-									<Button
-										variant="ghost"
-										size="sm"
-										type="button"
-										className="whitespace-normal px-2 text-control-label leading-normal"
-										style={{
-											borderColor: !anyManual
-												? "var(--text-dim)"
-												: "var(--border)",
-											color: !anyManual ? "var(--text)" : "var(--text-dim)",
-										}}
-										onClick={closing(() => onSetStatus(null))}
-									>
-										Auto
-									</Button>
-								</div>
-							</div>
-						);
-					})()}
-				{/* Snooze chips — the mobile stand-in for the right-click Snooze
-				    flyout. Tapping a preset parks the row in the Snoozed section
-				    until the resolved time. */}
 				{row.sessions.length > 0 && (
-					<div className="px-4 py-2">
-						<div className="mb-1.5 text-meta font-semibold text-faint">
-							{snoozeUntil
-								? `Snoozed · wakes in ${formatRemaining(snoozeUntil)}`
-								: "Snooze"}
-						</div>
-						<div className="flex flex-wrap gap-1.5">
-							{snoozePresets().map((p) => (
-								<Button
-										variant="ghost"
-										size="sm"
-									key={p.label}
-									type="button"
-									className="whitespace-normal px-2 text-control-label leading-normal"
-									style={{
-										borderColor: "var(--border)",
-										color: "var(--text-dim)",
-									}}
-									onClick={closing(() => onSnooze(p.until.toISOString()))}
-								>
-									{p.label}
-								</Button>
-							))}
-							{snoozeUntil && (
-								<Button
-										variant="ghost"
-										size="sm"
-									type="button"
-									className="whitespace-normal px-2 text-control-label leading-normal"
-									style={{
-										borderColor: "var(--text-dim)",
-										color: "var(--text)",
-									}}
-									onClick={closing(() => onSnooze(null))}
-								>
-									Unsnooze
-								</Button>
-							)}
-						</div>
-					</div>
+					<>
+						<SheetDrillInItem
+							icon={<LaneStatusMark value={displayedLane} />}
+							label="Status"
+							value={lanePickerLabel(displayedLane)}
+							onClick={() => setPage("status")}
+						/>
+						<SheetDrillInItem
+							icon={<IconMoon size={22} />}
+							label="Snooze"
+							value={
+								snoozeUntil
+									? `Wakes in ${formatRemaining(snoozeUntil)}`
+									: undefined
+							}
+							onClick={() => setPage("snooze")}
+						/>
+					</>
 				)}
 				{((row.status !== "merged" && row.sessions.length > 0) || onDelete) && (
 					<SheetSeparator />
