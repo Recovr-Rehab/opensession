@@ -37,7 +37,7 @@ describe.skipIf(!onServiceHost)("systemd unit", () => {
 
     expect(unit).toContain(`WorkingDirectory=${REPO_ROOT}`);
     expect(unit).toContain(`EnvironmentFile=${ENV_PATH}`);
-    expect(unit.match(/^ExecStart=(\S+) run opensession\.ts$/m)?.[1]).toMatch(/bun$/);
+    expect(unit.match(/^ExecStart=(\S+) run packages\/core\/opensession-server\/opensession\.ts$/m)?.[1]).toMatch(/bun$/);
   });
 
   test("preserves the tuning directives that encode real incidents", async () => {
@@ -88,7 +88,7 @@ describe.skipIf(!onServiceHost)("launchd plist", () => {
     // flags and no secrets — inert, and hard to diagnose.
     expect(plist).toContain(ENV_PATH);
     expect(plist).toContain("set -a");
-    expect(plist).toMatch(/exec \S*bun run opensession\.ts/);
+    expect(plist).toMatch(/exec \S*bun run packages\/core\/opensession-server\/opensession\.ts/);
   });
 
   test("escapes XML so a path with & or < cannot corrupt the file", () => {

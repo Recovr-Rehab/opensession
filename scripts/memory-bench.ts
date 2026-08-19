@@ -20,7 +20,7 @@
  */
 import { readdirSync, readFileSync, writeFileSync } from "fs";
 import { join } from "path";
-import { oneShot } from "../src/server/one-shot";
+import { oneShot } from "../packages/core/opensession-server/src/server/one-shot";
 import {
   BENCH_STRATEGIES,
   formatTable,
@@ -32,7 +32,7 @@ import {
   summarize,
   type BenchResult,
   type OneShot,
-} from "../src/server/memory-bench";
+} from "../packages/core/opensession-server/src/server/memory-bench";
 
 const requested = (process.env.MEMORY_BENCH_STRATEGIES ?? "")
   .split(",")

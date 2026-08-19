@@ -33,12 +33,12 @@ import os
 from PIL import Image, ImageDraw
 
 ROOT = os.path.join(os.path.dirname(__file__), "..")
-OUT_DIR = os.path.join(ROOT, "src", "frontend", "splash")
+OUT_DIR = os.path.join(ROOT, "packages", "core", "opensession-server", "src", "frontend", "splash")
 # The native app icon's macOS variant: identical artwork to the iOS icon, but
 # with transparent corners, so it composites onto the gradient exactly the way
 # /mac-app-icon.png does in the HTML shell.
 LOGO_PATH = os.path.join(
-    ROOT, "os1-ios", "OS1", "Assets.xcassets", "AppIcon.appiconset", "mac512@2x.png"
+    ROOT, "packages", "clients", "ios", "OS1", "Assets.xcassets", "AppIcon.appiconset", "mac512@2x.png"
 )
 
 # --- constants mirrored from #splash in src/frontend/index.html ---

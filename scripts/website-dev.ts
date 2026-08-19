@@ -6,9 +6,9 @@ import { buildWebsiteTailwind } from "./website-tailwind";
 const root = join(import.meta.dir, "..");
 await buildWebsiteTailwind(root);
 const [{ default: homepage }, { default: productDemo }, { default: setup }] = await Promise.all([
-	import("../website/index.html"),
-	import("../website/product-demo.html"),
-	import("../website/setup.html"),
+	import("../packages/clients/website/index.html"),
+	import("../packages/clients/website/product-demo.html"),
+	import("../packages/clients/website/setup.html"),
 ]);
 
 const port = Number(process.env.PORT || 3865);
