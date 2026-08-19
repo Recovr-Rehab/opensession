@@ -63,6 +63,11 @@ import {
 	type TurnActivityPref,
 } from "../../lib/turn-activity";
 import {
+	getLiveTypingPref,
+	onLiveTypingChanged,
+	setLiveTypingPref,
+} from "../../lib/live-typing-pref";
+import {
 	getReplySuggestionsPref,
 	onReplySuggestionsChanged,
 	setReplySuggestionsPref,
@@ -409,6 +414,11 @@ export function PreferencesPanel() {
 		() => onTurnActivityChanged(() => setTurnActivity(getTurnActivityPref())),
 		[],
 	);
+	const [liveTyping, setLiveTyping] = useState<boolean>(getLiveTypingPref);
+	useEffect(
+		() => onLiveTypingChanged(() => setLiveTyping(getLiveTypingPref())),
+		[],
+	);
 	useEffect(() => {
 		fetchModels()
 			.then((m) => setModelOptions(m.models))
@@ -600,6 +610,17 @@ export function PreferencesPanel() {
 								{ value: "expanded", label: "Always expanded" },
 							]}
 							onChange={setTurnActivityPref}
+						/>
+					}
+				/>
+				<SettingRow
+					title="Live typing"
+					desc="Type the reply out as the model writes it. Off, each part appears when it is finished."
+					control={
+						<Switch
+							aria-label="Live typing"
+							checked={liveTyping}
+							onCheckedChange={setLiveTypingPref}
 						/>
 					}
 				/>

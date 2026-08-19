@@ -10,6 +10,33 @@ final class PreferenceHydrationTests: XCTestCase {
         XCTAssertNil(NativePreferences.replySuggestionsEnabled("future-value"))
     }
 
+    /// The same "on"/"off" shape the web writes for `live-typing`. An unset
+    /// value is nil rather than false, so hydration leaves this device's
+    /// cached answer alone instead of snapping it to a choice nobody made.
+    func testLiveTypingPreferenceUsesWebValues() {
+        XCTAssertEqual(NativePreferences.liveTypingEnabled("on"), true)
+        XCTAssertEqual(NativePreferences.liveTypingEnabled("off"), false)
+        XCTAssertNil(NativePreferences.liveTypingEnabled(nil))
+        XCTAssertNil(NativePreferences.liveTypingEnabled("future-value"))
+    }
+
+    /// Default off: an account that has never touched the switch reads the
+    /// same on the phone as in the browser.
+    func testLiveTypingDefaultsOff() {
+        let defaults = UserDefaults.standard
+        let key = "os1.transcript.liveTyping"
+        let previous = defaults.object(forKey: key) as? Bool
+        defer {
+            if let previous { defaults.set(previous, forKey: key) }
+            else { defaults.removeObject(forKey: key) }
+        }
+
+        defaults.removeObject(forKey: key)
+        XCTAssertFalse(NativePreferences.liveTypingIsOn)
+        defaults.set(true, forKey: key)
+        XCTAssertTrue(NativePreferences.liveTypingIsOn)
+    }
+
     func testReadBeforeHydrationWinsOverOlderRemoteMark() {
         let store = ReadsStore()
         let session = Session(

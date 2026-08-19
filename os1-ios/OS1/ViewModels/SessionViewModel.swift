@@ -1402,6 +1402,13 @@ final class SessionViewModel {
 
         case .streamText(let id, let text, let blockId) where id == session.id:
             isStreaming = true
+            // Live typing is the account's choice (Settings > Preferences),
+            // default off. Dropping the frame is the whole implementation:
+            // the block still arrives as a durable entry over
+            // transcript_append, which is what filled the transcript before
+            // streaming existed. isStreaming is set above either way, so the
+            // run still reads as working.
+            guard NativePreferences.liveTypingIsOn else { break }
             if let blockId {
                 guard !landedBlockIds.contains(blockId) else { break }
                 liveBlockText[blockId, default: ""] += text

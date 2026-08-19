@@ -14,6 +14,7 @@ import { duration, ease } from "../ui/motion";
 import { TranscriptSkeleton } from "../ui/state";
 import { renderMarkdown } from "../lib/markdown";
 import { LiveTurnStore } from "../lib/live-turn-store";
+import { getLiveTypingPref } from "../lib/live-typing-pref";
 import { isTimelineOnlyRunnerNotice } from "../lib/runner-events";
 import { TranscriptViewStore } from "../lib/transcript-view-store";
 import {
@@ -2528,6 +2529,12 @@ export function SessionViewer({
 					break;
 				case "stream_text": {
 					if (isTimelineOnlyRunnerNotice(msg.text)) break;
+					// Live typing is per viewer (Settings > Preferences), default off.
+					// Dropping the frame is the whole implementation: the durable
+					// entry for the block still lands over the transcript feed, which
+					// is what filled the transcript before streaming existed. Read per
+					// frame rather than captured, so a toggle takes on the running turn.
+					if (!getLiveTypingPref()) break;
 					liveTurnStore.append(msg.text, msg.blockId);
 					break;
 				}

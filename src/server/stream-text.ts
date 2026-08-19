@@ -17,11 +17,14 @@
  * reveal) — and a viewer only ever holds something it can render. It also
  * cuts a fast turn from hundreds of frames to a handful.
  *
- * Delivery is unconditional, which is what makes the engines agree: the
- * codex-direct adapter has always streamed its `item/agentMessage/delta` feed,
- * and this puts opencode on the same footing rather than behind a setting.
- * OPENSESSION_OC_STREAM_TEXT=0 is a kill switch for an instance that needs the
- * old whole-part behaviour back without waiting for a deploy.
+ * Delivery from the server is unconditional, which is what makes the engines
+ * agree: the codex-direct adapter has always streamed its
+ * `item/agentMessage/delta` feed, and this puts opencode on the same footing.
+ * Whether a reply actually types out is a VIEWER's choice (the "Live typing"
+ * preference, default off) — several people can watch one run, the frames cost
+ * nothing to drop, and deciding it client-side covers every engine rather than
+ * only this one. OPENSESSION_OC_STREAM_TEXT=0 remains the instance-level kill
+ * switch for stopping the frames at the source without waiting for a deploy.
  */
 
 import { safeFlushLength } from "@tellahq/opensession-protocol/stream-cuts";

@@ -144,6 +144,13 @@ enum NativePreferences {
             resetMissing: changedIdentity,
             in: defaults
         )
+        setBool(
+            liveTypingEnabled(prefs["live-typing"]),
+            default: false,
+            key: "os1.transcript.liveTyping",
+            resetMissing: changedIdentity,
+            in: defaults
+        )
         set(
             validatedIdList(prefs["repo-order"]),
             default: "[]",
@@ -213,6 +220,25 @@ enum NativePreferences {
         case "off": false
         default: nil
         }
+    }
+
+    /// Whether a reply types out as the model writes it. Same "on"/"off"
+    /// shape as the web writes, and the same key, so the answer is one
+    /// account's rather than one client's. Absent means off, which is the
+    /// default on both.
+    static func liveTypingEnabled(_ value: String?) -> Bool? {
+        switch value {
+        case "on": true
+        case "off": false
+        default: nil
+        }
+    }
+
+    /// The cached answer this device holds, for the transcript to read per
+    /// frame rather than capture: flipping the toggle then takes on a turn
+    /// that is already running. Off until the account says otherwise.
+    nonisolated static var liveTypingIsOn: Bool {
+        UserDefaults.standard.object(forKey: "os1.transcript.liveTyping") as? Bool ?? false
     }
 
     /// The shape both list-valued prefs share (repo order, hidden sources): a

@@ -95,6 +95,7 @@ struct PreferencesSettingsView: View {
     @AppStorage("os1.composer.busySendMod") private var nativeBusySendMod = "steer"
     @AppStorage("os1.appearance.turnActivity") private var nativeTurnActivity = "auto"
     @AppStorage("os1.composer.replySuggestions") private var nativeReplySuggestions = true
+    @AppStorage("os1.transcript.liveTyping") private var nativeLiveTyping = false
     @AppStorage("os1.desk.voice") private var deskVoice = "off"
     /// The one control on this screen that stays on the device — see the type
     /// note above. It is deliberately not in `seededPrefs`/`commit()`: those
@@ -110,6 +111,7 @@ struct PreferencesSettingsView: View {
     @State private var busySendMod: String
     @State private var turnActivity: String
     @State private var replySuggestions: Bool
+    @State private var liveTyping: Bool
     @State private var loading = true
     @State private var saving = false
     @State private var resaveNeeded = false
@@ -137,6 +139,7 @@ struct PreferencesSettingsView: View {
             "busy-send-mod": defaults.string(forKey: "os1.composer.busySendMod") ?? "steer",
             "turn-activity": defaults.string(forKey: "os1.appearance.turnActivity") ?? "auto",
             "reply-suggestions": (defaults.object(forKey: "os1.composer.replySuggestions") as? Bool ?? true) ? "on" : "off",
+            "live-typing": (defaults.object(forKey: "os1.transcript.liveTyping") as? Bool ?? false) ? "on" : "off",
         ]
         _seededPrefs = State(initialValue: seeded)
         _defaultModel = State(initialValue: seeded["default-model"] ?? "")
@@ -146,6 +149,7 @@ struct PreferencesSettingsView: View {
         _busySendMod = State(initialValue: seeded["busy-send-mod"] ?? "steer")
         _turnActivity = State(initialValue: seeded["turn-activity"] ?? "auto")
         _replySuggestions = State(initialValue: seeded["reply-suggestions"] != "off")
+        _liveTyping = State(initialValue: seeded["live-typing"] == "on")
         let cachedCatalog = SettingsCache.value("model-catalog", as: ModelCatalogSettings.self)
         _models = State(initialValue: cachedCatalog?.models ?? [])
         _engines = State(initialValue: cachedCatalog?.engines ?? [])
@@ -267,10 +271,11 @@ struct PreferencesSettingsView: View {
                     Text("Expand while running").tag("auto")
                     Text("Always expanded").tag("expanded")
                 }
+                Toggle("Live typing", isOn: $liveTyping)
             } header: {
                 Text("Transcript")
             } footer: {
-                Text("How each turn's working folds in a session. By default a turn is open while it runs and folds away once it settles. \"Fold tool calls\" instead keeps every turn's in-between messages reading as normal transcript, so only its tool calls ever fold. Expanding a turn does not open its individual tool inputs.")
+                Text("How each turn's working folds in a session. By default a turn is open while it runs and folds away once it settles. \"Fold tool calls\" instead keeps every turn's in-between messages reading as normal transcript, so only its tool calls ever fold. Expanding a turn does not open its individual tool inputs. Live typing types the reply out as the model writes it. Off, each part appears when it is finished.")
             }
 
             Section {
@@ -303,6 +308,7 @@ struct PreferencesSettingsView: View {
         .onChange(of: busySendMod) { _, _ in commit() }
         .onChange(of: turnActivity) { _, _ in commit() }
         .onChange(of: replySuggestions) { _, _ in commit() }
+        .onChange(of: liveTyping) { _, _ in commit() }
         .onDisappear { commit() }
     }
 
@@ -349,6 +355,9 @@ struct PreferencesSettingsView: View {
                     NativePreferences.replySuggestionsEnabled(prefs["reply-suggestions"])
                         ?? replySuggestions
                 ) ? "on" : "off",
+                "live-typing": (
+                    NativePreferences.liveTypingEnabled(prefs["live-typing"]) ?? liveTyping
+                ) ? "on" : "off",
             ]
             // The screen was already usable while this was in flight, so a
             // control the reader moved in the meantime keeps their choice —
@@ -363,6 +372,9 @@ struct PreferencesSettingsView: View {
             if (replySuggestions ? "on" : "off") == seededPrefs["reply-suggestions"] {
                 replySuggestions = server["reply-suggestions"] != "off"
             }
+            if (liveTyping ? "on" : "off") == seededPrefs["live-typing"] {
+                liveTyping = server["live-typing"] == "on"
+            }
             seededPrefs = server
             #if os(macOS)
             nativeSendKey = sendKey
@@ -371,6 +383,7 @@ struct PreferencesSettingsView: View {
             nativeBusySendMod = busySendMod
             nativeTurnActivity = turnActivity
             nativeReplySuggestions = replySuggestions
+            nativeLiveTyping = liveTyping
             savedPrefs = server
             prefsLoaded = true
         } catch {
@@ -417,6 +430,9 @@ struct PreferencesSettingsView: View {
             replySuggestions = NativePreferences.replySuggestionsEnabled(
                 confirmed["reply-suggestions"]
             ) ?? replySuggestions
+            liveTyping = NativePreferences.liveTypingEnabled(
+                confirmed["live-typing"]
+            ) ?? liveTyping
             nativeDefaultModel = defaultModel
             nativeDefaultEngine = defaultEngine
             #if os(macOS)
@@ -426,6 +442,7 @@ struct PreferencesSettingsView: View {
             nativeBusySendMod = busySendMod
             nativeTurnActivity = turnActivity
             nativeReplySuggestions = replySuggestions
+            nativeLiveTyping = liveTyping
             savedPrefs = confirmed
         } catch {
             self.error = error.localizedDescription
@@ -446,6 +463,7 @@ struct PreferencesSettingsView: View {
             "busy-send-mod": busySendMod,
             "turn-activity": turnActivity,
             "reply-suggestions": replySuggestions ? "on" : "off",
+            "live-typing": liveTyping ? "on" : "off",
         ]
     }
 
