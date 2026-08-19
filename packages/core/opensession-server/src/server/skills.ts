@@ -1,6 +1,6 @@
 // Skill/command index for "/"-skill autocomplete in the composer.
 //
-// Mirrors what a run actually loads: OpenCode's global skills and user-level
+// Mirrors what a run actually loads: Pi's global skills and user-level
 // ~/.claude/commands, plus the checkout's .claude/ and .agents/ skills and
 // commands. Skills are matched the
 // way the engine globs them — `skills/**\/SKILL.md`, so nested ones count —
@@ -23,18 +23,18 @@ export interface SkillEntry {
 
 /**
  * Skills the engine embeds in its own binary — real, invocable skills that no
- * directory scan can find. opencode ships exactly one today; Claude Code's
+ * directory scan can find. pi ships exactly one today; Claude Code's
  * bundled set (/simplify, /code-review, …) is compiled into *its* binary and is
- * NOT reachable from an opencode run, so it deliberately isn't listed here —
- * Open Session installs its tracked ports into ~/.config/opencode/skills.
+ * NOT reachable from an pi run, so it deliberately isn't listed here —
+ * Open Session installs its tracked ports into ~/.config/pi/skills.
  * Keep in sync when the engine's embedded set changes (`GET /skill` on a
- * running opencode server lists them with `source.type === "embedded"`).
+ * running agent lists them with `source.type === "embedded"`).
  */
 const SYSTEM_SKILLS: SkillEntry[] = [
   {
-    name: "customize-opencode",
+    name: "customize-pi",
     description:
-      "Editing or creating opencode's own configuration — opencode.json(c), .opencode/, agents, skills, plugins, MCP servers, permission rules",
+      "Editing or creating pi's own configuration — pi.json(c), .pi/, agents, skills, plugins, MCP servers, permission rules",
     source: "system",
   },
 ];
@@ -169,13 +169,13 @@ function loadSkills(worktreeDir?: string, includeBuiltins = false): SkillEntry[]
   if (hit && performance.now() - hit.at < CACHE_TTL_MS) return hit.entries;
 
   const user = join(homedir(), ".claude");
-  const opencode = join(homedir(), ".config", "opencode");
+  const pi = join(homedir(), ".config", "pi");
   const byName = new Map<string, SkillEntry>();
   const all = [
     // First so a same-named file skill (which shadows it in the engine too)
     // wins dedupe and the menu describes what would actually run.
     ...SYSTEM_SKILLS,
-    ...readSkillsDir(join(opencode, "skills"), "user"),
+    ...readSkillsDir(join(pi, "skills"), "user"),
     ...readCommandsDir(join(user, "commands"), "user"),
     ...(worktreeDir ? readSkillsDir(join(worktreeDir, ".claude", "skills"), "project") : []),
     ...(worktreeDir ? readCommandsDir(join(worktreeDir, ".claude", "commands"), "project") : []),

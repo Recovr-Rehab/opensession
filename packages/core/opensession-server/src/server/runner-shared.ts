@@ -67,7 +67,7 @@ export function filterMcpServers(
 
 /**
  * Money-moving Stripe tools: interactive Open Session runs drop the whole
- * server fail-closed (no per-call approval bridge on the opencode engine);
+ * server fail-closed (no per-call approval bridge on the the previous runner engine);
  * unattended runs strip these from the tool list with propose-it-in-your-
  * output guidance. The raw-API tools are included because they can hit any
  * endpoint the restricted key allows, including refunds and cancels.
@@ -194,7 +194,7 @@ export function usageLimitResetAt(
  * status at https://claude.ai/settings/subscription". This is NOT a usage limit
  * (no reset frees it) but it IS an account-level fault that is dead on retry, so
  * callers should sideline the account and rotate off it exactly like a usage
- * limit rather than retrying the same account into a timeout. opencode's ai-sdk
+ * limit rather than retrying the same account into a timeout. the previous runner's ai-sdk
  * treats it as retryable, so if it's not caught it manifests as a long hang.
  */
 export function isClaudeSubscriptionError(message: string): boolean {
@@ -217,7 +217,7 @@ export function isClaudeSubscriptionError(message: string): boolean {
  * fine by hand. Treat it as a wedge — sideline briefly, respawn, retry — not
  * as an account-level fault.
  *
- * Worth catching because opencode's ai-sdk classes it retryable and nothing
+ * Worth catching because the previous runner's ai-sdk classes it retryable and nothing
  * else matches the string: uncaught it becomes ~13 backoff retries over ~2h16m
  * against a proxy that can't spawn, and then a turn that idles to the
  * wall-clock deadline and reports "Stopped after 3 hours".
@@ -233,7 +233,7 @@ export function isClaudeBridgeLaunchError(message: string): boolean {
  * ("Upstream stalled: no data for <n>ms") — the SDK daemon behind the proxy
  * accepted the request and went silent. Unlike an ordinary provider error,
  * every one of these already represents 90s+ of measured dead air on a FRESH
- * request, and opencode's retry re-enters the same wedged daemon, so a streak
+ * request, and the previous runner's retry re-enters the same wedged daemon, so a streak
  * of them can never recover on its own (2026-08-03 bks-019fc819: three of
  * these 7 min apart, 25 min of dead air until the human cancelled). The stall
  * backstop fires on a lower bar when a retry streak is made of only these.
@@ -256,7 +256,7 @@ export function isCodexUsageLimitError(message: string): boolean {
 
 /**
  * Infrastructure/transient run failures worth recovering from rather than
- * surfacing as a dead turn: a fresh server/account (opencode-runner) or the
+ * surfacing as a dead turn: a fresh server/account (the previous runner-runner) or the
  * next model in the fallback graph (agent-runner) usually clears them. The goal
  * is "continue without failing" — so this deliberately matches the failure
  * *shapes* our runner emits (server death, wedged bridge, network blips, 5xx,
@@ -294,7 +294,6 @@ export function isTransientRunError(message: string | undefined | null): boolean
     // Liveness wedge — the Meridian proxy stopped returning bytes mid-run
     s.includes("produced no output within") ||
     // Server death / boot failure
-    s.includes("opencode server exited") ||
     s.includes("server exited") ||
     s.includes("server died") ||
     // The status-poll watchdog only emits these after six failed polls and a
@@ -302,9 +301,6 @@ export function isTransientRunError(message: string | undefined | null): boolean
     // temporarily unable to schedule its health handler are both recoverable
     // by the normal bounded continuation path; do not make a person send the
     // prompt again after a restart/re-adoption spike.
-    s.includes("opencode server stopped answering status polls") ||
-    s.includes("opencode server answered health probes but was too starved to serve status") ||
-    s.includes("failed to start opencode") ||
     s.includes("econnaborted") ||
     // HTTP 5xx / gateway / provider overload
     s.includes("bad gateway") ||
@@ -314,7 +310,7 @@ export function isTransientRunError(message: string | undefined | null): boolean
     s.includes("overloaded_error") ||
     s.includes("overloaded") ||
     /\b50[234]\b/.test(s) ||
-    // OpenCode's shared SQLite store under write contention — transient, retry
+    // The previous runner's shared SQLite store under write contention — transient, retry
     // clears it (see the SQLite-statement-failure runbook).
     s.includes("failed to execute statement")
   );
@@ -430,7 +426,7 @@ export function hasRunStatusDeclaration(text: string): boolean {
 /** Read-only bash surface for ask mode: allow common inspection commands,
  *  deny everything else.
  *
- *  ORDER MATTERS — the catch-all deny MUST come first. OpenCode evaluates
+ *  ORDER MATTERS — the catch-all deny MUST come first. The previous runner evaluates
  *  permission rules LAST-match-wins (Permission.evaluate is a findLast over
  *  the rules in config-object insertion order; there is NO specificity
  *  ranking), so later specific allows override the earlier "*" deny. With
@@ -438,8 +434,8 @@ export function hasRunStatusDeclaration(text: string): boolean {
  *  worse, Permission.disabled() hides a tool entirely when its last-matching
  *  rule is a "*" deny, which is what made bash vanish from every unattended
  *  ask run (the PR #4676 review starvation, the health-monitor blinding).
- *  Used by the opencode config generation (opencode-runner.ts).
- *  Verified against opencode v1.17.15 source (permission/index.ts
+ *  Used by the the previous runner config generation (the previous runner-runner.ts).
+ *  Verified against the previous runner v1.17.15 source (permission/index.ts
  *  evaluate/disabled, session/llm/request.ts resolveTools). */
 export const ASK_BASH_PERMISSIONS: Record<string, "allow" | "deny"> = {
   "*": "deny",
@@ -456,7 +452,7 @@ export const ASK_BASH_PERMISSIONS: Record<string, "allow" | "deny"> = {
   "git show*": "allow", "git branch*": "allow", "git blame*": "allow",
   "git grep*": "allow", "git ls-files*": "allow",
   // git plumbing reads: rev-parse just prints resolved revs/paths (no mutation),
-  // and review agents routinely chain `… && git rev-parse HEAD` — opencode
+  // and review agents routinely chain `… && git rev-parse HEAD` — the previous runner
   // evaluates each sub-command, so an unlisted rev-parse denied the whole line.
   "git rev-parse*": "allow", "git cat-file*": "allow", "git describe*": "allow",
   "git merge-base*": "allow",
@@ -505,7 +501,7 @@ export const ASK_BASH_PERMISSIONS: Record<string, "allow" | "deny"> = {
 // an ask-mode bash command.
 let askBashRules: Array<{ re: RegExp; value: "allow" | "deny" }> | null = null;
 
-/** Last-match-wins over insertion order: the exact evaluation opencode's
+/** Last-match-wins over insertion order: the exact evaluation the previous runner's
  *  Permission.evaluate applies to these same rules (a findLast with no
  *  specificity ranking), so the two engines cannot drift on what a pattern
  *  means. `*` matches any run of characters, everything else is literal. */
@@ -526,10 +522,10 @@ function askBashVerdict(segment: string): "allow" | "deny" {
  * Why `command` may not run under read-only ask mode, or null when it may.
  *
  * Pi has no engine-side permission evaluator, so this is ASK_BASH_PERMISSIONS
- * applied the way opencode applies it: the command is split into its
+ * applied the way the previous runner applies it: the command is split into its
  * pipeline/list segments and EVERY segment must match an allow rule.
  * `cat x && rm y` is denied for the rm, not allowed for the cat (the
- * rev-parse note above exists because opencode evaluates per sub-command;
+ * rev-parse note above exists because the previous runner evaluates per sub-command;
  * matching only the whole line would let any allowed prefix smuggle a write).
  * Fail-closed on what a scanner cannot prove read-only: command and process
  * substitution embed commands this never sees, and output redirection writes

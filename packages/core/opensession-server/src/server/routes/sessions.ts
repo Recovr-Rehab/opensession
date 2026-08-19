@@ -69,12 +69,8 @@ import {
 	mergedSessionTranscriptAsync,
 } from "../sessions";
 import { githubLoginFor } from "../shared/user-mappings";
-import {
-	getOpencodeSubagentTranscript,
-	listSessionSubagents,
-} from "../opencode-subagents";
 import { isManualStatus, setStatusOverride } from "../status-overrides";
-import { getSubagentTranscript } from "../subagents";
+import { getSubagentTranscript, listSubagents } from "../subagents";
 import { setTitleOverride } from "../title-overrides";
 import { buildWorkspaceOverview, resolveTranscriptImage } from "../workspace-overview";
 import { type Workspace, deleteWorkspace, getWorkspace, workspaceName } from "../workspaces";
@@ -153,14 +149,12 @@ export function sessionRan(
 		UnifiedSession,
 		| "claudeSessionId"
 		| "codexThreadId"
-		| "opencodeSessionId"
 		| "piSessionId"
 	>,
 ): boolean {
 	return !!(
 		s.claudeSessionId ||
 		s.codexThreadId ||
-		s.opencodeSessionId ||
 		s.piSessionId
 	);
 }
@@ -371,7 +365,6 @@ export function sessionListRow(
 		// GET /api/sessions/:id, which the open session hydrates from.
 		claudeSessionId: _claudeSessionId,
 		codexThreadId: _codexThreadId,
-		opencodeSessionId: _opencodeSessionId,
 		piSessionId: _piSessionId,
 		modelHistory: _modelHistory,
 		transcriptPath: _transcriptPath,
@@ -901,7 +894,7 @@ export async function handleSessionsRoutes(
 		if (!session)
 			return Response.json({ error: "Session not found" }, { status: 404 });
 		// Engine-spanning read: the transcript file plus, for sessions with
-		// opencode history, the opencode store (covers legacy opencode
+		// pi history, the pi store (covers legacy pi
 		// sessions from before transcript persistence, and migrated
 		// sessions whose history spans engines). Classified on the way out,
 		// like every other send site — this is what the native clients read.
@@ -1093,7 +1086,7 @@ export async function handleSessionsRoutes(
 		return Response.json({ matches });
 	}
 
-	// Every sub-agent this session spawned (opencode task-tool children +
+	// Every sub-agent this session spawned (pi task-tool children +
 	// Claude-SDK subagent layout) — feeds the Agents tab's sub-agents card.
 	{
 		const m = path.match(/^\/api\/sessions\/(.+)\/subagents$/);
@@ -1105,14 +1098,14 @@ export async function handleSessionsRoutes(
 					{ status: 404 },
 				);
 			return Response.json({
-				subagents: listSessionSubagents(session),
+				subagents: session.transcriptPath ? listSubagents(session.transcriptPath) : [],
 				sessionRunning: session.isRunning,
 			});
 		}
 	}
 
 	// Sub-agent (Task/Agent) conversation for a session. The agentId is either
-	// a Task tool_result's `agentId` (Claude SDK layout) or an opencode child
+	// a Task tool_result's `agentId` (Claude SDK layout) or an pi child
 	// session id (ses_…) from the task tool / the subagents list above.
 	{
 		const m = path.match(
@@ -1126,10 +1119,9 @@ export async function handleSessionsRoutes(
 					{ status: 404 },
 				);
 			const agentId = decodeURIComponent(m[2]);
-			const sub =
-				(session.transcriptPath
-					? await getSubagentTranscript(session.transcriptPath, agentId)
-					: null) ?? getOpencodeSubagentTranscript(session, agentId);
+			const sub = session.transcriptPath
+				? await getSubagentTranscript(session.transcriptPath, agentId)
+				: null;
 			if (!sub)
 				return Response.json(
 					{ error: "Sub-agent not found" },

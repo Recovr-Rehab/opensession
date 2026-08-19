@@ -196,9 +196,9 @@ export async function fetchSubagent(
 	);
 }
 
-/** One sub-agent a session spawned directly (opencode task-tool child or
+/** One sub-agent a session spawned directly (pi task-tool child or
  *  Claude-SDK Task agent) — mirrors the server's SessionSubagentSnapshot
- *  (opencode-subagents.ts). Feeds the Agents tab's sub-agents card. */
+ *  (pi-subagents.ts). Feeds the Agents tab's sub-agents card. */
 export interface SessionSubagentSnapshot {
 	/** Drill-in key for fetchSubagent; absent while a spawn is still pending. */
 	id?: string;
@@ -213,7 +213,7 @@ export interface SessionSubagentSnapshot {
 	endedAt?: number;
 	model?: string;
 	tokensOut?: number;
-	source: "opencode" | "sdk";
+	source: "pi" | "sdk";
 }
 
 export async function fetchSessionSubagents(sessionId: string): Promise<{

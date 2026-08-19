@@ -70,26 +70,24 @@ import { authedRemoteUrl } from "../../codestorage/auth";
 import { parseCsRemote } from "../../codestorage/remote";
 import { redactUrl } from "../../shared/redact";
 import { listCodexAccounts } from "../../codex-accounts";
-import { readOpencodeBridgeConfig } from "../../opencode-config";
+import { readModelProviderConfig } from "../../model-providers";
 import { normalizePiConfig, readPiEngineConfig } from "../../pi-config";
 import {
   buildOpenaiRemoteSeedUpload,
   maskOpenaiAccount,
   openaiSeedAuthPath,
-} from "../../opencode-openai-auth";
+} from "../../openai-auth";
 import { modelSupportsSteer, providerFor } from "../../models";
 import { filterMcpServers } from "../../runner-shared";
 import {
-  appendOpencodeTranscript,
-  ensureOpencodeTranscriptFile,
-  getOpencodeTranscriptPath,
-  recordBksSessionFor,
+  appendTranscriptEntries,
+  recordEngineSessionOwner,
   transcriptLineUser,
   transcriptLineRunnerNotice,
   transcriptLineAssistantText,
   transcriptLineToolUse,
   transcriptLineToolResult,
-} from "../../opencode-transcript";
+} from "../../transcript-persistence";
 import { hostSteer, hostInterruptSteer, hostCancel } from "../../host-registry";
 import { registerRunToken, unregisterRunToken } from "../../run-rpc";
 import { registerRunWsHost, unregisterRunWsHost, runWsConnector } from "../../run-ws";
@@ -120,12 +118,10 @@ import type {
 export const REMOTE_HOME = "/home/ubuntu";
 const REMOTE_BUN = `${REMOTE_HOME}/.bun/bin/bun`;
 const REMOTE_BUNX = `${REMOTE_HOME}/.bun/bin/bunx`;
-const REMOTE_OPENCODE = `${REMOTE_HOME}/.bun/bin/opencode`;
 const REMOTE_MCP_CONFIG = `${REMOTE_HOME}/.opensession-mcp-config.json`;
-/** Same pin as deploy/sandbox/Dockerfile's OPENCODE_VERSION (host runs this
+/** Same pin as deploy/sandbox/Dockerfile's PI_VERSION (host runs this
  *  too) — bump BOTH together. Part of bootstrapSignature, so a bump
  *  invalidates existing sandboxes/prewarms and re-bootstraps them. */
-const REMOTE_OPENCODE_VERSION = "1.18.18";
 /** Keep these aligned with deploy/sandbox/Dockerfile. The runtime revision is
  * part of bootstrapSignature, so changing this contract invalidates old
  * prewarms and provider templates instead of calling them Ready. */
@@ -140,8 +136,7 @@ const BOOTSTRAP_MARKER = `${REMOTE_HOME}/.bks-bootstrapped`;
  *  never derived independently on the two sides. */
 export const REMOTE_OPENAI_SEED_DIR = `${REMOTE_HOME}/.opensession-openai-seeds`;
 export const REMOTE_PI_CONFIG = `${REMOTE_HOME}/.opensession-pi.json`;
-export const REMOTE_OPENCODE_CONFIG = `${REMOTE_HOME}/.opensession-opencode.json`;
-export const REMOTE_OPENCODE_NATIVE_AUTH = `${REMOTE_HOME}/.local/share/opencode/auth.json`;
+export const REMOTE_MODEL_PROVIDERS_CONFIG = `${REMOTE_HOME}/.opensession-model-providers.json`;
 const REMOTE_PATH = `${REMOTE_HOME}/.bun/bin:${REMOTE_HOME}/.local/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin`;
 
 const RUNS_BASE = `${OPENSESSION_SESSIONS_DIR}/sandbox-runs`;
@@ -203,10 +198,10 @@ function jsonRecord(value: unknown): JsonRecord | null {
     : null;
 }
 
-/** The third-party provider selected by an opencode/<provider>/<model> id.
+/** The third-party provider selected by an pi/<provider>/<model> id.
  * Anthropic/OpenAI use subscription material, never native auth. */
-export function remoteOpencodeProviderId(model: string | undefined): string | null {
-  const match = String(model || "").match(/^opencode\/([^/]+)\//);
+export function remoteModelProviderId(model: string | undefined): string | null {
+  const match = String(model || "").match(/^pi\/([^/]+)\//);
   const provider = match?.[1];
   return provider && provider !== "anthropic" && provider !== "openai"
     ? provider
@@ -234,19 +229,19 @@ export function projectRemotePiConfig(raw: unknown): string | null {
 }
 
 /**
- * Project host OpenCode settings into fields consumed by an in-guest runner.
- * Third-party API keys are included only for an OpenCode-other launch. They
+ * Project host Pi settings into fields consumed by an in-guest runner.
+ * Third-party API keys are included only for an Pi-other launch. They
  * travel as one operator-managed scope because the in-turn fallback walk can
  * change provider without another launch boundary.
  */
-export function projectRemoteOpencodeConfig(
+export function projectRemoteModelProviderConfig(
   raw: unknown,
   model: string | undefined,
   trustProfile: "interactive" | "automation" = "interactive",
   pinnedAccountId?: string,
 ): { content: string; settingsProviderIds: string[] } {
   const source = jsonRecord(raw);
-  if (!source) throw new Error("OpenCode config must be a JSON object");
+  if (!source) throw new Error("Pi config must be a JSON object");
 
   const out: JsonRecord = {};
   if (typeof source.enabled === "boolean") out.enabled = source.enabled;
@@ -290,7 +285,7 @@ export function projectRemoteOpencodeConfig(
   }
 
   const settingsProviders: JsonRecord = {};
-  const selectedSettingsProvider = remoteOpencodeProviderId(model);
+  const selectedSettingsProvider = remoteModelProviderId(model);
   if (selectedSettingsProvider) {
     for (const [id, value] of Object.entries(jsonRecord(source.providers) || {})) {
       if (id === "anthropic" || id === "openai") continue;
@@ -311,28 +306,6 @@ export function projectRemoteOpencodeConfig(
     content: JSON.stringify(out, null, 2) + "\n",
     settingsProviderIds: Object.keys(settingsProviders).sort(),
   };
-}
-
-/** Selected-provider slice of OpenCode's unmanaged native auth store. */
-export function projectRemoteOpencodeNativeAuth(
-  raw: unknown,
-  model: string | undefined,
-): { content: string; providerId: string } | null {
-  const providerId = remoteOpencodeProviderId(model);
-  if (!providerId) return null;
-  const source = jsonRecord(raw);
-  if (!source || !(providerId in source)) return null;
-  const credential = jsonRecord(source[providerId]);
-  if (!credential) return null;
-  return {
-    content: JSON.stringify({ [providerId]: credential }, null, 2) + "\n",
-    providerId,
-  };
-}
-
-function hostOpencodeNativeAuthPath(): string {
-  const dataHome = process.env.XDG_DATA_HOME || `${homeDir()}/.local/share`;
-  return `${dataHome}/opencode/auth.json`;
 }
 
 // ── Provider state files (mirror docker's, namespaced per provider) ──────────
@@ -641,15 +614,14 @@ function need(r: ExecResult, what: string): void {
 
 /** What the bootstrap marker records — a prewarmed sandbox is only adoptable
  *  while its recorded signature still matches this (prewarm.ts claim check).
- *  The opencode pin is part of it so sandboxes bootstrapped before opencode
+ *  The pi pin is part of it so sandboxes bootstrapped before pi
  *  was in the payload (or on an older pin) re-bootstrap instead of failing
- *  every opencode/* run with a missing binary. */
+ *  every pi/* run with a missing binary. */
 export function bootstrapSignature(): string {
   const cfg = sandboxConfig();
   const base = cfg.runnerSha || cfg.runnerBundleUrl || "unpinned";
   return (
-    `${base}+opencode@${REMOTE_OPENCODE_VERSION}` +
-    `+node@${REMOTE_NODE_VERSION}+just@${REMOTE_JUST_VERSION}` +
+    `${base}+node@${REMOTE_NODE_VERSION}+just@${REMOTE_JUST_VERSION}` +
     `+${REMOTE_RUNTIME_REVISION}`
   );
 }
@@ -894,26 +866,6 @@ export async function bootstrapRemoteSandbox(
     "claude CLI install",
   );
 
-  // opencode: the third engine (opencode/<provider>/<model> runs) — without it
-  // resolveOpencodeBin finds nothing in-sandbox and every opencode run dies
-  // instantly (bks-019f46bd, 2026-07-09). bun's global install puts the
-  // platform binary at REMOTE_OPENCODE (~/.bun/bin, already first on
-  // REMOTE_PATH); BUN_INSTALL pins the global dir to the payload HOME.
-  log("installing opencode…");
-  need(
-    await driver.exec(
-      `test -x ${REMOTE_OPENCODE} || HOME=${REMOTE_HOME} BUN_INSTALL=${REMOTE_HOME}/.bun ${REMOTE_BUN} add -g opencode-ai@${REMOTE_OPENCODE_VERSION}`,
-      { timeoutMs: 300_000 },
-    ),
-    "opencode install",
-  );
-  need(
-    await driver.exec(
-      `v=$(HOME=${REMOTE_HOME} ${REMOTE_OPENCODE} --version) && { [ "$v" = "${REMOTE_OPENCODE_VERSION}" ] || { echo "opencode version mismatch: got '$v', want ${REMOTE_OPENCODE_VERSION}"; exit 1; }; }`,
-      { timeoutMs: 60_000 },
-    ),
-    "opencode version check",
-  );
   need(
     await driver.exec(
       `mkdir -p ${REMOTE_HOME}/.claude && { test -s ${REMOTE_HOME}/.claude/settings.json || printf '{}' > ${REMOTE_HOME}/.claude/settings.json; }`,
@@ -1393,7 +1345,7 @@ function makeRemoteLauncher(
       const accounts = accountsForRemoteUpload(spec.user, spec.accountId);
       if (automationProfile && !accounts.some((account) => account.id === spec.accountId)) {
         const model = String(spec.model || "");
-        if (/^(?:claude-|opencode\/anthropic\/|pi\/anthropic\/)/.test(model)) {
+        if (/^(?:claude-|pi\/anthropic\/)/.test(model)) {
           throw new Error("the pinned automation account is not an eligible Claude account");
         }
       }
@@ -1423,38 +1375,38 @@ function makeRemoteLauncher(
       await driver.exec(
         `chmod 600 ${shellQuoteWord(claudeAccountsPath)} ${shellQuoteWord(REMOTE_MCP_CONFIG)}`,
       );
-      // OpenCode policy + provider config, projected at the sandbox boundary.
+      // Pi policy + provider config, projected at the sandbox boundary.
       // The source CAN contain third-party API keys under providers.*.apiKey;
       // never copy it wholesale. Anthropic/OpenAI/Pi launches receive only the
-      // bridge/runtime fields. OpenCode-other receives the configured
+      // bridge/runtime fields. Pi-other receives the configured
       // third-party provider scope because its fallback walk can switch within
       // one runner-host launch. Rewritten/removed every launch so stale wider
       // authority cannot linger on a reused sandbox.
       const ocCfgSrc =
-        process.env.OPENSESSION_OPENCODE_CONFIG ||
+        process.env.OPENSESSION_MODEL_PROVIDERS_CONFIG ||
         // Dual-read the host path (a new-name-only host has no
-        // ~/.opensession-opencode.json); the remote destination below stays the
+        // ~/.opensession-pi.json); the remote destination below stays the
         // legacy name the in-sandbox build dual-reads.
-        stateDir("opencode.json");
+        stateDir("model-providers.json");
       let settingsProviderIds: string[] = [];
       if (existsSync(ocCfgSrc)) {
         let raw: unknown;
         try {
           raw = JSON.parse(readFileSync(ocCfgSrc, "utf-8"));
         } catch (error) {
-          throw new Error(`Cannot project sandbox OpenCode config ${ocCfgSrc}: ${error}`);
+          throw new Error(`Cannot project sandbox Pi config ${ocCfgSrc}: ${error}`);
         }
-        const projected = projectRemoteOpencodeConfig(
+        const projected = projectRemoteModelProviderConfig(
           raw,
           spec.model,
           spec.trustProfile,
           spec.accountId,
         );
         settingsProviderIds = projected.settingsProviderIds;
-        await driver.writeFile(REMOTE_OPENCODE_CONFIG, projected.content);
-        await driver.exec(`chmod 600 ${shellQuoteWord(REMOTE_OPENCODE_CONFIG)}`);
+        await driver.writeFile(REMOTE_MODEL_PROVIDERS_CONFIG, projected.content);
+        await driver.exec(`chmod 600 ${shellQuoteWord(REMOTE_MODEL_PROVIDERS_CONFIG)}`);
       } else {
-        await driver.exec(`rm -f ${shellQuoteWord(REMOTE_OPENCODE_CONFIG)}`);
+        await driver.exec(`rm -f ${shellQuoteWord(REMOTE_MODEL_PROVIDERS_CONFIG)}`);
       }
 
       // Pi stays architecturally in-process: the guest runner-host imports the
@@ -1469,58 +1421,7 @@ function makeRemoteLauncher(
         await driver.exec(`rm -f ${shellQuoteWord(REMOTE_PI_CONFIG)}`);
       }
 
-      // OpenCode's unmanaged `auth login` store is a fallback for a selected
-      // third-party provider only. Project exactly that entry to OpenCode's
-      // normal guest path; never upload the Anthropic/OpenAI OAuth entries or
-      // the full host store.
-      const selectedProviderId = remoteOpencodeProviderId(spec.model);
-      let nativeAuth: ReturnType<typeof projectRemoteOpencodeNativeAuth> = null;
-      const nativeAuthSrc = hostOpencodeNativeAuthPath();
-      if (
-        selectedProviderId &&
-        !settingsProviderIds.includes(selectedProviderId) &&
-        existsSync(nativeAuthSrc)
-      ) {
-        try {
-          nativeAuth = projectRemoteOpencodeNativeAuth(
-            JSON.parse(readFileSync(nativeAuthSrc, "utf-8")),
-            spec.model,
-          );
-        } catch (error) {
-          throw new Error(`Cannot project sandbox OpenCode auth ${nativeAuthSrc}: ${error}`);
-        }
-      }
-      if (nativeAuth) {
-        await driver.exec(
-          `mkdir -p ${shellQuoteWord(dirname(REMOTE_OPENCODE_NATIVE_AUTH))} && chmod 700 ${shellQuoteWord(dirname(REMOTE_OPENCODE_NATIVE_AUTH))}`,
-        );
-        await driver.writeFile(REMOTE_OPENCODE_NATIVE_AUTH, nativeAuth.content);
-        await driver.exec(`chmod 600 ${shellQuoteWord(REMOTE_OPENCODE_NATIVE_AUTH)}`);
-      } else {
-        await driver.exec(`rm -f ${shellQuoteWord(REMOTE_OPENCODE_NATIVE_AUTH)}`);
-      }
-      if (
-        selectedProviderId &&
-        !settingsProviderIds.includes(selectedProviderId) &&
-        !nativeAuth
-      ) {
-        throw new Error(
-          `opencode/${selectedProviderId} cannot launch in a sandbox: configure provider ` +
-            `"${selectedProviderId}" in Settings → Model providers or run ` +
-            `\`opencode auth login\` for that provider on the Open Session host`,
-        );
-      }
-      if (selectedProviderId) {
-        audit({
-          msg: "sandbox_opencode_provider_upload",
-          host_id: spec.hostId,
-          session_id: spec.osSessionId,
-          provider: selectedProviderId,
-          mechanism: nativeAuth ? "native-auth" : "settings",
-          settings_providers: settingsProviderIds,
-        });
-      }
-      // OpenAI/ChatGPT-subscription material for opencode/openai/* dispatched
+      // OpenAI/ChatGPT-subscription material for pi/openai/* dispatched
       // IN-SANDBOX. The raw CODEX_HOME/auth.json is NEVER uploaded — its
       // refresh token is the one rotating family shared with the host codex
       // CLI, and an in-sandbox refresh would rotate (= kill) the host copy.
@@ -1535,7 +1436,7 @@ function makeRemoteLauncher(
       // previously-uploaded wider set never lingers. Destination filenames
       // stay the legacy .opensession-* names the (dual-reading) in-sandbox
       // build resolves — same convention as the bridge config above.
-      const usesOpenai = /^(?:opencode\/openai\/|pi\/openai\/)/.test(
+      const usesOpenai = /^pi\/openai\//.test(
         String(spec.model || ""),
       );
       const openaiUpload: ReturnType<typeof buildOpenaiRemoteSeedUpload> = usesOpenai
@@ -1543,7 +1444,7 @@ function makeRemoteLauncher(
             listCodexAccounts(),
             automationProfile && spec.accountId
               ? [spec.accountId]
-              : readOpencodeBridgeConfig()?.openaiAccounts,
+              : readModelProviderConfig()?.openaiAccounts,
             spec.user,
           )
         : { accounts: [], seeds: [], skipped: [] };
@@ -1604,9 +1505,6 @@ function makeRemoteLauncher(
           HOME: REMOTE_HOME,
           PATH: REMOTE_PATH,
           NODE_ENV: "production",
-          // Deterministic opencode resolution (bootstrap installed it here) —
-          // don't depend on PATH probing inside the run host.
-          OPENSESSION_OPENCODE_BIN: REMOTE_OPENCODE,
           OPENSESSION_MCP_CONFIG: REMOTE_MCP_CONFIG,
           OPENSESSION_RUN_JOURNAL: `${dir}/journal.json`,
           // Where bindOpenaiAccount finds the uploaded rotation-proof openai
@@ -1698,116 +1596,6 @@ function recordForSpec(
     lastResumeAt: spec.lastResumeAt,
     startedAt: new Date().toISOString(),
   };
-}
-
-/** Mutable engine-session ref shared between the transcript mirror and the
- *  RunHandle's steer wrappers, so a delivered steer can be mirrored into the
- *  file the run is CURRENTLY writing (rotation can change it mid-run). */
-export interface OcSessionRef {
-  id: string;
-}
-
-/**
- * Host-side mirror of the persisted opencode transcript for REMOTE runs.
- * The in-sandbox runner writes its JSONL inside the sandbox, where nothing
- * host-side can read it back (docker bind-mounts OPENCODE_TRANSCRIPTS_DIR;
- * remote sandboxes have no mount), so a daytona/e2b opencode session would
- * render "No transcript available" after a reload. Open Session already receives
- * every stream event over the dial-back — rebuild the same claude-shape lines
- * from them here. Applied ONLY on the remote adapters (this module): docker's
- * bind mount already lands the in-sandbox writes on the host, and mirroring
- * there would double every line.
- *
- * User-entry rules (bks-019f46d2 postmortem):
- *  - The prompt is written from the SPEC (the host knows every prompt it
- *    dispatches), never parsed back out of dial-back frames.
- *  - It is written AT DISPATCH when the engine session is already known
- *    (every turn after the first) — the viewer's optimistic "Sending…"
- *    bubble reconciles on this append, and remote engine boot is 10-30s,
- *    so waiting for init would hang the bubble that long (or forever if
- *    the turn dies first).
- *  - It is (re)written on every init that lands on a NEW engine session id:
- *    an account rotation mid-turn starts a fresh opencode session, and the
- *    turn's prompt must exist in the file the session ends up pointing at
- *    (the original bug: the prompt only ever landed in attempt 1's file).
- *  - A deterministic uuid (`<hostId>-prompt`) makes re-writes upsert-safe
- *    for the jsonl parser instead of duplicating.
- *  - The synthetic restart-resume continuation prompt is NOT a user entry.
- */
-export async function* withOpencodeTranscriptMirror(
-  events: AsyncGenerator<StreamEvent>,
-  spec: RunHostSpec,
-  ocRef?: OcSessionRef,
-): AsyncGenerator<StreamEvent> {
-  if (providerFor(spec.model) !== "opencode") {
-    yield* events;
-    return;
-  }
-  let oc = spec.engineSessionId || "";
-  if (ocRef) ocRef.id = oc;
-  // Transcript v2: record the oc→unified mapping BEFORE any mirror write so
-  // the flag-gated store path in opencode-transcript.ts can resolve it (the
-  // sandbox host is the recording site here — the spec carries both ids).
-  if (oc && spec.osSessionId) recordBksSessionFor(oc, spec.osSessionId);
-  const syntheticContinuation = spec.prompt === RESUME_CONTINUATION_PROMPT;
-  const promptUuid = `${spec.hostId}-prompt`;
-  const promptWrittenTo = new Set<string>();
-  const writePrompt = (id: string) => {
-    if (!id || !spec.prompt || syntheticContinuation || promptWrittenTo.has(id)) return;
-    ensureOpencodeTranscriptFile(id);
-    // Idempotent across re-deliveries (post-restart reattach replays the same
-    // spec): the deterministic uuid is checked in-file, since the jsonl
-    // parser renders duplicate lines as duplicate entries.
-    try {
-      const path = getOpencodeTranscriptPath(id);
-      if (existsSync(path) && readFileSync(path, "utf-8").includes(`"${promptUuid}"`)) {
-        promptWrittenTo.add(id);
-        return;
-      }
-    } catch {}
-    appendOpencodeTranscript(id, [transcriptLineUser(spec.prompt, promptUuid)]);
-    promptWrittenTo.add(id);
-  };
-  const mirror = (lines: Parameters<typeof appendOpencodeTranscript>[1]) => {
-    if (oc) appendOpencodeTranscript(oc, lines);
-  };
-  try {
-    writePrompt(oc); // dispatch-time (known session = resumed turns)
-  } catch {}
-  for await (const ev of events) {
-    try {
-      if (ev.type === "init" && ev.sessionId) {
-        oc = ev.sessionId;
-        if (ocRef) ocRef.id = oc;
-        // Rotation-safe: every init that lands on a NEW engine session id
-        // re-records the mapping before the mirror/store writes below.
-        if (spec.osSessionId) recordBksSessionFor(oc, spec.osSessionId);
-        ensureOpencodeTranscriptFile(oc);
-        writePrompt(oc);
-      } else if (ev.type === "text_chunk" && ev.text) {
-        mirror([transcriptLineAssistantText(ev.text)]);
-      } else if (ev.type === "runner_notice" && ev.text) {
-        // In-sandbox rotation/retry notices: the sandbox runner persisted them
-        // to ITS transcript file, which nothing on the host reads — mirror
-        // them into the host-side file as the same durable system line.
-        mirror([transcriptLineRunnerNotice(ev.text)]);
-      } else if (ev.type === "tool_use" && ev.toolUseId) {
-        mirror([transcriptLineToolUse(ev.toolUseId, ev.toolName || "tool", ev.toolInput)]);
-      } else if (ev.type === "tool_result" && ev.toolUseId) {
-        // Carry ev.images through. For a remote run the in-sandbox runner is
-        // the only thing that ever sees the Read attachment's bytes, and it
-        // sends them inline precisely because the host cannot serve a path
-        // inside the sandbox — dropping them here (as this did) left every
-        // sandboxed Read image blank in the transcript.
-        mirror([
-          transcriptLineToolResult(ev.toolUseId, ev.content || "", false, undefined, ev.images),
-        ]);
-      }
-    } catch {
-      // Mirroring must never break the run stream.
-    }
-    yield ev;
-  }
 }
 
 async function* withRunJournal(
@@ -1925,29 +1713,16 @@ export function makeRemoteSandbox(parts: RemoteSandboxParts): Sandbox {
         } catch {}
         throw e;
       }
-      const ocRef: OcSessionRef = { id: spec.engineSessionId || "" };
-      const gen = withRunJournal(
-        withOpencodeTranscriptMirror(handle.events(), spec, ocRef),
-        record,
-        touch,
-      );
+      const gen = withRunJournal(handle.events(), record, touch);
       // Steers fold into the running turn in-sandbox, so they never come back
       // as dial-back user frames — mirror DELIVERED steers into the current
       // engine-session file (same reconcile contract as the dispatch prompt).
-      const mirrorSteer = (text: string, delivered: boolean) => {
-        if (delivered && ocRef.id && providerFor(spec.model) === "opencode" && text) {
-          try {
-            appendOpencodeTranscript(ocRef.id, [transcriptLineUser(text)]);
-          } catch {}
-        }
-        return delivered;
-      };
       return {
         events: () => gen,
         steerable: modelSupportsSteer(spec.model),
-        steer: (text) => mirrorSteer(text, hostSteer(spec.osSessionId, text)),
+        steer: (text) => hostSteer(spec.osSessionId, text),
         interruptSteer: (text) =>
-          mirrorSteer(text, hostInterruptSteer(spec.osSessionId, text)),
+          hostInterruptSteer(spec.osSessionId, text),
         cancel: () => hostCancel(spec.osSessionId),
       };
     },
@@ -2052,7 +1827,7 @@ export async function resumeRemoteSandboxRun(
         throw e;
       }
       return withRunJournal(
-        withOpencodeTranscriptMirror(handle.events(), oldSpec),
+        handle.events(),
         { ...run, startedAt: run.startedAt },
         () => {},
       );

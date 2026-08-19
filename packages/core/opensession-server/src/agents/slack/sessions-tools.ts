@@ -36,7 +36,7 @@ import { OPENSESSION_SESSIONS_DIR } from "../../server/paths";
 import { agentActor, isWorkerActor, workerActor } from "../../server/session-actors";
 import { writeJsonAtomic } from "../../server/shared/atomic-write";
 import { userMatchesAny } from "../../server/shared/user-mappings";
-import { migrateSessionEngine } from "../../server/migrate-engine";
+import { migrateSessionEngine } from "../../server/session-model-migration";
 import { resolveSessionRepoContext } from "../../server/session-repos";
 import { transferSessionFile } from "../../server/session-file-transfer";
 import { branchNameFromPrompt } from "../../server/suggest-branch";
@@ -864,12 +864,12 @@ export function createSessionsMcpServer(
       ),
       tool(
         "migrate_session_engine",
-        "Migrate an existing session onto the OpenCode engine by flipping its model to an opencode/* id (e.g. opencode/anthropic/claude-sonnet-5). Does NOT start a run: the session's NEXT prompt builds a transcript handoff from its claude/codex history and continues on a fresh OpenCode session — file, workspace, branch, title and UI history all stay. Refuses automation-owned sessions (the opencode engine hard-gates automations off) and sessions that are mid-run.",
+        "Migrate an existing session onto the Pi engine by flipping its model to an pi/* id (e.g. pi/anthropic/claude-sonnet-5). Does NOT start a run: the session's NEXT prompt builds a transcript handoff from its claude/codex history and continues on a fresh Pi session — file, workspace, branch, title and UI history all stay. Refuses automation-owned sessions (the pi engine hard-gates automations off) and sessions that are mid-run.",
         {
           sessionId: z.string().describe("The opensession session id to migrate, e.g. 'bks-…'."),
           model: z
             .string()
-            .describe("Target opencode model id: opencode/<provider>/<model>, e.g. opencode/anthropic/claude-sonnet-5."),
+            .describe("Target pi model id: pi/<provider>/<model>, e.g. pi/anthropic/claude-sonnet-5."),
         },
         async (args: { sessionId: string; model: string }) => {
           // Belt-and-braces busy check through the live registry (the helper
@@ -888,7 +888,7 @@ export function createSessionsMcpServer(
           return text(
             `Migrated \`${res.sessionId}\` to ${res.to}` +
               (res.from ? ` (was ${res.from})` : "") +
-              ". The next prompt hands its history to the OpenCode engine and continues there."
+              ". The next prompt hands its history to the Pi engine and continues there."
           );
         }
       ),

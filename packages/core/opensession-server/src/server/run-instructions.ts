@@ -1,11 +1,11 @@
 // Engine-neutral run instructions — the policy/context text EVERY engine
-// delivers with a session run, whatever the transport: the opencode runner
-// appends it via an instructions file (OpenCode's system-prompt append
+// delivers with a session run, whatever the transport: the pi runner
+// appends it via an instructions file (Pi's system-prompt append
 // channel), the pi runner via systemPromptOverride. Run-policy text that
 // every engine must carry belongs here, not in an engine-specific prompt.
 //
-// Extracted from opencode-runner.ts (where it was born as
-// buildOpencodeInstructions) once the pi engine started sharing it.
+// Extracted from pi-runner.ts (where it was born as
+// buildPiInstructions) once the pi engine started sharing it.
 
 import { realpathSync } from "fs";
 import { join } from "path";
@@ -17,7 +17,7 @@ const UI_BASE =
   configuredServer().publicBaseUrl;
 
 /** Private-key-backed PR-checks reader (see the GitHub checks section below
- *  and the ask-mode bash allowlist in opencode-runner.ts). */
+ *  and the ask-mode bash allowlist in pi-runner.ts). */
 export const GH_CHECKS_CLI_PATH = join(import.meta.dir, "..", "..", "..", "..", "..", "scripts", "gh-checks.ts");
 
 /** Session context: ask guardrails, repos note, capability notes (UI mermaid
@@ -35,7 +35,7 @@ export function buildRunInstructions(input: {
    *  slug, or comma-separated list) — see RunAgentOpts.prReviewer. */
   prReviewer?: string;
   /** The session's real working directory — set ONLY for shared-pool runs,
-   *  where opencode's own environment block reports the pool server's neutral
+   *  where pi's own environment block reports the pool server's neutral
    *  cwd (SHARED_CWD, "Is a git repository: false") rather than the session's
    *  `?directory=`. Without this correction models hedge against the wrong cwd
    *  and prefix every bash call with a redundant `cd <worktree> &&`. */
@@ -58,7 +58,7 @@ export function buildRunInstructions(input: {
   /** Set when this run carries the owner's own GitHub token (github-auth.ts):
    *  PRs are authored by them directly, so skip the bot-attribution assignee. */
   githubUserLogin?: string | null;
-  /** Deny/confirm-tool denials (opencodeRunPolicy.noteGroups) — the tools are
+  /** Deny/confirm-tool denials (runToolPolicy.noteGroups) — the tools are
    *  already stripped at the engine level; this tells the agent what's
    *  unavailable and what to do instead. */
   deniedToolNotes?: Array<{ message: string; tools: string[] }>;
@@ -77,7 +77,7 @@ export function buildRunInstructions(input: {
     presetLabel: string;
     mainLabel: string;
     oracleLabel: string;
-    /** Pi exposes the advisor as a custom tool rather than an OpenCode task agent. */
+    /** Pi exposes the advisor as a custom tool rather than an Pi task agent. */
     tool?: boolean;
   };
   /** The Orchestrator: tells an orchestrator-preset run about its worker
@@ -86,7 +86,7 @@ export function buildRunInstructions(input: {
     presetLabel: string;
     mainLabel: string;
     workers: Array<{ agent: string; label: string; modelLabel: string }>;
-    /** Pi delegates through the sessions MCP instead of OpenCode task agents. */
+    /** Pi delegates through the sessions MCP instead of Pi task agents. */
     tool?: "task" | "sessions";
   };
 }): string {
@@ -232,7 +232,7 @@ export function buildRunInstructions(input: {
       "shortens the label for display, so an elided id like `os-019ff524-76d7…` costs the " +
       "link and gains nothing."
   );
-  // Shared-pool runs only: opencode builds its environment block from the
+  // Shared-pool runs only: pi builds its environment block from the
   // server process cwd, which for a pool member is the neutral SHARED_CWD —
   // so the model is told it sits in a non-repo scratch dir while bash actually
   // runs in the session's `?directory=`. Left uncorrected it defends against

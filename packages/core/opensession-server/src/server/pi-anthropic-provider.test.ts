@@ -50,24 +50,24 @@ import * as accounts from "./claude-accounts";
 // they are restored in afterAll so later test files see the originals.
 const dir = mkdtempSync(join(tmpdir(), "pi-anthropic-provider-"));
 const piConfigFile = join(dir, "pi.json");
-const ocConfigFile = join(dir, "opencode.json");
+const providerConfigFile = join(dir, "model-providers.json");
 const accountsFile = join(dir, "accounts.json");
 const savedEnv = {
   pi: process.env.OPENSESSION_PI_CONFIG,
-  oc: process.env.OPENSESSION_OPENCODE_CONFIG,
+  oc: process.env.OPENSESSION_MODEL_PROVIDERS_CONFIG,
   accounts: process.env.OPENSESSION_CLAUDE_ACCOUNTS_PATH,
 };
 
 beforeAll(() => {
   process.env.OPENSESSION_PI_CONFIG = piConfigFile;
-  process.env.OPENSESSION_OPENCODE_CONFIG = ocConfigFile;
+  process.env.OPENSESSION_MODEL_PROVIDERS_CONFIG = providerConfigFile;
   process.env.OPENSESSION_CLAUDE_ACCOUNTS_PATH = accountsFile;
 });
 
 afterAll(() => {
   for (const [envKey, value] of [
     ["OPENSESSION_PI_CONFIG", savedEnv.pi],
-    ["OPENSESSION_OPENCODE_CONFIG", savedEnv.oc],
+    ["OPENSESSION_MODEL_PROVIDERS_CONFIG", savedEnv.oc],
     ["OPENSESSION_CLAUDE_ACCOUNTS_PATH", savedEnv.accounts],
   ] as const) {
     if (value === undefined) delete process.env[envKey];
@@ -78,19 +78,19 @@ afterAll(() => {
 
 /** Configure the pick mode: null = everything disabled; [] = pi enabled with
  *  no designation (pool mode — the default in production); a non-empty list
- *  designates accounts through opencode's bridgeAccountIds, the only
+ *  designates accounts through pi's bridgeAccountIds, the only
  *  designation path left (pi's own bridgeAccounts field is retired). */
 function designate(bridgeAccountIds: string[] | null): void {
   if (bridgeAccountIds === null) {
     writeFileSync(piConfigFile, JSON.stringify({ enabled: false }));
-    rmSync(ocConfigFile, { force: true });
+    rmSync(providerConfigFile, { force: true });
     return;
   }
   writeFileSync(piConfigFile, JSON.stringify({ enabled: true }));
   if (bridgeAccountIds.length) {
-    writeFileSync(ocConfigFile, JSON.stringify({ enabled: true, bridgeAccountIds }));
+    writeFileSync(providerConfigFile, JSON.stringify({ enabled: true, bridgeAccountIds }));
   } else {
-    rmSync(ocConfigFile, { force: true });
+    rmSync(providerConfigFile, { force: true });
   }
 }
 
@@ -574,7 +574,7 @@ describe("buildPiAnthropicProvider", () => {
     accounts.__setUsageCacheForTest("pi-cap-acc", freshUsage);
     // Trip the shared per-boot hourly counter (same map the bridge admits
     // against) so the stream's own admission refuses pre-SDK.
-    const limit = 300; // bridgeMaxRequestsPerHour default (no opencode config in this seam)
+    const limit = 300; // bridgeMaxRequestsPerHour default (no pi config in this seam)
     for (let i = 0; i < limit; i++) admitBridgeRequest("pi-cap-acc", 1);
     const provider = buildPiAnthropicProvider({
       unifiedSessionId: "os-cap",
@@ -593,7 +593,7 @@ describe("buildPiAnthropicProvider", () => {
     expect(isPiUsageLimitShape(message, "anthropic")).toBe(true);
     // …but the account is NOT markExhausted'd: the cap is local admission
     // control (frees within the hour) and the exhaustion sideline is shared
-    // with the opencode bridge — the account must stay pickable.
+    // with the pi bridge — the account must stay pickable.
     const stillUsable = pickBridgeAccount("claude-sonnet-5");
     expect((stillUsable as any).id).toBe("pi-cap-acc");
   });
@@ -605,7 +605,7 @@ describe("buildPiAnthropicProvider", () => {
     const ids = ["cap-a", "cap-b", "cap-c", "cap-d", "cap-e", "cap-f"];
     designate(ids);
     seedAccounts(ids);
-    const limit = 300; // bridgeMaxRequestsPerHour default (no opencode config in this seam)
+    const limit = 300; // bridgeMaxRequestsPerHour default (no pi config in this seam)
     for (const id of ids) {
       accounts.__setUsageCacheForTest(id, freshUsage);
       for (let i = 0; i < limit; i++) admitBridgeRequest(id, 1);
@@ -629,7 +629,7 @@ describe("buildPiAnthropicProvider", () => {
     expect(message).toContain("cap-f");
     expect(isPiUsageLimitShape(message, "anthropic")).toBe(true);
     // Neither account was sidelined on the way through: the rolling cap is
-    // local admission control, and the sideline map is shared with opencode.
+    // local admission control, and the sideline map is shared with pi.
     const stillPickable = pickBridgeAccount("claude-sonnet-5");
     expect((stillPickable as any).id).toBe("cap-a");
   });
@@ -778,7 +778,7 @@ describe("pickBridgeAccount pins (in-process runs only; designation is the ceili
   });
 });
 
-describe("pickBridgeAccount pool mode (no designation — picks like opencode)", () => {
+describe("pickBridgeAccount pool mode (no designation — picks like pi)", () => {
   test("picks the least-used usable account from the general pool", () => {
     designate([]);
     seedAccounts(["pool-a", "pool-b"]);

@@ -1,151 +1,13 @@
 /**
- * Pi engine runner — pi.dev's coding agent (`@earendil-works/pi-coding-agent`)
- * as a second engine beside opencode, driven IN-PROCESS through the SDK (the
- * claude-direct precedent, not the opencode server-pool one). Model ids are
- * `pi/<provider>/<model>`; `pi/anthropic/*` runs on the designated Claude
- * accounts (in-process provider or the loopback bridge), `pi/openai/*` on the
- * ChatGPT-subscription codex pool, and any other configured third-party
- * provider (wafer, cerebras, moonshotai, xai, …) on its OpenCode-configured
- * API key — pi's built-in catalog supplies the dialect where it knows the
- * provider, piProviderCatalog/buildPiThirdPartyProviderPlan where it does
- * not (Wafer). Preset ids route here too: `pi/dial/<tier>`,
- * `pi/orchestrator/<name>` and `pi/workspace-preset/<ws>/<id>` resolve to
- * their concrete lead with the preset wiring attached — the dial oracle as a
- * native custom tool (same-bridge resolved via sameBridgeDialOracle, answered
- * out-of-band by oneShot), orchestrator/workspace delegation as
- * instructions over opensession-sessions (the codex-direct shape; pi has no
- * subagent registry, so claude-direct's native worker agents have no pi
- * equivalent).
+ * Pi coding-agent runner. Every production model id routes here.
  *
- * Containment / policy parity (the research-policy 14-point checklist):
- *  - Config gate, not an env flag: every turn refuses unless
- *    `~/.opensession-pi.json` has `enabled: true` (pi-config.ts; read fresh
- *    per run). Kind gate copies opencodeGateReason semantics — deny by
- *    default on journal kind, kind-less runs refused, denials audited
- *    (`pi_gate_denied`). The one escape is the module-internal smoke bypass
- *    (kind "pi-smoke", armed only inside runPiSmokeTurn — never reachable
- *    from request/automation data).
- *  - Auth/billing: Anthropic traffic runs on the designated bridge accounts
- *    (opencode's bridgeAccountIds, falling back to pi.json's bridgeAccounts —
- *    never the pool) over one of two config-gated transports
- *    (pi-config `anthropicTransport`): "inprocess" (the default) registers a
- *    NATIVE pi-ai provider (pi-anthropic-provider.ts) that drives the Claude
- *    Agent SDK in this process — token-level streaming, per-unified-session
- *    SDK-session continuation, `pi_anthropic_request` audit, usage-limit
- *    markExhausted — while "bridge" keeps the pre-2026-08 loopback path as
- *    rollback: `ensureAnthropicBridge` + provider "anthropic" re-registered
- *    with the bridge baseUrl + per-boot key via setRuntimeApiKey, account
- *    selection inside the bridge, and a stable `x-opencode-session` header
- *    for session affinity + audit attribution. OpenAI traffic rides pi's
- *    native `openai-codex`
- *    provider (chatgpt.com backend, pi's own headers/transport — no custom
- *    headers) on the SAME ChatGPT-subscription codex pool as opencode/openai:
- *    pickOpenaiAccount → buildSeededOpenaiAuth (access-token-only + the
- *    deliberately-invalid placeholder refresh, the rotation-hazard fix
- *    documented in opencode-openai-auth.ts) seeded into the run's in-memory
- *    credential store under "openai-codex". NEVER
- *    setRuntimeApiKey("openai-codex", …): the provider is oauth-only, so a
- *    runtime api-key override is ignored for auth resolution and would only
- *    mask the seeded oauth credential. A usage-limit terminal sidelines the
- *    picked codex account via markCodexExhausted — sideline state SHARED
- *    with the opencode engine, same per-(account, model) keys. Either
- *    provider's 429/529/usage-limit shapes surface with
- *    `usageLimitExhausted: true` so agent-runner's fallback walk engages.
- *  - Local-tool containment (CRITICAL): pi runs in-process, so its built-in
- *    tools would execute with the SERVER env (bash, and the rg/fd children
- *    grep/find spawn env-inheriting) and unrestricted filesystem reach
- *    (read/grep resolve absolute paths as-is — /proc/self/environ included).
- *    NO built-in is ever reachable: every local tool the model sees is a
- *    same-name custom override (customs are set into pi's registry after
- *    built-ins — verified in 0.83.0 _refreshToolRegistry). The custom `bash`
- *    Bun.spawns in its own process group with a minimal explicit env
- *    (PATH/HOME/LANG + git identity + the per-user GitHub token on eligible
- *    interactive runs + the AWS pointer env when `opts.aws`); read/ls/find/
- *    edit/write wrap pi's own tool factories with guarded fs operations, and
- *    grep keeps pi's schema but re-implements execute so rg spawns with that
- *    same minimal env. All fs tools realpath-contain every path to opts.cwd
- *    (symlink escapes resolved through the nearest existing ancestor, so
- *    not-yet-created write targets are contained too; /proc, /sys and /dev
- *    rejected outright). Containment is cwd-only by design — ask mode
- *    (read/grep/find/ls + MCP, no bash) is therefore genuinely workspace-
- *    bound; code mode's bash remains fs-unconfined like opencode's (that is
- *    how attached-repo worktrees are reached) but never sees the server env.
- *  - Deny/confirm sets are enforced by REMOVAL: `opencodeRunPolicy` computes
- *    the strip-set (same `<server>_<tool>` id convention), and the MCP bridge
- *    (pi-mcp-bridge.ts) drops denied ids BEFORE registration — the model
- *    never sees them. Ask mode is actually read-only: tools are
- *    read/grep/find/ls + MCP only (no bash/edit/write — deliberate
- *    conservative v0, same stance claude-direct documents). Unattended
- *    code-mode bash is additionally screened per command through the org
- *    command policy (`bashAskPolicyReply`).
- *  - Isolation from ~/.pi: in-memory credential store, `modelsPath: null`,
- *    server-owned agentDir under stateDir("pi"), SettingsManager.inMemory,
- *    DefaultResourceLoader with extensions/skills/templates/themes disabled
- *    and the run instructions (`buildRunInstructions` — engine-neutral
- *    policy text) appended via systemPromptOverride. Context-file discovery
- *    is bounded to the workspace via agentsFilesOverride: pi's default walks
- *    every ancestor up to / (plus the agentDir global) — an out-of-workspace
- *    instruction-persistence channel — so only cwd-level AGENTS.md/CLAUDE.md
- *    survive the filter (opencode parity). Sessions persist under
- *    stateDir("pi")/sessions/<unified id>/ as pi-native jsonl; resume scans
- *    that dir for the header id (`piSessionId`). Resume-miss with store
- *    history (pi buffers a session's jsonl until its first ASSISTANT message,
- *    so a first turn that died pre-output journaled an id with no file) is
- *    bridged with a same-engine-restart handoff note prepended to the prompt.
- *  - Journal: two-stage like opencode (pre-engine record with the prompt, an
- *    upgrade with claudeSessionId=<piSessionId> once the session exists) but
- *    NEVER a serverKey — in-process runs don't survive a restart, so boot
- *    always takes the continuation re-prompt path. `journalClear` only on a
- *    reached terminal or user cancel; consumer teardown mid-turn keeps the
- *    record (and aborts the orphaned in-process turn — nothing to reattach).
- *  - Transcript: the claude-direct recipe — recordBksSessionFor BEFORE any
- *    engine-keyed append, early user line under the unified id with a stable
- *    uuid (engine writes upsert the same row), all writes best-effort.
- *    Content persistence rides `message_end` (assistant text + tool calls,
- *    tool results, delivered steers) and `compaction_end` (summary + its
- *    summarization usage folded into TurnUsage) — NOT `entry_appended`,
- *    which in 0.83.0 fires only for extension custom entries (never for
- *    messages; with noExtensions it never fires at all). Error-stopped
- *    assistant attempts are skipped: auto-retry replays them and the
- *    terminal error already carries the failure text.
- *  - Steer contract: accept = enqueue + audit `steer_queued`; the transcript
- *    user line is written only at DELIVERY (the steer's user `message_end`),
- *    so an undelivered steer keeps its run-session receipt as the recovery
- *    affordance (opencode's failed-POST semantics). steerPiRun stops
- *    accepting the moment prompt() settles, and steers that slipped into the
- *    queue after the agent loop's final poll are drained through a bounded
- *    `agent.continue()` before the done terminal.
- *  - Exactly ONE terminal event per turn; `agent_settled`/prompt() completion
- *    is the end-of-run signal (never agent_end, which can precede retries).
- *    A user cancel ends QUIETLY — no terminal error event, the generator
- *    just returns (opencode-runner's MessageAbortedError exemption) — so
- *    run-session records no failure, keeps no spurious "Needs input" state
- *    and never pings a parent about a worker a human deliberately stopped.
- *  - Auto-retry surfacing: pi's agent-level retries (3x, 2s base backoff;
- *    provider-level retries default to zero in 0.83.0) are made visible with
- *    a runner_notice per attempt, and retries on usage-limit-shaped errors
- *    (bridge 429/529 — the pool cannot serve) are aborted via abortRetry()
- *    so the terminal surfaces immediately and the fallback walk engages.
- *  - Audit: `pi_turn` family (in with summarizeText(prompt), out with
- *    ok/duration/pi_session_id/tokens-or-error, first-call-wins closer with a
- *    cancelled/abandoned finally backstop) + `pi_gate_denied`.
- *
- * Documented v1 gaps: cross-engine handoffs put the note in the prompt;
- * `seedTranscriptEntries` is used only by detached hosts as a resume-miss
- * fallback. The adapter-level reattach is null by
- * design; no turn wall-clock deadline (cancel works; the smoke harness caps
- * itself); no account rotation inside a turn (anthropic: the bridge owns
- * accounts; openai: a usage-limit terminal sidelines the picked codex
- * account but the turn never re-picks — one terminal error, then the
- * model-fallback walk takes over); pi/openai serves ChatGPT-subscription
- * ("home") codex accounts only — kind "api_key" is refused with a clear
- * error (pi's openai-codex provider is oauth-only; API-key billing stays on
- * opencode/openai); no fast-mode/priority-tier variants on pi (0.83.0 has no
- * serviceTier plumbing; supportsOpenaiFastMode already excludes pi ids) and
- * effort "none" approximates to the model default (pi has no "off"-below
- * ThinkingLevel for it); the guarded find/grep are near-parity, not
- * byte-identical, with pi's fd/rg built-ins (find uses a glob walk with
- * node_modules/.git ignores instead of fd's .gitignore semantics).
+ * Security invariants:
+ *  - run kinds are denied by default and unattended tools are stripped before registration;
+ *  - built-in local tools are replaced with cwd-contained, minimal-environment overrides;
+ *  - Anthropic and ChatGPT traffic use the server-managed account pools;
+ *  - third-party providers receive only their configured API key;
+ *  - sessions, transcript writes, steering, cancellation, retries and audit events all use
+ *    Open Session's owned stores and detached run-host protocol.
  */
 
 import {
@@ -186,10 +48,10 @@ import {
 } from "./runner-shared";
 import { ensureAnthropicBridge } from "./anthropic-bridge";
 import {
-  opencodeProviders,
+  modelProviders,
   piProviderCatalog,
-  readOpencodeBridgeConfig,
-} from "./opencode-config";
+  readModelProviderConfig,
+} from "./model-providers";
 import { markCodexExhausted, type CodexAccount } from "./codex-accounts";
 import { pickAccount as pickClaudeAccount } from "./claude-accounts";
 import {
@@ -197,27 +59,27 @@ import {
   buildSeededOpenaiAuth,
   maskOpenaiAccount,
   type SeededOpenaiAuth,
-} from "./opencode-openai-auth";
+} from "./openai-auth";
 import {
   INTERACTIVE_KINDS,
   isUnattendedKind,
   baseJournalKind,
-  opencodeRunPolicy,
+  runToolPolicy,
   readLocalInstructions,
-} from "./opencode-policy";
+} from "./run-policy";
 import { buildRunInstructions } from "./run-instructions";
 import { logInjectedContext, logStandingContext, logStandingJson } from "./context-log";
 import { wrapContext } from "./prompt-context";
 import { bashAskPolicyReply } from "./command-policy";
 import {
-  appendOpencodeTranscript,
-  recordBksSessionFor,
+  appendTranscriptEntries,
+  recordEngineSessionOwner,
   transcriptLineForEntry,
   transcriptLineRunnerNotice,
   transcriptLineCompactionSummary,
   transcriptLineUser,
   storeAppendUserLineEarly,
-} from "./opencode-transcript";
+} from "./transcript-persistence";
 import { transcriptStore } from "./transcript-store";
 import { transcriptForwarder } from "./transcript-forward";
 import { gitIdentityEnv } from "./shared/user-mappings";
@@ -232,7 +94,7 @@ import {
   DIAL_ORACLE_FALLBACKS,
   ORCHESTRATOR_WORKER_AGENTS,
   dialPreset,
-  opencodeModelLabel,
+  piModelLabel,
   orchestratorPreset,
   orchestratorWorkerForBridge,
   sameBridgeDialOracle,
@@ -356,7 +218,7 @@ export function piDialOracleAgent(oracleAgent: string, providerID: string): stri
  * provider (cerebras, moonshotai, xai, …); a provider pi has never heard of
  * but we catalog ourselves (Wafer — piProviderCatalog) is registered as a
  * generic OpenAI-compatible provider carrying the same model table the
- * opencode engine injects. A provider in neither catalog fails clearly
+ * previous runner engine injects. A provider in neither catalog fails clearly
  * instead of guessing a protocol. A model id newer than both catalogs gets a
  * conservative fallback entry — zero cost (unknown pricing must under-report,
  * not invent; tokens still record) and safe window/output floors — inheriting
@@ -376,7 +238,7 @@ export function buildPiThirdPartyProviderPlan(input: {
     return {
       error:
         `Provider "${input.providerID}" is in neither Pi's built-in catalog nor ours, ` +
-        "so the Pi engine cannot guess its protocol. Use an opencode/* id for this model.",
+        "so the Pi engine cannot guess its protocol. Configure a supported provider for this model.",
     };
   }
   const known =
@@ -544,7 +406,7 @@ interface PiRunHandle {
 
 // Alias keys (runKey, unified session id, pi session id) → shared handle,
 // parked on globalThis so hot reloads keep cancel/steer/isBusy working for
-// in-flight turns — same pattern as the opencode runner's activeRuns.
+// in-flight turns — same pattern as the previous runner runner's activeRuns.
 const activeRuns: Map<string, PiRunHandle> = (g.__piActiveRuns ??= new Map());
 
 registerActiveRunProbe((runKey) => activeRuns.has(runKey));
@@ -592,7 +454,7 @@ export function steerPiRun(id: string, text: string, images?: ImageInput[]): boo
 let smokeGateBypass = 0;
 
 /** Non-null = the reason this run may not use the pi engine. Same deny-by-
- *  default semantics as opencodeGateReason: interactive + unattended journal
+ *  default semantics as previous runnerGateReason: interactive + unattended journal
  *  kinds only, kind-less runs refused. */
 export function piGateReason(opts: { journal?: { kind?: string } }): string | null {
   const base = baseJournalKind(opts.journal?.kind);
@@ -657,7 +519,7 @@ const CODEX_USAGE_LIMIT_CODE_SHAPES =
  *  usageLimitExhausted tells agent-runner's fallback walk. Anthropic runs see
  *  the loopback bridge's shapes: 429 (per-account hourly cap) and 529 (no
  *  usable designated account) plus the standard Claude limit messages. OpenAI
- *  runs match the codex classifier shared with the opencode engine
+ *  runs match the codex classifier shared with the previous runner engine
  *  (isCodexUsageLimitError) plus the raw code shapes above — never the
  *  bridge-only shapes (529/overload is transient there, not exhaustion).
  *  Exported for the classifier tests. */
@@ -720,7 +582,7 @@ function findPiSessionFile(sessionDir: string, piSessionId: string): string | nu
 // ── Transcript integration (the claude-direct recipe) ────────────────────────
 
 /** One transcript append, routed. In the server process this writes the
- *  store directly (appendOpencodeTranscript). Inside a run host a forwarder
+ *  store directly (appendTranscriptEntries). Inside a run host a forwarder
  *  is registered (transcript-forward.ts): the batch is relayed to the server
  *  over the run-host protocol instead, keeping transcripts.db single-writer
  *  and giving sandboxed/detached pi runs host-side persistence. */
@@ -730,11 +592,11 @@ function piAppend(engineSessionId: string, lines: Record<string, unknown>[]): vo
     forward(engineSessionId, lines);
     return;
   }
-  appendOpencodeTranscript(engineSessionId, lines);
+  appendTranscriptEntries(engineSessionId, lines);
 }
 
 /** Store one batch of normalized entries under the pi session id. Requires
- *  recordBksSessionFor to have mapped pi→unified first (see runPi); system
+ *  recordEngineSessionOwner to have mapped pi→unified first (see runPi); system
  *  entries ride runner-notice lines. Best-effort — a transcript write must
  *  never take the run down. */
 function persistEntries(
@@ -1286,7 +1148,7 @@ const THINKING_LEVELS = new Set(["low", "medium", "high", "xhigh", "max"]);
 interface PiAccountWalk {
   /** Provider account ids this turn has already burned, fed into the picker
    *  so a replay lands somewhere new. The sideline alone cannot drive this:
-   *  it is shared cross-engine with opencode, and some refusals deliberately
+   *  it is shared cross-engine with previous runner, and some refusals deliberately
    *  do not set it (local admission control that frees within the hour). */
   excluded: Set<string>;
   /** Set by an attempt that wants to be replayed on another account. */
@@ -1299,11 +1161,11 @@ interface PiAccountWalk {
 /**
  * One logical pi turn, across however many provider accounts it takes.
  *
- * This is opencode-runner's account-rotation discipline, which pi lacked: a
+ * This is previous runner-runner's account-rotation discipline, which pi lacked: a
  * usage limit ended the whole run while the rest of the pool sat idle, and
  * the sideline it recorded only helped the NEXT prompt. agent-runner cannot
  * rescue that either, because an explicit engine choice pins the model
- * fallback to "none" rather than silently crossing into an opencode fallback,
+ * fallback to "none" rather than silently crossing into an previous runner fallback,
  * so one capped account was simply the end of the turn.
  *
  * The anthropic side runs the same walk one level down, inside
@@ -1376,7 +1238,7 @@ async function* runPiAttempt(
   const dialOracleAgent = resolved?.dial
     ? piDialOracleAgent(resolved.dial.oracleAgent, parsed.providerID)
     : undefined;
-  const configuredProvider = opencodeProviders()[parsed.providerID];
+  const configuredProvider = modelProviders()[parsed.providerID];
   if (
     parsed.providerID !== "anthropic" &&
     parsed.providerID !== "openai" &&
@@ -1454,7 +1316,7 @@ async function* runPiAttempt(
   let pickedOpenai: CodexAccount | undefined;
   // The same account, but only once it is genuinely serving this turn. The
   // SIDELINE keys on this rather than on the pick: markCodexExhausted benches
-  // an account for hours, cross-engine, shared with opencode, and a local
+  // an account for hours, cross-engine, shared with previous runner, and a local
   // auth.json we could not read (or a token inside pi's refresh window) is a
   // fault of this box, not a verdict on the account's usage. Rotating off it
   // is right; benching it globally is not.
@@ -1476,7 +1338,7 @@ async function* runPiAttempt(
     if (opts.accountStrict && opts.accountId) return undefined;
     const next = pickOpenaiAccount(
       parsed.modelID,
-      readOpencodeBridgeConfig()?.openaiAccounts,
+      readModelProviderConfig()?.openaiAccounts,
       opts.accountAffinityKey || journal?.osSessionId || cwd,
       undefined,
       user,
@@ -1517,7 +1379,7 @@ async function* runPiAttempt(
   // registry writes above must still deregister in the finally, or the
   // session would report busy until the next restart.
   try {
-    // Durability before the engine exists (the opencode two-stage): journal
+    // Durability before the engine exists (the previous runner two-stage): journal
     // the run with its original prompt — no engine id and NO serverKey, so a
     // death here re-runs from scratch and a restart mid-turn takes the
     // continuation re-prompt path (nothing in-process survives to reattach) —
@@ -1553,15 +1415,15 @@ async function* runPiAttempt(
           kind: journal.kind,
         })
       );
-      storeAppendUserLineEarly(journal.osSessionId, userLine, opts.sessionId);
+      storeAppendUserLineEarly(journal.osSessionId, userLine);
     }
 
-    const policy = opencodeRunPolicy({
+    const policy = runToolPolicy({
       deniedTools: opts.deniedTools,
       confirmTools,
       journalKind: journal?.kind,
     });
-    // Command-policy gate: kind-based like opencode (NOT policy.unattended) —
+    // Command-policy gate: kind-based like previous runner (NOT policy.unattended) —
     // the trusted-human loops carry deniedTools but shouldn't trip the gate.
     const bashGated = isUnattendedKind(baseJournalKind(journal?.kind)) && !isAsk;
     const githubUserLogin =
@@ -1576,7 +1438,7 @@ async function* runPiAttempt(
     // deliberate ~/.pi isolation), so "no account can serve this model" is
     // always exhaustion-shaped, which is what the model-fallback walk keys on
     // (the catch below honors e.usageLimitExhausted). Same sessionKey
-    // convention as opencode-runner (journal osSessionId || cwd), so HRW
+    // convention as previous runner-runner (journal osSessionId || cwd), so HRW
     // session affinity and the per-(account, model) sideline are ONE shared
     // state across both engines.
     let seededOpenaiCredential: SeededOpenaiAuth["openai"] | undefined;
@@ -1599,7 +1461,7 @@ async function* runPiAttempt(
       for (;;) {
         picked = pickOpenaiAccount(
           parsed.modelID,
-          readOpencodeBridgeConfig()?.openaiAccounts,
+          readModelProviderConfig()?.openaiAccounts,
           opts.accountAffinityKey || journal?.osSessionId || cwd,
           pickOut,
           user,
@@ -1612,7 +1474,7 @@ async function* runPiAttempt(
           throw new Error(
             `pi/openai: pinned codex account "${picked.name}" is an API-key account, ` +
               "which the Pi engine does not support. ChatGPT-subscription (kind: home) " +
-              "accounts only. Use an opencode/openai/* model for API-key billing."
+              "accounts only. Configure a supported third-party provider for API-key billing."
           );
         }
         skippedApiKey.add(picked.id);
@@ -1626,7 +1488,7 @@ async function* runPiAttempt(
             `pi/openai: only API-key codex accounts are currently eligible ` +
               `(${skippedApiKey.size} skipped), which the Pi engine does not support. ` +
               "ChatGPT-subscription (kind: home) accounts only. Use an " +
-              "opencode/openai/* model for API-key billing."
+              "a supported third-party provider for API-key billing."
           );
         }
         const err = new Error(`pi/openai: ${picked.error}`) as Error & {
@@ -1645,7 +1507,7 @@ async function* runPiAttempt(
       if ("error" in built) {
         // Expired/unreadable ChatGPT access token = the same condition as a
         // dry pool: this model has no account to run on right now
-        // (opencode-runner's bind-failure parity).
+        // (previous runner-runner's bind-failure parity).
         const err = new Error(`pi/openai: ${built.error}`) as Error & {
           usageLimitExhausted?: boolean;
         };
@@ -1801,7 +1663,7 @@ async function* runPiAttempt(
       // only route to it legitimately. ensure* throws a clear config error
       // when the bridge is off — surfaced as-is by the catch below.
       const bridge = ensureAnthropicBridge();
-      const sessionHeader = { "x-opencode-session": unifiedSessionId || runKey };
+      const sessionHeader = { "x-opensession-session": unifiedSessionId || runKey };
       runtime.registerProvider("anthropic", {
         baseUrl: bridge.url,
         headers: sessionHeader,
@@ -1833,7 +1695,7 @@ async function* runPiAttempt(
         throw new Error(`Unknown Anthropic model "${parsed.modelID}" (could not register it with pi)`);
       }
     } else {
-      // Third-party picker providers share OpenCode's configured API key and
+      // Third-party picker providers share previous runner's configured API key and
       // optional base URL. buildPiThirdPartyProviderPlan supplies the API
       // dialect and model metadata — pi's built-in catalog when pi knows the
       // provider, our own catalog (Wafer) when it does not, a conservative
@@ -1887,7 +1749,7 @@ async function* runPiAttempt(
       }
     }
     if (opts.codexCliEnv) {
-      const cfg = readOpencodeBridgeConfig();
+      const cfg = readModelProviderConfig();
       const picked = pickOpenaiAccount(
         "",
         cfg?.openaiAccounts,
@@ -1957,7 +1819,7 @@ async function* runPiAttempt(
     });
     // Tool policy: ask mode is read-only — no edit/write, and bash screened
     // through ASK_BASH_PERMISSIONS (askBashDenyReason), the same allowlist
-    // opencode's ask agent enforces engine-side. Shipping ask without bash at
+    // previous runner's ask agent enforces engine-side. Shipping ask without bash at
     // all was tried first and it blinded every automation that assumed a
     // shell for jq/git/gh reads (the health-monitor incident, 2026-08-19).
     // Code/scratch get the read set + edit/write + the ungated custom bash.
@@ -2054,7 +1916,7 @@ async function* runPiAttempt(
       reposNote: opts.reposNote,
       prReviewer: opts.prReviewer,
       scratchDir: opts.scratchDir,
-      // Same host-awareness as the opencode runner: code.storage repos get
+      // Same host-awareness as the previous runner runner: code.storage repos get
       // push-the-branch instructions instead of `gh pr create`.
       repoHost: isScratch ? undefined : cwdRepo?.host,
       localInstructions: readLocalInstructions(cwd),
@@ -2087,7 +1949,7 @@ async function* runPiAttempt(
         ? {
             presetLabel:
               resolved.workspacePreset?.label || resolved.orchestrator.label,
-            mainLabel: opencodeModelLabel(resolved.orchestrator.model),
+            mainLabel: piModelLabel(resolved.orchestrator.model),
             workers: resolved.orchestrator.workerAgents.map((name) => ({
               agent: name,
               label: ORCHESTRATOR_WORKER_AGENTS[name]?.label || name,
@@ -2102,7 +1964,7 @@ async function* runPiAttempt(
     // The resolution of the `tools` scope runOnModel already logged: what
     // this engine actually put in front of the model. Pi assembles its tool
     // list in-process rather than declaring it in an engine config, so this
-    // record is the only account of it (opencode's equivalent can be read
+    // record is the only account of it (previous runner's equivalent can be read
     // back from its config file). Recorded once per session, then again only
     // when the content hash moves.
     logStandingJson({
@@ -2154,7 +2016,7 @@ async function* runPiAttempt(
       // Pi's context-file discovery walks every ancestor of cwd up to /
       // (plus the agentDir global) — an AGENTS.md dropped in /home/ubuntu
       // would silently join every pi system prompt on the box. Bound it to
-      // the workspace: keep only cwd-level files (opencode parity).
+      // the workspace: keep only cwd-level files (previous runner parity).
       agentsFilesOverride: ({ agentsFiles }) => ({
         agentsFiles: agentsFiles.filter((f) => {
           const p = resolve(f.path);
@@ -2230,14 +2092,14 @@ async function* runPiAttempt(
       settingsManager,
     });
     session = created.session;
-    // OpenCode appends every pending noReply steer before its next LLM step.
+    // previous runner appends every pending noReply steer before its next LLM step.
     // Match that behavior instead of Pi's one-message-per-step default.
     session.setSteeringMode("all");
     piSessionId = session.sessionId;
 
     // Map pi→unified BEFORE any engine-keyed append (the W1 import-first gate
     // resolves through this map; unmapped appends are dropped + degraded).
-    if (unifiedSessionId) recordBksSessionFor(piSessionId, unifiedSessionId);
+    if (unifiedSessionId) recordEngineSessionOwner(piSessionId, unifiedSessionId);
 
     // Journal upgrade: the record now carries the engine id (still no
     // serverKey — boot must take the continuation re-prompt path).
@@ -2278,7 +2140,7 @@ async function* runPiAttempt(
     // marks an undelivered steer as said (queue-state reconciles receipts
     // against transcript user texts, so it would never be requeued). An
     // undelivered steer keeps its run-session receipt as the recovery
-    // affordance — opencode's failed-POST semantics.
+    // affordance — previous runner's failed-POST semantics.
     const pendingSteers: Array<{ text: string; images?: ImageInput[] }> = [];
     handle.steer = (text, images) => {
       pendingSteers.push({ text, images });
@@ -2330,7 +2192,7 @@ async function* runPiAttempt(
       ? `${wrapContext(resumeMissNote, "handoff")}\n\n${prompt}`
       : prompt;
     // Injected BELOW runOnModel's choke point, so that call never saw this
-    // payload — log it here, exactly as the opencode runner does for its own
+    // payload — log it here, exactly as the previous runner runner does for its own
     // same-engine-restart handoff. Re-logging is free: entry ids are
     // content-derived, so an overlap upserts one row instead of duplicating.
     if (promptForEngine !== prompt) {
@@ -2387,7 +2249,7 @@ async function* runPiAttempt(
             const { text, images } = contentToTextAndImages(t.result?.content);
             // `content`, not `result`: stream consumers read event.content
             // (run-session's stream_tool_result). 500-char preview like
-            // opencode — the full text reaches the store via the toolResult
+            // previous runner — the full text reaches the store via the toolResult
             // message_end below and upserts over the streamed copy.
             push({
               type: "tool_result",
@@ -2661,7 +2523,7 @@ async function* runPiAttempt(
     const failed: { ok: boolean; error?: unknown } = promptOutcome!;
     if (abort.signal.aborted) {
       // User cancel ends QUIETLY — no terminal event, the generator just
-      // returns (opencode-runner's MessageAbortedError exemption). A terminal
+      // returns (previous runner-runner's MessageAbortedError exemption). A terminal
       // error here would take run-session's full failure path: a persisted
       // "Run failed" chip, lastRunError/Needs-input state, and a parent
       // notified its worker FAILED because a human pressed Stop. The finally
@@ -2672,7 +2534,7 @@ async function* runPiAttempt(
     }
     // Usage-limit terminal on a pi/openai run: sideline the picked codex
     // account BEFORE yielding, so the fallback walk's next hop (and every
-    // other engine's pick) skips it — shared sideline state with opencode,
+    // other engine's pick) skips it — shared sideline state with previous runner,
     // same per-(account, model) key.
     const sidelineOnUsageLimit = (usageLimit: boolean) => {
       if (usageLimit && sidelineableOpenai) {
@@ -2748,7 +2610,7 @@ async function* runPiAttempt(
     }
     const message: string = e?.message || String(e);
     // Honor the flag on pre-init throws (dry pool, expired seed): their
-    // distinctive text never matches the classifier — opencode-runner's
+    // distinctive text never matches the classifier — previous runner-runner's
     // catch parity.
     const usageLimit =
       e?.usageLimitExhausted === true ||

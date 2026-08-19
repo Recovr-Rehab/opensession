@@ -11,7 +11,7 @@ Open Session is a self-hosted agent-infrastructure server. One Bun process serve
   against registered git repos, in isolated worktrees or Docker sandboxes.
 - **Agents** that turn external events into sessions: Slack messages, Linear
   issues, Plain support tickets, GitHub PR review comments.
-- **One engine** that actually runs the agent turns: OpenCode, with Claude
+- **One engine** that actually runs the agent turns: Pi, with Claude
   subscription capacity via the bundled Meridian bridge and ChatGPT-OAuth
   OpenAI capacity ([engines.md](engines.md)).
 - **Automations**: stored prompts triggered by events or cron, run with
@@ -31,7 +31,7 @@ flowchart LR
     wh["webhook server :3848"]
     agents["integration agents<br/>slack · linear · plain · github · stripe"]
     autos["automations + schedulers"]
-    runner["runner layer<br/>opencode-runner → opencode serve"]
+    runner["runner layer<br/>pi-runner → detached host"]
     wh --> agents
     agents --> runner
     autos --> runner
@@ -59,7 +59,7 @@ UI and API at the root of your instance URL.
 - [Bun](https://bun.sh) — runtime, package manager, and bundler. No Node/Vite.
   The installer brings its own; you only need it up front for a manual install.
 - `git`, and the [`gh` CLI](https://cli.github.com) for PR operations.
-- The `opencode` binary — the engine that runs every agent turn. The installer
+- The `pi` binary — the engine that runs every agent turn. The installer
   installs it by default (`--no-engine` opts out).
 - The `claude` CLI (Claude Code) — the bundled Meridian bridge shells out to
   it for Anthropic models (`OPENSESSION_CLAUDE_BIN`, default: `claude` found
@@ -122,7 +122,7 @@ when adding anything that touches this.
 | [linear.md](linear.md) | Linear OAuth app, webhooks, the Linear agent |
 | [plain.md](plain.md) | Plain support tickets, the triage automation |
 | [integrations-misc.md](integrations-misc.md) | Stripe, WorkOS, Grafana/Sentry/Tinybird, web push, voice |
-| [engines.md](engines.md) | the OpenCode engine, account pools, usage & fallbacks, model routing |
+| [engines.md](engines.md) | the Pi engine, account pools, usage & fallbacks, model routing |
 | [../self-hosting-sandboxes.md](../self-hosting-sandboxes.md) | Docker/Daytona/E2B/Box/Modal/AWS Lambda MicroVM sandboxes |
 | [../runners.md](../runners.md) | attaching a Mac/Linux/Windows box as a Runner |
 | [../worktrees.md](../worktrees.md) | how sessions map to git worktrees, and where the disk goes |

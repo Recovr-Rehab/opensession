@@ -1,7 +1,7 @@
 # Open Session
 
 Self-hosted agent-infrastructure server: a web UI plus Slack, Linear, Plain,
-and GitHub agents, driving coding sessions through the OpenCode engine
+and GitHub agents, driving coding sessions through the Pi engine
 (any model provider) in git worktrees on your own box, or in isolated
 sandboxes — Docker locally, with pluggable adapters for other providers.
 
@@ -20,7 +20,7 @@ first.
 curl -fsSL https://raw.githubusercontent.com/tellahq/opensession/main/install.sh | bash
 ```
 
-Installs Bun, the OpenCode engine, the `claude` and `codex` CLIs, and the
+Installs Bun, the `claude` and `codex` CLIs, and the
 Tailscale client if you do not have them, clones the source to
 `~/.opensession/src`, puts an `opensession` command on your `PATH`, and walks
 you through configuration. Budget 5-15 minutes on a fresh box — mostly

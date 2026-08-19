@@ -20,9 +20,9 @@ import {
 } from "./aws-creds";
 import { askRecordContent } from "@tellahq/opensession-protocol/notices";
 import {
-	appendOpencodeTranscript,
+	appendTranscriptEntries,
 	transcriptLineAskRecord,
-} from "./opencode-transcript";
+} from "./transcript-persistence";
 import { resolveTeammate } from "./shared/user-mappings";
 import { transitionRunState } from "./run-state";
 import { findSession } from "./session-cache";
@@ -293,7 +293,7 @@ export function recordAskAnswer(
 	try {
 		const engineSessionId = findSession(sessionId)?.claudeSessionId;
 		if (!engineSessionId) return;
-		appendOpencodeTranscript(engineSessionId, [
+		appendTranscriptEntries(engineSessionId, [
 			transcriptLineAskRecord(askRecordEntryContent(questions, answers)),
 		]);
 	} catch (e) {

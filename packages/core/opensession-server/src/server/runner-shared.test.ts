@@ -97,27 +97,6 @@ describe("isClaudeMalformedTerminalError", () => {
   });
 });
 
-describe("status-poll watchdog failures", () => {
-  test("recover through the bounded engine continuation path", () => {
-    expect(
-      isTransientRunError(
-        "opencode server stopped answering status polls and refused a health probe — ending the turn " +
-          "(engine state preserved; send again to continue)",
-      ),
-    ).toBe(true);
-    expect(
-      isTransientRunError(
-        "opencode server answered health probes but was too starved to serve status for 10 minutes — " +
-          "ending the turn (engine state preserved; send again to continue)",
-      ),
-    ).toBe(true);
-  });
-
-  test("does not treat ordinary poll wording as an engine failure", () => {
-    expect(isTransientRunError("the model says status polls are useful")).toBe(false);
-    expect(isTransientRunError("health probe results are ready")).toBe(false);
-  });
-});
 
 describe("isProviderOverloadError", () => {
   test("matches provider-declared overloads", () => {

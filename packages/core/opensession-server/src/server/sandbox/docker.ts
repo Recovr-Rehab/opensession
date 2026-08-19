@@ -124,7 +124,6 @@ import { HostHandle, type HandleCallbacks, type HostLauncher } from "../host-cli
 import { registerRunWsHost, unregisterRunWsHost, runWsConnector } from "../run-ws";
 import { getTranscriptPath } from "../sessions";
 import { listCodexAccounts } from "../codex-accounts";
-import { OPENCODE_TRANSCRIPTS_DIR } from "../opencode-transcript";
 import { dropSandboxPreviewRoutes, externalPreviewCommandDirs } from "../preview";
 import { configuredPaths } from "../config";
 import { codeStorageConfig } from "../config";
@@ -500,24 +499,24 @@ async function repoOriginUrl(repoDir: string): Promise<string> {
 /**
  * Host-side engine config files projected read-only into a container, as
  * [hostSrc, containerDest] pairs. Sources honor the host-side env seams
- * (OPENSESSION_OPENCODE_CONFIG / OPENSESSION_PI_CONFIG; test/verify suites
+ * (OPENSESSION_MODEL_PROVIDERS_CONFIG / OPENSESSION_PI_CONFIG; test/verify suites
  * point them at temp files); destinations stay the legacy default paths the
  * in-container process (which has no such env) dual-reads.
- *  - OpenCode bridge config: bridge mode, accounts restriction, turn timeout.
- *    without it every opencode/anthropic/* run in a sandbox fails with
+ *  - Pi bridge config: bridge mode, accounts restriction, turn timeout.
+ *    without it every pi/anthropic/* run in a sandbox fails with
  *    "bridge disabled".
  *  - Pi engine config: the enabled gate + Anthropic transport policy. Without
  *    it every pi/* run in a sandbox refuses with "pi engine is not enabled"
  *    (pi credentials are the claude/codex account mounts above, shared with
- *    the opencode engine).
+ *    the pi engine).
  * A missing source is simply omitted: the engine then reports its own clear
  * config error in-container. Exported for the sandbox engine-config tests.
  */
 export function engineConfigMounts(home = HOME): Array<[src: string, dest: string]> {
   const out: Array<[string, string]> = [];
-  const opencodeSrc =
-    process.env.OPENSESSION_OPENCODE_CONFIG || stateDir("opencode.json");
-  if (existsSync(opencodeSrc)) out.push([opencodeSrc, `${home}/.opensession-opencode.json`]);
+  const providerSrc =
+    process.env.OPENSESSION_MODEL_PROVIDERS_CONFIG || stateDir("model-providers.json");
+  if (existsSync(providerSrc)) out.push([providerSrc, `${home}/.opensession-model-providers.json`]);
   const piSrc = process.env.OPENSESSION_PI_CONFIG || stateDir("pi.json");
   if (existsSync(piSrc)) out.push([piSrc, `${home}/.opensession-pi.json`]);
   return out;
@@ -600,7 +599,6 @@ async function createContainer(
   // mounting them host-side keeps the session viewer's tail working.
   const transcriptDir = dirname(getTranscriptPath(cwd, "x"));
   mkdirSync(transcriptDir, { recursive: true });
-  mkdirSync(OPENCODE_TRANSCRIPTS_DIR, { recursive: true });
 
   const mounts: string[] = [
     // Named volumes ONLY at ~/.claude and ~/.codex — never at /home/ubuntu
@@ -610,13 +608,6 @@ async function createContainer(
     ...workspaceMounts,
     // Host-visible engine transcripts for this cwd (over the .claude volume).
     ...vol(transcriptDir, transcriptDir),
-    // OpenCode engine transcripts: the opencode runner persists claude-shape
-    // JSONL per session under ~/.claude/projects/-opencode-engine (see
-    // opencode-transcript.ts) — same trick as the per-cwd dir above, bound rw
-    // over the ~/.claude volume so the host session viewer can tail
-    // in-container opencode runs. (OpenCode's own SQLite store stays inside
-    // the container; the persisted JSONL is the durable host-visible copy.)
-    ...vol(OPENCODE_TRANSCRIPTS_DIR, OPENCODE_TRANSCRIPTS_DIR),
     // Per-session run dirs: spec/meta/journal/host.sock/log for every run.
     ...vol(runsDir, runsDir),
     // Audit log parity (append-only jsonl stream). Deliberately rw where the
@@ -662,14 +653,14 @@ async function createContainer(
       stateDir("claude-accounts.json"),
     "claude account pool",
   );
-  // Codex/ChatGPT account material, for opencode/openai/* dispatch
+  // Codex/ChatGPT account material, for pi/openai/* dispatch
   // IN-CONTAINER (pickOpenaiAccount reads the pool store; bindOpenaiAccount
   // reads each home-account's CODEX_HOME/auth.json and seeds an access-token-
-  // only opencode auth.json under the container-local
-  // ~/.opensession-opencode/openai-data — never these mounts). Without them an
-  // openai model in a sandbox died as opencode's bare "model not found".
+  // only pi auth.json under the container-local
+  // ~/.opensession-pi/openai-data — never these mounts). Without them an
+  // openai model in a sandbox died as pi's bare "model not found".
   // Mounted per-FILE and ro on purpose: the auth.json files carry the
-  // rotation-sensitive refresh-token family (opencode-openai-auth.ts header)
+  // rotation-sensitive refresh-token family (pi-openai-auth.ts header)
   // — sandboxed code must never be able to rotate/corrupt them, and native
   // codex runs in-container keep their own per-sandbox ~/.codex volume
   // (an in-container refresh attempt against a ro auth.json fails loudly
@@ -678,7 +669,7 @@ async function createContainer(
   for (const acct of listCodexAccounts()) {
     if (acct.kind === "home") roIfExists(`${acct.value}/auth.json`, `codex auth (${acct.name})`);
   }
-  // Engine config files (see engineConfigMounts): the opencode bridge config
+  // Engine config files (see engineConfigMounts): the pi bridge config
   // and the pi engine gate, ro at their legacy in-container names.
   for (const [src, dest] of engineConfigMounts()) mounts.push(...vol(src, dest, true));
   // External preview commands at identical paths, read-only. Repo-owned
@@ -825,8 +816,8 @@ async function setupCsGitAuth(name: string, repos: Repo[]): Promise<void> {
  * targets. The session store is the canonical case: the per-session run dir is
  * mounted at `<sessions>/sandbox-runs/<id>`, and when the image doesn't
  * pre-seed `<sessions>`, docker creates `<sessions>` +
- * `<sessions>/sandbox-runs` as root and the in-container opencode runner then
- * EACCESes on `mkdir <sessions>/opencode`
+ * `<sessions>/sandbox-runs` as root and the in-container pi runner then
+ * EACCESes on `mkdir <sessions>/pi`
  * (regressed 2026-07-09, bks-019f4742-e65c). Exported for the regression test.
  */
 export function containerStateDirFixups(): string[] {

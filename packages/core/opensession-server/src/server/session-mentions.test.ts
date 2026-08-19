@@ -41,11 +41,11 @@ describe("foldSessionUsage cost accounting", () => {
 			cacheCreationTokens: 4,
 			contextTokens: 8,
 		};
-		const first = foldSessionUsage(undefined, zeroCostTurn, "opencode/openai/gpt-5.6-sol");
+		const first = foldSessionUsage(undefined, zeroCostTurn, "pi/openai/gpt-5.6-sol");
 		const next = foldSessionUsage(
 			first,
 			{ ...zeroCostTurn, costUsd: 0.123456 },
-			"opencode/openai/gpt-5.6-sol",
+			"pi/openai/gpt-5.6-sol",
 		);
 
 		expect(first.costUsd).toBe(0);

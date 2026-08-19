@@ -5,7 +5,7 @@
  * The script executes in a
  * contained Bun Worker (env-scrubbed, exfil/spawn globals stripped — see
  * workflow-worker.ts; exposure gating is the real boundary); each agent()
- * call becomes a plain opencode run in ask mode, while mcp.* calls go through
+ * call becomes a plain pi run in ask mode, while mcp.* calls go through
  * workflow-mcp.ts — a round trip, not a model turn, scoped by the
  * ctx.mcpAllowlist/deniedTools this server was built with (see
  * src/server/workflow-types.ts for the contract, workflow-runner.ts for
@@ -325,15 +325,15 @@ export function createWorkflowsMcpServer(ctx: WorkflowsToolContext) {
 					lines.push("Result:");
 					if (result.length > 20_000) {
 						// Spill the full value to a scratch file so it isn't lost to
-						// the tool-output cap. /tmp/opencode/** is readable by the
+						// the tool-output cap. /tmp/pi/** is readable by the
 						// Read tool in BOTH shell and ask-mode runs (see
-						// ASK_EXTERNAL_DIR_PERMISSIONS in opencode-runner.ts), so the
+						// ASK_EXTERNAL_DIR_PERMISSIONS in pi-runner.ts), so the
 						// agent can read the untruncated result instead of replaying
 						// the whole workflow with a compacted return shape (the
 						// "resume_workflow just to reshape the return" papercut).
 						let spillPath = "";
 						try {
-							const dir = "/tmp/opencode/workflow-results";
+							const dir = "/tmp/pi/workflow-results";
 							mkdirSync(dir, { recursive: true });
 							spillPath = `${dir}/${run.runId}.txt`;
 							writeFileSync(spillPath, result);

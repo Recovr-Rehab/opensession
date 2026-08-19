@@ -28,7 +28,7 @@ import { restoreSelectFocusAfterClose } from "./select-focus";
  *
  * One thing to know: pass `items` to `Root`. The trigger's value text is
  * resolved from that list, so without it a closed select shows the raw value
- * (`opencode/anthropic/claude-opus-5`) instead of its label.
+ * (`pi/anthropic/claude-opus-5`) instead of its label.
  *
  * Reach for `ui/input`'s native `Select` only when you specifically want the
  * OS picker.

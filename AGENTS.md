@@ -3,7 +3,7 @@ Default to using Bun instead of Node.js.
 Instance-private operator instructions (deployment hostnames, org access
 grants, incident history) belong in an untracked `AGENTS.local.md` or
 `CLAUDE.local.md` next to this file — the runner appends it to every engine
-run (`readLocalInstructions` in packages/core/opensession-server/src/server/opencode-runner.ts), and Claude
+run (`readLocalInstructions` in packages/core/opensession-server/src/server/run-policy.ts), and Claude
 Code auto-loads `CLAUDE.local.md`. Keep anything you wouldn't publish there,
 never here.
 
@@ -142,8 +142,7 @@ GitHub grants from every run host, and hung scripts that only wanted to read a
 function. Registering a builder or a listener in memory is fine and stays at
 module scope; anything that acquires a resource goes behind an exported
 `start*`/`ensure*` function that opensession.ts calls (the boot block for
-tickers, the listener block near the top for binds), or is armed lazily on
-first real use (`ensureOpencodeIdleSweep`). Make every one idempotent — a
+tickers, the listener block near the top for binds), or is armed lazily on first real use. Make every one idempotent — a
 `bun --hot` reload re-evaluates the entry. `bun scripts/check-module-side-effects.ts`
 imports every server module in an instrumented child process and fails on any
 resource created at import time; it runs as part of `bun test`.
@@ -396,17 +395,14 @@ routes, WebSocket handlers, agent loops, runner internals — needs one
 deliberate `systemctl restart opensession` after the change is committed and
 pushed.
 
-Restarts are graceful and do not kill in-flight engine turns: `opencode serve`
-processes are detached into transient systemd user scopes outside the unit's
-cgroup (`packages/core/opensession-server/src/server/opencode-detach.ts`), survive the restart, and are
-re-adopted on boot with journaled runs reattached to their live turns
-(`tryReattachOpencodeRun`; the continuation re-prompt is the fallback for dead
-servers). Kill switch: `OPENSESSION_OC_DETACH=0`. Full mechanics live in the
-module docs of opencode-detach.ts and opencode-runner.ts. Ops invariants: the
-unit's `TimeoutStopSec` must stay above `SHUTDOWN_DRAIN_MS` (60s default),
-`KillMode=mixed` is required, and the deployed
-`/etc/systemd/system/opensession.service` is a **copy** of the repo
-`opensession.service`, not a symlink — sync with `sudo cp` +
+Restarts are graceful and do not kill in-flight turns. Pi turns run in detached
+run-host systemd units outside the server cgroup; the next boot reconnects with
+`resumeLocalHostRun`, while a dead host falls back to the journaled continuation
+prompt. Kill switch: `OPENSESSION_PI_DETACH=0`. Full mechanics live in
+host-client.ts and pi-runner.ts. Ops invariants: the unit's `TimeoutStopSec`
+must stay above `SHUTDOWN_DRAIN_MS` (60s default), `KillMode=mixed` is required,
+and the deployed `/etc/systemd/system/opensession.service` is a **copy** of the
+repo `opensession.service`, not a symlink. Sync it with `sudo cp` and
 `systemctl daemon-reload`.
 
 ## Security model — invariants (full detail in docs/security-model.md)
@@ -423,10 +419,10 @@ just in prompts. Every change must preserve these invariants:
   and name only the MCP servers it uses.
 - Customer-facing and identity-mutating tools are hard-denied for automation
   runs *and* interactive resumes of automation-owned sessions, by STRIPPING
-  them from the model's tool list (`opencodeRunPolicy` in opencode-runner.ts).
+  them from the model's tool list (`runToolPolicy` in pi-runner.ts).
   Money-moving tools (`STRIPE_CONFIRM_TOOLS` in runner-shared.ts) are stripped
   from every run; reads keep working on a server-side-restricted key.
-- The run gate (`opencodeGateReason`) is deny-by-default on journal kind.
+- The run gate (`piGateReason`) is deny-by-default on journal kind.
 - `mode` is per-automation: "ask" runs read-only on the main checkout; "code"
   gets an isolated worktree with Write/Edit and can open PRs — never merge,
   PRs are the human gate. Code mode keeps every other scoping. Give every code
@@ -461,8 +457,8 @@ the `opensession-sessions` MCP tools to spin up focused worker sessions when
 that reduces context noise or parallelizes work.
 
 Pick the model that fits each task — intelligence and taste come first, cost
-isn't a reason to downgrade. All models run on the opencode engine (ids are
-`opencode/<provider>/<model>`; bare native ids map onto that form at dispatch).
+isn't a reason to downgrade. All models run on the pi engine (ids are
+`pi/<provider>/<model>`; bare native ids map onto that form at dispatch).
 
 How to delegate from an Open Session session:
 - Use `opensession-sessions.create_session`, setting `model` to whatever fits
@@ -481,22 +477,17 @@ How to delegate from an Open Session session:
   summary, diff, tests, and assumptions; rerun, steer, or escalate to a
   smarter model if the result misses the bar.
 
-Engine notes: Pi is the default engine and supports mid-turn steering through
-detached run hosts. OpenCode remains available explicitly and as a fallback;
-it queues a busy steer for the next turn. Anthropic models use the configured
+Engine notes: Pi is the only engine and supports mid-turn steering through
+detached run hosts. Anthropic models use the configured
 Anthropic account pool, and OpenAI models use the ChatGPT-OAuth account pool.
 One-shot utility calls (titles, branch names, intent classifiers) go through
 the tool-less Pi-backed `oneShot` helper (`packages/core/opensession-server/src/server/one-shot.ts`). Runner code
 is runner internals. Changes need a real restart.
 
-Eligible OpenCode interactive runs multiplex onto one shared always-warm
-`opencode serve` per (bridge account × user). Pi sessions and automations run
-in detached hosts, with automation MCP access proxied from the fail-closed
-server-side set. Full contracts live in pi-runner.ts, host-client.ts, and
-opencode-runner.ts ("Server
-lifecycle"); adding a new in-process opensession-* server requires adding it
-to SHARED_INPROCESS_SERVERS or its sessions silently fall back to per-session
-servers.
+Every local Pi turn runs in a detached host. Interactive in-process MCP servers
+are proxied from the fail-closed server-side set, so a host never receives the
+server process's credentials. Full contracts live in pi-runner.ts and
+host-client.ts.
 
 Priority rule for shipped work: intelligence > taste > cost. Cost is only a
 tie-breaker. Do not ship mediocre output just because it was cheaper to
@@ -523,8 +514,7 @@ flow.
   `POST /api/sessions/:id/detach-repo` (POST, not DELETE — a DELETE on
   `/sessions/:id/...` is swallowed by the generic session-delete route).
 - **Agent awareness**: `runSessionPrompt` passes `reposNote` through
-  `runAgent`; the opencode runner injects it via the per-session instructions
-  file. It lists primary + attached repos with their worktree paths so the
+  `runAgent`; Pi includes it in the turn's system prompt. It lists primary + attached repos with their worktree paths so the
   agent cd's into the right isolated checkout. Only present when the session
   has attached repos.
 - **@-mentions** (`GET /api/files`) search the primary worktree + every

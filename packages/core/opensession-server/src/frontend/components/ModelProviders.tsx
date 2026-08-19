@@ -23,7 +23,7 @@ import {
 import { Menu } from "../ui/menu";
 import { IconDotsHorizontal, IconPlus, IconTrash } from "./icons";
 
-// Settings → Model providers: third-party OpenCode providers (xai, openrouter,
+// Settings → Model providers: third-party Pi providers (xai, openrouter,
 // groq, …) — API key + optional baseURL, stored server-side (0600, returned
 // masked) — plus the model ids each one surfaces in the model picker. The
 // anthropic/openai bridges are configured under Accounts, never here; the server
@@ -33,11 +33,11 @@ interface ProviderInfo {
 	id: string;
 	apiKeyMasked: string;
 	baseURL?: string;
-	/** Full picker ids (opencode/<provider>/<model>) registered for it. */
+	/** Full picker ids (pi/<provider>/<model>) registered for it. */
 	models: string[];
 }
 
-/** Common opencode provider slugs, offered as datalist suggestions. */
+/** Common pi provider slugs, offered as datalist suggestions. */
 const COMMON_PROVIDER_IDS = [
 	"xai",
 	"meta",
@@ -153,7 +153,7 @@ export function ModelProvidersPanel() {
 								) : (
 									<div className="mt-1 text-supporting text-faint">
 										No picker models, so its models are type-in only
-										(opencode/{p.id}/&lt;model&gt;).
+										(pi/{p.id}/&lt;model&gt;).
 									</div>
 								)}
 							</SettingRowText>
@@ -182,7 +182,7 @@ export function ModelProvidersPanel() {
 			</SettingCard>
 
 			<SettingsHint>
-				Any provider the OpenCode engine supports (xAI, OpenRouter, Groq,
+				Any provider the Pi engine supports (xAI, OpenRouter, Groq,
 				Mistral, …) with your API key. Keys are stored on the server (0600) and
 				only ever shown masked. Changes apply to new session runs immediately,
 				and saved models appear in the picker without a restart. To update a
@@ -245,9 +245,9 @@ function AddProviderForm({
 		<SettingsForm>
 			<SettingsFormTitle>Add provider</SettingsFormTitle>
 			<SettingRowDescription className="-mt-2 mb-3">
-				The provider id must match opencode's slug for it (xai, openrouter,
+				The provider id must match pi's slug for it (xai, openrouter,
 				groq, …). Models are registered in the picker as{" "}
-				<code>opencode/&lt;provider&gt;/&lt;model&gt;</code>. List the
+				<code>pi/&lt;provider&gt;/&lt;model&gt;</code>. List the
 				provider's own model ids, e.g. <code>grok-4</code> for xai.
 			</SettingRowDescription>
 

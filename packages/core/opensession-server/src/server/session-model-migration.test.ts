@@ -51,25 +51,25 @@ describe("migrateSessionEngine", () => {
   test("flips the model and records modelHistory", () => {
     const res = migrateSessionEngine(
       "bks-mig-ok",
-      "opencode/anthropic/claude-haiku-4-5",
+      "pi/anthropic/claude-haiku-4-5",
       "tester"
     );
     expect(res).toMatchObject({
       ok: true,
       from: "claude-haiku-4-5",
-      to: "opencode/anthropic/claude-haiku-4-5",
+      to: "pi/anthropic/claude-haiku-4-5",
     });
     const data = JSON.parse(readFileSync(join(scratch, "bks-mig-ok.json"), "utf-8"));
-    expect(data.model).toBe("opencode/anthropic/claude-haiku-4-5");
+    expect(data.model).toBe("pi/anthropic/claude-haiku-4-5");
     expect(data.claudeSessionId).toBe("11111111-2222-7000-8000-000000000000"); // untouched
     expect(data.modelHistory).toHaveLength(1);
     expect(data.modelHistory[0]).toMatchObject({
-      model: "opencode/anthropic/claude-haiku-4-5",
+      model: "pi/anthropic/claude-haiku-4-5",
       from: "claude-haiku-4-5",
       by: "tester",
     });
     // Idempotent: same target again is ok, no duplicate history entry.
-    const again = migrateSessionEngine("bks-mig-ok", "opencode/anthropic/claude-haiku-4-5");
+    const again = migrateSessionEngine("bks-mig-ok", "pi/anthropic/claude-haiku-4-5");
     expect(again.ok).toBe(true);
     expect(
       JSON.parse(readFileSync(join(scratch, "bks-mig-ok.json"), "utf-8")).modelHistory
@@ -86,28 +86,28 @@ describe("migrateSessionEngine", () => {
     }
   });
 
-  test("accepts any enabled engine, not just opencode", () => {
+  test("accepts any enabled engine, not just pi", () => {
     // pi ids need no extra switch here: the pi runner reports its own config
     // gate at run time.
     const pi = migrateSessionEngine("bks-mig-ok", "pi/anthropic/claude-opus-5");
     expect(pi.ok).toBe(true);
     if (pi.ok) expect(pi.to).toBe("pi/anthropic/claude-opus-5");
 
-    // A legacy direct-engine id normalizes onto opencode (the engines are
+    // A legacy direct-engine id normalizes onto pi (the engines are
     // removed), so the flip lands the session on a runnable engine rather
     // than failing or bricking it.
     const legacy = migrateSessionEngine("bks-mig-ok", "claude/anthropic/claude-opus-5");
     expect(legacy.ok).toBe(true);
-    if (legacy.ok) expect(legacy.to).toBe("opencode/anthropic/claude-opus-5");
+    if (legacy.ok) expect(legacy.to).toBe("pi/anthropic/claude-opus-5");
     // Leave the session where the other tests expect it.
-    migrateSessionEngine("bks-mig-ok", "opencode/anthropic/claude-haiku-4-5");
+    migrateSessionEngine("bks-mig-ok", "pi/anthropic/claude-haiku-4-5");
   });
 
   test("allows automation-owned sessions to migrate only to Pi", () => {
     for (const id of ["bks-mig-automation", "bks-mig-automation2"]) {
       const blocked = migrateSessionEngine(
         id,
-        "opencode/anthropic/claude-haiku-4-5"
+        "pi/anthropic/claude-haiku-4-5"
       );
       expect(blocked.ok).toBe(false);
       if (!blocked.ok) expect(blocked.error).toContain("automation-owned");
@@ -138,13 +138,13 @@ describe("migrateSessionEngine", () => {
 
   test("rejects sessions with an in-flight journaled run", () => {
     expect(sessionHasJournaledRun("bks-mig-busy")).toBe(true);
-    const res = migrateSessionEngine("bks-mig-busy", "opencode/anthropic/claude-haiku-4-5");
+    const res = migrateSessionEngine("bks-mig-busy", "pi/anthropic/claude-haiku-4-5");
     expect(res.ok).toBe(false);
     if (!res.ok) expect(res.error).toContain("in-flight");
   });
 
   test("rejects unknown sessions", () => {
-    const res = migrateSessionEngine("bks-nope", "opencode/anthropic/claude-haiku-4-5");
+    const res = migrateSessionEngine("bks-nope", "pi/anthropic/claude-haiku-4-5");
     expect(res.ok).toBe(false);
   });
 });

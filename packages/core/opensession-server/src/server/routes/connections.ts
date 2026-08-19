@@ -9,8 +9,8 @@
 import type { RouteContext } from "./context";
 import { getAgents } from "../agents-registry";
 import { addMcpServer, getConnections, readMcpConfig, removeMcpServer, setMcpAllowedUsers } from "../connections";
-import { refreshOpencodePickerModels } from "../models";
-import { BRIDGE_PROVIDER_IDS, PROVIDER_ID_RE, addPickerModel, defaultPickerModelsForProvider, maskProviderKey, opencodeProviders, readOpencodeBridgeConfig, removeOpencodeProvider, removePickerModel, setBridgeEnabled, setOpencodeProvider } from "../opencode-config";
+import { refreshPickerModels } from "../models";
+import { BRIDGE_PROVIDER_IDS, PROVIDER_ID_RE, addPickerModel, defaultPickerModelsForProvider, maskProviderKey, modelProviders, readModelProviderConfig, removeModelProvider, removePickerModel, setModelProvider } from "../model-providers";
 import { isPiModelId, piEngineEnabled, readPiEngineConfig, setPiEnabled, setPiPickerModels } from "../pi-config";
 
 export async function handleConnectionsRoutes(
@@ -27,7 +27,7 @@ export async function handleConnectionsRoutes(
 		return Response.json({
 			mcpServers,
 			agents: agentHealth,
-			engines: ["opencode", ...(piEngineEnabled() ? ["pi"] : [])],
+			engines: piEngineEnabled() ? ["pi"] : [],
 		});
 	}
 
@@ -227,22 +227,22 @@ export async function handleConnectionsRoutes(
 	}
 
 	// ── Model providers (Settings → Model providers) ──
-	// Third-party OpenCode providers (xai, openrouter, groq, …): API key +
-	// optional baseURL in ~/.opensession-opencode.json (0600, keys only ever
+	// Third-party Pi providers (xai, openrouter, groq, …): API key +
+	// optional baseURL in ~/.opensession-pi.json (0600, keys only ever
 	// returned masked), plus their picker model ids. anthropic/openai are
 	// rejected — they run on the subscription bridges, not raw keys.
 	if (
 		path === "/api/settings/model-providers" &&
 		req.method === "GET"
 	) {
-		const pickerModels = readOpencodeBridgeConfig()?.pickerModels || [];
+		const pickerModels = readModelProviderConfig()?.pickerModels || [];
 		return Response.json({
-			providers: Object.entries(opencodeProviders()).map(([id, p]) => ({
+			providers: Object.entries(modelProviders()).map(([id, p]) => ({
 				id,
 				apiKeyMasked: maskProviderKey(p.apiKey),
 				...(p.baseURL ? { baseURL: p.baseURL } : {}),
 				models: pickerModels.filter((m) =>
-					m.startsWith(`opencode/${id}/`),
+					m.startsWith(`pi/${id}/`),
 				),
 			})),
 			pickerModels,
@@ -288,38 +288,38 @@ export async function handleConnectionsRoutes(
 				)
 			: undefined;
 		try {
-			setOpencodeProvider(id, { apiKey, baseURL });
-			const pickerModels = readOpencodeBridgeConfig()?.pickerModels || [];
+			setModelProvider(id, { apiKey, baseURL });
+			const pickerModels = readModelProviderConfig()?.pickerModels || [];
 			const providerModels =
 				models ??
-				(pickerModels.some((m) => m.startsWith(`opencode/${id}/`))
+				(pickerModels.some((m) => m.startsWith(`pi/${id}/`))
 					? undefined
 					: [...defaultPickerModelsForProvider(id)]);
 			if (providerModels) {
 				// `models` replaces this provider's picker entries wholesale.
-				const prefix = `opencode/${id}/`;
+				const prefix = `pi/${id}/`;
 				for (const m of pickerModels) {
 					if (m.startsWith(prefix)) removePickerModel(m);
 				}
 				for (const m of providerModels) {
-					// Accept "grok-4", "xai/grok-4" or "opencode/xai/grok-4".
+					// Accept "grok-4", "xai/grok-4" or "pi/xai/grok-4".
 					let tail = m.trim();
-					if (tail.startsWith("opencode/"))
-						tail = tail.slice("opencode/".length);
+					if (tail.startsWith("pi/"))
+						tail = tail.slice("pi/".length);
 					if (tail.startsWith(`${id}/`)) tail = tail.slice(id.length + 1);
 					if (tail) addPickerModel(`${prefix}${tail}`);
 				}
 			}
-			refreshOpencodePickerModels();
-			const stored = opencodeProviders()[id] || {};
-			const savedPickerModels = readOpencodeBridgeConfig()?.pickerModels || [];
+			refreshPickerModels();
+			const stored = modelProviders()[id] || {};
+			const savedPickerModels = readModelProviderConfig()?.pickerModels || [];
 			return Response.json({
 				provider: {
 					id,
 					apiKeyMasked: maskProviderKey(stored.apiKey),
 					...(stored.baseURL ? { baseURL: stored.baseURL } : {}),
 					models: savedPickerModels.filter((m) =>
-						m.startsWith(`opencode/${id}/`),
+						m.startsWith(`pi/${id}/`),
 					),
 				},
 			});
@@ -334,16 +334,16 @@ export async function handleConnectionsRoutes(
 	if (modelProviderMatch && req.method === "DELETE") {
 		const id = decodeURIComponent(modelProviderMatch[1]);
 		try {
-			const removed = removeOpencodeProvider(id);
-			const prefix = `opencode/${id}/`;
+			const removed = removeModelProvider(id);
+			const prefix = `pi/${id}/`;
 			let cleared = 0;
-			for (const m of readOpencodeBridgeConfig()?.pickerModels || []) {
+			for (const m of readModelProviderConfig()?.pickerModels || []) {
 				if (m.startsWith(prefix)) {
 					removePickerModel(m);
 					cleared++;
 				}
 			}
-			refreshOpencodePickerModels();
+			refreshPickerModels();
 			if (!removed && !cleared) {
 				return Response.json({ error: "Not found" }, { status: 404 });
 			}
@@ -356,73 +356,7 @@ export async function handleConnectionsRoutes(
 		}
 	}
 
-	// ── OpenCode engine on/off (Settings → Setup "Engine" checklist row) ──
-	// The `enabled` flag in ~/.opensession-opencode.json gates the Anthropic
-	// bridge AND whether third-party provider models reach the picker. Nothing
-	// wrote it before this route, so a fresh install had it absent and every
-	// default-model turn failed pointing at a file the operator had never seen.
-	if (path === "/api/settings/opencode-engine" && req.method === "GET") {
-		const { engineStatus } = await import("../engine-status");
-		return Response.json(engineStatus());
-	}
-
-	if (path === "/api/settings/opencode-engine" && req.method === "PUT") {
-		const body = await req.json().catch(() => null);
-		if (!body || typeof body !== "object" || typeof body.enabled !== "boolean") {
-			return Response.json(
-				{ error: "enabled must be a boolean" },
-				{ status: 400 },
-			);
-		}
-		try {
-			const { setBridgeEnabled } = await import("../opencode-config");
-			const { engineStatus } = await import("../engine-status");
-			setBridgeEnabled(body.enabled);
-			// Enabling is what makes a configured provider's models resolvable,
-			// so refresh the picker rather than making the user re-save a provider.
-			refreshOpencodePickerModels();
-			return Response.json(engineStatus());
-		} catch (e: any) {
-			return Response.json(
-				{ error: e?.message || "Failed to update the engine config" },
-				{ status: 500 },
-			);
-		}
-	}
-
-	// ── Pi engine (Settings → Accounts "Pi engine" card) ──
-	// The pi engine's on/off switch, picker model ids and designated bridge
-	// accounts in ~/.opensession-pi.json. GET returns the raw-file view (not the
-	// enabled-gated getters — an editor needs to see the ids while the engine is
-	// off); no secrets in this file, so nothing to mask.
-	// ── OpenCode engine (the default engine's on/off switch) ──
-	if (path === "/api/settings/opencode-engine" && req.method === "GET") {
-		return Response.json({
-			enabled: readOpencodeBridgeConfig()?.enabled === true,
-		});
-	}
-	if (path === "/api/settings/opencode-engine" && req.method === "PUT") {
-		const body = await req.json().catch(() => null);
-		if (!body || typeof body.enabled !== "boolean") {
-			return Response.json(
-				{ error: "enabled must be a boolean" },
-				{ status: 400 },
-			);
-		}
-		try {
-			setBridgeEnabled(body.enabled);
-			// The picker fold gates opencode/* entries on `enabled`.
-			refreshOpencodePickerModels();
-			return Response.json({
-				enabled: readOpencodeBridgeConfig()?.enabled === true,
-			});
-		} catch (e: any) {
-			return Response.json(
-				{ error: e?.message || "Failed to save opencode engine config" },
-				{ status: 400 },
-			);
-		}
-	}
+	// ── Pi engine settings ──
 
 	if (path === "/api/settings/pi-engine" && req.method === "GET") {
 		return Response.json(

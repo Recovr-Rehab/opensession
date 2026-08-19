@@ -311,12 +311,12 @@ export function buildAuditDigest(date: string): Record<string, unknown> | null {
       continue;
     }
     events++;
-    if (e.msg === "opencode_oneshot") {
+    if (e.msg === "pi_oneshot") {
       oneshots.total++;
       if (e.status && e.status !== "ok") oneshots.failed++;
       continue;
     }
-    if (e.msg === "opencode_meridian_run" || e.msg === "opencode_openai_run") {
+    if (e.msg === "pi_meridian_run" || e.msg === "pi_openai_run") {
       if (e.retry_attempt) engineRetries++;
       continue;
     }

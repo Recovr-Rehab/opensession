@@ -76,7 +76,7 @@ describe("evidenceFromTranscript", () => {
 	});
 
 	it("keeps both ends of a huge error — what failed, and the verdict", () => {
-		// Seen live: an opencode permission denial names the tool up front and
+		// Seen live: an pi permission denial names the tool up front and
 		// then dumps the whole permission config, so a tail-only clip showed
 		// nothing but config. A test runner is the opposite shape.
 		const { failures } = evidenceFromTranscript([
@@ -104,7 +104,7 @@ describe("evidenceFromTranscript", () => {
 	});
 
 	it("makes no pass/fail claim about commands the tool did not flag", () => {
-		// opencode does not set isError on a non-zero shell exit, so a command
+		// pi does not set isError on a non-zero shell exit, so a command
 		// whose output merely mentions an error must NOT be reported as failed.
 		const { failures, commands } = evidenceFromTranscript([
 			call("t1", "bash", { command: "grep -r error src/" }),

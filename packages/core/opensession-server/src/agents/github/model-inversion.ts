@@ -30,7 +30,7 @@ export function inversionEnabled(): boolean {
   return process.env.OPENSESSION_REVIEW_INVERSION !== "0";
 }
 
-/** Coarse family classification across native and opencode/<provider>/<model> ids. */
+/** Coarse family classification across native and pi/<provider>/<model> ids. */
 export function familyOf(model?: string): ModelFamily | null {
   if (!model) return null;
   const m = model.toLowerCase();

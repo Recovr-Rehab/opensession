@@ -52,7 +52,7 @@ async function acquireOneShotSlot(): Promise<() => void> {
 export interface OneShotOpts {
   /** Additional high-priority instructions injected into Pi's system context. */
   system?: string;
-  /** Any native, OpenCode, or Pi model id. It is routed onto Pi. */
+  /** Any native, Pi, or Pi model id. It is routed onto Pi. */
   model?: string;
   /** Account-affinity user for provider-pool selection. */
   user?: string;

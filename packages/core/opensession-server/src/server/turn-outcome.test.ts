@@ -16,7 +16,7 @@ describe("isReachTool", () => {
     expect(isReachTool("mcp__slack__conversations_add_message")).toBe(true);
   });
 
-  test("matches the opencode <server>_<tool> spelling the engine reports", () => {
+  test("matches the pi <server>_<tool> spelling the engine reports", () => {
     expect(isReachTool("plain_create_note")).toBe(true);
     expect(isReachTool("opensession-report_publish_report")).toBe(true);
   });

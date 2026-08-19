@@ -37,7 +37,7 @@ configuration for the run.
   Linear (incl. issue creation) and Sentry are internal, so their writes are
   allowed — that's the "spin off work" affordance.
 - Automations run on Pi in detached run hosts. `runAutomation` maps every
-  native or legacy OpenCode model id onto Pi at dispatch (`automationModel`;
+  native or legacy Pi model id onto Pi at dispatch (`automationModel`;
   unset uses `DEFAULT_PI_AUTOMATION_MODEL` in automations.ts). Deny-sets are
   enforced before Pi registers MCP tools, and its guarded local tools keep
   filesystem and environment access contained. opensession-admin,
@@ -70,7 +70,7 @@ stripe_api_write since they can hit any permitted endpoint — keep this list in
 sync with mcp.stripe.com's live catalog). Run the MCP on a restricted key
 (write on Refunds + Subscriptions + Invoices only — invoice voiding included;
 read on core billing resources, nothing else — Stripe enforces this ceiling
-server-side). On the opencode engine there is no per-call approval card, so
+server-side). On the pi engine there is no per-call approval card, so
 the confirm tools are STRIPPED from the model's tool list on every run — the
 server stays mounted and Stripe reads keep working. Guidance differs by run
 type: unattended runs get post-the-proposal-in-your-note wording, interactive
@@ -93,13 +93,13 @@ two people who should see it.
 
 - Enforcement is at the runner layer, not the prompt:
   `filterMcpServers(allowlist, user)` (runner-shared.ts, consumed by
-  `buildOpencodeMcpConfig` in opencode-runner.ts) drops a restricted server
+  the MCP bridge in pi-mcp-bridge.ts) drops a restricted server
   the run's user isn't cleared for, and strips the `allowedUsers` field before
   the config reaches the engine. Both the per-automation allowlist and the
   per-user gate apply.
 - The `user` is threaded from the run paths (`runSessionPrompt`, both
   `create_session` paths, goal wakes, the Slack/Linear loops) through
-  `runAgent` → `runOpencode`, and is journaled on the `ActiveRunRecord` so a
+  `runAgent` → `runPi`, and is journaled on the `ActiveRunRecord` so a
   resume after a restart keeps the same visibility. **Automation runs pass no
   user**, so an `allowedUsers`-restricted server is invisible to them —
   untrusted ticket text can never reach a restricted server, even if the
@@ -146,7 +146,7 @@ wins over the config id) activates BOTH halves at once:
   resolves to a login through the SAME identity table as commit attribution,
   so the mapping is config (identity.team[].github), not code. The
   PR-attribution instructions swap the `--assignee` bot wording for "authored
-  by them" when the token rides. Injection lives in opencode-runner.ts ⇒
+  by them" when the token rides. Injection lives in pi-runner.ts ⇒
   needs a real restart.
 - **GitHub web sign-in** (packages/core/opensession-server/src/server/web-auth.ts + routes/auth.ts): when
   active, the UI's name picker is replaced by a real sign-in (UserGate →
@@ -214,7 +214,7 @@ ticket text must never reach these tools. Open Session is network- and
 team-gated and already exposes all of this through its UI, so interactive
 users are treated as `isAdmin: true` there. The in-process servers are built
 with `packages/core/opensession-server/src/server/inprocess-mcp.ts` (a thin @modelcontextprotocol/sdk wrapper)
-and reach opencode runs as stdio MCP proxies that forward to the in-process
+and reach pi runs as stdio MCP proxies that forward to the in-process
 tools through the run-RPC socket; the Slack loop registers its own
 slack-context server set per run via `registerSessionMcpServers` (run-rpc.ts)
 so those proxies execute the right context. The runner adds a short "Managing

@@ -63,9 +63,7 @@ export interface SetupRepo {
 /** Whether the instance can actually run an agent turn — the one thing the
  *  Getting-started checklist used to omit. Server-side: engine-status.ts. */
 export interface SetupEngine {
-	opencodeBin: string | null;
 	claudeBin: string | null;
-	bridgeEnabled: boolean;
 	claudeAccounts: number;
 	codexAccounts: number;
 	defaultModel: string;

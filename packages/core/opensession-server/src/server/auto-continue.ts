@@ -77,11 +77,11 @@ export function isWedgeFailure(runFailure: string | null | undefined): boolean {
 /**
  * Fenced context appended to a prompt that was delivered by ABORTING the
  * running turn (busy-send interrupt). The engine has no mid-turn steer (see
- * "why opencode stops": every busy-send is an abort, and the truncated turn
+ * "why pi stops": every busy-send is an abort, and the truncated turn
  * left in history primes a short acknowledge-then-stop reply — the main
  * announce-then-stop trigger). This note reframes the delivery as a steer so
  * the model folds it into the work in progress instead of parking. Remove
- * when the engine gains real mid-turn steering (opencode v2 delivery:"steer").
+ * when the engine gains real mid-turn steering (pi v2 delivery:"steer").
  */
 export const INTERRUPT_STEER_NOTE =
 	"Delivery note: the user sent this while your previous turn was still " +

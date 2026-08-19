@@ -39,7 +39,7 @@ import {
   type ImageInput,
 } from "./run-events";
 import type { TranscriptEntry } from "./types";
-import { applyForwardedTranscript } from "./opencode-transcript";
+import { applyForwardedTranscript } from "./transcript-persistence";
 import type { GitIdentity } from "./shared/user-mappings";
 import { modelSupportsSteer, providerFor } from "./models";
 import { homeDir, OPENSESSION_SESSIONS_DIR } from "./paths";

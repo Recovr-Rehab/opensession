@@ -86,9 +86,9 @@ export interface ActiveRunRecord {
    *  unlike reposNote there is no rebuild callback for automation sessions, so
    *  an unjournaled value would be silently dropped by a restart. */
   prReviewer?: string;
-  /** Pool key of the opencode server hosting this run — lets resume-after-
+  /** Legacy pool key retained while decoding old run records — lets resume-after-
    *  restart REATTACH to a detached server that survived (adoption via the
-   *  opencode-detach registry) instead of re-prompting a fresh one. */
+   *  pi-detach registry) instead of re-prompting a fresh one. */
   serverKey?: string;
   /** Sandbox the run executes in (docs/self-hosting-sandboxes.md); absent = host process */
   sandboxId?: string;

@@ -20,7 +20,7 @@ const roots = [
 
 // The engine emits lowercase ids with camelCase inputs; transcripts from the
 // Claude-SDK era use "Read"/"file_path". Both have to render the same.
-test("opencode and Claude-SDK file reads summarize identically", () => {
+test("pi and Claude-SDK file reads summarize identically", () => {
   const path = "/home/user/projects/opensession/package.json";
   expect(toolSummary("read", { filePath: path, limit: 40 }, "Using read", roots)).toBe(
     "package.json"

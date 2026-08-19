@@ -99,8 +99,8 @@ registerSessionControl({
 	transcriptTail: (id, n) => {
 		const s = findSession(id);
 		if (!s) return [];
-		// Engine-spanning read (file + opencode store) — same as the transcript
-		// route, so get_session works on opencode/migrated sessions too.
+		// Engine-spanning read (file + pi store) — same as the transcript
+		// route, so get_session works on pi/migrated sessions too.
 		return mergedSessionTranscript(s).slice(-Math.max(0, n));
 	},
 

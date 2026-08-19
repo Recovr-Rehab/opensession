@@ -6,7 +6,7 @@ One prerequisite the installer cannot give you: **a model subscription** — a
 Claude Max subscription for the Anthropic path, or a ChatGPT plan for the
 OpenAI one. Sessions run on subscription capacity, not on a bundled key.
 
-The tooling it does give you: the OpenCode engine plus the `claude` and `codex`
+The tooling it does give you: the Pi engine plus the `claude` and `codex`
 CLIs, which are how you mint an account token and how the in-app ChatGPT
 sign-in works. Each is skipped if you already have it, and `--no-engine` skips
 all three.
@@ -28,7 +28,7 @@ session. A turn that actually runs is the only proof the install works — a
 health check is not.
 
 Budget 5-15 minutes on a fresh box, most of it unattended: the installer
-downloads Bun, the OpenCode engine and the two model CLIs, and installs a
+downloads Bun, the Pi engine and the two model CLIs, and installs a
 multi-gigabyte dependency tree.
 
 Sections 3-7 below — automations, the env-var inventory, the `config.json`
@@ -38,7 +38,7 @@ to them when the first session has run.
 
 Prerequisites: Linux, macOS, or Windows 10/11 with WSL2, plus `git` and
 `curl`. The installer brings its own [Bun](https://bun.sh) and
-[OpenCode](https://opencode.ai). `gh` (authenticated) is needed for
+[Pi](https://pi.ai). `gh` (authenticated) is needed for
 pull-request operations. See [README.md](README.md#minimum-requirements) for
 the optional extras.
 
@@ -117,7 +117,7 @@ safe to re-run: an existing install is fast-forwarded, and existing config is
 backed up rather than overwritten.
 
 Useful flags — `--dir <path>` to install elsewhere, `--channel <ref>` to track
-a branch or tag, `--no-engine` to skip OpenCode, `--no-tailscale` to skip
+a branch or tag, `--no-engine` to skip Pi, `--no-tailscale` to skip
 Tailscale, `--yes` to accept defaults, `--uninstall` to remove it. `--help`
 lists them all.
 
@@ -183,7 +183,7 @@ URL, your first repository, and which integrations to turn on. It writes:
 | `~/.opensession/config.json` | instance config — re-read on change, no restart |
 | `~/.opensession.env` | secrets and feature flags, `0600` |
 | `~/.opensession/opensession.service` | systemd unit templated for this box |
-| `~/.opensession-opencode.json` | engine config — created as `{"enabled": true}` when absent, so the Anthropic bridge is on out of the box ([engines.md](engines.md)) |
+| `~/.opensession-model-providers.json` | engine config — created as `{"enabled": true}` when absent, so the Anthropic bridge is on out of the box ([engines.md](engines.md)) |
 
 Re-run it any time with `opensession onboard --force`; the previous files are
 backed up to `.bak-<n>` first.
@@ -255,7 +255,7 @@ what the code actually reads, by feature:
 | --- | --- | --- |
 | `OPENSESSION_CLAUDE_BIN` | `claude` found on `PATH` | Claude Code CLI the Meridian bridge spawns for Anthropic models |
 | `OPENSESSION_CLAUDE_ACCOUNTS_PATH` | `~/.opensession-claude-accounts.json` | Claude account store override |
-| `OPENSESSION_OPENCODE_BIN` / `OPENSESSION_OPENCODE_CONFIG` | see engines.md | OpenCode binary / config path |
+| `OPENSESSION_PI_BIN` / `OPENSESSION_MODEL_PROVIDERS_CONFIG` | see engines.md | Pi binary / config path |
 | `OPENSESSION_MODEL` | `claude-fable-5` | default model (below the UI override file) |
 | `OPENSESSION_FALLBACK_MODEL` | unset | global fallback model; `none` disables |
 | `OPENSESSION_MCP_CONFIG` | `<checkout>/mcp-config.json` | MCP config path override |
@@ -268,7 +268,7 @@ host previews default to 8G/12G/1G/768 plus `CPUQuota=600%`. Tune them with
 `OPENSESSION_ENGINE_SWAP_MAX`, `OPENSESSION_ENGINE_TASKS_MAX`, and the matching
 `OPENSESSION_PREVIEW_*` variables (`MEMORY_HIGH`, `MEMORY_MAX`, `SWAP_MAX`,
 `TASKS_MAX`, `CPU_QUOTA`). Limits cover the whole transient scope, including
-agent-started compilers, MCP proxies, and dev servers—not only `opencode`.
+agent-started compilers, MCP proxies, and dev servers—not only `pi`.
 
 **Integrations** — each has its own page with the full list:
 
@@ -349,7 +349,7 @@ logins by device code.)
 The alternative, if you would rather have accounts in place before the first
 boot, is to create `~/.opensession-claude-accounts.json` by hand — file
 shapes, account picking, Codex accounts
-(`~/.opensession-codex-accounts.json`), and OpenCode config are documented in
+(`~/.opensession-codex-accounts.json`), and Pi config are documented in
 [engines.md](engines.md).
 
 ## 7. `mcp-config.json`

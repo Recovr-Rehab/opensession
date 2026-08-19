@@ -4,7 +4,7 @@ import { join } from "path";
 import { searchSkills } from "./skills";
 
 const home = process.env.HOME!;
-const skillRoot = join(home, ".config", "opencode", "skills");
+const skillRoot = join(home, ".config", "pi", "skills");
 const target = join(home, ".opensession-skills-test-target");
 const link = join(skillRoot, "opensession-symlink-test");
 

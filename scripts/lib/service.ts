@@ -98,7 +98,6 @@ export async function isActive(): Promise<boolean> {
 function servicePath(bunDir: string): string {
   return [
     bunDir,
-    join(HOME, ".opencode", "bin"),
     join(HOME, ".local", "bin"),
     "/opt/homebrew/bin",
     "/usr/local/sbin",

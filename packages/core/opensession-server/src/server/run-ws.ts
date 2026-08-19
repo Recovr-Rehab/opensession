@@ -27,7 +27,7 @@
  * registry only (spec.wsToken, minted at launch and registered by the
  * provider's launcher keyed by hostId). rpc-ws used to accept ANY registered
  * run-rpc token, which exposed the interactive-MCP RPC to the whole tailnet
- * for every proxied run — systemd hosts, codex, opencode — even on a
+ * for every proxied run — systemd hosts, codex, pi — even on a
  * sandbox-less deployment where nothing should dial back at all. Now the
  * upgrade requires the run's hostId + wsToken (only ws-transport launches
  * register one; the global run-rpc token set stays unix-socket-local), while

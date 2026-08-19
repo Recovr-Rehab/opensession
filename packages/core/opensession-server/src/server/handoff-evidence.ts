@@ -17,7 +17,7 @@
  *
  * Honesty about what we can know: `isError` is reliable for tool-level failures
  * (a failed edit, a tool that threw) on every engine, but a bash command that
- * exits non-zero does NOT set it on the opencode engine — the output comes back
+ * exits non-zero does NOT set it on the pi engine — the output comes back
  * as an ordinary result. So this block reports "failures the tool reported" and
  * a bare list of commands run; it never claims a command passed. Inferring
  * failure from the word "error" in output would mislabel every successful

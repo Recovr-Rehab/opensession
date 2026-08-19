@@ -24,7 +24,6 @@ import { configuredRepos, defaultRepo, githubBotLogins } from "./config";
 import { ghRateLimited, isGhRateLimitMsg, noteGhRateLimited } from "./github-limit";
 import { readFeedback } from "../agents/github/feedback";
 import type { FeedbackRecord } from "../agents/github/feedback-gates";
-import { engineUsageForDates } from "./engine-usage";
 import { gitIdentityFor } from "./shared/user-mappings";
 import { delegatedActorParent, isMachineActor, machineActorLabel } from "./session-actors";
 
@@ -53,9 +52,6 @@ interface SessionAgg {
 	kind: string;
 	turns: number;
 	output: number;
-	/** Output from engines other than OpenCode. OpenCode's aggregate is
-	 *  replaced from its request store at compose time without overlap. */
-	nonOpencodeOutput: number;
 	/** input + output + cache read + cache write. */
 	tokens: number;
 	costUsd: number;
@@ -119,9 +115,9 @@ interface DayRollup {
 	review: ReviewDayAgg;
 }
 
-/** "opencode/anthropic/claude-sonnet-4-6" → "claude-sonnet-4-6". */
+/** Strip an engine and upstream-provider prefix for aggregation. */
 function shortModel(model: string): string {
-	return model.replace(/^opencode\/[^/]+\//, "") || "unknown";
+	return model.replace(/^(?:pi|claude|codex)\/[^/]+\//, "") || "unknown";
 }
 
 function emptyTokens(): TokenTotals {
@@ -167,7 +163,6 @@ function rollupAuditDay(date: string): DayRollup {
 			kind: String(e.run_kind || "?").replace(/-reattach$/, ""),
 			turns: 0,
 			output: 0,
-			nonOpencodeOutput: 0,
 			tokens: 0,
 			costUsd: 0,
 			errors: 0,
@@ -182,12 +177,11 @@ function rollupAuditDay(date: string): DayRollup {
 		const isPrompt = line.includes('"kind":"user_prompt"');
 		const isError = line.includes('"kind":"error"');
 		const isCancelled = line.includes('"kind":"cancelled"');
-		const isOneshot = line.includes('"msg":"opencode_oneshot"');
+		const isOneshot = line.includes('"msg":"pi_oneshot"');
 		// Engine-run end events carry the turn's wall-clock duration (the
-		// per-turn "result" events don't on the opencode engine).
+		// per-turn "result" events don't on Pi).
 		const isRunEnd =
-			line.includes('"phase":"end"') &&
-			(line.includes('"msg":"opencode_meridian_run"') || line.includes('"msg":"opencode_openai_run"'));
+			line.includes('"direction":"out"') && line.includes('"msg":"pi_turn"');
 		const isReviewEvt = line.includes('"msg":"review_');
 		if (!isResult && !isPrompt && !isError && !isCancelled && !isOneshot && !isRunEnd && !isReviewEvt) continue;
 		let e: Record<string, unknown>;
@@ -225,11 +219,11 @@ function rollupAuditDay(date: string): DayRollup {
 			}
 			continue;
 		}
-		if (e.msg === "opencode_oneshot") {
+		if (e.msg === "pi_oneshot") {
 			rollup.oneshots++;
 			continue;
 		}
-		if (e.msg === "opencode_meridian_run" || e.msg === "opencode_openai_run") {
+		if (e.msg === "pi_turn" && e.direction === "out") {
 			rollup.durationMs += Number(e.duration_ms) || 0;
 			continue;
 		}
@@ -272,9 +266,6 @@ function rollupAuditDay(date: string): DayRollup {
 				if (s) {
 					s.turns++;
 					s.output += output;
-					if (e.provider !== "opencode" && !String(e.model || "").startsWith("opencode/")) {
-						s.nonOpencodeOutput += output;
-					}
 					s.tokens += input + output + cacheRead + cacheWrite;
 					s.costUsd += cost;
 				}
@@ -389,13 +380,6 @@ export function analyticsRepo(
 	return null;
 }
 
-export function attributedSessionOutput(
-	auditOutput: number,
-	nonOpencodeOutput: number,
-	engineOutput: number | undefined,
-): number {
-	return engineOutput === undefined ? auditOutput : engineOutput + nonOpencodeOutput;
-}
 
 let sessionMetaCache: { at: number; map: Map<string, SessionMeta> } | null = null;
 
@@ -1097,11 +1081,36 @@ export async function buildAnalytics(from: string, to: string): Promise<Analytic
 		aggForOwner(resolveOwnerRef(meta, s)).sessionsCreated++;
 	}
 
-	// Tokens and cost come from the engines' own message stores, not the audit
-	// log: one row per model request, so sub-sessions and multi-step turns are
-	// counted. See engine-usage.ts for why the audit log cannot do this.
-	const engineDays = await engineUsageForDates(dates);
 	const engineModels = new Map<string, { requests: number; costUsd: number } & TokenTotals>();
+	// Pi reports every request through the audit rollup, including tool rounds.
+	const engineDays = new Map(dates.map((date) => {
+		const rollup = cachedRollup(date);
+		const byModel = Object.entries(rollup.byModel).map(([model, usage]) => ({
+			model,
+			requests: usage.turns,
+			input: usage.input,
+			output: usage.output,
+			cacheRead: usage.cacheRead,
+			cacheWrite: usage.cacheWrite,
+			costUsd: usage.costUsd,
+		}));
+		const costUsd = byModel.reduce((sum, usage) => sum + usage.costUsd, 0);
+		return [date, {
+			byModel,
+			bySession: Object.fromEntries(Object.entries(rollup.bySession).map(([id, usage]) => [id, { requests: usage.turns, output: usage.output }])),
+			sessionAttribution: "measured" as const,
+			coverage: { pi: "measured" as const },
+			input: rollup.tokens.input,
+			output: rollup.tokens.output,
+			cacheRead: rollup.tokens.cacheRead,
+			cacheWrite: rollup.tokens.cacheWrite,
+			totalTokens: rollup.tokens.input + rollup.tokens.output + rollup.tokens.cacheRead + rollup.tokens.cacheWrite,
+			costUsd,
+			requests: byModel.reduce((sum, usage) => sum + usage.requests, 0),
+			unpricedRequests: 0,
+			unmeasured: false,
+		}] as const;
+	}));
 
 	const reviewByDate = new Map<string, ReviewDayAgg>();
 	for (const date of dates) {
@@ -1119,18 +1128,17 @@ export async function buildAnalytics(from: string, to: string): Promise<Analytic
 				kind: "prompt",
 				turns: 0,
 				output: 0,
-				nonOpencodeOutput: 0,
-				tokens: 0,
+					tokens: 0,
 				costUsd: 0,
 				errors: 0,
 			};
-			// Historical audit rows kept only the final request in an OpenCode turn,
+			// Historical audit rows kept only the final request in a Pi turn,
 			// while retained engine rows include every tool round and inherited task.
 			// Direct engines have no equivalent native-session index, so add only
 			// their explicitly separated audit output to avoid overlap.
 			const engineOutput =
 				engine?.sessionAttribution === "measured" ? engine.bySession?.[id]?.output : undefined;
-			const output = attributedSessionOutput(s.output, s.nonOpencodeOutput, engineOutput);
+			const output = engineOutput ?? s.output;
 			allSessions.add(id);
 			const m = meta.get(id);
 			// Review sessions run with run_kind "prompt"; give them their own
@@ -1203,11 +1211,7 @@ export async function buildAnalytics(from: string, to: string): Promise<Analytic
 		const dayPrs = allPrs.filter((pr) => pr.byOpensession);
 		const prsOpened = dayPrs.filter((pr) => pr.createdAt.slice(0, 10) === date).length;
 		const prsMerged = dayPrs.filter((pr) => pr.mergedAt?.slice(0, 10) === date).length;
-		const unmeasuredSources = engine
-			? Object.entries(engine.coverage)
-					.filter(([, coverage]) => coverage === "unmeasured")
-					.map(([source]) => source)
-			: [];
+		const unmeasuredSources: string[] = [];
 		days.push({
 			date,
 			sessions: sessionIds.size,
@@ -1510,7 +1514,10 @@ export interface HomeStatsBucket {
  *  engine usage supplies tokens. This avoids the session-store and gh scans. */
 export async function buildHomeStats(
 	now = Date.now(),
-	loadEngineUsage: typeof engineUsageForDates = engineUsageForDates,
+	loadEngineUsage: (dates: string[]) => Promise<Map<string, { input: number; output: number; cacheRead: number; cacheWrite: number }>> = async (dates) => new Map(dates.map((date) => {
+		const usage = cachedRollup(date).tokens;
+		return [date, usage];
+	})),
 ): Promise<{
 	today: HomeStatsBucket;
 	week: HomeStatsBucket;

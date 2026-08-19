@@ -3,7 +3,7 @@
  *
  * handleMessageEvent  — DM messages
  * handleMentionEvent  — @mention in channels
- * processMessage      — runs a queued message through runAgent (opencode engine)
+ * processMessage      — runs a queued message through runAgent (pi engine)
  */
 
 import { copyFileSync, existsSync } from "fs";
@@ -588,7 +588,7 @@ export async function handleModelCommand(
 // Tool-name normalization + post-push format pass
 // ---------------------------------------------------------------------------
 
-/** OpenCode emits lowercase tool names ("bash", "todowrite"); the streamer
+/** Pi emits lowercase tool names ("bash", "todowrite"); the streamer
  *  helpers (buildToolStatus / isSilentTool) key on the Claude-style names. */
 const TOOL_NAME_MAP: Record<string, string> = {
   bash: "Bash",
@@ -613,8 +613,8 @@ function normalizeToolName(name: string): string {
 }
 
 // Formatting hooks are repository policy, not agent code: a repo that wants
-// one carries it in its own .opencode/plugin (OpenCode tool.execute.after
-// hook), so every opencode run in that repo gets it regardless of which loop
+// one carries it in its own .pi/plugin (Pi tool.execute.after
+// hook), so every pi run in that repo gets it regardless of which loop
 // drove it.
 
 // ---------------------------------------------------------------------------
@@ -937,7 +937,7 @@ export async function processMessage(
     "When the user says things like \"ask Grant for X\", \"get John to review when I'm done\", or \"check with Jaap before shipping\", use ask_human rather than just telling them to do it.";
 
   // In-process MCP for this run: the slack-context server set (channel memory,
-  // github report-back, slack ask handler). OpenCode reaches these through the
+  // github report-back, slack ask handler). Pi reaches these through the
   // run-rpc stdio proxies, which execute against the per-session override
   // registered below — NOT the generic interactive builder.
   const bksId = `slack-${sessionKey}`;
@@ -996,7 +996,7 @@ export async function processMessage(
       user: msg.userId,
       author: gitIdentityFor(msg.userId),
       // Interactive Slack runs keep AWS read access via the injected
-      // short-lived creds (restores a2655fc9, lost in the opencode cutover).
+      // short-lived creds (restores a2655fc9, lost in the pi cutover).
       aws: true,
       inProcessMcp,
       reposNote: SLACK_SYSTEM_PROMPT_APPEND + ADMIN_TOOLS_PROMPT + memoryAppend,

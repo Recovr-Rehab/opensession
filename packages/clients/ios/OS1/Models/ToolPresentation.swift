@@ -638,7 +638,7 @@ enum TranscriptFormat {
         return files.count > 2 ? "\(shown) +\(files.count - 2)" : shown
     }
 
-    /// "opencode/anthropic/claude-sonnet-5" and "claude-sonnet-5-20250929"
+    /// "pi/anthropic/claude-sonnet-5" and "claude-sonnet-5-20250929"
     /// both read as "Sonnet 5" in the per-message attribution.
     static func modelLabel(_ raw: String) -> String {
         var slug = raw.components(separatedBy: "/").last ?? raw

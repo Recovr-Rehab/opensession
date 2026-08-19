@@ -57,9 +57,9 @@ export async function sealRemoteRepoTemplate(
       [
         "/home/ubuntu/.claude/.credentials.json",
         "/home/ubuntu/.codex/auth.json",
-        "/home/ubuntu/.config/opencode/auth.json",
+        "/home/ubuntu/.config/pi/auth.json",
         "/home/ubuntu/.opensession-claude-accounts.json",
-        "/home/ubuntu/.opensession-opencode.json",
+        "/home/ubuntu/.opensession-pi.json",
         "/home/ubuntu/.opensession-pi.json",
       ]
         .map(shellQuoteWord)

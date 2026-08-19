@@ -58,7 +58,7 @@ export function EngineRow({
 	async function enable() {
 		setEnabling(true);
 		try {
-			await setupRequest("/api/settings/opencode-engine", {
+			await setupRequest("/api/settings/pi-engine", {
 				method: "PUT",
 				json: { enabled: true },
 			});

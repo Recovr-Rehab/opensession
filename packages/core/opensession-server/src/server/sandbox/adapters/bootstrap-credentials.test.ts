@@ -1,17 +1,16 @@
 import { describe, expect, test } from "bun:test";
 import {
-  projectRemoteOpencodeConfig,
-  projectRemoteOpencodeNativeAuth,
+  projectRemoteModelProviderConfig,
   projectRemotePiConfig,
-  remoteOpencodeProviderId,
+  remoteModelProviderId,
 } from "./bootstrap";
 
 describe("remote engine credential projection", () => {
-  test("recognizes only third-party OpenCode model providers", () => {
-    expect(remoteOpencodeProviderId("opencode/cerebras/gpt-oss-120b")).toBe("cerebras");
-    expect(remoteOpencodeProviderId("opencode/anthropic/claude-sonnet-5")).toBeNull();
-    expect(remoteOpencodeProviderId("opencode/openai/gpt-5.6-sol")).toBeNull();
-    expect(remoteOpencodeProviderId("pi/openai/gpt-5.6-sol")).toBeNull();
+  test("recognizes only third-party Pi model providers", () => {
+    expect(remoteModelProviderId("pi/cerebras/gpt-oss-120b")).toBe("cerebras");
+    expect(remoteModelProviderId("pi/anthropic/claude-sonnet-5")).toBeNull();
+    expect(remoteModelProviderId("pi/openai/gpt-5.6-sol")).toBeNull();
+    expect(remoteModelProviderId("pi/openai/gpt-5.6-sol")).toBeNull();
   });
 
   test("Pi projection is allowlisted and disabled state removes the file", () => {
@@ -33,7 +32,7 @@ describe("remote engine credential projection", () => {
   });
 
   test("subscription and Pi launches receive policy but no provider API keys", () => {
-    const projected = projectRemoteOpencodeConfig(
+    const projected = projectRemoteModelProviderConfig(
       {
         enabled: true,
         bridge: {
@@ -48,7 +47,7 @@ describe("remote engine credential projection", () => {
         },
         futureSecret: "drop",
       },
-      "opencode/anthropic/claude-sonnet-5",
+      "pi/anthropic/claude-sonnet-5",
     );
     expect(projected.settingsProviderIds).toEqual([]);
     expect(JSON.parse(projected.content)).toEqual({
@@ -62,8 +61,8 @@ describe("remote engine credential projection", () => {
     });
   });
 
-  test("OpenCode-other gets configured third-party scope but never bridge raw keys", () => {
-    const projected = projectRemoteOpencodeConfig(
+  test("Pi-other gets configured third-party scope but never bridge raw keys", () => {
+    const projected = projectRemoteModelProviderConfig(
       {
         enabled: true,
         providers: {
@@ -74,7 +73,7 @@ describe("remote engine credential projection", () => {
           empty: { extra: "drop" },
         },
       },
-      "opencode/cerebras/gpt-oss-120b",
+      "pi/cerebras/gpt-oss-120b",
     );
     expect(projected.settingsProviderIds).toEqual(["cerebras", "xai"]);
     expect(JSON.parse(projected.content).providers).toEqual({
@@ -84,7 +83,7 @@ describe("remote engine credential projection", () => {
   });
 
   test("automation projection pins subscription accounts and one selected API provider", () => {
-    const projected = projectRemoteOpencodeConfig(
+    const projected = projectRemoteModelProviderConfig(
       {
         enabled: true,
         bridgeAccountIds: ["wide-claude"],
@@ -97,7 +96,7 @@ describe("remote engine credential projection", () => {
           xai: { apiKey: "must-not-cross" },
         },
       },
-      "opencode/cerebras/gpt-oss-120b",
+      "pi/cerebras/gpt-oss-120b",
       "automation",
       "pinned-account",
     );
@@ -113,25 +112,4 @@ describe("remote engine credential projection", () => {
     });
   });
 
-  test("native auth projection contains exactly the selected provider", () => {
-    const projected = projectRemoteOpencodeNativeAuth(
-      {
-        anthropic: { type: "oauth", refresh: "never-copy" },
-        openai: { type: "oauth", refresh: "never-copy" },
-        cerebras: { type: "api", key: "selected" },
-        xai: { type: "api", key: "other" },
-      },
-      "opencode/cerebras/gpt-oss-120b",
-    );
-    expect(projected?.providerId).toBe("cerebras");
-    expect(JSON.parse(projected!.content)).toEqual({
-      cerebras: { type: "api", key: "selected" },
-    });
-    expect(
-      projectRemoteOpencodeNativeAuth(
-        { cerebras: { type: "api", key: "selected" } },
-        "opencode/openai/gpt-5.6-sol",
-      ),
-    ).toBeNull();
-  });
 });

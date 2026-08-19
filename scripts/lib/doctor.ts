@@ -24,14 +24,6 @@ const TOOLS = [
   { bin: "bun", label: "Bun", required: true, hint: "https://bun.sh" },
   { bin: "git", label: "git", required: true, hint: "sessions run in git worktrees" },
   { bin: "gh", label: "GitHub CLI", required: false, hint: "needed for PR operations" },
-  // Required, not optional: it executes every agent turn. Listing it as a
-  // warning let `doctor` report a healthy instance that could not run one.
-  {
-    bin: "opencode",
-    label: "OpenCode",
-    required: true,
-    hint: "the engine that runs agent turns — `npm i -g opencode-ai`",
-  },
   // Installed by install.sh, but only there — a manual clone or a
   // `--no-engine` run still has to get these two, and both back a credential
   // path: `claude setup-token` for the default model, `codex login` for the
@@ -270,7 +262,7 @@ async function checkEngine(t: Tally): Promise<void> {
 
   fail(e.blocker || "cannot run agent turns", e.fix || undefined);
   t.errors++;
-  if (e.opencodeBin) info(dim(`bridge ${e.bridgeEnabled ? "enabled" : "disabled"}, ${pool}`));
+  if (e.piEnabled) info(dim(`Pi enabled, ${pool}`));
 }
 
 export async function doctor(): Promise<number> {

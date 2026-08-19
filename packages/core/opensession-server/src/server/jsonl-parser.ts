@@ -71,7 +71,7 @@ interface RawJsonlEntry {
     role?: string;
     content?: any;
     // Assistant lines: the model that produced the message (Claude SDK writes
-    // this natively; our opencode transcript writer mirrors it).
+    // this natively; our pi transcript writer mirrors it).
     model?: string;
   };
 }
@@ -225,7 +225,7 @@ function harnessEntryFor(
   }
   if (t.startsWith("<system-reminder>")) return [];
   // Runner-injected operational notice (account rotation, transient-error
-  // retry — transcriptLineRunnerNotice in opencode-transcript.ts): render as a
+  // retry — transcriptLineRunnerNotice in pi-transcript.ts): render as a
   // system chip, never as a user bubble.
   if (t.startsWith("<runner-notice>")) {
     const body = t.match(/<runner-notice>([\s\S]*?)<\/runner-notice>/)?.[1]?.trim();
@@ -234,7 +234,7 @@ function harnessEntryFor(
       : [];
   }
   // An answered question card (transcriptLineAskRecord in
-  // opencode-transcript.ts, written by asks.ts when the ask resolves). The
+  // transcript-persistence.ts, written by asks.ts when the ask resolves). The
   // card is transient, so this is the transcript's only trace of what was
   // asked and what was picked. A system entry tagged `noticeKind: "ask"`,
   // whose content is the record's title line plus its markdown body.
@@ -245,7 +245,7 @@ function harnessEntryFor(
       : [];
   }
   // Engine context-compaction summary (transcriptLineCompactionSummary in
-  // opencode-transcript.ts): the handoff the model wrote when its history was
+  // pi-transcript.ts): the handoff the model wrote when its history was
   // summarized to fit the context window. A system entry with `compaction`
   // set, so the UI shows a collapsed "context compacted" chip instead of the
   // model apparently dumping a status report mid-conversation.
@@ -255,7 +255,7 @@ function harnessEntryFor(
       ? [{ id, type: "system", content: body, timestamp: ts, noticeKind: "compaction" }]
       : [];
   }
-  // Session recap (transcriptLineRecap in opencode-transcript.ts): the
+  // Session recap (transcriptLineRecap in pi-transcript.ts): the
   // away-summary recap.ts writes when a viewer returns to a session whose turn
   // finished while nobody was watching. A system entry with `recap` set, so
   // the UI renders a "recap:" line instead of a generic system chip.
@@ -266,7 +266,7 @@ function harnessEntryFor(
       : [];
   }
   // A model-visible payload the harness injected into a prompt
-  // (transcriptLineContextInjection in opencode-transcript.ts, written by
+  // (transcriptLineContextInjection in pi-transcript.ts, written by
   // context-log.ts): the "model-visible means logged" record. A system entry
   // tagged `context-injection`, which every client-bound projection drops —
   // it exists for replay/eval/debugging, not for the conversation.

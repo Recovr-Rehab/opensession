@@ -207,7 +207,7 @@ export interface Automation {
   workflows?: boolean;
   /**
    * Provision the run's env with a Claude-CLI credential from the
-   * claude-accounts pool (CLAUDE_CODE_OAUTH_TOKEN, via the opencode runner —
+   * claude-accounts pool (CLAUDE_CODE_OAUTH_TOKEN, via the pi runner —
    * see RunAgentOpts.claudeCliEnv). For automations whose tooling spawns its
    * own `claude` CLI (the deepsec scans): the scan must run on Open Session's
    * account pool, never on the host CLI's own login (which logged out
@@ -250,7 +250,7 @@ export interface Automation {
   /**
    * Model for new runs (claude-* / gpt-* / pi/…; see models.ts).
    * Omitted = the Pi automation default. Dispatch maps engine-neutral and
-   * legacy OpenCode ids onto Pi while preserving the model tier.
+   * legacy Pi ids onto Pi while preserving the model tier.
    */
   model?: string;
   /**
@@ -426,13 +426,13 @@ function validateSandboxAutomation(
   }
   const runModel = automationModel(automation.model) || "";
   if (
-    /^(?:claude-|opencode\/anthropic\/|pi\/anthropic\/)/.test(runModel) &&
+    /^(?:claude-|pi\/anthropic\/|pi\/anthropic\/)/.test(runModel) &&
     !getAccountById(automation.accountId)
   ) {
     return { error: "the pinned account does not belong to the selected Claude model" };
   }
   if (
-    /^(?:opencode\/openai\/|pi\/openai\/)/.test(runModel) &&
+    /^(?:pi\/openai\/|pi\/openai\/)/.test(runModel) &&
     !getCodexAccountById(automation.accountId)
   ) {
     return { error: "the pinned account does not belong to the selected OpenAI model" };
@@ -950,7 +950,7 @@ function automationRunInProcessMcp(
  * (opensession.ts's inProcessMcpFor callback). A restart wipes the per-run
  * registration, and a re-prompted run on an in-process engine (pi) has no
  * surviving stdio proxies at all — so rebuild the run's full server set from
- * the automation record; for opencode the same set is harmless (its proxies
+ * the automation record; for pi the same set is harmless (its proxies
  * resolve through run-rpc's fail-closed automation fallback). Undefined when
  * the session isn't automation-owned or the automation record is gone (the
  * resumed run then proceeds without in-process tools, as before).
@@ -1061,7 +1061,7 @@ export function automationMcpServersByName(name: string): string[] | undefined {
 export const DEFAULT_PI_AUTOMATION_MODEL = "pi/openai/gpt-5.6-sol";
 
 /** Map an automation's stored model, a router override, or a fallback onto Pi
- * while preserving the concrete provider/model tier. Legacy OpenCode-prefixed
+ * while preserving the concrete provider/model tier. Legacy Pi-prefixed
  * ids migrate in place, so old records cannot silently keep the old engine. */
 export function automationModel(model?: string): string | undefined {
   const requested = (model || "").trim();
@@ -1195,7 +1195,7 @@ export async function runAutomation(
         options?.modelOverride || automation.model,
       );
       const displayModel = (runModelForPrompt || "").replace(
-        /^(?:opencode|pi)\/[^/]+\//,
+        /^(?:pi|pi)\/[^/]+\//,
         "",
       );
       if (displayModel)
@@ -1373,7 +1373,7 @@ export async function runAutomation(
     // Registered per run so the proxies execute THESE instances with
     // automation context — kept even when the primary is a pi model (direct
     // in-memory mounting, no proxies): a mid-run usage-limit fallback can
-    // land the run on opencode, whose stdio proxies need this registration.
+    // land the run on pi, whose stdio proxies need this registration.
     const inProcessMcp = automationRunInProcessMcp(automation, bksId, {
       repoId: repo.id,
       cwd,

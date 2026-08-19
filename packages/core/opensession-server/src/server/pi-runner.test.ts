@@ -56,7 +56,7 @@ describe("parsePiModel", () => {
   });
 
   test("rejects non-pi ids and malformed remainders", () => {
-    expect(parsePiModel("opencode/anthropic/claude-opus-5")).toBeNull();
+    expect(parsePiModel("anthropic/claude-opus-5")).toBeNull();
     expect(parsePiModel("claude-opus-5")).toBeNull();
     expect(parsePiModel("pi/anthropic")).toBeNull();
     expect(parsePiModel("pi/anthropic/")).toBeNull();
@@ -456,7 +456,7 @@ describe("runPi pi/openai account wiring (no engine, no network)", () => {
     const events = await collect("pi/openai/gpt-5.6-sol");
     const err = events.find((e) => e.type === "error")!;
     expect(err).toBeDefined();
-    expect(String(err.content)).toContain("no codex accounts configured");
+    expect(String(err.content)).toContain("no ChatGPT subscription or API-key accounts are configured");
     // The pre-init throw's text never matches the classifier — the catch must
     // honor the thrown error's usageLimitExhausted property.
     expect(err.usageLimitExhausted).toBe(true);

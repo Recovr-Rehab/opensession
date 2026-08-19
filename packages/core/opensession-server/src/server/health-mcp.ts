@@ -11,7 +11,7 @@
  * refuses loopback and private addresses on every hop by design, because its
  * caller is a model reading untrusted text, and no engine gives an unattended
  * ask run a shell to curl with. Before this existed the monitor's only path
- * was the OpenCode engine's webfetch tool, so moving automations to Pi
+ * was the Pi engine's webfetch tool, so moving automations to Pi
  * (aeb73d59f) blinded it while its runs kept recording `ok`.
  *
  * Held to the automation in-process bar, same as opensession-turn and
@@ -44,7 +44,7 @@ export function createHealthMcpServer() {
 	const tools = [
 		tool(
 			"read_host_metrics",
-			"Read this instance's health: disk usage on /, memory and swap, load averages against core count, counts of the process fleets that have leaked before (opencode servers, MCP proxies, headless Chrome, dev stacks, git operations), cgroup memory accounting, and each agent's status. Returns the same fields as the health endpoint. Use it for a health check instead of trying to fetch the server over HTTP, which is refused for loopback addresses.",
+			"Read this instance's health: disk usage on /, memory and swap, load averages against core count, counts of the process fleets that have leaked before (detached run hosts, MCP proxies, headless Chrome, dev stacks, git operations), cgroup memory accounting, and each agent's status. Returns the same fields as the health endpoint. Use it for a health check instead of trying to fetch the server over HTTP, which is refused for loopback addresses.",
 			{},
 			async () => ({
 				content: [

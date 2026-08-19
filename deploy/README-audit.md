@@ -5,7 +5,7 @@ Open Session keeps a structured audit trail of every agent run
 
 ## What gets logged
 
-Every engine run (`packages/core/opensession-server/src/server/opencode-runner.ts`) emits `claude_turn_event`
+Every engine run (`packages/core/opensession-server/src/server/pi-runner.ts`) emits `claude_turn_event`
 JSON lines (the event name predates the single-engine consolidation and is
 kept for log continuity) to `~/.opensession-audit/audit-YYYY-MM-DD.jsonl`.
 Every line carries the run key, session id, run kind, mode, and model; the

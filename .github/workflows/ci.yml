@@ -59,8 +59,7 @@ jobs:
       # half people forget, a green sweep is not evidence the ordering is fixed:
       # it was green half the time with the problem fully present. Two runs are
       # not enough to conclude anything either. The three files that failed
-      # outright when this workflow was written (zz-opencode-mirror,
-      # opencode-transcript, sessions.test.ts) have since been fixed; the shared
+      # outright when this workflow was written have since been fixed; the shared
       # state between files has not.
       #
       # It still runs on every PR so regressions are visible in the log, and the

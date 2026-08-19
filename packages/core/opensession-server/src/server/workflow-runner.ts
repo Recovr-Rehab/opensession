@@ -62,7 +62,7 @@ import type { WorkflowMcpHost } from "./workflow-mcp";
  * until a human types "continue". Steered (the deliverToSession default), not
  * queued: this is an agent-to-agent handoff ("continue the task"), so it must
  * reach the model without a human in the loop. A mid-turn session folds it into
- * the running turn (opencode steer is a non-disruptive noReply fold-in, not an
+ * the running turn (pi steer is a non-disruptive noReply fold-in, not an
  * interrupt — a session polling workflow_status just sees the result land); an
  * idle one starts a turn; a steer that can't land falls through to the queue +
  * drain-watcher. Best-effort — a delivery failure must never affect the run's

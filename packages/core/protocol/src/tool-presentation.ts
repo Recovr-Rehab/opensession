@@ -28,7 +28,7 @@ import type { TranscriptEntry } from "./session";
 import { currentPlanItem, parsePlanItems, planDoneCount } from "./todo-plan";
 
 /**
- * Engine dialects for the same tool. Claude Code, opencode and codex all name
+ * Engine dialects for the same tool. Claude Code, pi and codex all name
  * the basics differently; folding them onto one canonical name is what lets
  * one set of summaries, icons and detail renderers cover all three.
  */
@@ -73,7 +73,7 @@ export function canonicalToolName(name?: string): string {
 }
 
 /**
- * "mcp__linear__list_issues" (Claude SDK) or "linear_list_issues" (opencode's
+ * "mcp__linear__list_issues" (Claude SDK) or "linear_list_issues" (pi's
  * flattened form) → { server: "linear", tool: "list_issues" }. Native tools are
  * excluded by name first, so "apply_patch" doesn't read as an "apply" server.
  */

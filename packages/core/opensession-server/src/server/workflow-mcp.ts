@@ -14,7 +14,7 @@
  * in workflow-runner.ts; this module is transport + policy only.
  *
  * POLICY (fail-closed, mirrors the engine's run policy — see runner-shared.ts
- * and opencodeRunPolicy):
+ * and runToolPolicy):
  *  - the surface starts as filterMcpServers(allowlist, user): an automation's
  *    least-privilege allowlist and the per-user `allowedUsers` gate both apply,
  *    exactly as they would for the run's own tools;
@@ -53,15 +53,15 @@ function confirmGatedServers(): Set<string> {
 }
 
 /**
- * Bearer token minted by `opencode mcp auth <server>` for OAuth-only HTTP
+ * Bearer token minted by `pi mcp auth <server>` for OAuth-only HTTP
  * servers (the config carries no header for those — see the circle entry).
  * Best-effort: a missing/failed lookup just means the call 401s with the
  * server's own message.
  */
-function opencodeAuthHeader(server: string): Record<string, string> | undefined {
+function piAuthHeader(server: string): Record<string, string> | undefined {
 	try {
 		const store = JSON.parse(
-			readFileSync(`${HOME}/.local/share/opencode/mcp-auth.json`, "utf-8"),
+			readFileSync(`${HOME}/.local/share/pi/mcp-auth.json`, "utf-8"),
 		) as Record<string, { tokens?: { accessToken?: string } }>;
 		const token = store?.[server]?.tokens?.accessToken;
 		if (token) return { Authorization: `Bearer ${token}` };
@@ -209,7 +209,7 @@ export function createWorkflowMcpHost(
 				...(cfg.headers || {}),
 			};
 			if (!headers.Authorization && !headers.authorization) {
-				Object.assign(headers, opencodeAuthHeader(server) || {});
+				Object.assign(headers, piAuthHeader(server) || {});
 			}
 			const init = { requestInit: { headers } };
 			try {
