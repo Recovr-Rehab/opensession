@@ -1153,7 +1153,7 @@ async function collectSessionRows(
   const sessions: UnifiedSession[] = [];
   for (const session of rows) {
     sessions.push(session);
-    if (sessions.length % 32 === 0) await Bun.sleep(0);
+    if (sessions.length % 8 === 0) await Bun.sleep(0);
   }
   return sessions;
 }
@@ -1493,7 +1493,7 @@ async function assembleSessionsAsync(
   while (true) {
     const step = steps.next();
     if (step.done) return step.value;
-    if (++batch % 32 === 0) await Bun.sleep(0);
+    if (++batch % 8 === 0) await Bun.sleep(0);
   }
 }
 

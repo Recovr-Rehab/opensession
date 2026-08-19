@@ -220,7 +220,7 @@ const sessionsResponseRefreshes: Map<
 // compatible with the current web client.
 const LIVE_LIST_DISK_VERSION = 1;
 const LIVE_LIST_DISK_MAX_AGE_MS = 7 * 24 * 60 * 60_000;
-const LIVE_LIST_DISK_SERVE_MS = 60_000;
+const LIVE_LIST_DISK_SERVE_MS = 2 * 60_000;
 const LIVE_LIST_DISK_PATH = statePath(
 	`.opensession-session-list-v${LIVE_LIST_DISK_VERSION}.json`,
 );
@@ -678,14 +678,14 @@ export async function handleSessionsRoutes(
 			if (disk) {
 				sessionsResponseSnapshots.set(variant, disk);
 				// Starting the cooperative scan still does some synchronous index
-				// setup before its first yield. Give the cached JSON and its one-time
-				// gzip enough time to leave the process, or the "background" refresh
-				// starves the compression stream for the same cold-scan window.
+				// setup before its first yield. Keep boot quiet long enough for the
+				// session, sidebar and workspace shell to finish their own requests;
+				// the persisted response keeps the list useful in the meantime.
 				setTimeout(() => {
 					void refreshSessionsResponse(variant).catch((error) =>
 						console.warn("[sessions] live-list background refresh failed:", error),
 					);
-				}, 5_000).unref?.();
+				}, 30_000).unref?.();
 				return await sessionsListResponse(req, disk);
 			}
 		}
