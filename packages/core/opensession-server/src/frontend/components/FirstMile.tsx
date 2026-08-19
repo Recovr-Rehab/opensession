@@ -49,13 +49,6 @@ const STEPS: FirstMileStep[] = [
 			"Choose the name and icon your team will see across Open Session.",
 	},
 	{
-		id: "team",
-		label: "People",
-		title: "Invite your team",
-		description:
-			"Add the people who should have access. They can sign in with GitHub.",
-	},
-	{
 		id: "ai",
 		label: "AI",
 		title: "Add AI subscriptions",
@@ -68,6 +61,13 @@ const STEPS: FirstMileStep[] = [
 		title: "Add repositories",
 		description:
 			"Register the codebases sessions can work in. Each session gets its own isolated worktree.",
+	},
+	{
+		id: "team",
+		label: "People",
+		title: "Invite your team",
+		description:
+			"Add the people who should have access. They can sign in with GitHub.",
 	},
 	{
 		id: "ready",
