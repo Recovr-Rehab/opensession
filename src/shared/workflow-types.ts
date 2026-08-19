@@ -88,6 +88,13 @@ export interface WorkflowAgentOpts {
 	schema?: unknown;
 	/** Model id (native or opencode form); defaults to the workflow default. */
 	model?: string;
+	/** Reasoning effort for this agent: low, medium, high, xhigh or max, per the
+	 *  chosen model's own ladder. Unset = that model's default. Typed as a plain
+	 *  string rather than the server's SessionEffort union to keep this module
+	 *  dependency-free (the web UI and the native client read these contracts
+	 *  too); workflow-execute drops a level the model does not offer, exactly as
+	 *  the runner would have done silently. */
+	effort?: string;
 	/** Run this agent in code mode inside its OWN isolated git worktree
 	 *  (branched off the session's branch) so it may edit files with zero
 	 *  collisions against sibling agents. Its work is auto-committed on its own

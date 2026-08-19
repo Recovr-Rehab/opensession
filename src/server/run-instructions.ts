@@ -456,6 +456,32 @@ export function buildRunInstructions(input: {
         "opensession-repos when those servers are available."
     );
   }
+  // Dynamic workflows (workflow-runner.ts). The runtime has been wired into
+  // every interactive run since the first release, but nothing ever told the
+  // model it existed: discovery was one tool description competing with a
+  // hundred others, which is why the feature stayed rare. This block is the
+  // WHEN; the run_workflow tool description is the HOW.
+  if (inproc["opensession-workflows"]) {
+    parts.push(
+      "## Dynamic workflows\nWhen a task is the same step repeated over many items, you can " +
+        "write a workflow instead of working through it turn by turn: opensession-workflows' " +
+        "`run_workflow` takes a JavaScript script YOU author, runs it outside this " +
+        "conversation, and fans it out across focused agents (`agent()`, `parallel()`, " +
+        "`pipeline()`), with direct tool calls available to the script as " +
+        "`mcp.<server>.<tool>()`. Progress streams to this session's Agents panel; read the " +
+        "outcome with `workflow_status`.\n" +
+        "The point is that the plan lives in code rather than in your attention. A loop " +
+        "finishes all fifty items instead of declaring victory at thirty-five, each agent " +
+        "starts on a clean context so findings cannot cross-contaminate, a verifier can judge " +
+        "work it did not produce, and only the script's return value comes back to you. Reach " +
+        "for one to audit or migrate many files, to check every finding before reporting it, " +
+        "to research a question across many sources, or to try several approaches and weigh " +
+        "them against each other. Skip it for conversational work, a single edit, or anything " +
+        "you can settle by reading the code yourself: a workflow spends real tokens, so it " +
+        "should be earning them. Inside a script, prefer `mcp.*` over an agent for anything " +
+        "that is only a data lookup, since that is one round trip rather than a model turn."
+    );
+  }
   // Legacy michael-ask key: journaled runner-host runs resumed across the
   // opensession-* rename carry prebuilt proxy specs under the old id.
   if (inproc["opensession-ask"] || inproc["michael-ask"]) {

@@ -392,6 +392,30 @@ describe("workflowExecutor", () => {
 		expect(calls[1].model).toBe("gpt-5.5");
 	});
 
+	test("effort: sent when the model offers the level, dropped when it doesn't", async () => {
+		const calls = mockRunAgent([reply("x")]);
+		await workflowExecutor.execute(
+			{ prompt: "verify", opts: { model: "claude-opus-5", effort: "xhigh" }, seq: 0 },
+			makeCtx(),
+		);
+		// Trimmed and lowercased, so a script's stray whitespace or capital still lands.
+		await workflowExecutor.execute(
+			{ prompt: "verify", opts: { model: "claude-opus-5", effort: " XHigh " }, seq: 1 },
+			makeCtx(),
+		);
+		// Haiku's ladder is high/max, so "low" is dropped rather than coerced: the
+		// runner would have rewritten it to the model default anyway.
+		await workflowExecutor.execute(
+			{ prompt: "extract", opts: { model: "claude-haiku-4-5", effort: "low" }, seq: 2 },
+			makeCtx(),
+		);
+		await workflowExecutor.execute({ prompt: "plain", opts: {}, seq: 3 }, makeCtx());
+		expect(calls[0].effort).toBe("xhigh");
+		expect(calls[1].effort).toBe("xhigh");
+		expect(calls[2].effort).toBeUndefined();
+		expect(calls[3].effort).toBeUndefined();
+	});
+
 	test("result capped at maxResultChars", async () => {
 		const huge = "x".repeat(WORKFLOW_LIMITS.maxResultChars + 500);
 		mockRunAgent([reply(huge)]);

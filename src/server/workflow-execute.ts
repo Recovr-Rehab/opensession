@@ -27,7 +27,12 @@
 import { $ } from "bun";
 import { runAgent, type RunAgentOpts, type StreamEvent } from "./agent-runner";
 import { cancelOpencodeRun } from "./opencode-runner";
-import { DEFAULT_FALLBACK_MODEL, getDefaultModel } from "./models";
+import {
+	DEFAULT_FALLBACK_MODEL,
+	getDefaultModel,
+	modelEfforts,
+	type SessionEffort,
+} from "./models";
 import { createWorktree, getRepo, removeWorktree } from "./worktree";
 import { gitIdentityEnv, gitIdentityFor } from "./shared/user-mappings";
 import {
@@ -446,9 +451,27 @@ function withArtifact(
 	return { ...outcome, artifact, ...artifact };
 }
 
+/**
+ * The reasoning effort an agent() call asked for, kept only when the model it
+ * runs on actually offers that level.
+ *
+ * Dropping instead of coercing is deliberate: normalizeModelEffort() rewrites
+ * an unsupported level to the model's default anyway, so passing nothing lands
+ * on exactly the same variant while leaving `effort` absent from RunAgentOpts
+ * (and out of the journal's replay hash) for every call that never asked. A
+ * script that names a level its model lacks is a script bug, not a run error:
+ * failing the agent over it would abort a 200-agent fan-out for a typo.
+ */
+function agentEffort(model: string, requested?: string): string | undefined {
+	const want = requested?.trim().toLowerCase();
+	if (!want) return undefined;
+	return modelEfforts(model).includes(want as SessionEffort) ? want : undefined;
+}
+
 export const workflowExecutor: WorkflowExecutor = {
 	async execute(req: WorkflowAgentRequest, ctx: WorkflowExecCtx): Promise<WorkflowAgentOutcome> {
 		const model = req.opts.model || ctx.defaultModel || getDefaultModel();
+		const effort = agentEffort(model, req.opts.effort);
 		const write = req.opts.write === true;
 
 		// Per-agent timeout + the workflow's cancel signal fold into one signal.
@@ -486,6 +509,7 @@ export const workflowExecutor: WorkflowExecutor = {
 				cwd,
 				mode: write ? "code" : "ask",
 				model,
+				...(effort ? { effort } : {}),
 				fallbackModel: DEFAULT_FALLBACK_MODEL,
 				accountAffinityKey: `workflow:${ctx.runId}:${req.seq}`,
 				user: ctx.user,
