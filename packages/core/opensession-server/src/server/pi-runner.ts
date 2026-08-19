@@ -376,7 +376,7 @@ export function buildPiThirdPartyProviderPlan(input: {
     return {
       error:
         `Provider "${input.providerID}" is in neither Pi's built-in catalog nor ours, ` +
-        "so the pi engine cannot guess its protocol. Use an opencode/* id for this model.",
+        "so the Pi engine cannot guess its protocol. Use an opencode/* id for this model.",
     };
   }
   const known =
@@ -599,9 +599,9 @@ export function piGateReason(opts: { journal?: { kind?: string } }): string | nu
   if (base === "pi-smoke" && smokeGateBypass > 0) return null;
   if (INTERACTIVE_KINDS.has(base) || isUnattendedKind(base)) return null;
   return base
-    ? `The pi engine is not available to "${base}" runs — interactive sessions and automations only.`
-    : "The pi engine requires an explicit run kind (journal.kind) — " +
-        "deny by default; interactive sessions and automations only.";
+    ? `The Pi engine is not available to "${base}" runs. Interactive sessions and automations only.`
+    : "The Pi engine requires an explicit run kind (journal.kind). Deny by " +
+        "default; interactive sessions and automations only.";
 }
 
 // ── Small helpers ────────────────────────────────────────────────────────────
@@ -1337,7 +1337,7 @@ async function* runPiAttempt(
     yield {
       type: "error",
       content:
-        "pi engine is not enabled (~/.opensession-pi.json). Set {\"enabled\": true} there to turn it on.",
+        "The Pi engine is not enabled (~/.opensession-pi.json). Set {\"enabled\": true} there to turn it on.",
       provider: PROVIDER,
       model,
     };
@@ -1385,7 +1385,7 @@ async function* runPiAttempt(
     yield {
       type: "error",
       content:
-        `The pi engine has no credentials for provider "${parsed.providerID}" ` +
+        `The Pi engine has no credentials for provider "${parsed.providerID}" ` +
         `(got "${model}"). Configure that model provider first.`,
       provider: PROVIDER,
       model,
@@ -1611,7 +1611,7 @@ async function* runPiAttempt(
         if (opts.accountId && picked.id === opts.accountId) {
           throw new Error(
             `pi/openai: pinned codex account "${picked.name}" is an API-key account, ` +
-              "which the pi engine does not support — ChatGPT-subscription (kind: home) " +
+              "which the Pi engine does not support. ChatGPT-subscription (kind: home) " +
               "accounts only. Use an opencode/openai/* model for API-key billing."
           );
         }
@@ -1624,7 +1624,7 @@ async function* runPiAttempt(
           // fix it, so no usageLimitExhausted.
           throw new Error(
             `pi/openai: only API-key codex accounts are currently eligible ` +
-              `(${skippedApiKey.size} skipped), which the pi engine does not support — ` +
+              `(${skippedApiKey.size} skipped), which the Pi engine does not support. ` +
               "ChatGPT-subscription (kind: home) accounts only. Use an " +
               "opencode/openai/* model for API-key billing."
           );
@@ -2315,7 +2315,7 @@ async function* runPiAttempt(
 
     if (resumeMissNote) {
       const notice =
-        "Couldn't resume the previous engine session. " +
+        "Pi couldn't resume the previous engine session. " +
         "Continuing in a fresh one with the recent transcript.";
       push({ type: "runner_notice", text: notice });
       persistRunEntries([
@@ -2952,7 +2952,7 @@ export async function runPiSmokeTurn(
     enabled,
     dryRun: !enabled,
     reason: !enabled
-      ? "pi engine is disabled (~/.opensession-pi.json missing or enabled:false) — the gate error below is the expected dry-run result; no bridge or SDK use happened"
+      ? "The Pi engine is disabled (~/.opensession-pi.json missing or enabled:false). The gate error below is the expected dry-run result; no bridge or SDK use happened"
       : timedOut
         ? `smoke turn exceeded the ${timeoutMs}ms wall cap and was cancelled`
         : undefined,

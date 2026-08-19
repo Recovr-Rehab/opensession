@@ -373,7 +373,7 @@ function EnginesSection() {
 						</Button>
 						<Switch
 							checked={pi?.enabled ?? false}
-							aria-label="Enable the pi engine"
+							aria-label="Enable the Pi engine"
 							disabled={!pi || saving}
 							onCheckedChange={togglePi}
 						/>

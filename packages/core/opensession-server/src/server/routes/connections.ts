@@ -485,7 +485,7 @@ export async function handleConnectionsRoutes(
 			);
 		} catch (e: any) {
 			return Response.json(
-				{ error: e?.message || "Failed to save pi engine config" },
+				{ error: e?.message || "Failed to save Pi engine config" },
 				{ status: 400 },
 			);
 		}
