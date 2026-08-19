@@ -7,7 +7,7 @@
  */
 
 import { requestUser, type RouteContext } from "./context";
-import { DIAL_PRESETS, KNOWN_MODELS, ORCHESTRATOR_PRESETS, accountProviderForModel, getDefaultModel, getModelFallbackAuto, interactiveDefaultModel, modelEfforts, modelEngineKey, refreshOpencodePickerModels, setDefaultModel, setInteractiveDefaultModel, setModelFallbackAuto, toOpencodeModel } from "../models";
+import { DIAL_PRESETS, KNOWN_MODELS, ORCHESTRATOR_PRESETS, accountProviderForModel, getDefaultModel, getModelFallbackAuto, interactiveDefaultModel, modelEfforts, modelEngineKey, opencodeModelLabel, refreshOpencodePickerModels, setDefaultModel, setInteractiveDefaultModel, setModelFallbackAuto, toOpencodeModel } from "../models";
 import { ENGINE_IDS, modelEngineDefaults, setModelEngineDefault, type EngineId } from "../engine/engines-config";
 import { opencodeOrchestratorEnabled } from "../opencode-config";
 import { piEngineEnabled } from "../pi-config";
@@ -89,7 +89,7 @@ export async function handleModelsRoutes(
 				group: preset.group || "custom",
 				description: [
 					preset.instructions?.trim() || "Workspace model combination",
-					`${preset.lead.model}${preset.supporting?.length ? ` + ${preset.supporting.length} supporting model${preset.supporting.length === 1 ? "" : "s"}` : ""}`,
+					`${opencodeModelLabel(preset.lead.model)}${preset.supporting?.length ? ` + ${preset.supporting.length} supporting model${preset.supporting.length === 1 ? "" : "s"}` : ""}`,
 				].join(" · "),
 			})) : engineConfigured
 				? [
