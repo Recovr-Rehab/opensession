@@ -192,8 +192,10 @@ const MOBILE_TRIGGER =
  *  spent the row a phone can least spare on a word for what is already on
  *  screen. The name survives for screen readers below. */
 const PHONE_BAR = "hidden items-center justify-between gap-3 px-3 pb-1 pt-3 phone:flex";
+/** The send disc's neutral twin: same 44px circle and glyph box, so dismiss and
+ *  commit read as one pair rather than a bare icon beside a solid action. */
 const PHONE_CLOSE =
-	"focus-ring relative flex size-11 items-center justify-center rounded-[999px] p-0 text-faint transition-colors hover:bg-hover hover:text-fg";
+	"focus-ring relative flex size-11 items-center justify-center rounded-full bg-hover p-0 text-fg transition-colors hover:bg-pressed";
 /** The composer's own send disc, so the gesture that commits a prompt looks the
  *  same in the palette as it does in a session. Sized up to the 44px target the
  *  rest of this bar keeps. */
@@ -1208,7 +1210,7 @@ export function NewSession({ onBack, inline, focusSeq, send, addHandler, connect
       {phoneBar && (
         <div className={PHONE_BAR}>
           <Modal.Close className={PHONE_CLOSE} aria-label="Close">
-            <IconX size={20} />
+            <IconX size={22} />
           </Modal.Close>
           {/* The sheet still has a name, it just isn't drawn: the dialog needs
               one, and a screen reader has no card to look at. */}
