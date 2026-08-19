@@ -647,9 +647,15 @@ export async function handleSessionsRoutes(
 			const disk = readDiskLiveList();
 			if (disk) {
 				sessionsResponseSnapshots.set(variant, disk);
-				void refreshSessionsResponse(variant).catch((error) =>
-					console.warn("[sessions] live-list background refresh failed:", error),
-				);
+				// Starting the cooperative scan still does some synchronous index
+				// setup before its first yield. Let this response leave the process
+				// before starting that work, or the "background" refresh delays the
+				// very warm-start response it exists to protect.
+				setTimeout(() => {
+					void refreshSessionsResponse(variant).catch((error) =>
+						console.warn("[sessions] live-list background refresh failed:", error),
+					);
+				}, 250).unref?.();
 				return await sessionsListResponse(req, disk);
 			}
 		}
