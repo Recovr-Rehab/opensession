@@ -292,6 +292,10 @@ export function WorkspaceSummary({
 	openRef.current = open;
 	const workspaceKey = session.workspaceId || session.id;
 	const previousWorkspaceKey = useRef(workspaceKey);
+	/** Whether the card open on screen is one this person just opened, as
+	 *  opposed to one that was already pinned open when the pane mounted. Only
+	 *  the first kind may take focus. */
+	const openedByPerson = useRef(false);
 	useEffect(() => {
 		onOpenChange?.(initialOpen.current);
 		return () => onOpenChange?.(false);
@@ -324,6 +328,7 @@ export function WorkspaceSummary({
 		onOpenChange?.(nextOpen);
 	}, [onOpenChange, workspaceKey]);
 	function changeOpen(nextOpen: boolean) {
+		openedByPerson.current = nextOpen;
 		openRef.current = nextOpen;
 		setOpen(nextOpen);
 		localStorage.setItem(WS_SUMMARY_OPEN_KEY, String(nextOpen));
@@ -369,7 +374,11 @@ export function WorkspaceSummary({
 				sideOffset={tabStripVisible ? 72 : 20}
 				elevation="lg"
 				className={WS_SUMMARY_CARD}
-				initialFocus
+				// Take focus when someone opens the card, so the keyboard reaches its
+				// controls. Not when it merely mounts already-open: the card is
+				// pinned across sessions, and opening a session would otherwise land
+				// focus on a row in here instead of the composer.
+				initialFocus={() => openedByPerson.current}
 			>
 				{/* Mounted only while open — that is what keeps the fetches off every
 				    session that merely has the header. */}
