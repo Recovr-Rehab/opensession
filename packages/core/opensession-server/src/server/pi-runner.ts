@@ -2315,9 +2315,8 @@ async function* runPiAttempt(
 
     if (resumeMissNote) {
       const notice =
-        "pi could not resume the previous engine session (it ended before any " +
-        "assistant output was persisted) — continuing in a fresh one with the " +
-        "recent transcript bridged into this turn's prompt.";
+        "Couldn't resume the previous engine session. " +
+        "Continuing in a fresh one with the recent transcript.";
       push({ type: "runner_notice", text: notice });
       persistRunEntries([
         { id: crypto.randomUUID(), type: "system", content: notice, timestamp: nowIso() },
