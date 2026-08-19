@@ -21,9 +21,14 @@ import {
   PI_PASSTHROUGH_BLOCK_REASON,
   buildPiAnthropicModels,
   buildPiAnthropicProvider,
+  IMAGE_ONLY_PROMPT,
+  MAX_TURN_IMAGES,
+  piImageBlockToAnthropic,
   piMessagesToAnthropic,
   piSdkSessionStore,
   planSdkTurn,
+  sdkPromptContent,
+  turnImages,
   rememberSdkTurn,
   shouldDeferClaudeText,
   usageFromSdkResult,
@@ -238,8 +243,18 @@ describe("piMessagesToAnthropic", () => {
     ];
     expect(piMessagesToAnthropic(messages)).toEqual([
       { role: "user", content: "plain string" },
-      // Images cannot round-trip through flat replay — dropped.
-      { role: "user", content: [{ type: "text", text: "with attachment" }] },
+      // Images are KEPT: planSdkTurn lifts them onto the turn as real content
+      // blocks. Dropping them here was silent data loss.
+      {
+        role: "user",
+        content: [
+          { type: "text", text: "with attachment" },
+          {
+            type: "image",
+            source: { type: "base64", media_type: "image/png", data: "…base64…" },
+          },
+        ],
+      },
       {
         role: "assistant",
         content: [
@@ -280,6 +295,105 @@ describe("piMessagesToAnthropic", () => {
     expect(replay).toContain('[called tool grep with {"pattern":"x"}]');
     expect(replay).toContain("42 matches");
     expect(replay).not.toContain("tool_result");
+  });
+});
+
+describe("images survive the turn", () => {
+  const img = (mimeType: string, data = "AAAA") => ({ type: "image", data, mimeType });
+
+  test("piImageBlockToAnthropic converts the four media types the API reads", () => {
+    for (const mime of ["image/png", "image/jpeg", "image/gif", "image/webp"]) {
+      expect(piImageBlockToAnthropic(img(mime))).toEqual({
+        type: "image",
+        source: { type: "base64", media_type: mime, data: "AAAA" },
+      });
+    }
+    // Uppercase mimes are normalized rather than rejected.
+    expect(piImageBlockToAnthropic(img("IMAGE/PNG"))).toMatchObject({
+      source: { media_type: "image/png" },
+    });
+  });
+
+  test("drops what the API cannot read rather than poisoning the request", () => {
+    expect(piImageBlockToAnthropic(img("image/bmp"))).toBeNull();
+    expect(piImageBlockToAnthropic(img("image/svg+xml"))).toBeNull();
+    expect(piImageBlockToAnthropic({ type: "image", data: "AAAA" })).toBeNull();
+    expect(piImageBlockToAnthropic({ type: "image", mimeType: "image/png" })).toBeNull();
+    expect(piImageBlockToAnthropic({ type: "text", text: "hi" })).toBeNull();
+  });
+
+  test("turnImages collects user images and keeps the newest past the cap", () => {
+    expect(turnImages([wire({ role: "user", content: "no blocks" })])).toEqual([]);
+    const many: AnthropicMessage[] = Array.from({ length: MAX_TURN_IMAGES + 3 }, (_, i) =>
+      wire({
+        role: "user",
+        content: [{ type: "image", source: { type: "base64", media_type: "image/png", data: `d${i}` } }],
+      })
+    );
+    const kept = turnImages(many);
+    expect(kept).toHaveLength(MAX_TURN_IMAGES);
+    // Newest kept: the last block in the slice is the last block kept.
+    expect(kept.at(-1)).toMatchObject({ source: { data: `d${MAX_TURN_IMAGES + 2}` } });
+  });
+
+  test("planSdkTurn carries only the DELIVERED slice's images on a continuation", () => {
+    const messages: AnthropicMessage[] = [
+      wire({
+        role: "user",
+        content: [
+          { type: "text", text: "old shot" },
+          { type: "image", source: { type: "base64", media_type: "image/png", data: "old" } },
+        ],
+      }),
+      wire({ role: "assistant", content: [{ type: "text", text: "seen it" }] }),
+      wire({
+        role: "user",
+        content: [
+          { type: "text", text: "new shot" },
+          { type: "image", source: { type: "base64", media_type: "image/png", data: "new" } },
+        ],
+      }),
+    ];
+    const cont = planSdkTurn(
+      { sdkSessionId: "sdk-1", messageCount: 2, accountId: "acc-1", lastUsedAt: Date.now() },
+      messages
+    );
+    expect(cont.continuation).toBe(true);
+    expect(cont.images).toHaveLength(1);
+    expect(cont.images[0]).toMatchObject({ source: { data: "new" } });
+    // A fresh replay re-delivers the whole conversation, images included.
+    expect(planSdkTurn(undefined, messages).images).toHaveLength(2);
+  });
+
+  test("sdkPromptContent puts images before the text, and only for image turns", () => {
+    const plain = planSdkTurn(undefined, [wire({ role: "user", content: "just words" })]);
+    expect(sdkPromptContent(plain)).toBeNull();
+
+    const withImage = planSdkTurn(undefined, [
+      wire({
+        role: "user",
+        content: [
+          { type: "text", text: "look at this" },
+          { type: "image", source: { type: "base64", media_type: "image/png", data: "d" } },
+        ],
+      }),
+    ]);
+    const content = sdkPromptContent(withImage)!;
+    expect(content).toHaveLength(2);
+    expect(content[0]).toMatchObject({ type: "image" });
+    expect(content[1]).toEqual({ type: "text", text: "look at this" });
+  });
+
+  test("an image-only turn still gets a text block (an empty prompt reads as an empty turn)", () => {
+    const plan = planSdkTurn(undefined, [
+      wire({
+        role: "user",
+        content: [{ type: "image", source: { type: "base64", media_type: "image/png", data: "d" } }],
+      }),
+    ]);
+    expect(plan.prompt.trim()).toBe("");
+    const content = sdkPromptContent(plan)!;
+    expect(content.at(-1)).toEqual({ type: "text", text: IMAGE_ONLY_PROMPT });
   });
 });
 

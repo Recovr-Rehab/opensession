@@ -89,8 +89,12 @@
  * Known approximations (bridge parity, documented): `temperature`/`maxTokens`
  * /`timeoutMs` and pi's `reasoning` thinking level are ignored (the SDK does
  * not expose them); thinking blocks stream out but are dropped from replay
- * (signatures cannot round-trip through flat text); images in replayed
- * history are dropped.
+ * (signatures cannot round-trip through flat text). Images are NOT dropped:
+ * the flat replay cannot carry them, so planSdkTurn lifts the delivered
+ * slice's image blocks out and the turn goes to the SDK as a structured user
+ * message (see sdkPromptContent). They used to be filtered away here, which
+ * meant a person's screenshot reached the transcript and then vanished before
+ * the model, with no error on either side.
  *
  * pi-ai is not a direct dependency (only @earendil-works/pi-coding-agent is),
  * so the Provider surface is structurally typed: types derive from
@@ -221,12 +225,38 @@ export const PI_SDK_MAX_TURNS = 8;
 
 // ── pi messages → the bridge's Anthropic wire shape ──────────────────────────
 
+/** Media types the Anthropic messages API reads as an image. Anything else
+ *  (bmp, svg, a missing mime) is dropped rather than sent as a block the API
+ *  would reject for the whole request. */
+const ANTHROPIC_IMAGE_MEDIA_TYPES = new Set([
+  "image/png",
+  "image/jpeg",
+  "image/gif",
+  "image/webp",
+]);
+
+/**
+ * pi's `{type:"image", data, mimeType}` → Anthropic's base64 image block, or
+ * null when it is not an image this API can read. Exported for the tests.
+ */
+export function piImageBlockToAnthropic(block: Record<string, any>): ContentBlock | null {
+  if (!block || block.type !== "image") return null;
+  if (typeof block.data !== "string" || !block.data) return null;
+  const mediaType = typeof block.mimeType === "string" ? block.mimeType.toLowerCase() : "";
+  if (!ANTHROPIC_IMAGE_MEDIA_TYPES.has(mediaType)) return null;
+  return { type: "image", source: { type: "base64", media_type: mediaType, data: block.data } };
+}
+
 /**
  * Convert pi's Message[] into the AnthropicMessage[] the bridge helpers
  * (flattenMessageText / replayConversation) understand: assistant ToolCall
  * blocks become tool_use, toolResult messages become user tool_result
- * messages, thinking blocks and images are dropped (they cannot round-trip
- * through a flat-text replay). Exported for the unit tests.
+ * messages, thinking blocks are dropped (signatures cannot round-trip through
+ * a flat-text replay). User images are KEPT: they do not survive the flat
+ * replay either, so planSdkTurn lifts them out and rides them to the SDK as
+ * real content blocks. Dropping them here was silent data loss — the model
+ * answered as if the person had never attached a screenshot, with no error on
+ * either side. Exported for the unit tests.
  */
 export function piMessagesToAnthropic(messages: readonly PiWireMessage[]): AnthropicMessage[] {
   const out: AnthropicMessage[] = [];
@@ -236,9 +266,16 @@ export function piMessagesToAnthropic(messages: readonly PiWireMessage[]): Anthr
       if (typeof m.content === "string") {
         out.push({ role: "user", content: m.content });
       } else if (Array.isArray(m.content)) {
-        const blocks: ContentBlock[] = m.content
-          .filter((b) => b?.type === "text" && typeof b.text === "string")
-          .map((b) => ({ type: "text", text: b.text }));
+        const blocks: ContentBlock[] = [];
+        for (const b of m.content) {
+          if (!b || typeof b !== "object") continue;
+          if (b.type === "text" && typeof b.text === "string") {
+            blocks.push({ type: "text", text: b.text });
+            continue;
+          }
+          const image = piImageBlockToAnthropic(b);
+          if (image) blocks.push(image);
+        }
         out.push({ role: "user", content: blocks });
       }
     } else if (m.role === "assistant") {
@@ -295,7 +332,25 @@ export interface PiSdkTurnPlan {
   resume: string | undefined;
   /** Flat-text prompt: the new tail on continuation, the full replay else. */
   prompt: string;
+  /** Image blocks from the delivered slice, oldest first. Empty = a plain-text
+   *  turn, which rides the SDK's string prompt exactly as it always has. */
+  images: ContentBlock[];
   continuation: boolean;
+}
+
+/** Per-turn image ceiling. A fresh replay delivers the whole conversation, so
+ *  without a cap a session that had traded a dozen screenshots would re-upload
+ *  all of them on every divergence. The newest are the ones the turn is about. */
+export const MAX_TURN_IMAGES = 8;
+
+/** The image blocks a delivered slice carries, newest kept. */
+export function turnImages(messages: AnthropicMessage[]): ContentBlock[] {
+  const images: ContentBlock[] = [];
+  for (const m of messages) {
+    if (m.role !== "user" || !Array.isArray(m.content)) continue;
+    for (const b of m.content) if (b?.type === "image") images.push(b);
+  }
+  return images.length > MAX_TURN_IMAGES ? images.slice(-MAX_TURN_IMAGES) : images;
 }
 
 /** The bridge's continuation decision, factored pure for tests: continuation
@@ -307,13 +362,26 @@ export function planSdkTurn(
   messages: AnthropicMessage[]
 ): PiSdkTurnPlan {
   const continuation = !!stored && messages.length > stored.messageCount;
-  return continuation
-    ? {
-        resume: stored!.sdkSessionId,
-        prompt: replayConversation(messages.slice(stored!.messageCount)),
-        continuation,
-      }
-    : { resume: undefined, prompt: replayConversation(messages), continuation: false };
+  const delivered = continuation ? messages.slice(stored!.messageCount) : messages;
+  return {
+    resume: continuation ? stored!.sdkSessionId : undefined,
+    prompt: replayConversation(delivered),
+    images: turnImages(delivered),
+    continuation,
+  };
+}
+
+/** Placeholder for a turn whose only content is an image: replayConversation
+ *  skips a message with no text, and an empty prompt reads to the SDK as an
+ *  empty turn. */
+export const IMAGE_ONLY_PROMPT = "(see the attached image)";
+
+/** The structured user content for a turn carrying images, or null when the
+ *  turn is plain text and should keep using the string prompt. */
+export function sdkPromptContent(plan: PiSdkTurnPlan): ContentBlock[] | null {
+  if (!plan.images.length) return null;
+  const text = plan.prompt.trim();
+  return [...plan.images, { type: "text", text: text || IMAGE_ONLY_PROMPT }];
 }
 
 export const MAX_PI_SDK_SESSIONS = 500;
@@ -610,7 +678,10 @@ async function* runSdkAttempt(
     // OUR local admission control, it frees within the hour, and the
     // exhaustion sideline is shared with the opencode bridge — a synthetic
     // refusal must never bench the account cross-engine until the 5h reset.
-    const estTokens = Math.ceil((plan.prompt.length + system.length) / 4);
+    // ~1.6k tokens is a typical screenshot. The estimate only feeds our local
+    // rolling cap, so rough is the right amount of precision here.
+    const estTokens =
+      Math.ceil((plan.prompt.length + system.length) / 4) + plan.images.length * 1600;
     const rate = admitBridgeRequest(account.id, estTokens);
     if (!rate.allowed) {
       const rateErr = new Error(
@@ -656,8 +727,23 @@ async function* runSdkAttempt(
     let sawStreamContent = false;
     let emittedCaptures = 0;
 
+    // A turn carrying images goes in as one streaming-input user message whose
+    // content holds the real image blocks; a plain-text turn keeps the string
+    // prompt unchanged. Everything else about the turn (resume, hooks, partial
+    // streaming, the passthrough tools) is indifferent to which shape it gets.
+    const promptContent = sdkPromptContent(plan);
+    const sdkPrompt = promptContent
+      ? (async function* () {
+          yield {
+            type: "user" as const,
+            message: { role: "user" as const, content: promptContent },
+            parent_tool_use_id: null,
+          };
+        })()
+      : plan.prompt;
+
     const q = query({
-      prompt: plan.prompt,
+      prompt: sdkPrompt as any,
       options: {
         cwd: BRIDGE_CWD,
         model: model.id,
