@@ -1,4 +1,4 @@
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { PANEL_RESIZE } from "../lib/session-panel-classes";
 import { suppressLayoutAnimations } from "../ui/motion";
 
@@ -18,6 +18,7 @@ import { suppressLayoutAnimations } from "../ui/motion";
  * container's right side.
  */
 const OPEN_KEY = "opensession-panel-open";
+const OPEN_CHANGE_EVENT = "opensession-panel-open-changed";
 const WIDTH_KEY = "opensession-panel-w";
 /** Below this the panel stops being a column and overlays the pane, so it
     starts closed rather than covering a screen that has no room for both. */
@@ -41,9 +42,29 @@ export function useSidePanel(): SidePanel {
 			return stored === "true" && window.innerWidth > COLUMN_MIN_WIDTH;
 		return window.innerWidth > COLUMN_MIN_WIDTH;
 	});
+	useEffect(() => {
+		const syncOpen = () => {
+			const stored = localStorage.getItem(OPEN_KEY);
+			setOpenState(
+				stored !== null
+					? stored === "true" && window.innerWidth > COLUMN_MIN_WIDTH
+					: window.innerWidth > COLUMN_MIN_WIDTH,
+			);
+		};
+		const syncStorage = (event: StorageEvent) => {
+			if (event.key === OPEN_KEY) syncOpen();
+		};
+		window.addEventListener(OPEN_CHANGE_EVENT, syncOpen);
+		window.addEventListener("storage", syncStorage);
+		return () => {
+			window.removeEventListener(OPEN_CHANGE_EVENT, syncOpen);
+			window.removeEventListener("storage", syncStorage);
+		};
+	}, []);
 	function setOpen(next: boolean) {
 		setOpenState(next);
 		localStorage.setItem(OPEN_KEY, String(next));
+		window.dispatchEvent(new Event(OPEN_CHANGE_EVENT));
 	}
 
 	const [width, setWidth] = useState<number>(() => {

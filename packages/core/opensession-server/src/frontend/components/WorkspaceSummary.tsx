@@ -154,6 +154,7 @@ function emptyData(): SummaryData {
 
 const IMAGE_RE = /\.(png|jpe?g|gif|webp|avif|svg)$/i;
 const OPEN_KEY = "opensession-workspace-summary-open";
+const OPEN_CHANGE_EVENT = "opensession-workspace-summary-open-changed";
 
 /**
  * One identity per reviewer, merged across the two ways a review lands on
@@ -282,17 +283,69 @@ export function WorkspaceSummary({
 		() => localStorage.getItem(OPEN_KEY) === "true",
 	);
 	const initialOpen = useRef(open);
+	const openRef = useRef(open);
+	openRef.current = open;
+	const workspaceKey = session.workspaceId || session.id;
+	const previousWorkspaceKey = useRef(workspaceKey);
 	useEffect(() => {
 		onOpenChange?.(initialOpen.current);
 		return () => onOpenChange?.(false);
 	}, [onOpenChange]);
+	useEffect(() => {
+		const syncOpen = () => {
+			const nextOpen = localStorage.getItem(OPEN_KEY) === "true";
+			if (nextOpen === openRef.current) return;
+			openRef.current = nextOpen;
+			setOpen(nextOpen);
+			onOpenChange?.(nextOpen);
+		};
+		const syncStorage = (event: StorageEvent) => {
+			if (event.key === OPEN_KEY) syncOpen();
+		};
+		window.addEventListener(OPEN_CHANGE_EVENT, syncOpen);
+		window.addEventListener("storage", syncStorage);
+		return () => {
+			window.removeEventListener(OPEN_CHANGE_EVENT, syncOpen);
+			window.removeEventListener("storage", syncStorage);
+		};
+	}, [onOpenChange]);
+	useEffect(() => {
+		if (previousWorkspaceKey.current === workspaceKey) return;
+		previousWorkspaceKey.current = workspaceKey;
+		const nextOpen = localStorage.getItem(OPEN_KEY) === "true";
+		if (nextOpen === openRef.current) return;
+		openRef.current = nextOpen;
+		setOpen(nextOpen);
+		onOpenChange?.(nextOpen);
+	}, [onOpenChange, workspaceKey]);
 	function changeOpen(nextOpen: boolean) {
+		openRef.current = nextOpen;
 		setOpen(nextOpen);
 		localStorage.setItem(OPEN_KEY, String(nextOpen));
 		onOpenChange?.(nextOpen);
+		window.dispatchEvent(new Event(OPEN_CHANGE_EVENT));
 	}
 	return (
-		<Popover.Root open={open} onOpenChange={changeOpen}>
+		<Popover.Root
+			open={open}
+			onOpenChange={(nextOpen, details) => {
+				const target = details.event.target;
+				const switchingWorkspace =
+					!nextOpen &&
+					details.reason === "outside-press" &&
+					target instanceof Element &&
+					!!target.closest("[data-sidebar-row]");
+				if (!switchingWorkspace) {
+					changeOpen(nextOpen);
+					return;
+				}
+				// A workspace-row click has to dismiss this popup before navigation.
+				// Keep the preference so the destination workspace opens the same view.
+				openRef.current = false;
+				setOpen(false);
+				onOpenChange?.(false);
+			}}
+		>
 			<Tooltip label="Workspace summary">
 				<Popover.Trigger
 					className={cn(
