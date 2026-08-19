@@ -128,6 +128,7 @@ import {
 	restorePersistedQueueState,
 	steeredReceipts,
 	stoppedSessions,
+	takeSteerReceiptForText,
 	type QueueItem,
 } from "./queue-state";
 import { isShuttingDown } from "./shutdown-state";
@@ -252,6 +253,43 @@ export function enqueuePrompt(
 	// Queueing is a delivery promise, not just a UI state. Arm the idle watcher
 	// here so every queued message drains after the current run, even if a caller
 	// forgets to do that explicitly or the session becomes idle between checks.
+	watchExternalRunAndDrain(sessionId);
+}
+
+/**
+ * A steer the engine bounced back (`steer_failed`): put the message into the
+ * queue as the ITEM it was, not as the string the host echoed.
+ *
+ * hostSteer returns true once the frame is written to the socket, not once
+ * the host accepts it, so a steer can be recorded as delivered and then be
+ * refused (the run was already finishing, or that backend cannot steer).
+ * Both halves of the reversal belong here: retire the receipt, which
+ * otherwise goes on claiming the running turn has this message, and re-queue
+ * the original content with its user kept in its own field. Enqueueing the
+ * echoed text instead stored "[Name] " inside content, which showed up in
+ * the queue row and got attributed a second time by a multi-item drain.
+ *
+ * Front of the queue: this message was already meant to reach the agent
+ * ahead of anything queued behind it, and the steer is the only reason it
+ * left the queue at all.
+ */
+export function requeueFailedSteer(
+	sessionId: string,
+	text: string,
+	user?: string,
+): void {
+	// effects=false: the enqueue below persists and broadcasts both maps, so
+	// watchers never see a frame with the message in neither of them.
+	const receipt = takeSteerReceiptForText(sessionId, text, false);
+	// No receipt (a steer recorded by a path that keeps none, or one already
+	// reconciled away): fall back to the echoed text, minus the prefix this
+	// run composed, so content stays the raw message either way.
+	const prefix = user ? `[${user}] ` : "";
+	const item = receipt ?? {
+		content: prefix && text.startsWith(prefix) ? text.slice(prefix.length) : text,
+		user,
+	};
+	enqueuePrompt(sessionId, item, { front: true });
 	watchExternalRunAndDrain(sessionId);
 }
 
@@ -1350,11 +1388,9 @@ export async function maybeLaunchSandboxedRun(
 		const runCallbacks = {
 			onAskUser: makeAskHandler(session.id),
 			// A steer that reached the in-container run too late must not
-			// evaporate — queue it like the busy-path does.
-			onSteerFailed: (text: string) => {
-				enqueuePrompt(session.id, { content: text, user: opts.user });
-				watchExternalRunAndDrain(session.id);
-			},
+			// evaporate. Hand it back to the queue, receipt and all.
+			onSteerFailed: (text: string) =>
+				requeueFailedSteer(session.id, text, opts.user),
 		};
 		// Launch eagerly (docker exec + socket connect awaited here) so failure is
 		// visible before the stream begins and the prompt is never rerouted.
@@ -2127,10 +2163,7 @@ async function runSessionPromptInner(
 					trustProfile: isAutomationSession ? "automation" : "interactive",
 					journalKind: "prompt",
 					onAskUser: makeAskHandler(sessionId),
-					onSteerFailed: (text) => {
-						enqueuePrompt(session.id, { content: text, user });
-						watchExternalRunAndDrain(session.id);
-					},
+					onSteerFailed: (text) => requeueFailedSteer(session.id, text, user),
 					fallbackInProcessMcp: () =>
 						isAutomationSession
 							? automationSessionMcp(session, sessionId)

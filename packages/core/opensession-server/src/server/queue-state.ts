@@ -403,6 +403,52 @@ export function clearSteerReceipts(sessionId: string): void {
 	broadcastQueue(sessionId);
 }
 
+/**
+ * Take back the receipt for a steer the engine bounced (`steer_failed`), so
+ * the caller can put that message where it actually is: the queue.
+ *
+ * The receipt and the queue are the two halves of one invariant. A message is
+ * in promptQueues OR in steeredReceipts, never both, because "Steered" claims
+ * the running turn already has it while a queued row promises a future turn
+ * will. A rescue that only enqueues leaves the panel asserting both at once.
+ *
+ * Match on the ATTRIBUTED form as well as the raw one: the host echoes back
+ * the exact string it was handed, which is what steerQueuedPrompt composed
+ * (`[Name] text`), while the receipt stores content and user separately.
+ * Returning the ORIGINAL item is the point. Re-queueing the echoed string
+ * would store the prefix inside content, where a multi-item drain attributes
+ * it a second time and the delivered-steer reconcile can never match it.
+ *
+ * Undefined = no receipt matched, and the caller owns the fallback. Pass
+ * effects=false when a following queue write will persist and broadcast, so
+ * watchers see one consistent update rather than a moment with the message
+ * in neither place.
+ */
+export function takeSteerReceiptForText(
+	sessionId: string,
+	text: string,
+	effects = true,
+): QueueItem | undefined {
+	const steered = steeredReceipts.get(sessionId);
+	if (!steered?.length) return undefined;
+	const wanted = text.trim();
+	// First match only: two identical steers are two messages, and one bounce
+	// retires exactly one of them (same one-for-one rule as undeliveredSteers).
+	const index = steered.findIndex((item) => {
+		const raw = item.content.trim();
+		return raw === wanted || (!!item.user && `[${item.user}] ${raw}` === wanted);
+	});
+	if (index < 0) return undefined;
+	const [item] = steered.splice(index, 1);
+	if (steered.length > 0) steeredReceipts.set(sessionId, steered);
+	else steeredReceipts.delete(sessionId);
+	if (effects) {
+		persistQueues();
+		broadcastQueue(sessionId);
+	}
+	return item;
+}
+
 // Clear a steer receipt the moment its message lands in the transcript (the
 // file-watcher reports appended entries). Waiting for run end left delivered
 // messages showing as "queued" whenever the client's transcript tail didn't
