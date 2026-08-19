@@ -3,13 +3,17 @@ import type { TranscriptEntry } from "../lib/types";
 import { useWebSocket } from "../hooks/useWebSocket";
 import { getCurrentUser } from "./UserPicker";
 import { renderMarkdown } from "../lib/markdown";
-import { fetchFileMentions, fetchMentionSuggestions } from "../lib/api";
+import {
+	fetchFileMentions,
+	fetchMentionSuggestions,
+	fetchModels,
+	type ModelOption,
+} from "../lib/api";
+import type { FileAttachment } from "../lib/images";
 import { TranscriptBlocks } from "./TranscriptBlocks";
-import { useFileMentions } from "./useFileMentions";
-import { IconArrowUp } from "./icons";
+import { Composer } from "./Composer";
 import { mergeTranscriptEntries } from "../lib/transcript-state";
 import { CONTINUE_AFTER_FAILURE_PROMPT } from "../lib/continue-run";
-import { noAutofill } from "../lib/composer-autofill";
 import { cn } from "../ui/cn";
 import {
 	msgBodyStreaming,
@@ -25,9 +29,10 @@ interface DeskConversationProps {
 	presenceActive?: boolean;
 	/** Focus the composer when this conversation first mounts. */
 	autoFocus?: boolean;
-	/** Controls rendered inside the composer, immediately before submit. */
-	trailingActions?: React.ReactNode;
 	placeholder?: string;
+	/** The Desk session's stored model and reasoning effort (from
+	 *  /api/desk/ensure). Both are switchable from the composer's model pill. */
+	model?: string;
 	effort?: string;
 	hideBefore?: string;
 	/** While a voice call is live, typed messages go into it instead of
@@ -55,9 +60,9 @@ export function DeskConversation({
 	sessionId,
 	presenceActive = true,
 	autoFocus = false,
-	trailingActions,
 	placeholder,
-	effort,
+	model: sessionModel,
+	effort: sessionEffort,
 	hideBefore,
 	voiceSend,
 	onOpenSubagent,
@@ -68,8 +73,27 @@ export function DeskConversation({
 	const [entries, setEntries] = useState<TranscriptEntry[]>([]);
 	const [streamText, setStreamText] = useState("");
 	const [isRunning, setIsRunning] = useState(false);
-	const [draft, setDraft] = useState("");
 	const [pending, setPending] = useState<string | null>(null);
+	// Attachments staged for the next send. The Composer stages files to disk
+	// itself (no `onAddAttachments`), the same way the catch-up deck's reply box
+	// does; both ride along on the prompt.
+	const [images, setImages] = useState<string[]>([]);
+	const [files, setFiles] = useState<FileAttachment[]>([]);
+	// The model pill's catalog. Empty until it loads — the pill falls back to
+	// naming the id it was given, so nothing waits on this.
+	const [models, setModels] = useState<ModelOption[]>([]);
+	const [defaultModel, setDefaultModel] = useState("");
+	const [model, setModel] = useState(sessionModel || "");
+	// The Desk is pinned to a fast model on low effort server-side (desk.ts);
+	// both are the session's own settings from here on.
+	const [effort, setEffort] = useState(sessionEffort || "low");
+	// Picking a starter pill fills the composer rather than sending, so it goes
+	// in as a one-shot prefill (the draft lives inside the Composer).
+	const [prefill, setPrefill] = useState<{
+		seq: number;
+		text: string;
+		replace: boolean;
+	} | null>(null);
 	const bodyRef = useRef<HTMLDivElement | null>(null);
 	const textareaRef = useRef<HTMLTextAreaElement | null>(null);
 
@@ -106,16 +130,14 @@ export function DeskConversation({
 	const earlierCount = cleared.length - visibleEntries.length;
 	const hasContent = visibleEntries.length > 0 || !!streamText || !!pending;
 
-	// "@"-mentions: files (this session's repo), other sessions, teammates —
-	// same suggestions endpoint as the main composer.
-	const mentions = useFileMentions({
-		value: draft,
-		onChange: setDraft,
-		textareaRef,
-		mentionFetch: (q) => fetchFileMentions(q, sessionId),
-		paletteFetch: (q) =>
-			fetchMentionSuggestions(q, sessionId, getCurrentUser()),
-	});
+	useEffect(() => {
+		fetchModels()
+			.then((m) => {
+				setModels(m.models);
+				setDefaultModel(m.default);
+			})
+			.catch(() => {});
+	}, []);
 
 	// Watch the Desk only and tear the socket down on unmount / id change.
 	useEffect(() => {
@@ -245,11 +267,15 @@ export function DeskConversation({
 		followRef.current = el.scrollHeight - el.scrollTop - el.clientHeight < 80;
 	}
 
-	function handleSend() {
-		const content = draft.trim();
-		if (!content || !connected) return;
+	// Returns true when the message was consumed, so the (uncontrolled) Composer
+	// clears its draft; false keeps it for a retry — same contract as the
+	// session view.
+	function handleSend(raw: string, opts?: { steer?: boolean }): boolean {
+		const content = raw.trim();
+		if (!connected) return false;
+		if (!content && images.length === 0 && files.length === 0) return false;
 		// Slash commands (/model, /loop, /goal, …) are handled by the main
-		// session's command system, which this compact composer deliberately
+		// session's command system, which this compact surface deliberately
 		// doesn't wire up. Sent as a plain prompt they produce no turn, so the
 		// optimistic "sending…" bubble below would never reconcile and stick
 		// forever. Surface an inline hint instead — the input isn't silently
@@ -265,26 +291,54 @@ export function DeskConversation({
 					timestamp: new Date().toISOString(),
 				},
 			]);
-			setDraft("");
-			return;
+			return true;
 		}
 		// Live voice call: inject the typed message into it (the call mirrors its
 		// transcript back, so no optimistic bubble — the entry lands via append).
-		if (voiceSend?.(content)) {
-			setDraft("");
+		if (content && voiceSend?.(content)) {
 			followRef.current = true;
-			return;
+			return true;
 		}
+		// Prefer the staged disk path (HTTP upload); fall back to inline dataUrl.
+		const filePayload = files.map((f) =>
+			f.path
+				? { name: f.name, path: f.path }
+				: { name: f.name, dataUrl: f.dataUrl },
+		);
 		send({
 			type: "prompt",
 			sessionId,
 			content,
 			user: getCurrentUser(),
-			effort: effort || "high",
+			effort: effort || "low",
+			// Busy sends follow the same two behaviours as a session: plain send
+			// queues until the run finishes, ⌘/Ctrl+Enter steers into it.
+			...(isRunning
+				? { busyMode: opts?.steer ? ("steer" as const) : ("queue" as const) }
+				: {}),
+			...(images.length ? { images } : {}),
+			...(files.length ? { files: filePayload } : {}),
 		});
 		setPending(content);
-		setDraft("");
+		setImages([]);
+		setFiles([]);
 		followRef.current = true;
+		return true;
+	}
+
+	// Model and effort are settings of the Desk session, so the switch routes
+	// through the /model command (persisted + broadcast server-side), exactly
+	// as SessionViewer and the catch-up deck do.
+	function handleModelChange(next: string) {
+		const target = next || defaultModel;
+		if (!target || target === (model || defaultModel)) return;
+		setModel(next);
+		send({
+			type: "prompt",
+			sessionId,
+			content: `/model ${target}`,
+			user: getCurrentUser(),
+		});
 	}
 
 	// "Continue" under a failed run's notice. An ordinary prompt, like anything
@@ -296,16 +350,26 @@ export function DeskConversation({
 			sessionId,
 			content: CONTINUE_AFTER_FAILURE_PROMPT,
 			user: getCurrentUser(),
-			effort: effort || "high",
+			effort: effort || "low",
 		});
 		followRef.current = true;
 	}
 
 
 	return (
-		<div className="relative flex h-full min-h-0 flex-col">
+		// `--desk-under` is what the composer takes back off the conversation: the
+		// input box rides up over the last rows in normal flow, so they scroll
+		// under it instead of stopping above it. The session view does the same
+		// (VIEWER_INPUT), fading the overlap into its own opaque fill — the Desk
+		// sits on the palette's glass, so the rows dissolve into a mask instead.
+		<div className="relative flex h-full min-h-0 flex-col [--desk-under:18px]">
 			<div
-				className="min-h-0 flex-1 overflow-y-auto px-3 pb-16 pt-2"
+				className={cn(
+					"min-h-0 flex-1 overflow-y-auto px-3 pt-2",
+					"pb-[calc(var(--desk-under)_+_12px)]",
+					"[-webkit-mask-image:linear-gradient(to_bottom,#000_calc(100%_-_var(--desk-under)),transparent_100%)]",
+					"[mask-image:linear-gradient(to_bottom,#000_calc(100%_-_var(--desk-under)),transparent_100%)]",
+				)}
 				ref={bodyRef}
 				onScroll={onScroll}
 			>
@@ -366,9 +430,11 @@ export function DeskConversation({
 				)}
 			</div>
 
-			<div className="absolute inset-x-2 bottom-2 z-10">
+			<div className="relative z-[1] mt-[calc(-1*var(--desk-under))] shrink-0 px-2 pb-2">
 				{/* Starter pills stay attached to the composer and disappear once the
-				    conversation starts. */}
+				    conversation starts. Picking one fills the draft rather than
+				    sending: some name actions with side effects, and all of them are
+				    openings you'd want to finish in your own words. */}
 				{!hasContent && !!suggestions?.length && (
 					<div className="flex gap-1.5 overflow-x-auto px-1 pb-1.5 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
 						{suggestions.map((s) => (
@@ -377,7 +443,11 @@ export function DeskConversation({
 								key={s}
 								className="shrink-0 whitespace-nowrap rounded-full bg-hover px-3 py-1.5 text-label font-medium text-dim hover:bg-active hover:text-fg"
 								onClick={() => {
-									setDraft(s);
+									setPrefill((current) => ({
+										seq: (current?.seq ?? 0) + 1,
+										text: s,
+										replace: true,
+									}));
 									textareaRef.current?.focus();
 								}}
 							>
@@ -387,45 +457,39 @@ export function DeskConversation({
 					</div>
 				)}
 
-				<div
-					className="flex items-center gap-1 rounded-popup border border-line bg-surface p-1 smooth-shadow-ring-sm"
-					ref={mentions.inputWrapRef}
-				>
-					{mentions.popup}
-					<textarea
-						ref={textareaRef}
-						{...mentions.inputProps}
-						className="h-9 min-h-9 min-w-0 flex-1 resize-none border-0 bg-transparent px-2 py-2 text-xs font-medium leading-[18px] text-fg outline-none placeholder:text-dim disabled:cursor-default disabled:opacity-40"
-						rows={1}
-						autoFocus={autoFocus}
-						{...noAutofill}
-						value={draft}
-						placeholder={
-							connected ? placeholder || "Ask your Desk…" : "Not connected"
-						}
-						disabled={!connected}
-						onChange={(e) => setDraft(e.target.value)}
-						onKeyUp={mentions.sync}
-						onClick={mentions.sync}
-						onBlur={() => setTimeout(mentions.close, 120)}
-						onKeyDown={(e) => {
-							if (mentions.handleKeyDown(e)) return;
-							if (e.key === "Enter" && !e.shiftKey) {
-								e.preventDefault();
-								handleSend();
-							}
-						}}
-					/>
-					{trailingActions}
-					<button
-						className="flex size-9 shrink-0 items-center justify-center rounded-control bg-fg text-panel disabled:opacity-40"
-						onClick={handleSend}
-						disabled={!connected || !draft.trim()}
-						aria-label="Send"
-					>
-						<IconArrowUp size={20} />
-					</button>
-				</div>
+				{/* The session composer itself, so the Desk gets what a session gets:
+				    attachments, dictation, @-mentions, the model and effort pill, and
+				    the same send/queue/steer gestures. */}
+				<Composer
+					draftKey={`desk:${sessionId}`}
+					onSend={handleSend}
+					placeholder={
+						connected ? placeholder || "Ask your Desk…" : "Not connected"
+					}
+					disabled={!connected}
+					sendDisabled={(text) =>
+						!text.trim() && images.length === 0 && files.length === 0
+					}
+					busy={isRunning}
+					images={images}
+					onImagesChange={setImages}
+					files={files}
+					onFilesChange={setFiles}
+					prefill={prefill}
+					models={models}
+					defaultModel={defaultModel}
+					model={model}
+					onModelChange={handleModelChange}
+					modelTitle="Model and reasoning effort for your Desk"
+					effort={effort}
+					onEffortChange={setEffort}
+					mentionFetch={(q) => fetchFileMentions(q, sessionId)}
+					paletteFetch={(q) =>
+						fetchMentionSuggestions(q, sessionId, getCurrentUser())
+					}
+					autoFocus={autoFocus}
+					textareaRef={textareaRef}
+				/>
 			</div>
 		</div>
 	);

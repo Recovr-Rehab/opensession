@@ -4,7 +4,7 @@ import { getCurrentUser } from "./UserPicker";
 import { DeskConversation } from "./DeskConversation";
 import { DESK_SUGGESTIONS } from "../lib/desk-suggestions";
 import { Modal } from "../ui/modal";
-import { IconDesk, IconExpand, IconMic, IconX } from "./icons";
+import { IconChevronDown, IconDesk, IconExpand } from "./icons";
 import { Button } from "../ui/button";
 import {
 	DeskVoiceClient,
@@ -46,6 +46,11 @@ function DeskBody({
 	const [sessionId, setSessionId] = useState<string | null>(null);
 	const [clearedAt, setClearedAt] = useState<string | undefined>(undefined);
 	const [ensureError, setEnsureError] = useState<string | null>(null);
+	// The Desk session's stored model + effort, so the composer's pill opens on
+	// what this session actually runs rather than on the instance default.
+	const [settings, setSettings] = useState<{ model?: string; effort?: string }>(
+		{},
+	);
 
 	// Voice mode (Settings → Desk voice): a live GPT Realtime call layered on
 	// this same Desk session. The call mirrors its transcript into the session,
@@ -103,9 +108,14 @@ function DeskBody({
 				const data = (await res.json()) as {
 					sessionId: string;
 					clearedAt: string | null;
+					session: { model?: string; effort?: string } | null;
 				};
 				if (cancelled) return;
 				setSessionId(data.sessionId);
+				setSettings({
+					model: data.session?.model,
+					effort: data.session?.effort,
+				});
 				if (data.clearedAt) setClearedAt(data.clearedAt);
 			} catch (e: any) {
 				if (!cancelled) setEnsureError(e?.message || "Failed to open the Desk");
@@ -153,7 +163,7 @@ function DeskBody({
 					onClick={clearSession}
 					title="Clear the session here. The full transcript stays in the expanded session."
 				>
-					Clear
+					Clear chat
 				</Button>
 				{sessionId && (
 					<Button
@@ -173,9 +183,10 @@ function DeskBody({
 					variant="ghost"
 					size="sm"
 					className="shrink-0 text-faint"
-					icon={<IconX size={20} />}
+					icon={<IconChevronDown size={20} />}
 					onClick={onClose}
-					aria-label="Close"
+					title="Minimise Desk"
+					aria-label="Minimise Desk"
 				/>
 			</div>
 
@@ -190,26 +201,8 @@ function DeskBody({
 						sessionId={sessionId}
 						presenceActive={active}
 						autoFocus={active && !phone}
-						trailingActions={
-							voiceEnabled ? (
-								<Button
-									variant="ghost"
-									size="lg"
-									className={`shrink-0 ${voiceActive ? "text-fg" : "text-faint"}`}
-									icon={<IconMic size={20} />}
-									onClick={toggleVoice}
-									title={
-										voiceActive
-											? "End the voice call"
-											: "Talk to your Desk (GPT Realtime)"
-									}
-									aria-label={
-										voiceActive ? "End voice call" : "Start voice call"
-									}
-								/>
-							) : undefined
-						}
-						effort="low"
+						model={settings.model}
+						effort={settings.effort}
 						hideBefore={clearedAt}
 						voiceSend={(text) =>
 							voiceRef.current?.active
@@ -257,9 +250,11 @@ export function DeskOverlay({
 			<Modal.Content
 				variant="palette"
 				keepMounted
-				widthClassName="w-[min(560px,100%)]"
+				widthClassName="w-[min(650px,100%)]"
 				className={
-					phone ? "h-[min(560px,85dvh)]" : "h-[540px] max-h-[80dvh]"
+					phone
+						? "h-[min(600px,85dvh)] data-[starting-style]:scale-[0.9]!"
+						: "h-[600px] max-h-[80dvh] data-[starting-style]:scale-[0.9]!"
 				}
 				aria-label="Desk"
 			>
