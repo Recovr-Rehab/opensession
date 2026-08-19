@@ -364,7 +364,7 @@ export function WorkspaceSummary({
 				// Keep the usual 8px air below whichever chrome row is lowest. The
 				// desktop tab strip is 40px tall and sits after the header's own 8px
 				// inset, so clear both before adding 16px of breathing room.
-				sideOffset={tabStripVisible ? 64 : 8}
+				sideOffset={tabStripVisible ? 72 : 20}
 				elevation="lg"
 				className={WS_SUMMARY_CARD}
 				initialFocus
