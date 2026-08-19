@@ -850,7 +850,8 @@ export async function bootstrapRemoteSandbox(
   );
   need(
     await driver.exec(
-      `ln -sf ${REMOTE_REPO}/deploy/sandbox/opensession ${REMOTE_HOME}/.local/bin/opensession && ` +
+      `mkdir -p ${REMOTE_HOME}/.local/bin && ` +
+        `ln -sf ${REMOTE_REPO}/deploy/sandbox/opensession ${REMOTE_HOME}/.local/bin/opensession && ` +
         `chmod 755 ${REMOTE_REPO}/deploy/sandbox/opensession ${REMOTE_HOME}/.local/bin/opensession`,
     ),
     "workload identity client install",
