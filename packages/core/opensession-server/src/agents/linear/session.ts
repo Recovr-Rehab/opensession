@@ -10,7 +10,7 @@ import {
   personaName,
   productName,
 } from "../../server/config";
-import { getDefaultModel, toOpencodeModel } from "../../server/models";
+import { getDefaultModel, toPiModel } from "../../server/models";
 import { writeJsonAtomic } from "../../server/shared/atomic-write";
 import {
   createWorktree as createRepoWorktree,
@@ -414,7 +414,7 @@ export async function runAgentHeadless(
       sessionId: claudeSessionId || undefined,
       cwd: worktreeDir,
       mode: "code",
-      model: toOpencodeModel(session?.model || getDefaultModel()),
+      model: toPiModel(session?.model || getDefaultModel()),
       user: actorEmail,
       author: commitAuthor,
       // Teammate-driven runs keep AWS read access — also keeps the shared

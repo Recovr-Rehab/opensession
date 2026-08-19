@@ -78,7 +78,7 @@ import { ensureGeneratedTitle } from "../../server/generated-titles";
 import { invalidateSessionsCache } from "../../server/session-cache";
 import {
   getDefaultModel,
-  toOpencodeModel,
+  toPiModel,
   interactiveFallbackModel,
   providerFor,
   resolveModel,
@@ -984,7 +984,7 @@ export async function processMessage(
       sessionId: session.claudeSessionId || undefined,
       cwd,
       mode: "code",
-      model: toOpencodeModel(session.model || getDefaultModel()),
+      model: toPiModel(session.model || getDefaultModel()),
       // Interactive Slack runs are as interactive as the web UI: when the
       // primary model exhausts (e.g. the small Fable weekly bucket), let
       // runAgent's tier graph carry the turn onto Sol/Opus instead of

@@ -12,7 +12,7 @@ import {
   plain,
 } from "./api";
 import { buildMentionPrompt, buildWorkPrompt, buildRefundExecutionPrompt } from "./prompts";
-import { getDefaultModel, toOpencodeModel } from "../../server/models";
+import { getDefaultModel, toPiModel } from "../../server/models";
 import { runAgent } from "../../server/agent-runner";
 import { STRIPE_CONFIRM_TOOLS } from "../../server/runner-shared";
 import { classifyRefundApproval } from "./refund-intent";
@@ -132,7 +132,7 @@ async function runWorkTurn(
       sessionId: resumeSessionId || undefined,
       cwd,
       mode: "code",
-      model: toOpencodeModel(getDefaultModel()),
+      model: toPiModel(getDefaultModel()),
       // Every configured connector, as this loop has always run. Untrusted
       // ticket text reaches it, so the containment is the deny-set below +
       // per-server allowedUsers — not the mount list. Narrow this to the
