@@ -377,7 +377,7 @@ export const MCP_SERVER_CATALOG: McpServerCatalogEntry[] = [
   },
   {
     name: "opensession-health",
-    summary: "Read this instance's own disk, memory, load and process-fleet counters.",
+    summary: "Read this instance's own disk, memory, load, process fleets and agent status.",
     source: "packages/core/opensession-server/src/server/health-mcp.ts",
     wiring: ["packages/core/opensession-server/src/server/automations.ts"],
     runClasses: ["automation"],

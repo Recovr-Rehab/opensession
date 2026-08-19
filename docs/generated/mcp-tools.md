@@ -822,7 +822,7 @@ End this turn without replying, when you were addressed directly and have decide
 
 ## opensession-health
 
-Read this instance's own disk, memory, load and process-fleet counters.
+Read this instance's own disk, memory, load, process fleets and agent status.
 
 - **Source** `packages/core/opensession-server/src/server/health-mcp.ts`
 - **Wired in** `packages/core/opensession-server/src/server/automations.ts`
@@ -833,7 +833,7 @@ Read this instance's own disk, memory, load and process-fleet counters.
 
 `mcp__opensession-health__read_host_metrics` · input: none
 
-Read this instance's host metrics: disk usage on /, memory and swap, load averages against core count, counts of the process fleets that have leaked before (opencode servers, MCP proxies, headless Chrome, dev stacks, git operations), and cgroup memory accounting. Returns the same numbers as the health endpoint's `system` block. Use it for a health check instead of trying to fetch the server over HTTP, which is refused for loopback addresses.
+Read this instance's health: disk usage on /, memory and swap, load averages against core count, counts of the process fleets that have leaked before (opencode servers, MCP proxies, headless Chrome, dev stacks, git operations), cgroup memory accounting, and each agent's status. Returns the same fields as the health endpoint. Use it for a health check instead of trying to fetch the server over HTTP, which is refused for loopback addresses.
 
 ## opensession-self
 
