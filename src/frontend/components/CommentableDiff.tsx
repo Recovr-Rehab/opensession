@@ -17,7 +17,13 @@ import type {
 } from "@pierre/diffs";
 import type { Editor, EditorOptions } from "@pierre/diffs/edit";
 import type { DiffFileGroup } from "../lib/types";
-import { IconCheck, IconChevronRight, IconCopy, IconPencil, IconUndo } from "./icons";
+import {
+  IconCheck,
+  IconChevronRight,
+  IconCopy,
+  IconPencil,
+  IconUndo,
+} from "./icons";
 import { copyToClipboard } from "../lib/share-link";
 import { canAutoExpandDiffFile } from "../lib/review-diff";
 import { noAutofill } from "../lib/composer-autofill";
@@ -119,6 +125,14 @@ interface Props {
   diffStyle?: "unified" | "split";
   /** Soft-wrap long lines instead of scrolling each file horizontally. */
   wrapLines?: boolean;
+  /** Highlight the changed words within added and removed lines. */
+  structuralHighlighting?: boolean;
+  /** Show per-file addition and deletion totals in file and group headers. */
+  showFileStats?: boolean;
+  /** Follow the app theme, or pin the code surface light or dark. */
+  codeTheme?: "system" | "light" | "dark";
+  /** Optional review-canvas ordering, with paths absent from the list hidden. */
+  visibleFileOrder?: readonly string[];
   /** Keep each filename visible while its expanded file scrolls through a review canvas. */
   stickyFileHeaders?: boolean;
   /**
@@ -151,7 +165,10 @@ interface Props {
    * writes the edited text back.
    */
   editFile?: {
-    load: (file: FileDiffMetadata, side: "new" | "base") => Promise<string | null>;
+    load: (
+      file: FileDiffMetadata,
+      side: "new" | "base",
+    ) => Promise<string | null>;
     save: (path: string, content: string) => Promise<void>;
   };
 }
@@ -242,20 +259,32 @@ export function CommentableDiff({
   groupsLoading,
   diffStyle = "unified",
   wrapLines = false,
+  structuralHighlighting = true,
+  showFileStats = true,
+  codeTheme = "system",
+  visibleFileOrder,
   stickyFileHeaders = false,
   viewedFiles,
   onToggleViewed,
   editFile,
 }: Props) {
   const reviewMode = pendingComments !== undefined;
-  const theme = useResolvedTheme();
+  const resolvedTheme = useResolvedTheme();
+  const theme = codeTheme === "system" ? resolvedTheme : codeTheme;
   const files = useMemo<FileDiffMetadata[]>(() => {
     try {
-      return parsePatchFiles(patch).flatMap((p) => p.files);
+      const parsed = parsePatchFiles(patch).flatMap((p) => p.files);
+      if (!visibleFileOrder) return parsed;
+      const order = new Map(
+        visibleFileOrder.map((path, index) => [path, index]),
+      );
+      return parsed
+        .filter((file) => order.has(file.name))
+        .sort((a, b) => order.get(a.name)! - order.get(b.name)!);
     } catch {
       return [];
     }
-  }, [patch]);
+  }, [patch, visibleFileOrder]);
 
   // GitHub-backed "Viewed" checkboxes: hidden until the parent's fetch lands.
   const viewedEnabled = !!onToggleViewed && viewedFiles !== undefined;
@@ -271,8 +300,7 @@ export function CommentableDiff({
         files
           .slice(0, defaultExpandedFiles)
           .map((_, index) => index)
-          .filter(
-            (index) =>
+          .filter((index) =>
               canAutoExpandDiffFile(
                 files[index].name,
                 stats[index].add + stats[index].del,
@@ -316,8 +344,11 @@ export function CommentableDiff({
       });
       return indices.length ? [{ ...group, indices }] : [];
     });
-    const remaining = files.flatMap((_, index) => (used.has(index) ? [] : [index]));
-    if (remaining.length) resolved.push({ title: "Other", files: [], indices: remaining });
+    const remaining = files.flatMap((_, index) =>
+      used.has(index) ? [] : [index],
+    );
+    if (remaining.length)
+      resolved.push({ title: "Other", files: [], indices: remaining });
     return resolved.length >= 2 ? resolved : null;
   }, [files, groups]);
 
@@ -330,7 +361,9 @@ export function CommentableDiff({
   // within 4s performs it. `discarding` disables the row while the request runs.
   const [armed, setArmed] = useState<string | null>(null);
   const [discarding, setDiscarding] = useState<string | null>(null);
-  const disarmTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  const disarmTimer = useRef<ReturnType<typeof setTimeout> | undefined>(
+    undefined,
+  );
   const disarm = useCallback(() => {
     clearTimeout(disarmTimer.current);
     setArmed(null);
@@ -361,7 +394,9 @@ export function CommentableDiff({
   // Copying the path is the reliable way to get it out of the diff — text
   // selection breaks wherever the surrounding surface sets user-select: none.
   const [copied, setCopied] = useState<string | null>(null);
-  const copiedTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  const copiedTimer = useRef<ReturnType<typeof setTimeout> | undefined>(
+    undefined,
+  );
   const copyPath = useCallback((path: string) => {
     copyToClipboard(path, () => {
       setCopied(path);
@@ -394,13 +429,16 @@ export function CommentableDiff({
   // loads async, after the diff renders). Applied once per patch so it never
   // fights a user who re-expands a viewed file.
   useEffect(() => {
-    if (viewedFiles === undefined || viewedCollapseKey.current === patch) return;
+    if (viewedFiles === undefined || viewedCollapseKey.current === patch)
+      return;
     viewedCollapseKey.current = patch;
     if (viewedFiles.size === 0) return;
     setExpanded(
       (prev) =>
         new Set(
-          [...prev].filter((index) => !viewedFiles.has(files[index]?.name ?? "")),
+          [...prev].filter(
+            (index) => !viewedFiles.has(files[index]?.name ?? ""),
+          ),
         ),
     );
   }, [viewedFiles, patch, files]);
@@ -429,17 +467,22 @@ export function CommentableDiff({
   const [editingPath, setEditingPath] = useState<string | null>(null);
   const [savingEdit, setSavingEdit] = useState(false);
   const [editError, setEditError] = useState<string | null>(null);
-  const editModuleRef = useRef<typeof import("@pierre/diffs/edit") | null>(null);
+  const editModuleRef = useRef<typeof import("@pierre/diffs/edit") | null>(
+    null,
+  );
   const editorRef = useRef<Editor<Meta> | null>(null);
 
-  const startEdit = useCallback(async (file: FileDiffMetadata, index: number) => {
+  const startEdit = useCallback(
+    async (file: FileDiffMetadata, index: number) => {
     if (!editModuleRef.current) {
       editModuleRef.current = await import("@pierre/diffs/edit");
     }
     setEditError(null);
     setEditingPath(file.name);
     setExpanded((prev) => new Set(prev).add(index));
-  }, []);
+    },
+    [],
+  );
 
   const cancelEdit = useCallback(() => {
     editorRef.current = null;
@@ -498,11 +541,14 @@ export function CommentableDiff({
   // selection range is adjusted, without re-rendering the diff on each keystroke.
   const draftTextRef = useRef("");
 
-  const handleSelect = useCallback((fileIndex: number, path: string, range: SelectedLineRange | null) => {
+  const handleSelect = useCallback(
+    (fileIndex: number, path: string, range: SelectedLineRange | null) => {
     if (!range) return; // keep the draft on stray deselects; Cancel closes it
     setConfirmation(null);
     setDraft({ fileIndex, path, range });
-  }, []);
+    },
+    [],
+  );
 
   const closeDraft = useCallback(() => {
     draftTextRef.current = "";
@@ -513,7 +559,8 @@ export function CommentableDiff({
     async (body: string) => {
       const d = draftRef.current;
       if (!d) return;
-      const side: "additions" | "deletions" = d.range.side === "deletions" ? "deletions" : "additions";
+      const side: "additions" | "deletions" =
+        d.range.side === "deletions" ? "deletions" : "additions";
       await onSubmit(
         {
           path: d.path,
@@ -596,7 +643,15 @@ export function CommentableDiff({
         />
       );
     },
-    [renderPending, disabled, disabledHint, placeholder, submitLabel, closeDraft, submitDraft],
+    [
+      renderPending,
+      disabled,
+      disabledHint,
+      placeholder,
+      submitLabel,
+      closeDraft,
+      submitDraft,
+    ],
   );
 
   // Group pending comments by file once per change, so unaffected files reuse a
@@ -650,7 +705,8 @@ export function CommentableDiff({
     // Keep a file open while it holds a draft (the comment form lives inside
     // the diff), already-added pending comments (so they stay visible), or an
     // active edit session (collapsing would unmount the editor mid-edit).
-    const isOpen = expanded.has(i) || isDraftFile || pend.length > 0 || isEditing;
+    const isOpen =
+      expanded.has(i) || isDraftFile || pend.length > 0 || isEditing;
     // Open, but its turn to parse has not come round yet — the header is
     // already drawn open, and the diff drops in a frame or two later.
     const mounted = (mountRank.get(i) ?? 0) < mountBudget;
@@ -665,7 +721,9 @@ export function CommentableDiff({
       ? [
           ...pend,
           {
-            side: (draft!.range.side === "deletions" ? "deletions" : "additions") as "additions" | "deletions",
+            side: (draft!.range.side === "deletions"
+              ? "deletions"
+              : "additions") as "additions" | "deletions",
             lineNumber: Math.max(draft!.range.start, draft!.range.end),
             metadata: { kind: "draft" as const },
           },
@@ -673,7 +731,11 @@ export function CommentableDiff({
       : pend;
 
     return (
-      <div className={FILE_ROW} key={`${file.name}-${i}`} data-diff-file={file.name}>
+      <div
+        className={FILE_ROW}
+        key={`${file.name}-${i}`}
+        data-diff-file={file.name}
+      >
         <div
           // `diff-file-header` is a DOM hook, not styling — no rule reaches it
           // any more: PrPanel's Files card finds this row by that class to
@@ -709,7 +771,9 @@ export function CommentableDiff({
                 {dir}
               </span>
             )}
-            <span className="shrink-0 font-semibold whitespace-nowrap text-fg">{base}</span>
+            <span className="shrink-0 font-semibold whitespace-nowrap text-fg">
+              {base}
+            </span>
             <Tooltip label={copied === file.name ? "Copied" : "Copy path"}>
               <button
                 type="button"
@@ -726,7 +790,11 @@ export function CommentableDiff({
                   copyPath(file.name);
                 }}
               >
-                {copied === file.name ? <IconCheck size={20} /> : <IconCopy size={20} />}
+                {copied === file.name ? (
+                  <IconCheck size={20} />
+                ) : (
+                  <IconCopy size={20} />
+                )}
               </button>
             </Tooltip>
           </span>
@@ -816,14 +884,16 @@ export function CommentableDiff({
           {/* Change counts, pinned right. They hide whenever the discard icon
               shows — hover, armed, focused or in-flight — so the icon can take
               their place without the row changing size. */}
-          <span
-            className={`ml-auto flex shrink-0 gap-1.5 text-meta group-hover:invisible [[data-discard]:focus-visible~&]:invisible ${
-              isEditing ? "hidden" : ""
-            } ${armed === file.name || discarding === file.name ? "invisible" : ""}`}
-          >
-            {s.add > 0 && <span className={DIFF_ADD}>+{s.add}</span>}
-            {s.del > 0 && <span className={DIFF_DEL}>−{s.del}</span>}
-          </span>
+          {showFileStats && (
+            <span
+              className={`ml-auto flex shrink-0 gap-1.5 text-meta group-hover:invisible [[data-discard]:focus-visible~&]:invisible ${
+                isEditing ? "hidden" : ""
+              } ${armed === file.name || discarding === file.name ? "invisible" : ""}`}
+            >
+              {s.add > 0 && <span className={DIFF_ADD}>+{s.add}</span>}
+              {s.del > 0 && <span className={DIFF_DEL}>−{s.del}</span>}
+            </span>
+          )}
           {viewedEnabled && (
             <label
               className={`inline-flex shrink-0 cursor-pointer items-center gap-[5px] pl-1 font-sans text-label select-none ${
@@ -831,7 +901,10 @@ export function CommentableDiff({
               }`}
               onClick={(e) => e.stopPropagation()}
             >
-              <Checkbox checked={isViewed} onCheckedChange={() => toggleViewed(file, i)} />
+              <Checkbox
+                checked={isViewed}
+                onCheckedChange={() => toggleViewed(file, i)}
+              />
               Viewed
             </label>
           )}
@@ -847,6 +920,7 @@ export function CommentableDiff({
               theme={theme}
               diffStyle={diffStyle}
               wrapLines={wrapLines}
+              structuralHighlighting={structuralHighlighting}
               annotations={annotations}
               selectedLines={isDraftFile ? draft!.range : null}
               onSelect={handleSelect}
@@ -934,16 +1008,28 @@ export function CommentableDiff({
                     size={16}
                     className={`shrink-0 text-faint transition-transform ${collapsed ? "" : "rotate-90"}`}
                   />
-                  <span className="text-label font-semibold">{group.title}</span>
-                  <span className="text-meta text-faint">{group.indices.length}</span>
-                  <span className="ml-auto flex gap-2 text-meta">
-                    {totals.add > 0 && <span className={DIFF_ADD}>+{totals.add}</span>}
-                    {totals.del > 0 && <span className={DIFF_DEL}>−{totals.del}</span>}
+                  <span className="text-label font-semibold">
+                    {group.title}
                   </span>
+                  <span className="text-meta text-faint">
+                    {group.indices.length}
+                  </span>
+                  {showFileStats && (
+                  <span className="ml-auto flex gap-2 text-meta">
+                      {totals.add > 0 && (
+                        <span className={DIFF_ADD}>+{totals.add}</span>
+                      )}
+                      {totals.del > 0 && (
+                        <span className={DIFF_DEL}>−{totals.del}</span>
+                      )}
+                  </span>
+                  )}
                 </button>
                 {!collapsed && (
                   <div className="flex flex-col gap-[7px] border-l border-line pl-3">
-                    {group.indices.map((index) => renderFile(files[index], index))}
+                    {group.indices.map((index) =>
+                      renderFile(files[index], index),
+                    )}
                   </div>
                 )}
               </section>
@@ -978,7 +1064,11 @@ function ImageDiffRow({
   const showOld = !!srcs?.oldSrc && file.type !== "new" && !oldErr;
   const showNew = !!srcs?.newSrc && file.type !== "deleted" && !newErr;
   if (!showOld && !showNew)
-    return <div className="p-3 text-label text-dim">Image not available to preview</div>;
+    return (
+      <div className="p-3 text-label text-dim">
+        Image not available to preview
+      </div>
+    );
   return (
     <div className="flex flex-wrap gap-3 p-3">
       {showOld && (
@@ -1124,6 +1214,7 @@ const FileDiffRow = React.memo(function FileDiffRow({
   theme,
   diffStyle,
   wrapLines,
+  structuralHighlighting,
   annotations,
   selectedLines,
   onSelect,
@@ -1137,9 +1228,14 @@ const FileDiffRow = React.memo(function FileDiffRow({
   theme: "light" | "dark";
   diffStyle: "unified" | "split";
   wrapLines: boolean;
+  structuralHighlighting: boolean;
   annotations: DiffLineAnnotation<Meta>[];
   selectedLines: SelectedLineRange | null;
-  onSelect: (fileIndex: number, path: string, range: SelectedLineRange | null) => void;
+  onSelect: (
+    fileIndex: number,
+    path: string,
+    range: SelectedLineRange | null,
+  ) => void;
   renderAnnotation: (annotation: DiffLineAnnotation<Meta>) => React.ReactNode;
   editing?: boolean;
   createEditor?: (options: EditorOptions<Meta>) => DiffsEditor<Meta>;
@@ -1150,15 +1246,29 @@ const FileDiffRow = React.memo(function FileDiffRow({
       ...BASE_OPTIONS,
       diffStyle,
       overflow: wrapLines ? ("wrap" as const) : ("scroll" as const),
+      lineDiffType: structuralHighlighting
+        ? ("word-alt" as const)
+        : ("none" as const),
       theme: theme === "light" ? "pierre-light" : "pierre-dark",
       themeType: theme,
       // Line selection drives commenting; while editing, clicks place the
       // caret instead.
       enableLineSelection: !editing,
       ...(loadDiffFiles ? { loadDiffFiles } : {}),
-      onLineSelected: (range: SelectedLineRange | null) => onSelect(fileIndex, file.name, range),
+      onLineSelected: (range: SelectedLineRange | null) =>
+        onSelect(fileIndex, file.name, range),
     }),
-    [diffStyle, wrapLines, fileIndex, file.name, onSelect, theme, editing, loadDiffFiles],
+    [
+      diffStyle,
+      wrapLines,
+      structuralHighlighting,
+      fileIndex,
+      file.name,
+      onSelect,
+      theme,
+      editing,
+      loadDiffFiles,
+    ],
   );
 
   const fileDiff = (
