@@ -67,7 +67,7 @@ function OrderSection<T extends string>({
 		<section aria-labelledby={`sidebar-order-${label.toLowerCase()}`}>
 			<h3
 				id={`sidebar-order-${label.toLowerCase()}`}
-				className="m-0 mb-2 px-3 text-label font-semibold text-fg"
+				className="m-0 mb-2 text-label font-semibold text-fg"
 			>
 				{label}
 			</h3>
@@ -160,7 +160,7 @@ export function SidebarCustomizeDialog({
 			>
 				<Modal.Header
 					title="Customize sidebar"
-					description="Drag tools and repositories into the order you want."
+					description="Drag to reorder, and choose which tools appear."
 				/>
 				<OrderSection
 					label="Tools"
