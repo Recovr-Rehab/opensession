@@ -8,6 +8,8 @@ export interface ModelOption {
 	label: string;
 	aliases: string[];
 	efforts: string[];
+	/** Presets fix the lead model's effort instead of offering a ladder. */
+	fixedEffort?: string;
 	/** Provider account pool available to this model, if any. */
 	accountProvider?: "claude" | "codex";
 	/** Picker section override ("dial" = The Dial presets). */

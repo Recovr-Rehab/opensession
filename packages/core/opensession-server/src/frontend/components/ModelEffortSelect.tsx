@@ -359,30 +359,48 @@ export function ModelEffortSelect({
 		modelById.has(effectiveBase) || opencodeModelParts(effectiveModel)
 			? shortModelLabel(effectiveModel, models)
 			: fallbackModelLabel?.(effectiveModel) || shortModelLabel(effectiveModel, models);
-	const supportedEffortIds = modelById.get(effectiveBase)?.efforts ?? [];
+	const modelInfo = modelById.get(effectiveBase);
+	const supportedEffortIds = modelInfo?.efforts ?? [];
 	const supportedEfforts = EFFORTS.filter((e) => supportedEffortIds.includes(e.id));
-	const effectiveEffort = supportedEffortIds.includes(effort ?? "")
+	const fixedEffort = EFFORTS.find((e) => e.id === modelInfo?.fixedEffort);
+	// Presets expose their one fixed effort as a one-choice submenu. That keeps
+	// every model settings menu structurally consistent without pretending the
+	// preset's lead-model effort can be changed.
+	const effortOptions = supportedEfforts.length > 0
+		? supportedEfforts
+		: fixedEffort
+			? [fixedEffort]
+			: [];
+	const effectiveEffort = fixedEffort?.id ?? (supportedEffortIds.includes(effort ?? "")
 		? effort!
 		: supportedEffortIds.includes("high")
 			? "high"
-			: supportedEffortIds[0];
+			: supportedEffortIds[0]);
 	const effortLabel = EFFORTS.find((e) => e.id === effectiveEffort)?.label;
-	const hasEffort = !!onEffortChange && supportedEfforts.length > 0;
-	const modelInfo = modelById.get(effectiveBase);
+	const hasEffort = !!onEffortChange && effortOptions.length > 0;
 	const accountProvider = modelInfo?.accountProvider;
 	const providerAccounts = (accounts || []).filter((a) => a.provider === accountProvider);
-	const hasAccount = !!onAccountChange && providerAccounts.length > 0;
+	// Auto is a real account choice even when this person has no pinnable
+	// accounts, so keep the row present wherever account selection is wired.
+	const hasAccount = !!onAccountChange;
 	const currentAccount = accountId
 		? providerAccounts.find((a) => a.id === accountId)
 		: undefined;
 	const subscriptionAccount = providerAccounts.find(
 		(a) => a.kind !== "api_key" && a.usable,
 	);
-	const hasFastMode =
+	const fastModeAvailable =
 		modelInfo?.fastModeSupported === true &&
 		currentAccount?.kind !== "api_key" &&
-		!!(currentAccount || subscriptionAccount) &&
-		!!onFastModeChange;
+		!!(currentAccount || subscriptionAccount);
+	const hasFastMode = !!onFastModeChange;
+	const effectiveFastMode = fastModeAvailable && !!fastMode;
+	const speedOptions = fastModeAvailable
+		? [
+				{ fast: false, label: "Standard" },
+				{ fast: true, label: "Fast" },
+			]
+		: [{ fast: false, label: "Standard" }];
 	const accountLabel = currentAccount ? currentAccount.name : "Auto";
 	// Routing stays sticky across model changes even though engine selection is
 	// no longer exposed. Existing sessions keep their stored routing prefix.
@@ -410,12 +428,15 @@ export function ModelEffortSelect({
 	// default effort, fast mode off, account on auto. Effort resolves against
 	// the DEFAULT model rather than the current one — reset changes both, and
 	// the effort the current model happens to support may not exist there.
-	const defaultEffortIds = modelById.get(baseModelId(defaultModel))?.efforts ?? [];
-	const defaultEffort = defaultEffortIds.includes("high") ? "high" : defaultEffortIds[0];
+	const defaultModelInfo = modelById.get(baseModelId(defaultModel));
+	const defaultEffortIds = defaultModelInfo?.efforts ?? [];
+	const defaultEffort =
+		defaultModelInfo?.fixedEffort ||
+		(defaultEffortIds.includes("high") ? "high" : defaultEffortIds[0]);
 	const atDefault =
 		(modelDisabled || model === "" || model === defaultModel) &&
 		(!hasEffort || !defaultEffort || effectiveEffort === defaultEffort) &&
-		(!hasFastMode || !fastMode) &&
+		(!hasFastMode || !effectiveFastMode) &&
 		(!hasAccount || !accountId);
 	const resetToDefault = () => {
 		if (!modelDisabled) onModelChange("");
@@ -560,7 +581,8 @@ export function ModelEffortSelect({
 
 	const renderModelOption = (option: ModelMenuOption) => {
 		const selected = isSelected(option);
-		const nextEfforts = modelById.get(option.id)?.efforts ?? [];
+		const nextModelInfo = modelById.get(option.id);
+		const nextEfforts = nextModelInfo?.efforts ?? [];
 		// Engine stays sticky across model changes: the new id is recomposed onto
 		// the engine the session is already on. An entry that can't route there
 		// (wrong vendor for a direct-SDK engine, a legacy native id) is offered
@@ -574,10 +596,12 @@ export function ModelEffortSelect({
 				onClick={() => {
 					onModelChange(routed ?? option.value);
 					if (onEffortChange && !nextEfforts.includes(effort ?? "")) {
-						const nextEffort = nextEfforts.includes("high") ? "high" : nextEfforts[0];
+						const nextEffort =
+							nextModelInfo?.fixedEffort ||
+							(nextEfforts.includes("high") ? "high" : nextEfforts[0]);
 						if (nextEffort) onEffortChange(nextEffort);
 					}
-					if (onFastModeChange && modelById.get(option.id)?.fastModeSupported !== true) {
+					if (onFastModeChange && nextModelInfo?.fastModeSupported !== true) {
 						onFastModeChange(false);
 					}
 				}}
@@ -653,7 +677,7 @@ export function ModelEffortSelect({
 						{/* `data-effort` is a styling hook for the caller, not state: the
 						    new-session footer hides the suffix on ultra-narrow screens so the
 						    model name keeps the room, and the composer toolbar does not. */}
-						{hasFastMode && fastMode && (
+						{hasFastMode && effectiveFastMode && (
 							<>
 								<IconBolt className="flex-none text-faint" size={20} />
 								<span className="sr-only">Fast mode</span>
@@ -763,7 +787,7 @@ export function ModelEffortSelect({
 						</Menu.SubmenuTrigger>
 						<Menu.Popup className="max-w-[min(360px,calc(100vw-1rem))]">
 							{effortReuploadHint && <MenuHint>{effortReuploadHint}</MenuHint>}
-							{supportedEfforts.map((e) => {
+							{effortOptions.map((e) => {
 								const selected = effectiveEffort === e.id;
 								return (
 									<Menu.Item
@@ -788,16 +812,13 @@ export function ModelEffortSelect({
 						<Menu.SubmenuTrigger className="justify-between gap-3">
 							<span className="min-w-0 truncate">Speed</span>
 							<span className="flex flex-none items-center gap-1 text-dim">
-								{fastMode ? "Fast" : "Standard"}
+								{effectiveFastMode ? "Fast" : "Standard"}
 								<IconChevronRight className="shrink-0 text-dim" size={17} />
 							</span>
 						</Menu.SubmenuTrigger>
 						<Menu.Popup className="max-w-[min(360px,calc(100vw-1rem))]">
-							{[
-								{ fast: false, label: "Standard" },
-								{ fast: true, label: "Fast" },
-							].map((o) => {
-								const selected = !!fastMode === o.fast;
+							{speedOptions.map((o) => {
+								const selected = effectiveFastMode === o.fast;
 								return (
 									<Menu.Item
 										key={o.label}

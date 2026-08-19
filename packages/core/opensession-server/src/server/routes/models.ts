@@ -66,7 +66,7 @@ export async function handleModelsRoutes(
 		// in, Orchestrator presets instead — the entries resolveModel already
 		// serves — so the instance default (`dial/…`) always has a picker row.
 		const globalPresetEntry = (
-			p: { id: string; label: string; description: string },
+			p: { id: string; label: string; description: string; effort: string },
 			group: "dial" | "orchestrator",
 		) => ({
 			id: p.id,
@@ -75,6 +75,7 @@ export async function handleModelsRoutes(
 			aliases: [] as string[],
 			group,
 			description: p.description,
+			fixedEffort: p.effort,
 		});
 		const presetModels = workspace ? (settings.presets || [])
 			.filter((preset) =>
@@ -87,6 +88,7 @@ export async function handleModelsRoutes(
 				label: preset.label.trim(),
 				aliases: [],
 				group: preset.group || "custom",
+				fixedEffort: preset.lead.effort,
 				description: [
 					preset.instructions?.trim() || "Workspace model combination",
 					`${opencodeModelLabel(preset.lead.model)}${preset.supporting?.length ? ` + ${preset.supporting.length} supporting model${preset.supporting.length === 1 ? "" : "s"}` : ""}`,
