@@ -1127,15 +1127,17 @@ export interface FallbackHop {
  *
  * `mode` is the tier comparison against the model we're LEAVING: equal-or-higher
  * tier ⇒ "auto" (Fable→Sol, Opus→Sol), lower ⇒ "ask" (Fable→Opus, Opus→Sonnet,
- * Sol→Opus). All ids in/out are opencode-mapped.
+ * Sol→Opus). Fallbacks preserve an explicit Pi engine choice; legacy and
+ * unrouted primaries keep mapping onto OpenCode.
  */
 export function nextFallbackModel(
   currentModel: string,
   exhausted: Set<string>,
   preferredFallbackModel?: string
 ): FallbackHop | null {
-  const currentOc = toOpencodeModel(currentModel) || currentModel;
-  const currentTier = fallbackTier(currentOc);
+  const route = explicitEngineFor(currentModel) === "pi" ? toPiModel : toOpencodeModel;
+  const currentRouted = route(currentModel) || currentModel;
+  const currentTier = fallbackTier(currentRouted);
 
   const candidates: string[] = [];
   const add = (id: string | undefined | null) => {
@@ -1144,10 +1146,16 @@ export function nextFallbackModel(
       for (const c of CODEX_MODEL_ORDER) add(c);
       return;
     }
-    const oc = toOpencodeModel(id);
-    if (!oc || oc === currentOc || exhausted.has(oc) || candidates.includes(oc)) return;
-    if (!resolveModel(oc)) return;
-    candidates.push(oc);
+    const routed = route(id);
+    if (
+      !routed ||
+      routed === currentRouted ||
+      exhausted.has(routed) ||
+      candidates.includes(routed)
+    )
+      return;
+    if (!resolveModel(routed)) return;
+    candidates.push(routed);
   };
   if (preferredFallbackModel && preferredFallbackModel !== "none") add(preferredFallbackModel);
   for (const id of FALLBACK_DESTINATIONS) add(id);

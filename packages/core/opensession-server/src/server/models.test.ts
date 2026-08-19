@@ -651,6 +651,16 @@ describe("fallback graph (nextFallbackModel)", () => {
     ).toEqual({ id: terra, mode: "auto" });
   });
 
+  it("keeps a Pi session on Pi throughout its fallback plan", () => {
+    const plan = fallbackPlan(
+      "pi/anthropic/claude-fable-5",
+      "claude-opus-5"
+    );
+    expect(plan.length).toBeGreaterThan(0);
+    expect(plan.every((hop) => hop.id.startsWith("pi/"))).toBe(true);
+    expect(plan[0]).toEqual({ id: "pi/openai/gpt-5.6-sol", mode: "auto" });
+  });
+
   it("never routes back into Fable (scarce weekly-scoped credit pool)", () => {
     const plan = fallbackPlan("claude-opus-5", "claude-opus-5");
     expect(plan.map((h) => h.id)).not.toContain(fable);
