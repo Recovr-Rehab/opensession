@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
+	cancelPrReviewApi,
 	fetchGitStatus,
 	fetchPr,
 	fetchSessionAssets,
@@ -406,6 +407,7 @@ function SummaryBody({
 	const [selectedReview, setSelectedReview] = useState(reviewRequest ?? null);
 	const [reviewError, setReviewError] = useState<string | null>(null);
 	const [reviewBusy, setReviewBusy] = useState(false);
+	const [reviewCancelling, setReviewCancelling] = useState(false);
 	const updateData = useCallback(
 		(patch: Partial<SummaryData>) => {
 			if (activeSessionId.current !== session.id) return;
@@ -536,6 +538,22 @@ function SummaryBody({
 
 	const shown = assets.slice(0, ASSETS_SHOWN);
 
+	async function cancelOsReview() {
+		if (!pr?.reviewActive || reviewCancelling) return;
+		setReviewCancelling(true);
+		setReviewError(null);
+		try {
+			await cancelPrReviewApi(session.id, getCurrentUser(), session.repo || undefined);
+			// The stop request is durable before the API answers. Return to the last
+			// completed result immediately while the worker unwinds in the background.
+			updateData({ pr: { ...pr, reviewActive: false } });
+		} catch (error: any) {
+			setReviewError(error?.message || "Couldn't cancel the review");
+		} finally {
+			setReviewCancelling(false);
+		}
+	}
+
 	function pickReviewer(name: string | null, recipients?: string[]) {
 		if (reviewBusy) return;
 		const previous = selectedReview;
@@ -589,34 +607,63 @@ function SummaryBody({
 			<div className={WS_SUMMARY_SECTION}>Review</div>
 			{showOsReview && (
 				<button
-					className={WS_SUMMARY_ROW}
-					onClick={() => go(() => onOpenPanelTab("info"))}
-					title={`${AGENT_NAME}${osScore ? ` · ${osScore}/5` : ""} · ${osReviewState}`}
+					className={cn(
+						WS_SUMMARY_ROW,
+						"disabled:cursor-default disabled:opacity-70",
+					)}
+					onClick={
+						osReviewActive
+							? () => void cancelOsReview()
+							: () => go(() => onOpenPanelTab("info"))
+					}
+					disabled={reviewCancelling}
+					aria-label={
+						osReviewActive ? `Cancel ${AGENT_NAME} review` : undefined
+					}
+					title={`${AGENT_NAME}${osScore ? ` · ${osScore}/5` : ""} · ${
+						reviewCancelling ? "Cancelling…" : osReviewState
+					}`}
 				>
 					<span className={WS_SUMMARY_RAIL}>
-						<IconRobot size={20} className={WS_SUMMARY_ICON} />
+						<IconRobot
+							size={20}
+							className={cn(WS_SUMMARY_ICON, osReviewActive && "animate-pulse")}
+						/>
 					</span>
 					<span className={WS_SUMMARY_LABEL}>
 						{AGENT_NAME}
-						{osScore ? (
+						{osReviewActive ? (
+							<>
+								<span className="text-faint"> · </span>
+								<span className="text-dim">
+									{reviewCancelling ? "Cancelling…" : "Reviewing…"}
+								</span>
+							</>
+						) : osScore ? (
 							<>
 								<span className="text-faint"> · </span>
 								<span className={cn("tabular-nums", osScoreTone)}>{osScore}/5</span>
 							</>
 						) : null}
 					</span>
-					<span
-						className={cn(
-							WS_SUMMARY_STATE,
-							osReview?.stale
-								? "text-faint"
-								: osReview?.blocking
-									? "text-red"
-									: "text-dim",
-						)}
-					>
-						{osReviewState}
-					</span>
+					{osReviewActive ? (
+						<span className={WS_SUMMARY_ACTION}>
+							{reviewCancelling ? "Stopping" : "Cancel"}
+						</span>
+					) : (
+						<span
+							className={cn(
+								WS_SUMMARY_STATE,
+								osReview?.stale
+									? "text-faint"
+									: osReview?.blocking
+										? "text-red"
+										: "text-dim",
+							)}
+						>
+							{osReviewState}
+						</span>
+					)}
 				</button>
 			)}
 			{otherReviewers.map((reviewer) => (

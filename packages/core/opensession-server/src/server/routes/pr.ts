@@ -965,7 +965,11 @@ export async function handlePrRoutes(
 
 		const body = await req.json().catch(() => null);
 		const kind = body?.kind;
-		if (!["review", "autofix", "simplify", "adversarial"].includes(kind))
+		if (
+			!["review", "autofix", "simplify", "adversarial", "cancel-review"].includes(
+				kind,
+			)
+		)
 			return Response.json({ error: "Unknown action" }, { status: 400 });
 
 		const target = resolvePrTarget(session, body?.repo, body?.branch);
@@ -999,6 +1003,30 @@ export async function handlePrRoutes(
 				{ error: "No open PR for this branch yet" },
 				{ status: 400 },
 			);
+
+		if (kind === "cancel-review") {
+			const [{ cancelAgentRun }, { bksIdFor }, { requestActiveRunCancellation }] =
+				await Promise.all([
+					import("../agent-runner"),
+					import("../../agents/github/run"),
+					import("../../agents/github/state"),
+				]);
+			const bksId = bksIdFor(details.number, "review", target.ghRepo);
+			const reviewSession = findSession(bksId);
+			const requested = requestActiveRunCancellation(
+				details.number,
+				target.branch,
+				"review",
+				target.ghRepo,
+			);
+			const stopped = cancelAgentRun(
+				reviewSession?.claudeSessionId,
+				reviewSession?.codexThreadId,
+				bksId,
+			);
+			invalidateSessionsCache();
+			return Response.json({ ok: true, cancelled: requested || stopped });
+		}
 
 		// Auto-fix is code-writing work, not a review pass to post on the PR —
 		// so it opens a live session right in this workspace (shares the worktree +

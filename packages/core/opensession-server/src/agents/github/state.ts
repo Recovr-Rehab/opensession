@@ -82,7 +82,9 @@ export interface GithubPrState {
     kind: "review" | "simplify" | "adversarial";
     requestedBy: string;
     startedAt: string;
-    /** The run's progress comment id — reused only on restart recovery, not on a fresh re-trigger. */
+    /** A person stopped this run. Recovery must not start it again. */
+    cancelRequestedAt?: string;
+    /** The run's progress comment id, reused only on restart recovery, not on a fresh re-trigger. */
     progressCommentId?: number;
     /** Free-text steer from the triggering message, so a restart can re-pass it. */
     steer?: string;
@@ -239,6 +241,37 @@ export function clearActiveRun(
   );
 }
 
+/** Persist a stop request before aborting the engine, so startup recovery and
+ *  pre-engine setup cannot bring the run back. */
+export function requestActiveRunCancellation(
+  prNumber: number,
+  headRef: string,
+  kind: NonNullable<GithubPrState["activeRun"]>["kind"],
+  ghRepo?: string,
+): boolean {
+  let requested = false;
+  updatePrState(
+    prNumber,
+    headRef,
+    (s) => {
+      if (s.activeRun?.kind !== kind) return;
+      s.activeRun.cancelRequestedAt ||= new Date().toISOString();
+      requested = true;
+    },
+    ghRepo,
+  );
+  return requested;
+}
+
+export function activeRunCancellationRequested(
+  prNumber: number,
+  kind: NonNullable<GithubPrState["activeRun"]>["kind"],
+  ghRepo?: string,
+): boolean {
+  const run = readPrState(prNumber, ghRepo)?.activeRun;
+  return run?.kind === kind && Boolean(run.cancelRequestedAt);
+}
+
 /** Every PR state file (for the startup recovery sweep). */
 export function listPrStates(): GithubPrState[] {
   const out: GithubPrState[] = [];
@@ -304,6 +337,12 @@ export function planRecovery(
 ): { fire?: RecoveryKind; stale: RecoveryKind[] } {
   const stale: RecoveryKind[] = [];
   for (const kind of markersOn(s)) {
+    // A cancelled one-shot stays marked until its running function unwinds.
+    // Treat it as cleanup-only if the process restarts in that window.
+    if (kind === "run" && s.activeRun?.cancelRequestedAt) {
+      stale.push(kind);
+      continue;
+    }
     const t = Date.parse(recoveryMarkerAt(s, kind) || "");
     if (t && now - t <= RECOVERY_MAX_AGE_MS) return { fire: kind, stale };
     stale.push(kind);

@@ -571,3 +571,18 @@ export async function triggerPrActionApi(
 		body: { kind, user, ...(repo ? { repo } : {}) },
 	});
 }
+
+export async function cancelPrReviewApi(
+	sessionId: string,
+	user: string,
+	repo?: string,
+): Promise<{ ok: boolean; cancelled: boolean }> {
+	return request<{ ok: boolean; cancelled: boolean }>(
+		`/sessions/${encodeURIComponent(sessionId)}/pr-action`,
+		{
+			method: "POST",
+			body: { kind: "cancel-review", user, ...(repo ? { repo } : {}) },
+			label: "Couldn't cancel the review",
+		},
+	);
+}

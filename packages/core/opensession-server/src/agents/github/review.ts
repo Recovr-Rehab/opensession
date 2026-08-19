@@ -7,7 +7,15 @@
  */
 import { personaName } from "../../server/config";
 import { getPrDetails, getPrDiff, type PrDetails } from "../../server/pr-info";
-import { claimLock, releaseLock, getOrInitPrState, updatePrState, recordReviewed, clearActiveRun } from "./state";
+import {
+  activeRunCancellationRequested,
+  claimLock,
+  releaseLock,
+  getOrInitPrState,
+  updatePrState,
+  recordReviewed,
+  clearActiveRun,
+} from "./state";
 import { announceGithubRun, runGithubAgent, sessionUrl } from "./run";
 import { buildReviewPrompt, DEFAULT_REVIEW_PROMPT } from "./prompts";
 import {
@@ -150,6 +158,22 @@ export async function runReview(
       },
       pr.ghRepo,
     );
+    const cancellationRequested = () =>
+      activeRunCancellationRequested(pr.number, "review", pr.ghRepo);
+    const finishCancelled = async (commentId?: number): Promise<null> => {
+      if (commentId)
+        await editIssueComment(
+          commentId,
+          `${REVIEW_MARKER}\n### 🤖 ${personaName()} review\n\nReview cancelled.`,
+          pr.ghRepo,
+        ).catch(() => {});
+      audit({
+        msg: "review_cancelled",
+        pr_number: pr.number,
+        repo: pr.ghRepo || defaultRepo().ghRepo,
+      });
+      return null;
+    };
 
     // Look up by number before publishing the session link. If details are
     // unavailable, no worker exists and the next delivery remains retryable.
@@ -158,6 +182,7 @@ export async function runReview(
       console.warn(`[github] no PR details for #${pr.number} (${pr.headRef}); review not started`);
       return null;
     }
+    if (cancellationRequested()) return finishCancelled();
     const title = `Review · PR #${pr.number} ${details.title}`.slice(0, 100);
     const bksId = await announceGithubRun({
       prNumber: pr.number,
@@ -191,6 +216,7 @@ export async function runReview(
       if (prevId && prevId !== placeholderId) await supersedeReviewComment(prevId, pr.ghRepo).catch(() => {});
     }
     // If the placeholder failed, summaryCommentId keeps prevId and postReview edits it.
+    if (cancellationRequested()) return finishCancelled(placeholderId || undefined);
 
     // Pin a read-only worktree to the PR head so the files the agent Reads are
     // the exact tree the local git diff describes. Without that guarantee, fail
@@ -203,11 +229,12 @@ export async function runReview(
       if (placeholderId)
         await editIssueComment(
           placeholderId,
-          `${REVIEW_MARKER}\n### 🤖 ${personaName()} review\n\n⚠️ Couldn't prepare the PR checkout to review the diff — it will retry on the next push, or ask ${personaName()} to review manually.`,
+          `${REVIEW_MARKER}\n### 🤖 ${personaName()} review\n\n⚠️ Couldn't prepare the PR checkout to review the diff. It will retry on the next push, or ask ${personaName()} to review manually.`,
           pr.ghRepo,
         ).catch(() => {});
       return { findings: 0, blocking: 0, error: "Could not prepare the PR review worktree" };
     }
+    if (cancellationRequested()) return finishCancelled(placeholderId || undefined);
 
     // Per-repo knobs from the PR-head worktree (.os-review.json), the author's
     // model family for the targeted sweep, and the giant-PR summary-only mode.
@@ -297,6 +324,7 @@ export async function runReview(
       });
     }
 
+    if (cancellationRequested()) return finishCancelled(placeholderId || undefined);
     console.log(`[github] Reviewing PR #${pr.number} @ ${pr.headSha.slice(0, 7)} (${isUpdate ? "update" : "initial"})`);
     const result = await runGithubAgent({
       prNumber: pr.number,
@@ -320,6 +348,7 @@ export async function runReview(
       resume: false,
     });
 
+    if (cancellationRequested()) return finishCancelled(placeholderId || undefined);
     let finalResult = result;
     let parsed = parseReviewOutput(finalResult.text);
     // Fable occasionally declares a progress narration complete before it emits
@@ -339,6 +368,7 @@ export async function runReview(
         title,
         resume: true,
       });
+      if (cancellationRequested()) return finishCancelled(placeholderId || undefined);
       parsed = parseReviewOutput(finalResult.text);
     }
     const reviewError =
@@ -348,6 +378,7 @@ export async function runReview(
         : "The review did not produce the required structured verdict after one continuation.");
     const tob = await testOnBase;
     const secrets = await secretScan;
+    if (cancellationRequested()) return finishCancelled(placeholderId || undefined);
     // A leaked credential blocks regardless of what the model concluded: the
     // verdict drops to request_changes and confidence caps at 2/5. (Not counted
     // as a "blocking finding" for the auto-fix gate — rotation is human work a

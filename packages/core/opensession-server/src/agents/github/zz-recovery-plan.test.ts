@@ -103,6 +103,22 @@ describe("planRecovery picks exactly one run per PR", () => {
     expect(plan.fire).toBe("run");
   });
 
+  test("a cancelled review is cleared instead of restarted", () => {
+    const plan = planRecovery(
+      state({
+        activeRun: {
+          kind: "review",
+          requestedBy: "someone",
+          startedAt: fresh,
+          cancelRequestedAt: fresh,
+        },
+      }),
+      NOW,
+    );
+    expect(plan.fire).toBeUndefined();
+    expect(plan.stale).toEqual(["run"]);
+  });
+
   test("a PR with no markers is left alone", () => {
     expect(planRecovery(state({}), NOW)).toEqual({ stale: [] });
   });
