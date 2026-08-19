@@ -90,6 +90,9 @@ interface Props {
 	 *  attachment row as a ghost. */
 	staging: StagingCount;
 	onRemoveImage: (index: number) => void;
+	/** Swap an attachment for an annotated copy of itself, after the markup
+	 *  editor has staged the new picture. */
+	onReplaceImage: (index: number, ref: string) => void;
 	onRemoveFile: (index: number) => void;
 	onAddAttachments: (picked: FileList | File[]) => void;
 	sendKey: SendKeyPref;
@@ -133,6 +136,7 @@ export function NewSessionPrompt({
 	files,
 	staging,
 	onRemoveImage,
+	onReplaceImage,
 	onRemoveFile,
 	onAddAttachments,
 	sendKey,
@@ -481,6 +485,7 @@ export function NewSessionPrompt({
 				images={images}
 				pending={staging.images}
 				onRemove={onRemoveImage}
+				onReplace={onReplaceImage}
 				disabled={disabled}
 			/>
 			<FileChips

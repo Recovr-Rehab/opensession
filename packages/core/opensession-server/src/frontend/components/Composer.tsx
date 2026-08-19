@@ -898,6 +898,14 @@ export function Composer({
     onImagesChange?.(imgs.filter((_, idx) => idx !== i));
   }
 
+  // The markup editor stages an annotated copy and hands back its ref. The
+  // tile it was opened from BECOMES that picture, rather than gaining a
+  // neighbour: sending a screenshot next to the same screenshot with an arrow
+  // on it gives the agent two things to reconcile and says nothing extra.
+  function replaceImage(i: number, ref: string) {
+    onImagesChange?.(imgs.map((image, idx) => (idx === i ? ref : image)));
+  }
+
   function removeFile(i: number) {
     onFilesChange?.(fls.filter((_, idx) => idx !== i));
   }
@@ -1494,6 +1502,7 @@ export function Composer({
           images={imgs}
           pending={activeStaging.images}
           onRemove={removeImage}
+          onReplace={canAttachImages ? replaceImage : undefined}
           disabled={disabled}
         />
         <FileChips
