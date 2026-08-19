@@ -186,10 +186,12 @@ const MOBILE_PICKER = "contents";
  *  composer's attachment chips take. */
 const MOBILE_TRIGGER =
 	"phone:min-h-11 phone:rounded-[999px] phone:border phone:border-line phone:bg-[var(--bg-hover)] phone:px-3 phone:py-2";
-/** A balanced phone title bar: dismiss, centered title, commit. The fixed side
- *  columns keep the title optically centered even though the controls differ. */
-const PHONE_TITLE =
-	"hidden grid-cols-[44px_minmax(0,1fr)_44px] items-center gap-3 px-3 pb-1 pt-3 phone:grid";
+/** The phone sheet's bar: dismiss on the left, commit on the right, and
+ *  nothing between them. A sheet on the platform names itself by what it
+ *  contains, and this one is a prompt field under a project picker, so a title
+ *  spent the row a phone can least spare on a word for what is already on
+ *  screen. The name survives for screen readers below. */
+const PHONE_BAR = "hidden items-center justify-between gap-3 px-3 pb-1 pt-3 phone:flex";
 const PHONE_CLOSE =
 	"focus-ring relative flex size-11 items-center justify-center rounded-[999px] p-0 text-faint transition-colors hover:bg-hover hover:text-fg";
 /** The composer's own send disc, so the gesture that commits a prompt looks the
@@ -213,7 +215,13 @@ const FOOTER =
 	"flex items-center justify-between gap-x-2 gap-y-2 border-t border-transparent px-4 pt-[9px] pb-3.5 phone:flex-wrap phone:px-3 phone:pb-[calc(0.75rem+env(safe-area-inset-bottom))] max-[560px]:gap-x-1.5";
 const FOOTER_LEFT = "flex min-w-0 items-center gap-1.5 phone:flex-1 max-[560px]:gap-1";
 const FOOTER_RIGHT = "flex min-w-0 items-center gap-1.5 phone:contents max-[560px]:gap-1";
-const FOOTER_ICON_BTN = cn(paletteIconBtn, "shrink-0 max-[560px]:w-9");
+/** Round on a phone, where the bar's two controls are discs and the repo is a
+ *  pill: a 12px corner among them is the one square thing on the card. The
+ *  hover wash rides a pseudo-element, so it has to be rounded with them. */
+const FOOTER_ICON_BTN = cn(
+	paletteIconBtn,
+	"shrink-0 phone:rounded-[999px] phone:before:rounded-[999px] max-[560px]:w-9",
+);
 /** Ask mode's toggle. Off, it is one of the footer's quiet icon tools. On, it
  *  wears the same green marker the session composer's toolbar shows for the
  *  same mode, so one mode reads identically in both places — and it names
@@ -1198,13 +1206,13 @@ export function NewSession({ onBack, inline, focusSeq, send, addHandler, connect
   const card = (
     <>
       {phoneBar && (
-        <div className={PHONE_TITLE}>
+        <div className={PHONE_BAR}>
           <Modal.Close className={PHONE_CLOSE} aria-label="Close">
             <IconX size={20} />
           </Modal.Close>
-          <Modal.Title className="m-0 truncate text-center text-dialog-title font-semibold leading-tight tracking-[-0.01em] text-fg">
-            New session
-          </Modal.Title>
+          {/* The sheet still has a name, it just isn't drawn: the dialog needs
+              one, and a screen reader has no card to look at. */}
+          <Modal.Title className="sr-only">New session</Modal.Title>
           <button
             type="button"
             className={PHONE_SEND}
@@ -1820,7 +1828,10 @@ export function NewSession({ onBack, inline, focusSeq, send, addHandler, connect
         widthClassName="w-[min(820px,100%)] phone:w-full"
         viewportClassName="phone:items-end phone:px-0 phone:pb-0 phone:pt-3"
         className={cn(
-          "max-h-[calc(89dvh-1rem)] phone:max-h-[calc(100dvh-12px)] phone:rounded-b-none phone:[&_textarea]:min-h-[160px] phone:[&_textarea]:text-input-phone",
+          // A phone sheet carries a rounder top corner than the floating
+          // palette does: it meets the screen's own edge on three sides, so the
+          // two corners it keeps are the whole of its shape.
+          "max-h-[calc(89dvh-1rem)] phone:max-h-[calc(100dvh-12px)] phone:rounded-t-[calc(28px*var(--rf))] phone:rounded-b-none phone:[&_textarea]:min-h-[160px] phone:[&_textarea]:text-input-phone",
           ASK_SURFACE,
           mode === "ask" && "before:opacity-100 after:opacity-100",
         )}
