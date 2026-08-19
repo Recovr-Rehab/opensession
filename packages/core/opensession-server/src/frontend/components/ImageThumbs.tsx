@@ -8,11 +8,13 @@ interface Props {
   images: string[];
   onRemove: (index: number) => void;
   /**
-   * Swap one attachment for an annotated copy of itself. Wire this and each
-   * thumbnail gets a markup button; leave it off and the tiles stay read-only
-   * (a surface that cannot upload has nowhere to put the new picture).
+   * Swap one attachment for an annotated copy of itself, and take the notes
+   * written on its regions so the surface can fold them into the message being
+   * composed. Wire this and each thumbnail gets a markup button; leave it off
+   * and the tiles stay read-only (a surface that cannot upload has nowhere to
+   * put the new picture).
    */
-  onReplace?: (index: number, ref: string) => void;
+  onReplace?: (index: number, ref: string, notes: string[]) => void;
   disabled?: boolean;
   /**
    * Images still on their way to disk. A paste is not attached until its
@@ -102,7 +104,7 @@ export function ImageThumbs({
       {editingSrc && editing !== null && (
         <ImageMarkup
           src={editingSrc}
-          onSave={(ref) => onReplace?.(editing, ref)}
+          onSave={(ref, notes) => onReplace?.(editing, ref, notes)}
           onClose={() => setEditing(null)}
         />
       )}

@@ -12,6 +12,10 @@ import {
 	renderMarkup,
 	shapeHasInk,
 	shapePaths,
+	appendImageNotes,
+	badgeInk,
+	noteBadge,
+	noteTexts,
 } from "./image-markup";
 
 function shape(over: Partial<MarkupShape> = {}): MarkupShape {
@@ -224,33 +228,176 @@ describe("remembering what a markup was made from", () => {
 	});
 });
 
+function note(id: string, text: string, color = "#FF3B30") {
+	return {
+		id,
+		tool: "note" as const,
+		color,
+		points: [
+			{ x: 200, y: 120 },
+			{ x: 400, y: 260 },
+		],
+		note: text,
+	};
+}
+
+describe("noteBadge", () => {
+	test("sits on the region's own top-left corner", () => {
+		const badge = noteBadge(note("n1", "wrong colour"), 6);
+
+		// The number belongs to the box, so it rides the corner rather than
+		// floating beside it where a small region would lose track of it.
+		expect(badge?.cx).toBe(200);
+		expect(badge?.cy).toBe(120);
+		expect(badge?.r).toBeGreaterThan(6);
+	});
+
+	test("a region against the edge keeps its whole badge", () => {
+		const corner = { ...note("n1", "this bit"), points: [
+			{ x: 0, y: 0 },
+			{ x: 120, y: 90 },
+		] };
+
+		const badge = noteBadge(corner, 6, { w: 1200, h: 700 });
+
+		// Undrawn ink is worse than misplaced ink: a badge half outside the
+		// picture is cropped by the export and the number is simply gone.
+		expect(badge?.cx).toBe(badge?.r);
+		expect(badge?.cy).toBe(badge?.r);
+	});
+
+	test("an unfinished region has no badge to draw", () => {
+		expect(noteBadge({ ...note("n1", "x"), points: [] }, 6)).toBeNull();
+	});
+
+	test("the number is written in ink that shows on its own badge", () => {
+		expect(badgeInk("#FF3B30")).toBe("#FFFFFF");
+		expect(badgeInk("#FFFFFF")).toBe("#101114");
+	});
+});
+
+describe("the notes a picture carries", () => {
+	test("reads them in draw order, ignoring silent ink", () => {
+		const shapes = [
+			shape({ id: "a" }),
+			note("n1", "this should be secondary"),
+			shape({ id: "b", tool: "box" }),
+			note("n2", "this amount is stale"),
+		];
+
+		expect(noteTexts(shapes)).toEqual([
+			"this should be secondary",
+			"this amount is stale",
+		]);
+	});
+
+	test("the message numbers the lines the way the picture numbers the boxes", () => {
+		const out = appendImageNotes("", ["button is wrong", "amount is stale"]);
+
+		expect(out).toBe("1. button is wrong\n2. amount is stale");
+	});
+
+	test("what was already typed stays the opening sentence", () => {
+		const out = appendImageNotes("Two things on the billing screen:", [
+			"button is wrong",
+		]);
+
+		expect(out).toBe(
+			"Two things on the billing screen:\n\n1. button is wrong",
+		);
+	});
+
+	test("a trailing newline does not become a third blank line", () => {
+		expect(appendImageNotes("Look here:\n\n", ["fix it"])).toBe(
+			"Look here:\n\n1. fix it",
+		);
+	});
+
+	test("an image with nothing said about it leaves the message alone", () => {
+		expect(appendImageNotes("just a screenshot", [])).toBe("just a screenshot");
+	});
+});
+
 describe("renderMarkup", () => {
-	test("draws every shape in its own colour, at one width", () => {
-		const drawn: { d: string; color: string; width: number }[] = [];
+	function fakeContext() {
+		const strokes: { d: string; color: string; width: number }[] = [];
+		const fills: { d: string; color: string }[] = [];
+		const texts: { text: string; x: number; y: number; color: string }[] = [];
 		const ctx = {
 			strokeStyle: "",
+			fillStyle: "",
 			lineWidth: 0,
 			lineCap: "",
 			lineJoin: "",
+			font: "",
+			textAlign: "",
+			textBaseline: "",
 			stroke(path: unknown) {
-				drawn.push({
+				strokes.push({
 					d: String(path),
-					color: this.strokeStyle,
-					width: this.lineWidth,
+					color: String(ctx.strokeStyle),
+					width: ctx.lineWidth,
 				});
 			},
+			fill(path: unknown) {
+				fills.push({ d: String(path), color: String(ctx.fillStyle) });
+			},
+			fillText(text: string, x: number, y: number) {
+				texts.push({ text, x, y, color: String(ctx.fillStyle) });
+			},
 		};
+		return { ctx, strokes, fills, texts };
+	}
+
+	test("draws every shape in its own colour, at one width", () => {
+		const { ctx, strokes } = fakeContext();
+
 		renderMarkup(
 			ctx,
 			[shape(), shape({ id: "s2", tool: "box", color: "#0A84FF" })],
 			7,
 			(d) => d,
 		);
+
 		// Arrow contributes two paths, box one.
-		expect(drawn).toHaveLength(3);
-		expect(drawn[0].color).toBe("#FF3B30");
-		expect(drawn[2].color).toBe("#0A84FF");
-		expect(new Set(drawn.map((x) => x.width))).toEqual(new Set([7]));
+		expect(strokes).toHaveLength(3);
+		expect(strokes[0].color).toBe("#FF3B30");
+		expect(strokes[2].color).toBe("#0A84FF");
+		expect(new Set(strokes.map((x) => x.width))).toEqual(new Set([7]));
 		expect(ctx.lineCap).toBe("round");
+	});
+
+	test("a note draws its region, then its number on top of it", () => {
+		const { ctx, strokes, fills, texts } = fakeContext();
+
+		renderMarkup(ctx, [note("n1", "this button is wrong")], 6, (d) => d);
+
+		expect(strokes).toHaveLength(1);
+		expect(fills).toHaveLength(1);
+		expect(fills[0].color).toBe("#FF3B30");
+		expect(texts).toEqual([
+			{ text: "1", x: 200, y: 120, color: "#FFFFFF" },
+		]);
+		expect(ctx.textBaseline).toBe("middle");
+	});
+
+	test("the numbers follow draw order and skip the silent tools", () => {
+		const { ctx, texts } = fakeContext();
+
+		renderMarkup(
+			ctx,
+			[
+				shape({ id: "arrow" }),
+				note("n1", "first"),
+				shape({ id: "box", tool: "box" }),
+				note("n2", "second"),
+			],
+			6,
+			(d) => d,
+		);
+
+		// An arrow between two notes must not consume a number: the picture and
+		// the message would then disagree about which sentence is about what.
+		expect(texts.map((t) => t.text)).toEqual(["1", "2"]);
 	});
 });

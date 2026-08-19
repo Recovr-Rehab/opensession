@@ -11,6 +11,9 @@ import {
 	markupExportType,
 	markupFileName,
 	markupStrokeWidth,
+	badgeInk,
+	noteBadge,
+	noteTexts,
 	recallMarkup,
 	rememberMarkup,
 	renderMarkup,
@@ -24,18 +27,25 @@ import { Modal, useEnterOnMount } from "../ui/modal";
 import { toast } from "../ui/toast";
 import {
 	IconArrowUpRight,
+	IconMessage,
 	IconPencil,
 	IconRectangle,
 	IconUndo,
+	IconX,
 } from "./icons";
 
 /**
- * Draw on a screenshot before you send it.
+ * Annotate a screenshot before you send it.
  *
  * The gap this closes: you paste a screenshot into the composer and then have
  * to write "the second button in the top right, the one with the chevron",
- * because the picture cannot point. An arrow says it in one gesture, and the
- * sentence underneath gets to be about the fix instead of about the location.
+ * because the picture cannot point. Here you drag a box around the region and
+ * type what is wrong with it. The region becomes a numbered badge on the
+ * picture and the sentence leaves as the matching numbered line in the
+ * message, so three separate remarks about three parts of one screen are three
+ * places and three sentences rather than a paragraph of directions.
+ *
+ * Arrow, box and pen are the silent tools, for when pointing IS the message.
  *
  * Shape state lives in the image's natural pixels (lib/image-markup.ts
  * explains why), and the live overlay is an SVG with a natural-pixel viewBox,
@@ -58,9 +68,10 @@ import {
 interface Props {
 	/** The attachment being annotated: a `/media?path=` ref or a data URL. */
 	src: string;
-	/** Hand back the ref for the annotated copy, or the original when markup
-	 *  was removed. */
-	onSave: (ref: string) => void;
+	/** Hand back the ref for the annotated copy (or the original when markup was
+	 *  removed), plus the note text in badge order for the message being
+	 *  written. */
+	onSave: (ref: string, notes: string[]) => void;
 	onClose: () => void;
 }
 
@@ -110,7 +121,13 @@ export function ImageMarkup({ src, onSave, onClose }: Props) {
 		() => priorRef.current?.shapes ?? [],
 	);
 	const [draft, setDraft] = useState<MarkupShape | null>(null);
-	const [tool, setTool] = useState<MarkupTool>("arrow");
+	// A note's region, drawn and waiting for its sentence. It is deliberately
+	// not in `shapes` yet: a box with nothing said about it is an unfinished
+	// thought, and letting it commit would put an unexplained number on the
+	// picture and an empty line in the message.
+	const [pending, setPending] = useState<MarkupShape | null>(null);
+	const [noteText, setNoteText] = useState("");
+	const [tool, setTool] = useState<MarkupTool>("note");
 	const [color, setColor] = useState(DEFAULT_MARKUP_COLOR);
 	const [saving, setSaving] = useState(false);
 	const imageRef = useRef<HTMLImageElement | null>(null);
@@ -161,7 +178,10 @@ export function ImageMarkup({ src, onSave, onClose }: Props) {
 	);
 
 	function onPointerDown(e: React.PointerEvent) {
-		if (saving || !natural) return;
+		// One unfinished note at a time. Starting a second region would abandon
+		// the sentence half-typed, which is the one thing here that cannot be
+		// recovered with Undo.
+		if (saving || !natural || pending) return;
 		const p = pointAt(e);
 		if (!p) return;
 		e.preventDefault();
@@ -189,11 +209,34 @@ export function ImageMarkup({ src, onSave, onClose }: Props) {
 	}
 
 	function endStroke() {
-		setDraft((current) => {
-			if (current && shapeHasInk(current, strokeWidth))
-				setShapes((all) => [...all, current]);
-			return null;
-		});
+		if (!draft) return;
+		if (shapeHasInk(draft, strokeWidth)) {
+			// A note's region is only half of it. Hold the box and ask for the
+			// sentence; every other tool is complete the moment the drag ends.
+			if (draft.tool === "note") {
+				setPending(draft);
+				setNoteText("");
+			} else {
+				setShapes((all) => [...all, draft]);
+			}
+		}
+		setDraft(null);
+	}
+
+	/** Commit the pending region with what was typed about it. */
+	function commitNote() {
+		const said = noteText.trim();
+		if (!pending || !said) return;
+		setShapes((all) => [...all, { ...pending, note: said }]);
+		setPending(null);
+		setNoteText("");
+	}
+
+	/** Drop the region and whatever was being said about it. The box was never
+	 *  a shape, so there is nothing for Undo to pick up afterwards. */
+	function discardNote() {
+		setPending(null);
+		setNoteText("");
 	}
 
 	async function save() {
@@ -201,7 +244,7 @@ export function ImageMarkup({ src, onSave, onClose }: Props) {
 		// Nothing drawn: this is a cancel that happens to have taken the long
 		// way round, so leave the attachment exactly as it was.
 		if (!shapes.length) {
-			onSave(priorRef.current ? base : src);
+			onSave(priorRef.current ? base : src, []);
 			onClose();
 			return;
 		}
@@ -215,7 +258,10 @@ export function ImageMarkup({ src, onSave, onClose }: Props) {
 			if (!ctx) throw new Error("canvas unavailable");
 			ctx.scale(scale, scale);
 			ctx.drawImage(imageRef.current, 0, 0, natural.w, natural.h);
-			renderMarkup(ctx, shapes, strokeWidth, (d) => new Path2D(d));
+			renderMarkup(ctx, shapes, strokeWidth, (d) => new Path2D(d), {
+				w: natural.w,
+				h: natural.h,
+			});
 			const type = markupExportType(base);
 			const blob = await new Promise<Blob | null>((resolve) =>
 				canvas.toBlob(resolve, type.mime, type.quality),
@@ -227,7 +273,7 @@ export function ImageMarkup({ src, onSave, onClose }: Props) {
 			);
 			const ref = `/media?path=${encodeURIComponent(path)}`;
 			rememberMarkup(ref, { original: base, shapes });
-			onSave(ref);
+			onSave(ref, noteTexts(shapes));
 			onClose();
 		} catch (e) {
 			// Keep the shapes on screen. The work took a minute of aiming and
@@ -239,8 +285,35 @@ export function ImageMarkup({ src, onSave, onClose }: Props) {
 		}
 	}
 
-	const live = draft ? [...shapes, draft] : shapes;
+	const live = draft
+		? [...shapes, draft]
+		: pending
+			? [...shapes, pending]
+			: shapes;
 	const canRemove = !!priorRef.current;
+	const notes = shapes.filter((shape) => shape.note !== undefined);
+	// Badges for the committed notes, plus one for the region being written
+	// about right now: seeing the number it is ABOUT to take is what makes the
+	// list underneath read as the same thing as the picture.
+	const badges = [...notes, ...(pending ? [pending] : [])].flatMap(
+		(shape, i) => {
+			const badge = noteBadge(shape, strokeWidth, natural ?? undefined);
+			return badge ? [{ shape, badge, number: i + 1 }] : [];
+		},
+	);
+	// Where the note field sits: just under the region's bottom-left corner,
+	// held inside the picture so a box drawn against the right or bottom edge
+	// (which is where half of them are) does not push its own field off screen.
+	const notePlacement = (() => {
+		if (!pending || !natural) return { left: 0, top: 0 };
+		const [a, b] = pending.points;
+		const left = (Math.min(a.x, b.x) / natural.w) * 100;
+		const top = (Math.max(a.y, b.y) / natural.h) * 100;
+		return {
+			left: Math.min(Math.max(left, 0), 55),
+			top: Math.min(Math.max(top, 0), 78),
+		};
+	})();
 
 	return (
 		<Modal.Root
@@ -256,7 +329,7 @@ export function ImageMarkup({ src, onSave, onClose }: Props) {
 			>
 				<Modal.Header
 					title="Markup"
-					description="Point at what you mean, then say it."
+					description="Drag a box around what you mean, then say what is wrong."
 				/>
 				{/* The picture sits on a neutral, non-themed plate. A screenshot
 				    of a light app on the dark app's raised surface reads as a
@@ -301,7 +374,74 @@ export function ImageMarkup({ src, onSave, onClose }: Props) {
 										/>
 									)),
 								)}
+								{/* A note's number, on its region's corner. Drawn from the same
+								    geometry the export uses, so what you aimed at is what leaves. */}
+								{badges.map(({ shape, badge, number }) => (
+									<g key={`badge-${shape.id}`} pointerEvents="none">
+										<circle cx={badge.cx} cy={badge.cy} r={badge.r} fill={shape.color} />
+										<text
+											x={badge.cx}
+											y={badge.cy}
+											fill={badgeInk(shape.color)}
+											fontSize={badge.r * 1.25}
+											fontWeight={600}
+											textAnchor="middle"
+											dominantBaseline="central"
+											fontFamily="system-ui, -apple-system, sans-serif"
+										>
+											{number}
+										</text>
+									</g>
+								))}
 							</svg>
+							{/* The sentence is asked for AT the region rather than in a panel
+							    off to the side: what you are typing about stays under your
+							    cursor, and the field arrives where your hand already is. */}
+							{pending && natural && (
+								<div
+									className="absolute z-20 w-[min(280px,86%)]"
+									style={{
+										left: `${notePlacement.left}%`,
+										top: `${notePlacement.top}%`,
+									}}
+								>
+									<div className="mt-1.5 flex flex-col gap-2 rounded-control border border-line bg-panel p-2 shadow-lg">
+										<textarea
+											autoFocus
+											rows={2}
+											value={noteText}
+											placeholder="What is wrong here?"
+											onChange={(e) => setNoteText(e.target.value)}
+											onKeyDown={(e) => {
+												// Enter commits, because this is one remark rather than a
+												// message: the next thing you do is draw the next region.
+												if (e.key === "Enter" && !e.shiftKey) {
+													e.preventDefault();
+													commitNote();
+												}
+												if (e.key === "Escape") {
+													e.stopPropagation();
+													discardNote();
+												}
+											}}
+											className="w-full resize-none bg-transparent text-body text-fg outline-none placeholder:text-faint"
+										/>
+										<div className="flex items-center justify-end gap-1">
+											<Button size="sm" variant="ghost" onClick={discardNote}>
+												Cancel
+											</Button>
+											<Button
+												size="sm"
+												variant="primary"
+												disabled={!noteText.trim()}
+												onClick={commitNote}
+											>
+												Add
+											</Button>
+										</div>
+									</div>
+								</div>
+							)}
 						</div>
 					) : (
 						<div className="h-[40dvh] w-full animate-pulse rounded-[4px] bg-hover" />
@@ -310,6 +450,13 @@ export function ImageMarkup({ src, onSave, onClose }: Props) {
 
 				<div className="flex flex-wrap items-center gap-3">
 					<div className="flex items-center gap-1 rounded-control bg-hover/60 p-1">
+						<ToolButton
+							active={tool === "note"}
+							label="Comment"
+							onClick={() => setTool("note")}
+						>
+							<IconMessage size={20} />
+						</ToolButton>
 						<ToolButton
 							active={tool === "arrow"}
 							label="Arrow"
@@ -384,7 +531,7 @@ export function ImageMarkup({ src, onSave, onClose }: Props) {
 								variant="ghost"
 								disabled={saving}
 								onClick={() => {
-									onSave(base);
+									onSave(base, []);
 									onClose();
 								}}
 							>
@@ -394,12 +541,43 @@ export function ImageMarkup({ src, onSave, onClose }: Props) {
 					</div>
 				</div>
 
+				{/* The message half of the annotation, in the numbers the picture
+				    carries. Seeing the lines here is what makes Save honest: this
+				    text is going into the composer, not just into the file. */}
+				{notes.length > 0 && (
+					<ol className="flex flex-col gap-1.5">
+						{notes.map((shape, i) => (
+							<li key={shape.id} className="flex items-start gap-2">
+								<span
+									className="mt-px flex size-[18px] shrink-0 items-center justify-center rounded-full text-label font-medium"
+									style={{ background: shape.color, color: badgeInk(shape.color) }}
+								>
+									{i + 1}
+								</span>
+								<span className="min-w-0 flex-1 whitespace-pre-wrap break-words text-body text-fg">
+									{shape.note}
+								</span>
+								<button
+									type="button"
+									onClick={() =>
+										setShapes((all) => all.filter((s) => s.id !== shape.id))
+									}
+									className="focus-ring shrink-0 rounded-control p-0.5 text-faint transition-colors hover:text-fg"
+									aria-label={`Remove note ${i + 1}`}
+								>
+									<IconX size={14} dense />
+								</button>
+							</li>
+						))}
+					</ol>
+				)}
+
 				<Modal.Footer>
 					<Button variant="ghost" disabled={saving} onClick={onClose}>
 						Cancel
 					</Button>
 					<Button variant="primary" disabled={saving || !natural} onClick={save}>
-						{saving ? "Saving" : "Save"}
+						{saving ? "Saving" : notes.length ? "Add to message" : "Save"}
 					</Button>
 				</Modal.Footer>
 			</Modal.Content>

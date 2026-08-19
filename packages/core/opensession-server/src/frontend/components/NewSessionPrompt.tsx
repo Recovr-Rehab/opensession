@@ -14,6 +14,7 @@ import {
 import { saveDraft, NEW_SESSION_DRAFT_KEY as DRAFT_KEY } from "../lib/drafts";
 import { attachingLabel, type StagingCount } from "../lib/attachments";
 import { imageFilesFromPaste, type FileAttachment } from "../lib/images";
+import { appendImageNotes } from "../lib/image-markup";
 import { insertPastedSessionId } from "../lib/session-url";
 import { insideOpenFence, isSendCombo, type SendKeyPref } from "../lib/send-key";
 import {
@@ -485,7 +486,13 @@ export function NewSessionPrompt({
 				images={images}
 				pending={staging.images}
 				onRemove={onRemoveImage}
-				onReplace={onReplaceImage}
+				onReplace={(index, ref, notes) => {
+					onReplaceImage(index, ref);
+					// The field lives here rather than in the parent, so the notes
+					// written on the picture are folded in here too.
+					if (notes.length)
+						setText((current) => appendImageNotes(current, notes));
+				}}
 				disabled={disabled}
 			/>
 			<FileChips

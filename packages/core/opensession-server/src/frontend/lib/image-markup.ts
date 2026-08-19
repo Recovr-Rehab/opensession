@@ -21,9 +21,15 @@
  * screenshot produce the same file.
  */
 
-/** What a stroke is. Three tools, because "point at it" is an arrow, "this
- *  region" is a box, and "circle the thing" is a pen. */
-export type MarkupTool = "arrow" | "box" | "pen";
+/**
+ * What a stroke is.
+ *
+ * `note` is the one that carries words: you drag a box around a region and
+ * then say what is wrong with THAT region, and the sentence leaves with the
+ * picture as a numbered line. The other three are silent ink, for when
+ * pointing is the whole message: an arrow points, a box frames, a pen circles.
+ */
+export type MarkupTool = "note" | "arrow" | "box" | "pen";
 
 export interface MarkupPoint {
 	x: number;
@@ -34,9 +40,39 @@ export interface MarkupShape {
 	id: string;
 	tool: MarkupTool;
 	color: string;
-	/** Points in NATURAL image pixels. Arrow and box carry exactly two (start,
-	 *  end); pen carries the sampled path. */
+	/** Points in NATURAL image pixels. Arrow, box and note carry exactly two
+	 *  (start, end); pen carries the sampled path. */
 	points: MarkupPoint[];
+	/** What this region is about. Present only on a `note`, and only once its
+	 *  text has been committed, which is what separates a finished note from
+	 *  the box still waiting for someone to type into it. */
+	note?: string;
+}
+
+/** The notes on a set of shapes, in the order they were drawn, which is the
+ *  order their badges are numbered in. */
+export function noteTexts(shapes: MarkupShape[]): string[] {
+	const notes: string[] = [];
+	for (const shape of shapes) if (shape.note) notes.push(shape.note);
+	return notes;
+}
+
+/**
+ * Fold the notes into the message being written.
+ *
+ * Numbered, because the badges on the picture are numbered: "2. this amount is
+ * stale" is only useful next to a 2 drawn around the amount. Appended rather
+ * than prepended so whatever was already typed stays the opening sentence, and
+ * separated by a blank line so a paragraph and a list do not run together.
+ */
+export function appendImageNotes(text: string, notes: string[]): string {
+	const lines = notes
+		.map((note, i) => `${i + 1}. ${note.trim()}`)
+		.filter((line) => line.length > 3)
+		.join("\n");
+	if (!lines) return text;
+	const base = text.replace(/\s+$/, "");
+	return base ? `${base}\n\n${lines}` : lines;
 }
 
 /**
@@ -276,6 +312,44 @@ export function recallMarkup(
 	return remembered.get(ref);
 }
 
+/**
+ * A note's numbered badge, in natural image pixels.
+ *
+ * It sits ON the region's top-left corner rather than beside it, so the number
+ * cannot drift away from the thing it numbers when the box is small. Clamped
+ * into the picture when bounds are given, because a region drawn against an
+ * edge (which is most of them: the thing that is wrong is usually in a corner)
+ * would otherwise have half its badge cropped off by the export.
+ */
+export function noteBadge(
+	shape: MarkupShape,
+	strokeWidth: number,
+	bounds?: { w: number; h: number },
+): { cx: number; cy: number; r: number } | null {
+	const [a, b] = shape.points;
+	if (!a || !b) return null;
+	const r = Math.max(strokeWidth * 2.4, 9);
+	let cx = Math.min(a.x, b.x);
+	let cy = Math.min(a.y, b.y);
+	if (bounds) {
+		cx = Math.min(Math.max(cx, r), Math.max(r, bounds.w - r));
+		cy = Math.min(Math.max(cy, r), Math.max(r, bounds.h - r));
+	}
+	return { cx: n(cx), cy: n(cy), r: n(r) };
+}
+
+/** What a number is written in, on top of its own badge. Every ink in the
+ *  palette carries white except the white one, which would be invisible. */
+export function badgeInk(color: string): string {
+	return /^#f{3,}$|^#ffffff$/i.test(color.trim()) ? "#101114" : "#FFFFFF";
+}
+
+/** A circle as path data, so the badge draws through the same makePath seam as
+ *  every other mark instead of needing an arc() on the context interface. */
+function circlePath(cx: number, cy: number, r: number): string {
+	return `M ${n(cx - r)} ${n(cy)} A ${n(r)} ${n(r)} 0 1 0 ${n(cx + r)} ${n(cy)} A ${n(r)} ${n(r)} 0 1 0 ${n(cx - r)} ${n(cy)} Z`;
+}
+
 /** Minimal 2D-context surface used by the export path, so this module stays
  *  free of DOM lib assumptions and remains testable with a fake. */
 export interface MarkupContext {
@@ -284,10 +358,16 @@ export interface MarkupContext {
 	 *  or CanvasRenderingContext2D does not satisfy this interface. `object`
 	 *  rather than the DOM types keeps this module free of the DOM lib. */
 	strokeStyle: string | object;
+	fillStyle: string | object;
 	lineWidth: number;
 	lineCap: string;
 	lineJoin: string;
+	font: string;
+	textAlign: string;
+	textBaseline: string;
 	stroke(path: unknown): void;
+	fill(path: unknown): void;
+	fillText(text: string, x: number, y: number): void;
 }
 
 /**
@@ -303,12 +383,27 @@ export function renderMarkup(
 	shapes: MarkupShape[],
 	strokeWidth: number,
 	makePath: (d: string) => unknown,
+	bounds?: { w: number; h: number },
 ): void {
 	ctx.lineCap = "round";
 	ctx.lineJoin = "round";
 	ctx.lineWidth = strokeWidth;
+	let number = 0;
 	for (const shape of shapes) {
 		ctx.strokeStyle = shape.color;
 		for (const d of shapePaths(shape, strokeWidth)) ctx.stroke(makePath(d));
+		if (!shape.note) continue;
+		// The badge is drawn in the same pass as its region, so the numbering in
+		// the picture is draw order, which is the order the notes leave in.
+		number += 1;
+		const badge = noteBadge(shape, strokeWidth, bounds);
+		if (!badge) continue;
+		ctx.fillStyle = shape.color;
+		ctx.fill(makePath(circlePath(badge.cx, badge.cy, badge.r)));
+		ctx.fillStyle = badgeInk(shape.color);
+		ctx.font = `600 ${Math.round(badge.r * 1.25)}px system-ui, -apple-system, sans-serif`;
+		ctx.textAlign = "center";
+		ctx.textBaseline = "middle";
+		ctx.fillText(String(number), badge.cx, badge.cy);
 	}
 }

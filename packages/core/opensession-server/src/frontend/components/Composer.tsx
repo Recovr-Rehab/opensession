@@ -30,6 +30,7 @@ import {
 import { useSessionNameProjection } from "../hooks/useSessionNameProjection";
 import { usePeople } from "../lib/people";
 import { ImageThumbs } from "./ImageThumbs";
+import { appendImageNotes } from "../lib/image-markup";
 import { FileChips } from "./FileChips";
 import { QuoteContext } from "./QuoteContext";
 import { PastedTextContext } from "./PastedTextContext";
@@ -902,8 +903,12 @@ export function Composer({
   // tile it was opened from BECOMES that picture, rather than gaining a
   // neighbour: sending a screenshot next to the same screenshot with an arrow
   // on it gives the agent two things to reconcile and says nothing extra.
-  function replaceImage(i: number, ref: string) {
+  function replaceImage(i: number, ref: string, notes: string[]) {
     onImagesChange?.(imgs.map((image, idx) => (idx === i ? ref : image)));
+    // Half of an annotation is words. The picture carries the numbered
+    // regions, the field carries the matching lines, and one send delivers
+    // both, which is the whole point of writing them on the image.
+    if (notes.length) setText(appendImageNotes(text, notes));
   }
 
   function removeFile(i: number) {
