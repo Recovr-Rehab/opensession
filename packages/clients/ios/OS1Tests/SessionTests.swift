@@ -357,15 +357,14 @@ final class SessionTests: XCTestCase {
             calendar: calendar
         )
 
-        XCTAssertEqual(bands.map(\.band), [.needsAction, .recent, .yesterday, .earlier, .done])
+        XCTAssertEqual(bands.map(\.band), [.needsAction, .recent, .yesterday, .earlier])
         XCTAssertEqual(bands.map { $0.workspaces.map(\.mainSession.id) }, [
             ["blocked"],
+            // Merged work stays in its activity band instead of moving to Done.
             // A live row is recent whatever its day, but ranks by activity.
-            ["today-late", "today-early", "running-old"],
+            ["today-late", "merged-today", "today-early", "running-old"],
             ["yesterday"],
             ["earlier"],
-            // Landed today, and still Done rather than Recent.
-            ["merged-today"],
         ])
     }
 

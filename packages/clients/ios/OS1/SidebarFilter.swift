@@ -12,9 +12,9 @@ import Foundation
 ///
 /// The list is an inbox whichever of these is picked: its rows band by what
 /// they want from you and when they last moved (Needs action / Recent /
-/// Yesterday / Earlier / Done). This is the one question left, and it has
-/// three answers: nothing above those bands, one band per project, or the
-/// status lanes, which stand in for the bands rather than nesting inside them.
+/// Yesterday / Earlier). This is the one question left, and it has three
+/// answers: nothing above those bands, one band per project, or the status
+/// lanes, which stand in for the bands rather than nesting inside them.
 ///
 /// Six cases became three. Two combinations went deliberately: a flat
 /// "Recently active" list with no headings at all, and the status lanes nested
