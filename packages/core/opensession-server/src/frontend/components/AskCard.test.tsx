@@ -122,17 +122,47 @@ test("a lone question shows only the send action, never Previous/Next", () => {
 		/>,
 	);
 
+	// Match the ATTRIBUTE, not the word: every action now carries a class that
+	// spells `hidden` too, and a filter that reads the whole tag counts the
+	// visible button as hidden.
 	const buttons = html.match(/<button[^>]*>/g) ?? [];
-	const visible = buttons.filter((b) => !b.includes("hidden"));
+	const visible = buttons.filter((b) => !b.includes('hidden=""'));
 	expect(visible).toHaveLength(1);
 	expect(visible[0]).toContain('type="submit"');
 
 	// The `hidden` attribute alone does not hide them: Button paints
 	// `inline-flex`, which outranks the UA rule, and we ship no Preflight. Each
 	// hidden action has to carry the class that wins it back.
-	for (const button of buttons.filter((b) => b.includes("hidden"))) {
+	for (const button of buttons.filter((b) => b.includes('hidden=""'))) {
 		expect(button).toContain("[hidden]]:hidden");
 	}
+});
+
+test("a stepped ask shows Next only, with no dead Answer beside it", () => {
+	const html = renderToStaticMarkup(
+		<AskCard
+			questions={[
+				{ question: "Shape?", options: [{ label: "Compact" }] },
+				{ question: "Where?", options: [{ label: "Transcript" }] },
+			]}
+			onAnswer={() => {}}
+		/>,
+	);
+
+	const buttons = html.match(/<button[^>]*>/g) ?? [];
+	const visible = buttons.filter((b) => !b.includes('hidden=""'));
+
+	// Send belongs to the LAST question. Until then Next is the only action:
+	// an Answer button here is both dead (the primitive marks it inert) and a
+	// second thing to press.
+	expect(visible).toHaveLength(1);
+	expect(visible[0]).not.toContain('type="submit"');
+
+	// Every inert action has to win `hidden` back against Button's own
+	// `inline-flex` — submit included, which is the one that got missed.
+	const inert = buttons.filter((b) => b.includes('hidden=""'));
+	expect(inert).toHaveLength(2);
+	for (const button of inert) expect(button).toContain("[hidden]]:hidden");
 });
 
 test("multi-select and free-text answers retain the explicit Answer action", () => {

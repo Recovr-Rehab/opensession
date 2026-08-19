@@ -356,7 +356,14 @@ export function AskCard({ questions, onAnswer }: Props) {
 					Next
 				</Questionnaire.Next>
 				{/* The glyph reports the state the label also names: an answer on its
-				    way out before you press, a tick once it has gone. */}
+				    way out before you press, a tick once it has gone.
+
+				    It needs HIDE_WHEN_INERT for the same reason the other two do, and
+				    it is the one that hurts: send is the LAST question's action, so on
+				    a multi-question ask it arrives hidden and `inert` beside Next.
+				    Without the class it still paints, and inert means it ignores the
+				    click — a live-looking primary button that does nothing, which is
+				    the one people reach for. */}
 				<Questionnaire.Submit
 					disabled={submitted}
 					render={
@@ -364,6 +371,7 @@ export function AskCard({ questions, onAnswer }: Props) {
 							variant="primary"
 							size="lg"
 							icon={submitted ? <IconCheck size={20} /> : <IconReturn size={20} />}
+							className={HIDE_WHEN_INERT}
 						/>
 					}
 				>
