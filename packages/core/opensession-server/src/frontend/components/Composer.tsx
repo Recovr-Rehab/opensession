@@ -7,6 +7,15 @@ import type { ModelOption, FileMention, ProviderAccountOption } from "../lib/api
 import { splitAttachments, imageFilesFromPaste, type FileAttachment } from "../lib/images";
 import { loadDraft, onDraftsChanged, saveDraft } from "../lib/drafts";
 import {
+  addStaging,
+  attachingLabel,
+  countStaging,
+  isStaging,
+  NOTHING_STAGING,
+  subtractStaging,
+  type StagingCount,
+} from "../lib/attachments";
+import {
   composerHighlightHtml,
   composerMentionRanges,
   needsComposerHighlight,
@@ -217,6 +226,10 @@ interface Props {
    */
   files?: FileAttachment[];
   onFilesChange?: (files: FileAttachment[]) => void;
+  /** Uploads managed by the parent, used when a larger surface shares this
+   * composer's attachment path. Omit both props for Composer-owned staging. */
+  staging?: StagingCount;
+  onAddAttachments?: (picked: FileList | File[]) => void | Promise<void>;
   /** The transcript selection currently attached as ephemeral context. */
   quote?: Quote | null;
   onQuoteClear?: () => void;
@@ -452,6 +465,8 @@ export function Composer({
   onImagesChange,
   files,
   onFilesChange,
+  staging,
+  onAddAttachments,
   quote,
   onQuoteClear,
   mentionFetch,
@@ -477,6 +492,8 @@ export function Composer({
   const [pastedTexts, setPastedTexts] = useState(() =>
     draftKey ? loadDraft(draftKey).pastedTexts : [],
   );
+  const [localStaging, setLocalStaging] = useState<StagingCount>(NOTHING_STAGING);
+  const activeStaging = staging ?? localStaging;
   const isPhone = useIsPhone();
   const noteChord = useShortcutLabel("composer-note");
   const attachChord = useShortcutLabel("composer-attach");
@@ -593,7 +610,8 @@ export function Composer({
   }
   const outgoingText = composePastedText(text, pastedTexts);
   const isSendDisabled =
-    typeof sendDisabled === "function" ? sendDisabled(outgoingText) : sendDisabled;
+    (typeof sendDisabled === "function" ? sendDisabled(outgoingText) : sendDisabled) ||
+    isStaging(activeStaging);
   const imgs = images || [];
   const fls = files || [];
   // Notes accept images but not arbitrary files: images remain team-visible,
@@ -632,6 +650,7 @@ export function Composer({
     !!text.trim() ||
     imgs.length > 0 ||
     fls.length > 0 ||
+    isStaging(activeStaging) ||
     pastedTexts.length > 0 ||
     !!quote ||
     hasAttached;
@@ -806,6 +825,10 @@ export function Composer({
 
   async function addFiles(picked: FileList | File[]) {
     if (!canAttach) return;
+    if (onAddAttachments) {
+      await onAddAttachments(picked);
+      return;
+    }
     const selected = Array.from(picked);
     const noteImageTypes = new Set(["image/png", "image/jpeg", "image/gif", "image/webp"]);
     const allowed = (file: File) =>
@@ -814,21 +837,28 @@ export function Composer({
     const accepted = canAttachFiles
       ? selected
       : selected.filter(allowed);
-    const { images: newImgs, files: newFls, rejected } = await splitAttachments(accepted);
-    // Images ride the vision channel; other files need a dedicated file channel
-    // (if the parent only wired images, non-image files are simply ignored).
-    if (newImgs.length) onImagesChange?.([...imgs, ...newImgs]);
-    if (newFls.length && canAttachFiles) onFilesChange?.([...fls, ...newFls]);
-    // Fail loudly rather than dropping oversized/failed uploads silently.
-    const failures = [
-      ...rejected,
-      ...disallowed.map((file) =>
-        noteMode
-          ? `${file.name} (notes accept PNG, JPEG, GIF, or WebP images)`
-          : `${file.name} (only images are supported)`,
-      ),
-    ];
-    if (failures.length) alert(`Couldn't attach:\n${failures.join("\n")}`);
+    const batch = countStaging(accepted);
+    setLocalStaging((current) => addStaging(current, batch));
+    try {
+      const { images: newImgs, files: newFls, rejected } =
+        await splitAttachments(accepted);
+      // Images ride the vision channel; other files need a dedicated file channel
+      // (if the parent only wired images, non-image files are simply ignored).
+      if (newImgs.length) onImagesChange?.([...imgs, ...newImgs]);
+      if (newFls.length && canAttachFiles) onFilesChange?.([...fls, ...newFls]);
+      // Fail loudly rather than dropping oversized/failed uploads silently.
+      const failures = [
+        ...rejected,
+        ...disallowed.map((file) =>
+          noteMode
+            ? `${file.name} (notes accept PNG, JPEG, GIF, or WebP images)`
+            : `${file.name} (only images are supported)`,
+        ),
+      ];
+      if (failures.length) alert(`Couldn't attach:\n${failures.join("\n")}`);
+    } finally {
+      setLocalStaging((current) => subtractStaging(current, batch));
+    }
   }
 
   function handlePaste(e: React.ClipboardEvent) {
@@ -1454,8 +1484,23 @@ export function Composer({
             ))}
           </AnimatePresence>
         </div>
-        <ImageThumbs images={imgs} onRemove={removeImage} disabled={disabled} />
-        <FileChips files={fls} onRemove={removeFile} disabled={disabled} />
+        <ImageThumbs
+          images={imgs}
+          pending={activeStaging.images}
+          onRemove={removeImage}
+          disabled={disabled}
+        />
+        <FileChips
+          files={fls}
+          pending={activeStaging.files}
+          onRemove={removeFile}
+          disabled={disabled}
+        />
+        {attachingLabel(activeStaging) && (
+          <span className="sr-only" role="status">
+            {attachingLabel(activeStaging)}
+          </span>
+        )}
         <motion.div
           layout="position"
           transition={composerMorph}
