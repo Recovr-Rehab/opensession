@@ -233,6 +233,17 @@ function harnessEntryFor(
       ? [{ id, type: "system", content: body, timestamp: ts }]
       : [];
   }
+  // An answered question card (transcriptLineAskRecord in
+  // opencode-transcript.ts, written by asks.ts when the ask resolves). The
+  // card is transient, so this is the transcript's only trace of what was
+  // asked and what was picked. A system entry tagged `noticeKind: "ask"`,
+  // whose content is the record's title line plus its markdown body.
+  if (t.startsWith("<ask-record>")) {
+    const body = t.match(/<ask-record>([\s\S]*?)<\/ask-record>/)?.[1]?.trim();
+    return body
+      ? [{ id, type: "system", content: body, timestamp: ts, noticeKind: "ask" }]
+      : [];
+  }
   // Engine context-compaction summary (transcriptLineCompactionSummary in
   // opencode-transcript.ts): the handoff the model wrote when its history was
   // summarized to fit the context window. A system entry with `compaction`

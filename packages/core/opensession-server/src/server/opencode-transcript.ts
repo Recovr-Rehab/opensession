@@ -646,6 +646,21 @@ export function transcriptLineRecap(
   return transcriptLineUser(`<recap>${text}</recap>`, id, ts);
 }
 
+/** An answered question card (asks.ts): what was asked, the options it was
+ *  picked from, and the pick. The card itself is removed the moment it
+ *  resolves, so without this line the transcript kept no trace that the run
+ *  had stopped to ask at all. Same user-role + harness-marker pattern as
+ *  runner notices; the jsonl parser maps it to a system entry tagged
+ *  `noticeKind: "ask"`, which renders as one compact line with the options
+ *  behind a show toggle. */
+export function transcriptLineAskRecord(
+  text: string,
+  id?: string,
+  ts?: string
+): JsonlLine {
+  return transcriptLineUser(`<ask-record>${text}</ask-record>`, id, ts);
+}
+
 /** A model-visible payload the harness injected into a prompt — the
  *  "model-visible means logged" record written by context-log.ts. Same
  *  user-role + harness-marker pattern as runner notices; the jsonl parser maps

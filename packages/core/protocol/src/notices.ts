@@ -138,7 +138,12 @@ export type NoticeKind =
    *  session per source and again only when its content hash changes, so a
    *  multi-KB blob is not copied onto every turn. Same "not conversation"
    *  discipline as context-injection, and the same projections drop it. */
-  | "standing-context";
+  | "standing-context"
+  /** A question card that has been answered: what was asked, what was on
+   *  offer, and what the human picked. The card itself is transient (it is
+   *  removed the moment it resolves), so without this the transcript kept no
+   *  trace that the run had ever stopped to ask. */
+  | "ask";
 
 /**
  * How a client renders the entry's `content` underneath the title:
@@ -436,6 +441,31 @@ export function dropContextInjections<T extends TranscriptEntry>(
 }
 
 /**
+ * The durable record of an answered question card (asks.ts).
+ *
+ * One string carries both halves: a title line (the pick, which is what a
+ * reader scanning the transcript wants) and a markdown body (the question and
+ * the options it was chosen from, behind the show toggle). Keeping it in
+ * `content` means the record rides the ordinary entry path with no new wire
+ * field, and this pair is the only code that knows the layout.
+ */
+export function askRecordContent(title: string, body: string): string {
+  return body ? `${title}\n${body}` : title;
+}
+
+export function parseAskRecord(content: string): {
+  title: string;
+  body: string;
+} {
+  const nl = (content || "").indexOf("\n");
+  if (nl === -1) return { title: (content || "").trim(), body: "" };
+  return {
+    title: content.slice(0, nl).trim(),
+    body: content.slice(nl + 1).trim(),
+  };
+}
+
+/**
  * A status line whose whole notice is its own text: the title IS the body, and
  * the presentation is derived from the phrasing. One helper for the three
  * branches that build one, so a runner notice, a GitHub event and a workflow
@@ -461,6 +491,22 @@ export function classifyEntry(entry: TranscriptEntry): TranscriptEntry {
   if (entry.notice || entry.sender) return entry;
 
   if (entry.type === "system") {
+    // An answered question: the title is the pick, the body is what it was
+    // picked from. Not a PARSED_NOTICES row because its title is the record,
+    // not a fixed label.
+    if (entry.noticeKind === "ask") {
+      const { title, body } = parseAskRecord(entry.content);
+      return {
+        ...entry,
+        content: body,
+        notice: {
+          kind: "ask",
+          title,
+          tone: "info",
+          ...(body ? { body: "collapsed" as const } : {}),
+        },
+      };
+    }
     const parsed = entry.noticeKind && PARSED_NOTICES[entry.noticeKind];
     if (parsed) return { ...entry, notice: { tone: "info", ...parsed } };
     const content = stripNoticeGlyph(entry.content);

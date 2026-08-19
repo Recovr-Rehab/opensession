@@ -18,6 +18,11 @@ import {
 	AWS_HUMAN_AUTH_DENIAL,
 	isAwsHumanAuthRequest,
 } from "./aws-creds";
+import { askRecordContent } from "@tellahq/opensession-protocol/notices";
+import {
+	appendOpencodeTranscript,
+	transcriptLineAskRecord,
+} from "./opencode-transcript";
 import { resolveTeammate } from "./shared/user-mappings";
 import { transitionRunState } from "./run-state";
 import { findSession } from "./session-cache";
@@ -192,6 +197,108 @@ export function settleRestoredAskAfterRecovery(sessionId: string): boolean {
 			console.error(`[ask] Failed to deliver restored answer for ${sessionId}:`, e),
 		);
 	return true;
+}
+
+// ── The durable record of an answered card ───────────────────────────────────
+//
+// The question card is transient: it is removed the moment it resolves, and it
+// never was a transcript entry, so a session that stopped to ask something
+// showed no sign of it afterwards. What was on offer, and which of those the
+// human picked, is often the reason the run went the way it did.
+//
+// So on resolution we write one system entry: a title carrying the pick, and a
+// collapsed body carrying the question and the options it was picked from.
+// Deliberately a record rather than a re-render of the card, because it is
+// read later by someone scanning what happened, not answered.
+
+const ASK_TITLE_MAX = 72;
+const OPTION_LETTERS = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
+
+/** The wire format joins a multi-select answer with ", " (see AskCard). */
+function answerLabels(answer: string): string[] {
+	return answer
+		.split(",")
+		.map((s) => s.trim())
+		.filter(Boolean);
+}
+
+/** One line for the title row: a question or a typed answer can be prose. */
+function oneLine(text: string, max: number): string {
+	const flat = text.replace(/\s+/g, " ").trim();
+	return flat.length > max ? `${flat.slice(0, max - 1)}…` : flat;
+}
+
+function askRecordTitle(
+	questions: AskQuestionInput[],
+	answers: Record<string, string>,
+): string {
+	if (questions.length !== 1) return `Answered ${questions.length} questions`;
+	const answer = (answers[questions[0].question] ?? "").trim();
+	return answer ? `Answered: ${oneLine(answer, ASK_TITLE_MAX)}` : "Answered";
+}
+
+function askRecordBody(
+	questions: AskQuestionInput[],
+	answers: Record<string, string>,
+): string {
+	return questions
+		.map((q) => {
+			const answer = (answers[q.question] ?? "").trim();
+			const picked = new Set(answerLabels(answer));
+			const options = q.options ?? [];
+			const lines: string[] = [];
+			lines.push(`**${q.header ? `${q.header}: ` : ""}${q.question}**`, "");
+			options.forEach((o, i) => {
+				const letter = `${OPTION_LETTERS[i] ?? "-"}.`;
+				// The pick is bold against its neighbours: the options are here for
+				// context, the choice is the thing being reported.
+				lines.push(
+					picked.has(o.label)
+						? `- **${letter} ${o.label}**`
+						: `- ${letter} ${o.label}`,
+				);
+			});
+			// Anything answered that wasn't on offer was typed into the card's own
+			// free-text field, so it has no letter to wear.
+			const typed = answerLabels(answer).filter(
+				(l) => !options.some((o) => o.label === l),
+			);
+			if (typed.length) lines.push(`- **${typed.join(", ")}** (typed)`);
+			if (!answer) lines.push("- No answer.");
+			return lines.join("\n");
+		})
+		.join("\n\n");
+}
+
+/** The record's `content`: title line plus markdown body. Exported for tests,
+ *  which is where the wording is pinned. */
+export function askRecordEntryContent(
+	questions: AskQuestionInput[],
+	answers: Record<string, string>,
+): string {
+	return askRecordContent(
+		askRecordTitle(questions, answers),
+		askRecordBody(questions, answers),
+	);
+}
+
+/** Persist the answered card. Best-effort: a transcript write must never take
+ *  down the run that was waiting on the answer. */
+export function recordAskAnswer(
+	sessionId: string,
+	questions: AskQuestionInput[],
+	answers: Record<string, string> | null,
+): void {
+	if (!answers || !questions.length) return;
+	try {
+		const engineSessionId = findSession(sessionId)?.claudeSessionId;
+		if (!engineSessionId) return;
+		appendOpencodeTranscript(engineSessionId, [
+			transcriptLineAskRecord(askRecordEntryContent(questions, answers)),
+		]);
+	} catch (e) {
+		console.error(`[ask] Failed to record answer for ${sessionId}:`, e);
+	}
 }
 
 // Flatten an AskUserQuestion payload into a single Slack-friendly prompt. Option
@@ -428,6 +535,7 @@ export function offerAskCard(
 			if (settled) return;
 			settled = true;
 			retract();
+			recordAskAnswer(sessionId, questions, a);
 			onAnswer(a);
 		},
 	});
@@ -492,6 +600,8 @@ export function makeAskHandler(sessionId: string) {
 					if (settled) return;
 					settled = true;
 					retirePendingAsk(sessionId, questionId);
+					// Before the card goes: the transcript's only trace of it.
+					recordAskAnswer(sessionId, questions, a);
 					transitionRunState(sessionId, "ask_resolved", {
 						answered: a !== null,
 					});
