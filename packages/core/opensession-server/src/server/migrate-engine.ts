@@ -13,8 +13,8 @@
  * only the engine changes.
  *
  * Hard gates (fail closed):
- *  - automation-owned sessions: the engines' deny-by-default gate refuses
- *    automation runs, so flipping their model would just brick them.
+ *  - automation-owned sessions may move to Pi, which supports unattended run
+ *    kinds, but not to another engine.
  *  - sessions with an in-flight run (per the shared run journal): flipping the
  *    model mid-turn races the run's own end-of-turn session patch.
  *  - targets that don't name an engine.
@@ -80,14 +80,15 @@ export function sessionHasJournaledRun(
 }
 
 /**
- * Flip a opensession session's model to an opencode/* id so its next turn
- * migrates onto the OpenCode engine via the transcript handoff. Pure
- * session-file operation — see module doc for what it deliberately doesn't do.
+ * Flip an Open Session session's model to an engine-routed id so its next turn
+ * migrates via the transcript handoff. Pure session-file operation. See the
+ * module doc for what it deliberately does not do.
  */
 export function migrateSessionEngine(
   sessionId: string,
   targetModel: string,
-  by = "engine-migration"
+  by = "engine-migration",
+  options: { preserveActivity?: boolean } = {}
 ): MigrateEngineResult {
   const path = `${OPENSESSION_SESSIONS_DIR}/${sessionId}.json`;
   const data = readJson<NativeSessionFile>(path);
@@ -113,12 +114,12 @@ export function migrateSessionEngine(
         "or pi/anthropic/claude-opus-5.",
     };
   }
-  if (isAutomationOwnedSession(data)) {
+  if (isAutomationOwnedSession(data) && engine !== "pi") {
     return {
       ok: false,
       error:
-        `Session ${sessionId} is automation-owned ("${data.automation || data.createdBy}") — ` +
-        "the opencode engine hard-gates automation runs off, so migrating it would only break its runs.",
+        `Session ${sessionId} is automation-owned ("${data.automation || data.createdBy}"). ` +
+        "Automation sessions can only migrate to Pi.",
     };
   }
 
@@ -141,7 +142,7 @@ export function migrateSessionEngine(
       ...(data.modelHistory || []),
       { model: resolved.id, from, at: new Date().toISOString(), by },
     ],
-    lastActivity: new Date().toISOString(),
+    ...(options.preserveActivity ? {} : { lastActivity: new Date().toISOString() }),
   });
   return { ok: true, sessionId, from, to: resolved.id };
 }

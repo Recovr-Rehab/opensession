@@ -103,14 +103,37 @@ describe("migrateSessionEngine", () => {
     migrateSessionEngine("bks-mig-ok", "opencode/anthropic/claude-haiku-4-5");
   });
 
-  test("rejects automation-owned sessions (both markers)", () => {
+  test("allows automation-owned sessions to migrate only to Pi", () => {
     for (const id of ["bks-mig-automation", "bks-mig-automation2"]) {
-      const res = migrateSessionEngine(id, "opencode/anthropic/claude-haiku-4-5");
-      expect(res.ok).toBe(false);
-      if (!res.ok) expect(res.error).toContain("automation-owned");
+      const blocked = migrateSessionEngine(
+        id,
+        "opencode/anthropic/claude-haiku-4-5"
+      );
+      expect(blocked.ok).toBe(false);
+      if (!blocked.ok) expect(blocked.error).toContain("automation-owned");
+
+      const pi = migrateSessionEngine(id, "pi/anthropic/claude-haiku-4-5");
+      expect(pi.ok).toBe(true);
+      if (pi.ok) expect(pi.to).toBe("pi/anthropic/claude-haiku-4-5");
     }
     expect(isAutomationOwnedSession({ automation: "x", createdBy: "y" })).toBe(true);
     expect(isAutomationOwnedSession({ createdBy: "Alex" })).toBe(false);
+  });
+
+  test("can preserve last activity during a fleet migration", () => {
+    writeSession("bks-mig-preserve");
+    const res = migrateSessionEngine(
+      "bks-mig-preserve",
+      "pi/anthropic/claude-haiku-4-5",
+      "fleet",
+      { preserveActivity: true }
+    );
+    expect(res.ok).toBe(true);
+    const data = JSON.parse(
+      readFileSync(join(scratch, "bks-mig-preserve.json"), "utf-8")
+    );
+    expect(data.lastActivity).toBe("2026-07-08T00:00:00.000Z");
+    expect(data.modelHistory.at(-1)).toMatchObject({ by: "fleet" });
   });
 
   test("rejects sessions with an in-flight journaled run", () => {
