@@ -19,10 +19,10 @@ import { StackNode, StackRail } from "./StackRail";
  * the rail itself (pr/StackRail.tsx) so they cannot drift apart.
  *
  * Rows wear the sidebar's row language rather than a list shape of their own: a
- * 22px leading rail carrying the state glyph, the title on the shared text rail
- * after it, the quiet `#number · branch` line under it, one `rounded-row` pill
- * that fills on hover (SIDEBAR_HOVER_LAYER, a layer so it composites over the
- * current row's fill instead of replacing it), and `bg-selected` for the layer
+ * 22px leading rail carrying the state glyph, the title and quiet PR number on
+ * one line after it, one `rounded-row` pill that fills on hover
+ * (SIDEBAR_HOVER_LAYER, a layer so it composites over the current row's fill
+ * instead of replacing it), and `bg-selected` for the layer
  * you are reading. A stack is a list of places you can open, which is what the
  * sidebar's rows are, so it reads as the same app rather than as a bordered
  * text block wedged under the header.
@@ -54,7 +54,7 @@ function StackLayerRow({
 	return (
 		<li
 			className={cn(
-				"group/row relative flex items-stretch gap-[7px] rounded-row pr-1 pl-2",
+				"group/row relative flex min-h-9 items-stretch gap-[7px] rounded-row pr-1 pl-2 phone:min-h-11",
 				SIDEBAR_HOVER_LAYER,
 				current && "bg-selected",
 			)}
@@ -64,9 +64,10 @@ function StackLayerRow({
 				<StackNode state={layer.state} isDraft={layer.isDraft} />
 			</StackRail>
 			<a
-				className="min-w-0 flex-1 py-1.5 no-underline"
+				className="flex min-w-0 flex-1 items-center gap-2 py-1 no-underline"
 				href={inApp || layer.url}
 				{...(inApp ? {} : { target: "_blank", rel: "noopener" })}
+				title={layer.headRefName}
 				onClick={(e) => {
 					// Modified clicks keep native new-tab behavior.
 					if (!inApp || !onOpenPr || e.metaKey || e.ctrlKey || e.shiftKey)
@@ -77,7 +78,7 @@ function StackLayerRow({
 			>
 				<span
 					className={cn(
-						"block truncate text-item-title leading-snug",
+						"min-w-0 flex-1 truncate text-item-title leading-snug",
 						current
 							? "font-semibold text-fg"
 							: "font-medium text-dim group-hover/row:text-fg",
@@ -85,17 +86,15 @@ function StackLayerRow({
 				>
 					{layer.title}
 				</span>
-				<span className="block truncate text-meta leading-snug text-faint">
-					#{layer.number} · {layer.headRefName}
-				</span>
+				<span className="shrink-0 text-meta text-faint">#{layer.number}</span>
 			</a>
-			{/* Hover-revealed, like the sidebar row's own trailing actions: the row
-			    already opens the layer here, so the way out to GitHub stays quiet
-			    until you point at the row. */}
+			{/* The row already opens this layer in the app, so its second action stays
+			    quiet on pointer devices. Phones keep it visible because they have no
+			    hover path. */}
 			<a
 				className={cn(
 					PR_ROW_OUT,
-					"self-center opacity-0 group-hover/row:opacity-100 focus-visible:opacity-100",
+					"self-center opacity-0 group-hover/row:opacity-100 focus-visible:opacity-100 phone:size-11 phone:opacity-100",
 				)}
 				href={layer.url}
 				target="_blank"
@@ -179,17 +178,15 @@ function StackBody({
 			{/* The trunk: not a layer, just where the bottom one lands. It ends the
 			    rail, which is what the "Bottom of the stack merges into …" sentence
 			    used to say in prose. */}
-			<li className="flex items-stretch gap-[7px] pr-1 pl-2">
+			<li className="flex min-h-9 items-stretch gap-[7px] pr-1 pl-2 phone:min-h-11">
 				<StackRail last>
 					<StackNode />
 				</StackRail>
-				<span className="min-w-0 flex-1 py-1.5">
-					<span className="block truncate font-mono text-label leading-snug text-dim">
+				<span className="flex min-w-0 flex-1 items-center gap-2 py-1">
+					<span className="min-w-0 flex-1 truncate font-mono text-label text-dim">
 						{stack.baseRefName}
 					</span>
-					<span className="block truncate text-meta leading-snug text-faint">
-						Base branch
-					</span>
+					<span className="shrink-0 text-meta text-faint">Base branch</span>
 				</span>
 			</li>
 		</ul>
@@ -221,10 +218,11 @@ export function StackSection({
 }) {
 	if (!hasStackToShow(pr, sessionId)) return null;
 	return (
-		<section className="shrink-0 px-6 pb-4 phone:px-3">
-			{/* A caption over the rows, the sidebar's own: label step, semibold, the
-			    count sitting with the name rather than pinned to the far edge. */}
-			<h2 className="m-0 mb-0.5 flex items-center gap-[5px] pl-2 text-label font-semibold text-dim">
+		<section className="shrink-0 px-6 py-3 phone:px-3 phone:py-2.5">
+			{/* The caption takes the sidebar's full caption slot instead of sitting
+			    directly against the status bar. Its 37px inset is the row's 8px pad,
+			    22px rail, and 7px gap, so it aligns with the titles under it. */}
+			<h2 className="m-0 flex h-7 items-center gap-[5px] pl-[37px] text-label font-semibold text-dim">
 				Stack
 				{pr.stack && (
 					<span className="font-medium text-faint">
@@ -232,7 +230,7 @@ export function StackSection({
 					</span>
 				)}
 			</h2>
-			<div className="flex max-w-[680px] flex-col gap-1">
+			<div className="flex max-w-[560px] flex-col gap-1">
 				<StackBody
 					pr={pr}
 					sessionId={sessionId}
