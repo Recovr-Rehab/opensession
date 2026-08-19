@@ -6118,7 +6118,7 @@ export function SessionViewer({
 						createPortal(
 							<>
 								<motion.div
-									className="pointer-events-none fixed inset-0 z-[250] flex flex-col items-center justify-center bg-black/40 px-6 text-center"
+									className="pointer-events-none fixed inset-0 z-[250] flex flex-col items-center justify-center bg-black/60 px-6 text-center"
 									initial={{ opacity: 0 }}
 									animate={{ opacity: 1 }}
 									transition={{ type: "tween", duration: duration.base, ease }}
@@ -6126,6 +6126,10 @@ export function SessionViewer({
 									data-file-drop-overlay
 								>
 									<IconArrowUpToLine size={40} className="text-white" />
+									<div className="mt-4 text-title font-semibold text-white">Add files</div>
+									<div className="mt-1 text-label text-white opacity-80">
+										Drop here to attach them to your message.
+									</div>
 								</motion.div>
 								<span className="sr-only" role="status">
 									Drop files to attach
