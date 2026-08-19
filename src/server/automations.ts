@@ -1429,6 +1429,9 @@ export async function runAutomation(
         accountId: automation.accountId,
         accountStrict: true,
         usageCredits: automation.usageCredits,
+        // PRs opened from the sandboxed run carry the automation's review
+        // policy, same as the in-process runAgent call below.
+        prReviewer: automation.prReviewer,
         journalKind: "automation",
         trustProfile: "automation",
       };
