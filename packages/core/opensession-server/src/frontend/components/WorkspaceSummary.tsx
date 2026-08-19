@@ -9,6 +9,7 @@ import {
 	type SessionAssetFile,
 } from "../lib/api";
 import { fetchDiff } from "../lib/api";
+import { assetPreviewKind, isVisualAsset } from "../lib/asset-preview";
 import { commitPrompt } from "../lib/commit-prompt";
 import { AGENT_NAME, GITHUB_BOT_LOGINS } from "../lib/brand";
 import { getCurrentUser } from "./UserPicker";
@@ -43,9 +44,12 @@ import {
 	WS_SUMMARY_LABEL,
 	WS_SUMMARY_RAIL,
 	WS_SUMMARY_ROW,
+	WS_SUMMARY_FRAME,
+	WS_SUMMARY_FRAME_CAPTION,
+	WS_SUMMARY_FRAME_MEDIA,
 	WS_SUMMARY_SECTION,
+	WS_SUMMARY_STRIP,
 	WS_SUMMARY_STATE,
-	WS_SUMMARY_THUMB,
 } from "../lib/workspace-summary-classes";
 import {
 	WS_SUMMARY_OPEN_EVENT,
@@ -58,6 +62,7 @@ import {
 	IconFile,
 	IconListCircles,
 	IconPeople,
+	IconPlay,
 	IconRobot,
 	IconStack,
 } from "./icons";
@@ -160,8 +165,6 @@ const lastKnown = new Map<string, SummaryData>();
 function emptyData(): SummaryData {
 	return { pr: null, git: null, assets: [], diff: null };
 }
-
-const IMAGE_RE = /\.(png|jpe?g|gif|webp|avif|svg)$/i;
 
 /**
  * One identity per reviewer, merged across the two ways a review lands on
@@ -278,6 +281,10 @@ function reviewLines(
  *  scrolls, so this is about the list staying a summary rather than about the
  *  height it would take. */
 const ASSETS_SHOWN = 6;
+
+/** How many screenshots the strip carries. It scrolls, so this is about how
+ *  many pictures the card is willing to load, not about the room it has. */
+const ASSET_FRAMES_SHOWN = 6;
 
 export function WorkspaceSummary({
 	session,
@@ -549,7 +556,19 @@ function SummaryBody({
 		)
 		.slice(0, REVIEWERS_SHOWN);
 
-	const shown = assets.slice(0, ASSETS_SHOWN);
+	// A screenshot is shown, not listed. `contact-dark.png` names a file
+	// without saying what is in it, and the 16px tile this used to draw in a
+	// row's rail was too small to answer that either. So pictures and
+	// recordings become frames, and a page, a report or a data file keeps its
+	// row, where the name IS the content. Same split the Workspace panel makes,
+	// from the same helper.
+	const frames = assets
+		.filter((file) => isVisualAsset(file.path))
+		.slice(0, ASSET_FRAMES_SHOWN);
+	const shown = assets
+		.filter((file) => !isVisualAsset(file.path))
+		.slice(0, ASSETS_SHOWN);
+	const assetsHidden = assets.length - frames.length - shown.length;
 
 	async function cancelOsReview() {
 		if (!pr?.reviewActive || reviewCancelling) return;
@@ -807,10 +826,64 @@ function SummaryBody({
 				</>
 			)}
 
-			{shown.length > 0 && (
+			{(frames.length > 0 || shown.length > 0) && (
 				<>
 					<div className={WS_SUMMARY_DIVIDER} />
 					<div className={WS_SUMMARY_SECTION}>Assets</div>
+					{frames.length > 0 && (
+						<div className={WS_SUMMARY_STRIP}>
+							{frames.map((file) => (
+								<button
+									key={file.path}
+									type="button"
+									className={cn(
+										WS_SUMMARY_FRAME,
+										// One picture takes the card. More than one shows two
+										// frames plus a sliver of the next, which is what says
+										// the strip scrolls.
+										frames.length === 1
+											? "w-full"
+											: "w-[calc((100%_-_30px)/2)]",
+									)}
+									onClick={() => go(onOpenAssets)}
+									title={file.path}
+								>
+									<span className={WS_SUMMARY_FRAME_MEDIA}>
+										{assetPreviewKind(file.path) === "video" ? (
+											<>
+												<video
+													// #t=0.1 seeks to the first frame and paints it as
+													// a poster; without it the tile stays blank.
+													src={`${sessionAssetPreviewUrl(session.id, file)}#t=0.1`}
+													muted
+													playsInline
+													preload="metadata"
+													className="h-full w-full object-contain"
+												/>
+												<span className="pointer-events-none absolute inset-0 grid place-items-center">
+													<span className="grid size-7 place-items-center rounded-full bg-black/45 text-white backdrop-blur-sm">
+														<IconPlay size={16} />
+													</span>
+												</span>
+											</>
+										) : (
+											<img
+												src={sessionAssetPreviewUrl(session.id, file)}
+												alt=""
+												loading="lazy"
+												className="h-full w-full object-contain"
+											/>
+										)}
+									</span>
+									<span className={WS_SUMMARY_FRAME_CAPTION}>
+										{/* The folder is usually shared across a set of
+										    variants; the filename is what tells them apart. */}
+										{file.path.split("/").pop() || file.path}
+									</span>
+								</button>
+							))}
+						</div>
+					)}
 					{shown.map((file) => (
 						<button
 							key={file.path}
@@ -819,21 +892,12 @@ function SummaryBody({
 							title={file.path}
 						>
 							<span className={WS_SUMMARY_RAIL}>
-								{IMAGE_RE.test(file.path) ? (
-									<img
-										src={sessionAssetPreviewUrl(session.id, file)}
-										alt=""
-										className={WS_SUMMARY_THUMB}
-										loading="lazy"
-									/>
-								) : (
-									<IconFile size={20} className={WS_SUMMARY_ICON} />
-								)}
+								<IconFile size={20} className={WS_SUMMARY_ICON} />
 							</span>
 							<span className={WS_SUMMARY_LABEL}>{file.path}</span>
 						</button>
 					))}
-					{assets.length > shown.length && (
+					{assetsHidden > 0 && (
 						<button className={WS_SUMMARY_ROW} onClick={() => go(onOpenAssets)}>
 							<span className={WS_SUMMARY_RAIL} />
 							<span className={cn(WS_SUMMARY_LABEL, "text-dim")}>

@@ -118,9 +118,40 @@ export const WS_SUMMARY_STATE = "shrink-0 text-meta font-medium";
  * avatar class was tried and only produced a second shape for the same thing.
  */
 
-/** An asset's preview, centred in the rail above. A 16px tile inside a 20px
- *  slot, the same inset the sidebar gives its repo tiles: a filled image next
- *  to line art wants to sit a little smaller than the glyphs, or it reads as
- *  the heaviest thing in the list. */
-export const WS_SUMMARY_THUMB =
-	"size-4 overflow-hidden rounded-sm border border-line bg-panel object-cover";
+/**
+ * The screenshot strip.
+ *
+ * Pictures are the one thing in this card a row cannot say: `contact-dark.png`
+ * names a file without describing what was captured, and the 16px tile that
+ * used to sit in the row's rail was too small to answer it either. So they are
+ * shown at the width the card has, and scroll sideways rather than growing the
+ * list past the window.
+ *
+ * No plate under them, unlike the panel's own strip: nothing in this card
+ * carries a fill, and each frame's own border is enough to hold the row
+ * together. It keeps the rows' 16px content rail, so a frame starts at the
+ * same left edge as every label above it.
+ */
+export const WS_SUMMARY_STRIP =
+	"mx-2 flex snap-x snap-mandatory gap-2 overflow-x-auto overflow-y-hidden px-2 pb-1 " +
+	"[scroll-padding-left:8px] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden";
+
+/** One frame in that strip: the picture, with its filename under it. */
+export const WS_SUMMARY_FRAME =
+	"group/frame flex shrink-0 cursor-pointer snap-start flex-col gap-1 border-none " +
+	"bg-transparent p-0 text-left focus-ring";
+
+/** The picture itself. It carries a hairline because a capture's own edge is
+ *  whatever it happened to end on, so a light screenshot would otherwise have
+ *  no edge at all. `border-line`, not `border-line-strong`: the frame only has
+ *  to hold the picture's shape, and at the strong step the outline read as the
+ *  loudest thing in a card that has no other lines in it. `object-contain`,
+ *  because a screenshot is only worth showing whole. */
+export const WS_SUMMARY_FRAME_MEDIA =
+	"relative block aspect-video w-full overflow-hidden rounded-md border border-line " +
+	"bg-surface transition-colors group-hover/frame:bg-hover";
+
+/** The filename under a frame. The picture is the content, but the name is how
+ *  you refer to it ("use the dark one"), so it stays. */
+export const WS_SUMMARY_FRAME_CAPTION =
+	"block w-full truncate text-meta text-dim";
