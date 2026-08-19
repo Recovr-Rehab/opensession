@@ -78,11 +78,11 @@ struct GeneralSettingsView: View {
                     .resizable()
                     .scaledToFill()
             } else {
-                Text(String((settings?.organizationName ?? "O").prefix(1)).uppercased())
-                    .font(.title2.weight(.semibold))
-                    .foregroundStyle(.secondary)
+                Text(organizationInitials)
+                    .font(.headline.weight(.semibold))
+                    .foregroundStyle(RepoTilePalette.ink)
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
-                    .background(OS1VisualStyle.panel)
+                    .background(RepoTilePalette.shared.fill(for: organizationName))
             }
         }
         .frame(width: 56, height: 56)
@@ -104,6 +104,20 @@ struct GeneralSettingsView: View {
         .task(id: iconURL?.absoluteString) {
             if let iconURL { RepoImageCache.shared.ensureLoaded(iconURL) }
         }
+    }
+
+    private var organizationName: String {
+        let name = settings?.organizationName?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        return name.isEmpty ? "Organization" : name
+    }
+
+    private var organizationInitials: String {
+        let parts = organizationName.split(whereSeparator: \.isWhitespace)
+        guard let first = parts.first else { return "O" }
+        if let last = parts.dropFirst().last {
+            return "\(first.prefix(1))\(last.prefix(1))".uppercased()
+        }
+        return String(first.prefix(2)).uppercased()
     }
 
     @ViewBuilder
