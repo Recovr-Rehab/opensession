@@ -1,5 +1,17 @@
 import { expect, test } from "bun:test";
 
+test("the new composer keeps the full model name ahead of its effort suffix", async () => {
+  const source = await Bun.file(new URL("./NewSession.tsx", import.meta.url)).text();
+  const pillStart = source.indexOf("const MODEL_PILL");
+  const pillEnd = source.indexOf(");", pillStart);
+  const pill = source.slice(pillStart, pillEnd);
+
+  expect(pillStart).toBeGreaterThan(-1);
+  expect(pill).toContain("max-w-none");
+  expect(pill).toContain("phone:[&_[data-effort]]:hidden");
+  expect(pill).not.toContain("max-w-[150px]");
+});
+
 test("the new composer uses the shared model settings component with every axis", async () => {
   const source = await Bun.file(new URL("./NewSession.tsx", import.meta.url)).text();
   const pickerStart = source.indexOf("<ModelEffortSelect");

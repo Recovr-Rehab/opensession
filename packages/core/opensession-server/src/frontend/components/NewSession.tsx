@@ -19,6 +19,7 @@ import {
   NOTHING_STAGING,
   removeDraftFile,
   removeDraftImage,
+  replaceDraftImage,
   sameFiles,
   sameImages,
   subtractStaging,
@@ -248,12 +249,12 @@ const ASK_SURFACE =
 	"isolate " +
 	"before:pointer-events-none before:absolute before:inset-0 before:z-0 before:rounded-[inherit] before:[corner-shape:inherit] before:bg-[var(--palette-ask-bg)] before:opacity-0 before:transition-opacity before:duration-150 before:ease-[cubic-bezier(0.32,0.72,0,1)] " +
 	"[&>*]:relative [&>*]:z-[1]";
-/** The one flexible footer item. `[&_[data-effort]]` reaches the effort suffix
- *  inside ModelEffortSelect: on ultra-narrow screens it cedes its space to the
- *  model name, which would otherwise truncate to a single letter. */
+/** The one flexible footer item. The palette has room for the model's full
+ *  name, so it opts out of palettePill's generic 180px cap. On phones the
+ *  effort suffix steps aside first and leaves that room to the model. */
 const MODEL_PILL = cn(
 	palettePill,
-	"shrink min-w-0 phone:ml-auto max-[560px]:max-w-[150px] max-[560px]:px-[9px] max-[374px]:[&_[data-effort]]:hidden",
+	"shrink min-w-0 max-w-none phone:ml-auto phone:[&_[data-effort]]:hidden max-[560px]:px-[9px]",
 );
 
 /* What a create does with the view behind the palette: "open" follows the new
@@ -1406,6 +1407,10 @@ export function NewSession({ onBack, inline, focusSeq, send, addHandler, connect
           staging={staging}
           onRemoveImage={(i) => {
             removeDraftImage(DRAFT_KEY, i);
+            adoptDraftAttachments();
+          }}
+          onReplaceImage={(i, ref) => {
+            replaceDraftImage(DRAFT_KEY, i, ref);
             adoptDraftAttachments();
           }}
           onRemoveFile={(i) => {
