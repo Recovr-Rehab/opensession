@@ -26,8 +26,21 @@ test("pi and Claude-SDK file reads summarize identically", () => {
     "package.json"
   );
   expect(toolSummary("Read", { file_path: path }, "Using Read", roots)).toBe("package.json");
+  // The engine actually in use spells it `path`, and a row that misses the
+  // spelling falls back to the useless "Using read".
+  expect(toolSummary("read", { path, limit: 40 }, "Using read", roots)).toBe("package.json");
+  expect(toolSummary("write", { path, content: "x\n" }, "Using write", roots)).toBe(
+    "package.json"
+  );
   expect(toolFamily("read")).toBe("file");
   expect(canonicalToolName("read")).toBe("Read");
+});
+
+test("an edit row names its file and counts its lines in every spelling", () => {
+  const path = "/home/user/projects/opensession/src/a.ts";
+  const edits = [{ oldText: "one\ntwo", newText: "one\nupdated\nthree" }];
+  expect(toolSummary("edit", { path, edits }, "Using edit", roots)).toBe("src/a.ts");
+  expect(toolLineStats("edit", { path, edits })).toEqual({ additions: 3, deletions: 2 });
 });
 
 test("paths render relative to the session's worktrees", () => {

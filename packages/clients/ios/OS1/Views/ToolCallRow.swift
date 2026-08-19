@@ -596,15 +596,17 @@ struct ToolDetail: Equatable {
         if case .array(let edits)? = input?["edits"], !edits.isEmpty {
             let hunks = edits.compactMap { edit -> String? in
                 synthesize(
-                    old: edit["old_string"]?.stringValue ?? edit["oldString"]?.stringValue,
+                    old: edit["old_string"]?.stringValue ?? edit["oldString"]?.stringValue
+                        ?? edit["oldText"]?.stringValue,
                     new: edit["new_string"]?.stringValue ?? edit["newString"]?.stringValue
+                        ?? edit["newText"]?.stringValue
                 )
             }
             return hunks.isEmpty ? nil : clamp(hunks.joined(separator: "\n@@\n"))
         }
         return synthesize(
-            old: string(input, "old_string") ?? string(input, "oldString"),
-            new: string(input, "new_string") ?? string(input, "newString")
+            old: string(input, "old_string") ?? string(input, "oldString") ?? string(input, "oldText"),
+            new: string(input, "new_string") ?? string(input, "newString") ?? string(input, "newText")
         ).map(clamp)
     }
 

@@ -237,7 +237,7 @@ export function toolInputString(inp: Record<string, unknown>, ...keys: string[])
 }
 
 export const toolFilePath = (inp: Record<string, unknown>) =>
-  toolInputString(inp, "file_path", "filePath");
+  toolInputString(inp, "file_path", "filePath", "path", "notebook_path", "notebookPath");
 export const toolCommand = (inp: Record<string, unknown>) =>
   toolInputString(inp, "command", "cmd");
 
@@ -471,8 +471,10 @@ export function toolLineStats(
   for (const value of edits) {
     if (!value || typeof value !== "object") continue;
     const edit = value as Record<string, unknown>;
-    additions += lineCount(toolInputString(edit, "new_string", "newString", "content"));
-    deletions += lineCount(toolInputString(edit, "old_string", "oldString"));
+    additions += lineCount(
+      toolInputString(edit, "new_string", "newString", "newText", "content"),
+    );
+    deletions += lineCount(toolInputString(edit, "old_string", "oldString", "oldText"));
   }
   return additions || deletions ? { additions, deletions } : null;
 }

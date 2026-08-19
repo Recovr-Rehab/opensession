@@ -508,7 +508,9 @@ extension ToolPresentation {
                 var hunks: [String] = []
                 for edit in edits {
                     let old = edit["old_string"]?.stringValue ?? edit["oldString"]?.stringValue
+                        ?? edit["oldText"]?.stringValue
                     let new = edit["new_string"]?.stringValue ?? edit["newString"]?.stringValue
+                        ?? edit["newText"]?.stringValue
                     stats = stats + ToolLineStats(
                         additions: lineCount(new),
                         deletions: lineCount(old)
@@ -522,8 +524,8 @@ extension ToolPresentation {
                     hunks: hunks
                 )]
             }
-            let old = string(input, "old_string") ?? string(input, "oldString")
-            let new = string(input, "new_string") ?? string(input, "newString")
+            let old = string(input, "old_string") ?? string(input, "oldString") ?? string(input, "oldText")
+            let new = string(input, "new_string") ?? string(input, "newString") ?? string(input, "newText")
             if old != nil || new != nil, let path = filePath(input) {
                 return [TouchedFile(
                     path: tidyPath(path, worktreeDir: worktreeDir),
