@@ -20,9 +20,12 @@ import {
   MAX_PI_SDK_SESSIONS,
   PI_PASSTHROUGH_BLOCK_REASON,
   buildPiAnthropicModels,
+  createPiPassthroughEarlyStopTracker,
   buildPiAnthropicProvider,
   IMAGE_ONLY_PROMPT,
   MAX_TURN_IMAGES,
+  notePiPassthroughAssistant,
+  notePiPassthroughUser,
   piImageBlockToAnthropic,
   piMessagesToAnthropic,
   piSdkSessionStore,
@@ -31,6 +34,7 @@ import {
   turnImages,
   rememberSdkTurn,
   shouldDeferClaudeText,
+  shouldStopPiPassthrough,
   usageFromSdkResult,
   type PiCatalogModel,
   type PiWireMessage,
@@ -426,27 +430,42 @@ describe("images survive the turn", () => {
   });
 });
 
-describe("PI_PASSTHROUGH_BLOCK_REASON (the no-stop-nudging wording)", () => {
-  test("says the call is accepted and its result comes back with the next batch", () => {
-    expect(PI_PASSTHROUGH_BLOCK_REASON).toMatch(/Accepted/);
-    expect(PI_PASSTHROUGH_BLOCK_REASON).toMatch(/comes back with the next/);
-    expect(PI_PASSTHROUGH_BLOCK_REASON).toMatch(/Do not repeat this call/);
+describe("Pi passthrough early stop", () => {
+  test("uses an opaque marker with no model-facing control-flow prose", () => {
+    expect(PI_PASSTHROUGH_BLOCK_REASON).toBe("[OPENSESSION_EXTERNAL_TOOL]");
+    expect(PI_PASSTHROUGH_BLOCK_REASON).not.toMatch(
+      /turn|batch|wait|queue|defer|result|repeat|call any|end/i
+    );
   });
 
-  test("invites other tool calls instead of forbidding them (unlike the bridge)", () => {
-    expect(PI_PASSTHROUGH_BLOCK_REASON).toMatch(/Call any other tools you need/);
-    expect(PI_PASSTHROUGH_BLOCK_REASON).not.toMatch(/do not call more tools/i);
-    expect(PI_PASSTHROUGH_BLOCK_REASON).not.toMatch(/do not add text/i);
+  test("stops only after every tool in a parallel batch has a persisted block result", () => {
+    const tracker = createPiPassthroughEarlyStopTracker();
+    notePiPassthroughAssistant(tracker, [
+      { type: "text", text: "checking" },
+      { type: "tool_use", id: "tool-1", name: "read", input: {} },
+      { type: "tool_use", id: "tool-2", name: "grep", input: {} },
+    ]);
+    notePiPassthroughUser(tracker, [
+      { type: "tool_result", tool_use_id: "tool-1", content: "blocked" },
+    ]);
+    expect(shouldStopPiPassthrough(tracker)).toBe(false);
+    notePiPassthroughUser(tracker, [
+      { type: "tool_result", tool_use_id: "tool-2", content: "blocked" },
+    ]);
+    expect(shouldStopPiPassthrough(tracker)).toBe(true);
+    expect(shouldStopPiPassthrough(tracker)).toBe(false);
   });
 
-  // The regression this wording exists for: an imperative aimed at the reader
-  // ("then end your turn") gets obeyed AND narrated, so every pair of tool
-  // calls is separated by "I'll end my turn so the channel list returns".
-  test("never tells the reader to end its turn, or to narrate the wait", () => {
-    expect(PI_PASSTHROUGH_BLOCK_REASON).not.toMatch(/end your turn\b(?!.*do not)/i);
-    expect(PI_PASSTHROUGH_BLOCK_REASON).not.toMatch(/then end your turn/i);
-    expect(PI_PASSTHROUGH_BLOCK_REASON).toMatch(/nothing to wait for and nothing to report/);
-    expect(PI_PASSTHROUGH_BLOCK_REASON).toMatch(/do not write a message about queueing/);
+  test("handles the SDK delivering a blocked result before its assistant envelope", () => {
+    const tracker = createPiPassthroughEarlyStopTracker();
+    notePiPassthroughUser(tracker, [
+      { type: "tool_result", tool_use_id: "tool-1", content: "blocked" },
+    ]);
+    expect(shouldStopPiPassthrough(tracker)).toBe(false);
+    notePiPassthroughAssistant(tracker, [
+      { type: "tool_use", id: "tool-1", name: "read", input: {} },
+    ]);
+    expect(shouldStopPiPassthrough(tracker)).toBe(true);
   });
 });
 

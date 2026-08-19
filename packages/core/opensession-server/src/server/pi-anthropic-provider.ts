@@ -206,28 +206,68 @@ type PiStreamEvent =
   | { type: "done"; reason: "stop" | "length" | "toolUse"; message: PiAssistantMessageShape }
   | { type: "error"; reason: "aborted" | "error"; error: PiAssistantMessageShape };
 
-// ── The passthrough block wording (the no-stop-nudging change) ───────────────
+// ── Passthrough capture and early stop ───────────────────────────────────────
 
-/** PreToolUse block reason. Two things it must not do, both learned the hard
- *  way. It must not say "do not call more tools" (the bridge's wording), which
- *  nudges sequential models into max-turns instead of letting a multi-tool
- *  batch go out in one round-trip. And it must not read as an INSTRUCTION TO
- *  THE READER: an imperative here ("then end your turn") is obeyed, and then
- *  narrated, so the person watching gets a transcript of "I'll end my turn so
- *  the channel list returns" between every pair of tool calls, or a model that
- *  reports itself blocked because it believes its tools never ran. The block
- *  is ordinary plumbing, so it is worded as a status line: the call is on its
- *  way, more calls are welcome, this one is done being asked for, and there is
- *  nothing here to tell the person about. */
-export const PI_PASSTHROUGH_BLOCK_REASON =
-  "Accepted. This call runs after the current batch and its result comes back with the next " +
-  "one, so there is nothing to wait for and nothing to report. Call any other tools you need " +
-  "now. Do not repeat this call, and do not write a message about queueing, waiting, or " +
-  "ending the turn.";
+/** The SDK requires a reason when PreToolUse blocks execution, and persists it
+ *  as a tool_result in its session. Keep it as an opaque transport marker, not
+ *  prose about batches, results, waiting, or turn boundaries. The provider
+ *  stops the SDK query after this result is persisted and before Claude gets a
+ *  digest turn in which it could interpret or narrate the marker. */
+export const PI_PASSTHROUGH_BLOCK_REASON = "[OPENSESSION_EXTERNAL_TOOL]";
 
-/** Generous turn budget: each blocked tool call costs a turn boundary, and
- *  multi-tool batches (or models that try tools one at a time) need headroom.
- *  error_max_turns WITH captures is still a success (see the run loop). */
+export interface PiPassthroughEarlyStopTracker {
+  /** Tool ids in the complete assistant tool-use message. */
+  expected: Set<string>;
+  /** Tool ids whose blocked tool_result has been persisted by the SDK. */
+  resolved: Set<string>;
+  fired: boolean;
+}
+
+export function createPiPassthroughEarlyStopTracker(): PiPassthroughEarlyStopTracker {
+  return { expected: new Set(), resolved: new Set(), fired: false };
+}
+
+/** The SDK can emit a blocked result before the assistant message that names
+ *  the same id reaches the iterator, so expected and resolved are independent
+ *  sets and may be filled in either order. */
+export function notePiPassthroughAssistant(
+  tracker: PiPassthroughEarlyStopTracker,
+  content: unknown
+): void {
+  if (!Array.isArray(content)) return;
+  for (const block of content) {
+    if (block?.type === "tool_use" && typeof block.id === "string" && block.id) {
+      tracker.expected.add(block.id);
+    }
+  }
+}
+
+export function notePiPassthroughUser(
+  tracker: PiPassthroughEarlyStopTracker,
+  content: unknown
+): void {
+  if (!Array.isArray(content)) return;
+  for (const block of content) {
+    if (block?.type === "tool_result" && typeof block.tool_use_id === "string") {
+      tracker.resolved.add(block.tool_use_id);
+    }
+  }
+}
+
+export function shouldStopPiPassthrough(
+  tracker: PiPassthroughEarlyStopTracker
+): boolean {
+  if (tracker.fired || tracker.expected.size === 0) return false;
+  for (const id of tracker.expected) {
+    if (!tracker.resolved.has(id)) return false;
+  }
+  tracker.fired = true;
+  return true;
+}
+
+/** Backstop only. Early stop normally ends the query after one assistant tool
+ *  batch. Captured calls still count as success if an older SDK fails to emit
+ *  the user envelope needed by the early-stop tracker. */
 export const PI_SDK_MAX_TURNS = 8;
 
 // ── pi messages → the bridge's Anthropic wire shape ──────────────────────────
@@ -724,6 +764,27 @@ async function* runSdkAttempt(
     let sdkSessionId: string | undefined;
     let sdkUsage: Record<string, number> | undefined;
     let reachedResult = false;
+    let earlyStopped = false;
+    const earlyStop = createPiPassthroughEarlyStopTracker();
+
+    // PreToolUse hooks can resolve before the stream iterator has delivered
+    // every tool_use block in a parallel batch. Hold each block result until
+    // the assistant message ends, then let the SDK persist all denials before
+    // the tracker aborts the otherwise automatic digest turn.
+    const pendingDenyReleases: Array<() => void> = [];
+    let turnGenerating = false;
+    const releaseHeldDenies = () => {
+      turnGenerating = false;
+      for (const release of pendingDenyReleases.splice(0)) release();
+    };
+    const holdDenyUntilTurnEnd = () =>
+      new Promise<void>((resolve) => {
+        const timer = setTimeout(resolve, 8_000);
+        pendingDenyReleases.push(() => {
+          clearTimeout(timer);
+          resolve();
+        });
+      });
     // Stream-event bookkeeping: SDK content-block index (per SDK message) →
     // index into `partial.content`; -1 marks a block we deliberately skip
     // (tool_use streams are ignored — the post-hook captures are authoritative
@@ -784,6 +845,9 @@ async function* runSdkAttempt(
                     ? name.slice(PASSTHROUGH_PREFIX.length)
                     : name;
                   captured.push({ id: input.tool_use_id, name: bare, input: input.tool_input ?? {} });
+                  if (turnGenerating && !controller.signal.aborted) {
+                    await holdDenyUntilTurnEnd();
+                  }
                   return { decision: "block" as const, reason: PI_PASSTHROUGH_BLOCK_REASON };
                 },
               ],
@@ -811,8 +875,8 @@ async function* runSdkAttempt(
       for await (const msg of q) {
         yield* drainCaptures();
         const m = msg as Record<string, any>;
+        if (m.session_id) sdkSessionId = String(m.session_id) || sdkSessionId;
         if (m.type === "system" && m.subtype === "init") {
-          sdkSessionId = String(m.session_id || "") || sdkSessionId;
           continue;
         }
         if (m.type === "stream_event") {
@@ -822,9 +886,20 @@ async function* runSdkAttempt(
           if (m.parent_tool_use_id) continue;
           const ev = m.event as Record<string, any> | undefined;
           if (!ev) continue;
+          if (
+            ev.type === "message_delta" ||
+            ev.type === "message_stop" ||
+            (ev.type === "message_start" && turnGenerating)
+          ) {
+            releaseHeldDenies();
+          }
           if (ev.type === "message_start") {
+            turnGenerating = true;
             idxMap = new Map();
             pendingText = new Map();
+            if (ev.message?.usage) sdkUsage = { ...sdkUsage, ...ev.message.usage };
+          } else if (ev.type === "message_delta") {
+            if (ev.usage) sdkUsage = { ...sdkUsage, ...ev.usage };
           } else if (ev.type === "content_block_start") {
             const block = ev.content_block as Record<string, any> | undefined;
             const sdkIdx = Number(ev.index);
@@ -899,22 +974,46 @@ async function* runSdkAttempt(
           }
           continue;
         }
-        if (m.type === "assistant" && !sawStreamContent) {
-          // Fallback (no partial stream events from the CLI): emit each text
-          // block as one delta on arrival — per-message, not end-of-request.
-          const blocks = m.message?.content;
-          if (Array.isArray(blocks)) {
-            for (const b of blocks) {
-              if (!b || typeof b !== "object" || b.type !== "text" || !b.text) continue;
-              if (isClaudeUsageLimitError(b.text, false)) {
-                deferredUsageLimit = b.text;
-                continue;
+        if (m.type === "assistant") {
+          notePiPassthroughAssistant(earlyStop, m.message?.content);
+          if (m.message?.usage) sdkUsage = { ...sdkUsage, ...m.message.usage };
+          if (!sawStreamContent) {
+            // Fallback (no partial stream events from the CLI): emit each text
+            // block as one delta on arrival, per-message, not end-of-request.
+            const blocks = m.message?.content;
+            if (Array.isArray(blocks)) {
+              for (const b of blocks) {
+                if (!b || typeof b !== "object" || b.type !== "text" || !b.text) continue;
+                if (isClaudeUsageLimitError(b.text, false)) {
+                  deferredUsageLimit = b.text;
+                  continue;
+                }
+                const contentIndex = partial.content.push({ type: "text", text: b.text }) - 1;
+                yield { type: "text_start", contentIndex, partial };
+                yield { type: "text_delta", contentIndex, delta: b.text, partial };
+                yield { type: "text_end", contentIndex, content: b.text, partial };
               }
-              const contentIndex = partial.content.push({ type: "text", text: b.text }) - 1;
-              yield { type: "text_start", contentIndex, partial };
-              yield { type: "text_delta", contentIndex, delta: b.text, partial };
-              yield { type: "text_end", contentIndex, content: b.text, partial };
             }
+          }
+          // Usually the user envelope arrives last. The SDK can invert those
+          // two messages, so check here too after preserving fallback text.
+          if (shouldStopPiPassthrough(earlyStop)) {
+            earlyStopped = true;
+            reachedResult = true;
+            controller.abort("passthrough batch complete");
+            break;
+          }
+          continue;
+        }
+        if (m.type === "user") {
+          notePiPassthroughUser(earlyStop, m.message?.content);
+          if (shouldStopPiPassthrough(earlyStop)) {
+            // The blocked results are now durable in the SDK session. Abort
+            // before the SDK asks Claude to digest them as another model turn.
+            earlyStopped = true;
+            reachedResult = true;
+            controller.abort("passthrough batch complete");
+            break;
           }
           continue;
         }
@@ -948,6 +1047,7 @@ async function* runSdkAttempt(
       }
       yield* drainCaptures();
     } finally {
+      releaseHeldDenies();
       signal?.removeEventListener("abort", onAbort);
       // Abandonment backstop: a consumer that stops iterating this generator
       // (early .return()/throw upstream) must not leave the SDK subprocess
@@ -996,6 +1096,7 @@ async function* runSdkAttempt(
       duration_ms: Date.now() - started,
       stop_reason: stopReason,
       tool_uses: captured.length,
+      early_stop: earlyStopped,
       sdk_session_id: sdkSessionId,
       input_tokens: usage.input,
       output_tokens: usage.output,
