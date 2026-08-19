@@ -99,6 +99,13 @@ const HOME = homeDir();
 // (every tool is a blocked passthrough), so no worktree must ever be visible.
 export const BRIDGE_CWD = `${stateDir("anthropic-bridge")}/bridge-cwd`;
 
+/** Create the SDK cwd on the call path. The in-process provider uses the same
+ * directory without starting the HTTP bridge, so bridge startup cannot own it. */
+export function ensureAnthropicBridgeCwd(dir = BRIDGE_CWD): string {
+  mkdirSync(dir, { recursive: true });
+  return dir;
+}
+
 const g = globalThis as any;
 
 interface StoredBridgeSession {
@@ -159,7 +166,7 @@ export function ensureAnthropicBridge(): BridgeInfo {
   if (g.__anthropicBridgeServer) {
     return { url: `http://127.0.0.1:${g.__anthropicBridgeServer.port}`, key: bridgeKey() };
   }
-  mkdirSync(BRIDGE_CWD, { recursive: true });
+  ensureAnthropicBridgeCwd();
   g.__anthropicBridgeHandler = handleBridgeRequest;
   g.__anthropicBridgeServer = Bun.serve({
     hostname: "127.0.0.1",
@@ -555,7 +562,7 @@ async function handleBridgeRequest(req: Request): Promise<Response> {
     const q = query({
       prompt,
       options: {
-        cwd: BRIDGE_CWD,
+        cwd: ensureAnthropicBridgeCwd(),
         model: model || undefined,
         resume: sdkSessionId,
         // Turn 1 is the real answer; turn 2 exists because blocked tool calls

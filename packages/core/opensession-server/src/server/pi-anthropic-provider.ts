@@ -111,12 +111,12 @@ import type { ModelRuntime } from "@earendil-works/pi-coding-agent";
 import { stateDir } from "./paths";
 import { audit, summarizeText } from "./audit";
 import {
-  BRIDGE_CWD,
   DISALLOWED_BUILTINS,
   PASSTHROUGH_MCP,
   PASSTHROUGH_PREFIX,
   admitBridgeRequest,
   bridgeDesignationError,
+  ensureAnthropicBridgeCwd,
   flattenMessageText,
   jsonSchemaToZodShape,
   pickBridgeAccount,
@@ -745,7 +745,7 @@ async function* runSdkAttempt(
     const q = query({
       prompt: sdkPrompt as any,
       options: {
-        cwd: BRIDGE_CWD,
+        cwd: ensureAnthropicBridgeCwd(),
         model: model.id,
         resume: plan.resume,
         abortController: controller,

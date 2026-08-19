@@ -13,7 +13,7 @@
  * anthropicTransport left at its "inprocess" default.
  */
 import { afterAll, afterEach, beforeAll, describe, expect, test } from "bun:test";
-import { mkdtempSync, rmSync, writeFileSync } from "fs";
+import { existsSync, mkdtempSync, rmSync, statSync, writeFileSync } from "fs";
 import { tmpdir } from "os";
 import { join } from "path";
 import {
@@ -37,6 +37,7 @@ import {
 } from "./pi-anthropic-provider";
 import {
   admitBridgeRequest,
+  ensureAnthropicBridgeCwd,
   flattenMessageText,
   pickBridgeAccount,
   replayConversation,
@@ -138,6 +139,34 @@ const model = {
 
 const wire = (m: Partial<AnthropicMessage> & { role: "user" | "assistant" }): AnthropicMessage =>
   ({ content: "", ...m }) as AnthropicMessage;
+
+describe("ensureAnthropicBridgeCwd", () => {
+  test("creates a missing SDK cwd and is idempotent", () => {
+    const cwd = join(dir, "missing-state", "bridge-cwd");
+    expect(existsSync(cwd)).toBe(false);
+
+    expect(ensureAnthropicBridgeCwd(cwd)).toBe(cwd);
+    expect(ensureAnthropicBridgeCwd(cwd)).toBe(cwd);
+    expect(statSync(cwd).isDirectory()).toBe(true);
+  });
+
+  test("recreates the SDK cwd after its state tree is removed", () => {
+    const root = join(dir, "removed-state");
+    const cwd = ensureAnthropicBridgeCwd(join(root, "bridge-cwd"));
+    rmSync(root, { recursive: true, force: true });
+
+    expect(existsSync(cwd)).toBe(false);
+    expect(ensureAnthropicBridgeCwd(cwd)).toBe(cwd);
+    expect(statSync(cwd).isDirectory()).toBe(true);
+  });
+
+  test("preserves the filesystem error when the cwd path is invalid", () => {
+    const cwd = join(dir, "cwd-is-a-file");
+    writeFileSync(cwd, "not a directory");
+
+    expect(() => ensureAnthropicBridgeCwd(cwd)).toThrow();
+  });
+});
 
 describe("planSdkTurn (continuation vs replay)", () => {
   const messages: AnthropicMessage[] = [
