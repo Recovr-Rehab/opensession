@@ -29,13 +29,27 @@ const trackClasses = (size: SwitchSize) =>
 
 /** The knob is a 32×20 capsule, not a circle. That wider shape is most of
  *  what reads as the current macOS switch. The small size keeps the 2px inset
- *  and the capsule, at 26×16. */
+ *  and the capsule, at 26×16.
+ *
+ *  Press feedback changes width instead of scale so the round ends stay round.
+ *  A checked knob subtracts the stretch from its translate, which holds its
+ *  right edge on the 2px inset. The fallback keeps `SwitchIndicator` valid
+ *  without a root that sets the variable. */
 const thumbClasses = (size: SwitchSize) =>
 	cn(
-		"absolute left-0.5 top-0.5 rounded-full bg-white shadow-[0_1px_3px_rgba(0,0,0,0.22),0_0_0_1px_rgba(0,0,0,0.07)] transition-[transform,background-color] duration-[var(--dur-micro)] ease-[var(--ease)] data-[checked]:bg-on-accent-control",
+		"absolute left-0.5 top-0.5 rounded-full bg-white shadow-[0_1px_3px_rgba(0,0,0,0.22),0_0_0_1px_rgba(0,0,0,0.07)] transition-[translate,width,background-color] duration-[var(--dur-micro)] ease-[var(--ease)] data-[checked]:bg-on-accent-control",
 		size === "sm"
-			? "h-4 w-[26px] data-[checked]:translate-x-[14px]"
-			: "h-5 w-8 data-[checked]:translate-x-[18px]",
+			? "h-4 w-[calc(26px_+_var(--stretch,0px))] data-[checked]:translate-x-[calc(14px_-_var(--stretch,0px))]"
+			: "h-5 w-[calc(32px_+_var(--stretch,0px))] data-[checked]:translate-x-[calc(18px_-_var(--stretch,0px))]",
+	);
+
+/** Put `:active` on the root so presses on either the track or thumb inherit
+ *  the stretch. Base UI's disabled root can still match `:active`, so disabled
+ *  switches reset the variable explicitly. */
+const pressClasses = (size: SwitchSize) =>
+	cn(
+		size === "sm" ? "active:[--stretch:3px]" : "active:[--stretch:4px]",
+		"data-[disabled]:active:[--stretch:0px]",
 	);
 
 type SwitchProps = Omit<React.ComponentProps<typeof BaseSwitch.Root>, "size"> & {
@@ -48,6 +62,7 @@ export function Switch({ className, size = "md", ...props }: SwitchProps) {
 		<BaseSwitch.Root
 			className={cn(
 				trackClasses(size),
+				pressClasses(size),
 				"cursor-pointer outline-none",
 				"focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:ring-offset-2 focus-visible:ring-offset-bg",
 				"data-[disabled]:cursor-default data-[disabled]:opacity-40",
