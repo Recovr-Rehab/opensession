@@ -3,9 +3,9 @@
  * deny-by-default run gate, the provider-aware usage-limit classifier, the
  * local-tool path containment guard (the in-process engine's security
  * invariant), the custom bash tool's exit-gated completion (wedge
- * regression), and the pi/openai account-wiring failure paths (isolated
- * codex store — every case fails before the SDK import or any network use).
- * The engine turn itself is covered by the smoke harness
+ * regression), and pi/openai account wiring against an isolated Codex store
+ * plus a fake SDK for the in-band terminal path. No test reaches the network.
+ * A real engine turn is covered by the smoke harness
  * (POST /api/admin/pi-smoke) against a live bridge, not unit tests.
  */
 import { afterAll, beforeAll, describe, expect, spyOn, test } from "bun:test";
@@ -28,8 +28,10 @@ import {
   makeGuardedToolOps,
   makePiBashTool,
   parsePiModel,
+  PI_STATE_DIR,
   piDialOracleAgent,
   piGateReason,
+  piStreamEventBlocksAccountRotation,
   piToolNames,
   resolvePiPresetWiring,
   resolvePiRoutedModel,
@@ -410,10 +412,25 @@ describe("isPiUsageLimitShape (provider-aware)", () => {
   });
 });
 
-describe("runPi pi/openai account wiring (no engine, no network)", () => {
-  // Enabled pi config + an isolated codex store: every path exercised here
-  // must fail BEFORE the SDK import — a throw any later would mean a live
-  // engine (or chatgpt.com) was nearly reached from a unit test.
+describe("pi/openai in-band account rotation gate", () => {
+  test("zero-token usage bookkeeping does not strand the rest of the account pool", () => {
+    // Pi emits init → usage_snapshot(0) → stopReason:error for a provider
+    // usage limit. The terminal is handled after the queue drains, so the
+    // snapshot must not masquerade as assistant output and block rotation.
+    expect(piStreamEventBlocksAccountRotation({ type: "init" })).toBe(false);
+    expect(piStreamEventBlocksAccountRotation({ type: "usage_snapshot" })).toBe(false);
+
+    // Real output and durable operational notices still make replay unsafe.
+    expect(piStreamEventBlocksAccountRotation({ type: "text_chunk" })).toBe(true);
+    expect(piStreamEventBlocksAccountRotation({ type: "tool_use" })).toBe(true);
+    expect(piStreamEventBlocksAccountRotation({ type: "tool_result" })).toBe(true);
+    expect(piStreamEventBlocksAccountRotation({ type: "runner_notice" })).toBe(true);
+  });
+});
+
+describe("runPi pi/openai account wiring (fake engine, no network)", () => {
+  // Enabled Pi config + an isolated Codex store. Most tests fail before SDK
+  // import; the in-band terminal regression installs a fake SDK explicitly.
   const dir = mkdtempSync(join(tmpdir(), "pi-openai-"));
   const cfgPath = join(dir, "pi.json");
   const storePath = join(dir, "codex-accounts.json");
@@ -605,7 +622,7 @@ describe("runPi pi/openai account wiring (no engine, no network)", () => {
     return { id, name: id, kind: "home", value: home, createdAt: new Date().toISOString() };
   };
 
-  test("a usage-limited codex account rotates to the next one inside the same turn", async () => {
+  test("a pre-init usage failure rotates to the next account inside the same turn", async () => {
     const ids = ["rot-a", "rot-b", "rot-c", "rot-d", "rot-e", "rot-f"];
     writeFileSync(
       storePath,
@@ -631,6 +648,127 @@ describe("runPi pi/openai account wiring (no engine, no network)", () => {
     expect(switches).toHaveLength(5);
     expect(String(errors[0].content)).not.toContain("rot-a");
     expect(errors[0].usageLimitExhausted).toBe(true);
+  });
+
+  test("an in-band zero-usage limit rotates before model fallback", async () => {
+    const servingHomeAccount = (id: string, providerAccountId: string) => {
+      const home = join(dir, `codex-home-${id}`);
+      mkdirSync(home, { recursive: true });
+      const payload = Buffer.from(
+        JSON.stringify({ exp: Math.floor((Date.now() + 60 * 60_000) / 1000) })
+      ).toString("base64url");
+      writeFileSync(
+        join(home, "auth.json"),
+        JSON.stringify({
+          tokens: {
+            access_token: `h.${payload}.s`,
+            account_id: providerAccountId,
+          },
+        })
+      );
+      return { id, name: id, kind: "home", value: home, createdAt: new Date().toISOString() };
+    };
+
+    writeFileSync(
+      storePath,
+      JSON.stringify({
+        accounts: [
+          servingHomeAccount("live-a", "provider-a"),
+          servingHomeAccount("live-b", "provider-b"),
+        ],
+      })
+    );
+
+    const usedProviderAccounts: string[] = [];
+    const fakeSdk = {
+      ModelRuntime: {
+        create: async ({ credentials }: any) => {
+          const auth = await credentials.read("openai-codex");
+          const runtime = {
+            providerAccountId: String(auth?.accountId || ""),
+            getModel: (_provider: string, id: string) => ({ id, name: id }),
+            registerProvider: () => {},
+          };
+          return runtime;
+        },
+      },
+      SettingsManager: { inMemory: () => ({}) },
+      DefaultResourceLoader: class {
+        async reload() {}
+      },
+      SessionManager: {
+        create: () => ({}),
+        open: () => ({}),
+      },
+      createAgentSession: async ({ modelRuntime }: any) => {
+        const providerAccountId = String(modelRuntime.providerAccountId);
+        usedProviderAccounts.push(providerAccountId);
+        const limited = providerAccountId === "provider-a";
+        let listener: (event: any) => void = () => {};
+        const session = {
+          sessionId: `fake-${providerAccountId}`,
+          pendingMessageCount: 0,
+          agent: { continue: async () => {} },
+          setSteeringMode: () => {},
+          subscribe: (fn: (event: any) => void) => {
+            listener = fn;
+            return () => {};
+          },
+          prompt: async () => {
+            listener({
+              type: "message_end",
+              message: {
+                role: "assistant",
+                stopReason: limited ? "error" : "stop",
+                errorMessage: limited
+                  ? "Codex error: The usage limit has been reached"
+                  : undefined,
+                usage: {
+                  input: limited ? 0 : 1,
+                  output: limited ? 0 : 1,
+                  cacheRead: 0,
+                  cacheWrite: 0,
+                  cost: { total: 0 },
+                },
+                content: limited ? [] : [{ type: "text", text: "ok" }],
+                timestamp: Date.now(),
+              },
+            });
+            listener({ type: "agent_settled" });
+          },
+          getLastAssistantText: () => (limited ? "" : "ok"),
+          steer: async () => {},
+          abort: async () => {},
+          abortRetry: () => {},
+          dispose: () => {},
+        };
+        return { session };
+      },
+    };
+
+    const sdkState = globalThis as any;
+    const previousSdkPromise = sdkState.__piSdkPromise;
+    const sessionKey = `pi-inband-limit-${crypto.randomUUID()}`;
+    sdkState.__piSdkPromise = Promise.resolve(fakeSdk);
+    const warnings = spyOn(console, "warn").mockImplementation(() => {});
+    try {
+      const events = await collect("pi/openai/gpt-5.6-sol", {
+        accountId: "live-a",
+        sessionId: sessionKey,
+        disableLocalWorkspaceTools: true,
+      });
+      expect(usedProviderAccounts).toEqual(["provider-a", "provider-b"]);
+      expect(events.filter((event) => event.type === "init")).toHaveLength(2);
+      expect(events.filter((event) => event.type === "error")).toHaveLength(0);
+      expect(events.find((event) => event.type === "done")).toMatchObject({
+        model: "pi/openai/gpt-5.6-sol",
+        result: "ok",
+      });
+    } finally {
+      warnings.mockRestore();
+      sdkState.__piSdkPromise = previousSdkPromise;
+      rmSync(join(PI_STATE_DIR, "sessions", sessionKey), { recursive: true, force: true });
+    }
   });
 
   test("a strict pin refuses instead of rotating off the pinned account", async () => {

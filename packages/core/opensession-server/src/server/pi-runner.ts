@@ -1158,6 +1158,15 @@ interface PiAccountWalk {
   promptEntryId?: string;
 }
 
+/** An init can repeat, and a live usage snapshot is replaced by the next
+ * attempt. Everything else has user-visible or durable meaning and makes
+ * replay unsafe. Exported so the in-band usage-limit regression stays pinned. */
+export function piStreamEventBlocksAccountRotation(
+  event: Pick<StreamEvent, "type">
+): boolean {
+  return event.type !== "init" && event.type !== "usage_snapshot";
+}
+
 /**
  * One logical pi turn, across however many provider accounts it takes.
  *
@@ -1321,11 +1330,12 @@ async function* runPiAttempt(
   // fault of this box, not a verdict on the account's usage. Rotating off it
   // is right; benching it globally is not.
   let sidelineableOpenai: CodexAccount | undefined;
-  // Has the reader seen anything yet? Set by the event pump for every event
-  // but `init`. A rotation replays the whole attempt, so it may only run
-  // while this is false: otherwise the replay would re-emit output that has
-  // already been streamed and persisted. (The anthropic side's equivalent
-  // gate is `partial.content.length === 0` — same rule, same reason.)
+  // Has the reader seen replay-unsafe output yet? A rotation replays the whole
+  // attempt, so it may only run before model text or tool activity has escaped.
+  // `usage_snapshot` does NOT close the walk: Pi emits a zero-token snapshot
+  // with an in-band usage-limit terminal, and treating that bookkeeping event
+  // as model output strands the rest of the account pool. (The Anthropic side's
+  // equivalent gate is `partial.content.length === 0`.)
   let sawStreamedOutput = false;
 
   /** Another codex account that could serve this turn, or undefined when the
@@ -2161,9 +2171,7 @@ async function* runPiAttempt(
     const queue: StreamEvent[] = [];
     let wake: (() => void) | null = null;
     const push = (ev: StreamEvent) => {
-      // Anything but `init` is output the reader has now seen, which closes
-      // the account walk — a replay would re-emit it.
-      if (ev.type !== "init") sawStreamedOutput = true;
+      if (piStreamEventBlocksAccountRotation(ev)) sawStreamedOutput = true;
       queue.push(ev);
       const w = wake;
       wake = null;
