@@ -48,6 +48,12 @@ export type QueueItem = {
 	/** Review feedback must start its own turn after any user work already in
 	 * flight. Never batch it into that work or steer it mid-turn. */
 	reviewHandoff?: boolean;
+	/** When the engine ACCEPTED this message as a steer (epoch ms). Set by
+	 * recordSteer, read by the clients to show how long the fold-in has been
+	 * waiting. Acceptance is not delivery: the agent loop polls its steering
+	 * queue only after the current assistant message and its whole tool batch
+	 * finish, so a long tool call holds the message for minutes. */
+	steeredAt?: number;
 };
 export const promptQueues: Map<string, QueueItem[]> = (g.__promptQueues ??=
 	new Map());
@@ -386,10 +392,20 @@ export function broadcastQueue(sessionId: string) {
 	});
 }
 
-/** Record a steered message as a visible receipt until its run finishes. */
+/** Record a steered message as a visible receipt until its run finishes.
+ *
+ * Stamped with the moment the engine ACCEPTED it, which is not the moment it
+ * is read: pi's agent loop drains its steering queue only between turns, after
+ * the current assistant message and its entire tool batch complete. A steer
+ * sent during a long test run or a subagent waits for that tool to return, so
+ * the receipt carries its own start time and the clients count from it. A
+ * motionless chip with no elapsed time is what read as "stuck". */
 export function recordSteer(sessionId: string, item: QueueItem): void {
 	const list = steeredReceipts.get(sessionId) || [];
-	list.push(queueItem(item));
+	// Stamp LAST: a message the engine bounced comes back through
+	// takeSteerReceiptForText carrying the previous attempt's stamp, and a
+	// re-steer of it is a new wait, not a continuation of the old one.
+	list.push({ ...queueItem(item), steeredAt: Date.now() });
 	steeredReceipts.set(sessionId, list);
 	persistQueues();
 	broadcastQueue(sessionId);

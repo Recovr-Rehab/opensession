@@ -154,6 +154,14 @@ export interface QueuedPrompt {
   contextSessions?: string[];
   /** False for routed/system items that must keep queue-only metadata. */
   editable?: boolean;
+  /**
+   * When the engine ACCEPTED this message as a steer (epoch ms). Acceptance
+   * is not delivery: the agent loop only polls its steering queue after the
+   * current assistant message and its whole tool batch have finished, so the
+   * wait is routinely seconds and occasionally minutes (a long test run, a
+   * subagent). Clients count from here so a still chip cannot read as a hang.
+   */
+  steeredAt?: number;
 }
 
 /**

@@ -364,6 +364,8 @@ type QueueReceipt = {
 	contextSessions?: string[];
 	editable?: boolean;
 	editing?: boolean;
+	/** Steer receipts only: when the engine accepted the fold-in (epoch ms). */
+	steeredAt?: number;
 };
 
 interface Props {
@@ -2890,7 +2892,9 @@ export function SessionViewer({
 	}, [entries, queued, steered]);
 
 	// A steer receipt is reconciled away once its message lands in the transcript
-	// (its turn started) — until then it's the only visible record of the fold-in.
+	// (the run actually read it). So this list is exactly the PENDING window: the
+	// run has accepted the message and has not folded it in yet. Anything shown
+	// from here must read as waiting, never as delivered.
 	const visibleSteered = useMemo(() => {
 		if (steered.length === 0) return steered;
 		const userPool = entries
@@ -3999,9 +4003,12 @@ export function SessionViewer({
 
 	const queueCount =
 		shownQueued.length + visibleSteered.length + pendingQueue.length + durableOutbox.length;
-	// Steered receipts are NOT queued — they're already delivered into the
-	// running turn and only shown here until it ends. Calling them "queued"
-	// read as "my message didn't go through" (three times, 2026-07-19).
+	// Steered receipts are NOT queued — they have been ACCEPTED by the running
+	// turn and are waiting for it to reach its next step. Calling them "queued"
+	// read as "my message didn't go through" (three times, 2026-07-19); calling
+	// them delivered was the opposite lie, since the receipt is reconciled away
+	// the moment delivery actually happens, so "delivered" was on screen only
+	// while it hadn't happened yet.
 	const queuedMessageCount =
 		shownQueued.length -
 		queuedReviewCount -
@@ -4021,7 +4028,7 @@ export function SessionViewer({
 					? `${queuedWorkerCount} worker ${queuedWorkerCount === 1 ? "report" : "reports"} waiting`
 					: null,
 				visibleSteered.length
-					? `${visibleSteered.length} steered into the current turn`
+					? `${visibleSteered.length} steering into the current turn`
 					: null,
 			]
 				.filter(Boolean)
@@ -4051,10 +4058,11 @@ export function SessionViewer({
 							)}
 						>
 							<div className={composerQueueActions}>
-								<Tooltip label="Already delivered into the running turn, shown here until the turn finishes">
+								<Tooltip label="The run has this message and folds it in when the current step finishes. A long tool call, like a test run, can hold it for a few minutes.">
 									<span className={composerQueuePill}>
 										<IconCrosshair size={20} />
-										Steered
+										Steering
+										<SteerWaiting since={s.steeredAt} />
 									</span>
 								</Tooltip>
 								{s.id && (
@@ -7198,6 +7206,43 @@ function BusyElapsed({ since }: { since: number }) {
 	else label = `${Math.floor(s / 3600)}h, ${Math.floor((s % 3600) / 60)}m`;
 	// Tabular figures so a 10Hz counter doesn't jitter its own width.
 	return <span className="text-meta text-faint tabular-nums">{label}</span>;
+}
+
+// How long a steer may wait before the chip starts showing how long it has
+// waited. Under this, the counter would be noise on a fold-in that is about to
+// land anyway; over it, the silence is what reads as a hang.
+const STEER_SLOW_MS = 5000;
+
+/**
+ * A steer the run has accepted but not yet read. pi's agent loop drains its
+ * steering queue only between turns, after the current assistant message AND
+ * its whole tool batch finish, so this wait is the remainder of whatever the
+ * agent is doing right now: usually seconds, but a `bun test` or a subagent
+ * holds it for minutes (measured p90 85s, max 385s over two days).
+ *
+ * The counter appears only once the wait is long enough to worry about, and it
+ * counts up rather than predicting a landing time, because nothing here knows
+ * how long the running tool will take. A still chip saying "Steered" was the
+ * bug: it claimed delivery during the only window in which delivery had not
+ * happened, since the receipt is reconciled away as soon as it has.
+ */
+function SteerWaiting({ since }: { since?: number }) {
+	const [waited, setWaited] = useState(() =>
+		since ? Date.now() - since : 0,
+	);
+	useEffect(() => {
+		if (!since) return;
+		setWaited(Date.now() - since);
+		const t = setInterval(() => setWaited(Date.now() - since), 1000);
+		return () => clearInterval(t);
+	}, [since]);
+	// An old receipt restored across a restart has no stamp; showing nothing is
+	// better than showing a made-up zero.
+	if (!since || waited < STEER_SLOW_MS) return null;
+	const s = Math.floor(waited / 1000);
+	const label =
+		s < 60 ? `${s}s` : `${Math.floor(s / 60)}m ${String(s % 60).padStart(2, "0")}s`;
+	return <span className="font-normal tabular-nums opacity-70">{label}</span>;
 }
 
 // How long a stop may sit there before the label stops sounding confident.
