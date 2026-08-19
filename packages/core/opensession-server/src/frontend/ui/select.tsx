@@ -118,9 +118,9 @@ function Trigger(triggerProps: TriggerProps) {
 							: "grid-cols-[minmax(0,1fr)_auto]",
 					),
 				),
-				// Open reads like focus: the border carries the state, as it does
-				// on every other field.
-				"data-[popup-open]:border-accent",
+				// A select lifts slightly under the pointer; opening still reads like
+				// focus, with the border carrying that state as on every other field.
+				"transition-[border-color,box-shadow] enabled:hover:shadow-sm data-[popup-open]:border-accent",
 				className,
 			)}
 		>
