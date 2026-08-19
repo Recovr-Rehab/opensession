@@ -39,6 +39,7 @@ import {
 import { ComposerContextChip } from "./ComposerContextChip";
 import {
   IconPaperclip,
+  IconArrowUp,
   IconChevronDown,
   IconChevronRight,
   IconConnections,
@@ -65,7 +66,11 @@ import { Tooltip } from "../ui/tooltip";
 import { Modal, useEnterOnMount } from "../ui/modal";
 import { useShortcutKeys } from "../hooks/useShortcutBindings";
 import { matchesShortcut } from "../lib/shortcuts";
-import { composerBox } from "../lib/composer-classes";
+import {
+	composerBox,
+	composerSend,
+	composerSendDefault,
+} from "../lib/composer-classes";
 import { askSurface } from "../lib/tinted-surface";
 import { cn } from "../ui/cn";
 import {
@@ -175,12 +180,22 @@ const TRIGGER_STRONG =
 	"relative inline-flex min-w-0 max-w-full cursor-pointer items-center gap-1.5 rounded-control px-2 py-[5px] text-item-title font-semibold text-fg transition-colors hover:bg-hover disabled:cursor-default disabled:opacity-55";
 const CHEVRON = "-ml-0.5 shrink-0 text-faint";
 const MOBILE_PICKER = "contents";
+/** On a phone the trigger is a pill: it sits between two round controls in the
+ *  top bar, so it needs an edge of its own to read as the third one rather than
+ *  as loose text between them. The resting surface is the same one the
+ *  composer's attachment chips take. */
 const MOBILE_TRIGGER =
-	"phone:min-h-11 phone:rounded-[999px] phone:px-3 phone:py-2";
-const MOBILE_TITLE =
-	"hidden items-center justify-between gap-3 px-4 pb-1 pt-3 phone:flex";
-const MOBILE_CLOSE =
-	"focus-ring relative -mr-1 flex size-11 shrink-0 items-center justify-center rounded-control p-0 text-faint transition-colors hover:bg-hover hover:text-fg";
+	"phone:min-h-11 phone:rounded-[999px] phone:border phone:border-line phone:bg-[var(--bg-hover)] phone:px-3 phone:py-2";
+/** A balanced phone title bar: dismiss, centered title, commit. The fixed side
+ *  columns keep the title optically centered even though the controls differ. */
+const PHONE_TITLE =
+	"hidden grid-cols-[44px_minmax(0,1fr)_44px] items-center gap-3 px-3 pb-1 pt-3 phone:grid";
+const PHONE_CLOSE =
+	"focus-ring relative flex size-11 items-center justify-center rounded-[999px] p-0 text-faint transition-colors hover:bg-hover hover:text-fg";
+/** The composer's own send disc, so the gesture that commits a prompt looks the
+ *  same in the palette as it does in a session. Sized up to the 44px target the
+ *  rest of this bar keeps. */
+const PHONE_SEND = cn(composerSend, composerSendDefault, "phone:size-11");
 
 /* (The prompt's own surface — the scroller and the field — moved to
    NewSessionPrompt, with the draft state it belongs to.) */
@@ -613,6 +628,10 @@ export function NewSession({ onBack, inline, focusSeq, send, addHandler, connect
   const [createMenuOpen, setCreateMenuOpen] = useState(false);
   const createSplitRef = useRef<HTMLDivElement>(null);
   const isPhone = useIsPhone();
+  /** The palette as a phone sheet: close and send ride in the top bar, and the
+   *  footer keeps only the tools. The inline card has no bar of its own to put
+   *  them in, so it keeps the footer's Create at every width. */
+  const phoneBar = isPhone && !inline;
   // "Send messages with" (Settings → Preferences). The session composer honors it,
   // so this field has to as well — otherwise Enter silently does nothing here
   // while the Create button advertises ↩.
@@ -1178,14 +1197,23 @@ export function NewSession({ onBack, inline, focusSeq, send, addHandler, connect
   // palette or sits on it as the empty state's session input.
   const card = (
     <>
-      {!inline && (
-        <div className={MOBILE_TITLE}>
-          <Modal.Title className="m-0 min-w-0 flex-1 text-dialog-title font-semibold leading-tight tracking-[-0.01em] text-fg">
-            New session
-          </Modal.Title>
-          <Modal.Close className={MOBILE_CLOSE} aria-label="Close">
+      {phoneBar && (
+        <div className={PHONE_TITLE}>
+          <Modal.Close className={PHONE_CLOSE} aria-label="Close">
             <IconX size={20} />
           </Modal.Close>
+          <Modal.Title className="m-0 truncate text-center text-dialog-title font-semibold leading-tight tracking-[-0.01em] text-fg">
+            New session
+          </Modal.Title>
+          <button
+            type="button"
+            className={PHONE_SEND}
+            onClick={handleCreate}
+            disabled={!canCreate}
+            aria-label={CREATE_LABELS[createAction]}
+          >
+            <IconArrowUp size={22} />
+          </button>
         </div>
       )}
       {/* Header: what the session is pointed at, and nothing else. The mode
@@ -1193,7 +1221,10 @@ export function NewSession({ onBack, inline, focusSeq, send, addHandler, connect
           behind them, because a fresh branch is what almost every code
           session wants. Either mode can be pointed at nothing: Ask with no
           repo is a conversation with your tools, Code with no repo is a
-          scratch dir. */}
+          scratch dir.
+
+          On a phone the title bar above owns dismiss and send, while this row
+          keeps the project choice close to the prompt it scopes. */}
       <div className={cn(HEADER, edges.top && EDGE_DIVIDER)}>
         <div className={MOBILE_PICKER}>
           <PaletteSelect
@@ -1580,6 +1611,32 @@ export function NewSession({ onBack, inline, focusSeq, send, addHandler, connect
                     })}
                   </Menu.Popup>
                 </Menu.SubmenuRoot>
+                {/* The phone's send is one round button, so what the desktop
+                    caret holds lives here instead. Flat rows rather than a
+                    submenu: a submenu opens on hover, which a finger does not
+                    have. A plain div rather than Menu.GroupLabel, which stops
+                    the sibling submenus above from opening at all. */}
+                {phoneBar && (
+                  <>
+                    <div className="px-2 pb-1 pt-1.5 text-meta font-medium text-faint">
+                      On create
+                    </div>
+                    {CREATE_ACTIONS.map((action) => (
+                      <Menu.Item
+                        key={action}
+                        onClick={() => setCreateAction(action)}
+                      >
+                        <Menu.Check
+                          on={createAction === action}
+                          className="text-dim"
+                        />
+                        <span className="min-w-0 truncate">
+                          {CREATE_LABELS[action]}
+                        </span>
+                      </Menu.Item>
+                    ))}
+                  </>
+                )}
               </Menu.Popup>
             </Menu.Root>
           </div>
@@ -1612,6 +1669,7 @@ export function NewSession({ onBack, inline, focusSeq, send, addHandler, connect
               }}
             />
 
+            {!phoneBar && (
             <div className={CREATE_SPLIT} ref={createSplitRef}>
               <button
                 className={cn(
@@ -1709,12 +1767,13 @@ export function NewSession({ onBack, inline, focusSeq, send, addHandler, connect
                       <span className="flex min-w-0 flex-col gap-px">
                         <span className="text-label font-semibold">{opt.title}</span>
                         <span className="text-meta text-dim">{opt.desc}</span>
-                      </span>
-                    </button>
-                  ))}
-                </div>
-              )}
+                    </span>
+                  </button>
+                ))}
+              </div>
+            )}
             </div>
+            )}
           </div>
         </div>
     </>
