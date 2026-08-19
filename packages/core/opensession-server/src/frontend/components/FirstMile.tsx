@@ -88,7 +88,6 @@ export function FirstMile({ onDone }: { onDone: () => void }) {
 	const { status, failed, refetch } = setup;
 	const [index, setIndex] = useState(0);
 	const [direction, setDirection] = useState(1);
-	const [aiRevision, setAiRevision] = useState(0);
 	const headingRef = useRef<HTMLHeadingElement>(null);
 	const reducedMotion = useReducedMotion();
 	const step = STEPS[index]!;
@@ -110,11 +109,6 @@ export function FirstMile({ onDone }: { onDone: () => void }) {
 		setDirection(nextIndex > index ? 1 : -1);
 		setIndex(nextIndex);
 		void refetch();
-	}
-
-	async function refreshAi() {
-		setAiRevision((revision) => revision + 1);
-		await refetch();
 	}
 
 	const variants = {
@@ -140,16 +134,7 @@ export function FirstMile({ onDone }: { onDone: () => void }) {
 			/>
 
 			<header className="relative z-10 grid grid-cols-[1fr_auto_1fr] items-center px-8 phone:px-4">
-				<div className="flex min-w-0 items-center gap-2.5">
-					<img
-						src={`${BASE_PATH}/mac-app-icon.png`}
-						alt=""
-						className="size-9 rounded-md shadow-sm phone:size-8"
-					/>
-					<span className="truncate text-label font-semibold text-fg phone:hidden">
-						{PRODUCT_NAME}
-					</span>
-				</div>
+				<div />
 
 				<nav
 					className={cn("flex items-center gap-2", index === 0 && "invisible")}
@@ -215,11 +200,11 @@ export function FirstMile({ onDone }: { onDone: () => void }) {
 									<img
 										src={`${BASE_PATH}/mac-app-icon.png`}
 										alt=""
-										className="mb-7 size-20 rounded-xl shadow-[0_20px_64px_rgba(0,0,0,0.14)] phone:mb-6 phone:size-16"
+										className="mb-7 size-20 scale-[1.13] [filter:drop-shadow(0_18px_28px_rgba(0,0,0,0.16))] phone:mb-6 phone:size-16"
 									/>
 									<h1
 										ref={headingRef}
-										className="m-0 text-center text-[clamp(1.9rem,3vw,2.75rem)] font-title leading-[1.04] tracking-[-0.04em] text-fg outline-none"
+										className="m-0 text-center text-[clamp(1.6rem,2vw,2.15rem)] font-title leading-[1.08] tracking-[-0.03em] text-fg outline-none"
 									>
 										{step.title}
 									</h1>
@@ -282,14 +267,10 @@ export function FirstMile({ onDone }: { onDone: () => void }) {
 												<SettingCard>
 													<EngineRow engine={status.engine} onChanged={refetch} />
 												</SettingCard>
-												<ClaudeAccountsSection compact onChanged={refreshAi} />
-												<CodexAccountsSection compact onChanged={refreshAi} />
-												<ModelProvidersPanel compact onChanged={refreshAi} />
-												<ModelDefaultsSection
-													key={aiRevision}
-													compact
-													onChanged={refreshAi}
-												/>
+												<ClaudeAccountsSection />
+												<CodexAccountsSection />
+												<ModelProvidersPanel />
+												<ModelDefaultsSection />
 											</div>
 										)}
 										{step.id === "repos" && (
