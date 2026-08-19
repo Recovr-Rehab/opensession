@@ -69,6 +69,7 @@ function Root<Payload = unknown>({
 
 function Popup({
 	className,
+	positionerClassName,
 	side,
 	align,
 	sideOffset = 8,
@@ -80,6 +81,9 @@ function Popup({
 	children,
 }: {
 	className?: string;
+	/** Override the portal layer for standing page-level surfaces that should
+	 * sit behind modal and palette backdrops. */
+	positionerClassName?: string;
 	side?: React.ComponentProps<typeof BasePopover.Positioner>["side"];
 	align?: React.ComponentProps<typeof BasePopover.Positioner>["align"];
 	sideOffset?: number;
@@ -115,7 +119,7 @@ function Popup({
 				collisionPadding={collisionPadding}
 				// Keep the diamond clear of the popup's rounded corners.
 				arrowPadding={14}
-				className="z-[10001] outline-none"
+				className={cn("z-[10001] outline-none", positionerClassName)}
 			>
 				<BasePopover.Popup
 					initialFocus={initialFocus}

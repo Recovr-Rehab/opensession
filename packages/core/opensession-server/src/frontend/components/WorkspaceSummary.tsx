@@ -367,12 +367,15 @@ export function WorkspaceSummary({
 				side="bottom"
 				align="end"
 				anchor={anchor}
-				collisionPadding={24}
-				// Keep the usual 8px air below whichever chrome row is lowest. The
-				// desktop tab strip is 40px tall and sits after the header's own 8px
-				// inset, so clear both before adding 16px of breathing room.
-				sideOffset={tabStripVisible ? 72 : 20}
-				elevation="lg"
+				positionerClassName="z-[5000]"
+				collisionPadding={20}
+				// Clear the header divider before adding the usual air below the
+				// chrome. The no-tab position needs more room because the actions row
+				// ends just above that divider. The desktop tab strip is 40px tall and
+				// sits after the header's own 8px inset, so clear both before adding
+				// the breathing room.
+				sideOffset={tabStripVisible ? 72 : 24}
+				elevation="md"
 				className={WS_SUMMARY_CARD}
 				// Take focus when someone opens the card, so the keyboard reaches its
 				// controls. Not when it merely mounts already-open: the card is
