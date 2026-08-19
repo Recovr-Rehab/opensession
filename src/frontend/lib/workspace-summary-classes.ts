@@ -33,16 +33,48 @@
  * object from the rest of them.
  */
 export const WS_SUMMARY_CARD =
-	"flex max-h-[min(72vh,640px)] w-[300px] flex-col overflow-y-auto py-2";
+	"flex max-h-[min(72vh,640px)] w-[300px] flex-col overflow-hidden";
+
+/** The card's scrolling list. Everything that is a reading lives in here; the
+ *  bar below it does not scroll away. */
+export const WS_SUMMARY_BODY = "min-h-0 flex-1 overflow-y-auto py-2";
 
 /**
- * Band label ("Places", "Assets"), taken from the sidebar so the card heads
- * its lists the way the sidebar heads its own. It shares the rows' 16px
- * content rail and their 31px pitch, so it does not sit tighter than the list
- * it heads.
+ * The bar along the bottom: portals, agents, terminal.
  *
- * The first band has no label. It holds the state of the work itself, which is
- * what the card IS, and a heading over it could only repeat the card's own
+ * These are the Workspace panel's own bottom bar, and they keep that shape
+ * here rather than becoming a third band of rows. They are places you go, not
+ * things the card is telling you, so they sit under the list the way a
+ * window's chrome sits under its content. As rows in the middle they also
+ * split the two readings that belong together, putting a set of destinations
+ * between the state of the work and the files it produced.
+ */
+export const WS_SUMMARY_FOOTER =
+	"flex shrink-0 items-center gap-1 border-t border-divider px-2 py-1.5";
+
+/**
+ * One place on that bar: an icon, a word, and whatever it wants to report.
+ *
+ * The three of them fill a 300px card with 8px to spare, which is the whole
+ * budget: `px-2` is not padding to trim, it is what puts the first icon on the
+ * same rail as every row above. They do not shrink, and the labels do not
+ * truncate. Letting them was tried and is worse than the problem: flex hands
+ * each child its share rather than its content, so all three read "Port… Age…
+ * Termi…" in the ordinary case to protect against a rare one. If both counts
+ * ever run to two digits the last word clips at the card edge instead.
+ */
+export const WS_SUMMARY_FOOTER_ITEM =
+	"focus-ring flex shrink-0 cursor-pointer items-center gap-1.5 whitespace-nowrap " +
+	"rounded-control border-none bg-transparent px-2 py-1 text-label text-dim " +
+	"transition-colors hover:bg-hover hover:text-fg";
+
+/**
+ * Band label ("Assets"), taken from the sidebar so the card heads its lists
+ * the way the sidebar heads its own. It shares the rows' 16px content rail and
+ * their 31px pitch, so it does not sit tighter than the list it heads.
+ *
+ * The band above it has no label. It holds the state of the work itself, which
+ * is what the card IS, and a heading over it could only repeat the card's own
  * name back at you.
  */
 export const WS_SUMMARY_SECTION =

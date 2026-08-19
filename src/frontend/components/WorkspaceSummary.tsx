@@ -17,9 +17,12 @@ import { cn } from "../ui/cn";
 import type { GitStatusInfo, PrDetails, UnifiedSession } from "../lib/types";
 import {
 	WS_SUMMARY_ACTION,
+	WS_SUMMARY_BODY,
 	WS_SUMMARY_CARD,
 	WS_SUMMARY_COUNT,
 	WS_SUMMARY_DIVIDER,
+	WS_SUMMARY_FOOTER,
+	WS_SUMMARY_FOOTER_ITEM,
 	WS_SUMMARY_ICON,
 	WS_SUMMARY_LABEL,
 	WS_SUMMARY_RAIL,
@@ -300,88 +303,132 @@ function SummaryBody({
 
 	return (
 		<>
-			{changedFiles > 0 && (
-				<button
-					className={WS_SUMMARY_ROW}
-					onClick={() => go(() => onOpenPanelTab("changes"))}
-				>
-					<span className={WS_SUMMARY_RAIL}>
-						<IconFile size={20} className={WS_SUMMARY_ICON} />
-					</span>
-					<span className={WS_SUMMARY_LABEL}>
-						{changedFiles} file{changedFiles === 1 ? "" : "s"} changed
-					</span>
-					<span className={WS_SUMMARY_COUNT}>
-						<span className="text-green">+{additions}</span>{" "}
-						<span className="text-red">−{deletions}</span>
-					</span>
-				</button>
-			)}
+			<div className={WS_SUMMARY_BODY}>
+				{changedFiles > 0 && (
+					<button
+						className={WS_SUMMARY_ROW}
+						onClick={() => go(() => onOpenPanelTab("changes"))}
+					>
+						<span className={WS_SUMMARY_RAIL}>
+							<IconFile size={20} className={WS_SUMMARY_ICON} />
+						</span>
+						<span className={WS_SUMMARY_LABEL}>
+							{changedFiles} file{changedFiles === 1 ? "" : "s"} changed
+						</span>
+						<span className={WS_SUMMARY_COUNT}>
+							<span className="text-green">+{additions}</span>{" "}
+							<span className="text-red">−{deletions}</span>
+						</span>
+					</button>
+				)}
 
-			{dirty > 0 && (
-				<button className={WS_SUMMARY_ROW} onClick={askCommit} disabled={!send}>
-					<span className={WS_SUMMARY_RAIL}>
-						<IconClock size={20} className={WS_SUMMARY_ICON} />
-					</span>
-					<span className={WS_SUMMARY_LABEL}>
-						{prompted
-							? "Asked to commit"
-							: `${dirty} file${dirty === 1 ? "" : "s"} uncommitted`}
-					</span>
-					{!prompted && <span className={WS_SUMMARY_ACTION}>Commit</span>}
-				</button>
-			)}
+				{dirty > 0 && (
+					<button
+						className={WS_SUMMARY_ROW}
+						onClick={askCommit}
+						disabled={!send}
+					>
+						<span className={WS_SUMMARY_RAIL}>
+							<IconClock size={20} className={WS_SUMMARY_ICON} />
+						</span>
+						<span className={WS_SUMMARY_LABEL}>
+							{prompted
+								? "Asked to commit"
+								: `${dirty} file${dirty === 1 ? "" : "s"} uncommitted`}
+						</span>
+						{!prompted && <span className={WS_SUMMARY_ACTION}>Commit</span>}
+					</button>
+				)}
 
-			{/* Which PR, where it stands, and the one thing to do about it. The
+				{/* Which PR, where it stands, and the one thing to do about it. The
 			    strip owns all three; this card only says where they go. */}
-			<PrStatusBar
-				variant="summary"
-				sessionId={session.id}
-				repo={session.repo || undefined}
-				archived={session.archived}
-				prs={session.prs}
-				send={send}
-				running={running}
-				refreshTick={refreshTick}
-				onOpenPrTab={() => go(onOpenPr)}
-				onOpenChecksTab={() => go(onOpenChecks)}
-				onArchive={onArchive ? () => go(onArchive) : undefined}
-			/>
+				<PrStatusBar
+					variant="summary"
+					sessionId={session.id}
+					repo={session.repo || undefined}
+					archived={session.archived}
+					prs={session.prs}
+					send={send}
+					running={running}
+					refreshTick={refreshTick}
+					onOpenPrTab={() => go(onOpenPr)}
+					onOpenChecksTab={() => go(onOpenChecks)}
+					onArchive={onArchive ? () => go(onArchive) : undefined}
+				/>
 
-			{/* The panel's bottom bar, as rows. These are places rather than
-			    readings: everything above says where the work stands, everything
-			    here goes somewhere. */}
+				{shown.length > 0 && (
+					<>
+						<div className={WS_SUMMARY_DIVIDER} />
+						<div className={WS_SUMMARY_SECTION}>Assets</div>
+						{shown.map((file) => (
+							<button
+								key={file.path}
+								className={WS_SUMMARY_ROW}
+								onClick={() => go(onOpenAssets)}
+								title={file.path}
+							>
+								<span className={WS_SUMMARY_RAIL}>
+									{IMAGE_RE.test(file.path) ? (
+										<img
+											src={sessionAssetPreviewUrl(session.id, file)}
+											alt=""
+											className={WS_SUMMARY_THUMB}
+											loading="lazy"
+										/>
+									) : (
+										<IconFile size={20} className={WS_SUMMARY_ICON} />
+									)}
+								</span>
+								<span className={WS_SUMMARY_LABEL}>{file.path}</span>
+							</button>
+						))}
+						{assets.length > shown.length && (
+							<button
+								className={WS_SUMMARY_ROW}
+								onClick={() => go(onOpenAssets)}
+							>
+								<span className={WS_SUMMARY_RAIL} />
+								<span className={cn(WS_SUMMARY_LABEL, "text-dim")}>
+									View all {assets.length}
+								</span>
+							</button>
+						)}
+					</>
+				)}
+			</div>
+
+			{/* The panel's own bottom bar, at card scale. Places you go, under the
+			    list of things the card is telling you. */}
 			{places && (
-				<>
-					<div className={WS_SUMMARY_DIVIDER} />
-					<div className={WS_SUMMARY_SECTION}>Places</div>
+				<div className={WS_SUMMARY_FOOTER}>
 					{onOpenPortals && (
 						<button
-							className={WS_SUMMARY_ROW}
+							type="button"
+							className={WS_SUMMARY_FOOTER_ITEM}
 							onClick={() => go(onOpenPortals)}
 						>
-							<span className={WS_SUMMARY_RAIL}>
-								<IconGlobe size={20} className={WS_SUMMARY_ICON} />
-							</span>
-							<span className={WS_SUMMARY_LABEL}>Portals</span>
+							<IconGlobe size={20} className="shrink-0" />
+							Portals
 							{livePortals > 0 && (
-								<span className={cn(WS_SUMMARY_COUNT, "text-faint")}>
+								<span className="shrink-0 tabular-nums text-faint">
 									{livePortals}
 								</span>
 							)}
 						</button>
 					)}
 					{onOpenAgents && (
-						<button className={WS_SUMMARY_ROW} onClick={() => go(onOpenAgents)}>
-							<span className={WS_SUMMARY_RAIL}>
-								<IconStack size={20} className={WS_SUMMARY_ICON} />
-							</span>
-							<span className={WS_SUMMARY_LABEL}>Agents</span>
-							{/* Only the live count, as on the bar: a finished run is
-							    something you go and read, not something a summary has to
-							    keep announcing. */}
+						<button
+							type="button"
+							className={WS_SUMMARY_FOOTER_ITEM}
+							onClick={() => go(onOpenAgents)}
+						>
+							<IconStack size={20} className="shrink-0" />
+							Agents
+							{/* Only the live count, as on the panel's bar: a finished run
+							    is something you go and read, not something a summary has
+							    to keep announcing. */}
 							{runningAgents > 0 && (
-								<span className={cn(WS_SUMMARY_COUNT, "text-yellow")}>
+								<span className="shrink-0 tabular-nums text-yellow">
 									{runningAgents}
 								</span>
 							)}
@@ -389,53 +436,15 @@ function SummaryBody({
 					)}
 					{onOpenTerminal && (
 						<button
-							className={WS_SUMMARY_ROW}
+							type="button"
+							className={WS_SUMMARY_FOOTER_ITEM}
 							onClick={() => go(onOpenTerminal)}
 						>
-							<span className={WS_SUMMARY_RAIL}>
-								<IconTerminal size={20} className={WS_SUMMARY_ICON} />
-							</span>
-							<span className={WS_SUMMARY_LABEL}>Terminal</span>
+							<IconTerminal size={20} className="shrink-0" />
+							Terminal
 						</button>
 					)}
-				</>
-			)}
-
-			{shown.length > 0 && (
-				<>
-					<div className={WS_SUMMARY_DIVIDER} />
-					<div className={WS_SUMMARY_SECTION}>Assets</div>
-					{shown.map((file) => (
-						<button
-							key={file.path}
-							className={WS_SUMMARY_ROW}
-							onClick={() => go(onOpenAssets)}
-							title={file.path}
-						>
-							<span className={WS_SUMMARY_RAIL}>
-								{IMAGE_RE.test(file.path) ? (
-									<img
-										src={sessionAssetPreviewUrl(session.id, file)}
-										alt=""
-										className={WS_SUMMARY_THUMB}
-										loading="lazy"
-									/>
-								) : (
-									<IconFile size={20} className={WS_SUMMARY_ICON} />
-								)}
-							</span>
-							<span className={WS_SUMMARY_LABEL}>{file.path}</span>
-						</button>
-					))}
-					{assets.length > shown.length && (
-						<button className={WS_SUMMARY_ROW} onClick={() => go(onOpenAssets)}>
-							<span className={WS_SUMMARY_RAIL} />
-							<span className={cn(WS_SUMMARY_LABEL, "text-dim")}>
-								View all {assets.length}
-							</span>
-						</button>
-					)}
-				</>
+				</div>
 			)}
 		</>
 	);
