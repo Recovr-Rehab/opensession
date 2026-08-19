@@ -27,6 +27,19 @@ export type FrontendBundle = {
 	version: string;
 };
 
+function frontendInstance() {
+	return {
+		productName: productName(),
+		productMark: productMark(),
+		personaName: personaName(),
+		publicBaseUrl: configuredServer().publicBaseUrl,
+		webhookBaseUrl: configuredServer().webhookBaseUrl,
+		githubBotLogins: githubBotLogins(),
+		defaultRepoId: defaultRepo().id,
+		plainWorkspaceId: plainWorkspaceId() || undefined,
+	};
+}
+
 /**
  * Name of the newest Tailwind sheet that compiled successfully, so a failed
  * rebuild can keep serving it rather than shipping the app with no utilities
@@ -216,16 +229,7 @@ export async function buildFrontend(): Promise<string> {
 	}
 
 	let indexHtml = await Bun.file(`${FRONTEND_SRC}/index.html`).text();
-	const instance = JSON.stringify({
-		productName: productName(),
-		productMark: productMark(),
-		personaName: personaName(),
-		publicBaseUrl: configuredServer().publicBaseUrl,
-		webhookBaseUrl: configuredServer().webhookBaseUrl,
-		githubBotLogins: githubBotLogins(),
-		defaultRepoId: defaultRepo().id,
-		plainWorkspaceId: plainWorkspaceId() || undefined,
-	}).replace(/</g, "\\u003c");
+	const instance = JSON.stringify(frontendInstance()).replace(/</g, "\\u003c");
 	const htmlProductName = productName()
 		.replaceAll("&", "&amp;")
 		.replaceAll('"', "&quot;")
@@ -315,7 +319,7 @@ const BUNDLE_META = join(FRONTEND_DIST, ".bundle-meta.json");
 function frontendInputsHash(): string {
 	const parts: string[] = [
 		`bun:${Bun.version}`,
-		`instance:${productName()}:${productMark()}:${personaName()}:${configuredServer().publicBaseUrl}:${githubBotLogins().join(",")}:${defaultRepo().id}`,
+		`instance:${JSON.stringify(frontendInstance())}`,
 	];
 	try {
 		const lock = statSync(join(REPO_ROOT, "bun.lock"));
