@@ -86,6 +86,18 @@ export type { SettingsSectionKey, ToolSectionKey };
  *  column for it (see SETTINGS_PANEL_FRAME_GALLERY). */
 const GALLERY_SECTIONS = new Set<SettingsSectionKey>(["library", "setup"]);
 
+// Settings is a dense mix of headings, row titles, labels, descriptions,
+// fields, and tool panels. Body roles share 150% leading; heading and title
+// roles stay compact at 110%. The descendant rules deliberately beat local
+// one-off leading utilities so every section follows the page-level rhythm.
+const SETTINGS_LEADING =
+	"leading-normal [&_*]:!leading-normal " +
+	"[&_h1]:!leading-[1.1] [&_h2]:!leading-[1.1] [&_h3]:!leading-[1.1] " +
+	"[&_h4]:!leading-[1.1] [&_h5]:!leading-[1.1] [&_h6]:!leading-[1.1] " +
+	"[&_.font-title]:!leading-[1.1] [&_.text-item-title]:!leading-[1.1] " +
+	"[&_.text-dialog-title]:!leading-[1.1] [&_.text-section-title]:!leading-[1.1] " +
+	"[&_.text-page-title]:!leading-[1.1] [&_.text-stat]:!leading-[1.1]";
+
 type Section = (typeof SECTIONS)[number];
 type SectionGroup = { group: string; items: Section[] };
 type FilteredGroup = { group: string; hits: SectionHit<Section>[] };
@@ -308,7 +320,7 @@ export function Settings({
 	const firstHit = shown[0]?.hits[0]?.item;
 
 	return (
-		<div className={SETTINGS_PAGE}>
+		<div className={cn(SETTINGS_PAGE, SETTINGS_LEADING)}>
 			{/* Back and search stay put; only the section list scrolls, so neither
 			    they nor the account footer are lost once the list outgrows the nav. */}
 			<aside className={SETTINGS_NAV}>
@@ -430,7 +442,11 @@ function MobileSettings({
 	const pageEase = "transition-transform duration-[var(--dur-lg)] ease-[var(--ease)]";
 
 	return (
-		<BottomSheet onClose={onBack} label="Settings" className="settings-sheet h-[93dvh]">
+		<BottomSheet
+			onClose={onBack}
+			label="Settings"
+			className={cn("settings-sheet h-[93dvh]", SETTINGS_LEADING)}
+		>
 			{(dismiss) => (
 				<>
 					<div className="relative flex h-11 shrink-0 items-center justify-center px-3">
