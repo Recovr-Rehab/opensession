@@ -3,7 +3,7 @@ import type { TranscriptEntry } from "../lib/types";
 import { useWebSocket } from "../hooks/useWebSocket";
 import { getCurrentUser } from "./UserPicker";
 import { renderMarkdown } from "../lib/markdown";
-import { fetchFileMentions } from "../lib/api";
+import { fetchFileMentions, fetchMentionSuggestions } from "../lib/api";
 import { TranscriptBlocks } from "./TranscriptBlocks";
 import { useFileMentions } from "./useFileMentions";
 import { IconArrowUp } from "./icons";
@@ -98,8 +98,9 @@ export function DeskConversation({
 		value: draft,
 		onChange: setDraft,
 		textareaRef,
-		mentionFetch: (q) =>
-			fetchFileMentions(q, sessionId, undefined, getCurrentUser()),
+		mentionFetch: (q) => fetchFileMentions(q, sessionId),
+		paletteFetch: (q) =>
+			fetchMentionSuggestions(q, sessionId, getCurrentUser()),
 	});
 
 	// Watch the Desk only and tear the socket down on unmount / id change.

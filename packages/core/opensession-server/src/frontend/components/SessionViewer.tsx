@@ -74,13 +74,13 @@ import { SubagentPane, type SubagentRef } from "./SubagentPane";
 import { ShellPanel } from "./TerminalPanel";
 import { getCurrentUser, useCurrentUser } from "./UserPicker";
 import { UserAvatar } from "./UserAvatar";
-import { peopleMentionMatches } from "../lib/people";
 import {
 	deleteSessionApi,
 	archiveSessionApi,
 	fetchModels,
 	fetchProviderAccounts,
 	fetchFileMentions,
+	fetchMentionSuggestions,
 	fetchSkillMentions,
 	fetchSessionSubagents,
 	promoteSessionApi,
@@ -6454,15 +6454,10 @@ export function SessionViewer({
 										session.source === "opensession" ? handleSetGoal : undefined
 									}
 									usage={usage}
-									mentionFetch={async (q) => [
-										...peopleMentionMatches(q),
-										...(await fetchFileMentions(
-											q,
-											session.id,
-											undefined,
-											getCurrentUser(),
-										)),
-									]}
+									mentionFetch={(q) => fetchFileMentions(q, session.id)}
+									paletteFetch={(q) =>
+										fetchMentionSuggestions(q, session.id, getCurrentUser())
+									}
 									skillsFetch={(q) => fetchSkillMentions(q, session.id)}
 									textareaRef={composerRef}
 									sendMenu={

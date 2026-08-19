@@ -64,6 +64,7 @@ import { Textarea } from "../ui/input";
 import {
   IconBranches,
   IconChevronRight,
+  IconCopy,
   IconDiffSplit,
   IconDiffUnified,
   IconDotsHorizontal,
@@ -101,6 +102,7 @@ import { revealDiffFile } from "../lib/diff-navigation";
 import { PrFileTree } from "./pr/PrFileTree";
 import { reviewDiffLoadPolicy } from "../lib/review-diff";
 import { BrandMark } from "./BrandTile";
+import { useCopy } from "../ui/copy";
 
 // Re-exported so existing importers of these (formerly local) helpers keep working.
 export { checkClass, isDeployment, formatPrCommentPrompt, CheckRow, PrStateIcon };
@@ -411,6 +413,7 @@ export function PrPanel({
   const [closing, setClosing] = useState(false);
   const [confirmClose, setConfirmClose] = useState(false);
   const [closeError, setCloseError] = useState<string | null>(null);
+  const { copy: copyPrLink } = useCopy();
   // Merging is a separate decision from approving, so it starts off: the
   // reviewer opts into it, and the primary action stays "Approve".
   const [mergeAfterReview, setMergeAfterReview] = useState(false);
@@ -1647,12 +1650,49 @@ export function PrPanel({
                 Open on {provider.name}
               </span>
             </Menu.Item>
+            {pr.staging?.url && (
+              <Menu.Item
+                render={
+                  <a
+                    href={pr.staging.url}
+                    target="_blank"
+                    rel="noopener"
+                  />
+                }
+              >
+                <IconGlobe size={18} className={MENU_ICON} />
+                <span className="min-w-0 flex-1 truncate">Open preview</span>
+              </Menu.Item>
+            )}
+            <Menu.Item
+              onClick={() =>
+                copyPrLink(pr.url, { toast: "Pull request link copied" })
+              }
+            >
+              <IconCopy size={18} className={MENU_ICON} />
+              <span className="min-w-0 flex-1 truncate">Copy PR link</span>
+            </Menu.Item>
             {pr.state === "OPEN" && (
               <>
                 <Menu.Separator />
+                {canMergeAfterReview && (
+                  <Menu.Item
+                    onClick={handleMerge}
+                    closeOnClick={confirmMerge}
+                    disabled={merging}
+                  >
+                    <IconGitMerge size={18} className={MENU_ICON} />
+                    {merging
+                      ? "Merging…"
+                      : confirmMerge
+                        ? "Confirm squash and merge"
+                        : "Squash and merge"}
+                  </Menu.Item>
+                )}
                 <Menu.Item
                   className="text-red data-[highlighted]:bg-red-soft"
                   onClick={handleClose}
+                  closeOnClick={confirmClose}
                   disabled={closing}
                 >
                   <IconX size={18} className={MENU_ICON} />

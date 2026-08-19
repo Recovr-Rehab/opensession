@@ -226,6 +226,8 @@ interface Props {
    * "@" is inert.
    */
   mentionFetch?: (query: string) => Promise<FileMention[]>;
+  /** Fast non-file rows for the inline @ palette. */
+  paletteFetch?: (query: string) => Promise<FileMention[]>;
   /**
    * Enables "/"-skill autocomplete when the draft starts with "/". Given the
    * text typed after the "/", returns matching skills/commands. When omitted,
@@ -453,6 +455,7 @@ export function Composer({
   quote,
   onQuoteClear,
   mentionFetch,
+  paletteFetch,
   skillsFetch,
   noteMode,
   onNoteModeChange,
@@ -763,6 +766,7 @@ export function Composer({
     onChange: setDisplayText,
     textareaRef,
     mentionFetch,
+    paletteFetch,
     skillsFetch,
     actions: [
       ...(canAttach

@@ -6,11 +6,14 @@ import React, {
 	useRef,
 	useState,
 } from "react";
-import { fetchFileMentions, fetchSkillMentions } from "../lib/api";
+import {
+	fetchFileMentions,
+	fetchMentionSuggestions,
+	fetchSkillMentions,
+} from "../lib/api";
 import { saveDraft, NEW_SESSION_DRAFT_KEY as DRAFT_KEY } from "../lib/drafts";
 import { attachingLabel, type StagingCount } from "../lib/attachments";
 import { imageFilesFromPaste, type FileAttachment } from "../lib/images";
-import { peopleMentionMatches } from "../lib/people";
 import { insertPastedSessionId } from "../lib/session-url";
 import { insideOpenFence, isSendCombo, type SendKeyPref } from "../lib/send-key";
 import {
@@ -266,16 +269,9 @@ export function NewSessionPrompt({
 		value: sessionNames.displayText,
 		onChange: sessionNames.setDisplayText,
 		textareaRef,
-		mentionFetch: async (q) => [
-			...peopleMentionMatches(q),
-			...(await fetchFileMentions(
-				q,
-				undefined,
-				repo,
-				getCurrentUser(),
-				mcpServers,
-			)),
-		],
+		mentionFetch: (q) => fetchFileMentions(q, undefined, repo),
+		paletteFetch: (q) =>
+			fetchMentionSuggestions(q, undefined, getCurrentUser(), mcpServers),
 		skillsFetch: (q) => fetchSkillMentions(q, undefined, repo),
 	});
 

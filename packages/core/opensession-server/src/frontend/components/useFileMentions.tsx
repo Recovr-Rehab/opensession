@@ -81,6 +81,8 @@ interface Options {
    * returns matching files. When omitted, the hook is inert.
    */
   mentionFetch?: (query: string) => Promise<FileMention[]>;
+  /** Fast non-file rows for "@". Resolves independently of repository search. */
+  paletteFetch?: (query: string) => Promise<FileMention[]>;
   /**
    * Enables "/"-skill autocomplete when the input starts with "/". Given the
    * text typed after the "/", returns matching skills/commands.
@@ -125,7 +127,7 @@ interface FileMentions {
  * popup node plus handlers to wire into a host textarea. Used by both the session
  * Composer and the New-session prompt field so they behave identically.
  */
-export function useFileMentions({ value, onChange, textareaRef, mentionFetch, skillsFetch, actions = [] }: Options): FileMentions {
+export function useFileMentions({ value, onChange, textareaRef, mentionFetch, paletteFetch, skillsFetch, actions = [] }: Options): FileMentions {
   const [mention, setMention] = useState<TriggerContext | null>(null);
   const [suggestions, setSuggestions] = useState<MentionSuggestion[]>([]);
   const [activeIdx, setActiveIdx] = useState(0);
@@ -145,6 +147,8 @@ export function useFileMentions({ value, onChange, textareaRef, mentionFetch, sk
   // (fetch → setSuggestions → render → new closure → fetch) while open.
   const mentionFetchRef = useRef(mentionFetch);
   mentionFetchRef.current = mentionFetch;
+  const paletteFetchRef = useRef(paletteFetch);
+  paletteFetchRef.current = paletteFetch;
   const skillsFetchRef = useRef(skillsFetch);
   skillsFetchRef.current = skillsFetch;
   const actionsRef = useRef(actions);
@@ -214,8 +218,7 @@ export function useFileMentions({ value, onChange, textareaRef, mentionFetch, sk
   // the file/tool/session request resolves. A bare "@" should feel like opening
   // a palette, not like waiting for a repository search.
   useEffect(() => {
-    const fetcher = mention?.kind === "skill" ? skillsFetchRef.current : mentionFetchRef.current;
-    if (!mention || !fetcher) {
+    if (!mention) {
       clearSuggestions();
       return;
     }
@@ -230,16 +233,38 @@ export function useFileMentions({ value, onChange, textareaRef, mentionFetch, sk
     // directory rows are safe immediately; fetched rows merge underneath.
     setSuggestions(local);
     setActiveIdx(0);
-    void fetcher(mention.query)
-      .then((items) => {
-        if (seq === fetchSeq.current) {
-          setSuggestions(mergeMentionSuggestions(local, items));
-          setActiveIdx(0);
-        }
-      })
-      .catch(() => {
-        if (seq === fetchSeq.current) clearSuggestions();
-      });
+    if (mention.kind === "skill") {
+      const fetcher = skillsFetchRef.current;
+      if (!fetcher) return;
+      void fetcher(mention.query).then((items) => {
+        if (seq === fetchSeq.current) setSuggestions(items);
+      }).catch(() => {});
+      return;
+    }
+    let paletteItems: FileMention[] = [];
+    let fileItems: FileMention[] = [];
+    const publish = () => {
+      if (seq !== fetchSeq.current) return;
+      setSuggestions(mergeMentionSuggestions(local, paletteItems, fileItems));
+    };
+    const paletteFetcher = paletteFetchRef.current;
+    if (paletteFetcher) {
+      void paletteFetcher(mention.query)
+        .then((items) => {
+          paletteItems = items;
+          publish();
+        })
+        .catch(() => {});
+    }
+    const fileFetcher = mentionFetchRef.current;
+    if (fileFetcher) {
+      void fileFetcher(mention.query)
+        .then((items) => {
+          fileItems = items;
+          publish();
+        })
+        .catch(() => {});
+    }
   }, [mention?.query, mention?.start, mention?.kind, people, currentUser]);
 
   const open = !!mention && suggestions.length > 0;
