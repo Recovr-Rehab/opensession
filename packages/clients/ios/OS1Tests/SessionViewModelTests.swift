@@ -7,8 +7,25 @@ import XCTest
 /// every "text renders twice" bug has lived — each case here pins one of them.
 @MainActor
 final class SessionViewModelTests: XCTestCase {
+    private let liveTypingKey = "os1.transcript.liveTyping"
+    private var previousLiveTyping: Any?
     private let serverA = SessionViewModelCache.Scope(serverURL: "server-a", token: "token-a")
     private let serverB = SessionViewModelCache.Scope(serverURL: "server-b", token: "token-b")
+
+    override func setUp() {
+        super.setUp()
+        previousLiveTyping = UserDefaults.standard.object(forKey: liveTypingKey)
+        UserDefaults.standard.set(true, forKey: liveTypingKey)
+    }
+
+    override func tearDown() {
+        if let previousLiveTyping {
+            UserDefaults.standard.set(previousLiveTyping, forKey: liveTypingKey)
+        } else {
+            UserDefaults.standard.removeObject(forKey: liveTypingKey)
+        }
+        super.tearDown()
+    }
 
     private func makeViewModel() -> SessionViewModel {
         SessionViewModel(session: Session(id: "bks-1"))
