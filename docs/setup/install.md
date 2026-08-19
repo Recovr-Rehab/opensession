@@ -247,8 +247,6 @@ what the code actually reads, by feature:
 | `SHUTDOWN_DRAIN_MS` | `60000` | graceful-shutdown drain window for in-flight runs |
 | `OPENSESSION_SESSIONS_DIR` | `~/.opensession-sessions` | session store override (mostly a test seam) |
 | `OPENSESSION_WORKTREES_DIR` | `~/.opensession/worktrees` | where session worktrees are created |
-| `OPENSESSION_SMTP_URL` | unset | SMTP connection URL used for team invitations, for example `smtps://user:password@smtp.example.com:465` |
-| `OPENSESSION_INVITE_FROM` | unset | sender shown on team invitation emails, for example `Open Session <hello@example.com>` |
 | `OPENSESSION_DEV` | unset | `1` = dev frontend build only; does NOT disable agent loops (a second naive instance double-sends) |
 
 **Engines and models** (details: [engines.md](engines.md))

@@ -70,8 +70,7 @@
     "typescript": "^5.7.0",
     "web-push": "^3.6.7",
     "zod": "^4.3.6",
-    "@tellahq/opensession-server": "workspace:*",
-    "nodemailer": "^9.0.5"
+    "@tellahq/opensession-server": "workspace:*"
   },
   "devDependencies": {
     "@tailwindcss/cli": "^4.3.2",
@@ -80,7 +79,6 @@
     "@types/react-dom": "^19.0.0",
     "@types/web-push": "^3.6.4",
     "agentation": "^3.0.2",
-    "tailwindcss": "^4.3.2",
-    "@types/nodemailer": "^8.0.1"
+    "tailwindcss": "^4.3.2"
   }
 }

@@ -65,9 +65,8 @@ const STEPS: FirstMileStep[] = [
 	{
 		id: "team",
 		label: "People",
-		title: "Invite your team",
-		description:
-			"Add the people who should have access. They can sign in with GitHub.",
+		title: "Add your team",
+		description: "Add the GitHub accounts that should have access.",
 	},
 	{
 		id: "ready",
@@ -295,8 +294,7 @@ export function FirstMile({ onDone }: { onDone: () => void }) {
 											<TeamSection
 												onChanged={refetch}
 												title="Members"
-												addLabel="Invite person"
-												inviteByEmail
+												githubOnly
 											/>
 										)}
 										{step.id === "ai" && (

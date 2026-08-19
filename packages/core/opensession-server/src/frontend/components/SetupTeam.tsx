@@ -17,7 +17,7 @@ import {
 	SettingsHint,
 } from "../ui/settings";
 import { toast } from "../ui/toast";
-import { IconDotsHorizontal, IconMail, IconPencil, IconPlus, IconTrash } from "./icons";
+import { IconDotsHorizontal, IconPencil, IconPlus, IconTrash } from "./icons";
 import { setupRequest, type TeamMember } from "./setup-shared";
 import { UserAvatar } from "./UserAvatar";
 
@@ -26,34 +26,24 @@ import { UserAvatar } from "./UserAvatar";
 // member row stays concise while every identifier remains available in the
 // edit dialog. Add/edit go through a small dialog; remove is confirmed.
 
-interface PendingInvitation {
-	id: string;
-	email: string;
-	createdAt: string;
-	expiresAt: string;
-	sentAt: string;
-}
-
 export function TeamSection({
 	onChanged,
 	title,
 	addLabel = "Add member",
-	inviteByEmail = false,
+	githubOnly = false,
 }: {
 	onChanged: () => void | Promise<void>;
 	/** Optional label above the roster. Defaults to the roster name and count. */
 	title?: React.ReactNode;
-	/** Action copy for the add flow. Settings keeps "Add member"; onboarding invites. */
+	/** Action copy for the add flow. */
 	addLabel?: string;
-	/** Send a bearer invitation by email instead of adding a roster row directly. */
-	inviteByEmail?: boolean;
+	/** Keep onboarding focused on the GitHub identity used for sign-in. */
+	githubOnly?: boolean;
 }) {
 	const [members, setMembers] = useState<TeamMember[] | null>(null);
 	const [loadFailed, setLoadFailed] = useState(false);
 	const [dialogOpen, setDialogOpen] = useState(false);
 	const [editing, setEditing] = useState<TeamMember | null>(null);
-	const [invitations, setInvitations] = useState<PendingInvitation[]>([]);
-	const [emailConfigured, setEmailConfigured] = useState<boolean | null>(null);
 
 	const load = useCallback(async () => {
 		try {
@@ -65,27 +55,12 @@ export function TeamSection({
 		}
 	}, []);
 
-	const loadInvitations = useCallback(async () => {
-		if (!inviteByEmail) return;
-		try {
-			const body = await setupRequest<{
-				configured: boolean;
-				invitations: PendingInvitation[];
-			}>("/api/setup/invitations");
-			setEmailConfigured(body.configured);
-			setInvitations(body.invitations);
-		} catch {
-			setEmailConfigured(false);
-		}
-	}, [inviteByEmail]);
-
 	useEffect(() => {
-		void load();
-		void loadInvitations();
-	}, [load, loadInvitations]);
+		load();
+	}, [load]);
 
 	async function handleMutated() {
-		await Promise.all([load(), loadInvitations()]);
+		await load();
 		await onChanged();
 	}
 
@@ -97,12 +72,6 @@ export function TeamSection({
 					<Button
 						size="sm"
 						icon={<IconPlus size={16} />}
-						disabled={inviteByEmail && emailConfigured === false}
-						title={
-							inviteByEmail && emailConfigured === false
-								? "Configure email delivery before sending invitations"
-								: undefined
-						}
 						onClick={() => {
 							setEditing(null);
 							setDialogOpen(true);
@@ -114,23 +83,6 @@ export function TeamSection({
 			>
 				{title ?? `Team members${members ? ` · ${members.length}` : ""}`}
 			</SettingsGroupLabel>
-			{inviteByEmail && emailConfigured === false && (
-				<InlineAlert>
-					Email delivery isn&rsquo;t configured on this server. Add the SMTP
-					settings, then restart Open Session.
-				</InlineAlert>
-			)}
-			{invitations.length > 0 && (
-				<SettingCard>
-					{invitations.map((invitation) => (
-						<InvitationRow
-							key={invitation.id}
-							invitation={invitation}
-							onChanged={handleMutated}
-						/>
-					))}
-				</SettingCard>
-			)}
 			{!members && !loadFailed ? (
 				// The card itself is the ghost, so the roster lands in the block it
 				// was already occupying. Rendering the real card around a loading
@@ -162,14 +114,15 @@ export function TeamSection({
 				</SettingCard>
 			)}
 			<SettingsHint>
-				Names, emails, GitHub logins and Slack ids all resolve through the same
-				identity table, so a session user given as any of them matches the member.
+				{githubOnly
+					? "Members sign in with their GitHub account. You can add profile details later in Settings."
+					: "Names, emails, GitHub logins and Slack ids all resolve through the same identity table, so a session user given as any of them matches the member."}
 			</SettingsHint>
-			{inviteByEmail ? (
-				<InviteDialog
+			{githubOnly && !editing ? (
+				<GithubMemberDialog
 					open={dialogOpen}
 					onOpenChange={setDialogOpen}
-					onSent={async () => {
+					onSaved={async () => {
 						setDialogOpen(false);
 						await handleMutated();
 					}}
@@ -187,154 +140,6 @@ export function TeamSection({
 				/>
 			)}
 		</>
-	);
-}
-
-function InvitationRow({
-	invitation,
-	onChanged,
-}: {
-	invitation: PendingInvitation;
-	onChanged: () => void | Promise<void>;
-}) {
-	const [busy, setBusy] = useState<"resend" | "revoke" | null>(null);
-	const expires = new Date(invitation.expiresAt).toLocaleDateString(undefined, {
-		month: "short",
-		day: "numeric",
-	});
-
-	async function update(action: "resend" | "revoke") {
-		setBusy(action);
-		try {
-			await setupRequest(
-				`/api/setup/invitations/${encodeURIComponent(invitation.id)}/${action}`,
-				{ method: "POST" },
-			);
-			toast(action === "resend" ? "Invitation resent" : "Invitation revoked", {
-				variant: "success",
-			});
-			await onChanged();
-		} catch (error: any) {
-			toast(error?.message || `Could not ${action} invitation`, {
-				variant: "error",
-			});
-		} finally {
-			setBusy(null);
-		}
-	}
-
-	return (
-		<SettingRow>
-			<span className="flex size-7 shrink-0 items-center justify-center rounded-md bg-active text-dim">
-				<IconMail size={16} />
-			</span>
-			<SettingRowText>
-				<SettingRowTitle>{invitation.email}</SettingRowTitle>
-				<SettingRowDescription>Invitation pending · expires {expires}</SettingRowDescription>
-			</SettingRowText>
-			<SettingRowControl className="flex items-center gap-1">
-				<Button
-					variant="ghost"
-					size="sm"
-					disabled={busy !== null}
-					onClick={() => void update("resend")}
-				>
-					{busy === "resend" ? "Sending…" : "Resend"}
-				</Button>
-				<Button
-					variant="ghost"
-					size="sm"
-					disabled={busy !== null}
-					onClick={() => void update("revoke")}
-				>
-					Revoke
-				</Button>
-			</SettingRowControl>
-		</SettingRow>
-	);
-}
-
-function InviteDialog({
-	open,
-	onOpenChange,
-	onSent,
-}: {
-	open: boolean;
-	onOpenChange: (open: boolean) => void;
-	onSent: () => void | Promise<void>;
-}) {
-	const [email, setEmail] = useState("");
-	const [sending, setSending] = useState(false);
-	const [error, setError] = useState<string | null>(null);
-	const emailRef = useRef<HTMLInputElement>(null);
-
-	useEffect(() => {
-		if (!open) return;
-		setEmail("");
-		setError(null);
-	}, [open]);
-
-	async function submit(event: React.FormEvent) {
-		event.preventDefault();
-		if (!email.trim() || sending) return;
-		setSending(true);
-		setError(null);
-		try {
-			await setupRequest("/api/setup/invitations", {
-				method: "POST",
-				json: { email: email.trim() },
-			});
-			toast(`Invitation sent to ${email.trim()}`, { variant: "success" });
-			await onSent();
-		} catch (cause: any) {
-			setError(cause?.message || "Could not send invitation");
-		} finally {
-			setSending(false);
-		}
-	}
-
-	return (
-		<Modal.Root
-			open={open}
-			onOpenChange={(next) => {
-				if (!sending) onOpenChange(next);
-			}}
-			disablePointerDismissal={sending}
-		>
-			<Modal.Content initialFocus={emailRef}>
-				<Modal.Header
-					title="Invite person"
-					description="They will receive a link to join this organization with GitHub."
-				/>
-				<form className="flex flex-col gap-3" onSubmit={submit}>
-					<Field label="Email address">
-						<Input
-							ref={emailRef}
-							type="email"
-							value={email}
-							onChange={(event) => setEmail(event.target.value)}
-							placeholder="person@company.com"
-							autoComplete="email"
-							required
-						/>
-					</Field>
-					{error && <InlineAlert>{error}</InlineAlert>}
-					<Modal.Footer>
-						<Button
-							variant="ghost"
-							type="button"
-							disabled={sending}
-							onClick={() => onOpenChange(false)}
-						>
-							Cancel
-						</Button>
-						<Button variant="primary" type="submit" disabled={!email.trim() || sending}>
-							{sending ? "Sending…" : "Send invitation"}
-						</Button>
-					</Modal.Footer>
-				</form>
-			</Modal.Content>
-		</Modal.Root>
 	);
 }
 
@@ -447,6 +252,96 @@ function MemberActions({
 				</Modal.Content>
 			</Modal.Root>
 		</>
+	);
+}
+
+function GithubMemberDialog({
+	open,
+	onOpenChange,
+	onSaved,
+}: {
+	open: boolean;
+	onOpenChange: (open: boolean) => void;
+	onSaved: () => void | Promise<void>;
+}) {
+	const [github, setGithub] = useState("");
+	const [saving, setSaving] = useState(false);
+	const [error, setError] = useState<string | null>(null);
+	const githubRef = useRef<HTMLInputElement>(null);
+
+	useEffect(() => {
+		if (!open) return;
+		setGithub("");
+		setError(null);
+	}, [open]);
+
+	async function submit(event: React.FormEvent) {
+		event.preventDefault();
+		const login = github.trim().replace(/^@+/, "");
+		if (!login || saving) return;
+		if (!/^[a-z\d](?:[a-z\d-]{0,37}[a-z\d])?$/i.test(login)) {
+			setError("Enter a valid GitHub username.");
+			return;
+		}
+		setSaving(true);
+		setError(null);
+		try {
+			await setupRequest("/api/setup/team", {
+				method: "POST",
+				json: { name: login, github: login },
+			});
+			toast(`@${login} added`);
+			await onSaved();
+		} catch (cause: any) {
+			setError(cause?.message || "Could not add member");
+		} finally {
+			setSaving(false);
+		}
+	}
+
+	return (
+		<Modal.Root
+			open={open}
+			onOpenChange={(next) => {
+				if (!saving) onOpenChange(next);
+			}}
+			disablePointerDismissal={saving}
+		>
+			<Modal.Content initialFocus={githubRef}>
+				<Modal.Header
+					title="Add member"
+					description="They can sign in with this GitHub account."
+				/>
+				<form className="flex flex-col gap-3" onSubmit={submit}>
+					<Field label="GitHub username">
+						<Input
+							ref={githubRef}
+							value={github}
+							onChange={(event) => setGithub(event.target.value)}
+							placeholder="monalisa"
+							autoCapitalize="none"
+							autoComplete="off"
+							spellCheck={false}
+							required
+						/>
+					</Field>
+					{error && <InlineAlert>{error}</InlineAlert>}
+					<Modal.Footer>
+						<Button
+							variant="ghost"
+							type="button"
+							disabled={saving}
+							onClick={() => onOpenChange(false)}
+						>
+							Cancel
+						</Button>
+						<Button variant="primary" type="submit" disabled={!github.trim() || saving}>
+							{saving ? "Adding…" : "Add member"}
+						</Button>
+					</Modal.Footer>
+				</form>
+			</Modal.Content>
+		</Modal.Root>
 	);
 }
 
