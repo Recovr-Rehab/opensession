@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef, useCallback } from "react";
 import { AnimatePresence } from "motion/react";
-import { fetchWorktrees, fetchModels, fetchToolAccounts, fetchSandboxStatus, requestSandboxPrewarm, suggestBranch, suggestRepos, type RepoSuggestion, configuredNewSessionRepo, fetchProviderAccounts, fetchRepos, createWorkspaceApi, updateWorkspaceApi, ApiError, type ProviderAccountOption, type ModelOption, type SandboxStatusInfo } from "../lib/api";
+import { fetchWorktrees, fetchModels, fetchToolAccounts, fetchSandboxStatus, requestSandboxPrewarm, suggestBranch, suggestRepos, type RepoSuggestion, configuredNewSessionRepo, fetchProviderAccounts, fetchRepos, cachedRepos, type RepoInfo, createWorkspaceApi, updateWorkspaceApi, ApiError, type ProviderAccountOption, type ModelOption, type SandboxStatusInfo } from "../lib/api";
 import { getCurrentUser } from "./UserPicker";
 import { type FileAttachment } from "../lib/images";
 import {
@@ -471,33 +471,47 @@ export function NewSession({ onBack, inline, focusSeq, send, addHandler, connect
   // a Code session with a repo has. Ask reads one pinned checkout and Scratch
   // has no checkout at all, so neither can carry one.
   const canAddRepos = mode === "code";
-  const [repos, setRepos] = useState<RepoOption[]>([]);
-  const [configuredDefaultRepo, setConfiguredDefaultRepo] = useState("");
+  const repoOptions = (items: RepoInfo[]): RepoOption[] =>
+    items.map((item) => ({
+      id: item.id,
+      label: item.label || item.id,
+      default: item.default,
+      sharedCheckout: item.sharedCheckout,
+    }));
+  // The workspace's configured choice (which may itself be Auto) is what a
+  // user with no preference of their own starts on; the repo flagged
+  // `default` is only the last resort behind it.
+  const resolveDefaultRepo = (options: RepoOption[]): string => {
+    const workspaceChoice = configuredNewSessionRepo();
+    return (
+      (workspaceChoice === AUTO_REPO || options.some((i) => i.id === workspaceChoice)
+        ? workspaceChoice
+        : "") ||
+      options.find((item) => item.default)?.id ||
+      AUTO_REPO
+    );
+  };
+  // Seeded from the repos this browser saw last (lib/repo-cache) so the picker
+  // opens on the real list, and the palette settles on the right default,
+  // without waiting for /repos. The fetch below still runs and corrects both.
+  const [repos, setRepos] = useState<RepoOption[]>(() =>
+    repoOptions(cachedRepos()),
+  );
+  const [configuredDefaultRepo, setConfiguredDefaultRepo] = useState(() => {
+    const seeded = repoOptions(cachedRepos());
+    return seeded.length ? resolveDefaultRepo(seeded) : "";
+  });
   useEffect(() => {
     let live = true;
     fetchRepos().then((items) => {
       if (!live) return;
-      const options: RepoOption[] = items.map((item) => ({
-        id: item.id,
-        label: item.label || item.id,
-        default: item.default,
-        sharedCheckout: item.sharedCheckout,
-      }));
+      const options = repoOptions(items);
       setRepos(options);
-      // The workspace's configured choice (which may itself be Auto) is what a
-      // user with no preference of their own starts on; the repo flagged
-      // `default` is only the last resort behind it.
-      const workspaceChoice = configuredNewSessionRepo();
-      setConfiguredDefaultRepo(
-        (workspaceChoice === AUTO_REPO || options.some((i) => i.id === workspaceChoice)
-          ? workspaceChoice
-          : "") ||
-          options.find((item) => item.default)?.id ||
-          AUTO_REPO,
-      );
+      setConfiguredDefaultRepo(resolveDefaultRepo(options));
     }).catch(() => {
+      // A failed refresh keeps the cached rows rather than emptying the picker.
       if (!live) return;
-      setRepos([]);
+      setRepos((current) => current);
     });
     return () => {
       live = false;

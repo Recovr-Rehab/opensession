@@ -148,6 +148,7 @@ import {
 	updateWorkspaceApi,
 	deleteWorkspaceApi,
 	fetchRepos,
+	cachedRepos,
 	fetchToolAccounts,
 	knownToolAccounts,
 	REPOS_CHANGED_EVENT,
@@ -622,7 +623,12 @@ export function App(
 		remove,
 	} = useSessions({ loadArchived: route.view === "archived" });
 	const [launchComplete, setLaunchComplete] = useState(false);
-	const [registeredRepos, setRegisteredRepos] = useState<string[]>([]);
+	// Seeded from the repos this browser saw last (lib/repo-cache): PR-mention
+	// chips need the registered set to resolve, so without it the first paint of
+	// a transcript renders `opensession#128` as plain text and relinks a beat later.
+	const [registeredRepos, setRegisteredRepos] = useState<string[]>(() =>
+		cachedRepos().map((repo) => repo.id),
+	);
 	const [firstMileIsComplete, setFirstMileIsComplete] =
 		useState(firstMileComplete);
 	const auth = useAuthStatus();
@@ -706,6 +712,8 @@ export function App(
 	// (MarkdownRepoProvider).
 	useEffect(() => {
 		let live = true;
+		const seeded = cachedRepos();
+		if (seeded.length) setKnownRepos(seeded);
 		const loadRepos = () => fetchRepos()
 			.then((repos) => {
 				if (live) {

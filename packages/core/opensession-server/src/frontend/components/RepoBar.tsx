@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from "react";
 import {
+  cachedRepos,
   fetchRepos,
   attachRepoApi,
   detachRepoApi,
@@ -48,7 +49,10 @@ export function RepoBar({
 }: Props) {
   const [attached, setAttached] = useState<AttachedRepo[]>(initialAttached);
   const [primary, setPrimary] = useState(primaryRepo);
-  const [repos, setRepos] = useState<RepoInfo[]>([]);
+  // Opens on the repos this browser saw last (lib/repo-cache) and revalidates
+  // behind them: the registered set barely moves, so waiting for /repos before
+  // drawing a single row spent a request on a menu that was already right.
+  const [repos, setRepos] = useState<RepoInfo[]>(cachedRepos);
   const [open, setOpen] = useState(false);
   const [switchable, setSwitchable] = useState(false); // false only for ask sessions
   const [hasWork, setHasWork] = useState(false); // already has edits/commits → confirm on switch
@@ -76,7 +80,9 @@ export function RepoBar({
   }, [sessionId, primary]);
 
   useEffect(() => {
-    if (open && !repos.length) fetchRepos().then(setRepos).catch(() => {});
+    // Every open, not just the first: a repo added since is exactly what the
+    // cached list is missing, and a failed refresh keeps the rows on screen.
+    if (open) fetchRepos().then(setRepos).catch(() => {});
   }, [open]);
 
   const attachedIds = new Set(attached.map((r) => r.repo));

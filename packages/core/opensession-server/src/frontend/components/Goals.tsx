@@ -12,6 +12,7 @@ import {
   pauseGoalApi,
   fetchModels,
   fetchRepos,
+  cachedRepos,
   relativeTime,
   type ModelOption,
   type RepoInfo,
@@ -567,7 +568,9 @@ function GoalForm({
   const [mission, setMission] = useState(initial?.mission || "");
   const [mode, setMode] = useState<"ask" | "code">(initial?.mode || "ask");
   const [repo, setRepo] = useState(initial?.repo || "");
-  const [repos, setRepos] = useState<RepoInfo[]>([]);
+  // Seeded from the repos this browser saw last (lib/repo-cache), so the repo
+  // picker opens on the real list rather than empty; the fetch below corrects it.
+  const [repos, setRepos] = useState<RepoInfo[]>(cachedRepos);
   const [model, setModel] = useState(initial?.model || "");
   const [fallbackModel, setFallbackModel] = useState(initial?.fallbackModel || "");
   const [mcpServers, setMcpServers] = useState((initial?.mcpServers || []).join(", "));
@@ -583,7 +586,7 @@ function GoalForm({
       .then(([m, repoItems]) => {
         setModels(m.models);
         setDefaultModel(m.default);
-        setRepos(repoItems);
+        if (repoItems.length) setRepos(repoItems);
         setRepo((current) =>
           current ||
           repoItems.find((item) => item.default)?.id ||
