@@ -147,7 +147,16 @@ function isProxyMcpConfig(v: unknown): v is Record<string, unknown> {
  *  run a fresh cache key, so the catalog cache could never hit and each turn
  *  would spawn one stdio child per opensession-* server purely to list tools
  *  (20 of them, sequentially, before the first token). A proxied catalog is a
- *  property of the server NAME, not of this run's token. */
+ *  property of the server NAME, not of this run's token.
+ *
+ *  INVARIANT this relies on: a proxied server's tool LIST does not vary by
+ *  session or user. It doesn't today — the run token scopes what a CALL does
+ *  (dispatchRunRpc resolves it to a session and user, and the builder is
+ *  fail-closed for automation-owned sessions), while which servers a run
+ *  mounts at all is fixed by the spec's proxyMcpServers, and per-session
+ *  servers carry their own distinct names (opensession-goal-self). If a server
+ *  ever returns a different tool list per caller, that distinguishing bit has
+ *  to enter this key, or one caller's catalog shape is served to another. */
 const VOLATILE_PROXY_ENV = [
   "OPENSESSION_RPC_TOKEN",
   "OPENSESSION_RPC_WS_AUTH",
