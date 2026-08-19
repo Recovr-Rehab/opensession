@@ -31,10 +31,10 @@ interface FirstMileStep {
 const STEPS: FirstMileStep[] = [
 	{
 		id: "welcome",
-		label: "Welcome",
-		title: `Your ${PRODUCT_NAME} is ready`,
+		label: "Organization",
+		title: `Welcome to ${PRODUCT_NAME}`,
 		description:
-			"Connect the tools and models your team uses, then start your first session.",
+			"Set up a new organization or continue with one that already exists.",
 	},
 	{
 		id: "connections",
@@ -151,7 +151,10 @@ export function FirstMile({ onDone }: { onDone: () => void }) {
 					</span>
 				</div>
 
-				<nav className="flex items-center gap-2" aria-label="Onboarding progress">
+				<nav
+					className={cn("flex items-center gap-2", index === 0 && "invisible")}
+					aria-label="Onboarding progress"
+				>
 					{STEPS.map((item, itemIndex) => (
 						<button
 							key={item.id}
@@ -171,7 +174,12 @@ export function FirstMile({ onDone }: { onDone: () => void }) {
 					))}
 				</nav>
 
-				<div className="justify-self-end text-meta tabular-nums text-faint">
+				<div
+					className={cn(
+						"justify-self-end text-meta tabular-nums text-faint",
+						index === 0 && "invisible",
+					)}
+				>
 					{index + 1} of {STEPS.length}
 				</div>
 			</header>
@@ -203,26 +211,38 @@ export function FirstMile({ onDone }: { onDone: () => void }) {
 							)}
 						>
 							{step.id === "welcome" ? (
-								<div className="flex max-w-[720px] flex-col items-center text-center">
+								<div className="flex max-w-[560px] flex-col items-center text-center">
 									<img
 										src={`${BASE_PATH}/mac-app-icon.png`}
 										alt=""
-										className="mb-8 size-24 rounded-xl shadow-[0_24px_80px_rgba(0,0,0,0.16)] phone:mb-6 phone:size-20"
+										className="mb-7 size-20 rounded-xl shadow-[0_20px_64px_rgba(0,0,0,0.14)] phone:mb-6 phone:size-16"
 									/>
-									<p className="m-0 mb-3 text-label font-semibold text-faint">
-										Server connected
-									</p>
 									<h1
 										ref={headingRef}
-										className="m-0 text-center text-[clamp(2.4rem,5vw,5rem)] font-title leading-[0.98] tracking-[-0.055em] text-fg outline-none"
+										className="m-0 text-center text-[clamp(1.9rem,3vw,2.75rem)] font-title leading-[1.04] tracking-[-0.04em] text-fg outline-none"
 									>
 										{step.title}
 									</h1>
-									<p className="m-0 mt-6 max-w-[46ch] text-[clamp(1rem,1.5vw,1.25rem)] leading-relaxed text-dim text-pretty phone:mt-5">
+									<p className="m-0 mt-4 max-w-[42ch] text-body leading-relaxed text-dim text-pretty">
 										{step.description}
 									</p>
-									<div className="mt-8 rounded-[999px] bg-panel px-4 py-2 text-label text-dim shadow-sm phone:max-w-full phone:truncate">
-										{status.publicBaseUrl}
+									<div className="mt-8 flex w-full max-w-[300px] flex-col gap-3">
+										<Button
+											variant="primary"
+											size="lg"
+											onClick={() => goTo(1)}
+											className="min-h-11 w-full justify-center"
+										>
+											Create a new organization
+										</Button>
+										<Button
+											variant="soft"
+											size="lg"
+											onClick={onDone}
+											className="min-h-11 w-full justify-center"
+										>
+											Use an existing organization
+										</Button>
 									</div>
 								</div>
 							) : (
@@ -234,7 +254,7 @@ export function FirstMile({ onDone }: { onDone: () => void }) {
 										<h1
 											ref={headingRef}
 											tabIndex={-1}
-											className="m-0 text-[clamp(2rem,4vw,3.5rem)] font-title leading-[1.04] tracking-[-0.045em] text-fg outline-none"
+											className="m-0 text-[clamp(1.6rem,2.5vw,2.25rem)] font-title leading-[1.08] tracking-[-0.035em] text-fg outline-none"
 										>
 											{step.title}
 										</h1>
@@ -292,7 +312,12 @@ export function FirstMile({ onDone }: { onDone: () => void }) {
 				)}
 			</main>
 
-			<footer className="relative z-10 grid grid-cols-[1fr_auto_1fr] items-center bg-[linear-gradient(to_bottom,transparent,var(--bg)_30%)] px-8 pt-3 phone:px-4">
+			<footer
+				className={cn(
+					"relative z-10 grid grid-cols-[1fr_auto_1fr] items-center bg-[linear-gradient(to_bottom,transparent,var(--bg)_30%)] px-8 pt-3 phone:px-4",
+					index === 0 && "invisible",
+				)}
+			>
 				<Button
 					variant="ghost"
 					size="lg"
@@ -326,7 +351,7 @@ export function FirstMile({ onDone }: { onDone: () => void }) {
 					className="justify-self-end"
 				>
 					{index === 0
-						? "Start setup"
+						? "Continue"
 						: index === STEPS.length - 1
 							? `Enter ${PRODUCT_NAME}`
 							: index === STEPS.length - 2
