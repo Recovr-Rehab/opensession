@@ -1,5 +1,5 @@
 /**
- * Model catalog + default model + per-model default engine, sandbox capability/prewarm, system-prompt preview, branch-name suggestion, voice transcription.
+ * Model catalog + default model + per-model default engine, sandbox capability/prewarm, branch-name suggestion, voice transcription.
  *
  * Extracted verbatim from the opensession.ts fetch chain. Every handler
  * returns a Response for a matched route or undefined to fall through to the
@@ -14,10 +14,8 @@ import { piEngineEnabled } from "../pi-config";
 import { type Sandbox } from "../sandbox";
 import { suggestBranchName } from "../suggest-branch";
 import { suggestRepos } from "../suggest-repos";
-import { buildSystemPromptParts } from "../system-prompt";
 import { MAX_AUDIO_BYTES, transcribeAudio } from "../transcribe";
 import { supportsOpenaiFastMode } from "../opencode-openai-auth";
-import { configuredServer } from "../config";
 import { getWorkspace, workspaceModelSettings } from "../workspaces";
 
 /** Engine ids in picker order, with their labels and whether each one can
@@ -168,25 +166,6 @@ export async function handleModelsRoutes(
 			return Response.json({ state: "rate-limited" }, { status: 429 });
 		}
 		return Response.json(await requestPrewarm(provider, repoId, user));
-	}
-
-	// What an interactive session will be told on top of the claude_code
-	// preset — previewed in the New Session modal. Same builder the runner
-	// uses (src/server/system-prompt.ts), so this can't drift from reality.
-	if (path === "/api/system-prompt" && req.method === "GET") {
-		const isAsk = url.searchParams.get("mode") === "ask";
-		return Response.json({
-			preset: "claude_code",
-			settingSources: ["user", "project"],
-			parts: buildSystemPromptParts({
-				isAsk,
-				sessionLink: isAsk
-					? undefined
-					: `${process.env.OPENSESSION_UI_BASE || configuredServer().publicBaseUrl}/session/<this-session>`,
-				user: url.searchParams.get("user") || undefined,
-				interactiveTools: true,
-			}),
-		});
 	}
 
 	// Toggle interactive auto model-switch (manual vs auto) on running out

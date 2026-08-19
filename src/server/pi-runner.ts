@@ -201,7 +201,8 @@ import {
   readLocalInstructions,
 } from "./opencode-policy";
 import { buildRunInstructions } from "./run-instructions";
-import { logStandingContext } from "./context-log";
+import { logInjectedContext, logStandingContext, logStandingJson } from "./context-log";
+import { wrapContext } from "./prompt-context";
 import { bashAskPolicyReply } from "./command-policy";
 import {
   appendOpencodeTranscript,
@@ -1967,6 +1968,36 @@ async function* runPiAttempt(
         : undefined,
     });
 
+    // The resolution of the `tools` scope runOnModel already logged: what
+    // this engine actually put in front of the model. Pi assembles its tool
+    // list in-process rather than declaring it in an engine config, so this
+    // record is the only account of it (opencode's equivalent can be read
+    // back from its config file). Recorded once per session, then again only
+    // when the content hash moves.
+    logStandingJson({
+      sessionId: unifiedSessionId,
+      turnId: opts.promptEntryId || opts.startToken,
+      source: "mcp-servers",
+      value: {
+        engine: "pi",
+        // Same contract as the choke point's: a non-array scope reads as
+        // "all" and must never be spread.
+        mcpScope: Array.isArray(mcpServers)
+          ? [...mcpServers].sort()
+          : (mcpServers ?? "all"),
+        inProcess: Object.keys(opts.inProcessMcp || {}).sort(),
+        // Post-policy catalog: denied ids are dropped before a definition is
+        // ever built (pi-mcp-bridge), so these are the MCP tools the model
+        // can actually reach through the two discovery tools.
+        mcpTools: mcpBridge.tools.map((t) => t.name).sort(),
+        discovery: mcpBridge.discoveryTools.map((t) => t.name).sort(),
+        // Pi's local tools are enabled by name and every name is backed by a
+        // guarded custom definition (see the enabled-name list above).
+        local: [...localTools].sort(),
+        strip: Object.keys(policy.disables).sort(),
+        ...(dialOracleAgent ? { oracleTool: dialOracleAgent } : {}),
+      },
+    });
     logStandingContext({
       sessionId: unifiedSessionId,
       turnId: opts.promptEntryId || opts.startToken,
@@ -2161,10 +2192,25 @@ async function* runPiAttempt(
         { id: crypto.randomUUID(), type: "system", content: notice, timestamp: nowIso() },
       ]);
     }
-    // What the ENGINE receives; journal/store keep the raw prompt.
+    // What the ENGINE receives; journal/store keep the raw prompt. Fenced the
+    // way every other injection is (prompt-context.ts): the fence is what
+    // makes the payload readable to the context log, and it keeps the note
+    // from reading as something the human typed.
     const promptForEngine = resumeMissNote
-      ? `${resumeMissNote}\n\n${prompt}`
+      ? `${wrapContext(resumeMissNote, "handoff")}\n\n${prompt}`
       : prompt;
+    // Injected BELOW runOnModel's choke point, so that call never saw this
+    // payload — log it here, exactly as the opencode runner does for its own
+    // same-engine-restart handoff. Re-logging is free: entry ids are
+    // content-derived, so an overlap upserts one row instead of duplicating.
+    if (promptForEngine !== prompt) {
+      logInjectedContext({
+        sessionId: unifiedSessionId,
+        turnId: opts.promptEntryId || opts.startToken,
+        prompt: promptForEngine,
+        model,
+      });
+    }
 
     // Cumulative usage across the run (assistant messages incl. retries).
     const usageTotal: TurnUsage = {
