@@ -2782,8 +2782,11 @@ export function App(
 	useEffect(() => {
 		if (route.view !== "session" || !currentSession) return;
 		// Remember the open session as its workspace's landing tab, so re-entering
-		// the workspace (sidebar, bare /workspace/<id> URL) returns here.
-		if (activeWorkspaceId) saveWorkspaceLastSession(activeWorkspaceId, route.id);
+		// the workspace (sidebar, bare /workspace/<id> URL) returns here. A worker
+		// session is not a tab (see `viewingWorker`), so it never becomes the
+		// workspace's landing spot — re-entering lands on the session that spawned it.
+		if (activeWorkspaceId && !currentSession.parentSessionId)
+			saveWorkspaceLastSession(activeWorkspaceId, route.id);
 		const canonical =
 			activeWorkspacePane ??
 			((activeWorkspaceId
@@ -2801,6 +2804,16 @@ export function App(
 	// viewing (e.g. opened from Archived), which keeps its tab.
 	const liveTab = (s: UnifiedSession) =>
 		!s.archived || s.id === currentSession?.id;
+	/**
+	 * A worker session (one another session spawned through create_session) is a
+	 * drill-in, not a tab. Tabs are what a person opened; nobody opened this one.
+	 * It used to claim a temporary tab while you were inside it, so the strip grew
+	 * a tab on the way in and lost it on the way out, and what it showed was no
+	 * longer the workspace. While a worker is open the strip stays out of the way
+	 * entirely and the header breadcrumb (repo > session > worker) is what says
+	 * where you are and how to get back up.
+	 */
+	const viewingWorker = !!currentSession?.parentSessionId;
 	// The strip's natural order (createdAt asc), before any user reordering.
 	const naturalSessions: UnifiedSession[] = activeWorkspaceId
 		? sessions
@@ -2808,9 +2821,9 @@ export function App(
 					(s) =>
 						liveTab(s) &&
 						s.workspaceId === activeWorkspaceId &&
-						// Workers stay behind their parent until explicitly opened from the
-						// header's worker menu. The selected worker then gets a temporary tab.
-						(!s.parentSessionId || s.id === currentSession?.id),
+						// Workers never take a tab — they are reached from the header's
+						// worker menu and read as a level below their parent.
+						!s.parentSessionId,
 				)
 				.sort(byCreated)
 		: currentSession?.worktreeDir?.includes("/worktrees/")
@@ -2818,8 +2831,7 @@ export function App(
 					.filter(
 						(s) =>
 							liveTab(s) &&
-							s.worktreeDir === currentSession.worktreeDir &&
-								(!s.parentSessionId || s.id === currentSession?.id),
+							s.worktreeDir === currentSession.worktreeDir && !s.parentSessionId,
 					)
 					.sort(byCreated)
 			: currentSession
@@ -2911,7 +2923,10 @@ export function App(
 	// The split projected onto the tabs that exist right now. Null once either
 	// bar runs out of tabs — that's what collapses the strip back to one bar.
 	const tabSplit = isPhone ? null : resolveSplit(storedTabSplit, stripTabIds);
-	const activeTabSplit = currentSession ? tabSplit : null;
+	// A worker fills the pane on its own: it is not in the strip, so it is not in
+	// either column of a split either. The split is kept, not cleared — going back
+	// up to the parent restores it.
+	const activeTabSplit = currentSession && !viewingWorker ? tabSplit : null;
 	const toStoredSplit = (split: ResolvedSplit): TabSplit => ({
 		right: split.right,
 		leftActive: split.leftActive,
@@ -4150,9 +4165,10 @@ export function App(
 				// when there isn't, so counting them here would leave a lone
 				// session with neither + .
 				tabStripVisible={
-					!!activeTabSplit ||
-					workspaceSessions.length > 1 ||
-					viewTabs.length > 0
+					!viewingWorker &&
+					(!!activeTabSplit ||
+						workspaceSessions.length > 1 ||
+						viewTabs.length > 0)
 				}
 				archivedSessions={archivedSessions}
 				onRestoreSession={restoreSession}
@@ -4808,7 +4824,7 @@ export function App(
 								</span>
 							)}
 						</div>
-						{!activeTabSplit && renderTabBar(null)}
+						{!activeTabSplit && !viewingWorker && renderTabBar(null)}
 						{splitDropSide && (
 							<div
 								className={tabSplitDropPreviewClass(splitDropSide)}

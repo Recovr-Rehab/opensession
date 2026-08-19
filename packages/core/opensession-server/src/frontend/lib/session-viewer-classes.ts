@@ -84,6 +84,17 @@ export const VIEWER_BRANCH =
 	"[-webkit-touch-callout:default] " +
 	"[html.wco_&]:[-webkit-app-region:no-drag] [html.wco_&]:[app-region:no-drag]";
 
+/**
+ * A crumb BEFORE the session's own name: the session a worker was spawned from.
+ * It reads as the level above (dim, like the repo before it) and lights up on
+ * hover because clicking it is the way back up. Narrower than the name it
+ * precedes, since the name is what the bar is about.
+ */
+export const VIEWER_CRUMB_UP =
+	"-mx-2 -my-[5px] max-w-[240px] shrink cursor-pointer rounded-[calc(6px*var(--rf))] px-2 py-[5px] " +
+	"text-label font-medium text-dim transition-colors duration-[var(--dur-micro)] ease-[var(--ease)] " +
+	"hover:bg-hover hover:text-fg";
+
 /** Double-clickable to rename — hinted on hover without shifting the row. */
 export const VIEWER_BRANCH_EDITABLE =
 	"-mx-2 -my-[5px] cursor-text rounded-[calc(6px*var(--rf))] px-2 py-[5px] hover:bg-hover";

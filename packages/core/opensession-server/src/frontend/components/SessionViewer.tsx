@@ -304,6 +304,7 @@ import {
 	VIEWER_BRANCH,
 	VIEWER_BRANCH_EDITABLE,
 	VIEWER_BRANCH_RENAME,
+	VIEWER_CRUMB_UP,
 	VIEWER_DELETE_CONFIRM,
 	VIEWER_HEADER,
 	VIEWER_HEADER_ACTIONS,
@@ -4265,7 +4266,9 @@ export function SessionViewer({
 		if (renameDraft !== null) {
 			// When the header titles the workspace, renaming edits the workspace —
 			// every sibling session picks the new name up. Session titles live on tabs.
-			if (workspaceName && onRenameWorkspace)
+			// A worker's header titles the WORKER (the workspace is the crumb before
+			// it), so the same edit there renames just this session.
+			if (workspaceName && !parentSession && onRenameWorkspace)
 				onRenameWorkspace(renameDraft.trim());
 			else onRename?.(session.id, renameDraft.trim());
 		}
@@ -5315,6 +5318,27 @@ export function SessionViewer({
 								initialAttached={session.attachedRepos || []}
 							/>
 						))}
+					{/* A worker session sits UNDER the session that spawned it, so the
+					    bar reads repo > session > worker and the middle crumb is the way
+					    back up. It replaces the "worker of …" chip that used to trail the
+					    title while a temporary tab said the same thing again in the strip. */}
+					{parentSession && onOpenSession && (
+						<>
+							<button
+								type="button"
+								className={cn(VIEWER_BRANCH, VIEWER_CRUMB_UP)}
+								onClick={() => onOpenSession(parentSession.id)}
+								title={`Back to ${workspaceName || parentSession.title}`}
+							>
+								{workspaceName || parentSession.title}
+							</button>
+							<IconChevronDown
+								size={18}
+								className="-mx-1 shrink-0 -rotate-90 text-faint"
+								aria-hidden="true"
+							/>
+						</>
+					)}
 					{renameDraft !== null ? (
 						<input
 							className={VIEWER_BRANCH_RENAME}
@@ -5333,19 +5357,28 @@ export function SessionViewer({
 						<span
 							className={`${VIEWER_BRANCH} ${onRename ? VIEWER_BRANCH_EDITABLE : ""}`}
 							title={
-								workspaceName
-									? `${session.title} · double-click to rename the workspace`
-									: onRename
-										? "Double-click to rename"
+								parentSession
+									? onRename
+										? `${session.title} · double-click to rename`
 										: session.title
+									: workspaceName
+										? `${session.title} · double-click to rename the workspace`
+										: onRename
+											? "Double-click to rename"
+											: session.title
 							}
 							onDoubleClick={
 								onRename
-									? () => setRenameDraft(workspaceName || session.title)
+									? () =>
+											setRenameDraft(
+												parentSession
+													? session.title
+													: workspaceName || session.title,
+											)
 									: undefined
 							}
 						>
-							{workspaceName || session.title}
+							{parentSession ? session.title : workspaceName || session.title}
 						</span>
 					)}
 					{/* Where the session came FROM, as a quiet mark AFTER the name. It
@@ -5393,9 +5426,10 @@ export function SessionViewer({
 					    container (docker/daytona/e2b). Renders nothing for host sessions
 					    — purely from session fields, no container polling. */}
 					<SandboxBadge sessionId={session.id} sandbox={session.sandbox} runner={session.runner} />
-					{onOpenSession && (parentSession || (workerSessions && workerSessions.length > 0)) && (
+					{/* The parent edge is the crumb before the title; this is the other
+					    direction, the workers this session delegated to. */}
+					{onOpenSession && !!workerSessions?.length && (
 						<SessionRelations
-							parent={parentSession}
 							workers={workerSessions}
 							models={models}
 							onOpen={onOpenSession}
@@ -5437,9 +5471,12 @@ export function SessionViewer({
 							    the other end of the bar, so the 32px square, radius, hover
 							    wash and press scale match by construction rather than by
 							    hand-matching a chip. */}
+							{/* Not on a worker: its header is a level below the workspace, and
+							    a new tab belongs to the session above it. */}
 							{!session.desk &&
 								onNewSession &&
 								!tabStripVisible &&
+								!parentSession &&
 								workspaceSessions?.length === 1 && (
 									<Tooltip
 										label="New tab in this workspace"
