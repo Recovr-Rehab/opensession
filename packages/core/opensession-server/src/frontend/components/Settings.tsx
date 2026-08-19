@@ -448,7 +448,7 @@ function MobileSettings({
 								onClick={() => onShowRoot?.()}
 								aria-label="Back to settings"
 							>
-								<IconChevronLeft size={22} />
+								<IconChevronLeft size={24} />
 							</button>
 						)}
 						{/* The sheet's own title, and the only one on phones: the panel
@@ -463,7 +463,7 @@ function MobileSettings({
 							onClick={dismiss}
 							aria-label="Close settings"
 						>
-							<IconX size={22} />
+							<IconX size={24} />
 						</button>
 					</div>
 
