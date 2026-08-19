@@ -395,7 +395,7 @@ export function DeskConversation({
 					<textarea
 						ref={textareaRef}
 						{...mentions.inputProps}
-						className="h-9 min-h-9 min-w-0 flex-1 resize-none bg-transparent px-2 py-2 text-xs font-medium leading-[18px] text-fg outline-none placeholder:text-dim disabled:cursor-default disabled:opacity-40"
+						className="h-9 min-h-9 min-w-0 flex-1 resize-none border-0 bg-transparent px-2 py-2 text-xs font-medium leading-[18px] text-fg outline-none placeholder:text-dim disabled:cursor-default disabled:opacity-40"
 						rows={1}
 						autoFocus={autoFocus}
 						{...noAutofill}
