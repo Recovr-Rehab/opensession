@@ -3518,10 +3518,11 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 	// ── Inbox mode: the workspace rows as one activity-ranked list ─────────
 	// No repo/status grouping — bands mirror an email inbox instead: Needs
 	// action (blocked on you) → Recent (running or touched today, one
-	// activity-ranked mix) → Yesterday → Earlier → Done (merged). Bands are
-	// exclusive with priority needs-action > done > date, and the ranking follows
-	// lastActivity ("Sort by: Created" deliberately doesn't apply — an inbox
-	// orders by what moved last).
+	// activity-ranked mix) → Yesterday → Earlier. Bands are exclusive with
+	// priority needs-action > date, and the ranking follows lastActivity
+	// ("Sort by: Created" deliberately doesn't apply — an inbox orders by what
+	// moved last). There is deliberately no Done band: a merge does not move a
+	// row anywhere, it stays in its date band and ages out like any other mail.
 	//
 	// "Project and inbox" reuses these bands nested under each repo band, so
 	// `ns` (the repo's key prefix) keeps every copy collapsible on its own,
@@ -3553,13 +3554,8 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 			{ key: "recent", label: "Recent", rows: [], prs: [] },
 			{ key: "yesterday", label: "Yesterday", rows: [], prs: [] },
 			{ key: "earlier", label: "Earlier", rows: [], prs: [] },
-			// Landed work leaves the day bands entirely and settles at the
-			// bottom, the way the status lanes end on Done. A row that merged an
-			// hour ago is finished, not recent, and the inbox is for what still
-			// wants something from you.
-			{ key: "done", label: "Done", rows: [], prs: [] },
 		];
-		const [needsAction, recent, yesterday, earlier, done] = bands;
+		const [needsAction, recent, yesterday, earlier] = bands;
 		for (const r of sorted) {
 			// NaN (no lastActivity) compares false on both → Earlier. A running
 			// row counts as Recent whatever its day — live work is recent by
@@ -3569,7 +3565,6 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 			// agent is blocked on: it is waiting on you, so it bands with them
 			// rather than sinking into whatever day it was last touched.
 			if (r.status === "needsinput" || r.mention) needsAction.rows.push(r);
-			else if (r.status === "merged") done.rows.push(r);
 			else if (r.running || t >= todayMs) recent.rows.push(r);
 			else if (t >= yesterdayMs) yesterday.rows.push(r);
 			else earlier.rows.push(r);
@@ -3635,21 +3630,15 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 				);
 			});
 		if (snoozedRows.length > 0) {
-			// Snoozed sits ahead of Done, the way it does between Backlog and
-			// Done in the status lanes: parked work is still work, and the list
-			// ends on what has shipped.
-			const doneAt = nodes.findIndex((n) => n.key === `${ns}inbox:done`);
-			nodes.splice(
-				doneAt === -1 ? nodes.length : doneAt,
-				0,
-				renderSnoozedGroup(snoozedRows, ns),
-			);
+			// Snoozed closes the list: parked work is still work, but it asked to
+			// wait, so it sits after everything that is live.
+			nodes.push(renderSnoozedGroup(snoozedRows, ns));
 		}
 		return nodes;
 	}
 
 	// "Group by: Project" — one collapsible band per repo, with the inbox's
-	// activity bands (Needs action / Recent / Yesterday / Earlier / Done) nested
+	// activity bands (Needs action / Recent / Yesterday / Earlier) nested
 	// inside each. Scratch workspaces stay in one unlabelled group above them:
 	// they have no project, even when an older workspace record carries a stale
 	// repo. A collapsed band wears a count of the urgent rows it hides. Repos
