@@ -5974,15 +5974,9 @@ export function SessionViewer({
 							{loading ? (
 								<ConversationLoading />
 							) : waitingForWorkspace ? (
-								// Worktree prep in flight — the first message waits in the
+								// Worktree prep in flight. The first message waits in the
 								// queue flap below and sends the moment this clears.
-								<WorkspaceWaiting
-									detail={
-										session.branch
-											? `Creating a worktree for ${session.branch}. Your messages send when it's ready.`
-											: "Creating the worktree. Your messages send when it's ready."
-									}
-								/>
+								<WorkspaceWaiting detail="Your messages send when it's ready." />
 							) : entries.length === 0 && !session.transcriptPath ? (
 								// A fresh session with no run yet is just an empty conversation —
 								// blank canvas, the composer below is the UI. Only a session
