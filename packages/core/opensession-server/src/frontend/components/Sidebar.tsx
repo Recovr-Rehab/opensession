@@ -4314,13 +4314,13 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 				"flex w-full min-h-0 flex-1 flex-col overflow-x-hidden overflow-y-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden",
 				SIDEBAR_DENSITY_VARS,
 				SIDEBAR_NAV_X,
-				// The whole sidebar scrolls as one on phones, so the tool cards (and
-				// the Workspaces header) scroll away with the list instead of staying
+				// The whole sidebar scrolls as one on phones, so the tools (and the
+				// Workspaces header) scroll away with the list instead of staying
 				// pinned above a separately-scrolling list. The top bar floats over
-				// it (.app-header-overlay), so pad the scroll's top by the bar height
-				// — the cards clear the pills at rest and the list scrolls under
-				// them — fade the list into the bar with a mask, and keep the last
-				// section clear of the home indicator.
+				// it (.app-header-overlay), so pad the scroll's top by the bar height.
+				// The tools clear the pills at rest and the list scrolls under them.
+				// Fade the list into the bar with a mask, and keep the last section
+				// clear of the home indicator.
 				isPhone &&
 					"pt-[var(--header-h)] pb-[max(24px,env(safe-area-inset-bottom,0px))] [-webkit-mask-image:linear-gradient(to_bottom,transparent_0,#000_var(--header-h))] [mask-image:linear-gradient(to_bottom,transparent_0,#000_var(--header-h))]",
 			)}
@@ -4362,73 +4362,53 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 						// `--sidebar-nav-x` is the sidebar's own (SIDEBAR_NAV_X); the strip
 						// reads it rather than setting one, so the tools sit on the same
 						// edges as the lists under them.
-						"flex",
-						isPhone
-							? // One horizontally-scrollable line of tap cards (Slack-home
-								// style) rather than a wrapping grid, so all the tools sit on
-								// a single row and the rest peek in from the right edge to
-								// signal the scroll. flex-none so the sidebar's column layout
-								// can't shrink this container down to its padding and clip
-								// the cards; the left edge lines up with the Workspaces
-								// header and the list at 16px. No
-								// `-webkit-overflow-scrolling: touch`: on iOS it promotes the
-								// strip to its own composited layer, which then paints ABOVE
-								// the sidebar's vertical overlay scrollbar — the scrollbar
-								// vanishes "under" the cards as it passes over them. Momentum
-								// scroll is on by default on modern iOS anyway.
-								"flex-none flex-row flex-nowrap gap-2 overflow-x-auto overflow-y-hidden pt-5 pr-3 pb-3 pl-4 [overscroll-behavior-x:contain] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
-							: // The tools are the first thing in the rail now that their
-								// heading is gone, so the top pad is theirs rather than a
-								// correction against a heading's box: it sets the tools off
-								// from the window chrome above them the way the caption used
-								// to. Bottom pad stays the gap to the Workspaces heading.
-								"flex-col gap-0.5 px-[var(--sidebar-nav-x)] pt-2 pb-1.5",
+						//
+						// One vertical list at every width. Phones used to get a
+						// horizontally-scrolling line of Slack-home style tap cards, which
+						// put the tools in a different language from everything under
+						// them: the sidebar is a column of rows, and the cards were a
+						// sideways shelf that kept its own tail off the right edge. A list
+						// reads the same on both clients, shows every tool at once without
+						// a gesture, and takes a quarter of the height per tool.
+						//
+						// The tools are the first thing in the rail now that their heading
+						// is gone, so the top pad is theirs rather than a correction
+						// against a heading's box: it sets the tools off from the chrome
+						// above them the way the caption used to. Bottom pad is the gap to
+						// the Workspaces heading.
+						"flex flex-col gap-0.5 px-[var(--sidebar-nav-x)] pt-2 pb-1.5",
 					)}
 				>
 					{visibleTools.map((tool) => {
 						const rowClass = cn(
-							// Two complete looks, not one look with tweaks — so each
-							// viewport carries its whole set and neither has to out-rank
-							// the other. Phones get a Slack-home style 132px tap card;
-							// desktop gets a compact full-width row.
-							"group flex text-left transition-colors",
-							isPhone &&
-								"relative w-[132px] min-h-[84px] flex-[0_0_auto] flex-col items-start justify-between gap-2.5 rounded-xl bg-panel p-3 text-label leading-[1.25] font-semibold text-fg",
-							// The card owns a real surface (--bg-panel), so its states
-							// ride ON that as layers rather than replacing it — the same
-							// translucent ink the rows use, just stacked over a fill
-							// instead of over the sidebar.
-							isPhone && !tool.active && SIDEBAR_HOVER_LAYER,
-							isPhone &&
-								tool.active &&
-								"border-line-strong bg-[image:linear-gradient(var(--hover-strong),var(--hover-strong))]",
-							!isPhone && "items-center",
-							!isPhone &&
-								// Compact rows use control-label type, with glyphs matching
-								// the sidebar's standard 22px leading rail.
-								// `--sidebar-tool-pad` is 5px for a 32px box: the tools are a
-								// short utility strip above the work lists, and at the session
-								// rows' 36px the four of them took more of the rail than what
-								// they lead to. The glyph and the label's left rail are
-								// untouched, so they still line up with the rows below; only
-								// the air around them is tighter.
-								// Don't take it below 30. At 28 (`py-[3px]`, the pre-ffd11ffc
-								// value) the 22px glyph has 3px of margin and the hover pill
-								// stops reading as a row; the compact density's 4px stops at
-								// 30, level with the rows under it rather than below them.
-								`w-full ${SIDEBAR_RAIL_GAP} rounded-row bg-transparent px-[calc(var(--sidebar-icon-left)-var(--sidebar-nav-x))] py-[var(--sidebar-tool-pad)] text-body font-medium text-dim desktop:text-item-title hover:text-fg`,
-							!isPhone && SIDEBAR_HOVER_LAYER,
-							!isPhone && tool.active && "bg-selected text-fg",
+							// One look at both widths. Only the box changes, and only
+							// because a phone row is pressed rather than read.
+							"group flex items-center text-left transition-colors",
+							// Rows use control-label type, with glyphs matching the
+							// sidebar's standard 22px leading rail.
+							// `--sidebar-tool-pad` is 5px for a 32px box: the tools are a
+							// short utility strip above the work lists, and at the session
+							// rows' 36px the four of them took more of the rail than what
+							// they lead to. The glyph and the label's left rail are
+							// untouched, so they still line up with the rows below; only
+							// the air around them is tighter.
+							// Don't take it below 30. At 28 (`py-[3px]`, the pre-ffd11ffc
+							// value) the 22px glyph has 3px of margin and the hover pill
+							// stops reading as a row; the compact density's 4px stops at
+							// 30, level with the rows under it rather than below them.
+							// Phones override it to the 13px the session rows take
+							// (SIDEBAR_ROW, lib/sidebar-classes.ts) for a 48px box: 32px is
+							// a reading height, not a tap target.
+							`w-full ${SIDEBAR_RAIL_GAP} rounded-row bg-transparent px-[calc(var(--sidebar-icon-left)-var(--sidebar-nav-x))] py-[var(--sidebar-tool-pad)] phone:py-[13px] text-body font-medium text-dim desktop:text-item-title hover:text-fg`,
+							SIDEBAR_HOVER_LAYER,
+							tool.active && "bg-selected text-fg",
 						);
 						const rowBody = (
 							<>
 								<span
 									className={cn(
-										"inline-flex [&_svg]:size-[22px]",
-										isPhone && (tool.active ? "text-fg" : "text-dim"),
-										!isPhone && "text-faint",
-										!isPhone && tool.active && "text-dim",
-										!isPhone && !tool.active && "group-hover:text-dim",
+										"inline-flex text-faint [&_svg]:size-[22px]",
+										tool.active ? "text-dim" : "group-hover:text-dim",
 									)}
 								>
 									{tool.icon}
@@ -4437,17 +4417,8 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 								{!!tool.count && (
 									// `rounded-full`, not `rounded-[999px]`: this pill never
 									// carried a corner-shape, and rounded-full is the one
-									// radius spelling base.css does NOT squircle. On phones
-									// the count sits as a corner badge on the card rather
-									// than inline.
-									<span
-										className={cn(
-											"rounded-full bg-accent px-[7px] py-px text-meta leading-[1.5] font-semibold text-on-accent",
-											isPhone
-												? "absolute top-2.5 right-2.5 ml-0"
-												: "ml-auto",
-										)}
-									>
+									// radius spelling base.css does NOT squircle.
+									<span className="ml-auto rounded-full bg-accent px-[7px] py-px text-meta leading-[1.5] font-semibold text-on-accent">
 										{tool.count}
 									</span>
 								)}
@@ -4524,8 +4495,10 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 						// leaving the row you're on. The pile opens the same lens menu
 						// the Feed page's own chips write, so the row is both a way in
 						// and the shortcut past it. It has to be a sibling of the row,
-						// not a child: a button can't nest one. Phones render the tools
-						// as a card strip, where there's no room.
+						// not a child: a button can't nest one. Desktop only, even now
+						// that phones render the tools as rows with room for it: a pile
+						// laid over the row's right edge competes with the row's own tap
+						// where there is no hover to distinguish them.
 						if (tool.id !== "feed" || isPhone || team.length === 0) return row;
 						return (
 							<div key={tool.id} className="group/team-lens relative">
