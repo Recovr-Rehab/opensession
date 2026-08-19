@@ -1673,17 +1673,18 @@ export function PrPanel({
           </div>
           <div className="flex min-h-10 items-center justify-between gap-4 px-2 text-label text-fg">
             <span className="shrink-0 whitespace-nowrap">File list</span>
-            <OptionSelect
+            <Segmented
               label="File list"
               value={fileListMode}
-              onChange={changeFileListMode}
+              onValueChange={(next) =>
+                changeFileListMode(next as "flat" | "tree" | "hidden")
+              }
               size="sm"
-              options={[
-                { value: "flat", label: "Flat" },
-                { value: "tree", label: "Tree" },
-                { value: "hidden", label: "Hidden" },
-              ]}
-            />
+            >
+              <SegmentedOption value="flat">Flat</SegmentedOption>
+              <SegmentedOption value="tree">Tree</SegmentedOption>
+              <SegmentedOption value="hidden">Hidden</SegmentedOption>
+            </Segmented>
           </div>
           <div className="flex min-h-10 items-center justify-between gap-4 px-2 text-label text-fg">
             <span className="shrink-0 whitespace-nowrap">Order by</span>
