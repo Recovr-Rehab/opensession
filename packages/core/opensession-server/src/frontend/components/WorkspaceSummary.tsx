@@ -857,13 +857,12 @@ function SummaryBody({
 								<button
 									key={file.path}
 									type="button"
-									className={cn(
-										WS_SUMMARY_FRAME,
-										// One picture takes the card. More than one shows two
-										// frames plus a sliver of the next, which is what says
-										// the strip scrolls.
-										shown.length === 1 ? "w-full" : "w-[calc((100%_-_30px)/2)]",
-									)}
+									// One width, however many there are: two frames plus a
+									// sliver of the next is what says the strip scrolls, and a
+									// lone picture blown up to the card reads as a hero in a
+									// list of quiet rows. It also keeps the two strips the same
+									// size when a card shows both.
+									className={cn(WS_SUMMARY_FRAME, "w-[calc((100%_-_30px)/2)]")}
 									onClick={() => go(onOpenAssets)}
 									title={file.path}
 								>
