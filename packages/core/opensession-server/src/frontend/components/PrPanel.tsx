@@ -512,7 +512,7 @@ export function PrPanel({
   const [fileListMode, changeFileListMode] = useStoredCodeSetting(
     "opensession-pr-file-list",
     ["flat", "tree", "hidden"] as const,
-    phoneLayout ? "hidden" : "flat",
+    "hidden",
   );
   const [fileOrder, changeFileOrder] = useStoredCodeSetting(
     "opensession-pr-file-order",
