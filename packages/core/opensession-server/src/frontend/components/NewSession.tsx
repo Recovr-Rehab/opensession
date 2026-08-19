@@ -19,7 +19,6 @@ import {
   NOTHING_STAGING,
   removeDraftFile,
   removeDraftImage,
-  replaceDraftImage,
   sameFiles,
   sameImages,
   subtractStaging,
@@ -1407,10 +1406,6 @@ export function NewSession({ onBack, inline, focusSeq, send, addHandler, connect
           staging={staging}
           onRemoveImage={(i) => {
             removeDraftImage(DRAFT_KEY, i);
-            adoptDraftAttachments();
-          }}
-          onReplaceImage={(i, ref) => {
-            replaceDraftImage(DRAFT_KEY, i, ref);
             adoptDraftAttachments();
           }}
           onRemoveFile={(i) => {

@@ -126,7 +126,12 @@ import {
 	type SlackSent,
 } from "./ShippedChangeComposer";
 import { BrandMark } from "./BrandMark";
-import type { FileAttachment } from "../lib/images";
+import { splitAttachments, type FileAttachment } from "../lib/images";
+import { cropImageRegionFile } from "../lib/image-region-comment";
+import {
+	registerImageRegionCommentHandler,
+	type ImageRegionCommentRequest,
+} from "../lib/image-region-comment-registry";
 import { loadDraft, saveDraft, clearDraft } from "../lib/drafts";
 import {
 	addStaging,
@@ -3631,21 +3636,25 @@ export function SessionViewer({
 	function handleSend(
 		raw: string,
 		opts?: { steer?: boolean },
+		/** A region comment is already a complete message. Its derived crop must
+		 *  not consume or inherit anything waiting in the main composer. */
+		isolatedImages?: string[],
 	): boolean | Promise<boolean> {
 		const sendStartedAt = performance.now();
 		const typed = raw.trim();
-		// Quoted transcript selections lead the message as blockquotes, so the
-		// agent — and the sender's own bubble — carry what was being pointed at.
-		const text = withQuotes(quote ? [quote] : [], typed);
-		const imgs = images;
-		const fls = files;
+		const isolated = isolatedImages !== undefined;
+		// Quoted transcript selections lead a normal composer message. A region
+		// comment carries its own visual context and leaves the draft untouched.
+		const text = isolated ? typed : withQuotes(quote ? [quote] : [], typed);
+		const imgs = isolatedImages ?? images;
+		const fls = isolated ? [] : files;
 		if (!typed && imgs.length === 0 && fls.length === 0) return false;
 
 		// Note mode: post a team note on this session — never a prompt. The
 		// server broadcast echoes it back into `notes` for every viewer, so
 		// nothing is rendered optimistically here. Notes carry the quoted
 		// selection too (as "> " lines, the same shape a prompt sends).
-		if (noteMode) {
+		if (!isolated && noteMode) {
 			if (!typed && imgs.length === 0) return false;
 			return postSessionNoteApi(session.id, text, getCurrentUser(), imgs).then(
 				() => {
@@ -3669,7 +3678,7 @@ export function SessionViewer({
 
 		// Fork mode: branch a brand-new session from the selected message, keeping
 		// the real conversation history. App navigates into it on session_created.
-		if (forkFrom) {
+		if (!isolated && forkFrom) {
 			send({
 				type: "create_session",
 				branch: "",
@@ -3709,7 +3718,7 @@ export function SessionViewer({
 				busyMode: isBusy ? (steerNow ? "steer" : "queue") : undefined,
 				...(imgs.length ? { images: imgs } : {}),
 				...(fls.length ? { files: filePayload } : {}),
-				...(contextSessions.length ? { contextSessions } : {}),
+				...(!isolated && contextSessions.length ? { contextSessions } : {}),
 			});
 		} catch (error) {
 			toast(error instanceof Error ? error.message : "Couldn't save this message for delivery.");
@@ -3758,14 +3767,36 @@ export function SessionViewer({
 		// send is unambiguous intent to watch this turn. Instant, not smooth: the
 		// glue that follows sets scrollTop directly and would fight an animation.
 		scrollToLatest("auto");
-		dropStagingAttachments(draftKey);
-		setImages([]);
-		setFiles([]);
-		setQuote(null);
-		setContextSessions([]);
+		if (!isolated) {
+			dropStagingAttachments(draftKey);
+			setImages([]);
+			setFiles([]);
+			setQuote(null);
+			setContextSessions([]);
+		}
 		measureSessionPerf("send_handler_ms", sendStartedAt);
 		return true;
 	}
+
+	const imageRegionCommentRef = useRef<
+		(request: ImageRegionCommentRequest) => Promise<void>
+	>(async () => {});
+	imageRegionCommentRef.current = async (request) => {
+		if (request.sessionId !== session.id) throw new Error("That session changed");
+		const crop = await cropImageRegionFile(request.src, request.region);
+		const staged = await splitAttachments([crop]);
+		if (staged.images.length === 0) {
+			throw new Error(staged.rejected[0] || "Could not attach the selected image");
+		}
+		const sent = await handleSend(request.text, undefined, staged.images);
+		if (!sent) throw new Error("Could not send this comment");
+	};
+	useEffect(() => {
+		if (noEngine) return;
+		return registerImageRegionCommentHandler(session.id, (request) =>
+			imageRegionCommentRef.current(request),
+		);
+	}, [noEngine, session.id]);
 
 	function queueHasFiles(item: QueueReceipt): boolean {
 		return Array.isArray(item.files) && item.files.length > 0;
@@ -6283,6 +6314,7 @@ export function SessionViewer({
 							)}
 							style={summaryStepStyle}
 							ref={messagesRef}
+							data-lightbox-session-id={session.id}
 							onScroll={handleMessagesScroll}
 							onClick={handleMessagesClick}
 						>

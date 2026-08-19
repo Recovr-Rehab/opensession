@@ -24,12 +24,22 @@ import {
 import { cn } from "../ui/cn";
 import { toast } from "../ui/toast";
 import {
+	imageRegionBetween,
+	type ImageRegion,
+	type ImageRegionPoint,
+} from "../lib/image-region-comment";
+import {
+	canCommentOnImageRegion,
+	submitImageRegionComment,
+} from "../lib/image-region-comment-registry";
+import {
 	IconArrowDown,
 	IconArrowUpRight,
 	IconCheck,
 	IconChevronLeft,
 	IconChevronRight,
 	IconLink,
+	IconMessage,
 	IconX,
 } from "./icons";
 
@@ -65,6 +75,9 @@ export interface LightboxItem {
 	sessionTitle?: string;
 	description?: string;
 	at?: string;
+	/** Session that owns this transcript image. Only these images can send a
+	 *  selected region back into chat. */
+	commentSessionId?: string;
 }
 
 interface LightboxState {
@@ -186,12 +199,30 @@ function supportsHeroTransition(): boolean {
 	);
 }
 
+function commentSessionIdFor(element?: Element | null): string | undefined {
+	return element
+		?.closest<HTMLElement>("[data-lightbox-session-id]")
+		?.dataset.lightboxSessionId;
+}
+
 export function openLightbox(
 	items: (LightboxItem | WorkspaceMediaItem)[],
 	index: number,
 	origin?: Element | null,
 ) {
-	host?.({ items, index, origin: mediaElement(origin) });
+	const source = mediaElement(origin);
+	const commentSessionId = commentSessionIdFor(source);
+	host?.({
+		items: items.map((item) =>
+			item.kind === "image" &&
+			!("commentSessionId" in item && item.commentSessionId) &&
+			commentSessionId
+				? { ...item, commentSessionId }
+				: item,
+		),
+		index,
+		origin: source,
+	});
 }
 
 /** Every piece of session media currently in the DOM, in document order —
@@ -202,9 +233,15 @@ const GALLERY_SELECTOR = "img.md-image, video.md-video, .md-mermaid > svg";
  * markup never says how big it is has nothing to letterbox. */
 function galleryItem(node: Element): LightboxItem | null {
 	if (node.tagName === "IMG" || node.tagName === "VIDEO") {
+		const media = node as HTMLImageElement | HTMLVideoElement;
 		return {
 			kind: node.tagName === "VIDEO" ? "video" : "image",
-			src: (node as HTMLImageElement | HTMLVideoElement).src,
+			src:
+				node.tagName === "IMG"
+					? (media as HTMLImageElement).currentSrc || media.src
+					: media.src,
+			commentSessionId:
+				node.tagName === "IMG" ? commentSessionIdFor(node) : undefined,
 			// Markdown alt text is the only description these carry; captioning the
 			// viewer with it beats a bare counter once you are paging through a
 			// dozen screenshots.
@@ -532,6 +569,9 @@ function ZoomableMedia({
 	onSwipe,
 	enterFrom = 0,
 	viewTransitionName,
+	commentMode = false,
+	selection,
+	onSelection,
 }: {
 	src: string;
 	/** Present for a diagram: draw this markup instead of loading `src`. */
@@ -544,6 +584,10 @@ function ZoomableMedia({
 	 * side; 0 for the first item shown. */
 	enterFrom?: -1 | 0 | 1;
 	viewTransitionName?: string;
+	/** Region-comment mode replaces pan/page gestures with a box selection. */
+	commentMode?: boolean;
+	selection?: ImageRegion | null;
+	onSelection?: (region: ImageRegion) => void;
 }) {
 	const wrapRef = useRef<HTMLDivElement>(null);
 	const imgRef = useRef<HTMLImageElement>(null);
@@ -570,6 +614,18 @@ function ZoomableMedia({
 	const lastTap = useRef<{ at: number; x: number; y: number } | null>(null);
 	const [zoomed, setZoomed] = useState(false);
 	const zoomedRef = useRef(false);
+	const regionGesture = useRef<{
+		pointerId: number;
+		start: ImageRegionPoint;
+		imageRect: DOMRect;
+	} | null>(null);
+	const [draftRegion, setDraftRegion] = useState<ImageRegion | null>(null);
+	const [imageBox, setImageBox] = useState<{
+		left: number;
+		top: number;
+		width: number;
+		height: number;
+	} | null>(null);
 	/** A diagram's box, fitted to the surface. Unlike a photo, a chart has no
 	 * natural pixel size to hold it back — its viewBox is arbitrary units — so
 	 * it fills the room available rather than stopping at 1:1. Sized here in JS
@@ -677,6 +733,75 @@ function ZoomableMedia({
 		layout.current = null;
 	}, [src]);
 
+	// A region is stored against the image, while its outline is painted against
+	// the lightbox wrapper. Keep that projection current when a phone keyboard,
+	// a rotation, or a decoded image changes the fitted box.
+	useLayoutEffect(() => {
+		if (!commentMode || diagram) {
+			setImageBox(null);
+			return;
+		}
+		// Reset before measuring. A transformed getBoundingClientRect would map
+		// the selection against the old zoom level until the next resize.
+		t.current = { s: 1, tx: 0, ty: 0 };
+		const media = mediaEl();
+		if (media) {
+			media.style.transition = "none";
+			media.style.transform = "translate(0px, 0px) scale(1)";
+		}
+		if (zoomedRef.current) {
+			zoomedRef.current = false;
+			setZoomed(false);
+			onZoomChange(false);
+		}
+		const measure = () => {
+			const wrap = wrapRef.current;
+			const image = imgRef.current;
+			if (!wrap || !image || !image.complete) return;
+			const wrapRect = wrap.getBoundingClientRect();
+			const imageRect = image.getBoundingClientRect();
+			const next = {
+				left: imageRect.left - wrapRect.left,
+				top: imageRect.top - wrapRect.top,
+				width: imageRect.width,
+				height: imageRect.height,
+			};
+			setImageBox((current) =>
+				current &&
+				Math.abs(current.left - next.left) < 0.25 &&
+				Math.abs(current.top - next.top) < 0.25 &&
+				Math.abs(current.width - next.width) < 0.25 &&
+				Math.abs(current.height - next.height) < 0.25
+					? current
+					: next,
+			);
+		};
+		measure();
+		const observer = new ResizeObserver(measure);
+		if (wrapRef.current) observer.observe(wrapRef.current);
+		if (imgRef.current) observer.observe(imgRef.current);
+		window.addEventListener("resize", measure);
+		window.visualViewport?.addEventListener("resize", measure);
+		return () => {
+			observer.disconnect();
+			window.removeEventListener("resize", measure);
+			window.visualViewport?.removeEventListener("resize", measure);
+		};
+	}, [commentMode, diagram, src]);
+
+	// Selection needs the fitted, untransformed image. Entering comment mode
+	// returns a zoomed or panned image to fit before the first drag.
+	useEffect(() => {
+		if (!commentMode) {
+			regionGesture.current = null;
+			setDraftRegion(null);
+			return;
+		}
+		pointers.current.clear();
+		gesture.current = null;
+		lastTap.current = null;
+	}, [commentMode, src]);
+
 	/** Keep the scaled image covering the viewport (or centered when smaller).
 	 * Bounds are the full screen, not the letterboxed wrapper — a zoomed photo
 	 * should spread under the floating chrome like a native photo viewer, not
@@ -716,7 +841,37 @@ function ZoomableMedia({
 		apply(animate);
 	}
 
+	function pointInRegionImage(
+		x: number,
+		y: number,
+		rect: DOMRect,
+	): ImageRegionPoint {
+		return {
+			x: Math.min(1, Math.max(0, (x - rect.left) / Math.max(1, rect.width))),
+			y: Math.min(1, Math.max(0, (y - rect.top) / Math.max(1, rect.height))),
+		};
+	}
+
 	function onPointerDown(e: React.PointerEvent) {
+		if (commentMode && !diagram) {
+			const image = imgRef.current;
+			if (!image || e.button !== 0 || !e.isPrimary || regionGesture.current)
+				return;
+			const rect = image.getBoundingClientRect();
+			if (
+				e.clientX < rect.left ||
+				e.clientX > rect.right ||
+				e.clientY < rect.top ||
+				e.clientY > rect.bottom
+			)
+				return;
+			e.preventDefault();
+			wrapRef.current?.setPointerCapture(e.pointerId);
+			const start = pointInRegionImage(e.clientX, e.clientY, rect);
+			regionGesture.current = { pointerId: e.pointerId, start, imageRect: rect };
+			setDraftRegion(imageRegionBetween(start, start));
+			return;
+		}
 		// One measurement per gesture: nothing that happens between here and the
 		// last finger up can move the picture's layout box.
 		layout.current = null;
@@ -758,6 +913,16 @@ function ZoomableMedia({
 	}
 
 	function onPointerMove(e: React.PointerEvent) {
+		const selecting = regionGesture.current;
+		if (selecting?.pointerId === e.pointerId) {
+			const point = pointInRegionImage(
+				e.clientX,
+				e.clientY,
+				selecting.imageRect,
+			);
+			setDraftRegion(imageRegionBetween(selecting.start, point));
+			return;
+		}
 		if (!pointers.current.has(e.pointerId) || !gesture.current) return;
 		pointers.current.set(e.pointerId, { x: e.clientX, y: e.clientY });
 		const g = gesture.current;
@@ -795,7 +960,38 @@ function ZoomableMedia({
 		}
 	}
 
+	function clearRegionGesture(pointerId: number): boolean {
+		if (regionGesture.current?.pointerId !== pointerId) return false;
+		regionGesture.current = null;
+		setDraftRegion(null);
+		return true;
+	}
+
+	function onPointerCancel(e: React.PointerEvent) {
+		if (clearRegionGesture(e.pointerId)) return;
+		onPointerEnd(e);
+	}
+
 	function onPointerEnd(e: React.PointerEvent) {
+		const selecting = regionGesture.current;
+		if (selecting?.pointerId === e.pointerId) {
+			const point = pointInRegionImage(
+				e.clientX,
+				e.clientY,
+				selecting.imageRect,
+			);
+			const region = imageRegionBetween(selecting.start, point);
+			clearRegionGesture(e.pointerId);
+			// Twelve display pixels filters taps and shaky starts without making a
+			// small button impossible to select.
+			if (
+				region.width * selecting.imageRect.width >= 12 &&
+				region.height * selecting.imageRect.height >= 12
+			) {
+				onSelection?.(region);
+			}
+			return;
+		}
 		if (!pointers.current.has(e.pointerId)) return;
 		const p = { x: e.clientX, y: e.clientY };
 		pointers.current.delete(e.pointerId);
@@ -875,16 +1071,28 @@ function ZoomableMedia({
 		return () => wrap.removeEventListener("wheel", onWheel);
 	}, []);
 
+	const shownRegion = draftRegion ?? selection ?? null;
+	const shownRegionBox =
+		shownRegion && imageBox
+			? {
+					left: imageBox.left + shownRegion.x * imageBox.width,
+					top: imageBox.top + shownRegion.y * imageBox.height,
+					width: shownRegion.width * imageBox.width,
+					height: shownRegion.height * imageBox.height,
+				}
+			: null;
+
 	return (
 		<div
 			ref={wrapRef}
-			className={`flex min-h-0 min-w-0 flex-1 touch-none select-none items-center justify-center self-stretch ${
-				zoomed ? "cursor-grab" : "cursor-zoom-in"
+			className={`relative flex min-h-0 min-w-0 flex-1 touch-none select-none items-center justify-center self-stretch ${
+				commentMode ? "cursor-crosshair" : zoomed ? "cursor-grab" : "cursor-zoom-in"
 			}`}
 			onPointerDown={onPointerDown}
 			onPointerMove={onPointerMove}
 			onPointerUp={onPointerEnd}
-			onPointerCancel={onPointerEnd}
+			onPointerCancel={onPointerCancel}
+			onLostPointerCapture={(event) => clearRegionGesture(event.pointerId)}
 		>
 			{diagram ? (
 				<div
@@ -902,28 +1110,37 @@ function ZoomableMedia({
 					dangerouslySetInnerHTML={{ __html: diagram.svg }}
 				/>
 			) : (
-				<img
-					ref={imgRef}
-					src={src}
-					alt=""
-					draggable={false}
-					// object-contain sizes the box from the decoded picture, so the
-					// box before load is not the box after it.
-					onLoad={() => {
-						layout.current = null;
-					}}
-					// The scrim is near-black in both themes, so a dark screenshot
-					// opened full size has no edge of its own and bleeds into it.
-					// A white hairline rather than border-line-strong: this surface
-					// is always dark, like the rest of the lightbox chrome.
-					// The top of the radius scale, because this is the largest
-					// floating surface in the app and a card-sized corner on a
-					// screen-sized photo reads as a crop rather than a shape.
-					// Anything rounder would leave the scale, and it starts
-					// clipping content that sits in a screenshot's own corner.
-					className="min-h-0 min-w-0 max-h-full max-w-full rounded-2xl border border-white/20 object-contain [transform-origin:0_0]"
-					style={{ viewTransitionName }}
-				/>
+				<>
+					<img
+						ref={imgRef}
+						src={src}
+						alt=""
+						draggable={false}
+						// object-contain sizes the box from the decoded picture, so the
+						// box before load is not the box after it.
+						onLoad={() => {
+							layout.current = null;
+						}}
+						// The scrim is near-black in both themes, so a dark screenshot
+						// opened full size has no edge of its own and bleeds into it.
+						// A white hairline rather than border-line-strong: this surface
+						// is always dark, like the rest of the lightbox chrome.
+						// The top of the radius scale, because this is the largest
+						// floating surface in the app and a card-sized corner on a
+						// screen-sized photo reads as a crop rather than a shape.
+						// Anything rounder would leave the scale, and it starts
+						// clipping content that sits in a screenshot's own corner.
+						className="min-h-0 min-w-0 max-h-full max-w-full rounded-2xl border border-white/20 object-contain [transform-origin:0_0]"
+						style={{ viewTransitionName }}
+					/>
+					{commentMode && shownRegionBox && (
+						<div
+							className="pointer-events-none absolute rounded-sm border-2 border-accent bg-[color-mix(in_srgb,var(--accent)_14%,transparent)] shadow-[0_0_0_1px_rgb(255_255_255/0.8),0_4px_20px_rgb(0_0_0/0.28)]"
+							style={shownRegionBox}
+							aria-hidden="true"
+						/>
+					)}
+				</>
 			)}
 		</div>
 	);
@@ -936,7 +1153,7 @@ const MAX_VISIBLE_DOTS = 7;
 // Download / Open: quiet pills in the top action cluster, matching the asset
 // preview's separation between actions above and descriptions below.
 const lightboxAction =
-	"inline-flex shrink-0 cursor-pointer items-center gap-1 rounded-full border-0 bg-transparent px-2 py-1 text-xs text-white/60 no-underline transition-colors hover:bg-white/15 hover:text-white";
+	"inline-flex h-10 shrink-0 cursor-pointer items-center justify-center gap-1 rounded-full border-0 bg-transparent px-2 text-xs text-white/60 no-underline transition-colors hover:bg-white/15 hover:text-white phone:h-11";
 
 const PREVIEW_LABEL: Record<LightboxItem["kind"], string> = {
 	image: "Image preview",
@@ -981,22 +1198,38 @@ function MediaLightbox({
 	// the side it came from — set by the arrows and the keyboard too, not just
 	// by the drag, so every route through the gallery reads the same.
 	const [direction, setDirection] = useState<-1 | 0 | 1>(0);
+	const [commenting, setCommenting] = useState(false);
+	const [selection, setSelection] = useState<ImageRegion | null>(null);
+	const [commentText, setCommentText] = useState("");
+	const [commentError, setCommentError] = useState<string | null>(null);
+	const [sendingComment, setSendingComment] = useState(false);
+	const sendingCommentRef = useRef(false);
 	const dialogRef = useRef<HTMLDivElement>(null);
 	const closeRef = useRef<HTMLButtonElement>(null);
+	const commentInputRef = useRef<HTMLTextAreaElement>(null);
 	const reduceMotion = useReducedMotion();
+	const resetComment = () => {
+		setCommenting(false);
+		setSelection(null);
+		setCommentText("");
+		setCommentError(null);
+	};
 	const prev = () => {
 		setImageZoomed(false);
+		resetComment();
 		setDirection(-1);
 		onIndex((index - 1 + items.length) % items.length);
 	};
 	const next = () => {
 		setImageZoomed(false);
+		resetComment();
 		setDirection(1);
 		onIndex((index + 1) % items.length);
 	};
 	const go = (i: number) => {
 		if (i === index) return;
 		setImageZoomed(false);
+		resetComment();
 		setDirection(i > index ? 1 : -1);
 		onIndex(i);
 	};
@@ -1019,12 +1252,47 @@ function MediaLightbox({
 			if (!nativeShareWasCancelled(error)) toast("Could not share that link");
 		}
 	};
+	const commentable =
+		item.kind === "image" &&
+		canCommentOnImageRegion(item.commentSessionId);
+	const sendRegionComment = async () => {
+		const text = commentText.trim();
+		if (!item.commentSessionId || !selection || !text || sendingCommentRef.current)
+			return;
+		sendingCommentRef.current = true;
+		setSendingComment(true);
+		setCommentError(null);
+		try {
+			await submitImageRegionComment({
+				sessionId: item.commentSessionId,
+				src: item.src,
+				region: selection,
+				text,
+			});
+			onClose(false);
+		} catch (error) {
+			setCommentError(
+				error instanceof Error ? error.message : "Could not send this comment",
+			);
+		} finally {
+			sendingCommentRef.current = false;
+			setSendingComment(false);
+		}
+	};
 
 	useEffect(() => {
 		if (!copiedSrc) return;
 		const t = setTimeout(() => setCopiedSrc(null), 1600);
 		return () => clearTimeout(t);
 	}, [copiedSrc]);
+
+	useEffect(() => {
+		if (!selection) return;
+		const frame = requestAnimationFrame(() =>
+			commentInputRef.current?.focus({ preventScroll: true }),
+		);
+		return () => cancelAnimationFrame(frame);
+	}, [selection]);
 
 	useEffect(() => {
 		const previousFocus = document.activeElement as HTMLElement | null;
@@ -1048,21 +1316,26 @@ function MediaLightbox({
 	// the modal (composer, session viewer shortcuts).
 	useEffect(() => {
 		function onKey(e: KeyboardEvent) {
+			const target = e.target as HTMLElement | null;
+			const editingText = Boolean(
+				target?.matches("input, textarea, [contenteditable='true']"),
+			);
 			if (e.key === "Escape") {
 				e.stopPropagation();
-				requestClose();
-			} else if (e.key === "ArrowLeft" && many) {
+				if (commenting) resetComment();
+				else requestClose();
+			} else if (!editingText && e.key === "ArrowLeft" && many) {
 				e.stopPropagation();
 				e.preventDefault();
 				prev();
-			} else if (e.key === "ArrowRight" && many) {
+			} else if (!editingText && e.key === "ArrowRight" && many) {
 				e.stopPropagation();
 				e.preventDefault();
 				next();
 			} else if (e.key === "Tab") {
 				const focusable = Array.from(
 					dialogRef.current?.querySelectorAll<HTMLElement>(
-						'a[href], button:not([disabled]), video[controls], [tabindex]:not([tabindex="-1"])',
+						'a[href], button:not([disabled]), input:not([disabled]), textarea:not([disabled]), video[controls], [tabindex]:not([tabindex="-1"])',
 					) || [],
 				).filter((element) => element.getClientRects().length > 0);
 				if (focusable.length === 0) {
@@ -1096,7 +1369,7 @@ function MediaLightbox({
 	// spread under it across the whole viewport (z-index applies to flex items
 	// without needing position).
 	const navBtn =
-		"z-10 grid h-10 w-10 shrink-0 place-items-center rounded-full border-0 bg-white/10 p-0 text-white hover:bg-white/20";
+		"z-10 grid h-10 w-10 shrink-0 place-items-center rounded-full border-0 bg-white/10 p-0 text-white hover:bg-white/20 phone:h-11 phone:w-11";
 
 	return (
 		<motion.div
@@ -1115,23 +1388,51 @@ function MediaLightbox({
 			}}
 		>
 			<div className="absolute right-[calc(12px+env(safe-area-inset-right))] top-[calc(12px+env(safe-area-inset-top))] z-10 flex items-center gap-1">
+				{commentable && (
+					<button
+						type="button"
+						className={cn(
+							lightboxAction,
+							commenting && "bg-white/15 text-white",
+						)}
+						onClick={() => {
+							if (commenting) resetComment();
+							else {
+								setCommenting(true);
+								setCommentError(null);
+							}
+						}}
+						aria-pressed={commenting}
+						aria-label={commenting ? "Cancel image comment" : "Comment on image"}
+					>
+						<IconMessage size={14} />
+						Comment
+					</button>
+				)}
 				{nativeShare ? (
-					<button type="button" className={lightboxAction} onClick={saveItem} disabled={saving}>
+					<button
+						type="button"
+						className={cn(lightboxAction, "phone:w-11 phone:px-0")}
+						onClick={saveItem}
+						disabled={saving}
+						aria-label={saving ? "Preparing download" : "Download"}
+					>
 						<IconArrowDown size={14} />
-						{saving ? "Preparing…" : "Download"}
+						<span className="phone:sr-only">{saving ? "Preparing…" : "Download"}</span>
 					</button>
 				) : (
 					<a
 						href={downloadHref(item)}
+						aria-label="Download"
 						download={
 							item.src.startsWith("data:") || item.src.startsWith("blob:")
 								? suggestedName(item)
 								: undefined
 						}
-						className={lightboxAction}
+						className={cn(lightboxAction, "phone:w-11 phone:px-0")}
 					>
 						<IconArrowDown size={14} />
-						Download
+						<span className="phone:sr-only">Download</span>
 					</a>
 				)}
 				{!item.src.startsWith("data:") && (
@@ -1140,30 +1441,37 @@ function MediaLightbox({
 						    ticket, or a message to someone who can reach this instance. */}
 						<button
 							type="button"
+							aria-label={copied ? "Link copied" : "Copy link"}
 							onClick={() =>
 								copyToClipboard(shareableSrc(item), () =>
 									setCopiedSrc(item.src),
 								)
 							}
-							className={lightboxAction}
+							className={cn(lightboxAction, "phone:w-11 phone:px-0")}
 						>
 							{copied ? <IconCheck size={14} /> : <IconLink size={14} />}
-							{copied ? "Copied" : "Copy link"}
+							<span className="phone:sr-only">{copied ? "Copied" : "Copy link"}</span>
 						</button>
 						{nativeShare ? (
-							<button type="button" onClick={openItem} className={lightboxAction}>
+							<button
+								type="button"
+								onClick={openItem}
+								className={cn(lightboxAction, "phone:w-11 phone:px-0")}
+								aria-label="Open or share"
+							>
 								<IconArrowUpRight size={14} />
-								Open or share
+								<span className="phone:sr-only">Open or share</span>
 							</button>
 						) : (
 							<a
 								href={item.src}
 								target="_blank"
 								rel="noopener noreferrer"
-								className={lightboxAction}
+								className={cn(lightboxAction, "phone:w-11 phone:px-0")}
+								aria-label="Open"
 							>
 								<IconArrowUpRight size={14} />
-								Open
+								<span className="phone:sr-only">Open</span>
 							</a>
 						)}
 					</>
@@ -1223,9 +1531,19 @@ function MediaLightbox({
 							diagram={item.diagram}
 							onTapBackdrop={requestClose}
 							onZoomChange={setImageZoomed}
-							onSwipe={many ? (d) => (d === 1 ? next() : prev()) : undefined}
+							onSwipe={
+								many && !commenting
+									? (d) => (d === 1 ? next() : prev())
+									: undefined
+							}
 							enterFrom={direction}
 							viewTransitionName={heroTransitionName}
+							commentMode={commenting}
+							selection={selection}
+							onSelection={(region) => {
+								setSelection(region);
+								setCommentError(null);
+							}}
 						/>
 					) : (
 						<div className="flex min-h-0 min-w-0 flex-1 items-center justify-center self-stretch">
@@ -1255,13 +1573,80 @@ function MediaLightbox({
 				)}
 			</div>
 
+			{commenting && (
+				<form
+					className="z-20 mx-auto flex w-full max-w-[680px] shrink-0 flex-col gap-2 px-4 pb-[calc(12px+env(safe-area-inset-bottom))] pt-2"
+					onSubmit={(event) => {
+						event.preventDefault();
+						void sendRegionComment();
+					}}
+				>
+					<div className="rounded-xl bg-white/12 p-2.5 shadow-lg backdrop-blur-md">
+						{selection ? (
+							<>
+								<textarea
+									ref={commentInputRef}
+									value={commentText}
+									onChange={(event) => setCommentText(event.target.value)}
+									onKeyDown={(event) => {
+										if (
+											event.key === "Enter" &&
+											!event.shiftKey &&
+											!event.nativeEvent.isComposing &&
+											window.matchMedia("(hover: hover) and (pointer: fine)").matches
+										) {
+											event.preventDefault();
+											void sendRegionComment();
+										}
+									}}
+									rows={2}
+									placeholder="What should change here?"
+									className="block max-h-32 min-h-12 w-full resize-none rounded-lg border border-white/20 bg-black/25 px-3 py-2 text-body leading-relaxed text-white outline-none placeholder:text-white/45 focus:border-white/45 phone:text-input-phone"
+									disabled={sendingComment}
+								/>
+								{commentError && (
+									<div className="mt-2 text-label text-red" role="alert">
+										{commentError}
+									</div>
+								)}
+							</>
+						) : (
+							<div className="px-2 py-1.5 text-center text-label font-medium text-white">
+								Drag over the part you mean
+							</div>
+						)}
+						<div className="mt-2 flex items-center justify-end gap-2">
+							<button
+								type="button"
+								className="min-h-10 rounded-control px-3 text-label font-medium text-white/70 hover:bg-white/10 hover:text-white phone:min-h-11"
+								onClick={resetComment}
+								disabled={sendingComment}
+							>
+								Cancel
+							</button>
+							{selection && (
+								<button
+									type="submit"
+									className="min-h-10 rounded-control bg-white px-4 text-label font-semibold text-black transition-transform active:scale-[0.96] disabled:opacity-45 phone:min-h-11"
+									disabled={!commentText.trim() || sendingComment}
+								>
+									{sendingComment ? "Sending…" : "Send"}
+								</button>
+							)}
+						</div>
+					</div>
+				</form>
+			)}
+
 			{/* What you are looking at gets its own line directly under the
 			    picture, in plain white. Actions live above with Close, so a
 			    "Before"/"After" label cannot read as another link. */}
 			<div
 				className={cn(
 					"z-10 flex flex-col items-center gap-1.5 px-4 pb-4 pt-4",
-					!item.walkthroughLabel && !caption && !description && !many && "hidden",
+					(commenting ||
+						(!item.walkthroughLabel && !caption && !description && !many)) &&
+						"hidden",
 				)}
 				onMouseDown={(e) => {
 					if (e.target === e.currentTarget) requestClose();

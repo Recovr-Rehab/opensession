@@ -125,24 +125,6 @@ export function removeDraftImage(key: string, index: number): void {
   saveDraft(key, { images: stored.images.filter((_, i) => i !== index) });
 }
 
-/**
- * Swap one of the key's staged images for another ref, in place.
- *
- * The markup editor uploads the annotated copy and hands back its ref; the
- * tile that was drawn on becomes that picture. It goes through the draft
- * store rather than through component state because that store is what
- * survives a reload and what the other open instance of this composer reads
- * (see adoptDraftAttachments). An annotated screenshot held only in React
- * would vanish on the next draft change.
- */
-export function replaceDraftImage(key: string, index: number, ref: string): void {
-  const stored = loadDraft(key);
-  if (index < 0 || index >= stored.images.length) return;
-  saveDraft(key, {
-    images: stored.images.map((image, i) => (i === index ? ref : image)),
-  });
-}
-
 /** Drop one of the key's staged files. */
 export function removeDraftFile(key: string, index: number): void {
   const stored = loadDraft(key);

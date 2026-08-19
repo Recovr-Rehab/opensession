@@ -15,7 +15,6 @@ function field(overrides: Partial<Parameters<typeof NewSessionPrompt>[0]> = {}) 
 		files: [],
 		staging: { images: 0, files: 0 },
 		onRemoveImage: () => {},
-		onReplaceImage: () => {},
 		onRemoveFile: () => {},
 		onAddAttachments: () => {},
 		sendKey: "enter",
