@@ -239,6 +239,15 @@ export function DeskOverlay({
 	phone,
 	onOpenSession,
 }: DeskOverlayProps) {
+	// Base UI's keepMounted preserves the Desk after its first summon, but it
+	// also mounts hidden content on a cold app load. Gate the body until then so
+	// a person who never opens Desk does not create its session, fetch its model
+	// catalog, or hold a second WebSocket all day.
+	const [opened, setOpened] = useState(open);
+	useEffect(() => {
+		if (open) setOpened(true);
+	}, [open]);
+
 	return (
 		<Modal.Root
 			open={open}
@@ -258,12 +267,14 @@ export function DeskOverlay({
 				}
 				aria-label="Desk"
 			>
-				<DeskBody
-					active={open}
-					phone={phone}
-					onClose={onClose}
-					onOpenSession={onOpenSession}
-				/>
+				{(open || opened) && (
+					<DeskBody
+						active={open}
+						phone={phone}
+						onClose={onClose}
+						onOpenSession={onOpenSession}
+					/>
+				)}
 			</Modal.Content>
 		</Modal.Root>
 	);

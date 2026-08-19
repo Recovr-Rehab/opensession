@@ -24,8 +24,11 @@ const LEGACY_KEY = "backstage-user";
 const CHANGE_EVENT = "opensession-user-changed";
 
 function setStoredUser(val: string) {
+  const changed = getCurrentUser() !== val;
   localStorage.setItem(KEY, val);
-  window.dispatchEvent(new Event(CHANGE_EVENT));
+  // Auth verification commonly confirms the identity already restored from
+  // localStorage. Do not make every per-user store hydrate again in that case.
+  if (changed) window.dispatchEvent(new Event(CHANGE_EVENT));
 }
 
 export function getCurrentUser(): string {

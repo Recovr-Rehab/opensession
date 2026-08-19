@@ -1,11 +1,10 @@
-import { BASE_PATH } from "../lib/base";
 import { useEffect, useRef, useState } from "react";
 import type { WSServerMessage } from "../lib/types";
 import { PRODUCT_NAME } from "../lib/brand";
 import { FloatingStatus } from "../ui/floating-status";
 import { toast } from "../ui/toast";
+import { fetchHealthStatus } from "../lib/health";
 
-const HEALTH_URL = `${BASE_PATH}/api/health`;
 // Grace before showing anything — most socket blips reconnect within this.
 const PILL_DELAY_MS = 2500;
 // A disconnect older than this whose health probe ALSO fails escalates from
@@ -95,8 +94,7 @@ export function RestartOverlay({ connected, addHandler }: Props) {
   // Learn the current instance's bootId up front (also the fallback for
   // servers that don't send the hello frame yet).
   useEffect(() => {
-    fetch(HEALTH_URL, { cache: "no-store" })
-      .then((r) => r.json())
+    fetchHealthStatus()
       .then(handleHealth)
       .catch(() => {});
   }, []);
@@ -138,8 +136,7 @@ export function RestartOverlay({ connected, addHandler }: Props) {
       disconnectedAt.current = null;
       if (phaseRef.current === "reconnecting") {
         setPhase(explicit.current ? "restarting" : "ok");
-        fetch(HEALTH_URL, { cache: "no-store" })
-          .then((r) => r.json())
+        fetchHealthStatus()
           .then(handleHealth)
           .catch(() => {});
       }
@@ -161,8 +158,7 @@ export function RestartOverlay({ connected, addHandler }: Props) {
       const started = disconnectedAt.current ?? Date.now();
       if (Date.now() - started < ESCALATE_AFTER_MS) return;
       try {
-        const r = await fetch(HEALTH_URL, { cache: "no-store" });
-        if (!r.ok) throw new Error(String(r.status));
+        await fetchHealthStatus();
       } catch {
         if (!cancelled) {
           sawDown.current = true;
@@ -188,7 +184,7 @@ export function RestartOverlay({ connected, addHandler }: Props) {
         return;
       }
       try {
-        const d = await fetch(HEALTH_URL, { cache: "no-store" }).then((r) => r.json());
+        const d = await fetchHealthStatus();
         if (!cancelled) handleHealth(d);
       } catch {}
     }, 1500);
@@ -204,7 +200,7 @@ export function RestartOverlay({ connected, addHandler }: Props) {
     let cancelled = false;
     const iv = setInterval(async () => {
       try {
-        await fetch(HEALTH_URL, { cache: "no-store" }).then((r) => r.json());
+        await fetchHealthStatus();
         if (!cancelled) {
           setBackOnline(true);
           setTimeout(() => location.reload(), 700);
