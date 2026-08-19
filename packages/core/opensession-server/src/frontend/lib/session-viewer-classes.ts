@@ -588,8 +588,8 @@ export const INFO_STATUS =
 	// nothing when the session has no pull request to report, and a wrapper with
 	// only a margin left in it is a gap with no row above it.
 	//
-	// `mx-2` + `rounded-lg`, like every plate under it: the page has one edge.
-	"session-info-status mx-2 mb-3 overflow-hidden rounded-lg empty:hidden";
+	// `mx-3` + `rounded-lg`, like every plate under it: the page has one edge.
+	"session-info-status mx-3 mb-3 overflow-hidden rounded-lg empty:hidden";
 
 export const INFO_CONTENT = "min-h-[320px]";
 
@@ -597,7 +597,7 @@ export const INFO_CONTENT = "min-h-[320px]";
  *  by WorkspaceInfo. It gets the page's inset and the same 16px gap the panel
  *  puts between its own sections, and no rule above it: a section is separated
  *  by its plate, never by a hairline. */
-export const INFO_SECTION = "mt-4 px-2";
+export const INFO_SECTION = "mt-4 px-3";
 
 /**
  * The Info panel's section grammar, shared by everything that renders into it
@@ -633,11 +633,17 @@ export const INFO_LIST_CLASS = "grid gap-px overflow-hidden rounded-lg bg-panel 
  * above the page rather than as the page's first plate.
  */
 export const INFO_LIST =
-	"session-info-list mx-2 grid gap-px overflow-hidden rounded-lg bg-panel p-1 " +
+	"session-info-list mx-3 grid gap-px overflow-hidden rounded-lg bg-panel p-1 " +
 	"[&>button]:w-full [&>button]:justify-start [&>button]:gap-2 [&>button]:text-left " +
 	"[&>button]:rounded-control [&>button]:border-0 " +
-	"[&>button]:bg-transparent [&>button]:px-2 [&>button]:py-2 [&>button]:text-label [&>button]:text-fg " +
+	"[&>button]:bg-transparent [&>button]:px-2 [&>button]:py-2.5 [&>button]:text-label [&>button]:text-fg " +
 	"[&>button:hover]:bg-hover";
 
-/** The whole-workspace view embedded below the actions. */
-export const INFO_OVERVIEW = "pt-4 [&_.workspace-info-panel]:pt-0";
+/** The whole-workspace view embedded below the actions.
+ *
+ *  The panel's own `px-2` is the desktop side panel's inset, which pays part of
+ *  it through the `px-1` its mounts wrap it in. The phone page has no such
+ *  wrapper, so it names its own 12px here and every plate on the page lands on
+ *  the same edge as the strip and the repo list above them. */
+export const INFO_OVERVIEW =
+	"pt-4 [&_.workspace-info-panel]:pt-0 [&_.workspace-info-panel]:px-3";

@@ -1594,7 +1594,10 @@ export function WorkspaceInfo({
 				</div>
 			)}
 			{sandbox && (
-				<div className="flex flex-wrap items-center gap-1.5 px-2">
+				// `px-3`, the label inset: the badge is a section's worth of content
+				// with no plate under it, so it lines up with the labels rather than
+				// with the rows inside a plate.
+				<div className="flex flex-wrap items-center gap-1.5 px-3">
 					<SandboxBadge sessionId={sessionId} sandbox={sandbox} />
 				</div>
 			)}
