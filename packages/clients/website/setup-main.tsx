@@ -1,15 +1,15 @@
 import { useEffect, useState } from "react";
 import type { ReactNode } from "react";
 import { createRoot } from "react-dom/client";
-import markUrl from "../os1-mac/build/icon-512.png";
-import nativeMarkUrl from "../os1-ios/OS1/Assets.xcassets/AppIcon.appiconset/AppIcon-1024.png";
+import markUrl from "../mac/build/icon-512.png";
+import nativeMarkUrl from "../ios/OS1/Assets.xcassets/AppIcon.appiconset/AppIcon-1024.png";
 import {
   IconCheck,
   IconChevronLeft,
   IconCopy,
   IconGlobe,
   IconTerminal,
-} from "../src/frontend/components/icons";
+} from "../../core/opensession-server/src/frontend/components/icons";
 import "./site.css";
 import "./setup.css";
 
