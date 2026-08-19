@@ -568,10 +568,17 @@ export const INFO_STATUS =
 	// `empty:hidden` for the same reason as PANEL_PR_PLATE: the strip renders
 	// nothing when the session has no pull request to report, and a wrapper with
 	// only a margin left in it is a gap with no row above it.
-	"session-info-status mx-3 mb-3 overflow-hidden rounded-xl empty:hidden";
+	//
+	// `mx-2` + `rounded-lg`, like every plate under it: the page has one edge.
+	"session-info-status mx-2 mb-3 overflow-hidden rounded-lg empty:hidden";
 
 export const INFO_CONTENT = "min-h-[320px]";
-export const INFO_SECTION = "mt-2 border-t border-line p-3";
+
+/** A section rendered by a component of its own (Agents, Reports) rather than
+ *  by WorkspaceInfo. It gets the page's inset and the same 16px gap the panel
+ *  puts between its own sections, and no rule above it: a section is separated
+ *  by its plate, never by a hairline. */
+export const INFO_SECTION = "mt-4 px-2";
 
 /**
  * The Info panel's section grammar, shared by everything that renders into it
@@ -596,16 +603,22 @@ export const INFO_LABEL_CLASS =
 export const INFO_LIST_CLASS = "grid gap-px overflow-hidden rounded-lg bg-panel p-1";
 
 /**
- * A static, full-width settings list. Its rows come from RepoBar and
- * ModelMenuRow, so their shape is a child variant here rather than a prop two
- * components away — the same relationship the old `> button` rule expressed.
+ * A static, full-width settings list: the repo and the model. Its rows come
+ * from RepoBar and ModelMenuRow, so their shape is a child variant here rather
+ * than a prop two components away — the same relationship the old `> button`
+ * rule expressed.
+ *
+ * It is a plate like every section's (INFO_LIST_CLASS): same margin, same
+ * radius, same padding, no border. It used to run 4px narrower on each side
+ * with a hairline around it, which read as a different kind of thing sitting
+ * above the page rather than as the page's first plate.
  */
 export const INFO_LIST =
-	"session-info-list mx-3 flex flex-col items-stretch gap-1 rounded-xl border border-line bg-panel p-1.5 " +
+	"session-info-list mx-2 grid gap-px overflow-hidden rounded-lg bg-panel p-1 " +
 	"[&>button]:w-full [&>button]:justify-start [&>button]:gap-2 [&>button]:text-left " +
-	"[&>button]:rounded-[calc(6px*var(--rf))] [&>button]:border [&>button]:border-transparent " +
-	"[&>button]:bg-transparent [&>button]:px-2.5 [&>button]:py-2 [&>button]:text-label [&>button]:text-fg " +
+	"[&>button]:rounded-control [&>button]:border-0 " +
+	"[&>button]:bg-transparent [&>button]:px-2 [&>button]:py-2 [&>button]:text-label [&>button]:text-fg " +
 	"[&>button:hover]:bg-hover";
 
 /** The whole-workspace view embedded below the actions. */
-export const INFO_OVERVIEW = "pt-2 [&_.workspace-info-panel]:pt-0";
+export const INFO_OVERVIEW = "pt-4 [&_.workspace-info-panel]:pt-0";
