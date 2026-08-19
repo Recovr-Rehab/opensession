@@ -5,6 +5,7 @@ import markUrl from "../os1-mac/build/icon-512.png";
 import {
 	IconBranches,
 	IconCheck,
+	IconChevronRight,
 	IconClock,
 	IconGlobe,
 	IconPeople,
@@ -205,6 +206,9 @@ function LandingPage() {
 					>
 						Request access
 					</button>
+					<a className="rail-setup-link" href="/setup">
+						Set up your server <IconChevronRight size={16} />
+					</a>
 					<p className="rail-note">
 						Open source and self-hosted.
 						<br />
