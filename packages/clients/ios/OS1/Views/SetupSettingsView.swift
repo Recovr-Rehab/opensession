@@ -192,11 +192,16 @@ struct SetupSettingsView: View {
             Section {
                 ForEach(repos, id: \.id) { repo in
                     let state = lifecycleState(repo.lifecycle)
-                    HStack(spacing: 8) {
-                        RepoTile(name: repo.id, size: 22)
-                        Text(repo.label ?? repo.id)
-                        Spacer(minLength: 8)
-                        StateChip(tone: state.tone, label: state.label)
+                    VStack(alignment: .leading, spacing: 3) {
+                        HStack(spacing: 8) {
+                            RepoTile(name: repo.id, size: 22)
+                            Text(repo.label ?? repo.id)
+                            Spacer(minLength: 8)
+                            StateChip(tone: state.tone, label: state.label)
+                        }
+                        Text(state.detail)
+                            .font(.footnote)
+                            .foregroundStyle(.secondary)
                     }
                     .padding(.vertical, 2)
                 }
@@ -259,19 +264,36 @@ enum SetupTone {
     }
 }
 
-/// `start.sh` (or an instance `previewCommand`) is the load-bearing half.
-/// Without it the Preview button has nothing to run. `setup.sh` alone still
-/// provisions worktrees, but nothing boots. The chip label is all a row
-/// shows: the section footer explains the mechanism once.
+/// `start.sh` (or an instance `previewCommand`) is the load-bearing half —
+/// without it the Preview button has nothing to run. `setup.sh` alone still
+/// provisions worktrees, but nothing boots.
 private func lifecycleState(
     _ lifecycle: OS1API.SetupStatus.Lifecycle?
-) -> (tone: SetupTone, label: String) {
+) -> (tone: SetupTone, label: String, detail: String) {
+    let dir = lifecycle?.dir ?? ".opensession"
     let setup = lifecycle?.setup ?? false
     let start = lifecycle?.start ?? false
-    if start { return (.on, setup ? "Ready" : "Boots previews") }
-    if lifecycle?.previewCommand ?? false { return (.on, "Instance preview") }
-    if setup { return (.warn, "Setup only") }
-    return (.off, "No previews")
+    if start {
+        return (
+            .on, setup ? "Ready" : "Boots",
+            setup
+                ? "Provisions worktrees and boots previews."
+                : "Boots previews. Add \(dir)/setup.sh to provision worktrees."
+        )
+    }
+    if lifecycle?.previewCommand ?? false {
+        return (
+            .on, "Instance command",
+            "Boots from instance config. Commit \(dir)/start.sh instead."
+        )
+    }
+    if setup {
+        return (
+            .warn, "Setup only",
+            "Provisions worktrees. Add \(dir)/start.sh for previews."
+        )
+    }
+    return (.off, "None", "No \(dir)/ scripts, so no previews.")
 }
 
 /// The web's `StateChip`: a tone dot and its word, sized to sit at the end of

@@ -3788,6 +3788,14 @@ export function SessionViewer({
 		promptOutbox.discard(item.clientId);
 	}
 
+	/** What removing a queued row means, said in its own terms: a person's
+	 *  message is deleted, routed traffic is dismissed. */
+	function queueDeleteLabel(isReview: boolean, isWorker: boolean): string {
+		if (isReview) return "Dismiss review feedback";
+		if (isWorker) return "Dismiss worker report";
+		return "Delete queued message";
+	}
+
 	function renderQueueContent(
 		item: QueueReceipt,
 		classified: TranscriptEntry,
@@ -3911,10 +3919,19 @@ export function SessionViewer({
 	const hasLiveConversation =
 		pendingBubbles.length > 0 || liveTurnStore.hasText() || isBusy || !!ask;
 	const shownQueued = queued;
-	const queuedReviewCount = shownQueued.filter(
-		(item) =>
-			classifyQueuedContent(item.content, item.user).notice?.kind ===
-			"review-handoff",
+	// Classified once, read by both the counts and the rows, so the chip's
+	// tally and what each row renders as can't disagree.
+	const queuedClassified = shownQueued.map((item) =>
+		classifyQueuedContent(item.content, item.user),
+	);
+	const queuedReviewCount = queuedClassified.filter(
+		(c) => c.notice?.kind === "review-handoff",
+	).length;
+	// A worker's report to this session is one agent handing work back to
+	// another, not something a person sent. Counting it as a queued message
+	// made the chip claim the human had written something they never did.
+	const queuedWorkerCount = queuedClassified.filter(
+		(c) => c.notice?.kind === "worker-report",
 	).length;
 
 	const queueCount =
@@ -3924,7 +3941,8 @@ export function SessionViewer({
 	// read as "my message didn't go through" (three times, 2026-07-19).
 	const queuedMessageCount =
 		shownQueued.length -
-		queuedReviewCount +
+		queuedReviewCount -
+		queuedWorkerCount +
 		pendingQueue.length +
 		durableOutbox.length;
 	const queueTitle = waitingForWorkspace
@@ -3935,6 +3953,9 @@ export function SessionViewer({
 					: null,
 				queuedReviewCount
 					? `${queuedReviewCount} PR ${queuedReviewCount === 1 ? "review" : "reviews"} waiting`
+					: null,
+				queuedWorkerCount
+					? `${queuedWorkerCount} worker ${queuedWorkerCount === 1 ? "report" : "reports"} waiting`
 					: null,
 				visibleSteered.length
 					? `${visibleSteered.length} steered into the current turn`
@@ -4009,20 +4030,24 @@ export function SessionViewer({
 					className={composerQueueList}
 				>
 				{shownQueued.map((q, i) => {
-					const c = classifyQueuedContent(q.content, q.user);
+					const c = queuedClassified[i];
 					const isGitHub = isGitHubAttribution(q.user);
 					const isReview = c.notice?.kind === "review-handoff";
+					// Agent-to-agent traffic: it drives the next turn like a message,
+					// but nobody typed it, so it gets none of the composer gestures.
+					const isWorker = c.notice?.kind === "worker-report";
 					const id = q.id;
 					const key = id || `queued-${i}`;
 					const canSteer =
 						!isGitHub && !queueHasFiles(q) && !q.contextSessions?.length;
 					const canEdit =
 						!isGitHub &&
+						!isWorker &&
 						q.editable === true &&
 						personKey(q.user || "") === personKey(currentUser);
 					// A one-item queue has nothing to reorder — leave drag off so the
 					// lone message still selects/clicks normally.
-					const canReorder = shownQueued.length > 1 && !isGitHub;
+					const canReorder = shownQueued.length > 1 && !isGitHub && !isWorker;
 					return (
 						<Reorder.Item
 							as="div"
@@ -4052,10 +4077,10 @@ export function SessionViewer({
 											</button>
 										</Tooltip>
 								) : null}
-								<Tooltip label={isReview ? "Dismiss review feedback" : "Delete queued message"}>
+								<Tooltip label={queueDeleteLabel(isReview, isWorker)}>
 									<button
 										type="button"
-										aria-label={isReview ? "Dismiss review feedback" : "Delete queued message"}
+										aria-label={queueDeleteLabel(isReview, isWorker)}
 										className={cn(
 											composerQueueAction,
 											composerQueueActionDanger,

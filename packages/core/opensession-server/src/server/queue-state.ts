@@ -20,6 +20,7 @@ import { setAppendHook } from "./transcript-store";
 import type { TranscriptEntry } from "./types";
 import { broadcastToSession } from "./ws-hub";
 import { AUTO_CONTINUE_USER } from "./auto-continue";
+import { isWorkerActor } from "./session-actors";
 import { userMatchesAny } from "./shared/user-mappings";
 
 const g = globalThis as any;
@@ -66,12 +67,25 @@ export function isGitHubQueueItem(item?: QueueItem): boolean {
 	return item?.user === "GitHub" || item?.user === "GitHub (automation)";
 }
 
+/** A worker session's report to its parent, waiting for the parent's turn to
+ * end. It rides the same queue as human sends because it drives the parent's
+ * next turn, but nobody typed it: it is one agent handing work back to
+ * another. Treating it as a composer message gave it an Edit button and
+ * counted it in "N messages queued", which is what made reports read as
+ * something the human had said. Keyed on the `worker <id>` sender minted by
+ * workerActor — the same signal send_to_session uses to deliver a report
+ * verbatim instead of wrapping it as a notice. */
+export function isWorkerQueueItem(item?: QueueItem): boolean {
+	return isWorkerActor(item?.user);
+}
+
 /** Only ordinary composer messages can be moved back into a draft. Routed
  * items carry queue-only metadata that a composer send cannot reconstruct. */
 export function isEditableQueueItem(item?: QueueItem): boolean {
 	return !!item &&
 		!!item.user &&
 		!isGitHubQueueItem(item) &&
+		!isWorkerQueueItem(item) &&
 		item.user !== AUTO_CONTINUE_USER &&
 		!item.contextSessions?.length &&
 		!item.slackReplyTo &&

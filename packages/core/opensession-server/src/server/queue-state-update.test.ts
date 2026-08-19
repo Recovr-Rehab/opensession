@@ -1,11 +1,15 @@
 import { beforeEach, describe, expect, test } from "bun:test";
+import { classifyEntry } from "@tellahq/opensession-protocol/notices";
 import {
 	acknowledgePromptDispatch,
 	beginPromptDispatch,
+	isEditableQueueItem,
+	isWorkerQueueItem,
 	promptDispatches,
 	promptQueues,
 	takeQueuedPrompt,
 } from "./queue-state";
+import { agentActor, workerActor } from "./session-actors";
 
 const SESSION = "os-queue-state-update-test";
 const PNG = "data:image/png;base64,iVBORw0KGgo=";
@@ -65,5 +69,45 @@ describe("takeQueuedPrompt", () => {
 		]);
 		expect(takeQueuedPrompt(SESSION, "q1", "Kent", false)).toBeUndefined();
 		expect(takeQueuedPrompt(SESSION, "q2", "Kent", false)).toBeUndefined();
+	});
+});
+
+describe("worker reports are not user messages", () => {
+	const WORKER = "os-019fe194-5fbe-7000-a81e-d0a656ad77f4";
+
+	test("a worker's report to its parent is queue-owned, not editable", () => {
+		// It rides the same queue as human sends because it drives the parent's
+		// next turn, but nobody typed it — so it gets none of the composer's
+		// gestures, and no teammate can pull it back into their draft.
+		const report = { id: "w1", content: "Done.", user: workerActor(WORKER) };
+		expect(isWorkerQueueItem(report)).toBe(true);
+		expect(isEditableQueueItem(report)).toBe(false);
+	});
+
+	test("a person's message stays editable", () => {
+		const mine = { id: "q1", content: "ship it", user: "Kent" };
+		expect(isWorkerQueueItem(mine)).toBe(false);
+		expect(isEditableQueueItem(mine)).toBe(true);
+	});
+
+	test("a non-worker agent message is not mistaken for a worker report", () => {
+		// agentActor and workerActor are not interchangeable: only a worker's
+		// report to its own parent is delivered verbatim.
+		expect(isWorkerQueueItem({ content: "ping", user: agentActor(WORKER) })).toBe(false);
+		expect(isWorkerQueueItem({ content: "worker looks stuck", user: "Kent" })).toBe(false);
+	});
+
+	test("the sender the queue keeps still classifies as a worker report", () => {
+		// The queue stores content and user separately; the UI reads them back
+		// through the same classifier the transcript uses, so the two cannot
+		// disagree about what a row is.
+		const classified = classifyEntry({
+			id: "",
+			type: "user",
+			content: `[${workerActor(WORKER)}] <!--os:worker-report-->\nDone.`,
+			timestamp: "",
+		});
+		expect(classified.notice?.kind).toBe("worker-report");
+		expect(classified.sender).toBeUndefined();
 	});
 });
