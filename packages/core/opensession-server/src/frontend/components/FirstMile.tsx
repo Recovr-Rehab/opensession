@@ -88,7 +88,9 @@ export function FirstMile({ onDone }: { onDone: () => void }) {
 	const { status, failed, refetch } = setup;
 	const [index, setIndex] = useState(0);
 	const [direction, setDirection] = useState(1);
+	const [footerSeparated, setFooterSeparated] = useState(false);
 	const headingRef = useRef<HTMLHeadingElement>(null);
+	const mainRef = useRef<HTMLElement>(null);
 	const reducedMotion = useReducedMotion();
 	const step = STEPS[index]!;
 
@@ -102,6 +104,26 @@ export function FirstMile({ onDone }: { onDone: () => void }) {
 	useEffect(() => {
 		if (index > 0) headingRef.current?.focus({ preventScroll: true });
 	}, [index]);
+
+	useEffect(() => {
+		const main = mainRef.current;
+		if (!main) return;
+		const update = () => {
+			const remaining = main.scrollHeight - main.scrollTop - main.clientHeight;
+			setFooterSeparated(remaining > 1);
+		};
+		update();
+		main.addEventListener("scroll", update, { passive: true });
+		const resize = new ResizeObserver(update);
+		resize.observe(main);
+		const mutation = new MutationObserver(update);
+		mutation.observe(main, { childList: true, subtree: true });
+		return () => {
+			main.removeEventListener("scroll", update);
+			resize.disconnect();
+			mutation.disconnect();
+		};
+	}, [index, status]);
 
 	function goTo(next: number) {
 		const nextIndex = Math.min(Math.max(next, 0), STEPS.length - 1);
@@ -159,17 +181,23 @@ export function FirstMile({ onDone }: { onDone: () => void }) {
 					))}
 				</nav>
 
-				<div
-					className={cn(
-						"justify-self-end text-meta tabular-nums text-faint",
-						index === 0 && "invisible",
-					)}
-				>
-					{index + 1} of {STEPS.length}
-				</div>
+				{index > 0 && index < STEPS.length - 1 ? (
+					<button
+						type="button"
+						onClick={() => goTo(index + 1)}
+						className="focus-ring min-h-9 justify-self-end rounded-control px-3 text-label font-medium text-dim hover:bg-hover hover:text-fg"
+					>
+						Skip
+					</button>
+				) : (
+					<div />
+				)}
 			</header>
 
-			<main className="relative z-10 min-h-0 overflow-y-auto px-6 [scrollbar-width:thin] phone:px-4">
+			<main
+				ref={mainRef}
+				className="relative z-10 min-h-0 overflow-y-auto px-6 [scrollbar-width:thin] phone:px-4"
+			>
 				{!status ? (
 					<div className="flex h-full items-center justify-center">
 						<LoadingState>
@@ -295,7 +323,10 @@ export function FirstMile({ onDone }: { onDone: () => void }) {
 
 			<footer
 				className={cn(
-					"relative z-10 grid grid-cols-[1fr_auto_1fr] items-center bg-[linear-gradient(to_bottom,transparent,var(--bg)_30%)] px-8 pt-3 phone:px-4",
+					"relative z-10 grid grid-cols-[1fr_auto_1fr] items-center border-t px-8 pt-3 transition-[border-color,background-color] phone:px-4",
+					footerSeparated
+						? "border-line bg-bg/95 backdrop-blur-xl"
+						: "border-transparent bg-[linear-gradient(to_bottom,transparent,var(--bg)_30%)]",
 					index === 0 && "invisible",
 				)}
 			>
@@ -309,17 +340,7 @@ export function FirstMile({ onDone }: { onDone: () => void }) {
 					Back
 				</Button>
 
-				{index > 0 && index < STEPS.length - 1 ? (
-					<button
-						type="button"
-						onClick={() => goTo(index + 1)}
-						className="focus-ring min-h-11 rounded-control px-3 text-label font-medium text-dim hover:text-fg phone:invisible"
-					>
-						Do this later
-					</button>
-				) : (
-					<span />
-				)}
+				<span />
 
 				<Button
 					variant="primary"
