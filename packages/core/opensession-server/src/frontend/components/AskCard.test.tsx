@@ -88,7 +88,7 @@ test("a lone question's header rides the status row instead of stacking", () => 
 	expect(html).not.toContain('role="progressbar"');
 });
 
-test("several questions step one at a time, with progress on the status row", () => {
+test("several questions step one at a time, with page dots on the action bar", () => {
 	const html = renderToStaticMarkup(
 		<AskCard
 			questions={[
@@ -103,8 +103,21 @@ test("several questions step one at a time, with progress on the status row", ()
 	// row (which now carries the position instead).
 	expect(html).toContain("repo tile");
 	expect(html).toContain("sort order");
-	expect(html).toMatch(/needs input<\/span>(?!.*repo tile.*aria-valuetext)/s);
+	// The status row is the label and nothing else: with several questions no
+	// header rides it, and the position moved down to the action bar.
+	expect(html).toMatch(/needs input<\/span><\/div>/);
+
+	// Position is page dots down on the action bar, one per question, with the
+	// count still spoken by the primitive's own progressbar role.
 	expect(html).toContain('aria-valuetext="Question 1 of 2"');
+	const progress = html.match(/<div[^>]*role="progressbar"[^>]*>(.*?)<\/div>/s);
+	expect(progress).toBeTruthy();
+	expect(progress?.[1].match(/<span/g) ?? []).toHaveLength(2);
+	// The dots are the only thing in it: the "Question 1 of 2" sentence the
+	// primitive passes as children must not paint beside them.
+	expect(progress?.[1]).not.toContain("Question 1 of 2");
+	// It sits before the actions, not up in the header.
+	expect(html).toMatch(/role="progressbar"[\s\S]*<button/);
 
 	// Only the first question is live; the second is hidden and inert.
 	const fieldsets = html.match(/<fieldset[^>]*>/g) ?? [];

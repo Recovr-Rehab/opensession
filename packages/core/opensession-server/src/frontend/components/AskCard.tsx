@@ -207,15 +207,6 @@ export function AskCard({ questions, onAnswer }: Props) {
 						<span className="text-label font-semibold text-faint">{lone.header}</span>
 					</>
 				)}
-				{/* Several questions step one at a time, so the row says where you are. */}
-				{questions.length > 1 && (
-					<>
-						<span aria-hidden="true" className="text-label text-faint">
-							·
-						</span>
-						<Questionnaire.Progress className="text-label font-semibold text-faint" />
-					</>
-				)}
 			</div>
 
 			{questions.map((q, i) => (
@@ -354,6 +345,45 @@ export function AskCard({ questions, onAnswer }: Props) {
 			    item does. Without this, every single-question ask (almost all of
 			    them) wears a dead Previous and Next. */}
 			<div className="flex items-center justify-end gap-2">
+				{/* Where you are in a stepped ask, as page dots on the action bar:
+				    beside the button you press to move, rather than up on the status
+				    row where it read as one more label in the header. `mr-auto` parks
+				    them left without making the row justify-between, so a lone
+				    question's actions stay right-aligned with nothing to balance.
+
+				    The dots are the visual half only: the primitive's own
+				    `role="progressbar"` and `aria-valuetext` ("Question 1 of 2") ride
+				    along in `props`, so a screen reader still hears the count that the
+				    dots show. Count and position come from the primitive's state, not
+				    from indexing `questions` here, so they cannot drift from the item
+				    it is actually stepping through. */}
+				{questions.length > 1 && (
+					<Questionnaire.Progress
+						render={(props, state) => (
+							<div {...props} className="mr-auto flex items-center gap-1.5 pl-1">
+								{Array.from({ length: state.total }, (_, i) => (
+									<span
+										key={i}
+										aria-hidden="true"
+										className={cn(
+											"h-1.5 w-1.5 rounded-full transition-[background-color]",
+											// Two states, the way page dots work: here, and not
+											// here. Marking answered ones a third way would put
+											// three greys in a 6px dot, which nobody can read.
+											//
+											// 30% rather than the 20% a resting dot would take:
+											// the dots exist to say HOW MANY questions there are,
+											// so an unreachable inactive dot leaves you looking at
+											// one dot and none the wiser. Measured on the card's
+											// own surface, 20% resolved to #c9c9c9 on #f6f6f6.
+											i + 1 === state.current ? "bg-fg" : "bg-fg/30",
+										)}
+									/>
+								))}
+							</div>
+						)}
+					/>
+				)}
 				<Questionnaire.Previous
 					render={<Button variant="ghost" size="lg" className={HIDE_WHEN_INERT} />}
 				>
