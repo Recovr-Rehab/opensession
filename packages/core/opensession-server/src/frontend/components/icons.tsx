@@ -383,6 +383,14 @@ export function IconPlus(p: IconProps) {
   );
 }
 
+export function IconMinus(p: IconProps) {
+  return (
+    <Svg {...p}>
+      <path {...stroke} d="M19.25 12H4.75" />
+    </Svg>
+  );
+}
+
 /* Repo glyph for the session-header breadcrumb: a 2×2 grid of tiles. */
 export function IconRepo(p: IconProps) {
   return (

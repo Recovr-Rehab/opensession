@@ -4,7 +4,7 @@ import { getCurrentUser } from "./UserPicker";
 import { DeskConversation } from "./DeskConversation";
 import { DESK_SUGGESTIONS } from "../lib/desk-suggestions";
 import { Modal } from "../ui/modal";
-import { IconChevronDown, IconDesk, IconExpand } from "./icons";
+import { IconDesk, IconExpand, IconMinus } from "./icons";
 import { Button } from "../ui/button";
 import {
 	DeskVoiceClient,
@@ -183,7 +183,7 @@ function DeskBody({
 					variant="ghost"
 					size="sm"
 					className="shrink-0 text-faint"
-					icon={<IconChevronDown size={20} />}
+					icon={<IconMinus size={20} />}
 					onClick={onClose}
 					title="Minimise Desk"
 					aria-label="Minimise Desk"
@@ -253,8 +253,8 @@ export function DeskOverlay({
 				widthClassName="w-[min(650px,100%)]"
 				className={
 					phone
-						? "h-[min(600px,85dvh)] data-[starting-style]:scale-[0.9]!"
-						: "h-[600px] max-h-[80dvh] data-[starting-style]:scale-[0.9]!"
+						? "h-[min(600px,85dvh)] transition-[scale,translate,opacity]! data-[starting-style]:scale-[0.9]!"
+						: "h-[600px] max-h-[80dvh] transition-[scale,translate,opacity]! data-[starting-style]:scale-[0.9]!"
 				}
 				aria-label="Desk"
 			>
