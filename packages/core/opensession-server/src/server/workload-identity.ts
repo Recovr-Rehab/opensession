@@ -276,6 +276,7 @@ async function discovery(): Promise<Response> {
     issuer,
     jwks_uri: `${issuer}/jwks.json`,
     token_endpoint: `${issuer}/token`,
+    claims_supported: ["aud", "exp", "iat", "iss", "sub"],
     id_token_signing_alg_values_supported: ["RS256"],
     response_types_supported: ["id_token"],
     subject_types_supported: ["public"],
