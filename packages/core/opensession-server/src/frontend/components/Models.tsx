@@ -1,20 +1,7 @@
 import { BASE_PATH } from "../lib/base";
 import { useEffect, useState } from "react";
-import { BrandMark } from "./BrandTile";
 import { shortModelLabel, splitModelOptions } from "./ModelEffortSelect";
-import { fetchEngines, setModelEngineDefault } from "../lib/api/engines";
-import {
-	engineModelId,
-	modelEngineKey,
-	type EngineId,
-	type EngineOption,
-} from "../lib/model-engine";
 import { Select } from "../ui/select";
-import { Button } from "../ui/button";
-import { cn } from "../ui/cn";
-import { Menu } from "../ui/menu";
-import { IconChevronRight, IconPlus } from "./icons";
-import { EmptyState, InlineAlert } from "../ui/state";
 import {
 	SettingCard,
 	SettingRow,
@@ -26,7 +13,6 @@ import {
 	SettingsHint,
 } from "../ui/settings";
 import { Switch } from "../ui/switch";
-import { toast } from "../ui/toast";
 
 // Settings → Models: which model a run starts on and which engine carries it.
 // The subscription accounts those runs draw from, and how full they are, moved
@@ -42,9 +28,8 @@ interface ModelInfo {
 	efforts: string[];
 }
 
-/** The model half of Settings → Models: what new runs start on, and the
- * engines available to carry them. Renders as groups, not a page: Settings'
- * ModelsPanel owns the header. */
+/** The model half of Settings → Models: what new runs start on. Renders as
+ * groups, not a page: Settings' ModelsPanel owns the header. */
 export function ModelDefaultsSection() {
 	return (
 		<>
@@ -57,8 +42,6 @@ export function ModelDefaultsSection() {
 				Applies to new runs immediately, with no restart. A model picked for one session still
 				wins over the default.
 			</SettingsHint>
-
-			<EnginesSection />
 		</>
 	);
 }
@@ -236,99 +219,5 @@ function AutoFallbackRow() {
 			</SettingRowControl>
 		</SettingRow>
 	);
-}
-
-// ── Engines ────────────────────────────────────────────────────────────────
-
-interface PiEngineConfig {
-	enabled: boolean;
-	pickerModels?: string[];
-}
-
-/**
- * Engine switches: Pi, plus which engine
- * new sessions default to. Models and presets are shared by both engines.
- */
-function EnginesSection() {
-  const [pi, setPi] = useState<PiEngineConfig | null>(null);
-  const [saving, setSaving] = useState(false);
-  const [testing, setTesting] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-
-  useEffect(() => {
-    fetch(`${BASE_PATH}/api/settings/pi-engine`)
-      .then((response) => (response.ok ? response.json() : null))
-      .then((body) => body && setPi(body))
-      .catch(() => {});
-  }, []);
-
-  async function togglePi(enabled: boolean) {
-    if (saving || !pi) return;
-    setSaving(true);
-    setError(null);
-    const previous = pi;
-    setPi({ ...pi, enabled });
-    try {
-      const response = await fetch(`${BASE_PATH}/api/settings/pi-engine`, {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ enabled }),
-      });
-      const body = await response.json();
-      if (!response.ok) throw new Error(body.error || `Failed: ${response.status}`);
-      setPi(body);
-    } catch (caught: any) {
-      setPi(previous);
-      setError(caught.message);
-      toast(caught.message, { variant: "error" });
-    }
-    setSaving(false);
-  }
-
-  async function handleTestPi() {
-    if (testing) return;
-    setTesting(true);
-    try {
-      const response = await fetch(`${BASE_PATH}/api/admin/pi-smoke`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({}),
-      });
-      const body = await response.json();
-      if (body.ok) toast(body.text || "Pi turn completed", { variant: "success" });
-      else toast(body.reason || body.error || "Pi smoke turn failed", { variant: "error" });
-    } catch (caught: any) {
-      toast(caught.message || "Pi smoke turn failed", { variant: "error" });
-    }
-    setTesting(false);
-  }
-
-  return (
-    <>
-      <SettingsGroupLabel>Engine</SettingsGroupLabel>
-      {error && <InlineAlert className="mb-2" onDismiss={() => setError(null)}>{error}</InlineAlert>}
-      <SettingCard>
-        <SettingRow>
-          <SettingRowText>
-            <SettingRowTitle>Pi engine</SettingRowTitle>
-            <SettingRowDescription>
-              Runs every model and preset using the configured account pools and provider keys.
-            </SettingRowDescription>
-          </SettingRowText>
-          <SettingRowControl className="flex items-center gap-2.5">
-            <Button size="sm" onClick={handleTestPi} disabled={testing || !pi?.enabled}>
-              {testing ? "Running…" : "Test"}
-            </Button>
-            <Switch
-              checked={pi?.enabled ?? false}
-              aria-label="Enable the Pi engine"
-              disabled={!pi || saving}
-              onCheckedChange={togglePi}
-            />
-          </SettingRowControl>
-        </SettingRow>
-      </SettingCard>
-    </>
-  );
 }
 
