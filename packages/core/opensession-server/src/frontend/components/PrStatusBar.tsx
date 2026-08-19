@@ -187,9 +187,8 @@ function deriveHeadline(
 	return { key: "clean", label: "Up to date", tone: "muted" };
 }
 
-/** The summary card's headline glyph, one per state the strip can report. The
- *  card is a list of rows and every other row opens with a mark, so the
- *  headline needs one too rather than starting on bare text. */
+/** The summary card's headline glyph for states where an icon adds meaning.
+ *  Ready stands on its green band and label without repeating the signal. */
 function headlineGlyph(key: PrHeadline["key"]): React.ReactNode {
 	switch (key) {
 		case "merged":
@@ -210,6 +209,8 @@ function headlineGlyph(key: PrHeadline["key"]): React.ReactNode {
 		case "draft":
 		case "stack-blocked":
 			return <IconPullRequest size={20} />;
+		case "ready":
+			return null;
 		default:
 			return <IconCheck size={20} />;
 	}
@@ -1102,9 +1103,11 @@ export function PrStatusBar({
 					    a globe beside the state glyph needs no label to be read. Renders
 					    nothing when the PR has no preview, and the row closes up. */}
 					{children}
-					<span className={cn(WS_SUMMARY_RAIL, PR_STATE_TEXT[headlineTone])}>
-						{headlineGlyph(headline.key)}
-					</span>
+					{headline.key !== "ready" && (
+						<span className={cn(WS_SUMMARY_RAIL, PR_STATE_TEXT[headlineTone])}>
+							{headlineGlyph(headline.key)}
+						</span>
+					)}
 				{/* When checks are the reason for the headline, the headline IS the
 				    checks control, exactly as on the strip: hovering lists them,
 				    clicking opens Review's Checks tab. */}
