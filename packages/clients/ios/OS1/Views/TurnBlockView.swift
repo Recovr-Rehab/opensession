@@ -48,7 +48,7 @@ struct TurnBlockView: View {
                         worktreeDir: worktreeDir,
                         isLive: turn.isLive,
                         showsTools: true,
-                        expandsToolRuns: activity.expandsToolRuns,
+                        rendersToolCallsInPlace: activity.rendersToolCallsInPlace,
                         expansionState: expansionState
                     )
 
@@ -369,7 +369,11 @@ struct TurnStepsView: View {
     /// False under the "Fold tool calls" preference with the fold shut: the
     /// narration keeps reading as transcript while the tool runs stay away.
     var showsTools = true
-    var expandsToolRuns = false
+    /// The "Tool calls · Open" preference. It renders every call in place
+    /// instead of behind a grouped row. It does NOT open the calls
+    /// themselves: a tool's own body (a diff, a command's output, raw JSON)
+    /// stays behind its row's disclosure, the way the web reads.
+    var rendersToolCallsInPlace = false
     let expansionState: (String, Bool) -> TurnFoldState
 
     private enum TurnSection: Identifiable {
@@ -396,12 +400,24 @@ struct TurnStepsView: View {
                         .padding(.trailing, 16)
                 case .tools(let calls, let kind):
                     if showsTools {
-                        if case .edits = kind, calls.count > 1 {
+                        if rendersToolCallsInPlace {
+                            // Nothing left to disclose: a grouped row and its
+                            // indent would only wrap rows already on screen.
+                            // Each call still owns its own body.
+                            ForEach(calls) { item in
+                                ToolCallRow(
+                                    item: item,
+                                    sessionId: sessionId,
+                                    worktreeDir: worktreeDir,
+                                    state: expansionState(item.id, item.hasFeaturedMedia)
+                                )
+                            }
+                        } else if case .edits = kind, calls.count > 1 {
                             EditRunView(
                                 items: calls,
                                 sessionId: sessionId,
                                 worktreeDir: worktreeDir,
-                                state: expansionState("edits-\(calls[0].id)", expandsToolRuns),
+                                state: expansionState("edits-\(calls[0].id)", false),
                                 isLive: isLive,
                                 expansionState: expansionState
                             )
@@ -410,10 +426,9 @@ struct TurnStepsView: View {
                                 items: calls,
                                 sessionId: sessionId,
                                 worktreeDir: worktreeDir,
-                                state: expansionState("run-\(calls[0].id)", expandsToolRuns),
+                                state: expansionState("run-\(calls[0].id)", false),
                                 isLive: isLive,
                                 isCompact: kind == .compact,
-                                expandsToolRuns: expandsToolRuns,
                                 expansionState: expansionState
                             )
                         }
@@ -494,7 +509,6 @@ private struct ToolRunView: View {
     let state: TurnFoldState
     let isLive: Bool
     let isCompact: Bool
-    let expandsToolRuns: Bool
     let expansionState: (String, Bool) -> TurnFoldState
 
     var body: some View {
@@ -568,7 +582,7 @@ private struct ToolRunView: View {
                 item: item,
                 sessionId: sessionId,
                 worktreeDir: worktreeDir,
-                state: expansionState(item.id, expandsToolRuns || item.hasFeaturedMedia)
+                state: expansionState(item.id, item.hasFeaturedMedia)
             )
         }
     }
