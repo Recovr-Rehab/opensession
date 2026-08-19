@@ -276,8 +276,9 @@ export function AskCard({ questions, onAnswer }: Props) {
 									    the label beside it, so their cap-heights meet, and flush
 									    left in its column rather than centred in it, so the three
 									    letters share an edge with each other and with the text in
-									    the free-text row below. */}
-									<Questionnaire.ChoiceShortcut className="w-3.5 shrink-0 text-label leading-5 text-faint" />
+									    the free-text row below. Pulling only its trailing margin
+									    keeps the answer close without tightening the indicator. */}
+									<Questionnaire.ChoiceShortcut className="-mr-2 w-3.5 shrink-0 text-label leading-5 text-faint" />
 									<Questionnaire.ChoiceLabel className="min-w-0 flex-1">
 										<span className="block text-control-label font-semibold leading-5 text-fg">
 											{opt.label}
