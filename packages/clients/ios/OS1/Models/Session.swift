@@ -257,10 +257,40 @@ struct Session: Identifiable, Decodable, Equatable, Hashable {
         formatter.formatOptions = [.withInternetDateTime]
         return formatter
     }()
+    private static let isoCache = ISODateCache()
 
+    /// Date parsing used to run from computed properties inside SwiftUI view
+    /// bodies. A scene update could ask hundreds of transcript rows for the
+    /// same timestamps again and spend the watchdog's whole allowance in ICU.
+    /// Cache by the immutable wire value so every timestamp pays that cost at
+    /// most once for the process.
     static func parseISO(_ string: String?) -> Date? {
         guard let string else { return nil }
-        return isoFractional.date(from: string) ?? isoPlain.date(from: string)
+        if let cached = isoCache.value(for: string) { return cached }
+        guard let parsed = isoFractional.date(from: string) ?? isoPlain.date(from: string) else {
+            return nil
+        }
+        isoCache.insert(parsed, for: string)
+        return parsed
+    }
+
+    private final class ISODateCache: @unchecked Sendable {
+        private let lock = NSLock()
+        private var values: [String: Date] = [:]
+        private let limit = 20_000
+
+        func value(for key: String) -> Date? {
+            lock.lock()
+            defer { lock.unlock() }
+            return values[key]
+        }
+
+        func insert(_ value: Date, for key: String) {
+            lock.lock()
+            defer { lock.unlock() }
+            if values.count >= limit { values.removeAll(keepingCapacity: true) }
+            values[key] = value
+        }
     }
 }
 

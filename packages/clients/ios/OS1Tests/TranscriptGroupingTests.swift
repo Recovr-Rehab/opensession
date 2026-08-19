@@ -1098,6 +1098,24 @@ final class ToolPresentationTests: XCTestCase {
         XCTAssertEqual(TranscriptFormat.duration(3_900), "1h 5m")
     }
 
+    func testToolDurationIsPreparedBeforeTheRowRenders() {
+        let use = TranscriptEntry(
+            id: "use", type: "tool_use", timestamp: "2026-08-19T12:00:00Z"
+        )
+        let result = TranscriptEntry(
+            id: "result", type: "tool_result", timestamp: "2026-08-19T12:00:02Z"
+        )
+        let item = ToolCallItem(
+            id: "tool-use",
+            use: use,
+            result: result,
+            isLive: false,
+            presentation: ToolPresentation.make(toolName: "Bash", input: nil)
+        )
+
+        XCTAssertEqual(item.durationLabel, "2s")
+    }
+
     func testEditedFilesSummaryCountsTheRest() {
         let files = ["a.ts", "b.ts", "c.ts", "d.ts"].map {
             TouchedFile(path: "src/\($0)", additions: 1, deletions: 0)

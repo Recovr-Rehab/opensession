@@ -178,16 +178,27 @@ struct ToolCallItem: Identifiable, Equatable {
     /// reloaded transcript can hold old uses with no persisted result.
     var isLive: Bool
     var presentation: ToolPresentation
+    /// Prepared with the transcript blocks, not from `ToolCallRow.body`. The
+    /// latter runs during scene updates and must stay free of date parsing.
+    let durationLabel: String?
 
-    var isError: Bool { use?.isError == true || result?.isError == true }
-    var isPending: Bool { result == nil && use != nil }
-
-    /// How long the call took, for the row's trailing meta. Under a second and
-    /// a half it says nothing worth a slot on the row — the same floor the web
-    /// viewer applies before it prints one.
-    var durationLabel: String? {
-        guard let start = use?.timestampDate, let end = result?.timestampDate else {
-            return nil
+    init(
+        id: String,
+        use: TranscriptEntry?,
+        result: TranscriptEntry?,
+        isLive: Bool,
+        presentation: ToolPresentation
+    ) {
+        self.id = id
+        self.use = use
+        self.result = result
+        self.isLive = isLive
+        self.presentation = presentation
+        if let start = use?.timestampDate, let end = result?.timestampDate {
+            let elapsed = end.timeIntervalSince(start)
+            durationLabel = elapsed >= 1.5 ? TranscriptFormat.duration(elapsed) : nil
+        } else {
+            durationLabel = nil
         }
         let elapsed = end.timeIntervalSince(start)
         guard elapsed >= 1.5 else { return nil }
