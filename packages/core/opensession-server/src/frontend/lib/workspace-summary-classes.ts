@@ -40,12 +40,17 @@ export const WS_SUMMARY_CARD =
  * the way the sidebar heads its own. It shares the rows' 16px content rail and
  * their 31px pitch, so it does not sit tighter than the list it heads.
  *
+ * It opens its band with the gap a hairline used to hold. A label in bold ink
+ * over a run of quiet rows already reads as the start of something, so the
+ * line under it was drawing a boundary the type had drawn first, and the card
+ * says elsewhere that nothing in it carries a rule.
+ *
  * The band above it has no label. It holds the state of the work itself, which
  * is what the card IS, and a heading over it could only repeat the card's own
  * name back at you.
  */
 export const WS_SUMMARY_SECTION =
-	"flex h-[31px] shrink-0 items-center px-4 text-label font-semibold text-dim";
+	"mt-2 flex h-[31px] shrink-0 items-center px-4 text-label font-semibold text-dim";
 
 /**
  * A row. 31px tall on a 300px card, which is the proportion a dense list needs
@@ -141,10 +146,6 @@ export const WS_SUMMARY_ACTION =
  *  one that means something is running gets `text-yellow`, exactly as the
  *  panel's own bottom bar reads them. */
 export const WS_SUMMARY_COUNT = "shrink-0 text-meta tabular-nums";
-
-/** Hairline between two bands. Inset to the rows' own gutter, so it divides
- *  the list rather than cutting the card. */
-export const WS_SUMMARY_DIVIDER = "mx-4 my-2 h-px shrink-0 bg-line";
 
 /** The PR row's trailing state word ("Draft", "Merged", "Changes requested").
  *  Tone comes from the caller; this is only the shape. */

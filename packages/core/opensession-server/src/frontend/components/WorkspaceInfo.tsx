@@ -1688,17 +1688,18 @@ export function WorkspaceInfo({
 					)}
 					{media.length > 0 && (
 						<div className={INFO_SECTION_CLASS}>
-							{/* Not "screenshots": the strip has always shown recordings
-							    too. Naming the source instead is what separates this
-							    section from the assets below it: one is what appeared in
-							    the conversation, the other is what the session wrote. */}
+							{/* The strip shows recordings too, but screenshots are what
+							    people call the set, so that is the word to head it with.
+							    What separates this section from the assets below it is
+							    still the source: one is what appeared in the conversation,
+							    the other is what the session wrote. */}
 							<div
 								className={cn(
 									INFO_LABEL_CLASS,
 									"flex items-center justify-between gap-2",
 								)}
 							>
-								<span>Conversation</span>
+								<span>Screenshots</span>
 								<span className="tabular-nums">{media.length}</span>
 							</div>
 							<MediaStrip

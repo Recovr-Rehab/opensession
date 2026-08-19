@@ -874,8 +874,10 @@ struct WorktreeInfoView: View {
     private var conversationSection: some View {
         let media = conversationMedia
         if !media.isEmpty {
+            // The strip carries recordings too, but screenshots are what people
+            // call the set. Same word the web card and panel head it with.
             InfoSection(
-                title: "Conversation",
+                title: "Screenshots",
                 trailing: AnyView(
                     Text(verbatim: "\(media.count)")
                         .font(.caption.weight(.semibold).monospacedDigit())

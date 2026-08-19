@@ -41,7 +41,6 @@ import {
 	WS_SUMMARY_ACTION,
 	WS_SUMMARY_CARD,
 	WS_SUMMARY_COUNT,
-	WS_SUMMARY_DIVIDER,
 	WS_SUMMARY_ICON,
 	WS_SUMMARY_LABEL,
 	WS_SUMMARY_RAIL,
@@ -803,7 +802,6 @@ function SummaryBody({
 
 			{(changedFiles > 0 || dirty > 0) && (
 				<>
-					<div className={WS_SUMMARY_DIVIDER} />
 					<div className={WS_SUMMARY_SECTION}>Changes</div>
 					{changedFiles > 0 && (
 						<button
@@ -844,7 +842,6 @@ function SummaryBody({
 
 			{assets.length > 0 && (
 				<>
-					<div className={WS_SUMMARY_DIVIDER} />
 					<div
 						className={cn(
 							WS_SUMMARY_SECTION,
