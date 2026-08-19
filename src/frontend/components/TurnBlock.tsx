@@ -172,9 +172,11 @@ export const TurnBlock = React.memo(function TurnBlock({
         // Baseline, not centre: this row mixes its 14px title with 13px meta
         // runs, and centring aligns boxes rather than text. The chevron carries
         // no baseline of its own, so it keeps centring individually.
-        // The 8px overhang gives the icon-aligned chevron breathing room; the
-        // compensating padding keeps every child at its previous coordinate.
-        className="-mx-2 flex w-[calc(100%+16px)] min-w-0 cursor-pointer items-baseline gap-2 rounded-control border-0 bg-transparent px-3 py-1 text-left font-sans text-item-title leading-5 text-dim transition-colors hover:bg-hover/40 hover:text-fg"
+        // The 8px overhang gives the icon-aligned chevron breathing room. Its
+        // asymmetric padding moves the disclosure line into that overhang so
+        // the open rail sits near the transcript edge instead of floating
+        // inside the work column.
+        className="-mx-2 flex w-[calc(100%+16px)] min-w-0 cursor-pointer items-baseline gap-2 rounded-control border-0 bg-transparent py-1 pl-1 pr-3 text-left font-sans text-item-title leading-5 text-dim transition-colors hover:bg-hover/40 hover:text-fg"
       >
         <span
           className={cn(
@@ -218,13 +220,25 @@ export const TurnBlock = React.memo(function TurnBlock({
             // rail beside it, so where the work ends and the answer begins
             // stays legible however long the fold runs (a divider only marks
             // the seam; the rail says "still inside the work" from any
-            // scroll position). The 13px puts the hairline under the
-            // chevron's center. "messages" inline notes keep reading as
-            // plain transcript, so they take no rail until the fold is
-            // explicitly opened.
-            expanded && "mb-2 ml-[13px] border-l border-line pl-2.5"
+            // scroll position). The 5px puts the hairline under the chevron's
+            // center after the disclosure line's 8px left shift. "messages"
+            // inline notes keep reading as plain transcript, so they take no
+            // rail until the fold is explicitly opened.
+            expanded &&
+              "relative mb-2 ml-[5px] border-l border-line pl-2.5"
           )}
         >
+          {expanded && (
+            <button
+              type="button"
+              aria-label={`Collapse ${live ? "Working" : "Worked"}`}
+              onClick={() => {
+                userToggledRef.current = true;
+                setExpanded(false);
+              }}
+              className="absolute inset-y-0 -left-2 w-4 cursor-pointer border-0 bg-transparent p-0 after:absolute after:inset-y-0 after:left-1/2 after:border-l after:border-transparent after:transition-colors hover:after:border-line-strong focus-visible:after:border-line-strong"
+            />
+          )}
           {sections.map((sec) =>
             sec.kind === "msg" ? (
               <TurnMessage

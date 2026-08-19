@@ -6847,7 +6847,7 @@ function BusyInline({
 		<div
 			className={cn(
 				msgRow,
-				"mt-0.5 flex-row items-center gap-2 px-1 py-1.25 text-dim",
+				"-ml-2 mt-0.5 flex-row items-center gap-2 px-1 py-1.25 text-dim",
 			)}
 		>
 			<span className="grid size-5 shrink-0 place-items-center">
