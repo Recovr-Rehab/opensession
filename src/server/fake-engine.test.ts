@@ -139,22 +139,37 @@ describe("fake engine through runAgent", () => {
 		expect(fake.calls[1].firstJournaledAt).toBe(fake.calls[0].firstJournaledAt);
 	});
 
-	test("Pi exhaustion stays on Pi and never enters the OpenCode fallback walk", async () => {
-		const fake = makeFakeEngine([{ kind: "usage_exhausted", engineSessionId: "pi_partial" }]);
+	test("Pi exhaustion stays on Pi while continuing through the model fallback walk", async () => {
+		const fake = makeFakeEngine([
+			{ kind: "usage_exhausted", engineSessionId: "pi_partial" },
+			{ kind: "clean", text: ["continued on Pi"] },
+		]);
 		__setEngineForTest(fake.engine);
 		const events = await collect(
 			runAgent({
 				prompt: "keep going",
 				cwd: "/tmp",
 				mcpServers: [],
-				model: "pi/openai/gpt-5.6-sol",
+				model: "pi/anthropic/claude-fable-5",
 				fallbackModel: "claude-opus-4-8",
 			}),
 		);
-		expect(types(events)).toEqual(["init", "done"]);
-		expect(events.at(-1)?.usageLimitExhausted).toBe(true);
-		expect(fake.calls).toHaveLength(1);
-		expect(fake.calls[0].model).toBe("pi/openai/gpt-5.6-sol");
+		expect(types(events)).toEqual([
+			"init",
+			"model_switch",
+			"init",
+			"text_chunk",
+			"done",
+		]);
+		expect(events[1]).toMatchObject({
+			type: "model_switch",
+			fromModel: "pi/anthropic/claude-fable-5",
+			toModel: "pi/openai/gpt-5.6-sol",
+		});
+		expect(fake.calls).toHaveLength(2);
+		expect(fake.calls[0].model).toBe("pi/anthropic/claude-fable-5");
+		expect(fake.calls[1].model).toBe("pi/openai/gpt-5.6-sol");
+		expect(fake.calls[1].sessionId).toBeUndefined();
 	});
 
 	test("known-dry Claude pool skips the doomed engine attempt and enters fallback directly", async () => {

@@ -73,6 +73,7 @@ import {
   resolveConcreteModel,
   resolveModel,
   toOpencodeModel,
+  toPiModel,
 } from "./models";
 import { INTERACTIVE_KINDS, baseJournalKind } from "./opencode-policy";
 import { resolveWorkspaceModelPreset } from "./workspace-model-presets";
@@ -562,10 +563,11 @@ async function* runAgentInner(opts: RunAgentOpts): AsyncGenerator<StreamEvent> {
   const requestedModel = resolveModel(workspacePreset?.model || opts.model || getDefaultModel());
   const wantsBestCodex = requestedModel?.id === BEST_AVAILABLE_CODEX_MODEL;
   const primaryModel = workspacePreset?.model || resolveConcreteModel(opts.model);
-  // Pi and the direct-SDK engines are explicit engine selections. Never cross
-  // that boundary into an OpenCode fallback when a provider/account fails: end
-  // the turn and let the person retry or choose another engine deliberately.
-  const preferredFallback = /^(?:pi|claude|codex)\//.test(primaryModel)
+  const preservePiEngine = explicitEngineFor(primaryModel) === "pi";
+  // Direct-SDK engines are explicit engine selections. Never cross that
+  // boundary into an OpenCode fallback. Pi can use the same model graph while
+  // preserving its own engine prefix on every hop.
+  const preferredFallback = /^(?:claude|codex)\//.test(primaryModel)
     ? "none"
     : wantsBestCodex
     ? BEST_AVAILABLE_CODEX_MODEL
@@ -680,9 +682,11 @@ async function* runAgentInner(opts: RunAgentOpts): AsyncGenerator<StreamEvent> {
       consecutiveTransient = 0;
     }
 
-    const currentOc = toOpencodeModel(currentModel) || currentModel;
-    exhaustedModels.add(currentOc);
-    const hop = nextFallbackModel(currentOc, exhaustedModels, preferredFallback);
+    const currentGraphModel = preservePiEngine
+      ? toOpencodeModel(currentModel.replace(/^pi\//, "")) || currentModel
+      : toOpencodeModel(currentModel) || currentModel;
+    exhaustedModels.add(currentGraphModel);
+    const hop = nextFallbackModel(currentGraphModel, exhaustedModels, preferredFallback);
     if (!hop) {
       // Nothing left to try — surface the terminal error we were suppressing.
       yield {
@@ -697,6 +701,17 @@ async function* runAgentInner(opts: RunAgentOpts): AsyncGenerator<StreamEvent> {
       };
       return;
     }
+    const nextModel = preservePiEngine ? toPiModel(hop.id) : hop.id;
+    if (!nextModel) {
+      yield {
+        type: "error",
+        content: `${modelLabel(currentModel)} is out of usage, and its fallback cannot run on Pi.`,
+        provider: providerFor(currentModel),
+        model: currentModel,
+        usageLimitExhausted: true,
+      };
+      return;
+    }
 
     // Downgrade to a dumber model (Fable→Opus, Opus→Sonnet, Sol→Opus): a human
     // decides. Interactive runs get an AskUserQuestion; headless runs
@@ -706,7 +721,7 @@ async function* runAgentInner(opts: RunAgentOpts): AsyncGenerator<StreamEvent> {
       const approved = await askFallbackApproval(
         opts.onAskUser,
         currentModel,
-        hop.id,
+        nextModel,
         failure.transient
       );
       if (!approved) {
@@ -717,9 +732,9 @@ async function* runAgentInner(opts: RunAgentOpts): AsyncGenerator<StreamEvent> {
           type: "error",
           content: failure.transient
             ? `${modelLabel(currentModel)} hit a transient engine failure. ` +
-              `Declined the fallback to ${modelLabel(hop.id)} — retry this prompt, or use /model to switch.`
+              `Declined the fallback to ${modelLabel(nextModel)}. Retry this prompt, or use /model to switch.`
             : `${modelLabel(currentModel)} is out of usage. ` +
-              `Declined the fallback to ${modelLabel(hop.id)} — use /model to switch when ready.`,
+              `Declined the fallback to ${modelLabel(nextModel)}. Use /model to switch when ready.`,
           provider: providerFor(currentModel),
           model: currentModel,
           usageLimitExhausted: failure.transient ? undefined : true,
@@ -735,12 +750,12 @@ async function* runAgentInner(opts: RunAgentOpts): AsyncGenerator<StreamEvent> {
     // vs. start fresh with a handoff — turns on the UNDERLYING provider
     // (anthropic ↔ openai): same family resumes the opencode session; a family
     // switch needs a fresh session seeded with the prior transcript.
-    const fromFamily = engineFamily(currentOc);
-    const toFamily = engineFamily(hop.id);
+    const fromFamily = engineFamily(currentModel);
+    const toFamily = engineFamily(nextModel);
     const crossProvider = fromFamily !== toFamily;
     const reason = failure.transient ? "hit a transient failure" : "is out of usage on all accounts";
     console.warn(
-      `[runner] ${currentModel} ${reason}; falling back to ${hop.id} (${hop.mode})`
+      `[runner] ${currentModel} ${reason}; falling back to ${nextModel} (${hop.mode})`
     );
     const transientFallback = !!currentOpts.transientFallback || failure.transient;
     // Structured cue: usage exhaustion becomes a durable selection change;
@@ -748,7 +763,7 @@ async function* runAgentInner(opts: RunAgentOpts): AsyncGenerator<StreamEvent> {
     yield {
       type: "model_switch",
       fromModel: currentModel,
-      toModel: hop.id,
+      toModel: nextModel,
       switchReason: failure.transient ? "hit a transient engine error" : "out of credits",
       temporaryFallback: transientFallback,
     };
@@ -771,7 +786,7 @@ async function* runAgentInner(opts: RunAgentOpts): AsyncGenerator<StreamEvent> {
         ? await readEngineTranscriptAsync(
             currentOpts.cwd,
             currentEngineId,
-            transcriptProviderFor(currentOc)
+            transcriptProviderFor(currentModel)
           )
         : [];
       handoffEntries = entries;
@@ -798,7 +813,7 @@ async function* runAgentInner(opts: RunAgentOpts): AsyncGenerator<StreamEvent> {
     currentOpts = {
       ...currentOpts,
       prompt,
-      selectedModel: transientFallback ? currentOpts.selectedModel : hop.id,
+      selectedModel: transientFallback ? currentOpts.selectedModel : nextModel,
       transientFallback,
       // Account ids are provider-local. A fallback to another family must not
       // reinterpret the source provider's pin (including a strict cost cap).
@@ -812,7 +827,7 @@ async function* runAgentInner(opts: RunAgentOpts): AsyncGenerator<StreamEvent> {
         ? { ...opts.journal, kind: `${opts.journal.kind || "run"}-fallback` }
         : undefined,
     };
-    currentModel = hop.id;
+    currentModel = nextModel;
   }
 }
 

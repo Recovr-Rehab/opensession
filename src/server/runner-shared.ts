@@ -97,7 +97,7 @@ export function isClaudeUsageLimitError(message: string, isErrorResult: boolean)
   const s = message.toLowerCase();
   // Observed CLI phrasings: "You've hit your session limit · resets 12:50pm (UTC)",
   // "Claude AI usage limit reached|<ts>", "5-hour limit reached ∙ resets 3am"
-  if (/you've hit your .{0,20}limit/.test(s)) return true;
+  if (/you've (?:hit|reached) your .{0,30}limit/.test(s)) return true;
   // Credit-metered premium models (e.g. Fable 5) exhaust a separate per-account
   // credit pool, not the 5-hour session limit, and say so with none of the
   // "limit/reached/resets" tokens: "You're out of usage credits. Run

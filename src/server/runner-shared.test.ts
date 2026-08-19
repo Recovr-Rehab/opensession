@@ -4,12 +4,30 @@ import {
   describeUsageLimitReset,
   hasRunStatusDeclaration,
   isClaudeBridgeLaunchError,
+  isClaudeUsageLimitError,
   isClaudeMalformedTerminalError,
   isProviderOverloadError,
   isTransientRunError,
   isUpstreamIdleStallError,
   usageLimitResetAt,
 } from "./runner-shared";
+
+describe("isClaudeUsageLimitError", () => {
+  test("recognizes provider notices before they leak into streamed output", () => {
+    expect(
+      isClaudeUsageLimitError(
+        "You've reached your Fable 5 limit. Switch to another model to continue.",
+        false,
+      ),
+    ).toBe(true);
+    expect(
+      isClaudeUsageLimitError(
+        "You've hit your weekly limit · resets Aug 20, 9am (UTC)",
+        false,
+      ),
+    ).toBe(true);
+  });
+});
 
 describe("isClaudeBridgeLaunchError", () => {
   test("matches the two shapes the agent SDK emits", () => {
