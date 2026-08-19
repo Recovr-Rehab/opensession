@@ -177,40 +177,20 @@ export function githubAuthState(g: SetupGithub): { tone: ChipTone; label: string
  *  load-bearing half — without it the Preview button has nothing to run and an
  *  agent can't see its own UI change. `.agents/setup` alone still helps:
  *  worktrees provision, but nothing boots. Explained in
- *  docs/repo-lifecycle.md. */
+ *  docs/repo-lifecycle.md.
+ *
+ *  The chip label is the whole answer a row gives. A sentence under every
+ *  repo restated the same mechanism once per row, so the footer says it once
+ *  and the label carries the state. */
 export function repoLifecycleState(repo: SetupRepo): {
 	tone: ChipTone;
 	label: string;
-	/** Sentence for the repo row — what works, or what to add. */
-	description: string;
 } {
-	const { dir, setup, start, previewCommand } = repo.lifecycle;
-	const where = dir ?? ".agents";
-	if (start)
-		return {
-			tone: "on",
-			label: setup ? "Ready" : "Boots",
-			description: setup
-				? "Provisions worktrees and boots previews."
-				: `Boots previews. Add ${where}/setup to provision worktrees.`,
-		};
-	if (previewCommand)
-		return {
-			tone: "on",
-			label: "Instance command",
-			description: `Boots from instance config. Commit ${where}/start.sh instead.`,
-		};
-	if (setup)
-		return {
-			tone: "warn",
-			label: "Setup only",
-			description: `Provisions worktrees. Add ${where}/start.sh for previews.`,
-		};
-	return {
-		tone: "off",
-		label: "None",
-		description: `No ${where}/ scripts, so no previews.`,
-	};
+	const { setup, start, previewCommand } = repo.lifecycle;
+	if (start) return { tone: "on", label: setup ? "Ready" : "Boots previews" };
+	if (previewCommand) return { tone: "on", label: "Instance preview" };
+	if (setup) return { tone: "warn", label: "Setup only" };
+	return { tone: "off", label: "No previews" };
 }
 
 export function StateChip({ tone, label }: { tone: ChipTone; label: string }) {
@@ -438,7 +418,7 @@ export function SecretField({
 					</button>
 				)}
 			</div>
-			{description && <div className="text-supporting text-faint">{description}</div>}
+			{description && <div className="text-meta text-faint">{description}</div>}
 			<input
 				type={type}
 				// Mono for the value you paste, but not for the placeholder: every

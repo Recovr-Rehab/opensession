@@ -129,9 +129,6 @@ export function ReposSection({
 									<SettingRowDescription className="truncate font-mono text-meta">
 										{r.path}
 									</SettingRowDescription>
-									<SettingRowDescription>
-										{lifecycle.description}
-									</SettingRowDescription>
 								</SettingRowText>
 								<StateChip tone={lifecycle.tone} label={lifecycle.label} />
 							</SettingRow>
@@ -422,7 +419,7 @@ function RepoPickRow({
 					)}
 				</div>
 				{repo.description && (
-					<div className="mt-0.5 truncate text-supporting text-faint">
+					<div className="mt-0.5 truncate text-meta text-faint">
 						{repo.description}
 					</div>
 				)}
