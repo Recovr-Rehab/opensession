@@ -46,7 +46,6 @@ function DeskBody({
 	const [sessionId, setSessionId] = useState<string | null>(null);
 	const [clearedAt, setClearedAt] = useState<string | undefined>(undefined);
 	const [ensureError, setEnsureError] = useState<string | null>(null);
-	const rootRef = useRef<HTMLDivElement | null>(null);
 
 	// Voice mode (Settings → Desk voice): a live GPT Realtime call layered on
 	// this same Desk session. The call mirrors its transcript into the session,
@@ -117,18 +116,6 @@ function DeskBody({
 		};
 	}, [user]);
 
-	// On summon, or when the standing session finishes loading on first summon,
-	// drop the caret straight into the composer. A phone keyboard popping open
-	// unasked is hostile, so phones keep their current focus.
-	useEffect(() => {
-		if (!active || phone) return;
-		const timer = window.setTimeout(() => {
-			const ta = rootRef.current?.querySelector("textarea");
-			(ta as HTMLTextAreaElement | null)?.focus({ preventScroll: true });
-		}, 150);
-		return () => window.clearTimeout(timer);
-	}, [active, phone, sessionId]);
-
 	async function clearSession() {
 		try {
 			const res = await fetch(`${BASE_PATH}/api/desk/clear`, {
@@ -144,7 +131,7 @@ function DeskBody({
 	return (
 		// flex-1 rather than h-full: on phone the sheet's drag grabber is a
 		// sibling above us, so we take the remainder instead of the whole panel.
-		<div ref={rootRef} className="flex min-h-0 flex-1 flex-col">
+		<div className="flex min-h-0 flex-1 flex-col">
 			{/* Header */}
 			<div className="flex shrink-0 items-center gap-2.5 border-b border-divider px-4 py-2.5">
 				<IconDesk size={22} className="text-dim" />
