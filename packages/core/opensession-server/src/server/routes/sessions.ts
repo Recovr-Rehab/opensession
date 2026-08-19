@@ -81,7 +81,14 @@ import { type Workspace, deleteWorkspace, getWorkspace, workspaceName } from "..
 import { prHostFor } from "../pr-host";
 import { getRepo, NO_REPO, removeWorktree, repoForPath } from "../worktree";
 import { preparingWorkspaces } from "../ws-hub";
-import { existsSync, readFileSync, statSync } from "fs";
+import {
+	existsSync,
+	readFileSync,
+	renameSync,
+	rmSync,
+	statSync,
+	writeFileSync,
+} from "fs";
 import { statePath } from "../paths";
 import { writeFileAtomic } from "../shared/atomic-write";
 import {
@@ -217,6 +224,7 @@ const LIVE_LIST_DISK_SERVE_MS = 60_000;
 const LIVE_LIST_DISK_PATH = statePath(
 	`.opensession-session-list-v${LIVE_LIST_DISK_VERSION}.json`,
 );
+const LIVE_LIST_DISK_GZIP_PATH = `${LIVE_LIST_DISK_PATH}.gz`;
 let triedDiskLiveList = false;
 
 function readDiskLiveList(): SessionsResponseSnapshot | null {
@@ -224,14 +232,20 @@ function readDiskLiveList(): SessionsResponseSnapshot | null {
 	triedDiskLiveList = true;
 	try {
 		if (!existsSync(LIVE_LIST_DISK_PATH)) return null;
-		if (Date.now() - statSync(LIVE_LIST_DISK_PATH).mtimeMs > LIVE_LIST_DISK_MAX_AGE_MS)
-			return null;
+		const sourceMtime = statSync(LIVE_LIST_DISK_PATH).mtimeMs;
+		if (Date.now() - sourceMtime > LIVE_LIST_DISK_MAX_AGE_MS) return null;
 		const text = readFileSync(LIVE_LIST_DISK_PATH, "utf8");
 		if (!text.startsWith("[")) return null;
+		const haveMatchingGzip =
+			existsSync(LIVE_LIST_DISK_GZIP_PATH) &&
+			statSync(LIVE_LIST_DISK_GZIP_PATH).mtimeMs >= sourceMtime;
 		return {
 			text,
 			hash: Bun.hash(text).toString(16),
 			expiresAt: Date.now() + LIVE_LIST_DISK_SERVE_MS,
+			...(haveMatchingGzip
+				? { gzip: Promise.resolve(Bun.file(LIVE_LIST_DISK_GZIP_PATH)) }
+				: {}),
 		};
 	} catch {
 		return null;
@@ -241,6 +255,22 @@ function readDiskLiveList(): SessionsResponseSnapshot | null {
 function persistDiskLiveList(text: string): void {
 	try {
 		writeFileAtomic(LIVE_LIST_DISK_PATH, text, 0o600);
+		// CompressionStream competes with the cold scan on the server thread. Do
+		// this once when the fresh snapshot lands, not on the next process's first
+		// response, so a warm boot can send ready bytes straight from disk.
+		const tmp = `${LIVE_LIST_DISK_GZIP_PATH}.tmp.${process.pid}`;
+		try {
+			writeFileSync(tmp, Bun.gzipSync(Buffer.from(text)), { mode: 0o600 });
+			renameSync(tmp, LIVE_LIST_DISK_GZIP_PATH);
+		} catch (error) {
+			try {
+				rmSync(tmp);
+			} catch {}
+			try {
+				rmSync(LIVE_LIST_DISK_GZIP_PATH);
+			} catch {}
+			throw error;
+		}
 	} catch (error) {
 		console.warn("[sessions] failed to persist the live-list startup cache:", error);
 	}
