@@ -15,6 +15,7 @@ import { findSessionAsync } from "../../server/session-cache";
 import type { UnifiedSession } from "../../server/types";
 import { configuredServer } from "../../server/config";
 import {
+  SESSION_CARD_SLACK_WIDTH,
   sessionCardTitle,
   sessionSocialCardData,
   sessionSocialCardUrl,
@@ -150,7 +151,7 @@ export function unfurlForSession(s: UnifiedSession, url: string): { blocks: any[
     },
     {
       type: "image",
-      image_url: sessionSocialCardUrl(s.id),
+      image_url: sessionSocialCardUrl(s.id, { width: SESSION_CARD_SLACK_WIDTH }),
       alt_text: `${title}, an Open Session by ${card.owner}`,
     },
   ];

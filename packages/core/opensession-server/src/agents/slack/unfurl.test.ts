@@ -32,7 +32,7 @@ afterAll(() => {
 });
 
 describe("unfurlForSession", () => {
-	test("includes the dynamic social card image", () => {
+	test("includes the dynamic social card image at the compact Slack width", () => {
 		const unfurl = unfurlForSession(
 			session({ id: "sess-card", title: "Ship the card", createdBy: "Kent" }),
 			"https://os.example.test/session/sess-card",
@@ -40,7 +40,7 @@ describe("unfurlForSession", () => {
 		expect(unfurl.blocks).toContainEqual({
 			type: "image",
 			image_url: expect.stringMatching(
-				/^https:\/\/media\.example\.test\/session-card\/sess-card\/[A-Za-z0-9_-]{32}\.png\?v=3$/,
+				/^https:\/\/media\.example\.test\/session-card\/sess-card\/[A-Za-z0-9_-]{32}\.png\?v=3&w=480$/,
 			),
 			alt_text: "Ship the card, an Open Session by Kent",
 		});

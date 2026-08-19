@@ -195,6 +195,26 @@ describe("session social card", () => {
 		expect(metadata.height).toBe(630);
 	});
 
+	test("serves the compact Slack width when asked for it", async () => {
+		const route = sessionSocialCardPublicRoutes().get("GET /session-card/*")!;
+		const url = new URL(sessionSocialCardUrl(signedRouteSessionId, { width: 480 }));
+		expect(url.searchParams.get("w")).toBe("480");
+		const response = await route(new Request(url), url);
+		expect(response.status).toBe(200);
+		const metadata = await sharp(await response.arrayBuffer()).metadata();
+		expect(metadata.width).toBe(480);
+		expect(metadata.height).toBe(252);
+	});
+
+	test("renders the full card for an unrecognized width", async () => {
+		const route = sessionSocialCardPublicRoutes().get("GET /session-card/*")!;
+		const url = new URL(`${sessionSocialCardUrl(signedRouteSessionId)}&w=17`);
+		const response = await route(new Request(url), url);
+		expect(response.status).toBe(200);
+		const metadata = await sharp(await response.arrayBuffer()).metadata();
+		expect(metadata.width).toBe(1200);
+	});
+
 	test("rejects an invalid HMAC before resolving the session", async () => {
 		const route = sessionSocialCardPublicRoutes().get("GET /session-card/*")!;
 		const valid = new URL(sessionSocialCardUrl(signedRouteSessionId));
