@@ -62,6 +62,9 @@ export type ModalContentProps = Omit<
 	/** Palette only: adjust the viewport that positions the popup. Useful for a
 	 *  phone sheet that rests on the bottom edge instead of below the top bar. */
 	viewportClassName?: string;
+	/** Keep the dialog subtree mounted while closed. Use for live surfaces whose
+	 *  sockets and local state must survive dismissal. */
+	keepMounted?: boolean;
 	variant?: ModalVariant;
 };
 
@@ -77,6 +80,7 @@ function Content({
 	widthClassName,
 	initialFocus,
 	viewportClassName,
+	keepMounted = false,
 	variant = "centered",
 	...popupProps
 }: ModalContentProps) {
@@ -88,6 +92,9 @@ function Content({
 			// the dialog pinned to the middle while it pops. The palette variant
 			// is laid out by the Viewport instead, so it only owns its own size.
 			className={cn(
+				// Base UI's keepMounted popup receives `hidden` when closed. This
+				// explicit rule outranks display utilities such as `flex`.
+				"[&[hidden]]:hidden",
 				palette
 					? [
 							// `relative` anchors overlays a palette draws inside itself
@@ -143,7 +150,7 @@ function Content({
 		</BaseDialog.Popup>
 	);
 	return (
-		<BaseDialog.Portal>
+		<BaseDialog.Portal keepMounted={keepMounted}>
 			<BaseDialog.Backdrop
 				className={cn(
 					"fixed inset-0 transition-opacity ease-out",
@@ -174,7 +181,7 @@ function Content({
 			{palette ? (
 				<BaseDialog.Viewport
 					className={cn(
-						"fixed inset-0 z-[6001] flex items-start justify-center px-4 pb-4 pt-[11vh] max-[560px]:pt-[7vh]",
+						"fixed inset-0 z-[6001] flex items-start justify-center px-4 pb-4 pt-[11vh] max-[560px]:pt-[7vh] [&[hidden]]:hidden",
 						viewportClassName,
 					)}
 				>

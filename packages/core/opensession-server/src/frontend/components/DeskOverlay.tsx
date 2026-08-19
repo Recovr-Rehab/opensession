@@ -3,7 +3,7 @@ import { BASE_PATH } from "../lib/base";
 import { getCurrentUser } from "./UserPicker";
 import { DeskConversation } from "./DeskConversation";
 import { DESK_SUGGESTIONS } from "../lib/desk-suggestions";
-import { ResponsiveDialog } from "../ui/sheet";
+import { Modal } from "../ui/modal";
 import { IconDesk, IconExpand, IconMic, IconX } from "./icons";
 import { Button } from "../ui/button";
 import {
@@ -19,8 +19,8 @@ import { getDeskVoicePref, onDeskVoiceChanged } from "../lib/desk-voice-pref";
  *
  * Persistence is the point: after the first summon the body STAYS MOUNTED
  * (hidden, not unmounted) — the session's scoped socket keeps watching, so every
- * later ⌘J is instant with the transcript already in place. The desktop panel
- * uses the shared dialog's subtle scale transition when summoned.
+ * later ⌘J is instant with the transcript already in place. It uses the same
+ * palette modal as the command menu.
  *
  * The Desk is a normal durable session (desk: true, hidden from the session
  * lists) pinned to a fast model+effort server-side; "Clear" sets a display
@@ -129,8 +129,6 @@ function DeskBody({
 	}
 
 	return (
-		// flex-1 rather than h-full: on phone the sheet's drag grabber is a
-		// sibling above us, so we take the remainder instead of the whole panel.
 		<div className="flex min-h-0 flex-1 flex-col">
 			{/* Header */}
 			<div className="flex shrink-0 items-center gap-2.5 border-b border-divider px-4 py-2.5">
@@ -249,26 +247,29 @@ export function DeskOverlay({
 	onOpenSession,
 }: DeskOverlayProps) {
 	return (
-		<ResponsiveDialog
+		<Modal.Root
 			open={open}
-			onClose={onClose}
-			phone={phone}
-			label="Desk"
-			// The body stays mounted after the first summon — see the module doc.
-			keepMounted
-			desktopTransition="scale-drop"
-			// bg-raised on both breakpoints, overriding the sheet's bg-surface:
-			// the Desk's controls are recessed bg-surface inputs, which would
-			// dissolve into a bg-surface panel.
-			sheetClassName="h-[85dvh] bg-raised"
-			modalClassName="h-[540px] max-h-[80vh] max-w-[560px]"
+			onOpenChange={(next) => {
+				if (!next) onClose();
+			}}
+			modal="trap-focus"
 		>
-			<DeskBody
-				active={open}
-				phone={phone}
-				onClose={onClose}
-				onOpenSession={onOpenSession}
-			/>
-		</ResponsiveDialog>
+			<Modal.Content
+				variant="palette"
+				keepMounted
+				widthClassName="w-[min(560px,100%)]"
+				className={
+					phone ? "h-[min(560px,85dvh)]" : "h-[540px] max-h-[80dvh]"
+				}
+				aria-label="Desk"
+			>
+				<DeskBody
+					active={open}
+					phone={phone}
+					onClose={onClose}
+					onOpenSession={onOpenSession}
+				/>
+			</Modal.Content>
+		</Modal.Root>
 	);
 }

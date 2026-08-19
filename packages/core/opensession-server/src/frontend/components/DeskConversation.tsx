@@ -388,7 +388,7 @@ export function DeskConversation({
 				)}
 
 				<div
-					className="flex items-center gap-1 rounded-popup border border-line bg-surface p-1 smooth-shadow-ring-sm transition-colors focus-within:border-accent"
+					className="flex items-center gap-1 rounded-popup border border-line bg-surface p-1 smooth-shadow-ring-sm"
 					ref={mentions.inputWrapRef}
 				>
 					{mentions.popup}
