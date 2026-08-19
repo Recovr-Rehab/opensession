@@ -166,10 +166,14 @@ function Content({
 						? "z-[6000] bg-black/22 backdrop-blur-[6px] duration-[var(--dur-micro)]"
 						: "z-[10000] bg-black/25 backdrop-blur-[1px] duration-[var(--dur)]",
 					// `palette-backdrop` rides along purely as a runtime marker, and
-					// nothing styles it any more: SessionViewer (⌘P) and Sidebar
-					// (archive chord) suppress their window-level shortcuts via
-					// `document.querySelector(".palette-backdrop, …)`, and a palette
-					// must keep matching it. The stylesheet rule it used to carry
+					// nothing styles it any more: the window-level chords (archive,
+					// pin, team note, tab switching, open pull request) decline a
+					// keystroke while one is open, via `blockingOverlayOpen()` in
+					// lib/blocking-overlay, and a palette must keep matching it.
+					// That helper qualifies every marker with `:not([hidden])`, which
+					// is load-bearing rather than tidy: a `keepMounted` palette (the
+					// Desk) is in the DOM from boot, so the unqualified selector read
+					// true forever and every one of those chords was dead. The stylesheet rule it used to carry
 					// said the same z-index/tint/blur written above, plus flex and
 					// padding that are inert on a childless backdrop, so deleting it
 					// changed nothing visually. The NAME is removable once those two

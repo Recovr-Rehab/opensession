@@ -162,6 +162,7 @@ import { pointerCanHover } from "../lib/pointer";
 import { RepoTile, repoLabel } from "./RepoTile";
 import { useIsPhone } from "../hooks/useIsPhone";
 import { useShortcutKeys } from "../hooks/useShortcutBindings";
+import { blockingOverlayOpen } from "../lib/blocking-overlay";
 import { matchesShortcut, shortcutLabel } from "../lib/shortcuts";
 import { PrRow } from "./PrRow";
 import {
@@ -2030,12 +2031,7 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 	useEffect(() => {
 		function onKeyDown(e: KeyboardEvent) {
 			if (e.defaultPrevented || !matchesShortcut(e, "session-archive")) return;
-			if (
-				document.querySelector(
-					".palette-backdrop, .composer-schedule-modal-backdrop, .session-delete-overlay",
-				)
-			)
-				return;
+			if (blockingOverlayOpen()) return;
 			if (editableSwallowsArchiveChord(e.target)) return;
 			const canArchive = sessions.some(
 				(s) => s.id === selectedId && !s.archived,
@@ -2081,12 +2077,7 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 	useEffect(() => {
 		function onKeyDown(e: KeyboardEvent) {
 			if (e.defaultPrevented || !matchesShortcut(e, "session-pin")) return;
-			if (
-				document.querySelector(
-					".palette-backdrop, .composer-schedule-modal-backdrop, .session-delete-overlay",
-				)
-			)
-				return;
+			if (blockingOverlayOpen()) return;
 			// Decline inside a text field rather than swallowing the key: the
 			// viewer's own handler still sees it, so this only ever adds row
 			// semantics, never removes the chord from where it worked before.
@@ -2120,12 +2111,7 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 					: 0;
 			if (dir === 0) return;
 			if (editableOwnsCaretChord(e.target)) return;
-			if (
-				document.querySelector(
-					".palette-backdrop, .composer-schedule-modal-backdrop, .session-delete-overlay",
-				)
-			)
-				return;
+			if (blockingOverlayOpen()) return;
 			const candidates = Array.from(
 				document.querySelectorAll<HTMLButtonElement>(
 					"[data-sidebar-list] button[data-sidebar-row]",

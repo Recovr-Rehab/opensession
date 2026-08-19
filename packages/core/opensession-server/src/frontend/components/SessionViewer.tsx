@@ -276,6 +276,7 @@ import { useShortcutKeys, useShortcutLabel } from "../hooks/useShortcutBindings"
 import { useSidePanel } from "../hooks/useSidePanel";
 import { sessionHasWorkspace } from "../lib/session-workspace";
 import { workspaceSummaryOpen } from "../lib/workspace-summary-open";
+import { blockingOverlayOpen } from "../lib/blocking-overlay";
 import { matchesShortcut } from "../lib/shortcuts";
 import { PulseDot } from "../ui/status";
 import {
@@ -2073,9 +2074,7 @@ export function SessionViewer({
 				!focused ||
 				e.defaultPrevented ||
 				!matchesShortcut(e, "session-pin") ||
-				document.querySelector(
-					".palette-backdrop, .composer-schedule-modal-backdrop, .session-delete-overlay",
-				)
+				blockingOverlayOpen()
 			) {
 				return;
 			}
@@ -2268,9 +2267,7 @@ export function SessionViewer({
 				!e.defaultPrevented &&
 				!e.repeat &&
 				matchesShortcut(e, "composer-note") &&
-				!document.querySelector(
-					".palette-backdrop, .composer-schedule-modal-backdrop, .session-delete-overlay",
-				)
+				!blockingOverlayOpen()
 			) {
 				e.preventDefault();
 				setNoteMode((on) => !on);
@@ -4606,12 +4603,7 @@ export function SessionViewer({
 	useEffect(() => {
 		function onKeyDown(e: KeyboardEvent) {
 			if (!focused) return;
-			if (
-				e.defaultPrevented ||
-				document.querySelector(
-					".palette-backdrop, .composer-schedule-modal-backdrop, .session-delete-overlay",
-				)
-			) {
+			if (e.defaultPrevented || blockingOverlayOpen()) {
 				return;
 			}
 			// Same composer exemption as the sidebar's archive chords: the
@@ -4753,9 +4745,7 @@ export function SessionViewer({
 			if (
 				e.defaultPrevented ||
 				(!openPr && !openPreview) ||
-				document.querySelector(
-					".palette-backdrop, .composer-schedule-modal-backdrop, .session-delete-overlay",
-				)
+				blockingOverlayOpen()
 			) {
 				return;
 			}

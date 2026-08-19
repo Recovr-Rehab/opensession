@@ -227,6 +227,7 @@ import { PR_DOT_TONE } from "./lib/session-tab-classes";
 import { dedupeViewers, otherViewers } from "./lib/presence";
 import { copySessionTranscript } from "./lib/transcript-copy";
 import { effectiveTheme, setThemePref } from "./lib/theme";
+import { blockingOverlayOpen } from "./lib/blocking-overlay";
 import { matchesShortcut, shortcutPrimaryKeys } from "./lib/shortcuts";
 import type { UnifiedSession } from "./lib/types";
 // Order matters: base.css (tokens, reset, platform chrome) then legacy.css,
@@ -3591,12 +3592,7 @@ export function App(
 					? Number(e.code.slice(5))
 					: 0;
 			if (!dir && !digit) return;
-			if (
-				document.querySelector(
-					".palette-backdrop, .composer-schedule-modal-backdrop, .session-delete-overlay",
-				)
-			)
-				return;
+			if (blockingOverlayOpen()) return;
 			// Only claim the keystroke once there is a tab to move to, so a
 			// workspace with no strip leaves the chord to whatever wants it.
 			const acted = dir
