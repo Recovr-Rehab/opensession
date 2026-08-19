@@ -11,7 +11,7 @@ bun run website:build  # writes .website-dist/
 ```
 
 Deploy the contents of `.website-dist/` as a static site. The build always
-emits stable `index.html`, `product-demo.html`, and `opensession-social.png`
+emits stable `index.html`, `setup.html`, `setup/index.html`, `product-demo.html`, and `opensession-social.png`
 paths; scripts, styles, and the in-page icon remain content-hashed.
 
 The hero uses animated background artwork from Tella. The iframe overrides

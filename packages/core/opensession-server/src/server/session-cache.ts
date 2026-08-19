@@ -267,19 +267,20 @@ function checkRunStateWedge(
 }
 
 export function findSession(sessionId: string): UnifiedSession | undefined {
-	return getCachedSessions().find((s) => s.id === sessionId);
+	return getCachedSessions().find(
+		(s) => s.id === sessionId || s.aliasIds?.includes(sessionId),
+	);
 }
 
 export async function findSessionAsync(
 	sessionId: string,
 ): Promise<UnifiedSession | undefined> {
-	const cached = peekCachedSessions().find((s) => s.id === sessionId);
-	if (cached) return cached;
-	const live = (await getCachedSessionsAsync("exclude")).find(
-		(s) => s.id === sessionId,
+	// Correctness lookups keep the original fresh, atomic whole-list contract.
+	// The split caches can be different ages, and peekCachedSessions is allowed
+	// to be stale for autocomplete, so neither is safe for opening a session.
+	return (await getCachedSessionsAsync()).find(
+		(s) => s.id === sessionId || s.aliasIds?.includes(sessionId),
 	);
-	if (live) return live;
-	return (await getCachedSessionsAsync("only")).find((s) => s.id === sessionId);
 }
 
 /** Canonical id followed by every historical alias for this session. Asset

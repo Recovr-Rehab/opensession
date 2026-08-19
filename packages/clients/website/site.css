@@ -184,6 +184,23 @@ summary:focus-visible {
 	line-height: 1.5;
 }
 
+.rail-setup-link {
+	display: flex;
+	width: fit-content;
+	min-height: 40px;
+	align-items: center;
+	gap: 5px;
+	margin-top: 10px;
+	color: var(--muted);
+	font-size: 14px;
+	font-weight: 600;
+	transition: color 160ms ease;
+}
+
+.rail-setup-link:hover {
+	color: var(--ink);
+}
+
 .feed {
 	display: flex;
 	flex-direction: column;

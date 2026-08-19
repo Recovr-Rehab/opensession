@@ -541,8 +541,8 @@ export async function handleSessionsRoutes(
 		// workspace would grow an entry per workspace forever.
 		const scope = archivedScope(url.searchParams, variant);
 		if (scope) {
-			const rows = (await getCachedSessionsAsync())
-				.filter((s) => s.archived && inWorkspaceGroup(s, scope))
+			const rows = (await getCachedSessionsAsync("only"))
+				.filter((s) => inWorkspaceGroup(s, scope))
 				.map(enrichSession);
 			const text = JSON.stringify(
 				variant === "only-slim"
@@ -559,14 +559,13 @@ export async function handleSessionsRoutes(
 		const cached = sessionsResponseSnapshots.get(variant);
 		if (cached && cached.expiresAt > Date.now())
 			return await sessionsListResponse(req, cached);
-		const enriched = (await getCachedSessionsAsync()).map(enrichSession);
-		const sessions = enriched;
-		const sliced =
-			variant === "include"
-				? sessions
-				: variant === "exclude"
-					? sessions.filter((s) => !s.archived)
-					: sessions.filter((s) => s.archived);
+		const slice =
+			variant === "exclude"
+				? "exclude"
+				: variant === "include"
+					? "include"
+					: "only";
+		const sliced = (await getCachedSessionsAsync(slice)).map(enrichSession);
 		const text = JSON.stringify(
 			variant === "only-slim"
 				? sliced.map(archivedIndexRow)
