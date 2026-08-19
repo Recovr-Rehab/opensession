@@ -1097,6 +1097,15 @@ final class SessionViewModel {
         removeChip(item)
     }
 
+    /// Deliver a steering receipt now. The server ends the run's current
+    /// step so the message lands immediately instead of waiting out a long
+    /// tool call, then the run resumes with it in hand. Not optimistic: the
+    /// chip stays until the server's queue_update moves it, because the
+    /// forced delivery is observable in the transcript within a second.
+    func deliverSteeredNow(_ item: QueueItem) {
+        socket?.interruptQueued(sessionId: session.id, queueId: item.id)
+    }
+
     /// Removals have to be optimistic in BOTH lists: a chip that leaves the
     /// server's queue without its message landing in the transcript is what
     /// `queueUpdate` reads as "mid-delivery", so a discarded one we still hold

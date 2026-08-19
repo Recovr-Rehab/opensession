@@ -263,6 +263,11 @@ struct QueueItem: Identifiable, Equatable, Sendable {
     let hasFiles: Bool
     let editable: Bool
     let hasContextSessions: Bool
+    /// When the engine accepted this message as a steer (receipts only,
+    /// epoch-ms on the wire). Acceptance is not delivery: the run reads its
+    /// steering queue when the current step's tool calls finish, so the
+    /// steering row counts the wait from here.
+    let steeredAt: Date?
 
     /// Chips minted locally (the optimistic echo of a busy send) carry an id
     /// the server has never seen, so the actions that address a queue entry
@@ -277,6 +282,7 @@ struct QueueItem: Identifiable, Equatable, Sendable {
         hasFiles = !(wire.files ?? []).isEmpty
         editable = wire.editable ?? false
         hasContextSessions = !(wire.contextSessions ?? []).isEmpty
+        steeredAt = wire.steeredAt.map { Date(timeIntervalSince1970: $0 / 1000) }
     }
 
     /// Local optimistic construction — the composer's echo of a send made
@@ -289,7 +295,8 @@ struct QueueItem: Identifiable, Equatable, Sendable {
         images: [String] = [],
         hasFiles: Bool = false,
         editable: Bool = true,
-        hasContextSessions: Bool = false
+        hasContextSessions: Bool = false,
+        steeredAt: Date? = nil
     ) {
         self.id = id
         self.content = content
@@ -298,6 +305,7 @@ struct QueueItem: Identifiable, Equatable, Sendable {
         self.hasFiles = hasFiles
         self.editable = editable
         self.hasContextSessions = hasContextSessions
+        self.steeredAt = steeredAt
     }
 
     /// The same entry with new text — and, when the edit touched them, new
@@ -312,7 +320,8 @@ struct QueueItem: Identifiable, Equatable, Sendable {
             images: images ?? self.images,
             hasFiles: hasFiles,
             editable: editable,
-            hasContextSessions: hasContextSessions
+            hasContextSessions: hasContextSessions,
+            steeredAt: steeredAt
         )
     }
 }
@@ -334,6 +343,7 @@ private struct RawFrame: Decodable {
         let files: [OpaqueFile]?
         let editable: Bool?
         let contextSessions: [String]?
+        let steeredAt: Double?
     }
 
     struct WireSlackChannel: Decodable {

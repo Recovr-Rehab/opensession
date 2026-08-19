@@ -19,6 +19,7 @@ protocol SessionSocket: AnyObject {
     )
     func steerQueued(sessionId: String, queueId: String)
     func deleteQueued(sessionId: String, queueId: String)
+    func interruptQueued(sessionId: String, queueId: String)
     func takeQueued(sessionId: String, queueId: String)
     func reorderQueued(sessionId: String, order: [String])
     func cancelWatchedRun()
@@ -167,6 +168,14 @@ final class OS1Socket: SessionSocket {
 
     func deleteQueued(sessionId: String, queueId: String) {
         send(["type": "delete_queued_prompt", "sessionId": sessionId, "queueId": queueId])
+    }
+
+    /// Deliver a steered message immediately: the server ends the run's
+    /// current step and re-delivers this one message as the next turn, so it
+    /// stops waiting out a long tool call. The agent resumes its work with
+    /// the message in hand.
+    func interruptQueued(sessionId: String, queueId: String) {
+        send(["type": "interrupt_queued_prompt", "sessionId": sessionId, "queueId": queueId])
     }
 
     func takeQueued(sessionId: String, queueId: String) {

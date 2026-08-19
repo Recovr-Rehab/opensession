@@ -1967,6 +1967,8 @@ private final class MockSocket: SessionSocket {
     }
     func steerQueued(sessionId: String, queueId: String) { steeredQueueIds.append(queueId) }
     func deleteQueued(sessionId: String, queueId: String) { deletedQueueIds.append(queueId) }
+    var interruptedQueueIds: [String] = []
+    func interruptQueued(sessionId: String, queueId: String) { interruptedQueueIds.append(queueId) }
     func takeQueued(sessionId: String, queueId: String) { takenQueueIds.append(queueId) }
     func reorderQueued(sessionId: String, order: [String]) { reorders.append(order) }
     func cancelWatchedRun() {}

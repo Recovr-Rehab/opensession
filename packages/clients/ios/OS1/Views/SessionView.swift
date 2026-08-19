@@ -2978,6 +2978,10 @@ private struct SessionInputBar: View {
                     item: item,
                     phase: .steering,
                     showsDivider: item.id != firstRowId,
+                    // Forces the run's step boundary so the message lands now.
+                    // Ids the server never confirmed can't address the queue.
+                    onDeliverNow: item.isLocalEcho
+                        ? nil : { viewModel.deliverSteeredNow(item) },
                     // The run keeps the message either way — this only
                     // retires the receipt early.
                     onDelete: { viewModel.dismissSteered(item) }
@@ -3679,6 +3683,10 @@ private struct SessionInputBar: View {
         var showsDivider = false
         var detail: String?
         var onSteer: (() -> Void)?
+        /// Deliver-now on a steering receipt: end the run's current step so
+        /// the message lands immediately instead of waiting out a long tool
+        /// call. The agent resumes with the message in hand.
+        var onDeliverNow: (() -> Void)?
         var onEdit: (() -> Void)?
         /// -1 moves the message one place towards the front of the queue,
         /// +1 one place back. Absent when there's nothing to reorder.
@@ -3704,7 +3712,7 @@ private struct SessionInputBar: View {
         private var label: String? {
             switch phase {
             case .queued: nil
-            case .steering: "Steering — delivers next turn"
+            case .steering: "Steering · delivers when this step ends"
             case .delivering: "Delivering…"
             case .unsent: detail ?? "Unsent — sends when you're back online"
             case .failed: detail ?? "Couldn't send"
@@ -3813,6 +3821,9 @@ private struct SessionInputBar: View {
                                 .foregroundStyle(labelColor)
                                 .lineLimit(1)
                         }
+                        if phase == .steering, let since = item.steeredAt {
+                            SteerElapsed(since: since)
+                        }
                         if let from = message.label {
                             Text(from)
                                 .font(.caption2)
@@ -3856,6 +3867,9 @@ private struct SessionInputBar: View {
                     }
                     if let onSteer {
                         rowAction("arrow.up", "Steer into this run", onSteer)
+                    }
+                    if let onDeliverNow {
+                        rowAction("arrow.up.to.line", "Deliver now", onDeliverNow)
                     }
                 }
             }
@@ -3928,6 +3942,36 @@ private struct SessionInputBar: View {
         /// skipping past a neighbour.
         private static let rowStep: CGFloat = 56
 
+        /// How long a steer may wait before the row starts counting. Under
+        /// this the number is noise on a fold-in about to land; past it the
+        /// silence is what reads as a hang (the engine reads its steering
+        /// queue only when the current step's tool calls finish, so a long
+        /// test run holds a steer for minutes).
+        private static let steerSlowSeconds: TimeInterval = 5
+
+        /// Ticking wait readout for a steering receipt. Counts up rather
+        /// than predicting a landing time, because nothing here knows how
+        /// long the running tool will take.
+        private struct SteerElapsed: View {
+            let since: Date
+            var body: some View {
+                TimelineView(.periodic(from: .now, by: 1)) { context in
+                    let waited = context.date.timeIntervalSince(since)
+                    if waited >= QueuedMessageRow.steerSlowSeconds {
+                        Text(Self.format(waited))
+                            .font(.caption2)
+                            .monospacedDigit()
+                            .foregroundStyle(OS1VisualStyle.textFaint)
+                    }
+                }
+            }
+            private static func format(_ t: TimeInterval) -> String {
+                let s = Int(t)
+                if s < 60 { return "\(s)s" }
+                return "\(s / 60)m \(String(format: "%02d", s % 60))s"
+            }
+        }
+
         /// One control in the row's trailing cluster. 40x32 of hit area around
         /// a 16pt glyph: these are peers of the composer's own buttons a few
         /// points below them, and at 32/13 they read as a smaller, more
@@ -3958,6 +4002,9 @@ private struct SessionInputBar: View {
             }
             if let onSteer {
                 Button("Steer into this run", systemImage: "arrow.up", action: onSteer)
+            }
+            if let onDeliverNow {
+                Button("Deliver now", systemImage: "arrow.up.to.line", action: onDeliverNow)
             }
             if let onMove {
                 Button("Move up", systemImage: "arrow.up.to.line") { onMove(-1) }
