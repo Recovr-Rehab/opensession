@@ -8,7 +8,9 @@ import {
 } from "../../lib/api/profile";
 import { useIsPhone } from "../../hooks/useIsPhone";
 import { refreshPeople } from "../../lib/people";
+import { isTouchPrimary } from "../../lib/platform";
 import { Button } from "../../ui/button";
+import { cn } from "../../ui/cn";
 import { Field, FieldGrid, Input } from "../../ui/input";
 import { SettingsForm, SettingsGroupLabel } from "../../ui/settings";
 import { ResponsiveDialog } from "../../ui/sheet";
@@ -270,45 +272,65 @@ function ProfileCard({
 						<div className="text-item-title font-semibold text-fg">
 							Edit profile
 						</div>
-						{/* Picture actions are badges on the picture itself, both
-						    always visible: hover cannot be the way in on a phone, and
-						    a row of two labelled buttons under a portrait is more
-						    furniture than a rarely-used action deserves. Change is a
-						    picture glyph rather than a camera, because this replaces a
-						    FILE rather than taking a shot; remove is a trash, because
-						    it deletes one and you can put another back. */}
-						<div className="relative mx-auto mb-1 mt-1 flex">
-							<UserAvatar
-								name={name || profile.name}
-								login={profile.github}
-								image={profile.image}
-								size={72}
-							/>
+						{/* The picture is the control: the whole square picks a file,
+						    and the glyph arrives over the middle of it on hover rather
+						    than riding a corner all the time. A picture glyph rather
+						    than a camera, because this replaces a FILE rather than
+						    taking a shot.
+
+						    Left rather than centered, so it starts on the same x as
+						    the fields under it and the dialog reads as one column.
+
+						    Two things the hover cannot carry: a touch client has no
+						    hover, so there the glyph simply stays on, and removing is
+						    its own button beside the picture rather than a second
+						    badge on it, since a destructive action should not share a
+						    target with the one you reach for. */}
+						<div className="mb-1 mt-1 flex items-center gap-3">
 							<button
 								type="button"
 								disabled={busy !== null}
 								onClick={() => fileRef.current?.click()}
 								aria-label={pictureAction}
 								title={pictureAction}
-								className="focus-ring absolute -bottom-0.5 -right-0.5 grid size-7 place-items-center rounded-full bg-white text-black shadow-sm transition-colors hover:text-accent disabled:pointer-events-none"
+								className="focus-ring group relative flex rounded-avatar disabled:pointer-events-none"
 							>
-								{busy === "picture" ? (
-									<Spinner size="sm" />
-								) : (
-									<IconImage size={15} dense />
-								)}
+								<UserAvatar
+									name={name || profile.name}
+									login={profile.github}
+									image={profile.image}
+									size={72}
+								/>
+								{/* Hard black and white rather than themed tokens: this
+								    lies on whatever photo a person uploaded, so it has
+								    to hold its own contrast instead of following the
+								    page. */}
+								<span
+									className={cn(
+										"absolute inset-0 grid place-items-center rounded-avatar bg-black/45 text-white transition-opacity",
+										busy === "picture" || isTouchPrimary
+											? "opacity-100"
+											: "opacity-0 group-hover:opacity-100 group-focus-visible:opacity-100",
+									)}
+									aria-hidden
+								>
+									{busy === "picture" ? (
+										<Spinner size="md" />
+									) : (
+										<IconImage size={22} dense />
+									)}
+								</span>
 							</button>
 							{profile.image && (
-								<button
-									type="button"
+								<Button
+									variant="ghost"
+									icon={<IconTrash size={18} dense />}
 									disabled={busy !== null}
 									onClick={() => void removePicture()}
 									aria-label="Remove picture"
 									title="Remove picture"
-									className="focus-ring absolute -right-0.5 -top-0.5 grid size-7 place-items-center rounded-full bg-white text-black shadow-sm transition-colors hover:text-red disabled:pointer-events-none"
-								>
-									<IconTrash size={15} dense />
-								</button>
+									className="hover:text-red phone:min-h-11 phone:w-11"
+								/>
 							)}
 						</div>
 						{/* The note is a sibling of the Field, not a child: `Field` is
