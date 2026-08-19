@@ -43,11 +43,14 @@ import {
 	PR_SIB_DOT_BG,
 	PR_BAR_STATE_TEXT,
 	PR_STATE_TEXT,
+	PR_SUMMARY_BAND_BG,
 } from "../lib/pr-tone-classes";
 // The summary variant renders into the workspace summary card, so it borrows
 // that card's row grammar rather than inventing a third one. The strip owns
 // the PR state machine; the card owns how a row in it looks.
 import {
+	WS_SUMMARY_BAND,
+	WS_SUMMARY_BAND_PAD,
 	WS_SUMMARY_LABEL,
 	WS_SUMMARY_RAIL,
 	WS_SUMMARY_STATUS_ROW,
@@ -285,6 +288,14 @@ interface Props {
 	    variant only) so it shares the strip's tone background — e.g. the globe
 	    staging-deploy icon in the Workspace panel. */
 	leading?: React.ReactNode;
+	/**
+	 * Summary variant only: rows that belong to this PR but are not the strip's
+	 * to derive, rendered inside the band under the status row. Today that is the
+	 * preview environment the PR deployed. They share the band because they share
+	 * the subject: one plate for the state of the work, not a tinted row with a
+	 * loose link under it.
+	 */
+	children?: React.ReactNode;
 	/** Live run state — when it falls from running→idle the header refetches, so
 	    it reflects the just-finished turn (and any auto-push) immediately. */
 	running?: boolean;
@@ -589,6 +600,7 @@ export function PrStatusBar({
 	onNewSession,
 	variant = "bar",
 	leading,
+	children,
 	running,
 	refreshTick,
 }: Props) {
@@ -791,13 +803,18 @@ export function PrStatusBar({
 	// other way.
 	if (!loaded) {
 		if (variant === "summary")
+			// No tone to paint yet, so the band holds its shape without a fill
+			// rather than guessing a colour it may have to take back.
 			return (
-				<Skeleton label="Loading PR status">
-					<div className={WS_SUMMARY_STATUS_ROW}>
-						<SkeletonBar className="size-4 shrink-0 rounded-full" />
-						<SkeletonBar className="w-[58%]" />
-					</div>
-				</Skeleton>
+				<div className={WS_SUMMARY_BAND}>
+					<Skeleton label="Loading PR status">
+						<div className={WS_SUMMARY_STATUS_ROW}>
+							<SkeletonBar className="size-4 shrink-0 rounded-full" />
+							<SkeletonBar className="w-[58%]" />
+						</div>
+					</Skeleton>
+					{children}
+				</div>
 			);
 		if (
 			variant === "header" ||
@@ -1061,45 +1078,58 @@ export function PrStatusBar({
 		);
 		return (
 			<div
-				className={WS_SUMMARY_STATUS_ROW}
-				// The title the row no longer shows is still the fastest way to know
-				// which PR this is, so it stays as the row's tooltip.
-				title={pr ? `#${pr.number} · ${pr.title}` : undefined}
+				className={cn(
+					WS_SUMMARY_BAND,
+					PR_SUMMARY_BAND_BG[headlineTone],
+					// Only a band with a fill needs room inside it.
+					headlineTone !== "muted" && WS_SUMMARY_BAND_PAD,
+				)}
 			>
-				<span className={cn(WS_SUMMARY_RAIL, PR_STATE_TEXT[headlineTone])}>
-					{headlineGlyph(headline.key)}
-				</span>
+				<div
+					className={WS_SUMMARY_STATUS_ROW}
+					// The title the row no longer shows is still the fastest way to
+					// know which PR this is, so it stays as the row's tooltip.
+					title={pr ? `#${pr.number} · ${pr.title}` : undefined}
+				>
+					<span className={cn(WS_SUMMARY_RAIL, PR_STATE_TEXT[headlineTone])}>
+						{headlineGlyph(headline.key)}
+					</span>
 				{/* When checks are the reason for the headline, the headline IS the
 				    checks control, exactly as on the strip: hovering lists them,
 				    clicking opens Review's Checks tab. */}
-				{checksPr ? (
-					<PrChecksPopover
-						checks={checksPr.checks}
-						trigger={
-							<button
-								type="button"
-								className={labelClass}
-								onClick={onOpenChecksTab}
-							>
-								{labelBody}
-							</button>
-						}
-					/>
-				) : (
-					<button
-						type="button"
-						className={labelClass}
-						onClick={() => onOpenPrTab?.()}
-					>
-						{labelBody}
-					</button>
-				)}
-				{error && (
-					<span className={PR_HEAD_ERROR} title={error}>
-						{error}
-					</span>
-				)}
-				{renderAction()}
+					{checksPr ? (
+						<PrChecksPopover
+							checks={checksPr.checks}
+							trigger={
+								<button
+									type="button"
+									className={labelClass}
+									onClick={onOpenChecksTab}
+								>
+									{labelBody}
+								</button>
+							}
+						/>
+					) : (
+						<button
+							type="button"
+							className={labelClass}
+							onClick={() => onOpenPrTab?.()}
+						>
+							{labelBody}
+						</button>
+					)}
+					{error && (
+						<span className={PR_HEAD_ERROR} title={error}>
+							{error}
+						</span>
+					)}
+					{renderAction()}
+				</div>
+				{/* The preview environment this PR deployed: same subject, same
+				    plate, its globe leading the row the way every row in the card
+				    opens on a mark. */}
+				{children}
 			</div>
 		);
 	}

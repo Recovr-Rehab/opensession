@@ -55,10 +55,22 @@ export const WS_SUMMARY_SECTION =
  * `group/ws` lets a trailing action fade in on hover without reserving its own
  * hover state.
  */
+/** What a row gives up once it sits inside the band: its own gutter, since the
+ *  band supplies one for the whole group. Declared before its first use: these
+ *  are module-scope consts, so a reference from a line above would evaluate in
+ *  the temporal dead zone and throw at import. */
+const BAND_ROW = " [.ws-summary-band_&]:mx-0 [.ws-summary-band_&]:w-full";
+
 export const WS_SUMMARY_ROW =
 	"group/ws mx-2 flex h-[31px] w-[calc(100%_-_16px)] min-w-0 shrink-0 cursor-pointer items-center gap-3.5 " +
 	"rounded-row border-none bg-transparent px-2 text-left text-item-title text-fg " +
-	"hover:bg-hover focus-ring";
+	"hover:bg-hover focus-ring " +
+	// Inside the PR band the row is already inset by the band, and the neutral
+	// hover plate would sit as a grey patch on a tinted surface. Give up the
+	// gutter and wash with the row's own ink instead, so the hover reads as the
+	// band getting darker rather than as a second colour landing on it.
+	BAND_ROW +
+	" [.ws-summary-band_&]:hover:bg-[color-mix(in_srgb,currentColor_8%,transparent)]";
 
 /**
  * The one row that holds a real control: the PR headline and its action
@@ -68,7 +80,33 @@ export const WS_SUMMARY_ROW =
  */
 export const WS_SUMMARY_STATUS_ROW =
 	"mx-2 flex min-h-[38px] w-[calc(100%_-_16px)] min-w-0 shrink-0 items-center gap-3.5 " +
-	"rounded-row px-2 text-left text-item-title text-fg";
+	"rounded-row px-2 text-left text-item-title text-fg" +
+	BAND_ROW;
+
+/**
+ * The PR band: the card's one plate, at the top, holding everything about the
+ * pull request. Where it stands with its action, and the preview environment
+ * that PR deployed.
+ *
+ * It is the single exception to "nothing in this card carries a fill", and it
+ * earns it the same way the one coloured row does: the state of the work is
+ * what the card is for, so it is the thing that should be visible before the
+ * card is read. The fill is the strip's own tone band (`PR_SUMMARY_BAND_BG`),
+ * which is what makes the card and the panel's strip the same object seen
+ * twice rather than two designs for one fact. A muted state gets no fill at
+ * all: a PR with nothing to report has no colour to lend, and a grey plate
+ * would only draw a box around two rows.
+ *
+ * It takes the rows' own gutter and their `rounded-row` corner, so the tint
+ * lands exactly where a hover pill would and the band reads as part of the
+ * list rather than as a header bolted over it.
+ */
+export const WS_SUMMARY_BAND =
+	"ws-summary-band mx-2 mb-1 flex min-w-0 shrink-0 flex-col rounded-row";
+
+/** The band's inner padding, once it has a fill to hold. An untinted band is
+ *  invisible, so it stays flush and the rows keep the list's own pitch. */
+export const WS_SUMMARY_BAND_PAD = "py-1";
 
 /**
  * The leading column every row opens with, whatever it holds: a glyph, an

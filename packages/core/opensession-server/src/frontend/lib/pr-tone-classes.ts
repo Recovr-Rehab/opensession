@@ -183,6 +183,21 @@ export const PR_BAR_BG: Record<PrTone, string> = {
 	muted: "bg-panel [.session-info-status_&]:bg-transparent",
 };
 
+/** The same band in the workspace summary card, where it plates the PR rows
+ *  rather than spanning a pane. Two departures from the strip's map above.
+ *  `muted` carries no fill: the card is quiet text on one surface, and a state
+ *  with nothing to report has no colour to lend, so it gets no plate. Green and
+ *  red drop to a lighter mix than `--*-soft` because the card sits on the
+ *  popup's own raised surface, where the strip's weight reads as a highlight
+ *  band instead of a tint. */
+export const PR_SUMMARY_BAND_BG: Record<PrTone, string> = {
+	green: "bg-[color-mix(in_srgb,var(--green)_11%,transparent)]",
+	purple: "bg-[color-mix(in_srgb,var(--purple)_10%,transparent)]",
+	red: "bg-[color-mix(in_srgb,var(--red)_11%,transparent)]",
+	yellow: "bg-[color-mix(in_srgb,var(--yellow)_10%,transparent)]",
+	muted: "",
+};
+
 /** A session that shipped one feature as several PRs: the primary strip plus a
  *  row per sibling, as one continuous block of status. */
 export const PR_BAR_STACK = `flex min-w-0 flex-col ${PR_BAR_IN_CARD}`;
