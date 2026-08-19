@@ -618,6 +618,62 @@ describe("renderMarkdown PR mentions", () => {
     expect(html).not.toContain(`>${url}</a>`);
   });
 
+  it("collapses a qualified mention and its own pasted URL to one chip", () => {
+    setKnownRepos([{ id: "tella-fusion", ghRepo: "tellahq/tella-fusion" }]);
+    const sources = [
+      "## PR **tella-fusion#5832** — https://github.com/tellahq/tella-fusion/pull/5832",
+      "tella-fusion#5832 https://github.com/tellahq/tella-fusion/pull/5832",
+      "tella-fusion#5832 (https://github.com/tellahq/tella-fusion/pull/5832)",
+      "PR #5832: https://github.com/tellahq/tella-fusion/pull/5832",
+    ];
+    for (const src of sources) {
+      const html = renderMarkdown(src, fusion);
+      expect(html.match(/class="pr-ref"/g)?.length).toBe(1);
+      expect(html).toContain('data-pr-number="5832"');
+      expect(html).not.toContain("github.com/tellahq/tella-fusion/pull");
+    }
+  });
+
+  it("keeps two different pull requests as two chips", () => {
+    setKnownRepos([{ id: "tella-fusion", ghRepo: "tellahq/tella-fusion" }]);
+    const html = renderMarkdown(
+      "tella-fusion#5832 — https://github.com/tellahq/tella-fusion/pull/5528",
+      fusion,
+    );
+    expect(html.match(/class="pr-ref"/g)?.length).toBe(2);
+  });
+
+  it("leaves a mention alone when the URL is a different repo", () => {
+    setKnownRepos([{ id: "tella-fusion", ghRepo: "tellahq/tella-fusion" }]);
+    const html = renderMarkdown(
+      "tella-fusion#5832 — https://github.com/vercel/next.js/pull/5832",
+      fusion,
+    );
+    expect(html.match(/class="pr-ref"/g)?.length).toBe(1);
+    expect(html).toContain("vercel/next.js/pull/5832");
+  });
+
+  it("leaves a code-span mention and its URL alone", () => {
+    setKnownRepos([{ id: "tella-fusion", ghRepo: "tellahq/tella-fusion" }]);
+    const html = renderMarkdown(
+      "`tella-fusion#5832`: https://github.com/tellahq/tella-fusion/pull/5832",
+      fusion,
+    );
+    // The code span never chips, so the URL is the only reference that can
+    // open anything and has to survive.
+    expect(html).toContain("<code>tella-fusion#5832</code>");
+    expect(html.match(/class="pr-ref"/g)?.length).toBe(1);
+  });
+
+  it("leaves a duplicate inside a code fence verbatim", () => {
+    setKnownRepos([{ id: "tella-fusion", ghRepo: "tellahq/tella-fusion" }]);
+    const html = renderMarkdown(
+      "```\ntella-fusion#5832 — https://github.com/tellahq/tella-fusion/pull/5832\n```",
+      fusion,
+    );
+    expect(html).toContain("github.com/tellahq/tella-fusion/pull/5832");
+  });
+
   it("keeps links to unregistered GitHub PRs external", () => {
     setKnownRepos([{ id: "tella-fusion", ghRepo: "tellahq/tella-fusion" }]);
     const html = renderMarkdown(

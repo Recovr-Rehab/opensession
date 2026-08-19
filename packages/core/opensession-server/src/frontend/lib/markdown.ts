@@ -725,6 +725,67 @@ function githubPrTarget(
   return null;
 }
 
+// The same pull request, written twice on one line. The house style asks for a
+// qualified reference and the link gets pasted next to it anyway, so
+// "**webapp#5832** — https://github.com/acme/webapp/pull/5832" is everyday
+// output. Both forms are references and both chip, so the line renders as two
+// identical pills joined by a separator that only ever existed to introduce
+// the URL. One reference written twice is still one reference: keep the form
+// that was written first and drop the duplicate with its separator.
+//
+// Two DIFFERENT pull requests side by side are two references and stay two
+// chips — the repo and the number both have to match, resolved through the
+// same helpers the chips themselves resolve through.
+const DUPLICATE_PR_PAIR = new RegExp(
+  // The character in front, captured rather than looked behind: a mention glued
+  // to a word (or to another `#`) is not a mention, and re-emitting the guard
+  // keeps the rewrite lossless.
+  `(?<lead>^|[^\\w#&/-])` +
+    // Bold wraps a mention without changing what it is. A code span does: a
+    // mention in backticks renders as code and never chips, so collapsing
+    // there would delete the only linkable form. It is left alone.
+    `(?<mention>(?<cue>[Pp][Rr]s?[ \\t]+)?(?<wrap>\\*\\*)?` +
+    `(?<qualifier>(?:[A-Za-z0-9][\\w.-]*/)?[A-Za-z0-9][\\w.-]*)?` +
+    `#(?<number>\\d{1,${PR_NUMBER_MAX_DIGITS}})\\k<wrap>?)` +
+    // What joins the two: a dash/middot/colon, an opening paren, or just space.
+    `(?<sep>[ \\t]*[—–·:|-][ \\t]*|[ \\t]*\\([ \\t]*|[ \\t]+)` +
+    `<?(?<url>https?://(?:www\\.)?github\\.com/[\\w.-]+/[\\w.-]+/pull/\\d{1,${PR_NUMBER_MAX_DIGITS}})/?>?` +
+    `(?<close>[ \\t]*\\))?`,
+  "gm",
+);
+
+/** Run a rewrite over prose only, leaving fenced code blocks verbatim. */
+function outsideCodeFences(src: string, fn: (chunk: string) => string): string {
+  if (!src.includes("```")) return fn(src);
+  return src
+    .split(/(```[\s\S]*?```)/g)
+    .map((part) => (part.startsWith("```") ? part : fn(part)))
+    .join("");
+}
+
+/** Collapse `repo#123 — https://github.com/owner/repo/pull/123` to one chip. */
+function collapseDuplicatePrReferences(src: string): string {
+  if (!src.includes("/pull/")) return src;
+  return outsideCodeFences(src, (chunk) =>
+    chunk.replace(DUPLICATE_PR_PAIR, (match, ...args) => {
+      const g = args[args.length - 1] as Record<string, string | undefined>;
+      const lead = g.lead ?? "";
+      const target = githubPrTarget(g.url);
+      if (!target) return match;
+      const repo = prMentionRepo(g.qualifier);
+      if (repo !== target.repo || g.number !== target.number) return match;
+      // A mention that wouldn't chip on its own is prose, and dropping the URL
+      // next to it would leave the reference with nothing to open.
+      if (!g.qualifier && !g.cue && !bareMentionLinks(repo, g.number!))
+        return match;
+      // An unbalanced parenthesis means the separator wasn't one.
+      if (g.sep?.includes("(") && !g.close) return match;
+      const close = g.sep?.includes("(") ? "" : (g.close ?? "");
+      return `${lead}${g.mention}${close}`;
+    }),
+  );
+}
+
 // Commit shas are the other reference agents write constantly ("this reverts
 // `4ed1ef09`"), and they were dead text: to see what one was you left for
 // GitHub and searched. They become references you can hover instead, answered
@@ -1205,7 +1266,7 @@ export function renderMarkdown(src: string, ctx?: MarkdownContext): string {
   renderAssetSessionId = ctx?.sessionId;
   renderRawHtml = ctx?.rawHtml ?? "escape";
   try {
-    out = md.parse(src) as string;
+    out = md.parse(collapseDuplicatePrReferences(src)) as string;
   } catch {
     out = src;
   } finally {
