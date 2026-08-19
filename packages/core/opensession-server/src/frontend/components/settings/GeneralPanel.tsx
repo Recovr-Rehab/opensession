@@ -30,7 +30,7 @@ import { IdentityCard } from "../SetupIdentity";
 
 const NAME_INPUT_CLASS = cn(settingsInputClass, "w-[220px] max-w-full");
 
-export function GeneralPanel() {
+export function OrganizationProfileSection() {
 	const [settings, setSettings] = useState<OrganizationSettingsDto | null>(null);
 	const [draft, setDraft] = useState("");
 	const [busy, setBusy] = useState(false);
@@ -109,8 +109,7 @@ export function GeneralPanel() {
 	const fallbackColor = repoColor(settings?.organizationName || "organization");
 
 	return (
-		<SettingsPanel>
-			<SettingsHeader title="General" className="phone:hidden" />
+		<>
 			{loadError && !settings ? (
 				<InlineAlert onRetry={() => void load()}>{loadError}</InlineAlert>
 			) : settings ? (
@@ -196,13 +195,22 @@ export function GeneralPanel() {
 						</SettingRow>
 					</SettingCard>
 					<SettingsHint>
-						Shared by everyone in this workspace. Clearing the name restores the
-						 product name.
+						Shared by everyone in this organization. Clearing the name restores the
+						product name.
 					</SettingsHint>
 				</>
 			) : (
 				<SettingCardSkeleton rows={2} label="Loading organization settings" />
 			)}
+		</>
+	);
+}
+
+export function GeneralPanel() {
+	return (
+		<SettingsPanel>
+			<SettingsHeader title="General" className="phone:hidden" />
+			<OrganizationProfileSection />
 			<SettingsGroupLabel>Identity</SettingsGroupLabel>
 			<IdentityCard />
 		</SettingsPanel>

@@ -6,23 +6,21 @@ import { useSetupStatus } from "../hooks/useSetupStatus";
 import { Button } from "../ui/button";
 import { cn } from "../ui/cn";
 import { duration, ease } from "../ui/motion";
-import { SettingCard } from "../ui/settings";
 import { LoadingState } from "../ui/state";
-import { EngineRow, SetupChecklist } from "./SetupChecklist";
-import { IdentityCard } from "./SetupIdentity";
-import { IntegrationsList } from "./SetupIntegrations";
+import { SetupChecklist } from "./SetupChecklist";
+import { GithubAuthCard, IntegrationsList } from "./SetupIntegrations";
 import { ReposSection } from "./SetupRepos";
 import { SetupRestart } from "./SetupRestart";
+import { TeamSection } from "./SetupTeam";
+import { OrganizationProfileSection } from "./settings/GeneralPanel";
 import {
 	ClaudeAccountsSection,
 	CodexAccountsSection,
 } from "./settings/ModelAccounts";
-import { ModelProvidersPanel } from "./ModelProviders";
-import { ModelDefaultsSection } from "./Models";
 import { IconCheck, IconChevronLeft } from "./icons";
 
 interface FirstMileStep {
-	id: "welcome" | "connections" | "ai" | "repos" | "identity" | "ready";
+	id: "welcome" | "github" | "organization" | "team" | "ai" | "repos" | "ready";
 	label: string;
 	title: string;
 	description: string;
@@ -37,18 +35,32 @@ const STEPS: FirstMileStep[] = [
 			"Set up a new organization or continue with one that already exists.",
 	},
 	{
-		id: "connections",
-		label: "Connections",
-		title: "Connect your work",
+		id: "github",
+		label: "GitHub",
+		title: "Connect GitHub",
 		description:
-			"Bring in code, conversations, issues, support, and observability. Set up what you use now and add the rest later.",
+			"Connect your GitHub organization for repositories, pull requests, and teammate sign-in. You can add other tools later.",
+	},
+	{
+		id: "organization",
+		label: "Organization",
+		title: "Name your organization",
+		description:
+			"Choose the name and icon your team will see across Open Session.",
+	},
+	{
+		id: "team",
+		label: "People",
+		title: "Invite your team",
+		description:
+			"Add the people who should have access. They can sign in with GitHub.",
 	},
 	{
 		id: "ai",
 		label: "AI",
-		title: "Choose your AI",
+		title: "Add AI subscriptions",
 		description:
-			"Connect Claude, OpenAI Codex, or another provider, then choose the default for new sessions.",
+			"Connect the Claude and Codex subscriptions your organization will use to run sessions.",
 	},
 	{
 		id: "repos",
@@ -58,29 +70,12 @@ const STEPS: FirstMileStep[] = [
 			"Register the codebases sessions can work in. Each session gets its own isolated worktree.",
 	},
 	{
-		id: "identity",
-		label: "Identity",
-		title: "Make it yours",
-		description:
-			"Choose the names this instance and its agent use when they introduce themselves.",
-	},
-	{
 		id: "ready",
 		label: "Ready",
 		title: "Start your first session",
 		description:
 			"Review what is connected. You can change every choice later in Settings.",
 	},
-];
-
-const CONNECTION_ORDER = [
-	"github",
-	"linear",
-	"slack",
-	"plain",
-	"codestorage",
-	"stripe",
-	"grafana",
 ];
 
 export function FirstMile({ onDone }: { onDone: () => void }) {
@@ -162,23 +157,26 @@ export function FirstMile({ onDone }: { onDone: () => void }) {
 					className={cn("flex items-center gap-2", index === 0 && "invisible")}
 					aria-label="Onboarding progress"
 				>
-					{STEPS.map((item, itemIndex) => (
-						<button
-							key={item.id}
-							type="button"
-							aria-label={`${itemIndex + 1}. ${item.label}`}
-							aria-current={itemIndex === index ? "step" : undefined}
-							onClick={() => goTo(itemIndex)}
-							className={cn(
-								"focus-ring h-2 cursor-pointer rounded-full transition-[width,background-color] duration-200",
-								itemIndex === index
-									? "w-8 bg-fg"
-									: itemIndex < index
-										? "w-2 bg-fg/45"
-										: "w-2 bg-faint/35 hover:bg-faint/60",
-							)}
-						/>
-					))}
+					{STEPS.slice(1).map((item, itemIndex) => {
+						const stepIndex = itemIndex + 1;
+						return (
+							<button
+								key={item.id}
+								type="button"
+								aria-label={`${itemIndex + 1}. ${item.label}`}
+								aria-current={stepIndex === index ? "step" : undefined}
+								onClick={() => goTo(stepIndex)}
+								className={cn(
+									"focus-ring h-2 cursor-pointer rounded-full transition-[width,background-color] duration-200",
+									stepIndex === index
+										? "w-8 bg-fg"
+										: stepIndex < index
+											? "w-2 bg-fg/45"
+											: "w-2 bg-faint/35 hover:bg-faint/60",
+								)}
+							/>
+						);
+					})}
 				</nav>
 
 				{index > 0 && index < STEPS.length - 1 ? (
@@ -262,7 +260,7 @@ export function FirstMile({ onDone }: { onDone: () => void }) {
 								<>
 									<div className="mb-8 max-w-[700px] text-center phone:mb-6">
 										<p className="m-0 mb-2 text-label font-semibold text-faint">
-											Step {index + 1}
+											Step {index}
 										</p>
 										<h1
 											ref={headingRef}
@@ -277,34 +275,38 @@ export function FirstMile({ onDone }: { onDone: () => void }) {
 									</div>
 
 									<div className="w-full max-w-[820px] pb-8">
-										{step.id === "connections" && (
-											<IntegrationsList
-												integrations={status.integrations
-													.slice()
-													.sort(
-														(a, b) =>
-															CONNECTION_ORDER.indexOf(a.id) -
-															CONNECTION_ORDER.indexOf(b.id),
+										{step.id === "github" && (
+											<div className="flex flex-col gap-4">
+												<IntegrationsList
+													integrations={status.integrations.filter(
+														(integration) => integration.id === "github",
 													)}
-												publicBaseUrl={status.publicBaseUrl}
-												onSaved={setup.applyIntegration}
+													publicBaseUrl={status.publicBaseUrl}
+													onSaved={setup.applyIntegration}
+												/>
+												<GithubAuthCard
+													github={status.github}
+													onSaved={setup.applyGithub}
+												/>
+											</div>
+										)}
+										{step.id === "organization" && <OrganizationProfileSection />}
+										{step.id === "team" && (
+											<TeamSection
+												onChanged={refetch}
+												title="Members"
+												addLabel="Invite person"
 											/>
 										)}
 										{step.id === "ai" && (
 											<div className="flex flex-col gap-4">
-												<SettingCard>
-													<EngineRow engine={status.engine} onChanged={refetch} />
-												</SettingCard>
 												<ClaudeAccountsSection />
 												<CodexAccountsSection />
-												<ModelProvidersPanel />
-												<ModelDefaultsSection />
 											</div>
 										)}
 										{step.id === "repos" && (
 											<ReposSection repos={status.repos} onChanged={refetch} />
 										)}
-										{step.id === "identity" && <IdentityCard />}
 										{step.id === "ready" && (
 											<>
 												<div className="mx-auto mb-6 flex size-16 items-center justify-center rounded-full bg-green-soft text-green">

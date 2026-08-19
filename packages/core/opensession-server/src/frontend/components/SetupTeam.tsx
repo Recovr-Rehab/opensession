@@ -29,10 +29,13 @@ import { UserAvatar } from "./UserAvatar";
 export function TeamSection({
 	onChanged,
 	title,
+	addLabel = "Add member",
 }: {
 	onChanged: () => void | Promise<void>;
 	/** Optional label above the roster. Defaults to the roster name and count. */
 	title?: React.ReactNode;
+	/** Action copy for the add flow. Settings keeps "Add member"; onboarding invites. */
+	addLabel?: string;
 }) {
 	const [members, setMembers] = useState<TeamMember[] | null>(null);
 	const [loadFailed, setLoadFailed] = useState(false);
@@ -71,7 +74,7 @@ export function TeamSection({
 							setDialogOpen(true);
 						}}
 					>
-						Add member
+						{addLabel}
 					</Button>
 				}
 			>
@@ -114,6 +117,7 @@ export function TeamSection({
 			<MemberDialog
 				open={dialogOpen}
 				member={editing}
+				addLabel={addLabel}
 				onOpenChange={setDialogOpen}
 				onSaved={async () => {
 					setDialogOpen(false);
@@ -239,12 +243,14 @@ function MemberActions({
 function MemberDialog({
 	open,
 	member,
+	addLabel,
 	onOpenChange,
 	onSaved,
 }: {
 	open: boolean;
 	/** null → add; a member → edit that member. */
 	member: TeamMember | null;
+	addLabel: string;
 	onOpenChange: (open: boolean) => void;
 	onSaved: () => void | Promise<void>;
 }) {
@@ -333,8 +339,8 @@ function MemberDialog({
 		>
 			<Modal.Content initialFocus={nameRef}>
 				<Modal.Header
-					title={member ? `Edit ${member.name}` : "Add member"}
-					description="Identity table entry. Commits, sessions and access grants resolve through it."
+					title={member ? `Edit ${member.name}` : addLabel}
+					description="Commits, sessions, and access grants resolve through this person."
 				/>
 				<form className="flex flex-col gap-3" onSubmit={submit}>
 					<Field label="Full name">
@@ -394,7 +400,7 @@ function MemberDialog({
 							Cancel
 						</Button>
 						<Button variant="primary" type="submit" disabled={!name.trim() || saving}>
-							{saving ? "Saving…" : member ? "Save changes" : "Add member"}
+							{saving ? "Saving…" : member ? "Save changes" : addLabel}
 						</Button>
 					</Modal.Footer>
 				</form>
