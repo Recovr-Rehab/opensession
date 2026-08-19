@@ -31,48 +31,43 @@ const STEPS: FirstMileStep[] = [
 		id: "welcome",
 		label: "Organization",
 		title: `Welcome to ${PRODUCT_NAME}`,
-		description:
-			"Set up a new organization or continue with one that already exists.",
+		description: "Create an organization or join an existing one.",
 	},
 	{
 		id: "github",
 		label: "GitHub",
 		title: "Connect GitHub",
-		description: "Connect your organization, repositories, and team.",
+		description: "Your organization, repositories, and members.",
 	},
 	{
 		id: "organization",
 		label: "Organization",
 		title: "Name your organization",
-		description:
-			"Choose the name and icon your team will see across Open Session.",
+		description: "Set a name and icon.",
 	},
 	{
 		id: "ai",
 		label: "AI",
 		title: "Add AI subscriptions",
-		description:
-			"Connect the Claude and Codex subscriptions your organization will use to run sessions.",
+		description: "Connect Claude and Codex.",
 	},
 	{
 		id: "repos",
 		label: "Repositories",
 		title: "Add repositories",
-		description:
-			"Register the codebases sessions can work in. Each session gets its own isolated worktree.",
+		description: "Choose repositories for sessions.",
 	},
 	{
 		id: "team",
 		label: "People",
 		title: "Bring in your team",
-		description: "Everyone in your GitHub organization is added automatically.",
+		description: "Everyone from your GitHub organization.",
 	},
 	{
 		id: "ready",
 		label: "Ready",
 		title: "Start your first session",
-		description:
-			"Review what is connected. You can change every choice later in Settings.",
+		description: "Review your setup.",
 	},
 ];
 
@@ -272,7 +267,9 @@ export function FirstMile({ onDone }: { onDone: () => void }) {
 										</p>
 									</div>
 
-									<div className="w-full max-w-[820px] pb-8">
+									{/* Settings plates use a translucent version of their normal surface here,
+									    so every onboarding section picks up the page gradient behind it. */}
+									<div className="w-full max-w-[820px] pb-8 [&_.bg-settings-plate]:bg-settings-plate/45 [&_.border-divider]:border-divider/45">
 										{step.id === "github" && (
 											<GithubAuthCard
 												github={status.github}

@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from "react";
 import { Button } from "../ui/button";
+import { cn } from "../ui/cn";
 import { Disclosure } from "../ui/disclosure";
 import { Modal } from "../ui/modal";
 import { SettingCard, SettingsHint, SettingsSection } from "../ui/settings";
@@ -332,7 +333,7 @@ export function GithubAuthCard({
 	return (
 		<>
 			<div className="grid px-4 phone:px-0">
-				<SettingCard className={onboarding ? "border-transparent bg-transparent" : undefined}>
+				<SettingCard>
 					<div className="grid grid-cols-[auto_minmax(0,1fr)_auto] items-start gap-x-3 gap-y-1 px-5 py-4 phone:grid-cols-[auto_minmax(0,1fr)] phone:px-3 phone:py-2">
 						<IconTile name="github" size={40} />
 						<div className="col-start-2 flex min-w-0 flex-wrap items-center gap-2">
@@ -341,26 +342,31 @@ export function GithubAuthCard({
 							</div>
 							<StateChip tone={state.tone} label={state.label} />
 						</div>
-						<div className="col-start-2 row-start-2 min-w-0 phone:col-span-2 phone:col-start-1 phone:mt-3">
-							<p className="m-0 text-supporting leading-relaxed text-dim">
-								{onboarding
-									? "Repositories, members, pull requests, and sign-in."
-									: "Interactive sessions open PRs as their connected owner instead of the bot."}
-							</p>
-							{/* The Device Flow switch lives on GitHub, so nothing here can
-							    report whether it is on. It is also the only way in now, so
-							    the requirement is stated wherever the connection is set up
-							    rather than left to the moment a teammate is locked out. */}
-							{active && (
-								<div className="mt-1.5 text-meta leading-relaxed text-faint">
-									{"Device Flow must be enabled in your GitHub App." +
-										(secretConfigured
-											? ""
-											: " Add a client secret to keep teammates signed in.")}
-								</div>
+						{!onboarding && (
+							<div className="col-start-2 row-start-2 min-w-0 phone:col-span-2 phone:col-start-1 phone:mt-3">
+								<p className="m-0 text-supporting leading-relaxed text-dim">
+									Interactive sessions open PRs as their connected owner instead of the bot.
+								</p>
+								{/* The Device Flow switch lives on GitHub, so nothing here can
+								    report whether it is on. It is also the only way in now, so
+								    the requirement is stated wherever the connection is set up
+								    rather than left to the moment a teammate is locked out. */}
+								{active && (
+									<div className="mt-1.5 text-meta leading-relaxed text-faint">
+										{"Device Flow must be enabled in your GitHub App." +
+											(secretConfigured
+												? ""
+												: " Add a client secret to keep teammates signed in.")}
+									</div>
+								)}
+							</div>
+						)}
+						<div
+							className={cn(
+								"col-start-3 row-span-2 row-start-1 ml-4 flex min-h-10 shrink-0 items-center gap-2 phone:col-span-2 phone:col-start-1 phone:row-span-1 phone:mt-4 phone:ml-0 phone:flex-col phone:items-stretch",
+								onboarding ? "phone:row-start-2" : "phone:row-start-3",
 							)}
-						</div>
-						<div className="col-start-3 row-span-2 row-start-1 ml-4 flex min-h-10 shrink-0 items-center gap-2 phone:col-span-2 phone:col-start-1 phone:row-span-1 phone:row-start-3 phone:mt-4 phone:ml-0 phone:flex-col phone:items-stretch">
+						>
 							{(github.clientIdConfigured || github.userPrAuth) && (
 								<>
 									<div className="hidden min-h-11 items-center justify-between text-label font-medium text-dim phone:flex">
