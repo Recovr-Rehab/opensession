@@ -141,9 +141,8 @@ export function ReposSection({
 			</SettingCard>
 			<SettingsHint>
 				Registering clones the repo onto the server, and sessions branch into
-				isolated worktrees of it. Commit <code>.agents/setup</code> and{" "}
-				<code>.agents/start.sh</code> to provision worktrees and boot previews.
-				See docs/repo-lifecycle.md.
+				isolated worktrees of it. Commit <code>.agents/</code> scripts to
+				provision those worktrees and boot previews. See docs/repo-lifecycle.md.
 			</SettingsHint>
 		</>
 	);
@@ -313,7 +312,7 @@ function RepoTileButton({
 						}
 					/>
 				</label>
-				<div className="mt-1.5 text-meta leading-relaxed text-faint">
+				<div className="mt-1.5 text-supporting leading-relaxed text-faint">
 					{busy
 						? "Working…"
 						: avatarOk

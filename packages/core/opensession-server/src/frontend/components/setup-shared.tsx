@@ -191,20 +191,20 @@ export function repoLifecycleState(repo: SetupRepo): {
 			tone: "on",
 			label: setup ? "Ready" : "Boots",
 			description: setup
-				? `${where}/ provisions worktrees and boots previews.`
-				: `${where}/start.sh boots previews. Add setup to provision worktrees.`,
+				? "Provisions worktrees and boots previews."
+				: `Boots previews. Add ${where}/setup to provision worktrees.`,
 		};
 	if (previewCommand)
 		return {
 			tone: "on",
 			label: "Instance command",
-			description: `Boots through this instance's preview command. Commit ${where}/start.sh to keep it with the code.`,
+			description: `Boots from instance config. Commit ${where}/start.sh instead.`,
 		};
 	if (setup)
 		return {
 			tone: "warn",
 			label: "Setup only",
-			description: `${where}/setup provisions worktrees. Add start.sh for previews.`,
+			description: `Provisions worktrees. Add ${where}/start.sh for previews.`,
 		};
 	return {
 		tone: "off",

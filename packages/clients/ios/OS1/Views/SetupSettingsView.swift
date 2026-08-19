@@ -79,13 +79,13 @@ struct SetupSettingsView: View {
                 StatusRow(
                     title: "Local dev setup",
                     detail: bootable.count == repos.count
-                        ? "Every repo boots its own dev server, so previews work and agents can check their UI changes in a browser."
+                        ? "Every repo boots its own preview."
                         // .agents is the only directory the server looks in
                         // (LIFECYCLE_DIR in src/server/preview.ts). This row
                         // named .opensession, which no instance has read since
                         // the rename, so it sent anyone who followed it to a
                         // path that stays dark.
-                        : "Repos without a boot script keep the Preview button disabled. Add .agents/start.sh (docs/repo-lifecycle.md).",
+                        : "Repos without .agents/start.sh keep Preview disabled. See docs/repo-lifecycle.md.",
                     tone: bootable.count == repos.count
                         ? .on : (bootable.isEmpty ? .off : .warn),
                     label: "\(bootable.count)/\(repos.count) bootable"
@@ -208,7 +208,7 @@ struct SetupSettingsView: View {
             } header: {
                 Text("Repositories")
             } footer: {
-                Text("A repo that commits .agents/setup and .agents/start.sh provisions its own worktrees and boots its dev server.")
+                Text("Commit .agents/ scripts to provision worktrees and boot previews.")
             }
         }
     }
@@ -277,20 +277,20 @@ private func lifecycleState(
         return (
             .on, setup ? "Ready" : "Boots",
             setup
-                ? "\(dir)/ provisions worktrees and boots previews."
-                : "\(dir)/start.sh boots previews. Add setup.sh to provision worktrees."
+                ? "Provisions worktrees and boots previews."
+                : "Boots previews. Add \(dir)/setup.sh to provision worktrees."
         )
     }
     if lifecycle?.previewCommand ?? false {
         return (
             .on, "Instance command",
-            "Boots through this instance's preview command. Commit \(dir)/start.sh to keep it with the code."
+            "Boots from instance config. Commit \(dir)/start.sh instead."
         )
     }
     if setup {
         return (
             .warn, "Setup only",
-            "\(dir)/setup.sh provisions worktrees. Add start.sh for previews."
+            "Provisions worktrees. Add \(dir)/start.sh for previews."
         )
     }
     return (.off, "None", "No \(dir)/ scripts, so no previews.")
