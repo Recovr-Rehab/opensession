@@ -648,14 +648,14 @@ export async function handleSessionsRoutes(
 			if (disk) {
 				sessionsResponseSnapshots.set(variant, disk);
 				// Starting the cooperative scan still does some synchronous index
-				// setup before its first yield. Let this response leave the process
-				// before starting that work, or the "background" refresh delays the
-				// very warm-start response it exists to protect.
+				// setup before its first yield. Give the cached JSON and its one-time
+				// gzip enough time to leave the process, or the "background" refresh
+				// starves the compression stream for the same cold-scan window.
 				setTimeout(() => {
 					void refreshSessionsResponse(variant).catch((error) =>
 						console.warn("[sessions] live-list background refresh failed:", error),
 					);
-				}, 250).unref?.();
+				}, 5_000).unref?.();
 				return await sessionsListResponse(req, disk);
 			}
 		}
