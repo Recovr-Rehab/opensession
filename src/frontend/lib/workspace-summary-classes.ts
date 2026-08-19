@@ -24,8 +24,8 @@
  * long branch name cannot make the card wider than the header it hangs from.
  *
  * It caps its own height and scrolls, because the list is open-ended at the
- * bottom: a session with a dozen sources would otherwise grow the card past
- * the window. Everything above the sources is short and never scrolls in
+ * bottom: a session with a dozen assets would otherwise grow the card past
+ * the window. Everything above the assets is short and never scrolls in
  * practice.
  *
  * No radius, fill or shadow here: `ui/popover.tsx` gives every popup the same
@@ -33,40 +33,7 @@
  * object from the rest of them.
  */
 export const WS_SUMMARY_CARD =
-	"flex max-h-[min(72vh,640px)] w-[300px] flex-col overflow-hidden";
-
-/** The card's scrolling list. Everything that is a reading lives in here; the
- *  bar below it does not scroll away. */
-export const WS_SUMMARY_BODY = "min-h-0 flex-1 overflow-y-auto py-2";
-
-/**
- * The bar along the bottom: portals, agents, terminal.
- *
- * These are the Workspace panel's own bottom bar, and they keep that shape
- * here rather than becoming a third band of rows. They are places you go, not
- * things the card is telling you, so they sit under the list the way a
- * window's chrome sits under its content. As rows in the middle they also
- * split the two readings that belong together, putting a set of destinations
- * between the state of the work and the files it produced.
- */
-export const WS_SUMMARY_FOOTER =
-	"flex shrink-0 items-center gap-1 border-t border-divider px-2 py-1.5";
-
-/**
- * One place on that bar: an icon, a word, and whatever it wants to report.
- *
- * The three of them fill a 300px card with 8px to spare, which is the whole
- * budget: `px-2` is not padding to trim, it is what puts the first icon on the
- * same rail as every row above. They do not shrink, and the labels do not
- * truncate. Letting them was tried and is worse than the problem: flex hands
- * each child its share rather than its content, so all three read "Port… Age…
- * Termi…" in the ordinary case to protect against a rare one. If both counts
- * ever run to two digits the last word clips at the card edge instead.
- */
-export const WS_SUMMARY_FOOTER_ITEM =
-	"focus-ring flex shrink-0 cursor-pointer items-center gap-1.5 whitespace-nowrap " +
-	"rounded-control border-none bg-transparent px-2 py-1 text-label text-dim " +
-	"transition-colors hover:bg-hover hover:text-fg";
+	"flex max-h-[min(72vh,640px)] w-[300px] flex-col overflow-y-auto py-2";
 
 /**
  * Band label ("Assets"), taken from the sidebar so the card heads its lists
@@ -144,6 +111,25 @@ export const WS_SUMMARY_DIVIDER = "mx-4 my-2 h-px shrink-0 bg-line";
 /** The PR row's trailing state word ("Draft", "Merged", "Changes requested").
  *  Tone comes from the caller; this is only the shape. */
 export const WS_SUMMARY_STATE = "shrink-0 text-meta font-medium";
+
+/**
+ * A reviewer's face in that rail. Round, because a person is not a file: the
+ * assets beside it are square tiles, and the shape is what tells the two lists
+ * apart before either label is read.
+ *
+ * `rounded-full`, not the `rounded-[999px]` this repo normally reaches for.
+ * That spelling keeps base.css's squircle grant, which at 16px reads as a
+ * rounded square rather than a face, and every other avatar in the app is a
+ * true circle.
+ */
+export const WS_SUMMARY_AVATAR =
+	"size-4 rounded-full border border-line bg-panel object-cover";
+
+/** The same slot for a reviewer with no picture (a team, or a host that serves
+ *  none): their initial, at the size the faces beside it are. */
+export const WS_SUMMARY_AVATAR_FALLBACK =
+	"grid size-4 place-items-center rounded-full border border-line bg-panel " +
+	"text-[9px] font-semibold text-faint";
 
 /** An asset's preview, centred in the rail above. A 16px tile inside a 20px
  *  slot, the same inset the sidebar gives its repo tiles: a filled image next

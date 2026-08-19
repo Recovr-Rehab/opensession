@@ -1,6 +1,6 @@
 import { repoLabel } from "../lib/repo-label";
 import React, { useCallback, useEffect, useMemo, useState } from "react";
-import type { GitStatusInfo, PrDetails } from "../lib/types";
+import type { GitStatusInfo, PrDetails, PrReviewer } from "../lib/types";
 import {
 	refChipText,
 	refLabel,
@@ -23,7 +23,7 @@ import {
 	PR_WEBHOOK_FALLBACK_POLL_MS,
 } from "../lib/poll";
 import { getCurrentUser } from "./UserPicker";
-import { providerFromUrl } from "../lib/provider";
+import { avatarUrl, providerFromUrl } from "../lib/provider";
 import { sessionPrPresentation } from "../lib/session-prs";
 import {
 	prChipClass,
@@ -48,10 +48,13 @@ import {
 // that card's row grammar rather than inventing a third one. The strip owns
 // the PR state machine; the card owns how a row in it looks.
 import {
+	WS_SUMMARY_AVATAR,
+	WS_SUMMARY_AVATAR_FALLBACK,
 	WS_SUMMARY_COUNT,
 	WS_SUMMARY_LABEL,
 	WS_SUMMARY_RAIL,
 	WS_SUMMARY_ROW,
+	WS_SUMMARY_STATE,
 	WS_SUMMARY_STATUS_ROW,
 } from "../lib/workspace-summary-classes";
 import { Tooltip } from "../ui/tooltip";
@@ -62,6 +65,7 @@ import { useShortcutLabel } from "../hooks/useShortcutBindings";
 import { PrChecksPopover } from "./PrChecksPopover";
 import { PrSeriesRows } from "./PrSeriesRows";
 import { PrStackChip } from "./pr/StackPopover";
+import { reviewerStateMeta } from "./pr/PrRows";
 import {
 	IconArrowDown,
 	IconArrowUp,
@@ -221,6 +225,24 @@ function headlineGlyph(key: PrHeadline["key"]): React.ReactNode {
 		default:
 			return <IconCheck size={20} />;
 	}
+}
+
+/**
+ * The reviewers the summary card lists: one row per person, latest state wins,
+ * capped so a long reviewer list cannot push the rest of the card off screen.
+ *
+ * GitHub returns a person twice when they answer a request they were already
+ * on, so a raw render shows "Kent · Awaiting review" directly above "Kent ·
+ * Approved". The submitted review is the answer to the pending one.
+ */
+const SUMMARY_REVIEWERS_SHOWN = 4;
+function summarizeReviewers(pr: PrDetails | null): PrReviewer[] {
+	const byLogin = new Map<string, PrReviewer>();
+	for (const reviewer of pr?.reviewers || []) {
+		const seen = byLogin.get(reviewer.login);
+		if (!seen || seen.state === "PENDING") byLogin.set(reviewer.login, reviewer);
+	}
+	return [...byLogin.values()].slice(0, SUMMARY_REVIEWERS_SHOWN);
 }
 
 export type { SessionPrRef } from "../lib/pr-refs";
@@ -661,6 +683,9 @@ export function PrStatusBar({
 	}, [refreshTick, load]);
 
 	const headline = useMemo(() => deriveHeadline(pr, git), [pr, git]);
+	// Card-only reads: computed here so the summary branch below stays render.
+	const summaryReviewers = variant === "summary" ? summarizeReviewers(pr) : [];
+	const provider = providerFromUrl(pr?.url);
 
 	// Everything except the primary branch's PR (which the headline covers):
 	// attached repos, manual links, and PRs discovered through their body
@@ -1103,6 +1128,50 @@ export function PrStatusBar({
 					)}
 					{renderAction()}
 				</div>
+				{/* Who is holding it, one row each. The headline says a review is
+				    needed or that changes were requested; these say by whom, which
+				    is the next question and the one you act on. Only while the PR
+				    is open: once it lands the review is history, and the card is
+				    for what is still live. */}
+				{pr?.state === "OPEN" &&
+					summaryReviewers.map((reviewer) => {
+						const meta = reviewerStateMeta(reviewer.state);
+						const src = reviewer.isTeam
+							? null
+							: avatarUrl(reviewer.login, provider, 40);
+						return (
+							<button
+								key={`${reviewer.login}\0${reviewer.state}`}
+								className={WS_SUMMARY_ROW}
+								onClick={() => onOpenPrTab?.()}
+								title={`${reviewer.login} · ${meta.label}`}
+							>
+								<span className={WS_SUMMARY_RAIL}>
+									{src ? (
+										<img
+											className={WS_SUMMARY_AVATAR}
+											src={src}
+											alt=""
+											loading="lazy"
+										/>
+									) : (
+										<span className={WS_SUMMARY_AVATAR_FALLBACK} aria-hidden>
+											{reviewer.login.slice(0, 1).toUpperCase()}
+										</span>
+									)}
+								</span>
+								<span className={WS_SUMMARY_LABEL}>{reviewer.login}</span>
+								<span
+									className={cn(
+										WS_SUMMARY_STATE,
+										PR_STATE_TEXT[meta.tone === "muted" ? "muted" : meta.tone],
+									)}
+								>
+									{meta.label}
+								</span>
+							</button>
+						);
+					})}
 			</>
 		);
 	}

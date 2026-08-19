@@ -17,12 +17,9 @@ import { cn } from "../ui/cn";
 import type { GitStatusInfo, PrDetails, UnifiedSession } from "../lib/types";
 import {
 	WS_SUMMARY_ACTION,
-	WS_SUMMARY_BODY,
 	WS_SUMMARY_CARD,
 	WS_SUMMARY_COUNT,
 	WS_SUMMARY_DIVIDER,
-	WS_SUMMARY_FOOTER,
-	WS_SUMMARY_FOOTER_ITEM,
 	WS_SUMMARY_ICON,
 	WS_SUMMARY_LABEL,
 	WS_SUMMARY_RAIL,
@@ -30,14 +27,7 @@ import {
 	WS_SUMMARY_SECTION,
 	WS_SUMMARY_THUMB,
 } from "../lib/workspace-summary-classes";
-import {
-	IconClock,
-	IconFile,
-	IconGlobe,
-	IconListCircles,
-	IconStack,
-	IconTerminal,
-} from "./icons";
+import { IconClock, IconFile, IconListCircles } from "./icons";
 
 /**
  * The session header's compact stand-in for the right Workspace panel: one
@@ -94,12 +84,6 @@ interface Props {
 	onOpenChecks: () => void;
 	/** Open the Assets tab (the Assets list's destination). */
 	onOpenAssets?: () => void;
-	/** The panel's own bottom-bar places, and their live counts. */
-	onOpenPortals?: () => void;
-	onOpenAgents?: () => void;
-	onOpenTerminal?: () => void;
-	livePortals?: number;
-	runningAgents?: number;
 	/** Archive through the owning viewer, so it can select the neighbouring
 	 *  sidebar row. Offered by the PR block once the work has landed. */
 	onArchive?: () => void;
@@ -198,11 +182,6 @@ function SummaryBody({
 	onOpenPr,
 	onOpenChecks,
 	onOpenAssets,
-	onOpenPortals,
-	onOpenAgents,
-	onOpenTerminal,
-	livePortals = 0,
-	runningAgents = 0,
 	onArchive,
 	running,
 	send,
@@ -299,152 +278,92 @@ function SummaryBody({
 	}
 
 	const shown = assets.slice(0, ASSETS_SHOWN);
-	const places = onOpenPortals || onOpenAgents || onOpenTerminal;
 
 	return (
 		<>
-			<div className={WS_SUMMARY_BODY}>
-				{changedFiles > 0 && (
-					<button
-						className={WS_SUMMARY_ROW}
-						onClick={() => go(() => onOpenPanelTab("changes"))}
-					>
-						<span className={WS_SUMMARY_RAIL}>
-							<IconFile size={20} className={WS_SUMMARY_ICON} />
-						</span>
-						<span className={WS_SUMMARY_LABEL}>
-							{changedFiles} file{changedFiles === 1 ? "" : "s"} changed
-						</span>
-						<span className={WS_SUMMARY_COUNT}>
-							<span className="text-green">+{additions}</span>{" "}
-							<span className="text-red">−{deletions}</span>
-						</span>
-					</button>
-				)}
+			{changedFiles > 0 && (
+				<button
+					className={WS_SUMMARY_ROW}
+					onClick={() => go(() => onOpenPanelTab("changes"))}
+				>
+					<span className={WS_SUMMARY_RAIL}>
+						<IconFile size={20} className={WS_SUMMARY_ICON} />
+					</span>
+					<span className={WS_SUMMARY_LABEL}>
+						{changedFiles} file{changedFiles === 1 ? "" : "s"} changed
+					</span>
+					<span className={WS_SUMMARY_COUNT}>
+						<span className="text-green">+{additions}</span>{" "}
+						<span className="text-red">−{deletions}</span>
+					</span>
+				</button>
+			)}
 
-				{dirty > 0 && (
-					<button
-						className={WS_SUMMARY_ROW}
-						onClick={askCommit}
-						disabled={!send}
-					>
-						<span className={WS_SUMMARY_RAIL}>
-							<IconClock size={20} className={WS_SUMMARY_ICON} />
-						</span>
-						<span className={WS_SUMMARY_LABEL}>
-							{prompted
-								? "Asked to commit"
-								: `${dirty} file${dirty === 1 ? "" : "s"} uncommitted`}
-						</span>
-						{!prompted && <span className={WS_SUMMARY_ACTION}>Commit</span>}
-					</button>
-				)}
+			{dirty > 0 && (
+				<button className={WS_SUMMARY_ROW} onClick={askCommit} disabled={!send}>
+					<span className={WS_SUMMARY_RAIL}>
+						<IconClock size={20} className={WS_SUMMARY_ICON} />
+					</span>
+					<span className={WS_SUMMARY_LABEL}>
+						{prompted
+							? "Asked to commit"
+							: `${dirty} file${dirty === 1 ? "" : "s"} uncommitted`}
+					</span>
+					{!prompted && <span className={WS_SUMMARY_ACTION}>Commit</span>}
+				</button>
+			)}
 
-				{/* Which PR, where it stands, and the one thing to do about it. The
+			{/* Which PR, where it stands, and the one thing to do about it. The
 			    strip owns all three; this card only says where they go. */}
-				<PrStatusBar
-					variant="summary"
-					sessionId={session.id}
-					repo={session.repo || undefined}
-					archived={session.archived}
-					prs={session.prs}
-					send={send}
-					running={running}
-					refreshTick={refreshTick}
-					onOpenPrTab={() => go(onOpenPr)}
-					onOpenChecksTab={() => go(onOpenChecks)}
-					onArchive={onArchive ? () => go(onArchive) : undefined}
-				/>
+			<PrStatusBar
+				variant="summary"
+				sessionId={session.id}
+				repo={session.repo || undefined}
+				archived={session.archived}
+				prs={session.prs}
+				send={send}
+				running={running}
+				refreshTick={refreshTick}
+				onOpenPrTab={() => go(onOpenPr)}
+				onOpenChecksTab={() => go(onOpenChecks)}
+				onArchive={onArchive ? () => go(onArchive) : undefined}
+			/>
 
-				{shown.length > 0 && (
-					<>
-						<div className={WS_SUMMARY_DIVIDER} />
-						<div className={WS_SUMMARY_SECTION}>Assets</div>
-						{shown.map((file) => (
-							<button
-								key={file.path}
-								className={WS_SUMMARY_ROW}
-								onClick={() => go(onOpenAssets)}
-								title={file.path}
-							>
-								<span className={WS_SUMMARY_RAIL}>
-									{IMAGE_RE.test(file.path) ? (
-										<img
-											src={sessionAssetPreviewUrl(session.id, file)}
-											alt=""
-											className={WS_SUMMARY_THUMB}
-											loading="lazy"
-										/>
-									) : (
-										<IconFile size={20} className={WS_SUMMARY_ICON} />
-									)}
-								</span>
-								<span className={WS_SUMMARY_LABEL}>{file.path}</span>
-							</button>
-						))}
-						{assets.length > shown.length && (
-							<button
-								className={WS_SUMMARY_ROW}
-								onClick={() => go(onOpenAssets)}
-							>
-								<span className={WS_SUMMARY_RAIL} />
-								<span className={cn(WS_SUMMARY_LABEL, "text-dim")}>
-									View all {assets.length}
-								</span>
-							</button>
-						)}
-					</>
-				)}
-			</div>
-
-			{/* The panel's own bottom bar, at card scale. Places you go, under the
-			    list of things the card is telling you. */}
-			{places && (
-				<div className={WS_SUMMARY_FOOTER}>
-					{onOpenPortals && (
+			{shown.length > 0 && (
+				<>
+					<div className={WS_SUMMARY_DIVIDER} />
+					<div className={WS_SUMMARY_SECTION}>Assets</div>
+					{shown.map((file) => (
 						<button
-							type="button"
-							className={WS_SUMMARY_FOOTER_ITEM}
-							onClick={() => go(onOpenPortals)}
+							key={file.path}
+							className={WS_SUMMARY_ROW}
+							onClick={() => go(onOpenAssets)}
+							title={file.path}
 						>
-							<IconGlobe size={20} className="shrink-0" />
-							Portals
-							{livePortals > 0 && (
-								<span className="shrink-0 tabular-nums text-faint">
-									{livePortals}
-								</span>
-							)}
+							<span className={WS_SUMMARY_RAIL}>
+								{IMAGE_RE.test(file.path) ? (
+									<img
+										src={sessionAssetPreviewUrl(session.id, file)}
+										alt=""
+										className={WS_SUMMARY_THUMB}
+										loading="lazy"
+									/>
+								) : (
+									<IconFile size={20} className={WS_SUMMARY_ICON} />
+								)}
+							</span>
+							<span className={WS_SUMMARY_LABEL}>{file.path}</span>
+						</button>
+					))}
+					{assets.length > shown.length && (
+						<button className={WS_SUMMARY_ROW} onClick={() => go(onOpenAssets)}>
+							<span className={WS_SUMMARY_RAIL} />
+							<span className={cn(WS_SUMMARY_LABEL, "text-dim")}>
+								View all {assets.length}
+							</span>
 						</button>
 					)}
-					{onOpenAgents && (
-						<button
-							type="button"
-							className={WS_SUMMARY_FOOTER_ITEM}
-							onClick={() => go(onOpenAgents)}
-						>
-							<IconStack size={20} className="shrink-0" />
-							Agents
-							{/* Only the live count, as on the panel's bar: a finished run
-							    is something you go and read, not something a summary has
-							    to keep announcing. */}
-							{runningAgents > 0 && (
-								<span className="shrink-0 tabular-nums text-yellow">
-									{runningAgents}
-								</span>
-							)}
-						</button>
-					)}
-					{onOpenTerminal && (
-						<button
-							type="button"
-							className={WS_SUMMARY_FOOTER_ITEM}
-							onClick={() => go(onOpenTerminal)}
-						>
-							<IconTerminal size={20} className="shrink-0" />
-							Terminal
-						</button>
-					)}
-				</div>
+				</>
 			)}
 		</>
 	);

@@ -4482,13 +4482,7 @@ export function SessionViewer({
 	// also renew the authenticated Caddy routes for remote sandbox services.
 	useEffect(() => {
 		if (
-			(!showPreviewTab &&
-				!showPortal &&
-				!panelOpen &&
-				!infoPageOpen &&
-				// The summary card reports the same live-portal count on its own
-				// Portals row, so it needs status warm for as long as it is up.
-				!summaryOpen) ||
+			(!showPreviewTab && !showPortal && !panelOpen && !infoPageOpen) ||
 			!session.worktreeDir
 		)
 			return;
@@ -4510,7 +4504,6 @@ export function SessionViewer({
 		showPortal,
 		panelOpen,
 		infoPageOpen,
-		summaryOpen,
 		session.id,
 		session.worktreeDir,
 	]);
@@ -5305,10 +5298,12 @@ export function SessionViewer({
 							refreshTick={gitRefreshTick}
 						/>
 					)}
-					{/* …and the rest of what a one-line strip can't say: changes,
-					    branch, conflicts, sources, and the panel's own places. One
+					{/* …and the rest of what a one-line strip can't say: the diff's
+					    size, uncommitted work, who is reviewing, the assets. One
 					    floating card, so the panel can stay shut without going blind
-					    (see WorkspaceSummary's module doc). */}
+					    (see WorkspaceSummary's module doc). Portals, Agents and
+					    Terminal are deliberately not in it: they are places, and
+					    places live in the panel. */}
 					{!isPhone && hasRepoWork && !panelOpen && (
 						<WorkspaceSummary
 							session={session}
@@ -5322,32 +5317,6 @@ export function SessionViewer({
 							onOpenPr={() => focusPrInReview()}
 							onOpenChecks={() => focusPrInReview(undefined, "checks")}
 							onOpenAssets={onOpenAssets}
-							// The panel's bottom bar, reached from here: Portals and
-							// Agents are pages of the panel, Terminal is the full-width
-							// view tab beside it.
-							onOpenPortals={
-								hasWorkspace
-									? () => {
-											setPanelPage("portals");
-											setPanelOpen(true);
-										}
-									: undefined
-							}
-							onOpenAgents={
-								hasWorkspace
-									? () => {
-											setPanelPage("agents");
-											setPanelOpen(true);
-										}
-									: undefined
-							}
-							onOpenTerminal={
-								hasWorkspace && onOpenTerminal
-									? () => onOpenTerminal()
-									: undefined
-							}
-							livePortals={livePortals}
-							runningAgents={runningAgents}
 							onArchive={handleArchive}
 							running={isRunningLive}
 							send={connected ? send : undefined}
