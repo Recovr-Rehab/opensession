@@ -208,17 +208,18 @@ type PiStreamEvent =
 
 // ── Passthrough capture and early stop ───────────────────────────────────────
 
-/** The SDK requires a reason when PreToolUse blocks execution, and persists it
- *  as a tool_result in its session. Keep it as an opaque transport marker, not
- *  prose about batches, results, waiting, or turn boundaries. The provider
- *  stops the SDK query after this result is persisted and before Claude gets a
- *  digest turn in which it could interpret or narrate the marker. */
+/** The SDK requires a reason when PreToolUse blocks execution and emits it as
+ *  a tool_result. Keep it as an opaque transport marker, not prose about
+ *  batches, results, waiting, or turn boundaries. The provider stops before
+ *  Claude gets a digest turn in which it could interpret or narrate the marker.
+ *  An immediate SDK abort does not guarantee the session JSONL is durable, so
+ *  this path evicts the SDK mapping and full-replays the next Pi step. */
 export const PI_PASSTHROUGH_BLOCK_REASON = "[OPENSESSION_EXTERNAL_TOOL]";
 
 export interface PiPassthroughEarlyStopTracker {
   /** Tool ids in the complete assistant tool-use message. */
   expected: Set<string>;
-  /** Tool ids whose blocked tool_result has been persisted by the SDK. */
+  /** Tool ids whose blocked tool_result reached the SDK iterator. */
   resolved: Set<string>;
   fired: boolean;
 }
@@ -1008,8 +1009,9 @@ async function* runSdkAttempt(
         if (m.type === "user") {
           notePiPassthroughUser(earlyStop, m.message?.content);
           if (shouldStopPiPassthrough(earlyStop)) {
-            // The blocked results are now durable in the SDK session. Abort
-            // before the SDK asks Claude to digest them as another model turn.
+            // Every blocked result reached the iterator. Abort before the SDK
+            // asks Claude to digest them as another model turn. The mapping is
+            // evicted below because iterator delivery is not disk durability.
             earlyStopped = true;
             reachedResult = true;
             controller.abort("passthrough batch complete");
@@ -1074,7 +1076,15 @@ async function* runSdkAttempt(
       throw new Error("SDK stream ended without a result message");
     }
 
-    if (sdkSessionId) {
+    if (earlyStopped) {
+      // Meridian's live PTY E2E found that an assistant message and its blocked
+      // tool_result can reach the iterator without reaching the SDK session
+      // JSONL before an immediate abort. Never resume such a mapping: the next
+      // Pi step full-replays its real tool call and result into a fresh SDK
+      // session. This gives up a prompt-cache hit, but cannot resume from a
+      // missing or interrupted boundary.
+      piSdkSessionStore().delete(storeKey);
+    } else if (sdkSessionId) {
       rememberSdkTurn(storeKey, sdkSessionId, wireMessages.length, account.id);
     }
 

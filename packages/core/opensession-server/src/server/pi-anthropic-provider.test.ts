@@ -438,7 +438,7 @@ describe("Pi passthrough early stop", () => {
     );
   });
 
-  test("stops only after every tool in a parallel batch has a persisted block result", () => {
+  test("stops only after every tool in a parallel batch has an observed block result", () => {
     const tracker = createPiPassthroughEarlyStopTracker();
     notePiPassthroughAssistant(tracker, [
       { type: "text", text: "checking" },
