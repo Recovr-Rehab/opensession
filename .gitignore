@@ -49,8 +49,8 @@ deploy/sandbox/microvm/.cache-busybox
 .DS_Store
 
 # Vendored third-party agent skills are instance-local. Open Session's own
-# generic skills are tracked below and loaded by the run instruction builder
-# by install.sh.
+# generic skills are tracked below, and every run loads this directory
+# (src/server/skill-paths.ts).
 .agents/skills/
 !.agents/skills/
 .agents/skills/*
@@ -60,6 +60,8 @@ deploy/sandbox/microvm/.cache-busybox
 !.agents/skills/pr-autofix/**
 !.agents/skills/audit-codebase/
 !.agents/skills/audit-codebase/**
+!.agents/skills/bro/
+!.agents/skills/bro/**
 .claude/skills
 skills-lock.json
 .css-shots/
