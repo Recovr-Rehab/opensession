@@ -307,7 +307,7 @@ export function SheetIconButton({
 /**
  * The scrolling, padded interior of a bottom sheet. `ResponsiveDialog` clips
  * its panel at 94dvh, so a sheet whose action list can grow has its own
- * scroller and keeps every 44px action reachable.
+ * scroller so every action stays reachable.
  */
 export function SheetBody({
 	className,
@@ -319,7 +319,7 @@ export function SheetBody({
 	return (
 		<div
 			className={cn(
-				"min-h-0 overflow-y-auto overscroll-contain px-2.5 pb-3.5 [&_button]:min-h-11 [&_button]:min-w-11",
+				"min-h-0 overflow-y-auto overscroll-contain px-2.5 pb-3.5",
 				className,
 			)}
 		>
