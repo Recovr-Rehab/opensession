@@ -57,6 +57,7 @@ import {
 import { Tooltip } from "../ui/tooltip";
 import { ContextMenu, Menu } from "../ui/menu";
 import { Spinner } from "../ui/spinner";
+import { Skeleton, SkeletonBar } from "../ui/state";
 import { cn } from "../ui/cn";
 import { useShortcutLabel } from "../hooks/useShortcutBindings";
 import { PrChecksPopover } from "./PrChecksPopover";
@@ -801,11 +802,17 @@ export function PrStatusBar({
 	// session that turns out to have nothing is the same blink, pointed the
 	// other way.
 	if (!loaded) {
+		if (variant === "summary")
+			return (
+				<Skeleton label="Loading PR status">
+					<div className={WS_SUMMARY_STATUS_ROW}>
+						<SkeletonBar className="size-4 shrink-0 rounded-full" />
+						<SkeletonBar className="w-[58%]" />
+					</div>
+				</Skeleton>
+			);
 		if (
 			variant === "header" ||
-			// The card fills in row by row as its own fetches land, so a
-			// placeholder row here would be the one thing in it that flashes.
-			variant === "summary" ||
 			!(prs || []).some((ref) => ref.number)
 		)
 			return null;
