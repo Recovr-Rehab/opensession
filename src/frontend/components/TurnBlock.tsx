@@ -209,7 +209,22 @@ export const TurnBlock = React.memo(function TurnBlock({
       </button>
 
       {(expanded || messagesInline) && (
-        <div className="mt-0.5">
+        <div
+          className={cn(
+            "mt-0.5",
+            // Open, the work wears a rail: a hairline dropping from the
+            // chevron, with every row nudged in under the header's own text.
+            // The turn's final answer sits back at the column edge with no
+            // rail beside it, so where the work ends and the answer begins
+            // stays legible however long the fold runs (a divider only marks
+            // the seam; the rail says "still inside the work" from any
+            // scroll position). The 13px puts the hairline under the
+            // chevron's center. "messages" inline notes keep reading as
+            // plain transcript, so they take no rail until the fold is
+            // explicitly opened.
+            expanded && "mb-2 ml-[13px] border-l border-line pl-2.5"
+          )}
+        >
           {sections.map((sec) =>
             sec.kind === "msg" ? (
               <TurnMessage
