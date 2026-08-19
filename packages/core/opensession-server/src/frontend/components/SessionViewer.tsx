@@ -1200,6 +1200,9 @@ export function SessionViewer({
 	const [files, setFiles] = useState<FileAttachment[]>(() => loadDraft(draftKey).files);
 	const [uploadStaging, setUploadStaging] = useState(NOTHING_STAGING);
 	const dragDepthRef = useRef(0);
+	const fileDragPresentRef = useRef(false);
+	const cancelledFileDragRef = useRef(false);
+	const fileDragWatchdogRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 	const [fileDragActive, setFileDragActive] = useState(false);
 	useEffect(() => {
 		saveDraft(draftKey, { images, files });
@@ -1521,24 +1524,52 @@ export function SessionViewer({
 		dragDepthRef.current = 0;
 		setFileDragActive(false);
 	}
+	function finishFileDrag() {
+		if (fileDragWatchdogRef.current) clearTimeout(fileDragWatchdogRef.current);
+		fileDragWatchdogRef.current = null;
+		resetFileDrag();
+		fileDragPresentRef.current = false;
+		cancelledFileDragRef.current = false;
+	}
+	function armFileDragWatchdog() {
+		if (fileDragWatchdogRef.current) clearTimeout(fileDragWatchdogRef.current);
+		fileDragWatchdogRef.current = setTimeout(finishFileDrag, 500);
+	}
 	useEffect(() => {
-		if (!fileDragActive) return;
 		function cancelFileDrag(event: KeyboardEvent) {
-			if (event.key !== "Escape") return;
+			if (event.key !== "Escape" || !fileDragPresentRef.current) return;
 			event.preventDefault();
 			event.stopPropagation();
+			cancelledFileDragRef.current = true;
 			resetFileDrag();
+			armFileDragWatchdog();
 		}
-		// Capture before the composer. During a busy run its own Escape handler
-		// stops propagation to open the stop confirmation, which used to leave
-		// this overlay stranded above it.
+		function finishNativeDrag() {
+			finishFileDrag();
+		}
+		// Capture before the composer, and listen for keyup too: Chromium can
+		// consume keydown while it owns a native OS drag.
 		window.addEventListener("keydown", cancelFileDrag, true);
-		return () => window.removeEventListener("keydown", cancelFileDrag, true);
-	}, [fileDragActive]);
+		window.addEventListener("keyup", cancelFileDrag, true);
+		window.addEventListener("dragend", finishNativeDrag, true);
+		return () => {
+			if (fileDragWatchdogRef.current)
+				clearTimeout(fileDragWatchdogRef.current);
+			window.removeEventListener("keydown", cancelFileDrag, true);
+			window.removeEventListener("keyup", cancelFileDrag, true);
+			window.removeEventListener("dragend", finishNativeDrag, true);
+		};
+	}, []);
 
 	function handleFileDragEnter(event: React.DragEvent) {
 		if (!hasDraggedFiles(event.dataTransfer)) return;
 		event.preventDefault();
+		armFileDragWatchdog();
+		if (cancelledFileDragRef.current) return;
+		if (!fileDragPresentRef.current) {
+			fileDragPresentRef.current = true;
+			dragDepthRef.current = 0;
+		}
 		dragDepthRef.current += 1;
 		setFileDragActive(true);
 	}
@@ -1546,8 +1577,21 @@ export function SessionViewer({
 	function handleFileDragLeave(event: React.DragEvent) {
 		if (!hasDraggedFiles(event.dataTransfer)) return;
 		const next = event.relatedTarget;
-		if (!(next instanceof Node) || !event.currentTarget.contains(next)) {
-			resetFileDrag();
+		const leftSurface =
+			!(next instanceof Node) || !event.currentTarget.contains(next);
+		if (cancelledFileDragRef.current) {
+			if (leftSurface) finishFileDrag();
+			else resetFileDrag();
+			return;
+		}
+		// Escape during an external file drag is owned by the browser on some
+		// platforms. Its observable signal is a final leave with no drop effect.
+		if (event.dataTransfer.dropEffect === "none") {
+			finishFileDrag();
+			return;
+		}
+		if (leftSurface) {
+			finishFileDrag();
 			return;
 		}
 		dragDepthRef.current = Math.max(0, dragDepthRef.current - 1);
@@ -1557,6 +1601,16 @@ export function SessionViewer({
 	function handleFileDragOver(event: React.DragEvent) {
 		if (!hasDraggedFiles(event.dataTransfer)) return;
 		event.preventDefault();
+		armFileDragWatchdog();
+		if (cancelledFileDragRef.current) {
+			event.dataTransfer.dropEffect = "none";
+			return;
+		}
+		if (!fileDragPresentRef.current) {
+			fileDragPresentRef.current = true;
+			dragDepthRef.current = 1;
+			setFileDragActive(true);
+		}
 		event.dataTransfer.dropEffect = "copy";
 	}
 
@@ -1564,7 +1618,9 @@ export function SessionViewer({
 		if (!hasDraggedFiles(event.dataTransfer)) return;
 		event.preventDefault();
 		event.stopPropagation();
-		resetFileDrag();
+		const cancelled = cancelledFileDragRef.current;
+		finishFileDrag();
+		if (cancelled) return;
 		if (event.dataTransfer.files.length) {
 			void addSessionAttachments(event.dataTransfer.files);
 		}
@@ -6062,7 +6118,7 @@ export function SessionViewer({
 					{fileDragActive && (
 						<>
 							<motion.div
-								className="pointer-events-none absolute inset-0 z-20 flex flex-col items-center justify-center bg-panel/90 px-6 text-center backdrop-blur-sm"
+								className="pointer-events-none absolute inset-0 z-20 flex flex-col items-center justify-center bg-[color-mix(in_srgb,var(--accent)_18%,var(--bg-panel))] px-6 text-center backdrop-blur-sm"
 								initial={{ opacity: 0 }}
 								animate={{ opacity: 1 }}
 								transition={{ type: "tween", duration: duration.base, ease }}
