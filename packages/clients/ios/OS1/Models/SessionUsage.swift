@@ -1,7 +1,7 @@
 import Foundation
 
 /// Cumulative token and cost accounting for one session, as the server folds
-/// it (`SessionUsage` in packages/protocol). It rides on the session row and
+/// it (`SessionUsage` in packages/core/protocol). It rides on the session row and
 /// is pushed live during a run by the `usage_update` frame.
 ///
 /// Every field has a zero default: a server that predates one of them, or a

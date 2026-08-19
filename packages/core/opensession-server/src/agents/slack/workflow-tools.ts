@@ -139,14 +139,14 @@ Example (no opts.model set → agents run on the default):
 export const meta = { name: "route-audit", phases: [{ title: "List" }, { title: "Audit" }, { title: "Rank" }] };
 phase("List");
 const files = await agent(
-  "List every .ts file in src/server/routes of this repo. Reply with ONLY the basenames.",
+  "List every .ts file in packages/core/opensession-server/src/server/routes of this repo. Reply with ONLY the basenames.",
   { schema: { type: "array", items: { type: "string" } } },
 );
 if (!files) return "listing failed";
 phase("Audit");
 const findings = await pipeline(
   files,
-  (f) => agent("Read src/server/routes/" + f + " and report missing auth/validation checks. Reply 'none' if clean.", { label: f }),
+  (f) => agent("Read packages/core/opensession-server/src/server/routes/" + f + " and report missing auth/validation checks. Reply 'none' if clean.", { label: f }),
   (prev, f) => (prev && prev !== "none" ? f + ": " + prev : null),
 );
 log(findings.filter(Boolean).length + " files with findings");
