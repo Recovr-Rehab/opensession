@@ -6456,7 +6456,12 @@ export function SessionViewer({
 									usage={usage}
 									mentionFetch={async (q) => [
 										...peopleMentionMatches(q),
-										...(await fetchFileMentions(q, session.id)),
+										...(await fetchFileMentions(
+											q,
+											session.id,
+											undefined,
+											getCurrentUser(),
+										)),
 									]}
 									skillsFetch={(q) => fetchSkillMentions(q, session.id)}
 									textareaRef={composerRef}
