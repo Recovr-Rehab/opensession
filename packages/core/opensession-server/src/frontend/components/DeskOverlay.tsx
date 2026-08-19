@@ -117,13 +117,17 @@ function DeskBody({
 		};
 	}, [user]);
 
-	// On summon: drop the caret straight into the composer (desktop — a phone
-	// keyboard popping open unasked is hostile).
+	// On summon, or when the standing session finishes loading on first summon,
+	// drop the caret straight into the composer. A phone keyboard popping open
+	// unasked is hostile, so phones keep their current focus.
 	useEffect(() => {
 		if (!active || phone) return;
-		const ta = rootRef.current?.querySelector("textarea");
-		(ta as HTMLTextAreaElement | null)?.focus();
-	}, [active, phone]);
+		const timer = window.setTimeout(() => {
+			const ta = rootRef.current?.querySelector("textarea");
+			(ta as HTMLTextAreaElement | null)?.focus({ preventScroll: true });
+		}, 150);
+		return () => window.clearTimeout(timer);
+	}, [active, phone, sessionId]);
 
 	async function clearSession() {
 		try {
@@ -156,21 +160,6 @@ function DeskBody({
 							? (voiceError ?? "Voice call failed")
 							: { connecting: "Connecting…", listening: "Listening", thinking: "Thinking…", speaking: "Speaking", action: "Working…" }[voiceState]}
 					</span>
-				)}
-				{voiceEnabled && (
-					<Button
-						variant="ghost"
-						size="sm"
-						className={`shrink-0 ${voiceActive ? "text-fg" : "text-faint"}`}
-						icon={<IconMic size={20} />}
-						onClick={toggleVoice}
-						title={
-							voiceActive
-								? "End the voice call"
-								: "Talk to your Desk (GPT Realtime)"
-						}
-						aria-label={voiceActive ? "End voice call" : "Start voice call"}
-					/>
 				)}
 				<Button
 					variant="ghost"
@@ -215,6 +204,26 @@ function DeskBody({
 					<DeskConversation
 						sessionId={sessionId}
 						presenceActive={active}
+						autoFocus={active && !phone}
+						trailingActions={
+							voiceEnabled ? (
+								<Button
+									variant="ghost"
+									size="lg"
+									className={`shrink-0 ${voiceActive ? "text-fg" : "text-faint"}`}
+									icon={<IconMic size={20} />}
+									onClick={toggleVoice}
+									title={
+										voiceActive
+											? "End the voice call"
+											: "Talk to your Desk (GPT Realtime)"
+									}
+									aria-label={
+										voiceActive ? "End voice call" : "Start voice call"
+									}
+								/>
+							) : undefined
+						}
 						effort="low"
 						hideBefore={clearedAt}
 						voiceSend={(text) =>
@@ -260,6 +269,7 @@ export function DeskOverlay({
 			label="Desk"
 			// The body stays mounted after the first summon — see the module doc.
 			keepMounted
+			desktopTransition="scale-drop"
 			// bg-raised on both breakpoints, overriding the sheet's bg-surface:
 			// the Desk's controls are recessed bg-surface inputs, which would
 			// dissolve into a bg-surface panel.

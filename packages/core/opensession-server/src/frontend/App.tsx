@@ -131,7 +131,7 @@ import { useInputAlerts } from "./hooks/useInputAlerts";
 import { useScrollEdge } from "./hooks/useScrollEdge";
 import { useLargeTitleHandoff } from "./hooks/useLargeTitle";
 import { initAlerts } from "./lib/notify";
-import { registerServiceWorker } from "./lib/push";
+import { onPushNavigate, registerServiceWorker } from "./lib/push";
 import {
 	archiveSessionApi,
 	deleteSessionApi,
@@ -312,7 +312,6 @@ const SETTINGS_SECTIONS = new Set<SettingsSectionKey>([
 	"shortcuts",
 	"general",
 	"setup",
-	"identity",
 	"repos",
 	"members",
 	"models",
@@ -341,6 +340,7 @@ const LEGACY_SETTINGS_SECTIONS: Record<string, SettingsSectionKey> = {
 	composer: "preferences",
 	keychain: "myAccounts",
 	profile: "myAccounts",
+	identity: "general",
 };
 
 // Everything a session URL carries after `/session/`: the id, plus the
@@ -1163,6 +1163,20 @@ export function App(
 		onOpen: (id) => navigate({ view: "session", id }),
 		connected,
 	});
+
+	// Tapping a push notification opens what it is about. The service worker
+	// hands the URL to this page instead of reloading the document, so the tap
+	// lands on that session rather than on whatever page the app was left on.
+	useEffect(() => {
+		if (!serviceWorker) return;
+		return onPushNavigate((url) => {
+			try {
+				navigateRef.current(parseRoute(new URL(url, location.origin).pathname));
+			} catch {
+				// A malformed URL is not worth throwing away the focus for.
+			}
+		});
+	}, [serviceWorker]);
 
 	// The "new session" ⌘K palette. It's an overlay driven by its own state (not a
 	// route), so it can open over any view; the <base>/new route still opens it

@@ -17,6 +17,7 @@ import {
 	SettingRowControl,
 	SettingRowText,
 	SettingRowTitle,
+	SettingsGroupLabel,
 	SettingsHeader,
 	SettingsHint,
 	SettingsPanel,
@@ -25,6 +26,7 @@ import {
 import { toast } from "../../ui/toast";
 import { InlineAlert } from "../../ui/state";
 import { IconArrowUpToLine, IconTrash } from "../icons";
+import { IdentityCard } from "../SetupIdentity";
 
 const NAME_INPUT_CLASS = cn(settingsInputClass, "w-[220px] max-w-full");
 
@@ -201,6 +203,8 @@ export function GeneralPanel() {
 			) : (
 				<SettingCardSkeleton rows={2} label="Loading organization settings" />
 			)}
+			<SettingsGroupLabel>Identity</SettingsGroupLabel>
+			<IdentityCard />
 		</SettingsPanel>
 	);
 }
