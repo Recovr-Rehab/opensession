@@ -311,6 +311,7 @@ import {
 	SESSION_LINK,
 	SESSION_LINK_LINEAR,
 	SESSION_LINK_PLAIN,
+	PILL_CENTRED,
 	SUGGESTIONS_CLEARANCE,
 	TRANSCRIPT_PILL_BUTTON,
 	TRANSCRIPT_PILL_LOADING,
@@ -6318,7 +6319,10 @@ export function SessionViewer({
 							</>,
 							document.body,
 						)}
-					<div className={VIEWER_MESSAGES_REGION}>
+					{/* The step lives here rather than on the scroller alone, so the
+					    pills floating beside it inherit it too and stay on the reading
+					    column instead of the middle of the pane. */}
+					<div className={VIEWER_MESSAGES_REGION} style={summaryStepStyle}>
 						{/* Selecting transcript text offers actions without changing either
 						    composer until the person chooses where to use it. */}
 						<QuoteSelection
@@ -6340,7 +6344,6 @@ export function SessionViewer({
 								// the card's side of the composition.
 								summaryStep > 0 && VIEWER_SUMMARY_STEP,
 							)}
-							style={summaryStepStyle}
 							ref={messagesRef}
 							data-lightbox-session-id={session.id}
 							onScroll={handleMessagesScroll}
@@ -6636,7 +6639,7 @@ export function SessionViewer({
 												// is centred while the chips run from the left, so
 												// on a narrow column they otherwise land on top of
 												// each other.
-												"absolute bottom-[calc(24px+var(--suggestions-under,0px))] left-1/2 z-[5] -translate-x-1/2",
+												`absolute bottom-[calc(24px+var(--suggestions-under,0px))] left-1/2 z-[5] ${PILL_CENTRED}`,
 											)}
 											onClick={() => scrollToLatest("smooth")}
 										>

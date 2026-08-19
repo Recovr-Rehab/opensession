@@ -455,6 +455,25 @@ const PILL_PRESSABLE =
 export const TRANSCRIPT_PILL_BUTTON = `${TRANSCRIPT_PILL} ${PILL_PRESSABLE}`;
 export const FLOATING_PILL_BUTTON = `${FLOATING_PILL} ${PILL_PRESSABLE}`;
 
+/**
+ * Centring for a pill that floats over the transcript.
+ *
+ * `left-1/2` centres on the PANE, and the reading column is not always in the
+ * middle of it: while the workspace summary card is up, the transcript and the
+ * composer step left by `--ws-summary-step` (VIEWER_SUMMARY_STEP) while these
+ * pills are siblings of the scroller, so a pane-centred pill is left hanging
+ * over the card's side of the composition. Folding the step into the same
+ * translate keeps the pill on the column it belongs to.
+ *
+ * One utility rather than `-translate-x-1/2` with an override beside it: two
+ * translate utilities on one element resolve by Tailwind's output order, not
+ * by the order they are written. The variable is only ever set while the card
+ * is up, which never happens on a phone, so its default leaves every other
+ * case at a plain -50%.
+ */
+export const PILL_CENTRED =
+	"translate-x-[calc(-50%+var(--ws-summary-step,0px))]";
+
 /** The loading state's leading spinner, and the wider gap it asks for: an arrow
  *  glyph carries side bearing of its own, a bare 12px ring carries none, so at
  *  the label's own spacing the two sit on top of each other. */
@@ -483,7 +502,7 @@ export const TRANSCRIPT_PILL_SPINNER =
  * the `translate` property doing the centring, and costs no layout.
  */
 export const TRANSCRIPT_PILL_TOP =
-	"pointer-events-none absolute top-3 left-1/2 z-[5] -translate-x-1/2 " +
+	`pointer-events-none absolute top-3 left-1/2 z-[5] ${PILL_CENTRED} ` +
 	"phone:top-[calc(var(--pane-header-h)+var(--strip-clearance,0px)+8px)] " +
 	"phone:[transition-property:transform] phone:duration-[var(--dur-lg)] " +
 	"phone:ease-[var(--ease)] " +
