@@ -84,6 +84,12 @@ import { PreviewWait, matchPreviewWaitRoute } from "./components/PreviewWait";
 import { SettingsButton } from "./components/SettingsButton";
 import { TitleBar } from "./components/TitleBar";
 import { Settings } from "./components/Settings";
+import { FirstMile } from "./components/FirstMile";
+import {
+	completeFirstMile,
+	firstMileComplete,
+	onFirstMileChanged,
+} from "./lib/first-mile-pref";
 import {
 	settingsPaletteActions,
 	type SettingsSectionKey,
@@ -616,6 +622,8 @@ export function App(
 	} = useSessions({ loadArchived: route.view === "archived" });
 	const [launchComplete, setLaunchComplete] = useState(false);
 	const [registeredRepos, setRegisteredRepos] = useState<string[]>([]);
+	const [firstMileIsComplete, setFirstMileIsComplete] =
+		useState(firstMileComplete);
 	const auth = useAuthStatus();
 	const currentUser = useCurrentUser();
 	const { connected, send, addHandler } = useWebSocket();
@@ -859,6 +867,12 @@ export function App(
 		workspacesLoaded &&
 		sessions.length === 0 &&
 		workspaces.length === 0;
+	const forceFirstMile =
+		stripBasePath(location.pathname) === "/welcome" ||
+		new URLSearchParams(location.search).get("firstmile") === "1";
+	const firstMileActive =
+		forceFirstMile ||
+		(auth?.admin !== false && productEmpty && !firstMileIsComplete);
 	const refreshWorkspaces = React.useCallback(() => {
 		fetchWorkspaces()
 			.then(setWorkspaces)
@@ -876,6 +890,24 @@ export function App(
 		window.addEventListener("opensession:workspaces-changed", onWorkspaceSettingsChanged);
 		return () => window.removeEventListener("opensession:workspaces-changed", onWorkspaceSettingsChanged);
 	}, [refreshWorkspaces]);
+	useEffect(() => {
+		const sync = () => setFirstMileIsComplete(firstMileComplete());
+		const unsubscribe = onFirstMileChanged(sync);
+		sync();
+		return unsubscribe;
+	}, []);
+
+	function finishFirstMile() {
+		completeFirstMile();
+		if (forceFirstMile) {
+			const url = new URL(location.href);
+			url.searchParams.delete("firstmile");
+			const path = stripBasePath(url.pathname) === "/welcome"
+				? routePath({ view: "prs" })
+				: url.pathname;
+			history.replaceState(history.state, "", `${path}${url.search}${url.hash}`);
+		}
+	}
 
 	// Subscribe to the per-user pin/color stores. Both hydrate async at module
 	// load, and on a fast localhost that load() can resolve (and emit) before
@@ -4190,6 +4222,10 @@ export function App(
 				</Modal.Content>
 			</Modal.Root>
 			<div className="app">
+				{firstMileActive ? (
+					<FirstMile onDone={finishFirstMile} />
+				) : (
+				<>
 				{/* Mobile-only top bar. On the sidebar-root page it shows the brand;
 				    on a pushed page (a session or other view) the brand is replaced by
 				    a Back chevron that pops back to the root, iOS-style. On desktop the
@@ -5183,6 +5219,8 @@ export function App(
 				    markdown. One watcher for the whole app: the chips are HTML
 				    strings, so they can't each own a popover. */}
 				<ChipHoverCards sessions={sessions} />
+				</>
+				)}
 			</div>
 		</UserGate>
 	);
