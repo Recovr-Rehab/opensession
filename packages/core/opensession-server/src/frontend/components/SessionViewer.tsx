@@ -275,7 +275,11 @@ import { useSessionScroll } from "../hooks/useSessionScroll";
 import { useShortcutKeys, useShortcutLabel } from "../hooks/useShortcutBindings";
 import { useSidePanel } from "../hooks/useSidePanel";
 import { sessionHasWorkspace } from "../lib/session-workspace";
-import { workspaceSummaryOpen } from "../lib/workspace-summary-open";
+import {
+	workspaceSummaryOpen,
+	WS_SUMMARY_ROOM_W,
+	workspaceSummaryShift,
+} from "../lib/workspace-summary-open";
 import { blockingOverlayOpen } from "../lib/blocking-overlay";
 import { matchesShortcut } from "../lib/shortcuts";
 import { PulseDot } from "../ui/status";
@@ -318,6 +322,7 @@ import {
 	VIEWER_REVIEW_MAIN,
 	VIEWER_SUGGESTIONS,
 	VIEWER_SUGGESTIONS_ROW,
+	VIEWER_SUMMARY_STEP,
 	VIEWER_TITLE,
 	INFO_CONTENT,
 	INFO_HERO,
@@ -4380,6 +4385,19 @@ export function SessionViewer({
 	// the card can only report itself once it exists.
 	const summaryVisible =
 		summaryOpen && !showReview && !isPhone && hasRepoWork && !panelOpen;
+	// How far the reading column has to step to clear the card, which on a pane
+	// wide enough to hold both of them is not at all. Below the threshold the
+	// card lies over the transcript and there is nowhere to step to, so the
+	// column stays where it is rather than shuffling under a card it cannot
+	// escape.
+	const summaryStep =
+		summaryVisible && headerW >= WS_SUMMARY_ROOM_W
+			? workspaceSummaryShift(headerW)
+			: 0;
+	const summaryStepStyle =
+		summaryStep > 0
+			? ({ "--ws-summary-step": `-${summaryStep}px` } as React.CSSProperties)
+			: undefined;
 	// Closing the panel (desktop) or the info page (phone) drops back to the
 	// overview, so re-opening it doesn't land mid-drill-in. Each width watches
 	// only its own host: a phone's side panel is never rendered, so keying this
@@ -6260,14 +6278,13 @@ export function SessionViewer({
 						<div
 							className={cn(
 								VIEWER_MESSAGES,
-								// The summary card floats over this column's right gutter.
-								// Wide enough and the reading column steps aside rather than
-								// being covered; narrower than that there is nowhere to step,
-								// so the card overlaps and the transcript stays put.
-								summaryVisible &&
-									headerW >= 1120 &&
-									"desktop:[&>*]:-translate-x-[160px]",
+								// The summary card floats over this column's right gutter, so
+								// the column steps aside by however much of it the card would
+								// actually cover. A pane with room for both moves nothing: the
+								// messages stay in the middle where they were.
+								summaryStep > 0 && VIEWER_SUMMARY_STEP,
 							)}
+							style={summaryStepStyle}
 							ref={messagesRef}
 							onScroll={handleMessagesScroll}
 							onClick={handleMessagesClick}
@@ -6580,10 +6597,11 @@ export function SessionViewer({
 							<div
 								className={cn(
 									VIEWER_INPUT,
-									summaryVisible &&
-										headerW >= 1120 &&
-										"desktop:[&>*]:-translate-x-[160px]",
+									// Moves with the transcript above it, or the composer would
+									// sit off the column it belongs to.
+									summaryStep > 0 && VIEWER_SUMMARY_STEP,
 								)}
+								style={summaryStepStyle}
 							>
 								{noEngine ? (
 									<div className="mx-auto max-w-[var(--session-col)] text-label text-faint">

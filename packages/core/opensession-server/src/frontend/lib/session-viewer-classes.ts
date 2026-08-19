@@ -287,6 +287,20 @@ export const VIEWER_INPUT =
 	"phone:[body.kb-open_&:has(.composer:not(.composer-min))]:pb-0";
 
 /**
+ * The step the transcript and the composer take while the workspace summary
+ * card is up.
+ *
+ * The distance is a variable rather than a fixed utility because it depends on
+ * how much pane is left beside the card: on a wide window it is zero and the
+ * reading column stays centred (`workspaceSummaryShift`).
+ *
+ * It moves the children, not the scroller, so the scroll container keeps its
+ * own box, its padding and its overflow exactly where they were.
+ */
+export const VIEWER_SUMMARY_STEP =
+	"desktop:[&>*]:translate-x-[var(--ws-summary-step,0px)]";
+
+/**
  * Where the quick-reply row hangs (components/ReplySuggestions).
  *
  * `bottom-full` lifts it off the top of the input box, so the row lies on the
