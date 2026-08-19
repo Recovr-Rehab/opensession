@@ -612,10 +612,10 @@ function normalizeToolName(name: string): string {
   return TOOL_NAME_MAP[name.toLowerCase()] || name;
 }
 
-// The old Claude PostToolUse "just format after git push" hook is gone from
-// here: that's tella-fusion repo policy, not agent code — it now lives in
-// tella-fusion's own .opencode/plugin (OpenCode tool.execute.after hook), so
-// every opencode run in that repo gets it regardless of which loop drove it.
+// Formatting hooks are repository policy, not agent code: a repo that wants
+// one carries it in its own .opencode/plugin (OpenCode tool.execute.after
+// hook), so every opencode run in that repo gets it regardless of which loop
+// drove it.
 
 // ---------------------------------------------------------------------------
 // processMessage — core: runs a queued message through runAgent

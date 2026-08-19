@@ -26,7 +26,7 @@ export const SUPPORT_PRIORITY_DOT: Record<number, string> = Object.fromEntries(
 
 // ── Generic feed-band filters (the feeds design) ──
 // Every band's filter menu is driven by the feed descriptor's FeedFilterSpec
-// list: arg-mode specs feed the backing list tool (tella tags/playlists),
+// list: arg-mode specs feed the backing list tool (tags/playlists),
 // meta-mode specs filter client-side over item.meta (plain assignee/labels,
 // options derived from the items). Built-ins on every feed: "Linked session"
 // and (non-lane feeds) "Sort". Selections persist per browser, per feed.

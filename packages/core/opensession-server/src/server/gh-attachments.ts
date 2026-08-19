@@ -10,7 +10,7 @@
  *   github.com/user-attachments/assets/<uuid> URL that GitHub renders inline
  *   (an <img> for images, a native player for a bare video URL). Used by the
  *   walkthrough PR mirror (walkthrough.ts). Verified 2026-08-15 against
- *   tellahq/opensession#96.
+ *   an internal pull request.
  *
  * - resolveUserAttachment: turn such a URL back into a short-lived signed
  *   private-user-images URL (plus whether it is an image or a video). The

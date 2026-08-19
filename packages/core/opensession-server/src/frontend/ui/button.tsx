@@ -7,7 +7,7 @@ import { cn } from "./cn";
  * buttons. New buttons go through this; legacy `.btn-*` classes in legacy.css
  * migrate here opportunistically when touched (strangler pattern).
  *
- * The icon/spacing rules are ported from tella-fusion's button system
+ * The icon/spacing rules are ported from a mature button system
  * (webapp Button.res + ButtonWithIcon.res — the product these iconic-pro
  * glyphs come from):
  *
@@ -16,12 +16,12 @@ import { cn } from "./cn";
  *  - when an icon LEADS a label, pull the icon-side padding in, so the pair
  *    reads optically balanced against a text-only button — the glyph's
  *    built-in whitespace otherwise makes the icon side look padded out;
- *  - dim the leading icon relative to the label (Tella: opacity-50 on
+ *  - dim the leading icon relative to the label (opacity-50 on
  *    neutral weights, a lighter tint on the primary) — the label stays the
  *    dominant read, the icon is support;
  *  - icon-only buttons go square with symmetric padding and the icon
  *    dead-centered, UNdimmed — there the icon *is* the label;
- *  - press feedback is a whole-button scale tick (Tella: active:scale-97).
+ *  - press feedback is a whole-button scale tick (active:scale-97).
  *
  * `caret` is the mirror of `icon` for menu triggers: one trailing chevron,
  * sized off the LABEL rather than the 20px glyph step, with the same padding

@@ -355,7 +355,7 @@
 	   corner: a circular arc removes 0.215r² of its corner square against a
 	   squircle's 0.073r², about three times as much, so it has to be 1.75x
 	   smaller to read at the same weight. 1.35 / 1.75 is the 0.771 here, and
-	   1.75 is the ratio tella-fusion authors its own squircle classes with
+	   1.75 is the ratio commonly used for squircle classes
 	   (8px round against 14px squircle).
 
 	   This was 1, the radius each corner is authored with, and that is what
@@ -1214,7 +1214,7 @@ body:is(.resizing-sidebar, .resizing-panel, .resizing-tab-split) {
 
    Keyed off `html.wco` (set by the detection script in index.html), NOT the
    `(display-mode: window-controls-overlay)` media query: Electron (the Open Session
-   desktop shell, tellahq/os1-mac) exposes the WCO geometry and env() vars but
+   desktop shell, packages/clients/mac) exposes the WCO geometry and env() vars but
    keeps display-mode at "browser", so the media query never matches there. */
 html.wco .app {
 	border-top: none;

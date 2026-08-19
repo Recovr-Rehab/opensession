@@ -110,7 +110,7 @@ export function resolveSessionRepoContext(
  * that branch as THE branch — sibling commits included. Without this, each
  * sibling session decided the extra commits on the shared branch weren't its own
  * and cherry-picked onto a fresh branch, producing one PR per session instead of
- * one per workspace (tella-fusion PRs #4529–#4531).
+ * one per workspace.
  */
 export function buildBranchNote(session: {
 	mode?: "ask" | "code" | "scratch";

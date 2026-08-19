@@ -128,7 +128,7 @@ function Content({
 							"fixed left-1/2 top-1/2 z-[10001] w-[90vw] -translate-x-1/2 -translate-y-1/2",
 							widthClassName ?? "max-w-[28rem]",
 							"max-h-[85dvh] overflow-y-auto overscroll-contain outline-none",
-							// Match Tella's restrained Dialog2 shell: lifted surface, soft edge,
+							// A restrained dialog shell: lifted surface, soft edge,
 							// and enough radius to read as a modal without becoming a card.
 							// The edge is --dialog-ring rather than the shared hairline: on
 							// a scrim the fill's step above the page all but disappears, so

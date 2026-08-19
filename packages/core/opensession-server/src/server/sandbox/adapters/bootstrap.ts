@@ -539,7 +539,7 @@ function toHttpsUrl(origin: string): string | null {
 function injectToken(httpsUrl: string): string {
   const cred = sandboxConfig().cloneCredential;
   if (cred?.type === "https-token") {
-    // Hosted Open Session keeps a long-lived, tellahq-scoped bot credential in
+    // A hosted instance keeps a long-lived, org-scoped bot credential in
     // GITHUB_API_TOKEN. Prefer it for GitHub clones over the config's token:
     // GitHub App user tokens expire in ~8h, so persisting one in sandbox.json
     // makes every fresh Daytona/Modal bootstrap fail days later. Self-hosters
@@ -770,7 +770,7 @@ async function bootstrapRemoteBaseRuntime(
   );
   // Some provider images prebake only the `bun` binary. Bun's standard
   // installer also exposes `bunx` as a same-binary shim, and repo tooling
-  // commonly invokes that name directly (tella-fusion's ReScript watcher).
+  // commonly invokes that name directly (a repo's own watcher scripts).
   need(
     await driver.exec(
       `test -x ${REMOTE_BUNX} || ln -sf ${REMOTE_BUN} ${REMOTE_BUNX}`,
@@ -1196,7 +1196,7 @@ export async function setupRemoteWorkspace(
   if (cloned.exitCode !== 0) {
     console.log(`[sandbox-remote] cloning ${redactUrl(cloneUrl)} into ${cwd}`);
     // Blobless partial clone: full history/refs but blobs fetched lazily via
-    // the persisted (tokenized) origin URL. tella-fusion's full .git is
+    // the persisted (tokenized) origin URL. A large repo's full .git can be
     // ~2.4GB vs ~450MB blobless — on a 10GiB sandbox disk that headroom is
     // the difference between working and ENOSPC (verified live 2026-07-09:
     // full clone died on the default 3GiB disk with an EMPTY git error,

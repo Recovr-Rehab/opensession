@@ -11,10 +11,9 @@ import { markTileClass, markTileShadow } from "../lib/mark-tile";
  * and it did not while each side rounded and lit itself. */
 export function IconTile({ name, size = 34 }: { name: string; size?: number }) {
   const key = name.toLowerCase();
-  const canonicalKey = brandKey(key);
-  const brand = BRANDS[canonicalKey];
+  const brand = BRANDS[brandKey(key)];
   const logo = brandLogo(key);
-  const logoSize = canonicalKey === "tella" ? size : size * 0.56;
+  const logoSize = size * 0.56;
   const bg = brand?.bg;
   return (
     <span

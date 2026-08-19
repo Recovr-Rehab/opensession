@@ -134,8 +134,8 @@ const TYPE_GLYPHS: Record<LibraryEntryType, Glyph> = {
 
 /** A service named in the entry's own name, for the entries that carry no
  *  `requires`, which is every automation TEMPLATE, most of the catalog. Only
- *  the name is searched: a description mentioning a repo called tella-fusion
- *  is not a Tella automation. */
+ *  the name is searched: a description mentioning a repo called webapp
+ *  is not a webapp automation. */
 const BRAND_IN_NAME = new RegExp(`\\b(${Object.keys(BRANDS).join("|")})\\b`);
 
 function brandFor(entry: LibraryEntry): string | undefined {

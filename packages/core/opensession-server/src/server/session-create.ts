@@ -940,7 +940,7 @@ export async function handleCreateSessionMessage(
 	const canFork = !!fork?.canFork;
 	const needsForkHandoff = !!fork?.needsHandoff;
 
-	// Scratch: repo-less sessions for feed-item workspaces (Tella videos —
+	// Scratch: repo-less sessions for feed-item workspaces (videos —
 	// the feeds design). Full write + bash in a per-workspace scratch
 	// dir, MCP tools as usual; no repo, branch, or PR flow.
 	const isScratch = forkSource
@@ -990,7 +990,7 @@ export async function handleCreateSessionMessage(
 	const createMcpServers = Array.isArray(msg.mcpServers)
 		? msg.mcpServers.map(String)
 		: undefined;
-	// Which repo this session works in (tella-fusion by default). A repo-less
+	// Which repo this session works in (the instance default). A repo-less
 	// session still resolves one here — sandbox selection and memory scopes
 	// are repo-keyed — but never records it (see `repoId` on the spec below).
 	const repo = getRepo(
@@ -1379,7 +1379,7 @@ export async function handleCreateSessionMessage(
 			).externalRefsOpeningContext(inheritedRefs, {
 				scratch: isScratch,
 				// The creator's MCP grant fetches the object context
-				// (e.g. the Tella video via their account).
+				// (e.g. a linked video via their account).
 				user,
 			});
 			if (refsContext)

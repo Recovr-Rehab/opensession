@@ -775,7 +775,7 @@ export async function capturePreviewScreenshot(
   }
 }
 
-/** Fresh `.ports.conf` body in tella-fusion dev-services.sh format (harmless
+/** Fresh `.ports.conf` body in dev-services.sh format (harmless
  *  for repos that ignore it — a lifecycle start.sh just reads $WEBAPP_PORT). */
 function freshPortsConfText(webappPort: number, comment: string): string {
   const rand = (min: number, max: number) => min + Math.floor(Math.random() * (max - min + 1));
@@ -799,10 +799,10 @@ function freshPortsConfText(webappPort: number, comment: string): string {
  *
  *  A warm-template refresh deliberately excludes `.env*` from what it seeds
  *  into a worktree, and nothing else puts them back — the comment there still
- *  points at a `seedWebappEnv` that no longer exists. tella-fusion's
- *  `.agents/start.sh` exits 2 on a missing `.env.local`, so the Preview button
+ *  points at a `seedWebappEnv` that no longer exists. A repo's
+ *  `.agents/start.sh` can exit on a missing `.env.local`, so the Preview button
  *  fails outright for any worktree where an agent never happened to run the
- *  tella-local setup.
+ *  repo's own local setup.
  *
  *  Only fills gaps: a worktree copy may carry deliberate per-session edits
  *  (the dev-auth bypass among them), so an existing file is never overwritten. */
@@ -869,19 +869,19 @@ function setupStampPath(worktreeDir: string): string {
 /**
  * Bring the session's dev server up if it isn't already, using the shared
  * resolution chain (repo `.agents/start.sh` → config `previewCommand` →
- * tella-local). Bring-ups can take minutes (first build) — so we spawn the
+ * a built-in fallback). Bring-ups can take minutes (first build) — so we spawn the
  * command in the background and return immediately with `starting: true`;
  * callers poll `getPreviewStatus` to see it flip to `running`.
  *
  * Environment contract (same as sandbox boots): `OPENSESSION_BOOT_MODE=fresh`
  * always; repo-script boots additionally get `WEBAPP_PORT` (allocated here and
  * seeded into .ports.conf so status can see it) and `PREVIEW_URL`. The legacy
- * rungs (previewCommand/tella-local) own their .ports.conf themselves.
+ * rungs (previewCommand/fallback) own their .ports.conf themselves.
  *
  * AWS: the opensession service cgroup denies IMDS (IPAddressDeny in
  * opensession.service), so children spawned here can never mint instance-role
- * creds on their own — that's what silently broke the tella-fusion bring-up
- * (its `aws` preflight and prebuilt-WASM S3 install both need creds). Inject
+ * creds on their own, which is what silently broke a repo bring-up whose
+ * `aws` preflight and prebuilt-WASM S3 install both needed creds. Inject
  * the same short-lived credentials agent runs get (aws-creds.ts).
  */
 export async function startPreview(worktreeDir: string): Promise<PreviewStatus> {
@@ -1333,7 +1333,7 @@ function sandboxExists(sandbox: Sandbox): (p: string) => Promise<boolean> {
 /**
  * Seed `<worktree>/.ports.conf` so the in-container dev flow adopts the
  * chosen (pre-published) webapp port instead of allocating a random one that
- * isn't published. tella-fusion's dev-services.sh SOURCES an existing
+ * isn't published. A repo's dev-services.sh may SOURCE an existing
  * .ports.conf and keeps any port that's free — inside the container's fresh
  * netns ours always is. When the file already exists we rewrite only the
  * WEBAPP_PORT line; when it's absent we write the full six-key file in
@@ -1387,7 +1387,7 @@ async function writeSandboxTunnelsEnv(
     `printf '%s\\n' ${shellQuoteWord(body)} > ${shellQuoteWord(file)}`,
   ]);
   // Keep it out of the session diff: one idempotent line in the repo's shared
-  // info/exclude (tella-fusion doesn't gitignore .tunnels.env yet).
+  // info/exclude (a repo may not gitignore .tunnels.env).
   await sandbox.exec([
     "sh", "-c",
     `ex="$(git rev-parse --git-path info/exclude 2>/dev/null)" && [ -n "$ex" ] && ` +

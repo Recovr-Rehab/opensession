@@ -459,7 +459,7 @@ export interface UnifiedSession {
 	 */
 	slim?: boolean;
 	plainThreadId?: string;
-	/** Generic feed-item linkage (Tella videos, …) — the feeds design. */
+	/** Generic feed-item linkage (videos, …) — the feeds design. */
 	externalRefs?: ExternalRef[];
 	goal?: string;
 	/** The Goal record driving this session, when a goal woke it. */
@@ -557,7 +557,7 @@ export interface Workspace {
 	worktreeDir?: string;
 	/** For support-ticket workspaces: the Plain thread they're attached to. */
 	plainThreadId?: string;
-	/** Generic feed-item linkage (Tella videos, …) — the feeds design. */
+	/** Generic feed-item linkage (videos, …) — the feeds design. */
 	externalRefs?: ExternalRef[];
 	/** An unsent composer prompt parked here before any session exists. */
 	draft?: { text: string; updatedAt: string; by?: string; autoName?: boolean };
@@ -730,7 +730,7 @@ export interface PrDetails {
 	/** CLEAN | BEHIND | BLOCKED | DIRTY | UNSTABLE | … — merge-box state. */
 	mergeStateStatus?: string;
 	/** The PR's webapp preview environment (Vercel preview), when one exists.
-	 * `embeddable` is true once the deploy's CSP lets os.tella.dev frame it. */
+	 * `embeddable` is true once the deploy's CSP lets this app frame it. */
 	staging?: { url: string; status: string; embeddable?: boolean } | null;
 	/** The GitHub stack this PR is a layer of. Null/absent covers both "not
 	 *  stacked" and "the stack read failed" — the UI treats them the same. */

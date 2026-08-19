@@ -2,7 +2,7 @@ export type SessionSource = "slack" | "linear" | "opensession" | "cli";
 
 /**
  * Generic linkage from a session/workspace to an external object surfaced by
- * a feed (Tella video, eventually Plain thread, …). `kind` matches the feed's
+ * a feed (a video, eventually a Plain thread, …). `kind` matches the feed's
  * refKind; `id` is the item's stable external id. The successor to per-source
  * foreign keys like plainThreadId — see the feeds design.
  */
@@ -178,7 +178,7 @@ export interface UnifiedSession {
    */
   slim?: boolean;
   plainThreadId?: string;
-  /** Generic external-object linkage (feed items: Tella videos, …) — the
+  /** Generic external-object linkage (feed items: videos, …) — the
    *  successor to per-source foreign keys like plainThreadId (see
    *  the feeds design). A session can carry several. */
   externalRefs?: ExternalRef[];
@@ -323,7 +323,7 @@ export interface SlackSessionFile {
   model?: string;
   codexThreadId?: string | null;
   /** Registered repo id this session works in; unset/null = the default repo
-   *  (tella-fusion), which is the historical shape, so old session files stay
+   *  (the instance default repo), which is the historical shape, so old session files stay
    *  valid. */
   repoId?: string | null;
   /** Pi engine session id, written by agent-session-sync for pi/* runs (its
@@ -434,7 +434,7 @@ export interface WalkthroughShot {
  * A Cursor-style PR walkthrough the agent publishes when it finishes a
  * user-visible change: a short demo video, before/after screenshots, and a
  * writeup. Rendered inline in the session's Review tab and mirrored into the
- * GitHub PR description (video + images as os.tella.dev links there — the
+ * GitHub PR description (video + images as instance links there — the
  * server is tailnet-only, so GitHub's camo proxy can't inline them).
  */
 export interface SessionWalkthrough {

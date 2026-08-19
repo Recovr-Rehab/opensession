@@ -184,7 +184,7 @@ export function SupportRow({
 	);
 }
 
-// A feed row: one external object (e.g. a Tella video) in the workspace rows'
+// A feed row: one external object (e.g. a linked video) in the workspace rows'
 // exact shape — the generic sibling of SupportRow (the feeds design). The
 // rail dot wears the linked session's status (the feed lane's color, else
 // faint, when no session exists yet); the hover card carries the preview.

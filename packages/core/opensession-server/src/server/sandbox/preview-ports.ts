@@ -4,7 +4,7 @@
  *
  * Host previews expose a webapp at Caddy https port `webappPort + 6000`
  * (webapp ports 3100-3999 → https 9100-9999). That's collision-free on the
- * host because the tella-fusion port allocator enforces webapp-port
+ * host because the repo's own port allocator enforces webapp-port
  * uniqueness with lsof — but a SANDBOXED dev server's webapp port lives in
  * the container's private netns, where the host allocator can't see it: a
  * host session and a sandbox (or two sandboxes) can hold the same webapp

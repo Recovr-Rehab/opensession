@@ -545,7 +545,7 @@ function notifyPrClosed(detail: PrClosedDetail) {
 }
 
 /** GitHub PR agent behaviors (the opensession-* PR labels) fired straight from the
-    info panel: review / auto-fix / simplify / adversarial. tella-fusion only. */
+    info panel: review / auto-fix / simplify / adversarial. */
 export type PrAgentAction = "review" | "autofix" | "simplify" | "adversarial";
 
 export async function triggerPrActionApi(

@@ -288,7 +288,7 @@ export function webAuthToken(req: Request): string | null {
  *  - Sec-Fetch-Site: "cross-site" → reject; "same-origin"/"none" → allow.
  *  - Otherwise, if an Origin header is present its host must equal the
  *    request's Host (scheme-insensitive: Caddy terminates TLS, so the origin
- *    is https://os.tella.dev while we see plain HTTP with that Host).
+ *    is the public HTTPS origin while we see plain HTTP with that Host).
  */
 export function crossSiteViolation(req: Request): string | null {
   // Explicit-Authorization requests cannot be CSRF — a browser never attaches
@@ -311,7 +311,7 @@ export function crossSiteViolation(req: Request): string | null {
   // us at all when it holds host permissions for this host, and the auth
   // endpoints those calls hit don't act on the cookie — the residual risk
   // (a cookie-riding mutation from a rogue extension the user installed with
-  // os.tella.dev host access) is inside the trust boundary of this
+  // access to the instance host) is inside the trust boundary of this
   // tailnet-only deployment.
   if (origin.startsWith("chrome-extension://")) return null;
   let originHost: string;

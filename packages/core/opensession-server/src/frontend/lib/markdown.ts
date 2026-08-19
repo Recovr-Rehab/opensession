@@ -454,7 +454,7 @@ function sessionTip(id: string): string {
 }
 
 // Agents write pull requests the GitHub way — a bare `#5528`, sometimes
-// qualified (`tella-fusion#5528`, `tellahq/tella-fusion#5528`) — and those
+// qualified (`webapp#5528`, `acme/webapp#5528`) — and those
 // references are the most-followed link in a transcript. They render as chips
 // into OS1's OWN review surface (`/pr/<repo>/<number>`, which resolves to the
 // PR's workspace Review tab), not to github.com: the review is here.
@@ -473,7 +473,7 @@ const PR_NUMBER_MAX_DIGITS = 5;
 // (`color: #333`, `#111`), and rankings (`#29`).
 //
 // Repos numbered under a thousand are the reason this can't just be a length
-// floor — backstage is at #92, tella-mac at #14. A short number links when
+// floor: a young repo can be at #92, or #14. A short number links when
 // something other than its digits says PR: the word in front of it (`PR #92`,
 // the dominant form in practice), a qualifier (`backstage#92`), or a PR the
 // session list already knows for that repo.

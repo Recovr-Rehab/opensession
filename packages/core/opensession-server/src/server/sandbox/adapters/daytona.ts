@@ -404,7 +404,7 @@ export class DaytonaProvider implements SandboxProvider {
       // are rejected when creating from a snapshot (live-API behavior
       // 2026-07). Unset = Daytona's default snapshot (1 vCPU/1GB/3GiB disk),
       // too small for real repo workspaces: the runner payload alone is ~2GB
-      // and a tella-fusion clone died on ENOSPC. See SandboxDaytonaConfig.
+      // and a large repo's clone died on ENOSPC. See SandboxDaytonaConfig.
       const template = await recoverDaytonaRepoTemplate(client, repo.id);
       // A prepared repo template already carries its machine shape. When the
       // template is absent/stale (first launch after a merge), the cold

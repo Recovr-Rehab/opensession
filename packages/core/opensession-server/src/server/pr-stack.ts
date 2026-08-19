@@ -16,8 +16,7 @@
  * Enumerating the layers takes two paths, because on preview day one
  * `PullRequestStack.entries` answers INTERNAL for EVERY selection on a real
  * stack — even `totalCount` — and being non-null it nulls the whole `stack`
- * object with it (verified 2026-07-30 against tellahq/tella-fusion stack
- * #5404). So the scalars are fetched WITHOUT `entries` and always resolve;
+ * object with it (verified against a real stack). So the scalars are fetched WITHOUT `entries` and always resolve;
  * `entries` is attempted separately and, when it fails, `walkStackChain`
  * enumerates the layers by following base/head branch links — `stackEntry`
  * resolves fine per PR inside a list query, so each hop can prove its stack

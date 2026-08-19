@@ -3,7 +3,7 @@
  *
  * The Claude subscription pool and the codex (OpenAI) pool both authenticate
  * runs with credentials a human must occasionally renew, and until now they
- * rotted silently: the codex `tella-dev` auth.json sat expired for 10+ days
+ * rotted silently: a codex account's auth.json sat expired for 10+ days
  * (2026-07-12) and only surfaced when the model-fallback chain dead-ended on
  * it mid-outage. This module sweeps both pools hourly and DMs the person who
  * can fix each problem:

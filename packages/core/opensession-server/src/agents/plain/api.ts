@@ -1043,7 +1043,7 @@ async function linearAuthHeader(): Promise<string | null> {
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const teamIdCache = new Map<string, string>();
 
-/** Resolve a team key (e.g. "TELLA") to its UUID — issueCreate only accepts UUIDs. */
+/** Resolve a team key (e.g. "ENG") to its UUID — issueCreate only accepts UUIDs. */
 async function resolveLinearTeamId(auth: string, team: string): Promise<string | null> {
   if (UUID_RE.test(team)) return team;
   const cached = teamIdCache.get(team);

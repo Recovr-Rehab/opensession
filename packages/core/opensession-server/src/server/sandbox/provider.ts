@@ -48,7 +48,7 @@ export type SandboxProviderUsability =
 export interface SandboxSessionSpec {
   /** Open Session session id (bks-…). Container providers name resources by it. */
   sessionId: string;
-  /** Registered repo id (worktree.ts REPOS). Defaults to tella-fusion. */
+  /** Registered repo id (worktree.ts REPOS). Defaults to the instance default repo. */
   repo?: string;
   /** Branch for code-mode worktrees. Required unless ask/sharedCheckout/cwd. */
   branch?: string;

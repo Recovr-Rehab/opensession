@@ -51,8 +51,7 @@ export const CANCELLED_ANSWER = "__CANCELLED__";
 // instances) this store isolates like every other one, so a second instance
 // can neither read nor patch the live loop's session files. Unset ⇒ $HOME.
 export const SESSION_DIR = statePath(".slack-sessions");
-// Config-driven (repos registry / paths in ~/.backstage/config.json); the
-// zero-config values are the historical tella-fusion literals.
+// Config-driven: the repos registry and paths in the instance config file.
 export const DEFAULT_CWD = defaultRepo().repo;
 export const MCP_CONFIG_PATH = configuredPaths().mcpConfig;
 export const GITHUB_REPO = defaultRepo().ghRepo;

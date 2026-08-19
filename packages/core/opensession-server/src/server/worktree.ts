@@ -47,8 +47,7 @@ export function getRepo(id?: string): Repo {
 
 /** Canonicalize a checkout path for identity COMPARISONS only: resolves
  *  symlinks so session files persisted before a checkout rename (old path
- *  kept behind as a symlink, e.g. projects/tella-backstage → opensession)
- *  still match the registered repo. Never rewrite a stored worktreeDir with
+ *  kept behind as a symlink) still match the registered repo. Never rewrite a stored worktreeDir with
  *  this — transcript locations hash the recorded string, so canonicalizing
  *  persisted data would orphan old transcripts. */
 export function canonicalPath(p: string): string {
@@ -239,7 +238,7 @@ export interface WorktreeInfo {
  * `bun install` themselves. A repo-owned `.agents/setup` hook is preferred;
  * `worktreeSetup` is the instance-level fallback. `depsInstall` then overrides the generic root package install.
  *
- * Interactive create paths fire this WITHOUT awaiting (a tella-fusion webapp
+ * Interactive create paths fire this WITHOUT awaiting (a large webapp
  * `bun install` is ~20-25s — it was the bulk of the "Waiting for workspace"
  * spinner) so the opening turn starts as soon as the git worktree exists; the
  * agent-facing autofix/followup paths still await it because those runs build
@@ -319,7 +318,7 @@ export async function listWorktrees(repoId?: string): Promise<WorktreeInfo[]> {
 
 /**
  * Repo-less scratch directory for "scratch" sessions (feed-item workspaces —
- * the feeds design): media/MCP work like downloading a Tella video and
+ * the feeds design): media/MCP work like downloading a linked video and
  * running ffmpeg, with full write access but no repo, branch, or PR flow.
  * Keyed by workspace id so a workspace's sibling sessions share downloads
  * (falls back to the session id for workspace-less creates). Never a git
@@ -337,7 +336,7 @@ export function ensureScratchDir(key: string): string {
  *
  * Ask sessions used to run in the repo's live main checkout, but that tree's
  * branch is whatever the last flow left checked out — a resumed ask session
- * that had lost its history found tella-fusion parked on a teammate's PR
+ * that had lost its history found the checkout parked on a teammate's PR
  * branch and adopted that PR's review as its own task (2026-07-24). Every
  * non-shared-checkout repo instead gets one `<wtPrefix>-ask-checkout`
  * worktree, detached at origin/<defaultBranch>, that all its ask sessions
@@ -562,7 +561,7 @@ async function removeLegacySuffixWorktree(
  * below hand to `worktree add` never appears, so the add dies with
  * "fatal: invalid reference: origin/<branch>" and EVERY PR review in that repo
  * fails identically (not transiently — retrying on the next push hits it again).
- * Explicit refspecs bypass the remote config. Found on tella-windows, cloned
+ * Explicit refspecs bypass the remote config. Found on a repo cloned
  * single-branch during node provisioning; `--unshallow` fixes depth, not this.
  */
 async function fetchBranchesWithTracking(

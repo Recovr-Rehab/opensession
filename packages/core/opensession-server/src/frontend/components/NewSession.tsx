@@ -1266,7 +1266,7 @@ export function NewSession({ onBack, inline, focusSeq, send, addHandler, connect
                 : repoSelectionHint(extraRepos, repoOptionLabel, MULTI_MODIFIER)
             }
             // A feed workspace is repo-less by construction (its subject is a
-            // Tella video, not a checkout), so its create doesn't offer one.
+            // a feed item, not a checkout), so its create doesn't offer one.
             disabled={busy || forceMode === "scratch"}
             ariaLabel="Project"
             isPhone={isPhone}

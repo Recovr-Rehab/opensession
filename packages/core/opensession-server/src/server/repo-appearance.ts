@@ -72,7 +72,7 @@ export async function fetchOwnerAvatar(owner: string): Promise<Uint8Array> {
 		throw new RepoAppearanceError(`${owner}'s avatar came back empty`);
 	}
 	// Avatars are uploaded art with whatever padding their author chose —
-	// tellahq's mark sits on 62% of its canvas. Crop it now so the stored file
+	// an org mark can sit on 62% of its canvas. Crop it now so the stored file
 	// is already tile-shaped.
 	return trimIconMargin(bytes) ?? bytes;
 }

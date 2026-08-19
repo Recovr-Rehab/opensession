@@ -124,7 +124,7 @@ export interface Workspace {
   prNumber?: number;
   /** For support-ticket workspaces: the Plain thread this workspace is attached to. */
   plainThreadId?: string;
-  /** Generic feed-item linkage (Tella videos, …) — the feeds design. */
+  /** Generic feed-item linkage (videos, …) — the feeds design. */
   externalRefs?: ExternalRef[];
   /**
    * The workspace's default branch. Present when the workspace owns a worktree
@@ -437,7 +437,7 @@ export function stampWorkspaceIdentity(
   // The adopted workspace may have been minted by a session in ANOTHER repo:
   // a session working in repo A can open a PR in repo B through an attached
   // repo, and that is how a workspace ended up filed under `opensession` while
-  // its branch and PR belonged to `tella-fusion`. A repo that disagrees with
+  // its branch and PR belonged to another repo. A repo that disagrees with
   // the branch beside it is worse than none: sessionPrBranch refuses to
   // inherit a branch across repos, the sidebar cannot match the PR row to the
   // workspace, and a new session here resolves the branch in the wrong repo.

@@ -10,7 +10,7 @@ import { PageLoader } from "../ui/page-loader";
  * Full-width Preview view-tab (a sibling of Review/Preview environment/Assets): the
  * session's dev server embedded in an iframe, with a toolbar to break out to
  * a real browser window, reload, or stop the preview. The app's CSP already
- * allowlists framing from the app origin (frame-ancestors https://os.tella.dev).
+ * allowlists framing from the app's own origin (frame-ancestors).
  *
  * Status comes from the parent (SessionViewer polls it for the header button
  * anyway); this pane starts the preview when opened while nothing runs, shows

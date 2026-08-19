@@ -880,7 +880,7 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 		return () => window.removeEventListener(PR_CLOSED_EVENT, onClosed);
 	}, []);
 
-	// Generic feed bands (Tella videos, … — the feeds design): descriptors
+	// Generic feed bands (videos, dashboards, … the feeds design): descriptors
 	// once on mount. Hidden feeds remain available to Settings but do not poll.
 	const [feeds, setFeeds] = useState<FeedDescriptor[]>([]);
 	const [feedItems, setFeedItems] = useState<Record<string, FeedItem[]>>({});
@@ -3289,8 +3289,8 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 
 	// The repo band a workspace row files under. The workspace's own repo wins:
 	// it's what the work is *about*, while a session's repo is only the checkout it
-	// happens to run from — a PR workspace for shared-infra whose session runs in a
-	// tella-fusion worktree belongs under shared-infra. A workspace spanning
+	// happens to run from: a PR workspace for one repo whose session runs in
+	// another repo's worktree files under the repo it is about. A workspace spanning
 	// repos still files under one band (a row in two bands double-counts and
 	// reads as two pieces of work); the repo *filter* honours every repo it
 	// touches, so it stays findable from the others.
@@ -4127,7 +4127,7 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 		return !!session && session.id === selectedId;
 	}
 
-	// A generic feed band (Tella videos, …) styled like the Plain project band:
+	// A generic feed band (videos, dashboards, …) styled like the Plain project band:
 	// brand tile + name + count, newest-first rows nested under
 	// (the feeds design). Hidden while a repo filter is active, like Plain.
 	function renderFeedBand(feed: FeedDescriptor, withLanes = false) {
@@ -5165,7 +5165,7 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 							(supportThreads || []).find((t) => t.id === e.slice(8)),
 						)
 						.filter((t): t is SupportThread => !!t);
-					// Pinned feed items (Tella videos, PostHog dashboards) —
+					// Pinned feed items (videos, dashboards):
 					// resolved against the live feed items like tickets are.
 					const pinnedFeedItems = pins
 						.filter((e) => e.startsWith("feed:"))

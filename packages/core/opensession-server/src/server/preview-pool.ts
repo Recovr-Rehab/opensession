@@ -1,7 +1,7 @@
 /**
  * Preview pool: warm, already-booted dev-server containers per repo, so the
  * session Preview button serves in seconds instead of paying a cold `just dev`
- * boot (~1 min on tella-fusion).
+ * boot (~1 min on a large repo).
  *
  * Shape (per pool-enabled repo):
  *  - One GOLDEN IMAGE (`os-preview-golden-<repo>:latest`): the repo cloned
@@ -85,8 +85,8 @@ export interface PreviewPoolRepoConfig {
    * Keep the DEV_AUTH_* login bypass in preview containers (default false:
    * previews use the app's normal auth). The bypass is always active DURING
    * the golden build so route warming pre-compiles authed pages; when this
-   * is false the vars are stripped from the image before commit. (tella-local
-   * on the host keeps its bypass either way — this only affects the pool.)
+   * is false the vars are stripped from the image before commit. (A host
+   * bring-up keeps its bypass either way — this only affects the pool.)
    */
   devAuthBypass: boolean;
   /** Release a claimed preview whose status hasn't been polled for this long

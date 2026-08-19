@@ -294,7 +294,7 @@ function relTime(iso?: string): string {
 const FILE_PREVIEW = 6;
 const COMMENT_PREVIEW = 3;
 
-/** The author's real GitHub avatar (Greptile, Tella Butler, Vercel, a human…),
+/** The author's real GitHub avatar (a review bot, a deploy bot, a human…),
 		served at github.com/<login>.png. Falls back to a lettered brand tile if the
 		image 404s or the author isn't a plausible login (e.g. a display name). */
 function CommentAvatar({ author }: { author: string }) {

@@ -1,11 +1,12 @@
 /**
  * Slack link unfurling for Open Session session links.
  *
- * When someone pastes an `os.tella.dev/session/<id>` link into Slack, Slack
+ * When someone pastes a `<instance-host>/session/<id>` link into Slack, Slack
  * fires a `link_shared` event (the app must have `links:read`/`links:write` and
  * register the domain as an unfurl domain). We can't rely on Open Graph tags
- * because os.tella.dev is tailnet-only — Slack's crawler can't reach it — so
- * instead we look the session up in-process and post a rich preview back with
+ * because an instance host is often private (tailnet-only, behind a VPN), so
+ * Slack's crawler cannot reach it. Instead we look the session up in-process
+ * and post a rich preview back with
  * `chat.unfurl`.
  */
 

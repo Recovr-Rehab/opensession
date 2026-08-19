@@ -341,7 +341,7 @@ export function SessionSearch({
 	const hasSessionFilter = person !== "all" || repo !== "all" || status !== "all";
 
 	// Commands, PRs, and sessions share one flat result list so arrow-key navigation
-	// crosses group boundaries just like Tella's command menu.
+	// crosses group boundaries the way a command menu should.
 	const results = useMemo<PaletteResult[]>(() => {
 		const q = query.trim().toLowerCase();
 		const terms = q.split(/\s+/).filter(Boolean);

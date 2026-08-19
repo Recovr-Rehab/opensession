@@ -50,7 +50,7 @@ import { IconGitCommit, IconGitMerge, IconPullRequest } from "./icons";
  * cards) rather than only the transcript it was asked for.
  *
  * A chip whose subject this client can't name keeps its own tooltip and gets
- * no card: "Open the review for tella-fusion #3662" is what the chip already
+ * no card: "Open the review for webapp #3662" is what the chip already
  * promises, and a card that repeats it is a card that got in the way.
  */
 
