@@ -76,6 +76,7 @@ function Popup({
 	collisionPadding = 8,
 	arrow = false,
 	elevation = "md",
+	ring = "default",
 	anchor,
 	initialFocus = false,
 	children,
@@ -98,6 +99,13 @@ function Popup({
 	arrow?: boolean;
 	/** Large preview cards need a wider cast shadow than compact popovers. */
 	elevation?: "md" | "lg";
+	/** How firm the popup's hairline is. `soft` walks the ring toward the
+	 * popup's own surface, for a big card of quiet rows where the default edge
+	 * draws a box around them. Mixed toward the surface rather than faded to
+	 * transparent, so the edge keeps its direction in both themes: in light the
+	 * line lightens toward the paper, and in dark it stays brighter than the
+	 * fill it lifts off instead of falling under it into a seam. */
+	ring?: "default" | "soft";
 	/** Position against something other than the Trigger — pass the wrapper of a
 	 * control cluster whose popup opens from several places (a caret, a
 	 * right-click, a disabled button), so the popup keeps one anchor no matter
@@ -127,7 +135,10 @@ function Popup({
 						// The ring override rides on the popup so the arrow, which
 						// continues that hairline, inherits the same value.
 						"rounded-popup [corner-shape:squircle] outline-none",
-						"bg-popup-glass [backdrop-filter:var(--popup-blur)] [--smooth-ring-color:var(--popup-ring)]",
+						"bg-popup-glass [backdrop-filter:var(--popup-blur)]",
+						ring === "soft"
+							? "[--smooth-ring-color:color-mix(in_srgb,var(--popup-ring)_65%,var(--popup-surface))]"
+							: "[--smooth-ring-color:var(--popup-ring)]",
 						elevation === "lg"
 							? "smooth-shadow-ring-lg"
 							: "smooth-shadow-ring-md",

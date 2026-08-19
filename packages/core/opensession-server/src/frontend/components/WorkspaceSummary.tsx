@@ -376,14 +376,17 @@ export function WorkspaceSummary({
 				anchor={anchor}
 				positionerClassName="z-[5000]"
 				collisionPadding={20}
-				// The card hangs 16px below whatever chrome it clears, in both
-				// positions. Offsets are measured from the actions row, which ends 8px
-				// above the header's bottom edge: 8 + 16 with no strip, and with one,
-				// the same 8 plus the 40px strip less the 5px it overlaps the header
-				// by, then the 16. The old 72 left the strip position 13px slacker
-				// than the other one.
-				sideOffset={tabStripVisible ? 59 : 24}
+				// Clear the header divider before adding the usual air below the
+				// chrome. The no-tab position needs more room because the actions row
+				// ends just above that divider. The desktop tab strip is 40px tall and
+				// sits after the header's own 8px inset, so clear both before adding
+				// the breathing room.
+				sideOffset={tabStripVisible ? 72 : 24}
 				elevation="md"
+				// A menu's hairline is right for a strip of rows; on 300px of quiet
+				// text it reads as a box drawn around them rather than the card's own
+				// edge. Softened so the corner is what you see.
+				ring="soft"
 				className={WS_SUMMARY_CARD}
 				// Take focus when someone opens the card, so the keyboard reaches its
 				// controls. Not when it merely mounts already-open: the card is
