@@ -78,6 +78,87 @@ export function imageRegionOutputSize(
 	};
 }
 
+/** Which part of a committed selection a drag has hold of. */
+export type RegionHandle =
+	| "move"
+	| "n"
+	| "e"
+	| "s"
+	| "w"
+	| "nw"
+	| "ne"
+	| "se"
+	| "sw";
+
+/** Slide a region without changing its size. It stops at the image edge rather
+ *  than shrinking, so a selection cannot lose the thing it was drawn around. */
+export function movedImageRegion(
+	region: ImageRegion,
+	dx: number,
+	dy: number,
+): ImageRegion {
+	const width = Math.min(1, Math.max(0, region.width));
+	const height = Math.min(1, Math.max(0, region.height));
+	return {
+		x: Math.min(1 - width, Math.max(0, region.x + dx)),
+		y: Math.min(1 - height, Math.max(0, region.y + dy)),
+		width,
+		height,
+	};
+}
+
+/** One axis of a resize: the untouched edge holds still, the dragged one moves.
+ *  Dragging an edge past its opposite flips the region instead of collapsing
+ *  it, which is what every selection tool does and what the hand expects. */
+function spanFromAnchor(
+	anchor: number,
+	moving: number,
+	min: number,
+): [number, number] {
+	const fixed = clampUnit(anchor);
+	const floor = Math.min(1, Math.max(0, min));
+	let edge = clampUnit(moving);
+	if (Math.abs(edge - fixed) < floor) {
+		edge = edge >= fixed ? fixed + floor : fixed - floor;
+	}
+	let left = Math.min(fixed, edge);
+	let right = Math.max(fixed, edge);
+	if (left < 0) {
+		right -= left;
+		left = 0;
+	}
+	if (right > 1) {
+		left -= right - 1;
+		right = 1;
+	}
+	return [Math.max(0, left), Math.min(1, right)];
+}
+
+/** Resize a region by dragging one of its edges or corners. */
+export function resizedImageRegion(
+	region: ImageRegion,
+	handle: Exclude<RegionHandle, "move">,
+	dx: number,
+	dy: number,
+	min: { x: number; y: number } = { x: 0, y: 0 },
+): ImageRegion {
+	const left = region.x;
+	const right = region.x + region.width;
+	const top = region.y;
+	const bottom = region.y + region.height;
+	const [x0, x1] = handle.includes("w")
+		? spanFromAnchor(right, left + dx, min.x)
+		: handle.includes("e")
+			? spanFromAnchor(left, right + dx, min.x)
+			: [clampUnit(left), clampUnit(right)];
+	const [y0, y1] = handle.includes("n")
+		? spanFromAnchor(bottom, top + dy, min.y)
+		: handle.includes("s")
+			? spanFromAnchor(top, bottom + dy, min.y)
+			: [clampUnit(top), clampUnit(bottom)];
+	return { x: x0, y: y0, width: x1 - x0, height: y1 - y0 };
+}
+
 export interface ScreenRect {
 	left: number;
 	top: number;

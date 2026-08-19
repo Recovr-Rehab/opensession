@@ -4,6 +4,8 @@ import {
 	imageRegionBetween,
 	imageRegionOutputSize,
 	imageRegionPixels,
+	movedImageRegion,
+	resizedImageRegion,
 } from "./image-region-comment";
 import {
 	canCommentOnImageRegion,
@@ -119,5 +121,68 @@ describe("the comment card sits against its region", () => {
 		);
 		expect(placed.left).toBe(38);
 		expect(placed.left + 340).toBeLessThanOrEqual(phone.width - 12);
+	});
+});
+
+describe("a selection can be moved and resized", () => {
+	const region = { x: 0.2, y: 0.2, width: 0.3, height: 0.2 };
+
+	test("moving slides the region and keeps its size", () => {
+		expect(movedImageRegion(region, 0.1, -0.05)).toEqual({
+			x: 0.30000000000000004,
+			y: 0.15000000000000002,
+			width: 0.3,
+			height: 0.2,
+		});
+	});
+
+	test("a move stops at the edge instead of shrinking", () => {
+		const moved = movedImageRegion(region, 0.9, 0.9);
+		expect(moved.width).toBe(0.3);
+		expect(moved.height).toBe(0.2);
+		expect(moved.x + moved.width).toBeCloseTo(1, 10);
+		expect(moved.y + moved.height).toBeCloseTo(1, 10);
+	});
+
+	test("a corner moves two edges and leaves the opposite corner alone", () => {
+		const resized = resizedImageRegion(region, "se", 0.1, 0.1);
+		expect(resized.x).toBeCloseTo(0.2, 10);
+		expect(resized.y).toBeCloseTo(0.2, 10);
+		expect(resized.width).toBeCloseTo(0.4, 10);
+		expect(resized.height).toBeCloseTo(0.3, 10);
+	});
+
+	test("an edge moves only its own side", () => {
+		const resized = resizedImageRegion(region, "w", -0.1, 0.4);
+		expect(resized.x).toBeCloseTo(0.1, 10);
+		expect(resized.width).toBeCloseTo(0.4, 10);
+		expect(resized.y).toBeCloseTo(0.2, 10);
+		expect(resized.height).toBeCloseTo(0.2, 10);
+	});
+
+	test("dragging an edge past its opposite flips instead of collapsing", () => {
+		const resized = resizedImageRegion(region, "e", -0.4, 0);
+		expect(resized.x).toBeCloseTo(0.1, 10);
+		expect(resized.width).toBeCloseTo(0.1, 10);
+	});
+
+	test("a resize cannot go below the size a drag could have drawn", () => {
+		const resized = resizedImageRegion(
+			region,
+			"se",
+			-0.3,
+			-0.2,
+			{ x: 0.05, y: 0.04 },
+		);
+		expect(resized.width).toBeCloseTo(0.05, 10);
+		expect(resized.height).toBeCloseTo(0.04, 10);
+	});
+
+	test("a resize stays inside the image", () => {
+		const resized = resizedImageRegion(region, "nw", -0.9, -0.9);
+		expect(resized.x).toBe(0);
+		expect(resized.y).toBe(0);
+		expect(resized.x + resized.width).toBeLessThanOrEqual(1);
+		expect(resized.y + resized.height).toBeLessThanOrEqual(1);
 	});
 });

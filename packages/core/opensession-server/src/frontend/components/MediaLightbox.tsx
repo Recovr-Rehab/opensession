@@ -21,13 +21,17 @@ import {
 	WALKTHROUGH_LABEL_TONE,
 	type WalkthroughMediaLabel,
 } from "../lib/walkthrough-label";
+import { useIsPhone } from "../hooks/useIsPhone";
 import { cn } from "../ui/cn";
 import { toast } from "../ui/toast";
 import {
 	anchoredCommentPosition,
 	imageRegionBetween,
+	movedImageRegion,
+	resizedImageRegion,
 	type ImageRegion,
 	type ImageRegionPoint,
+	type RegionHandle,
 	type ScreenRect,
 } from "../lib/image-region-comment";
 import {
@@ -564,6 +568,32 @@ const DIAGRAM_PADDING = 16;
  * arms once the drag is decidedly horizontal, so a pinch or a vertical flick
  * never steals a page turn, and zoomed in the same drag pans the photo.
  */
+/** Corners first, then edges: the corner is what the hand reaches for, and on
+ *  a short side it is the only handle that fits. `sx`/`sy` are the directions
+ *  the handle lies in from the region's middle, which is both where it sits and
+ *  which way it steps when the region is too small to hold it. */
+const REGION_HANDLES: {
+	id: RegionHandle;
+	/** The side whose length has to be long enough to hold this handle. */
+	axis?: "x" | "y";
+	position: string;
+	cursor: string;
+	sx: -1 | 0 | 1;
+	sy: -1 | 0 | 1;
+}[] = [
+	{ id: "nw", position: "left-0 top-0", sx: -1, sy: -1, cursor: "cursor-nwse-resize" },
+	{ id: "ne", position: "left-full top-0", sx: 1, sy: -1, cursor: "cursor-nesw-resize" },
+	{ id: "se", position: "left-full top-full", sx: 1, sy: 1, cursor: "cursor-nwse-resize" },
+	{ id: "sw", position: "left-0 top-full", sx: -1, sy: 1, cursor: "cursor-nesw-resize" },
+	{ id: "n", axis: "x", position: "left-1/2 top-0", sx: 0, sy: -1, cursor: "cursor-ns-resize" },
+	{ id: "s", axis: "x", position: "left-1/2 top-full", sx: 0, sy: 1, cursor: "cursor-ns-resize" },
+	{ id: "w", axis: "y", position: "left-0 top-1/2", sx: -1, sy: 0, cursor: "cursor-ew-resize" },
+	{ id: "e", axis: "y", position: "left-full top-1/2", sx: 1, sy: 0, cursor: "cursor-ew-resize" },
+];
+
+/** Touch-sized on a phone, pointer-sized otherwise. */
+const REGION_HANDLE_HIT = { phone: 36, desktop: 24 };
+
 function ZoomableMedia({
 	src,
 	diagram,
@@ -596,6 +626,7 @@ function ZoomableMedia({
 	 *  placed against it. Viewport coordinates. */
 	onSelectionRect?: (rect: ScreenRect | null) => void;
 }) {
+	const isPhone = useIsPhone();
 	const wrapRef = useRef<HTMLDivElement>(null);
 	const imgRef = useRef<HTMLImageElement>(null);
 	const boxRef = useRef<HTMLDivElement>(null);
@@ -621,11 +652,23 @@ function ZoomableMedia({
 	const lastTap = useRef<{ at: number; x: number; y: number } | null>(null);
 	const [zoomed, setZoomed] = useState(false);
 	const zoomedRef = useRef(false);
-	const regionGesture = useRef<{
-		pointerId: number;
-		start: ImageRegionPoint;
-		imageRect: DOMRect;
-	} | null>(null);
+	const regionGesture = useRef<
+		| {
+				kind: "create";
+				pointerId: number;
+				start: ImageRegionPoint;
+				imageRect: DOMRect;
+		  }
+		| {
+				kind: "adjust";
+				handle: RegionHandle;
+				origin: ImageRegion;
+				pointerId: number;
+				start: ImageRegionPoint;
+				imageRect: DOMRect;
+		  }
+		| null
+	>(null);
 	const [draftRegion, setDraftRegion] = useState<ImageRegion | null>(null);
 	const [imageBox, setImageBox] = useState<{
 		left: number;
@@ -872,17 +915,44 @@ function ZoomableMedia({
 			if (!image || e.button !== 0 || !e.isPrimary || regionGesture.current)
 				return;
 			const rect = image.getBoundingClientRect();
+			// A press on the selection itself moves it, and one on a handle
+			// resizes it. Read from the target rather than from coordinates: the
+			// handles deliberately overhang the region so a thin selection still
+			// has something to take hold of.
+			const handle = (e.target as HTMLElement | null)
+				?.closest?.("[data-region-handle]")
+				?.getAttribute("data-region-handle") as RegionHandle | null;
+			// A corner handle sits half outside the picture, so only a fresh
+			// selection has to start inside it.
 			if (
-				e.clientX < rect.left ||
-				e.clientX > rect.right ||
-				e.clientY < rect.top ||
-				e.clientY > rect.bottom
+				!handle &&
+				(e.clientX < rect.left ||
+					e.clientX > rect.right ||
+					e.clientY < rect.top ||
+					e.clientY > rect.bottom)
 			)
 				return;
 			e.preventDefault();
 			wrapRef.current?.setPointerCapture(e.pointerId);
 			const start = pointInRegionImage(e.clientX, e.clientY, rect);
-			regionGesture.current = { pointerId: e.pointerId, start, imageRect: rect };
+			if (handle && selection) {
+				regionGesture.current = {
+					kind: "adjust",
+					handle,
+					origin: selection,
+					pointerId: e.pointerId,
+					start,
+					imageRect: rect,
+				};
+				setDraftRegion(selection);
+				return;
+			}
+			regionGesture.current = {
+				kind: "create",
+				pointerId: e.pointerId,
+				start,
+				imageRect: rect,
+			};
 			setDraftRegion(imageRegionBetween(start, start));
 			return;
 		}
@@ -926,15 +996,37 @@ function ZoomableMedia({
 		}
 	}
 
+	/** The region this gesture describes with the pointer where it now is. */
+	function regionForGesture(
+		selecting: NonNullable<typeof regionGesture.current>,
+		clientX: number,
+		clientY: number,
+	): ImageRegion {
+		const point = pointInRegionImage(clientX, clientY, selecting.imageRect);
+		if (selecting.kind === "create") {
+			return imageRegionBetween(selecting.start, point);
+		}
+		const dx = point.x - selecting.start.x;
+		const dy = point.y - selecting.start.y;
+		if (selecting.handle === "move") {
+			return movedImageRegion(selecting.origin, dx, dy);
+		}
+		// The same twelve display pixels a new selection has to clear, so a
+		// region cannot be resized into something too small to have drawn.
+		return resizedImageRegion(selecting.origin, selecting.handle, dx, dy, {
+			x: 12 / Math.max(1, selecting.imageRect.width),
+			y: 12 / Math.max(1, selecting.imageRect.height),
+		});
+	}
+
 	function onPointerMove(e: React.PointerEvent) {
 		const selecting = regionGesture.current;
 		if (selecting?.pointerId === e.pointerId) {
-			const point = pointInRegionImage(
-				e.clientX,
-				e.clientY,
-				selecting.imageRect,
-			);
-			setDraftRegion(imageRegionBetween(selecting.start, point));
+			const next = regionForGesture(selecting, e.clientX, e.clientY);
+			setDraftRegion(next);
+			// An adjustment changes a region that already has a comment against
+			// it, so the card travels with the pixels it is about.
+			if (selecting.kind === "adjust") onSelection?.(next);
 			return;
 		}
 		if (!pointers.current.has(e.pointerId) || !gesture.current) return;
@@ -989,18 +1081,14 @@ function ZoomableMedia({
 	function onPointerEnd(e: React.PointerEvent) {
 		const selecting = regionGesture.current;
 		if (selecting?.pointerId === e.pointerId) {
-			const point = pointInRegionImage(
-				e.clientX,
-				e.clientY,
-				selecting.imageRect,
-			);
-			const region = imageRegionBetween(selecting.start, point);
+			const region = regionForGesture(selecting, e.clientX, e.clientY);
 			clearRegionGesture(e.pointerId);
 			// Twelve display pixels filters taps and shaky starts without making a
-			// small button impossible to select.
+			// small button impossible to select. An adjustment is already bounded.
 			if (
-				region.width * selecting.imageRect.width >= 12 &&
-				region.height * selecting.imageRect.height >= 12
+				selecting.kind === "adjust" ||
+				(region.width * selecting.imageRect.width >= 12 &&
+					region.height * selecting.imageRect.height >= 12)
 			) {
 				onSelection?.(region);
 			}
@@ -1102,6 +1190,7 @@ function ZoomableMedia({
 		});
 	}, [commentMode, selection, imageBox, onSelectionRect]);
 
+	const handleHit = isPhone ? REGION_HANDLE_HIT.phone : REGION_HANDLE_HIT.desktop;
 	const shownRegion = draftRegion ?? selection ?? null;
 	const shownRegionBox =
 		shownRegion && imageBox
@@ -1112,6 +1201,15 @@ function ZoomableMedia({
 					height: shownRegion.height * imageBox.height,
 				}
 			: null;
+
+	// A handle centred on the corner of a small region covers the region. Rather
+	// than shrink the target below what a finger can hit, step the handles
+	// outward so they frame the selection and leave its middle free to press.
+	// Large regions keep them on the corners, which is where the eye expects.
+	const handlesOutside =
+		!!shownRegionBox &&
+		Math.min(shownRegionBox.width, shownRegionBox.height) < handleHit * 2;
+	const handleStep = handlesOutside ? Math.round(handleHit * 0.55) : 0;
 
 	return (
 		<div
@@ -1166,10 +1264,50 @@ function ZoomableMedia({
 					/>
 					{commentMode && shownRegionBox && (
 						<div
-							className="pointer-events-none absolute rounded-sm border-2 border-accent bg-[color-mix(in_srgb,var(--accent)_14%,transparent)] shadow-[0_0_0_1px_rgb(255_255_255/0.8),0_4px_20px_rgb(0_0_0/0.28)]"
+							// The region is a thing you can take hold of, not a mark:
+							// press it to move it, press a handle to resize it.
+							// Dragging bare picture still starts a new one.
+							data-region-handle="move"
+							className="absolute cursor-move touch-none rounded-sm border-2 border-accent bg-[color-mix(in_srgb,var(--accent)_14%,transparent)] shadow-[0_0_0_1px_rgb(255_255_255/0.8),0_4px_20px_rgb(0_0_0/0.28)]"
 							style={shownRegionBox}
 							aria-hidden="true"
-						/>
+						>
+							{REGION_HANDLES.filter(
+								(handle) =>
+									// An edge handle needs a side long enough to hold one
+									// without crowding the corners it sits between, and
+									// a framed region has no room for one at all.
+									!handlesOutside &&
+									(handle.axis !== "x" || shownRegionBox.width >= 56) &&
+									(handle.axis !== "y" || shownRegionBox.height >= 56),
+							)
+								.concat(
+									handlesOutside
+										? REGION_HANDLES.filter((handle) => !handle.axis)
+										: [],
+								)
+								.map((handle) => (
+									<span
+										key={handle.id}
+										data-region-handle={handle.id}
+										// The dot stays small so it cannot hide a small
+										// region; the square around it is what the finger
+										// gets.
+										className={cn(
+											"absolute grid touch-none place-items-center",
+											handle.position,
+											handle.cursor,
+										)}
+										style={{
+											width: handleHit,
+											height: handleHit,
+											transform: `translate(calc(-50% + ${handle.sx * handleStep}px), calc(-50% + ${handle.sy * handleStep}px))`,
+										}}
+									>
+										<span className="block size-2.5 rounded-full border border-black/25 bg-white shadow-[0_1px_3px_rgb(0_0_0/0.4)] phone:size-3" />
+									</span>
+								))}
+						</div>
 					)}
 				</>
 			)}
