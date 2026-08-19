@@ -153,7 +153,7 @@ interface Props {
 	 * (the + button's plain-click default), stack = new worktree branched off it,
 	 * ask = no worktree.
 	 */
-	onNewSession: (mode: "share" | "stack" | "ask") => void;
+	onNewSession?: (mode: "share" | "stack" | "ask") => void;
 	/** Rename a session (double-click the title); empty title resets it. */
 	onRename: (id: string, title: string) => void;
 	/** Close (archive) a session — the × revealed on hover. */
@@ -499,7 +499,7 @@ export function SessionTabs({
 
 	// New-tab "+" — plain-click shares the workspace worktree; right-click offers
 	// the stacked/ask modes.
-	const newTabButton = (
+	const newTabButton = onNewSession && (
 		<button
 			type="button"
 			className={TAB_NEW}
@@ -783,7 +783,7 @@ export function SessionTabs({
 			{!isPhone && newTabButton}
 			{!isPhone && <div className={TAB_ACTIONS}>{historyMenu}</div>}
 
-			{newMenu && (
+			{newMenu && onNewSession && (
 				<div
 					className={NEW_MENU}
 					style={{ left: newMenu.x, top: newMenu.y }}

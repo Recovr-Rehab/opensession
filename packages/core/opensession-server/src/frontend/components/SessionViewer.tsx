@@ -5251,7 +5251,8 @@ export function SessionViewer({
 						ref={headerRef}
 					>
 						<div className={VIEWER_TITLE}>
-					{session.worktreeDir &&
+					{!session.desk &&
+						session.worktreeDir &&
 						hasWorkspace &&
 						// Repo-less sessions get a static tile instead of the repo
 						// switch/attach menu: scratch names the feed it came from,
@@ -5414,7 +5415,8 @@ export function SessionViewer({
 							    the other end of the bar, so the 32px square, radius, hover
 							    wash and press scale match by construction rather than by
 							    hand-matching a chip. */}
-							{onNewSession &&
+							{!session.desk &&
+								onNewSession &&
 								!tabStripVisible &&
 								workspaceSessions?.length === 1 && (
 									<Tooltip
@@ -5645,13 +5647,17 @@ export function SessionViewer({
 								) : (
 								<>
 								<div className={INFO_HERO}>
-									<RepoTile name={session.repo || "repository"} size={40} />
+									{session.desk ? (
+										<IconDesk size={40} className="text-dim" />
+									) : (
+										<RepoTile name={session.repo || "repository"} size={40} />
+									)}
 									<div className={INFO_NAME} ref={infoHeroNameRef}>
 										{workspaceName || session.title}
 									</div>
 									<div className={INFO_SUB}>
 										{[
-											session.repo || "repository",
+											session.desk ? null : session.repo || "repository",
 											models.length > 0
 												? metadataModelLabel(effectiveModel, models)
 												: null,

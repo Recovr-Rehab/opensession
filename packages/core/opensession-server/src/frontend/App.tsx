@@ -3092,7 +3092,11 @@ export function App(
 							dropPaneUrlSuffix(closingTab);
 					}
 				}}
-				onNewSession={(mode) => handleNewSession(mode, side)}
+				onNewSession={
+					barSessions.some((session) => session.desk)
+						? undefined
+						: (mode) => handleNewSession(mode, side)
+				}
 				onRename={async (id, title) => {
 					try {
 						await renameSessionApi(id, title);
@@ -3577,7 +3581,7 @@ export function App(
 			} else if (matchesShortcut(e, "session-close")) {
 				e.preventDefault();
 				void closeSessionRef.current(s);
-			} else if (matchesShortcut(e, "session-new-sibling")) {
+			} else if (!s.desk && matchesShortcut(e, "session-new-sibling")) {
 				e.preventDefault();
 				void handleNewSessionRef.current("share");
 			}
@@ -3670,16 +3674,21 @@ export function App(
 		},
 		...(currentSession
 			? [
-					{
-						id: "new-session-workspace",
-						label: "New session in this workspace",
-						description: "Share the current workspace and worktree",
-						category: "Actions" as const,
-						keywords: ["tab", "conversation", "sibling"],
-						shortcut: shortcutPrimaryKeys("session-new-sibling") ?? undefined,
-						icon: <IconPlus size={18} />,
-						run: () => void handleNewSession("share"),
-					},
+					...(!currentSession.desk
+						? [
+								{
+									id: "new-session-workspace",
+									label: "New session in this workspace",
+									description: "Share the current workspace and worktree",
+									category: "Actions" as const,
+									keywords: ["tab", "conversation", "sibling"],
+									shortcut:
+										shortcutPrimaryKeys("session-new-sibling") ?? undefined,
+									icon: <IconPlus size={18} />,
+									run: () => void handleNewSession("share"),
+								},
+							]
+						: []),
 					{
 						id: "copy-transcript",
 						label: "Copy conversation",
@@ -4069,7 +4078,7 @@ export function App(
 				onCloseTerminal={closeTerminalTab}
 				onOpenWorkspace={() => setActiveViewTab(null)}
 				allSessions={sessions}
-				onNewSession={handleNewSession}
+				onNewSession={viewerSession.desk ? undefined : handleNewSession}
 				onStartNewChat={(prompt) =>
 					openNewSessionInWorkspace(viewerSession, "share", prompt)
 				}
@@ -5094,6 +5103,15 @@ export function App(
 					<Tooltip label="Desk" side="left" shortcut={["⌘", "J"]}>
 						<button
 							className={DESK_FAB}
+							style={
+								activeViewTabShown
+									? ({
+											positionAnchor: "auto",
+											left: "auto",
+											positionTryFallbacks: "none",
+										} as React.CSSProperties)
+									: undefined
+							}
 							onClick={() => setDeskOpen(true)}
 							aria-label="Open the Desk"
 						>
