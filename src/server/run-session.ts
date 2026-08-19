@@ -132,6 +132,7 @@ import {
 	stoppedSessions,
 	type QueueItem,
 } from "./queue-state";
+import { isShuttingDown } from "./shutdown-state";
 import {
 	parseImageDataUrls,
 	stageFileAttachments,
@@ -821,6 +822,20 @@ export function attachSessionWatchersToEngineTranscript(
 
 const queueDrains: Map<string, Promise<void>> = (g.__queueDrains ??= new Map());
 
+// One notice per session when a send parks for a restart. In-memory only: the
+// next boot delivers the parked queue, so a stale entry costs nothing.
+const shutdownParkNotified: Set<string> = (g.__shutdownParkNotified ??= new Set());
+function notifyShutdownPark(sessionId: string): void {
+	if (shutdownParkNotified.has(sessionId)) return;
+	shutdownParkNotified.add(sessionId);
+	broadcastToSession(sessionId, {
+		type: "notice",
+		sessionId,
+		message:
+			"The server is restarting. Your message is queued and will be delivered when it's back.",
+	});
+}
+
 /**
  * Serialize queue draining per session. A sleeping Sandbox may take seconds
  * to resume, during which later composer sends must stay behind the first
@@ -842,6 +857,16 @@ async function drainQueueInner(sessionId: string): Promise<void> {
 		// The user pressed stop: leave the queue visible-but-parked until their
 		// next explicit action instead of restarting the run they just stopped.
 		if (stoppedSessions.has(sessionId)) return;
+		// Graceful shutdown: park the queue instead of starting a turn. A turn
+		// started after the shutdown snapshot races the drain deadline (an
+		// in-process one is SIGKILLed there and redone from the journal), and
+		// the sender's socket dies mid-stream either way. The queue is already
+		// persisted, so the next boot's restorePromptQueues delivers this
+		// message cleanly instead.
+		if (isShuttingDown()) {
+			notifyShutdownPark(sessionId);
+			return;
+		}
 		// A racing run can own the session by the time we loop again (e.g. our
 		// last batch lost the start race and got re-queued) — hand off to the
 		// idle-watcher instead of busy-spinning runs that immediately bounce.

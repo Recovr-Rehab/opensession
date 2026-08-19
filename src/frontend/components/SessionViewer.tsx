@@ -2504,6 +2504,15 @@ export function SessionViewer({
 					break;
 				case "session_status":
 					setIsRunningLive(msg.isRunning);
+					if (!msg.isRunning) {
+						// Every isRunning:false broadcast follows its run's stream_done,
+						// so a live turn never gets cut here. This clears the stale case:
+						// a socket that died mid-stream (server restart) reconnects, the
+						// re-watch hello reports the turn already over, and the spinner
+						// from the dead stream would otherwise stay up forever.
+						setIsStreaming(false);
+						liveTurnStore.finish();
+					}
 					onRunningChange?.(session.id, msg.isRunning);
 					break;
 				case "git_pushed":
