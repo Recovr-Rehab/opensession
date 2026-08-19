@@ -98,6 +98,16 @@ describe("isClaudeMalformedTerminalError", () => {
 });
 
 
+describe("isTransientRunError", () => {
+  test("recovers when the Claude binary fails to launch", () => {
+    expect(
+      isTransientRunError(
+        "Claude Code native binary at /home/ubuntu/.local/bin/claude exists but failed to launch.",
+      ),
+    ).toBe(true);
+  });
+});
+
 describe("isProviderOverloadError", () => {
   test("matches provider-declared overloads", () => {
     expect(isProviderOverloadError("Our servers are currently overloaded. Please try again later.")).toBe(true);
