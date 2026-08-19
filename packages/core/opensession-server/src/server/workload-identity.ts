@@ -286,7 +286,16 @@ async function discovery(): Promise<Response> {
 async function jwks(): Promise<Response> {
   const key = await signingKey();
   return Response.json({
-    keys: [{ ...key.publicKey, kid: key.kid, use: "sig", alg: "RS256" }],
+    keys: [
+      {
+        kty: key.publicKey.kty,
+        alg: "RS256",
+        use: "sig",
+        kid: key.kid,
+        n: key.publicKey.n,
+        e: key.publicKey.e,
+      },
+    ],
   });
 }
 

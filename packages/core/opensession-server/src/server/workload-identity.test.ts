@@ -69,6 +69,7 @@ describe("sandbox workload identity", () => {
     );
     const keys = (await jwks?.json() as { keys: Array<Record<string, unknown>> }).keys;
     expect(keys).toHaveLength(1);
+    expect(Object.keys(keys[0] || {}).sort()).toEqual(["alg", "e", "kid", "kty", "n", "use"]);
     expect(keys[0]?.alg).toBe("RS256");
     expect(keys[0]?.use).toBe("sig");
   });
