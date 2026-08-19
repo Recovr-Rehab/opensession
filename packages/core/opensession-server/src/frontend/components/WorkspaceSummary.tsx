@@ -13,6 +13,7 @@ import { getCurrentUser } from "./UserPicker";
 import { pollWhileVisible, PR_WEBHOOK_FALLBACK_POLL_MS } from "../lib/poll";
 import { PrStatusBar } from "./PrStatusBar";
 import { reviewerStateMeta } from "./pr/PrRows";
+import { StagingLink } from "./StagingLink";
 import { UserAvatar } from "./UserAvatar";
 import {
 	personNameForGithubLogin,
@@ -44,6 +45,11 @@ import {
 	WS_SUMMARY_STATE,
 	WS_SUMMARY_THUMB,
 } from "../lib/workspace-summary-classes";
+import {
+	WS_SUMMARY_OPEN_EVENT,
+	WS_SUMMARY_OPEN_KEY,
+	workspaceSummaryOpen,
+} from "../lib/workspace-summary-open";
 import {
 	IconChevronDown,
 	IconClock,
@@ -153,8 +159,6 @@ function emptyData(): SummaryData {
 }
 
 const IMAGE_RE = /\.(png|jpe?g|gif|webp|avif|svg)$/i;
-const OPEN_KEY = "opensession-workspace-summary-open";
-const OPEN_CHANGE_EVENT = "opensession-workspace-summary-open-changed";
 
 /**
  * One identity per reviewer, merged across the two ways a review lands on
@@ -279,9 +283,7 @@ export function WorkspaceSummary({
 	tabStripVisible,
 	...body
 }: Props) {
-	const [open, setOpen] = useState(
-		() => localStorage.getItem(OPEN_KEY) === "true",
-	);
+	const [open, setOpen] = useState(workspaceSummaryOpen);
 	const initialOpen = useRef(open);
 	const openRef = useRef(open);
 	openRef.current = open;
@@ -293,26 +295,26 @@ export function WorkspaceSummary({
 	}, [onOpenChange]);
 	useEffect(() => {
 		const syncOpen = () => {
-			const nextOpen = localStorage.getItem(OPEN_KEY) === "true";
+			const nextOpen = workspaceSummaryOpen();
 			if (nextOpen === openRef.current) return;
 			openRef.current = nextOpen;
 			setOpen(nextOpen);
 			onOpenChange?.(nextOpen);
 		};
 		const syncStorage = (event: StorageEvent) => {
-			if (event.key === OPEN_KEY) syncOpen();
+			if (event.key === WS_SUMMARY_OPEN_KEY) syncOpen();
 		};
-		window.addEventListener(OPEN_CHANGE_EVENT, syncOpen);
+		window.addEventListener(WS_SUMMARY_OPEN_EVENT, syncOpen);
 		window.addEventListener("storage", syncStorage);
 		return () => {
-			window.removeEventListener(OPEN_CHANGE_EVENT, syncOpen);
+			window.removeEventListener(WS_SUMMARY_OPEN_EVENT, syncOpen);
 			window.removeEventListener("storage", syncStorage);
 		};
 	}, [onOpenChange]);
 	useEffect(() => {
 		if (previousWorkspaceKey.current === workspaceKey) return;
 		previousWorkspaceKey.current = workspaceKey;
-		const nextOpen = localStorage.getItem(OPEN_KEY) === "true";
+		const nextOpen = workspaceSummaryOpen();
 		if (nextOpen === openRef.current) return;
 		openRef.current = nextOpen;
 		setOpen(nextOpen);
@@ -321,29 +323,22 @@ export function WorkspaceSummary({
 	function changeOpen(nextOpen: boolean) {
 		openRef.current = nextOpen;
 		setOpen(nextOpen);
-		localStorage.setItem(OPEN_KEY, String(nextOpen));
+		localStorage.setItem(WS_SUMMARY_OPEN_KEY, String(nextOpen));
 		onOpenChange?.(nextOpen);
-		window.dispatchEvent(new Event(OPEN_CHANGE_EVENT));
+		window.dispatchEvent(new Event(WS_SUMMARY_OPEN_EVENT));
 	}
 	return (
 		<Popover.Root
 			open={open}
 			onOpenChange={(nextOpen, details) => {
-				const target = details.event.target;
-				const switchingWorkspace =
+				// This is a pinned workspace view, not a transient menu. Keep it open
+				// while the person works elsewhere in the pane or changes workspace.
+				if (
 					!nextOpen &&
-					details.reason === "outside-press" &&
-					target instanceof Element &&
-					!!target.closest("[data-sidebar-row]");
-				if (!switchingWorkspace) {
-					changeOpen(nextOpen);
+					(details.reason === "outside-press" || details.reason === "focus-out")
+				)
 					return;
-				}
-				// A workspace-row click has to dismiss this popup before navigation.
-				// Keep the preference so the destination workspace opens the same view.
-				openRef.current = false;
-				setOpen(false);
-				onOpenChange?.(false);
+				changeOpen(nextOpen);
 			}}
 		>
 			<Tooltip label="Workspace summary">
@@ -580,6 +575,13 @@ function SummaryBody({
 				onOpenChecksTab={() => go(onOpenChecks)}
 				onArchive={onArchive ? () => go(onArchive) : undefined}
 			/>
+
+			{/* The PR's preview deploy, in the band with the rest of that PR's
+			    state. It is the globe the header carries while this card is shut:
+			    the header stands down when the card is up, the same way it does
+			    for the workspace panel, so the deploy is in exactly one place at
+			    a time. Renders nothing when the PR has no preview. */}
+			<StagingLink session={session} variant="summary" refreshTick={refreshTick} />
 
 			{/* One review section for both the automated reading and the people asked
 			    to review. The final row owns the picker, so adding or changing a
