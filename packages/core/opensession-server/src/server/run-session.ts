@@ -129,6 +129,7 @@ import {
 	steeredReceipts,
 	stoppedSessions,
 	takeSteerReceiptForText,
+	undeliveredSteers,
 	type QueueItem,
 } from "./queue-state";
 import { isShuttingDown } from "./shutdown-state";
@@ -382,16 +383,29 @@ export function interruptQueuedPrompt(
 ): boolean {
 	const session = findSession(sessionId);
 	if (!session) return false;
-	if (queueId && (steeredReceipts.get(sessionId) || []).some((s) => s.id === queueId)) {
-		// A receipt means this message is already in the engine's history: the
-		// running turn reads it at its next step on its own, and there is
-		// nothing left to interrupt WITH. Delivering it again would duplicate
-		// it. The receipt stays visible until the message lands in the
-		// transcript (the usual reconcile) — dropping it here would lose it if
-		// the turn ended between release and delivery. Stopping the turn is the
-		// separate, explicit gesture (the Stop button), so say no rather than
-		// silently ending someone's run from a queue chip.
-		return false;
+	const receipt = queueId
+		? (steeredReceipts.get(sessionId) || []).find((s) => s.id === queueId)
+		: undefined;
+	if (receipt) {
+		// A receipt means the running turn has ACCEPTED this message: it sits in
+		// the engine's steering queue and is read at the next step boundary,
+		// which a long tool call can push out by minutes. "Deliver now" forces
+		// that boundary. The transcript is the arbiter of delivered-vs-not: the
+		// user entry is written at the same engine event that folds a steer into
+		// history, so a receipt whose text already landed needs nothing forced
+		// (the reconcile retires it on its own — report success, not a notice).
+		if (undeliveredSteers([receipt], engineUserTexts(session)).length === 0) {
+			return true;
+		}
+		// Still unread: abort the turn. An aborted run never drains its steering
+		// queue (the engine discards it on dispose), so abortTurnAndDrain
+		// requeues every receipt the transcript has not seen and the solo mark
+		// delivers exactly this one as the immediate next turn — any other
+		// pending steers go back to the queue and wait for a natural boundary
+		// instead of being swept into this forced one. The INTERRUPT_STEER_NOTE
+		// frames the delivery as a mid-task steer so the model resumes the
+		// interrupted work rather than acknowledge-and-parking.
+		return abortTurnAndDrain(sessionId, session, receipt.id);
 	}
 	const queue = promptQueues.get(sessionId);
 	if (!queue) return false;

@@ -4066,6 +4066,27 @@ export function SessionViewer({
 									</span>
 								</Tooltip>
 								{s.id && (
+									<Tooltip label="Deliver now: end the current step so this message lands immediately. The agent resumes its work with your message in hand.">
+										<button
+											type="button"
+											aria-label="Deliver now"
+											className={cn(
+												composerQueueAction,
+												composerQueueActionSteer,
+											)}
+											onClick={() =>
+												send({
+													type: "interrupt_queued_prompt",
+													sessionId: session.id,
+													queueId: s.id,
+												})
+											}
+										>
+											<IconArrowUpToLine size={20} />
+										</button>
+									</Tooltip>
+								)}
+								{s.id && (
 									<Tooltip label="Dismiss. The run keeps going and this message won't be re-sent.">
 										<button
 											type="button"
