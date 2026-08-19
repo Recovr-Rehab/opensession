@@ -38,11 +38,9 @@ const INTEGRATION_DESCRIPTIONS: Record<string, string> = {
 
 function IntegrationCard({
 	integration,
-	publicBaseUrl,
 	onSaved,
 }: {
 	integration: SetupIntegration;
-	publicBaseUrl: string;
 	onSaved: (updated: SetupIntegration, restartRequired: boolean) => void;
 }) {
 	const state = integrationState(integration);
@@ -115,7 +113,6 @@ function IntegrationCard({
 			</SettingCard>
 			<IntegrationSetupDialog
 				integration={integration}
-				publicBaseUrl={publicBaseUrl}
 				open={setupOpen}
 				onOpenChange={setSetupOpen}
 				onSaved={onSaved}
@@ -127,11 +124,9 @@ function IntegrationCard({
 /** Every integration the registry knows about, as configuration cards. */
 export function IntegrationsList({
 	integrations,
-	publicBaseUrl,
 	onSaved,
 }: {
 	integrations: SetupIntegration[];
-	publicBaseUrl: string;
 	onSaved: (updated: SetupIntegration, restartRequired: boolean) => void;
 }) {
 	return (
@@ -141,7 +136,6 @@ export function IntegrationsList({
 					<IntegrationCard
 						key={i.id}
 						integration={i}
-						publicBaseUrl={publicBaseUrl}
 						onSaved={onSaved}
 					/>
 				))}

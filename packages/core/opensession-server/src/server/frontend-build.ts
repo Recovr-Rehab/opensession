@@ -221,6 +221,7 @@ export async function buildFrontend(): Promise<string> {
 		productMark: productMark(),
 		personaName: personaName(),
 		publicBaseUrl: configuredServer().publicBaseUrl,
+		webhookBaseUrl: configuredServer().webhookBaseUrl,
 		githubBotLogins: githubBotLogins(),
 		defaultRepoId: defaultRepo().id,
 		plainWorkspaceId: plainWorkspaceId() || undefined,

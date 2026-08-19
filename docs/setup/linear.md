@@ -35,7 +35,8 @@ your TLS proxy):
 
 The OAuth `redirect_uri` is derived, not hardcoded: it is
 `integrations.linear.oauthRedirectUrl` if you set it, otherwise
-`<server.publicBaseUrl>/oauth/callback`. Register whichever one applies on your
+`<server.webhookBaseUrl>/oauth/callback` (falling back to `server.publicBaseUrl`
+when no separate webhook origin is configured). Register whichever one applies on your
 Linear OAuth app — they must match exactly, including the scheme and any
 trailing path.
 

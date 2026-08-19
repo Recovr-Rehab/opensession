@@ -6,6 +6,7 @@ import { SettingsSection } from "../ui/settings";
 import { InlineAlert } from "../ui/state";
 import { Switch } from "../ui/switch";
 import { toast } from "../ui/toast";
+import { WEBHOOK_BASE_URL } from "../lib/brand";
 import { IconTile } from "./BrandTile";
 import {
 	Code,
@@ -222,18 +223,16 @@ function guideFor(integration: SetupIntegration, publicBaseUrl: string): Guide {
 
 export function IntegrationSetupDialog({
 	integration,
-	publicBaseUrl,
 	open,
 	onOpenChange,
 	onSaved,
 }: {
 	integration: SetupIntegration;
-	publicBaseUrl: string;
 	open: boolean;
 	onOpenChange: (open: boolean) => void;
 	onSaved: (updated: SetupIntegration, restartRequired: boolean) => void;
 }) {
-	const guide = guideFor(integration, publicBaseUrl);
+	const guide = guideFor(integration, WEBHOOK_BASE_URL);
 	const [enabled, setEnabled] = useState(integration.enabled);
 	const [typed, setTyped] = useState<Record<string, string>>({});
 	const [cleared, setCleared] = useState<Record<string, boolean>>({});

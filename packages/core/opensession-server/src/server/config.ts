@@ -40,6 +40,8 @@ export interface ServerSection {
   webhookPort?: number;
   /** Public web-UI base, e.g. "https://opensession.example.com". */
   publicBaseUrl?: string;
+  /** Public webhook/OAuth base when the UI stays on a private network. */
+  webhookBaseUrl?: string;
   /** Host previews are served from (Caddy-fronted). */
   previewHost?: string;
   /** Caddy admin API endpoint. */
@@ -273,6 +275,7 @@ export interface ResolvedServer {
   port: number;
   webhookPort: number;
   publicBaseUrl: string;
+  webhookBaseUrl: string;
   previewHost: string;
   caddyAdmin: string;
 }
@@ -418,6 +421,7 @@ function parseConfig(text: string): OpenSessionConfig {
         port: num(server.port),
         webhookPort: num(server.webhookPort),
         publicBaseUrl: str(server.publicBaseUrl),
+        webhookBaseUrl: str(server.webhookBaseUrl),
         previewHost: str(server.previewHost),
         caddyAdmin: str(server.caddyAdmin),
       });
@@ -554,6 +558,10 @@ export function configuredServer(): ResolvedServer {
     process.env.OPENSESSION_UI_BASE ||
     s.publicBaseUrl ||
     `http://127.0.0.1:${port}`;
+  const webhookBaseUrl =
+    process.env.OPENSESSION_WEBHOOK_BASE ||
+    s.webhookBaseUrl ||
+    publicBaseUrl;
   let publicHost = "127.0.0.1";
   try {
     publicHost = new URL(publicBaseUrl).hostname || publicHost;
@@ -563,6 +571,7 @@ export function configuredServer(): ResolvedServer {
     port,
     webhookPort: Number.isFinite(envWebhookPort) ? envWebhookPort : s.webhookPort ?? 3848,
     publicBaseUrl,
+    webhookBaseUrl,
     // Portals authenticate with the OpenSession browser cookie. Defaulting to
     // the UI hostname keeps that cookie same-site across preview ports; an
     // unrelated machine/tailnet hostname would make every browser portal 401.

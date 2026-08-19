@@ -27,6 +27,7 @@ const ENV_KEYS = [
   "OPENSESSION_PI_BIN",
   "OPENSESSION_MCP_CONFIG",
   "OPENSESSION_UI_BASE",
+  "OPENSESSION_WEBHOOK_BASE",
   "PREVIEW_HOST",
 ] as const;
 const saved: Record<string, string | undefined> = {};
@@ -50,6 +51,31 @@ afterEach(() => {
 });
 
 describe("config loader", () => {
+  test("supports a separate public webhook origin", () => {
+    withConfig(JSON.stringify({
+      server: {
+        publicBaseUrl: "https://ui.example.test",
+        webhookBaseUrl: "https://ingress.example.test",
+      },
+    }));
+    delete process.env.OPENSESSION_UI_BASE;
+    delete process.env.OPENSESSION_WEBHOOK_BASE;
+
+    expect(configuredServer().publicBaseUrl).toBe("https://ui.example.test");
+    expect(configuredServer().webhookBaseUrl).toBe("https://ingress.example.test");
+
+    process.env.OPENSESSION_WEBHOOK_BASE = "https://env-ingress.example.test";
+    expect(configuredServer().webhookBaseUrl).toBe("https://env-ingress.example.test");
+  });
+
+  test("defaults the webhook origin to the public UI origin", () => {
+    withConfig(JSON.stringify({ server: { publicBaseUrl: "https://ui.example.test" } }));
+    delete process.env.OPENSESSION_UI_BASE;
+    delete process.env.OPENSESSION_WEBHOOK_BASE;
+
+    expect(configuredServer().webhookBaseUrl).toBe("https://ui.example.test");
+  });
+
 	test("defaults preview portals to the public UI hostname", () => {
 		withConfig(JSON.stringify({ server: { publicBaseUrl: "https://os.example.test" } }));
 		delete process.env.OPENSESSION_UI_BASE;

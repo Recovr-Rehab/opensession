@@ -38,7 +38,6 @@ export function IntegrationsPanel() {
 				<>
 					<IntegrationsList
 						integrations={status.integrations}
-						publicBaseUrl={status.publicBaseUrl}
 						onSaved={setup.applyIntegration}
 					/>
 

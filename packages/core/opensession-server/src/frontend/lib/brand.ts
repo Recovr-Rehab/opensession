@@ -24,6 +24,7 @@ type InstanceBrand = {
 	productMark?: string;
 	personaName?: string;
 	publicBaseUrl?: string;
+	webhookBaseUrl?: string;
 	githubBotLogins?: string[];
 	defaultRepoId?: string;
 	plainWorkspaceId?: string;
@@ -47,6 +48,7 @@ export const AGENT_NAME = INSTANCE.personaName || "Assistant";
 export const PUBLIC_BASE_URL =
 	INSTANCE.publicBaseUrl ||
 	(typeof location === "undefined" ? "http://127.0.0.1:3850" : location.origin);
+export const WEBHOOK_BASE_URL = INSTANCE.webhookBaseUrl || PUBLIC_BASE_URL;
 export const GITHUB_BOT_LOGINS = new Set(
 	(INSTANCE.githubBotLogins || []).map((login) => login.toLowerCase()),
 );

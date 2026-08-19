@@ -13,6 +13,7 @@
     "port": 3850,
     "webhookPort": 3848,
     "publicBaseUrl": "https://sessions.example.com",
+    "webhookBaseUrl": "https://ingress.example.com",
     "previewHost": "preview.example.com",
     "caddyAdmin": "http://localhost:2019"
   },

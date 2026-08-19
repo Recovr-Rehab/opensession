@@ -31,7 +31,7 @@ import {
   IconPlug,
   IconPlus,
 } from "./icons";
-import { AGENT_NAME, PUBLIC_BASE_URL, docTitle, DEFAULT_DOC_TITLE } from "../lib/brand";
+import { AGENT_NAME, WEBHOOK_BASE_URL, docTitle, DEFAULT_DOC_TITLE } from "../lib/brand";
 import { Button } from "../ui/button";
 import { Checkbox } from "../ui/checkbox";
 import { cn } from "../ui/cn";
@@ -908,7 +908,7 @@ function RunLedger({
 /** Secret webhook URL as a Configuration-grid value: truncated URL + copy. */
 function WebhookUrl({ id, secret }: { id: string; secret: string }) {
   const [copied, setCopied] = useState(false);
-  const url = `${PUBLIC_BASE_URL}/automations/${id}/${secret}`;
+  const url = `${WEBHOOK_BASE_URL}/automations/${id}/${secret}`;
 
   return (
     <span className="flex items-center gap-2 min-w-0">

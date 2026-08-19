@@ -330,7 +330,6 @@ export function SetupPanel({ onDone }: { onDone?: () => void }) {
                       integrations={status.integrations.filter(
                         (integration) => integration.id === "github",
                       )}
-                      publicBaseUrl={status.publicBaseUrl}
                       onSaved={setup.applyIntegration}
                     />
                   )}
