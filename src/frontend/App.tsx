@@ -312,7 +312,6 @@ const SETTINGS_SECTIONS = new Set<SettingsSectionKey>([
 	"shortcuts",
 	"general",
 	"setup",
-	"identity",
 	"repos",
 	"members",
 	"models",
@@ -341,6 +340,7 @@ const LEGACY_SETTINGS_SECTIONS: Record<string, SettingsSectionKey> = {
 	composer: "preferences",
 	keychain: "myAccounts",
 	profile: "myAccounts",
+	identity: "general",
 };
 
 // Everything a session URL carries after `/session/`: the id, plus the

@@ -1,6 +1,5 @@
 import React from "react";
 import {
-	IconBadge,
 	IconBandAid,
 	IconBell,
 	IconBolt,
@@ -46,7 +45,6 @@ export type SettingsSectionKey =
 	| "shortcuts"
 	| "general"
 	| "setup"
-	| "identity"
 	| "repos"
 	| "members"
 	| "models"
@@ -119,13 +117,6 @@ export const SECTIONS: {
 		group: "Workspace",
 		adminOnly: true,
 		icon: <IconChecklist />,
-	},
-	{
-		key: "identity",
-		label: "Identity",
-		group: "Workspace",
-		adminOnly: true,
-		icon: <IconBadge />,
 	},
 	{
 		key: "repos",

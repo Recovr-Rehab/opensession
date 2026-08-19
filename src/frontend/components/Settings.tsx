@@ -43,7 +43,6 @@ import { AppearancePanel } from "./settings/AppearancePanel";
 import { AuditPanel } from "./settings/AuditPanel";
 import { DeploysPanel } from "./settings/DeploysPanel";
 import { GeneralPanel } from "./settings/GeneralPanel";
-import { IdentityPanel } from "./settings/IdentityPanel";
 import { IntegrationsPanel } from "./settings/IntegrationsPanel";
 import { LibraryPanel } from "./settings/LibraryPanel";
 import { MembersPanel } from "./settings/MembersPanel";
@@ -103,8 +102,8 @@ function filterGroups(groups: SectionGroup[], query: string): FilteredGroup[] {
 }
 
 /**
- * The nav's filter field. Settings is 22 sections across five groups, and the
- * group a setting sits in is a judgement call the person searching hasn't made
+ * The nav's filter field. Settings spans many sections across five groups,
+ * and the group a setting sits in is a judgement call the person hasn't made
  * — so the query also matches per-section keywords ("vim", "cron", "dark
  * mode"), and a row that matched on one says which under its label.
  *
@@ -221,7 +220,6 @@ function SectionPanel({
 			{section === "shortcuts" && <ShortcutsPanel />}
 			{section === "general" && <GeneralPanel />}
 			{section === "setup" && <SetupPanel onDone={onBack} />}
-			{section === "identity" && <IdentityPanel />}
 			{section === "repos" && <ReposPanel />}
 			{section === "members" && <MembersPanel />}
 			{section === "library" && <LibraryPanel />}
@@ -509,7 +507,7 @@ function MobileSettings({
 							{/* Search sits at the bottom edge, where the thumb is and where
 							    iOS 26 puts it (the native app's sessions list does the same),
 							    on glass — so the list stays legible passing behind it and the
-							    way out of 22 sections is always in reach. */}
+							    way out of a long section list is always in reach. */}
 							<NavSearch
 								sheet
 								value={query}

@@ -14,6 +14,11 @@ import { SETTINGS_KEYWORDS } from "./settings-search";
 const navSections = SECTIONS.filter((s) => !TOOL_SECTIONS.has(s.key));
 
 describe("settingsPaletteActions", () => {
+	test("keeps identity settings inside General", () => {
+		expect(SECTIONS.map((section) => String(section.key))).not.toContain("identity");
+		expect(SETTINGS_KEYWORDS.general).toContain("identity");
+	});
+
 	test("covers every non-tool section for an admin", () => {
 		const actions = settingsPaletteActions({ admin: true });
 		expect(actions.map((a) => a.section).sort()).toEqual(

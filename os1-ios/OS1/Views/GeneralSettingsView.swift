@@ -2,22 +2,35 @@ import PhotosUI
 import SwiftUI
 import UniformTypeIdentifiers
 
-/// Settings → General: workspace identity shared by everyone on the server.
+/// Settings → General: organization and instance identity shared by everyone.
 struct GeneralSettingsView: View {
     @State private var settings: OrganizationSettings?
+    @State private var identity: InstanceIdentitySettings?
     @State private var name: String
+    @State private var persona = ""
+    @State private var product = ""
     @State private var loading = true
+    @State private var identityLoading = true
     @State private var saving = false
+    @State private var identitySaving = false
     @State private var error: String?
+    @State private var identityError: String?
     @State private var pickerItem: PhotosPickerItem?
     @State private var importing = false
     @State private var iconHovered = false
     @FocusState private var nameFocused: Bool
+    @FocusState private var focusedIdentityField: IdentityField?
+
+    private enum IdentityField: Hashable { case persona, product }
 
     init() {
         let cached: OrganizationSettings? = SettingsCache.value("organization-settings")
+        let cachedIdentity: InstanceIdentitySettings? = SettingsCache.value("instance-identity")
         _settings = State(initialValue: cached)
+        _identity = State(initialValue: cachedIdentity)
         _name = State(initialValue: cached?.organizationName ?? "")
+        _persona = State(initialValue: cachedIdentity?.personaName ?? "")
+        _product = State(initialValue: cachedIdentity?.productName ?? "")
     }
 
     var body: some View {
@@ -52,14 +65,47 @@ struct GeneralSettingsView: View {
                     Text("Shared by everyone in this workspace. Clearing the name restores the product name.")
                 }
             }
+            if identityLoading, identity == nil {
+                settingsLoadingRow
+            } else {
+                if let identityError {
+                    settingsErrorRow(identityError) { Task { await loadIdentity() } }
+                }
+                Section {
+                    identityNameRow(
+                        "Agent name",
+                        text: $persona,
+                        placeholder: "Assistant",
+                        field: .persona
+                    )
+                    identityNameRow(
+                        "Product name",
+                        text: $product,
+                        placeholder: "Open Session",
+                        field: .product
+                    )
+                } header: {
+                    Text("Identity")
+                } footer: {
+                    Text(identityFooter)
+                }
+            }
         }
         .insetGroupedListCompat()
         .navigationTitle("General")
         .task { await load() }
-        .refreshable { await load() }
+        .task { await loadIdentity() }
+        .refreshable {
+            await load()
+            await loadIdentity()
+        }
         .onChange(of: nameFocused) { wasFocused, isFocused in
             guard wasFocused, !isFocused else { return }
             Task { await commitName() }
+        }
+        .onChange(of: focusedIdentityField) { previous, _ in
+            guard let previous else { return }
+            Task { await commitIdentity(previous) }
         }
     }
 
@@ -153,6 +199,30 @@ struct GeneralSettingsView: View {
         SettingsAPI.organizationIconURL(settings?.organizationIconUrl)
     }
 
+    private var identityFooter: String {
+        let base = "Shared by everyone on this instance. Clearing a name restores the built-in default."
+        guard let path = identity?.configPath, !path.isEmpty else { return base }
+        return "\(base) Stored in \(path) on the server."
+    }
+
+    private func identityNameRow(
+        _ title: String,
+        text: Binding<String>,
+        placeholder: String,
+        field: IdentityField
+    ) -> some View {
+        LabeledContent {
+            TextField(placeholder, text: text)
+                .multilineTextAlignment(.trailing)
+                .disableAutocorrection(true)
+                .focused($focusedIdentityField, equals: field)
+                .disabled(identitySaving)
+                .onSubmit { focusedIdentityField = nil }
+        } label: {
+            Text(title)
+        }
+    }
+
     private func load() async {
         loading = true
         defer { loading = false }
@@ -170,10 +240,46 @@ struct GeneralSettingsView: View {
         SettingsCache.save("organization-settings", next)
     }
 
+    private func loadIdentity() async {
+        identityLoading = true
+        defer { identityLoading = false }
+        do {
+            applyIdentity(try await SettingsAPI.instanceIdentity())
+            identityError = nil
+        } catch {
+            identityError = error.localizedDescription
+        }
+    }
+
+    private func applyIdentity(_ next: InstanceIdentitySettings) {
+        identity = next
+        if focusedIdentityField != .persona { persona = next.personaName ?? "" }
+        if focusedIdentityField != .product { product = next.productName ?? "" }
+        SettingsCache.save("instance-identity", next)
+    }
+
     private func commitName() async {
         let value = name.trimmingCharacters(in: .whitespaces)
         guard value != (settings?.organizationName ?? ""), !saving else { return }
         await save { try await SettingsAPI.saveOrganizationSettings(["organizationName": value]) }
+    }
+
+    private func commitIdentity(_ field: IdentityField) async {
+        let value = (field == .persona ? persona : product)
+            .trimmingCharacters(in: .whitespaces)
+        let stored = (field == .persona ? identity?.personaName : identity?.productName) ?? ""
+        guard value != stored, !identitySaving else { return }
+        identitySaving = true
+        defer { identitySaving = false }
+        do {
+            let key = field == .persona ? "personaName" : "productName"
+            applyIdentity(try await SettingsAPI.saveInstanceIdentity([key: value]))
+            identityError = nil
+        } catch {
+            identityError = error.localizedDescription
+            if field == .persona { persona = identity?.personaName ?? "" }
+            else { product = identity?.productName ?? "" }
+        }
     }
 
     private func upload(_ raw: Data) async {

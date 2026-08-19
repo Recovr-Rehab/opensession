@@ -81,11 +81,12 @@ export const SETTINGS_KEYWORDS: Record<string, string[]> = {
 		"instance name",
 		"branding",
 		"product name",
+		"agent name",
+		"identity",
 		"persona",
 		"default repo",
 	],
 	setup: ["onboarding", "getting started", "checklist", "first run"],
-	identity: ["aliases", "who is who", "slack id", "email", "user mapping"],
 	repos: ["repositories", "projects", "checkout", "worktree", "branch", "clone"],
 	members: ["team", "people", "teammates", "access"],
 	models: [
