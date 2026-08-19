@@ -266,12 +266,18 @@ export function AskCard({ questions, onAnswer }: Props) {
 								>
 									<Questionnaire.ChoiceInput className="sr-only" />
 									{/* The letter leads the row, the way a lettered list does. It is
-									    how the options are named — in the transcript above, in Slack,
-									    and out loud — so it belongs where a marker goes rather than
+									    how the options are named (in the transcript above, in Slack,
+									    and out loud), so it belongs where a marker goes rather than
 									    trailing the description as a key hint. Fixed width so the
 									    labels start on one line; still the quiet weight a menu row's
-									    shortcut wears (MenuShortcut). */}
-									<Questionnaire.ChoiceShortcut className="mt-px w-3.5 shrink-0 text-center text-label leading-5 text-faint" />
+									    shortcut wears (MenuShortcut).
+
+									    It sits on the option's own line: same 13px/20px line box as
+									    the label beside it, so their cap-heights meet, and flush
+									    left in its column rather than centred in it, so the three
+									    letters share an edge with each other and with the text in
+									    the free-text row below. */}
+									<Questionnaire.ChoiceShortcut className="w-3.5 shrink-0 text-label leading-5 text-faint" />
 									<Questionnaire.ChoiceLabel className="min-w-0 flex-1">
 										<span className="block text-control-label font-semibold leading-5 text-fg">
 											{opt.label}
