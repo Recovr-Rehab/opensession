@@ -289,11 +289,14 @@ interface Props {
 	    staging-deploy icon in the Workspace panel. */
 	leading?: React.ReactNode;
 	/**
-	 * Summary variant only: rows that belong to this PR but are not the strip's
-	 * to derive, rendered inside the band under the status row. Today that is the
-	 * preview environment the PR deployed. They share the band because they share
-	 * the subject: one plate for the state of the work, not a tinted row with a
-	 * loose link under it.
+	 * Summary variant only: marks that belong to this PR but are not the strip's
+	 * to derive, rendered at the head of the status row before the state glyph.
+	 * Today that is the preview environment the PR deployed. It shares the row
+	 * because it shares the subject: one line for the state of the work and the
+	 * place to try it, not a tinted row with a loose link under it.
+	 *
+	 * The row is the band's only line, so anything passed here has to be a mark
+	 * rather than a labelled row. There is nowhere for a second label to go.
 	 */
 	children?: React.ReactNode;
 	/** Live run state — when it falls from running→idle the header refetches, so
@@ -1048,7 +1051,9 @@ export function PrStatusBar({
 	}
 
 	// The summary card: one row for the PR, the way a sidebar row carries its
-	// own subtext. Where the work stands is the line that matters, so the
+	// own subtext. One row for all of it, including the preview deploy, which
+	// leads the row as a second mark rather than taking a line of its own to say
+	// a name the globe already says. Where the work stands is the line that matters, so the
 	// headline leads and the PR number sits under it as secondary. The PR title
 	// is gone: it restates the session title the card already hangs from, and it
 	// cost the card a whole row to do it.
@@ -1091,6 +1096,12 @@ export function PrStatusBar({
 					// know which PR this is, so it stays as the row's tooltip.
 					title={pr ? `#${pr.number} · ${pr.title}` : undefined}
 				>
+					{/* The preview environment this PR deployed: same subject, same
+					    plate, and now the same line. It leads the row because it is the
+					    only part of the band you go somewhere else to use, and because
+					    a globe beside the state glyph needs no label to be read. Renders
+					    nothing when the PR has no preview, and the row closes up. */}
+					{children}
 					<span className={cn(WS_SUMMARY_RAIL, PR_STATE_TEXT[headlineTone])}>
 						{headlineGlyph(headline.key)}
 					</span>
@@ -1126,10 +1137,6 @@ export function PrStatusBar({
 					)}
 					{renderAction()}
 				</div>
-				{/* The preview environment this PR deployed: same subject, same
-				    plate, its globe leading the row the way every row in the card
-				    opens on a mark. */}
-				{children}
 			</div>
 		);
 	}

@@ -6,18 +6,12 @@ import {
 } from "../lib/poll";
 import type { PrCheck, UnifiedSession } from "../lib/types";
 import { withPreviewPath } from "../lib/preview-url";
-import {
-	WS_SUMMARY_ICON,
-	WS_SUMMARY_LABEL,
-	WS_SUMMARY_RAIL,
-	WS_SUMMARY_ROW,
-	WS_SUMMARY_STATE,
-} from "../lib/workspace-summary-classes";
+import { WS_SUMMARY_ICON } from "../lib/workspace-summary-classes";
 import { cn } from "../ui/cn";
 import { Tooltip } from "../ui/tooltip";
 import { toast } from "../ui/toast";
 import { CopyCheck, useCopy } from "../ui/copy";
-import { IconArrowUpRight, IconGlobe } from "./icons";
+import { IconArrowUpRight, IconGlobe, IconLink } from "./icons";
 import { checkClass, isDeployment } from "./PrPanel";
 import { useShortcutLabel } from "../hooks/useShortcutBindings";
 
@@ -51,6 +45,28 @@ const ICON_BUILDING =
 const ICON_REBUILDING =
 	"cursor-pointer text-yellow opacity-72 hover:bg-yellow/13 hover:opacity-100";
 const ICON_PENDING = "cursor-default text-dim";
+
+/* The summary card's preview mark. It rides at the head of the PR band's
+   status row, immediately before the glyph for where the work stands, so the
+   band says both on one line: this is the pull request, and this is where you
+   can try it.
+
+   A 28px square rather than the card's 20px rail, which every other leading
+   mark takes. Those marks are decoration on a row whose whole width is the
+   target; this one IS the target, and 20px is too little to aim at.
+
+   The hover plate is the mark's own ink rather than the list's neutral wash,
+   the same trade the band's rows make: a grey plate on a tinted band reads as
+   a second colour landing on it instead of the band darkening under the
+   pointer. */
+const SUMMARY_MARK =
+	"grid size-7 shrink-0 place-items-center rounded-sm no-underline focus-ring";
+const SUMMARY_MARK_HOVER =
+	"hover:bg-[color-mix(in_srgb,currentColor_14%,transparent)]";
+/* Pulls the pair together. The status row spaces its parts 14px apart, which
+   is the distance between a mark and the words it belongs to. Two marks at
+   that distance read as two columns rather than as one leading cluster. */
+const SUMMARY_MARK_PAIR = "-mr-2";
 
 /* Spinning ring around the globe while the preview environment builds.
    border-t-current picks up the amber/green icon tone; the ring sits just
@@ -104,6 +120,20 @@ export function StagingLink({
 	// comment yet — enough to show a loading placeholder, not enough to link.
 	const [deployPending, setDeployPending] = useState(false);
 	const { copied, copy } = useCopy();
+	const [copyModifierHeld, setCopyModifierHeld] = useState(false);
+	useEffect(() => {
+		const syncModifier = (e: KeyboardEvent) =>
+			setCopyModifierHeld(e.metaKey || e.ctrlKey);
+		const clearModifier = () => setCopyModifierHeld(false);
+		window.addEventListener("keydown", syncModifier);
+		window.addEventListener("keyup", syncModifier);
+		window.addEventListener("blur", clearModifier);
+		return () => {
+			window.removeEventListener("keydown", syncModifier);
+			window.removeEventListener("keyup", syncModifier);
+			window.removeEventListener("blur", clearModifier);
+		};
+	}, []);
 	// Read up here with the other hooks, not beside the tooltip it feeds. Every
 	// state below this line returns early, so a call further down runs on some
 	// renders and not others: the render where the URL lands would add a hook the
@@ -195,16 +225,18 @@ export function StagingLink({
 		if (variant === "summary") {
 			return (
 				<span
-					// Nothing to open yet, so the row drops the list's pointer and its
-					// hover pill rather than offering a target that does nothing.
-					className={cn(WS_SUMMARY_ROW, "cursor-default hover:bg-transparent")}
+					// Nothing to open yet, so the mark drops its pointer and its hover
+					// plate rather than offering a target that does nothing.
+					className={cn(
+						SUMMARY_MARK,
+						SUMMARY_MARK_PAIR,
+						WS_SUMMARY_ICON,
+						"cursor-default",
+					)}
 					title="Preview environment starting… the link appears once it's up"
+					aria-label="Preview environment starting"
 				>
-					<span className={cn(WS_SUMMARY_RAIL, WS_SUMMARY_ICON)}>
-						{shimmerGlobe(20)}
-					</span>
-					<span className={WS_SUMMARY_LABEL}>Preview environment</span>
-					<span className={cn(WS_SUMMARY_STATE, "text-faint")}>Starting</span>
+					{shimmerGlobe(20)}
 				</span>
 			);
 		}
@@ -254,20 +286,23 @@ export function StagingLink({
 	// The globe carries a spinning ring while any deploy is in flight — first
 	// build (link dead until it lands) and rebuild (link opens the previous
 	// deploy) alike. While a ⌘-copy is fresh the globe morphs into a drawing
-	// checkmark; otherwise it's the (optionally spinning) globe.
+	// checkmark; holding the copy modifier previews the link action, and the
+	// globe remains the resting (optionally spinning) state.
 	const spinning = building || rebuilding;
+	const restingIcon = (size: number) =>
+		copyModifierHeld ? <IconLink size={size} /> : <IconGlobe size={size} />;
 	const globe = (size: number, ring: string) =>
 		copied ? (
-			<CopyCheck copied size={size} idle={<IconGlobe size={size} />} />
+			<CopyCheck copied size={size} idle={restingIcon(size)} />
 		) : (
 			<span className="relative inline-flex items-center justify-center">
-				{spinning && (
+				{spinning && !copyModifierHeld && (
 					<span
 						className={`${RING_BASE} ${RING_MOTION} ${ring}`}
 						aria-hidden="true"
 					/>
 				)}
-				<IconGlobe size={size} />
+				{restingIcon(size)}
 			</span>
 		);
 
@@ -325,7 +360,6 @@ export function StagingLink({
 			</a>
 		);
 	}
-
 	if (variant === "summary") {
 		return (
 			<a
@@ -334,30 +368,23 @@ export function StagingLink({
 				rel="noopener"
 				onClick={onClick}
 				aria-disabled={building || undefined}
+				// The label the mark used to carry is now the tooltip's first line,
+				// and the deploy's own state rides in there with it: an icon cannot
+				// say "Redeploying" and the band has no room for a word that is only
+				// true for a minute at a time.
+				aria-label="Preview environment"
 				className={cn(
-					WS_SUMMARY_ROW,
-					"no-underline",
-					building && "cursor-default",
+					SUMMARY_MARK,
+					SUMMARY_MARK_PAIR,
+					// Amber only while a deploy is in flight. A card of quiet rows
+					// keeps its colour for the ones with something to report, and a
+					// preview that is simply up has nothing.
+					spinning ? "text-yellow" : WS_SUMMARY_ICON,
+					building ? "cursor-default" : SUMMARY_MARK_HOVER,
 				)}
 				title={`${tooltip("⌘-click to copy the link")} · ${href}`}
 			>
-				{/* Amber only while a deploy is in flight. A card of quiet rows keeps
-				    its colour for the ones with something to report, and a preview
-				    that is simply up has nothing. */}
-				<span
-					className={cn(
-						WS_SUMMARY_RAIL,
-						spinning ? "text-yellow" : WS_SUMMARY_ICON,
-					)}
-				>
-					{globe(20, RING_LG)}
-				</span>
-				<span className={WS_SUMMARY_LABEL}>Preview environment</span>
-				{spinning && (
-					<span className={cn(WS_SUMMARY_STATE, "text-yellow")}>
-						{rebuilding ? "Redeploying" : staging.status}
-					</span>
-				)}
+				{globe(20, RING_LG)}
 			</a>
 		);
 	}
