@@ -10,7 +10,7 @@ import { fetchDiff } from "../lib/api";
 import { commitPrompt } from "../lib/commit-prompt";
 import { getCurrentUser } from "./UserPicker";
 import { pollWhileVisible, PR_WEBHOOK_FALLBACK_POLL_MS } from "../lib/poll";
-import { summarizeChecks } from "./PrStatusBar";
+import { PrStatusBar } from "./PrStatusBar";
 import { Popover } from "../ui/popover";
 import { Tooltip } from "../ui/tooltip";
 import { cn } from "../ui/cn";
@@ -22,33 +22,28 @@ import {
 	WS_SUMMARY_DIVIDER,
 	WS_SUMMARY_ICON,
 	WS_SUMMARY_LABEL,
+	WS_SUMMARY_RAIL,
 	WS_SUMMARY_ROW,
 	WS_SUMMARY_SECTION,
-	WS_SUMMARY_STATE,
 	WS_SUMMARY_THUMB,
 } from "../lib/workspace-summary-classes";
 import {
-	IconArrowUp,
-	IconArrowDown,
-	IconBranches,
-	IconCheck,
 	IconClock,
 	IconFile,
-	IconGitMerge,
 	IconGlobe,
 	IconListCircles,
-	IconPullRequest,
-	IconRepo,
 	IconStack,
 	IconTerminal,
-	IconX,
 } from "./icons";
 
 /**
  * The session header's compact stand-in for the right Workspace panel: one
- * floating card carrying both halves of what that panel holds. Where the work
- * stands (changes, branch, PR, checks, conflicts, sources) and the places it
- * can take you (portals, agents, terminal).
+ * floating card carrying what that panel carries, in three bands.
+ *
+ * 1. The work itself, unlabelled: how big the diff is, whether anything is
+ *    uncommitted, and where the pull request stands with its one action.
+ * 2. Places, which is the panel's bottom bar: portals, agents, terminal.
+ * 3. Assets, the session's own files.
  *
  * Why it exists: the Workspace panel is a third of the pane, so the only way
  * to check "did the checks pass / is there a conflict / is anything still
@@ -58,26 +53,25 @@ import {
  * pane's own gutter, so both side columns can stay shut and the reading column
  * stays wide.
  *
- * It carries the panel's whole set of destinations rather than a chosen few.
- * A smaller version of a place is only useful if it is the same place: a card
- * that answered five of the panel's questions and stayed quiet about the other
- * three would send you to the panel for the missing ones, which is the thing
- * it exists to avoid. The Places band is the panel's bottom bar, one row each,
- * with the same live counts on the same two rows.
+ * What it deliberately does NOT hold: the repo and the branch. They were the
+ * two rows that never changed while you worked, and a summary is for what
+ * moves. Both are on the session header a few pixels above, and the branch is
+ * in the panel's Info section.
  *
- * It is deliberately read-and-route, not a second control surface: every row
- * opens the panel page that owns the real actions, and the only thing it does
- * itself is ask the session to commit (which is a sentence, not a git plumbing
- * call). Duplicating merge/confirm state here would mean two places that can
- * disagree about whether a merge is in flight, which is why the header's PR
- * strip keeps merge and push: this card reports, that strip commits.
+ * The PR block is `PrStatusBar` in its `summary` variant rather than rows of
+ * this file's own. Everything behind a merge button (headline derivation, the
+ * stack merge plan, confirm-then-merge, the ask-the-session paths) belongs to
+ * that component, and re-deriving it here would be a second thing that can be
+ * wrong about whether a merge is in flight. It replaced hand-written checks,
+ * conflict, ahead and behind rows that could report a state without being able
+ * to do anything about it.
  *
  * Data is fetched only while the card is open, which is what keeps the polls
- * off every session that merely has the header. The PR's own line stats feed
- * the Changes row when there is a PR, because that number rides along with the
- * PR fetch where a worktree diff would be a second, much heavier request for
- * the same two integers. With no PR (or no branch yet) it falls back to the
- * worktree diff.
+ * off every session that merely has the header. What is left to fetch here is
+ * small: the PR's own line stats feed the diff row, because that number rides
+ * along with the PR fetch where a worktree diff would be a second, much
+ * heavier request for the same two integers. With no PR (or no branch yet) it
+ * falls back to the worktree diff.
  */
 
 interface Props {
@@ -90,12 +84,12 @@ interface Props {
 	 * the right-hand panel belongs.
 	 */
 	anchor?: React.RefObject<HTMLElement | null>;
-	/** Open the right panel on a page. Most rows' destination. */
+	/** Open the right panel on a page. */
 	onOpenPanelTab: (tab: "info" | "changes") => void;
 	/** Open the Review tab (PR + its checks). */
 	onOpenPr: () => void;
 	onOpenChecks: () => void;
-	/** Open the Assets tab (the Sources list's destination). */
+	/** Open the Assets tab (the Assets list's destination). */
 	onOpenAssets?: () => void;
 	/** The panel's own bottom-bar places, and their live counts. */
 	onOpenPortals?: () => void;
@@ -103,6 +97,11 @@ interface Props {
 	onOpenTerminal?: () => void;
 	livePortals?: number;
 	runningAgents?: number;
+	/** Archive through the owning viewer, so it can select the neighbouring
+	 *  sidebar row. Offered by the PR block once the work has landed. */
+	onArchive?: () => void;
+	/** Live run state, so the PR block refetches the moment a turn ends. */
+	running?: boolean;
 	/** Prompt the session (Commit) via WS `prompt`. Absent while disconnected. */
 	send?: (msg: any) => void;
 	/** Bumped when a webhook or an auto-push reports workspace activity. */
@@ -132,51 +131,17 @@ function emptyData(): SummaryData {
 
 const IMAGE_RE = /\.(png|jpe?g|gif|webp|avif|svg)$/i;
 
-/** How many sources the card lists before it defers to the Assets tab. The
- *  card scrolls, so this is about the list staying a summary rather than about
- *  the height it would take. */
-const SOURCES_SHOWN = 6;
-
-/** The PR glyph's colour: where the pull request itself stands. */
-function prTone(pr: PrDetails): string {
-	if (pr.state === "MERGED") return "text-purple";
-	if (pr.state === "CLOSED") return "text-dim";
-	if (pr.isDraft) return "text-faint";
-	return "text-green";
-}
-
-/** The word at the row's right edge: the review verdict when there is one to
- *  report, otherwise the PR's own state. A draft says so before anything else,
- *  since an approval on a draft still cannot ship. */
-function prStatusLabel(pr: PrDetails): { label: string; tone: string } {
-	if (pr.state === "MERGED") return { label: "Merged", tone: "text-purple" };
-	if (pr.state === "CLOSED") return { label: "Closed", tone: "text-dim" };
-	if (pr.isDraft) return { label: "Draft", tone: "text-dim" };
-	if (pr.reviewDecision === "CHANGES_REQUESTED")
-		return { label: "Changes requested", tone: "text-red" };
-	if (pr.reviewDecision === "APPROVED")
-		return { label: "Approved", tone: "text-green" };
-	if (pr.reviewDecision === "REVIEW_REQUIRED")
-		return { label: "Review needed", tone: "text-dim" };
-	return { label: "Open", tone: "text-dim" };
-}
+/** How many assets the card lists before it defers to the Assets tab. The card
+ *  scrolls, so this is about the list staying a summary rather than about the
+ *  height it would take. */
+const ASSETS_SHOWN = 6;
 
 export function WorkspaceSummary({
 	session,
 	anchor,
-	onOpenPanelTab,
-	onOpenPr,
-	onOpenChecks,
-	onOpenAssets,
-	onOpenPortals,
-	onOpenAgents,
-	onOpenTerminal,
-	livePortals = 0,
-	runningAgents = 0,
-	send,
-	refreshTick,
 	onOpenChange,
 	tabStripVisible,
+	...body
 }: Props) {
 	const [open, setOpen] = useState(false);
 	useEffect(() => () => onOpenChange?.(false), [onOpenChange]);
@@ -216,17 +181,7 @@ export function WorkspaceSummary({
 				    session that merely has the header. */}
 				<SummaryBody
 					session={session}
-					onOpenPanelTab={onOpenPanelTab}
-					onOpenPr={onOpenPr}
-					onOpenChecks={onOpenChecks}
-					onOpenAssets={onOpenAssets}
-					onOpenPortals={onOpenPortals}
-					onOpenAgents={onOpenAgents}
-					onOpenTerminal={onOpenTerminal}
-					livePortals={livePortals}
-					runningAgents={runningAgents}
-					send={send}
-					refreshTick={refreshTick}
+					{...body}
 					close={() => changeOpen(false)}
 				/>
 			</Popover.Popup>
@@ -245,6 +200,8 @@ function SummaryBody({
 	onOpenTerminal,
 	livePortals = 0,
 	runningAgents = 0,
+	onArchive,
+	running,
 	send,
 	refreshTick,
 	close,
@@ -317,11 +274,7 @@ function SummaryBody({
 	const additions = pr ? pr.additions : (diff?.additions ?? 0);
 	const deletions = pr ? pr.deletions : (diff?.deletions ?? 0);
 	const changedFiles = pr ? pr.changedFiles : (diff?.files ?? 0);
-	const checks = summarizeChecks(pr);
 	const dirty = git?.uncommittedFiles ?? 0;
-	const ahead = git?.ahead ?? 0;
-	const behind = git?.behindBase ?? 0;
-	const conflicted = pr?.mergeable === "CONFLICTING";
 
 	/** Route somewhere else and get out of the way. A card that stayed open
 	 *  over the thing it just opened would have to be dismissed by hand. */
@@ -342,21 +295,22 @@ function SummaryBody({
 		setTimeout(() => setPrompted(false), 4000);
 	}
 
-	const branch = git?.branch || session.branch;
-	const sources = assets.slice(0, SOURCES_SHOWN);
+	const shown = assets.slice(0, ASSETS_SHOWN);
 	const places = onOpenPortals || onOpenAgents || onOpenTerminal;
 
 	return (
 		<>
-			<div className={WS_SUMMARY_SECTION}>Workspace</div>
-
 			{changedFiles > 0 && (
 				<button
 					className={WS_SUMMARY_ROW}
 					onClick={() => go(() => onOpenPanelTab("changes"))}
 				>
-					<IconFile size={15} className={WS_SUMMARY_ICON} />
-					<span className={WS_SUMMARY_LABEL}>Changes</span>
+					<span className={WS_SUMMARY_RAIL}>
+						<IconFile size={20} className={WS_SUMMARY_ICON} />
+					</span>
+					<span className={WS_SUMMARY_LABEL}>
+						{changedFiles} file{changedFiles === 1 ? "" : "s"} changed
+					</span>
 					<span className={WS_SUMMARY_COUNT}>
 						<span className="text-green">+{additions}</span>{" "}
 						<span className="text-red">−{deletions}</span>
@@ -364,119 +318,39 @@ function SummaryBody({
 				</button>
 			)}
 
-			{session.repo && (
-				<button
-					className={WS_SUMMARY_ROW}
-					onClick={() => go(() => onOpenPanelTab("info"))}
-				>
-					<IconRepo size={15} className={WS_SUMMARY_ICON} />
-					<span className={WS_SUMMARY_LABEL}>{session.repo}</span>
-				</button>
-			)}
-
-			{branch && (
-				<button
-					className={WS_SUMMARY_ROW}
-					onClick={() => {
-						navigator.clipboard?.writeText(branch).catch(() => {});
-					}}
-					title={branch}
-				>
-					<IconBranches size={15} className={WS_SUMMARY_ICON} />
-					<span className={WS_SUMMARY_LABEL}>{branch}</span>
-					<span
-						className={cn(
-							WS_SUMMARY_ACTION,
-							"opacity-0 group-hover/ws:opacity-100",
-						)}
-					>
-						Copy
-					</span>
-				</button>
-			)}
-
 			{dirty > 0 && (
 				<button className={WS_SUMMARY_ROW} onClick={askCommit} disabled={!send}>
-					<IconClock size={15} className={WS_SUMMARY_ICON} />
+					<span className={WS_SUMMARY_RAIL}>
+						<IconClock size={20} className={WS_SUMMARY_ICON} />
+					</span>
 					<span className={WS_SUMMARY_LABEL}>
 						{prompted
 							? "Asked to commit"
-							: `Commit ${dirty} file${dirty === 1 ? "" : "s"}`}
+							: `${dirty} file${dirty === 1 ? "" : "s"} uncommitted`}
 					</span>
 					{!prompted && <span className={WS_SUMMARY_ACTION}>Commit</span>}
 				</button>
 			)}
 
-			{ahead > 0 && (
-				<div className={WS_SUMMARY_ROW}>
-					<IconArrowUp size={15} className={WS_SUMMARY_ICON} />
-					<span className={WS_SUMMARY_LABEL}>
-						Ahead by {ahead} commit{ahead === 1 ? "" : "s"}
-					</span>
-				</div>
-			)}
-
-			{pr && (
-				<button
-					className={WS_SUMMARY_ROW}
-					onClick={() => go(onOpenPr)}
-					title={`#${pr.number} · ${pr.title}`}
-				>
-					{/* The glyph carries the PR's own state and the trailing word
-					    carries the review's. They answer different questions ("has it
-					    landed" vs "is anyone blocking it"), and a merged PR with an old
-					    approval on it must not read as open. */}
-					<IconPullRequest size={15} className={cn("shrink-0", prTone(pr))} />
-					<span className={WS_SUMMARY_LABEL}>{pr.title}</span>
-					<span className={cn(WS_SUMMARY_STATE, prStatusLabel(pr).tone)}>
-						{prStatusLabel(pr).label}
-					</span>
-				</button>
-			)}
-
-			{pr && checks.total > 0 && (
-				<button className={WS_SUMMARY_ROW} onClick={() => go(onOpenChecks)}>
-					{checks.failed > 0 ? (
-						<IconX size={15} className="shrink-0 text-red" />
-					) : checks.pending > 0 ? (
-						<IconClock size={15} className="shrink-0 text-yellow" />
-					) : (
-						<IconCheck size={15} className="shrink-0 text-green" />
-					)}
-					<span className={WS_SUMMARY_LABEL}>
-						{checks.failed > 0
-							? `${checks.failed} check${checks.failed === 1 ? "" : "s"} failing`
-							: checks.pending > 0
-								? `${checks.pending} check${checks.pending === 1 ? "" : "s"} pending`
-								: "Checks successful"}
-					</span>
-				</button>
-			)}
-
-			{conflicted && (
-				<button className={WS_SUMMARY_ROW} onClick={() => go(onOpenPr)}>
-					<IconGitMerge size={15} className="shrink-0 text-red" />
-					<span className={WS_SUMMARY_LABEL}>Merge conflicts</span>
-					<span className={WS_SUMMARY_ACTION}>Fix</span>
-				</button>
-			)}
-
-			{behind > 0 && (
-				<button
-					className={WS_SUMMARY_ROW}
-					onClick={() => go(() => onOpenPanelTab("info"))}
-				>
-					<IconArrowDown size={15} className={WS_SUMMARY_ICON} />
-					<span className={WS_SUMMARY_LABEL}>
-						{behind} behind {git?.baseBranch || "main"}
-					</span>
-					<span className={WS_SUMMARY_ACTION}>Pull</span>
-				</button>
-			)}
+			{/* Which PR, where it stands, and the one thing to do about it. The
+			    strip owns all three; this card only says where they go. */}
+			<PrStatusBar
+				variant="summary"
+				sessionId={session.id}
+				repo={session.repo || undefined}
+				archived={session.archived}
+				prs={session.prs}
+				send={send}
+				running={running}
+				refreshTick={refreshTick}
+				onOpenPrTab={() => go(onOpenPr)}
+				onOpenChecksTab={() => go(onOpenChecks)}
+				onArchive={onArchive ? () => go(onArchive) : undefined}
+			/>
 
 			{/* The panel's bottom bar, as rows. These are places rather than
-			    readings, so they keep their own band: everything above says where
-			    the work stands, everything here goes somewhere. */}
+			    readings: everything above says where the work stands, everything
+			    here goes somewhere. */}
 			{places && (
 				<>
 					<div className={WS_SUMMARY_DIVIDER} />
@@ -486,7 +360,9 @@ function SummaryBody({
 							className={WS_SUMMARY_ROW}
 							onClick={() => go(onOpenPortals)}
 						>
-							<IconGlobe size={15} className={WS_SUMMARY_ICON} />
+							<span className={WS_SUMMARY_RAIL}>
+								<IconGlobe size={20} className={WS_SUMMARY_ICON} />
+							</span>
 							<span className={WS_SUMMARY_LABEL}>Portals</span>
 							{livePortals > 0 && (
 								<span className={cn(WS_SUMMARY_COUNT, "text-faint")}>
@@ -497,7 +373,9 @@ function SummaryBody({
 					)}
 					{onOpenAgents && (
 						<button className={WS_SUMMARY_ROW} onClick={() => go(onOpenAgents)}>
-							<IconStack size={15} className={WS_SUMMARY_ICON} />
+							<span className={WS_SUMMARY_RAIL}>
+								<IconStack size={20} className={WS_SUMMARY_ICON} />
+							</span>
 							<span className={WS_SUMMARY_LABEL}>Agents</span>
 							{/* Only the live count, as on the bar: a finished run is
 							    something you go and read, not something a summary has to
@@ -514,43 +392,44 @@ function SummaryBody({
 							className={WS_SUMMARY_ROW}
 							onClick={() => go(onOpenTerminal)}
 						>
-							<IconTerminal size={15} className={WS_SUMMARY_ICON} />
+							<span className={WS_SUMMARY_RAIL}>
+								<IconTerminal size={20} className={WS_SUMMARY_ICON} />
+							</span>
 							<span className={WS_SUMMARY_LABEL}>Terminal</span>
 						</button>
 					)}
 				</>
 			)}
 
-			{sources.length > 0 && (
+			{shown.length > 0 && (
 				<>
 					<div className={WS_SUMMARY_DIVIDER} />
-					<div className={WS_SUMMARY_SECTION}>Sources</div>
-					{sources.map((file) => (
+					<div className={WS_SUMMARY_SECTION}>Assets</div>
+					{shown.map((file) => (
 						<button
 							key={file.path}
 							className={WS_SUMMARY_ROW}
 							onClick={() => go(onOpenAssets)}
 							title={file.path}
 						>
-							{IMAGE_RE.test(file.path) ? (
-								<img
-									src={sessionAssetPreviewUrl(session.id, file)}
-									alt=""
-									className={WS_SUMMARY_THUMB}
-									loading="lazy"
-								/>
-							) : (
-								<IconFile size={15} className={WS_SUMMARY_ICON} />
-							)}
+							<span className={WS_SUMMARY_RAIL}>
+								{IMAGE_RE.test(file.path) ? (
+									<img
+										src={sessionAssetPreviewUrl(session.id, file)}
+										alt=""
+										className={WS_SUMMARY_THUMB}
+										loading="lazy"
+									/>
+								) : (
+									<IconFile size={20} className={WS_SUMMARY_ICON} />
+								)}
+							</span>
 							<span className={WS_SUMMARY_LABEL}>{file.path}</span>
 						</button>
 					))}
-					{assets.length > sources.length && (
-						<button
-							className={WS_SUMMARY_ROW}
-							onClick={() => go(onOpenAssets)}
-						>
-							<span className="w-[15px] shrink-0" />
+					{assets.length > shown.length && (
+						<button className={WS_SUMMARY_ROW} onClick={() => go(onOpenAssets)}>
+							<span className={WS_SUMMARY_RAIL} />
 							<span className={cn(WS_SUMMARY_LABEL, "text-dim")}>
 								View all {assets.length}
 							</span>

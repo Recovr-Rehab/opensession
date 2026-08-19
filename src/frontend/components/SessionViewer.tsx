@@ -5348,6 +5348,8 @@ export function SessionViewer({
 							}
 							livePortals={livePortals}
 							runningAgents={runningAgents}
+							onArchive={handleArchive}
+							running={isRunningLive}
 							send={connected ? send : undefined}
 							refreshTick={gitRefreshTick}
 							onOpenChange={setSummaryOpen}
