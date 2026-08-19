@@ -153,30 +153,26 @@ const LAST_REPO_KEY = "opensession-new-session-repo";
  *  where toggling `border-b` would jog the layout by a pixel.
  *
  *  Padding is asymmetric for the same reason the footer's is: the top is the
- *  card's own edge, the bottom only a hairline. The pickers are 32px boxes
- *  that fill on hover, so 16px above them matches the 16px beside them.
+ *  card's own edge, the bottom only a hairline. The picker is a 32px box that
+ *  fills on hover, so 16px above it matches the 16px beside it.
  *
- *  `flex-wrap` is what keeps the row honest on a phone. The two compact pills
- *  share one line when their labels fit, then wrap instead of overlapping or
- *  compressing either label into a sliver. */
+ *  One control wide, since the branch moved into the footer's overflow menu.
+ *  Nothing is left to wrap, to divide the row between, or to squeeze the repo
+ *  label on a phone. */
 const HEADER =
-	"flex flex-wrap items-center justify-between gap-x-2 gap-y-1 border-b border-transparent px-4 pt-4 pb-[11px] phone:justify-start phone:gap-2 phone:px-3 phone:pb-3 phone:pt-2";
+	"flex items-center gap-2 border-b border-transparent px-4 pt-4 pb-[11px] phone:px-3 phone:pb-3 phone:pt-2";
 /** Merged onto HEADER/FOOTER by `cn()`, which drops the transparent colour. */
 const EDGE_DIVIDER = "border-line";
-/** Header pickers. `relative` is load-bearing — PaletteSelect's phone branch
- *  stacks an invisible native <select> over the trigger.
+/** The header's picker, which doubles as the palette's title: bigger, solid,
+ *  heavier than a footer control.
  *
- *  So is `min-w-0`: a picker's label already truncates, but a flex item whose
- *  own overflow is visible cannot be sized below its content, so the row had
- *  no way to give. On a phone the three of them want more than the header has,
- *  and the repo picker ran out under the branch picker instead of ellipsizing
- *  — the two labels overlapped, with the branch glyph landing on the repo's
- *  chevron. */
-const TRIGGER =
-	"relative inline-flex min-w-0 max-w-[46%] cursor-pointer items-center gap-1.5 rounded-control px-2 py-[5px] text-label font-medium text-dim transition-colors hover:bg-hover hover:text-fg disabled:cursor-default disabled:opacity-55";
-/** The repo picker doubles as the palette's title: bigger, solid, heavier. */
+ *  `relative` is load-bearing — PaletteSelect's phone branch stacks an
+ *  invisible native <select> over the trigger. So is `min-w-0`: the label
+ *  already truncates, but a flex item whose own overflow is visible cannot be
+ *  sized below its content, so a long repo name would push the row wider than
+ *  the card instead of ellipsizing. */
 const TRIGGER_STRONG =
-	"relative inline-flex min-w-0 max-w-[46%] cursor-pointer items-center gap-1.5 rounded-control px-2 py-[5px] text-item-title font-semibold text-fg transition-colors hover:bg-hover disabled:cursor-default disabled:opacity-55";
+	"relative inline-flex min-w-0 max-w-full cursor-pointer items-center gap-1.5 rounded-control px-2 py-[5px] text-item-title font-semibold text-fg transition-colors hover:bg-hover disabled:cursor-default disabled:opacity-55";
 const CHEVRON = "-ml-0.5 shrink-0 text-faint";
 const MOBILE_PICKER = "contents";
 const MOBILE_TRIGGER =
@@ -816,15 +812,29 @@ export function NewSession({ onBack, inline, focusSeq, send, addHandler, connect
 
   // Worktrees are per-repo; refetch and reset the selection when it changes.
   // Inside a workspace, snap back to the shared sibling branch, not "New branch".
+  //
+  // The `live` guard is what keeps a fetch from outliving the repo it was for:
+  // switching to Auto before it lands used to clear the list and then have the
+  // old repo's branches arrive on top of the empty one, which now decides
+  // whether the branch row exists at all — the menu offered branches from a
+  // repo the session was no longer pointed at.
   useEffect(() => {
+    let live = true;
     setSelectedWorktree(forceBranch || "__new__");
     if (!effectiveRepo || effectiveRepo === NO_REPO) {
       setWorktrees([]);
       return;
     }
     fetchWorktrees(effectiveRepo)
-      .then(setWorktrees)
-      .catch(() => setWorktrees([]));
+      .then((items) => {
+        if (live) setWorktrees(items);
+      })
+      .catch(() => {
+        if (live) setWorktrees([]);
+      });
+    return () => {
+      live = false;
+    };
   }, [effectiveRepo, forceBranch]);
 
   // Auto-suggest a branch name from the prompt (a Haiku call, once typing has
@@ -1120,9 +1130,12 @@ export function NewSession({ onBack, inline, focusSeq, send, addHandler, connect
         (hasPromptText || images.length > 0 || files.length > 0) &&
         (mode === "ask" || mode === "scratch" || selectedWorktree !== ""));
 
-  // "Create from…" picks the base a code session branches off, so it only
-  // appears for a Code session that has a repo. Ask cuts no worktree, and Code
-  // with no repo has no branch to cut one from.
+  // The base a code session branches off. It sits in the footer's overflow
+  // menu rather than the header: a fresh branch is what almost every session
+  // gets, so the row it used to occupy was a picker nobody moved, beside the
+  // one thing you do choose. Only a Code session with a repo has a branch at
+  // all — Ask cuts no worktree, and Code with no repo has nothing to cut one
+  // from.
   const createFromLabel = selectedWorktree === "__new__" ? "New branch" : selectedWorktree;
   const createFromOptions = [
     {
@@ -1133,6 +1146,15 @@ export function NewSession({ onBack, inline, focusSeq, send, addHandler, connect
     },
     ...worktrees.map((wt) => ({ value: wt.branch, label: wt.branch })),
   ];
+  // The branch this palette starts on: a sibling's inside a workspace, a fresh
+  // one everywhere else. Anything else is a deliberate pick, and one level
+  // behind a button it has to light that button up to be visible at all.
+  const defaultWorktree = forceBranch || "__new__";
+  const branchPicked = mode === "code" && selectedWorktree !== defaultWorktree;
+  // A row worth opening needs a second thing to pick. With no sibling
+  // worktrees there is only "New branch", which is what a create does anyway.
+  const showBranchPicker =
+    mode === "code" && (worktrees.length > 0 || selectedWorktree !== "__new__");
 
   // Which edges of the prompt earn a hairline. The field measures its own
   // scroller and reports; holding the previous object when nothing moved is
@@ -1166,11 +1188,12 @@ export function NewSession({ onBack, inline, focusSeq, send, addHandler, connect
           </Modal.Close>
         </div>
       )}
-      {/* Header: the Code/Ask switch and the repo (left) · create-from
-          (right). Two axes, in the order they're decided: what the session
-          may do, then what it is pointed at. Either mode can be pointed at
-          nothing: Ask with no repo is a conversation with your tools, Code
-          with no repo is a scratch dir. */}
+      {/* Header: what the session is pointed at, and nothing else. The mode
+          switch sits with the tools in the footer, and the branch one level
+          behind them, because a fresh branch is what almost every code
+          session wants. Either mode can be pointed at nothing: Ask with no
+          repo is a conversation with your tools, Code with no repo is a
+          scratch dir. */}
       <div className={cn(HEADER, edges.top && EDGE_DIVIDER)}>
         <div className={MOBILE_PICKER}>
           <PaletteSelect
@@ -1290,29 +1313,6 @@ export function NewSession({ onBack, inline, focusSeq, send, addHandler, connect
             )}
           </PaletteSelect>
         </div>
-
-        {mode === "code" && (
-          <div className={MOBILE_PICKER}>
-            <PaletteSelect
-              className={cn(TRIGGER, MOBILE_TRIGGER)}
-              title="What to create from"
-              value={selectedWorktree}
-              options={createFromOptions}
-              onChange={setSelectedWorktree}
-              disabled={busy}
-              ariaLabel="Create from"
-              isPhone={isPhone}
-              align="end"
-            >
-              {/* shrink-0 like every other glyph in the header: a long branch
-                  name squeezes the trigger, and the icon was giving up its width
-                  before the label gave up characters, leaving a sliver. */}
-              <IconNewBranch className="shrink-0" size={19} />
-              <span className="truncate">{createFromLabel}</span>
-              <IconChevronDown className={CHEVRON} size={22} />
-            </PaletteSelect>
-          </div>
-        )}
       </div>
 
       {/* Picked services, above the field like every other thing attached to
@@ -1446,7 +1446,7 @@ export function NewSession({ onBack, inline, focusSeq, send, addHandler, connect
                   type="button"
                   className={cn(
                     FOOTER_ICON_BTN,
-						(sandboxProvider || modelEngine(effectiveModelId) !== "opencode" || selectedMcpServers.length > 0) &&
+						(branchPicked || sandboxProvider || modelEngine(effectiveModelId) !== "opencode" || selectedMcpServers.length > 0) &&
                       paletteIconBtnOn,
                   )}
                   disabled={busy}
@@ -1460,6 +1460,34 @@ export function NewSession({ onBack, inline, focusSeq, send, addHandler, connect
                 sideOffset={6}
                 className="min-w-[260px] max-w-[min(360px,calc(100vw-1rem))]"
               >
+                {showBranchPicker && (
+                  <Menu.SubmenuRoot>
+                    <Menu.SubmenuTrigger className="justify-between gap-3">
+                      <span className="flex flex-none items-center gap-2">
+                        <IconNewBranch className="shrink-0 text-dim" size={20} />
+                        <span>Branch</span>
+                      </span>
+                      <span className="flex min-w-0 items-center gap-1 text-dim">
+                        <span className="truncate">{createFromLabel}</span>
+                        <IconChevronRight className="shrink-0 text-faint" size={17} />
+                      </span>
+                    </Menu.SubmenuTrigger>
+                    <Menu.Popup className="max-w-[min(340px,calc(100vw-1rem))]">
+                      {createFromOptions.map((opt) => (
+                        <Menu.Item
+                          key={opt.value}
+                          onClick={() => setSelectedWorktree(opt.value)}
+                        >
+                          <Menu.Check
+                            on={selectedWorktree === opt.value}
+                            className="text-dim"
+                          />
+                          <span className="min-w-0 truncate">{opt.label}</span>
+                        </Menu.Item>
+                      ))}
+                    </Menu.Popup>
+                  </Menu.SubmenuRoot>
+                )}
                 {showSandboxPicker && (
                   <Menu.SubmenuRoot>
                     <Menu.SubmenuTrigger className="justify-between gap-3">
