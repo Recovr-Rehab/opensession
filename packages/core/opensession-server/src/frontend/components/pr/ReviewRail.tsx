@@ -118,7 +118,7 @@ export function ReviewRail({
           merging={merging}
           confirmMerge={confirmMerge}
         />
-        {mergeError && <p className="m-0 px-2 pt-1 text-meta text-red">{mergeError}</p>}
+        {mergeError && <p className="m-0 px-2 pt-1 text-supporting text-red">{mergeError}</p>}
       </RailSection>
 
       {caps.reviewers && reviewers.length > 0 && (
@@ -199,7 +199,7 @@ export function ReviewRail({
                     {caps.commitNotes &&
                       commit.notes?.map((note) => (
                         <span
-                          className="mt-1 block whitespace-pre-wrap text-meta leading-relaxed text-dim"
+                          className="mt-1 block whitespace-pre-wrap text-supporting leading-relaxed text-dim"
                           key={note.ref}
                         >
                           {note.text}

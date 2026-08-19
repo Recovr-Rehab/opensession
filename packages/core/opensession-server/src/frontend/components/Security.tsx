@@ -530,7 +530,7 @@ function NewScanModal({
               onChange={setProfileId}
             />
             {profiles.length === 0 && (
-              <span className="text-meta font-normal text-faint">
+              <span className="text-supporting text-faint">
                 No profiles yet. A profile tells a scan how to read your code.
               </span>
             )}
@@ -558,7 +558,7 @@ function NewScanModal({
               disabled={!canRecur}
             />
             {!singleRepo && (
-              <span className="text-meta font-normal text-faint">
+              <span className="text-supporting text-faint">
                 Recurring and interactive scans take one repository at a time.
               </span>
             )}

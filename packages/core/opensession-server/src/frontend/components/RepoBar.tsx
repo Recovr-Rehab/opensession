@@ -259,13 +259,13 @@ export function RepoBar({
                 )}
               </Menu.Group>
               {!switchable ? (
-                <div className="max-w-[240px] px-2.5 pt-1.5 pb-0.5 text-meta leading-snug text-faint">
+                <div className="max-w-[240px] px-2.5 pt-1.5 pb-0.5 text-supporting leading-snug text-faint">
                   Ask sessions read the shared checkout, so there's no primary repo
                   to switch.
                 </div>
               ) : (
                 hasWork && (
-                  <div className="max-w-[240px] px-2.5 pt-1.5 pb-0.5 text-meta leading-snug text-faint">
+                  <div className="max-w-[240px] px-2.5 pt-1.5 pb-0.5 text-supporting leading-snug text-faint">
                     Switching keeps your current changes in the {repoLabel(primary)} worktree.
                     They won't move to the new repo.
                   </div>

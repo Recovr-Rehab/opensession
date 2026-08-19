@@ -134,8 +134,8 @@ export function RunnersPanel() {
 				<Button size="sm" onClick={() => void copy()}>Copy</Button>
 				<Button size="sm" variant="ghost" onClick={() => setPairing(null)}>Done</Button>
 			</div>
-			<p className="mb-0 mt-2 text-meta text-faint">This one-time code expires at {new Date(pairing.expiresAt).toLocaleTimeString()}.</p>
-			<p className="mb-0 mt-1 text-meta text-faint">New machine? Install the command first: install.sh on macOS and Linux, install.ps1 on Windows.</p>
+			<p className="mb-0 mt-2 text-supporting text-faint">This one-time code expires at {new Date(pairing.expiresAt).toLocaleTimeString()}.</p>
+			<p className="mb-0 mt-1 text-supporting text-faint">New machine? Install the command first: install.sh on macOS and Linux, install.ps1 on Windows.</p>
 		</div>}
 
 		<SettingsGroupLabel actions={<Button size="sm" variant="ghost" onClick={() => void load()}>Refresh</Button>}>Workspace inventory</SettingsGroupLabel>

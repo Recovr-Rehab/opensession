@@ -715,7 +715,7 @@ function AgentReviewCard({
 									>
 										<div className="min-w-0">
 											<div className="font-semibold text-fg">{action.label}</div>
-											<div className="mt-0.5 text-meta leading-[1.35] text-faint">
+											<div className="mt-0.5 text-supporting leading-[1.35] text-faint">
 												{action.hint}
 											</div>
 										</div>
@@ -817,7 +817,7 @@ function AgentReviewCard({
 				{children}
 			</div>
 			{done && (
-				<div className="px-3 text-meta font-medium text-dim">
+				<div className="px-3 text-supporting text-dim">
 					Started {done.label.toLowerCase()}. {AGENT_NAME} will post results on{" "}
 					{pr.url ? (
 						<a
@@ -853,7 +853,7 @@ function AgentReviewCard({
 				</div>
 			)}
 			{error && (
-				<div className="px-3 text-meta font-medium text-red">
+				<div className="px-3 text-supporting text-red">
 					{error}
 				</div>
 			)}
@@ -1758,7 +1758,7 @@ export function WorkspaceInfo({
 											<span className="min-w-0 flex-1">
 												<span className="block truncate">{a.path}</span>
 												{a.description && (
-													<span className="mt-0.5 line-clamp-2 text-meta leading-snug text-dim">
+													<span className="mt-0.5 line-clamp-2 text-supporting leading-snug text-dim">
 														{a.description}
 													</span>
 												)}

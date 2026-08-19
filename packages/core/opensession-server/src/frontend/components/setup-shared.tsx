@@ -438,7 +438,7 @@ export function SecretField({
 					</button>
 				)}
 			</div>
-			{description && <div className="text-meta text-faint">{description}</div>}
+			{description && <div className="text-supporting text-faint">{description}</div>}
 			<input
 				type={type}
 				// Mono for the value you paste, but not for the placeholder: every

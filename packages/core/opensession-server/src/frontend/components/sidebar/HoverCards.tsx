@@ -83,17 +83,17 @@ export function SessionCardBody({ session: s }: { session: UnifiedSession }) {
 			</div>
 
 			{s.waitingForInput && (
-				<div className="mt-[7px] rounded-md bg-accent-soft px-2 py-[5px] text-meta text-dim">
+				<div className="mt-[7px] rounded-md bg-accent-soft px-2 py-[5px] text-supporting text-dim">
 					Blocked on a question. Open the session to answer.
 				</div>
 			)}
 			{!s.waitingForInput && runNeedsAttention(s) && (
-				<div className="mt-[7px] rounded-md bg-accent-soft px-2 py-[5px] text-meta text-dim">
+				<div className="mt-[7px] rounded-md bg-accent-soft px-2 py-[5px] text-supporting text-dim">
 					Run failed: {s.lastRunError!.message.slice(0, 200)}
 				</div>
 			)}
 			{!s.waitingForInput && (s.queuedCount ?? 0) > 0 && (
-				<div className="mt-[7px] rounded-md bg-accent-soft px-2 py-[5px] text-meta text-dim">
+				<div className="mt-[7px] rounded-md bg-accent-soft px-2 py-[5px] text-supporting text-dim">
 					{s.queuedCount} prompt{s.queuedCount === 1 ? "" : "s"} queued.
 				</div>
 			)}
@@ -445,11 +445,11 @@ function WsOverviewInfo({
 
 			{row.status === "needsinput" &&
 				(row.sessions.some((c) => c.waitingForInput) ? (
-					<div className="mt-[7px] rounded-md bg-accent-soft px-2 py-[5px] text-meta text-dim">
+					<div className="mt-[7px] rounded-md bg-accent-soft px-2 py-[5px] text-supporting text-dim">
 						Blocked on a question. Open to answer.
 					</div>
 				) : (
-					<div className="mt-[7px] rounded-md bg-accent-soft px-2 py-[5px] text-meta text-dim">
+					<div className="mt-[7px] rounded-md bg-accent-soft px-2 py-[5px] text-supporting text-dim">
 						Run failed:{" "}
 						{row.sessions
 							.find((c) => runNeedsAttention(c))

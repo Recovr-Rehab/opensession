@@ -371,7 +371,7 @@ function ProfileCard({
 							    All they need is which name their teammates will see, and
 							    that the old one still finds them. */}
 							{shortNameChanging && (
-								<p className="m-0 text-meta text-dim">
+								<p className="m-0 text-supporting text-dim">
 									{profile.shortName} becomes {nextShort} in mentions and
 									attribution. {profile.shortName} keeps working.
 								</p>

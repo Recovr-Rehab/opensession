@@ -111,7 +111,7 @@ export function SelectionToSession({ sessionId, label, send, children }: Props) 
             </div>
           ) : composing ? (
             <div className="flex flex-col gap-2 p-2.5">
-              <div className="max-h-16 overflow-y-auto border-l-2 border-line-strong pl-2 text-meta break-words whitespace-pre-wrap text-faint">
+              <div className="max-h-16 overflow-y-auto border-l-2 border-line-strong pl-2 text-supporting break-words whitespace-pre-wrap text-faint">
                 {sel.text}
               </div>
               <textarea

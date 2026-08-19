@@ -284,7 +284,7 @@ export function splitModelOptions(models: ModelOption[]): {
  */
 function MenuHint({ children }: { children: React.ReactNode }) {
 	return (
-		<p className="px-2 pt-0.5 pb-1.5 text-meta text-faint">{children}</p>
+		<p className="px-2 pt-0.5 pb-1.5 text-supporting text-faint">{children}</p>
 	);
 }
 

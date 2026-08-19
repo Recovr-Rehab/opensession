@@ -352,7 +352,7 @@ export function GithubAuthCard({
 						    the requirement is stated wherever the connection is set up
 						    rather than left to the moment a teammate is locked out. */}
 						{active && (
-							<div className="mt-2 text-meta text-dim">
+							<div className="mt-2 text-supporting text-dim">
 								{"Signing in is a device code, so the GitHub app needs Device Flow enabled." +
 									(secretConfigured
 										? ""
@@ -394,7 +394,7 @@ export function GithubAuthCard({
 						<div className="flex items-center gap-4">
 							<div className="min-w-0 flex-1">
 								<div className="text-item-title font-medium text-fg">Enable GitHub sign-in</div>
-								<div className="mt-0.5 text-meta text-dim">
+								<div className="mt-0.5 text-supporting text-dim">
 									Takes effect after you restart Open Session.
 								</div>
 							</div>
@@ -440,7 +440,7 @@ export function GithubAuthCard({
 									setClientSecret("");
 								}}
 							/>
-							<p className="m-0 text-meta text-faint">
+							<p className="m-0 text-supporting text-faint">
 								Credentials stay on this server and are never shown back.
 							</p>
 						</div>

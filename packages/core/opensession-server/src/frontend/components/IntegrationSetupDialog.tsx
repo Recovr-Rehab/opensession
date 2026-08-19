@@ -313,7 +313,7 @@ export function IntegrationSetupDialog({
 									<div className="text-item-title font-medium text-fg">
 										Enable {integration.label}
 									</div>
-									<div className="mt-0.5 text-meta text-dim">
+									<div className="mt-0.5 text-supporting text-dim">
 										Takes effect after you restart Open Session.
 									</div>
 								</div>
@@ -363,7 +363,7 @@ export function IntegrationSetupDialog({
 										}}
 									/>
 								))}
-								<p className="m-0 text-meta text-faint">
+								<p className="m-0 text-supporting text-faint">
 									Credentials stay on this server and are never shown back.
 								</p>
 							</div>

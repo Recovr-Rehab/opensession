@@ -283,7 +283,7 @@ function AddCredentialForm({
 					</Field>
 					{/* The hint belongs to this zone, so it sits inside it rather
 					    than floating between the fields and the actions. */}
-					<p className="m-0 text-meta leading-relaxed text-faint">
+					<p className="m-0 text-supporting leading-relaxed text-faint">
 						Narrow the methods and paths where you can. A grant can only reach what the
 						credential allows, so this is the ceiling on anything you approve later.
 					</p>

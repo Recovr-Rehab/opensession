@@ -2208,7 +2208,7 @@ export function PrPanel({
                             <div className="text-item-title font-semibold text-fg">
                               {section.title}
                             </div>
-                            <div className="mt-1 text-meta leading-relaxed text-dim">
+                            <div className="mt-1 text-supporting leading-relaxed text-dim">
                               {section.explanation}
                             </div>
                           </div>
@@ -2297,7 +2297,7 @@ export function PrPanel({
                       : "No pending comments"}
             </div>
             <div
-              className={`mt-0.5 truncate text-meta ${closeError ? "text-red" : "text-faint"}`}
+              className={`mt-0.5 truncate text-supporting ${closeError ? "text-red" : "text-faint"}`}
               title={closeError || undefined}
             >
               {closeError ||
@@ -2454,7 +2454,7 @@ function FinishReviewDialog({
                 <span className="text-label font-semibold text-fg">
                   {verdict.label}
                 </span>
-                <span className="text-meta text-dim">{verdict.hint}</span>
+                <span className="text-supporting text-dim">{verdict.hint}</span>
               </span>
             </button>
           ))}

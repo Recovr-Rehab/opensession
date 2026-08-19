@@ -359,7 +359,7 @@ export function PrRowCard({ item }: { item: ReviewQueueItem }) {
 			<div className="mt-[5px] text-label font-semibold leading-[1.3]">{pr.title}</div>
 
 			{problem ? (
-				<div className="mt-[7px] rounded-md bg-accent-soft px-2 py-[5px] text-meta text-dim">{problem}</div>
+				<div className="mt-[7px] rounded-md bg-accent-soft px-2 py-[5px] text-supporting text-dim">{problem}</div>
 			) : (
 				state && (
 					<div className={`mt-[3px] text-meta font-medium ${TONE_TEXT[state.tone]}`}>
@@ -369,7 +369,7 @@ export function PrRowCard({ item }: { item: ReviewQueueItem }) {
 			)}
 
 			{pr.reviewActive && (
-				<div className="mt-[7px] rounded-md bg-accent-soft px-2 py-[5px] text-meta text-dim">
+				<div className="mt-[7px] rounded-md bg-accent-soft px-2 py-[5px] text-supporting text-dim">
 					An automated review is still running.
 				</div>
 			)}

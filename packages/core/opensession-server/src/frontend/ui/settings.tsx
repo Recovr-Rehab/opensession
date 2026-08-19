@@ -287,7 +287,7 @@ export function SettingsHint({
 	className,
 	...props
 }: React.ComponentPropsWithoutRef<"div">) {
-	return <div className={cn("mt-2 px-5 text-meta text-faint", className)} {...props} />;
+	return <div className={cn("mt-2 px-5 text-supporting text-faint", className)} {...props} />;
 }
 
 /**

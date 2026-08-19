@@ -1045,7 +1045,7 @@ function ChooserRow({
       </span>
       <span className="flex min-w-0 flex-1 flex-col gap-0.75">
         <span className="text-item-title font-semibold leading-5 text-fg">{title}</span>
-        <span className="text-meta leading-normal text-faint">{description}</span>
+        <span className="text-supporting leading-normal text-faint">{description}</span>
       </span>
       {meta && <span className="mt-0.5 shrink-0 text-meta text-faint">{meta}</span>}
     </button>
@@ -1306,7 +1306,7 @@ function DataFlowEditor({
       <div className="flex flex-col gap-2">
         <div className="flex min-h-10 items-center gap-2">
           <span className="text-label font-medium text-dim">Inputs</span>
-          <span className="text-meta text-faint">Each source is bounded and treated as untrusted data</span>
+          <span className="text-supporting text-faint">Each source is bounded and treated as untrusted data</span>
           <div className="ml-auto flex gap-1.5">
             <Button
               size="sm"
@@ -1510,7 +1510,7 @@ function DataFlowEditor({
       <div className="mt-1 flex flex-col gap-2">
         <div className="flex min-h-10 items-center gap-2">
           <span className="text-label font-medium text-dim">Outputs</span>
-          <span className="text-meta text-faint">Reports are durable; Slack delivery is optional</span>
+          <span className="text-supporting text-faint">Reports are durable; Slack delivery is optional</span>
           <div className="ml-auto flex gap-1.5">
             {!outputs.some((output) => output.type === "report") && (
               <Button
@@ -1818,7 +1818,7 @@ function AutomationForm({
             onChange={(e) => setOwner(e.target.value)}
             placeholder={getCurrentUser() || "Kent"}
           />
-          <span className="mt-1 text-meta leading-snug text-faint">
+          <span className="mt-1 text-supporting leading-snug text-faint">
             Who reviews what it does. It appears in their sidebar.
           </span>
         </label>
@@ -1835,7 +1835,7 @@ function AutomationForm({
               </option>
             ))}
           </Select>
-          <span className="mt-1 text-meta leading-snug text-faint">
+          <span className="mt-1 text-supporting leading-snug text-faint">
             Files the automation under a workspace. Its runs stay in the
             Automations section.
           </span>
@@ -1851,7 +1851,7 @@ function AutomationForm({
             placeholder="C0123456789 (channel id)"
             className="mono-input"
           />
-          <span className="mt-1 text-meta leading-snug text-faint">
+          <span className="mt-1 text-supporting leading-snug text-faint">
             Invite @{AGENT_NAME} to the channel first. The bot only receives messages
             for channels it's a member of. One run per top-level message; thread
             replies don't re-trigger. Channel id is in the channel's “About” tab.
@@ -1898,7 +1898,7 @@ function AutomationForm({
                 ))}
               </Select>
             </label>
-            <div className="text-meta text-faint">
+            <div className="text-supporting text-faint">
               Schedules and events can be combined. Manual “Run now” is always available.
             </div>
             <label className="flex min-h-10 items-center gap-2.5 text-label text-dim">

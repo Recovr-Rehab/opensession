@@ -601,7 +601,7 @@ export function SessionSearch({
 										<span className="flex min-w-0 flex-1 flex-col gap-0.5">
 											<span className="truncate text-label font-medium">{result.action.label}</span>
 											{result.action.description && (
-												<span className="max-w-full truncate text-meta leading-[1.35] text-dim">{result.action.description}</span>
+												<span className="max-w-full truncate text-supporting leading-[1.35] text-dim">{result.action.description}</span>
 											)}
 										</span>
 										{result.action.shortcut && (
@@ -672,7 +672,7 @@ export function SessionSearch({
 									<span className="flex min-w-0 flex-1 flex-col gap-0.5">
 										<span className="truncate text-label font-medium">{s.title}</span>
 										{result.snippet && (
-											<span className="max-w-full truncate text-meta leading-[1.35] text-dim">{result.snippet}</span>
+											<span className="max-w-full truncate text-supporting leading-[1.35] text-dim">{result.snippet}</span>
 										)}
 										<span className="flex items-center gap-2 overflow-hidden whitespace-nowrap text-meta text-faint">
 											{s.automation ? (

@@ -1563,7 +1563,7 @@ export function NewSession({ onBack, inline, focusSeq, send, addHandler, connect
                                   {sandboxLabel(opt.id)}
                                 </span>
                                 {opt.note && (
-                                  <span className="whitespace-normal text-meta font-medium leading-snug text-faint">
+                                  <span className="whitespace-normal text-supporting leading-snug text-faint">
                                     {opt.note}
                                   </span>
                                 )}
@@ -1592,7 +1592,7 @@ export function NewSession({ onBack, inline, focusSeq, send, addHandler, connect
                   </Menu.SubmenuTrigger>
                   <Menu.Popup className="max-w-[min(360px,calc(100vw-1rem))]">
                     {availableMcpServers.length > 0 && (
-                      <div className="max-w-[300px] px-2 pb-1 text-meta font-medium leading-snug text-faint">
+                      <div className="max-w-[300px] px-2 pb-1 text-supporting leading-snug text-faint">
                         Picked services are the only ones the session gets.
                       </div>
                     )}
@@ -1776,7 +1776,7 @@ export function NewSession({ onBack, inline, focusSeq, send, addHandler, connect
                       />
                       <span className="flex min-w-0 flex-col gap-px">
                         <span className="text-label font-semibold">{opt.title}</span>
-                        <span className="text-meta text-dim">{opt.desc}</span>
+                        <span className="text-supporting text-dim">{opt.desc}</span>
                     </span>
                   </button>
                 ))}

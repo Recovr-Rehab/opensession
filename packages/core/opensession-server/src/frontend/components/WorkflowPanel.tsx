@@ -491,7 +491,7 @@ function WorkflowsEmptyState() {
 					))}
 				</CardList>
 			</div>
-			<p className="px-2 text-meta leading-snug text-faint">
+			<p className="px-2 text-supporting leading-snug text-faint">
 				Agents read this worktree. Write agents each get their own branch, and
 				merging back is explicit.
 			</p>

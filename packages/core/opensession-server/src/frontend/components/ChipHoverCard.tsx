@@ -324,7 +324,7 @@ function CommitChipCardBody({ commit }: { commit: CommitDetails }) {
 			</div>
 
 			{lede && (
-				<div className="mt-[3px] line-clamp-3 text-meta leading-[1.4] text-dim">
+				<div className="mt-[3px] line-clamp-3 text-supporting leading-[1.4] text-dim">
 					{lede}
 				</div>
 			)}

@@ -1044,7 +1044,7 @@ function CodeStorageCard() {
               >
                 {connecting ? "Connecting…" : "Connect"}
               </Button>
-              <span className="text-meta text-faint">
+              <span className="text-supporting text-faint">
                 The key is stored on this server (mode 0600) and never leaves it.
               </span>
             </div>
@@ -1082,7 +1082,7 @@ function CodeStorageCard() {
                     {copied === "secret" ? "Copied" : "Copy"}
                   </Button>
                 </div>
-                <div className="text-meta leading-snug text-faint">
+                <div className="text-supporting leading-snug text-faint">
                   Paste your public URL for this path plus the secret into the Pierre
                   dashboard → Webhooks, subscribed to push and repo.sync events.
                 </div>
@@ -1099,7 +1099,7 @@ function CodeStorageCard() {
                       : `Last delivery failed (${last.error}), ${relativeTime(last.at)}`}
                 </div>
                 {wh.lastRejected && (
-                  <div className="text-meta leading-snug text-red">
+                  <div className="text-supporting leading-snug text-red">
                     {wh.rejectedCount} unauthenticated request
                     {wh.rejectedCount === 1 ? "" : "s"} rejected ({wh.lastRejected.error}
                     ), last {relativeTime(wh.lastRejected.at)}. If these are your Pierre

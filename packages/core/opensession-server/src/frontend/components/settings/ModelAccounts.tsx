@@ -948,7 +948,7 @@ function AddClaudeAccountForm({
 					<Field label="Usage credentials path">
 						<Input value={credentialsPath} onChange={(e) => setCredentialsPath(e.target.value)} placeholder="Usage not tracked" autoCapitalize="none" spellCheck={false} />
 					</Field>
-					<p className="m-0 text-meta leading-relaxed text-faint">
+					<p className="m-0 text-supporting leading-relaxed text-faint">
 						To show usage afterwards, use “Sign in with Claude” from the account's menu.
 					</p>
 				</div>

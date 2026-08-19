@@ -1052,7 +1052,7 @@ export function Analytics() {
 							</div>
 
 							{derived.unmeasuredDays > 0 && (
-								<p className="m-0 mt-2 text-meta text-faint">
+								<p className="m-0 mt-2 text-supporting text-faint">
 									Tokens and cost cover {shortDate(derived.engineLabels[0])} onwards. The engine keeps about a month of message
 									history, so the earlier {derived.unmeasuredDays === 1 ? "day" : `${derived.unmeasuredDays} days`} of
 									this range have no data left to read. Everything else on this page covers the full range.
@@ -1087,7 +1087,7 @@ export function Analytics() {
 											formatValue={fmtUsd}
 											formatTick={fmtUsdTick}
 										/>
-										<p className="m-0 mt-2 text-meta text-faint">
+										<p className="m-0 mt-2 text-supporting text-faint">
 											What this traffic would have cost on the API, not what was paid: every model runs on a
 											subscription pool. Counted per model request, so tool calls and sub-agents are included.
 										</p>
@@ -1195,7 +1195,7 @@ export function Analytics() {
 													})()}
 												</tbody>
 											</table>
-											<p className="m-0 mt-2 text-meta text-faint">
+											<p className="m-0 mt-2 text-supporting text-faint">
 												Addressed = author acted on the finding · pushback = author explicitly rejected it · reviews-run
 												metrics collect from Jul 28 on. High addressed rate + low pushback/missed bugs = healthier reviews.
 											</p>
@@ -1244,7 +1244,7 @@ export function Analytics() {
 										</table>
 									</div>
 									{(data.totals.unpricedRequests ?? 0) > 0 && (
-										<p className="m-0 mt-2 text-meta text-faint">
+										<p className="m-0 mt-2 text-supporting text-faint">
 											A dash means the model carries no catalog price, so its requests are left out of the total.
 										</p>
 									)}
@@ -1284,7 +1284,7 @@ export function Analytics() {
 											</tbody>
 										</table>
 									</div>
-									<p className="m-0 mt-2 text-meta text-faint">
+									<p className="m-0 mt-2 text-supporting text-faint">
 										Opened/Merged = {PRODUCT_NAME} PRs / all PRs in range · share = {PRODUCT_NAME}'s cut of merges.
 									</p>
 								</ChartCard>

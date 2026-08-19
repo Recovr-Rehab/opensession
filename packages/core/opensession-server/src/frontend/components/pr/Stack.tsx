@@ -138,7 +138,7 @@ function StackBody({
           </a>
         );
       })}
-      <div className="border-t border-line pt-2 text-meta text-faint">
+      <div className="border-t border-line pt-2 text-supporting text-faint">
         Bottom of the stack merges into{" "}
         <span className="rounded-sm border border-line bg-surface px-1.5 py-0.5">
           {stack.baseRefName}

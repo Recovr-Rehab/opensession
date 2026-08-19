@@ -151,7 +151,7 @@ export function ModelProvidersPanel() {
 										))}
 									</div>
 								) : (
-									<div className="mt-1 text-meta text-faint">
+									<div className="mt-1 text-supporting text-faint">
 										No picker models, so its models are type-in only
 										(opencode/{p.id}/&lt;model&gt;).
 									</div>
