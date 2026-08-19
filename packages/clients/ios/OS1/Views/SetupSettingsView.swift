@@ -277,23 +277,23 @@ private func lifecycleState(
         return (
             .on, setup ? "Ready" : "Boots",
             setup
-                ? "\(dir)/ provisions each worktree and boots the dev server."
-                : "\(dir)/start.sh boots the dev server — add setup.sh to provision worktrees."
+                ? "\(dir)/ provisions worktrees and boots previews."
+                : "\(dir)/start.sh boots previews. Add setup.sh to provision worktrees."
         )
     }
     if lifecycle?.previewCommand ?? false {
         return (
             .on, "Instance command",
-            "Boots through this instance's previewCommand — commit \(dir)/start.sh to keep the recipe with the code."
+            "Boots through this instance's preview command. Commit \(dir)/start.sh to keep it with the code."
         )
     }
     if setup {
         return (
             .warn, "Setup only",
-            "\(dir)/setup.sh provisions worktrees — add start.sh to enable previews."
+            "\(dir)/setup.sh provisions worktrees. Add start.sh for previews."
         )
     }
-    return (.off, "None", "No \(dir)/ scripts — previews stay disabled.")
+    return (.off, "None", "No \(dir)/ scripts, so no previews.")
 }
 
 /// The web's `StateChip`: a tone dot and its word, sized to sit at the end of

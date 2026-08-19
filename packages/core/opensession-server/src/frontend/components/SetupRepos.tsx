@@ -140,12 +140,10 @@ export function ReposSection({
 				)}
 			</SettingCard>
 			<SettingsHint>
-				Registering clones the repo onto the server; sessions then branch into
-				isolated worktrees of it. New repos are usable right away, with no restart.
-				A repo that commits <code>.agents/setup</code> and{" "}
-				<code>.agents/start.sh</code> provisions its own worktrees and
-				boots its dev server, so previews work and agents can check their UI
-				changes in a real browser. See docs/repo-lifecycle.md.
+				Registering clones the repo onto the server, and sessions branch into
+				isolated worktrees of it. Commit <code>.agents/setup</code> and{" "}
+				<code>.agents/start.sh</code> to provision worktrees and boot previews.
+				See docs/repo-lifecycle.md.
 			</SettingsHint>
 		</>
 	);
