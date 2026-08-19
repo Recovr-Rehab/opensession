@@ -292,8 +292,12 @@ export type ProtocolClientMessage =
        *  configured provider id. Omit = host. */
       sandbox?: boolean | string;
       images?: string[];
-      /** Reasoning effort — persisted on the new session and enforced per run. */
-      effort?: "low" | "medium" | "high";
+      /** Reasoning effort persisted on the new session and enforced per run. */
+      effort?: "none" | "low" | "medium" | "high" | "xhigh" | "max";
+      /** OpenAI priority service tier for the opening and later turns. */
+      fastMode?: boolean;
+      /** Pinned provider account; omitted means automatic pool selection. */
+      accountId?: string;
       /** Fork an existing session, keeping its real conversation history. */
       forkFrom?: { sourceId: string; messageId?: string };
       /**

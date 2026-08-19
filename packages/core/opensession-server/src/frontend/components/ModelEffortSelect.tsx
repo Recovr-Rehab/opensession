@@ -577,6 +577,9 @@ export function ModelEffortSelect({
 						const nextEffort = nextEfforts.includes("high") ? "high" : nextEfforts[0];
 						if (nextEffort) onEffortChange(nextEffort);
 					}
+					if (onFastModeChange && modelById.get(option.id)?.fastModeSupported !== true) {
+						onFastModeChange(false);
+					}
 				}}
 				disabled={disabled}
 				title={

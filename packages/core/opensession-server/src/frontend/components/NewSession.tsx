@@ -607,9 +607,11 @@ export function NewSession({ onBack, inline, focusSeq, send, addHandler, connect
   const [models, setModels] = useState<ModelOption[]>([]);
   const [defaultModel, setDefaultModel] = useState("");
   const [model, setModel] = useState(""); // "" = default
-  // Footer controls from the palette design. effort is persisted on the new
-  // session and enforced per run (Claude effort / Codex modelReasoningEffort).
+  // The shared model settings menu carries the same choices as an existing
+  // session's composer. Both values persist on the new session and apply to
+  // its opening turn.
   const [effort, setEffort] = useState("high");
+  const [fastMode, setFastMode] = useState(false);
   // Pinned provider account for the new session ("" = auto pool pick).
   // Soft pin: the runner prefers it and falls back on exhaustion. Only
   // meaningful for Anthropic/OpenAI subscription-backed models.
@@ -1122,6 +1124,7 @@ export function NewSession({ onBack, inline, focusSeq, send, addHandler, connect
       user: getCurrentUser(),
       ...(model ? { model } : {}),
       effort,
+      ...(fastMode ? { fastMode: true } : {}),
       ...(accountProvider && accountId ? { accountId } : {}),
       // Once defaults have loaded, Host is an explicit override ("local") —
       // omitting the field would make the server re-apply the user's default.
@@ -1663,9 +1666,9 @@ export function NewSession({ onBack, inline, focusSeq, send, addHandler, connect
               onModelChange={setModel}
               effort={effort}
               onEffortChange={setEffort}
-              // Account pinning is shown for models backed by a configured
-              // Claude or Codex account pool.
-              accounts={accountProvider && accounts.length > 0 ? accounts : undefined}
+              fastMode={fastMode}
+              onFastModeChange={setFastMode}
+              accounts={accounts}
               accountId={accountId}
               onAccountChange={setAccountId}
               disabled={busy}

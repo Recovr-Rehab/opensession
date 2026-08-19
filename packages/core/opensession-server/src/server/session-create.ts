@@ -80,6 +80,7 @@ export interface CreateSessionMessage {
 	forkFrom?: unknown;
 	model?: unknown;
 	effort?: unknown;
+	fastMode?: unknown;
 	accountId?: string;
 	mcpServers?: unknown;
 	repo?: unknown;
@@ -982,7 +983,9 @@ export async function handleCreateSessionMessage(
 				SESSION_EFFORTS.has(msg.effort.trim().toLowerCase())
 			? msg.effort.trim().toLowerCase()
 			: undefined);
-	const createFastMode = forkSource?.fastMode;
+	const createFastMode = forkSource
+		? forkSource.fastMode
+		: msg.fastMode === true;
 	// Pinned provider account from the palette (forks inherit).
 	const createAccountId = forkSource
 		? forkSource.accountId
