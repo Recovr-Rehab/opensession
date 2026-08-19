@@ -41,20 +41,23 @@ struct TurnBlockView: View {
             .accessibilityHint(state.expanded ? "Hide the work" : "Show the work")
 
             if state.expanded {
-                TurnStepsView(
-                    items: turn.items,
-                    sessionId: sessionId,
-                    worktreeDir: worktreeDir,
-                    isLive: turn.isLive,
-                    showsTools: true,
-                    expandsToolRuns: activity.expandsToolRuns,
-                    expansionState: expansionState
-                )
-                .padding(.leading, 6)
-                .padding(.top, 8)
-                .transition(.opacity)
+                VStack(alignment: .leading, spacing: 8) {
+                    TurnStepsView(
+                        items: turn.items,
+                        sessionId: sessionId,
+                        worktreeDir: worktreeDir,
+                        isLive: turn.isLive,
+                        showsTools: true,
+                        expandsToolRuns: activity.expandsToolRuns,
+                        expansionState: expansionState
+                    )
 
-                touchedFileSummary
+                    touchedFileSummary
+                }
+                .padding(.leading, Self.foldContentInset)
+                .padding(.top, 8)
+                .overlay(alignment: .leading) { foldRail }
+                .transition(.opacity)
             }
 
             // A marked screenshot or recording is the result, not the work.
@@ -75,6 +78,25 @@ struct TurnBlockView: View {
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    /// Where the open fold's hairline sits: under the chevron it drops from.
+    private static let railInset: CGFloat = 5
+    /// Where the fold's rows start: under the header's own word, clear of the
+    /// rail rather than crowding it.
+    private static let foldContentInset: CGFloat = 16
+
+    /// The rail down an open fold. A turn can run for pages, and once the
+    /// header has scrolled away nothing said whether a paragraph was still
+    /// part of the work or already the answer. The answer sits back at the
+    /// column edge with no rail beside it, so the seam reads from any scroll
+    /// position. Mirrors the web viewer's turn fold.
+    private var foldRail: some View {
+        Rectangle()
+            .fill(OS1VisualStyle.border)
+            .frame(width: 1)
+            .offset(x: Self.railInset)
+            .accessibilityHidden(true)
     }
 
     /// Files named in the open fold before the rest become one chip. A
@@ -104,8 +126,6 @@ struct TurnBlockView: View {
                     )
                 }
             }
-            .padding(.leading, 6)
-            .padding(.top, 8)
             .frame(maxWidth: .infinity, alignment: .leading)
         }
     }
