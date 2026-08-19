@@ -55,6 +55,20 @@ describe("emoji trigger context", () => {
 		expect(emojiContextAt("https://ex.com", 8)).toBeNull();
 		expect(emojiContextAt("at 10:30", 8)).toBeNull();
 		expect(emojiContextAt("note:cr", 7)).toBeNull();
+		expect(emojiContextAt("::cr", 4)).toBeNull();
+	});
+
+	test("opens right after a picked emoji, which leaves no trailing space", () => {
+		const value = "😢:cr";
+		expect(emojiContextAt(value, value.length)).toEqual({
+			start: value.indexOf(":"),
+			query: "cr",
+		});
+	});
+
+	test("opens after punctuation and brackets too", () => {
+		expect(emojiContextAt("done!:cr", 8)).toEqual({ start: 5, query: "cr" });
+		expect(emojiContextAt("(:cr", 4)).toEqual({ start: 1, query: "cr" });
 	});
 
 	test("stops at whitespace and at non-shortcode characters", () => {

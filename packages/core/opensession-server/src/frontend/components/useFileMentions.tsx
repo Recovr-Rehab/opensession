@@ -17,6 +17,7 @@ import {
   type MentionSuggestion,
 } from "../lib/mention-palette";
 import { emojiContextAt, emojiMentionSuggestions } from "../lib/emoji";
+import { caretPoint } from "../lib/caret-coords";
 
 /**
  * Find the active "@"-mention being typed at the caret. Returns the index of
@@ -284,6 +285,11 @@ export function useFileMentions({ value, onChange, textareaRef, mentionFetch, pa
   // viewport coordinates so an overflow:hidden ancestor (e.g. the new-session
   // palette card) can't clip it. Opens upward by default, flips downward when
   // there isn't room above.
+  //
+  // The emoji picker is the exception: it answers two characters typed inside
+  // a sentence, so it anchors to the shortcode itself rather than to the field.
+  // A full-width panel at the field's left edge reads as unrelated to what you
+  // are typing when the caret is halfway across a wide composer.
   useLayoutEffect(() => {
     if (!open) {
       setPos(null);
@@ -294,6 +300,37 @@ export function useFileMentions({ value, onChange, textareaRef, mentionFetch, pa
       if (!el) return;
       const rect = el.getBoundingClientRect();
       const POPUP_MAX = 420;
+      const caret =
+        mention?.kind === "emoji"
+          ? caretPoint(textareaRef.current, mention.start)
+          : null;
+      if (caret) {
+        const WIDTH = 240;
+        const GUTTER = 8;
+        // Stay inside the viewport, and never left of the field: a shortcode
+        // at the very start of a line would otherwise hang off its edge.
+        const left = Math.max(
+          GUTTER,
+          Math.min(caret.left - 8, window.innerWidth - WIDTH - GUTTER),
+        );
+        const spaceAbove = caret.top;
+        const spaceBelow = window.innerHeight - caret.bottom;
+        const down = spaceAbove < POPUP_MAX && spaceBelow > spaceAbove;
+        setPos({
+          left,
+          width: WIDTH,
+          ...(down
+            ? {
+                top: caret.bottom + 6,
+                maxHeight: Math.min(POPUP_MAX, spaceBelow - 12),
+              }
+            : {
+                bottom: window.innerHeight - caret.top + 6,
+                maxHeight: Math.min(POPUP_MAX, spaceAbove - 12),
+              }),
+        });
+        return;
+      }
       const spaceAbove = rect.top;
       const spaceBelow = window.innerHeight - rect.bottom;
       const down = spaceAbove < POPUP_MAX && spaceBelow > spaceAbove;
@@ -318,7 +355,7 @@ export function useFileMentions({ value, onChange, textareaRef, mentionFetch, pa
       window.removeEventListener("resize", measure);
       window.removeEventListener("scroll", measure, true);
     };
-  }, [open, suggestions.length]);
+  }, [open, suggestions.length, mention?.kind, mention?.start, value]);
 
   useEffect(() => {
     if (!open) return;

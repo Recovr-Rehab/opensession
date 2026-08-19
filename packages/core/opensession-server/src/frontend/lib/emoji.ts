@@ -377,14 +377,25 @@ export function emojiMentionSuggestions(query: string): MentionSuggestion[] {
 const MAX_TOKEN = 34;
 
 /**
- * Find the shortcode being typed at the caret: a ":" at the start of the text
- * or after whitespace, followed by shortcode characters. Returns the index of
- * the ":" and the query typed after it, or null when the caret isn't in one.
+ * Characters that make a ":" mean something other than a shortcode. Letters and
+ * digits cover "https://", "10:30" and "note:"; a second ":" covers "::". An
+ * emoji is a symbol rather than a letter, so it passes, and so does a surrogate
+ * half of one.
+ */
+const PREV_BLOCKS = /[\p{L}\p{N}_:]/u;
+
+/**
+ * Find the shortcode being typed at the caret: a ":" that starts a token,
+ * followed by shortcode characters. Returns the index of the ":" and the query
+ * typed after it, or null when the caret isn't in one.
  *
- * A URL's ":" is preceded by a letter, so "https://" never opens the picker,
- * and neither does a time like "10:30" or a label like "note:". A trailing
- * ":" stays inside the token, so finishing ":cry:" keeps the row selectable
- * instead of leaving the shortcode as raw text.
+ * The ":" may not follow a letter, a digit or another ":", so "https://" never
+ * opens the picker, and neither does a time like "10:30" or a label like
+ * "note:". Everything else may precede it, which matters most right after an
+ * emoji: picking one inserts no trailing space, so the very next ":cr" would
+ * otherwise be dead. A trailing ":" stays inside the token, so finishing
+ * ":cry:" keeps the row selectable instead of leaving the shortcode as raw
+ * text.
  */
 export function emojiContextAt(
 	value: string,
@@ -398,8 +409,8 @@ export function emojiContextAt(
 	while (i >= 0 && caret - i <= MAX_TOKEN) {
 		const ch = value[i];
 		if (ch === ":") {
-			const prev = i > 0 ? value[i - 1] : " ";
-			if (prev === " " || prev === "\n" || prev === "\t") {
+			const prev = i > 0 ? value[i - 1] : undefined;
+			if (!prev || !PREV_BLOCKS.test(prev)) {
 				return { start: i, query: value.slice(i + 1, end) };
 			}
 			return null;
