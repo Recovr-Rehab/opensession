@@ -37,7 +37,7 @@ describe.skipIf(!onServiceHost)("systemd unit", () => {
 
     expect(unit).toContain(`WorkingDirectory=${REPO_ROOT}`);
     expect(unit).toContain(`EnvironmentFile=${ENV_PATH}`);
-    expect(unit.match(/^ExecStart=(\S+) run packages\/core\/opensession-server\/opensession\.ts$/m)?.[1]).toMatch(/bun(?:\.exe)?$/i);
+    expect(unit.match(/^ExecStart=(\S+) run packages\/core\/opensession-server\/opensession\.ts$/m)?.[1]).toMatch(/bun$/);
   });
 
   test("preserves the tuning directives that encode real incidents", async () => {
@@ -54,11 +54,9 @@ describe.skipIf(!onServiceHost)("systemd unit", () => {
     const path = (await renderUnit()).match(/^Environment="PATH=(.*)"$/m)?.[1] ?? "";
     // Engine resolution goes through Bun.which("opencode"); a PATH without it
     // means the server silently finds no engine at runtime.
-    expect(path.replaceAll("\\", "/")).toContain(".opencode/bin");
+    expect(path).toContain(".opencode/bin");
     expect(path).toContain("/usr/bin");
-    if (process.platform !== "win32") {
-      expect(path.split(":").every((p) => p.startsWith("/"))).toBe(true);
-    }
+    expect(path.split(":").every((p) => p.startsWith("/"))).toBe(true);
   });
 });
 
@@ -90,7 +88,7 @@ describe.skipIf(!onServiceHost)("launchd plist", () => {
     // flags and no secrets — inert, and hard to diagnose.
     expect(plist).toContain(ENV_PATH);
     expect(plist).toContain("set -a");
-    expect(plist).toMatch(/exec \S*bun(?:\.exe)? run packages\/core\/opensession-server\/opensession\.ts/i);
+    expect(plist).toMatch(/exec \S*bun run packages\/core\/opensession-server\/opensession\.ts/);
   });
 
   test("escapes XML so a path with & or < cannot corrupt the file", () => {
