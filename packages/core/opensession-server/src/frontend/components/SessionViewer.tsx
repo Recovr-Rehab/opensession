@@ -2198,15 +2198,26 @@ export function SessionViewer({
 	// ref tracks which case we're in: it stays true until we've observed the
 	// session idle.
 	const [busySince, setBusySince] = useState<number | null>(null);
+	// When the Stop was asked for, so the click can be acknowledged locally at
+	// once. The server's isRunning:false only lands after the aborted turn
+	// actually unwinds — an abort signal is observed at the next await, so a
+	// long bash command, an MCP call or a retrying model request holds it for
+	// seconds — and until then this row went on counting up as if the click had
+	// never happened. 18% of stops in the audit log are a second stop on the
+	// same session within a minute (median 1.9s apart): people clicking again
+	// because the first click showed them nothing.
+	const [stopRequestedAt, setStopRequestedAt] = useState<number | null>(null);
 	const anchorFromTranscript = useRef(session.isRunning);
 	useEffect(() => {
 		anchorFromTranscript.current = true;
 		setBusySince(null);
+		setStopRequestedAt(null);
 	}, [session.id]);
 	useEffect(() => {
 		if (!isBusy) {
 			anchorFromTranscript.current = false;
 			setBusySince(null);
+			setStopRequestedAt(null);
 			return;
 		}
 		// The journaled run start is authoritative whenever we have it — for a
@@ -2694,6 +2705,9 @@ export function SessionViewer({
 					break;
 				case "stream_start":
 					setIsStreaming(true);
+					// A new turn is never the stopped one: clear the pending stop so
+					// its label can't bleed into the run that follows it.
+					setStopRequestedAt(null);
 					liveTurnStore.start(msg.by);
 					// A new turn answers the last one's chips. The server clears its
 					// copy on the same event; this is what stops the row lingering
@@ -4171,6 +4185,9 @@ export function SessionViewer({
 		) : null;
 
 	function handleCancel() {
+		// Local acknowledgement first: the gesture must land visibly whether or
+		// not the engine can drop what it is doing this instant.
+		setStopRequestedAt((prev) => prev ?? Date.now());
 		send({ type: "cancel" });
 	}
 
@@ -6312,6 +6329,7 @@ export function SessionViewer({
 							{isBusy && !waitingForWorkspace && (
 								<BusyInline
 									since={busySince}
+									stoppingSince={stopRequestedAt}
 								/>
 							)}
 
@@ -6571,6 +6589,7 @@ export function SessionViewer({
 									onNoteModeChange={setNoteMode}
 									busy={isBusy && !forkFrom}
 									onStop={handleCancel}
+									stopping={stopRequestedAt != null}
 									// Bumped by the ⌘. listener above; the composer opens the
 									// same confirmation Escape does.
 									stopRequest={stopRequest}
@@ -7014,10 +7033,40 @@ function BusyElapsed({ since }: { since: number }) {
 	return <span className="text-meta text-faint tabular-nums">{label}</span>;
 }
 
+// How long a stop may sit there before the label stops sounding confident.
+const STOP_SLOW_MS = 5000;
+
+/**
+ * The stop has been asked for, the turn has not settled yet. This deliberately
+ * counts nothing: freezing the work timer at click time would be a small lie
+ * (the engine really is still unwinding its current tool call), and letting it
+ * run is the complaint we are fixing. After STOP_SLOW_MS the wording admits
+ * the abort has not landed rather than sitting on a hopeful "Stopping…"
+ * forever — the one thing this row must never do is claim the agent has
+ * stopped while it is still editing files.
+ */
+function BusyStopping({ since }: { since: number }) {
+	const [slow, setSlow] = useState(false);
+	useEffect(() => {
+		const waited = Date.now() - since;
+		setSlow(waited >= STOP_SLOW_MS);
+		if (waited >= STOP_SLOW_MS) return;
+		const t = setTimeout(() => setSlow(true), STOP_SLOW_MS - waited);
+		return () => clearTimeout(t);
+	}, [since]);
+	return (
+		<span className="text-meta text-faint">
+			{slow ? "Still stopping…" : "Stopping…"}
+		</span>
+	);
+}
+
 function BusyInline({
 	since,
+	stoppingSince,
 }: {
 	since: number | null;
+	stoppingSince: number | null;
 }) {
 	return (
 		<div
@@ -7036,7 +7085,11 @@ function BusyInline({
 			<span className="-ml-2 grid size-5 shrink-0 place-items-center">
 				<PulseDot size={7} />
 			</span>
-			{since != null && <BusyElapsed since={since} />}
+			{stoppingSince != null ? (
+				<BusyStopping since={stoppingSince} />
+			) : (
+				since != null && <BusyElapsed since={since} />
+			)}
 		</div>
 	);
 }

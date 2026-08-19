@@ -149,6 +149,11 @@ interface Props {
   sendTitle?: string;
   busy?: boolean;
   onStop?: () => void;
+  /** A stop was asked for and the turn has not settled yet. The button stays
+   *  live (a second press re-sends the cancel, which is what people already do
+   *  when nothing seems to happen) but reads as acknowledged rather than
+   *  ignored. */
+  stopping?: boolean;
   /**
    * Ask for the stop confirmation from outside the composer — the parent bumps
    * this counter, and each bump opens the same dialog Escape does. A counter
@@ -436,6 +441,7 @@ export function Composer({
   sendTitle,
   busy,
   onStop,
+  stopping,
   stopRequest,
   models,
   defaultModel,
@@ -1946,7 +1952,11 @@ export function Composer({
 
           {busy && onStop && (
             <Tooltip
-              label="Stop. Interrupts the current turn; the session stays ready."
+              label={
+                stopping
+                  ? "Stopping. The turn ends as soon as the work in flight returns."
+                  : "Stop. Interrupts the current turn; the session stays ready."
+              }
               // The chord that reaches this from anywhere in the session.
               // Escape does the same from inside the composer, but two chords
               // side by side in one badge row would read as a single one.
@@ -1961,10 +1971,13 @@ export function Composer({
                   // the far left of the resting row; seat it just before send.
                   minimized && "order-4",
                   minimized && composerSendMinimizedFill,
+                  // Acknowledged: the press registered, the engine is winding
+                  // down. Not `disabled` — pressing again re-sends the cancel.
+                  stopping && "opacity-60",
                 )}
                 {...tapProps(() => onStop())}
                 disabled={disabled}
-                aria-label="Stop current turn"
+                aria-label={stopping ? "Stopping current turn" : "Stop current turn"}
               >
                 <IconStopSquare size={24} />
               </button>
