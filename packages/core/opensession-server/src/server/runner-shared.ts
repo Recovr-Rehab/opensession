@@ -499,3 +499,140 @@ export const ASK_BASH_PERMISSIONS: Record<string, "allow" | "deny"> = {
   "systemctl status*": "allow", "systemctl is-active*": "allow",
   "systemctl is-enabled*": "allow", "systemctl list-units*": "allow",
 };
+
+// Compiled lazily on first use: building regexes at import would be harmless
+// but pointless for the many processes that import this module and never run
+// an ask-mode bash command.
+let askBashRules: Array<{ re: RegExp; value: "allow" | "deny" }> | null = null;
+
+/** Last-match-wins over insertion order: the exact evaluation opencode's
+ *  Permission.evaluate applies to these same rules (a findLast with no
+ *  specificity ranking), so the two engines cannot drift on what a pattern
+ *  means. `*` matches any run of characters, everything else is literal. */
+function askBashVerdict(segment: string): "allow" | "deny" {
+  if (!askBashRules) {
+    const escape = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    askBashRules = Object.entries(ASK_BASH_PERMISSIONS).map(([pattern, value]) => ({
+      re: new RegExp(`^${pattern.split("*").map(escape).join("[\\s\\S]*")}$`),
+      value,
+    }));
+  }
+  let verdict: "allow" | "deny" = "deny";
+  for (const rule of askBashRules) if (rule.re.test(segment)) verdict = rule.value;
+  return verdict;
+}
+
+/**
+ * Why `command` may not run under read-only ask mode, or null when it may.
+ *
+ * Pi has no engine-side permission evaluator, so this is ASK_BASH_PERMISSIONS
+ * applied the way opencode applies it: the command is split into its
+ * pipeline/list segments and EVERY segment must match an allow rule.
+ * `cat x && rm y` is denied for the rm, not allowed for the cat (the
+ * rev-parse note above exists because opencode evaluates per sub-command;
+ * matching only the whole line would let any allowed prefix smuggle a write).
+ * Fail-closed on what a scanner cannot prove read-only: command and process
+ * substitution embed commands this never sees, and output redirection writes
+ * a file, so both are refused outright. Fd dups (2>&1) and redirects to
+ * /dev/null stay allowed, since they appear in ordinary read pipelines.
+ */
+export function askBashDenyReason(command: string): string | null {
+  const REFUSE =
+    "Read-only ask mode: bash is limited to a read-only allowlist (file, git, gh and system reads). " +
+    "Propose the exact command in your reply for a human to run.";
+  const segments: string[] = [];
+  let current = "";
+  let quote: "'" | '"' | null = null;
+  let i = 0;
+  const push = () => {
+    segments.push(current);
+    current = "";
+  };
+  while (i < command.length) {
+    const ch = command[i];
+    if (quote === "'") {
+      if (ch === "'") quote = null;
+      current += ch;
+      i++;
+      continue;
+    }
+    if (quote === '"') {
+      if (ch === "\\") {
+        current += command.slice(i, i + 2);
+        i += 2;
+        continue;
+      }
+      if (ch === "`" || (ch === "$" && command[i + 1] === "(")) {
+        return `Command substitution is not allowed here. ${REFUSE}`;
+      }
+      if (ch === '"') quote = null;
+      current += ch;
+      i++;
+      continue;
+    }
+    if (ch === "\\") {
+      current += command.slice(i, i + 2);
+      i += 2;
+      continue;
+    }
+    if (ch === "'" || ch === '"') {
+      quote = ch;
+      current += ch;
+      i++;
+      continue;
+    }
+    if (ch === "`" || (ch === "$" && command[i + 1] === "(")) {
+      return `Command substitution is not allowed here. ${REFUSE}`;
+    }
+    if ((ch === "<" || ch === ">") && command[i + 1] === "(") {
+      return `Process substitution is not allowed here. ${REFUSE}`;
+    }
+    if (ch === ">" || (ch === "&" && command[i + 1] === ">")) {
+      // Redirection: allowed only as an fd dup (2>&1) or aimed at /dev/null.
+      // Anything else writes a file, which read-only mode must refuse.
+      let j = i + (ch === "&" ? 2 : 1);
+      if (command[j] === ">") j++;
+      if (command[j] === "&" && /\d/.test(command[j + 1] || "")) {
+        while (command[j] && !/\s/.test(command[j])) j++;
+        current += command.slice(i, j);
+        i = j;
+        continue;
+      }
+      while (command[j] === " " || command[j] === "\t") j++;
+      let k = j;
+      while (command[k] && !/[\s;|&<>]/.test(command[k])) k++;
+      if (command.slice(j, k) !== "/dev/null") {
+        return `Output redirection writes a file. ${REFUSE}`;
+      }
+      current += command.slice(i, k);
+      i = k;
+      continue;
+    }
+    if (ch === ";" || ch === "\n") {
+      push();
+      i++;
+      continue;
+    }
+    if (ch === "|") {
+      push();
+      i += command[i + 1] === "|" || command[i + 1] === "&" ? 2 : 1;
+      continue;
+    }
+    if (ch === "&") {
+      push();
+      i += command[i + 1] === "&" ? 2 : 1;
+      continue;
+    }
+    current += ch;
+    i++;
+  }
+  push();
+  for (const raw of segments) {
+    const segment = raw.trim();
+    if (!segment) continue;
+    if (askBashVerdict(segment) === "deny") {
+      return `"${segment}" is not on the read-only allowlist. ${REFUSE}`;
+    }
+  }
+  return null;
+}

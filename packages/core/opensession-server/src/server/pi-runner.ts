@@ -179,7 +179,11 @@ type PiProviderConfigInput = Parameters<ModelRuntime["registerProvider"]>[1];
 import { stateDir } from "./paths";
 import { audit, summarizeText } from "./audit";
 import { journalSet, buildRunJournalRecord, journalClear, registerActiveRunProbe } from "./run-journal";
-import { isClaudeUsageLimitError, isCodexUsageLimitError } from "./runner-shared";
+import {
+  askBashDenyReason,
+  isClaudeUsageLimitError,
+  isCodexUsageLimitError,
+} from "./runner-shared";
 import { ensureAnthropicBridge } from "./anthropic-bridge";
 import {
   opencodeProviders,
@@ -1058,6 +1062,9 @@ export function makePiBashTool(input: {
   cwd: string;
   env: Record<string, string>;
   gated: boolean;
+  /** Ask mode: every command must pass the read-only allowlist
+   *  (askBashDenyReason over ASK_BASH_PERMISSIONS, runner-shared.ts). */
+  askReadOnly?: boolean;
   unattended: boolean;
   sessionId?: string;
   runKind?: string;
@@ -1082,6 +1089,10 @@ export function makePiBashTool(input: {
     async execute(_toolCallId, params, signal, onUpdate) {
       const command = String((params as { command?: unknown })?.command ?? "");
       if (!command.trim()) throw new Error("Empty command");
+      if (input.askReadOnly) {
+        const reason = askBashDenyReason(command);
+        if (reason) throw new Error(reason);
+      }
       if (input.gated) {
         const reply = bashAskPolicyReply(
           { permission: "bash", metadata: { command } },
@@ -1897,14 +1908,18 @@ async function* runPiAttempt(
           ms: e.ms,
         }),
     });
-    // Tool policy: ask mode is read-only (no bash/edit/write — conservative
-    // v0); code/scratch get the read set + edit/write + the custom bash.
+    // Tool policy: ask mode is read-only — no edit/write, and bash screened
+    // through ASK_BASH_PERMISSIONS (askBashDenyReason), the same allowlist
+    // opencode's ask agent enforces engine-side. Shipping ask without bash at
+    // all was tried first and it blinded every automation that assumed a
+    // shell for jq/git/gh reads (the health-monitor incident, 2026-08-19).
+    // Code/scratch get the read set + edit/write + the ungated custom bash.
     // disableLocalWorkspaceTools (engine-outside-sandbox) strips all local
     // tools — pi has no sandbox mode, but fail closed if a caller passes it.
     const localTools = opts.disableLocalWorkspaceTools
       ? []
       : isAsk
-        ? ["read", "grep", "find", "ls"]
+        ? ["read", "grep", "find", "ls", "bash"]
         : ["read", "grep", "find", "ls", "edit", "write", "bash"];
     // Every enabled name is derived from a custom definition below. Pi falls
     // back to its in-process built-ins for a name without an override, so a
@@ -1965,6 +1980,7 @@ async function* runPiAttempt(
               cwd,
               env: bashEnv,
               gated: bashGated,
+              askReadOnly: isAsk,
               unattended: policy.unattended,
               sessionId: journal?.osSessionId,
               runKind: journal?.kind,

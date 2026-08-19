@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import {
+  askBashDenyReason,
   declaredRunFailure,
   describeUsageLimitReset,
   hasRunStatusDeclaration,
@@ -219,5 +220,61 @@ describe("usageLimitResetAt", () => {
     // Beyond the 14-day ceiling: a mis-parse must never bench a healthy
     // account for weeks, which would be worse than the churn this replaces.
     expect(usageLimitResetAt("resets Sep 30, 9am (UTC)", now)).toBeUndefined();
+  });
+});
+
+describe("askBashDenyReason", () => {
+  test("allows plain reads", () => {
+    expect(askBashDenyReason("cat README.md")).toBeNull();
+    expect(askBashDenyReason("ls -la src")).toBeNull();
+    expect(askBashDenyReason("git log --oneline -5")).toBeNull();
+    expect(askBashDenyReason("jq '.runs[0]' file.json")).toBeNull();
+    expect(askBashDenyReason("gh pr list --state open")).toBeNull();
+    expect(askBashDenyReason("systemctl is-active opensession")).toBeNull();
+    expect(askBashDenyReason("date +%s")).toBeNull();
+  });
+
+  test("every pipeline segment must be allowed", () => {
+    expect(askBashDenyReason("git log --oneline | head -5")).toBeNull();
+    expect(askBashDenyReason("cat f.json | jq '.a' | wc -l")).toBeNull();
+    // The allowed prefix must not smuggle the write.
+    expect(askBashDenyReason("cat x && rm y")).toContain("rm y");
+    expect(askBashDenyReason("ls; touch pwned")).toContain("touch pwned");
+    expect(askBashDenyReason("cat f | tee out.txt")).toContain("tee out.txt");
+  });
+
+  test("denies writes and unlisted commands with an actionable reason", () => {
+    const reason = askBashDenyReason("rm -rf /tmp/x");
+    expect(reason).toContain("read-only allowlist");
+    expect(askBashDenyReason("git push")).not.toBeNull();
+    expect(askBashDenyReason("git add .")).not.toBeNull();
+    // sed stays denied even in -n form (see the allowlist's own note).
+    expect(askBashDenyReason("sed -n 1,5p file")).not.toBeNull();
+    expect(askBashDenyReason("python3 -c 'print(1)'")).not.toBeNull();
+    expect(askBashDenyReason("gh api repos/o/r -X POST")).not.toBeNull();
+    expect(askBashDenyReason("systemctl restart opensession")).not.toBeNull();
+  });
+
+  test("refuses command and process substitution outright", () => {
+    expect(askBashDenyReason("echo $(rm -rf /)")).toContain("substitution");
+    expect(askBashDenyReason("echo `id`")).toContain("substitution");
+    expect(askBashDenyReason('echo "$(id)"')).toContain("substitution");
+    expect(askBashDenyReason("diff <(cat a) <(cat b)")).toContain("substitution");
+  });
+
+  test("redirection: fd dups and /dev/null pass, file writes do not", () => {
+    expect(askBashDenyReason("ls missing 2>&1")).toBeNull();
+    expect(askBashDenyReason("cat big > /dev/null")).toBeNull();
+    expect(askBashDenyReason("ls 2>/dev/null")).toBeNull();
+    expect(askBashDenyReason("echo hi > /tmp/f")).toContain("redirection");
+    expect(askBashDenyReason("cat a >> b")).toContain("redirection");
+    expect(askBashDenyReason("cmd &> log.txt")).toContain("redirection");
+  });
+
+  test("quoting does not hide separators or unquote them wrongly", () => {
+    // A quoted semicolon is data, not a separator: still one jq segment.
+    expect(askBashDenyReason("jq '.a; .b' f.json")).toBeNull();
+    // Literal $( inside single quotes is data too.
+    expect(askBashDenyReason("grep -n '$(x)' file")).toBeNull();
   });
 });
