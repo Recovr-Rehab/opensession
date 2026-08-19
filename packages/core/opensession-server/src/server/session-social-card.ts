@@ -43,20 +43,40 @@ export const SESSION_CARD_HEIGHT = 630;
  * paper to every message that quotes a session.
  */
 export const SESSION_CARD_BANNER_WIDTH = 1200;
-export const SESSION_CARD_BANNER_HEIGHT = 220;
+export const SESSION_CARD_BANNER_HEIGHT = 200;
 
 export type SessionCardVariant = "card" | "banner";
-const SESSION_CARD_VERSION = 4;
+const SESSION_CARD_VERSION = 5;
+
+/**
+ * The card is ink, not paper: the product mark is a near-black square with a
+ * white glyph, so a session link wearing the same value reads as ours at
+ * thumbnail size, which is the only size Slack ever shows it at. Sampled off
+ * icon.png rather than picked by eye.
+ */
+const CARD_INK = "#050609";
+const CARD_PAPER = "#FFFFFF";
 /** Left margin, clear of the 8 px accent bar. */
 const PAD_X = 56;
-/** The repo tile in front of the title, and the gap after it. */
-const TILE_SIZE = 72;
-const TILE_GAP = 24;
-/** The metadata line: the person's avatar, then who and which model. */
-const META_SIZE = 32;
-const META_GAP = 22;
-const META_TEXT_SIZE = 26;
-const META_TEXT_X = PAD_X + META_SIZE + 14;
+/**
+ * The repo tile in front of the title. Sized against the title's cap height
+ * rather than its point size, so the tile reads as a sibling of the words
+ * instead of a block they sit beside, and rounded harder than an app icon
+ * because at this size a tighter corner just looks like a rounded rect.
+ */
+const TILE_SIZE = 60;
+const TILE_GAP = 20;
+const TILE_RADIUS = TILE_SIZE * 0.42;
+/** The metadata line: a glyph and its label, twice over. */
+const META_SIZE = 28;
+const META_GAP = 20;
+const META_TEXT_SIZE = 24;
+const META_LABEL_GAP = 12;
+const META_GROUP_GAP = 26;
+const META_GLYPH_SIZE = 22;
+const META_TEXT_X = PAD_X + META_SIZE + META_LABEL_GAP;
+const META_FONT = "Inter Medium 24";
+const META_OPACITY = 0.55;
 const TITLE_SIZE = 48;
 const TITLE_X = PAD_X + TILE_SIZE + TILE_GAP;
 const TITLE_MAX_WIDTH = SESSION_CARD_WIDTH - TITLE_X - PAD_X;
@@ -133,15 +153,6 @@ function html(value: string): string {
 		.replaceAll(">", "&gt;");
 }
 
-function initials(name: string): string {
-	return name
-		.split(/\s+/)
-		.slice(0, 2)
-		.map((part) => part[0] || "")
-		.join("")
-		.toUpperCase();
-}
-
 async function titleWidth(title: string): Promise<number> {
 	const metadata = await sharp({
 		text: {
@@ -150,6 +161,20 @@ async function titleWidth(title: string): Promise<number> {
 			rgba: true,
 			dpi: 72,
 		},
+	}).metadata();
+	return metadata.width ?? 0;
+}
+
+/**
+ * How wide the owner's name renders, so the model group can sit right after it
+ * rather than at a guessed column. Measured through the same rasterizer that
+ * draws the card; the SVG keeps a rough estimate as its fallback so it stays
+ * callable (and testable) without a render.
+ */
+async function metaWidth(text: string): Promise<number> {
+	if (!text) return 0;
+	const metadata = await sharp({
+		text: { text: xml(text), font: META_FONT, rgba: true, dpi: 72 },
 	}).metadata();
 	return metadata.width ?? 0;
 }
@@ -317,6 +342,26 @@ function squirclePath(
 	].join("");
 }
 
+/**
+ * A subtext glyph, in the SF Symbols idiom: one stroked outline sitting on the
+ * label's own optical centre, at the label's colour and weight.
+ *
+ * Drawn here rather than shipped from Apple's set, which is licensed for use
+ * in apps on Apple platforms and not for a PNG we hand to Slack. The shapes
+ * are deliberately the plainest reading of `person` and `sparkle`, so the pair
+ * reads as one family beside the name and the model.
+ */
+function metaGlyph(kind: "person" | "model", x: number, cy: number): string {
+	const scale = META_GLYPH_SIZE / 24;
+	const transform = `translate(${x.toFixed(2)} ${(cy - META_GLYPH_SIZE / 2).toFixed(2)}) scale(${scale.toFixed(4)})`;
+	const stroke = `fill="none" stroke="${CARD_PAPER}" stroke-opacity="${META_OPACITY}" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"`;
+	const body =
+		kind === "person"
+			? `<circle cx="12" cy="7.6" r="3.7" ${stroke}/><path d="M4.7 20.1c0-4.1 3.3-6.5 7.3-6.5s7.3 2.4 7.3 6.5" ${stroke}/>`
+			: `<path d="M12 3.1L13.7 9.5L20.2 11.3L13.7 13.1L12 19.5L10.3 13.1L3.8 11.3L10.3 9.5Z" fill="${CARD_PAPER}" fill-opacity="${META_OPACITY}"/>`;
+	return `<g transform="${transform}">${body}</g>`;
+}
+
 /** SVG source is exported so the visual can be inspected without PNG decoding. */
 export function sessionSocialCardSvg(
 	data: SessionSocialCardData,
@@ -325,6 +370,7 @@ export function sessionSocialCardSvg(
 	displayTitle = clean(data.title) || productName(),
 	variant: SessionCardVariant = "card",
 	repoIcon = "",
+	ownerWidth = 0,
 ): string {
 	const banner = variant === "banner";
 	const height = banner ? SESSION_CARD_BANNER_HEIGHT : SESSION_CARD_HEIGHT;
@@ -343,7 +389,7 @@ export function sessionSocialCardSvg(
 	const repoId = clean(data.repo);
 	const owner = metaLabel(clean(data.owner));
 	const model = metaLabel(clean(data.model));
-	const tile = squirclePath(PAD_X, blockTop, TILE_SIZE);
+	const tile = squirclePath(PAD_X, blockTop, TILE_SIZE, TILE_RADIUS);
 	const hasTile = !!(repoIcon || repoId);
 	const titleX = hasTile ? TITLE_X : PAD_X;
 	// Art when the repo has any, the same colored letter the app falls back to
@@ -352,10 +398,20 @@ export function sessionSocialCardSvg(
 		? ""
 		: repoIcon
 			? `<image href="${repoIcon}" x="${PAD_X}" y="${blockTop}" width="${TILE_SIZE}" height="${TILE_SIZE}" preserveAspectRatio="xMidYMid slice" clip-path="url(#repoClip)"/>`
-			: `<path d="${tile}" fill="${xml(repoTileColorFor(repoId))}"/><path d="${tile}" fill="url(#tileSheen)"/><text x="${PAD_X + TILE_SIZE / 2}" y="${tileCenter + 1}" text-anchor="middle" dominant-baseline="middle" fill="${REPO_TILE_INK}" font-size="34" font-weight="600">${xml(repoLetter(repoId))}</text>`;
+			: `<path d="${tile}" fill="${xml(repoTileColorFor(repoId))}"/><path d="${tile}" fill="url(#tileSheen)"/><text x="${PAD_X + TILE_SIZE / 2}" y="${tileCenter + 1}" text-anchor="middle" dominant-baseline="middle" fill="${REPO_TILE_INK}" font-size="28" font-weight="600">${xml(repoLetter(repoId))}</text>`;
+	// The person's own face when we have one, the `person` glyph when we do
+	// not, so the subtext keeps its shape either way.
 	const avatarMarkup = avatar
 		? `<image href="${avatar}" x="${PAD_X}" y="${metaTop}" width="${META_SIZE}" height="${META_SIZE}" preserveAspectRatio="xMidYMid slice" clip-path="url(#avatarClip)"/>`
-		: `<circle cx="${PAD_X + META_SIZE / 2}" cy="${metaCenter}" r="${META_SIZE / 2}" fill="${xml(data.accent)}"/><text x="${PAD_X + META_SIZE / 2}" y="${metaCenter + 1}" text-anchor="middle" dominant-baseline="middle" fill="#FFFFFF" font-size="13" font-weight="600">${xml(initials(data.owner))}</text>`;
+		: metaGlyph("person", PAD_X + (META_SIZE - META_GLYPH_SIZE) / 2, metaCenter);
+	// Where the model group starts. Measured by the caller through the same
+	// rasterizer that draws the card; the estimate keeps this callable without
+	// a render (tests, and anyone inspecting the SVG).
+	const nameWidth = ownerWidth || owner.length * META_TEXT_SIZE * 0.52;
+	const modelX = META_TEXT_X + nameWidth + META_GROUP_GAP;
+	const modelMarkup = model
+		? `${metaGlyph("model", modelX, metaCenter)}<text x="${(modelX + META_GLYPH_SIZE + META_LABEL_GAP).toFixed(2)}" y="${metaCenter + 1}" dominant-baseline="middle" fill="${CARD_PAPER}" fill-opacity="${META_OPACITY}" font-family="JetBrains Mono, monospace" font-size="${META_TEXT_SIZE}" font-weight="500">${xml(model)}</text>`
+		: "";
 	const fontFace = jetBrainsMono
 		? `<style>@font-face { font-family: 'JetBrains Mono'; font-style: normal; font-weight: 500; src: url('${jetBrainsMono}') format('truetype'); }</style>`
 		: "";
@@ -364,8 +420,8 @@ export function sessionSocialCardSvg(
 <defs>
   ${fontFace}
   <linearGradient id="artGradient" x1="199.5" y1="0" x2="199.5" y2="630" gradientUnits="userSpaceOnUse">
-    <stop stop-color="#000000" stop-opacity="0.01"/>
-    <stop offset="1" stop-color="#000000" stop-opacity="0.08"/>
+    <stop stop-color="#FFFFFF" stop-opacity="0.015"/>
+    <stop offset="1" stop-color="#FFFFFF" stop-opacity="0.07"/>
   </linearGradient>
   <linearGradient id="tileSheen" x1="0" y1="${blockTop}" x2="0" y2="${blockTop + TILE_SIZE}" gradientUnits="userSpaceOnUse">
     <stop stop-color="#FFFFFF" stop-opacity="0.1"/>
@@ -374,16 +430,17 @@ export function sessionSocialCardSvg(
   <clipPath id="repoClip"><path d="${tile}"/></clipPath>
   <clipPath id="avatarClip"><circle cx="${PAD_X + META_SIZE / 2}" cy="${metaCenter}" r="${META_SIZE / 2}"/></clipPath>
 </defs>
-<rect width="1200" height="${height}" fill="#FFFFFF"/>
+<rect width="1200" height="${height}" fill="${CARD_INK}"/>
 <rect width="8" height="${height}" fill="${xml(data.accent)}"/>
 <g transform="${artTransform}">
   <path d="M68.8375 226.509C-37.3322 147.543 -7.34262 36.0198 68.8375 0H399V630H84.0041C208.443 571.121 289.104 390.338 68.8375 226.509Z" fill="url(#artGradient)"/>
 </g>
 ${repoMarkup}
-${hasTile ? `<path d="${tile}" fill="none" stroke="#000000" stroke-opacity="0.12"/>` : ""}
-<text x="${titleX}" y="${tileCenter + 2}" dominant-baseline="middle" fill="#0A0A0B" font-size="${TITLE_SIZE}" font-weight="600" letter-spacing="-1.2">${xml(displayTitle)}</text>
+${hasTile ? `<path d="${tile}" fill="none" stroke="${CARD_PAPER}" stroke-opacity="0.14"/>` : ""}
+<text x="${titleX}" y="${tileCenter + 2}" dominant-baseline="middle" fill="${CARD_PAPER}" font-size="${TITLE_SIZE}" font-weight="600" letter-spacing="-1.2">${xml(displayTitle)}</text>
 ${avatarMarkup}
-<text x="${META_TEXT_X}" y="${metaCenter + 1}" dominant-baseline="middle" fill="#000000" fill-opacity="0.45" font-size="${META_TEXT_SIZE}" font-weight="500">${xml(owner)}${model ? ` · <tspan font-family="JetBrains Mono, monospace">${xml(model)}</tspan>` : ""}</text>
+<text x="${META_TEXT_X}" y="${metaCenter + 1}" dominant-baseline="middle" fill="${CARD_PAPER}" fill-opacity="${META_OPACITY}" font-size="${META_TEXT_SIZE}" font-weight="500">${xml(owner)}</text>
+${modelMarkup}
 </svg>`;
 }
 
@@ -402,15 +459,24 @@ export async function renderSessionSocialCard(
 	data: SessionSocialCardData,
 	variant: SessionCardVariant = "card",
 ): Promise<Buffer> {
-	const [avatar, repoIcon, monoFont, title] = await Promise.all([
+	const [avatar, repoIcon, monoFont, title, ownerWidth] = await Promise.all([
 		avatarDataUrl(data.person),
 		repoIconDataUrl(data.repo),
 		socialCardMonoFont(),
 		fitSocialCardTitle(data.title),
+		metaWidth(metaLabel(clean(data.owner))),
 	]);
 	return sharp(
 		Buffer.from(
-			sessionSocialCardSvg(data, avatar, monoFont, title, variant, repoIcon),
+			sessionSocialCardSvg(
+				data,
+				avatar,
+				monoFont,
+				title,
+				variant,
+				repoIcon,
+				ownerWidth,
+			),
 		),
 	)
 		.png()

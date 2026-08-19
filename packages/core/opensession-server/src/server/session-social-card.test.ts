@@ -115,15 +115,22 @@ describe("session social card", () => {
 			accent: "#dd233a",
 		});
 		expect(svg).toContain('<rect width="8" height="630" fill="#dd233a"/>');
+		// The card is ink, and every word on it is paper.
+		expect(svg).toContain('<rect width="1200" height="630" fill="#050609"/>');
+		expect(svg).toContain('fill="#FFFFFF" font-size="48"');
 		// The repo tile is a real squircle path, not an `rx` rounded rect, and
 		// the title starts clear of it.
 		expect(svg).toContain('<clipPath id="repoClip"><path d="M');
-		expect(svg).toContain('x="152"');
+		expect(svg).toContain('x="136"');
 		expect(svg).toContain(">O</text>");
-		// Owner and model read as metadata rather than as a second heading.
-		expect(svg).toContain('fill-opacity="0.45"');
+		// Owner and model read as metadata rather than as a second heading,
+		// each behind its own glyph.
+		expect(svg).toContain('fill-opacity="0.55"');
+		expect(svg).toContain('<circle cx="12" cy="7.6" r="3.7"');
+		expect(svg).toContain("M12 3.1L13.7 9.5");
 		expect(svg).toContain("gpt-5.6-sol");
-		expect(svg).toContain('stop-opacity="0.08"');
+		// The corner art is now light on ink rather than shadow on paper.
+		expect(svg).toContain('stop-color="#FFFFFF" stop-opacity="0.07"');
 		expect(svg).toContain("M68.8375 226.509C-37.3322 147.543");
 		expect(svg).toContain("Fix &lt;cards&gt; &amp; links");
 		expect(svg).not.toContain("Fix <cards>");
@@ -155,7 +162,7 @@ describe("session social card", () => {
 		expect(output).toContain("<title>Ship dynamic social cards · Open Session</title>");
 		expect(output).toContain('content="summary_large_image"');
 		expect(output).toMatch(
-			/content="https:\/\/media\.example\.test\/session-card\/sess-social-1\/[A-Za-z0-9_-]{32}\.png\?v=4"/,
+			/content="https:\/\/media\.example\.test\/session-card\/sess-social-1\/[A-Za-z0-9_-]{32}\.png\?v=5"/,
 		);
 		expect(output).toContain(
 			'property="og:url" content="https://os.example.test/session/sess-social-1"',
@@ -169,13 +176,13 @@ describe("session social card", () => {
 		).toBe("sess-social-1");
 		expect(socialSessionIdFromPath("/settings")).toBeNull();
 		expect(sessionSocialCardUrl("sess-social-1")).toMatch(
-			/^https:\/\/media\.example\.test\/session-card\/sess-social-1\/[A-Za-z0-9_-]{32}\.png\?v=4$/,
+			/^https:\/\/media\.example\.test\/session-card\/sess-social-1\/[A-Za-z0-9_-]{32}\.png\?v=5$/,
 		);
 	});
 
 	test("signs ids containing Slack timestamp dots", () => {
 		expect(sessionSocialCardUrl("slack-C123-1719860000.000000")).toMatch(
-			/^https:\/\/media\.example\.test\/session-card\/slack-C123-1719860000\.000000\/[A-Za-z0-9_-]{32}\.png\?v=4$/,
+			/^https:\/\/media\.example\.test\/session-card\/slack-C123-1719860000\.000000\/[A-Za-z0-9_-]{32}\.png\?v=5$/,
 		);
 	});
 
@@ -208,7 +215,7 @@ describe("session social card", () => {
 		expect(response.status).toBe(200);
 		const metadata = await sharp(await response.arrayBuffer()).metadata();
 		expect(metadata.width).toBe(1200);
-		expect(metadata.height).toBe(220);
+		expect(metadata.height).toBe(200);
 	});
 
 	test("renders the full card for an unrecognized shape", async () => {
