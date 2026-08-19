@@ -163,6 +163,8 @@ export interface UnifiedSession {
   /** Slack messages a teammate sent from this session. */
   slackShares?: SessionSlackShare[];
   automation?: string;
+  /** Total live runs in this automation. Present on the bounded sidebar list. */
+  automationRunCount?: number;
   /** Stable automation id for linking back to its settings. Older sessions may
    *  only have `automation`, which the settings route also accepts by name. */
   automationId?: string;

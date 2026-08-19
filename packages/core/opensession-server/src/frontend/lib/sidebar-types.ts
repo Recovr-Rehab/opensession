@@ -164,6 +164,8 @@ export interface Group {
 	dotColor: string | null;
 	band: GroupBand;
 	items: UnifiedSession[];
+	/** Complete count when `items` is a bounded recent window. */
+	totalItems?: number;
 }
 
 // "My sessions" is split, Conductor-style, into status buckets. Order + labels +

@@ -1505,12 +1505,17 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 					!automationInRepoLens(overview, filter.repo))
 			)
 				continue;
+			const items = byAutomation.get(name)!;
 			out.push({
 				key: `auto:${name}`,
 				label: name,
 				dotColor: AUTOMATION_COLOR,
 				band: "automations",
-				items: byAutomation.get(name)!,
+				items,
+				totalItems: Math.max(
+					items.length,
+					...items.map((session) => session.automationRunCount || 0),
+				),
 			});
 		}
 		return out;
@@ -5599,7 +5604,7 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 								    far right; any future action can still be pushed there
 								    with ml-auto. */}
 								<span className={SIDEBAR_GROUP_COUNT}>
-									{groups.reduce((n, g) => n + g.items.length, 0)}
+									{groups.reduce((n, g) => n + (g.totalItems || g.items.length), 0)}
 								</span>
 								<IconChevronDown
 									className={cn(
@@ -5644,7 +5649,7 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 											    as a column of its own, and it had to disappear on
 											    hover to hand the slot to the settings glyph. */}
 											<span className={cn(SIDEBAR_GROUP_COUNT, "shrink-0")}>
-												{group.items.length}
+												{group.totalItems || group.items.length}
 											</span>
 											{/* Collapsed, the chevron shows at rest, as it does
 											    on every other heading in the sidebar: a closed
@@ -5707,6 +5712,12 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 												}}
 											/>
 										)}
+										{open &&
+											(group.totalItems || group.items.length) > group.items.length && (
+												<div className="px-4 pb-1 pt-0.5 text-meta tabular-nums text-faint">
+													Latest {group.items.length} of {group.totalItems} runs
+												</div>
+											)}
 										{group.items
 											.filter(() => open)
 											.map((s) => {

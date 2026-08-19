@@ -218,7 +218,7 @@ const sessionsResponseRefreshes: Map<
 // fallback, then refresh in the background. The version in the filename is the
 // schema boundary: bump it whenever sessionListRow stops being backward
 // compatible with the current web client.
-const LIVE_LIST_DISK_VERSION = 1;
+const LIVE_LIST_DISK_VERSION = 2;
 const LIVE_LIST_DISK_MAX_AGE_MS = 7 * 24 * 60 * 60_000;
 const LIVE_LIST_DISK_SERVE_MS = 2 * 60_000;
 const LIVE_LIST_DISK_PATH = statePath(
@@ -416,6 +416,52 @@ export function sessionListRow(
  * real session (GET /api/sessions/:id), so nothing downstream has to make do
  * with the subset.
  */
+const SIDEBAR_AUTOMATION_RUNS = 5;
+
+/**
+ * Bound automation history in the live list the web app polls.
+ *
+ * Automation runs are 4,304 of this instance's 4,707 live sessions, but a
+ * collapsed automation heading renders none of them. Keep enough recent runs
+ * to make an expanded heading useful, plus any older run that is still live or
+ * waiting on a person. Direct links hydrate their session independently.
+ * Every retained run carries the complete count so the heading still says how
+ * much history exists rather than pretending this bounded window is all of it.
+ */
+export function sidebarLiveSessions<T extends UnifiedSession & SessionListSignals>(
+	sessions: T[],
+): Array<T & { automationRunCount?: number }> {
+	const byAutomation = new Map<string, T[]>();
+	for (const session of sessions) {
+		if (!session.automation) continue;
+		const rows = byAutomation.get(session.automation) || [];
+		rows.push(session);
+		byAutomation.set(session.automation, rows);
+	}
+
+	const keep = new Set<T>();
+	for (const rows of byAutomation.values()) {
+		const recent = [...rows]
+			.sort((a, b) => b.lastActivity.localeCompare(a.lastActivity))
+			.slice(0, SIDEBAR_AUTOMATION_RUNS);
+		for (const row of recent) keep.add(row);
+		for (const row of rows) {
+			if (row.isRunning || row.waitingForInput || row.manualStatus) keep.add(row);
+		}
+	}
+
+	return sessions.flatMap((session) => {
+		if (!session.automation) return [session];
+		if (!keep.has(session)) return [];
+		return [
+			{
+				...session,
+				automationRunCount: byAutomation.get(session.automation)!.length,
+			},
+		];
+	});
+}
+
 export function archivedIndexRow(
 	s: UnifiedSession & SessionListSignals,
 ): SessionListRow {
@@ -516,10 +562,12 @@ function refreshSessionsResponse(
 					? "include"
 					: "only";
 		const sliced = (await getCachedSessionsAsync(slice)).map(enrichSession);
+		const listed =
+			variant === "exclude" ? sidebarLiveSessions(sliced) : sliced;
 		const text = JSON.stringify(
 			variant === "only-slim"
-				? sliced.map(archivedIndexRow)
-				: sliced.map(sessionListRow),
+				? listed.map(archivedIndexRow)
+				: listed.map(sessionListRow),
 		);
 		const snapshot: SessionsResponseSnapshot = {
 			text,

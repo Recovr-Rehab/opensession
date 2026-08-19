@@ -444,6 +444,8 @@ export interface UnifiedSession {
 	 *  composer that sent it into a receipt, so nobody re-sends the update. */
 	slackShares?: SessionSlackShare[];
 	automation?: string;
+	/** Total live runs in this automation. Present on the bounded sidebar list. */
+	automationRunCount?: number;
 	/** Stable automation id for linking back to its settings. */
 	automationId?: string;
 	archived?: boolean;

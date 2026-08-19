@@ -18,6 +18,7 @@ import {
 	sessionListRow,
 	sessionRan,
 	sessionsVariant,
+	sidebarLiveSessions,
 } from "./sessions";
 
 function paramsOf(query: string) {
@@ -109,6 +110,40 @@ describe("archivedScope", () => {
 			workspaceId: "ws-gone",
 			worktreeDir: undefined,
 		});
+	});
+});
+
+describe("sidebarLiveSessions", () => {
+	test("keeps ordinary sessions and only recent automation history", () => {
+		const ordinary = archivedSession({ id: "ordinary", archived: false });
+		const runs = Array.from({ length: 8 }, (_, index) =>
+			archivedSession({
+				id: `run-${index}`,
+				archived: false,
+				automation: "nightly",
+				lastActivity: `2026-08-${String(index + 1).padStart(2, "0")}T10:00:00.000Z`,
+				...(index === 0 ? { isRunning: true } : {}),
+				...(index === 1 ? { manualStatus: "pending" } : {}),
+			}),
+		);
+
+		const result = sidebarLiveSessions([ordinary, ...runs]);
+		expect(result.map((session) => session.id)).toEqual([
+			"ordinary",
+			"run-0",
+			"run-1",
+			"run-3",
+			"run-4",
+			"run-5",
+			"run-6",
+			"run-7",
+		]);
+		expect(result[0].automationRunCount).toBeUndefined();
+		expect(
+			result
+				.filter((session) => session.automation)
+				.every((session) => session.automationRunCount === 8),
+		).toBe(true);
 	});
 });
 
