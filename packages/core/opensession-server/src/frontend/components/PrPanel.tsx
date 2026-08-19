@@ -958,6 +958,21 @@ export function PrPanel({
     setPending((prev) => prev.filter((c) => c.id !== id));
   }, []);
 
+  function handleFixChecks(summary: string) {
+    if (!send || !pr) return;
+    send({
+      type: "prompt",
+      sessionId,
+      user: getCurrentUser(),
+      content: `Investigate the failing checks on PR #${pr.number}, fix the failures, run the relevant tests, commit the changes, and push them.`,
+    });
+    setSummaryDraft(summary);
+    setReviewError(null);
+    setMergeAfterReview(false);
+    setReviewOpen(false);
+    toast("Fixing checks…");
+  }
+
   async function handleSubmitReview(summary: string) {
     if (submitting) return;
     const actionTargetKey = loadTargetKey;
@@ -2344,6 +2359,9 @@ export function PrPanel({
           onEventChange={setReviewEvent}
           defaultSummary={summaryDraft}
           canMerge={canMergeAfterReview}
+          onFixChecks={
+            checkSummary.failed > 0 && send ? handleFixChecks : undefined
+          }
           mergeAfterReview={mergeAfterReview}
           onMergeAfterReviewChange={setMergeAfterReview}
           error={reviewError || mergeError}
@@ -2380,6 +2398,7 @@ function FinishReviewDialog({
   onEventChange,
   defaultSummary,
   canMerge,
+  onFixChecks,
   mergeAfterReview,
   onMergeAfterReviewChange,
   error,
@@ -2394,6 +2413,7 @@ function FinishReviewDialog({
   onEventChange: (event: ReviewEvent) => void;
   defaultSummary: string;
   canMerge: boolean;
+  onFixChecks?: (summary: string) => void;
   mergeAfterReview: boolean;
   onMergeAfterReviewChange: (merge: boolean) => void;
   error: string | null;
@@ -2483,6 +2503,21 @@ function FinishReviewDialog({
               Squash and merge as well
             </span>
           </label>
+        )}
+        {event === "APPROVE" && !canMerge && onFixChecks && (
+          <div className="flex items-center justify-between gap-3 rounded-row bg-red-soft px-3 py-2">
+            <span className="text-supporting text-red">
+              Checks must pass before you can merge.
+            </span>
+            <Button
+              variant="danger"
+              size="sm"
+              className="shrink-0"
+              onClick={() => onFixChecks(summary)}
+            >
+              Fix checks
+            </Button>
+          </div>
         )}
         {error && <div className="text-supporting text-red">{error}</div>}
         <Modal.Footer>
