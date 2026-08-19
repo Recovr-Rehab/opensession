@@ -10,6 +10,8 @@ import {
 } from "../lib/api";
 import { fetchDiff } from "../lib/api";
 import { assetPreviewKind, isVisualAsset } from "../lib/asset-preview";
+import { useAssetViewMode } from "../lib/asset-view-mode";
+import { AssetViewToggle } from "./AssetViewToggle";
 import { commitPrompt } from "../lib/commit-prompt";
 import { AGENT_NAME, GITHUB_BOT_LOGINS } from "../lib/brand";
 import { getCurrentUser } from "./UserPicker";
@@ -50,6 +52,7 @@ import {
 	WS_SUMMARY_SECTION,
 	WS_SUMMARY_STRIP,
 	WS_SUMMARY_STATE,
+	WS_SUMMARY_THUMB,
 } from "../lib/workspace-summary-classes";
 import {
 	WS_SUMMARY_OPEN_EVENT,
@@ -63,6 +66,7 @@ import {
 	IconListCircles,
 	IconPeople,
 	IconPlay,
+	IconPlayRectangle,
 	IconRobot,
 	IconStack,
 } from "./icons";
@@ -425,6 +429,9 @@ function SummaryBody({
 }) {
 	const activeSessionId = useRef(session.id);
 	activeSessionId.current = session.id;
+	// Pictures or rows. One preference, shared with the Workspace panel's own
+	// Assets section, so the same folder is not drawn two ways in one window.
+	const [assetView, setAssetView] = useAssetViewMode();
 	const [data, setData] = useState<SummaryData>(
 		() => lastKnown.get(session.id) ?? emptyData(),
 	);
@@ -561,19 +568,18 @@ function SummaryBody({
 		)
 		.slice(0, REVIEWERS_SHOWN);
 
-	// A screenshot is shown, not listed. `contact-dark.png` names a file
-	// without saying what is in it, and the 16px tile this used to draw in a
-	// row's rail was too small to answer that either. So pictures and
-	// recordings become frames, and a page, a report or a data file keeps its
-	// row, where the name IS the content. Same split the Workspace panel makes,
-	// from the same helper.
-	const frames = assets
-		.filter((file) => isVisualAsset(file.path))
-		.slice(0, ASSET_FRAMES_SHOWN);
-	const shown = assets
-		.filter((file) => !isVisualAsset(file.path))
-		.slice(0, ASSETS_SHOWN);
-	const assetsHidden = assets.length - frames.length - shown.length;
+	// A capture is shown, not listed: `contact-dark.png` names a file without
+	// saying what is in it. A report or a data file is the other way round, and
+	// its name IS the content. Rather than split the band down that line and
+	// leave the files stranded under a strip of pictures, the whole folder is
+	// drawn one way at a time and the heading's toggle says which. A file with
+	// nothing to show gets a glyph in the picture's place; a picture in the list
+	// gets a thumbnail in the row's rail.
+	const shown = assets.slice(
+		0,
+		assetView === "preview" ? ASSET_FRAMES_SHOWN : ASSETS_SHOWN,
+	);
+	const assetsHidden = assets.length - shown.length;
 
 	async function cancelOsReview() {
 		if (!pr?.reviewActive || reviewCancelling) return;
@@ -831,13 +837,21 @@ function SummaryBody({
 				</>
 			)}
 
-			{(frames.length > 0 || shown.length > 0) && (
+			{assets.length > 0 && (
 				<>
 					<div className={WS_SUMMARY_DIVIDER} />
-					<div className={WS_SUMMARY_SECTION}>Assets</div>
-					{frames.length > 0 && (
+					<div
+						className={cn(
+							WS_SUMMARY_SECTION,
+							"group/assets justify-between gap-2",
+						)}
+					>
+						<span>Assets</span>
+						<AssetViewToggle mode={assetView} onChange={setAssetView} />
+					</div>
+					{assetView === "preview" ? (
 						<div className={WS_SUMMARY_STRIP}>
-							{frames.map((file) => (
+							{shown.map((file) => (
 								<button
 									key={file.path}
 									type="button"
@@ -846,9 +860,7 @@ function SummaryBody({
 										// One picture takes the card. More than one shows two
 										// frames plus a sliver of the next, which is what says
 										// the strip scrolls.
-										frames.length === 1
-											? "w-full"
-											: "w-[calc((100%_-_30px)/2)]",
+										shown.length === 1 ? "w-full" : "w-[calc((100%_-_30px)/2)]",
 									)}
 									onClick={() => go(onOpenAssets)}
 									title={file.path}
@@ -871,13 +883,20 @@ function SummaryBody({
 													</span>
 												</span>
 											</>
-										) : (
+										) : isVisualAsset(file.path) ? (
 											<img
 												src={sessionAssetPreviewUrl(session.id, file)}
 												alt=""
 												loading="lazy"
 												className="h-full w-full object-contain"
 											/>
+										) : (
+											// A report or a data file has no picture to show, so it
+											// holds the same tile with a glyph in it rather than
+											// dropping out of the set and stranding itself below.
+											<span className="grid h-full w-full place-items-center text-faint">
+												<IconFile size={22} />
+											</span>
 										)}
 									</span>
 									<span className={WS_SUMMARY_FRAME_CAPTION}>
@@ -888,20 +907,34 @@ function SummaryBody({
 								</button>
 							))}
 						</div>
+					) : (
+						shown.map((file) => (
+							<button
+								key={file.path}
+								className={WS_SUMMARY_ROW}
+								onClick={() => go(onOpenAssets)}
+								title={file.path}
+							>
+								<span className={WS_SUMMARY_RAIL}>
+									{assetPreviewKind(file.path) === "image" ? (
+										<img
+											src={sessionAssetPreviewUrl(session.id, file)}
+											alt=""
+											loading="lazy"
+											className={WS_SUMMARY_THUMB}
+										/>
+									) : assetPreviewKind(file.path) === "video" ? (
+										// A poster frame at 16px is a smudge, so a recording
+										// says what it is instead.
+										<IconPlayRectangle size={20} className={WS_SUMMARY_ICON} />
+									) : (
+										<IconFile size={20} className={WS_SUMMARY_ICON} />
+									)}
+								</span>
+								<span className={WS_SUMMARY_LABEL}>{file.path}</span>
+							</button>
+						))
 					)}
-					{shown.map((file) => (
-						<button
-							key={file.path}
-							className={WS_SUMMARY_ROW}
-							onClick={() => go(onOpenAssets)}
-							title={file.path}
-						>
-							<span className={WS_SUMMARY_RAIL}>
-								<IconFile size={20} className={WS_SUMMARY_ICON} />
-							</span>
-							<span className={WS_SUMMARY_LABEL}>{file.path}</span>
-						</button>
-					))}
 					{assetsHidden > 0 && (
 						<button className={WS_SUMMARY_ROW} onClick={() => go(onOpenAssets)}>
 							<span className={WS_SUMMARY_RAIL} />

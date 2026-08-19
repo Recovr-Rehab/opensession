@@ -155,3 +155,12 @@ export const WS_SUMMARY_FRAME_MEDIA =
  *  you refer to it ("use the dark one"), so it stays. */
 export const WS_SUMMARY_FRAME_CAPTION =
 	"block w-full truncate text-meta text-dim";
+
+/** A picture in the list, centred in the rail the glyphs use. A 16px tile
+ *  inside a 20px slot, the same inset the sidebar gives its repo tiles: a
+ *  filled image next to line art wants to sit a little smaller than the
+ *  glyphs, or it reads as the heaviest thing in the list. It cannot say what
+ *  the capture is at this size, which is what the frames are for. What it does
+ *  is tell two rows apart at a glance once you already know them. */
+export const WS_SUMMARY_THUMB =
+	"size-4 overflow-hidden rounded-sm border border-line bg-panel object-cover";

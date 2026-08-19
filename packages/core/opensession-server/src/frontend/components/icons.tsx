@@ -1435,3 +1435,31 @@ export function IconDiffSplit(p: IconProps) {
     </Svg>
   );
 }
+
+// Asset layouts: four tiles for the pictures, named rows for the list. Both
+// draw the SAME set, so the pair has to differ in shape rather than in count:
+// the grid is all tile, the list is a small tile with its name beside it,
+// which is what each mode actually puts on screen.
+export function IconViewGrid(p: IconProps) {
+  return (
+    <Svg {...p}>
+      <rect {...stroke} x="4.75" y="4.75" width="6" height="6" rx="1.5" />
+      <rect {...stroke} x="13.25" y="4.75" width="6" height="6" rx="1.5" />
+      <rect {...stroke} x="4.75" y="13.25" width="6" height="6" rx="1.5" />
+      <rect {...stroke} x="13.25" y="13.25" width="6" height="6" rx="1.5" />
+    </Svg>
+  );
+}
+
+export function IconViewList(p: IconProps) {
+  return (
+    <Svg {...p}>
+      <rect {...stroke} x="4.75" y="5.25" width="3.5" height="3.5" rx="1" />
+      <path {...stroke} d="M11.25 7H19.25" />
+      <rect {...stroke} x="4.75" y="10.25" width="3.5" height="3.5" rx="1" />
+      <path {...stroke} d="M11.25 12H19.25" />
+      <rect {...stroke} x="4.75" y="15.25" width="3.5" height="3.5" rx="1" />
+      <path {...stroke} d="M11.25 17H19.25" />
+    </Svg>
+  );
+}

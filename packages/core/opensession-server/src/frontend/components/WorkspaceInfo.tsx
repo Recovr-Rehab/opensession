@@ -20,6 +20,8 @@ import {
 	type SessionAssetFile,
 } from "../lib/api";
 import { assetPreviewKind, isVisualAsset } from "../lib/asset-preview";
+import { useAssetViewMode } from "../lib/asset-view-mode";
+import { AssetViewToggle } from "./AssetViewToggle";
 import {
 	pollWhileVisible,
 	PR_WEBHOOK_FALLBACK_POLL_MS,
@@ -74,6 +76,7 @@ import {
 	IconFile,
 	IconPeople,
 	IconPlay,
+	IconPlayRectangle,
 	IconPullRequest,
 	IconRobot,
 	IconStack,
@@ -1222,10 +1225,13 @@ function GitStatusRows({
 	);
 }
 
-/** One frame in a media strip, and what clicking it opens. */
+/** One frame in a media strip, and what clicking it opens. `file` is an asset
+ *  with nothing to show: it holds the same tile with a glyph in it, so a
+ *  folder of captures and notes stays one set instead of a strip with the
+ *  notes stranded under it. */
 type StripItem = {
 	key: string;
-	kind: "image" | "video";
+	kind: "image" | "video" | "file";
 	src: string;
 	/** Native tooltip: where the frame came from, or what the file is. */
 	title?: string;
@@ -1290,7 +1296,11 @@ function MediaStrip({ items }: { items: StripItem[] }) {
 						// the fill alone: there is no line above strong to escalate to.
 						className="relative block aspect-video w-full overflow-hidden rounded-[calc(14px*var(--rf)-12px)] border border-line-strong bg-surface transition-colors group-hover/frame:bg-hover"
 					>
-						{item.kind === "image" ? (
+						{item.kind === "file" ? (
+							<span className="grid h-full w-full place-items-center text-faint">
+								<IconFile size={24} />
+							</span>
+						) : item.kind === "image" ? (
 							<img
 								src={item.src}
 								alt=""
@@ -1528,11 +1538,13 @@ export function WorkspaceInfo({
 	}, [liveMedia, data?.media]);
 
 	// A picture or a recording an agent wrote is shown, not listed: its name and
-	// size say nothing about it. Everything else (a page, a report, a data
-	// file) is the opposite, so it keeps the row, where the name and the
-	// description are the content.
-	const visualAssets = assets.filter((a) => isVisualAsset(a.path));
-	const fileAssets = assets.filter((a) => !isVisualAsset(a.path));
+	// size say nothing about it. A page, a report or a data file is the
+	// opposite, and its name and description ARE the content. Rather than draw
+	// half the band each way and leave the files stranded under a strip of
+	// pictures, the whole folder goes one way at a time and the heading's toggle
+	// says which. The header's summary card reads the same preference, so one
+	// window never shows the same folder two ways.
+	const [assetView, setAssetView] = useAssetViewMode();
 
 	// Ahead, behind and the PR itself are the status strip's; this section is
 	// only the uncommitted work in the tree.
@@ -1707,20 +1719,25 @@ export function WorkspaceInfo({
 							<div
 								className={cn(
 									INFO_LABEL_CLASS,
-									"flex items-center justify-between gap-2",
+									"group/assets flex items-center justify-between gap-2",
 								)}
 							>
 								<span>Assets</span>
-								<span className="tabular-nums">{assets.length}</span>
+								<span className="flex items-center gap-1.5">
+									<AssetViewToggle mode={assetView} onChange={setAssetView} />
+									<span className="tabular-nums">{assets.length}</span>
+								</span>
 							</div>
-							{visualAssets.length > 0 && (
+							{assetView === "preview" ? (
 								<MediaStrip
-									items={visualAssets.map((a) => ({
+									items={assets.map((a) => ({
 										key: a.path,
 										kind:
 											assetPreviewKind(a.path) === "video"
 												? ("video" as const)
-												: ("image" as const),
+												: isVisualAsset(a.path)
+													? ("image" as const)
+													: ("file" as const),
 										src: sessionAssetPreviewUrl(sessionId, a),
 										title: [`Open ${a.path}`, a.description]
 											.filter(Boolean)
@@ -1731,10 +1748,9 @@ export function WorkspaceInfo({
 										onOpen: () => onOpenAsset?.(a.path),
 									}))}
 								/>
-							)}
-							{fileAssets.length > 0 && (
+							) : (
 								<div className={INFO_LIST_CLASS}>
-									{fileAssets.map((a) => (
+									{assets.map((a) => (
 										<button
 											key={a.path}
 											type="button"
@@ -1748,13 +1764,38 @@ export function WorkspaceInfo({
 												a.description ? "items-start" : "items-center",
 											)}
 										>
-											<IconFile
-												size={14}
-												className={cn(
-													"shrink-0 text-faint",
-													a.description && "mt-0.5",
-												)}
-											/>
+											{assetPreviewKind(a.path) === "image" ? (
+												<img
+													src={sessionAssetPreviewUrl(sessionId, a)}
+													alt=""
+													loading="lazy"
+													// Too small to say what the capture is, which is
+													// what the frames are for. What it does is tell
+													// two rows apart once you already know them.
+													className={cn(
+														"size-3.5 shrink-0 rounded-[3px] border border-line-strong object-cover",
+														a.description && "mt-0.5",
+													)}
+												/>
+											) : assetPreviewKind(a.path) === "video" ? (
+												// A poster frame at 14px is a smudge, so a recording
+												// says what it is instead.
+												<IconPlayRectangle
+													size={14}
+													className={cn(
+														"shrink-0 text-faint",
+														a.description && "mt-0.5",
+													)}
+												/>
+											) : (
+												<IconFile
+													size={14}
+													className={cn(
+														"shrink-0 text-faint",
+														a.description && "mt-0.5",
+													)}
+												/>
+											)}
 											<span className="min-w-0 flex-1">
 												<span className="block truncate">{a.path}</span>
 												{a.description && (
