@@ -73,8 +73,10 @@ struct SessionView: View {
     /// screens-tall blocks has no row fine-grained enough to land on.
     @State private var scrollPosition = ScrollPosition()
 
-    /// How work folds start out: where a turn's steps rest, and whether nested
-    /// grouped tool calls start open. Shared with the web preference.
+    /// How work folds start out: where a turn's work rests (folded / running,
+    /// which opens it only while the turn is live / open), and whether that
+    /// includes its tool calls. Set in Settings → Preferences, shared with the
+    /// web.
     @AppStorage("os1.appearance.turnActivity") private var turnWork = "running"
     @AppStorage("os1.appearance.toolCalls") private var toolCalls = "folded"
     private var turnActivity: TurnActivity {
@@ -101,6 +103,10 @@ struct SessionView: View {
     /// geometry. New AI output only auto-scrolls while true; scrolling up to
     /// read releases the pin so streams don't yank the reader back down.
     @State private var pinnedToBottom = true
+    /// Proximity alone cannot express intent: the first small upward movement
+    /// still sits inside `pinTolerance`, but must release live following.
+    @State private var readerMovedTowardHistory = false
+    @State private var readerScrollActive = false
 
     /// Height of the transcript's visible area, from live scroll geometry.
     /// The content stack is never shorter than this, so a transcript that
@@ -116,6 +122,12 @@ struct SessionView: View {
     /// has to clear that, plus slack for keyboard/inset transitions and lazy
     /// rows settling.
     private let pinTolerance: CGFloat = 76
+    /// Gesture completion uses a tighter edge than live following. The wider
+    /// tolerance absorbs layout slack; this one recognizes the actual resting
+    /// bottom without treating a small upward nudge as a return.
+    private var restingBottomTolerance: CGFloat {
+        pinTolerance - SessionView.tailClearance
+    }
 
     /// Model/effort catalog for the toolbar picker; fetched on first open.
     @State private var catalog: ModelCatalog?
@@ -276,9 +288,13 @@ struct SessionView: View {
                         TranscriptGeometry(
                             offset: $0.contentOffset.y,
                             contentHeight: $0.contentSize.height,
-                            insetTop: $0.contentInsets.top
+                            insetTop: $0.contentInsets.top,
+                            visibleMaxY: $0.visibleRect.maxY,
+                            insetBottom: $0.contentInsets.bottom,
+                            containerHeight: $0.containerSize.height
                         )
                     } action: { old, new in
+                        let wasFollowing = pinnedToBottom && !readerMovedTowardHistory
                         if awaitingPrepend, new.contentHeight != old.contentHeight {
                             awaitingPrepend = false
                             prependDistanceFromEnd = TranscriptScroll.distanceFromEnd(
@@ -288,6 +304,51 @@ struct SessionView: View {
                             prependBaselineContentHeight = old.contentHeight
                         }
                         restoreAfterPrependIfPossible(new)
+                        let nearBottom = TranscriptScroll.isNearBottom(
+                            TranscriptScroll.Geometry(
+                                visibleMaxY: new.visibleMaxY,
+                                contentHeight: new.contentHeight,
+                                insetBottom: new.insetBottom,
+                                containerHeight: new.containerHeight
+                            ),
+                            tolerance: pinTolerance
+                        )
+                        let follow = TranscriptScroll.followState(
+                            previousOffset: old.offset,
+                            offset: new.offset,
+                            previousContentHeight: old.contentHeight,
+                            contentHeight: new.contentHeight,
+                            previousDistanceFromBottom: TranscriptScroll.distanceFromBottom(
+                                TranscriptScroll.Geometry(
+                                    visibleMaxY: old.visibleMaxY,
+                                    contentHeight: old.contentHeight,
+                                    insetBottom: old.insetBottom,
+                                    containerHeight: old.containerHeight
+                                )
+                            ),
+                            isNearBottom: nearBottom,
+                            readerGestureActive: readerScrollActive,
+                            layoutChanged: old.insetTop != new.insetTop
+                                || old.insetBottom != new.insetBottom
+                                || old.containerHeight != new.containerHeight,
+                            readerMovedTowardHistory: readerMovedTowardHistory
+                        )
+                        var nextPinned = follow.pinned
+                        // Streamed markdown lays out asynchronously after
+                        // `liveText` changes. Follow its measured height, not
+                        // the pre-layout text update, so the run footer stays
+                        // planted instead of stepping around while words land.
+                        if new.contentHeight > old.contentHeight,
+                           !follow.readerMovedTowardHistory,
+                           wasFollowing || (holdingAtLatest && !readerScrollActive) {
+                            nextPinned = true
+                            scrollToBottom(proxy, animated: false, repin: false)
+                        }
+                        if pinnedToBottom != nextPinned { pinnedToBottom = nextPinned }
+                        if readerMovedTowardHistory != follow.readerMovedTowardHistory {
+                            readerMovedTowardHistory = follow.readerMovedTowardHistory
+                        }
+                        if nextPinned, newBelow { newBelow = false }
                     }
                     // One viewport, for the content stack's floor above.
                     // `containerSize` is the unobstructed visible region (it
@@ -362,13 +423,39 @@ struct SessionView: View {
                         )
                     // A scroll gesture is the reader taking over: the
                     // opening hold ends the moment they touch the transcript.
-                    .onScrollPhaseChange { _, phase in
+                    .onScrollPhaseChange { old, phase, context in
                         // A hand on the transcript outranks both the opening
                         // hold and a restore still settling a page of history.
-                        if phase == .interacting {
+                        let readerPhase = phase == .tracking
+                            || phase == .interacting
+                            || phase == .decelerating
+                        if phase == .interacting, old != .interacting {
                             scrollInteractionGeneration += 1
                             endHold()
                             cancelPrependRestore()
+                            if !readerMovedTowardHistory {
+                                readerMovedTowardHistory = true
+                            }
+                            if pinnedToBottom { pinnedToBottom = false }
+                        }
+                        if readerScrollActive != readerPhase {
+                            readerScrollActive = readerPhase
+                        }
+                        if phase == .idle, readerMovedTowardHistory {
+                            let atRestingBottom = TranscriptScroll.isNearBottom(
+                                TranscriptScroll.Geometry(
+                                    visibleMaxY: context.geometry.visibleRect.maxY,
+                                    contentHeight: context.geometry.contentSize.height,
+                                    insetBottom: context.geometry.contentInsets.bottom,
+                                    containerHeight: context.geometry.containerSize.height
+                                ),
+                                tolerance: restingBottomTolerance
+                            )
+                            if atRestingBottom {
+                                readerMovedTowardHistory = false
+                                pinnedToBottom = true
+                                newBelow = false
+                            }
                         }
                         // Reading counts as being here: a hand on the transcript
                         // is what keeps our face on this session (the view model
@@ -422,16 +509,16 @@ struct SessionView: View {
                     // unchanged, and following new output would stop.
                     let outputScroll = deliveryScroll
                         .onChange(of: viewModel.displayItems.count) {
-                            displayItemsChanged(proxy)
+                            displayItemsChanged()
                         }
                         // The clock arriving lengthens the transcript by a row;
                         // follow it so it lands above the composer rather than
                         // behind it.
                         .onChange(of: viewModel.isRunning) { _, running in
-                            runningChanged(running, proxy: proxy)
+                            runningChanged(running)
                         }
                         .onChange(of: viewModel.liveText) {
-                            liveTextChanged(proxy)
+                            liveTextChanged()
                         }
 
                     outputScroll
@@ -489,7 +576,7 @@ struct SessionView: View {
             #endif
         }
         let chromeContent = transcriptContent
-            .environment(\.transcriptRepo, viewModel.session.effectiveRepo)
+            .environment(\.transcriptSessionId, viewModel.session.id)
             .safeAreaInset(edge: .top, spacing: 0) {
             VStack(spacing: 0) {
                 #if os(iOS)
@@ -1039,7 +1126,7 @@ struct SessionView: View {
             for _ in 0..<max(1, Int(seconds / 0.25)) {
                 try? await Task.sleep(for: .milliseconds(250))
                 guard !Task.isCancelled, holdingAtLatest else { return }
-                scrollToBottom(proxy, animated: false)
+                scrollToBottom(proxy, animated: false, repin: false)
             }
             holdingAtLatest = false
         }
@@ -1158,20 +1245,6 @@ struct SessionView: View {
             for: .sizeChanges
         )
         .scrollDismissesKeyboardCompat()
-        .onScrollGeometryChange(for: Bool.self) { geometry in
-            TranscriptScroll.isNearBottom(
-                TranscriptScroll.Geometry(
-                    visibleMaxY: geometry.visibleRect.maxY,
-                    contentHeight: geometry.contentSize.height,
-                    insetBottom: geometry.contentInsets.bottom,
-                    containerHeight: geometry.containerSize.height
-                ),
-                tolerance: pinTolerance
-            )
-        } action: { _, isNearBottom in
-            pinnedToBottom = isNearBottom
-            if isNearBottom { newBelow = false }
-        }
         .scrollPosition($scrollPosition)
     }
 
@@ -1220,31 +1293,25 @@ struct SessionView: View {
         awaitingPrepend = true
     }
 
-    private func displayItemsChanged(_ proxy: ScrollViewProxy) {
+    private func displayItemsChanged() {
         let isHistoryPrepend = lastDisplayHistoryPrependSeq != viewModel.historyPrependSeq
         lastDisplayHistoryPrependSeq = viewModel.historyPrependSeq
         if isHistoryPrepend { return }
         // A tail append during a restore breaks its pure-prepend invariant, so
         // the reader's current position wins over the stale distance from end.
         cancelPrependRestore()
-        if pinnedToBottom || holdingAtLatest {
-            scrollToBottom(proxy, animated: true)
-        } else {
+        if !pinnedToBottom, !holdingAtLatest {
             newBelow = true
         }
     }
 
-    private func runningChanged(_ running: Bool, proxy: ScrollViewProxy) {
-        if running, pinnedToBottom || holdingAtLatest {
-            scrollToBottom(proxy, animated: true)
-        }
+    private func runningChanged(_ running: Bool) {
+        if running, !pinnedToBottom, !holdingAtLatest { newBelow = true }
     }
 
-    private func liveTextChanged(_ proxy: ScrollViewProxy) {
+    private func liveTextChanged() {
         cancelPrependRestore()
-        if pinnedToBottom {
-            scrollToBottom(proxy, animated: false)
-        } else if !viewModel.liveText.isEmpty {
+        if !pinnedToBottom, !viewModel.liveText.isEmpty {
             newBelow = true
         }
     }
@@ -1275,8 +1342,16 @@ struct SessionView: View {
     /// The row's own `transcriptTail` padding is what keeps it clear of the
     /// composer's fade, since this puts its frame's bottom edge on the visible
     /// bottom.
-    private func scrollToBottom(_ proxy: ScrollViewProxy, animated: Bool) {
+    private func scrollToBottom(
+        _ proxy: ScrollViewProxy,
+        animated: Bool,
+        repin: Bool = true
+    ) {
         guard let target = tailId else { return }
+        if repin {
+            if readerMovedTowardHistory { readerMovedTowardHistory = false }
+            if !pinnedToBottom { pinnedToBottom = true }
+        }
         if animated {
             withAnimation(.snappy) { proxy.scrollTo(target, anchor: .bottom) }
         } else {
@@ -1291,6 +1366,7 @@ struct SessionView: View {
         guard let target = viewModel.blockId(containing: message.id) else { return }
         endHold()
         cancelPrependRestore()
+        readerMovedTowardHistory = true
         pinnedToBottom = false
         newBelow = false
         viewModel.userDidInteract()

@@ -255,7 +255,7 @@ struct PreferencesSettingsView: View {
             Section {
                 Toggle("Quick replies", isOn: $replySuggestions)
             } footer: {
-                Text("Suggest replies when a turn ends on a choice. Picking one fills the draft.")
+                Text("Suggest short follow-ups above the composer when a turn ends on a choice. Picking one fills the draft.")
             }
 
             #if os(iOS)

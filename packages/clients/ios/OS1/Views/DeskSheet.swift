@@ -26,8 +26,16 @@ struct DeskSheet: View {
     var body: some View {
         @Bindable var engine = engine
         return VStack(spacing: 0) {
-            header
-            Divider()
+            VStack(spacing: 0) {
+                header
+                Divider()
+            }
+            .background(OS1VisualStyle.chatCanvas)
+            // SessionView's top transcript wash deliberately overhangs its
+            // bounds to dissolve rows under navigation chrome. The Desk owns
+            // its header outside SessionView, so keep that opaque header above
+            // the wash instead of letting the later sibling fade its controls.
+            .zIndex(1)
             content
         }
         .task {

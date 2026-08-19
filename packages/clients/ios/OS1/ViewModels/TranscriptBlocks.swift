@@ -267,6 +267,8 @@ struct WorkTurn: Identifiable, Equatable {
     var failureCount: Int
     var touchedFiles: [TouchedFile]
     var lineStats: ToolLineStats
+    /// A result carried an image — the fold opens so it isn't hidden.
+    var hasMedia: Bool
     /// Media the agent explicitly surfaced. Closed folds keep this visible;
     /// open folds render it in the tool row that produced it.
     var featuredMedia: TranscriptMedia = TranscriptMedia()
@@ -274,9 +276,25 @@ struct WorkTurn: Identifiable, Equatable {
     /// live and collapsed so the work never looks stalled.
     var livePreview: String?
 
+    var hasFailure: Bool { failureCount > 0 }
+
+    /// A fold this long is a wall on a phone. Media and failures still pull a
+    /// short turn open — that's how you see a screenshot or a stack trace
+    /// without hunting — but past this many steps the header's own signals
+    /// (the failure count, the edited files) carry it instead, and opening
+    /// stays the reader's choice.
+    private static let pinOpenStepLimit = 8
+
     /// How the fold should start out, before any manual toggle.
     func defaultExpanded(preference: TurnActivity) -> Bool {
-        preference.defaultExpanded(isLive: isLive)
+        if !isLive, toolCount <= Self.pinOpenStepLimit, hasFailure || hasMedia {
+            return true
+        }
+        // The default is open while the work is happening and folded the
+        // moment it settles, which is also the only work setting where a
+        // finished turn's notes can be put away, since the header then owns
+        // them. The nested tool-call setting does not change this outer fold.
+        return preference.defaultExpanded(isLive: isLive)
     }
 }
 
@@ -686,6 +704,7 @@ enum TranscriptGrouping {
             failureCount: tools.filter(\.isError).count,
             touchedFiles: files,
             lineStats: stats,
+            hasMedia: tools.contains(where: \.hasMedia),
             featuredMedia: featuredMedia(from: tools),
             livePreview: preview
         )

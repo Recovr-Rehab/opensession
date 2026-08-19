@@ -917,6 +917,7 @@ final class SessionsListViewModel {
                 guard requestConnection == OS1API.LiveActivityConnection.current() else { return }
                 SessionLinks.register(titles: grouped.titles)
                 PrLinks.register(index: grouped.prs)
+                CommitLinks.register(sessionRepos: grouped.prs.repos)
                 if let renamed { workspaceNames = renamed }
                 if let refreshedWorkspaces { workspaces = refreshedWorkspaces }
                 liveActivityConnection = requestConnection
