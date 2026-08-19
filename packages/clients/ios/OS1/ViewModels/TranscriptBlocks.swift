@@ -200,10 +200,10 @@ struct ToolCallItem: Identifiable, Equatable {
         } else {
             durationLabel = nil
         }
-        let elapsed = end.timeIntervalSince(start)
-        guard elapsed >= 1.5 else { return nil }
-        return TranscriptFormat.duration(elapsed)
     }
+
+    var isError: Bool { use?.isError == true || result?.isError == true }
+    var isPending: Bool { result == nil && use != nil }
     var media: TranscriptMedia { result?.media ?? TranscriptMedia() }
     var featuredMedia: TranscriptMedia {
         result?.explicitlyFeaturedMedia ?? TranscriptMedia()
