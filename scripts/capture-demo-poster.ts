@@ -7,7 +7,7 @@
  * live app underneath it when it is ready.
  *
  * It is a picture of the real preview, taken at the width the preview lays the
- * app out at (`desktopDemoWidth` in website/ProductDemo.tsx) and the aspect the
+ * app out at (`desktopDemoWidth` in packages/clients/website/ProductDemo.tsx) and the aspect the
  * desktop window has, so the swap lands on the same pixels. Re-run it whenever
  * the demo's fixtures or the app's chrome change:
  *
@@ -144,7 +144,7 @@ try {
       const frame = await t.send("Page.captureScreenshot", { format: "png" });
       const png = join(scratch, `${shot.name}-${theme}.png`);
       writeFileSync(png, Buffer.from(frame.data, "base64"));
-      const out = join(ROOT, "website", `${shot.name}${theme === "dark" ? "-dark" : ""}.webp`);
+      const out = join(ROOT, "packages", "clients", "website", `${shot.name}${theme === "dark" ? "-dark" : ""}.webp`);
       const convert = Bun.spawnSync([
         "python3",
         "-c",

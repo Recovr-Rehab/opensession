@@ -26,8 +26,8 @@
  *   bun scripts/memory-supersede.ts --apply    # write it
  */
 import { readdirSync } from "fs";
-import { loadScope, saveScope, type MemoryEntry } from "../src/agents/slack/memory";
-import { memoryDir } from "../src/agents/slack/memory";
+import { loadScope, saveScope, type MemoryEntry } from "../packages/core/opensession-server/src/agents/slack/memory";
+import { memoryDir } from "../packages/core/opensession-server/src/agents/slack/memory";
 
 /** Verbs that assert the named entry is wrong. */
 const ARCHIVING = /\b(CORRECTION|CORRECTS|SUPERSEDES|SUPERSEDED|REPLACES)\b/;

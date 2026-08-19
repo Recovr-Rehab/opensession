@@ -10,8 +10,8 @@ await buildWebsiteTailwind(root);
 
 const result = await Bun.build({
 	entrypoints: [
-		join(root, "website", "index.html"),
-		join(root, "website", "product-demo.html"),
+		join(root, "packages", "clients", "website", "index.html"),
+		join(root, "packages", "clients", "website", "product-demo.html"),
 	],
 	outdir,
 	minify: true,
@@ -67,7 +67,7 @@ for (const page of ["index", "product-demo"]) {
 // Bun emits for the page itself. A dedicated landscape social card can replace
 // this without changing any metadata URLs.
 copyFileSync(
-	join(root, "os1-mac", "build", "icon-512.png"),
+	join(root, "packages", "clients", "mac", "build", "icon-512.png"),
 	join(outdir, "opensession-social.png"),
 );
 
