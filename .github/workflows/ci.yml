@@ -73,7 +73,7 @@ jobs:
        # These two directories are where every server-side test lives.
       - name: Unit tests (reported, not yet a gate — see comment)
         continue-on-error: true
-        run: bun test src scripts
+        run: bun test packages/core/opensession-server/src scripts
 
       # The snapshot scenarios are exactly the part of that sweep the ordering
       # problem eats: they redirect the sessions dir, transcript store, MCP

@@ -14,7 +14,7 @@
  *   bun scripts/migrate-memory-dir.ts --apply  # move it
  */
 import { existsSync, readdirSync, renameSync, statSync } from "fs";
-import { MEMORY_DIR, legacyMemoryDir } from "../src/agents/slack/memory";
+import { MEMORY_DIR, legacyMemoryDir } from "../packages/core/opensession-server/src/agents/slack/memory";
 
 function describe(dir: string): string {
   try {

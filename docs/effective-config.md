@@ -82,7 +82,7 @@ The endpoint composes the real resolvers rather than restating them:
 
 The one decision that used to live inline in `run-session.ts` — the
 automation / session / feed branch that picks the MCP allowlist, the denials
-and the run user — was extracted to `src/server/session-run-inputs.ts`, which
+and the run user — was extracted to `packages/core/opensession-server/src/server/session-run-inputs.ts`, which
 `runSessionPromptInner` now calls. One decision, two readers, so the dump
 cannot drift from the turn.
 
@@ -90,7 +90,7 @@ The two things this file computes itself are attributions, not decisions:
 `explainMcpServers` is handed `filterMcpServers`' output and only says why each
 server is in or out, and `describeStrippedTools` is handed
 `opencodeRunPolicy`'s disable list and only says which catalog each entry came
-from. Both are pure and tested (`src/server/effective-config.test.ts`).
+from. Both are pure and tested (`packages/core/opensession-server/src/server/effective-config.test.ts`).
 
 ## Calling it from a script
 

@@ -26,7 +26,7 @@ import { localAutomationToken } from "./local-auth";
 
 const IDENTITY_PATH = join(OPENSESSION_HOME, "runner.json");
 const HEARTBEAT_MS = 60_000;
-const RUNNER_HOST_ENTRY = resolve(import.meta.dir, "../../src/runner-host/host.ts");
+const RUNNER_HOST_ENTRY = resolve(import.meta.dir, "../../packages/core/opensession-server/src/runner-host/host.ts");
 const RUNNER_SERVICE_LABEL = "dev.tella.opensession.runner";
 export const RUNNER_TASK_NAME = "OpenSessionRunner";
 

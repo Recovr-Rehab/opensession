@@ -26,7 +26,7 @@
  *   bun scripts/papercuts-prune-machine.ts --apply  # rewrite the day files
  */
 import { copyFileSync, existsSync, readFileSync, readdirSync, writeFileSync } from "fs";
-import { stateDir } from "../src/server/paths";
+import { stateDir } from "../packages/core/opensession-server/src/server/paths";
 
 /** The stable opening of silentDropMessage(). Matching the whole string would
  *  miss the per-kind word in the middle ("automation", "github-review"). */

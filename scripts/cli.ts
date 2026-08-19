@@ -23,7 +23,7 @@ import { ENV_PATH, REPO_ROOT, STAGED_UNIT_PATH } from "./lib/paths";
 import * as service from "./lib/service";
 import { update } from "./lib/update";
 import { bold, dim, fail, green, heading, info, ok, run, runInherit, warn } from "./lib/ui";
-import { INTEGRATIONS, findIntegration } from "../src/server/integrations/registry";
+import { INTEGRATIONS, findIntegration } from "../packages/core/opensession-server/src/server/integrations/registry";
 import { findRecipe, installRecipe, installedKeys, listRecipes, removeRecipe } from "./lib/recipes";
 import { plugins } from "./lib/plugins";
 import { connect, installRunnerService, runnerRun, runnerStatus, runnersList, runnersPair, runnersRemove } from "./lib/connect";
@@ -111,7 +111,7 @@ async function version(): Promise<number> {
 async function start(): Promise<number> {
   if (flags.has("--foreground") || flags.has("-f") || !(await service.isInstalled())) {
     info(dim(`starting in the foreground — ${REPO_ROOT}`));
-    return await runInherit(["bun", "run", "opensession.ts"], REPO_ROOT);
+    return await runInherit(["bun", "run", "packages/core/opensession-server/opensession.ts"], REPO_ROOT);
   }
   return await service.control("start");
 }
