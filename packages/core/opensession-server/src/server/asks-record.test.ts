@@ -1,7 +1,8 @@
-import { describe, expect, test } from "bun:test";
+import { afterEach, describe, expect, test } from "bun:test";
 import { classifyEntry } from "@tellahq/opensession-protocol/notices";
 import type { TranscriptEntry } from "@tellahq/opensession-protocol/session";
-import { askRecordEntryContent } from "./asks";
+import { askRecordEntryContent, recordAskAnswer } from "./asks";
+import { setTranscriptForwarder } from "./transcript-forward";
 
 const QUESTION = {
 	header: "Choice",
@@ -20,6 +21,26 @@ function askEntry(content: string): TranscriptEntry {
 }
 
 describe("answered-ask record", () => {
+	afterEach(() => setTranscriptForwarder(undefined));
+
+	test("persists directly under the Open Session id", () => {
+		const batches: Array<{
+			sessionId: string;
+			lines: Record<string, unknown>[];
+		}> = [];
+		setTranscriptForwarder((sessionId, lines) => {
+			batches.push({ sessionId, lines });
+		});
+
+		recordAskAnswer("os-session", [QUESTION], { "Which option?": "Two" });
+
+		expect(batches).toHaveLength(1);
+		expect(batches[0].sessionId).toBe("os-session");
+		expect(JSON.stringify(batches[0].lines[0])).toContain(
+			"<ask-record>Answered: Two",
+		);
+	});
+
 	test("titles with the pick and bolds it among the options", () => {
 		const content = askRecordEntryContent([QUESTION], {
 			"Which option?": "Two",

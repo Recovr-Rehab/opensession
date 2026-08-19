@@ -20,7 +20,7 @@ import {
 } from "./aws-creds";
 import { askRecordContent } from "@tellahq/opensession-protocol/notices";
 import {
-	appendTranscriptEntries,
+	storeAppendUserLineEarly,
 	transcriptLineAskRecord,
 } from "./transcript-persistence";
 import { resolveTeammate } from "./shared/user-mappings";
@@ -291,11 +291,10 @@ export function recordAskAnswer(
 ): void {
 	if (!answers || !questions.length) return;
 	try {
-		const engineSessionId = findSession(sessionId)?.claudeSessionId;
-		if (!engineSessionId) return;
-		appendTranscriptEntries(engineSessionId, [
+		storeAppendUserLineEarly(
+			sessionId,
 			transcriptLineAskRecord(askRecordEntryContent(questions, answers)),
-		]);
+		);
 	} catch (e) {
 		console.error(`[ask] Failed to record answer for ${sessionId}:`, e);
 	}
