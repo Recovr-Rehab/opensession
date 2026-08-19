@@ -1193,7 +1193,6 @@ final class SessionViewModel {
     private func scheduleReconnect(_ reason: String?) {
         guard !stopped else { return }
         if conversationLoadError == nil { connectionState = .reconnecting(reason) }
-        replySuggestions = []
         // A history page died with the socket; the watch's fresh
         // transcript_init is what unblocks paging again, so don't leave the
         // control spinning on a request nobody will answer.

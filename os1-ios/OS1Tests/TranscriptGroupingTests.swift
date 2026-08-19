@@ -784,9 +784,12 @@ final class ToolPresentationTests: XCTestCase {
           }
         }
         """#.utf8)
+
         let entry = try JSONDecoder().decode(TranscriptEntry.self, from: data)
+
         XCTAssertEqual(entry.presentation?.canonical, "mcp__opensession-portals__start_portal")
         XCTAssertEqual(entry.presentation?.mcpServer, "opensession-portals")
+        XCTAssertEqual(entry.presentation?.detail?.kind, "text")
         XCTAssertEqual(entry.presentation?.detail?.text, "Start the preview")
         XCTAssertEqual(entry.presentation?.lineStats?.additions, 4)
     }
@@ -809,11 +812,13 @@ final class ToolPresentationTests: XCTestCase {
         }
         """#.utf8)
         let entry = try JSONDecoder().decode(TranscriptEntry.self, from: data)
+
         let presentation = ToolPresentation.make(
             toolName: entry.toolName,
             input: entry.toolInput,
             server: entry.presentation
         )
+
         XCTAssertEqual(presentation.serverLabel, "Open Session Portals")
         XCTAssertEqual(presentation.label, "Start portal")
         XCTAssertEqual(presentation.displayName, "Open Session Portals · Start portal")
@@ -835,11 +840,13 @@ final class ToolPresentationTests: XCTestCase {
         }
         """#.utf8)
         let entry = try JSONDecoder().decode(TranscriptEntry.self, from: data)
+
         let presentation = ToolPresentation.make(
             toolName: entry.toolName,
             input: entry.toolInput,
             server: entry.presentation
         )
+
         XCTAssertEqual(presentation.canonical, "Bash")
         XCTAssertEqual(presentation.family, .run)
         XCTAssertEqual(presentation.summary, "bun test")
@@ -863,6 +870,7 @@ final class ToolPresentationTests: XCTestCase {
         }
         """#.utf8)
         let entry = try JSONDecoder().decode(TranscriptEntry.self, from: data)
+
         let blocks = TranscriptGrouping.blocks(
             from: TranscriptGrouping.displayItems(from: [entry]),
             live: false,
@@ -872,6 +880,7 @@ final class ToolPresentationTests: XCTestCase {
               case .tool(let item)? = turn.items.first else {
             return XCTFail("expected the tool call inside a work turn")
         }
+
         XCTAssertEqual(item.presentation.displayName, "PostHog · Query trends")
         XCTAssertEqual(item.presentation.summary, "Weekly active people")
     }
@@ -886,12 +895,14 @@ final class ToolPresentationTests: XCTestCase {
         }
         """#.utf8)
         let entry = try JSONDecoder().decode(TranscriptEntry.self, from: data)
+
         let presentation = ToolPresentation.make(
             toolName: entry.toolName,
             input: entry.toolInput,
             server: entry.presentation,
             worktreeDir: "/wt"
         )
+
         XCTAssertNil(entry.presentation)
         XCTAssertEqual(presentation.canonical, "Read")
         XCTAssertEqual(presentation.summary, "src/App.swift")
@@ -913,11 +924,13 @@ final class ToolPresentationTests: XCTestCase {
         }
         """#.utf8)
         let entry = try JSONDecoder().decode(TranscriptEntry.self, from: data)
+
         let presentation = ToolPresentation.make(
             toolName: entry.toolName,
             input: entry.toolInput,
             server: entry.presentation
         )
+
         XCTAssertEqual(presentation.summary, "reports/summary.html")
         XCTAssertTrue(presentation.summaryIsPath)
     }
@@ -942,12 +955,14 @@ final class ToolPresentationTests: XCTestCase {
         }
         """#.utf8)
         let entry = try JSONDecoder().decode(TranscriptEntry.self, from: data)
+
         let presentation = ToolPresentation.make(
             toolName: entry.toolName,
             input: entry.toolInput,
             server: entry.presentation,
             worktreeDir: "/wt"
         )
+
         XCTAssertEqual(presentation.summary, "Update a.swift  ·  Add b.swift  ·  +2")
         XCTAssertFalse(presentation.summaryIsPath)
     }

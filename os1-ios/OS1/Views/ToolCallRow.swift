@@ -520,7 +520,7 @@ struct ToolDetail: Equatable {
 
         if let result = item.result {
             let text = result.text.trimmingCharacters(in: .whitespacesAndNewlines)
-            let hasMedia = !(result.images ?? []).isEmpty
+            let hasMedia = !result.media.isEmpty
             // "Image read successfully." next to the image it describes is
             // noise; the image is the result.
             let redundant = hasMedia && text == "Image read successfully."

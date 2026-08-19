@@ -87,7 +87,7 @@ struct TranscriptEntry: Identifiable, Decodable, Equatable, Sendable {
     /// Video attachments and tool-result recordings, served through the media
     /// endpoint and streamed by the native player.
     var videos: [String]?
-    /// Media an agent marked as the visual result of its work. A merged-change
+    /// Images an agent marked as the visual result of its work. A merged-change
     /// share uses the newest local screenshot when no walkthrough still exists.
     var featuredMedia: [String]?
     /// Set when this entry is an operational notice rather than a message —

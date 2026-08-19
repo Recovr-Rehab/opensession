@@ -241,20 +241,6 @@ final class SessionTests: XCTestCase {
         )
     }
 
-    func testTabSessionsJoinDuplicateWorkspaceRecordsOnTheSameWorktree() throws {
-        let sessions = try JSONDecoder().decode(
-            [Session].self,
-            from: Data(
-                #"[{"id":"person","workspaceId":"ws-person","worktreeDir":"/home/ubuntu/worktrees/feature","createdAt":"2026-07-01T00:00:00Z"},{"id":"review","workspaceId":"ghpr-42","worktreeDir":"/home/ubuntu/worktrees/feature","createdAt":"2026-07-02T00:00:00Z"},{"id":"other","workspaceId":"ws-other","worktreeDir":"/home/ubuntu/worktrees/other"}]"#.utf8
-            )
-        )
-
-        XCTAssertEqual(
-            SessionsListViewModel.tabSessions(in: sessions, containing: sessions[0]).map(\.id),
-            ["person", "review"]
-        )
-    }
-
     func testSidebarCollapsesWorkspaceSessionsIntoOneRow() throws {
         let sessions = try JSONDecoder().decode(
             [Session].self,

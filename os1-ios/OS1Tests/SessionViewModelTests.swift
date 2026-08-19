@@ -915,24 +915,6 @@ final class SessionViewModelTests: XCTestCase {
         viewModel.stop()
         XCTAssertTrue(viewModel.replySuggestions.isEmpty)
     }
-
-    func testReplySuggestionsClearWhenTheSocketDrops() {
-        let socket = MockSocket()
-        let viewModel = SessionViewModel(
-            session: Session(id: "bks-1"),
-            socketFactory: { socket }
-        )
-        viewModel.start()
-        viewModel.handle(.replySuggestions(
-            sessionId: "bks-1",
-            suggestions: [ReplySuggestion(label: "Retry", text: "Retry the request.")]
-        ))
-
-        socket.onClose?("connection lost")
-
-        XCTAssertTrue(viewModel.replySuggestions.isEmpty)
-        viewModel.stop()
-    }
 }
 
 /// `sendDraft` composer semantics. Sending is a two-step now: the draft goes

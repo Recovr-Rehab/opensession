@@ -13,8 +13,8 @@ struct TurnBlockView: View {
     let sessionId: String
     var worktreeDir: String?
     let state: TurnFoldState
-    /// The outer state owns this turn's steps. `activity.tools` owns the
-    /// grouped tool runs nested inside it.
+    /// The two transcript preferences. The outer state owns this turn's steps;
+    /// `activity.tools` owns the grouped tool runs nested inside it.
     var activity = TurnActivity.standard
     /// Resolves each nested tool row's own detail state, which must survive
     /// the row scrolling out of the lazy stack.
@@ -393,6 +393,7 @@ struct TurnStepsView: View {
                                 state: expansionState("run-\(calls[0].id)", expandsToolRuns),
                                 isLive: isLive,
                                 isCompact: kind == .compact,
+                                expandsToolRuns: expandsToolRuns,
                                 expansionState: expansionState
                             )
                         }
@@ -473,6 +474,7 @@ private struct ToolRunView: View {
     let state: TurnFoldState
     let isLive: Bool
     let isCompact: Bool
+    let expandsToolRuns: Bool
     let expansionState: (String, Bool) -> TurnFoldState
 
     var body: some View {
@@ -533,7 +535,7 @@ private struct ToolRunView: View {
                                 item: item,
                                 sessionId: sessionId,
                                 worktreeDir: worktreeDir,
-                                state: expansionState(item.id, item.hasFeaturedMedia)
+                                state: expansionState(item.id, false)
                             )
                         }
                     }
@@ -546,7 +548,7 @@ private struct ToolRunView: View {
                 item: item,
                 sessionId: sessionId,
                 worktreeDir: worktreeDir,
-                state: expansionState(item.id, item.hasFeaturedMedia)
+                state: expansionState(item.id, expandsToolRuns || item.hasFeaturedMedia)
             )
         }
     }
@@ -566,15 +568,14 @@ private struct ToolRunView: View {
     }
 
     private var failureCount: Int { items.filter(\.isError).count }
-    private var mediaCount: Int { items.reduce(0) { $0 + $1.media.count } }
-    private var mediaLabel: String {
-        var media = TranscriptMedia()
-        for item in items {
-            media.images.append(contentsOf: item.media.images)
-            media.videos.append(contentsOf: item.media.videos)
+    private var media: TranscriptMedia {
+        items.reduce(into: TranscriptMedia()) {
+            $0.images.append(contentsOf: $1.media.images)
+            $0.videos.append(contentsOf: $1.media.videos)
         }
-        return media.label
     }
+    private var mediaCount: Int { media.count }
+    private var mediaLabel: String { media.label }
     private var accessibilityLabel: String {
         var parts = ["\(items.count) grouped steps", label]
         if failureCount > 0 { parts.append("\(failureCount) failed") }
@@ -621,7 +622,7 @@ private struct EditRunView: View {
                             item: item,
                             sessionId: sessionId,
                             worktreeDir: worktreeDir,
-                            state: expansionState(item.id, item.hasFeaturedMedia)
+                            state: expansionState(item.id, false)
                         )
                     }
                 }
