@@ -331,53 +331,66 @@ export function GithubAuthCard({
 
 	return (
 		<>
-			<div className="grid px-4">
-				<SettingCard>
-					<div className="flex flex-wrap items-start gap-3 px-5 py-4">
-					<IconTile name="github" size={40} />
-					<div className="min-w-[14rem] flex-1">
-						<div className="flex flex-wrap items-center gap-2">
+			<div className="grid px-4 phone:px-0">
+				<SettingCard className={onboarding ? "border-transparent bg-transparent" : undefined}>
+					<div className="grid grid-cols-[auto_minmax(0,1fr)_auto] items-start gap-x-3 gap-y-1 px-5 py-4 phone:grid-cols-[auto_minmax(0,1fr)] phone:px-3 phone:py-2">
+						<IconTile name="github" size={40} />
+						<div className="col-start-2 flex min-w-0 flex-wrap items-center gap-2">
 							<div className="text-item-title font-semibold text-fg">
 								{onboarding ? "GitHub" : "GitHub sign-in"}
 							</div>
 							<StateChip tone={state.tone} label={state.label} />
 						</div>
-						<p className="m-0 mt-1 text-supporting leading-relaxed text-dim">
-							{onboarding
-								? "Repositories, pull requests, organization members, and teammate sign-in."
-								: "Interactive sessions open PRs as their connected owner instead of the bot."}
-						</p>
-						{/* The Device Flow switch lives on GitHub, so nothing here can
-						    report whether it is on. It is also the only way in now, so
-						    the requirement is stated wherever the connection is set up
-						    rather than left to the moment a teammate is locked out. */}
-						{active && (
-							<div className="mt-2 text-supporting text-dim">
-								{"Signing in is a device code, so the GitHub app needs Device Flow enabled." +
-									(secretConfigured
-										? ""
-										: " Add a client secret so teammates' tokens renew.")}
-							</div>
-						)}
-					</div>
-					<div className="ml-auto flex min-h-10 shrink-0 items-center gap-2">
-						{(github.clientIdConfigured || github.userPrAuth) && (
-							<Switch
-								checked={github.userPrAuth}
-								onCheckedChange={(next) => void handleToggle(next)}
-								disabled={saving || !github.clientIdConfigured}
-								aria-label={`${github.userPrAuth ? "Disable" : "Enable"} GitHub sign-in`}
-							/>
-						)}
-						<Button
-							size="sm"
-							className="max-sm:min-h-10"
-							variant={github.clientIdConfigured ? "default" : "primary"}
-							onClick={() => setSetupOpen(true)}
-						>
-							{github.clientIdConfigured ? "Configure" : "Set up"}
-						</Button>
-					</div>
+						<div className="col-start-2 row-start-2 min-w-0 phone:col-span-2 phone:col-start-1 phone:mt-3">
+							<p className="m-0 text-supporting leading-relaxed text-dim">
+								{onboarding
+									? "Repositories, members, pull requests, and sign-in."
+									: "Interactive sessions open PRs as their connected owner instead of the bot."}
+							</p>
+							{/* The Device Flow switch lives on GitHub, so nothing here can
+							    report whether it is on. It is also the only way in now, so
+							    the requirement is stated wherever the connection is set up
+							    rather than left to the moment a teammate is locked out. */}
+							{active && (
+								<div className="mt-1.5 text-meta leading-relaxed text-faint">
+									{"Device Flow must be enabled in your GitHub App." +
+										(secretConfigured
+											? ""
+											: " Add a client secret to keep teammates signed in.")}
+								</div>
+							)}
+						</div>
+						<div className="col-start-3 row-span-2 row-start-1 ml-4 flex min-h-10 shrink-0 items-center gap-2 phone:col-span-2 phone:col-start-1 phone:row-span-1 phone:row-start-3 phone:mt-4 phone:ml-0 phone:flex-col phone:items-stretch">
+							{(github.clientIdConfigured || github.userPrAuth) && (
+								<>
+									<div className="hidden min-h-11 items-center justify-between text-label font-medium text-dim phone:flex">
+										<span>GitHub sign-in</span>
+										<Switch
+											checked={github.userPrAuth}
+											onCheckedChange={(next) => void handleToggle(next)}
+											disabled={saving || !github.clientIdConfigured}
+											aria-label={`${github.userPrAuth ? "Disable" : "Enable"} GitHub sign-in`}
+										/>
+									</div>
+									<div className="phone:hidden">
+										<Switch
+											checked={github.userPrAuth}
+											onCheckedChange={(next) => void handleToggle(next)}
+											disabled={saving || !github.clientIdConfigured}
+											aria-label={`${github.userPrAuth ? "Disable" : "Enable"} GitHub sign-in`}
+										/>
+									</div>
+								</>
+							)}
+							<Button
+								size="sm"
+								className="phone:min-h-11 phone:w-full phone:justify-center"
+								variant={github.clientIdConfigured ? "default" : "primary"}
+								onClick={() => setSetupOpen(true)}
+							>
+								{github.clientIdConfigured ? "Configure" : "Set up"}
+							</Button>
+						</div>
 					</div>
 				</SettingCard>
 			</div>

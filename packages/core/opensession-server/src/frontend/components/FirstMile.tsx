@@ -38,8 +38,7 @@ const STEPS: FirstMileStep[] = [
 		id: "github",
 		label: "GitHub",
 		title: "Connect GitHub",
-		description:
-			"Connect your GitHub organization for repositories, pull requests, and teammate sign-in. You can add other tools later.",
+		description: "Connect your organization, repositories, and team.",
 	},
 	{
 		id: "organization",
