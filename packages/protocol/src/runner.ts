@@ -106,6 +106,10 @@ export interface RunHostSpec {
   accountStrict?: boolean;
   /** Allow accounts spending usage-credits past their subscription limits. */
   usageCredits?: boolean;
+  /** Reviewer(s) requested on PRs this run opens (GitHub login, org/team
+   *  slug, or comma-separated list): an automation-owned session keeps its
+   *  automation's PR-review policy when its turn moves into a host. */
+  prReviewer?: string;
   journalKind?: string;
   /** Durable restart-recovery lineage (see server/run-journal.ts). */
   firstJournaledAt?: string;

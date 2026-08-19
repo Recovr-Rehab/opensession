@@ -138,7 +138,7 @@ import {
 	withUploadsNote,
 } from "./uploads";
 import { buildSessionNote } from "./session-repos";
-import { interactiveMcpServers } from "./interactive-mcp";
+import { automationSessionMcp, interactiveMcpServers } from "./interactive-mcp";
 import { makeAskHandler, settleRestoredAskAfterRecovery } from "./asks";
 
 // The runner writes its active-run journal before it can call an engine. Once
@@ -2050,13 +2050,14 @@ async function runSessionPromptInner(
 	// proxied back over the host protocol, so the server stays the store's
 	// only writer. Kill switch: OPENSESSION_PI_DETACH=0 (the generic
 	// disable-run-hosts file and runAgentHosted's in-process fallback also
-	// apply). Automation-owned sessions keep the in-process path: their runs
-	// carry a scoped policy surface this launcher does not thread.
+	// apply). Automation-owned sessions ride it too, with the automation's
+	// scoping intact: proxy names come from the same fail-closed automation
+	// set the run-rpc fallback builder serves, the repos note and MCP grant
+	// identity are withheld, and the automation's prReviewer rides the spec.
 	const hostedRun =
 		!runnerRun &&
 		!sandboxRun &&
 		routedEngine === "pi" &&
-		!isAutomationSession &&
 		process.env.OPENSESSION_PI_DETACH !== "0"
 			? runAgentHosted({
 					osSessionId: session.id,
@@ -2066,15 +2067,23 @@ async function runSessionPromptInner(
 					sessionId: engineSessionId || undefined,
 					cwd,
 					mode: session.mode,
-					mcpGrantUser: session.startedBy || undefined,
+					// Automation runs pass no MCP grant identity: a human's OAuth
+					// grants must not ride an automation-owned session's turns.
+					mcpGrantUser: isAutomationSession
+						? undefined
+						: session.startedBy || undefined,
 					model: session.model,
 					images,
 					mcpServers: mcpServers ?? "all",
-					proxyMcpServers: [
-						...Object.keys(interactiveMcpServers(user, sessionId)),
-						...(session.goalId ? ["opensession-goal-self"] : []),
-					],
-					reposNote: await buildSessionNote(session, user),
+					proxyMcpServers: isAutomationSession
+						? Object.keys(automationSessionMcp(session, sessionId))
+						: [
+								...Object.keys(interactiveMcpServers(user, sessionId)),
+								...(session.goalId ? ["opensession-goal-self"] : []),
+							],
+					reposNote: isAutomationSession
+						? undefined
+						: await buildSessionNote(session, user),
 					deniedTools,
 					confirmTools: STRIPE_CONFIRM_TOOLS,
 					aws: true,
@@ -2084,6 +2093,14 @@ async function runSessionPromptInner(
 					effort: session.effort,
 					fastMode: session.fastMode,
 					accountId: session.accountId,
+					// A human steering an automation-owned session still opens PRs
+					// under that automation's policy (parity with the in-process
+					// call below).
+					prReviewer:
+						isAutomationSession && session.automationId
+							? getAutomation(session.automationId)?.prReviewer
+							: undefined,
+					trustProfile: isAutomationSession ? "automation" : "interactive",
 					journalKind: "prompt",
 					onAskUser: makeAskHandler(sessionId),
 					onSteerFailed: (text) => {
@@ -2091,12 +2108,14 @@ async function runSessionPromptInner(
 						watchExternalRunAndDrain(session.id);
 					},
 					fallbackInProcessMcp: () =>
-						session.goalId
-							? {
-									...interactiveMcpServers(user, sessionId),
-									"opensession-goal-self": createGoalSelfMcpServer(session.goalId),
-								}
-							: interactiveMcpServers(user, sessionId),
+						isAutomationSession
+							? automationSessionMcp(session, sessionId)
+							: session.goalId
+								? {
+										...interactiveMcpServers(user, sessionId),
+										"opensession-goal-self": createGoalSelfMcpServer(session.goalId),
+									}
+								: interactiveMcpServers(user, sessionId),
 				})
 			: null;
 

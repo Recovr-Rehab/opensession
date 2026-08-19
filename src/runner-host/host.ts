@@ -489,6 +489,7 @@ try {
     accountId: spec.accountId,
     accountStrict: spec.accountStrict,
     usageCredits: spec.usageCredits,
+    prReviewer: spec.prReviewer,
     journal: {
       osSessionId: spec.osSessionId,
       kind: spec.journalKind || "prompt",

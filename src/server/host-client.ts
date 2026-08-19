@@ -97,7 +97,9 @@ export interface HostedRunOpts {
   forkSession?: boolean;
   resumeSessionAt?: string;
   mcpServers?: McpScope;
-  /** opensession-* servers to expose through the RPC proxy (interactive runs only). */
+  /** opensession-* servers to expose through the RPC proxy. Names must
+   *  resolve through the run-rpc builder: the interactive set, or the
+   *  fail-closed automation-bar set for automation-owned sessions. */
   proxyMcpServers?: string[];
   reposNote?: string;
   deniedTools?: Record<string, string>;
@@ -113,6 +115,11 @@ export interface HostedRunOpts {
   accountId?: string;
   accountStrict?: boolean;
   usageCredits?: boolean;
+  /** Reviewer(s) for PRs the run opens (an automation session's policy). */
+  prReviewer?: string;
+  /** Trust boundary stamped on the spec + journal record: "automation" for
+   *  automation-owned sessions, defaults to interactive. */
+  trustProfile?: "interactive" | "automation";
   journalKind?: string;
   firstJournaledAt?: string;
   resumeAttempts?: number;
@@ -168,6 +175,7 @@ export async function* runAgentHosted(opts: HostedRunOpts): AsyncGenerator<Strea
     accountId: opts.accountId,
     accountStrict: opts.accountStrict,
     usageCredits: opts.usageCredits,
+    prReviewer: opts.prReviewer,
     journal: {
       osSessionId: opts.osSessionId,
       kind: opts.journalKind || "prompt",
@@ -243,6 +251,8 @@ function hostedRunRecord(spec: RunHostSpec): ActiveRunRecord {
     accountId: spec.accountId,
     accountStrict: spec.accountStrict,
     usageCredits: spec.usageCredits,
+    prReviewer: spec.prReviewer,
+    trustProfile: spec.trustProfile,
     fallbackModel: spec.fallbackModel,
     kind: spec.journalKind || "prompt",
     firstJournaledAt: spec.firstJournaledAt,
@@ -291,6 +301,8 @@ async function spawnHostRun(
     accountId: opts.accountId,
     accountStrict: opts.accountStrict,
     usageCredits: opts.usageCredits,
+    prReviewer: opts.prReviewer,
+    trustProfile: opts.trustProfile,
     journalKind: opts.journalKind,
     firstJournaledAt: opts.firstJournaledAt || new Date().toISOString(),
     resumeAttempts: opts.resumeAttempts,
