@@ -41,6 +41,12 @@ are ambiguous between them:
 
 - **Web UI** — `packages/core/opensession-server/src/frontend/` (React, served by the Bun server; also what the
   iOS PWA and the Electron shell display).
+- **Phone web (PWA)** — the same bundle as the Web UI, at phone width, usually
+  installed to a home screen. It has no directory of its own, and that is
+  exactly why it gets skipped: a feature is in this client whether or not
+  anyone laid it out for 390px, so nothing looks missing. The rules for
+  building both widths at once are in
+  `packages/core/opensession-server/src/frontend/AGENTS.md`.
 - **Electron desktop shell** — `packages/clients/mac/` (bundle id `dev.tella.os1.shell`;
   wraps the web UI).
 - **Native Swift app** — `packages/clients/ios/` (one SwiftUI codebase, iOS + macOS targets,
@@ -59,9 +65,19 @@ bug report, "also fix X" means fix X in the native app). If it's genuinely
 unclear which app a request targets, ask first instead of guessing; a fix
 landed in the wrong app wastes a round-trip and can mask the real bug.
 
-Cross-client check — do this for every new feature or user-visible update, not
-only when the request names a client. Before calling the work done, ask what
-the change means for the **native app** (`packages/clients/ios/`) in particular: it is the
+Cross-client check. Do this for every new feature or user-visible update, not
+only when the request names a client.
+
+Start with the width, because it is the cheapest one to get right and the
+hardest to notice when wrong. The web UI is one bundle serving a desktop
+window and a phone, so a user-visible web change reaches phones whether or not
+anyone laid it out for 390px: there is no missing file, no empty branch, no
+build that fails, just a feature that is unusable on the client many people
+read the app on. Build both widths in the same change and look at the phone
+one before calling it done (`packages/core/opensession-server/src/frontend/AGENTS.md`,
+"Both widths, one change").
+
+Then ask what the change means for the **native app** (`packages/clients/ios/`): it is the
 client most often left behind, because it re-implements what the web UI gets
 for free (transcript rendering, attribution, presence, prefs, image URL
 resolution) rather than sharing code. Concretely:
@@ -79,7 +95,8 @@ resolution) rather than sharing code. Concretely:
 
 If the native app needs a matching change, either make it in the same session
 or say explicitly, in your final report, what is still web-only and why. "The
-web works" is not done for a feature that spans clients. Server work that no
+web works" is not done for a feature that spans clients, and "it works in my
+window" is not done for one that spans widths. Server work that no
 client surfaces (internal refactors, automation plumbing) needs no such note.
 
 ## Server architecture map

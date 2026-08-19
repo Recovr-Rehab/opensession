@@ -513,7 +513,11 @@ export function buildRunInstructions(input: {
       "resolution rather than enlarging a low-resolution image, and use the repository's own " +
       "capture or preview command when it has one (its AGENTS.md names it). A native or " +
       "mobile app change is exactly the one that gets skipped because capturing it looks " +
-      "expensive; look for that command before deciding it is too much work. Either way " +
+      "expensive; look for that command before deciding it is too much work. When the " +
+      "surface is a web UI that serves both a desktop window and a phone, capture BOTH " +
+      "widths (a desktop size, and a phone one around 390x844) and look at each before you " +
+      "publish: the same bundle already serves the phone, so a layout nobody built for it " +
+      "ships broken without any file looking incomplete. Either way " +
       "include a 2-6 sentence markdown writeup " +
         "whose first paragraph says what " +
         "changed and why it matters. That proof makes a deliberate Share to Slack action " +

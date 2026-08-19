@@ -1,5 +1,7 @@
 import { useEffect, useRef } from "react";
 
+import { PHONE_QUERY } from "../lib/breakpoints";
+
 /**
  * iOS-style edge-swipe-to-go-back for the mobile page stack, plus a permanent
  * guard against the browser's own history-navigation gesture. On phones the
@@ -54,7 +56,6 @@ interface Opts {
   priority?: number;
 }
 
-const MOBILE = "(max-width: 720px)";
 const EDGE = 32; // px from the left that may begin a back drag
 const SLOP = 8; // px of movement before committing to an axis
 const SNAP_MS = 260; // matches the CSS page transition
@@ -203,7 +204,7 @@ function settle(toBack: boolean) {
 }
 
 const mq =
-  typeof window !== "undefined" ? window.matchMedia(MOBILE) : null;
+  typeof window !== "undefined" ? window.matchMedia(PHONE_QUERY) : null;
 
 function onStart(e: TouchEvent) {
   if (!mq?.matches || e.touches.length !== 1) return;
