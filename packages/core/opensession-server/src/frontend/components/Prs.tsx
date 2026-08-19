@@ -19,7 +19,6 @@ import { usePeople } from "../lib/people";
 import { Menu } from "../ui/menu";
 import { Tooltip } from "../ui/tooltip";
 import { Input } from "../ui/input";
-import { PageHeader, PageTitle } from "../ui/page-header";
 import { EmptyState } from "../ui/state";
 import {
   PR_GROUP_LABEL,
@@ -149,7 +148,7 @@ function OverviewLine({
       // The clauses wrap rather than truncate: a narrow window should cost the
       // line a second row, not hide the trend behind an ellipsis that gives no
       // hint of what it swallowed.
-      className="focus-ring group -mx-1 mt-1 flex max-w-full cursor-pointer flex-wrap items-center gap-x-1.5 gap-y-0.5 rounded-sm px-1 text-left text-supporting tabular-nums text-dim transition-colors hover:text-fg"
+      className="focus-ring group -mx-1 flex max-w-full cursor-pointer flex-wrap items-center gap-x-1.5 gap-y-0.5 rounded-sm px-1 text-left text-supporting tabular-nums text-dim transition-colors hover:text-fg"
     >
       <span className="flex items-center gap-2">
         <span
@@ -529,19 +528,22 @@ export function Prs({
     <div data-page-scroll className="min-h-0 w-full flex-1 overflow-y-auto bg-surface">
       {topbarActionsEl ? createPortal(actions, topbarActionsEl) : null}
       <div className="mx-auto w-full max-w-[920px] px-6 pb-15 pt-7 max-[560px]:px-4 max-[560px]:pb-12 max-[560px]:pt-[18px]">
-        <PageHeader>
-          {/* `flex-1` even as an only child: the day's line wraps, and a
-              wrapping flex box asked for its content size takes the width of
-              one clause rather than of the row. */}
-          <div className="min-w-0 flex-1">
-            <PageTitle>Pull requests</PageTitle>
-            <OverviewLine
-              running={running}
-              stats={stats}
-              onOpenAnalytics={onOpenAnalytics}
-            />
-          </div>
-        </PageHeader>
+        {/* The page's name is the top bar's now. With no `PageTitle` under it
+            the large-title handoff never has a heading to defer to, so the bar
+            holds "Pull requests" in its left corner for good rather than
+            fading it in on scroll (hooks/useLargeTitle.ts). That buys the body
+            its first screen back: the day's numbers take a row of their own,
+            and the list starts on Open instead of a third row of chrome.
+
+            `min-w-0` because the line wraps, and a flex child asked for its
+            content size takes the width of one clause rather than of the row. */}
+        <div className="mb-[18px] flex min-w-0 max-[560px]:mb-3.5">
+          <OverviewLine
+            running={running}
+            stats={stats}
+            onOpenAnalytics={onOpenAnalytics}
+          />
+        </div>
         {sections.length === 0 ? (
           <EmptyState
             title={
