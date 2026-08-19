@@ -67,7 +67,7 @@ function OrderSection<T extends string>({
 		<section aria-labelledby={`sidebar-order-${label.toLowerCase()}`}>
 			<h3
 				id={`sidebar-order-${label.toLowerCase()}`}
-				className="m-0 mb-2 px-3 text-section-title font-semibold text-fg"
+				className="m-0 mb-2 px-3 text-label font-semibold text-fg"
 			>
 				{label}
 			</h3>
