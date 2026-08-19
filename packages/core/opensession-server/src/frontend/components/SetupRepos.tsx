@@ -129,9 +129,6 @@ export function ReposSection({
 									<SettingRowDescription className="truncate font-mono text-meta">
 										{r.path}
 									</SettingRowDescription>
-									<SettingRowDescription>
-										{lifecycle.description}
-									</SettingRowDescription>
 								</SettingRowText>
 								<StateChip tone={lifecycle.tone} label={lifecycle.label} />
 							</SettingRow>
