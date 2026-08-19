@@ -229,15 +229,18 @@ function ProfileCard({
 						image={profile.image}
 						size={80}
 					/>
-					<span
-						className="absolute -bottom-0.5 -right-0.5 grid size-6 place-items-center rounded-[999px] border border-line bg-panel text-dim shadow-sm"
-						aria-hidden
-					>
-						{busy === "picture" ? (
-							<Spinner size="sm" />
-						) : (
-							<IconPencil size={13} dense />
-						)}
+					{/* Centered on the picture, and hard white rather than a themed
+					    surface: it floats on whatever photo a person uploaded, so it
+					    has to hold its own contrast in both themes instead of
+					    following the page. Same reason its ink is hard black. */}
+					<span className="absolute inset-0 grid place-items-center" aria-hidden>
+						<span className="grid size-8 place-items-center rounded-full bg-white text-black shadow-sm">
+							{busy === "picture" ? (
+								<Spinner size="sm" />
+							) : (
+								<IconPencil size={16} dense />
+							)}
+						</span>
 					</span>
 				</button>
 				{/* Your name and nothing under it. The GitHub login is already on
@@ -285,7 +288,7 @@ function ProfileCard({
 								onClick={() => fileRef.current?.click()}
 								aria-label={pictureAction}
 								title={pictureAction}
-								className="focus-ring absolute -bottom-0.5 -right-0.5 grid size-6 place-items-center rounded-[999px] border border-line bg-panel text-dim shadow-sm transition-colors hover:text-fg disabled:pointer-events-none"
+								className="focus-ring absolute -bottom-0.5 -right-0.5 grid size-6 place-items-center rounded-full border border-line bg-panel text-dim shadow-sm transition-colors hover:text-fg disabled:pointer-events-none"
 							>
 								{busy === "picture" ? (
 									<Spinner size="sm" />
@@ -300,7 +303,7 @@ function ProfileCard({
 									onClick={() => void removePicture()}
 									aria-label="Remove picture"
 									title="Remove picture"
-									className="focus-ring absolute -right-0.5 -top-0.5 grid size-6 place-items-center rounded-[999px] border border-line bg-panel text-dim shadow-sm transition-colors hover:text-red disabled:pointer-events-none"
+									className="focus-ring absolute -right-0.5 -top-0.5 grid size-6 place-items-center rounded-full border border-line bg-panel text-dim shadow-sm transition-colors hover:text-red disabled:pointer-events-none"
 								>
 									<IconTrash size={13} dense />
 								</button>
