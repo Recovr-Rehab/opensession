@@ -14,11 +14,20 @@ import {
 import { AGENT_PERSON_KEY } from "../../lib/automation-audience";
 import { useIsPhone } from "../../hooks/useIsPhone";
 import { Menu } from "../../ui/menu";
+import {
+	SETTING_GLYPH,
+	SETTING_ROW,
+	SETTING_ROW_PRESSABLE,
+} from "../../lib/setting-row-classes";
+import {
+	type SettingOption,
+	ValueOptions,
+	ValueRow,
+} from "../../ui/setting-row";
 import { SwitchIndicator } from "../../ui/switch";
 import { cn } from "../../ui/cn";
 import { RepoTile, repoLabel } from "../RepoTile";
 import {
-	IconChevronDown,
 	IconChevronRight,
 	IconRobot,
 	IconSliders,
@@ -32,12 +41,6 @@ import { createPortal } from "react-dom";
 // controls for the session list: how it is grouped, which repo and person it
 // is scoped to, what it hides, how it is sorted, and how tight its rows are.
 // Rendered in a portal so it can overflow the narrow sidebar.
-
-interface SelectOption {
-	value: string;
-	label: string;
-	icon?: React.ReactNode;
-}
 
 /** Full-screen transparent catcher that closes the popover on outside click.
  *  The row menus portal above it (Base UI positions them at z-10001), so a
@@ -55,104 +58,6 @@ const FILTER_POPOVER =
 	"fixed z-[301] flex flex-col gap-0.5 rounded-popup bg-popup-glass [backdrop-filter:var(--popup-blur)] [--smooth-ring-color:var(--popup-ring)] " +
 	"p-3 smooth-shadow-ring-md animate-[hovercard-in_var(--dur-micro)_var(--ease)]";
 
-/** One control per row, and the row IS the control: the setting's name on the
- *  left, its current value and a chevron on the right.
- *
- *  These wear the popup's vocabulary (a menu row's corner and hover wash), not
- *  the field's. A bordered field per row put seven of the strong hairline on a
- *  290px panel whose whole job is to be quiet, and a 7px box inside a 16px
- *  panel corner reads square; boxes sized to their own content also left-ragged
- *  the column. Taking the frames away leaves the values themselves as the only
- *  thing to read, and the chevrons land on one x.
- *
- *  The phone step is the row's own, not the panel's: 36px is a comfortable
- *  pointer row and a tight thumb one, and the whole row is the target now, so
- *  the padding is the only thing standing between it and 44. */
-const FILTER_ROW =
-	"flex w-full cursor-pointer select-none items-center gap-3 rounded-md px-2 py-2 phone:py-3 text-left text-item-title hover:bg-hover data-[popup-open]:bg-hover";
-
-/** The leading glyph in a row and in its menu: one 16px box either way, so a
- *  list where only some options carry one keeps its labels on a single x. */
-const GLYPH_SLOT = "flex size-4 shrink-0 items-center justify-center text-dim";
-
-/** The options themselves. Shared, because the same question is asked from
- *  two places now: a row on the panel, and a row inside the Advanced menu. */
-function ValueOptions({
-	value,
-	options,
-	onSelect,
-}: {
-	value: string;
-	options: SelectOption[];
-	onSelect: (value: string) => void;
-}) {
-	const glyphs = options.some((option) => option.icon);
-	return (
-		<Menu.RadioGroup
-			value={value}
-			onValueChange={(next) => onSelect(String(next))}
-		>
-			{options.map((option) => (
-				// `closeOnClick`, because this list is a value picker: Base UI
-				// leaves a radio item's menu open by default, which is right
-				// for a menu you keep toggling things in and wrong for one
-				// answering a single question.
-				<Menu.RadioItem
-					key={option.value}
-					value={option.value}
-					closeOnClick
-					className="justify-between gap-3"
-				>
-					<span className="flex min-w-0 items-center gap-2">
-						{glyphs && <span className={GLYPH_SLOT}>{option.icon}</span>}
-						<span className="min-w-0 truncate">{option.label}</span>
-					</span>
-					<Menu.Check on={option.value === value} />
-				</Menu.RadioItem>
-			))}
-		</Menu.RadioGroup>
-	);
-}
-
-function FilterRow({
-	label,
-	value,
-	options,
-	onSelect,
-	footer,
-}: {
-	label: string;
-	value: string;
-	options: SelectOption[];
-	onSelect: (value: string) => void;
-	/** Rows under the options, below a rule: a setting about the things the
-	 *  options name, rather than another one of them to pick. */
-	footer?: React.ReactNode;
-}) {
-	const current = options.find((option) => option.value === value);
-	return (
-		<Menu.Root>
-			<Menu.Trigger className={FILTER_ROW}>
-				<span className="shrink-0 text-dim">{label}</span>
-				<span className="ml-auto flex min-w-0 items-center gap-2 text-fg">
-					{current?.icon && <span className={GLYPH_SLOT}>{current.icon}</span>}
-					<span className="truncate">{current?.label ?? value}</span>
-					<IconChevronDown size={16} className="-mr-0.5 shrink-0 text-faint" />
-				</span>
-			</Menu.Trigger>
-			<Menu.Popup align="end" sideOffset={6}>
-				<ValueOptions value={value} options={options} onSelect={onSelect} />
-				{footer && (
-					<>
-						<Menu.Separator />
-						{footer}
-					</>
-				)}
-			</Menu.Popup>
-		</Menu.Root>
-	);
-}
-
 /** The same control as a row inside the Advanced menu: label, current value,
  *  and its options one level in. Reads as a menu row rather than a panel row,
  *  because that is where it now lives. */
@@ -164,7 +69,7 @@ function FilterSubmenu({
 }: {
 	label: string;
 	value: string;
-	options: SelectOption[];
+	options: SettingOption[];
 	onSelect: (value: string) => void;
 }) {
 	const current = options.find((option) => option.value === value);
@@ -173,7 +78,7 @@ function FilterSubmenu({
 			<Menu.SubmenuTrigger className="justify-between gap-3">
 				<span className="truncate">{label}</span>
 				<span className="flex flex-none items-center gap-2 text-dim">
-					{current?.icon && <span className={GLYPH_SLOT}>{current.icon}</span>}
+					{current?.icon && <span className={SETTING_GLYPH}>{current.icon}</span>}
 					<span className="truncate">{current?.label ?? value}</span>
 					<IconChevronRight className="shrink-0 text-faint" size={17} />
 				</span>
@@ -223,7 +128,7 @@ export function FilterPopover({
 	const left = Math.max(8, Math.min(r.left, window.innerWidth - width - 8));
 	const top = r.bottom + 6;
 
-	const repoOptions: SelectOption[] = [
+	const repoOptions: SettingOption[] = [
 		{ value: "all", label: "All repos" },
 		...repos.map((name) => ({
 			value: name,
@@ -249,7 +154,7 @@ export function FilterPopover({
 		) : (
 			personAvatar(label)
 		);
-	const personOptions: SelectOption[] = [
+	const personOptions: SettingOption[] = [
 		{ value: "me", label: `${currentUser} (you)`, icon: personAvatar(currentUser) },
 		...people
 			.filter(({ key }) => key !== meKey)
@@ -283,7 +188,7 @@ export function FilterPopover({
 				    two of which nobody needed: a list with no headings at all, and
 				    the status lanes nested under every project, which split the one
 				    "Needs input" heading status is for into one per project. */}
-				<FilterRow
+				<ValueRow
 					label="Group by"
 					value={filter.groupBy}
 					options={[
@@ -303,7 +208,7 @@ export function FilterPopover({
 				    about, and in Advanced with the other things that decide what
 				    the list holds. Whichever you open, it reads and writes the
 				    same setting. */}
-				<FilterRow
+				<ValueRow
 					label="Repo"
 					value={filter.repo}
 					options={repoOptions}
@@ -323,7 +228,7 @@ export function FilterPopover({
 						</Menu.CheckboxItem>
 					}
 				/>
-				<FilterRow
+				<ValueRow
 					label="Person"
 					value={filter.person}
 					options={personOptions}
@@ -340,7 +245,7 @@ export function FilterPopover({
 				    the list reads rather than what is in it, so neither is part
 				    of that count. */}
 				<Menu.Root>
-					<Menu.Trigger className={cn(FILTER_ROW, "mt-1")}>
+					<Menu.Trigger className={cn(SETTING_ROW, SETTING_ROW_PRESSABLE, "mt-1")}>
 						<span className="shrink-0 text-dim">Advanced</span>
 						<span className="ml-auto flex min-w-0 items-center gap-2 text-fg">
 							{advancedChanged > 0 && (
@@ -451,7 +356,7 @@ export function FilterPopover({
 				</Menu.Root>
 				<button
 					type="button"
-					className={cn(FILTER_ROW, "mt-1 text-fg")}
+					className={cn(SETTING_ROW, SETTING_ROW_PRESSABLE, "mt-1 text-fg")}
 					onClick={onCustomize}
 				>
 					<IconSliders size={20} className="shrink-0 text-dim" />
@@ -520,7 +425,7 @@ export const RepoFilterChip = React.forwardRef<
 								className="justify-between gap-3"
 							>
 								<span className="flex min-w-0 items-center gap-2">
-									<span className={GLYPH_SLOT} />
+									<span className={SETTING_GLYPH} />
 									<span className="min-w-0 truncate">All repos</span>
 								</span>
 								<Menu.Check on={repo === "all"} />
@@ -533,7 +438,7 @@ export const RepoFilterChip = React.forwardRef<
 									className="justify-between gap-3"
 								>
 									<span className="flex min-w-0 items-center gap-2">
-										<span className={GLYPH_SLOT}>
+										<span className={SETTING_GLYPH}>
 											<RepoTile name={name} size={16} />
 										</span>
 										<span className="min-w-0 truncate">{repoLabel(name)}</span>

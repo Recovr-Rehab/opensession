@@ -79,8 +79,6 @@ import {
   IconBranches,
   IconChevronRight,
   IconCopy,
-  IconDiffSplit,
-  IconDiffUnified,
   IconDotsHorizontal,
   IconFile,
   IconGitMerge,
@@ -93,9 +91,8 @@ import { Menu, MENU_ICON } from "../ui/menu";
 import { Modal, useEnterOnMount } from "../ui/modal";
 import { Tooltip } from "../ui/tooltip";
 import { Popover } from "../ui/popover";
-import { Switch } from "../ui/switch";
 import { Segmented, SegmentedOption } from "../ui/segmented";
-import { OptionSelect } from "../ui/select";
+import { SettingRow, SwitchRow, ValueRow } from "../ui/setting-row";
 
 import { checkClass, isDeployment, summarize } from "../lib/pr-status-derive";
 import { prStatusMark } from "../lib/pr-status";
@@ -1604,156 +1601,145 @@ export function PrPanel({
           }
         />
       </Tooltip>
+      {/* Two groups, one rule apart: how the code is drawn, then which files
+          are drawn and in what order. Every setting is one row wearing the
+          shape of its answer, which is the vocabulary in `ui/setting-row`. */}
       <Popover.Popup
         side="bottom"
         align="end"
         initialFocus
-        className="w-[340px] p-2"
+        className="flex w-[340px] flex-col gap-0.5 p-3"
       >
-        <Segmented
-          label="Diff layout"
-          value={diffStyle}
-          onValueChange={(next) => changeDiffStyle(next as "unified" | "split")}
-          className="grid w-full grid-cols-2"
-        >
-          <SegmentedOption value="split" className="justify-center py-1.5">
-            <IconDiffSplit size={18} />
-            Split
-          </SegmentedOption>
-          <SegmentedOption value="unified" className="justify-center py-1.5">
-            <IconDiffUnified size={18} />
-            Unified
-          </SegmentedOption>
-        </Segmented>
-
-        <div className="mt-2 border-t border-divider py-1">
-          <label className="flex min-h-10 items-center justify-between gap-4 px-2 text-label text-fg">
-            <span>Structural highlighting</span>
-            <Switch
-              size="sm"
-              checked={structuralSetting === "1"}
-              onCheckedChange={(checked) =>
-                changeStructuralSetting(checked ? "1" : "0")
-              }
-            />
-          </label>
-          <label className="flex min-h-10 items-center justify-between gap-4 px-2 text-label text-fg">
-            <span>Wrap lines</span>
-            <Switch
-              size="sm"
-              checked={wrapLines}
-              onCheckedChange={changeWrapLines}
-            />
-          </label>
-          <label className="flex min-h-10 items-center justify-between gap-4 px-2 text-label text-fg">
-            <span>Show changed lines per file</span>
-            <Switch
-              size="sm"
-              checked={fileStatsSetting === "1"}
-              onCheckedChange={(checked) =>
-                changeFileStatsSetting(checked ? "1" : "0")
-              }
-            />
-          </label>
-        </div>
-
-        <div className="border-t border-divider py-1">
-          <div className="flex min-h-10 items-center justify-between gap-4 px-2 text-label text-fg">
-            <span className="shrink-0 whitespace-nowrap">Grouping</span>
-            <OptionSelect
-              label="Grouping"
-              value={grouping}
-              onChange={changeGrouping}
-              size="sm"
-              options={[
-                { value: "none", label: "No grouping" },
-                { value: "ai", label: "By purpose" },
-              ]}
-            />
-          </div>
-          <div className="flex min-h-10 items-center justify-between gap-4 px-2 text-label text-fg">
-            <span className="shrink-0 whitespace-nowrap">File list</span>
-            <Segmented
-              label="File list"
-              value={fileListMode}
-              onValueChange={(next) =>
-                changeFileListMode(next as "flat" | "tree" | "hidden")
-              }
-              size="sm"
-            >
-              <SegmentedOption value="flat">Flat</SegmentedOption>
-              <SegmentedOption value="tree">Tree</SegmentedOption>
-              <SegmentedOption value="hidden">Hidden</SegmentedOption>
-            </Segmented>
-          </div>
-          <div className="flex min-h-10 items-center justify-between gap-4 px-2 text-label text-fg">
-            <span className="shrink-0 whitespace-nowrap">Order by</span>
-            <span className="flex items-center gap-1">
-              <Tooltip
-                label={sortDirection === "asc" ? "Ascending" : "Descending"}
-              >
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  aria-label={
-                    sortDirection === "asc"
-                      ? "Sort descending"
-                      : "Sort ascending"
-                  }
-                  icon={
-                    sortDirection === "asc" ? (
-                      <IconArrowUp size={17} />
-                    ) : (
-                      <IconArrowDown size={17} />
-                    )
-                  }
-                  onClick={() =>
-                    changeSortDirection(
-                      sortDirection === "asc" ? "desc" : "asc",
-                    )
-                  }
-                />
-              </Tooltip>
-              <OptionSelect
-                label="File order"
-                value={fileOrder}
-                onChange={changeFileOrder}
-                size="sm"
-                options={[
-                  { value: "path", label: "Path" },
-                  { value: "changes", label: "Changed lines" },
-                  { value: "pull-request", label: "Pull request" },
-                ]}
-              />
-            </span>
-          </div>
-          <label className="flex min-h-10 items-center justify-between gap-4 px-2 text-label text-fg">
-            <span className="shrink-0 whitespace-nowrap">Hide reviewed</span>
-            <Switch
-              size="sm"
-              checked={hideReviewed}
-              disabled={!reviewedFiles}
-              onCheckedChange={(checked) =>
-                changeHideReviewedSetting(checked ? "1" : "0")
-              }
-            />
-          </label>
-        </div>
-
-        <div className="flex min-h-11 items-center justify-between gap-4 border-t border-divider px-2 pt-1 text-label text-fg">
-          <span className="shrink-0 whitespace-nowrap">Code theme</span>
-          <OptionSelect
-            label="Code theme"
-            value={codeTheme}
-            onChange={changeCodeTheme}
+        <SettingRow label="Diff layout">
+          <Segmented
+            label="Diff layout"
             size="sm"
-            options={[
-              { value: "system", label: "Match app" },
-              { value: "light", label: "Light" },
-              { value: "dark", label: "Dark" },
-            ]}
-          />
-        </div>
+            value={diffStyle}
+            onValueChange={(next) =>
+              changeDiffStyle(next as "unified" | "split")
+            }
+          >
+            <SegmentedOption value="split">Split</SegmentedOption>
+            <SegmentedOption value="unified">Unified</SegmentedOption>
+          </Segmented>
+        </SettingRow>
+        <SettingRow label="Code theme">
+          <Segmented
+            label="Code theme"
+            size="sm"
+            value={codeTheme}
+            onValueChange={(next) =>
+              changeCodeTheme(next as "system" | "light" | "dark")
+            }
+          >
+            <SegmentedOption value="system">Match app</SegmentedOption>
+            <SegmentedOption value="light">Light</SegmentedOption>
+            <SegmentedOption value="dark">Dark</SegmentedOption>
+          </Segmented>
+        </SettingRow>
+        <SwitchRow
+          label="Wrap lines"
+          checked={wrapLines}
+          onCheckedChange={changeWrapLines}
+        />
+        <SwitchRow
+          label="Structural highlighting"
+          checked={structuralSetting === "1"}
+          onCheckedChange={(checked) =>
+            changeStructuralSetting(checked ? "1" : "0")
+          }
+        />
+
+        <div aria-hidden className="mx-2 my-1.5 h-px bg-line" />
+
+        <SettingRow label="File list">
+          <Segmented
+            label="File list"
+            size="sm"
+            value={fileListMode}
+            onValueChange={(next) =>
+              changeFileListMode(next as "flat" | "tree" | "hidden")
+            }
+          >
+            <SegmentedOption value="flat">Flat</SegmentedOption>
+            <SegmentedOption value="tree">Tree</SegmentedOption>
+            <SegmentedOption value="hidden">Hidden</SegmentedOption>
+          </Segmented>
+        </SettingRow>
+        {/* Direction is not a fourth thing to order by, so it sits under the
+            three that are, and the arrow rides the value: which way the list
+            runs is worth reading without opening the menu. */}
+        <ValueRow
+          label="Order by"
+          value={fileOrder}
+          options={[
+            { value: "path", label: "Path" },
+            { value: "changes", label: "Changed lines" },
+            { value: "pull-request", label: "Pull request" },
+          ]}
+          onSelect={(next) =>
+            changeFileOrder(next as "path" | "changes" | "pull-request")
+          }
+          trailing={
+            sortDirection === "asc" ? (
+              <IconArrowUp size={15} className="shrink-0 text-dim" />
+            ) : (
+              <IconArrowDown size={15} className="shrink-0 text-dim" />
+            )
+          }
+          footer={
+            <Menu.RadioGroup
+              value={sortDirection}
+              onValueChange={(next) =>
+                changeSortDirection(String(next) as "asc" | "desc")
+              }
+            >
+              {/* No glyph on these two: the orders above carry none, and one
+                  indented pair under them would put two label x's in one
+                  menu. The arrow rides the row's value instead. */}
+              {(
+                [
+                  ["asc", "Ascending"],
+                  ["desc", "Descending"],
+                ] as const
+              ).map(([value, label]) => (
+                <Menu.RadioItem
+                  key={value}
+                  value={value}
+                  closeOnClick
+                  className="justify-between gap-3"
+                >
+                  <span className="min-w-0 truncate">{label}</span>
+                  <Menu.Check on={sortDirection === value} />
+                </Menu.RadioItem>
+              ))}
+            </Menu.RadioGroup>
+          }
+        />
+        <ValueRow
+          label="Grouping"
+          value={grouping}
+          options={[
+            { value: "none", label: "No grouping" },
+            { value: "ai", label: "By purpose" },
+          ]}
+          onSelect={(next) => changeGrouping(next as "none" | "ai")}
+        />
+        <SwitchRow
+          label="Show changed lines per file"
+          checked={fileStatsSetting === "1"}
+          onCheckedChange={(checked) =>
+            changeFileStatsSetting(checked ? "1" : "0")
+          }
+        />
+        <SwitchRow
+          label="Hide reviewed"
+          checked={hideReviewed}
+          disabled={!reviewedFiles}
+          onCheckedChange={(checked) =>
+            changeHideReviewedSetting(checked ? "1" : "0")
+          }
+        />
       </Popover.Popup>
     </Popover.Root>
   );
