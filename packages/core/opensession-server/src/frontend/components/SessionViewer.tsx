@@ -5125,6 +5125,7 @@ export function SessionViewer({
 						entries={entries}
 						send={send}
 						connected={connected}
+						onOpenNewSession={onOpenNewSession}
 					/>
 				);
 				// Archive is the reversible primary "done with this" action — it sits
