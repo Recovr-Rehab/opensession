@@ -273,7 +273,10 @@ export function isCodexUsageLimitError(message: string): boolean {
  */
 export function isTransientRunError(message: string | undefined | null): boolean {
   if (!message) return false;
-  if (isClaudeMalformedTerminalError(message)) return true;
+  if (
+    isClaudeMalformedTerminalError(message) ||
+    isClaudeBridgeLaunchError(message)
+  ) return true;
   const s = message.toLowerCase();
   // Never treat a user/engine abort as transient — that's an intentional stop.
   if (s.includes("messageabortederror") || s.includes("aborted")) return false;
