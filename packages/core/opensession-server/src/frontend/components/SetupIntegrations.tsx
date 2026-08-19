@@ -198,7 +198,7 @@ function GithubAuthSetupDialog({
 									Tick <strong>Enable Device Flow</strong>. Signing in is a device code, so without it nobody can sign in at all.
 								</>,
 								<>
-									Under Repository permissions, grant <strong>Contents: read and write</strong>, <strong>Pull requests: read and write</strong>, and <strong>Issues: read and write</strong>. Metadata remains read-only.
+									Under Repository permissions, grant <strong>Contents: read and write</strong>, <strong>Pull requests: read and write</strong>, and <strong>Issues: read and write</strong>. Under Organization permissions, grant <strong>Members: read-only</strong> so setup can import your team. Metadata remains read-only.
 								</>,
 								<>
 									Install the app only on your organization. Choose all repositories, or select only the repositories Open Session should work in.

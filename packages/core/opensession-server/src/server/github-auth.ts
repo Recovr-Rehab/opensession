@@ -53,9 +53,9 @@ function storePath(): string {
   return process.env.OPENSESSION_GITHUB_AUTH_STORE || `${HOME}/.opensession-github-auth.json`;
 }
 
-/** Classic OAuth needs `repo` for PR writes on private repositories. Team
- * membership is resolved from our local identity config, so no org scope. */
-const DEVICE_FLOW_SCOPE = "repo";
+/** Classic OAuth needs `repo` for private-repository PR writes and
+ * `read:org` for the one-time organization member import during setup. */
+const DEVICE_FLOW_SCOPE = "repo read:org";
 
 export interface GithubUserAuthSettings {
   /** Feature switch (config `integrations.github.userPrAuth`). */

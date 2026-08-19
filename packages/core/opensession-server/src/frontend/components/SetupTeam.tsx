@@ -44,6 +44,8 @@ export function TeamSection({
 	const [loadFailed, setLoadFailed] = useState(false);
 	const [dialogOpen, setDialogOpen] = useState(false);
 	const [editing, setEditing] = useState<TeamMember | null>(null);
+	const [githubOrganization, setGithubOrganization] = useState<string | null>(null);
+	const [githubSyncError, setGithubSyncError] = useState<string | null>(null);
 
 	const load = useCallback(async () => {
 		try {
@@ -55,9 +57,29 @@ export function TeamSection({
 		}
 	}, []);
 
-	useEffect(() => {
-		load();
+	const syncGithubMembers = useCallback(async () => {
+		try {
+			const body = await setupRequest<{
+				organization: string | null;
+				synced: boolean;
+				added: number;
+				members: TeamMember[];
+				error?: string;
+			}>("/api/setup/team/sync-github", { method: "POST" });
+			setMembers(body.members);
+			setLoadFailed(false);
+			setGithubOrganization(body.synced ? body.organization : null);
+			setGithubSyncError(body.error ?? null);
+		} catch (cause: any) {
+			setGithubSyncError(cause?.message || "Couldn’t import GitHub members");
+			await load();
+		}
 	}, [load]);
+
+	useEffect(() => {
+		if (githubOnly) void syncGithubMembers();
+		else void load();
+	}, [githubOnly, load, syncGithubMembers]);
 
 	async function handleMutated() {
 		await load();
@@ -83,6 +105,7 @@ export function TeamSection({
 			>
 				{title ?? `Team members${members ? ` · ${members.length}` : ""}`}
 			</SettingsGroupLabel>
+			{githubSyncError && <InlineAlert>{githubSyncError}</InlineAlert>}
 			{!members && !loadFailed ? (
 				// The card itself is the ghost, so the roster lands in the block it
 				// was already occupying. Rendering the real card around a loading
@@ -115,7 +138,9 @@ export function TeamSection({
 			)}
 			<SettingsHint>
 				{githubOnly
-					? "Members sign in with their GitHub account. You can add profile details later in Settings."
+					? githubOrganization
+						? `Members were imported from the ${githubOrganization} GitHub organization. You can add profile details later in Settings.`
+						: "Members sign in with their GitHub account. You can add profile details later in Settings."
 					: "Names, emails, GitHub logins and Slack ids all resolve through the same identity table, so a session user given as any of them matches the member."}
 			</SettingsHint>
 			{githubOnly && !editing ? (

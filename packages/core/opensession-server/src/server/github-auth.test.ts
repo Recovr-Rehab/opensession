@@ -325,15 +325,20 @@ describe("starting the device flow", () => {
     expect(await startGithubDeviceFlow()).toEqual({ error: "Not Found" });
   });
 
-  test("a configured app gets its code back", async () => {
+  test("a configured app gets its code back with organization read access", async () => {
     enableFeature();
-    githubAnswers(200, {
-      device_code: "dev-code",
-      user_code: "ABCD-1234",
-      verification_uri: "https://github.com/login/device",
-      interval: 5,
-      expires_in: 900,
-    });
+    let requestedScope = "";
+    globalThis.fetch = (async (_input: string | URL | Request, init?: RequestInit) => {
+      const body = JSON.parse(String(init?.body));
+      requestedScope = body.scope;
+      return Response.json({
+        device_code: "dev-code",
+        user_code: "ABCD-1234",
+        verification_uri: "https://github.com/login/device",
+        interval: 5,
+        expires_in: 900,
+      });
+    }) as unknown as typeof fetch;
     expect(await startGithubDeviceFlow()).toEqual({
       deviceCode: "dev-code",
       userCode: "ABCD-1234",
@@ -341,6 +346,7 @@ describe("starting the device flow", () => {
       interval: 5,
       expiresIn: 900,
     });
+    expect(requestedScope).toBe("repo read:org");
   });
 });
 

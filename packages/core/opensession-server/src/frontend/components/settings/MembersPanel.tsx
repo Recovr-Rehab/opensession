@@ -10,7 +10,7 @@ export function MembersPanel() {
 		<SettingsPanel>
 			<SettingsHeader
 				title="Members"
-				description="Add the GitHub accounts that should have access to this organization."
+				description="Members from your GitHub organization are added automatically."
 			/>
 			<TeamSection onChanged={() => {}} githubOnly />
 		</SettingsPanel>

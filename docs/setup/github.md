@@ -216,9 +216,14 @@ What turns on (`packages/core/opensession-server/src/server/github-auth.ts`, `we
   identity overrides client-claimed user names (WS and HTTP), stamps
   `createdByLogin` on new sessions, and a one-time boot migration backfills
   it onto existing ones.
+- **Organization members imported**: after a repository identifies the GitHub
+  organization, the People step adds every organization member to
+  `identity.team`. Existing profile details are preserved, and the import is
+  recorded so removing someone later is not undone on the next page load.
 - **PRs as the owner**: signing in also stores the person's OAuth token
-  (scope `repo`, `~/.opensession-github-auth.json`, 0600). The
-  runner injects it as `GH_TOKEN`/`GITHUB_TOKEN` into interactive,
+  (scopes `repo read:org`, `~/.opensession-github-auth.json`, 0600). The
+  `read:org` scope lets initial setup list organization members. The runner
+  injects it as `GH_TOKEN`/`GITHUB_TOKEN` into interactive,
   non-least-privilege runs only — automations, unattended kinds, and any
   run carrying a deny-set keep the bot credential, fail-closed. Manage
   connections (per-teammate status, disconnect) in the Connections UI.

@@ -65,8 +65,8 @@ const STEPS: FirstMileStep[] = [
 	{
 		id: "team",
 		label: "People",
-		title: "Add your team",
-		description: "Add the GitHub accounts that should have access.",
+		title: "Bring in your team",
+		description: "Everyone in your GitHub organization is added automatically.",
 	},
 	{
 		id: "ready",
