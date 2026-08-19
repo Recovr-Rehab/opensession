@@ -259,7 +259,6 @@ export function Connections() {
     <SettingsPanel>
       <SettingsHeader
         title="Connections"
-        description={`What ${AGENT_NAME} is wired into: inbound agents and the MCP tools every session can use.`}
         actions={
           <>
             <Button
@@ -454,11 +453,6 @@ export function Connections() {
           <ProjectsSection />
 
           <PlainRouter />
-
-          <div className="mt-6 text-supporting text-faint">
-            Changes apply to new session runs immediately (config is read per run). In a session
-            transcript, MCP tool calls show up tagged with their server name.
-          </div>
         </>
       )}
     </SettingsPanel>

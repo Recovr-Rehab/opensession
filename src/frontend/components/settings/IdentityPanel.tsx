@@ -7,10 +7,7 @@ import { IdentityCard } from "../SetupIdentity";
 export function IdentityPanel() {
 	return (
 		<SettingsPanel>
-			<SettingsHeader
-				title="Identity"
-				description="Choose the names this instance and its agent use when they introduce themselves."
-			/>
+			<SettingsHeader title="Identity" />
 			<IdentityCard />
 		</SettingsPanel>
 	);

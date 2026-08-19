@@ -192,7 +192,6 @@ function DeskVoicePanel() {
 			<SettingCard>
 				<SettingRow
 					title="Voice mode"
-					desc="Show the voice toggle in your Desk. Off hides it for you only."
 					control={
 						<Switch aria-label="Voice mode" checked={on} onCheckedChange={setDeskVoicePref} />
 					}
@@ -437,7 +436,6 @@ export function PreferencesPanel() {
 			<SettingCard>
 				<SettingRow
 					title="Default model"
-					desc="Preselect this model when you start a session."
 					control={
 						<Select
 							label="Default model"
@@ -461,7 +459,6 @@ export function PreferencesPanel() {
 				{engineOptions.length > 1 && (
 					<SettingRow
 						title="Default engine"
-						desc="Which engine your new sessions start on. Switch a single session in its model picker."
 						control={
 							<Select
 								label="Default engine"
@@ -568,7 +565,6 @@ export function PreferencesPanel() {
 				/>
 				<SettingRow
 					title="Pin new sessions"
-					desc="Automatically pin a session to your tab strip when you start it."
 					control={
 						<Switch
 							aria-label="Pin new sessions"
@@ -579,7 +575,6 @@ export function PreferencesPanel() {
 				/>
 				<SettingRow
 					title="Pin new workspaces"
-					desc="Also pin a workspace to your tab strip when you create one."
 					control={
 						<Switch
 							aria-label="Pin new workspaces"
@@ -589,16 +584,10 @@ export function PreferencesPanel() {
 					}
 				/>
 			</SettingCard>
-			<SettingsHint>
-				Stored per user, so it follows you across every device. Queue holds a
-				follow-up until the run and its worker sessions have finished.
-			</SettingsHint>
-
 			<SettingsGroupLabel>Transcript</SettingsGroupLabel>
 			<SettingCard>
 				<SettingRow
 					title="Tool calls and messages"
-					desc="How much of each turn's working the transcript shows."
 					control={
 						<Select
 						label="Tool calls and messages"
@@ -625,11 +614,6 @@ export function PreferencesPanel() {
 					}
 				/>
 			</SettingCard>
-			<SettingsHint>
-				By default a turn is open while it runs and folds away once it settles.
-				"Fold tool calls" instead folds only the tool calls, leaving the rest of the
-				turn reading as normal transcript.
-			</SettingsHint>
 
 			<DeskVoicePanel />
 			<PersonalPromptPanel />
