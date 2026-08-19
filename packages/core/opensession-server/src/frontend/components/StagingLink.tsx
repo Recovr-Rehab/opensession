@@ -6,6 +6,14 @@ import {
 } from "../lib/poll";
 import type { PrCheck, UnifiedSession } from "../lib/types";
 import { withPreviewPath } from "../lib/preview-url";
+import {
+	WS_SUMMARY_ICON,
+	WS_SUMMARY_LABEL,
+	WS_SUMMARY_RAIL,
+	WS_SUMMARY_ROW,
+	WS_SUMMARY_STATE,
+} from "../lib/workspace-summary-classes";
+import { cn } from "../ui/cn";
 import { Tooltip } from "../ui/tooltip";
 import { toast } from "../ui/toast";
 import { CopyCheck, useCopy } from "../ui/copy";
@@ -83,8 +91,9 @@ export function StagingLink({
 }: {
 	session: UnifiedSession;
 	/** "bar" = the labelled Preview environment link; "header" = a compact
-	 *  state-colored icon; "action" = a cell in the mobile workspace grid. */
-	variant?: "bar" | "header" | "action";
+	 *  state-colored icon; "action" = a cell in the mobile workspace grid;
+	 *  "summary" = a row in the header's workspace summary card. */
+	variant?: "bar" | "header" | "action" | "summary";
 	/** Bumped when GitHub reports PR/check/deployment activity for this session. */
 	refreshTick?: number;
 }) {
@@ -180,6 +189,22 @@ export function StagingLink({
 						{shimmerGlobe(17)}
 					</span>
 					<span className="min-w-0 flex-1 truncate">Preview environment</span>
+				</span>
+			);
+		}
+		if (variant === "summary") {
+			return (
+				<span
+					// Nothing to open yet, so the row drops the list's pointer and its
+					// hover pill rather than offering a target that does nothing.
+					className={cn(WS_SUMMARY_ROW, "cursor-default hover:bg-transparent")}
+					title="Preview environment starting… the link appears once it's up"
+				>
+					<span className={cn(WS_SUMMARY_RAIL, WS_SUMMARY_ICON)}>
+						{shimmerGlobe(20)}
+					</span>
+					<span className={WS_SUMMARY_LABEL}>Preview environment</span>
+					<span className={cn(WS_SUMMARY_STATE, "text-faint")}>Starting</span>
 				</span>
 			);
 		}
@@ -297,6 +322,42 @@ export function StagingLink({
 					{globe(17, RING_LG)}
 				</span>
 				<span className="min-w-0 flex-1 truncate">Preview environment</span>
+			</a>
+		);
+	}
+
+	if (variant === "summary") {
+		return (
+			<a
+				href={href}
+				target="_blank"
+				rel="noopener"
+				onClick={onClick}
+				aria-disabled={building || undefined}
+				className={cn(
+					WS_SUMMARY_ROW,
+					"no-underline",
+					building && "cursor-default",
+				)}
+				title={`${tooltip("⌘-click to copy the link")} · ${href}`}
+			>
+				{/* Amber only while a deploy is in flight. A card of quiet rows keeps
+				    its colour for the ones with something to report, and a preview
+				    that is simply up has nothing. */}
+				<span
+					className={cn(
+						WS_SUMMARY_RAIL,
+						spinning ? "text-yellow" : WS_SUMMARY_ICON,
+					)}
+				>
+					{globe(20, RING_LG)}
+				</span>
+				<span className={WS_SUMMARY_LABEL}>Preview environment</span>
+				{spinning && (
+					<span className={cn(WS_SUMMARY_STATE, "text-yellow")}>
+						{rebuilding ? "Redeploying" : staging.status}
+					</span>
+				)}
 			</a>
 		);
 	}

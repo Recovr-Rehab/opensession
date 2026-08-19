@@ -275,6 +275,7 @@ import { useSessionScroll } from "../hooks/useSessionScroll";
 import { useShortcutKeys, useShortcutLabel } from "../hooks/useShortcutBindings";
 import { useSidePanel } from "../hooks/useSidePanel";
 import { sessionHasWorkspace } from "../lib/session-workspace";
+import { workspaceSummaryOpen } from "../lib/workspace-summary-open";
 import { matchesShortcut } from "../lib/shortcuts";
 import { PulseDot } from "../ui/status";
 import {
@@ -4307,9 +4308,12 @@ export function SessionViewer({
 	const headerActionsRef = useRef<HTMLDivElement>(null);
 	const [headerW, setHeaderW] = useState(0);
 	// Whether the header's workspace-summary card is up. The transcript and
-	// composer shift out from under it while it is, so this lives here rather
-	// than inside the card.
-	const [summaryOpen, setSummaryOpen] = useState(false);
+	// composer shift out from under it while it is, and the header's own PR
+	// strip and preview globe stand down, so this lives here rather than inside
+	// the card. Seeded from the stored preference rather than starting shut: the
+	// card reports itself an effect later, and a frame of the strip it replaces
+	// is the thing this is here to prevent.
+	const [summaryOpen, setSummaryOpen] = useState(workspaceSummaryOpen);
 	useLayoutEffect(() => {
 		const el = headerRef.current;
 		if (!el) return;
@@ -4338,6 +4342,12 @@ export function SessionViewer({
 		mq.addEventListener("change", onChange);
 		return () => mq.removeEventListener("change", onChange);
 	}, []);
+	// The card is only mounted on a desktop-width code session with the panel
+	// shut, so read the preference through the same conditions that mount it.
+	// The flag on its own would move the transcript for a card that is not
+	// there: it is seeded from a preference that outlives any one session, and
+	// the card can only report itself once it exists.
+	const summaryVisible = summaryOpen && !isPhone && hasRepoWork && !panelOpen;
 	// Closing the panel (desktop) or the info page (phone) drops back to the
 	// overview, so re-opening it doesn't land mid-drill-in. Each width watches
 	// only its own host: a phone's side panel is never rendered, so keying this
@@ -5461,10 +5471,10 @@ export function SessionViewer({
 					{isPhone && overflowMenu}
 					{/* Code-workspace testing affordances dock immediately left of the
 					    side-panel toggle. The local preview launcher lives in the ⋯ menu;
-					    the globe rides here only while the panel is closed —
-					    once the panel opens the globe moves into the panel's PR row
-					    (to the left of the PR), so it isn't shown twice. */}
-					{!isPhone && !panelOpen && (
+					    the globe rides here only while nothing else is showing it. The
+					    panel carries it in its PR row, the summary card as a row of its
+					    own, so it is never in two places at once. */}
+					{!isPhone && !panelOpen && !summaryVisible && (
 						<StagingLink
 							session={session}
 							variant="header"
@@ -5474,22 +5484,28 @@ export function SessionViewer({
 					{/* Panel closed → surface the PR chip + its primary action (Merge/
 					    Push/Resolve) inline, grouped with the globe directly left of
 					    the side-panel toggle. Review owns that action in its own header,
-					    so the global copy steps out while Review is open. */}
-					{!isPhone && hasRepoWork && !panelOpen && !showReview && (
-						<PrStatusBar
-							sessionId={session.id}
-							repo={session.repo || undefined}
-							archived={session.archived}
-							prs={session.prs}
-							send={connected ? send : undefined}
-							onOpenPrTab={focusPrInReview}
-							onOpenChecksTab={() => focusPrInReview(undefined, "checks")}
-							onArchive={handleArchive}
-							variant="header"
-							running={isRunningLive}
-							refreshTick={gitRefreshTick}
-						/>
-					)}
+					    so the global copy steps out while Review is open. So does the
+					    summary card below, which says the same three things in rows with
+					    room for the rest of them. */}
+					{!isPhone &&
+						hasRepoWork &&
+						!panelOpen &&
+						!showReview &&
+						!summaryVisible && (
+							<PrStatusBar
+								sessionId={session.id}
+								repo={session.repo || undefined}
+								archived={session.archived}
+								prs={session.prs}
+								send={connected ? send : undefined}
+								onOpenPrTab={focusPrInReview}
+								onOpenChecksTab={() => focusPrInReview(undefined, "checks")}
+								onArchive={handleArchive}
+								variant="header"
+								running={isRunningLive}
+								refreshTick={gitRefreshTick}
+							/>
+						)}
 					{/* …and the rest of what a one-line strip can't say: the diff's
 					    size, uncommitted work, who is reviewing, the assets. One
 					    floating card, so the panel can stay shut without going blind
@@ -6175,7 +6191,7 @@ export function SessionViewer({
 								// Wide enough and the reading column steps aside rather than
 								// being covered; narrower than that there is nowhere to step,
 								// so the card overlaps and the transcript stays put.
-								summaryOpen &&
+								summaryVisible &&
 									headerW >= 1120 &&
 									"desktop:[&>*]:-translate-x-[160px]",
 							)}
@@ -6491,7 +6507,7 @@ export function SessionViewer({
 							<div
 								className={cn(
 									VIEWER_INPUT,
-									summaryOpen &&
+									summaryVisible &&
 										headerW >= 1120 &&
 										"desktop:[&>*]:-translate-x-[160px]",
 								)}
