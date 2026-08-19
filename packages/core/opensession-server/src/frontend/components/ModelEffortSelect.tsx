@@ -584,11 +584,7 @@ export function ModelEffortSelect({
 				}}
 				disabled={disabled}
 				title={
-					modelDisabled
-						? modelTitle
-						: offEngine
-							? `Not available on the ${engineLabel} engine`
-							: undefined
+					modelDisabled ? modelTitle : offEngine ? "Not available in this session" : undefined
 				}
 				className={cn(
 					PICKER_ROW_GAP,
@@ -723,8 +719,8 @@ export function ModelEffortSelect({
 						)}
 						{hiddenOnEngine > 0 && (
 							<MenuHint>
-								Hidden on this engine: {hiddenOnEngine}{" "}
-								{hiddenOnEngine === 1 ? "model" : "models"}
+								{hiddenOnEngine} {hiddenOnEngine === 1 ? "model" : "models"} not available
+								here
 							</MenuHint>
 						)}
 					</Menu.Popup>
@@ -750,11 +746,7 @@ export function ModelEffortSelect({
 										key={e.id}
 										onClick={() => changeEngine(e.id)}
 										disabled={unavailable}
-										title={
-											unavailable
-												? `${modelLabel} isn't available on the ${e.label} engine`
-												: undefined
-										}
+										title={unavailable ? `${modelLabel} isn't available here` : undefined}
 										className={cn(
 											PICKER_ROW_GAP,
 											"justify-between gap-3",

@@ -62,10 +62,6 @@ export function ModelMenuRow({
 	// model and written by recomposing it — no separate engine state.
 	const engineOptions = useEngines().engines.filter((e) => e.available);
 	const activeEngine = modelEngine(effective);
-	const activeEngineLabel =
-		engineOptions.find((e) => e.id === activeEngine)?.label ||
-		ENGINE_LABELS[activeEngine] ||
-		activeEngine;
 
 	// Legacy rows keep the full registry label so they never read as
 	// duplicates of the friendly names above them.
@@ -82,7 +78,7 @@ export function ModelMenuRow({
 			<Menu.Item
 				key={m.id}
 				disabled={routed === null}
-				title={routed === null ? `Not available on the ${activeEngineLabel} engine` : undefined}
+				title={routed === null ? "Not available in this session" : undefined}
 				className={routed === null ? "opacity-55" : undefined}
 				onClick={() => onChange(routed ?? (m.id === defaultModel ? "" : m.id))}
 			>
@@ -142,9 +138,7 @@ export function ModelMenuRow({
 									<Menu.Item
 										key={e.id}
 										disabled={!next}
-										title={
-											next ? undefined : `${label} isn't available on the ${e.label} engine`
-										}
+										title={next ? undefined : `${label} isn't available here`}
 										className={next ? undefined : "opacity-55"}
 										onClick={() => next && onChange(next === defaultModel ? "" : next)}
 									>
