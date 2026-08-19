@@ -109,8 +109,9 @@ function makeLocalSandbox(cwd: string): Sandbox {
       return {
         events: () => gen,
         steerable: modelSupportsSteer(spec.model),
-        steer: (text) => steerAgentRun(ids, text),
-        interruptSteer: (text) => interruptAndSteerAgentRun(ids, text),
+        steer: (text, images) => steerAgentRun(ids, text, images),
+        interruptSteer: (text, images) =>
+          interruptAndSteerAgentRun(ids, text, images),
         cancel: () => cancelAgentRun(...ids),
       };
     },

@@ -211,8 +211,19 @@ type HostToClientPayload =
 
 export type ClientToHostMsg =
   | { t: "ask_answer"; askId: string; result: AskResult }
-  | { t: "steer"; text: string }
-  | { t: "interrupt_steer"; text: string }
+  /**
+   * Mid-run steer. `images` carries composer attachments the same way the
+   * opening prompt's `RunHostSpec.images` does, so a screenshot folds into
+   * the live turn instead of waiting for the run to end. It was text-only
+   * until 2026-08-19, which made every attachment unsteerable once local
+   * runs moved into detached hosts: the server declined the steer rather
+   * than send one that would silently drop the picture, and the message
+   * bounced back to the queue with a notice. Hosts built before that field
+   * existed ignore it, which degrades to the old behavior rather than
+   * breaking.
+   */
+  | { t: "steer"; text: string; images?: ImageInput[] }
+  | { t: "interrupt_steer"; text: string; images?: ImageInput[] }
   | { t: "cancel" }
   /** Ack of `end`: everything consumed, host may exit and the client cleans up the dir. */
   | { t: "shutdown" }

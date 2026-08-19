@@ -1171,8 +1171,9 @@ function makeDockerSandbox(
         steerable: modelSupportsSteer(spec.model),
         // HostHandle registers its control in host-registry keyed by the bks
         // session id — route through the same helpers the WS handlers use.
-        steer: (text) => hostSteer(spec.osSessionId, text),
-        interruptSteer: (text) => hostInterruptSteer(spec.osSessionId, text),
+        steer: (text, images) => hostSteer(spec.osSessionId, text, images),
+        interruptSteer: (text, images) =>
+          hostInterruptSteer(spec.osSessionId, text, images),
         cancel: () => hostCancel(spec.osSessionId),
       };
     },
@@ -1198,8 +1199,9 @@ function makeDockerSandbox(
       return {
         events: () => gen,
         steerable: modelSupportsSteer(spec.model),
-        steer: (text) => hostSteer(spec.osSessionId, text),
-        interruptSteer: (text) => hostInterruptSteer(spec.osSessionId, text),
+        steer: (text, images) => hostSteer(spec.osSessionId, text, images),
+        interruptSteer: (text, images) =>
+          hostInterruptSteer(spec.osSessionId, text, images),
         cancel: () => hostCancel(spec.osSessionId),
       };
     },

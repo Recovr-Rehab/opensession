@@ -944,9 +944,12 @@ export function steerAgentRun(
   for (const id of ids) {
     if (!id) continue;
     if (steerPiRun(id, text, images)) return true;
-    // Host-forward RPC is text-only: a send with images falls through
-    // (caller queues it — the queue drain delivers images).
-    if (!images?.length && hostSteer(id, text)) return true;
+    // Images ride the host frame too (protocol ClientToHostMsg.steer). This
+    // used to bail on any attachment, which read as "pi can't steer images"
+    // — it can; only the RPC frame was text-only. Once every local run moved
+    // into a detached host that guard covered every case, so no message with
+    // a screenshot could be steered at all.
+    if (hostSteer(id, text, images)) return true;
   }
   return false;
 }
@@ -982,7 +985,7 @@ export function interruptAndSteerAgentRun(
 ): boolean {
   for (const id of ids) {
     if (!id) continue;
-    if (!images?.length && hostInterruptSteer(id, text)) return true;
+    if (hostInterruptSteer(id, text, images)) return true;
   }
   return false;
 }

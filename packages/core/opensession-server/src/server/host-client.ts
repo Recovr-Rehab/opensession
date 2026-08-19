@@ -594,8 +594,9 @@ export class HostHandle {
       osSessionId: spec.osSessionId,
       steerable: modelSupportsSteer(spec.model),
       connected: () => this.up,
-      steer: (text) => this.send({ t: "steer", text }),
-      interruptSteer: (text) => this.send({ t: "interrupt_steer", text }),
+      steer: (text, images) => this.send({ t: "steer", text, images }),
+      interruptSteer: (text, images) =>
+        this.send({ t: "interrupt_steer", text, images }),
       cancel: () => this.send({ t: "cancel" }),
     };
     registerHostRun([spec.osSessionId, spec.engineSessionId], this.ctl);

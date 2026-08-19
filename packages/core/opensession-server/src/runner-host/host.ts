@@ -205,7 +205,17 @@ function handleClientMsg(msg: ClientToHostMsg): void {
       break;
     }
     case "steer": {
-      if (!steerAgentRun([spec.osSessionId, meta.engineSessionId], msg.text)) {
+      // Attachments ride the steer into the live turn (pi's session.steer
+      // takes image parts). A bounce carries the text alone on purpose: the
+      // server matches its steer receipt by text and re-queues the ORIGINAL
+      // item, images included.
+      if (
+        !steerAgentRun(
+          [spec.osSessionId, meta.engineSessionId],
+          msg.text,
+          msg.images
+        )
+      ) {
         // Too late (run finishing) or backend can't steer — bounce it back so
         // opensession queues it instead of the message evaporating.
         send({ t: "steer_failed", text: msg.text });
@@ -216,9 +226,14 @@ function handleClientMsg(msg: ClientToHostMsg): void {
       if (
         !interruptAndSteerAgentRun(
           [spec.osSessionId, meta.engineSessionId],
-          msg.text
+          msg.text,
+          msg.images
         ) &&
-        !steerAgentRun([spec.osSessionId, meta.engineSessionId], msg.text)
+        !steerAgentRun(
+          [spec.osSessionId, meta.engineSessionId],
+          msg.text,
+          msg.images
+        )
       ) {
         send({ t: "steer_failed", text: msg.text });
       }

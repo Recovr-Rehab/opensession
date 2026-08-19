@@ -17,7 +17,7 @@
  * `sandbox` field keep the unchanged in-process host path.
  */
 
-import type { StreamEvent } from "../run-events";
+import type { StreamEvent, ImageInput } from "../run-events";
 import type { RunAgentOpts } from "../agent-runner";
 import type { RunHostSpec } from "../../runner-host/protocol";
 
@@ -151,8 +151,8 @@ export interface RunHandle {
   events(): AsyncGenerator<StreamEvent>;
   /** Whether the run's backend supports mid-run steering (claude yes, exec-codex no). */
   steerable: boolean;
-  steer(text: string): boolean;
-  interruptSteer(text: string): boolean;
+  steer(text: string, images?: ImageInput[]): boolean;
+  interruptSteer(text: string, images?: ImageInput[]): boolean;
   cancel(): boolean;
 }
 
