@@ -129,7 +129,7 @@ final class TranscriptGroupingTests: XCTestCase {
     func testOnlyFinalErrorNoticeOffersFailureContinuation() {
         let errorNotice = EntryNotice(
             kind: "system", title: "Run failed", tone: "error",
-            body: nil, link: nil, icon: nil
+            body: nil, link: nil, ask: nil, icon: nil
         )
         append([
             TranscriptEntry(
@@ -150,7 +150,7 @@ final class TranscriptGroupingTests: XCTestCase {
                 id: tone, type: "system", content: "Stopped",
                 notice: EntryNotice(
                     kind: "system", title: "Stopped", tone: tone,
-                    body: nil, link: nil, icon: nil
+                    body: nil, link: nil, ask: nil, icon: nil
                 )
             )
         }
@@ -489,6 +489,7 @@ final class TranscriptGroupingTests: XCTestCase {
                 tone: "info",
                 body: "collapsed",
                 link: nil,
+                ask: nil,
                 icon: nil
             )
         )
@@ -507,6 +508,7 @@ final class TranscriptGroupingTests: XCTestCase {
                 tone: "info",
                 body: nil,
                 link: nil,
+                ask: nil,
                 icon: "deploy"
             )
         )

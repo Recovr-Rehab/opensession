@@ -30,12 +30,20 @@ struct TranscriptRow: View {
             // A notice is anything that isn't someone talking, whatever
             // produced it — the server already decided which.
             if let notice = entry.notice {
-                NoticeRow(
-                    entry: entry,
-                    notice: notice,
-                    state: expansionState("notice-\(entry.id)", false),
-                    failureContinuation: failureContinuation
-                )
+                // An answered question is history in the live card's own
+                // visual language, so the decision stays scannable. The
+                // entry-level `ask` is the compatibility spot for a server
+                // that predates `notice.ask`.
+                if notice.kind == "ask", let ask = notice.ask ?? entry.ask {
+                    AnsweredAskCard(ask: ask)
+                } else {
+                    NoticeRow(
+                        entry: entry,
+                        notice: notice,
+                        state: expansionState("notice-\(entry.id)", false),
+                        failureContinuation: failureContinuation
+                    )
+                }
             } else if entry.isUser {
                 UserBubble(
                     entry: entry,
@@ -59,6 +67,7 @@ struct TranscriptRow: View {
                         tone: NoticeTone.derived(from: entry).rawValue,
                         body: nil,
                         link: nil,
+                        ask: nil,
                         icon: nil
                     ),
                     state: expansionState("notice-\(entry.id)", false)
@@ -561,6 +570,8 @@ struct NoticeRow: View {
     let state: TurnFoldState
     var failureContinuation: FailureContinuationAction? = nil
 
+    @Environment(\.openURL) private var openURL
+
     private var tone: NoticeTone { NoticeTone(rawValue: notice.tone) ?? .info }
     private var showsBody: Bool {
         notice.showsBodyInline || (notice.isCollapsible && state.expanded)
@@ -637,15 +648,21 @@ struct NoticeRow: View {
                 .multilineTextAlignment(.center)
 
                 if showsBody, !entry.text.isEmpty {
-                    // `notice.link` (e.g. "Open worker") is deliberately not
-                    // rendered yet: this app routes to a session by pushing a
-                    // whole `Session`, and a transcript row has only an id.
-                    // The field is on the wire, so it costs one route to add.
                     Text(entry.text)
                         .font(.footnote)
                         .foregroundStyle(OS1VisualStyle.textDim)
                         .textSelection(.enabled)
                         .frame(maxWidth: .infinity, alignment: .leading)
+                }
+                // At most one action ("Open worker"): routed through the
+                // same private-scheme link a transcript session chip uses,
+                // so the id resolves and pushes like any other session link.
+                if let link = notice.link,
+                   let url = SessionLinks.url(for: link.sessionId) {
+                    Button(link.label) { openURL(url) }
+                        .buttonStyle(.plain)
+                        .font(.footnote.weight(.medium))
+                        .foregroundStyle(OS1VisualStyle.link)
                 }
             }
         }
