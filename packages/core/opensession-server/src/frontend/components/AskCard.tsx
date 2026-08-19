@@ -7,6 +7,7 @@ import { Button } from "../ui/button";
 import { cn } from "../ui/cn";
 import { IconCheck, IconReturn } from "./icons";
 import { useMarkdownRepo } from "./MarkdownBody";
+import { ASK_CARD_SHELL, ASK_CHOICE_ROW } from "../lib/ask-card-classes";
 
 interface Props {
 	questions: AskQuestion[];
@@ -27,10 +28,6 @@ const itemName = (index: number) => `q${index}`;
  * Preflight. A class plus an attribute outranks the class on its own.
  */
 const HIDE_WHEN_INERT = "[&[hidden]]:hidden";
-
-/** One option row: the whole row is the label for a hidden native radio. */
-const CHOICE_ROW =
-	"group relative flex min-h-11 w-full cursor-pointer select-none items-start gap-3 rounded-[calc(12px*var(--rf))] bg-control px-3 py-2.5 text-left transition-[background-color] hover:bg-hover [corner-shape:var(--cs)] has-[:focus-visible]:outline-2 has-[:focus-visible]:outline-offset-2 has-[:focus-visible]:outline-[var(--accent-ink)]";
 
 /**
  * Interactive AskUserQuestion card — the agent is waiting on these answers.
@@ -183,7 +180,7 @@ export function AskCard({ questions, onAnswer }: Props) {
 			items={items}
 			shortcuts="letters"
 			onSubmit={handleSubmit}
-			className="mx-auto mb-6 mt-2 flex w-full max-w-[var(--session-col)] flex-col gap-5 rounded-xl bg-raised p-4 [corner-shape:var(--cs)]"
+			className={ASK_CARD_SHELL}
 		>
 			<div className="flex flex-wrap items-center gap-x-2 gap-y-0.5">
 				<span
@@ -269,7 +266,7 @@ export function AskCard({ questions, onAnswer }: Props) {
 									// indicator says it. Washing the row grey made the chosen
 									// option look dimmed, not chosen, and collided with the
 									// hover wash on its neighbours.
-									className={CHOICE_ROW}
+									className={ASK_CHOICE_ROW}
 								>
 									<Questionnaire.ChoiceInput className="sr-only" />
 									{/* The letter leads the row, the way a lettered list does. It is

@@ -398,6 +398,87 @@ describe("classifyEntry", () => {
 		});
 	});
 
+	it("carries exact answered-ask data into the read-only card notice", () => {
+		const ask = {
+			version: 1 as const,
+			questions: [
+				{
+					header: "Demo choice",
+					question: "Which version?",
+					options: [
+						{ label: "Compact", description: "One calm card." },
+						{ label: "Detailed" },
+					],
+					answer: "Detailed",
+				},
+			],
+		};
+		const classified = classifyEntry(
+			entry({
+				type: "system",
+				noticeKind: "ask",
+				content:
+					"Answered: Compact\n**Demo choice: Which version?**\n\n- **A. Compact**\n- B. Detailed",
+				ask,
+			}),
+		);
+		expect(classified.notice).toMatchObject({ kind: "ask", ask });
+		expect(classified.notice?.ask?.questions[0].answer).toBe("Detailed");
+		expect(classified.content).toStartWith("**Demo choice:");
+	});
+
+	it("falls back to legacy markdown when structured ask data is unsupported", () => {
+		const classified = classifyEntry(
+			entry({
+				type: "system",
+				noticeKind: "ask",
+				content:
+					"Answered: Compact\n**Demo choice: Which version?**\n\n- **A. Compact**\n- B. Detailed",
+				ask: { version: 2, questions: [] } as never,
+			}),
+		);
+		expect(classified.notice?.ask?.questions[0].answer).toBe("Compact");
+	});
+
+	it("upgrades an ask already classified by an older server", () => {
+		const classified = classifyEntry(
+			entry({
+				type: "system",
+				content:
+					"**Demo choice: Which version?**\n\n- **A. Compact**\n- B. Detailed",
+				notice: {
+					kind: "ask",
+					title: "Answered: Compact",
+					tone: "info",
+					body: "collapsed",
+				},
+			}),
+		);
+		expect(classified.notice?.ask?.questions[0].answer).toBe("Compact");
+	});
+
+	it("upgrades legacy answered-ask markdown for already-written records", () => {
+		const classified = classifyEntry(
+			entry({
+				type: "system",
+				noticeKind: "ask",
+				content:
+					"Answered: Compact\n**Demo choice: Which version?**\n\n- **A. Compact**\n- B. Detailed",
+			}),
+		);
+		expect(classified.notice?.ask).toEqual({
+			version: 1,
+			questions: [
+				{
+					header: "Demo choice",
+					question: "Which version?",
+					options: [{ label: "Compact" }, { label: "Detailed" }],
+					answer: "Compact",
+				},
+			],
+		});
+	});
+
 	it("is idempotent — a second pass can't strip twice", () => {
 		const once = classifyEntry(
 			entry({ content: "[worker os-9] <!--os:worker-report-->\nDone." }),

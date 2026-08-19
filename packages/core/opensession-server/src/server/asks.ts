@@ -19,6 +19,7 @@ import {
 	isAwsHumanAuthRequest,
 } from "./aws-creds";
 import { askRecordContent } from "@tellahq/opensession-protocol/notices";
+import type { AnsweredAskData } from "@tellahq/opensession-protocol/notices";
 import {
 	storeAppendUserLineEarly,
 	transcriptLineAskRecord,
@@ -271,7 +272,7 @@ function askRecordBody(
 }
 
 /** The record's `content`: title line plus markdown body. Exported for tests,
- *  which is where the wording is pinned. */
+ *  which is where the compatibility wording is pinned. */
 export function askRecordEntryContent(
 	questions: AskQuestionInput[],
 	answers: Record<string, string>,
@@ -280,6 +281,25 @@ export function askRecordEntryContent(
 		askRecordTitle(questions, answers),
 		askRecordBody(questions, answers),
 	);
+}
+
+/** Exact read-only card data. It rides beside the compatibility text in the
+ *  JSONL line, preserving option descriptions and multi-select semantics that
+ *  cannot be recovered reliably from rendered markdown. */
+export function answeredAskData(
+	questions: AskQuestionInput[],
+	answers: Record<string, string>,
+): AnsweredAskData {
+	return {
+		version: 1,
+		questions: questions.map((q) => ({
+			question: q.question,
+			answer: answers[q.question] ?? "",
+			...(q.header ? { header: q.header } : {}),
+			...(q.options ? { options: q.options } : {}),
+			...(q.multiSelect ? { multiSelect: true } : {}),
+		})),
+	};
 }
 
 /** Persist the answered card. Best-effort: a transcript write must never take
@@ -293,7 +313,10 @@ export function recordAskAnswer(
 	try {
 		storeAppendUserLineEarly(
 			sessionId,
-			transcriptLineAskRecord(askRecordEntryContent(questions, answers)),
+			transcriptLineAskRecord(
+				askRecordEntryContent(questions, answers),
+				answeredAskData(questions, answers),
+			),
 		);
 	} catch (e) {
 		console.error(`[ask] Failed to record answer for ${sessionId}:`, e);

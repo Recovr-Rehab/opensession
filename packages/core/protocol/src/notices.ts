@@ -162,6 +162,63 @@ export type NoticeBody = "inline" | "collapsed";
  */
 export type NoticeIcon = "merge" | "deploy" | "done";
 
+/** Exact read-only data behind an answered AskUserQuestion card. Versioned so
+ *  a newer server can extend the record while older clients keep rendering the
+ *  markdown fallback in the entry's `content`. */
+export interface AnsweredAskData {
+  version: 1;
+  questions: Array<{
+    question: string;
+    header?: string;
+    options?: Array<{ label: string; description?: string }>;
+    multiSelect?: boolean;
+    answer: string;
+  }>;
+}
+
+/** Validate the optional structured ask payload at the parser/classifier
+ *  boundary. A malformed or future version falls back to the markdown record. */
+export function parseAnsweredAskData(value: unknown): AnsweredAskData | undefined {
+  if (!value || typeof value !== "object") return undefined;
+  const record = value as { version?: unknown; questions?: unknown };
+  if (record.version !== 1 || !Array.isArray(record.questions) || !record.questions.length)
+    return undefined;
+  const questions: AnsweredAskData["questions"] = [];
+  for (const valueQuestion of record.questions) {
+    if (!valueQuestion || typeof valueQuestion !== "object") return undefined;
+    const q = valueQuestion as Record<string, unknown>;
+    if (typeof q.question !== "string" || typeof q.answer !== "string") return undefined;
+    let options: AnsweredAskData["questions"][number]["options"];
+    if (q.options !== undefined) {
+      if (!Array.isArray(q.options)) return undefined;
+      options = [];
+      for (const valueOption of q.options) {
+        if (!valueOption || typeof valueOption !== "object") return undefined;
+        const option = valueOption as Record<string, unknown>;
+        if (typeof option.label !== "string") return undefined;
+        if (option.description !== undefined && typeof option.description !== "string")
+          return undefined;
+        options.push({
+          label: option.label,
+          ...(typeof option.description === "string"
+            ? { description: option.description }
+            : {}),
+        });
+      }
+    }
+    if (q.header !== undefined && typeof q.header !== "string") return undefined;
+    if (q.multiSelect !== undefined && typeof q.multiSelect !== "boolean") return undefined;
+    questions.push({
+      question: q.question,
+      answer: q.answer,
+      ...(typeof q.header === "string" ? { header: q.header } : {}),
+      ...(options ? { options } : {}),
+      ...(typeof q.multiSelect === "boolean" ? { multiSelect: q.multiSelect } : {}),
+    });
+  }
+  return { version: 1, questions };
+}
+
 export interface EntryNotice {
   kind: NoticeKind;
   /** One line, always visible. Never empty. */
@@ -170,6 +227,9 @@ export interface EntryNotice {
   /** Only on `info` notices. A toned one already draws its alert glyph. */
   icon?: NoticeIcon;
   body?: NoticeBody;
+  /** Present only for an answered question card. Clients that understand it
+   *  render a read-only card; older clients keep using title + body. */
+  ask?: AnsweredAskData;
   /** At most one action, rendered at the end of the body. */
   link?: { label: string; sessionId: string };
 }
@@ -453,16 +513,77 @@ export function askRecordContent(title: string, body: string): string {
   return body ? `${title}\n${body}` : title;
 }
 
-export function parseAskRecord(content: string): {
+function parseLegacyAnsweredAsk(body: string): AnsweredAskData | undefined {
+  const questions: AnsweredAskData["questions"] = [];
+  let current: AnsweredAskData["questions"][number] | undefined;
+  let selected: string[] = [];
+  const finish = () => {
+    if (!current) return;
+    current.answer = selected.join(", ");
+    questions.push(current);
+    current = undefined;
+    selected = [];
+  };
+
+  for (const raw of body.split("\n")) {
+    const line = raw.trim();
+    if (!line) continue;
+    if (line.startsWith("**") && line.endsWith("**") && !line.startsWith("- ")) {
+      finish();
+      const combined = line.slice(2, -2).trim();
+      const headed = combined.match(/^([^:*_`\[\]{}]{1,40}):\s+(.+)$/);
+      current = {
+        question: headed ? headed[2] : combined,
+        ...(headed ? { header: headed[1].trim() } : {}),
+        options: [],
+        answer: "",
+      };
+      if (!current.question) return undefined;
+      continue;
+    }
+    if (!current) return undefined;
+    if (line === "- No answer.") continue;
+    const typed = line.match(/^- \*\*(.+)\*\* \(typed\)$/);
+    if (typed) {
+      selected.push(typed[1]);
+      continue;
+    }
+    const picked = line.match(/^- \*\*[A-Z-]\. (.+)\*\*$/);
+    if (picked) {
+      current.options!.push({ label: picked[1] });
+      selected.push(picked[1]);
+      continue;
+    }
+    const option = line.match(/^- [A-Z-]\. (.+)$/);
+    if (option) {
+      current.options!.push({ label: option[1] });
+      continue;
+    }
+    return undefined;
+  }
+  finish();
+  if (!questions.length) return undefined;
+  for (const q of questions) {
+    if (!q.options?.length) delete q.options;
+    if ((q.options?.filter((o) => q.answer.split(", ").includes(o.label)).length ?? 0) > 1)
+      q.multiSelect = true;
+  }
+  return { version: 1, questions };
+}
+
+export function parseAskRecord(
+  content: string,
+  structured?: unknown,
+): {
   title: string;
   body: string;
+  ask?: AnsweredAskData;
 } {
   const nl = (content || "").indexOf("\n");
-  if (nl === -1) return { title: (content || "").trim(), body: "" };
-  return {
-    title: content.slice(0, nl).trim(),
-    body: content.slice(nl + 1).trim(),
-  };
+  const title = (nl === -1 ? content || "" : content.slice(0, nl)).trim();
+  const body = nl === -1 ? "" : content.slice(nl + 1).trim();
+  const ask = parseAnsweredAskData(structured) ?? parseLegacyAnsweredAsk(body);
+  return { title, body, ...(ask ? { ask } : {}) };
 }
 
 /**
@@ -488,6 +609,17 @@ function statusNotice(kind: NoticeKind, body: string): EntryNotice {
  * item the server has since tagged) can't double-strip.
  */
 export function classifyEntry(entry: TranscriptEntry): TranscriptEntry {
+  // During a rolling deploy, an older server may already have classified an
+  // ask into its generic title + markdown notice before the newer web bundle
+  // receives it. Upgrade that one legacy shape client-side; every complete
+  // notice and every attributed message stays idempotent by reference.
+  if (entry.notice?.kind === "ask" && !entry.notice.ask) {
+    const { ask } = parseAskRecord(
+      `${entry.notice.title}\n${entry.content}`,
+      entry.ask,
+    );
+    if (ask) return { ...entry, notice: { ...entry.notice, ask } };
+  }
   if (entry.notice || entry.sender) return entry;
 
   if (entry.type === "system") {
@@ -495,7 +627,7 @@ export function classifyEntry(entry: TranscriptEntry): TranscriptEntry {
     // picked from. Not a PARSED_NOTICES row because its title is the record,
     // not a fixed label.
     if (entry.noticeKind === "ask") {
-      const { title, body } = parseAskRecord(entry.content);
+      const { title, body, ask } = parseAskRecord(entry.content, entry.ask);
       return {
         ...entry,
         content: body,
@@ -504,6 +636,7 @@ export function classifyEntry(entry: TranscriptEntry): TranscriptEntry {
           title,
           tone: "info",
           ...(body ? { body: "collapsed" as const } : {}),
+          ...(ask ? { ask } : {}),
         },
       };
     }

@@ -17,6 +17,7 @@ import { UserAvatar } from "./UserAvatar";
 import { openGalleryFrom } from "./MediaLightbox";
 import { IconExpand, IconPencil } from "./icons";
 import { personKey } from "../lib/review-queue";
+import { AnsweredAskCard } from "./AnsweredAskCard";
 
 import {
 	fileChipCard,
@@ -584,7 +585,13 @@ export const MessageBubble = React.memo(function MessageBubble({
 	const e = useMemo(() => classifyEntry(entry), [entry]);
 	const displayContent = e.content;
 
-	// Anything that isn't a message is a notice, whatever produced it.
+	// An answered question is history in the same visual language as the card
+	// that was answered. It is read-only, but the option rows and selected mark
+	// make the decision visible without opening a generic notice disclosure.
+	if (e.notice?.kind === "ask" && e.notice.ask)
+		return <AnsweredAskCard record={e.notice.ask} entryId={e.id} />;
+
+	// Anything else that isn't a message is a notice, whatever produced it.
 	if (e.notice)
 		return (
 			<NoticeRow

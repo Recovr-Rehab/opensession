@@ -2,7 +2,11 @@ import { readFileSync, statSync } from "fs";
 import { openSync, readSync, closeSync, fstatSync } from "fs";
 import { existsSync } from "fs";
 import type { TranscriptEntry } from "./types";
-import { classifyEntries, dropContextInjections } from "@tellahq/opensession-protocol/notices";
+import {
+  classifyEntries,
+  dropContextInjections,
+  parseAnsweredAskData,
+} from "@tellahq/opensession-protocol/notices";
 import { withToolPresentations } from "@tellahq/opensession-protocol/tool-presentation";
 import { SLACK_ID_TO_NAME } from "./shared/user-mappings";
 import { stripContext } from "./prompt-context";
@@ -62,6 +66,9 @@ interface RawJsonlEntry {
   uuid?: string;
   timestamp?: string;
   requestId?: string;
+  // Structured companion to an <ask-record> text block. Older parsers ignore
+  // the extra line field and keep the markdown fallback in the message.
+  ask?: unknown;
   // Harness-injected user lines (skill bodies, command output) — not typed by the user
   isMeta?: boolean;
   // Present on a Task/Agent tool_result line: carries the spawned sub-agent's id
@@ -209,6 +216,7 @@ function harnessEntryFor(
   text: string,
   ts: string,
   id: string,
+  structuredAsk?: unknown,
 ): TranscriptEntry[] | null {
   const t = text.trimStart();
   if (t.startsWith("<task-notification>")) {
@@ -237,11 +245,21 @@ function harnessEntryFor(
   // transcript-persistence.ts, written by asks.ts when the ask resolves). The
   // card is transient, so this is the transcript's only trace of what was
   // asked and what was picked. A system entry tagged `noticeKind: "ask"`,
-  // whose content is the record's title line plus its markdown body.
+  // whose content is the record's title line plus its markdown body. New lines
+  // also carry exact structured data beside the text; old lines keep working
+  // through the protocol classifier's conservative markdown parser.
   if (t.startsWith("<ask-record>")) {
     const body = t.match(/<ask-record>([\s\S]*?)<\/ask-record>/)?.[1]?.trim();
+    const ask = parseAnsweredAskData(structuredAsk);
     return body
-      ? [{ id, type: "system", content: body, timestamp: ts, noticeKind: "ask" }]
+      ? [{
+          id,
+          type: "system",
+          content: body,
+          timestamp: ts,
+          noticeKind: "ask",
+          ...(ask ? { ask } : {}),
+        }]
       : [];
   }
   // Engine context-compaction summary (transcriptLineCompactionSummary in
@@ -384,6 +402,7 @@ function parseEntry(raw: RawJsonlEntry): TranscriptEntry[] {
             block.text || "",
             ts,
             harnessEntryId(raw, block.text || "", ts, bi),
+            raw.ask,
           );
           if (harness) {
             entries.push(...harness);
@@ -431,7 +450,12 @@ function parseEntry(raw: RawJsonlEntry): TranscriptEntry[] {
     } else if (!raw.isMeta) {
       const stripped = stripContext(extractText(content));
       if (stripped) {
-        const harness = harnessEntryFor(stripped, ts, harnessEntryId(raw, stripped, ts));
+        const harness = harnessEntryFor(
+          stripped,
+          ts,
+          harnessEntryId(raw, stripped, ts),
+          raw.ask,
+        );
         if (harness) {
           entries.push(...harness);
         } else {

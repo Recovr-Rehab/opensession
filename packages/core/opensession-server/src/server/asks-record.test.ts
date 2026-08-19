@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, test } from "bun:test";
 import { classifyEntry } from "@tellahq/opensession-protocol/notices";
 import type { TranscriptEntry } from "@tellahq/opensession-protocol/session";
-import { askRecordEntryContent, recordAskAnswer } from "./asks";
+import { answeredAskData, askRecordEntryContent, recordAskAnswer } from "./asks";
 import { setTranscriptForwarder } from "./transcript-forward";
 
 const QUESTION = {
@@ -39,6 +39,37 @@ describe("answered-ask record", () => {
 		expect(JSON.stringify(batches[0].lines[0])).toContain(
 			"<ask-record>Answered: Two",
 		);
+		expect(batches[0].lines[0].ask).toEqual(
+			answeredAskData([QUESTION], { "Which option?": "Two" }),
+		);
+	});
+
+	test("preserves descriptions and selection semantics in structured data", () => {
+		const questions = [
+			{
+				...QUESTION,
+				multiSelect: true,
+				options: [
+					{ label: "One", description: "First choice" },
+					{ label: "Two" },
+				],
+			},
+		];
+		expect(answeredAskData(questions, { "Which option?": "One, Two" })).toEqual({
+			version: 1,
+			questions: [
+				{
+					header: "Choice",
+					question: "Which option?",
+					multiSelect: true,
+					options: [
+						{ label: "One", description: "First choice" },
+						{ label: "Two" },
+					],
+					answer: "One, Two",
+				},
+			],
+		});
 	});
 
 	test("titles with the pick and bolds it among the options", () => {

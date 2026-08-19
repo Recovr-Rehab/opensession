@@ -3,6 +3,7 @@ import { existsSync, readFileSync } from "fs";
 import { OPENSESSION_SESSIONS_DIR } from "./paths";
 import { writeJsonAtomic } from "./shared/atomic-write";
 import type { TranscriptEntry } from "./types";
+import type { AnsweredAskData } from "@tellahq/opensession-protocol/notices";
 import type { ImageInput } from "./run-events";
 import { parseJsonlLines } from "./jsonl-parser";
 import { transcriptStore } from "./transcript-store";
@@ -225,13 +226,20 @@ export function transcriptLineRecap(
  *  ordinary entry path is the point: blob-splitting bounds a 180KB handoff the
  *  same way it bounds any other oversized entry, and the ws protocol needs no
  *  new frame. */
-/** Persist an answered question card after its transient UI card closes. */
+/** Persist an answered question card after its transient UI card closes.
+ *  The ordinary message text is the compatibility record. `ask` is an optional
+ *  sibling field in the JSONL line, so old parsers ignore it without losing the
+ *  readable fallback and current clients can rebuild the original card. */
 export function transcriptLineAskRecord(
   text: string,
+  ask?: AnsweredAskData,
   id?: string,
   ts?: string,
 ): JsonlLine {
-  return transcriptLineUser(`<ask-record>${text}</ask-record>`, id, ts);
+  return {
+    ...transcriptLineUser(`<ask-record>${text}</ask-record>`, id, ts),
+    ...(ask ? { ask } : {}),
+  };
 }
 
 export function transcriptLineContextInjection(

@@ -202,6 +202,43 @@ describe("parseTranscript", () => {
     });
   });
 
+  it("preserves structured answered-ask data beside the markdown fallback", () => {
+    const ask = {
+      version: 1,
+      questions: [
+        {
+          header: "Demo choice",
+          question: "Which version?",
+          options: [{ label: "Compact" }, { label: "Detailed" }],
+          answer: "Compact",
+        },
+      ],
+    };
+    const path = writeFixture([
+      JSON.stringify({
+        type: "user",
+        uuid: "ask1",
+        timestamp: TS,
+        ask,
+        message: {
+          role: "user",
+          content: [
+            {
+              type: "text",
+              text: "<ask-record>Answered: Compact\n**Demo choice: Which version?**\n\n- **A. Compact**\n- B. Detailed</ask-record>",
+            },
+          ],
+        },
+      }),
+    ]);
+    expect(parseTranscript(path)[0]).toMatchObject({
+      id: "sys-ask1",
+      type: "system",
+      noticeKind: "ask",
+      ask,
+    });
+  });
+
   it("maps recap lines to system entries with the recap flag", () => {
     const path = writeFixture([
       userLine(
