@@ -242,7 +242,7 @@ export function buildRunInstructions(input: {
     // stored string, which engine-session identity is keyed on (worktree.ts's
     // canonicalPath carries the same warning). A session persisted before a
     // checkout rename stores the pre-rename path, and naming it here makes the
-    // model narrate `cd …/tella-backstage &&` back in every command — while
+    // model narrate `cd …/<old-checkout-name> &&` back in every command — while
     // `pwd` reports the post-rename path, since getcwd() resolves symlinks.
     // Importing canonicalPath here would cycle back through worktree/preview,
     // so this is the same two lines locally.
