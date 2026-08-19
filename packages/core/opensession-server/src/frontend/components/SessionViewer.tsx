@@ -2117,7 +2117,7 @@ export function SessionViewer({
 	const plainUrl = session.plainThreadId
 		? plainThreadUrl(session.plainThreadId)
 		: "";
-	// Feed-item link (Tella video, PostHog dashboard, …): the same
+	// Feed-item link (a video, a dashboard, …): the same
 	// jump-out affordance Plain has, generic over the session's externalRefs.
 	const feedRef = (session.externalRefs || []).find((r) => r.url);
 	const feedRefLabel = feedRef
@@ -3354,7 +3354,6 @@ export function SessionViewer({
 						sessionId: session.id,
 						defaultMessage: suggestedShippedChangeMessage(
 							mergedPr.title || "an update",
-							mergedPr.repo,
 							session.walkthrough?.summary,
 						),
 						screenshot: shippedScreenshot,
@@ -5924,12 +5923,12 @@ export function SessionViewer({
 						</div>
 					) : showStaging && stagingUrl ? (
 						staging?.embeddable ? (
-							// This deploy opts into being framed by os.tella.dev (its CSP
-							// frame-ancestors names us — the tella-fusion preview change),
-							// so we embed it inline. The STAGE session cookie is
-							// Domain=.tella.dev; SameSite=None; Secure, so it rides into
-							// this same-site (tella.dev) frame on every device, iOS
-							// included — a logged-in reviewer sees the deploy directly. A
+							// This deploy opts into being framed by this app (its CSP
+							// frame-ancestors names our origin), so we embed it inline.
+							// When the deploy's session cookie is scoped to a parent
+							// domain this app also sits under (SameSite=None; Secure), it
+							// rides into the frame on every device, iOS included, so a
+							// logged-in reviewer sees the deploy directly. A
 							// logged-OUT one gets a blank frame (staging redirects to
 							// WorkOS AuthKit, which refuses framing), so the header keeps a
 							// first-party "Open" break-out to log in, then come back.
@@ -6060,7 +6059,7 @@ export function SessionViewer({
 							/>
 						</div>
 					) : showVideo && videoPanel ? (
-						// The workspace's feed panel — web embed (Tella) or a custom
+						// The workspace's feed panel: a web embed or a custom
 						// component (Slack channel Conversation) via the panel
 						// registry (the feeds design).
 						<div className={VIEWER_REVIEW_MAIN}>

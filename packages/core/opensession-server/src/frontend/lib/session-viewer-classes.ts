@@ -371,8 +371,8 @@ export const SESSION_DELETE_LABEL = "text-label text-dim";
  * The padding is asymmetric on purpose. Every one of these carries a leading
  * icon, and an icon brings its own whitespace to the edge, so matching the
  * label's padding on that side reads as a gap. Trimming the leading side by
- * 4px puts the two ends back in optical balance — the same trim Tella makes on
- * its icon+label buttons.
+ * 4px puts the two ends back in optical balance, the usual trim for an
+ * icon+label button.
  */
 
 /** Everything but the fill and the gap — the two values these pills disagree

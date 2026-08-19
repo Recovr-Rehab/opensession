@@ -848,8 +848,8 @@ export async function prReviewerSpecs(
  * via REST (PATCH pulls/{n} with an --input file so markdown/quotes/newlines
  * survive shell-free). NOT `gh pr edit`: its GraphQL preamble resolves org
  * teams and needs read:org, which neither the bot PAT nor the device-flow
- * OAuth tokens carry — it fails unconditionally on tellahq repos (verified
- * live on tellahq/backstage#78, 2026-07-26; same class as the label-edit
+ * OAuth tokens carry: it fails unconditionally on private org repos (verified
+ * live on a private org repo; same class as the label-edit
  * gotcha).
  */
 export async function updatePrBody(
@@ -1033,7 +1033,7 @@ function isPermanentPrApiError(msg: string): boolean {
 
 // Fine-grained PATs can't be granted the Checks permission (GitHub App-only),
 // so statusCheckRollup fails with "Resource not accessible by personal access
-// token" under the tellahq-scoped bot PAT. Preferred path: run the PR query
+// token" under an org-scoped bot PAT. Preferred path: run the PR query
 // on a GitHub App installation token (github-app.ts), which has checks:read.
 // Fallback when no app key is configured: once the error is seen, skip the
 // field process-wide (checks render empty) instead of failing every PR fetch —

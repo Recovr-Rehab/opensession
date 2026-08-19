@@ -950,8 +950,8 @@ export async function handlePrRoutes(
 
 	// Fire a GitHub PR agent behavior straight from the info panel — the same
 	// actions the opensession-* PR labels / Slack @mentions kick off (review,
-	// auto-fix, simplify, adversarial). tella-fusion only (the agent is
-	// repo-scoped), and there must be an open PR for the branch.
+	// auto-fix, simplify, adversarial). The agent is repo-scoped, and there
+	// must be an open PR for the branch.
 	if (
 		path.match(/^\/api\/sessions\/(.+)\/pr-action$/) &&
 		req.method === "POST"

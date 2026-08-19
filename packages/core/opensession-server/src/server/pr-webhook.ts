@@ -11,7 +11,7 @@
  *  - a debounced `pr_updated` broadcast tells open tabs to refetch now,
  *    which is what turns the invalidation into a visible update.
  *
- * Events GitHub currently delivers (see the webhook config on the tellahq
+ * Events GitHub currently delivers (see the webhook config on your
  * GitHub App): pull_request, pull_request_review, issue_comment,
  * pull_request_review_comment, workflow_run. check_suite / check_run / status
  * are handled here too so subscribing to them GitHub-side needs no code.

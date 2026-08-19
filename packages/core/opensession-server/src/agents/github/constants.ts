@@ -42,7 +42,7 @@ export const PR_EVENT_KEY = "github:pull_request";
 /** Name of the seeded (disabled-by-default) review automation. */
 export const REVIEW_AUTOMATION_NAME = "github-pr-review";
 
-/** Internal event key published when a PR is merged into tella-fusion. */
+/** Internal event key published when a PR is merged into a registered repo. */
 export const PR_MERGED_EVENT_KEY = "github:pr_merged";
 /** Name of the seeded docs-sync automation (fires on PR merge). */
 export const DOCS_SYNC_AUTOMATION_NAME = "docs-sync";

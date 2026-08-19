@@ -145,7 +145,7 @@ export async function handlePreviewRoutes(
 		}
 	}
 
-	// Start the session's dev server (Tella Local) if it isn't up yet.
+	// Start the session's dev server if it isn't up yet.
 	{
 		const m = path.match(
 			/^\/api\/sessions\/(.+)\/preview\/start$/,

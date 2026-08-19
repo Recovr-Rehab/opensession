@@ -142,7 +142,7 @@ struct PrPanelView: View {
             .inlineTitleBarCompat()
     }
 
-    /// `#5755 · Open · tella-butler`. Plain ink: a navigation subtitle styles
+    /// `#5755 · Open · octocat`. Plain ink: a navigation subtitle styles
     /// itself, and a per-run colour on it is ignored — the state wears its
     /// colour on the Info page, where it has a row of its own.
     private var subtitle: Text {

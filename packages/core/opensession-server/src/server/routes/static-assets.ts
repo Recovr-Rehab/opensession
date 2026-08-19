@@ -290,12 +290,12 @@ export async function handleStaticAssetsRoutes(
 		);
 	}
 
-	// Universal links for the Open Session desktop app (tellahq/os1-mac): lets plain
-	// https://os.tella.dev/… links open the app once it's signed with the
+	// Universal links for the desktop app (packages/clients/mac): lets plain
+	// https://<instance-host>/… links open the app once it's signed with the
 	// associated-domains entitlement. Both spec locations, since Apple has
-	// probed the bare path historically. Caveat: os.tella.dev resolves to a
-	// tailnet IP, so Apple's AASA CDN can't fetch this — team devices need the
-	// entitlement's `?mode=developer` alternate (direct fetch) for links to
+	// probed the bare path historically. Caveat: a private host (tailnet-only,
+	// behind a VPN) can't be fetched by Apple's AASA CDN, so team devices need
+	// the entitlement's `?mode=developer` alternate (direct fetch) for links to
 	// activate; harmless for everyone else.
 	if (
 		path === "/.well-known/apple-app-site-association" ||

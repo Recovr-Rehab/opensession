@@ -285,7 +285,7 @@ export async function handleOs1UpdateRoutes(
 			const currentRelease = current?.join(".") || "0.0.0";
 			return Response.json({ currentRelease, releases: [] });
 		}
-		// Canonical public form is prefix-less (os.tella.dev root); it
+		// Canonical public form is prefix-less (the instance root); it
 		// normalizes back onto /api/* in the fetch preamble.
 		const base = configuredServer().publicBaseUrl.replace(/\/$/, "");
 		return Response.json({

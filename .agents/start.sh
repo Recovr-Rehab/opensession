@@ -124,5 +124,4 @@ exec env \
 	ENABLE_STRIPE_AGENT=false \
 	ENABLE_GITHUB_AGENT=false \
 	ENABLE_GRAFANA_POLLER=false \
-	ENABLE_TELLA_MODULE=false \
 	bun run packages/core/opensession-server/opensession.ts

@@ -97,7 +97,6 @@ const IDENTIFIER_NAMES: Record<string, string> = {
   opensession: "Open Session",
   posthog: "PostHog",
   sql: "SQL",
-  tella: "Tella",
   url: "URL",
   workos: "WorkOS",
 };

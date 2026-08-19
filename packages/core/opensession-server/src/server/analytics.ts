@@ -502,7 +502,7 @@ async function fetchRepoPrs(repoId: string, ghRepo: string, fromDate: string): P
 	let failed = false;
 	// Two searches: PRs created in range (any state) + PRs merged in range
 	// (which may have been created before it). Capped at 1000 (the GitHub
-	// search ceiling) — tella-fusion alone opens 400+ PRs in a 30-day window.
+	// search ceiling): a busy repo alone can open 400+ PRs in a 30-day window.
 	for (const search of [`created:>=${fromDate}`, `merged:>=${fromDate}`]) {
 		try {
 			const raw = await $`gh pr list --repo ${ghRepo} --state all --limit 1000 --search ${search} --json ${fields}`

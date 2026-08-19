@@ -1,7 +1,7 @@
 /**
  * GitHub App installation tokens (server-to-server).
  *
- * The tellahq-scoped fine-grained PAT can never read check runs — GitHub
+ * An org-scoped fine-grained PAT can never read check runs: GitHub
  * doesn't offer the Checks permission on PATs at all (App-only). The org's
  * GitHub App (the same one behind per-user sign-in, github-auth.ts) has
  * checks:read, so this module mints short-lived installation access tokens
@@ -14,7 +14,7 @@
  * null and callers keep their PAT behavior). The JWT issuer is the app
  * client id from the same config as github-auth.ts. Token + installation id
  * are cached on globalThis so hot reloads don't re-mint; tokens live 1h and
- * refresh 5 min early. Scoped to the app's single tellahq installation —
+ * refresh 5 min early. Scoped to the app's single org installation:
  * same containment story as the App user tokens.
  */
 import { createSign } from "node:crypto";

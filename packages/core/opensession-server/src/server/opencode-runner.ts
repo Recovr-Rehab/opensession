@@ -1080,9 +1080,9 @@ export function steerOpencodeRun(id: string, text: string, images?: ImageInput[]
  * part of the local-profile contract. Open Session tokens never are.
  *
  * Public-repo containment note (2026-07-26): the gh-guard PATH shims that
- * used to front this env are gone — GitHub writes outside tellahq are now
+ * used to front this env are gone: GitHub writes outside the configured owners are now
  * blocked by credential scope instead (bot = fine-grained PAT with resource
- * owner tellahq; per-user = GitHub App user tokens limited to the tellahq
+ * owner; per-user = GitHub App user tokens limited to that owner's
  * installation). Writes elsewhere fail at GitHub's side with 403 "Resource
  * not accessible", for every code path including raw API calls the shims
  * could never see. */
@@ -4358,7 +4358,7 @@ async function* runOpencodeAttempt(
           autoshare: false,
           // Shadow-git snapshots run `git add --all` over the entire worktree
           // (plus git-lfs re-hashing) at every step-start AND step-finish of
-          // every turn. On multi-GB tella-fusion worktrees with a dozen
+          // every turn. On multi-GB worktrees with a dozen
           // concurrent runs that saturated the NVMe (2026-07-27: load 50-85,
           // 86% iowait, the web UI unreachable). We never use opencode's
           // undo/revert — worktrees + PRs are the rollback mechanism.

@@ -259,7 +259,7 @@ export function WorkspacePane({
 		// isolated worktree even on shared-checkout repos); ticket/plain
 		// workspaces start ask-style, and the server links plainThreadId from the
 		// workspace record and injects the ticket context. Feed-item workspaces
-		// (externalRefs, no repo, such as a Tella video) start in scratch mode:
+		// (externalRefs, no repo, such as a linked video) start in scratch mode:
 		// repo-less scratch dir, write+bash allowed, MCP as usual.
 		send({
 			type: "create_session",
@@ -386,7 +386,7 @@ export function WorkspacePane({
 		);
 	}
 
-	// The feed web panel (Tella video embed, … — the feeds design) on the
+	// The feed web panel (a video embed, … — the feeds design) on the
 	// session-less workspace route.
 	const webRef = (workspace.externalRefs || []).find((r) => refWebPanel(r));
 	const webPanel = webRef ? refWebPanel(webRef) : null;

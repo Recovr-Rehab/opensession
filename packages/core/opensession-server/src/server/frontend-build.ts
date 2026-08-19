@@ -113,7 +113,7 @@ export async function buildFrontend(): Promise<string> {
 		splitting: true,
 		sourcemap: "none",
 		// Root-relative assets: the app is served at the bare domain root
-		// (os.tella.dev); old /opensession + /backstage page URLs 301 there, and
+		// (the instance host); old /opensession + /backstage page URLs 301 there, and
 		// prefixed asset requests still normalize in the fetch preamble.
 		publicPath: "/",
 		naming: {

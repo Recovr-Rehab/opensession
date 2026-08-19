@@ -1941,7 +1941,7 @@ async function runSessionPromptInner(
 
 	// First engine turn of a feed-workspace session that was born prompt-less
 	// (tab-strip "+" siblings): inject the workspace's external-object context
-	// (Tella video metadata + transcript excerpt, scratch-dir note) exactly
+	// (video metadata + transcript excerpt, scratch-dir note) exactly
 	// like the create_session paths do — a session must get this context no
 	// matter how it was created (the feeds design).
 	if (

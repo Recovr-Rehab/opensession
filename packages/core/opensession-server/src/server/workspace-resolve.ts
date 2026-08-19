@@ -249,7 +249,7 @@ export function resolvePlainWorkspace(input: {
 }
 
 /**
- * Resolve the one workspace for a generic feed item (Tella video, …) by its
+ * Resolve the one workspace for a generic feed item (a video, …) by its
  * ExternalRef. The generic sibling of resolvePlainWorkspace: dedupe key
  * `<kind>-<id>`, adopt a filed session already carrying the ref, else mint a
  * session-less workspace stamped with the ref (the feeds design).

@@ -253,9 +253,10 @@ export class SlackAgent implements AgentModule {
             });
         }
 
-        // Unfurl os.tella.dev session links (Slack can't reach the tailnet-only
-        // host to read OG tags, so we look the session up in-process and post a
-        // preview via chat.unfurl). Deduped on the shared message ts.
+        // Unfurl this instance's session links. A private host (tailnet-only,
+        // VPN) is unreachable for Slack's OG-tag fetch, so we look the session
+        // up in-process and post a preview via chat.unfurl. Deduped on the
+        // shared message ts.
         if (event.type === "link_shared") {
           const eventId = `unfurl-${event.channel}-${event.message_ts}`;
           if (!isEventProcessed(eventId)) {

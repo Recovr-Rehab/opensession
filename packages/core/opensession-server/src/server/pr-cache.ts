@@ -652,7 +652,7 @@ const MIN_FULL_REFRESH_MS = 10 * 60_000;
 const PROBE_MAX_SKIP_MS = 30 * 60_000;
 
 // GitHub only populates a PR's `reviewDecision` when branch protection *requires*
-// a review. tella-fusion has no such rule, so reviewDecision comes back "" even
+// a review. A repo with no such rule answers reviewDecision "" even
 // after a teammate approves — which left approved-but-unmerged PRs stuck in the
 // sidebar's "Awaiting review" band forever (it clears only on APPROVED or MERGED).
 // Derive an effective decision from the actual latest review per reviewer,

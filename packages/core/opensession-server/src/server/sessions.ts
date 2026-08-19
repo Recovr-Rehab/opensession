@@ -864,7 +864,7 @@ const SIDECAR_SOURCE_OWNED = new Set<string>([
  * that sidecar has no `id` field, so scanNativeSessions skips it and the
  * fields silently vanished from the unified view (publish_walkthrough on a
  * Slack session kept answering "no walkthrough on session" right after
- * persisting one — tellahq/tella-mac#71, 2026-07-26).
+ * persisting one).
  *
  * Carry-by-default: everything in the sidecar lands on the row except the
  * fields the scanned source owns (SIDECAR_SOURCE_OWNED, justified above). The

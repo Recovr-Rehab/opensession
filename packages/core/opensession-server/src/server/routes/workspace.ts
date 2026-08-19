@@ -748,7 +748,7 @@ export async function handleWorkspaceRoutes(
 			...(plainThreadId ? { plainThreadId } : {}),
 			...(siblingRefs?.length ? { externalRefs: siblingRefs } : {}),
 			// Siblings keep the source session's MCP scoping (least privilege —
-			// a sibling of a tella-scoped session must not regain every server).
+			// a sibling of a scoped session must not regain every server).
 			...(src.mcpServers?.length ? { mcpServers: src.mcpServers } : {}),
 			createdBy: requestUser(ctx, body.user) || "Anonymous",
 			createdAt: new Date().toISOString(),

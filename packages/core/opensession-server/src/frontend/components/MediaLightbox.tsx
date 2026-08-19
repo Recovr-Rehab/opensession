@@ -1136,8 +1136,8 @@ function MediaLightbox({
 				)}
 				{!item.src.startsWith("data:") && (
 					<>
-						{/* The file's own URL — what you paste into a Tella upload, a
-						    ticket, or a message to someone else on the tailnet. */}
+						{/* The file's own URL: what you paste into an upload, a
+						    ticket, or a message to someone who can reach this instance. */}
 						<button
 							type="button"
 							onClick={() =>

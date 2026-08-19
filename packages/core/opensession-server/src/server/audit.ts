@@ -9,7 +9,7 @@ import {
 } from "node:fs";
 import { stateDir } from "./paths";
 
-// Structured audit log, modeled on tellahq/incident-agent's src/audit.ts.
+// Structured audit log.
 // One JSON line per event into a daily file under ~/.opensession-audit/.
 // incident-agent ships stdout via Docker's awslogs driver; opensession runs as
 // a systemd unit that hard-denies IMDS (opensession.service), so it can never

@@ -33,8 +33,8 @@ const SESSIONS_DIR = OPENSESSION_SESSIONS_DIR;
  * sessions (1.4%) ever called an external MCP tool at all, and the calls
  * concentrate in grafana (149 calls / 7 sessions — checking Loki + Prometheus
  * for a change under review) and linear (13 / 8 — pulling the issue a PR
- * references). The tail this drops by default is stripe (16 / 3),
- * TellaInternalSupportMCP (11 / 3) and plain (3 / 2); a run that needs one of
+ * references). The tail this drops by default is stripe, an internal support
+ * server and plain (all in single digits); a run that needs one of
  * those reports it can't reach it instead of silently costing every other run
  * the schemas.
  */

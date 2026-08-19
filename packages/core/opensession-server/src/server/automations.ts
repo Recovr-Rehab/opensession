@@ -145,14 +145,14 @@ export interface Automation {
   mode: "ask" | "code";
   /**
    * Registered repo id (see worktree.ts REPOS) this automation works against.
-   * Omitted = tella-fusion (the historical default). Ask mode reads the repo's
+   * Omitted = the instance default repo. Ask mode reads the repo's
    * main checkout; code mode gets an isolated worktree — for shared-checkout
    * repos (opensession) explicitly isolated, never the live checkout.
    */
   repo?: string;
   /**
    * Reviewer to request on PRs this automation opens — a GitHub login
-   * (`kentdebruin`), an `org/team` slug (`tellahq/super-developers`), or a
+   * (`octocat`), an `org/team` slug (`acme/reviewers`), or a
    * comma-separated list of either. Unattended PRs are otherwise opened with
    * no reviewer, so nothing surfaces them: the review-requested push
    * (pr-review-notifications.ts) is edge-triggered off GitHub's own

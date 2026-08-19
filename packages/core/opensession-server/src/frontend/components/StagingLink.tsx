@@ -61,12 +61,11 @@ const RING_LG = "size-[22px] -mt-[11px] -ml-[11px]";
 const RING_SM = "size-4 -mt-2 -ml-2";
 
 /**
- * Header link to the PR's preview environment (the Vercel preview at
- * https://tella-git-<branch>.tella.dev) so a change can be tested on real
- * infra in one click. The URL comes from the PR details endpoint, which parses
- * tella-butler's preview-table comment — so the link only appears when a
- * webapp deploy actually exists for the PR (fusion PRs that don't touch the
- * webapp never get one). While the deploy is still building the link renders
+ * Header link to the PR's preview environment (a per-branch deploy, e.g. a
+ * Vercel preview) so a change can be tested on real infra in one click. The
+ * URL comes from the PR details endpoint, which parses the deploy bot's
+ * preview-table comment, so the link only appears when a deploy actually
+ * exists for the PR (PRs that never deploy never get one). While the deploy is still building the link renders
  * dimmed; it flips live on the next poll.
  *
  * Before butler posts the comment at all there's still a window where we KNOW a

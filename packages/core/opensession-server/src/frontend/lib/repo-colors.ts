@@ -3,8 +3,8 @@
  *
  * The server assigns one color per registered repo, across the whole set, so
  * that no two of them match — see src/server/repo-tile-colors.ts for why a
- * plain hash isn't enough (same-letter families like `tella-fusion` /
- * `tella-mac` / `tella-windows` are the normal case, and a colliding color
+ * plain hash isn't enough (same-letter families like `acme-web` /
+ * `acme-mac` / `acme-windows` are the normal case, and a colliding color
  * leaves their tiles identical). Those assignments arrive with the repo list
  * and are recorded here by `rememberRepoColors`.
  *

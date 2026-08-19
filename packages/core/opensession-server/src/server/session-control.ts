@@ -74,7 +74,7 @@ export interface CreateSessionOpts {
   prompt: string;
   /** Branch for a code-mode worktree session. Ignored for ask mode. */
   branch?: string;
-  /** Registered repo id to run in. Defaults to tella-fusion. */
+  /** Registered repo id to run in. Defaults to the instance default repo. */
   repo?: string;
   /** Explicitly run an Ask session without a repository checkout. */
   repoLess?: boolean;

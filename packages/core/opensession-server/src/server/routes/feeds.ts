@@ -83,7 +83,7 @@ export async function handleFeedsRoutes(
 	}
 
 	// Options for one of a feed's filter controls (resolved via MCP on the
-	// viewer's grant — e.g. tella tags via list_tags).
+	// viewer's grant, e.g. tags via list_tags).
 	const filterOptsMatch = path.match(
 		/^\/api\/feeds\/([^/]+)\/filters\/([^/]+)\/options$/,
 	);
