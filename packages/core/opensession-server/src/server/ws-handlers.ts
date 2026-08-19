@@ -42,6 +42,7 @@ import { subscribeTranscript } from "./transcript-bus";
 import { resumeSessionFeed } from "./session-feed";
 import { type SeqEntry, transcriptStore } from "./transcript-store";
 import { startTranscriptWatch } from "./transcript-watch";
+import { clampV2InitEntries } from "./transcript-wire";
 import { MAX_UPLOAD_BYTES, WS_MAX_PAYLOAD_BYTES, asDataUrlList, parseImageDataUrls } from "./uploads";
 import { githubReconnectRequired } from "./github-auth";
 import { refreshWebIdentity } from "./web-auth";
@@ -198,30 +199,9 @@ function classifyV2Entries(entries: SeqEntry[]): SeqEntry[] {
 }
 
 /**
- * §4 snapshot clamp: v2 store rows are wire-bounded at 32KB, but the legacy
- * transcript-open payload clamps entries to INIT_WIRE_CLAMP_BYTES (8KB — the
- * e4e2340a slow-transcript fix; the UI eagerly renders ~6KB per bubble and
- * fetches the full entry on "Show more" anyway), so v2 init/history/backlog
- * pages go through the same budget. Same markers as entriesForWire,
- * except an already-store-stripped entry keeps its original contentLength
- * (the true pre-strip length) instead of the 32KB form's. Live
- * transcript_append frames keep the fatter store forms, same as legacy
- * appends.
+ * V2 snapshot/history pages use the same bounded previews as the legacy
+ * transcript path. Live transcript_append frames keep the larger store form.
  */
-function clampV2InitEntries(entries: SeqEntry[]): SeqEntry[] {
-	if (!entries.some((e) => (e.content?.length ?? 0) > INIT_WIRE_CLAMP_BYTES))
-		return entries;
-	return entries.map((e) =>
-		(e.content?.length ?? 0) <= INIT_WIRE_CLAMP_BYTES
-			? e
-			: {
-					...e,
-					content: e.content.slice(0, INIT_WIRE_CLAMP_BYTES),
-					contentClamped: true,
-					contentLength: e.contentLength ?? e.content.length,
-				},
-	);
-}
 
 /** Legacy (re-)import for a session (same routine as §3's import-first
  *  gate): merged cross-engine history → importLegacyTranscript (which marks

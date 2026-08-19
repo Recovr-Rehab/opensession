@@ -42,7 +42,20 @@ struct ToolCallRow: View {
         .frame(maxWidth: .infinity, alignment: .leading)
         .task(id: detailKey) {
             guard state.expanded, detail == nil else { return }
-            detail = ToolDetail.make(item: item)
+            let hydratedResultText: String?
+            if let result = item.result, result.contentClamped == true {
+                hydratedResultText = try? await OS1API.fullEntryContent(
+                    sessionId: sessionId,
+                    entryId: result.id
+                )
+            } else {
+                hydratedResultText = nil
+            }
+            guard !Task.isCancelled else { return }
+            detail = ToolDetail.make(
+                item: item,
+                hydratedResultText: hydratedResultText
+            )
         }
         .onChange(of: item.result?.id) { _, _ in detail = nil }
         .sheet(item: $openWorker) { link in
@@ -470,7 +483,10 @@ struct ToolDetail: Equatable {
 
     private static let maxBodyCharacters = 4000
 
-    static func make(item: ToolCallItem) -> ToolDetail {
+    static func make(
+        item: ToolCallItem,
+        hydratedResultText: String? = nil
+    ) -> ToolDetail {
         var detail = ToolDetail()
         let canonical = item.presentation.canonical
         let input = item.use?.toolInput
@@ -519,7 +535,8 @@ struct ToolDetail: Equatable {
         }
 
         if let result = item.result {
-            let text = result.text.trimmingCharacters(in: .whitespacesAndNewlines)
+            let text = (hydratedResultText ?? result.text)
+                .trimmingCharacters(in: .whitespacesAndNewlines)
             let hasMedia = !result.media.isEmpty
             // "Image read successfully." next to the image it describes is
             // noise; the image is the result.
@@ -527,7 +544,9 @@ struct ToolDetail: Equatable {
             if !redundant {
                 detail.resultLabel = item.isError
                     ? "Error"
-                    : (result.contentClamped == true ? "Output (truncated)" : "Output")
+                    : (result.contentClamped == true && hydratedResultText == nil
+                        ? "Output (truncated)"
+                        : "Output")
                 detail.resultText = text.isEmpty
                     ? (hasMedia ? nil : "(empty)")
                     : clamp(text)

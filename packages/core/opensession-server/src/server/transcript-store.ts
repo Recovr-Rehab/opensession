@@ -105,6 +105,34 @@ export interface TranscriptImportInfo {
   watermark: number | null;
 }
 
+/**
+ * What counts as CONVERSATION when sizing an opening window (readTailWindow).
+ *
+ * Deliberately not `system`: the biggest system rows are the per-turn context
+ * injections (memory, standing instructions), which every client drops on the
+ * way in (dropContextInjections), so counting them would satisfy the message
+ * floor with rows nobody ever sees.
+ */
+const TAIL_WINDOW_MESSAGE_KINDS = new Set(["user", "assistant"]);
+
+export interface TailWindowOpts {
+  /** Never fewer than this many entries, whatever the byte ceiling says. */
+  minEntries: number;
+  /** Reach back until the window holds this many user/assistant entries. */
+  minMessages: number;
+  /** Require this many user boundaries when the window contains tool work. */
+  minUserMessagesWithToolWork?: number;
+  /** Hard ceiling on rows read, and on the probe query itself. */
+  maxEntries: number;
+  /** Estimated transfer ceiling for the extension past `minEntries`. */
+  maxEstimatedBytes: number;
+  /**
+   * Estimate what one stored row costs after the caller's wire transforms.
+   * Defaults to its stored UTF-8 size.
+   */
+  weigh?: (kind: string, storedBytes: number) => number;
+}
+
 /** Same contract as file-watcher.ts's AppendListener (setTranscriptAppendListener):
  *  best-effort post-commit notification with the affected entries. */
 export type TranscriptAppendHook = (
@@ -470,6 +498,85 @@ export class TranscriptStore {
   }
 
   // ── Reads ──────────────────────────────────────────────────────────────────
+
+  /**
+   * The tail a reader should OPEN on: at least `minEntries` rows, extended
+   * back until the window holds enough conversation and user-message
+   * boundaries, and stopped by whichever ceiling comes first.
+   *
+   * Why this exists at all: a flat entry count is a bad proxy for how much
+   * conversation a snapshot contains. One turn can be a thousand tool rows,
+   * and the UI folds a run of consecutive tool/assistant entries into ONE
+   * collapsed "Worked · N steps" block, so a 132-entry tail of such a turn
+   * renders as a single fold and reads as an empty session (measured on a
+   * real session: 2,256 entries, of which the last 132 held one assistant
+   * message and no user message; 17 of the 60 largest sessions in the store
+   * had fewer than 8 messages in that window).
+   *
+   * Two queries, and the first decodes no JSON: a probe over (seq, kind,
+   * length(data)) walks the tail newest-first to pick the row count, then the
+   * ordinary tail read materializes exactly that many. The probe is bounded by
+   * `maxEntries` and rides the (session_id, seq) primary key, so it stays an
+   * index scan of at most that many rows rather than a table scan.
+   */
+  readTailWindow(sessionId: string, opts: TailWindowOpts): TranscriptPage {
+    const maxEntries = Math.max(1, Math.floor(opts.maxEntries));
+    const minEntries = Math.max(
+      1,
+      Math.min(Math.floor(opts.minEntries), maxEntries)
+    );
+    const minMessages = Math.max(0, Math.floor(opts.minMessages));
+    const minUserMessagesWithToolWork = Math.max(
+      0,
+      Math.floor(opts.minUserMessagesWithToolWork ?? 0)
+    );
+    const maxEstimatedBytes = Math.max(0, opts.maxEstimatedBytes);
+    const weigh = opts.weigh ?? ((_kind: string, bytes: number) => bytes);
+    const probe = this.db
+      .query(
+        `SELECT seq, kind, length(CAST(data AS BLOB)) AS bytes
+         FROM transcript_events
+         WHERE session_id = ? ORDER BY seq DESC LIMIT ?`
+      )
+      .all(sessionId, maxEntries) as Array<{
+      seq: number;
+      kind: string;
+      bytes: number;
+    }>;
+
+    let count = 0;
+    let estimatedBytes = 0;
+    let messages = 0;
+    let userMessages = 0;
+    let toolRows = 0;
+    for (const row of probe) {
+      // Tool-free assistant messages all render in place. A user boundary is
+      // needed only once tool work makes the renderer fold those messages.
+      const userBoundaryMet =
+        toolRows === 0 || userMessages >= minUserMessagesWithToolWork;
+      if (count >= minEntries && messages >= minMessages && userBoundaryMet) {
+        break;
+      }
+      const cost = weigh(row.kind, row.bytes ?? 0);
+      // The entry floor is unconditional. The byte ceiling only governs the
+      // message-seeking extension past it, so a session of enormous rows still
+      // opens on the same window it always did.
+      if (
+        count >= minEntries &&
+        estimatedBytes + cost > maxEstimatedBytes
+      ) {
+        break;
+      }
+      count++;
+      estimatedBytes += cost;
+      if (TAIL_WINDOW_MESSAGE_KINDS.has(row.kind)) messages++;
+      if (row.kind === "user") userMessages++;
+      if (row.kind === "tool_use" || row.kind === "tool_result") toolRows++;
+    }
+
+    if (count === 0) return { entries: [], firstSeq: 0, lastSeq: 0 };
+    return this.readTail(sessionId, count);
+  }
 
   /** Last `limit` entries in ascending seq order. */
   readTail(sessionId: string, limit: number = 50): TranscriptPage {

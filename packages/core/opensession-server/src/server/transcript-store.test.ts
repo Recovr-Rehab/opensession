@@ -265,6 +265,132 @@ describe("paging: readSince / readBefore", () => {
   });
 });
 
+describe("message-aware tail windows", () => {
+  test("extends past the entry floor until it reaches conversation", () => {
+    const sid = "bks-tail-window-messages";
+    store.appendTranscriptEvents(sid, [
+      entry("tw-u", "question", { type: "user" }),
+      entry("tw-a", "answer"),
+      ...Array.from({ length: 10 }, (_, i) =>
+        entry(`tw-tool-${i}`, `step ${i}`, { type: "tool_use" })
+      ),
+    ]);
+
+    const page = store.readTailWindow(sid, {
+      minEntries: 4,
+      minMessages: 2,
+      maxEntries: 20,
+      maxEstimatedBytes: 100_000,
+    });
+
+    expect(page.entries).toHaveLength(12);
+    expect(page.entries[0]).toMatchObject({ id: "tw-u", seq: 1 });
+    expect(page.entries.at(-1)).toMatchObject({ id: "tw-tool-9", seq: 12 });
+  });
+
+  test("assistant rows alone do not satisfy a required user boundary", () => {
+    const sid = "bks-tail-window-user";
+    store.appendTranscriptEvents(sid, [
+      entry("tu-u", "question", { type: "user" }),
+      entry("tu-a0", "starting"),
+      entry("tu-a1", "still working"),
+      entry("tu-a2", "nearly done"),
+      ...Array.from({ length: 6 }, (_, i) =>
+        entry(`tu-tool-${i}`, `step ${i}`, { type: "tool_use" })
+      ),
+    ]);
+
+    const page = store.readTailWindow(sid, {
+      minEntries: 2,
+      minMessages: 2,
+      minUserMessagesWithToolWork: 1,
+      maxEntries: 20,
+      maxEstimatedBytes: 100_000,
+    });
+
+    expect(page.entries[0]).toMatchObject({ id: "tu-u", type: "user" });
+  });
+
+  test("the estimated byte ceiling bounds extension past the entry floor", () => {
+    const sid = "bks-tail-window-bytes";
+    store.appendTranscriptEvents(sid, [
+      entry("tb-u", "old question", { type: "user" }),
+      entry("tb-a", "old answer"),
+      ...Array.from({ length: 8 }, (_, i) =>
+        entry(`tb-tool-${i}`, `step ${i}`, { type: "tool_use" })
+      ),
+    ]);
+
+    const page = store.readTailWindow(sid, {
+      minEntries: 3,
+      minMessages: 2,
+      minUserMessagesWithToolWork: 1,
+      maxEntries: 20,
+      maxEstimatedBytes: 40,
+      weigh: () => 10,
+    });
+
+    expect(page.entries.map((row) => row.id)).toEqual([
+      "tb-tool-4",
+      "tb-tool-5",
+      "tb-tool-6",
+      "tb-tool-7",
+    ]);
+  });
+
+  test("the row ceiling bounds a message-poor tail", () => {
+    const sid = "bks-tail-window-rows";
+    store.appendTranscriptEvents(sid, [
+      entry("tr-u", "old question", { type: "user" }),
+      ...Array.from({ length: 10 }, (_, i) =>
+        entry(`tr-tool-${i}`, `step ${i}`, { type: "tool_use" })
+      ),
+    ]);
+
+    const page = store.readTailWindow(sid, {
+      minEntries: 2,
+      minMessages: 2,
+      minUserMessagesWithToolWork: 1,
+      maxEntries: 5,
+      maxEstimatedBytes: 100_000,
+    });
+
+    expect(page.entries).toHaveLength(5);
+    expect(page.firstSeq).toBe(7);
+    expect(page.lastSeq).toBe(11);
+  });
+
+  test("measures stored rows in UTF-8 bytes", () => {
+    const sid = "bks-tail-window-utf8";
+    store.appendTranscriptEvents(sid, [entry("utf8", "😀".repeat(20))]);
+    let measured = 0;
+
+    store.readTailWindow(sid, {
+      minEntries: 1,
+      minMessages: 2,
+      maxEntries: 2,
+      maxEstimatedBytes: 100_000,
+      weigh: (_kind, bytes) => {
+        measured = bytes;
+        return bytes;
+      },
+    });
+
+    const raw = new Database(dbPath, { readonly: true });
+    try {
+      const row = raw
+        .query(
+          "SELECT length(CAST(data AS BLOB)) AS bytes FROM transcript_events WHERE session_id = ?"
+        )
+        .get(sid) as { bytes: number };
+      expect(measured).toBe(row.bytes);
+      expect(measured).toBeGreaterThan(20);
+    } finally {
+      raw.close();
+    }
+  });
+});
+
 describe("import-first gate + legacy import", () => {
   test("import then live-append: history seqs precede live seqs", () => {
     const sid = "bks-import-order";

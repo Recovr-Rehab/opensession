@@ -238,6 +238,87 @@ describe("race-free transcript watch", () => {
     expect(state.frames).toHaveLength(1);
   });
 
+  test("an assistant-heavy tool tail reaches back to its user message", () => {
+    // The bug this fixes: a turn's tools and intermediate assistant notes
+    // collapse into ONE fold. A flat 132-entry tail, or a floor that counts
+    // those notes alone, can still render as one line with no user message.
+    const state = setup();
+    const sid = `bks-window-${crypto.randomUUID()}`;
+    const rows: TranscriptEntry[] = [];
+    for (let i = 0; i < 5; i++) {
+      rows.push({ ...entry(`msg-${i}`, `question ${i}`), type: "user" });
+      rows.push(entry(`ans-${i}`, `answer ${i}`));
+    }
+    rows.push({ ...entry("current-user", "current question"), type: "user" });
+    rows.push(entry("current-start", "I am checking"));
+    for (let i = 0; i < 400; i++) {
+      rows.push({ ...entry(`tu-${i}`, "Using bash"), type: "tool_use" });
+      rows.push({ ...entry(`tr-${i}`, `out ${i}`), type: "tool_result" });
+      if (i % 100 === 0) rows.push(entry(`note-${i}`, `note ${i}`));
+    }
+    rows.push(entry("current-answer", "current answer"));
+    state.store.appendTranscriptEvents(sid, rows);
+
+    const handle = watch(state, sid);
+    cleanups.push(() => handle.unsubscribe());
+
+    const sent = state.frames[0].entries as TranscriptEntry[];
+    const messages = sent.filter(
+      (e) => e.type === "user" || e.type === "assistant"
+    );
+    expect(sent.length).toBeGreaterThan(132);
+    expect(messages.length).toBeGreaterThanOrEqual(4);
+    expect(sent.some((e) => e.id === "current-user")).toBe(true);
+    expect(sent.at(-1)?.id).toBe("current-answer");
+    expect(state.frames[0].truncated).toBe(true);
+  });
+
+  test("the message floor never shrinks the window below the entry floor", () => {
+    // A chatty session already satisfies the message floor immediately; it
+    // must still receive the 132-entry tail it always did.
+    const state = setup();
+    const sid = `bks-window-chatty-${crypto.randomUUID()}`;
+    state.store.appendTranscriptEvents(
+      sid,
+      Array.from({ length: 300 }, (_, i) => entry(`e${i}`, String(i)))
+    );
+    const handle = watch(state, sid);
+    cleanups.push(() => handle.unsubscribe());
+
+    expect(state.frames[0].entries).toHaveLength(132);
+    expect(state.frames[0]).toMatchObject({ truncated: true, lastSeq: 300 });
+  });
+
+  test("a store without the window read still serves the flat tail", () => {
+    // readTailWindow is optional on TranscriptWatchStore; an adapter that
+    // does not implement it must degrade to the previous behaviour rather
+    // than throw the whole watch.
+    const state = setup();
+    const sid = `bks-window-legacy-${crypto.randomUUID()}`;
+    state.store.appendTranscriptEvents(
+      sid,
+      Array.from({ length: 200 }, (_, i) => entry(`e${i}`, String(i)))
+    );
+    const legacy = {
+      getLastChangeSeq: (id: string) => state.store.getLastChangeSeq(id),
+      getLastResetChangeSeq: (id: string) =>
+        state.store.getLastResetChangeSeq(id),
+      readChangesSince: (id: string, since: number, limit?: number) =>
+        state.store.readChangesSince(id, since, limit),
+      readTail: (id: string, limit?: number) => state.store.readTail(id, limit),
+    };
+    const handle = startTranscriptWatch({
+      sessionId: sid,
+      store: legacy,
+      socket: state.socket,
+      subscribe: subscribeTranscript,
+      isCurrent: () => true,
+    });
+    cleanups.push(() => handle.unsubscribe());
+
+    expect(state.frames[0].entries).toHaveLength(132);
+  });
+
   test("every entry batch is prepared before it goes on the wire", async () => {
     // Store rows are raw: classification (notices.ts) happens on the way out,
     // and a client that only reads the classified form has no second chance.
