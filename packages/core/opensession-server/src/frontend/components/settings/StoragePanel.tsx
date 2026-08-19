@@ -138,6 +138,14 @@ export function StoragePanel() {
 		!!draft.secretAccessKey ||
 		draft.forcePathStyle !== saved.forcePathStyle
 	);
+	const ready = !!draft && (
+		draft.provider === "local" ||
+		!!(
+			draft.bucket.trim() &&
+			draft.accessKeyId.trim() &&
+			(draft.secretAccessKey.trim() || draft.secretAccessKeySet)
+		)
+	);
 
 	return (
 		<SettingsPanel>
@@ -266,7 +274,7 @@ export function StoragePanel() {
 						{draft.provider === "s3" && (
 							<Button
 								variant="soft"
-								disabled={!!busy}
+								disabled={!!busy || !ready}
 								onClick={() => void testConnection()}
 							>
 								{busy === "test" ? "Testing…" : "Test connection"}
@@ -274,7 +282,7 @@ export function StoragePanel() {
 						)}
 						<Button
 							variant="primary"
-							disabled={!!busy || !changed}
+							disabled={!!busy || !changed || !ready}
 							onClick={() => void save()}
 						>
 							{busy === "save" ? "Saving…" : "Save"}
