@@ -53,7 +53,11 @@ describe("GitHub organization member import", () => {
     globalThis.fetch = (async (input: string | URL | Request) => {
       fetches++;
       expect(String(input)).toContain("/orgs/acme/members?per_page=100&page=1");
-      return Response.json([{ login: "ada" }, { login: "grace" }]);
+      return Response.json([
+        { login: "ada", type: "User" },
+        { login: "grace", type: "User" },
+        { login: "acme-bot", type: "Bot" },
+      ]);
     }) as unknown as typeof fetch;
 
     const response = await handleSetupTeamRoutes(context());

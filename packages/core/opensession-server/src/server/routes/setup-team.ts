@@ -120,6 +120,7 @@ function githubOrganization(): string | null {
 
 interface GithubOrganizationMember {
   login?: unknown;
+  type?: unknown;
 }
 
 async function fetchGithubOrganizationMembers(
@@ -153,6 +154,7 @@ async function fetchGithubOrganizationMembers(
     }
     if (!Array.isArray(body)) throw new Error("GitHub returned an invalid member list.");
     for (const item of body) {
+      if (item.type === "Bot") continue;
       if (typeof item.login === "string" && item.login.trim()) members.push(item.login.trim());
     }
     if (body.length < 100) break;
