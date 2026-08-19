@@ -2443,7 +2443,11 @@ function FinishReviewDialog({
   ];
   return (
     <Modal.Root open={open} onOpenChange={(next) => !next && onClose(summary)}>
-      <Modal.Content widthClassName="max-w-[30rem]" initialFocus={summaryRef}>
+      <Modal.Content
+        widthClassName="max-w-[30rem]"
+        className="bottom-[max(1rem,env(safe-area-inset-bottom))] left-auto right-4 top-auto translate-x-0 translate-y-0 origin-bottom-right phone:left-1/2 phone:right-auto phone:-translate-x-1/2 phone:origin-bottom"
+        initialFocus={summaryRef}
+      >
         <Modal.Header
           title="Finish review"
           description={
