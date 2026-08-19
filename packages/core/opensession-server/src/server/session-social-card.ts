@@ -27,12 +27,6 @@ import { getUiPrefs } from "./ui-prefs";
 
 export const SESSION_CARD_WIDTH = 1200;
 export const SESSION_CARD_HEIGHT = 630;
-/**
- * Width Slack gets. A Block Kit `image` block is laid out at the message
- * column width, so the full 1200 px card fills half the conversation. Slack
- * does not upscale, so serving a small render keeps the preview modest.
- */
-export const SESSION_CARD_SLACK_WIDTH = 480;
 const SESSION_CARD_VERSION = 3;
 const TITLE_MAX_WIDTH = 1088;
 const TITLE_FONT = "Inter SemiBold 56";
@@ -251,18 +245,15 @@ async function socialCardMonoFont(): Promise<string> {
 
 export async function renderSessionSocialCard(
 	data: SessionSocialCardData,
-	width: number = SESSION_CARD_WIDTH,
 ): Promise<Buffer> {
 	const [avatar, monoFont, title] = await Promise.all([
 		avatarDataUrl(data.person),
 		socialCardMonoFont(),
 		fitSocialCardTitle(data.title),
 	]);
-	const image = sharp(
-		Buffer.from(sessionSocialCardSvg(data, avatar, monoFont, title)),
-	);
-	if (width !== SESSION_CARD_WIDTH) image.resize(width);
-	return image.png().toBuffer();
+	return sharp(Buffer.from(sessionSocialCardSvg(data, avatar, monoFont, title)))
+		.png()
+		.toBuffer();
 }
 
 function publicBase(): string {
@@ -273,15 +264,8 @@ function publicBase(): string {
 	).replace(/\/+$/, "");
 }
 
-export function sessionSocialCardUrl(
-	sessionId: string,
-	options: { width?: number } = {},
-): string {
-	const size =
-		options.width && options.width !== SESSION_CARD_WIDTH
-			? `&w=${options.width}`
-			: "";
-	return `${publicBase()}/session-card/${encodeURIComponent(sessionId)}/${cardToken(sessionId)}.png?v=${SESSION_CARD_VERSION}${size}`;
+export function sessionSocialCardUrl(sessionId: string): string {
+	return `${publicBase()}/session-card/${encodeURIComponent(sessionId)}/${cardToken(sessionId)}.png?v=${SESSION_CARD_VERSION}`;
 }
 
 let cachedCardSecret = "";
@@ -372,11 +356,11 @@ const CARD_CACHE_MS = 60_000;
 const CARD_CACHE_LIMIT = 100;
 
 function rememberCard(
-	cacheKey: string,
+	sessionId: string,
 	entry: { fingerprint: string; bytes: Buffer; at: number },
 ): void {
-	cardCache.delete(cacheKey);
-	cardCache.set(cacheKey, entry);
+	cardCache.delete(sessionId);
+	cardCache.set(sessionId, entry);
 	if (cardCache.size <= CARD_CACHE_LIMIT) return;
 	const oldest = cardCache.keys().next().value;
 	if (oldest) cardCache.delete(oldest);
@@ -403,22 +387,15 @@ export function sessionSocialCardPublicRoutes(): Map<
 		const session = await findSessionAsync(sessionId);
 		if (!session) return Response.json({ error: "Not found" }, { status: 404 });
 		const data = sessionSocialCardData(session);
-		// Any width other than the one Slack asks for renders the full card, so a
-		// crafted `w` cannot make us rasterize an arbitrary size.
-		const width =
-			Number(url.searchParams.get("w")) === SESSION_CARD_SLACK_WIDTH
-				? SESSION_CARD_SLACK_WIDTH
-				: SESSION_CARD_WIDTH;
-		const cacheKey = `${session.id}@${width}`;
 		const fingerprint = JSON.stringify(data, (key, value) => (key === "person" ? data.person?.image || data.person?.github : value));
-		const cached = cardCache.get(cacheKey);
+		const cached = cardCache.get(session.id);
 		const now = Date.now();
 		let bytes: Buffer;
 		if (cached && cached.fingerprint === fingerprint && now - cached.at < CARD_CACHE_MS) {
 			bytes = cached.bytes;
 		} else {
-			bytes = await renderSessionSocialCard(data, width);
-			rememberCard(cacheKey, { fingerprint, bytes, at: now });
+			bytes = await renderSessionSocialCard(data);
+			rememberCard(session.id, { fingerprint, bytes, at: now });
 		}
 		return new Response(bytes.slice().buffer as ArrayBuffer, {
 			headers: {
