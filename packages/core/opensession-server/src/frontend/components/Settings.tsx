@@ -436,7 +436,7 @@ function MobileSettings({
 					<div className="relative flex h-11 shrink-0 items-center justify-center px-3">
 						{detail && (
 							<button
-								className="absolute left-3 grid size-8 place-items-center rounded-full border-none bg-transparent p-0 text-accent"
+								className="absolute left-3 grid size-8 place-items-center rounded-full border-none bg-active p-0 text-dim"
 								onClick={() => onShowRoot?.()}
 								aria-label="Back to settings"
 							>
