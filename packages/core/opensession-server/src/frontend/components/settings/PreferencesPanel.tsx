@@ -589,6 +589,7 @@ export function PreferencesPanel() {
 			<SettingCard>
 				<SettingRow
 					title="Steps"
+					desc="Choose whether a turn’s steps stay closed, open only while it runs, or remain open."
 					control={
 						<Select
 							label="Steps"
@@ -604,6 +605,7 @@ export function PreferencesPanel() {
 				/>
 				<SettingRow
 					title="Tool calls"
+					desc="Choose whether tool calls start open or stay folded into a single step."
 					control={
 						<Select
 							label="Tool calls"

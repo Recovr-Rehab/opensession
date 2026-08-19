@@ -72,6 +72,15 @@ export function DeskConversation({
 	const [pending, setPending] = useState<string | null>(null);
 	const bodyRef = useRef<HTMLDivElement | null>(null);
 	const textareaRef = useRef<HTMLTextAreaElement | null>(null);
+
+	useEffect(() => {
+		if (!autoFocus) return;
+		const timer = window.setTimeout(
+			() => textareaRef.current?.focus({ preventScroll: true }),
+			160,
+		);
+		return () => window.clearTimeout(timer);
+	}, [autoFocus]);
 	// Stick to the live edge only while the reader is already there, so a
 	// streaming reply doesn't yank them up from scrollback.
 	const followRef = useRef(true);
