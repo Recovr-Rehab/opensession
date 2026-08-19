@@ -156,15 +156,11 @@ const LAST_REPO_KEY = "opensession-new-session-repo";
  *  card's own edge, the bottom only a hairline. The pickers are 32px boxes
  *  that fill on hover, so 16px above them matches the 16px beside them.
  *
- *  `flex-wrap` is what keeps the row honest on a phone. The three pickers want
- *  ~64px more than a 393px screen has, and a single line can only pay for that
- *  out of the labels — which took "tella-fusion" down to "tel…" and the branch
- *  to "New br…", two ellipses on the one row that says what the session is
- *  pointed at. Wrapped, the branch drops to a second line at full width and
- *  nothing is abbreviated; on any width that fits (every desktop) the row is
- *  unchanged, since wrapping costs nothing until it happens. */
+ *  `flex-wrap` is what keeps the row honest on a phone. The two compact pills
+ *  share one line when their labels fit, then wrap instead of overlapping or
+ *  compressing either label into a sliver. */
 const HEADER =
-	"flex flex-wrap items-center justify-between gap-x-2 gap-y-1 border-b border-transparent px-4 pt-4 pb-[11px] phone:grid phone:grid-cols-2 phone:items-start phone:gap-2 phone:px-3 phone:pb-3 phone:pt-2";
+	"flex flex-wrap items-center justify-between gap-x-2 gap-y-1 border-b border-transparent px-4 pt-4 pb-[11px] phone:justify-start phone:gap-2 phone:px-3 phone:pb-3 phone:pt-2";
 /** Merged onto HEADER/FOOTER by `cn()`, which drops the transparent colour. */
 const EDGE_DIVIDER = "border-line";
 /** Header pickers. `relative` is load-bearing — PaletteSelect's phone branch
@@ -182,12 +178,9 @@ const TRIGGER =
 const TRIGGER_STRONG =
 	"relative inline-flex min-w-0 max-w-[46%] cursor-pointer items-center gap-1.5 rounded-control px-2 py-[5px] text-item-title font-semibold text-fg transition-colors hover:bg-hover disabled:cursor-default disabled:opacity-55";
 const CHEVRON = "-ml-0.5 shrink-0 text-faint";
-const MOBILE_PICKER =
-	"contents phone:flex phone:min-w-0 phone:flex-col phone:gap-0.5";
-const MOBILE_PICKER_LABEL =
-	"hidden px-1 text-meta font-medium text-faint phone:block";
+const MOBILE_PICKER = "contents";
 const MOBILE_TRIGGER =
-	"phone:min-h-11 phone:w-full phone:max-w-none phone:px-2.5 phone:py-2";
+	"phone:min-h-11 phone:rounded-[999px] phone:px-3 phone:py-2";
 const MOBILE_TITLE =
 	"hidden items-center justify-between gap-3 px-4 pb-1 pt-3 phone:flex";
 const MOBILE_CLOSE =
@@ -1180,7 +1173,6 @@ export function NewSession({ onBack, inline, focusSeq, send, addHandler, connect
           with no repo is a scratch dir. */}
       <div className={cn(HEADER, edges.top && EDGE_DIVIDER)}>
         <div className={MOBILE_PICKER}>
-          <span className={MOBILE_PICKER_LABEL}>Project</span>
           <PaletteSelect
             className={cn(TRIGGER_STRONG, MOBILE_TRIGGER)}
             title="Project"
@@ -1301,7 +1293,6 @@ export function NewSession({ onBack, inline, focusSeq, send, addHandler, connect
 
         {mode === "code" && (
           <div className={MOBILE_PICKER}>
-            <span className={MOBILE_PICKER_LABEL}>Branch</span>
             <PaletteSelect
               className={cn(TRIGGER, MOBILE_TRIGGER)}
               title="What to create from"
