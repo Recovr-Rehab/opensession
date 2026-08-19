@@ -428,15 +428,23 @@ function MobileSettings({
 	const shownSection = detail ?? lastSection;
 	const shownLabel = SECTIONS.find((s) => s.key === shownSection)?.label;
 	const pageEase = "transition-transform duration-[var(--dur-lg)] ease-[var(--ease)]";
+	// iOS controls keep a 44pt target. The sheet's 34px corner follows the
+	// 22px button radius at its 12px inset, so the two curves stay concentric.
+	const headerButton =
+		"absolute grid size-11 place-items-center rounded-full border-none bg-active p-0 text-dim active:bg-pressed";
 
 	return (
-		<BottomSheet onClose={onBack} label="Settings" className="settings-sheet h-[93dvh]">
+		<BottomSheet
+			onClose={onBack}
+			label="Settings"
+			className="settings-sheet h-[93dvh] [--sheet-radius:34px]"
+		>
 			{(dismiss) => (
 				<>
 					<div className="relative flex h-11 shrink-0 items-center justify-center px-3">
 						{detail && (
 							<button
-								className="absolute left-3 grid size-8 place-items-center rounded-full border-none bg-active p-0 text-dim"
+								className={cn(headerButton, "left-3")}
 								onClick={() => onShowRoot?.()}
 								aria-label="Back to settings"
 							>
@@ -451,7 +459,7 @@ function MobileSettings({
 							{detail ? shownLabel : "Settings"}
 						</span>
 						<button
-							className="absolute right-3 grid size-8 place-items-center rounded-full border-none bg-active p-0 text-dim"
+							className={cn(headerButton, "right-3")}
 							onClick={dismiss}
 							aria-label="Close settings"
 						>

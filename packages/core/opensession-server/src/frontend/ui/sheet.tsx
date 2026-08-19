@@ -252,7 +252,7 @@ export function ResponsiveDialog({
 					// and its circular fallback with everything else.
 					"absolute flex flex-col overflow-hidden outline-none [corner-shape:squircle]",
 					phone
-						? "inset-x-0 bottom-0 max-h-[94dvh] rounded-t-[calc(16.5px*var(--rf))] bg-surface pb-[env(safe-area-inset-bottom)] shadow-[0_-12px_40px_rgba(0,0,0,0.35)]"
+						? "inset-x-0 bottom-0 max-h-[94dvh] rounded-t-[calc(var(--sheet-radius,16.5px)*var(--rf))] bg-surface pb-[env(safe-area-inset-bottom)] shadow-[0_-12px_40px_rgba(0,0,0,0.35)]"
 						: "left-1/2 top-1/2 max-h-[85vh] w-[92vw] max-w-[30rem] -translate-x-1/2 -translate-y-1/2 rounded-[calc(18px*var(--rf))] bg-raised smooth-shadow-ring-lg",
 					animated &&
 						(phone
