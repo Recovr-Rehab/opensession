@@ -72,6 +72,7 @@ function Popup({
 	side,
 	align,
 	sideOffset = 8,
+	collisionPadding = 8,
 	arrow = false,
 	elevation = "md",
 	anchor,
@@ -82,6 +83,11 @@ function Popup({
 	side?: React.ComponentProps<typeof BasePopover.Positioner>["side"];
 	align?: React.ComponentProps<typeof BasePopover.Positioner>["align"];
 	sideOffset?: number;
+	/** Space kept between the popup and viewport clipping edges. Increase this
+	 * when a wide shadow needs more room than the compact-popover default. */
+	collisionPadding?: React.ComponentProps<
+		typeof BasePopover.Positioner
+	>["collisionPadding"];
 	/** Draw a callout diamond pointing back at the anchor, bridging
 	 * `sideOffset`. Matches the sidebar's legacy hover card, so a popup that
 	 * sits beside one of those reads as the same object. */
@@ -106,7 +112,7 @@ function Popup({
 				align={align}
 				sideOffset={sideOffset}
 				anchor={anchor}
-				collisionPadding={8}
+				collisionPadding={collisionPadding}
 				// Keep the diamond clear of the popup's rounded corners.
 				arrowPadding={14}
 				className="z-[10001] outline-none"
