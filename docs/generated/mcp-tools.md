@@ -701,25 +701,25 @@ Per-session scratch assets, previewed in the Assets tab.
 
 `mcp__opensession-assets__write_asset` · input: `path` (string, required), `content` (string, required), `description` (string), `encoding` ("utf8" | "base64")
 
-Save a file into this session's assets folder — scratch space for helper artifacts the human can preview in the session's Assets tab or open directly from its path in chat: interactive HTML/JS visualizations, generated reports, diagrams, sample data. Add a short description so the viewer explains what the asset shows. Assets are NOT part of any repo and are never committed (if something turns out PR-worthy, copy it into the worktree explicitly). HTML previews live in the UI and relative references between assets resolve, so multi-file pages (index.html + style.css + data.json) work. Overwrites silently — iterating on the same file is the normal flow. Works in read-only Ask sessions too: the assets folder is session scratch, not the checkout.
+Save a file into this session's asset storage for preview in the Assets tab or a direct link in chat: interactive HTML/JS visualizations, generated reports, diagrams, and sample data. Add a short description so the viewer explains what the asset shows. Assets are outside every repo and never committed. HTML previews live in the UI and relative references resolve, so multi-file pages work. Overwrites silently. Works in read-only Ask sessions too.
 
 ### `list_assets`
 
 `mcp__opensession-assets__list_assets` · input: none
 
-List this session's assets folder (path, size, modified time), plus its on-disk location. In code mode you can also write into that directory directly with shell tools — useful for binary files or anything over the write_asset size cap.
+List this session's assets (path, size, modified time) and the configured storage location.
 
 ### `read_asset`
 
 `mcp__opensession-assets__read_asset` · input: `path` (string, required)
 
-Read back a text asset from this session's assets folder (capped at 256 KB).
+Read back a text asset from this session's asset storage (capped at 256 KB).
 
 ### `delete_asset`
 
 `mcp__opensession-assets__delete_asset` · input: `path` (string, required)
 
-Delete a file (or a whole subfolder) from this session's assets folder.
+Delete a file or virtual folder from this session's asset storage.
 
 ## opensession-todos
 

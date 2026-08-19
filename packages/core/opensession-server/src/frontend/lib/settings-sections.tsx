@@ -1,5 +1,6 @@
 import React from "react";
 import {
+	IconArchive,
 	IconBandAid,
 	IconBell,
 	IconBolt,
@@ -55,6 +56,7 @@ export type SettingsSectionKey =
 	| "integrations"
 	| "connections"
 	| "memory"
+	| "storage"
 	| "prewarming"
 	| "deploys"
 	| "papercuts"
@@ -198,6 +200,13 @@ export const SECTIONS: {
 		label: "Security",
 		group: "Automation",
 		icon: <IconShieldCheck />,
+	},
+	{
+		key: "storage",
+		label: "Storage",
+		group: "Infrastructure",
+		adminOnly: true,
+		icon: <IconArchive />,
 	},
 	{
 		key: "prewarming",

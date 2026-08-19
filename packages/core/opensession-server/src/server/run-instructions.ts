@@ -355,17 +355,16 @@ export function buildRunInstructions(input: {
   const inprocEarly = (input.inProcessMcp || {}) as Record<string, unknown>;
   if (inprocEarly["opensession-assets"]) {
     parts.push(
-      "## Session assets\nThis session has a scratch assets folder — not part of any repo, " +
-        "never committed. Save helper artifacts there with opensession-assets' `write_asset` " +
+      "## Session assets\nThis session has asset storage outside every repo. " +
+        "Nothing there is committed. Save helper artifacts with opensession-assets' `write_asset` " +
         "(plus list/read/delete_asset): interactive HTML/JS visualizations, generated reports, " +
         "diagrams, sample data. Files appear immediately in the session's Assets tab with a " +
         "live preview; relative references between assets resolve, so multi-file pages " +
         "(index.html + style.css + data.json) work. Reach for it when a visual or document " +
         "explains something better than plain text — a chart of results, an interactive demo, a " +
         "formatted report. Mention an asset's relative path in your final response so it becomes " +
-        "a direct open link in the conversation. It also works in read-only Ask sessions: the " +
-        "assets folder is " +
-        "session scratch space, not the checkout. If an artifact turns out repo-worthy, copy " +
+        "a direct open link in the conversation. It also works in read-only Ask sessions because " +
+        "asset storage is separate from the checkout. If an artifact turns out repo-worthy, copy " +
         "it into the worktree explicitly and commit it like any other change."
     );
   }

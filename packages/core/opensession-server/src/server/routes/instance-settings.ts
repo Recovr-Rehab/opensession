@@ -9,10 +9,12 @@
 import type { RouteContext } from "./context";
 import {
 	configPath,
+	getConfig,
 	organizationName,
 	personaName,
 	productName,
 	productMark,
+	type ResolvedAssetStorage,
 } from "../config";
 import {
 	persistRawConfig,
@@ -28,8 +30,10 @@ import {
 	saveOrganizationIcon,
 } from "../organization-settings";
 import { requireWorkspaceAdmin } from "../workspace-auth";
+import { testS3AssetStorage } from "../session-assets";
 
 const MAX_NAME_LENGTH = 80;
+const MAX_STORAGE_FIELD_LENGTH = 500;
 
 class OrganizationIconBodyTooLarge extends Error {}
 
@@ -81,6 +85,95 @@ function generalDto(publicPrefix: string) {
 		organizationIconRevision: revision,
 		configPath: configPath(),
 	};
+}
+
+function assetStorageDto() {
+	const config = getConfig().storage?.assets;
+	if (!config || config.provider !== "s3") {
+		return {
+			provider: "local" as const,
+			bucket: "",
+			region: "us-east-1",
+			endpoint: "",
+			prefix: "opensession-assets",
+			accessKeyId: "",
+			secretAccessKeySet: false,
+			forcePathStyle: false,
+		};
+	}
+	return {
+		provider: "s3" as const,
+		bucket: config.bucket || "",
+		region: config.region || "us-east-1",
+		endpoint: config.endpoint || "",
+		prefix: config.prefix || "opensession-assets",
+		accessKeyId: config.accessKeyId || "",
+		secretAccessKeySet: !!config.secretAccessKey,
+		forcePathStyle: config.forcePathStyle === true,
+	};
+}
+
+function storageString(value: unknown, label: string, required = false): string {
+	if (typeof value !== "string") {
+		if (!required && value === undefined) return "";
+		throw new Error(`${label} must be a string`);
+	}
+	const clean = value.trim();
+	if (required && !clean) throw new Error(`${label} is required`);
+	if (clean.length > MAX_STORAGE_FIELD_LENGTH)
+		throw new Error(`${label} must be at most ${MAX_STORAGE_FIELD_LENGTH} characters`);
+	return clean;
+}
+
+export function assetStorageCandidate(body: Record<string, unknown>): ResolvedAssetStorage {
+	if (body.provider === "local") return { provider: "local" };
+	if (body.provider !== "s3") throw new Error("provider must be local or s3");
+	const current = getConfig().storage?.assets;
+	const endpoint = storageString(body.endpoint, "endpoint");
+	if (endpoint) {
+		let parsed: URL;
+		try {
+			parsed = new URL(endpoint);
+		} catch {
+			throw new Error("endpoint must be a valid URL");
+		}
+		if (parsed.protocol !== "https:" && parsed.protocol !== "http:")
+			throw new Error("endpoint must use http or https");
+	}
+	const prefix = storageString(body.prefix, "prefix")
+		.replace(/^\/+|\/+$/g, "") || "opensession-assets";
+	if (prefix.split("/").includes(".."))
+		throw new Error("prefix cannot contain .. segments");
+	const secretFromBody = storageString(body.secretAccessKey, "secretAccessKey");
+	const secretAccessKey = secretFromBody || current?.secretAccessKey?.trim() || "";
+	if (!secretAccessKey) throw new Error("secretAccessKey is required");
+	return {
+		provider: "s3",
+		bucket: storageString(body.bucket, "bucket", true),
+		region: storageString(body.region, "region") || "us-east-1",
+		...(endpoint ? { endpoint } : {}),
+		prefix,
+		accessKeyId: storageString(body.accessKeyId, "accessKeyId", true),
+		secretAccessKey,
+		forcePathStyle: body.forcePathStyle === true,
+	};
+}
+
+function persistAssetStorage(config: ResolvedAssetStorage): void {
+	const raw = rawConfig();
+	const storage =
+		raw.storage && typeof raw.storage === "object" && !Array.isArray(raw.storage)
+			? { ...(raw.storage as Record<string, unknown>) }
+			: {};
+	if (config.provider === "local") {
+		delete storage.assets;
+		if (Object.keys(storage).length) raw.storage = storage;
+		else delete raw.storage;
+	} else {
+		storage.assets = config;
+		raw.storage = storage;
+	}
+	persistRawConfig(raw);
 }
 
 /** Optional string field: absent → undefined, otherwise a length-capped string. */
@@ -178,6 +271,50 @@ export async function handleInstanceSettingsRoutes(
 		if (forbidden) return forbidden;
 		removeOrganizationIcon();
 		return Response.json(generalDto(publicPrefix));
+	}
+
+	if (path === "/api/settings/asset-storage" && req.method === "GET") {
+		const forbidden = requireWorkspaceAdmin(ctx);
+		if (forbidden) return forbidden;
+		return Response.json(assetStorageDto());
+	}
+
+	if (
+		path === "/api/settings/asset-storage/test" &&
+		req.method === "POST"
+	) {
+		const forbidden = requireWorkspaceAdmin(ctx);
+		if (forbidden) return forbidden;
+		const body = (await req.json().catch(() => null)) as Record<string, unknown> | null;
+		if (!body) return Response.json({ error: "expected a JSON body" }, { status: 400 });
+		try {
+			const candidate = assetStorageCandidate(body);
+			if (candidate.provider === "s3") await testS3AssetStorage(candidate);
+			return Response.json({ ok: true });
+		} catch (error: any) {
+			return Response.json(
+				{ error: error?.message || String(error) },
+				{ status: 400 },
+			);
+		}
+	}
+
+	if (path === "/api/settings/asset-storage" && req.method === "PUT") {
+		const forbidden = requireWorkspaceAdmin(ctx);
+		if (forbidden) return forbidden;
+		const body = (await req.json().catch(() => null)) as Record<string, unknown> | null;
+		if (!body) return Response.json({ error: "expected a JSON body" }, { status: 400 });
+		try {
+			const candidate = assetStorageCandidate(body);
+			if (candidate.provider === "s3") await testS3AssetStorage(candidate);
+			await withConfigMutationLock(async () => persistAssetStorage(candidate));
+			return Response.json(assetStorageDto());
+		} catch (error: any) {
+			return Response.json(
+				{ error: error?.message || String(error) },
+				{ status: 400 },
+			);
+		}
 	}
 
 	if (path === "/api/settings/identity" && req.method === "GET") {

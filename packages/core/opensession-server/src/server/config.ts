@@ -9,8 +9,8 @@
  *
  * Precedence per key: existing env var → config.json → built-in default.
  *
- * Sections `server`, `paths`, `repos`, `identity`, `organization`, `persona`,
- * `branding`, `policy`, and integration-specific settings are consumed by their owning
+ * Sections `server`, `paths`, `storage`, `repos`, `identity`, `organization`,
+ * `persona`, `branding`, `policy`, and integration-specific settings are consumed by their owning
  * modules. See config.example.json at the repo root for the full schema.
  */
 
@@ -52,6 +52,23 @@ export interface PathsSection {
   claudeBin?: string;
   worktreesDir?: string;
   mcpConfig?: string;
+}
+
+/** Optional S3-compatible storage for session assets. Local disk stays the
+ * default when this section is absent. */
+export interface AssetStorageSection {
+  provider?: "local" | "s3";
+  bucket?: string;
+  region?: string;
+  endpoint?: string;
+  prefix?: string;
+  accessKeyId?: string;
+  secretAccessKey?: string;
+  forcePathStyle?: boolean;
+}
+
+export interface StorageSection {
+  assets?: AssetStorageSection;
 }
 
 /** How NEW sessions on a `sharedCheckout` repo get their working dir — see
@@ -201,6 +218,7 @@ export interface BrandingSection {
 export interface OpenSessionConfig {
   server?: ServerSection;
   paths?: PathsSection;
+  storage?: StorageSection;
   /** Working-dir policy for `sharedCheckout` repos' new sessions. */
   selfDev?: SelfDevMode;
   repos?: Record<string, RepoSection>;
@@ -484,6 +502,27 @@ function parseConfig(text: string): OpenSessionConfig {
       cfg.identity = section;
     }
 
+    const storage = obj(raw.storage);
+    const assets = obj(storage?.assets);
+    if (assets) {
+      const provider = str(assets.provider);
+      cfg.storage = {
+        assets: defined({
+          provider:
+            provider === "s3" || provider === "local"
+              ? (provider as AssetStorageSection["provider"])
+              : undefined,
+          bucket: str(assets.bucket),
+          region: str(assets.region),
+          endpoint: str(assets.endpoint),
+          prefix: str(assets.prefix),
+          accessKeyId: str(assets.accessKeyId),
+          secretAccessKey: str(assets.secretAccessKey),
+          forcePathStyle: bool(assets.forcePathStyle),
+        }),
+      };
+    }
+
     const integrations = obj(raw.integrations);
     if (integrations) cfg.integrations = integrations;
     const policy = obj(raw.policy);
@@ -598,6 +637,48 @@ export function configuredPaths(): ResolvedPaths {
       process.env.OPENSESSION_MCP_CONFIG ||
       p.mcpConfig ||
       `${OPENSESSION_ROOT}/mcp-config.json`,
+  };
+}
+
+export type ResolvedAssetStorage =
+  | { provider: "local" }
+  | {
+      provider: "s3";
+      bucket: string;
+      region: string;
+      endpoint?: string;
+      prefix: string;
+      accessKeyId: string;
+      secretAccessKey: string;
+      forcePathStyle: boolean;
+    };
+
+/** Session assets stay local unless an explicit, complete S3-compatible
+ * backend is configured. An incomplete enabled backend fails loudly so assets
+ * never spill back onto the disk the administrator meant to stop using. */
+export function configuredAssetStorage(): ResolvedAssetStorage {
+  const assets = getConfig().storage?.assets;
+  if (!assets || assets.provider !== "s3") return { provider: "local" };
+  const required = {
+    bucket: assets.bucket?.trim(),
+    accessKeyId: assets.accessKeyId?.trim(),
+    secretAccessKey: assets.secretAccessKey?.trim(),
+  };
+  const missing = Object.entries(required)
+    .filter(([, value]) => !value)
+    .map(([key]) => key);
+  if (missing.length) {
+    throw new Error(`S3 asset storage is missing ${missing.join(", ")}`);
+  }
+  return {
+    provider: "s3",
+    bucket: required.bucket!,
+    region: assets.region?.trim() || "us-east-1",
+    ...(assets.endpoint?.trim() ? { endpoint: assets.endpoint.trim() } : {}),
+    prefix: assets.prefix?.trim().replace(/^\/+|\/+$/g, "") || "opensession-assets",
+    accessKeyId: required.accessKeyId!,
+    secretAccessKey: required.secretAccessKey!,
+    forcePathStyle: assets.forcePathStyle === true,
   };
 }
 

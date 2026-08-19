@@ -56,6 +56,7 @@ import { ShortcutsPanel } from "./settings/ShortcutsPanel";
 import { PrewarmingPanel } from "./settings/PrewarmingPanel";
 import { ReposPanel } from "./settings/ReposPanel";
 import { SandboxesPanel } from "./settings/SandboxesPanel";
+import { StoragePanel } from "./settings/StoragePanel";
 import { RunnersPanel } from "./settings/RunnersPanel";
 import { SettingsAccountCard, SettingsAccountFooter } from "./SettingsAccount";
 import { SetupPanel } from "./Setup";
@@ -244,6 +245,7 @@ function SectionPanel({
 			{section === "connections" && <Connections />}
 			{section === "myAccounts" && <MyAccountsPanel />}
 			{section === "memory" && <MemoryPanel />}
+			{section === "storage" && <StoragePanel />}
 			{section === "prewarming" && <PrewarmingPanel />}
 			{section === "papercuts" && <PapercutsPanel />}
 			{section === "deploys" && <DeploysPanel />}

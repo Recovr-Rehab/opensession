@@ -331,6 +331,7 @@ const SETTINGS_SECTIONS = new Set<SettingsSectionKey>([
 	"integrations",
 	"connections",
 	"memory",
+	"storage",
 	"prewarming",
 	"deploys",
 	"papercuts",

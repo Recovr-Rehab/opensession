@@ -323,6 +323,46 @@ export async function removeOrganizationIcon(): Promise<OrganizationSettingsDto>
 	return request("/settings/general/icon", { method: "DELETE" });
 }
 
+export interface AssetStorageSettingsDto {
+	provider: "local" | "s3";
+	bucket: string;
+	region: string;
+	endpoint: string;
+	prefix: string;
+	accessKeyId: string;
+	secretAccessKeySet: boolean;
+	forcePathStyle: boolean;
+}
+
+export interface AssetStorageSettingsInput {
+	provider: "local" | "s3";
+	bucket?: string;
+	region?: string;
+	endpoint?: string;
+	prefix?: string;
+	accessKeyId?: string;
+	secretAccessKey?: string;
+	forcePathStyle?: boolean;
+}
+
+export async function fetchAssetStorageSettings(): Promise<AssetStorageSettingsDto> {
+	return request("/settings/asset-storage", {
+		label: "Failed to fetch asset storage settings",
+	});
+}
+
+export async function testAssetStorageSettings(
+	input: AssetStorageSettingsInput,
+): Promise<{ ok: true }> {
+	return request("/settings/asset-storage/test", { method: "POST", body: input });
+}
+
+export async function saveAssetStorageSettings(
+	input: AssetStorageSettingsInput,
+): Promise<AssetStorageSettingsDto> {
+	return request("/settings/asset-storage", { method: "PUT", body: input });
+}
+
 // ── Instance identity (Settings → Workspace → Identity) ──
 
 export interface InstanceIdentityDto {
