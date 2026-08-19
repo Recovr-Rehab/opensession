@@ -63,12 +63,12 @@ import {
 
 /**
  * The session header's compact stand-in for the right Workspace panel: one
- * floating card carrying what that panel carries, in three bands.
+ * floating card carrying what that panel carries, in four bands.
  *
- * 1. The work itself, unlabelled: how big the diff is, whether anything is
- *    uncommitted, and where the pull request stands with its one action.
- * 2. Places, which is the panel's bottom bar: portals, agents, terminal.
- * 3. Assets, the session's own files.
+ * 1. The pull request and its current action, unlabelled at the top.
+ * 2. Review findings and the people asked to review.
+ * 3. Changes, including the diff size and anything still uncommitted.
+ * 4. Assets, the session's own files.
  *
  * Why it exists: the Workspace panel is a third of the pane, so the only way
  * to check "did the checks pass / is there a conflict / is anything still
@@ -560,38 +560,6 @@ function SummaryBody({
 
 	return (
 		<>
-			{changedFiles > 0 && (
-				<button
-					className={WS_SUMMARY_ROW}
-					onClick={() => go(() => onOpenPanelTab("changes"))}
-				>
-					<span className={WS_SUMMARY_RAIL}>
-						<IconFile size={20} className={WS_SUMMARY_ICON} />
-					</span>
-					<span className={WS_SUMMARY_LABEL}>
-						{changedFiles} file{changedFiles === 1 ? "" : "s"} changed
-					</span>
-					<span className={WS_SUMMARY_COUNT}>
-						<span className="text-green">+{additions}</span>{" "}
-						<span className="text-red">−{deletions}</span>
-					</span>
-				</button>
-			)}
-
-			{dirty > 0 && (
-				<button className={WS_SUMMARY_ROW} onClick={askCommit} disabled={!send}>
-					<span className={WS_SUMMARY_RAIL}>
-						<IconClock size={20} className={WS_SUMMARY_ICON} />
-					</span>
-					<span className={WS_SUMMARY_LABEL}>
-						{prompted
-							? "Asked to commit"
-							: `${dirty} file${dirty === 1 ? "" : "s"} uncommitted`}
-					</span>
-					{!prompted && <span className={WS_SUMMARY_ACTION}>Commit</span>}
-				</button>
-			)}
-
 			{/* Which PR, where it stands, and the one thing to do about it. The
 			    strip owns all three; this card only says where they go. */}
 			<PrStatusBar
@@ -736,6 +704,47 @@ function SummaryBody({
 			)}
 			{reviewError && (
 				<div className="px-4 py-1 text-meta font-medium text-red">{reviewError}</div>
+			)}
+
+			{(changedFiles > 0 || dirty > 0) && (
+				<>
+					<div className={WS_SUMMARY_DIVIDER} />
+					<div className={WS_SUMMARY_SECTION}>Changes</div>
+					{changedFiles > 0 && (
+						<button
+							className={WS_SUMMARY_ROW}
+							onClick={() => go(() => onOpenPanelTab("changes"))}
+						>
+							<span className={WS_SUMMARY_RAIL}>
+								<IconFile size={20} className={WS_SUMMARY_ICON} />
+							</span>
+							<span className={WS_SUMMARY_LABEL}>
+								{changedFiles} file{changedFiles === 1 ? "" : "s"} changed
+							</span>
+							<span className={WS_SUMMARY_COUNT}>
+								<span className="text-green">+{additions}</span>{" "}
+								<span className="text-red">−{deletions}</span>
+							</span>
+						</button>
+					)}
+					{dirty > 0 && (
+						<button
+							className={WS_SUMMARY_ROW}
+							onClick={askCommit}
+							disabled={!send}
+						>
+							<span className={WS_SUMMARY_RAIL}>
+								<IconClock size={20} className={WS_SUMMARY_ICON} />
+							</span>
+							<span className={WS_SUMMARY_LABEL}>
+								{prompted
+									? "Asked to commit"
+									: `${dirty} file${dirty === 1 ? "" : "s"} uncommitted`}
+							</span>
+							{!prompted && <span className={WS_SUMMARY_ACTION}>Commit</span>}
+						</button>
+					)}
+				</>
 			)}
 
 			{shown.length > 0 && (
