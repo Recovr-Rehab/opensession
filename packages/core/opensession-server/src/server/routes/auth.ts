@@ -32,6 +32,7 @@ import {
   startGithubDeviceFlow,
   watchGithubDeviceFlow,
 } from "../github-auth";
+import { acceptTeamInvitation } from "../team-invitations";
 import { workspaceAdminAuthorized } from "../workspace-auth";
 
 export async function handleAuthRoutes(
@@ -108,11 +109,23 @@ export async function handleAuthRoutes(
 		}
 		if (result.status !== "ok") return Response.json(result);
 		if (!teamMemberForLogin(result.login)) {
-			removeGithubAccount(result.login);
-			return Response.json({
-				status: "error",
-				error: `GitHub account @${result.login} is not on the configured team (identity.team)`,
-			});
+			const inviteToken =
+				typeof body?.inviteToken === "string" ? body.inviteToken : "";
+			const accepted = inviteToken
+				? await acceptTeamInvitation(inviteToken, {
+						login: result.login,
+						name: result.name,
+					})
+				: { error: "" };
+			if ("error" in accepted) {
+				removeGithubAccount(result.login);
+				return Response.json({
+					status: "error",
+					error:
+						accepted.error ||
+						`GitHub account @${result.login} is not on the configured team (identity.team)`,
+				});
+			}
 		}
 		const session = createWebSession(result.login);
 		if (!session)

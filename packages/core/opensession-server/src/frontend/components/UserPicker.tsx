@@ -304,10 +304,12 @@ export function UserGate({ children }: { children: React.ReactNode }) {
   // picker"), so nobody signing in with GitHub is ever asked to pick a name.
   if (auth?.required) {
     if (auth.authenticated) return <>{children}</>;
+    const inviteToken = invitationTokenFromPath();
     return (
       <GithubSignIn
         reconnect={auth.reconnectRequired === true}
         login={auth.login}
+        inviteToken={inviteToken}
         onSignedIn={(status) => {
           setAuth(status);
           setAuthStatusCache(status);
@@ -366,15 +368,27 @@ export function UserGate({ children }: { children: React.ReactNode }) {
  * the thing they were signing in to. Entering a code is one step longer and
  * lands everywhere.
  */
+function invitationTokenFromPath(): string | undefined {
+  const match = window.location.pathname.match(/^\/invite\/([^/]+)\/?$/);
+  if (!match) return undefined;
+  try {
+    return decodeURIComponent(match[1]);
+  } catch {
+    return undefined;
+  }
+}
+
 function GithubSignIn({
   reconnect = false,
   login,
+  inviteToken,
   onSignedIn,
 }: {
   /** The grant behind an existing session died; this is the same screen and
    *  the same flow, saying which of the two happened. */
   reconnect?: boolean;
   login?: string;
+  inviteToken?: string;
   onSignedIn: (status: AuthStatus) => void;
 }) {
   const [flow, setFlow] = useState<{
@@ -397,12 +411,13 @@ function GithubSignIn({
         const res = await fetch(`${BASE_PATH}/api/auth/device/poll`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ deviceCode: flow.deviceCode }),
+          body: JSON.stringify({ deviceCode: flow.deviceCode, inviteToken }),
         });
         const body = await res.json();
         if (cancelled) return;
         if (body.status === "ok") {
           if (body.name) setStoredUser(body.name.split(" ")[0]);
+          if (inviteToken) history.replaceState(null, "", `${BASE_PATH || ""}/`);
           onSignedIn({ required: true, authenticated: true, admin: body.admin, login: body.login, name: body.name });
           return;
         }
@@ -420,7 +435,7 @@ function GithubSignIn({
       cancelled = true;
       clearTimeout(timer);
     };
-  }, [flow, onSignedIn]);
+  }, [flow, inviteToken, onSignedIn]);
 
   async function start() {
     setError(null);
@@ -443,7 +458,9 @@ function GithubSignIn({
           ? "Enter this code"
           : reconnect
             ? "Reconnect GitHub"
-            : `Sign in to ${PRODUCT_NAME}`
+            : inviteToken
+              ? "Accept your invitation"
+              : `Sign in to ${PRODUCT_NAME}`
       }
     >
       {!flow ? (
@@ -454,6 +471,11 @@ function GithubSignIn({
                 GitHub's authorization
                 {login ? <> for @{login}</> : null} expired. Sign in again to
                 continue.
+              </>
+            ) : inviteToken ? (
+              <>
+                Sign in with GitHub to join this organization. This link grants
+                access to the team that invited you.
               </>
             ) : (
               <>

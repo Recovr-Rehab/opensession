@@ -12,7 +12,11 @@ export function MembersPanel() {
 				title="Members"
 				description="Add everyone who uses this instance so sessions, commits, and access grants name the right person."
 			/>
-			<TeamSection onChanged={() => {}} />
+			<TeamSection
+				onChanged={() => {}}
+				addLabel="Invite person"
+				inviteByEmail
+			/>
 		</SettingsPanel>
 	);
 }

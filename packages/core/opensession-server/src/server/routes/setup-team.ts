@@ -16,6 +16,13 @@ import {
   withConfigMutationLock,
 } from "../config-mutation";
 import { validateEnvValue } from "../env-file-edit";
+import {
+  createTeamInvitation,
+  emailInvitationsConfigured,
+  listTeamInvitations,
+  resendTeamInvitation,
+  revokeTeamInvitation,
+} from "../team-invitations";
 import type { RouteContext } from "./context";
 
 const STRING_FIELDS = ["name", "email", "slackId", "github", "timezone"] as const;
@@ -92,6 +99,46 @@ export async function handleSetupTeamRoutes(
   if (path === "/api/setup/team" && req.method === "GET") {
     const { configuredIdentity } = await import("../config");
     return Response.json({ members: configuredIdentity().team });
+  }
+
+  if (path === "/api/setup/invitations" && req.method === "GET") {
+    return Response.json({
+      configured: emailInvitationsConfigured(),
+      invitations: listTeamInvitations(),
+    });
+  }
+
+  if (path === "/api/setup/invitations" && req.method === "POST") {
+    const body = await req.json().catch(() => null);
+    const email = typeof body?.email === "string" ? body.email : "";
+    try {
+      const invitation = await createTeamInvitation(email);
+      return Response.json({ invitation }, { status: 201 });
+    } catch (error: any) {
+      const message = error?.message || "Could not send invitation";
+      const status = message.includes("not configured") ? 503 : 400;
+      return Response.json({ error: message }, { status });
+    }
+  }
+
+  const invitationMatch = path.match(
+    /^\/api\/setup\/invitations\/([^/]+)\/(resend|revoke)$/,
+  );
+  if (invitationMatch && req.method === "POST") {
+    const id = decodeURIComponent(invitationMatch[1]);
+    try {
+      if (invitationMatch[2] === "resend") {
+        return Response.json({ invitation: await resendTeamInvitation(id) });
+      }
+      await revokeTeamInvitation(id);
+      return Response.json({ ok: true });
+    } catch (error: any) {
+      const message = error?.message || "Could not update invitation";
+      return Response.json(
+        { error: message },
+        { status: message === "Invitation not found" ? 404 : 400 },
+      );
+    }
   }
 
   if (path === "/api/setup/team" && req.method === "POST") {

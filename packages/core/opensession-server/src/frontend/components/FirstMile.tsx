@@ -296,6 +296,7 @@ export function FirstMile({ onDone }: { onDone: () => void }) {
 												onChanged={refetch}
 												title="Members"
 												addLabel="Invite person"
+												inviteByEmail
 											/>
 										)}
 										{step.id === "ai" && (
