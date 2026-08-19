@@ -75,7 +75,11 @@ export function ReposSection({
 			    already titled "Repositories", so repeating the word says
 			    nothing, while how many are registered is worth reading. */}
 			<SettingsGroupLabel
-				className="mt-0"
+				// first:mt-0 because this section opens the setup wizard's repos
+				// step, where the label needs no space above it. On the settings
+				// page it follows the default-repository card and keeps the
+				// group's own mt-9, which is what separates the two.
+				className="first:mt-0"
 				actions={
 					<Button
 						size="sm"
