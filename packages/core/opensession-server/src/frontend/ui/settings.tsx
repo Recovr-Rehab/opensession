@@ -251,7 +251,7 @@ export function SettingRowDescription({
 	return (
 		<div
 			data-setting-description=""
-			className={cn("mt-0.5 text-supporting text-dim", className)}
+			className={cn("mt-1 text-supporting text-dim", className)}
 			{...props}
 		/>
 	);
