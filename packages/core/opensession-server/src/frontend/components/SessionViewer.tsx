@@ -5749,6 +5749,14 @@ export function SessionViewer({
 												defaultModel={defaultModel}
 												onChange={handleModelChange}
 												prettyLabel={prettyModel}
+												effort={effort}
+												onEffortChange={setEffort}
+												fastMode={fastMode}
+												onFastModeChange={setFastMode}
+												accounts={accounts}
+												accountId={accountId}
+												onAccountChange={handleAccountChange}
+												usage={usage}
 											/>
 										)}
 									</div>

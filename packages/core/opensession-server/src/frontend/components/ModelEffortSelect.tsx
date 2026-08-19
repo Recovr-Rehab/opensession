@@ -1,12 +1,10 @@
 import React from "react";
 import type { ModelOption, ProviderAccountOption } from "../lib/api";
-import { useEngines } from "../hooks/useEngines";
-import { baseModelId, engineModelId, isAnthropicModel, modelEngine, type EngineId } from "../lib/model-engine";
+import { baseModelId, engineModelId, isAnthropicModel, modelEngine } from "../lib/model-engine";
 import { Menu } from "../ui/menu";
 import { cn } from "../ui/cn";
 import { Tooltip } from "../ui/tooltip";
-import { IconBolt, IconChevronRight, IconUndo } from "./icons";
-import { BrandMark } from "./BrandTile";
+import { IconBolt, IconChevronRight, IconSparkle, IconUndo } from "./icons";
 import type { SessionUsage } from "../lib/types";
 import { UsageCost, UsageDetails } from "./UsageMeter";
 
@@ -47,6 +45,11 @@ type Props = {
 	disabled?: boolean;
 	title?: string;
 	className?: string;
+	/** The same menu can sit behind the compact composer pill or the full-width
+	 * model row in session info. Only the trigger changes. */
+	triggerVariant?: "pill" | "menu-row";
+	/** Label fallback for a model that has not reached the catalog yet. */
+	fallbackModelLabel?: (id: string) => string;
 	/** Fires as the menu opens/closes. The phone composer needs it: the popup
 	 * takes focus (blurring the textarea), and the composer must stay expanded
 	 * while open or this trigger unmounts and the menu closes with it. */
@@ -303,13 +306,14 @@ type ModelMenuOption = {
 const PICKER_ROW_GAP = "mb-0.5 last:mb-0";
 
 /**
- * Combined model + reasoning-effort pill (Claude-app-style): one trigger on the
- * composer's right edge opening a short menu of settings rows — Model, Engine,
- * Effort, Speed, Account — each showing its current value and opening a
- * submenu, over a "Reset to default" row. The model list used to sit at the top
- * level, which made the menu as tall as the registry and buried the four
- * settings under it; a row per setting keeps the menu one screenful whatever
- * the catalog does, at the cost of one extra hop to change model.
+ * Combined model + reasoning-effort menu: one trigger opens a short list of
+ * settings rows (Model, Effort, Speed, Account), each showing its current value
+ * and opening a submenu, over a "Reset to default" row. The same menu powers
+ * the composer pill and the full-width model row in session info, so those two
+ * surfaces cannot drift apart. The model list used to sit at the top level,
+ * which made the menu as tall as the registry and buried the settings under it;
+ * a row per setting keeps the menu one screenful whatever the catalog does, at
+ * the cost of one extra hop to change model.
  *
  * Unlike PaletteSelect there is no native-select phone fallback: the nested
  * submenus don't map to a <select>, and Base UI menus handle touch fine.
@@ -333,6 +337,8 @@ export function ModelEffortSelect({
 	disabled,
 	title,
 	className,
+	triggerVariant = "pill",
+	fallbackModelLabel,
 	onOpenChange,
 }: Props) {
 	const effectiveModel = model || defaultModel;
@@ -349,7 +355,10 @@ export function ModelEffortSelect({
 		for (const m of models) if (!byId.has(m.id)) byId.set(m.id, m);
 		return byId;
 	}, [models]);
-	const modelLabel = shortModelLabel(effectiveModel, models);
+	const modelLabel =
+		modelById.has(effectiveBase) || opencodeModelParts(effectiveModel)
+			? shortModelLabel(effectiveModel, models)
+			: fallbackModelLabel?.(effectiveModel) || shortModelLabel(effectiveModel, models);
 	const supportedEffortIds = modelById.get(effectiveBase)?.efforts ?? [];
 	const supportedEfforts = EFFORTS.filter((e) => supportedEffortIds.includes(e.id));
 	const effectiveEffort = supportedEffortIds.includes(effort ?? "")
@@ -375,23 +384,11 @@ export function ModelEffortSelect({
 		!!(currentAccount || subscriptionAccount) &&
 		!!onFastModeChange;
 	const accountLabel = currentAccount ? currentAccount.name : "Auto";
-	// Engine choice is the model id's routing prefix, so it needs no state of
-	// its own: read it off the current id, and write it by recomposing that id.
-	const engineOptions = useEngines().engines.filter((e) => e.available);
+	// Routing stays sticky across model changes even though engine selection is
+	// no longer exposed. Existing sessions keep their stored routing prefix.
 	const activeEngine = modelEngine(effectiveModel);
-	const hasEngine = engineOptions.length > 1;
-	const engineLabel =
-		engineOptions.find((e) => e.id === activeEngine)?.label ||
-		ENGINE_LABELS[activeEngine] ||
-		activeEngine;
-	/** Recompose the current model onto `engine`; "" keeps following the default. */
-	const changeEngine = (engine: EngineId) => {
-		const next = engineModelId(engine, effectiveModel);
-		if (!next) return;
-		onModelChange(next === defaultModel ? "" : next);
-	};
 
-	// Changing model or engine mid-conversation invalidates the prompt cache,
+	// Changing model mid-conversation invalidates the prompt cache,
 	// so the next turn re-sends every token of the conversation: roughly
 	// twenty times a cached turn's input. Worth saying once the conversation is
 	// big enough for that to cost something, and only where it is true: an
@@ -481,11 +478,10 @@ export function ModelEffortSelect({
 				];
 		return { opencodeFirst, allPrimaryOptions, allOtherOptions };
 	}, [models, modelById, defaultModel]);
-	// The engine narrows the list rather than greying half of it out: the
-	// direct-SDK engines each speak to one vendor, so on those a model they
-	// can't run is noise, not a choice. Same predicate the Engine submenu uses
-	// for its own disabled rows (a null recomposition is "can't route there"),
-	// and it leaves presets visible, since a preset names its own models.
+	// The stored routing prefix narrows the list rather than greying half of it
+	// out: the direct-SDK engines each speak to one vendor, so on those a model
+	// they can't run is noise, not a choice. A null recomposition means "can't
+	// route there", and presets stay visible since a preset names its own models.
 	// opencode and pi serve everything, so they filter nothing (pi still meets
 	// the odd unroutable legacy slug, which stays a disabled row below).
 	const { primaryOptions, otherOptions, hiddenOnEngine, otherGroups, groupedPrimary, providerGroups } =
@@ -613,17 +609,23 @@ export function ModelEffortSelect({
 		);
 	};
 
+	const menuRowTrigger = triggerVariant === "menu-row";
+
 	return (
 		<Menu.Root onOpenChange={onOpenChange}>
 			<Menu.Trigger
 				type="button"
-				// Quiet pill: no outline at rest, hover state only, no chevron.
 				className={cn(
-					"border-transparent hover:border-transparent hover:bg-hover",
+					menuRowTrigger
+						? "flex w-full cursor-pointer items-center gap-[7px] whitespace-nowrap rounded-control border border-line-strong bg-transparent px-3 py-[7px] text-control-label font-medium text-faint hover:bg-hover hover:text-fg data-[popup-open]:bg-hover data-[popup-open]:text-fg"
+						: "border-transparent hover:border-transparent hover:bg-hover",
 					className,
 				)}
 				title={title}
-				disabled={disabled || (!hasEffort && !hasFastMode && !hasEngine && modelDisabled)}
+				disabled={
+					disabled ||
+					(!!modelDisabled && !hasEffort && !hasFastMode && !hasAccount)
+				}
 				aria-label={
 					hasAccount
 						? "Model, reasoning effort, and provider account"
@@ -632,23 +634,45 @@ export function ModelEffortSelect({
 							: "Model"
 				}
 			>
-				{/* `data-effort` is a styling hook for the caller, not state: the
-				    new-session footer hides the suffix on ultra-narrow screens so the
-				    model name keeps the room, and the composer toolbar does not. */}
-				{hasFastMode && fastMode && (
+				{menuRowTrigger ? (
 					<>
-						<IconBolt className="flex-none text-faint" size={20} />
-						<span className="sr-only">Fast mode</span>
+						<IconSparkle size={18} className="shrink-0 text-faint" />
+						<span className="flex min-w-0 flex-1 flex-col gap-0.5 text-left">
+							<span className="text-meta font-semibold leading-none text-faint">Model</span>
+							<span className="truncate text-control-label leading-[1.2] text-fg">
+								{modelLabel}
+							</span>
+						</span>
+						<IconChevronRight size={16} className="shrink-0 text-faint" />
+					</>
+				) : (
+					<>
+						{/* `data-effort` is a styling hook for the caller, not state: the
+						    new-session footer hides the suffix on ultra-narrow screens so the
+						    model name keeps the room, and the composer toolbar does not. */}
+						{hasFastMode && fastMode && (
+							<>
+								<IconBolt className="flex-none text-faint" size={20} />
+								<span className="sr-only">Fast mode</span>
+							</>
+						)}
+						<span className="truncate">{modelLabel}</span>
+						{hasEffort && (
+							<span data-effort className="flex-none text-faint">
+								{effortLabel}
+							</span>
+						)}
 					</>
 				)}
-				<span className="truncate">{modelLabel}</span>
-				{hasEffort && (
-					<span data-effort className="flex-none text-faint">
-						{effortLabel}
-					</span>
-				)}
 			</Menu.Trigger>
-			<Menu.Popup align="end" sideOffset={6} className="max-w-[min(360px,calc(100vw-1rem))]">
+			<Menu.Popup
+				align={menuRowTrigger ? "start" : "end"}
+				sideOffset={6}
+				className={cn(
+					"max-w-[min(360px,calc(100vw-1rem))]",
+					menuRowTrigger && "min-w-[220px]",
+				)}
+			>
 				{showUsage && (
 					<>
 						<Menu.SubmenuRoot>
@@ -725,48 +749,6 @@ export function ModelEffortSelect({
 						)}
 					</Menu.Popup>
 				</Menu.SubmenuRoot>
-				{hasEngine && (
-					<Menu.SubmenuRoot>
-						<Menu.SubmenuTrigger className="justify-between gap-3">
-							<span className="min-w-0 truncate">Engine</span>
-							<span className="flex flex-none items-center gap-1 text-dim">
-								{engineLabel}
-								<IconChevronRight className="shrink-0 text-dim" size={17} />
-							</span>
-						</Menu.SubmenuTrigger>
-						<Menu.Popup className="max-w-[min(360px,calc(100vw-1rem))]">
-							{reuploadHint && <MenuHint>{reuploadHint}</MenuHint>}
-							{engineOptions.map((e) => {
-								const selected = e.id === activeEngine;
-								// An engine that can't run the current model stays visible
-								// but unpickable — hiding it would read as "not configured".
-								const unavailable = !engineModelId(e.id, effectiveModel);
-								return (
-									<Menu.Item
-										key={e.id}
-										onClick={() => changeEngine(e.id)}
-										disabled={unavailable}
-										title={unavailable ? `${modelLabel} isn't available here` : undefined}
-										className={cn(
-											PICKER_ROW_GAP,
-											"justify-between gap-3",
-											selected && "bg-hover",
-											unavailable && "opacity-55",
-										)}
-									>
-	<span className="flex min-w-0 items-center gap-2">
-											<span className="flex size-4 shrink-0 items-center justify-center text-dim">
-												<BrandMark name={e.id} />
-											</span>
-											<span className="min-w-0 truncate">{e.label}</span>
-										</span>
-										<Menu.Check on={selected} className="text-dim" />
-									</Menu.Item>
-								);
-							})}
-						</Menu.Popup>
-					</Menu.SubmenuRoot>
-				)}
 				{hasEffort && (
 					<Menu.SubmenuRoot>
 						<Menu.SubmenuTrigger className="justify-between gap-3">
