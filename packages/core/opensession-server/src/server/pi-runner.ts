@@ -101,6 +101,7 @@ import {
   toPiModel,
 } from "./models";
 import { resolveWorkspaceModelPreset } from "./workspace-model-presets";
+import { expandSkillCommand, skillSearchPaths } from "./skill-paths";
 import type { ResolvedWorkspaceModelPreset } from "./workspace-model-presets";
 import type { TranscriptEntry } from "./types";
 import type { RunAgentOpts } from "./agent-runner";
@@ -2020,7 +2021,14 @@ async function* runPiAttempt(
       agentDir,
       settingsManager,
       noExtensions: true,
+      // Pi's own skill resolution stays off, like extensions and themes. A
+      // turn loads the allowlist in skill-paths.ts: what this server ships,
+      // plus the session checkout's own skills, never whatever the host
+      // account has enabled. The paths are what make it non-empty. noSkills
+      // with no additionalSkillPaths loaded nothing at all, which left every
+      // shipped skill dead in the product.
       noSkills: true,
+      additionalSkillPaths: skillSearchPaths(cwd),
       noPromptTemplates: true,
       noThemes: true,
       // Pi's context-file discovery walks every ancestor of cwd up to /
@@ -2153,8 +2161,12 @@ async function* runPiAttempt(
     // affordance — previous runner's failed-POST semantics.
     const pendingSteers: Array<{ text: string; images?: ImageInput[] }> = [];
     handle.steer = (text, images) => {
-      pendingSteers.push({ text, images });
-      void liveSession.steer(text, piImages(images)).catch((e) => {
+      // Same skill expansion as the prompt path. The queue holds the expanded
+      // text so the delivery match stays exact; the audit line below still
+      // records what the person typed.
+      const steerText = expandSkillCommand(text, loader.getSkills().skills);
+      pendingSteers.push({ text: steerText, images });
+      void liveSession.steer(steerText, piImages(images)).catch((e) => {
         console.warn("[pi-runner] steer failed:", e);
       });
       audit({ ...auditBase, direction: "in", kind: "steer_queued", ...summarizeText(text) });
@@ -2196,9 +2208,15 @@ async function* runPiAttempt(
     // way every other injection is (prompt-context.ts): the fence is what
     // makes the payload readable to the context log, and it keeps the note
     // from reading as something the human typed.
+    // "/bro" (or "/skill:bro") becomes the skill's body before the engine sees
+    // it. Expanded here rather than by pi for two reasons: a bare "/name"
+    // works, which is what the composer's "/" menu inserts, and this text
+    // stays identical to the user message pi echoes back, which the
+    // steer-delivery check below compares against.
+    const promptWithSkill = expandSkillCommand(prompt, loader.getSkills().skills);
     const promptForEngine = resumeMissNote
-      ? `${wrapContext(resumeMissNote, "handoff")}\n\n${prompt}`
-      : prompt;
+      ? `${wrapContext(resumeMissNote, "handoff")}\n\n${promptWithSkill}`
+      : promptWithSkill;
     // Injected BELOW runOnModel's choke point, so that call never saw this
     // payload — log it here, exactly as the previous runner runner does for its own
     // same-engine-restart handoff. Re-logging is free: entry ids are
