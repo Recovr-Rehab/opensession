@@ -431,7 +431,7 @@ function MobileSettings({
 	// iOS controls keep a 44pt target. The sheet's 34px corner follows the
 	// 22px button radius at its 12px inset, so the two curves stay concentric.
 	const headerButton =
-		"absolute grid size-11 place-items-center rounded-full border-none bg-active p-0 text-dim active:bg-pressed";
+		"absolute grid size-11 place-items-center rounded-full border-none bg-panel p-0 text-dim active:bg-pressed";
 
 	return (
 		<BottomSheet
