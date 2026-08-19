@@ -48,10 +48,8 @@ import {
 // that card's row grammar rather than inventing a third one. The strip owns
 // the PR state machine; the card owns how a row in it looks.
 import {
-	WS_SUMMARY_COUNT,
 	WS_SUMMARY_LABEL,
 	WS_SUMMARY_RAIL,
-	WS_SUMMARY_ROW,
 	WS_SUMMARY_STATUS_ROW,
 } from "../lib/workspace-summary-classes";
 import { Tooltip } from "../ui/tooltip";
@@ -184,16 +182,6 @@ function deriveHeadline(
 			tone: "muted",
 		};
 	return { key: "clean", label: "Up to date", tone: "muted" };
-}
-
-/** The PR row's glyph tone in the summary card: where the pull request itself
- *  stands, which is a different question from the headline under it. A merged
- *  PR with an old approval on it must not read as open. */
-function prGlyphTone(pr: PrDetails): string {
-	if (pr.state === "MERGED") return "text-purple";
-	if (pr.state === "CLOSED") return "text-dim";
-	if (pr.isDraft) return "text-faint";
-	return "text-green";
 }
 
 /** The summary card's headline glyph, one per state the strip can report. The
@@ -1042,75 +1030,77 @@ export function PrStatusBar({
 		}
 	}
 
-	// The summary card: which PR, then where it stands with its one action.
+	// The summary card: one row for the PR, the way a sidebar row carries its
+	// own subtext. Where the work stands is the line that matters, so the
+	// headline leads and the PR number sits under it as secondary. The PR title
+	// is gone: it restates the session title the card already hangs from, and it
+	// cost the card a whole row to do it.
 	//
-	// The headline row is a div holding two targets rather than one row-wide
-	// button, which is the card's only departure from "the whole row is the
-	// target". It has to be: the label opens the PR (or its checks) and the
-	// button beside it merges, pushes or pulls, and a button inside a button is
-	// not a thing.
+	// The row is a div holding two targets rather than one row-wide button,
+	// which is the card's only departure from "the whole row is the target". It
+	// has to be: the label opens the PR (or its checks) and the button beside it
+	// merges, pushes or pulls, and a button inside a button is not a thing.
 	if (variant === "summary") {
 		// The label is the button, rather than a button wrapping it: it has to
 		// carry the row's truncation and its flex share, and a `display:contents`
 		// wrapper would drop the focus ring with the box.
 		const labelClass = cn(
 			WS_SUMMARY_LABEL,
-			"cursor-pointer rounded-sm border-none bg-transparent p-0 text-left text-item-title text-fg hover:text-accent focus-ring",
+			"group/prsum cursor-pointer rounded-sm border-none bg-transparent p-0 text-left focus-ring",
+		);
+		// Two lines inside the one target: the state, then which PR it is about.
+		const labelBody = (
+			<>
+				<span className="block truncate text-item-title text-fg group-hover/prsum:text-accent">
+					{headlineLabel}
+				</span>
+				{pr && (
+					<span className="block truncate text-meta text-faint">#{pr.number}</span>
+				)}
+			</>
 		);
 		return (
-			<>
-				{pr && (
+			<div
+				className={WS_SUMMARY_STATUS_ROW}
+				// The title the row no longer shows is still the fastest way to know
+				// which PR this is, so it stays as the row's tooltip.
+				title={pr ? `#${pr.number} · ${pr.title}` : undefined}
+			>
+				<span className={cn(WS_SUMMARY_RAIL, PR_STATE_TEXT[headlineTone])}>
+					{headlineGlyph(headline.key)}
+				</span>
+				{/* When checks are the reason for the headline, the headline IS the
+				    checks control, exactly as on the strip: hovering lists them,
+				    clicking opens Review's Checks tab. */}
+				{checksPr ? (
+					<PrChecksPopover
+						checks={checksPr.checks}
+						trigger={
+							<button
+								type="button"
+								className={labelClass}
+								onClick={onOpenChecksTab}
+							>
+								{labelBody}
+							</button>
+						}
+					/>
+				) : (
 					<button
-						className={WS_SUMMARY_ROW}
+						type="button"
+						className={labelClass}
 						onClick={() => onOpenPrTab?.()}
-						title={`#${pr.number} · ${pr.title}`}
 					>
-						<span className={cn(WS_SUMMARY_RAIL, prGlyphTone(pr))}>
-							<IconPullRequest size={20} />
-						</span>
-						<span className={WS_SUMMARY_LABEL}>{pr.title}</span>
-						<span className={cn(WS_SUMMARY_COUNT, "text-faint")}>
-							#{pr.number}
-						</span>
+						{labelBody}
 					</button>
 				)}
-				<div className={WS_SUMMARY_STATUS_ROW}>
-					<span className={cn(WS_SUMMARY_RAIL, PR_STATE_TEXT[headlineTone])}>
-						{headlineGlyph(headline.key)}
+				{error && (
+					<span className={PR_HEAD_ERROR} title={error}>
+						{error}
 					</span>
-					{/* When checks are the reason for the headline, the headline IS the
-					    checks control, exactly as on the strip: hovering lists them,
-					    clicking opens Review's Checks tab. */}
-					{checksPr ? (
-						<PrChecksPopover
-							checks={checksPr.checks}
-							trigger={
-								<button
-									type="button"
-									className={labelClass}
-									onClick={onOpenChecksTab}
-								>
-									{headlineLabel}
-								</button>
-							}
-						/>
-					) : (
-						<button
-							type="button"
-							className={labelClass}
-							onClick={() => onOpenPrTab?.()}
-						>
-							{headlineLabel}
-						</button>
-					)}
-					{error && (
-						<span className={PR_HEAD_ERROR} title={error}>
-							{error}
-						</span>
-					)}
-					{renderAction()}
-				</div>
-			</>
+				)}
+				{renderAction()}
+			</div>
 		);
 	}
 
