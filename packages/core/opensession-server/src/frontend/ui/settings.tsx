@@ -248,7 +248,13 @@ export function SettingRowDescription({
 	className,
 	...props
 }: React.ComponentPropsWithoutRef<"div">) {
-	return <div className={cn("mt-0.5 text-supporting text-dim", className)} {...props} />;
+	return (
+		<div
+			data-setting-description=""
+			className={cn("mt-0.5 text-supporting text-dim", className)}
+			{...props}
+		/>
+	);
 }
 
 export function SettingRowControl({
@@ -287,7 +293,13 @@ export function SettingsHint({
 	className,
 	...props
 }: React.ComponentPropsWithoutRef<"div">) {
-	return <div className={cn("mt-2 px-5 text-supporting text-faint", className)} {...props} />;
+	return (
+		<div
+			data-settings-hint=""
+			className={cn("mt-2 px-5 text-supporting text-faint", className)}
+			{...props}
+		/>
+	);
 }
 
 /**

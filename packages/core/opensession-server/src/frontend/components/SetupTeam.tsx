@@ -31,6 +31,7 @@ export function TeamSection({
 	title,
 	addLabel = "Add member",
 	githubOnly = false,
+	compact = false,
 }: {
 	onChanged: () => void | Promise<void>;
 	/** Optional label above the roster. Defaults to the roster name and count. */
@@ -39,6 +40,7 @@ export function TeamSection({
 	addLabel?: string;
 	/** Keep onboarding focused on the GitHub identity used for sign-in. */
 	githubOnly?: boolean;
+	compact?: boolean;
 }) {
 	const [members, setMembers] = useState<TeamMember[] | null>(null);
 	const [loadFailed, setLoadFailed] = useState(false);
@@ -126,6 +128,7 @@ export function TeamSection({
 							<MemberRow
 								key={m.name}
 								member={m}
+								compact={compact}
 								onEdit={() => {
 									setEditing(m);
 									setDialogOpen(true);
@@ -170,10 +173,12 @@ export function TeamSection({
 
 function MemberRow({
 	member,
+	compact,
 	onEdit,
 	onRemoved,
 }: {
 	member: TeamMember;
+	compact: boolean;
 	onEdit: () => void;
 	onRemoved: () => void | Promise<void>;
 }) {
@@ -186,7 +191,7 @@ function MemberRow({
 			<UserAvatar name={member.name} login={member.github} size={28} />
 			<SettingRowText>
 				<SettingRowTitle>{member.name}</SettingRowTitle>
-				{details.length > 0 && (
+				{!compact && details.length > 0 && (
 					<SettingRowDescription className="truncate">
 						{details.join(" · ")}
 					</SettingRowDescription>

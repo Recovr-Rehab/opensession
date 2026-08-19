@@ -7,7 +7,7 @@ import { Button } from "../ui/button";
 import { cn } from "../ui/cn";
 import { duration, ease } from "../ui/motion";
 import { LoadingState } from "../ui/state";
-import { SetupChecklist } from "./SetupChecklist";
+import { SettingCard, SettingRow, SettingRowTitle } from "../ui/settings";
 import { GithubAuthCard } from "./SetupIntegrations";
 import { ReposSection } from "./SetupRepos";
 import { SetupRestart } from "./SetupRestart";
@@ -18,58 +18,61 @@ import {
 	CodexAccountsSection,
 } from "./settings/ModelAccounts";
 import { IconCheck, IconChevronLeft } from "./icons";
+import { StateChip, githubAuthState, type SetupStatus } from "./setup-shared";
 
 interface FirstMileStep {
 	id: "welcome" | "github" | "organization" | "team" | "ai" | "repos" | "ready";
 	label: string;
 	title: string;
-	description: string;
 }
 
 const STEPS: FirstMileStep[] = [
-	{
-		id: "welcome",
-		label: "Organization",
-		title: `Welcome to ${PRODUCT_NAME}`,
-		description: "Create an organization or join an existing one.",
-	},
-	{
-		id: "github",
-		label: "GitHub",
-		title: "Connect GitHub",
-		description: "Your organization, repositories, and members.",
-	},
-	{
-		id: "organization",
-		label: "Organization",
-		title: "Name your organization",
-		description: "Set a name and icon.",
-	},
-	{
-		id: "ai",
-		label: "AI",
-		title: "Add AI subscriptions",
-		description: "Connect Claude and Codex.",
-	},
-	{
-		id: "repos",
-		label: "Repositories",
-		title: "Add repositories",
-		description: "Choose repositories for sessions.",
-	},
-	{
-		id: "team",
-		label: "People",
-		title: "Bring in your team",
-		description: "Everyone from your GitHub organization.",
-	},
-	{
-		id: "ready",
-		label: "Ready",
-		title: "Start your first session",
-		description: "Review your setup.",
-	},
+	{ id: "welcome", label: "Organization", title: `Welcome to ${PRODUCT_NAME}` },
+	{ id: "github", label: "GitHub", title: "Connect GitHub" },
+	{ id: "organization", label: "Organization", title: "Organization" },
+	{ id: "ai", label: "AI", title: "AI subscriptions" },
+	{ id: "repos", label: "Repositories", title: "Repositories" },
+	{ id: "team", label: "People", title: "Team" },
+	{ id: "ready", label: "Ready", title: "You’re ready" },
 ];
+
+function FirstMileSummary({ status }: { status: SetupStatus }) {
+	const github = githubAuthState(status.github);
+	const rows = [
+		{ title: "GitHub", tone: github.tone, label: github.label },
+		{
+			title: "AI",
+			tone: status.engine.ready ? ("on" as const) : ("warn" as const),
+			label: status.engine.ready ? "Ready" : "Needs setup",
+		},
+		{
+			title: "Repositories",
+			tone: status.repos.length > 0 ? ("on" as const) : ("warn" as const),
+			label: status.repos.length > 0 ? `${status.repos.length} added` : "None",
+		},
+		{
+			title: "Team",
+			tone: status.team.count > 0 ? ("on" as const) : ("warn" as const),
+			label:
+				status.team.count > 0
+					? `${status.team.count} ${status.team.count === 1 ? "member" : "members"}`
+					: "None",
+		},
+	];
+
+	return (
+		<SettingCard>
+			{rows.map((row) => (
+				<SettingRow key={row.title}>
+					<SettingRowTitle>{row.title}</SettingRowTitle>
+					<div className="ml-auto">
+						<StateChip tone={row.tone} label={row.label} />
+					</div>
+				</SettingRow>
+			))}
+		</SettingCard>
+	);
+}
 
 export function FirstMile({ onDone }: { onDone: () => void }) {
 	const setup = useSetupStatus();
@@ -227,17 +230,14 @@ export function FirstMile({ onDone }: { onDone: () => void }) {
 									>
 										{step.title}
 									</h1>
-									<p className="m-0 mt-4 max-w-[42ch] text-body leading-relaxed text-dim text-pretty">
-										{step.description}
-									</p>
-									<div className="mt-8 flex w-full max-w-[300px] flex-col gap-3">
+									<div className="mt-7 flex w-full max-w-[300px] flex-col gap-3">
 										<Button
 											variant="primary"
 											size="lg"
 											onClick={() => goTo(1)}
 											className="min-h-11 w-full justify-center"
 										>
-											Create a new organization
+											Create organization
 										</Button>
 										<Button
 											variant="soft"
@@ -245,16 +245,13 @@ export function FirstMile({ onDone }: { onDone: () => void }) {
 											onClick={onDone}
 											className="min-h-11 w-full justify-center"
 										>
-											Use an existing organization
+											Join organization
 										</Button>
 									</div>
 								</div>
 							) : (
 								<>
 									<div className="mb-8 max-w-[700px] text-center phone:mb-6">
-										<p className="m-0 mb-2 text-label font-semibold text-faint">
-											Step {index}
-										</p>
 										<h1
 											ref={headingRef}
 											tabIndex={-1}
@@ -262,14 +259,11 @@ export function FirstMile({ onDone }: { onDone: () => void }) {
 										>
 											{step.title}
 										</h1>
-										<p className="m-0 mt-4 max-w-[58ch] text-body leading-relaxed text-dim text-pretty">
-											{step.description}
-										</p>
 									</div>
 
 									{/* Settings plates use a translucent version of their normal surface here,
 									    so every onboarding section picks up the page gradient behind it. */}
-									<div className="w-full max-w-[820px] pb-8 [&_.bg-settings-plate]:bg-settings-plate/45 [&_.border-divider]:border-divider/45">
+									<div className="w-full max-w-[820px] pb-8 [&_[data-setting-description]]:hidden [&_[data-settings-hint]]:hidden [&_.bg-settings-plate]:bg-settings-plate/45 [&_.border-divider]:border-divider/45">
 										{step.id === "github" && (
 											<GithubAuthCard
 												github={status.github}
@@ -283,23 +277,24 @@ export function FirstMile({ onDone }: { onDone: () => void }) {
 												onChanged={refetch}
 												title="Members"
 												githubOnly
+												compact
 											/>
 										)}
 										{step.id === "ai" && (
 											<div className="flex flex-col gap-4">
-												<ClaudeAccountsSection />
-												<CodexAccountsSection />
+												<ClaudeAccountsSection compact />
+												<CodexAccountsSection compact />
 											</div>
 										)}
 										{step.id === "repos" && (
-											<ReposSection repos={status.repos} onChanged={refetch} />
+											<ReposSection repos={status.repos} onChanged={refetch} compact />
 										)}
 										{step.id === "ready" && (
 											<>
 												<div className="mx-auto mb-6 flex size-16 items-center justify-center rounded-full bg-green-soft text-green">
 													<IconCheck size={30} />
 												</div>
-												<SetupChecklist status={status} onChanged={refetch} />
+												<FirstMileSummary status={status} />
 											</>
 										)}
 									</div>

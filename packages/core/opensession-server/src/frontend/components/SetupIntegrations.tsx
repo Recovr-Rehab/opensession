@@ -367,7 +367,7 @@ export function GithubAuthCard({
 								onboarding ? "phone:row-start-2" : "phone:row-start-3",
 							)}
 						>
-							{(github.clientIdConfigured || github.userPrAuth) && (
+							{!onboarding && (github.clientIdConfigured || github.userPrAuth) && (
 								<>
 									<div className="hidden min-h-11 items-center justify-between text-label font-medium text-dim phone:flex">
 										<span>GitHub sign-in</span>

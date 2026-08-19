@@ -50,9 +50,11 @@ import { Badge } from "../ui/badge";
 export function ReposSection({
 	repos,
 	onChanged,
+	compact = false,
 }: {
 	repos: SetupStatus["repos"];
 	onChanged: () => void | Promise<void>;
+	compact?: boolean;
 }) {
 	const [pickerOpen, setPickerOpen] = useState(false);
 	// Focused when the picker opens, so a long list is one keystroke from
@@ -126,9 +128,11 @@ export function ReposSection({
 								/>
 								<SettingRowText>
 									<SettingRowTitle>{r.label}</SettingRowTitle>
-									<SettingRowDescription className="truncate font-mono text-meta">
-										{r.path}
-									</SettingRowDescription>
+									{!compact && (
+										<SettingRowDescription className="truncate font-mono text-meta">
+											{r.path}
+										</SettingRowDescription>
+									)}
 								</SettingRowText>
 								<StateChip tone={lifecycle.tone} label={lifecycle.label} />
 							</SettingRow>
@@ -419,7 +423,7 @@ function RepoPickRow({
 					)}
 				</div>
 				{repo.description && (
-					<div className="mt-0.5 truncate text-meta text-faint">
+					<div className="mt-0.5 truncate text-supporting text-faint">
 						{repo.description}
 					</div>
 				)}
