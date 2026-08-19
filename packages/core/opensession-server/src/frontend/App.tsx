@@ -158,6 +158,7 @@ import {
 	saveWorkspaceLastSession,
 } from "./lib/workspace-last-session";
 import { sessionCarriesPr, sessionHasPr } from "./lib/session-prs";
+import { findPrWorkspaceId } from "./lib/pr-workspace";
 import { sessionHasWorkspace } from "./lib/session-workspace";
 import type {
 	Workspace,
@@ -849,6 +850,10 @@ export function App(
 	// change (a new PR session can auto-create a workspace server-side).
 	const [workspaces, setWorkspaces] = useState<Workspace[]>([]);
 	const [workspacesLoaded, setWorkspacesLoaded] = useState(false);
+	// Read by the PR-link opener, which runs from a document-level listener and
+	// therefore can't close over the render's value.
+	const workspacesRef = useRef(workspaces);
+	workspacesRef.current = workspaces;
 	const productEmpty =
 		!loading &&
 		workspacesLoaded &&
@@ -991,6 +996,8 @@ export function App(
 	}
 	const navigateRef = useRef(navigate);
 	navigateRef.current = navigate;
+	// Set below, once the review-focus callback it needs exists.
+	const openPrRef = useRef<(repo: string, number: number) => void>(() => {});
 
 	// PR-mention chips (markdown.ts) are anchors inside
 	// dangerouslySetInnerHTML, so they can't carry a React handler — and they
@@ -1035,7 +1042,7 @@ export function App(
 			// gestures on the href — leave them to it.
 			if (e.shiftKey || e.altKey) return;
 			e.preventDefault();
-			navigateRef.current({ view: "pr", repo: chip.repo, number: chip.number });
+			openPrRef.current(chip.repo, chip.number);
 		};
 		const onAuxClick = (e: MouseEvent) => {
 			if (e.button !== 1) return;
@@ -1266,7 +1273,7 @@ export function App(
 		() => new Set(),
 	);
 	// The Video (feed web-panel) tab is likewise default-PRESENT on workspaces
-	// carrying a web-panel ExternalRef (Tella videos) — track explicit closes.
+	// carrying a web-panel ExternalRef (a linked video, dashboard, …): track explicit closes.
 	const [videoClosed, setVideoClosed] = useState<Set<string>>(() => new Set());
 	const [stagingOpen, setStagingOpen] = useState<Set<string>>(
 		() => new Set(getActiveViewTabKeys("staging")),
@@ -1365,6 +1372,52 @@ export function App(
 		},
 		[],
 	);
+	// Open a PR named in prose (a `repo#123` chip) where it belongs: a Review tab
+	// in its workspace. The standalone /pr/ route is a page, so routing through it
+	// took the whole detail pane, title and tab strip included, for as long as the
+	// resolve took, even when the PR's workspace was the one already on screen.
+	// Most clicks need no server at all (the workspace and session lists already
+	// say where the PR lives), and the ones that do keep the current view up while
+	// they wait rather than blanking it. Only an unresolvable PR falls through to
+	// the standalone route, which is what says there is no such pull request.
+	const openPrByRef = React.useCallback(
+		(repo: string, number: number) => {
+			const open = (
+				workspaceId: string,
+				pr: { repo: string; branch?: string; number?: number },
+			) => {
+				focusReviewPr({ ...pr, workspaceId });
+				navigateRef.current({
+					view: "workspace",
+					id: workspaceId,
+					tab: "review",
+				});
+			};
+			const known = findPrWorkspaceId(
+				workspacesRef.current,
+				sessionsRef.current,
+				{ repo, number },
+			);
+			if (known) {
+				open(known, { repo, number });
+				return;
+			}
+			resolveWorkspaceApi({ pr: { repo, number } })
+				.then(({ workspaceId, pr }) => {
+					refreshWorkspaces();
+					open(workspaceId, {
+						repo: pr?.repo ?? repo,
+						branch: pr?.branch,
+						number: pr?.number ?? number,
+					});
+				})
+				.catch(() => {
+					navigateRef.current({ view: "pr", repo, number });
+				});
+		},
+		[focusReviewPr, refreshWorkspaces],
+	);
+	openPrRef.current = openPrByRef;
 	// One-shot guard consumed by the workspace default-pane seeding effect (set
 	// when closing a view tab replaces the workspace URL — see onCloseView).
 	const suppressWsSeedRef = useRef(false);
@@ -1935,6 +1988,30 @@ export function App(
 		};
 		if (route.view === "pr") {
 			setPrRefMissing(false);
+			// A deep link (or a fallback that landed here) whose workspace this
+			// client already knows resolves without the round-trip, so the review
+			// opens rather than the page spending the wait as a spinner.
+			const known = findPrWorkspaceId(
+				workspacesRef.current,
+				sessionsRef.current,
+				{
+					repo: route.repo,
+					...(route.number !== undefined ? { number: route.number } : {}),
+					...(route.branch !== undefined ? { branch: route.branch } : {}),
+				},
+			);
+			if (known) {
+				focusReviewPr({
+					repo: route.repo,
+					branch: route.branch,
+					number: route.number,
+					workspaceId: known,
+				});
+				toWorkspace(known, "review");
+				return () => {
+					stale = true;
+				};
+			}
 			resolveWorkspaceApi({
 				pr: {
 					repo: route.repo,
@@ -2053,7 +2130,7 @@ export function App(
 		void ensureFeedMeta().then(() => setFeedMetaTick((t) => t + 1));
 	}, []);
 	// The Video view-tab: the web panel of the workspace's (or open session's)
-	// feed-item ExternalRef — e.g. the Tella video embed (the feeds design).
+	// feed-item ExternalRef, e.g. a video embed (the feeds design).
 	// On a session route routeWorkspace is null, so fall back to the open session's
 	// workspace record — otherwise the tab vanishes as soon as a session exists.
 	const videoWorkspace =
@@ -2567,7 +2644,7 @@ export function App(
 		},
 		[refreshWorkspaces, focusReviewPr],
 	);
-	// Sidebar feed row (Tella video, …) → the item's ONE workspace, its web
+	// Sidebar feed row (a video, a dashboard, …) to the item's ONE workspace, its web
 	// panel foregrounded (the feeds design).
 	const openFeedItemWorkspace = React.useCallback(
 		async (feed: FeedDescriptor, item: FeedItem) => {
@@ -3538,6 +3615,11 @@ export function App(
 					? "Pull requests"
 				: route.view === "new"
 					? "New session"
+					// A PR opened by number is on its way to a workspace. It brings no
+					// bar of its own while it resolves, so name it here instead of
+					// leaving the window with nothing to drag by.
+					: route.view === "pr" && route.number !== undefined
+						? `${repoLabel(route.repo)} #${route.number}`
 					: route.view === "workspace"
 						? routeWorkspace?.name || "Workspace"
 						: "";
