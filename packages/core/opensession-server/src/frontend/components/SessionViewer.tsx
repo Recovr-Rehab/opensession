@@ -6158,7 +6158,7 @@ export function SessionViewer({
 						createPortal(
 							<>
 								<motion.div
-									className="pointer-events-none fixed inset-0 z-[250] flex flex-col items-center justify-center bg-black/60 px-6 text-center"
+									className="pointer-events-none fixed inset-0 z-[250] flex flex-col items-center justify-center bg-[color-mix(in_srgb,var(--accent)_16%,rgb(0_0_0/0.66))] px-6 text-center"
 									initial={{ opacity: 0 }}
 									animate={{ opacity: 1 }}
 									transition={{ type: "tween", duration: duration.base, ease }}
