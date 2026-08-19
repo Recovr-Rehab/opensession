@@ -78,6 +78,43 @@ export function imageRegionOutputSize(
 	};
 }
 
+export interface ScreenRect {
+	left: number;
+	top: number;
+	width: number;
+	height: number;
+}
+
+/**
+ * Where the comment card sits relative to the region it is about.
+ *
+ * Directly under the selection, so the words and the pixels they describe read
+ * as one thing. It flips above when the region sits low, and it never leaves
+ * the viewport: a card that hangs off the edge of a phone takes the Send button
+ * with it.
+ */
+export function anchoredCommentPosition(
+	region: ScreenRect,
+	card: { width: number; height: number },
+	viewport: { width: number; height: number },
+	gap = 10,
+	margin = 12,
+): { left: number; top: number; placement: "below" | "above" | "clamped" } {
+	const maxLeft = Math.max(margin, viewport.width - card.width - margin);
+	const left = Math.min(Math.max(margin, region.left), maxLeft);
+	const below = region.top + region.height + gap;
+	if (below + card.height <= viewport.height - margin) {
+		return { left, top: below, placement: "below" };
+	}
+	const above = region.top - gap - card.height;
+	if (above >= margin) return { left, top: above, placement: "above" };
+	return {
+		left,
+		top: Math.max(margin, viewport.height - card.height - margin),
+		placement: "clamped",
+	};
+}
+
 async function decodedImage(blob: Blob): Promise<{
 	source: CanvasImageSource;
 	width: number;

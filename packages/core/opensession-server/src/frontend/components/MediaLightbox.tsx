@@ -24,9 +24,11 @@ import {
 import { cn } from "../ui/cn";
 import { toast } from "../ui/toast";
 import {
+	anchoredCommentPosition,
 	imageRegionBetween,
 	type ImageRegion,
 	type ImageRegionPoint,
+	type ScreenRect,
 } from "../lib/image-region-comment";
 import {
 	canCommentOnImageRegion,
@@ -34,6 +36,7 @@ import {
 } from "../lib/image-region-comment-registry";
 import {
 	IconArrowDown,
+	IconArrowUp,
 	IconArrowUpRight,
 	IconCheck,
 	IconChevronLeft,
@@ -572,6 +575,7 @@ function ZoomableMedia({
 	commentMode = false,
 	selection,
 	onSelection,
+	onSelectionRect,
 }: {
 	src: string;
 	/** Present for a diagram: draw this markup instead of loading `src`. */
@@ -588,6 +592,9 @@ function ZoomableMedia({
 	commentMode?: boolean;
 	selection?: ImageRegion | null;
 	onSelection?: (region: ImageRegion) => void;
+	/** Where the committed selection sits on screen, so the comment card can be
+	 *  placed against it. Viewport coordinates. */
+	onSelectionRect?: (rect: ScreenRect | null) => void;
 }) {
 	const wrapRef = useRef<HTMLDivElement>(null);
 	const imgRef = useRef<HTMLImageElement>(null);
@@ -625,6 +632,9 @@ function ZoomableMedia({
 		top: number;
 		width: number;
 		height: number;
+		/** The same box in viewport coordinates, for the fixed comment card. */
+		viewLeft: number;
+		viewTop: number;
 	} | null>(null);
 	/** A diagram's box, fitted to the surface. Unlike a photo, a chart has no
 	 * natural pixel size to hold it back — its viewBox is arbitrary units — so
@@ -765,13 +775,17 @@ function ZoomableMedia({
 				top: imageRect.top - wrapRect.top,
 				width: imageRect.width,
 				height: imageRect.height,
+				viewLeft: imageRect.left,
+				viewTop: imageRect.top,
 			};
 			setImageBox((current) =>
 				current &&
 				Math.abs(current.left - next.left) < 0.25 &&
 				Math.abs(current.top - next.top) < 0.25 &&
 				Math.abs(current.width - next.width) < 0.25 &&
-				Math.abs(current.height - next.height) < 0.25
+				Math.abs(current.height - next.height) < 0.25 &&
+				Math.abs(current.viewLeft - next.viewLeft) < 0.25 &&
+				Math.abs(current.viewTop - next.viewTop) < 0.25
 					? current
 					: next,
 			);
@@ -1071,6 +1085,23 @@ function ZoomableMedia({
 		return () => wrap.removeEventListener("wheel", onWheel);
 	}, []);
 
+	// The comment belongs against the region it is about, so the viewer reports
+	// where that region landed. Viewport coordinates rather than wrapper ones:
+	// the wrapper carries the page-turn translation, and the card is fixed.
+	useEffect(() => {
+		if (!onSelectionRect) return;
+		if (!commentMode || !selection || !imageBox) {
+			onSelectionRect(null);
+			return;
+		}
+		onSelectionRect({
+			left: imageBox.viewLeft + selection.x * imageBox.width,
+			top: imageBox.viewTop + selection.y * imageBox.height,
+			width: selection.width * imageBox.width,
+			height: selection.height * imageBox.height,
+		});
+	}, [commentMode, selection, imageBox, onSelectionRect]);
+
 	const shownRegion = draftRegion ?? selection ?? null;
 	const shownRegionBox =
 		shownRegion && imageBox
@@ -1200,6 +1231,16 @@ function MediaLightbox({
 	const [direction, setDirection] = useState<-1 | 0 | 1>(0);
 	const [commenting, setCommenting] = useState(false);
 	const [selection, setSelection] = useState<ImageRegion | null>(null);
+	/** Where that selection sits on screen, reported by the viewer. */
+	const [selectionRect, setSelectionRect] = useState<ScreenRect | null>(null);
+	const [commentCardSize, setCommentCardSize] = useState<{
+		width: number;
+		height: number;
+	} | null>(null);
+	const [viewport, setViewport] = useState(() => ({
+		width: typeof window === "undefined" ? 0 : window.innerWidth,
+		height: typeof window === "undefined" ? 0 : window.innerHeight,
+	}));
 	const [commentText, setCommentText] = useState("");
 	const [commentError, setCommentError] = useState<string | null>(null);
 	const [sendingComment, setSendingComment] = useState(false);
@@ -1207,10 +1248,13 @@ function MediaLightbox({
 	const dialogRef = useRef<HTMLDivElement>(null);
 	const closeRef = useRef<HTMLButtonElement>(null);
 	const commentInputRef = useRef<HTMLTextAreaElement>(null);
+	const commentCardRef = useRef<HTMLFormElement>(null);
 	const reduceMotion = useReducedMotion();
 	const resetComment = () => {
 		setCommenting(false);
 		setSelection(null);
+		setSelectionRect(null);
+		setCommentCardSize(null);
 		setCommentText("");
 		setCommentError(null);
 	};
@@ -1285,6 +1329,54 @@ function MediaLightbox({
 		const t = setTimeout(() => setCopiedSrc(null), 1600);
 		return () => clearTimeout(t);
 	}, [copiedSrc]);
+
+	// The card is placed against the selection, so it needs the room it is being
+	// placed in. visualViewport rather than innerHeight: an open phone keyboard
+	// shrinks the first and not the second, and a card measured against the
+	// second would sit under the keys the person is typing on.
+	useEffect(() => {
+		const measure = () =>
+			setViewport((current) => {
+				const next = {
+					width: window.visualViewport?.width ?? window.innerWidth,
+					height: window.visualViewport?.height ?? window.innerHeight,
+				};
+				return Math.abs(current.width - next.width) < 0.5 &&
+					Math.abs(current.height - next.height) < 0.5
+					? current
+					: next;
+			});
+		measure();
+		window.addEventListener("resize", measure);
+		window.visualViewport?.addEventListener("resize", measure);
+		return () => {
+			window.removeEventListener("resize", measure);
+			window.visualViewport?.removeEventListener("resize", measure);
+		};
+	}, []);
+
+	// Its own height decides whether it fits below the region, and that height
+	// changes as an error appears or the text wraps.
+	useLayoutEffect(() => {
+		const el = commentCardRef.current;
+		if (!el) return;
+		const measure = () => {
+			const rect = el.getBoundingClientRect();
+			setCommentCardSize((current) =>
+				current &&
+				Math.abs(current.width - rect.width) < 0.5 &&
+				Math.abs(current.height - rect.height) < 0.5
+					? current
+					: { width: rect.width, height: rect.height },
+			);
+		};
+		measure();
+		const observer = new ResizeObserver(measure);
+		observer.observe(el);
+		return () => observer.disconnect();
+		// selectionRect too: the card only mounts once the viewer has reported
+		// where the region is, which is a render after the selection itself.
+	}, [commenting, selection, selectionRect]);
 
 	useEffect(() => {
 		if (!selection) return;
@@ -1370,6 +1462,16 @@ function MediaLightbox({
 	// without needing position).
 	const navBtn =
 		"z-10 grid h-10 w-10 shrink-0 place-items-center rounded-full border-0 bg-white/10 p-0 text-white hover:bg-white/20 phone:h-11 phone:w-11";
+	// Wide enough for a sentence, never wider than the screen it floats on.
+	const commentCardWidth = Math.min(340, Math.max(220, viewport.width - 24));
+	const commentAnchor =
+		commenting && selection && selectionRect
+			? anchoredCommentPosition(
+					selectionRect,
+					{ width: commentCardWidth, height: commentCardSize?.height ?? 0 },
+					viewport,
+				)
+			: null;
 
 	return (
 		<motion.div
@@ -1544,6 +1646,7 @@ function MediaLightbox({
 								setSelection(region);
 								setCommentError(null);
 							}}
+							onSelectionRect={setSelectionRect}
 						/>
 					) : (
 						<div className="flex min-h-0 min-w-0 flex-1 items-center justify-center self-stretch">
@@ -1573,68 +1676,94 @@ function MediaLightbox({
 				)}
 			</div>
 
-			{commenting && (
+			{commenting && !selection && (
+				<div className="pointer-events-none absolute inset-x-0 bottom-[calc(16px+env(safe-area-inset-bottom))] z-20 flex justify-center px-4">
+					<div className="pointer-events-auto flex items-center gap-1 rounded-full bg-black/70 py-1 pl-4 pr-1 shadow-[0_10px_40px_rgb(0_0_0/0.45)] backdrop-blur-md">
+						<span className="text-label font-medium text-white">
+							Drag over the part you mean
+						</span>
+						<button
+							type="button"
+							className="min-h-9 rounded-full px-3 text-label font-medium text-white/70 hover:bg-white/10 hover:text-white phone:min-h-11"
+							onClick={resetComment}
+						>
+							Cancel
+						</button>
+					</div>
+				</div>
+			)}
+
+			{commentAnchor && (
 				<form
-					className="z-20 mx-auto flex w-full max-w-[680px] shrink-0 flex-col gap-2 px-4 pb-[calc(12px+env(safe-area-inset-bottom))] pt-2"
+					ref={commentCardRef}
+					/* Fixed and placed against the region: the remark and the pixels it
+					   is about read as one thing. Kept to a single row, because on a
+					   phone a taller card would cover the picture it is describing. */
+					className="fixed z-20 flex flex-col gap-1 rounded-2xl border border-white/15 bg-black/80 p-1.5 shadow-[0_10px_40px_rgb(0_0_0/0.45)] backdrop-blur-md"
+					style={{
+						left: commentAnchor.left,
+						top: commentAnchor.top,
+						width: commentCardWidth,
+						// One frame of measurement before it knows which side of the
+						// region it fits on. Showing it first would place it, then move it.
+						visibility: commentCardSize ? undefined : "hidden",
+					}}
 					onSubmit={(event) => {
 						event.preventDefault();
 						void sendRegionComment();
 					}}
 				>
-					<div className="rounded-xl bg-white/12 p-2.5 shadow-lg backdrop-blur-md">
-						{selection ? (
-							<>
-								<textarea
-									ref={commentInputRef}
-									value={commentText}
-									onChange={(event) => setCommentText(event.target.value)}
-									onKeyDown={(event) => {
-										if (
-											event.key === "Enter" &&
-											!event.shiftKey &&
-											!event.nativeEvent.isComposing &&
-											window.matchMedia("(hover: hover) and (pointer: fine)").matches
-										) {
-											event.preventDefault();
-											void sendRegionComment();
-										}
-									}}
-									rows={2}
-									placeholder="What should change here?"
-									className="block max-h-32 min-h-12 w-full resize-none rounded-lg border border-white/20 bg-black/25 px-3 py-2 text-body leading-relaxed text-white outline-none placeholder:text-white/45 focus:border-white/45 phone:text-input-phone"
-									disabled={sendingComment}
-								/>
-								{commentError && (
-									<div className="mt-2 text-label text-red" role="alert">
-										{commentError}
-									</div>
-								)}
-							</>
-						) : (
-							<div className="px-2 py-1.5 text-center text-label font-medium text-white">
-								Drag over the part you mean
-							</div>
-						)}
-						<div className="mt-2 flex items-center justify-end gap-2">
-							<button
-								type="button"
-								className="min-h-10 rounded-control px-3 text-label font-medium text-white/70 hover:bg-white/10 hover:text-white phone:min-h-11"
-								onClick={resetComment}
-								disabled={sendingComment}
-							>
-								Cancel
-							</button>
-							{selection && (
-								<button
-									type="submit"
-									className="min-h-10 rounded-control bg-white px-4 text-label font-semibold text-black transition-transform active:scale-[0.96] disabled:opacity-45 phone:min-h-11"
-									disabled={!commentText.trim() || sendingComment}
-								>
-									{sendingComment ? "Sending…" : "Send"}
-								</button>
-							)}
-						</div>
+					<div className="flex items-end gap-1">
+						<textarea
+							ref={commentInputRef}
+							value={commentText}
+							onChange={(event) => {
+								setCommentText(event.target.value);
+								// Grows with the remark instead of scrolling inside one line,
+								// and the card is re-placed as it grows.
+								const field = event.target;
+								field.style.height = "auto";
+								field.style.height = `${Math.min(field.scrollHeight, 96)}px`;
+							}}
+							onKeyDown={(event) => {
+								if (
+									event.key === "Enter" &&
+									!event.shiftKey &&
+									!event.nativeEvent.isComposing &&
+									window.matchMedia("(hover: hover) and (pointer: fine)").matches
+								) {
+									event.preventDefault();
+									void sendRegionComment();
+								}
+							}}
+							rows={1}
+							placeholder="What should change here?"
+							className="block max-h-24 min-h-9 w-full flex-1 resize-none rounded-xl bg-transparent px-2.5 py-2 text-body leading-snug text-white outline-none placeholder:text-white/45 phone:min-h-11 phone:text-input-phone"
+							disabled={sendingComment}
+						/>
+						<button
+							type="button"
+							className="grid size-9 shrink-0 place-items-center rounded-full border-0 bg-transparent p-0 text-white/60 hover:bg-white/10 hover:text-white phone:size-11"
+							onClick={resetComment}
+							disabled={sendingComment}
+							aria-label="Cancel comment"
+						>
+							<IconX size={16} />
+						</button>
+						<button
+							type="submit"
+							className="grid size-9 shrink-0 place-items-center rounded-full border-0 bg-white p-0 text-black transition-transform active:scale-[0.94] disabled:opacity-40 phone:size-11"
+							disabled={!commentText.trim() || sendingComment}
+							aria-label={sendingComment ? "Sending comment" : "Send comment"}
+						>
+							<IconArrowUp size={17} />
+						</button>
 					</div>
+					{commentError && (
+						<div className="px-2.5 pb-1 text-label text-red" role="alert">
+							{commentError}
+						</div>
+					)}
 				</form>
 			)}
 

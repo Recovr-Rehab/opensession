@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import {
+	anchoredCommentPosition,
 	imageRegionBetween,
 	imageRegionOutputSize,
 	imageRegionPixels,
@@ -72,5 +73,51 @@ describe("image region comment registry", () => {
 		expect(calls).toEqual(["second"]);
 		unregisterSecond();
 		expect(canCommentOnImageRegion("session-1")).toBe(false);
+	});
+});
+
+describe("the comment card sits against its region", () => {
+	const card = { width: 340, height: 140 };
+	const viewport = { width: 1440, height: 900 };
+
+	test("hangs under the selection, aligned to its left edge", () => {
+		expect(
+			anchoredCommentPosition(
+				{ left: 500, top: 200, width: 260, height: 120 },
+				card,
+				viewport,
+			),
+		).toEqual({ left: 500, top: 330, placement: "below" });
+	});
+
+	test("flips above a region that reaches the bottom of the screen", () => {
+		expect(
+			anchoredCommentPosition(
+				{ left: 500, top: 640, width: 260, height: 200 },
+				card,
+				viewport,
+			),
+		).toEqual({ left: 500, top: 490, placement: "above" });
+	});
+
+	test("keeps Send on screen when a region fills the height", () => {
+		const placed = anchoredCommentPosition(
+			{ left: 40, top: 10, width: 300, height: 880 },
+			card,
+			viewport,
+		);
+		expect(placed.placement).toBe("clamped");
+		expect(placed.top + card.height).toBeLessThanOrEqual(viewport.height - 12);
+	});
+
+	test("never runs off the right edge of a phone", () => {
+		const phone = { width: 390, height: 844 };
+		const placed = anchoredCommentPosition(
+			{ left: 300, top: 120, width: 80, height: 60 },
+			{ width: 340, height: 150 },
+			phone,
+		);
+		expect(placed.left).toBe(38);
+		expect(placed.left + 340).toBeLessThanOrEqual(phone.width - 12);
 	});
 });
