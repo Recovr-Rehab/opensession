@@ -1988,6 +1988,93 @@ html[data-theme="light"] .composer-hl .cmp-fence {
 	background: rgba(0, 0, 0, 0.75);
 }
 
+/* ── Copy control on a rendered code fence ──────────────────────
+   Same shape as the diagram's expand button above, and a sibling of the
+   scroller for the same reason: a long line scrolls the <pre> sideways, and a
+   button inside it would ride off the edge with the code. It is opaque
+   because of that movement. A translucent chip with a line of code sliding
+   under it reads as a rendering fault, and the well it sits on has no single
+   colour to borrow (light paints it as translucent ink over whichever surface
+   the turn uses, see the .markdown pre rules above). Built by
+   lib/code-copy.ts, which is also why this cannot be a utility. */
+.md-code-wrap {
+	position: relative;
+}
+/* Room at the end of the first line so the button never lands on top of code
+   at rest. Once scrolled, the fill is what covers the rest. */
+.md-code-wrap > pre {
+	padding-right: 46px;
+}
+.md-code-copy {
+	position: absolute;
+	top: 6px;
+	right: 6px;
+	display: grid;
+	place-items: center;
+	width: 28px;
+	height: 28px;
+	padding: 0;
+	border: 1px solid var(--border);
+	border-radius: calc(7px * var(--rf)); corner-shape: var(--cs);
+	background: var(--bg);
+	color: var(--text-dim);
+	cursor: pointer;
+}
+.md-code-copy:hover {
+	background: var(--bg-raised);
+	color: var(--text);
+}
+/* Both glyphs share one cell, so the swap to the check carries no layout and
+   the button cannot shift under the pointer mid-click. */
+.md-code-copy-glyph {
+	grid-area: 1 / 1;
+	display: grid;
+	place-items: center;
+}
+.md-code-copy-glyph[data-state="done"] {
+	opacity: 0;
+	color: var(--green);
+}
+.md-code-copy[data-copied] .md-code-copy-glyph[data-state="idle"] {
+	opacity: 0;
+}
+.md-code-copy[data-copied] .md-code-copy-glyph[data-state="done"] {
+	opacity: 1;
+}
+
+/* A hover client gets it on approach, so a message full of fences is not a
+   message full of buttons. Keyboard focus counts as approach, or the control
+   would be invisible to the tab that reaches it. */
+@media (hover: hover) and (pointer: fine) {
+	.md-code-copy {
+		opacity: 0;
+		transition: opacity 0.12s ease-out;
+	}
+	.md-code-wrap:hover .md-code-copy,
+	.md-code-copy:focus-visible,
+	.md-code-copy[data-copied] {
+		opacity: 1;
+	}
+}
+
+/* A touch client has no hover and so no way to discover the control at all:
+   there it is simply always on. 36px rather than the 44 a standalone target
+   takes, because this one floats over the block's own horizontal scroll area
+   and a 44px corner covers most of what you drag to scroll a one-line fence.
+   Selecting the text by hand still works, so the button is not the only way
+   to copy. */
+@media (hover: none) and (pointer: coarse) {
+	.md-code-copy {
+		top: 4px;
+		right: 4px;
+		width: 36px;
+		height: 36px;
+	}
+	.md-code-wrap > pre {
+		padding-right: 50px;
+	}
+}
+
 /* ── Chips inside rendered markdown ──────────────────────────
    Both of these style markup that lib/markdown.ts writes as an innerHTML
    string, so there is no JSX to hang utilities on — the same case as

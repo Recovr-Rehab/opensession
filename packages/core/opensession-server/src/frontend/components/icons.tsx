@@ -214,10 +214,12 @@ export function IconChevronRight(p: IconProps) {
   );
 }
 
+const CHECK_PATH = "M5.75 12.75L9.5 16.25L18.25 7.75";
+
 export function IconCheck(p: IconProps) {
   return (
     <Svg {...p}>
-      <path {...stroke} d="M5.75 12.75L9.5 16.25L18.25 7.75" />
+      <path {...stroke} d={CHECK_PATH} />
     </Svg>
   );
 }
@@ -869,22 +871,46 @@ export function IconExpand(p: IconProps) {
   );
 }
 
-/**
- * The same glyph as markup, for the one control that is built as an innerHTML
- * string rather than as JSX: the expand button on a rendered mermaid diagram,
- * which MarkdownBody creates in the DOM (see there). Shares EXPAND_PATHS with
- * <IconExpand> so there is still one drawing.
- */
-export function expandIconMarkup(size = MIN_ICON_SIZE): string {
-  const paths = EXPAND_PATHS.map(
-    (d) =>
-      `<path d="${d}" stroke="currentColor" stroke-width="${stroke.strokeWidth}"` +
-      ` stroke-linecap="${stroke.strokeLinecap}" stroke-linejoin="${stroke.strokeLinejoin}"/>`,
-  ).join("");
+// ── Glyphs as markup ───────────────────────────────────────────────────────
+// A few controls are built as an innerHTML string rather than as JSX, because
+// the surface they sit on is itself injected HTML with no element for React to
+// own: the expand button on a rendered mermaid diagram and the copy button on
+// a code fence, both created by MarkdownBody (see there, and lib/code-copy.ts).
+// Each shares its path data with the JSX icon above it, so there is still one
+// drawing per glyph.
+
+const STROKE_MARKUP =
+  `stroke="currentColor" stroke-width="${stroke.strokeWidth}"` +
+  ` stroke-linecap="${stroke.strokeLinecap}" stroke-linejoin="${stroke.strokeLinejoin}"`;
+
+function iconMarkup(inner: string, size: number): string {
   return (
     `<svg width="${size}" height="${size}" viewBox="0 0 24 24" fill="none"` +
-    ` aria-hidden="true">${paths}</svg>`
+    ` aria-hidden="true">${inner}</svg>`
   );
+}
+
+function pathsMarkup(paths: readonly string[]): string {
+  return paths.map((d) => `<path d="${d}" ${STROKE_MARKUP}/>`).join("");
+}
+
+/** <IconExpand> as markup. */
+export function expandIconMarkup(size = MIN_ICON_SIZE): string {
+  return iconMarkup(pathsMarkup(EXPAND_PATHS), size);
+}
+
+/** <IconCopy> as markup. */
+export function copyIconMarkup(size = MIN_ICON_SIZE): string {
+  return iconMarkup(
+    `<rect x="8.75" y="8.75" width="10.5" height="10.5" rx="2" ${STROKE_MARKUP}/>` +
+      pathsMarkup([COPY_SHEET_PATH]),
+    size,
+  );
+}
+
+/** <IconCheck> as markup. */
+export function checkIconMarkup(size = MIN_ICON_SIZE): string {
+  return iconMarkup(pathsMarkup([CHECK_PATH]), size);
 }
 
 export function IconTrash(p: IconProps) {
@@ -1241,14 +1267,14 @@ export function IconEyeOff(p: IconProps) {
   );
 }
 
+const COPY_SHEET_PATH =
+  "M15.25 4.75H6.75C5.64543 4.75 4.75 5.64543 4.75 6.75V15.25";
+
 export function IconCopy(p: IconProps) {
   return (
     <Svg {...p}>
       <rect {...stroke} x="8.75" y="8.75" width="10.5" height="10.5" rx="2" />
-      <path
-        {...stroke}
-        d="M15.25 4.75H6.75C5.64543 4.75 4.75 5.64543 4.75 6.75V15.25"
-      />
+      <path {...stroke} d={COPY_SHEET_PATH} />
     </Svg>
   );
 }

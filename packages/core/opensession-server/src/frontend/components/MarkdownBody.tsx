@@ -7,6 +7,7 @@ import {
 	useRef,
 	useState,
 } from "react";
+import { attachCodeCopy, decorateCodeBlocks } from "../lib/code-copy";
 import {
 	type EffectiveTheme,
 	effectiveTheme,
@@ -185,6 +186,23 @@ export function MarkdownBody({
 			alive = false;
 		};
 	}, [html, theme, visible]);
+
+	// The copy control on each fence (lib/code-copy.ts). Declared AFTER the
+	// upgrade effect on purpose: that one restores the pristine markdown into
+	// the DOM before its first await, which would throw these buttons away.
+	// Effects run in declaration order, so this re-decorates what the reset just
+	// put back. The upgrades that follow are `pre.replaceWith(...)` INSIDE the
+	// wrapper this creates, so the button survives them without being rebuilt.
+	useEffect(() => {
+		const el = ref.current;
+		if (!el || !html.includes("<pre")) return;
+		decorateCodeBlocks(el);
+	}, [html, theme, visible]);
+
+	useEffect(() => {
+		const el = ref.current;
+		return el ? attachCodeCopy(el) : undefined;
+	}, []);
 
 	return (
 		<div ref={ref} className={className} dangerouslySetInnerHTML={innerHtml} />
