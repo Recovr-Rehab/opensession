@@ -149,6 +149,22 @@ export function AskCard({ questions, onAnswer }: Props) {
 		}
 	}
 
+	// Send is offered only when the whole ask can actually be sent. The
+	// primitive shows the action on the last question and leaves it live there
+	// whether or not anything has been answered, so an unanswered question got a
+	// button that refuses: pressing it validates, blocks, and jumps focus back
+	// with an error. A button that is visibly not ready yet says the same thing
+	// before you spend a click on it.
+	//
+	// The condition is every question, not just the active one. Required items
+	// mean Next already validates on the way forward, so in practice the earlier
+	// ones are answered by the time send appears, but this is the honest reading
+	// of "ready to send" and it survives a skipped or controlled jump.
+	//
+	// Cmd/Ctrl+Enter is unaffected and still routes through the primitive's own
+	// validation, so a keyboard user gets the spoken error rather than silence.
+	const allAnswered = questions.every((_, i) => answerFor(i) !== "");
+
 	// Only reached once every item validates — the root holds the submit back
 	// and focuses the first unanswered question otherwise.
 	function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
@@ -365,7 +381,7 @@ export function AskCard({ questions, onAnswer }: Props) {
 				    click — a live-looking primary button that does nothing, which is
 				    the one people reach for. */}
 				<Questionnaire.Submit
-					disabled={submitted}
+					disabled={submitted || !allAnswered}
 					render={
 						<Button
 							variant="primary"

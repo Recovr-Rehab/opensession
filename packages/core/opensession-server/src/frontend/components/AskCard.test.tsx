@@ -165,6 +165,41 @@ test("a stepped ask shows Next only, with no dead Answer beside it", () => {
 	for (const button of inert) expect(button).toContain("[hidden]]:hidden");
 });
 
+test("the send action is held back until the ask has an answer", () => {
+	const html = renderToStaticMarkup(
+		<AskCard
+			questions={[
+				{ question: "Pick all", multiSelect: true, options: [{ label: "One" }] },
+			]}
+			onAnswer={() => {}}
+		/>,
+	);
+
+	// Answer is on screen from the start here, because a multi-select pick is not
+	// a send. Nothing has been answered yet though, so it must not be pressable:
+	// the primitive shows the action on the last question and leaves it live, and
+	// pressing it would validate, refuse, and jump focus back with an error.
+	const submit = (html.match(/<button[^>]*>/g) ?? []).find((b) =>
+		b.includes('type="submit"'),
+	);
+	expect(submit).toBeTruthy();
+	expect(submit).toContain("disabled");
+});
+
+test("a free-text ask cannot be sent empty", () => {
+	const html = renderToStaticMarkup(
+		<AskCard
+			questions={[{ question: "What should happen next?" }]}
+			onAnswer={() => {}}
+		/>,
+	);
+
+	const submit = (html.match(/<button[^>]*>/g) ?? []).find((b) =>
+		b.includes('type="submit"'),
+	);
+	expect(submit).toContain("disabled");
+});
+
 test("multi-select and free-text answers retain the explicit Answer action", () => {
 	const html = renderToStaticMarkup(
 		<AskCard
