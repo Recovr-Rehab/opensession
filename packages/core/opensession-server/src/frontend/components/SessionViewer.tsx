@@ -1420,6 +1420,12 @@ export function SessionViewer({
 		style: panelStyle,
 		resizeHandle: panelResizeHandle,
 	} = useSidePanel();
+	// Review starts with a clear canvas without overwriting the browser-wide
+	// workspace-panel preference. Its own toggle can open the panel for this view,
+	// while returning to a session restores that session's ordinary panel state.
+	const [reviewPanelOpen, setReviewPanelOpen] = useState(false);
+	const activePanelOpen = showReview ? reviewPanelOpen : panelOpen;
+	const setActivePanelOpen = showReview ? setReviewPanelOpen : setPanelOpen;
 	// The panel's own navigation stack, one level deep: null is the workspace
 	// overview, and a page is what pushes on top of it: "portals" from the bar
 	// along the bottom, "changes" from the file list in the overview. It lives
@@ -2129,7 +2135,6 @@ export function SessionViewer({
 	// or Plain thread still need somewhere to show the Agents tab.
 	const panelAvailable =
 		!hideRightPanel &&
-		!showReview &&
 		(hasWorkspace ||
 			hasPlain ||
 			workflowRuns.length > 0 ||
@@ -2188,7 +2193,7 @@ export function SessionViewer({
 	// Parked unless a workspace surface is open on a code session: the panel
 	// column on desktop, the info page on a phone.
 	const diffState = useSessionDiff(session.id, {
-		enabled: hasRepoWork && (panelOpen || infoPageOpen),
+		enabled: hasRepoWork && (activePanelOpen || infoPageOpen),
 		isRunning: isBusy,
 	});
 
@@ -4348,14 +4353,15 @@ export function SessionViewer({
 	// The flag on its own would move the transcript for a card that is not
 	// there: it is seeded from a preference that outlives any one session, and
 	// the card can only report itself once it exists.
-	const summaryVisible = summaryOpen && !isPhone && hasRepoWork && !panelOpen;
+	const summaryVisible =
+		summaryOpen && !showReview && !isPhone && hasRepoWork && !panelOpen;
 	// Closing the panel (desktop) or the info page (phone) drops back to the
 	// overview, so re-opening it doesn't land mid-drill-in. Each width watches
 	// only its own host: a phone's side panel is never rendered, so keying this
 	// on panelOpen alone would clear the page the info page had just pushed.
 	useEffect(() => {
-		if (!isPhone && !panelOpen) setPanelPage(null);
-	}, [isPhone, panelOpen]);
+		if (!isPhone && !activePanelOpen) setPanelPage(null);
+	}, [isPhone, activePanelOpen]);
 	useEffect(() => {
 		if (isPhone && !infoPageOpen) setPanelPage(null);
 	}, [isPhone, infoPageOpen]);
@@ -4685,7 +4691,7 @@ export function SessionViewer({
 	// also renew the authenticated Caddy routes for remote sandbox services.
 	useEffect(() => {
 		if (
-			(!showPreviewTab && !showPortal && !panelOpen && !infoPageOpen) ||
+			(!showPreviewTab && !showPortal && !activePanelOpen && !infoPageOpen) ||
 			!session.worktreeDir
 		)
 			return;
@@ -4705,7 +4711,7 @@ export function SessionViewer({
 	}, [
 		showPreviewTab,
 		showPortal,
-		panelOpen,
+		activePanelOpen,
 		infoPageOpen,
 		session.id,
 		session.worktreeDir,
@@ -5477,7 +5483,7 @@ export function SessionViewer({
 					    the globe rides here only while nothing else is showing it. The
 					    panel carries it in its PR row, the summary card as a row of its
 					    own, so it is never in two places at once. */}
-					{!isPhone && !panelOpen && !summaryVisible && (
+					{!isPhone && !showReview && !panelOpen && !summaryVisible && (
 						<StagingLink
 							session={session}
 							variant="header"
@@ -5515,7 +5521,7 @@ export function SessionViewer({
 					    (see WorkspaceSummary's module doc). Portals, Agents and
 					    Terminal are deliberately not in it: they are places, and
 					    places live in the panel. */}
-					{!isPhone && hasRepoWork && !panelOpen && (
+					{!isPhone && !showReview && hasRepoWork && !panelOpen && (
 						<WorkspaceSummary
 							session={session}
 							anchor={headerActionsRef}
@@ -5557,7 +5563,7 @@ export function SessionViewer({
 								// three are equal squares it just made this gap 4px where the
 								// share → ⋯ one is the row's 8px.
 								className="rounded-control text-dim hover:bg-hover hover:text-fg phone:order-2 phone:h-[38px] phone:min-h-[38px] phone:w-[38px] phone:bg-[color-mix(in_srgb,var(--accent)_12%,transparent)] phone:text-accent"
-								onClick={() => setPanelOpen(!panelOpen)}
+								onClick={() => setActivePanelOpen(!activePanelOpen)}
 								aria-label="Toggle side panel"
 								// Iconic sidebar-right glyph — reads as "right side panel".
 								// Passed as `icon` (not children) so the primitive uses its
@@ -6743,10 +6749,10 @@ export function SessionViewer({
 				{(() => {
 				const rightRegion = (
 					<>
-				{!isPhone && panelAvailable && panelOpen && (
-					<div className={PANEL_OVERLAY} onClick={() => setPanelOpen(false)} />
+				{!isPhone && panelAvailable && activePanelOpen && (
+					<div className={PANEL_OVERLAY} onClick={() => setActivePanelOpen(false)} />
 				)}
-				{!isPhone && panelAvailable && panelOpen ? (
+				{!isPhone && panelAvailable && activePanelOpen ? (
 					<div className={PANEL_SHELL} style={panelStyle}>
 						{panelResizeHandle}
 						{/* A plate, not a band: the strip takes the same inset and
@@ -6978,7 +6984,7 @@ export function SessionViewer({
 				) : null}
 					</>
 				);
-				if (hideRightPanel || showReview) return null;
+				if (hideRightPanel) return null;
 				return rightPanelEl ? createPortal(rightRegion, rightPanelEl) : rightRegion;
 				})()}
 			</div>

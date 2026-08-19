@@ -168,6 +168,12 @@ export function WorkspacePane({
 	const [model, setModel] = useState(""); // "" = default
 	const isPhone = useIsPhone();
 	const sidePanel = useSidePanel();
+	// Review gets a quiet first paint without changing the browser-wide panel
+	// preference. If someone opens it here, keep that choice while this pane stays
+	// mounted, then restore the ordinary preference on the other tabs.
+	const [reviewPanelOpen, setReviewPanelOpen] = useState(false);
+	const panelOpen = tab === "review" ? reviewPanelOpen : sidePanel.open;
+	const setPanelOpen = tab === "review" ? setReviewPanelOpen : sidePanel.setOpen;
 
 	useEffect(() => {
 		const load = () => fetchModels(workspace.id)
@@ -288,9 +294,9 @@ export function WorkspacePane({
 	// same Info block in it. A workspace is a first-class surface, so the chrome
 	// around it doesn't change when the last session goes — only what the pane
 	// beside it holds.
-	const infoPanel = tab !== "review" && !isPhone && sidePanel.open && (
+	const infoPanel = !isPhone && panelOpen && (
 		<>
-			<div className={PANEL_OVERLAY} onClick={() => sidePanel.setOpen(false)} />
+			<div className={PANEL_OVERLAY} onClick={() => setPanelOpen(false)} />
 			<aside className={PANEL_SHELL} style={sidePanel.style}>
 				{sidePanel.resizeHandle}
 				<div className={PANEL_BODY}>
@@ -324,20 +330,18 @@ export function WorkspacePane({
 				{workspace.repo && <RepoTile name={workspace.repo} />}
 				<span className={VIEWER_BRANCH}>{workspace.name}</span>
 			</div>
-			{tab !== "review" && (
-				<div className={VIEWER_HEADER_ACTIONS}>
-					<Tooltip label="Toggle side panel">
-						<Button
-							variant="ghost"
-							size="md"
-							className="rounded-control text-dim hover:bg-hover hover:text-fg"
-							onClick={() => sidePanel.setOpen(!sidePanel.open)}
-							aria-label="Toggle side panel"
-							icon={<IconSidebarRight size={22} />}
-						/>
-					</Tooltip>
-				</div>
-			)}
+			<div className={VIEWER_HEADER_ACTIONS}>
+				<Tooltip label="Toggle side panel">
+					<Button
+						variant="ghost"
+						size="md"
+						className="rounded-control text-dim hover:bg-hover hover:text-fg"
+						onClick={() => setPanelOpen(!panelOpen)}
+						aria-label="Toggle side panel"
+						icon={<IconSidebarRight size={22} />}
+					/>
+				</Tooltip>
+			</div>
 		</div>
 	);
 
