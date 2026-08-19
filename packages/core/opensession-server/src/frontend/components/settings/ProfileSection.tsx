@@ -276,17 +276,21 @@ function ProfileCard({
 						    and the glyph arrives over the middle of it on hover rather
 						    than riding a corner all the time. A picture glyph rather
 						    than a camera, because this replaces a FILE rather than
-						    taking a shot.
+						    taking a shot, and a word under the glyph because a glyph
+						    alone says "picture" without saying which way it goes.
 
 						    Left rather than centered, so it starts on the same x as
 						    the fields under it and the dialog reads as one column.
 
-						    Two things the hover cannot carry: a touch client has no
-						    hover, so there the glyph simply stays on, and removing is
-						    its own button beside the picture rather than a second
-						    badge on it, since a destructive action should not share a
-						    target with the one you reach for. */}
-						<div className="mb-1 mt-1 flex items-center gap-3">
+						    Removing rides the opposite corner of the same picture: it
+						    acts on that picture, so it belongs on it, and the far
+						    corner keeps a destructive click away from the target you
+						    reach for. It is a sibling of the picture button and never
+						    a child, since a button inside a button is invalid.
+
+						    A touch client has no hover, so there the overlay stays
+						    on. */}
+						<div className="relative mb-1 mt-1 w-max">
 							<button
 								type="button"
 								disabled={busy !== null}
@@ -307,7 +311,7 @@ function ProfileCard({
 								    page. */}
 								<span
 									className={cn(
-										"absolute inset-0 grid place-items-center rounded-avatar bg-black/45 text-white transition-opacity",
+										"absolute inset-0 flex flex-col items-center justify-center gap-1 rounded-avatar bg-black/45 text-white transition-opacity",
 										busy === "picture" || isTouchPrimary
 											? "opacity-100"
 											: "opacity-0 group-hover:opacity-100 group-focus-visible:opacity-100",
@@ -317,20 +321,29 @@ function ProfileCard({
 									{busy === "picture" ? (
 										<Spinner size="md" />
 									) : (
-										<IconImage size={22} dense />
+										<>
+											<IconImage size={18} dense />
+											{/* One word: the button already carries the whole
+											    sentence as its accessible name, and 72px of
+											    picture cannot hold two. */}
+											<span className="text-[10px] font-medium leading-none">
+												{profile.image ? "Change" : "Upload"}
+											</span>
+										</>
 									)}
 								</span>
 							</button>
 							{profile.image && (
-								<Button
-									variant="ghost"
-									icon={<IconTrash size={18} dense />}
+								<button
+									type="button"
 									disabled={busy !== null}
 									onClick={() => void removePicture()}
 									aria-label="Remove picture"
 									title="Remove picture"
-									className="hover:text-red phone:min-h-11 phone:w-11"
-								/>
+									className="focus-ring absolute -right-1.5 -top-1.5 grid size-7 place-items-center rounded-full bg-white text-black shadow-sm transition-colors hover:text-red disabled:pointer-events-none"
+								>
+									<IconTrash size={15} dense />
+								</button>
 							)}
 						</div>
 						{/* The note is a sibling of the Field, not a child: `Field` is
