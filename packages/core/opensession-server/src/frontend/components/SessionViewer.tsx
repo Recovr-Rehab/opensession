@@ -6114,36 +6114,25 @@ export function SessionViewer({
 						onDragOverCapture={handleFileDragOver}
 						onDropCapture={handleFileDrop}
 					>
-					{fileDragActive && (
-						<>
-							<motion.div
-								className="pointer-events-none absolute inset-0 z-20 flex flex-col items-center justify-center bg-[color-mix(in_srgb,var(--accent)_18%,var(--bg-panel))] px-6 text-center backdrop-blur-sm"
-								initial={{ opacity: 0 }}
-								animate={{ opacity: 1 }}
-								transition={{ type: "tween", duration: duration.base, ease }}
-								aria-hidden="true"
-							>
-								<div className="mb-5 flex items-center -space-x-2">
-									<div className="rotate-[-8deg] rounded-lg bg-panel p-3 text-dim shadow-md">
-										<IconFile size={26} />
-									</div>
-									<div className="relative z-[1] rounded-xl bg-active p-4 text-fg shadow-lg">
-										<IconArrowUpToLine size={30} />
-									</div>
-									<div className="rotate-[8deg] rounded-lg bg-panel p-3 text-dim shadow-md">
-										<IconFile size={26} />
-									</div>
-								</div>
-								<div className="text-title font-semibold text-fg">Add files</div>
-								<div className="mt-1 text-label text-dim">
-									Drop files here to attach them to your message.
-								</div>
-							</motion.div>
-							<span className="sr-only" role="status">
-								Drop files to attach
-							</span>
-						</>
-					)}
+					{fileDragActive &&
+						createPortal(
+							<>
+								<motion.div
+									className="pointer-events-none fixed inset-0 z-[250] flex flex-col items-center justify-center bg-black/40 px-6 text-center"
+									initial={{ opacity: 0 }}
+									animate={{ opacity: 1 }}
+									transition={{ type: "tween", duration: duration.base, ease }}
+									aria-hidden="true"
+									data-file-drop-overlay
+								>
+									<IconArrowUpToLine size={40} className="text-white" />
+								</motion.div>
+								<span className="sr-only" role="status">
+									Drop files to attach
+								</span>
+							</>,
+							document.body,
+						)}
 					<div className={VIEWER_MESSAGES_REGION}>
 						{/* Selecting transcript text offers actions without changing either
 						    composer until the person chooses where to use it. */}
