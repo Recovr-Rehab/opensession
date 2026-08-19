@@ -250,30 +250,44 @@ export async function fetchFileMentions(
 	query: string,
 	sessionId?: string,
 	repo?: string,
+): Promise<FileMention[]> {
+	const params = new URLSearchParams({ q: query });
+	if (sessionId) params.set("session", sessionId);
+	else if (repo) params.set("repo", repo);
+	try {
+		const data = await request<{ files?: FileMention[] }>(
+			`/files?${params.toString()}`,
+		);
+		return (data.files ?? []).filter(
+			(item) => item.kind === undefined || item.kind === "dir",
+		);
+	} catch (error) {
+		console.warn("fetchFileMentions failed:", error);
+		return [];
+	}
+}
+
+/** People-independent rows for the inline @ palette. Kept separate from the
+ * repository search so tools and recent sessions never wait for git. */
+export async function fetchMentionSuggestions(
+	query: string,
+	sessionId?: string,
 	user?: string,
 	mcpServers?: string[],
 ): Promise<FileMention[]> {
 	const params = new URLSearchParams({ q: query });
 	if (sessionId) params.set("session", sessionId);
-	else if (repo) params.set("repo", repo);
 	if (user) params.set("user", user);
 	for (const server of mcpServers || []) params.append("mcp", server);
-	const queryString = params.toString();
-	const [files, palette] = await Promise.all([
-		request<{ files?: FileMention[] }>(`/files?${queryString}`)
-			.then((data) => data.files ?? [])
-			.catch((error) => {
-				console.warn("fetchFileMentions failed:", error);
-				return [];
-			}),
-		request<{ items?: FileMention[] }>(`/mention-suggestions?${queryString}`)
-			.then((data) => data.items ?? [])
-			.catch((error) => {
-				console.warn("fetchMentionPalette failed:", error);
-				return [];
-			}),
-	]);
-	return [...palette, ...files];
+	try {
+		const data = await request<{ items?: FileMention[] }>(
+			`/mention-suggestions?${params.toString()}`,
+		);
+		return data.items ?? [];
+	} catch (error) {
+		console.warn("fetchMentionPalette failed:", error);
+		return [];
+	}
 }
 
 /**
