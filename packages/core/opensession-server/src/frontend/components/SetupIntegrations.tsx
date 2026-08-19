@@ -235,9 +235,11 @@ function GithubAuthSetupDialog({
 export function GithubAuthCard({
 	github,
 	onSaved,
+	onboarding = false,
 }: {
 	github: SetupGithub;
 	onSaved: (updated: SetupGithub, restartRequired: boolean) => void;
+	onboarding?: boolean;
 }) {
 	const state = githubAuthState(github);
 	const active = github.userPrAuth && github.clientIdConfigured;
@@ -335,11 +337,15 @@ export function GithubAuthCard({
 					<IconTile name="github" size={40} />
 					<div className="min-w-[14rem] flex-1">
 						<div className="flex flex-wrap items-center gap-2">
-							<div className="text-item-title font-semibold text-fg">GitHub sign-in</div>
+							<div className="text-item-title font-semibold text-fg">
+								{onboarding ? "GitHub" : "GitHub sign-in"}
+							</div>
 							<StateChip tone={state.tone} label={state.label} />
 						</div>
 						<p className="m-0 mt-1 text-supporting leading-relaxed text-dim">
-							Interactive sessions open PRs as their connected owner instead of the bot.
+							{onboarding
+								? "Repositories, pull requests, organization members, and teammate sign-in."
+								: "Interactive sessions open PRs as their connected owner instead of the bot."}
 						</p>
 						{/* The Device Flow switch lives on GitHub, so nothing here can
 						    report whether it is on. It is also the only way in now, so

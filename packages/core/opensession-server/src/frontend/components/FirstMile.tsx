@@ -8,7 +8,7 @@ import { cn } from "../ui/cn";
 import { duration, ease } from "../ui/motion";
 import { LoadingState } from "../ui/state";
 import { SetupChecklist } from "./SetupChecklist";
-import { GithubAuthCard, IntegrationsList } from "./SetupIntegrations";
+import { GithubAuthCard } from "./SetupIntegrations";
 import { ReposSection } from "./SetupRepos";
 import { SetupRestart } from "./SetupRestart";
 import { TeamSection } from "./SetupTeam";
@@ -275,18 +275,11 @@ export function FirstMile({ onDone }: { onDone: () => void }) {
 
 									<div className="w-full max-w-[820px] pb-8">
 										{step.id === "github" && (
-											<div className="flex flex-col gap-4">
-												<IntegrationsList
-													integrations={status.integrations.filter(
-														(integration) => integration.id === "github",
-													)}
-													onSaved={setup.applyIntegration}
-												/>
-												<GithubAuthCard
-													github={status.github}
-													onSaved={setup.applyGithub}
-												/>
-											</div>
+											<GithubAuthCard
+												github={status.github}
+												onSaved={setup.applyGithub}
+												onboarding
+											/>
 										)}
 										{step.id === "organization" && <OrganizationProfileSection />}
 										{step.id === "team" && (
