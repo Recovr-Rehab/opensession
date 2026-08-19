@@ -195,9 +195,20 @@ describe("session social card", () => {
 		expect(metadata.height).toBe(630);
 	});
 
-	test("always serves the full-resolution card", async () => {
+	test("serves the banner variant at full width and half the height", async () => {
 		const route = sessionSocialCardPublicRoutes().get("GET /session-card/*")!;
-		const url = new URL(`${sessionSocialCardUrl(signedRouteSessionId)}&w=480`);
+		const url = new URL(sessionSocialCardUrl(signedRouteSessionId, "banner"));
+		expect(url.searchParams.get("s")).toBe("banner");
+		const response = await route(new Request(url), url);
+		expect(response.status).toBe(200);
+		const metadata = await sharp(await response.arrayBuffer()).metadata();
+		expect(metadata.width).toBe(1200);
+		expect(metadata.height).toBe(300);
+	});
+
+	test("renders the full card for an unrecognized shape", async () => {
+		const route = sessionSocialCardPublicRoutes().get("GET /session-card/*")!;
+		const url = new URL(`${sessionSocialCardUrl(signedRouteSessionId)}&s=tall`);
 		const response = await route(new Request(url), url);
 		expect(response.status).toBe(200);
 		const metadata = await sharp(await response.arrayBuffer()).metadata();

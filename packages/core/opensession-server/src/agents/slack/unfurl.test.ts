@@ -32,27 +32,20 @@ afterAll(() => {
 });
 
 describe("unfurlForSession", () => {
-	test("shows the social card as a thumbnail beside the title", () => {
+	test("shows the banner render of the social card", () => {
 		const unfurl = unfurlForSession(
 			session({ id: "sess-card", title: "Ship the card", createdBy: "Kent" }),
 			"https://os.example.test/session/sess-card",
 		);
-		expect(unfurl.blocks[0]).toEqual({
-			type: "section",
-			text: {
-				type: "mrkdwn",
-				text: "*<https://os.example.test/session/sess-card|Ship the card>*",
-			},
-			accessory: {
-				type: "image",
-				image_url: expect.stringMatching(
-					/^https:\/\/media\.example\.test\/session-card\/sess-card\/[A-Za-z0-9_-]{32}\.png\?v=3$/,
-				),
-				alt_text: "Ship the card, an Open Session by Kent",
-			},
+		expect(unfurl.blocks).toContainEqual({
+			type: "image",
+			image_url: expect.stringMatching(
+				/^https:\/\/media\.example\.test\/session-card\/sess-card\/[A-Za-z0-9_-]{32}\.png\?v=3&s=banner$/,
+			),
+			alt_text: "Ship the card, an Open Session by Kent",
 		});
-		// A full-width image block is what made the preview huge.
-		expect(unfurl.blocks.some((b: any) => b.type === "image")).toBe(false);
+		// The square accessory thumbnail squashed the wide card.
+		expect(unfurl.blocks.some((b: any) => b.accessory)).toBe(false);
 	});
 });
 

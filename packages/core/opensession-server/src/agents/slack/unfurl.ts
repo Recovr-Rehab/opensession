@@ -143,20 +143,20 @@ export function unfurlForSession(s: UnifiedSession, url: string): { blocks: any[
   if (s.isRunning && s.runStartedAt) bits.push(`running ${relTime(s.runStartedAt)}`);
   else if (s.lastActivity) bits.push(`updated ${relTime(s.lastActivity)} ago`);
 
-  // The card rides in the section's accessory slot rather than its own `image`
-  // block: an image block is laid out at the full message column width, which
-  // made the preview dominate the message, and shrinking the source only made
-  // Slack upscale it. The accessory slot is a bounded thumbnail Slack sizes
-  // itself, so the full 1200x630 render stays sharp on a Retina screen.
+  // Slack lays an `image` block out at the message column width whatever the
+  // source measures, so aspect ratio is the only thing that decides how tall
+  // the preview is. Hence the banner render: same width, half the height. The
+  // accessory slot is not the answer either, it is a square thumbnail that
+  // squashes a wide card.
   const blocks: any[] = [
     {
       type: "section",
       text: { type: "mrkdwn", text: `*<${url}|${esc(title)}>*` },
-      accessory: {
-        type: "image",
-        image_url: sessionSocialCardUrl(s.id),
-        alt_text: `${title}, an Open Session by ${card.owner}`,
-      },
+    },
+    {
+      type: "image",
+      image_url: sessionSocialCardUrl(s.id, "banner"),
+      alt_text: `${title}, an Open Session by ${card.owner}`,
     },
   ];
 

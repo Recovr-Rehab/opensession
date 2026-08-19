@@ -27,6 +27,16 @@ import { getUiPrefs } from "./ui-prefs";
 
 export const SESSION_CARD_WIDTH = 1200;
 export const SESSION_CARD_HEIGHT = 630;
+/**
+ * Banner variant, for Slack. A Block Kit `image` block is always laid out at
+ * the message column width, so the only thing that decides how much of the
+ * conversation the card eats is its aspect ratio. Same width, half the
+ * height, so Slack downscales a full-resolution render and it stays sharp.
+ */
+export const SESSION_CARD_BANNER_WIDTH = 1200;
+export const SESSION_CARD_BANNER_HEIGHT = 300;
+
+export type SessionCardVariant = "card" | "banner";
 const SESSION_CARD_VERSION = 3;
 const TITLE_MAX_WIDTH = 1088;
 const TITLE_FONT = "Inter SemiBold 56";
@@ -199,7 +209,18 @@ export function sessionSocialCardSvg(
 	avatar = "",
 	jetBrainsMono = "",
 	displayTitle = clean(data.title) || productName(),
+	variant: SessionCardVariant = "card",
 ): string {
+	const banner = variant === "banner";
+	const height = banner ? SESSION_CARD_BANNER_HEIGHT : SESSION_CARD_HEIGHT;
+	// The banner keeps the card's whole top block (accent bar, title, avatar,
+	// owner) and drops the empty middle, so the footer sits the same distance
+	// from the bottom edge as it does on the full card.
+	const footerY = height - 88;
+	const artScale = height / SESSION_CARD_HEIGHT;
+	const artTransform = banner
+		? `translate(${SESSION_CARD_WIDTH - 399 * artScale} 0) scale(${artScale})`
+		: "translate(801 0)";
 	const repo = footerLabel(clean(data.repo));
 	const model = footerLabel(clean(data.model));
 	const avatarMarkup = avatar
@@ -209,7 +230,7 @@ export function sessionSocialCardSvg(
 		? `<style>@font-face { font-family: 'JetBrains Mono'; font-style: normal; font-weight: 500; src: url('${jetBrainsMono}') format('truetype'); }</style>`
 		: "";
 
-	return `<svg xmlns="http://www.w3.org/2000/svg" width="${SESSION_CARD_WIDTH}" height="${SESSION_CARD_HEIGHT}" viewBox="0 0 ${SESSION_CARD_WIDTH} ${SESSION_CARD_HEIGHT}" font-family="Inter, Arial, sans-serif">
+	return `<svg xmlns="http://www.w3.org/2000/svg" width="${SESSION_CARD_WIDTH}" height="${height}" viewBox="0 0 ${SESSION_CARD_WIDTH} ${height}" font-family="Inter, Arial, sans-serif">
 <defs>
   ${fontFace}
   <linearGradient id="artGradient" x1="199.5" y1="0" x2="199.5" y2="630" gradientUnits="userSpaceOnUse">
@@ -218,17 +239,17 @@ export function sessionSocialCardSvg(
   </linearGradient>
   <clipPath id="avatarClip"><rect x="56" y="123" width="48" height="48" rx="8"/></clipPath>
 </defs>
-<rect width="1200" height="630" fill="#FFFFFF"/>
-<rect width="8" height="630" fill="${xml(data.accent)}"/>
-<g transform="translate(801 0)">
+<rect width="1200" height="${height}" fill="#FFFFFF"/>
+<rect width="8" height="${height}" fill="${xml(data.accent)}"/>
+<g transform="${artTransform}">
   <path d="M68.8375 226.509C-37.3322 147.543 -7.34262 36.0198 68.8375 0H399V630H84.0041C208.443 571.121 289.104 390.338 68.8375 226.509Z" fill="url(#artGradient)"/>
 </g>
 <text x="56" y="40" dominant-baseline="hanging" fill="#000000" font-size="56" font-weight="600" letter-spacing="-2">${xml(displayTitle)}</text>
 ${avatarMarkup}
 <rect x="56.5" y="123.5" width="47" height="47" rx="7.5" fill="none" stroke="#000000" stroke-opacity="0.25"/>
 <text x="120" y="147" dominant-baseline="middle" fill="#000000" font-size="36" font-weight="500">${xml(data.owner)}</text>
-<text x="56" y="542" dominant-baseline="hanging" fill="#000000" fill-opacity="0.5" font-family="JetBrains Mono, monospace" font-size="36" font-weight="500">${xml(repo)}</text>
-<text x="1144" y="542" dominant-baseline="hanging" text-anchor="end" fill="#000000" fill-opacity="0.5" font-family="JetBrains Mono, monospace" font-size="36" font-weight="500">${xml(model)}</text>
+<text x="56" y="${footerY}" dominant-baseline="hanging" fill="#000000" fill-opacity="0.5" font-family="JetBrains Mono, monospace" font-size="36" font-weight="500">${xml(repo)}</text>
+<text x="1144" y="${footerY}" dominant-baseline="hanging" text-anchor="end" fill="#000000" fill-opacity="0.5" font-family="JetBrains Mono, monospace" font-size="36" font-weight="500">${xml(model)}</text>
 </svg>`;
 }
 
@@ -245,13 +266,16 @@ async function socialCardMonoFont(): Promise<string> {
 
 export async function renderSessionSocialCard(
 	data: SessionSocialCardData,
+	variant: SessionCardVariant = "card",
 ): Promise<Buffer> {
 	const [avatar, monoFont, title] = await Promise.all([
 		avatarDataUrl(data.person),
 		socialCardMonoFont(),
 		fitSocialCardTitle(data.title),
 	]);
-	return sharp(Buffer.from(sessionSocialCardSvg(data, avatar, monoFont, title)))
+	return sharp(
+		Buffer.from(sessionSocialCardSvg(data, avatar, monoFont, title, variant)),
+	)
 		.png()
 		.toBuffer();
 }
@@ -264,8 +288,12 @@ function publicBase(): string {
 	).replace(/\/+$/, "");
 }
 
-export function sessionSocialCardUrl(sessionId: string): string {
-	return `${publicBase()}/session-card/${encodeURIComponent(sessionId)}/${cardToken(sessionId)}.png?v=${SESSION_CARD_VERSION}`;
+export function sessionSocialCardUrl(
+	sessionId: string,
+	variant: SessionCardVariant = "card",
+): string {
+	const shape = variant === "banner" ? "&s=banner" : "";
+	return `${publicBase()}/session-card/${encodeURIComponent(sessionId)}/${cardToken(sessionId)}.png?v=${SESSION_CARD_VERSION}${shape}`;
 }
 
 let cachedCardSecret = "";
@@ -356,11 +384,11 @@ const CARD_CACHE_MS = 60_000;
 const CARD_CACHE_LIMIT = 100;
 
 function rememberCard(
-	sessionId: string,
+	cacheKey: string,
 	entry: { fingerprint: string; bytes: Buffer; at: number },
 ): void {
-	cardCache.delete(sessionId);
-	cardCache.set(sessionId, entry);
+	cardCache.delete(cacheKey);
+	cardCache.set(cacheKey, entry);
 	if (cardCache.size <= CARD_CACHE_LIMIT) return;
 	const oldest = cardCache.keys().next().value;
 	if (oldest) cardCache.delete(oldest);
@@ -387,15 +415,20 @@ export function sessionSocialCardPublicRoutes(): Map<
 		const session = await findSessionAsync(sessionId);
 		if (!session) return Response.json({ error: "Not found" }, { status: 404 });
 		const data = sessionSocialCardData(session);
+		// Only the one named shape is honoured, so a crafted `s` cannot ask us to
+		// rasterize an arbitrary geometry.
+		const variant: SessionCardVariant =
+			url.searchParams.get("s") === "banner" ? "banner" : "card";
+		const cacheKey = `${session.id}@${variant}`;
 		const fingerprint = JSON.stringify(data, (key, value) => (key === "person" ? data.person?.image || data.person?.github : value));
-		const cached = cardCache.get(session.id);
+		const cached = cardCache.get(cacheKey);
 		const now = Date.now();
 		let bytes: Buffer;
 		if (cached && cached.fingerprint === fingerprint && now - cached.at < CARD_CACHE_MS) {
 			bytes = cached.bytes;
 		} else {
-			bytes = await renderSessionSocialCard(data);
-			rememberCard(session.id, { fingerprint, bytes, at: now });
+			bytes = await renderSessionSocialCard(data, variant);
+			rememberCard(cacheKey, { fingerprint, bytes, at: now });
 		}
 		return new Response(bytes.slice().buffer as ArrayBuffer, {
 			headers: {
