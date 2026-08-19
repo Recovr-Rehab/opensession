@@ -752,7 +752,7 @@ describe("buildRunInstructions", () => {
       const s = buildRunInstructions({ isAsk });
       expect(s).toContain("## Browser processes must be bounded");
       expect(s).toContain("Never launch Chrome/Chromium or Xvfb directly");
-      expect(s).toContain("bun scripts/cdp-browser.ts start");
+      expect(s).toContain("Prefer the repository's own screenshot or browser tooling");
       expect(s).toContain("Never reuse another session's CDP port or browser profile");
     }
   });
@@ -814,21 +814,22 @@ describe("buildRunInstructions", () => {
     });
     expect(s).toContain("a static visual change needs at least one after screenshot");
     expect(s).toContain("Retina or device-native resolution");
-    expect(s).toContain("`bun scripts/capture-ui.ts`");
+    expect(s).toContain("use the repository's own capture or preview command");
     expect(s).toContain("why it matters");
     expect(s).toContain("deliberate Share to Slack action");
   });
   // Native changes shipped without walkthroughs while web changes got them:
-  // the instruction named only the web capture script, so an os1-ios run faced
-  // an undocumented Mac-node chain and skipping looked reasonable every time.
-  test("the walkthrough instruction names the native capture script too", () => {
+  // the instruction assumed a web-shaped capture, so a mobile run faced an
+  // undocumented build chain and skipping looked reasonable every time. The
+  // command itself is per-repo (its AGENTS.md names it), so the run text only
+  // has to send the model looking for one.
+  test("the walkthrough instruction covers native and mobile changes too", () => {
     const s = buildRunInstructions({
       isAsk: false,
       inProcessMcp: { "opensession-walkthrough": {} },
     });
-    expect(s).toContain("`bun scripts/capture-ios.ts`");
-    expect(s).toContain("os1-ios/");
-    expect(s).toContain("--platform mac");
+    expect(s).toContain("A native or mobile app change is exactly the one that gets skipped");
+    expect(s).toContain("look for that command before deciding it is too much work");
     expect(s).toContain("deliberate Share to Slack action");
   });
   // Kent kept waiting for walkthroughs on design work that never came: the old

@@ -261,7 +261,9 @@ Do not hand-roll a DPR 1 CDP screenshot for visual review — it makes borders,
 shadows, and type look harsher than the shipped app. The CSS measurement tools start
 and clean up their own private, resource-bounded headful Chrome+Xvfb service;
 never launch or share a raw Chrome CDP service for them. Set `CDP_PORT` only
-when deliberately using an externally managed browser.
+when deliberately using an externally managed browser. For CDP work none of
+those scripts covers, `bun scripts/cdp-browser.ts start` acquires the same
+bounded browser: stop the systemd unit it returns in a `finally`/trap.
 
 `bun scripts/css-rulekill.ts --targets <file> --route <path> --control
 '<selector>'` answers the question the audit can't: not "is this class name
