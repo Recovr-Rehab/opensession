@@ -716,6 +716,21 @@ export async function handleSessionsRoutes(
 		const cached = sessionsResponseSnapshots.get(variant);
 		if (cached && cached.expiresAt > Date.now())
 			return await sessionsListResponse(req, cached);
+		if (cached && variant === "exclude") {
+			// Polling should never make the sidebar wait for a fresh scan of every
+			// source file. Keep handing out the last complete, bounded list while
+			// one shared refresh catches up. Cache invalidation marks this snapshot
+			// stale rather than deleting it for the same reason.
+			cached.expiresAt = Date.now() + SESSIONS_RESPONSE_TTL_MS;
+			if (!sessionsResponseRefreshes.has(variant)) {
+				setTimeout(() => {
+					void refreshSessionsResponse(variant).catch((error) =>
+						console.warn("[sessions] live-list background refresh failed:", error),
+					);
+				}, 250).unref?.();
+			}
+			return await sessionsListResponse(req, cached);
+		}
 
 		// A process restart loses the in-memory list but not the last complete
 		// response. Serve that once so the sidebar can paint, while the ordinary

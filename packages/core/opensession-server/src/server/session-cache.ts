@@ -61,12 +61,15 @@ export function invalidateSessionsCache(): void {
 		sessionsCacheGenerations[slice]++;
 		sessionsCaches[slice] = null;
 	}
-	// The list ROUTE caches its serialized response on top of this cache, and
-	// that copy outliving its source is what made an archive take up to five
-	// seconds to disappear from every client. Cleared through globalThis
-	// because routes/sessions.ts imports this module — same cycle-breaker as
-	// promptQueues below.
-	(g.__osSessionsResponseSnapshots as Map<string, unknown> | undefined)?.clear();
+	// The list route caches its serialized response on top of this cache. Mark
+	// those snapshots stale so ordinary slices rebuild on their next request;
+	// the bounded live slice deliberately serves the stale body while it does
+	// that scan, instead of blocking every sidebar poll on thousands of files.
+	// Reached through globalThis because routes/sessions.ts imports this module.
+	const responses = g.__osSessionsResponseSnapshots as
+		| Map<string, { expiresAt: number }>
+		| undefined;
+	for (const snapshot of responses?.values() || []) snapshot.expiresAt = 0;
 }
 
 function enrichCachedSessions(
