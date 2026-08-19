@@ -48,6 +48,7 @@ import { createTodosMcpServer } from "../agents/slack/todos-tools";
 import { createTurnMcpServer } from "../agents/slack/turn-tools";
 import { createWalkthroughMcpServer } from "../agents/slack/walkthrough-tools";
 import { createWorkflowsMcpServer } from "../agents/slack/workflow-tools";
+import { createHealthMcpServer } from "./health-mcp";
 import { createRunnersMcpServer } from "./runners-mcp";
 import { createPortalsMcpServer } from "./portals-mcp";
 import { createSelfDeployMcpServer } from "./self-deploy";
@@ -373,6 +374,15 @@ export const MCP_SERVER_CATALOG: McpServerCatalogEntry[] = [
     runClasses: ["automation"],
     note: "Held to the papercuts bar: reads nothing, controls nothing.",
     build: () => createTurnMcpServer({ turnKey: SESSION_ID }),
+  },
+  {
+    name: "opensession-health",
+    summary: "Read this instance's own disk, memory, load and process-fleet counters.",
+    source: "packages/core/opensession-server/src/server/health-mcp.ts",
+    wiring: ["packages/core/opensession-server/src/server/automations.ts"],
+    runClasses: ["automation"],
+    note: "The only way a monitor can see its own host: loopback fetches are refused and unattended ask runs have no shell. One argument-less read, no writes.",
+    build: () => createHealthMcpServer(),
   },
   {
     name: "opensession-self",

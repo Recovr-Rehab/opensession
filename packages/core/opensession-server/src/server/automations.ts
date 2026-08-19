@@ -42,6 +42,7 @@ import { createPapercutsMcpServer } from "../agents/slack/papercuts-tools";
 import { createReportMcpServer } from "../agents/slack/report-tools";
 import { createWorkflowsMcpServer } from "../agents/slack/workflow-tools";
 import { createTurnMcpServer } from "../agents/slack/turn-tools";
+import { createHealthMcpServer } from "./health-mcp";
 import { papercutsEnabledForRepo } from "./papercuts";
 import {
   registerRunToken,
@@ -935,6 +936,12 @@ function automationRunInProcessMcp(
     // looked and there was nothing to report" instead of ending on silence
     // that reads exactly like an early stop (src/server/turn-outcome.ts).
     "opensession-turn": createTurnMcpServer({ turnKey: sessionId }),
+    // Same bar again: one argument-less read of aggregate host counters, no
+    // path/url/command to steer and nothing to escalate with. It is here
+    // because a monitor cannot watch the box any other way — web-fetch.ts
+    // refuses loopback, and an unattended ask run has no shell on either
+    // engine (src/server/health-mcp.ts).
+    "opensession-health": createHealthMcpServer(),
   };
 }
 

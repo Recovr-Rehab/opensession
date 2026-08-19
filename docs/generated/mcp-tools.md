@@ -61,11 +61,12 @@ in-process tool (both name external MCP tools):
 | [`opensession-papercuts`](#opensession-papercuts) | 2 | interactive, automation | yes | Dropped when the session's repo opted out (Settings → Papercuts). |
 | [`opensession-report`](#opensession-report) | 1 | automation | no | – |
 | [`opensession-turn`](#opensession-turn) | 2 | automation | no | – |
+| [`opensession-health`](#opensession-health) | 1 | automation | no | – |
 | [`opensession-self`](#opensession-self) | 2 | automation | no | Only with the human-set `selfImprove` flag on that automation. |
 | [`opensession-github`](#opensession-github) | 4 | Slack loop | yes | – |
 | [`opensession-goal-self`](#opensession-goal-self) | 6 | goal wake | no | Only on a session that carries a goalId. |
 
-25 servers, 103 tools. "Shared server" is membership of
+26 servers, 104 tools. "Shared server" is membership of
 `SHARED_INPROCESS_SERVERS` (`packages/core/opensession-server/src/server/opencode-policy.ts`): a run carrying
 any server outside that list falls back to a per-session engine server.
 
@@ -818,6 +819,21 @@ End this run without reporting anything. ONLY for a scheduled or event-driven ru
 `mcp__opensession-turn__stay_silent` · input: `reason` (string, required)
 
 End this turn without replying, when you were addressed directly and have decided not to answer. Give a one-line reason: it is logged, never shown to anyone. Use it sparingly — the ordinary response to being asked something is to reply.
+
+## opensession-health
+
+Read this instance's own disk, memory, load and process-fleet counters.
+
+- **Source** `packages/core/opensession-server/src/server/health-mcp.ts`
+- **Wired in** `packages/core/opensession-server/src/server/automations.ts`
+- **Runs** automation
+- **Note** The only way a monitor can see its own host: loopback fetches are refused and unattended ask runs have no shell. One argument-less read, no writes.
+
+### `read_host_metrics`
+
+`mcp__opensession-health__read_host_metrics` · input: none
+
+Read this instance's host metrics: disk usage on /, memory and swap, load averages against core count, counts of the process fleets that have leaked before (opencode servers, MCP proxies, headless Chrome, dev stacks, git operations), and cgroup memory accounting. Returns the same numbers as the health endpoint's `system` block. Use it for a health check instead of trying to fetch the server over HTTP, which is refused for loopback addresses.
 
 ## opensession-self
 
