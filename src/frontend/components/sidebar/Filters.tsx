@@ -412,22 +412,33 @@ export function FilterPopover({
 							<span className="grow truncate">Hide empty projects</span>
 							<SwitchIndicator on={filter.emptyProjects === "hide"} />
 						</Menu.CheckboxItem>
-						{/* Desktop only, because that is the whole of what the
+						{/* Behind a rule, because it is the odd one here: everything
+						    above decides which rows the list holds, and this only
+						    decides how tightly they are drawn. It is also the only
+						    row here that is not part of the filter at all: it writes
+						    a stored preference the Appearance settings share.
+
+						    Desktop only, because that is the whole of what the
 						    preference does: a phone row is a tap target and keeps its
 						    own padding at either setting (see SIDEBAR_DENSITY_VARS),
 						    so offering the control there would be a switch that
-						    changes nothing. */}
+						    changes nothing. The rule goes inside that check, so a
+						    phone does not end the menu on a line with nothing under
+						    it. */}
 						{!isPhone && (
-							<FilterSubmenu
-								label="Density"
-								value={density}
-								options={DENSITY_OPTIONS.map(({ value, label, Icon }) => ({
-									value,
-									label,
-									icon: <Icon size={16} />,
-								}))}
-								onSelect={(v) => setSidebarDensity(v as SidebarDensity)}
-							/>
+							<>
+								<Menu.Separator />
+								<FilterSubmenu
+									label="Density"
+									value={density}
+									options={DENSITY_OPTIONS.map(({ value, label, Icon }) => ({
+										value,
+										label,
+										icon: <Icon size={16} />,
+									}))}
+									onSelect={(v) => setSidebarDensity(v as SidebarDensity)}
+								/>
+							</>
 						)}
 					</Menu.Popup>
 				</Menu.Root>
