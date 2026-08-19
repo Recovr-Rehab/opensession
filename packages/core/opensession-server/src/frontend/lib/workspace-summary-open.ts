@@ -38,36 +38,22 @@ export function workspaceSummaryOpen(): boolean {
 export const WS_SUMMARY_ROOM_W = 1120;
 
 /**
- * The widest step the reading column ever takes to get out of the card's way.
+ * How far the reading column moves left while the card is open.
  *
- * Half the card's footprint, which is what clearing it costs at
- * WS_SUMMARY_ROOM_W: the column is already as wide as it is allowed to get by
- * then, so the only room left to find is in the two gutters either side of it,
- * and giving up half the footprint on the right buys the whole of it.
+ * The transcript and composer move as one, leaving the card its own side of
+ * the pane and making the open state visible even when the pane is wide. This
+ * is a deliberate composition rather than the minimum distance needed to
+ * prevent overlap, so the step stays fixed at every width that can show the
+ * card.
  */
 export const WS_SUMMARY_MAX_SHIFT = 160;
 
 /**
- * How far left the transcript and the composer step while the card is up.
+ * How far left the transcript and composer step while the card is up.
  *
- * The card hangs at the pane's right edge and the reading column is centred in
- * the pane, so the two only collide on a narrow pane. Every pixel of pane above
- * WS_SUMMARY_ROOM_W is split evenly between the two gutters, so half of it is
- * clearance the column is handed for free: the step shrinks at half the rate
- * the pane grows, and reaches zero once the right gutter alone can hold the
- * card. Wider than that the messages stay in the middle of the pane, because
- * there is nothing over them to step away from.
- *
- * This replaced a flat WS_SUMMARY_MAX_SHIFT applied at every width, which
- * pulled the transcript off centre on windows where the card had never been
- * anywhere near it.
- *
- * An unmeasured pane steps not at all, for the same reason it counts as having
- * room: the width lands in a layout effect before the first paint, and centred
- * is the common case.
+ * Below WS_SUMMARY_ROOM_W the card is hidden, so an unmeasured or narrow pane
+ * does not move. Every pane that can show the card gets the full step.
  */
 export function workspaceSummaryShift(headerW: number): number {
-	if (headerW <= 0) return 0;
-	const step = WS_SUMMARY_MAX_SHIFT - (headerW - WS_SUMMARY_ROOM_W) / 2;
-	return Math.round(Math.max(0, Math.min(WS_SUMMARY_MAX_SHIFT, step)));
+	return headerW >= WS_SUMMARY_ROOM_W ? WS_SUMMARY_MAX_SHIFT : 0;
 }

@@ -4385,11 +4385,9 @@ export function SessionViewer({
 	// the card can only report itself once it exists.
 	const summaryVisible =
 		summaryOpen && !showReview && !isPhone && hasRepoWork && !panelOpen;
-	// How far the reading column has to step to clear the card, which on a pane
-	// wide enough to hold both of them is not at all. Below the threshold the
-	// card lies over the transcript and there is nowhere to step to, so the
-	// column stays where it is rather than shuffling under a card it cannot
-	// escape.
+	// Keep a visible left step whenever the card is up. This composes the card,
+	// transcript and composer as two sides of one pane instead of letting the
+	// reading column drift back to centre as the window grows.
 	const summaryStep =
 		summaryVisible && headerW >= WS_SUMMARY_ROOM_W
 			? workspaceSummaryShift(headerW)
@@ -6278,10 +6276,9 @@ export function SessionViewer({
 						<div
 							className={cn(
 								VIEWER_MESSAGES,
-								// The summary card floats over this column's right gutter, so
-								// the column steps aside by however much of it the card would
-								// actually cover. A pane with room for both moves nothing: the
-								// messages stay in the middle where they were.
+								// The open card and the reading column share the pane, so the
+								// messages take a visible step left instead of staying under
+								// the card's side of the composition.
 								summaryStep > 0 && VIEWER_SUMMARY_STEP,
 							)}
 							style={summaryStepStyle}
