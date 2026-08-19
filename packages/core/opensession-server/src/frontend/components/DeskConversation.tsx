@@ -436,7 +436,7 @@ export function DeskConversation({
 				    sending: some name actions with side effects, and all of them are
 				    openings you'd want to finish in your own words. */}
 				{!hasContent && !!suggestions?.length && (
-					<div className="flex gap-1.5 overflow-x-auto px-1 pb-1.5 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+					<div className="flex gap-1.5 overflow-x-auto px-1 pb-3 pr-8 [-webkit-mask-image:linear-gradient(to_right,#000_0,#000_calc(100%_-_32px),transparent_100%)] [mask-image:linear-gradient(to_right,#000_0,#000_calc(100%_-_32px),transparent_100%)] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
 						{suggestions.map((s) => (
 							<button
 								type="button"
