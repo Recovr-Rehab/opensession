@@ -1,15 +1,6 @@
 import React from "react";
-import { AGENT_NAME } from "./brand";
 import type { ReviewQueueItem } from "./review-queue";
 import type { FeedDescriptor, FeedItem, SupportThread, UnifiedSession, Workspace } from "./types";
-import { TEAM } from "../components/UserPicker";
-
-// Only recognized people get their own "people" section. Sessions whose
-// `startedBy` is something other than a real teammate — test labels
-// ("proof-test", "image-test"), action/integration names ("Slack",
-// "Make Alice editor (action)"), or empty — are hidden rather than shown as
-// stray sections. The agent persona counts as a person here.
-export const KNOWN_PEOPLE = new Set([...TEAM, AGENT_NAME].map((n) => n.toLowerCase()));
 
 export interface Props {
 	sessions: UnifiedSession[];

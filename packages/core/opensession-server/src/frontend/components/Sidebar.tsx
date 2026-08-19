@@ -92,7 +92,7 @@ import {
 	type PrClosedDetail,
 	type OpenPr,
 } from "../lib/api";
-import { useCurrentUser, TEAM } from "./UserPicker";
+import { useCurrentUser } from "./UserPicker";
 import { getLane, getLanes, onLanesChanged } from "../lib/lanes";
 import { getPins, onPinsChanged, togglePin, reorderPins, unpin } from "../lib/pins";
 import { clearSnooze, getSnoozes, onSnoozesChanged, setSnooze } from "../lib/snoozes";
@@ -170,6 +170,13 @@ import {
 	reviewAskerFor,
 	wsPrRequestsReviewFrom,
 } from "../lib/review-queue";
+import { personNameForKey, usePeople } from "../lib/people";
+import {
+	canonicalNames,
+	ownerKey,
+	ownerKeyOf,
+	sessionOwners,
+} from "../lib/session-owner";
 import {
 	placeSidebarRows,
 	rowAutoCreatedInLens,
@@ -251,7 +258,6 @@ import {
 	type SwipeState,
 } from "../lib/sidebar-swipe";
 import {
-	KNOWN_PEOPLE,
 	MINE_STATUS_META,
 	type CtxEntry,
 	type Group,
@@ -1037,30 +1043,29 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 			setRepoOrder(completeRepoOrder);
 	}, [savedRepoOrder, completeRepoOrder]);
 
-	// Distinct people who started sessions, most-active first, for the Person
-	// filter dropdown. Only recognized teammates (see KNOWN_PEOPLE) are offered;
-	// keyed by lowercased name to merge casing, with the first-seen spelling as
-	// the display label. Built off every session so options don't churn on search.
+	// Workspace members who started sessions, most-active first, for the Person
+	// filter. The team directory decides who is a person and merges one
+	// person's spellings (lib/session-owner): `startedBy` also carries workers,
+	// goal names and integration senders, and the same teammate arrives as a
+	// first name from the web and a full name from chat. Built off every
+	// session so options don't churn on search.
+	const roster = usePeople();
+	const canonical = useMemo(() => canonicalNames(roster), [roster]);
 	const people = useMemo(() => {
-		const entries = new Map<string, { label: string; count: number }>();
-		for (const s of sessions) {
-			if (s.archived || s.automation || !s.startedBy) continue;
-			const key = s.startedBy.toLowerCase();
-			if (!KNOWN_PEOPLE.has(key)) continue;
-			const e = entries.get(key) || { label: s.startedBy, count: 0 };
-			e.count++;
-			entries.set(key, e);
-		}
+		const entries = sessionOwners(
+			sessions.filter((s) => !s.archived),
+			canonical,
+		);
+		const seen = new Set(entries.map((e) => e.key));
+		// Someone whose only work here is a pull request is still someone whose
+		// lanes you can look at, so they are offered even with no session.
 		for (const pr of openPrs || []) {
-			if (!pr.person || entries.has(pr.person)) continue;
-			const label =
-				TEAM.find((name) => name.toLowerCase() === pr.person) || pr.person;
-			entries.set(pr.person, { label, count: 1 });
+			if (!pr.person || seen.has(pr.person)) continue;
+			seen.add(pr.person);
+			entries.push({ key: pr.person, label: personNameForKey(pr.person) });
 		}
-		return Array.from(entries.entries())
-			.sort((a, b) => b[1].count - a[1].count || a[1].label.localeCompare(b[1].label))
-			.map(([key, { label }]) => ({ key, label }));
-	}, [sessions, openPrs]);
+		return entries;
+	}, [sessions, openPrs, canonical]);
 
 	// A borrowed sidebar: someone else's lanes, everyone's, or the unassigned
 	// pile. It looks exactly like your own, so the rail changes shape while you
@@ -1161,7 +1166,7 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 				// used to empty that band the moment you looked at a colleague.
 				s.automation
 					? true
-					: !!s.startedBy && s.startedBy.toLowerCase() === filter.person,
+					: !!s.startedBy && ownerKeyOf(s, canonical) === filter.person,
 			);
 		if (!search) return visible;
 		const q = search.toLowerCase();
@@ -1172,7 +1177,7 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 				(s.startedBy || "").toLowerCase().includes(q) ||
 				(s.automation || "").toLowerCase().includes(q),
 		);
-	}, [sessions, workspaces, search, filter.repo, filter.person]);
+	}, [sessions, workspaces, search, filter.repo, filter.person, canonical]);
 
 	// Sort order applied to every group's items: newest activity or newest
 	// creation first. Groups read from this pre-sorted list so ordering is uniform.
@@ -1331,7 +1336,9 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 					.map((c) => mentionFor(c.id))
 					.find(Boolean)?.by,
 				running: sessions.some((c) => c.isRunning) || reviewRunning,
-				owner: (workspace?.createdBy || sessions[0]?.startedBy || "").toLowerCase(),
+				// Canonical, so the row files under the person the Person filter
+				// names however this workspace spelled them.
+				owner: ownerKey(workspace?.createdBy || sessions[0]?.startedBy, canonical),
 			};
 		};
 		for (const [wsId, sessions] of byWs) {
@@ -1410,7 +1417,7 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 		return rows;
 		// `lanes` feeds mineStatus/pinnedLane (read via the lib cache), and
 		// `mentionsRev` the @-mention badge (mentionFor, same cache pattern).
-	}, [filtered, sessions, workspaces, selectedId, reads, search, filter, lanes, activeReviewPrKeys, mentionsRev, activeWorkspaceSubagentIds, selectedWorkspaceId]);
+	}, [filtered, sessions, workspaces, selectedId, reads, search, filter, lanes, activeReviewPrKeys, mentionsRev, activeWorkspaceSubagentIds, selectedWorkspaceId, canonical]);
 	const rowOwnsSelection = (row: WsRow) =>
 		workspaceRowOwnsSession(row, selectedSession);
 	const selectionBelongsToWorkspaceRow = allWsRows.some(rowOwnsSelection);

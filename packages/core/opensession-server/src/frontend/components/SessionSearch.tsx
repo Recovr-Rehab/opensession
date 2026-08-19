@@ -16,6 +16,12 @@ import {
 	prLinksMatch,
 	sessionUsesPrLink,
 } from "../lib/session-prs";
+import { usePeople } from "../lib/people";
+import {
+	canonicalNames,
+	sessionHasOwner,
+	sessionOwners,
+} from "../lib/session-owner";
 
 export interface CommandPaletteAction {
 	id: string;
@@ -302,20 +308,23 @@ export function SessionSearch({
 
 	const searchIndex = useMemo(() => sessionSearchIndex(pool), [pool]);
 
-	const personOptions = useMemo(() => {
-		const seen = new Map<string, string>();
-		for (const session of pool) {
-			if (session.automation || !session.startedBy) continue;
-			const key = session.startedBy.toLowerCase();
-			if (!seen.has(key)) seen.set(key, session.startedBy);
-		}
-		return [
+	// Workspace members only. `startedBy` is a free-text name that also carries
+	// workers, goals, integration senders and unmapped Slack ids, so the team
+	// directory decides who is a person here, and merges the spellings one
+	// person has: "Michiel Westerbeek", "Michiel" and "Kent (loop)" are not
+	// three more teammates (lib/session-owner).
+	const roster = usePeople();
+	const canonical = useMemo(() => canonicalNames(roster), [roster]);
+	const personOptions = useMemo(
+		() => [
 			{ value: "all", label: "Anyone" },
-			...Array.from(seen.entries())
-				.sort((a, b) => a[1].localeCompare(b[1]))
-				.map(([value, label]) => ({ value, label })),
-		];
-	}, [pool]);
+			...sessionOwners(pool, canonical).map(({ key, label }) => ({
+				value: key,
+				label,
+			})),
+		],
+		[pool, canonical],
+	);
 
 	const repoOptions = useMemo(() => {
 		const counts = new Map<string, number>();
@@ -380,8 +389,7 @@ export function SessionSearch({
 		// a pool and an index that are momentarily out of step still search.
 		const hayOf = (s: UnifiedSession) => searchIndex.hay.get(s) ?? haystack(s);
 		let sessionResults = pool.filter((s) => {
-			if (person !== "all" && (s.startedBy || "").toLowerCase() !== person)
-				return false;
+			if (person !== "all" && !sessionHasOwner(s, person, canonical)) return false;
 			if (repo !== "all" && sessionRepo(s) !== repo) return false;
 			if (status !== "all" && sessionStatus(s) !== status) return false;
 			if (terms.length === 0) return true;
@@ -415,6 +423,7 @@ export function SessionSearch({
 		return [...actionResults, ...prResults, ...sessionRows];
 	}, [
 		actions,
+		canonical,
 		hasSessionFilter,
 		openPrs,
 		person,

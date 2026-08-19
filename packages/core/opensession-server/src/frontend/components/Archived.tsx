@@ -20,7 +20,7 @@ import type { UnifiedSession } from "../lib/types";
 import { relativeTime, archiveSessionApi } from "../lib/api";
 import { useCurrentUser } from "./UserPicker";
 import { usePeople } from "../lib/people";
-import { archivedOwners, canonicalNames, sessionHasOwner } from "../lib/archived-owner";
+import { canonicalNames, sessionHasOwner, sessionOwners } from "../lib/session-owner";
 import { docTitle, DEFAULT_DOC_TITLE } from "../lib/brand";
 import { PageLayout } from "../ui/page";
 import { Button } from "../ui/button";
@@ -169,7 +169,7 @@ export function Archived({ sessions, loaded, onSelect, onChanged }: Props) {
 	const meKey = currentUser.toLowerCase();
 	const canonical = useMemo(() => canonicalNames(roster), [roster]);
 	const people = useMemo(
-		() => archivedOwners(allArchived, canonical, meKey),
+		() => sessionOwners(allArchived, canonical, meKey),
 		[allArchived, canonical, meKey],
 	);
 
