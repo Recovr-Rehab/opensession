@@ -17,6 +17,24 @@ available. It reconnects after restart. If installation is unavailable, run
 The Runner connects outbound over the tailnet. Open Session never dials into
 the machine.
 
+## Windows Runners
+
+Windows machines are supported as Runners. The Open Session server itself
+still runs on Linux or macOS; the Windows install is the Runner client only.
+On the Windows machine, from PowerShell:
+
+```powershell
+irm https://raw.githubusercontent.com/tellahq/opensession/main/install.ps1 | iex
+opensession runner connect --server https://your-opensession-host --code CODE
+```
+
+Connect registers a per-user scheduled task that starts the Runner at
+sign-in, restarts it if the process dies, and needs no administrator rights.
+Delegated commands run under PowerShell (`-NoProfile -NonInteractive`), so
+write PowerShell rather than bash when targeting a Windows Runner; the
+`run_on_runner` tool description says the same to agents. Pairing is
+tailnet-gated on every platform, so install Tailscale for Windows first.
+
 Administrators choose its permissions, eligible people and repositories,
 managed workspace roots, maintenance state, and revocation. Revoking a Runner
 invalidates its credential and closes its control connection immediately.

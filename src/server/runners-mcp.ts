@@ -43,7 +43,7 @@ export function createRunnersMcpServer(context: { user?: string; sessionId?: str
 				const view = publicRunner(resolved.runner, isRunnerConnected(resolved.runner.id), Boolean(resolved.runner.workload));
 				return text(JSON.stringify(view, null, 2));
 			}),
-			tool("run_on_runner", "Run one bounded command on a trusted Runner. It runs as that machine's local user and is not sandboxed. Check status first, use only the session-owned workspace, and avoid destructive commands.", {
+			tool("run_on_runner", "Run one bounded command on a trusted Runner. It runs as that machine's local user and is not sandboxed. Check status first, use only the session-owned workspace, and avoid destructive commands. Commands run under PowerShell on a win32 Runner and under bash elsewhere, so match the syntax to the Runner's platform.", {
 				runner: z.string(), command: z.string(), cwd: z.string().optional(), timeoutSeconds: z.number().optional(),
 			}, async (args: { runner: string; command: string; cwd?: string; timeoutSeconds?: number }) => {
 				const resolved = resolveRunner(args.runner);

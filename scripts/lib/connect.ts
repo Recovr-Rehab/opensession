@@ -18,7 +18,7 @@
  */
 
 import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "fs";
-import { arch, cpus, hostname, platform, tmpdir, totalmem } from "os";
+import { arch, cpus, hostname, platform, tmpdir, totalmem, userInfo } from "os";
 import { dirname, join, resolve } from "path";
 import { OPENSESSION_HOME } from "./paths";
 import { bold, dim, fail, heading, info, ok, run, warn } from "./ui";
@@ -28,6 +28,7 @@ const IDENTITY_PATH = join(OPENSESSION_HOME, "runner.json");
 const HEARTBEAT_MS = 60_000;
 const RUNNER_HOST_ENTRY = resolve(import.meta.dir, "../../src/runner-host/host.ts");
 const RUNNER_SERVICE_LABEL = "dev.tella.opensession.runner";
+export const RUNNER_TASK_NAME = "OpenSessionRunner";
 
 type Identity = { server: string; id: string; token: string; name: string };
 
@@ -60,6 +61,7 @@ async function detectCapabilities(): Promise<string[]> {
     ["cargo", "rust"],
     ["go", "go"],
     ["bun", "bun"],
+    ["dotnet", "dotnet"],
     ["ffmpeg", "ffmpeg"],
     ["ollama", "ollama"],
     ["vllm", "vllm"],
@@ -84,12 +86,15 @@ async function detectResources(): Promise<Record<string, unknown>> {
 		cpuCores: cpus().length,
 		memoryGb: Math.round((totalmem() / 1024 ** 3) * 10) / 10,
 	};
-	const disk = platform() === "win32"
-		? ""
-		: await commandOutput(["df", "-Pk", "."]);
-	const diskLine = disk.split("\n").at(-1)?.trim().split(/\s+/);
-	if (diskLine && Number.isFinite(Number(diskLine.at(-3)))) {
-		resources.freeDiskGb = Math.round((Number(diskLine.at(-3)) * 1024 / 1024 ** 3) * 10) / 10;
+	if (platform() === "win32") {
+		const free = Number(await commandOutput(["powershell.exe", "-NoProfile", "-NonInteractive", "-Command", "(Get-PSDrive ((Get-Location).Drive.Name)).Free"]));
+		if (Number.isFinite(free) && free > 0) resources.freeDiskGb = Math.round((free / 1024 ** 3) * 10) / 10;
+	} else {
+		const disk = await commandOutput(["df", "-Pk", "."]);
+		const diskLine = disk.split("\n").at(-1)?.trim().split(/\s+/);
+		if (diskLine && Number.isFinite(Number(diskLine.at(-3)))) {
+			resources.freeDiskGb = Math.round((Number(diskLine.at(-3)) * 1024 / 1024 ** 3) * 10) / 10;
+		}
 	}
 	const nvidia = await commandOutput(["nvidia-smi", "--query-gpu=name,memory.total,driver_version", "--format=csv,noheader,nounits"]);
 	if (nvidia) {
@@ -206,7 +211,31 @@ function runnerCommandPath(): string {
 	return process.argv[1] || "opensession";
 }
 
+/** Env keys a Windows child process cannot function without. PowerShell fails
+ * to start with no SystemRoot, git resolves its config through USERPROFILE and
+ * APPDATA, and PATHEXT is how .cmd/.bat resolution works at all. Everything
+ * else (tokens, keys) is deliberately withheld, matching the Unix branch. */
+const WINDOWS_ENV_KEYS = new Set([
+	"PATH", "PATHEXT", "SYSTEMROOT", "SYSTEMDRIVE", "WINDIR", "COMSPEC",
+	"TEMP", "TMP", "USERPROFILE", "HOMEDRIVE", "HOMEPATH", "APPDATA",
+	"LOCALAPPDATA", "PROGRAMDATA", "PROGRAMFILES", "PROGRAMFILES(X86)",
+	"PROGRAMW6432", "ALLUSERSPROFILE", "PUBLIC", "USERNAME", "USERDOMAIN",
+	"NUMBER_OF_PROCESSORS", "PROCESSOR_ARCHITECTURE", "OS",
+]);
+
+/** Matched case-insensitively because Windows environments mix Path, PATH and
+ * SystemRoot freely; the original spelling is kept on the way through.
+ * Exported for tests: no Windows box runs this suite locally. */
+export function windowsRunnerEnvironment(source: Record<string, string | undefined> = process.env): Record<string, string> {
+	const env: Record<string, string> = {};
+	for (const [key, value] of Object.entries(source)) {
+		if (value && WINDOWS_ENV_KEYS.has(key.toUpperCase())) env[key] = value;
+	}
+	return env;
+}
+
 function runnerEnvironment(): Record<string, string> {
+	if (platform() === "win32") return windowsRunnerEnvironment();
 	return {
 		PATH: process.env.PATH || "/usr/local/bin:/usr/bin:/bin",
 		HOME: process.env.HOME || "/tmp",
@@ -221,6 +250,27 @@ export function runnerLaunchdPlist(command = runnerCommandPath(), bun = process.
 
 export function runnerSystemdUnit(command = runnerCommandPath(), bun = process.execPath): string {
 	return `[Unit]\nDescription=Open Session Runner\nAfter=network-online.target\nWants=network-online.target\n\n[Service]\nType=simple\nExecStart=${bun} ${command} runner run\nRestart=always\nRestartSec=5\nEnvironment=HOME=${process.env.HOME || "/tmp"}\nEnvironment=PATH=${process.env.PATH || "/usr/local/bin:/usr/bin:/bin"}\n\n[Install]\nWantedBy=default.target\n`;
+}
+
+function windowsTaskUser(): string {
+	let name = process.env.USERNAME || "";
+	if (!name) { try { name = userInfo().username; } catch {} }
+	const domain = process.env.USERDOMAIN;
+	return domain && name ? `${domain}\\${name}` : name;
+}
+
+/** Render the Windows per-user Scheduled Task (registered via
+ * `schtasks /Create /XML`). Task Scheduler is the launchd/systemd-user
+ * equivalent here: no admin rights, starts at sign-in, and RestartOnFailure
+ * re-arms the channel if the process itself dies. The action goes through a
+ * hidden PowerShell so a console window does not land on the desktop at every
+ * sign-in, and `*>>` appends all streams to the runner log. */
+export function runnerScheduledTaskXml(command = runnerCommandPath(), bun = process.execPath, user = windowsTaskUser()): string {
+	const xml = (value: string) => value.replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;").replaceAll('"', "&quot;");
+	const single = (value: string) => `'${value.replaceAll("'", "''")}'`;
+	const action = `& ${single(bun)} ${single(command)} runner run *>> ${single(join(OPENSESSION_HOME, "runner.log"))}`;
+	const args = `-NoProfile -NonInteractive -WindowStyle Hidden -Command "${action}"`;
+	return `<?xml version="1.0" encoding="UTF-16"?>\n<Task version="1.2" xmlns="http://schemas.microsoft.com/windows/2004/02/mit/task">\n  <RegistrationInfo>\n    <Description>Open Session Runner: holds the outbound control channel open.</Description>\n  </RegistrationInfo>\n  <Triggers>\n    <LogonTrigger>\n      <Enabled>true</Enabled>\n      <UserId>${xml(user)}</UserId>\n    </LogonTrigger>\n  </Triggers>\n  <Principals>\n    <Principal id="Author">\n      <UserId>${xml(user)}</UserId>\n      <LogonType>InteractiveToken</LogonType>\n      <RunLevel>LeastPrivilege</RunLevel>\n    </Principal>\n  </Principals>\n  <Settings>\n    <MultipleInstancesPolicy>IgnoreNew</MultipleInstancesPolicy>\n    <DisallowStartIfOnBatteries>false</DisallowStartIfOnBatteries>\n    <StopIfGoingOnBatteries>false</StopIfGoingOnBatteries>\n    <StartWhenAvailable>true</StartWhenAvailable>\n    <ExecutionTimeLimit>PT0S</ExecutionTimeLimit>\n    <RestartOnFailure>\n      <Interval>PT1M</Interval>\n      <Count>10</Count>\n    </RestartOnFailure>\n  </Settings>\n  <Actions Context="Author">\n    <Exec>\n      <Command>powershell.exe</Command>\n      <Arguments>${xml(args)}</Arguments>\n    </Exec>\n  </Actions>\n</Task>\n`;
 }
 
 /** Install a per-user service. Runner credentials and workspaces stay owned by
@@ -246,6 +296,19 @@ export async function installRunnerService(): Promise<boolean> {
 			const enabled = await run(["systemctl", "--user", "enable", "--now", "opensession-runner.service"], { quiet: true });
 			if (reload.code !== 0 || enabled.code !== 0) throw new Error(enabled.stderr || reload.stderr || "systemctl user service failed");
 			ok("Runner service installed", "systemd user service reconnects after restart");
+			return true;
+		}
+		if (platform() === "win32" && Bun.which("schtasks")) {
+			mkdirSync(OPENSESSION_HOME, { recursive: true });
+			const path = join(OPENSESSION_HOME, "runner-task.xml");
+			// UTF-16 LE with a BOM: the one encoding every Windows build's
+			// schtasks accepts for /XML.
+			const body = Buffer.concat([Buffer.from([0xff, 0xfe]), Buffer.from(runnerScheduledTaskXml(), "utf16le")]);
+			await Bun.write(path, new Uint8Array(body));
+			const created = await run(["schtasks", "/Create", "/TN", RUNNER_TASK_NAME, "/XML", path, "/F"], { quiet: true });
+			if (created.code !== 0) throw new Error(created.stderr || created.stdout || "schtasks create failed");
+			await run(["schtasks", "/Run", "/TN", RUNNER_TASK_NAME], { quiet: true });
+			ok("Runner service installed", "scheduled task reconnects after sign-in");
 			return true;
 		}
 	} catch (error) {
@@ -977,6 +1040,7 @@ export async function runnersPair(): Promise<number> {
   info(dim(`  valid for 10 minutes, single use`));
   heading("On the machine you want to attach");
   info(dim("  curl -fsSL https://raw.githubusercontent.com/tellahq/opensession/main/install.sh | bash"));
+  info(dim("  (Windows: irm https://raw.githubusercontent.com/tellahq/opensession/main/install.ps1 | iex)"));
   info(`  opensession connect --server ${(await localApi()).replace("/api/runners", "")} --code ${result.code}`);
   return 0;
 }

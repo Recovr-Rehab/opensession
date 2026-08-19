@@ -332,7 +332,15 @@ async function main(): Promise<number> {
       if (positional[0] === "run") return await runnerRun();
 			if (positional[0] === "service" && positional[1] === "install") return (await installRunnerService()) ? 0 : 1;
       if (positional[0] === "status" || !positional[0]) return await runnerStatus();
-		fail("usage: opensession runner run|status|service install");
+			// The pairing UI and docs both say `opensession runner connect`; keep
+			// that spelling working alongside the top-level `connect`.
+			if (positional[0] === "connect") return await connect({
+				server: flagValue("--server"),
+				code: flagValue("--code"),
+				name: flagValue("--name"),
+				label: flagValue("--label"),
+			});
+		fail("usage: opensession runner run|status|connect|service install");
       return 1;
 
     case "runners":
