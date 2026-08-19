@@ -129,6 +129,17 @@ import { BrandMark } from "./BrandMark";
 import type { FileAttachment } from "../lib/images";
 import { loadDraft, saveDraft, clearDraft } from "../lib/drafts";
 import {
+	addStaging,
+	attachToDraft,
+	countStaging,
+	dropStagingAttachments,
+	NOTHING_STAGING,
+	sameFiles,
+	sameImages,
+	subtractStaging,
+} from "../lib/attachments";
+import { hasDraggedFiles } from "../lib/file-drag";
+import {
 	isHiddenForSession,
 	onHidesChanged,
 	unhideForSession,
@@ -189,6 +200,7 @@ import {
 	IconPencil,
 	IconArrowDown,
 	IconArrowUp,
+	IconArrowUpToLine,
 	IconCrosshair,
 	IconDesk,
 	IconDotsHorizontal,
@@ -1186,6 +1198,9 @@ export function SessionViewer({
 	const draftKey = `session:${session.id}`;
 	const [images, setImages] = useState<string[]>(() => loadDraft(draftKey).images);
 	const [files, setFiles] = useState<FileAttachment[]>(() => loadDraft(draftKey).files);
+	const [uploadStaging, setUploadStaging] = useState(NOTHING_STAGING);
+	const dragDepthRef = useRef(0);
+	const [fileDragActive, setFileDragActive] = useState(false);
 	useEffect(() => {
 		saveDraft(draftKey, { images, files });
 	}, [draftKey, images, files]);
@@ -1462,6 +1477,98 @@ export function SessionViewer({
 	// from the composer's note mode (⌘N).
 	const [notes, setNotes] = useState<SessionNote[]>([]);
 	const [noteMode, setNoteMode] = useState(false);
+	async function addSessionAttachments(picked: FileList | File[]) {
+		const selected = Array.from(picked);
+		const noteImageTypes = new Set([
+			"image/png",
+			"image/jpeg",
+			"image/gif",
+			"image/webp",
+		]);
+		const disallowed = noteMode
+			? selected.filter((file) => !noteImageTypes.has(file.type))
+			: [];
+		const accepted = noteMode
+			? selected.filter((file) => noteImageTypes.has(file.type))
+			: selected;
+		const batch = countStaging(accepted);
+		setUploadStaging((current) => addStaging(current, batch));
+		try {
+			const { rejected, applied } = await attachToDraft(draftKey, accepted);
+			if (applied) {
+				const stored = loadDraft(draftKey);
+				setImages((current) =>
+					sameImages(current, stored.images) ? current : stored.images,
+				);
+				setFiles((current) =>
+					sameFiles(current, stored.files) ? current : stored.files,
+				);
+			}
+			const failures = [
+				...rejected,
+				...disallowed.map(
+					(file) =>
+						`${file.name} (notes accept PNG, JPEG, GIF, or WebP images)`,
+				),
+			];
+			if (failures.length) alert(`Couldn't attach:\n${failures.join("\n")}`);
+		} finally {
+			setUploadStaging((current) => subtractStaging(current, batch));
+		}
+	}
+
+	function resetFileDrag() {
+		dragDepthRef.current = 0;
+		setFileDragActive(false);
+	}
+	useEffect(() => {
+		if (!fileDragActive) return;
+		function cancelFileDrag(event: KeyboardEvent) {
+			if (event.key !== "Escape") return;
+			event.preventDefault();
+			event.stopPropagation();
+			resetFileDrag();
+		}
+		// Capture before the composer. During a busy run its own Escape handler
+		// stops propagation to open the stop confirmation, which used to leave
+		// this overlay stranded above it.
+		window.addEventListener("keydown", cancelFileDrag, true);
+		return () => window.removeEventListener("keydown", cancelFileDrag, true);
+	}, [fileDragActive]);
+
+	function handleFileDragEnter(event: React.DragEvent) {
+		if (!hasDraggedFiles(event.dataTransfer)) return;
+		event.preventDefault();
+		dragDepthRef.current += 1;
+		setFileDragActive(true);
+	}
+
+	function handleFileDragLeave(event: React.DragEvent) {
+		if (!hasDraggedFiles(event.dataTransfer)) return;
+		const next = event.relatedTarget;
+		if (!(next instanceof Node) || !event.currentTarget.contains(next)) {
+			resetFileDrag();
+			return;
+		}
+		dragDepthRef.current = Math.max(0, dragDepthRef.current - 1);
+		if (dragDepthRef.current === 0) setFileDragActive(false);
+	}
+
+	function handleFileDragOver(event: React.DragEvent) {
+		if (!hasDraggedFiles(event.dataTransfer)) return;
+		event.preventDefault();
+		event.dataTransfer.dropEffect = "copy";
+	}
+
+	function handleFileDrop(event: React.DragEvent) {
+		if (!hasDraggedFiles(event.dataTransfer)) return;
+		event.preventDefault();
+		event.stopPropagation();
+		resetFileDrag();
+		if (event.dataTransfer.files.length) {
+			void addSessionAttachments(event.dataTransfer.files);
+		}
+	}
 	useEffect(() => {
 		setNotes([]);
 		setNoteMode(false);
@@ -2187,6 +2294,7 @@ export function SessionViewer({
 	useEffect(() => {
 		if (newSessionSeq === lastNewSessionSeq.current) return;
 		lastNewSessionSeq.current = newSessionSeq;
+		dropStagingAttachments(draftKey);
 		// The composer's text draft resets via its key={newSessionSeq} remount.
 		setImages([]);
 		setFiles([]);
@@ -3462,6 +3570,7 @@ export function SessionViewer({
 			if (!typed && imgs.length === 0) return false;
 			return postSessionNoteApi(session.id, text, getCurrentUser(), imgs).then(
 				() => {
+					dropStagingAttachments(draftKey);
 					setImages([]);
 					setQuote(null);
 					return true;
@@ -3492,6 +3601,7 @@ export function SessionViewer({
 				...(fls.length ? { files: filePayload } : {}),
 			});
 			setForkFrom(null);
+			dropStagingAttachments(draftKey);
 			setImages([]);
 			setFiles([]);
 			setQuote(null);
@@ -3569,6 +3679,7 @@ export function SessionViewer({
 		// send is unambiguous intent to watch this turn. Instant, not smooth: the
 		// glue that follows sets scrollTop directly and would fight an animation.
 		scrollToLatest("auto");
+		dropStagingAttachments(draftKey);
 		setImages([]);
 		setFiles([]);
 		setQuote(null);
@@ -5941,7 +6052,43 @@ export function SessionViewer({
 								/>
 						</div>
 					) : (
-					<>
+					<div
+						className="relative flex min-h-0 flex-1 flex-col"
+						onDragEnterCapture={handleFileDragEnter}
+						onDragLeaveCapture={handleFileDragLeave}
+						onDragOverCapture={handleFileDragOver}
+						onDropCapture={handleFileDrop}
+					>
+					{fileDragActive && (
+						<>
+							<motion.div
+								className="pointer-events-none absolute inset-0 z-20 flex flex-col items-center justify-center bg-panel/90 px-6 text-center backdrop-blur-sm"
+								initial={{ opacity: 0 }}
+								animate={{ opacity: 1 }}
+								transition={{ type: "tween", duration: duration.base, ease }}
+								aria-hidden="true"
+							>
+								<div className="mb-5 flex items-center -space-x-2">
+									<div className="rotate-[-8deg] rounded-lg bg-panel p-3 text-dim shadow-md">
+										<IconFile size={26} />
+									</div>
+									<div className="relative z-[1] rounded-xl bg-active p-4 text-fg shadow-lg">
+										<IconArrowUpToLine size={30} />
+									</div>
+									<div className="rotate-[8deg] rounded-lg bg-panel p-3 text-dim shadow-md">
+										<IconFile size={26} />
+									</div>
+								</div>
+								<div className="text-title font-semibold text-fg">Add files</div>
+								<div className="mt-1 text-label text-dim">
+									Drop files here to attach them to your message.
+								</div>
+							</motion.div>
+							<span className="sr-only" role="status">
+								Drop files to attach
+							</span>
+						</>
+					)}
 					<div className={VIEWER_MESSAGES_REGION}>
 						{/* Selecting transcript text offers actions without changing either
 						    composer until the person chooses where to use it. */}
@@ -6336,6 +6483,8 @@ export function SessionViewer({
 									onImagesChange={setImages}
 									files={files}
 									onFilesChange={setFiles}
+									staging={uploadStaging}
+									onAddAttachments={addSessionAttachments}
 									attachmentShortcutActive={focused}
 									quote={quote}
 									onQuoteClear={clearQuote}
@@ -6480,7 +6629,7 @@ export function SessionViewer({
 							</>
 						)}
 					</div>
-					</>
+					</div>
 					)}
 					{/* Shells keep their PTYs alive across view-tab switches: mounted
 					    for as long as the Terminal tab exists, hidden while another
