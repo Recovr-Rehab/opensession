@@ -43,7 +43,7 @@ import { useIsPhone } from "../hooks/useIsPhone";
 import { Button } from "../ui/button";
 import { cn } from "../ui/cn";
 import { Menu } from "../ui/menu";
-import { ResponsiveDialog } from "../ui/sheet";
+import { ResponsiveDialog, SheetIconButton } from "../ui/sheet";
 import { toast } from "../ui/toast";
 import { Tooltip } from "../ui/tooltip";
 import { MarkdownBody } from "./MarkdownBody";
@@ -190,11 +190,13 @@ function AssetMenu({
 	file,
 	refresh,
 	onClose,
+	phone = false,
 }: {
 	sessionId: string;
 	file: SessionAssetFile;
 	refresh?: () => void;
 	onClose?: () => void;
+	phone?: boolean;
 }) {
 	const rawUrl = sessionAssetPreviewUrl(sessionId, file);
 	const stableUrl = sessionAssetRawUrl(sessionId, file.path);
@@ -232,9 +234,14 @@ function AssetMenu({
 		<Menu.Root>
 			<Menu.Trigger
 				aria-label="Asset actions"
-				className="flex size-7 shrink-0 items-center justify-center rounded-control border-0 bg-transparent text-dim hover:bg-hover hover:text-fg data-[popup-open]:bg-hover data-[popup-open]:text-fg"
+				className={cn(
+					"flex shrink-0 items-center justify-center border-0 text-dim hover:text-fg data-[popup-open]:text-fg",
+					phone
+						? "size-11 rounded-full bg-panel active:bg-pressed data-[popup-open]:bg-pressed"
+						: "size-7 rounded-control bg-transparent hover:bg-hover data-[popup-open]:bg-hover",
+				)}
 			>
-				<IconDotsHorizontal size={16} />
+				<IconDotsHorizontal size={phone ? 24 : 16} />
 			</Menu.Trigger>
 			<Menu.Popup align="end">
 				<Menu.Item
@@ -718,7 +725,10 @@ export function AssetOverlay({
 			>
 				{/* Actions only: the file's name reads under it, in the footer. */}
 				<div
-					className="flex min-h-10 shrink-0 items-center justify-end gap-1 px-3 pr-12"
+					className={cn(
+						"flex shrink-0 items-center justify-end gap-1 px-3",
+						isPhone ? "min-h-11 pr-16" : "min-h-10 pr-12",
+					)}
 				>
 					{listed && (
 						<span className="shrink-0 text-meta text-faint">
@@ -730,7 +740,7 @@ export function AssetOverlay({
 							variant="ghost"
 							size="sm"
 							icon={<IconArrowUpRight size={15} />}
-							className="shrink-0"
+							className={cn("shrink-0", isPhone && "min-h-11")}
 							onClick={() => onOpenAsTab(file.path)}
 						>
 							Open
@@ -741,6 +751,7 @@ export function AssetOverlay({
 						file={file}
 						refresh={refresh}
 						onClose={onClose}
+						phone={isPhone}
 					/>
 				</div>
 				<div className="relative flex min-h-0 flex-1">
@@ -763,16 +774,26 @@ export function AssetOverlay({
 				{isPhone && footer}
 			</div>
 			{!isPhone && footer}
-			<Tooltip label="Close">
-				<Button
-					variant="ghost"
-					size="md"
-					icon={<IconX size={18} />}
+			{isPhone ? (
+				<SheetIconButton
 					aria-label="Close"
-					className="absolute right-2 top-2 z-20 size-8"
+					className="absolute right-3 top-[21px] z-20"
 					onClick={onClose}
-				/>
-			</Tooltip>
+				>
+					<IconX size={24} />
+				</SheetIconButton>
+			) : (
+				<Tooltip label="Close">
+					<Button
+						variant="ghost"
+						size="md"
+						icon={<IconX size={18} />}
+						aria-label="Close"
+						className="absolute right-2 top-2 z-20 size-8"
+						onClick={onClose}
+					/>
+				</Tooltip>
+			)}
 			{!isPhone && navigation && (
 				<>
 					<AssetSideButton direction="previous" onClick={navigation.onPrevious} />

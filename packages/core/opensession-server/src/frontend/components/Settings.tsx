@@ -30,7 +30,7 @@ import {
 	type ToolSectionKey,
 } from "../lib/settings-sections";
 import { Input } from "../ui/input";
-import { BottomSheet } from "../ui/sheet";
+import { BottomSheet, SheetIconButton } from "../ui/sheet";
 import { Connections } from "./Connections";
 import {
 	IconChevronLeft,
@@ -428,28 +428,20 @@ function MobileSettings({
 	const shownSection = detail ?? lastSection;
 	const shownLabel = SECTIONS.find((s) => s.key === shownSection)?.label;
 	const pageEase = "transition-transform duration-[var(--dur-lg)] ease-[var(--ease)]";
-	// iOS controls keep a 44pt target. The sheet's 34px corner follows the
-	// 22px button radius at its 12px inset, so the two curves stay concentric.
-	const headerButton =
-		"absolute grid size-11 place-items-center rounded-full border-none bg-panel p-0 text-dim active:bg-pressed";
 
 	return (
-		<BottomSheet
-			onClose={onBack}
-			label="Settings"
-			className="settings-sheet h-[93dvh] [--sheet-radius:34px]"
-		>
+		<BottomSheet onClose={onBack} label="Settings" className="settings-sheet h-[93dvh]">
 			{(dismiss) => (
 				<>
 					<div className="relative flex h-11 shrink-0 items-center justify-center px-3">
 						{detail && (
-							<button
-								className={cn(headerButton, "left-3")}
+							<SheetIconButton
+								className="absolute left-3"
 								onClick={() => onShowRoot?.()}
 								aria-label="Back to settings"
 							>
 								<IconChevronLeft size={24} />
-							</button>
+							</SheetIconButton>
 						)}
 						{/* The sheet's own title, and the only one on phones: the panel
 						    h1 hides in here (`[.settings-sheet_&]:hidden` in ui/settings).
@@ -458,13 +450,13 @@ function MobileSettings({
 						<span className="text-section-title font-title text-fg">
 							{detail ? shownLabel : "Settings"}
 						</span>
-						<button
-							className={cn(headerButton, "right-3")}
+						<SheetIconButton
+							className="absolute right-3"
 							onClick={dismiss}
 							aria-label="Close settings"
 						>
 							<IconX size={24} />
-						</button>
+						</SheetIconButton>
 					</div>
 
 					<div className="relative min-h-0 flex-1 overflow-hidden">

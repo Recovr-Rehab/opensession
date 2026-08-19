@@ -401,11 +401,16 @@ function ProfileCard({
 							<InlineAlert onDismiss={() => setError(null)}>{error}</InlineAlert>
 						)}
 						<div className="mt-1 flex justify-end gap-2">
-							<Button variant="ghost" onClick={dismiss}>
+							<Button
+								variant="ghost"
+								className={isPhone ? "min-h-11" : undefined}
+								onClick={dismiss}
+							>
 								Cancel
 							</Button>
 							<Button
 								variant="primary"
+								className={isPhone ? "min-h-11" : undefined}
 								type="submit"
 								disabled={!name.trim() || !dirty || busy !== null}
 							>

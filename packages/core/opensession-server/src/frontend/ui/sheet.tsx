@@ -252,7 +252,7 @@ export function ResponsiveDialog({
 					// and its circular fallback with everything else.
 					"absolute flex flex-col overflow-hidden outline-none [corner-shape:squircle]",
 					phone
-						? "inset-x-0 bottom-0 max-h-[94dvh] rounded-t-[calc(var(--sheet-radius,16.5px)*var(--rf))] bg-surface pb-[env(safe-area-inset-bottom)] shadow-[0_-12px_40px_rgba(0,0,0,0.35)]"
+						? "inset-x-0 bottom-0 max-h-[94dvh] rounded-t-[calc(var(--sheet-radius,34px)*var(--rf))] bg-surface pb-[env(safe-area-inset-bottom)] shadow-[0_-12px_40px_rgba(0,0,0,0.35)]"
 						: "left-1/2 top-1/2 max-h-[85vh] w-[92vw] max-w-[30rem] -translate-x-1/2 -translate-y-1/2 rounded-[calc(18px*var(--rf))] bg-raised smooth-shadow-ring-lg",
 					animated &&
 						(phone
@@ -284,11 +284,30 @@ export function ResponsiveDialog({
 	);
 }
 
+/** Shared iOS-style chrome for icon actions in a phone sheet header. */
+export function SheetIconButton({
+	className,
+	children,
+	...props
+}: React.ButtonHTMLAttributes<HTMLButtonElement>) {
+	return (
+		<button
+			type="button"
+			className={cn(
+				"focus-ring grid size-11 shrink-0 touch-manipulation place-items-center rounded-full border-none bg-panel p-0 text-dim active:bg-pressed [&_svg]:size-6",
+				className,
+			)}
+			{...props}
+		>
+			{children}
+		</button>
+	);
+}
+
 /**
  * The scrolling, padded interior of a bottom sheet. `ResponsiveDialog` clips
- * its panel at 94dvh, so a sheet whose action list can grow — the sidebar's
- * long-press menus do — needs its own scroller or the last rows are simply
- * unreachable.
+ * its panel at 94dvh, so a sheet whose action list can grow has its own
+ * scroller and keeps every 44px action reachable.
  */
 export function SheetBody({
 	className,
@@ -300,7 +319,7 @@ export function SheetBody({
 	return (
 		<div
 			className={cn(
-				"min-h-0 overflow-y-auto overscroll-contain px-2.5 pb-3.5",
+				"min-h-0 overflow-y-auto overscroll-contain px-2.5 pb-3.5 [&_button]:min-h-11 [&_button]:min-w-11",
 				className,
 			)}
 		>
