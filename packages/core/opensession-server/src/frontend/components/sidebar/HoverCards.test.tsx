@@ -55,7 +55,9 @@ describe("hover cards drop the repo and the idle timestamp", () => {
 			<WsCardBody
 				row={row([session()])}
 				settled={false}
+				archivePrimary={false}
 				onToggleSettled={() => {}}
+				onArchive={() => {}}
 				onOpen={() => {}}
 			/>,
 		);
@@ -79,13 +81,30 @@ describe("hover cards drop the repo and the idle timestamp", () => {
 			<WsCardBody
 				row={{ ...row([session()]), status: "merged" }}
 				settled={false}
+				archivePrimary={false}
 				onToggleSettled={() => {}}
+				onArchive={() => {}}
 				onOpen={() => {}}
 			/>,
 		);
 		expect(html).toMatch(
 			new RegExp(`<span class="[^"]*text-box[^"]*">Settle</span>`),
 		);
+	});
+
+	test("activity mode puts Archive in the primary slot", () => {
+		const html = renderToStaticMarkup(
+			<WsCardBody
+				row={{ ...row([session()]), status: "merged" }}
+				settled={false}
+				archivePrimary
+				onToggleSettled={() => {}}
+				onArchive={() => {}}
+				onOpen={() => {}}
+			/>,
+		);
+		expect(html).toContain(">Archive<");
+		expect(html).not.toContain(">Settle<");
 	});
 
 	test("the PR chip centres its number the same way", () => {
@@ -119,7 +138,9 @@ describe("hover cards drop the repo and the idle timestamp", () => {
 				<WsCardBody
 					row={row([withPr])}
 					settled={false}
+					archivePrimary={false}
 					onToggleSettled={() => {}}
+					onArchive={() => {}}
 					onOpen={() => {}}
 				/>,
 			),

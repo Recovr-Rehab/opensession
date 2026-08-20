@@ -180,21 +180,27 @@ export function FilterPopover({
 		<>
 			<div className={BACKDROP} onClick={onClose} />
 			<div className={FILTER_POPOVER} style={{ left, top, width }}>
-				{/* Activity is the stable Active/Settled inbox. Project keeps the
-				    same creation order inside each repo; Status is the deliberate
-				    dynamic alternative whose rows move between lifecycle lanes. */}
+				{/* The section mode and project nesting are independent answers. */}
 				<ValueRow
 					label="Group by"
 					value={filter.groupBy}
 					options={[
-						// The stored value stays "none" for backwards-compatible prefs;
-						// the visible mode is the Active/Settled lifecycle.
-						{ value: "none", label: "Activity" },
-						{ value: "repo", label: "Project" },
+						{ value: "settled", label: "Settled" },
+						{ value: "activity", label: "Activity" },
 						{ value: "status", label: "Status" },
 					]}
 					onSelect={(v) => onChange({ groupBy: v as GroupBy })}
 				/>
+				<button
+					type="button"
+					className={cn(SETTING_ROW, SETTING_ROW_PRESSABLE)}
+					onClick={() => onChange({ byProject: !filter.byProject })}
+				>
+					<span className="shrink-0 text-dim">Group by project</span>
+					<span className="ml-auto">
+						<SwitchIndicator on={filter.byProject} />
+					</span>
+				</button>
 				{/* The projects, and under them the one setting about the set of
 				    them rather than about which one you are in. It is in two
 				    places on purpose: here, under the list of projects it is
@@ -213,9 +219,6 @@ export function FilterPopover({
 								onChange({ emptyProjects: hide ? "hide" : "show" })
 							}
 						>
-							{/* "when empty", not "empty projects": the list above it has
-							    just named the projects, so the row only has to say what
-							    happens to one. */}
 							<span className="grow truncate">Hide when empty</span>
 							<SwitchIndicator on={filter.emptyProjects === "hide"} />
 						</Menu.CheckboxItem>
@@ -253,7 +256,7 @@ export function FilterPopover({
 						</span>
 					</Menu.Trigger>
 					<Menu.Popup align="end" sideOffset={6}>
-						{/* Active and Project ordering is deliberately stable by creation.
+						{/* Settled has stable creation order and Activity owns recency.
 						    Status is the one layout where choosing lane order still makes
 						    sense, so only it offers this override. */}
 						{filter.groupBy === "status" && (

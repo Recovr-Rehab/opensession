@@ -53,31 +53,28 @@ final class SessionsListLensTests: XCTestCase {
 
     // MARK: - Default grouping
 
-    func testOneProjectDefaultsToTheActivityBands() {
-        XCTAssertEqual(SidebarGroupBy.fallback(repoCount: 1), .activity)
-        XCTAssertEqual(SidebarGroupBy.fallback(repoCount: 4), .project)
-        // Unknown until `/api/repos` answers: assume several, so an instance
-        // that has them doesn't paint a flat list and re-band a moment later.
-        XCTAssertEqual(
-            SidebarGroupBy.fallback(repoCount: RepoCount.unknown), .project
+    func testGroupingAxesHaveIndependentDefaults() {
+        XCTAssertEqual(SidebarGroupBy.fallback(repoCount: 1), .settled)
+        XCTAssertEqual(SidebarGroupBy.fallback(repoCount: 4), .settled)
+        XCTAssertFalse(SidebarGroupBy.defaultGroupsByProject(repoCount: 1))
+        XCTAssertTrue(SidebarGroupBy.defaultGroupsByProject(repoCount: 4))
+        XCTAssertTrue(
+            SidebarGroupBy.defaultGroupsByProject(repoCount: RepoCount.unknown)
         )
     }
 
-    /// Six groupings became three, so every value this app has ever written
-    /// has to still name one. Reading the old value IS the migration: nothing
-    /// is rewritten until the next pick.
-    func testEveryGroupingThisAppEverStoredStillNamesOne() {
+    func testEveryGroupingThisAppEverStoredKeepsBothAxes() {
+        XCTAssertEqual(SidebarGroupBy.stored("none"), .settled)
         XCTAssertEqual(SidebarGroupBy.stored("inbox"), .activity)
         XCTAssertEqual(SidebarGroupBy.stored("recent"), .activity)
-        XCTAssertEqual(SidebarGroupBy.stored("repo"), .project)
-        XCTAssertEqual(SidebarGroupBy.stored("repo-inbox"), .project)
-        // The default of every multi-project phone. Its repo bands are what
-        // people are looking at, so it keeps them and takes the activity bands
-        // in place of its status lanes.
-        XCTAssertEqual(SidebarGroupBy.stored("repo-status"), .project)
+        XCTAssertEqual(SidebarGroupBy.stored("repo"), .settled)
+        XCTAssertEqual(SidebarGroupBy.stored("repo-inbox"), .activity)
+        XCTAssertEqual(SidebarGroupBy.stored("repo-status"), .status)
         XCTAssertEqual(SidebarGroupBy.stored("status"), .status)
-        // Unpicked, and anything a later version writes: the default decides,
-        // and keeps deciding.
+        XCTAssertTrue(SidebarGroupBy.legacyGroupsByProject("repo") == true)
+        XCTAssertTrue(SidebarGroupBy.legacyGroupsByProject("repo-inbox") == true)
+        XCTAssertTrue(SidebarGroupBy.legacyGroupsByProject("repo-status") == true)
+        XCTAssertFalse(SidebarGroupBy.legacyGroupsByProject("inbox") == true)
         XCTAssertNil(SidebarGroupBy.stored(""))
         XCTAssertNil(SidebarGroupBy.stored("repo-something-new"))
     }

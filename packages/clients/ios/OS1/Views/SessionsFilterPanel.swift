@@ -1,8 +1,8 @@
 import SwiftUI
 
 /// The sessions list's view controls in one panel: how the list is grouped,
-/// which project and person it is scoped to, what it hides, and how it is
-/// sorted. The web's filter popover, minus the two controls with no native
+/// which project and person it is scoped to, what it hides, and, in Status,
+/// how it is sorted. The web's filter popover, minus the two controls with no native
 /// surface behind them (session-less pull request rows, and the desktop
 /// sidebar's row density).
 ///
@@ -13,6 +13,7 @@ import SwiftUI
 /// A sheet on the phone, a popover on the Mac.
 struct SessionsFilterPanel: View {
     @Binding var groupBy: String
+    @Binding var groupByProject: Bool
     @Binding var repo: String
     @Binding var person: String
     @Binding var sort: String
@@ -93,6 +94,7 @@ struct SessionsFilterPanel: View {
                 }
                 // The one setting about the SET of projects rather than about
                 // which one you are in, so it sits under the list of them.
+                Toggle("Group by project", isOn: $groupByProject)
                 Toggle("Hide when empty", isOn: $hideEmptyProjects)
             }
 
@@ -103,9 +105,13 @@ struct SessionsFilterPanel: View {
             }
 
             Section {
-                Picker("Sort by", selection: $sort) {
-                    ForEach(SidebarSortBy.allCases, id: \.rawValue) { option in
-                        Text(option.label).tag(option.rawValue)
+                // Active and Project keep stable creation order. Status is the
+                // one layout where choosing the order inside lanes still helps.
+                if groupBy == SidebarGroupBy.status.rawValue {
+                    Picker("Sort by", selection: $sort) {
+                        ForEach(SidebarSortBy.allCases, id: \.rawValue) { option in
+                            Text(option.label).tag(option.rawValue)
+                        }
                     }
                 }
                 Toggle("Show auto created", isOn: $showAutoCreated)

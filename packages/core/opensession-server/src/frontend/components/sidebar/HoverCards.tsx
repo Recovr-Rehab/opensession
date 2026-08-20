@@ -478,12 +478,16 @@ function WsOverviewInfo({
 export function WsCardBody({
 	row,
 	settled,
+	archivePrimary,
 	onToggleSettled,
+	onArchive,
 	onOpen,
 }: {
 	row: WsCardRow;
 	settled: boolean;
+	archivePrimary: boolean;
 	onToggleSettled: () => void;
+	onArchive: () => void;
 	/** Open a session (the "Answer" action jumps to the blocked one). */
 	onOpen: (session: UnifiedSession) => void;
 }) {
@@ -498,7 +502,16 @@ export function WsCardBody({
 				{/* The single main action, colored by what the workspace needs next:
 				    return settled work, answer a question, merge/review, or settle
 				    finished PR work. Archive remains in the explicit context menu. */}
-				{settled ? (
+				{archivePrimary && row.sessions.length > 0 ? (
+					<Button
+						size="sm"
+						variant="soft"
+						icon={<IconArchive size={20} />}
+						onClick={onArchive}
+					>
+						Archive
+					</Button>
+				) : settled ? (
 					<Button
 						size="sm"
 						variant="soft"
@@ -575,6 +588,7 @@ export function WsMobileSheet({
 	onTogglePin,
 	onClose,
 	settled,
+	archivePrimary,
 	onToggleSettled,
 	onArchive,
 	onSetStatus,
@@ -593,6 +607,7 @@ export function WsMobileSheet({
 	onTogglePin: () => void;
 	onClose: () => void;
 	settled: boolean;
+	archivePrimary: boolean;
 	onToggleSettled: () => void;
 	onArchive: () => void;
 	/** Pin the workspace into a lane, or clear back to derived with `null`. */
@@ -712,8 +727,14 @@ export function WsMobileSheet({
 					)}
 				</div>
 				<SheetSeparator />
-				{/* Main action, colored by what the workspace needs next. */}
-				{settled && (
+				{/* Main action follows the section mode. */}
+				{archivePrimary && row.sessions.length > 0 && (
+					<SheetItem tone="danger" onClick={closing(onArchive)}>
+						{archiveGlyph}
+						Archive
+					</SheetItem>
+				)}
+				{!archivePrimary && settled && (
 					<SheetItem onClick={closing(onToggleSettled)}>
 						<IconArrowUp size={22} />
 						Unsettle
@@ -748,7 +769,7 @@ export function WsMobileSheet({
 						{prSession.prNumber != null && ` #${prSession.prNumber}`}
 					</SheetItem>
 				)}
-				{!settled && row.status === "merged" && row.sessions.length > 0 && (
+				{!archivePrimary && !settled && row.status === "merged" && row.sessions.length > 0 && (
 					<SheetItem onClick={closing(onToggleSettled)}>
 						<IconCheckCircle size={22} />
 						Settle workspace
@@ -780,7 +801,7 @@ export function WsMobileSheet({
 						{unread ? "Mark as read" : "Mark as unread"}
 					</SheetItem>
 				)}
-				{!settled && row.status !== "merged" && row.sessions.length > 0 && (
+				{!archivePrimary && !settled && row.status !== "merged" && row.sessions.length > 0 && (
 					<SheetItem onClick={closing(onToggleSettled)}>
 						<IconCheckCircle size={22} />
 						Settle
@@ -832,7 +853,7 @@ export function WsMobileSheet({
 				{(row.sessions.length > 0 || onDelete) && <SheetSeparator />}
 				{/* Archive is the stronger removal action. It stays in the explicit
 				    menu for both Active and Settled work, never in the primary slot. */}
-				{row.sessions.length > 0 && (
+				{!archivePrimary && row.sessions.length > 0 && (
 					<SheetItem tone="danger" onClick={closing(onArchive)}>
 						{archiveGlyph}
 						Archive

@@ -15,11 +15,11 @@ private let sidebarMargin: CGFloat = 16
 
 /// Sessions list, organized the way the web sidebar is.
 ///
-/// The list is an inbox: its rows band by what they want from you and when
-/// they last moved. What sits above those bands is the one thing you pick —
-/// nothing, one band per project, or the status lanes (`SidebarGroupBy`) —
-/// and the list is then narrowed to a project and a person, ordered by
-/// activity or creation, and searched. Every choice persists, under the same
+/// Settled keeps work in stable Active and Settled sections. Activity restores
+/// the date bands, and Status is the dynamic lane view (`SidebarGroupBy`). A
+/// separate project switch repeats any of those sections per project. The list
+/// is then narrowed to a project and a person and searched. Every choice persists,
+/// under the same
 /// values the web's filter popover stores, so one account reads the same list
 /// in both places. The controls live in `SessionsFilterPanel`.
 struct SessionsListView: View {
@@ -139,6 +139,9 @@ struct SessionsListView: View {
     // Empty until the person picks a grouping, so the default can stay a
     // decision rather than a stored answer — see `SidebarGroupBy.fallback`.
     @AppStorage("os1.list.groupBy") private var groupByRaw = ""
+    /// Project bands are independent from the section mode. Empty means no
+    /// explicit pick yet, so the project count decides.
+    @AppStorage("os1.list.groupByProject") private var groupByProjectRaw = ""
     /// Projects registered on this instance, as of the last load. Read here so
     /// the list re-groups when the first `/api/repos` of a launch lands.
     @AppStorage(RepoCount.storageKey) private var knownRepoCount = RepoCount.unknown
@@ -160,8 +163,8 @@ struct SessionsListView: View {
     /// headings, and this takes them out.
     @AppStorage("os1.list.hideEmptyProjects") private var hideEmptyProjects = false
     @AppStorage("os1.sidebar.repoOrder") private var preferredRepoOrder = "[]"
-    /// Section headings the person has folded shut — repo bands, status lanes
-    /// and inbox bands, keyed like the web sidebar's collapse state and stored
+    /// Section headings the person has folded shut: repo bands, status lanes,
+    /// Active and Settled. They are keyed like the web sidebar's collapse state and stored
     /// as a JSON array so the choice survives relaunches.
     @AppStorage("os1.list.collapsed") private var collapsedGroupsRaw = "[]"
     /// Source rows the person has hidden — the account's, shared with the web
@@ -189,7 +192,30 @@ struct SessionsListView: View {
     /// its default as the selected row instead of nothing — and a value stored
     /// under one of this app's five older spellings shows what it now means.
     private var groupBySelection: Binding<String> {
-        Binding(get: { groupBy.rawValue }, set: { groupByRaw = $0 })
+        Binding(get: { groupBy.rawValue }, set: { next in
+            if groupByProjectRaw.isEmpty,
+               let legacy = SidebarGroupBy.legacyGroupsByProject(groupByRaw) {
+                groupByProjectRaw = legacy ? "on" : "off"
+            }
+            groupByRaw = next
+        })
+    }
+
+    private var groupsByProject: Bool {
+        switch groupByProjectRaw {
+        case "on": true
+        case "off": false
+        default:
+            SidebarGroupBy.legacyGroupsByProject(groupByRaw)
+                ?? SidebarGroupBy.defaultGroupsByProject(repoCount: knownRepoCount)
+        }
+    }
+
+    private var groupsByProjectSelection: Binding<Bool> {
+        Binding(
+            get: { groupsByProject },
+            set: { groupByProjectRaw = $0 ? "on" : "off" }
+        )
     }
     private var sortBy: SidebarSortBy { SidebarSortBy(rawValue: sortByRaw) ?? .updated }
 
@@ -1629,25 +1655,86 @@ struct SessionsListView: View {
     private struct RepoSessionGroup: Identifiable {
         let repo: String
         let workspaces: [SidebarWorkspace]
-        /// The activity bands nested under the project band.
-        let lanes: [SessionGroup]
+        let sections: [SessionGroup]
 
         var id: String { repo }
     }
 
-    private var groups: [SessionGroup] {
-        let workspaces = filteredWorkspaces
+    /// Active and Settled are derived from the canonical workspace rows before
+    /// the current grouping decides how to draw them. The maps also keep every
+    /// row action on the same answer as its section.
+    private struct LifecycleOutcome {
+        var facts: [String: WorkspaceLifecycleFacts] = [:]
+        var states: [String: WorkspaceLifecycleState] = [:]
+        var active: [SidebarWorkspace] = []
+        var settled: [SidebarWorkspace] = []
+    }
+
+    private var lifecycleOutcome: LifecycleOutcome {
+        let store = WorkspaceSettlementStore.shared
+        let now = Date()
+        var outcome = LifecycleOutcome()
+        for workspace in filteredWorkspaces {
+            let facts = WorkspaceLifecycle.facts(for: workspace)
+            let state = WorkspaceLifecycle.state(
+                facts: facts,
+                record: store.record(for: workspace),
+                now: now,
+                autoSettleDays: store.autoSettleDays,
+                autoSettlePullRequests: store.autoSettlePullRequests,
+                pinned: PinStore.shared.isPinned(workspace),
+                snoozed: store.isSnoozed(workspace, now: now)
+            )
+            outcome.facts[facts.key] = facts
+            outcome.states[facts.key] = state
+            if state.settled {
+                outcome.settled.append(workspace)
+            } else {
+                outcome.active.append(workspace)
+            }
+        }
+        outcome.active = WorkspaceLifecycle.sortActive(outcome.active, facts: outcome.facts)
+        outcome.settled = WorkspaceLifecycle.sortSettled(
+            outcome.settled,
+            facts: outcome.facts,
+            states: outcome.states
+        )
+        return outcome
+    }
+
+    private func lifecycleState(_ workspace: SidebarWorkspace) -> WorkspaceLifecycleState {
+        lifecycleOutcome.states[SidebarRowKeys.rowKey(for: workspace)] ?? .active
+    }
+
+    private func sessionGroups(
+        for workspaces: [SidebarWorkspace],
+        namespace: String = ""
+    ) -> [SessionGroup] {
         switch groupBy {
+        case .settled:
+            let ids = Set(workspaces.map(\.id))
+            let lifecycle = lifecycleOutcome
+            return [
+                SessionGroup(
+                    id: "\(namespace)lifecycle-active",
+                    title: "Active",
+                    workspaces: lifecycle.active.filter { ids.contains($0.id) },
+                    repo: nil
+                ),
+                SessionGroup(
+                    id: "\(namespace)lifecycle-settled",
+                    title: "Settled",
+                    workspaces: lifecycle.settled.filter { ids.contains($0.id) },
+                    repo: nil
+                ),
+            ].filter { !$0.workspaces.isEmpty }
         case .activity:
-            // One flat list across every repo, banded like an email inbox:
-            // Needs action first, then by when the row last moved. Repo
-            // identity moves onto the rows themselves (see `sessionRow`).
             return SessionsListViewModel.inboxBands(
                 workspaces,
                 mentionedSessionIds: MentionStore.shared.sessionIds
             ).map { band in
                 SessionGroup(
-                    id: "inbox-\(band.band.rawValue)",
+                    id: "\(namespace)inbox-\(band.band.rawValue)",
                     title: band.band.label,
                     workspaces: band.workspaces,
                     repo: nil
@@ -1659,37 +1746,28 @@ struct SessionsListView: View {
                 return inLane.isEmpty
                     ? nil
                     : SessionGroup(
-                        id: "lane-\(lane.rawValue)",
+                        id: "\(namespace)lane-\(lane.rawValue)",
                         title: lane.label,
                         workspaces: inLane,
                         repo: nil
                     )
             }
-        case .project:
-            // Nests its bands under one heading per project — see
-            // repoInboxGroups.
-            return []
         }
     }
 
-    /// "Group by: Project": one band per project, with the same activity
-    /// bands nested inside each.
-    private var repoInboxGroups: [RepoSessionGroup] {
+    private var groups: [SessionGroup] {
+        sessionGroups(for: filteredWorkspaces)
+    }
+
+    private var repoSessionGroups: [RepoSessionGroup] {
         let byRepo = Dictionary(grouping: filteredWorkspaces, by: \.effectiveRepo)
         return repoBandRepos.map { repo in
             let workspaces = byRepo[repo] ?? []
-            let bands = SessionsListViewModel.inboxBands(
-                workspaces,
-                mentionedSessionIds: MentionStore.shared.sessionIds
-            ).map { band in
-                SessionGroup(
-                    id: "repo-\(repo)-band-\(band.band.rawValue)",
-                    title: band.band.label,
-                    workspaces: band.workspaces,
-                    repo: nil
-                )
-            }
-            return RepoSessionGroup(repo: repo, workspaces: workspaces, lanes: bands)
+            return RepoSessionGroup(
+                repo: repo,
+                workspaces: workspaces,
+                sections: sessionGroups(for: workspaces, namespace: "repo-\(repo)-")
+            )
         }
     }
 
@@ -1749,6 +1827,7 @@ struct SessionsListView: View {
     private var filterPanel: some View {
         SessionsFilterPanel(
             groupBy: groupBySelection,
+            groupByProject: groupsByProjectSelection,
             repo: $repoFilter,
             person: personSelection,
             sort: $sortByRaw,
@@ -1777,7 +1856,13 @@ struct SessionsListView: View {
         default: people = person
         }
         let repo = repoFilter == "all" ? "All projects" : RepoTile.label(for: repoFilter)
-        return "\(people), grouped by \(groupBy.label), \(repo), sorted by \(sortBy.label)"
+        let order = switch groupBy {
+        case .settled: "stable creation order"
+        case .activity: "ordered by activity"
+        case .status: "sorted by \(sortBy.label)"
+        }
+        let projects = groupsByProject ? "grouped by project" : "all projects together"
+        return "\(people), grouped by \(groupBy.label), \(projects), \(repo), \(order)"
     }
 
     // ── List body ─────────────────────────────────────────────────────────
@@ -1900,7 +1985,7 @@ struct SessionsListView: View {
     /// that's already one repo (a repo filter, or a single-repo instance)
     /// would only repeat itself.
     private func inboxRowRepo(_ workspace: SidebarWorkspace) -> String? {
-        guard groupBy == .activity, repoFilter == "all", availableRepos.count > 1
+        guard !groupsByProject, repoFilter == "all", availableRepos.count > 1
         else { return nil }
         return workspace.effectiveRepo
     }
@@ -1919,12 +2004,14 @@ struct SessionsListView: View {
     private func sessionRow(_ workspace: SidebarWorkspace) -> some View {
         let session = workspace.mainSession
         let canArchive = !workspace.isOptimistic && !workspace.isDraftWorkspace
+        let settled = lifecycleState(workspace).settled
+        let archivePrimary = groupBy == .activity
         let repo = inboxRowRepo(workspace)
         #if os(macOS)
         // Selection drives the detail column; select by id so rows replaced
         // by polling (fresh struct values every refresh) keep the selection.
-        // Archiving is Mac-idiomatic here: hover button on the row, context
-        // menu, and the Delete key — swipe also works but isn't the primary.
+        // Settlement is the reversible inline action on Mac. Archive remains
+        // in the context menu and on the Delete key as the stronger removal.
         SessionRow(
             session: workspace.statusSession,
             title: workspace.title,
@@ -1933,20 +2020,28 @@ struct SessionsListView: View {
             autoCreated: AutoCreatedOrigin.wasAutoCreated(workspace),
             searchSnippet: workspaceSearchSnippet(workspace),
             isWorkspaceDraft: workspace.isDraftWorkspace,
-            onArchive: canArchive ? { archive(workspace) } : nil
+            settled: settled,
+            archivePrimary: archivePrimary,
+            onPrimaryAction: canArchive ? {
+                if archivePrimary { archive(workspace) }
+                else { toggleSettled(workspace) }
+            } : nil
         )
         .tag(workspace.isDraftWorkspace ? workspace.id : session.id)
         .swipeActions(edge: .trailing) {
             if workspace.isDraftWorkspace {
                 deleteDraftButton(workspace, viaSwipe: true)
-            } else {
+            } else if archivePrimary {
                 archiveButton(workspace, viaSwipe: true)
+            } else {
+                settlementButton(workspace, viaSwipe: true)
             }
         }
         .contextMenu {
             if workspace.isDraftWorkspace {
                 deleteDraftButton(workspace)
             } else {
+                settlementButton(workspace)
                 archiveButton(workspace)
             }
         }
@@ -1978,12 +2073,14 @@ struct SessionsListView: View {
         .swipeActions(edge: .trailing) {
             if workspace.isDraftWorkspace {
                 deleteDraftButton(workspace, viaSwipe: true)
-            } else {
+            } else if archivePrimary {
                 archiveButton(workspace, viaSwipe: true)
+            } else {
+                settlementButton(workspace, viaSwipe: true)
             }
         }
-        // Swipe right to pin, left to archive: the pin is the reversible one,
-        // so it takes the leading edge (and its full swipe just toggles).
+        // Swipe right to pin. Activity restores the old Archive swipe; the
+        // Settled and Status modes use the reversible Settle or Unsettle action.
         // The tint rides on the swipe, not on the button: it paints the swipe
         // action's own background here, but in the context menu the same tint
         // would land on the glyph and make Pin the one coloured item in a
@@ -2123,6 +2220,7 @@ struct SessionsListView: View {
 
     @ViewBuilder
     private func workspaceMenu(_ workspace: SidebarWorkspace) -> some View {
+        settlementButton(workspace)
         readButton(workspace)
 
         // Same action as the leading swipe, for anyone who reaches for the
@@ -2148,7 +2246,7 @@ struct SessionsListView: View {
             Divider()
             Label(state.label, systemImage: prStateIcon(state))
                 .disabled(true)
-            prAction(state, session: session, workspace: workspace)
+            prAction(state, session: session)
             if let prURL = session.prUrl.flatMap(URL.init(string:)) {
                 Button {
                     copyToPasteboard(prURL.absoluteString)
@@ -2214,12 +2312,10 @@ struct SessionsListView: View {
                     Label("Hide from sidebar", systemImage: "eye.slash")
                 }
             }
-            if workspace.pullRequestSession?.pullRequestContextState?.suggestsArchive != true {
-                Button(role: .destructive) {
-                    archive(workspace)
-                } label: {
-                    Label("Archive", systemImage: "archivebox")
-                }
+            Button(role: .destructive) {
+                archive(workspace)
+            } label: {
+                Label("Archive", systemImage: "archivebox")
             }
         }
     }
@@ -2232,14 +2328,11 @@ struct SessionsListView: View {
     @ViewBuilder
     private func prAction(
         _ state: Session.PullRequestContextState,
-        session: Session,
-        workspace: SidebarWorkspace
+        session: Session
     ) -> some View {
         switch state {
         case .merged, .closed:
-            Button(role: .destructive) { archive(workspace) } label: {
-                Label("Archive", systemImage: "archivebox")
-            }
+            EmptyView()
         case .conflicts:
             Button {
                 promptForPr(
@@ -2367,40 +2460,65 @@ struct SessionsListView: View {
     }
     #endif
 
-    /// Trailing swipe (and Mac context-menu) action. Hidden for optimistic
-    /// rows — even after create returns a real id, the server may not have
-    /// exposed the session through its cached list yet.
-    ///
-    /// The swipe variant is `role: .destructive` and skips our own
-    /// `withAnimation`: the destructive role tells the List the row is going
-    /// away, so a full swipe runs the system's native delete choreography
-    /// (row slides off, neighbors close up). A non-destructive button first
-    /// snaps the cell shut and then our animation re-ran the whole
-    /// inset-grouped section reflow — visibly morphing iOS 26's
-    /// position-dependent corner radii at our curve's pace.
+    /// The reversible trailing swipe and primary context-menu action. A neutral
+    /// system swipe separates filing from the red Archive action one level in.
+    @ViewBuilder
+    private func settlementButton(
+        _ workspace: SidebarWorkspace,
+        viaSwipe: Bool = false
+    ) -> some View {
+        if groupBy != .activity,
+           !workspace.isOptimistic && !workspace.isDraftWorkspace {
+            let settled = lifecycleState(workspace).settled
+            let symbol = settled ? "arrow.up.circle" : "checkmark.circle"
+            let button = Button {
+                toggleSettled(workspace)
+            } label: {
+                Label(
+                    settled ? "Unsettle" : "Settle",
+                    systemImage: viaSwipe ? "\(symbol).fill" : symbol
+                )
+            }
+            if viaSwipe {
+                button.tint(.gray)
+            } else {
+                button
+            }
+        }
+    }
+
+    /// Archive stays explicit and destructive in context menus and on the Mac
+    /// Delete key. It never runs automatically.
     @ViewBuilder
     private func archiveButton(
         _ workspace: SidebarWorkspace,
         viaSwipe: Bool = false
     ) -> some View {
-        if !workspace.isOptimistic {
-            Button(role: viaSwipe ? .destructive : nil) {
+        if !workspace.isOptimistic && !workspace.isDraftWorkspace {
+            let button = Button(role: viaSwipe ? .destructive : nil) {
                 archive(workspace, animated: !viaSwipe)
             } label: {
-                // A Label, not our own icon+text stack: a swipe action lays
-                // out the system's label shape (glyph over caption, dropping
-                // to the glyph alone in a short swipe), and a custom view is
-                // rendered as its text only — which is why the archive glyph
-                // never appeared. `archivebox` is the metaphor the overflow
-                // menus here and in the session already use.
-                Label("Archive", systemImage: "archivebox.fill")
+                Label("Archive", systemImage: viaSwipe ? "archivebox.fill" : "archivebox")
             }
-            // Red, matching the web sidebar's own swipe action at phone width
-            // (.sidebar-swipe-action--archive, var(--red)): the same gesture on
-            // the same row should not change colour between the two clients.
-            // Our own palette rather than stock .red — see OS1VisualStyle.
-            .tint(OS1VisualStyle.red)
+            if viaSwipe {
+                button.tint(OS1VisualStyle.red)
+            } else {
+                button
+            }
         }
+    }
+
+    private func toggleSettled(_ workspace: SidebarWorkspace) {
+        let facts = WorkspaceLifecycle.facts(for: workspace)
+        let settled = lifecycleState(workspace).settled
+        withAnimation(.snappy(duration: 0.28)) {
+            WorkspaceSettlementStore.shared.set(
+                workspace,
+                settled: !settled,
+                terminalSignature: facts.terminalPullRequestSignature
+            )
+        }
+        Haptics.play(.selection)
     }
 
     @ViewBuilder
@@ -2491,19 +2609,17 @@ struct SessionsListView: View {
             }
             #endif
 
-            if groupBy == .project {
-                ForEach(repoInboxGroups) { repoGroup in
-                    // Folding a repo band takes its lane headings with it —
-                    // the band's own heading is the one thing left standing.
+            if groupsByProject {
+                ForEach(repoSessionGroups) { repoGroup in
                     let bandKey = repoBandKey(repoGroup.repo)
                     Section {
                         if !isCollapsed(bandKey) {
-                            ForEach(repoGroup.lanes) { laneGroup in
-                                statusLaneHeader(laneGroup)
+                            ForEach(repoGroup.sections) { group in
+                                statusLaneHeader(group)
                                 ForEach(
                                     visibleWorkspaces(
-                                        laneGroup.workspaces,
-                                        collapsedKey: laneGroup.id
+                                        group.workspaces,
+                                        collapsedKey: group.id
                                     )
                                 ) { workspace in
                                     sessionRow(workspace)
@@ -3289,15 +3405,6 @@ struct SessionsListView: View {
     }
 }
 
-private extension Session.PullRequestContextState {
-    var suggestsArchive: Bool {
-        switch self {
-        case .merged, .closed: true
-        default: false
-        }
-    }
-}
-
 private struct ArchivedSessionsView: View {
     let sessions: [Session]
     /// Whether the archived index has arrived. Archived rows travel on their
@@ -3625,8 +3732,10 @@ struct SessionRow: View {
     /// Settings → Appearance → Show last used time. Off by default, like the
     /// web's resting sidebar, and per device like the web's own copy of it.
     @AppStorage("os1.list.lastUsed") private var lastUsedPref = "off"
-    /// Mac: hover-revealed archive button (nil hides it).
-    var onArchive: (() -> Void)? = nil
+    /// Mac: the hover-revealed primary filing action.
+    var settled = false
+    var archivePrimary = false
+    var onPrimaryAction: (() -> Void)? = nil
 
     #if os(macOS)
     @State private var hovering = false
@@ -3636,14 +3745,16 @@ struct SessionRow: View {
         #if os(macOS)
         content
             .overlay(alignment: .trailing) {
-                if hovering, let onArchive {
-                    Button(action: onArchive) {
-                        Image(systemName: "archivebox")
+                if hovering, let onPrimaryAction {
+                    Button(action: onPrimaryAction) {
+                        Image(systemName: archivePrimary
+                            ? "archivebox"
+                            : (settled ? "arrow.up.circle" : "checkmark.circle"))
                             .font(.body)
                             .foregroundStyle(.secondary)
                     }
                     .buttonStyle(.borderless)
-                    .help("Archive")
+                    .help(archivePrimary ? "Archive" : (settled ? "Unsettle" : "Settle"))
                     // Keep the action legible over a long title.
                     .padding(4)
                     .background(.thinMaterial, in: RoundedRectangle(cornerRadius: 5))

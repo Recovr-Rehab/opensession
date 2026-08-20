@@ -82,25 +82,12 @@ export function readExpanded(): Set<string> {
 }
 
 // ── Grouping / filtering controls (the filter popover) ─────────────────────
-// The list is an inbox. Its rows band by what they want from you and when
-// they last moved (Needs action / Recent / Yesterday / Earlier / Done), and
-// that shape is what an inbox is rather than something you pick. "Group by"
-// is the one question left: what sits above those bands — nothing, one band
-// per project, or the status lanes (Needs input / In progress / …), which
-// stand in for the bands rather than nesting inside them.
-//
-// This replaced a pair of controls, "Sections" (inbox bands / status lanes /
-// none) and "Group by" (nothing / project), whose six combinations included
-// two nobody needed: a section-less list where every row carried its own
-// status mark, and the status lanes nested under each project, which turned
-// one "Needs input" heading into one per project with a row or two under
-// each. Scoping the list to a single project ("Repo") is how you read one
-// project's lanes now, and it costs no nesting.
-//
-// The list is narrowed to a single repo ("Repo") or a single person
-// ("Person"), and ordered by recency of activity or creation ("Sort by"). The
-// choices persist together per browser.
-export type GroupBy = "none" | "repo" | "status";
+// Two independent answers shape the list. "Group by" chooses the row sections:
+// Settled (stable Active / Settled lifecycle), Activity (Needs action / Recent /
+// Yesterday / Earlier), or Status (Needs input / In progress / …). "Group by
+// project" then decides whether those sections are global or repeated inside
+// each project. Repo and Person only narrow the same inventory.
+export type GroupBy = "settled" | "activity" | "status";
 export type SortBy = "updated" | "created";
 // Session-less PR rows folded into the project lanes: the default shows your
 // own PRs + explicit review requests (the retired PR band's default sources),
@@ -120,36 +107,27 @@ export type AutoCreatedFilter = "show" | "hide";
 export type EmptyProjectsFilter = "show" | "hide";
 export const DEFAULT_PROJECT = DEFAULT_REPO_ID;
 export const FILTER_KEY = "opensession-sidebar-filter";
-// Bumped when the grouping's shape or its default changes. Because setFilter
-// persists the whole state, a grouping stored before the bump is ambiguous:
-// most people got it by touching Repo or Person, not by choosing it. A
-// blob carrying the default of its day keeps its repo/person/sort but takes
-// the new default. Anything written at the current version says what it
-// means: since v3, "auto" is what an unpicked axis stores. v4 split the one
-// grouping into the `sections` / `groupBy` pair. v5 hides agent-created work
-// until someone asks to see it. v6 folded the pair back into one axis, minus
-// the two combinations it dropped.
-export const FILTER_VERSION = 6;
+// Bumped when project grouping became independent again and the lifecycle
+// sections gained their own Settled name. v7 restores Activity as a separate
+// date-banded option while preserving every v6 Active/Settled choice.
+export const FILTER_VERSION = 7;
 
-const GROUP_BYS: GroupBy[] = ["none", "repo", "status"];
+const GROUP_BYS: GroupBy[] = ["settled", "activity", "status"];
 
-/**
- * The grouping to use when nobody picked one. A single project has nothing
- * to band by, so its inbox stands on its own; several get one band each. It
- * re-decides as projects are added, since the choice is stored as "auto"
- * rather than as its answer.
- *
- * The count is only unknown on the very first load, before `/api/repos`
- * answers (lib/repo-count) — assume several then, so an instance that has them
- * doesn't paint a flat list and regroup a moment later.
- */
+/** Nobody choosing a section mode gets the stable lifecycle. */
 export function defaultGroupBy(): GroupBy {
+	return "settled";
+}
+
+/** Several projects default to project bands; one project does not need them. */
+export function defaultByProject(): boolean {
 	const count = repoCount();
-	return count !== null && count <= 1 ? "none" : "repo";
+	return count === null || count > 1;
 }
 
 export interface FilterState {
 	groupBy: GroupBy;
+	byProject: boolean;
 	repo: string; // a repo id, or "all"
 	// "me" (your workspaces — the default), "everyone" (literally all
 	// workspaces), "unassigned" (the aggregate backlog view), or a lowercased
@@ -161,11 +139,13 @@ export interface FilterState {
 	emptyProjects: EmptyProjectsFilter;
 }
 
-/** What the grouping can be on disk: a pick, or "auto" for nobody's pick. */
+/** What either grouping axis can be on disk: a pick, or auto when unpicked. */
 export type StoredGroupBy = GroupBy | "auto";
+export type StoredByProject = boolean | "auto";
 
-export interface StoredFilterState extends Omit<FilterState, "groupBy"> {
+export interface StoredFilterState extends Omit<FilterState, "groupBy" | "byProject"> {
 	groupBy: StoredGroupBy;
+	byProject: StoredByProject;
 }
 
 /**
@@ -188,6 +168,8 @@ export function getFilter(): FilterState {
 		current = {
 			...stored,
 			groupBy: stored.groupBy === "auto" ? defaultGroupBy() : stored.groupBy,
+			byProject:
+				stored.byProject === "auto" ? defaultByProject() : stored.byProject,
 		};
 	}
 	return current;
@@ -223,8 +205,8 @@ if (typeof window !== "undefined" && typeof window.addEventListener === "functio
 	// The project list landing (or a project being added) can change what
 	// "auto" means, so the sidebar re-reads it.
 	onRepoCountChanged(() => {
-		if (stored?.groupBy !== "auto") return;
-		if (current?.groupBy === defaultGroupBy()) return;
+		if (stored?.byProject !== "auto") return;
+		if (current?.byProject === defaultByProject()) return;
 		current = null;
 		window.dispatchEvent(new Event(CHANGE_EVENT));
 	});
@@ -274,57 +256,69 @@ export function personLensFilter(picked: string, currentUser: string): string {
 		: personFilterFor(picked, currentUser);
 }
 
-/** The single grouping v3 and earlier stored, as the one axis now says it.
- *  "repo-status" lands on the status lanes: they were the deliberate half of
- *  that pick, and the nesting is what went away. "recently" is absent on
- *  purpose: it was never in the menu, and the sidebar drew it as the plain
- *  status lanes, so it reads as unset like any other value nobody recognises. */
-const LEGACY_GROUPINGS: Record<string, StoredGroupBy> = {
-	status: "status",
-	repo: "repo",
-	"repo-status": "status",
-	"repo-inbox": "repo",
-	inbox: "none",
-};
+interface StoredGrouping {
+	groupBy: StoredGroupBy;
+	byProject: StoredByProject;
+}
 
-/**
- * Which grouping a stored blob is actually asking for. "auto" means nobody
- * chose, so the default decides and keeps deciding.
- *
- * v6 stores the one axis and says what it means. v4 and v5 stored a
- * `sections` / `groupBy` pair whose six combinations are now three: a blob
- * that asked for the status lanes keeps them whatever it was banded by, since
- * that is the half being kept, and a section-less list falls back to its
- * project banding. Older blobs stored one compound value, and since setFilter
- * persists the whole state that value may only be the default of its day. So
- * v2's "repo-status" and pre-v2's "status" read as unset, and every other
- * value maps to what it stood for. v3 is exempt: it already stored "auto" for
- * an unpicked grouping, so whatever it names is a real choice.
- */
-function storedGrouping(v: any): StoredGroupBy {
-	if (v?.v === FILTER_VERSION)
-		return GROUP_BYS.includes(v.groupBy) ? v.groupBy : "auto";
-	if (v?.v === 4 || v?.v === 5) {
-		// The sections axis shipped as `lanes` before the control was renamed,
-		// within v4. Same values, so read either key rather than dropping the
-		// pick of anyone who set one in between.
-		const sections = v.sections ?? v.lanes;
-		if (sections === "status") return "status";
-		return v.groupBy === "repo" || v.groupBy === "none" ? v.groupBy : "auto";
+/** Resolve every historical shape into the two independent v7 axes. */
+function storedGrouping(v: any): StoredGrouping {
+	if (v?.v === FILTER_VERSION) {
+		return {
+			groupBy: GROUP_BYS.includes(v.groupBy) ? v.groupBy : "auto",
+			byProject: typeof v.byProject === "boolean" ? v.byProject : "auto",
+		};
 	}
-	const legacy = LEGACY_GROUPINGS[v?.groupBy];
-	if (!legacy) return "auto";
-	if (v.v === 3) return legacy;
-	if (v.groupBy === "repo-status") return "auto";
-	if (v.groupBy === "status" && v.v !== 2) return "auto";
-	return legacy;
+	if (v?.v === 6) {
+		switch (v.groupBy) {
+			case "none":
+				return { groupBy: "settled", byProject: false };
+			case "repo":
+				return { groupBy: "settled", byProject: true };
+			case "status":
+				return { groupBy: "status", byProject: false };
+			default:
+				return { groupBy: "auto", byProject: "auto" };
+		}
+	}
+	if (v?.v === 4 || v?.v === 5) {
+		const sections = v.sections ?? v.lanes;
+		const groupBy: StoredGroupBy =
+			sections === "status"
+				? "status"
+				: sections === "inbox"
+					? "activity"
+					: sections === "none"
+						? "settled"
+						: "auto";
+		const byProject: StoredByProject =
+			v.groupBy === "repo" ? true : v.groupBy === "none" ? false : "auto";
+		return { groupBy, byProject };
+	}
+	const legacy: Record<string, StoredGrouping> = {
+		status: { groupBy: "status", byProject: false },
+		repo: { groupBy: "activity", byProject: true },
+		"repo-status": { groupBy: "status", byProject: true },
+		"repo-inbox": { groupBy: "activity", byProject: true },
+		inbox: { groupBy: "activity", byProject: false },
+	};
+	const mapped = legacy[v?.groupBy];
+	if (!mapped) return { groupBy: "auto", byProject: "auto" };
+	if (v.v === 3) return mapped;
+	if (v.groupBy === "repo-status")
+		return { groupBy: "auto", byProject: "auto" };
+	if (v.groupBy === "status" && v.v !== 2)
+		return { groupBy: "auto", byProject: "auto" };
+	return mapped;
 }
 
 export function readStoredFilter(): StoredFilterState {
 	try {
 		const v = JSON.parse(localStorage.getItem(FILTER_KEY) || "{}");
+		const grouping = storedGrouping(v);
 		return {
-			groupBy: storedGrouping(v),
+			groupBy: grouping.groupBy,
+			byProject: grouping.byProject,
 			repo: typeof v.repo === "string" ? v.repo : "all",
 			// Legacy stored "all" behaved as "you" in the lanes — map it to "me"
 			// so nobody's default flips to everyone.
@@ -349,6 +343,7 @@ export function readStoredFilter(): StoredFilterState {
 	} catch {
 		return {
 			groupBy: "auto",
+			byProject: "auto",
 			repo: "all",
 			person: "me",
 			sort: "updated",

@@ -8,44 +8,33 @@ import Foundation
 /// `Views/SessionsFilterPanel.swift`; the list that reads it is
 /// `Views/SessionsListView.swift`.
 
-/// What sits above the list's activity bands.
+/// How the workspace list is organized.
 ///
-/// The list is an inbox whichever of these is picked: its rows band by what
-/// they want from you and when they last moved (Needs action / Recent /
-/// Yesterday / Earlier). This is the one question left, and it has three
-/// answers: nothing above those bands, one band per project, or the status
-/// lanes, which stand in for the bands rather than nesting inside them.
-///
-/// Six cases became three. Two combinations went deliberately: a flat
-/// "Recently active" list with no headings at all, and the status lanes nested
-/// under each project, which split the one "Needs input" heading status is for
-/// into one per project with a row or two under each. Scoping the list to a
-/// project is how you read one project's lanes now, and it costs no nesting.
+/// Settled is the stable Active/Settled lifecycle. Activity restores the date
+/// bands, and Status is the dynamic lane view. Project grouping is a separate
+/// switch, so any of those three can be global or repeated per project.
 enum SidebarGroupBy: String, CaseIterable, Sendable {
-    /// The inbox bands with nothing above them. Stored under the web's
-    /// spelling, so the two clients read each other's value.
-    case activity = "none"
-    case project = "repo"
+    case settled
+    case activity
     case status
 
     var label: String {
         switch self {
+        case .settled: "Settled"
         case .activity: "Activity"
-        case .project: "Project"
         case .status: "Status"
         }
     }
 
-    /// The grouping to use when nobody has picked one. A single project has
-    /// nothing to band by, so its inbox stands on its own; several get one
-    /// band each. It re-decides as projects are added, since nothing is
-    /// stored until somebody picks.
-    ///
-    /// The count is only unknown on the very first load, before `/api/repos`
-    /// answers, so assume several then: an instance that has them should not
-    /// paint a flat list and re-band a moment later.
+    /// The section mode to use when nobody has picked one.
     static func fallback(repoCount: Int) -> SidebarGroupBy {
-        repoCount == RepoCount.unknown || repoCount > 1 ? .project : .activity
+        .settled
+    }
+
+    /// Project grouping is a separate axis. Until somebody picks it, several
+    /// projects get bands and one project stays flat.
+    static func defaultGroupsByProject(repoCount: Int) -> Bool {
+        repoCount == RepoCount.unknown || repoCount > 1
     }
 
     /// What a stored value means now, including the five spellings this app
@@ -53,16 +42,22 @@ enum SidebarGroupBy: String, CaseIterable, Sendable {
     /// writes the new spelling, and a value nobody recognises falls back to
     /// the default like an unpicked one.
     ///
-    /// `repo-status` lands on Project, where the web sends the same value to
-    /// Status. The two clients dropped that combination from opposite sides:
-    /// on the web the status lanes were the deliberate half of the pick, while
-    /// here it was the DEFAULT for every multi-project instance, so its repo
-    /// bands are what people are actually looking at.
+    /// Compound project values keep both halves through
+    /// `legacyGroupsByProject` below.
     static func stored(_ raw: String) -> SidebarGroupBy? {
         switch raw {
-        case "none", "inbox", "recent": .activity
-        case "repo", "repo-inbox", "repo-status": .project
-        case "status": .status
+        case "settled", "none", "repo": .settled
+        case "activity", "inbox", "recent", "repo-inbox": .activity
+        case "status", "repo-status": .status
+        default: nil
+        }
+    }
+
+    /// Whether an older one-axis value carried project bands.
+    static func legacyGroupsByProject(_ raw: String) -> Bool? {
+        switch raw {
+        case "repo", "repo-inbox", "repo-status": true
+        case "settled", "activity", "status", "none", "inbox", "recent": false
         default: nil
         }
     }

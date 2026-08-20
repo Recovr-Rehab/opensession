@@ -2052,9 +2052,9 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 			snoozedWsRows,
 		],
 	);
-	// Grouping by project draws the repo bands, and so gives every lane
-	// somewhere to nest.
-	const groupsByRepo = filter.groupBy === "repo";
+	// Project bands are independent from the section mode. Settled, Activity,
+	// and Status can each render globally or inside every project.
+	const groupsByRepo = filter.byProject;
 	const hasWorkspaceFilter =
 		!!search ||
 		filter.repo !== "all" ||
@@ -2542,6 +2542,7 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 				window.setTimeout(() => {
 					if (action === "settle") {
 						if (isDraftWsRow(row)) deleteDraftWsRow(row);
+						else if (filter.groupBy === "activity") archiveWorkspaceWithNext(row);
 						else setWorkspaceSettled(row, !rowIsSettled(row));
 					} else {
 						workspacePinState(row).toggle();
@@ -2941,6 +2942,7 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 		// away from Activity and Project layouts.
 		const showRunDuration = runStartMs !== null;
 		const settled = rowIsSettled(row);
+		const archivePrimary = filter.groupBy === "activity";
 		const swipeOffset = isPhone && wsSwipe?.key === row.key ? wsSwipe.offset : 0;
 		const swipeAction = isPhone && wsSwipe?.key === row.key ? wsSwipe.action : null;
 		const draggingRow = wsDraggingKey === row.key;
@@ -2989,20 +2991,35 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 					<button
 						className={cn(
 							SIDEBAR_SWIPE_ACTION,
-							SIDEBAR_SWIPE_ACTION_SETTLE,
+							archivePrimary
+								? SIDEBAR_SWIPE_ACTION_ARCHIVE
+								: SIDEBAR_SWIPE_ACTION_SETTLE,
 							swipeSide === "settle" && SIDEBAR_SWIPE_ACTION_OPEN,
 							draggingRow ? "transition-none" : SIDEBAR_SWIPE_ACTION_TRANSITION,
 						)}
-						data-swipe-action={settled ? "unsettle" : "settle"}
+						data-swipe-action={archivePrimary ? "archive" : settled ? "unsettle" : "settle"}
 						onClick={(e) => {
 							e.stopPropagation();
 							setWsSwipe(null);
-							setWorkspaceSettled(row, !settled);
+							if (archivePrimary) archiveWorkspaceWithNext(row);
+							else setWorkspaceSettled(row, !settled);
 						}}
-						title={settled ? "Unsettle workspace" : "Settle workspace"}
+						title={
+							archivePrimary
+								? "Archive workspace"
+								: settled
+									? "Unsettle workspace"
+									: "Settle workspace"
+						}
 					>
-						{settled ? <IconArrowUp size={22} /> : <IconCheckCircle size={22} />}
-						<span>{settled ? "Unsettle" : "Settle"}</span>
+						{archivePrimary ? (
+							<IconArchive size={22} />
+						) : settled ? (
+							<IconArrowUp size={22} />
+						) : (
+							<IconCheckCircle size={22} />
+						)}
+						<span>{archivePrimary ? "Archive" : settled ? "Unsettle" : "Settle"}</span>
 					</button>
 				)}
 				{/* A draft row's left swipe deletes instead of settling: it has no
@@ -3368,24 +3385,51 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 						</span>
 					</Tooltip>
 					{row.sessions.length > 0 ? (
-						<Tooltip label={settled ? "Unsettle workspace" : "Settle workspace"}>
+						<Tooltip
+							label={
+								archivePrimary
+									? "Archive workspace"
+									: settled
+										? "Unsettle workspace"
+										: "Settle workspace"
+							}
+						>
 							<span
 								role="button"
 								tabIndex={0}
-								className={cn(SIDEBAR_WS_ACTION, "text-faint hover:text-fg")}
-								aria-label={settled ? "Unsettle workspace" : "Settle workspace"}
+								className={cn(
+									SIDEBAR_WS_ACTION,
+									archivePrimary
+										? "text-faint hover:text-red"
+										: "text-faint hover:text-fg",
+								)}
+								aria-label={
+									archivePrimary
+										? "Archive workspace"
+										: settled
+											? "Unsettle workspace"
+											: "Settle workspace"
+								}
 								onClick={(e) => {
 									e.stopPropagation();
-									setWorkspaceSettled(row, !settled);
+									if (archivePrimary) archiveWorkspaceWithNext(row);
+									else setWorkspaceSettled(row, !settled);
 								}}
 								onKeyDown={(e) => {
 									if (e.key === "Enter" || e.key === " ") {
 										e.stopPropagation();
-										setWorkspaceSettled(row, !settled);
+										if (archivePrimary) archiveWorkspaceWithNext(row);
+										else setWorkspaceSettled(row, !settled);
 									}
 								}}
 							>
-								{settled ? <IconArrowUp size={19} /> : <IconCheckCircle size={19} />}
+								{archivePrimary ? (
+									<IconArchive size={19} />
+								) : settled ? (
+									<IconArrowUp size={19} />
+								) : (
+									<IconCheckCircle size={19} />
+								)}
 							</span>
 						</Tooltip>
 					) : row.workspace?.draft ? (
@@ -3711,6 +3755,96 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 		return lanes;
 	}
 
+	// Activity sections use the old inbox rhythm: blocked work first, then
+	// Recent, Yesterday, and Earlier. Rows rank by activity inside each band.
+	function renderInboxBands(
+		rows: WsRow[],
+		ns = "",
+		snoozedRows: WsRow[] = [],
+		prItems: ReviewQueueItem[] = [],
+	) {
+		const sorted = [...rows].sort((a, b) =>
+			(b.lastActivity || "").localeCompare(a.lastActivity || ""),
+		);
+		const dayStart = new Date();
+		dayStart.setHours(0, 0, 0, 0);
+		const todayMs = dayStart.getTime();
+		const yesterdayMs = todayMs - 24 * 60 * 60 * 1000;
+		const bands: Array<{
+			key: string;
+			label: string;
+			rows: WsRow[];
+			prs: ReviewQueueItem[];
+		}> = [
+			{ key: "needsaction", label: "Needs action", rows: [], prs: [] },
+			{ key: "recent", label: "Recent", rows: [], prs: [] },
+			{ key: "yesterday", label: "Yesterday", rows: [], prs: [] },
+			{ key: "earlier", label: "Earlier", rows: [], prs: [] },
+		];
+		const [needsAction, recent, yesterday, earlier] = bands;
+		for (const row of sorted) {
+			const time = Date.parse(row.lastActivity || "");
+			if (row.status === "needsinput" || row.mention)
+				needsAction.rows.push(row);
+			else if (row.running || time >= todayMs) recent.rows.push(row);
+			else if (time >= yesterdayMs) yesterday.rows.push(row);
+			else earlier.rows.push(row);
+		}
+		for (const item of [...prItems].sort((a, b) =>
+			(b.pr.updatedAt || "").localeCompare(a.pr.updatedAt || ""),
+		)) {
+			const time = Date.parse(item.pr.updatedAt || "");
+			if (time >= todayMs) recent.prs.push(item);
+			else if (time >= yesterdayMs) yesterday.prs.push(item);
+			else earlier.prs.push(item);
+		}
+		const nodes = bands
+			.filter((band) => band.rows.length > 0 || band.prs.length > 0)
+			.map((band) => {
+				const gkey = `${ns}inbox:${band.key}`;
+				const open = isOpen(gkey);
+				return (
+					<div className={SIDEBAR_STATUS_GROUP} data-status-group key={gkey}>
+						<button
+							className={cn(
+								SIDEBAR_GROUP_HEADER,
+								SIDEBAR_GROUP_HEADER_INSET,
+								SIDEBAR_LANE_HEADER,
+								"transition-colors",
+								SIDEBAR_STICKY_LANE,
+								ns && SIDEBAR_STICKY_LANE_NESTED,
+								SIDEBAR_STUCK_BACKING,
+							)}
+							data-sticky-head
+							onClick={() => toggleGroup(gkey)}
+						>
+							<span className={cn(SIDEBAR_GROUP_NAME, SIDEBAR_LANE_NAME)}>
+								{band.label}
+							</span>
+							<span className={SIDEBAR_LANE_COUNT}>
+								{band.rows.length + band.prs.length}
+							</span>
+							<IconChevronDown
+								className={cn(
+									SIDEBAR_GROUP_CHEVRON,
+									!open && SIDEBAR_GROUP_CHEVRON_COLLAPSED,
+								)}
+								size={12}
+								style={{ transform: open ? "none" : "rotate(-90deg)" }}
+							/>
+						</button>
+						{band.rows
+							.filter((row) => open || rowOwnsSelection(row))
+							.map((row) => renderWsRowImpl(row, !ns))}
+						{band.prs.filter((item) => open || prRowSelected(item)).map(renderPrRow)}
+					</div>
+				);
+			});
+		if (snoozedRows.length > 0)
+			nodes.push(renderSnoozedGroup(snoozedRows, ns));
+		return nodes;
+	}
+
 	// ── Active / Settled lifecycle sections ────────────────────────────────
 	// Both use the same row component and density. The heading and stable
 	// creation/settlement ordering carry the lifecycle, not a card-size change.
@@ -3757,9 +3891,36 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 		);
 	}
 
-	// "Group by: Project" — one collapsible band per repo, with Active rows in
-	// stable creation order. Settled remains one global shelf below the project
-	// list, so filing work does not duplicate that shelf under every repo.
+	function renderWorkspaceGrouping(
+		rows: WsRow[],
+		ns = "",
+		snoozedRows: WsRow[] = [],
+		laneRepo?: string,
+		prItems: ReviewQueueItem[] = [],
+	) {
+		if (filter.groupBy === "activity")
+			return renderInboxBands(rows, ns, snoozedRows, prItems);
+		if (filter.groupBy === "status")
+			return renderStatusLanes(rows, ns, snoozedRows, laneRepo, prItems);
+		const active = sortActiveByCreation(
+			rows.filter((row) => !lifecycleByKey.get(row.key)?.settled),
+			lifecycleFacts,
+		);
+		const settled = sortSettledByTime(
+			rows.filter((row) => lifecycleByKey.get(row.key)?.settled),
+			lifecycleByKey,
+			lifecycleFacts,
+		);
+		return [
+			renderLifecycleSection("Active", active, ns),
+			renderLifecycleSection("Settled", settled, ns),
+			...prItems.map(renderPrRow),
+			...(snoozedRows.length > 0 ? [renderSnoozedGroup(snoozedRows, ns)] : []),
+		];
+	}
+
+	// Project grouping is independent from the section mode. Each collapsible
+	// repo repeats Settled, Activity, or Status according to the other control.
 	// Scratch workspaces stay in one unlabelled group above them:
 	// they have no project, even when an older workspace record carries a stale
 	// repo. A collapsed band wears a count of the urgent rows it hides. Repos
@@ -3769,14 +3930,12 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 	function renderRepoGroups() {
 		const byRepo = new Map<string, WsRow[]>();
 		const snoozedByRepo = new Map<string, WsRow[]>();
-		const scratchRows = [
-			...activeFocusWsRows.filter(
-				(row) => !rowIsFeedOnly(row) && rowIsScratch(row),
-			),
-			...snoozedWsRows.filter(
-				(row) => !rowIsFeedOnly(row) && rowIsScratch(row),
-			),
-		];
+		const scratchRows = focusWsRows.filter(
+			(row) => !rowIsFeedOnly(row) && rowIsScratch(row),
+		);
+		const scratchSnoozedRows = snoozedWsRows.filter(
+			(row) => !rowIsFeedOnly(row) && rowIsScratch(row),
+		);
 		const bucket = (map: Map<string, WsRow[]>, repo: string) => {
 			let b = map.get(repo);
 			if (!b) {
@@ -3791,7 +3950,7 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 		// file them under the default project, which is the one place they
 		// certainly don't belong.
 		const bandOf = (r: WsRow) => (rowIsAsk(r) ? ASK_BAND : wsRowRepo(r));
-		for (const r of activeFocusWsRows)
+		for (const r of focusWsRows)
 			if (!rowIsFeedOnly(r) && !rowIsScratch(r))
 				bucket(byRepo, bandOf(r)).push(r);
 		// Each repo's snoozed rows stay in that repo's own band, as a Snoozed
@@ -3927,9 +4086,13 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 		};
 		return (
 			<>
-				{scratchRows.length > 0 && (
+				{(scratchRows.length > 0 || scratchSnoozedRows.length > 0) && (
 					<div className="mb-2" data-sidebar-scratch-workspaces>
-						{scratchRows.map((row) => renderWsRowImpl(row, true))}
+						{renderWorkspaceGrouping(
+							scratchRows,
+							"scratch::",
+							scratchSnoozedRows,
+						)}
 					</div>
 				)}
 				{/* Every band after the first opens with whitespace, whatever
@@ -4128,9 +4291,13 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 									rows: awaitingRepoRows,
 									ns: `repo:${repo}::`,
 								})}
-								{rows.map((row) => renderWsRowImpl(row, false))}
-								{prs.map(renderPrRow)}
-								{renderSnoozedGroup(snoozedRows, `repo:${repo}::`)}
+								{renderWorkspaceGrouping(
+									rows,
+									`repo:${repo}::`,
+									snoozedRows,
+									repo,
+									prs,
+								)}
 							</div>
 						) : (
 							(selectedReviewRows.length > 0 ||
@@ -5588,9 +5755,8 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 				    header above (which carries the filter, new-workspace and
 				    new-session actions) — no second in-list heading. ── */}
 				<div className={SIDEBAR_GROUP}>
-					{/* Activity is the stable Active/Settled inbox. Project keeps that
-					    creation order inside each repo and shares one Settled shelf.
-					    Status remains the explicit dynamic view whose rows move lanes. */}
+					{/* Settled, Activity, and Status choose the row sections. Project
+					    independently decides whether those sections repeat per repo. */}
 					{/* Snoozed rows sit out of focusWsRows, so each layout places
 					    them itself: under a project band every band gets its own
 					    Snoozed group (renderRepoGroups), the ungrouped inbox renders
@@ -5605,33 +5771,25 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 					{groupsByRepo ? (
 						<>
 							{renderRepoGroups()}
-							{renderLifecycleSection("Settled", settledFocusWsRows)}
 							{visibleFeeds.map((d) => renderFeedBand(d, true))}
 						</>
-					) : filter.groupBy === "status" ? (
+					) : (
 						[
-							...renderStatusLanes(
-								activeFocusWsRows,
+							...renderWorkspaceGrouping(
+								focusWsRows,
 								"",
 								snoozedWsRows,
 								undefined,
-								lanePrItems,
+								filter.groupBy === "status" ? lanePrItems : [],
 							),
-							renderLifecycleSection("Settled", settledFocusWsRows),
-							// Plain's priority lanes stay inlined after the status
-							// lanes (one continuous list); other feeds render as
-							// bands below.
-							...renderSupportLanes(plainThreadsInView),
-							...visibleFeeds
-								.filter((d) => d.id !== "plain")
-								.map((d) => renderFeedBand(d, false)),
-						]
-					) : (
-						[
-							renderLifecycleSection("Active", activeFocusWsRows),
-							renderLifecycleSection("Settled", settledFocusWsRows),
-							...renderStatusLanes([], "", snoozedWsRows),
-							...visibleFeeds.map((d) => renderFeedBand(d, true)),
+							...(filter.groupBy === "status"
+								? [
+										...renderSupportLanes(plainThreadsInView),
+										...visibleFeeds
+											.filter((d) => d.id !== "plain")
+											.map((d) => renderFeedBand(d, false)),
+									]
+								: visibleFeeds.map((d) => renderFeedBand(d, true))),
 						]
 					)}
 				</div>
@@ -5892,9 +6050,14 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 							<WsCardBody
 								row={wsHover.row}
 								settled={rowIsSettled(wsHover.row)}
+								archivePrimary={filter.groupBy === "activity"}
 								onToggleSettled={() => {
 									closeWsHover();
 									setWorkspaceSettled(wsHover.row, !rowIsSettled(wsHover.row));
+								}}
+								onArchive={() => {
+									closeWsHover();
+									archiveWorkspaceWithNext(wsHover.row);
 								}}
 								onOpen={(session) => {
 									closeWsHover();
@@ -5924,6 +6087,7 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 							row={row}
 							pinned={pinned}
 							settled={rowIsSettled(row)}
+							archivePrimary={filter.groupBy === "activity"}
 							onToggleSettled={() =>
 								setWorkspaceSettled(row, !rowIsSettled(row))
 							}
