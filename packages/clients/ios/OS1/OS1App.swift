@@ -82,8 +82,50 @@ struct OS1App: App {
     }
 }
 
-struct RootView: View {
+/// Runs scene-sensitive account work in a leaf so foreground transitions do
+/// not invalidate the sessions list and every conversation under it.
+private struct RootSceneLifecycle: View {
     @Environment(\.scenePhase) private var scenePhase
+    let config: ServerConfig
+
+    var body: some View {
+        Color.clear
+            .frame(width: 0, height: 0)
+            .task(id: hydrationID) {
+                guard scenePhase == .active else {
+                    PresenceStore.shared.stop()
+                    return
+                }
+                PresenceStore.shared.start()
+                while !Task.isCancelled {
+                    await NativePreferences.hydrate()
+                    await HideStore.shared.hydrate()
+                    await PinStore.shared.hydrate()
+                    await LaneStore.shared.hydrate()
+                    await MentionStore.shared.hydrate()
+                    await ReadsStore.shared.hydrate()
+                    await DraftsStore.shared.hydrate()
+                    try? await Task.sleep(for: .seconds(30))
+                }
+            }
+            .onChange(of: scenePhase) { _, phase in
+                if phase == .active {
+                    GitHubSignIn.shared.nudge()
+                    // A grant can die while the app is in the background, and
+                    // polls that fail quietly are exactly what this replaces.
+                    AuthGate.shared.confirm()
+                } else {
+                    DraftsStore.shared.flushAll()
+                }
+            }
+    }
+
+    private var hydrationID: String {
+        "\(scenePhase)|\(config.baseURLString)|\(config.userName)|\(config.githubLogin)|\(config.token.hashValue)"
+    }
+}
+
+struct RootView: View {
     @AppStorage("os1.appearance") private var appearance = "system"
     @State private var config = ServerConfig.shared
     @State private var authGate = AuthGate.shared
@@ -143,36 +185,9 @@ struct RootView: View {
                     }
                 }
             }
-            .task(id: preferenceHydrationID) {
-                guard scenePhase == .active else {
-                    PresenceStore.shared.stop()
-                    return
-                }
-                PresenceStore.shared.start()
-                while !Task.isCancelled {
-                    await NativePreferences.hydrate()
-                    await HideStore.shared.hydrate()
-                    await PinStore.shared.hydrate()
-                    await LaneStore.shared.hydrate()
-                    await MentionStore.shared.hydrate()
-                    await ReadsStore.shared.hydrate()
-                    await DraftsStore.shared.hydrate()
-                    try? await Task.sleep(for: .seconds(30))
-                }
-            }
-            // Coming back from Safari/GitHub after approving the device code:
-            // poll right away so the sign-in lands the moment we're foreground
-            // (also revives a poll loop that died with the process).
-            .onChange(of: scenePhase) { _, phase in
-                if phase == .active {
-                    GitHubSignIn.shared.nudge()
-                    // A grant can die while the app is in the background, and
-                    // polls that fail quietly are exactly what this replaces.
-                    AuthGate.shared.confirm()
-                } else {
-                    DraftsStore.shared.flushAll()
-                }
-            }
+            // Keep scenePhase out of this root. On a background transition,
+            // only the lifecycle leaf should update.
+            .background { RootSceneLifecycle(config: config) }
             #if os(iOS)
             .task(id: liveActivityTaskID) {
                 if liveActivitiesEnabled {
@@ -195,13 +210,13 @@ struct RootView: View {
         }
     }
 
-    private var preferenceHydrationID: String {
-        "\(scenePhase)|\(config.baseURLString)|\(config.userName)|\(config.githubLogin)|\(config.token.hashValue)"
+    private var connectionID: String {
+        "\(config.baseURLString)|\(config.userName)|\(config.githubLogin)|\(config.token.hashValue)"
     }
 
     #if os(iOS)
     private var liveActivityTaskID: String {
-        "\(liveActivitiesEnabled)|\(preferenceHydrationID)"
+        "\(liveActivitiesEnabled)|\(connectionID)"
     }
     #endif
 }

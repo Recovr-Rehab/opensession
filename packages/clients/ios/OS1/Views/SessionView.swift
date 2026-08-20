@@ -3,6 +3,37 @@ import SwiftUI
 import AppKit
 #endif
 
+/// Owns session start/stop and foreground presence without making the large
+/// conversation view depend on `scenePhase`. A scene update should compare
+/// this leaf, not every conditional branch in a live transcript.
+private struct SessionSceneLifecycle: View {
+    @Environment(\.scenePhase) private var scenePhase
+    let viewModel: SessionViewModel
+
+    var body: some View {
+        Color.clear
+            .frame(width: 0, height: 0)
+            .task {
+                let owner = UUID()
+                viewModel.start(owner: owner)
+                defer { viewModel.stop(owner: owner) }
+                if scenePhase != .active { viewModel.appDidEnterBackground() }
+                while !Task.isCancelled {
+                    try? await Task.sleep(for: .seconds(3_600))
+                }
+            }
+            .onChange(of: scenePhase) { _, phase in
+                // Presence follows the foreground app, not input activity.
+                // Resync immediately when the app becomes active again.
+                switch phase {
+                case .active: viewModel.appDidBecomeActive()
+                case .inactive, .background: viewModel.appDidEnterBackground()
+                @unknown default: viewModel.appDidEnterBackground()
+                }
+            }
+    }
+}
+
 struct SessionView: View {
     @State private var viewModel: SessionViewModel
     private let tabs: [Session]
@@ -28,7 +59,6 @@ struct SessionView: View {
     /// carrying them. Nil while the tab strip has them, which is what keeps
     /// one list from appearing in two places at once.
     private let workspaceHistory: WorkspaceSessionHistory?
-    @Environment(\.scenePhase) private var scenePhase
     @Environment(\.horizontalSizeClass) private var horizontalSizeClass
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     /// The appearance the conversation itself is drawn in — read out here,
@@ -770,52 +800,42 @@ struct SessionView: View {
             #endif
 
         presentedContent
+            // Scene phase is a hot environment value. Reading it in this view
+            // invalidated the entire transcript when the app backgrounded; a
+            // long live turn could spend the watchdog's full 10 seconds in
+            // SwiftUI's AttributeGraph comparison. Keep that dependency in a
+            // zero-sized lifecycle leaf instead.
+            .background { SessionSceneLifecycle(viewModel: viewModel) }
             .task {
-            let owner = UUID()
-            viewModel.start(owner: owner)
-            defer { viewModel.stop(owner: owner) }
-            if scenePhase != .active { viewModel.appDidEnterBackground() }
-            catalog = try? await OS1API.models(workspaceId: viewModel.session.workspaceId)
-            #if DEBUG && os(iOS)
-            if ProcessInfo.processInfo.environment["OS1_OPEN_WORKTREE_INFO"] == "1" {
-                showWorktreeInfo = true
+                catalog = try? await OS1API.models(workspaceId: viewModel.session.workspaceId)
+                #if DEBUG && os(iOS)
+                if ProcessInfo.processInfo.environment["OS1_OPEN_WORKTREE_INFO"] == "1" {
+                    showWorktreeInfo = true
+                }
+                // Land straight on the PR panel. The simulator takes no taps from
+                // a headless host, so verifying anything behind a control means
+                // reaching it some other way — same reason as the sheet above.
+                if ProcessInfo.processInfo.environment["OS1_OPEN_PR"] == "1",
+                   openPanel.isAvailable {
+                    openPanel(.review(sessionId: viewModel.session.id))
+                }
+                if ProcessInfo.processInfo.environment["OS1_OPEN_CHANGES"] == "1",
+                   openPanel.isAvailable {
+                    openPanel(.changes(sessionId: viewModel.session.id))
+                }
+                #endif
             }
-            // Land straight on the PR panel. The simulator takes no taps from
-            // a headless host, so verifying anything behind a control means
-            // reaching it some other way — same reason as the sheet above.
-            if ProcessInfo.processInfo.environment["OS1_OPEN_PR"] == "1",
-               openPanel.isAvailable {
-                openPanel(.review(sessionId: viewModel.session.id))
+            .onDisappear {
+                onSaveComposerDraft?(SessionViewModel.ComposerDraft(
+                    text: viewModel.draft,
+                    images: viewModel.attachedImages
+                ))
+                viewModel.quoteSelection.clear()
             }
-            if ProcessInfo.processInfo.environment["OS1_OPEN_CHANGES"] == "1",
-               openPanel.isAvailable {
-                openPanel(.changes(sessionId: viewModel.session.id))
+            .onChange(of: DraftsStore.shared.remoteRevision) {
+                let remote = DraftsStore.shared.mountedText(for: viewModel.session.id)
+                if viewModel.draft != remote { viewModel.draft = remote }
             }
-            #endif
-            while !Task.isCancelled {
-                try? await Task.sleep(for: .seconds(3_600))
-            }
-        }
-        .onDisappear {
-            onSaveComposerDraft?(SessionViewModel.ComposerDraft(
-                text: viewModel.draft,
-                images: viewModel.attachedImages
-            ))
-            viewModel.quoteSelection.clear()
-        }
-        .onChange(of: DraftsStore.shared.remoteRevision) {
-            let remote = DraftsStore.shared.mountedText(for: viewModel.session.id)
-            if viewModel.draft != remote { viewModel.draft = remote }
-        }
-        .onChange(of: scenePhase) { _, phase in
-            // Presence follows the foreground app, not input activity. Resync
-            // (and reconnect if dead) the moment it becomes active again.
-            switch phase {
-            case .active: viewModel.appDidBecomeActive()
-            case .inactive, .background: viewModel.appDidEnterBackground()
-            @unknown default: viewModel.appDidEnterBackground()
-            }
-        }
     }
 
     /// A separate view struct on purpose: typing mutates `viewModel.draft` on
