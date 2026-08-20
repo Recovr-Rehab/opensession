@@ -1102,14 +1102,12 @@ export function PrStatusBar({
 						}
 					/>
 				) : pr ? (
-					// The PR title the row stopped showing is the fastest way to know
-					// which PR this is, so it is what the tooltip says, with the
-					// modified-click destination under it.
+					// The session already names the work. The tooltip only explains
+					// the modified-click destination that the hover arrow advertises.
 					<Tooltip
-						label={`#${pr.number} · ${pr.title}${externalHint ? `\n${externalHint}` : ""}`}
+						label={externalHint || `Open #${pr.number}`}
 						side="bottom"
 						align="start"
-						multiline
 					>
 						<a
 							className={cn(labelClass, "no-underline")}
