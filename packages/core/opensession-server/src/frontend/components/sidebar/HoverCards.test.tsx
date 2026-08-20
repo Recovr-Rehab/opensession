@@ -1,7 +1,8 @@
 import { describe, expect, test } from "bun:test";
 import React from "react";
 import { renderToStaticMarkup } from "react-dom/server";
-import { SessionCardBody, WsCardBody } from "./HoverCards";
+import { CardOverview, SessionCardBody, WsCardBody } from "./HoverCards";
+import type { WorkspaceOverview } from "../../lib/api";
 import type { WsCardRow } from "../../lib/sidebar-hover";
 import type { UnifiedSession } from "../../lib/types";
 
@@ -122,6 +123,28 @@ describe("hover cards drop the repo and the idle timestamp", () => {
 			expect(html).toContain("+25");
 			expect(html).toContain("-1");
 			expect(html).not.toContain("opensession");
+		}
+	});
+
+	test("message previews and callouts use the compact metadata size", () => {
+		const preview = renderToStaticMarkup(
+			<CardOverview
+				ov={
+					{
+						lastMessage: { content: "A compact latest message" },
+					} as WorkspaceOverview
+				}
+			/>,
+		);
+		const callout = renderToStaticMarkup(
+			<SessionCardBody
+				session={session({ lastRunError: { message: "Stopped", at: AGO } })}
+			/>,
+		);
+		for (const html of [preview, callout]) {
+			expect(html).toContain("text-meta");
+			expect(html).not.toContain("text-supporting");
+			expect(html).not.toContain("text-xs");
 		}
 	});
 });
