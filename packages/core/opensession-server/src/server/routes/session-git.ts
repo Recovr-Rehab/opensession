@@ -25,6 +25,7 @@ import { defaultRepo } from "../config";
 import { $ } from "bun";
 import { existsSync } from "fs";
 import { resolve } from "path";
+import { githubMutationCredential } from "./github-credential";
 
 function isDiffGroupFile(file: unknown): file is DiffGroupFile {
 	if (typeof file !== "object" || file === null) return false;
@@ -423,6 +424,7 @@ export async function handleSessionGitRoutes(
 			target.dir,
 			session.branch || "HEAD",
 			target.primary ? await workspaceExecFor(session, target.dir) : undefined,
+			githubMutationCredential(ctx)?.env,
 		);
 		if ("error" in result) return Response.json(result, { status: 502 });
 		return Response.json(result);
@@ -453,6 +455,7 @@ export async function handleSessionGitRoutes(
 			target.dir,
 			body?.base ? target.defaultBranch : undefined,
 			target.primary ? await workspaceExecFor(session, target.dir) : undefined,
+			githubMutationCredential(ctx)?.env,
 		);
 		if ("error" in result) return Response.json(result, { status: 502 });
 		return Response.json(result);

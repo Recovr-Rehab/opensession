@@ -2,22 +2,13 @@
  * Git credential helper for github.com remotes.
  *
  * Registered per checkout by setup-repos.ts and reached through the stable
- * `opensession github-credential` command. A run-scoped GH_TOKEN wins. Without
- * one, the checkout's recorded non-secret username selects its stored account;
- * personal simple mode can also fall back to its sole account. No token is
- * written to git config or a remote URL.
+ * `opensession github-credential` command. It answers only from GH_TOKEN in
+ * this process. Trusted interactive runs and explicit server-side Git calls
+ * inject that value; unattended runs receive neither the token nor a way to
+ * resolve one from the server-side account store.
  */
 
-import {
-  githubCredentialForLogin,
-  soleGithubAccount,
-} from "../../packages/core/opensession-server/src/server/github-auth";
-
-export function githubCredentialResponse(
-  action: string | undefined,
-  input: string,
-  credentialForLogin = githubCredentialForLogin,
-): string {
+export function githubCredentialResponse(action: string | undefined, input: string): string {
   if (action !== "get") return "";
 
   const attrs: Record<string, string> = {};
@@ -28,11 +19,7 @@ export function githubCredentialResponse(
   }
   if (attrs.protocol !== "https" || attrs.host !== "github.com") return "";
 
-  const login = attrs.username?.trim();
-  const token =
-    process.env.GH_TOKEN ||
-    (login ? credentialForLogin(login)?.env.GH_TOKEN : undefined) ||
-    soleGithubAccount()?.env.GH_TOKEN;
+  const token = process.env.GH_TOKEN;
   return token ? `username=x-access-token\npassword=${token}\n` : "";
 }
 

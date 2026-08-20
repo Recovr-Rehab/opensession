@@ -81,6 +81,8 @@ import {
 	snapshotResolvedCreate,
 	updateCreatePlan,
 } from "./session-create-plan";
+import { githubCredentialForLogin, soleGithubAccount } from "./github-auth";
+
 
 /**
  * The `create_session` client message fields the flow reads. Fields typed
@@ -1112,6 +1114,13 @@ export async function handleCreateSessionMessage(
 		finishCreate();
 		return response;
 	}
+	// This WebSocket create is interactive. Pass its credential only to the
+	// server-owned worktree materializer; unattended processes cannot recover it.
+	const githubGitEnv = ws.data.authLogin
+		? githubCredentialForLogin(ws.data.authLogin)?.env
+		: ws.data.authAutomation
+			? undefined
+			: soleGithubAccount()?.env;
 	// Mutable: a brand-new code branch is made collision-free below (a
 	// name clashing with an existing `name/...` ref — or vice versa —
 	// makes `git worktree add -b` fail, killing the session).
@@ -1710,12 +1719,11 @@ export async function handleCreateSessionMessage(
 			materializeWorktree: needsWorktree
 				? () =>
 						fromPr
-							? createWorktreeForExistingBranch(branch, repo.id)
-							: createWorktree(
-									branch,
-									repo.id,
-									stackBase ? { base: stackBase } : undefined,
-								)
+							? createWorktreeForExistingBranch(branch, repo.id, githubGitEnv)
+							: createWorktree(branch, repo.id, {
+									...(stackBase ? { base: stackBase } : {}),
+									...(githubGitEnv ? { gitEnv: githubGitEnv } : {}),
+								})
 				: undefined,
 			fork: canFork
 				? {

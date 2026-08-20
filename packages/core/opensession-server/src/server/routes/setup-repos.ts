@@ -333,18 +333,10 @@ export function githubCredentialHelperCommand(
   return `!bun ${shellQuoteWord(GH_CREDENTIAL_SCRIPT)}`;
 }
 
-export async function configureGithubCredentialHelper(
-  checkoutPath: string,
-  credential: GithubCredential,
-): Promise<void> {
+async function configureGithubCredentialHelper(checkoutPath: string): Promise<void> {
   const helperKey = "credential.https://github.com.helper";
   await $`git -C ${checkoutPath} config --replace-all ${helperKey} ${""}`.quiet();
   await $`git -C ${checkoutPath} config --add ${helperKey} ${githubCredentialHelperCommand()}`.quiet();
-  if (credential.kind === "user") {
-    const login = credential.principal.replace(/^user:/, "");
-    const usernameKey = "credential.https://github.com.username";
-    await $`git -C ${checkoutPath} config --replace-all ${usernameKey} ${login}`.quiet();
-  }
 }
 
 async function registerGithubRepo(input: {
@@ -372,7 +364,7 @@ async function registerGithubRepo(input: {
     // it leaves is tokenless, so wire the credential helper for future
     // fetch/push. No-op for a public (tokenless) clone — the helper simply has
     // nothing to answer with.
-    if (input.credential) await configureGithubCredentialHelper(dest, input.credential);
+    if (input.credential) await configureGithubCredentialHelper(dest);
     const inspected = await inspectRepo(dest);
     const config = rawConfig();
     const repos = {

@@ -323,9 +323,8 @@ describe("token lookups + runner env", () => {
   });
 
   test("builds a credential only for the exact connected login", () => {
-    seedToken("Alice");
-    expect(githubCredentialForLogin("alice")?.principal).toBe("user:alice");
     enableFeature();
+    seedToken("Alice");
     expect(githubCredentialForLogin("alice")).toEqual({
       kind: "user",
       principal: "user:alice",

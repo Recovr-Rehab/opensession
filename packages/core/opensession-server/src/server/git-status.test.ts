@@ -3,7 +3,8 @@ import { $ } from "bun";
 import { existsSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { gitPull, porcelainPaths } from "./git-status";
+import { gitPull, gitPush, porcelainPaths } from "./git-status";
+import type { WorkspaceExec } from "./sandbox/workspace-exec";
 
 const roots: string[] = [];
 
@@ -114,5 +115,22 @@ describe("porcelainPaths", () => {
 
   test("ignores blank and truncated lines", () => {
     expect(porcelainPaths("\n\nM  src/a.ts\nM\n")).toEqual(["src/a.ts"]);
+  });
+});
+
+
+describe("scoped Git credentials", () => {
+  test("passes a credential only to the explicit server-owned operation", async () => {
+    const envs: Array<Record<string, string> | undefined> = [];
+    const exec = Object.assign(
+      async (_cmd: string[], opts?: { env?: Record<string, string> }) => {
+        envs.push(opts?.env);
+        return { exitCode: 0, stdout: "", stderr: "" };
+      },
+      { sandboxed: false, remote: false },
+    ) as WorkspaceExec;
+
+    expect(await gitPush("/repo", "feature", exec, { GH_TOKEN: "scoped" })).toEqual({ ok: true });
+    expect(envs).toEqual([{ GH_TOKEN: "scoped" }]);
   });
 });

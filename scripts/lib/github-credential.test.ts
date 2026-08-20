@@ -15,23 +15,14 @@ describe("GitHub credential helper", () => {
     ).toBe("username=x-access-token\npassword=ghu_run_scoped\n");
   });
 
-  test("resolves the checkout's recorded login without a run-scoped token", () => {
+  test("does not resolve a recorded login without a run-scoped token", () => {
     delete process.env.GH_TOKEN;
-    const seen: string[] = [];
-    const response = githubCredentialResponse(
-      "get",
-      "protocol=https\nhost=github.com\nusername=alice\n\n",
-      (login) => {
-        seen.push(login);
-        return {
-          kind: "user",
-          principal: `user:${login}`,
-          env: { GH_TOKEN: "ghu_stored", GITHUB_TOKEN: "ghu_stored" },
-        };
-      },
-    );
-    expect(seen).toEqual(["alice"]);
-    expect(response).toBe("username=x-access-token\npassword=ghu_stored\n");
+    expect(
+      githubCredentialResponse(
+        "get",
+        "protocol=https\nhost=github.com\nusername=alice\n\n",
+      ),
+    ).toBe("");
   });
 
   test("ignores writes and non-GitHub hosts", () => {

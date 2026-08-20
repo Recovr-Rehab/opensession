@@ -58,6 +58,7 @@ import {
 	snapshotResolvedCreate,
 	updateCreatePlan,
 } from "./session-create-plan";
+import { githubAuthEnv, githubCredentialForLogin } from "./github-auth";
 import { existsSync, watch } from "fs";
 import { branchNameFromPrompt } from "./suggest-branch";
 
@@ -469,6 +470,13 @@ registerSessionControl({
 			: resolvePinnedAccountId(model, accountIdInput, user);
 		const images = parseImageDataUrls(imageUrls);
 		const parentSession = parentSessionId ? findSession(parentSessionId) : null;
+		// opensession-sessions is withheld from automation-owned runs. Scope the
+		// server-owned worktree fetch to this trusted interactive creator.
+		const githubGitEnv = parentSession?.automation
+			? undefined
+			: parentSession?.createdByLogin
+				? githubCredentialForLogin(parentSession.createdByLogin)?.env
+				: githubAuthEnv(user || parentSession?.createdBy);
 		// Attribution only (CreateSessionInput.spawnedBy): the session whose agent
 		// asked for this one, recorded even when the create was standalone and
 		// carries no parent link. It is what lets the sidebar keep an agent's own
@@ -609,7 +617,10 @@ registerSessionControl({
 				// is the difference between this session getting a tree of its own
 				// and joining every other session in the live main checkout.
 				if (!wtPath) {
-					const worktreeOptions = isolatedWorktree ? { isolated: true } : {};
+					const worktreeOptions = {
+						...(isolatedWorktree ? { isolated: true } : {}),
+						...(githubGitEnv ? { gitEnv: githubGitEnv } : {}),
+					};
 					wtPath = worktreePathFor(sessionBranch, repo.id, worktreeOptions);
 					materializeWorktree = () =>
 						createWorktree(sessionBranch, repo.id, worktreeOptions);

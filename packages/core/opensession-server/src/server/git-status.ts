@@ -189,6 +189,7 @@ export async function gitPull(
   dir: string,
   fromBase?: string,
   exec?: WorkspaceExec,
+  env?: Record<string, string>,
 ): Promise<{ ok: true } | { error: string }> {
   return audited(
     {
@@ -199,10 +200,14 @@ export async function gitPull(
     async () => {
       async function run(args: string[]): Promise<{ stdout: string; stderr: string; code: number }> {
         if (exec) {
-          const r = await exec(args);
+          const r = await exec(args, env ? { env } : undefined);
           return { stdout: r.stdout, stderr: r.stderr, code: r.exitCode };
         }
-        const proc = Bun.spawn(args, { stdout: "pipe", stderr: "pipe" });
+        const proc = Bun.spawn(args, {
+          env: { ...process.env, ...env },
+          stdout: "pipe",
+          stderr: "pipe",
+        });
         const [stdout, stderr, code] = await Promise.all([
           new Response(proc.stdout).text(),
           new Response(proc.stderr).text(),
@@ -271,6 +276,7 @@ export async function gitPush(
   dir: string,
   branch: string,
   exec?: WorkspaceExec,
+  env?: Record<string, string>,
 ): Promise<{ ok: true } | { error: string }> {
   return audited(
     {
@@ -283,11 +289,15 @@ export async function gitPush(
       let err: string;
       let code: number;
       if (exec) {
-        const r = await exec(args);
+        const r = await exec(args, env ? { env } : undefined);
         err = r.stderr;
         code = r.exitCode;
       } else {
-        const proc = Bun.spawn(args, { stdout: "pipe", stderr: "pipe" });
+        const proc = Bun.spawn(args, {
+          env: { ...process.env, ...env },
+          stdout: "pipe",
+          stderr: "pipe",
+        });
         [err, code] = await Promise.all([
           new Response(proc.stderr).text(),
           proc.exited,

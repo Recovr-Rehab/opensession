@@ -848,11 +848,9 @@ export const serviceGithubCredential: GithubCredential = {
   env: {},
 };
 
-/**
- * Exact-login lookup for an authenticated request or a checkout whose local
- * credential config records the non-secret login that registered it.
- */
+/** Exact-login lookup for an already authenticated web request. */
 export function githubCredentialForLogin(login: string): GithubCredential | null {
+  if (!githubUserAuthActive()) return null;
   const account = readStore().users[login.toLowerCase()];
   if (!account?.token || !tokenUsable(account)) return null;
   return {
