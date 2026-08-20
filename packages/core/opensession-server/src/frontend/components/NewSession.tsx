@@ -217,9 +217,11 @@ const ERROR = "mx-4 mb-2 rounded-md bg-red-soft px-2.5 py-[7px] text-supporting 
    The bottom pad is deeper than the top one because it is measured against a
    different thing: the top is a hairline, the bottom is the card's own edge,
    rounded at ~30px. Create is a 36px plate inside a 40px row, so 14px here
-   leaves it the same 16px clearance the side padding gives it. */
+   leaves it the same 16px clearance the side padding gives it. The safe-area
+   inset clears the home indicator at rest, but the keyboard covers that edge
+   while a field is focused, so the ordinary 12px pad takes over then. */
 const FOOTER =
-	"flex items-center justify-between gap-x-2 gap-y-2 border-t border-transparent px-4 pt-[9px] pb-3.5 phone:flex-wrap phone:px-3 phone:pb-[calc(0.75rem+env(safe-area-inset-bottom))] max-[560px]:gap-x-1.5";
+	"flex items-center justify-between gap-x-2 gap-y-2 border-t border-transparent px-4 pt-[9px] pb-3.5 phone:flex-wrap phone:px-3 phone:pb-[calc(0.75rem+env(safe-area-inset-bottom))] phone:[body.kb-open_&]:pb-3 max-[560px]:gap-x-1.5";
 const FOOTER_LEFT = "flex min-w-0 items-center gap-1.5 phone:flex-1 max-[560px]:gap-1";
 const FOOTER_RIGHT = "flex min-w-0 items-center gap-1.5 phone:contents max-[560px]:gap-1";
 /** Round on a phone, where the bar's two controls are discs and the repo is a

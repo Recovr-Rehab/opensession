@@ -61,6 +61,9 @@ test("attachments share the prompt's scroller", () => {
 
 	expect(html).toContain('aria-label="Open image preview"');
 	expect(html).toContain("notes.txt");
+	expect(html.indexOf('aria-label="Open image preview"')).toBeLessThan(
+		html.indexOf("<textarea"),
+	);
 });
 
 // A pasted screenshot is uploaded before it is attached, and during a slow

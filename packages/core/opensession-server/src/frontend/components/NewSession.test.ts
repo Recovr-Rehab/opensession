@@ -1,5 +1,16 @@
 import { expect, test } from "bun:test";
 
+test("the phone footer drops the covered safe-area inset while the keyboard is open", async () => {
+  const source = await Bun.file(new URL("./NewSession.tsx", import.meta.url)).text();
+  const footerStart = source.indexOf("const FOOTER =");
+  const footerEnd = source.indexOf(";", footerStart);
+  const footer = source.slice(footerStart, footerEnd);
+
+  expect(footerStart).toBeGreaterThan(-1);
+  expect(footer).toContain("phone:pb-[calc(0.75rem+env(safe-area-inset-bottom))]");
+  expect(footer).toContain("phone:[body.kb-open_&]:pb-3");
+});
+
 test("the new composer keeps the full model name ahead of its effort suffix", async () => {
   const source = await Bun.file(new URL("./NewSession.tsx", import.meta.url)).text();
   const pillStart = source.indexOf("const MODEL_PILL");
