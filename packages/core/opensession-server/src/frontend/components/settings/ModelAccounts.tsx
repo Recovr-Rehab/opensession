@@ -28,7 +28,7 @@ import {
 } from "../../ui/settings";
 import { cn } from "../../ui/cn";
 import { toast } from "../../ui/toast";
-import { IconTile } from "../BrandTile";
+import { BrandMark, IconTile } from "../BrandTile";
 import {
 	IconDotsHorizontal,
 	IconHistory,
@@ -108,12 +108,17 @@ function OwnerSelect({
 	label,
 	title,
 	disabled,
+	quiet = false,
+	className,
 }: {
 	value: string;
 	onChange: (owner: string) => void;
 	label: string;
 	title?: string;
 	disabled?: boolean;
+	/** Remove field chrome when the selected owner sits inside a row. */
+	quiet?: boolean;
+	className?: string;
 }) {
 	// The roster reactively, so the list and the pictures both fill in when
 	// GET /api/people lands rather than only on the next render.
@@ -139,7 +144,12 @@ function OwnerSelect({
 				aria-label={label}
 				title={title}
 				icon={ownerIcon(value)}
-				sizeTo={items.map((i) => i.label)}
+				sizeTo={quiet ? undefined : items.map((i) => i.label)}
+				className={cn(
+					quiet &&
+						"border-transparent bg-transparent px-2 text-dim shadow-none transition-colors hover:border-transparent hover:bg-hover enabled:hover:shadow-none focus:border-transparent data-[popup-open]:border-transparent data-[popup-open]:bg-hover phone:min-h-11",
+					className,
+				)}
 			/>
 			<Select.Popup align="end">
 				{items.map((i) => (
@@ -149,6 +159,16 @@ function OwnerSelect({
 				))}
 			</Select.Popup>
 		</Select.Root>
+	);
+}
+
+/** A provider mark keeps mixed account rows scannable without repeating a
+ * column of colored tiles beside provider names that are already written out. */
+function AccountProviderMark({ name }: { name: "claude" | "codex" }) {
+	return (
+		<span className="mt-0.5 flex size-7 shrink-0 items-center justify-center text-faint">
+			<BrandMark name={name} size={18} />
+		</span>
 	);
 }
 
@@ -172,11 +192,12 @@ function usageTone(pct: number | null): keyof typeof usageToneClasses {
 }
 
 const statusToneClasses = {
-	red: "bg-red-soft text-red",
-	yellow: "bg-[rgba(210,153,34,0.15)] text-yellow",
+	red: { dot: "bg-red", text: "text-red" },
+	yellow: { dot: "bg-yellow", text: "text-yellow" },
+	muted: { dot: "bg-faint", text: "text-faint" },
 } as const;
 
-function StatusPill({
+function AccountStatus({
 	tone,
 	children,
 	...props
@@ -184,11 +205,12 @@ function StatusPill({
 	return (
 		<span
 			className={cn(
-				"inline-flex min-w-[70px] shrink-0 items-center justify-center gap-1.5 rounded-full px-2.5 py-[3px] text-meta font-bold phone:min-w-0 phone:px-2",
-				statusToneClasses[tone],
+				"inline-flex shrink-0 items-center gap-1.5 text-meta font-medium",
+				statusToneClasses[tone].text,
 			)}
 			{...props}
 		>
+			<span aria-hidden className={cn("size-1.5 rounded-full", statusToneClasses[tone].dot)} />
 			{children}
 		</span>
 	);
@@ -271,7 +293,7 @@ function Meter({
 					</span>
 				) : null}
 			</span>
-			<div className="h-1.5 overflow-hidden rounded-full bg-active desktop:col-span-2 desktop:row-start-2 phone:col-start-2 phone:row-start-1">
+			<div className="h-1 overflow-hidden rounded-full bg-active desktop:col-span-2 desktop:row-start-2 phone:col-start-2 phone:row-start-1">
 				<div
 					className={cn(
 						"h-full rounded-full transition-[width] duration-300",
@@ -346,36 +368,36 @@ function ExtraUsageRow({
 
 /**
  * The one thing that needs attention, never stacked, so nothing collides. A
- * healthy account gets no pill: its meters already say it is fine, and nine
- * green "In rotation" pills down a page hid the two accounts that weren't.
+ * healthy account gets no status: its meters already say it is fine, and nine
+ * green "In rotation" labels down a page hid the two accounts that weren't.
  */
-function ClaudeStatusPill({ a }: { a: ClaudeAccountInfo }) {
+function ClaudeAccountStatus({ a }: { a: ClaudeAccountInfo }) {
 	if (a.usage?.error && a.usage.errorStatus === 401)
 		return (
-			<StatusPill tone="red" title={a.usage.error}>
+			<AccountStatus tone="red" title={a.usage.error}>
 				Token error
-			</StatusPill>
+			</AccountStatus>
 		);
 	if (a.usage?.error)
 		return (
-			<StatusPill tone="yellow" title={a.usage.error}>
+			<AccountStatus tone="yellow" title={a.usage.error}>
 				Usage unknown
-			</StatusPill>
+			</AccountStatus>
 		);
 	if (a.noUsageScope && !a.usage)
 		return (
-			<StatusPill tone="yellow" title="Add OAuth usage credentials to show dashboard usage.">
+			<AccountStatus tone="muted" title="Add OAuth usage credentials to show dashboard usage.">
 				Usage hidden
-			</StatusPill>
+			</AccountStatus>
 		);
 	if (a.exhaustedUntil)
 		return (
-			<StatusPill tone="red" title={`Sidelined until ${a.exhaustedUntil}`}>
+			<AccountStatus tone="red" title={`Sidelined until ${a.exhaustedUntil}`}>
 				Limit hit
-			</StatusPill>
+			</AccountStatus>
 		);
 	if (a.usable) return null;
-	return <StatusPill tone="yellow">Near limit</StatusPill>;
+	return <AccountStatus tone="yellow">Near limit</AccountStatus>;
 }
 
 function useClaudeAccounts() {
@@ -490,12 +512,12 @@ function ClaudeAccountRows({ state }: { state: ClaudeAccountsState }) {
 				)
 				.map((account) => (
 					<React.Fragment key={account.id}>
-						<SettingRow className="items-start">
-							<IconTile name="claude" size={28} />
+						<SettingRow className="items-start gap-x-3 phone:px-4">
+							<AccountProviderMark name="claude" />
 							<SettingRowText>
 								<div className="flex min-w-0 items-center gap-2">
 									<SettingRowTitle className="truncate">{account.name}</SettingRowTitle>
-									<ClaudeStatusPill a={account} />
+									<ClaudeAccountStatus a={account} />
 								</div>
 								<SettingRowDescription
 									className="truncate text-meta"
@@ -507,9 +529,9 @@ function ClaudeAccountRows({ state }: { state: ClaudeAccountsState }) {
 									{account.plan ? ` · ${account.plan.replace("default_claude_", "")}` : ""}
 								</SettingRowDescription>
 								{account.noUsageScope && !account.usage ? (
-									<div className="mt-1.5 text-meta text-faint">
-										Usage not visible: setup-tokens cannot read the usage endpoint. Use
-										“Sign in with Claude” in this account's menu to connect usage.
+									<div className="mt-1.5 text-meta leading-relaxed text-faint">
+										Setup tokens cannot read usage. Sign in with Claude from the account menu to
+										connect it.
 									</div>
 								) : (
 									<>
@@ -529,11 +551,14 @@ function ClaudeAccountRows({ state }: { state: ClaudeAccountsState }) {
 									</>
 								)}
 							</SettingRowText>
-							<SettingRowControl className="flex items-center gap-1.5">
+							<SettingRowControl className="flex items-center gap-1.5 phone:mt-1 phone:ml-0 phone:w-full phone:basis-full phone:gap-2.5 phone:pl-10">
+								<span className="hidden shrink-0 text-meta text-faint phone:inline">Used by</span>
 								<OwnerSelect
 									value={account.owner || ""}
 									onChange={(owner) => state.setOwner(account, owner)}
 									label={`Owner of ${account.name}`}
+									quiet
+									className="phone:min-w-0 phone:flex-1"
 									title={
 										account.owner
 											? `${account.owner}'s personal subscription. Their runs use it first, everyone else never does.`
@@ -649,18 +674,18 @@ export function ClaudeAccountsSection({
 
 // ── Codex accounts ─────────────────────────────────────────────────────────
 
-function CodexStatusPill({ account }: { account: CodexAccountInfo }) {
+function CodexAccountStatus({ account }: { account: CodexAccountInfo }) {
 	if (account.exhaustedUntil)
 		return (
-			<StatusPill tone="red" title={`Sidelined until ${account.exhaustedUntil}`}>
+			<AccountStatus tone="red" title={`Sidelined until ${account.exhaustedUntil}`}>
 				Limit hit
-			</StatusPill>
+			</AccountStatus>
 		);
 	if (account.usage?.error)
 		return (
-			<StatusPill tone="yellow" title={account.usage.error}>
+			<AccountStatus tone="yellow" title={account.usage.error}>
 				Usage unknown
-			</StatusPill>
+			</AccountStatus>
 		);
 	return null;
 }
@@ -795,12 +820,12 @@ function CodexAccountRows({ state }: { state: CodexAccountsState }) {
 					(left, right) => left.name.localeCompare(right.name) || left.id.localeCompare(right.id),
 				)
 				.map((account) => (
-					<SettingRow key={account.id} className="items-start">
-						<IconTile name="codex" size={28} />
+					<SettingRow key={account.id} className="items-start gap-x-3 phone:px-4">
+						<AccountProviderMark name="codex" />
 						<SettingRowText>
 							<div className="flex min-w-0 items-center gap-2">
 								<SettingRowTitle className="truncate">{account.name}</SettingRowTitle>
-								<CodexStatusPill account={account} />
+								<CodexAccountStatus account={account} />
 							</div>
 							<SettingRowDescription className="truncate text-meta" title={account.valueMasked}>
 								OpenAI · {account.kind === "api_key" ? "API key" : "ChatGPT login"}
@@ -811,11 +836,14 @@ function CodexAccountRows({ state }: { state: CodexAccountsState }) {
 							</SettingRowDescription>
 							<CodexUsageMeters account={account} />
 						</SettingRowText>
-						<SettingRowControl className="flex items-center gap-1.5">
+						<SettingRowControl className="flex items-center gap-1.5 phone:mt-1 phone:ml-0 phone:w-full phone:basis-full phone:gap-2.5 phone:pl-10">
+							<span className="hidden shrink-0 text-meta text-faint phone:inline">Used by</span>
 							<OwnerSelect
 								value={account.owner || ""}
 								onChange={(owner) => state.setOwner(account, owner)}
 								label={`Owner of ${account.name}`}
+								quiet
+								className="phone:min-w-0 phone:flex-1"
 								title={
 									account.owner
 										? `${account.owner}'s personal subscription. Their runs use it first, everyone else never does.`
@@ -933,6 +961,7 @@ export function ProviderAccountsSection() {
 				<>
 					<Button
 						size="sm"
+						variant="ghost"
 						className="phone:min-h-11"
 						icon={<IconHistory size={16} className={refreshing ? "animate-spin" : ""} />}
 						onClick={refreshUsage}
