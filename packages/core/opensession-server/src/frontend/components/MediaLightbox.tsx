@@ -1833,7 +1833,15 @@ function MediaLightbox({
 							onSelectionRect={setSelectionRect}
 						/>
 					) : (
-						<div className="flex min-h-0 min-w-0 flex-1 items-center justify-center self-stretch">
+						// The video never fills the stage, so the space beside it has to
+						// close too. Without this, only the thin strip outside this
+						// wrapper was a backdrop and the lightbox felt stuck.
+						<div
+							className="flex min-h-0 min-w-0 flex-1 items-center justify-center self-stretch"
+							onMouseDown={(e) => {
+								if (e.target === e.currentTarget) requestClose();
+							}}
+						>
 							<video
 								key={item.src}
 								src={item.src}
