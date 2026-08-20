@@ -170,6 +170,14 @@ export function githubAuthState(g: SetupGithub): { tone: ChipTone; label: string
 	return { tone: "off", label: "Off" };
 }
 
+/** Whether a public base URL is configured, for the setup chip. A blank value
+ *  is the unset default; any non-empty URL counts as configured. */
+export function publicUrlState(publicBaseUrl: string): { tone: ChipTone; label: string } {
+	return publicBaseUrl.trim()
+		? { tone: "on", label: "Configured" }
+		: { tone: "off", label: "Not set" };
+}
+
 /** Does this repo carry what a session needs to provision and boot it on its
  *  own? `.agents/start.sh` (or an instance `previewCommand`) is the
  *  load-bearing half — without it the Preview button has nothing to run and an
