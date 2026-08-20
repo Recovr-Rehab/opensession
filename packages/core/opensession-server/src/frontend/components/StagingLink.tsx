@@ -52,14 +52,30 @@ const ICON_PENDING = "cursor-default text-dim";
    mark takes. Those marks are decoration on a row whose whole width is the
    target; this one IS the target, and 20px is too little to aim at.
 
-   The hover plate is the mark's own ink rather than the list's neutral wash,
-   the same trade the band's rows make: a grey plate on a tinted band reads as
-   a second colour landing on it instead of the band darkening under the
-   pointer. */
+   The plate is the mark's own ink rather than the list's neutral wash, the
+   same trade the band's rows make: a grey plate on a tinted band reads as a
+   second colour landing on it instead of the band darkening under the
+   pointer.
+
+   It carries that plate at rest, not only on hover. A bare glyph beside a
+   filled Merge button reads as part of the label rather than as something to
+   press, and on a tinted band there is no edge to tell it from the fill. The
+   resting step is faint enough to stay quiet and deep enough to be a target. */
 const SUMMARY_MARK =
-	"grid size-7 shrink-0 place-items-center rounded-md no-underline focus-ring";
+	"grid size-7 shrink-0 place-items-center rounded-md no-underline focus-ring " +
+	"transition-[background-color,scale] duration-150 ease-out";
+/** Resting fill, so the mark is visibly a control before it is pointed at.
+ *  14% of the mark's own grey lands about 12 levels under the band it sits on,
+ *  which is a plate you can see without it becoming a second button beside
+ *  Merge. Below that (10% was the first try) it measured 8 levels and read as
+ *  a rendering artefact rather than a control. */
+const SUMMARY_MARK_PLATE =
+	"bg-[color-mix(in_srgb,currentColor_14%,transparent)]";
+/** Pointer and press. The press step also takes a hair of scale, which is what
+ *  makes a 28px target feel like it answered. */
 const SUMMARY_MARK_HOVER =
-	"hover:bg-[color-mix(in_srgb,currentColor_14%,transparent)]";
+	"hover:bg-[color-mix(in_srgb,currentColor_26%,transparent)] " +
+	"active:scale-[0.96] active:bg-[color-mix(in_srgb,currentColor_34%,transparent)]";
 /* Pulls the pair together. The status row spaces its parts 14px apart, which
    is the distance between a mark and the words it belongs to. Two marks at
    that distance read as two columns rather than as one leading cluster. */
@@ -202,20 +218,25 @@ export function StagingLink({
 		}
 		if (variant === "summary") {
 			return (
-				<span
-					// Nothing to open yet, so the mark drops its pointer and its hover
-					// plate rather than offering a target that does nothing.
-					className={cn(
-						SUMMARY_MARK,
-						SUMMARY_MARK_PAIR,
-						WS_SUMMARY_ICON,
-						"cursor-default",
-					)}
-					title="Preview environment starting… the link appears once it's up"
-					aria-label="Preview environment starting"
+				<Tooltip
+					label="Preview environment starting… the link appears once it's up"
+					side="bottom"
+					multiline
 				>
-					{shimmerGlobe(20)}
-				</span>
+					<span
+						// Nothing to open yet, so the mark drops its pointer and its
+						// plate rather than offering a target that does nothing.
+						className={cn(
+							SUMMARY_MARK,
+							SUMMARY_MARK_PAIR,
+							WS_SUMMARY_ICON,
+							"cursor-default",
+						)}
+						aria-label="Preview environment starting"
+					>
+						{shimmerGlobe(20)}
+					</span>
+				</Tooltip>
 			);
 		}
 		return (
@@ -297,7 +318,7 @@ export function StagingLink({
 				? `Preview environment ${staging.status.toLowerCase()}… ${copyHint}`
 				: rebuilding
 					? `Redeploying for the latest push. Opens the previous deploy until it lands (${chordHint}${copyHint})`
-					: `Open the preview environment to test this PR on real infra (${chordHint}${copyHint})`;
+					: `Open the preview environment to test this PR (${chordHint}${copyHint})`;
 
 	if (variant === "header") {
 		return (
@@ -340,30 +361,34 @@ export function StagingLink({
 	}
 	if (variant === "summary") {
 		return (
-			<a
-				href={href}
-				target="_blank"
-				rel="noopener"
-				onClick={onClick}
-				aria-disabled={building || undefined}
-				// The label the mark used to carry is now the tooltip's first line,
-				// and the deploy's own state rides in there with it: an icon cannot
-				// say "Redeploying" and the band has no room for a word that is only
-				// true for a minute at a time.
-				aria-label="Preview environment"
-				className={cn(
-					SUMMARY_MARK,
-					SUMMARY_MARK_PAIR,
-					// Amber only while a deploy is in flight. A card of quiet rows
-					// keeps its colour for the ones with something to report, and a
-					// preview that is simply up has nothing.
-					spinning ? "text-yellow" : WS_SUMMARY_ICON,
-					building ? "cursor-default" : SUMMARY_MARK_HOVER,
-				)}
-				title={`${tooltip("⌘-click to copy the link")} · ${href}`}
-			>
-				{globe(20, RING_LG)}
-			</a>
+			// The band is at the top of a floating card, so the tip hangs below it
+			// rather than over the header the card came from.
+			<Tooltip label={tooltip("⌘-click to copy the link")} side="bottom" multiline>
+				<a
+					href={href}
+					target="_blank"
+					rel="noopener"
+					onClick={onClick}
+					aria-disabled={building || undefined}
+					// The label the mark used to carry is now the tooltip's first line,
+					// and the deploy's own state rides in there with it: an icon cannot
+					// say "Redeploying" and the band has no room for a word that is only
+					// true for a minute at a time.
+					aria-label="Preview environment"
+					className={cn(
+						SUMMARY_MARK,
+						SUMMARY_MARK_PAIR,
+						SUMMARY_MARK_PLATE,
+						// Amber only while a deploy is in flight. A card of quiet rows
+						// keeps its colour for the ones with something to report, and a
+						// preview that is simply up has nothing.
+						spinning ? "text-yellow" : WS_SUMMARY_ICON,
+						building ? "cursor-default" : SUMMARY_MARK_HOVER,
+					)}
+				>
+					{globe(20, RING_LG)}
+				</a>
+			</Tooltip>
 		);
 	}
 

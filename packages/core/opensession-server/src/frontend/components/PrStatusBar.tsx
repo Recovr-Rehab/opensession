@@ -52,7 +52,7 @@ import {
 	WS_SUMMARY_STATUS_ROW,
 } from "../lib/workspace-summary-classes";
 import { Tooltip } from "../ui/tooltip";
-import { ContextMenu, Menu } from "../ui/menu";
+import { ContextMenu, Menu, MENU_ICON } from "../ui/menu";
 import { Spinner } from "../ui/spinner";
 import { Skeleton, SkeletonBar } from "../ui/state";
 import { cn } from "../ui/cn";
@@ -362,6 +362,60 @@ function PrBarButton({
 // advertises whatever it is bound to.
 
 /**
+ * The rows every right-click menu about a pull request offers: open it where it
+ * lives, and take its link or its number away with you. Written once because
+ * two surfaces carry the same menu: the strip's `#1234` chip and the summary
+ * card's PR band. A copy action that says "Copied" in one place and
+ * nothing in the other is two implementations of one gesture.
+ *
+ * The rows keep the popup open after a copy (`closeOnClick={false}`) so the
+ * checkmark is visible where it was clicked, which is the whole confirmation.
+ */
+function PrCopyItems({ pr }: { pr: PrDetails }) {
+	const [copied, setCopied] = useState<"link" | "number" | null>(null);
+	const provider = providerFromUrl(pr.url);
+
+	const copy = useCallback((kind: "link" | "number", text: string) => {
+		navigator.clipboard?.writeText(text).then(() => {
+			setCopied(kind);
+			setTimeout(() => setCopied(null), 1500);
+		});
+	}, []);
+
+	return (
+		<>
+			<ContextMenu.Item
+				render={
+					<a href={pr.url} target="_blank" rel="noopener" className="no-underline" />
+				}
+			>
+				<IconArrowUpRight size={20} className={MENU_ICON} />
+				<span className="grow">Open on {provider.name}</span>
+			</ContextMenu.Item>
+			<ContextMenu.Item closeOnClick={false} onClick={() => copy("link", pr.url)}>
+				{copied === "link" ? (
+					<IconCheck size={20} className="text-green" />
+				) : (
+					<IconCopy size={20} className={MENU_ICON} />
+				)}
+				<span className="grow">{copied === "link" ? "Copied" : "Copy link"}</span>
+			</ContextMenu.Item>
+			<ContextMenu.Item
+				closeOnClick={false}
+				onClick={() => copy("number", `#${pr.number}`)}
+			>
+				{copied === "number" ? (
+					<IconCheck size={20} className="text-green" />
+				) : (
+					<IconHash size={20} className={MENU_ICON} />
+				)}
+				<span className="grow">{copied === "number" ? "Copied" : "Copy number"}</span>
+			</ContextMenu.Item>
+		</>
+	);
+}
+
+/**
  * The PR chip links to Open Session's review by default. GitHub remains a
  * separate outbound action, while the context menu holds copy actions.
  */
@@ -377,16 +431,8 @@ function PrNumberChip({
 	size: "bar" | "head";
 	onOpenPrTab?: () => void;
 }) {
-	const [copied, setCopied] = useState<"link" | "number" | null>(null);
 	const provider = providerFromUrl(pr.url);
 	const prChord = useShortcutLabel("open-pr");
-
-	const copy = useCallback((kind: "link" | "number", text: string) => {
-		navigator.clipboard?.writeText(text).then(() => {
-			setCopied(kind);
-			setTimeout(() => setCopied(null), 1500);
-		});
-	}, []);
 
 	return (
 		<div className="inline-flex items-center">
@@ -408,45 +454,7 @@ function PrNumberChip({
 					</span>
 				</ContextMenu.Trigger>
 				<ContextMenu.Popup>
-					<ContextMenu.Item
-						render={
-							<a
-								href={pr.url}
-								target="_blank"
-								rel="noopener"
-								className="no-underline"
-							/>
-						}
-					>
-						<IconArrowUpRight size={20} />
-						<span className="grow">Open on {provider.name}</span>
-					</ContextMenu.Item>
-					<ContextMenu.Item
-						closeOnClick={false}
-						onClick={() => copy("link", pr.url)}
-					>
-						{copied === "link" ? (
-							<IconCheck size={20} />
-						) : (
-							<IconCopy size={20} />
-						)}
-						<span className="grow">
-							{copied === "link" ? "Copied" : "Copy link"}
-						</span>
-					</ContextMenu.Item>
-					<ContextMenu.Item
-						closeOnClick={false}
-						onClick={() => copy("number", `#${pr.number}`)}
-					>
-						{copied === "number" ? (
-							<IconCheck size={20} />
-						) : (
-							<IconHash size={20} />
-						)}
-						<span className="grow">
-							{copied === "number" ? "Copied" : "Copy number"}
-						</span>
-					</ContextMenu.Item>
+					<PrCopyItems pr={pr} />
 				</ContextMenu.Popup>
 			</ContextMenu.Root>
 			<Tooltip
@@ -1036,6 +1044,11 @@ export function PrStatusBar({
 					<span className="flex items-center gap-1 truncate text-meta text-faint group-hover/prsum:text-dim">
 						<BrandMark name={provider.key} size={12} className="shrink-0" />
 						<span className="truncate">#{pr.number}</span>
+						<IconArrowUpRight
+							dense
+							size={12}
+							className="shrink-0 opacity-0 transition-opacity duration-150 group-hover/prsum:opacity-100 group-focus-visible/prsum:opacity-100"
+						/>
 					</span>
 				)}
 			</>
@@ -1057,52 +1070,52 @@ export function PrStatusBar({
 			event.preventDefault();
 			open();
 		}
-		return (
-			<div
-				className={cn(
-					WS_SUMMARY_BAND,
-					PR_SUMMARY_BAND_BG[headlineTone],
-					// Only a band with a fill needs room inside it.
-					headlineTone !== "muted" && WS_SUMMARY_BAND_PAD,
-				)}
-			>
-				<div
-					className={WS_SUMMARY_STATUS_ROW}
-					// The title the row no longer shows is still the fastest way to
-					// know which PR this is, so it stays as the row's tooltip.
-					title={pr ? `#${pr.number} · ${pr.title}` : undefined}
-				>
-					{/* The preview environment this PR deployed is the row's only
-					    leading mark. The status label already says where the work stands,
-					    so repeating it with a glyph would only take space from that label.
-					    Renders nothing when the PR has no preview, and the row closes up. */}
-					{children}
+		// The row's contents, held apart from the element that carries them: with
+		// a PR the row is a right-click target and so has to be a ContextMenu
+		// trigger, and without one it is a plain div. Same children either way.
+		const rowBody = (
+			<>
+				{/* The preview environment this PR deployed is the row's only
+				    leading mark. The status label already says where the work stands,
+				    so repeating it with a glyph would only take space from that label.
+				    Renders nothing when the PR has no preview, and the row closes up. */}
+				{children}
 				{/* When checks are the reason for the headline, the headline IS the
 				    checks control, exactly as on the strip: hovering lists them,
-				    clicking opens Review's Checks tab. */}
-					{checksPr ? (
-						<PrChecksPopover
-							checks={checksPr.checks}
-							trigger={
-								<a
-									className={cn(labelClass, "no-underline")}
-									href={checksPr.url}
-									target="_blank"
-									rel="noopener"
-									title={`#${checksPr.number} · ${checksPr.title}. ${externalHint}`}
-									onClick={(event) => openInReview(event, onOpenChecksTab)}
-								>
-									{labelBody}
-								</a>
-							}
-						/>
-					) : pr ? (
+				    clicking opens Review's Checks tab. That popup is the hover
+				    answer here, so this branch gets no tooltip beside it. The PR's
+				    own title stays as the native fallback. */}
+				{checksPr ? (
+					<PrChecksPopover
+						checks={checksPr.checks}
+						trigger={
+							<a
+								className={cn(labelClass, "no-underline")}
+								href={checksPr.url}
+								target="_blank"
+								rel="noopener"
+								title={`#${checksPr.number} · ${checksPr.title}. ${externalHint}`}
+								onClick={(event) => openInReview(event, onOpenChecksTab)}
+							>
+								{labelBody}
+							</a>
+						}
+					/>
+				) : pr ? (
+					// The PR title the row stopped showing is the fastest way to know
+					// which PR this is, so it is what the tooltip says, with the
+					// modified-click destination under it.
+					<Tooltip
+						label={`#${pr.number} · ${pr.title}${externalHint ? `\n${externalHint}` : ""}`}
+						side="bottom"
+						align="start"
+						multiline
+					>
 						<a
 							className={cn(labelClass, "no-underline")}
 							href={pr.url}
 							target="_blank"
 							rel="noopener"
-							title={`#${pr.number} · ${pr.title}. ${externalHint}`}
 							onClick={(event) =>
 								openInReview(
 									event,
@@ -1112,7 +1125,9 @@ export function PrStatusBar({
 						>
 							{labelBody}
 						</a>
-					) : (
+					</Tooltip>
+				) : (
+					<Tooltip label="Open the Review tab" side="bottom" align="start">
 						<button
 							type="button"
 							className={labelClass}
@@ -1120,14 +1135,43 @@ export function PrStatusBar({
 						>
 							{labelBody}
 						</button>
-					)}
-					{error && (
-						<span className={PR_HEAD_ERROR} title={error}>
-							{error}
-						</span>
-					)}
-					{renderAction()}
-				</div>
+					</Tooltip>
+				)}
+				{error && (
+					<span className={PR_HEAD_ERROR} title={error}>
+						{error}
+					</span>
+				)}
+				{renderAction()}
+			</>
+		);
+		return (
+			<div
+				className={cn(
+					WS_SUMMARY_BAND,
+					PR_SUMMARY_BAND_BG[headlineTone],
+					// Only a band with a fill needs room inside it.
+					headlineTone !== "muted" && WS_SUMMARY_BAND_PAD,
+				)}
+			>
+				{pr ? (
+					// Right-click anywhere on the band, not only on the two words that
+					// happen to be a link: the whole row is about one pull request, so
+					// that is the target for taking its link away. Same menu as the
+					// strip's `#1234` chip.
+					<ContextMenu.Root>
+						<ContextMenu.Trigger
+							render={<div className={WS_SUMMARY_STATUS_ROW} />}
+						>
+							{rowBody}
+						</ContextMenu.Trigger>
+						<ContextMenu.Popup>
+							<PrCopyItems pr={pr} />
+						</ContextMenu.Popup>
+					</ContextMenu.Root>
+				) : (
+					<div className={WS_SUMMARY_STATUS_ROW}>{rowBody}</div>
+				)}
 			</div>
 		);
 	}
