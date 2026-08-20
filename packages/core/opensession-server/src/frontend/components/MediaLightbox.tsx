@@ -1597,9 +1597,9 @@ function MediaLightbox({
 				target?.matches("input, textarea, [contenteditable='true']"),
 			);
 			if (e.key === "Escape") {
+				e.preventDefault();
 				e.stopPropagation();
-				if (commenting) resetComment();
-				else requestClose();
+				requestClose();
 			} else if (!editingText && e.key === "ArrowLeft" && many) {
 				e.stopPropagation();
 				e.preventDefault();
