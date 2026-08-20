@@ -3,6 +3,7 @@ import {
   projectRemoteModelProviderConfig,
   projectRemotePiConfig,
   remoteModelProviderId,
+  remoteRunNeedsOpenai,
 } from "./bootstrap";
 
 describe("remote engine credential projection", () => {
@@ -11,6 +12,17 @@ describe("remote engine credential projection", () => {
     expect(remoteModelProviderId("pi/anthropic/claude-sonnet-5")).toBeNull();
     expect(remoteModelProviderId("pi/openai/gpt-5.6-sol")).toBeNull();
     expect(remoteModelProviderId("pi/openai/gpt-5.6-sol")).toBeNull();
+  });
+
+  test("projects OpenAI credentials for direct, preset, and fallback use", () => {
+    expect(remoteRunNeedsOpenai("pi/openai/gpt-5.6-sol")).toBe(true);
+    expect(remoteRunNeedsOpenai("pi/orchestrator/sol")).toBe(true);
+    // Production workspace-preset tuple: both the lead and preferred fallback
+    // are Opus, but the automatic graph's first reachable hop is Sol.
+    expect(
+      remoteRunNeedsOpenai("pi/dial/opus-fable", "pi/anthropic/claude-opus-5"),
+    ).toBe(true);
+    expect(remoteRunNeedsOpenai("pi/dial/opus-fable", "none")).toBe(false);
   });
 
   test("Pi projection is allowlisted and disabled state removes the file", () => {

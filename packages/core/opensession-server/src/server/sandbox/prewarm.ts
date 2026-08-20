@@ -175,6 +175,12 @@ interface PrewarmRecord {
   entry: PrewarmEntry;
   /** Runtime-only completion owned by the same record as the lifecycle state. */
   bootstrapDone?: Promise<void>;
+  /** Sessions waiting to adopt this exact bootstrap. Preparation hands the
+   * sandbox to them before an optional multi-minute template seal. */
+  waiters?: number;
+  /** A provider template publication has begun and cannot be interrupted. A
+   * new session should cold-create immediately instead of waiting first. */
+  sealing?: boolean;
   /** Runtime-only provider cleanup, shared by every overlapping cleanup path. */
   destroyDone?: Promise<void>;
 }
@@ -520,11 +526,21 @@ async function runPrewarmBootstrap(record: PrewarmRecord, adapter: PrewarmAdapte
       void destroyRecord(record, "superseded mid-warm");
       return;
     }
-    if (adapter.publishTemplate && !restoredFromTemplate) {
+    // A person is waiting for this workspace now. Hand them the prepared
+    // sandbox before optional publication/parking work. Daytona repository
+    // templates can take six minutes to seal, while adoption is immediate.
+    // The claim replaces the short pool lifecycle with the session lifecycle.
+    const releaseToWaiter = () => (record.waiters || 0) > 0;
+    if (adapter.publishTemplate && !restoredFromTemplate && !releaseToWaiter()) {
+      record.sealing = true;
       setPrewarmStage(entry, "Sealing reusable template", 82);
-      await adapter.publishTemplate(sandboxId, repo, `${entry.provider}-prewarm`);
+      try {
+        await adapter.publishTemplate(sandboxId, repo, `${entry.provider}-prewarm`);
+      } finally {
+        record.sealing = false;
+      }
     }
-    if (adapter.park) {
+    if (!releaseToWaiter() && adapter.park) {
       setPrewarmStage(entry, "Finalizing", 95);
       await adapter.park(sandboxId);
     }
@@ -537,7 +553,11 @@ async function runPrewarmBootstrap(record: PrewarmRecord, adapter: PrewarmAdapte
     entry.progress = 100;
     entry.lastTouchedAt = new Date().toISOString();
     persist(entry);
-    console.log(`[sandbox-prewarm] ${entry.key} ready (${sandboxId})`);
+    console.log(
+      releaseToWaiter()
+        ? `[sandbox-prewarm] ${entry.key} ready for waiting session (${sandboxId})`
+        : `[sandbox-prewarm] ${entry.key} ready (${sandboxId})`,
+    );
   } catch (e) {
     console.warn(`[sandbox-prewarm] ${entry.key} bootstrap failed:`, e);
     void destroyRecord(record, "bootstrap failed");
@@ -627,6 +647,15 @@ export async function claimPrewarmOrWait(
   const record = pool().get(key);
   const entry = record?.entry;
   if (!entry || entry.state !== "bootstrapping") return null;
+  // Provider snapshot creation cannot be interrupted. Starting the user's
+  // cold fallback now is faster than waiting two minutes and then doing the
+  // same cold create, which was the five-minute startup failure this guards.
+  if (record.sealing) {
+    console.log(
+      `[sandbox-prewarm] ensure(${sessionId.slice(0, 20)}…) skipping ${key} wait; template seal already started`,
+    );
+    return null;
+  }
   const age = Date.now() - Date.parse(entry.createdAt);
   if (!Number.isFinite(age) || age > (opts?.maxAgeMs ?? 60_000)) return null;
   const done = record.bootstrapDone;
@@ -634,13 +663,18 @@ export async function claimPrewarmOrWait(
   console.log(
     `[sandbox-prewarm] ensure(${sessionId.slice(0, 20)}…) waiting for in-flight ${key} prewarm (${Math.round(age / 1000)}s old)…`,
   );
-  await Promise.race([
-    done,
-    new Promise<void>((r) => {
-      const t = setTimeout(r, opts?.maxWaitMs ?? 120_000);
-      (t as { unref?: () => void }).unref?.();
-    }),
-  ]);
+  record.waiters = (record.waiters || 0) + 1;
+  try {
+    await Promise.race([
+      done,
+      new Promise<void>((r) => {
+        const t = setTimeout(r, opts?.maxWaitMs ?? 120_000);
+        (t as { unref?: () => void }).unref?.();
+      }),
+    ]);
+  } finally {
+    record.waiters = Math.max(0, (record.waiters || 1) - 1);
+  }
   return claimPrewarm(provider, repoId, sessionId);
 }
 

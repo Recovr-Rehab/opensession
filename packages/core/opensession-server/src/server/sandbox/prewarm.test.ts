@@ -353,6 +353,52 @@ describe("claimPrewarmOrWait (adopt a mid-bootstrap prewarm)", () => {
     expect(winners[0]!.sandboxId).toBe(fake.created[0]);
   });
 
+  test.skipIf(killSwitch)("hands a prepared workspace to its waiter before sealing", async () => {
+    let finishPrepare!: () => void;
+    const prepareGate = new Promise<void>((resolve) => (finishPrepare = resolve));
+    const fake = makeFakeAdapter();
+    let publications = 0;
+    let parks = 0;
+    fake.adapter.prepare = async () => {
+      await prepareGate;
+    };
+    fake.adapter.publishTemplate = async () => {
+      publications++;
+    };
+    fake.adapter.park = async () => {
+      parks++;
+    };
+
+    await requestPrewarm("daytona", "tella-fusion");
+    await until(() => fake.created.length === 1);
+    const waiting = claimPrewarmOrWait("daytona", "tella-fusion", "bks-waiter");
+    finishPrepare();
+
+    expect((await waiting)?.sandboxId).toBe(fake.created[0]);
+    expect(publications).toBe(0);
+    expect(parks).toBe(0);
+  });
+
+  test.skipIf(killSwitch)("cold-starts immediately once template sealing has begun", async () => {
+    let finishSeal!: () => void;
+    const sealGate = new Promise<void>((resolve) => (finishSeal = resolve));
+    const fake = makeFakeAdapter();
+    fake.adapter.prepare = async () => {};
+    fake.adapter.publishTemplate = async () => {
+      await sealGate;
+    };
+
+    await requestPrewarm("daytona", "tella-fusion");
+    await until(() => readyEntry()?.stage === "Sealing reusable template");
+    const startedAt = Date.now();
+    const claim = await claimPrewarmOrWait("daytona", "tella-fusion", "bks-late");
+
+    expect(claim).toBeNull();
+    expect(Date.now() - startedAt).toBeLessThan(500);
+    finishSeal();
+    await until(() => readyEntry()?.state === "ready");
+  });
+
   test.skipIf(killSwitch)("does not wait on an old bootstrapping entry", async () => {
     let release!: () => void;
     const gate = new Promise<void>((r) => (release = r));

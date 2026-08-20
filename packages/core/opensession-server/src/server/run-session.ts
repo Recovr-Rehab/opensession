@@ -85,6 +85,10 @@ import {
 	sandboxProviderConfigured,
 } from "./sandbox/config";
 import { ensureSandboxWithTransientRetry } from "./sandbox/reliability";
+import {
+	portableWorkspacePresetRun,
+	resolveWorkspaceModelPreset,
+} from "./workspace-model-presets";
 import { getTitleOverride } from "./title-overrides";
 import { ensureGeneratedTitle } from "./generated-titles";
 import { clearReplySuggestions, maybeSuggestReplies } from "./reply-suggestions";
@@ -1366,6 +1370,17 @@ export async function maybeLaunchSandboxedRun(
 		];
 		rpcToken = crypto.randomUUID();
 		registerRunToken(rpcToken, { sessionId: session.id, user: opts.user });
+		// Detached sandbox hosts cannot read the server's workspace store. Resolve
+		// the picker-only workspace preset before crossing that boundary. A preset
+		// matching built-in Dial/Orchestrator wiring keeps that portable id, while
+		// an ordinary custom preset carries its concrete lead model.
+		const workspacePreset = resolveWorkspaceModelPreset(
+			session.model,
+			session.workspaceId,
+		);
+		const portablePreset = workspacePreset
+			? portableWorkspacePresetRun(workspacePreset)
+			: undefined;
 		const spec: RunHostSpec = {
 			hostId: `rh-${randomUUIDv7()}`,
 			osSessionId: session.id,
@@ -1377,7 +1392,8 @@ export async function maybeLaunchSandboxedRun(
 				: opts.engineSessionId || undefined,
 			cwd: sandbox.cwd,
 			mode: session.mode,
-			model: session.model,
+			model: portablePreset?.model ?? session.model,
+			selectedModel: portablePreset?.selectedModel,
 			images: opts.images,
 			mcpServers: opts.mcpServers ?? "all",
 			proxyMcpServers,
@@ -1389,7 +1405,7 @@ export async function maybeLaunchSandboxedRun(
 			user: opts.user,
 			mcpGrantUser: session.startedBy || undefined,
 			fallbackModel: interactiveFallbackModel(session.model),
-			effort: session.effort,
+			effort: portablePreset?.effort ?? session.effort,
 			fastMode: session.fastMode,
 			accountId: session.accountId,
 			journalKind: "prompt",

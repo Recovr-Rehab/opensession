@@ -17,6 +17,27 @@ export interface ResolvedWorkspaceModelPreset {
 	enginePresetId?: string;
 }
 
+/** A detached sandbox cannot read the server's workspace store. Convert a
+ * resolved workspace preset into a self-contained runtime selection before
+ * the RunHostSpec crosses that boundary, while retaining the picker id for
+ * attribution and fallback bookkeeping. */
+export function portableWorkspacePresetRun(preset: ResolvedWorkspaceModelPreset): {
+	model: string;
+	selectedModel: string;
+	effort?: string;
+} {
+	const enginePresetId = preset.enginePresetId?.trim();
+	return {
+		model: enginePresetId
+			? enginePresetId.startsWith("pi/")
+				? enginePresetId
+				: `pi/${enginePresetId}`
+			: preset.model,
+		selectedModel: preset.id,
+		...(preset.effort ? { effort: preset.effort } : {}),
+	};
+}
+
 /** Return the Dial preset with the exact same lead and oracle configuration. */
 function matchingDialPreset(preset: {
 	lead: { model: string; effort?: string };

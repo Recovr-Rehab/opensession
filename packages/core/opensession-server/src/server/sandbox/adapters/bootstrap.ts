@@ -77,7 +77,12 @@ import {
   maskOpenaiAccount,
   openaiSeedAuthPath,
 } from "../../openai-auth";
-import { modelSupportsSteer, providerFor } from "../../models";
+import {
+  fallbackPlan,
+  modelSupportsSteer,
+  providerFor,
+  toPiModel,
+} from "../../models";
 import { filterMcpServers } from "../../runner-shared";
 import {
   appendTranscriptEntries,
@@ -226,6 +231,18 @@ export function projectRemotePiConfig(raw: unknown): string | null {
       2,
     ) + "\n"
   );
+}
+
+export function remoteRunNeedsOpenai(
+  model: string | undefined,
+  fallbackModel?: string,
+): boolean {
+  const primary = toPiModel(model) || model;
+  const reachable = [
+    primary,
+    ...fallbackPlan(primary, fallbackModel).map((hop) => toPiModel(hop.id) || hop.id),
+  ];
+  return reachable.some((candidate) => /^pi\/openai\//.test(candidate || ""));
 }
 
 /**
@@ -1430,16 +1447,14 @@ function makeRemoteLauncher(
       // in-sandbox applies the same pool/openaiAccounts rules, and (b) the
       // rotation-proof SEEDED artifact per home account (access-token-only +
       // invalid placeholder refresh — buildOpenaiRemoteSeedUpload). Upload it
-      // only for an OpenAI run: every turn gets a fresh host launch with its
-      // selected model, and projecting unrelated account families adds both
-      // authority and remote startup latency for no benefit.
+      // only when the selected model or its configured fallback can use
+      // OpenAI. The fallback walk runs inside this same host, so waiting until
+      // that hop would leave it without credentials.
       // Rewritten (or removed) per launch so restriction changes apply and a
       // previously-uploaded wider set never lingers. Destination filenames
       // stay the legacy .opensession-* names the (dual-reading) in-sandbox
       // build resolves — same convention as the bridge config above.
-      const usesOpenai = /^pi\/openai\//.test(
-        String(spec.model || ""),
-      );
+      const usesOpenai = remoteRunNeedsOpenai(spec.model, spec.fallbackModel);
       const openaiUpload: ReturnType<typeof buildOpenaiRemoteSeedUpload> = usesOpenai
         ? buildOpenaiRemoteSeedUpload(
             listCodexAccounts(),
