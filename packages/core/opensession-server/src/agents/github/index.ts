@@ -41,6 +41,7 @@ import {
 } from "./state";
 import { feedbackStats } from "./feedback";
 import type { PrRef } from "./review";
+import { githubWebhookForwardStatus } from "./webhook-forward";
 
 const GITHUB_WEBHOOK_SECRET = process.env.GITHUB_WEBHOOK_SECRET || "";
 
@@ -251,6 +252,13 @@ export class GithubAgent implements AgentModule {
     // review dead on dry pools, missed delivery) is re-fired by the sweep.
     const { startReconcileSweep } = await import("./reconcile");
     startReconcileSweep();
+    // Outbound webhook delivery for no-exposure installs: gh forwards GitHub
+    // deliveries to the loopback /github/webhook over an outbound connection, so
+    // no inbound port is opened. Self-gates on the public-URL signal; when a
+    // public webhook URL is configured this is a no-op and the inbound HTTP
+    // webhook stays authoritative. The reconcile sweep above backstops either.
+    const { startGithubWebhookForward } = await import("./webhook-forward");
+    void startGithubWebhookForward();
     // Cross-PR learning: periodically re-distill the per-repo learned review
     // rules from the feedback store's outcome signals.
     const { armLearnedRulesDistiller } = await import("./learned-rules");
@@ -261,6 +269,8 @@ export class GithubAgent implements AgentModule {
 
   async shutdown(): Promise<void> {
     // Auto-fix loop state is persisted to disk after each iteration; nothing to flush.
+    const { stopGithubWebhookForward } = await import("./webhook-forward");
+    stopGithubWebhookForward();
   }
 
   health(): Record<string, unknown> {
@@ -271,6 +281,7 @@ export class GithubAgent implements AgentModule {
       trackedPrs: listPrStates().length,
       activeCodeLoops: activeCodeLoops(),
       reviewFeedback: feedbackStats(),
+      webhookForward: githubWebhookForwardStatus(),
     };
   }
 }

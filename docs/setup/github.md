@@ -104,6 +104,46 @@ non-default repos (the default repo keeps its historical bare-number keys).
 Merge side effects (docs-sync, SEO tracking, session deploy notifications)
 run for the **default repo only**.
 
+## GitHub events without a public URL
+
+A simple install has no public hostname and no TLS proxy, so GitHub cannot POST
+to `/github/webhook`. The **outbound** analogue of Slack Socket Mode covers this
+case: the `cli/gh-webhook` gh extension opens an outbound connection to GitHub
+and forwards received deliveries to the loopback handler.
+
+```
+gh webhook forward --repo=<owner/name> \
+  --events=pull_request,pull_request_review,pull_request_review_comment,issue_comment,workflow_run \
+  --url=http://127.0.0.1:${WEBHOOK_PORT}/github/webhook \
+  --secret=$GITHUB_WEBHOOK_SECRET
+```
+
+Delivery becomes GitHub to gh (outbound) to the same `/github/webhook` handler a
+public webhook would hit, signed with the same `GITHUB_WEBHOOK_SECRET` so the
+handler's HMAC check passes unchanged. No inbound port is opened.
+
+The github agent arms this from its `startup()`
+(`packages/core/opensession-server/src/agents/github/webhook-forward.ts`): it
+spawns one forwarder per configured repo that has a `ghRepo`, restarts each on
+exit with capped backoff, and kills them on shutdown. Set
+`GITHUB_WEBHOOK_FORWARD_ORG` (or `integrations.github.webhookForwardOrg`) to
+forward a whole org with a single `--org` process instead.
+
+**Gating.** The forwarder runs when no public webhook URL is configured
+(`server.publicBaseUrl` is loopback, the simple-mode default) and stays off when
+a public URL is set, where the inbound HTTP webhook above stays authoritative.
+`GITHUB_WEBHOOK_FORWARD=true` or `=false` overrides that auto-selection. Under
+either transport the reconcile sweep
+(`packages/core/opensession-server/src/agents/github/reconcile.ts`) remains the
+fire-once backstop, so a dropped or missed delivery is still recovered.
+
+**Prerequisites.** The forwarder needs `gh` authenticated (`gh auth login`) and
+the `cli/gh-webhook` extension. On startup the agent checks for both; if `gh` is
+present but the extension is missing it attempts a one-time
+`gh extension install cli/gh-webhook`. If `gh` is absent or the install fails it
+logs one line with the fix and falls back to the reconcile sweep rather than
+crashing.
+
 ## Behavior toggles
 
 - Auto-review on every PR push is **off by default**: the github agent seeds
