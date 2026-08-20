@@ -57,7 +57,7 @@ const ICON_PENDING = "cursor-default text-dim";
    a second colour landing on it instead of the band darkening under the
    pointer. */
 const SUMMARY_MARK =
-	"grid size-7 shrink-0 place-items-center rounded-sm no-underline focus-ring";
+	"grid size-7 shrink-0 place-items-center rounded-md no-underline focus-ring";
 const SUMMARY_MARK_HOVER =
 	"hover:bg-[color-mix(in_srgb,currentColor_14%,transparent)]";
 /* Pulls the pair together. The status row spaces its parts 14px apart, which
