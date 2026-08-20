@@ -59,15 +59,14 @@ const WAVE_BAR_LIVE =
 const GLYPH_CANCEL =
 	"inline-flex size-10 shrink-0 cursor-pointer items-center justify-center rounded-md border-none bg-transparent text-dim transition-colors hover:bg-hover hover:text-fg disabled:cursor-default disabled:opacity-35";
 
-/* The `voice-spinner` hook is gone: base.css's reduced-motion block used to
-   name it to pin the rotation to a constant 0.8s, but that block now matches
-   `[class*="animate-spin"]`, the utility itself, and pins the same 0.8s, so
-   the name earned nothing. Measured both ways, plain and under emulated
-   reduced motion, before removing it. The border is written one side at a time
-   on purpose. A `border-color` shorthand next to a `border-top-color` is the
-   same two-utilities-one-property race as the waveform colours above. */
-const SPINNER =
-	"h-4 w-4 shrink-0 animate-spin rounded-full border-2 border-l-line-strong border-r-line-strong border-b-line-strong border-t-dim [animation-duration:0.8s]";
+/** Each period fades in after the one before it, then all three clear together.
+ *  Their spans stay in layout while transparent so the label never shifts. */
+const TRANSCRIBING_DOT_STARTS = [0.06, 0.23, 0.4] as const;
+const TRANSCRIBING_DOT_MOTION = {
+  duration: 1.4,
+  repeat: Infinity,
+  ease: "linear",
+} as const;
 
 /** The recording row arrives through a short blur rather than sliding. The
  *  overlay's surface itself is not animated: it covers the field on the first
@@ -102,8 +101,8 @@ const PLUS_TO_CANCEL = {
  * Wispr-Flow-style dictation control shared by the session Composer and the
  * New-session palette. Idle it's just a mic button; tapping it takes over the
  * whole input surface with a recording bar (cancel × · live waveform · save ✓ ·
- * save and send ↑), then a "Transcribing…" bar while the clip runs through
- * /api/transcribe, and finally hands the text to `onText` or, when the send
+ * save and send ↑), then an animated "Transcribing..." label while the clip
+ * runs through /api/transcribe, and finally hands the text to `onText` or, when the send
  * button asked for it, to `onTextSend`.
  *
  * ✓ and ↑ differ only in what happens after the text lands: ✓ leaves it in the
@@ -572,9 +571,27 @@ export function VoiceInput({
           aria-live="polite"
           {...ROW_MOTION}
         >
-          <span className={SPINNER} aria-hidden="true" />
-          <span className="shrink-0 text-label font-medium text-dim">
-            Transcribing…
+          <span className="sr-only">Transcribing</span>
+          <span
+            className="shrink-0 text-label font-medium text-dim"
+            aria-hidden="true"
+          >
+            Transcribing
+            <span className="inline-flex">
+              {TRANSCRIBING_DOT_STARTS.map((start, index) => (
+                <motion.span
+                  key={index}
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: [0, 0, 1, 1, 0, 0] }}
+                  transition={{
+                    ...TRANSCRIBING_DOT_MOTION,
+                    times: [0, start, start + 0.06, 0.72, 0.78, 1],
+                  }}
+                >
+                  .
+                </motion.span>
+              ))}
+            </span>
           </span>
         </motion.div>
       )}
