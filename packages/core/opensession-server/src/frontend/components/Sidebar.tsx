@@ -2383,23 +2383,20 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 			clearWsPress();
 		}
 	}
-	// What a row click opens. `review` rows — the ones under the "Needs review"
-	// band — land on the workspace's Review tab, because the whole reason that
-	// band exists is that someone asked you to look at the diff. Every other
-	// place the same workspace appears (status lanes, Pinned, search) still
-	// opens the session.
+	// Rows under Needs review land on Review because someone asked you to inspect
+	// the diff. Every other workspace row re-enters through onOpenWorkspace, which
+	// restores the session or pane tab that was last active in that workspace.
 	function openWsRow(row: WsRow, review: boolean) {
 		const mainSession = workspaceMainSession(row);
-		// …as long as there's something to review: a PR (even one opened on a
-		// branch the session doesn't own), or its own branch/worktree to diff.
-		// Anything else falls through to the session rather than landing on an
-		// empty pane.
+		// Only open Review when there is something to inspect: a PR, or a branch or
+		// worktree that can produce a diff. Otherwise use the normal workspace path.
 		const reviewable =
 			row.workspace?.prNumber !== undefined ||
 			row.sessions.some((s) => sessionHasPr(s) || sessionHasWorkspace(s));
 		if (review && reviewable && mainSession) onOpenReview(mainSession);
-		else if (mainSession) onSelect(mainSession);
 		else if (row.workspace) onOpenWorkspace(row.workspace.id);
+		// Pre-migration grouped rows have no workspace record to restore through.
+		else if (mainSession) onSelect(mainSession);
 	}
 	function wsRowTouchEnd(row: WsRow, e: React.TouchEvent, review = false) {
 		const hadOrigin = wsPressOrigin.current !== null;
