@@ -34,7 +34,7 @@ import { accountProviderForModel, interactiveDefaultModel, interactiveFallbackMo
 import { notifyMentions } from "./mentions";
 import { newSessionId } from "./paths";
 import { wrapContext } from "./prompt-context";
-import { promptQueues } from "./queue-state";
+import { acknowledgePromptDispatch, beginPromptDispatch, promptQueues } from "./queue-state";
 import { type ImageInput, shouldPersistModelSwitch } from "./run-events";
 import { attachSessionWatchersToEngineTranscript, drainQueue, foldSessionUsage, maybeLaunchSandboxedRun, maybeQueueAutoContinue, sessionMentionsNote, watchExternalRunAndDrain } from "./run-session";
 import { type McpScope, STRIPE_CONFIRM_TOOLS } from "./runner-shared";
@@ -352,6 +352,10 @@ export async function openCreatedSession(
 	// Extra repos that actually got a worktree (see attachCreateRepos) — what
 	// the opening run's repos note and memory scopes are built from.
 	let attachedRepoIds: string[] = [];
+	// A sandbox opening turn can spend minutes provisioning before its run
+	// journal exists. Keep that prompt in the durable intake dispatch until the
+	// sandbox host journals it, so a service restart requeues rather than loses it.
+	let openingPromptEntryId: string | undefined;
 	// Terminal failure the opening run died on — recorded after the loop so
 	// the fresh session surfaces as "Needs input".
 	let runFailure: string | null = null;
@@ -468,6 +472,21 @@ export async function openCreatedSession(
 		if (preparingEnvironment) preparingWorkspaces.add(bksId);
 		try {
 			await persist();
+			if (spec.sandboxProvider) {
+				openingPromptEntryId = beginPromptDispatch(bksId, [
+					{
+						content: spec.openingPrompt,
+						user: spec.user,
+						...(spec.images?.length
+							? {
+								images: spec.images.map(
+									(image) => `data:${image.mediaType};base64,${image.data}`,
+								),
+							}
+							: {}),
+					},
+				]);
+			}
 			// A session starting in a workspace consumes its draft. The
 			// composer prompt it held is now this session's opening prompt.
 			// After persist() so this never races the create with a client
@@ -550,6 +569,7 @@ export async function openCreatedSession(
 							mcpServers: spec.runMcpServers ?? [],
 							isAutomationSession: false,
 							startToken,
+							promptEntryId: openingPromptEntryId,
 						})
 					: null;
 				if (!sandboxOpeningRun) {
@@ -826,6 +846,10 @@ export async function openCreatedSession(
 				noticePersisted: failureNoticePersisted,
 			});
 		} finally {
+			// Normal completion and handled launch failures no longer need the
+			// pre-launch record. If the process dies, this finally never runs and
+			// boot restores the opening prompt instead.
+			acknowledgePromptDispatch(bksId, openingPromptEntryId);
 			unmarkSessionStarting(bksId, startToken);
 			// Safety net for throws before the worktree block's own finally
 			// (persist/announce failures) — must never leak a session stuck
