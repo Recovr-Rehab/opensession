@@ -161,11 +161,14 @@ const LAST_REPO_KEY = "opensession-new-session-repo";
  *  card's own edge, the bottom only a hairline. The picker is a 32px box that
  *  fills on hover, so 16px above it matches the 16px beside it.
  *
- *  One control wide, since the branch moved into the footer's overflow menu.
- *  Nothing is left to wrap, to divide the row between, or to squeeze the repo
- *  label on a phone. */
+ *  One control wide on a desktop, since the branch moved into the footer's
+ *  overflow menu. On a phone this row IS the sheet's title bar: dismiss on the
+ *  left, the project in the middle, commit on the right. It used to be a
+ *  second row under that bar, and the two rows together pushed the sheet taller
+ *  than the strip a keyboard leaves visible, which cut the bar off the top of
+ *  the screen as soon as an attachment took its own space. */
 const HEADER =
-	"flex items-center gap-2 border-b border-transparent px-4 pt-4 pb-[11px] phone:px-3 phone:pb-3 phone:pt-2";
+	"flex items-center gap-2 border-b border-transparent px-4 pt-4 pb-[11px] phone:px-3 phone:pb-3 phone:pt-3";
 /** Merged onto HEADER/FOOTER by `cn()`, which drops the transparent colour. */
 const EDGE_DIVIDER = "border-line";
 /** The header's picker, which doubles as the palette's title: bigger, solid,
@@ -178,20 +181,24 @@ const EDGE_DIVIDER = "border-line";
  *  the card instead of ellipsizing. */
 const TRIGGER_STRONG =
 	"relative inline-flex min-w-0 max-w-full cursor-pointer items-center gap-1.5 rounded-control px-2 py-[5px] text-item-title font-semibold text-fg transition-colors hover:bg-hover disabled:cursor-default disabled:opacity-55";
-const CHEVRON = "-ml-0.5 shrink-0 text-faint";
-const MOBILE_PICKER = "contents";
+const CHEVRON = "-ml-0.5 shrink-0 text-faint phone:size-4";
+/** A pass-through on a desktop, where the picker is the header's one control.
+ *  On a phone it is the middle slot of the title bar: it takes the space the
+ *  two discs leave and centres the pill inside it, so the row reads as one
+ *  balanced bar rather than a label pushed against the close button. */
+const MOBILE_PICKER =
+	"desktop:contents phone:flex phone:min-w-0 phone:flex-1 phone:justify-center";
 /** On a phone the trigger is a pill: it sits between two round controls in the
  *  top bar, so it needs an edge of its own to read as the third one rather than
  *  as loose text between them. The resting surface is the same one the
- *  composer's attachment chips take. */
+ *  composer's attachment chips take.
+ *
+ *  Smaller than the header's desktop title: between two 44px discs it is the
+ *  quiet one of the three, so it drops to the label size and medium weight the
+ *  rest of the chrome's chips wear. It also has to fit the row it now shares,
+ *  which is what `max-w-full` plus the label's own truncation buy. */
 const MOBILE_TRIGGER =
-	"phone:min-h-11 phone:rounded-[999px] phone:border phone:border-line phone:bg-[var(--bg-hover)] phone:px-3 phone:py-2";
-/** The phone sheet's bar: dismiss on the left, commit on the right, and
- *  nothing between them. A sheet on the platform names itself by what it
- *  contains, and this one is a prompt field under a project picker, so a title
- *  spent the row a phone can least spare on a word for what is already on
- *  screen. The name survives for screen readers below. */
-const PHONE_BAR = "hidden items-center justify-between gap-3 px-3 pb-1 pt-3 phone:flex";
+	"phone:min-h-9 phone:gap-1 phone:rounded-[999px] phone:border phone:border-line phone:bg-[var(--bg-hover)] phone:px-2.5 phone:py-1.5 phone:text-label phone:font-medium phone:[&_svg:first-child]:size-4";
 /** The send disc's neutral twin: same 44px circle and glyph box, so dismiss and
  *  commit read as one pair rather than a bare icon beside a solid action. */
 const PHONE_CLOSE =
@@ -222,7 +229,7 @@ const FOOTER_RIGHT = "flex min-w-0 items-center gap-1.5 phone:contents max-[560p
  *  hover wash rides a pseudo-element, so it has to be rounded with them. */
 const FOOTER_ICON_BTN = cn(
 	paletteIconBtn,
-	"shrink-0 phone:rounded-[999px] phone:before:rounded-[999px] max-[560px]:w-9",
+	"shrink-0 phone:size-11 phone:rounded-[999px] phone:before:rounded-[999px]",
 );
 /** Ask mode's toggle. Off, it is one of the footer's quiet icon tools. On, it
  *  wears the same green marker the session composer's toolbar shows for the
@@ -231,11 +238,12 @@ const FOOTER_ICON_BTN = cn(
  *  would leave read-only running silently.
  *
  *  A complete string rather than a variant stacked on FOOTER_ICON_BTN: the two
- *  states differ in width, height and colour, and `max-[560px]:w-9` from the
- *  icon button would crush the labelled chip on phones. 32px tall, the size
- *  the icon buttons' hover wash paints, so the row keeps one rhythm. */
+ *  states differ in width, height and colour, and the icon button's square
+ *  `size-11` would crush the labelled chip on phones. 32px tall on a desktop,
+ *  the size the icon buttons' hover wash paints, so the row keeps one rhythm;
+ *  44px on a phone, where the whole row is thumb-sized. */
 const ASK_BTN_ON =
-	"inline-flex min-h-8 shrink-0 items-center gap-1.5 rounded-control px-2.5 text-label font-medium transition-colors bg-[color-mix(in_srgb,var(--green)_18%,transparent)] text-green hover:bg-[color-mix(in_srgb,var(--green)_26%,transparent)] disabled:cursor-default disabled:opacity-50";
+	"inline-flex min-h-8 shrink-0 items-center gap-1.5 rounded-control px-2.5 text-label font-medium transition-colors phone:min-h-11 phone:rounded-[999px] phone:px-3.5 bg-[color-mix(in_srgb,var(--green)_18%,transparent)] text-green hover:bg-[color-mix(in_srgb,var(--green)_26%,transparent)] disabled:cursor-default disabled:opacity-50";
 /** Ask mode paints the whole card, not just its toggle — the same thing the
  *  session composer does for ask and for note mode, because the mode governs
  *  everything you are about to type rather than one control in the corner.
@@ -253,7 +261,7 @@ const ASK_SURFACE =
  *  effort suffix steps aside first and leaves that room to the model. */
 const MODEL_PILL = cn(
 	palettePill,
-	"shrink min-w-0 max-w-none phone:ml-auto phone:[&_[data-effort]]:hidden max-[560px]:px-[9px]",
+	"shrink min-w-0 max-w-none phone:ml-auto phone:min-h-11 phone:[&_[data-effort]]:hidden max-[560px]:px-[9px]",
 );
 
 /* What a create does with the view behind the palette: "open" follows the new
@@ -1053,6 +1061,13 @@ export function NewSession({ onBack, inline, focusSeq, send, addHandler, connect
     }
   }
 
+  /** The latest `handleCreate`, for a caller that has to wait a render before
+   *  it can create. The dictation bar's ↑ is the one: it writes the transcript
+   *  through the prompt's own state, so a closure captured at the moment of
+   *  the press would still be looking at the draft as it was. */
+  const createRef = useRef<() => void>(() => {});
+  createRef.current = handleCreate;
+
   function handleCreate() {
     if (!canCreate) return;
     if (createAction === "draft") {
@@ -1224,25 +1239,6 @@ export function NewSession({ onBack, inline, focusSeq, send, addHandler, connect
   // palette or sits on it as the empty state's session input.
   const card = (
     <>
-      {phoneBar && (
-        <div className={PHONE_BAR}>
-          <Modal.Close className={PHONE_CLOSE} aria-label="Close">
-            <IconX size={22} />
-          </Modal.Close>
-          {/* The sheet still has a name, it just isn't drawn: the dialog needs
-              one, and a screen reader has no card to look at. */}
-          <Modal.Title className="sr-only">New session</Modal.Title>
-          <button
-            type="button"
-            className={PHONE_SEND}
-            onClick={handleCreate}
-            disabled={!canCreate}
-            aria-label={CREATE_LABELS[createAction]}
-          >
-            <IconArrowUp size={22} />
-          </button>
-        </div>
-      )}
       {/* Header: what the session is pointed at, and nothing else. The mode
           switch sits with the tools in the footer, and the branch one level
           behind them, because a fresh branch is what almost every code
@@ -1250,9 +1246,21 @@ export function NewSession({ onBack, inline, focusSeq, send, addHandler, connect
           repo is a conversation with your tools, Code with no repo is a
           scratch dir.
 
-          On a phone the title bar above owns dismiss and send, while this row
-          keeps the project choice close to the prompt it scopes. */}
+          On a phone this row is also the sheet's title bar: dismiss, the
+          project, commit. One row rather than two, because a sheet over an
+          open keyboard has about half a screen to spend and an attachment
+          takes its share of it. */}
       <div className={cn(HEADER, edges.top && EDGE_DIVIDER)}>
+        {phoneBar && (
+          <>
+            <Modal.Close className={PHONE_CLOSE} aria-label="Close">
+              <IconX size={22} />
+            </Modal.Close>
+            {/* The sheet still has a name, it just isn't drawn: the dialog
+                needs one, and a screen reader has no card to look at. */}
+            <Modal.Title className="sr-only">New session</Modal.Title>
+          </>
+        )}
         <div className={MOBILE_PICKER}>
           <PaletteSelect
             className={cn(TRIGGER_STRONG, MOBILE_TRIGGER)}
@@ -1371,6 +1379,17 @@ export function NewSession({ onBack, inline, focusSeq, send, addHandler, connect
             )}
           </PaletteSelect>
         </div>
+        {phoneBar && (
+          <button
+            type="button"
+            className={PHONE_SEND}
+            onClick={handleCreate}
+            disabled={!canCreate}
+            aria-label={CREATE_LABELS[createAction]}
+          >
+            <IconArrowUp size={22} />
+          </button>
+        )}
       </div>
 
       {/* Picked services, above the field like every other thing attached to
@@ -1694,6 +1713,19 @@ export function NewSession({ onBack, inline, focusSeq, send, addHandler, connect
                 promptHandle.current?.appendText(t);
                 promptRef.current?.focus();
               }}
+              onTextSend={(t) => {
+                promptHandle.current?.appendText(t);
+                // One turn of the loop before creating: the transcript reaches
+                // the prompt through its own state, and `canCreate` only
+                // catches up on the render after it. `createRef` is read then
+                // rather than captured now for the same reason.
+                setTimeout(() => createRef.current(), 0);
+              }}
+              // The bar covers the card it sits in, so it takes that card's
+              // corner: the inline card's 16px, or the palette shell's 22px.
+              overlayClassName={
+                inline ? "rounded-2xl" : "rounded-[calc(22px*var(--rf))]"
+              }
             />
 
             {!phoneBar && (
@@ -1850,7 +1882,15 @@ export function NewSession({ onBack, inline, focusSeq, send, addHandler, connect
           // A phone sheet carries a rounder top corner than the floating
           // palette does: it meets the screen's own edge on three sides, so the
           // two corners it keeps are the whole of its shape.
-          "max-h-[calc(89dvh-1rem)] phone:max-h-[calc(100dvh-12px)] phone:rounded-t-[calc(28px*var(--rf))] phone:rounded-b-none phone:[&_textarea]:min-h-[160px] phone:[&_textarea]:text-input-phone",
+          //
+          // The keyboard cap is what keeps the title bar on screen. The sheet
+          // is anchored to the bottom of the LAYOUT viewport and grows upward,
+          // and `dvh` does not shrink for the keyboard, so a tall enough sheet
+          // (a prompt carrying an image) ran off the top of the screen and took
+          // dismiss and send with it. 43dvh fits the strip left above an iPhone
+          // keyboard and its suggestion bar; past that the prompt scrolls,
+          // which is what its scroller is for.
+          "max-h-[calc(89dvh-1rem)] phone:max-h-[calc(100dvh-12px)] phone:[body.kb-open_&]:max-h-[43dvh] phone:rounded-t-[calc(28px*var(--rf))] phone:rounded-b-none phone:[&_textarea]:min-h-[160px] phone:[&_textarea]:text-input-phone",
           ASK_SURFACE,
           mode === "ask" && "before:opacity-100 after:opacity-100",
         )}
