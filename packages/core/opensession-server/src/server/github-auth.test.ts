@@ -166,6 +166,18 @@ describe("token lookups + runner env", () => {
       GH_TOKEN: "gho_test123",
       GITHUB_TOKEN: "gho_test123",
     });
+    // The caller may pass a null or unmatched user (simple mode has no per-user
+    // login); the sole account is still returned, so an interactive run gets
+    // GH_TOKEN. The pi-runner gate keys on interactivity, not on a non-null
+    // login — see the githubInteractive boolean.
+    expect(githubAuthEnv(null)).toEqual({
+      GH_TOKEN: "gho_test123",
+      GITHUB_TOKEN: "gho_test123",
+    });
+    expect(githubAuthEnv("Some Randomer")).toEqual({
+      GH_TOKEN: "gho_test123",
+      GITHUB_TOKEN: "gho_test123",
+    });
     enableFeature();
     expect(githubAuthEnv("Some Randomer")).toEqual({}); // unknown user
     expect(githubAuthEnv(null)).toEqual({});

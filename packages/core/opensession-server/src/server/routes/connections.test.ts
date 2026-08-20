@@ -333,6 +333,34 @@ describe("connect-time auth bootstrap", () => {
     }
   });
 
+  test("refuses to flip when a concurrent connect replaced the stored account", async () => {
+    // The finding: token storage happens before this lock. If a racing poll
+    // authorized a different account, the simple-mode store now holds Bob, so
+    // enabling sign-in for Alice would roster an admin whose token is gone
+    // (githubCredentialForLogin("alice") is null). The in-lock revalidation must
+    // refuse and leave the gate + intent untouched.
+    const cfg = writeGithubConfig({ oauthClientId: "cid", authOnConnect: true });
+    const storePath = join(dir, `gh-auth-${Math.random().toString(36).slice(2)}.json`);
+    writeFileSync(
+      storePath,
+      JSON.stringify({
+        users: {
+          bob: { login: "bob", token: "tok-bob", connectedAt: "2020-01-01T00:00:00.000Z" },
+        },
+      }),
+    );
+    process.env.OPENSESSION_GITHUB_AUTH_STORE = storePath;
+    try {
+      const boot = await bootstrapUserAuthOnConnect("alice", "Alice");
+      expect("error" in boot).toBe(true);
+      const written = JSON.parse(readFileSync(cfg, "utf-8"));
+      expect(written.integrations.github.userPrAuth).toBeUndefined(); // gate NOT flipped
+      expect(written.integrations.github.authOnConnect).toBe(true); // intent NOT consumed
+    } finally {
+      delete process.env.OPENSESSION_GITHUB_AUTH_STORE;
+    }
+  });
+
   test("no authOnConnect: simple mode is unchanged (no cookie, no flip, no roster)", async () => {
     const cfg = writeGithubConfig({ oauthClientId: "cid" });
     const restore = stubGithubDeviceFetch("octocat", "Octo Cat");
@@ -375,17 +403,33 @@ describe("connect-time auth bootstrap", () => {
 
   test("refuses a second bootstrap once the intent is consumed (TOCTOU)", async () => {
     const cfg = writeGithubConfig({ oauthClientId: "cid", authOnConnect: true });
-    // First connect consumes authOnConnect: rosters @alice, flips the gate.
-    const first = await bootstrapUserAuthOnConnect("alice", "Alice");
-    expect("error" in first).toBe(false);
-    // A second poll that also passed the pre-lock check must be refused INSIDE
-    // the lock, or it would roster @bob as a second admin and mint a session.
-    const second = await bootstrapUserAuthOnConnect("bob", "Bob");
-    expect("error" in second).toBe(true);
-    const written = JSON.parse(readFileSync(cfg, "utf-8"));
-    const admins = written.identity.team.filter((m: any) => m.admin === true);
-    expect(admins.length).toBe(1); // @bob was never rostered
-    expect(admins[0].github.toLowerCase()).toBe("alice");
-    expect(written.integrations.github.authOnConnect).toBeUndefined();
+    // The connecting account is in the store (pollGithubDeviceFlow stored it
+    // before the lock), so the in-lock revalidation passes for @alice.
+    const storePath = join(dir, `gh-auth-${Math.random().toString(36).slice(2)}.json`);
+    writeFileSync(
+      storePath,
+      JSON.stringify({
+        users: {
+          alice: { login: "alice", token: "tok-alice", connectedAt: "2020-01-01T00:00:00.000Z" },
+        },
+      }),
+    );
+    process.env.OPENSESSION_GITHUB_AUTH_STORE = storePath;
+    try {
+      // First connect consumes authOnConnect: rosters @alice, flips the gate.
+      const first = await bootstrapUserAuthOnConnect("alice", "Alice");
+      expect("error" in first).toBe(false);
+      // A second poll that also passed the pre-lock check must be refused INSIDE
+      // the lock, or it would roster @bob as a second admin and mint a session.
+      const second = await bootstrapUserAuthOnConnect("bob", "Bob");
+      expect("error" in second).toBe(true);
+      const written = JSON.parse(readFileSync(cfg, "utf-8"));
+      const admins = written.identity.team.filter((m: any) => m.admin === true);
+      expect(admins.length).toBe(1); // @bob was never rostered
+      expect(admins[0].github.toLowerCase()).toBe("alice");
+      expect(written.integrations.github.authOnConnect).toBeUndefined();
+    } finally {
+      delete process.env.OPENSESSION_GITHUB_AUTH_STORE;
+    }
   });
 });

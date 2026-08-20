@@ -233,47 +233,46 @@ What turns on (`packages/core/opensession-server/src/server/github-auth.ts`, `we
 
 A **simple-mode install** is one person on their own box: no operator config, no
 bot machine-user, no `gh auth login`, and no sign-in gate. Such a user still
-needs their **private** repos available — to list them in the repo picker, clone
-them, and open PRs as themselves. Connect a **personal access token**, pasted
-once, with nothing to provision:
+needs their **private** repos available, to list them in the repo picker, clone
+them, and open PRs as themselves. Simple mode connects with a **GitHub App you
+create**, configured entirely in the UI: no file editing, no restart.
 
-1. Create a token. A **fine-grained** token is the recommendation:
-   [github.com/settings/personal-access-tokens/new](https://github.com/settings/personal-access-tokens/new).
-   Scope it to the repositories you want to expose and grant permissions
-   **Contents: Read and write** and **Pull requests: Read and write** (Metadata:
-   Read is added automatically). A **classic** token with the `repo` scope also
-   works — you get a bearer token either way.
-2. Settings → Connections → **GitHub**: paste the token and **Save**. It is
-   validated with `GET /user`, and stored server-side under the login GitHub
-   reports (`~/.opensession-github-auth.json`, 0600) with no expiry — never
-   shown again. That single account becomes *the* account for this install
-   (there is no roster in simple mode; the one connected account is the acting
-   identity). **Disconnect** removes it.
+1. **Create the app.** Settings → Connections → **GitHub App** opens a wizard
+   whose link lands on `github.com/settings/apps/new` pre-filled: a generated,
+   likely-unique name, private, no webhook, **Device Flow enabled**, permissions
+   **Contents: Read & write** and **Pull requests: Read & write** (Metadata: Read
+   is automatic). Pick the owner: your personal account, or an organization (a
+   team's app should be org-owned so the org owns it and can reach org repos).
+   On that page, **generate a client secret** and copy it, then create the app.
+2. **Paste the details.** Back in the wizard, paste the **Client ID**, the app
+   **slug** (from the app's URL), and the **client secret**. All three are
+   required. The secret is stored 0600 so Open Session can refresh the ~8h
+   user-to-server token; without it the connection would lapse.
+3. **Install on your repositories.** Follow the install link and pick the repos
+   to expose. A user-to-server token only reaches repos the app is installed on.
+4. **Connect.** Enter the one-time code at `github.com/login/device`. The token
+   is stored under the login GitHub reports (`~/.opensession-github-auth.json`,
+   0600, never shown again). Private clones use it through a temporary
+   `GIT_ASKPASS` (never written into the remote), and a per-checkout credential
+   helper keeps later `fetch`/`push` authenticated. No `gh` CLI or
+   `GITHUB_API_TOKEN` is involved.
 
-Private clones use the connected token without ever writing it into the remote:
-the clone runs with a temporary `GIT_ASKPASS` helper, and `origin` is left as the
-plain `https://github.com/<owner>/<repo>.git`. No `gh` CLI or `GITHUB_API_TOKEN`
-is involved.
+The single connected account is *the* account for this install (there is no
+roster in simple mode; the one connected account is the acting identity).
+**Disconnect** removes it; **Remove app** clears the configured client id, slug,
+and secret and returns the section to unconfigured. There is no personal-access-
+token path: the App is the only simple-mode connect.
 
-This is entirely decoupled from [per-user GitHub auth](#per-user-github-auth-prs-as-the-session-owner)
-above: connecting a token in simple mode does **not** turn on the sign-in gate.
-That gate is still governed solely by `integrations.github.userPrAuth`.
+### Graduating to per-user sign-in
 
-### Operator override: bring your own GitHub App
-
-No App is shipped and none is required. An operator who prefers an
-**installable** connect — a user-to-server token scoped to selected repos rather
-than a pasted PAT — can register their own public GitHub App and configure its
-client id. The simple-mode card then also offers GitHub's device flow.
-
-Set `OPENSESSION_GITHUB_CLIENT_ID` (env) or `integrations.github.oauthClientId`
-(config), plus `OPENSESSION_GITHUB_APP_SLUG` / `integrations.github.appSlug` for
-the install URL. The App wants **Device Flow: ON**, **Expire user authorization
-tokens: OFF** (so the `ghu_` token is non-expiring and no client secret is ever
-needed — the device flow is a public-client flow), permissions **Contents: Read
-& write**, **Pull requests: Read & write**, **Metadata: Read**, no webhook, and
-no callback URL. Absent a configured client id this path stays hidden; the PAT
-field is always present.
+Connecting the app does **not** by itself turn on the sign-in gate (governed
+solely by `integrations.github.userPrAuth`). Because the App's client id is the
+*same* key sign-in reads, graduating a team to
+[per-user GitHub auth](#per-user-github-auth-prs-as-the-session-owner) is a
+one-flag change, or automatic for an org-owned app: `install.sh --org <name>`
+(or choosing the Organization owner in the wizard) records the org, and at the
+connect step rosters the connecting account as the first admin and enables
+sign-in in one locked write. A personal app stays single-user with no gate.
 
 ## Deploy script
 

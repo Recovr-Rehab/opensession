@@ -8,9 +8,10 @@
  *                                   config.repos.
  */
 
+import { $ } from "bun";
 import { chmodSync, existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "fs";
 import { tmpdir } from "os";
-import { join } from "path";
+import { join, resolve as resolvePath } from "path";
 import { audit } from "../audit";
 import { codeStorageConfig, configuredRepos, type RepoSection } from "../config";
 import { getRepo as getCsRepo, listRepos as listCsRepos } from "../codestorage/client";
@@ -300,6 +301,25 @@ function checkoutsRoot(): string {
   return `${homeDir()}/checkouts`;
 }
 
+const GH_CREDENTIAL_SCRIPT = resolvePath(
+  import.meta.dir,
+  "../../../../../../scripts/gh-credential.ts",
+);
+
+/**
+ * Wire a URL-scoped git credential helper on a github.com checkout so ambient
+ * `git fetch`/`git push` resolve the currently connected token at use time,
+ * without the token ever persisting in the remote. Mirrors
+ * configureCsCredentialHelper: an empty value first resets any inherited helper
+ * list for this URL scope, then the minting helper. `--replace-all` keeps
+ * re-runs from stacking duplicates.
+ */
+async function configureGithubCredentialHelper(checkoutPath: string): Promise<void> {
+  const key = "credential.https://github.com.helper";
+  await $`git -C ${checkoutPath} config --replace-all ${key} ${""}`.quiet();
+  await $`git -C ${checkoutPath} config --add ${key} ${`!bun ${GH_CREDENTIAL_SCRIPT}`}`.quiet();
+}
+
 async function registerGithubRepo(input: {
   fullName: string;
   id?: string;
@@ -321,6 +341,11 @@ async function registerGithubRepo(input: {
   mkdirSync(root, { recursive: true });
   try {
     await cloneGithubRepo(input.fullName, dest, input.userToken);
+    // A private clone authenticated through a one-shot GIT_ASKPASS; the remote
+    // it leaves is tokenless, so wire the credential helper for future
+    // fetch/push. No-op for a public (tokenless) clone — the helper simply has
+    // nothing to answer with.
+    if (input.userToken) await configureGithubCredentialHelper(dest);
     const inspected = await inspectRepo(dest);
     const config = rawConfig();
     const repos = {

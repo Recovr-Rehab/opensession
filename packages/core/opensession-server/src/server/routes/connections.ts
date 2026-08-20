@@ -83,6 +83,18 @@ export async function bootstrapUserAuthOnConnect(
 				return {
 					error: "GitHub sign-in was already enabled by another connection",
 				};
+			// The token was stored by pollGithubDeviceFlow BEFORE this lock, and
+			// simple mode keeps only one account. A concurrent poll that authorized
+			// a DIFFERENT account would have replaced the store, so flipping sign-in
+			// for `login` now would roster an admin whose token is gone
+			// (githubCredentialForLogin(login) would be null). Confirm the stored
+			// sole identity still matches before enabling the gate.
+			const { soleGithubLogin } = await import("../github-auth");
+			if (soleGithubLogin()?.toLowerCase() !== key)
+				return {
+					error:
+						"A different GitHub account connected before setup finished; reconnect to enable sign-in",
+				};
 			const team = rawTeam(config);
 			// (b) roster-upsert the login as admin, matched by github login.
 			const existing = team.find(
