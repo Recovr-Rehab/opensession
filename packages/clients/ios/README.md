@@ -232,12 +232,12 @@ Pure SwiftUI with SwiftStreamingMarkdown for CommonMark/GFM rendering, iOS 26+
   stack and Done button); the sheet form is what the Mac still uses.
 - **New session** (`NewSessionView.swift`): the repo sits across the top, the
   prompt fills the middle, and run controls sit in the footer. On iOS, Code is
-  the quiet default and the footer eye toggles Ask, so there is no default New
-  branch chip. Sandbox choices from `GET /api/sandbox/status` sit under More
-  options and use the same names as the web palette. The host is sent as an
-  explicit `local` so the menu and session always agree. The Mac keeps its mode
-  and Sandbox chips where the wider footer has room. Choosing a Runner is not
-  offered because the web palette also dropped runner-at-create.
+  the quiet default, so there is no default New branch chip. Ask and Sandbox
+  choices from `GET /api/sandbox/status` sit under More options, while dictation
+  stays at the trailing edge. Sandbox names match the web palette, and the host
+  is sent as an explicit `local` so the menu and session always agree. The Mac
+  keeps its mode and Sandbox chips where the wider footer has room. Choosing a
+  Runner is not offered because the web palette also dropped runner-at-create.
 - **Action Button / Siri / Spotlight — "Start an Agent"** — one App Intent
   (`Intents/StartAgentIntent.swift`), and it deliberately OPENS the app
   (`openAppWhenRun = true`) rather than collecting the idea in the system's

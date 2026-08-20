@@ -2,10 +2,10 @@ import SwiftUI
 
 /// Compose a new session, laid out like the palette on the desktop: the repo
 /// reads across the top, the prompt fills the middle, and how it runs sits in
-/// the footer with the attach button. Code is the quiet default. Ask stays one
-/// tap away, while the less common Sandbox choice sits behind More options.
-/// Connected services have no native equivalent yet, so they stay absent
-/// rather than half-present.
+/// the footer with the attach button. Code is the quiet default. Ask and
+/// Sandbox sit behind More options, while dictation stays one tap away at the
+/// trailing edge. Connected services have no native equivalent yet, so they
+/// stay absent rather than half-present.
 /// Screenshots paste straight into the attachments (Cmd+V on the Mac,
 /// long-press Paste on iOS).
 ///
@@ -501,24 +501,25 @@ struct NewSessionView: View {
         return catalog?.label(for: id) ?? "Model"
     }
 
-    /// Attach and session mode stay one tap away. Rare execution choices sit
-    /// behind one overflow button, while the model remains visible on the right.
-    /// The Mac has room to keep every setting as its own chip.
+    /// Attach stays at the leading edge. iOS keeps mode and execution choices
+    /// behind one overflow button, with model and dictation on the right. The
+    /// Mac has room to keep every setting as its own chip.
     private var controls: some View {
         HStack(spacing: 8) {
             AttachImagesButton(images: $images)
-            ComposerDictationButton(dictation: dictation, draft: $prompt)
             #if os(iOS)
-            askButton
-            if !sandboxChoices.isEmpty { moreOptionsMenu }
-            #endif
+            moreOptionsMenu
             Spacer(minLength: 8)
-            #if os(macOS)
+            modelChip
+            ComposerDictationButton(dictation: dictation, draft: $prompt)
+            #else
+            ComposerDictationButton(dictation: dictation, draft: $prompt)
+            Spacer(minLength: 8)
             if !availableEfforts.isEmpty { effortChip }
             if fastSupported { fastChip }
             if !sandboxChoices.isEmpty { sandboxChip }
-            #endif
             modelChip
+            #endif
         }
         .padding(.horizontal, 12)
         .padding(.vertical, controlsVerticalPadding)
@@ -542,62 +543,55 @@ struct NewSessionView: View {
         return SandboxOffering.choices(sandboxStatus)
     }
 
-    /// Ask is the one mode switch worth keeping visible. Its entry point is a
-    /// quiet eye until the read-only mode is enabled and names itself.
-    private var askButton: some View {
-        Button {
-            selectMode(mode == "ask" ? "code" : "ask")
-        } label: {
-            HStack(spacing: 5) {
-                Image(systemName: "eye")
-                    .font(.system(size: mode == "ask" ? 14 : 18, weight: .medium))
-                if mode == "ask" {
-                    Text("Ask")
-                        .font(.caption.weight(.medium))
-                }
-            }
-            .foregroundStyle(mode == "ask" ? OS1VisualStyle.green : OS1VisualStyle.textDim)
-            .padding(.horizontal, mode == "ask" ? 11 : 0)
-            .frame(minWidth: 44, minHeight: 44)
-            .background(
-                mode == "ask" ? OS1VisualStyle.green.opacity(0.14) : Color.clear,
-                in: Capsule()
-            )
-            .contentShape(Capsule())
-        }
-        .buttonStyle(.plain)
-        .accessibilityLabel("Ask mode")
-        .accessibilityValue(mode == "ask" ? "On" : "Off")
+    private var askModeBinding: Binding<Bool> {
+        Binding(
+            get: { mode == "ask" },
+            set: { selectMode($0 ? "ask" : "code") }
+        )
     }
 
-    /// Where the session runs. iOS follows the web and keeps this uncommon
-    /// choice behind More options. A non-host selection highlights the button
-    /// so the hidden override cannot be missed.
+    /// iOS keeps mode and environment choices behind one control. Its active
+    /// state remains visible when either hidden choice differs from Code on the
+    /// host, with Ask using the same green as the session composer.
     private var moreOptionsMenu: some View {
-        Menu {
-            Menu {
-                sandboxOptions
-            } label: {
+        let customized = mode == "ask" || sandbox != SandboxOffering.host
+        return Menu {
+            Toggle(isOn: askModeBinding) {
                 Label {
-                    Text("Sandbox")
-                    Text(SandboxOffering.label(sandbox))
+                    Text("Ask")
+                    Text("Read-only, no repo unless you pick one")
                 } icon: {
-                    Image(systemName: "cube")
+                    Image(systemName: "eye")
+                }
+            }
+            if !sandboxChoices.isEmpty {
+                Divider()
+                Menu {
+                    sandboxOptions
+                } label: {
+                    Label {
+                        Text("Sandbox")
+                        Text(SandboxOffering.label(sandbox))
+                    } icon: {
+                        Image(systemName: "cube")
+                    }
                 }
             }
         } label: {
             Image(systemName: "ellipsis")
                 .font(.system(size: 18, weight: .medium))
                 .foregroundStyle(
-                    sandbox == SandboxOffering.host
-                        ? OS1VisualStyle.textDim
-                        : OS1VisualStyle.accentInk
+                    customized
+                        ? (mode == "ask" ? OS1VisualStyle.green : OS1VisualStyle.accentInk)
+                        : OS1VisualStyle.textDim
                 )
                 .frame(width: 44, height: 44)
                 .background(
-                    sandbox == SandboxOffering.host
-                        ? Color.clear
-                        : OS1VisualStyle.accent.opacity(0.14),
+                    customized
+                        ? (mode == "ask"
+                            ? OS1VisualStyle.green.opacity(0.14)
+                            : OS1VisualStyle.accent.opacity(0.14))
+                        : Color.clear,
                     in: Circle()
                 )
                 .contentShape(Circle())
@@ -605,6 +599,7 @@ struct NewSessionView: View {
         .menuStyle(.button)
         .buttonStyle(.plain)
         .accessibilityLabel("More options")
+        .accessibilityValue(mode == "ask" ? "Ask on" : "Code")
     }
 
     /// The Mac keeps Sandbox visible as a chip because it has the room.
