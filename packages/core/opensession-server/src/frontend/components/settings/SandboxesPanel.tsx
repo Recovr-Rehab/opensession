@@ -477,17 +477,6 @@ function ConnectionCard({
 									{summary}
 								</p>
 							)}
-							{connection.qualification && (
-								<details className="mt-2 text-meta text-faint">
-									<summary className="w-fit cursor-pointer select-none hover:text-fg">Diagnostics</summary>
-									<div className="mt-1 grid gap-0.5 pl-2">
-										<span>Connection {connection.id}</span>
-										<span>Adapter {connection.qualification.adapterSignature}</span>
-										{connection.qualification.checkedAt && <span>Checked {new Date(connection.qualification.checkedAt).toLocaleString()}</span>}
-										{connection.qualification.failureCode && <span>Code {connection.qualification.failureCode}</span>}
-									</div>
-								</details>
-							)}
 						</div>
 					</div>
 					<div className="col-start-2 row-start-1 flex justify-end self-start">
@@ -504,16 +493,31 @@ function ConnectionCard({
 							/>
 						)}
 					</div>
-					{connection.state !== "not_configured" && (
-						<div className="col-span-2 row-start-2 flex items-center justify-end gap-2 desktop:col-span-1 desktop:col-start-2 desktop:row-start-1 desktop:self-end">
-							{connection.state === "ready" && !checking && (
-								<Button size="sm" icon={<IconCheck size={17} />} onClick={() => void testAgain()} disabled={!canManage || busy}>
-									Test again
-								</Button>
+					{(connection.qualification || connection.state !== "not_configured") && (
+						<div className="col-span-2 row-start-2 flex items-start justify-between gap-4">
+							{connection.qualification && (
+								<details className="min-w-0 text-meta text-faint">
+									<summary className="h-[26px] w-fit cursor-pointer select-none leading-[26px] hover:text-fg">Diagnostics</summary>
+									<div className="mt-1 grid gap-0.5 pl-2">
+										<span>Connection {connection.id}</span>
+										<span>Adapter {connection.qualification.adapterSignature}</span>
+										{connection.qualification.checkedAt && <span>Checked {new Date(connection.qualification.checkedAt).toLocaleString()}</span>}
+										{connection.qualification.failureCode && <span>Code {connection.qualification.failureCode}</span>}
+									</div>
+								</details>
 							)}
-							<Button size="sm" onClick={() => setDialogOpen(true)} disabled={!canManage || checking}>
-								Configure
-							</Button>
+							{connection.state !== "not_configured" && (
+								<div className="ml-auto flex shrink-0 items-center gap-2">
+									{connection.state === "ready" && !checking && (
+										<Button size="sm" icon={<IconCheck size={17} />} onClick={() => void testAgain()} disabled={!canManage || busy}>
+											Test again
+										</Button>
+									)}
+									<Button size="sm" onClick={() => setDialogOpen(true)} disabled={!canManage || checking}>
+										Configure
+									</Button>
+								</div>
+							)}
 						</div>
 					)}
 				</div>
