@@ -496,9 +496,9 @@ function ConnectionCard({
 					{(connection.qualification || connection.state !== "not_configured") && (
 						<div className="col-span-2 row-start-2 flex items-baseline justify-between gap-4">
 							{connection.qualification && (
-								<details className="min-w-0 text-meta text-faint">
+								<details className="ml-10 min-w-0 text-meta text-faint">
 									<summary className="h-[26px] w-fit cursor-pointer select-none leading-[26px] hover:text-fg">Diagnostics</summary>
-									<div className="mt-1 grid gap-0.5 pl-2">
+									<div className="mt-1 grid gap-0.5 pl-3">
 										<span>Connection {connection.id}</span>
 										<span>Adapter {connection.qualification.adapterSignature}</span>
 										{connection.qualification.checkedAt && <span>Checked {new Date(connection.qualification.checkedAt).toLocaleString()}</span>}
