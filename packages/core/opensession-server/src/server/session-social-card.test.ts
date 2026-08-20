@@ -231,11 +231,16 @@ describe("session social card", () => {
 		expect(svg).toContain(
 			'<image href="data:image/png;base64,avatar" x="56" y="153" width="28" height="28"',
 		);
-		expect(svg).toContain(
-			'<text x="94" y="165" dominant-baseline="middle"',
+		// Both labels sit on one baseline placed so their cap band centers on the
+		// 28px marks. `dominant-baseline: middle` centers the font box instead,
+		// which reads high for a name carrying no descender.
+		expect(svg).toContain('<text x="94" y="175" fill=');
+		expect(svg).toContain('<text x="280" y="175" fill=');
+		expect(svg).not.toContain(
+			'<text x="94" y="175" dominant-baseline="middle"',
 		);
-		expect(svg).toContain(
-			'<text x="280" y="165" dominant-baseline="middle"',
+		expect(svg).not.toContain(
+			'<text x="280" y="175" dominant-baseline="middle"',
 		);
 		expect(svg).toContain(">Test Person</text>");
 		expect(svg).toContain(">opensession</text>");
@@ -322,7 +327,7 @@ describe("session social card", () => {
 		expect(output).toContain("<title>Ship dynamic social cards · Open Session</title>");
 		expect(output).toContain('content="summary_large_image"');
 		expect(output).toMatch(
-			/content="https:\/\/media\.example\.test\/session-card\/sess-social-1\/[A-Za-z0-9_-]{32}\.png\?v=15"/,
+			/content="https:\/\/media\.example\.test\/session-card\/sess-social-1\/[A-Za-z0-9_-]{32}\.png\?v=16"/,
 		);
 		expect(output).toContain(
 			'property="og:url" content="https://os.example.test/session/sess-social-1"',
@@ -336,13 +341,13 @@ describe("session social card", () => {
 		).toBe("sess-social-1");
 		expect(socialSessionIdFromPath("/settings")).toBeNull();
 		expect(sessionSocialCardUrl("sess-social-1")).toMatch(
-			/^https:\/\/media\.example\.test\/session-card\/sess-social-1\/[A-Za-z0-9_-]{32}\.png\?v=15$/,
+			/^https:\/\/media\.example\.test\/session-card\/sess-social-1\/[A-Za-z0-9_-]{32}\.png\?v=16$/,
 		);
 	});
 
 	test("signs ids containing Slack timestamp dots", () => {
 		expect(sessionSocialCardUrl("slack-C123-1719860000.000000")).toMatch(
-			/^https:\/\/media\.example\.test\/session-card\/slack-C123-1719860000\.000000\/[A-Za-z0-9_-]{32}\.png\?v=15$/,
+			/^https:\/\/media\.example\.test\/session-card\/slack-C123-1719860000\.000000\/[A-Za-z0-9_-]{32}\.png\?v=16$/,
 		);
 	});
 

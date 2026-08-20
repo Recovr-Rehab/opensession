@@ -46,7 +46,7 @@ export const SESSION_CARD_BANNER_WIDTH = 1200;
 export const SESSION_CARD_BANNER_HEIGHT = 240;
 
 export type SessionCardVariant = "card" | "banner";
-const SESSION_CARD_VERSION = 15;
+const SESSION_CARD_VERSION = 16;
 
 const CARD_INK = "#050609";
 const CARD_PAPER = "#FFFFFF";
@@ -60,8 +60,17 @@ const META_GROUP_GAP = 24;
 const META_GLYPH_SIZE = 22;
 const META_RADIUS = META_SIZE * 0.46;
 const META_OPACITY = 0.42;
-/** Lift labels against the icons because SVG's middle baseline sits optically low. */
-const META_TEXT_Y_OFFSET = -2;
+/**
+ * Inter's cap height, as a share of the point size. Both labels sit on one
+ * baseline placed so this band centers on the icons. `dominant-baseline:
+ * middle` centers the font's whole box instead, which puts a name with no
+ * descender visibly high while a word carrying a `p` looks right.
+ */
+const META_CAP_RATIO = 0.727;
+/** Whole pixels, so a label's stem lands on the raster grid. */
+function capBaselineShift(fontSize: number): number {
+	return Math.round((fontSize * META_CAP_RATIO) / 2);
+}
 const TITLE_META_GAP = 10;
 const TITLE_SIZE = 38;
 const TITLE_LINE_HEIGHT = 42;
@@ -691,7 +700,7 @@ export function sessionSocialCardSvg(
 		ownerTextWidth ?? owner.length * META_TEXT_SIZE * 0.55;
 	const repoX = ownerTextX + measuredOwnerWidth + META_GROUP_GAP;
 	const repoTextX = repoX + META_SIZE + META_LABEL_GAP;
-	const metaTextY = metaCenter + META_TEXT_Y_OFFSET;
+	const metaTextY = metaCenter + capBaselineShift(META_TEXT_SIZE);
 	const avatarTile = squirclePath(PAD_X, metaTop, META_SIZE, META_RADIUS);
 	const repoTile = squirclePath(repoX, metaTop, META_SIZE, META_RADIUS);
 	const tileColor = repoId ? repoTileColorFor(repoId) : CARD_INK;
@@ -737,7 +746,7 @@ ${avatarGlyph}
 		: repoIcon
 			? `<image href="${repoIcon}" x="${repoX}" y="${metaTop}" width="${META_SIZE}" height="${META_SIZE}" preserveAspectRatio="xMidYMid slice" clip-path="url(#repoClip)"/>
 <path d="${repoTile}" fill="none" stroke="#000000" stroke-opacity="0.1"/>`
-			: `<path d="${repoTile}" fill="${xml(tileColor)}"/><text x="${repoX + META_SIZE / 2}" y="${metaCenter}" text-anchor="middle" dominant-baseline="middle" fill="${REPO_TILE_INK}" font-size="14" font-weight="600">${xml(repoLetter(repoId))}</text>
+			: `<path d="${repoTile}" fill="${xml(tileColor)}"/><text x="${repoX + META_SIZE / 2}" y="${metaCenter + capBaselineShift(14)}" text-anchor="middle" fill="${REPO_TILE_INK}" font-size="14" font-weight="600">${xml(repoLetter(repoId))}</text>
 <path d="${repoTile}" fill="none" stroke="#000000" stroke-opacity="0.1"/>`;
 
 	return `<svg xmlns="http://www.w3.org/2000/svg" width="${SESSION_CARD_WIDTH}" height="${height}" viewBox="0 0 ${SESSION_CARD_WIDTH} ${height}" overflow="hidden" font-family="Inter, Arial, sans-serif">
@@ -755,9 +764,9 @@ ${shotDefs}
 ${shotMarkup}
 ${titleMarkup}
 ${avatarMarkup}
-<text x="${ownerTextX}" y="${metaTextY}" dominant-baseline="middle" fill="${CARD_INK}" fill-opacity="${META_OPACITY}" font-size="${META_TEXT_SIZE}" font-weight="500">${xml(owner)}</text>
+<text x="${ownerTextX}" y="${metaTextY}" fill="${CARD_INK}" fill-opacity="${META_OPACITY}" font-size="${META_TEXT_SIZE}" font-weight="500">${xml(owner)}</text>
 ${repoMarkup}
-${repoId ? `<text x="${repoTextX}" y="${metaTextY}" dominant-baseline="middle" fill="${CARD_INK}" fill-opacity="${META_OPACITY}" font-size="${META_TEXT_SIZE}" font-weight="500">${xml(metaLabel(repoId))}</text>` : ""}
+${repoId ? `<text x="${repoTextX}" y="${metaTextY}" fill="${CARD_INK}" fill-opacity="${META_OPACITY}" font-size="${META_TEXT_SIZE}" font-weight="500">${xml(metaLabel(repoId))}</text>` : ""}
 </svg>`;
 }
 
