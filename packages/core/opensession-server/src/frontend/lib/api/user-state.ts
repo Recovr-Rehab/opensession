@@ -210,6 +210,43 @@ export async function saveHidesApi(
 	return body?.hides && typeof body.hides === "object" ? body.hides : hides;
 }
 
+// ── Settlements (per-user workspace lifecycle overrides) ──
+
+export interface SettlementRecord {
+	state: "settled" | "active";
+	at: string;
+	terminalSignature?: string;
+}
+
+export async function fetchSettlements(
+	user: string,
+): Promise<Record<string, SettlementRecord>> {
+	const body = await request<{ settlements?: Record<string, SettlementRecord> }>(
+		`/settlements?user=${encodeURIComponent(user)}`,
+		{ label: "Failed to fetch settlements" },
+	);
+	return body?.settlements && typeof body.settlements === "object"
+		? body.settlements
+		: {};
+}
+
+export async function saveSettlementsApi(
+	user: string,
+	settlements: Record<string, SettlementRecord>,
+): Promise<Record<string, SettlementRecord>> {
+	const body = await request<{ settlements?: Record<string, SettlementRecord> }>(
+		"/settlements",
+		{
+			method: "PUT",
+			body: { user, settlements },
+			label: "Failed to save settlements",
+		},
+	);
+	return body?.settlements && typeof body.settlements === "object"
+		? body.settlements
+		: settlements;
+}
+
 // ── Tab colors (per-user session tab colors) ──
 
 export async function fetchTabColors(

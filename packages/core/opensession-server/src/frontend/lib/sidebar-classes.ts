@@ -915,6 +915,9 @@ export const SIDEBAR_SWIPE_ACTION_TRANSITION =
 /** Destructive, and on the trailing edge because the swipe travels left. */
 export const SIDEBAR_SWIPE_ACTION_ARCHIVE = "right-0 bg-red text-white";
 
+/** Reversible lifecycle filing on the trailing edge. Quieter than Archive. */
+export const SIDEBAR_SWIPE_ACTION_SETTLE = "right-0 bg-active text-fg";
+
 /** Pin, on the leading edge. Dark ink: the yellow is too light for white. */
 export const SIDEBAR_SWIPE_ACTION_STAR = "left-0 bg-yellow text-[#17130a]";
 

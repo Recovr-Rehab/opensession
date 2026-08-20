@@ -52,7 +52,12 @@ describe("hover cards drop the repo and the idle timestamp", () => {
 
 	test("the workspace card leads with neither the repo nor a timestamp", () => {
 		const html = renderToStaticMarkup(
-			<WsCardBody row={row([session()])} onArchive={() => {}} onOpen={() => {}} />,
+			<WsCardBody
+				row={row([session()])}
+				settled={false}
+				onToggleSettled={() => {}}
+				onOpen={() => {}}
+			/>,
 		);
 		expect(html).toContain("Modernize UI design");
 		expect(html).not.toContain("opensession");
@@ -64,21 +69,22 @@ describe("hover cards drop the repo and the idle timestamp", () => {
 		expect(html).not.toContain("mt-3.5");
 	});
 
-	// A word with no descenders ("Archive", "#5675") leaves the line box's
+	// A word with no descenders ("Settle", "#5675") leaves the line box's
 	// reserved descender space empty, so centring the box puts the ink most of
 	// a pixel high on the plate. The label carries CAP_LABEL to centre the ink
 	// itself; it has to be a span, because the trim is a no-op on the control's
 	// own flex box.
-	test("the archive action centres its word on the cap band", () => {
+	test("the settle action centres its word on the cap band", () => {
 		const html = renderToStaticMarkup(
 			<WsCardBody
 				row={{ ...row([session()]), status: "merged" }}
-				onArchive={() => {}}
+				settled={false}
+				onToggleSettled={() => {}}
 				onOpen={() => {}}
 			/>,
 		);
 		expect(html).toMatch(
-			new RegExp(`<span class="[^"]*text-box[^"]*">Archive</span>`),
+			new RegExp(`<span class="[^"]*text-box[^"]*">Settle</span>`),
 		);
 	});
 
@@ -110,7 +116,12 @@ describe("hover cards drop the repo and the idle timestamp", () => {
 		for (const html of [
 			renderToStaticMarkup(<SessionCardBody session={withPr} />),
 			renderToStaticMarkup(
-				<WsCardBody row={row([withPr])} onArchive={() => {}} onOpen={() => {}} />,
+				<WsCardBody
+					row={row([withPr])}
+					settled={false}
+					onToggleSettled={() => {}}
+					onOpen={() => {}}
+				/>,
 			),
 		]) {
 			expect(html).toContain("+25");

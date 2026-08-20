@@ -1,6 +1,6 @@
 /**
  * One per-user flat-file store, spelled once. Pins, read marks, lanes,
- * snoozes, hides, tab colors, UI prefs and personal prompts are the same
+ * snoozes, hides, settlements, tab colors, UI prefs and personal prompts are the same
  * thing: one JSON file per person under `~/.opensession-<name>/`, holding a
  * single field. They used to be seven copies of that code, and the copies
  * disagreed about the two things that matter, so one person's pins and drafts
@@ -18,7 +18,7 @@
  * - READING THE LOSING SPELLINGS. Every one of these stores holds live state
  *   written under an older filename, so a read that finds no canonical file
  *   falls back to the legacy names before giving up: the plain sanitized slug
- *   (pins, reads, lanes, snoozes, hides, tab colors, UI prefs) and the
+ *   (pins, reads, lanes, snoozes, hides, settlements, tab colors, UI prefs) and the
  *   identity verbatim (personal prompts' `user-<slackId>`). The first write
  *   after this lands on the canonical name and wins from then on; the legacy
  *   file is left in place rather than deleted, so nothing is lost if the
@@ -94,6 +94,7 @@ export const NAME_KEYED_STORES = [
 	"lanes",
 	"pins",
 	"reads",
+	"settlements",
 	"snoozes",
 	"tab-colors",
 	"ui-prefs",
@@ -104,7 +105,8 @@ export const NAME_KEYED_STORES = [
  *
  * The display name is the filename, so a rename would otherwise orphan someone
  * quietly: their pins, read marks, lanes, snoozes, hides, tab colors, drafts
- * and UI prefs would all still be on disk under a name nothing looks up, and
+ * settlements and UI prefs would all still be on disk under a name nothing
+ * looks up, and
  * the app would show them a factory-fresh sidebar. Nothing errors, which is
  * what makes it worth handling here rather than leaving to the caller.
  *

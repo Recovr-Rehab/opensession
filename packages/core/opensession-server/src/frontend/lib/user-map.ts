@@ -1,5 +1,5 @@
 // Factory for the per-user MAPS that follow you across devices: sidebar
-// hides, snoozes, lanes, tab colors. Each is a `Record<string, V>` held
+// hides, snoozes, settlements, lanes, tab colors. Each is a `Record<string, V>` held
 // server-side under the UserPicker name, mirrored in an in-memory cache so the
 // public API stays synchronous, and written back by PUTting the whole map.
 //

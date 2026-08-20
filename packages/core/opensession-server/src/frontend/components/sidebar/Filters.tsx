@@ -180,22 +180,15 @@ export function FilterPopover({
 		<>
 			<div className={BACKDROP} onClick={onClose} />
 			<div className={FILTER_POPOVER} style={{ left, top, width }}>
-				{/* The list is an inbox whichever of these is picked: its rows
-				    band by what they want from you and when they last moved. This
-				    is what sits above those bands — nothing, one band per project,
-				    or the status lanes, which stand in for them. It was two rows
-				    ("Sections" and "Group by") answering that as six combinations,
-				    two of which nobody needed: a list with no headings at all, and
-				    the status lanes nested under every project, which split the one
-				    "Needs input" heading status is for into one per project. */}
+				{/* Activity is the stable Active/Settled inbox. Project keeps the
+				    same creation order inside each repo; Status is the deliberate
+				    dynamic alternative whose rows move between lifecycle lanes. */}
 				<ValueRow
 					label="Group by"
 					value={filter.groupBy}
 					options={[
-						// "Activity", not "Nothing": this is the inbox's own bands
-						// (Needs action / Recent / Yesterday / Earlier / Done) with
-						// nothing above them, so a list with five headings in it must
-						// not claim to have none. The stored value stays "none".
+						// The stored value stays "none" for backwards-compatible prefs;
+						// the visible mode is the Active/Settled lifecycle.
 						{ value: "none", label: "Activity" },
 						{ value: "repo", label: "Project" },
 						{ value: "status", label: "Status" },
@@ -260,15 +253,20 @@ export function FilterPopover({
 						</span>
 					</Menu.Trigger>
 					<Menu.Popup align="end" sideOffset={6}>
-						<FilterSubmenu
-							label="Sort by"
-							value={filter.sort}
-							options={[
-								{ value: "updated", label: "Updated" },
-								{ value: "created", label: "Created" },
-							]}
-							onSelect={(v) => onChange({ sort: v as SortBy })}
-						/>
+						{/* Active and Project ordering is deliberately stable by creation.
+						    Status is the one layout where choosing lane order still makes
+						    sense, so only it offers this override. */}
+						{filter.groupBy === "status" && (
+							<FilterSubmenu
+								label="Sort by"
+								value={filter.sort}
+								options={[
+									{ value: "updated", label: "Updated" },
+									{ value: "created", label: "Created" },
+								]}
+								onSelect={(v) => onChange({ sort: v as SortBy })}
+							/>
+						)}
 						{/* Session-less PR rows in the project sections (the dissolved
 						    PR band): whose PRs surface. */}
 						<FilterSubmenu

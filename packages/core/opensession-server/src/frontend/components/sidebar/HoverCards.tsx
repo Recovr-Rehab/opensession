@@ -22,7 +22,7 @@ import {
 import { openLightbox } from "../MediaLightbox";
 import { sessionPrTone } from "../../lib/pr-refs";
 import { CardFooter, CardPrChip, checksLabel, osReviewLabel } from "../SidebarRowCards";
-import { IconArchive, IconArrowUpRight, IconClock, IconGitMerge, IconInbox, IconLink, IconMail, IconMoon, IconPencil, IconPin, IconPullRequest } from "../icons";
+import { IconArchive, IconArrowUp, IconArrowUpRight, IconCheckCircle, IconClock, IconGitMerge, IconInbox, IconLink, IconMail, IconMoon, IconPencil, IconPin, IconPullRequest } from "../icons";
 import React, { useEffect, useState } from "react";
 
 // The session card, in the shape the workspace card already proved: what the
@@ -294,6 +294,9 @@ export function WsStatusMark({
 	);
 	const dot = (cls: string) =>
 		slot(<span className={`size-2 shrink-0 rounded-full ${cls}`} />);
+	if (row.sessions.some((session) => session.waitingForInput))
+		return dot(SIDEBAR_STATUS_DOT.waiting);
+	if (row.sessions.some(runNeedsAttention)) return dot(SIDEBAR_STATUS_DOT.failed);
 	if (row.status === "needsinput") return dot(SIDEBAR_STATUS_DOT.waiting);
 	if (row.running) return dot(SIDEBAR_STATUS_DOT.running);
 	// A draft workspace has no session and so no PR to show. The flat-repo
@@ -473,15 +476,17 @@ function WsOverviewInfo({
 // The workspace counterpart of SessionCardBody: diff stats + status
 // at a glance, the latest assistant message as a "where things stand" line,
 // screenshot thumbnails from the workspace's sessions, and quick actions
-// (Archive, PR link) — the only card body that carries controls, which is why
+// (Settle, PR link) — the only card body that carries controls, which is why
 // its shell is the one the pointer can travel into.
 export function WsCardBody({
 	row,
-	onArchive,
+	settled,
+	onToggleSettled,
 	onOpen,
 }: {
 	row: WsCardRow;
-	onArchive: () => void;
+	settled: boolean;
+	onToggleSettled: () => void;
 	/** Open a session (the "Answer" action jumps to the blocked one). */
 	onOpen: (session: UnifiedSession) => void;
 }) {
@@ -494,9 +499,18 @@ export function WsCardBody({
 
 			<CardFooter>
 				{/* The single main action, colored by what the workspace needs next:
-				    answer the blocked question (accent), merge the ready PR (green),
-				    review the not-ready PR (neutral), or archive merged work (purple). */}
-				{row.status === "needsinput" && row.sessions.length > 0 ? (
+				    return settled work, answer a question, merge/review, or settle
+				    finished PR work. Archive remains in the explicit context menu. */}
+				{settled ? (
+					<Button
+						size="sm"
+						variant="soft"
+						icon={<IconArrowUp size={20} />}
+						onClick={onToggleSettled}
+					>
+						Unsettle
+					</Button>
+				) : row.status === "needsinput" && row.sessions.length > 0 ? (
 					<Button
 						size="sm"
 						variant="primary"
@@ -511,19 +525,13 @@ export function WsCardBody({
 						{row.sessions.some((c) => c.waitingForInput) ? "Answer" : "Open"}
 					</Button>
 				) : row.status === "merged" ? (
-					// Purple is the merged tone across every PR surface, and this is
-					// the action that closes merged work, so it takes the solid
-					// plate's shape with that fill. It is a className rather than a
-					// variant because the variants are semantic (danger, success)
-					// and "merged" is a fact about a PR, not about a button.
 					<Button
 						size="sm"
-						variant="primary"
-						className="bg-purple text-white hover:bg-purple/90"
-						icon={<IconArchive size={20} />}
-						onClick={onArchive}
+						variant="soft"
+						icon={<IconCheckCircle size={20} />}
+						onClick={onToggleSettled}
 					>
-						Archive
+						Settle
 					</Button>
 				) : row.status === "review" && prSession?.prUrl ? (
 					<Button
@@ -569,6 +577,8 @@ export function WsMobileSheet({
 	pinned,
 	onTogglePin,
 	onClose,
+	settled,
+	onToggleSettled,
 	onArchive,
 	onSetStatus,
 	snoozeUntil,
@@ -585,6 +595,8 @@ export function WsMobileSheet({
 	pinned: boolean;
 	onTogglePin: () => void;
 	onClose: () => void;
+	settled: boolean;
+	onToggleSettled: () => void;
 	onArchive: () => void;
 	/** Pin the workspace into a lane, or clear back to derived with `null`. */
 	onSetStatus: (status: LaneChoice | null) => void;
@@ -704,7 +716,13 @@ export function WsMobileSheet({
 				</div>
 				<SheetSeparator />
 				{/* Main action, colored by what the workspace needs next. */}
-				{row.status === "needsinput" && row.sessions.length > 0 && (
+				{settled && (
+					<SheetItem onClick={closing(onToggleSettled)}>
+						<IconArrowUp size={22} />
+						Unsettle
+					</SheetItem>
+				)}
+				{!settled && row.status === "needsinput" && row.sessions.length > 0 && (
 					<SheetItem
 						tone="accent"
 						onClick={closing(() =>
@@ -733,10 +751,10 @@ export function WsMobileSheet({
 						{prSession.prNumber != null && ` #${prSession.prNumber}`}
 					</SheetItem>
 				)}
-				{row.status === "merged" && row.sessions.length > 0 && (
-					<SheetItem tone="purple" onClick={closing(onArchive)}>
-						{archiveGlyph}
-						Archive workspace
+				{!settled && row.status === "merged" && row.sessions.length > 0 && (
+					<SheetItem onClick={closing(onToggleSettled)}>
+						<IconCheckCircle size={22} />
+						Settle workspace
 					</SheetItem>
 				)}
 				{prSession?.prUrl && row.status !== "review" && (
@@ -763,6 +781,12 @@ export function WsMobileSheet({
 					<SheetItem onClick={closing(onToggleRead)}>
 						<IconMail size={22} />
 						{unread ? "Mark as read" : "Mark as unread"}
+					</SheetItem>
+				)}
+				{!settled && row.status !== "merged" && row.sessions.length > 0 && (
+					<SheetItem onClick={closing(onToggleSettled)}>
+						<IconCheckCircle size={22} />
+						Settle
 					</SheetItem>
 				)}
 				<SheetItem onClick={closing(onTogglePin)}>
@@ -808,12 +832,10 @@ export function WsMobileSheet({
 						/>
 					</>
 				)}
-				{((row.status !== "merged" && row.sessions.length > 0) || onDelete) && (
-					<SheetSeparator />
-				)}
-				{/* Archiving stays reachable pre-merge from the explicit menu — the
-				    status coloring only governs which action gets top billing. */}
-				{row.status !== "merged" && row.sessions.length > 0 && (
+				{(row.sessions.length > 0 || onDelete) && <SheetSeparator />}
+				{/* Archive is the stronger removal action. It stays in the explicit
+				    menu for both Active and Settled work, never in the primary slot. */}
+				{row.sessions.length > 0 && (
 					<SheetItem tone="danger" onClick={closing(onArchive)}>
 						{archiveGlyph}
 						Archive

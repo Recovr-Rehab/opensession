@@ -41,6 +41,13 @@ import {
 	setPinNewWorkspaces,
 } from "../../lib/pins";
 import {
+	getSettlementPrefs,
+	onSettlementPrefsChanged,
+	setAutoSettleDays,
+	setAutoSettlePrs,
+	type SettlementPrefs,
+} from "../../lib/settlement-pref";
+import {
 	MOD_ENTER_GLYPH,
 	MOD_ENTER_LABEL,
 	type SendKeyPref,
@@ -357,6 +364,8 @@ export function PreferencesPanel() {
 	);
 	const [pinNew, setPinNew] = useState<boolean>(getPinNewSessions);
 	const [pinNewWs, setPinNewWs] = useState<boolean>(getPinNewWorkspaces);
+	const [settlement, setSettlement] =
+		useState<SettlementPrefs>(getSettlementPrefs);
 	useEffect(() => onSendKeyChanged(() => setSendKey(getSendKeyPref())), []);
 	useEffect(() => onBusySendChanged(() => setBusySend(getBusySendPrefs())), []);
 	useEffect(() => onVimModeChanged(() => setVimMode(getVimModePref())), []);
@@ -373,6 +382,11 @@ export function PreferencesPanel() {
 	);
 	useEffect(
 		() => onPinNewWorkspacesChanged(() => setPinNewWs(getPinNewWorkspaces())),
+		[],
+	);
+	useEffect(
+		() =>
+			onSettlementPrefsChanged(() => setSettlement(getSettlementPrefs())),
 		[],
 	);
 	// Per-user default model for NEW sessions ("" = no preference — the
@@ -523,6 +537,41 @@ export function PreferencesPanel() {
 					desc="Modal editing in the composer. Esc for normal mode, i to type. Enter still sends."
 					control={
 						<Switch aria-label="Vim mode" checked={vimMode} onCheckedChange={setVimModePref} />
+					}
+				/>
+			</SettingCard>
+			<SettingsGroupLabel>Sidebar</SettingsGroupLabel>
+			<SettingCard>
+				<SettingRow
+					title="Settle inactive work"
+					desc="Move quiet workspaces into Settled while keeping them in the sidebar."
+					control={
+						<Select
+							label="Settle inactive work"
+							value={String(settlement.autoSettleDays)}
+							options={[
+								{ value: "off", label: "Off" },
+								{ value: "1", label: "After 1 day" },
+								{ value: "3", label: "After 3 days" },
+								{ value: "7", label: "After 7 days" },
+								{ value: "14", label: "After 14 days" },
+								{ value: "30", label: "After 30 days" },
+							]}
+							onChange={(value) =>
+								setAutoSettleDays(value === "off" ? "off" : Number(value))
+							}
+						/>
+					}
+				/>
+				<SettingRow
+					title="Settle finished pull requests"
+					desc="Settle a workspace when all of its pull requests are merged or closed."
+					control={
+						<Switch
+							aria-label="Settle finished pull requests"
+							checked={settlement.autoSettlePrs}
+							onCheckedChange={setAutoSettlePrs}
+						/>
 					}
 				/>
 				<SettingRow

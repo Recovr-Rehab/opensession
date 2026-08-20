@@ -15,6 +15,10 @@ import { addSessionMemory, describeScope, forgetSessionMemory, listAllMemory, up
 import { getLanes as getUserLanes, setLanes as setUserLanes } from "../lanes";
 import { getSnoozes as getUserSnoozes, setSnoozes as setUserSnoozes } from "../snoozes";
 import { getHides as getUserHides, setHides as setUserHides } from "../hides";
+import {
+	getSettlements as getUserSettlements,
+	setSettlements as setUserSettlements,
+} from "../settlements";
 import { getTabColors as getUserTabColors, setTabColors as setUserTabColors } from "../tab-colors";
 import { getUiPrefs, patchUiPrefs } from "../ui-prefs";
 import { getPersonalPrompt, setPersonalPrompt } from "../personal-prompts";
@@ -186,7 +190,7 @@ export async function handlePrefsRoutes(
 	}
 
 	// ── The per-user stores below (pins, personal prompt, read marks, drafts,
-	// UI prefs, lanes, snoozes, hides, tab colors) all resolve WHO through
+	// UI prefs, lanes, snoozes, hides, settlements, tab colors) all resolve WHO through
 	// requestUser: the verified sign-in identity when web sign-in is active,
 	// the client-claimed name otherwise. They used to read the raw `user`
 	// param, which let a signed-in teammate read and overwrite another
@@ -424,6 +428,33 @@ export async function handlePrefsRoutes(
 		}
 		const user = requestUser(ctx, body.user) || "Anonymous";
 		return Response.json({ hides: setUserHides(user, body.hides) });
+	}
+
+	// ── Per-user workspace settlements ──
+	// Settlement is personal sidebar triage, unlike global Archive. The map is
+	// keyed by workspace-row identity and carries explicit Settle/Unsettle acts.
+	if (path === "/api/settlements" && req.method === "GET") {
+		const user = requestUser(ctx, url.searchParams.get("user")) || "Anonymous";
+		return Response.json({ settlements: getUserSettlements(user) });
+	}
+
+	if (path === "/api/settlements" && req.method === "PUT") {
+		const body = await req.json().catch(() => null);
+		if (
+			!body ||
+			typeof body.user !== "string" ||
+			typeof body.settlements !== "object" ||
+			body.settlements === null
+		) {
+			return Response.json(
+				{ error: "user (string) and settlements (object) are required" },
+				{ status: 400 },
+			);
+		}
+		const user = requestUser(ctx, body.user) || "Anonymous";
+		return Response.json({
+			settlements: setUserSettlements(user, body.settlements),
+		});
 	}
 
 	// ── Per-user session tab colors ──
