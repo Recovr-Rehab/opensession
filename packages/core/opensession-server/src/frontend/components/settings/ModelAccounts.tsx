@@ -194,7 +194,7 @@ function usageTone(pct: number | null): keyof typeof usageToneClasses {
 const statusToneClasses = {
 	red: { dot: "bg-red", text: "text-red" },
 	yellow: { dot: "bg-yellow", text: "text-yellow" },
-	muted: { dot: "bg-faint", text: "text-faint" },
+	muted: { dot: null, text: "rounded-full bg-yellow-soft px-2 py-[2px] text-yellow" },
 } as const;
 
 function AccountStatus({
@@ -210,7 +210,9 @@ function AccountStatus({
 			)}
 			{...props}
 		>
-			<span aria-hidden className={cn("size-1.5 rounded-full", statusToneClasses[tone].dot)} />
+			{statusToneClasses[tone].dot && (
+				<span aria-hidden className={cn("size-1.5 rounded-full", statusToneClasses[tone].dot)} />
+			)}
 			{children}
 		</span>
 	);
