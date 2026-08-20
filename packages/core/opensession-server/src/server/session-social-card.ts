@@ -38,16 +38,15 @@ export const SESSION_CARD_WIDTH = 1200;
 export const SESSION_CARD_HEIGHT = 630;
 /**
  * Banner variant, for Slack. A Block Kit `image` block is always laid out at
- * the message column width, so the only thing that decides how much of the
- * conversation the card eats is its aspect ratio. The compact title and
- * metadata fit this short banner: a taller shape only adds blank paper to
- * every message that quotes a session.
+ * the message column width, so its aspect ratio decides how much space the
+ * card uses. This height keeps the title and metadata centered while letting
+ * a 16:9 screenshot fill most of the card.
  */
 export const SESSION_CARD_BANNER_WIDTH = 1200;
-export const SESSION_CARD_BANNER_HEIGHT = 200;
+export const SESSION_CARD_BANNER_HEIGHT = 240;
 
 export type SessionCardVariant = "card" | "banner";
-const SESSION_CARD_VERSION = 13;
+const SESSION_CARD_VERSION = 14;
 
 const CARD_INK = "#050609";
 const CARD_PAPER = "#FFFFFF";
@@ -61,25 +60,27 @@ const META_GROUP_GAP = 24;
 const META_GLYPH_SIZE = 22;
 const META_RADIUS = META_SIZE * 0.46;
 const META_OPACITY = 0.52;
+/** Lift labels against the icons because SVG's middle baseline sits optically low. */
+const META_TEXT_Y_OFFSET = -2;
 const TITLE_META_GAP = 10;
 const TITLE_SIZE = 38;
 const TITLE_LINE_HEIGHT = 42;
 const TITLE_FONT = "Inter SemiBold 38";
 const TITLE_LETTER_SPACING = -1024;
 /** Every screenshot frame stays 16:9, including the ones behind the lead shot. */
-const SHOT_BANNER_WIDTH = 304;
-const SHOT_BANNER_HEIGHT = 171;
+const SHOT_BANNER_WIDTH = 384;
+const SHOT_BANNER_HEIGHT = 216;
 const SHOT_CARD_WIDTH = 448;
 const SHOT_CARD_HEIGHT = 252;
 const SHOT_BANNER_INSET = 14;
 const SHOT_CARD_INSET = 28;
-const SHOT_BANNER_RADIUS = 22;
+const SHOT_BANNER_RADIUS = 26;
 const SHOT_CARD_RADIUS = 28;
 const SHOT_GAP = 32;
 const SHOT_LIMIT = 2;
-const SHOT_BANNER_STACK_OFFSET = 72;
+const SHOT_BANNER_STACK_OFFSET = 84;
 const SHOT_CARD_STACK_OFFSET = 96;
-const SHOT_BANNER_STACK_LIFT = 8;
+const SHOT_BANNER_STACK_LIFT = 10;
 const SHOT_CARD_STACK_LIFT = 12;
 
 export interface SessionSocialCardData {
@@ -690,6 +691,7 @@ export function sessionSocialCardSvg(
 		ownerTextWidth ?? owner.length * META_TEXT_SIZE * 0.55;
 	const repoX = ownerTextX + measuredOwnerWidth + META_GROUP_GAP;
 	const repoTextX = repoX + META_SIZE + META_LABEL_GAP;
+	const metaTextY = metaCenter + META_TEXT_Y_OFFSET;
 	const avatarTile = squirclePath(PAD_X, metaTop, META_SIZE, META_RADIUS);
 	const repoTile = squirclePath(repoX, metaTop, META_SIZE, META_RADIUS);
 	const tileColor = repoId ? repoTileColorFor(repoId) : CARD_INK;
@@ -753,9 +755,9 @@ ${shotDefs}
 ${shotMarkup}
 ${titleMarkup}
 ${avatarMarkup}
-<text x="${ownerTextX}" y="${metaCenter}" dominant-baseline="middle" fill="${CARD_INK}" fill-opacity="${META_OPACITY}" font-size="${META_TEXT_SIZE}" font-weight="500">${xml(owner)}</text>
+<text x="${ownerTextX}" y="${metaTextY}" dominant-baseline="middle" fill="${CARD_INK}" fill-opacity="${META_OPACITY}" font-size="${META_TEXT_SIZE}" font-weight="500">${xml(owner)}</text>
 ${repoMarkup}
-${repoId ? `<text x="${repoTextX}" y="${metaCenter}" dominant-baseline="middle" fill="${CARD_INK}" fill-opacity="${META_OPACITY}" font-size="${META_TEXT_SIZE}" font-weight="500">${xml(metaLabel(repoId))}</text>` : ""}
+${repoId ? `<text x="${repoTextX}" y="${metaTextY}" dominant-baseline="middle" fill="${CARD_INK}" fill-opacity="${META_OPACITY}" font-size="${META_TEXT_SIZE}" font-weight="500">${xml(metaLabel(repoId))}</text>` : ""}
 </svg>`;
 }
 

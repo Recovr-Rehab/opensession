@@ -226,24 +226,24 @@ describe("session social card", () => {
 			[],
 			124,
 		);
-		expect(svg).toContain('<text x="56" y="60"');
-		expect(svg).toContain('<text x="56" y="102"');
+		expect(svg).toContain('<text x="56" y="80"');
+		expect(svg).toContain('<text x="56" y="122"');
 		expect(svg).toContain(
-			'<image href="data:image/png;base64,avatar" x="56" y="133" width="28" height="28"',
+			'<image href="data:image/png;base64,avatar" x="56" y="153" width="28" height="28"',
 		);
 		expect(svg).toContain(
-			'<text x="94" y="147" dominant-baseline="middle"',
+			'<text x="94" y="165" dominant-baseline="middle"',
 		);
 		expect(svg).toContain(
-			'<text x="280" y="147" dominant-baseline="middle"',
+			'<text x="280" y="165" dominant-baseline="middle"',
 		);
 		expect(svg).toContain(">Test Person</text>");
 		expect(svg).toContain(">opensession</text>");
 		expect(svg).toMatch(
-			/<clipPath id="avatarClip" clipPathUnits="userSpaceOnUse"><path d="M68\.88 133\.00L/,
+			/<clipPath id="avatarClip" clipPathUnits="userSpaceOnUse"><path d="M68\.88 153\.00L/,
 		);
 		expect(svg).toMatch(
-			/<clipPath id="repoClip" clipPathUnits="userSpaceOnUse"><path d="M254\.88 133\.00L/,
+			/<clipPath id="repoClip" clipPathUnits="userSpaceOnUse"><path d="M254\.88 153\.00L/,
 		);
 	});
 
@@ -265,20 +265,20 @@ describe("session social card", () => {
 			],
 		);
 		expect(svg).toContain(
-			'<image href="data:image/png;base64,primary" x="882" y="43" width="304" height="171"',
+			'<image href="data:image/png;base64,primary" x="802" y="38" width="384" height="216"',
 		);
 		expect(svg).toContain(
-			'<image href="data:image/png;base64,secondary" x="810" y="51" width="304" height="171"',
+			'<image href="data:image/png;base64,secondary" x="718" y="48" width="384" height="216"',
 		);
 		expect(svg).not.toContain("ignored");
-		expect(svg).toContain('transform="rotate(-5 962 222)"');
-		expect(svg).toContain('transform="rotate(2 1034 214)"');
+		expect(svg).toContain('transform="rotate(-5 910 264)"');
+		expect(svg).toContain('transform="rotate(2 994 254)"');
 		expect(svg).toContain(
-			'<clipPath id="shotClip1" clipPathUnits="userSpaceOnUse"><path d="M832.00 51.00L1092.00 51.00',
+			'<clipPath id="shotClip1" clipPathUnits="userSpaceOnUse"><path d="M744.00 48.00L1076.00 48.00',
 		);
 		expect(svg).toContain('result="ambient"');
 		expect(svg).toContain('result="contact"');
-		expect(304 / 171).toBe(16 / 9);
+		expect(384 / 216).toBe(16 / 9);
 		expect(svg).not.toContain("gradient");
 
 		const single = sessionSocialCardSvg(
@@ -289,7 +289,7 @@ describe("session social card", () => {
 			"",
 			["data:image/png;base64,primary"],
 		);
-		expect(single).toContain('x="882" y="14.5" width="304" height="171"');
+		expect(single).toContain('x="802" y="12" width="384" height="216"');
 		expect(single).not.toContain('transform="rotate(');
 	});
 
@@ -319,7 +319,7 @@ describe("session social card", () => {
 		expect(output).toContain("<title>Ship dynamic social cards · Open Session</title>");
 		expect(output).toContain('content="summary_large_image"');
 		expect(output).toMatch(
-			/content="https:\/\/media\.example\.test\/session-card\/sess-social-1\/[A-Za-z0-9_-]{32}\.png\?v=13"/,
+			/content="https:\/\/media\.example\.test\/session-card\/sess-social-1\/[A-Za-z0-9_-]{32}\.png\?v=14"/,
 		);
 		expect(output).toContain(
 			'property="og:url" content="https://os.example.test/session/sess-social-1"',
@@ -333,13 +333,13 @@ describe("session social card", () => {
 		).toBe("sess-social-1");
 		expect(socialSessionIdFromPath("/settings")).toBeNull();
 		expect(sessionSocialCardUrl("sess-social-1")).toMatch(
-			/^https:\/\/media\.example\.test\/session-card\/sess-social-1\/[A-Za-z0-9_-]{32}\.png\?v=13$/,
+			/^https:\/\/media\.example\.test\/session-card\/sess-social-1\/[A-Za-z0-9_-]{32}\.png\?v=14$/,
 		);
 	});
 
 	test("signs ids containing Slack timestamp dots", () => {
 		expect(sessionSocialCardUrl("slack-C123-1719860000.000000")).toMatch(
-			/^https:\/\/media\.example\.test\/session-card\/slack-C123-1719860000\.000000\/[A-Za-z0-9_-]{32}\.png\?v=13$/,
+			/^https:\/\/media\.example\.test\/session-card\/slack-C123-1719860000\.000000\/[A-Za-z0-9_-]{32}\.png\?v=14$/,
 		);
 	});
 
@@ -372,7 +372,7 @@ describe("session social card", () => {
 		expect(response.status).toBe(200);
 		const metadata = await sharp(await response.arrayBuffer()).metadata();
 		expect(metadata.width).toBe(1200);
-		expect(metadata.height).toBe(200);
+		expect(metadata.height).toBe(240);
 	});
 
 	test("renders the full card for an unrecognized shape", async () => {
