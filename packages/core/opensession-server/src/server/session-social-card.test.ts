@@ -186,7 +186,7 @@ describe("session social card", () => {
 		expect(svg).toContain('<rect width="1200" height="630" fill="#FFFFFF"/>');
 		expect(svg).not.toContain("aurora");
 		expect(svg).not.toContain("shotFade");
-		expect(svg).toContain('fill="#050609" font-size="48"');
+		expect(svg).toContain('fill="#050609" font-size="44"');
 		// The repo tile is a real squircle path, not an `rx` rounded rect, and
 		// the title starts clear of the smaller inline mark.
 		expect(svg).toContain('<clipPath id="repoClip"><path d="M');
@@ -224,11 +224,14 @@ describe("session social card", () => {
 		expect(svg).toContain(
 			'<text x="156" y="132" dominant-baseline="middle"',
 		);
+		// The screenshot is an inset 16:9 frame instead of stretching to fill
+		// the card's available height.
 		expect(svg).toContain(
-			'<image href="data:image/png;base64,screenshot" x="820" y="20" width="360" height="160"',
+			'<image href="data:image/png;base64,screenshot" x="882" y="14.5" width="304" height="171"',
 		);
+		expect(304 / 171).toBe(16 / 9);
 		expect(svg).toContain(
-			'<clipPath id="shotClip"><path d="M844.00 20.00L1156.00 20.00',
+			'<clipPath id="shotClip"><path d="M904.00 14.50L1164.00 14.50',
 		);
 		expect(svg).not.toContain("shotFade");
 	});
@@ -259,7 +262,7 @@ describe("session social card", () => {
 		expect(output).toContain("<title>Ship dynamic social cards · Open Session</title>");
 		expect(output).toContain('content="summary_large_image"');
 		expect(output).toMatch(
-			/content="https:\/\/media\.example\.test\/session-card\/sess-social-1\/[A-Za-z0-9_-]{32}\.png\?v=8"/,
+			/content="https:\/\/media\.example\.test\/session-card\/sess-social-1\/[A-Za-z0-9_-]{32}\.png\?v=9"/,
 		);
 		expect(output).toContain(
 			'property="og:url" content="https://os.example.test/session/sess-social-1"',
@@ -273,13 +276,13 @@ describe("session social card", () => {
 		).toBe("sess-social-1");
 		expect(socialSessionIdFromPath("/settings")).toBeNull();
 		expect(sessionSocialCardUrl("sess-social-1")).toMatch(
-			/^https:\/\/media\.example\.test\/session-card\/sess-social-1\/[A-Za-z0-9_-]{32}\.png\?v=8$/,
+			/^https:\/\/media\.example\.test\/session-card\/sess-social-1\/[A-Za-z0-9_-]{32}\.png\?v=9$/,
 		);
 	});
 
 	test("signs ids containing Slack timestamp dots", () => {
 		expect(sessionSocialCardUrl("slack-C123-1719860000.000000")).toMatch(
-			/^https:\/\/media\.example\.test\/session-card\/slack-C123-1719860000\.000000\/[A-Za-z0-9_-]{32}\.png\?v=8$/,
+			/^https:\/\/media\.example\.test\/session-card\/slack-C123-1719860000\.000000\/[A-Za-z0-9_-]{32}\.png\?v=9$/,
 		);
 	});
 

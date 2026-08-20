@@ -47,14 +47,14 @@ export const SESSION_CARD_BANNER_WIDTH = 1200;
 export const SESSION_CARD_BANNER_HEIGHT = 200;
 
 export type SessionCardVariant = "card" | "banner";
-const SESSION_CARD_VERSION = 8;
+const SESSION_CARD_VERSION = 9;
 
 const CARD_INK = "#050609";
 const CARD_PAPER = "#FFFFFF";
 /** Left margin. */
 const PAD_X = 56;
 /**
- * The repo tile in front of the title. It matches the title's point size, so it
+ * The repo tile in front of the title. It follows the title's line height, so it
  * reads as an inline mark instead of a block the words sit beside. The generous
  * superellipse radius keeps the tiny tile distinct from a rounded rectangle.
  */
@@ -69,18 +69,20 @@ const META_LABEL_GAP = 8;
 const META_GLYPH_SIZE = 22;
 const META_RADIUS = META_SIZE * 0.46;
 const META_OPACITY = 0.52;
-const TITLE_SIZE = 48;
+const TITLE_SIZE = 44;
 const TITLE_X = PAD_X + TILE_SIZE + TILE_GAP;
 const TITLE_MAX_WIDTH = SESSION_CARD_WIDTH - TITLE_X - PAD_X;
-const TITLE_FONT = "Inter SemiBold 48";
-const TITLE_LETTER_SPACING = Math.round(-1.2 * 1024);
-/** An inset screenshot gives the white card a clear visual without covering it. */
-const SHOT_BANNER_WIDTH = 360;
-const SHOT_CARD_WIDTH = 430;
-const SHOT_BANNER_INSET = 20;
+const TITLE_FONT = "Inter SemiBold 44";
+const TITLE_LETTER_SPACING = Math.round(-1.1 * 1024);
+/** Both screenshot frames are true 16:9, so screen captures never feel stretched. */
+const SHOT_BANNER_WIDTH = 304;
+const SHOT_BANNER_HEIGHT = 171;
+const SHOT_CARD_WIDTH = 448;
+const SHOT_CARD_HEIGHT = 252;
+const SHOT_BANNER_INSET = 14;
 const SHOT_CARD_INSET = 28;
-const SHOT_BANNER_RADIUS = 24;
-const SHOT_CARD_RADIUS = 32;
+const SHOT_BANNER_RADIUS = 22;
+const SHOT_CARD_RADIUS = 28;
 const SHOT_GAP = 28;
 
 export interface SessionSocialCardData {
@@ -105,9 +107,7 @@ function shotRadius(variant: SessionCardVariant): number {
 }
 
 function shotHeight(variant: SessionCardVariant): number {
-	const cardHeight =
-		variant === "banner" ? SESSION_CARD_BANNER_HEIGHT : SESSION_CARD_HEIGHT;
-	return cardHeight - shotInset(variant) * 2;
+	return variant === "banner" ? SHOT_BANNER_HEIGHT : SHOT_CARD_HEIGHT;
 }
 
 /** How much room one line of title has, which the screenshot takes from. */
@@ -293,7 +293,7 @@ async function titleWidth(title: string): Promise<number> {
 	return metadata.width ?? 0;
 }
 
-/** Fit one 48 px Inter Semi Bold line inside the measure left of the tile. */
+/** Fit one 44 px Inter Semi Bold line inside the measure left of the tile. */
 export async function fitSocialCardTitle(
 	title: string,
 	maxWidth: number = TITLE_MAX_WIDTH,
@@ -507,7 +507,7 @@ export function sessionSocialCardSvg(
 	const shotH = shotHeight(variant);
 	const shotPad = shotInset(variant);
 	const shotX = SESSION_CARD_WIDTH - shotW - shotPad;
-	const shotY = shotPad;
+	const shotY = (height - shotH) / 2;
 	const shotShape = squircleRectPath(
 		shotX,
 		shotY,
@@ -537,7 +537,7 @@ export function sessionSocialCardSvg(
 ${shotMarkup}
 ${repoMarkup}
 ${hasTile ? `<path d="${tile}" fill="none" stroke="${CARD_INK}" stroke-opacity="0.1"/>` : ""}
-<text x="${titleX}" y="${tileCenter + 2}" dominant-baseline="middle" fill="${CARD_INK}" font-size="${TITLE_SIZE}" font-weight="600" letter-spacing="-1.2">${xml(displayTitle)}</text>
+<text x="${titleX}" y="${tileCenter + 2}" dominant-baseline="middle" fill="${CARD_INK}" font-size="${TITLE_SIZE}" font-weight="600" letter-spacing="-1.1">${xml(displayTitle)}</text>
 ${avatarMarkup}
 ${avatar ? `<path d="${avatarTile}" fill="none" stroke="${CARD_INK}" stroke-opacity="0.1"/>` : ""}
 <text x="${metaTextX}" y="${metaCenter + 1}" dominant-baseline="middle" fill="${CARD_INK}" fill-opacity="${META_OPACITY}" font-size="${META_TEXT_SIZE}" font-weight="500">${xml(owner)}</text>
