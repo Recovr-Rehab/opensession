@@ -31,6 +31,7 @@ import { sessionsDir } from "./paths";
 import { tryGetSessionControl } from "./session-control";
 import { writeJsonAtomic } from "./shared/atomic-write";
 import { broadcastToSession } from "./ws-hub";
+import { wrapContext } from "./prompt-context";
 
 const g = globalThis as any;
 
@@ -141,15 +142,18 @@ function sameQuestions(a: unknown[], b: AskQuestionInput[]): boolean {
 	}
 }
 
-function fallbackAnswerText(
+function fallbackAnswerContext(
 	questions: AskQuestionInput[],
 	answers: Record<string, string>,
 ): string {
 	const lines = questions.map((question) => {
 		const answer = answers[question.question] ?? "";
-		return `**${question.question}**\n\n${answer}`;
+		return `Question: ${question.question}\nAnswer: ${answer}`;
 	});
-	return `💬 Answered after the server restarted:\n\n${lines.join("\n\n")}`;
+	return wrapContext(
+		`A blocking question was answered before restart recovery finished. Treat this as the person's answer and continue:\n\n${lines.join("\n\n")}`,
+		"restart-recovery",
+	);
 }
 
 /** A restored card initially has no in-process tool promise to resolve. If the
@@ -191,6 +195,11 @@ export function settleRestoredAskAfterRecovery(sessionId: string): boolean {
 		questionId: ask.questionId,
 	});
 	if (!answers) return false;
+	const questions = ask.questions as AskQuestionInput[];
+	// The ordinary adopted path records the answer when the re-emitted tool call
+	// resolves. This terminal recovery path has no tool promise left to do that,
+	// so write the same durable receipt before continuing the session.
+	recordAskAnswer(sessionId, questions, answers);
 	const control = tryGetSessionControl();
 	if (!control) {
 		console.error(`[ask] No session control to deliver restored answer for ${sessionId}`);
@@ -200,7 +209,7 @@ export function settleRestoredAskAfterRecovery(sessionId: string): boolean {
 	void control
 		.deliverToSession(
 			sessionId,
-			fallbackAnswerText(ask.questions as AskQuestionInput[], answers),
+			fallbackAnswerContext(questions, answers),
 			session?.startedBy || undefined,
 			{ busy: "queue" },
 		)

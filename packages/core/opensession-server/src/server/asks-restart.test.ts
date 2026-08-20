@@ -11,6 +11,13 @@ import {
 	settleRestoredAskAfterRecovery,
 } from "./asks";
 import { sessionWatchers } from "./ws-hub";
+import {
+	registerSessionControl,
+	tryGetSessionControl,
+	type SessionControl,
+} from "./session-control";
+import { setTranscriptForwarder } from "./transcript-forward";
+import { stripContext } from "./prompt-context";
 
 const SESSION = "os-pending-ask-restart-test";
 const QUESTION = {
@@ -195,6 +202,59 @@ describe("pending ask restart persistence", () => {
 		});
 		expect(pendingAsks.has(SESSION)).toBe(false);
 		expect(JSON.parse(readFileSync(storePath, "utf8"))).toEqual({ asks: [] });
+	});
+
+	test("records a receipt and hides the terminal recovery delivery", async () => {
+		scratch = mkdtempSync(join(tmpdir(), "os-asks-terminal-answer-"));
+		const storePath = join(scratch, "pending-asks.json");
+		writeFileSync(
+			storePath,
+			JSON.stringify({
+				asks: [
+					{
+						sessionId: SESSION,
+						questionId: "q-terminal-answer",
+						questions: [QUESTION],
+						askedAt: Date.now(),
+						answerReceived: true,
+						earlyAnswer: { "Which option?": "Two" },
+					},
+				],
+			}),
+		);
+		restorePendingAsks({ storePath, sessionExists: () => true });
+
+		const previousControl = tryGetSessionControl();
+		const deliveries: string[] = [];
+		const lines: Record<string, unknown>[] = [];
+		registerSessionControl({
+			listSessions: () => [],
+			getSession: () => undefined,
+			transcriptTail: () => [],
+			answerQuestion: () => false,
+			deliverToSession: async (_id, content) => {
+				deliveries.push(content);
+				return { status: "queued", message: "queued" };
+			},
+			cancelSession: () => false,
+			createSession: async () => ({ id: "unused", createdBy: "Test", createdAt: "now" }),
+		});
+		setTranscriptForwarder((_sessionId, batch) => lines.push(...batch));
+		try {
+			expect(settleRestoredAskAfterRecovery(SESSION)).toBe(true);
+			await Bun.sleep(0);
+		} finally {
+			registerSessionControl(previousControl as SessionControl);
+			setTranscriptForwarder(undefined);
+		}
+
+		expect(JSON.stringify(lines)).toContain('"answer":"Two"');
+		expect(deliveries).toHaveLength(1);
+		expect(deliveries[0]).toContain(
+			'<opensession:context source="restart-recovery">',
+		);
+		expect(deliveries[0]).toContain("Question: Which option?\nAnswer: Two");
+		expect(stripContext(deliveries[0])).toBe("");
 	});
 
 	test("retires a restored card when recovery ends without adopting it", () => {
