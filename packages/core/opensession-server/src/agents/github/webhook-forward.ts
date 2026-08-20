@@ -224,6 +224,8 @@ interface ForwardState {
   stopped: boolean;
   started: boolean;
   attempts: Map<string, number>;
+  /** Invalidates exit callbacks and backoff timers from an older lifecycle. */
+  generation: number;
 }
 
 // Park state on globalThis so a `bun --hot` re-evaluation reuses the SAME
@@ -235,10 +237,17 @@ const state: ForwardState = (g.__ghWebhookForward ??= {
   stopped: false,
   started: false,
   attempts: new Map(),
+  generation: 0,
 });
+// Hot reload may reuse state created before generation tracking existed.
+if (!Number.isFinite(state.generation)) state.generation = 0;
 
-function spawnForwarder(label: string, args: string[]): void {
-  if (state.stopped) return;
+function spawnForwarder(
+  label: string,
+  args: string[],
+  generation = state.generation,
+): void {
+  if (state.stopped || generation !== state.generation) return;
   const env = githubForwardProcessEnv();
   if (!env) {
     state.started = false;
@@ -255,7 +264,7 @@ function spawnForwarder(label: string, args: string[]): void {
     });
   } catch (e) {
     console.error(`[github-forward] failed to spawn forwarder for ${label}:`, e);
-    scheduleRestart(label, args);
+    scheduleRestart(label, args, generation);
     return;
   }
   const entry: Running = { label, args, proc };
@@ -263,22 +272,22 @@ function spawnForwarder(label: string, args: string[]): void {
 
   void proc.exited.then((code) => {
     state.running = state.running.filter((r) => r !== entry);
-    if (state.stopped) return;
+    if (state.stopped || generation !== state.generation) return;
     // A long, healthy run clears the backoff so a much-later crash restarts fast.
     if (Date.now() - startedAt >= HEALTHY_UPTIME_MS) state.attempts.delete(label);
     console.warn(`[github-forward] forwarder for ${label} exited (code ${code})`);
-    scheduleRestart(label, args);
+    scheduleRestart(label, args, generation);
   });
 }
 
-function scheduleRestart(label: string, args: string[]): void {
-  if (state.stopped) return;
+function scheduleRestart(label: string, args: string[], generation: number): void {
+  if (state.stopped || generation !== state.generation) return;
   const n = (state.attempts.get(label) || 0) + 1;
   state.attempts.set(label, n);
   const delay = Math.min(MAX_BACKOFF_MS, 1000 * 2 ** Math.min(n - 1, 5));
   const wait = Math.round(delay / 2 + Math.random() * (delay / 2));
   console.log(`[github-forward] restarting forwarder for ${label} in ${wait}ms`);
-  setTimeout(() => spawnForwarder(label, args), wait);
+  setTimeout(() => spawnForwarder(label, args, generation), wait);
 }
 
 /**
@@ -286,8 +295,7 @@ function scheduleRestart(label: string, args: string[]): void {
  * call (or a hot reload) while forwarders are live does nothing.
  */
 export async function startGithubWebhookForward(): Promise<void> {
-  if (!githubWebhookForwardEnabled()) return;
-  if (state.started && state.running.length > 0) return; // already running
+  if (!githubWebhookForwardEnabled() || state.started) return;
 
   const env = githubForwardProcessEnv();
   if (!env) return;
@@ -303,8 +311,15 @@ export async function startGithubWebhookForward(): Promise<void> {
     return;
   }
 
+  const generation = state.generation;
+  state.stopped = false;
+  state.started = true;
   const available = await ensureGhWebhook(defaultRun, env);
-  if (!available) return; // reconcile sweep is the backstop
+  if (!available) {
+    if (generation === state.generation) state.started = false;
+    return; // reconcile sweep is the backstop
+  }
+  if (generation !== state.generation || state.stopped) return;
 
   const { org, repos } = forwardTargets();
   const url = forwardUrl();
@@ -323,12 +338,11 @@ export async function startGithubWebhookForward(): Promise<void> {
     console.warn(
       "[github-forward] no ghRepo (or org) configured — nothing to forward; the reconcile sweep remains the backstop",
     );
+    state.started = false;
     return;
   }
 
-  state.stopped = false;
-  state.started = true;
-  for (const c of commands) spawnForwarder(c.label, c.args);
+  for (const c of commands) spawnForwarder(c.label, c.args, generation);
   console.log(
     `[github-forward] forwarding GitHub webhooks over an outbound gh connection → ${url} (${commands.map((c) => c.label).join(", ")})`,
   );
@@ -345,6 +359,7 @@ export async function syncGithubWebhookForwardCredential(): Promise<void> {
 
 /** Kill every forwarder and stop restarting. Safe when nothing is running. */
 export function stopGithubWebhookForward(): void {
+  state.generation += 1;
   state.stopped = true;
   state.started = false;
   for (const r of state.running) {
