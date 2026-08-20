@@ -408,12 +408,7 @@ export const ToolCallBlock = React.memo(function ToolCallBlock({
           "hover:bg-hover/40"
         )}
       >
-        <span
-          className={cn(
-            "relative z-[1] flex size-[22px] flex-shrink-0 self-center items-center justify-center",
-            failed ? "text-red/70" : "text-faint"
-          )}
-        >
+        <span className="relative z-[1] flex size-[22px] flex-shrink-0 self-center items-center justify-center text-faint">
           <span className="transition-opacity duration-150 group-hover:opacity-0">
             <ToolGlyph toolName={toolName} size={20} />
           </span>
@@ -445,9 +440,8 @@ export const ToolCallBlock = React.memo(function ToolCallBlock({
             {fileMark && <ExtBadge name={fileMark} className="self-center" />}
             <span
               className={cn(
-                "min-w-0 text-label leading-4",
-                isFileTool ? "flex flex-1 overflow-hidden" : "truncate",
-                failed ? "text-red/80" : "text-dim"
+                "min-w-0 text-label leading-4 text-dim",
+                isFileTool ? "flex flex-1 overflow-hidden" : "truncate"
               )}
             >
               {isFileTool ? <PathSummary path={summary} /> : summary}
@@ -530,8 +524,8 @@ export const ToolCallBlock = React.memo(function ToolCallBlock({
           // `border-top-color` is a two-utilities-one-property race.
           <span className="size-[11px] flex-shrink-0 self-center animate-spin rounded-full border border-b-line-strong border-l-line-strong border-r-line-strong border-t-dim" />
         ) : failed ? (
-          <span className="flex-shrink-0 self-center text-red">
-            <IconX size={20} />
+          <span className="flex-shrink-0 self-center text-faint opacity-70">
+            <IconX size={18} />
           </span>
         ) : !result ? (
           <span className="flex-shrink-0 text-meta text-faint">–</span>
@@ -554,20 +548,10 @@ export const ToolCallBlock = React.memo(function ToolCallBlock({
             <>
               {resultContent && (
                 <div className="space-y-1">
-                  <div
-                    className={cn(
-                      "px-1 text-meta font-medium leading-4",
-                      failed ? "text-red" : "text-faint"
-                    )}
-                  >
+                  <div className="px-1 text-meta font-medium leading-4 text-faint">
                     {failed ? "Error" : "Output"}
                   </div>
-                  <div
-                    className={cn(
-                      TOOL_CODE_WELL,
-                      failed && "border-red/25"
-                    )}
-                  >
+                  <div className={TOOL_CODE_WELL}>
                     {renderResultContent(canonical, shownInput, resultContent)}
                   </div>
                 </div>

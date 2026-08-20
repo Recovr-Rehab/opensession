@@ -24,6 +24,7 @@ import {
   LineStats,
   TurnLineStatsCard,
 } from "./TurnFooter";
+import { transcriptDisclosureLedger } from "../lib/transcript-disclosures";
 
 interface Props {
   /** The folded part of one assistant turn: tool_use + intermediate assistant
@@ -44,9 +45,9 @@ interface Props {
  * with the tool calls, followed by failures and a compact change summary.
  *
  * The collapsed line carries what a folded turn can't otherwise say: duration,
- * step count, and — when the turn wrote files — the ±lines it moved, in the
- * same green/red the diff surfaces use. Which files, and every failure, stay
- * one click away. The counts sit after the meta run and never shrink; the
+ * step count, and the ±lines it moved when the turn wrote files. Line changes
+ * keep the diff surfaces' colors, while routine failures stay quiet and one
+ * click away. The counts sit after the meta run and never shrink; the
  * duration/steps run truncates first, so a phone drops characters off the
  * middle instead of the numbers.
  *
@@ -88,7 +89,16 @@ export const TurnBlock = React.memo(function TurnBlock({
   );
   const defaultExpanded =
     pref.work === "open" || (pref.work === "running" && live);
-  const [expanded, setExpanded] = useState(defaultExpanded);
+  const [rememberedExpanded] = useState(() =>
+    transcriptDisclosureLedger.read(
+      "turn",
+      sessionId,
+      items.map((item) => item.id)
+    )
+  );
+  const [expanded, setExpanded] = useState(
+    rememberedExpanded ?? defaultExpanded
+  );
   // `tools` owns the nested grouped-call disclosures. Open renders each call
   // in place; folded keeps routine runs behind their compact step rows.
   // ToolCallBlock owns its own detail disclosure either way, so this never
@@ -97,11 +107,21 @@ export const TurnBlock = React.memo(function TurnBlock({
   // Once the user has toggled the fold by hand, their choice wins — the
   // auto-sync below must not reopen/collapse it on a later default change
   // (the turn settling, or the preference itself changing).
-  const userToggledRef = useRef(false);
+  const userToggledRef = useRef(rememberedExpanded !== undefined);
   useEffect(() => {
     if (userToggledRef.current) return;
     setExpanded(defaultExpanded);
   }, [defaultExpanded]);
+  function rememberExpansion(next: boolean) {
+    userToggledRef.current = true;
+    transcriptDisclosureLedger.write(
+      "turn",
+      sessionId,
+      items.map((item) => item.id),
+      next
+    );
+    setExpanded(next);
+  }
 
   const duration = blockDuration(items, toolResults);
   const failures = tools.filter(
@@ -162,10 +182,7 @@ export const TurnBlock = React.memo(function TurnBlock({
       <button
         type="button"
         aria-expanded={expanded}
-        onClick={() => {
-          userToggledRef.current = true;
-          setExpanded(!expanded);
-        }}
+        onClick={() => rememberExpansion(!expanded)}
         // Baseline, not centre: this row mixes its 14px title with 13px meta
         // runs, and centring aligns boxes rather than text. The chevron carries
         // no baseline of its own, so it keeps centring individually.
@@ -225,10 +242,7 @@ export const TurnBlock = React.memo(function TurnBlock({
           <button
             type="button"
             aria-label={`Collapse ${live ? "Working" : "Worked"}`}
-            onClick={() => {
-              userToggledRef.current = true;
-              setExpanded(false);
-            }}
+            onClick={() => rememberExpansion(false)}
             className="absolute inset-y-0 -left-2 w-4 cursor-pointer border-0 bg-transparent p-0 after:absolute after:inset-y-0 after:left-1/2 after:border-l after:border-transparent after:transition-colors hover:after:border-line-strong focus-visible:after:border-line-strong"
           />
           {sections.map((sec) =>
@@ -264,7 +278,7 @@ export const TurnBlock = React.memo(function TurnBlock({
               still carries them for the folded turn. */}
           {failures > 0 && (
             // The row starts where every other row in the fold does.
-            <div className="mt-1 flex flex-wrap items-center gap-x-0.5 gap-y-1 px-1 text-label leading-4 text-red/80">
+            <div className="mt-1 flex flex-wrap items-center gap-x-0.5 gap-y-1 px-1 text-label leading-4 text-faint">
               {failures} failed {failures === 1 ? "step" : "steps"}
             </div>
           )}
@@ -362,9 +376,26 @@ function ToolRunBlock({
   onOpenSubagent,
   sessionId,
 }: ToolSectionProps) {
-  // Always starts closed: the one preference that would open it renders the
-  // run flat instead, so there is no group row to be open.
-  const [expanded, setExpanded] = useState(false);
+  // Start closed unless this overlapping set of steps was toggled before. A
+  // live run grows one entry at a time, and its parent can be replaced as that
+  // happens, so component-local state alone loses the person's choice.
+  const [expanded, setExpanded] = useState(
+    () =>
+      transcriptDisclosureLedger.read(
+        "tool-run",
+        sessionId,
+        items.map((item) => item.id)
+      ) ?? false
+  );
+  function rememberExpansion(next: boolean) {
+    transcriptDisclosureLedger.write(
+      "tool-run",
+      sessionId,
+      items.map((item) => item.id),
+      next
+    );
+    setExpanded(next);
+  }
 
   const {
     label,
@@ -383,7 +414,7 @@ function ToolRunBlock({
         aria-expanded={expanded}
         aria-label={`${expanded ? "Hide" : "Show"} ${items.length} grouped steps: ${label}${statusLabel ? `. ${statusLabel}` : ""}`}
         title={`${items.length} grouped steps`}
-        onClick={() => setExpanded(!expanded)}
+        onClick={() => rememberExpansion(!expanded)}
         className="group flex w-full min-w-0 cursor-pointer items-center gap-2 rounded-control border-0 bg-transparent px-1 py-[3px] text-left font-sans transition-colors hover:bg-hover/40 phone:min-h-10"
       >
         {/* Open, the row is a heading for the steps under it, so it keeps the
@@ -423,7 +454,7 @@ function ToolRunBlock({
           <span className="flex-shrink-0 text-meta text-faint">{mediaLabel}</span>
         )}
         {failures > 0 && (
-          <span className="flex-shrink-0 text-meta text-red/80">
+          <span className="flex-shrink-0 text-meta text-faint">
             {failures} failed
           </span>
         )}

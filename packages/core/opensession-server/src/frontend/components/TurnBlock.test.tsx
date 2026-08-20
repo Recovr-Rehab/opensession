@@ -34,6 +34,7 @@ Object.assign(
 );
 
 const { ToolSection } = await import("./TurnBlock");
+const { ToolCallBlock } = await import("./ToolCallBlock");
 
 function toolUse(
 	id: string,
@@ -115,6 +116,28 @@ describe("grouped tool run row", () => {
 		const html = render(items, withError);
 
 		expect(html).toContain("1 failed");
+		expect(html).toContain("text-meta text-faint");
+		expect(html).not.toContain("text-red/80");
+	});
+
+	test("keeps an individual failed step neutral", () => {
+		const entry = toolUse("quiet-failure", "Bash", { command: "false" });
+		const html = renderToStaticMarkup(
+			React.createElement(ToolCallBlock, {
+				entry,
+				result: result("quiet-failure", {
+					content: "Command exited with status 1",
+					isError: true,
+					featuredMedia: ["detail"],
+				}),
+			}),
+		);
+
+		expect(html).toContain(">Error<");
+		expect(html).toContain("text-faint opacity-70");
+		expect(html).not.toContain("text-red/70");
+		expect(html).not.toContain("text-red/80");
+		expect(html).not.toContain("border-red/25");
 	});
 
 	test("picks up media a result carries for an unchanged run", () => {
