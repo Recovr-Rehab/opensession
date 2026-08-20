@@ -666,6 +666,8 @@ export function Composer({
   // slam the menu shut mid-interaction.
   const [focused, setFocused] = useState(false);
   const [modelMenuOpen, setModelMenuOpen] = useState(false);
+  const [dictating, setDictating] = useState(false);
+  const [dictationClipping, setDictationClipping] = useState(false);
   const hasAttached = !!attached;
   const hasContent =
     !!text.trim() ||
@@ -677,6 +679,10 @@ export function Composer({
     hasAttached;
   const minimized = isPhone && !focused && !hasContent && !modelMenuOpen;
   const showSend = !busy || hasContent;
+  function handleDictationActive(active: boolean) {
+    setDictating(active);
+    if (active) setDictationClipping(true);
+  }
   // Whether the send button/plain send steers right now: each gesture has its
   // own configured busy action — Enter/button uses the "enter" pref, holding
   // ⌘/Ctrl switches to the "mod" pref. (With ⌘/Ctrl+Enter as the send key the
@@ -1422,8 +1428,16 @@ export function Composer({
           borderTopRightRadius: minimized ? 999 : hasAttached ? 0 : composerRadius(),
           borderBottomLeftRadius: minimized ? 999 : composerRadius(),
           borderBottomRightRadius: minimized ? 999 : composerRadius(),
+          // The controls stay in their toolbar positions while the top edge
+          // comes down to wrap them. Returning to auto reveals the draft.
+          height: dictating ? (minimized ? 50 : 54) : "auto",
         }}
         transition={composerMorph}
+        onAnimationComplete={() => {
+          // Keep the draft clipped until the top edge has finished expanding.
+          // Dropping overflow at the start would reveal text outside the box.
+          if (!dictating) setDictationClipping(false);
+        }}
         // `composer` and `composer-min` stay on the markup as hooks, not as
         // styling: the viewer's input wrap keys the phone keyboard gap off the
         // pair with `body.kb-open .viewer-input:has(.composer:not(
@@ -1437,6 +1451,7 @@ export function Composer({
           minimized ? composerBoxMinimized : composerBoxExpanded,
           "isolate before:pointer-events-none before:absolute before:inset-0 before:z-0 before:rounded-[inherit] before:[corner-shape:inherit] before:bg-[var(--composer-note-bg)] before:opacity-0 before:transition-opacity before:duration-150 before:ease-[cubic-bezier(0.32,0.72,0,1)] [&>*]:relative [&>*]:z-[1]",
           noteMode && "before:opacity-100",
+          dictationClipping && "overflow-hidden",
           disabled && "opacity-60",
         )}
         style={surfaceStyle}
@@ -1993,6 +2008,7 @@ export function Composer({
               editTargetRef={textareaRef}
               overlayTargetRef={voiceOverlayRef}
               overlayStyle={dictationSurfaceStyle}
+              onActiveChange={handleDictationActive}
               // The bar covers the whole composer, so it takes the composer's
               // own corner. The resting phone pill is included, which is a
               // capsule rather than the expanded box's radius.

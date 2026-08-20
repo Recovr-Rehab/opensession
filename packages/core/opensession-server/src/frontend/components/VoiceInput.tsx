@@ -27,7 +27,7 @@ const BAR_COUNT = 72;
    the waveform reads as drawn straight onto the container, not onto a second
    raised slab inside it. */
 const OVERLAY =
-	"pointer-events-auto absolute inset-0 z-[6] flex items-center gap-1.5 bg-[var(--composer-surface)] px-2 phone:px-1.5";
+	"pointer-events-auto absolute inset-0 z-[6] flex items-end gap-1.5 bg-[var(--composer-surface)] px-3.5 pb-2.5 phone:px-3 phone:pb-[9px]";
 /** Default corner. A host whose container is rounded differently passes its
  *  own (the new-session card is `rounded-2xl`). */
 const OVERLAY_RADIUS = "rounded-[var(--composer-radius)]";
@@ -42,9 +42,9 @@ const WAVE_BAR_LIVE =
 
 /* Plain glyph buttons have no fill or border. The ✓ picks up the accent. */
 const GLYPH_CANCEL =
-	"inline-flex h-[34px] w-[34px] shrink-0 cursor-pointer items-center justify-center rounded-md border-none bg-transparent text-dim transition-colors hover:bg-hover hover:text-fg disabled:cursor-default disabled:opacity-35 phone:h-10 phone:w-10";
+	"inline-flex size-10 shrink-0 cursor-pointer items-center justify-center rounded-md border-none bg-transparent text-dim transition-colors hover:bg-hover hover:text-fg disabled:cursor-default disabled:opacity-35";
 const GLYPH_ACCEPT =
-	"inline-flex h-[34px] w-[34px] shrink-0 cursor-pointer items-center justify-center rounded-md border-none bg-transparent text-fg transition-colors hover:bg-hover hover:text-accent disabled:cursor-default disabled:opacity-35 phone:h-10 phone:w-10";
+	"inline-flex size-10 shrink-0 cursor-pointer items-center justify-center rounded-md border-none bg-transparent text-fg transition-colors hover:bg-hover hover:text-accent disabled:cursor-default disabled:opacity-35";
 
 /* The `voice-spinner` hook is gone: base.css's reduced-motion block used to
    name it to pin the rotation to a constant 0.8s, but that block now matches
@@ -106,6 +106,7 @@ export function VoiceInput({
   overlayStyle,
   overlayTargetRef,
   editTargetRef,
+  onActiveChange,
 }: {
   onText: (text: string) => void;
   /** Take the text and send it straight away. Without one, the send button is
@@ -126,6 +127,8 @@ export function VoiceInput({
   overlayTargetRef?: React.RefObject<HTMLElement | null>;
   /** The draft field to restore after keeping, cancelling, or an error. */
   editTargetRef?: React.RefObject<HTMLElement | null>;
+  /** Lets a host collapse its container while dictation owns the input. */
+  onActiveChange?: (active: boolean) => void;
 }) {
   const [phase, setPhase] = useState<Phase>("idle");
   const [error, setError] = useState<string | null>(null);
@@ -137,6 +140,8 @@ export function VoiceInput({
   const returnFocusRef = useRef<HTMLElement | null>(null);
   const callbacksRef = useRef({ onText, onTextSend });
   callbacksRef.current = { onText, onTextSend };
+  const activeChangeRef = useRef(onActiveChange);
+  activeChangeRef.current = onActiveChange;
   const chunksRef = useRef<BlobPart[]>([]);
   const streamRef = useRef<MediaStream | null>(null);
   const audioCtxRef = useRef<AudioContext | null>(null);
@@ -167,6 +172,12 @@ export function VoiceInput({
   // restored to exactly the inert state they had before recording.
   const active = phase !== "idle";
   useEffect(() => {
+    activeChangeRef.current?.(active);
+    return () => {
+      if (active) activeChangeRef.current?.(false);
+    };
+  }, [active]);
+  useEffect(() => {
     const target = overlayTargetRef?.current;
     const parent = target?.parentElement;
     if (!active || !target || !parent) return;
@@ -189,8 +200,12 @@ export function VoiceInput({
   }, [error]);
 
   function restoreEditorFocus() {
+    // The first frame lets React remove `inert`; the second restores the caret
+    // after that commit instead of trying to focus an inert textarea.
     requestAnimationFrame(() =>
-      returnFocusRef.current?.focus({ preventScroll: true }),
+      requestAnimationFrame(() =>
+        returnFocusRef.current?.focus({ preventScroll: true }),
+      ),
     );
   }
 
@@ -346,7 +361,7 @@ export function VoiceInput({
       {phase === "recording" || phase === "requesting" ? (
         <motion.div
           key="recording"
-          className="flex h-full min-w-0 flex-1 items-center gap-1.5"
+          className="flex h-10 min-w-0 flex-1 items-center gap-2 phone:gap-1.5"
           {...ROW_MOTION}
         >
           <span className="sr-only" role="status" aria-live="polite">
@@ -425,7 +440,7 @@ export function VoiceInput({
       ) : (
         <motion.div
           key="transcribing"
-          className="flex h-full min-w-0 flex-1 items-center gap-2.5 px-1"
+          className="flex h-10 min-w-0 flex-1 items-center gap-2.5 px-1"
           role="status"
           aria-live="polite"
           {...ROW_MOTION}
