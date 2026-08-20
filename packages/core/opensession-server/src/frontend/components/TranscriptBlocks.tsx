@@ -150,6 +150,21 @@ function mergedNoticePrNumber(entry: TranscriptEntry): number | null {
 	return match ? Number(match[1]) : null;
 }
 
+/** A blank delivery row renders nothing in MessageBubble, so it cannot be a
+ * conversation boundary here. Treating it as one split uninterrupted work
+ * into a long stack of meaningless "Worked · 1 step" disclosures. */
+function isRenderlessUserEntry(entry: TranscriptEntry): boolean {
+	return (
+		entry.type === "user" &&
+		!entry.notice &&
+		!(entry.sender && entry.senderVia) &&
+		!entry.content &&
+		!entry.images?.length &&
+		!entry.videos?.length &&
+		!entry.files?.length
+	);
+}
+
 // How many blocks at the end of the transcript are never windowed. The reader
 // lands here on open and stays here while a turn runs, so these keep their real
 // content and their real height rather than a measured placeholder.
@@ -198,6 +213,12 @@ function renderBlockEstimate(block: RenderBlock): number {
 	return 160;
 }
 
+function isSingleToolTurn(
+	block: Extract<RenderBlock, { kind: "turn" }>,
+): boolean {
+	return block.items.length === 1 && block.items[0]?.type === "tool_use";
+}
+
 /**
  * Groups a flat transcript into per-turn fold blocks and message bubbles, then
  * renders them. A turn's working (tool calls + intermediate assistant notes)
@@ -236,7 +257,9 @@ const LoadedTranscriptBlocks = React.memo(function LoadedTranscriptBlocks({
 	onReviewLoopOpenChange,
 	virtualize = true,
 }: Props) {
-	const renderedEntries = normalizeLegacyVoiceToolEntries(entries);
+	const renderedEntries = normalizeLegacyVoiceToolEntries(entries)
+		.map(classifyEntry)
+		.filter((entry) => !isRenderlessUserEntry(entry));
 	const shareAfterEntryIds = new Set<string>();
 	if (slackShare) {
 		for (let i = 0; i < renderedEntries.length; i++) {
@@ -423,7 +446,21 @@ const LoadedTranscriptBlocks = React.memo(function LoadedTranscriptBlocks({
 			(i === groupedBlocks.length - 1 ||
 				(block.kind === "turn" && i === groupedBlocks.length - 2));
 		const content =
-			block.kind === "turn" ? (
+			block.kind === "turn" && isSingleToolTurn(block) ? (
+				// A disclosure that says only "Worked · 1 step" hides the useful
+				// row behind a label with less information. Single calls stay direct;
+				// the outer work fold starts only when it has something to group.
+				<div className="mx-auto mb-3 w-full max-w-[var(--session-col)]">
+					<ToolSection
+						items={block.items}
+						toolResults={toolResults}
+						live={isLiveTail}
+						expandAll={false}
+						onOpenSubagent={onOpenSubagent}
+						sessionId={sessionId}
+					/>
+				</div>
+			) : block.kind === "turn" ? (
 				<TurnBlock
 					items={block.items}
 					toolResults={toolResults}

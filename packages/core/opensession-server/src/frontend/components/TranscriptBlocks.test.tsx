@@ -251,9 +251,61 @@ describe("TranscriptBlocks compact tool runs", () => {
 			<TranscriptBlocks live entries={toolEntries.slice(0, 3)} />,
 		);
 
-		// No fold: a lone call's own row already says more than "1 step".
+		// No fold at either level: a lone call's own row already says more than
+		// "Working · 1 step" or a nested "1 step" row.
 		expect(html).not.toContain('data-tool-run="true"');
+		expect(html).not.toContain(">Working</span>");
 		expect(html).toContain("git status");
+	});
+
+	test("does not turn a settled lone call into a Worked disclosure", () => {
+		setTurnPrefs(null);
+		const html = renderToStaticMarkup(
+			<TranscriptBlocks
+				entries={[
+					...toolEntries.slice(0, 3),
+					{
+						id: "answer",
+						type: "assistant",
+						content: "The repository is clean.",
+						timestamp: "2026-08-13T06:00:03Z",
+					},
+				]}
+			/>,
+		);
+
+		expect(html).not.toContain(">Worked</span>");
+		expect(html).toContain("git status");
+		expect(html).toContain("The repository is clean.");
+	});
+
+	test("does not split work on a delivery row that renders nothing", () => {
+		setTurnPrefs(null);
+		const html = renderToStaticMarkup(
+			<TranscriptBlocks
+				entries={[
+					...toolEntries.slice(0, 3),
+					{
+						id: "empty-delivery",
+						type: "user",
+						content: "",
+						timestamp: "2026-08-13T06:00:02.500Z",
+						sender: "auto-continue",
+					},
+					...toolEntries.slice(3),
+					{
+						id: "grouped-answer",
+						type: "assistant",
+						content: "Finished both checks.",
+						timestamp: "2026-08-13T06:00:05Z",
+					},
+				]}
+			/>,
+		);
+
+		expect(html.match(/>Worked<\/span>/g)).toHaveLength(1);
+		expect(html).toContain("2 steps");
+		expect(html).not.toContain("1 step");
 	});
 
 	test("folds edits into the run and counts their lines on the row", () => {
