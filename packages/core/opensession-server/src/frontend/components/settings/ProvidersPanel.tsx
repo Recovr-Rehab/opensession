@@ -3,7 +3,7 @@ import { ModelDefaultsSection } from "../Models";
 import { ModelProvidersPanel } from "../ModelProviders";
 import { WorkspaceModelPresetSettings } from "../WorkspaceModelPresets";
 import type { Workspace } from "../../lib/types";
-import { ClaudeAccountsSection, CodexAccountsSection } from "./ModelAccounts";
+import { ProviderAccountsSection } from "./ModelAccounts";
 
 /** Providers: everything behind the model a run uses. Which model it starts
  * on, the subscription accounts it draws from and how close each one is to its
@@ -19,9 +19,8 @@ export function ProvidersPanel({ workspace }: { workspace?: Workspace }) {
 			<SettingsHeader title="Providers" />
 			<ModelDefaultsSection />
 			<WorkspaceModelPresetSettings workspace={workspace} />
-			{/* The pools those models run on, and how full each one is. */}
-			<ClaudeAccountsSection />
-			<CodexAccountsSection />
+			{/* The pool those models run on, and how full each account is. */}
+			<ProviderAccountsSection />
 			{/* Last: one row per model, Auto on all of them until someone pins
 			    one, so it sits below everything people came here to read. */}
 			<ModelProvidersPanel />

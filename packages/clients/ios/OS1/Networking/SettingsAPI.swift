@@ -351,6 +351,11 @@ enum SettingsAPI {
         return response.accounts ?? []
     }
 
+    static func refreshCodexAccounts() async throws -> [ProviderAccount] {
+        let response: ProviderAccountsResponse = try await request("/api/codex-accounts/refresh", method: "POST")
+        return response.accounts ?? []
+    }
+
     static func createCodexAccount(_ body: [String: Any]) async throws -> ProviderAccount {
         try await request("/api/codex-accounts", method: "POST", body: body)
     }

@@ -28,6 +28,7 @@ import {
 } from "../../ui/settings";
 import { cn } from "../../ui/cn";
 import { toast } from "../../ui/toast";
+import { IconTile } from "../BrandTile";
 import {
 	IconDotsHorizontal,
 	IconHistory,
@@ -148,19 +149,6 @@ function OwnerSelect({
 				))}
 			</Select.Popup>
 		</Select.Root>
-	);
-}
-
-function Avatar({ name, className }: { name: string; className: string }) {
-	return (
-		<span
-			className={cn(
-				"inline-flex size-7 shrink-0 items-center justify-center rounded-md text-label font-bold text-white",
-				className,
-			)}
-		>
-			{name.charAt(0).toUpperCase()}
-		</span>
 	);
 }
 
@@ -390,10 +378,8 @@ function ClaudeStatusPill({ a }: { a: ClaudeAccountInfo }) {
 	return <StatusPill tone="yellow">Near limit</StatusPill>;
 }
 
-export function ClaudeAccountsSection() {
+function useClaudeAccounts() {
 	const [accounts, setAccounts] = useState<ClaudeAccountInfo[] | null>(null);
-	const [showAdd, setShowAdd] = useState(false);
-	const addNameRef = useRef<HTMLInputElement>(null);
 	const [signIn, setSignIn] = useState<ClaudeAccountInfo | null>(null);
 	const [refreshing, setRefreshing] = useState(false);
 	const [error, setError] = useState<string | null>(null);
@@ -404,149 +390,123 @@ export function ClaudeAccountsSection() {
 			const res = forceUsage
 				? await fetch(`${BASE_PATH}/api/claude-accounts/refresh`, { method: "POST" })
 				: await fetch(`${BASE_PATH}/api/claude-accounts`);
-			if (res.ok) setAccounts((await res.json()).accounts);
-		} catch {}
+			if (!res.ok) throw new Error(`Could not load Anthropic accounts (${res.status})`);
+			setAccounts((await res.json()).accounts);
+		} catch (cause: any) {
+			setError(cause.message || "Could not load Anthropic accounts");
+			setAccounts((current) => current ?? []);
+		}
 		setRefreshing(false);
 	}, []);
 
 	useEffect(() => {
-		load();
-		const t = setInterval(() => load(), 60_000);
-		return () => clearInterval(t);
+		void load();
+		const timer = setInterval(() => void load(), 60_000);
+		return () => clearInterval(timer);
 	}, [load]);
 
-	async function handleRemove(a: ClaudeAccountInfo) {
-		if (!confirm(`Remove Claude account "${a.name}"? Runs will stop using its token.`)) return;
+	async function remove(account: ClaudeAccountInfo) {
+		if (!confirm(`Remove Claude account "${account.name}"? Runs will stop using its token.`)) return;
 		try {
-			const res = await fetch(`${BASE_PATH}/api/claude-accounts/${encodeURIComponent(a.id)}`, {
-				method: "DELETE",
-			});
+			const res = await fetch(
+				`${BASE_PATH}/api/claude-accounts/${encodeURIComponent(account.id)}`,
+				{ method: "DELETE" },
+			);
 			const body = await res.json();
 			if (!res.ok) throw new Error(body.error || `Failed: ${res.status}`);
-			load();
-		} catch (e: any) {
-			setError(e.message);
+			void load();
+		} catch (cause: any) {
+			setError(cause.message);
 		}
 	}
 
-	async function handleSetOwner(a: ClaudeAccountInfo, owner: string) {
-		if (owner === (a.owner || "")) return;
+	async function setOwner(account: ClaudeAccountInfo, owner: string) {
+		if (owner === (account.owner || "")) return;
 		try {
-			const res = await fetch(`${BASE_PATH}/api/claude-accounts/${encodeURIComponent(a.id)}`, {
-				method: "PUT",
-				headers: { "Content-Type": "application/json" },
-				body: JSON.stringify({ owner }),
-			});
+			const res = await fetch(
+				`${BASE_PATH}/api/claude-accounts/${encodeURIComponent(account.id)}`,
+				{
+					method: "PUT",
+					headers: { "Content-Type": "application/json" },
+					body: JSON.stringify({ owner }),
+				},
+			);
 			const body = await res.json();
 			if (!res.ok) throw new Error(body.error || `Failed: ${res.status}`);
-			load();
-		} catch (e: any) {
-			setError(e.message);
+			void load();
+		} catch (cause: any) {
+			setError(cause.message);
 		}
 	}
 
-	async function handleSetCredentialsPath(a: ClaudeAccountInfo) {
+	async function setCredentialsPath(account: ClaudeAccountInfo) {
 		const current =
-			a.credentialsPath ||
-			`~/.claude/accounts/${a.name.toLowerCase().replace(/[^a-z0-9]+/g, "-")}/credentials.json`;
+			account.credentialsPath ||
+			`~/.claude/accounts/${account.name.toLowerCase().replace(/[^a-z0-9]+/g, "-")}/credentials.json`;
 		const credentialsPath = prompt(
 			"Path to this account's Claude OAuth credentials.json for usage polling. Leave empty to clear it.",
 			current,
 		);
 		if (credentialsPath === null) return;
 		try {
-			const res = await fetch(`${BASE_PATH}/api/claude-accounts/${encodeURIComponent(a.id)}`, {
-				method: "PUT",
-				headers: { "Content-Type": "application/json" },
-				body: JSON.stringify({ owner: a.owner || "", credentialsPath }),
-			});
+			const res = await fetch(
+				`${BASE_PATH}/api/claude-accounts/${encodeURIComponent(account.id)}`,
+				{
+					method: "PUT",
+					headers: { "Content-Type": "application/json" },
+					body: JSON.stringify({ owner: account.owner || "", credentialsPath }),
+				},
+			);
 			const body = await res.json();
 			if (!res.ok) throw new Error(body.error || `Failed: ${res.status}`);
-			load(true);
-		} catch (e: any) {
-			setError(e.message);
+			void load(true);
+		} catch (cause: any) {
+			setError(cause.message);
 		}
 	}
 
+	return {
+		accounts,
+		error,
+		load,
+		refreshing,
+		remove,
+		setCredentialsPath,
+		setError,
+		setOwner,
+		setSignIn,
+		signIn,
+	};
+}
+
+type ClaudeAccountsState = ReturnType<typeof useClaudeAccounts>;
+
+function ClaudeAccountRows({ state }: { state: ClaudeAccountsState }) {
 	return (
 		<>
-			<SettingsGroupLabel
-				actions={
-					<>
-						<Button
-							size="sm"
-							icon={<IconHistory size={16} className={refreshing ? "animate-spin" : ""} />}
-							onClick={() => load(true)}
-							disabled={refreshing}
-						>
-							{refreshing ? "Checking…" : "Refresh usage"}
-						</Button>
-						<Button size="sm" icon={<IconPlus size={16} />} onClick={() => setShowAdd(true)}>
-							Add account
-						</Button>
-					</>
-				}
-			>
-				Claude accounts
-			</SettingsGroupLabel>
-
-			{error && (
-				<InlineAlert className="mb-2" onDismiss={() => setError(null)}>
-					{error}
-				</InlineAlert>
-			)}
-
-			<Modal.Root open={showAdd} onOpenChange={setShowAdd}>
-				{/* The form is a child so the portal remounts it on every open,
-				    which clears the pasted token rather than leaving it in state
-				    after a dismissal. */}
-				<Modal.Content initialFocus={addNameRef}>
-					<AddClaudeAccountForm
-						nameRef={addNameRef}
-						onAdded={() => {
-							setShowAdd(false);
-							load();
-						}}
-					/>
-				</Modal.Content>
-			</Modal.Root>
-
-			<SettingCard>
-				{!accounts ? (
-					<LoadingState placement="row">Loading accounts…</LoadingState>
-				) : accounts.length === 0 ? (
-					<EmptyState placement="row">
-						No accounts yet, so runs use the VPS's own Claude login. Add Max-account tokens
-						(<code>claude setup-token</code>) and runs pick the least-used one, rotating when
-						one hits its limit.
-					</EmptyState>
-				) : (
-					accounts.map((a) => (
-						<React.Fragment key={a.id}>
+			{[...(state.accounts || [])]
+				.sort(
+					(left, right) => left.name.localeCompare(right.name) || left.id.localeCompare(right.id),
+				)
+				.map((account) => (
+					<React.Fragment key={account.id}>
 						<SettingRow className="items-start">
-							<Avatar name={a.name} className="bg-[#d97757]" />
+							<IconTile name="claude" size={28} />
 							<SettingRowText>
-								<div className="flex items-center gap-2 min-w-0">
-									<SettingRowTitle className="truncate">{a.name}</SettingRowTitle>
-									<ClaudeStatusPill a={a} />
+								<div className="flex min-w-0 items-center gap-2">
+									<SettingRowTitle className="truncate">{account.name}</SettingRowTitle>
+									<ClaudeStatusPill a={account} />
 								</div>
-								{/* One line that identifies the account. The masked token only
-								    earns its place when there is no email to name it by; it
-								    stays in the tooltip either way. It takes the meters' size
-								    rather than the settings row's default: at 13px against a
-								    14px name the two read as one block, and an address nobody
-								    needs to read was holding the same weight as the name you
-								    scan the page by. */}
 								<SettingRowDescription
 									className="truncate text-meta"
-									title={[a.email, a.plan?.replace("default_claude_", ""), a.tokenMasked]
+									title={[account.email, account.plan?.replace("default_claude_", ""), account.tokenMasked]
 										.filter(Boolean)
 										.join(" · ")}
 								>
-									{a.email || a.tokenMasked}
-									{a.plan ? ` · ${a.plan.replace("default_claude_", "")}` : ""}
+									Anthropic · {account.email || account.tokenMasked}
+									{account.plan ? ` · ${account.plan.replace("default_claude_", "")}` : ""}
 								</SettingRowDescription>
-								{a.noUsageScope && !a.usage ? (
+								{account.noUsageScope && !account.usage ? (
 									<div className="mt-1.5 text-meta text-faint">
 										Usage not visible: setup-tokens cannot read the usage endpoint. Use
 										“Sign in with Claude” in this account's menu to connect usage.
@@ -554,50 +514,50 @@ export function ClaudeAccountsSection() {
 								) : (
 									<>
 										<MeterGroup>
-											<UsageMeters windows={claudeLimits(a.usage)} />
-											<ExtraUsageRow extra={a.usage?.extraUsage} />
+											<UsageMeters windows={claudeLimits(account.usage)} />
+											<ExtraUsageRow extra={account.usage?.extraUsage} />
 										</MeterGroup>
-										{a.usage?.source === "meridian" && (
+										{account.usage?.source === "meridian" && (
 											<div className="mt-1.5 text-meta text-faint">
-												Observed via the Meridian bridge (rate-limit events from live
-												runs). The token can’t read the usage endpoint directly.
+												Observed through Meridian from rate-limit events during live runs. The
+												token cannot read the usage endpoint directly.
 											</div>
 										)}
-										{a.usage?.error && (
-											<div className="mt-1.5 text-meta text-red">{a.usage.error}</div>
+										{account.usage?.error && (
+											<div className="mt-1.5 text-meta text-red">{account.usage.error}</div>
 										)}
 									</>
 								)}
 							</SettingRowText>
 							<SettingRowControl className="flex items-center gap-1.5">
 								<OwnerSelect
-									value={a.owner || ""}
-									onChange={(owner) => handleSetOwner(a, owner)}
-									label={`Owner of ${a.name}`}
+									value={account.owner || ""}
+									onChange={(owner) => state.setOwner(account, owner)}
+									label={`Owner of ${account.name}`}
 									title={
-										a.owner
-											? `${a.owner}'s personal sub. Their runs use it first, everyone else never does.`
+										account.owner
+											? `${account.owner}'s personal subscription. Their runs use it first, everyone else never does.`
 											: "Shared pool account, used by everyone and by automations."
 									}
 								/>
 								<Menu.Root>
 									<Menu.Trigger
 										className={rowMenuTriggerClasses}
-										aria-label={`Manage ${a.name}`}
+										aria-label={`Manage ${account.name}`}
 									>
 										<IconDotsHorizontal size={18} />
 									</Menu.Trigger>
 									<Menu.Popup align="end" sideOffset={4}>
-										<Menu.Item onClick={() => setSignIn(a)}>
+										<Menu.Item onClick={() => state.setSignIn(account)}>
 											<IconPlug size={16} className="text-faint" />
 											Sign in with Claude (usage)…
 										</Menu.Item>
-										<Menu.Item onClick={() => handleSetCredentialsPath(a)}>
+										<Menu.Item onClick={() => state.setCredentialsPath(account)}>
 											<IconSliders size={16} className="text-faint" />
 											Usage credentials…
 										</Menu.Item>
 										<Menu.Item
-											onClick={() => handleRemove(a)}
+											onClick={() => state.remove(account)}
 											className="text-red data-[highlighted]:bg-red-soft"
 										>
 											<IconTrash size={16} />
@@ -607,25 +567,82 @@ export function ClaudeAccountsSection() {
 								</Menu.Root>
 							</SettingRowControl>
 						</SettingRow>
-						{signIn?.id === a.id && (
+						{state.signIn?.id === account.id && (
 							<ClaudeSignInForm
-								account={a}
-								onClose={() => setSignIn(null)}
+								account={account}
+								onClose={() => state.setSignIn(null)}
 								onDone={() => {
-									setSignIn(null);
-									load();
+									state.setSignIn(null);
+									void state.load();
 								}}
 							/>
 						)}
-						</React.Fragment>
-					))
+					</React.Fragment>
+				))}
+		</>
+	);
+}
+
+/** Provider-specific summary used by onboarding. The full settings page uses
+ * ProviderAccountsSection so every account shares one list and one toolbar. */
+export function ClaudeAccountsSection({
+	onChanged,
+}: {
+	compact?: boolean;
+	onChanged?: () => void | Promise<void>;
+} = {}) {
+	const state = useClaudeAccounts();
+	const [showAdd, setShowAdd] = useState(false);
+	const addNameRef = useRef<HTMLInputElement>(null);
+	const available =
+		state.accounts?.filter((account) => account.usable && !account.exhaustedUntil).length ?? 0;
+	return (
+		<>
+			<SettingsGroupLabel
+				actions={
+					<Button size="sm" icon={<IconPlus size={16} />} onClick={() => setShowAdd(true)}>
+						Add account
+					</Button>
+				}
+			>
+				Claude
+			</SettingsGroupLabel>
+			<Modal.Root open={showAdd} onOpenChange={setShowAdd}>
+				<Modal.Content initialFocus={addNameRef}>
+					<AddClaudeAccountForm
+						nameRef={addNameRef}
+						onAdded={() => {
+							setShowAdd(false);
+							void state.load();
+							void onChanged?.();
+						}}
+					/>
+				</Modal.Content>
+			</Modal.Root>
+			<SettingCard>
+				{!state.accounts ? (
+					<LoadingState placement="row">Checking Claude…</LoadingState>
+				) : (
+					<SettingRow>
+						<IconTile name="claude" size={28} />
+						<SettingRowText>
+							<SettingRowTitle>Claude</SettingRowTitle>
+							<SettingRowDescription>
+								{state.accounts.length === 0
+									? "Add a Claude account before choosing an Anthropic model."
+									: `${available} available of ${state.accounts.length} connected`}
+							</SettingRowDescription>
+						</SettingRowText>
+						<span className="shrink-0 text-label text-dim">
+							{available > 0
+								? "Ready"
+								: state.accounts.length > 0
+									? "Unavailable"
+									: "Not connected"}
+						</span>
+					</SettingRow>
 				)}
 			</SettingCard>
-			<SettingsHint>
-				The usage pool for Claude runs. Each run picks the least-used account, and a
-				personal one is used first by its owner and never by anyone else. For usage
-				bars, sign in with Claude from an account's menu.
-			</SettingsHint>
 		</>
 	);
 }
@@ -705,10 +722,8 @@ function CodexUsageMeters({ account }: { account: CodexAccountInfo }) {
 	);
 }
 
-export function CodexAccountsSection() {
+function useCodexAccounts() {
 	const [accounts, setAccounts] = useState<CodexAccountInfo[] | null>(null);
-	const [showAdd, setShowAdd] = useState(false);
-	const addNameRef = useRef<HTMLInputElement>(null);
 	const [refreshing, setRefreshing] = useState(false);
 	const [error, setError] = useState<string | null>(null);
 
@@ -718,158 +733,295 @@ export function CodexAccountsSection() {
 			const res = forceUsage
 				? await fetch(`${BASE_PATH}/api/codex-accounts/refresh`, { method: "POST" })
 				: await fetch(`${BASE_PATH}/api/codex-accounts`);
-			if (res.ok) setAccounts((await res.json()).accounts);
-		} catch {}
+			if (!res.ok) throw new Error(`Could not load OpenAI accounts (${res.status})`);
+			setAccounts((await res.json()).accounts);
+		} catch (cause: any) {
+			setError(cause.message || "Could not load OpenAI accounts");
+			setAccounts((current) => current ?? []);
+		}
 		setRefreshing(false);
 	}, []);
 
 	useEffect(() => {
-		load();
-		const t = setInterval(() => load(), 60_000);
-		return () => clearInterval(t);
+		void load();
+		const timer = setInterval(() => void load(), 60_000);
+		return () => clearInterval(timer);
 	}, [load]);
 
-	async function handleSetOwner(a: CodexAccountInfo, owner: string) {
-		if (owner === (a.owner || "")) return;
+	async function setOwner(account: CodexAccountInfo, owner: string) {
+		if (owner === (account.owner || "")) return;
 		try {
-			const res = await fetch(`${BASE_PATH}/api/codex-accounts/${encodeURIComponent(a.id)}`, {
-				method: "PUT",
-				headers: { "Content-Type": "application/json" },
-				body: JSON.stringify({ owner }),
-			});
+			const res = await fetch(
+				`${BASE_PATH}/api/codex-accounts/${encodeURIComponent(account.id)}`,
+				{
+					method: "PUT",
+					headers: { "Content-Type": "application/json" },
+					body: JSON.stringify({ owner }),
+				},
+			);
 			const body = await res.json();
 			if (!res.ok) throw new Error(body.error || `Failed: ${res.status}`);
-			load();
-		} catch (e: any) {
-			setError(e.message);
+			void load();
+		} catch (cause: any) {
+			setError(cause.message);
 		}
 	}
 
-	async function handleRemove(a: CodexAccountInfo) {
-		if (!confirm(`Remove Codex account "${a.name}"? Runs will stop using it.`)) return;
+	async function remove(account: CodexAccountInfo) {
+		if (!confirm(`Remove Codex account "${account.name}"? Runs will stop using it.`)) return;
 		try {
-			const res = await fetch(`${BASE_PATH}/api/codex-accounts/${encodeURIComponent(a.id)}`, {
-				method: "DELETE",
-			});
+			const res = await fetch(
+				`${BASE_PATH}/api/codex-accounts/${encodeURIComponent(account.id)}`,
+				{ method: "DELETE" },
+			);
 			const body = await res.json();
 			if (!res.ok) throw new Error(body.error || `Failed: ${res.status}`);
-			load();
-		} catch (e: any) {
-			setError(e.message);
+			void load();
+		} catch (cause: any) {
+			setError(cause.message);
 		}
+	}
+
+	return { accounts, error, load, refreshing, remove, setError, setOwner };
+}
+
+type CodexAccountsState = ReturnType<typeof useCodexAccounts>;
+
+function CodexAccountRows({ state }: { state: CodexAccountsState }) {
+	return (
+		<>
+			{[...(state.accounts || [])]
+				.sort(
+					(left, right) => left.name.localeCompare(right.name) || left.id.localeCompare(right.id),
+				)
+				.map((account) => (
+					<SettingRow key={account.id} className="items-start">
+						<IconTile name="codex" size={28} />
+						<SettingRowText>
+							<div className="flex min-w-0 items-center gap-2">
+								<SettingRowTitle className="truncate">{account.name}</SettingRowTitle>
+								<CodexStatusPill account={account} />
+							</div>
+							<SettingRowDescription className="truncate text-meta" title={account.valueMasked}>
+								OpenAI · {account.kind === "api_key" ? "API key" : "ChatGPT login"}
+								{account.usage?.buckets.find((bucket) => bucket.plan)?.plan
+									? ` · ${account.usage.buckets.find((bucket) => bucket.plan)!.plan}`
+									: ""}
+								{account.kind === "api_key" ? ` · ${account.valueMasked}` : ""}
+							</SettingRowDescription>
+							<CodexUsageMeters account={account} />
+						</SettingRowText>
+						<SettingRowControl className="flex items-center gap-1.5">
+							<OwnerSelect
+								value={account.owner || ""}
+								onChange={(owner) => state.setOwner(account, owner)}
+								label={`Owner of ${account.name}`}
+								title={
+									account.owner
+										? `${account.owner}'s personal subscription. Their runs use it first, everyone else never does.`
+										: "Shared pool account, used by everyone and by automations."
+								}
+							/>
+							<Menu.Root>
+								<Menu.Trigger
+									className={rowMenuTriggerClasses}
+									aria-label={`Manage ${account.name}`}
+								>
+									<IconDotsHorizontal size={18} />
+								</Menu.Trigger>
+								<Menu.Popup align="end" sideOffset={4}>
+									<Menu.Item
+										onClick={() => state.remove(account)}
+										className="text-red data-[highlighted]:bg-red-soft"
+									>
+										<IconTrash size={16} />
+										Remove account
+									</Menu.Item>
+								</Menu.Popup>
+							</Menu.Root>
+						</SettingRowControl>
+					</SettingRow>
+				))}
+		</>
+	);
+}
+
+/** Provider-specific summary used by onboarding. */
+export function CodexAccountsSection({
+	onChanged,
+}: {
+	compact?: boolean;
+	onChanged?: () => void | Promise<void>;
+} = {}) {
+	const state = useCodexAccounts();
+	const [showAdd, setShowAdd] = useState(false);
+	const addNameRef = useRef<HTMLInputElement>(null);
+	const available =
+		state.accounts?.filter((account) => account.usable && !account.exhaustedUntil).length ?? 0;
+	return (
+		<>
+			<SettingsGroupLabel
+				actions={
+					<Button size="sm" icon={<IconPlus size={16} />} onClick={() => setShowAdd(true)}>
+						Add account
+					</Button>
+				}
+			>
+				OpenAI Codex
+			</SettingsGroupLabel>
+			<Modal.Root open={showAdd} onOpenChange={setShowAdd}>
+				<Modal.Content initialFocus={addNameRef}>
+					<AddCodexAccountForm
+						nameRef={addNameRef}
+						onAdded={() => {
+							setShowAdd(false);
+							void state.load();
+							void onChanged?.();
+						}}
+					/>
+				</Modal.Content>
+			</Modal.Root>
+			<SettingCard>
+				{!state.accounts ? (
+					<LoadingState placement="row">Checking Codex…</LoadingState>
+				) : (
+					<SettingRow>
+						<IconTile name="codex" size={28} />
+						<SettingRowText>
+							<SettingRowTitle>OpenAI Codex</SettingRowTitle>
+							<SettingRowDescription>
+								{state.accounts.length === 0
+									? "Add a ChatGPT login or API key before choosing an OpenAI model."
+									: `${available} available of ${state.accounts.length} connected`}
+							</SettingRowDescription>
+						</SettingRowText>
+						<span className="shrink-0 text-label text-dim">
+							{available > 0
+								? "Ready"
+								: state.accounts.length > 0
+									? "Unavailable"
+									: "Not connected"}
+						</span>
+					</SettingRow>
+				)}
+			</SettingCard>
+		</>
+	);
+}
+
+/** Every subscription account in one provider-neutral list. Provider marks and
+ * metadata preserve where each account comes from without splitting the pool
+ * into separate cards. */
+export function ProviderAccountsSection() {
+	const claude = useClaudeAccounts();
+	const codex = useCodexAccounts();
+	const [adding, setAdding] = useState<"claude" | "codex" | null>(null);
+	const claudeNameRef = useRef<HTMLInputElement>(null);
+	const codexNameRef = useRef<HTMLInputElement>(null);
+	const loading = claude.accounts === null || codex.accounts === null;
+	const empty = !loading && claude.accounts?.length === 0 && codex.accounts?.length === 0;
+	const refreshing = claude.refreshing || codex.refreshing;
+
+	function refreshUsage() {
+		void Promise.allSettled([claude.load(true), codex.load(true)]);
 	}
 
 	return (
 		<>
 			<SettingsGroupLabel
 				actions={
-					<>
-						<Button
-							size="sm"
-							icon={<IconHistory size={16} className={refreshing ? "animate-spin" : ""} />}
-							onClick={() => load(true)}
-							disabled={refreshing}
-						>
-							{refreshing ? "Checking…" : "Refresh usage"}
-						</Button>
-						<Button size="sm" icon={<IconPlus size={16} />} onClick={() => setShowAdd(true)}>
-							Add account
-						</Button>
-					</>
-				}
+				<>
+					<Button
+						size="sm"
+						className="phone:min-h-11"
+						icon={<IconHistory size={16} className={refreshing ? "animate-spin" : ""} />}
+						onClick={refreshUsage}
+						disabled={refreshing}
+					>
+						{refreshing ? "Checking…" : "Refresh usage"}
+					</Button>
+					<Menu.Root>
+						<Menu.Trigger
+							render={
+								<Button
+									size="sm"
+									className="phone:min-h-11"
+									icon={<IconPlus size={16} />}
+									caret
+								>
+									Add account
+								</Button>
+							}
+						/>
+						<Menu.Popup align="end" sideOffset={4}>
+							<Menu.Item onClick={() => setAdding("claude")}>
+								<IconTile name="claude" size={18} />
+								Claude account
+							</Menu.Item>
+							<Menu.Item onClick={() => setAdding("codex")}>
+								<IconTile name="codex" size={18} />
+								OpenAI account
+							</Menu.Item>
+						</Menu.Popup>
+					</Menu.Root>
+				</>
+			}
 			>
-				Codex accounts
+				Accounts
 			</SettingsGroupLabel>
 
-			{error && (
-				<InlineAlert className="mb-2" onDismiss={() => setError(null)}>
-					{error}
+			{claude.error && (
+				<InlineAlert className="mb-2" onDismiss={() => claude.setError(null)}>
+					{claude.error}
+				</InlineAlert>
+			)}
+			{codex.error && (
+				<InlineAlert className="mb-2" onDismiss={() => codex.setError(null)}>
+					{codex.error}
 				</InlineAlert>
 			)}
 
-			<Modal.Root open={showAdd} onOpenChange={setShowAdd}>
-				{/* Same remount contract as the Claude dialog. It also drives the
-				    cleanup of a half-finished sign-in, which now hangs off the
-				    form's unmount so Escape and the backdrop release it too. */}
-				<Modal.Content initialFocus={addNameRef}>
-					<AddCodexAccountForm
-						nameRef={addNameRef}
+			<Modal.Root open={adding === "claude"} onOpenChange={(open) => !open && setAdding(null)}>
+				<Modal.Content initialFocus={claudeNameRef}>
+					<AddClaudeAccountForm
+						nameRef={claudeNameRef}
 						onAdded={() => {
-							setShowAdd(false);
-							load();
+							setAdding(null);
+							void claude.load();
+						}}
+					/>
+				</Modal.Content>
+			</Modal.Root>
+			<Modal.Root open={adding === "codex"} onOpenChange={(open) => !open && setAdding(null)}>
+				<Modal.Content initialFocus={codexNameRef}>
+					<AddCodexAccountForm
+						nameRef={codexNameRef}
+						onAdded={() => {
+							setAdding(null);
+							void codex.load();
 						}}
 					/>
 				</Modal.Content>
 			</Modal.Root>
 
 			<SettingCard>
-				{!accounts ? (
+				{loading ? (
 					<LoadingState placement="row">Loading accounts…</LoadingState>
-				) : accounts.length === 0 ? (
+				) : empty ? (
 					<EmptyState placement="row">
-						No accounts yet, so Codex runs use the VPS's own <code>codex login</code> (~/.codex).
-						Add an OpenAI API key, or a CODEX_HOME directory holding a ChatGPT-plan{" "}
-						<code>auth.json</code>, and runs rotate across the pool.
+						No accounts yet. Runs use this server's Claude and Codex sign-ins until you add
+						an Anthropic or OpenAI account.
 					</EmptyState>
 				) : (
-					accounts.map((a) => (
-						<SettingRow key={a.id} className="items-start">
-							<Avatar name={a.name} className="bg-[#10a37f]" />
-							<SettingRowText>
-								<div className="flex items-center gap-2 min-w-0">
-									<SettingRowTitle className="truncate">{a.name}</SettingRowTitle>
-									<CodexStatusPill account={a} />
-								</div>
-								{/* A ChatGPT login is named by its plan; the CODEX_HOME path it
-								    lives at is the longest string on the row and identifies
-								    nothing the account name doesn't, so it moves to the tooltip.
-								    An API key has no plan, so its masked key stays visible. */}
-								<SettingRowDescription className="truncate text-meta" title={a.valueMasked}>
-									{a.kind === "api_key" ? "API key" : "ChatGPT login"}
-									{a.usage?.buckets.find((bucket) => bucket.plan)?.plan
-										? ` · ${a.usage.buckets.find((bucket) => bucket.plan)!.plan}`
-										: ""}
-									{a.kind === "api_key" ? ` · ${a.valueMasked}` : ""}
-								</SettingRowDescription>
-								<CodexUsageMeters account={a} />
-							</SettingRowText>
-							<SettingRowControl className="flex items-center gap-1.5">
-								<OwnerSelect
-									value={a.owner || ""}
-									onChange={(owner) => handleSetOwner(a, owner)}
-									label={`Owner of ${a.name}`}
-									title={
-										a.owner
-											? `${a.owner}'s personal subscription. Their runs use it first, everyone else never does.`
-											: "Shared pool account, used by everyone and by automations."
-									}
-								/>
-								<Menu.Root>
-									<Menu.Trigger
-										className={rowMenuTriggerClasses}
-										aria-label={`Manage ${a.name}`}
-									>
-										<IconDotsHorizontal size={18} />
-									</Menu.Trigger>
-									<Menu.Popup align="end" sideOffset={4}>
-										<Menu.Item
-											onClick={() => handleRemove(a)}
-											className="text-red data-[highlighted]:bg-red-soft"
-										>
-											<IconTrash size={16} />
-											Remove account
-										</Menu.Item>
-									</Menu.Popup>
-								</Menu.Root>
-							</SettingRowControl>
-						</SettingRow>
-					))
+					<>
+						<ClaudeAccountRows state={claude} />
+						<CodexAccountRows state={codex} />
+					</>
 				)}
 			</SettingCard>
 			<SettingsHint>
-				The pool for GPT and Codex runs. Runs rotate to the next account at the usage
-				limit, and a personal one is used first by its owner and never by anyone else.
-				Automations only use the shared pool.
+				Runs rotate through shared accounts for the selected model. Personal accounts
+				are used only for their owner's runs.
 			</SettingsHint>
 		</>
 	);

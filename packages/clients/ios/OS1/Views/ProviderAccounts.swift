@@ -31,15 +31,44 @@ struct ProviderAccountSections: View {
     }
 
     var body: some View {
-        Group {
-            // The `task` hangs off a section rendered in every state. A
-            // `Group`'s modifiers apply to each child individually, so parking
-            // it on a conditional row would tear the fetch down the moment that
-            // row swapped out and leave `loading` stuck true forever.
-            accountSection("Claude", accounts: validClaude, kind: .claude)
-                .task(id: reload) { await load() }
-            accountSection("Codex", accounts: validCodex, kind: .codex)
+        Section("Accounts") {
+            if loading, loaded == false {
+                settingsLoadingRow
+            } else if let error, loaded == false {
+                settingsErrorRow(error) { Task { await load() } }
+            } else {
+                if let error { settingsErrorRow(error) { Task { await load() } } }
+                if accountItems.isEmpty {
+                    Text("No accounts yet. Runs use this server's Claude and Codex sign-ins until you add an Anthropic or OpenAI account.")
+                        .foregroundStyle(.secondary)
+                }
+                ForEach(accountItems) { item in
+                    AccountUsageRow(
+                        account: item.account,
+                        kind: item.kind,
+                        onToggleOwnership: { Task { await toggleOwnership(item.account, kind: item.kind) } },
+                        onRemove: {
+                            removal = AccountRemoval(
+                                id: item.account.id ?? "",
+                                name: item.account.name ?? "this account",
+                                kind: item.kind
+                            )
+                        }
+                    )
+                }
+                Menu {
+                    Button("Claude account") { showingAdd = .claude }
+                    Button("OpenAI API key") { showingAdd = .codex }
+                } label: {
+                    Label("Add account", systemImage: "plus")
+                }
+                Button("Refresh account usage") { Task { await refreshAccounts() } }
+                Button { codexLoginSheet = true } label: {
+                    Label("Sign in with ChatGPT", systemImage: "person.badge.key")
+                }
+            }
         }
+        .task(id: reload) { await load() }
         .sheet(item: $showingAdd) { kind in
             AccountEditor(kind: kind) { name, value, owner in
                 await addAccount(kind: kind, name: name, value: value, owner: owner)
@@ -65,64 +94,77 @@ struct ProviderAccountSections: View {
 
     private var validClaude: [ProviderAccount] { claude.filter { $0.id?.isEmpty == false } }
     private var validCodex: [ProviderAccount] { codex.filter { $0.id?.isEmpty == false } }
-
-    @ViewBuilder
-    private func accountSection(_ title: String, accounts: [ProviderAccount], kind: AccountKind) -> some View {
-        Section(title) {
-            if loading, loaded == false {
-                settingsLoadingRow
-            } else if let error, loaded == false {
-                settingsErrorRow(error) { Task { await load() } }
-            } else {
-                if let error, kind == .claude { settingsErrorRow(error) { Task { await load() } } }
-                if accounts.isEmpty {
-                    Text("No \(title) accounts configured.").foregroundStyle(.secondary)
-                }
-                ForEach(accounts, id: \.id) { account in
-                    AccountUsageRow(
-                        account: account,
-                        kind: kind,
-                        onToggleOwnership: { Task { await toggleOwnership(account, kind: kind) } },
-                        onRemove: {
-                            removal = AccountRemoval(
-                                id: account.id ?? "",
-                                name: account.name ?? "this account",
-                                kind: kind
-                            )
-                        }
-                    )
-                }
-                Button { showingAdd = kind } label: { Label("Add \(title) account", systemImage: "plus") }
-                if kind == .claude {
-                    Button("Refresh account usage") { Task { await refreshClaude() } }
-                } else {
-                    Button { codexLoginSheet = true } label: {
-                        Label("Sign in with ChatGPT", systemImage: "person.badge.key")
-                    }
-                }
-            }
-        }
+    private var accountItems: [ProviderAccountItem] {
+        let claudeItems = validClaude
+            .sorted { ($0.name ?? "").localizedCaseInsensitiveCompare($1.name ?? "") == .orderedAscending }
+            .map { ProviderAccountItem(account: $0, kind: .claude) }
+        let codexItems = validCodex
+            .sorted { ($0.name ?? "").localizedCaseInsensitiveCompare($1.name ?? "") == .orderedAscending }
+            .map { ProviderAccountItem(account: $0, kind: .codex) }
+        return claudeItems + codexItems
     }
 
     private func load() async {
-        loading = true; error = nil
-        do {
-            async let fetchedClaude = SettingsAPI.claudeAccounts()
-            async let fetchedCodex = SettingsAPI.codexAccounts()
-            let result = try await (fetchedClaude, fetchedCodex)
-            claude = result.0; codex = result.1
+        loading = true
+        error = nil
+        async let fetchedClaude = fetchClaude()
+        async let fetchedCodex = fetchCodex()
+        let result = await (fetchedClaude, fetchedCodex)
+        var problems: [String] = []
+        switch result.0 {
+        case .success(let accounts):
+            claude = accounts
             loaded = true
-            SettingsCache.save("claude-accounts", result.0)
-            SettingsCache.save("codex-accounts", result.1)
-        } catch { self.error = error.localizedDescription }
+            SettingsCache.save("claude-accounts", accounts)
+        case .failure(let cause):
+            problems.append("Anthropic: \(cause.localizedDescription)")
+        }
+        switch result.1 {
+        case .success(let accounts):
+            codex = accounts
+            loaded = true
+            SettingsCache.save("codex-accounts", accounts)
+        case .failure(let cause):
+            problems.append("OpenAI: \(cause.localizedDescription)")
+        }
+        error = problems.isEmpty ? nil : problems.joined(separator: "\n")
         loading = false
     }
 
-    private func refreshClaude() async {
+    private func refreshAccounts() async {
+        async let refreshedClaude = fetchClaude(refresh: true)
+        async let refreshedCodex = fetchCodex(refresh: true)
+        let result = await (refreshedClaude, refreshedCodex)
+        var problems: [String] = []
+        switch result.0 {
+        case .success(let accounts):
+            claude = accounts
+            SettingsCache.save("claude-accounts", accounts)
+        case .failure(let cause):
+            problems.append("Anthropic: \(cause.localizedDescription)")
+        }
+        switch result.1 {
+        case .success(let accounts):
+            codex = accounts
+            SettingsCache.save("codex-accounts", accounts)
+        case .failure(let cause):
+            problems.append("OpenAI: \(cause.localizedDescription)")
+        }
+        error = problems.isEmpty ? nil : problems.joined(separator: "\n")
+    }
+
+    private func fetchClaude(refresh: Bool = false) async -> Result<[ProviderAccount], Error> {
         do {
-            claude = try await SettingsAPI.refreshClaudeAccounts()
-            SettingsCache.save("claude-accounts", claude)
-        } catch { self.error = error.localizedDescription }
+            if refresh { return .success(try await SettingsAPI.refreshClaudeAccounts()) }
+            return .success(try await SettingsAPI.claudeAccounts())
+        } catch { return .failure(error) }
+    }
+
+    private func fetchCodex(refresh: Bool = false) async -> Result<[ProviderAccount], Error> {
+        do {
+            if refresh { return .success(try await SettingsAPI.refreshCodexAccounts()) }
+            return .success(try await SettingsAPI.codexAccounts())
+        } catch { return .failure(error) }
     }
 
     private func addAccount(kind: AccountKind, name: String, value: String, owner: String?) async {
@@ -165,6 +207,13 @@ struct ProviderAccountSections: View {
     }
 }
 
+private struct ProviderAccountItem: Identifiable {
+    let account: ProviderAccount
+    let kind: AccountKind
+
+    var id: String { "\(kind.id):\(account.id ?? account.name ?? "account")" }
+}
+
 /// One account: what it is, how full it is, and the two things you can do
 /// about that.
 private struct AccountUsageRow: View {
@@ -175,10 +224,11 @@ private struct AccountUsageRow: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
-            HStack(alignment: .firstTextBaseline) {
+            HStack(alignment: .top, spacing: 10) {
+                BrandTile(name: kind == .claude ? "claude" : "codex", size: 28)
                 VStack(alignment: .leading, spacing: 2) {
                     Text(account.name ?? account.email ?? "Account")
-                    Text(ownership)
+                    Text("\(providerName) · \(ownership)")
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }
@@ -200,6 +250,8 @@ private struct AccountUsageRow: View {
         }
         .padding(.vertical, 2)
     }
+
+    private var providerName: String { kind == .claude ? "Anthropic" : "OpenAI" }
 
     /// Whose subscription this is. A shared pool account is the default, so it
     /// is the phrase that needs no name beside it.
