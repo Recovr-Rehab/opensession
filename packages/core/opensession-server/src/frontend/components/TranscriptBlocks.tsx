@@ -610,7 +610,6 @@ function IndexedTranscriptBlocks(props: Props) {
 	}
 	atoms.sort((a, b) => a.timestampMs - b.timestampMs);
 	const timeline = groupIndexedReviewLoops(atoms);
-	const allPayloadEntries = entries.filter((entry) => typeof entry.seq === "number");
 	const lastIndex = timeline.length - 1;
 	const items: VirtualTranscriptItem[] = timeline.map((item, index) => {
 		const itemRanges = indexedItemRanges(item);
@@ -618,9 +617,17 @@ function IndexedTranscriptBlocks(props: Props) {
 		const loaded = itemRanges.every((range) =>
 			range.entryIds.every((id) => payloadById.has(id)),
 		);
-		const itemEntries = loaded
-			? allPayloadEntries.filter((entry) => entryIds.includes(entry.id))
-			: [];
+		const itemEntries = entryIds.flatMap((id) => {
+			const entry = payloadById.get(id);
+			return entry ? [entry] : [];
+		});
+		// The opening tail can begin midway through one structural range. When the
+		// complete index arrives, keep rendering the payload already on screen
+		// while its missing prefix hydrates. Replacing real content with a 48px
+		// placeholder for that round trip makes the transcript flash and briefly
+		// remaps scrollTop into an older part of the conversation.
+		const rendersPartialRange = item.kind === "range" && itemEntries.length > 0;
+		const rendersPayload = loaded || rendersPartialRange;
 		const key = indexedItemKey(item, index);
 		const estimateSize = indexedItemEstimate(item);
 		const isLast = index === lastIndex;
@@ -629,7 +636,7 @@ function IndexedTranscriptBlocks(props: Props) {
 			anchorId: key,
 			entryIds,
 			estimateSize,
-			measure: loaded || item.kind !== "range",
+			measure: rendersPayload || item.kind !== "range",
 			content:
 				item.kind === "note" ? (
 					<NoteBubble note={item.note} sessionId={props.sessionId} />
@@ -646,7 +653,7 @@ function IndexedTranscriptBlocks(props: Props) {
 						live={Boolean(props.live && isLast)}
 						onContinue={isLast ? props.onContinue : undefined}
 					/>
-				) : loaded ? (
+				) : rendersPayload ? (
 					<LoadedTranscriptBlocks
 						{...props}
 						entries={itemEntries}

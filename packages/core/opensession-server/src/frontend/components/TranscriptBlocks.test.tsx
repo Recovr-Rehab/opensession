@@ -795,6 +795,29 @@ describe("TranscriptBlocks indexed ranges", () => {
 		expect(html).toContain("Newest prompt");
 	});
 
+	test("keeps a partial opening range visible while its prefix hydrates", () => {
+		const html = renderToStaticMarkup(
+			<TranscriptBlocks
+				transcriptIndex={[
+					indexRow(1, "user"),
+					indexRow(2, "assistant"),
+				]}
+				entries={[
+					{
+						id: "indexed-2",
+						seq: 2,
+						changeSeq: 2,
+						type: "assistant",
+						content: "Visible tail answer",
+						timestamp: "2026-08-12T12:00:02Z",
+					},
+				]}
+			/>,
+		);
+		expect(html).toContain("Visible tail answer");
+		expect(html).not.toContain("Loading messages");
+	});
+
 	test("keeps a note inside its loaded conversation range", () => {
 		const html = renderToStaticMarkup(
 			<TranscriptBlocks
