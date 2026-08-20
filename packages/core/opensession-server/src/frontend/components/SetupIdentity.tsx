@@ -16,7 +16,6 @@ import {
 	settingsInputClass,
 } from "../ui/settings";
 import { toast } from "../ui/toast";
-import { Code } from "./setup-shared";
 
 // What this instance and its agent are called: a Setup step and a group in
 // Workspace > General, rendered from the same card.
@@ -103,9 +102,7 @@ export function IdentityCard() {
 					<SettingRowText>
 						<SettingRowTitle>Agent name</SettingRowTitle>
 						<SettingRowDescription>
-							What the agent calls itself in prompts, Slack messages, and the
-							UI. Stored as <Code>persona.name</Code> in{" "}
-							<Code>~/.opensession/config.json</Code> on the server.
+							Shown in prompts, Slack messages, and the app.
 						</SettingRowDescription>
 					</SettingRowText>
 					<IdentityInput
@@ -119,8 +116,7 @@ export function IdentityCard() {
 					<SettingRowText>
 						<SettingRowTitle>Product name</SettingRowTitle>
 						<SettingRowDescription>
-							What this app calls itself in titles and headers. Stored as{" "}
-							<Code>branding.productName</Code> in the same config file.
+							Shown in titles and headings.
 						</SettingRowDescription>
 					</SettingRowText>
 					<IdentityInput
@@ -132,9 +128,7 @@ export function IdentityCard() {
 				</SettingRow>
 			</SettingCard>
 			<SettingsHint>
-				Workspace-wide, shared by everyone on this instance. Changes apply to
-				new agent runs immediately; clearing a field restores the built-in
-				default.
+				Shared with everyone on this instance. Clear a field to use the default.
 			</SettingsHint>
 		</>
 	);
