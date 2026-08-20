@@ -17,35 +17,46 @@ export function AnsweredAskCard({
 }) {
 	const repo = useMarkdownRepo();
 	const count = record.questions.length;
+	const lone = count === 1 ? record.questions[0] : undefined;
 
 	return (
 		<div className={msgRow} data-eid={entryId} data-answered-ask="">
-			<div className="max-w-[min(600px,90%)] rounded-lg bg-panel px-3.5 py-3 [corner-shape:var(--cs)]">
-				<div className="flex items-center gap-1.5 text-label font-semibold text-dim">
+			<div className="max-w-[min(600px,90%)] rounded-2xl bg-panel p-4 [corner-shape:var(--cs)]">
+				<div className="flex flex-wrap items-center gap-x-1.5 gap-y-0.5 text-label font-semibold">
 					<span
 						aria-hidden="true"
 						className="flex h-4 w-4 items-center justify-center rounded-full bg-green-soft text-green"
 					>
 						<IconCheck size={14} />
 					</span>
-					{count === 1 ? "Answer sent" : `${count} answers sent`}
+					<span className="text-dim">
+						{count === 1 ? "Answer sent" : `${count} answers sent`}
+					</span>
+					{lone?.header && (
+						<>
+							<span aria-hidden="true" className="text-faint">
+								·
+							</span>
+							<span className="text-faint">{lone.header}</span>
+						</>
+					)}
 				</div>
 
-				<div className="mt-2.5 flex flex-col gap-3.5">
+				<div className="mt-3 flex flex-col gap-4">
 					{record.questions.map((question, index) => (
 						<section key={`${question.question}:${index}`}>
-							{question.header && (
-								<div className="mb-0.5 text-meta font-semibold text-faint">
+							{question.header && !lone && (
+								<div className="mb-1 text-meta font-semibold text-faint">
 									{question.header}
 								</div>
 							)}
 							<div
-								className="markdown text-supporting leading-5 text-dim [overflow-wrap:anywhere]"
+								className="markdown text-control-label leading-5 text-dim [overflow-wrap:anywhere] [text-wrap:pretty]"
 								dangerouslySetInnerHTML={{
 									__html: renderMarkdown(question.question, { repo }),
 								}}
 							/>
-							<div className="mt-1 whitespace-pre-wrap text-body font-medium leading-6 text-fg [overflow-wrap:anywhere]">
+							<div className="mt-2.5 whitespace-pre-wrap rounded-md bg-control px-3 py-2.5 text-body font-medium leading-6 text-fg [overflow-wrap:anywhere] [corner-shape:var(--cs)]">
 								{question.answer || "No answer"}
 							</div>
 						</section>
