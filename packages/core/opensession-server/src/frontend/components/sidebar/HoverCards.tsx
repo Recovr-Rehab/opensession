@@ -294,9 +294,6 @@ export function WsStatusMark({
 	);
 	const dot = (cls: string) =>
 		slot(<span className={`size-2 shrink-0 rounded-full ${cls}`} />);
-	if (row.sessions.some((session) => session.waitingForInput))
-		return dot(SIDEBAR_STATUS_DOT.waiting);
-	if (row.sessions.some(runNeedsAttention)) return dot(SIDEBAR_STATUS_DOT.failed);
 	if (row.status === "needsinput") return dot(SIDEBAR_STATUS_DOT.waiting);
 	if (row.running) return dot(SIDEBAR_STATUS_DOT.running);
 	// A draft workspace has no session and so no PR to show. The flat-repo
