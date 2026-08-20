@@ -4,6 +4,10 @@ import { buildWebsiteTailwind } from "./website-tailwind";
 
 const root = join(import.meta.dir, "..");
 const outdir = join(root, ".website-dist");
+const publicPath = (() => {
+	const configured = process.env.OPENSESSION_WEBSITE_PUBLIC_PATH || "/";
+	return `/${configured.replace(/^\/+|\/+$/g, "")}/`.replace(/^\/\/$/, "/");
+})();
 
 rmSync(outdir, { recursive: true, force: true });
 await buildWebsiteTailwind(root);
@@ -18,7 +22,7 @@ const result = await Bun.build({
 	minify: true,
 	splitting: true,
 	sourcemap: "none",
-	publicPath: "/",
+	publicPath,
 	naming: {
 		entry: "[name]-[hash].[ext]",
 		chunk: "[name]-[hash].[ext]",
@@ -51,7 +55,7 @@ for (const page of ["index", "product-demo", "setup"]) {
 	const entry = named(page, ".js", "entry-point");
 	if (!html) throw new Error(`${page}.html build produced no HTML entry`);
 	if (!entry) throw new Error(`${page}.html build produced no script entry`);
-	const script = `/${entry.path.split("/").pop()}`;
+	const script = `${publicPath}${entry.path.split("/").pop()}`;
 	// Structural, not copy: a headline edit must not fail the build (it did).
 	const proof =
 		page === "index"

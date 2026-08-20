@@ -62,7 +62,7 @@ export function ProductDemo() {
 					title="Interactive Open Session product preview"
 					aria-hidden={!ready}
 					tabIndex={ready ? undefined : -1}
-					src="/product-demo.html"
+					src="product-demo.html"
 					loading="eager"
 					referrerPolicy="no-referrer"
 					sandbox="allow-scripts allow-same-origin"

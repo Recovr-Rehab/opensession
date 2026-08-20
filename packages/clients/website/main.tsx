@@ -25,7 +25,7 @@ import { TellaBackground } from "./TellaBackground";
  * the list. `bun run website:dev` handles it in scripts/website-dev.ts and
  * appends each address to a markdown file — no third-party collector yet.
  */
-const waitlistEndpoint = "/api/waitlist";
+const waitlistEndpoint = "api/waitlist";
 
 const Agentation = lazy(() =>
 	import("agentation").then((module) => ({ default: module.Agentation })),
@@ -206,7 +206,7 @@ function LandingPage() {
 					>
 						Request access
 					</button>
-					<a className="rail-setup-link" href="/setup">
+					<a className="rail-setup-link" href="setup">
 						Set up your server <IconChevronRight size={16} />
 					</a>
 					<p className="rail-note">
