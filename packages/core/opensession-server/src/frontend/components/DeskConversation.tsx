@@ -1,4 +1,5 @@
 import React, { useEffect, useRef, useState } from "react";
+import { AnimatePresence, motion } from "motion/react";
 import type { TranscriptEntry } from "../lib/types";
 import { useWebSocket } from "../hooks/useWebSocket";
 import { getCurrentUser } from "./UserPicker";
@@ -24,6 +25,7 @@ import {
 	msgStreamingRow,
 } from "../lib/msg-classes";
 import { TypingIndicator } from "./TypingIndicator";
+import { duration, ease } from "../ui/motion";
 
 interface DeskConversationProps {
 	sessionId: string;
@@ -77,6 +79,7 @@ export function DeskConversation({
 	const [streamText, setStreamText] = useState("");
 	const [isRunning, setIsRunning] = useState(false);
 	const [pending, setPending] = useState<string | null>(null);
+	const [dictationHidesSuggestions, setDictationHidesSuggestions] = useState(false);
 	// Attachments staged for the next send. The Composer stages files to disk
 	// itself (no `onAddAttachments`), the same way the catch-up deck's reply box
 	// does; both ride along on the prompt.
@@ -108,6 +111,12 @@ export function DeskConversation({
 		);
 		return () => window.clearTimeout(timer);
 	}, [autoFocus]);
+
+	function handleDictationActive(active: boolean) {
+		// The row exits during the Composer morph, not after it. Sharing the same
+		// start makes the two pieces read as one compacting surface.
+		setDictationHidesSuggestions(active);
+	}
 	// Stick to the live edge only while the reader is already there, so a
 	// streaming reply doesn't yank them up from scrollback.
 	const followRef = useRef(true);
@@ -441,27 +450,40 @@ export function DeskConversation({
 				    conversation starts. Picking one fills the draft rather than
 				    sending: some name actions with side effects, and all of them are
 				    openings you'd want to finish in your own words. */}
-				{!hasContent && !!suggestions?.length && (
-					<div className="flex gap-1.5 overflow-x-auto px-1 pb-3 pr-8 [-webkit-mask-image:linear-gradient(to_right,#000_0,#000_calc(100%_-_32px),transparent_100%)] [mask-image:linear-gradient(to_right,#000_0,#000_calc(100%_-_32px),transparent_100%)] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-						{suggestions.map((s) => (
-							<button
-								type="button"
-								key={s}
-								className="shrink-0 whitespace-nowrap rounded-full bg-hover px-3 py-1.5 text-label font-medium text-dim hover:bg-active hover:text-fg"
-								onClick={() => {
-									setPrefill((current) => ({
-										seq: (current?.seq ?? 0) + 1,
-										text: s,
-										replace: true,
-									}));
-									textareaRef.current?.focus();
-								}}
-							>
-								{s}
-							</button>
-						))}
-					</div>
-				)}
+				<div className="overflow-hidden">
+					<AnimatePresence initial={false}>
+						{!hasContent &&
+							!!suggestions?.length &&
+							!dictationHidesSuggestions && (
+								<motion.div
+									key="desk-suggestions"
+									initial={{ y: 40 }}
+									animate={{ y: 0 }}
+									exit={{ y: 40 }}
+									transition={{ type: "tween", duration: duration.base, ease }}
+									className="flex gap-1.5 overflow-x-auto px-1 pb-3 pr-8 [-webkit-mask-image:linear-gradient(to_right,#000_0,#000_calc(100%_-_32px),transparent_100%)] [mask-image:linear-gradient(to_right,#000_0,#000_calc(100%_-_32px),transparent_100%)] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+								>
+									{suggestions.map((s) => (
+										<button
+											type="button"
+											key={s}
+											className="shrink-0 whitespace-nowrap rounded-full bg-hover px-3 py-1.5 text-label font-medium text-dim hover:bg-active hover:text-fg"
+											onClick={() => {
+												setPrefill((current) => ({
+													seq: (current?.seq ?? 0) + 1,
+													text: s,
+													replace: true,
+												}));
+												textareaRef.current?.focus();
+											}}
+										>
+											{s}
+										</button>
+									))}
+								</motion.div>
+							)}
+					</AnimatePresence>
+				</div>
 
 				<TypingIndicator users={typingUsers} className="mb-1 px-5" />
 				{/* The session composer itself, so the Desk gets what a session gets:
@@ -471,6 +493,7 @@ export function DeskConversation({
 					draftKey={`desk:${sessionId}`}
 					onSend={handleSend}
 					onTyping={(active) => setTyping(sessionId, active)}
+					onDictationActive={handleDictationActive}
 					placeholder={
 						connected ? placeholder || "Ask your Desk…" : "Not connected"
 					}

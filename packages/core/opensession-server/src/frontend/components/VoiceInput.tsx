@@ -2,19 +2,21 @@ import React, { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { motion } from "motion/react";
 import { transcribeClip } from "../lib/api";
-import { IconArrowUp, IconCheck, IconMic, IconX } from "./icons";
+import { IconArrowUp, IconCheck, IconMic, IconPlus, IconX } from "./icons";
 import { Tooltip } from "../ui/tooltip";
 import { PRODUCT_NAME } from "../lib/brand";
 import { cn } from "../ui/cn";
 import { duration, ease } from "../ui/motion";
 import { paletteIconBtn } from "../lib/palette-classes";
 import { composerSend, composerSendDefault } from "../lib/composer-classes";
+import { useIsPhone } from "../hooks/useIsPhone";
 
-type Phase = "idle" | "requesting" | "recording" | "transcribing";
+type Phase = "idle" | "requesting" | "recording" | "cancelling" | "transcribing";
 
 /** Dictation is capped. This is a session input, not a memo recorder. */
 const MAX_SECONDS = 120;
 const BAR_COUNT = 72;
+const PHONE_BAR_COUNT = 24;
 
 /* The recording bar's chrome. Every variant is written out in full rather than
    composed from a fragment: Tailwind scans source text, so a class assembled
@@ -36,15 +38,14 @@ const OVERLAY_RADIUS = "rounded-[var(--composer-radius)]";
    utility on the same element. Two of those don't compose, the sheet's order
    decides the winner. Bars without a sample yet are a 2px baseline dot; live
    ones get their height inline from the level meter. */
-const WAVE_BAR_IDLE = "mx-auto h-0.5 w-0.5 min-w-0 max-w-0.5 flex-1 rounded-xs bg-faint";
+const WAVE_BAR_IDLE = "h-0.5 w-[3px] shrink-0 rounded-full bg-faint";
 const WAVE_BAR_LIVE =
-	"mx-auto h-0.5 w-0.5 min-w-0 max-w-0.5 flex-1 rounded-xs bg-dim transition-[height] duration-[90ms] ease-linear";
+	"h-0.5 w-[3px] shrink-0 rounded-full bg-dim transition-[height] duration-[90ms] ease-linear";
 
-/* Plain glyph buttons have no fill or border. The ✓ picks up the accent. */
+/* Hosts can match cancel to the control it replaces. This fallback keeps the
+   standalone VoiceInput target at the same 40px size as its idle mic. */
 const GLYPH_CANCEL =
 	"inline-flex size-10 shrink-0 cursor-pointer items-center justify-center rounded-md border-none bg-transparent text-dim transition-colors hover:bg-hover hover:text-fg disabled:cursor-default disabled:opacity-35";
-const GLYPH_ACCEPT =
-	"inline-flex size-10 shrink-0 cursor-pointer items-center justify-center rounded-md border-none bg-transparent text-fg transition-colors hover:bg-hover hover:text-accent disabled:cursor-default disabled:opacity-35";
 
 /* The `voice-spinner` hook is gone: base.css's reduced-motion block used to
    name it to pin the rotation to a constant 0.8s, but that block now matches
@@ -79,6 +80,11 @@ const CHECK_IN = {
 	animate: { opacity: 1, filter: "blur(0px)", scale: 1 },
 	transition: GLYPH_MORPH,
 } as const;
+const PLUS_TO_CANCEL = {
+	initial: { rotate: 0 },
+	animate: { rotate: 45 },
+	transition: GLYPH_MORPH,
+} as const;
 
 /**
  * Wispr-Flow-style dictation control shared by the session Composer and the
@@ -107,6 +113,8 @@ export function VoiceInput({
   overlayTargetRef,
   editTargetRef,
   onActiveChange,
+  cancelClassName,
+  cancelFromPlus = false,
 }: {
   onText: (text: string) => void;
   /** Take the text and send it straight away. Without one, the send button is
@@ -129,7 +137,13 @@ export function VoiceInput({
   editTargetRef?: React.RefObject<HTMLElement | null>;
   /** Lets a host collapse its container while dictation owns the input. */
   onActiveChange?: (active: boolean) => void;
+  /** Matches cancel to the add control it replaces in a full-surface host. */
+  cancelClassName?: string;
+  /** Rotate the host's add glyph into cancel instead of swapping to an X. */
+  cancelFromPlus?: boolean;
 }) {
+  const isPhone = useIsPhone();
+  const barCount = isPhone ? PHONE_BAR_COUNT : BAR_COUNT;
   const [phase, setPhase] = useState<Phase>("idle");
   const [error, setError] = useState<string | null>(null);
   const [levels, setLevels] = useState<number[]>([]);
@@ -267,10 +281,7 @@ export function VoiceInput({
       });
       cleanup();
       if (accepted) void finish(blob, request);
-      else {
-        setPhase("idle");
-        restoreEditorFocus();
-      }
+      else finishCancellation();
     };
 
     // Live level meter for the waveform is progressive enhancement. Recording
@@ -310,11 +321,20 @@ export function VoiceInput({
     setPhase("recording");
   }
 
+  function finishCancellation() {
+    setPhase("cancelling");
+    timersRef.current.push(
+      window.setTimeout(() => {
+        setPhase("idle");
+        restoreEditorFocus();
+      }, duration.large * 1000),
+    );
+  }
+
   function stop(accept: boolean, send = false) {
     if (phase === "requesting") {
       requestRef.current++;
-      setPhase("idle");
-      restoreEditorFocus();
+      finishCancellation();
       return;
     }
     const rec = recRef.current;
@@ -358,7 +378,7 @@ export function VoiceInput({
       className={cn(OVERLAY, overlayClassName || OVERLAY_RADIUS)}
       style={overlayStyle}
     >
-      {phase === "recording" || phase === "requesting" ? (
+      {phase === "recording" || phase === "requesting" || phase === "cancelling" ? (
         <motion.div
           key="recording"
           className="flex h-10 min-w-0 flex-1 items-center gap-2 phone:gap-1.5"
@@ -372,21 +392,37 @@ export function VoiceInput({
           <Tooltip label="Cancel">
             <button
               type="button"
-              className={GLYPH_CANCEL}
+              className={cancelClassName || GLYPH_CANCEL}
               onClick={() => stop(false)}
+              disabled={phase === "cancelling"}
               aria-label="Cancel dictation"
             >
-              <IconX size={22} />
+              {cancelFromPlus ? (
+                <motion.span
+                  className="inline-flex"
+                  initial={PLUS_TO_CANCEL.initial}
+                  animate={
+                    phase === "cancelling"
+                      ? PLUS_TO_CANCEL.initial
+                      : PLUS_TO_CANCEL.animate
+                  }
+                  transition={PLUS_TO_CANCEL.transition}
+                >
+                  <IconPlus size={22} />
+                </motion.span>
+              ) : (
+                <IconX size={22} />
+              )}
             </button>
           </Tooltip>
           {/* Full-width track: baseline dots on the quiet/older left, live
               bars accumulating on the right by the accept buttons. */}
           <div
-            className="flex h-full min-w-0 flex-1 items-center gap-0.5 overflow-hidden"
+            className="flex h-full min-w-0 flex-1 items-center justify-center gap-1 overflow-hidden"
             aria-hidden="true"
           >
-            {Array.from({ length: BAR_COUNT }, (_, i) => {
-              const l = levels[levels.length - BAR_COUNT + i];
+            {Array.from({ length: barCount }, (_, i) => {
+              const l = levels[levels.length - barCount + i];
               const active = l !== undefined;
               return (
                 <span
@@ -400,15 +436,15 @@ export function VoiceInput({
           <Tooltip label="Keep it. The text lands in the draft to edit.">
             <button
               type="button"
-              className={cn(GLYPH_ACCEPT, "relative")}
+              className={cn(className, "text-fg hover:text-accent")}
               onClick={() => stop(true)}
-              disabled={phase === "requesting"}
+              disabled={phase === "requesting" || phase === "cancelling"}
               aria-label="Stop and transcribe"
             >
               {/* Start with the mic at the checkmark's resting position,
                   then blur the two glyphs through one another. */}
               <motion.span
-                className="absolute inset-0 inline-flex items-center justify-center"
+                className="!absolute inset-0 inline-flex items-center justify-center"
                 {...MIC_OUT}
                 aria-hidden="true"
               >
@@ -429,7 +465,7 @@ export function VoiceInput({
                 type="button"
                 className={cn(composerSend, composerSendDefault)}
                 onClick={() => stop(true, true)}
-                disabled={phase === "requesting"}
+                disabled={phase === "requesting" || phase === "cancelling"}
                 aria-label="Stop, transcribe and send"
               >
                 <IconArrowUp size={20} />

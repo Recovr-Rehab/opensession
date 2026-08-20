@@ -128,6 +128,8 @@ interface Props {
   onChange?: (value: string) => void;
   /** Composer activity for the session's live typing indicator. */
   onTyping?: (active: boolean) => void;
+  /** Reports when dictation owns the input so a host can coordinate nearby UI. */
+  onDictationActive?: (active: boolean) => void;
   /**
    * Uncontrolled mode only: persist the text draft under this key (lib/drafts)
    * so it survives the component unmounting — switching to another session,
@@ -437,6 +439,7 @@ export function Composer({
   value,
   onChange,
   onTyping,
+  onDictationActive,
   draftKey,
   onSend,
   placeholder,
@@ -682,10 +685,20 @@ export function Composer({
     !!quote ||
     hasAttached;
   const minimized = isPhone && !focused && !hasContent && !modelMenuOpen;
+  const composerIconButtonClass = cn(
+    paletteIconBtn,
+    minimized && paletteIconBtnRound,
+    !minimized && "phone:[&_svg]:size-[22px]",
+  );
+  const addButtonClass = cn(
+    composerIconButtonClass,
+    minimized ? "ml-0" : "-ml-1.5",
+  );
   const showSend = !busy || hasContent;
   function handleDictationActive(active: boolean) {
     setDictating(active);
     if (active) setDictationClipping(true);
+    onDictationActive?.(active);
   }
   // Whether the send button/plain send steers right now: each gesture has its
   // own configured busy action — Enter/button uses the "enter" pref, holding
@@ -1788,12 +1801,7 @@ export function Composer({
                   // its wrapper, which the menu anchors to) back out so the glyph
                   // sits about where the send circle does. The resting pill
                   // insets everything by 4px already, so it stays put there.
-                  className={cn(
-                    paletteIconBtn,
-                    minimized && paletteIconBtnRound,
-                    !minimized && "phone:[&_svg]:size-[22px]",
-                    minimized ? "ml-0" : "-ml-1.5",
-                  )}
+                  className={addButtonClass}
                   {...tapProps(() => setMenu(menu === "add" ? null : "add"))}
                   disabled={disabled}
                   aria-label="Attach files and session options"
@@ -2004,11 +2012,9 @@ export function Composer({
                 round variant with the "+" — that pairing used to come from a
                 `.composer.composer-min .palette-icon-btn` descendant rule. */}
             <VoiceInput
-              className={cn(
-                paletteIconBtn,
-                minimized && paletteIconBtnRound,
-                !minimized && "phone:[&_svg]:size-[22px]",
-              )}
+              className={composerIconButtonClass}
+              cancelClassName={addButtonClass}
+              cancelFromPlus
               onText={insertDictation}
               onTextSend={sendDictation}
               editTargetRef={textareaRef}
@@ -2020,7 +2026,7 @@ export function Composer({
               // capsule rather than the expanded box's radius.
               overlayClassName={
                 minimized
-                  ? "rounded-[999px] phone:pb-1"
+                  ? "rounded-[999px] phone:pl-2 phone:pr-0.5 phone:pb-1"
                   : "rounded-[var(--composer-radius)]"
               }
               disabled={disabled}
