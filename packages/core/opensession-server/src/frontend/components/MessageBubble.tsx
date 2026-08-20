@@ -585,9 +585,8 @@ export const MessageBubble = React.memo(function MessageBubble({
 	const e = useMemo(() => classifyEntry(entry), [entry]);
 	const displayContent = e.content;
 
-	// An answered question is history in the same visual language as the card
-	// that was answered. It is read-only, but the option rows and selected mark
-	// make the decision visible without opening a generic notice disclosure.
+	// An answered question is a durable sent receipt. It keeps the question and
+	// exact answer visible without making the old choices look actionable.
 	if (e.notice?.kind === "ask" && e.notice.ask)
 		return <AnsweredAskCard record={e.notice.ask} entryId={e.id} />;
 

@@ -1,6 +1,4 @@
-/** Shared visual shell for the live AskUserQuestion card and its durable,
- * read-only transcript record. Behaviour stays in each component; these
- * classes keep the answered card from drifting into a second design. */
+/** Visual shell and choice rows for the live AskUserQuestion card. */
 
 export const ASK_CARD_SHELL =
 	"mx-auto mb-6 mt-2 flex w-full max-w-[var(--session-col)] flex-col gap-5 rounded-xl bg-raised p-4 [corner-shape:var(--cs)]";

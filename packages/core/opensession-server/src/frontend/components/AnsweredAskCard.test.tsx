@@ -19,34 +19,30 @@ const record = {
 	],
 };
 
-test("renders the answered ask in the original card vocabulary", () => {
+test("renders a compact receipt with the question and exact answer", () => {
 	const html = renderToStaticMarkup(
 		<AnsweredAskCard record={record} entryId="ask-1" />,
 	);
 
 	expect(html).toContain('data-answered-ask=""');
-	expect(html).toContain("Answered");
+	expect(html).toContain("Answer sent");
 	expect(html).toContain("Demo choice");
 	expect(html).toContain("Which <strong>version</strong>");
-	expect(html).toContain("A calm read-only card.");
-	expect(html).toContain('aria-label="Compact, selected"');
-	expect(html).toContain('aria-label="Detailed"');
-	expect(html).toContain('data-selected=""');
+	expect(html).toContain("Compact");
 });
 
-test("is read-only and keeps every option visible", () => {
+test("is read-only and leaves decision-time options out of the receipt", () => {
 	const html = renderToStaticMarkup(
 		<AnsweredAskCard record={record} entryId="ask-1" />,
 	);
 
-	expect(html).toContain(">A</span>");
-	expect(html).toContain(">B</span>");
-	expect(html).toContain(">C</span>");
+	expect(html).not.toContain("Detailed");
+	expect(html).not.toContain("A calm read-only card.");
 	expect(html).not.toContain("<button");
 	expect(html).not.toContain("<input");
 });
 
-test("MessageBubble routes ask notices to the read-only card", () => {
+test("MessageBubble routes ask notices to the sent receipt", () => {
 	const html = renderToStaticMarkup(
 		<MessageBubble
 			entry={{
@@ -66,11 +62,12 @@ test("MessageBubble routes ask notices to the read-only card", () => {
 	);
 
 	expect(html).toContain('data-answered-ask=""');
+	expect(html).toContain("Answer sent");
 	expect(html).not.toContain("Answered: Compact ·");
 	expect(html).not.toContain(">show</span>");
 });
 
-test("shows a custom answer as the selected typed row", () => {
+test("shows typed and multi-question answers exactly as sent", () => {
 	const html = renderToStaticMarkup(
 		<AnsweredAskCard
 			record={{
@@ -81,13 +78,17 @@ test("shows a custom answer as the selected typed row", () => {
 						options: [{ label: "Wait" }],
 						answer: "Ship today",
 					},
+					{
+						question: "Who should review it?",
+						answer: "Kent",
+					},
 				],
 			}}
 			entryId="ask-2"
 		/>,
 	);
 
+	expect(html).toContain("2 answers sent");
 	expect(html).toContain("Ship today");
-	expect(html).toContain("Typed answer");
-	expect(html).toContain('aria-label="Ship today, selected typed answer"');
+	expect(html).toContain("Kent");
 });
