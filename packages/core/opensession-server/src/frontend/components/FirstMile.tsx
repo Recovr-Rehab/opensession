@@ -147,7 +147,17 @@ export function FirstMile({ onDone }: { onDone: () => void }) {
 			/>
 
 			<header className="relative z-10 grid grid-cols-[1fr_auto_1fr] items-center px-8 phone:px-4">
-				<div />
+				<Button
+					variant="ghost"
+					size="lg"
+					icon={<IconChevronLeft size={18} />}
+					onClick={() => goTo(index - 1)}
+					aria-label="Back"
+					className={cn(
+						"hidden justify-self-start phone:flex phone:size-10 phone:justify-center phone:p-0",
+						index === 0 && "phone:invisible",
+					)}
+				/>
 
 				<nav
 					className={cn("flex items-center gap-2", index === 0 && "invisible")}
@@ -307,7 +317,7 @@ export function FirstMile({ onDone }: { onDone: () => void }) {
 
 			<footer
 				className={cn(
-					"relative z-10 grid grid-cols-[1fr_auto_1fr] items-center border-t px-8 pt-1 transition-[border-color,background-color] phone:grid-cols-[48px_minmax(0,1fr)] phone:items-start phone:gap-4 phone:px-5 phone:pt-3",
+					"relative z-10 grid grid-cols-[1fr_auto_1fr] items-center border-t px-8 pt-1 transition-[border-color,background-color] phone:grid-cols-1 phone:items-start phone:px-5 phone:pt-3",
 					footerSeparated
 						? "border-line bg-bg/95 backdrop-blur-xl"
 						: "border-transparent bg-[linear-gradient(to_bottom,transparent,var(--bg)_30%)]",
@@ -319,12 +329,9 @@ export function FirstMile({ onDone }: { onDone: () => void }) {
 					size="lg"
 					icon={<IconChevronLeft size={18} />}
 					onClick={() => goTo(index - 1)}
-					className={cn(
-						"justify-self-start phone:size-12 phone:justify-center phone:p-0",
-						index === 0 && "invisible",
-					)}
+					className={cn("justify-self-start phone:hidden", index === 0 && "invisible")}
 				>
-					<span className="phone:hidden">Back</span>
+					Back
 				</Button>
 
 				<span className="phone:hidden" />
