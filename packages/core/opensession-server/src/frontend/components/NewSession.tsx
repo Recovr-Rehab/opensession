@@ -183,21 +183,24 @@ const TRIGGER_STRONG =
 const CHEVRON = "-ml-0.5 shrink-0 text-faint phone:size-4";
 /** A pass-through on a desktop, where the picker is the header's one control.
  *  On a phone it is the middle slot of the title bar: it takes the space the
- *  two discs leave and centres the pill inside it, so the row reads as one
+ *  two discs leave and centres the title inside it, so the row reads as one
  *  balanced bar rather than a label pushed against the close button. */
 const MOBILE_PICKER =
 	"desktop:contents phone:flex phone:min-w-0 phone:flex-1 phone:justify-center";
-/** On a phone the trigger is a pill: it sits between two round controls in the
- *  top bar, so it needs an edge of its own to read as the third one rather than
- *  as loose text between them. The resting surface is the same one the
- *  composer's attachment chips take.
+/** On a phone the trigger is the sheet's title: the row's name, centred
+ *  between the two discs that dismiss and commit. It carries no fill and no
+ *  edge of its own. Those discs are the bar's only surfaces, and a third one
+ *  between them read as an empty field rather than as the heading it is. The
+ *  label and its chevron are the whole control; pressing it still paints the
+ *  shared hover wash from `TRIGGER_STRONG`.
  *
  *  Smaller than the header's desktop title: between two 44px discs it is the
  *  quiet one of the three, so it drops to the label size and medium weight the
- *  rest of the chrome's chips wear. It also has to fit the row it now shares,
- *  which is what `max-w-full` plus the label's own truncation buy. */
+ *  rest of the chrome's chips wear. It keeps the full 44px height as a touch
+ *  target, and it has to fit the row it shares, which is what `max-w-full`
+ *  plus the label's own truncation buy. */
 const MOBILE_TRIGGER =
-	"phone:min-h-9 phone:gap-1 phone:rounded-[999px] phone:border phone:border-line phone:bg-[var(--bg-hover)] phone:px-2.5 phone:py-1.5 phone:text-label phone:font-medium phone:[&_svg:first-child]:size-4";
+	"phone:min-h-11 phone:gap-1 phone:rounded-[999px] phone:px-2.5 phone:py-1.5 phone:text-label phone:font-medium phone:[&_svg:first-child]:size-4";
 /** The send disc's neutral twin: same 44px circle and glyph box, so dismiss and
  *  commit read as one pair rather than a bare icon beside a solid action. */
 const PHONE_CLOSE =

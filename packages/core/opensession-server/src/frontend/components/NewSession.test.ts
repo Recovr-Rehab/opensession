@@ -11,6 +11,19 @@ test("the phone footer drops the covered safe-area inset while the keyboard is o
   expect(footer).toContain("phone:[body.kb-open_&]:pb-3");
 });
 
+test("the phone title bar's project trigger carries no surface of its own", async () => {
+  const source = await Bun.file(new URL("./NewSession.tsx", import.meta.url)).text();
+  const triggerStart = source.indexOf("const MOBILE_TRIGGER =");
+  const triggerEnd = source.indexOf(";", triggerStart);
+  const trigger = source.slice(triggerStart, triggerEnd);
+
+  expect(triggerStart).toBeGreaterThan(-1);
+  expect(trigger).not.toContain("phone:bg-");
+  expect(trigger).not.toContain("phone:border");
+  // Still a 44px target, even without a surface to show for it.
+  expect(trigger).toContain("phone:min-h-11");
+});
+
 test("the new composer keeps the full model name ahead of its effort suffix", async () => {
   const source = await Bun.file(new URL("./NewSession.tsx", import.meta.url)).text();
   const pillStart = source.indexOf("const MODEL_PILL");
