@@ -307,34 +307,32 @@ export const VIEWER_SUMMARY_STEP =
 	"desktop:[&>*]:translate-x-[var(--ws-summary-step,0px)]";
 
 /**
- * The band above the composer that carries the session's own actions: the
+ * The row of the session's own offers, on the composer's own width: the
  * quick-reply chips on the left, the Next action on the right.
  *
- * This row exists only while there is a Next action, and the button gives it
- * its height. Moving the chips here therefore costs the conversation no extra
- * room. Centring the two offers makes them read as one row of choices.
+ * It lives inside the floating band (VIEWER_SUGGESTIONS), so both offers sit
+ * on the same level, on the transcript's last rows, and the conversation
+ * scrolls under them. Neither one takes flow height, so neither moves the
+ * composer under your hands as it arrives or retires.
  *
- * The composer's own box is `--session-col` + 40px wide and starts at this
- * container's left edge, so the chips inset from here land on its content rail
- * (VIEWER_SUGGESTIONS_ROW_INLINE). Desktop keeps the input's 20px right inset.
- * A phone uses 8px on both gaps so ordinary two-chip choices fit in full.
+ * The band already repeats the input's side padding, so `--session-col` + 40px
+ * here is the composer's own box: the chips inset from this left edge land on
+ * its content rail (VIEWER_SUGGESTIONS_ROW). Desktop keeps the input's 20px
+ * right inset. A phone uses 8px on both gaps so ordinary two-chip choices fit
+ * in full beside Next.
  */
 export const VIEWER_ACTION_ROW =
-	"mx-auto mb-2 flex w-full max-w-[calc(var(--session-col)+40px)] items-center gap-3 pr-5 " +
+	"flex w-full max-w-[calc(var(--session-col)+40px)] items-center gap-3 pr-5 " +
 	"phone:gap-2 phone:pr-2";
 
 /**
- * Where the quick-reply row hangs when it is alone in that band
- * (components/ReplySuggestions).
+ * The band the session's own offers hang in: the quick-reply chips and the
+ * Next action (VIEWER_ACTION_ROW).
  *
- * `bottom-full` lifts it off the top of the input box, so the row lies on the
+ * `bottom-full` lifts it off the top of the input box, so the band lies on the
  * transcript's last rows and costs the input no height: it arrives and retires
  * without moving the composer under your hands. The transcript pays for what it
  * covers in bottom padding instead (`--suggestions-under`, above).
- *
- * With a Next action up, the chips are laid out in VIEWER_ACTION_ROW instead
- * and none of this applies: that row is already paid for, so they take no
- * height there either.
  *
  * It stands off the composer by 10px: 6px of its own plus the input's 4px of
  * top padding. The row is an offer about the message you are being invited to
@@ -355,28 +353,36 @@ export const VIEWER_SUGGESTIONS =
 	`${RAIL_GUTTER_CLASS} phone:px-3`;
 
 /**
- * The room the transcript keeps clear while that row is up, set on the session
+ * The room the transcript keeps clear while that band is up, set on the session
  * column as `--suggestions-under` and 0 the rest of the time.
  *
- * The pills float ON the last rows of the transcript rather than sitting in
- * flow above the composer, so they cost the conversation no height while they
- * are up and none of it back when they retire. What they do cost is cover:
- * without this the answer's own last line ends underneath them, and no amount
- * of scrolling brings it out. One pill tall (28px) plus the row's standoff, so
+ * The band floats ON the last rows of the transcript rather than sitting in
+ * flow above the composer, so it costs the conversation no height while it is
+ * up and none of it back when it retires. What it does cost is cover: without
+ * this the answer's own last line ends underneath it, and no amount of
+ * scrolling brings it out. One pill tall (28px) plus the band's standoff, so
  * the reading stops the same 16px clear of the pills that it normally stops
  * clear of the input. ReplySuggestions.test.tsx holds the two together.
  */
-export const SUGGESTIONS_CLEARANCE = "34px";
+export const SUGGESTIONS_CLEARANCE = "[--suggestions-under:34px]";
 
 /**
- * The row inside it, on the composer's own width.
+ * The same clearance once Next shares the band and gives it its height: a 40px
+ * button, 44px on a phone where it keeps a full touch target, plus the same
+ * standoff. Written out rather than derived, because Tailwind compiles the
+ * class names it can find spelled in the source.
+ */
+export const ACTION_CLEARANCE =
+	"[--suggestions-under:46px] phone:[--suggestions-under:50px]";
+
+/**
+ * The chips themselves, filling the action row beside Next.
  *
- * The 4px of padding, and the +8px on both widths that pays it back, are for
- * the pills' cast shadow. The row scrolls sideways, and a scroll container
- * clips: `overflow-x: auto` forces the other axis to `auto` too, so at the
- * row's own height the lift under each pill was cut off square, and the first
- * pill lost the left edge of its hairline. Centring is the flex parent's job
- * rather than `mx-auto`, since the negative margins want that side of the box.
+ * The 4px of padding, and the negative margins that pay it back, are for the
+ * pills' cast shadow. The row scrolls sideways, and a scroll container clips:
+ * `overflow-x: auto` forces the other axis to `auto` too, so at the row's own
+ * height the lift under each pill was cut off square, and the first pill lost
+ * the left edge of its hairline.
  *
  * The left side carries that allowance plus an indent, so the first pill
  * starts on the composer's own content rail rather than on its outer edge:
@@ -391,14 +397,13 @@ export const SUGGESTIONS_CLEARANCE = "34px";
  * holds the two together.
  */
 export const VIEWER_SUGGESTIONS_ROW =
-	"w-[calc(100%+8px)] max-w-[calc(var(--session-col)+48px)] " +
-	"-m-1 py-1 pr-1 pl-[19px] phone:pl-[17px]";
+	"min-w-0 flex-1 -my-1 -ml-1 py-1 pr-1 pl-[19px] phone:pl-[17px]";
 
 /**
- * The same row once it shares VIEWER_ACTION_ROW with the Next action.
+ * The same chips once Next shares the row with them.
  *
- * It keeps the desktop shadow allowance and content-rail indent exactly as
- * above. On a phone it starts on the composer's outer edge instead. That gives
+ * They keep the desktop shadow allowance and content-rail indent exactly as
+ * above. On a phone they start on the composer's outer edge instead. That gives
  * the rail enough room to finish ordinary two-chip choices before Next, rather
  * than clipping the final capsule for an indent the narrow row cannot afford.
  * `min-w-0` still lets longer choices scroll sideways instead of pushing Next.

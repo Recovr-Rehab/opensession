@@ -324,6 +324,7 @@ import {
 	SESSION_LINK_LINEAR,
 	SESSION_LINK_PLAIN,
 	PILL_CENTRED,
+	ACTION_CLEARANCE,
 	SUGGESTIONS_CLEARANCE,
 	TRANSCRIPT_PILL_BUTTON,
 	TRANSCRIPT_PILL_LOADING,
@@ -5468,13 +5469,13 @@ export function SessionViewer({
 		!forkFrom &&
 		replySuggestions.length > 0;
 
-	/* Next is up whenever there is another chat to move on to. While it is, the
-	   chips sit in its row (VIEWER_ACTION_ROW) rather than in a floating band of
-	   their own: two offers about the same moment, on one line. That row already
-	   costs the composer its height, so the chips still cost the transcript
-	   nothing, and only the alone case has to pad for them. */
+	/* Next is up whenever there is another chat to move on to. It shares the
+	   chips' floating band rather than sitting in flow above the composer: two
+	   offers about the same moment, on one line, with the conversation scrolling
+	   under both. What the band covers is what the transcript keeps clear, and
+	   Next is the taller of the two, so it decides that clearance. */
 	const nextAction = !!onNextChat;
-	const floatingQuickReplies = quickReplies && !nextAction;
+	const actionBand = quickReplies || nextAction;
 
 	const pickReplySuggestion = (text: string) => {
 		setComposerPrefill((current) => ({
@@ -6672,17 +6673,14 @@ export function SessionViewer({
 
 			<div className="flex min-h-0 flex-1">
 				<div
-					className="flex min-h-0 min-w-0 flex-1 flex-col [--session-under:16px]"
-					/* What the floating quick-reply row covers, paid for by the
-					   transcript's bottom padding and by the scroll-to-bottom pill's
-					   offset. Set here so both read one value. */
-					style={
-						floatingQuickReplies
-							? ({
-									"--suggestions-under": SUGGESTIONS_CLEARANCE,
-								} as React.CSSProperties)
-							: undefined
-					}
+					/* The last class is what the floating action band covers, paid for
+					   by the transcript's bottom padding and by the scroll-to-bottom
+					   pill's offset. Set here so both read one value. */
+					className={cn(
+						"flex min-h-0 min-w-0 flex-1 flex-col [--session-under:16px]",
+						actionBand &&
+							(nextAction ? ACTION_CLEARANCE : SUGGESTIONS_CLEARANCE),
+					)}
 				>
 					{showPortal && portalTarget ? (
 						<div className={VIEWER_REVIEW_MAIN}>
@@ -7283,52 +7281,50 @@ export function SessionViewer({
 										</button>
 									</div>
 								)}
-								{/* Quick replies (see `quickReplies` above for when they
-								    show). Hung off the top of this box rather than laid out
-								    in it, for the reason VIEWER_SUGGESTIONS gives, and given
-								    the composer's own max width inside it so the pills start
-								    on its left edge. */}
-								{floatingQuickReplies && (
+								{/* The session's own offers: quick replies (see `quickReplies`
+								    above for when they show) and Next. Hung off the top of this
+								    box rather than laid out in it, for the reason
+								    VIEWER_SUGGESTIONS gives, and given the composer's own max
+								    width inside it so the two sit on its rails. */}
+								{actionBand && (
 									<div className={VIEWER_SUGGESTIONS}>
-										<ReplySuggestions
-											className={VIEWER_SUGGESTIONS_ROW}
-											suggestions={replySuggestions}
-											onPick={pickReplySuggestion}
-										/>
+										<div className={VIEWER_ACTION_ROW}>
+											{quickReplies && (
+												<ReplySuggestions
+													className={
+														nextAction
+															? VIEWER_SUGGESTIONS_ROW_INLINE
+															: VIEWER_SUGGESTIONS_ROW
+													}
+													suggestions={replySuggestions}
+													onPick={pickReplySuggestion}
+												/>
+											)}
+											{nextAction && (
+												<Tooltip
+													label="Next chat"
+													shortcut={nextChatKeys ?? undefined}
+												>
+													<Button
+														size="lg"
+														/* The band takes no clicks, so the one thing in
+														   it that is a control asks for them back. */
+														className="pointer-events-auto ml-auto min-h-10 shrink-0 border-divider hover:border-line phone:min-h-11"
+														trailing={<IconChevronRight size={18} aria-hidden />}
+														aria-label="Next chat"
+														onClick={onNextChat}
+													>
+														Next
+													</Button>
+												</Tooltip>
+											)}
+										</div>
 									</div>
 								)}
 								<TypingIndicator
 									users={typingUsers}
 									className="mx-auto mb-1 w-full max-w-[calc(var(--session-col)+40px)] px-5"
 								/>
-								{nextAction && (
-									<div className={VIEWER_ACTION_ROW}>
-										{/* The chips join Next here instead of floating over the
-										    transcript, so both offers sit on one centred line
-										    rather than stacking a few pixels apart. */}
-										{quickReplies && (
-											<ReplySuggestions
-												className={VIEWER_SUGGESTIONS_ROW_INLINE}
-												suggestions={replySuggestions}
-												onPick={pickReplySuggestion}
-											/>
-										)}
-										<Tooltip
-											label="Next chat"
-											shortcut={nextChatKeys ?? undefined}
-										>
-											<Button
-												size="lg"
-												className="ml-auto min-h-10 shrink-0 border-divider hover:border-line phone:min-h-11"
-												trailing={<IconChevronRight size={18} aria-hidden />}
-												aria-label="Next chat"
-												onClick={onNextChat}
-											>
-												Next
-											</Button>
-										</Tooltip>
-									</div>
-								)}
 								<Composer
 									// Uncontrolled: the draft lives in the Composer (persisted
 									// per session via draftKey). Remount on the tab-bar +

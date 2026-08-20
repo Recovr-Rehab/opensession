@@ -4,6 +4,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { composerBoxExpanded } from "../lib/composer-classes";
 import type { ReplySuggestion } from "../lib/reply-suggestions";
 import {
+	ACTION_CLEARANCE,
 	SUGGESTIONS_CLEARANCE,
 	VIEWER_ACTION_ROW,
 	VIEWER_SUGGESTIONS,
@@ -67,19 +68,29 @@ describe("ReplySuggestions", () => {
 		);
 	});
 
-	test("the transcript keeps clear of the pills, not just of the row", () => {
-		// The row floats on the transcript, so the only thing holding the last
+	test("the transcript keeps clear of whatever the band is carrying", () => {
+		// The band floats on the transcript, so the only thing holding the last
 		// line of an answer out from under it is this padding. It has to cover
-		// the pills' own height plus however far they stand off the composer, or
-		// the standoff eats into the 16px the reading is supposed to end on.
+		// the tallest thing in the band plus however far the band stands off the
+		// composer, or the standoff eats into the 16px the reading ends on.
 		const PILL_HEIGHT = 28; // `h-7` on the chip in ReplySuggestions.
+		const NEXT_HEIGHT = 40; // `min-h-10` on the Next button in SessionViewer.
+		const NEXT_HEIGHT_PHONE = 44; // `phone:min-h-11` on the same button.
 		const SPACING_STEP = 4; // Tailwind's px-anchored scale (styles/tailwind.css).
 		const standoff =
 			Number(/\spb-(\d+(?:\.\d+)?)\s/.exec(VIEWER_SUGGESTIONS)?.[1]) *
 			SPACING_STEP;
 
 		expect(standoff).toBeGreaterThan(0);
-		expect(SUGGESTIONS_CLEARANCE).toBe(`${PILL_HEIGHT + standoff}px`);
+		expect(SUGGESTIONS_CLEARANCE).toBe(
+			`[--suggestions-under:${PILL_HEIGHT + standoff}px]`,
+		);
+		expect(ACTION_CLEARANCE).toContain(
+			`[--suggestions-under:${NEXT_HEIGHT + standoff}px]`,
+		);
+		expect(ACTION_CLEARANCE).toContain(
+			`phone:[--suggestions-under:${NEXT_HEIGHT_PHONE + standoff}px]`,
+		);
 	});
 
 	test("the chips share the narrow phone row without clipping an ordinary pair", () => {
