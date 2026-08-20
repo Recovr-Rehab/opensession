@@ -2108,14 +2108,20 @@ export function SessionViewer({
 		};
 	}, [session.id]);
 
-	// Immersive reading on phones (Safari-style): scrolling down through the
-	// transcript slides the top bar, docked tabs and composer off-screen to
-	// maximize the reading area; scrolling back up — or reaching the very top or
-	// the live edge — brings them back. Toggles body.chrome-collapsed, which the
-	// mobile CSS animates with transforms (inert on desktop / when unscrollable).
+	// Immersive reading on phones (Safari-style): for a lone session, scrolling
+	// down through the transcript slides the top bar and composer off-screen to
+	// maximize the reading area; scrolling back up, or reaching the very top or
+	// the live edge, brings them back. A visible tab strip keeps the whole chrome
+	// stack fixed: hiding the top bar there would cut off its navigation and
+	// actions while the workspace controls are in use. Toggles
+	// body.chrome-collapsed, which the mobile CSS animates with transforms (inert
+	// on desktop / when unscrollable).
 	useEffect(() => {
 		const el = messagesRef.current;
-		if (!el) return;
+		if (!el || tabStripVisible) {
+			document.body.classList.remove("chrome-collapsed");
+			return;
+		}
 		const mq = window.matchMedia("(max-width: 720px)");
 		let lastY = el.scrollTop;
 		let collapsed = false;
@@ -2152,7 +2158,7 @@ export function SessionViewer({
 			el.removeEventListener("scroll", onDir);
 			document.body.classList.remove("chrome-collapsed");
 		};
-	}, [messagesRef, session.id]);
+	}, [messagesRef, session.id, tabStripVisible]);
 
 	// Per-session model (switchable from the composer; "" = default)
 	const [model, setModel] = useState(session.model || "");
