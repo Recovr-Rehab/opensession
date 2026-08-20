@@ -118,6 +118,8 @@ interface Props {
 	onOpenPanelTab: (tab: "info" | "changes") => void;
 	/** Open the Review tab (PR + its checks). */
 	onOpenPr: () => void;
+	/** Open another layer of the stack on its own PR page. */
+	onOpenStackPr?: (repo: string, branch: string) => void;
 	onOpenChecks: () => void;
 	/** Open the Assets tab (the Assets list's destination). */
 	onOpenAssets?: () => void;
@@ -413,6 +415,7 @@ function SummaryBody({
 	session,
 	onOpenPanelTab,
 	onOpenPr,
+	onOpenStackPr,
 	onOpenChecks,
 	onOpenAssets,
 	onArchive,
@@ -612,6 +615,11 @@ function SummaryBody({
 				running={running}
 				refreshTick={refreshTick}
 				onOpenPrTab={() => go(onOpenPr)}
+				onOpenStackPr={
+					onOpenStackPr
+						? (repo, branch) => go(() => onOpenStackPr(repo, branch))
+						: undefined
+				}
 				onOpenChecksTab={() => go(onOpenChecks)}
 				onArchive={onArchive ? () => go(onArchive) : undefined}
 			>

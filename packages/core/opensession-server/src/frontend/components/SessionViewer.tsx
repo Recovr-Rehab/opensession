@@ -6222,6 +6222,7 @@ export function SessionViewer({
 								setPanelOpen(true);
 							}}
 							onOpenPr={() => focusPrInReview()}
+							onOpenStackPr={onOpenPr}
 							onOpenChecks={() => focusPrInReview(undefined, "checks")}
 							onOpenAssets={onOpenAssets}
 							onArchive={handleArchive}

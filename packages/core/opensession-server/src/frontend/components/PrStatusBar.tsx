@@ -235,6 +235,8 @@ interface Props {
 	send?: (msg: any) => void;
 	/** Clicking the headline jumps to the PR tab; a chip jumps to that PR. */
 	onOpenPrTab?: (ref?: { repo: string; branch: string }) => void;
+	/** Open a GitHub stack layer that is not one of this session's PR targets. */
+	onOpenStackPr?: (repo: string, branch: string) => void;
 	/** Open the primary PR directly on its Checks tab. */
 	onOpenChecksTab?: () => void;
 	/** Archive via the owning viewer so it can select the neighboring sidebar row. */
@@ -249,13 +251,12 @@ interface Props {
 	 * - "bar" is the panel's own strip.
 	 * - "header" renders just the PR chip + primary action while the panel is
 	 *   closed.
-	 * - "summary" renders the same two facts as rows for the workspace summary
-	 *   card: which PR, and where it stands with its one action. It is a
-	 *   variant rather than a copy because everything behind that action
-	 *   belongs to this component: headline derivation, the stack merge plan,
-	 *   deferred merge, the prompt-the-session paths, and busy state. A second
-	 *   implementation is a second thing that can be wrong about
-	 *   whether a merge is in flight.
+	 * - "summary" renders the primary PR and its action in the workspace
+	 *   summary card, followed by the other PRs in its stack. It is a variant
+	 *   rather than a copy because everything behind that action belongs to this
+	 *   component: headline derivation, the stack merge plan, deferred merge,
+	 *   the prompt-the-session paths, and busy state. A second implementation is
+	 *   a second thing that can be wrong about whether a merge is in flight.
 	 */
 	variant?: "bar" | "header" | "summary";
 	/** Optional element rendered inside the strip, left of the PR chip (bar
@@ -568,6 +569,7 @@ export function PrStatusBar({
 	prs,
 	send,
 	onOpenPrTab,
+	onOpenStackPr,
 	onOpenChecksTab,
 	onArchive,
 	onNewSession,
@@ -658,6 +660,19 @@ export function PrStatusBar({
 					)
 			: [];
 	const stackNumbers = new Set(stackRows.map((ref) => ref.number));
+	const stackTargets = new Set(
+		stackRows.map((ref) => `${ref.repo}\0${ref.branch}`),
+	);
+	const openStatusRow = (ref: { repo: string; branch: string }) => {
+		if (
+			onOpenStackPr &&
+			stackTargets.has(`${ref.repo}\0${ref.branch}`)
+		) {
+			onOpenStackPr(ref.repo, ref.branch);
+			return;
+		}
+		onOpenPrTab?.(ref);
+	};
 	const statusRows = [
 		...stackRows,
 		...siblings.filter(
@@ -1168,7 +1183,7 @@ export function PrStatusBar({
 				{renderAction()}
 			</>
 		);
-		return (
+		const primarySummary = (
 			<div
 				className={cn(
 					WS_SUMMARY_BAND,
@@ -1196,6 +1211,18 @@ export function PrStatusBar({
 					<div className={WS_SUMMARY_STATUS_ROW}>{rowBody}</div>
 				)}
 			</div>
+		);
+		if (statusRows.length === 0) return primarySummary;
+		return (
+			<>
+				{primarySummary}
+				<PrSeriesRows
+					refs={statusRows}
+					primaryRepo={primaryRepoId}
+					onOpen={openStatusRow}
+					variant="summary"
+				/>
+			</>
 		);
 	}
 
