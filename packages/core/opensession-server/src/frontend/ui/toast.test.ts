@@ -39,7 +39,7 @@ describe("toast", () => {
 	});
 
 	test("can keep a pending action visible until it runs or is undone", () => {
-		toast("Merge starts in 5 seconds", {
+		toast("PR merged", {
 			action: { label: "Undo", onClick: () => undefined },
 			dismissOnClick: false,
 		});
@@ -58,13 +58,13 @@ describe("toast", () => {
 	});
 
 	test("keeps a pending action when newer informational toasts arrive", () => {
-		toast("Merge starts in 5 seconds", {
+		toast("PR merged", {
 			action: { label: "Undo", onClick: () => undefined },
 			dismissOnClick: false,
 		});
 		for (const message of ["One", "Two", "Three"]) toast(message);
 		expect(activeToasts().map((t) => t.message)).toEqual([
-			"Merge starts in 5 seconds",
+			"PR merged",
 			"Two",
 			"Three",
 		]);

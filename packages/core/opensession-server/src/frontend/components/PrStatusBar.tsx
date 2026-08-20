@@ -734,17 +734,14 @@ export function PrStatusBar({
 			);
 		});
 		if (!handle) return;
-		toastId = toast(
-			stackMerge ? "Stack merge starts in 5 seconds" : "Merge starts in 5 seconds",
-			{
-				duration: MERGE_UNDO_DELAY_MS + 1000,
-				dismissOnClick: false,
-				action: {
-					label: "Undo",
-					onClick: () => cancelDeferredMerge(handle),
-				},
+		toastId = toast("PR merged", {
+			duration: MERGE_UNDO_DELAY_MS + 1000,
+			dismissOnClick: false,
+			action: {
+				label: "Undo",
+				onClick: () => cancelDeferredMerge(handle),
 			},
-		);
+		});
 	}
 
 	// Session-driven actions: ask the agent instead of doing bare git plumbing —

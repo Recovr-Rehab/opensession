@@ -1078,7 +1078,7 @@ export function PrPanel({
       }
     });
     if (!handle) return;
-    toastId = toast("Merge starts in 5 seconds", {
+    toastId = toast("PR merged", {
       duration: MERGE_UNDO_DELAY_MS + 1000,
       dismissOnClick: false,
       action: {
