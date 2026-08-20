@@ -102,6 +102,10 @@ export function OrganizationProfileSection() {
 		}, "Organization icon updated.");
 	}
 
+	function removeIcon() {
+		void update(removeOrganizationIcon, "Organization icon removed.");
+	}
+
 	const nameParts = (settings?.organizationName || "Organization").trim().split(/\s+/);
 	const initials = (
 		nameParts.length > 1
@@ -123,47 +127,61 @@ export function OrganizationProfileSection() {
 								<SettingRowTitle>Upload icon</SettingRowTitle>
 							</SettingRowText>
 							<SettingRowControl className="flex flex-wrap items-center justify-end gap-2">
-								{settings.organizationIconUrl && (
-									<Button
-										variant="ghost"
-										icon={<IconTrash size={20} />}
+								<div className="group/icon relative flex shrink-0 flex-col items-center gap-1.5">
+									<button
+										type="button"
 										disabled={busy}
-										onClick={() =>
-											void update(removeOrganizationIcon, "Organization icon removed.")
+										onClick={() => fileInput.current?.click()}
+										aria-label={showIcon ? "Change organization icon" : "Upload organization icon"}
+										className="focus-ring group/upload relative flex size-14 shrink-0 items-center justify-center overflow-hidden rounded-lg text-section-title font-semibold outline outline-1 outline-divider disabled:pointer-events-none"
+										style={
+											showIcon
+												? undefined
+												: {
+														backgroundImage: repoIconFill(fallbackColor),
+														color: REPO_TILE_INK,
+													}
 										}
 									>
-										Remove
-									</Button>
-								)}
-								<button
-									type="button"
-									disabled={busy}
-									onClick={() => fileInput.current?.click()}
-									aria-label={showIcon ? "Change organization icon" : "Upload organization icon"}
-									className="focus-ring group relative flex size-14 shrink-0 items-center justify-center overflow-hidden rounded-lg text-section-title font-semibold outline outline-1 outline-divider disabled:pointer-events-none"
-									style={
-										showIcon
-											? undefined
-											: {
-													backgroundImage: repoIconFill(fallbackColor),
-													color: REPO_TILE_INK,
-												}
-									}
-								>
-									{showIcon ? (
-										<img
-											src={settings.organizationIconUrl || undefined}
-											alt=""
-											className="size-full object-cover"
-											onError={() => setIconFailed(true)}
-										/>
-									) : (
-										initials
+										{showIcon ? (
+											<img
+												src={settings.organizationIconUrl || undefined}
+												alt=""
+												className="size-full object-cover"
+												onError={() => setIconFailed(true)}
+											/>
+										) : (
+											initials
+										)}
+										<span className="pointer-events-none absolute inset-0 grid place-items-center rounded-[inherit] bg-black/50 text-white opacity-0 transition-opacity duration-150 group-hover/upload:opacity-100 group-focus-visible/upload:opacity-100">
+											<IconArrowUpToLine size={20} />
+										</span>
+									</button>
+									{settings.organizationIconUrl && (
+										<>
+											<Button
+												variant="danger"
+												size="sm"
+												icon={<IconTrash size={20} />}
+												disabled={busy}
+												onClick={removeIcon}
+												aria-label="Remove organization icon"
+												title="Remove icon"
+												className="pointer-events-none absolute -right-2 -top-2 z-[1] opacity-0 transition-opacity phone:hidden desktop:group-hover/icon:pointer-events-auto desktop:group-hover/icon:opacity-100 desktop:focus-visible:pointer-events-auto desktop:focus-visible:opacity-100"
+											/>
+											<Button
+												variant="danger"
+												size="sm"
+												icon={<IconTrash size={20} />}
+												disabled={busy}
+												onClick={removeIcon}
+												className="min-h-11 desktop:hidden"
+											>
+												Remove
+											</Button>
+										</>
 									)}
-									<span className="pointer-events-none absolute inset-0 grid place-items-center rounded-[inherit] bg-black/50 text-white opacity-0 transition-opacity duration-150 group-hover:opacity-100 group-focus-visible:opacity-100">
-										<IconArrowUpToLine size={20} />
-									</span>
-								</button>
+								</div>
 								<input
 									ref={fileInput}
 									type="file"
