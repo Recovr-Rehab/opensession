@@ -233,9 +233,9 @@ export function SessionTabs({
 	// unsplit strip.
 	const canDragTabs = !isPhone && (inSplit || tabs.length + viewTabs.length > 1);
 
-	// Where the dragged tab will land. Desktop tabs are flat text on the strip's
-	// own background, so a dragged one has no surface to separate it from the
-	// labels it passes — it lifts into a chip (`TAB_ITEM_DRAGGING`) and this ghost
+	// Where the dragged tab will land. Inactive desktop tabs are flat text on the
+	// strip's background, so a dragged one has no surface to separate it from the
+	// labels it passes. It lifts into a chip (`TAB_ITEM_DRAGGING`) and this ghost
 	// marks the gap it left behind. Reorder already opens that gap live; the
 	// ghost just makes an otherwise invisible hole readable.
 	const [dropSlot, setDropSlot] = useState<{

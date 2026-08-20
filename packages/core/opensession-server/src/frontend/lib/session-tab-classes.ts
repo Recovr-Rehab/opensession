@@ -4,21 +4,17 @@
  *
  * Two things shape everything here.
  *
- * 1. The strip has TWO complete looks, not one look with tweaks. On desktop it
- *    is a flat band in flow: plain-text tabs on the transcript's own
- *    background, closed off by a bottom hairline that the active tab's underline
- *    rests on. On phones it is a solid bar docked under the floating header pills,
- *    and its tabs are floating pills with a fill, a ring and a shadow. The old
- *    sheet wrote the pill unconditionally and then had `@media (min-width:
- *    721px)` undo every paint property of it, and that shape is kept: the pill
- *    is unprefixed and the flat band overrides it at `desktop:`. Tailwind
- *    emits every breakpoint variant after every unprefixed and pseudo-class
- *    utility (verified in the compiled sheet: `hover:bg-hover` at ~93k,
- *    the first `desktop:` rule at ~119k), which is what makes a responsive
- *    override reliable at all. Note that Tailwind's `phone:` is
- *    `width < 720px`, NOT the `max-width: 720px` the old sheet and
- *    `useIsPhone` mean — so phone-only rules are written as overrides on a
- *    base that already reads correctly, never as one half of a split.
+ * 1. The strip has two related floating looks. On desktop, inactive tabs are
+ *    quiet labels separated by short rules while the active tab sits on a
+ *    filled, rounded surface. There is no underline or full-width bottom rule.
+ *    On phones every tab needs its own solid pill because the bar is docked over
+ *    scrolling content, so the shared pill is unprefixed and desktop resolves
+ *    each state with `desktop:` overrides. Tailwind emits every breakpoint
+ *    variant after every unprefixed and pseudo-class utility, which makes that
+ *    responsive override reliable. Note that Tailwind's `phone:` is `width <
+ *    720px`, not the `max-width: 720px` the old sheet and `useIsPhone` mean, so
+ *    phone-only rules are written as overrides on a base that already reads
+ *    correctly, never as one half of a split.
  *
  * 2. For the same reason, each tab state carries its WHOLE colour set. A
  *    colored tab does not layer a fill over the plain tab's fill; `tabClass`
@@ -30,12 +26,10 @@
  * A few class names survive on the markup as bare hooks with no styling of
  * their own, because things OUTSIDE this file name them:
  *
- *   · `session-tabs`   — legacy.css keys a structural rule off the strip's
- *     presence from an ancestor this file can't reach
- *     (`.detail-topbar:has(+ .session-tabs) .detail-topbar-title` drops the
- *     top bar's border, because the strip carries both dividers itself), and
- *     SessionSplit sizes the bar with `[&>.session-tabs]:shrink-0`;
- *   · `session-tab-view` / `session-tab-reorder` — `.app:has(.session-tab-view)
+ *   · `session-tabs`: app-shell-classes.ts suppresses the top bar's scroll
+ *     divider while the strip overlaps that edge, and SessionSplit sizes the
+ *     bar with `[&>.session-tabs]:shrink-0`;
+ *   · `session-tab-view` / `session-tab-reorder`: `.app:has(.session-tab-view)
  *     .app-header-overlay` and `.detail-pane:has(.session-tab-reorder ~
  *     .session-tab-reorder)` set the phone header's fill and
  *     `--strip-clearance` on elements that belong to other components.
@@ -61,21 +55,19 @@ const PILL = "rounded-[calc(8px*var(--rf))]";
  */
 export const TAB_STRIP =
 	"session-tabs group/strip flex min-w-0 shrink-0 items-center gap-[3px] bg-surface px-2 " +
-	// Desktop: a compact flat band, closed off by the one rule the active tab's
-	// underline rests on. Only the bottom edge is drawn. The session header
-	// above carries no border of its own, and a top inset here would put a
-	// second line across a top region meant to read as one surface.
+	// Desktop: a compact, line-free band. The active tab's own surface supplies
+	// the selection boundary, so neither an underline nor a rule across the
+	// content belongs here.
 	//
 	// The non-split bar takes its 11px header overlap at the call site. The
 	// session header above is a fixed 48px row whose title is centred in it, and
 	// the tab labels are centred in this 40px band, so the two words sit far
 	// apart while neither box looks generous. Neither row can be trimmed on its
-	// own (the header's height is what lines it up with the sidebar's brand row),
-	// so the strip closes the distance by climbing into the header's slack.
-	// Split bars start at the top of an overflow-clipped column, so their full
-	// box stays in flow instead of losing its top edge outside that column.
-	"desktop:h-10 desktop:items-stretch desktop:py-0 " +
-	"desktop:shadow-[inset_0_-1px_0_var(--border)] " +
+	// own because the header's height lines it up with the sidebar's brand row.
+	// The strip closes the distance by climbing into the header's slack. Split
+	// bars start at the top of an overflow-clipped column, so their full box stays
+	// in flow instead of losing its top edge outside that column.
+	"desktop:h-10 desktop:py-0 " +
 	// Phone: pulled out of flow and pinned flush under the header's bottom edge,
 	// so it reads as fixed chrome rather than a strip the transcript scrolls by.
 	"phone:absolute phone:inset-x-0 phone:top-[var(--pane-header-h)] phone:z-[6] " +
@@ -108,9 +100,9 @@ export const TAB_SCROLL =
 	"flex min-w-0 flex-[1_1_auto] items-center gap-[3px] overflow-x-auto overscroll-x-contain " +
 	"[scrollbar-width:none] [&::-webkit-scrollbar]:hidden " +
 	// Hug the content on desktop so the pinned "+" sits right after the last tab
-	// rather than being pushed to the far right; full-height so its tabs can
-	// stretch down to the band's baseline hairline.
-	"desktop:flex-[0_1_auto] desktop:items-stretch " +
+	// rather than being pushed to the far right. The group keeps its intrinsic
+	// height so the selected tab floats vertically inside the 40px band.
+	"desktop:flex-[0_1_auto] " +
 	"supports-[animation-timeline:scroll()]:[animation:session-tabs-fade-start_1ms_both,session-tabs-fade-end_1ms_both] " +
 	"supports-[animation-timeline:scroll()]:[animation-timeline:scroll(self_inline),scroll(self_inline)] " +
 	"supports-[animation-timeline:scroll()]:[animation-range:0_24px,calc(100%_-_24px)_100%] " +
@@ -124,20 +116,22 @@ export const TAB_SCROLL =
  * out after the shrunken box. Sizing to content pushes the overflow out to the
  * scroll, which is the thing that scrolls.
  */
-export const TAB_GROUP =
-	"relative inline-flex flex-none items-center gap-[3px] " +
-	"desktop:self-stretch desktop:items-stretch";
+export const TAB_GROUP = "relative inline-flex flex-none items-center gap-[3px]";
 
 /** Each tab's Reorder.Item wrapper. `relative` lets whileDrag's z-index lift
- *  the dragged tab over its siblings. */
+ *  the dragged tab over its siblings. On desktop, a short rule separates quiet
+ *  inactive tabs. The selected tab and the final tab need no trailing rule. */
 export const TAB_ITEM =
 	"session-tab-reorder relative inline-flex shrink-0 items-center " +
-	"desktop:self-stretch desktop:items-stretch";
+	"desktop:after:pointer-events-none desktop:after:absolute desktop:after:top-1/2 " +
+	"desktop:after:-right-0.5 desktop:after:h-3 desktop:after:w-px desktop:after:-translate-y-1/2 " +
+	"desktop:after:bg-divider desktop:after:content-[''] desktop:last:after:hidden " +
+	"desktop:[&:has(>[aria-selected=true])]:after:hidden";
 
-/** Picked up: desktop tabs are flat labels on the strip's own background, so a
- *  dragged one has no surface of its own and smears over every tab it passes.
- *  It lifts into an opaque chip instead. */
-export const TAB_ITEM_DRAGGING = `${PILL} cursor-grabbing bg-panel smooth-shadow-ring-sm`;
+/** Picked up: an inactive desktop tab has no surface of its own and would smear
+ *  over every label it passes. It lifts into an opaque chip while dragging. */
+export const TAB_ITEM_DRAGGING =
+	`${PILL} cursor-grabbing bg-panel smooth-shadow-ring-sm desktop:rounded-control`;
 
 /**
  * Where the dragged tab will land. Reorder already opens the gap live, but an
@@ -168,25 +162,12 @@ export const TAB_ACTIONS = "ml-auto flex flex-none items-center gap-[3px]";
 const TAB_BASE =
 	"inline-flex max-w-[200px] shrink-0 cursor-pointer items-center gap-1.5 whitespace-nowrap " +
 	"px-2.5 py-1.5 text-label transition-[background-color,color] " +
-	// A floating pill with a solid fill, so the transcript scrolling underneath
-	// never shows through it. (`--tab-stroke`, the ring's colour in the old
-	// sheet, was never set anywhere — it always resolved to transparent.)
+	// A floating phone pill with a solid fill, so the transcript scrolling
+	// underneath never shows through it. Desktop keeps the same compact box but
+	// drops the ring and shadow, rounds it to the shared control corner, and lets
+	// `tabClass` choose whether it has a surface.
 	`border ${PILL} smooth-shadow-sm ` +
-	// Desktop: no fill, ring, lift or rounding — just the label.
-	"desktop:relative desktop:rounded-none desktop:border-0 desktop:bg-transparent " +
-	"desktop:shadow-none desktop:hover:bg-transparent " +
-	// …and the underline, which every state paints by naming a colour in
-	// `--tab-line` (see `tabClass`) rather than by writing a rule of its own.
-	// It is a pseudo-element and not the inset box-shadow it used to be
-	// because a shadow can only trace the whole box, and this line is 6px
-	// shorter than that at each end: full width, it ran within 3px of the next
-	// tab's, which is what made two tabs read as one rule. 6px and not the
-	// 10px padding, so the line still overhangs the content it marks — cut to
-	// the content box it looked like a text decoration, and stopping it before
-	// the close × (which it did briefly) left it visibly short of the tab.
-	"desktop:after:absolute desktop:after:inset-x-1.5 desktop:after:bottom-0 " +
-	"desktop:after:h-0.5 desktop:after:rounded-[1px] desktop:after:content-[''] " +
-	"desktop:after:bg-[var(--tab-line,transparent)]";
+	"desktop:rounded-control desktop:border-0 desktop:shadow-none";
 
 export type TabState = {
 	active: boolean;
@@ -198,41 +179,18 @@ export type TabState = {
 /**
  * One tab, painted for exactly one state.
  *
- * The order of the branches below is the order the old stylesheet resolved:
- * colored beats waiting beats active beats plain, because equal-specificity
- * rules were written in that order. Desktop moves the whole cue to the
- * underline, since a flat tab has no pill to tint.
+ * Phone keeps the established status and custom-colour pills. Desktop resolves
+ * the selected surface independently: active always stays unmistakable, while
+ * a waiting tab already has its live dot and needs no second coloured plate.
  */
 export function tabClass(state: TabState): string {
 	const { active, waiting, colored } = state;
 	const ink = active || waiting ? "text-fg" : "text-dim hover:text-fg";
 
-	// Desktop: one — and only one — underline, drawn by TAB_BASE from the colour
-	// named here. 2px, which is the weight every other tab strip in the app
-	// selects with (Reviews writes the same cue as `border-b-2 border-b-accent`);
-	// at 3px the bar was a slab of full-strength ink next to a hairline band.
-	// That leaves active and waiting on the same weight, so waiting carries the
-	// colour instead: blue, the same "needs you" the tab's own dot and the
-	// sidebar row already speak.
-	//
-	// Ink rather than --accent for the plain active tab. The accent is a chosen
-	// hue, and a strip of tabs is the app's own chrome: which tab you are on is
-	// structure, not a status worth spending the one saturated colour on, and
-	// at full strength beside a hairline band it was the loudest thing in the
-	// header. --text also inverts with the theme for free, which is what keeps
-	// the mark reading as "this one" on paper as well as on ink.
-	const underline = active
-		? "[--tab-line:var(--text)]"
-		: waiting
-			? "[--tab-line:var(--blue)]"
-			: colored
-				? "[--tab-line:color-mix(in_srgb,var(--tab-color)_70%,transparent)]"
-				: "";
-
-	// One fill + one ring per state, hover included: a second background
+	// One phone fill + one ring per state, hover included. A second background
 	// utility in the same variant bucket would be resolved by Tailwind's output
 	// order rather than by which state is meant to win.
-	const pill =
+	const phonePill =
 		colored && active
 			? "border-[color-mix(in_srgb,var(--tab-color)_60%,transparent)] " +
 				"bg-[color-mix(in_srgb,var(--tab-color)_26%,var(--bg-active))] " +
@@ -246,12 +204,23 @@ export function tabClass(state: TabState): string {
 						// action band: blocked-on-you is urgent, not informational.
 						"border-red bg-red-soft hover:bg-red-soft"
 					: active
-						? // The pointed-at wash beats the selected fill here, exactly as
-							// `.session-tab:hover` (0,2,0) beat `.session-tab-active` (0,1,0).
-							"border-transparent bg-[color-mix(in_srgb,var(--bg-active)_94%,var(--text))] hover:bg-hover"
+						? "border-transparent bg-[color-mix(in_srgb,var(--bg-active)_94%,var(--text))] hover:bg-hover"
 						: "border-transparent bg-panel hover:bg-hover";
 
-	return `${TAB_BASE} ${ink} ${underline} ${pill}`;
+	// The selected tab is the only ordinary desktop tab with a surface. Custom
+	// colours remain visible as an explicit exception, but use a quieter mix when
+	// inactive so they do not compete with the selected tab.
+	const desktopPill = colored
+		? active
+			? "desktop:bg-[color-mix(in_srgb,var(--tab-color)_22%,var(--bg-panel))] " +
+				"desktop:hover:bg-[color-mix(in_srgb,var(--tab-color)_28%,var(--bg-panel))]"
+			: "desktop:bg-[color-mix(in_srgb,var(--tab-color)_9%,transparent)] " +
+				"desktop:hover:bg-[color-mix(in_srgb,var(--tab-color)_16%,transparent)]"
+		: active
+			? "desktop:bg-panel desktop:hover:bg-hover"
+			: "desktop:bg-transparent desktop:hover:bg-hover";
+
+	return `${TAB_BASE} ${ink} ${phonePill} ${desktopPill}`;
 }
 
 /** The label. Gives up its width first so a long title truncates instead of
