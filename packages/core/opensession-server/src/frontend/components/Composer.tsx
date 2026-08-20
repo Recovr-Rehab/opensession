@@ -587,6 +587,12 @@ export function Composer({
     const next = !prefill.replace && text.trim()
       ? `${text.replace(/\s+$/, "")}\n${prefill.text}`
       : prefill.text;
+    // Persist the handoff before React commits it. Restoring queued attachments
+    // can emit a draft-store change in the same pass; if the store still holds
+    // the old empty text, that event otherwise erases the restored message.
+    if (!isControlled && draftKey) {
+      saveDraft(draftKey, { text: next, pastedTexts });
+    }
     setText(next);
     queueMicrotask(() => {
       const el = textareaRef.current;
