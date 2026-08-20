@@ -3,11 +3,13 @@ import { classifyEntry } from "@tellahq/opensession-protocol/notices";
 import {
 	acknowledgePromptDispatch,
 	beginPromptDispatch,
+	clientVisibleQueuedCount,
 	isDelegatedQueueItem,
 	isEditableQueueItem,
 	isWorkerQueueItem,
 	promptDispatches,
 	promptQueues,
+	queueDisplayState,
 	takeQueuedPrompt,
 } from "./queue-state";
 import { agentActor, workerActor } from "./session-actors";
@@ -70,6 +72,30 @@ describe("takeQueuedPrompt", () => {
 		]);
 		expect(takeQueuedPrompt(SESSION, "q1", "Kent", false)).toBeUndefined();
 		expect(takeQueuedPrompt(SESSION, "q2", "Kent", false)).toBeUndefined();
+	});
+});
+
+describe("review handoffs are not user messages", () => {
+	test("keeps review work queued without exposing it to clients", () => {
+		promptQueues.set(SESSION, [
+			{ id: "human", content: "Please fix this", user: "Kent" },
+			{
+				id: "review",
+				content: "<!--os:review-handoff-->\nReview PR #42",
+				user: "GitHub",
+				reviewHandoff: true,
+			},
+		]);
+
+		expect(queueDisplayState(SESSION).queued.map((item) => item.id)).toEqual([
+			"human",
+		]);
+		expect(clientVisibleQueuedCount(SESSION)).toBe(1);
+		// Filtering is presentation-only. Dispatch still owns the handoff.
+		expect(promptQueues.get(SESSION)?.map((item) => item.id)).toEqual([
+			"human",
+			"review",
+		]);
 	});
 });
 

@@ -370,16 +370,26 @@ export function acknowledgePromptDispatch(
 	}
 }
 
+/** Review handoffs drive an automated turn. They use the prompt queue for
+ * ordering and crash recovery, but they are not messages a person sent and
+ * must not contribute to any client-facing message count. */
+export function clientVisibleQueuedCount(sessionId: string): number {
+	return (promptQueues.get(sessionId) ?? []).filter((item) => !item.reviewHandoff)
+		.length;
+}
+
 export function queueDisplayState(sessionId: string) {
 	const queued = queueWithIds(promptQueues.get(sessionId));
 	const steered = queueWithIds(steeredReceipts.get(sessionId));
 	if (queued.length > 0) promptQueues.set(sessionId, queued);
 	if (steered.length > 0) steeredReceipts.set(sessionId, steered);
-	// Display copy only: fenced <opensession:context> blocks (e.g. the queued
-	// auto-continue nudge) are model plumbing, not something the queue chip
-	// should render raw. The stored items keep the full content for delivery.
+	// Display copy only: automated review handoffs remain in the internal queue
+	// until dispatch but never enter a client's message surface. Fenced
+	// <opensession:context> blocks (e.g. the queued auto-continue nudge) are
+	// model plumbing too, so strip them from the remaining rows. The stored
+	// items keep their full content for delivery.
 	const forDisplay = (items: typeof queued) =>
-		items.map((i) => {
+		items.filter((i) => !i.reviewHandoff).map((i) => {
 			const shown = stripContext(i.content);
 			return {
 				...i,

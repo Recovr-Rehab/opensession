@@ -30,7 +30,11 @@ import {
 	prMetaForBranch,
 	prReviewerSpecs,
 } from "../pr-info";
-import { promptQueues, requeueSteerReceipts, stoppedSessions } from "../queue-state";
+import {
+	clientVisibleQueuedCount,
+	requeueSteerReceipts,
+	stoppedSessions,
+} from "../queue-state";
 import { markPrReviewNotified } from "../pr-review-notifications";
 import { getReviewRequest, setReviewAccepted, setReviewRequest } from "../review-requests";
 import { getSessionControl, type SandboxRequest } from "../session-control";
@@ -317,7 +321,7 @@ function enrichSession(s: UnifiedSession) {
 			? { workspaceName: workspaceName(s.workspaceId) ?? undefined }
 			: {}),
 		waitingForInput: !!pendingAskAwaitingAnswer(s.id),
-		queuedCount: promptQueues.get(s.id)?.length || 0,
+		queuedCount: clientVisibleQueuedCount(s.id),
 		// Present on the list AND on the detail response, so one rule reads the
 		// same either side of a hydrate. `undefined` rather than `false`: it is
 		// dropped by JSON.stringify, and a session object a client builds
