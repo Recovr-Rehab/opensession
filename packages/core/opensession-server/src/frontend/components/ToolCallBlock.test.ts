@@ -57,20 +57,20 @@ test("paths render relative to the session's worktrees", () => {
   );
 });
 
-test("long paths expose a stable beginning and filename around the collapsed middle", () => {
+test("path summaries keep the full directory available for responsive truncation", () => {
   expect(pathSummaryParts("packages/core/protocol/src/tool-presentation.ts")).toEqual({
-    prefix: "packages/core/",
-    middle: "protocol/src",
+    directory: "packages/core/protocol/src",
+    separator: "/",
     filename: "tool-presentation.ts",
   });
   expect(pathSummaryParts("/etc/hosts")).toEqual({
-    prefix: "/etc/",
-    middle: "",
+    directory: "/etc",
+    separator: "/",
     filename: "hosts",
   });
   expect(pathSummaryParts("package.json")).toEqual({
-    prefix: "",
-    middle: "",
+    directory: "",
+    separator: "",
     filename: "package.json",
   });
 });

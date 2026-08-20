@@ -1041,15 +1041,6 @@ final class ToolPresentationTests: XCTestCase {
         XCTAssertEqual(presentation.summary, "~/notes/x.md")
     }
 
-    func testLongToolPathsCollapseOnlyTheirMiddle() {
-        XCTAssertEqual(
-            collapsedToolPath("packages/core/protocol/src/tool-presentation.ts"),
-            "packages/core/…/tool-presentation.ts"
-        )
-        XCTAssertEqual(collapsedToolPath("/etc/hosts"), "/etc/hosts")
-        XCTAssertEqual(collapsedToolPath("package.json"), "package.json")
-    }
-
     func testEditLineStatsComeFromTheInput() {
         let presentation = ToolPresentation.make(
             toolName: "Edit",

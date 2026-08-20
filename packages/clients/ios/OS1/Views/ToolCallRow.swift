@@ -286,38 +286,24 @@ struct ToolCallRow: View {
     }
 }
 
-/// Keep the first two directories and filename, replacing deeper directories
-/// with one ellipsis. Character-level middle truncation remains the fallback
-/// when even that compact path cannot fit.
-func collapsedToolPath(_ path: String) -> String {
-    let parts = path.split(separator: "/").map(String.init)
-    guard parts.count > 3, let filename = parts.last else { return path }
-    let prefix = parts.prefix(2).joined(separator: "/")
-    let leadingSlash = path.hasPrefix("/") ? "/" : ""
-    return "\(leadingSlash)\(prefix)/…/\(filename)"
-}
-
 /// What a call is doing, on the row's own line. A path's directory dims, and
-/// middle truncation keeps both its beginning and filename visible. Shared
-/// with the folded edit run, which stands in for a row and has to read as one.
+/// middle truncation keeps both its beginning and filename visible only when
+/// the full path cannot fit. Shared with the folded edit run, which stands in
+/// for a row and has to read as one.
 struct ToolSummaryText: View {
     let summary: String
     let isPath: Bool
     var isError = false
 
-    private var displayedSummary: String {
-        isPath ? collapsedToolPath(summary) : summary
-    }
-
     var body: some View {
         Group {
-            if isPath, let slash = displayedSummary.lastIndex(of: "/") {
-                Text(displayedSummary[displayedSummary.startIndex...slash])
+            if isPath, let slash = summary.lastIndex(of: "/") {
+                Text(summary[summary.startIndex...slash])
                     .foregroundStyle(OS1VisualStyle.textFaint)
-                    + Text(displayedSummary[displayedSummary.index(after: slash)...])
+                    + Text(summary[summary.index(after: slash)...])
                     .foregroundStyle(OS1VisualStyle.textDim)
             } else {
-                Text(displayedSummary)
+                Text(summary)
                     .foregroundStyle(
                         isError ? OS1VisualStyle.redInk : OS1VisualStyle.textFaint
                     )

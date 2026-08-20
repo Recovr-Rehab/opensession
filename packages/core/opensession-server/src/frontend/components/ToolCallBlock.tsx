@@ -221,32 +221,28 @@ export function ToolGlyph({ toolName, size = 20 }: { toolName: string; size?: nu
   }
 }
 
-/** Collapse a long path's middle while keeping its beginning and filename. */
+/** Split the filename from a path so only its middle yields when space runs out. */
 export function pathSummaryParts(path: string) {
   const slash = path.lastIndexOf("/");
-  if (slash < 0) return { prefix: "", middle: "", filename: path };
-
-  const directory = path.slice(0, slash);
-  const leadingSlash = directory.startsWith("/") ? "/" : "";
-  const directories = directory.split("/").filter(Boolean);
-  const prefixCount = Math.min(2, directories.length);
-  const prefixDirectories = directories.slice(0, prefixCount).join("/");
+  if (slash < 0) return { directory: "", separator: "", filename: path };
   return {
-    prefix: `${leadingSlash}${prefixDirectories}${prefixDirectories ? "/" : ""}`,
-    middle: directories.slice(prefixCount).join("/"),
+    directory: path.slice(0, slash),
+    separator: "/",
     filename: path.slice(slash + 1),
   };
 }
 
 export function PathSummary({ path }: { path: string }) {
-  const { prefix, middle, filename } = pathSummaryParts(path);
-  if (!prefix) return <>{filename}</>;
+  const { directory, separator, filename } = pathSummaryParts(path);
+  if (!separator) return <>{filename}</>;
   return (
     <span className="flex min-w-0 w-full items-baseline overflow-hidden" title={path}>
-      <span className="min-w-[4ch] shrink overflow-hidden whitespace-nowrap opacity-55">
-        {prefix}
-      </span>
-      {middle && <span className="shrink-0 opacity-55">…/</span>}
+      {directory && (
+        <span className="min-w-[4ch] shrink overflow-hidden text-ellipsis whitespace-nowrap opacity-55">
+          {directory}
+        </span>
+      )}
+      <span className="shrink-0 opacity-55">{separator}</span>
       <span className="shrink-0">{filename}</span>
     </span>
   );
