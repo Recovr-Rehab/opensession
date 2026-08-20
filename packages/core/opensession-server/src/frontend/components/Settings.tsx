@@ -459,9 +459,9 @@ function MobileSettings({
 						)}
 						{/* The sheet's own title, and the only one on phones: the panel
 						    h1 hides in here (`[.settings-sheet_&]:hidden` in ui/settings).
-						    This is compact navigation chrome rather than a page heading, so
-						    every Settings section uses the dialog-title step here. */}
-						<span className="text-dialog-title font-title text-fg">
+						    This compact navigation chrome uses the 17px body step instead of
+						    the larger desktop page-heading scale. */}
+						<span className="text-body font-title text-fg">
 							{detail ? shownLabel : "Settings"}
 						</span>
 						<SheetIconButton

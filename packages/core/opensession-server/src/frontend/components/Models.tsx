@@ -38,10 +38,7 @@ export function ModelDefaultsSection() {
 				<DefaultModelRow />
 				<AutoFallbackRow />
 			</SettingCard>
-			<SettingsHint>
-				Applies to new runs immediately, with no restart. A model picked for one session still
-				wins over the default.
-			</SettingsHint>
+			<SettingsHint>Applies to new runs unless the session has its own model.</SettingsHint>
 		</>
 	);
 }
@@ -206,7 +203,7 @@ function AutoFallbackRow() {
 				<SettingRowTitle>Auto-switch when out of credits</SettingRowTitle>
 				<SettingRowDescription>
 					{error ||
-						"When a run has an explicit fallback model and the current model runs out of usage credits, keep going on that configured fallback. Off = the run halts and you pick the next model. Either way the switch shows in the session."}
+						"Switch to the configured fallback when the current model runs out of credits."}
 				</SettingRowDescription>
 			</SettingRowText>
 			<SettingRowControl>
