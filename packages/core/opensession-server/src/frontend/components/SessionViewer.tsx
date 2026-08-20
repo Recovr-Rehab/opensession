@@ -367,6 +367,7 @@ import {
 	HEADER_SESSIONBAR_MODEL,
 	HEADER_SESSIONBAR_SEP,
 	HEADER_SESSIONBAR_USAGE,
+	MOBILE_CONTROL_GLASS,
 } from "../lib/app-header-classes";
 
 type QueueReceipt = {
@@ -5878,8 +5879,20 @@ export function SessionViewer({
 									// its neighbours are squircles. Set it back explicitly,
 									// and keep a true circle on mobile.
 									"[corner-shape:squircle] phone:[corner-shape:round]",
-									"phone:size-11 phone:min-h-11 phone:rounded-full phone:border-[color:var(--mobile-header-control-border)] phone:bg-surface phone:text-accent phone:shadow-[var(--mobile-header-control-shadow)]",
-									overflowOpen && "bg-hover text-fg phone:border-transparent phone:bg-accent-soft phone:text-accent",
+									// The same glass the Back bubble and the title pill beside
+									// it are made of. This control is portaled INTO that bar, so
+									// it has to be the same material or it reads as a different
+									// object that happens to be round.
+									`phone:size-11 phone:min-h-11 phone:rounded-full phone:border-[color:var(--mobile-header-control-border)] ${MOBILE_CONTROL_GLASS} phone:text-accent phone:shadow-[var(--mobile-header-control-shadow)]`,
+									// Open: the accent wash replaces the plate's fill through the
+									// VARIABLE rather than a second `bg-*` utility. Two of those
+									// on one element are resolved by Tailwind's output order, not
+									// by which was written last, so the open state would be a coin
+									// flip. It also keeps the blur underneath, which is what a
+									// selected iOS toolbar item does: tinted glass, not a chip.
+									overflowOpen &&
+										"bg-hover text-fg phone:border-transparent phone:text-accent " +
+											"phone:[--mobile-header-control-surface:var(--accent-soft)]",
 								)}
 								title="More actions"
 								aria-label="More actions"

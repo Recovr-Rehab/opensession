@@ -1,4 +1,10 @@
 import { expect, test } from "bun:test";
+import {
+	APP_HEADER_ACTIONS,
+	HEADER_TITLE_PILL,
+	MOBILE_BACK,
+	MOBILE_CONTROL_GLASS,
+} from "../lib/app-header-classes";
 import { TAB_STRIP } from "../lib/session-tab-classes";
 import { REPORTS_COLUMN_HEADER } from "../lib/reports-classes";
 import { infoTopbarClass } from "../lib/session-viewer-classes";
@@ -16,4 +22,25 @@ test("phone navigation chrome has no hard divider bars", async () => {
 	expect(infoTopbarClass(true)).not.toContain("border-b");
 	expect(infoTopbarClass(false)).not.toContain("border-b");
 	expect(REPORTS_COLUMN_HEADER).not.toMatch(/(?<!desktop:)border-b/);
+});
+
+test("every floating phone header control is made of the same glass", async () => {
+	const css = await Bun.file(CSS).text();
+
+	// The prefixed spelling is the whole point on iOS Safari and the installed
+	// PWA, which still ship backdrop-filter only under `-webkit-`.
+	expect(MOBILE_CONTROL_GLASS).toContain(
+		"phone:[-webkit-backdrop-filter:var(--mobile-header-control-blur)]",
+	);
+	for (const control of [MOBILE_BACK, HEADER_TITLE_PILL, APP_HEADER_ACTIONS]) {
+		expect(control).toContain(MOBILE_CONTROL_GLASS);
+		// A page-coloured fill is what made these read as paper stickers.
+		expect(control).not.toContain("phone:bg-surface");
+	}
+
+	// Glass is an enhancement: both opt-outs collapse the fill back to opaque.
+	const optOuts = css.match(
+		/--mobile-header-control-surface: var\(--bg\);/g,
+	);
+	expect(optOuts?.length).toBe(2);
 });

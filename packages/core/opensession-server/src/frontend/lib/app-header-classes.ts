@@ -101,8 +101,14 @@ const APP_HEADER_OVERLAY =
 	"phone:before:absolute phone:before:inset-x-0 phone:before:top-0 " +
 	"phone:before:bottom-auto phone:before:z-[-1] phone:before:h-[calc(100%+30px)] " +
 	"phone:before:pointer-events-none phone:before:content-[''] " +
-	"phone:before:[background:linear-gradient(to_bottom,var(--bg)_0%,var(--bg)_50%,color-mix(in_srgb,var(--bg)_70%,transparent)_75%,transparent_100%)] " +
-	"phone:before:backdrop-blur-[16px] " +
+	// The fade is thinned deliberately. It used to be SOLID `--bg` for its first
+	// half, which is exactly the band the controls sit in, so each control was
+	// backed by an opaque plate of the page colour and had nothing to be
+	// translucent against. Full strength survives only across the status-bar
+	// strip, where the clock has to stay legible; from there down the blur is
+	// what does the work, which is how an iOS scroll edge behaves.
+	"phone:before:[background:linear-gradient(to_bottom,var(--bg)_0%,color-mix(in_srgb,var(--bg)_55%,transparent)_52%,color-mix(in_srgb,var(--bg)_18%,transparent)_78%,transparent_100%)] " +
+	"phone:before:backdrop-blur-[20px] phone:before:backdrop-saturate-[1.4] " +
 	"phone:before:[-webkit-mask-image:linear-gradient(to_bottom,#000_0%,#000_62%,transparent_100%)] " +
 	"phone:before:[mask-image:linear-gradient(to_bottom,#000_0%,#000_62%,transparent_100%)]";
 
@@ -139,6 +145,25 @@ export function appHeader({
 export const APP_HEADER_LEFT = "flex items-center gap-2";
 
 /**
+ * What every floating control in this bar is made of: a thinned fill over a
+ * blur, so the page passing underneath tints it. This is the whole difference
+ * between an iOS toolbar item and a white pill sitting on a page, and it is one
+ * string rather than four copies because the four controls are one material:
+ * Back, the title pill, the grouped actions capsule, and the session header's
+ * ⋯ trigger (components/SessionViewer.tsx, which imports it).
+ *
+ * The `-webkit-` spelling is not legacy dressing: iOS Safari, and the installed
+ * PWA with it, still ships `backdrop-filter` only under the prefix, so dropping
+ * it turns the glass back into a flat wash on the exact client this is for.
+ * base.css collapses the fill back to an opaque `--bg` where the browser has no
+ * backdrop-filter at all, and for reduced transparency.
+ */
+export const MOBILE_CONTROL_GLASS =
+	"phone:bg-[var(--mobile-header-control-surface)] " +
+	"phone:[backdrop-filter:var(--mobile-header-control-blur)] " +
+	"phone:[-webkit-backdrop-filter:var(--mobile-header-control-blur)]";
+
+/**
  * Back control on a pushed page: a circular bubble carrying just the chevron,
  * no "Back" word — the same white floating surface and soft shadow as the
  * title pill and the actions beside it, so the whole bar reads as one set of
@@ -154,7 +179,7 @@ export const APP_HEADER_LEFT = "flex items-center gap-2";
  */
 export const MOBILE_BACK =
 	"pwa-header-back phone:m-0 phone:inline-flex phone:size-11 phone:items-center phone:justify-center " +
-	"phone:rounded-full phone:border phone:border-[color:var(--mobile-header-control-border)] phone:bg-surface phone:p-0 " +
+	`phone:rounded-full phone:border phone:border-[color:var(--mobile-header-control-border)] ${MOBILE_CONTROL_GLASS} phone:p-0 ` +
 	"phone:text-accent phone:shadow-[var(--mobile-header-control-shadow)] " +
 	"phone:cursor-pointer phone:touch-manipulation " +
 	"phone:[-webkit-tap-highlight-color:transparent] " +
@@ -221,7 +246,7 @@ export const HEADER_TITLE_PILL =
 	"phone:flex phone:min-h-11 phone:flex-[0_1_auto] phone:min-w-0 phone:items-center " +
 	"phone:justify-start phone:gap-[9px] phone:ml-2 phone:mr-auto " +
 	"phone:py-[5px] phone:pr-4 phone:pl-[11px] " +
-	"phone:rounded-full phone:border phone:border-[color:var(--mobile-header-control-border)] phone:bg-surface " +
+	`phone:rounded-full phone:border phone:border-[color:var(--mobile-header-control-border)] ${MOBILE_CONTROL_GLASS} ` +
 	"phone:shadow-[var(--mobile-header-control-shadow)] phone:text-fg " +
 	"phone:pointer-events-auto";
 
@@ -368,7 +393,7 @@ const HEADER_ACTIONS_BASE =
  */
 export const APP_HEADER_ACTIONS =
 	`${HEADER_ACTIONS_BASE} phone:ml-auto phone:gap-0 phone:overflow-hidden ` +
-	"phone:rounded-full phone:border phone:border-[color:var(--mobile-header-control-border)] phone:bg-surface " +
+	`phone:rounded-full phone:border phone:border-[color:var(--mobile-header-control-border)] ${MOBILE_CONTROL_GLASS} ` +
 	"phone:shadow-[var(--mobile-header-control-shadow)]";
 
 /**

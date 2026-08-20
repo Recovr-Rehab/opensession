@@ -79,12 +79,24 @@
 	   composer's case at chip scale, so it takes the composer's answer; see the
 	   light block. */
 	--button-surface: var(--control-surface);
-	/* Phone navigation controls float over live content. Dark mode keeps a
-	   defined edge because the fill alone is close to the page; light mode takes
-	   the native toolbar treatment below, where an even cast around the control
-	   replaces that edge. */
+	/* Phone navigation controls float over live content, the way an iOS toolbar
+	   item does: a translucent plate that takes its colour from whatever passes
+	   underneath it, rather than a paper sticker laid on top. The fill used to be
+	   `--bg`, the same colour as the page it floats over, so nothing but the cast
+	   shadow said the control was there at all, and the bar read as stickers on a
+	   page instead of glass over one.
+
+	   Dark mode keeps a defined edge, because even thinned the fill lands close
+	   to the page; light mode takes the native toolbar treatment below, where an
+	   even cast around the control replaces that edge. The inset line leading
+	   each shadow is the specular top edge every glass control on iOS carries. It
+	   is what gives the plate a thickness, and it is the one part of the look a
+	   blur alone cannot produce. */
 	--mobile-header-control-border: var(--border);
+	--mobile-header-control-surface: color-mix(in srgb, var(--bg) 68%, transparent);
+	--mobile-header-control-blur: blur(20px) saturate(1.7);
 	--mobile-header-control-shadow:
+		inset 0 1px 0 rgba(255, 255, 255, 0.07),
 		0 1px 3px -1px rgba(0, 0, 0, 0.06),
 		0 4px 10px -4px rgba(0, 0, 0, 0.09);
 	/* The segmented control's knob: the one plate that sits in a WELL rather
@@ -480,7 +492,13 @@ html[data-theme="light"] {
 	   glass. A zero-offset cast with a little spread lifts the whole silhouette
 	   evenly, including its top edge, without turning that edge into a border. */
 	--mobile-header-control-border: transparent;
-	--mobile-header-control-shadow: 0 0 14px 1px rgba(0, 0, 0, 0.1);
+	/* Thinner than dark's, because what shows through here is a bright page and
+	   the plate has to stay lighter than it to keep reading as glass rather than
+	   as a grey wash over the words underneath. */
+	--mobile-header-control-surface: color-mix(in srgb, var(--bg) 62%, transparent);
+	--mobile-header-control-shadow:
+		inset 0 1px 0 rgba(255, 255, 255, 0.6),
+		0 0 14px 1px rgba(0, 0, 0, 0.1);
 	/* The segmented knob goes paper here, like every other raised control, and
 	   wears no edge at all. A --border hairline is darker than the --bg-hover
 	   track it lies on, so it reads as an outline drawn around the option
@@ -618,6 +636,10 @@ html[data-theme="light"] {
 	:root {
 		--popup-glass: var(--popup-surface);
 		--palette-glass: var(--popup-surface);
+		/* The page colour, which is what these controls were painted in before
+		   they became glass: without a blur behind it a thinned fill is just a
+		   window onto whatever is scrolling past. */
+		--mobile-header-control-surface: var(--bg);
 	}
 }
 
@@ -625,6 +647,7 @@ html[data-theme="light"] {
 	:root {
 		--popup-glass: var(--popup-surface);
 		--palette-glass: var(--popup-surface);
+		--mobile-header-control-surface: var(--bg);
 	}
 }
 
