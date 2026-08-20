@@ -69,6 +69,11 @@ export class TranscriptViewStore {
 					needsOrder = true;
 				if (entry.seq === undefined) this.hasUnsequenced = true;
 				else this.lastSeq = Math.max(this.lastSeq, entry.seq);
+			} else if (v2 && current.seq !== entry.seq) {
+				// Live tool results arrive without seq, then the durable append fills it
+				// in. Reorder that existing id now, rather than leaving the result at
+				// whichever end of the current turn its live frame first occupied.
+				needsOrder = true;
 			}
 			this.byId.set(entry.id, entry);
 			changed = true;

@@ -724,6 +724,8 @@ type CachedTranscriptView = {
 	} | null;
 	historyTruncated: boolean;
 	historyStart: number | null;
+	index: TranscriptIndexEntry[] | null;
+	indexEpoch: number | null;
 	scrollTop: number;
 	following: boolean;
 	anchorEid: string | null;
@@ -1302,14 +1304,24 @@ export function SessionViewer({
 	const [transcriptIndexState, setTranscriptIndexState] = useState<{
 		sessionId: string;
 		entries: TranscriptIndexEntry[];
-	} | null>(null);
-	const [transcriptIndexExpected, setTranscriptIndexExpected] = useState(false);
-	const transcriptIndexExpectedRef = useRef(false);
+	} | null>(() =>
+		cachedTranscript?.index
+			? { sessionId: session.id, entries: cachedTranscript.index }
+			: null,
+	);
+	const transcriptIndexStateRef = useRef(transcriptIndexState);
+	transcriptIndexStateRef.current = transcriptIndexState;
+	const [transcriptIndexExpected, setTranscriptIndexExpected] = useState(
+		Boolean(cachedTranscript?.index),
+	);
+	const transcriptIndexExpectedRef = useRef(Boolean(cachedTranscript?.index));
 	const transcriptIndex =
 		transcriptIndexState?.sessionId === session.id
 			? transcriptIndexState.entries
 			: null;
-	const transcriptIndexEpochRef = useRef<number | null>(null);
+	const transcriptIndexEpochRef = useRef<number | null>(
+		cachedTranscript?.indexEpoch ?? null,
+	);
 	const transcriptRangeDemandReadyRef = useRef(false);
 	const [transcriptRangeRetryGeneration, setTranscriptRangeRetryGeneration] =
 		useState(0);
@@ -1920,12 +1932,21 @@ export function SessionViewer({
 			seq: transcriptSeqRef.current,
 			historyTruncated,
 			historyStart: historyStartRef.current,
+			index: transcriptIndex,
+			indexEpoch: transcriptIndexEpochRef.current,
 			scrollTop: el?.scrollTop ?? previous?.scrollTop ?? 0,
 			following,
 			anchorEid: previous?.anchorEid ?? null,
 			anchorTop: previous?.anchorTop ?? null,
 		});
-	}, [entries, following, historyTruncated, messagesRef, session.id]);
+	}, [
+		entries,
+		following,
+		historyTruncated,
+		messagesRef,
+		session.id,
+		transcriptIndex,
+	]);
 	// Where the anchor is computed. Nothing reads it until this session is
 	// opened again, and pickScrollAnchor reads a rect per [data-eid] node, so
 	// it runs once the reader settles instead of on every scroll event and
@@ -2681,6 +2702,10 @@ export function SessionViewer({
 					// falls back to a full legacy snapshot). Init frames are
 					// authoritative for the mode.
 					const v2 = msg.v2 === true && typeof msg.lastSeq === "number";
+					const existingIndex =
+						v2 && transcriptIndexStateRef.current?.sessionId === session.id
+							? transcriptIndexStateRef.current.entries
+							: null;
 					transcriptIndexExpectedRef.current = v2;
 					setTranscriptIndexExpected(v2);
 					if (v2) {
@@ -2718,7 +2743,9 @@ export function SessionViewer({
 							);
 						setTranscriptIndexState({
 							sessionId: session.id,
-							entries: tailIndex,
+							entries: existingIndex
+								? mergeTranscriptIndexEntries(existingIndex, tailIndex)
+								: tailIndex,
 						});
 						transcriptIndexEpochRef.current = null;
 						transcriptRangeDemandReadyRef.current = false;
@@ -2730,7 +2757,9 @@ export function SessionViewer({
 						transcriptRangeRequestsRef.current.clear();
 						completedTranscriptRangeKeysRef.current.clear();
 					}
-					transcriptViewStore.replace(merged, true, v2);
+					if (v2 && existingIndex)
+						transcriptViewStore.merge(merged, true, true);
+					else transcriptViewStore.replace(merged, true, v2);
 					setHistoryTruncated(!!msg.truncated);
 					backgroundHistoryRef.current = false;
 					historyRevealRef.current = null;
