@@ -83,7 +83,7 @@ import {
 import { transcriptStore } from "./transcript-store";
 import { transcriptForwarder } from "./transcript-forward";
 import { gitIdentityEnv } from "./shared/user-mappings";
-import { githubAuthEnv, githubUserLoginForRun } from "./github-auth";
+import { githubRunEnv, githubUserLoginForRun } from "./github-auth";
 import { ensureAgentAwsCredsFile } from "./aws-creds";
 import { buildEngineSwitchHandoffNote } from "./fork-handoff";
 import { piAnthropicTransport, piEngineEnabled } from "./pi-config";
@@ -1464,11 +1464,15 @@ async function* runPiAttempt(
     // Command-policy gate: kind-based like previous runner (NOT policy.unattended) —
     // the trusted-human loops carry deniedTools but shouldn't trip the gate.
     const bashGated = isUnattendedKind(baseJournalKind(journal?.kind)) && !isAsk;
-    const githubUserLogin =
+    const interactiveGithub =
       !policy.unattended &&
-      INTERACTIVE_KINDS.has(baseJournalKind(journal?.kind))
-        ? githubUserLoginForRun(user || author?.name)
-        : null;
+      INTERACTIVE_KINDS.has(baseJournalKind(journal?.kind));
+    const githubUserLogin = interactiveGithub
+      ? githubUserLoginForRun(user || author?.name)
+      : null;
+    const githubEnv = interactiveGithub
+      ? githubRunEnv(user || author?.name)
+      : {};
 
     // pi/openai: pick the codex account + build the seeded credential BEFORE
     // the SDK import or any engine work — a dry/unconfigured pool must fail
@@ -1818,7 +1822,7 @@ async function* runPiAttempt(
         ? { TMPDIR: opts.scratchDir, OPENSESSION_SCRATCH: opts.scratchDir }
         : {}),
       ...gitIdentityEnv(author),
-      ...(githubUserLogin ? githubAuthEnv(user || author?.name) : {}),
+      ...githubEnv,
       ...awsEnv,
       ...cliEnv,
     };

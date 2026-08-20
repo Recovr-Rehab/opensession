@@ -644,6 +644,44 @@ export function githubAuthEnv(user?: string | null): Record<string, string> {
   return { GH_TOKEN: account.token, GITHUB_TOKEN: account.token };
 }
 
+/** A remote sandbox cannot read the server's per-user grant store. Its trusted
+ * launcher writes only this run's access token to a private file and points the
+ * host at it. The token never enters the persisted RunHostSpec or launch command. */
+export const GITHUB_RUN_AUTH_FILE_ENV = "OPENSESSION_GITHUB_RUN_AUTH_FILE";
+
+function projectedGithubAuthEnv(): Record<string, string> {
+  const path = process.env[GITHUB_RUN_AUTH_FILE_ENV];
+  if (!path) return {};
+  try {
+    const parsed = JSON.parse(readFileSync(path, "utf-8")) as Record<string, unknown>;
+    const token =
+      typeof parsed.GH_TOKEN === "string"
+        ? parsed.GH_TOKEN
+        : typeof parsed.GITHUB_TOKEN === "string"
+          ? parsed.GITHUB_TOKEN
+          : "";
+    return token ? { GH_TOKEN: token, GITHUB_TOKEN: token } : {};
+  } catch {
+    return {};
+  }
+}
+
+/** GitHub environment for one interactive run. Besides the API variables, set
+ * a process-local Git credential helper so HTTPS remotes can push without
+ * persisting the short-lived user token in .git/config or ~/.config/gh. */
+export function githubRunEnv(user?: string | null): Record<string, string> {
+  const auth = githubAuthEnv(user);
+  const projected = Object.keys(auth).length ? auth : projectedGithubAuthEnv();
+  if (!projected.GH_TOKEN) return {};
+  return {
+    ...projected,
+    GIT_TERMINAL_PROMPT: "0",
+    GIT_CONFIG_COUNT: "1",
+    GIT_CONFIG_KEY_0: "credential.https://github.com.helper",
+    GIT_CONFIG_VALUE_0: "!gh auth git-credential",
+  };
+}
+
 export interface GithubCredential {
   kind: "service" | "user";
   principal: string;

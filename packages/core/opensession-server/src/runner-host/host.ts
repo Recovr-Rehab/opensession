@@ -26,6 +26,7 @@ if (!specPath) {
   process.exit(2);
 }
 const hostDir = dirname(resolve(specPath));
+const projectedGithubAuthPath = process.env.OPENSESSION_GITHUB_RUN_AUTH_FILE;
 
 // Must be set before claude-runner is evaluated — it resolves the journal path
 // at module load. The transient unit sets it too; this is the belt-and-braces
@@ -576,6 +577,17 @@ exiting = true; // stop the WS redial loop
 if (!RUN_WS_URL) {
   try {
     unlinkSync(sockPath);
+  } catch {}
+}
+// Remote interactive runs receive a short-lived access token in their private
+// run directory. Remove it on every ordinary host exit; a crashed sandbox is
+// still bounded by the token's own expiry and the sandbox lifecycle cleanup.
+if (
+  projectedGithubAuthPath &&
+  dirname(resolve(projectedGithubAuthPath)) === hostDir
+) {
+  try {
+    unlinkSync(projectedGithubAuthPath);
   } catch {}
 }
 log("exiting");

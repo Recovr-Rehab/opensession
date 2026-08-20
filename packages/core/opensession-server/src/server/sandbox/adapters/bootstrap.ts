@@ -85,6 +85,10 @@ import {
 } from "../../models";
 import { filterMcpServers } from "../../runner-shared";
 import {
+  GITHUB_RUN_AUTH_FILE_ENV,
+  githubAuthEnv,
+} from "../../github-auth";
+import {
   appendTranscriptEntries,
   recordEngineSessionOwner,
   transcriptLineUser,
@@ -1460,6 +1464,21 @@ function makeRemoteLauncher(
       await driver.exec(
         `chmod 600 ${shellQuoteWord(claudeAccountsPath)} ${shellQuoteWord(REMOTE_MCP_CONFIG)}`,
       );
+
+      // Interactive parity for GitHub uses a run-scoped access-token file.
+      // Do not put it in spec.json or the launch command, and never project it
+      // into the fail-closed automation profile. githubRunEnv reads this file
+      // inside the guest and installs a process-local HTTPS credential helper.
+      const githubAuth = automationProfile
+        ? {}
+        : githubAuthEnv(spec.user || spec.author?.name);
+      const githubAuthPath = `${dir}/github-auth.json`;
+      if (githubAuth.GH_TOKEN) {
+        await driver.writeFile(githubAuthPath, JSON.stringify(githubAuth));
+        await driver.exec(`chmod 600 ${shellQuoteWord(githubAuthPath)}`);
+      } else {
+        await driver.exec(`rm -f ${shellQuoteWord(githubAuthPath)}`);
+      }
       // Pi policy + provider config, projected at the sandbox boundary.
       // The source CAN contain third-party API keys under providers.*.apiKey;
       // never copy it wholesale. Anthropic/OpenAI/Pi launches receive only the
@@ -1605,6 +1624,9 @@ function makeRemoteLauncher(
           OPENSESSION_RUN_WS_URL: `${base}/run-ws/${hostId}`,
           OPENSESSION_RUN_WS_TOKEN: spec.wsToken,
           OPENSESSION_RPC_WS_URL: `${base}/rpc-ws`,
+          ...(githubAuth.GH_TOKEN
+            ? { [GITHUB_RUN_AUTH_FILE_ENV]: githubAuthPath }
+            : {}),
           ...createWorkloadIdentityEnv({
             sandboxId,
             provider,

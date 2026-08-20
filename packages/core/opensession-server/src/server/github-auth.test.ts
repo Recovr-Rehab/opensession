@@ -13,7 +13,9 @@ import { tmpdir } from "os";
 import { join } from "path";
 import {
   connectedGithubAccounts,
+  GITHUB_RUN_AUTH_FILE_ENV,
   githubAuthEnv,
+  githubRunEnv,
   githubCredentialForLogin,
   githubReconnectRequired,
   githubUserAuthActive,
@@ -37,6 +39,7 @@ const ENV_KEYS = [
   "OPENSESSION_CONFIG",
   "OPENSESSION_GITHUB_CLIENT_ID",
   "OPENSESSION_GITHUB_AUTH_STORE",
+  GITHUB_RUN_AUTH_FILE_ENV,
   "OPENSESSION_WEB_SESSIONS_STORE",
   "KEYPAD_TOKEN",
 ] as const;
@@ -159,6 +162,38 @@ describe("token lookups + runner env", () => {
     expect(githubAuthEnv(null)).toEqual({});
     expect(githubAuthEnv("Bob")).toEqual({}); // unknown, never connected
     expect(githubUserLoginForRun("Bob")).toBeNull();
+  });
+
+  test("run env gives HTTPS git and gh the connected user's token", () => {
+    enableFeature();
+    seedToken();
+    expect(githubRunEnv("Alice")).toEqual({
+      GH_TOKEN: "gho_test123",
+      GITHUB_TOKEN: "gho_test123",
+      GIT_TERMINAL_PROMPT: "0",
+      GIT_CONFIG_COUNT: "1",
+      GIT_CONFIG_KEY_0: "credential.https://github.com.helper",
+      GIT_CONFIG_VALUE_0: "!gh auth git-credential",
+    });
+  });
+
+  test("remote run env reads only its projected access-token file", () => {
+    const projected = join(dir, "run-github-auth.json");
+    writeFileSync(
+      projected,
+      JSON.stringify({
+        GH_TOKEN: "ghu_remote123",
+        GITHUB_TOKEN: "ghu_remote123",
+        refreshToken: "must-not-be-read",
+      }),
+    );
+    process.env[GITHUB_RUN_AUTH_FILE_ENV] = projected;
+    expect(githubRunEnv("Alice")).toMatchObject({
+      GH_TOKEN: "ghu_remote123",
+      GITHUB_TOKEN: "ghu_remote123",
+      GIT_CONFIG_VALUE_0: "!gh auth git-credential",
+    });
+    expect(JSON.stringify(githubRunEnv("Alice"))).not.toContain("must-not-be-read");
   });
 
   test("connectedGithubAccounts never exposes tokens", () => {
