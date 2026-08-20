@@ -176,9 +176,12 @@ type TabMember =
 function TabTitle({
 	children,
 	onDoubleClick,
+	reserveClose = true,
 }: {
 	children: React.ReactNode;
 	onDoubleClick?: React.MouseEventHandler<HTMLSpanElement>;
+	/** Keep the tab width stable while its close control changes visibility. */
+	reserveClose?: boolean;
 }) {
 	const ref = useRef<HTMLSpanElement>(null);
 	useEffect(() => {
@@ -193,7 +196,11 @@ function TabTitle({
 	}, [children]);
 
 	return (
-		<span ref={ref} className={TAB_TITLE} onDoubleClick={onDoubleClick}>
+		<span
+			ref={ref}
+			className={cn(TAB_TITLE, reserveClose && "desktop:mr-3.5")}
+			onDoubleClick={onDoubleClick}
+		>
 			{children}
 		</span>
 	);
@@ -608,13 +615,20 @@ export function SessionTabs({
 										onClick={() => onSelectView(v.id)}
 										title={v.label}
 									>
-										{v.dotClass && <span className={`${PANEL_TAB_DOT} ${v.dotClass}`} />}
+										{/* Review's PR dot can change when another session tab becomes current.
+										    Keep its slot so that status update never shifts the tab row. */}
+										{(v.dotClass || v.id.startsWith("review:")) && (
+											<span className={`${PANEL_TAB_DOT} ${v.dotClass ?? "invisible"}`} />
+										)}
 										{v.icon ? (
-											<span className={TAB_VICON} aria-hidden="true">
+											<span
+												className={cn(TAB_VICON, v.closable !== false && "desktop:mr-3.5")}
+												aria-hidden="true"
+											>
 												{v.icon}
 											</span>
 										) : (
-											<TabTitle>{v.label}</TabTitle>
+											<TabTitle reserveClose={v.closable !== false}>{v.label}</TabTitle>
 										)}
 										{v.closable !== false && (
 											<button

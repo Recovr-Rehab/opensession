@@ -68,6 +68,10 @@ export const TAB_STRIP =
 	// bars start at the top of an overflow-clipped column, so their full box stays
 	// in flow instead of losing its top edge outside that column.
 	"desktop:h-10 desktop:py-0 " +
+	// When the pinned + is pointed at, soften enough of the adjacent tab to reach
+	// its label rather than fading only its trailing padding and close control.
+	// The scroll mask consumes this inherited override below.
+	"desktop:[&:has(.session-tab-new:hover)]:[--tabs-control-fade-end:64px] " +
 	// Phone: pulled out of flow and pinned flush under the header's bottom edge,
 	// so it reads as fixed chrome rather than a strip the transcript scrolls by.
 	"phone:absolute phone:inset-x-0 phone:top-[var(--pane-header-h)] phone:z-[6] " +
@@ -106,7 +110,10 @@ export const TAB_SCROLL =
 	"supports-[animation-timeline:scroll()]:[animation:session-tabs-fade-start_1ms_both,session-tabs-fade-end_1ms_both] " +
 	"supports-[animation-timeline:scroll()]:[animation-timeline:scroll(self_inline),scroll(self_inline)] " +
 	"supports-[animation-timeline:scroll()]:[animation-range:0_24px,calc(100%_-_24px)_100%] " +
-	"supports-[animation-timeline:scroll()]:data-[overflow]:[mask-image:linear-gradient(to_right,transparent_0,#000_var(--tabs-fade-start),#000_calc(100%_-_var(--tabs-fade-end)),transparent_100%)]";
+	"supports-[animation-timeline:scroll()]:data-[overflow]:[mask-image:linear-gradient(to_right,transparent_0,#000_var(--tabs-fade-start),#000_calc(100%_-_max(var(--tabs-fade-end),var(--tabs-control-fade-end,0px))),transparent_100%)] " +
+	// The + hover fade also applies when the tabs fit. In that case data-overflow
+	// is absent, but the adjacent label still needs to recede behind the control.
+	"desktop:[.session-tabs:has(.session-tab-new:hover)_&]:[mask-image:linear-gradient(to_right,transparent_0,#000_var(--tabs-fade-start),#000_calc(100%_-_max(var(--tabs-fade-end),var(--tabs-control-fade-end,0px))),transparent_100%)]";
 
 /**
  * The drag-to-reorder group wraps EVERY tab — sessions and view panes alike —
@@ -225,8 +232,8 @@ export function tabClass(state: TabState): string {
 	return `${TAB_BASE} ${ink} ${phonePill} ${desktopPill}`;
 }
 
-/** The label fades only when its content actually overflows. Inactive desktop
- *  tabs reserve no room for close, then fade under its overlaid button on hover. */
+/** The label fades only when its content actually overflows. TabTitle adds
+ *  stable trailing room for close, then fades under the control on hover. */
 export const TAB_TITLE =
 	"session-tab-title block min-w-0 max-w-[150px] overflow-hidden " +
 	"data-[overflow]:[mask-image:linear-gradient(to_right,#000_0,#000_calc(100%_-_10px),transparent_100%)] " +
@@ -322,28 +329,36 @@ const CLOSE_BASE =
 	"rounded-sm border-0 bg-transparent p-0 font-[inherit] text-[15px] leading-none text-dim " +
 	"hover:bg-pressed hover:text-fg [@media_(hover:none)]:size-[26px] [@media_(hover:none)]:-mr-1";
 
-/** Revealed over the trailing edge on hover, so inactive pointer-driven tabs
- * reserve no width for close. A focused button reveals too for keyboard use. */
-const CLOSE_OVERLAY =
+/** Desktop close controls share one absolute position, so selecting a tab never
+ * changes its width and never asks Motion to shuffle every sibling. */
+const CLOSE_OVERLAY_POSITION =
 	"[@media_(hover:hover)_and_(pointer:fine)]:absolute " +
 	"[@media_(hover:hover)_and_(pointer:fine)]:right-1 [@media_(hover:hover)_and_(pointer:fine)]:top-1/2 " +
 	"[@media_(hover:hover)_and_(pointer:fine)]:z-[1] [@media_(hover:hover)_and_(pointer:fine)]:m-0 " +
 	"[@media_(hover:hover)_and_(pointer:fine)]:-translate-y-1/2 " +
+	"[@media_(hover:hover)_and_(pointer:fine)]:transition-opacity";
+
+const CLOSE_OVERLAY_HIDDEN =
 	"[@media_(hover:hover)_and_(pointer:fine)]:pointer-events-none " +
 	"[@media_(hover:hover)_and_(pointer:fine)]:opacity-0 " +
-	"[@media_(hover:hover)_and_(pointer:fine)]:transition-opacity " +
 	"[@media_(hover:hover)_and_(pointer:fine)]:group-hover/tab:pointer-events-auto " +
 	"[@media_(hover:hover)_and_(pointer:fine)]:group-hover/tab:opacity-100 " +
 	"[@media_(hover:hover)_and_(pointer:fine)]:focus-visible:pointer-events-auto " +
 	"[@media_(hover:hover)_and_(pointer:fine)]:focus-visible:opacity-100";
 
+const CLOSE_OVERLAY_ACTIVE =
+	"[@media_(hover:hover)_and_(pointer:fine)]:pointer-events-auto " +
+	"[@media_(hover:hover)_and_(pointer:fine)]:opacity-100";
+
 /** Phones have no hover, so close stays in flow with a finger-sized hit area. */
 const CLOSE_TOUCH = "size-[26px] -mr-1";
 
-/** Active tabs keep close in flow and visible. Inactive desktop tabs overlay it
- * only on hover, which keeps their resting width to the content itself. */
 export const tabCloseClass = (phone: boolean, active: boolean) =>
-	`${CLOSE_BASE} ${phone ? CLOSE_TOUCH : active ? "" : CLOSE_OVERLAY}`;
+	`${CLOSE_BASE} ${
+		phone
+			? CLOSE_TOUCH
+			: `${CLOSE_OVERLAY_POSITION} ${active ? CLOSE_OVERLAY_ACTIVE : CLOSE_OVERLAY_HIDDEN}`
+	}`;
 
 /**
  * The trailing controls use quiet chrome with no pill fill or shadow. History
@@ -374,7 +389,7 @@ const CTRL_BASE =
  * area on touch and matches the header's ⋯ control on desktop.
  */
 export const TAB_NEW =
-	`${CTRL_BASE} justify-center text-[15px] ` +
+	`session-tab-new ${CTRL_BASE} justify-center text-[15px] ` +
 	"desktop:min-h-auto desktop:self-center desktop:rounded-control " +
 	"desktop:px-[5px] desktop:py-[3px] desktop:text-[22px]";
 
