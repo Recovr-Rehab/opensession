@@ -608,7 +608,7 @@ export function SessionTabs({
 										{v.closable !== false && (
 											<button
 												type="button"
-												className={tabCloseClass(isPhone)}
+												className={tabCloseClass(isPhone, v.active)}
 												aria-label={`Close ${v.label}`}
 												title={`Close ${v.label}`}
 												onClick={(e) => {
@@ -714,7 +714,7 @@ export function SessionTabs({
 										)}
 										<button
 											type="button"
-											className={tabCloseClass(isPhone)}
+											className={tabCloseClass(isPhone, key === activeId)}
 											aria-label="Close session"
 											title="Close session"
 											onClick={(e) => {

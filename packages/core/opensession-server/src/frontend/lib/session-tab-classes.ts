@@ -225,13 +225,12 @@ export function tabClass(state: TabState): string {
 	return `${TAB_BASE} ${ink} ${phonePill} ${desktopPill}`;
 }
 
-/** The label fades only when its content actually overflows. Desktop titles
- *  use the room released by the overlaid close button, then fade earlier on
- *  hover so the revealed close control stays clear of the text. */
+/** The label fades only when its content actually overflows. Inactive desktop
+ *  tabs reserve no room for close, then fade under its overlaid button on hover. */
 export const TAB_TITLE =
 	"session-tab-title block min-w-0 max-w-[150px] overflow-hidden " +
 	"data-[overflow]:[mask-image:linear-gradient(to_right,#000_0,#000_calc(100%_-_10px),transparent_100%)] " +
-	"desktop:mr-3.5 desktop:max-w-[166px] " +
+	"desktop:max-w-[166px] " +
 	"desktop:group-hover/tab:[mask-image:linear-gradient(to_right,#000_0,#000_calc(100%_-_18px),transparent_100%)]";
 
 /** An icon-only view tab (Staging → a globe): drop the label's text metrics so
@@ -323,8 +322,8 @@ const CLOSE_BASE =
 	"rounded-sm border-0 bg-transparent p-0 font-[inherit] text-[15px] leading-none text-dim " +
 	"hover:bg-pressed hover:text-fg [@media_(hover:none)]:size-[26px] [@media_(hover:none)]:-mr-1";
 
-/** Revealed over the trailing edge on hover, so pointer-driven tabs reserve no
- * width for close. A focused button reveals too, preserving keyboard feedback. */
+/** Revealed over the trailing edge on hover, so inactive pointer-driven tabs
+ * reserve no width for close. A focused button reveals too for keyboard use. */
 const CLOSE_OVERLAY =
 	"[@media_(hover:hover)_and_(pointer:fine)]:absolute " +
 	"[@media_(hover:hover)_and_(pointer:fine)]:right-1 [@media_(hover:hover)_and_(pointer:fine)]:top-1/2 " +
@@ -341,8 +340,10 @@ const CLOSE_OVERLAY =
 /** Phones have no hover, so close stays in flow with a finger-sized hit area. */
 const CLOSE_TOUCH = "size-[26px] -mr-1";
 
-export const tabCloseClass = (phone: boolean) =>
-	`${CLOSE_BASE} ${phone ? CLOSE_TOUCH : CLOSE_OVERLAY}`;
+/** Active tabs keep close in flow and visible. Inactive desktop tabs overlay it
+ * only on hover, which keeps their resting width to the content itself. */
+export const tabCloseClass = (phone: boolean, active: boolean) =>
+	`${CLOSE_BASE} ${phone ? CLOSE_TOUCH : active ? "" : CLOSE_OVERLAY}`;
 
 /**
  * The trailing controls use quiet chrome with no pill fill or shadow. History
