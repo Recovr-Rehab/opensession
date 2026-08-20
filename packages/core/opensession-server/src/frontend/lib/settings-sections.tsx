@@ -12,7 +12,6 @@ import {
 	IconConnections,
 	IconDatabase,
 	IconFileText2,
-	IconGauge,
 	IconHome,
 	IconKeyboard,
 	IconPeople,
@@ -46,8 +45,7 @@ export type SettingsSectionKey =
 	| "setup"
 	| "repos"
 	| "members"
-	| "models"
-	| "usage"
+	| "providers"
 	| "sandboxes"
 	| "runners"
 	| "library"
@@ -127,16 +125,10 @@ export const SECTIONS: {
 		icon: <IconPeople />,
 	},
 	{
-		key: "models",
-		label: "Models",
+		key: "providers",
+		label: "Providers",
 		group: "Workspace",
 		icon: <IconShapes />,
-	},
-	{
-		key: "usage",
-		label: "Usage",
-		group: "Workspace",
-		icon: <IconGauge />,
 	},
 	{
 		key: "sandboxes",

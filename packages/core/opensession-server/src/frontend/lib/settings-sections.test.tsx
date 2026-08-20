@@ -19,6 +19,19 @@ describe("settingsPaletteActions", () => {
 		expect(SETTINGS_KEYWORDS.general).toContain("identity");
 	});
 
+	test("combines model and usage settings under Providers", () => {
+		const sections = SECTIONS.map((section) => ({
+			key: String(section.key),
+			label: section.label,
+		}));
+		expect(sections).toContainEqual({ key: "providers", label: "Providers" });
+		expect(sections.map((section) => section.key)).not.toContain("models");
+		expect(sections.map((section) => section.key)).not.toContain("usage");
+		expect(SETTINGS_KEYWORDS.providers).toEqual(
+			expect.arrayContaining(["models", "usage", "quota"]),
+		);
+	});
+
 	test("covers every non-tool section for an admin", () => {
 		const actions = settingsPaletteActions({ admin: true });
 		expect(actions.map((a) => a.section).sort()).toEqual(

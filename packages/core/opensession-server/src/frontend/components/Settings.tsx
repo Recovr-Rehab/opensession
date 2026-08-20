@@ -46,8 +46,7 @@ import { IntegrationsPanel } from "./settings/IntegrationsPanel";
 import { LibraryPanel } from "./settings/LibraryPanel";
 import { MembersPanel } from "./settings/MembersPanel";
 import { MemoryPanel } from "./settings/MemoryPanel";
-import { ModelsPanel } from "./settings/ModelsPanel";
-import { UsagePanel } from "./settings/UsagePanel";
+import { ProvidersPanel } from "./settings/ProvidersPanel";
 import { NotificationsPanel } from "./settings/NotificationsPanel";
 import { PapercutsPanel } from "./settings/PapercutsPanel";
 import { PreferencesPanel } from "./settings/PreferencesPanel";
@@ -236,8 +235,7 @@ function SectionPanel({
 			{section === "library" && <LibraryPanel />}
 			{section === "integrations" && <IntegrationsPanel />}
 			{section === "audit" && <AuditPanel />}
-			{section === "models" && <ModelsPanel workspace={workspace} />}
-			{section === "usage" && <UsagePanel />}
+			{section === "providers" && <ProvidersPanel workspace={workspace} />}
 			{section === "sandboxes" && <SandboxesPanel />}
 			{section === "runners" && <RunnersPanel />}
 			{section === "connections" && <Connections />}

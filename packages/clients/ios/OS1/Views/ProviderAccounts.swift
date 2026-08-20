@@ -1,29 +1,12 @@
 import SwiftUI
 
-/// Settings → Usage: the subscription accounts runs draw from, and how close
-/// each one is to its limit.
-///
-/// Its own page rather than a section of Models, matching the web
-/// (src/frontend/components/settings/UsagePanel.tsx): the two are read on
-/// different clocks. These meters move hourly and answer "have we got
-/// headroom", while a default model is set once and left alone.
+/// The subscription accounts runs draw from, and how close each one is to its
+/// limit. Rendered inside Settings → Providers, matching the web
+/// (ProvidersPanel.tsx).
 ///
 /// The list and the meters live together because the answer to "this one is
 /// spent" is an action on the row: hand it an owner, sign it in again, or take
 /// it out of the pool.
-struct UsageSettingsView: View {
-    @State private var reload = 0
-
-    var body: some View {
-        List {
-            ProviderAccountSections(reload: reload)
-        }
-        .insetGroupedListCompat()
-        .navigationTitle("Usage")
-        .refreshable { reload += 1 }
-    }
-}
-
 struct ProviderAccountSections: View {
     /// Bumped by the enclosing pane's pull-to-refresh; re-runs `task`.
     var reload: Int
@@ -36,8 +19,8 @@ struct ProviderAccountSections: View {
     @State private var removal: AccountRemoval?
     @State private var codexLoginSheet = false
 
-    /// Seeded from the last answer this device saw, so re-entering Usage shows
-    /// the pools straight away and the fetch behind it only corrects them.
+    /// Seeded from the last answer this device saw, so re-entering Providers
+    /// shows the pools straight away and the fetch behind it only corrects them.
     init(reload: Int) {
         self.reload = reload
         let cachedClaude: [ProviderAccount] = SettingsCache.value("claude-accounts") ?? []

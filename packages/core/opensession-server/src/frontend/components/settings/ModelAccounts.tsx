@@ -39,7 +39,7 @@ import {
 } from "../icons";
 
 // The Claude and Codex subscription accounts runs draw from, and how full each
-// one is. Rendered by Settings → Usage; the account list and its meters live
+// one is. Rendered by Settings → Providers; the account list and its meters live
 // together because the answer to "this one is spent" is an action on the row
 // (hand it an owner, connect its usage, take it out of the pool).
 

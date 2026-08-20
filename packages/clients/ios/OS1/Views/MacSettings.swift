@@ -14,7 +14,7 @@ struct MacSettingsView: View {
         case notifications
         case shortcuts
         case appearance
-        case models
+        case providers
         case connections
         case memory
         case automations
@@ -35,7 +35,7 @@ struct MacSettingsView: View {
             case .notifications: "Notifications"
             case .shortcuts: "Keyboard shortcuts"
             case .appearance: "Appearance"
-            case .models: "Models"
+            case .providers: "Providers"
             case .connections: "Connections"
             case .memory: "Memory"
             case .automations: "Automations"
@@ -56,7 +56,7 @@ struct MacSettingsView: View {
             case .notifications: "bell.badge"
             case .shortcuts: "keyboard"
             case .appearance: "circle.lefthalf.filled"
-            case .models: "square.grid.2x2"
+            case .providers: "square.grid.2x2"
             case .connections: "point.3.connected.trianglepath.dotted"
             case .memory: "brain"
             case .automations: "clock.arrow.circlepath"
@@ -94,7 +94,7 @@ struct MacSettingsView: View {
                     paneRow(.appearance)
                 }
                 Section("Workspace") {
-                    paneRow(.models)
+                    paneRow(.providers)
                     paneRow(.connections)
                     paneRow(.memory)
                 }
@@ -160,7 +160,7 @@ struct MacSettingsView: View {
         case .notifications: NotificationsSettingsView()
         case .shortcuts: MacKeyboardShortcutsSettingsView()
         case .appearance: AppearanceSettingsView()
-        case .models: ModelsSettingsView()
+        case .providers: ProvidersSettingsView()
         case .connections: ConnectionsSettingsView()
         case .memory: MemorySettingsView()
         case .automations: AutomationSettingsView(initialAutomationId: automationId)

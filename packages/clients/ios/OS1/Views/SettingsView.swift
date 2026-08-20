@@ -112,11 +112,8 @@ struct SettingsView: View {
                 settingsLink("Members", icon: "person.2") {
                     MembersSettingsView()
                 }
-                settingsLink("Models", icon: "square.grid.2x2") {
-                    ModelsSettingsView()
-                }
-                settingsLink("Usage", icon: "gauge.with.needle") {
-                    UsageSettingsView()
+                settingsLink("Providers", icon: "square.grid.2x2") {
+                    ProvidersSettingsView()
                 }
                 // Not "cube": Repositories two rows up is a shipping box, and
                 // at 15pt the two solids are the same grey lozenge. The
