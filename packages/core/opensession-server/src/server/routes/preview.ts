@@ -15,6 +15,24 @@ import { restartPortalService, restartSandboxPortalService, stopPortalService, s
 import { restartRunnerPortal, runnerPortalPreviewStatus, startRunnerPortal, stopRunnerPortal } from "../runner-portals";
 import { getRepo } from "../worktree";
 import { sleepingSandboxPortalStatus } from "../sandbox-portals";
+import type { UnifiedSession } from "../types";
+
+export function unavailableSandboxPreviewStatus(
+	session: Pick<UnifiedSession, "sandbox">,
+) {
+	const sandbox = session.sandbox;
+	if (!sandbox?.provider) return null;
+	return {
+		hasPortsConf: false,
+		webappPort: null,
+		running: false,
+		starting: sandbox.lifecycle === "preparing" || sandbox.lifecycle === "waking",
+		previewUrl: null,
+		bootable: false,
+		services: [],
+		sandboxLifecycle: sandbox.lifecycle || "preparing",
+	};
+}
 
 export async function handlePreviewRoutes(
 	ctx: RouteContext,
@@ -74,6 +92,9 @@ export async function handlePreviewRoutes(
 				const sleeping = sleepingSandboxPortalStatus(session.id, session.sandbox.sandboxId);
 				if (sleeping) return Response.json({ ...sleeping, ...who });
 			}
+			const unavailableSandbox = unavailableSandboxPreviewStatus(session);
+			if (unavailableSandbox)
+				return Response.json({ ...unavailableSandbox, ...who });
 			if (!session.worktreeDir || !existsSync(session.worktreeDir)) {
 				return Response.json({
 					hasPortsConf: false,
@@ -108,6 +129,12 @@ export async function handlePreviewRoutes(
 			const sbx = session.worktreeDir
 				? await activeSandboxFor(session, { wake: true })
 				: null;
+			const unavailableSandbox = unavailableSandboxPreviewStatus(session);
+			if (!sbx && unavailableSandbox)
+				return Response.json(
+					{ ...unavailableSandbox, error: "Sandbox is not ready for Preview" },
+					{ status: 409 },
+				);
 			if (!session.worktreeDir || (!existsSync(session.worktreeDir) && !sbx && !runnerStatus))
 				return Response.json(
 					{ error: "Session has no worktree" },
@@ -164,6 +191,12 @@ export async function handlePreviewRoutes(
 				return Response.json(
 					await startSandboxPreview(sbx, session.worktreeDir!, session.id),
 				);
+			const unavailableSandbox = unavailableSandboxPreviewStatus(session);
+			if (unavailableSandbox)
+				return Response.json(
+					{ ...unavailableSandbox, error: "Sandbox is not ready for Preview" },
+					{ status: 409 },
+				);
 			if (session.runner) {
 				const status = await runnerPortalPreviewStatus(session, session.startedBy || undefined);
 				if (status.running || status.starting) return Response.json(status);
@@ -207,6 +240,8 @@ export async function handlePreviewRoutes(
 				return Response.json(
 					await stopSandboxPreview(sbx, session.worktreeDir!),
 				);
+			const unavailableSandbox = unavailableSandboxPreviewStatus(session);
+			if (unavailableSandbox) return Response.json(unavailableSandbox);
 			if (!session.worktreeDir || !existsSync(session.worktreeDir)) {
 				return Response.json({
 					hasPortsConf: false,
