@@ -1513,8 +1513,12 @@ export function App(
 		};
 	}, [searchOpen]);
 	// The Desk overlay (⌘J / the floating desk button): a standing concierge
-	// session on top of whatever view is open.
-	const [deskOpen, setDeskOpen] = useState(false);
+	// session on top of whatever view is open. Its entrance origin follows the
+	// invocation: the corner launcher is spatial, while the shortcut is not.
+	const [deskOverlay, setDeskOverlay] = useState<{
+		open: boolean;
+		origin: "center" | "bottom-right";
+	}>({ open: false, origin: "bottom-right" });
 	// The shortcut cheat sheet (⌘/): every chord on one card, over any view.
 	const [shortcutsOpen, setShortcutsOpen] = useState(false);
 	// Open-task count for the Tasks toolbar entry — refreshed on every
@@ -1576,10 +1580,14 @@ export function App(
 				return;
 			}
 			if (matchesShortcut(e, "desk")) {
-				// Summon/dismiss the Desk overlay. Esc-close is handled by the
-				// overlay itself (Base UI dialog / the bottom sheet).
+				// Summon/dismiss the Desk overlay. A keyboard summon grows from
+				// the center because there is no spatial trigger to connect it to.
 				e.preventDefault();
-				setDeskOpen((o) => !o);
+				setDeskOverlay((desk) =>
+					desk.open
+						? { ...desk, open: false }
+						: { open: true, origin: "center" },
+				);
 				return;
 			}
 			if (matchesShortcut(e, "shortcuts-help")) {
@@ -3864,7 +3872,7 @@ export function App(
 			keywords: ["concierge", "assistant"],
 			shortcut: shortcutPrimaryKeys("desk") ?? undefined,
 			icon: <IconDesk size={18} />,
-			run: () => setDeskOpen(true),
+			run: () => setDeskOverlay({ open: true, origin: "center" }),
 		},
 		{
 			id: "toggle-sidebar",
@@ -5228,7 +5236,9 @@ export function App(
 										} as React.CSSProperties)
 									: undefined
 							}
-							onClick={() => setDeskOpen(true)}
+							onClick={() =>
+								setDeskOverlay({ open: true, origin: "bottom-right" })
+							}
 							aria-label="Open the Desk"
 						>
 							<IconDesk size={24} />
@@ -5238,8 +5248,11 @@ export function App(
 
 				{/* ⌘J Desk overlay — standing concierge session. */}
 				<DeskOverlay
-					open={deskOpen}
-					onClose={() => setDeskOpen(false)}
+					open={deskOverlay.open}
+					openOrigin={deskOverlay.origin}
+					onClose={() =>
+						setDeskOverlay((desk) => ({ ...desk, open: false }))
+					}
 					phone={isPhone}
 					onOpenSession={(id) => navigate({ view: "session", id })}
 				/>

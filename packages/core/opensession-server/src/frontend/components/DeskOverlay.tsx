@@ -11,6 +11,7 @@ import {
 	type DeskVoiceState,
 } from "../lib/desk-voice-client";
 import { getDeskVoicePref, onDeskVoiceChanged } from "../lib/desk-voice-pref";
+import { cn } from "../ui/cn";
 
 /**
  * The Desk — a summonable overlay (⌘J / the floating desk button) on top of
@@ -30,6 +31,7 @@ import { getDeskVoicePref, onDeskVoiceChanged } from "../lib/desk-voice-pref";
 
 interface DeskOverlayProps {
 	open: boolean;
+	openOrigin: "center" | "bottom-right";
 	onClose: () => void;
 	phone: boolean;
 	/** Open the Desk session in the full viewer. */
@@ -41,7 +43,7 @@ function DeskBody({
 	phone,
 	onClose,
 	onOpenSession,
-}: Omit<DeskOverlayProps, "open"> & { active: boolean }) {
+}: Omit<DeskOverlayProps, "open" | "openOrigin"> & { active: boolean }) {
 	const user = getCurrentUser();
 	const [sessionId, setSessionId] = useState<string | null>(null);
 	const [clearedAt, setClearedAt] = useState<string | undefined>(undefined);
@@ -235,6 +237,7 @@ function DeskBody({
 
 export function DeskOverlay({
 	open,
+	openOrigin,
 	onClose,
 	phone,
 	onOpenSession,
@@ -260,11 +263,13 @@ export function DeskOverlay({
 				variant="palette"
 				keepMounted
 				widthClassName="w-[min(650px,100%)]"
-				className={
+				className={cn(
 					phone
-						? "h-[min(600px,85dvh)] origin-bottom-right rounded-b-[var(--composer-radius)] transition-[scale,translate,opacity]! data-[starting-style]:translate-y-0! data-[starting-style]:scale-[0.9]!"
-						: "h-[600px] max-h-[80dvh] origin-bottom-right rounded-b-[var(--composer-radius)] transition-[scale,translate,opacity]! data-[starting-style]:translate-y-0! data-[starting-style]:scale-[0.9]!"
-				}
+						? "h-[min(600px,85dvh)]"
+						: "h-[600px] max-h-[80dvh]",
+					openOrigin === "center" ? "origin-center" : "origin-bottom-right",
+					"rounded-b-[var(--composer-radius)] transition-[scale,translate,opacity]! duration-[100ms]! data-[starting-style]:translate-y-0! data-[starting-style]:scale-[0.9]!",
+				)}
 				aria-label="Desk"
 			>
 				{(open || opened) && (
