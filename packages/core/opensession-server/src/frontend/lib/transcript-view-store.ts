@@ -46,7 +46,7 @@ export class TranscriptViewStore {
 		this.publish(notify);
 	}
 
-	merge(entries: TranscriptEntry[], v2 = false) {
+	merge(entries: TranscriptEntry[], v2 = false, immediate = false) {
 		if (entries.length === 0) return;
 		let changed = false;
 		let needsOrder = false;
@@ -75,7 +75,12 @@ export class TranscriptViewStore {
 		}
 		if (!changed) return;
 		if (v2 && needsOrder) this.orderV2();
-		this.schedulePublish();
+		if (immediate) {
+			this.cancelFrame();
+			this.publish();
+		} else {
+			this.schedulePublish();
+		}
 	}
 
 	prepend(entries: TranscriptEntry[], v2 = false) {

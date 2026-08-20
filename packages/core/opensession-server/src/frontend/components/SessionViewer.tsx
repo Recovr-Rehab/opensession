@@ -1314,6 +1314,13 @@ export function SessionViewer({
 	const [transcriptRangeRetryGeneration, setTranscriptRangeRetryGeneration] =
 		useState(0);
 	const indexAnchorHoldCancelRef = useRef<(() => void) | null>(null);
+	const pendingIndexPositionRef = useRef<{
+		sessionId: string;
+		keepLiveEdge: boolean;
+		bottomGap: number | null;
+		anchorEid: string | null;
+		anchorTop: number | null;
+	} | null>(null);
 	const completedTranscriptRangeKeysRef = useRef(new Set<string>());
 	const transcriptRangeRequestsRef = useRef(
 		new Map<
@@ -1858,6 +1865,46 @@ export function SessionViewer({
 		relayout,
 		onScroll,
 	} = useSessionScroll(cachedTranscript?.following ?? true);
+
+	useLayoutEffect(() => {
+		const pending = pendingIndexPositionRef.current;
+		if (!pending || transcriptIndexState?.sessionId !== pending.sessionId) return;
+		pendingIndexPositionRef.current = null;
+		const container = messagesRef.current;
+		if (pending.keepLiveEdge) {
+			scrollToLatest("auto");
+		} else if (container && pending.bottomGap !== null) {
+			container.scrollTop = Math.max(
+				0,
+				container.scrollHeight - container.clientHeight - pending.bottomGap,
+			);
+			if (pending.anchorEid && pending.anchorTop !== null) {
+				indexAnchorHoldCancelRef.current?.();
+				let cancelIndexHold = () => {};
+				cancelIndexHold = holdTranscriptAnchor(
+					container,
+					pending.anchorEid,
+					pending.anchorTop,
+					pending.bottomGap,
+					leaveLatest,
+					() => {
+						if (indexAnchorHoldCancelRef.current === cancelIndexHold)
+							indexAnchorHoldCancelRef.current = null;
+					},
+				);
+				indexAnchorHoldCancelRef.current = cancelIndexHold;
+			}
+		}
+		requestAnimationFrame(() => {
+			transcriptRangeDemandReadyRef.current = true;
+			setTranscriptRangeRetryGeneration((generation) => generation + 1);
+		});
+	}, [
+		leaveLatest,
+		messagesRef,
+		scrollToLatest,
+		transcriptIndexState,
+	]);
 
 	// Keep the cached snapshot current as live frames and history pages land.
 	// Scroll position is updated synchronously in handleMessagesScroll below;
@@ -2664,9 +2711,18 @@ export function SessionViewer({
 						}
 					}
 					if (v2) {
-						setTranscriptIndexState(null);
+						const tailIndex = msg.entries
+							.map(transcriptIndexEntryFromPayload)
+							.filter(
+								(entry): entry is TranscriptIndexEntry => entry !== null,
+							);
+						setTranscriptIndexState({
+							sessionId: session.id,
+							entries: tailIndex,
+						});
 						transcriptIndexEpochRef.current = null;
 						transcriptRangeDemandReadyRef.current = false;
+						pendingIndexPositionRef.current = null;
 						indexAnchorHoldCancelRef.current?.();
 						indexAnchorHoldCancelRef.current = null;
 						for (const request of transcriptRangeRequestsRef.current.values())
@@ -2733,6 +2789,13 @@ export function SessionViewer({
 							? previousAnchor.getBoundingClientRect().top -
 								scrollContainer.getBoundingClientRect().top
 							: null;
+					pendingIndexPositionRef.current = {
+						sessionId: session.id,
+						keepLiveEdge,
+						bottomGap: previousBottomGap,
+						anchorEid: previousAnchorEid,
+						anchorTop: previousAnchorTop,
+					};
 					transcriptIndexExpectedRef.current = true;
 					setTranscriptIndexExpected(true);
 					transcriptIndexEpochRef.current = msg.epoch;
@@ -2743,43 +2806,6 @@ export function SessionViewer({
 					loadingHistoryRef.current = false;
 					setLoadingHistory(false);
 					transcriptRangeDemandReadyRef.current = false;
-					requestAnimationFrame(() => {
-						if (keepLiveEdge) {
-							scrollToLatest("auto");
-						} else if (previousBottomGap !== null) {
-							const container = messagesRef.current;
-							if (container) {
-								container.scrollTop = Math.max(
-									0,
-									container.scrollHeight -
-										container.clientHeight -
-										previousBottomGap,
-								);
-								if (previousAnchorEid && previousAnchorTop !== null) {
-									indexAnchorHoldCancelRef.current?.();
-									let cancelIndexHold = () => {};
-									cancelIndexHold = holdTranscriptAnchor(
-										container,
-										previousAnchorEid,
-										previousAnchorTop,
-										previousBottomGap,
-										leaveLatest,
-										() => {
-											if (indexAnchorHoldCancelRef.current === cancelIndexHold)
-												indexAnchorHoldCancelRef.current = null;
-										},
-									);
-									indexAnchorHoldCancelRef.current = cancelIndexHold;
-								}
-							}
-						}
-						requestAnimationFrame(() => {
-							transcriptRangeDemandReadyRef.current = true;
-							setTranscriptRangeRetryGeneration(
-								(generation) => generation + 1,
-							);
-						});
-					});
 					break;
 				}
 				case "transcript_range": {
@@ -2912,7 +2938,7 @@ export function SessionViewer({
 							offset: msg.endOffset,
 						};
 					}
-					transcriptViewStore.merge(msg.entries, inSeqMode);
+					transcriptViewStore.merge(msg.entries, inSeqMode, true);
 					if (inSeqMode && transcriptIndexEpochRef.current !== null) {
 						const projected = msg.entries
 							.map(transcriptIndexEntryFromPayload)
@@ -4367,7 +4393,18 @@ export function SessionViewer({
 			.filter((item) => item.state === "failed")
 			.map((item) => `outbox-${item.clientId}`),
 	);
-	const visiblePending = pending.filter((item) => !failedOutboxIds.has(item.id));
+	const pendingReconciliation = reconcilePending(
+		pending,
+		entries,
+		[...queued, ...steered],
+		Date.now(),
+	);
+	const visiblePending = pending.filter(
+		(item) =>
+			!failedOutboxIds.has(item.id) &&
+			!pendingReconciliation.landed.has(item.id) &&
+			!pendingReconciliation.expired.has(item.id),
+	);
 	const pendingQueue = visiblePending.filter((p) => p.busyMode || waitingForWorkspace);
 	const pendingBubbles = visiblePending.filter(
 		(p) => !p.busyMode && !waitingForWorkspace,

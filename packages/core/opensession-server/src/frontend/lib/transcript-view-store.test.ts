@@ -20,6 +20,23 @@ describe("TranscriptViewStore", () => {
 		expect(store.getSnapshot()[1]).toBe(nextB);
 	});
 
+	test("publishes durable appends immediately when their index updates with them", () => {
+		const originalRaf = globalThis.requestAnimationFrame;
+		const originalCancel = globalThis.cancelAnimationFrame;
+		globalThis.requestAnimationFrame = (() => 1) as typeof requestAnimationFrame;
+		globalThis.cancelAnimationFrame = (() => {}) as typeof cancelAnimationFrame;
+		try {
+			const store = new TranscriptViewStore([entry("1")]);
+			store.merge([entry("2")]);
+			expect(store.getSnapshot().map((item) => item.id)).toEqual(["1"]);
+			store.merge([entry("2")], false, true);
+			expect(store.getSnapshot().map((item) => item.id)).toEqual(["1", "2"]);
+		} finally {
+			globalThis.requestAnimationFrame = originalRaf;
+			globalThis.cancelAnimationFrame = originalCancel;
+		}
+	});
+
 	test("prepends older entries in timestamp order", () => {
 		const store = new TranscriptViewStore([entry("2")]);
 		store.prepend([entry("1")]);
