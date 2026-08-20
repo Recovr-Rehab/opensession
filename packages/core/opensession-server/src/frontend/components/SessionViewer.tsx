@@ -1239,6 +1239,8 @@ export function SessionViewer({
 		sessionId: string;
 		entries: TranscriptIndexEntry[];
 	} | null>(null);
+	const [transcriptIndexExpected, setTranscriptIndexExpected] = useState(false);
+	const transcriptIndexExpectedRef = useRef(false);
 	const transcriptIndex =
 		transcriptIndexState?.sessionId === session.id
 			? transcriptIndexState.entries
@@ -2567,6 +2569,8 @@ export function SessionViewer({
 					// falls back to a full legacy snapshot). Init frames are
 					// authoritative for the mode.
 					const v2 = msg.v2 === true && typeof msg.lastSeq === "number";
+					transcriptIndexExpectedRef.current = v2;
+					setTranscriptIndexExpected(v2);
 					if (v2) {
 						transcriptSeqRef.current = {
 							sessionId: session.id,
@@ -2642,6 +2646,8 @@ export function SessionViewer({
 				}
 				case "transcript_index": {
 					const keepLiveEdge = followingLive.current;
+					transcriptIndexExpectedRef.current = true;
+					setTranscriptIndexExpected(true);
 					transcriptIndexEpochRef.current = msg.epoch;
 					setTranscriptIndexState({ sessionId: session.id, entries: msg.entries });
 					setHistoryTruncated(false);
@@ -3419,7 +3425,7 @@ export function SessionViewer({
 		setLoadingHistory(true);
 	}, [leaveLatest, messagesRef, startHistoryHold]);
 	const loadEarlierHistory = useCallback(() => {
-		if (!historyTruncated) return;
+		if (transcriptIndexExpectedRef.current || !historyTruncated) return;
 		if (loadingHistoryRef.current) {
 			// The deferred page is already on the wire. Adopt it rather than making
 			// the first upward gesture look ignored, and let its response continue
@@ -3449,7 +3455,12 @@ export function SessionViewer({
 		requestHistoryPage();
 	}, [beginHistoryLoad, historyTruncated, requestHistoryPage, session.id]);
 	const loadAllHistory = useCallback(() => {
-		if (!historyTruncated || loadingHistoryRef.current) return;
+		if (
+			transcriptIndexExpectedRef.current ||
+			!historyTruncated ||
+			loadingHistoryRef.current
+		)
+			return;
 		loadingHistoryRef.current = true;
 		historyRevealRef.current = null;
 		backgroundHistoryRef.current = false;
@@ -3479,6 +3490,7 @@ export function SessionViewer({
 	useEffect(() => {
 		if (
 			loading ||
+			transcriptIndexExpected ||
 			!historyTruncated ||
 			loadingHistory ||
 			sessionHidden ||
@@ -3507,6 +3519,7 @@ export function SessionViewer({
 	}, [
 		historyTruncated,
 		loading,
+		transcriptIndexExpected,
 		loadingHistory,
 		messagesRef,
 		requestHistoryPage,
@@ -6913,7 +6926,9 @@ export function SessionViewer({
 							    whatever was being read. The loading state ignores the gate:
 							    the prepend it reports pushes the reader away from the top,
 							    and hiding the pill mid-load takes the feedback with it. */}
-							{historyTruncated && (atTop || loadingHistory) && (
+							{!transcriptIndexExpected &&
+								historyTruncated &&
+								(atTop || loadingHistory) && (
 								<div className={TRANSCRIPT_PILL_TOP}>
 									{loadingHistory ? (
 										<div className={TRANSCRIPT_PILL_LOADING}>
