@@ -4,24 +4,16 @@
  *
  * Two things shape everything here.
  *
- * 1. The strip has two related floating looks. On desktop, inactive tabs are
- *    quiet labels separated by short rules while the active tab sits on a
- *    filled, rounded surface. There is no underline or full-width bottom rule.
- *    On phones every tab needs its own solid pill because the bar is docked over
- *    scrolling content, so the shared pill is unprefixed and desktop resolves
- *    each state with `desktop:` overrides. Tailwind emits every breakpoint
- *    variant after every unprefixed and pseudo-class utility, which makes that
- *    responsive override reliable. Note that Tailwind's `phone:` is `width <
- *    720px`, not the `max-width: 720px` the old sheet and `useIsPhone` mean, so
- *    phone-only rules are written as overrides on a base that already reads
- *    correctly, never as one half of a split.
+ * 1. Desktop and the phone PWA share one floating look: inactive tabs are quiet
+ *    labels separated by short rules, while the active tab sits on a filled,
+ *    rounded surface. Phone-only rules position the docked strip and preserve
+ *    touch controls, but they do not redefine the tab states.
  *
- * 2. For the same reason, each tab state carries its WHOLE colour set. A
- *    colored tab does not layer a fill over the plain tab's fill; `tabClass`
- *    returns exactly one background, one border colour and one box-shadow per
- *    state. That is also why the states are resolved in JS: the old cascade
- *    picked a winner by rule order (colored beats waiting beats active), and a
- *    stack of utilities cannot reproduce "later rule wins" reliably.
+ * 2. Each tab state carries its whole colour set. A colored tab does not layer
+ *    a fill over the plain tab's fill; `tabClass` returns exactly one background
+ *    per state. The states stay resolved in JS because the old cascade picked a
+ *    winner by rule order, and a stack of utilities cannot reproduce that
+ *    reliably.
  *
  * A few class names survive on the markup as bare hooks with no styling of
  * their own, because things OUTSIDE this file name them:
@@ -129,16 +121,16 @@ export const TAB_SCROLL =
 export const TAB_GROUP = "relative inline-flex flex-none items-center gap-[3px]";
 
 /** Each tab's Reorder.Item wrapper. `relative` lets whileDrag's z-index lift
- *  the dragged tab over its siblings. On desktop, a short rule separates quiet
- *  inactive tabs. The selected tab and the final tab need no trailing rule. */
+ *  the dragged tab over its siblings. A short rule separates quiet inactive
+ *  tabs at every width. The selected tab and final tab need no trailing rule. */
 export const TAB_ITEM =
 	"session-tab-reorder relative inline-flex shrink-0 items-center " +
-	"desktop:after:pointer-events-none desktop:after:absolute desktop:after:top-1/2 " +
-	"desktop:after:-right-0.5 desktop:after:h-3 desktop:after:w-px desktop:after:-translate-y-1/2 " +
-	"desktop:after:bg-divider desktop:after:content-[''] desktop:last:after:hidden " +
-	// The active pill supplies both edges: hide this item's trailing divider
-	// when either this item or its next sibling is active.
-	"desktop:[&:has(>[aria-selected=true])]:after:hidden desktop:data-[next-active]:after:hidden";
+	"after:pointer-events-none after:absolute after:top-1/2 " +
+	"after:-right-0.5 after:h-3 after:w-px after:-translate-y-1/2 " +
+	"after:bg-divider after:content-[''] last:after:hidden " +
+	// The active surface supplies both edges. Hide the trailing divider when
+	// either this item or its next sibling is active.
+	"[&:has(>[aria-selected=true])]:after:hidden data-[next-active]:after:hidden";
 
 /** Picked up: an inactive desktop tab has no surface of its own and would smear
  *  over every label it passes. It lifts into an opaque chip while dragging. */
@@ -173,13 +165,8 @@ export const TAB_ACTIONS = "ml-auto flex flex-none items-center gap-[3px]";
  */
 const TAB_BASE =
 	"relative inline-flex max-w-[200px] shrink-0 cursor-pointer items-center gap-1.5 whitespace-nowrap " +
-	"px-2.5 py-1.5 text-label transition-[background-color,color] " +
-	// A floating phone pill with a solid fill, so the transcript scrolling
-	// underneath never shows through it. Desktop keeps the same compact box but
-	// drops the ring and shadow, rounds it to the shared control corner, and lets
-	// `tabClass` choose whether it has a surface.
-	`border ${PILL} smooth-shadow-sm ` +
-	"desktop:rounded-control desktop:border-0 desktop:shadow-none";
+	"rounded-control border-0 px-2.5 py-1.5 text-label shadow-none " +
+	"transition-[background-color,color]";
 
 export type TabState = {
 	active: boolean;
@@ -189,50 +176,24 @@ export type TabState = {
 };
 
 /**
- * One tab, painted for exactly one state.
- *
- * Phone keeps the established status and custom-colour pills. Desktop resolves
- * the selected surface independently: active always stays unmistakable, while
- * a waiting tab already has its live dot and needs no second coloured plate.
+ * One shared tab state for desktop and the phone PWA. The selected tab is the
+ * only ordinary tab with a surface. Custom colours stay visible as an explicit
+ * exception, but use a quieter mix while inactive.
  */
 export function tabClass(state: TabState): string {
 	const { active, waiting, colored } = state;
 	const ink = active || waiting ? "text-fg" : "text-dim hover:text-fg";
-
-	// One phone fill + one ring per state, hover included. A second background
-	// utility in the same variant bucket would be resolved by Tailwind's output
-	// order rather than by which state is meant to win.
-	const phonePill =
-		colored && active
-			? "border-[color-mix(in_srgb,var(--tab-color)_60%,transparent)] " +
-				"bg-[color-mix(in_srgb,var(--tab-color)_26%,var(--bg-active))] " +
-				"hover:bg-[color-mix(in_srgb,var(--tab-color)_26%,var(--bg-active))]"
-			: colored
-				? "border-[color-mix(in_srgb,var(--tab-color)_50%,transparent)] " +
-					"bg-[color-mix(in_srgb,var(--tab-color)_14%,var(--bg-panel))] " +
-					"hover:bg-[color-mix(in_srgb,var(--tab-color)_22%,var(--bg-panel))]"
-				: waiting
-					? // Same hue as the sidebar's "needs you" row and the Needs
-						// action band: blocked-on-you is urgent, not informational.
-						"border-red bg-red-soft hover:bg-red-soft"
-					: active
-						? "border-transparent bg-[color-mix(in_srgb,var(--bg-active)_94%,var(--text))] hover:bg-hover"
-						: "border-transparent bg-panel hover:bg-hover";
-
-	// The selected tab is the only ordinary desktop tab with a surface. Custom
-	// colours remain visible as an explicit exception, but use a quieter mix when
-	// inactive so they do not compete with the selected tab.
-	const desktopPill = colored
+	const surface = colored
 		? active
-			? "desktop:bg-[color-mix(in_srgb,var(--tab-color)_22%,var(--bg-panel))] " +
-				"desktop:hover:bg-[color-mix(in_srgb,var(--tab-color)_28%,var(--bg-panel))]"
-			: "desktop:bg-[color-mix(in_srgb,var(--tab-color)_9%,transparent)] " +
-				"desktop:hover:bg-[color-mix(in_srgb,var(--tab-color)_16%,transparent)]"
+			? "bg-[color-mix(in_srgb,var(--tab-color)_22%,var(--bg-panel))] " +
+				"hover:bg-[color-mix(in_srgb,var(--tab-color)_28%,var(--bg-panel))]"
+			: "bg-[color-mix(in_srgb,var(--tab-color)_9%,transparent)] " +
+				"hover:bg-[color-mix(in_srgb,var(--tab-color)_16%,transparent)]"
 		: active
-			? "desktop:bg-panel desktop:hover:bg-hover"
-			: "desktop:bg-transparent desktop:hover:bg-hover";
+			? "bg-panel hover:bg-hover"
+			: "bg-transparent hover:bg-hover";
 
-	return `${TAB_BASE} ${ink} ${phonePill} ${desktopPill}`;
+	return `${TAB_BASE} ${ink} ${surface}`;
 }
 
 /** The label fades only when its content actually overflows. TabTitle adds
