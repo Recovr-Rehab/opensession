@@ -319,6 +319,8 @@ export type ProtocolClientMessage =
   | { type: "cancel" }
   | {
       type: "create_session";
+      /** Client-minted native id. Replaying the same create after reconnect is idempotent. */
+      clientSessionId?: string;
       branch: string;
       prompt: string;
       user: string;

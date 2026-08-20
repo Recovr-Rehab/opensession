@@ -50,7 +50,7 @@ type ResolvedSandboxProvider = Extract<
 	ReturnType<typeof resolveRequestedSandbox>,
 	{ ok: true }
 >["provider"];
-import { SESSION_EFFORTS, findSession, invalidateSessionsCache, recordRunOutcome, touchNativeSession, updateSessionFile } from "./session-cache";
+import { SESSION_EFFORTS, findSession, findSessionAsync, invalidateSessionsCache, recordRunOutcome, touchNativeSession, updateSessionFile } from "./session-cache";
 import { attachRepo, buildBranchNote, buildReposNote, memoryNoteFor, planCreateAttachRepos, workspaceOwningWorktree } from "./session-repos";
 import { ownedWorktree } from "./session-workspace";
 import { engineSessionPatch } from "./sessions";
@@ -70,6 +70,8 @@ import { type WSClientData, broadcastToSession, preparingWorkspaces } from "./ws
  * arrives as parsed JSON and was previously read off an `any`).
  */
 export interface CreateSessionMessage {
+	/** Client-minted native id used to replay this create safely after reconnect. */
+	clientSessionId?: unknown;
 	prompt: string;
 	user?: string;
 	mode?: string;
@@ -923,14 +925,96 @@ export async function openCreatedSession(
 	}
 }
 
+const CLIENT_SESSION_ID =
+	/^os-[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
+type WebCreateSocket = ServerWebSocket<WSClientData>;
+interface PendingWebCreate {
+	sockets: Set<WebCreateSocket>;
+}
+
+const pendingWebCreates: Map<string, PendingWebCreate> =
+	((globalThis as any).__pendingWebCreates ??= new Map());
+
+function sendCreateFrame(
+	attempt: PendingWebCreate,
+	frame: Record<string, unknown>,
+): void {
+	const payload = JSON.stringify(frame);
+	for (const socket of attempt.sockets) {
+		try {
+			socket.send(payload);
+		} catch {}
+	}
+}
+
 /**
  * Create a session from a UI WebSocket `create_session` message and drive its
  * opening run, streaming events back to the creating socket / session room.
+ * A clientSessionId claims one in-flight operation, so reconnect replay either
+ * joins that operation or returns the session it already persisted.
  */
 export async function handleCreateSessionMessage(
 	ws: ServerWebSocket<WSClientData>,
 	msg: CreateSessionMessage,
 ): Promise<void> {
+	const rawClientSessionId = msg.clientSessionId;
+	if (
+		rawClientSessionId !== undefined &&
+		(typeof rawClientSessionId !== "string" ||
+			!CLIENT_SESSION_ID.test(rawClientSessionId))
+	) {
+		sendCreateFrame(
+			{ sockets: new Set([ws]) },
+			{ type: "error", message: "Invalid session create id" },
+		);
+		return;
+	}
+	const clientSessionId = rawClientSessionId as string | undefined;
+	if (clientSessionId) {
+		const pending = pendingWebCreates.get(clientSessionId);
+		if (pending) {
+			pending.sockets.add(ws);
+			return;
+		}
+	}
+	const attempt: PendingWebCreate = { sockets: new Set([ws]) };
+	if (clientSessionId) pendingWebCreates.set(clientSessionId, attempt);
+	const finishCreate = () => {
+		if (
+			clientSessionId &&
+			pendingWebCreates.get(clientSessionId) === attempt
+		) {
+			pendingWebCreates.delete(clientSessionId);
+		}
+	};
+	const failCreate = (message: string) => {
+		sendCreateFrame(attempt, { type: "error", message });
+		finishCreate();
+	};
+	if (clientSessionId) {
+		let existing: UnifiedSession | undefined;
+		try {
+			existing = await findSessionAsync(clientSessionId);
+		} catch (error) {
+			finishCreate();
+			throw error;
+		}
+		if (existing) {
+			sendCreateFrame(attempt, {
+				type: "session_created",
+				id: existing.id,
+				...(existing.workspaceId ? { workspaceId: existing.workspaceId } : {}),
+				...(!msg.workspaceId && msg.createWorkspace ? { newWorkspace: true } : {}),
+				...(preparingWorkspaces.has(existing.id)
+					? { preparingWorkspace: true }
+					: {}),
+			});
+			finishCreate();
+			return;
+		}
+	}
+
 	const { prompt, user, mode } = msg;
 	// Mutable: a brand-new code branch is made collision-free below (a
 	// name clashing with an existing `name/...` ref — or vice versa —
@@ -953,12 +1037,7 @@ export async function handleCreateSessionMessage(
 	try {
 		fork = resolveForkContext(forkFrom);
 	} catch {
-		ws.send(
-			JSON.stringify({
-				type: "error",
-				message: "Fork source session not found",
-			}),
-		);
+		failCreate("Fork source session not found");
 		return;
 	}
 	const forkSource = fork?.source;
@@ -1037,34 +1116,32 @@ export async function handleCreateSessionMessage(
 				model,
 			);
 	if (!sandboxResolved.ok) {
-		ws.send(
-			JSON.stringify({ type: "error", message: sandboxResolved.error }),
-		);
+		failCreate(sandboxResolved.error);
 		return;
 	}
 	// null = host (no sandbox recorded on the session).
 	const createSandboxProvider = sandboxResolved.provider;
 	const requestedRunnerId = typeof msg.runner === "string" && msg.runner.trim() ? msg.runner.trim() : undefined;
 	if (requestedRunnerId) {
-		ws.send(JSON.stringify({ type: "error", message: "Runner full sessions are not available. Use Runner command delegation from a standard session." }));
+		failCreate("Runner full sessions are not available. Use Runner command delegation from a standard session.");
 		return;
 	}
 	if (requestedRunnerId && createSandboxProvider) {
-		ws.send(JSON.stringify({ type: "error", message: "Choose either Sandbox or a Runner for this session." }));
+		failCreate("Choose either Sandbox or a Runner for this session.");
 		return;
 	}
 	const selectedRunner = requestedRunnerId ? getRunner(requestedRunnerId) : undefined;
 	if (requestedRunnerId) {
 		if (!selectedRunner || !isRunnerConnected(selectedRunner.id)) {
-			ws.send(JSON.stringify({ type: "error", message: "That Runner is offline." }));
+			failCreate("That Runner is offline.");
 			return;
 		}
 		if (!runnerAvailableForSession(selectedRunner, { user, repo: repo.id, sessionId: "new" }) || !selectedRunner.workspaceRoots.length) {
-			ws.send(JSON.stringify({ type: "error", message: "That Runner is not available for this repository." }));
+			failCreate("That Runner is not available for this repository.");
 			return;
 		}
 		if (forkSource || fromPr || isScratch || isAsk) {
-			ws.send(JSON.stringify({ type: "error", message: "Runner sessions require a new code workspace." }));
+			failCreate("Runner sessions require a new code workspace.");
 			return;
 		}
 	}
@@ -1160,7 +1237,7 @@ export async function handleCreateSessionMessage(
 	};
 	let spec: ResolvedCreate;
 	try {
-		const bksId = newSessionId();
+		const bksId = clientSessionId || newSessionId();
 		let wtPath: string;
 		// Deferred worktree setup: the git fetch + worktree add +
 		// bun install can take tens of seconds, so the session is
@@ -1526,34 +1603,26 @@ export async function handleCreateSessionMessage(
 			finish: "drain",
 		};
 	} catch (e: any) {
-		// Setup failed before anything was persisted or announced — the raw
-		// error goes straight back to the sender (same as before extraction).
-		ws.send(
-			JSON.stringify({
-				type: "error",
-				message: e.message || String(e),
-			}),
-		);
+		// Setup failed before anything was persisted or announced. Every socket
+		// that replayed this create receives the same terminal response.
+		failCreate(e.message || String(e));
 		return;
 	}
 
 	await openCreatedSession(spec, {
 		announce: (info) => {
-			ws.send(
-				JSON.stringify({
-					type: "session_created",
-					id: info.id,
-					...(info.workspaceId ? { workspaceId: info.workspaceId } : {}),
-					...(info.newWorkspace ? { newWorkspace: true } : {}),
-					...(info.preparingWorkspace ? { preparingWorkspace: true } : {}),
-				}),
-			);
+			sendCreateFrame(attempt, {
+				type: "session_created",
+				id: info.id,
+				...(info.workspaceId ? { workspaceId: info.workspaceId } : {}),
+				...(info.newWorkspace ? { newWorkspace: true } : {}),
+				...(info.preparingWorkspace ? { preparingWorkspace: true } : {}),
+			});
+			finishCreate();
 			announcedId = info.id;
 			emit({ type: "stream_start" });
 		},
 		emit,
-		fail: (message) => {
-			ws.send(JSON.stringify({ type: "error", message }));
-		},
+		fail: failCreate,
 	});
 }

@@ -53,7 +53,8 @@ import {
   IconSparkle,
   IconX,
 } from "./icons";
-import type { WSServerMessage } from "../lib/types";
+import type { WSClientMessage, WSServerMessage } from "../lib/types";
+import { newClientSessionId } from "../lib/session-id";
 import { VoiceInput } from "./VoiceInput";
 import { useIsPhone } from "../hooks/useIsPhone";
 import { PaletteSelect } from "./PaletteSelect";
@@ -275,12 +276,12 @@ const MODEL_PILL = cn(
 const CREATE_ACTIONS = ["open", "background", "more"] as const;
 type CreateAction = (typeof CREATE_ACTIONS)[number];
 
-// What the card is doing, and what it ended on. A create waits on a WebSocket
-// message, and "failed" is the terminal state it can reach, including the
-// create whose answer never comes back because the socket dropped.
+// A dropped socket is recoverable: the same idempotent create is replayed as
+// soon as the connection returns. "failed" is reserved for a server response.
 type CreateStatus =
   | { kind: "idle" }
   | { kind: "creating" }
+  | { kind: "reconnecting" }
   | { kind: "failed"; message: string };
 /** ⌘⌥↓ / ⌘⌥↑ (Ctrl+Alt elsewhere). Vertical rather than horizontal because
  *  Chrome and Safari own ⌘⌥← / ⌘⌥→ for tab switching. */
@@ -645,11 +646,8 @@ export function NewSession({ onBack, inline, focusSeq, send, addHandler, connect
   // though it was staged by the instance that closed: the store fires on an
   // attachment change for exactly this.
   useEffect(() => onDraftsChanged(adoptDraftAttachments), [adoptDraftAttachments]);
-  // "creating" waits for a WebSocket message and "failed" carries the message
-  // it ended on. A single boolean could not carry the terminal state for a
-  // create whose answer never arrives.
   const [status, setStatus] = useState<CreateStatus>({ kind: "idle" });
-  const busy = status.kind === "creating";
+  const busy = status.kind === "creating" || status.kind === "reconnecting";
   // Which edges of the prompt have content beyond them, and so earn a hairline.
   const [edges, setEdges] = useState({ top: false, bottom: false });
   const [models, setModels] = useState<ModelOption[]>([]);
@@ -970,13 +968,11 @@ export function NewSession({ onBack, inline, focusSeq, send, addHandler, connect
 
   // Registered from mount and gated on a ref set synchronously in handleCreate:
   // session_created is announced before the worktree even boots, so it can
-  // arrive before a `creating`-gated effect would have registered this handler
-  // — the palette would miss it (stuck on "creating", draft never cleared).
-  // It stays armed until a terminal message arrives, which is deliberately not
-  // the same as status.kind === "creating": a create that lost its socket shows
-  // "failed" while this stays true, so a late session_created still clears the
-  // draft instead of leaving the prompt behind for a session that does exist.
+  // arrive before a creating-gated effect would have registered this handler.
   const creatingRef = useRef(false);
+  const createSessionIdRef = useRef<string | null>(null);
+  const createMessageRef = useRef<WSClientMessage | null>(null);
+  const replayCreateRef = useRef(false);
   // A successful create replaces the surface behind this dialog. Returning
   // focus to the now-removed opener makes Base UI advance to the new session's
   // "+" button, so Enter immediately creates another session. Cancelling still
@@ -987,28 +983,25 @@ export function NewSession({ onBack, inline, focusSeq, send, addHandler, connect
       if (!creatingRef.current) return;
       if (msg.type === "error") {
         creatingRef.current = false;
+        createSessionIdRef.current = null;
+        createMessageRef.current = null;
+        replayCreateRef.current = false;
         setStatus({ kind: "failed", message: msg.message });
-      } else if (msg.type === "session_created") {
+      } else if (
+        msg.type === "session_created" &&
+        msg.id === createSessionIdRef.current
+      ) {
         creatingRef.current = false;
-        // The prompt was consumed — drop the stored draft either way, and the
-        // field's pending write with it: the draft is written on a debounce, so
-        // a write still in flight would land after this and restore the prompt
-        // for a session that already has it (a "Create" closes the palette, and
-        // the field flushes on the way out).
+        createSessionIdRef.current = null;
+        createMessageRef.current = null;
+        replayCreateRef.current = false;
+        // The prompt was consumed. Drop the stored draft and its pending write,
+        // which might otherwise land after this and restore the sent prompt.
         promptHandle.current?.dropPendingDraftWrite();
-        // Same reasoning for a file still on its way to disk: it belongs to
-        // the prompt that just went out, so it must not write itself back
-        // into the draft this is clearing.
         dropStagingAttachments(DRAFT_KEY);
         clearDraft(DRAFT_KEY);
-        // "Create more" stays in the palette and resets for the next task (App
-        // still navigates into the created session behind the overlay). The
-        // other two close it: "Create" lets App drop us into the new session,
-        // "Create in background" leaves the view we came from in place.
-        //
-        // Inline takes the same reset: App navigates into the session, which
-        // unmounts this card. If anything ever kept it mounted, what is left
-        // behind should be an empty prompt rather than the one just sent.
+        // "Create more" stays in the palette and resets for the next task. The
+        // other actions close it after App handles the same announcement.
         if (createAction === "more" || inline) {
           setStatus({ kind: "idle" });
           promptHandle.current?.setText("");
@@ -1018,9 +1011,6 @@ export function NewSession({ onBack, inline, focusSeq, send, addHandler, connect
           setBranchEdited(false);
           promptRef.current?.focus();
         } else {
-          // Only an "open" create replaces the surface behind the palette, so
-          // only it declines to restore focus. In the background it is the
-          // opener you pressed that you are returning to.
           createdRef.current = createAction === "open";
           onBack();
         }
@@ -1028,18 +1018,20 @@ export function NewSession({ onBack, inline, focusSeq, send, addHandler, connect
     });
   }, [addHandler, createAction, inline]);
 
-  // The create's only completion signal is a message on this socket, so a drop
-  // between the send and session_created is a wait that can never end. Without
-  // this the card sits on "Creating…" with Create and the options caret both
-  // disabled and the draft still parked, and only a reload gets out.
+  // Re-send the same client-minted id after a drop. The server deduplicates an
+  // in-flight request and returns the existing session if it already persisted.
   useEffect(() => {
-    if (connected || status.kind !== "creating") return;
-    setStatus({
-      kind: "failed",
-      message:
-        "Lost the connection before the session started. It may still have been created, so check Sessions before trying again.",
-    });
-  }, [connected, status.kind]);
+    if (!creatingRef.current) return;
+    if (!connected) {
+      replayCreateRef.current = true;
+      setStatus({ kind: "reconnecting" });
+      return;
+    }
+    if (!replayCreateRef.current || !createMessageRef.current) return;
+    replayCreateRef.current = false;
+    setStatus({ kind: "creating" });
+    send(createMessageRef.current);
+  }, [connected, send]);
 
   async function addAttachments(picked: FileList | File[]) {
     const staging = countStaging(picked);
@@ -1184,8 +1176,10 @@ export function NewSession({ onBack, inline, focusSeq, send, addHandler, connect
       // App navigates into a created session by default; this asks it not to.
       ...(createAction === "background" ? { background: true } : {}),
     });
-    send({
+    const clientSessionId = newClientSessionId();
+    const createMessage = {
       type: "create_session",
+      clientSessionId,
       mode: createMode,
       repo: createRepo,
       // Repos to work in beside `repo`. The server cuts each an isolated
@@ -1205,9 +1199,9 @@ export function NewSession({ onBack, inline, focusSeq, send, addHandler, connect
       effort,
       ...(fastMode ? { fastMode: true } : {}),
       ...(accountProvider && accountId ? { accountId } : {}),
-      // Once defaults have loaded, Host is an explicit override ("local") —
-      // omitting the field would make the server re-apply the user's default.
-		...(sandboxStatus ? { sandbox: sandboxProvider || "local" } : {}),
+      // Once defaults have loaded, Host is an explicit override ("local").
+      // Omitting the field would make the server re-apply the user's default.
+      ...(sandboxStatus ? { sandbox: sandboxProvider || "local" } : {}),
       ...(selectedMcpServers.length ? { mcpServers: selectedMcpServers } : {}),
       ...(images.length ? { images } : {}),
       ...(files.length
@@ -1217,7 +1211,10 @@ export function NewSession({ onBack, inline, focusSeq, send, addHandler, connect
             ),
           }
         : {}),
-    });
+    } as WSClientMessage;
+    createSessionIdRef.current = clientSessionId;
+    createMessageRef.current = createMessage;
+    send(createMessage);
   }
 
   const canCreate =
@@ -1803,11 +1800,13 @@ export function NewSession({ onBack, inline, focusSeq, send, addHandler, connect
                 onClick={handleCreate}
                 disabled={!canCreate}
               >
-                {status.kind === "creating"
-                  ? "Creating…"
-                  : isStaging(staging)
-                    ? "Attaching…"
-                    : CREATE_LABELS[createAction]}
+                {status.kind === "reconnecting"
+                  ? "Reconnecting…"
+                  : status.kind === "creating"
+                    ? "Creating…"
+                    : isStaging(staging)
+                      ? "Attaching…"
+                      : CREATE_LABELS[createAction]}
                 {/* The hint has to match the preference — a bare ↩ next to a
                     field that only creates on ⌘↩ is what made Enter look
                     broken in the first place. */}
