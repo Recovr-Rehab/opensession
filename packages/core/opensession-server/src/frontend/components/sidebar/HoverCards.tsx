@@ -97,7 +97,7 @@ export function SessionCardBody({ session: s }: { session: UnifiedSession }) {
 			)}
 			{!s.waitingForInput && runNeedsAttention(s) && (
 				<div className="mt-[7px] rounded-md bg-accent-soft px-2 py-[5px] text-meta leading-snug text-dim">
-					Run failed: {s.lastRunError!.message.slice(0, 200)}
+					Run failed. Open to retry.
 				</div>
 			)}
 			{!s.waitingForInput && (s.queuedCount ?? 0) > 0 && (
@@ -458,10 +458,7 @@ function WsOverviewInfo({
 					</div>
 				) : (
 					<div className="mt-[7px] rounded-md bg-accent-soft px-2 py-[5px] text-meta leading-snug text-dim">
-						Run failed:{" "}
-						{row.sessions
-							.find((c) => runNeedsAttention(c))
-							?.lastRunError?.message.slice(0, 200) || "needs attention"}
+						Run failed. Open to retry.
 					</div>
 				))}
 

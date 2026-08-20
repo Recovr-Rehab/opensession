@@ -146,6 +146,8 @@ describe("hover cards drop the repo and the idle timestamp", () => {
 			expect(html).not.toContain("text-supporting");
 			expect(html).not.toContain("text-xs");
 		}
+		expect(callout).toContain("Run failed. Open to retry.");
+		expect(callout).not.toContain("Stopped");
 	});
 });
 
