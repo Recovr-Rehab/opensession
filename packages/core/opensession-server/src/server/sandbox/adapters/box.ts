@@ -304,7 +304,7 @@ async function waitForState(
 
 /** cwd/env fold into the command string: the commands endpoint only takes a
  *  cwd RELATIVE to the box work dir, and no env at all. */
-function composeShell(cmd: string, opts?: RemoteExecOpts): string {
+export function boxComposeShell(cmd: string, opts?: RemoteExecOpts): string {
   let s = cmd;
   const env = opts?.env && Object.keys(opts.env).length ? opts.env : undefined;
   if (env) {
@@ -314,7 +314,7 @@ function composeShell(cmd: string, opts?: RemoteExecOpts): string {
     s = `env ${pairs} sh -c ${shellQuoteWord(s)}`;
   }
   if (opts?.cwd) s = `cd ${shellQuoteWord(opts.cwd)} && { ${s}\n}`;
-  return s;
+  return `mkdir -p /home/ubuntu/.tmp && export TMPDIR=/home/ubuntu/.tmp && ${s}`;
 }
 
 export function boxNativeFilePath(path: string): string {
@@ -498,7 +498,7 @@ export function boxDriver(cfg: BoxClientConfig, boxId: string): RemoteDriver {
 
   return {
     async exec(cmd: string, opts?: RemoteExecOpts) {
-      const shell = composeShell(cmd, opts);
+      const shell = boxComposeShell(cmd, opts);
       const timeoutMs = opts?.timeoutMs ?? 120_000;
       // Keep short probes on Box's reliable synchronous endpoint. Long setup
       // work and explicitly backgrounded workspace work use its independent
@@ -517,7 +517,7 @@ export function boxDriver(cfg: BoxClientConfig, boxId: string): RemoteDriver {
     },
 
     async execBackground(cmd: string, opts?: RemoteExecOpts) {
-      const started = await afterCommandPlaneReady(() => startDetached(composeShell(cmd, opts)));
+      const started = await afterCommandPlaneReady(() => startDetached(boxComposeShell(cmd, opts)));
       if (!Number.isInteger(started.processId)) {
         throw new Error("Box returned no process id for background command");
       }

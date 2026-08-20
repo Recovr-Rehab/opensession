@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test";
 import {
   BOX_RUNTIME_HOME_COMMAND,
   boxCommandPlaneUnavailable,
+  boxComposeShell,
   boxMachineType,
   boxNativeFilePath,
 } from "./box";
@@ -38,6 +39,12 @@ describe("Box persistent file paths", () => {
 });
 
 describe("Box command readiness", () => {
+  test("keeps command temporary files inside the bind-mounted home", () => {
+    expect(boxComposeShell("printf ok")).toStartWith(
+      "mkdir -p /home/ubuntu/.tmp && export TMPDIR=/home/ubuntu/.tmp && ",
+    );
+  });
+
   test("only retries explicit no-command 409 states", () => {
     expect(boxCommandPlaneUnavailable({ status: 409, code: "machine_not_running" })).toBe(true);
     expect(boxCommandPlaneUnavailable({ status: 409, code: "box_starting" })).toBe(true);
