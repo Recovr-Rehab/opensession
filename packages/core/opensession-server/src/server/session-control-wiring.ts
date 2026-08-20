@@ -853,6 +853,7 @@ ${createMentionsNote}`;
 			openingPromptEntryId: `create-${requestId}`,
 			// Persist the full decision before git creates anything. The opening
 			// setup materializes this deterministic path after announcement.
+			gitEnv: githubGitEnv,
 			needsWorktree: !!materializeWorktree,
 			worktreeKind: "new",
 			worktreeIsolated: isolatedWorktree === true,

@@ -229,6 +229,8 @@ export interface ResolvedCreate {
    * so its system note and any sandbox mounts already know about them.
    */
 	attachRepos?: { repos: string[]; branch: string };
+	/** Credential scoped to trusted server-owned worktree fetches. */
+	gitEnv?: Record<string, string>;
 	stackedOn?: { repo: string; branch: string };
 	/** Workspace recorded on the session file. */
 	workspaceId?: string;
@@ -326,11 +328,12 @@ async function attachCreateRepos(
 	sessionId: string,
 	plan: { repos: string[]; branch: string },
 	io: CreateSessionIO,
+	gitEnv?: Record<string, string>,
 ): Promise<string[]> {
 	const attached: string[] = [];
 	for (const repoId of plan.repos) {
 		try {
-			await attachRepo(sessionId, repoId, plan.branch);
+			await attachRepo(sessionId, repoId, plan.branch, gitEnv);
 			attached.push(repoId);
 		} catch (e) {
 			io.emit({
@@ -635,7 +638,8 @@ export async function openCreatedSession(
 						attachedRepoIds = await attachCreateRepos(
 							bksId,
 							pendingAttach,
-							io
+							io,
+							spec.gitEnv,
 						);
 				} finally {
 					// Ready (or failed — the error surfaces separately): flip the
@@ -1714,6 +1718,7 @@ export async function handleCreateSessionMessage(
 			volumeWorkspace,
 			remoteSandbox,
 			openingPromptEntryId: `create-${requestId || bksId}`,
+			gitEnv: githubGitEnv,
 			needsWorktree,
 			worktreeKind: fromPr ? "existing" : "new",
 			materializeWorktree: needsWorktree

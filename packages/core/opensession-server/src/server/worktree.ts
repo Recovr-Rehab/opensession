@@ -998,13 +998,16 @@ export async function createWorktree(
  */
 export async function prepareAttachedWorktree(
   repoId: string,
-  branch: string
+  branch: string,
+  gitEnv?: Record<string, string>,
 ): Promise<{ repo: string; branch: string; dir: string }> {
   const repo = getRepo(repoId);
   if (sharedCheckoutForNewSessions(repo)) {
     throw new Error(`${repo.id} is a shared-checkout repo and can't be attached as an isolated worktree`);
   }
   const existing = (await listWorktrees(repo.id)).find((w) => w.branch === branch);
-  const dir = existing?.path || (await createWorktree(branch, repo.id));
+  const dir =
+    existing?.path ||
+    (await createWorktree(branch, repo.id, gitEnv ? { gitEnv } : undefined));
   return { repo: repo.id, branch, dir };
 }

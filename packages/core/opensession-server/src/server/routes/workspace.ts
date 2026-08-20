@@ -936,6 +936,7 @@ export async function handleWorkspaceRoutes(
 				sessionId,
 				body.repo,
 				body.branch,
+				githubMutationCredential(ctx)?.env,
 			);
 			return Response.json({ ok: true, attached, attachedRepos: all });
 		} catch (e: any) {
@@ -993,6 +994,7 @@ export async function handleWorkspaceRoutes(
 				sessionId,
 				body.repo,
 				!!body.force,
+				githubMutationCredential(ctx)?.env,
 			);
 			return Response.json({ ok: true, ...result });
 		} catch (e: any) {
