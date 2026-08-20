@@ -32,7 +32,7 @@ const STEPS: FirstMileStep[] = [
 	{ id: "organization", label: "Organization", title: "Organization" },
 	{ id: "ai", label: "AI", title: "AI subscriptions" },
 	{ id: "repos", label: "Repositories", title: "Repositories" },
-	{ id: "team", label: "People", title: "Team" },
+	{ id: "team", label: "People", title: "Add team members" },
 	{ id: "ready", label: "Ready", title: "You’re ready" },
 ];
 
