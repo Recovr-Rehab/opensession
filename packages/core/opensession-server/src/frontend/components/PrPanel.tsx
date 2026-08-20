@@ -2034,7 +2034,7 @@ export function PrPanel({
             <Menu.Item
               render={<a href={pr.url} target="_blank" rel="noopener" />}
             >
-              <BrandMark name={provider.key} size={18} className={MENU_ICON} />
+              <BrandMark name={provider.key} size={16} className={MENU_ICON} />
               <span className="min-w-0 flex-1 truncate">
                 Open on {provider.name}
               </span>
