@@ -98,7 +98,7 @@ describe("session social card", () => {
 		).toBe("opus-fable");
 	});
 
-	test("uses the full 1088px title measure before truncating", async () => {
+	test("uses the available title measure before truncating", async () => {
 		const fitting = "Make Open Session links feel alive";
 		expect(await fitSocialCardTitle(fitting)).toBe(fitting);
 		const truncated = await fitSocialCardTitle("W".repeat(80));
@@ -114,14 +114,17 @@ describe("session social card", () => {
 			model: "gpt-5.6-sol",
 			accent: "#dd233a",
 		});
-		expect(svg).toContain('<rect width="8" height="630" fill="#dd233a"/>');
-		// The card is ink, and every word on it is paper.
+		// The card is ink, and the creator's accent is reserved for the quiet
+		// aurora and oversized brand sweep on the right.
 		expect(svg).toContain('<rect width="1200" height="630" fill="#050609"/>');
+		expect(svg).toContain('stop-color="#dd233a" stop-opacity="0.24"');
+		expect(svg).toContain('fill="#FFFFFF" fill-opacity="0.07"');
+		expect(svg).not.toContain('<rect width="8"');
 		expect(svg).toContain('fill="#FFFFFF" font-size="48"');
 		// The repo tile is a real squircle path, not an `rx` rounded rect, and
-		// the title starts clear of it.
+		// the title starts clear of the smaller inline mark.
 		expect(svg).toContain('<clipPath id="repoClip"><path d="M');
-		expect(svg).toContain('x="136"');
+		expect(svg).toContain('x="120"');
 		expect(svg).toContain(">O</text>");
 		// Owner and model read as metadata rather than as a second heading,
 		// each behind its own glyph.
@@ -129,8 +132,6 @@ describe("session social card", () => {
 		expect(svg).toContain('<circle cx="12" cy="7.6" r="3.7"');
 		expect(svg).toContain("M12 3.1L13.7 9.5");
 		expect(svg).toContain("gpt-5.6-sol");
-		// The corner art is now light on ink rather than shadow on paper.
-		expect(svg).toContain('stop-color="#FFFFFF" stop-opacity="0.07"');
 		expect(svg).toContain("M68.8375 226.509C-37.3322 147.543");
 		expect(svg).toContain("Fix &lt;cards&gt; &amp; links");
 		expect(svg).not.toContain("Fix <cards>");
@@ -162,7 +163,7 @@ describe("session social card", () => {
 		expect(output).toContain("<title>Ship dynamic social cards · Open Session</title>");
 		expect(output).toContain('content="summary_large_image"');
 		expect(output).toMatch(
-			/content="https:\/\/media\.example\.test\/session-card\/sess-social-1\/[A-Za-z0-9_-]{32}\.png\?v=5"/,
+			/content="https:\/\/media\.example\.test\/session-card\/sess-social-1\/[A-Za-z0-9_-]{32}\.png\?v=6"/,
 		);
 		expect(output).toContain(
 			'property="og:url" content="https://os.example.test/session/sess-social-1"',
@@ -176,13 +177,13 @@ describe("session social card", () => {
 		).toBe("sess-social-1");
 		expect(socialSessionIdFromPath("/settings")).toBeNull();
 		expect(sessionSocialCardUrl("sess-social-1")).toMatch(
-			/^https:\/\/media\.example\.test\/session-card\/sess-social-1\/[A-Za-z0-9_-]{32}\.png\?v=5$/,
+			/^https:\/\/media\.example\.test\/session-card\/sess-social-1\/[A-Za-z0-9_-]{32}\.png\?v=6$/,
 		);
 	});
 
 	test("signs ids containing Slack timestamp dots", () => {
 		expect(sessionSocialCardUrl("slack-C123-1719860000.000000")).toMatch(
-			/^https:\/\/media\.example\.test\/session-card\/slack-C123-1719860000\.000000\/[A-Za-z0-9_-]{32}\.png\?v=5$/,
+			/^https:\/\/media\.example\.test\/session-card\/slack-C123-1719860000\.000000\/[A-Za-z0-9_-]{32}\.png\?v=6$/,
 		);
 	});
 

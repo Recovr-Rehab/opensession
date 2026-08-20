@@ -46,7 +46,7 @@ export const SESSION_CARD_BANNER_WIDTH = 1200;
 export const SESSION_CARD_BANNER_HEIGHT = 200;
 
 export type SessionCardVariant = "card" | "banner";
-const SESSION_CARD_VERSION = 5;
+const SESSION_CARD_VERSION = 6;
 
 /**
  * The card is ink, not paper: the product mark is a near-black square with a
@@ -56,17 +56,16 @@ const SESSION_CARD_VERSION = 5;
  */
 const CARD_INK = "#050609";
 const CARD_PAPER = "#FFFFFF";
-/** Left margin, clear of the 8 px accent bar. */
+/** Left margin. */
 const PAD_X = 56;
 /**
- * The repo tile in front of the title. Sized against the title's cap height
- * rather than its point size, so the tile reads as a sibling of the words
- * instead of a block they sit beside, and rounded harder than an app icon
- * because at this size a tighter corner just looks like a rounded rect.
+ * The repo tile in front of the title. It matches the title's point size, so it
+ * reads as an inline mark instead of a block the words sit beside. The generous
+ * superellipse radius keeps the tiny tile distinct from a rounded rectangle.
  */
-const TILE_SIZE = 60;
-const TILE_GAP = 20;
-const TILE_RADIUS = TILE_SIZE * 0.42;
+const TILE_SIZE = 48;
+const TILE_GAP = 16;
+const TILE_RADIUS = TILE_SIZE * 0.46;
 /** The metadata line: a glyph and its label, twice over. */
 const META_SIZE = 28;
 const META_GAP = 20;
@@ -382,14 +381,17 @@ export function sessionSocialCardSvg(
 	const tileCenter = blockTop + TILE_SIZE / 2;
 	const metaTop = blockTop + TILE_SIZE + META_GAP;
 	const metaCenter = metaTop + META_SIZE / 2;
-	const artScale = height / SESSION_CARD_HEIGHT;
-	const artTransform = banner
-		? `translate(${SESSION_CARD_WIDTH - 399 * artScale} 0) scale(${artScale})`
-		: "translate(801 0)";
+	// The brand curve is scaled past the card's own height so it crops top and
+	// bottom and bleeds off the right edge. Oversized, it reads as a sweep the
+	// card was cut out of rather than a shape pasted inside the frame.
+	const artScale = (height / SESSION_CARD_HEIGHT) * 1.6;
+	const artTransform = `translate(${(SESSION_CARD_WIDTH - 399 * artScale).toFixed(2)} ${((height - SESSION_CARD_HEIGHT * artScale) / 2).toFixed(2)}) scale(${artScale.toFixed(4)})`;
+	const accent = xml(data.accent);
 	const repoId = clean(data.repo);
 	const owner = metaLabel(clean(data.owner));
 	const model = metaLabel(clean(data.model));
 	const tile = squirclePath(PAD_X, blockTop, TILE_SIZE, TILE_RADIUS);
+	const tileColor = repoId ? repoTileColorFor(repoId) : CARD_PAPER;
 	const hasTile = !!(repoIcon || repoId);
 	const titleX = hasTile ? TITLE_X : PAD_X;
 	// Art when the repo has any, the same colored letter the app falls back to
@@ -398,7 +400,7 @@ export function sessionSocialCardSvg(
 		? ""
 		: repoIcon
 			? `<image href="${repoIcon}" x="${PAD_X}" y="${blockTop}" width="${TILE_SIZE}" height="${TILE_SIZE}" preserveAspectRatio="xMidYMid slice" clip-path="url(#repoClip)"/>`
-			: `<path d="${tile}" fill="${xml(repoTileColorFor(repoId))}"/><path d="${tile}" fill="url(#tileSheen)"/><text x="${PAD_X + TILE_SIZE / 2}" y="${tileCenter + 1}" text-anchor="middle" dominant-baseline="middle" fill="${REPO_TILE_INK}" font-size="28" font-weight="600">${xml(repoLetter(repoId))}</text>`;
+			: `<path d="${tile}" fill="${xml(tileColor)}"/><path d="${tile}" fill="url(#tileSheen)"/><text x="${PAD_X + TILE_SIZE / 2}" y="${tileCenter + 1}" text-anchor="middle" dominant-baseline="middle" fill="${REPO_TILE_INK}" font-size="24" font-weight="600">${xml(repoLetter(repoId))}</text>`;
 	// The person's own face when we have one, the `person` glyph when we do
 	// not, so the subtext keeps its shape either way.
 	const avatarMarkup = avatar
@@ -420,21 +422,41 @@ export function sessionSocialCardSvg(
 <defs>
   ${fontFace}
   <linearGradient id="artGradient" x1="199.5" y1="0" x2="199.5" y2="630" gradientUnits="userSpaceOnUse">
-    <stop stop-color="#FFFFFF" stop-opacity="0.015"/>
-    <stop offset="1" stop-color="#FFFFFF" stop-opacity="0.07"/>
+    <stop stop-color="${accent}" stop-opacity="0.18"/>
+    <stop offset="1" stop-color="${accent}" stop-opacity="0.035"/>
   </linearGradient>
+  <radialGradient id="aurora" cx="1160" cy="${banner ? -30 : 60}" r="${banner ? 620 : 860}" gradientUnits="userSpaceOnUse">
+    <stop stop-color="${accent}" stop-opacity="0.24"/>
+    <stop offset="0.5" stop-color="${accent}" stop-opacity="0.055"/>
+    <stop offset="1" stop-color="${accent}" stop-opacity="0"/>
+  </radialGradient>
+  <pattern id="grid" width="26" height="26" patternUnits="userSpaceOnUse">
+    <circle cx="1.3" cy="1.3" r="1.3" fill="${CARD_PAPER}" fill-opacity="0.07"/>
+  </pattern>
+  <linearGradient id="gridFade" x1="0" y1="0" x2="1200" y2="0" gradientUnits="userSpaceOnUse">
+    <stop stop-color="#000000"/>
+    <stop offset="0.55" stop-color="#000000"/>
+    <stop offset="1" stop-color="#FFFFFF"/>
+  </linearGradient>
+  <mask id="gridMask"><rect width="1200" height="${height}" fill="url(#gridFade)"/></mask>
+  <radialGradient id="tileGlow" cx="${PAD_X + TILE_SIZE / 2}" cy="${tileCenter}" r="${TILE_SIZE * 1.7}" gradientUnits="userSpaceOnUse">
+    <stop stop-color="${xml(tileColor)}" stop-opacity="0.26"/>
+    <stop offset="1" stop-color="${xml(tileColor)}" stop-opacity="0"/>
+  </radialGradient>
   <linearGradient id="tileSheen" x1="0" y1="${blockTop}" x2="0" y2="${blockTop + TILE_SIZE}" gradientUnits="userSpaceOnUse">
-    <stop stop-color="#FFFFFF" stop-opacity="0.1"/>
-    <stop offset="1" stop-color="#000000" stop-opacity="0.06"/>
+    <stop stop-color="#FFFFFF" stop-opacity="0.14"/>
+    <stop offset="1" stop-color="#000000" stop-opacity="0.08"/>
   </linearGradient>
   <clipPath id="repoClip"><path d="${tile}"/></clipPath>
   <clipPath id="avatarClip"><circle cx="${PAD_X + META_SIZE / 2}" cy="${metaCenter}" r="${META_SIZE / 2}"/></clipPath>
 </defs>
 <rect width="1200" height="${height}" fill="${CARD_INK}"/>
-<rect width="8" height="${height}" fill="${xml(data.accent)}"/>
+<rect width="1200" height="${height}" fill="url(#aurora)"/>
+<rect width="1200" height="${height}" fill="url(#grid)" mask="url(#gridMask)"/>
 <g transform="${artTransform}">
   <path d="M68.8375 226.509C-37.3322 147.543 -7.34262 36.0198 68.8375 0H399V630H84.0041C208.443 571.121 289.104 390.338 68.8375 226.509Z" fill="url(#artGradient)"/>
 </g>
+${hasTile && !repoIcon ? `<circle cx="${PAD_X + TILE_SIZE / 2}" cy="${tileCenter}" r="${TILE_SIZE * 1.7}" fill="url(#tileGlow)"/>` : ""}
 ${repoMarkup}
 ${hasTile ? `<path d="${tile}" fill="none" stroke="${CARD_PAPER}" stroke-opacity="0.14"/>` : ""}
 <text x="${titleX}" y="${tileCenter + 2}" dominant-baseline="middle" fill="${CARD_PAPER}" font-size="${TITLE_SIZE}" font-weight="600" letter-spacing="-1.2">${xml(displayTitle)}</text>
