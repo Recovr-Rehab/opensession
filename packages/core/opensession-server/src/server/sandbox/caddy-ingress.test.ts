@@ -11,9 +11,10 @@ describe("sandbox Caddy ingress", () => {
     expect(snippet).toContain("hooks.example.com {");
     expect(snippet).toContain("handle /run-ws/*");
     expect(snippet).toContain("handle /rpc-ws");
+    expect(snippet).toContain("handle /sandbox-portal-ws");
     expect(snippet).toContain("handle /ingress-health");
 		expect(snippet).toContain("handle /workload-identity/*");
-		expect(snippet.match(/127\.0\.0\.1:3860/g)?.length).toBe(4);
+		expect(snippet.match(/127\.0\.0\.1:3860/g)?.length).toBe(5);
     expect(snippet).toContain("reverse_proxy 127.0.0.1:3848");
     expect(snippet).not.toContain("3850");
   });
@@ -63,6 +64,7 @@ describe("sandbox Caddy ingress", () => {
     const installed = upsertCaddyIngress(source, "https://hooks.example.com");
     expect(installed).toContain("# BEGIN OPENSESSION SANDBOX INGRESS");
     expect(installed).toContain("handle /run-ws/*");
+    expect(installed).toContain("handle /sandbox-portal-ws");
     expect(installed.match(/hooks\.example\.com \{/g)).toHaveLength(1);
     expect(installed).toContain("reverse_proxy localhost:3848");
     expect(upsertCaddyIngress(installed, "https://hooks.example.com")).toBe(installed);

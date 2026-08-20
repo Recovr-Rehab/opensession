@@ -63,6 +63,9 @@ ${indent}}
 ${indent}handle /rpc-ws {
 ${indent}    reverse_proxy 127.0.0.1:3860
 ${indent}}
+${indent}handle /sandbox-portal-ws {
+${indent}    reverse_proxy 127.0.0.1:3860
+${indent}}
 ${indent}handle /ingress-health {
 ${indent}    reverse_proxy 127.0.0.1:3860
 ${indent}}
@@ -118,6 +121,7 @@ function stripKnownSandboxRoutes(site: string): string {
   const paths = [
     "/run-ws/\\*",
     "/rpc-ws",
+    "/sandbox-portal-ws",
     "/ingress-health",
     "/workload-identity/\\*",
     "/opensession/run-ws/\\*",
