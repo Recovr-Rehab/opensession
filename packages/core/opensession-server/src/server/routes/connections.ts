@@ -73,6 +73,16 @@ export async function bootstrapUserAuthOnConnect(
 	const flip = await withConfigMutationLock(
 		async (): Promise<{ ok: true } | { error: string }> => {
 			const config = rawConfig();
+			// (a) Re-check the intent INSIDE the lock. The route checked
+			// githubAuthOnConnect() before acquiring it, but a concurrent device
+			// poll may have already consumed authOnConnect (rostered its own admin,
+			// flipped the gate). Without this the queued second poll would roster a
+			// second admin and mint a session against an already-enabled instance.
+			const github = githubIntegrationSection(config, true)!;
+			if (github.authOnConnect !== true)
+				return {
+					error: "GitHub sign-in was already enabled by another connection",
+				};
 			const team = rawTeam(config);
 			// (b) roster-upsert the login as admin, matched by github login.
 			const existing = team.find(
@@ -106,7 +116,6 @@ export async function bootstrapUserAuthOnConnect(
 					error: "Could not roster the connected GitHub account as admin",
 				};
 			// (c) flip the sign-in gate — atomically with the roster write above.
-			const github = githubIntegrationSection(config, true)!;
 			github.userPrAuth = true;
 			// Consumed — clear the intent so a later connect is a plain reconnect.
 			delete github.authOnConnect;

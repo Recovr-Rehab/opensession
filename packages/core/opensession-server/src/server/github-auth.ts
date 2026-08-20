@@ -526,7 +526,7 @@ async function identifyAndStoreToken(
   if (!ownership.ok) return { status: "error", error: ownership.error };
 
   const store = readStore();
-  store.users[login.toLowerCase()] = {
+  const record: StoredAccount = {
     login,
     token,
     ...(typeof user.name === "string" && user.name ? { name: user.name } : {}),
@@ -535,6 +535,16 @@ async function identifyAndStoreToken(
     connectedAt: new Date().toISOString(),
     ...grantExpiryFields(grant),
   };
+  // Simple mode holds exactly one account: soleGithubAccount()/soleGithubLogin()
+  // are one-account-or-nothing, so a reconnect that authorizes a DIFFERENT login
+  // must REPLACE the previous record, not accumulate. Two usable accounts strand
+  // both getters at null, which also leaves the DELETE route no way to recover.
+  // Operator mode keeps one record per signed-in team member.
+  if (githubUserAuthActive()) {
+    store.users[login.toLowerCase()] = record;
+  } else {
+    store.users = { [login.toLowerCase()]: record };
+  }
   writeStore(store);
   audit({ kind: "github_auth_connect", login, scopes: scope });
   return { status: "ok", login, ...(user.name ? { name: user.name } : {}) };
@@ -622,7 +632,14 @@ export async function refreshGithubToken(login: string): Promise<boolean> {
  *  Kept cheap (no-op for legacy tokens and far-from-expiry ones) so it can
  *  run on boot and on a short interval. */
 export async function refreshExpiringGithubTokens(): Promise<void> {
-  if (!githubUserAuthActive()) return;
+  // Gate on the App credentials the refresh grant itself needs, NOT on web
+  // sign-in. A personal App in simple mode keeps userPrAuth (and so
+  // githubUserAuthActive) off, yet still mints ~8h user-to-server tokens and
+  // stores a client secret for exactly this refresh. Bailing on
+  // githubUserAuthActive() left those tokens to expire and drop out of
+  // soleGithubAccount() until a manual reconnect.
+  const { clientId, clientSecret } = githubUserAuthSettings();
+  if (!clientId || !clientSecret) return;
   for (const account of Object.values(readStore().users)) {
     if (!account.refreshToken || !account.expiresAt) continue;
     if (account.refreshFailedAt) continue; // dead grant — only a reconnect fixes it
@@ -769,10 +786,16 @@ export function githubUserLoginForRun(user?: string | null): string | null {
  */
 export function githubAuthEnv(user?: string | null): Record<string, string> {
   const login = githubUserLoginForRun(user);
-  if (!login) return {};
-  const account = readStore().users[login.toLowerCase()];
-  if (!account || !tokenUsable(account)) return {};
-  return { GH_TOKEN: account.token, GITHUB_TOKEN: account.token };
+  if (login) {
+    const account = readStore().users[login.toLowerCase()];
+    if (account && tokenUsable(account))
+      return { GH_TOKEN: account.token, GITHUB_TOKEN: account.token };
+  }
+  // Simple mode has no per-user mapping (githubUserLoginForRun returns null when
+  // sign-in is off), but the single connected account IS the identity for every
+  // interactive run. soleGithubAccount() is null in operator mode, so the two
+  // paths never overlap.
+  return soleGithubAccount()?.env ?? {};
 }
 
 /** A remote sandbox cannot read the server's per-user grant store. Its trusted

@@ -21,7 +21,11 @@ import {
   githubUserAuthActive,
   githubUserAuthSettings,
   githubUserLoginForRun,
+  pollGithubDeviceFlow,
+  refreshExpiringGithubTokens,
   removeGithubAccount,
+  soleGithubAccount,
+  soleGithubLogin,
   startGithubDeviceFlow,
   validateGithubTokenLogin,
 } from "./github-auth";
@@ -154,9 +158,14 @@ describe("token lookups + runner env", () => {
     }
   });
 
-  test("empty when the feature is off, the user is unknown, or not connected", () => {
+  test("simple mode uses the sole account; operator mode empty for unknown/unconnected", () => {
     seedToken();
-    expect(githubAuthEnv("Alice")).toEqual({}); // feature off
+    // Feature off (simple mode): the single connected account is the identity
+    // for every interactive run, regardless of the passed user.
+    expect(githubAuthEnv("Alice")).toEqual({
+      GH_TOKEN: "gho_test123",
+      GITHUB_TOKEN: "gho_test123",
+    });
     enableFeature();
     expect(githubAuthEnv("Some Randomer")).toEqual({}); // unknown user
     expect(githubAuthEnv(null)).toEqual({});
@@ -588,5 +597,97 @@ describe("keypad bearer auth", () => {
     expect(keypadBearerAuthorized(request("bearer keypad-test-secret"))).toBe(true);
     expect(keypadBearerAuthorized(request("Bearer wrong-secret"))).toBe(false);
     expect(keypadBearerAuthorized(request())).toBe(false);
+  });
+});
+
+describe("simple-mode credential (App connected, sign-in off)", () => {
+  const realFetch = globalThis.fetch;
+  afterEach(() => {
+    globalThis.fetch = realFetch;
+  });
+
+  // A personal App: client id + secret configured, but userPrAuth stays off, so
+  // githubUserAuthActive()/webAuthRequired() are both false.
+  function simpleModeApp(): void {
+    const path = join(dir, "config.json");
+    writeFileSync(
+      path,
+      JSON.stringify({
+        integrations: {
+          github: { oauthClientId: "cid", oauthClientSecret: "csecret" },
+        },
+      }),
+    );
+    process.env.OPENSESSION_CONFIG = path;
+  }
+
+  function writeStore(users: Record<string, unknown>): void {
+    writeFileSync(
+      process.env.OPENSESSION_GITHUB_AUTH_STORE!,
+      JSON.stringify({ users }),
+    );
+  }
+
+  test("refreshes a personal-app token even with sign-in off", async () => {
+    simpleModeApp();
+    expect(githubUserAuthActive()).toBe(false);
+    const soon = new Date(Date.now() + 60_000).toISOString(); // inside the skew window
+    writeStore({
+      alice: {
+        login: "alice",
+        token: "old-token",
+        refreshToken: "rt-1",
+        expiresAt: soon,
+        connectedAt: "2026-07-18T00:00:00.000Z",
+      },
+    });
+    globalThis.fetch = (async (input: string | URL | Request) => {
+      const url = typeof input === "string" ? input : (input as Request).url;
+      if (url.includes("login/oauth/access_token"))
+        return new Response(
+          JSON.stringify({
+            access_token: "new-token",
+            refresh_token: "rt-2",
+            expires_in: 28800,
+            refresh_token_expires_in: 15552000,
+            token_type: "bearer",
+          }),
+          { status: 200 },
+        );
+      return new Response("{}", { status: 404 });
+    }) as unknown as typeof fetch;
+    await refreshExpiringGithubTokens();
+    const after = JSON.parse(
+      readFileSync(process.env.OPENSESSION_GITHUB_AUTH_STORE!, "utf-8"),
+    );
+    expect(after.users.alice.token).toBe("new-token");
+    expect(after.users.alice.refreshToken).toBe("rt-2");
+  });
+
+  test("reconnect authorizing a different account replaces, never strands two", async () => {
+    simpleModeApp();
+    writeStore({
+      alice: { login: "alice", token: "tok-alice", connectedAt: "2026-07-18T00:00:00.000Z" },
+    });
+    // Simple-mode reconnect passes no expected login; GitHub reports @bob.
+    globalThis.fetch = (async (input: string | URL | Request) => {
+      const url = typeof input === "string" ? input : (input as Request).url;
+      if (url.includes("login/oauth/access_token"))
+        return new Response(
+          JSON.stringify({ access_token: "tok-bob", token_type: "bearer" }),
+          { status: 200 },
+        );
+      if (url.includes("api.github.com/user"))
+        return new Response(JSON.stringify({ login: "bob", name: "Bob" }), { status: 200 });
+      return new Response("{}", { status: 404 });
+    }) as unknown as typeof fetch;
+    const res = await pollGithubDeviceFlow("device-code");
+    expect(res.status).toBe("ok");
+    const after = JSON.parse(
+      readFileSync(process.env.OPENSESSION_GITHUB_AUTH_STORE!, "utf-8"),
+    );
+    expect(Object.keys(after.users)).toEqual(["bob"]); // one account, not two
+    expect(soleGithubLogin()).toBe("bob"); // recoverable: DELETE can find it
+    expect(soleGithubAccount()).not.toBeNull(); // repo ops resolve, no fallback to bot
   });
 });

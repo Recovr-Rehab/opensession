@@ -372,4 +372,20 @@ describe("connect-time auth bootstrap", () => {
     expect(written.integrations.github.authOnConnect).toBe(true);
     expect(written.identity).toBeUndefined();
   });
+
+  test("refuses a second bootstrap once the intent is consumed (TOCTOU)", async () => {
+    const cfg = writeGithubConfig({ oauthClientId: "cid", authOnConnect: true });
+    // First connect consumes authOnConnect: rosters @alice, flips the gate.
+    const first = await bootstrapUserAuthOnConnect("alice", "Alice");
+    expect("error" in first).toBe(false);
+    // A second poll that also passed the pre-lock check must be refused INSIDE
+    // the lock, or it would roster @bob as a second admin and mint a session.
+    const second = await bootstrapUserAuthOnConnect("bob", "Bob");
+    expect("error" in second).toBe(true);
+    const written = JSON.parse(readFileSync(cfg, "utf-8"));
+    const admins = written.identity.team.filter((m: any) => m.admin === true);
+    expect(admins.length).toBe(1); // @bob was never rostered
+    expect(admins[0].github.toLowerCase()).toBe("alice");
+    expect(written.integrations.github.authOnConnect).toBeUndefined();
+  });
 });
