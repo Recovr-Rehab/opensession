@@ -161,10 +161,7 @@ export function SidebarCustomizeDialog({
 				widthClassName="max-w-[32rem]"
 				className="max-h-[80dvh] gap-4"
 			>
-				<Modal.Header
-					title="Customize sidebar"
-					description="Drag to reorder, and choose which tools appear."
-				/>
+				<Modal.Header title="Customize sidebar" />
 				<OrderSection
 					label="Tools"
 					items={tools.map((tool) => ({
