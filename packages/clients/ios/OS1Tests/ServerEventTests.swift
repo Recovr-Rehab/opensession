@@ -67,6 +67,23 @@ final class ServerEventTests: XCTestCase {
         XCTAssertEqual(entries[3].isError, false)
     }
 
+    func testTranscriptResumeCursorsDecode() {
+        guard case .transcriptInit(_, _, let seq) = parse(#"{"type":"transcript_init","sessionId":"bks-1","entries":[],"truncated":true,"firstSeq":9,"lastSeq":140,"lastChangeSeq":151,"v2":true}"#) else {
+            return XCTFail("expected seq transcript init")
+        }
+        XCTAssertEqual(seq.firstSeq, 9)
+        XCTAssertEqual(seq.lastSeq, 140)
+        XCTAssertEqual(seq.lastChangeSeq, 151)
+        XCTAssertTrue(seq.v2)
+
+        guard case .transcriptAppend(_, _, let offset) = parse(#"{"type":"transcript_append","sessionId":"bks-1","entries":[],"endOffset":8192,"rev":"rev-1"}"#) else {
+            return XCTFail("expected legacy transcript append")
+        }
+        XCTAssertEqual(offset.endOffset, 8_192)
+        XCTAssertEqual(offset.rev, "rev-1")
+        XCTAssertFalse(offset.v2)
+    }
+
     func testTranscriptFramesWithoutSessionIdAreIgnored() {
         for type in ["transcript_init", "transcript_history", "transcript_append",
                      "stream_start", "stream_done", "session_status", "queue_update"] {

@@ -8,7 +8,7 @@ protocol SessionSocket: AnyObject {
     var onClose: ((String?) -> Void)? { get set }
     func connect()
     func disconnect()
-    func watch(sessionId: String)
+    func watch(sessionId: String, resume: TranscriptResumeCursor?)
     func setAway(_ away: Bool)
     func loadHistory(sessionId: String, beforeOffset: Int, beforeRev: String?)
     func loadHistory(sessionId: String, beforeSeq: Int, limit: Int?)
@@ -27,6 +27,10 @@ protocol SessionSocket: AnyObject {
 }
 
 extension SessionSocket {
+    func watch(sessionId: String) {
+        watch(sessionId: sessionId, resume: nil)
+    }
+
     /// Text-only convenience (slash commands and the like) — protocols can't
     /// carry default arguments, so the concrete method's defaults live here.
     func prompt(sessionId: String, content: String, user: String) {
@@ -93,8 +97,24 @@ final class OS1Socket: SessionSocket {
     /// and sessions whose mirror file no longer exists (every owned-store
     /// session now) answer with a 120-entry tail, `truncated: true` and NO byte
     /// cursor, which left the reader unable to page past the last 120 entries.
-    func watch(sessionId: String) {
-        send(["type": "watch", "sessionId": sessionId, "supportsSeq": true])
+    func watch(sessionId: String, resume: TranscriptResumeCursor?) {
+        var frame: [String: Any] = [
+            "type": "watch",
+            "sessionId": sessionId,
+            "supportsSeq": true,
+            "supportsChangeSeq": true,
+        ]
+        switch resume {
+        case .seq(let lastSeq, let lastChangeSeq):
+            frame["sinceSeq"] = lastSeq
+            frame["sinceChangeSeq"] = lastChangeSeq
+        case .offset(let endOffset, let rev):
+            frame["sinceOffset"] = endOffset
+            frame["sinceRev"] = rev
+        case nil:
+            break
+        }
+        send(frame)
     }
 
     /// Presence, not subscription: backgrounding the app keeps the watch (the

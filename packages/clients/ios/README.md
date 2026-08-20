@@ -461,6 +461,9 @@ OS1/
   sends `watch` only after that, so it can't race the upgrade.
 - `transcript_init` replaces the tail, `transcript_history` prepends,
   `transcript_append` upserts by entry id (overlap expected, ~1s cadence).
+  The app advertises seq and change-seq support, retains each frame's resume
+  watermark, and includes it on every re-watch. Reconnects therefore replay
+  only the missed gap instead of replacing history pages already on screen.
 - `stream_text` deltas render immediately; the durable assistant entry arrives
   via `transcript_append` after `stream_done`, at which point the live bubble
   is dropped.

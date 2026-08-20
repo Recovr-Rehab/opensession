@@ -710,6 +710,74 @@ final class SessionViewModelTests: XCTestCase {
         XCTAssertEqual(viewModel.entries.map(\.id), ["e1", "e9"])
     }
 
+    func testRewatchResumesAfterLatestChangeAndKeepsPagedHistory() {
+        let socket = MockSocket()
+        let viewModel = SessionViewModel(
+            session: Session(id: "bks-1"), socketFactory: { socket }
+        )
+        viewModel.start()
+        viewModel.handle(.hello(bootId: "boot-1"))
+        XCTAssertEqual(socket.watchResumes.count, 1)
+        XCTAssertNil(socket.watchResumes[0])
+
+        viewModel.handle(.transcriptInit(
+            sessionId: "bks-1",
+            entries: [entry("e900", "user", text: "recent")],
+            cursor: HistoryCursor(
+                truncated: true, firstSeq: 900, lastSeq: 1_000,
+                lastChangeSeq: 1_200, v2: true
+            )
+        ))
+        viewModel.handle(.transcriptHistory(
+            sessionId: "bks-1",
+            entries: [entry("e500", "user", text: "earlier")],
+            cursor: HistoryCursor(truncated: true, firstSeq: 500, v2: true)
+        ))
+        viewModel.handle(.transcriptAppend(
+            sessionId: "bks-1",
+            entries: [entry("e1001", "assistant", text: "new")],
+            cursor: HistoryCursor(
+                truncated: false, lastSeq: 1_001, lastChangeSeq: 1_201, v2: true
+            )
+        ))
+
+        // A replacement socket's hello re-watches using the durable watermark.
+        // The server answers with transcript_append, not a tail transcript_init,
+        // so the earlier page already on screen remains mounted.
+        viewModel.handle(.hello(bootId: "boot-2"))
+        XCTAssertEqual(
+            socket.watchResumes.last!,
+            .seq(lastSeq: 1_001, lastChangeSeq: 1_201)
+        )
+        XCTAssertEqual(viewModel.entries.map(\.id), ["e500", "e900", "e1001"])
+    }
+
+    func testLegacyRewatchUsesTheLastByteCursor() {
+        let socket = MockSocket()
+        let viewModel = SessionViewModel(
+            session: Session(id: "bks-1"), socketFactory: { socket }
+        )
+        viewModel.start()
+        viewModel.handle(.transcriptInit(
+            sessionId: "bks-1", entries: [entry("e1", "user")],
+            cursor: HistoryCursor(
+                truncated: false, rev: "rev-1", endOffset: 4_096
+            )
+        ))
+        viewModel.handle(.transcriptAppend(
+            sessionId: "bks-1", entries: [entry("e2", "assistant")],
+            cursor: HistoryCursor(
+                truncated: false, rev: "rev-1", endOffset: 8_192
+            )
+        ))
+
+        viewModel.handle(.hello(bootId: "boot-2"))
+        XCTAssertEqual(
+            socket.watchResumes.last!,
+            .offset(endOffset: 8_192, rev: "rev-1")
+        )
+    }
+
     /// A socket that dies mid-walk must not leave the control spinning on a
     /// request nobody will answer — nor scroll the reader to a start we never
     /// reached.
@@ -1927,6 +1995,7 @@ private final class MockSocket: SessionSocket {
     private(set) var connectCount = 0
     private(set) var disconnectCount = 0
     private(set) var watched: [String] = []
+    private(set) var watchResumes: [TranscriptResumeCursor?] = []
     private(set) var prompts: [PromptCall] = []
     private(set) var steeredQueueIds: [String] = []
     private(set) var deletedQueueIds: [String] = []
@@ -1945,7 +2014,10 @@ private final class MockSocket: SessionSocket {
 
     func connect() { connectCount += 1 }
     func disconnect() { disconnectCount += 1 }
-    func watch(sessionId: String) { watched.append(sessionId) }
+    func watch(sessionId: String, resume: TranscriptResumeCursor?) {
+        watched.append(sessionId)
+        watchResumes.append(resume)
+    }
     func setAway(_ away: Bool) { awayFrames.append(away) }
     func loadHistory(sessionId: String, beforeOffset: Int, beforeRev: String?) {
         historyRequests.append(.offset(beforeOffset))

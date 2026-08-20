@@ -163,6 +163,10 @@ final class SessionViewModel {
     private var historyStartOffset: Int?
     private var historyRev: String?
     private var historyFirstSeq: Int?
+    /// Latest durable position received from the server. Re-watches send it
+    /// back so a reconnect appends only the missed gap and keeps any earlier
+    /// pages the reader already loaded.
+    private var transcriptResume: TranscriptResumeCursor?
     /// Walking the whole backlog to the first message, a page at a time.
     /// Separate from `loadingEarlier` (which stays true across the gaps) so
     /// the view can say which of the two is running.
@@ -706,7 +710,7 @@ final class SessionViewModel {
             return
         }
         let probeStarted = Date()
-        socket.watch(sessionId: session.id)
+        socket.watch(sessionId: session.id, resume: transcriptResume)
         // Back on screen: show our face again. (A reconnect starts present, so
         // only a socket that survived the background needs telling.)
         lastPresenceRefresh = Date()
@@ -1085,6 +1089,49 @@ final class SessionViewModel {
         historyFirstSeq = cursor.firstSeq
     }
 
+    /// An init is authoritative for protocol mode and resume position. A frame
+    /// without resume metadata comes from an older server, so the next watch
+    /// must request another snapshot rather than reuse a stale cursor.
+    private func applyTranscriptSnapshotCursor(_ cursor: HistoryCursor) {
+        if cursor.v2, let lastSeq = cursor.lastSeq {
+            transcriptResume = .seq(
+                lastSeq: lastSeq,
+                lastChangeSeq: cursor.lastChangeSeq ?? lastSeq
+            )
+        } else if let endOffset = cursor.endOffset, let rev = cursor.rev {
+            transcriptResume = .offset(endOffset: endOffset, rev: rev)
+        } else {
+            transcriptResume = nil
+        }
+    }
+
+    /// Append watermarks only move forward. Store upserts can republish an old
+    /// entry seq, while `lastChangeSeq` still identifies the newer commit.
+    private func applyTranscriptAppendCursor(_ cursor: HistoryCursor) {
+        switch transcriptResume {
+        case .seq(let currentSeq, let currentChange) where cursor.v2:
+            transcriptResume = .seq(
+                lastSeq: max(currentSeq, cursor.lastSeq ?? 0),
+                lastChangeSeq: max(currentChange, cursor.lastChangeSeq ?? 0)
+            )
+        case .offset where !cursor.v2:
+            if let endOffset = cursor.endOffset, let rev = cursor.rev {
+                transcriptResume = .offset(endOffset: endOffset, rev: rev)
+            }
+        default:
+            // An append normally follows an init, but accepting its complete
+            // cursor also makes recovery tolerant of reordered test fixtures.
+            if cursor.v2, let lastSeq = cursor.lastSeq {
+                transcriptResume = .seq(
+                    lastSeq: lastSeq,
+                    lastChangeSeq: cursor.lastChangeSeq ?? lastSeq
+                )
+            } else if let endOffset = cursor.endOffset, let rev = cursor.rev {
+                transcriptResume = .offset(endOffset: endOffset, rev: rev)
+            }
+        }
+    }
+
     /// Deliberately NOT optimistic: a steer can be refused (nothing steerable
     /// right now, files attached) and the message legitimately stays queued —
     /// the server answers with a notice and the queue_update that follows is
@@ -1264,7 +1311,7 @@ final class SessionViewModel {
             // flashes (or remains) as an active viewer.
             if isAway { socket?.setAway(true) }
             // Watch after the handshake frame so the send cannot race the upgrade.
-            socket?.watch(sessionId: session.id)
+            socket?.watch(sessionId: session.id, resume: transcriptResume)
             // A completed handshake is proof the server is reachable — better
             // evidence than any network path status, so anything waiting out a
             // backoff goes now.
@@ -1282,6 +1329,7 @@ final class SessionViewModel {
                 awaitingCreation = false
                 isLoadingConversation = false
                 applyHistoryCursor(cursor)
+                applyTranscriptSnapshotCursor(cursor)
                 loadingEarlier = false
                 endJump()
                 break
@@ -1331,6 +1379,7 @@ final class SessionViewModel {
                 updateDelivering(deliveringItems.filter { !messageLanded($0) })
             }
             applyHistoryCursor(cursor)
+            applyTranscriptSnapshotCursor(cursor)
             // A rev-mismatch reply to load_history comes back as a fresh init.
             loadingEarlier = false
             // Also how a legacy jump lands (the whole transcript at once), and
@@ -1352,8 +1401,9 @@ final class SessionViewModel {
             rebuildDisplayItems()
             continueJump(added: added.count)
 
-        case .transcriptAppend(let id, let appended) where id == session.id:
+        case .transcriptAppend(let id, let appended, let cursor) where id == session.id:
             upsert(appended)
+            applyTranscriptAppendCursor(cursor)
             // Landed durably — drop the ephemeral copies (match by id, or by
             // toolUseId in case the two channels mint different entry ids).
             liveEntries.removeAll { live in
@@ -1605,7 +1655,9 @@ final class SessionViewModel {
             creationRetryTask = Task { [weak self] in
                 try? await Task.sleep(for: .seconds(1.5))
                 guard let self, !Task.isCancelled, !self.stopped else { return }
-                self.socket?.watch(sessionId: self.session.id)
+                self.socket?.watch(
+                    sessionId: self.session.id, resume: self.transcriptResume
+                )
             }
 
         case .notice(let message), .serverError(let message):

@@ -9,7 +9,9 @@ enum ServerEvent: Sendable {
     case pong
     case transcriptInit(sessionId: String, entries: [TranscriptEntry], cursor: HistoryCursor)
     case transcriptHistory(sessionId: String, entries: [TranscriptEntry], cursor: HistoryCursor)
-    case transcriptAppend(sessionId: String, entries: [TranscriptEntry])
+    case transcriptAppend(
+        sessionId: String, entries: [TranscriptEntry], cursor: HistoryCursor = .empty
+    )
     case sessionNote(sessionId: String, note: SessionNote)
     case sessionNoteDeleted(sessionId: String, noteId: String)
     case streamStart(sessionId: String)
@@ -78,7 +80,9 @@ enum ServerEvent: Sendable {
             )
         case "transcript_append":
             guard let id = frame.sessionId else { return .ignored }
-            return .transcriptAppend(sessionId: id, entries: frame.entries ?? [])
+            return .transcriptAppend(
+                sessionId: id, entries: frame.entries ?? [], cursor: frame.cursor
+            )
         case "session_note":
             guard let id = frame.sessionId, let note = frame.note else { return .ignored }
             return .sessionNote(sessionId: id, note: note)
@@ -255,11 +259,43 @@ struct HistoryCursor: Equatable, Sendable {
     var startOffset: Int?
     var rev: String?
     var firstSeq: Int?
+    /// Reconnect resume metadata. Seq-mode uses the two sequence watermarks;
+    /// legacy mode uses the end byte plus `rev`.
+    var endOffset: Int?
+    var lastSeq: Int?
+    var lastChangeSeq: Int?
+    var v2: Bool
 
-    /// No paging metadata (short transcripts, tests).
-    static let empty = HistoryCursor(
-        truncated: false, startOffset: nil, rev: nil, firstSeq: nil
-    )
+    init(
+        truncated: Bool,
+        startOffset: Int? = nil,
+        rev: String? = nil,
+        firstSeq: Int? = nil,
+        endOffset: Int? = nil,
+        lastSeq: Int? = nil,
+        lastChangeSeq: Int? = nil,
+        v2: Bool = false
+    ) {
+        self.truncated = truncated
+        self.startOffset = startOffset
+        self.rev = rev
+        self.firstSeq = firstSeq
+        self.endOffset = endOffset
+        self.lastSeq = lastSeq
+        self.lastChangeSeq = lastChangeSeq
+        self.v2 = v2
+    }
+
+    /// No paging or resume metadata (short transcripts, tests).
+    static let empty = HistoryCursor(truncated: false)
+}
+
+/// The latest durable transcript position, sent back on a re-watch so the
+/// server replays only the disconnected gap instead of replacing the loaded
+/// conversation with a fresh tail snapshot.
+enum TranscriptResumeCursor: Equatable, Sendable {
+    case seq(lastSeq: Int, lastChangeSeq: Int)
+    case offset(endOffset: Int, rev: String)
 }
 
 /// One message waiting on a busy run — either queued (held until the run
@@ -402,8 +438,12 @@ private struct RawFrame: Decodable {
     let queueId: String?
     let truncated: Bool?
     let startOffset: Int?
+    let endOffset: Int?
     let rev: String?
     let firstSeq: Int?
+    let lastSeq: Int?
+    let lastChangeSeq: Int?
+    let v2: Bool?
     // term_* frames.
     let termId: String?
     let target: String?
@@ -416,7 +456,11 @@ private struct RawFrame: Decodable {
             truncated: truncated ?? false,
             startOffset: startOffset,
             rev: rev,
-            firstSeq: firstSeq
+            firstSeq: firstSeq,
+            endOffset: endOffset,
+            lastSeq: lastSeq,
+            lastChangeSeq: lastChangeSeq,
+            v2: v2 ?? false
         )
     }
 }
