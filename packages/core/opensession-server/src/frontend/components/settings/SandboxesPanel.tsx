@@ -763,7 +763,7 @@ export function SandboxesPanel() {
 					You can use Ready connections, but only a workspace administrator can configure them.
 				</SettingsHint>
 			)}
-			<div className="grid gap-3 px-4">
+			<div className="grid gap-3">
 				{loading && (
 					<SettingCardSkeleton rows={3} icon={40} label="Loading sandbox connections" />
 				)}
@@ -802,7 +802,7 @@ export function SandboxesPanel() {
 					>
 						Project snapshots
 					</SettingsGroupLabel>
-					<div className="grid gap-3 px-4">
+					<div className="grid gap-3">
 						{configuredEnvironments.length === 0 && (
 							<SettingCard>
 								<div className="px-5 py-5 text-center">
