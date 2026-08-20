@@ -139,7 +139,7 @@ export function FirstMile({ onDone }: { onDone: () => void }) {
 	return (
 		<div
 			data-first-mile
-			className="relative grid h-[100dvh] min-h-[560px] w-full grid-rows-[76px_minmax(0,1fr)_84px] overflow-hidden bg-bg text-fg phone:min-h-[620px] phone:grid-rows-[68px_minmax(0,1fr)_78px]"
+			className="relative grid h-[100dvh] min-h-[560px] w-full grid-rows-[76px_minmax(0,1fr)_84px] overflow-hidden bg-bg text-fg phone:min-h-[620px] phone:grid-rows-[68px_minmax(0,1fr)_90px] phone:pb-[env(safe-area-inset-bottom)]"
 		>
 			<div
 				className="pointer-events-none absolute inset-0 opacity-70 [background:radial-gradient(circle_at_18%_8%,var(--accent-soft),transparent_34%),radial-gradient(circle_at_82%_92%,var(--blue-soft),transparent_36%)]"
@@ -307,7 +307,7 @@ export function FirstMile({ onDone }: { onDone: () => void }) {
 
 			<footer
 				className={cn(
-					"relative z-10 grid grid-cols-[1fr_auto_1fr] items-center border-t px-8 pt-1 transition-[border-color,background-color] phone:grid-cols-[48px_minmax(0,1fr)] phone:gap-3 phone:px-4",
+					"relative z-10 grid grid-cols-[1fr_auto_1fr] items-center border-t px-8 pt-1 transition-[border-color,background-color] phone:grid-cols-[48px_minmax(0,1fr)] phone:items-start phone:gap-4 phone:px-5 phone:pt-3",
 					footerSeparated
 						? "border-line bg-bg/95 backdrop-blur-xl"
 						: "border-transparent bg-[linear-gradient(to_bottom,transparent,var(--bg)_30%)]",
@@ -337,7 +337,7 @@ export function FirstMile({ onDone }: { onDone: () => void }) {
 						else goTo(index + 1);
 					}}
 					disabled={!status}
-					className="justify-self-end phone:min-h-12 phone:w-full phone:justify-center"
+					className="justify-self-end phone:min-h-12 phone:w-full phone:justify-center phone:rounded-lg"
 				>
 					{index === 0
 						? "Continue"
