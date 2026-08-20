@@ -461,35 +461,41 @@ function ConnectionCard({
 	return (
 		<>
 			<SettingCard>
-				<div className="flex flex-wrap items-start gap-3 px-5 py-4">
-					<SandboxProviderLogo provider={connection.provider} />
-					<div className="min-w-[14rem] flex-1">
-						<div className="flex flex-wrap items-center gap-2">
-							<div className="text-item-title font-semibold text-fg">{provider.label}</div>
-							<span className={cn("rounded-full px-2 py-0.5 text-meta font-medium", statusClasses(checking ? "checking" : connection.state))}>
-								{checking ? "Checking" : STATE_LABEL[connection.state]}
-							</span>
+				<div className="grid grid-cols-[minmax(0,1fr)_5.75rem] gap-x-4 gap-y-3 px-5 py-4 desktop:grid-cols-[minmax(0,1fr)_13rem]">
+					<div className="col-start-1 row-start-1 flex min-w-0 items-start gap-3">
+						<SandboxProviderLogo provider={connection.provider} />
+						<div className="min-w-0 flex-1">
+							<div className="flex flex-wrap items-center gap-2">
+								<div className="text-item-title font-semibold text-fg">{provider.label}</div>
+								<span className={cn("rounded-full px-2 py-0.5 text-meta font-medium", statusClasses(checking ? "checking" : connection.state))}>
+									{checking ? "Checking" : STATE_LABEL[connection.state]}
+								</span>
+							</div>
+							<p className="m-0 mt-1 text-supporting leading-relaxed text-dim">{provider.description}</p>
+							{summary && (
+								<p className={cn("m-0 mt-2 text-supporting", connection.state === "needs_attention" ? "text-red" : "text-dim")}>
+									{summary}
+								</p>
+							)}
+							{connection.qualification && (
+								<details className="mt-2 text-meta text-faint">
+									<summary className="w-fit cursor-pointer select-none hover:text-fg">Diagnostics</summary>
+									<div className="mt-1 grid gap-0.5 pl-2">
+										<span>Connection {connection.id}</span>
+										<span>Adapter {connection.qualification.adapterSignature}</span>
+										{connection.qualification.checkedAt && <span>Checked {new Date(connection.qualification.checkedAt).toLocaleString()}</span>}
+										{connection.qualification.failureCode && <span>Code {connection.qualification.failureCode}</span>}
+									</div>
+								</details>
+							)}
 						</div>
-						<p className="m-0 mt-1 text-supporting leading-relaxed text-dim">{provider.description}</p>
-						{summary && (
-							<p className={cn("m-0 mt-2 text-supporting", connection.state === "needs_attention" ? "text-red" : "text-dim")}>
-								{summary}
-							</p>
-						)}
-						{connection.qualification && (
-							<details className="mt-2 text-meta text-faint">
-								<summary className="w-fit cursor-pointer select-none hover:text-fg">Diagnostics</summary>
-								<div className="mt-1 grid gap-0.5 pl-2">
-									<span>Connection {connection.id}</span>
-									<span>Adapter {connection.qualification.adapterSignature}</span>
-									{connection.qualification.checkedAt && <span>Checked {new Date(connection.qualification.checkedAt).toLocaleString()}</span>}
-									{connection.qualification.failureCode && <span>Code {connection.qualification.failureCode}</span>}
-								</div>
-							</details>
-						)}
 					</div>
-					<div className="ml-auto flex min-h-10 shrink-0 items-center gap-2">
-						{connection.state !== "not_configured" && (
+					<div className="col-start-2 row-start-1 flex justify-end self-start">
+						{connection.state === "not_configured" ? (
+							<Button size="sm" variant="primary" onClick={() => setDialogOpen(true)} disabled={!canManage || checking}>
+								{connection.provider === "docker" || connection.provider === "microvm" ? "Enable" : "Connect"}
+							</Button>
+						) : (
 							<Switch
 								aria-label={`${connection.enabled ? "Disable" : "Enable"} ${provider.label}`}
 								checked={connection.enabled}
@@ -497,15 +503,19 @@ function ConnectionCard({
 								onCheckedChange={(checked) => void toggle(checked)}
 							/>
 						)}
-						{connection.state === "ready" && !checking && (
-							<Button size="sm" icon={<IconCheck size={17} />} onClick={() => void testAgain()} disabled={!canManage || busy}>
-								Test again
-							</Button>
-						)}
-						<Button size="sm" variant={connection.state === "not_configured" ? "primary" : "default"} onClick={() => setDialogOpen(true)} disabled={!canManage || checking}>
-							{connection.state === "not_configured" ? (connection.provider === "docker" || connection.provider === "microvm" ? "Enable" : "Connect") : "Configure"}
-						</Button>
 					</div>
+					{connection.state !== "not_configured" && (
+						<div className="col-span-2 row-start-2 flex items-center justify-end gap-2 desktop:col-span-1 desktop:col-start-2 desktop:row-start-1 desktop:self-end">
+							{connection.state === "ready" && !checking && (
+								<Button size="sm" icon={<IconCheck size={17} />} onClick={() => void testAgain()} disabled={!canManage || busy}>
+									Test again
+								</Button>
+							)}
+							<Button size="sm" onClick={() => setDialogOpen(true)} disabled={!canManage || checking}>
+								Configure
+							</Button>
+						</div>
+					)}
 				</div>
 			</SettingCard>
 			<ConnectDialog
