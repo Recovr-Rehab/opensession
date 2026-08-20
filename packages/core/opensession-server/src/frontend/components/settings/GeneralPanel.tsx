@@ -9,7 +9,6 @@ import {
 import { rememberOrganizationIcon } from "../../hooks/useOrganizationIcon";
 import { pngFromImageFile } from "../../lib/icon-image";
 import { REPO_TILE_INK, repoColor, repoIconFill } from "../../lib/repo-colors";
-import { Button } from "../../ui/button";
 import { cn } from "../../ui/cn";
 import { OverlayAction } from "../../ui/overlay-action";
 import {
@@ -159,26 +158,14 @@ export function OrganizationProfileSection() {
 										</span>
 									</button>
 									{settings.organizationIconUrl && (
-										<>
-											<OverlayAction
-												icon={<IconTrash className="text-red" size={20} />}
-												disabled={busy}
-												onClick={removeIcon}
-												aria-label="Remove organization icon"
-												title="Remove icon"
-												className="phone:hidden"
-											/>
-											<Button
-												variant="danger"
-												size="sm"
-												icon={<IconTrash size={20} />}
-												disabled={busy}
-												onClick={removeIcon}
-												className="min-h-11 desktop:hidden"
-											>
-												Remove
-											</Button>
-										</>
+										<OverlayAction
+											icon={<IconTrash className="text-red" size={20} />}
+											disabled={busy}
+											onClick={removeIcon}
+											aria-label="Remove organization icon"
+											title="Remove icon"
+											className="phone:pointer-events-auto! phone:opacity-100!"
+										/>
 									)}
 								</div>
 								<input
