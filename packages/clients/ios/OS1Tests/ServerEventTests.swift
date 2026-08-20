@@ -260,6 +260,41 @@ final class ServerEventTests: XCTestCase {
         XCTAssertNil(allSessionId)
     }
 
+    func testWorkflowAndGitRefreshFrames() {
+        let workflow = #"{"type":"workflow_update","sessionId":"os-1","run":{"runId":"run-1","name":"Audit","status":"running","agents":[]}}"#
+        guard case .workflowUpdate(let sessionId, let run) = parse(workflow) else {
+            return XCTFail("expected .workflowUpdate")
+        }
+        XCTAssertEqual(sessionId, "os-1")
+        XCTAssertEqual(run.runId, "run-1")
+        XCTAssertEqual(run.name, "Audit")
+        XCTAssertEqual(run.status, .running)
+
+        guard case .gitPushed(let pushedSession, let repo) = parse(
+            #"{"type":"git_pushed","sessionId":"os-1","repo":"opensession"}"#
+        ) else { return XCTFail("expected .gitPushed") }
+        XCTAssertEqual(pushedSession, "os-1")
+        XCTAssertEqual(repo, "opensession")
+
+        guard case .prUpdated(let updatedRepo, let branch) = parse(
+            #"{"type":"pr_updated","repo":"tella-fusion","branch":"feature/native"}"#
+        ) else { return XCTFail("expected .prUpdated") }
+        XCTAssertEqual(updatedRepo, "tella-fusion")
+        XCTAssertEqual(branch, "feature/native")
+    }
+
+    func testMalformedLiveRefreshFramesAreIgnored() {
+        for json in [
+            #"{"type":"workflow_update","sessionId":"os-1"}"#,
+            #"{"type":"git_pushed"}"#,
+            #"{"type":"pr_updated","repo":"opensession"}"#,
+        ] {
+            guard case .ignored = parse(json) else {
+                return XCTFail("incomplete live refresh frame should be ignored")
+            }
+        }
+    }
+
     func testNoticeAndError() {
         guard case .notice(let message) = parse(#"{"type":"notice","message":"heads up"}"#) else {
             return XCTFail("expected .notice")

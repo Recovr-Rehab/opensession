@@ -50,6 +50,14 @@ enum ServerEvent: Sendable {
     case replySuggestions(sessionId: String, suggestions: [ReplySuggestion])
     case slackComposer(sessionId: String, request: SlackComposeRequest?)
     case slackComposerResolved(sessionId: String, receipt: SlackComposeReceipt)
+    /// A dynamic workflow snapshot changed. The session view model owns the
+    /// run list so an update is not lost when the Agents panel is closed.
+    case workflowUpdate(sessionId: String, run: WorkflowRun)
+    /// This session published local commits. Its PR surfaces should re-read now.
+    case gitPushed(sessionId: String, repo: String?)
+    /// A git-host webhook changed PR, review, or check state for this branch.
+    /// This frame is app-wide and therefore has no session id.
+    case prUpdated(repo: String, branch: String)
     case notice(String)
     case serverError(String)
     // Shell output, for the session's terminal panel. Each frame carries the
@@ -190,6 +198,15 @@ enum ServerEvent: Sendable {
                     permalink: frame.permalink
                 )
             )
+        case "workflow_update":
+            guard let id = frame.sessionId, let run = frame.run else { return .ignored }
+            return .workflowUpdate(sessionId: id, run: run)
+        case "git_pushed":
+            guard let id = frame.sessionId else { return .ignored }
+            return .gitPushed(sessionId: id, repo: frame.repo)
+        case "pr_updated":
+            guard let repo = frame.repo, let branch = frame.branch else { return .ignored }
+            return .prUpdated(repo: repo, branch: branch)
         case "notice":
             return .notice(frame.message ?? "")
         case "error":
@@ -440,6 +457,9 @@ private struct RawFrame: Decodable {
     let status: String?
     let channel: WireSlackChannel?
     let permalink: String?
+    let run: WorkflowRun?
+    let repo: String?
+    let branch: String?
     let message: String?
     let queueId: String?
     let truncated: Bool?

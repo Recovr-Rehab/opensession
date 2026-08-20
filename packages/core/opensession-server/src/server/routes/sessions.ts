@@ -520,6 +520,71 @@ export function archivedIndexRow(
  * when nothing matches, which we treat as "no hits", not an error. Chunked so a
  * very long file list can't overflow the argv limit.
  */
+interface StoredTranscriptSearchResult {
+	matches: Array<{ id: string; snippet: string }>;
+	searchedSessions: number;
+}
+
+/**
+ * Search transcript v2 on a read-only child process. Bun's SQLite API is
+ * synchronous, so doing this in the coordinator would pause sockets and every
+ * other request for the duration of a rare-query scan.
+ */
+async function searchStoredTranscripts(
+	query: string,
+	sessionIds: string[],
+	signal?: AbortSignal,
+): Promise<StoredTranscriptSearchResult> {
+	if (!sessionIds.length || !existsSync(transcriptDbPath()))
+		return { matches: [], searchedSessions: 0 };
+	const proc = Bun.spawn(
+		[process.execPath, `${import.meta.dir}/../transcript-search-worker.ts`],
+		{
+			stdin: "pipe",
+			stdout: "pipe",
+			stderr: "pipe",
+			timeout: 10_000,
+		},
+	);
+	const abort = () => proc.kill();
+	if (signal?.aborted) {
+		abort();
+		await proc.exited;
+		return { matches: [], searchedSessions: 0 };
+	}
+	signal?.addEventListener("abort", abort, { once: true });
+	proc.stdin.write(
+		JSON.stringify({ dbPath: transcriptDbPath(), query, sessionIds, maxMatches: 50 }),
+	);
+	proc.stdin.end();
+	let output = "";
+	let error = "";
+	let code = -1;
+	try {
+		[output, error, code] = await Promise.all([
+			new Response(proc.stdout).text(),
+			new Response(proc.stderr).text(),
+			proc.exited,
+		]);
+	} finally {
+		signal?.removeEventListener("abort", abort);
+	}
+	if (code !== 0) {
+		if (!signal?.aborted)
+			console.warn(`[transcript-search] store worker failed: ${error.trim().slice(0, 300)}`);
+		return { matches: [], searchedSessions: 0 };
+	}
+	try {
+		const parsed = JSON.parse(output) as StoredTranscriptSearchResult;
+		return {
+			matches: Array.isArray(parsed.matches) ? parsed.matches : [],
+			searchedSessions: Number(parsed.searchedSessions) || 0,
+		};
+	} catch {
+		return { matches: [], searchedSessions: 0 };
+	}
+}
+
 async function ripgrepFiles(
 	query: string,
 	files: string[],
@@ -1057,33 +1122,54 @@ export async function handleSessionsRoutes(
 	}
 
 	// Full-text search across session transcripts (the ⌘K palette's
-	// "search in conversations"). Two-stage: a cheap ripgrep pass narrows
-	// hundreds of transcripts to the few that contain the query, then we
-	// parse only those (cached) to pull a clean snippet — which also drops
-	// matches that only occur in transcript metadata (base64, JSON keys).
+	// "search in conversations"). Owned sessions live in transcript v2 and no
+	// longer have mirror files, so their bounded rows are searched in a
+	// read-only child process. The most recent 1,000 sessions cover interactive
+	// recall without turning each keystroke into a scan of the 6+ GB database;
+	// `truncated` keeps that ceiling explicit for a future FTS cutover. Legacy
+	// transcripts retain the ripgrep pre-pass and clean-snippet validation.
 	if (path === "/api/sessions/search" && req.method === "GET") {
 		const q = (url.searchParams.get("q") || "").trim();
 		if (q.length < 2) return Response.json({ matches: [] });
-		const byPath = new Map<string, string>(); // transcriptPath → sessionId
-		for (const s of getCachedSessions()) {
-			if (
-				s.transcriptPath &&
-				!byPath.has(s.transcriptPath) &&
-				existsSync(s.transcriptPath)
+		const sessions = getCachedSessions();
+		const recentIds = sessions
+			.slice()
+			.sort(
+				(a, b) =>
+					(Date.parse(b.lastActivity || "") || 0) -
+					(Date.parse(a.lastActivity || "") || 0),
 			)
-				byPath.set(s.transcriptPath, s.id);
+			.slice(0, 1_000)
+			.map((session) => session.id);
+		const stored = await searchStoredTranscripts(q, recentIds, req.signal);
+		const matches = stored.matches.slice(0, 50);
+		const matchedIds = new Set(matches.map((match) => match.id));
+
+		const byPath = new Map<string, string>(); // transcriptPath → sessionId
+		for (const session of sessions) {
+			if (
+				session.transcriptPath &&
+				!byPath.has(session.transcriptPath) &&
+				existsSync(session.transcriptPath)
+			)
+				byPath.set(session.transcriptPath, session.id);
 		}
-		const files = [...byPath.keys()];
-		if (!files.length) return Response.json({ matches: [] });
-		const matches: Array<{ id: string; snippet: string }> = [];
-		for (const f of await ripgrepFiles(q, files)) {
-			const id = byPath.get(f);
-			if (!id) continue;
-			const snippet = transcriptMatchSnippet(f, q);
-			if (snippet) matches.push({ id, snippet });
-			if (matches.length >= 50) break;
+		if (matches.length < 50) {
+			for (const file of await ripgrepFiles(q, [...byPath.keys()])) {
+				const id = byPath.get(file);
+				if (!id || matchedIds.has(id)) continue;
+				const snippet = transcriptMatchSnippet(file, q);
+				if (snippet) {
+					matches.push({ id, snippet });
+					matchedIds.add(id);
+				}
+				if (matches.length >= 50) break;
+			}
 		}
-		return Response.json({ matches });
+		return Response.json({
+			matches,
+			truncated: sessions.length > recentIds.length && matches.length < 50,
+		});
 	}
 
 	// Every sub-agent this session spawned (pi task-tool children +

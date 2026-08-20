@@ -137,7 +137,19 @@ final class SessionViewModel {
     /// of an endless spinner.
     private(set) var prLoadFailed = false
     private var prTask: Task<Void, Never>?
+    private var prLoadGeneration = 0
+    private let prLoader: @MainActor (String) async throws -> PrDetails?
     private var notesTask: Task<Void, Never>?
+
+    // ── Workflow runs ──
+    /// Authoritative snapshots for the Agents panel. The socket upserts live
+    /// changes here even while the panel is closed, so opening it cannot miss
+    /// the transition a local view-level listener never saw.
+    private(set) var workflowRuns: [WorkflowRun] = []
+    private(set) var workflowRunsLoaded = false
+    private(set) var workflowLoadFailed = false
+    private var workflowEventRevision = 0
+    private let workflowLoader: @MainActor (String) async throws -> [WorkflowRun]
 
     // ── Session goal ──
     /// Goal set from this app (`/goal`), used to label the composer menu's
@@ -388,12 +400,20 @@ final class SessionViewModel {
         composerDraft: ComposerDraft? = nil,
         socketFactory: @escaping @MainActor () -> any SessionSocket = { OS1Socket() },
         outbox: Outbox = .shared,
-        conversationLoadTimeout: TimeInterval = 15
+        conversationLoadTimeout: TimeInterval = 15,
+        prLoader: @escaping @MainActor (String) async throws -> PrDetails? = {
+            try await OS1API.pr(sessionId: $0)
+        },
+        workflowLoader: @escaping @MainActor (String) async throws -> [WorkflowRun] = {
+            try await OS1API.workflowRuns(sessionId: $0)
+        }
     ) {
         self.session = session
         self.socketFactory = socketFactory
         self.outbox = outbox
         self.conversationLoadTimeout = conversationLoadTimeout
+        self.prLoader = prLoader
+        self.workflowLoader = workflowLoader
         self.isRunning = session.isRunning ?? false
         self.usage = session.usage
         self.model = session.model ?? ""
@@ -523,33 +543,93 @@ final class SessionViewModel {
         resyncProbeTask?.cancel()
         creationRetryTask?.cancel()
         deliveringPruneTask?.cancel()
+        prLoadGeneration += 1
         prTask?.cancel()
         notesTask?.cancel()
         socket?.disconnect()
         socket = nil
     }
 
-    /// Fire-and-forget PR refresh (open, foreground, run end).
+    /// Fire-and-forget PR refresh (open, foreground, run end, live event).
+    /// A generation guard keeps a cancelled request that finishes late from
+    /// replacing a newer webhook-triggered answer.
     func loadPr() {
+        prLoadGeneration += 1
+        let generation = prLoadGeneration
         prTask?.cancel()
         prTask = Task { [weak self] in
-            await self?.refreshPr()
+            await self?.performPrRefresh(generation: generation)
         }
     }
 
     /// Awaitable PR refresh for the panel's pull-to-refresh / retry. A failure
-    /// keeps whatever we already have — stale beats blank; only a failure with
+    /// keeps whatever we already have: stale beats blank; only a failure with
     /// nothing loaded surfaces as prLoadFailed.
     func refreshPr() async {
+        prLoadGeneration += 1
+        let generation = prLoadGeneration
+        prTask?.cancel()
+        prTask = nil
+        await performPrRefresh(generation: generation)
+    }
+
+    private func performPrRefresh(generation: Int) async {
         do {
-            let details = try await OS1API.pr(sessionId: session.id)
-            guard !Task.isCancelled else { return }
+            let details = try await prLoader(session.id)
+            guard !Task.isCancelled, generation == prLoadGeneration else { return }
             prDetails = details
             prLoadFailed = false
         } catch {
-            guard !Task.isCancelled else { return }
+            guard !Task.isCancelled, generation == prLoadGeneration else { return }
             prLoadFailed = prDetails == nil
         }
+    }
+
+    /// A global PR event belongs to this session when it names any branch the
+    /// server associates with it, including linked and discovered PRs whose
+    /// branch differs from the checked-out worktree.
+    func matchesPrUpdate(repo: String, branch: String) -> Bool {
+        if session.effectiveRepo == repo, session.branch == branch { return true }
+        if session.attachedRepos?.contains(where: {
+            $0.repo == repo && $0.branch == branch
+        }) == true { return true }
+        return session.prs?.contains(where: {
+            $0.repo == repo && $0.branch == branch
+        }) == true
+    }
+
+    /// Seed or revalidate the Agents panel. A workflow event that lands while
+    /// this request is in flight wins for any run id both carry; the older REST
+    /// snapshot may only fill runs the event-backed list does not know yet.
+    func refreshWorkflowRuns() async {
+        let eventRevision = workflowEventRevision
+        do {
+            let next = try await workflowLoader(session.id)
+            guard !Task.isCancelled else { return }
+            if eventRevision == workflowEventRevision {
+                workflowRuns = next
+            } else {
+                let known = Set(workflowRuns.map(\.runId))
+                workflowRuns.append(contentsOf: next.filter { !known.contains($0.runId) })
+            }
+            workflowRunsLoaded = true
+            workflowLoadFailed = false
+        } catch {
+            guard !Task.isCancelled else { return }
+            workflowRunsLoaded = true
+            workflowLoadFailed = workflowRuns.isEmpty
+        }
+    }
+
+    private func upsertWorkflowRun(_ run: WorkflowRun) {
+        workflowEventRevision += 1
+        if let index = workflowRuns.firstIndex(where: { $0.runId == run.runId }) {
+            workflowRuns[index] = run
+        } else {
+            workflowRuns.insert(run, at: 0)
+        }
+        workflowRunsLoaded = true
+        workflowLoadFailed = false
     }
 
     func loadSessionNotes() {
@@ -1690,6 +1770,17 @@ final class SessionViewModel {
 
         case .slackComposerResolved(let id, let receipt) where id == session.id:
             resolveSlackComposer(receipt)
+
+        case .workflowUpdate(let id, let run) where id == session.id:
+            upsertWorkflowRun(run)
+
+        case .gitPushed(let id, _) where id == session.id:
+            loadPr()
+
+        case .prUpdated(let repo, let branch) where matchesPrUpdate(
+            repo: repo, branch: branch
+        ):
+            loadPr()
 
         case .serverError(let message)
         where awaitingCreation && message == "Session not found":

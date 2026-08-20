@@ -12,6 +12,7 @@ import { SLACK_ID_TO_NAME } from "./shared/user-mappings";
 import { stripContext } from "./prompt-context";
 import { configuredIntegration } from "./config";
 import { extractAssistantVideos, toolResultMedia } from "./transcript-media";
+import { transcriptEntryMatchSnippet } from "./transcript-search";
 export {
   extractAssistantVideos,
   extractImageMarkers,
@@ -1181,30 +1182,6 @@ export function entriesForWire(
   );
 }
 
-function safeStringify(v: unknown): string {
-  try {
-    return JSON.stringify(v);
-  } catch {
-    return "";
-  }
-}
-
-// Build a compact one-line snippet with the match shown in context, whitespace
-// collapsed and ellipses where text was trimmed.
-function makeSnippet(
-  text: string,
-  idx: number,
-  len: number,
-  ctx: number
-): string {
-  const start = Math.max(0, idx - ctx);
-  const end = Math.min(text.length, idx + len + ctx);
-  let snip = text.slice(start, end).replace(/\s+/g, " ").trim();
-  if (start > 0) snip = "…" + snip;
-  if (end < text.length) snip = snip + "…";
-  return snip;
-}
-
 /**
  * Find the first transcript entry whose *visible* text (a message, a tool
  * result, or a tool call's serialized input) contains `query`
@@ -1219,18 +1196,9 @@ export function transcriptMatchSnippet(
   query: string,
   ctx: number = 60
 ): string | null {
-  const q = query.trim().toLowerCase();
-  if (!q) return null;
-  for (const e of parseTranscript(path)) {
-    // The text a person actually reads for this entry. For a tool call the
-    // rendered `content` is a truncated summary, so also search the full input
-    // (e.g. a Bash command or search query the summary cut off).
-    const hay =
-      e.type === "tool_use" && e.toolInput
-        ? `${e.content}\n${safeStringify(e.toolInput)}`
-        : e.content || "";
-    const idx = hay.toLowerCase().indexOf(q);
-    if (idx !== -1) return makeSnippet(hay, idx, q.length, ctx);
+  for (const entry of parseTranscript(path)) {
+    const snippet = transcriptEntryMatchSnippet(entry, query, ctx);
+    if (snippet) return snippet;
   }
   return null;
 }

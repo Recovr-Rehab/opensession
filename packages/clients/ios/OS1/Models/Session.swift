@@ -103,6 +103,11 @@ struct Session: Identifiable, Decodable, Equatable, Hashable {
     var spawnedBy: String?
     var automation: AutomationFlag?
     var attachedRepos: [AttachedRepo]?
+    /// Every pull-request branch associated with this session, including
+    /// attached, linked, and discovered branches. The native PR panel still
+    /// presents the primary PR; this list makes app-wide webhook refreshes
+    /// reach every branch the session owns.
+    var prs: [SessionPrRef]?
     /// The requested sandbox provider and materialized sandbox id. This is a
     /// reference only; Workspace details resolves its live state on demand.
     var sandbox: SessionSandbox?
@@ -368,6 +373,14 @@ struct AttachedRepo: Decodable, Equatable, Hashable, Identifiable {
     let dir: String
 
     var id: String { repo }
+}
+
+/// The identity fields of one PR associated with a session. The server sends
+/// richer state too; tolerant decoding keeps only what live refresh matching
+/// needs and ignores the rest.
+struct SessionPrRef: Decodable, Equatable, Hashable {
+    let repo: String
+    let branch: String
 }
 
 extension Session {

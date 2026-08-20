@@ -66,6 +66,10 @@ struct SessionsListView: View {
     /// equivalent: the open session stays selected in the sidebar.
     @State private var lastOpenedSessionID: String?
     @State private var searchText = ""
+    /// Full-text hits from the same transcript search the PWA uses. Kept by
+    /// session id so workspace rows can match any conversation behind them.
+    @State private var transcriptSnippets: [String: String] = [:]
+    @State private var transcriptSearchRevision = 0
     /// Non-nil opens the new-session sheet; carries the per-repo "+" preset.
     @State private var newSessionRequest: NewSessionRequest?
     /// Parked "Start an Agent" requests (`StartAgentIntent`, widgets, Siri).
@@ -313,6 +317,9 @@ struct SessionsListView: View {
             .task {
                 viewModel.startPolling()
             }
+            .task(id: searchText) {
+                await updateTranscriptSearch()
+            }
             .task(id: knownRepoCount) {
                 // Not for the sheet's repo picker — for the tiles in this
                 // list. The repo list carries each repo's assigned tile
@@ -385,6 +392,15 @@ struct SessionsListView: View {
             .onAppear {
                 openQuickCapture()
                 openRequestedSession()
+                #if DEBUG
+                // Screenshot and simulator probe hook for the result-only UI.
+                // Showing everyone makes the fixture independent of the
+                // Automation identity used by capture-ios.ts.
+                if let query = ProcessInfo.processInfo.environment["OS1_SEARCH_QUERY"] {
+                    peopleFilterRaw = SidebarPersonLens.everyone
+                    searchText = query
+                }
+                #endif
             }
             .onChange(of: quickCapture.request?.id) { openQuickCapture() }
             .onChange(of: requestedSession.request?.id) { openRequestedSession() }
@@ -1392,8 +1408,79 @@ struct SessionsListView: View {
         }
     }
 
-    /// Whose work is whose — one rule, shared with the Archived sheet.
+    /// Whose work is whose: one rule, shared with the Archived sheet.
     private var peopleLens: PeopleLens { PeopleLens.current() }
+
+    /// Debounced server search with a revision guard. Cancellation normally
+    /// stops URLSession too, but the guard also covers a request that finishes
+    /// after the query changed away and then back to the same text.
+    private func updateTranscriptSearch() async {
+        transcriptSearchRevision += 1
+        let revision = transcriptSearchRevision
+        let query = searchText.trimmingCharacters(in: .whitespacesAndNewlines)
+        transcriptSnippets = [:]
+        guard query.count >= 2 else { return }
+        do {
+            try await Task.sleep(for: .milliseconds(250))
+            guard !Task.isCancelled else { return }
+            let matches = try await OS1API.searchTranscripts(query)
+            guard !Task.isCancelled, revision == transcriptSearchRevision,
+                  query == searchText.trimmingCharacters(in: .whitespacesAndNewlines)
+            else { return }
+            var next: [String: String] = [:]
+            for match in matches where next[match.id] == nil {
+                next[match.id] = match.snippet
+            }
+            transcriptSnippets = next
+        } catch {
+            // Metadata search remains useful when a server predates this route
+            // or the connection drops. The next query tries again.
+        }
+    }
+
+    private func sessionMatchesMetadata(_ session: Session, query: String) -> Bool {
+        [session.title, session.effectiveRepo, session.branch, session.id]
+            .compactMap { $0 }
+            .contains { $0.lowercased().contains(query) }
+    }
+
+    private func workspaceMatchesMetadata(
+        _ workspace: SidebarWorkspace,
+        query: String
+    ) -> Bool {
+        workspace.title.lowercased().contains(query)
+            || workspace.sessions.contains { sessionMatchesMetadata($0, query: query) }
+    }
+
+    /// Snippets explain only transcript-only hits. A metadata match already
+    /// explains itself through the row's title, repository, or branch.
+    private func workspaceSearchSnippet(_ workspace: SidebarWorkspace) -> String? {
+        let query = searchText.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        guard !query.isEmpty, !workspaceMatchesMetadata(workspace, query: query) else {
+            return nil
+        }
+        return workspace.sessions.compactMap { transcriptSnippets[$0.id] }.first
+    }
+
+    private var archivedSearchResults: [Session] {
+        let query = searchText.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        guard !query.isEmpty else { return [] }
+        let lens = peopleLens
+        let person = person
+        let agentKey = agentKey
+        return viewModel.archivedSessions.filter { session in
+            lens.matches(session, person: person, agentKey: agentKey)
+                && (repoFilter == "all" || session.effectiveRepo == repoFilter)
+                && (sessionMatchesMetadata(session, query: query)
+                    || transcriptSnippets[session.id] != nil)
+        }
+    }
+
+    private func archivedSearchSnippet(_ session: Session) -> String? {
+        let query = searchText.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        guard !sessionMatchesMetadata(session, query: query) else { return nil }
+        return transcriptSnippets[session.id]
+    }
 
     private var visibleArchivedSessions: [Session] {
         let lens = peopleLens
@@ -1435,12 +1522,8 @@ struct SessionsListView: View {
             }
             if repo != "all", workspace.effectiveRepo != repo { return false }
             guard !query.isEmpty else { return true }
-            if workspace.title.lowercased().contains(query) { return true }
-            return workspace.sessions.contains { session in
-                [session.title, session.effectiveRepo, session.branch, session.id]
-                    .compactMap { $0 }
-                    .contains { $0.lowercased().contains(query) }
-            }
+            if workspaceMatchesMetadata(workspace, query: query) { return true }
+            return workspace.sessions.contains { transcriptSnippets[$0.id] != nil }
         }
     }
 
@@ -1848,6 +1931,7 @@ struct SessionsListView: View {
             sessions: workspace.sessions,
             repo: repo,
             autoCreated: AutoCreatedOrigin.wasAutoCreated(workspace),
+            searchSnippet: workspaceSearchSnippet(workspace),
             isWorkspaceDraft: workspace.isDraftWorkspace,
             onArchive: canArchive ? { archive(workspace) } : nil
         )
@@ -1880,6 +1964,7 @@ struct SessionsListView: View {
                 sessions: workspace.sessions,
                 repo: repo,
                 autoCreated: AutoCreatedOrigin.wasAutoCreated(workspace),
+                searchSnippet: workspaceSearchSnippet(workspace),
                 highlighted: isLastOpened(workspace),
                 isWorkspaceDraft: workspace.isDraftWorkspace
             )
@@ -1922,6 +2007,40 @@ struct SessionsListView: View {
             }
         })
         #endif
+    }
+
+    private func archivedSearchRow(_ session: Session) -> some View {
+        Button {
+            openArchivedSearchResult(session)
+        } label: {
+            SessionRow(
+                session: session,
+                repo: repoFilter == "all" && availableRepos.count > 1
+                    ? session.effectiveRepo
+                    : nil,
+                searchSnippet: archivedSearchSnippet(session)
+            )
+        }
+        .buttonStyle(.plain)
+        #if os(iOS)
+        .listRowInsets(EdgeInsets(
+            top: 2, leading: sidebarMargin, bottom: 2, trailing: sidebarMargin
+        ))
+        .listRowSeparator(.hidden)
+        .listRowBackground(Color.clear)
+        #endif
+    }
+
+    private func openArchivedSearchResult(_ session: Session) {
+        Task {
+            let hydrated = await viewModel.hydrated(session)
+            #if os(macOS)
+            selectedSessionID = nil
+            openedArchivedSession = hydrated
+            #else
+            path.append(hydrated)
+            #endif
+        }
     }
 
     #if os(iOS)
@@ -2418,6 +2537,17 @@ struct SessionsListView: View {
                             )
                         }
                     }
+                }
+            }
+
+            let archivedMatches = archivedSearchResults
+            if !archivedMatches.isEmpty {
+                Section {
+                    ForEach(archivedMatches) { session in
+                        archivedSearchRow(session)
+                    }
+                } header: {
+                    Text("Archived matches")
                 }
             }
 
@@ -3478,6 +3608,10 @@ struct SessionRow: View {
     /// automation run does: sitting in the ordinary bands next to work a
     /// person started, that is the question the row still raises.
     var autoCreated = false
+    /// Conversation context for a transcript-only search hit. Metadata matches
+    /// keep their normal one-line row because the title already explains why
+    /// they are present.
+    var searchSnippet: String? = nil
     /// iOS: the session you last had open. A neutral plate rather than a hue —
     /// every colour on this list already means something (the status marks and
     /// repo tiles), and "where you were" is chrome, not status. `tertiary`
@@ -3541,20 +3675,26 @@ struct SessionRow: View {
                 WebIcon(kind: .robot, size: tileSize, color: OS1VisualStyle.textFaint)
                     .accessibilityHidden(true)
             }
-            Text(rowTitle)
-                #if os(iOS)
-                // The web sidebar's phone type, exactly: 16px titles (callout)
-                // in medium, dimmed — and, when the row has activity you
-                // haven't read, semibold at full strength. Same Slack-style
-                // pair as `.sidebar-item-title` / `.sidebar-item-unread`.
-                .font(.callout.weight(unread ? .semibold : .medium))
-                .foregroundStyle(unread ? OS1VisualStyle.text : OS1VisualStyle.textDim)
-                #else
-                .font(.body.weight(unread ? .semibold : .regular))
-                .foregroundStyle(.primary)
-                #endif
-                .lineLimit(1)
-                .frame(maxWidth: .infinity, alignment: .leading)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(rowTitle)
+                    #if os(iOS)
+                    // The web sidebar's phone type, exactly: 16px titles (callout)
+                    // in medium, dimmed. Unread rows step up in both weight and ink.
+                    .font(.callout.weight(unread ? .semibold : .medium))
+                    .foregroundStyle(unread ? OS1VisualStyle.text : OS1VisualStyle.textDim)
+                    #else
+                    .font(.body.weight(unread ? .semibold : .regular))
+                    .foregroundStyle(.primary)
+                    #endif
+                    .lineLimit(1)
+                if let searchSnippet, !searchSnippet.isEmpty {
+                    Text(searchSnippet)
+                        .font(.caption)
+                        .foregroundStyle(OS1VisualStyle.textFaint)
+                        .lineLimit(1)
+                }
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
             if hasDraft && !isWorkspaceDraft {
                 Image(systemName: "pencil")
                     .font(.system(size: 15, weight: .semibold))

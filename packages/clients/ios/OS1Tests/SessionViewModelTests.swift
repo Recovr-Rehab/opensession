@@ -381,6 +381,88 @@ final class SessionViewModelTests: XCTestCase {
         viewModel.stop()
     }
 
+    func testWorkflowUpdatesAreOwnedByTheMatchingSession() {
+        let viewModel = makeViewModel()
+        viewModel.handle(.workflowUpdate(
+            sessionId: "bks-1",
+            run: WorkflowRun(runId: "run-1", name: "Audit", status: .running)
+        ))
+        XCTAssertEqual(viewModel.workflowRuns.map(\.runId), ["run-1"])
+        XCTAssertEqual(viewModel.workflowRuns.first?.status, .running)
+        XCTAssertTrue(viewModel.workflowRunsLoaded)
+
+        viewModel.handle(.workflowUpdate(
+            sessionId: "bks-1",
+            run: WorkflowRun(runId: "run-1", name: "Audit", status: .done)
+        ))
+        XCTAssertEqual(viewModel.workflowRuns.count, 1)
+        XCTAssertEqual(viewModel.workflowRuns.first?.status, .done)
+
+        viewModel.handle(.workflowUpdate(
+            sessionId: "bks-2",
+            run: WorkflowRun(runId: "run-2", name: "Other")
+        ))
+        XCTAssertEqual(viewModel.workflowRuns.map(\.runId), ["run-1"])
+    }
+
+    func testWorkflowEventWinsAgainstAnOlderRestResponse() async {
+        var continuation: CheckedContinuation<[WorkflowRun], any Error>?
+        let viewModel = SessionViewModel(
+            session: Session(id: "bks-1"),
+            workflowLoader: { _ in
+                try await withCheckedThrowingContinuation { continuation = $0 }
+            }
+        )
+        let loading = Task { await viewModel.refreshWorkflowRuns() }
+        while continuation == nil { await Task.yield() }
+
+        viewModel.handle(.workflowUpdate(
+            sessionId: "bks-1",
+            run: WorkflowRun(runId: "run-1", name: "Audit", status: .done)
+        ))
+        continuation?.resume(returning: [
+            WorkflowRun(runId: "run-1", name: "Audit", status: .running),
+            WorkflowRun(runId: "run-older", name: "Older", status: .done),
+        ])
+        await loading.value
+
+        XCTAssertEqual(viewModel.workflowRuns.map(\.runId), ["run-1", "run-older"])
+        XCTAssertEqual(viewModel.workflowRuns.first?.status, .done)
+    }
+
+    func testPrRefreshEventsMatchEveryAssociatedBranch() async {
+        var requested: [String] = []
+        var session = Session(id: "bks-1")
+        session.repo = "opensession"
+        session.branch = "feature/native"
+        session.attachedRepos = [
+            AttachedRepo(repo: "tella-fusion", branch: "feature/attached", dir: "/tmp/a")
+        ]
+        session.prs = [
+            SessionPrRef(repo: "gitops", branch: "feature/discovered")
+        ]
+        let viewModel = SessionViewModel(session: session, prLoader: { id in
+            requested.append(id)
+            return nil
+        })
+
+        viewModel.handle(.prUpdated(repo: "opensession", branch: "other"))
+        viewModel.handle(.gitPushed(sessionId: "bks-2", repo: nil))
+        await Task.yield()
+        XCTAssertTrue(requested.isEmpty)
+
+        for event in [
+            ServerEvent.prUpdated(repo: "opensession", branch: "feature/native"),
+            .prUpdated(repo: "tella-fusion", branch: "feature/attached"),
+            .prUpdated(repo: "gitops", branch: "feature/discovered"),
+            .gitPushed(sessionId: "bks-1", repo: "opensession"),
+        ] {
+            viewModel.handle(event)
+            await Task.yield()
+        }
+        XCTAssertEqual(requested, ["bks-1", "bks-1", "bks-1", "bks-1"])
+    }
+
     /// Presence for another session must not repaint this one's pile.
     func testPresenceForAnotherSessionIsIgnored() {
         let viewModel = makeViewModel()

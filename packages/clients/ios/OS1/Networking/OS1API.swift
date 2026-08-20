@@ -233,6 +233,33 @@ enum OS1API {
         try await get("/api/sessions/\(sessionId)/transcript")
     }
 
+    struct TranscriptSearchMatch: Decodable, Equatable, Sendable {
+        let id: String
+        let snippet: String
+    }
+
+    private struct TranscriptSearchResponse: Decodable, Sendable {
+        let matches: [TranscriptSearchMatch]
+    }
+
+    /// Search visible transcript text across sessions. The server ignores
+    /// one-character queries too, but keeping them local avoids a round trip
+    /// while someone is still starting to type.
+    static func searchTranscripts(_ query: String) async throws -> [TranscriptSearchMatch] {
+        let trimmed = query.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard trimmed.count >= 2 else { return [] }
+        let response: TranscriptSearchResponse = try await get(
+            transcriptSearchPath(query: trimmed)
+        )
+        return response.matches
+    }
+
+    nonisolated static func transcriptSearchPath(query: String) -> String {
+        var components = URLComponents()
+        components.queryItems = [URLQueryItem(name: "q", value: query)]
+        return "/api/sessions/search?\(components.percentEncodedQuery ?? "")"
+    }
+
     /// One sub-agent's transcript. `agentId` comes off the spawning Task
     /// call — its result's `agentId`, or the `ses_…` the result announces.
     static func subagent(

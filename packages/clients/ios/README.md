@@ -15,7 +15,8 @@ Pure SwiftUI with SwiftStreamingMarkdown for CommonMark/GFM rendering, iOS 26+
   flat single-line workspace rows with live/PR status marks and a running-time
   ticker, larger mobile type, and the web client's warm dark palette, plus
   grouping with the web sidebar's shared, drag-to-reorder repository order,
-  compact toolbar search/filter, iOS long-press worktree actions (details,
+  compact toolbar search/filter that finds session metadata and conversation
+  text through `/api/sessions/search`, iOS long-press worktree actions (details,
   rename, sharing, pull request, pin, hide from my sidebar, and archive),
   swipe right to pin and left to archive, restore from the archived list, a
   floating create button, and pull to refresh. Pinned rows are lifted into a
@@ -145,6 +146,9 @@ Pure SwiftUI with SwiftStreamingMarkdown for CommonMark/GFM rendering, iOS 26+
   `openPanel` environment action from the transcript and the overflow menu,
   and directly by the workspace sheet's own rows — which push within the
   sheet, so that page stays where it was.
+- **Agent runs**: the Agents panel reads every workflow a session started and
+  updates each run immediately from `workflow_update` socket frames. A 3-second
+  poll remains while a run is live for compatibility with older servers.
 - **Changes** — every file the worktree has touched, and the diff of any one of
   them, reached from the overflow menu or the workspace sheet (whose file rows
   open that file directly, and whose "Show all N files" replaces what used to
@@ -216,7 +220,9 @@ Pure SwiftUI with SwiftStreamingMarkdown for CommonMark/GFM rendering, iOS 26+
   long-press menu also rolls the
   cached PR state into one next action: merge when ready, fix failed checks,
   resolve conflicts, address feedback, view running checks, or archive after it
-  lands. Each action needs a GitHub credential server-side,
+  lands. `git_pushed` and matching `pr_updated` socket frames re-fetch these
+  PR surfaces immediately, including attached, linked, and discovered branches.
+  Each action needs a GitHub credential server-side,
   which with web sign-in on is the signed-in person's own token,
   so an unconnected account gets the server's "connect your GitHub account"
   sentence in the panel rather than a status code. It is
