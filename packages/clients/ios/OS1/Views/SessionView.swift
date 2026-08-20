@@ -814,7 +814,7 @@ struct SessionView: View {
                 }
                 // Land straight on the PR panel. The simulator takes no taps from
                 // a headless host, so verifying anything behind a control means
-                // reaching it some other way — same reason as the sheet above.
+                // reaching it some other way, for the same reason as the sheet above.
                 if ProcessInfo.processInfo.environment["OS1_OPEN_PR"] == "1",
                    openPanel.isAvailable {
                     openPanel(.review(sessionId: viewModel.session.id))
