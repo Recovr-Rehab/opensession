@@ -6,6 +6,7 @@ import {
 	uploadOrganizationIcon,
 	type OrganizationSettingsDto,
 } from "../../lib/api";
+import { rememberOrganizationIcon } from "../../hooks/useOrganizationIcon";
 import { pngFromImageFile } from "../../lib/icon-image";
 import { REPO_TILE_INK, repoColor, repoIconFill } from "../../lib/repo-colors";
 import { Button } from "../../ui/button";
@@ -45,6 +46,7 @@ export function OrganizationProfileSection() {
 			if (cancelled?.()) return;
 			setSettings(next);
 			setDraft(next.organizationName);
+			rememberOrganizationIcon(next);
 		} catch (error: any) {
 			if (cancelled?.()) return;
 			const message = error?.message || "Couldn’t load organization settings";
@@ -69,6 +71,7 @@ export function OrganizationProfileSection() {
 			setSettings(next);
 			setDraft(next.organizationName);
 			setIconFailed(false);
+			rememberOrganizationIcon(next);
 			toast(message, { variant: "success" });
 		} catch (error: any) {
 			toast(error?.message || "Couldn’t save organization settings", {

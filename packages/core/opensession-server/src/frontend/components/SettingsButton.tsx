@@ -1,10 +1,10 @@
 import React from "react";
 import {
 	APP_LOGO_BUTTON,
-	APP_LOGO_IMAGE,
 	APP_LOGO_STATUS,
 } from "../lib/app-header-classes";
 import { Tooltip } from "../ui/tooltip";
+import { OrganizationAppIcon } from "./OrganizationAppIcon";
 import { useCurrentUser } from "./UserPicker";
 import { UserAvatar } from "./UserAvatar";
 
@@ -37,7 +37,7 @@ export function SettingsButton({
 				className={APP_LOGO_BUTTON}
 				onClick={() => onOpenSettings?.()}
 			>
-				<img className={APP_LOGO_IMAGE} src="/mac-app-icon.png" alt="" />
+				<OrganizationAppIcon />
 			</button>
 		);
 

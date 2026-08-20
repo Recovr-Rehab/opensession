@@ -906,46 +906,16 @@ struct SessionsListView: View {
                         Button {
                             showSettings = true
                         } label: {
-                            // The tile this button wore before the icon work
-                            // of 2026-08-07 — restored deliberately, after a
-                            // day of resizing it landed nowhere better.
-                            //
-                            // What that was: a 44pt round tile painting an
-                            // UNTRIMMED icon, i.e. one whose own transparent
-                            // margin left the mark on ~80% of the picture.
-                            // The icon route now crops that margin off
-                            // (png-trim.ts), so reproducing the old look
-                            // takes the inset back as `artScale`, a notch
-                            // under the 0.867 that reproduced it exactly:
-                            // the mark is solid ink against actions that are
-                            // a near-transparent capsule holding two ~22pt
-                            // glyphs, so it stays under their 44pt capsule:
-                            // 44 × 0.88 × 0.93 ≈ 36pt.
-                            //
-                            // Square clip, not `round`, once the art is this
-                            // close to the tile's edge: a circle inscribed in
-                            // the same 44pt box crosses inside the mark's own
-                            // rounded-square corners and flattens them, which
-                            // is the "cutting off the radius" this button was
-                            // reported for. Nothing is clipped either way at
-                            // this size — the square is just the shape that
-                            // stays true if the art grows again.
-                            RepoTile(
-                                name: "opensession",
-                                size: 44,
-                                artScale: 0.88
-                            )
+                            // An organization icon fills the existing 44pt
+                            // rounded-square tile. Without one, the bundled
+                            // mark keeps its established inset so its ink sits
+                            // below the nearby 44pt action capsules.
+                            OrganizationAppIcon(size: 44, fallbackScale: 0.88)
                         }
                         .accessibilityLabel("Settings")
                         // Hiding the glass background leaves the padding the
-                        // capsule reserved, so the bare tile sits well right
-                        // of everything under it. Pull it back until the MARK
-                        // starts on the list's own column — band headings and
-                        // row tiles both begin at ~16pt — which is further
-                        // than the tile's frame suggests: the art is inset
-                        // inside it by `artScale`, so the frame has to sit
-                        // ~5pt left of where the ink should land, i.e. 33.5pt
-                        // left of the column itself.
+                        // capsule reserved, so pull the tile back onto the
+                        // list's leading column.
                         .padding(.leading, sidebarMargin - 33.5)
                     }
                     // The bare app tile is the control; the toolbar's glass
