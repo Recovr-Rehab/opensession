@@ -2102,6 +2102,7 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 	// repaints the hints instead of leaving them describing the old chord.
 	const newSessionKeys = useShortcutKeys("session-new");
 	const pinShortcutKeys = useShortcutKeys("session-pin");
+	const archiveShortcutKeys = useShortcutKeys("session-archive");
 
 	// ⌘E (or the legacy ⌘⇧A) archives the open session and lands on the next entry
 	// in the sidebar, rather than dropping back to Home. This lives here (not in
@@ -3296,11 +3297,16 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 									<IconMoon size={19} />
 								</span>
 							</Tooltip>
-							<Tooltip label="Archive workspace">
+							<Tooltip
+								label="Archive workspace"
+								shortcut={
+									active ? (archiveShortcutKeys ?? undefined) : undefined
+								}
+							>
 								<span
 									role="button"
 									tabIndex={0}
-									className={cn(SIDEBAR_WS_ACTION, "text-faint hover:text-red")}
+									className={cn(SIDEBAR_WS_ACTION, "text-faint hover:text-fg")}
 									aria-label="Archive workspace"
 									onClick={(e) => {
 										e.stopPropagation();
