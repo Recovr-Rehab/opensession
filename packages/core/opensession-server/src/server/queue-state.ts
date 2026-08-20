@@ -20,7 +20,7 @@ import { setAppendHook } from "./transcript-store";
 import type { TranscriptEntry } from "./types";
 import { broadcastToSession } from "./ws-hub";
 import { AUTO_CONTINUE_USER } from "./auto-continue";
-import { isWorkerActor } from "./session-actors";
+import { delegatedActorParent, isWorkerActor } from "./session-actors";
 import { userMatchesAny } from "./shared/user-mappings";
 
 const g = globalThis as any;
@@ -85,13 +85,19 @@ export function isWorkerQueueItem(item?: QueueItem): boolean {
 	return isWorkerActor(item?.user);
 }
 
+/** Any message sent by another session, whether it is a parent-linked worker
+ * report or a peer session's coordination prompt. */
+export function isDelegatedQueueItem(item?: QueueItem): boolean {
+	return delegatedActorParent(item?.user) !== null;
+}
+
 /** Only ordinary composer messages can be moved back into a draft. Routed
  * items carry queue-only metadata that a composer send cannot reconstruct. */
 export function isEditableQueueItem(item?: QueueItem): boolean {
 	return !!item &&
 		!!item.user &&
 		!isGitHubQueueItem(item) &&
-		!isWorkerQueueItem(item) &&
+		!isDelegatedQueueItem(item) &&
 		item.user !== AUTO_CONTINUE_USER &&
 		!item.contextSessions?.length &&
 		!item.slackReplyTo &&

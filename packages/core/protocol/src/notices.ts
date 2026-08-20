@@ -408,24 +408,36 @@ export function parseRecoveryNotice(content?: string): { body: string } | null {
 }
 
 /**
- * An informational heads-up sent by one session into another. The server marks
- * new notices; the strict opener keeps already-delivered ones from before the
- * marker shipped from looking like words the human typed.
+ * A message one agent sent into another session. New deliveries carry the
+ * sentinel. The strict `agent <session-id>` attribution recovers messages
+ * already stored before every send_to_session payload was marked.
  */
 const SESSION_NOTICE_SENTINEL_RE = /^<!--os:session-notice-->\s*/;
+const AGENT_ATTR_RE = /^\[agent\s+((?:os|bks)-[a-z0-9-]+)\]\s*/i;
 const LEGACY_SESSION_NOTICE_RE =
   /^Heads-up from another session(?:\s*\([^\n)]*\))?:/i;
 
-export function parseSessionNotice(content?: string): { body: string } | null {
+export function parseSessionNotice(
+  content?: string,
+): { body: string; sessionId: string | null } | null {
   if (!content) return null;
-  const text = content.replace(ATTR_PREFIX_RE, "");
+  let text = content;
+  let sessionId: string | null = null;
+  const agent = text.match(AGENT_ATTR_RE);
+  if (agent) {
+    sessionId = agent[1];
+    text = text.slice(agent[0].length);
+  } else {
+    text = text.replace(ATTR_PREFIX_RE, "");
+  }
   const sentinel = text.match(SESSION_NOTICE_SENTINEL_RE);
   const body = (sentinel ? text.slice(sentinel[0].length) : text).trim();
-  if (!sentinel && !LEGACY_SESSION_NOTICE_RE.test(body)) return null;
-  // Co-released steers can be joined into one user entry. Keep that entry a
-  // user turn rather than folding a real attributed instruction into a notice.
+  if (!agent && !sentinel && !LEGACY_SESSION_NOTICE_RE.test(body)) return null;
+  // Old co-released steers can share one entry with a real attributed human
+  // prompt. Keep that mixed entry visible rather than hiding the prompt inside
+  // a collapsed notice. New delegated messages drain alone at the queue layer.
   if (/\n\s*\n\[[^\]\n]{1,80}\]\s+/.test(body)) return null;
-  return { body };
+  return { body, sessionId };
 }
 
 /**
@@ -689,9 +701,12 @@ export function classifyEntry(entry: TranscriptEntry): TranscriptEntry {
       content: sessionNotice.body,
       notice: {
         kind: "session-notice",
-        title: "Heads-up from another session",
+        title: "Message from another session",
         tone: "info",
         body: "collapsed",
+        ...(sessionNotice.sessionId
+          ? { link: { label: "Open session", sessionId: sessionNotice.sessionId } }
+          : {}),
       },
     };
 

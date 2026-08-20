@@ -6,10 +6,23 @@
  */
 import { AUTO_CONTINUE_USER } from "./auto-continue";
 import type { QueueItem } from "./queue-state";
+import { delegatedActorParent } from "./session-actors";
 
 export type QueueBatchPlan =
 	| { kind: "deliver"; batch: QueueItem[]; rest: QueueItem[] }
 	| { kind: "hold"; heldCount: number };
+
+function splitAtDelegatedMessage(queue: QueueItem[]): QueueBatchPlan | null {
+	const index = queue.findIndex((item) => delegatedActorParent(item.user) !== null);
+	if (index < 0) return null;
+	const batch = index === 0 ? [queue[0]] : queue.slice(0, index);
+	const selected = new Set(batch);
+	return {
+		kind: "deliver",
+		batch,
+		rest: queue.filter((item) => !selected.has(item)),
+	};
+}
 
 export function selectQueueBatch(
 	queue: QueueItem[],
@@ -48,12 +61,32 @@ export function selectQueueBatch(
 	const handoffAt = queue.findIndex((m) => m.reviewHandoff);
 	if (handoffAt === 0)
 		return { kind: "deliver", batch: [queue[0]], rest: queue.slice(1) };
-	if (handoffAt > 0)
-		return { kind: "deliver", batch: queue.slice(0, handoffAt), rest: queue.slice(handoffAt) };
-	if (opts.stillWorking && !opts.interruptMark) {
-		const batch = queue.filter((m) => !m.hold);
-		if (batch.length === 0) return { kind: "hold", heldCount: queue.length };
-		return { kind: "deliver", batch, rest: queue.filter((m) => m.hold) };
+	if (handoffAt > 0) {
+		const beforeReview = queue.slice(0, handoffAt);
+		const delegated = splitAtDelegatedMessage(beforeReview);
+		if (delegated?.kind === "deliver") {
+			const selected = new Set(delegated.batch);
+			return {
+				kind: "deliver",
+				batch: delegated.batch,
+				rest: queue.filter((item) => !selected.has(item)),
+			};
+		}
+		return { kind: "deliver", batch: beforeReview, rest: queue.slice(handoffAt) };
 	}
-	return { kind: "deliver", batch: [...queue], rest: [] };
+	if (opts.stillWorking && !opts.interruptMark) {
+		const ready = queue.filter((m) => !m.hold);
+		if (ready.length === 0) return { kind: "hold", heldCount: queue.length };
+		const delegated = splitAtDelegatedMessage(ready);
+		if (delegated?.kind === "deliver") {
+			const selected = new Set(delegated.batch);
+			return {
+				kind: "deliver",
+				batch: delegated.batch,
+				rest: queue.filter((item) => !selected.has(item)),
+			};
+		}
+		return { kind: "deliver", batch: ready, rest: queue.filter((m) => m.hold) };
+	}
+	return splitAtDelegatedMessage(queue) ?? { kind: "deliver", batch: [...queue], rest: [] };
 }

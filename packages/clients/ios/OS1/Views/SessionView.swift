@@ -3023,17 +3023,18 @@ private struct SessionInputBar: View {
                 )
             }
             ForEach(viewModel.queuedItems) { item in
-                let isGitHub = QueueMessagePresentation(
+                let presentation = QueueMessagePresentation(
                     content: item.content,
                     user: item.user
-                ).isGitHub
+                )
                 QueuedMessageRow(
                         item: item,
                         phase: .queued,
                         showsDivider: item.id != firstRowId,
                         // Steering needs a run to fold into, and the server can't
                         // fold a message that carries files.
-                        onSteer: (viewModel.isRunning && !item.hasFiles && !isGitHub)
+                        onSteer: (viewModel.isRunning && !item.hasFiles
+                            && !presentation.isGitHub)
                             ? { viewModel.steerQueued(item) } : nil,
                         onEdit: (!item.isLocalEcho && !item.hasFiles
                             && !item.hasContextSessions && item.editable
@@ -3046,7 +3047,9 @@ private struct SessionInputBar: View {
                                 viewModel.editQueuedInComposer(item)
                                 inputFocused = true
                             } : nil,
-                        onMove: (!isGitHub && viewModel.canReorder(item))
+                        onMove: (!presentation.isGitHub
+                            && !presentation.isSessionMessage
+                            && viewModel.canReorder(item))
                             ? { offset in viewModel.moveQueued(item, by: offset) } : nil,
                         onDelete: { viewModel.deleteQueued(item) }
                     )
@@ -3138,10 +3141,12 @@ private struct SessionInputBar: View {
     }
 
     private var queueTitle: String {
-        let reviewCount = viewModel.queuedItems.lazy.filter {
-            QueueMessagePresentation(content: $0.content, user: $0.user).isReviewHandoff
-        }.count
-        let queued = viewModel.queuedItems.count - reviewCount
+        let queuedPresentations = viewModel.queuedItems.map {
+            QueueMessagePresentation(content: $0.content, user: $0.user)
+        }
+        let reviewCount = queuedPresentations.lazy.filter(\.isReviewHandoff).count
+        let sessionMessageCount = queuedPresentations.lazy.filter(\.isSessionMessage).count
+        let queued = viewModel.queuedItems.count - reviewCount - sessionMessageCount
         let inFlight = viewModel.steeredItems.count + viewModel.deliveringItems.count
         let unsent = unsentItems.count
         // Unsent leads: "waiting on your connection" is the more urgent fact,
@@ -3155,6 +3160,12 @@ private struct SessionInputBar: View {
         }
         if reviewCount > 0 {
             parts.append("\(reviewCount) PR \(reviewCount == 1 ? "review" : "reviews") waiting")
+        }
+        if sessionMessageCount > 0 {
+            parts.append(
+                "\(sessionMessageCount) session "
+                    + "\(sessionMessageCount == 1 ? "message" : "messages") waiting"
+            )
         }
         // Never folded into the "queued" count: these are already committed to
         // the running turn, and calling them queued reads as "my message
@@ -3197,7 +3208,10 @@ private struct SessionInputBar: View {
     /// tighter, longstanding values.
     private var multiLineInset: (horizontal: CGFloat, top: CGFloat, bottom: CGFloat) {
         #if os(iOS)
-        (16, 14, 6)
+        // An attachment already occupies the visual line above the field.
+        // Pull the caption toward it instead of stacking the ordinary 14pt
+        // paragraph inset on top of the strip's own spacing.
+        (16, viewModel.attachedImages.isEmpty ? 14 : 4, 6)
         #else
         (10, 9, 5)
         #endif

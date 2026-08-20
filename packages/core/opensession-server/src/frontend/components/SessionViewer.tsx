@@ -3984,9 +3984,14 @@ export function SessionViewer({
 
 	/** What removing a queued row means, said in its own terms: a person's
 	 *  message is deleted, routed traffic is dismissed. */
-	function queueDeleteLabel(isReview: boolean, isWorker: boolean): string {
+	function queueDeleteLabel(
+		isReview: boolean,
+		isWorker: boolean,
+		isSessionMessage: boolean,
+	): string {
 		if (isReview) return "Dismiss review feedback";
 		if (isWorker) return "Dismiss worker report";
+		if (isSessionMessage) return "Dismiss session message";
 		return "Delete queued message";
 	}
 
@@ -4127,6 +4132,9 @@ export function SessionViewer({
 	const queuedWorkerCount = queuedClassified.filter(
 		(c) => c.notice?.kind === "worker-report",
 	).length;
+	const queuedSessionMessageCount = queuedClassified.filter(
+		(c) => c.notice?.kind === "session-notice",
+	).length;
 
 	const queueCount =
 		shownQueued.length + visibleSteered.length + pendingQueue.length + durableOutbox.length;
@@ -4139,7 +4147,8 @@ export function SessionViewer({
 	const queuedMessageCount =
 		shownQueued.length -
 		queuedReviewCount -
-		queuedWorkerCount +
+		queuedWorkerCount -
+		queuedSessionMessageCount +
 		pendingQueue.length +
 		durableOutbox.length;
 	const queueTitle = waitingForWorkspace
@@ -4153,6 +4162,9 @@ export function SessionViewer({
 					: null,
 				queuedWorkerCount
 					? `${queuedWorkerCount} worker ${queuedWorkerCount === 1 ? "report" : "reports"} waiting`
+					: null,
+				queuedSessionMessageCount
+					? `${queuedSessionMessageCount} session ${queuedSessionMessageCount === 1 ? "message" : "messages"} waiting`
 					: null,
 				visibleSteered.length
 					? `${visibleSteered.length} steering into the current turn`
@@ -4252,21 +4264,23 @@ export function SessionViewer({
 					const c = queuedClassified[i];
 					const isGitHub = isGitHubAttribution(q.user);
 					const isReview = c.notice?.kind === "review-handoff";
-					// Agent-to-agent traffic: it drives the next turn like a message,
-					// but nobody typed it, so it gets none of the composer gestures.
+					// Agent-to-agent traffic drives the next turn, but nobody typed it,
+					// so it gets none of the composer edit or reorder gestures.
 					const isWorker = c.notice?.kind === "worker-report";
+					const isSessionMessage = c.notice?.kind === "session-notice";
+					const isDelegated = isWorker || isSessionMessage;
 					const id = q.id;
 					const key = id || `queued-${i}`;
 					const canSteer =
 						!isGitHub && !queueHasFiles(q) && !q.contextSessions?.length;
 					const canEdit =
 						!isGitHub &&
-						!isWorker &&
+						!isDelegated &&
 						q.editable === true &&
 						personKey(q.user || "") === personKey(currentUser);
 					// A one-item queue has nothing to reorder — leave drag off so the
 					// lone message still selects/clicks normally.
-					const canReorder = shownQueued.length > 1 && !isGitHub && !isWorker;
+					const canReorder = shownQueued.length > 1 && !isGitHub && !isDelegated;
 					return (
 						<Reorder.Item
 							as="div"
@@ -4296,10 +4310,16 @@ export function SessionViewer({
 											</button>
 										</Tooltip>
 								) : null}
-								<Tooltip label={queueDeleteLabel(isReview, isWorker)}>
+								<Tooltip
+									label={queueDeleteLabel(isReview, isWorker, isSessionMessage)}
+								>
 									<button
 										type="button"
-										aria-label={queueDeleteLabel(isReview, isWorker)}
+										aria-label={queueDeleteLabel(
+											isReview,
+											isWorker,
+											isSessionMessage,
+										)}
 										className={cn(
 											composerQueueAction,
 											composerQueueActionDanger,

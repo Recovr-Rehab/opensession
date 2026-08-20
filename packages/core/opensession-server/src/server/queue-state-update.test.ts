@@ -3,6 +3,7 @@ import { classifyEntry } from "@tellahq/opensession-protocol/notices";
 import {
 	acknowledgePromptDispatch,
 	beginPromptDispatch,
+	isDelegatedQueueItem,
 	isEditableQueueItem,
 	isWorkerQueueItem,
 	promptDispatches,
@@ -72,7 +73,7 @@ describe("takeQueuedPrompt", () => {
 	});
 });
 
-describe("worker reports are not user messages", () => {
+describe("delegated messages are not user messages", () => {
 	const WORKER = "os-019fe194-5fbe-7000-a81e-d0a656ad77f4";
 
 	test("a worker's report to its parent is queue-owned, not editable", () => {
@@ -90,10 +91,11 @@ describe("worker reports are not user messages", () => {
 		expect(isEditableQueueItem(mine)).toBe(true);
 	});
 
-	test("a non-worker agent message is not mistaken for a worker report", () => {
-		// agentActor and workerActor are not interchangeable: only a worker's
-		// report to its own parent is delivered verbatim.
-		expect(isWorkerQueueItem({ content: "ping", user: agentActor(WORKER) })).toBe(false);
+	test("a peer agent message is delegated but not a worker report", () => {
+		const message = { content: "ping", user: agentActor(WORKER) };
+		expect(isDelegatedQueueItem(message)).toBe(true);
+		expect(isWorkerQueueItem(message)).toBe(false);
+		expect(isEditableQueueItem(message)).toBe(false);
 		expect(isWorkerQueueItem({ content: "worker looks stuck", user: "Kent" })).toBe(false);
 	});
 

@@ -2,9 +2,16 @@ import { describe, expect, test } from "bun:test";
 import { AUTO_CONTINUE_USER } from "./auto-continue";
 import { selectQueueBatch } from "./queue-hold";
 import type { QueueItem } from "./queue-state";
+import { agentActor, workerActor } from "./session-actors";
 
+const SOURCE = "os-019fe194-5fbe-7000-a81e-d0a656ad77f4";
 const human = (id: string): QueueItem => ({ id, content: id, user: "Jaap", hold: true });
-const report = (id: string): QueueItem => ({ id, content: id, user: "session" });
+const report = (id: string): QueueItem => ({ id, content: id, user: workerActor(SOURCE) });
+const agentMessage = (id: string): QueueItem => ({
+	id,
+	content: id,
+	user: agentActor(SOURCE),
+});
 
 describe("selectQueueBatch", () => {
 	test("idle: whole queue delivers combined", () => {
@@ -59,8 +66,33 @@ describe("selectQueueBatch", () => {
 		expect(plan.rest.map((m) => m.id)).toEqual(["a", "b"]);
 	});
 
-	test("explicit interrupt mark bypasses the hold", () => {
-		const q = [human("a"), human("b")];
-		expect(selectQueueBatch(q, { stillWorking: true, interruptMark: true })).toEqual({ kind: "deliver", batch: q, rest: [] });
+	test("delegated messages drain alone instead of merging with human prompts", () => {
+		const first = selectQueueBatch([human("a"), agentMessage("agent"), human("b")], {});
+		if (first.kind !== "deliver") throw new Error("expected deliver");
+		expect(first.batch.map((m) => m.id)).toEqual(["a"]);
+
+		const second = selectQueueBatch(first.rest, {});
+		if (second.kind !== "deliver") throw new Error("expected deliver");
+		expect(second.batch.map((m) => m.id)).toEqual(["agent"]);
+		expect(second.rest.map((m) => m.id)).toEqual(["b"]);
+	});
+
+	test("multiple delegated messages each get their own turn while work continues", () => {
+		const first = selectQueueBatch(
+			[human("a"), report("r1"), agentMessage("agent"), report("r2")],
+			{ stillWorking: true },
+		);
+		if (first.kind !== "deliver") throw new Error("expected deliver");
+		expect(first.batch.map((m) => m.id)).toEqual(["r1"]);
+		expect(first.rest.map((m) => m.id)).toEqual(["a", "agent", "r2"]);
+	});
+
+	test("explicit interrupt mark bypasses the hold without merging delegated traffic", () => {
+		const q = [human("a"), agentMessage("agent"), human("b")];
+		expect(selectQueueBatch(q, { stillWorking: true, interruptMark: true })).toEqual({
+			kind: "deliver",
+			batch: [q[0]],
+			rest: [q[1], q[2]],
+		});
 	});
 });

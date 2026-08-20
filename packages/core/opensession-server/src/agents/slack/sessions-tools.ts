@@ -189,13 +189,11 @@ const WORKER_REPORT_SENTINEL = "<!--os:worker-report-->";
 
 const SESSION_NOTICE_SENTINEL = "<!--os:session-notice-->";
 
-/** Mark an explicitly informational cross-session heads-up. Other messages sent
- * through send_to_session remain ordinary user turns that drive the target. */
-export function sessionNoticePayload(message: string): string {
-  const body = message.trim();
-  return /^Heads-up from another session(?:\s|\(|:)/i.test(body)
-    ? `${SESSION_NOTICE_SENTINEL}\n${body}`
-    : message;
+/** Mark an agent-authored cross-session message for notice rendering. The
+ * payload still drives the target's next turn, but it must never read as words
+ * the session owner typed. */
+export function sessionMessagePayload(message: string): string {
+  return `${SESSION_NOTICE_SENTINEL}\n${message}`;
 }
 
 /**
@@ -629,13 +627,13 @@ export function createSessionsMcpServer(
         },
         async (args: { id: string; message: string; delivery_id?: string }) => {
           if (!args.message?.trim()) return text("Nothing to send (empty message).");
-          // Reporting to my own parent → prose + server-computed evidence,
-          // attributed as a worker. Explicit heads-ups get a UI-only notice
-          // marker; every other cross-session prompt is delivered as-is.
+          // Reporting to my own parent gets a worker card with server-computed
+          // evidence. Every other agent-authored delivery gets a session notice.
+          // Both still drive the target's next turn; neither is human prose.
           const payload = await workerReportPayload(args.id, args.message, ctx);
           const content = isWorkerActor(payload.user)
             ? payload.content
-            : sessionNoticePayload(payload.content);
+            : sessionMessagePayload(payload.content);
           const deliveryId = args.delivery_id?.trim() || crypto.randomUUID();
           const res = await getSessionControl().deliverToSession(
             args.id,

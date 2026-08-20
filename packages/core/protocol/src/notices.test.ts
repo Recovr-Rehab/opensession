@@ -154,16 +154,32 @@ describe("cross-session notice detection", () => {
 		"Heads-up from another session (Ada, working on the sidebar): a shared-checkout commit picked up your changes.\n\nNothing was lost.";
 
 	it("detects an existing unmarked heads-up", () => {
-		expect(parseSessionNotice(headsUp)).toEqual({ body: headsUp });
+		expect(parseSessionNotice(headsUp)).toEqual({ body: headsUp, sessionId: null });
 	});
 
 	it("strips the marker and delivery attribution from new notices", () => {
 		expect(
 			parseSessionNotice(`[Alex] <!--os:session-notice-->\n${headsUp}`),
-		).toEqual({ body: headsUp });
+		).toEqual({ body: headsUp, sessionId: null });
 	});
 
-	it("leaves ordinary cross-session prompts as user turns", () => {
+	it("recovers historical agent deliveries regardless of their prose", () => {
+		for (const id of [
+			"os-01a01e56-a1fc-7000-bb91-bc99b916c4ad",
+			"bks-019fa49c-71bb-7000-85d4-c8cc61d0ca85",
+		]) {
+			expect(parseSessionNotice(`[agent ${id}] Please reconcile these changes.`)).toEqual({
+				body: "Please reconcile these changes.",
+				sessionId: id,
+			});
+		}
+	});
+
+	it("rejects a loose agent label that does not name a native session", () => {
+		expect(parseSessionNotice("[agent release-bot] Please ship this.")).toBeNull();
+	});
+
+	it("leaves ordinary prompts as user turns", () => {
 		expect(parseSessionNotice("Please keep editing and commit the fix.")).toBeNull();
 	});
 
@@ -358,7 +374,25 @@ describe("classifyEntry", () => {
 		expect(
 			classifyEntry(entry({ content: "<!--os:session-notice-->\nFYI: staging is down." }))
 				.notice,
-		).toMatchObject({ kind: "session-notice", body: "collapsed" });
+		).toMatchObject({
+			kind: "session-notice",
+			title: "Message from another session",
+			body: "collapsed",
+		});
+		const historical = classifyEntry(
+			entry({
+				content:
+					"[agent os-01a01e56-a1fc-7000-bb91-bc99b916c4ad] Please avoid overlapping edits.",
+			}),
+		);
+		expect(historical.content).toBe("Please avoid overlapping edits.");
+		expect(historical.notice).toMatchObject({
+			kind: "session-notice",
+			link: {
+				label: "Open session",
+				sessionId: "os-01a01e56-a1fc-7000-bb91-bc99b916c4ad",
+			},
+		});
 		expect(
 			classifyEntry(
 				entry({
