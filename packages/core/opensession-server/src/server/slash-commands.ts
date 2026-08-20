@@ -125,6 +125,7 @@ export function handleSlashCommand(
 				accountProviderForModel(prevEffectiveModel) !== accountProviderForModel(effectiveResolvedModel);
 			touchNativeSession(session.id, {
 				model: resolved.id,
+				autoFallbackModel: undefined,
 				presetNote: workspacePreset?.note,
 				...(workspacePreset?.effort ? { effort: workspacePreset.effort } : {}),
 				...(switchedProvider ? { accountId: undefined } : {}),

@@ -107,6 +107,7 @@ import {
 	getCachedSessions,
 	invalidateSessionsCache,
 	persistAutoModelSwitch,
+	retryAutoFallbackModel,
 	recordRunOutcome,
 	touchNativeSession,
 	SESSIONS_DIR,
@@ -1704,8 +1705,18 @@ async function runSessionPromptInner(
 	startToken?: string,
 	promptEntryId?: string,
 ): Promise<void> {
+	const autoRetry = await retryAutoFallbackModel(sessionId);
 	const session = findSession(sessionId);
 	if (!session) return;
+	if (autoRetry) {
+		broadcastToSession(sessionId, {
+			type: "model_changed",
+			sessionId,
+			model: autoRetry.model,
+			from: autoRetry.fromModel,
+			by: autoRetry.by,
+		});
+	}
 
 	// A fresh human prompt re-arms the announce-then-stop guard (the nudge's
 	// own delivery keeps the flag, capping it at one consecutive auto-continue).

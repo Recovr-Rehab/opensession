@@ -25,7 +25,10 @@ import {
 	isAgentSessionBusy,
 } from "./agent-runner";
 import { audit } from "./audit";
-import { SESSION_EFFORTS as MODEL_EFFORTS } from "./models";
+import {
+	getDefaultModel,
+	SESSION_EFFORTS as MODEL_EFFORTS,
+} from "./models";
 import { writeJsonAtomic } from "./shared/atomic-write";
 import type { UnifiedSession, NativeSessionFile } from "./types";
 
@@ -418,6 +421,13 @@ export function persistAutoModelSwitch(input: {
 		return {
 			...data,
 			model: input.model,
+			// Preserve the FIRST displaced selection across a multi-hop walk. A
+			// null marker keeps an inherited default implicit rather than pinning
+			// whichever concrete model happened to be the default today.
+			autoFallbackModel:
+				data.autoFallbackModel !== undefined
+					? data.autoFallbackModel
+					: (data.model ?? null),
 			modelHistory: [...(data.modelHistory || []), input.entry],
 			lastActivity: new Date().toISOString(),
 		};
@@ -428,6 +438,55 @@ export function persistAutoModelSwitch(input: {
 			return false;
 		},
 	);
+}
+
+export interface AutoFallbackRetry {
+	fromModel?: string;
+	model: string;
+	by: string;
+}
+
+/**
+ * Retry the selection displaced by the previous turn's automatic usage
+ * fallback. The compare-and-swap includes both fields observed before the
+ * serialized write, so a concurrent explicit /model always wins.
+ */
+export async function retryAutoFallbackModel(
+	sessionId: string,
+): Promise<AutoFallbackRetry | undefined> {
+	const path = `${SESSIONS_DIR}/${sessionId}.json`;
+	let observed: NativeSessionFile;
+	try {
+		if (!existsSync(path)) return undefined;
+		observed = JSON.parse(readFileSync(path, "utf-8"));
+	} catch {
+		return undefined;
+	}
+	if (observed.autoFallbackModel === undefined) return undefined;
+
+	let retry: AutoFallbackRetry | undefined;
+	await updateSessionFile(sessionId, (data) => {
+		if (
+			data.model !== observed.model ||
+			data.autoFallbackModel !== observed.autoFallbackModel
+		)
+			return data;
+
+		const model = data.autoFallbackModel ?? getDefaultModel();
+		const by = "auto-retry — checking the original selection again";
+		retry = { fromModel: data.model, model, by };
+		return {
+			...data,
+			model: data.autoFallbackModel ?? undefined,
+			autoFallbackModel: undefined,
+			modelHistory: [
+				...(data.modelHistory || []),
+				{ model, from: data.model, at: new Date().toISOString(), by },
+			],
+			lastActivity: new Date().toISOString(),
+		};
+	});
+	return retry;
 }
 
 // Reasoning-effort values the composer/new-session pill can send. Model-specific

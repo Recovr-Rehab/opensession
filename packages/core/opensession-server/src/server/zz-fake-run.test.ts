@@ -26,6 +26,7 @@ const tmp = mkdtempSync(`${tmpdir()}/zz-fake-run-`);
 let runSession: typeof import("./run-session");
 let agentRunner: typeof import("./agent-runner");
 let sessionCache: typeof import("./session-cache");
+let slashCommands: typeof import("./slash-commands");
 let runState: typeof import("./run-state");
 let queueState: typeof import("./queue-state");
 let fakeEngineMod: typeof import("./testing/fake-engine");
@@ -34,6 +35,7 @@ let transcriptStoreMod: typeof import("./transcript-store");
 let restoreSessionsDir: (() => void) | null = null;
 let restoreJournal: (() => void) | null = null;
 let redirected = false;
+const previousPiDetach = process.env.OPENSESSION_PI_DETACH;
 
 function writeSessionFile(id: string, extra: Record<string, unknown> = {}) {
 	writeFileSync(
@@ -51,6 +53,7 @@ function writeSessionFile(id: string, extra: Record<string, unknown> = {}) {
 }
 
 beforeAll(async () => {
+	process.env.OPENSESSION_PI_DETACH = "0";
 	(globalThis as any).__opensessionBooted = true;
 	const paths = await import("./paths");
 	const prevDir = paths.__setSessionsDirForTest(tmp);
@@ -64,6 +67,7 @@ beforeAll(async () => {
 	runSession = await import("./run-session");
 	agentRunner = await import("./agent-runner");
 	sessionCache = await import("./session-cache");
+	slashCommands = await import("./slash-commands");
 	runState = await import("./run-state");
 	queueState = await import("./queue-state");
 	fakeEngineMod = await import("./testing/fake-engine");
@@ -84,6 +88,8 @@ beforeAll(async () => {
 });
 
 afterAll(() => {
+	if (previousPiDetach === undefined) delete process.env.OPENSESSION_PI_DETACH;
+	else process.env.OPENSESSION_PI_DETACH = previousPiDetach;
 	agentRunner?.__setEngineForTest(null);
 	restoreJournal?.();
 	restoreSessionsDir?.();
@@ -272,6 +278,75 @@ describe("fake-engine session runs (consumer loop end-to-end)", () => {
 		expect(data.model).toBe("pi/openai/gpt-5.6-terra");
 		expect(data.modelHistory).toHaveLength(1);
 		expect(data.modelHistory[0].by).toContain("out of credits");
+	});
+
+	test("the next prompt retries the model selected before a usage fallback", async () => {
+		if (!redirected) return;
+		const sid = "bks-zz-retry-selected-model";
+		writeSessionFile(sid, { model: "dial/medium" });
+		sessionCache.invalidateSessionsCache();
+		const fake = fakeEngineMod.makeFakeEngine([
+			{ kind: "usage_exhausted" },
+			{ kind: "usage_exhausted" },
+			{ kind: "clean", engineSessionId: "ses_zz_fallback", text: ["recovered"] },
+			{ kind: "clean", engineSessionId: "ses_zz_retry", text: ["preferred model is back"] },
+		]);
+		agentRunner.__setEngineForTest(fake.engine);
+
+		await runSession.runSessionPromptAndDrain(sid, "first turn", "Test");
+
+		const fallback = sessionJson(sid);
+		expect(fallback.model).toBe(fake.calls[2].model);
+		expect(fallback.autoFallbackModel).toBe("dial/medium");
+
+		await runSession.runSessionPromptAndDrain(sid, "second turn", "Test");
+
+		expect(fake.calls[3].model).toBe(fake.calls[0].model);
+		const retried = sessionJson(sid);
+		expect(retried.model).toBe("dial/medium");
+		expect(retried.autoFallbackModel).toBeUndefined();
+	});
+
+	test("retrying an implicit selection keeps the instance default implicit", async () => {
+		if (!redirected) return;
+		const sid = "bks-zz-retry-default-model";
+		writeSessionFile(sid, { model: undefined });
+		sessionCache.invalidateSessionsCache();
+		const fake = fakeEngineMod.makeFakeEngine([
+			{ kind: "usage_exhausted" },
+			{ kind: "clean", engineSessionId: "ses_zz_default_fallback", text: ["recovered"] },
+			{ kind: "clean", engineSessionId: "ses_zz_default_retry", text: ["default is back"] },
+		]);
+		agentRunner.__setEngineForTest(fake.engine);
+
+		await runSession.runSessionPromptAndDrain(sid, "first turn", "Test");
+
+		expect(sessionJson(sid).autoFallbackModel).toBeNull();
+
+		await runSession.runSessionPromptAndDrain(sid, "second turn", "Test");
+
+		expect(fake.calls[2].model).toBe(fake.calls[0].model);
+		const retried = sessionJson(sid);
+		expect(retried.model).toBeUndefined();
+		expect(retried.autoFallbackModel).toBeUndefined();
+	});
+
+	test("an explicit model choice cancels the automatic retry", () => {
+		if (!redirected) return;
+		const sid = "bks-zz-cancel-model-retry";
+		writeSessionFile(sid, {
+			model: "claude-sonnet-4-6",
+			autoFallbackModel: "gpt-5.6-luna",
+		});
+		sessionCache.invalidateSessionsCache();
+		const session = sessionCache.findSession(sid);
+		expect(session).toBeDefined();
+
+		slashCommands.handleSlashCommand(session!, "/model gpt-5.6-terra", "Test");
+
+		const data = sessionJson(sid);
+		expect(data.model).toBe("gpt-5.6-terra");
+		expect(data.autoFallbackModel).toBeUndefined();
 	});
 
 	test("usage exhaustion on a temporary fallback does not replace the viable selection", async () => {
