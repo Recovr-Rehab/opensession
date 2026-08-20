@@ -1001,7 +1001,7 @@ export function ProviderAccountsSection() {
 				</>
 			}
 			>
-				Account settings
+				Subscriptions
 			</SettingsGroupLabel>
 
 			{claude.error && (
