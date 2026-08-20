@@ -1,5 +1,12 @@
 import { expect, test } from "bun:test";
-import { openWebSocket, sendWebSocket, type PortalSocketState } from "./sandbox-portal-agent";
+import { loopbackHeaders, openWebSocket, sendWebSocket, type PortalSocketState } from "./sandbox-portal-agent";
+
+test("uses local-dev host semantics and disables upstream compression", () => {
+	const headers = loopbackHeaders({ host: "portal.example:22000", "accept-encoding": "gzip, br", cookie: "session=abc" }, 4300);
+	expect(headers.get("host")).toBe("localhost:4300");
+	expect(headers.get("accept-encoding")).toBe("identity");
+	expect(headers.get("cookie")).toBe("session=abc");
+});
 
 class FakeWebSocket extends EventTarget {
 	readyState: number = WebSocket.CONNECTING;

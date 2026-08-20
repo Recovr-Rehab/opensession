@@ -9,6 +9,17 @@ const headersFrom = (value: unknown) => {
 	return headers;
 };
 
+export function loopbackHeaders(value: unknown, port: number): Headers {
+	const headers = headersFrom(value);
+	// Match a direct local-dev request. Passing the public Portal host makes
+	// frameworks treat the request as a custom domain, while forwarding the
+	// browser's compression negotiation lets fetch decompress a body whose
+	// content-encoding header would then be stale on the relayed response.
+	headers.set("host", `localhost:${port}`);
+	headers.set("accept-encoding", "identity");
+	return headers;
+}
+
 async function respond(socket: WebSocket, msg: any, port: number): Promise<void> {
 	const id = typeof msg.id === "string" ? msg.id : "";
 	const path = typeof msg.path === "string" ? msg.path : "";
@@ -17,7 +28,7 @@ async function respond(socket: WebSocket, msg: any, port: number): Promise<void>
 	try {
 		const body = typeof msg.body === "string" ? Buffer.from(msg.body, "base64") : undefined;
 		if (body && body.byteLength > 5 * 1024 * 1024) throw new Error("request too large");
-		const response = await fetch(`http://127.0.0.1:${port}${path}`, { method, headers: headersFrom(msg.headers), body: body && method !== "GET" && method !== "HEAD" ? body : undefined, redirect: "manual", signal: AbortSignal.timeout(30_000) });
+		const response = await fetch(`http://127.0.0.1:${port}${path}`, { method, headers: loopbackHeaders(msg.headers, port), body: body && method !== "GET" && method !== "HEAD" ? body : undefined, redirect: "manual", signal: AbortSignal.timeout(30_000) });
 		const bytes = new Uint8Array(await response.arrayBuffer());
 		if (bytes.byteLength > 10 * 1024 * 1024) throw new Error("response too large");
 		const headers: Record<string, string> = {};
@@ -37,7 +48,7 @@ export function openWebSocket(socket: WebSocket, sockets: Map<string, PortalSock
 	const path = typeof msg.path === "string" ? msg.path : "";
 	if (!id || !path.startsWith("/") || path.startsWith("//")) return;
 	try {
-		const local = createWebSocket(`ws://127.0.0.1:${port}${path}`, { headers: headersFrom(msg.headers) });
+		const local = createWebSocket(`ws://127.0.0.1:${port}${path}`, { headers: loopbackHeaders(msg.headers, port) });
 		const state: PortalSocketState = { socket: local, pending: [] };
 		sockets.set(id, state);
 		local.addEventListener("open", () => {
