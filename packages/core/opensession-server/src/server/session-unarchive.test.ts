@@ -4,11 +4,15 @@ import {
 	unarchiveForHumanTurn,
 } from "./session-unarchive";
 
-function recorder() {
+function recorder(registryIds: string[] = []) {
 	const archived: Array<[string, boolean]> = [];
 	const files: string[] = [];
+	const registry = new Set(registryIds);
 	let invalidations = 0;
 	const deps: HumanTurnUnarchiveDeps = {
+		isArchivedId(id) {
+			return registry.has(id);
+		},
 		setArchived(id, value) {
 			archived.push([id, value]);
 		},
@@ -41,6 +45,16 @@ describe("unarchiveForHumanTurn", () => {
 			["os-old", false],
 		]);
 		expect(calls.files).toEqual(["os-current"]);
+		expect(calls.invalidations()).toBe(1);
+	});
+
+	test("catches archive registry state newer than the session cache", () => {
+		const calls = recorder(["os-stale"]);
+		expect(
+			unarchiveForHumanTurn({ id: "os-stale", archived: false }, calls.deps),
+		).toBe(true);
+		expect(calls.archived).toEqual([["os-stale", false]]);
+		expect(calls.files).toEqual(["os-stale"]);
 		expect(calls.invalidations()).toBe(1);
 	});
 
