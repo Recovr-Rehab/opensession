@@ -3179,7 +3179,7 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 							<IconPin size={19} fill={pinned ? "currentColor" : "none"} />
 						</span>
 					</Tooltip>
-					{row.sessions.length > 0 && (
+					{row.sessions.length > 0 ? (
 						<Tooltip
 							label={
 								row.sessions.length > 1
@@ -3216,7 +3216,28 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 								<IconArchive size={19} />
 							</span>
 						</Tooltip>
-					)}
+					) : row.workspace?.draft ? (
+						<Tooltip label="Delete draft">
+							<span
+								role="button"
+								tabIndex={0}
+								className={cn(SIDEBAR_WS_ACTION, "text-faint hover:text-red")}
+								aria-label="Delete draft"
+								onClick={(e) => {
+									e.stopPropagation();
+									if (window.confirm("Delete this draft?")) deleteDraftWsRow(row);
+								}}
+								onKeyDown={(e) => {
+									if (e.key === "Enter" || e.key === " ") {
+										e.stopPropagation();
+										if (window.confirm("Delete this draft?")) deleteDraftWsRow(row);
+									}
+								}}
+							>
+								<IconTrash size={19} />
+							</span>
+						</Tooltip>
+					) : null}
 				</span>
 				</button>
 			</div>
