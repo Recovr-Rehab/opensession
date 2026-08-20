@@ -658,13 +658,7 @@ describe("TranscriptBlocks review loops", () => {
 	});
 });
 
-describe("TranscriptBlocks turn windowing", () => {
-	// A review loop swallows the blocks it contains, so the rendered array is
-	// shorter than the flat one. The trailing window has to be measured against
-	// what is rendered, or the loops' absorbed rows come out of it.
-	const windowed = (html: string) =>
-		html.split("[content-visibility:auto]").length - 1;
-
+describe("TranscriptBlocks virtual-list fallback", () => {
 	/** A review loop that swallows `absorbed` agent answers, then `tail` turns. */
 	function transcriptWithReviewLoop(
 		absorbed: number,
@@ -699,28 +693,12 @@ describe("TranscriptBlocks turn windowing", () => {
 		return built;
 	}
 
-	const windowedFor = (absorbed: number, tail: number) =>
-		windowed(
-			renderToStaticMarkup(
-				<TranscriptBlocks entries={transcriptWithReviewLoop(absorbed, tail)} />,
-			),
-		);
-
-	test("windows the same blocks however many a review loop absorbed", () => {
-		// One loop plus the same tail either way, so the same rows render and the
-		// same rows may be windowed. Measured against the flat array instead, a
-		// loop that swallowed ten blocks took ten off the trailing window: 32 and
-		// 24 windowed here rather than 21.
-		expect(windowedFor(10, 30)).toBe(windowedFor(2, 30));
-		expect(windowedFor(10, 30)).toBe(windowedFor(0, 30));
-		expect(windowedFor(10, 30)).toBeGreaterThan(0);
-	});
-
-	test("windows nothing while the whole transcript fits the trailing window", () => {
+	test("renders every row when measurement is unavailable", () => {
 		const html = renderToStaticMarkup(
-			<TranscriptBlocks entries={transcriptWithReviewLoop(10, 12)} />,
+			<TranscriptBlocks entries={transcriptWithReviewLoop(10, 30)} />,
 		);
 		expect(html).toContain('aria-label="Review loop, 1 round, PR #42"');
-		expect(windowed(html)).toBe(0);
+		expect(html).toContain("Tail message 29.");
+		expect(html).not.toContain("data-virtual-transcript");
 	});
 });

@@ -38,6 +38,10 @@ when it owns the session and the store has it:
   moments later; older pages via `load_history {beforeSeq}`; reconnects
   resume with `sinceSeq` — no snapshot re-send.
 - live: bus-driven `transcript_append` frames carrying `seq`.
+- collapsed detail: opening and history pages carry 512-byte previews for tool
+  results and intermediate assistant notes hidden inside work folds. The web
+  and native clients fetch the full entry through `/api/sessions/:id/entry/:id`
+  only when someone opens that message.
 
 Sessions the server does *not* own — CLI/tmux runs writing their own
 transcript files — are served by the legacy file-watcher + byte-offset

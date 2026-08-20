@@ -41,14 +41,10 @@ export interface TouchedFile {
  * bottom margin to 8px: these actions belong to that answer, and a full row
  * gap read as the next block starting.
  *
- * It is a class the CALLER places rather than one the row wears, because the
- * lift only works on a box nothing clips. TranscriptBlocks wraps each block in
- * VirtualTranscriptBlock, whose `content-visibility: auto` applies layout and
- * paint containment: layout containment stops this margin collapsing out
- * through the wrapper, so the row hangs 10px above the wrapper's box, and
- * paint containment then clips exactly those 10px off the top, taking half the
- * duration and the top of every chip with them. On that wrapper the same class
- * is a plain margin, outside the box it contains.
+ * It is a class the CALLER places rather than one the row wears. Transcript
+ * blocks sit inside measured virtual rows, and a negative margin inside that
+ * measurement does not move the row's own start. On the measured wrapper the
+ * same class shifts the whole row and remains part of its virtual position.
  */
 export const TURN_FOOTER_LIFT = "-mt-2.5";
 

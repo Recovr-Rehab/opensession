@@ -9,7 +9,10 @@ import {
 	TURN_FOOTER_LIFT,
 	type TouchedFile,
 } from "./TurnFooter";
-import { VirtualTranscriptBlock } from "./VirtualTranscriptBlock";
+import {
+	VirtualTranscriptList,
+	type VirtualTranscriptItem,
+} from "./VirtualTranscriptList";
 import { WalkthroughCard } from "./WalkthroughCard";
 import { walkthroughInsertIndex } from "./walkthrough-placement";
 import { normalizeLegacyVoiceToolEntries } from "../lib/transcript-state";
@@ -144,6 +147,43 @@ function mergedNoticePrNumber(entry: TranscriptEntry): number | null {
 // on the biggest session in the store (9,689 entries, 3 review loops), the
 // trailing window came out as 1 block instead of 24.
 const TRAILING_MOUNTED_BLOCKS = 24;
+
+function renderBlockEntries(block: RenderBlock): TranscriptEntry[] {
+	if (block.kind === "turn") return block.items;
+	if (block.kind === "entry" || block.kind === "footer") return [block.entry];
+	if (block.kind === "review-loop")
+		return block.blocks.flatMap(renderBlockEntries);
+	return [];
+}
+
+function renderBlockKey(block: RenderBlock, index: number): string {
+	if (block.kind === "turn") return block.items[block.items.length - 1].id;
+	if (block.kind === "walkthrough") return "walkthrough";
+	if (block.kind === "note") return `note:${block.note.id}`;
+	if (block.kind === "footer") return `${block.entry.id}:footer`;
+	if (block.kind === "review-loop") {
+		const first = renderBlockEntries(block)[0];
+		return `review-loop:${first?.id ?? index}`;
+	}
+	return block.entry.id;
+}
+
+function renderBlockAnchor(block: RenderBlock, key: string): string {
+	if (block.kind === "turn")
+		return `${block.items[block.items.length - 1].id}#turn`;
+	return key;
+}
+
+function renderBlockEstimate(block: RenderBlock): number {
+	if (block.kind === "turn") return 40;
+	if (block.kind === "footer") return 32;
+	if (block.kind === "review-loop") return 120;
+	if (block.kind === "walkthrough") return 320;
+	if (block.kind === "note") return 96;
+	if (block.kind === "entry" && block.entry.type === "system") return 48;
+	if (block.kind === "entry" && block.entry.type === "user") return 88;
+	return 160;
+}
 
 /**
  * Groups a flat transcript into per-turn fold blocks and message bubbles, then
@@ -287,145 +327,136 @@ export const TranscriptBlocks = React.memo(function TranscriptBlocks({
 			(block) => reviewBlockRole(block).kind === "user-message",
 		);
 
-	return (
-		<>
-			{groupedBlocks.map((block, i) => {
-				if (block.kind === "review-loop") {
-					const isLast = i === groupedBlocks.length - 1;
-					const isLive = Boolean(live && isLast);
-					return (
-						<React.Fragment key={`review-loop:${block.blocks[0]?.kind === "entry" ? block.blocks[0].entry.id : i}`}>
-							<ReviewLoopBlock
-								prNumber={block.prNumber}
-								rounds={block.rounds}
-								live={isLive}
-								// A live loop is always pending, whatever GitHub last
-								// reported about the PR.
-								result={
-									showReviewResult && i === lastReviewLoop && !isLive
-										? reviewResult
-										: undefined
-								}
-								defaultOpen={reviewLoopsOpen}
-							>
-								{block.blocks.map((inner, innerIndex) => {
-									const innerKey = inner.kind === "turn"
-										? inner.items[0].id
-										: inner.kind === "footer"
-											? `${inner.entry.id}:footer`
-											: inner.kind === "entry"
-												? inner.entry.id
-												: `inner:${innerIndex}`;
-									return (
-										<React.Fragment key={innerKey}>
-											{inner.kind === "turn" ? (
-												<ReviewTurnSteps
-													items={inner.items}
-													toolResults={toolResults}
-													live={Boolean(live && isLast && innerIndex === block.blocks.length - 1)}
-													owner={owner}
-													sessionId={sessionId}
-													onOpenSubagent={onOpenSubagent}
-												/>
-											) : inner.kind === "footer" ? (
-												// Inside the fold the row is one child among many, so it
-												// carries its own lift onto the answer above it.
-												<TurnFooter className={TURN_FOOTER_LIFT} entry={inner.entry} durationMs={inner.durationMs} files={inner.files} assets={inner.assets} onFork={onFork} />
-											) : inner.kind === "entry" && reviewBlockRole(inner).kind !== "handoff" ? (
-												<MessageBubble
-													entry={inner.entry}
-													owner={owner}
-													sessionId={sessionId}
-													onEdit={onEditMessage}
-												/>
-											) : null}
-										</React.Fragment>
-									);
-								})}
-							</ReviewLoopBlock>
-						</React.Fragment>
-					);
-				}
-				const key =
-					block.kind === "turn"
-						// History prepends can extend the start of an existing turn. Its
-						// tail survives that merge, so key the wrapper there and keep its
-						// measured height and visibility state instead of remounting it.
-						? block.items[block.items.length - 1].id
-						: block.kind === "walkthrough"
-							? "walkthrough"
-							: block.kind === "note"
-								? `note:${block.note.id}`
-								: block.kind === "footer"
-									? `${block.entry.id}:footer`
-									: block.entry.id;
-				const anchorId =
-					block.kind === "turn"
-						? `${block.items[block.items.length - 1].id}#turn`
-						: key;
-				// While streaming, flushTurn splits trailing assistant text out as
-				// its own block after the fold, so the live turn alternates between
-				// being last and second-to-last as text and tool calls interleave —
-				// a turn fold directly before the tail is still the live turn.
-				const isLiveTail =
-					Boolean(live) &&
-					(i === groupedBlocks.length - 1 ||
-						(block.kind === "turn" && i === groupedBlocks.length - 2));
-				const content =
-					block.kind === "turn" ? (
-					<TurnBlock
-						items={block.items}
-						toolResults={toolResults}
-						live={isLiveTail}
-						onOpenSubagent={onOpenSubagent}
-						sessionId={sessionId}
-					/>
-				) : block.kind === "walkthrough" ? (
-					<WalkthroughCard
-						walkthrough={block.walkthrough}
-						variant="session"
-					/>
-				) : block.kind === "note" ? (
-					<NoteBubble note={block.note} sessionId={sessionId} />
-				) : block.kind === "footer" ? (
-					<TurnFooter
-						entry={block.entry}
-						durationMs={block.durationMs}
-						files={block.files}
-						assets={block.assets}
-						onFork={onFork}
-					/>
-				) : (
-					<MessageBubble
-						entry={block.entry}
-						owner={owner}
-						sessionId={sessionId}
-						onEdit={onEditMessage}
-						onContinue={
-							i === groupedBlocks.length - 1 ? onContinue : undefined
+	const virtualItems: VirtualTranscriptItem[] = groupedBlocks.map((block, i) => {
+		const key = renderBlockKey(block, i);
+		const entriesInBlock = renderBlockEntries(block);
+		if (block.kind === "review-loop") {
+			const isLast = i === groupedBlocks.length - 1;
+			const isLive = Boolean(live && isLast);
+			return {
+				key,
+				anchorId: renderBlockAnchor(block, key),
+				entryIds: entriesInBlock.map((entry) => entry.id),
+				estimateSize: renderBlockEstimate(block),
+				content: (
+					<ReviewLoopBlock
+						prNumber={block.prNumber}
+						rounds={block.rounds}
+						live={isLive}
+						result={
+							showReviewResult && i === lastReviewLoop && !isLive
+								? reviewResult
+								: undefined
 						}
-					/>
-				);
-				const showShareAction =
-					block.kind === "entry" && shareAfterEntryIds.has(block.entry.id);
-				return (
-					<React.Fragment key={key}>
-						<VirtualTranscriptBlock
-							anchorId={anchorId}
-							enabled={!isLiveTail && i < groupedBlocks.length - TRAILING_MOUNTED_BLOCKS}
-							// A footer overlaps the answer block above it, and only the
-							// wrapper can: the windowed branch contains its contents.
-							className={block.kind === "footer" ? TURN_FOOTER_LIFT : undefined}
-						>
-							{content}
-						</VirtualTranscriptBlock>
-						{showShareAction && slackShare && (
-							<ShippedChangeComposer {...slackShare} />
-						)}
-					</React.Fragment>
-				);
-			})}
-		</>
+						defaultOpen={reviewLoopsOpen}
+					>
+						{block.blocks.map((inner, innerIndex) => {
+							const innerKey = renderBlockKey(inner, innerIndex);
+							return (
+								<React.Fragment key={innerKey}>
+									{inner.kind === "turn" ? (
+										<ReviewTurnSteps
+											items={inner.items}
+											toolResults={toolResults}
+											live={Boolean(
+												live &&
+												isLast &&
+												innerIndex === block.blocks.length - 1,
+											)}
+											owner={owner}
+											sessionId={sessionId}
+											onOpenSubagent={onOpenSubagent}
+										/>
+									) : inner.kind === "footer" ? (
+										<TurnFooter
+											className={TURN_FOOTER_LIFT}
+											entry={inner.entry}
+											durationMs={inner.durationMs}
+											files={inner.files}
+											assets={inner.assets}
+											onFork={onFork}
+										/>
+									) : inner.kind === "entry" &&
+										reviewBlockRole(inner).kind !== "handoff" ? (
+										<MessageBubble
+											entry={inner.entry}
+											owner={owner}
+											sessionId={sessionId}
+											onEdit={onEditMessage}
+										/>
+									) : null}
+								</React.Fragment>
+							);
+						})}
+					</ReviewLoopBlock>
+				),
+			};
+		}
+
+		// While streaming, flushTurn splits trailing assistant text out as its
+		// own block after the fold. A turn directly before that tail is live too.
+		const isLiveTail =
+			Boolean(live) &&
+			(i === groupedBlocks.length - 1 ||
+				(block.kind === "turn" && i === groupedBlocks.length - 2));
+		const content =
+			block.kind === "turn" ? (
+				<TurnBlock
+					items={block.items}
+					toolResults={toolResults}
+					live={isLiveTail}
+					onOpenSubagent={onOpenSubagent}
+					sessionId={sessionId}
+				/>
+			) : block.kind === "walkthrough" ? (
+				<WalkthroughCard walkthrough={block.walkthrough} variant="session" />
+			) : block.kind === "note" ? (
+				<NoteBubble note={block.note} sessionId={sessionId} />
+			) : block.kind === "footer" ? (
+				<TurnFooter
+					entry={block.entry}
+					durationMs={block.durationMs}
+					files={block.files}
+					assets={block.assets}
+					onFork={onFork}
+				/>
+			) : (
+				<MessageBubble
+					entry={block.entry}
+					owner={owner}
+					sessionId={sessionId}
+					onEdit={onEditMessage}
+					onContinue={
+						i === groupedBlocks.length - 1 ? onContinue : undefined
+					}
+				/>
+			);
+		const showShareAction =
+			block.kind === "entry" && shareAfterEntryIds.has(block.entry.id);
+		return {
+			key,
+			anchorId: renderBlockAnchor(block, key),
+			entryIds: entriesInBlock.map((entry) => entry.id),
+			estimateSize: renderBlockEstimate(block),
+			// A footer overlaps the answer above it, so its margin belongs to the
+			// measured wrapper rather than inside the contained row.
+			className: block.kind === "footer" ? TURN_FOOTER_LIFT : undefined,
+			content: (
+				<>
+					{content}
+					{showShareAction && slackShare && (
+						<ShippedChangeComposer {...slackShare} />
+					)}
+				</>
+			),
+		};
+	});
+
+	return (
+		<VirtualTranscriptList
+			items={virtualItems}
+			trailingMounted={TRAILING_MOUNTED_BLOCKS}
+		/>
 	);
 });
 

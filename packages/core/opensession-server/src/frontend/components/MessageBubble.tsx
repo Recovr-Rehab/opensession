@@ -398,8 +398,8 @@ function EditAgainButton({ onClick }: { onClick: () => void }) {
  * every one of them would just be noise while reading — so the time stays
  * hover-capable pointers only, where the assistant's equivalent lives in the ⋯
  * menu instead. The reveal is opacity-only over an absolutely positioned row —
- * nothing here may change a block's height, or VirtualTranscriptBlock's
- * measured placeholders would mis-size and jump the scroll. The ::selection
+ * nothing here may change a block's height, or the virtual transcript's
+ * measured rows would resize and jump the scroll. The ::selection
  * mask is the same WebKit fix as the label's: a drag-select sweeping past
  * unselectable text paints a phantom highlight without it, and a fully
  * transparent background is ignored. */

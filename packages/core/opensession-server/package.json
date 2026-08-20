@@ -23,6 +23,7 @@
     "@shadcn/react": "^0.3.0",
     "@shikijs/langs": "3.23.0",
     "@shikijs/themes": "3.23.0",
+    "@tanstack/react-virtual": "^3.13.12",
     "@team-plain/typescript-sdk": "^5.12.1",
     "@tellahq/opensession-protocol": "workspace:*",
     "@xterm/addon-fit": "^0.11.0",

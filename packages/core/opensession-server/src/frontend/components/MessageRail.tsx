@@ -5,6 +5,7 @@ import { relativeTime } from "../lib/api";
 import { IconGitCommit, IconPencil, IconPullRequest } from "./icons";
 import { Popover } from "../ui/popover";
 import { cn } from "../ui/cn";
+import { scrollToVirtualTranscriptEntry } from "../lib/transcript-virtual-navigation";
 
 /**
  * Your own messages, as a rail of ticks down the left edge of the transcript.
@@ -279,15 +280,19 @@ export function MessageRail({ messages, containerRef, leaveLatest }: Props) {
 		// be mistaken for the reader drifting back to the live edge.
 		leaveLatest();
 
+		// Ask the virtual list to mount an offscreen destination first. A recent
+		// message is already in ordinary DOM and skips this path.
+		const selector = `[data-eid="${CSS.escape(message.id)}"]`;
+		if (!el.querySelector(selector))
+			scrollToVirtualTranscriptEntry(el, message.id);
+
 		// Instant, never smooth: an animated scroll across hundreds of
 		// virtualized blocks mounts and unmounts them mid-flight, and the
 		// destination moves out from under the animation.
 		const settle = () => {
 			// Re-query every pass: the block may have been a measured
 			// placeholder a moment ago.
-			const target = el.querySelector<HTMLElement>(
-				`[data-eid="${CSS.escape(message.id)}"]`,
-			);
+			const target = el.querySelector<HTMLElement>(selector);
 			if (!target) return false;
 			const delta =
 				target.getBoundingClientRect().top -

@@ -20,7 +20,7 @@
  *   · `viewer-header-actions` — lib/pr-tone-classes.ts spaces the PR chip off
  *     the row with `[.viewer-header-actions_&]:mx-1.5`;
  *   · `viewer-messages` — base.css's selection policy opts the whole transcript
- *     in, and MarkdownBody, VirtualTranscriptBlock and CodeHighlight all find
+ *     in, and MarkdownBody, VirtualTranscriptList and CodeHighlight all find
  *     their scroll container with `closest(".viewer-messages")`.
  *
  * One more joins them from the row's contents:
