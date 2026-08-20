@@ -307,7 +307,7 @@ export function FirstMile({ onDone }: { onDone: () => void }) {
 
 			<footer
 				className={cn(
-					"relative z-10 grid grid-cols-[1fr_auto_1fr] items-center border-t px-8 pt-1 transition-[border-color,background-color] phone:px-4",
+					"relative z-10 grid grid-cols-[1fr_auto_1fr] items-center border-t px-8 pt-1 transition-[border-color,background-color] phone:grid-cols-[48px_minmax(0,1fr)] phone:gap-3 phone:px-4",
 					footerSeparated
 						? "border-line bg-bg/95 backdrop-blur-xl"
 						: "border-transparent bg-[linear-gradient(to_bottom,transparent,var(--bg)_30%)]",
@@ -319,12 +319,15 @@ export function FirstMile({ onDone }: { onDone: () => void }) {
 					size="lg"
 					icon={<IconChevronLeft size={18} />}
 					onClick={() => goTo(index - 1)}
-					className={cn("justify-self-start", index === 0 && "invisible")}
+					className={cn(
+						"justify-self-start phone:size-12 phone:justify-center phone:p-0",
+						index === 0 && "invisible",
+					)}
 				>
-					Back
+					<span className="phone:hidden">Back</span>
 				</Button>
 
-				<span />
+				<span className="phone:hidden" />
 
 				<Button
 					variant="primary"
@@ -334,7 +337,7 @@ export function FirstMile({ onDone }: { onDone: () => void }) {
 						else goTo(index + 1);
 					}}
 					disabled={!status}
-					className="justify-self-end"
+					className="justify-self-end phone:min-h-12 phone:w-full phone:justify-center"
 				>
 					{index === 0
 						? "Continue"
