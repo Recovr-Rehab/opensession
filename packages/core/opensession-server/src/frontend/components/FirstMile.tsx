@@ -276,7 +276,7 @@ export function FirstMile({ onDone }: { onDone: () => void }) {
 
 									{/* Settings plates use a translucent version of their normal surface here,
 									    so every onboarding section picks up the page gradient behind it. */}
-									<div className="w-full max-w-[820px] pb-8 [&_[data-setting-description]]:hidden [&_[data-settings-hint]]:hidden [&_.bg-settings-plate]:bg-settings-plate/65 [&_.border-divider]:border-divider/45">
+									<div className="w-full max-w-[820px] pb-8 [&_[data-setting-description]]:hidden [&_[data-settings-hint]]:hidden [&_.bg-settings-plate]:bg-settings-plate/65 [&_.border-divider-soft]:border-divider-soft/45">
 										{step.id === "github" && (
 											<GithubAuthCard
 												github={status.github}

@@ -231,6 +231,12 @@
 	   quietly. Keep --border itself for the edge of a control, where the line
 	   IS the shape. */
 	--divider: color-mix(in srgb, var(--border) 55%, transparent);
+	/* A block's own outline, where the fill under it already says where the
+	   block is and the line only has to close its shape: the settings plate.
+	   Lighter than --divider, which still has to read as a separation between
+	   two surfaces. Anything that has to be seen as a rule takes --divider or
+	   --border; this one is meant to be felt and not looked at. */
+	--divider-soft: color-mix(in srgb, var(--border) 34%, transparent);
 	/* The scrollbar thumb, on the platforms that draw a permanent one (see the
 	   scrollbar block further down). Translucent rather than a picked grey: the
 	   scrollers sit on four different fills, and an alpha keeps the thumb in the

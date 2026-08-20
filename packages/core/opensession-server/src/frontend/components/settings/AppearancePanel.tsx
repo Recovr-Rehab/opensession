@@ -59,6 +59,7 @@ import {
 } from "../../lib/support-surface";
 import {
 	SettingCard,
+	SettingGroup,
 	SettingsGroupLabel,
 	SettingsSection,
 } from "../../ui/settings";
@@ -254,7 +255,7 @@ export function AppearanceSection() {
 						/>
 					))}
 				</div>
-				<div className="mt-4 border-t border-divider pt-4">
+				<div className="mt-5">
 					<div className="mb-2 text-control-label font-medium text-faint">
 						Accent
 					</div>
@@ -330,130 +331,135 @@ export function SidebarDisplayRows({ repos }: { repos: RepoInfo[] }) {
 
 	return (
 		<>
-			<SettingRow
-				title="Group by"
-				control={
-					<Select
-						label="Group by"
-						value={filter.groupBy}
-						options={GROUP_BY_OPTIONS}
-						onChange={(groupBy) => setFilter({ groupBy })}
-					/>
-				}
-			/>
-			<SettingRow
-				title="Group by project"
-				control={
-					<Switch
-						aria-label="Group by project"
-						checked={filter.byProject}
-						onCheckedChange={(byProject) => setFilter({ byProject })}
-					/>
-				}
-			/>
-			<SettingRow
-				title="Repo"
-				control={
-					<Select
-						label="Repo"
-						value={filter.repo}
-						options={repoOptions}
-						onChange={(repo) => setFilter({ repo })}
-					/>
-				}
-			/>
-			<SettingRow
-				title="Person"
-				control={
-					<Select
-						label="Person"
-						value={filter.person}
-						options={personOptions}
-						onChange={(person) => setFilter({ person })}
-					/>
-				}
-			/>
-			{filter.groupBy === "status" && (
+			{/* These rows describe one default view of the sidebar. */}
+			<SettingGroup>
 				<SettingRow
-					title="Sort by"
+					title="Group by"
 					control={
 						<Select
-							label="Sort by"
-							value={filter.sort}
-							options={[
-								{ value: "updated", label: "Updated" },
-								{ value: "created", label: "Created" },
-							]}
-							onChange={(sort) => setFilter({ sort: sort as SortBy })}
+							label="Group by"
+							value={filter.groupBy}
+							options={GROUP_BY_OPTIONS}
+							onChange={(groupBy) => setFilter({ groupBy })}
 						/>
 					}
 				/>
-			)}
-			<SettingRow
-				title="Pull requests"
-				control={
-					<Select
-						label="Pull requests"
-						value={filter.prs}
-						options={PR_FILTER_OPTIONS}
-						onChange={(prs) => setFilter({ prs })}
-					/>
-				}
-			/>
-			<SettingRow
-				title="Show auto created"
-				control={
-					<Switch
-						aria-label="Show auto created"
-						checked={filter.autoCreated === "show"}
-						onCheckedChange={(shown) =>
-							setFilter({ autoCreated: shown ? "show" : "hide" })
+				<SettingRow
+					title="Group by project"
+					control={
+						<Switch
+							aria-label="Group by project"
+							checked={filter.byProject}
+							onCheckedChange={(byProject) => setFilter({ byProject })}
+						/>
+					}
+				/>
+				<SettingRow
+					title="Repo"
+					control={
+						<Select
+							label="Repo"
+							value={filter.repo}
+							options={repoOptions}
+							onChange={(repo) => setFilter({ repo })}
+						/>
+					}
+				/>
+				<SettingRow
+					title="Person"
+					control={
+						<Select
+							label="Person"
+							value={filter.person}
+							options={personOptions}
+							onChange={(person) => setFilter({ person })}
+						/>
+					}
+				/>
+				{filter.groupBy === "status" && (
+					<SettingRow
+						title="Sort by"
+						control={
+							<Select
+								label="Sort by"
+								value={filter.sort}
+								options={[
+									{ value: "updated", label: "Updated" },
+									{ value: "created", label: "Created" },
+								]}
+								onChange={(sort) => setFilter({ sort: sort as SortBy })}
+							/>
 						}
 					/>
-				}
-			/>
-			<SettingRow
-				title="Hide empty projects"
-				control={
-					<Switch
-						aria-label="Hide empty projects"
-						checked={filter.emptyProjects === "hide"}
-						onCheckedChange={(hide) =>
-							setFilter({ emptyProjects: hide ? "hide" : "show" })
-						}
-					/>
-				}
-			/>
-			<SettingRow
-				title="Row density"
-				control={
-					<Segmented
-						label="Sidebar row density"
-						value={density}
-						onValueChange={(value) =>
-							setSidebarDensity(value as SidebarDensity)
-						}
-					>
-						{DENSITY_OPTIONS.map(({ value, label, Icon }) => (
-							<SegmentedOption key={value} value={value}>
-								<Icon size={20} />
-								{label}
-							</SegmentedOption>
-						))}
-					</Segmented>
-				}
-			/>
-			<SettingRow
-				title="Show last used time"
-				control={
-					<Select
-						label="Show last used time"
-						value={wsTime}
-						options={LAST_USED_TIME_OPTIONS}
-						onChange={setWsTimePref}
-					/>
-				}
-			/>
+				)}
+				<SettingRow
+					title="Pull requests"
+					control={
+						<Select
+							label="Pull requests"
+							value={filter.prs}
+							options={PR_FILTER_OPTIONS}
+							onChange={(prs) => setFilter({ prs })}
+						/>
+					}
+				/>
+				<SettingRow
+					title="Show auto created"
+					control={
+						<Switch
+							aria-label="Show auto created"
+							checked={filter.autoCreated === "show"}
+							onCheckedChange={(shown) =>
+								setFilter({ autoCreated: shown ? "show" : "hide" })
+							}
+						/>
+					}
+				/>
+				<SettingRow
+					title="Hide empty projects"
+					control={
+						<Switch
+							aria-label="Hide empty projects"
+							checked={filter.emptyProjects === "hide"}
+							onCheckedChange={(hide) =>
+								setFilter({ emptyProjects: hide ? "hide" : "show" })
+							}
+						/>
+					}
+				/>
+			</SettingGroup>
+			<SettingGroup>
+				<SettingRow
+					title="Row density"
+					control={
+						<Segmented
+							label="Sidebar row density"
+							value={density}
+							onValueChange={(value) =>
+								setSidebarDensity(value as SidebarDensity)
+							}
+						>
+							{DENSITY_OPTIONS.map(({ value, label, Icon }) => (
+								<SegmentedOption key={value} value={value}>
+									<Icon size={20} />
+									{label}
+								</SegmentedOption>
+							))}
+						</Segmented>
+					}
+				/>
+				<SettingRow
+					title="Show last used time"
+					control={
+						<Select
+							label="Show last used time"
+							value={wsTime}
+							options={LAST_USED_TIME_OPTIONS}
+							onChange={setWsTimePref}
+						/>
+					}
+				/>
+			</SettingGroup>
 		</>
 	);
 }

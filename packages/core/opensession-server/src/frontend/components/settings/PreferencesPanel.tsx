@@ -79,6 +79,7 @@ import { Input, Textarea } from "../../ui/input";
 import { Button } from "../../ui/button";
 import {
 	SettingCard,
+	SettingGroup,
 	SettingsGroupLabel,
 	SettingsHeader,
 	SettingsHint,
@@ -193,13 +194,19 @@ function DeskVoicePanel() {
 		<>
 			<SettingsGroupLabel>Desk voice</SettingsGroupLabel>
 			<SettingCard>
-				<SettingRow
-					title="Voice mode"
-					control={
-						<Switch aria-label="Voice mode" checked={on} onCheckedChange={setDeskVoicePref} />
-					}
-				/>
-				<DeskVoiceApiKeyRow />
+				<SettingGroup>
+					<SettingRow
+						title="Voice mode"
+						control={
+							<Switch
+								aria-label="Voice mode"
+								checked={on}
+								onCheckedChange={setDeskVoicePref}
+							/>
+						}
+					/>
+					<DeskVoiceApiKeyRow />
+				</SettingGroup>
 			</SettingCard>
 			<SettingsHint>
 				Talk to your Desk, the standing session you summon with ⌘J, instead of
@@ -488,96 +495,101 @@ export function PreferencesPanel() {
 			<SettingsHeader title="Preferences" />
 			<SettingsGroupLabel className="mt-0">Messages</SettingsGroupLabel>
 			<SettingCard>
-				<SettingRow
-					title="Default model"
-					control={
-						<Select
-							label="Default model"
-							value={
-								modelPref &&
-								modelOptions.some((m) => m.id === modelPref)
-									? modelPref
-									: ""
-							}
-							options={[
-								{ value: "", label: "No preference" },
-								...modelOptions.map((m) => ({
-									value: m.id,
-									label: m.label,
-								})),
-							]}
-							onChange={setDefaultModelPref}
-						/>
-					}
-				/>
-
-				<SettingRow
-					title="Default repository"
-					desc="Where a new session starts. On Auto it reads your prompt and picks."
-					control={
-						<Select
-							label="Default repository"
-							value={
-								repoPref === AUTO_REPO ||
-								repoOptions.some((r) => r.id === repoPref)
-									? repoPref
-									: ""
-							}
-							options={[
-								{ value: "", label: "Use the workspace default" },
-								{ value: AUTO_REPO, label: "Auto" },
-								...repoOptions.map((r) => ({
-									value: r.id,
-									label: r.label || r.id,
-								})),
-							]}
-							onChange={setDefaultRepoPref}
-						/>
-					}
-				/>
-				<PersonalSandboxDefaultRow />
-				<PersonalOutputStyleRow />
-				<SettingRow
-					title="Send messages with"
-					desc={
-						sendKey === "mod-enter"
-							? "↵ makes a new line."
-							: "⇧↵ makes a new line. On a phone ↵ always makes one, so send with the button."
-					}
-					control={
-						<Select
-							label="Send messages with"
-							value={sendKey}
-							options={[
-								{ value: "enter", label: "Enter" },
-								{ value: "mod-enter", label: MOD_ENTER_LABEL },
-							]}
-							onChange={setSendKeyPref}
-						/>
-					}
-				/>
-				<SettingRow
-					title="Follow-up while busy"
-					desc="Queue waits until the run fully finishes; steer folds your message into the running turn without stopping it."
-					control={
-						<div className="flex flex-wrap items-end justify-end gap-x-3 gap-y-2">
-							<BusyGestureSelect
-								gesture="enter"
-								glyph={sendKey === "enter" ? "↩" : MOD_ENTER_GLYPH}
-								value={busySend.enter}
+				{/* These four choices become one starting state for every new session. */}
+				<SettingGroup>
+					<SettingRow
+						title="Default model"
+						control={
+							<Select
+								label="Default model"
+								value={
+									modelPref && modelOptions.some((m) => m.id === modelPref)
+										? modelPref
+										: ""
+								}
+								options={[
+									{ value: "", label: "No preference" },
+									...modelOptions.map((m) => ({
+										value: m.id,
+										label: m.label,
+									})),
+								]}
+								onChange={setDefaultModelPref}
 							/>
-							{/* The modifier only has its own answer while plain Enter is
-							    the send key; otherwise ⌘↵ IS sending, set just above. */}
-							{sendKey === "enter" && (
+						}
+					/>
+
+					<SettingRow
+						title="Default repository"
+						desc="Where a new session starts. On Auto it reads your prompt and picks."
+						control={
+							<Select
+								label="Default repository"
+								value={
+									repoPref === AUTO_REPO ||
+									repoOptions.some((r) => r.id === repoPref)
+										? repoPref
+										: ""
+								}
+								options={[
+									{ value: "", label: "Use the workspace default" },
+									{ value: AUTO_REPO, label: "Auto" },
+									...repoOptions.map((r) => ({
+										value: r.id,
+										label: r.label || r.id,
+									})),
+								]}
+								onChange={setDefaultRepoPref}
+							/>
+						}
+					/>
+					<PersonalSandboxDefaultRow />
+					<PersonalOutputStyleRow />
+				</SettingGroup>
+				{/* The send key also determines which busy-turn gesture is available. */}
+				<SettingGroup>
+					<SettingRow
+						title="Send messages with"
+						desc={
+							sendKey === "mod-enter"
+								? "↵ makes a new line."
+								: "⇧↵ makes a new line. On a phone ↵ always makes one, so send with the button."
+						}
+						control={
+							<Select
+								label="Send messages with"
+								value={sendKey}
+								options={[
+									{ value: "enter", label: "Enter" },
+									{ value: "mod-enter", label: MOD_ENTER_LABEL },
+								]}
+								onChange={setSendKeyPref}
+							/>
+						}
+					/>
+					<SettingRow
+						title="Follow-up while busy"
+						desc="Queue waits until the run fully finishes; steer folds your message into the running turn without stopping it."
+						control={
+							<div className="flex flex-wrap items-end justify-end gap-x-3 gap-y-2">
 								<BusyGestureSelect
-									gesture="mod"
-									glyph={MOD_ENTER_GLYPH}
-									value={busySend.mod}
+									gesture="enter"
+									glyph={sendKey === "enter" ? "↩" : MOD_ENTER_GLYPH}
+									value={busySend.enter}
 								/>
-							)}
-						</div>
-					}
-				/>
+								{/* The modifier only has its own answer while plain Enter is
+							    the send key; otherwise ⌘↵ IS sending, set just above. */}
+								{sendKey === "enter" && (
+									<BusyGestureSelect
+										gesture="mod"
+										glyph={MOD_ENTER_GLYPH}
+										value={busySend.mod}
+									/>
+								)}
+							</div>
+						}
+					/>
+				</SettingGroup>
 				<SettingRow
 					title="Quick replies"
 					desc="Suggest short follow-ups above the composer when a turn ends on a choice. Picking one fills the draft."
@@ -593,7 +605,11 @@ export function PreferencesPanel() {
 					title="Vim mode"
 					desc="Modal editing in the composer. Esc for normal mode, i to type. Enter still sends."
 					control={
-						<Switch aria-label="Vim mode" checked={vimMode} onCheckedChange={setVimModePref} />
+						<Switch
+							aria-label="Vim mode"
+							checked={vimMode}
+							onCheckedChange={setVimModePref}
+						/>
 					}
 				/>
 			</SettingCard>
@@ -601,61 +617,65 @@ export function PreferencesPanel() {
 			<SettingsGroupLabel>Sidebar</SettingsGroupLabel>
 			<SettingCard>
 				<SidebarDisplayRows repos={repoOptions} />
-				<SettingRow
-					title="Pin new sessions"
-					control={
-						<Switch
-							aria-label="Pin new sessions"
-							checked={pinNew}
-							onCheckedChange={setPinNewSessions}
-						/>
-					}
-				/>
-				<SettingRow
-					title="Pin new workspaces"
-					control={
-						<Switch
-							aria-label="Pin new workspaces"
-							checked={pinNewWs}
-							onCheckedChange={setPinNewWorkspaces}
-						/>
-					}
-				/>
+				<SettingGroup>
+					<SettingRow
+						title="Pin new sessions"
+						control={
+							<Switch
+								aria-label="Pin new sessions"
+								checked={pinNew}
+								onCheckedChange={setPinNewSessions}
+							/>
+						}
+					/>
+					<SettingRow
+						title="Pin new workspaces"
+						control={
+							<Switch
+								aria-label="Pin new workspaces"
+								checked={pinNewWs}
+								onCheckedChange={setPinNewWorkspaces}
+							/>
+						}
+					/>
+				</SettingGroup>
 			</SettingCard>
 			<SidebarItemsSection />
 			<SettingsGroupLabel>Transcript</SettingsGroupLabel>
 			<SettingCard>
-				<SettingRow
-					title="Steps"
-					desc="Choose whether a turn’s steps stay closed, open only while it runs, or remain open."
-					control={
-						<Select
-							label="Steps"
-							value={turnActivity.work}
-							options={[
-								{ value: "folded", label: "Closed" },
-								{ value: "running", label: "While running" },
-								{ value: "open", label: "Open" },
-							]}
-							onChange={setTurnWorkPref}
-						/>
-					}
-				/>
-				<SettingRow
-					title="Tool calls"
-					desc="Choose whether tool calls start open or stay folded into a single step."
-					control={
-						<Select
-							label="Tool calls"
-							value={turnActivity.tools}
-							options={[
-								{ value: "folded", label: "Closed" },
-								{ value: "open", label: "Open" },
-							]}
-							onChange={setToolCallsPref}
-						/>
-					}
-				/>
+				<SettingGroup>
+					<SettingRow
+						title="Steps"
+						desc="Choose whether a turn’s steps stay closed, open only while it runs, or remain open."
+						control={
+							<Select
+								label="Steps"
+								value={turnActivity.work}
+								options={[
+									{ value: "folded", label: "Closed" },
+									{ value: "running", label: "While running" },
+									{ value: "open", label: "Open" },
+								]}
+								onChange={setTurnWorkPref}
+							/>
+						}
+					/>
+					<SettingRow
+						title="Tool calls"
+						desc="Choose whether tool calls start open or stay folded into a single step."
+						control={
+							<Select
+								label="Tool calls"
+								value={turnActivity.tools}
+								options={[
+									{ value: "folded", label: "Closed" },
+									{ value: "open", label: "Open" },
+								]}
+								onChange={setToolCallsPref}
+							/>
+						}
+					/>
+				</SettingGroup>
 				<SettingRow
 					title="Live typing"
 					desc="Type the reply out as the model writes it. Off, each part appears when it is finished."

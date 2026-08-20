@@ -123,8 +123,8 @@ layout from regressing once it exists.
   today is the settings plate (`--settings-plate`, `ui/settings.tsx`): there
   the hairline replaces the weight the fill gave up rather than adding to it,
   and the pair is quieter than the full L1 grey was on its own. It takes
-  `border-divider`, the chrome seam, not the `border-line` its own rows take:
-  closing a block's shape asks less of a line than separating two rows does,
+  `border-divider-soft`, a third-strength outline, not the `border-line` its own
+  rows take: closing a block's shape asks less of a line than separating rows,
   and at the row weight the outline was the loudest thing on the page. That is
   a trade, not a licence. It does not extend to `Card`, which stays
   borderless, and a card that still carries a normal fill has nothing to

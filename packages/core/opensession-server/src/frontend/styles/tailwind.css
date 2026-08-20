@@ -100,6 +100,9 @@
 	   pane header. Softer than `line`, which stays for the edge of a control.
 	   See base.css for why the chrome takes a wash and not a full hairline. */
 	--color-divider: var(--divider);
+	/* Lighter still: the outline of a block that already has its own fill (the
+	   settings plate). See base.css. */
+	--color-divider-soft: var(--divider-soft);
 
 	/* Text */
 	--color-fg: var(--text);
