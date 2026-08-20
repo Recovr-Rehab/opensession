@@ -1434,7 +1434,7 @@ export function Composer({
           borderBottomRightRadius: minimized ? 999 : composerRadius(),
           // The controls stay in their toolbar positions while the top edge
           // comes down to wrap them. Returning to auto reveals the draft.
-          height: dictating ? (minimized ? 50 : 54) : "auto",
+          height: dictating ? (minimized ? 50 : isPhone ? 60 : 62) : "auto",
         }}
         transition={composerMorph}
         onAnimationComplete={() => {
@@ -2020,7 +2020,7 @@ export function Composer({
               // capsule rather than the expanded box's radius.
               overlayClassName={
                 minimized
-                  ? "rounded-[999px]"
+                  ? "rounded-[999px] phone:pb-1"
                   : "rounded-[var(--composer-radius)]"
               }
               disabled={disabled}
