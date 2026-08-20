@@ -63,8 +63,6 @@ import {
 	SettingsSection,
 } from "../../ui/settings";
 import { Segmented, SegmentedOption } from "../../ui/segmented";
-import { Select as SelectParts } from "../../ui/select";
-import type { SettingOption } from "../../ui/setting-row";
 import { Switch } from "../../ui/switch";
 import { usePeople } from "../../lib/people";
 import { useCurrentUser } from "../UserPicker";
@@ -287,46 +285,6 @@ export function AppearanceSection() {
 	);
 }
 
-function SidebarOptionSelect<T extends string>({
-	label,
-	value,
-	options,
-	onChange,
-}: {
-	label: string;
-	value: T;
-	options: Array<SettingOption & { value: T }>;
-	onChange: (value: T) => void;
-}) {
-	const hasIcons = options.some((option) => option.icon != null);
-	const selected = options.find((option) => option.value === value);
-	return (
-		<SelectParts.Root
-			items={options}
-			value={value}
-			onValueChange={(next) => onChange(next as T)}
-		>
-			<SelectParts.Trigger
-				aria-label={label}
-				contentAlign="center"
-				{...(hasIcons ? { icon: selected?.icon ?? null } : {})}
-				sizeTo={options.map((option) => option.label)}
-			/>
-			<SelectParts.Popup align="end">
-				{options.map((option) => (
-					<SelectParts.Item
-						key={option.value}
-						value={option.value}
-						{...(hasIcons ? { icon: option.icon ?? null } : {})}
-					>
-						{option.label}
-					</SelectParts.Item>
-				))}
-			</SelectParts.Popup>
-		</SelectParts.Root>
-	);
-}
-
 /** The same sidebar filter controls, shown as Settings rows. */
 export function SidebarDisplayRows({ repos }: { repos: RepoInfo[] }) {
 	const filter = useSidebarFilter();
@@ -375,7 +333,7 @@ export function SidebarDisplayRows({ repos }: { repos: RepoInfo[] }) {
 			<SettingRow
 				title="Group by"
 				control={
-					<SidebarOptionSelect
+					<Select
 						label="Group by"
 						value={filter.groupBy}
 						options={GROUP_BY_OPTIONS}
@@ -396,7 +354,7 @@ export function SidebarDisplayRows({ repos }: { repos: RepoInfo[] }) {
 			<SettingRow
 				title="Repo"
 				control={
-					<SidebarOptionSelect
+					<Select
 						label="Repo"
 						value={filter.repo}
 						options={repoOptions}
@@ -407,7 +365,7 @@ export function SidebarDisplayRows({ repos }: { repos: RepoInfo[] }) {
 			<SettingRow
 				title="Person"
 				control={
-					<SidebarOptionSelect
+					<Select
 						label="Person"
 						value={filter.person}
 						options={personOptions}
@@ -419,7 +377,7 @@ export function SidebarDisplayRows({ repos }: { repos: RepoInfo[] }) {
 				<SettingRow
 					title="Sort by"
 					control={
-						<SidebarOptionSelect
+						<Select
 							label="Sort by"
 							value={filter.sort}
 							options={[
@@ -434,7 +392,7 @@ export function SidebarDisplayRows({ repos }: { repos: RepoInfo[] }) {
 			<SettingRow
 				title="Pull requests"
 				control={
-					<SidebarOptionSelect
+					<Select
 						label="Pull requests"
 						value={filter.prs}
 						options={PR_FILTER_OPTIONS}
@@ -488,7 +446,7 @@ export function SidebarDisplayRows({ repos }: { repos: RepoInfo[] }) {
 			<SettingRow
 				title="Show last used time"
 				control={
-					<SidebarOptionSelect
+					<Select
 						label="Show last used time"
 						value={wsTime}
 						options={LAST_USED_TIME_OPTIONS}

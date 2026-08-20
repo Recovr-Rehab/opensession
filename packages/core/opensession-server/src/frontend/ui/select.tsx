@@ -77,7 +77,6 @@ function Root<Value, Multiple extends boolean | undefined = false>({
 type TriggerProps = Omit<React.ComponentProps<typeof BaseSelect.Trigger>, "className"> & {
 	className?: string;
 	size?: Size;
-	contentAlign?: "start" | "center";
 	/** Shown when nothing is selected. */
 	placeholder?: React.ReactNode;
 	/**
@@ -99,16 +98,7 @@ type TriggerProps = Omit<React.ComponentProps<typeof BaseSelect.Trigger>, "class
 };
 
 function Trigger(triggerProps: TriggerProps) {
-	const {
-		className,
-		size = "md",
-		contentAlign = "start",
-		placeholder,
-		sizeTo,
-		icon,
-		children,
-		...props
-	} = triggerProps;
+	const { className, size = "md", placeholder, sizeTo, icon, children, ...props } = triggerProps;
 	// Presence, not truthiness: an icon-bearing list keeps the slot for the
 	// values that have no glyph, so the labels stay on one x.
 	const iconSlot = "icon" in triggerProps;
@@ -119,21 +109,13 @@ function Trigger(triggerProps: TriggerProps) {
 			className={cn(
 				fieldClasses(
 					size,
+					// The chevron sits in flow in its own grid column, so the
+					// field's own padding is what separates it from the edge.
 					cn(
-						"inline-grid cursor-pointer items-center gap-2 text-left",
-						contentAlign === "center"
-							? cn(
-									"relative justify-center px-6 text-center",
-									iconSlot ? "grid-cols-[auto_auto]" : "grid-cols-[auto]",
-								)
-							: cn(
-									// The chevron sits in flow in its own grid column, so the
-									// field's own padding is what separates it from the edge.
-									"pr-2",
-									iconSlot
-										? "grid-cols-[auto_minmax(0,1fr)_auto]"
-										: "grid-cols-[minmax(0,1fr)_auto]",
-								),
+						"inline-grid cursor-pointer items-center gap-2 pr-2 text-left",
+						iconSlot
+							? "grid-cols-[auto_minmax(0,1fr)_auto]"
+							: "grid-cols-[minmax(0,1fr)_auto]",
 					),
 				),
 				// A select lifts slightly under the pointer; opening still reads like
@@ -161,14 +143,7 @@ function Trigger(triggerProps: TriggerProps) {
 			))}
 			<IconChevronDown
 				size={16}
-				className={cn(
-					"row-start-1 shrink-0 text-faint",
-					contentAlign === "center"
-						? "absolute right-2 top-1/2 -translate-y-1/2"
-						: iconSlot
-							? "col-start-3"
-							: "col-start-2",
-				)}
+				className={cn("row-start-1 shrink-0 text-faint", iconSlot ? "col-start-3" : "col-start-2")}
 			/>
 		</BaseSelect.Trigger>
 	);
@@ -302,7 +277,10 @@ export function OptionSelect<T extends string>({
 	triggerRef,
 }: {
 	value: T;
-	options: { value: T; label: string; disabled?: boolean }[];
+	/** `icon` is optional per option, but the slot is all-or-nothing: as soon
+	 *  as one row carries a glyph, every row and the trigger reserve the
+	 *  column, so the labels stay on one x. */
+	options: { value: T; label: string; disabled?: boolean; icon?: React.ReactNode }[];
 	onChange: (value: T) => void;
 	label: string;
 	disabled?: boolean;
@@ -313,6 +291,8 @@ export function OptionSelect<T extends string>({
 	 *  field (`Modal.Content`'s `initialFocus`). */
 	triggerRef?: React.ComponentProps<typeof Trigger>["ref"];
 }) {
+	const hasIcons = options.some((option) => option.icon != null);
+	const selected = options.find((option) => option.value === value);
 	return (
 		<Select.Root
 			// The labels the trigger draws its value from, so a closed select
@@ -327,11 +307,17 @@ export function OptionSelect<T extends string>({
 				aria-label={label}
 				className={className}
 				size={size}
+				{...(hasIcons ? { icon: selected?.icon ?? null } : {})}
 				sizeTo={options.map((option) => option.label)}
 			/>
 			<Select.Popup align="end">
 				{options.map((option) => (
-					<Select.Item key={option.value} value={option.value} disabled={option.disabled}>
+					<Select.Item
+						key={option.value}
+						value={option.value}
+						disabled={option.disabled}
+						{...(hasIcons ? { icon: option.icon ?? null } : {})}
+					>
 						{option.label}
 					</Select.Item>
 				))}
