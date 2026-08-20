@@ -307,12 +307,33 @@ export const VIEWER_SUMMARY_STEP =
 	"desktop:[&>*]:translate-x-[var(--ws-summary-step,0px)]";
 
 /**
- * Where the quick-reply row hangs (components/ReplySuggestions).
+ * The band above the composer that carries the session's own actions: the
+ * quick-reply chips on the left, the Next action on the right.
+ *
+ * This row exists only while there is a Next action, and the button gives it
+ * its height. Moving the chips here therefore costs the conversation no extra
+ * room. Centring the two offers makes them read as one row of choices.
+ *
+ * The composer's own box is `--session-col` + 40px wide and starts at this
+ * container's left edge, so the chips inset from here land on its content rail
+ * (VIEWER_SUGGESTIONS_ROW_INLINE). The right side keeps the input's 20px, which
+ * is where the Next button sat before it had company.
+ */
+export const VIEWER_ACTION_ROW =
+	"mx-auto mb-2 flex w-full max-w-[calc(var(--session-col)+40px)] items-center gap-3 pr-5";
+
+/**
+ * Where the quick-reply row hangs when it is alone in that band
+ * (components/ReplySuggestions).
  *
  * `bottom-full` lifts it off the top of the input box, so the row lies on the
  * transcript's last rows and costs the input no height: it arrives and retires
  * without moving the composer under your hands. The transcript pays for what it
  * covers in bottom padding instead (`--suggestions-under`, above).
+ *
+ * With a Next action up, the chips are laid out in VIEWER_ACTION_ROW instead
+ * and none of this applies: that row is already paid for, so they take no
+ * height there either.
  *
  * It stands off the composer by 10px: 6px of its own plus the input's 4px of
  * top padding. The row is an offer about the message you are being invited to
@@ -371,6 +392,18 @@ export const SUGGESTIONS_CLEARANCE = "34px";
 export const VIEWER_SUGGESTIONS_ROW =
 	"w-[calc(100%+8px)] max-w-[calc(var(--session-col)+48px)] " +
 	"-m-1 py-1 pr-1 pl-[19px] phone:pl-[17px]";
+
+/**
+ * The same row once it shares VIEWER_ACTION_ROW with the Next action.
+ *
+ * It keeps the shadow allowance and the content-rail indent exactly as above.
+ * The chips start where the draft they are offering starts, whichever band they
+ * are in. It gives up only the column's own max width, because the row it is
+ * in already has it. `min-w-0` is what lets the chips scroll sideways instead
+ * of pushing Next off its edge when there are more of them than fit.
+ */
+export const VIEWER_SUGGESTIONS_ROW_INLINE =
+	"min-w-0 flex-1 -my-1 -ml-1 py-1 pr-1 pl-[19px] phone:pl-[17px]";
 
 /* ── Banners and the delete overlay ─────────────────────────────────────── */
 

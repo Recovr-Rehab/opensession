@@ -54,9 +54,9 @@ import { cn } from "../ui/cn";
  * What keeps the row quiet is its ink, not its surface: dim at medium weight,
  * no icon, against the near-black semibold of the transcript's own pills.
  *
- * The 28px height is fixed rather than left to the label, because the
- * transcript pads for exactly that (SUGGESTIONS_CLEARANCE) and inherited
- * leading would otherwise decide how much of the answer the row covers.
+ * The 28px height is fixed rather than left to the label, because
+ * SUGGESTIONS_CLEARANCE is measured from it and inherited leading would
+ * otherwise decide how much of the answer the row covers.
  */
 const chip =
 	"relative inline-flex h-7 w-full items-center whitespace-nowrap rounded-[999px] px-3 " +

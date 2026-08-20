@@ -329,6 +329,7 @@ import {
 	TRANSCRIPT_PILL_LOADING,
 	TRANSCRIPT_PILL_SPINNER,
 	TRANSCRIPT_PILL_TOP,
+	VIEWER_ACTION_ROW,
 	VIEWER_BRANCH,
 	VIEWER_BRANCH_EDITABLE,
 	VIEWER_BRANCH_RENAME,
@@ -346,6 +347,7 @@ import {
 	VIEWER_REVIEW_MAIN,
 	VIEWER_SUGGESTIONS,
 	VIEWER_SUGGESTIONS_ROW,
+	VIEWER_SUGGESTIONS_ROW_INLINE,
 	VIEWER_SUMMARY_STEP,
 	VIEWER_TITLE,
 	INFO_CONTENT,
@@ -5465,6 +5467,24 @@ export function SessionViewer({
 		!forkFrom &&
 		replySuggestions.length > 0;
 
+	/* Next is up whenever there is another chat to move on to. While it is, the
+	   chips sit in its row (VIEWER_ACTION_ROW) rather than in a floating band of
+	   their own: two offers about the same moment, on one line. That row already
+	   costs the composer its height, so the chips still cost the transcript
+	   nothing, and only the alone case has to pad for them. */
+	const nextAction = !!onNextChat;
+	const floatingQuickReplies = quickReplies && !nextAction;
+
+	const pickReplySuggestion = (text: string) => {
+		setComposerPrefill((current) => ({
+			seq: (current?.seq ?? 0) + 1,
+			text,
+			replace: false,
+		}));
+		setReplySuggestions(EMPTY_SUGGESTIONS);
+		if (!isPhone) composerRef.current?.focus();
+	};
+
 	return (
 		<div className="relative flex h-full min-h-0 flex-col">
 			{deleting && (
@@ -6644,7 +6664,7 @@ export function SessionViewer({
 					   transcript's bottom padding and by the scroll-to-bottom pill's
 					   offset. Set here so both read one value. */
 					style={
-						quickReplies
+						floatingQuickReplies
 							? ({
 									"--suggestions-under": SUGGESTIONS_CLEARANCE,
 								} as React.CSSProperties)
@@ -7255,20 +7275,12 @@ export function SessionViewer({
 								    in it, for the reason VIEWER_SUGGESTIONS gives, and given
 								    the composer's own max width inside it so the pills start
 								    on its left edge. */}
-								{quickReplies && (
+								{floatingQuickReplies && (
 									<div className={VIEWER_SUGGESTIONS}>
 										<ReplySuggestions
 											className={VIEWER_SUGGESTIONS_ROW}
 											suggestions={replySuggestions}
-											onPick={(text) => {
-												setComposerPrefill((current) => ({
-													seq: (current?.seq ?? 0) + 1,
-													text,
-													replace: false,
-												}));
-												setReplySuggestions(EMPTY_SUGGESTIONS);
-												if (!isPhone) composerRef.current?.focus();
-											}}
+											onPick={pickReplySuggestion}
 										/>
 									</div>
 								)}
@@ -7276,15 +7288,25 @@ export function SessionViewer({
 									users={typingUsers}
 									className="mx-auto mb-1 w-full max-w-[calc(var(--session-col)+40px)] px-5"
 								/>
-								{onNextChat && (
-									<div className="mx-auto mb-2 flex w-full max-w-[calc(var(--session-col)+40px)] justify-end pr-5">
+								{nextAction && (
+									<div className={VIEWER_ACTION_ROW}>
+										{/* The chips join Next here instead of floating over the
+										    transcript, so both offers sit on one centred line
+										    rather than stacking a few pixels apart. */}
+										{quickReplies && (
+											<ReplySuggestions
+												className={VIEWER_SUGGESTIONS_ROW_INLINE}
+												suggestions={replySuggestions}
+												onPick={pickReplySuggestion}
+											/>
+										)}
 										<Tooltip
 											label="Next chat"
 											shortcut={nextChatKeys ?? undefined}
 										>
 											<Button
 												size="lg"
-												className="min-h-10 border-divider hover:border-line phone:min-h-11"
+												className="ml-auto min-h-10 shrink-0 border-divider hover:border-line phone:min-h-11"
 												trailing={<IconChevronRight size={18} aria-hidden />}
 												aria-label="Next chat"
 												onClick={onNextChat}

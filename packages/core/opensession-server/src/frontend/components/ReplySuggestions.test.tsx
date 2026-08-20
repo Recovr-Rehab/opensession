@@ -7,6 +7,7 @@ import {
 	SUGGESTIONS_CLEARANCE,
 	VIEWER_SUGGESTIONS,
 	VIEWER_SUGGESTIONS_ROW,
+	VIEWER_SUGGESTIONS_ROW_INLINE,
 } from "../lib/session-viewer-classes";
 
 const { ReplySuggestions } = await import("./ReplySuggestions");
@@ -75,6 +76,21 @@ describe("ReplySuggestions", () => {
 
 		expect(standoff).toBeGreaterThan(0);
 		expect(SUGGESTIONS_CLEARANCE).toBe(`${PILL_HEIGHT + standoff}px`);
+	});
+
+	test("the chips keep the composer's rail when they move beside Next", () => {
+		// The row sits in two places: floating over the transcript when it is
+		// alone, and in the action row when there is a Next to share a line with.
+		// The indent that puts the first pill where the draft starts has to
+		// survive the move, or picking up Next shifts every chip sideways.
+		for (const pattern of [/(?:^|\s)pl-\[\d+px\]/, /\sphone:pl-\[\d+px\]/]) {
+			expect(pattern.exec(VIEWER_SUGGESTIONS_ROW_INLINE)?.[0]).toBe(
+				pattern.exec(VIEWER_SUGGESTIONS_ROW)?.[0],
+			);
+		}
+		// It has to yield rather than push Next off the column's edge when there
+		// are more chips than fit: the row scrolls sideways instead.
+		expect(VIEWER_SUGGESTIONS_ROW_INLINE).toContain("min-w-0");
 	});
 
 	test("renders nothing at all when there is nothing to suggest", () => {
