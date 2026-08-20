@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState } from "react";
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import { useSetupStatus } from "../hooks/useSetupStatus";
+import { BASE_PATH } from "../lib/base";
 import { DEFAULT_DOC_TITLE, docTitle } from "../lib/brand";
 import { Button } from "../ui/button";
 import { cn } from "../ui/cn";
@@ -247,7 +248,15 @@ export function SetupPanel({ onDone }: { onDone?: () => void }) {
 
   return (
 		<SettingsPanel className="relative flex max-w-[940px] flex-col overflow-x-clip desktop:h-[calc(100dvh-96px)] desktop:min-h-[640px] desktop:max-h-[760px] [&_input]:phone:text-input-phone">
-      <SettingsHeader title="Workspace setup" className="mb-8" />
+      <SettingsHeader
+        title="Workspace setup"
+        className="mb-8"
+        actions={
+          <Button size="sm" render={<a href={`${BASE_PATH}/welcome`} />}>
+            Open onboarding
+          </Button>
+        }
+      />
       {!status ? (
         <LoadingState>
           {failed ? "Couldn't load setup status." : "Loading…"}
