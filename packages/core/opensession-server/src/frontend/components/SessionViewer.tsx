@@ -1244,6 +1244,7 @@ export function SessionViewer({
 			? transcriptIndexState.entries
 			: null;
 	const transcriptIndexEpochRef = useRef<number | null>(null);
+	const transcriptRangeDemandReadyRef = useRef(false);
 	const [transcriptRangeRetryGeneration, setTranscriptRangeRetryGeneration] =
 		useState(0);
 	const completedTranscriptRangeKeysRef = useRef(new Set<string>());
@@ -2480,7 +2481,7 @@ export function SessionViewer({
 	const loadTranscriptRanges = useCallback(
 		(ranges: TranscriptIndexedRange[]) => {
 			const epoch = transcriptIndexEpochRef.current;
-			if (epoch === null) return;
+			if (epoch === null || !transcriptRangeDemandReadyRef.current) return;
 			for (const range of ranges) {
 				const key = `${range.firstSeq}:${range.lastSeq}`;
 				if (
@@ -2596,6 +2597,7 @@ export function SessionViewer({
 					if (v2) {
 						setTranscriptIndexState(null);
 						transcriptIndexEpochRef.current = null;
+						transcriptRangeDemandReadyRef.current = false;
 						for (const request of transcriptRangeRequestsRef.current.values())
 							clearTimeout(request.timer);
 						transcriptRangeRequestsRef.current.clear();
@@ -2647,8 +2649,14 @@ export function SessionViewer({
 					historyRevealRef.current = null;
 					loadingHistoryRef.current = false;
 					setLoadingHistory(false);
-					if (keepLiveEdge)
-						requestAnimationFrame(() => scrollToLatest("auto"));
+					transcriptRangeDemandReadyRef.current = false;
+					requestAnimationFrame(() => {
+						if (keepLiveEdge) scrollToLatest("auto");
+						transcriptRangeDemandReadyRef.current = true;
+						setTranscriptRangeRetryGeneration(
+							(generation) => generation + 1,
+						);
+					});
 					break;
 				}
 				case "transcript_range": {
