@@ -49,6 +49,10 @@ import {
 	queueAttribution,
 } from "../lib/transcript-state";
 import { TranscriptBlocks } from "./TranscriptBlocks";
+import {
+	HISTORY_PAGE_ENTRIES,
+	shouldContinueHistoryReveal,
+} from "../lib/transcript-history";
 import { MessageRail } from "./MessageRail";
 import { collectSentMessages } from "../lib/sent-messages";
 import {
@@ -638,7 +642,7 @@ const RESUME_GROWTH_WINDOW_MS = 8_000;
 // round trips (and whole-transcript re-renders) in single digits; the ceiling
 // stops a runaway walk on a session nobody should be rendering whole — when it
 // trips, the pill stays put so the reader can keep going deliberately.
-const JUMP_PAGE_ENTRIES = 400;
+const JUMP_PAGE_ENTRIES = HISTORY_PAGE_ENTRIES;
 const JUMP_MAX_ENTRIES = 4_000;
 
 function modelIsCodex(id: string, models: ModelOption[]): boolean {
@@ -1206,6 +1210,20 @@ export function SessionViewer({
 		loaded: number;
 		cursor: number | null;
 	} | null>(null);
+	// An ordinary history load walks until it reaches a user/system boundary.
+	// A raw page can otherwise land wholly inside one collapsed work turn, which
+	// makes a successful load look like a no-op. This stays separate from the
+	// explicit whole-history walk and has its own small ceiling.
+	const historyRevealRef = useRef<{
+		sessionId: string;
+		loaded: number;
+		cursor: number | null;
+	} | null>(null);
+	// One extra page downloads after the initial view settles. It starts only
+	// while the reader is still at the live edge; an upward gesture adopts the
+	// in-flight request into historyRevealRef and gives it the normal scroll hold.
+	const backgroundHistoryRef = useRef(false);
+	const backgroundHistoryAttemptedRef = useRef(false);
 	const [loadingAllHistory, setLoadingAllHistory] = useState(false);
 	// Byte offset the loaded history begins at — the "load earlier" pagination
 	// cursor (server: parseTranscriptTail/parseTranscriptWindow startOffset).
@@ -1915,6 +1933,8 @@ export function SessionViewer({
 	useEffect(() => {
 		return () => {
 			historyWalkRef.current = null;
+			historyRevealRef.current = null;
+			backgroundHistoryRef.current = false;
 			setLoadingAllHistory(false);
 		};
 	}, [session.id]);
@@ -2508,6 +2528,9 @@ export function SessionViewer({
 					}
 					transcriptViewStore.replace(merged, true, v2);
 					setHistoryTruncated(!!msg.truncated);
+					backgroundHistoryRef.current = false;
+					historyRevealRef.current = null;
+					loadingHistoryRef.current = false;
 					setLoadingHistory(false);
 					setLoading(false);
 					// A whole-history walk ends here when the server answers with the
@@ -2588,6 +2611,28 @@ export function SessionViewer({
 						}
 						finishHistoryWalk();
 					}
+					const reveal = historyRevealRef.current;
+					if (reveal && reveal.sessionId === session.id && inSeqMode) {
+						reveal.loaded += msg.entries.length;
+						const cursor = seqState.firstSeq;
+						if (
+							shouldContinueHistoryReveal({
+								entries: msg.entries,
+								truncated: !!msg.truncated,
+								loaded: reveal.loaded,
+								cursor,
+								previousCursor: reveal.cursor,
+							})
+						) {
+							reveal.cursor = cursor;
+							requestHistoryPage();
+							break;
+						}
+						historyRevealRef.current = null;
+					}
+					if (backgroundHistoryRef.current) scrollToLatest("auto");
+					backgroundHistoryRef.current = false;
+					loadingHistoryRef.current = false;
 					setLoadingHistory(false);
 					break;
 				}
@@ -3183,7 +3228,7 @@ export function SessionViewer({
 					...(seqState.firstSeq !== null && seqState.firstSeq > 1
 						? { beforeSeq: seqState.firstSeq }
 						: {}),
-					...(whole ? { limit: JUMP_PAGE_ENTRIES } : {}),
+					limit: whole ? JUMP_PAGE_ENTRIES : HISTORY_PAGE_ENTRIES,
 				});
 				return;
 			}
@@ -3223,14 +3268,40 @@ export function SessionViewer({
 		setLoadingHistory(true);
 	}, [leaveLatest, messagesRef, startHistoryHold]);
 	const loadEarlierHistory = useCallback(() => {
-		if (!historyTruncated || loadingHistoryRef.current) return;
+		if (!historyTruncated) return;
+		if (loadingHistoryRef.current) {
+			// The deferred page is already on the wire. Adopt it rather than making
+			// the first upward gesture look ignored, and let its response continue
+			// until a visible conversation boundary lands.
+			if (backgroundHistoryRef.current) {
+				backgroundHistoryRef.current = false;
+				if (transcriptSeqRef.current?.sessionId === session.id) {
+					historyRevealRef.current = {
+						sessionId: session.id,
+						loaded: 0,
+						cursor: null,
+					};
+				}
+				beginHistoryLoad();
+			}
+			return;
+		}
 		loadingHistoryRef.current = true;
+		if (transcriptSeqRef.current?.sessionId === session.id) {
+			historyRevealRef.current = {
+				sessionId: session.id,
+				loaded: 0,
+				cursor: null,
+			};
+		}
 		beginHistoryLoad();
 		requestHistoryPage();
-	}, [beginHistoryLoad, historyTruncated, requestHistoryPage]);
+	}, [beginHistoryLoad, historyTruncated, requestHistoryPage, session.id]);
 	const loadAllHistory = useCallback(() => {
 		if (!historyTruncated || loadingHistoryRef.current) return;
 		loadingHistoryRef.current = true;
+		historyRevealRef.current = null;
+		backgroundHistoryRef.current = false;
 		historyWalkRef.current = {
 			sessionId: session.id,
 			loaded: 0,
@@ -3250,6 +3321,47 @@ export function SessionViewer({
 		setLoadingAllHistory(false);
 		stopHistoryHold();
 	}, [stopHistoryHold]);
+
+	// Preserve the fast opening snapshot, then download one fuller page once the
+	// browser has had time to paint it. This only runs at the live edge in seq
+	// mode. A reader who starts moving first wins and uses the interactive path.
+	useEffect(() => {
+		if (
+			loading ||
+			!historyTruncated ||
+			loadingHistory ||
+			sessionHidden ||
+			backgroundHistoryAttemptedRef.current ||
+			transcriptSeqRef.current?.sessionId !== session.id
+		)
+			return;
+		let attempts = 0;
+		let timer = 0;
+		const tryPrefetch = () => {
+			const el = messagesRef.current;
+			if (!el || el.scrollHeight - el.scrollTop - el.clientHeight > 4) {
+				// Opening scroll restoration can settle after the first transcript
+				// paint. Give it a short window without chasing a reader who moved up.
+				if (++attempts < 12) timer = window.setTimeout(tryPrefetch, 500);
+				return;
+			}
+			backgroundHistoryAttemptedRef.current = true;
+			backgroundHistoryRef.current = true;
+			loadingHistoryRef.current = true;
+			setLoadingHistory(true);
+			requestHistoryPage();
+		};
+		timer = window.setTimeout(tryPrefetch, 1_500);
+		return () => window.clearTimeout(timer);
+	}, [
+		historyTruncated,
+		loading,
+		loadingHistory,
+		messagesRef,
+		requestHistoryPage,
+		session.id,
+		sessionHidden,
+	]);
 
 	// Auto-load is driven by upward reader intent, never by viewport geometry
 	// alone. That keeps initial hydration and programmatic bottom settling from
@@ -3274,6 +3386,9 @@ export function SessionViewer({
 				following: followingLive.current,
 			});
 			scheduleAnchorCapture();
+		}
+		if (el && current < previous - 1 && backgroundHistoryRef.current) {
+			loadEarlierHistory();
 		}
 		if (
 			el &&
@@ -3310,6 +3425,7 @@ export function SessionViewer({
 		};
 		const onWheel = (event: WheelEvent) => {
 			if (event.deltaY >= 0) return;
+			if (backgroundHistoryRef.current) loadEarlierHistory();
 			const now = performance.now();
 			if (now - lastHistoryWheelAtRef.current > 200)
 				historyGestureConsumedRef.current = false;
@@ -3325,6 +3441,7 @@ export function SessionViewer({
 			const y = event.touches[0]?.clientY;
 			if (y === undefined || touchY === null) return;
 			if (y > touchY + 1) {
+				if (backgroundHistoryRef.current) loadEarlierHistory();
 				historyGestureUntilRef.current = performance.now() + 6000;
 				nearHistory();
 			}
@@ -3349,6 +3466,7 @@ export function SessionViewer({
 				!event.altKey &&
 				event.key === "ArrowUp";
 			if (!upward) return;
+			if (backgroundHistoryRef.current) loadEarlierHistory();
 			historyGestureConsumedRef.current = false;
 			historyGestureUntilRef.current = performance.now() + 1200;
 			nearHistory();
