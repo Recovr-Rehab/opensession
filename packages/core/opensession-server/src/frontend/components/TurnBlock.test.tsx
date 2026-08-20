@@ -103,6 +103,42 @@ describe("grouped tool run row", () => {
 		expect(html).toContain("-1");
 	});
 
+	test("groups consecutive MCP calls as routine work", () => {
+		const items = [
+			toolUse("send-a", "opensession-sessions_send_to_session", {
+				id: "os-a",
+				message: "First update",
+			}),
+			toolUse("send-b", "opensession-sessions_send_to_session", {
+				id: "os-b",
+				message: "Second update",
+			}),
+		];
+		const html = render(items, new Map());
+
+		expect(html).toContain('data-tool-run="true"');
+		expect(html).toContain("2 steps");
+		expect(html).toContain("opensession-sessions_send_to_session ×2");
+	});
+
+	test("keeps asset-writing MCP calls directly accessible", () => {
+		const items = [
+			toolUse("asset-a", "opensession-assets_write_asset", {
+				path: "report/index.html",
+				content: "<h1>Report</h1>",
+			}),
+			toolUse("asset-b", "opensession-assets_write_asset", {
+				path: "report/data.json",
+				content: "{}",
+			}),
+		];
+		const html = render(items, new Map());
+
+		expect(html).not.toContain('data-tool-run="true"');
+		expect(html).toContain("report/index.html");
+		expect(html).toContain("report/data.json");
+	});
+
 	test("does not repeat a failed result on the grouped row", () => {
 		const items = [
 			toolUse("fail-a", "Bash", { command: "ls" }),

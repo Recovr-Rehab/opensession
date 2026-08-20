@@ -287,6 +287,9 @@ const COMPACT_TOOL_FAMILIES = new Set([
   "file",
   "find",
   "web",
+  // MCP calls are routine work too. Keeping them direct split otherwise
+  // uninterrupted runs into a noisy sequence of verbose call rows.
+  "mcp",
   // Edits fold with everything else: four passes over a file are as mechanical
   // as the Bash calls around them, and splitting a run at each one left the
   // turn as a ladder of alternating rows. What an edit adds to the folded row
