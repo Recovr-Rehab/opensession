@@ -35,6 +35,7 @@ import { engineUserTexts, mergedSessionTranscript, mergedSessionTranscriptAsync,
 import { handleSlashCommand } from "./slash-commands";
 import { maybeRecapOnReturn } from "./recap";
 import { maybeSuggestRepliesOnReturn, resendReplySuggestions } from "./reply-suggestions";
+import { unarchiveForHumanTurn } from "./session-unarchive";
 import { resizeTerminal, startSessionTerminal, stopAllTerminals, stopTerminal, writeTerminal } from "./terminals";
 import { classifyEntries, dropContextInjections } from "@tellahq/opensession-protocol/notices";
 import { withToolPresentations } from "@tellahq/opensession-protocol/tool-presentation";
@@ -829,6 +830,28 @@ export const websocketHandlers: WebSocketHandler<WSClientData> = {
 					break;
 				}
 
+				// Codex sessions start a fresh thread on first prompt. Open Session
+				// sessions with no engine id are *fresh* sessions (a new sibling from the
+				// tab strip's +): runSessionPrompt starts a new conversation. Only
+				// non-opensession sources genuinely need an id to resume.
+				if (
+					providerFor(session.model) === "claude" &&
+					!session.claudeSessionId &&
+					session.source !== "opensession"
+				) {
+					ws.send(
+						JSON.stringify({
+							type: "error",
+							message: "No Claude session to resume",
+						}),
+					);
+					return;
+				}
+
+				// Sending a new human turn makes archived work active again. Do this
+				// only after validation and slash-command handling have accepted the turn.
+				unarchiveForHumanTurn(session);
+
 				// @People-mentions in a prompt ping the tagged teammates (roster
 				// from the identity config, never the sender). Fires at send time
 				// on every path — direct, queued, steer.
@@ -906,24 +929,6 @@ export const websocketHandlers: WebSocketHandler<WSClientData> = {
 					break;
 				}
 
-				// Codex sessions start a fresh thread on first prompt. Open Session
-				// sessions with no engine id are *fresh* sessions (a new sibling from the
-				// tab strip's +): runSessionPrompt starts a new conversation. Only
-				// non-opensession sources genuinely need an id to resume.
-				if (
-					providerFor(session.model) === "claude" &&
-					!session.claudeSessionId &&
-					session.source !== "opensession"
-				) {
-					ws.send(
-						JSON.stringify({
-							type: "error",
-							message: "No Claude session to resume",
-						}),
-					);
-					return;
-				}
-
 				// A Sandbox send is durable before it can wake compute. The drain has
 				// a per-session single-flight lock, so the first queued message owns
 				// the wake and later messages remain FIFO behind it.
@@ -965,6 +970,7 @@ export const websocketHandlers: WebSocketHandler<WSClientData> = {
 					);
 					return;
 				}
+				unarchiveForHumanTurn(session);
 				maybePersistEffort(session, msg.effort);
 				maybePersistFastMode(session, msg.fastMode);
 				liftUserStop(sessionId);
