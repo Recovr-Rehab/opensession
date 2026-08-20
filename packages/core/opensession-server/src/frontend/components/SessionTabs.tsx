@@ -531,7 +531,7 @@ export function SessionTabs({
 	);
 
 	return (
-		<div className={cn(TAB_STRIP, !inSplit && "desktop:-mt-[5px]")} role="tablist">
+		<div className={cn(TAB_STRIP, !inSplit && "desktop:-mt-[11px]")} role="tablist">
 			<div className={TAB_SCROLL} ref={scrollRef}>
 				<Reorder.Group
 					as="div"

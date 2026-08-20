@@ -66,9 +66,14 @@ export const TAB_STRIP =
 	// above carries no border of its own, and a top inset here would put a
 	// second line across a top region meant to read as one surface.
 	//
-	// The non-split bar takes its 5px header overlap at the call site. Split bars
-	// start at the top of an overflow-clipped column, so their full box stays in
-	// flow instead of losing its top edge outside that column.
+	// The non-split bar takes its 11px header overlap at the call site. The
+	// session header above is a fixed 48px row whose title is centred in it, and
+	// the tab labels are centred in this 40px band, so the two words sit far
+	// apart while neither box looks generous. Neither row can be trimmed on its
+	// own (the header's height is what lines it up with the sidebar's brand row),
+	// so the strip closes the distance by climbing into the header's slack.
+	// Split bars start at the top of an overflow-clipped column, so their full
+	// box stays in flow instead of losing its top edge outside that column.
 	"desktop:h-10 desktop:items-stretch desktop:py-0 " +
 	"desktop:shadow-[inset_0_-1px_0_var(--border)] " +
 	// Phone: pulled out of flow and pinned flush under the header's bottom edge,
