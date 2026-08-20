@@ -58,9 +58,11 @@ export const composerBoxMinimized =
    shares these metrics exactly — any difference in font, padding or wrap
    desyncs the caret from the painted glyphs — so both read the same strings. */
 /** The draft field and the code/mention mirror behind it both take this, which
- *  is what keeps them glyph-identical. */
+ *  is what keeps them glyph-identical. When the phone keyboard is open, the
+ *  tighter cap reserves room for the toolbar. Standalone iOS does not shrink
+ *  visualViewport, so a viewport-relative cap cannot measure that space. */
 export const composerTextarea =
-	"block max-h-[320px] min-h-0 w-full touch-pan-y resize-none overflow-y-auto overscroll-contain border-none bg-transparent text-body leading-[1.55] outline-none phone:max-h-[240px] phone:text-input-phone";
+	"block max-h-[320px] min-h-0 w-full touch-pan-y resize-none overflow-y-auto overscroll-contain border-none bg-transparent text-body leading-[1.55] outline-none phone:max-h-[240px] phone:text-input-phone phone:[body.kb-open_&]:max-h-[120px]";
 /** The only room a mention pill can take is the space character beside it: its
  *  wash is painted rather than laid out, and 3.7px of natural space has to
  *  cover both the pill's own padding and the gap to the next word. Widening
