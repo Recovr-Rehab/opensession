@@ -19,11 +19,12 @@ import {
   webhookBodyTooLargeResponse,
 } from "../../server/shared/bounded-body";
 import { verifyGitHubSignature } from "../../server/shared/signature";
+import { incrementGithubWebhooks } from "../slack/state";
 import {
   isGithubDeliveryProcessed,
   markGithubDeliveryProcessed,
-  incrementGithubWebhooks,
-} from "../slack/state";
+  loadGithubDeliveries,
+} from "./deliveries";
 import {
   listAutomations,
   createAutomation,
@@ -298,6 +299,10 @@ export class GithubAgent implements AgentModule {
   }
 
   async startup(): Promise<void> {
+    // Restore webhook replay protection before the webhook server can hand this
+    // agent a delivery. This agent owns the /github/webhook route, so a
+    // GitHub-only install (Slack disabled) must load the store itself.
+    loadGithubDeliveries();
     if (!githubConfigured()) {
       console.warn("[github] GITHUB_API_TOKEN unset — review/fix/simplify can't post; agent idle");
     }

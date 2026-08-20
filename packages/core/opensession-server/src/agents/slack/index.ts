@@ -80,7 +80,6 @@ import {
   isEventProcessed,
   markEventProcessed,
   loadProcessedEvents,
-  loadGithubDeliveries,
   pendingAnswers,
   slackTeamId,
   slackBotUserId,
@@ -774,7 +773,6 @@ export class SlackAgent implements AgentModule {
     await loadWorktreeChannels();
     await loadQueueFromDisk();
     loadProcessedEvents();
-    loadGithubDeliveries();
 
     // Fetch team ID and bot user ID for streaming APIs
     try {
