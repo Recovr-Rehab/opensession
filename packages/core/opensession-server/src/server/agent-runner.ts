@@ -1751,7 +1751,6 @@ export function resumeInterruptedRuns(
   return resumed;
 }
 
-export const MAX_BOOT_RECOVERIES = 32;
 export const BOOT_RECOVERY_CONCURRENCY = 4;
 // How long a recovery may wait for a queue slot before it is started anyway,
 // outside the queue. Long enough that a busy restart drains its legitimate
@@ -1802,10 +1801,10 @@ export function markRecoveryProgress(run: ActiveRunRecord, event: StreamEvent): 
 
 /** One boot recovery per owning session, newest journal record wins. Records
  * without a session id remain independently recoverable by run key. Once
- * deduplicated, recover the oldest work first: a restart during a busy boot
- * must not keep inserting newer work ahead of a session that has already
- * waited through one or more recovery sweeps. A hard fuse prevents a malformed
- * journal from monopolizing boot and starving HTTP. */
+ * deduplicated, recover every valid run, oldest first: a restart during a busy
+ * boot must not keep inserting newer work ahead of a session that has already
+ * waited through one or more recovery sweeps. Startup load stays bounded by
+ * the recovery queue rather than by discarding work. */
 export function sanitizeInterruptedRuns(runs: ActiveRunRecord[], now = Date.now()): {
   interrupted: ActiveRunRecord[];
   quarantined: QuarantinedRun[];
@@ -1849,14 +1848,7 @@ export function sanitizeInterruptedRuns(runs: ActiveRunRecord[], now = Date.now(
   const ordered = [...newest.values()].sort(
     (a, b) => (Date.parse(a.startedAt || "") || 0) - (Date.parse(b.startedAt || "") || 0),
   );
-  const interrupted = ordered.slice(0, MAX_BOOT_RECOVERIES);
-  quarantined.push(
-    ...ordered.slice(MAX_BOOT_RECOVERIES).map((run) => ({
-      run,
-      reason: "boot_recovery_limit" as const,
-      notify: true,
-    })),
-  );
+  const interrupted = ordered;
   // A rejected stale record must not settle a session whose valid record will
   // still recover. When no valid record remains, notify once for the newest
   // rejected record instead of writing multiple terminal outcomes.
@@ -1883,7 +1875,7 @@ export function sanitizeInterruptedRuns(runs: ActiveRunRecord[], now = Date.now(
   }
   if (quarantined.length) {
     console.warn(
-      `[runner] Restart recovery kept ${interrupted.length} unique run(s), quarantined ${quarantined.length} duplicate/unsafe/excess record(s)`,
+      `[runner] Restart recovery kept ${interrupted.length} unique run(s), quarantined ${quarantined.length} duplicate/unsafe record(s)`,
     );
   }
   return { interrupted, quarantined };
@@ -1895,9 +1887,7 @@ function recoveryQuarantineMessage(entry: QuarantinedRun): string {
       ? `it already used ${entry.run.resumeAttempts ?? MAX_BOOT_RESUME_ATTEMPTS} restart recovery attempts`
       : entry.reason === "recovery_expired"
         ? "its durable journal lineage is older than 24 hours"
-        : entry.reason === "boot_recovery_limit"
-          ? `the boot recovery safety limit is ${MAX_BOOT_RECOVERIES} runs`
-          : "its recovery lineage was recursively re-journaled";
+        : "its recovery lineage was recursively re-journaled";
   return `Restart recovery was stopped safely because ${reason}. The record was moved to the run-journal quarantine for inspection; send the prompt again to continue.`;
 }
 

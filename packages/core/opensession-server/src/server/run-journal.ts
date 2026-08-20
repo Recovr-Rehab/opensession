@@ -245,8 +245,7 @@ export type RunQuarantineReason =
   | "duplicate_session"
   | "recursive_recovery_kind"
   | "resume_attempts_exhausted"
-  | "recovery_expired"
-  | "boot_recovery_limit";
+  | "recovery_expired";
 
 export interface QuarantinedRun {
   run: ActiveRunRecord;

@@ -480,7 +480,7 @@ describe("run journal", () => {
 		});
 	});
 
-	it("deduplicates and bounds restart recovery while rejecting recursive records", () => {
+	it("deduplicates and recovers every valid run while rejecting recursive records", () => {
 		const now = Date.now();
 		const records: mod.ActiveRunRecord[] = Array.from({ length: 40 }, (_, i) => ({
 			runKey: `run-${i}`,
@@ -496,15 +496,9 @@ describe("run journal", () => {
 		records.push({ ...records[1], runKey: "recursive", kind: "prompt-resume-resume" });
 
 		const result = agent.sanitizeInterruptedRuns(records, now);
-		expect(result.interrupted).toHaveLength(agent.MAX_BOOT_RECOVERIES);
-		// The retained record is the newest for this session even when the
-		// oldest-first queue leaves that session beyond the boot batch.
+		expect(result.interrupted).toHaveLength(40);
 		expect(result.interrupted.some((r) => r.runKey === "run-0")).toBe(false);
-		expect(
-			result.quarantined.some(
-				(r) => r.run.runKey === "run-0-new" && r.reason === "boot_recovery_limit",
-			),
-		).toBe(true);
+		expect(result.interrupted.some((r) => r.runKey === "run-0-new")).toBe(true);
 		expect(result.interrupted.some((r) => r.runKey === "recursive")).toBe(false);
 		expect(result.quarantined.some((r) => r.run.runKey === "run-0" && r.reason === "duplicate_session")).toBe(true);
 		expect(result.quarantined.some((r) => r.run.runKey === "recursive" && r.reason === "recursive_recovery_kind")).toBe(true);
@@ -664,7 +658,7 @@ describe("run journal", () => {
 			mod.journalSet({ runKey: `batch-${i}`, cwd: "/tmp", mcpServers: [], startedAt: new Date().toISOString() });
 		}
 		mod.journalQuarantine([
-			{ run: mod.activeRunRecords().find((run) => run.runKey === "batch-1")!, reason: "boot_recovery_limit", notify: true },
+			{ run: mod.activeRunRecords().find((run) => run.runKey === "batch-1")!, reason: "recovery_expired", notify: true },
 			{ run: mod.activeRunRecords().find((run) => run.runKey === "batch-3")!, reason: "duplicate_session", notify: false },
 		]);
 		expect(mod.activeRunRecords().map((run) => run.runKey).sort()).toEqual([
@@ -672,8 +666,8 @@ describe("run journal", () => {
 		]);
 		const quarantine = await Bun.file(join(dir, "active-runs.quarantine.json")).json();
 		expect(Object.values(quarantine).map((run: any) => run.quarantineReason).sort()).toEqual([
-			"boot_recovery_limit",
 			"duplicate_session",
+			"recovery_expired",
 		]);
 	});
 
