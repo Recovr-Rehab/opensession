@@ -86,9 +86,11 @@ export function SessionCardBody({ session: s }: { session: UnifiedSession }) {
 
 			<div className="mt-[5px] text-label font-semibold leading-[1.3]">{s.title}</div>
 
-			<div className={`mt-[3px] text-meta font-medium ${TONE_TEXT[state.tone]}`}>
-				{state.label}
-			</div>
+			{!runNeedsAttention(s) && (
+				<div className={`mt-[3px] text-meta font-medium ${TONE_TEXT[state.tone]}`}>
+					{state.label}
+				</div>
+			)}
 
 			{s.waitingForInput && (
 				<div className="mt-[7px] rounded-md bg-accent-soft px-2 py-[5px] text-meta leading-snug text-dim">
