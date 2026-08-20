@@ -251,9 +251,10 @@ export const fileChipSub = "text-meta text-faint";
  *  the alpha composites over the flap's own fill (backgrounds paint under
  *  borders), so it lands within a couple of levels of the composer's ring.
  *
- *  Phones keep the solid border, because there the composer keeps one too. */
+ *  Phone browsers keep the solid border. Installed PWAs use the
+ *  `pwa-composer-edge` hook in base.css to match the desktop ring strength. */
 export const composerFlapBorder =
-	"border-[color:var(--composer-border)] desktop:border-[color:color-mix(in_srgb,var(--composer-border)_35%,transparent)]";
+	"pwa-composer-edge border-[color:var(--composer-border)] desktop:border-[color:color-mix(in_srgb,var(--composer-border)_35%,transparent)]";
 
 /* ── The queue flap ───────────────────────────────────────────────
    The flap that folds out from behind the composer: a dimmer panel flush with
