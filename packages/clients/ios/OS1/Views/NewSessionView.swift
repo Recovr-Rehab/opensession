@@ -1,12 +1,11 @@
 import SwiftUI
 
-/// Compose a new session, laid out like the palette on the desktop: what the
-/// session IS — the repo, and what it's created from — reads across the top,
-/// the prompt fills the middle, and how it runs sits in the footer with the
-/// attach button. Only the controls this app actually carries appear; the rest
-/// of the palette's row (connected services) has no native equivalent yet, so
-/// it stays absent rather than half-present. Where the session runs is one
-/// chip, and only on instances that offer more than the host.
+/// Compose a new session, laid out like the palette on the desktop: the repo
+/// reads across the top, the prompt fills the middle, and how it runs sits in
+/// the footer with the attach button. Code is the quiet default. Ask stays one
+/// tap away, while the less common Sandbox choice sits behind More options.
+/// Connected services have no native equivalent yet, so they stay absent
+/// rather than half-present.
 /// Screenshots paste straight into the attachments (Cmd+V on the Mac,
 /// long-press Paste on iOS).
 ///
@@ -330,14 +329,16 @@ struct NewSessionView: View {
 
     // ── Header: what the session is ───────────────────────────────────────
 
-    /// Repo left, what-it's-created-from right, as on the desktop. These two
-    /// decide what the session can touch, so they sit above the prompt rather
-    /// than among the run settings below it.
+    /// The repo decides what the session can touch, so it sits above the prompt
+    /// rather than among the run settings below it. Code is the default on iOS,
+    /// so its "New branch" label stays hidden like it does on the web.
     private var header: some View {
         HStack(spacing: 8) {
             repoChip
             Spacer(minLength: 8)
+            #if os(macOS)
             modeChip
+            #endif
         }
         // 16, the column the prompt below already uses (11 outer + the text
         // view's own 5pt fragment padding) and the toolbar circles now sit on.
@@ -500,20 +501,23 @@ struct NewSessionView: View {
         return catalog?.label(for: id) ?? "Model"
     }
 
-    /// Attach on the left, model on the right — the palette's footer. iOS folds
-    /// reasoning effort and fast mode into the model menu, so the row stays two
-    /// controls wide and needs no sideways scrolling; the Mac has the width to
-    /// show them as their own chips.
+    /// Attach and session mode stay one tap away. Rare execution choices sit
+    /// behind one overflow button, while the model remains visible on the right.
+    /// The Mac has room to keep every setting as its own chip.
     private var controls: some View {
         HStack(spacing: 8) {
             AttachImagesButton(images: $images)
             ComposerDictationButton(dictation: dictation, draft: $prompt)
+            #if os(iOS)
+            askButton
+            if !sandboxChoices.isEmpty { moreOptionsMenu }
+            #endif
             Spacer(minLength: 8)
             #if os(macOS)
             if !availableEfforts.isEmpty { effortChip }
             if fastSupported { fastChip }
-            #endif
             if !sandboxChoices.isEmpty { sandboxChip }
+            #endif
             modelChip
         }
         .padding(.horizontal, 12)
@@ -538,21 +542,88 @@ struct NewSessionView: View {
         return SandboxOffering.choices(sandboxStatus)
     }
 
-    /// Where the session runs. One chip, mirroring the server's own names for
-    /// the providers. Choosing a Runner is not offered here — the web palette
-    /// dropped that too, because a machine is picked for a piece of work, not
-    /// for a message you have not written yet.
+    /// Ask is the one mode switch worth keeping visible. Its entry point is a
+    /// quiet eye until the read-only mode is enabled and names itself.
+    private var askButton: some View {
+        Button {
+            selectMode(mode == "ask" ? "code" : "ask")
+        } label: {
+            HStack(spacing: 5) {
+                Image(systemName: "eye")
+                    .font(.system(size: mode == "ask" ? 14 : 18, weight: .medium))
+                if mode == "ask" {
+                    Text("Ask")
+                        .font(.caption.weight(.medium))
+                }
+            }
+            .foregroundStyle(mode == "ask" ? OS1VisualStyle.green : OS1VisualStyle.textDim)
+            .padding(.horizontal, mode == "ask" ? 11 : 0)
+            .frame(minWidth: 44, minHeight: 44)
+            .background(
+                mode == "ask" ? OS1VisualStyle.green.opacity(0.14) : Color.clear,
+                in: Capsule()
+            )
+            .contentShape(Capsule())
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel("Ask mode")
+        .accessibilityValue(mode == "ask" ? "On" : "Off")
+    }
+
+    /// Where the session runs. iOS follows the web and keeps this uncommon
+    /// choice behind More options. A non-host selection highlights the button
+    /// so the hidden override cannot be missed.
+    private var moreOptionsMenu: some View {
+        Menu {
+            Menu {
+                sandboxOptions
+            } label: {
+                Label {
+                    Text("Sandbox")
+                    Text(SandboxOffering.label(sandbox))
+                } icon: {
+                    Image(systemName: "cube")
+                }
+            }
+        } label: {
+            Image(systemName: "ellipsis")
+                .font(.system(size: 18, weight: .medium))
+                .foregroundStyle(
+                    sandbox == SandboxOffering.host
+                        ? OS1VisualStyle.textDim
+                        : OS1VisualStyle.accentInk
+                )
+                .frame(width: 44, height: 44)
+                .background(
+                    sandbox == SandboxOffering.host
+                        ? Color.clear
+                        : OS1VisualStyle.accent.opacity(0.14),
+                    in: Circle()
+                )
+                .contentShape(Circle())
+        }
+        .menuStyle(.button)
+        .buttonStyle(.plain)
+        .accessibilityLabel("More options")
+    }
+
+    /// The Mac keeps Sandbox visible as a chip because it has the room.
     private var sandboxChip: some View {
         Menu {
-            sandboxOption(SandboxOffering.host)
-            ForEach(sandboxChoices, id: \.self) { provider in
-                sandboxOption(provider)
-            }
+            sandboxOptions
         } label: {
             chipLabel(icon: "cube", text: SandboxOffering.label(sandbox))
         }
         .menuStyle(.button)
         .buttonStyle(.plain)
+    }
+
+    @ViewBuilder
+    private var sandboxOptions: some View {
+        sandboxOption(SandboxOffering.host)
+        ForEach(sandboxChoices, id: \.self) { provider in
+            sandboxOption(provider)
+        }
     }
 
     private func sandboxOption(_ provider: String) -> some View {

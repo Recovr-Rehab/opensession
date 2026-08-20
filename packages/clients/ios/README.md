@@ -230,14 +230,14 @@ Pure SwiftUI with SwiftStreamingMarkdown for CommonMark/GFM rendering, iOS 26+
   sentence in the panel rather than a status code. It is
   pushed as a panel (`PrPanelView(chrome: .pushed)` drops its own navigation
   stack and Done button); the sheet form is what the Mac still uses.
-- **New session** (`NewSessionView.swift`) — the desktop palette's shape: repo
-  and what it is created from across the top, the prompt in the middle, and how
-  it runs in the footer. A **sandbox chip** joins that footer only on instances
-  that offer somewhere other than the host to run — the choices are the ready
-  sandbox connections from `GET /api/sandbox/status`, named exactly as the web
-  palette names them, and the host is sent as an explicit `local` so the chip
-  and the session always agree. Choosing a Runner is deliberately not offered:
-  the web palette dropped runner-at-create, and native matches by not having it.
+- **New session** (`NewSessionView.swift`): the repo sits across the top, the
+  prompt fills the middle, and run controls sit in the footer. On iOS, Code is
+  the quiet default and the footer eye toggles Ask, so there is no default New
+  branch chip. Sandbox choices from `GET /api/sandbox/status` sit under More
+  options and use the same names as the web palette. The host is sent as an
+  explicit `local` so the menu and session always agree. The Mac keeps its mode
+  and Sandbox chips where the wider footer has room. Choosing a Runner is not
+  offered because the web palette also dropped runner-at-create.
 - **Action Button / Siri / Spotlight — "Start an Agent"** — one App Intent
   (`Intents/StartAgentIntent.swift`), and it deliberately OPENS the app
   (`openAppWhenRun = true`) rather than collecting the idea in the system's
