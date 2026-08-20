@@ -148,7 +148,9 @@ test("summary rows show every stacked PR in the workspace card", () => {
 	expect(html).toContain("Desktop shell");
 	expect(html).toContain("Checks failed");
 	expect(html).toContain('href="https://github.com/tellahq/tella-mac/pull/73"');
-	// Summary rows use the card's quiet row grammar instead of another status band.
+	// Each row carries its own state fill at the summary card's quieter weight.
+	expect(html).toContain("var(--green)_11%");
+	expect(html).toContain("var(--red)_11%");
 	expect(html).not.toContain("bg-green-soft");
 	expect(html).not.toContain("bg-red-soft");
 });

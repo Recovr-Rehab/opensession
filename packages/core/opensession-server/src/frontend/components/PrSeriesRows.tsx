@@ -17,6 +17,7 @@ import {
 	PR_ROW_STATE,
 	PR_ROW_TITLE,
 	PR_STATE_TEXT,
+	PR_SUMMARY_ROW_BG,
 } from "../lib/pr-tone-classes";
 import {
 	WS_SUMMARY_ICON,
@@ -77,7 +78,11 @@ export function PrSeriesRow({
 				</span>
 			</>
 		);
-		const className = cn(WS_SUMMARY_ROW, "gap-2 no-underline");
+		const className = cn(
+			WS_SUMMARY_ROW,
+			"gap-2 no-underline",
+			PR_SUMMARY_ROW_BG[tone],
+		);
 		const title = refLabel(prRef);
 		if (prRef.url) {
 			return (
