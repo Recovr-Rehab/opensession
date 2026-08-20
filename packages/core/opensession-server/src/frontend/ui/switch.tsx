@@ -29,50 +29,70 @@ const trackClasses = (size: SwitchSize) =>
 
 /** The knob is a 32×20 capsule, not a circle. That wider shape is most of
  *  what reads as the current macOS switch. The small size keeps the 2px inset
- *  and the capsule, at 26×16.
- *
- *  Press feedback changes width instead of scale so the round ends stay round.
- *  A checked knob subtracts the stretch from its translate, which holds its
- *  right edge on the 2px inset. The fallback keeps `SwitchIndicator` valid
- *  without a root that sets the variable. */
+ *  and the capsule, at 26×16. */
 const thumbClasses = (size: SwitchSize) =>
 	cn(
-		"absolute left-0.5 top-0.5 rounded-full bg-white shadow-[0_1px_3px_rgba(0,0,0,0.22),0_0_0_1px_rgba(0,0,0,0.07)] transition-[translate,width,background-color] duration-[var(--dur-micro)] ease-[var(--ease)] group-active/switch:duration-[60ms] data-[checked]:bg-on-accent-control",
+		"absolute left-0.5 top-0.5 rounded-full bg-white shadow-[0_1px_3px_rgba(0,0,0,0.22),0_0_0_1px_rgba(0,0,0,0.07)] transition-[translate,background-color] duration-[var(--dur-micro)] ease-[var(--ease)] data-[checked]:bg-on-accent-control",
 		size === "sm"
-			? "h-4 w-[calc(26px_+_var(--stretch,0px))] data-[checked]:translate-x-[calc(14px_-_var(--stretch,0px))]"
-			: "h-5 w-[calc(32px_+_var(--stretch,0px))] data-[checked]:translate-x-[calc(18px_-_var(--stretch,0px))]",
+			? "h-4 w-[26px] data-[checked]:translate-x-[14px]"
+			: "h-5 w-8 data-[checked]:translate-x-[18px]",
 	);
 
-/** Put `:active` on the root so presses on either the track or thumb inherit
- *  the stretch. Press-in takes 60ms on the thumb, while release and the state
- *  change keep the normal 150ms transition. Base UI's disabled root can still
- *  match `:active`, so disabled switches reset the variable explicitly. */
-const pressClasses = (size: SwitchSize) =>
-	cn(
-		size === "sm" ? "active:[--stretch:3px]" : "active:[--stretch:4px]",
-		"data-[disabled]:active:[--stretch:0px]",
+const STRETCH_ANIMATION_ID = "switch-thumb-stretch";
+
+/** Stretch only while the thumb travels, anchored toward its destination. */
+function animateThumbTravel(thumb: HTMLElement, checked: boolean) {
+	if (
+		!thumb.animate ||
+		window.matchMedia("(prefers-reduced-motion: reduce)").matches
+	)
+		return;
+	thumb
+		.getAnimations()
+		.find((animation) => animation.id === STRETCH_ANIMATION_ID)
+		?.cancel();
+	const origin = checked ? "left center" : "right center";
+	const easing =
+		getComputedStyle(thumb).getPropertyValue("--ease").trim() || "ease-out";
+	const animation = thumb.animate(
+		[
+			{ scale: "1 1", transformOrigin: origin, easing },
+			{ scale: "1.12 1", transformOrigin: origin, easing, offset: 0.4 },
+			{ scale: "1 1", transformOrigin: origin },
+		],
+		{ duration: 150 },
 	);
+	animation.id = STRETCH_ANIMATION_ID;
+}
 
 type SwitchProps = Omit<React.ComponentProps<typeof BaseSwitch.Root>, "size"> & {
 	className?: string;
 	size?: SwitchSize;
 };
 
-export function Switch({ className, size = "md", ...props }: SwitchProps) {
+export function Switch({
+	className,
+	size = "md",
+	onCheckedChange,
+	...props
+}: SwitchProps) {
+	const thumbRef = React.useRef<HTMLSpanElement>(null);
 	return (
 		<BaseSwitch.Root
 			className={cn(
-				"group/switch",
 				trackClasses(size),
-				pressClasses(size),
 				"cursor-pointer outline-none",
 				"focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:ring-offset-2 focus-visible:ring-offset-bg",
 				"data-[disabled]:cursor-default data-[disabled]:opacity-40",
 				className,
 			)}
+			onCheckedChange={(checked, eventDetails) => {
+				if (thumbRef.current) animateThumbTravel(thumbRef.current, checked);
+				onCheckedChange?.(checked, eventDetails);
+			}}
 			{...props}
 		>
-			<BaseSwitch.Thumb className={thumbClasses(size)} />
+			<BaseSwitch.Thumb ref={thumbRef} className={thumbClasses(size)} />
 		</BaseSwitch.Root>
 	);
 }
