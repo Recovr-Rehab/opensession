@@ -256,7 +256,27 @@ export async function deleteDeployApp(name: string): Promise<{ ok: true }> {
 	return request(`/deploys/${encodeURIComponent(name)}`, { method: "DELETE" });
 }
 
-// ── Personal system prompt (Settings → Personal prompt) ──
+// ── Personal output style and system prompt (Settings → Preferences) ──
+
+export type PersonalOutputStyle = "default" | "concise";
+
+export async function fetchPersonalOutputStyle(
+	user: string,
+): Promise<{ outputStyle: PersonalOutputStyle }> {
+	return request(`/personal-output-style?user=${encodeURIComponent(user)}`, {
+		label: "Failed to fetch output style",
+	});
+}
+
+export async function savePersonalOutputStyle(
+	user: string,
+	outputStyle: PersonalOutputStyle,
+): Promise<{ outputStyle: PersonalOutputStyle }> {
+	return request("/personal-output-style", {
+		method: "PUT",
+		body: { user, outputStyle },
+	});
+}
 
 export async function fetchPersonalPrompt(
 	user: string,

@@ -34,6 +34,7 @@ import {
 } from "./session-memory";
 import { DESK_NOTE } from "./desk";
 import { deskBriefingFor } from "./desk-state";
+import { personalOutputStyleNoteFor } from "./personal-output-style";
 import { personalPromptNoteFor } from "./personal-prompts";
 import {
 	findSession,
@@ -243,9 +244,9 @@ export async function buildSessionNote(
 	);
 }
 
-/** The per-user prompt sections for a run: the user's personal system prompt
- *  (Settings → Personal prompt) + repo/user/team memory (with tool guidance —
- *  callers are interactive paths only; automations pass no user and skip this).
+/** The per-user prompt sections for a run: output style, personal system
+ *  prompt, and repo/user/team memory (with tool guidance). Callers are
+ *  interactive paths only; automations pass no user and skip this.
  *  Never throws: a store failure must not block a run, the note just goes out
  *  without that piece. */
 export async function memoryNoteFor(
@@ -258,7 +259,10 @@ export async function memoryNoteFor(
 	 *  memory writes refresh it (invalidateMemorySnapshot). */
 	sessionId?: string,
 ): Promise<string> {
-	const parts: string[] = [personalPromptNoteFor(user)];
+	const parts: string[] = [
+		personalOutputStyleNoteFor(user),
+		personalPromptNoteFor(user),
+	];
 	try {
 		parts.push(
 			await snapshotMemoryNote(sessionId, () =>

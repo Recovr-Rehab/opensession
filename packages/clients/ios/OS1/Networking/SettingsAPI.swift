@@ -280,6 +280,22 @@ enum SettingsAPI {
         )
     }
 
+    static func personalOutputStyle(user: String) async throws -> String {
+        struct Response: Decodable, Sendable { var outputStyle: String? }
+        let response: Response = try await request("/api/personal-output-style", query: ["user": user])
+        return response.outputStyle == "concise" ? "concise" : "default"
+    }
+
+    static func setPersonalOutputStyle(user: String, outputStyle: String) async throws -> String {
+        struct Response: Decodable, Sendable { var outputStyle: String? }
+        let response: Response = try await request(
+            "/api/personal-output-style",
+            method: "PUT",
+            body: ["user": user, "outputStyle": outputStyle]
+        )
+        return response.outputStyle == "concise" ? "concise" : "default"
+    }
+
     static func personalPrompt(user: String) async throws -> String {
         struct Response: Decodable, Sendable { var prompt: String? }
         let response: Response = try await request("/api/personal-prompt", query: ["user": user])

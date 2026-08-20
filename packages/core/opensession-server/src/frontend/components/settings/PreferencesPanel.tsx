@@ -1,10 +1,13 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
 	fetchModels,
+	fetchPersonalOutputStyle,
 	fetchPersonalPrompt,
 	fetchRepos,
+	savePersonalOutputStyle,
 	savePersonalPrompt,
 	type ModelOption,
+	type PersonalOutputStyle,
 	type RepoInfo,
 } from "../../lib/api";
 import { BASE_PATH } from "../../lib/base";
@@ -204,6 +207,68 @@ function DeskVoicePanel() {
 				key is shared by everyone on this instance.
 			</SettingsHint>
 		</>
+	);
+}
+
+/** A server-backed personal choice, rather than localStorage: sessions started
+ * from the web, native app, Slack, and GitHub all report work the same way. */
+function PersonalOutputStyleRow() {
+	const user = getCurrentUser();
+	const [style, setStyle] = useState<PersonalOutputStyle | null>(null);
+	const [saving, setSaving] = useState(false);
+	const [error, setError] = useState<string | null>(null);
+
+	useEffect(() => {
+		let alive = true;
+		fetchPersonalOutputStyle(user)
+			.then((r) => {
+				if (!alive) return;
+				setStyle(r.outputStyle);
+				setError(null);
+			})
+			.catch((e) => alive && setError(e.message));
+		return () => {
+			alive = false;
+		};
+	}, [user]);
+
+	async function change(next: PersonalOutputStyle) {
+		const previous = style ?? "default";
+		setStyle(next);
+		setSaving(true);
+		setError(null);
+		try {
+			const saved = await savePersonalOutputStyle(user, next);
+			setStyle(saved.outputStyle);
+		} catch (e: any) {
+			setStyle(previous);
+			setError(e?.message || "Failed to save output style");
+			toast(e?.message || "Failed to save output style", { variant: "error" });
+		} finally {
+			setSaving(false);
+		}
+	}
+
+	return (
+		<SettingRow
+			title="Output style"
+			desc={
+				error ||
+				"Concise leads with the result and skips preamble and narration without reducing the work."
+			}
+			control={
+				<Select
+					label="Output style"
+					value={style ?? "default"}
+					options={[
+						{ value: "default", label: "Default" },
+						{ value: "concise", label: "Concise" },
+					]}
+					disabled={style === null || saving}
+					onChange={change}
+				/>
+			}
+		/>
 	);
 }
 
@@ -471,6 +536,7 @@ export function PreferencesPanel() {
 					}
 				/>
 				<PersonalSandboxDefaultRow />
+				<PersonalOutputStyleRow />
 				<SettingRow
 					title="Send messages with"
 					desc={

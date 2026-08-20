@@ -300,6 +300,7 @@ struct PreferencesSettingsView: View {
             } footer: {
                 Text("Talk to your Desk with a live voice call. Uses the server's OpenAI key.")
             }
+            PersonalOutputStyleSection()
             PersonalPromptSection()
         }
         .navigationTitle("Preferences")
@@ -1077,9 +1078,88 @@ struct RepoOrderSettingsView: View {
     }
 }
 
+/// How sessions report their work. This is server-backed so the same choice
+/// applies when the person starts a session from another client.
+struct PersonalOutputStyleSection: View {
+    @State private var style: String
+    @State private var savedStyle: String
+    @State private var loading: Bool
+    @State private var saving = false
+    @State private var error: String?
+
+    private let user = ServerConfig.shared.userName
+
+    init() {
+        let cached: String? = SettingsCache.value("personal-output-style")
+        let initial = cached == "concise" ? "concise" : "default"
+        _style = State(initialValue: initial)
+        _savedStyle = State(initialValue: initial)
+        _loading = State(initialValue: cached == nil)
+    }
+
+    var body: some View {
+        Section {
+            Picker("Output style", selection: $style) {
+                Text("Default").tag("default")
+                Text("Concise").tag("concise")
+            }
+            .disabled(loading || saving)
+            if let error {
+                Text(error).foregroundStyle(.red)
+            }
+        } footer: {
+            Text("Concise leads with the result and skips preamble and narration without reducing the work.")
+        }
+        .task { await load() }
+        .onChange(of: style) { _, next in save(next) }
+    }
+
+    private func save(_ next: String) {
+        guard !loading, next != savedStyle else { return }
+        let previous = savedStyle
+        savedStyle = next
+        saving = true
+        SettingsCache.save("personal-output-style", next)
+        Task {
+            do {
+                let result = try await SettingsAPI.setPersonalOutputStyle(
+                    user: user,
+                    outputStyle: next
+                )
+                style = result
+                savedStyle = result
+                SettingsCache.save("personal-output-style", result)
+                error = nil
+            } catch {
+                style = previous
+                savedStyle = previous
+                SettingsCache.save("personal-output-style", previous)
+                self.error = error.localizedDescription
+            }
+            saving = false
+        }
+    }
+
+    private func load() async {
+        let startingStyle = style
+        do {
+            let result = try await SettingsAPI.personalOutputStyle(user: user)
+            if style == startingStyle, savedStyle == startingStyle {
+                style = result
+                savedStyle = result
+                SettingsCache.save("personal-output-style", result)
+            }
+            error = nil
+        } catch {
+            self.error = error.localizedDescription
+        }
+        loading = false
+    }
+}
+
 /// The standing prompt, shown inside Preferences. There is no Save button: it
 /// commits when the box loses focus and again when the screen goes away, so
-/// leaving keeps your edit — same contract as the web.
+/// leaving keeps your edit, matching the web.
 struct PersonalPromptSection: View {
     @State private var prompt: String
     @State private var savedPrompt: String

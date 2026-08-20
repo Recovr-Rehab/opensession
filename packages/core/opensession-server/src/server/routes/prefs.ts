@@ -22,6 +22,10 @@ import {
 import { getTabColors as getUserTabColors, setTabColors as setUserTabColors } from "../tab-colors";
 import { getUiPrefs, patchUiPrefs } from "../ui-prefs";
 import { getPersonalPrompt, setPersonalPrompt } from "../personal-prompts";
+import {
+	getPersonalOutputStyle,
+	setPersonalOutputStyle,
+} from "../personal-output-style";
 import { refreshWarmTemplate, setWarmTemplateConfig, warmTemplateStatus } from "../warm-template";
 import { previewPoolStatus, refreshGoldenImage, setPreviewPoolConfig } from "../preview-pool";
 import { REPOS } from "../worktree";
@@ -189,7 +193,7 @@ export async function handlePrefsRoutes(
 		}
 	}
 
-	// ── The per-user stores below (pins, personal prompt, read marks, drafts,
+	// ── The per-user stores below (pins, output style, personal prompt, read marks, drafts,
 	// UI prefs, lanes, snoozes, hides, settlements, tab colors) all resolve WHO through
 	// requestUser: the verified sign-in identity when web sign-in is active,
 	// the client-claimed name otherwise. They used to read the raw `user`
@@ -218,6 +222,33 @@ export async function handlePrefsRoutes(
 		}
 		const user = requestUser(ctx, body.user) || "Anonymous";
 		return Response.json({ pins: setUserPins(user, body.pins) });
+	}
+
+	// ── Per-user output style ──
+	// Concise changes how interactive runs report their work, not how much work
+	// they do. It shares the personal prompt's identity key so the choice follows
+	// a teammate between the web, native app, Slack, and GitHub.
+	if (path === "/api/personal-output-style" && req.method === "GET") {
+		const user = requestUser(ctx, url.searchParams.get("user")) || "Anonymous";
+		return Response.json({ outputStyle: getPersonalOutputStyle(user) });
+	}
+
+	if (path === "/api/personal-output-style" && req.method === "PUT") {
+		const body = await req.json().catch(() => null);
+		if (
+			!body ||
+			typeof body.user !== "string" ||
+			(body.outputStyle !== "default" && body.outputStyle !== "concise")
+		) {
+			return Response.json(
+				{ error: 'user (string) and outputStyle ("default" or "concise") are required' },
+				{ status: 400 },
+			);
+		}
+		const user = requestUser(ctx, body.user) || "Anonymous";
+		return Response.json({
+			outputStyle: setPersonalOutputStyle(user, body.outputStyle),
+		});
 	}
 
 	// ── Per-user personal system prompt ──
