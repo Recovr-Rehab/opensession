@@ -11,7 +11,8 @@
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { FileTree, useFileTree } from "@pierre/trees/react";
-import { fetchSessionAssets, type SessionAssetFile } from "../lib/api";
+import type { SessionAssetFile } from "../lib/api";
+import { useSessionAssetsResource } from "../hooks/useApiResources";
 import type { WSServerMessage } from "../lib/types";
 import type { NewSessionPrefill } from "../lib/new-session-link";
 import { Button } from "../ui/button";
@@ -24,16 +25,10 @@ export function useSessionAssets(
 	sessionId: string,
 	addHandler: (h: (msg: WSServerMessage) => void) => () => void,
 ) {
-	const [files, setFiles] = useState<SessionAssetFile[]>([]);
+	const { data: files = [], mutate } = useSessionAssetsResource(sessionId);
 	const refresh = useCallback(() => {
-		fetchSessionAssets(sessionId)
-			.then((r) => setFiles(r.files || []))
-			.catch(() => {});
-	}, [sessionId]);
-	useEffect(() => {
-		setFiles([]);
-		refresh();
-	}, [refresh]);
+		void mutate();
+	}, [mutate]);
 	useEffect(
 		() =>
 			addHandler((msg) => {

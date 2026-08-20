@@ -1,21 +1,22 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
 	cancelPrReviewApi,
-	fetchGitStatus,
-	fetchPr,
-	fetchSessionAssets,
 	setSessionReviewerApi,
 	sessionAssetPreviewUrl,
-	type SessionAssetFile,
 } from "../lib/api";
-import { fetchDiff } from "../lib/api";
+import {
+	useSessionAssetsResource,
+	useSessionDiffResource,
+	useSessionGitResource,
+	useSessionPrResource,
+} from "../hooks/useApiResources";
 import { assetPreviewKind, isVisualAsset } from "../lib/asset-preview";
 import { useAssetViewMode } from "../lib/asset-view-mode";
 import { AssetViewToggle } from "./AssetViewToggle";
 import { commitPrompt } from "../lib/commit-prompt";
 import { AGENT_NAME, GITHUB_BOT_LOGINS } from "../lib/brand";
 import { getCurrentUser } from "./UserPicker";
-import { pollWhileVisible, PR_WEBHOOK_FALLBACK_POLL_MS } from "../lib/poll";
+import { PR_WEBHOOK_FALLBACK_POLL_MS } from "../lib/poll";
 import { PrStatusBar } from "./PrStatusBar";
 import { reviewerStateMeta } from "./pr/PrRows";
 import { StagingLink } from "./StagingLink";
@@ -31,12 +32,7 @@ import { Popover } from "../ui/popover";
 import { Menu } from "../ui/menu";
 import { Tooltip } from "../ui/tooltip";
 import { cn } from "../ui/cn";
-import type {
-	GitStatusInfo,
-	PrDetails,
-	PrReviewer,
-	UnifiedSession,
-} from "../lib/types";
+import type { PrDetails, PrReviewer, UnifiedSession } from "../lib/types";
 import {
 	WS_SUMMARY_ACTION,
 	WS_SUMMARY_CARD,
@@ -150,23 +146,6 @@ interface Props {
 	onOpenChange?: (open: boolean) => void;
 	/** The desktop tab strip sits between the header anchor and the transcript. */
 	tabStripVisible?: boolean;
-}
-
-type SummaryData = {
-	pr: PrDetails | null;
-	git: GitStatusInfo | null;
-	assets: SessionAssetFile[];
-	/** Worktree line stats, only fetched when there is no PR to read them from. */
-	diff: { additions: number; deletions: number; files: number } | null;
-};
-
-/** Last-known state per session, so re-opening the card paints instantly and
- *  revalidates behind the previous answer instead of flashing a skeleton.
- *  Module-level: survives the popup unmounting, dies with the page. */
-const lastKnown = new Map<string, SummaryData>();
-
-function emptyData(): SummaryData {
-	return { pr: null, git: null, assets: [], diff: null };
 }
 
 /**
@@ -426,80 +405,58 @@ function SummaryBody({
 }: Omit<Props, "anchor" | "onOpenChange" | "tabStripVisible"> & {
 	close: () => void;
 }) {
-	const activeSessionId = useRef(session.id);
-	activeSessionId.current = session.id;
 	// Pictures or rows. One preference, shared with the Workspace panel's own
 	// Assets section, so the same folder is not drawn two ways in one window.
 	const [assetView, setAssetView] = useAssetViewMode();
-	const [data, setData] = useState<SummaryData>(
-		() => lastKnown.get(session.id) ?? emptyData(),
+	const prResource = useSessionPrResource(
+		session.id,
+		session.repo || undefined,
+		undefined,
+		{
+			refreshInterval: PR_WEBHOOK_FALLBACK_POLL_MS,
+			revision: refreshTick,
+		},
 	);
+	const gitResource = useSessionGitResource(
+		session.id,
+		session.repo || undefined,
+		{
+			refreshInterval: PR_WEBHOOK_FALLBACK_POLL_MS,
+			revision: refreshTick,
+		},
+	);
+	const assetsResource = useSessionAssetsResource(session.id, {
+		revision: refreshTick,
+	});
+	// A PR already carries line totals, so only fetch the much larger worktree
+	// patch when there is no PR (or its revalidation failed without stale data).
+	const diffResource = useSessionDiffResource(session.id, {
+		enabled: prResource.data === null || Boolean(prResource.error),
+		refreshInterval: PR_WEBHOOK_FALLBACK_POLL_MS,
+		revision: refreshTick,
+	});
+	const pr = prResource.data ?? null;
+	const git = gitResource.data ?? null;
+	const assets = assetsResource.data ?? [];
+	const diff =
+		diffResource.data?.repos.reduce(
+			(sum, repo) => ({
+				additions: sum.additions + (repo.diff.totalAdditions || 0),
+				deletions: sum.deletions + (repo.diff.totalDeletions || 0),
+				files: sum.files + (repo.diff.files?.length || 0),
+			}),
+			{ additions: 0, deletions: 0, files: 0 },
+		) ?? null;
 	const [prompted, setPrompted] = useState(false);
 	const [selectedReview, setSelectedReview] = useState(reviewRequest ?? null);
 	const [reviewError, setReviewError] = useState<string | null>(null);
 	const [reviewBusy, setReviewBusy] = useState(false);
 	const [reviewCancelling, setReviewCancelling] = useState(false);
-	const updateData = useCallback(
-		(patch: Partial<SummaryData>) => {
-			if (activeSessionId.current !== session.id) return;
-			setData((current) => {
-				const next = { ...current, ...patch };
-				lastKnown.set(session.id, next);
-				return next;
-			});
-		},
-		[session.id],
-	);
-
-	const load = useCallback(async () => {
-		// Each answer paints as it lands rather than waiting for the slowest of
-		// the three, which is what makes a cold card fill in rather than appear.
-		const prTask = fetchPr(session.id, session.repo || undefined)
-			.catch(() => null)
-			.then((nextPr) => {
-				updateData({ pr: nextPr, ...(nextPr ? { diff: null } : {}) });
-				return nextPr;
-			});
-		const gitTask = fetchGitStatus(session.id, session.repo || undefined)
-			.catch(() => null)
-			.then((nextGit) => updateData({ git: nextGit }));
-		const assetsTask = fetchSessionAssets(session.id)
-			.then((response) => response.files)
-			.catch(() => [] as SessionAssetFile[])
-			.then((nextAssets) => updateData({ assets: nextAssets }));
-		const [nextPr] = await Promise.all([prTask, gitTask, assetsTask]);
-		if (activeSessionId.current !== session.id) return;
-		// Only pay for the worktree patch when the PR cannot answer the same
-		// question.
-		if (nextPr) return;
-		const patch = await fetchDiff(session.id).catch(() => null);
-		const diff = patch?.repos
-			? patch.repos.reduce(
-					(sum, repo) => ({
-						additions: sum.additions + (repo.diff.totalAdditions || 0),
-						deletions: sum.deletions + (repo.diff.totalDeletions || 0),
-						files: sum.files + (repo.diff.files?.length || 0),
-					}),
-					{ additions: 0, deletions: 0, files: 0 },
-				)
-			: null;
-		updateData({ diff });
-	}, [session.id, session.repo, updateData]);
-
-	useEffect(() => {
-		setData(lastKnown.get(session.id) ?? emptyData());
-		load();
-		return pollWhileVisible(load, PR_WEBHOOK_FALLBACK_POLL_MS);
-	}, [load, session.id]);
-	useEffect(() => {
-		if (refreshTick) load();
-	}, [refreshTick, load]);
 	useEffect(() => {
 		setSelectedReview(reviewRequest ?? null);
 		setReviewError(null);
 	}, [reviewRequest?.to, reviewRequest?.at, reviewRequest?.accepted?.at]);
 
-	const { pr, git, assets, diff } = data;
 	const additions = pr ? pr.additions : (diff?.additions ?? 0);
 	const deletions = pr ? pr.deletions : (diff?.deletions ?? 0);
 	const changedFiles = pr ? pr.changedFiles : (diff?.files ?? 0);
@@ -588,7 +545,10 @@ function SummaryBody({
 			await cancelPrReviewApi(session.id, getCurrentUser(), session.repo || undefined);
 			// The stop request is durable before the API answers. Return to the last
 			// completed result immediately while the worker unwinds in the background.
-			updateData({ pr: { ...pr, reviewActive: false } });
+			void prResource.mutate(
+				{ ...pr, reviewActive: false },
+				{ revalidate: false },
+			);
 		} catch (error: any) {
 			setReviewError(error?.message || "Couldn't cancel the review");
 		} finally {

@@ -1,9 +1,6 @@
 import { useEffect, useState } from "react";
-import { fetchPr } from "../lib/api";
-import {
-	pollWhileVisible,
-	PR_WEBHOOK_FALLBACK_POLL_MS,
-} from "../lib/poll";
+import { PR_WEBHOOK_FALLBACK_POLL_MS } from "../lib/poll";
+import { useSessionPrResource } from "../hooks/useApiResources";
 import type { PrCheck, UnifiedSession } from "../lib/types";
 import { withPreviewPath } from "../lib/preview-url";
 import { WS_SUMMARY_ICON } from "../lib/workspace-summary-classes";
@@ -113,12 +110,6 @@ export function StagingLink({
 	/** Bumped when GitHub reports PR/check/deployment activity for this session. */
 	refreshTick?: number;
 }) {
-	const [staging, setStaging] = useState<{ url: string; status: string } | null>(
-		null,
-	);
-	// A Vercel preview deploy is queued/running but butler hasn't posted the URL
-	// comment yet — enough to show a loading placeholder, not enough to link.
-	const [deployPending, setDeployPending] = useState(false);
 	const { copied, copy } = useCopy();
 	const [copyModifierHeld, setCopyModifierHeld] = useState(false);
 	useEffect(() => {
@@ -140,41 +131,28 @@ export function StagingLink({
 	// previous render didn't have, and React tears the whole tree down over it.
 	const openChord = useShortcutLabel("open-preview");
 
-	// A merged/closed PR's alias no longer points at this change — the link is a
+	// A merged/closed PR's alias no longer points at this change. The link is a
 	// pre-merge testing affordance. Repos without deployment metadata simply
 	// return no staging URL.
 	const relevant = !!session.prUrl && session.prState === "OPEN";
-
-	useEffect(() => {
-		if (!relevant) {
-			setStaging(null);
-			setDeployPending(false);
-			return;
-		}
-		let alive = true;
-		const load = () =>
-			fetchPr(session.id)
-				.then((pr) => {
-					if (!alive) return;
-					setStaging(pr?.staging ?? null);
-					setDeployPending(
-						!!pr?.checks?.some(
-							(c: PrCheck) =>
-								isDeployment(c) &&
-								checkClass(c.status, c.conclusion) === "check-pending",
-						),
-					);
-				})
-				.catch(() => {});
-		load();
-		// Webhooks normally flip Building to Ready; this is only a missed-event
-		// fallback, and hidden tabs skip it entirely.
-		const stop = pollWhileVisible(load, PR_WEBHOOK_FALLBACK_POLL_MS);
-		return () => {
-			alive = false;
-			stop();
-		};
-	}, [session.id, relevant, refreshTick]);
+	const prResource = useSessionPrResource(
+		session.id,
+		session.repo || undefined,
+		undefined,
+		{
+			enabled: relevant,
+			refreshInterval: PR_WEBHOOK_FALLBACK_POLL_MS,
+			revision: refreshTick,
+		},
+	);
+	const staging = prResource.data?.staging ?? null;
+	// A Vercel preview deploy is queued/running but butler hasn't posted the URL
+	// comment yet. That is enough to show a loading placeholder, not enough to link.
+	const deployPending = !!prResource.data?.checks?.some(
+		(c: PrCheck) =>
+			isDeployment(c) &&
+			checkClass(c.status, c.conclusion) === "check-pending",
+	);
 
 	if (!relevant) return null;
 

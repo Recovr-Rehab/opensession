@@ -10,18 +10,14 @@ import {
 } from "../lib/pr-refs";
 import {
 	archiveSessionApi,
-	fetchGitStatus,
-	fetchPr,
 	gitPullApi,
 	gitPushApi,
 	mergePrApi,
 	mergePrStackApi,
 } from "../lib/api";
 import { stackLayersTopFirst, stackMergePlan } from "../lib/pr-stack";
-import {
-	pollWhileVisible,
-	PR_WEBHOOK_FALLBACK_POLL_MS,
-} from "../lib/poll";
+import { PR_WEBHOOK_FALLBACK_POLL_MS } from "../lib/poll";
+import { useSessionGitResource, useSessionPrResource } from "../hooks/useApiResources";
 import { getCurrentUser } from "./UserPicker";
 import { providerFromUrl } from "../lib/provider";
 import { isApple } from "../lib/platform";
@@ -585,15 +581,6 @@ function PrRefChips({
 	);
 }
 
-/** Last-known state per session+repo, so a remount (tab switch, panel toggle)
- * paints the previous status instantly and revalidates behind it instead of
- * blanking for a fresh round-trip. Module-level: survives unmounts, dies with
- * the page (a reload starts honest). */
-const lastKnown = new Map<
-	string,
-	{ pr: PrDetails | null; git: GitStatusInfo | null }
->();
-
 export function PrStatusBar({
 	sessionId,
 	repo,
@@ -615,11 +602,20 @@ export function PrStatusBar({
 		presentation.primary?.source !== "primary" ? presentation.primary : undefined;
 	const targetRepo = promoted?.repo || repo;
 	const targetBranch = promoted?.branch;
-	const cacheId = `${sessionId}\0${targetRepo || ""}\0${targetBranch || ""}`;
-	const seed = lastKnown.get(cacheId);
-	const [pr, setPr] = useState<PrDetails | null>(seed?.pr ?? null);
-	const [git, setGit] = useState<GitStatusInfo | null>(seed?.git ?? null);
-	const [loaded, setLoaded] = useState(!!seed);
+	const prResource = useSessionPrResource(
+		sessionId,
+		targetRepo,
+		targetBranch,
+		{ refreshInterval: PR_WEBHOOK_FALLBACK_POLL_MS },
+	);
+	const gitResource = useSessionGitResource(sessionId, repo, {
+		enabled: !promoted,
+		refreshInterval: PR_WEBHOOK_FALLBACK_POLL_MS,
+	});
+	const pr = prResource.data ?? null;
+	const git = gitResource.data ?? null;
+	const loaded =
+		!prResource.isLoading && (Boolean(promoted) || !gitResource.isLoading);
 	const [busy, setBusy] = useState<string | null>(null);
 	const [confirmMerge, setConfirmMerge] = useState(false);
 	const [error, setError] = useState<string | null>(null);
@@ -629,28 +625,11 @@ export function PrStatusBar({
 	useEffect(() => setIsArchived(!!archived), [archived]);
 
 	const load = useCallback(async () => {
-		const [prData, gitData] = await Promise.all([
-			fetchPr(sessionId, targetRepo, targetBranch).catch(() => null),
-			promoted
-				? Promise.resolve(null)
-				: fetchGitStatus(sessionId, repo).catch(() => null),
+		await Promise.all([
+			prResource.mutate(),
+			promoted ? Promise.resolve() : gitResource.mutate(),
 		]);
-		setPr(prData);
-		setGit(gitData);
-		setLoaded(true);
-		lastKnown.set(cacheId, { pr: prData, git: gitData });
-	}, [sessionId, targetRepo, targetBranch, promoted, repo, cacheId]);
-
-	useEffect(() => {
-		// Session/repo switch on a mounted component: fall back to that target's
-		// last-known state (or the checking placeholder) while the fetch runs.
-		const cached = lastKnown.get(cacheId);
-		setPr(cached?.pr ?? null);
-		setGit(cached?.git ?? null);
-		setLoaded(!!cached);
-		load();
-		return pollWhileVisible(load, PR_WEBHOOK_FALLBACK_POLL_MS);
-	}, [load]);
+	}, [prResource.mutate, gitResource.mutate, promoted]);
 
 	// Refetch the instant a turn ends (running→idle) or an auto-push lands
 	// (refreshTick bump), so "Ahead by N commits" clears without waiting on a

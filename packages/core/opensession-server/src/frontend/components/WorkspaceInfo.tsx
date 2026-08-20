@@ -1,31 +1,30 @@
 import { AGENT_NAME, GITHUB_BOT_NAME } from "../lib/brand";
 import { BASE_PATH } from "../lib/base";
 import { commitPrompt } from "../lib/commit-prompt";
-import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { parsePatchFiles } from "@pierre/diffs";
 import type { FileDiffMetadata } from "@pierre/diffs";
 import { FileDiff } from "@pierre/diffs/react";
 import { useResolvedTheme } from "./CodeHighlight";
 import {
-	fetchDiff,
-	fetchPr,
-	fetchGitStatus,
 	setSessionReviewerApi,
 	acceptReviewApi,
 	triggerPrActionApi,
 	sessionAssetPreviewUrl,
 	type PrAgentAction,
 	type WorkspaceMediaItem,
-	type WorkspaceOverview,
 	type SessionAssetFile,
 } from "../lib/api";
 import { assetPreviewKind, isVisualAsset } from "../lib/asset-preview";
 import { useAssetViewMode } from "../lib/asset-view-mode";
 import { AssetViewToggle } from "./AssetViewToggle";
+import { PR_WEBHOOK_FALLBACK_POLL_MS } from "../lib/poll";
 import {
-	pollWhileVisible,
-	PR_WEBHOOK_FALLBACK_POLL_MS,
-} from "../lib/poll";
+	useSessionDiffResource,
+	useSessionGitResource,
+	useSessionPrResource,
+	useWorkspaceOverviewResource,
+} from "../hooks/useApiResources";
 import { getCurrentUser, TEAM, useCurrentUser } from "./UserPicker";
 import { personNameForKey, usePeople, useReviewTeams } from "../lib/people";
 import { UserAvatar } from "./UserAvatar";
@@ -47,11 +46,7 @@ import {
 	reviewRequestTargetsPerson,
 } from "../lib/review-queue";
 import { MarkdownBody, useMarkdownRepo } from "./MarkdownBody";
-import {
-	loadOverview,
-	overviewCache,
-	type OverviewSessionRef,
-} from "../lib/workspace-overview";
+import type { OverviewSessionRef } from "../lib/workspace-overview";
 import {
 	GIT_ACTION,
 	GIT_ACTION_CARET,
@@ -1371,118 +1366,46 @@ export function WorkspaceInfo({
 }: Props) {
 	const sessionsKey = sessions.map((c) => c.id).join(",");
 	const cacheKey = workspaceId || `sessions:${sessionsKey}`;
-	const [data, setData] = useState<WorkspaceOverview | null>(
-		() => overviewCache.get(cacheKey)?.data ?? null,
+	const overviewRevision = `${sessions
+		.map((session) => session.lastActivity || session.createdAt)
+		.join(",")}\0${liveMediaCount}`;
+	const overviewResource = useWorkspaceOverviewResource(
+		cacheKey,
+		workspaceId,
+		sessions,
+		{ revision: overviewRevision },
 	);
+	const prResource = useSessionPrResource(sessionId, repo, undefined, {
+		enabled: Boolean(prState),
+		refreshInterval: PR_WEBHOOK_FALLBACK_POLL_MS,
+		revision: refreshTick,
+	});
+	const diffResource = useSessionDiffResource(sessionId, {
+		enabled: Boolean(repo && sessionId),
+		refreshInterval: 45_000,
+		revision: liveMediaCount,
+	});
+	const gitResource = useSessionGitResource(sessionId, repo, {
+		enabled: Boolean(repo && sessionId),
+		refreshInterval: 45_000,
+		revision: liveMediaCount,
+	});
+	const data = overviewResource.data ?? null;
+	const pr = prState ? (prResource.data ?? null) : null;
+	const primaryDiff =
+		diffResource.data?.repos.find((entry) => entry.primary) ||
+		diffResource.data?.repos[0] ||
+		null;
+	const files: DiffFile[] | null = repo
+		? (primaryDiff?.diff.files ?? (diffResource.data ? [] : null))
+		: null;
+	const rawPatch = primaryDiff?.diff.rawPatch ?? "";
+	const git: GitStatusInfo | null = repo ? (gitResource.data ?? null) : null;
 	const [commentsExpanded, setCommentsExpanded] = useState(false);
-	const [pr, setPr] = useState<PrDetails | null>(null);
-	const [files, setFiles] = useState<DiffFile[] | null>(null);
-	// The primary repo's raw patch, kept so the file rows can hover-reveal the
-	// actual diff for that file (parsed lazily below).
-	const [rawPatch, setRawPatch] = useState<string>("");
-	// Local git state (ahead/behind, dirty tree) for the Git status section.
-	const [git, setGit] = useState<GitStatusInfo | null>(null);
-
-	// The sessions array is re-created every App render — read it through a ref so
-	// the fetch effect keys on the stable sessionsKey instead.
-	const sessionsRef = useRef(sessions);
-	sessionsRef.current = sessions;
 
 	useEffect(() => {
-		let alive = true;
-		const cached = overviewCache.get(cacheKey);
-		setData(cached?.data ?? null);
 		setCommentsExpanded(false);
-		// Fresh cache → refresh quietly in the background after a beat (also
-		// debounces the liveMediaCount bumps during a streaming run).
-		const t = setTimeout(
-			() => {
-				loadOverview(cacheKey, workspaceId, sessionsRef.current)
-					.then((ov) => {
-						if (alive) setData(ov);
-					})
-					.catch(() => {
-						// Keep whatever we had — the block just doesn't refresh.
-					});
-			},
-			cached ? 1200 : 0,
-		);
-		return () => {
-			alive = false;
-			clearTimeout(t);
-		};
-	}, [cacheKey, sessionsKey, workspaceId, liveMediaCount]);
-
-	// PR (for the status chips) — webhooks trigger refreshTick; the slow poll only
-	// recovers a missed delivery or a deployment with no matching webhook.
-	useEffect(() => {
-		if (!prState) {
-			setPr(null);
-			return;
-		}
-		let alive = true;
-		const load = () =>
-			fetchPr(sessionId, repo)
-				.then((p) => alive && setPr(p))
-				.catch(() => {});
-		load();
-		const stop = pollWhileVisible(load, PR_WEBHOOK_FALLBACK_POLL_MS);
-		return () => {
-			alive = false;
-			stop();
-		};
-	}, [sessionId, repo, prState, refreshTick]);
-
-	// Files changed — the primary repo's diff (Changes tab has the full view
-	// + repo switcher; here we show a capped preview).
-	useEffect(() => {
-		// No session to read through: a session-less workspace has no worktree,
-		// so there is no diff to ask for (and nothing to poll for one).
-		if (!repo || !sessionId) {
-			setFiles(null);
-			setRawPatch("");
-			return;
-		}
-		let alive = true;
-		const load = () =>
-			fetchDiff(sessionId)
-				.then((res) => {
-					if (!alive) return;
-					const primary =
-						res.repos.find((r) => r.primary) || res.repos[0] || null;
-					setFiles(primary?.diff.files ?? []);
-					setRawPatch(primary?.diff.rawPatch ?? "");
-				})
-				.catch(() => {});
-		load();
-		const iv = setInterval(load, 45000);
-		return () => {
-			alive = false;
-			clearInterval(iv);
-		};
-	}, [sessionId, repo, liveMediaCount]);
-
-	// Local git status (ahead/behind, uncommitted) for the Git status section — same
-	// slow poll, refetched as live media bumps (a proxy for run activity) so the
-	// counts settle after a turn's auto-commit/push. Only when the session has a repo.
-	useEffect(() => {
-		// Same as the diff above: local git state is the session's worktree's.
-		if (!repo || !sessionId) {
-			setGit(null);
-			return;
-		}
-		let alive = true;
-		const load = () =>
-			fetchGitStatus(sessionId, repo)
-				.then((g) => alive && setGit(g))
-				.catch(() => {});
-		load();
-		const iv = setInterval(load, 45000);
-		return () => {
-			alive = false;
-			clearInterval(iv);
-		};
-	}, [sessionId, repo, liveMediaCount]);
+	}, [cacheKey]);
 
 	// This list is what the team said about the PR, so machines are dropped:
 	// deploy bots, preview tables, and the agent's own review, which the review

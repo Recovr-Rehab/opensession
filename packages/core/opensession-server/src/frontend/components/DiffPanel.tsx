@@ -1,9 +1,13 @@
 import { repoLabel } from "../lib/repo-label";
-import React, { useEffect, useState, useCallback, startTransition, useRef } from "react";
-import type { CodeFlowResult, DiffFileGroup, RepoDiff } from "../lib/types";
+import React, { useEffect, useState, useCallback, useRef } from "react";
+import type {
+  CodeFlowResult,
+  DiffFileGroup,
+  RepoDiff,
+} from "../lib/types";
+import { useSessionDiffResource } from "../hooks/useApiResources";
 import {
   API_BASE,
-  fetchDiff,
   fetchDiffGroups,
   fetchCodeFlow,
   discardDiffFile,
@@ -72,65 +76,35 @@ export function useSessionDiff(
   opts: { enabled?: boolean; isRunning: boolean },
 ): SessionDiffState {
   const { enabled = true, isRunning } = opts;
-  const [repos, setRepos] = useState<RepoDiff[] | null>(null);
-  const [error, setError] = useState<string | null>(null);
-  const [loading, setLoading] = useState(true);
-  // What the last committed poll held, and whether that poll succeeded. The
-  // poll re-fetches the same patch every 8s while a run is going, and an
-  // identical answer must not reach state: committing one re-renders every
-  // mounted file of the diff for nothing. Cleared on failure so the next
-  // success always commits, error or not.
-  const committed = useRef<{ repos: RepoDiff[] } | null>(null);
+  const { data, error: requestError, isLoading, mutate } = useSessionDiffResource(
+    sessionId,
+    {
+      enabled,
+      refreshInterval: enabled ? (isRunning ? 8000 : 30000) : 0,
+      // The same patch comes back on most polls. Suppress that update before it
+      // reaches React, because rendering a large diff parses every file again.
+      compare: (previous, next) => {
+        if (previous === next) return true;
+        if (!previous || !next) return false;
+        return sameRepoDiffs(previous.repos || [], next.repos || []);
+      },
+    },
+  );
+  const repos = data?.repos ?? null;
+  const loading = isLoading && !data;
+  // A failed background revalidation must not replace a usable stale patch.
+  const error = data
+    ? null
+    : requestError instanceof Error
+      ? requestError.message
+      : requestError
+        ? "Failed to load diff."
+        : null;
+  const reload = useCallback(async () => {
+    await mutate();
+  }, [mutate]);
 
-	const load = useCallback(async (urgent = false) => {
-    try {
-      const data = await fetchDiff(sessionId);
-      if (data.error) throw new Error(data.error);
-      const next = data.repos || [];
-      if (committed.current && sameRepoDiffs(committed.current.repos, next)) return;
-      // @pierre/diffs renders on the main thread (disableWorkerPool) and
-      // parsePatchFiles runs during render, so committing a large diff is a long,
-      // uninterruptible task. Commit it as a transition so an urgent interaction —
-      // e.g. clicking the panel toggle to close — preempts it instead of waiting
-      // for the whole diff to parse and paint. If the user closes the panel before
-      // this render commits, React discards it and the panel closes instantly.
-		const commit = () => {
-			committed.current = { repos: next };
-			setRepos(next);
-			setError(null);
-			setLoading(false);
-		};
-		if (urgent) commit();
-		else startTransition(commit);
-    } catch (e: any) {
-      committed.current = null;
-      setError(e.message);
-      setLoading(false);
-    }
-  }, [sessionId]);
-
-  // Switching sessions: drop the previous session's diff so a stale count/patch
-  // doesn't flash before the new fetch lands.
-  useEffect(() => {
-    committed.current = null;
-    setRepos(null);
-    setError(null);
-    setLoading(true);
-  }, [sessionId]);
-
-  useEffect(() => {
-    if (!enabled) return;
-    load();
-    // Keep the diff fresh while the agent is working
-    const interval = setInterval(load, isRunning ? 8000 : 30000);
-    return () => clearInterval(interval);
-  }, [load, isRunning, enabled]);
-
-	const reload = useCallback(async () => {
-		await load(true);
-	}, [load]);
-
-	return { repos, loading, error, reload };
+  return { repos, loading, error, reload };
 }
 
 export function DiffPanel({ sessionId, isRunning, canSend, send, diff }: Props) {
