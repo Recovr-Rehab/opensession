@@ -139,7 +139,7 @@ export function FirstMile({ onDone }: { onDone: () => void }) {
 	return (
 		<div
 			data-first-mile
-			className="relative grid h-[100dvh] min-h-[560px] w-full grid-rows-[76px_minmax(0,1fr)_84px] overflow-hidden bg-bg text-fg phone:min-h-[620px] phone:grid-rows-[68px_minmax(0,1fr)_90px] phone:pb-[env(safe-area-inset-bottom)]"
+			className="relative grid h-[100dvh] w-full grid-rows-[76px_minmax(0,1fr)_84px] overflow-hidden bg-bg text-fg phone:grid-rows-[68px_minmax(0,1fr)_90px] phone:pb-[env(safe-area-inset-bottom)]"
 		>
 			<div
 				className="pointer-events-none absolute inset-0 opacity-70 [background:radial-gradient(circle_at_18%_8%,var(--accent-soft),transparent_34%),radial-gradient(circle_at_82%_92%,var(--blue-soft),transparent_36%)]"
@@ -160,7 +160,10 @@ export function FirstMile({ onDone }: { onDone: () => void }) {
 				/>
 
 				<nav
-					className={cn("flex items-center gap-2", index === 0 && "invisible")}
+					className={cn(
+						"absolute left-1/2 flex -translate-x-1/2 items-center gap-2",
+						index === 0 && "invisible",
+					)}
 					aria-label="Onboarding progress"
 				>
 					{STEPS.slice(1).map((item, itemIndex) => {
@@ -189,12 +192,12 @@ export function FirstMile({ onDone }: { onDone: () => void }) {
 					<button
 						type="button"
 						onClick={() => goTo(index + 1)}
-						className="focus-ring min-h-9 justify-self-end rounded-control px-3 text-label font-medium text-dim hover:bg-hover hover:text-fg"
+						className="focus-ring col-start-3 min-h-9 justify-self-end rounded-control px-3 text-label font-medium text-dim hover:bg-hover hover:text-fg"
 					>
 						Skip
 					</button>
 				) : (
-					<div />
+					<div className="col-start-3" />
 				)}
 			</header>
 
