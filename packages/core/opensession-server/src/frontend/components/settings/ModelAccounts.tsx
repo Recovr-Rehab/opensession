@@ -231,21 +231,21 @@ function absoluteReset(resetsAt: string | null): string | undefined {
 }
 
 /**
- * The meters under an account share one grid, so bars and values line up down
- * their columns. Each row is two things, not four: what the limit is and when
- * it frees up on the left, how full it is on the right. The label column used
- * to be a fixed 46px, which truncated every Codex bucket to "Codex…" /
- * "GPT-5…", losing the one word that said which limit you were looking at.
+ * Usage windows sit beside each other so three limits add one compact strip
+ * instead of three lines to every account. Each window owns its alignment,
+ * which also lets Codex wrap a fourth window without changing its neighbours.
+ * Phones keep one window per line because the same strip would be unreadable
+ * at that width.
  */
 function MeterGroup({ children }: { children: React.ReactNode }) {
 	return (
-		<div className="mt-2 grid max-w-[420px] grid-cols-[minmax(0,1fr)_112px_minmax(42px,auto)] items-center gap-x-3 gap-y-1.5 text-meta phone:grid-cols-[minmax(0,1fr)_72px_minmax(38px,auto)] phone:gap-x-2">
+		<div className="mt-2 grid max-w-[420px] grid-cols-3 gap-3 text-meta phone:grid-cols-1 phone:gap-1.5">
 			{children}
 		</div>
 	);
 }
 
-/** One row of MeterGroup's grid: label and note, bar, value. */
+/** One compact limit: label and value, track, then its reset time. */
 function Meter({
 	label,
 	labelTitle,
@@ -256,30 +256,34 @@ function Meter({
 }: {
 	label: string;
 	labelTitle?: string;
-	/** 0-100, or null when the value is unknown — the track renders empty. */
+	/** 0-100, or null when the value is unknown. The track renders empty. */
 	pct: number | null;
 	value: React.ReactNode;
 	note?: React.ReactNode;
 	noteTitle?: string;
 }) {
 	return (
-		<>
-			{/* One line on desktop; on a phone the column is too narrow for
-			    "Fable · resets in 5d", so it wraps rather than clipping the
-			    reset time, which a touch device can't reveal with a tooltip. */}
-			<span
-				className="overflow-hidden text-ellipsis whitespace-nowrap text-dim phone:overflow-visible phone:whitespace-normal"
-				title={labelTitle}
-			>
-				{label}
+		<div className="grid min-w-0 grid-cols-[minmax(0,1fr)_auto] items-center gap-x-2 gap-y-1 phone:grid-cols-[minmax(0,1fr)_72px_minmax(38px,auto)] phone:gap-x-2 phone:gap-y-0">
+			{/* `contents` gives the desktop label and reset time separate rows.
+			    On phones they become one cell beside the track and value. */}
+			<span className="min-w-0 phone:overflow-visible phone:whitespace-normal desktop:contents">
+				<span
+					className="overflow-hidden text-ellipsis whitespace-nowrap text-dim desktop:col-start-1 desktop:row-start-1"
+					title={labelTitle}
+				>
+					{label}
+				</span>
 				{note ? (
-					<span className="text-faint" title={noteTitle}>
-						{" · "}
+					<span
+						className="overflow-hidden text-ellipsis whitespace-nowrap text-faint desktop:col-span-2 desktop:row-start-3"
+						title={noteTitle}
+					>
+						<span className="phone:inline desktop:hidden"> · </span>
 						{note}
 					</span>
 				) : null}
 			</span>
-			<div className="h-1.5 overflow-hidden rounded-full bg-active">
+			<div className="h-1.5 overflow-hidden rounded-full bg-active desktop:col-span-2 desktop:row-start-2 phone:col-start-2 phone:row-start-1">
 				<div
 					className={cn(
 						"h-full rounded-full transition-[width] duration-300",
@@ -288,19 +292,21 @@ function Meter({
 					style={{ width: `${Math.min(100, Math.max(0, pct ?? 0))}%` }}
 				/>
 			</div>
-			<span className="text-right tabular-nums text-dim">{value}</span>
-		</>
+			<span className="text-right tabular-nums text-dim desktop:col-start-2 desktop:row-start-1 phone:col-start-3 phone:row-start-1">
+				{value}
+			</span>
+		</div>
 	);
 }
 
 /**
- * Every limit an account is running against, one row each: the 5-hour window,
- * the 7-day window, and any per-model weekly cap. They free up at different
- * times, so which one is full changes what you do about it — a spent 5h clears
- * this afternoon, a spent Fable cap holds that model for days. Showing only the
- * fullest of them put the rest a hover away, which is no place for a fact
- * someone came to this page to read. Quiet ink keeps a page of accounts calm;
- * colour still means one thing, that this limit is running out.
+ * Every limit an account is running against, one compact item each: the 5-hour
+ * window, the 7-day window, and any per-model weekly cap. They free up at
+ * different times, so which one is full changes what you do about it. A spent
+ * 5h clears this afternoon, while a spent Fable cap holds that model for days.
+ * Showing only the fullest of them put the rest a hover away, which is no place
+ * for a fact someone came to this page to read. Quiet ink keeps a page of
+ * accounts calm; colour still means one thing, that this limit is running out.
  */
 function UsageMeters({ windows }: { windows: LimitWindow[] }) {
 	return (
