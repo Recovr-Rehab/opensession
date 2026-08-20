@@ -115,6 +115,7 @@ import {
 import { Reorder } from "motion/react";
 import { getRecents, onRecentsChanged } from "../lib/recents";
 import { getReads, isUnread, markRead, markUnread, onReadsChanged } from "../lib/reads";
+import { pickUnreadWorkspaceSession } from "../lib/sidebar-unread-session";
 import { mentionFor, onMentionsChanged } from "../lib/mentions";
 import { TeamLensMenu, useTeamPresence } from "./TeamPresence";
 import { sessionPath, absoluteLink, copyToClipboard } from "../lib/share-link";
@@ -1343,9 +1344,7 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 				// (App's naturalSessions keeps it behind its parent), so opening the
 				// workspace marks every tab read and never the worker. Counting one
 				// left the row bold with nothing you could open to clear it.
-				unread: statusSources.some(
-					(c) => c.id !== selectedId && isUnread(c.id, c.lastActivity, reads),
-				),
+				unread: !!pickUnreadWorkspaceSession(sessions, selectedId, reads),
 				// A tag on any session in the workspace marks the whole row: the
 				// person who wrote it asked for you, not for a particular tab.
 				mention: sessions
@@ -2383,11 +2382,16 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 			clearWsPress();
 		}
 	}
-	// Rows under Needs review land on Review because someone asked you to inspect
-	// the diff. Every other workspace row re-enters through onOpenWorkspace, which
-	// restores the session or pane tab that was last active in that workspace.
+	// A bold row points to unread activity, so that tab wins over the row's lane
+	// or remembered tab. Rows with no unread activity keep their normal routing.
 	function openWsRow(row: WsRow, review: boolean) {
 		const mainSession = workspaceMainSession(row);
+		const unreadSession = pickUnreadWorkspaceSession(row.sessions, selectedId, reads);
+		if (unreadSession) {
+			if (row.workspace) onOpenWorkspace(row.workspace.id, unreadSession.id);
+			else onSelect(unreadSession);
+			return;
+		}
 		// Only open Review when there is something to inspect: a PR, or a branch or
 		// worktree that can produce a diff. Otherwise use the normal workspace path.
 		const reviewable =

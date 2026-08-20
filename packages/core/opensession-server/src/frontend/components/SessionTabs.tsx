@@ -12,7 +12,9 @@ import { IconChevronRight, IconHistory, IconPencil, IconPlus, IconRestore, IconR
 import { isAutomationSession } from "../lib/landing-session";
 import { ArchivedSessionItems } from "./ArchivedSessionItems";
 import { useIsPhone } from "../hooks/useIsPhone";
+import { useScrollEdge } from "../hooks/useScrollEdge";
 import { UserAvatar } from "./UserAvatar";
+import { SCROLL_EDGE_DIVIDER } from "../lib/app-shell-classes";
 import {
 	NEW_MENU,
 	NEW_MENU_ITEM,
@@ -237,6 +239,11 @@ export function SessionTabs({
 	// touch for an easier hit.
 	const isPhone = useIsPhone();
 	const ctrlIconSize = isPhone ? 23 : 20;
+	// Once transcript content passes under the tab bar, close the chrome with the
+	// same scroll-aware hairline used by the rest of the app. Each split owns its
+	// own strip and scroller, so the edge follows the correct column.
+	const [stripEl, setStripEl] = useState<HTMLDivElement | null>(null);
+	useScrollEdge(stripEl, ".viewer-messages, [data-page-scroll]");
 
 	// Drag-to-reorder the session tabs (desktop only — an x-drag would fight touch
 	// scrolling / the phone swipe gestures). `orderDraft` holds the in-flight
@@ -531,7 +538,7 @@ export function SessionTabs({
 	const newTabButton = onNewSession && (
 		<button
 			type="button"
-			className={TAB_NEW}
+			className={cn(TAB_NEW, "relative z-[1]")}
 			data-menu-open={newMenu ? "" : undefined}
 			aria-label="New session in this workspace"
 			title="New session. Shares this workspace's worktree (right-click for options)"
@@ -560,7 +567,11 @@ export function SessionTabs({
 	);
 
 	return (
-		<div className={cn(TAB_STRIP, !inSplit && "desktop:-mt-[11px]")} role="tablist">
+		<div
+			ref={setStripEl}
+			className={cn(TAB_STRIP, SCROLL_EDGE_DIVIDER, !inSplit && "desktop:-mt-[11px]")}
+			role="tablist"
+		>
 			<div className={TAB_SCROLL} ref={scrollRef}>
 				<Reorder.Group
 					as="div"

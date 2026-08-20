@@ -90,8 +90,8 @@ export interface Props {
 	draftRowActive?: boolean;
 	/** Put the caret back in it. */
 	onOpenDraft?: () => void;
-	/** Open a project — its sessions surface in the top tab strip. */
-	onOpenWorkspace: (id: string) => void;
+	/** Open a project. A preferred session targets the tab carrying unread activity. */
+	onOpenWorkspace: (id: string, preferredSessionId?: string) => void;
 	/** Rename a project folder. */
 	onRenameWorkspace: (id: string, name: string) => void;
 	/** Delete a project folder (its sessions become standalone, or for a

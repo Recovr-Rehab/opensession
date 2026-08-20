@@ -4671,14 +4671,15 @@ export function App(
 										: { open: true, repo },
 								)
 							}
-							onOpenWorkspace={(id) => {
-								// Sidebar selection navigates directly to a session rather than via
-								// /workspace/<id>, so restore the same remembered tab here too.
+							onOpenWorkspace={(id, preferredSessionId) => {
+								// A bold workspace row names the unread session explicitly. Otherwise
+								// restore the session tab that was last active in this workspace.
 								const session = pickLandingSession(
 									sessions,
 									id,
-									getWorkspaceLastSession(id),
+									preferredSessionId ?? getWorkspaceLastSession(id),
 								);
+								const opensPreferredSession = session?.id === preferredSessionId;
 								// Every session closed but a pane still open: land on the
 								// pane rather than resurrecting the newest archived session
 								// (pickLandingSession's history fallback).
@@ -4691,13 +4692,16 @@ export function App(
 								const remembered = getActiveViewTab(id);
 								const pane =
 									panes.find((p) => p === remembered) ?? panes[0] ?? null;
-								if (pane) {
+								if (pane && !opensPreferredSession) {
 									setActiveViewTabState(pane);
 									setFocusComposerOnOpen(false);
 									navigate({ view: "workspace", id, tab: pane });
 								} else if (session) {
-									const rememberedTab = getActiveViewTab(id) ?? null;
+									const rememberedTab = opensPreferredSession
+										? null
+										: (getActiveViewTab(id) ?? null);
 									setActiveViewTabState(rememberedTab);
+									if (opensPreferredSession) saveActiveViewTab(id, null);
 									setFocusComposerOnOpen(rememberedTab === null);
 									navigate({ view: "session", id: session.id });
 								} else {
