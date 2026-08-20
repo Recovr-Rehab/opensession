@@ -38,3 +38,23 @@ test("the new session payload persists fast mode", async () => {
   expect(createEnd).toBeGreaterThan(createStart);
   expect(createPayload).toContain("...(fastMode ? { fastMode: true } : {})");
 });
+
+test("dismissing a nonempty composer parks it without an explicit draft action", async () => {
+  const source = await Bun.file(new URL("./NewSession.tsx", import.meta.url)).text();
+  const closeStart = source.indexOf("onOpenChange={(next) =>");
+  const closeEnd = source.indexOf("modal=\"trap-focus\"", closeStart);
+  const closeHandler = source.slice(closeStart, closeEnd);
+
+  expect(closeStart).toBeGreaterThan(-1);
+  expect(closeHandler).toContain("if (next || busy) return;");
+  expect(closeHandler).toContain("void parkDraftOnExit();");
+  expect(closeHandler.indexOf("void parkDraftOnExit();")).toBeLessThan(
+    closeHandler.indexOf("onBack();"),
+  );
+  const createStart = source.indexOf("function handleCreate()");
+  const sendStart = source.indexOf("send({", createStart);
+  const createHandler = source.slice(createStart, sendStart);
+  expect(createHandler).toContain("consumePendingDraftParks(prompt, workspaceId);");
+  expect(source).not.toContain('action: "draft"');
+  expect(source).not.toContain("Save as draft");
+});

@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef, useCallback } from "react";
 import { AnimatePresence } from "motion/react";
-import { fetchWorktrees, fetchModels, fetchToolAccounts, fetchSandboxStatus, requestSandboxPrewarm, suggestBranch, suggestRepos, type RepoSuggestion, configuredNewSessionRepo, fetchProviderAccounts, fetchRepos, cachedRepos, type RepoInfo, createWorkspaceApi, updateWorkspaceApi, ApiError, type ProviderAccountOption, type ModelOption, type SandboxStatusInfo } from "../lib/api";
+import { fetchWorktrees, fetchModels, fetchToolAccounts, fetchSandboxStatus, requestSandboxPrewarm, suggestBranch, suggestRepos, type RepoSuggestion, configuredNewSessionRepo, fetchProviderAccounts, fetchRepos, cachedRepos, type RepoInfo, createWorkspaceApi, updateWorkspaceApi, deleteWorkspaceApi, ApiError, type ProviderAccountOption, type ModelOption, type SandboxStatusInfo } from "../lib/api";
 import { getCurrentUser } from "./UserPicker";
 import { type FileAttachment } from "../lib/images";
 import {
@@ -53,7 +53,7 @@ import {
   IconSparkle,
   IconX,
 } from "./icons";
-import type { WSServerMessage, Workspace } from "../lib/types";
+import type { WSServerMessage } from "../lib/types";
 import { VoiceInput } from "./VoiceInput";
 import { useIsPhone } from "../hooks/useIsPhone";
 import { PaletteSelect } from "./PaletteSelect";
@@ -72,6 +72,7 @@ import {
 	composerSendDefault,
 } from "../lib/composer-classes";
 import { askSurface } from "../lib/tinted-surface";
+import { toast } from "../ui/toast";
 import { cn } from "../ui/cn";
 import {
 	paletteIconBtn,
@@ -121,9 +122,6 @@ interface Props {
     /** Start the session without following it — leave the current view alone. */
     background?: boolean;
   }) => void;
-  /** "Save as draft" succeeded: the workspace that now holds the draft
-   *  (freshly created, or the scoped `workspaceId` when saving into one). */
-  onDraftSaved?: (ws: Workspace) => void;
 }
 
 interface Worktree {
@@ -268,16 +266,14 @@ const MODEL_PILL = cn(
    session, "background" leaves you where you were, and "more" keeps the palette
    up for the next task. The order is the dropdown's, so the cycle shortcut and
    the menu step the same way. */
-const CREATE_ACTIONS = ["open", "background", "more", "draft"] as const;
+const CREATE_ACTIONS = ["open", "background", "more"] as const;
 type CreateAction = (typeof CREATE_ACTIONS)[number];
 
-// What the card is doing, and what it ended on. "savingDraft" and "creating"
-// are two different waits (a promise and a WebSocket message), and "failed" is
-// the terminal state both of them can reach, including the create whose answer
-// never comes back because the socket dropped.
+// What the card is doing, and what it ended on. A create waits on a WebSocket
+// message, and "failed" is the terminal state it can reach, including the
+// create whose answer never comes back because the socket dropped.
 type CreateStatus =
   | { kind: "idle" }
-  | { kind: "savingDraft" }
   | { kind: "creating" }
   | { kind: "failed"; message: string };
 /** ⌘⌥↓ / ⌘⌥↑ (Ctrl+Alt elsewhere). Vertical rather than horizontal because
@@ -290,7 +286,6 @@ const CREATE_LABELS: Record<CreateAction, string> = {
 	open: "Create",
 	background: "Create in background",
 	more: "Create more",
-	draft: "Save draft",
 };
 
 /* Split button: primary Create action + a caret that opens a mode dropdown.
@@ -312,10 +307,9 @@ const CREATE_MAIN =
  *  because both set `border-top-left-radius`, and which one wins is decided by
  *  the compiled sheet's order rather than the order they are listed here.
  *
- *  On a phone the split stays a split (the caret is the only way to reach
- *  "Save as draft" there): the main button keeps the pill's left half and the
- *  caret takes its right half, so together they still read as one pill. Only
- *  the inline card (no caret at all) rounds the whole button on a phone. */
+ *  The phone overlay moves Create into its title bar and does not render this
+ *  pair. Only the inline card reaches these phone classes, where it has no
+ *  caret and rounds the whole button. */
 const CREATE_MAIN_SPLIT = "desktop:rounded-l-control phone:rounded-l-[999px] phone:rounded-r-none";
 const CREATE_MAIN_WHOLE = "desktop:rounded-control phone:rounded-[999px]";
 const CREATE_CARET =
@@ -413,6 +407,34 @@ function firstNonEmptyLine(text: string): string {
   return text.split("\n").find((l) => l.trim())?.trim() ?? "";
 }
 
+type PendingDraftPark = {
+  text: string;
+  workspaceId?: string;
+  consumed: boolean;
+};
+
+// A dismissed palette can be reopened while its workspace request is still in
+// flight. If that prompt starts a session first, the late response must not
+// leave a second, stale draft workspace behind.
+const pendingDraftParks = new Set<PendingDraftPark>();
+
+function consumePendingDraftParks(text: string, workspaceId?: string) {
+  for (const operation of pendingDraftParks) {
+    if (operation.text === text && operation.workspaceId === workspaceId) {
+      operation.consumed = true;
+    }
+  }
+}
+
+function draftParkInFlight(text: string, workspaceId?: string): boolean {
+  return [...pendingDraftParks].some(
+    (operation) =>
+      !operation.consumed &&
+      operation.text === text &&
+      operation.workspaceId === workspaceId,
+  );
+}
+
 /** Fallback branch name from the prompt when Haiku's auto-suggest hasn't landed. */
 function slugifyBranch(text: string): string {
   const slug = text
@@ -425,7 +447,7 @@ function slugifyBranch(text: string): string {
   return slug || "new-session";
 }
 
-export function NewSession({ onBack, inline, focusSeq, send, addHandler, connected, prefillPrompt, initialMcpServers, forceMode, workspaceId, modelWorkspaceId, forceRepo, forceBranch, onCreateStarted, onDraftSaved }: Props) {
+export function NewSession({ onBack, inline, focusSeq, send, addHandler, connected, prefillPrompt, initialMcpServers, forceMode, workspaceId, modelWorkspaceId, forceRepo, forceBranch, onCreateStarted }: Props) {
   const [prefill] = useState(readPrefill);
   // What the session may do, and nothing else — the footer's Ask toggle. The
   // repo is a separate axis, so Scratch is not a third value here: it is what
@@ -617,13 +639,11 @@ export function NewSession({ onBack, inline, focusSeq, send, addHandler, connect
   // though it was staged by the instance that closed: the store fires on an
   // attachment change for exactly this.
   useEffect(() => onDraftsChanged(adoptDraftAttachments), [adoptDraftAttachments]);
-  // One status for both completion protocols: "savingDraft" resolves through a
-  // promise, "creating" waits for a WebSocket message, and "failed" carries the
-  // message either of them ended on. A single boolean could not say which
-  // protocol was running, and had no terminal state for a create whose answer
-  // never arrives.
+  // "creating" waits for a WebSocket message and "failed" carries the message
+  // it ended on. A single boolean could not carry the terminal state for a
+  // create whose answer never arrives.
   const [status, setStatus] = useState<CreateStatus>({ kind: "idle" });
-  const busy = status.kind === "creating" || status.kind === "savingDraft";
+  const busy = status.kind === "creating";
   // Which edges of the prompt have content beyond them, and so earn a hairline.
   const [edges, setEdges] = useState({ top: false, bottom: false });
   const [models, setModels] = useState<ModelOption[]>([]);
@@ -1024,17 +1044,30 @@ export function NewSession({ onBack, inline, focusSeq, send, addHandler, connect
     }
   }
 
-  // "Save as draft" doesn't start a session at all: it parks the prompt on a
-  // workspace (a fresh one, or the one this palette is already scoped to) and
-  // never sends create_session. Separate from handleCreate's session_created
-  // wait below, which this action never triggers.
-  async function saveAsDraft() {
+  // Leaving the palette with an unsent prompt saves it, rather than asking you
+  // to say so in advance. The text is parked on a workspace (a fresh one, or
+  // the one this palette is scoped to) and shows up in the sidebar as a draft.
+  // Nothing runs. This never sends create_session, so it is separate from
+  // handleCreate's session_created wait below.
+  //
+  // The local composer draft stays in place while the request runs. On success
+  // clear only the exact text that moved, preserving attachments and anything
+  // typed after reopening. On failure, the local copy remains the fallback.
+  const parkingDraftRef = useRef(false);
+  async function parkDraftOnExit() {
     const text = promptText.current.trim();
-    if (!text) return;
-    setStatus({ kind: "savingDraft" });
+    if (
+      !text ||
+      busy ||
+      parkingDraftRef.current ||
+      draftParkInFlight(text, workspaceId)
+    ) return;
+    parkingDraftRef.current = true;
+    const operation: PendingDraftPark = { text, workspaceId, consumed: false };
+    pendingDraftParks.add(operation);
+    const draft = { text, updatedAt: new Date().toISOString(), by: getCurrentUser() };
     try {
-      const draft = { text, updatedAt: new Date().toISOString(), by: getCurrentUser() };
-      const ws = workspaceId
+      const workspace = workspaceId
         ? // Scoped to an existing workspace: update its draft, never rename it.
           await updateWorkspaceApi(workspaceId, { draft })
         : await createWorkspaceApi({
@@ -1042,22 +1075,29 @@ export function NewSession({ onBack, inline, focusSeq, send, addHandler, connect
             ...(repo && repo !== NO_REPO ? { repo } : {}),
             draft: { ...draft, autoName: true },
           });
-      // Same as a create: the text now lives on the workspace, so the field's
-      // pending write must not put it back in the palette's draft.
-      promptHandle.current?.dropPendingDraftWrite();
-      // Only the text travels: a workspace draft has nowhere to keep a file.
-      // So the attachments stay in the palette's own draft rather than being
-      // cleared with it — parking a prompt should not quietly destroy the
-      // screenshot that was attached to it.
-      saveDraft(DRAFT_KEY, { text: "" });
-      setStatus({ kind: "idle" });
+      if (operation.consumed) {
+        // The same prompt started while this request was in flight. Remove the
+        // late draft instead of leaving a duplicate beside the live session.
+        if (workspaceId) await updateWorkspaceApi(workspaceId, { draft: null });
+        else await deleteWorkspaceApi(workspace.id);
+      } else {
+        if (loadDraft(DRAFT_KEY).text.trim() === text) {
+          saveDraft(DRAFT_KEY, { text: "" });
+        }
+        toast("Saved as draft", { variant: "success" });
+      }
       window.dispatchEvent(new Event("opensession:workspaces-changed"));
-      onDraftSaved?.(ws);
     } catch (e) {
-      setStatus({
-        kind: "failed",
-        message: e instanceof ApiError ? e.message : "Couldn't save the draft",
-      });
+      if (!operation.consumed) {
+        toast(
+          e instanceof ApiError
+            ? `Couldn't save the draft: ${e.message}`
+            : "Couldn't save the draft. It is still in the composer.",
+        );
+      }
+    } finally {
+      pendingDraftParks.delete(operation);
+      parkingDraftRef.current = false;
     }
   }
 
@@ -1070,10 +1110,6 @@ export function NewSession({ onBack, inline, focusSeq, send, addHandler, connect
 
   function handleCreate() {
     if (!canCreate) return;
-    if (createAction === "draft") {
-      void saveAsDraft();
-      return;
-    }
     const prompt = promptText.current.trim();
     // The preview only applies to the exact prompt it answered. If it is still
     // choosing (or the text changed), send the sentinel: the server starts in
@@ -1107,6 +1143,7 @@ export function NewSession({ onBack, inline, focusSeq, send, addHandler, connect
     // session_created event arrives (and drops us into the new session).
     setStatus({ kind: "creating" });
     creatingRef.current = true;
+    consumePendingDraftParks(prompt, workspaceId);
     // Workspace linkage: scoped to an existing workspace (the tab/sidebar +),
     // the session joins it — sharing its worktree when reusing the sibling branch,
     // stacking a fresh worktree off it for a new branch. Unscoped, the default
@@ -1176,20 +1213,16 @@ export function NewSession({ onBack, inline, focusSeq, send, addHandler, connect
     // reads the list as it stands. Creating a second earlier would send the
     // prompt without the screenshot it is about, silently.
     !isStaging(staging) &&
-    // A draft is just the prompt text parked on a workspace: none of the
-    // session-create gates (connection, repo, sandbox, branch) apply.
-    (createAction === "draft"
-      ? hasPromptText
-      : connected &&
-        // "No repo" is a choice, so it passes; only an unresolved picker (an
-        // instance with no repositories registered yet) blocks.
-        !!repo &&
-        // Unsupported model × environment combo: the server would reject the
-        // create with the same message (resolveRequestedSandbox). Block here
-        // so the wall is discovered before submit, not after.
-        !sandboxModelWarning &&
-        (hasPromptText || images.length > 0 || files.length > 0) &&
-        (mode === "ask" || mode === "scratch" || selectedWorktree !== ""));
+    connected &&
+    // "No repo" is a choice, so it passes; only an unresolved picker (an
+    // instance with no repositories registered yet) blocks.
+    !!repo &&
+    // Unsupported model × environment combo: the server would reject the
+    // create with the same message (resolveRequestedSandbox). Block here
+    // so the wall is discovered before submit, not after.
+    !sandboxModelWarning &&
+    (hasPromptText || images.length > 0 || files.length > 0) &&
+    (mode === "ask" || mode === "scratch" || selectedWorktree !== "");
 
   // The base a code session branches off. It sits in the footer's overflow
   // menu rather than the header: a fresh branch is what almost every session
@@ -1742,13 +1775,11 @@ export function NewSession({ onBack, inline, focusSeq, send, addHandler, connect
                 onClick={handleCreate}
                 disabled={!canCreate}
               >
-                {status.kind === "savingDraft"
-                  ? "Saving…"
-                  : status.kind === "creating"
-                    ? "Creating…"
-                    : isStaging(staging)
-                      ? "Attaching…"
-                      : CREATE_LABELS[createAction]}
+                {status.kind === "creating"
+                  ? "Creating…"
+                  : isStaging(staging)
+                    ? "Attaching…"
+                    : CREATE_LABELS[createAction]}
                 {/* The hint has to match the preference — a bare ↩ next to a
                     field that only creates on ⌘↩ is what made Enter look
                     broken in the first place. */}
@@ -1805,11 +1836,6 @@ export function NewSession({ onBack, inline, focusSeq, send, addHandler, connect
                       desc: "Stay where you are",
                     },
                     { action: "more" as const, title: "Create more", desc: "Stay here to start another" },
-                    {
-                      action: "draft" as const,
-                      title: "Save as draft",
-                      desc: "Keeps the prompt in the sidebar. Nothing runs yet.",
-                    },
                   ].map((opt) => (
                     <button
                       key={opt.action}
@@ -1868,7 +1894,11 @@ export function NewSession({ onBack, inline, focusSeq, send, addHandler, connect
       // reaches window, so this is the only close (which matters, because
       // closePalette also pops a /new deep link off history).
       onOpenChange={(next) => {
-        if (!next) onBack();
+        if (next || busy) return;
+        // Whatever is still in the prompt was worth typing, so leaving parks it
+        // as a draft instead of dropping it behind the palette.
+        void parkDraftOnExit();
+        onBack();
       }}
       // Focus is trapped, but the page is neither inerted nor scroll-locked: the
       // "@"-mention popup portals to <body>, and inerting would leave it dead.

@@ -5151,10 +5151,6 @@ export function App(
 													originPath: routePath(routeRef.current),
 												};
 											}}
-											onDraftSaved={(ws) => {
-												refreshWorkspaces();
-												navigate({ view: "workspace", id: ws.id });
-											}}
 										/>
 									)}
 								</div>
@@ -5290,11 +5286,6 @@ export function App(
 								user: getCurrentUser(),
 								originPath: routePath(routeRef.current),
 							};
-						}}
-						onDraftSaved={(ws) => {
-							closePalette();
-							refreshWorkspaces();
-							navigate({ view: "workspace", id: ws.id });
 						}}
 					/>
 				)}

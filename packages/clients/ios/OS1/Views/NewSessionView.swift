@@ -79,6 +79,11 @@ struct NewSessionView: View {
     @State private var sandboxStatus: InstanceSandboxStatus?
     @State private var showLibrary = false
     @State private var savingDraft = false
+    /// Set before the save begins and kept through dismissal, so the sheet's
+    /// disappearance cannot park the same prompt twice.
+    @State private var draftSaveStarted = false
+    /// Starting a session also dismisses this sheet, but consumes the prompt.
+    @State private var sessionStarted = false
     @State private var draftSaveError: String?
     /// Owned here, like the session composer's: the button reads it, this view
     /// keeps it alive across the layout changes a long dictation causes.
@@ -154,6 +159,9 @@ struct NewSessionView: View {
                 Text(draftSaveError ?? "")
             }
         }
+        // This belongs to the outer stack. The editor itself disappears when
+        // the recipe library is pushed, which is not an exit from the sheet.
+        .onDisappear { parkDraftAfterDismiss() }
         // The floor belongs to the stack, not to its first screen. A macOS
         // sheet sizes to its content, so applied inside, a push replaced it
         // with a view that asks for nothing and the sheet collapsed to its
@@ -219,7 +227,7 @@ struct NewSessionView: View {
         // neutral fill the sheet's own chips wear. Only the role colour differs,
         // so the bar reads as a pair — a bare glyph opposite a solid accent disc
         // left the sheet lopsided.
-        Button { dismiss() } label: {
+        Button { exitComposer() } label: {
             Image(systemName: "xmark")
                 .font(.system(size: 15, weight: .semibold))
                 .foregroundStyle(OS1VisualStyle.text)
@@ -227,10 +235,12 @@ struct NewSessionView: View {
                 .background(OS1VisualStyle.hover, in: Circle())
         }
         .buttonStyle(.plain)
+        .disabled(savingDraft)
         .padding(.leading, -4)
-        .accessibilityLabel("Cancel")
+        .accessibilityLabel(savingDraft ? "Saving draft" : "Cancel")
         #else
-        Button("Cancel") { dismiss() }
+        Button(savingDraft ? "Saving…" : "Cancel") { exitComposer() }
+            .disabled(savingDraft)
         #endif
     }
 
@@ -496,9 +506,6 @@ struct NewSessionView: View {
         HStack(spacing: 8) {
             AttachImagesButton(images: $images)
             ComposerDictationButton(dictation: dictation, draft: $prompt)
-            if !prompt.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                saveDraftButton
-            }
             Spacer(minLength: 8)
             #if os(macOS)
             if !availableEfforts.isEmpty { effortChip }
@@ -509,18 +516,6 @@ struct NewSessionView: View {
         }
         .padding(.horizontal, 12)
         .padding(.vertical, controlsVerticalPadding)
-    }
-
-    private var saveDraftButton: some View {
-        Button { saveDraft() } label: {
-            chipLabel(
-                icon: "square.and.arrow.down",
-                text: savingDraft ? "Saving" : "Save draft"
-            )
-        }
-        .buttonStyle(.plain)
-        .disabled(savingDraft)
-        .accessibilityLabel(savingDraft ? "Saving draft" : "Save as draft")
     }
 
     /// The iOS attach button carries its own 44pt tap target, so the row only
@@ -867,13 +862,32 @@ struct NewSessionView: View {
         return repos.first(where: { $0.isDefault == true })?.id ?? repos.first?.id ?? ""
     }
 
-    private func saveDraft() {
+    /// Closing with text parks it first. An empty composer still closes
+    /// immediately, and a failed explicit close stays open with the error.
+    private func exitComposer() {
         let text = prompt.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !text.isEmpty, !savingDraft else { return }
-        dictation.stop()
+        guard !text.isEmpty else {
+            dictation.stop()
+            dismiss()
+            return
+        }
+        parkDraft(text, dismissWhenSaved: true)
+    }
+
+    /// Covers an interactive sheet dismissal. The outer NavigationStack owns
+    /// this callback, so opening the recipe library does not count as leaving.
+    private func parkDraftAfterDismiss() {
+        let text = prompt.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !text.isEmpty else { return }
+        parkDraft(text, dismissWhenSaved: false)
+    }
+
+    private func parkDraft(_ text: String, dismissWhenSaved: Bool) {
+        guard !draftSaveStarted, !sessionStarted else { return }
+        draftSaveStarted = true
         savingDraft = true
+        dictation.stop()
         Task {
-            defer { savingDraft = false }
             do {
                 let workspace = try await OS1API.saveWorkspaceDraft(
                     text: text,
@@ -882,9 +896,12 @@ struct NewSessionView: View {
                     autoName: initialDraft?.autoName
                 )
                 onDraftSaved(workspace)
-                dismiss()
+                savingDraft = false
+                if dismissWhenSaved { dismiss() }
             } catch {
-                draftSaveError = error.localizedDescription
+                savingDraft = false
+                draftSaveStarted = false
+                if dismissWhenSaved { draftSaveError = error.localizedDescription }
             }
         }
     }
@@ -916,6 +933,7 @@ struct NewSessionView: View {
             startedBy: ServerConfig.shared.userName,
             workspaceId: initialWorkspaceId
         )
+        sessionStarted = true
         dismiss()
         onCreated(
             pending,

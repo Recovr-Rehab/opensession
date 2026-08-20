@@ -1360,8 +1360,8 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 				),
 			);
 		}
-		// A draft workspace (an unsent "Save as draft" prompt, no session yet) is
-		// the one sessionless exception below: it earns a row of its own, since
+		// A draft workspace (an unsent prompt, no session yet) is the one
+		// sessionless exception below: it earns a row of its own, since
 		// it IS a place to start work. The composer is sitting there prefilled,
 		// waiting to be sent. mkRow's activity/creation dates default to a
 		// session that doesn't exist here, so they're patched from the

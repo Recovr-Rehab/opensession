@@ -146,8 +146,8 @@ export function NewSessionPrompt({
 }: Props) {
 	const [text, setText] = useState(initialText);
 	// Written during render, the way the projection hook holds its own: every
-	// handler the palette runs after a commit (Create, Save as draft) reads the
-	// draft from here, so it has to be the committed value and not one frame old.
+	// handler the palette runs after a commit (Create or dismiss) reads the draft
+	// from here, so it has to be the committed value and not one frame old.
 	valueRef.current = text;
 	// The palette re-renders far less often than this field does now, so its
 	// callbacks are held rather than depended on: a repo switch mid-sentence
