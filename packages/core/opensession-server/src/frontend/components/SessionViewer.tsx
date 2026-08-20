@@ -6844,17 +6844,17 @@ export function SessionViewer({
 						createPortal(
 							<>
 								<motion.div
-									className="pointer-events-none fixed inset-0 z-[250] flex items-center justify-center bg-[color-mix(in_srgb,var(--bg-panel)_68%,transparent)] text-dim"
+									className="pointer-events-none fixed inset-0 z-[250] flex flex-col items-center justify-center bg-[color-mix(in_srgb,var(--bg-panel)_68%,transparent)] px-6 text-center"
 									initial={{ opacity: 0 }}
 									animate={{ opacity: 1 }}
 									transition={{ type: "tween", duration: duration.base, ease }}
 									aria-hidden="true"
 									data-file-drop-overlay
 								>
-									<div className="flex items-center -space-x-1.5">
-										<IconFile size={26} className="-rotate-6 opacity-50" />
-										<IconArrowUpToLine size={32} className="relative z-[1] text-fg" />
-										<IconFile size={26} className="rotate-6 opacity-50" />
+									<IconArrowUpToLine size={40} className="text-fg" />
+									<div className="mt-4 text-title font-semibold text-fg">Add files</div>
+									<div className="mt-1 text-label text-dim">
+										Drop here to attach them to your message.
 									</div>
 								</motion.div>
 								<span className="sr-only" role="status">
