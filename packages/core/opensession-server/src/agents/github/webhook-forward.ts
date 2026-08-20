@@ -24,7 +24,7 @@
  */
 
 import { configuredIntegration, configuredRepos, configuredServer } from "../../server/config";
-import { soleGithubAccount } from "../../server/github-auth";
+import { githubUserAuthActive, soleGithubAccount } from "../../server/github-auth";
 import { WEBHOOK_FORWARD_EVENTS } from "./constants";
 
 // ── Gating ───────────────────────────────────────────────────
@@ -138,8 +138,10 @@ export type GithubForwardEnv = Record<string, string | undefined>;
 export function githubForwardProcessEnv(
   base: GithubForwardEnv = process.env,
   credential: GithubForwardEnv | null = soleGithubAccount()?.env ?? null,
-): GithubForwardEnv {
-  return credential ? { ...base, ...credential } : { ...base };
+  operatorMode: boolean = githubUserAuthActive(),
+): GithubForwardEnv | null {
+  if (credential) return { ...base, ...credential };
+  return operatorMode ? { ...base } : null;
 }
 
 export type GhRunner = (
@@ -147,7 +149,7 @@ export type GhRunner = (
   env?: GithubForwardEnv,
 ) => Promise<{ code: number; stdout: string }>;
 
-const defaultRun: GhRunner = async (args, env = githubForwardProcessEnv()) => {
+const defaultRun: GhRunner = async (args, env = process.env) => {
   const proc = Bun.spawn(args, {
     env,
     stdout: "pipe",
@@ -163,7 +165,7 @@ const defaultRun: GhRunner = async (args, env = githubForwardProcessEnv()) => {
  *  `cli/gh-webhook` extension is installed. Runner injectable for tests. */
 export async function detectGhWebhook(
   run: GhRunner = defaultRun,
-  env: GithubForwardEnv = githubForwardProcessEnv(),
+  env: GithubForwardEnv = process.env,
 ): Promise<{ gh: boolean; extension: boolean }> {
   const version = await run(["gh", "--version"], env).catch(() => ({ code: 1, stdout: "" }));
   if (version.code !== 0) return { gh: false, extension: false };
@@ -180,7 +182,7 @@ export async function detectGhWebhook(
  */
 export async function ensureGhWebhook(
   run: GhRunner = defaultRun,
-  env: GithubForwardEnv = githubForwardProcessEnv(),
+  env: GithubForwardEnv = process.env,
 ): Promise<boolean> {
   const { gh, extension } = await detectGhWebhook(run, env);
   if (!gh) {
@@ -237,11 +239,16 @@ const state: ForwardState = (g.__ghWebhookForward ??= {
 
 function spawnForwarder(label: string, args: string[]): void {
   if (state.stopped) return;
+  const env = githubForwardProcessEnv();
+  if (!env) {
+    state.started = false;
+    return;
+  }
   const startedAt = Date.now();
   let proc: ReturnType<typeof Bun.spawn>;
   try {
     proc = Bun.spawn(args, {
-      env: githubForwardProcessEnv(),
+      env,
       stdout: "inherit",
       stderr: "inherit",
       stdin: "ignore",
@@ -282,8 +289,8 @@ export async function startGithubWebhookForward(): Promise<void> {
   if (!githubWebhookForwardEnabled()) return;
   if (state.started && state.running.length > 0) return; // already running
 
-  const available = await ensureGhWebhook();
-  if (!available) return; // reconcile sweep is the backstop
+  const env = githubForwardProcessEnv();
+  if (!env) return;
 
   const secret = process.env.GITHUB_WEBHOOK_SECRET || "";
   if (!secret) {
@@ -295,6 +302,9 @@ export async function startGithubWebhookForward(): Promise<void> {
     );
     return;
   }
+
+  const available = await ensureGhWebhook(defaultRun, env);
+  if (!available) return; // reconcile sweep is the backstop
 
   const { org, repos } = forwardTargets();
   const url = forwardUrl();
@@ -322,6 +332,15 @@ export async function startGithubWebhookForward(): Promise<void> {
   console.log(
     `[github-forward] forwarding GitHub webhooks over an outbound gh connection → ${url} (${commands.map((c) => c.label).join(", ")})`,
   );
+}
+
+/**
+ * Re-resolve authentication after a simple-mode account connection changes.
+ * Stopping first guarantees a disconnected account cannot keep receiving.
+ */
+export async function syncGithubWebhookForwardCredential(): Promise<void> {
+  stopGithubWebhookForward();
+  await startGithubWebhookForward();
 }
 
 /** Kill every forwarder and stop restarting. Safe when nothing is running. */

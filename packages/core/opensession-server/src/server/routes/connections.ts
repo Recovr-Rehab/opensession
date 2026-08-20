@@ -150,6 +150,19 @@ export async function bootstrapUserAuthOnConnect(
 	};
 }
 
+async function syncSimpleGithubWebhookForwarder(): Promise<void> {
+	try {
+		const { syncGithubWebhookForwardCredential } = await import(
+			"../../agents/github/webhook-forward"
+		);
+		await syncGithubWebhookForwardCredential();
+	} catch (error) {
+		// The account mutation succeeded. The old process was stopped before a
+		// replacement was attempted, so log startup failures without lying to the UI.
+		console.warn("[github-forward] could not synchronize the connected account:", error);
+	}
+}
+
 export async function handleConnectionsRoutes(
 	ctx: RouteContext,
 ): Promise<Response | undefined> {
@@ -648,6 +661,7 @@ export async function handleConnectionsRoutes(
 			"../github-auth"
 		);
 		const { webAuthRequired } = await import("../web-auth");
+		const simpleMode = !webAuthRequired();
 		if (!githubConnectAvailable())
 			return Response.json({ error: "GitHub connect is not configured" }, { status: 400 });
 		if (webAuthRequired() && !ctx.authUser?.login)
@@ -675,11 +689,14 @@ export async function handleConnectionsRoutes(
 			const { githubAuthOnConnect } = await import("../github-auth");
 			if (githubAuthOnConnect()) {
 				const boot = await bootstrapUserAuthOnConnect(result.login, result.name);
-				if ("error" in boot)
+				if ("error" in boot) {
+					await syncSimpleGithubWebhookForwarder();
 					return Response.json({ status: "error", error: boot.error });
+				}
 				// Native clients can't hold the HttpOnly cookie — they ask for the
 				// token in the body (native:true) and send it back as Bearer.
 				const native = body?.native === true;
+				await syncSimpleGithubWebhookForwarder();
 				return Response.json(
 					{
 						...result,
@@ -693,6 +710,8 @@ export async function handleConnectionsRoutes(
 				);
 			}
 		}
+		if (result.status === "ok" && simpleMode)
+			await syncSimpleGithubWebhookForwarder();
 		return Response.json(result);
 	}
 
@@ -703,7 +722,8 @@ export async function handleConnectionsRoutes(
 		const login = decodeURIComponent(ghAccountMatch[1]);
 		const { removeGithubAccount, soleGithubLogin } = await import("../github-auth");
 		const { webAuthRequired } = await import("../web-auth");
-		if (webAuthRequired()) {
+		const simpleMode = !webAuthRequired();
+		if (!simpleMode) {
 			// Operator mode: you manage only your own signed-in account.
 			if (!ctx.authUser?.login || ctx.authUser.login.toLowerCase() !== login.toLowerCase()) {
 				return Response.json(
@@ -724,6 +744,7 @@ export async function handleConnectionsRoutes(
 		const removed = removeGithubAccount(login);
 		if (!removed)
 			return Response.json({ error: "Not connected" }, { status: 404 });
+		if (simpleMode) await syncSimpleGithubWebhookForwarder();
 		return Response.json({ ok: true });
 	}
 

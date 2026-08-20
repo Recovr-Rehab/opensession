@@ -132,7 +132,11 @@ describe("githubForwardProcessEnv", () => {
 
   test("operator mode keeps ambient authentication", () => {
     const ambient = { PATH: "/bin", GH_TOKEN: "operator" };
-    expect(githubForwardProcessEnv(ambient, null)).toEqual(ambient);
+    expect(githubForwardProcessEnv(ambient, null, true)).toEqual(ambient);
+  });
+
+  test("disconnected simple mode has no forwarder credential", () => {
+    expect(githubForwardProcessEnv({ GH_TOKEN: "ambient" }, null, false)).toBeNull();
   });
 });
 
