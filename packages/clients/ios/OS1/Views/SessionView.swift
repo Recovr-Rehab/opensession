@@ -3332,7 +3332,10 @@ private struct SessionInputBar: View {
                     }
                 }
             }
-            .padding(isSingleRow ? 4 : 0)
+            // Keep the focused layout at its established 52pt height. At rest,
+            // remove only the outer inset so the pill becomes 44pt tall while
+            // every control keeps its full touch area.
+            .padding(isSingleRow && inputFocused ? 4 : 0)
 
             if !isSingleRow {
                 HStack(spacing: 6) {
@@ -3415,6 +3418,7 @@ private struct SessionInputBar: View {
         // typist never sees the box lagging the caret.
             .animation(.snappy(duration: 0.18), value: viewModel.draft)
             .animation(.snappy(duration: 0.18), value: isSingleRow)
+            .animation(.snappy(duration: 0.18), value: inputFocused)
             .animation(.snappy(duration: 0.18), value: noteMode)
         #endif
     }
