@@ -15,7 +15,7 @@ private let sidebarMargin: CGFloat = 16
 
 /// Sessions list, organized the way the web sidebar is.
 ///
-/// Settled keeps work in stable Active and Settled sections. Activity restores
+/// Inbox keeps work in stable Active and Snoozed sections. Activity restores
 /// the date bands, and Status is the dynamic lane view (`SidebarGroupBy`). A
 /// separate project switch repeats any of those sections per project. The list
 /// is then narrowed to a project and a person and searched. Every choice persists,
@@ -164,7 +164,7 @@ struct SessionsListView: View {
     @AppStorage("os1.list.hideEmptyProjects") private var hideEmptyProjects = false
     @AppStorage("os1.sidebar.repoOrder") private var preferredRepoOrder = "[]"
     /// Section headings the person has folded shut: repo bands, status lanes,
-    /// Active and Settled. They are keyed like the web sidebar's collapse state and stored
+    /// Active and Snoozed. They are keyed like the web sidebar's collapse state and stored
     /// as a JSON array so the choice survives relaunches.
     @AppStorage("os1.list.collapsed") private var collapsedGroupsRaw = "[]"
     /// Source rows the person has hidden — the account's, shared with the web
@@ -1660,89 +1660,70 @@ struct SessionsListView: View {
         var id: String { repo }
     }
 
-    /// Active and Settled are derived from the canonical workspace rows before
-    /// the current grouping decides how to draw them. The maps also keep every
-    /// row action on the same answer as its section.
-    private struct LifecycleOutcome {
-        var facts: [String: WorkspaceLifecycleFacts] = [:]
-        var states: [String: WorkspaceLifecycleState] = [:]
+    /// Snoozed rows leave the active sections in every grouping. Inbox keeps
+    /// both lists nearby, while Activity and Status append the same Snoozed shelf.
+    private struct InboxOutcome {
         var active: [SidebarWorkspace] = []
-        var settled: [SidebarWorkspace] = []
+        var snoozed: [SidebarWorkspace] = []
     }
 
-    private var lifecycleOutcome: LifecycleOutcome {
-        let store = WorkspaceSettlementStore.shared
-        let now = Date()
-        var outcome = LifecycleOutcome()
+    private var inboxOutcome: InboxOutcome {
+        let store = WorkspaceSnoozeStore.shared
+        var outcome = InboxOutcome()
         for workspace in filteredWorkspaces {
-            let facts = WorkspaceLifecycle.facts(for: workspace)
-            let state = WorkspaceLifecycle.state(
-                facts: facts,
-                record: store.record(for: workspace),
-                now: now,
-                autoSettleDays: store.autoSettleDays,
-                autoSettlePullRequests: store.autoSettlePullRequests,
-                pinned: PinStore.shared.isPinned(workspace),
-                snoozed: store.isSnoozed(workspace, now: now)
-            )
-            outcome.facts[facts.key] = facts
-            outcome.states[facts.key] = state
-            if state.settled {
-                outcome.settled.append(workspace)
-            } else {
-                outcome.active.append(workspace)
-            }
+            if store.isSnoozed(workspace) { outcome.snoozed.append(workspace) }
+            else { outcome.active.append(workspace) }
         }
-        outcome.active = WorkspaceLifecycle.sortActive(outcome.active, facts: outcome.facts)
-        outcome.settled = WorkspaceLifecycle.sortSettled(
-            outcome.settled,
-            facts: outcome.facts,
-            states: outcome.states
+        outcome.active = WorkspaceSnooze.sortActive(outcome.active)
+        outcome.snoozed = WorkspaceSnooze.sortSnoozed(
+            outcome.snoozed,
+            values: store.snoozes
         )
         return outcome
-    }
-
-    private func lifecycleState(_ workspace: SidebarWorkspace) -> WorkspaceLifecycleState {
-        lifecycleOutcome.states[SidebarRowKeys.rowKey(for: workspace)] ?? .active
     }
 
     private func sessionGroups(
         for workspaces: [SidebarWorkspace],
         namespace: String = ""
     ) -> [SessionGroup] {
+        let ids = Set(workspaces.map(\.id))
+        let inbox = inboxOutcome
+        let active = inbox.active.filter { ids.contains($0.id) }
+        let snoozed = inbox.snoozed.filter { ids.contains($0.id) }
+        let snoozedGroup = SessionGroup(
+            id: "\(namespace)snoozed",
+            title: "Snoozed",
+            workspaces: snoozed,
+            repo: nil
+        )
         switch groupBy {
-        case .settled:
-            let ids = Set(workspaces.map(\.id))
-            let lifecycle = lifecycleOutcome
+        case .inbox:
             return [
                 SessionGroup(
-                    id: "\(namespace)lifecycle-active",
+                    id: "\(namespace)inbox-active",
                     title: "Active",
-                    workspaces: lifecycle.active.filter { ids.contains($0.id) },
+                    workspaces: active,
                     repo: nil
                 ),
-                SessionGroup(
-                    id: "\(namespace)lifecycle-settled",
-                    title: "Settled",
-                    workspaces: lifecycle.settled.filter { ids.contains($0.id) },
-                    repo: nil
-                ),
+                snoozedGroup,
             ].filter { !$0.workspaces.isEmpty }
         case .activity:
-            return SessionsListViewModel.inboxBands(
-                workspaces,
+            var groups = SessionsListViewModel.inboxBands(
+                active,
                 mentionedSessionIds: MentionStore.shared.sessionIds
             ).map { band in
                 SessionGroup(
-                    id: "\(namespace)inbox-\(band.band.rawValue)",
+                    id: "\(namespace)activity-\(band.band.rawValue)",
                     title: band.band.label,
                     workspaces: band.workspaces,
                     repo: nil
                 )
             }
+            if !snoozed.isEmpty { groups.append(snoozedGroup) }
+            return groups
         case .status:
-            return Session.Lane.allCases.compactMap { lane in
-                let inLane = workspaces.filter { $0.lane == lane }
+            var groups = Session.Lane.allCases.compactMap { lane in
+                let inLane = active.filter { $0.lane == lane }
                 return inLane.isEmpty
                     ? nil
                     : SessionGroup(
@@ -1752,6 +1733,8 @@ struct SessionsListView: View {
                         repo: nil
                     )
             }
+            if !snoozed.isEmpty { groups.append(snoozedGroup) }
+            return groups
         }
     }
 
@@ -1857,7 +1840,7 @@ struct SessionsListView: View {
         }
         let repo = repoFilter == "all" ? "All projects" : RepoTile.label(for: repoFilter)
         let order = switch groupBy {
-        case .settled: "stable creation order"
+        case .inbox: "stable creation order"
         case .activity: "ordered by activity"
         case .status: "sorted by \(sortBy.label)"
         }
@@ -2004,14 +1987,13 @@ struct SessionsListView: View {
     private func sessionRow(_ workspace: SidebarWorkspace) -> some View {
         let session = workspace.mainSession
         let canArchive = !workspace.isOptimistic && !workspace.isDraftWorkspace
-        let settled = lifecycleState(workspace).settled
-        let archivePrimary = groupBy == .activity
+        let snoozeValue = WorkspaceSnoozeStore.shared.value(for: workspace)
+        let pinned = PinStore.shared.isPinned(workspace)
         let repo = inboxRowRepo(workspace)
         #if os(macOS)
         // Selection drives the detail column; select by id so rows replaced
         // by polling (fresh struct values every refresh) keep the selection.
-        // Settlement is the reversible inline action on Mac. Archive remains
-        // in the context menu and on the Delete key as the stronger removal.
+        // The hover cluster matches web exactly: Pin, Snooze, Archive.
         SessionRow(
             session: workspace.statusSession,
             title: workspace.title,
@@ -2020,28 +2002,19 @@ struct SessionsListView: View {
             autoCreated: AutoCreatedOrigin.wasAutoCreated(workspace),
             searchSnippet: workspaceSearchSnippet(workspace),
             isWorkspaceDraft: workspace.isDraftWorkspace,
-            settled: settled,
-            archivePrimary: archivePrimary,
-            onPrimaryAction: canArchive ? {
-                if archivePrimary { archive(workspace) }
-                else { toggleSettled(workspace) }
-            } : nil
+            snoozeValue: snoozeValue,
+            pinned: pinned,
+            onTogglePin: canArchive ? { PinStore.shared.toggle(workspace) } : nil,
+            onToggleSnooze: canArchive ? { toggleSnooze(workspace) } : nil,
+            onArchive: canArchive ? { archive(workspace) } : nil
         )
         .tag(workspace.isDraftWorkspace ? workspace.id : session.id)
-        .swipeActions(edge: .trailing) {
-            if workspace.isDraftWorkspace {
-                deleteDraftButton(workspace, viaSwipe: true)
-            } else if archivePrimary {
-                archiveButton(workspace, viaSwipe: true)
-            } else {
-                settlementButton(workspace, viaSwipe: true)
-            }
-        }
         .contextMenu {
             if workspace.isDraftWorkspace {
                 deleteDraftButton(workspace)
             } else {
-                settlementButton(workspace)
+                pinButton(workspace)
+                snoozeButton(workspace)
                 archiveButton(workspace)
             }
         }
@@ -2061,7 +2034,8 @@ struct SessionsListView: View {
                 autoCreated: AutoCreatedOrigin.wasAutoCreated(workspace),
                 searchSnippet: workspaceSearchSnippet(workspace),
                 highlighted: isLastOpened(workspace),
-                isWorkspaceDraft: workspace.isDraftWorkspace
+                isWorkspaceDraft: workspace.isDraftWorkspace,
+                snoozeValue: snoozeValue
             )
         }
         .buttonStyle(.plain)
@@ -2073,14 +2047,12 @@ struct SessionsListView: View {
         .swipeActions(edge: .trailing) {
             if workspace.isDraftWorkspace {
                 deleteDraftButton(workspace, viaSwipe: true)
-            } else if archivePrimary {
-                archiveButton(workspace, viaSwipe: true)
             } else {
-                settlementButton(workspace, viaSwipe: true)
+                archiveButton(workspace, viaSwipe: true)
+                snoozeButton(workspace, viaSwipe: true)
             }
         }
-        // Swipe right to pin. Activity restores the old Archive swipe; the
-        // Settled and Status modes use the reversible Settle or Unsettle action.
+        // Swipe right pins. Swipe left keeps Snooze and Archive together.
         // The tint rides on the swipe, not on the button: it paints the swipe
         // action's own background here, but in the context menu the same tint
         // would land on the glyph and make Pin the one coloured item in a
@@ -2220,12 +2192,10 @@ struct SessionsListView: View {
 
     @ViewBuilder
     private func workspaceMenu(_ workspace: SidebarWorkspace) -> some View {
-        settlementButton(workspace)
-        readButton(workspace)
-
-        // Same action as the leading swipe, for anyone who reaches for the
-        // long press instead.
+        // The same three filing actions as the row: Pin, Snooze, Archive.
         pinButton(workspace)
+        snoozeButton(workspace)
+        readButton(workspace)
 
         Button {
             renameText = workspace.title
@@ -2460,30 +2430,41 @@ struct SessionsListView: View {
     }
     #endif
 
-    /// The reversible trailing swipe and primary context-menu action. A neutral
-    /// system swipe separates filing from the red Archive action one level in.
+    #if os(macOS)
     @ViewBuilder
-    private func settlementButton(
+    private func pinButton(_ workspace: SidebarWorkspace) -> some View {
+        if !workspace.isOptimistic && !workspace.isDraftWorkspace {
+            let pinned = PinStore.shared.isPinned(workspace)
+            Button {
+                withAnimation(.snappy(duration: 0.28)) {
+                    PinStore.shared.toggle(workspace)
+                }
+            } label: {
+                Label(pinned ? "Unpin" : "Pin", systemImage: pinned ? "pin.slash" : "pin")
+            }
+        }
+    }
+    #endif
+
+    /// Reversible filing shared with the web. Snooze means Some day when the
+    /// row has no explicit wake date; a snoozed row gets Unsnooze.
+    @ViewBuilder
+    private func snoozeButton(
         _ workspace: SidebarWorkspace,
         viaSwipe: Bool = false
     ) -> some View {
-        if groupBy != .activity,
-           !workspace.isOptimistic && !workspace.isDraftWorkspace {
-            let settled = lifecycleState(workspace).settled
-            let symbol = settled ? "arrow.up.circle" : "checkmark.circle"
+        if !workspace.isOptimistic && !workspace.isDraftWorkspace {
+            let snoozed = WorkspaceSnoozeStore.shared.isSnoozed(workspace)
             let button = Button {
-                toggleSettled(workspace)
+                toggleSnooze(workspace)
             } label: {
                 Label(
-                    settled ? "Unsettle" : "Settle",
-                    systemImage: viaSwipe ? "\(symbol).fill" : symbol
+                    snoozed ? "Unsnooze" : "Snooze",
+                    systemImage: viaSwipe ? "moon.fill" : "moon"
                 )
             }
-            if viaSwipe {
-                button.tint(.gray)
-            } else {
-                button
-            }
+            if viaSwipe { button.tint(.gray) }
+            else { button }
         }
     }
 
@@ -2508,15 +2489,9 @@ struct SessionsListView: View {
         }
     }
 
-    private func toggleSettled(_ workspace: SidebarWorkspace) {
-        let facts = WorkspaceLifecycle.facts(for: workspace)
-        let settled = lifecycleState(workspace).settled
+    private func toggleSnooze(_ workspace: SidebarWorkspace) {
         withAnimation(.snappy(duration: 0.28)) {
-            WorkspaceSettlementStore.shared.set(
-                workspace,
-                settled: !settled,
-                terminalSignature: facts.terminalPullRequestSignature
-            )
+            WorkspaceSnoozeStore.shared.toggleSomeDay(workspace)
         }
         Haptics.play(.selection)
     }
@@ -2540,12 +2515,10 @@ struct SessionsListView: View {
         workspace.sessions.forEach {
             sessionPageCache.remove(sessionId: $0.id)
         }
-        #if os(iOS)
         // The server unpins archived work for everyone (`unpinEverywhere`);
         // dropping it locally too keeps the Pinned band from holding a row
         // that just left the list.
         PinStore.shared.unpin(workspace)
-        #endif
         #if os(macOS)
         if workspace.sessions.contains(where: { $0.id == selectedSessionID }) {
             selectedSessionID = nil
@@ -2582,6 +2555,7 @@ struct SessionsListView: View {
         let store = PinStore.shared
         guard !store.pins.isEmpty else { return [] }
         return filteredWorkspaces
+            .filter { !WorkspaceSnoozeStore.shared.isSnoozed($0) }
             .compactMap { workspace in store.rank(workspace).map { (workspace, $0) } }
             .sorted { $0.1 < $1.1 }
             .map(\.0)
@@ -3728,14 +3702,17 @@ struct SessionRow: View {
     /// A parked workspace prompt has no session yet. It reuses the row's
     /// layout, but its pencil is the state mark rather than a session status.
     var isWorkspaceDraft = false
+    /// Active snooze value: an ISO wake time or Some day.
+    var snoozeValue: String? = nil
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     /// Settings → Appearance → Show last used time. Off by default, like the
     /// web's resting sidebar, and per device like the web's own copy of it.
     @AppStorage("os1.list.lastUsed") private var lastUsedPref = "off"
-    /// Mac: the hover-revealed primary filing action.
-    var settled = false
-    var archivePrimary = false
-    var onPrimaryAction: (() -> Void)? = nil
+    /// Mac: the hover-revealed Pin, Snooze, Archive cluster.
+    var pinned = false
+    var onTogglePin: (() -> Void)? = nil
+    var onToggleSnooze: (() -> Void)? = nil
+    var onArchive: (() -> Void)? = nil
 
     #if os(macOS)
     @State private var hovering = false
@@ -3745,18 +3722,29 @@ struct SessionRow: View {
         #if os(macOS)
         content
             .overlay(alignment: .trailing) {
-                if hovering, let onPrimaryAction {
-                    Button(action: onPrimaryAction) {
-                        Image(systemName: archivePrimary
-                            ? "archivebox"
-                            : (settled ? "arrow.up.circle" : "checkmark.circle"))
-                            .font(.body)
-                            .foregroundStyle(.secondary)
+                if hovering,
+                   onTogglePin != nil || onToggleSnooze != nil || onArchive != nil {
+                    HStack(spacing: 2) {
+                        if let onTogglePin {
+                            filingButton(
+                                pinned ? "pin.slash" : "pin",
+                                help: pinned ? "Unpin" : "Pin",
+                                action: onTogglePin
+                            )
+                        }
+                        if let onToggleSnooze {
+                            filingButton(
+                                snoozeValue != nil ? "moon.fill" : "moon",
+                                help: snoozeValue != nil ? "Unsnooze" : "Snooze until Some day",
+                                action: onToggleSnooze
+                            )
+                        }
+                        if let onArchive {
+                            filingButton("archivebox", help: "Archive", action: onArchive)
+                        }
                     }
-                    .buttonStyle(.borderless)
-                    .help(archivePrimary ? "Archive" : (settled ? "Unsettle" : "Settle"))
-                    // Keep the action legible over a long title.
-                    .padding(4)
+                    // Keep the actions legible over a long title.
+                    .padding(2)
                     .background(.thinMaterial, in: RoundedRectangle(cornerRadius: 5))
                 }
             }
@@ -3768,6 +3756,23 @@ struct SessionRow: View {
         content
         #endif
     }
+
+    #if os(macOS)
+    private func filingButton(
+        _ systemName: String,
+        help: String,
+        action: @escaping () -> Void
+    ) -> some View {
+        Button(action: action) {
+            Image(systemName: systemName)
+                .font(.body)
+                .foregroundStyle(.secondary)
+                .frame(width: 24, height: 24)
+        }
+        .buttonStyle(.borderless)
+        .help(help)
+    }
+    #endif
 
     /// Mac sidebar rows are compact and body-sized like Finder/System
     /// Settings; iOS keeps the roomier touch metrics.
@@ -3859,7 +3864,16 @@ struct SessionRow: View {
                     viewers: rowViewers, size: faceSize, separation: .seam
                 )
             }
-            if showsClock {
+            if let snoozeValue {
+                HStack(spacing: 3) {
+                    Image(systemName: "moon.fill")
+                    Text(WorkspaceSnooze.label(snoozeValue))
+                }
+                .font(.caption.weight(.medium))
+                .foregroundStyle(OS1VisualStyle.textFaint)
+                .fixedSize(horizontal: true, vertical: false)
+                .accessibilityLabel("Snoozed: \(WorkspaceSnooze.label(snoozeValue))")
+            } else if showsClock {
                 WorkspaceRunElapsedLabel(since: session.runStartedDate)
                     // No trailing pad: the repo header's "+" now hangs its tap
                     // target past the row margin so its INK sits on 16pt, and

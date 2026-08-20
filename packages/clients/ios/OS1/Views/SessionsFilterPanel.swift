@@ -105,7 +105,7 @@ struct SessionsFilterPanel: View {
             }
 
             Section {
-                // Active and Project keep stable creation order. Status is the
+                // Inbox keeps stable creation order. Status is the
                 // one layout where choosing the order inside lanes still helps.
                 if groupBy == SidebarGroupBy.status.rawValue {
                     Picker("Sort by", selection: $sort) {

@@ -47,7 +47,7 @@ export const SWIPE_FULL_RATIO = 0.45;
 export const SWIPE_COMMIT_MS = 210;
 export const SWIPE_AXIS_LOCK_PX = 8;
 
-export type SwipeAction = "archive" | "settle" | "star";
+export type SwipeAction = "archive" | "snooze" | "star";
 export type SwipeState = { key: string; offset: number; action?: SwipeAction };
 
 export function clampSwipe(dx: number, rowWidth: number): number {
@@ -64,6 +64,6 @@ export function fullSwipeThreshold(rowWidth: number): number {
 }
 
 export function swipeCommitOffset(action: SwipeAction, rowWidth: number): number {
-	return action === "archive" || action === "settle" ? -rowWidth : rowWidth;
+	return action === "archive" || action === "snooze" ? -rowWidth : rowWidth;
 }
 

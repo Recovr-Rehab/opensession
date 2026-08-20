@@ -300,7 +300,6 @@ struct PreferencesSettingsView: View {
             } footer: {
                 Text("Talk to your Desk with a live voice call. Uses the server's OpenAI key.")
             }
-            WorkspaceSettlementSettingsSection()
             PersonalPromptSection()
         }
         .navigationTitle("Preferences")

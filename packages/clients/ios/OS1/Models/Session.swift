@@ -375,32 +375,12 @@ struct AttachedRepo: Decodable, Equatable, Hashable, Identifiable {
     var id: String { repo }
 }
 
-/// One PR associated with a session. Repo and branch drive live refresh
-/// matching; the optional lifecycle fields let Active/Settled consider every
-/// attached PR rather than only the primary one stamped on the session.
+/// The identity fields of one PR associated with a session. The server sends
+/// richer state too; tolerant decoding keeps only what live refresh matching
+/// needs and ignores the rest.
 struct SessionPrRef: Decodable, Equatable, Hashable {
     let repo: String
     let branch: String
-    let number: Int?
-    let url: String?
-    let state: String?
-    let updatedAt: String?
-
-    init(
-        repo: String,
-        branch: String,
-        number: Int? = nil,
-        url: String? = nil,
-        state: String? = nil,
-        updatedAt: String? = nil
-    ) {
-        self.repo = repo
-        self.branch = branch
-        self.number = number
-        self.url = url
-        self.state = state
-        self.updatedAt = updatedAt
-    }
 }
 
 extension Session {

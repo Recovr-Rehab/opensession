@@ -54,8 +54,8 @@ final class SessionsListLensTests: XCTestCase {
     // MARK: - Default grouping
 
     func testGroupingAxesHaveIndependentDefaults() {
-        XCTAssertEqual(SidebarGroupBy.fallback(repoCount: 1), .settled)
-        XCTAssertEqual(SidebarGroupBy.fallback(repoCount: 4), .settled)
+        XCTAssertEqual(SidebarGroupBy.fallback(repoCount: 1), .inbox)
+        XCTAssertEqual(SidebarGroupBy.fallback(repoCount: 4), .inbox)
         XCTAssertFalse(SidebarGroupBy.defaultGroupsByProject(repoCount: 1))
         XCTAssertTrue(SidebarGroupBy.defaultGroupsByProject(repoCount: 4))
         XCTAssertTrue(
@@ -64,10 +64,11 @@ final class SessionsListLensTests: XCTestCase {
     }
 
     func testEveryGroupingThisAppEverStoredKeepsBothAxes() {
-        XCTAssertEqual(SidebarGroupBy.stored("none"), .settled)
-        XCTAssertEqual(SidebarGroupBy.stored("inbox"), .activity)
+        XCTAssertEqual(SidebarGroupBy.stored("none"), .inbox)
+        XCTAssertEqual(SidebarGroupBy.stored("settled"), .inbox)
+        XCTAssertEqual(SidebarGroupBy.stored("inbox"), .inbox)
         XCTAssertEqual(SidebarGroupBy.stored("recent"), .activity)
-        XCTAssertEqual(SidebarGroupBy.stored("repo"), .settled)
+        XCTAssertEqual(SidebarGroupBy.stored("repo"), .inbox)
         XCTAssertEqual(SidebarGroupBy.stored("repo-inbox"), .activity)
         XCTAssertEqual(SidebarGroupBy.stored("repo-status"), .status)
         XCTAssertEqual(SidebarGroupBy.stored("status"), .status)

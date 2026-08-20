@@ -207,45 +207,27 @@ enum SettingsAPI {
         return response.pins ?? pins
     }
 
-    /// Per-user Active/Settled choices, shared with the web sidebar. PUT
-    /// replaces the whole row-keyed map.
-    static func settlements(user: String) async throws -> [String: WorkspaceSettlementRecord] {
-        struct Response: Decodable, Sendable {
-            var settlements: [String: WorkspaceSettlementRecord]?
-        }
-        let response: Response = try await request(
-            "/api/settlements",
-            query: ["user": user]
-        )
-        return response.settlements ?? [:]
-    }
-
-    @discardableResult
-    static func saveSettlements(
-        user: String,
-        settlements: [String: WorkspaceSettlementRecord]
-    ) async throws -> [String: WorkspaceSettlementRecord] {
-        struct Response: Decodable, Sendable {
-            var settlements: [String: WorkspaceSettlementRecord]?
-        }
-        let encoder = JSONEncoder()
-        let data = try encoder.encode(settlements)
-        let object = try JSONSerialization.jsonObject(with: data)
-        let body: [String: Any] = ["user": user, "settlements": object]
-        let response: Response = try await request(
-            "/api/settlements",
-            method: "PUT",
-            body: body
-        )
-        return response.settlements ?? settlements
-    }
-
-    /// Snoozes are read-only here. The native app does not offer snoozing yet,
-    /// but Active/Settled must not automatically file work snoozed on the web.
+    /// Per-user workspace snoozes, shared with the web sidebar. Values are an
+    /// ISO wake time or `someday`; PUT replaces the whole row-keyed map.
     static func snoozes(user: String) async throws -> [String: String] {
         struct Response: Decodable, Sendable { var snoozes: [String: String]? }
         let response: Response = try await request("/api/snoozes", query: ["user": user])
         return response.snoozes ?? [:]
+    }
+
+    @discardableResult
+    static func saveSnoozes(
+        user: String,
+        snoozes: [String: String]
+    ) async throws -> [String: String] {
+        struct Response: Decodable, Sendable { var snoozes: [String: String]? }
+        let body: [String: Any] = ["user": user, "snoozes": snoozes]
+        let response: Response = try await request(
+            "/api/snoozes",
+            method: "PUT",
+            body: body
+        )
+        return response.snoozes ?? snoozes
     }
 
     /// Per-user read marks, shared with the web sidebar (session id → the ISO

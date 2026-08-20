@@ -101,7 +101,7 @@ private struct RootSceneLifecycle: View {
                     await NativePreferences.hydrate()
                     await HideStore.shared.hydrate()
                     await PinStore.shared.hydrate()
-                    await WorkspaceSettlementStore.shared.hydrate()
+                    await WorkspaceSnoozeStore.shared.hydrate()
                     await LaneStore.shared.hydrate()
                     await MentionStore.shared.hydrate()
                     await ReadsStore.shared.hydrate()

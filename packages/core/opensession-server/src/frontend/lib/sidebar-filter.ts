@@ -83,11 +83,11 @@ export function readExpanded(): Set<string> {
 
 // ── Grouping / filtering controls (the filter popover) ─────────────────────
 // Two independent answers shape the list. "Group by" chooses the row sections:
-// Settled (stable Active / Settled lifecycle), Activity (Needs action / Recent /
-// Yesterday / Earlier), or Status (Needs input / In progress / …). "Group by
+// Inbox (Active / Snoozed), Activity (Needs action / Recent / Yesterday /
+// Earlier), or Status (Needs input / In progress / …). "Group by
 // project" then decides whether those sections are global or repeated inside
 // each project. Repo and Person only narrow the same inventory.
-export type GroupBy = "settled" | "activity" | "status";
+export type GroupBy = "inbox" | "activity" | "status";
 export type SortBy = "updated" | "created";
 // Session-less PR rows folded into the project lanes: the default shows your
 // own PRs + explicit review requests (the retired PR band's default sources),
@@ -107,16 +107,15 @@ export type AutoCreatedFilter = "show" | "hide";
 export type EmptyProjectsFilter = "show" | "hide";
 export const DEFAULT_PROJECT = DEFAULT_REPO_ID;
 export const FILTER_KEY = "opensession-sidebar-filter";
-// Bumped when project grouping became independent again and the lifecycle
-// sections gained their own Settled name. v7 restores Activity as a separate
-// date-banded option while preserving every v6 Active/Settled choice.
-export const FILTER_VERSION = 7;
+// Bumped when Settled was replaced by Inbox. v8 keeps project grouping
+// independent and migrates every explicit Settled choice to Inbox.
+export const FILTER_VERSION = 8;
 
-const GROUP_BYS: GroupBy[] = ["settled", "activity", "status"];
+const GROUP_BYS: GroupBy[] = ["inbox", "activity", "status"];
 
-/** Nobody choosing a section mode gets the stable lifecycle. */
+/** Nobody choosing a section mode gets Active and Snoozed inbox sections. */
 export function defaultGroupBy(): GroupBy {
-	return "settled";
+	return "inbox";
 }
 
 /** Several projects default to project bands; one project does not need them. */
@@ -261,7 +260,7 @@ interface StoredGrouping {
 	byProject: StoredByProject;
 }
 
-/** Resolve every historical shape into the two independent v7 axes. */
+/** Resolve every historical shape into the two independent v8 axes. */
 function storedGrouping(v: any): StoredGrouping {
 	if (v?.v === FILTER_VERSION) {
 		return {
@@ -269,12 +268,23 @@ function storedGrouping(v: any): StoredGrouping {
 			byProject: typeof v.byProject === "boolean" ? v.byProject : "auto",
 		};
 	}
+	if (v?.v === 7) {
+		return {
+			groupBy:
+				v.groupBy === "settled"
+					? "inbox"
+					: GROUP_BYS.includes(v.groupBy)
+						? v.groupBy
+						: "auto",
+			byProject: typeof v.byProject === "boolean" ? v.byProject : "auto",
+		};
+	}
 	if (v?.v === 6) {
 		switch (v.groupBy) {
 			case "none":
-				return { groupBy: "settled", byProject: false };
+				return { groupBy: "inbox", byProject: false };
 			case "repo":
-				return { groupBy: "settled", byProject: true };
+				return { groupBy: "inbox", byProject: true };
 			case "status":
 				return { groupBy: "status", byProject: false };
 			default:
@@ -289,7 +299,7 @@ function storedGrouping(v: any): StoredGrouping {
 				: sections === "inbox"
 					? "activity"
 					: sections === "none"
-						? "settled"
+						? "inbox"
 						: "auto";
 		const byProject: StoredByProject =
 			v.groupBy === "repo" ? true : v.groupBy === "none" ? false : "auto";

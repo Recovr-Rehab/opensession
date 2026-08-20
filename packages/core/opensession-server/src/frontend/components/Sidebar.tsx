@@ -54,7 +54,7 @@ import {
 	SIDEBAR_STUCK_BACKING,
 	SIDEBAR_SWIPE_ACTION,
 	SIDEBAR_SWIPE_ACTION_ARCHIVE,
-	SIDEBAR_SWIPE_ACTION_SETTLE,
+	SIDEBAR_SWIPE_ACTION_SNOOZE,
 	SIDEBAR_SWIPE_ACTION_OPEN,
 	SIDEBAR_SWIPE_ACTION_STAR,
 	SIDEBAR_SWIPE_ACTION_STAR_ON,
@@ -96,24 +96,15 @@ import {
 import { useCurrentUser } from "./UserPicker";
 import { getLane, getLanes, onLanesChanged } from "../lib/lanes";
 import { getPins, onPinsChanged, togglePin, reorderPins, unpin } from "../lib/pins";
-import { clearSnooze, getSnoozes, onSnoozesChanged, setSnooze } from "../lib/snoozes";
 import {
-	getSettlements,
-	onSettlementsChanged,
-	setSettlement,
-} from "../lib/settlements";
-import {
-	getSettlementPrefs,
-	onSettlementPrefsChanged,
-} from "../lib/settlement-pref";
-import {
-	sortActiveByCreation,
-	sortSettledByTime,
-	workspaceLifecycle,
-	workspaceLifecycleFacts,
-	type WorkspaceLifecycle,
-	type WorkspaceLifecycleFacts,
-} from "../lib/sidebar-lifecycle";
+	SNOOZE_SOMEDAY,
+	clearSnooze,
+	getSnoozes,
+	onSnoozesChanged,
+	setSnooze,
+	snoozeIsActive,
+} from "../lib/snoozes";
+import { sortInboxByCreation } from "../lib/sidebar-inbox";
 import {
 	clearHides,
 	getHides,
@@ -147,8 +138,7 @@ import { shortTime } from "../lib/time";
 import {
 	IconChevronDown,
 	IconArchive,
-	IconArrowUp,
-	IconCheckCircle,
+	IconMoon,
 	IconFilter,
 	IconX,
 	IconSliders,
@@ -445,12 +435,6 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 	const [snoozes, setSnoozesState] = useState<Record<string, string>>(
 		getSnoozes,
 	);
-	// Per-user explicit Settle/Unsettle actions. Automatic settlement is derived
-	// from the row's canonical activity and PR state below; only human intent is
-	// persisted so the lifecycle can react naturally to new work.
-	const [settlements, setSettlementsState] = useState(getSettlements);
-	const [settlementPrefs, setSettlementPrefsState] =
-		useState(getSettlementPrefs);
 	// Per-user sidebar hides (row key → ISO hidden-at). The personal
 	// counterpart to Archive, which is global: a hidden row leaves only THIS
 	// user's sidebar, and the session keeps running for everyone else.
@@ -752,17 +736,6 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 
 	useEffect(() => onPinsChanged(() => setPins(getPins())), []);
 	useEffect(() => onSnoozesChanged(() => setSnoozesState(getSnoozes())), []);
-	useEffect(
-		() => onSettlementsChanged(() => setSettlementsState(getSettlements())),
-		[],
-	);
-	useEffect(
-		() =>
-			onSettlementPrefsChanged(() =>
-				setSettlementPrefsState(getSettlementPrefs()),
-			),
-		[],
-	);
 	useEffect(() => onHidesChanged(() => setHidesState(getHides())), []);
 	// Per-user lanes (lib/lanes.ts). mineStatus/pinnedLane read the lib cache
 	// directly; this state exists to re-render (and re-derive the memos below)
@@ -1641,7 +1614,7 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 		const now = Date.now();
 		return new Set(
 			Object.entries(snoozes)
-				.filter(([, until]) => Date.parse(until) > now)
+				.filter(([, until]) => snoozeIsActive(until, now))
 				.map(([key]) => key),
 		);
 	}, [snoozes]);
@@ -1650,7 +1623,7 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 		const sweep = () => {
 			const now = Date.now();
 			for (const [key, until] of Object.entries(snoozes)) {
-				if (Date.parse(until) > now) continue;
+				if (snoozeIsActive(until, now)) continue;
 				const row = wsRows.find((r) => r.key === key);
 				row?.sessions.forEach((c) => markUnread(c.id));
 				clearSnooze(key);
@@ -1745,8 +1718,13 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 	const awaitingReviewRows = rowsAtPlacement(placedWsRows, "awaiting-review");
 	const focusWsRows = rowsAtPlacement(placedWsRows, "status");
 	const snoozedWsRows = rowsAtPlacement(placedWsRows, "snoozed").sort(
-		(a, b) =>
-			Date.parse(snoozes[a.key] || "") - Date.parse(snoozes[b.key] || ""),
+		(a, b) => {
+			const aUntil = snoozes[a.key];
+			const bUntil = snoozes[b.key];
+			if (aUntil === SNOOZE_SOMEDAY && bUntil !== SNOOZE_SOMEDAY) return 1;
+			if (bUntil === SNOOZE_SOMEDAY && aUntil !== SNOOZE_SOMEDAY) return -1;
+			return Date.parse(aUntil || "") - Date.parse(bUntil || "");
+		},
 	);
 	const pinnedWsRows = useMemo(() => {
 		const pinSet = new Set(pins);
@@ -1773,122 +1751,20 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 			.sort((a, b) => rowIdx(a) - rowIdx(b));
 	}, [wsRows, pins, activeSnoozeKeys]);
 
-	// ── Active / Settled lifecycle ──────────────────────────────────────────
-	// The rendered row can carry only the sessions admitted by the current
-	// person/repo/search lens. Lifecycle facts must use the workspace's FULL live
-	// membership or a hidden sibling could keep working while this partial row
-	// quietly auto-settles (or one hidden open PR could be missed).
-	const canonicalSessionsByRow = useMemo(() => {
-		const byRow = new Map<string, UnifiedSession[]>();
-		for (const session of sessions) {
-			if (session.archived || session.desk) continue;
-			const key = session.workspaceId
-				? `workspace:${session.workspaceId}`
-				: session.worktreeDir?.includes("/worktrees/")
-					? `wt:${session.worktreeDir}`
-					: session.id;
-			const members = byRow.get(key) ?? [];
-			members.push(session);
-			byRow.set(key, members);
-		}
-		return byRow;
-	}, [sessions]);
-	const lifecycleFacts = useMemo(() => {
-		const facts = new Map<string, WorkspaceLifecycleFacts>();
-		for (const row of wsRows)
-			facts.set(
-				row.key,
-				workspaceLifecycleFacts(
-					row,
-					canonicalSessionsByRow.get(row.key) ?? row.sessions,
-				),
-			);
-		return facts;
-	}, [wsRows, canonicalSessionsByRow]);
-	const [settlementNow, setSettlementNow] = useState(() => Date.now());
-	useEffect(() => {
-		if (settlementPrefs.autoSettleDays === "off") return;
-		const windowMs = settlementPrefs.autoSettleDays * 86_400_000;
-		let next = Number.POSITIVE_INFINITY;
-		for (const facts of lifecycleFacts.values()) {
-			const activity = Date.parse(facts.lastActivity);
-			const override = settlements[facts.key];
-			const overrideAt =
-				override?.state === "active" ? Date.parse(override.at) : Number.NaN;
-			const anchor = Math.max(
-				Number.isNaN(activity) ? Number.NEGATIVE_INFINITY : activity,
-				Number.isNaN(overrideAt) ? Number.NEGATIVE_INFINITY : overrideAt,
-			);
-			if (Number.isFinite(anchor) && anchor + windowMs > settlementNow)
-				next = Math.min(next, anchor + windowMs);
-		}
-		if (!Number.isFinite(next)) return;
-		const delay = Math.min(2_147_000_000, Math.max(250, next - Date.now() + 50));
-		const timer = window.setTimeout(() => setSettlementNow(Date.now()), delay);
-		return () => window.clearTimeout(timer);
-	}, [
-		lifecycleFacts,
-		settlements,
-		settlementPrefs.autoSettleDays,
-		settlementNow,
-	]);
-	const lifecycleByKey = useMemo(() => {
-		const values = new Map<string, WorkspaceLifecycle>();
-		const pinSet = new Set(pins);
-		for (const row of wsRows) {
-			const facts = lifecycleFacts.get(row.key);
-			if (!facts) continue;
-			const pinned =
-				pinSet.has(row.key) || row.sessions.some((session) => pinSet.has(session.id));
-			values.set(
-				row.key,
-				workspaceLifecycle(facts, settlements[row.key], {
-					now: settlementNow,
-					autoSettleDays: settlementPrefs.autoSettleDays,
-					autoSettlePrs: settlementPrefs.autoSettlePrs,
-					pinned,
-					snoozed: activeSnoozeKeys.has(row.key),
-				}),
-			);
-		}
-		return values;
-	}, [
-		wsRows,
-		lifecycleFacts,
-		settlements,
-		settlementPrefs,
-		settlementNow,
-		pins,
-		activeSnoozeKeys,
-	]);
+	// ── Inbox rows ──────────────────────────────────────────────────────────
+	// Snoozed rows already left `focusWsRows` through placement. The remaining
+	// inbox stays stable by creation time, and pinned rows keep their dedicated
+	// quick-access copy rather than repeating directly under it.
 	const pinnedRowKeys = useMemo(
 		() => new Set(pinnedWsRows.map((row) => row.key)),
 		[pinnedWsRows],
 	);
 	const activeFocusWsRows = useMemo(
 		() =>
-			sortActiveByCreation(
-				focusWsRows.filter(
-					(row) =>
-						!pinnedRowKeys.has(row.key) &&
-						!lifecycleByKey.get(row.key)?.settled,
-				),
-				lifecycleFacts,
+			sortInboxByCreation(
+				focusWsRows.filter((row) => !pinnedRowKeys.has(row.key)),
 			),
-		[focusWsRows, pinnedRowKeys, lifecycleByKey, lifecycleFacts],
-	);
-	const settledFocusWsRows = useMemo(
-		() =>
-			sortSettledByTime(
-				focusWsRows.filter(
-					(row) =>
-						!pinnedRowKeys.has(row.key) &&
-						lifecycleByKey.get(row.key)?.settled,
-				),
-				lifecycleByKey,
-				lifecycleFacts,
-			),
-		[focusWsRows, pinnedRowKeys, lifecycleByKey, lifecycleFacts],
+		[focusWsRows, pinnedRowKeys],
 	);
 	// ── PR rows in the project lanes ────────────────────────────────────────
 	// The retired standalone Pull-requests band dissolved into the project
@@ -1910,7 +1786,6 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 		const covered = new Set<string>();
 		const rowsInView = [
 			...activeFocusWsRows,
-			...settledFocusWsRows,
 			...pinnedWsRows,
 			...snoozedWsRows,
 			...needsReviewRows,
@@ -1943,7 +1818,6 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 		reviewQueueItems,
 		workspaceDataReady,
 		activeFocusWsRows,
-		settledFocusWsRows,
 		pinnedWsRows,
 		snoozedWsRows,
 		needsReviewRows,
@@ -2053,7 +1927,6 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 				...MINE_STATUS_META.flatMap((meta) =>
 					activeFocusWsRows.filter((r) => r.status === meta.key),
 				),
-				...settledFocusWsRows,
 				...snoozedWsRows,
 			].filter((r) => (seen.has(r.key) ? false : (seen.add(r.key), true)));
 		},
@@ -2063,11 +1936,10 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 			awaitingReviewRows,
 			pinnedWsRows,
 			activeFocusWsRows,
-			settledFocusWsRows,
 			snoozedWsRows,
 		],
 	);
-	// Project bands are independent from the section mode. Settled, Activity,
+	// Project bands are independent from the section mode. Inbox, Activity,
 	// and Status can each render globally or inside every project.
 	const groupsByRepo = filter.byProject;
 	const hasWorkspaceFilter =
@@ -2084,7 +1956,6 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 		approvedReviewRows.length === 0 &&
 		pinnedWsRows.length === 0 &&
 		activeFocusWsRows.length === 0 &&
-		settledFocusWsRows.length === 0 &&
 		snoozedWsRows.length === 0 &&
 		prRowItems.length === 0;
 	const productEmpty = sessions.length === 0 && workspaces.length === 0;
@@ -2112,36 +1983,13 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 		});
 	}
 
-	function rowIsSettled(row: WsRow): boolean {
-		return lifecycleByKey.get(row.key)?.settled === true;
+	function rowIsSnoozed(row: WsRow): boolean {
+		return activeSnoozeKeys.has(row.key);
 	}
 
-	function setWorkspaceSettled(row: WsRow, settled: boolean) {
-		const facts = lifecycleFacts.get(row.key);
-		if (!facts) return;
-		if (settled && facts.blocked) {
-			onToast?.("Finish or stop the current work before settling it.");
-			return;
-		}
-		if (settled) {
-			// Settle means leave the active working set. A pin or snooze would keep
-			// the row in a stronger section and make the action look ineffective.
-			setPins(
-				unpin([
-					row.key,
-					...row.sessions.flatMap((session) => [
-						session.id,
-						...(session.aliasIds ?? []),
-					]),
-				]),
-			);
-			clearSnooze(row.key);
-		}
-		setSettlement(
-			row.key,
-			settled ? "settled" : "active",
-			facts.terminalPrSignature,
-		);
+	function toggleWorkspaceSnooze(row: WsRow) {
+		if (rowIsSnoozed(row)) clearSnooze(row.key);
+		else setSnooze(row.key, SNOOZE_SOMEDAY);
 	}
 
 	function archiveWorkspaceWithNext(row: WsRow) {
@@ -2482,14 +2330,14 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 				// Per-frame position goes straight to the DOM: a setState here
 				// re-rendered the entire sidebar on every touchmove, which
 				// phones can't do at 60fps. React only hears about drag start
-				// and side flips; touchend reconciles the settled state.
+				// and side flips; touchend reconciles the committed state.
 				const btn = e.currentTarget as HTMLElement;
 				btn.style.setProperty("--swipe-x", `${offset}px`);
 				btn.parentElement?.style.setProperty(
 					"--swipe-action-w",
 					`${Math.max(SWIPE_REVEAL_PX, Math.abs(offset))}px`,
 				);
-				setWsDragSide(offset < 0 ? "settle" : offset > 0 ? "star" : null);
+				setWsDragSide(offset < 0 ? "snooze" : offset > 0 ? "star" : null);
 				return;
 			}
 		}
@@ -2539,7 +2387,7 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 		setWsDragSide(null);
 		// The drag wrote --swipe-x / --swipe-action-w straight onto the DOM;
 		// React never owned them, so a re-render with an undefined style prop
-		// won't remove them. Clear here — the settled wsSwipe state (if any)
+		// won't remove them. Clear here; the committed wsSwipe state (if any)
 		// re-applies them through the style props on this same flush.
 		const rowEl = e.currentTarget as HTMLElement;
 		rowEl.style.removeProperty("--swipe-x");
@@ -2548,17 +2396,16 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 		if (wasSwiping) {
 			e.preventDefault();
 			if (Math.abs(swipeOffset) >= fullSwipeThreshold(rowWidth)) {
-				const action: SwipeAction = swipeOffset < 0 ? "settle" : "star";
+				const action: SwipeAction = swipeOffset < 0 ? "snooze" : "star";
 				setWsSwipe({
 					key: row.key,
 					offset: swipeCommitOffset(action, rowWidth),
 					action,
 				});
 				window.setTimeout(() => {
-					if (action === "settle") {
+					if (action === "snooze") {
 						if (isDraftWsRow(row)) deleteDraftWsRow(row);
-						else if (filter.groupBy === "activity") archiveWorkspaceWithNext(row);
-						else setWorkspaceSettled(row, !rowIsSettled(row));
+						else toggleWorkspaceSnooze(row);
 					} else {
 						workspacePinState(row).toggle();
 						setWsSwipe({ key: row.key, offset: 0, action });
@@ -2954,20 +2801,19 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 		}
 		// The yellow duration is a live status, not a sort key. Stable creation
 		// ordering makes that distinction honest without taking the useful timer
-		// away from Activity and Project layouts.
+		// away from Inbox and Project layouts.
 		const showRunDuration = runStartMs !== null;
-		const settled = rowIsSettled(row);
-		const archivePrimary = filter.groupBy === "activity";
+		const snoozed = rowIsSnoozed(row);
 		const swipeOffset = isPhone && wsSwipe?.key === row.key ? wsSwipe.offset : 0;
 		const swipeAction = isPhone && wsSwipe?.key === row.key ? wsSwipe.action : null;
 		const draggingRow = wsDraggingKey === row.key;
 		// Which underlay to show: the in-flight drag reveals its side via
-		// wsDragSide (per-frame offsets live only in the DOM now), a settled
-		// open/committing row falls back to the reconciled wsSwipe state.
+		// wsDragSide (per-frame offsets live only in the DOM now), an open or
+		// committing row falls back to the reconciled wsSwipe state.
 		const swipeSide: SwipeAction | null = draggingRow
 			? wsDragSide
-			: swipeAction === "settle" || swipeOffset < 0
-				? "settle"
+			: swipeAction === "snooze" || swipeOffset < 0
+				? "snooze"
 				: swipeAction === "star" || swipeOffset > 0
 					? "star"
 					: null;
@@ -3006,38 +2852,23 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 					<button
 						className={cn(
 							SIDEBAR_SWIPE_ACTION,
-							archivePrimary
-								? SIDEBAR_SWIPE_ACTION_ARCHIVE
-								: SIDEBAR_SWIPE_ACTION_SETTLE,
-							swipeSide === "settle" && SIDEBAR_SWIPE_ACTION_OPEN,
+							SIDEBAR_SWIPE_ACTION_SNOOZE,
+							swipeSide === "snooze" && SIDEBAR_SWIPE_ACTION_OPEN,
 							draggingRow ? "transition-none" : SIDEBAR_SWIPE_ACTION_TRANSITION,
 						)}
-						data-swipe-action={archivePrimary ? "archive" : settled ? "unsettle" : "settle"}
+						data-swipe-action={snoozed ? "unsnooze" : "snooze"}
 						onClick={(e) => {
 							e.stopPropagation();
 							setWsSwipe(null);
-							if (archivePrimary) archiveWorkspaceWithNext(row);
-							else setWorkspaceSettled(row, !settled);
+							toggleWorkspaceSnooze(row);
 						}}
-						title={
-							archivePrimary
-								? "Archive workspace"
-								: settled
-									? "Unsettle workspace"
-									: "Settle workspace"
-						}
+						title={snoozed ? "Unsnooze workspace" : "Snooze workspace until Some day"}
 					>
-						{archivePrimary ? (
-							<IconArchive size={22} />
-						) : settled ? (
-							<IconArrowUp size={22} />
-						) : (
-							<IconCheckCircle size={22} />
-						)}
-						<span>{archivePrimary ? "Archive" : settled ? "Unsettle" : "Settle"}</span>
+						<IconMoon size={22} />
+						<span>{snoozed ? "Unsnooze" : "Snooze"}</span>
 					</button>
 				)}
-				{/* A draft row's left swipe deletes instead of settling: it has no
+				{/* A draft row's left swipe deletes instead of snoozing: it has no
 				    session lifecycle yet, and the confirm-on-delete elsewhere (right-click,
 				    long-press sheet) would defeat the point of a swipe. */}
 				{isPhone && isDraftWsRow(row) && (
@@ -3045,7 +2876,7 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 						className={cn(
 							SIDEBAR_SWIPE_ACTION,
 							SIDEBAR_SWIPE_ACTION_ARCHIVE,
-							swipeSide === "settle" && SIDEBAR_SWIPE_ACTION_OPEN,
+							swipeSide === "snooze" && SIDEBAR_SWIPE_ACTION_OPEN,
 							draggingRow ? "transition-none" : SIDEBAR_SWIPE_ACTION_TRANSITION,
 						)}
 						data-swipe-action="delete"
@@ -3087,6 +2918,10 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 						// row carries the slide. The drag writes --swipe-x straight onto
 						// the node, so the transform reads it rather than a React style.
 						SIDEBAR_WS_ROW,
+						// The reserve follows the chips that actually appear: an
+						// unpinned row reveals snooze + archive, not the pin, so it
+						// gives up one chip less of its right end (26px + the 4px gap).
+						!pinned && "hover:pr-[68px]",
 						"z-1 mt-0 touch-pan-y transform-[translateX(var(--swipe-x,0))]",
 						SIDEBAR_HOVER_LAYER,
 						// "Needs you" paints no fill of its own: it is a question
@@ -3357,7 +3192,7 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 						<IconPencil size={20} />
 					</span>
 				)}
-				{/* Hover actions: pin + settle/unsettle, side by side. */}
+				{/* Hover actions stay in one predictable order: Pin, Snooze, Archive. */}
 				<span
 					className={cn(
 						SIDEBAR_WS_ACTIONS,
@@ -3368,8 +3203,14 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 					)}
 					data-ws-actions=""
 				>
+					{/* Pin is not one of the row's standing actions: an unpinned row
+					    offers snooze and archive, the two moves you make constantly,
+					    and pinning stays in the context menu, the ⌘P chord and the
+					    swipe. Once a row IS pinned the chip comes back, because
+					    unpinning has to be reachable from the thing it marks. */}
+					{pinned && (
 					<Tooltip
-						label={pinned ? "Unpin workspace" : "Pin workspace"}
+						label="Unpin workspace"
 						// Only on the row the chord would actually hit: ⌘P pins the
 						// workspace holding the OPEN session, so advertising it on
 						// every row would promise a key that lands elsewhere.
@@ -3378,13 +3219,11 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 						<span
 							role="button"
 							tabIndex={0}
-							className={cn(
-								SIDEBAR_WS_ACTION,
-								// One colour, picked here rather than stacking two `text-*`
-								// utilities, whose winner would be Tailwind's ordering.
-								pinned ? "text-accent" : "text-faint hover:text-fg",
-							)}
-							aria-label={pinned ? "Unpin workspace" : "Pin workspace"}
+							// One colour, picked here rather than stacking two `text-*`
+							// utilities, whose winner would be Tailwind's ordering: a
+							// pinned action keeps its accent under the pointer.
+							className={cn(SIDEBAR_WS_ACTION, "text-accent")}
+							aria-label="Unpin workspace"
 							onClick={(e) => {
 								e.stopPropagation();
 								toggleRowPin();
@@ -3396,57 +3235,55 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 								}
 							}}
 						>
-							<IconPin size={19} fill={pinned ? "currentColor" : "none"} />
+							<IconPin size={19} fill="currentColor" />
 						</span>
 					</Tooltip>
+					)}
 					{row.sessions.length > 0 ? (
-						<Tooltip
-							label={
-								archivePrimary
-									? "Archive workspace"
-									: settled
-										? "Unsettle workspace"
-										: "Settle workspace"
-							}
-						>
-							<span
-								role="button"
-								tabIndex={0}
-								className={cn(
-									SIDEBAR_WS_ACTION,
-									archivePrimary
-										? "text-faint hover:text-red"
-										: "text-faint hover:text-fg",
-								)}
-								aria-label={
-									archivePrimary
-										? "Archive workspace"
-										: settled
-											? "Unsettle workspace"
-											: "Settle workspace"
-								}
-								onClick={(e) => {
-									e.stopPropagation();
-									if (archivePrimary) archiveWorkspaceWithNext(row);
-									else setWorkspaceSettled(row, !settled);
-								}}
-								onKeyDown={(e) => {
-									if (e.key === "Enter" || e.key === " ") {
-										e.stopPropagation();
-										if (archivePrimary) archiveWorkspaceWithNext(row);
-										else setWorkspaceSettled(row, !settled);
-									}
-								}}
+						<>
+							<Tooltip
+								label={snoozed ? "Unsnooze workspace" : "Snooze workspace until Some day"}
 							>
-								{archivePrimary ? (
+								<span
+									role="button"
+									tabIndex={0}
+									className={cn(SIDEBAR_WS_ACTION, "text-faint hover:text-fg")}
+									aria-label={snoozed ? "Unsnooze workspace" : "Snooze workspace"}
+									onClick={(e) => {
+										e.stopPropagation();
+										toggleWorkspaceSnooze(row);
+									}}
+									onKeyDown={(e) => {
+										if (e.key === "Enter" || e.key === " ") {
+											e.stopPropagation();
+											toggleWorkspaceSnooze(row);
+										}
+									}}
+								>
+									<IconMoon size={19} />
+								</span>
+							</Tooltip>
+							<Tooltip label="Archive workspace">
+								<span
+									role="button"
+									tabIndex={0}
+									className={cn(SIDEBAR_WS_ACTION, "text-faint hover:text-red")}
+									aria-label="Archive workspace"
+									onClick={(e) => {
+										e.stopPropagation();
+										archiveWorkspaceWithNext(row);
+									}}
+									onKeyDown={(e) => {
+										if (e.key === "Enter" || e.key === " ") {
+											e.stopPropagation();
+											archiveWorkspaceWithNext(row);
+										}
+									}}
+								>
 									<IconArchive size={19} />
-								) : settled ? (
-									<IconArrowUp size={19} />
-								) : (
-									<IconCheckCircle size={19} />
-								)}
-							</span>
-						</Tooltip>
+								</span>
+							</Tooltip>
+						</>
 					) : row.workspace?.draft ? (
 						<Tooltip label="Delete draft">
 							<span
@@ -3860,16 +3697,13 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 		return nodes;
 	}
 
-	// ── Active / Settled lifecycle sections ────────────────────────────────
-	// Both use the same row component and density. The heading and stable
-	// creation/settlement ordering carry the lifecycle, not a card-size change.
-	function renderLifecycleSection(
-		label: "Active" | "Settled",
-		rows: WsRow[],
-		ns = "",
-	) {
+	// ── Inbox Active section ───────────────────────────────────────────────
+	// Snoozed uses the shared section below; Active keeps its stable creation
+	// order and the same compact row density.
+	function renderActiveSection(rows: WsRow[], ns = "") {
+		const label = "Active";
 		if (rows.length === 0) return null;
-		const gkey = `${ns}lifecycle:${label.toLowerCase()}`;
+		const gkey = `${ns}inbox:${label.toLowerCase()}`;
 		const open = isOpen(gkey);
 		return (
 			<div className={SIDEBAR_STATUS_GROUP} data-status-group key={gkey}>
@@ -3917,25 +3751,16 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 			return renderInboxBands(rows, ns, snoozedRows, prItems);
 		if (filter.groupBy === "status")
 			return renderStatusLanes(rows, ns, snoozedRows, laneRepo, prItems);
-		const active = sortActiveByCreation(
-			rows.filter((row) => !lifecycleByKey.get(row.key)?.settled),
-			lifecycleFacts,
-		);
-		const settled = sortSettledByTime(
-			rows.filter((row) => lifecycleByKey.get(row.key)?.settled),
-			lifecycleByKey,
-			lifecycleFacts,
-		);
+		const active = sortInboxByCreation(rows);
 		return [
-			renderLifecycleSection("Active", active, ns),
-			renderLifecycleSection("Settled", settled, ns),
+			renderActiveSection(active, ns),
 			...prItems.map(renderPrRow),
 			...(snoozedRows.length > 0 ? [renderSnoozedGroup(snoozedRows, ns)] : []),
 		];
 	}
 
 	// Project grouping is independent from the section mode. Each collapsible
-	// repo repeats Settled, Activity, or Status according to the other control.
+	// repo repeats Inbox, Activity, or Status according to the other control.
 	// Scratch workspaces stay in one unlabelled group above them:
 	// they have no project, even when an older workspace record carries a stale
 	// repo. A collapsed band wears a count of the urgent rows it hides. Repos
@@ -5194,17 +5019,6 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 							onPick: (s) => onSetStatus(sessions, s),
 						});
 					if (menuRow && sessions.length > 0) {
-						const settled = rowIsSettled(menuRow);
-						entries.push({
-							kind: "item",
-							icon: settled ? (
-								<IconArrowUp size={20} />
-							) : (
-								<IconCheckCircle size={20} />
-							),
-							label: settled ? "Unsettle" : "Settle",
-							onClick: () => setWorkspaceSettled(menuRow, !settled),
-						});
 						entries.push({
 							kind: "snooze",
 							until: activeSnoozeKeys.has(menuRow.key)
@@ -5768,7 +5582,7 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 				    header above (which carries the filter, new-workspace and
 				    new-session actions) — no second in-list heading. ── */}
 				<div className={SIDEBAR_GROUP}>
-					{/* Settled, Activity, and Status choose the row sections. Project
+					{/* Inbox, Activity, and Status choose the row sections. Project
 					    independently decides whether those sections repeat per repo. */}
 					{/* Snoozed rows sit out of focusWsRows, so each layout places
 					    them itself: under a project band every band gets its own
@@ -5780,7 +5594,7 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 					    under ungrouped status lanes, its priority lanes appended
 					    after them so everything reads as one list. */}
 					{/* Session-less PR and feed rows keep their project-shaped sections;
-					    Active/Settled applies to workspace rows with resumable sessions. */}
+					    Active/Snoozed applies to workspace rows with resumable sessions. */}
 					{groupsByRepo ? (
 						<>
 							{renderRepoGroups()}
@@ -6062,15 +5876,10 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 						>
 							<WsCardBody
 								row={wsHover.row}
-								settled={rowIsSettled(wsHover.row)}
-								archivePrimary={filter.groupBy === "activity"}
-								onToggleSettled={() => {
+								snoozed={rowIsSnoozed(wsHover.row)}
+								onToggleSnooze={() => {
 									closeWsHover();
-									setWorkspaceSettled(wsHover.row, !rowIsSettled(wsHover.row));
-								}}
-								onArchive={() => {
-									closeWsHover();
-									archiveWorkspaceWithNext(wsHover.row);
+									toggleWorkspaceSnooze(wsHover.row);
 								}}
 								onOpen={(session) => {
 									closeWsHover();
@@ -6099,11 +5908,6 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 						<WsMobileSheet
 							row={row}
 							pinned={pinned}
-							settled={rowIsSettled(row)}
-							archivePrimary={filter.groupBy === "activity"}
-							onToggleSettled={() =>
-								setWorkspaceSettled(row, !rowIsSettled(row))
-							}
 							onTogglePin={() => {
 								if (pinned) {
 									let next = pins;

@@ -5,7 +5,7 @@ import { MAX_HOVERCARD_MEDIA, TONE_TEXT, compactNum, hoverState, prTone, prettyR
 import { SIDEBAR_STATUS_DOT, SIDEBAR_WS_SNOOZE, SIDEBAR_WS_TICKER } from "../../lib/sidebar-classes";
 import { frontingPrSession, mineStatus, pinnedLane, runNeedsAttention } from "../../lib/sidebar-lanes";
 import { MINE_STATUS_META, type LaneChoice, type MineStatus } from "../../lib/sidebar-types";
-import { formatRemaining, snoozePresets } from "../../lib/snoozes";
+import { SNOOZE_SOMEDAY, formatRemaining, snoozePresets } from "../../lib/snoozes";
 import { elapsedSince, fullTime } from "../../lib/time";
 import type { UnifiedSession } from "../../lib/types";
 import { Button } from "../../ui/button";
@@ -22,7 +22,7 @@ import {
 import { openLightbox } from "../MediaLightbox";
 import { sessionPrTone } from "../../lib/pr-refs";
 import { CardFooter, CardPrChip, checksLabel, osReviewLabel } from "../SidebarRowCards";
-import { IconArchive, IconArrowUp, IconArrowUpRight, IconCheckCircle, IconClock, IconGitMerge, IconInbox, IconLink, IconMail, IconMoon, IconPencil, IconPin, IconPullRequest } from "../icons";
+import { IconArrowUpRight, IconClock, IconGitMerge, IconInbox, IconLink, IconMail, IconMoon, IconPencil, IconPin, IconPullRequest } from "../icons";
 import React, { useEffect, useState } from "react";
 
 // The session card, in the shape the workspace card already proved: what the
@@ -177,7 +177,7 @@ export function SnoozeBadge({
 	return (
 		<span
 			className={cn(SIDEBAR_WS_SNOOZE, className)}
-			title={`Snoozed until ${new Date(until).toLocaleString()}`}
+			title={until === SNOOZE_SOMEDAY ? "Snoozed: Some day" : `Snoozed until ${new Date(until).toLocaleString()}`}
 		>
 			<IconMoon size={20} />
 			{formatRemaining(until, now)}
@@ -473,21 +473,16 @@ function WsOverviewInfo({
 // The workspace counterpart of SessionCardBody: diff stats + status
 // at a glance, the latest assistant message as a "where things stand" line,
 // screenshot thumbnails from the workspace's sessions, and quick actions
-// (Settle, PR link) — the only card body that carries controls, which is why
-// its shell is the one the pointer can travel into.
+// (Snooze, PR link), which is why its shell is the one the pointer can travel into.
 export function WsCardBody({
 	row,
-	settled,
-	archivePrimary,
-	onToggleSettled,
-	onArchive,
+	snoozed,
+	onToggleSnooze,
 	onOpen,
 }: {
 	row: WsCardRow;
-	settled: boolean;
-	archivePrimary: boolean;
-	onToggleSettled: () => void;
-	onArchive: () => void;
+	snoozed: boolean;
+	onToggleSnooze: () => void;
 	/** Open a session (the "Answer" action jumps to the blocked one). */
 	onOpen: (session: UnifiedSession) => void;
 }) {
@@ -499,26 +494,16 @@ export function WsCardBody({
 			<WsOverviewInfo row={row} ov={ov} />
 
 			<CardFooter>
-				{/* The single main action, colored by what the workspace needs next:
-				    return settled work, answer a question, merge/review, or settle
-				    finished PR work. Archive remains in the explicit context menu. */}
-				{archivePrimary && row.sessions.length > 0 ? (
+				{/* The single main action follows what the workspace needs next.
+				    Unsnooze is always immediate; Snooze stays on the row and menu. */}
+				{snoozed ? (
 					<Button
 						size="sm"
 						variant="soft"
-						icon={<IconArchive size={20} />}
-						onClick={onArchive}
+						icon={<IconMoon size={20} />}
+						onClick={onToggleSnooze}
 					>
-						Archive
-					</Button>
-				) : settled ? (
-					<Button
-						size="sm"
-						variant="soft"
-						icon={<IconArrowUp size={20} />}
-						onClick={onToggleSettled}
-					>
-						Unsettle
+						Unsnooze
 					</Button>
 				) : row.status === "needsinput" && row.sessions.length > 0 ? (
 					<Button
@@ -533,15 +518,6 @@ export function WsCardBody({
 						}
 					>
 						{row.sessions.some((c) => c.waitingForInput) ? "Answer" : "Open"}
-					</Button>
-				) : row.status === "merged" ? (
-					<Button
-						size="sm"
-						variant="soft"
-						icon={<IconCheckCircle size={20} />}
-						onClick={onToggleSettled}
-					>
-						Settle
 					</Button>
 				) : row.status === "review" && prSession?.prUrl ? (
 					<Button
@@ -587,9 +563,6 @@ export function WsMobileSheet({
 	pinned,
 	onTogglePin,
 	onClose,
-	settled,
-	archivePrimary,
-	onToggleSettled,
 	onArchive,
 	onSetStatus,
 	snoozeUntil,
@@ -606,9 +579,6 @@ export function WsMobileSheet({
 	pinned: boolean;
 	onTogglePin: () => void;
 	onClose: () => void;
-	settled: boolean;
-	archivePrimary: boolean;
-	onToggleSettled: () => void;
 	onArchive: () => void;
 	/** Pin the workspace into a lane, or clear back to derived with `null`. */
 	onSetStatus: (status: LaneChoice | null) => void;
@@ -689,9 +659,7 @@ export function WsMobileSheet({
 								{snoozePresets().map((preset) => (
 									<SheetItem
 										key={preset.label}
-										onClick={closing(() =>
-											onSnooze(preset.until.toISOString()),
-										)}
+										onClick={closing(() => onSnooze(preset.until))}
 									>
 										<IconClock size={22} />
 										{preset.label}
@@ -727,20 +695,8 @@ export function WsMobileSheet({
 					)}
 				</div>
 				<SheetSeparator />
-				{/* Main action follows the section mode. */}
-				{archivePrimary && row.sessions.length > 0 && (
-					<SheetItem tone="danger" onClick={closing(onArchive)}>
-						{archiveGlyph}
-						Archive
-					</SheetItem>
-				)}
-				{!archivePrimary && settled && (
-					<SheetItem onClick={closing(onToggleSettled)}>
-						<IconArrowUp size={22} />
-						Unsettle
-					</SheetItem>
-				)}
-				{!settled && row.status === "needsinput" && row.sessions.length > 0 && (
+				{/* The most urgent contextual action stays first. */}
+				{row.status === "needsinput" && row.sessions.length > 0 && (
 					<SheetItem
 						tone="accent"
 						onClick={closing(() =>
@@ -769,12 +725,6 @@ export function WsMobileSheet({
 						{prSession.prNumber != null && ` #${prSession.prNumber}`}
 					</SheetItem>
 				)}
-				{!archivePrimary && !settled && row.status === "merged" && row.sessions.length > 0 && (
-					<SheetItem onClick={closing(onToggleSettled)}>
-						<IconCheckCircle size={22} />
-						Settle workspace
-					</SheetItem>
-				)}
 				{prSession?.prUrl && row.status !== "review" && (
 					<SheetItem
 						onClick={closing(() =>
@@ -801,16 +751,16 @@ export function WsMobileSheet({
 						{unread ? "Mark as read" : "Mark as unread"}
 					</SheetItem>
 				)}
-				{!archivePrimary && !settled && row.status !== "merged" && row.sessions.length > 0 && (
-					<SheetItem onClick={closing(onToggleSettled)}>
-						<IconCheckCircle size={22} />
-						Settle
-					</SheetItem>
-				)}
 				<SheetItem onClick={closing(onTogglePin)}>
 					<IconPin size={22} fill={pinned ? "currentColor" : "none"} />
 					{pinned ? "Unpin" : "Pin"}
 				</SheetItem>
+				{snoozeUntil && (
+					<SheetItem onClick={closing(() => onSnooze(null))}>
+						<IconMoon size={22} />
+						Unsnooze
+					</SheetItem>
+				)}
 				<SheetItem onClick={closing(onRename)}>
 					<svg
 						width="20"
@@ -838,22 +788,18 @@ export function WsMobileSheet({
 							value={lanePickerLabel(displayedLane)}
 							onClick={() => setPage("status")}
 						/>
-						<SheetDrillInItem
-							icon={<IconMoon size={22} />}
-							label="Snooze"
-							value={
-								snoozeUntil
-									? `Wakes in ${formatRemaining(snoozeUntil)}`
-									: undefined
-							}
-							onClick={() => setPage("snooze")}
-						/>
+						{!snoozeUntil && (
+							<SheetDrillInItem
+								icon={<IconMoon size={22} />}
+								label="Snooze"
+								onClick={() => setPage("snooze")}
+							/>
+						)}
 					</>
 				)}
 				{(row.sessions.length > 0 || onDelete) && <SheetSeparator />}
-				{/* Archive is the stronger removal action. It stays in the explicit
-				    menu for both Active and Settled work, never in the primary slot. */}
-				{!archivePrimary && row.sessions.length > 0 && (
+				{/* Archive stays explicit and destructive after Pin and Snooze. */}
+				{row.sessions.length > 0 && (
 					<SheetItem tone="danger" onClick={closing(onArchive)}>
 						{archiveGlyph}
 						Archive

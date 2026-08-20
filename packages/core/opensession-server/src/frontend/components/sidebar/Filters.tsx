@@ -185,7 +185,7 @@ export function FilterPopover({
 					label="Group by"
 					value={filter.groupBy}
 					options={[
-						{ value: "settled", label: "Settled" },
+						{ value: "inbox", label: "Inbox" },
 						{ value: "activity", label: "Activity" },
 						{ value: "status", label: "Status" },
 					]}
@@ -256,7 +256,7 @@ export function FilterPopover({
 						</span>
 					</Menu.Trigger>
 					<Menu.Popup align="end" sideOffset={6}>
-						{/* Settled has stable creation order and Activity owns recency.
+						{/* Inbox has stable creation order and Activity owns recency.
 						    Status is the one layout where choosing lane order still makes
 						    sense, so only it offers this override. */}
 						{filter.groupBy === "status" && (

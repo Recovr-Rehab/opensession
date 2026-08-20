@@ -54,10 +54,8 @@ describe("hover cards drop the repo and the idle timestamp", () => {
 		const html = renderToStaticMarkup(
 			<WsCardBody
 				row={row([session()])}
-				settled={false}
-				archivePrimary={false}
-				onToggleSettled={() => {}}
-				onArchive={() => {}}
+				snoozed={false}
+				onToggleSnooze={() => {}}
 				onOpen={() => {}}
 			/>,
 		);
@@ -71,39 +69,17 @@ describe("hover cards drop the repo and the idle timestamp", () => {
 		expect(html).not.toContain("mt-3.5");
 	});
 
-	// A word with no descenders ("Settle", "#5675") leaves the line box's
-	// reserved descender space empty, so centring the box puts the ink most of
-	// a pixel high on the plate. The label carries CAP_LABEL to centre the ink
-	// itself; it has to be a span, because the trim is a no-op on the control's
-	// own flex box.
-	test("the settle action centres its word on the cap band", () => {
+	// Snoozed work always offers the immediate way back from the card.
+	test("a snoozed workspace gets Unsnooze", () => {
 		const html = renderToStaticMarkup(
 			<WsCardBody
 				row={{ ...row([session()]), status: "merged" }}
-				settled={false}
-				archivePrimary={false}
-				onToggleSettled={() => {}}
-				onArchive={() => {}}
+				snoozed
+				onToggleSnooze={() => {}}
 				onOpen={() => {}}
 			/>,
 		);
-		expect(html).toMatch(
-			new RegExp(`<span class="[^"]*text-box[^"]*">Settle</span>`),
-		);
-	});
-
-	test("activity mode puts Archive in the primary slot", () => {
-		const html = renderToStaticMarkup(
-			<WsCardBody
-				row={{ ...row([session()]), status: "merged" }}
-				settled={false}
-				archivePrimary
-				onToggleSettled={() => {}}
-				onArchive={() => {}}
-				onOpen={() => {}}
-			/>,
-		);
-		expect(html).toContain(">Archive<");
+		expect(html).toContain(">Unsnooze<");
 		expect(html).not.toContain(">Settle<");
 	});
 
@@ -137,10 +113,8 @@ describe("hover cards drop the repo and the idle timestamp", () => {
 			renderToStaticMarkup(
 				<WsCardBody
 					row={row([withPr])}
-					settled={false}
-					archivePrimary={false}
-					onToggleSettled={() => {}}
-					onArchive={() => {}}
+					snoozed={false}
+					onToggleSnooze={() => {}}
 					onOpen={() => {}}
 				/>,
 			),

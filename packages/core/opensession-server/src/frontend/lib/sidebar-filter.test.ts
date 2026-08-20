@@ -23,11 +23,11 @@ function write(blob: Record<string, unknown>) {
 beforeEach(() => store.clear());
 
 describe("the default grouping", () => {
-	test("settled is the section mode regardless of project count", () => {
+	test("inbox is the section mode regardless of project count", () => {
 		rememberRepoCount(1);
-		expect(defaultGroupBy()).toBe("settled");
+		expect(defaultGroupBy()).toBe("inbox");
 		rememberRepoCount(4);
-		expect(defaultGroupBy()).toBe("settled");
+		expect(defaultGroupBy()).toBe("inbox");
 	});
 
 	test("project grouping is the independent count-sensitive default", () => {
@@ -46,7 +46,7 @@ describe("readStoredFilter", () => {
 		expect(stored.autoCreated).toBe("hide");
 	});
 
-	test.each(["settled", "activity", "status"] as const)(
+	test.each(["inbox", "activity", "status"] as const)(
 		"a %s pick at the current version is honoured",
 		(groupBy) => {
 			write({ v: FILTER_VERSION, groupBy, byProject: true });
@@ -64,8 +64,19 @@ describe("readStoredFilter", () => {
 	});
 
 	test.each([
-		["none", "settled", false],
-		["repo", "settled", true],
+		["settled", "inbox", false],
+		["activity", "activity", true],
+		["status", "status", false],
+	] as const)("v7 %s migrates across both axes", (old, groupBy, byProject) => {
+		write({ v: 7, groupBy: old, byProject });
+		const stored = readStoredFilter();
+		expect(stored.groupBy).toBe(groupBy);
+		expect(stored.byProject).toBe(byProject);
+	});
+
+	test.each([
+		["none", "inbox", false],
+		["repo", "inbox", true],
 		["status", "status", false],
 		["auto", "auto", "auto"],
 	] as const)("v6 %s keeps its meaning across both axes", (old, groupBy, byProject) => {

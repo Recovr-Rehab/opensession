@@ -10,17 +10,17 @@ import Foundation
 
 /// How the workspace list is organized.
 ///
-/// Settled is the stable Active/Settled lifecycle. Activity restores the date
+/// Inbox keeps Active and Snoozed work together. Activity restores the date
 /// bands, and Status is the dynamic lane view. Project grouping is a separate
 /// switch, so any of those three can be global or repeated per project.
 enum SidebarGroupBy: String, CaseIterable, Sendable {
-    case settled
+    case inbox
     case activity
     case status
 
     var label: String {
         switch self {
-        case .settled: "Settled"
+        case .inbox: "Inbox"
         case .activity: "Activity"
         case .status: "Status"
         }
@@ -28,7 +28,7 @@ enum SidebarGroupBy: String, CaseIterable, Sendable {
 
     /// The section mode to use when nobody has picked one.
     static func fallback(repoCount: Int) -> SidebarGroupBy {
-        .settled
+        .inbox
     }
 
     /// Project grouping is a separate axis. Until somebody picks it, several
@@ -46,8 +46,8 @@ enum SidebarGroupBy: String, CaseIterable, Sendable {
     /// `legacyGroupsByProject` below.
     static func stored(_ raw: String) -> SidebarGroupBy? {
         switch raw {
-        case "settled", "none", "repo": .settled
-        case "activity", "inbox", "recent", "repo-inbox": .activity
+        case "settled", "inbox", "none", "repo": .inbox
+        case "activity", "recent", "repo-inbox": .activity
         case "status", "repo-status": .status
         default: nil
         }
@@ -57,7 +57,7 @@ enum SidebarGroupBy: String, CaseIterable, Sendable {
     static func legacyGroupsByProject(_ raw: String) -> Bool? {
         switch raw {
         case "repo", "repo-inbox", "repo-status": true
-        case "settled", "activity", "status", "none", "inbox", "recent": false
+        case "settled", "inbox", "activity", "status", "none", "recent": false
         default: nil
         }
     }
