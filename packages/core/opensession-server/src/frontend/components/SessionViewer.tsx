@@ -1881,7 +1881,7 @@ export function SessionViewer({
 		endTurn,
 		relayout,
 		onScroll,
-	} = useSessionScroll(cachedTranscript?.following ?? true);
+	} = useSessionScroll(true);
 
 	useLayoutEffect(() => {
 		const pending = pendingIndexPositionRef.current;
@@ -3316,53 +3316,10 @@ export function SessionViewer({
 
 	// Every session opens at the live edge. Do this in a layout effect so the
 	// transcript never paints at scrollTop 0 before moving to the end.
-	const initiallyScrolledSessionRef = useRef<string | null>(
-		cachedTranscript ? session.id : null,
-	);
+	const initiallyScrolledSessionRef = useRef<string | null>(null);
 	const [initialScrollSession, setInitialScrollSession] = useState<string | null>(
 		null,
 	);
-	const restoredCachedScrollRef = useRef(false);
-	useLayoutEffect(() => {
-		if (!cachedTranscript || restoredCachedScrollRef.current || sessionHidden) return;
-		const el = messagesRef.current;
-		if (!el) return;
-		restoredCachedScrollRef.current = true;
-		if (cachedTranscript.following) {
-			el.scrollTop = el.scrollHeight;
-			setInitialScrollSession(session.id);
-			return;
-		}
-		el.scrollTop = Math.min(
-			cachedTranscript.scrollTop,
-			Math.max(0, el.scrollHeight - el.clientHeight),
-		);
-		const anchor = cachedTranscript.anchorEid
-			? el.querySelector<HTMLElement>(
-					`[data-eid="${CSS.escape(cachedTranscript.anchorEid)}"]`,
-				)
-			: null;
-		if (anchor && cachedTranscript.anchorTop !== null) {
-			const containerTop = el.getBoundingClientRect().top;
-			// Restore by content identity first: raw scrollTop came from intrinsic
-			// estimates, while the entry id survives remounts and settling heights.
-			el.scrollTop +=
-				anchor.getBoundingClientRect().top -
-				containerTop -
-				cachedTranscript.anchorTop;
-			startHistoryHold(anchor, 3000, null);
-			return;
-		}
-		const fallback = pickScrollAnchor(el);
-		if (fallback) startHistoryHold(fallback, 3000, null);
-	}, [
-		cachedTranscript,
-		entries,
-		messagesRef,
-		session.id,
-		sessionHidden,
-		startHistoryHold,
-	]);
 	useLayoutEffect(() => {
 		const el = messagesRef.current;
 		if (
@@ -7226,7 +7183,7 @@ export function SessionViewer({
 												// each other.
 												`absolute bottom-[calc(24px+var(--suggestions-under,0px))] left-1/2 z-[5] ${PILL_CENTRED}`,
 											)}
-											onClick={() => scrollToLatest("smooth")}
+											onClick={() => scrollToLatest("auto")}
 										>
 											<IconArrowDown
 												size={13}
