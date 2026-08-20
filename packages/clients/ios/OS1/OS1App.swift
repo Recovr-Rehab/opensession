@@ -93,7 +93,7 @@ private struct RootSceneLifecycle: View {
             .frame(width: 0, height: 0)
             .task(id: hydrationID) {
                 guard scenePhase == .active else {
-                    PresenceStore.shared.stop()
+                    PresenceStore.shared.suspend()
                     return
                 }
                 PresenceStore.shared.start()

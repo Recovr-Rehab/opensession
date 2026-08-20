@@ -36,8 +36,10 @@ final class PresenceStore {
         guard config.isConfigured else { return stop() }
         let scope = "\(config.baseURLString)|\(config.token)"
         if socket != nil, connectedScope == scope { return }
-        stop()
-        connectedScope = scope
+        if connectedScope != scope {
+            stop()
+            connectedScope = scope
+        }
         let socket = OS1Socket()
         socket.onEvent = { [weak self] event in
             switch event {
@@ -56,14 +58,21 @@ final class PresenceStore {
         socket.connect()
     }
 
-    /// Inactive/backgrounded apps stop listening and discard stale faces.
-    func stop() {
+    /// Inactive/backgrounded apps stop listening without invalidating the
+    /// retained session graph or forgetting which account should reconnect.
+    func suspend() {
         reconnectTask?.cancel()
         reconnectTask = nil
-        socket?.disconnect()
+        let suspendedSocket = socket
         socket = nil
+        suspendedSocket?.disconnect()
+    }
+
+    /// Sign-out and account/config changes discard presence and connection scope.
+    func stop() {
+        suspend()
         connectedScope = nil
-        bySession = [:]
+        clearPresence()
     }
 
     func apply(_ viewing: [PresenceEntry]) {
@@ -82,9 +91,14 @@ final class PresenceStore {
         }
     }
 
+    private func clearPresence() {
+        guard !bySession.isEmpty else { return }
+        bySession = [:]
+    }
+
     private func scheduleReconnect() {
         guard socket != nil else { return }
-        bySession = [:]
+        clearPresence()
         reconnectTask?.cancel()
         let scope = connectedScope
         reconnectTask = Task { [weak self] in
