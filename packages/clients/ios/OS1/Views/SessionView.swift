@@ -2726,13 +2726,6 @@ private struct SessionInputBar: View {
         .onChange(of: viewModel.isRunning) { _, running in
             if !running { stopConfirm = false }
         }
-        // The send you can feel. Keyed on the view model's send counter rather
-        // than the button's action, so every way of sending gets it: the disc,
-        // the hold menu's steer/queue, Return on the software keyboard and
-        // ⌘/Ctrl+Return on the Mac. A send that was REFUSED (a full outbox)
-        // never increments it, so it stays silent and the notice below speaks
-        // instead.
-        .haptic(.send, trigger: viewModel.sendSeq)
         // Only the notices that carry bad news knock: "switched to code mode"
         // is information, and a phone that buzzes at information is a phone
         // people turn haptics off on.
@@ -2804,6 +2797,7 @@ private struct SessionInputBar: View {
                 SchedulePromptSheet { at in
                     do {
                         try await viewModel.schedulePrompt(at: at)
+                        Haptics.play(.send)
                         return nil
                     } catch {
                         return "Couldn't schedule that message."
@@ -3045,7 +3039,10 @@ private struct SessionInputBar: View {
                         // fold a message that carries files.
                         onSteer: (viewModel.isRunning && !item.hasFiles
                             && !presentation.isGitHub)
-                            ? { viewModel.steerQueued(item) } : nil,
+                            ? {
+                                Haptics.play(.send)
+                                viewModel.steerQueued(item)
+                            } : nil,
                         onEdit: (!item.isLocalEcho && !item.hasFiles
                             && !item.hasContextSessions && item.editable
                             && MessageAttribution.isViewer(
@@ -3410,18 +3407,15 @@ private struct SessionInputBar: View {
                         composerShape.fill(OS1VisualStyle.green.opacity(0.09))
                     }
                 }
+                #if os(iOS)
+                // Only the composer's empty surface focuses the field. Keeping
+                // this gesture behind the controls prevents it from competing
+                // with the send menu's tap.
+                .contentShape(composerShape)
+                .onTapGesture { inputFocused = true }
+                #endif
         }
         #if os(iOS)
-        // No focus ring: an accent-coloured border around the input read as a
-        // validation/error outline rather than "you can type here". The glass
-        // surface and the caret are affordance enough — same call the web
-        // composer made.
-        .contentShape(
-            composerShape
-        )
-        .simultaneousGesture(
-            TapGesture().onEnded { inputFocused = true }
-        )
         // Growth and the one-row → multi-line morph both want to track the
         // text rather than ease behind it — a snappy, short spring so a fast
         // typist never sees the box lagging the caret.
@@ -3512,52 +3506,38 @@ private struct SessionInputBar: View {
         #endif
     }
 
-    /// Tapping sends the way the person's setting says (queue or steer);
-    /// holding offers the other one FOR THIS MESSAGE ONLY. Both verbs are
-    /// always one gesture away, the way Command/Control+Return makes them on
-    /// the web. Before this, steering a fresh message meant sending it,
-    /// finding its chip, and tapping Steer. Only a running turn has anything
-    /// to choose between, so an idle composer keeps the plain button.
-    ///
-    /// The web's equivalent menu SETS the preference and hands the other
-    /// action to the modifier. That is right there and wrong here, and the
-    /// difference is the modifier: on the web every send already holds a key
-    /// or doesn't, so the menu can spend itself on the default and leave the
-    /// per-message escape hatch to Command+Return. An iPhone has no modifier.
-    /// This menu IS the modifier, and a modifier that silently rewrote your
-    /// default every time you used it would be a strange key. So the override
-    /// stays one-off, and the default stays where a default belongs, in
-    /// Settings. On the Mac, where a modifier does exist, each row also names
-    /// the key that does the same thing.
+    /// Idle sends stay one tap. During a run, the phone opens both delivery
+    /// choices on tap so steering never depends on discovering or winning a
+    /// long-press gesture. The Mac keeps its primary action because its
+    /// modifier key provides a reliable second path.
     @ViewBuilder
     private var sendButton: some View {
         if noteMode {
-            Button { send() } label: { sendButtonFace }
+            Button { send() } label: { sendButtonFace() }
                 .buttonStyle(.plain)
                 .disabled(!canSubmit)
                 .frame(width: 44, height: 44)
                 .contentShape(Circle())
                 .accessibilityLabel("Add note")
         } else if viewModel.isRunning {
+            #if os(iOS)
             Menu {
-                Button {
-                    viewModel.sendDraft(busyModeOverride: "steer")
-                } label: {
-                    Label(
-                        busyMenuTitle("Steer into this run", pref: "steer"),
-                        systemImage: busySend == "steer" ? "checkmark" : "arrow.turn.up.right"
-                    )
-                }
-                Button {
-                    viewModel.sendDraft(busyModeOverride: "queue")
-                } label: {
-                    Label(
-                        busyMenuTitle("Queue for after this run", pref: "queue"),
-                        systemImage: busySend == "steer" ? "clock" : "checkmark"
-                    )
-                }
+                busySendActions
             } label: {
-                sendButtonFace
+                sendButtonFace(showsMenu: true)
+            }
+            .menuOrder(.fixed)
+            .buttonStyle(.plain)
+            .disabled(!canSubmit)
+            .frame(width: 44, height: 44)
+            .contentShape(Circle())
+            .accessibilityLabel("Send options")
+            .accessibilityHint("Choose whether to steer this run or queue the message.")
+            #else
+            Menu {
+                busySendActions
+            } label: {
+                sendButtonFace()
             } primaryAction: {
                 send()
             }
@@ -3569,14 +3549,15 @@ private struct SessionInputBar: View {
             .accessibilityLabel("Send")
             .accessibilityHint(
                 busySend == "steer"
-                    ? "Steers this run. Touch and hold to queue instead."
-                    : "Queues for after this run. Touch and hold to steer instead."
+                    ? "Steers this run. Open the menu to queue instead."
+                    : "Queues for after this run. Open the menu to steer instead."
             )
+            #endif
         } else {
             Button {
                 send()
             } label: {
-                sendButtonFace
+                sendButtonFace()
             }
             .buttonStyle(.plain)
             .disabled(!canSubmit)
@@ -3585,27 +3566,54 @@ private struct SessionInputBar: View {
         }
     }
 
-    /// The disc itself — identical in both forms, so gaining the hold menu
-    /// doesn't change how the button looks.
-    private var sendButtonFace: some View {
-        Image(systemName: "arrow.up")
-            .font(.system(size: 13, weight: .semibold))
-            // Explicit colours for the resting state, not the semantic
-            // `.fill.secondary` / `Color.secondary` pair: both are faint
-            // to begin with, and the dimming SwiftUI applies to a disabled
-            // button on top of that left the disc invisible against the
-            // near-white composer (measured: 242 vs a 252 background).
-            .foregroundStyle(
-                canSubmit ? OS1VisualStyle.onAccent : OS1VisualStyle.textDim
+    @ViewBuilder
+    private var busySendActions: some View {
+        Button {
+            send(busyModeOverride: "steer")
+        } label: {
+            Label(
+                busyMenuTitle("Steer into this run", pref: "steer"),
+                systemImage: busySend == "steer" ? "checkmark" : "arrow.turn.up.right"
             )
-            .frame(width: 32, height: 32)
-            .background(
-                canSubmit
-                    ? AnyShapeStyle(OS1VisualStyle.accent)
-                    : AnyShapeStyle(OS1VisualStyle.hover),
-                in: Circle()
+        }
+        Button {
+            send(busyModeOverride: "queue")
+        } label: {
+            Label(
+                busyMenuTitle("Queue for after this run", pref: "queue"),
+                systemImage: busySend == "steer" ? "clock" : "checkmark"
             )
-            .animation(.easeOut(duration: 0.15), value: canSubmit)
+        }
+    }
+
+    /// The same disc in every state. The small chevron appears only when a tap
+    /// opens delivery choices instead of sending immediately.
+    private func sendButtonFace(showsMenu: Bool = false) -> some View {
+        HStack(spacing: 2) {
+            Image(systemName: "arrow.up")
+                .font(.system(size: 13, weight: .semibold))
+            if showsMenu {
+                Image(systemName: "chevron.down")
+                    .font(.system(size: 7, weight: .bold))
+            }
+        }
+        .offset(x: showsMenu ? 1 : 0)
+        // Explicit colours for the resting state, not the semantic
+        // `.fill.secondary` / `Color.secondary` pair: both are faint
+        // to begin with, and the dimming SwiftUI applies to a disabled
+        // button on top of that left the disc invisible against the
+        // near-white composer (measured: 242 vs a 252 background).
+        .foregroundStyle(
+            canSubmit ? OS1VisualStyle.onAccent : OS1VisualStyle.textDim
+        )
+        .frame(width: 32, height: 32)
+        .background(
+            canSubmit
+                ? AnyShapeStyle(OS1VisualStyle.accent)
+                : AnyShapeStyle(OS1VisualStyle.hover),
+            in: Circle()
+        )
+        .animation(.easeOut(duration: 0.15), value: canSubmit)
     }
 
     private var canSubmit: Bool {
@@ -3617,8 +3625,11 @@ private struct SessionInputBar: View {
         return viewModel.canSend
     }
 
-    private func send() {
+    private func send(busyModeOverride: String? = nil) {
         guard canSubmit else { return }
+        // Play on the accepted control action itself. This stays in sync with
+        // menu picks and keyboard sends even when the composer changes shape.
+        Haptics.play(.send)
         if noteMode {
             addingNote = true
             Task {
@@ -3626,7 +3637,7 @@ private struct SessionInputBar: View {
                 addingNote = false
             }
         } else {
-            viewModel.sendDraft()
+            viewModel.sendDraft(busyModeOverride: busyModeOverride)
         }
     }
 
@@ -3716,8 +3727,7 @@ private struct SessionInputBar: View {
                     let mode = UserDefaults.standard.string(
                         forKey: "os1.composer.busySendMod"
                     ) ?? "steer"
-                    if noteMode { send() }
-                    else { viewModel.sendDraft(busyModeOverride: mode) }
+                    send(busyModeOverride: noteMode ? nil : mode)
                     return nil
                 }
                 if mods == .shift || (mods.isEmpty && preferredSendKey == "mod-enter") {

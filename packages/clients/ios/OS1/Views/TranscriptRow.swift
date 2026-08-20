@@ -684,6 +684,7 @@ private struct FailureContinuationButton: View {
     var body: some View {
         VStack(spacing: 5) {
             Button {
+                Haptics.play(.send)
                 action.viewModel.continueAfterFailure(noticeId: action.noticeId)
             } label: {
                 HStack(spacing: 6) {
