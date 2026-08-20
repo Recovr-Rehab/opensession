@@ -67,13 +67,13 @@ function OrderSection<T extends string>({
 		<section aria-labelledby={`sidebar-order-${label.toLowerCase()}`}>
 			<h3
 				id={`sidebar-order-${label.toLowerCase()}`}
-				className="m-0 mb-1.5 text-label font-semibold text-fg"
+				className="m-0 mb-1.5 text-label font-semibold text-faint"
 			>
 				{label}
 			</h3>
 			{order.length === 0 ? (
 				// Left-aligned like the rows it stands in for.
-				<p className="m-0 rounded-popup bg-panel px-3 py-4 text-label text-faint">
+				<p className="m-0 rounded-lg bg-panel px-2 py-4 text-label text-faint">
 					No {label.toLowerCase()} available.
 				</p>
 			) : (
@@ -82,7 +82,7 @@ function OrderSection<T extends string>({
 					axis="y"
 					values={order}
 					onReorder={setDraft}
-					className="rounded-popup bg-panel p-1"
+					className="rounded-lg bg-panel p-0.5"
 					role="list"
 				>
 					{order.map((id, index) => {
@@ -95,7 +95,7 @@ function OrderSection<T extends string>({
 								value={id}
 								onDragEnd={commit}
 								whileDrag={{ scale: 1.015, zIndex: 2 }}
-								className="focus-ring group flex min-h-9 cursor-grab select-none items-center gap-2.5 rounded-control bg-panel px-2 py-1.5 text-item-title text-fg active:cursor-grabbing hover:bg-hover phone:min-h-11"
+								className="focus-ring group flex min-h-9 cursor-grab select-none items-center gap-2 rounded-control bg-panel px-1.5 py-1.5 text-item-title text-fg active:cursor-grabbing hover:bg-hover phone:min-h-11"
 								role="listitem"
 								tabIndex={0}
 								aria-label={`${item.label}, position ${index + 1} of ${order.length}. Use the up and down arrow keys to move it.`}
