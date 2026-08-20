@@ -430,12 +430,13 @@ export function SessionTabs({
 	 * A drag that ends over the pane hands the tab to the other split column
 	 * (`onSplitDrop`) instead of committing a reorder.
 	 */
-	function reorderItemProps(key: string) {
+	function reorderItemProps(key: string, nextActive: boolean) {
 		const draggable = canDragTabs && editKey !== key;
 		return {
 			as: "div" as const,
 			value: key,
 			"data-tab-key": key,
+			"data-next-active": nextActive ? "" : undefined,
 			dragListener: draggable,
 			onPointerDown: (event: React.PointerEvent) => {
 				if (draggable) trackPointer(key, event);
@@ -549,14 +550,17 @@ export function SessionTabs({
 							aria-hidden="true"
 						/>
 					)}
-					{orderedMembers.map((member) => {
+					{orderedMembers.map((member, memberIndex) => {
 						const key = member.id;
+						// A separator belongs only between two inactive tabs. The active
+						// surface supplies both of its own edges.
+						const nextActive = orderedMembers[memberIndex + 1]?.id === activeTopId;
 						// A view pane (Review, Assets, …): the same draggable item as a
 						// session, minus the rename/color/transcript menu it has no use for.
 						if (member.kind === "view") {
 							const v = member.view;
 							return (
-								<Reorder.Item key={key} {...reorderItemProps(key)}>
+								<Reorder.Item key={key} {...reorderItemProps(key, nextActive)}>
 									<div
 										role="tab"
 										aria-selected={v.active}
@@ -576,7 +580,7 @@ export function SessionTabs({
 										{v.closable !== false && (
 											<button
 												type="button"
-												className={tabCloseClass(v.active)}
+												className={tabCloseClass(isPhone)}
 												aria-label={`Close ${v.label}`}
 												title={`Close ${v.label}`}
 												onClick={(e) => {
@@ -595,7 +599,7 @@ export function SessionTabs({
 						const waiting = !!session.waitingForInput;
 						const hex = colorHex(colors[key]);
 						return (
-							<Reorder.Item key={key} {...reorderItemProps(key)}>
+							<Reorder.Item key={key} {...reorderItemProps(key, nextActive)}>
 								<ContextMenu.Root>
 									<ContextMenu.Trigger
 										render={
@@ -683,7 +687,7 @@ export function SessionTabs({
 										)}
 										<button
 											type="button"
-											className={tabCloseClass(key === activeId)}
+											className={tabCloseClass(isPhone)}
 											aria-label="Close session"
 											title="Close session"
 											onClick={(e) => {

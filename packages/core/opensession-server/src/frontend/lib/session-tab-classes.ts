@@ -45,8 +45,8 @@ const PILL = "rounded-[calc(8px*var(--rf))]";
 /* ── The strip ──────────────────────────────────────────────────────────── */
 
 /**
- * The bar itself. `group/strip` is what reveals the trailing +/history
- * controls, which are quiet chrome until the strip is pointed at.
+ * The bar itself. `group/strip` reveals history, which stays quiet until the
+ * strip is pointed at. The new-tab + remains visible whenever the strip exists.
  *
  * The old rule painted a `linear-gradient(var(--topbar-bg), var(--bg))` here,
  * but BOTH breakpoints set `background: var(--bg)` over it, so the gradient
@@ -126,7 +126,9 @@ export const TAB_ITEM =
 	"desktop:after:pointer-events-none desktop:after:absolute desktop:after:top-1/2 " +
 	"desktop:after:-right-0.5 desktop:after:h-3 desktop:after:w-px desktop:after:-translate-y-1/2 " +
 	"desktop:after:bg-divider desktop:after:content-[''] desktop:last:after:hidden " +
-	"desktop:[&:has(>[aria-selected=true])]:after:hidden";
+	// The active pill supplies both edges: hide this item's trailing divider
+	// when either this item or its next sibling is active.
+	"desktop:[&:has(>[aria-selected=true])]:after:hidden desktop:data-[next-active]:after:hidden";
 
 /** Picked up: an inactive desktop tab has no surface of its own and would smear
  *  over every label it passes. It lifts into an opaque chip while dragging. */
@@ -160,7 +162,7 @@ export const TAB_ACTIONS = "ml-auto flex flex-none items-center gap-[3px]";
  * instead of differing by a pixel.
  */
 const TAB_BASE =
-	"inline-flex max-w-[200px] shrink-0 cursor-pointer items-center gap-1.5 whitespace-nowrap " +
+	"relative inline-flex max-w-[200px] shrink-0 cursor-pointer items-center gap-1.5 whitespace-nowrap " +
 	"px-2.5 py-1.5 text-label transition-[background-color,color] " +
 	// A floating phone pill with a solid fill, so the transcript scrolling
 	// underneath never shows through it. Desktop keeps the same compact box but
@@ -314,26 +316,32 @@ export const PR_DOT_TONE: Record<string, string> = {
 const CLOSE_BASE =
 	"-my-0.5 -mr-[3px] inline-flex size-4 shrink-0 cursor-pointer items-center justify-center " +
 	"rounded-sm border-0 bg-transparent p-0 font-[inherit] text-[15px] leading-none text-dim " +
-	"hover:bg-pressed hover:text-fg " +
-	// Touch screens can't hover, so the × is always there — with a finger-sized
-	// hit area, while the glyph stays small.
-	"[@media_(hover:none)]:size-[26px] [@media_(hover:none)]:-mr-1";
+	"hover:bg-pressed hover:text-fg [@media_(hover:none)]:size-[26px] [@media_(hover:none)]:-mr-1";
 
-/** Revealed with the tab on pointer devices; an active tab keeps its × on. */
-const CLOSE_REVEAL =
+/** Revealed over the trailing edge on hover, so pointer-driven tabs reserve no
+ * width for close. A focused button reveals too, preserving keyboard feedback. */
+const CLOSE_OVERLAY =
+	"[@media_(hover:hover)_and_(pointer:fine)]:absolute " +
+	"[@media_(hover:hover)_and_(pointer:fine)]:right-1 [@media_(hover:hover)_and_(pointer:fine)]:top-1/2 " +
+	"[@media_(hover:hover)_and_(pointer:fine)]:z-[1] [@media_(hover:hover)_and_(pointer:fine)]:m-0 " +
+	"[@media_(hover:hover)_and_(pointer:fine)]:-translate-y-1/2 " +
 	"[@media_(hover:hover)_and_(pointer:fine)]:pointer-events-none " +
 	"[@media_(hover:hover)_and_(pointer:fine)]:opacity-0 " +
 	"[@media_(hover:hover)_and_(pointer:fine)]:transition-opacity " +
 	"[@media_(hover:hover)_and_(pointer:fine)]:group-hover/tab:pointer-events-auto " +
-	"[@media_(hover:hover)_and_(pointer:fine)]:group-hover/tab:opacity-100";
+	"[@media_(hover:hover)_and_(pointer:fine)]:group-hover/tab:opacity-100 " +
+	"[@media_(hover:hover)_and_(pointer:fine)]:focus-visible:pointer-events-auto " +
+	"[@media_(hover:hover)_and_(pointer:fine)]:focus-visible:opacity-100";
 
-export const tabCloseClass = (active: boolean) =>
-	active ? CLOSE_BASE : `${CLOSE_BASE} ${CLOSE_REVEAL}`;
+/** Phones have no hover, so close stays in flow with a finger-sized hit area. */
+const CLOSE_TOUCH = "size-[26px] -mr-1";
+
+export const tabCloseClass = (phone: boolean) =>
+	`${CLOSE_BASE} ${phone ? CLOSE_TOUCH : CLOSE_OVERLAY}`;
 
 /**
- * The trailing "+" and history controls. They are quiet chrome — no pill fill
- * or shadow — and they light up on hover of the strip, on focus (hover cannot
- * be the only way to reach a control) and while their menu is open.
+ * The trailing controls use quiet chrome with no pill fill or shadow. History
+ * reveals with the strip, on focus, and while its menu is open.
  */
 const CTRL_REVEAL =
 	"[@media_(hover:hover)_and_(pointer:fine)]:pointer-events-none " +
@@ -355,15 +363,14 @@ const CTRL_BASE =
 	"hover:bg-hover hover:text-fg";
 
 /**
- * New-tab "+". A comfortable square hit area on touch; on desktop a real
- * control on the same footprint and weight as the header's ⋯ menu, centered
- * on the same line as the tab labels.
+ * New-tab "+". Always visible once there is a strip, so adding a sibling does
+ * not depend on discovering a hover state. It keeps a comfortable square hit
+ * area on touch and matches the header's ⋯ control on desktop.
  */
 export const TAB_NEW =
 	`${CTRL_BASE} justify-center text-[15px] ` +
 	"desktop:min-h-auto desktop:self-center desktop:rounded-control " +
-	"desktop:px-[5px] desktop:py-[3px] desktop:text-[22px] " +
-	CTRL_REVEAL;
+	"desktop:px-[5px] desktop:py-[3px] desktop:text-[22px]";
 
 /**
  * Archived-sessions menu. Same desktop footprint as the "+" it sits beside:
