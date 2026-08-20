@@ -52,25 +52,12 @@ const ICON_PENDING = "cursor-default text-dim";
    mark takes. Those marks are decoration on a row whose whole width is the
    target; this one IS the target, and 20px is too little to aim at.
 
-   The plate is the mark's own ink rather than the list's neutral wash, the
-   same trade the band's rows make: a grey plate on a tinted band reads as a
-   second colour landing on it instead of the band darkening under the
-   pointer.
-
-   It carries that plate at rest, not only on hover. A bare glyph beside a
-   filled Merge button reads as part of the label rather than as something to
-   press, and on a tinted band there is no edge to tell it from the fill. The
-   resting step is faint enough to stay quiet and deep enough to be a target. */
+   The mark stays bare at rest so it belongs to the tinted status band rather
+   than reading as a disabled grey control. Its own ink supplies the hover and
+   press washes, which makes the band darken under the pointer. */
 const SUMMARY_MARK =
 	"grid size-7 shrink-0 place-items-center rounded-md no-underline focus-ring " +
 	"transition-[background-color,scale] duration-150 ease-out";
-/** Resting fill, so the mark is visibly a control before it is pointed at.
- *  14% of the mark's own grey lands about 12 levels under the band it sits on,
- *  which is a plate you can see without it becoming a second button beside
- *  Merge. Below that (10% was the first try) it measured 8 levels and read as
- *  a rendering artefact rather than a control. */
-const SUMMARY_MARK_PLATE =
-	"bg-[color-mix(in_srgb,currentColor_14%,transparent)]";
 /** Pointer and press. The press step also takes a hair of scale, which is what
  *  makes a 28px target feel like it answered. */
 const SUMMARY_MARK_HOVER =
@@ -378,7 +365,6 @@ export function StagingLink({
 					className={cn(
 						SUMMARY_MARK,
 						SUMMARY_MARK_PAIR,
-						SUMMARY_MARK_PLATE,
 						// Amber only while a deploy is in flight. A card of quiet rows
 						// keeps its colour for the ones with something to report, and a
 						// preview that is simply up has nothing.
