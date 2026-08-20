@@ -51,12 +51,11 @@ import React, { useEffect, useRef, useState } from "react";
  *
  *  Rows wrapped in a swipe shell add `mt-0` — the wrapper carries the 2px gap
  *  for them — plus the swipe transform; bare rows keep the margin. On phones,
- *  row content sits one 4px step inside the repo and lane headings, matching
- *  the native list hierarchy instead of flattening every label onto one rail.
- *  That step is written against `--sidebar-icon-left` (8px at its default 16)
- *  rather than as a flat 8, so a family that nests by overriding that variable,
- *  today the runs under an automation, indents at phone width too and not only
- *  on desktop, where the rail pad already reads it.
+ *  row marks sit on the same 20px rail as tool and repo marks. The inset is
+ *  written against `--sidebar-icon-left` (8px at its default 16) rather than
+ *  as a flat 8, so a family that nests by overriding that variable, today the
+ *  runs under an automation, indents at phone width too and not only on
+ *  desktop, where the rail pad already reads it.
  *
  *  `--sidebar-row-pad` around the 22px rail is the sidebar's ITEM height (see
  *  the height scale in lib/sidebar-classes.ts): 7px for a 36px box, and 4px

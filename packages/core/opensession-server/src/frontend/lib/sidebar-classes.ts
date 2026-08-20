@@ -348,9 +348,10 @@ export const SIDEBAR_GROUP_HEADER =
 export const SIDEBAR_HEADER_ROW =
 	"text-body desktop:h-[var(--sidebar-line-h)] desktop:min-h-[var(--sidebar-line-h)] desktop:text-item-title";
 
-/** Left pad puts the icon on the shared rail, whatever the list's inset is. */
+/** Left pad puts the icon on the shared rail, whatever the list's inset is.
+ * Phone headers sit on the same 20px mark rail as the rows they title. */
 export const SIDEBAR_GROUP_HEADER_INSET =
-	`pt-[11px] pr-1 pb-[11px] pl-1 desktop:pt-1 desktop:pr-1.5 desktop:pb-1 ${SIDEBAR_RAIL_PAD_DESKTOP}`;
+	`pt-[11px] pr-1 pb-[11px] pl-2 desktop:pt-1 desktop:pr-1.5 desktop:pb-1 ${SIDEBAR_RAIL_PAD_DESKTOP}`;
 
 /**
  * Status lanes, inbox bands and Snoozed — the groups nested inside a list or a

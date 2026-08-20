@@ -4389,7 +4389,9 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 						// against a heading's box: it sets the tools off from the chrome
 						// above them the way the caption used to. Bottom pad is the gap to
 						// the Workspaces heading.
-						"flex flex-col gap-0.5 px-[var(--sidebar-nav-x)] pt-2 pb-1.5",
+						// Workspace rows use a 20px leading rail on phones. Keep the
+						// tool marks and trailing content on that same line.
+						"flex flex-col gap-0.5 px-[var(--sidebar-nav-x)] pt-2 pb-1.5 phone:[--sidebar-icon-left:20px]",
 					)}
 				>
 					{visibleTools.map((tool) => {
