@@ -39,7 +39,6 @@ import {
 	IconX,
 } from "./icons";
 import { MyAccountsPanel } from "./MyAccounts";
-import { AppearancePanel } from "./settings/AppearancePanel";
 import { AuditPanel } from "./settings/AuditPanel";
 import { DeploysPanel } from "./settings/DeploysPanel";
 import { GeneralPanel } from "./settings/GeneralPanel";
@@ -70,10 +69,10 @@ import type { Workspace } from "../lib/types";
 // section is controlled by the router, not local state.
 //
 // Groups run from what one person owns to what the whole instance does:
-// "Personal" is yours alone — the per-user half first (who sessions act as,
-// your standing prompt, how you write) and the per-device half last
-// (notifications, theme); "Workspace" is shared config every session runs
-// under; "Automation" is the standing work the instance does on its own —
+// "Personal" is yours alone: who sessions act as, how the app looks and
+// behaves for you, and what it notifies you about. "Workspace" is shared
+// config every session runs under. "Automation" is the standing work the
+// instance does on its own:
 // those are the tool surfaces, grouped by what they are rather than sold as
 // the headline; "Infrastructure" is the machinery prepared ahead of a run; and
 // "Activity" is the read-only record agents leave behind.
@@ -229,7 +228,6 @@ function SectionPanel({
 			{TOOL_SECTIONS.has(section) && children}
 			{section === "notifications" && <NotificationsPanel />}
 			{section === "preferences" && <PreferencesPanel />}
-			{section === "appearance" && <AppearancePanel />}
 			{section === "shortcuts" && <ShortcutsPanel />}
 			{section === "general" && <GeneralPanel />}
 			{section === "setup" && <SetupPanel onDone={onBack} />}

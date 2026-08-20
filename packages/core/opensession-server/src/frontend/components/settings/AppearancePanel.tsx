@@ -56,14 +56,15 @@ import {
 import {
 	SettingCard,
 	SettingsGroupLabel,
-	SettingsHeader,
-	SettingsPanel,
 	SettingsSection,
 } from "../../ui/settings";
 import { Switch } from "../../ui/switch";
 import { Select, SettingRow } from "./shared";
 
-// ── Appearance ─────────────────────────────────────────────────────────────
+// The look of the app, as it appears inside Settings → Preferences. These used
+// to be their own Appearance section; they are per-device choices about the
+// same surfaces Preferences already covers, so they sit here rather than one
+// nav row away.
 
 const THEME_OPTIONS: { value: ThemePref; label: string }[] = [
 	{ value: "system", label: "System" },
@@ -72,7 +73,7 @@ const THEME_OPTIONS: { value: ThemePref; label: string }[] = [
 ];
 
 /**
- * Fixed palettes for the miniature mockup below — deliberately raw values
+ * Fixed palettes for the miniature mockup below, deliberately raw values
  * rather than theme tokens, because each swatch has to keep showing its own
  * tone no matter which theme is active. Applied as custom properties so the
  * mock's parts can stay plain utilities.
@@ -93,7 +94,7 @@ const MOCK_PALETTE: Record<"light" | "dark", React.CSSProperties> = {
 };
 
 // A miniature app mockup used inside the theme swatches. Its proportions are
-// percentages of the swatch rather than scale steps — it is an illustration
+// percentages of the swatch rather than scale steps: it is an illustration
 // that has to rescale with the card, not a piece of chrome on the grid.
 function ThemeMock({ tone }: { tone: "light" | "dark" }) {
 	return (
@@ -128,7 +129,7 @@ function ThemeCard({
 		// Selection reads off `data-active` rather than an `.active` class so the
 		// swatch and label can style themselves with group-data-* variants. The
 		// old rules were compound selectors (`.theme-card.active .theme-swatch`),
-		// which outrank a single utility — leaving the class here would have let
+		// which outrank a single utility: leaving the class here would have let
 		// it keep winning against everything below.
 		<button
 			className="group flex cursor-pointer flex-col items-center gap-2.5 border-none bg-transparent p-0"
@@ -194,19 +195,12 @@ function AccentSwatch({
 	);
 }
 
-// ── Workspace · General ─────────────────────────────────────────────────────
-
-/** Text field that commits on blur/Enter (Esc reverts), for the identity
- *  settings backed by the config file rather than local prefs. */
 /**
- * Instance identity. The source of truth is ~/.opensession/config.json
- * (persona.name / branding.productName) on the server, read and written
- * through /api/settings/identity. A save applies to new runs immediately and
- * schedules a frontend rebuild, so open tabs get the update-pill nudge once
- * the re-branded bundle is live.
+ * Theme and accent, in one card. They are the same decision taken twice, how
+ * the app looks, so they share a heading instead of standing as two sections
+ * a scroll apart.
  */
-export function AppearancePanel() {
-	const isPhone = useIsPhone();
+export function AppearanceSection() {
 	const [pref, setPref] = useState<ThemePref>(getThemePref);
 	const [tone, setTone] = useState(effectiveTheme);
 	useEffect(
@@ -218,17 +212,114 @@ export function AppearancePanel() {
 		[],
 	);
 	const [accent, setAccent] = useState<AccentTheme>(getAccentTheme);
-	useEffect(
-		() => onAccentThemeChanged(() => setAccent(getAccentTheme())),
-		[],
+	useEffect(() => onAccentThemeChanged(() => setAccent(getAccentTheme())), []);
+
+	return (
+		<>
+			<SettingsGroupLabel className="mt-0">Appearance</SettingsGroupLabel>
+			<SettingsSection>
+				<div
+					className="grid grid-cols-3 gap-3.5"
+					role="radiogroup"
+					aria-label="Theme"
+				>
+					{THEME_OPTIONS.map((o) => (
+						<ThemeCard
+							key={o.value}
+							option={o.value}
+							active={pref === o.value}
+							onClick={() => {
+								setThemePref(o.value);
+								setPref(o.value);
+							}}
+						/>
+					))}
+				</div>
+				<div className="mt-4 border-t border-divider pt-4">
+					<div className="mb-2 text-control-label font-medium text-faint">
+						Accent
+					</div>
+					<div
+						// One row per breakpoint, so the column count tracks
+						// ACCENT_THEME_OPTIONS.length. A single swatch wrapping onto its
+						// own line reads as a mistake; accent-theme.test.ts guards it.
+						className="grid grid-cols-4 gap-2 desktop:grid-cols-7"
+						role="radiogroup"
+						aria-label="Accent colour"
+					>
+						{ACCENT_THEME_OPTIONS.map((option) => (
+							<AccentSwatch
+								key={option.value}
+								theme={option.value}
+								active={accent === option.value}
+								tone={tone}
+								onClick={() => {
+									setAccentTheme(option.value);
+									setAccent(option.value);
+								}}
+							/>
+						))}
+					</div>
+				</div>
+			</SettingsSection>
+		</>
 	);
-	const [wsTime, setWsTime] = useState<WsTimePref>(getWsTimePref);
-	useEffect(() => onWsTimeChanged(() => setWsTime(getWsTimePref())), []);
+}
+
+/** How sidebar rows are drawn. Rendered inside Preferences' Sidebar card. */
+export function SidebarDisplayRows() {
 	const [density, setDensity] = useState<SidebarDensity>(getSidebarDensity);
 	useEffect(
 		() => onSidebarDensityChanged(() => setDensity(getSidebarDensity())),
 		[],
 	);
+	const [wsTime, setWsTime] = useState<WsTimePref>(getWsTimePref);
+	useEffect(() => onWsTimeChanged(() => setWsTime(getWsTimePref())), []);
+
+	return (
+		<>
+			<SettingRow
+				title="Row density"
+				control={
+					// Two named choices rather than a switch: the same pair the
+					// sidebar's filter menu offers, in the same control, wearing the
+					// same marks, so the two ways in read as one setting.
+					<Segmented
+						label="Sidebar row density"
+						value={density}
+						onValueChange={(v) => setSidebarDensity(v as SidebarDensity)}
+					>
+						{DENSITY_OPTIONS.map(({ value, label, Icon }) => (
+							<SegmentedOption key={value} value={value}>
+								<Icon size={20} />
+								{label}
+							</SegmentedOption>
+						))}
+					</Segmented>
+				}
+			/>
+			<SettingRow
+				title="Show last used time"
+				control={
+					<Select
+						label="Show last used time"
+						value={wsTime}
+						options={[
+							{ value: "off", label: "Off" },
+							{ value: "always", label: "Always" },
+							{ value: "hover", label: "On hover" },
+						]}
+						onChange={setWsTimePref}
+					/>
+				}
+			/>
+		</>
+	);
+}
+
+/** Which tools and sources the sidebar carries, as its own card. */
+export function SidebarItemsSection() {
+	const isPhone = useIsPhone();
 	const [hiddenSidebarTools, setHiddenSidebarTools] = useState(
 		readHiddenSidebarTools,
 	);
@@ -263,93 +354,9 @@ export function AppearancePanel() {
 	);
 
 	return (
-		<SettingsPanel>
-			<SettingsHeader title="Appearance" />
-			<SettingsGroupLabel className="mt-0">Theme</SettingsGroupLabel>
-			<SettingsSection>
-				<div
-					className="grid grid-cols-3 gap-3.5"
-					role="radiogroup"
-					aria-label="Theme"
-				>
-					{THEME_OPTIONS.map((o) => (
-						<ThemeCard
-							key={o.value}
-							option={o.value}
-							active={pref === o.value}
-							onClick={() => {
-								setThemePref(o.value);
-								setPref(o.value);
-							}}
-						/>
-					))}
-				</div>
-			</SettingsSection>
-
-			<SettingsGroupLabel>Accent</SettingsGroupLabel>
-			<SettingsSection>
-				<div
-					// One row per breakpoint, so the column count tracks
-					// ACCENT_THEME_OPTIONS.length. A single swatch wrapping onto its
-					// own line reads as a mistake; accent-theme.test.ts guards it.
-					className="grid grid-cols-4 gap-2 desktop:grid-cols-7"
-					role="radiogroup"
-					aria-label="Accent colour"
-				>
-					{ACCENT_THEME_OPTIONS.map((option) => (
-						<AccentSwatch
-							key={option.value}
-							theme={option.value}
-							active={accent === option.value}
-							tone={tone}
-							onClick={() => {
-								setAccentTheme(option.value);
-								setAccent(option.value);
-							}}
-						/>
-					))}
-				</div>
-			</SettingsSection>
-
-			<SettingsGroupLabel>
-				Sidebar
-			</SettingsGroupLabel>
+		<>
+			<SettingsGroupLabel>Show in sidebar</SettingsGroupLabel>
 			<SettingCard>
-				<SettingRow
-					title="Row density"
-					control={
-						// Two named choices rather than a switch: the same pair the
-						// sidebar's filter menu offers, in the same control, wearing the
-						// same marks, so the two ways in read as one setting.
-						<Segmented
-							label="Sidebar row density"
-							value={density}
-							onValueChange={(v) => setSidebarDensity(v as SidebarDensity)}
-						>
-							{DENSITY_OPTIONS.map(({ value, label, Icon }) => (
-								<SegmentedOption key={value} value={value}>
-									<Icon size={20} />
-									{label}
-								</SegmentedOption>
-							))}
-						</Segmented>
-					}
-				/>
-				<SettingRow
-					title="Show last used time"
-					control={
-						<Select
-							label="Show last used time"
-							value={wsTime}
-							options={[
-								{ value: "off", label: "Off" },
-								{ value: "always", label: "Always" },
-								{ value: "hover", label: "On hover" },
-							]}
-							onChange={setWsTimePref}
-						/>
-					}
-				/>
 				{/* Support is one decision, not two switches. Its tool and its
 				    sidebar band are the same queue reached two ways, so they are
 				    set together here and left out of the lists below. Only
@@ -367,16 +374,13 @@ export function AppearancePanel() {
 									!hiddenSidebarFeeds.has(PLAIN_ID),
 								)}
 								options={SUPPORT_SURFACE_OPTIONS}
-								onChange={(value) =>
-									setSupportSurface(value as SupportSurface)
-								}
+								onChange={(value) => setSupportSurface(value as SupportSurface)}
 							/>
 						}
 					/>
 				)}
 				{SIDEBAR_TOOL_IDS.filter(
-					(toolId) =>
-						toolFitsViewport(toolId, isPhone) && toolId !== PLAIN_ID,
+					(toolId) => toolFitsViewport(toolId, isPhone) && toolId !== PLAIN_ID,
 				).map((toolId) => (
 					<SettingRow
 						key={toolId}
@@ -411,6 +415,6 @@ export function AppearancePanel() {
 						/>
 					))}
 			</SettingCard>
-		</SettingsPanel>
+		</>
 	);
 }

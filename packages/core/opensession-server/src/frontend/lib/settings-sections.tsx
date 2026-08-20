@@ -15,7 +15,6 @@ import {
 	IconGauge,
 	IconHome,
 	IconKeyboard,
-	IconMoon,
 	IconPeople,
 	IconPlug,
 	IconRocket,
@@ -42,7 +41,6 @@ export type SettingsSectionKey =
 	| "myAccounts"
 	| "preferences"
 	| "notifications"
-	| "appearance"
 	| "shortcuts"
 	| "general"
 	| "setup"
@@ -93,12 +91,6 @@ export const SECTIONS: {
 		label: "Notifications",
 		group: "Personal",
 		icon: <IconBell />,
-	},
-	{
-		key: "appearance",
-		label: "Appearance",
-		group: "Personal",
-		icon: <IconMoon />,
 	},
 	{
 		key: "shortcuts",

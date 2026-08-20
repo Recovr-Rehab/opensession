@@ -317,7 +317,6 @@ const SETTINGS_SECTIONS = new Set<SettingsSectionKey>([
 	"myAccounts",
 	"preferences",
 	"notifications",
-	"appearance",
 	"shortcuts",
 	"general",
 	"setup",
@@ -340,6 +339,7 @@ const SETTINGS_SECTIONS = new Set<SettingsSectionKey>([
 
 // Sections that were merged into another one — old links keep working.
 const LEGACY_SETTINGS_SECTIONS: Record<string, SettingsSectionKey> = {
+	appearance: "preferences",
 	model: "models",
 	modelProviders: "models",
 	warmPreviews: "prewarming",

@@ -112,7 +112,7 @@ export function FilterPopover({
 	// Row density is a property of this list, so it sits with the other view
 	// controls rather than only in settings. It is a stored preference, not part
 	// of FilterState — hence its own state here, kept live by the pref's change
-	// event so the Appearance switch and this row never disagree.
+	// event so the Preferences control and this row never disagree.
 	// Both hooks run before the `anchor` early return: an unmounted anchor must
 	// not change how many hooks this component calls.
 	const isPhone = useIsPhone();
@@ -329,7 +329,7 @@ export function FilterPopover({
 						    above decides which rows the list holds, and this only
 						    decides how tightly they are drawn. It is also the only
 						    row here that is not part of the filter at all: it writes
-						    a stored preference the Appearance settings share.
+						    a stored preference the Preferences settings share.
 
 						    Desktop only, because that is the whole of what the
 						    preference does: a phone row is a tap target and keeps its

@@ -42,7 +42,7 @@ const ROUTES: [string, string][] = [
 	// it is the one most worth pinning at both widths.
 	["new", "/new"],
 	["settings", "/settings"],
-	["appearance", "/settings/appearance"],
+	["preferences", "/settings/preferences"],
 	["reviews", "/reviews"],
 	["automations", "/automations"],
 ];

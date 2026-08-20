@@ -94,6 +94,11 @@ import { Switch } from "../../ui/switch";
 import { toast } from "../../ui/toast";
 import { getCurrentUser } from "../UserPicker";
 import { Select, SettingRow } from "./shared";
+import {
+	AppearanceSection,
+	SidebarDisplayRows,
+	SidebarItemsSection,
+} from "./AppearancePanel";
 import { PersonalSandboxDefaultRow } from "./SandboxDefaults";
 
 // ── Desk voice ─────────────────────────────────────────────────────────────
@@ -350,10 +355,10 @@ function BusyGestureSelect({
 }
 
 /**
- * How working with a session behaves for you: the composer keys, what a
- * follow-up does mid-run, and how much of a turn's work the transcript shows.
- * Everything here is per user (ui-prefs), so it follows you across devices —
- * purely visual choices (theme, sidebar) live in Appearance instead.
+ * How the app looks and behaves for you: theme and accent, the composer keys,
+ * what a follow-up does mid-run, and how much of a turn's work the transcript
+ * shows. Everything here is yours alone, and the prefs backed by ui-prefs
+ * follow you across devices.
  */
 export function PreferencesPanel() {
 	const [sendKey, setSendKey] = useState<SendKeyPref>(getSendKeyPref);
@@ -430,7 +435,8 @@ export function PreferencesPanel() {
 	return (
 		<SettingsPanel>
 			<SettingsHeader title="Preferences" />
-			<SettingsGroupLabel className="mt-0">Messages</SettingsGroupLabel>
+			<AppearanceSection />
+			<SettingsGroupLabel>Messages</SettingsGroupLabel>
 			<SettingCard>
 				<SettingRow
 					title="Default model"
@@ -542,6 +548,7 @@ export function PreferencesPanel() {
 			</SettingCard>
 			<SettingsGroupLabel>Sidebar</SettingsGroupLabel>
 			<SettingCard>
+				<SidebarDisplayRows />
 				<SettingRow
 					title="Settle inactive work"
 					desc="Move quiet workspaces into Settled while keeping them in the sidebar."
@@ -595,6 +602,7 @@ export function PreferencesPanel() {
 					}
 				/>
 			</SettingCard>
+			<SidebarItemsSection />
 			<SettingsGroupLabel>Transcript</SettingsGroupLabel>
 			<SettingCard>
 				<SettingRow
