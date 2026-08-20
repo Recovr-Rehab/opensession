@@ -3208,10 +3208,7 @@ private struct SessionInputBar: View {
     /// tighter, longstanding values.
     private var multiLineInset: (horizontal: CGFloat, top: CGFloat, bottom: CGFloat) {
         #if os(iOS)
-        // An attachment already occupies the visual line above the field.
-        // Pull the caption toward it instead of stacking the ordinary 14pt
-        // paragraph inset on top of the strip's own spacing.
-        (16, viewModel.attachedImages.isEmpty ? 14 : 4, 6)
+        (16, 14, 6)
         #else
         (10, 9, 5)
         #endif
