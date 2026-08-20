@@ -320,43 +320,45 @@ export function FirstMile({ onDone }: { onDone: () => void }) {
 
 			<footer
 				className={cn(
-					"relative z-10 grid grid-cols-[1fr_auto_1fr] items-center border-t px-8 pt-1 transition-[border-color,background-color] phone:grid-cols-1 phone:items-start phone:px-5 phone:pt-3",
+					"relative z-10 border-t px-8 pt-1 transition-[border-color,background-color] phone:px-5 phone:pt-3",
 					footerSeparated
 						? "border-line bg-bg/95 backdrop-blur-xl"
 						: "border-transparent bg-[linear-gradient(to_bottom,transparent,var(--bg)_30%)]",
 					index === 0 && "invisible",
 				)}
 			>
-				<Button
-					variant="ghost"
-					size="lg"
-					icon={<IconChevronLeft size={18} />}
-					onClick={() => goTo(index - 1)}
-					className={cn("justify-self-start phone:hidden", index === 0 && "invisible")}
-				>
-					Back
-				</Button>
+				<div className="mx-auto grid h-full w-full max-w-[820px] grid-cols-[1fr_auto_1fr] items-center phone:grid-cols-1 phone:items-start">
+					<Button
+						variant="ghost"
+						size="lg"
+						icon={<IconChevronLeft size={18} />}
+						onClick={() => goTo(index - 1)}
+						className={cn("justify-self-start phone:hidden", index === 0 && "invisible")}
+					>
+						Back
+					</Button>
 
-				<span className="phone:hidden" />
+					<span className="phone:hidden" />
 
-				<Button
-					variant="primary"
-					size="lg"
-					onClick={() => {
-						if (index === STEPS.length - 1) onDone();
-						else goTo(index + 1);
-					}}
-					disabled={!status}
-					className="justify-self-end phone:min-h-12 phone:w-full phone:justify-center phone:rounded-lg"
-				>
-					{index === 0
-						? "Continue"
-						: index === STEPS.length - 1
-							? `Enter ${PRODUCT_NAME}`
-							: index === STEPS.length - 2
-								? "Review"
-								: "Next"}
-				</Button>
+					<Button
+						variant="primary"
+						size="lg"
+						onClick={() => {
+							if (index === STEPS.length - 1) onDone();
+							else goTo(index + 1);
+						}}
+						disabled={!status}
+						className="justify-self-end phone:min-h-12 phone:w-full phone:justify-center phone:rounded-lg"
+					>
+						{index === 0
+							? "Continue"
+							: index === STEPS.length - 1
+								? `Enter ${PRODUCT_NAME}`
+								: index === STEPS.length - 2
+									? "Review"
+									: "Next"}
+					</Button>
+				</div>
 			</footer>
 
 			<SetupRestart setup={setup} />
