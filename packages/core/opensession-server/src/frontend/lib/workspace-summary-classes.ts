@@ -50,7 +50,7 @@ export const WS_SUMMARY_CARD =
  * name back at you.
  */
 export const WS_SUMMARY_SECTION =
-	"mt-2 flex h-[31px] shrink-0 items-center px-4 text-label font-semibold text-dim";
+	"mt-2 flex h-[31px] shrink-0 items-center px-4 text-label font-semibold text-dim first:mt-0";
 
 /**
  * A row. 31px tall on a 300px card, which is the proportion a dense list needs
