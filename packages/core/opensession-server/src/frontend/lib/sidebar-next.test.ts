@@ -73,15 +73,18 @@ describe("nextRenderedSidebarItem", () => {
 function attentionItem({
 	selected = false,
 	unread = false,
+	running = false,
 }: {
 	selected?: boolean;
 	unread?: boolean;
+	running?: boolean;
 } = {}) {
 	return {
 		hasAttribute(name: string) {
 			return (
 				(name === "data-selected" && selected) ||
-				(name === "data-unread" && unread)
+				(name === "data-unread" && unread) ||
+				(name === "data-running" && running)
 			);
 		},
 	};
@@ -117,6 +120,14 @@ describe("nextUnreadRenderedWorkspaceItem", () => {
 		const unread = attentionItem({ unread: true });
 
 		expect(nextUnreadRenderedWorkspaceItem([read, unread])).toBe(unread);
+	});
+
+	test("skips unread workspaces that are still running", () => {
+		const running = attentionItem({ unread: true, running: true });
+		const ready = attentionItem({ unread: true });
+
+		expect(nextUnreadRenderedWorkspaceItem([running, ready])).toBe(ready);
+		expect(nextUnreadRenderedWorkspaceItem([running])).toBeNull();
 	});
 
 	test("returns null when only the selected workspace is unread", () => {

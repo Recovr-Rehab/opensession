@@ -427,6 +427,7 @@ export function SidebarItem({
 					data-sidebar-row=""
 					data-selected={selected || undefined}
 					data-waiting={waiting || undefined}
+					data-running={session.isRunning || undefined}
 					data-unread={unread || undefined}
 					style={
 						visibleSwipeOffset

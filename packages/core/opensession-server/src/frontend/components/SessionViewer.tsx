@@ -2488,6 +2488,7 @@ export function SessionViewer({
 	// the composer is not focused; Ctrl+R focuses it directly.
 	const archiveShortcutLabel = useShortcutLabel("session-archive");
 	const copyTranscriptLabel = useShortcutLabel("session-copy-transcript");
+	const nextUnreadWorkspaceKeys = useShortcutKeys("workspace-next-unread");
 	const newSiblingKeys = useShortcutKeys("session-new-sibling");
 	const transcriptDownKeys = useShortcutKeys("transcript-down");
 	const composerRef = useRef<HTMLTextAreaElement | null>(null);
@@ -5241,6 +5242,14 @@ export function SessionViewer({
 			if (editable && !editable.classList.contains("composer-textarea")) {
 				return;
 			}
+			if (
+				matchesShortcut(e, "workspace-next-unread") &&
+				onNextUnreadWorkspace
+			) {
+				e.preventDefault();
+				onNextUnreadWorkspace();
+				return;
+			}
 			// The sidebar handles live sessions when it can, because it knows which
 			// visible row comes next. Keep this listener as the route-level fallback:
 			// the viewer remains mounted even when the sidebar cannot handle the open
@@ -5252,7 +5261,13 @@ export function SessionViewer({
 		}
 		window.addEventListener("keydown", onKeyDown, true);
 		return () => window.removeEventListener("keydown", onKeyDown, true);
-	}, [focused, archiving, handleArchive, session.archived]);
+	}, [
+		focused,
+		archiving,
+		handleArchive,
+		onNextUnreadWorkspace,
+		session.archived,
+	]);
 
 	// Preview environment for the ⌘O chord — mirrors StagingLink's poll (same
 	// relevance gate; the server caches PR details for 30s, so the duplicate
@@ -7265,15 +7280,20 @@ export function SessionViewer({
 								/>
 								{onNextUnreadWorkspace && (
 									<div className="mx-auto mb-2 flex w-full max-w-[calc(var(--session-col)+40px)] justify-end pr-5">
-										<Button
-											size="lg"
-											className="min-h-10 border-divider hover:border-line phone:min-h-11"
-											trailing={<IconChevronRight size={18} aria-hidden />}
-											aria-label="Next unread workspace"
-											onClick={onNextUnreadWorkspace}
+										<Tooltip
+											label="Next ready unread workspace"
+											shortcut={nextUnreadWorkspaceKeys ?? undefined}
 										>
-											Next
-										</Button>
+											<Button
+												size="lg"
+												className="min-h-10 border-divider hover:border-line phone:min-h-11"
+												trailing={<IconChevronRight size={18} aria-hidden />}
+												aria-label="Next unread workspace"
+												onClick={onNextUnreadWorkspace}
+											>
+												Next
+											</Button>
+										</Tooltip>
 									</div>
 								)}
 								<Composer

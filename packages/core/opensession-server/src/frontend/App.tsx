@@ -112,6 +112,7 @@ import {
 	IconUnarchive,
 	IconBook,
 	IconChart,
+	IconChevronRight,
 	IconCopy,
 	IconDesk,
 	IconFile,
@@ -1059,6 +1060,8 @@ export function App(
 	// recreated each render, but effects/handlers can capture an older copy.
 	const routeRef = useRef(route);
 	const sidebarRef = useRef<SidebarHandle>(null);
+	const nextUnreadWorkspaceRef = useRef<() => void>(() => {});
+	const [nextUnreadAvailable, setNextUnreadAvailable] = useState(false);
 	routeRef.current = route;
 	// The mobile layout is an iOS-style navigation stack: the sidebar is the root
 	// (depth 0) and each panel is pushed over it. Every entry carries its own
@@ -3880,6 +3883,22 @@ export function App(
 								},
 							]
 						: []),
+					...(nextUnreadAvailable
+						? [
+								{
+									id: "next-unread-workspace",
+									label: "Next unread workspace",
+									description:
+										"Open the next ready workspace with unread activity",
+									category: "Navigate" as const,
+									keywords: ["next", "unread", "ready", "attention"],
+									shortcut:
+										shortcutPrimaryKeys("workspace-next-unread") ?? undefined,
+									icon: <IconChevronRight size={18} />,
+									run: () => nextUnreadWorkspaceRef.current(),
+								},
+							]
+						: []),
 					{
 						id: "copy-transcript",
 						label: "Copy conversation",
@@ -4182,6 +4201,7 @@ export function App(
 		next.scrollIntoView({ block: "nearest" });
 		next.click();
 	};
+	nextUnreadWorkspaceRef.current = openNextUnreadWorkspace;
 	const renderSessionPane = (
 		viewerSession: UnifiedSession,
 		socket: ReturnType<typeof useWebSocket>,
@@ -4201,7 +4221,11 @@ export function App(
 				hideHeader={splitMode && !focused}
 				hideRightPanel={splitMode && !focused}
 				onBack={goBack}
-				onNextUnreadWorkspace={focused ? openNextUnreadWorkspace : undefined}
+				onNextUnreadWorkspace={
+					focused && nextUnreadAvailable
+						? openNextUnreadWorkspace
+						: undefined
+				}
 				onArchive={() =>
 					focused
 						? sidebarRef.current?.archiveSelected()
@@ -4835,6 +4859,7 @@ export function App(
 							onOpenArchived={() => navigate({ view: "archived" })}
 							onOpenCatchUp={() => navigate({ view: "catchup" })}
 							catchUpActive={route.view === "catchup"}
+							onNextUnreadAvailableChange={setNextUnreadAvailable}
 							archivedActive={route.view === "archived"}
 							onArchive={(s, openNext) => {
 								const archive = async () => {

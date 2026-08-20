@@ -254,7 +254,10 @@ import {
 	stripPrTitlePrefix,
 } from "../lib/sidebar-lanes";
 import { sessionHasPr } from "../lib/session-prs";
-import { nextRenderedSidebarItem } from "../lib/sidebar-next";
+import {
+	nextRenderedSidebarItem,
+	nextUnreadRenderedWorkspaceItem,
+} from "../lib/sidebar-next";
 import { sessionHasWorkspace } from "../lib/session-workspace";
 import {
 	LONG_PRESS_MS,
@@ -355,6 +358,7 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 	archivedActive,
 	onOpenCatchUp,
 	catchUpActive,
+	onNextUnreadAvailableChange,
 	onArchive,
 	onArchiveWorkspace,
 	onRename,
@@ -2097,6 +2101,19 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 		archiveSelected: archiveOpenSessionWithNext,
 	}));
 
+	const reportedNextUnreadAvailable = useRef<boolean | null>(null);
+	useLayoutEffect(() => {
+		const items = Array.from(
+			sidebarScrollRef.current?.querySelectorAll<HTMLButtonElement>(
+				"[data-sidebar-list] button[data-ws-row]",
+			) ?? [],
+		);
+		const available = !!nextUnreadRenderedWorkspaceItem(items);
+		if (reportedNextUnreadAvailable.current === available) return;
+		reportedNextUnreadAvailable.current = available;
+		onNextUnreadAvailableChange?.(available);
+	});
+
 	// Advertised keycaps, read through the registry so a rebind in Settings
 	// repaints the hints instead of leaving them describing the old chord.
 	const newSessionKeys = useShortcutKeys("session-new");
@@ -2974,6 +2991,7 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 					data-ws-row=""
 					data-selected={active || undefined}
 					data-waiting={waiting || undefined}
+					data-running={row.running || undefined}
 					data-unread={row.unread || undefined}
 					style={
 						swipeOffset

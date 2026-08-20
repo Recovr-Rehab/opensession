@@ -44,6 +44,7 @@ export type ShortcutId =
 	| "sidebar-toggle"
 	| "sidebar-next"
 	| "sidebar-prev"
+	| "workspace-next-unread"
 	| "tab-next"
 	| "tab-prev"
 	| "shortcuts-help"
@@ -136,6 +137,13 @@ export const SHORTCUT_COMMANDS: ShortcutCommand[] = [
 		description: "Open the session above the current one",
 		group: "Navigation",
 		defaults: ["mod+arrowup"],
+	},
+	{
+		id: "workspace-next-unread",
+		title: "Next unread workspace",
+		description: "Open the next ready workspace with unread activity",
+		group: "Navigation",
+		defaults: ["alt+shift+arrowdown"],
 	},
 	// The tab strip's horizontal answer to the sidebar's ⌘↑/⌘↓. ⌘⌥ arrows are
 	// the neighbouring family (⌘⌥↑/↓ already step the reasoning effort), which
