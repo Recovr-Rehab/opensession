@@ -49,7 +49,6 @@ import {
 	WS_SUMMARY_BAND,
 	WS_SUMMARY_BAND_PAD,
 	WS_SUMMARY_LABEL,
-	WS_SUMMARY_RAIL,
 	WS_SUMMARY_STATUS_ROW,
 } from "../lib/workspace-summary-classes";
 import { Tooltip } from "../ui/tooltip";
@@ -71,10 +70,8 @@ import {
 	IconCopy,
 	IconHash,
 	IconCheck,
-	IconClock,
 	IconPlus,
 	IconArchive,
-	IconX,
 } from "./icons";
 
 /**
@@ -183,35 +180,6 @@ function deriveHeadline(
 			tone: "muted",
 		};
 	return { key: "clean", label: "Up to date", tone: "muted" };
-}
-
-/** The summary card's headline glyph for states where an icon adds meaning.
- *  Ready stands on its green band and label without repeating the signal. */
-function headlineGlyph(key: PrHeadline["key"]): React.ReactNode {
-	switch (key) {
-		case "merged":
-		case "conflicts":
-			return <IconGitMerge size={20} />;
-		case "closed":
-		case "failing":
-		case "changes-requested":
-			return <IconX size={20} />;
-		case "running":
-			return <IconClock size={20} />;
-		case "ahead":
-			return <IconArrowUp size={20} />;
-		case "behind":
-		case "behind-base":
-			return <IconArrowDown size={20} />;
-		case "no-pr":
-		case "draft":
-		case "stack-blocked":
-			return <IconPullRequest size={20} />;
-		case "ready":
-			return null;
-		default:
-			return <IconCheck size={20} />;
-	}
 }
 
 export type { SessionPrRef } from "../lib/pr-refs";
@@ -1104,17 +1072,11 @@ export function PrStatusBar({
 					// know which PR this is, so it stays as the row's tooltip.
 					title={pr ? `#${pr.number} · ${pr.title}` : undefined}
 				>
-					{/* The preview environment this PR deployed: same subject, same
-					    plate, and now the same line. It leads the row because it is the
-					    only part of the band you go somewhere else to use, and because
-					    a globe beside the state glyph needs no label to be read. Renders
-					    nothing when the PR has no preview, and the row closes up. */}
+					{/* The preview environment this PR deployed is the row's only
+					    leading mark. The status label already says where the work stands,
+					    so repeating it with a glyph would only take space from that label.
+					    Renders nothing when the PR has no preview, and the row closes up. */}
 					{children}
-					{headline.key !== "ready" && (
-						<span className={cn(WS_SUMMARY_RAIL, PR_STATE_TEXT[headlineTone])}>
-							{headlineGlyph(headline.key)}
-						</span>
-					)}
 				{/* When checks are the reason for the headline, the headline IS the
 				    checks control, exactly as on the strip: hovering lists them,
 				    clicking opens Review's Checks tab. */}
