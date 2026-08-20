@@ -173,6 +173,7 @@ import {
 	IconPullRequest,
 } from "./icons";
 import { Button } from "../ui/button";
+import { useConfirm } from "../ui/confirm";
 import { Tooltip } from "../ui/tooltip";
 import { ContextMenu, MENU_ICON, Menu } from "../ui/menu";
 import { Popover } from "../ui/popover";
@@ -1961,6 +1962,20 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 		return item.bucket === "ready" ? "review" : "pending";
 	}
 
+	const [confirm, confirmDialog] = useConfirm();
+
+	// Every draft entry point uses the same styled confirmation instead of the
+	// browser's native alert.
+	function confirmDeleteDraft(onConfirm: () => void) {
+		confirm({
+			title: "Delete this draft?",
+			description: "This removes the unsent message.",
+			confirmLabel: "Delete",
+			destructive: true,
+			onConfirm,
+		});
+	}
+
 	// Closing a PR from a row's context menu — optimistic spinner per URL; the
 	// PR_CLOSED_EVENT listener above prunes the open-PR list on success.
 	const [closingPrUrls, setClosingPrUrls] = useState<Set<string>>(
@@ -3441,12 +3456,12 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 								aria-label="Delete draft"
 								onClick={(e) => {
 									e.stopPropagation();
-									if (window.confirm("Delete this draft?")) deleteDraftWsRow(row);
+									confirmDeleteDraft(() => deleteDraftWsRow(row));
 								}}
 								onKeyDown={(e) => {
 									if (e.key === "Enter" || e.key === " ") {
 										e.stopPropagation();
-										if (window.confirm("Delete this draft?")) deleteDraftWsRow(row);
+										confirmDeleteDraft(() => deleteDraftWsRow(row));
 									}
 								}}
 							>
@@ -5274,10 +5289,8 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 							icon: <IconTrash size={20} />,
 							danger: true,
 							label: "Delete draft",
-							onClick: () => {
-								if (window.confirm(`Delete this draft?`))
-									onDeleteWorkspace(ws.id);
-							},
+							onClick: () =>
+								confirmDeleteDraft(() => onDeleteWorkspace(ws.id)),
 						});
 					}
 
@@ -6153,10 +6166,11 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 							onDelete={
 								ws
 									? () => {
-											const message =
-												row.sessions.length === 0
-													? `Delete this draft?`
-													: `Delete workspace "${ws.name}"? Its sessions become standalone.`;
+											if (row.sessions.length === 0) {
+												confirmDeleteDraft(() => onDeleteWorkspace(ws.id));
+												return;
+											}
+											const message = `Delete workspace "${ws.name}"? Its sessions become standalone.`;
 											if (window.confirm(message)) onDeleteWorkspace(ws.id);
 										}
 									: null
@@ -6195,6 +6209,7 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 			}
 			onRepositoryOrderChange={setRepoOrder}
 		/>
+		{confirmDialog}
 		</>
 	);
 });
