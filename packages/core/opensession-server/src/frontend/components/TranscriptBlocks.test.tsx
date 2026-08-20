@@ -370,7 +370,7 @@ describe("TranscriptBlocks compact tool runs", () => {
 		expect(html.match(/data-tool-run="true"/g)).toHaveLength(2);
 	});
 
-	test("surfaces failure and incidental media status on the compact row", () => {
+	test("keeps incidental media status without repeating failures on the compact row", () => {
 		setTurnPrefs(null);
 		const html = renderToStaticMarkup(
 			<TranscriptBlocks
@@ -385,9 +385,10 @@ describe("TranscriptBlocks compact tool runs", () => {
 			/>,
 		);
 
-		expect(html).toContain("1 failed");
+		expect(html).not.toContain("1 failed");
+		expect(html).not.toContain("failed step");
 		expect(html).toContain("1 image");
-		expect(html).toContain("1 failed, 1 media");
+		expect(html).toContain("1 media");
 	});
 
 	test("keeps featured media and subagents as direct rows", () => {

@@ -42,7 +42,7 @@ interface Props {
  * One assistant turn's work, folded into a single calm line — "Worked · 12m 4s
  * · 51 steps" — closed by default so the session reads as question → answer.
  * Expanding shows the full flat run: intermediate assistant notes interleaved
- * with the tool calls, followed by failures and a compact change summary.
+ * with the tool calls and a compact change summary.
  *
  * The collapsed line carries what a folded turn can't otherwise say: duration,
  * step count, and the ±lines it moved when the turn wrote files. Line changes
@@ -124,9 +124,6 @@ export const TurnBlock = React.memo(function TurnBlock({
   }
 
   const duration = blockDuration(items, toolResults);
-  const failures = tools.filter(
-    (it) => it.toolUseId && toolResults.get(it.toolUseId)?.isError
-  ).length;
   const lastTool = tools[tools.length - 1];
 
   // Memoized against the house rule: a live turn re-renders on every stream
@@ -271,17 +268,6 @@ export const TurnBlock = React.memo(function TurnBlock({
               </div>
             )
           )}
-          {/* Failures only. The files this turn wrote were repeated here as
-              chips back when a step row named a path and nothing else. Every
-              file step now wears its own language mark, so an open fold
-              already says which files it touched, and the answer's footer
-              still carries them for the folded turn. */}
-          {failures > 0 && (
-            // The row starts where every other row in the fold does.
-            <div className="mt-1 flex flex-wrap items-center gap-x-0.5 gap-y-1 px-1 text-label leading-4 text-faint">
-              {failures} failed {failures === 1 ? "step" : "steps"}
-            </div>
-          )}
         </div>
       )}
 
@@ -399,7 +385,6 @@ function ToolRunBlock({
 
   const {
     label,
-    failures,
     pending,
     additions,
     deletions,
@@ -452,11 +437,6 @@ function ToolRunBlock({
         <span className="min-w-0 flex-1" />
         {mediaLabel && (
           <span className="flex-shrink-0 text-meta text-faint">{mediaLabel}</span>
-        )}
-        {failures > 0 && (
-          <span className="flex-shrink-0 text-meta text-faint">
-            {failures} failed
-          </span>
         )}
         {pending > 0 && (
           <span className="size-[11px] flex-shrink-0 animate-spin rounded-full border border-b-line-strong border-l-line-strong border-r-line-strong border-t-dim" />
@@ -522,7 +502,6 @@ function groupedToolLabel(items: TranscriptEntry[]): string {
 /** Everything the folded run's row says, derived once per run. */
 interface ToolRunAggregate {
   label: string;
-  failures: number;
   pending: number;
   additions: number;
   deletions: number;
@@ -536,8 +515,8 @@ interface ToolRunAggregate {
 // replaced rather than mutated when they change (mergeTranscriptEntries), so
 // identity is a sound key. But a call earlier in the run can be replaced while
 // the last one stands, and so can the RESULT a call is waiting on, which is
-// what decides pending, failures and the media counts. Both are compared on a
-// hit, and `live` with them.
+// what decides pending and the media counts. Both are compared on a hit, and
+// `live` with them.
 //
 // Worth caching because the work is repeated rather than one-off: a live turn
 // re-renders on every stream event and this walks every step it has taken so
@@ -566,7 +545,6 @@ function toolRunAggregate(
   const results = items.map((entry) =>
     entry.toolUseId ? toolResults.get(entry.toolUseId) : undefined
   );
-  let failures = 0;
   let pending = 0;
   let images = 0;
   let videos = 0;
@@ -575,7 +553,6 @@ function toolRunAggregate(
   for (let i = 0; i < items.length; i++) {
     const entry = items[i];
     const result = results[i];
-    if (result?.isError) failures++;
     if (live && entry.toolUseId && !result) pending++;
     images += result?.images?.length ?? 0;
     videos += result?.videos?.length ?? 0;
@@ -588,12 +565,10 @@ function toolRunAggregate(
   const mediaCount = images + videos;
   const value: ToolRunAggregate = {
     label: groupedToolLabel(items),
-    failures,
     pending,
     additions,
     deletions,
     statusLabel: [
-      failures > 0 ? `${failures} failed` : "",
       mediaCount > 0 ? `${mediaCount} media` : "",
       pending > 0 ? "running" : "",
     ].filter(Boolean).join(", "),

@@ -103,20 +103,18 @@ describe("grouped tool run row", () => {
 		expect(html).toContain("-1");
 	});
 
-	test("picks up a result that arrives for an unchanged run", () => {
-		// Same entry objects, so the cache key hits. The failure must still appear,
-		// which is why the looked-up results are compared on a hit.
+	test("does not repeat a failed result on the grouped row", () => {
 		const items = [
 			toolUse("fail-a", "Bash", { command: "ls" }),
 			toolUse("fail-b", "Bash", { command: "false" }),
 		];
-		expect(render(items, new Map())).not.toContain("failed");
-
 		const withError = new Map([["use-fail-b", result("fail-b", { isError: true })]]);
 		const html = render(items, withError);
 
-		expect(html).toContain("1 failed");
-		expect(html).toContain("text-meta text-faint");
+		// The individual step still carries its quiet Error state when opened.
+		// Repeating a failure count on the folded row made routine failures feel
+		// like a turn-level alert.
+		expect(html).not.toContain("failed");
 		expect(html).not.toContain("text-red/80");
 	});
 
