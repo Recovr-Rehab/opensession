@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { fetchWaitlist, type WaitlistEntryDto } from "../../lib/api";
-import { fullTime, warmAgo } from "../../lib/time";
+import { fullTime } from "../../lib/time";
 import { Button } from "../../ui/button";
 import {
 	SettingCard,
@@ -49,12 +49,12 @@ export function WaitlistPanel() {
 			title="Waitlist"
 			description={
 				slackChannel
-					? `Review website requests here while new signups also appear in #${slackChannel}.`
-					: "Review access requests collected from the website."
+					? `Website requests appear here and in #${slackChannel}.`
+					: "Website requests appear here."
 			}
 			actions={
 				entries?.length ? (
-					<Button size="sm" onClick={() => void copyEmails()}>
+					<Button className="max-sm:hidden" size="sm" onClick={() => void copyEmails()}>
 						Copy emails
 					</Button>
 				) : undefined
@@ -79,7 +79,19 @@ export function WaitlistPanel() {
 		<SettingsPanel>
 			{header}
 			{error && <InlineAlert onDismiss={() => setError(null)}>{error}</InlineAlert>}
-			<SettingsGroupLabel>
+			<SettingsGroupLabel
+				actions={
+					entries.length ? (
+						<Button
+							className="min-h-10 sm:hidden"
+							size="md"
+							onClick={() => void copyEmails()}
+						>
+							Copy emails
+						</Button>
+					) : undefined
+				}
+			>
 				{entries.length} {entries.length === 1 ? "request" : "requests"}
 			</SettingsGroupLabel>
 			{entries.length === 0 ? (
@@ -96,8 +108,8 @@ export function WaitlistPanel() {
 										{entry.email}
 									</a>
 								</SettingRowTitle>
-								<SettingRowDescription title={fullTime(entry.createdAt)}>
-									{warmAgo(entry.createdAt)}
+								<SettingRowDescription>
+									{fullTime(entry.createdAt)}
 								</SettingRowDescription>
 							</SettingRowText>
 						</SettingRow>
