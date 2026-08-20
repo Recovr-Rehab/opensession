@@ -525,6 +525,8 @@ type IndexedTimelineAtom =
 	| {
 			kind: "range";
 			range: TranscriptIndexedRange;
+			/** Live turn entries that have not received durable seq values yet. */
+			continuationEntryIds: string[];
 			timestampMs: number;
 			notes: SessionNote[];
 			walkthrough?: SessionWalkthrough;
@@ -565,26 +567,49 @@ function IndexedTranscriptBlocks(props: Props) {
 	}, []);
 	const ranges = buildTranscriptRanges(transcriptIndex);
 	const payloadById = new Map(entries.map((entry) => [entry.id, entry]));
+	const indexedIds = new Set(ranges.flatMap((range) => range.entryIds));
 	const atoms: IndexedTimelineAtom[] = ranges.map((range) => ({
 		kind: "range",
 		range,
+		continuationEntryIds: [],
 		timestampMs: range.endTimestampMs,
 		notes: [],
 	}));
 	for (const entry of entries) {
-		if (typeof entry.seq === "number") continue;
+		if (typeof entry.seq === "number" || indexedIds.has(entry.id)) continue;
 		atoms.push({
 			kind: "entry",
 			entry,
 			timestampMs: Date.parse(entry.timestamp) || 0,
 		});
 	}
+	atoms.sort((a, b) => a.timestampMs - b.timestampMs);
+	// Live turn frames arrive before their durable sequence numbers. Keep a
+	// separate overlay on the durable tail range so one assistant turn cannot
+	// temporarily split into a settled Worked group and a loose call. The range
+	// bounds and entry IDs stay durable-only for sparse hydration requests.
+	const tailRange = ranges[ranges.length - 1];
+	for (let index = 1; index < atoms.length; index++) {
+		const atom = atoms[index]!;
+		const previous = atoms[index - 1]!;
+		if (
+			atom.kind !== "entry" ||
+			previous.kind !== "range" ||
+			previous.range !== tailRange ||
+			!isLiveToolEntry(atom.entry)
+		)
+			continue;
+		previous.continuationEntryIds.push(atom.entry.id);
+		previous.timestampMs = Math.max(previous.timestampMs, atom.timestampMs);
+		atoms.splice(index, 1);
+		index--;
+	}
 	for (const note of notes ?? []) {
 		const containing = atoms.find(
 			(atom) =>
 				atom.kind === "range" &&
 				note.ts >= atom.range.startTimestampMs &&
-				note.ts <= atom.range.endTimestampMs,
+				note.ts <= atom.timestampMs,
 		);
 		if (containing?.kind === "range") containing.notes.push(note);
 		else atoms.push({ kind: "note", note, timestampMs: note.ts });
@@ -596,9 +621,9 @@ function IndexedTranscriptBlocks(props: Props) {
 			(atom) =>
 				atom.kind === "range" &&
 				(publishedEntryId
-					? atom.range.entryIds.includes(publishedEntryId)
+					? indexedAtomEntryIds(atom).includes(publishedEntryId)
 					: publishedAt >= atom.range.startTimestampMs &&
-						publishedAt <= atom.range.endTimestampMs),
+						publishedAt <= atom.timestampMs),
 		);
 		if (containing?.kind === "range") containing.walkthrough = walkthrough;
 		else
@@ -716,6 +741,10 @@ function IndexedTranscriptBlocks(props: Props) {
 	);
 }
 
+function isLiveToolEntry(entry: TranscriptEntry): boolean {
+	return entry.type === "tool_use" || entry.type === "tool_result";
+}
+
 function groupIndexedReviewLoops(
 	atoms: IndexedTimelineAtom[],
 ): IndexedTimelineItem[] {
@@ -759,11 +788,16 @@ function indexedItemRanges(item: IndexedTimelineItem): TranscriptIndexedRange[] 
 	return [];
 }
 
-function indexedItemEntryIds(item: IndexedTimelineItem): string[] {
-	if (item.kind === "entry") return [item.entry.id];
-	if (item.kind === "range") return item.range.entryIds;
-	if (item.kind === "review") return item.ranges.flatMap((range) => range.entryIds);
+function indexedAtomEntryIds(atom: IndexedTimelineAtom): string[] {
+	if (atom.kind === "entry") return [atom.entry.id];
+	if (atom.kind === "range")
+		return [...atom.range.entryIds, ...atom.continuationEntryIds];
 	return [];
+}
+
+function indexedItemEntryIds(item: IndexedTimelineItem): string[] {
+	if (item.kind === "review") return item.atoms.flatMap(indexedAtomEntryIds);
+	return indexedAtomEntryIds(item);
 }
 
 function indexedItemNotes(item: IndexedTimelineItem): SessionNote[] | undefined {

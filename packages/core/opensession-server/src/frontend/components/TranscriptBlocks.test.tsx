@@ -760,7 +760,12 @@ describe("TranscriptBlocks virtual-list fallback", () => {
 describe("TranscriptBlocks indexed ranges", () => {
 	const indexRow = (
 		seq: number,
-		role: "user" | "assistant" | "review_handoff",
+		role:
+			| "user"
+			| "assistant"
+			| "tool_use"
+			| "tool_result"
+			| "review_handoff",
 		extra: Record<string, unknown> = {},
 	) => ({
 		id: `indexed-${seq}`,
@@ -817,6 +822,96 @@ describe("TranscriptBlocks indexed ranges", () => {
 		);
 		expect(html).toContain("Visible tail answer");
 		expect(html).not.toContain("Loading messages");
+	});
+
+	test("keeps live tool frames inside their indexed work group", () => {
+		setTurnPrefs(null);
+		const at = (seq: number) => `2026-08-12T12:00:0${seq}Z`;
+		const tool = (seq: number, durable = true): TranscriptEntry => ({
+			id: `indexed-${seq}`,
+			type: "tool_use",
+			toolUseId: `call-${seq}`,
+			toolName: "bash",
+			toolInput: { command: `check ${seq}` },
+			content: "Using bash",
+			timestamp: at(seq),
+			...(durable ? { seq, changeSeq: seq } : {}),
+		});
+		const result = (
+			seq: number,
+			toolSeq: number,
+			durable = true,
+		): TranscriptEntry => ({
+			id: `indexed-${seq}`,
+			type: "tool_result",
+			toolUseId: `call-${toolSeq}`,
+			content: "ok",
+			timestamp: at(seq),
+			...(durable ? { seq, changeSeq: seq } : {}),
+		});
+		const baseIndex = [
+			indexRow(1, "user"),
+			indexRow(2, "tool_use"),
+			indexRow(3, "tool_result"),
+			indexRow(4, "tool_use"),
+			indexRow(5, "tool_result"),
+		];
+		const fullIndex = [
+			...baseIndex,
+			indexRow(6, "tool_use"),
+			indexRow(7, "tool_result"),
+		];
+		const baseEntries: TranscriptEntry[] = [
+			{
+				id: "indexed-1",
+				seq: 1,
+				changeSeq: 1,
+				type: "user",
+				content: "Inspect the session",
+				timestamp: at(1),
+			},
+			tool(2),
+			result(3, 2),
+			tool(4),
+			result(5, 4),
+		];
+		const liveTool = tool(6, false);
+		const liveResult = result(7, 6, false);
+		const scenarios = [
+			{ index: baseIndex, entries: [...baseEntries, liveTool, liveResult] },
+			{
+				index: [...baseIndex, indexRow(6, "tool_use")],
+				entries: [
+					...baseEntries,
+					{ ...liveTool, seq: 6, changeSeq: 6 },
+					liveResult,
+				],
+			},
+			// The index and payload state updates can render in either order.
+			{ index: fullIndex, entries: [...baseEntries, liveTool, liveResult] },
+			{
+				index: fullIndex,
+				entries: [
+					...baseEntries,
+					{ ...liveTool, seq: 6, changeSeq: 6 },
+					{ ...liveResult, seq: 7, changeSeq: 7 },
+				],
+			},
+		];
+
+		for (const scenario of scenarios) {
+			const html = renderToStaticMarkup(
+				<TranscriptBlocks
+					live
+					transcriptIndex={scenario.index}
+					entries={scenario.entries}
+				/>,
+			);
+			expect(html).toContain(">Working</span>");
+			expect(html).not.toContain(">Worked</span>");
+			expect(html).toContain("3 steps");
+			expect(html).toContain('data-eid="indexed-6#turn"');
+		}
 	});
 
 	test("keeps a note inside its loaded conversation range", () => {
