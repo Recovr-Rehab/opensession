@@ -192,26 +192,7 @@ function GithubAuthSetupDialog({
 					}
 				>
 					<div className="flex flex-col gap-4">
-						<SetupSteps
-							steps={[
-								<>Create an organization-owned GitHub App.</>,
-								<>
-									Tick <strong>Enable Device Flow</strong>. Signing in is a device code, so without it nobody can sign in at all.
-								</>,
-								<>
-									Under Repository permissions, grant <strong>Contents: read and write</strong>, <strong>Pull requests: read and write</strong>, and <strong>Issues: read and write</strong>. Under Organization permissions, grant <strong>Members: read-only</strong> so setup can import your team. Metadata remains read-only.
-								</>,
-								<>
-									Install the app only on your organization. Choose all repositories, or select only the repositories Open Session should work in.
-								</>,
-								<>
-									Paste the client id and the client secret above. Sign-in is a device code and needs no secret, but renewing a teammate&rsquo;s token does, and without it their access stops after a few hours.
-								</>,
-								<>
-									Enable GitHub sign-in, save, restart Open Session, then have each teammate connect under Personal → Account.
-								</>,
-							]}
-						/>
+						<SetupSteps steps={githubSetupSteps("above")} />
 						<GuideBlock title="Permissions">
 							<ul className="m-0 flex flex-col gap-1.5 pl-5 text-supporting leading-relaxed text-dim">
 								<li>Contents write lets a connected teammate&rsquo;s interactive session push commits; pull-request and issue write cover PR creation, reviews, and conversation comments.</li>
@@ -231,6 +212,34 @@ function GithubAuthSetupDialog({
 			</Modal.Content>
 		</Modal.Root>
 	);
+}
+
+/** The GitHub App walkthrough, in one place so the setup dialog and the
+ *  onboarding step cannot drift apart. `paste` names where the credential
+ *  fields are from the reader's position: the dialog puts them right above
+ *  this list, while onboarding opens them from Configure. */
+function githubSetupSteps(paste: "above" | "configure"): React.ReactNode[] {
+	return [
+		<>Create an organization-owned GitHub App.</>,
+		<>
+			Tick <strong>Enable Device Flow</strong>. Signing in is a device code, so without it nobody can sign in at all.
+		</>,
+		<>
+			Under Repository permissions, grant <strong>Contents: read and write</strong>, <strong>Pull requests: read and write</strong>, and <strong>Issues: read and write</strong>. Under Organization permissions, grant <strong>Members: read-only</strong> so setup can import your team. Metadata remains read-only.
+		</>,
+		<>
+			Install the app only on your organization. Choose all repositories, or select only the repositories Open Session should work in.
+		</>,
+		<>
+			{paste === "above"
+				? "Paste the client id and the client secret above."
+				: "Open Configure and paste the client id and the client secret."}{" "}
+			Sign-in is a device code and needs no secret, but renewing a teammate&rsquo;s token does, and without it their access stops after a few hours.
+		</>,
+		<>
+			Enable GitHub sign-in, save, restart Open Session, then have each teammate connect under Personal → Account.
+		</>,
+	];
 }
 
 export function GithubAuthCard({
@@ -399,6 +408,24 @@ export function GithubAuthCard({
 						</div>
 					</div>
 				</SettingCard>
+				{/* Onboarding shows the walkthrough up front: one GitHub App serves the
+				    whole workspace, so the work is a one-time setup on GitHub that a
+				    person should be able to read before opening a credentials form. */}
+				{onboarding && (
+					<SettingsSection className="mt-3 flex flex-col gap-4">
+						<div>
+							<div className="text-item-title font-semibold text-fg">How to connect</div>
+							<p className="m-0 mt-1 text-supporting leading-relaxed text-dim">
+								One GitHub App connects the whole workspace, then each teammate signs in with their own account.
+							</p>
+						</div>
+						<SetupSteps steps={githubSetupSteps("configure")} />
+						<LinkChips
+							className="mt-0"
+							links={[{ label: "Create GitHub App", url: github.appCreateUrl }]}
+						/>
+					</SettingsSection>
+				)}
 			</div>
 			<GithubAuthSetupDialog
 				github={github}
