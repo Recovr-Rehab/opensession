@@ -17,6 +17,7 @@ import {
 } from "../../lib/pr-tone-classes";
 import type { GitStatusInfo, PrDetails } from "../../lib/types";
 import { Button } from "../../ui/button";
+import { MergeUndoControl } from "./MergeUndoControl";
 
 /**
  * Local/remote discrepancy rows for the Status card: each gets a line with one
@@ -75,18 +76,18 @@ export function GitStatusRows({
       action:
         resolveAction ||
         (pr.state === "OPEN" && !pr.isDraft && onMerge ? (
-          <button
-            className={GIT_ACTION}
-            onClick={onMerge}
-            disabled={merging}
-            title={
-              mergeScheduled
-                ? "Cancel the scheduled merge"
-                : "Squash and merge this pull request"
-            }
-          >
-            {merging ? "Merging…" : mergeScheduled ? "Undo" : "Merge"}
-          </button>
+          mergeScheduled ? (
+            <MergeUndoControl compact onUndo={onMerge} />
+          ) : (
+            <button
+              className={GIT_ACTION}
+              onClick={onMerge}
+              disabled={merging}
+              title="Squash and merge this pull request"
+            >
+              {merging ? "Merging…" : "Merge"}
+            </button>
+          )
         ) : undefined),
     });
   }

@@ -108,6 +108,7 @@ import { PrStateIcon } from "./pr/PrStateIcon";
 import { ConversationView } from "./pr/PrViews";
 import { LinkPrControl } from "./pr/LinkPrControl";
 import { PrCard } from "./pr/PrCard";
+import { MergeUndoControl } from "./pr/MergeUndoControl";
 import { StackLinkSection } from "./pr/Stack";
 import { PrStackChip } from "./pr/StackPopover";
 import { ReviewRail } from "./pr/ReviewRail";
@@ -1999,39 +2000,37 @@ export function PrPanel({
             Review
           </Button>
         )}
-        {canMergeAfterReview && (
-          <Button
-            variant={mergeScheduled ? "soft" : "success-strong"}
-            size="sm"
-            className={
-              !pr.staging?.url && !(caps.reviewComments && !reviewing)
-                ? "ml-auto"
-                : undefined
-            }
-            icon={
-              mergeScheduled
-                ? <IconUndo size={18} />
-                : !merging
-                  ? <IconGitMerge size={18} />
+        {canMergeAfterReview &&
+          (mergeScheduled ? (
+            <MergeUndoControl
+              className={
+                !pr.staging?.url && !(caps.reviewComments && !reviewing)
+                  ? "ml-auto"
                   : undefined
-            }
-            disabled={merging}
-            onClick={handleMerge}
-            title={
-              mergeScheduled
-                ? "Cancel the scheduled merge"
-                : "Squash and merge this pull request"
-            }
-          >
-            {merging
-              ? "Merging…"
-              : mergeScheduled
-                ? "Undo"
+              }
+              onUndo={handleMerge}
+            />
+          ) : (
+            <Button
+              variant="success-strong"
+              size="sm"
+              className={
+                !pr.staging?.url && !(caps.reviewComments && !reviewing)
+                  ? "ml-auto"
+                  : undefined
+              }
+              icon={!merging ? <IconGitMerge size={18} /> : undefined}
+              disabled={merging}
+              onClick={handleMerge}
+              title="Squash and merge this pull request"
+            >
+              {merging
+                ? "Merging…"
                 : headerCompact
                   ? "Merge"
                   : "Squash and merge"}
-          </Button>
-        )}
+            </Button>
+          ))}
         <Menu.Root>
           <Tooltip label="Pull request actions">
             <Menu.Trigger

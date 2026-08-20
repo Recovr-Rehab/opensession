@@ -66,6 +66,7 @@ import {
 import { BrandMark } from "./BrandTile";
 import { PrChecksPopover } from "./PrChecksPopover";
 import { PrSeriesRows } from "./PrSeriesRows";
+import { MergeUndoControl } from "./pr/MergeUndoControl";
 import { PrStackChip } from "./pr/StackPopover";
 import {
 	IconArrowDown,
@@ -78,7 +79,6 @@ import {
 	IconCheck,
 	IconPlus,
 	IconArchive,
-	IconUndo,
 } from "./icons";
 
 /**
@@ -995,39 +995,36 @@ export function PrStatusBar({
 			case "ready": {
 				const mergeScheduled = mergePhase === "scheduled";
 				const merging = mergePhase === "running" || busy === "merge";
+				if (mergeScheduled)
+					return (
+						<MergeUndoControl
+							className={variant === "header" ? "min-h-[32px]" : undefined}
+							onUndo={handleMerge}
+						/>
+					);
 				return (
 					<PrBarButton
 						className={actionBtn}
-						tone={mergeScheduled ? "secondary" : "green"}
-						icon={
-							mergeScheduled
-								? <IconUndo size={18} />
-								: !merging
-									? <IconGitMerge size={18} />
-									: undefined
-						}
+						tone="green"
+						icon={!merging ? <IconGitMerge size={18} /> : undefined}
 						disabled={!!busy || merging}
 						onClick={handleMerge}
 						title={
-							mergeScheduled
-								? "Cancel the scheduled merge"
-								: stackMerge
-									? `Squash and merge ${stackMerge.layers
-											.map((l) => `#${l.number}`)
-											.join(", ")} into ${pr?.stack?.baseRefName || "the base branch"}, all or nothing`
-									: "Squash and merge this PR into its base branch"
+							stackMerge
+								? `Squash and merge ${stackMerge.layers
+										.map((l) => `#${l.number}`)
+										.join(", ")} into ${pr?.stack?.baseRefName || "the base branch"}, all or nothing`
+								: "Squash and merge this PR into its base branch"
 						}
 					>
 						{merging
 							? stackMerge
 								? "Merging stack…"
 								: "Merging…"
-							: mergeScheduled
-								? "Undo"
-								: stackMerge
-									? "Merge stack"
-									: "Merge"}
-						{stackMerge && !merging && !mergeScheduled && (
+							: stackMerge
+								? "Merge stack"
+								: "Merge"}
+						{stackMerge && !merging && (
 							<span className="ml-1.5 rounded-full bg-white/20 px-1.5 tabular-nums">
 								{stackMerge.layers.length}
 							</span>
