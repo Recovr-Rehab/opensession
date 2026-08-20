@@ -102,11 +102,9 @@ function memberGithub(entry: MemberPatch): string {
  * people step, so a normal first-mile flow has this by the time it needs it. */
 function githubOrganization(): string | null {
   const integration = configuredIntegration("github");
-  const explicit =
-    typeof integration.installationOwner === "string"
-      ? integration.installationOwner.trim()
-      : "";
-  if (explicit) return explicit;
+  const explicit = [integration.installationOwner, integration.appOrg]
+    .find((owner): owner is string => typeof owner === "string" && !!owner.trim());
+  if (explicit) return explicit.trim();
 
   const counts = new Map<string, { owner: string; count: number }>();
   for (const repo of Object.values(configuredRepos())) {

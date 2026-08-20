@@ -28,7 +28,9 @@ function writeConfig(): string {
   writeFileSync(
     path,
     JSON.stringify({
-      integrations: { github: { installationOwner: "acme" } },
+      // The App wizard records its organization as appOrg before this
+      // first-mile import runs.
+      integrations: { github: { appOrg: "acme" } },
       identity: { team: [{ name: "Ada Lovelace", github: "ada" }] },
     }),
   );
