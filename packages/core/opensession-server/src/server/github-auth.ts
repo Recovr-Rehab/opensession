@@ -6,7 +6,7 @@
  * Opt-in via config (`integrations.github` in ~/.opensession/config.json):
  *
  *   "integrations": {
- *     "github": { "userPrAuth": true, "oauthClientId": "<OAuth app client id>" }
+ *     "github": { "userPrAuth": true, "oauthClientId": "<GitHub App client id>" }
  *   }
  *
  * Both keys are required for the feature to activate; absent/false = today's
@@ -73,6 +73,9 @@ export interface GithubConnectedAccount {
   /** GitHub profile display name at connect time. */
   name?: string;
   scopes?: string;
+  /** How the token was obtained: the device flow ("device") or a pasted
+   *  personal access token ("pat"). Absent on records predating the field. */
+  source?: "device" | "pat";
   connectedAt: string;
   /** GitHub has permanently rejected the stored refresh token, so the access
    *  token can no longer be renewed. Nothing server-side can revive it — the
@@ -107,11 +110,19 @@ function tokenUsable(account: StoredAccount): boolean {
   return Date.parse(account.expiresAt) > Date.now();
 }
 
-export function githubUserAuthSettings(): GithubUserAuthSettings {
+/** `integrations.github` as a plain object (the config value is untyped). */
+function githubIntegrationConfig(): Record<string, unknown> {
   const raw = getConfig().integrations?.github;
-  const o = raw && typeof raw === "object" && !Array.isArray(raw)
+  return raw && typeof raw === "object" && !Array.isArray(raw)
     ? (raw as Record<string, unknown>)
     : {};
+}
+
+export function githubUserAuthSettings(): GithubUserAuthSettings {
+  const o = githubIntegrationConfig();
+  // env → config: this client id feeds githubUserAuthActive()/webAuthRequired().
+  // It mirrors githubAppIdentity()'s client id resolution, kept separate so the
+  // two never drift into changing each other's meaning.
   const clientId =
     process.env.OPENSESSION_GITHUB_CLIENT_ID ||
     (typeof o.oauthClientId === "string" && o.oauthClientId.trim()
@@ -129,6 +140,101 @@ export function githubUserAuthSettings(): GithubUserAuthSettings {
 export function githubUserAuthActive(): boolean {
   const s = githubUserAuthSettings();
   return s.enabled && !!s.clientId;
+}
+
+// ── The GitHub App device flow ───────────────────────────────────────────────
+//
+// Simple-mode connect is a user's own GitHub App: they create one (the setup
+// wizard, or an operator env var), and the device flow issues a user-to-server
+// token scoped to the repos the app is installed on. It is opt-in: NO app is
+// shipped and there is no baked client id, so this path stays invisible until a
+// client id is configured.
+//
+// The client id and slug are public identifiers, not credentials. A client
+// secret is configured alongside them: the device flow itself needs none (its
+// token exchange takes client_id + device_code), but refreshing the ~8h
+// user-to-server token does, so without a secret the connection would lapse.
+export interface GithubAppIdentity {
+  /** Public OAuth client id; null = not configured (device flow unavailable). */
+  clientId: string | null;
+  /** App slug, for the install URL; null = not configured. */
+  slug: string | null;
+}
+
+function trimmedEnv(name: string): string | null {
+  const v = process.env[name];
+  return v && v.trim() ? v.trim() : null;
+}
+
+function trimmedConfig(o: Record<string, unknown>, key: string): string | null {
+  const v = o[key];
+  return typeof v === "string" && v.trim() ? v.trim() : null;
+}
+
+/**
+ * The operator's configured GitHub App identity, resolved env → config, with no
+ * baked default (nothing ships). Deliberately does NOT feed
+ * githubUserAuthActive() / webAuthRequired(): configuring an App must never flip
+ * an operator's sign-in gate. It is the client id for the device flow and the
+ * slug for the install URL only.
+ */
+export function githubAppIdentity(): GithubAppIdentity {
+  const o = githubIntegrationConfig();
+  return {
+    clientId:
+      trimmedEnv("OPENSESSION_GITHUB_CLIENT_ID") ?? trimmedConfig(o, "oauthClientId"),
+    slug: trimmedEnv("OPENSESSION_GITHUB_APP_SLUG") ?? trimmedConfig(o, "appSlug"),
+  };
+}
+
+/**
+ * The device-flow connect path is on offer — only when an operator has
+ * configured a GitHub App client id, and INDEPENDENT of
+ * webAuthRequired()/userPrAuth. Simple mode's always-available connect is the
+ * pasted token, not this.
+ */
+export function githubConnectAvailable(): boolean {
+  return !!githubAppIdentity().clientId;
+}
+
+/**
+ * The org an install was told to set the App up under (install `--org`, or the
+ * setup wizard with owner=Organization). Config-only — it is captured intent,
+ * not a live credential, and NEVER feeds githubUserAuthActive()/webAuthRequired().
+ * Null when the install was single-user (no org).
+ */
+export function githubAppOrg(): string | null {
+  return trimmedConfig(githubIntegrationConfig(), "appOrg");
+}
+
+/**
+ * The install/app-setup recorded that connecting should also turn on per-user
+ * sign-in (config `integrations.github.authOnConnect`). This is INTENT only: it
+ * has zero effect until the simple-mode device-connect handler consumes it and
+ * clears it (routes/connections.ts), so a box carrying it set-but-unconsumed
+ * behaves exactly like one without it. It deliberately does not touch
+ * userPrAuth, so it can never gate the app on its own.
+ */
+export function githubAuthOnConnect(): boolean {
+  return githubIntegrationConfig().authOnConnect === true;
+}
+
+/**
+ * Where the App client id came from, so the UI can name the exact thing to
+ * unset when it explains that the PAT field is blocked by an App. env wins over
+ * config, mirroring githubAppIdentity()'s resolution; null when no App is set.
+ */
+export function githubAppConfigSource(): "env" | "config" | null {
+  if (trimmedEnv("OPENSESSION_GITHUB_CLIENT_ID")) return "env";
+  if (trimmedConfig(githubIntegrationConfig(), "oauthClientId")) return "config";
+  return null;
+}
+
+/** Where a user picks which repos the App (and so their user-to-server token)
+ *  may reach. Null unless a configured App's slug is known. */
+export function githubAppInstallUrl(): string | null {
+  const { slug } = githubAppIdentity();
+  return slug ? `https://github.com/apps/${slug}/installations/new` : null;
 }
 
 function readStore(): Store {
@@ -172,9 +278,13 @@ const DEVICE_FLOW_DISABLED =
   'Tick "Enable Device Flow" in the app\'s settings on GitHub, then try again.';
 
 export async function startGithubDeviceFlow(): Promise<DeviceFlowStart | { error: string }> {
-  const { enabled, clientId } = githubUserAuthSettings();
-  if (!enabled) return { error: "GitHub user auth is not enabled (config integrations.github.userPrAuth)" };
-  if (!clientId) return { error: "No OAuth client id configured (integrations.github.oauthClientId)" };
+  // The device flow is the operator-App override (simple mode's default connect
+  // is a pasted PAT), so its client id comes from githubAppIdentity — env/config
+  // only, absent unless an App is configured. Who may reach this is the route's
+  // job (operator mode: signed in; simple mode: App configured), not the
+  // flow's — starting a device code is a read-only call to GitHub.
+  const clientId = githubAppIdentity().clientId;
+  if (!clientId) return { error: "GitHub connect is not configured (no client id)" };
   const res = await fetchWithTimeout("https://github.com/login/device/code", {
     method: "POST",
     headers: { Accept: "application/json", "Content-Type": "application/json" },
@@ -239,7 +349,7 @@ export async function pollGithubDeviceFlow(
   deviceCode: string,
   expectedLogin?: string | null
 ): Promise<DeviceFlowPoll> {
-  const { clientId } = githubUserAuthSettings();
+  const { clientId } = githubAppIdentity();
   if (!clientId) return { status: "error", error: "No OAuth client id configured" };
   const res = await fetchWithTimeout("https://github.com/login/oauth/access_token", {
     method: "POST",
@@ -387,7 +497,8 @@ function grantExpiryFields(body: TokenGrant): Partial<StoredAccount> {
 async function identifyAndStoreToken(
   token: string,
   grant: TokenGrant,
-  expectedLogin?: string | null
+  expectedLogin?: string | null,
+  source: "device" | "pat" = "device"
 ): Promise<DeviceFlowPoll> {
   const scope = grant.scope;
   const userRes = await fetchWithTimeout("https://api.github.com/user", {
@@ -400,7 +511,15 @@ async function identifyAndStoreToken(
   const user: any = await userRes.json().catch(() => null);
   const login: string | undefined = user?.login;
   if (!userRes.ok || !login) {
-    return { status: "error", error: "Token issued but GET /user failed — not stored" };
+    return {
+      status: "error",
+      // A pasted token is the user's own input to fix, so the error names the
+      // likely cause; the device-flow message reflects a token we just minted.
+      error:
+        source === "pat"
+          ? "GitHub rejected that token. Check it hasn't expired and grants repo access (Contents + Pull requests read-write, or a classic `repo` token)."
+          : "Token issued but GET /user failed — not stored",
+    };
   }
 
   const ownership = validateGithubTokenLogin(login, expectedLogin);
@@ -412,6 +531,7 @@ async function identifyAndStoreToken(
     token,
     ...(typeof user.name === "string" && user.name ? { name: user.name } : {}),
     ...(typeof scope === "string" && scope ? { scopes: scope } : {}),
+    source,
     connectedAt: new Date().toISOString(),
     ...grantExpiryFields(grant),
   };
@@ -419,6 +539,17 @@ async function identifyAndStoreToken(
   audit({ kind: "github_auth_connect", login, scopes: scope });
   return { status: "ok", login, ...(user.name ? { name: user.name } : {}) };
 }
+
+/**
+ * Store a user-pasted personal access token as the simple-mode account. The PAT
+ * is already the bearer credential — there is no grant to exchange — so it is
+ * validated and attributed exactly like a minted token (GET /user is ground
+ * truth for the login, never client-supplied) and stored with no `expiresAt`:
+ * classic and fine-grained PATs are treated as long-lived, and a 401 at use
+ * time is what surfaces a needed reconnect. Accepts both PAT kinds (both are
+ * just a bearer token). The route gates this to simple mode; storing here does
+ * not, so nothing depends on a client id being configured.
+ */
 
 // ── Token refresh (GitHub App user tokens) ───────────────────────────────────
 
@@ -704,4 +835,39 @@ export function githubCredentialForLogin(login: string): GithubCredential | null
     principal: `user:${account.login.toLowerCase()}`,
     env: { GH_TOKEN: account.token, GITHUB_TOKEN: account.token },
   };
+}
+
+/** The usable stored accounts (token present and not expired). */
+function usableAccounts(): StoredAccount[] {
+  return Object.values(readStore().users).filter((a) => a.token && tokenUsable(a));
+}
+
+/**
+ * The acting GitHub identity in SIMPLE MODE — one install, one user, so the
+ * single connected account (a pasted PAT, or a device-flow token) IS the
+ * identity, resolved without any web session (there is none: webAuthRequired()
+ * is false, so no authUser exists to scope by). Null when sign-in is active
+ * (operator mode resolves by authUser via githubCredentialForLogin instead) or
+ * when the usable-account count isn't exactly one — zero (nobody connected) and
+ * more than one (ambiguous) both fail closed so a caller never guesses whose
+ * token to act with.
+ */
+export function soleGithubAccount(): GithubCredential | null {
+  if (githubUserAuthActive()) return null; // operator mode scopes by authUser
+  const usable = usableAccounts();
+  if (usable.length !== 1) return null;
+  const account = usable[0]!;
+  return {
+    kind: "user",
+    principal: `user:${account.login.toLowerCase()}`,
+    env: { GH_TOKEN: account.token, GITHUB_TOKEN: account.token },
+  };
+}
+
+/** The sole connected login in simple mode (for routes that manage it by
+ *  name), on the same one-account-or-nothing rule as soleGithubAccount. */
+export function soleGithubLogin(): string | null {
+  if (githubUserAuthActive()) return null;
+  const usable = usableAccounts();
+  return usable.length === 1 ? usable[0]!.login : null;
 }

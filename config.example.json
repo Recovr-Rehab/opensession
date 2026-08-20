@@ -116,6 +116,7 @@
       "enabled": false,
       "userPrAuth": false,
       "oauthClientId": "",
+      "appSlug": "",
       "mentionHandles": [
         "assistant",
         "acme-automation"

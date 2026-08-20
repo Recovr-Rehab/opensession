@@ -47,6 +47,7 @@ ${bold("opensession")} — self-hosted agent infrastructure
 ${bold("Setup")}
   onboard [--force]        configure this box (writes config + env + service)
                            --defaults: no questions, the installer's path
+                           --org <name>: set up an org App + per-user sign-in
   bind [address]           move the server to a new bind address and restart
                            (no address: this box's tailnet IP)
   team [add|remove]        manage the identity roster (attribution, sign-in)
@@ -276,6 +277,7 @@ async function main(): Promise<number> {
       return await onboard({
         force: flags.has("--force"),
         defaults: flags.has("--defaults"),
+        org: flagValue("--org"),
       });
 
     case "bind":

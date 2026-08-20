@@ -1,10 +1,12 @@
 import { BASE_PATH } from "../lib/base";
-import React, { useEffect, useState, useCallback } from "react";
+import React, { useEffect, useState, useCallback, useRef } from "react";
 import { Menu } from "../ui/menu";
 import { OptionSelect } from "../ui/select";
 import { cn } from "../ui/cn";
 import { Button } from "../ui/button";
 import { DeviceCode } from "../ui/device-code";
+import { Modal } from "../ui/modal";
+import { Segmented, SegmentedOption } from "../ui/segmented";
 import { InlineAlert, Skeleton, SkeletonBar } from "../ui/state";
 import { PulseDot } from "../ui/status";
 import {
@@ -490,6 +492,25 @@ export function Connections() {
 interface GithubAuthData {
   enabled: boolean;
   clientIdConfigured: boolean;
+  /** A client id resolves (shipped app, env, or config) — connect is on offer
+   *  even when the sign-in gate (webAuthRequired) is off. */
+  connectAvailable: boolean;
+  /** Where that App client id came from, so the blocked-PAT note can name the
+   *  exact thing to unset. null when no App is configured. */
+  appConfigSource?: "env" | "config" | null;
+  /** The workspace is behind GitHub sign-in (operator mode). False = simple
+   *  mode: one user, no session, the single connected account is the identity. */
+  webAuthRequired: boolean;
+  /** github.com/apps/<slug>/installations/new, or null until the app slug ships. */
+  appInstallUrl: string | null;
+  /** Captured install/app-setup intent: the org the App is owned by, so the
+   *  wizard prefills the org owner. null for a single-user install. */
+  appOrg?: string | null;
+  /** Connecting should also turn on per-user sign-in (set at install with an
+   *  org). Inert until the connect handler consumes it. */
+  authOnConnect?: boolean;
+  /** Simple mode: the single connected login, if exactly one. */
+  soleLogin?: string | null;
   accounts: { login: string; name?: string; connectedAt: string; scopes?: string }[];
   team: {
     name: string;
@@ -515,6 +536,477 @@ interface DeviceFlow {
  * device flow: show a code, the person enters it on github.com, we poll until
  * GitHub hands over their token (stored server-side, never shown here).
  */
+// The create-app form on GitHub can be pre-filled with URL query parameters
+// (docs.github.com/apps/sharing-github-apps/registering-a-github-app-using-url-parameters).
+// `device_flow_enabled` is undocumented but pre-ticks the Enable Device Flow
+// box — so the only thing left to do by hand is generate a client secret. It
+// is treated as best-effort: the wizard still asks the user to confirm Device
+// Flow is on, in case GitHub ever drops the param. GitHub ignores unknown
+// params, so this can only under-fill, never error.
+// Blank org creates the app under the signed-in personal account; an org login
+// creates it under that organization (so the org owns it and it can reach org
+// repos). Same query params either way.
+function buildGithubAppCreateUrl(name: string, org: string): string {
+  const params = new URLSearchParams({
+    name,
+    url: "http://localhost:3850",
+    public: "false",
+    webhook_active: "false",
+    contents: "write",
+    pull_requests: "write",
+    metadata: "read",
+    device_flow_enabled: "true",
+  }).toString();
+  const base = org.trim()
+    ? `https://github.com/organizations/${encodeURIComponent(org.trim())}/settings/apps/new`
+    : "https://github.com/settings/apps/new";
+  return `${base}?${params}`;
+}
+
+// GitHub derives the app slug from its name: lowercased, every run of
+// non-alphanumerics collapsed to one hyphen. Previewed so the user recognises
+// their slug on the settings page before it exists.
+function deriveGithubAppSlug(name: string): string {
+  return name
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "");
+}
+
+// App names are unique across all of GitHub, so a bare "Open Session" is almost
+// always taken. A short random suffix in parens makes the pre-filled name land
+// first try and reads as a deliberate tag rather than a typo; still editable,
+// well under GitHub's 34-char cap, and slugifies to open-session-<suffix>.
+function generateGithubAppName(): string {
+  const suffix = Math.random().toString(36).slice(2, 6);
+  return `Open Session (${suffix})`;
+}
+
+function WizardCheck({ children }: { children: React.ReactNode }) {
+  return (
+    <li className="flex items-start gap-2 text-supporting leading-snug text-dim">
+      <span className="mt-[3px] shrink-0 text-green">✓</span>
+      <span className="min-w-0">{children}</span>
+    </li>
+  );
+}
+
+/**
+ * Guided setup for a bring-your-own GitHub App: create it on GitHub (form
+ * pre-filled), paste its id/slug/secret, install it on the repos you pick, then
+ * connect. It lives outside the card so saving the client id — which re-renders
+ * the card from "no app" to "app configured" — doesn't unmount it mid-flow.
+ */
+function GithubAppWizard({
+  open,
+  onOpenChange,
+  clientId,
+  setClientId,
+  slug,
+  setSlug,
+  secret,
+  setSecret,
+  onSaveApp,
+  saving,
+  configured,
+  connected,
+  installUrl,
+  onConnect,
+  error,
+  flow,
+  onCancelFlow,
+  intentOrg,
+  onClearIntent,
+}: {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  clientId: string;
+  setClientId: (v: string) => void;
+  slug: string;
+  setSlug: (v: string) => void;
+  secret: string;
+  setSecret: (v: string) => void;
+  onSaveApp: (appOrg: string) => void;
+  saving: boolean;
+  configured: boolean;
+  connected: boolean;
+  installUrl: string | null;
+  onConnect: () => void;
+  error: string | null;
+  flow: DeviceFlow | null;
+  onCancelFlow: () => void;
+  /** Org captured at install (config appOrg): prefills the owner and shows the
+   *  wizard is finishing sign-in setup. null for a single-user install. */
+  intentOrg?: string | null;
+  /** Clear the captured org intent (switch the owner back to single-user). */
+  onClearIntent: () => void;
+}) {
+  const [step, setStep] = useState(1);
+  // A likely-unique app name, minted once per open so the pre-filled name and
+  // the slug we preview stay in step.
+  const [appName, setAppName] = useState("Open Session");
+  // Where the app is created: the person's own account, or an org they name.
+  const [appOwner, setAppOwner] = useState<"you" | "org">("you");
+  // The org login, used only when appOwner is "org".
+  const [appOrg, setAppOrg] = useState("");
+  // Opening jumps to where the user actually is (an already-configured app
+  // resumes at install, a fresh start begins at create) and mints a fresh name.
+  useEffect(() => {
+    if (open) {
+      setStep(configured ? 3 : 1);
+      setAppName(generateGithubAppName());
+      // An org install/app-setup prefills the owner and the org login, so the
+      // wizard resumes finishing the sign-in setup it was told to do.
+      setAppOwner(intentOrg ? "org" : "you");
+      setAppOrg(intentOrg ?? "");
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open]);
+  // Saving the client id flips `configured`; carry the user from paste to
+  // install without a manual step.
+  useEffect(() => {
+    if (open && configured && step === 2) setStep(3);
+  }, [open, configured, step]);
+  // Connected is the finish line — nothing left to guide.
+  useEffect(() => {
+    if (open && connected) onOpenChange(false);
+  }, [open, connected, onOpenChange]);
+
+  // The last step needs no preamble: arriving on it starts the device flow once
+  // and drops the user straight on the code. The ref stops a re-render (or
+  // strict mode's double invoke) from opening a second flow; leaving the step
+  // rearms it, so Back → Next or a retry can start again.
+  const connectStartedRef = useRef(false);
+  useEffect(() => {
+    if (step !== 4) {
+      connectStartedRef.current = false;
+      return;
+    }
+    if (!open || connectStartedRef.current) return;
+    connectStartedRef.current = true;
+    if (!flow) onConnect();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, step]);
+
+  // Focus each step's primary control as the user arrives on it (and on open).
+  const stepFocusRef = useRef<HTMLElement | null>(null);
+  const setStepFocus = useCallback((el: HTMLElement | null) => {
+    stepFocusRef.current = el;
+  }, []);
+  useEffect(() => {
+    if (open) stepFocusRef.current?.focus();
+  }, [open, step]);
+
+  const createUrl = buildGithubAppCreateUrl(appName, appOwner === "org" ? appOrg : "");
+  // Creating in an org needs its login to build the URL, so block until it's given.
+  const createReady = appOwner === "you" || !!appOrg.trim();
+  const previewSlug = deriveGithubAppSlug(appName);
+  const canSave = !!clientId.trim() && !!slug.trim() && !!secret.trim();
+  const titles = ["Create the app", "Paste the details", "Install on your repos", "Connect"];
+
+  return (
+    <Modal.Root open={open} onOpenChange={(next) => !saving && onOpenChange(next)}>
+      <Modal.Content widthClassName="max-w-[34rem]" initialFocus={stepFocusRef}>
+        <Modal.Header
+          title="Set up a GitHub App"
+          description={`Step ${step} of 4 · ${titles[step - 1]}`}
+        />
+
+        {step === 1 && (
+          <div className="flex flex-col gap-4">
+            <div className="flex flex-col gap-1.5">
+              <span className="text-supporting text-dim">Create under</span>
+              <Segmented
+                label="Create under"
+                size="sm"
+                value={appOwner}
+                onValueChange={(next) => {
+                  // Switching back to single-user drops the captured org intent:
+                  // no org App, no sign-in. Confirm it, then clear it upstream.
+                  if (next === "you" && intentOrg) {
+                    if (!confirm("Stays single-user, no sign-in.")) return;
+                    onClearIntent();
+                  }
+                  setAppOwner(next as "you" | "org");
+                }}
+              >
+                <SegmentedOption value="you">You</SegmentedOption>
+                <SegmentedOption value="org">Organization</SegmentedOption>
+              </Segmented>
+              {appOwner === "org" && (
+                <>
+                  <input
+                    type="text"
+                    className={cn(settingsInputClass, "font-mono")}
+                    value={appOrg}
+                    onChange={(e) => setAppOrg(e.target.value)}
+                    placeholder="my-org"
+                    autoCapitalize="none"
+                    autoComplete="off"
+                    spellCheck={false}
+                    aria-label="Organization login"
+                  />
+                  {intentOrg && (
+                    <div className="text-meta leading-snug text-dim">
+                      Finishing sign-in setup for {intentOrg}.
+                    </div>
+                  )}
+                  <div className="text-meta leading-snug text-faint">
+                    For a team, create it in your organization so the org owns
+                    the app and it can reach org repos. You need permission to
+                    create apps in the org.
+                  </div>
+                </>
+              )}
+            </div>
+            {createReady ? (
+              <a href={createUrl} target="_blank" rel="noreferrer">
+                <Button
+                  ref={setStepFocus}
+                  variant="primary"
+                  icon={<IconArrowUpRight size={20} />}
+                >
+                  Create app on GitHub
+                </Button>
+              </a>
+            ) : (
+              <Button
+                ref={setStepFocus}
+                variant="primary"
+                disabled
+                icon={<IconArrowUpRight size={20} />}
+              >
+                Create app on GitHub
+              </Button>
+            )}
+            <div className="text-supporting leading-snug text-dim">
+              Opens a pre-filled form. On that page:
+            </div>
+            {/* An annotated screenshot could slot in here, but GitHub's settings
+                UI changes, so the text carries the flow and stays correct. */}
+            <ul className="flex flex-col gap-2">
+              <WizardCheck>
+                Confirm <span className="text-fg">Device Flow</span> is checked.
+              </WizardCheck>
+              <WizardCheck>
+                Click <span className="text-fg">Create GitHub App</span>.
+              </WizardCheck>
+            </ul>
+            <div className="text-meta leading-snug text-faint">
+              Pre-filled: name{" "}
+              <span className="font-mono text-dim">{appName}</span>, permissions
+              (Contents + Pull requests, read &amp; write), private, no webhook.
+              Names are unique on GitHub, so tweak it if it's taken.
+            </div>
+            <Modal.Footer>
+              <button
+                type="button"
+                className="mr-auto text-supporting text-dim underline hover:text-fg"
+                onClick={() => setStep(2)}
+              >
+                I already have an app
+              </button>
+              <Button variant="ghost" onClick={() => onOpenChange(false)}>
+                Cancel
+              </Button>
+              <Button
+                variant="primary"
+                onClick={() => {
+                  if (!slug.trim()) setSlug(previewSlug);
+                  setStep(2);
+                }}
+              >
+                Next
+              </Button>
+            </Modal.Footer>
+          </div>
+        )}
+
+        {step === 2 && (
+          <div className="flex flex-col gap-4">
+            <div className="text-supporting leading-snug text-dim">
+              On your new app's settings page:
+            </div>
+            <div className="flex flex-col gap-3">
+              <div className="flex flex-col gap-1">
+                <label className="text-supporting text-fg">Client ID</label>
+                <input
+                  ref={setStepFocus}
+                  type="text"
+                  className={cn(settingsInputClass, "font-mono")}
+                  value={clientId}
+                  onChange={(e) => setClientId(e.target.value)}
+                  placeholder="Iv23…"
+                  aria-label="GitHub App client ID"
+                  autoCapitalize="none"
+                  autoComplete="off"
+                  spellCheck={false}
+                />
+                <span className="text-meta leading-snug text-faint">
+                  In <span className="text-dim">About</span> at the top: the{" "}
+                  <span className="text-dim">Client ID</span>, not the App ID above
+                  it.
+                </span>
+              </div>
+              <div className="flex flex-col gap-1">
+                <label className="text-supporting text-fg">App slug</label>
+                <input
+                  type="text"
+                  className={cn(settingsInputClass, "font-mono")}
+                  value={slug}
+                  onChange={(e) => setSlug(e.target.value)}
+                  placeholder={previewSlug}
+                  aria-label="GitHub App slug"
+                  autoCapitalize="none"
+                  autoComplete="off"
+                  spellCheck={false}
+                />
+                <span className="text-meta leading-snug text-faint">
+                  From the app's URL{" "}
+                  <span className="font-mono text-dim">
+                    github.com/settings/apps/{previewSlug}
+                  </span>
+                  . Pre-filled, so fix it only if you renamed the app.
+                </span>
+              </div>
+              <div className="flex flex-col gap-1">
+                <label className="text-supporting text-fg">Client secret</label>
+                <input
+                  type="password"
+                  className={cn(settingsInputClass, "font-mono")}
+                  value={secret}
+                  onChange={(e) => setSecret(e.target.value)}
+                  placeholder="Client secret"
+                  aria-label="GitHub App client secret"
+                  autoCapitalize="none"
+                  autoComplete="off"
+                  spellCheck={false}
+                />
+                <span className="text-meta leading-snug text-faint">
+                  In <span className="text-dim">Client secrets</span>, click{" "}
+                  <span className="text-dim">Generate a new client secret</span>, then
+                  copy it (shown once). Required.
+                </span>
+              </div>
+            </div>
+            <div className="text-meta leading-snug text-faint">
+              Ignore GitHub's “generate a private key” banner. Open Session uses
+              device flow and doesn't need one.
+            </div>
+            <Modal.Footer>
+              <Button
+                variant="ghost"
+                onClick={() => setStep(1)}
+                className="mr-auto"
+              >
+                Back
+              </Button>
+              <Button
+                variant="primary"
+                onClick={() => onSaveApp(appOwner === "org" ? appOrg.trim() : "")}
+                disabled={!canSave || saving}
+              >
+                {saving ? "Saving…" : "Save and continue"}
+              </Button>
+            </Modal.Footer>
+          </div>
+        )}
+
+        {step === 3 && (
+          <div className="flex flex-col gap-4">
+            <div className="text-supporting leading-snug text-dim">
+              Install the app on the repositories you want to use. Its access
+              reaches only the repos you pick here.
+            </div>
+            {installUrl && (
+              <a href={installUrl} target="_blank" rel="noreferrer">
+                <Button
+                  ref={setStepFocus}
+                  variant="primary"
+                  icon={<IconArrowUpRight size={20} />}
+                >
+                  Install on your repositories
+                </Button>
+              </a>
+            )}
+            <Modal.Footer>
+              <Button
+                variant="ghost"
+                onClick={() => setStep(2)}
+                className="mr-auto"
+              >
+                Back
+              </Button>
+              <Button variant="primary" onClick={() => setStep(4)}>
+                Next
+              </Button>
+            </Modal.Footer>
+          </div>
+        )}
+
+        {step === 4 && (
+          <div className="flex flex-col gap-4">
+            {appOwner === "org" && (
+              <div className="text-supporting leading-snug text-dim">
+                This turns on GitHub sign-in for this workspace. You'll be signed
+                in as the first admin.
+              </div>
+            )}
+            {flow ? (
+              <div className="flex flex-col gap-2.5">
+                <div className="text-supporting text-dim">
+                  Enter this code at{" "}
+                  <span className="font-medium text-fg">
+                    {flow.verificationUri.replace(/^https:\/\//, "")}
+                  </span>
+                </div>
+                <div className="flex flex-wrap items-center gap-2.5">
+                  <DeviceCode code={flow.userCode} />
+                  <a href={flow.verificationUri} target="_blank" rel="noreferrer">
+                    <Button
+                      size="sm"
+                      variant="primary"
+                      icon={<IconArrowUpRight size={20} />}
+                    >
+                      Open GitHub
+                    </Button>
+                  </a>
+                </div>
+                <div className="flex items-center gap-2 text-supporting text-dim">
+                  <PulseDot size={7} />
+                  <span>Waiting for GitHub…</span>
+                </div>
+              </div>
+            ) : error ? (
+              <InlineAlert onRetry={onConnect} retryLabel="Try again">
+                {error}
+              </InlineAlert>
+            ) : (
+              <div className="flex items-center gap-2 text-supporting text-dim">
+                <PulseDot size={7} />
+                <span>Starting…</span>
+              </div>
+            )}
+            <Modal.Footer>
+              <Button
+                variant="ghost"
+                onClick={() => {
+                  if (flow) onCancelFlow();
+                  setStep(3);
+                }}
+                className="mr-auto"
+              >
+                Back
+              </Button>
+            </Modal.Footer>
+          </div>
+        )}
+      </Modal.Content>
+    </Modal.Root>
+  );
+}
+
 /** `personal`: only the signed-in user's own row (the Account page);
  *  default shows the whole team roster (admin overview). */
 export function GithubAccounts({ personal = false }: { personal?: boolean } = {}) {
@@ -522,7 +1014,16 @@ export function GithubAccounts({ personal = false }: { personal?: boolean } = {}
   const [flow, setFlow] = useState<DeviceFlow | null>(null);
   const [flowState, setFlowState] = useState<"idle" | "starting" | "waiting">("idle");
   const [error, setError] = useState<string | null>(null);
-  const [justConnected, setJustConnected] = useState<string | null>(null);
+  // Simple-mode "bring your own GitHub App" form: client id + slug (+ secret)
+  // written to config.json, so the device flow lights up with no env var and no
+  // restart.
+  const [appClientId, setAppClientId] = useState("");
+  const [appSlug, setAppSlug] = useState("");
+  const [appSecret, setAppSecret] = useState("");
+  const [savingApp, setSavingApp] = useState(false);
+  // The guided "create your app on GitHub, then paste + install + connect"
+  // wizard, launched from the App option below.
+  const [wizardOpen, setWizardOpen] = useState(false);
 
   const load = useCallback(async () => {
     try {
@@ -553,7 +1054,14 @@ export function GithubAccounts({ personal = false }: { personal?: boolean } = {}
         if (body.status === "ok") {
           setFlow(null);
           setFlowState("idle");
-          setJustConnected(body.login);
+          // authEnabled: this connect flipped the workspace into sign-in mode and
+          // the browser now holds the session cookie. A full reload re-runs the
+          // app's auth bootstrap so every panel reflects operator mode, rather
+          // than patching one card's state.
+          if (body.authEnabled) {
+            window.location.reload();
+            return;
+          }
           load();
           return;
         }
@@ -576,7 +1084,6 @@ export function GithubAccounts({ personal = false }: { personal?: boolean } = {}
 
   async function startConnect() {
     setError(null);
-    setJustConnected(null);
     setFlowState("starting");
     try {
       const res = await fetch(`${BASE_PATH}/api/connections/github/device`, { method: "POST" });
@@ -587,6 +1094,76 @@ export function GithubAccounts({ personal = false }: { personal?: boolean } = {}
     } catch (e: any) {
       setError(e.message);
       setFlowState("idle");
+    }
+  }
+
+  async function saveApp(appOrg: string) {
+    const clientId = appClientId.trim();
+    const slug = appSlug.trim();
+    const secret = appSecret.trim();
+    // The secret is required: the device-flow token expires and is refreshed
+    // with it, so without one the connection would stop after ~8h.
+    if (!clientId || !slug || !secret) return;
+    setError(null);
+    setSavingApp(true);
+    try {
+      const res = await fetch(`${BASE_PATH}/api/connections/github/app`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        // An org owner also records the sign-in intent server-side; a blank org
+        // is a personal, single-user App.
+        body: JSON.stringify({ clientId, slug, secret, appOrg }),
+      });
+      const body = await res.json();
+      if (!res.ok) throw new Error(body.error || `Failed: ${res.status}`);
+      setAppClientId("");
+      setAppSlug("");
+      setAppSecret("");
+      // getConfig() re-reads on the file change, so the reload shows the App as
+      // configured and switches the card to its device-flow connect.
+      load();
+    } catch (e: any) {
+      setError(e.message);
+    } finally {
+      setSavingApp(false);
+    }
+  }
+
+  async function removeApp() {
+    if (
+      !confirm(
+        "Remove the GitHub App? You'll be able to paste a personal access token instead.",
+      )
+    )
+      return;
+    setError(null);
+    try {
+      const res = await fetch(`${BASE_PATH}/api/connections/github/app`, {
+        method: "DELETE",
+      });
+      const body = await res.json();
+      if (!res.ok) throw new Error(body.error || `Failed: ${res.status}`);
+      load();
+    } catch (e: any) {
+      setError(e.message);
+    }
+  }
+
+  // Switching the wizard owner back to "You" clears the captured org intent
+  // (appOrg + authOnConnect) so a later connect stays single-user. The DELETE
+  // /app route clears both; at intent stage there are no App keys yet to remove.
+  async function clearOrgIntent() {
+    try {
+      const res = await fetch(`${BASE_PATH}/api/connections/github/app`, {
+        method: "DELETE",
+      });
+      if (!res.ok) {
+        const body = await res.json().catch(() => null);
+        throw new Error(body?.error || `Failed: ${res.status}`);
+      }
+      load();
+    } catch (e: any) {
+      setError(e.message);
     }
   }
 
@@ -606,6 +1183,258 @@ export function GithubAccounts({ personal = false }: { personal?: boolean } = {}
   }
 
   if (!data) return null;
+
+  // The device-flow well and the just-connected note render the same in both
+  // the operator roster and the simple-mode card, so they're built once here.
+  const deviceFlowWell = flow ? (
+    // A well, not a sentence: the code, the link and the status used to run
+    // together on one line that overflowed the card on anything narrower than a
+    // desktop. Three short stacked lines — what to do, the two controls, what
+    // we're waiting for — never wrap badly and let the code be the thing the eye
+    // lands on.
+    <div className="flex flex-col gap-2.5 px-5 py-3.5">
+      <div className="text-supporting text-dim">
+        Enter this code at{" "}
+        <span className="font-medium text-fg">
+          {flow.verificationUri.replace(/^https:\/\//, "")}
+        </span>
+      </div>
+      <div className="flex flex-wrap items-center gap-2.5">
+        <DeviceCode code={flow.userCode} />
+        <a href={flow.verificationUri} target="_blank" rel="noreferrer">
+          <Button size="sm" variant="primary" icon={<IconArrowUpRight size={20} />}>
+            Open GitHub
+          </Button>
+        </a>
+      </div>
+      <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-supporting text-dim">
+        {/* Dot and status are one item: as two siblings of a wrapping row, a
+            phone breaks between them and leaves the dot orphaned on its own
+            line. */}
+        <span className="flex min-w-0 flex-1 items-center gap-2">
+          <PulseDot size={7} />
+          <span className="min-w-0">
+            Waiting for GitHub. Sign in as the account you want to connect.
+          </span>
+        </span>
+        <Button
+          size="sm"
+          variant="ghost"
+          className="ml-auto"
+          onClick={() => {
+            setFlow(null);
+            setFlowState("idle");
+          }}
+        >
+          Cancel
+        </Button>
+      </div>
+    </div>
+  ) : null;
+
+  // ── Simple mode ──
+  // No web sign-in, so no roster and no authUser: the card is one shared account
+  // (the install's single user), and every session acts as it. Connect is a
+  // GitHub App device flow, available once an app's client id is configured
+  // (data.connectAvailable) via the setup wizard or an env var. The operator
+  // roster below is untouched.
+  if (!data.webAuthRequired) {
+    const account = data.accounts[0];
+    const connected = !!account;
+    return (
+      <>
+        <SectionHeading>GitHub</SectionHeading>
+        {error && <InlineAlert onDismiss={() => setError(null)}>{error}</InlineAlert>}
+        <SettingCard>
+          <SettingRow className="items-start gap-x-3">
+            {connected ? (
+              <span className="flex size-[30px] shrink-0 items-center justify-center">
+                <UserAvatar
+                  name={account.name || account.login}
+                  login={account.login}
+                  size={28}
+                />
+              </span>
+            ) : (
+              <IconTile name="github" size={30} />
+            )}
+            <SettingRowText>
+              <SettingRowTitle className="truncate">
+                {connected ? account.name || account.login : "GitHub"}
+                {connected && (
+                  <span className="ml-2 text-label font-normal text-faint">
+                    @{account.login}
+                  </span>
+                )}
+              </SettingRowTitle>
+              <SettingRowDescription className="leading-snug">
+                {connected
+                  ? `All sessions clone and open pull requests as @${account.login}.`
+                  : "Connect a GitHub App to clone your private repositories and open pull requests."}
+              </SettingRowDescription>
+            </SettingRowText>
+            <SettingRowControl className="flex items-center gap-3">
+              <StatusChip
+                label={connected ? "Connected" : "Not connected"}
+                dot={
+                  connected
+                    ? "var(--green)"
+                    : "var(--line-strong, var(--text-faint))"
+                }
+              />
+              {connected && (
+                <Menu.Root>
+                  <Menu.Trigger
+                    className={rowMenuTriggerClasses}
+                    aria-label={`Manage @${account.login}`}
+                  >
+                    <IconDotsHorizontal size={18} />
+                  </Menu.Trigger>
+                  <Menu.Popup align="end" sideOffset={4}>
+                    {/* Reconnect re-runs the device flow, which exists only with
+                        a configured App. */}
+                    {data.connectAvailable && (
+                      <Menu.Item onClick={startConnect} disabled={flowState !== "idle"}>
+                        <IconPlug size={16} className="text-faint" />
+                        Reconnect
+                      </Menu.Item>
+                    )}
+                    <Menu.Item
+                      onClick={() => disconnect(account.login)}
+                      className="text-red data-[highlighted]:bg-red-soft"
+                    >
+                      <IconTrash size={16} />
+                      Disconnect
+                    </Menu.Item>
+                  </Menu.Popup>
+                </Menu.Root>
+              )}
+            </SettingRowControl>
+          </SettingRow>
+
+          {/* Not connected: the GitHub App device flow. The connect button
+              appears once an app client id is configured (data.connectAvailable,
+              set by the wizard or an env var); before that the setup wizard is
+              the entry point. */}
+          {!connected &&
+            (data.connectAvailable
+              ? flowState !== "waiting" && (
+                  <div className="flex flex-col gap-2.5 px-5 py-3.5">
+                    <div className="flex flex-wrap items-center gap-2.5">
+                      <Button
+                        variant="primary"
+                        onClick={startConnect}
+                        disabled={flowState !== "idle"}
+                      >
+                        {flowState === "starting" ? "Starting…" : "Connect GitHub App"}
+                      </Button>
+                      {data.appInstallUrl && (
+                        <a href={data.appInstallUrl} target="_blank" rel="noreferrer">
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            icon={<IconArrowUpRight size={20} />}
+                          >
+                            Install on your repositories
+                          </Button>
+                        </a>
+                      )}
+                    </div>
+                    <div className="text-meta leading-snug text-faint">
+                      Authorize with a one-time code. No sign-in here, so every
+                      session shares the connected account.
+                    </div>
+                    {/* A config-set app can be cleared live; an env-set one only
+                        gets named, since it needs a restart to change. */}
+                    {data.appConfigSource === "config" ? (
+                      <button
+                        type="button"
+                        className="self-start text-meta text-dim underline hover:text-fg"
+                        onClick={removeApp}
+                      >
+                        Remove app
+                      </button>
+                    ) : (
+                      <div className="text-meta leading-snug text-faint">
+                        Set via{" "}
+                        <code className="rounded-sm bg-surface px-1 py-0.5 font-mono text-[0.92em] text-dim">
+                          OPENSESSION_GITHUB_CLIENT_ID
+                        </code>
+                        . Unset and restart to change.
+                      </div>
+                    )}
+                  </div>
+                )
+              : (
+                  <div className="flex flex-col gap-4 px-5 py-3.5">
+                    <div className="text-meta leading-snug text-faint">
+                      No sign-in here, so every session shares one GitHub account.
+                      Turn on GitHub sign-in for per-person accounts.
+                    </div>
+                    <div className="flex flex-col gap-2">
+                      <div className="text-label font-medium text-fg">GitHub App</div>
+                      <div className="text-meta leading-snug text-faint">
+                        Install your own app on the repos you choose and authorize
+                        with a one-time code. Nothing secret to paste.
+                      </div>
+                      <div className="flex flex-wrap items-center gap-2.5">
+                        <Button variant="primary" onClick={() => setWizardOpen(true)}>
+                          Set up GitHub App
+                        </Button>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+
+          {deviceFlowWell}
+
+          {/* A configured App's user-to-server token reaches only repos the App
+              is installed on, so managing the install is ongoing. A quiet link
+              once connected, not a pending step. */}
+          {connected && data.appInstallUrl && (
+            <div className="px-5 py-3.5">
+              <a
+                href={data.appInstallUrl}
+                target="_blank"
+                rel="noreferrer"
+                className="inline-flex items-center gap-1 text-meta text-dim underline hover:text-fg"
+              >
+                Manage which repositories the app can access
+                <IconArrowUpRight size={14} />
+              </a>
+            </div>
+          )}
+        </SettingCard>
+        {/* Rendered outside the card so it survives the card re-rendering from
+            "no app" to "app configured" the moment the client id is saved. */}
+        <GithubAppWizard
+          open={wizardOpen}
+          onOpenChange={setWizardOpen}
+          clientId={appClientId}
+          setClientId={setAppClientId}
+          slug={appSlug}
+          setSlug={setAppSlug}
+          secret={appSecret}
+          setSecret={setAppSecret}
+          onSaveApp={saveApp}
+          saving={savingApp}
+          configured={data.connectAvailable}
+          connected={connected}
+          installUrl={data.appInstallUrl}
+          onConnect={startConnect}
+          error={error}
+          flow={flow}
+          onCancelFlow={() => {
+            setFlow(null);
+            setFlowState("idle");
+          }}
+          intentOrg={data.appOrg}
+          onClearIntent={clearOrgIntent}
+        />
+      </>
+    );
+  }
+
   const active = data.enabled && data.clientIdConfigured;
   // The only account this card can hold is your own. GitHub's device flow is
   // rejected unless the login that authorizes matches the signed-in user, so
@@ -746,58 +1575,7 @@ export function GithubAccounts({ personal = false }: { personal?: boolean } = {}
           </SettingRowControl>
         </SettingRow>
 
-        {flow && (
-          // A well, not a sentence: the code, the link and the status used to
-          // run together on one line that overflowed the card on anything
-          // narrower than a desktop. Three short stacked lines — what to do,
-          // the two controls, what we're waiting for — never wrap badly and
-          // let the code be the thing the eye lands on.
-          <div className="flex flex-col gap-2.5 px-5 py-3.5">
-            <div className="text-supporting text-dim">
-              Enter this code at{" "}
-              <span className="font-medium text-fg">
-                {flow.verificationUri.replace(/^https:\/\//, "")}
-              </span>
-            </div>
-            <div className="flex flex-wrap items-center gap-2.5">
-              <DeviceCode code={flow.userCode} />
-              <a href={flow.verificationUri} target="_blank" rel="noreferrer">
-                <Button size="sm" variant="primary" icon={<IconArrowUpRight size={20} />}>
-                  Open GitHub
-                </Button>
-              </a>
-            </div>
-            <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-supporting text-dim">
-              {/* Dot and status are one item: as two siblings of a wrapping
-                  row, a phone breaks between them and leaves the dot orphaned
-                  on its own line. */}
-              <span className="flex min-w-0 flex-1 items-center gap-2">
-                <PulseDot size={7} />
-                <span className="min-w-0">
-                  Waiting for GitHub. Sign in as the account you want to connect.
-                </span>
-              </span>
-              <Button
-                size="sm"
-                variant="ghost"
-                className="ml-auto"
-                onClick={() => {
-                  setFlow(null);
-                  setFlowState("idle");
-                }}
-              >
-                Cancel
-              </Button>
-            </div>
-          </div>
-        )}
-
-        {justConnected && (
-          <div className="px-5 py-2.5 text-label text-dim">
-            Connected <span className="font-medium text-fg">@{justConnected}</span>. Their new
-            session runs now open PRs as this account.
-          </div>
-        )}
+        {deviceFlowWell}
 
         {active &&
           !personal &&

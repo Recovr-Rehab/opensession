@@ -8,7 +8,9 @@
  *                                   config.repos.
  */
 
-import { existsSync, mkdirSync, rmSync } from "fs";
+import { chmodSync, existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "fs";
+import { tmpdir } from "os";
+import { join } from "path";
 import { audit } from "../audit";
 import { codeStorageConfig, configuredRepos, type RepoSection } from "../config";
 import { getRepo as getCsRepo, listRepos as listCsRepos } from "../codestorage/client";
@@ -18,7 +20,7 @@ import {
   rawConfig,
   withConfigMutationLock,
 } from "../config-mutation";
-import { githubCredentialForLogin } from "../github-auth";
+import { githubCredentialForLogin, soleGithubAccount, type GithubCredential } from "../github-auth";
 import { homeDir } from "../paths";
 import { fetchWithTimeout } from "../shared/fetch-with-timeout";
 import type { RouteContext } from "./context";
@@ -30,6 +32,19 @@ export const GITHUB_FULL_NAME_RE = /^[\w.-]+\/[\w.-]+$/;
 
 export function validGithubFullName(value: unknown): value is string {
   return typeof value === "string" && GITHUB_FULL_NAME_RE.test(value);
+}
+
+/**
+ * The GitHub credential to act with for listing and cloning: the signed-in
+ * user's stored token when web sign-in is active (operator mode), else the
+ * single connected account in simple mode (soleGithubAccount — no authUser to
+ * scope by there). Null falls back to the bot PAT / anonymous access.
+ */
+function actingGithubCredential(ctx: RouteContext): GithubCredential | null {
+  return (
+    (ctx.authUser?.login ? githubCredentialForLogin(ctx.authUser.login) : null) ??
+    soleGithubAccount()
+  );
 }
 
 // ── GitHub repo listing ──────────────────────────────────────────────────────
@@ -191,6 +206,7 @@ async function listCodestorageRepos(): Promise<PickerRepo[]> {
 async function runCommand(
   argv: string[],
   timeoutMs: number,
+  extraEnv?: Record<string, string>,
 ): Promise<{ exitCode: number; stderr: string }> {
   const proc = Bun.spawn(argv, {
     env: {
@@ -198,6 +214,7 @@ async function runCommand(
       GIT_SSH_COMMAND:
         process.env.GIT_SSH_COMMAND ||
         "ssh -o ConnectTimeout=20 -o ServerAliveInterval=10 -o ServerAliveCountMax=3",
+      ...extraEnv,
     },
     stdout: "pipe",
     stderr: "pipe",
@@ -210,15 +227,69 @@ async function runCommand(
   return { exitCode, stderr: stderr.trim() };
 }
 
-/** Prefer `gh repo clone` (brings its own auth, leaves a clean tokenless
- *  remote); fall back to plain https `git clone`. NEVER embeds a credential
- *  in the persisted remote URL. Both paths get the full https URL (never the
- *  bare owner/name) so a `-`-prefixed name can't be parsed as a CLI flag. */
-async function cloneGithubRepo(fullName: string, dest: string): Promise<void> {
-  const url = `https://github.com/${fullName}.git`;
+/** Replace every occurrence of a secret in text bound for a log or an API
+ *  error. Cheap and total, so a token can't ride out on a clone failure. */
+function scrubSecret(text: string, secret?: string): string {
+  return secret ? text.split(secret).join("***") : text;
+}
+
+/**
+ * Clone `owner/name` to `dest`, NEVER embedding a credential in the persisted
+ * remote URL. Both paths take the full https URL (never the bare owner/name) so
+ * a `-`-prefixed name can't be read as a CLI flag.
+ *
+ * With a connected user token, clone privately and secretlessly: the token
+ * reaches git only through a 0700 GIT_ASKPASS helper that echoes it for the
+ * password prompt — never in argv (ps-visible), never in .git/config. The URL
+ * carries the username `x-access-token` (GitHub's app-token username, not a
+ * secret) so git skips the username prompt; origin is normalized to the
+ * tokenless URL afterward, holding the "no credential in the persisted remote"
+ * invariant. Without a token: `gh` (brings its own auth) if present, else an
+ * anonymous https clone — still enough for public repos.
+ */
+async function cloneGithubRepo(
+  fullName: string,
+  dest: string,
+  userToken?: string,
+): Promise<void> {
+  const cleanUrl = `https://github.com/${fullName}.git`;
+  if (userToken) {
+    const askpassDir = mkdtempSync(join(tmpdir(), "os-gh-askpass-"));
+    const askpass = join(askpassDir, "askpass.sh");
+    // The script body is static and secret-free: git passes the prompt text as
+    // $1, and the helper echoes the username or the token from the environment
+    // (which only this child and its git subprocess can read).
+    writeFileSync(
+      askpass,
+      '#!/bin/sh\ncase "$1" in\n*[Uu]sername*) printf %s "$GIT_USERNAME" ;;\n*) printf %s "$GIT_PASSWORD" ;;\nesac\n',
+      { mode: 0o700 },
+    );
+    chmodSync(askpass, 0o700); // belt against a permissive umask on create
+    try {
+      const result = await runCommand(
+        ["git", "clone", "--", `https://x-access-token@github.com/${fullName}.git`, dest],
+        5 * 60_000,
+        {
+          GIT_ASKPASS: askpass,
+          GIT_TERMINAL_PROMPT: "0",
+          GIT_USERNAME: "x-access-token",
+          GIT_PASSWORD: userToken,
+        },
+      );
+      if (result.exitCode !== 0) {
+        throw new Error(scrubSecret(result.stderr, userToken) || "git clone failed");
+      }
+      // The token never touched the persisted remote (it lived only in the
+      // askpass env), but drop the username too so origin is the plain URL.
+      await runCommand(["git", "-C", dest, "remote", "set-url", "origin", cleanUrl], 30_000);
+    } finally {
+      rmSync(askpassDir, { recursive: true, force: true });
+    }
+    return;
+  }
   const argv = Bun.which("gh")
-    ? ["gh", "repo", "clone", url, dest]
-    : ["git", "clone", "--", url, dest];
+    ? ["gh", "repo", "clone", cleanUrl, dest]
+    : ["git", "clone", "--", cleanUrl, dest];
   const result = await runCommand(argv, 5 * 60_000);
   if (result.exitCode !== 0) {
     throw new Error(result.stderr || `${argv[0]} clone failed`);
@@ -232,6 +303,8 @@ function checkoutsRoot(): string {
 async function registerGithubRepo(input: {
   fullName: string;
   id?: string;
+  /** Connected user token to clone private repos with (secretlessly). */
+  userToken?: string;
 }): Promise<RepoSection & { id: string }> {
   const name = input.fullName.split("/")[1];
   const id = repoIdFromName(input.id?.trim() || name);
@@ -247,7 +320,7 @@ async function registerGithubRepo(input: {
   }
   mkdirSync(root, { recursive: true });
   try {
-    await cloneGithubRepo(input.fullName, dest);
+    await cloneGithubRepo(input.fullName, dest, input.userToken);
     const inspected = await inspectRepo(dest);
     const config = rawConfig();
     const repos = {
@@ -344,11 +417,10 @@ export async function handleSetupRepoRoutes(
   const { req, path } = ctx;
 
   if (path === "/api/setup/github/repos" && req.method === "GET") {
-    // Credential preference: the signed-in user's stored GitHub token, else
+    // Credential preference: the acting user's stored GitHub token (signed-in
+    // user in operator mode, the sole connected account in simple mode), else
     // the bot PAT, else an empty (but well-formed) answer.
-    const userCredential = ctx.authUser?.login
-      ? githubCredentialForLogin(ctx.authUser.login)
-      : null;
+    const userCredential = actingGithubCredential(ctx);
     const token = userCredential?.env.GH_TOKEN || process.env.GITHUB_API_TOKEN;
     const source: "user" | "bot" | null = userCredential
       ? "user"
@@ -460,11 +532,15 @@ export async function handleSetupRepoRoutes(
     if (body?.id !== undefined && (typeof body.id !== "string" || !body.id.trim())) {
       return Response.json({ error: "id must be a non-empty string" }, { status: 400 });
     }
+    // The acting token lets a private clone succeed without ambient gh /
+    // credential-helper auth; absent, the clone stays anonymous (public repos).
+    const userToken = actingGithubCredential(ctx)?.env.GH_TOKEN;
     try {
       const repo = await withConfigMutationLock(() =>
         registerGithubRepo({
           fullName: body!.fullName as string,
           ...(typeof body!.id === "string" ? { id: body!.id } : {}),
+          ...(userToken ? { userToken } : {}),
         }),
       );
       return Response.json(repo, { status: 201 });

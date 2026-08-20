@@ -55,3 +55,52 @@ describe("workspace setup authorization", () => {
 		});
 	});
 });
+
+/** A simple-mode config carrying the captured org intent (userPrAuth absent, so
+ *  sign-in is off and any caller administers the workspace). */
+function orgIntentConfig(): void {
+	const dir = mkdtempSync(join(tmpdir(), "opensession-setup-intent-"));
+	dirs.push(dir);
+	const path = join(dir, "config.json");
+	writeFileSync(
+		path,
+		JSON.stringify({
+			integrations: {
+				github: { appOrg: "acme-inc", authOnConnect: true },
+			},
+		}),
+	);
+	process.env.OPENSESSION_CONFIG = path;
+	delete process.env.OPENSESSION_GITHUB_CLIENT_ID;
+}
+
+function singleUserConfig(): void {
+	const dir = mkdtempSync(join(tmpdir(), "opensession-setup-single-"));
+	dirs.push(dir);
+	const path = join(dir, "config.json");
+	writeFileSync(path, JSON.stringify({ integrations: {} }));
+	process.env.OPENSESSION_CONFIG = path;
+	delete process.env.OPENSESSION_GITHUB_CLIENT_ID;
+}
+
+describe("setup status github snapshot exposes install intent", () => {
+	test("appOrg + authOnConnect ride the snapshot", async () => {
+		orgIntentConfig();
+		const response = await handleSetupRoutes(context("anyone"));
+		expect(response?.status).toBe(200);
+		const body = await response?.json();
+		expect(body.github.appOrg).toBe("acme-inc");
+		expect(body.github.authOnConnect).toBe(true);
+		// The intent is inert: it must not have flipped the sign-in gate.
+		expect(body.github.userPrAuth).toBe(false);
+	});
+
+	test("a single-user install exposes no intent", async () => {
+		singleUserConfig();
+		const response = await handleSetupRoutes(context("anyone"));
+		const body = await response?.json();
+		expect(body.github.appOrg).toBe(null);
+		expect(body.github.authOnConnect).toBe(false);
+		expect(body.github.userPrAuth).toBe(false);
+	});
+});

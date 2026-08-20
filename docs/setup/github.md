@@ -229,6 +229,52 @@ What turns on (`packages/core/opensession-server/src/server/github-auth.ts`, `we
   connections (per-teammate status, disconnect) in the Connections UI.
 - `GET /api/health` stays un-gated (deploy polls / restart detection).
 
+## Connecting GitHub in simple mode
+
+A **simple-mode install** is one person on their own box: no operator config, no
+bot machine-user, no `gh auth login`, and no sign-in gate. Such a user still
+needs their **private** repos available — to list them in the repo picker, clone
+them, and open PRs as themselves. Connect a **personal access token**, pasted
+once, with nothing to provision:
+
+1. Create a token. A **fine-grained** token is the recommendation:
+   [github.com/settings/personal-access-tokens/new](https://github.com/settings/personal-access-tokens/new).
+   Scope it to the repositories you want to expose and grant permissions
+   **Contents: Read and write** and **Pull requests: Read and write** (Metadata:
+   Read is added automatically). A **classic** token with the `repo` scope also
+   works — you get a bearer token either way.
+2. Settings → Connections → **GitHub**: paste the token and **Save**. It is
+   validated with `GET /user`, and stored server-side under the login GitHub
+   reports (`~/.opensession-github-auth.json`, 0600) with no expiry — never
+   shown again. That single account becomes *the* account for this install
+   (there is no roster in simple mode; the one connected account is the acting
+   identity). **Disconnect** removes it.
+
+Private clones use the connected token without ever writing it into the remote:
+the clone runs with a temporary `GIT_ASKPASS` helper, and `origin` is left as the
+plain `https://github.com/<owner>/<repo>.git`. No `gh` CLI or `GITHUB_API_TOKEN`
+is involved.
+
+This is entirely decoupled from [per-user GitHub auth](#per-user-github-auth-prs-as-the-session-owner)
+above: connecting a token in simple mode does **not** turn on the sign-in gate.
+That gate is still governed solely by `integrations.github.userPrAuth`.
+
+### Operator override: bring your own GitHub App
+
+No App is shipped and none is required. An operator who prefers an
+**installable** connect — a user-to-server token scoped to selected repos rather
+than a pasted PAT — can register their own public GitHub App and configure its
+client id. The simple-mode card then also offers GitHub's device flow.
+
+Set `OPENSESSION_GITHUB_CLIENT_ID` (env) or `integrations.github.oauthClientId`
+(config), plus `OPENSESSION_GITHUB_APP_SLUG` / `integrations.github.appSlug` for
+the install URL. The App wants **Device Flow: ON**, **Expire user authorization
+tokens: OFF** (so the `ghu_` token is non-expiring and no client secret is ever
+needed — the device flow is a public-client flow), permissions **Contents: Read
+& write**, **Pull requests: Read & write**, **Metadata: Read**, no webhook, and
+no callback URL. Absent a configured client id this path stays hidden; the PAT
+field is always present.
+
 ## Deploy script
 
 `deploy/deploy.sh` updates a running box in place. There is no deploy workflow

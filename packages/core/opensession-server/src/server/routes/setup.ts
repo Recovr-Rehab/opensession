@@ -104,7 +104,8 @@ async function primaryGithubOrg(): Promise<string | undefined> {
 }
 
 async function githubSnapshot() {
-  const { githubUserAuthSettings } = await import("../github-auth");
+  const { githubUserAuthSettings, githubAppOrg, githubAuthOnConnect } =
+    await import("../github-auth");
   const github = githubUserAuthSettings();
   const org = await primaryGithubOrg();
   return {
@@ -112,6 +113,11 @@ async function githubSnapshot() {
     clientIdConfigured: !!github.clientId,
     clientSecretConfigured: !!github.clientSecret,
     botTokenPresent: !!process.env.GITHUB_API_TOKEN,
+    // Captured install/app-setup intent: the org the App is owned by, and
+    // whether connecting should turn on per-user sign-in. Both are inert until
+    // the simple-mode connect handler consumes authOnConnect.
+    appOrg: githubAppOrg(),
+    authOnConnect: githubAuthOnConnect(),
     appCreateUrl: org
       ? `https://github.com/organizations/${org}/settings/apps/new`
       : "https://github.com/settings/apps/new",
