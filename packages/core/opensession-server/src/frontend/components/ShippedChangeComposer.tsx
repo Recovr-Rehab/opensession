@@ -3,6 +3,7 @@ import { fetchShippedChangeChannels } from "../lib/api/shipped-changes";
 import { imageFilesFromPaste, uploadFile } from "../lib/images";
 import { noAutofill } from "../lib/composer-autofill";
 import { Button } from "../ui/button";
+import { OverlayAction } from "../ui/overlay-action";
 import { OptionSelect } from "../ui/select";
 import { toast } from "../ui/toast";
 import { Tooltip } from "../ui/tooltip";
@@ -252,13 +253,18 @@ export function ShippedChangeComposer({
 				{screenshots.length > 0 && (
 					<div className="mt-0.5 flex gap-2 overflow-x-auto pt-2 pr-2 pb-0.5 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
 						{screenshots.map((path, index) => (
-							<div key={path} className="group/image relative shrink-0">
+							<div key={path} className="group/overlay-action relative shrink-0">
 								<button type="button" aria-label="Open screenshot preview" className="focus-ring block overflow-hidden rounded-md" onClick={(event) => openLightbox(screenshots.map((item) => ({ kind: "image", src: mediaUrl(item) })), index, event.currentTarget)}>
 									<img className="h-16 w-24 rounded-md border border-line-strong object-cover object-top" src={mediaUrl(path)} alt="" />
 								</button>
-								<button type="button" aria-label="Remove screenshot" disabled={status !== "idle"} className="focus-ring absolute -top-2 -right-2 flex size-6 items-center justify-center rounded-full border-2 border-[color:var(--composer-surface)] bg-fg p-0 text-panel shadow-sm transition-[opacity,scale] active:scale-[0.96] disabled:opacity-50 [@media(hover:hover)]:pointer-events-none [@media(hover:hover)]:opacity-0 [@media(hover:hover)]:group-hover/image:pointer-events-auto [@media(hover:hover)]:group-hover/image:opacity-100 [@media(hover:hover)]:focus-visible:pointer-events-auto [@media(hover:hover)]:focus-visible:opacity-100" onClick={() => setScreenshots((current) => current.filter((_, i) => i !== index))}>
-									<IconX className="block" size={14} />
-								</button>
+								<OverlayAction
+									aria-label="Remove screenshot"
+									disabled={status !== "idle"}
+									icon={<IconX className="text-red" size={16} />}
+									onClick={() =>
+										setScreenshots((current) => current.filter((_, i) => i !== index))
+									}
+								/>
 							</div>
 						))}
 					</div>

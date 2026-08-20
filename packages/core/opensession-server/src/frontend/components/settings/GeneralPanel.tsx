@@ -11,6 +11,7 @@ import { pngFromImageFile } from "../../lib/icon-image";
 import { REPO_TILE_INK, repoColor, repoIconFill } from "../../lib/repo-colors";
 import { Button } from "../../ui/button";
 import { cn } from "../../ui/cn";
+import { OverlayAction } from "../../ui/overlay-action";
 import {
 	SettingCard,
 	SettingCardSkeleton,
@@ -127,7 +128,7 @@ export function OrganizationProfileSection() {
 								<SettingRowTitle>Upload icon</SettingRowTitle>
 							</SettingRowText>
 							<SettingRowControl className="flex flex-wrap items-center justify-end gap-2">
-								<div className="group/icon relative flex shrink-0 flex-col items-center gap-1.5">
+								<div className="group/overlay-action relative flex shrink-0 flex-col items-center gap-1.5">
 									<button
 										type="button"
 										disabled={busy}
@@ -159,15 +160,13 @@ export function OrganizationProfileSection() {
 									</button>
 									{settings.organizationIconUrl && (
 										<>
-											<Button
-												variant="danger"
-												size="sm"
-												icon={<IconTrash size={20} />}
+											<OverlayAction
+												icon={<IconTrash className="text-red" size={20} />}
 												disabled={busy}
 												onClick={removeIcon}
 												aria-label="Remove organization icon"
 												title="Remove icon"
-												className="pointer-events-none absolute -right-2 -top-2 z-[1] opacity-0 transition-opacity phone:hidden desktop:group-hover/icon:pointer-events-auto desktop:group-hover/icon:opacity-100 desktop:focus-visible:pointer-events-auto desktop:focus-visible:opacity-100"
+												className="phone:hidden"
 											/>
 											<Button
 												variant="danger"

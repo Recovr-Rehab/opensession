@@ -96,8 +96,9 @@ describe("TranscriptBlocks shipped change action", () => {
 		expect(html).toContain("%2Ftmp%2Ftoggle-after.png");
 		expect(html).toContain('aria-label="Open screenshot preview"');
 		expect(html).toContain('aria-label="Remove screenshot"');
-		expect(html).toContain("group/image");
-		expect(html).toContain("group-hover/image:opacity-100");
+		expect(html).toContain("group/overlay-action");
+		expect(html).toContain("group-hover/overlay-action:opacity-100");
+		expect(html).toContain("bg-white");
 		expect(html).toContain('aria-label="Add images"');
 		expect(html).toContain('aria-label="Slack channel"');
 		expect(html).toContain("border-line bg-surface");

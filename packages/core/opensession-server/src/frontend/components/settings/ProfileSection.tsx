@@ -12,6 +12,7 @@ import { isTouchPrimary } from "../../lib/platform";
 import { Button } from "../../ui/button";
 import { cn } from "../../ui/cn";
 import { Field, FieldGrid, Input } from "../../ui/input";
+import { OverlayAction } from "../../ui/overlay-action";
 import { SettingsForm, SettingsGroupLabel } from "../../ui/settings";
 import { ResponsiveDialog } from "../../ui/sheet";
 import { Spinner } from "../../ui/spinner";
@@ -290,7 +291,7 @@ function ProfileCard({
 
 						    A touch client has no hover, so there the overlay stays
 						    on. */}
-						<div className="relative mb-1 mt-1 w-max">
+						<div className="group/overlay-action relative mb-1 mt-1 w-max">
 							<button
 								type="button"
 								disabled={busy !== null}
@@ -334,22 +335,13 @@ function ProfileCard({
 								</span>
 							</button>
 							{profile.image && (
-								<button
-									type="button"
+								<OverlayAction
 									disabled={busy !== null}
 									onClick={() => void removePicture()}
 									aria-label="Remove picture"
 									title="Remove picture"
-									/* Only the mark is red: a destructive action on a corner
-									   badge has no word to say so, and a mark you recognize
-									   only once the pointer is on it is one you can hit by
-									   accident. The badge itself stays white, so the red
-									   holds against whatever picture is under it without a
-									   red disc shouting from the corner of a portrait. */
-									className="focus-ring absolute -right-1.5 -top-1.5 grid size-7 place-items-center rounded-full bg-white text-red shadow-sm transition-opacity hover:opacity-80 disabled:pointer-events-none"
-								>
-									<IconTrash size={16} />
-								</button>
+									icon={<IconTrash className="text-red" size={16} />}
+								/>
 							)}
 						</div>
 						{/* The note is a sibling of the Field, not a child: `Field` is
