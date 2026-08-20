@@ -98,7 +98,7 @@ export function SidebarItem({
 	mention,
 	mine,
 	onClick,
-	onArchive,
+	onArchive: onArchiveRequest,
 	pinned,
 	onTogglePin,
 	onRename,
@@ -117,7 +117,7 @@ export function SidebarItem({
 	    dropped and the timestamp moves up onto the title line. */
 	mine: boolean;
 	onClick: () => void;
-	onArchive: () => void;
+	onArchive: (current: HTMLButtonElement | null) => void;
 	pinned: boolean;
 	onTogglePin: () => void;
 	onRename: (title: string) => void;
@@ -150,6 +150,7 @@ export function SidebarItem({
 	// row turns into owns the interaction).
 	const btnRef = useRef<HTMLButtonElement>(null);
 	const card = useRowHoverCard(editing);
+	const onArchive = () => onArchiveRequest(btnRef.current);
 	const closeHover = card.close;
 
 	// Mobile long-press → action sheet, and — importantly — the *tap* to open a
@@ -422,6 +423,7 @@ export function SidebarItem({
 						// the idle list (dozens of retina-sized layers is a real tax).
 						(dragging || swipeOpen) && "will-change-transform",
 					)}
+					data-sidebar-item-key={`session:${session.id}`}
 					data-sidebar-row=""
 					data-selected={selected || undefined}
 					data-waiting={waiting || undefined}

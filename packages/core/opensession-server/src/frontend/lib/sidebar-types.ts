@@ -1,6 +1,8 @@
 import React from "react";
 import type { ReviewQueueItem } from "./review-queue";
 import type { FeedDescriptor, FeedItem, SupportThread, UnifiedSession, Workspace } from "./types";
+export type OpenNextSidebarItem = () => boolean;
+
 
 export interface Props {
 	sessions: UnifiedSession[];
@@ -104,20 +106,20 @@ export interface Props {
 	/** True while the catch-up deck is open — highlights its entry. */
 	catchUpActive: boolean;
 	/**
-	 * Archive a session. `next` is the session that follows it in the sidebar's
-	 * visible order (or the previous one for the last row) — the caller uses it
-	 * to keep a live session open when the active one is archived.
+	 * Archive a session. `openNext` opens the rendered sidebar item after it, or
+	 * the previous item when it is last. It returns false when no item remains.
 	 */
-	onArchive: (session: UnifiedSession, next: UnifiedSession | null) => void;
+	onArchive: (
+		session: UnifiedSession,
+		openNext: OpenNextSidebarItem | null,
+	) => void;
 	/**
-	 * Archive every session in a workspace (the row's archive icon). `next` is the
-	 * first session of the workspace row that follows it in the sidebar's visible
-	 * order (or the previous one for the last row) — the caller opens it when
-	 * the active workspace is archived away.
+	 * Archive every session in a workspace. `openNext` follows the same rendered
+	 * order as the row the person archived.
 	 */
 	onArchiveWorkspace: (
 		sessions: UnifiedSession[],
-		next: UnifiedSession | null,
+		openNext: OpenNextSidebarItem | null,
 	) => void;
 	/** Rename a session (double-click its title); empty title resets it. */
 	onRename: (session: UnifiedSession, title: string) => void;

@@ -4721,14 +4721,11 @@ export function App(
 							onOpenCatchUp={() => navigate({ view: "catchup" })}
 							catchUpActive={route.view === "catchup"}
 							archivedActive={route.view === "archived"}
-							onArchive={(s, next) => {
+							onArchive={(s, openNext) => {
 								const archive = async () => {
-									patch(s.id, { archived: true, archivedReason: "manual" });
 									const wasOpen = route.view === "session" && route.id === s.id;
-									if (wasOpen) {
-										if (next) navigate({ view: "session", id: next.id });
-										else goBack();
-									}
+									if (wasOpen && !openNext?.()) goBack();
+									patch(s.id, { archived: true, archivedReason: "manual" });
 									try {
 										const { stoppedRun } = await archiveSessionApi(s.id, true);
 										showArchivedToast(
@@ -4747,22 +4744,19 @@ export function App(
 								};
 								confirmRunningClose(s, () => void archive());
 							}}
-							onArchiveWorkspace={(sessions, next) => {
+							onArchiveWorkspace={(sessions, openNext) => {
 								const archive = async () => {
-									// Archive a whole workspace = archive every member session (the
-									// archive registry is per-session; the workspace row disappears
-									// once no live sessions remain).
-									for (const session of sessions) {
-										patch(session.id, { archived: true, archivedReason: "manual" });
-									}
 									const openSessionId =
 										route.view === "session" &&
 										sessions.some((c) => c.id === route.id)
 											? route.id
 											: null;
-									if (openSessionId) {
-										if (next) navigate({ view: "session", id: next.id });
-										else goBack();
+									if (openSessionId && !openNext?.()) goBack();
+									// Archive a whole workspace = archive every member session (the
+									// archive registry is per-session; the workspace row disappears
+									// once no live sessions remain).
+									for (const session of sessions) {
+										patch(session.id, { archived: true, archivedReason: "manual" });
 									}
 									try {
 										const results = await Promise.all(

@@ -253,6 +253,7 @@ import {
 	stripPrTitlePrefix,
 } from "../lib/sidebar-lanes";
 import { sessionHasPr } from "../lib/session-prs";
+import { nextRenderedSidebarItem } from "../lib/sidebar-next";
 import { sessionHasWorkspace } from "../lib/session-workspace";
 import {
 	LONG_PRESS_MS,
@@ -274,6 +275,7 @@ import {
 	type CtxEntry,
 	type Group,
 	type GroupBand,
+	type OpenNextSidebarItem,
 	type MineStatus,
 	type Props,
 	type SidebarHandle,
@@ -769,6 +771,7 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 	const [workspaceMenu, setWorkspaceMenu] = useState<{
 		id: string;
 		x: number;
+		source: HTMLButtonElement;
 		y: number;
 	} | null>(null);
 	const [editingWorkspaceId, setEditingWorkspaceId] = useState<string | null>(null);
@@ -1544,24 +1547,38 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 		currentUser,
 	]);
 
-	// Sessions in sidebar order (pinned rows first, then each group's items) —
-	// used to hand onArchive the row that should become active when the open
-	// session is archived away.
-	const flatOrder = useMemo(() => {
-		const pinned = pins
-			.map((id) =>
-				sessions.find((s) => s.id === id || s.aliasIds?.includes(id)),
-			)
-			.filter((s): s is UnifiedSession => !!s);
-		return [...pinned, ...groups.flatMap((g) => g.items)];
-	}, [pins, sessions, groups]);
+	// The DOM is the source of truth for visual order. Section mode, project
+	// grouping, collapse state, pins, PRs and feeds can all put rendered rows in
+	// an order that no single data array represents.
+	function openNextSidebarItem(
+		currentKey: string,
+		current: HTMLButtonElement | null = null,
+	): OpenNextSidebarItem {
+		return () => {
+			const root = sidebarScrollRef.current;
+			if (!root) return false;
+			const items = Array.from(
+				root.querySelectorAll<HTMLButtonElement>("button[data-sidebar-row]"),
+			);
+			const next = nextRenderedSidebarItem(
+				items,
+				current?.isConnected ? current : null,
+				currentKey,
+			);
+			if (!next) return false;
+			next.click();
+			return true;
+		};
+	}
 
-	function archiveWithNext(s: UnifiedSession) {
-		const idx = flatOrder.findIndex((x) => x.id === s.id);
-		const rest = flatOrder.filter((x) => x.id !== s.id);
-		const next =
-			idx >= 0 ? (rest[Math.min(idx, rest.length - 1)] ?? null) : (rest[0] ?? null);
-		onArchive(s, next);
+	function archiveWithNext(
+		session: UnifiedSession,
+		current: HTMLButtonElement | null = null,
+	) {
+		onArchive(
+			session,
+			openNextSidebarItem(`session:${session.id}`, current),
+		);
 	}
 	function sessionPinState(s: UnifiedSession) {
 		const keys = [s.id, ...(s.aliasIds || [])].filter(
@@ -1911,9 +1928,8 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 		(item) => item.source !== "requested",
 	);
 
-	// Workspace rows in the sidebar's visual order (Pinned band first, then the
-	// status lanes) — archiveWorkspaceWithNext walks this to pick the row that
-	// should open when the active workspace is archived away.
+	// Workspace rows in their primary placement order. This supports operations
+	// that need row membership; archive navigation reads the rendered DOM below.
 	const wsRowOrder = useMemo(
 		() => {
 			// Pinned rows appear in the Pinned band AND their status lane —
@@ -1992,14 +2008,14 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 		else setSnooze(row.key, SNOOZE_SOMEDAY);
 	}
 
-	function archiveWorkspaceWithNext(row: WsRow) {
-		// Sessionless rows can't be opened, so they're not "next" candidates.
-		const candidates = wsRowOrder.filter((r) => r.sessions.length > 0);
-		const idx = candidates.findIndex((r) => r.key === row.key);
-		const rest = candidates.filter((r) => r.key !== row.key);
-		const next =
-			idx >= 0 ? (rest[Math.min(idx, rest.length - 1)] ?? null) : (rest[0] ?? null);
-		onArchiveWorkspace(row.sessions, next?.sessions[0] ?? null);
+	function archiveWorkspaceWithNext(
+		row: WsRow,
+		current: HTMLButtonElement | null = null,
+	) {
+		onArchiveWorkspace(
+			row.sessions,
+			openNextSidebarItem(`workspace:${row.key}`, current),
+		);
 	}
 
 	/**
@@ -2035,36 +2051,47 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 		setHide(row.key);
 	}
 
-	// Archive just the open session and pick what becomes active. We resolve the open
-	// session through wsRowOrder (the rendered workspace rows) rather than flatOrder
-	// — flatOrder only carries pinned + automation sessions, so a normal open session
-	// isn't in it. If the session has siblings in its workspace, land on one of them;
-	// otherwise the row empties out, so land on the next workspace's first session.
+	// Archive just the open session and pick what becomes active. A workspace
+	// with another tab stays on that workspace. When its last tab goes away, the
+	// rendered list decides what opens next.
 	function archiveOpenSessionWithNext() {
-		const candidates = wsRowOrder.filter((r) => r.sessions.length > 0);
-		const rowIdx = candidates.findIndex((r) =>
-			r.sessions.some((c) => c.id === selectedId),
+		const row = wsRowOrder.find((candidate) =>
+			candidate.sessions.some((session) => session.id === selectedId),
 		);
-		if (rowIdx < 0) {
+		if (!row) {
 			// The open session can be hidden by the current person/repo/search lens.
 			// Archiving the active session must not depend on it being rendered.
 			const session = sessions.find((s) => s.id === selectedId && !s.archived);
-			if (session) onArchive(session, null);
+			if (session)
+				onArchive(
+					session,
+					openNextSidebarItem(`session:${session.id}`),
+				);
 			return;
 		}
-		const row = candidates[rowIdx];
-		const session = row.sessions.find((c) => c.id === selectedId);
+		const session = row.sessions.find((candidate) => candidate.id === selectedId);
 		if (!session) return;
-		let next: UnifiedSession | null;
-		const siblings = row.sessions.filter((c) => c.id !== selectedId);
+		const siblings = row.sessions.filter((candidate) => candidate.id !== selectedId);
 		if (siblings.length > 0) {
-			const sessionIdx = row.sessions.findIndex((c) => c.id === selectedId);
-			next = siblings[Math.min(sessionIdx, siblings.length - 1)] ?? null;
-		} else {
-			const rest = candidates.filter((r) => r.key !== row.key);
-			next = rest[Math.min(rowIdx, rest.length - 1)]?.sessions[0] ?? null;
+			const sessionIdx = row.sessions.findIndex(
+				(candidate) => candidate.id === selectedId,
+			);
+			const sibling = siblings[Math.min(sessionIdx, siblings.length - 1)] ?? null;
+			onArchive(
+				session,
+				sibling
+					? () => {
+						onSelect(sibling);
+						return true;
+					}
+					: null,
+			);
+			return;
 		}
-		onArchive(session, next);
+		onArchive(
+			session,
+			openNextSidebarItem(`workspace:${row.key}`),
+		);
 	}
 
 	React.useImperativeHandle(ref, () => ({
@@ -2098,7 +2125,7 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 		}
 		window.addEventListener("keydown", onKeyDown);
 		return () => window.removeEventListener("keydown", onKeyDown);
-	}, [wsRowOrder, sessions, selectedId, onArchive]);
+	}, [wsRowOrder, sessions, selectedId, onArchive, onSelect]);
 
 	// ⌘⌥⇧A escalates the session archive (⌘E/⌘⇧A) to the whole active workspace.
 	// The Alt modifier is the only thing that separates the two handlers, so
@@ -2209,7 +2236,10 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 		null,
 	);
 	// Mobile long-press sheet (the touch stand-in for the hover card).
-	const [wsSheet, setWsSheet] = useState<WsRow | null>(null);
+	const [wsSheet, setWsSheet] = useState<{
+		row: WsRow;
+		source: HTMLButtonElement;
+	} | null>(null);
 
 	function cancelWsHoverTimers() {
 		if (wsHoverOpenT.current) clearTimeout(wsHoverOpenT.current);
@@ -2300,13 +2330,14 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 			y: t.clientY,
 			width: e.currentTarget.clientWidth,
 		};
+		const source = e.currentTarget as HTMLButtonElement;
 		wsPressTimer.current = setTimeout(() => {
 			wsLongPressed.current = true;
 			closeWsHover();
 			navigator.vibrate?.(10);
 			// The touch stand-in for both the hover card AND right-click: a
 			// bottom sheet with the overview block plus every workspace action.
-			setWsSheet(row);
+			setWsSheet({ row, source });
 		}, LONG_PRESS_MS);
 	}
 	function wsRowTouchMove(row: WsRow, e: React.TouchEvent) {
@@ -2937,6 +2968,7 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 						(draggingRow || swipeSide) && "will-change-transform",
 					)}
 					data-sidebar-row=""
+					data-sidebar-item-key={`workspace:${row.key}`}
 					data-ws-row=""
 					data-selected={active || undefined}
 					data-waiting={waiting || undefined}
@@ -2987,6 +3019,7 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 					setWorkspaceMenu({
 						id: row.workspace ? row.workspace.id : row.key,
 						x: e.clientX,
+						source: e.currentTarget,
 						y: e.clientY,
 					});
 					}}
@@ -3271,12 +3304,22 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 									aria-label="Archive workspace"
 									onClick={(e) => {
 										e.stopPropagation();
-										archiveWorkspaceWithNext(row);
+										archiveWorkspaceWithNext(
+											row,
+											e.currentTarget.closest<HTMLButtonElement>(
+												"button[data-sidebar-row]",
+											),
+										);
 									}}
 									onKeyDown={(e) => {
 										if (e.key === "Enter" || e.key === " ") {
 											e.stopPropagation();
-											archiveWorkspaceWithNext(row);
+											archiveWorkspaceWithNext(
+												row,
+												e.currentTarget.closest<HTMLButtonElement>(
+													"button[data-sidebar-row]",
+												),
+											);
 										}
 									}}
 								>
@@ -5094,7 +5137,8 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 							kind: "item",
 							icon: <IconArchive size={20} />,
 							label: "Archive",
-							onClick: () => archiveWorkspaceWithNext(menuRow),
+							onClick: () =>
+								archiveWorkspaceWithNext(menuRow, workspaceMenu.source),
 						});
 					} else if (ws) {
 						entries.push({ kind: "sep" });
@@ -5370,7 +5414,7 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 										s.startedBy.toLowerCase() === currentUser.toLowerCase()
 									}
 									onClick={() => onSelect(s)}
-									onArchive={() => archiveWithNext(s)}
+									onArchive={(current) => archiveWithNext(s, current)}
 									pinned={pin.pinned}
 									onTogglePin={pin.toggle}
 									onRename={(title) => onRename(s, title)}
@@ -5827,7 +5871,7 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 																currentUser.toLowerCase()
 														}
 														onClick={() => onSelect(s)}
-														onArchive={() => archiveWithNext(s)}
+														onArchive={(current) => archiveWithNext(s, current)}
 														pinned={pin.pinned}
 														onTogglePin={pin.toggle}
 														onRename={(title) => onRename(s, title)}
@@ -5892,7 +5936,7 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 			</Popover.Root>
 			{wsSheet &&
 				(() => {
-					const row = wsSheet;
+					const { row, source } = wsSheet;
 					const ws = row.workspace;
 					// Same pin resolution as the row's star and the right-click menu: a
 					// row can be pinned via its own key or a legacy pin on any member
@@ -5918,7 +5962,7 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 								}
 							}}
 							onClose={() => setWsSheet(null)}
-							onArchive={() => archiveWorkspaceWithNext(row)}
+							onArchive={() => archiveWorkspaceWithNext(row, source)}
 							onSetStatus={(status) => onSetStatus(row.sessions, status)}
 							snoozeUntil={
 								activeSnoozeKeys.has(row.key)
