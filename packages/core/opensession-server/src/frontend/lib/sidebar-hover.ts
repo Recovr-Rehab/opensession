@@ -88,6 +88,14 @@ export function compactNum(n: number): string {
 	return String(n);
 }
 
+/** Keep the card on the failure reason. The status above it already says the
+ * run failed and what to do next, so later recovery instructions only repeat
+ * that message. The full error remains available through the callout title. */
+export function cardRunErrorDetail(message: string): string {
+	const detail = message.trim().replace(/^pi:\s*/i, "");
+	return detail.match(/^.*?[.!?](?:\s|$)/)?.[0]?.trim() || detail;
+}
+
 // ── Workspace hover card ────────────────────────────────────────────────────
 // Structural subset of WsRow (declared inside Sidebar) that the card reads.
 export interface WsCardRow {

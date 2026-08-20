@@ -1,7 +1,7 @@
 import type { WorkspaceOverview } from "../../lib/api";
 import { providerFromUrl } from "../../lib/provider";
 import { sessionPrMerged } from "../../lib/session-prs";
-import { MAX_HOVERCARD_MEDIA, TONE_TEXT, compactNum, hoverState, prTone, prettyReview, useSessionOverview, useWsOverview, wsPrInfo, type WsCardRow } from "../../lib/sidebar-hover";
+import { MAX_HOVERCARD_MEDIA, TONE_TEXT, cardRunErrorDetail, compactNum, hoverState, prTone, prettyReview, useSessionOverview, useWsOverview, wsPrInfo, type WsCardRow } from "../../lib/sidebar-hover";
 import { SIDEBAR_STATUS_DOT, SIDEBAR_WS_SNOOZE, SIDEBAR_WS_TICKER } from "../../lib/sidebar-classes";
 import { frontingPrSession, mineStatus, pinnedLane, runNeedsAttention } from "../../lib/sidebar-lanes";
 import { MINE_STATUS_META, type LaneChoice, type MineStatus } from "../../lib/sidebar-types";
@@ -96,8 +96,11 @@ export function SessionCardBody({ session: s }: { session: UnifiedSession }) {
 				</div>
 			)}
 			{!s.waitingForInput && runNeedsAttention(s) && (
-				<div className="mt-[7px] rounded-md bg-accent-soft px-2 py-[5px] text-meta leading-snug text-dim">
-					Run failed. Open to retry.
+				<div
+					className="mt-[7px] rounded-md bg-accent-soft px-2 py-[5px] text-meta leading-snug text-dim line-clamp-2"
+					title={s.lastRunError!.message}
+				>
+					{cardRunErrorDetail(s.lastRunError!.message)}
 				</div>
 			)}
 			{!s.waitingForInput && (s.queuedCount ?? 0) > 0 && (
@@ -411,6 +414,7 @@ function WsOverviewInfo({
 }) {
 	const { prSession } = wsPrInfo(row);
 	const meta = MINE_STATUS_META.find((m) => m.key === row.status);
+	const failedSession = row.sessions.find((session) => runNeedsAttention(session));
 	return (
 		<>
 			{/* The PR facts, on one strip above the title: what changed, what the
@@ -457,8 +461,13 @@ function WsOverviewInfo({
 						Blocked on a question. Open to answer.
 					</div>
 				) : (
-					<div className="mt-[7px] rounded-md bg-accent-soft px-2 py-[5px] text-meta leading-snug text-dim">
-						Run failed. Open to retry.
+					<div
+						className="mt-[7px] rounded-md bg-accent-soft px-2 py-[5px] text-meta leading-snug text-dim line-clamp-2"
+						title={failedSession?.lastRunError?.message}
+					>
+						{cardRunErrorDetail(
+							failedSession?.lastRunError?.message || "Needs attention.",
+						)}
 					</div>
 				))}
 

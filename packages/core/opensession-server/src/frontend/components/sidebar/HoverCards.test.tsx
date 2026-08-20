@@ -138,7 +138,12 @@ describe("hover cards drop the repo and the idle timestamp", () => {
 		);
 		const callout = renderToStaticMarkup(
 			<SessionCardBody
-				session={session({ lastRunError: { message: "Stopped", at: AGO } })}
+				session={session({
+					lastRunError: {
+						message: "The model is unavailable. Send the prompt again.",
+						at: AGO,
+					},
+				})}
 			/>,
 		);
 		for (const html of [preview, callout]) {
@@ -146,8 +151,10 @@ describe("hover cards drop the repo and the idle timestamp", () => {
 			expect(html).not.toContain("text-supporting");
 			expect(html).not.toContain("text-xs");
 		}
-		expect(callout).toContain("Run failed. Open to retry.");
-		expect(callout).not.toContain("Stopped");
+		expect(callout).toContain(
+			'title="The model is unavailable. Send the prompt again.">The model is unavailable.</div>',
+		);
+		expect(callout).toContain("line-clamp-2");
 	});
 });
 
