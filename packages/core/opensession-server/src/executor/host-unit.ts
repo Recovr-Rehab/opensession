@@ -9,6 +9,7 @@ import {
   HOST_ENTRY,
   HOST_JOURNAL_NAME,
   REPO_ROOT,
+  runnerHostArgv,
 } from "../runner-host/protocol";
 
 export const RUN_HOST_HELPER = "/usr/local/libexec/opensession-run-host";
@@ -18,7 +19,13 @@ export async function verifyRunHostHelper(): Promise<void> {
   if (!existsSync(RUN_HOST_HELPER))
     throw new Error("run-host helper is not installed");
   const proc = Bun.spawn(
-    ["sudo", "-n", RUN_HOST_HELPER, "check-version", String(RUN_HOST_HELPER_VERSION)],
+    [
+      "sudo",
+      "-n",
+      RUN_HOST_HELPER,
+      "check-version",
+      String(RUN_HOST_HELPER_VERSION),
+    ],
     { stdout: "ignore", stderr: "pipe" },
   );
   const [error, code] = await Promise.all([
@@ -26,7 +33,9 @@ export async function verifyRunHostHelper(): Promise<void> {
     proc.exited,
   ]);
   if (code !== 0)
-    throw new Error(`run-host helper version check failed: ${error.trim().slice(0, 400)}`);
+    throw new Error(
+      `run-host helper version check failed: ${error.trim().slice(0, 400)}`,
+    );
 }
 const ENV_FILE = statePath(".opensession.env");
 
@@ -53,7 +62,9 @@ export async function launchHostUnitDirect(
     proc.exited,
   ]);
   if (code !== 0) {
-    throw new Error(`systemd-run exited ${code}: ${error.trim().slice(0, 400)}`);
+    throw new Error(
+      `systemd-run exited ${code}: ${error.trim().slice(0, 400)}`,
+    );
   }
 }
 
@@ -92,10 +103,7 @@ export function legacyHostUnitArgs(
     "StandardOutput=journal",
     "-p",
     "StandardError=journal",
-    BUN_BIN,
-    "run",
-    HOST_ENTRY,
-    `${dir}/spec.json`,
+    ...runnerHostArgv(BUN_BIN, HOST_ENTRY, `${dir}/spec.json`),
   ];
 }
 
@@ -104,15 +112,7 @@ export function hostUnitArgs(
   dir: string,
   specHash: string,
 ): string[] {
-  return [
-    "sudo",
-    "-n",
-    RUN_HOST_HELPER,
-    "launch",
-    hostId,
-    dir,
-    specHash,
-  ];
+  return ["sudo", "-n", RUN_HOST_HELPER, "launch", hostId, dir, specHash];
 }
 
 export async function stopHostUnitDirect(hostId: string): Promise<void> {
@@ -127,15 +127,17 @@ export async function stopHostUnitDirect(hostId: string): Promise<void> {
     proc.exited,
   ]);
   if (code !== 0) {
-    throw new Error(`systemctl stop exited ${code}: ${error.trim().slice(0, 400)}`);
+    throw new Error(
+      `systemctl stop exited ${code}: ${error.trim().slice(0, 400)}`,
+    );
   }
 }
 
 export async function hostUnitActive(hostId: string): Promise<boolean> {
-  const proc = Bun.spawn(
-    ["systemctl", "is-active", runHostUnitName(hostId)],
-    { stdout: "pipe", stderr: "ignore" },
-  );
+  const proc = Bun.spawn(["systemctl", "is-active", runHostUnitName(hostId)], {
+    stdout: "pipe",
+    stderr: "ignore",
+  });
   const [output, code] = await Promise.all([
     new Response(proc.stdout).text(),
     proc.exited,

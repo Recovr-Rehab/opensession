@@ -55,7 +55,14 @@ export async function handleAuthRoutes(
 		return Response.json({
 			required: webAuthRequired(),
 			authenticated: signedIn,
-			admin: signedIn ? workspaceAdminAuthorized({ authUser: identity }) : false,
+			// When web auth isn't required (a single-user install), there is no
+			// identity to sign in as, but that user administers the workspace —
+			// workspaceAdminAuthorized() says as much. Report it so the admin-only
+			// settings (Repositories, Connections, …) are reachable; falling
+			// through to `false` here would hide them from the only user.
+			admin: signedIn
+				? workspaceAdminAuthorized({ authUser: identity })
+				: !webAuthRequired(),
 			...(reconnect ? { reconnectRequired: true } : {}),
 			// The login rides along even for a reconnect: the card names the
 			// account whose authorization lapsed, which is the whole difference

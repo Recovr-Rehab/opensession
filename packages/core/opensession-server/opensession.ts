@@ -21,9 +21,9 @@ import { kickTranscriptBackfillOnce } from "./src/server/transcript-backfill";
 import { kickOrphanTranscriptSweep } from "./src/server/transcript-orphan-sweep";
 import { makeAskHandler, restorePendingAsks } from "./src/server/asks";
 import { automationResumeMcpForSession, ensureConfiguredAutomations, getWebhookRoutes, setEventSessionCallback, settleResumedAutomationRun, startScheduler } from "./src/server/automations";
-import { startUsagePoller } from "./src/server/claude-accounts";
+import { seedAccountFromEnvOrFile, startUsagePoller } from "./src/server/claude-accounts";
 import { startCodexUsagePoller } from "./src/server/codex-accounts";
-import { FRONTEND_SRC, IS_DEV, SPA_HEADERS, ensureFrontendBuilt, frontend, scheduleFrontendRebuild, sharedCheckoutEditors, spaEntry } from "./src/server/frontend-build";
+import { FRONTEND_SRC, IS_DEV, SPA_HEADERS, ensureFrontendBuilt, frontend, isPrebuiltFrontend, scheduleFrontendRebuild, sharedCheckoutEditors, spaEntry } from "./src/server/frontend-build";
 import { configuredIntegration } from "./src/server/config";
 import { initHumanAsks } from "./src/server/human-asks";
 import { interactiveMcpServers } from "./src/server/interactive-mcp";
@@ -48,7 +48,6 @@ import { handleSandboxPortalRelayUpgrade } from "./src/server/sandbox-portal-rel
 import { handleWorkloadIdentityRequest } from "./src/server/workload-identity";
 import {
 	findSession,
-	findSessionAsync,
 	invalidateSessionsCache,
 	recordRunOutcome,
 } from "./src/server/session-cache";
@@ -221,7 +220,7 @@ const sessionSpaEntry = (() => {
 			return new Response("Frontend is still building", { status: 503 });
 		const pathname = new URL(req.url).pathname;
 		const id = socialSessionIdFromPath(pathname);
-		const session = id ? await findSessionAsync(id) : undefined;
+		const session = id ? await findSession(id) : undefined;
 		return new Response(
 			session
 				? sessionHtmlWithSocialMeta(bundle.indexHtml, session, pathname)
@@ -271,7 +270,6 @@ const server: import("bun").Server<WSClientData> = hotServe({
 				"/settings/*",
 				"/archived",
 				"/catchup",
-				"/welcome",
 				"/reviews",
 				"/reviews/*",
 				"/support/*",
@@ -568,6 +566,26 @@ async function loadAgents(): Promise<AgentModule[]> {
 // any of it — the already-running agents/timers keep going untouched (only a
 // real restart reloads their code, and that restart is now graceful, below).
 if (!g.__opensessionBooted) {
+	// Pi runs Claude Max through the installed `claude` CLI (the Anthropic
+	// bridge hands the Agent SDK pathToClaudeCodeExecutable); nothing bundled
+	// stands in for it. Warn at boot, loudly, if it is not a usable executable,
+	// but keep serving: the operator fixes it by installing the CLI, not by
+	// restarting a dead server.
+	{
+		const { configuredPaths } = await import("./src/server/config");
+		const { existsSync } = await import("fs");
+		const configured = configuredPaths().claudeBin;
+		const claudeBin =
+			configured && configured !== "claude" ? configured : Bun.which("claude");
+		if (!claudeBin || !existsSync(claudeBin)) {
+			console.error(
+				"[engine] the `claude` CLI is not installed — Anthropic turns cannot run.\n" +
+					"[engine] install it: curl -fsSL https://claude.ai/install.sh | bash",
+			);
+		} else {
+			console.log(`[engine] claude CLI ${claudeBin}`);
+		}
+	}
 	// Dev instances (src/server/dev-mode.ts) skip background work here:
 	// no agents, no webhook intake, no schedulers/sweeps, no detached-server
 	// adoption — a second instance next to production must never double-send
@@ -655,6 +673,9 @@ if (!g.__opensessionBooted) {
 		invalidateSessionsCache();
 	});
 
+	// Unattended installs stage a Claude token in the env or a file; import it
+	// into the pool before anything can ask for an account.
+	await seedAccountFromEnvOrFile();
 	// Poll per-account Claude usage (drives account picking + the Connections UI)
 	startUsagePoller();
 	// Poll supported ChatGPT/Codex rate-limit windows per registered CODEX_HOME.
@@ -923,13 +944,13 @@ if (!g.__opensessionBooted) {
 	// stopping point (bounded), then exit — instead of killing every run mid-turn.
 	// Anything still running after the drain window is picked up by the run
 	// journal on the next boot (resumeInterruptedRuns), so nothing is lost.
-	// 15s default: enough for a turn already at its terminal boundary, but not
-	// long enough for a restart to look wedged behind model work that cannot
-	// finish before systemd's deadline. Anything still running is resumed from
-	// the run journal on the next boot, so the shorter drain costs a little redo
+	// 60s default: long enough for most in-flight turns to reach a natural
+	// stopping point, short enough for a snappy restart. Anything still running
+	// is resumed from the run journal on the next boot (and self-heals transient
+	// failures via the fallback graph), so a shorter drain costs a little redo
 	// work, not lost work. Must stay below the unit's TimeoutStopSec (80s), or
 	// systemd SIGKILLs the process mid-drain.
-	const DRAIN_TIMEOUT_MS = parseInt(process.env.SHUTDOWN_DRAIN_MS || "15000");
+	const DRAIN_TIMEOUT_MS = parseInt(process.env.SHUTDOWN_DRAIN_MS || "60000");
 	let shuttingDown = false;
 	const gracefulShutdown = async (signal: string) => {
 		if (shuttingDown) return;
@@ -1047,7 +1068,11 @@ if (!g.__opensessionBooted) {
 	// for restart in a deploy script). Guarded by __opensessionBooted so a hot
 	// reload doesn't stack watchers/handlers. recursive watch needs Linux ≥ 6.x
 	// (we're on 6.17) — fine here.
-	if (!IS_DEV && frontend) {
+	// A prebuilt bundle (compiled binary's embedded assets, or a release
+	// tarball's .frontend-dist) has no src/frontend tree to watch.
+	if (!IS_DEV && frontend && isPrebuiltFrontend()) {
+		console.log("[frontend] Prebuilt bundle: source watch and SIGUSR2 rebuilds are off");
+	} else if (!IS_DEV && frontend) {
 		try {
 			const watcher = watch(FRONTEND_SRC, { recursive: true }, (_evt, file) => {
 				if (file && /\.(tsx?|css|html)$/.test(file.toString())) {
