@@ -629,6 +629,7 @@ function IndexedTranscriptBlocks(props: Props) {
 			anchorId: key,
 			entryIds,
 			estimateSize,
+			measure: loaded || item.kind !== "range",
 			content:
 				item.kind === "note" ? (
 					<NoteBubble note={item.note} sessionId={props.sessionId} />

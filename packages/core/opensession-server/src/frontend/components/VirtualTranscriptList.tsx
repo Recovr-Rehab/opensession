@@ -11,6 +11,8 @@ export interface VirtualTranscriptItem {
 	anchorId: string;
 	entryIds: string[];
 	estimateSize: number;
+	/** Keep the estimate until sparse payload content is available to measure. */
+	measure?: boolean;
 	className?: string;
 	content: React.ReactNode;
 }
@@ -47,6 +49,11 @@ export function VirtualTranscriptList({
 			),
 		useAnimationFrameWithResizeObserver: true,
 	});
+	virtualizer.shouldAdjustScrollPositionOnItemSizeChange = (
+		item,
+		_delta,
+		instance,
+	) => shouldAdjustTranscriptScroll(item.end, instance.scrollOffset ?? 0);
 	const virtualItems = virtualizer.getVirtualItems();
 	const canVirtualize =
 		enabled && typeof ResizeObserver !== "undefined" && items.length > 0;
@@ -86,11 +93,14 @@ export function VirtualTranscriptList({
 				!container ||
 				(item.end >= top - viewport && item.start <= bottom + viewport),
 		);
-		onVisibleItems(
-			demand
-				.map((virtualItem) => items[virtualItem.index])
-				.filter((item): item is VirtualTranscriptItem => Boolean(item)),
-		);
+		const timer = window.setTimeout(() => {
+			onVisibleItems(
+				demand
+					.map((virtualItem) => items[virtualItem.index])
+					.filter((item): item is VirtualTranscriptItem => Boolean(item)),
+			);
+		}, 120);
+		return () => window.clearTimeout(timer);
 	}, [items, onVisibleItems, virtualItems]);
 
 	// Server rendering and minimal test DOMs have no ResizeObserver. Keeping the
@@ -115,7 +125,7 @@ export function VirtualTranscriptList({
 					return (
 						<div
 							key={item.key}
-							ref={virtualizer.measureElement}
+							ref={item.measure === false ? undefined : virtualizer.measureElement}
 							data-index={virtualItem.index}
 							data-eid={item.anchorId}
 							className={cn("absolute left-0 top-0 w-full", item.className)}
@@ -128,6 +138,13 @@ export function VirtualTranscriptList({
 			</div>
 		</>
 	);
+}
+
+export function shouldAdjustTranscriptScroll(
+	itemEnd: number,
+	scrollOffset: number,
+): boolean {
+	return itemEnd <= scrollOffset + 1;
 }
 
 export function virtualTranscriptRange(

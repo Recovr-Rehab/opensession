@@ -3,6 +3,7 @@ import React from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import {
 	VirtualTranscriptList,
+	shouldAdjustTranscriptScroll,
 	type VirtualTranscriptItem,
 	virtualTranscriptRange,
 } from "./VirtualTranscriptList";
@@ -21,6 +22,12 @@ describe("VirtualTranscriptList", () => {
 	test("keeps the live-edge tail in the same virtual coordinate space", () => {
 		expect(virtualTranscriptRange([10, 11], 40, 3)).toEqual([10, 11, 37, 38, 39]);
 		expect(virtualTranscriptRange([0, 1], 2, 24)).toEqual([0, 1]);
+	});
+
+	test("keeps the viewport stable when measured rows above it resize", () => {
+		expect(shouldAdjustTranscriptScroll(400, 600)).toBe(true);
+		expect(shouldAdjustTranscriptScroll(600, 600)).toBe(true);
+		expect(shouldAdjustTranscriptScroll(700, 600)).toBe(false);
 	});
 
 	test("renders complete semantic content without browser measurement", () => {

@@ -825,6 +825,7 @@ function holdTranscriptAnchor(
 	top: number,
 	bottomGap: number,
 	onFound: () => void,
+	onStop?: () => void,
 ): () => void {
 	let raf = 0;
 	let stopped = false;
@@ -838,6 +839,7 @@ function holdTranscriptAnchor(
 		container.removeEventListener("touchstart", stop);
 		container.removeEventListener("pointerdown", stop);
 		window.removeEventListener("keydown", stop);
+		onStop?.();
 	};
 	container.addEventListener("wheel", stop, { passive: true });
 	container.addEventListener("touchstart", stop, { passive: true });
@@ -869,8 +871,8 @@ function holdTranscriptAnchor(
 			);
 		}
 		if (
-			(foundAt !== null && now - foundAt >= 1500) ||
-			(foundAt === null && now - startedAt >= 2500)
+			(foundAt !== null && now - foundAt >= 2500) ||
+			(foundAt === null && now - startedAt >= 6000)
 		) {
 			stop();
 			return;
@@ -2755,13 +2757,19 @@ export function SessionViewer({
 								);
 								if (previousAnchorEid && previousAnchorTop !== null) {
 									indexAnchorHoldCancelRef.current?.();
-									indexAnchorHoldCancelRef.current = holdTranscriptAnchor(
+									let cancelIndexHold = () => {};
+									cancelIndexHold = holdTranscriptAnchor(
 										container,
 										previousAnchorEid,
 										previousAnchorTop,
 										previousBottomGap,
 										leaveLatest,
+										() => {
+											if (indexAnchorHoldCancelRef.current === cancelIndexHold)
+												indexAnchorHoldCancelRef.current = null;
+										},
 									);
+									indexAnchorHoldCancelRef.current = cancelIndexHold;
 								}
 							}
 						}
