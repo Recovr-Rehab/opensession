@@ -48,6 +48,7 @@ import { handleSandboxPortalRelayUpgrade } from "./src/server/sandbox-portal-rel
 import { handleWorkloadIdentityRequest } from "./src/server/workload-identity";
 import {
 	findSession,
+	findSessionAsync,
 	invalidateSessionsCache,
 	recordRunOutcome,
 } from "./src/server/session-cache";
@@ -220,7 +221,10 @@ const sessionSpaEntry = (() => {
 			return new Response("Frontend is still building", { status: 503 });
 		const pathname = new URL(req.url).pathname;
 		const id = socialSessionIdFromPath(pathname);
-		const session = id ? await findSession(id) : undefined;
+		// findSessionAsync reads a native session directly and otherwise scans
+		// cooperatively, so a deep link opens without blocking the event loop
+		// while a large sidebar cache warms.
+		const session = id ? await findSessionAsync(id) : undefined;
 		return new Response(
 			session
 				? sessionHtmlWithSocialMeta(bundle.indexHtml, session, pathname)

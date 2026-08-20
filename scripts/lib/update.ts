@@ -33,14 +33,16 @@ import {
   mkdirSync,
   mkdtempSync,
   readFileSync,
+  readlinkSync,
   realpathSync,
+  renameSync,
   rmSync,
   symlinkSync,
-  renameSync,
 } from "fs";
 import { tmpdir } from "os";
 import { dirname, join } from "path";
 import { OPENSESSION_HOME, REPO_ROOT } from "./paths";
+import { readConfig } from "./config-edit";
 import * as service from "./service";
 import {
   bold,
@@ -77,10 +79,25 @@ interface ReleaseManifest {
  * symlink into `releases/<name>`. Its update path is a download-and-swap, not
  * a git pull — there is no `.git`, and the tree is immutable by design.
  */
+/**
+ * The `src` symlink install swaps, which is not always `OPENSESSION_HOME/src`:
+ * `install.sh --dir` puts it elsewhere. The shim at `OPENSESSION_HOME/bin/
+ * opensession` always points at `<srcLink>/opensession`, so derive the real
+ * location from it and only fall back to the default when the shim is absent.
+ */
+function releaseSrcLink(): string {
+  try {
+    const target = readlinkSync(join(OPENSESSION_HOME, "bin", "opensession"));
+    const link = dirname(target);
+    if (link && link !== ".") return link;
+  } catch {}
+  return join(OPENSESSION_HOME, "src");
+}
+
 function releaseInstall():
   { manifest: ReleaseManifest; srcLink: string } | undefined {
   const manifestPath = join(REPO_ROOT, "release.json");
-  const srcLink = join(OPENSESSION_HOME, "src");
+  const srcLink = releaseSrcLink();
   if (!existsSync(manifestPath)) return undefined;
   let isLink = false;
   try {
@@ -261,9 +278,14 @@ export async function update(opts: UpdateOptions = {}): Promise<number> {
       );
       return 0;
     }
+    const prevTarget = existsSync(rel.srcLink) ? realpathSync(rel.srcLink) : "";
     const swapped = await updateRelease(rel, opts);
     if (swapped !== 0) return swapped;
-    return await restartAfterUpdate(opts, undefined);
+    const newTarget = existsSync(rel.srcLink) ? realpathSync(rel.srcLink) : "";
+    // updateRelease returns 0 both when it swapped and when already current;
+    // only a real swap needs a restart, and only then is there a rollback target.
+    if (!newTarget || newTarget === prevTarget) return 0;
+    return await restartReleaseWithRollback(rel.srcLink, prevTarget, opts);
   }
 
   const { code: isRepo } = await git(["rev-parse", "--git-dir"]);
@@ -408,6 +430,76 @@ export async function update(opts: UpdateOptions = {}): Promise<number> {
   ok("dependencies installed");
 
   return await restartAfterUpdate(opts, beforeFull);
+}
+
+/** The local origin the service should answer on, for the health gate. */
+async function healthBaseUrl(): Promise<string> {
+  const server = ((await readConfig())?.server ?? {}) as Record<
+    string,
+    unknown
+  >;
+  const host = (server.host as string) || "127.0.0.1";
+  const port = Number(server.port) || 3850;
+  return `http://${host === "0.0.0.0" ? "127.0.0.1" : host}:${port}`;
+}
+
+/**
+ * Restart a freshly swapped release install and verify it. A release has no
+ * deploy/ and no pin, so `restartAfterUpdate` would restart and return success
+ * even when the new binary crash-loops (systemd `Restart=always` masks it). The
+ * old release is still on disk, so instead: restart, gate on /api/health, and
+ * if the restart or the health check fails, repoint `src` back to the previous
+ * release and restart it, then fail loudly rather than leave the box offline.
+ */
+async function restartReleaseWithRollback(
+  srcLink: string,
+  prevTarget: string,
+  opts: UpdateOptions,
+): Promise<number> {
+  if (opts.restart === false) return 0;
+  if (!(await service.isInstalled())) {
+    warn(
+      "no service installed",
+      "restart your foreground server to pick this up",
+    );
+    return 0;
+  }
+  heading("Restart (health-gated)");
+  const base = await healthBaseUrl();
+  const restarted = (await service.control("restart")) === 0;
+  const healthy = restarted && (await service.waitHealthy(base));
+  if (healthy) {
+    ok("restarted and healthy");
+    return 0;
+  }
+  if (!prevTarget) {
+    fail(
+      restarted ? "did not come back healthy" : "restart failed",
+      "no previous release to roll back to",
+    );
+    return 1;
+  }
+  warn(
+    restarted ? "the new release did not come back healthy" : "restart failed",
+    `rolling back to ${prevTarget.split("/").pop()}`,
+  );
+  try {
+    const staging = join(dirname(srcLink), `.src.rollback.${process.pid}`);
+    try {
+      rmSync(staging, { force: true });
+    } catch {}
+    symlinkSync(prevTarget, staging);
+    renameSync(staging, srcLink); // atomic over the symlink
+  } catch {
+    fail(
+      "rollback failed — repoint src by hand",
+      `${srcLink} -> ${prevTarget}`,
+    );
+    return 1;
+  }
+  await service.control("restart");
+  fail("rolled back to the previous release", "the new one did not come up");
+  return 1;
 }
 
 /**

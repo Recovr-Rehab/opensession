@@ -337,7 +337,12 @@ function frontendInstance() {
 }
 
 export function renderIndexHtml(meta: BundleMeta): string {
-	let indexHtml = readFileSync(`${FRONTEND_SRC}/index.html`, "utf8");
+	// A compiled binary has no src tree, so the neutral index.html shell is
+	// embedded and parked here at boot; otherwise read it from src/frontend.
+	// Either way the instance blob below is stitched from the LIVE config, so
+	// the served page reflects THIS install, not the machine that built it.
+	const embeddedShell = g.__opensessionFrontendShell as string | undefined;
+	let indexHtml = embeddedShell ?? readFileSync(`${FRONTEND_SRC}/index.html`, "utf8");
 	const instance = JSON.stringify(frontendInstance()).replace(/</g, "\\u003c");
 	const htmlProductName = productName()
 		.replaceAll("&", "&amp;")
@@ -554,10 +559,17 @@ export function ensureFrontendBuilt(): Promise<void> {
 			// Compiled binary: the bundle is baked in, no source tree or Tailwind
 			// CLI to build from — fill from the embedded assets.
 			if (EMBEDDED_FRONTEND) {
-				frontend.indexHtml = await Bun.file(EMBEDDED_FRONTEND.indexHtmlPath).text();
-				frontend.gzip.clear();
-				frontend.version = EMBEDDED_FRONTEND.version;
-				console.log(`Frontend served from embedded assets (v=${EMBEDDED_FRONTEND.version})`);
+				// The embedded index.html is the instance-NEUTRAL shell; park it so
+				// renderIndexHtml stitches THIS install's config (product name,
+				// public URL, default repo, bot logins…) at boot instead of the
+				// build machine's, exactly as the on-disk prebuilt path does.
+				g.__opensessionFrontendShell = await Bun.file(
+					EMBEDDED_FRONTEND.shellPath,
+				).text();
+				applyBundle(EMBEDDED_FRONTEND.meta);
+				console.log(
+					`Frontend served from embedded assets (v=${EMBEDDED_FRONTEND.version}); instance stitched at boot`,
+				);
 				return;
 			}
 			// Release tarball: the prebuilt .frontend-dist is on disk.
