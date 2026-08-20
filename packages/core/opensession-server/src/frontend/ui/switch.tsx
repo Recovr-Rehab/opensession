@@ -37,15 +37,16 @@ const trackClasses = (size: SwitchSize) =>
  *  without a root that sets the variable. */
 const thumbClasses = (size: SwitchSize) =>
 	cn(
-		"absolute left-0.5 top-0.5 rounded-full bg-white shadow-[0_1px_3px_rgba(0,0,0,0.22),0_0_0_1px_rgba(0,0,0,0.07)] transition-[translate,width,background-color] duration-[var(--dur-micro)] ease-[var(--ease)] data-[checked]:bg-on-accent-control",
+		"absolute left-0.5 top-0.5 rounded-full bg-white shadow-[0_1px_3px_rgba(0,0,0,0.22),0_0_0_1px_rgba(0,0,0,0.07)] transition-[translate,width,background-color] duration-[var(--dur-micro)] ease-[var(--ease)] group-active/switch:duration-[60ms] data-[checked]:bg-on-accent-control",
 		size === "sm"
 			? "h-4 w-[calc(26px_+_var(--stretch,0px))] data-[checked]:translate-x-[calc(14px_-_var(--stretch,0px))]"
 			: "h-5 w-[calc(32px_+_var(--stretch,0px))] data-[checked]:translate-x-[calc(18px_-_var(--stretch,0px))]",
 	);
 
 /** Put `:active` on the root so presses on either the track or thumb inherit
- *  the stretch. Base UI's disabled root can still match `:active`, so disabled
- *  switches reset the variable explicitly. */
+ *  the stretch. Press-in takes 60ms on the thumb, while release and the state
+ *  change keep the normal 150ms transition. Base UI's disabled root can still
+ *  match `:active`, so disabled switches reset the variable explicitly. */
 const pressClasses = (size: SwitchSize) =>
 	cn(
 		size === "sm" ? "active:[--stretch:3px]" : "active:[--stretch:4px]",
@@ -61,6 +62,7 @@ export function Switch({ className, size = "md", ...props }: SwitchProps) {
 	return (
 		<BaseSwitch.Root
 			className={cn(
+				"group/switch",
 				trackClasses(size),
 				pressClasses(size),
 				"cursor-pointer outline-none",
