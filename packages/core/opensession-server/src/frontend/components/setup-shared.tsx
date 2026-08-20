@@ -170,6 +170,24 @@ export function githubAuthState(g: SetupGithub): { tone: ChipTone; label: string
 	return { tone: "off", label: "Off" };
 }
 
+/** Whether a public base URL is configured, for the setup chip. A blank value
+ *  is the unset default; any non-empty URL counts as configured. */
+export function publicUrlState(publicBaseUrl: string): { tone: ChipTone; label: string } {
+	// The server defaults publicBaseUrl to a loopback address (127.0.0.1:3850),
+	// so a blank check alone reads that default as "Configured" on a fresh
+	// install. A loopback URL is not reachable from other devices, so treat it,
+	// like an empty value, as not configured.
+	const url = publicBaseUrl.trim();
+	if (!url) return { tone: "off", label: "Not set" };
+	let host = url;
+	try {
+		host = new URL(url).hostname;
+	} catch {}
+	if (host === "127.0.0.1" || host === "localhost" || host === "::1" || host === "[::1]")
+		return { tone: "off", label: "Not set" };
+	return { tone: "on", label: "Configured" };
+}
+
 /** Does this repo carry what a session needs to provision and boot it on its
  *  own? `.agents/start.sh` (or an instance `previewCommand`) is the
  *  load-bearing half — without it the Preview button has nothing to run and an
