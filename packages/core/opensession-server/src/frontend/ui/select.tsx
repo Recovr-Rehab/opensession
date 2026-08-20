@@ -77,6 +77,7 @@ function Root<Value, Multiple extends boolean | undefined = false>({
 type TriggerProps = Omit<React.ComponentProps<typeof BaseSelect.Trigger>, "className"> & {
 	className?: string;
 	size?: Size;
+	contentAlign?: "start" | "center";
 	/** Shown when nothing is selected. */
 	placeholder?: React.ReactNode;
 	/**
@@ -98,7 +99,16 @@ type TriggerProps = Omit<React.ComponentProps<typeof BaseSelect.Trigger>, "class
 };
 
 function Trigger(triggerProps: TriggerProps) {
-	const { className, size = "md", placeholder, sizeTo, icon, children, ...props } = triggerProps;
+	const {
+		className,
+		size = "md",
+		contentAlign = "start",
+		placeholder,
+		sizeTo,
+		icon,
+		children,
+		...props
+	} = triggerProps;
 	// Presence, not truthiness: an icon-bearing list keeps the slot for the
 	// values that have no glyph, so the labels stay on one x.
 	const iconSlot = "icon" in triggerProps;
@@ -109,13 +119,21 @@ function Trigger(triggerProps: TriggerProps) {
 			className={cn(
 				fieldClasses(
 					size,
-					// The chevron sits in flow in its own grid column, so the
-					// field's own padding is what separates it from the edge.
 					cn(
-						"inline-grid cursor-pointer items-center gap-2 pr-2 text-left",
-						iconSlot
-							? "grid-cols-[auto_minmax(0,1fr)_auto]"
-							: "grid-cols-[minmax(0,1fr)_auto]",
+						"inline-grid cursor-pointer items-center gap-2 text-left",
+						contentAlign === "center"
+							? cn(
+									"relative justify-center px-6 text-center",
+									iconSlot ? "grid-cols-[auto_auto]" : "grid-cols-[auto]",
+								)
+							: cn(
+									// The chevron sits in flow in its own grid column, so the
+									// field's own padding is what separates it from the edge.
+									"pr-2",
+									iconSlot
+										? "grid-cols-[auto_minmax(0,1fr)_auto]"
+										: "grid-cols-[minmax(0,1fr)_auto]",
+								),
 					),
 				),
 				// A select lifts slightly under the pointer; opening still reads like
@@ -143,7 +161,14 @@ function Trigger(triggerProps: TriggerProps) {
 			))}
 			<IconChevronDown
 				size={16}
-				className={cn("row-start-1 shrink-0 text-faint", iconSlot ? "col-start-3" : "col-start-2")}
+				className={cn(
+					"row-start-1 shrink-0 text-faint",
+					contentAlign === "center"
+						? "absolute right-2 top-1/2 -translate-y-1/2"
+						: iconSlot
+							? "col-start-3"
+							: "col-start-2",
+				)}
 			/>
 		</BaseSelect.Trigger>
 	);
