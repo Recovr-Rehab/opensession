@@ -2652,10 +2652,12 @@ export function SessionViewer({
 					transcriptRangeDemandReadyRef.current = false;
 					requestAnimationFrame(() => {
 						if (keepLiveEdge) scrollToLatest("auto");
-						transcriptRangeDemandReadyRef.current = true;
-						setTranscriptRangeRetryGeneration(
-							(generation) => generation + 1,
-						);
+						requestAnimationFrame(() => {
+							transcriptRangeDemandReadyRef.current = true;
+							setTranscriptRangeRetryGeneration(
+								(generation) => generation + 1,
+							);
+						});
 					});
 					break;
 				}
