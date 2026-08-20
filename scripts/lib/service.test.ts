@@ -21,8 +21,9 @@ import {
   renderLauncher,
   renderPlist,
   renderUnit,
+  serviceWorkdir,
 } from "./service";
-import { ENV_PATH, HOME, REPO_ROOT } from "./paths";
+import { ENV_PATH, HOME } from "./paths";
 
 // Both renderers interpolate host paths and the local bun, so on Windows they
 // produce a unit and a plist that could never be installed. Neither service
@@ -42,7 +43,7 @@ describe.skipIf(!onServiceHost)("systemd unit", () => {
     expect(unit).toMatch(/^WantedBy=default\.target$/m);
     // Optional env file: a box with no secrets yet must still start.
     expect(unit).toContain(`EnvironmentFile=-${ENV_PATH}`);
-    expect(unit).toContain(`WorkingDirectory=${REPO_ROOT}`);
+    expect(unit).toContain(`WorkingDirectory=${serviceWorkdir()}`);
     expect(
       unit.match(
         /^ExecStart=(\S+) run packages\/core\/opensession-server\/opensession\.ts$/m,
@@ -66,7 +67,7 @@ describe.skipIf(!onServiceHost)("systemd unit", () => {
     expect(user).not.toBe("unknown");
     expect(user).not.toContain(" ");
 
-    expect(unit).toContain(`WorkingDirectory=${REPO_ROOT}`);
+    expect(unit).toContain(`WorkingDirectory=${serviceWorkdir()}`);
     expect(unit).toContain(`EnvironmentFile=${ENV_PATH}`);
     expect(
       unit.match(
@@ -102,7 +103,7 @@ describe.skipIf(!onServiceHost)("systemd unit", () => {
 describe.skipIf(!onServiceHost)("executor systemd unit", () => {
   test("is independently restartable and host-specific", async () => {
     const unit = await renderExecutorUnit();
-    expect(unit).toContain(`WorkingDirectory=${REPO_ROOT}`);
+    expect(unit).toContain(`WorkingDirectory=${serviceWorkdir()}`);
     expect(unit).not.toContain("EnvironmentFile=");
     expect(unit).toContain(`Environment="HOME=${HOME}"`);
     expect(unit).toMatch(

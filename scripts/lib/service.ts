@@ -100,9 +100,15 @@ function runHostsRoot(): string {
   return join(sessionsDir, "run-hosts");
 }
 
-/** Stable source root. Release updates repoint this symlink atomically. */
-function serviceWorkdir(): string {
-  return isCompiledBinary() ? join(OPENSESSION_HOME, "src") : REPO_ROOT;
+/** The service's working directory must survive release swaps. A release install
+ *  runs from the `~/.opensession/src` symlink, which `opensession update`
+ *  repoints; REPO_ROOT is the versioned release dir that same update prunes, so
+ *  baking it into the unit strands the service once the old release is gone.
+ *  Prefer the symlink when it exists (release install); fall back to REPO_ROOT
+ *  for a source checkout that has no such symlink. */
+export function serviceWorkdir(): string {
+  const link = join(OPENSESSION_HOME, "src");
+  return existsSync(link) ? link : REPO_ROOT;
 }
 
 export function supervisor(): Supervisor {
@@ -496,7 +502,7 @@ export function renderLauncher(): string {
   return (
     `#!/bin/bash\n` +
     `# macOS shows this file's name in Login Items & Extensions; hence "OpenSession".\n` +
-    `cd ${REPO_ROOT} || exit 1\n` +
+    `cd ${serviceWorkdir()} || exit 1\n` +
     `set -a; [ -f ${ENV_PATH} ] && . ${ENV_PATH}; set +a\n` +
     `exec ${exec.cmd}\n`
   );
@@ -513,7 +519,7 @@ export function renderPlist(): string {
   <array>
     <string>${xml(LAUNCHD_LAUNCHER)}</string>
   </array>
-  <key>WorkingDirectory</key><string>${xml(REPO_ROOT)}</string>
+  <key>WorkingDirectory</key><string>${xml(serviceWorkdir())}</string>
   <key>EnvironmentVariables</key>
   <dict>
     <key>PATH</key><string>${xml(servicePath(exec.binDir))}</string>
