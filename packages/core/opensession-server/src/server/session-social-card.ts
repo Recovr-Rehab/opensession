@@ -47,34 +47,25 @@ export const SESSION_CARD_BANNER_WIDTH = 1200;
 export const SESSION_CARD_BANNER_HEIGHT = 200;
 
 export type SessionCardVariant = "card" | "banner";
-const SESSION_CARD_VERSION = 9;
+const SESSION_CARD_VERSION = 10;
 
 const CARD_INK = "#050609";
 const CARD_PAPER = "#FFFFFF";
 /** Left margin. */
 const PAD_X = 56;
-/**
- * The repo tile in front of the title. It follows the title's line height, so it
- * reads as an inline mark instead of a block the words sit beside. The generous
- * superellipse radius keeps the tiny tile distinct from a rounded rectangle.
- */
-const TILE_SIZE = 48;
-const TILE_GAP = 16;
-const TILE_RADIUS = TILE_SIZE * 0.46;
-/** The owner row starts under the title, with the avatar beside the name. */
 const META_SIZE = 28;
-const META_GAP = 14;
-const META_TEXT_SIZE = 24;
+const META_TEXT_SIZE = 22;
 const META_LABEL_GAP = 8;
 const META_GLYPH_SIZE = 22;
 const META_RADIUS = META_SIZE * 0.46;
 const META_OPACITY = 0.52;
+const META_ROW_GAP = 4;
+const TITLE_META_GAP = 8;
 const TITLE_SIZE = 44;
-const TITLE_X = PAD_X + TILE_SIZE + TILE_GAP;
-const TITLE_MAX_WIDTH = SESSION_CARD_WIDTH - TITLE_X - PAD_X;
+const TITLE_LINE_HEIGHT = 48;
 const TITLE_FONT = "Inter SemiBold 44";
 const TITLE_LETTER_SPACING = Math.round(-1.1 * 1024);
-/** Both screenshot frames are true 16:9, so screen captures never feel stretched. */
+/** Every screenshot frame stays 16:9, including the ones behind the lead shot. */
 const SHOT_BANNER_WIDTH = 304;
 const SHOT_BANNER_HEIGHT = 171;
 const SHOT_CARD_WIDTH = 448;
@@ -83,15 +74,20 @@ const SHOT_BANNER_INSET = 14;
 const SHOT_CARD_INSET = 28;
 const SHOT_BANNER_RADIUS = 22;
 const SHOT_CARD_RADIUS = 28;
-const SHOT_GAP = 28;
+const SHOT_GAP = 32;
+const SHOT_LIMIT = 2;
+const SHOT_BANNER_STACK_OFFSET = 72;
+const SHOT_CARD_STACK_OFFSET = 96;
+const SHOT_BANNER_STACK_LIFT = 8;
+const SHOT_CARD_STACK_LIFT = 12;
 
 export interface SessionSocialCardData {
 	title: string;
 	owner: string;
 	repo?: string;
 	person?: DirectoryPerson;
-	/** Absolute path to a screenshot this session produced, when it has one. */
-	shot?: string;
+	/** Strongest session screenshots first, capped to a small visual stack. */
+	shots?: string[];
 }
 
 function shotWidth(variant: SessionCardVariant): number {
@@ -110,19 +106,25 @@ function shotHeight(variant: SessionCardVariant): number {
 	return variant === "banner" ? SHOT_BANNER_HEIGHT : SHOT_CARD_HEIGHT;
 }
 
-/** How much room one line of title has, which the screenshot takes from. */
+function shotStackOffset(variant: SessionCardVariant): number {
+	return variant === "banner"
+		? SHOT_BANNER_STACK_OFFSET
+		: SHOT_CARD_STACK_OFFSET;
+}
+
+/** How much room each title line has to the left of the screenshot stack. */
 function titleMeasure(
 	data: SessionSocialCardData,
 	variant: SessionCardVariant,
 ): number {
-	const left = clean(data.repo) ? TITLE_X : PAD_X;
-	const right = data.shot
+	const shotCount = Math.min(data.shots?.length ?? 0, SHOT_LIMIT);
+	const stackLeft = shotCount
 		? SESSION_CARD_WIDTH -
 			shotWidth(variant) -
 			shotInset(variant) -
-			SHOT_GAP
+			shotStackOffset(variant) * (shotCount - 1)
 		: SESSION_CARD_WIDTH - PAD_X;
-	return right - left;
+	return stackLeft - SHOT_GAP - PAD_X;
 }
 
 function clean(value: string | null | undefined): string {
@@ -150,13 +152,13 @@ export function sessionSocialCardData(
 	const heading = sessionCardTitle(session);
 	const ownerRef = clean(session.createdBy || session.startedBy) || productName();
 	const person = teamDirectory().find((candidate) => samePerson(candidate, ownerRef));
-	const shot = options.includeShot ? sessionShotPath(session) : undefined;
+	const shots = options.includeShot ? sessionShotPaths(session) : [];
 	return {
 		title: heading.title,
 		owner: person?.fullName || ownerRef,
 		...(session.repo ? { repo: session.repo } : {}),
 		...(person ? { person } : {}),
-		...(shot ? { shot } : {}),
+		...(shots.length ? { shots } : {}),
 	};
 }
 
@@ -187,46 +189,51 @@ function uploadedShot(src: string): string | undefined {
 	return staged && usableShot(staged.path) ? staged.path : undefined;
 }
 
-/** Return the first eligible image from the requested entry order. */
-function entryShot(
+/** Add eligible images from the requested entry order without duplicates. */
+function appendEntryShots(
 	entries: TranscriptEntry[],
 	field: "images" | "featuredMedia",
-): string | undefined {
+	append: (path: string | undefined) => void,
+): void {
 	for (const entry of entries) {
-		for (const src of [...(entry[field] ?? [])].reverse()) {
-			const path = uploadedShot(src);
-			if (path) return path;
-		}
+		for (const src of [...(entry[field] ?? [])].reverse())
+			append(uploadedShot(src));
 	}
-	return undefined;
 }
 
 /**
- * Pick the picture that best says what this session is about. A walkthrough is
- * the strongest deliberate summary. Next comes media the agent explicitly
- * featured, then a picture a person attached in the conversation. Ordinary
- * tool attachments are excluded because a file the agent merely read is not a
- * useful or intentional social preview.
+ * Pick the pictures that best say what this session is about. Walkthrough
+ * after-shots are the strongest deliberate summaries. Next comes other
+ * walkthrough media, media the agent explicitly featured, then pictures a
+ * person attached in the conversation. Ordinary tool attachments are excluded
+ * because a file the agent merely read is not a useful social preview.
  */
-function sessionShotPath(session: UnifiedSession): string | undefined {
-	for (const shot of session.walkthrough?.shots ?? []) {
-		for (const candidate of [shot.after, shot.before])
-			if (candidate && usableShot(candidate)) return candidate;
-	}
+function sessionShotPaths(session: UnifiedSession): string[] {
+	const paths: string[] = [];
+	const seen = new Set<string>();
+	const append = (path: string | undefined): void => {
+		if (!path || paths.length >= SHOT_LIMIT || seen.has(path) || !usableShot(path))
+			return;
+		seen.add(path);
+		paths.push(path);
+	};
+	const walkthroughShots = session.walkthrough?.shots ?? [];
+	for (const shot of walkthroughShots) append(shot.after);
+	for (const shot of walkthroughShots) append(shot.before);
+	if (paths.length >= SHOT_LIMIT) return paths;
+
 	try {
 		const store = transcriptStore();
 		const tail = store.readTail(session.id, SHOT_SCAN_ENTRIES);
 		const newestFirst = [...tail.entries].reverse();
-		const featured = entryShot(newestFirst, "featuredMedia");
-		if (featured) return featured;
-
-		const recentUser = entryShot(
+		appendEntryShots(newestFirst, "featuredMedia", append);
+		appendEntryShots(
 			newestFirst.filter((entry) => entry.type === "user"),
 			"images",
+			append,
 		);
-		if (recentUser) return recentUser;
 
-		if (tail.firstSeq > 1) {
+		if (paths.length < SHOT_LIMIT && tail.firstSeq > 1) {
 			const opening = store.readRange(
 				session.id,
 				1,
@@ -234,19 +241,19 @@ function sessionShotPath(session: UnifiedSession): string | undefined {
 				0,
 				SHOT_SCAN_ENTRIES,
 			);
-			return entryShot(
+			appendEntryShots(
 				opening.entries.filter((entry) => entry.type === "user"),
 				"images",
+				append,
 			);
 		}
 	} catch {
 		// No transcript for this session yet, or the store is unavailable.
 	}
-	return undefined;
+	return paths;
 }
 
-/** The screenshot, cropped to the panel. Top-anchored: a screenshot says what
- *  it is in its first band, and centring it usually crops that away. */
+/** A screenshot cropped to a 16:9 frame. Top anchoring preserves app chrome. */
 async function shotDataUrl(
 	path: string | undefined,
 	width: number,
@@ -262,6 +269,19 @@ async function shotDataUrl(
 	} catch {
 		return "";
 	}
+}
+
+async function shotDataUrls(
+	paths: string[] | undefined,
+	width: number,
+	height: number,
+): Promise<string[]> {
+	const results = await Promise.all(
+		(paths ?? []).slice(0, SHOT_LIMIT).map((path) =>
+			shotDataUrl(path, width, height),
+		),
+	);
+	return results.filter(Boolean);
 }
 
 function xml(value: string): string {
@@ -293,14 +313,11 @@ async function titleWidth(title: string): Promise<number> {
 	return metadata.width ?? 0;
 }
 
-/** Fit one 44 px Inter Semi Bold line inside the measure left of the tile. */
-export async function fitSocialCardTitle(
-	title: string,
-	maxWidth: number = TITLE_MAX_WIDTH,
+async function truncateTitleLine(
+	value: string,
+	maxWidth: number,
 ): Promise<string> {
-	const value = clean(title) || productName();
 	if ((await titleWidth(value)) <= maxWidth) return value;
-
 	const characters = Array.from(value);
 	let low = 1;
 	let high = characters.length - 1;
@@ -311,6 +328,102 @@ export async function fitSocialCardTitle(
 		else high = middle - 1;
 	}
 	return `${characters.slice(0, low).join("").trimEnd()}...`;
+}
+
+/** Fit the title into at most two balanced 44px lines. */
+export async function fitSocialCardTitle(
+	title: string,
+	maxWidth: number = SESSION_CARD_WIDTH - PAD_X * 2,
+): Promise<string[]> {
+	const value = clean(title) || productName();
+	const measure = Math.max(80, maxWidth);
+	if ((await titleWidth(value)) <= measure) return [value];
+
+	const boundaries = Array.from(value.matchAll(/\s+/g), (match) => match.index!);
+	const measured = new Map<
+		number,
+		{ first: string; second: string; firstWidth: number; secondWidth: number }
+	>();
+	const at = async (index: number) => {
+		const cached = measured.get(index);
+		if (cached) return cached;
+		const split = boundaries[index];
+		const first = value.slice(0, split).trim();
+		const second = value.slice(split).trim();
+		const [firstWidth, secondWidth] = await Promise.all([
+			titleWidth(first),
+			titleWidth(second),
+		]);
+		const result = { first, second, firstWidth, secondWidth };
+		measured.set(index, result);
+		return result;
+	};
+
+	if (boundaries.length) {
+		let low = 0;
+		let high = boundaries.length - 1;
+		while (low < high) {
+			const middle = Math.floor((low + high) / 2);
+			if ((await at(middle)).secondWidth <= measure) high = middle;
+			else low = middle + 1;
+		}
+		const firstValid = low;
+		low = firstValid;
+		high = boundaries.length - 1;
+		while (low < high) {
+			const middle = Math.ceil((low + high) / 2);
+			if ((await at(middle)).firstWidth <= measure) low = middle;
+			else high = middle - 1;
+		}
+		const lastValid = low;
+		const firstEdge = await at(firstValid);
+		const lastEdge = await at(lastValid);
+		if (
+			firstValid <= lastValid &&
+			firstEdge.secondWidth <= measure &&
+			firstEdge.firstWidth <= measure &&
+			lastEdge.firstWidth <= measure
+		) {
+			low = firstValid;
+			high = lastValid;
+			while (low < high) {
+				const middle = Math.floor((low + high) / 2);
+				const candidate = await at(middle);
+				if (candidate.firstWidth >= candidate.secondWidth) high = middle;
+				else low = middle + 1;
+			}
+			const candidates = [low - 1, low]
+				.filter((index) => index >= firstValid && index <= lastValid);
+			let best = await at(candidates[0]);
+			for (const index of candidates.slice(1)) {
+				const candidate = await at(index);
+				if (
+					Math.abs(candidate.firstWidth - candidate.secondWidth) <
+					Math.abs(best.firstWidth - best.secondWidth)
+				)
+					best = candidate;
+			}
+			return [best.first, best.second];
+		}
+	}
+
+	// A long unbroken word, or a title too long for two complete lines. Fill the
+	// first line, prefer a nearby word boundary, then ellipsize only line two.
+	const characters = Array.from(value);
+	let low = 1;
+	let high = characters.length - 1;
+	while (low < high) {
+		const middle = Math.ceil((low + high) / 2);
+		if ((await titleWidth(characters.slice(0, middle).join(""))) <= measure)
+			low = middle;
+		else high = middle - 1;
+	}
+	let split = low;
+	const wordBreak = value.lastIndexOf(" ", split);
+	if (wordBreak >= Math.floor(split * 0.6)) split = wordBreak;
+	const first = value.slice(0, split).trim();
+	const second = await truncateTitleLine(value.slice(split).trim(), measure);
+	return [first, second];
 }
 
 const avatarCache = new Map<string, string>();
@@ -418,9 +531,9 @@ function repoTileColorFor(id: string): string {
  * A squircle: the superellipse corner the UI wears through
  * `corner-shape: squircle`, baked into a path because this rasterizes through
  * librsvg, which has no such property. An `rx` rounded rect beside the app's
- * real tiles reads as the wrong shape, and at 72 px it is obvious. Sampled
- * along the curve rather than approximated with beziers, so the corner is the
- * actual superellipse at any size.
+ * real tiles reads as the wrong shape even at metadata size. Sampled along the
+ * curve rather than approximated with beziers, so the corner is the actual
+ * superellipse at any size.
  */
 function squircleRectPath(
 	x: number,
@@ -477,70 +590,132 @@ function metaGlyph(x: number, cy: number): string {
 	return `<g transform="${transform}"><circle cx="12" cy="7.6" r="3.7" ${stroke}/><path d="M4.7 20.1c0-4.1 3.3-6.5 7.3-6.5s7.3 2.4 7.3 6.5" ${stroke}/></g>`;
 }
 
+interface ShotFrame {
+	index: number;
+	x: number;
+	y: number;
+	width: number;
+	height: number;
+	shape: string;
+}
+
+function shotFrames(
+	variant: SessionCardVariant,
+	count: number,
+	height: number,
+): ShotFrame[] {
+	const frameCount = Math.min(count, SHOT_LIMIT);
+	const width = shotWidth(variant);
+	const frameHeight = shotHeight(variant);
+	const frontX = SESSION_CARD_WIDTH - width - shotInset(variant);
+	const frontY = (height - frameHeight) / 2;
+	const offsetX = shotStackOffset(variant);
+	const lift =
+		variant === "banner" ? SHOT_BANNER_STACK_LIFT : SHOT_CARD_STACK_LIFT;
+	return Array.from({ length: frameCount }, (_, index) => {
+		const x = frontX - offsetX * index;
+		const y = frontY + (index === 0 ? 0 : index % 2 ? lift : -lift);
+		return {
+			index,
+			x,
+			y,
+			width,
+			height: frameHeight,
+			shape: squircleRectPath(
+				x,
+				y,
+				width,
+				frameHeight,
+				shotRadius(variant),
+			),
+		};
+	});
+}
+
 /** SVG source is exported so the visual can be inspected without PNG decoding. */
 export function sessionSocialCardSvg(
 	data: SessionSocialCardData,
 	avatar = "",
-	displayTitle = clean(data.title) || productName(),
+	displayTitle: string | string[] = clean(data.title) || productName(),
 	variant: SessionCardVariant = "card",
 	repoIcon = "",
-	shot = "",
+	shots: string[] = [],
 ): string {
 	const banner = variant === "banner";
 	const height = banner ? SESSION_CARD_BANNER_HEIGHT : SESSION_CARD_HEIGHT;
-	const blockTop = Math.round((height - (TILE_SIZE + META_GAP + META_SIZE)) / 2);
-	const tileCenter = blockTop + TILE_SIZE / 2;
-	const metaTop = blockTop + TILE_SIZE + META_GAP;
-	const metaCenter = metaTop + META_SIZE / 2;
+	const titleLines = (Array.isArray(displayTitle)
+		? displayTitle
+		: [displayTitle]
+	)
+		.map(clean)
+		.filter(Boolean)
+		.slice(0, 2);
+	if (!titleLines.length) titleLines.push(productName());
 	const repoId = clean(data.repo);
 	const owner = metaLabel(clean(data.owner));
-	const tile = squirclePath(PAD_X, blockTop, TILE_SIZE, TILE_RADIUS);
+	const metadataHeight =
+		META_SIZE + (repoId ? META_ROW_GAP + META_SIZE : 0);
+	const contentHeight =
+		titleLines.length * TITLE_LINE_HEIGHT + TITLE_META_GAP + metadataHeight;
+	const blockTop = (height - contentHeight) / 2;
+	const ownerTop =
+		blockTop + titleLines.length * TITLE_LINE_HEIGHT + TITLE_META_GAP;
+	const ownerCenter = ownerTop + META_SIZE / 2;
+	const repoTop = ownerTop + META_SIZE + META_ROW_GAP;
+	const repoCenter = repoTop + META_SIZE / 2;
+	const metaTextX = PAD_X + META_SIZE + META_LABEL_GAP;
+	const avatarTile = squirclePath(PAD_X, ownerTop, META_SIZE, META_RADIUS);
+	const repoTile = squirclePath(PAD_X, repoTop, META_SIZE, META_RADIUS);
 	const tileColor = repoId ? repoTileColorFor(repoId) : CARD_INK;
-	const hasTile = !!(repoIcon || repoId);
-	const titleX = hasTile ? TITLE_X : PAD_X;
-	// The owner row begins under the title. Its avatar sits immediately beside
-	// the name instead of occupying a detached icon column.
-	const metaX = titleX;
-	const metaTextX = metaX + META_SIZE + META_LABEL_GAP;
-	const avatarTile = squirclePath(metaX, metaTop, META_SIZE, META_RADIUS);
-	const shotW = shotWidth(variant);
-	const shotH = shotHeight(variant);
-	const shotPad = shotInset(variant);
-	const shotX = SESSION_CARD_WIDTH - shotW - shotPad;
-	const shotY = (height - shotH) / 2;
-	const shotShape = squircleRectPath(
-		shotX,
-		shotY,
-		shotW,
-		shotH,
-		shotRadius(variant),
-	);
-	const repoMarkup = !hasTile
+	const frames = shotFrames(variant, shots.length, height);
+	const shotDefs = frames
+		.map(
+			(frame) =>
+				`  <clipPath id="shotClip${frame.index}"><path d="${frame.shape}"/></clipPath>`,
+		)
+		.join("\n");
+	const shotMarkup = [...frames]
+		.reverse()
+		.map((frame) => {
+			const shot = shots[frame.index];
+			return `<path d="${frame.shape}" fill="${CARD_PAPER}" filter="url(#shotShadow)"/>
+<g clip-path="url(#shotClip${frame.index})"><image href="${shot}" x="${frame.x}" y="${frame.y}" width="${frame.width}" height="${frame.height}" preserveAspectRatio="xMidYMin slice"/></g>
+<path d="${frame.shape}" fill="none" stroke="${CARD_INK}" stroke-opacity="0.1"/>`;
+		})
+		.join("\n");
+	const titleMarkup = titleLines
+		.map(
+			(line, index) =>
+				`<text x="${PAD_X}" y="${blockTop + index * TITLE_LINE_HEIGHT + TITLE_LINE_HEIGHT / 2}" dominant-baseline="middle" fill="${CARD_INK}" font-size="${TITLE_SIZE}" font-weight="600" letter-spacing="-1.1">${xml(line)}</text>`,
+		)
+		.join("\n");
+	const avatarMarkup = avatar
+		? `<image href="${avatar}" x="${PAD_X}" y="${ownerTop}" width="${META_SIZE}" height="${META_SIZE}" preserveAspectRatio="xMidYMid slice" clip-path="url(#avatarClip)"/>`
+		: metaGlyph(
+				PAD_X + (META_SIZE - META_GLYPH_SIZE) / 2,
+				ownerCenter,
+			);
+	const repoMarkup = !repoId
 		? ""
 		: repoIcon
-			? `<image href="${repoIcon}" x="${PAD_X}" y="${blockTop}" width="${TILE_SIZE}" height="${TILE_SIZE}" preserveAspectRatio="xMidYMid slice" clip-path="url(#repoClip)"/>`
-			: `<path d="${tile}" fill="${xml(tileColor)}"/><text x="${PAD_X + TILE_SIZE / 2}" y="${tileCenter + 1}" text-anchor="middle" dominant-baseline="middle" fill="${REPO_TILE_INK}" font-size="24" font-weight="600">${xml(repoLetter(repoId))}</text>`;
-	const avatarMarkup = avatar
-		? `<image href="${avatar}" x="${metaX}" y="${metaTop}" width="${META_SIZE}" height="${META_SIZE}" preserveAspectRatio="xMidYMid slice" clip-path="url(#avatarClip)"/>`
-		: metaGlyph(metaX + (META_SIZE - META_GLYPH_SIZE) / 2, metaCenter);
-	const shotMarkup = shot
-		? `<g clip-path="url(#shotClip)"><image href="${shot}" x="${shotX}" y="${shotY}" width="${shotW}" height="${shotH}" preserveAspectRatio="xMidYMin slice"/></g><path d="${shotShape}" fill="none" stroke="${CARD_INK}" stroke-opacity="0.1"/>`
-		: "";
+			? `<image href="${repoIcon}" x="${PAD_X}" y="${repoTop}" width="${META_SIZE}" height="${META_SIZE}" preserveAspectRatio="xMidYMid slice" clip-path="url(#repoClip)"/>`
+			: `<path d="${repoTile}" fill="${xml(tileColor)}"/><text x="${PAD_X + META_SIZE / 2}" y="${repoCenter + 1}" text-anchor="middle" dominant-baseline="middle" fill="${REPO_TILE_INK}" font-size="14" font-weight="600">${xml(repoLetter(repoId))}</text>`;
 
 	return `<svg xmlns="http://www.w3.org/2000/svg" width="${SESSION_CARD_WIDTH}" height="${height}" viewBox="0 0 ${SESSION_CARD_WIDTH} ${height}" font-family="Inter, Arial, sans-serif">
 <defs>
-  <clipPath id="shotClip"><path d="${shotShape}"/></clipPath>
-  <clipPath id="repoClip"><path d="${tile}"/></clipPath>
+${shotDefs}
+  <clipPath id="repoClip"><path d="${repoTile}"/></clipPath>
   <clipPath id="avatarClip"><path d="${avatarTile}"/></clipPath>
+  <filter id="shotShadow" x="-20%" y="-20%" width="140%" height="150%"><feDropShadow dx="0" dy="3" stdDeviation="5" flood-color="${CARD_INK}" flood-opacity="0.14"/></filter>
 </defs>
 <rect width="1200" height="${height}" fill="${CARD_PAPER}"/>
 ${shotMarkup}
-${repoMarkup}
-${hasTile ? `<path d="${tile}" fill="none" stroke="${CARD_INK}" stroke-opacity="0.1"/>` : ""}
-<text x="${titleX}" y="${tileCenter + 2}" dominant-baseline="middle" fill="${CARD_INK}" font-size="${TITLE_SIZE}" font-weight="600" letter-spacing="-1.1">${xml(displayTitle)}</text>
+${titleMarkup}
 ${avatarMarkup}
 ${avatar ? `<path d="${avatarTile}" fill="none" stroke="${CARD_INK}" stroke-opacity="0.1"/>` : ""}
-<text x="${metaTextX}" y="${metaCenter + 1}" dominant-baseline="middle" fill="${CARD_INK}" fill-opacity="${META_OPACITY}" font-size="${META_TEXT_SIZE}" font-weight="500">${xml(owner)}</text>
+<text x="${metaTextX}" y="${ownerCenter + 1}" dominant-baseline="middle" fill="${CARD_INK}" fill-opacity="${META_OPACITY}" font-size="${META_TEXT_SIZE}" font-weight="500">${xml(owner)}</text>
+${repoMarkup}
+${repoId ? `<path d="${repoTile}" fill="none" stroke="${CARD_INK}" stroke-opacity="0.1"/><text x="${metaTextX}" y="${repoCenter + 1}" dominant-baseline="middle" fill="${CARD_INK}" fill-opacity="${META_OPACITY}" font-size="${META_TEXT_SIZE}" font-weight="500">${xml(metaLabel(repoId))}</text>` : ""}
 </svg>`;
 }
 
@@ -548,20 +723,23 @@ export async function renderSessionSocialCard(
 	data: SessionSocialCardData,
 	variant: SessionCardVariant = "card",
 ): Promise<Buffer> {
-	const [avatar, repoIcon, shot] = await Promise.all([
+	const [avatar, repoIcon, shots] = await Promise.all([
 		avatarDataUrl(data.person),
 		repoIconDataUrl(data.repo),
-		shotDataUrl(data.shot, shotWidth(variant), shotHeight(variant)),
+		shotDataUrls(data.shots, shotWidth(variant), shotHeight(variant)),
 	]);
-	// A missing or unreadable image falls back to the full title measure rather
-	// than leaving an unexplained blank where its panel would have been.
+	// Missing or unreadable images give their space back to the title instead
+	// of leaving an unexplained blank where the stack would have been.
 	const title = await fitSocialCardTitle(
 		data.title,
-		titleMeasure(shot ? data : { ...data, shot: undefined }, variant),
+		titleMeasure(
+			shots.length ? { ...data, shots } : { ...data, shots: undefined },
+			variant,
+		),
 	);
 	return sharp(
 		Buffer.from(
-			sessionSocialCardSvg(data, avatar, title, variant, repoIcon, shot),
+			sessionSocialCardSvg(data, avatar, title, variant, repoIcon, shots),
 		),
 	)
 		.png()
