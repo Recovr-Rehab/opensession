@@ -24,6 +24,7 @@ import {
 } from "../lib/poll";
 import { getCurrentUser } from "./UserPicker";
 import { providerFromUrl } from "../lib/provider";
+import { isApple } from "../lib/platform";
 import { sessionPrPresentation } from "../lib/session-prs";
 import {
 	prChipClass,
@@ -61,6 +62,7 @@ import { Spinner } from "../ui/spinner";
 import { Skeleton, SkeletonBar } from "../ui/state";
 import { cn } from "../ui/cn";
 import { useShortcutLabel } from "../hooks/useShortcutBindings";
+import { BrandMark } from "./BrandTile";
 import { PrChecksPopover } from "./PrChecksPopover";
 import { PrSeriesRows } from "./PrSeriesRows";
 import { PrStackChip } from "./pr/StackPopover";
@@ -1071,17 +1073,43 @@ export function PrStatusBar({
 			WS_SUMMARY_LABEL,
 			"group/prsum cursor-pointer rounded-sm border-none bg-transparent p-0 text-left focus-ring",
 		);
+		const provider = pr ? providerFromUrl(pr.url) : null;
+		const externalHint = provider
+			? `${isApple ? "⌘" : "Ctrl"}-click opens on ${provider.name}`
+			: undefined;
 		// Two lines inside the one target: the state, then which PR it is about.
+		// The provider mark makes the modified-click destination visible without
+		// competing with the state or the primary action.
 		const labelBody = (
 			<>
 				<span className="block truncate text-item-title text-fg group-hover/prsum:text-accent">
 					{headlineLabel}
 				</span>
-				{pr && (
-					<span className="block truncate text-meta text-faint">#{pr.number}</span>
+				{pr && provider && (
+					<span className="flex items-center gap-1 truncate text-meta text-faint group-hover/prsum:text-dim">
+						<BrandMark name={provider.key} size={12} className="shrink-0" />
+						<span className="truncate">#{pr.number}</span>
+					</span>
 				)}
 			</>
 		);
+		function openInReview(
+			event: React.MouseEvent<HTMLAnchorElement>,
+			open?: () => void,
+		) {
+			// Keep the anchor's native destination for modified and middle clicks.
+			// A plain click stays in context in Open Session's Review tab.
+			if (
+				!open ||
+				event.metaKey ||
+				event.ctrlKey ||
+				event.shiftKey ||
+				event.altKey
+			)
+				return;
+			event.preventDefault();
+			open();
+		}
 		return (
 			<div
 				className={cn(
@@ -1115,15 +1143,34 @@ export function PrStatusBar({
 						<PrChecksPopover
 							checks={checksPr.checks}
 							trigger={
-								<button
-									type="button"
-									className={labelClass}
-									onClick={onOpenChecksTab}
+								<a
+									className={cn(labelClass, "no-underline")}
+									href={checksPr.url}
+									target="_blank"
+									rel="noopener"
+									title={`#${checksPr.number} · ${checksPr.title}. ${externalHint}`}
+									onClick={(event) => openInReview(event, onOpenChecksTab)}
 								>
 									{labelBody}
-								</button>
+								</a>
 							}
 						/>
+					) : pr ? (
+						<a
+							className={cn(labelClass, "no-underline")}
+							href={pr.url}
+							target="_blank"
+							rel="noopener"
+							title={`#${pr.number} · ${pr.title}. ${externalHint}`}
+							onClick={(event) =>
+								openInReview(
+									event,
+									onOpenPrTab ? () => onOpenPrTab() : undefined,
+								)
+							}
+						>
+							{labelBody}
+						</a>
 					) : (
 						<button
 							type="button"
