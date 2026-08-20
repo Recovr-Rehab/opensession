@@ -21,7 +21,7 @@ import {
 	rawConfig,
 	withConfigMutationLock,
 } from "../config-mutation";
-import { scheduleFrontendRebuild } from "../frontend-build";
+import { refreshIndexHtml } from "../frontend-build";
 import {
 	OrganizationIconError,
 	MAX_ORGANIZATION_ICON_BYTES,
@@ -347,7 +347,7 @@ export async function handleInstanceSettingsRoutes(
 		} catch (e: any) {
 			return Response.json({ error: e?.message || String(e) }, { status: 400 });
 		}
-		scheduleFrontendRebuild("identity settings");
+		refreshIndexHtml("identity settings");
 		return Response.json(identityDto());
 	}
 
