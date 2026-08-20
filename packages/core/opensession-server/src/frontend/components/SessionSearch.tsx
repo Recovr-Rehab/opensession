@@ -59,7 +59,7 @@ type Status = "needsinput" | "running" | "review" | "merged" | "pending";
  *  surface reads as an opaque chip cut out of it (and in dark it sat *below*
  *  the popup fill, so a "keycap" rendered sunken). */
 const KBD =
-	"mx-px inline-flex min-w-4 items-center justify-center rounded-md border border-line-strong bg-hover px-1.5 py-px font-sans text-meta text-dim phone:hidden";
+	"mx-px inline-flex min-w-4 items-center justify-center rounded-md bg-hover px-1.5 py-px font-sans text-meta text-dim phone:hidden";
 
 /** A result row. The selected wash rides on `aria-selected`, which the button
  *  already carries for the listbox — so the icon and keycap tones that used to
@@ -606,7 +606,7 @@ export function SessionSearch({
 										</span>
 										{result.action.shortcut && (
 											<span className="inline-flex shrink-0 items-center gap-[3px] max-[560px]:hidden">
-												{result.action.shortcut.map((key) => <kbd key={key} className={`${KBD} group-aria-selected:border-faint`}>{key}</kbd>)}
+												{result.action.shortcut.map((key) => <kbd key={key} className={KBD}>{key}</kbd>)}
 											</span>
 										)}
 									</button>
