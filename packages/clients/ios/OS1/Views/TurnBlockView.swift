@@ -101,8 +101,14 @@ struct TurnBlockView: View {
 
     /// Files named in the open fold before the rest become one chip. A
     /// refactor can touch thirty, and thirty wrapped chips would bury the
-    /// steps they belong to.
+    /// steps they belong to. A phone chip carries a name and its ± counts, so
+    /// two rarely share a line: there the fold names one and counts the rest.
     private static let foldFileChips = 6
+    private static let phoneFoldFileChips = 1
+
+    private var foldFileChips: Int {
+        horizontalSizeClass == .compact ? Self.phoneFoldFileChips : Self.foldFileChips
+    }
 
     /// What the turn changed, by name, closing the open fold.
     ///
@@ -116,13 +122,13 @@ struct TurnBlockView: View {
     private var touchedFileSummary: some View {
         if !turn.touchedFiles.isEmpty {
             FlowLayout(spacing: 6) {
-                ForEach(turn.touchedFiles.prefix(Self.foldFileChips)) { file in
+                ForEach(turn.touchedFiles.prefix(foldFileChips)) { file in
                     FileChipView(file: file)
                 }
-                if turn.touchedFiles.count > Self.foldFileChips {
+                if turn.touchedFiles.count > foldFileChips {
                     MoreFilesChipView(
                         sessionId: sessionId,
-                        count: turn.touchedFiles.count - Self.foldFileChips
+                        count: turn.touchedFiles.count - foldFileChips
                     )
                 }
             }
@@ -807,12 +813,21 @@ struct TurnFooterView: View {
     /// would bury the answer they belong to.
     private static let chipLimit = 8
 
+    /// A phone chip carries a name and its ± counts, so two rarely share a
+    /// line and four became a column under every answer. One name plus the
+    /// count of the rest keeps the footer to a single row, matching the web.
+    private static let phoneChipLimit = 1
+
+    private var chipLimit: Int {
+        horizontalSizeClass == .compact ? Self.phoneChipLimit : Self.chipLimit
+    }
+
     /// Assets come first and are never cut. A touched file is named in the
     /// Changes list too, so the chip is a shortcut; a scratch file the turn
     /// wrote is named nowhere else in the transcript, so the chip is the
     /// only way to it.
     private var shownFiles: [TouchedFile] {
-        Array(footer.files.prefix(max(0, Self.chipLimit - footer.assets.count)))
+        Array(footer.files.prefix(max(0, chipLimit - footer.assets.count)))
     }
 
     private var hiddenFileCount: Int {
@@ -849,27 +864,20 @@ struct TurnFooterView: View {
                 // overflow behind an edge with nothing to say it's there, so
                 // the third chip onward simply wasn't reachable. Assets stay
                 // individually named because the transcript has no other way
-                // into them. Phone edits collapse into one summary that opens
-                // the complete Changes panel.
+                // into them. A phone names the first file and counts the rest,
+                // which opens the complete Changes panel.
                 FlowLayout(spacing: 6) {
                     ForEach(footer.assets, id: \.self) { path in
                         AssetChipView(sessionId: sessionId, path: path)
                     }
-                    if horizontalSizeClass == .compact, !footer.files.isEmpty {
-                        ChangedFilesSummaryView(
+                    ForEach(shownFiles) { file in
+                        FileChipView(file: file)
+                    }
+                    if hiddenFileCount > 0 {
+                        MoreFilesChipView(
                             sessionId: sessionId,
-                            files: footer.files
+                            count: hiddenFileCount
                         )
-                    } else {
-                        ForEach(shownFiles) { file in
-                            FileChipView(file: file)
-                        }
-                        if hiddenFileCount > 0 {
-                            MoreFilesChipView(
-                                sessionId: sessionId,
-                                count: hiddenFileCount
-                            )
-                        }
                     }
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
@@ -906,54 +914,6 @@ private extension View {
             .padding(.trailing, trailing)
             .padding(.vertical, 4)
             .background(OS1VisualStyle.chipFill, in: SquircleCapsule())
-    }
-}
-
-/// One quiet summary of a phone turn's edits. Tapping it reveals every file
-/// in Changes, so the details remain available without a cloud of chips under
-/// each answer.
-struct ChangedFilesSummaryView: View {
-    let sessionId: String
-    let files: [TouchedFile]
-
-    @Environment(\.openPanel) private var openPanel
-
-    private var stats: ToolLineStats {
-        files.reduce(into: ToolLineStats()) {
-            $0 = $0 + ToolLineStats(additions: $1.additions, deletions: $1.deletions)
-        }
-    }
-
-    var body: some View {
-        Button {
-            openPanel(.changes(sessionId: sessionId))
-        } label: {
-            HStack(spacing: 4) {
-                Text("\(files.count) file\(files.count == 1 ? "" : "s")")
-                    .font(.caption)
-                    .foregroundStyle(OS1VisualStyle.textDim)
-                if !stats.isEmpty {
-                    Text("·")
-                        .font(.caption)
-                        .foregroundStyle(OS1VisualStyle.textFaint)
-                    LineStatsView(stats: stats, font: .caption.weight(.medium))
-                }
-            }
-            .footerChip(leading: 9, trailing: 9)
-        }
-        .buttonStyle(.plain)
-        .disabled(!openPanel.isAvailable)
-        .accessibilityElement(children: .combine)
-        .accessibilityLabel("\(files.count) changed file\(files.count == 1 ? "" : "s")")
-        .accessibilityValue(changeSummary)
-        .accessibilityHint("Opens everything this session changed")
-    }
-
-    private var changeSummary: String {
-        var parts: [String] = []
-        if stats.additions > 0 { parts.append("\(stats.additions) lines added") }
-        if stats.deletions > 0 { parts.append("\(stats.deletions) lines removed") }
-        return parts.joined(separator: ", ")
     }
 }
 
