@@ -32,7 +32,7 @@ import {
 import { SwitchIndicator } from "../../ui/switch";
 import { cn } from "../../ui/cn";
 import { RepoTile, repoLabel } from "../RepoTile";
-import { IconChevronRight, IconSliders } from "../icons";
+import { IconChevronRight, IconRepo, IconSliders } from "../icons";
 import {
 	GROUP_BY_OPTIONS,
 	LAST_USED_TIME_OPTIONS,
@@ -385,7 +385,9 @@ export const RepoFilterChip = React.forwardRef<
 								className="justify-between gap-3"
 							>
 								<span className="flex min-w-0 items-center gap-2">
-									<span className={SETTING_GLYPH} />
+									<span className={SETTING_GLYPH}>
+										<IconRepo size={16} />
+									</span>
 									<span className="min-w-0 truncate">All repos</span>
 								</span>
 								<Menu.Check on={repo === "all"} />

@@ -4,7 +4,7 @@ import type { WsTimePref } from "../../lib/workspace-time";
 import type { SettingOption } from "../../ui/setting-row";
 import { RepoTile, repoLabel } from "../RepoTile";
 import { UserAvatar } from "../UserAvatar";
-import { IconRobot } from "../icons";
+import { IconRepo, IconRobot } from "../icons";
 
 export const GROUP_BY_OPTIONS: Array<SettingOption & { value: GroupBy }> = [
 	{ value: "inbox", label: "Inbox" },
@@ -30,7 +30,7 @@ export function repoFilterOptions(
 	repos: Array<{ id: string }>,
 ): SettingOption[] {
 	return [
-		{ value: "all", label: "All repos" },
+		{ value: "all", label: "All repos", icon: <IconRepo size={16} /> },
 		...repos.map(({ id }) => ({
 			value: id,
 			label: repoLabel(id),
