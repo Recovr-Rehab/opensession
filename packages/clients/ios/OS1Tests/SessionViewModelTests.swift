@@ -1715,6 +1715,24 @@ final class SendDraftTests: XCTestCase {
         XCTAssertEqual(viewModel.queuedItems.map(\.id), ["q2"])
     }
 
+    func testEditingPendingSteerTakesItIntoTheNormalComposer() {
+        let user = ServerConfig.shared.userName
+        let json = """
+        {"type":"queue_update","sessionId":"bks-1","queued":[],
+         "steered":[{"id":"s1","content":"change this","user":"\(user)","editable":true}]}
+        """
+        viewModel.handle(ServerEvent.parse(Data(json.utf8)))
+        let item = viewModel.steeredItems[0]
+
+        viewModel.editSteeredInComposer(item)
+        XCTAssertEqual(socket.takenSteerIds, ["s1"])
+        viewModel.handle(.queuedPromptTaken(
+            sessionId: "bks-1", queueId: "s1", item: item, message: nil
+        ))
+        XCTAssertEqual(viewModel.draft, "change this")
+        XCTAssertTrue(viewModel.steeredItems.isEmpty)
+    }
+
     func testEditingSentMessageCopiesItIntoTheNormalComposer() {
         let entry = TranscriptEntry(
             id: "u1", type: "user", content: "fix the typo", images: [Self.pngURL]
@@ -2115,6 +2133,7 @@ private final class MockSocket: SessionSocket {
     private(set) var steeredQueueIds: [String] = []
     private(set) var deletedQueueIds: [String] = []
     private(set) var takenQueueIds: [String] = []
+    private(set) var takenSteerIds: [String] = []
     private(set) var reorders: [[String]] = []
     private(set) var awayFrames: [Bool] = []
     private(set) var typingFrames: [(sessionId: String, typing: Bool)] = []
@@ -2161,6 +2180,7 @@ private final class MockSocket: SessionSocket {
     var interruptedQueueIds: [String] = []
     func interruptQueued(sessionId: String, queueId: String) { interruptedQueueIds.append(queueId) }
     func takeQueued(sessionId: String, queueId: String) { takenQueueIds.append(queueId) }
+    func takeSteered(sessionId: String, queueId: String) { takenSteerIds.append(queueId) }
     func reorderQueued(sessionId: String, order: [String]) { reorders.append(order) }
     func cancelWatchedRun() {}
     func answer(sessionId: String, questionId: String, answers: [String: String]?) {}

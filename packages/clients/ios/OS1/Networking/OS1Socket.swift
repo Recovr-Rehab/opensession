@@ -22,6 +22,7 @@ protocol SessionSocket: AnyObject {
     func deleteQueued(sessionId: String, queueId: String)
     func interruptQueued(sessionId: String, queueId: String)
     func takeQueued(sessionId: String, queueId: String)
+    func takeSteered(sessionId: String, queueId: String)
     func reorderQueued(sessionId: String, order: [String])
     func cancelWatchedRun()
     func answer(sessionId: String, questionId: String, answers: [String: String]?)
@@ -206,6 +207,10 @@ final class OS1Socket: SessionSocket {
 
     func takeQueued(sessionId: String, queueId: String) {
         send(["type": "take_queued_prompt", "sessionId": sessionId, "queueId": queueId])
+    }
+
+    func takeSteered(sessionId: String, queueId: String) {
+        send(["type": "take_steered_prompt", "sessionId": sessionId, "queueId": queueId])
     }
 
     func reorderQueued(sessionId: String, order: [String]) {

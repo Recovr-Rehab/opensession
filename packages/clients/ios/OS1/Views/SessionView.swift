@@ -3017,6 +3017,16 @@ private struct SessionInputBar: View {
                     // Ids the server never confirmed can't address the queue.
                     onDeliverNow: item.isLocalEcho
                         ? nil : { viewModel.deliverSteeredNow(item) },
+                    onEdit: (!item.isLocalEcho && item.editable
+                        && MessageAttribution.isViewer(
+                            item.user ?? "",
+                            viewerName: ServerConfig.shared.userName,
+                            viewerLogin: ServerConfig.shared.githubLogin
+                        ))
+                        ? {
+                            viewModel.editSteeredInComposer(item)
+                            inputFocused = true
+                        } : nil,
                     // The run keeps the message either way — this only
                     // retires the receipt early.
                     onDelete: { viewModel.dismissSteered(item) }
@@ -3731,8 +3741,8 @@ private struct SessionInputBar: View {
     /// the server at all (no signal, or it's still being retried) and is held
     /// on disk until it does; "Undelivered" is one the server refused, waiting
     /// on the person. "Queued" holds until the run fully finishes; "Steering"
-    /// is already committed to deliver at the run's next turn boundary (a
-    /// receipt — no actions left to take); "Delivering" has left the server
+    /// is accepted for the run's next turn boundary but can still be pulled
+    /// back before it crosses that boundary; "Delivering" has left the server
     /// queue and is waiting on its transcript echo (~1s file watcher) — inert,
     /// just kept visible.
     private struct QueuedMessageRow: View {
@@ -3951,9 +3961,9 @@ private struct SessionInputBar: View {
             }
             // The row IS the edit affordance now that the pencil is gone —
             // and the only way to read a message the two-line clamp cut off.
-            // Rows with nothing to edit (a worker report, GitHub feedback, a
-            // receipt) stay inert rather than opening a sheet on what they
-            // can't change.
+            // Rows with nothing to edit (a worker report, GitHub feedback, or
+            // a receipt from someone else) stay inert rather than opening a
+            // sheet on what they can't change.
             .contentShape(Rectangle())
             .onTapGesture { if canEdit { onEdit?() } }
             // Drag to reorder, without leaving for a menu: each row-height of

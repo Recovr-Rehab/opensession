@@ -573,6 +573,10 @@ export class HostHandle {
   private effectiveModel?: string;
   private transientFallback = false;
   private handlingAsks = new Set<string>();
+  private steerRetractions = new Map<
+    string,
+    { resolve: (retracted: boolean) => void; timer: ReturnType<typeof setTimeout> }
+  >();
   private respawns = 0;
   private readonly ctl: HostRunControl;
   engineSessionId?: string;
@@ -594,7 +598,9 @@ export class HostHandle {
       osSessionId: spec.osSessionId,
       steerable: modelSupportsSteer(spec.model),
       connected: () => this.up,
-      steer: (text, images) => this.send({ t: "steer", text, images }),
+      steer: (text, images, steerId) =>
+        this.send({ t: "steer", text, images, steerId }),
+      retractSteer: (steerId) => this.retractSteer(steerId),
       interruptSteer: (text, images) =>
         this.send({ t: "interrupt_steer", text, images }),
       cancel: () => this.send({ t: "cancel" }),
@@ -620,6 +626,30 @@ export class HostHandle {
 
   private send(msg: ClientToHostMsg): boolean {
     return this.conn ? this.conn.send(msg) : false;
+  }
+
+  private retractSteer(steerId: string): Promise<boolean> {
+    const requestId = crypto.randomUUID();
+    return new Promise((resolve) => {
+      const timer = setTimeout(() => {
+        this.steerRetractions.delete(requestId);
+        resolve(false);
+      }, 3_000);
+      this.steerRetractions.set(requestId, { resolve, timer });
+      if (!this.send({ t: "retract_steer", requestId, steerId })) {
+        clearTimeout(timer);
+        this.steerRetractions.delete(requestId);
+        resolve(false);
+      }
+    });
+  }
+
+  private settleSteerRetractions(): void {
+    for (const pending of this.steerRetractions.values()) {
+      clearTimeout(pending.timer);
+      pending.resolve(false);
+    }
+    this.steerRetractions.clear();
   }
 
   /** Retry-connect until the host is reachable; used for fresh spawns and boot
@@ -740,6 +770,14 @@ export class HostHandle {
       case "steer_failed":
         this.cb.onSteerFailed?.(msg.text);
         break;
+      case "steer_retracted": {
+        const pending = this.steerRetractions.get(msg.requestId);
+        if (!pending) break;
+        clearTimeout(pending.timer);
+        this.steerRetractions.delete(msg.requestId);
+        pending.resolve(msg.retracted);
+        break;
+      }
       case "end": {
         if (msg.done && !this.sawTerminal) {
           this.sawTerminal = true;
@@ -790,6 +828,7 @@ export class HostHandle {
     if (this.endedClean) return;
     this.endedClean = true;
     this.queue.end();
+    this.settleSteerRetractions();
     unregisterHostRun(this.ctl);
     unregisterRunToken(this.spec.rpcToken);
     this.connector.dispose?.();
@@ -801,6 +840,7 @@ export class HostHandle {
     this.endedClean = true;
     this.send({ t: "shutdown" });
     this.queue.end();
+    this.settleSteerRetractions();
     unregisterHostRun(this.ctl);
     unregisterRunToken(this.spec.rpcToken);
     this.connector.dispose?.();

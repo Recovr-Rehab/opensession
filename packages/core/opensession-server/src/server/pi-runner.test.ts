@@ -36,11 +36,30 @@ import {
   resolvePiPresetWiring,
   resolvePiRoutedModel,
   resolvePiDialModel,
+  retractPendingSteer,
   runPi,
   runPiSmokeTurn,
 } from "./pi-runner";
 import { __setCodexAccountsPathForTest } from "./codex-accounts";
 import type { ResolvedWorkspaceModelPreset } from "./workspace-model-presets";
+
+describe("retractPendingSteer", () => {
+  test("retracts an exact duplicate id and replays the remaining payloads in order", () => {
+    const pending = [
+      { steerId: "first", text: "same", images: ["first-image"] },
+      { steerId: "second", text: "same", images: ["second-image"] },
+      { steerId: "third", text: "after" },
+    ];
+    let replayed: readonly typeof pending[number][] = [];
+
+    expect(retractPendingSteer(pending, "second", (remaining) => {
+      replayed = [...remaining];
+    })).toBe(true);
+    expect(pending.map((item) => item.steerId)).toEqual(["first", "third"]);
+    expect(replayed).toEqual(pending);
+    expect(retractPendingSteer(pending, "missing", () => {})).toBe(false);
+  });
+});
 
 describe("parsePiModel", () => {
   test("splits pi/<provider>/<model>", () => {

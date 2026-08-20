@@ -44,6 +44,53 @@ function hello(spec: RunHostSpec, selectedModel: string) {
 }
 
 describe("HostHandle model recovery", () => {
+	test("waits for the host to confirm an exact steer retraction", async () => {
+		const root = mkdtempSync(join(tmpdir(), "host-client-retract-test-"));
+		roots.push(root);
+		const dir = join(root, "rh-retract");
+		mkdirSync(dir);
+		const sent: any[] = [];
+		let handlers: { onMsg(msg: any): void; onClose(): void } | undefined;
+		const launcher: HostLauncher = {
+			alive: () => true,
+			newRunDir: (hostId) => join(root, hostId),
+			launch: async () => {},
+			connector: () => ({
+				connect: async (nextHandlers) => {
+					handlers = nextHandlers;
+					return {
+						send: (message) => {
+							sent.push(message);
+							return true;
+						},
+						close: () => {},
+					};
+				},
+			}),
+		};
+		const spec: RunHostSpec = {
+			hostId: "rh-retract",
+			osSessionId: "os-retract",
+			prompt: "keep working",
+			cwd: "/tmp",
+			model: "pi/anthropic/claude-sonnet-5",
+		};
+		const handle = new HostHandle(dir, spec, {}, launcher);
+		await handle.connectWithWait(100);
+
+		const retraction = (handle as any).ctl.retractSteer("steer-2");
+		const request = sent.find((message) => message.t === "retract_steer");
+		expect(request).toMatchObject({ t: "retract_steer", steerId: "steer-2" });
+		handlers!.onMsg({
+			t: "steer_retracted",
+			requestId: request.requestId,
+			steerId: "steer-2",
+			retracted: true,
+		});
+		expect(await retraction).toBe(true);
+		(handle as any).finish();
+	});
+
 	test("acknowledges a terminal event so the detached host can exit", async () => {
 		const root = mkdtempSync(join(tmpdir(), "host-client-terminal-test-"));
 		roots.push(root);

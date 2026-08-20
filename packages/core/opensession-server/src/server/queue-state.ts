@@ -130,6 +130,42 @@ export function takeQueuedPrompt(
 	return item;
 }
 
+export function editableSteerReceipt(
+	sessionId: string,
+	queueId: string,
+	actor?: string,
+): QueueItem | undefined {
+	const item = (steeredReceipts.get(sessionId) || []).find(
+		(candidate) => candidate.id === queueId,
+	);
+	return isEditableQueueItem(item) && item && queueActorMatches(item, actor)
+		? item
+		: undefined;
+}
+
+/** Remove a steer receipt only after the engine confirms the exact message is
+ * still pending. The caller owns that ordering; this function owns auth and
+ * durable receipt state. */
+export function takeSteeredPrompt(
+	sessionId: string,
+	queueId: string,
+	actor?: string,
+	effects = true,
+): QueueItem | undefined {
+	const item = editableSteerReceipt(sessionId, queueId, actor);
+	if (!item) return;
+	const steered = steeredReceipts.get(sessionId);
+	if (!steered) return;
+	const next = steered.filter((candidate) => candidate.id !== queueId);
+	if (next.length > 0) steeredReceipts.set(sessionId, next);
+	else steeredReceipts.delete(sessionId);
+	if (effects) {
+		persistQueues();
+		broadcastQueue(sessionId);
+	}
+	return item;
+}
+
 // Steered messages (folded into a live run, delivered at the run's next turn
 // boundary) aren't in promptQueues — the drain would re-deliver them. But until
 // their turn lands they're invisible on reload, so we keep a display-only
@@ -162,8 +198,9 @@ export function liftUserStop(sessionId: string): void {
 // just-steered messages. Queued prompts re-drain on boot; steer receipts stay
 // display-only until their transcript entry lands or cancellation requeues them.
 export const QUEUE_STORE = `${SESSIONS_DIR}/prompt-queues.json`;
-export function queueItem(item: QueueItem): QueueItem {
-	return item.id ? item : { ...item, id: crypto.randomUUID() };
+export function queueItem(item: QueueItem): QueueItem & { id: string } {
+	if (item.id) return item as QueueItem & { id: string };
+	return { ...item, id: crypto.randomUUID() };
 }
 
 export function queueWithIds(items: QueueItem[] | undefined): QueueItem[] {

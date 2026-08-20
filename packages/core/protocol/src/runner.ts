@@ -179,6 +179,9 @@ type HostToClientPayload =
    * delivery after the run instead — never drop a user's message.
    */
   | { t: "steer_failed"; text: string }
+  /** Reply to a retract_steer request. False means the message already crossed
+   * the engine's step boundary, so the client must not restore it as a draft. */
+  | { t: "steer_retracted"; requestId: string; steerId: string; retracted: boolean }
   /** Run generator finished; meta.done is written. Client should ack with shutdown. */
   | { t: "end"; done?: StreamEvent }
   /**
@@ -222,7 +225,10 @@ export type ClientToHostMsg =
    * existed ignore it, which degrades to the old behavior rather than
    * breaking.
    */
-  | { t: "steer"; text: string; images?: ImageInput[] }
+  | { t: "steer"; text: string; images?: ImageInput[]; steerId?: string }
+  /** Remove one exact steer while it is still in the engine queue. The host
+   * acknowledges after the engine has either removed it or already delivered it. */
+  | { t: "retract_steer"; requestId: string; steerId: string }
   | { t: "interrupt_steer"; text: string; images?: ImageInput[] }
   | { t: "cancel" }
   /** Ack of `end`: everything consumed, host may exit and the client cleans up the dir. */

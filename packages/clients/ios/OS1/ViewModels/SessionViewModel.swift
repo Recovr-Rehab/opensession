@@ -1322,6 +1322,26 @@ final class SessionViewModel {
         socket?.takeQueued(sessionId: session.id, queueId: item.id)
     }
 
+    /// Pull back a steer only while it is still waiting behind the engine's
+    /// next step boundary. The server replies through queuedPromptTaken after
+    /// the engine confirms the exact receipt id was retracted.
+    func editSteeredInComposer(_ item: QueueItem) {
+        guard !item.isLocalEcho, !item.hasFiles, !item.hasContextSessions, item.editable,
+              MessageAttribution.isViewer(
+                item.user ?? "",
+                viewerName: ServerConfig.shared.userName,
+                viewerLogin: ServerConfig.shared.githubLogin
+              ) else {
+            return
+        }
+        guard draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+              attachedImages.isEmpty else {
+            notice = "Send or clear your draft before editing a message."
+            return
+        }
+        socket?.takeSteered(sessionId: session.id, queueId: item.id)
+    }
+
     /// Move a queued message one place towards (-1) or away from (+1) the
     /// front of the queue. The server takes the full id order and leaves
     /// entries it doesn't recognise where they are, so local echoes ride

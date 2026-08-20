@@ -37,8 +37,13 @@ process.env.OPENSESSION_RUN_JOURNAL ||=
   process.env.OPENSESSION_RUN_JOURNAL || `${hostDir}/journal.json`;
 process.env.OPENSESSION_RUN_JOURNAL = process.env.OPENSESSION_RUN_JOURNAL;
 
-const { runAgent, cancelAgentRun, steerAgentRun, interruptAndSteerAgentRun } =
-  await import("../server/agent-runner");
+const {
+  runAgent,
+  cancelAgentRun,
+  steerAgentRun,
+  retractAgentSteer,
+  interruptAndSteerAgentRun,
+} = await import("../server/agent-runner");
 const { shouldPersistModelSwitch } = await import("../server/run-events");
 const { readFileSync, writeFileSync, existsSync, unlinkSync } = await import("fs");
 const { writeJsonAtomic } = await import("../server/shared/atomic-write");
@@ -213,13 +218,28 @@ function handleClientMsg(msg: ClientToHostMsg): void {
         !steerAgentRun(
           [spec.osSessionId, meta.engineSessionId],
           msg.text,
-          msg.images
+          msg.images,
+          msg.steerId
         )
       ) {
         // Too late (run finishing) or backend can't steer — bounce it back so
         // opensession queues it instead of the message evaporating.
         send({ t: "steer_failed", text: msg.text });
       }
+      break;
+    }
+    case "retract_steer": {
+      void retractAgentSteer(
+        [spec.osSessionId, meta.engineSessionId],
+        msg.steerId
+      ).then((retracted) => {
+        send({
+          t: "steer_retracted",
+          requestId: msg.requestId,
+          steerId: msg.steerId,
+          retracted,
+        });
+      });
       break;
     }
     case "interrupt_steer": {

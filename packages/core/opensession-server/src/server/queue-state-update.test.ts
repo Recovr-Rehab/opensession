@@ -10,7 +10,9 @@ import {
 	promptDispatches,
 	promptQueues,
 	queueDisplayState,
+	steeredReceipts,
 	takeQueuedPrompt,
+	takeSteeredPrompt,
 } from "./queue-state";
 import { agentActor, workerActor } from "./session-actors";
 
@@ -96,6 +98,29 @@ describe("review handoffs are not user messages", () => {
 			"human",
 			"review",
 		]);
+	});
+});
+
+describe("takeSteeredPrompt", () => {
+	beforeEach(() => {
+		steeredReceipts.set(SESSION, [
+			{ id: "s1", content: "first", user: "Kent", images: [PNG] },
+			{ id: "s2", content: "same", user: "Kent" },
+		]);
+	});
+
+	test("removes one exact pending steer with its complete payload", () => {
+		expect(takeSteeredPrompt(SESSION, "s1", "Kent de Bruin", false)).toMatchObject({
+			id: "s1",
+			content: "first",
+			images: [PNG],
+		});
+		expect(steeredReceipts.get(SESSION)?.map((item) => item.id)).toEqual(["s2"]);
+	});
+
+	test("only the original sender can take a steer", () => {
+		expect(takeSteeredPrompt(SESSION, "s1", "Michiel", false)).toBeUndefined();
+		expect(steeredReceipts.get(SESSION)?.map((item) => item.id)).toEqual(["s1", "s2"]);
 	});
 });
 

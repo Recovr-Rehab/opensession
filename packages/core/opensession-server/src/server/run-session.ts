@@ -309,8 +309,9 @@ export function steerQueuedPrompt(
 	if (!session || !queue) return false;
 	const index = queuedPromptIndex(queue, queueId, queueIndex);
 	if (index < 0) return false;
-	const [item] = queue.splice(index, 1);
-	if (!item) return false;
+	const [rawItem] = queue.splice(index, 1);
+	if (!rawItem) return false;
+	const item = queueItem(rawItem);
 	if (
 		!isAgentSessionBusy(
 			session.claudeSessionId,
@@ -360,6 +361,7 @@ export function steerQueuedPrompt(
 			[session.claudeSessionId, session.codexThreadId, session.id],
 			attributed,
 			images,
+			item.id,
 		)
 	) {
 		queue.splice(index, 0, item);

@@ -163,6 +163,7 @@ registerSessionControl({
 					[session.claudeSessionId, session.codexThreadId, session.id],
 					attributed,
 					opts?.images,
+					deliveryId,
 				)
 			) {
 				recordSteer(id, { id: deliveryId, content, user, images: opts?.imageUrls });

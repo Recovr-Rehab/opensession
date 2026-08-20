@@ -2993,6 +2993,11 @@ export function SessionViewer({
 				case "queued_prompt_taken": {
 					if (msg.sessionId !== session.id) break;
 					if (!msg.item) {
+						setSteered((current) =>
+							current.map((item) =>
+								item.id === msg.queueId ? { ...item, editing: false } : item,
+							),
+						);
 						toast(msg.message || "That queued message could not be edited");
 						break;
 					}
@@ -4334,14 +4339,21 @@ export function SessionViewer({
 		);
 	}
 
-	function editQueuedInComposer(q: QueueReceipt) {
+	function editQueuedInComposer(q: QueueReceipt, steering = false) {
 		if (composerHasDraft()) {
-			toast("Send or clear your draft before editing a queued message");
+			toast("Send or clear your draft before editing a message");
 			return;
 		}
 		if (!q.id) return;
+		if (steering) {
+			setSteered((current) =>
+				current.map((item) =>
+					item.id === q.id ? { ...item, editing: true } : item,
+				),
+			);
+		}
 		send({
-			type: "take_queued_prompt",
+			type: steering ? "take_steered_prompt" : "take_queued_prompt",
 			sessionId: session.id,
 			queueId: q.id,
 		});
@@ -4491,9 +4503,12 @@ export function SessionViewer({
 				<div className={composerQueueTitle}>{queueTitle}</div>
 				{visibleSteered.map((s, i) => {
 					const c = classifyQueuedContent(s.content, s.user);
+					const canEdit =
+						s.editable === true &&
+						personKey(s.user || "") === personKey(currentUser);
 					return (
 						<div
-							key={`steered-${i}`}
+							key={s.id || `steered-${i}`}
 							// The hairline between rows was a `+` sibling selector, which a
 							// utility cannot spell against its own class — each group draws
 							// it from its own index instead, which is what that selector
@@ -4511,6 +4526,19 @@ export function SessionViewer({
 										<SteerWaiting since={s.steeredAt} />
 									</span>
 								</Tooltip>
+								{s.id && canEdit && (
+									<Tooltip label="Edit in composer">
+										<button
+											type="button"
+											aria-label="Edit in composer"
+											className={composerQueueAction}
+											disabled={s.editing}
+											onClick={() => editQueuedInComposer(s, true)}
+										>
+											<IconPencil size={20} />
+										</button>
+									</Tooltip>
+								)}
 								{s.id && (
 									<Tooltip label="Deliver now: end the current step so this message lands immediately. The agent resumes its work with your message in hand.">
 										<button
@@ -4520,6 +4548,7 @@ export function SessionViewer({
 												composerQueueAction,
 												composerQueueActionSteer,
 											)}
+											disabled={s.editing}
 											onClick={() =>
 												send({
 													type: "interrupt_queued_prompt",
@@ -4536,10 +4565,12 @@ export function SessionViewer({
 									<Tooltip label="Dismiss. The run keeps going and this message won't be re-sent.">
 										<button
 											type="button"
+											aria-label="Dismiss steering message"
 											className={cn(
 												composerQueueAction,
 												composerQueueActionDanger,
 											)}
+											disabled={s.editing}
 											onClick={() =>
 												send({
 													type: "delete_queued_prompt",

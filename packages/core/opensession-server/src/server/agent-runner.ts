@@ -33,6 +33,7 @@ import {
   runPi,
   isPiSessionBusy,
   steerPiRun,
+  retractPiSteer,
   cancelPiRun,
   activePiRunCount,
 } from "./pi-runner";
@@ -58,6 +59,7 @@ import {
 import {
   hostRunBusy,
   hostSteer,
+  hostRetractSteer,
   hostInterruptSteer,
   hostCancel,
   hostRunCount,
@@ -955,19 +957,32 @@ export function activeDetachedAgentRunCount(): number {
 export function steerAgentRun(
   ids: Array<string | null | undefined>,
   text: string,
-  images?: ImageInput[]
+  images?: ImageInput[],
+  steerId?: string
 ): boolean {
   for (const id of ids) {
     if (!id) continue;
-    if (steerPiRun(id, text, images)) return true;
+    if (steerPiRun(id, text, images, steerId)) return true;
     // Images ride the host frame too (protocol ClientToHostMsg.steer). This
     // used to bail on any attachment, which read as "pi can't steer images"
     // — it can; only the RPC frame was text-only. Once every local run moved
     // into a detached host that guard covered every case, so no message with
     // a screenshot could be steered at all.
-    if (hostSteer(id, text, images)) return true;
+    if (hostSteer(id, text, images, steerId)) return true;
   }
   return false;
+}
+
+/** Retract one accepted steer only while it remains behind the engine's next
+ * step boundary. Exact ids distinguish duplicate messages. */
+export async function retractAgentSteer(
+  ids: Array<string | null | undefined>,
+  steerId: string
+): Promise<boolean> {
+  for (const id of ids) {
+    if (id && retractPiSteer(id, steerId)) return true;
+  }
+  return hostRetractSteer(ids, steerId);
 }
 
 /**

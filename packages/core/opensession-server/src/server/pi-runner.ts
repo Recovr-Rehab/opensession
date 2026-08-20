@@ -402,7 +402,8 @@ if (process.env.NODE_ENV !== "test" && piEngineEnabled()) {
 interface PiRunHandle {
   abort: AbortController;
   /** Distinct-run identity: every alias key maps to the same handle object. */
-  steer?: (text: string, images?: ImageInput[]) => void;
+  steer?: (text: string, images?: ImageInput[], steerId?: string) => void;
+  retractSteer?: (steerId: string) => boolean;
 }
 
 // Alias keys (runKey, unified session id, pi session id) → shared handle,
@@ -440,10 +441,35 @@ export function cancelPiRun(id: string): boolean {
  *  the current assistant step's in-flight tool calls, before the next LLM
  *  call. True = a live run accepted it; false = nothing steerable (caller
  *  queues for the next turn instead). */
-export function steerPiRun(id: string, text: string, images?: ImageInput[]): boolean {
+export function steerPiRun(
+  id: string,
+  text: string,
+  images?: ImageInput[],
+  steerId?: string
+): boolean {
   const handle = activeRuns.get(id);
   if (!handle?.steer) return false;
-  handle.steer(text, images);
+  handle.steer(text, images, steerId);
+  return true;
+}
+
+export function retractPiSteer(id: string, steerId: string): boolean {
+  return activeRuns.get(id)?.retractSteer?.(steerId) === true;
+}
+
+/** Remove one exact pending steer, then let the caller rebuild the engine queue.
+ * The synchronous mutation is the race boundary: delivery either removed the
+ * item first, or retraction does, never both. */
+export function retractPendingSteer<T extends { steerId?: string }>(
+  pending: T[],
+  steerId: string,
+  replay: (remaining: readonly T[]) => void
+): boolean {
+  const index = pending.findIndex((item) => item.steerId === steerId);
+  if (index < 0) return false;
+  const remaining = pending.filter((_, candidate) => candidate !== index);
+  pending.splice(0, pending.length, ...remaining);
+  replay(remaining);
   return true;
 }
 
@@ -2159,18 +2185,40 @@ async function* runPiAttempt(
     // against transcript user texts, so it would never be requeued). An
     // undelivered steer keeps its run-session receipt as the recovery
     // affordance — previous runner's failed-POST semantics.
-    const pendingSteers: Array<{ text: string; images?: ImageInput[] }> = [];
-    handle.steer = (text, images) => {
+    const pendingSteers: Array<{
+      text: string;
+      images?: ImageInput[];
+      steerId?: string;
+    }> = [];
+    handle.steer = (text, images, steerId) => {
       // Same skill expansion as the prompt path. The queue holds the expanded
       // text so the delivery match stays exact; the audit line below still
       // records what the person typed.
       const steerText = expandSkillCommand(text, loader.getSkills().skills);
-      pendingSteers.push({ text: steerText, images });
+      pendingSteers.push({ text: steerText, images, steerId });
       void liveSession.steer(steerText, piImages(images)).catch((e) => {
         console.warn("[pi-runner] steer failed:", e);
       });
       audit({ ...auditBase, direction: "in", kind: "steer_queued", ...summarizeText(text) });
     };
+    handle.retractSteer = (steerId) =>
+      retractPendingSteer(pendingSteers, steerId, (remaining) => {
+        // Pi exposes exact delivery identity only in our wrapper. Rebuild its
+        // whole queue from our richer copy so duplicate text and images keep
+        // their original order while the selected id disappears.
+        liveSession.clearQueue();
+        for (const steer of remaining) {
+          void liveSession.steer(steer.text, piImages(steer.images)).catch((e) => {
+            console.warn("[pi-runner] steer replay failed:", e);
+          });
+        }
+        audit({
+          ...auditBase,
+          direction: "in",
+          kind: "steer_retracted",
+          steer_id: steerId,
+        });
+      });
 
     // Cancellation: our registry AbortController drives session.abort().
     const onAbort = () => {
