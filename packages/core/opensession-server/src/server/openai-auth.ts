@@ -86,11 +86,17 @@ export interface SeededOpenaiAuth {
   };
 }
 
-/** Build the access-token-only credential Pi's in-memory store consumes. */
+/** Build the access-token-only credential Pi's in-memory store consumes.
+ * Remote sandboxes receive a rotation-proof per-account seed directory rather
+ * than the host's CODEX_HOME path. The launcher points this process at that
+ * directory with OPENSESSION_OPENAI_SEED_DIR. */
 export function buildSeededOpenaiAuth(
   account: CodexAccount,
+  seedRoot = process.env.OPENSESSION_OPENAI_SEED_DIR?.trim(),
 ): { seeded: SeededOpenaiAuth } | { error: string } {
-  const srcPath = `${account.value}/auth.json`;
+  const srcPath = seedRoot
+    ? openaiSeedAuthPath(seedRoot, account.id)
+    : `${account.value}/auth.json`;
   if (!existsSync(srcPath)) {
     return { error: `ChatGPT account "${account.name}" has no auth.json at ${srcPath}` };
   }
@@ -100,12 +106,18 @@ export function buildSeededOpenaiAuth(
   } catch (error: any) {
     return { error: `failed to read ${srcPath}: ${error?.message || error}` };
   }
-  const access = src?.tokens?.access_token;
-  const accountId = src?.tokens?.account_id;
+  // Host CODEX_HOME files use tokens.*, while remote sandbox seed files use
+  // the already-normalized openai.* shape produced below. Supporting both is
+  // what keeps the remote copy rotation-proof without copying refresh tokens.
+  const access = src?.openai?.access ?? src?.tokens?.access_token;
+  const accountId = src?.openai?.accountId ?? src?.tokens?.account_id;
   if (!access || typeof access !== "string") {
     return { error: `ChatGPT account "${account.name}" has no access token` };
   }
-  const expires = jwtExpMs(access);
+  const expires =
+    typeof src?.openai?.expires === "number"
+      ? src.openai.expires
+      : jwtExpMs(access);
   if (expires !== null && expires <= Date.now()) {
     return { error: `ChatGPT account "${account.name}" has an expired access token` };
   }
@@ -155,7 +167,12 @@ export function buildOpenaiRemoteSeedUpload(
   const skipped: Array<{ account: CodexAccount; reason: string }> = [];
   for (const account of eligible) {
     if (account.kind === "api_key") {
-      selected.push(account);
+      // Pi's OpenAI provider is OAuth-only. Copying an unsupported sk-* value
+      // into third-party compute would widen authority without enabling a run.
+      skipped.push({
+        account,
+        reason: "remote Pi runs do not support OpenAI API-key accounts",
+      });
       continue;
     }
     const built = buildSeededOpenaiAuth(account);
@@ -163,7 +180,10 @@ export function buildOpenaiRemoteSeedUpload(
       skipped.push({ account, reason: built.error });
       continue;
     }
-    selected.push(account);
+    // account.value is a host CODEX_HOME path. The guest resolves this record
+    // through OPENSESSION_OPENAI_SEED_DIR, so project an inert value rather
+    // than disclose a host path it cannot access.
+    selected.push({ ...account, value: "opensession-remote-seed" });
     seeds.push({ accountId: account.id, content: JSON.stringify(built.seeded) });
   }
   return { accounts: selected, seeds, skipped };
