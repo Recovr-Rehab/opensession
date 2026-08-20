@@ -169,6 +169,8 @@ struct TasksView: View {
     }
 
     private func load() async {
+        loading = true
+        defer { loading = false }
         do {
             let next = try await OS1API.todos()
             guard !Task.isCancelled else { return }
@@ -177,10 +179,10 @@ struct TasksView: View {
                 if let date = Session.parseISO(task.remindAt) { dates[task.id] = date }
             }
             loadFailed = false
+            actionError = nil
         } catch {
             if tasks.isEmpty { loadFailed = true }
         }
-        loading = false
     }
 
     private func add() async {
@@ -193,10 +195,10 @@ struct TasksView: View {
             draft = ""
             actionError = nil
             tasks.insert(created, at: 0)
+            await load()
         } catch {
             actionError = "The task could not be added."
         }
-        await load()
     }
 
     private func toggle(_ task: TodoItem) {

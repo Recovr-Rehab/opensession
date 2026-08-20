@@ -26,6 +26,7 @@ struct FeedView: View {
     @State private var hasMore = false
     @State private var loading = true
     @State private var loadFailed = false
+    @State private var loadGeneration = 0
 
     /// How far back the feed reaches, in days, and the steps "Show more"
     /// walks. A window rather than a row count: on a repo that ships a hundred
@@ -92,7 +93,7 @@ struct FeedView: View {
             ForEach(groups, id: \.title) { group in
                 Section {
                     ForEach(group.rows) { row in
-                        FeedRowView(row: row) { open(row) }
+                        FeedRowView(row: row, onOpen: openAction(for: row))
                     }
                 } header: {
                     Text(group.title)
@@ -196,25 +197,32 @@ struct FeedView: View {
 
     /// The session if there is one, the pull request or commit on the host if
     /// there is not. A shipped commit's session is usually archived, which is
-    /// exactly the case the row keeps an id for.
-    private func open(_ row: FeedRow) {
+    /// exactly the case the row keeps an id for. A row with neither stays
+    /// readable without pretending a tap can take it anywhere.
+    private func openAction(for row: FeedRow) -> (() -> Void)? {
         if let sessionId = row.sessionId {
-            onOpenSession(sessionId)
-            return
+            return { onOpenSession(sessionId) }
         }
-        if let url = row.url.flatMap(URL.init(string:)) { openURL(url) }
+        if let url = row.url.flatMap(URL.init(string:)) {
+            return { openURL(url) }
+        }
+        return nil
     }
 
     private func load(days next: Int? = nil) async {
         let window = next ?? days
+        loadGeneration &+= 1
+        let generation = loadGeneration
         loading = true
-        defer { loading = false }
+        defer {
+            if generation == loadGeneration { loading = false }
+        }
         // Both at once: they are independent reads, and the feed is the sum
         // of them rather than one after the other.
         async let prsTask = try? OS1API.recentPrs()
         async let commitsTask = try? OS1API.recentCommits(days: window)
         let (prs, page) = await (prsTask, commitsTask)
-        guard !Task.isCancelled else { return }
+        guard generation == loadGeneration, !Task.isCancelled else { return }
         // Both halves failing is a failure; one is a thinner feed, which is
         // still the honest answer for an instance where only one of them
         // exists at all.
@@ -228,7 +236,7 @@ struct FeedView: View {
         let built = await Task.detached(priority: .userInitiated) {
             FeedRows.build(prs: prs ?? [], commits: page?.commits ?? [])
         }.value
-        guard !Task.isCancelled else { return }
+        guard generation == loadGeneration, !Task.isCancelled else { return }
         let servedDays = page?.days ?? window
         let cutoff = Date().addingTimeInterval(-Double(servedDays) * 86_400)
         rows = built
@@ -242,41 +250,48 @@ struct FeedView: View {
 /// One shipped thing: what it was, where it landed, and how big it was.
 private struct FeedRowView: View {
     let row: FeedRow
-    let onOpen: () -> Void
+    let onOpen: (() -> Void)?
 
+    @ViewBuilder
     var body: some View {
-        Button(action: onOpen) {
-            HStack(alignment: .top, spacing: 10) {
-                Image(systemName: row.kind == .pullRequest
-                    ? "arrow.triangle.pull"
-                    : "point.3.connected.trianglepath.dotted")
-                    .font(.callout)
-                    .foregroundStyle(OS1VisualStyle.textDim)
-                    .padding(.top, 2)
-                VStack(alignment: .leading, spacing: 3) {
-                    Text(row.title)
-                        .font(.callout.weight(.medium))
-                        .foregroundStyle(OS1VisualStyle.text)
-                        .lineLimit(2)
-                        .multilineTextAlignment(.leading)
-                    Text(verbatim: metaLine)
-                        .font(.caption)
-                        .foregroundStyle(OS1VisualStyle.textFaint)
-                        .lineLimit(1)
-                }
-                Spacer(minLength: 0)
-                if let diff = diffLabel {
-                    Text(verbatim: diff)
-                        .font(.caption.monospacedDigit())
-                        .foregroundStyle(OS1VisualStyle.textFaint)
-                        .padding(.top, 2)
-                }
-            }
-            .padding(.vertical, 3)
-            .contentShape(Rectangle())
+        if let onOpen {
+            Button(action: onOpen) { content }
+                .buttonStyle(.plain)
+                .accessibilityLabel(accessibilityLabel)
+        } else {
+            content
         }
-        .buttonStyle(.plain)
-        .accessibilityLabel(accessibilityLabel)
+    }
+
+    private var content: some View {
+        HStack(alignment: .top, spacing: 10) {
+            Image(systemName: row.kind == .pullRequest
+                ? "arrow.triangle.pull"
+                : "point.3.connected.trianglepath.dotted")
+                .font(.callout)
+                .foregroundStyle(OS1VisualStyle.textDim)
+                .padding(.top, 2)
+            VStack(alignment: .leading, spacing: 3) {
+                Text(row.title)
+                    .font(.callout.weight(.medium))
+                    .foregroundStyle(OS1VisualStyle.text)
+                    .lineLimit(2)
+                    .multilineTextAlignment(.leading)
+                Text(verbatim: metaLine)
+                    .font(.caption)
+                    .foregroundStyle(OS1VisualStyle.textFaint)
+                    .lineLimit(1)
+            }
+            Spacer(minLength: 0)
+            if let diff = diffLabel {
+                Text(verbatim: diff)
+                    .font(.caption.monospacedDigit())
+                    .foregroundStyle(OS1VisualStyle.textFaint)
+                    .padding(.top, 2)
+            }
+        }
+        .padding(.vertical, 3)
+        .contentShape(Rectangle())
     }
 
     /// Who, where and which one, on the line the title does not need.
