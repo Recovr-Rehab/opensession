@@ -42,7 +42,7 @@ export function ReviewRail({
   onRefresh,
   onMerge,
   merging,
-  confirmMerge,
+  mergeScheduled,
   mergeError,
   onOpenFile,
   onOpenFiles,
@@ -70,7 +70,7 @@ export function ReviewRail({
   onRefresh: () => Promise<void> | void;
   onMerge?: () => void;
   merging?: boolean;
-  confirmMerge?: boolean;
+  mergeScheduled?: boolean;
   mergeError?: string | null;
   /** Reveal one file in the Files changed page. */
   onOpenFile: (path: string) => void;
@@ -116,7 +116,7 @@ export function ReviewRail({
           onRefresh={onRefresh}
           onMerge={onMerge}
           merging={merging}
-          confirmMerge={confirmMerge}
+          mergeScheduled={mergeScheduled}
         />
         {mergeError && <p className="m-0 px-2 pt-1 text-supporting text-red">{mergeError}</p>}
       </RailSection>

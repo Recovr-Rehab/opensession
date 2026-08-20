@@ -33,7 +33,7 @@ export function GitStatusRows({
   onRefresh,
   onMerge,
   merging,
-  confirmMerge,
+  mergeScheduled,
 }: {
   git: GitStatusInfo | null;
   pr: PrDetails | null;
@@ -43,7 +43,7 @@ export function GitStatusRows({
   onRefresh: () => Promise<void> | void;
   onMerge?: () => void;
   merging?: boolean;
-  confirmMerge?: boolean;
+  mergeScheduled?: boolean;
 }) {
   const runner = useGitTaskRunner({ sessionId, repo, send, onRefresh });
   const { prompted, error } = runner;
@@ -78,10 +78,10 @@ export function GitStatusRows({
           <button
             className={GIT_ACTION}
             onClick={onMerge}
-            disabled={merging}
+            disabled={merging || mergeScheduled}
             title="Squash and merge this pull request"
           >
-            {merging ? "Merging…" : confirmMerge ? "Confirm merge" : "Merge"}
+            {merging ? "Merging…" : mergeScheduled ? "Merge scheduled" : "Merge"}
           </button>
         ) : undefined),
     });

@@ -57,6 +57,14 @@ import { Spinner } from "../ui/spinner";
 import { Skeleton, SkeletonBar } from "../ui/state";
 import { cn } from "../ui/cn";
 import { useShortcutLabel } from "../hooks/useShortcutBindings";
+import { useDeferredMergePhase } from "../hooks/useDeferredMerge";
+import {
+	cancelDeferredMerge,
+	deferredMergeKey,
+	MERGE_UNDO_DELAY_MS,
+	scheduleDeferredMerge,
+} from "../lib/deferred-merge";
+import { dismissToast, toast } from "../ui/toast";
 import { BrandMark } from "./BrandTile";
 import { PrChecksPopover } from "./PrChecksPopover";
 import { PrSeriesRows } from "./PrSeriesRows";
@@ -244,10 +252,10 @@ interface Props {
 	 *   closed.
 	 * - "summary" renders the same two facts as rows for the workspace summary
 	 *   card: which PR, and where it stands with its one action. It is a
-	 *   variant rather than a copy because everything behind that action —
-	 *   headline derivation, the stack merge plan, confirm-then-merge, the
-	 *   prompt-the-session paths, busy state — is this component's, and a
-	 *   second implementation of it is a second thing that can be wrong about
+	 *   variant rather than a copy because everything behind that action
+	 *   belongs to this component: headline derivation, the stack merge plan,
+	 *   deferred merge, the prompt-the-session paths, and busy state. A second
+	 *   implementation is a second thing that can be wrong about
 	 *   whether a merge is in flight.
 	 */
 	variant?: "bar" | "header" | "summary";
@@ -284,13 +292,11 @@ interface PrBarButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElement>
 		| "purple-dashed"
 		| "solid";
 	icon?: React.ReactNode;
-	confirm?: boolean;
 }
 
 function PrBarButton({
 	tone,
 	icon,
-	confirm,
 	className = "",
 	children,
 	...props
@@ -329,7 +335,6 @@ function PrBarButton({
 				// two things. Icon-only callers override px themselves, so this
 				// never lands on a lone glyph.
 				icon && "gap-1 pl-[6.5px]",
-				confirm && "outline-2 outline-[color-mix(in_srgb,var(--green)_45%,transparent)] outline-offset-1",
 				className,
 			)}
 			{...props}
@@ -590,10 +595,11 @@ export function PrStatusBar({
 	});
 	const pr = prResource.data ?? null;
 	const git = gitResource.data ?? null;
+	const mergeKey = deferredMergeKey(pr?.url);
+	const mergePhase = useDeferredMergePhase(mergeKey);
 	const loaded =
 		!prResource.isLoading && (Boolean(promoted) || !gitResource.isLoading);
 	const [busy, setBusy] = useState<string | null>(null);
-	const [confirmMerge, setConfirmMerge] = useState(false);
 	const [error, setError] = useState<string | null>(null);
 	const [isArchived, setIsArchived] = useState(!!archived);
 	const [prompted, setPrompted] = useState<string | null>(null);
@@ -717,16 +723,27 @@ export function PrStatusBar({
 			: null;
 
 	function handleMerge() {
-		if (!confirmMerge) {
-			setConfirmMerge(true);
-			setTimeout(() => setConfirmMerge(false), 4000);
-			return;
-		}
-		setConfirmMerge(false);
-		run("merge", () =>
-			stackMerge
-				? mergePrStackApi(sessionId, "squash", targetRepo, targetBranch)
-				: mergePrApi(sessionId, "squash", targetRepo, targetBranch),
+		if (!mergeKey || mergePhase !== "idle" || busy) return;
+		let toastId: number | null = null;
+		const handle = scheduleDeferredMerge(mergeKey, async () => {
+			if (toastId !== null) dismissToast(toastId);
+			await run("merge", () =>
+				stackMerge
+					? mergePrStackApi(sessionId, "squash", targetRepo, targetBranch)
+					: mergePrApi(sessionId, "squash", targetRepo, targetBranch),
+			);
+		});
+		if (!handle) return;
+		toastId = toast(
+			stackMerge ? "Stack merge starts in 5 seconds" : "Merge starts in 5 seconds",
+			{
+				duration: MERGE_UNDO_DELAY_MS + 1000,
+				dismissOnClick: false,
+				action: {
+					label: "Undo",
+					onClick: () => cancelDeferredMerge(handle),
+				},
+			},
 		);
 	}
 
@@ -970,14 +987,15 @@ export function PrStatusBar({
 						Create PR
 					</PrBarButton>
 				) : null;
-			case "ready":
+			case "ready": {
+				const mergeScheduled = mergePhase === "scheduled";
+				const merging = mergePhase === "running" || busy === "merge";
 				return (
 					<PrBarButton
 						className={actionBtn}
 						tone="green"
-						confirm={confirmMerge}
-						icon={!busy && !confirmMerge ? <IconGitMerge size={18} /> : undefined}
-						disabled={!!busy}
+						icon={!merging && !mergeScheduled ? <IconGitMerge size={18} /> : undefined}
+						disabled={!!busy || mergePhase !== "idle"}
 						onClick={handleMerge}
 						title={
 							stackMerge
@@ -987,22 +1005,23 @@ export function PrStatusBar({
 								: "Squash and merge this PR into its base branch"
 						}
 					>
-						{busy === "merge"
+						{merging
 							? stackMerge
 								? "Merging stack…"
 								: "Merging…"
-							: confirmMerge
-								? "Confirm merge"
+							: mergeScheduled
+								? "Merge scheduled"
 								: stackMerge
 									? "Merge stack"
 									: "Merge"}
-						{stackMerge && busy !== "merge" && (
+						{stackMerge && !merging && (
 							<span className="ml-1.5 rounded-full bg-white/20 px-1.5 tabular-nums">
 								{stackMerge.layers.length}
 							</span>
 						)}
 					</PrBarButton>
 				);
+			}
 			default:
 				return null;
 		}

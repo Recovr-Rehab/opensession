@@ -51,7 +51,7 @@ import {
 } from "../lib/api";
 import { Button } from "../ui/button";
 import { Checkbox } from "../ui/checkbox";
-import { toast } from "../ui/toast";
+import { dismissToast, toast } from "../ui/toast";
 import type { FileDiffMetadata } from "@pierre/diffs";
 import {
   CommentableDiff,
@@ -118,6 +118,13 @@ import { PrFileTree } from "./pr/PrFileTree";
 import { reviewDiffLoadPolicy } from "../lib/review-diff";
 import { BrandMark } from "./BrandTile";
 import { useCopy } from "../ui/copy";
+import { useDeferredMergePhase } from "../hooks/useDeferredMerge";
+import {
+  cancelDeferredMerge,
+  deferredMergeKey,
+  MERGE_UNDO_DELAY_MS,
+  scheduleDeferredMerge,
+} from "../lib/deferred-merge";
 
 // Re-exported so existing importers of these (formerly local) helpers keep working.
 export {
@@ -423,6 +430,10 @@ export function PrPanel({
   const contextRepo = useMarkdownRepo();
   const markdownRepo = previewTarget?.repo || active?.repo || contextRepo;
   const [pr, setPr] = useState<PrDetails | null>(null);
+  const mergeKey = deferredMergeKey(pr?.url);
+  const mergePhase = useDeferredMergePhase(mergeKey);
+  const merging = mergePhase === "running";
+  const mergeScheduled = mergePhase === "scheduled";
   const [git, setGit] = useState<GitStatusInfo | null>(null);
   const [loadedDiff, setDiff] = useState<PrDiffData | null>(null);
   const diff = loadedDiff?.headRefOid === pr?.headRefOid ? loadedDiff : null;
@@ -452,8 +463,6 @@ export function PrPanel({
   const [submitting, setSubmitting] = useState(false);
   const [reviewError, setReviewError] = useState<string | null>(null);
   const [reviewDone, setReviewDone] = useState<string | null>(null);
-  const [merging, setMerging] = useState(false);
-  const [confirmMerge, setConfirmMerge] = useState(false);
   const [mergeError, setMergeError] = useState<string | null>(null);
   const [closing, setClosing] = useState(false);
   const [confirmClose, setConfirmClose] = useState(false);
@@ -1044,36 +1053,39 @@ export function PrPanel({
     }
   }
 
-  // Two-click confirm guards against accidental merges (this mutates the repo).
-  async function handleMerge() {
-    if (!confirmMerge) {
-      setConfirmMerge(true);
-      setMergeError(null);
-      setTimeout(() => setConfirmMerge(false), 4000);
-      return;
-    }
-    setConfirmMerge(false);
-    setMerging(true);
+  function handleMerge() {
+    if (!mergeKey || mergePhase !== "idle") return;
     setMergeError(null);
     const actionTargetKey = loadTargetKey;
-    try {
-      if (previewTarget)
-        await mergePrPreviewApi(
-          previewTarget.repo,
-          previewTarget.branch,
-          "squash",
-        );
-      else await mergePrApi(sessionId, "squash", active?.repo, active?.branch);
-      if (actionTargetKey === activeLoadTargetRef.current) await load(true);
-    } catch (e: any) {
-      if (actionTargetKey === activeLoadTargetRef.current) {
-        const message = e.message || "Merge failed";
-        setMergeError(message);
-        toast(message);
+    let toastId: number | null = null;
+    const handle = scheduleDeferredMerge(mergeKey, async () => {
+      if (toastId !== null) dismissToast(toastId);
+      try {
+        if (previewTarget)
+          await mergePrPreviewApi(
+            previewTarget.repo,
+            previewTarget.branch,
+            "squash",
+          );
+        else await mergePrApi(sessionId, "squash", active?.repo, active?.branch);
+        if (actionTargetKey === activeLoadTargetRef.current) await load(true);
+      } catch (e: any) {
+        if (actionTargetKey === activeLoadTargetRef.current) {
+          const message = e.message || "Merge failed";
+          setMergeError(message);
+          toast(message);
+        }
       }
-    } finally {
-      setMerging(false);
-    }
+    });
+    if (!handle) return;
+    toastId = toast("Merge starts in 5 seconds", {
+      duration: MERGE_UNDO_DELAY_MS + 1000,
+      dismissOnClick: false,
+      action: {
+        label: "Undo",
+        onClick: () => cancelDeferredMerge(handle),
+      },
+    });
   }
 
   async function handleClose() {
@@ -1592,7 +1604,7 @@ export function PrPanel({
       onRefresh={load}
       onMerge={handleMerge}
       merging={merging}
-      confirmMerge={confirmMerge}
+      mergeScheduled={mergeScheduled}
       mergeError={mergeError}
       onOpenFile={scrollToFile}
       onOpenFiles={() => setPage("files")}
@@ -2002,15 +2014,17 @@ export function PrPanel({
                 ? "ml-auto"
                 : undefined
             }
-            icon={!merging && !confirmMerge ? <IconGitMerge size={18} /> : undefined}
-            disabled={merging}
+            icon={!merging && !mergeScheduled ? <IconGitMerge size={18} /> : undefined}
+            disabled={merging || mergeScheduled}
             onClick={handleMerge}
             title="Squash and merge this pull request"
           >
             {merging
               ? "Merging…"
-              : confirmMerge
-                ? "Confirm merge"
+              : mergeScheduled
+                ? headerCompact
+                  ? "Scheduled"
+                  : "Merge scheduled"
                 : headerCompact
                   ? "Merge"
                   : "Squash and merge"}
@@ -2067,14 +2081,13 @@ export function PrPanel({
                 {canMergeAfterReview && (
                   <Menu.Item
                     onClick={handleMerge}
-                    closeOnClick={confirmMerge}
-                    disabled={merging}
+                    disabled={merging || mergeScheduled}
                   >
                     <IconGitMerge size={18} className={MENU_ICON} />
                     {merging
                       ? "Merging…"
-                      : confirmMerge
-                        ? "Confirm squash and merge"
+                      : mergeScheduled
+                        ? "Merge scheduled"
                         : "Squash and merge"}
                   </Menu.Item>
                 )}
