@@ -10,6 +10,7 @@ protocol SessionSocket: AnyObject {
     func disconnect()
     func watch(sessionId: String, resume: TranscriptResumeCursor?)
     func setAway(_ away: Bool)
+    func setTyping(sessionId: String, typing: Bool)
     func loadHistory(sessionId: String, beforeOffset: Int, beforeRev: String?)
     func loadHistory(sessionId: String, beforeSeq: Int, limit: Int?)
     func loadWholeHistory(sessionId: String)
@@ -124,6 +125,11 @@ final class OS1Socket: SessionSocket {
     /// expires, which is too long for a normal focus transition.
     func setAway(_ away: Bool) {
         send(["type": "away", "away": away])
+    }
+
+    /// Short-lived composer activity. The server expires it unless refreshed.
+    func setTyping(sessionId: String, typing: Bool) {
+        send(["type": "typing", "sessionId": sessionId, "typing": typing])
     }
 
     /// Page one window of earlier history (arrives as transcript_history).

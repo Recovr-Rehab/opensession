@@ -634,7 +634,7 @@ export function App(
 		useState(firstMileComplete);
 	const auth = useAuthStatus();
 	const currentUser = useCurrentUser();
-	const { connected, send, addHandler } = useWebSocket();
+	const { connected, send, setTyping, addHandler } = useWebSocket();
 	const sessionsRef = useRef(sessions);
 	sessionsRef.current = sessions;
 	type PendingCreateDraft = {
@@ -4098,6 +4098,7 @@ export function App(
 					rememberArchived([viewerSession.id]);
 				}}
 				send={socket.send}
+				setTyping={socket.setTyping}
 				addHandler={socket.addHandler}
 				connected={socket.connected}
 				initialPending={pendingInitialPrompts[viewerSession.id]}
@@ -5070,7 +5071,7 @@ export function App(
 								) : (
 									renderSessionPane(
 										currentSession,
-										{ connected, send, addHandler },
+										{ connected, send, setTyping, addHandler },
 										true,
 										false,
 									)

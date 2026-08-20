@@ -47,7 +47,7 @@ import { clampV2InitEntries } from "./transcript-wire";
 import { MAX_UPLOAD_BYTES, WS_MAX_PAYLOAD_BYTES, asDataUrlList, parseImageDataUrls } from "./uploads";
 import { githubReconnectRequired } from "./github-auth";
 import { refreshWebIdentity } from "./web-auth";
-import { BOOT_ID, allClients, broadcastToAll, broadcastToSession, globalPresenceFrame, joinSession, leaveSession, markClientSeen, setClientAway } from "./ws-hub";
+import { BOOT_ID, allClients, broadcastToAll, broadcastToSession, globalPresenceFrame, joinSession, leaveSession, markClientSeen, setClientAway, setClientTyping } from "./ws-hub";
 import { existsSync, readFileSync, statSync, watch } from "fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
@@ -484,6 +484,12 @@ export const websocketHandlers: WebSocketHandler<WSClientData> = {
 					// ended one while nobody was here (reply-suggestions.ts).
 					maybeSuggestRepliesOnReturn(returnedTo, ws.data?.user || undefined);
 				}
+				break;
+			}
+
+			case "typing": {
+				if (typeof msg.sessionId !== "string") break;
+				setClientTyping(ws, msg.sessionId, msg.typing === true);
 				break;
 			}
 

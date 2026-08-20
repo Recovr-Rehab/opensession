@@ -32,6 +32,15 @@ final class ServerEventTests: XCTestCase {
         XCTAssertEqual(viewers, ["Kent", "Michiel"])
     }
 
+    func testTypingDecodesUsers() {
+        let json = #"{"type":"typing","sessionId":"bks-1","users":["Grant","Kent"]}"#
+        guard case .typing(let id, let users) = parse(json) else {
+            return XCTFail("expected .typing")
+        }
+        XCTAssertEqual(id, "bks-1")
+        XCTAssertEqual(users, ["Grant", "Kent"])
+    }
+
     /// Everyone left: the frame still arrives, with an empty list.
     func testPresenceWithNoViewers() {
         guard case .presence(_, let viewers) =

@@ -24,6 +24,10 @@ const IDLE_MS = 8 * 60_000;
 // socket out, so a person reading and scrolling re-sends "still here" at this
 // cadence — comfortably inside the server's window, rare enough to be free.
 const ACTIVE_REFRESH_MS = 60_000;
+// Composer activity is a short lease, refreshed before the server's 4s expiry.
+// A pause retires it promptly even when the draft stays in the field.
+const TYPING_REFRESH_MS = 2_000;
+const TYPING_IDLE_MS = 3_000;
 // What proves a person is at the keyboard. Passive and cheap: the handler
 // throttles itself to one call a second.
 const ACTIVITY_EVENTS = [
@@ -69,6 +73,12 @@ export function useWebSocket(presenceActive = true) {
   const idleTimer = useRef<ReturnType<typeof setTimeout> | undefined>(
     undefined,
   );
+  const typingRef = useRef<{
+    sessionId: string;
+    active: boolean;
+    lastSent: number;
+    timer?: ReturnType<typeof setTimeout>;
+  }>({ sessionId: "", active: false, lastSent: 0 });
   // Outbound messages issued while the socket wasn't OPEN (wifi switch, server
   // restart, PWA resume): held here and flushed in order on the next onopen, so
   // a transient drop doesn't silently swallow intent like create_session — the
@@ -323,6 +333,18 @@ export function useWebSocket(presenceActive = true) {
       clearTimeout(reconnectTimer.current);
       clearInterval(heartbeat);
       clearTimeout(idleTimer.current);
+      clearTimeout(typingRef.current.timer);
+      const typing = typingRef.current;
+      if (typing.active && wsRef.current?.readyState === WebSocket.OPEN) {
+        try {
+          wsRef.current.send(JSON.stringify({
+            type: "typing",
+            sessionId: typing.sessionId,
+            typing: false,
+          }));
+        } catch {}
+      }
+      typing.active = false;
       for (const type of ACTIVITY_EVENTS)
         window.removeEventListener(type, onActivity);
       document.removeEventListener("visibilitychange", onVisibility);
@@ -381,6 +403,51 @@ export function useWebSocket(presenceActive = true) {
     [connect],
   );
 
+  const setTyping = useCallback((sessionId: string, active: boolean) => {
+    const state = typingRef.current;
+    const ws = wsRef.current;
+    const emit = (id: string, typing: boolean) => {
+      if (ws?.readyState !== WebSocket.OPEN) return;
+      try {
+        ws.send(JSON.stringify({ type: "typing", sessionId: id, typing }));
+      } catch {}
+    };
+
+    if (!active) {
+      clearTimeout(state.timer);
+      if (state.active) emit(state.sessionId, false);
+      state.active = false;
+      state.lastSent = 0;
+      return;
+    }
+
+    if (state.active && state.sessionId !== sessionId) {
+      emit(state.sessionId, false);
+      state.active = false;
+      state.lastSent = 0;
+    }
+    state.sessionId = sessionId;
+    const now = Date.now();
+    if (!state.active || now - state.lastSent >= TYPING_REFRESH_MS) {
+      emit(sessionId, true);
+      state.lastSent = now;
+    }
+    state.active = true;
+    clearTimeout(state.timer);
+    state.timer = setTimeout(() => {
+      const latest = typingRef.current;
+      if (!latest.active || latest.sessionId !== sessionId) return;
+      const socket = wsRef.current;
+      if (socket?.readyState === WebSocket.OPEN) {
+        try {
+          socket.send(JSON.stringify({ type: "typing", sessionId, typing: false }));
+        } catch {}
+      }
+      latest.active = false;
+      latest.lastSent = 0;
+    }, TYPING_IDLE_MS);
+  }, []);
+
   const addHandler = useCallback((handler: (msg: WSServerMessage) => void) => {
     handlersRef.current.push(handler);
     return () => {
@@ -388,5 +455,5 @@ export function useWebSocket(presenceActive = true) {
     };
   }, []);
 
-  return { connected, send, addHandler };
+  return { connected, send, setTyping, addHandler };
 }

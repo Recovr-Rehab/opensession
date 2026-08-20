@@ -14,6 +14,7 @@ import { TranscriptBlocks } from "./TranscriptBlocks";
 import { Composer } from "./Composer";
 import { mergeTranscriptEntries } from "../lib/transcript-state";
 import { CONTINUE_AFTER_FAILURE_PROMPT } from "../lib/continue-run";
+import { otherTypingUsers } from "../lib/typing";
 import { cn } from "../ui/cn";
 import {
 	msgBodyStreaming,
@@ -22,6 +23,7 @@ import {
 	msgRow,
 	msgStreamingRow,
 } from "../lib/msg-classes";
+import { TypingIndicator } from "./TypingIndicator";
 
 interface DeskConversationProps {
 	sessionId: string;
@@ -69,8 +71,9 @@ export function DeskConversation({
 	staleAfterMs,
 	suggestions,
 }: DeskConversationProps) {
-	const { connected, send, addHandler } = useWebSocket(presenceActive);
+	const { connected, send, setTyping, addHandler } = useWebSocket(presenceActive);
 	const [entries, setEntries] = useState<TranscriptEntry[]>([]);
+	const [typingUsers, setTypingUsers] = useState<string[]>([]);
 	const [streamText, setStreamText] = useState("");
 	const [isRunning, setIsRunning] = useState(false);
 	const [pending, setPending] = useState<string | null>(null);
@@ -189,6 +192,9 @@ export function DeskConversation({
 				}
 				case "session_status":
 					setIsRunning(msg.isRunning);
+					break;
+				case "typing":
+					setTypingUsers(otherTypingUsers(msg.users, getCurrentUser()));
 					break;
 				case "stream_start":
 					streamSeqRef.current++;
@@ -457,12 +463,14 @@ export function DeskConversation({
 					</div>
 				)}
 
+				<TypingIndicator users={typingUsers} className="mb-1 px-5" />
 				{/* The session composer itself, so the Desk gets what a session gets:
 				    attachments, dictation, @-mentions, the model and effort pill, and
 				    the same send/queue/steer gestures. */}
 				<Composer
 					draftKey={`desk:${sessionId}`}
 					onSend={handleSend}
+					onTyping={(active) => setTyping(sessionId, active)}
 					placeholder={
 						connected ? placeholder || "Ask your Desk…" : "Not connected"
 					}

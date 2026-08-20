@@ -2615,6 +2615,10 @@ private struct SessionInputBar: View {
     /// scrim's dissolve has to finish, so it ends level with that element.
     private static let barTopPadding: CGFloat = 6
 
+    private var typingLabel: String? {
+        SessionViewModel.typingLabel(viewModel.otherTypingUsers)
+    }
+
     #if os(macOS)
     /// Local key monitor that turns Shift+Return into a newline insert.
     @State private var shiftReturnMonitor: Any?
@@ -2663,6 +2667,14 @@ private struct SessionInputBar: View {
                 AttachedImagesRow(images: viewModel.attachedImages) { image in
                     viewModel.attachedImages.removeAll { $0.id == image.id }
                 }
+            }
+
+            if let typingLabel {
+                Text(typingLabel)
+                    .font(.caption)
+                    .foregroundStyle(OS1VisualStyle.textFaint)
+                    .padding(.horizontal, 12)
+                    .accessibilityAddTraits(.updatesFrequently)
             }
 
             VStack(spacing: 0) {
@@ -2752,8 +2764,11 @@ private struct SessionInputBar: View {
         .onAppear {
             if viewModel.session.neverRan && autoFocusWhenNeverRan { inputFocused = true }
         }
-        // Leaving the session must not leave the mic open.
-        .onDisappear { dictation.stop() }
+        // Leaving the session must not leave the mic or typing status open.
+        .onDisappear {
+            dictation.stop()
+            viewModel.userIsTyping(false)
+        }
         // Reveal (or re-hide) the outbox's pending rows. Re-runs whenever the
         // pending set changes, which is what makes the window per-send rather
         // than a latch that stays open for the rest of the session.
@@ -3237,6 +3252,11 @@ private struct SessionInputBar: View {
                     // also covers sending, which empties the draft and so
                     // takes the pencil off the row here and in the browser.
                     DraftsStore.shared.setText(draft, for: viewModel.session.id)
+                    if inputFocused {
+                        viewModel.userIsTyping(!draft.isEmpty)
+                    } else if draft.isEmpty {
+                        viewModel.userIsTyping(false)
+                    }
                     // Typing is the loudest possible "I'm here".
                     viewModel.userDidInteract()
                     // Starting to write is a statement about where you want to
@@ -3265,6 +3285,9 @@ private struct SessionInputBar: View {
                 .padding(.top, isSingleRow ? 0 : multiLineInset.top)
                 .padding(.bottom, isSingleRow ? 0 : multiLineInset.bottom)
                 .focused($inputFocused)
+                .onChange(of: inputFocused) { _, focused in
+                    if !focused { viewModel.userIsTyping(false) }
+                }
                 // Mac: Return sends; Shift/Option-Return insert a newline. On
                 // iOS the software keyboard's return key just wraps, as before.
                 .onSubmit {

@@ -126,6 +126,8 @@ interface Props {
    */
   value?: string;
   onChange?: (value: string) => void;
+  /** Composer activity for the session's live typing indicator. */
+  onTyping?: (active: boolean) => void;
   /**
    * Uncontrolled mode only: persist the text draft under this key (lib/drafts)
    * so it survives the component unmounting — switching to another session,
@@ -434,6 +436,7 @@ function StopConfirmModal({
 export function Composer({
   value,
   onChange,
+  onTyping,
   draftKey,
   onSend,
   placeholder,
@@ -606,6 +609,7 @@ export function Composer({
   ) {
     const sentPastedIds = new Set(pastedTexts.map((attachment) => attachment.id));
     const consume = () => {
+      onTyping?.(false);
       if (!isControlled) setInnerValue("");
       setPastedTexts((current) =>
         current.filter((attachment) => !sentPastedIds.has(attachment.id)),
@@ -1666,6 +1670,7 @@ export function Composer({
               // effect, which is both later and more reliable than a microtask
               // queued from here (see useFileMentions).
               sessionNames.handleChange(e);
+              onTyping?.(e.currentTarget.value.length > 0);
             }}
             onKeyDown={handleKeyDown}
             onKeyUp={mentions.sync}
@@ -1685,6 +1690,7 @@ export function Composer({
             onFocus={() => setFocused(true)}
             onBlur={() => {
               setFocused(false);
+              onTyping?.(false);
               const remote = pendingRemoteText.current;
               pendingRemoteText.current = null;
               if (remote !== null && (!draftKey || loadDraft(draftKey).text === remote)) {

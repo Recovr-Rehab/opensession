@@ -801,7 +801,9 @@ export type WSClientMessage =
 	// Presence only: this tab went hidden or idle (or came back). The watch is
 	// untouched — the transcript keeps streaming — but an away socket stops
 	// showing this person's face to teammates.
-	| { type: "away"; away: boolean };
+	| { type: "away"; away: boolean }
+	// Short-lived composer activity. The server expires it unless refreshed.
+	| { type: "typing"; sessionId: string; typing: boolean };
 
 export type WSServerMessage =
 	// The protocol core: hello/pong/error/notice, the transcript frames (init/
@@ -809,6 +811,7 @@ export type WSServerMessage =
 	// usage, queue, asks, session_created / workspace_status / model_changed.
 	| ProtocolServerMessage
 	| { type: "presence"; sessionId: string; viewers: string[] }
+	| { type: "typing"; sessionId: string; users: string[] }
 	| {
 			type: "global_presence";
 			viewing: Array<{ user: string; sessionId: string }>;

@@ -348,6 +348,39 @@ final class SessionViewModelTests: XCTestCase {
         XCTAssertTrue(SessionViewModel.otherViewers(["Michiel"], me: "Michiel").isEmpty)
     }
 
+    func testTypingDropsUsAndUsesTheGroupCopy() {
+        let viewModel = makeViewModel()
+        let me = ServerConfig.shared.userName
+        viewModel.handle(.typing(
+            sessionId: "bks-1", users: [me, "Zzz Tester", "Zzz Tester", "Yyy Tester"]
+        ))
+        XCTAssertEqual(viewModel.otherTypingUsers, ["Zzz Tester", "Yyy Tester"])
+        XCTAssertEqual(SessionViewModel.typingLabel(["Grant"]), "Grant is typing…")
+        XCTAssertEqual(
+            SessionViewModel.typingLabel(["Grant", "Kent"]),
+            "Several people are typing…"
+        )
+
+        viewModel.handle(.typing(sessionId: "bks-2", users: ["Ada"]))
+        XCTAssertEqual(viewModel.otherTypingUsers, ["Zzz Tester", "Yyy Tester"])
+    }
+
+    func testComposerTypingSendsStartAndStop() {
+        let socket = MockSocket()
+        let viewModel = SessionViewModel(
+            session: Session(id: "bks-1"),
+            socketFactory: { socket }
+        )
+        viewModel.start()
+        viewModel.handle(.hello(bootId: "boot-1"))
+
+        viewModel.userIsTyping(true)
+        viewModel.userIsTyping(false)
+        XCTAssertEqual(socket.typingFrames.map { $0.typing }, [true, false])
+        XCTAssertEqual(socket.typingFrames.map { $0.sessionId }, ["bks-1", "bks-1"])
+        viewModel.stop()
+    }
+
     /// Presence for another session must not repaint this one's pile.
     func testPresenceForAnotherSessionIsIgnored() {
         let viewModel = makeViewModel()
@@ -2002,6 +2035,7 @@ private final class MockSocket: SessionSocket {
     private(set) var takenQueueIds: [String] = []
     private(set) var reorders: [[String]] = []
     private(set) var awayFrames: [Bool] = []
+    private(set) var typingFrames: [(sessionId: String, typing: Bool)] = []
 
     /// Every earlier-history request, in order — the backlog walk behind
     /// "jump to the start" is a sequence of these.
@@ -2019,6 +2053,9 @@ private final class MockSocket: SessionSocket {
         watchResumes.append(resume)
     }
     func setAway(_ away: Bool) { awayFrames.append(away) }
+    func setTyping(sessionId: String, typing: Bool) {
+        typingFrames.append((sessionId, typing))
+    }
     func loadHistory(sessionId: String, beforeOffset: Int, beforeRev: String?) {
         historyRequests.append(.offset(beforeOffset))
     }

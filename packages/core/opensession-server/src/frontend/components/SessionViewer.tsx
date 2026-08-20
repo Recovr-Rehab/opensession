@@ -125,8 +125,10 @@ import {
 import { latestFeaturedScreenshot } from "../../shared/shipped-change-media";
 import { useBackSwipe } from "../hooks/useBackSwipe";
 import { dedupeViewers, otherViewers } from "../lib/presence";
+import { otherTypingUsers } from "../lib/typing";
 import { personKey, prReviewCompletion } from "../lib/review-queue";
 import { Composer } from "./Composer";
+import { TypingIndicator } from "./TypingIndicator";
 import { ComposerAgents } from "./ComposerAgents";
 import { UsageMeter } from "./UsageMeter";
 import { SchedulePromptButton } from "./SchedulePrompt";
@@ -386,6 +388,7 @@ interface Props {
 	    gracefully stopped an in-flight owned turn — so the parent can toast. */
 	onArchived?: (stoppedRun: boolean) => void;
 	send: (msg: any) => void;
+	setTyping: (sessionId: string, active: boolean) => void;
 	addHandler: (handler: (msg: WSServerMessage) => void) => () => void;
 	connected: boolean;
 	/** Opening prompt shown while a just-created session is still catching up
@@ -819,6 +822,7 @@ export function SessionViewer({
 	onArchive,
 	onArchived,
 	send,
+	setTyping,
 	addHandler,
 	connected,
 	initialPending,
@@ -1281,6 +1285,7 @@ export function SessionViewer({
 		...(session.prs || []).map((r) => `${r.repo}\0${r.branch}`),
 	]);
 	const [viewers, setViewers] = useState<string[]>([]);
+	const [typingUsers, setTypingUsers] = useState<string[]>([]);
 	// The create run is still preparing this session's worktree (new workspaces
 	// announce the session before the slow git work). While true the transcript
 	// and workspace panels show "Waiting for workspace" and sends hold in the
@@ -2683,6 +2688,10 @@ export function SessionViewer({
 				}
 				case "presence":
 					if (msg.sessionId === session.id) setViewers(msg.viewers);
+					break;
+				case "typing":
+					if (msg.sessionId === session.id)
+						setTypingUsers(otherTypingUsers(msg.users, getCurrentUser()));
 					break;
 				case "queue_update":
 					if (msg.sessionId === session.id) {
@@ -6853,6 +6862,10 @@ export function SessionViewer({
 										/>
 									</div>
 								)}
+								<TypingIndicator
+									users={typingUsers}
+									className="mx-auto mb-1 w-full max-w-[calc(var(--session-col)+40px)] px-5"
+								/>
 								<Composer
 									// Uncontrolled: the draft lives in the Composer (persisted
 									// per session via draftKey). Remount on the tab-bar +
@@ -6860,6 +6873,7 @@ export function SessionViewer({
 									key={newSessionSeq ?? 0}
 									draftKey={draftKey}
 									onSend={handleSend}
+									onTyping={(active) => setTyping(session.id, active)}
 									images={images}
 									onImagesChange={setImages}
 									files={files}

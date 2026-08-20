@@ -83,6 +83,7 @@ final class SessionViewModel {
     /// already know is there), and a person watching from two devices appears
     /// once, since presence carries one name per socket.
     private(set) var otherViewers: [String] = []
+    private(set) var otherTypingUsers: [String] = []
     private(set) var pendingQuestion: AskQuestion?
     /// Quick replies for the last settled turn. A pick fills the draft; it
     /// never sends, because the server's suggestion is still only a guess.
@@ -513,6 +514,7 @@ final class SessionViewModel {
     }
 
     private func stopConnection() {
+        stopTyping()
         stopped = true
         replySuggestions = []
         outbox.stopObserving(sessionId: session.id)
@@ -658,6 +660,14 @@ final class SessionViewModel {
         }
     }
 
+    static func typingLabel(_ users: [String]) -> String? {
+        switch users.count {
+        case 0: nil
+        case 1: "\(users[0]) is typing…"
+        default: "Several people are typing…"
+        }
+    }
+
     private static func firstName(_ name: String) -> String {
         name.trimmingCharacters(in: .whitespacesAndNewlines)
             .split(separator: " ")
@@ -670,11 +680,47 @@ final class SessionViewModel {
     private var lastPresenceRefresh = Date.distantPast
     /// Rare enough to cost nothing on a session someone reads for an hour.
     private static let presenceRefreshInterval: TimeInterval = 45
+    private static let typingRefreshInterval: TimeInterval = 2
+    private static let typingIdleInterval: TimeInterval = 3
+    private var typingActive = false
+    private var lastTypingSent = Date.distantPast
+    private var typingStopTask: Task<Void, Never>?
+
+    /// Composer input refreshes a short typing lease. A pause clears it even
+    /// while the unsent draft remains in the field.
+    func userIsTyping(_ active: Bool) {
+        guard active else {
+            stopTyping()
+            return
+        }
+        guard !stopped, let socket, connectionState == .connected else { return }
+        let now = Date()
+        if !typingActive || now.timeIntervalSince(lastTypingSent) >= Self.typingRefreshInterval {
+            socket.setTyping(sessionId: session.id, typing: true)
+            lastTypingSent = now
+        }
+        typingActive = true
+        typingStopTask?.cancel()
+        typingStopTask = Task { [weak self] in
+            try? await Task.sleep(for: .seconds(Self.typingIdleInterval))
+            guard !Task.isCancelled else { return }
+            self?.stopTyping()
+        }
+    }
+
+    private func stopTyping() {
+        typingStopTask?.cancel()
+        typingStopTask = nil
+        if typingActive { socket?.setTyping(sessionId: session.id, typing: false) }
+        typingActive = false
+        lastTypingSent = .distantPast
+    }
 
     /// The app is no longer active. The watch stays so the transcript keeps
     /// streaming, but our face comes off the selected session.
     func appDidEnterBackground() {
         guard !stopped else { return }
+        stopTyping()
         isAway = true
         // Coming back has to re-claim the face immediately, not wait out the
         // refresh interval below.
@@ -1264,8 +1310,10 @@ final class SessionViewModel {
         loadingEarlier = false
         endJump(landed: false)
         // Presence is only true while the socket that reported it is up; the
-        // rejoin brings a fresh frame.
+        // rejoin brings fresh frames.
         otherViewers = []
+        otherTypingUsers = []
+        stopTyping()
         reconnectTask?.cancel()
         reconnectTask = Task { [weak self] in
             try? await Task.sleep(for: .seconds(2))
@@ -1508,6 +1556,9 @@ final class SessionViewModel {
 
         case .presence(let id, let viewers) where id == session.id:
             otherViewers = Self.otherViewers(viewers, me: ServerConfig.shared.userName)
+
+        case .typing(let id, let users) where id == session.id:
+            otherTypingUsers = Self.otherViewers(users, me: ServerConfig.shared.userName)
 
         // The create flow's frame carries no session id — that socket is
         // already scoped to this conversation — so an unaddressed one is ours.

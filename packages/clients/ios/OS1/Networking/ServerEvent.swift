@@ -32,6 +32,8 @@ enum ServerEvent: Sendable {
     /// Everyone with this session open right now, by display name. One entry
     /// per socket, so the same person can appear twice (two devices).
     case presence(sessionId: String, viewers: [String])
+    /// People actively composing in this session, once per person.
+    case typing(sessionId: String, users: [String])
     /// Who is looking at what, app-wide — one entry per PERSON (the server
     /// resolves a two-device teammate to their most recent session). Broadcast
     /// to every client on change, and once at the handshake.
@@ -113,6 +115,9 @@ enum ServerEvent: Sendable {
         case "presence":
             guard let id = frame.sessionId else { return .ignored }
             return .presence(sessionId: id, viewers: frame.viewers ?? [])
+        case "typing":
+            guard let id = frame.sessionId else { return .ignored }
+            return .typing(sessionId: id, users: frame.users ?? [])
         case "global_presence":
             return .globalPresence(viewing: (frame.viewing ?? []).compactMap {
                 guard let user = $0.user, let sessionId = $0.sessionId else { return nil }
@@ -419,6 +424,7 @@ private struct RawFrame: Decodable {
     let model: String?
     let by: String?
     let viewers: [String]?
+    let users: [String]?
     let viewing: [WireViewing]?
     let queued: [WireQueueItem]?
     let steered: [WireQueueItem]?
