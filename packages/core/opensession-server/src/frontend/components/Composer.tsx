@@ -54,6 +54,8 @@ import {
   IconStopSquare,
   IconPencil,
   IconTrash,
+  IconFile,
+  IconArrowUpToLine,
 } from "./icons";
 import {
   composerBox,
@@ -112,7 +114,12 @@ import { getVimModePref, onVimModeChanged } from "../lib/vim-pref";
 import { useVimMode } from "../hooks/useVimMode";
 import { useIsPhone } from "../hooks/useIsPhone";
 import { motion, AnimatePresence } from "motion/react";
-import { composerMorph, composerChipMotion } from "../ui/motion";
+import {
+  composerMorph,
+  composerChipMotion,
+  duration,
+  ease,
+} from "../ui/motion";
 import { ModelEffortSelect, shortModelLabel } from "./ModelEffortSelect";
 import type { SessionUsage } from "../lib/types";
 
@@ -240,6 +247,9 @@ interface Props {
    * composer's attachment path. Omit both props for Composer-owned staging. */
   staging?: StagingCount;
   onAddAttachments?: (picked: FileList | File[]) => void | Promise<void>;
+  /** Paints the composer as the active file target. A parent may still accept
+   * the actual drop across a larger surface and route the files here. */
+  dropActive?: boolean;
   /** The transcript selection currently attached as ephemeral context. */
   quote?: Quote | null;
   onQuoteClear?: () => void;
@@ -480,6 +490,7 @@ export function Composer({
   onFilesChange,
   staging,
   onAddAttachments,
+  dropActive,
   quote,
   onQuoteClear,
   mentionFetch,
@@ -684,7 +695,8 @@ export function Composer({
     pastedTexts.length > 0 ||
     !!quote ||
     hasAttached;
-  const minimized = isPhone && !focused && !hasContent && !modelMenuOpen;
+  const minimized =
+    isPhone && !dropActive && !focused && !hasContent && !modelMenuOpen;
   const composerIconButtonClass = cn(
     paletteIconBtn,
     minimized && paletteIconBtnRound,
@@ -1475,6 +1487,30 @@ export function Composer({
         onDrop={handleDrop}
         onDragOver={(e) => canAttach && e.preventDefault()}
       >
+        <AnimatePresence initial={false}>
+          {dropActive && canAttach && (
+            <motion.div
+              className="pointer-events-none !absolute -inset-px !z-[7] flex items-center justify-center rounded-[inherit] bg-accent text-on-accent [corner-shape:inherit]"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              transition={{ type: "tween", duration: duration.micro, ease }}
+              aria-hidden="true"
+              data-file-drop-overlay
+            >
+              <div className="flex items-center -space-x-1.5">
+                <IconFile size={26} className="-rotate-6 opacity-70" />
+                <IconArrowUpToLine size={32} className="relative z-[1]" />
+                <IconFile size={26} className="rotate-6 opacity-70" />
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
+        {dropActive && canAttach && (
+          <span className="sr-only" role="status">
+            Drop files to attach
+          </span>
+        )}
         {/* The mic lives in the toolbar, but recording replaces this entire
             surface. VoiceInput portals the active bar here so a positioned
             toolbar cannot trap it at one-row height. */}

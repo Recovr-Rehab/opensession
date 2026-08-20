@@ -6840,29 +6840,6 @@ export function SessionViewer({
 						onDragOverCapture={handleFileDragOver}
 						onDropCapture={handleFileDrop}
 					>
-					{fileDragActive &&
-						createPortal(
-							<>
-								<motion.div
-									className="pointer-events-none fixed inset-0 z-[250] flex flex-col items-center justify-center bg-[color-mix(in_srgb,var(--accent)_16%,rgb(0_0_0/0.66))] px-6 text-center"
-									initial={{ opacity: 0 }}
-									animate={{ opacity: 1 }}
-									transition={{ type: "tween", duration: duration.base, ease }}
-									aria-hidden="true"
-									data-file-drop-overlay
-								>
-									<IconArrowUpToLine size={40} className="text-white" />
-									<div className="mt-4 text-title font-semibold text-white">Add files</div>
-									<div className="mt-1 text-label text-white opacity-80">
-										Drop here to attach them to your message.
-									</div>
-								</motion.div>
-								<span className="sr-only" role="status">
-									Drop files to attach
-								</span>
-							</>,
-							document.body,
-						)}
 					{/* The step lives here rather than on the scroller alone, so the
 					    pills floating beside it inherit it too and stay on the reading
 					    column instead of the middle of the pane. */}
@@ -7274,6 +7251,7 @@ export function SessionViewer({
 									onFilesChange={setFiles}
 									staging={uploadStaging}
 									onAddAttachments={addSessionAttachments}
+									dropActive={fileDragActive}
 									attachmentShortcutActive={focused}
 									quote={quote}
 									onQuoteClear={clearQuote}
