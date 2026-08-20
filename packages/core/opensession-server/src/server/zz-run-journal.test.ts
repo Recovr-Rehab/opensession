@@ -254,7 +254,7 @@ describe("run journal", () => {
 		}
 	});
 
-	it("resets the consecutive recovery fuse after a live turn reattaches", () => {
+	it("resets the consecutive recovery fuse after resumed work progresses", () => {
 		const sessionId = `attached-${crypto.randomUUID()}`;
 		const runKey = `engine-${crypto.randomUUID()}`;
 		const startedAt = new Date().toISOString();
@@ -264,12 +264,25 @@ describe("run journal", () => {
 			expect(started.resumeAttempts).toBe(1);
 			expect(started.lastResumeAt).toBeTruthy();
 
-			const attached = mod.journalMarkRecoveryAttached(started);
-			expect(attached?.resumeAttempts).toBe(0);
-			expect(attached?.lastResumeAt).toBeUndefined();
+			expect(agent.markRecoveryProgress(started, { type: "init" })).toBe(false);
+			expect(started.resumeAttempts).toBe(1);
+			expect(agent.markRecoveryProgress(started, { type: "tool_use" })).toBe(true);
+			expect(started.resumeAttempts).toBe(0);
+			expect(started.lastResumeAt).toBeUndefined();
 			expect(mod.activeRunRecords()[0].resumeAttempts).toBe(0);
 
-			const nextBoot = mod.journalStartRecovery(attached!);
+			// A later model fallback re-journals opts captured before the reset.
+			// The live journal's healthy state must win over those stale fields.
+			mod.journalSet({
+				...started,
+				resumeAttempts: 1,
+				lastResumeAt: new Date().toISOString(),
+				startedAt: new Date().toISOString(),
+			});
+			expect(mod.activeRunRecords()[0].resumeAttempts).toBe(0);
+			expect(mod.activeRunRecords()[0].lastResumeAt).toBeUndefined();
+
+			const nextBoot = mod.journalStartRecovery(started);
 			expect(nextBoot.resumeAttempts).toBe(1);
 		} finally {
 			mod.journalClear(runKey);
@@ -465,6 +478,22 @@ describe("run journal", () => {
 		expect(result.quarantined.some((r) => r.run.runKey === "recursive" && r.reason === "recursive_recovery_kind")).toBe(true);
 	});
 
+	it("accepts interleaved fallback recovery markers with a bounded durable counter", () => {
+		const now = Date.now();
+		const run: mod.ActiveRunRecord = {
+			runKey: "interleaved",
+			osSessionId: "interleaved-session",
+			cwd: "/tmp",
+			kind: "create-resume-fallback-resume",
+			resumeAttempts: 0,
+			firstJournaledAt: new Date(now - 60_000).toISOString(),
+			startedAt: new Date(now).toISOString(),
+		};
+		const result = agent.sanitizeInterruptedRuns([run], now);
+		expect(result.interrupted).toEqual([run]);
+		expect(result.quarantined).toEqual([]);
+	});
+
 	it("rejects expired lineage and exhausted durable resume attempts", () => {
 		const now = Date.now();
 		const base: mod.ActiveRunRecord = {
@@ -489,6 +518,12 @@ describe("run journal", () => {
 		expect(agent.recoveryKind("prompt", "resume")).toBe("prompt-resume");
 		expect(agent.recoveryKind("prompt-resume", "resume")).toBe("prompt-resume");
 		expect(agent.recoveryKind("prompt-resume-rerun", "rerun")).toBe("prompt-rerun");
+		expect(agent.recoveryKind("create-resume-fallback", "resume")).toBe(
+			"create-resume-fallback",
+		);
+		expect(agent.recoveryKind("prompt-resume-fallback-resume", "rerun")).toBe(
+			"prompt-rerun-fallback",
+		);
 		const once = agent.resumeContinuationPrompt("original task");
 		expect(agent.resumeContinuationPrompt(once)).toBe(once);
 		const hidden = agent.restartContinuationPrompt("original task");

@@ -218,9 +218,12 @@ export function journalSet(record: ActiveRunRecord): void {
   journal[record.runKey] = {
     ...record,
     firstJournaledAt:
-      record.firstJournaledAt || prior?.firstJournaledAt || prior?.startedAt || record.startedAt,
-    resumeAttempts: record.resumeAttempts ?? prior?.resumeAttempts,
-    lastResumeAt: record.lastResumeAt ?? prior?.lastResumeAt,
+      prior?.firstJournaledAt || record.firstJournaledAt || prior?.startedAt || record.startedAt,
+    // An existing record is the live source of recovery health. A fallback
+    // may re-journal stale opts captured before model output reset the
+    // consecutive-failure fuse; it must not resurrect the old attempt count.
+    resumeAttempts: prior ? prior.resumeAttempts : record.resumeAttempts,
+    lastResumeAt: prior ? prior.lastResumeAt : record.lastResumeAt,
   };
   writeRunJournal(journal);
   try {
@@ -308,9 +311,10 @@ export function journalStartRecovery(record: ActiveRunRecord): ActiveRunRecord {
   return returned;
 }
 
-/** A live detached turn was successfully reattached. Reboots while the turn
- * keeps running should not exhaust the recovery-attempt fuse: that fuse is for
- * consecutive failed recoveries, not successful adoptions of the same turn. */
+/** A recovered turn was successfully reattached or produced new model work.
+ * Reboots while the turn keeps running should not exhaust the recovery-attempt
+ * fuse: that fuse is for consecutive failed recoveries, not healthy resumptions
+ * of the same turn. */
 export function journalMarkRecoveryAttached(record: ActiveRunRecord): ActiveRunRecord | undefined {
   const journal = readRunJournal();
   const current = journal[record.runKey];

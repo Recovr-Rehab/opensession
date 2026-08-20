@@ -1298,6 +1298,7 @@ export function resumeInterruptedRuns(
           }
           for await (const event of events) {
             if (abandonStoppedRecovery(run)) return;
+            markRecoveryProgress(run, event);
             if (event.type === "done" || event.type === "error") {
               terminalSeen = settleRecovery(run, event) || terminalSeen;
             } else emitRecoveryEvent(run, event);
@@ -1384,6 +1385,7 @@ export function resumeInterruptedRuns(
           }
           for await (const event of events) {
             if (abandonStoppedRecovery(run)) return;
+            markRecoveryProgress(run, event);
             if (event.type === "done" || event.type === "error") {
               terminalSeen = settleRecovery(run, event) || terminalSeen;
               recordRecovery(event.type === "done" ? "ok" : "failed", event.type);
@@ -1504,6 +1506,7 @@ export function resumeInterruptedRuns(
           }
           for await (const event of events) {
             if (abandonStoppedRecovery(run)) return;
+            markRecoveryProgress(run, event);
             if (event.type === "done" || event.type === "error") {
               terminalSeen = settleRecovery(run, event) || terminalSeen;
             } else emitRecoveryEvent(run, event);
@@ -1597,6 +1600,7 @@ export function resumeInterruptedRuns(
             onAskUser: run.osSessionId ? askHandlerFor?.(run.osSessionId) : undefined,
           })) {
             if (abandonStoppedRecovery(run)) return;
+            markRecoveryProgress(run, event);
             if (event.type === "done" || event.type === "error") {
               terminalSeen = settleRecovery(run, event) || terminalSeen;
             } else emitRecoveryEvent(run, event);
@@ -1680,6 +1684,7 @@ export function resumeInterruptedRuns(
           onAskUser: run.osSessionId ? askHandlerFor?.(run.osSessionId) : undefined,
         })) {
           if (abandonStoppedRecovery(run)) return;
+          markRecoveryProgress(run, event);
           if (event.type === "done" || event.type === "error") {
             recoverySettled = settleRecovery(run, event) || recoverySettled;
           } else emitRecoveryEvent(run, event);
@@ -1726,11 +1731,34 @@ export function __setRecoveryQueueWaitMsForTest(ms: number): number {
 export const MAX_BOOT_RESUME_ATTEMPTS = 2;
 export const MAX_RECOVERY_AGE_MS = 24 * 60 * 60 * 1000;
 
-/** Collapse recovery suffixes so a crash during recovery never grows
- * `prompt-resume-resume` (or recursively wraps the same continuation forever). */
+/** Collapse the complete operational suffix chain so recovery after a model
+ * fallback never grows `prompt-resume-fallback-resume`. Keep one fallback
+ * marker for audit/policy consumers, regardless of how many hops preceded the
+ * restart. */
 export function recoveryKind(kind: string | undefined, suffix: "resume" | "rerun"): string {
-  const base = (kind || "run").replace(/(?:(?:-resume|-rerun))+$/g, "");
-  return `${base}-${suffix}`;
+  const current = kind || "run";
+  const chain = current.match(/(?:(?:-resume|-rerun|-fallback))+$/)?.[0] || "";
+  const base = chain ? current.slice(0, -chain.length) : current;
+  return `${base}-${suffix}${chain.includes("-fallback") ? "-fallback" : ""}`;
+}
+
+/** A recovery attempt becomes healthy once the resumed model produces
+ * user-visible work. Reset the consecutive-failure fuse at that point so a
+ * later service restart recovers the live turn rather than mistaking it for a
+ * repeatedly failing boot loop. Transport init and notices do not count. */
+export function markRecoveryProgress(run: ActiveRunRecord, event: StreamEvent): boolean {
+  if (
+    (run.resumeAttempts ?? 0) <= 0 ||
+    (event.type !== "text_chunk" &&
+      event.type !== "tool_use" &&
+      event.type !== "tool_result")
+  ) {
+    return false;
+  }
+  const progressed = journalMarkRecoveryAttached(run);
+  if (!progressed) return false;
+  Object.assign(run, progressed);
+  return true;
 }
 
 /** One boot recovery per owning session, newest journal record wins. Records
@@ -1744,7 +1772,10 @@ export function sanitizeInterruptedRuns(runs: ActiveRunRecord[], now = Date.now(
   const quarantined: QuarantinedRun[] = [];
   for (const run of runs) {
     const recoverySuffixes = run.kind?.match(/-(?:resume|rerun)/g)?.length ?? 0;
-    if (recoverySuffixes > 1) {
+    // Older builds could interleave fallback and recovery markers even when
+    // durable resumeAttempts proved the lineage was bounded. Reject only
+    // legacy recursive records that have no trustworthy attempt counter.
+    if (recoverySuffixes > 1 && run.resumeAttempts === undefined) {
       quarantined.push({ run, reason: "recursive_recovery_kind", notify: true });
       continue;
     }
