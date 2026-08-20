@@ -6,9 +6,9 @@ import { Tooltip } from "../ui/tooltip";
 import { IconX } from "./icons";
 
 /** Per-tone colour, spelled out in full: Tailwind scans source as text, so a
- *  class assembled from the tone name would never be generated. Neutral and
- *  note chips keep an edge where their surfaces need it. Ask uses its green
- *  fill alone for a cleaner label on the matching composer wash. */
+ *  class assembled from the tone name would never be generated. Neutral keeps
+ *  an edge against the plain composer. Note and Ask use their tinted fills
+ *  alone for cleaner labels on the matching composer washes. */
 const CHIP_TONE = {
 	neutral: {
 		box: "border border-line/60 bg-surface text-fg",
@@ -16,7 +16,7 @@ const CHIP_TONE = {
 		remove: "text-faint enabled:hover:text-fg",
 	},
 	note: {
-		box: "border border-[color-mix(in_srgb,var(--yellow-tint)_45%,transparent)] bg-[color-mix(in_srgb,var(--yellow-tint)_18%,transparent)] text-yellow",
+		box: "bg-[color-mix(in_srgb,var(--yellow-tint)_18%,transparent)] text-yellow",
 		icon: "text-yellow",
 		remove: "text-yellow/60 enabled:hover:text-yellow",
 	},
