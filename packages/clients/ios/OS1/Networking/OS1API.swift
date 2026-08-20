@@ -324,6 +324,65 @@ enum OS1API {
         return URL(string: "\(base.absoluteString)/api/reports/\(group)/\(report)/raw")
     }
 
+    // ── Tasks: the shared list agents write to ──────────────────────────────
+
+    /// Every task on this person's list, open ones first.
+    ///
+    /// Asks for all statuses rather than just the open ones, because the
+    /// screen offers to show what is done and a second round trip to reveal
+    /// it would be slower than the list is long.
+    static func todos() async throws -> [TodoItem] {
+        var components = URLComponents()
+        components.queryItems = [
+            URLQueryItem(name: "status", value: "all"),
+            URLQueryItem(name: "user", value: ServerConfig.shared.userName),
+        ]
+        let response: TodoListResponse = try await get(
+            "/api/todos?\(components.percentEncodedQuery ?? "")"
+        )
+        return response.todos
+    }
+
+    /// Add one task, owned by the signed-in person.
+    @discardableResult
+    static func addTodo(text: String) async throws -> TodoItem {
+        let response: TodoResponse = try await post(
+            "/api/todos",
+            body: ["text": text, "user": ServerConfig.shared.userName]
+        )
+        return response.todo
+    }
+
+    /// Move one task between open, done and dropped.
+    @discardableResult
+    static func setTodoStatus(id: String, status: TodoStatus) async throws -> TodoItem {
+        let encoded = id.addingPercentEncoding(
+            withAllowedCharacters: .urlPathAllowed
+        ) ?? id
+        let response: TodoResponse = try await patch(
+            "/api/todos/\(encoded)",
+            body: ["status": status.rawValue, "user": ServerConfig.shared.userName]
+        )
+        return response.todo
+    }
+
+    // ── Feed ────────────────────────────────────────────────────────────────
+
+    /// Recent pull requests across every repo, including ones merged outside
+    /// Open Session.
+    static func recentPrs() async throws -> [RecentPr] {
+        let response: RecentPrsResponse = try await get("/api/recent-prs")
+        return response.prs
+    }
+
+    /// Recent commits for repos that ship without pull requests, from the last
+    /// `days`. The server clamps the window to what it read and says whether
+    /// anything older is left, so the feed can stop offering to widen a window
+    /// that has already reached the end of the history.
+    static func recentCommits(days: Int) async throws -> RecentCommitPage {
+        try await get("/api/recent-commits?days=\(days)")
+    }
+
     /// `@`-mention targets matching a query, for the composer's "Reference a
     /// file" picker. Scoped to the session, so an attached repo's files come
     /// back too (labelled with their repo).

@@ -32,6 +32,19 @@ struct SessionsListView: View {
     @State private var showSupport = false
     @State private var supportQueue = SupportQueueModel()
     #if os(iOS)
+    /// The tools that are lists: what the team shipped and your own tasks.
+    /// Each is pushed onto this stack like a ticket is, for the same reason:
+    /// it is a place you go from the list, not a window over it.
+    @State private var showFeed = false
+    @State private var showTasks = false
+    /// Open tasks, for the row's own number. Cheap to ask for because the
+    /// server reads one small file.
+    @State private var openTaskCount = 0
+    /// A session named by id from one of those screens, parked until the
+    /// screen has closed. They hand back ids rather than sessions because most
+    /// of what they can open is archived, and an archived session is not in
+    /// the live list at all.
+    @State private var pendingToolSessionOpen: String?
     /// The published reports, pushed onto this stack like a ticket is: a
     /// place you go from the list, not a window over it.
     @State private var showReports = false
@@ -327,6 +340,9 @@ struct SessionsListView: View {
                     reportGroupCount = groups.count
                 }
             }
+            // Same shape, same reason: one read, and only so the Tasks row can
+            // say how much is on the list before you open it.
+            .task { await refreshOpenTaskCount() }
             #endif
             .onDisappear {
                 viewModel.stopPolling()
@@ -1001,6 +1017,16 @@ struct SessionsListView: View {
                 .navigationDestination(isPresented: $showReports) {
                     ReportsListView()
                 }
+                .navigationDestination(isPresented: $showFeed) {
+                    FeedView { sessionId in
+                        requestToolSessionOpen(sessionId)
+                    }
+                }
+                .navigationDestination(isPresented: $showTasks) {
+                    TasksView { sessionId in
+                        requestToolSessionOpen(sessionId)
+                    }
+                }
                 // Pushed onto this stack, not thrown over it: a ticket is
                 // somewhere you go from the list, the same as a session, and
                 // a sheet would have covered the list you came from. It can't
@@ -1036,6 +1062,10 @@ struct SessionsListView: View {
                     if env["OS1_OPEN_REPORTS"] != nil {
                         showReports = true
                     }
+                    // Same reason again for the two list tools: each is a row
+                    // a scripted run would have to find and scroll to.
+                    if env["OS1_OPEN_FEED"] != nil { showFeed = true }
+                    if env["OS1_OPEN_TASKS"] != nil { showTasks = true }
                     if env["OS1_OPEN_SETTINGS"] != nil {
                         showSettings = true
                     }
@@ -1093,6 +1123,18 @@ struct SessionsListView: View {
                     guard !shown, let session = pendingCatchUpOpen else { return }
                     pendingCatchUpOpen = nil
                     path.append(session)
+                }
+                // A tool screen and a session share this one stack, so the
+                // push waits for the screen it came from to leave rather than
+                // landing underneath it.
+                .onChange(of: showFeed) { _, shown in
+                    if !shown { consumePendingToolSessionOpen() }
+                }
+                .onChange(of: showTasks) { _, shown in
+                    if !shown {
+                        consumePendingToolSessionOpen()
+                        Task { await refreshOpenTaskCount() }
+                    }
                 }
                 .safeAreaInset(edge: .bottom) {
                     errorBanner
@@ -2414,6 +2456,8 @@ struct SessionsListView: View {
 
             if supportLocation.showsSidebar { plainSidebarRow }
             #if os(iOS)
+            if !isFeedHidden { mobileFeedRow }
+            if !isTasksHidden { mobileTasksRow }
             if supportLocation.showsPage { mobileSupportToolRow }
             if !isReportsHidden && reportGroupCount > 0 { mobileReportsRow }
             #endif
@@ -2739,6 +2783,121 @@ struct SessionsListView: View {
         ))
         .listRowSeparator(.hidden)
         .listRowBackground(Color.clear)
+    }
+
+    /// What the team shipped. Merged pull requests and commits in one list,
+    /// which is what makes it the page you open when you have not decided
+    /// what to work on yet.
+    private var mobileFeedRow: some View {
+        toolRow(
+            title: "Feed",
+            symbol: "shippingbox",
+            count: nil,
+            accessibility: "Open Feed",
+            hides: SidebarTools.feed
+        ) {
+            showFeed = true
+        }
+    }
+
+    /// Your list, and the one any session can add to.
+    private var mobileTasksRow: some View {
+        toolRow(
+            title: "Tasks",
+            symbol: "checklist",
+            count: openTaskCount > 0 ? openTaskCount : nil,
+            accessibility: openTaskCount == 1
+                ? "Open Tasks, 1 open"
+                : "Open Tasks, \(openTaskCount) open",
+            hides: SidebarTools.tasks
+        ) {
+            showTasks = true
+        }
+    }
+
+    /// The shape every tool row shares: glyph, name, an optional number, and
+    /// the one-item menu that puts it away. Built once rather than per row so
+    /// the tools cannot drift apart from each other the way they would if each
+    /// carried its own copy of this.
+    private func toolRow(
+        title: String,
+        symbol: String,
+        count: Int?,
+        accessibility: String,
+        hides id: String,
+        open: @escaping () -> Void
+    ) -> some View {
+        Section {
+            Button(action: open) {
+                HStack(spacing: 9) {
+                    Image(systemName: symbol)
+                        .font(.callout)
+                        .foregroundStyle(OS1VisualStyle.textDim)
+                        .frame(width: 22, height: 22)
+                        .offset(x: 1)
+                    Text(title)
+                        .font(.callout.weight(.medium))
+                        .foregroundStyle(OS1VisualStyle.textDim)
+                    if let count {
+                        Text(verbatim: "\(count)")
+                            .font(.footnote.weight(.medium))
+                            .foregroundStyle(OS1VisualStyle.textFaint)
+                    }
+                    Spacer()
+                }
+                .padding(.vertical, 11)
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel(accessibility)
+            // The same one-item menu the Plain and Reports rows carry, for the
+            // same reason: the row leads somewhere rather than holding state,
+            // and Settings → Appearance brings it back.
+            .contextMenu {
+                Button {
+                    withAnimation(.snappy(duration: 0.28)) {
+                        SidebarTools.setVisible(id, false)
+                    }
+                } label: {
+                    Label("Hide from sidebar", systemImage: "eye.slash")
+                }
+            }
+        }
+        .listRowInsets(EdgeInsets(
+            top: 2, leading: sidebarMargin, bottom: 2, trailing: sidebarMargin
+        ))
+        .listRowSeparator(.hidden)
+        .listRowBackground(Color.clear)
+    }
+
+    /// Push a session one of the tool screens named, now that the screen it
+    /// was named on has gone.
+    private func consumePendingToolSessionOpen() {
+        guard let id = pendingToolSessionOpen else { return }
+        pendingToolSessionOpen = nil
+        Task {
+            guard let session = try? await OS1API.session(id: id) else { return }
+            path.append(session)
+        }
+    }
+
+    private func requestToolSessionOpen(_ id: String) {
+        pendingToolSessionOpen = id
+        showFeed = false
+        showTasks = false
+    }
+
+    private func refreshOpenTaskCount() async {
+        guard let todos = try? await OS1API.todos() else { return }
+        openTaskCount = todos.lazy.filter { $0.status == .open }.count
+    }
+
+    private var isFeedHidden: Bool {
+        SidebarTools.isHidden(SidebarTools.feed, in: hiddenToolsRaw)
+    }
+
+    private var isTasksHidden: Bool {
+        SidebarTools.isHidden(SidebarTools.tasks, in: hiddenToolsRaw)
     }
 
     /// Read off `@AppStorage` rather than `UserDefaults` so hiding the row
