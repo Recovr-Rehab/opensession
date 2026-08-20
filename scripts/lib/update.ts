@@ -41,7 +41,7 @@ import {
 } from "fs";
 import { tmpdir } from "os";
 import { dirname, join } from "path";
-import { OPENSESSION_HOME, REPO_ROOT } from "./paths";
+import { ENV_PATH, OPENSESSION_HOME, REPO_ROOT } from "./paths";
 import { readConfig } from "./config-edit";
 import * as service from "./service";
 import {
@@ -433,14 +433,32 @@ export async function update(opts: UpdateOptions = {}): Promise<number> {
 }
 
 /** The local origin the service should answer on, for the health gate. */
+/** A single value from the service env file (~/.opensession.env). The systemd
+ *  unit and the LaunchAgent load it, and the server reads HOST/PORT from it. */
+function envFileValue(name: string): string | undefined {
+  try {
+    for (const line of readFileSync(ENV_PATH, "utf-8").split("\n")) {
+      const m = line.match(/^\s*([A-Z_][A-Z0-9_]*)=(.*)$/);
+      if (m && m[1] === name) return m[2].trim();
+    }
+  } catch {}
+  return undefined;
+}
+
 async function healthBaseUrl(): Promise<string> {
   const server = ((await readConfig())?.server ?? {}) as Record<
     string,
     unknown
   >;
-  const host = (server.host as string) || "127.0.0.1";
-  const port = Number(server.port) || 3850;
-  return `http://${host === "0.0.0.0" ? "127.0.0.1" : host}:${port}`;
+  // The server takes HOST/PORT from the env file the service loads, ahead of
+  // config, defaulting to 127.0.0.1:3850 (opensession.ts). Probe that same
+  // endpoint; otherwise a healthy update whose env file overrides the port
+  // fails the health check and rolls itself back every time.
+  const host = envFileValue("HOST") || (server.host as string) || "127.0.0.1";
+  const port = Number(envFileValue("PORT") || server.port) || 3850;
+  // A wildcard bind address is not connectable; probe loopback instead.
+  const probeHost = /^(0\.0\.0\.0|::|\[::\])$/.test(host) ? "127.0.0.1" : host;
+  return `http://${probeHost}:${port}`;
 }
 
 /**
