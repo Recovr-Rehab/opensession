@@ -333,8 +333,8 @@ export function FilterPopover({
 							<span className="grow truncate">Hide empty projects</span>
 							<SwitchIndicator on={filter.emptyProjects === "hide"} />
 						</Menu.CheckboxItem>
-						{/* Display preferences stay beside the filters they affect instead
-						    of being duplicated in Settings. Density is desktop only because
+						{/* Display preferences stay beside the filters they affect and also
+						    remain available in Settings. Density is desktop only here because
 						    phone rows keep their touch padding at either value. */}
 						<Menu.Separator />
 						{!isPhone && (

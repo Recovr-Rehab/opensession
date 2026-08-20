@@ -33,6 +33,24 @@ import {
 } from "../../lib/theme";
 import type { FeedDescriptor } from "../../lib/types";
 import {
+	setFilter,
+	useSidebarFilter,
+	type GroupBy,
+} from "../../lib/sidebar-filter";
+import {
+	DENSITY_OPTIONS,
+	getSidebarDensity,
+	onSidebarDensityChanged,
+	setSidebarDensity,
+	type SidebarDensity,
+} from "../../lib/sidebar-density";
+import {
+	getWsTimePref,
+	onWsTimeChanged,
+	setWsTimePref,
+	type WsTimePref,
+} from "../../lib/workspace-time";
+import {
 	PLAIN_ID,
 	SUPPORT_SURFACE_OPTIONS,
 	setSupportSurface,
@@ -44,6 +62,7 @@ import {
 	SettingsGroupLabel,
 	SettingsSection,
 } from "../../ui/settings";
+import { Segmented, SegmentedOption } from "../../ui/segmented";
 import { Switch } from "../../ui/switch";
 import { Tooltip } from "../../ui/tooltip";
 import { Select, SettingRow } from "./shared";
@@ -250,6 +269,115 @@ export function AppearanceSection() {
 					</div>
 				</div>
 			</SettingsSection>
+		</>
+	);
+}
+
+const SIDEBAR_LAYOUT_OPTIONS: Array<{
+	value: string;
+	label: string;
+	groupBy: GroupBy;
+	byProject: boolean;
+}> = [
+	{ value: "inbox", label: "Inbox", groupBy: "inbox", byProject: false },
+	{
+		value: "inbox-project",
+		label: "Inbox · grouped by project",
+		groupBy: "inbox",
+		byProject: true,
+	},
+	{
+		value: "activity",
+		label: "Activity",
+		groupBy: "activity",
+		byProject: false,
+	},
+	{
+		value: "activity-project",
+		label: "Activity · grouped by project",
+		groupBy: "activity",
+		byProject: true,
+	},
+	{ value: "status", label: "Status", groupBy: "status", byProject: false },
+	{
+		value: "status-project",
+		label: "Status · grouped by project",
+		groupBy: "status",
+		byProject: true,
+	},
+];
+
+/** Sidebar layout and display controls. Also available beside the list itself. */
+export function SidebarDisplayRows() {
+	const filter = useSidebarFilter();
+	const layout = SIDEBAR_LAYOUT_OPTIONS.find(
+		(option) =>
+			option.groupBy === filter.groupBy && option.byProject === filter.byProject,
+	)?.value;
+	const [density, setDensity] = useState<SidebarDensity>(getSidebarDensity);
+	useEffect(
+		() => onSidebarDensityChanged(() => setDensity(getSidebarDensity())),
+		[],
+	);
+	const [wsTime, setWsTime] = useState<WsTimePref>(getWsTimePref);
+	useEffect(() => onWsTimeChanged(() => setWsTime(getWsTimePref())), []);
+
+	return (
+		<>
+			<SettingRow
+				title="Layout"
+				control={
+					<Select
+						label="Sidebar layout"
+						value={layout ?? "inbox"}
+						options={SIDEBAR_LAYOUT_OPTIONS}
+						onChange={(value) => {
+							const option = SIDEBAR_LAYOUT_OPTIONS.find(
+								(candidate) => candidate.value === value,
+							);
+							if (option)
+								setFilter({
+									groupBy: option.groupBy,
+									byProject: option.byProject,
+								});
+						}}
+					/>
+				}
+			/>
+			<SettingRow
+				title="Row density"
+				control={
+					<Segmented
+						label="Sidebar row density"
+						value={density}
+						onValueChange={(value) =>
+							setSidebarDensity(value as SidebarDensity)
+						}
+					>
+						{DENSITY_OPTIONS.map(({ value, label, Icon }) => (
+							<SegmentedOption key={value} value={value}>
+								<Icon size={20} />
+								{label}
+							</SegmentedOption>
+						))}
+					</Segmented>
+				}
+			/>
+			<SettingRow
+				title="Show last used time"
+				control={
+					<Select
+						label="Show last used time"
+						value={wsTime}
+						options={[
+							{ value: "off", label: "Off" },
+							{ value: "always", label: "Always" },
+							{ value: "hover", label: "On hover" },
+						]}
+						onChange={setWsTimePref}
+					/>
+				}
+			/>
 		</>
 	);
 }
