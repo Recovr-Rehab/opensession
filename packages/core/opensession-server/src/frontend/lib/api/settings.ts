@@ -72,6 +72,20 @@ export async function setPapercutsRepoEnabled(
 	});
 }
 
+// ── Waitlist (Settings → Waitlist: website access requests) ──
+
+export interface WaitlistEntryDto {
+	email: string;
+	createdAt: string;
+}
+
+export async function fetchWaitlist(): Promise<{
+	entries: WaitlistEntryDto[];
+	slackChannel: string | null;
+}> {
+	return request("/waitlist", { label: "Failed to fetch the waitlist" });
+}
+
 // ── Tool accounts (Settings → Account: personal sign-in per MCP tool) ──
 
 export interface ToolAccountDto {

@@ -21,11 +21,11 @@ import { ProductDemo } from "./ProductDemo";
 import { TellaBackground } from "./TellaBackground";
 
 /**
- * Where a waitlist signup goes: same origin, so whoever serves the site owns
- * the list. `bun run website:dev` handles it in scripts/website-dev.ts and
- * appends each address to a markdown file — no third-party collector yet.
+ * The Open Session server stores signups and notifies the configured #os
+ * Slack channel. Local website development handles the same route itself and
+ * writes the same Markdown format without needing the app server.
  */
-const waitlistEndpoint = "api/waitlist";
+const waitlistEndpoint = "/api/waitlist";
 
 const Agentation = lazy(() =>
 	import("agentation").then((module) => ({ default: module.Agentation })),

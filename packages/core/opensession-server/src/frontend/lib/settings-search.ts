@@ -126,6 +126,7 @@ export const SETTINGS_KEYWORDS: Record<string, string[]> = {
 	storage: ["assets", "s3", "r2", "bucket", "object storage", "cloudflare"],
 	prewarming: ["acceleration", "faster starts", "dependency cache", "preview pool", "warm", "install"],
 	deploys: ["releases", "restart", "version"],
+	waitlist: ["emails", "signups", "requests", "access"],
 	papercuts: ["friction", "annoyances"],
 	audit: ["history", "events", "who did what"],
 };
