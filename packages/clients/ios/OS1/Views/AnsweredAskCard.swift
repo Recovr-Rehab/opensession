@@ -1,10 +1,12 @@
 import SwiftUI
 
 /// A durable receipt for an answer sent through `AskQuestionCard`. It keeps the
-/// question and exact answer in the transcript, while dropping the unpicked
-/// options that only mattered during the decision.
+/// question and every offered option in the transcript, with the exact choice
+/// clearly marked.
 struct AnsweredAskCard: View {
     let ask: AnsweredAsk
+
+    private static let optionLetters = Array("ABCDEFGHIJKLMNOPQRSTUVWXYZ")
 
     private var loneQuestion: AnsweredAsk.Question? {
         ask.questions.count == 1 ? ask.questions.first : nil
@@ -52,7 +54,10 @@ struct AnsweredAskCard: View {
     }
 
     private func questionReceipt(_ question: AnsweredAsk.Question) -> some View {
-        VStack(alignment: .leading, spacing: 8) {
+        let state = AnsweredAsk.state(of: question)
+        let options = question.options ?? []
+
+        return VStack(alignment: .leading, spacing: 8) {
             VStack(alignment: .leading, spacing: 3) {
                 if loneQuestion == nil,
                    let header = question.header,
@@ -67,18 +72,74 @@ struct AnsweredAskCard: View {
                     .fixedSize(horizontal: false, vertical: true)
             }
 
-            Text(question.answer.isEmpty ? "No answer" : question.answer)
-                .font(.subheadline.weight(.medium))
-                .foregroundStyle(OS1VisualStyle.text)
-                .fixedSize(horizontal: false, vertical: true)
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .padding(.horizontal, 10)
-                .padding(.vertical, 8)
-                .background(
-                    OS1VisualStyle.hover,
-                    in: RoundedRectangle(cornerRadius: 7, style: .continuous)
-                )
+            VStack(spacing: 2) {
+                ForEach(Array(options.enumerated()), id: \.offset) { index, option in
+                    choiceRow(
+                        letter: index < Self.optionLetters.count
+                            ? String(Self.optionLetters[index])
+                            : "–",
+                        label: option.label,
+                        description: option.description,
+                        selected: state.selected.contains(option.label)
+                    )
+                }
+                ForEach(Array(state.typed.enumerated()), id: \.offset) { _, answer in
+                    choiceRow(
+                        letter: "–",
+                        label: answer,
+                        description: options.isEmpty ? nil : "Custom answer",
+                        selected: true
+                    )
+                }
+                if question.answer.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                    choiceRow(letter: "–", label: "No answer", selected: true)
+                }
+            }
         }
+        .accessibilityElement(children: .contain)
+    }
+
+    private func choiceRow(
+        letter: String,
+        label: String,
+        description: String? = nil,
+        selected: Bool
+    ) -> some View {
+        HStack(alignment: .firstTextBaseline, spacing: 9) {
+            Text(letter)
+                .font(.caption2)
+                .foregroundStyle(OS1VisualStyle.textFaint)
+                .frame(width: 14, alignment: .leading)
+
+            VStack(alignment: .leading, spacing: 2) {
+                Text(label)
+                    .font(.subheadline.weight(selected ? .semibold : .medium))
+                    .foregroundStyle(selected ? OS1VisualStyle.text : OS1VisualStyle.textDim)
+                    .fixedSize(horizontal: false, vertical: true)
+                if let description, !description.isEmpty {
+                    Text(description)
+                        .font(.footnote)
+                        .foregroundStyle(
+                            selected ? OS1VisualStyle.textDim : OS1VisualStyle.textFaint
+                        )
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            }
+
+            Spacer(minLength: 0)
+            Image(systemName: "checkmark.circle.fill")
+                .font(.footnote.weight(.semibold))
+                .foregroundStyle(OS1VisualStyle.green)
+                .opacity(selected ? 1 : 0)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(.horizontal, 10)
+        .padding(.vertical, 7)
+        .background(
+            selected ? OS1VisualStyle.hover : Color.clear,
+            in: RoundedRectangle(cornerRadius: 7, style: .continuous)
+        )
         .accessibilityElement(children: .combine)
+        .accessibilityLabel(selected ? "\(label), selected" : label)
     }
 }

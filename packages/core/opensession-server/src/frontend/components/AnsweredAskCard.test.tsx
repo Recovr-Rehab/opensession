@@ -31,13 +31,18 @@ test("renders a compact receipt with the question and exact answer", () => {
 	expect(html).toContain("Compact");
 });
 
-test("is read-only and leaves decision-time options out of the receipt", () => {
+test("keeps every option and clearly marks the selected one", () => {
 	const html = renderToStaticMarkup(
 		<AnsweredAskCard record={record} entryId="ask-1" />,
 	);
 
-	expect(html).not.toContain("Detailed");
-	expect(html).not.toContain("A calm read-only card.");
+	expect(html).toContain("Detailed");
+	expect(html).toContain("A calm read-only card.");
+	expect(html).toContain(">A</span>");
+	expect(html).toContain(">B</span>");
+	expect(html).toContain('aria-label="Compact, selected"');
+	expect(html).toContain('aria-label="Detailed"');
+	expect(html).not.toContain('aria-label="Detailed, selected"');
 	expect(html).not.toContain("<button");
 	expect(html).not.toContain("<input");
 });
@@ -89,6 +94,9 @@ test("shows typed and multi-question answers exactly as sent", () => {
 	);
 
 	expect(html).toContain("2 answers sent");
+	expect(html).toContain("Wait");
 	expect(html).toContain("Ship today");
+	expect(html).toContain('aria-label="Ship today, selected"');
+	expect(html).toContain("Custom answer");
 	expect(html).toContain("Kent");
 });
