@@ -153,6 +153,21 @@ export function FilterPopover({
 		<>
 			<div className={BACKDROP} onClick={onClose} />
 			<div className={FILTER_POPOVER} style={{ left, top, width }}>
+				{/* Set order opens a separate screen, so it belongs beside the panel
+				    label rather than among the filters it rearranges. */}
+				<div className="flex items-center justify-between gap-3 px-2 pb-1 pt-0.5">
+					<span className="truncate text-meta font-semibold tracking-[-0.01em] text-faint">
+						View
+					</span>
+					<button
+						type="button"
+						className="-mr-1 flex shrink-0 cursor-pointer select-none items-center gap-1.5 rounded-md px-1.5 py-1 phone:min-h-11 text-meta text-dim hover:bg-hover hover:text-fg"
+						onClick={onCustomize}
+					>
+						<IconSliders size={15} className="shrink-0" />
+						<span>Set order</span>
+					</button>
+				</div>
 				{/* The section mode and project nesting are independent answers. */}
 				<ValueRow
 					label="Group by"
@@ -314,14 +329,6 @@ export function FilterPopover({
 						/>
 					</Menu.Popup>
 				</Menu.Root>
-				<button
-					type="button"
-					className={cn(SETTING_ROW, SETTING_ROW_PRESSABLE, "mt-1 text-fg")}
-					onClick={onCustomize}
-				>
-					<IconSliders size={20} className="shrink-0 text-dim" />
-					<span className="truncate">Sidebar order</span>
-				</button>
 			</div>
 		</>,
 		document.body,
