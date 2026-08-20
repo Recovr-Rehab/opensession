@@ -155,13 +155,13 @@ export function FilterPopover({
 			<div className={FILTER_POPOVER} style={{ left, top, width }}>
 				{/* Set order opens a separate screen, so it belongs beside the panel
 				    label rather than among the filters it rearranges. */}
-				<div className="flex items-center justify-between gap-3 px-2 pb-1 pt-0.5">
-					<span className="truncate text-meta font-semibold tracking-[-0.01em] text-faint">
-						View
+				<div className="flex items-center justify-between gap-3 px-2 pb-1.5 pt-1">
+					<span className="truncate text-item-title font-semibold text-fg">
+						Sidebar
 					</span>
 					<button
 						type="button"
-						className="-mr-1 flex shrink-0 cursor-pointer select-none items-center gap-1.5 rounded-md px-1.5 py-1 phone:min-h-11 text-meta text-dim hover:bg-hover hover:text-fg"
+						className="-mr-0.5 flex shrink-0 cursor-pointer select-none items-center gap-1.5 rounded-md bg-control px-2 py-1 phone:min-h-11 text-label text-dim hover:bg-hover hover:text-fg"
 						onClick={onCustomize}
 					>
 						<IconSliders size={15} className="shrink-0" />
