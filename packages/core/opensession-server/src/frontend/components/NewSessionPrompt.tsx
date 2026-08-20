@@ -361,22 +361,6 @@ export function NewSessionPrompt({
 			ref={attachPromptBody}
 		>
 			{mentions.popup}
-			{/* Attachments lead the prompt, matching the session composer. The
-			    thumbnail row's own 8px bottom margin is then the whole gap to the
-			    first line, instead of the phone field's 160px minimum sitting
-			    between the writing and the picture. */}
-			<ImageThumbs
-				images={images}
-				pending={staging.images}
-				onRemove={onRemoveImage}
-				disabled={disabled}
-			/>
-			<FileChips
-				files={files}
-				pending={staging.files}
-				onRemove={onRemoveFile}
-				disabled={disabled}
-			/>
 			<div className="relative">
 				{sessionPill && (
 					// `composer-hl` stays as a hook: the pill spans inside this
@@ -492,6 +476,18 @@ export function NewSessionPrompt({
 					{...noAutofill}
 				/>
 			</div>
+			<ImageThumbs
+				images={images}
+				pending={staging.images}
+				onRemove={onRemoveImage}
+				disabled={disabled}
+			/>
+			<FileChips
+				files={files}
+				pending={staging.files}
+				onRemove={onRemoveFile}
+				disabled={disabled}
+			/>
 			{/* The ghost tiles are the whole message on screen, and they say
 			    nothing out loud. This is the same news for a reader who cannot
 			    see them. */}

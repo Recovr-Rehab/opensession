@@ -61,7 +61,7 @@ test("attachments share the prompt's scroller", () => {
 
 	expect(html).toContain('aria-label="Open image preview"');
 	expect(html).toContain("notes.txt");
-	expect(html.indexOf('aria-label="Open image preview"')).toBeLessThan(
+	expect(html.indexOf('aria-label="Open image preview"')).toBeGreaterThan(
 		html.indexOf("<textarea"),
 	);
 });
