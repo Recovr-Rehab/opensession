@@ -1068,20 +1068,18 @@ struct SessionView: View {
                         .mask(titleTrailingFade)
                 }
             }
-            // Match the bar's system navigation and actions controls so the
-            // identity reads as another tappable piece of its chrome.
-            //
-            // The semantic glass BUTTON style belongs to the control; never
-            // put `.glassEffect` on this label. That nested a second surface in
-            // the bar's glass group and let menu morphs flatten its controls.
+            // Keep this surface outside the navigation bar's glass morphs.
+            // A glass button here can flatten the system Back control into a
+            // square after the trailing actions menu closes.
             .padding(.leading, 4)
             .padding(.trailing, 10)
             .padding(.vertical, 1)
             .frame(width: 190, alignment: .leading)
             .contentShape(Capsule())
+            .background(OS1VisualStyle.background.opacity(0.7), in: Capsule())
+            .background(.thickMaterial, in: Capsule())
         }
-        .buttonStyle(.glass)
-        .buttonBorderShape(.capsule)
+        .buttonStyle(.plain)
         .tint(.primary)
         .accessibilityLabel("Workspace details")
     }
