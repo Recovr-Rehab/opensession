@@ -240,8 +240,10 @@ create**, configured entirely in the UI: no file editing, no restart.
 1. **Create the app.** Settings → Connections → **GitHub App** opens a wizard
    whose link lands on `github.com/settings/apps/new` pre-filled: a generated,
    likely-unique name, private, no webhook, **Device Flow enabled**, permissions
-   **Contents: Read & write** and **Pull requests: Read & write** (Metadata: Read
-   is automatic). Pick the owner: your personal account, or an organization (a
+   **Contents: Read & write**, **Pull requests: Read & write**, and organization
+   **Members: Read** (Metadata: Read is automatic). The Members permission lets
+   org setup import private memberships into the sign-in roster. Pick the owner:
+   your personal account, or an organization (a
    team's app should be org-owned so the org owns it and can reach org repos).
    On that page, **generate a client secret** and copy it, then create the app.
 2. **Paste the details.** Back in the wizard, paste the **Client ID**, the app

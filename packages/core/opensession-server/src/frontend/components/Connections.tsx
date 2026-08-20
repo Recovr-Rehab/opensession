@@ -554,6 +554,7 @@ function buildGithubAppCreateUrl(name: string, org: string): string {
     webhook_active: "false",
     contents: "write",
     pull_requests: "write",
+    members: "read",
     metadata: "read",
     device_flow_enabled: "true",
   }).toString();
@@ -796,7 +797,8 @@ function GithubAppWizard({
             <div className="text-meta leading-snug text-faint">
               Pre-filled: name{" "}
               <span className="font-mono text-dim">{appName}</span>, permissions
-              (Contents + Pull requests, read &amp; write), private, no webhook.
+              (Contents + Pull requests, read &amp; write; Members, read), private,
+              no webhook.
               Names are unique on GitHub, so tweak it if it's taken.
             </div>
             <Modal.Footer>
