@@ -1709,6 +1709,7 @@ export function NewSession({ onBack, inline, focusSeq, send, addHandler, connect
             <VoiceInput
               className={FOOTER_ICON_BTN}
               disabled={busy}
+              editTargetRef={promptRef}
               onText={(t) => {
                 promptHandle.current?.appendText(t);
                 promptRef.current?.focus();
@@ -1722,9 +1723,12 @@ export function NewSession({ onBack, inline, focusSeq, send, addHandler, connect
                 setTimeout(() => createRef.current(), 0);
               }}
               // The bar covers the card it sits in, so it takes that card's
-              // corner: the inline card's 16px, or the palette shell's 22px.
+              // corner and surface. The modal is glass; the inline card uses
+              // the Composer surface that VoiceInput carries by default.
               overlayClassName={
-                inline ? "rounded-2xl" : "rounded-[calc(22px*var(--rf))]"
+                inline
+                  ? "rounded-2xl"
+                  : "rounded-[calc(22px*var(--rf))] bg-palette-glass [backdrop-filter:var(--popup-blur)]"
               }
             />
 

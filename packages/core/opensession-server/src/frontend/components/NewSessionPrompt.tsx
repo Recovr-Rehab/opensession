@@ -12,6 +12,7 @@ import {
 	fetchSkillMentions,
 } from "../lib/api";
 import { saveDraft, NEW_SESSION_DRAFT_KEY as DRAFT_KEY } from "../lib/drafts";
+import { appendDictation } from "../lib/dictation";
 import { attachingLabel, type StagingCount } from "../lib/attachments";
 import { imageFilesFromPaste, type FileAttachment } from "../lib/images";
 import { insertPastedSessionId } from "../lib/session-url";
@@ -228,9 +229,7 @@ export function NewSessionPrompt({
 		() => ({
 			setText: (next: string) => setText(next),
 			appendText: (add: string) =>
-				setText((prev) =>
-					prev.trim() ? `${prev.replace(/\s+$/, "")} ${add}` : add,
-				),
+				setText((prev) => appendDictation(prev, add)),
 			dropPendingDraftWrite,
 		}),
 		[dropPendingDraftWrite],

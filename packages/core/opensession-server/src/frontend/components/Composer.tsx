@@ -6,6 +6,7 @@ import {
 import type { ModelOption, FileMention, ProviderAccountOption } from "../lib/api";
 import { splitAttachments, imageFilesFromPaste, type FileAttachment } from "../lib/images";
 import { loadDraft, onDraftsChanged, saveDraft } from "../lib/drafts";
+import { appendDictation } from "../lib/dictation";
 import {
   addStaging,
   attachingLabel,
@@ -488,6 +489,7 @@ export function Composer({
   const textareaRef = externalRef ?? internalRef;
   const fileInputRef = useRef<HTMLInputElement>(null);
   const toolbarRef = useRef<HTMLDivElement>(null);
+  const voiceOverlayRef = useRef<HTMLDivElement>(null);
   // Uncontrolled mode (no `value` prop): the draft lives here so keystrokes
   // re-render only the Composer, not the whole parent view. With a `draftKey`
   // it seeds from — and mirrors into — the draft store, so navigating away
@@ -597,6 +599,10 @@ export function Composer({
       opts?: { steer?: boolean },
     ) => boolean | void | Promise<boolean | void>,
     opts?: { steer?: boolean },
+    /** A draft that has not reached state yet, which is what the dictation
+     *  bar's ↑ sends: the transcript and the send land in one gesture, and
+     *  the `setDisplayText` beside it has not committed. */
+    overrideText?: string,
   ) {
     const sentPastedIds = new Set(pastedTexts.map((attachment) => attachment.id));
     const consume = () => {
@@ -605,7 +611,10 @@ export function Composer({
         current.filter((attachment) => !sentPastedIds.has(attachment.id)),
       );
     };
-    const consumed = handler(composePastedText(text, pastedTexts), opts);
+    const consumed = handler(
+      composePastedText(overrideText ?? text, pastedTexts),
+      opts,
+    );
     if (consumed instanceof Promise) {
       void consumed.then((result) => {
         if (result === true) consume();
@@ -615,9 +624,15 @@ export function Composer({
     }
   }
   const outgoingText = composePastedText(text, pastedTexts);
-  const isSendDisabled =
-    (typeof sendDisabled === "function" ? sendDisabled(outgoingText) : sendDisabled) ||
-    isStaging(activeStaging);
+  /** Whether a given draft may be sent right now. The dictation bar asks about
+   *  a draft it is about to write, so the question takes the text. */
+  const sendBlockedFor = (draft: string) =>
+    !!(
+      (typeof sendDisabled === "function"
+        ? sendDisabled(composePastedText(draft, pastedTexts))
+        : sendDisabled) || isStaging(activeStaging)
+    );
+  const isSendDisabled = sendBlockedFor(text);
   const imgs = images || [];
   const fls = files || [];
   // Notes accept images but not arbitrary files: images remain team-visible,
@@ -1243,11 +1258,11 @@ export function Composer({
   }, [displayText]);
 
   // Dictated text lands at the end of the draft (with a joining space) and
-  // focus returns to the textarea so you can touch it up and send.
+  // focus returns to the textarea so you can touch it up and send. Appending
+  // rather than replacing is what lets someone keep ✓, read the transcript,
+  // and press the mic again to add to it.
   function insertDictation(t: string) {
-    const next = displayText.trim()
-      ? `${displayText.replace(/\s+$/, "")} ${t}`
-      : t;
+    const next = appendDictation(displayText, t);
     setDisplayText(next);
     queueMicrotask(() => {
       const el = textareaRef.current;
@@ -1256,6 +1271,22 @@ export function Composer({
         el.selectionStart = el.selectionEnd = next.length;
       }
     });
+  }
+
+  /** The dictation bar's ↑: the same append, sent as it stands. What leaves is
+   *  the CANONICAL draft (a session reference is an id there and a title in
+   *  the field), handed to `fireSend` directly because the state write beside
+   *  it has not committed yet. A draft that cannot be sent (offline, a host
+   *  that vetoes it) still keeps the text, so nothing dictated is lost. */
+  function sendDictation(t: string) {
+    insertDictation(t);
+    const nextCanonical = appendDictation(text, t);
+    if (disabled || sendBlockedFor(nextCanonical)) return;
+    fireSend(
+      onSend,
+      steerSend ? { steer: true } : undefined,
+      nextCanonical,
+    );
   }
 
   function handleKeyDown(e: React.KeyboardEvent) {
@@ -1340,6 +1371,11 @@ export function Composer({
       : {}),
     "--composer-note-bg": noteSurface("var(--composer-surface)"),
   } as React.CSSProperties;
+  const dictationSurfaceStyle: React.CSSProperties | undefined = noteMode
+    ? { backgroundColor: noteSurface("var(--composer-surface)") }
+    : askMode
+      ? { backgroundColor: askSurface("var(--composer-surface)") }
+      : undefined;
 
   return (
     <div className="mx-auto w-full max-w-[calc(var(--session-col)+40px)]">
@@ -1407,6 +1443,13 @@ export function Composer({
         onDrop={handleDrop}
         onDragOver={(e) => canAttach && e.preventDefault()}
       >
+        {/* The mic lives in the toolbar, but recording replaces this entire
+            surface. VoiceInput portals the active bar here so a positioned
+            toolbar cannot trap it at one-row height. */}
+        <div
+          ref={voiceOverlayRef}
+          className="pointer-events-none !absolute inset-0 !z-[6]"
+        />
         {/* Vim mode indicator — only surfaces outside insert mode, so plain
             typing looks identical with the pref on. Sits above the input wrap's
             scroll-fade mask. */}
@@ -1946,6 +1989,18 @@ export function Composer({
                 !minimized && "phone:[&_svg]:size-[22px]",
               )}
               onText={insertDictation}
+              onTextSend={sendDictation}
+              editTargetRef={textareaRef}
+              overlayTargetRef={voiceOverlayRef}
+              overlayStyle={dictationSurfaceStyle}
+              // The bar covers the whole composer, so it takes the composer's
+              // own corner. The resting phone pill is included, which is a
+              // capsule rather than the expanded box's radius.
+              overlayClassName={
+                minimized
+                  ? "rounded-[999px]"
+                  : "rounded-[var(--composer-radius)]"
+              }
               disabled={disabled}
             />
           </motion.div>
