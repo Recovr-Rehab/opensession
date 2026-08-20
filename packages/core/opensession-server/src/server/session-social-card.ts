@@ -46,7 +46,7 @@ export const SESSION_CARD_BANNER_WIDTH = 1200;
 export const SESSION_CARD_BANNER_HEIGHT = 240;
 
 export type SessionCardVariant = "card" | "banner";
-const SESSION_CARD_VERSION = 14;
+const SESSION_CARD_VERSION = 15;
 
 const CARD_INK = "#050609";
 const CARD_PAPER = "#FFFFFF";
@@ -59,7 +59,7 @@ const META_LABEL_GAP = 10;
 const META_GROUP_GAP = 24;
 const META_GLYPH_SIZE = 22;
 const META_RADIUS = META_SIZE * 0.46;
-const META_OPACITY = 0.52;
+const META_OPACITY = 0.42;
 /** Lift labels against the icons because SVG's middle baseline sits optically low. */
 const META_TEXT_Y_OFFSET = -2;
 const TITLE_META_GAP = 10;
@@ -724,13 +724,13 @@ export function sessionSocialCardSvg(
 		PAD_X + (META_SIZE - META_GLYPH_SIZE) / 2,
 		metaCenter,
 	);
+	// No white ring: it would inset the picture by half its width and leave the
+	// avatar visibly smaller than the repo mark standing next to it.
 	const avatarMarkup = avatar
 		? `<image href="${avatar}" x="${PAD_X}" y="${metaTop}" width="${META_SIZE}" height="${META_SIZE}" preserveAspectRatio="xMidYMid slice" clip-path="url(#avatarClip)"/>
-<path d="${avatarTile}" fill="none" stroke="${CARD_PAPER}" stroke-width="3"/>
 <path d="${avatarTile}" fill="none" stroke="#000000" stroke-opacity="0.1"/>`
 		: `<path d="${avatarTile}" fill="${CARD_PAPER}"/>
 ${avatarGlyph}
-<path d="${avatarTile}" fill="none" stroke="${CARD_PAPER}" stroke-width="3"/>
 <path d="${avatarTile}" fill="none" stroke="#000000" stroke-opacity="0.1"/>`;
 	const repoMarkup = !repoId
 		? ""
