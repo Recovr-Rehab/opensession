@@ -1654,19 +1654,8 @@ struct SessionsListView: View {
             showAutoCreated: $showAutoCreated,
             hideEmptyProjects: $hideEmptyProjects,
             repos: availableRepos,
-            currentUser: ServerConfig.shared.userName,
-            onArchived: panelArchivedAction
+            currentUser: ServerConfig.shared.userName
         )
-    }
-
-    /// The Mac sidebar keeps its own Archived row under the list, so only the
-    /// phone reaches the archive from here.
-    private var panelArchivedAction: (() -> Void)? {
-        #if os(macOS)
-        nil
-        #else
-        { showArchived = true }
-        #endif
     }
 
     /// Whether anything is narrowing or hiding rows. The grouping and the sort

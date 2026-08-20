@@ -21,9 +21,6 @@ struct SessionsFilterPanel: View {
     /// Projects with a band in the list right now, in its own order.
     let repos: [String]
     let currentUser: String
-    /// Opens the archived list. Absent on the Mac, whose sidebar has its own
-    /// Archived row under the list.
-    var onArchived: (() -> Void)?
 
     @Environment(\.dismiss) private var dismiss
 
@@ -113,15 +110,8 @@ struct SessionsFilterPanel: View {
             } footer: {
                 Text("Auto created rows are workspaces an agent opened for itself, not automations you set up.")
             }
-
-            if let onArchived {
-                Section {
-                    Button("Archived") {
-                        dismiss()
-                        onArchived()
-                    }
-                }
-            }
+            // No Archived row here. The list ends on one, on both clients, and
+            // a second door to the same screen is one more thing to read.
         }
     }
 
