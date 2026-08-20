@@ -324,6 +324,26 @@ export function WorkspaceSummary({
 		onOpenChange?.(nextOpen);
 		window.dispatchEvent(new Event(WS_SUMMARY_OPEN_EVENT));
 	}
+	useEffect(() => {
+		if (!open) return;
+		const onKeyDown = (event: KeyboardEvent) => {
+			if (event.key !== "Escape" || event.defaultPrevented) return;
+			// A menu or modal opened from the summary owns the first Escape. Capture
+			// otherwise lets the card close before the composer can treat the same key
+			// as a request to stop a running turn.
+			if (
+				document.querySelector(
+					'.app-menu-popup, [role="dialog"][aria-modal="true"]:not([hidden])',
+				)
+			)
+				return;
+			event.preventDefault();
+			event.stopPropagation();
+			changeOpen(false);
+		};
+		window.addEventListener("keydown", onKeyDown, true);
+		return () => window.removeEventListener("keydown", onKeyDown, true);
+	}, [open]);
 	return (
 		<Popover.Root
 			open={open}
