@@ -1,5 +1,16 @@
 import { expect, test } from "bun:test";
 
+test("a long phone prompt scrolls without moving the title bar or send button", async () => {
+  const source = await Bun.file(new URL("./NewSession.tsx", import.meta.url)).text();
+  const motionStart = source.indexOf("<motion.div", source.indexOf("const card ="));
+  const promptStart = source.indexOf("<NewSessionPrompt", motionStart);
+  const layout = source.slice(motionStart, promptStart);
+
+  expect(motionStart).toBeGreaterThan(-1);
+  expect(layout).toContain('"relative flex min-h-0 flex-col"');
+  expect(layout).toContain('"flex min-h-0 flex-1 flex-col"');
+});
+
 test("the phone footer drops the covered safe-area inset while the keyboard is open", async () => {
   const source = await Bun.file(new URL("./NewSession.tsx", import.meta.url)).text();
   const footerStart = source.indexOf("const FOOTER =");

@@ -1442,7 +1442,10 @@ export function NewSession({ onBack, inline, focusSeq, send, addHandler, connect
         onAnimationComplete={() => {
           if (!dictating) setDictationClipping(false);
         }}
-        className={cn("relative", dictationClipping && "overflow-hidden")}
+        className={cn(
+          "relative flex min-h-0 flex-col",
+          dictationClipping && "overflow-hidden",
+        )}
       >
         {/* Dictation replaces everything below Project while the card itself
             supplies the surface, border and shadow. Keeping this target inside
@@ -1451,7 +1454,12 @@ export function NewSession({ onBack, inline, focusSeq, send, addHandler, connect
           ref={voiceOverlayRef}
           className="pointer-events-none !absolute inset-0 !z-[6]"
         />
-        <div className={dictating ? "invisible" : undefined}>
+        <div
+          className={cn(
+            "flex min-h-0 flex-1 flex-col",
+            dictating && "invisible",
+          )}
+        >
 
       {/* Picked services, above the field like every other thing attached to
           what you are about to send. The picker is two levels inside a menu,
