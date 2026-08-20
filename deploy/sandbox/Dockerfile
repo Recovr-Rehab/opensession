@@ -18,7 +18,7 @@
 FROM ubuntu:24.04
 
 # --- version pins (bump these when the host bumps; see README) ---
-ARG BUN_VERSION=1.3.14
+ARG BUN_VERSION=1.4.0
 ARG CLAUDE_VERSION=2.1.218
 ARG NODE_MAJOR=24
 

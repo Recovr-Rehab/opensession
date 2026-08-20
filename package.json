@@ -2,6 +2,7 @@
   "name": "opensession",
   "version": "0.1.0",
   "private": true,
+  "packageManager": "bun@1.4.0",
   "description": "Open Session \u2014 self-hosted agent session dashboard: run, watch, and steer AI coding sessions from the web UI, Slack, and native clients",
   "license": "MIT",
   "repository": {

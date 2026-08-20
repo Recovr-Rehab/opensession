@@ -9,7 +9,7 @@ session's git worktree **bind-mounted at its identical host path**.
 
 | Component | Purpose | Pin |
 | --- | --- | --- |
-| `bun` | runs the runner bundle + Bun `$` exec | `1.3.14` (host) |
+| `bun` | runs the runner bundle + Bun `$` exec | `1.4.0` (host) |
 | Node.js LTS | native-dep builds, tooling | `24.x` |
 | `git`, `gh` | clone / status / diff / push / PR | apt latest |
 | `ripgrep` | @-mention file search | apt |

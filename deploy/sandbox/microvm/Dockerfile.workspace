@@ -10,7 +10,7 @@
 # baseline. refresh-sandbox-golden.sh exports this image into the ext4 golden.
 FROM ubuntu:24.04
 
-ARG BUN_VERSION=1.3.14
+ARG BUN_VERSION=1.4.0
 ARG NODE_MAJOR=24
 
 ENV DEBIAN_FRONTEND=noninteractive \

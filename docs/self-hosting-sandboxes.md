@@ -55,7 +55,7 @@ root. Pins are `ARG`s — override with `--build-arg` per build:
 
 | ARG | Default | Keep in lockstep with |
 | --- | --- | --- |
-| `BUN_VERSION` | 1.3.14 | host `bun --version` |
+| `BUN_VERSION` | 1.4.0 | host `bun --version` |
 | `CLAUDE_VERSION` | 2.1.218 | host `claude --version` |
 | `NODE_MAJOR` | 24 | host Node LTS |
 | `PI_VERSION` | 1.18.18 | host pi |
