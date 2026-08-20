@@ -1,5 +1,5 @@
 import { afterAll, describe, expect, test } from "bun:test";
-import { mkdirSync, mkdtempSync, rmSync } from "fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync } from "fs";
 import { tmpdir } from "os";
 import { join } from "path";
 
@@ -16,6 +16,7 @@ const { statePath } = await import("../../server/paths");
 
 const STORE_DIR = statePath(".opensession-github");
 const STORE = join(STORE_DIR, "deliveries.json");
+const LEGACY_STORE = statePath(".slack-sessions/github-deliveries.json");
 
 afterAll(() => {
   if (previousStateDir === undefined) delete process.env.OPENSESSION_STATE_DIR;
@@ -53,5 +54,32 @@ describe("GitHub delivery replay protection", () => {
     (globalThis as any).__githubDeliveriesLoaded = false;
 
     expect(isGithubDeliveryProcessed("boot-window-delivery")).toBe(true);
+  });
+
+  test("migrates unexpired ids from the legacy Slack store once", () => {
+    rmSync(STORE, { force: true });
+    mkdirSync(join(scratch, ".slack-sessions"), { recursive: true });
+    writeJsonAtomic(
+      LEGACY_STORE,
+      [
+        ["legacy-live", Date.now() + 60_000],
+        ["legacy-expired", 0],
+      ],
+      false,
+    );
+
+    loadGithubDeliveries();
+
+    expect(isGithubDeliveryProcessed("legacy-live")).toBe(true);
+    expect(isGithubDeliveryProcessed("legacy-expired")).toBe(false);
+    expect(existsSync(STORE)).toBe(true);
+    expect(JSON.parse(readFileSync(STORE, "utf8"))).toEqual([
+      ["legacy-live", expect.any(Number)],
+    ]);
+
+    writeJsonAtomic(LEGACY_STORE, [["legacy-later", Date.now() + 60_000]], false);
+    loadGithubDeliveries();
+    expect(isGithubDeliveryProcessed("legacy-live")).toBe(true);
+    expect(isGithubDeliveryProcessed("legacy-later")).toBe(false);
   });
 });

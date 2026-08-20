@@ -1,5 +1,12 @@
-import { describe, it, expect } from "bun:test";
+import { afterEach, describe, it, expect } from "bun:test";
+import { SlackAgent } from "../slack/index";
 import { GithubAgent } from "./index";
+
+const savedGithubFlag = process.env.ENABLE_GITHUB_AGENT;
+afterEach(() => {
+  if (savedGithubFlag === undefined) delete process.env.ENABLE_GITHUB_AGENT;
+  else process.env.ENABLE_GITHUB_AGENT = savedGithubFlag;
+});
 
 // The GitHub webhook route moved out of the Slack agent so it exists whenever
 // the GitHub agent runs — including a GitHub-only install and the outbound
@@ -20,5 +27,18 @@ describe("GithubAgent webhook route", () => {
     });
     const res = await handler(req, new URL("http://127.0.0.1/github/webhook"));
     expect(res.status).toBe(401);
+  });
+});
+
+describe("Slack-only GitHub webhook route", () => {
+  it("registers the shared route when the GitHub agent is disabled", () => {
+    process.env.ENABLE_GITHUB_AGENT = "false";
+    expect(new SlackAgent().getRoutes().has("POST /github/webhook")).toBe(true);
+  });
+
+  it("leaves one owner when the GitHub agent is enabled", () => {
+    process.env.ENABLE_GITHUB_AGENT = "true";
+    expect(new SlackAgent().getRoutes().has("POST /github/webhook")).toBe(false);
+    expect(new GithubAgent().getRoutes().has("POST /github/webhook")).toBe(true);
   });
 });

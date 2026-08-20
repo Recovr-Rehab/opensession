@@ -13,8 +13,17 @@ import { join } from "path";
 import { writeJsonAtomic } from "../../server/shared/atomic-write";
 import { statePath } from "../../server/paths";
 
-const GITHUB_DELIVERIES_DIR = statePath(".opensession-github");
-const GITHUB_DELIVERIES_STORE = join(GITHUB_DELIVERIES_DIR, "deliveries.json");
+function githubDeliveriesDir(): string {
+  return statePath(".opensession-github");
+}
+
+function githubDeliveriesStore(): string {
+  return join(githubDeliveriesDir(), "deliveries.json");
+}
+
+function legacyGithubDeliveriesStore(): string {
+  return statePath(".slack-sessions/github-deliveries.json");
+}
 const GITHUB_DELIVERY_TTL_MS = 24 * 60 * 60 * 1000;
 const MAX_GITHUB_DELIVERIES = 500;
 const githubDeliveryExpiry: Map<string, number> = ((globalThis as any).__githubDeliveryExpiry ??=
@@ -46,8 +55,9 @@ function pruneGithubDeliveries(now = Date.now()): void {
 
 function persistGithubDeliveries(): void {
   try {
-    mkdirSync(GITHUB_DELIVERIES_DIR, { recursive: true });
-    writeJsonAtomic(GITHUB_DELIVERIES_STORE, [...githubDeliveryExpiry], false);
+    const dir = githubDeliveriesDir();
+    mkdirSync(dir, { recursive: true });
+    writeJsonAtomic(join(dir, "deliveries.json"), [...githubDeliveryExpiry], false);
   } catch (e) {
     console.error("[github] Failed to persist GitHub deliveries:", e);
   }
@@ -59,8 +69,15 @@ function persistGithubDeliveries(): void {
 export function loadGithubDeliveries(): void {
   githubDeliveryExpiry.clear();
   try {
-    if (existsSync(GITHUB_DELIVERIES_STORE)) {
-      const entries = JSON.parse(readFileSync(GITHUB_DELIVERIES_STORE, "utf-8")) as [string, number][];
+    const store = githubDeliveriesStore();
+    const legacyStore = legacyGithubDeliveriesStore();
+    const source = existsSync(store)
+      ? store
+      : existsSync(legacyStore)
+        ? legacyStore
+        : null;
+    if (source) {
+      const entries = JSON.parse(readFileSync(source, "utf-8")) as [string, number][];
       const now = Date.now();
       for (const [id, expiresAt] of entries) {
         if (typeof id === "string" && Number.isFinite(expiresAt) && expiresAt > now) {
@@ -68,6 +85,8 @@ export function loadGithubDeliveries(): void {
         }
       }
       pruneGithubDeliveries(now);
+      // Writing the new store makes a legacy read a one-time migration. The old
+      // file is left untouched so upgrading never mutates Slack-owned state.
       persistGithubDeliveries();
     }
   } catch (e) {

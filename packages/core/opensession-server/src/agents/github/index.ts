@@ -1,30 +1,21 @@
 /**
  * GitHub PR agent: automated review + auto-fix + simplify for the configured repos.
  *
- * Owns the single GitHub webhook route (`POST /github/webhook`): verify the
- * signature, dedup deliveries, and forward events to `handleGithubPrEvent`
- * (webhook.ts). The route lives here, not the Slack agent, so it exists whenever
- * the GitHub agent runs, including a GitHub-only install and the outbound
- * `gh webhook forward` path that targets it. PR-review notifications into Slack
- * are an optional handler the Slack agent registers. This module also owns
+ * Registers the shared GitHub webhook route (`POST /github/webhook`) whenever
+ * this agent runs, including GitHub-only installs and the outbound
+ * `gh webhook forward` path. Slack registers the same handler only in a
+ * Slack-only install. PR-review notifications into Slack are optional. This
+ * module also owns
  * lifecycle: seeding the disabled review automation, recovering interrupted
  * auto-fix loops on restart, health, and a secret-gated manual trigger.
  */
 import { configuredIntegration, defaultRepo, personaName } from "../../server/config";
-import type { AgentModule } from "../types";
 import {
-  MAX_WEBHOOK_BODY_BYTES,
   RequestBodyTooLargeError,
   readRequestTextWithinLimit,
   webhookBodyTooLargeResponse,
 } from "../../server/shared/bounded-body";
-import { verifyGitHubSignature } from "../../server/shared/signature";
-import { incrementGithubWebhooks } from "../slack/state";
-import {
-  isGithubDeliveryProcessed,
-  markGithubDeliveryProcessed,
-  loadGithubDeliveries,
-} from "./deliveries";
+import type { AgentModule } from "../types";
 import {
   listAutomations,
   createAutomation,
@@ -43,8 +34,9 @@ import {
   setGithubSessionInvalidate,
   resolveReviewConfig,
   handleGithubPrEvent,
-  firePullRequestReview,
 } from "./webhook";
+import { loadGithubDeliveries } from "./deliveries";
+import { githubWebhookRoute } from "./webhook-route";
 import {
   listPrStates,
   activeCodeLoops,
@@ -249,51 +241,9 @@ export class GithubAgent implements AgentModule {
       return Response.json({ ok: true, behavior, prNumber });
     });
 
-    // The single GitHub webhook. Owned here (not the Slack agent) so it exists
-    // whenever the GitHub agent runs, including a GitHub-only install and the
-    // outbound `gh webhook forward` path — both of which target this route.
-    routes.set("POST /github/webhook", async (req) => {
-      let body: string;
-      try {
-        body = await readRequestTextWithinLimit(req, MAX_WEBHOOK_BODY_BYTES);
-      } catch (error) {
-        if (error instanceof RequestBodyTooLargeError)
-          return webhookBodyTooLargeResponse(MAX_WEBHOOK_BODY_BYTES);
-        throw error;
-      }
-      const signature = req.headers.get("x-hub-signature-256") || "";
-      if (!verifyGitHubSignature(body, signature, GITHUB_WEBHOOK_SECRET)) {
-        console.error("[github] Invalid GitHub webhook signature");
-        return Response.json({ error: "Invalid signature" }, { status: 401 });
-      }
-      // Reject replayed/redelivered webhooks by delivery id.
-      const deliveryId = req.headers.get("x-github-delivery");
-      if (deliveryId) {
-        if (isGithubDeliveryProcessed(deliveryId))
-          return Response.json({ ok: true, duplicate: true });
-        markGithubDeliveryProcessed(deliveryId);
-      }
-      incrementGithubWebhooks();
-      const event = req.headers.get("x-github-event") || "";
-      const payload = JSON.parse(body);
-      console.log(`[github] webhook: event=${event}, action=${payload.action}`);
-      // Slack-specific PR-review notifications, only when that agent registered one.
-      if (event === "pull_request_review") firePullRequestReview(payload);
-      // Server-side PR cache sync + open-tab nudges (filters to PR events itself).
-      import("../../server/pr-webhook")
-        .then((m) => m.handlePrWebhookEvent(event, payload))
-        .catch((e) => console.error("[github] pr-webhook dispatch failed:", e));
-      // Review / auto-fix / simplify / @mention / merge notifications.
-      if (
-        event === "pull_request" ||
-        event === "issue_comment" ||
-        event === "pull_request_review_comment" ||
-        event === "workflow_run"
-      ) {
-        void handleGithubPrEvent(event, payload);
-      }
-      return Response.json({ ok: true });
-    });
+    // GitHub normally owns this shared route. Slack registers the same handler
+    // only when this independently gated agent is disabled.
+    routes.set("POST /github/webhook", githubWebhookRoute);
 
     return routes;
   }
@@ -301,9 +251,9 @@ export class GithubAgent implements AgentModule {
   async startup(): Promise<void> {
     // Eagerly restore webhook replay protection. The webhook server binds
     // earlier in boot, so the delivery read/write paths also restore the store
-    // lazily on first touch; this keeps it warm when no delivery arrives. This
-    // agent owns the /github/webhook route, so a GitHub-only install (Slack
-    // disabled) still loads the store itself.
+    // lazily on first touch; this keeps it warm when no delivery arrives. A
+    // GitHub-only install has no Slack startup to warm it, so this agent loads
+    // the store itself.
     loadGithubDeliveries();
     if (!githubConfigured()) {
       console.warn("[github] GITHUB_API_TOKEN unset — review/fix/simplify can't post; agent idle");

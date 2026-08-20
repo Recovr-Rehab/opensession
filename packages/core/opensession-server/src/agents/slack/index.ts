@@ -5,7 +5,7 @@
  * Implements the AgentModule interface for the opensession webhook server.
  */
 
-import { defaultRepo } from "../../server/config";
+import { configuredIntegration, defaultRepo, personaName } from "../../server/config";
 import { mkdirSync, existsSync, unlinkSync } from "fs";
 import { timingSafeEqual } from "crypto";
 import type { AgentModule } from "../types";
@@ -54,7 +54,8 @@ import {
 import { cancelSession } from "./cancel";
 import { cancelAgentRun } from "../../server/agent-runner";
 import { worktreePathFor } from "../../server/worktree";
-import { personaName } from "../../server/config";
+import { githubWebhookRoute } from "../github/webhook-route";
+import { setGithubPullRequestReviewHandler } from "../github/webhook";
 import {
   slackApiCall,
   sendSlackMessage,
@@ -526,6 +527,20 @@ export class SlackAgent implements AgentModule {
       (req: Request, url: URL) => Promise<Response>
     >();
 
+    // Slack review notifications still consume GitHub webhooks even when the
+    // independently gated GitHub agent is off. Register the shared route only
+    // in that configuration so enabling both agents produces one route owner.
+    const githubFlag = process.env.ENABLE_GITHUB_AGENT;
+    const githubEnabled = githubFlag == null
+      ? configuredIntegration("github").enabled === true
+      : githubFlag === "true";
+    if (!githubEnabled) routes.set("POST /github/webhook", githubWebhookRoute);
+    setGithubPullRequestReviewHandler((payload) =>
+      handlePullRequestReview(payload, branchToChannel).catch((e) =>
+        console.error("[slack] Error handling PR review webhook:", e),
+      ),
+    );
+
     // Slack event + interactivity intake. With an app-level token configured we
     // run Socket Mode (an outbound WebSocket, armed in startup()) and register
     // no inbound HTTP routes at all — no public URL, no signing secret. Without
@@ -797,16 +812,6 @@ export class SlackAgent implements AgentModule {
     // module must stay side-effect-free). Self-gates on SLACK_APP_TOKEN, so
     // this is a no-op for HTTP-transport installs.
     startSlackSocket();
-
-    // The GitHub webhook route now lives in the GitHub agent. Register our
-    // PR-review notifier so review events still post to Slack channels when
-    // both agents are enabled.
-    const { setGithubPullRequestReviewHandler } = await import("../github/webhook");
-    setGithubPullRequestReviewHandler((payload) =>
-      handlePullRequestReview(payload, branchToChannel).catch((e) =>
-        console.error("[slack] Error handling PR review webhook:", e),
-      ),
-    );
 
     console.log("[slack] Agent started");
   }
