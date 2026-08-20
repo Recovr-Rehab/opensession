@@ -94,6 +94,10 @@ import {
 	settingsPaletteActions,
 	type SettingsSectionKey,
 } from "./lib/settings-sections";
+import {
+	settingsReturnForNavigation,
+	type SettingsReturn,
+} from "./lib/settings-navigation";
 import { SessionTabs, type ViewTab } from "./components/SessionTabs";
 import type { SubagentRef } from "./components/SubagentPane";
 import { SessionSplit, type SplitSide } from "./components/SessionSplit";
@@ -311,6 +315,10 @@ const TOOL_VIEWS = ["automations", "security", "goals"] as const;
 type ToolView = (typeof TOOL_VIEWS)[number];
 function isToolView(view: string): view is ToolView {
 	return (TOOL_VIEWS as readonly string[]).includes(view);
+}
+
+function isSettingsRoute(route: Route): boolean {
+	return route.view === "settings" || isToolView(route.view);
 }
 
 // Non-tool settings sections, addressable as <base>/settings/<section>.
@@ -560,13 +568,26 @@ function routePath(route: Route): string {
 // popstate — so after a Back/Forward we still know where the root is. `null`
 // means no root beneath us at all (cold-loaded straight into a panel), where
 // Back synthesizes home instead of popping.
-type NavState = { d: number } | null;
-function entryDepth(): number | null {
-	const s = history.state as NavState;
-	return s && typeof s.d === "number" ? s.d : null;
+type NavState = {
+	d: number | null;
+	settingsReturn?: SettingsReturn;
+} | null;
+function currentNavState(): NavState {
+	const state = history.state as NavState;
+	return state && (typeof state.d === "number" || state.d === null)
+		? state
+		: null;
 }
-function navState(depth: number | null): NavState {
-	return depth === null ? null : { d: depth };
+function entryDepth(): number | null {
+	return currentNavState()?.d ?? null;
+}
+function navState(
+	depth: number | null,
+	settingsReturn?: SettingsReturn,
+): NavState {
+	return depth === null && !settingsReturn
+		? null
+		: { d: depth, ...(settingsReturn ? { settingsReturn } : {}) };
 }
 
 // Pop `steps` entries, or synthesize the destination when the browser can't.
@@ -1026,7 +1047,7 @@ export function App(
 
 	// Settings (and the tool surfaces it hosts) render as a full page on
 	// desktop, but as a bottom sheet over the root list on phones.
-	const settingsActive = route.view === "settings" || isToolView(route.view);
+	const settingsActive = isSettingsRoute(route);
 	const isPhone = useIsPhone();
 
 	// A pushed detail page is showing (anything but the sidebar-root home view).
@@ -1063,9 +1084,25 @@ export function App(
 			samePanel(cur, next);
 		const replace = opts?.replace ?? samePath;
 		const depth = entryDepth();
-		if (replace) history.replaceState(navState(toRoot ? 0 : depth), "", path);
-		else if (toRoot) history.pushState(navState(0), "", path);
-		else history.pushState(navState(depth === null ? null : depth + 1), "", path);
+		const settingsReturn = settingsReturnForNavigation({
+			currentIsSettings: isSettingsRoute(cur),
+			nextIsSettings: isSettingsRoute(next),
+			currentReturn: currentNavState()?.settingsReturn,
+			currentPath: `${location.pathname}${location.search}${location.hash}`,
+			currentDepth: depth,
+			replace,
+		});
+		const nextState = (nextDepth: number | null) =>
+			navState(nextDepth, settingsReturn);
+		if (replace)
+			history.replaceState(nextState(toRoot ? 0 : depth), "", path);
+		else if (toRoot) history.pushState(nextState(0), "", path);
+		else
+			history.pushState(
+				nextState(depth === null ? null : depth + 1),
+				"",
+				path,
+			);
 		setRoute(next);
 	}
 	const navigateRef = useRef(navigate);
@@ -1226,6 +1263,29 @@ export function App(
 		if (depth !== null && depth > 0)
 			popOr(1, () => navigate({ view: "prs" }, { replace: true }));
 		else navigate({ view: "prs" }, { replace: true });
+	}
+
+	// Settings is a temporary surface over whatever the person was doing. Its
+	// sections may add history entries of their own, so closing skips the whole
+	// Settings run and restores the exact route that opened it. This also works
+	// after a cold deep link, where there is no sidebar-root depth to count from.
+	function leaveSettings() {
+		const settingsReturn = currentNavState()?.settingsReturn;
+		if (!settingsReturn) {
+			goBack();
+			return;
+		}
+		const restore = () => {
+			const url = new URL(settingsReturn.path, location.origin);
+			history.replaceState(
+				navState(settingsReturn.depth),
+				"",
+				`${url.pathname}${url.search}${url.hash}`,
+			);
+			setRoute(parseRoute(url.pathname));
+		};
+		if (settingsReturn.steps > 0) popOr(settingsReturn.steps, restore);
+		else restore();
 	}
 
 	// Edge-swipe-from-left pops the pushed page back to the sidebar on phones.
@@ -4495,7 +4555,7 @@ export function App(
 
 				{settingsActive && (
 					<Settings
-						onBack={goBack}
+						onBack={leaveSettings}
 						workspace={settingsWorkspaceId ? workspaces.find((workspace) => workspace.id === settingsWorkspaceId) : undefined}
 						section={
 							route.view === "settings"
