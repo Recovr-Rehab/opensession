@@ -1,18 +1,21 @@
 import { useEffect, useRef, useState, type FormEvent, type RefObject } from "react";
 import { bootstrapRunner, createRunnerPairing, fetchRunnerBootstrapTargets, fetchRunners, revokeRunner, updateRunner, type RunnerBootstrapTarget, type RunnerInfo } from "../../lib/api/runners";
 import { Button } from "../../ui/button";
+import { cn } from "../../ui/cn";
 import { Field, Input } from "../../ui/input";
 import { Modal } from "../../ui/modal";
 import { OptionSelect } from "../../ui/select";
 import { Switch } from "../../ui/switch";
 import { toast } from "../../ui/toast";
-import { SettingCard, SettingCardSkeleton, SettingsGroupLabel, SettingsHeader, SettingsHint, SettingsPanel, SettingRow } from "../../ui/settings";
+import { SettingCard, SettingCardSkeleton, SettingsGroupLabel, SettingsHeader, SettingsHint, SettingsPanel } from "../../ui/settings";
+import { markTileClass, markTileGradient, markTileInk, markTileShadow } from "../../lib/mark-tile";
+import { IconServer } from "../icons";
 
 const stateStyle: Record<RunnerInfo["state"], string> = {
-	online: "text-green",
-	busy: "text-yellow",
-	offline: "text-faint",
-	maintenance: "text-dim",
+	online: "bg-green-soft text-green",
+	busy: "bg-yellow-soft text-yellow",
+	offline: "bg-hover text-dim",
+	maintenance: "bg-hover text-dim",
 };
 
 function resourceSummary(runner: RunnerInfo): string {
@@ -139,18 +142,41 @@ export function RunnersPanel() {
 		</div>}
 
 		<SettingsGroupLabel actions={<Button size="sm" variant="ghost" onClick={() => void load()}>Refresh</Button>}>Workspace inventory</SettingsGroupLabel>
-		{loading ? <SettingCardSkeleton rows={3} label="Loading Runners" /> : <SettingCard>
-			{!runners.length && <div className="px-5 py-5">
-				<div className="text-item-title font-medium text-fg">No Runners connected</div>
-				<p className="mb-0 mt-1 text-supporting leading-relaxed text-dim">Choose a computer, connect it with a pairing command, then choose its permissions.</p>
-			</div>}
-			{runners.map((runner) => <RunnerRow key={runner.id} runner={runner} admin={admin} busy={busyId === runner.id} onChange={change} onRevoke={revoke} />)}
-		</SettingCard>}
+		{loading ? <SettingCardSkeleton rows={3} icon={40} label="Loading Runners" /> : !runners.length ? (
+			<SettingCard>
+				<div className="px-5 py-5">
+					<div className="text-item-title font-medium text-fg">No Runners connected</div>
+					<p className="mb-0 mt-1 text-supporting leading-relaxed text-dim">Choose a computer, connect it with a pairing command, then choose its permissions.</p>
+				</div>
+			</SettingCard>
+		) : (
+			<div className="grid gap-3">
+				{runners.map((runner) => <RunnerRow key={runner.id} runner={runner} admin={admin} busy={busyId === runner.id} onChange={change} onRevoke={revoke} />)}
+			</div>
+		)}
 		<SettingsHint>SSH and Kubernetes bootstrap remain operator-managed migration paths. They never give agents direct SSH or kubectl access.</SettingsHint>
 	</SettingsPanel>;
 }
 
 type RunnerChange = (runner: RunnerInfo, patch: Parameters<typeof updateRunner>[1]) => Promise<boolean>;
+
+function RunnerIcon() {
+	const size = 40;
+	return (
+		<span
+			className={markTileClass(size)}
+			style={{
+				width: size,
+				height: size,
+				backgroundImage: markTileGradient("indigo"),
+				color: "#fff",
+				boxShadow: markTileShadow(markTileInk("indigo")),
+			}}
+		>
+			<IconServer size={22} />
+		</span>
+	);
+}
 
 function RunnerRow({ runner, admin, busy, onChange, onRevoke }: { runner: RunnerInfo; admin: boolean; busy: boolean; onChange: RunnerChange; onRevoke: (runner: RunnerInfo) => void }) {
 	const [editing, setEditing] = useState(false);
@@ -158,19 +184,31 @@ function RunnerRow({ runner, admin, busy, onChange, onRevoke }: { runner: Runner
 	// opens the dialog with its close button ringed.
 	const labelRef = useRef<HTMLInputElement>(null);
 	return <>
-		<SettingRow className="items-start">
-			<div className="min-w-0">
-				<div className="flex flex-wrap items-baseline gap-x-2 gap-y-1"><span className="text-item-title font-medium text-fg">{runner.label || runner.name}</span><span className={`text-meta capitalize ${stateStyle[runner.state]}`}>{runner.state}</span></div>
-				<div className="mt-0.5 text-supporting text-dim">{runner.platform} · {runner.arch} · {resourceSummary(runner)}</div>
-				{runner.capabilities.toolchains.length > 0 && <div className="mt-1 text-meta text-faint">{runner.capabilities.toolchains.join(" · ")}</div>}
-				{runner.resources?.localInference?.length ? <div className="mt-1 text-meta text-faint">Local inference reported: {runner.resources.localInference.map((runtime) => `${runtime.runtime}${runtime.models.length ? ` (${runtime.models.join(", ")})` : ""}`).join(" · ")}</div> : null}
-				{runner.migration?.kind === "kubernetes" && <div className="mt-1 text-meta text-faint">Kubernetes · {runner.migration.context} / {runner.migration.namespace} / {runner.migration.workload}</div>}
-				{runner.workload && <div className="mt-1 text-meta text-dim">Working: {runner.workload.operation || runner.workload.sessionId || "session work"}</div>}
+		<SettingCard>
+			<div className="grid grid-cols-[minmax(0,1fr)_5.75rem] gap-x-4 gap-y-3 px-5 py-4 desktop:grid-cols-[minmax(0,1fr)_13rem]">
+				<div className="col-start-1 row-start-1 flex min-w-0 items-start gap-3">
+					<RunnerIcon />
+					<div className="min-w-0 flex-1">
+						<div className="flex flex-wrap items-center gap-2">
+							<span className="text-item-title font-semibold text-fg">{runner.label || runner.name}</span>
+							<span className={cn("rounded-full px-2 py-0.5 text-meta font-medium capitalize", stateStyle[runner.state])}>{runner.state}</span>
+						</div>
+						<div className="mt-1 text-supporting leading-relaxed text-dim">{runner.platform} · {runner.arch} · {resourceSummary(runner)}</div>
+						{runner.workload && <div className="mt-2 text-supporting text-dim">Working: {runner.workload.operation || runner.workload.sessionId || "session work"}</div>}
+						<div className="mt-2 grid gap-0.5 text-meta text-faint">
+							{runner.capabilities.toolchains.length > 0 && <div>{runner.capabilities.toolchains.join(" · ")}</div>}
+							{runner.resources?.localInference?.length ? <div>Local inference: {runner.resources.localInference.map((runtime) => `${runtime.runtime}${runtime.models.length ? ` (${runtime.models.join(", ")})` : ""}`).join(" · ")}</div> : null}
+							{runner.migration?.kind === "kubernetes" && <div>Kubernetes · {runner.migration.context} / {runner.migration.namespace} / {runner.migration.workload}</div>}
+						</div>
+					</div>
+				</div>
+				{admin && (
+					<div className="col-span-2 row-start-2 flex justify-end">
+						<Button size="sm" onClick={() => setEditing(true)}>Details</Button>
+					</div>
+				)}
 			</div>
-			<div className="flex shrink-0 items-center gap-2">
-				{admin && <Button size="sm" variant="ghost" onClick={() => setEditing(true)}>Details</Button>}
-			</div>
-		</SettingRow>
+		</SettingCard>
 		{admin && <Modal.Root open={editing} onOpenChange={setEditing}>
 			{/* The form is a child so Base UI's portal remounts it on every open,
 			    which re-reads the current runner instead of showing edits staged
