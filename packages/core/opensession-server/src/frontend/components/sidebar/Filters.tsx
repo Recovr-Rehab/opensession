@@ -27,11 +27,7 @@ import {
 import { SwitchIndicator } from "../../ui/switch";
 import { cn } from "../../ui/cn";
 import { RepoTile, repoLabel } from "../RepoTile";
-import {
-	IconChevronRight,
-	IconRobot,
-	IconSliders,
-} from "../icons";
+import { IconChevronRight, IconRobot } from "../icons";
 import { UserAvatar } from "../UserAvatar";
 import React, { useEffect, useState } from "react";
 import { createPortal } from "react-dom";
@@ -98,7 +94,7 @@ export function FilterPopover({
 	currentUser,
 	onChange,
 	onClose,
-	onCustomize,
+	onOrderSection,
 }: {
 	anchor: HTMLElement | null;
 	filter: FilterState;
@@ -107,7 +103,7 @@ export function FilterPopover({
 	currentUser: string;
 	onChange: (patch: Partial<FilterState>) => void;
 	onClose: () => void;
-	onCustomize: () => void;
+	onOrderSection: (section: "tools" | "repositories") => void;
 }) {
 	// Row density is a property of this list, so it sits with the other view
 	// controls rather than only in settings. It is a stored preference, not part
@@ -355,14 +351,31 @@ export function FilterPopover({
 						)}
 					</Menu.Popup>
 				</Menu.Root>
-				<button
-					type="button"
-					className={cn(SETTING_ROW, SETTING_ROW_PRESSABLE, "mt-1 text-fg")}
-					onClick={onCustomize}
-				>
-					<IconSliders size={20} className="shrink-0 text-dim" />
-					<span className="truncate">Customize sidebar</span>
-				</button>
+				<Menu.Root>
+					<Menu.Trigger
+						className={cn(SETTING_ROW, SETTING_ROW_PRESSABLE, "mt-1")}
+					>
+						<span className="shrink-0 text-dim">Sidebar order</span>
+						<IconChevronRight
+							size={16}
+							className="ml-auto -mr-0.5 shrink-0 text-faint"
+						/>
+					</Menu.Trigger>
+					<Menu.Popup align="end" sideOffset={6}>
+						<Menu.Item
+							className="phone:min-h-11"
+							onClick={() => onOrderSection("tools")}
+						>
+							<span className="grow truncate">Tools</span>
+						</Menu.Item>
+						<Menu.Item
+							className="phone:min-h-11"
+							onClick={() => onOrderSection("repositories")}
+						>
+							<span className="grow truncate">Repositories</span>
+						</Menu.Item>
+					</Menu.Popup>
+				</Menu.Root>
 			</div>
 		</>,
 		document.body,

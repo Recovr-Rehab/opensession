@@ -135,9 +135,12 @@ function OrderSection<T extends string>({
 	);
 }
 
+export type SidebarCustomizeSection = "all" | "tools" | "repositories";
+
 export function SidebarCustomizeDialog({
 	open,
 	onOpenChange,
+	section = "all",
 	tools,
 	repositories,
 	onToolOrderChange,
@@ -145,6 +148,7 @@ export function SidebarCustomizeDialog({
 }: {
 	open: boolean;
 	onOpenChange: (open: boolean) => void;
+	section?: SidebarCustomizeSection;
 	tools: Array<
 		OrderItem<SidebarToolId> & {
 			shown: boolean;
@@ -155,41 +159,53 @@ export function SidebarCustomizeDialog({
 	onToolOrderChange: (order: SidebarToolId[]) => void;
 	onRepositoryOrderChange: (order: string[]) => void;
 }) {
+	const title =
+		section === "tools"
+			? "Tool order"
+			: section === "repositories"
+				? "Repository order"
+				: "Customize sidebar";
+	const description =
+		section === "repositories"
+			? "Drag repositories into the order you want."
+			: "Drag to reorder, and choose which tools appear.";
+
 	return (
 		<Modal.Root open={open} onOpenChange={onOpenChange}>
 			<Modal.Content
 				widthClassName="max-w-[32rem]"
 				className="max-h-[80dvh] gap-4"
 			>
-				<Modal.Header
-					title="Customize sidebar"
-					description="Drag to reorder, and choose which tools appear."
-				/>
-				<OrderSection
-					label="Tools"
-					items={tools.map((tool) => ({
-						...tool,
-						action: (
-							<Switch
-								size="sm"
-								className="phone:after:absolute phone:after:inset-x-0 phone:after:-inset-y-3 phone:after:content-['']"
-								checked={tool.shown}
-								onCheckedChange={tool.onShownChange}
-								aria-label={`${tool.shown ? "Hide" : "Show"} ${tool.label} in sidebar`}
-							/>
-						),
-					}))}
-					onCommit={onToolOrderChange}
-				/>
-				<OrderSection
-					label="Repositories"
-					items={repositories.map((repo) => ({
-						id: repo,
-						label: repoLabel(repo),
-						icon: <RepoTile name={repo} size={20} />,
-					}))}
-					onCommit={onRepositoryOrderChange}
-				/>
+				<Modal.Header title={title} description={description} />
+				{section !== "repositories" && (
+					<OrderSection
+						label="Tools"
+						items={tools.map((tool) => ({
+							...tool,
+							action: (
+								<Switch
+									size="sm"
+									className="phone:after:absolute phone:after:inset-x-0 phone:after:-inset-y-3 phone:after:content-['']"
+									checked={tool.shown}
+									onCheckedChange={tool.onShownChange}
+									aria-label={`${tool.shown ? "Hide" : "Show"} ${tool.label} in sidebar`}
+								/>
+							),
+						}))}
+						onCommit={onToolOrderChange}
+					/>
+				)}
+				{section !== "tools" && (
+					<OrderSection
+						label="Repositories"
+						items={repositories.map((repo) => ({
+							id: repo,
+							label: repoLabel(repo),
+							icon: <RepoTile name={repo} size={20} />,
+						}))}
+						onCommit={onRepositoryOrderChange}
+					/>
+				)}
 			</Modal.Content>
 		</Modal.Root>
 	);
