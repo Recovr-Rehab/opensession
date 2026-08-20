@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from "react";
 import { IconCheck } from "../icons";
-import { fetchFeeds } from "../../lib/api";
+import { fetchFeeds, type RepoInfo } from "../../lib/api";
 import {
 	ACCENT_THEME_OPTIONS,
 	getAccentTheme,
@@ -35,7 +35,7 @@ import type { FeedDescriptor } from "../../lib/types";
 import {
 	setFilter,
 	useSidebarFilter,
-	type GroupBy,
+	type SortBy,
 } from "../../lib/sidebar-filter";
 import {
 	DENSITY_OPTIONS,
@@ -64,6 +64,18 @@ import {
 } from "../../ui/settings";
 import { Segmented, SegmentedOption } from "../../ui/segmented";
 import { Switch } from "../../ui/switch";
+import { usePeople } from "../../lib/people";
+import { useCurrentUser } from "../UserPicker";
+import { useAutomationOverview } from "../../lib/automation-overview";
+import { AGENT_NAME } from "../../lib/brand";
+import { AGENT_PERSON_KEY } from "../../lib/automation-audience";
+import {
+	GROUP_BY_OPTIONS,
+	LAST_USED_TIME_OPTIONS,
+	personFilterOptions,
+	PR_FILTER_OPTIONS,
+	repoFilterOptions,
+} from "../sidebar/filter-options";
 import { Tooltip } from "../../ui/tooltip";
 import { Select, SettingRow } from "./shared";
 
@@ -273,47 +285,41 @@ export function AppearanceSection() {
 	);
 }
 
-const SIDEBAR_LAYOUT_OPTIONS: Array<{
-	value: string;
-	label: string;
-	groupBy: GroupBy;
-	byProject: boolean;
-}> = [
-	{ value: "inbox", label: "Inbox", groupBy: "inbox", byProject: false },
-	{
-		value: "inbox-project",
-		label: "Inbox · grouped by project",
-		groupBy: "inbox",
-		byProject: true,
-	},
-	{
-		value: "activity",
-		label: "Activity",
-		groupBy: "activity",
-		byProject: false,
-	},
-	{
-		value: "activity-project",
-		label: "Activity · grouped by project",
-		groupBy: "activity",
-		byProject: true,
-	},
-	{ value: "status", label: "Status", groupBy: "status", byProject: false },
-	{
-		value: "status-project",
-		label: "Status · grouped by project",
-		groupBy: "status",
-		byProject: true,
-	},
-];
-
-/** Sidebar layout and display controls. Also available beside the list itself. */
-export function SidebarDisplayRows() {
+/** The same sidebar filter controls, shown as Settings rows. */
+export function SidebarDisplayRows({ repos }: { repos: RepoInfo[] }) {
 	const filter = useSidebarFilter();
-	const layout = SIDEBAR_LAYOUT_OPTIONS.find(
-		(option) =>
-			option.groupBy === filter.groupBy && option.byProject === filter.byProject,
-	)?.value;
+	const currentUser = useCurrentUser();
+	const roster = usePeople();
+	const automationOverview = useAutomationOverview("settings");
+	const hasUnownedAutomation = Array.from(automationOverview.values()).some(
+		(automation) => !automation.owner,
+	);
+	const people = roster.map((person) => ({
+		key:
+			person.name.trim().split(/\s+/)[0]?.toLowerCase() ||
+			person.name.toLowerCase(),
+		label: person.name,
+	}));
+	if (
+		(hasUnownedAutomation || filter.person === AGENT_PERSON_KEY) &&
+		!people.some(({ key }) => key === AGENT_PERSON_KEY)
+	)
+		people.push({ key: AGENT_PERSON_KEY, label: AGENT_NAME });
+	if (
+		!["me", "everyone", "unassigned"].includes(filter.person) &&
+		!people.some(({ key }) => key === filter.person)
+	)
+		people.push({ key: filter.person, label: filter.person });
+
+	const availableRepos = repos.map(({ id }) => ({ id }));
+	if (
+		filter.repo !== "all" &&
+		!availableRepos.some(({ id }) => id === filter.repo)
+	)
+		availableRepos.push({ id: filter.repo });
+	const repoOptions = repoFilterOptions(availableRepos);
+	const personOptions = personFilterOptions({ people, currentUser });
+
 	const [density, setDensity] = useState<SidebarDensity>(getSidebarDensity);
 	useEffect(
 		() => onSidebarDensityChanged(() => setDensity(getSidebarDensity())),
@@ -325,22 +331,96 @@ export function SidebarDisplayRows() {
 	return (
 		<>
 			<SettingRow
-				title="Layout"
+				title="Group by"
 				control={
 					<Select
-						label="Sidebar layout"
-						value={layout ?? "inbox"}
-						options={SIDEBAR_LAYOUT_OPTIONS}
-						onChange={(value) => {
-							const option = SIDEBAR_LAYOUT_OPTIONS.find(
-								(candidate) => candidate.value === value,
-							);
-							if (option)
-								setFilter({
-									groupBy: option.groupBy,
-									byProject: option.byProject,
-								});
-						}}
+						label="Group by"
+						value={filter.groupBy}
+						options={GROUP_BY_OPTIONS}
+						onChange={(groupBy) => setFilter({ groupBy })}
+					/>
+				}
+			/>
+			<SettingRow
+				title="Group by project"
+				control={
+					<Switch
+						aria-label="Group by project"
+						checked={filter.byProject}
+						onCheckedChange={(byProject) => setFilter({ byProject })}
+					/>
+				}
+			/>
+			<SettingRow
+				title="Repo"
+				control={
+					<Select
+						label="Repo"
+						value={filter.repo}
+						options={repoOptions}
+						onChange={(repo) => setFilter({ repo })}
+					/>
+				}
+			/>
+			<SettingRow
+				title="Person"
+				control={
+					<Select
+						label="Person"
+						value={filter.person}
+						options={personOptions}
+						onChange={(person) => setFilter({ person })}
+					/>
+				}
+			/>
+			{filter.groupBy === "status" && (
+				<SettingRow
+					title="Sort by"
+					control={
+						<Select
+							label="Sort by"
+							value={filter.sort}
+							options={[
+								{ value: "updated", label: "Updated" },
+								{ value: "created", label: "Created" },
+							]}
+							onChange={(sort) => setFilter({ sort: sort as SortBy })}
+						/>
+					}
+				/>
+			)}
+			<SettingRow
+				title="Pull requests"
+				control={
+					<Select
+						label="Pull requests"
+						value={filter.prs}
+						options={PR_FILTER_OPTIONS}
+						onChange={(prs) => setFilter({ prs })}
+					/>
+				}
+			/>
+			<SettingRow
+				title="Show auto created"
+				control={
+					<Switch
+						aria-label="Show auto created"
+						checked={filter.autoCreated === "show"}
+						onCheckedChange={(shown) =>
+							setFilter({ autoCreated: shown ? "show" : "hide" })
+						}
+					/>
+				}
+			/>
+			<SettingRow
+				title="Hide empty projects"
+				control={
+					<Switch
+						aria-label="Hide empty projects"
+						checked={filter.emptyProjects === "hide"}
+						onCheckedChange={(hide) =>
+							setFilter({ emptyProjects: hide ? "hide" : "show" })
+						}
 					/>
 				}
 			/>
@@ -369,11 +449,7 @@ export function SidebarDisplayRows() {
 					<Select
 						label="Show last used time"
 						value={wsTime}
-						options={[
-							{ value: "off", label: "Off" },
-							{ value: "always", label: "Always" },
-							{ value: "hover", label: "On hover" },
-						]}
+						options={LAST_USED_TIME_OPTIONS}
 						onChange={setWsTimePref}
 					/>
 				}

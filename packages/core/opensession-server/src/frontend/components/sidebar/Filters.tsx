@@ -17,7 +17,6 @@ import {
 	setWsTimePref,
 	type WsTimePref,
 } from "../../lib/workspace-time";
-import { AGENT_PERSON_KEY } from "../../lib/automation-audience";
 import { useIsPhone } from "../../hooks/useIsPhone";
 import { Menu } from "../../ui/menu";
 import {
@@ -33,12 +32,14 @@ import {
 import { SwitchIndicator } from "../../ui/switch";
 import { cn } from "../../ui/cn";
 import { RepoTile, repoLabel } from "../RepoTile";
+import { IconChevronRight, IconSliders } from "../icons";
 import {
-	IconChevronRight,
-	IconRobot,
-	IconSliders,
-} from "../icons";
-import { UserAvatar } from "../UserAvatar";
+	GROUP_BY_OPTIONS,
+	LAST_USED_TIME_OPTIONS,
+	personFilterOptions,
+	PR_FILTER_OPTIONS,
+	repoFilterOptions,
+} from "./filter-options";
 import React, { useEffect, useState } from "react";
 import { createPortal } from "react-dom";
 
@@ -135,44 +136,8 @@ export function FilterPopover({
 	const left = Math.max(8, Math.min(r.left, window.innerWidth - width - 8));
 	const top = r.bottom + 6;
 
-	const repoOptions: SettingOption[] = [
-		{ value: "all", label: "All repos" },
-		...repos.map((name) => ({
-			value: name,
-			label: repoLabel(name),
-			icon: <RepoTile name={name} size={16} />,
-		})),
-	];
-
-	// You first (the default), then teammates and the agent, the aggregate
-	// Backlog lens, and "Everyone" last. Owner-focused views retain their own
-	// Backlog rows.
-	const meKey = currentUser.toLowerCase();
-	const personAvatar = (name: string) => <UserAvatar name={name} size={16} />;
-	// The agent is one of the people in this list: it owns every automation
-	// nobody has taken. It has no photo, and an initial tile would read as a
-	// teammate you don't recognise, so it wears the machine face automation
-	// rows already use.
-	const personIcon = (key: string, label: string) =>
-		key === AGENT_PERSON_KEY ? (
-			<span className="inline-flex size-4 shrink-0 items-center justify-center rounded-avatar bg-active text-dim">
-				<IconRobot size={13} />
-			</span>
-		) : (
-			personAvatar(label)
-		);
-	const personOptions: SettingOption[] = [
-		{ value: "me", label: `${currentUser} (you)`, icon: personAvatar(currentUser) },
-		...people
-			.filter(({ key }) => key !== meKey)
-			.map(({ key, label }) => ({
-				value: key,
-				label,
-				icon: personIcon(key, label),
-			})),
-		{ value: "unassigned", label: "Unassigned" },
-		{ value: "everyone", label: "Everyone" },
-	];
+	const repoOptions = repoFilterOptions(repos.map((id) => ({ id })));
+	const personOptions = personFilterOptions({ people, currentUser });
 
 	// How much of what is now out of sight is doing something. Only the three
 	// that change which rows the list holds count: density and time are looks,
@@ -192,11 +157,7 @@ export function FilterPopover({
 				<ValueRow
 					label="Group by"
 					value={filter.groupBy}
-					options={[
-						{ value: "inbox", label: "Inbox" },
-						{ value: "activity", label: "Activity" },
-						{ value: "status", label: "Status" },
-					]}
+					options={GROUP_BY_OPTIONS}
 					onSelect={(v) => onChange({ groupBy: v as GroupBy })}
 				/>
 				<button
@@ -283,11 +244,7 @@ export function FilterPopover({
 						<FilterSubmenu
 							label="Pull requests"
 							value={filter.prs}
-							options={[
-								{ value: "default", label: "Mine + requested" },
-								{ value: "all", label: "Everyone's" },
-								{ value: "none", label: "Hidden" },
-							]}
+							options={PR_FILTER_OPTIONS}
 							onSelect={(v) => onChange({ prs: v as PrsFilter })}
 						/>
 						{/* Workspaces an agent started for itself. They sit in the
@@ -352,11 +309,7 @@ export function FilterPopover({
 						<FilterSubmenu
 							label="Last used time"
 							value={wsTime}
-							options={[
-								{ value: "off", label: "Off" },
-								{ value: "always", label: "Always" },
-								{ value: "hover", label: "On hover" },
-							]}
+							options={LAST_USED_TIME_OPTIONS}
 							onSelect={(v) => setWsTimePref(v as WsTimePref)}
 						/>
 					</Menu.Popup>

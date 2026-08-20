@@ -600,7 +600,7 @@ export function PreferencesPanel() {
 			<AppearanceSection />
 			<SettingsGroupLabel>Sidebar</SettingsGroupLabel>
 			<SettingCard>
-				<SidebarDisplayRows />
+				<SidebarDisplayRows repos={repoOptions} />
 				<SettingRow
 					title="Pin new sessions"
 					control={
