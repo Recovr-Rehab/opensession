@@ -53,7 +53,11 @@ struct SessionsFilterPanel: View {
                     }
                 }
         }
-        .presentationDetents([.medium, .large])
+        // Full height, not a half sheet. There are six controls and the half
+        // sheet cut the last one off, which is the auto-created switch: the
+        // setting most likely to be why the list looks short is the one you
+        // would have had to drag the sheet to find.
+        .presentationDetents([.large])
         #else
         form
             .formStyle(.grouped)
@@ -63,14 +67,16 @@ struct SessionsFilterPanel: View {
 
     private var form: some View {
         Form {
+            // No footers on these two. Three explanations in a row pushed
+            // Advanced off the sheet's first detent, and neither control
+            // needs one: the groupings name themselves, and the switch below
+            // says what turning it on does.
             Section {
                 Picker("Group by", selection: $groupBy) {
                     ForEach(SidebarGroupBy.allCases, id: \.rawValue) { option in
                         Text(option.label).tag(option.rawValue)
                     }
                 }
-            } footer: {
-                Text("Rows band by what they want from you and when they last moved. This is what sits above those bands.")
             }
 
             Section {
@@ -88,8 +94,6 @@ struct SessionsFilterPanel: View {
                 // The one setting about the SET of projects rather than about
                 // which one you are in, so it sits under the list of them.
                 Toggle("Hide when empty", isOn: $hideEmptyProjects)
-            } footer: {
-                Text("A project you just connected keeps its heading until you turn this on.")
             }
 
             Section {
@@ -108,7 +112,10 @@ struct SessionsFilterPanel: View {
             } header: {
                 Text("Advanced")
             } footer: {
-                Text("Auto created rows are workspaces an agent opened for itself, not automations you set up.")
+                // The one explanation worth its space: "auto created" and
+                // "automation" are different things, and the row above cannot
+                // say which one it means on its own.
+                Text("Workspaces an agent opened for itself, not automations you set up.")
             }
             // No Archived row here. The list ends on one, on both clients, and
             // a second door to the same screen is one more thing to read.

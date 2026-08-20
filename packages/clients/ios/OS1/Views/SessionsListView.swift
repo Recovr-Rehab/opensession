@@ -1061,6 +1061,9 @@ struct SessionsListView: View {
                         Task { await viewModel.refresh() }
                     }
                 }
+                .sheet(isPresented: $showFilterPanel) {
+                    filterPanel
+                }
                 .sheet(isPresented: $showArchived) {
                     ArchivedSessionsView(
                         sessions: viewModel.archivedSessions,
@@ -1610,14 +1613,17 @@ struct SessionsListView: View {
         .accessibilityLabel("Filter sessions")
         .accessibilityValue(filterAccessibilityValue)
 
+        // The Mac's panel is a popover, so it hangs off the button it points
+        // at. The phone's is a sheet, and a sheet presented from inside a
+        // `ToolbarItem` does not reliably appear — SwiftUI hosts toolbar
+        // content apart from the view it decorates. It rides the navigation
+        // container instead, where every other sheet on this screen lives.
         #if os(macOS)
         button.popover(isPresented: $showFilterPanel, arrowEdge: .bottom) {
             filterPanel
         }
         #else
-        button.sheet(isPresented: $showFilterPanel) {
-            filterPanel
-        }
+        button
         #endif
     }
 
