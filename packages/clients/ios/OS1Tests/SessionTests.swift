@@ -66,6 +66,29 @@ final class SessionTests: XCTestCase {
     }
 
     @MainActor
+    func testSessionCreationCarriesOnlyStagedFiles() {
+        let staged = AttachedFile(
+            name: "incident.pdf",
+            mediaType: "application/pdf",
+            path: "/uploads/incident.pdf"
+        )
+        let local = AttachedFile(name: "still-uploading.log", data: Data("log".utf8))
+        let body = OS1API.createSessionBody(
+            prompt: "Review these",
+            repo: "opensession",
+            mode: "code",
+            files: [staged, local],
+            user: "Alice"
+        )
+
+        let files = body["files"] as? [[String: String]]
+        XCTAssertEqual(files?.count, 1)
+        XCTAssertEqual(files?.first?["name"], "incident.pdf")
+        XCTAssertEqual(files?.first?["type"], "application/pdf")
+        XCTAssertEqual(files?.first?["path"], "/uploads/incident.pdf")
+    }
+
+    @MainActor
     func testAskDefaultsToNoRepoUnlessCreationIsRepoScoped() {
         XCTAssertEqual(
             NewSessionView.repoAfterSelectingMode(

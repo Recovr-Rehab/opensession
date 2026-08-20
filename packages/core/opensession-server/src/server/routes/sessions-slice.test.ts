@@ -9,11 +9,18 @@
  * up as blank text in the UI, not as a type error.
  */
 
-import { describe, expect, test } from "bun:test";
+import { afterEach, describe, expect, test } from "bun:test";
+import {
+	type CreateSessionOpts,
+	type SessionControl,
+	registerSessionControl,
+	tryGetSessionControl,
+} from "../session-control";
 import type { UnifiedSession } from "../types";
 import {
 	archivedScope,
 	archivedIndexRow,
+	handleSessionsRoutes,
 	nativeCreateRepoOptions,
 	sessionListRow,
 	sessionRan,
@@ -460,5 +467,41 @@ describe("nativeCreateRepoOptions", () => {
 		expect(nativeCreateRepoOptions("ask", "opensession")).toEqual({
 			repo: "opensession",
 		});
+	});
+});
+
+describe("native session create attachments", () => {
+	const previousControl = tryGetSessionControl();
+	afterEach(() => registerSessionControl(previousControl as SessionControl));
+
+	test("accepts a file-only composer and carries its staged ref", async () => {
+		const created: CreateSessionOpts[] = [];
+		registerSessionControl({
+			createSession: async (input: CreateSessionOpts) => {
+				created.push(input);
+				return { id: "os-file", createdBy: "Ada", createdAt: "now" };
+			},
+		} as unknown as SessionControl);
+		const path = "/api/sessions";
+		const url = new URL(`http://localhost${path}`);
+		const files = [{
+			name: "incident.pdf",
+			type: "application/pdf",
+			path: "/uploads/incident.pdf",
+		}];
+		const response = await handleSessionsRoutes({
+			req: new Request(url, {
+				method: "POST",
+				body: JSON.stringify({ prompt: "", mode: "ask", files, user: "Ada" }),
+			}),
+			url,
+			path,
+			publicPrefix: "",
+		});
+
+		expect(response?.status).toBe(200);
+		expect(created).toHaveLength(1);
+		expect(created[0]?.prompt).toBe("");
+		expect(created[0]?.files).toEqual(files);
 	});
 });

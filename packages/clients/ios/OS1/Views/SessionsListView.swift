@@ -90,8 +90,9 @@ struct SessionsListView: View {
     /// Loaded transcripts for recently visited mobile conversations. The
     /// cache is bounded and cached view models disconnect while off-screen.
     @State private var sessionPageCache = SessionViewModelCache()
-    /// Surfaced when a background session create fails after the sheet closed.
+    /// Surfaced when a file handoff or background session create fails.
     @State private var createError: String?
+    @State private var createErrorTitle = "Couldn't start session"
     @State private var showArchived = false
     /// The view controls (`SessionsFilterPanel`): a sheet on the phone, a
     /// popover on the Mac.
@@ -134,6 +135,10 @@ struct SessionsListView: View {
         var workspaceId: String?
         /// A sessionless workspace's parked prompt, reopened in New Session.
         var draft: OS1API.WorkspaceDraft?
+        /// Files iOS opened with this app. Images keep the vision channel;
+        /// everything else stages through `/api/upload` in the composer.
+        var images: [AttachedImage] = []
+        var files: [AttachedFile] = []
     }
 
     // Empty until the person picks a grouping, so the default can stay a
@@ -430,8 +435,11 @@ struct SessionsListView: View {
             }
             .onChange(of: quickCapture.request?.id) { openQuickCapture() }
             .onChange(of: requestedSession.request?.id) { openRequestedSession() }
+            #if os(iOS)
+            .onOpenURL(perform: openFile)
+            #endif
             .alert(
-                "Couldn't start session",
+                createErrorTitle,
                 isPresented: Binding(
                     get: { createError != nil },
                     set: { if !$0 { createError = nil } }
@@ -613,7 +621,9 @@ struct SessionsListView: View {
                 initialRepo: request.repo,
                 initialWorkspaceId: request.workspaceId,
                 initialDraft: request.draft,
-                autoDictate: request.dictate
+                autoDictate: request.dictate,
+                initialImages: request.images,
+                initialFiles: request.files
             ) { session, seed in
                 openOptimistic(session, seed: seed)
             } onResolved: { tempId, result in
@@ -1066,6 +1076,13 @@ struct SessionsListView: View {
                     if env["OS1_OPEN_NEW"] != nil {
                         newSessionRequest = NewSessionRequest()
                     }
+                    if let name = env["OS1_OPEN_FILE_NAME"], !name.isEmpty {
+                        newSessionRequest = NewSessionRequest(files: [AttachedFile(
+                            name: name,
+                            mediaType: "application/pdf",
+                            path: "/debug/\(name)"
+                        )])
+                    }
                     if env["OS1_OPEN_SUPPORT"] != nil, supportLocation != .off {
                         openSupport()
                     }
@@ -1094,7 +1111,9 @@ struct SessionsListView: View {
                         initialRepo: request.repo,
                         initialWorkspaceId: request.workspaceId,
                         initialDraft: request.draft,
-                        autoDictate: request.dictate
+                        autoDictate: request.dictate,
+                        initialImages: request.images,
+                        initialFiles: request.files
                     ) { session, seed in
                         openOptimistic(session, seed: seed)
                     } onResolved: { tempId, result in
@@ -1282,6 +1301,31 @@ struct SessionsListView: View {
         )
     }
 
+    #if os(iOS)
+    /// Adopt a document iOS opened with this app, then put it in a fresh
+    /// composer. Reading happens off-main while the security-scoped URL is
+    /// valid; the composer owns plain Data after that, so Files can revoke the
+    /// source URL without breaking the upload.
+    private func openFile(_ url: URL) {
+        Task {
+            do {
+                let attachment = try await Task.detached(priority: .userInitiated) {
+                    try ImportedComposerAttachment.load(from: url)
+                }.value
+                switch attachment {
+                case .image(let image):
+                    newSessionRequest = NewSessionRequest(images: [image])
+                case .file(let file):
+                    newSessionRequest = NewSessionRequest(files: [file])
+                }
+            } catch {
+                createErrorTitle = "Couldn't open file"
+                createError = error.localizedDescription
+            }
+        }
+    }
+    #endif
+
     /// Open the composer for an Action Button "New Idea", mic hot. A request
     /// is consumed once, so returning to the list later doesn't reopen it.
     private func openQuickCapture() {
@@ -1398,6 +1442,7 @@ struct SessionsListView: View {
             // screen, not whatever the person is looking at now.
             path.removeAll { $0.id == tempId }
             #endif
+            createErrorTitle = "Couldn't start session"
             createError = error.localizedDescription
         }
     }

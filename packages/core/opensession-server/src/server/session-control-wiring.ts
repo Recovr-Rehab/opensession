@@ -23,7 +23,11 @@ import { relinkAskThreads } from "./human-asks";
 import { SESSION_EFFORTS, type SessionEffort, interactiveDefaultModel, providerFor, resolveModel } from "./models";
 import { liftUserStop, promptQueues, recordSteer, requeueSteerReceipts, stoppedSessions } from "./queue-state";
 import { enqueuePrompt, runSessionPrompt, runSessionPromptAndDrain, sessionMentionsNote, watchExternalRunAndDrain } from "./run-session";
-import { parseImageDataUrls } from "./uploads";
+import {
+	parseImageDataUrls,
+	stageFileAttachments,
+	withUploadsNote,
+} from "./uploads";
 import { type Sandbox } from "./sandbox";
 import { isRemoteSandboxProvider, resolveRequestedSandbox } from "./sandbox/config";
 import { resolveInteractiveSandbox } from "./sandbox/defaults";
@@ -250,6 +254,7 @@ registerSessionControl({
 		effort: effortInput,
 		fastMode: fastModeInput,
 		images: imageUrls,
+		files: rawFiles,
 		mcpServers,
 		workspaceId,
 		isolatedWorktree,
@@ -469,7 +474,13 @@ registerSessionControl({
 			parentSession?.createdBy ||
 			personaName();
 		const sessionCreatedAt = new Date().toISOString();
-		const title = prompt.trim().split("\n")[0].slice(0, 80);
+		const title =
+			prompt.trim().split("\n")[0].slice(0, 80) ||
+			(Array.isArray(rawFiles) && rawFiles.length
+				? "Attached file"
+				: imageUrls?.length
+					? "Image"
+					: "New session");
 		// The Desk (desk.ts) is an orchestrator living in an overlay, not a piece
 		// of work: it carries no workspace, and a worker it spawns is its own
 		// independent thing. So a desk parent contributes NOTHING to the workspace
@@ -546,9 +557,11 @@ registerSessionControl({
 		// prompts on existing sessions — this create path bypasses
 		// runSessionPromptInner.
 		const createMentionsNote = sessionMentionsNote(prompt);
-		let openingPrompt = createMentionsNote
-			? `${prompt}\n\n${createMentionsNote}`
-			: prompt;
+		let openingPrompt = withUploadsNote(
+			prompt,
+			stageFileAttachments(bksId, rawFiles),
+		);
+		if (createMentionsNote) openingPrompt += `\n\n${createMentionsNote}`;
 		// A session joining a workspace opens with the workspace's own context, the
 		// same as the web create: the feed item it hangs off, and the support
 		// ticket it belongs to. Without this a "new tab" in a ticket workspace is

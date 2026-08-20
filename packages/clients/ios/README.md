@@ -197,8 +197,11 @@ Pure SwiftUI with SwiftStreamingMarkdown for CommonMark/GFM rendering, iOS 26+
   The recognizer object is owned by `SessionInputBar`, not the button: a long
   dictation wraps the composer to its two-row layout, which swaps the branch
   the button renders in and would otherwise destroy its state mid-sentence.
-- **Session creation** — a full-height prompt editor with image attachments and
-  a compact single-row iOS toolbar for repository, mode, and model settings.
+- **Session creation** — a full-height prompt editor with attachments and a
+  compact single-row iOS toolbar for repository, mode, and model settings.
+  Opening a file with OS from Files or another app starts a fresh composer with
+  that file attached. Images use the vision channel; other files upload to the
+  session's staged file channel before Start becomes available.
 - **AskUserQuestion** — blocking questions render as an inline card with option
   buttons + free-text answer, wired to `answer_question`.
 - **PR panel** — sessions with a pull request expose a row in the title-opened
@@ -403,6 +406,7 @@ OS1/
     TranscriptEntry.swift    Transcript entry (REST + WS frames)
     AskQuestion.swift        Pending AskUserQuestion
     AttachedImage.swift      Composer image attachments
+    AttachedFile.swift       Open-in and staged file attachments
     ModelCatalog.swift       Workspace model catalog + engine routing
     ToolPresentation.swift   Canonical tool names, families, summaries, ±lines
     SubagentTranscript.swift A Task call's sub-agent conversation payload

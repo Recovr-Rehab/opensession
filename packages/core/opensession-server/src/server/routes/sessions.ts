@@ -662,14 +662,22 @@ export async function handleSessionsRoutes(
 			effort?: unknown;
 			fastMode?: unknown;
 			images?: unknown;
+			files?: unknown;
 			branch?: unknown;
 			user?: unknown;
 			workspaceId?: unknown;
 			sandbox?: unknown;
 		} | null;
 		const prompt = typeof body?.prompt === "string" ? body.prompt.trim() : "";
-		if (!prompt) {
-			return Response.json({ error: "prompt required" }, { status: 400 });
+		const files = Array.isArray(body?.files) ? body.files : undefined;
+		const imageUrls = Array.isArray(body?.images)
+			? body.images.filter((value): value is string => typeof value === "string")
+			: [];
+		if (!prompt && !files?.length && !imageUrls.length) {
+			return Response.json(
+				{ error: "prompt or attachment required" },
+				{ status: 400 },
+			);
 		}
 		// Join an existing workspace as a sibling session — the native apps' "new
 		// session in this workspace", equivalent to the web tab strip's "+".
@@ -689,8 +697,14 @@ export async function handleSessionsRoutes(
 		// only be discarded. A workspace with no worktree yet still needs one.
 		const joinsWorktree = !!(workspaceId && getWorkspace(workspaceId)?.worktreeDir);
 		if (mode === "code" && !branch && !joinsWorktree) {
+			const attachmentName =
+				typeof (files?.[0] as { name?: unknown } | undefined)?.name === "string"
+					? String((files?.[0] as { name: string }).name)
+					: imageUrls.length
+						? "image"
+						: "session";
 			branch =
-				(await suggestBranchName(prompt).catch(() => null)) ||
+				(await suggestBranchName(prompt || `Review ${attachmentName}`).catch(() => null)) ||
 				`session-${Date.now().toString(36)}`;
 		}
 		try {
@@ -719,13 +733,8 @@ export async function handleSessionsRoutes(
 					: {}),
 				// Image attachments as data URLs (the native apps' create path;
 				// validated/parsed by the wiring's parseImageDataUrls).
-				...(Array.isArray(body?.images) && body.images.length
-					? {
-							images: body.images.filter(
-								(u): u is string => typeof u === "string",
-							),
-						}
-					: {}),
+				...(imageUrls.length ? { images: imageUrls } : {}),
+				...(files?.length ? { files } : {}),
 				user: requestUser(ctx, body?.user),
 			});
 			return Response.json({ id });

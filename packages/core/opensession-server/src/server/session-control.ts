@@ -88,6 +88,8 @@ export interface CreateSessionOpts {
   fastMode?: boolean;
   /** Composer image attachments as `data:image/...;base64,` URLs. */
   images?: string[];
+  /** Raw composer file references, already staged through `/api/upload`. */
+  files?: unknown;
   /** Optional MCP allowlist for the opening run. Empty array means no MCP servers. */
   mcpServers?: string[];
   /**

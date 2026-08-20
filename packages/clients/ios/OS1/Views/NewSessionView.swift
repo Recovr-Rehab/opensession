@@ -32,6 +32,10 @@ struct NewSessionView: View {
     /// before you have found the keyboard.
     var autoDictate = false
 
+    /// Attachments handed to the app by iOS before this composer opened.
+    var initialImages: [AttachedImage]
+    var initialFiles: [AttachedFile]
+
     /// Called the moment Start is tapped, with an optimistic session row
     /// (temporary `pending-` id) plus the prompt/images to seed the
     /// conversation view instantly.
@@ -49,6 +53,8 @@ struct NewSessionView: View {
         initialWorkspaceId: String? = nil,
         initialDraft: OS1API.WorkspaceDraft? = nil,
         autoDictate: Bool = false,
+        initialImages: [AttachedImage] = [],
+        initialFiles: [AttachedFile] = [],
         onCreated: @escaping (Session, SessionViewModel.OptimisticSeed) -> Void,
         onResolved: @escaping (String, Result<String, Error>) -> Void,
         onDraftSaved: @escaping (OS1API.WorkspaceSummary) -> Void = { _ in }
@@ -57,6 +63,10 @@ struct NewSessionView: View {
         self.initialWorkspaceId = initialWorkspaceId
         self.initialDraft = initialDraft
         self.autoDictate = autoDictate
+        self.initialImages = initialImages
+        self.initialFiles = initialFiles
+        _images = State(initialValue: initialImages)
+        _files = State(initialValue: initialFiles)
         self.onCreated = onCreated
         self.onResolved = onResolved
         self.onDraftSaved = onDraftSaved
@@ -70,7 +80,11 @@ struct NewSessionView: View {
     @State private var model = ""
     @State private var effort = ""
     @State private var fastMode = false
-    @State private var images: [AttachedImage] = []
+    @State private var images: [AttachedImage]
+    @State private var files: [AttachedFile]
+    @State private var stagingFileIDs: Set<String> = []
+    @State private var failedFileIDs: Set<String> = []
+    @State private var attachmentError: String?
     /// "" is the host. Never seeded from the instance's own default: the chip
     /// is what tells you where this session will run, so it starts on the one
     /// answer that is true everywhere.
@@ -100,9 +114,22 @@ struct NewSessionView: View {
             VStack(spacing: 0) {
                 header
                 editor
-                if !images.isEmpty {
-                    AttachedImagesRow(images: images) { image in
-                        images.removeAll { $0.id == image.id }
+                if !images.isEmpty || !files.isEmpty {
+                    VStack(spacing: 6) {
+                        if !images.isEmpty {
+                            AttachedImagesRow(images: images) { image in
+                                images.removeAll { $0.id == image.id }
+                            }
+                        }
+                        if !files.isEmpty {
+                            AttachedFilesRow(
+                                files: files,
+                                staging: stagingFileIDs,
+                                failed: failedFileIDs,
+                                onRetry: { file in Task { await stage(file) } },
+                                onRemove: remove
+                            )
+                        }
                     }
                     .padding(.horizontal, 16)
                     .padding(.bottom, 6)
@@ -131,6 +158,7 @@ struct NewSessionView: View {
                 #endif
             }
             .task { await load() }
+            .task { await stagePendingFiles() }
             // The library is a detail of composing this session, so it pushes
             // onto the sheet's own stack: back is where you were, with the
             // prompt filled in.
@@ -157,6 +185,17 @@ struct NewSessionView: View {
             } message: {
                 Text(draftSaveError ?? "")
             }
+            .alert(
+                "Couldn't attach file",
+                isPresented: Binding(
+                    get: { attachmentError != nil },
+                    set: { if !$0 { attachmentError = nil } }
+                )
+            ) {
+                Button("OK", role: .cancel) {}
+            } message: {
+                Text(attachmentError ?? "")
+            }
         }
         // This belongs to the outer stack. The editor itself disappears when
         // the recipe library is pushed, which is not an exit from the sheet.
@@ -175,7 +214,12 @@ struct NewSessionView: View {
 
     private var startDisabled: Bool {
         savingDraft
-            || (prompt.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && images.isEmpty)
+            || !stagingFileIDs.isEmpty
+            || !failedFileIDs.isEmpty
+            || files.contains(where: { !$0.isStaged })
+            || (prompt.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                && images.isEmpty
+                && files.isEmpty)
     }
 
     /// Starting a session is the same gesture as sending a message, so on iOS
@@ -823,6 +867,34 @@ struct NewSessionView: View {
 
     // ── Data ──────────────────────────────────────────────────────────────
 
+    private func stagePendingFiles() async {
+        for file in files where !file.isStaged {
+            await stage(file)
+        }
+    }
+
+    private func stage(_ file: AttachedFile) async {
+        guard !file.isStaged, !stagingFileIDs.contains(file.id) else { return }
+        stagingFileIDs.insert(file.id)
+        failedFileIDs.remove(file.id)
+        defer { stagingFileIDs.remove(file.id) }
+        do {
+            let staged = try await OS1API.uploadComposerFile(file)
+            guard let index = files.firstIndex(where: { $0.id == file.id }) else { return }
+            files[index] = staged
+        } catch {
+            guard files.contains(where: { $0.id == file.id }) else { return }
+            failedFileIDs.insert(file.id)
+            attachmentError = error.localizedDescription
+        }
+    }
+
+    private func remove(_ file: AttachedFile) {
+        files.removeAll { $0.id == file.id }
+        stagingFileIDs.remove(file.id)
+        failedFileIDs.remove(file.id)
+    }
+
     private func load() async {
         if prompt.isEmpty, let initialDraft { prompt = initialDraft.text }
         promptFocused = true
@@ -980,7 +1052,11 @@ struct NewSessionView: View {
     /// create (worktree prep — seconds) runs in the background. The list
     /// swaps the temp id for the server's when it resolves.
     private func create() {
-        guard !savingDraft else { return }
+        guard !savingDraft,
+              stagingFileIDs.isEmpty,
+              failedFileIDs.isEmpty,
+              files.allSatisfy(\.isStaged)
+        else { return }
         // Played here rather than from a trigger on the view: the sheet
         // dismisses two lines down, and a dismissed view never observes its
         // own state change. Starting a session is the same gesture as sending
@@ -990,9 +1066,12 @@ struct NewSessionView: View {
         let text = prompt.trimmingCharacters(in: .whitespacesAndNewlines)
         let imageURLs = images.map(\.dataURL)
         if repo != Session.noRepoID { lastRepo = repo }
+        let provisionalTitle = text.isEmpty
+            ? (files.first?.name ?? "New session")
+            : (text.components(separatedBy: "\n").first ?? text)
         let pending = Session.optimistic(
             id: "pending-\(UUID().uuidString)",
-            title: String((text.components(separatedBy: "\n").first ?? text).prefix(80)),
+            title: String(provisionalTitle.prefix(80)),
             repo: repo,
             repoLess: repo == Session.noRepoID,
             mode: mode,
@@ -1018,6 +1097,7 @@ struct NewSessionView: View {
                     effort: effort.isEmpty ? nil : effort,
                     fastMode: fastMode,
                     images: imageURLs,
+                    files: files,
                     workspaceId: initialWorkspaceId,
                     // Only when the chip was on screen. Where it wasn't, the
                     // instance keeps deciding, exactly as before.

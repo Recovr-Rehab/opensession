@@ -1604,6 +1604,7 @@ enum OS1API {
         effort: String? = nil,
         fastMode: Bool = false,
         images: [String] = [],
+        files: [AttachedFile] = [],
         workspaceId: String? = nil,
         sandbox: String? = nil
     ) async throws -> String {
@@ -1616,6 +1617,7 @@ enum OS1API {
             effort: effort,
             fastMode: fastMode,
             images: images,
+            files: files,
             workspaceId: workspaceId,
             sandbox: sandbox,
             user: ServerConfig.shared.userName
@@ -1635,6 +1637,7 @@ enum OS1API {
         effort: String? = nil,
         fastMode: Bool = false,
         images: [String] = [],
+        files: [AttachedFile] = [],
         workspaceId: String? = nil,
         sandbox: String? = nil,
         user: String
@@ -1654,8 +1657,34 @@ enum OS1API {
         if let effort, !effort.isEmpty { body["effort"] = effort }
         if fastMode { body["fastMode"] = true }
         if !images.isEmpty { body["images"] = images }
+        let stagedFiles = files.compactMap(\.wireValue)
+        if !stagedFiles.isEmpty { body["files"] = stagedFiles }
         if !user.isEmpty { body["user"] = user }
         return body
+    }
+
+    /// Upload one composer file before it rides a prompt or session create.
+    /// The route returns a server-confined path, so the JSON request carries no
+    /// file bytes and can use the same path as the web composer.
+    static func uploadComposerFile(_ file: AttachedFile) async throws -> AttachedFile {
+        struct UploadResponse: Decodable, Sendable {
+            let name: String
+            let path: String
+        }
+        guard let data = file.data else {
+            if file.isStaged { return file }
+            throw APIError.server("The attachment is no longer available")
+        }
+        let encodedName = file.name.addingPercentEncoding(
+            withAllowedCharacters: .alphanumerics
+        ) ?? "file"
+        let response: UploadResponse = try await upload(
+            "/api/upload",
+            data: data,
+            contentType: file.mediaType,
+            headers: ["x-file-name": encodedName]
+        )
+        return file.staged(name: response.name, path: response.path)
     }
 
     /// What the server did with a message — or why it couldn't.

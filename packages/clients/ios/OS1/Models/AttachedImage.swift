@@ -6,7 +6,7 @@ import UniformTypeIdentifiers
 /// One image attached to a message or new-session prompt, normalized at pick
 /// time: downscaled to the vision path's useful size and re-encoded as JPEG so
 /// a 12 MP camera photo doesn't ride the WebSocket at 40 MB of base64.
-struct AttachedImage: Identifiable, Equatable {
+struct AttachedImage: Identifiable, Equatable, Sendable {
     let id: String
     let jpegData: Data
     /// What the bytes actually are. Anything this app encodes itself is JPEG,
