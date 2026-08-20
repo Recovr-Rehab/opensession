@@ -33,6 +33,20 @@ export function setGithubSessionInvalidate(cb: () => void): void {
   onSessionInvalidate = cb;
 }
 
+// The GitHub webhook route is owned by GithubAgent (below). It fires
+// pull_request_review payloads at a handler the Slack agent registers on
+// startup, so PR-review notifications still reach Slack channels when that
+// agent is enabled. Unset (a no-op) otherwise.
+let onPullRequestReview: ((payload: any) => void) | undefined;
+export function setGithubPullRequestReviewHandler(
+  cb: ((payload: any) => void) | undefined,
+): void {
+  onPullRequestReview = cb;
+}
+export function firePullRequestReview(payload: any): void {
+  onPullRequestReview?.(payload);
+}
+
 const REVIEW_ACTIONS = new Set(["opened", "reopened", "synchronize", "ready_for_review"]);
 
 interface PrPayload {

@@ -12,7 +12,6 @@ import type { AgentModule } from "../types";
 import { fetchWithTimeout } from "../../server/shared/fetch-with-timeout";
 import {
   verifySlackSignature,
-  verifyGitHubSignature,
 } from "../../server/shared/signature";
 import {
   MAX_WEBHOOK_BODY_BYTES,
@@ -81,8 +80,6 @@ import {
   isEventProcessed,
   markEventProcessed,
   loadProcessedEvents,
-  isGithubDeliveryProcessed,
-  markGithubDeliveryProcessed,
   loadGithubDeliveries,
   pendingAnswers,
   slackTeamId,
@@ -90,13 +87,11 @@ import {
   githubWebhooksReceived,
   setSlackTeamId,
   setSlackBotUserId,
-  incrementGithubWebhooks,
   loadActiveSessionsOnStartup,
 } from "./state";
 
 const SLACK_BOT_TOKEN = process.env.SLACK_BOT_TOKEN;
 const SLACK_SIGNING_SECRET = process.env.SLACK_SIGNING_SECRET || "";
-const GITHUB_WEBHOOK_SECRET = process.env.GITHUB_WEBHOOK_SECRET || "";
 
 async function readWebhookBody(req: Request, maxBytes = MAX_WEBHOOK_BODY_BYTES): Promise<string | Response> {
   try {
@@ -607,67 +602,6 @@ export class SlackAgent implements AgentModule {
     });
     }
 
-    // ----- POST /github/webhook -----
-    routes.set("POST /github/webhook", async (req) => {
-      const body = await readWebhookBody(req);
-      if (body instanceof Response) return body;
-      const signature = req.headers.get("x-hub-signature-256") || "";
-
-      if (!verifyGitHubSignature(body, signature, GITHUB_WEBHOOK_SECRET)) {
-        console.error("[slack] Invalid GitHub webhook signature");
-        return Response.json({ error: "Invalid signature" }, { status: 401 });
-      }
-
-      // Reject replayed/redelivered webhooks by delivery id.
-      const deliveryId = req.headers.get("x-github-delivery");
-      if (deliveryId) {
-        if (isGithubDeliveryProcessed(deliveryId)) {
-          console.log(`[slack] Duplicate GitHub delivery ${deliveryId} — skipping`);
-          return Response.json({ ok: true, duplicate: true });
-        }
-        markGithubDeliveryProcessed(deliveryId);
-      }
-
-      incrementGithubWebhooks();
-      const event = req.headers.get("x-github-event") || "";
-      const payload = JSON.parse(body);
-
-      console.log(
-        `[slack] GitHub webhook: event=${event}, action=${payload.action}`
-      );
-
-      if (event === "pull_request_review") {
-        // Handle async — GitHub has a 10s timeout
-        handlePullRequestReview(payload, branchToChannel).catch((e) => {
-          console.error("[slack] Error handling PR review webhook:", e);
-        });
-      }
-
-      // Sync the server's PR caches + nudge open tabs (server/pr-webhook.ts)
-      // on every delivery — it filters to PR-carrying events itself, including
-      // ones the github agent doesn't consume (reviews, checks, statuses).
-      import("../../server/pr-webhook")
-        .then((m) => m.handlePrWebhookEvent(event, payload))
-        .catch((e) => console.error("[slack] pr-webhook dispatch failed:", e));
-
-      // Forward PR events to the github agent (review / auto-fix / simplify,
-      // @mention replies on PR comments, and merge/deploy notifications into
-      // linked sessions). Fire-and-forget so a github-module error never breaks
-      // the Slack path.
-      if (
-        event === "pull_request" ||
-        event === "issue_comment" ||
-        event === "pull_request_review_comment" ||
-        event === "workflow_run"
-      ) {
-        import("../github/webhook")
-          .then((m) => m.handleGithubPrEvent(event, payload))
-          .catch((e) => console.error("[slack] github agent dispatch failed:", e));
-      }
-
-      return Response.json({ ok: true });
-    });
-
     // ----- POST /worktree/create-channel -----
     routes.set("POST /worktree/create-channel", async (req) => {
       if (!verifyWorktreeSecret(req)) {
@@ -865,6 +799,16 @@ export class SlackAgent implements AgentModule {
     // module must stay side-effect-free). Self-gates on SLACK_APP_TOKEN, so
     // this is a no-op for HTTP-transport installs.
     startSlackSocket();
+
+    // The GitHub webhook route now lives in the GitHub agent. Register our
+    // PR-review notifier so review events still post to Slack channels when
+    // both agents are enabled.
+    const { setGithubPullRequestReviewHandler } = await import("../github/webhook");
+    setGithubPullRequestReviewHandler((payload) =>
+      handlePullRequestReview(payload, branchToChannel).catch((e) =>
+        console.error("[slack] Error handling PR review webhook:", e),
+      ),
+    );
 
     console.log("[slack] Agent started");
   }

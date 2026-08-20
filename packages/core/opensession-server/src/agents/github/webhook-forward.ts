@@ -48,17 +48,20 @@ export function isPublicUrl(base: string): boolean {
 /**
  * Pure gating decision. `GITHUB_WEBHOOK_FORWARD` is an explicit override (only
  * the literal "true" enables, matching the integration enable-flag asymmetry);
- * unset falls back to "forward when there is no public inbound URL".
+ * unset falls back to "forward when the webhook origin is not publicly
+ * reachable". The relevant origin is `server.webhookBaseUrl` (where GitHub is
+ * told to POST), which is distinct from the UI's `publicBaseUrl` — a public UI
+ * behind a private webhook endpoint still needs forwarding, and vice versa.
  */
-export function shouldForward(opts: { flag?: string | null; publicBaseUrl: string }): boolean {
+export function shouldForward(opts: { flag?: string | null; webhookBaseUrl: string }): boolean {
   if (opts.flag != null) return opts.flag === "true";
-  return !isPublicUrl(opts.publicBaseUrl);
+  return !isPublicUrl(opts.webhookBaseUrl);
 }
 
 export function githubWebhookForwardEnabled(): boolean {
   return shouldForward({
     flag: process.env.GITHUB_WEBHOOK_FORWARD ?? null,
-    publicBaseUrl: configuredServer().publicBaseUrl,
+    webhookBaseUrl: configuredServer().webhookBaseUrl,
   });
 }
 
@@ -250,9 +253,13 @@ export async function startGithubWebhookForward(): Promise<void> {
 
   const secret = process.env.GITHUB_WEBHOOK_SECRET || "";
   if (!secret) {
+    // Without a secret the handler's signature check rejects every forwarded
+    // delivery, so a running forwarder would only report false health. Don't
+    // spawn; the reconcile sweep remains the backstop.
     console.warn(
-      "[github-forward] GITHUB_WEBHOOK_SECRET unset — forwarded deliveries will fail the handler's signature check; set it to match the Slack agent",
+      "[github-forward] GITHUB_WEBHOOK_SECRET unset — not forwarding (every delivery would fail the signature check). Set it and restart; the reconcile sweep backstops until then.",
     );
+    return;
   }
 
   const { org, repos } = forwardTargets();

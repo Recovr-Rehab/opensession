@@ -1,19 +1,29 @@
 /**
  * GitHub PR agent: automated review + auto-fix + simplify for the configured repos.
  *
- * Does NOT own a webhook route — the single GitHub webhook lives in the Slack agent
- * (`POST /github/webhook`), which forwards `pull_request` events to
- * `handleGithubPrEvent` (webhook.ts). This module owns lifecycle: seeding the
- * disabled review automation, recovering interrupted auto-fix loops on restart,
- * health, and a secret-gated manual trigger for testing.
+ * Owns the single GitHub webhook route (`POST /github/webhook`): verify the
+ * signature, dedup deliveries, and forward events to `handleGithubPrEvent`
+ * (webhook.ts). The route lives here, not the Slack agent, so it exists whenever
+ * the GitHub agent runs, including a GitHub-only install and the outbound
+ * `gh webhook forward` path that targets it. PR-review notifications into Slack
+ * are an optional handler the Slack agent registers. This module also owns
+ * lifecycle: seeding the disabled review automation, recovering interrupted
+ * auto-fix loops on restart, health, and a secret-gated manual trigger.
  */
 import { configuredIntegration, defaultRepo, personaName } from "../../server/config";
 import type { AgentModule } from "../types";
 import {
+  MAX_WEBHOOK_BODY_BYTES,
   RequestBodyTooLargeError,
   readRequestTextWithinLimit,
   webhookBodyTooLargeResponse,
 } from "../../server/shared/bounded-body";
+import { verifyGitHubSignature } from "../../server/shared/signature";
+import {
+  isGithubDeliveryProcessed,
+  markGithubDeliveryProcessed,
+  incrementGithubWebhooks,
+} from "../slack/state";
 import {
   listAutomations,
   createAutomation,
@@ -28,7 +38,12 @@ import {
 } from "./constants";
 import { DEFAULT_REVIEW_PROMPT } from "./prompts";
 import { DEFAULT_GITHUB_FLOW_MCP_SERVERS } from "./run";
-import { setGithubSessionInvalidate, resolveReviewConfig } from "./webhook";
+import {
+  setGithubSessionInvalidate,
+  resolveReviewConfig,
+  handleGithubPrEvent,
+  firePullRequestReview,
+} from "./webhook";
 import {
   listPrStates,
   activeCodeLoops,
@@ -231,6 +246,52 @@ export class GithubAgent implements AgentModule {
         void runReview(ref, resolveReviewConfig().config, this.onSessionInvalidate);
       }
       return Response.json({ ok: true, behavior, prNumber });
+    });
+
+    // The single GitHub webhook. Owned here (not the Slack agent) so it exists
+    // whenever the GitHub agent runs, including a GitHub-only install and the
+    // outbound `gh webhook forward` path — both of which target this route.
+    routes.set("POST /github/webhook", async (req) => {
+      let body: string;
+      try {
+        body = await readRequestTextWithinLimit(req, MAX_WEBHOOK_BODY_BYTES);
+      } catch (error) {
+        if (error instanceof RequestBodyTooLargeError)
+          return webhookBodyTooLargeResponse(MAX_WEBHOOK_BODY_BYTES);
+        throw error;
+      }
+      const signature = req.headers.get("x-hub-signature-256") || "";
+      if (!verifyGitHubSignature(body, signature, GITHUB_WEBHOOK_SECRET)) {
+        console.error("[github] Invalid GitHub webhook signature");
+        return Response.json({ error: "Invalid signature" }, { status: 401 });
+      }
+      // Reject replayed/redelivered webhooks by delivery id.
+      const deliveryId = req.headers.get("x-github-delivery");
+      if (deliveryId) {
+        if (isGithubDeliveryProcessed(deliveryId))
+          return Response.json({ ok: true, duplicate: true });
+        markGithubDeliveryProcessed(deliveryId);
+      }
+      incrementGithubWebhooks();
+      const event = req.headers.get("x-github-event") || "";
+      const payload = JSON.parse(body);
+      console.log(`[github] webhook: event=${event}, action=${payload.action}`);
+      // Slack-specific PR-review notifications, only when that agent registered one.
+      if (event === "pull_request_review") firePullRequestReview(payload);
+      // Server-side PR cache sync + open-tab nudges (filters to PR events itself).
+      import("../../server/pr-webhook")
+        .then((m) => m.handlePrWebhookEvent(event, payload))
+        .catch((e) => console.error("[github] pr-webhook dispatch failed:", e));
+      // Review / auto-fix / simplify / @mention / merge notifications.
+      if (
+        event === "pull_request" ||
+        event === "issue_comment" ||
+        event === "pull_request_review_comment" ||
+        event === "workflow_run"
+      ) {
+        void handleGithubPrEvent(event, payload);
+      }
+      return Response.json({ ok: true });
     });
 
     return routes;

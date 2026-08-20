@@ -71,20 +71,20 @@ describe("computeTargets", () => {
 
 describe("shouldForward (gating)", () => {
   test("public URL present ⇒ forwarder off (inbound HTTP webhook stays authoritative)", () => {
-    expect(shouldForward({ publicBaseUrl: "https://os.example.com" })).toBe(false);
+    expect(shouldForward({ webhookBaseUrl: "https://os.example.com" })).toBe(false);
   });
 
   test("no public URL (loopback default) ⇒ forwarder on", () => {
-    expect(shouldForward({ publicBaseUrl: "http://127.0.0.1:3850" })).toBe(true);
-    expect(shouldForward({ publicBaseUrl: "http://localhost:3850" })).toBe(true);
+    expect(shouldForward({ webhookBaseUrl: "http://127.0.0.1:3850" })).toBe(true);
+    expect(shouldForward({ webhookBaseUrl: "http://localhost:3850" })).toBe(true);
   });
 
   test('explicit flag "true" forces on even with a public URL', () => {
-    expect(shouldForward({ flag: "true", publicBaseUrl: "https://os.example.com" })).toBe(true);
+    expect(shouldForward({ flag: "true", webhookBaseUrl: "https://os.example.com" })).toBe(true);
   });
 
   test('explicit flag "false" forces off even with no public URL', () => {
-    expect(shouldForward({ flag: "false", publicBaseUrl: "http://127.0.0.1:3850" })).toBe(false);
+    expect(shouldForward({ flag: "false", webhookBaseUrl: "http://127.0.0.1:3850" })).toBe(false);
   });
 });
 
