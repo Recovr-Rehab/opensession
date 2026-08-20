@@ -36,9 +36,6 @@ export type ToastOptions = {
 	 *  7000 with an action, which has to outlast noticing and reaching it. */
 	duration?: number;
 	action?: ToastAction;
-	/** Informational toasts dismiss when their body is clicked. Keep this false
-	 *  when the toast is the only place that can stop a pending action. */
-	dismissOnClick?: boolean;
 };
 
 export type Toast = {
@@ -46,7 +43,6 @@ export type Toast = {
 	message: string;
 	variant: ToastVariant;
 	action?: ToastAction;
-	dismissOnClick: boolean;
 };
 
 // Cap the stack so a burst (e.g. archiving many sessions) can't wallpaper the
@@ -86,31 +82,12 @@ function inferVariant(message: string): ToastVariant {
 export function toast(message: string, opts: ToastOptions = {}): number {
 	const id = nextId++;
 	const variant = opts.variant ?? inferVariant(message);
-	toasts = [
-		...toasts,
-		{
-			id,
-			message,
-			variant,
-			action: opts.action,
-			dismissOnClick: opts.dismissOnClick ?? true,
-		},
-	];
-	// Drop the oldest informational toasts first. A toast that cannot be clicked
-	// away may be the only way to stop pending work, so it stays for its timer.
+	toasts = [...toasts, { id, message, variant, action: opts.action }];
+	// Drop the oldest if we're over the cap.
 	if (toasts.length > MAX_VISIBLE) {
-		let overflow = toasts.length - MAX_VISIBLE;
-		const dropped = new Set<number>();
-		for (const item of toasts) {
-			if (overflow === 0) break;
-			if (!item.dismissOnClick) continue;
-			dropped.add(item.id);
-			overflow--;
-		}
-		for (const item of toasts) {
-			if (dropped.has(item.id)) clearToastTimer(item.id);
-		}
-		toasts = toasts.filter((item) => !dropped.has(item.id));
+		const overflow = toasts.slice(0, toasts.length - MAX_VISIBLE);
+		for (const t of overflow) clearToastTimer(t.id);
+		toasts = toasts.slice(toasts.length - MAX_VISIBLE);
 	}
 	const duration =
 		opts.duration ?? (opts.action ? 7000 : variant === "error" ? 4200 : 3200);
@@ -170,7 +147,7 @@ function ToastCard({ toast: t }: { toast: Toast }) {
 			animate={{ opacity: 1, y: 0, scale: 1 }}
 			exit={{ opacity: 0, y: 8, scale: 0.96 }}
 			transition={{ type: "spring", duration: 0.34, bounce: 0.22 }}
-			onClick={t.dismissOnClick ? () => dismissToast(t.id) : undefined}
+			onClick={() => dismissToast(t.id)}
 			className={cn(
 				"pointer-events-auto cursor-default",
 				// The pill is nowrap by default, which a phone cannot afford: at

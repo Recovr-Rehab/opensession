@@ -38,14 +38,6 @@ describe("toast", () => {
 		expect(undone).toBe(1);
 	});
 
-	test("can keep a pending action visible until it runs or is undone", () => {
-		toast("PR merged", {
-			action: { label: "Undo", onClick: () => undefined },
-			dismissOnClick: false,
-		});
-		expect(activeToasts()[0]?.dismissOnClick).toBe(false);
-	});
-
 	// A burst of archives must not wallpaper the screen, and the toasts that
 	// survive are the newest ones, whose Undo is the one still worth reaching.
 	test("keeps only the newest three", () => {
@@ -54,19 +46,6 @@ describe("toast", () => {
 			"Archived 2 sessions",
 			"Archived 3 sessions",
 			"Archived 4 sessions",
-		]);
-	});
-
-	test("keeps a pending action when newer informational toasts arrive", () => {
-		toast("PR merged", {
-			action: { label: "Undo", onClick: () => undefined },
-			dismissOnClick: false,
-		});
-		for (const message of ["One", "Two", "Three"]) toast(message);
-		expect(activeToasts().map((t) => t.message)).toEqual([
-			"PR merged",
-			"Two",
-			"Three",
 		]);
 	});
 });

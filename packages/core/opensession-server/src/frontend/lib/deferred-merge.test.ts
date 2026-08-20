@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import {
 	cancelDeferredMerge,
+	cancelDeferredMergeByKey,
 	deferredMergeKey,
 	deferredMergePhase,
 	MERGE_UNDO_DELAY_MS,
@@ -48,6 +49,14 @@ describe("deferred merge", () => {
 		expect(cancelDeferredMerge(first)).toBe(false);
 		expect(deferredMergePhase("pr:two")).toBe("scheduled");
 		expect(cancelDeferredMerge(second)).toBe(true);
+		expect(calls).toBe(0);
+	});
+
+	test("lets any control for the PR undo the current schedule", () => {
+		let calls = 0;
+		scheduleDeferredMerge("pr:shared", () => calls++, 1000);
+		expect(cancelDeferredMergeByKey("pr:shared")).toBe(true);
+		expect(deferredMergePhase("pr:shared")).toBe("idle");
 		expect(calls).toBe(0);
 	});
 

@@ -78,10 +78,14 @@ export function GitStatusRows({
           <button
             className={GIT_ACTION}
             onClick={onMerge}
-            disabled={merging || mergeScheduled}
-            title="Squash and merge this pull request"
+            disabled={merging}
+            title={
+              mergeScheduled
+                ? "Cancel the scheduled merge"
+                : "Squash and merge this pull request"
+            }
           >
-            {merging ? "Merging…" : mergeScheduled ? "Merge scheduled" : "Merge"}
+            {merging ? "Merging…" : mergeScheduled ? "Undo" : "Merge"}
           </button>
         ) : undefined),
     });

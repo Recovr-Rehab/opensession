@@ -59,12 +59,10 @@ import { cn } from "../ui/cn";
 import { useShortcutLabel } from "../hooks/useShortcutBindings";
 import { useDeferredMergePhase } from "../hooks/useDeferredMerge";
 import {
-	cancelDeferredMerge,
+	cancelDeferredMergeByKey,
 	deferredMergeKey,
-	MERGE_UNDO_DELAY_MS,
 	scheduleDeferredMerge,
 } from "../lib/deferred-merge";
-import { dismissToast, toast } from "../ui/toast";
 import { BrandMark } from "./BrandTile";
 import { PrChecksPopover } from "./PrChecksPopover";
 import { PrSeriesRows } from "./PrSeriesRows";
@@ -80,6 +78,7 @@ import {
 	IconCheck,
 	IconPlus,
 	IconArchive,
+	IconUndo,
 } from "./icons";
 
 /**
@@ -723,24 +722,18 @@ export function PrStatusBar({
 			: null;
 
 	function handleMerge() {
-		if (!mergeKey || mergePhase !== "idle" || busy) return;
-		let toastId: number | null = null;
-		const handle = scheduleDeferredMerge(mergeKey, async () => {
-			if (toastId !== null) dismissToast(toastId);
+		if (!mergeKey || busy) return;
+		if (mergePhase === "scheduled") {
+			cancelDeferredMergeByKey(mergeKey);
+			return;
+		}
+		if (mergePhase !== "idle") return;
+		scheduleDeferredMerge(mergeKey, async () => {
 			await run("merge", () =>
 				stackMerge
 					? mergePrStackApi(sessionId, "squash", targetRepo, targetBranch)
 					: mergePrApi(sessionId, "squash", targetRepo, targetBranch),
 			);
-		});
-		if (!handle) return;
-		toastId = toast("PR merged", {
-			duration: MERGE_UNDO_DELAY_MS + 1000,
-			dismissOnClick: false,
-			action: {
-				label: "Undo",
-				onClick: () => cancelDeferredMerge(handle),
-			},
 		});
 	}
 
@@ -990,16 +983,24 @@ export function PrStatusBar({
 				return (
 					<PrBarButton
 						className={actionBtn}
-						tone="green"
-						icon={!merging && !mergeScheduled ? <IconGitMerge size={18} /> : undefined}
-						disabled={!!busy || mergePhase !== "idle"}
+						tone={mergeScheduled ? "secondary" : "green"}
+						icon={
+							mergeScheduled
+								? <IconUndo size={18} />
+								: !merging
+									? <IconGitMerge size={18} />
+									: undefined
+						}
+						disabled={!!busy || merging}
 						onClick={handleMerge}
 						title={
-							stackMerge
-								? `Squash and merge ${stackMerge.layers
-										.map((l) => `#${l.number}`)
-										.join(", ")} into ${pr?.stack?.baseRefName || "the base branch"}, all or nothing`
-								: "Squash and merge this PR into its base branch"
+							mergeScheduled
+								? "Cancel the scheduled merge"
+								: stackMerge
+									? `Squash and merge ${stackMerge.layers
+											.map((l) => `#${l.number}`)
+											.join(", ")} into ${pr?.stack?.baseRefName || "the base branch"}, all or nothing`
+									: "Squash and merge this PR into its base branch"
 						}
 					>
 						{merging
@@ -1007,11 +1008,11 @@ export function PrStatusBar({
 								? "Merging stack…"
 								: "Merging…"
 							: mergeScheduled
-								? "Merge scheduled"
+								? "Undo"
 								: stackMerge
 									? "Merge stack"
 									: "Merge"}
-						{stackMerge && !merging && (
+						{stackMerge && !merging && !mergeScheduled && (
 							<span className="ml-1.5 rounded-full bg-white/20 px-1.5 tabular-nums">
 								{stackMerge.layers.length}
 							</span>

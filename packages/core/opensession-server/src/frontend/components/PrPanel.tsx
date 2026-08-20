@@ -51,7 +51,7 @@ import {
 } from "../lib/api";
 import { Button } from "../ui/button";
 import { Checkbox } from "../ui/checkbox";
-import { dismissToast, toast } from "../ui/toast";
+import { toast } from "../ui/toast";
 import type { FileDiffMetadata } from "@pierre/diffs";
 import {
   CommentableDiff,
@@ -85,6 +85,7 @@ import {
   IconGlobe,
   IconListCircles,
   IconSliders,
+  IconUndo,
   IconX,
 } from "./icons";
 import { Menu, MENU_ICON } from "../ui/menu";
@@ -120,9 +121,8 @@ import { BrandMark } from "./BrandTile";
 import { useCopy } from "../ui/copy";
 import { useDeferredMergePhase } from "../hooks/useDeferredMerge";
 import {
-  cancelDeferredMerge,
+  cancelDeferredMergeByKey,
   deferredMergeKey,
-  MERGE_UNDO_DELAY_MS,
   scheduleDeferredMerge,
 } from "../lib/deferred-merge";
 
@@ -1054,12 +1054,15 @@ export function PrPanel({
   }
 
   function handleMerge() {
-    if (!mergeKey || mergePhase !== "idle") return;
+    if (!mergeKey) return;
+    if (mergePhase === "scheduled") {
+      cancelDeferredMergeByKey(mergeKey);
+      return;
+    }
+    if (mergePhase !== "idle") return;
     setMergeError(null);
     const actionTargetKey = loadTargetKey;
-    let toastId: number | null = null;
-    const handle = scheduleDeferredMerge(mergeKey, async () => {
-      if (toastId !== null) dismissToast(toastId);
+    scheduleDeferredMerge(mergeKey, async () => {
       try {
         if (previewTarget)
           await mergePrPreviewApi(
@@ -1076,15 +1079,6 @@ export function PrPanel({
           toast(message);
         }
       }
-    });
-    if (!handle) return;
-    toastId = toast("PR merged", {
-      duration: MERGE_UNDO_DELAY_MS + 1000,
-      dismissOnClick: false,
-      action: {
-        label: "Undo",
-        onClick: () => cancelDeferredMerge(handle),
-      },
     });
   }
 
@@ -2007,24 +2001,32 @@ export function PrPanel({
         )}
         {canMergeAfterReview && (
           <Button
-            variant="success-strong"
+            variant={mergeScheduled ? "soft" : "success-strong"}
             size="sm"
             className={
               !pr.staging?.url && !(caps.reviewComments && !reviewing)
                 ? "ml-auto"
                 : undefined
             }
-            icon={!merging && !mergeScheduled ? <IconGitMerge size={18} /> : undefined}
-            disabled={merging || mergeScheduled}
+            icon={
+              mergeScheduled
+                ? <IconUndo size={18} />
+                : !merging
+                  ? <IconGitMerge size={18} />
+                  : undefined
+            }
+            disabled={merging}
             onClick={handleMerge}
-            title="Squash and merge this pull request"
+            title={
+              mergeScheduled
+                ? "Cancel the scheduled merge"
+                : "Squash and merge this pull request"
+            }
           >
             {merging
               ? "Merging…"
               : mergeScheduled
-                ? headerCompact
-                  ? "Scheduled"
-                  : "Merge scheduled"
+                ? "Undo"
                 : headerCompact
                   ? "Merge"
                   : "Squash and merge"}
@@ -2079,15 +2081,16 @@ export function PrPanel({
               <>
                 <Menu.Separator />
                 {canMergeAfterReview && (
-                  <Menu.Item
-                    onClick={handleMerge}
-                    disabled={merging || mergeScheduled}
-                  >
-                    <IconGitMerge size={18} className={MENU_ICON} />
+                  <Menu.Item onClick={handleMerge} disabled={merging}>
+                    {mergeScheduled ? (
+                      <IconUndo size={18} className={MENU_ICON} />
+                    ) : (
+                      <IconGitMerge size={18} className={MENU_ICON} />
+                    )}
                     {merging
                       ? "Merging…"
                       : mergeScheduled
-                        ? "Merge scheduled"
+                        ? "Undo"
                         : "Squash and merge"}
                   </Menu.Item>
                 )}

@@ -88,17 +88,26 @@ export function scheduleDeferredMerge(
 	return { key, token };
 }
 
-/** Undo only the exact schedule that created the visible toast. */
-export function cancelDeferredMerge(handle: DeferredMergeHandle): boolean {
-	const entry = entries.get(handle.key);
+function cancelScheduledMerge(key: string, token?: number): boolean {
+	const entry = entries.get(key);
 	if (
 		!entry ||
-		entry.token !== handle.token ||
+		(token !== undefined && entry.token !== token) ||
 		entry.phase !== "scheduled"
 	)
 		return false;
 	if (entry.timer) clearTimeout(entry.timer);
-	entries.delete(handle.key);
+	entries.delete(key);
 	emit();
 	return true;
+}
+
+/** Undo only the exact schedule represented by this handle. */
+export function cancelDeferredMerge(handle: DeferredMergeHandle): boolean {
+	return cancelScheduledMerge(handle.key, handle.token);
+}
+
+/** Undo the current schedule from any merge control showing that PR. */
+export function cancelDeferredMergeByKey(key: string): boolean {
+	return cancelScheduledMerge(key);
 }
