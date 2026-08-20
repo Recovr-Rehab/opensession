@@ -1,10 +1,13 @@
 import { expect, test } from "bun:test";
+import { createElement } from "react";
+import { renderToStaticMarkup } from "react-dom/server";
 import {
   assetToolPath,
   canonicalToolName,
   mcpServerDisplayName,
   mcpToolDisplayName,
   parseMcpTool,
+  PathSummary,
   pathSummaryParts,
   toolDurationMs,
   toolDisplayName,
@@ -57,7 +60,7 @@ test("paths render relative to the session's worktrees", () => {
   );
 });
 
-test("path summaries keep the full directory available for responsive truncation", () => {
+test("path summaries truncate the complete left-aligned path", () => {
   expect(pathSummaryParts("packages/core/protocol/src/tool-presentation.ts")).toEqual({
     directory: "packages/core/protocol/src",
     separator: "/",
@@ -73,6 +76,14 @@ test("path summaries keep the full directory available for responsive truncation
     separator: "",
     filename: "package.json",
   });
+
+  const markup = renderToStaticMarkup(
+    createElement(PathSummary, {
+      path: "packages/core/protocol/src/tool-presentation.ts",
+    }),
+  );
+  expect(markup).toContain("truncate");
+  expect(markup).not.toContain("w-full");
 });
 
 test("bash, grep and glob summaries drop their plumbing", () => {

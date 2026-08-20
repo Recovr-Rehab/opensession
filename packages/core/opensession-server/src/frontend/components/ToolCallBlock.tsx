@@ -221,7 +221,7 @@ export function ToolGlyph({ toolName, size = 20 }: { toolName: string; size?: nu
   }
 }
 
-/** Split the filename from a path so only its middle yields when space runs out. */
+/** Split a path so its directory can stay quiet while the row truncates as one line. */
 export function pathSummaryParts(path: string) {
   const slash = path.lastIndexOf("/");
   if (slash < 0) return { directory: "", separator: "", filename: path };
@@ -236,14 +236,10 @@ export function PathSummary({ path }: { path: string }) {
   const { directory, separator, filename } = pathSummaryParts(path);
   if (!separator) return <>{filename}</>;
   return (
-    <span className="flex min-w-0 w-full items-baseline overflow-hidden" title={path}>
-      {directory && (
-        <span className="min-w-[4ch] shrink overflow-hidden text-ellipsis whitespace-nowrap opacity-55">
-          {directory}
-        </span>
-      )}
-      <span className="shrink-0 opacity-55">{separator}</span>
-      <span className="shrink-0">{filename}</span>
+    <span className="block min-w-0 truncate" title={path}>
+      {directory && <span className="opacity-55">{directory}</span>}
+      <span className="opacity-55">{separator}</span>
+      <span>{filename}</span>
     </span>
   );
 }
