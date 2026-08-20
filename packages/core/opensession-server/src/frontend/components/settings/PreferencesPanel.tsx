@@ -90,11 +90,7 @@ import { Switch } from "../../ui/switch";
 import { toast } from "../../ui/toast";
 import { getCurrentUser } from "../UserPicker";
 import { Select, SettingRow } from "./shared";
-import {
-	AppearanceSection,
-	SidebarDisplayRows,
-	SidebarItemsSection,
-} from "./AppearancePanel";
+import { AppearanceSection, SidebarItemsSection } from "./AppearancePanel";
 import { PersonalSandboxDefaultRow } from "./SandboxDefaults";
 
 // ── Desk voice ─────────────────────────────────────────────────────────────
@@ -600,7 +596,6 @@ export function PreferencesPanel() {
 			<AppearanceSection />
 			<SettingsGroupLabel>Sidebar</SettingsGroupLabel>
 			<SettingCard>
-				<SidebarDisplayRows />
 				<SettingRow
 					title="Pin new sessions"
 					control={

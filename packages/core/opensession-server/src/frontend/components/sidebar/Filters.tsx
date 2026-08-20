@@ -11,6 +11,12 @@ import {
 	setSidebarDensity,
 	type SidebarDensity,
 } from "../../lib/sidebar-density";
+import {
+	getWsTimePref,
+	onWsTimeChanged,
+	setWsTimePref,
+	type WsTimePref,
+} from "../../lib/workspace-time";
 import { AGENT_PERSON_KEY } from "../../lib/automation-audience";
 import { useIsPhone } from "../../hooks/useIsPhone";
 import { Menu } from "../../ui/menu";
@@ -109,11 +115,10 @@ export function FilterPopover({
 	onClose: () => void;
 	onCustomize: () => void;
 }) {
-	// Row density is a property of this list, so it sits with the other view
-	// controls rather than only in settings. It is a stored preference, not part
-	// of FilterState — hence its own state here, kept live by the pref's change
-	// event so the Preferences control and this row never disagree.
-	// Both hooks run before the `anchor` early return: an unmounted anchor must
+	// Density and last used time belong to this list, but they are stored display
+	// preferences rather than part of FilterState. Keep them live here so the
+	// menu always reflects changes from another tab.
+	// All hooks run before the `anchor` early return: an unmounted anchor must
 	// not change how many hooks this component calls.
 	const isPhone = useIsPhone();
 	const [density, setDensity] = useState<SidebarDensity>(getSidebarDensity);
@@ -121,6 +126,8 @@ export function FilterPopover({
 		() => onSidebarDensityChanged(() => setDensity(getSidebarDensity())),
 		[],
 	);
+	const [wsTime, setWsTime] = useState<WsTimePref>(getWsTimePref);
+	useEffect(() => onWsTimeChanged(() => setWsTime(getWsTimePref())), []);
 
 	if (!anchor) return null;
 	const r = anchor.getBoundingClientRect();
@@ -168,9 +175,10 @@ export function FilterPopover({
 	];
 
 	// How much of what is now out of sight is doing something. Only the three
-	// that change which rows the list holds count: density is a look, and sort
-	// is an order. Empty projects counts here even though the Repo picker is
-	// its other door, because this is the number that explains a short list.
+	// that change which rows the list holds count: density and time are looks,
+	// and sort is an order. Empty projects counts here even though the Repo
+	// picker is its other door, because this is the number that explains a short
+	// list.
 	const advancedChanged =
 		(filter.prs === "default" ? 0 : 1) +
 		(filter.autoCreated === "hide" ? 0 : 1) +
@@ -237,9 +245,9 @@ export function FilterPopover({
 				    It says how many of them are off their default, because a
 				    setting that hides rows is exactly the one you want to find
 				    again when the list looks short, and a closed menu cannot
-				    show you that it is the reason. Sort and density change how
-				    the list reads rather than what is in it, so neither is part
-				    of that count. */}
+				    show you that it is the reason. Sort, density, and time change
+				    how the list reads rather than what is in it, so they are not
+				    part of that count. */}
 				<Menu.Root>
 					<Menu.Trigger className={cn(SETTING_ROW, SETTING_ROW_PRESSABLE, "mt-1")}>
 						<span className="shrink-0 text-dim">Advanced</span>
@@ -325,34 +333,32 @@ export function FilterPopover({
 							<span className="grow truncate">Hide empty projects</span>
 							<SwitchIndicator on={filter.emptyProjects === "hide"} />
 						</Menu.CheckboxItem>
-						{/* Behind a rule, because it is the odd one here: everything
-						    above decides which rows the list holds, and this only
-						    decides how tightly they are drawn. It is also the only
-						    row here that is not part of the filter at all: it writes
-						    a stored preference the Preferences settings share.
-
-						    Desktop only, because that is the whole of what the
-						    preference does: a phone row is a tap target and keeps its
-						    own padding at either setting (see SIDEBAR_DENSITY_VARS),
-						    so offering the control there would be a switch that
-						    changes nothing. The rule goes inside that check, so a
-						    phone does not end the menu on a line with nothing under
-						    it. */}
+						{/* Display preferences stay beside the filters they affect instead
+						    of being duplicated in Settings. Density is desktop only because
+						    phone rows keep their touch padding at either value. */}
+						<Menu.Separator />
 						{!isPhone && (
-							<>
-								<Menu.Separator />
-								<FilterSubmenu
-									label="Density"
-									value={density}
-									options={DENSITY_OPTIONS.map(({ value, label, Icon }) => ({
-										value,
-										label,
-										icon: <Icon size={16} />,
-									}))}
-									onSelect={(v) => setSidebarDensity(v as SidebarDensity)}
-								/>
-							</>
+							<FilterSubmenu
+								label="Density"
+								value={density}
+								options={DENSITY_OPTIONS.map(({ value, label, Icon }) => ({
+									value,
+									label,
+									icon: <Icon size={16} />,
+								}))}
+								onSelect={(v) => setSidebarDensity(v as SidebarDensity)}
+							/>
 						)}
+						<FilterSubmenu
+							label="Last used time"
+							value={wsTime}
+							options={[
+								{ value: "off", label: "Off" },
+								{ value: "always", label: "Always" },
+								{ value: "hover", label: "On hover" },
+							]}
+							onSelect={(v) => setWsTimePref(v as WsTimePref)}
+						/>
 					</Menu.Popup>
 				</Menu.Root>
 				<button

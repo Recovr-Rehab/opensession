@@ -33,20 +33,6 @@ import {
 } from "../../lib/theme";
 import type { FeedDescriptor } from "../../lib/types";
 import {
-	getWsTimePref,
-	onWsTimeChanged,
-	setWsTimePref,
-	type WsTimePref,
-} from "../../lib/workspace-time";
-import {
-	DENSITY_OPTIONS,
-	getSidebarDensity,
-	onSidebarDensityChanged,
-	setSidebarDensity,
-	type SidebarDensity,
-} from "../../lib/sidebar-density";
-import { Segmented, SegmentedOption } from "../../ui/segmented";
-import {
 	PLAIN_ID,
 	SUPPORT_SURFACE_OPTIONS,
 	setSupportSurface,
@@ -264,57 +250,6 @@ export function AppearanceSection() {
 					</div>
 				</div>
 			</SettingsSection>
-		</>
-	);
-}
-
-/** How sidebar rows are drawn. Rendered inside Preferences' Sidebar card. */
-export function SidebarDisplayRows() {
-	const [density, setDensity] = useState<SidebarDensity>(getSidebarDensity);
-	useEffect(
-		() => onSidebarDensityChanged(() => setDensity(getSidebarDensity())),
-		[],
-	);
-	const [wsTime, setWsTime] = useState<WsTimePref>(getWsTimePref);
-	useEffect(() => onWsTimeChanged(() => setWsTime(getWsTimePref())), []);
-
-	return (
-		<>
-			<SettingRow
-				title="Row density"
-				control={
-					// Two named choices rather than a switch: the same pair the
-					// sidebar's filter menu offers, in the same control, wearing the
-					// same marks, so the two ways in read as one setting.
-					<Segmented
-						label="Sidebar row density"
-						value={density}
-						onValueChange={(v) => setSidebarDensity(v as SidebarDensity)}
-					>
-						{DENSITY_OPTIONS.map(({ value, label, Icon }) => (
-							<SegmentedOption key={value} value={value}>
-								<Icon size={20} />
-								{label}
-							</SegmentedOption>
-						))}
-					</Segmented>
-				}
-			/>
-			<SettingRow
-				title="Show last used time"
-				control={
-					<Select
-						label="Show last used time"
-						value={wsTime}
-						options={[
-							{ value: "off", label: "Off" },
-							{ value: "always", label: "Always" },
-							{ value: "hover", label: "On hover" },
-						]}
-						onChange={setWsTimePref}
-					/>
-				}
-			/>
 		</>
 	);
 }
