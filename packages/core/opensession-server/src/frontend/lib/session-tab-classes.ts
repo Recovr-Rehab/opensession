@@ -54,10 +54,13 @@ const PILL = "rounded-[calc(8px*var(--rf))]";
  * carried over.
  */
 export const TAB_STRIP =
-	"session-tabs group/strip flex min-w-0 shrink-0 items-center gap-[3px] bg-surface px-2 " +
-	// Desktop: a compact, line-free band. The active tab's own surface supplies
-	// the selection boundary, so neither an underline nor a rule across the
-	// content belongs here.
+	"session-tabs group/strip relative flex min-w-0 shrink-0 items-center gap-[3px] bg-surface px-2 " +
+	// Every desktop tab bar has one closing hairline. A pseudo-element avoids
+	// changing its height, while phones keep their existing real bottom border.
+	"desktop:after:pointer-events-none desktop:after:absolute desktop:after:inset-x-0 " +
+	"desktop:after:bottom-0 desktop:after:h-px desktop:after:bg-divider desktop:after:content-[''] " +
+	// Desktop: a compact band. The active tab's own surface supplies the
+	// selection boundary, so the line closes the bar rather than underlining it.
 	//
 	// The non-split bar takes its 11px header overlap at the call site. The
 	// session header above is a fixed 48px row whose title is centred in it, and
