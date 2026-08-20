@@ -48,6 +48,8 @@ export interface StartTranscriptWatchOptions {
     frame: Record<string, unknown>,
     event?: TranscriptBusEvent
   ) => Record<string, unknown>;
+  /** An authoritative reset sent a replacement snapshot. */
+  afterResetSnapshot?: () => void;
 }
 
 export interface TranscriptWatchHandle {
@@ -133,6 +135,7 @@ export function startTranscriptWatch(
       lastChangeSeq: cursor,
       v2: true,
     });
+    if (initialized) options.afterResetSnapshot?.();
   }
 
   const flush = (event?: TranscriptBusEvent) => {

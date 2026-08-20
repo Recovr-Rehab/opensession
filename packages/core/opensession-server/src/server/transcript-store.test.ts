@@ -575,3 +575,139 @@ describe("deleteSessionTranscript", () => {
     expect(store.readTail(sid).entries.map((e) => e.seq)).toEqual([1]);
   });
 });
+
+describe("transcript outline and random-access ranges", () => {
+  test("indexes display roles without shipping content", () => {
+    const sid = "bks-outline";
+    store.appendTranscriptEvents(sid, [
+      entry("context", "private context", {
+        type: "system",
+        contextInjection: { source: "repos" },
+      }),
+      entry("human", "Please investigate", { type: "user" }),
+      entry("tool", "Using Read", {
+        type: "tool_use",
+        toolUseId: "call-1",
+        toolName: "Read",
+      }),
+      entry("result", "large result", {
+        type: "tool_result",
+        toolUseId: "call-1",
+      }),
+      entry("answer", "Done"),
+      entry(
+        "handoff",
+        "[GitHub] <!--os:review-handoff-->\nReview PR #42",
+        { type: "user" },
+      ),
+    ]);
+
+    const outline = store.readTranscriptIndex(sid);
+    expect(outline.entries.map((row) => row.role)).toEqual([
+      "hidden",
+      "user",
+      "tool_use",
+      "tool_result",
+      "assistant",
+      "review_handoff",
+    ]);
+    expect(outline.entries[5]).toMatchObject({ reviewPrNumber: 42 });
+    expect(outline.entries[1]).toMatchObject({
+      id: "human",
+      seq: 2,
+      contentLength: "Please investigate".length,
+    });
+    expect(JSON.stringify(outline)).not.toContain("large result");
+    expect(outline.firstSeq).toBe(1);
+    expect(outline.lastSeq).toBe(6);
+  });
+
+  test("updates an old outline row in place when its role changes", () => {
+    const sid = "bks-outline-upsert";
+    store.appendTranscriptEvents(sid, [entry("same", "draft")]);
+    const before = store.readTranscriptIndex(sid).entries[0];
+    store.appendTranscriptEvents(sid, [entry("same", "now a person", { type: "user" })]);
+    const after = store.readTranscriptIndex(sid).entries[0];
+    expect(after.seq).toBe(before.seq);
+    expect(after.changeSeq).toBeGreaterThan(before.changeSeq);
+    expect(after.role).toBe("user");
+  });
+
+  test("hydrates an inclusive span in bounded chunks", () => {
+    const sid = "bks-range";
+    store.appendTranscriptEvents(
+      sid,
+      Array.from({ length: 5 }, (_, index) => entry(`range-${index + 1}`, `row ${index + 1}`)),
+    );
+    const first = store.readRange(sid, 2, 5, 1, 2);
+    expect(first.entries.map((row) => row.seq)).toEqual([2, 3]);
+    expect(first.coveredThroughSeq).toBe(3);
+    expect(first.complete).toBe(false);
+    const second = store.readRange(sid, 2, 5, first.coveredThroughSeq, 2);
+    expect(second.entries.map((row) => row.seq)).toEqual([4, 5]);
+    expect(second.coveredThroughSeq).toBe(5);
+    expect(second.complete).toBe(true);
+  });
+
+  test("paginates a range larger than the wire cap", () => {
+    const sid = "bks-range-large";
+    store.appendTranscriptEvents(
+      sid,
+      Array.from({ length: 501 }, (_, index) =>
+        entry(`large-range-${index + 1}`, `row ${index + 1}`),
+      ),
+    );
+    const first = store.readRange(sid, 1, 501, 0, 500);
+    expect(first.entries).toHaveLength(500);
+    expect(first.coveredThroughSeq).toBe(500);
+    expect(first.complete).toBe(false);
+    const last = store.readRange(sid, 1, 501, 500, 500);
+    expect(last.entries.map((row) => row.seq)).toEqual([501]);
+    expect(last.complete).toBe(true);
+  });
+
+  test("backfills existing canonical rows in bounded async batches", async () => {
+    const sid = "bks-outline-backfill";
+    store.appendTranscriptEvents(
+      sid,
+      Array.from({ length: 250 }, (_, index) =>
+        entry(`backfill-${index}`, "hello", { type: "user" }),
+      ),
+    );
+    const raw = new Database(dbPath);
+    raw.run("DELETE FROM transcript_outline WHERE session_id = ?", [sid]);
+    raw.close();
+    let yielded = false;
+    setTimeout(() => {
+      yielded = true;
+    }, 0);
+    await store.ensureTranscriptOutline(sid);
+    const outline = store.readTranscriptIndex(sid);
+    expect(outline.entries).toHaveLength(250);
+    expect(outline.entries[0]).toMatchObject({
+      id: "backfill-0",
+      role: "user",
+    });
+    expect(yielded).toBe(true);
+  });
+
+  test("backfill preserves oversized row roles and original lengths", async () => {
+    const sid = "bks-outline-full-blob";
+    const content =
+      "[GitHub] <!--os:review-handoff-->\nReview PR #42\n" + "x".repeat(100_000);
+    store.appendTranscriptEvents(sid, [
+      entry("large-handoff", content, { type: "user" }),
+    ]);
+    const written = store.readTranscriptIndex(sid).entries[0];
+    const raw = new Database(dbPath);
+    raw.run("DELETE FROM transcript_outline WHERE session_id = ?", [sid]);
+    raw.close();
+    await store.ensureTranscriptOutline(sid);
+    expect(store.readTranscriptIndex(sid).entries[0]).toEqual(written);
+    expect(written).toMatchObject({
+      role: "review_handoff",
+      reviewPrNumber: 42,
+      contentLength: content.length,
+    });
+  });
+});

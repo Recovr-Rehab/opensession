@@ -34,6 +34,7 @@ import { clearMention, onMentionsChanged } from "../lib/mentions";
 import { QuoteSelection } from "./QuoteSelection";
 import { plainThreadUrl } from "./PlainThreadPanel";
 import { isGitHubAttribution } from "@tellahq/opensession-protocol/notices";
+import type { TranscriptIndexEntry } from "@tellahq/opensession-protocol/session";
 import type {
 	UnifiedSession,
 	SessionNote,
@@ -55,6 +56,11 @@ import {
 } from "../lib/transcript-history";
 import { MessageRail } from "./MessageRail";
 import { collectSentMessages } from "../lib/sent-messages";
+import {
+	mergeTranscriptIndexEntries,
+	transcriptIndexEntryFromPayload,
+	type TranscriptIndexedRange,
+} from "../lib/transcript-index";
 import {
 	canonicalToolName,
 	LiveSubagentsProvider,
@@ -1229,6 +1235,27 @@ export function SessionViewer({
 	const backgroundHistoryRef = useRef(false);
 	const backgroundHistoryAttemptedRef = useRef(false);
 	const [loadingAllHistory, setLoadingAllHistory] = useState(false);
+	const [transcriptIndexState, setTranscriptIndexState] = useState<{
+		sessionId: string;
+		entries: TranscriptIndexEntry[];
+	} | null>(null);
+	const transcriptIndex =
+		transcriptIndexState?.sessionId === session.id
+			? transcriptIndexState.entries
+			: null;
+	const transcriptIndexEpochRef = useRef<number | null>(null);
+	const [transcriptRangeRetryGeneration, setTranscriptRangeRetryGeneration] =
+		useState(0);
+	const transcriptRangeRequestsRef = useRef(
+		new Map<
+			string,
+			{
+				range: TranscriptIndexedRange;
+				requestId: string;
+				timer: ReturnType<typeof setTimeout>;
+			}
+		>(),
+	);
 	// Byte offset the loaded history begins at — the "load earlier" pagination
 	// cursor (server: parseTranscriptTail/parseTranscriptWindow startOffset).
 	// null = unknown (old server) → load_history falls back to the full resend.
@@ -2449,6 +2476,36 @@ export function SessionViewer({
 	}, [focused, workspaceName, session.title]);
 
 	// Subscribe to WebSocket messages
+	const loadTranscriptRanges = useCallback(
+		(ranges: TranscriptIndexedRange[]) => {
+			const epoch = transcriptIndexEpochRef.current;
+			if (epoch === null) return;
+			for (const range of ranges) {
+				const key = `${range.firstSeq}:${range.lastSeq}`;
+				if (transcriptRangeRequestsRef.current.has(key)) continue;
+				const requestId = crypto.randomUUID();
+				const timer = setTimeout(() => {
+					transcriptRangeRequestsRef.current.delete(key);
+					setTranscriptRangeRetryGeneration((generation) => generation + 1);
+				}, 15_000);
+				transcriptRangeRequestsRef.current.set(key, {
+					range,
+					requestId,
+					timer,
+				});
+				send({
+					type: "load_transcript_range",
+					sessionId: session.id,
+					requestId,
+					firstSeq: range.firstSeq,
+					lastSeq: range.lastSeq,
+					epoch,
+				});
+			}
+		},
+		[send, session.id],
+	);
+
 	useEffect(() => {
 		if (!connected) return;
 
@@ -2531,6 +2588,13 @@ export function SessionViewer({
 							transcriptCursorRef.current = null;
 						}
 					}
+					if (v2) {
+						setTranscriptIndexState(null);
+						transcriptIndexEpochRef.current = null;
+						for (const request of transcriptRangeRequestsRef.current.values())
+							clearTimeout(request.timer);
+						transcriptRangeRequestsRef.current.clear();
+					}
 					transcriptViewStore.replace(merged, true, v2);
 					setHistoryTruncated(!!msg.truncated);
 					backgroundHistoryRef.current = false;
@@ -2565,6 +2629,47 @@ export function SessionViewer({
 					// beforeSeq instead, so the byte cursor stays untouched there.
 					if (!v2 && typeof msg.startOffset === "number") {
 						historyStartRef.current = msg.startOffset;
+					}
+					break;
+				}
+				case "transcript_index": {
+					const keepLiveEdge = followingLive.current;
+					transcriptIndexEpochRef.current = msg.epoch;
+					setTranscriptIndexState({ sessionId: session.id, entries: msg.entries });
+					setHistoryTruncated(false);
+					backgroundHistoryRef.current = false;
+					historyRevealRef.current = null;
+					loadingHistoryRef.current = false;
+					setLoadingHistory(false);
+					if (keepLiveEdge)
+						requestAnimationFrame(() => scrollToLatest("auto"));
+					break;
+				}
+				case "transcript_range": {
+					if (msg.epoch !== transcriptIndexEpochRef.current) break;
+					const found = [...transcriptRangeRequestsRef.current.entries()].find(
+						([, request]) => request.requestId === msg.requestId,
+					);
+					if (!found) break;
+					transcriptViewStore.merge(msg.entries, true);
+					const [key, request] = found;
+					clearTimeout(request.timer);
+					if (msg.complete) {
+						transcriptRangeRequestsRef.current.delete(key);
+					} else {
+						request.timer = setTimeout(() => {
+							transcriptRangeRequestsRef.current.delete(key);
+							setTranscriptRangeRetryGeneration((generation) => generation + 1);
+						}, 15_000);
+						send({
+							type: "load_transcript_range",
+							sessionId: session.id,
+							requestId: request.requestId,
+							firstSeq: request.range.firstSeq,
+							lastSeq: request.range.lastSeq,
+							afterSeq: msg.coveredThroughSeq,
+							epoch: msg.epoch,
+						});
 					}
 					break;
 				}
@@ -2670,6 +2775,25 @@ export function SessionViewer({
 						};
 					}
 					transcriptViewStore.merge(msg.entries, inSeqMode);
+					if (inSeqMode && transcriptIndexEpochRef.current !== null) {
+						const projected = msg.entries
+							.map(transcriptIndexEntryFromPayload)
+							.filter((entry): entry is TranscriptIndexEntry => entry !== null);
+						setTranscriptIndexState((current) =>
+							current?.sessionId === session.id
+								? {
+									...current,
+									entries: mergeTranscriptIndexEntries(
+										current.entries,
+										projected,
+									),
+								}
+								: current,
+						);
+						if (msg.entries.length === 0 && typeof msg.firstSeq === "number") {
+							send({ type: "load_transcript_index", sessionId: session.id });
+						}
+					}
 					// The live stream and the transcript tail both carry assistant text.
 					// stream_text accumulates whole blocks until stream_done (end of the
 					// run), so a mid-run text block would otherwise show twice: as the
@@ -2901,6 +3025,7 @@ export function SessionViewer({
 			user: getCurrentUser(),
 			supportsSeq: true,
 			supportsChangeSeq: true,
+			supportsTranscriptIndex: true,
 			...resume,
 		});
 		return () => {
@@ -6628,6 +6753,11 @@ export function SessionViewer({
 													<OpenAssetProvider value={openAssetFromTranscript}>
 														<TranscriptBlocks
 															entries={entries}
+															transcriptIndex={transcriptIndex ?? undefined}
+															transcriptRangeRetryGeneration={
+																transcriptRangeRetryGeneration
+															}
+															onLoadTranscriptRanges={loadTranscriptRanges}
 															live={isBusy}
 															sessionId={session.id}
 															reviewResult={reviewResult}

@@ -702,3 +702,100 @@ describe("TranscriptBlocks virtual-list fallback", () => {
 		expect(html).not.toContain("data-virtual-transcript");
 	});
 });
+
+describe("TranscriptBlocks indexed ranges", () => {
+	const indexRow = (
+		seq: number,
+		role: "user" | "assistant" | "review_handoff",
+		extra: Record<string, unknown> = {},
+	) => ({
+		id: `indexed-${seq}`,
+		seq,
+		changeSeq: seq,
+		timestampMs: Date.parse(`2026-08-12T12:00:0${seq}Z`),
+		role,
+		contentLength: 24,
+		...extra,
+	});
+
+	test("renders the complete outline while unloaded ranges stay placeholders", () => {
+		const html = renderToStaticMarkup(
+			<TranscriptBlocks
+				transcriptIndex={[
+					indexRow(1, "user"),
+					indexRow(2, "assistant"),
+					indexRow(3, "user"),
+				]}
+				entries={[
+					{
+						id: "indexed-3",
+						seq: 3,
+						changeSeq: 3,
+						type: "user",
+						content: "Newest prompt",
+						timestamp: "2026-08-12T12:00:03Z",
+					},
+				]}
+			/>,
+		);
+		expect(html).toContain("Loading messages");
+		expect(html).toContain("Newest prompt");
+	});
+
+	test("keeps a note inside its loaded conversation range", () => {
+		const html = renderToStaticMarkup(
+			<TranscriptBlocks
+				transcriptIndex={[
+					indexRow(1, "user"),
+					indexRow(2, "assistant"),
+				]}
+				entries={[
+					{
+						id: "indexed-1",
+						seq: 1,
+						changeSeq: 1,
+						type: "user",
+						content: "Question before note",
+						timestamp: "2026-08-12T12:00:01Z",
+					},
+					{
+						id: "indexed-2",
+						seq: 2,
+						changeSeq: 2,
+						type: "assistant",
+						content: "Answer after note",
+						timestamp: "2026-08-12T12:00:02Z",
+					},
+				]}
+				notes={[
+					{
+						id: "middle-note",
+						user: "Kent",
+						text: "Note in between",
+						ts: Date.parse("2026-08-12T12:00:01.500Z"),
+					},
+				]}
+			/>,
+		);
+		expect(html.indexOf("Question before note")).toBeLessThan(
+			html.indexOf("Note in between"),
+		);
+		expect(html.indexOf("Note in between")).toBeLessThan(
+			html.indexOf("Answer after note"),
+		);
+	});
+
+	test("renders a review shell from index metadata before its payload loads", () => {
+		const html = renderToStaticMarkup(
+			<TranscriptBlocks
+				transcriptIndex={[
+					indexRow(1, "review_handoff", { reviewPrNumber: 42 }),
+					indexRow(2, "assistant"),
+				]}
+				entries={[]}
+			/>,
+		);
+		expect(html).toContain("Review loop");
+		expect(html).toContain("PR #42");
+	});
+});

@@ -118,6 +118,29 @@ export interface TranscriptEntry {
   senderVia?: "slack";
 }
 
+/** Display role needed to group a transcript without downloading its bodies. */
+export type TranscriptIndexRole =
+  | "user"
+  | "notice"
+  | "review_handoff"
+  | "system"
+  | "assistant"
+  | "tool_use"
+  | "tool_result"
+  | "hidden";
+
+/** One compact durable-row descriptor in a complete transcript outline. */
+export interface TranscriptIndexEntry {
+  id: string;
+  seq: number;
+  changeSeq: number;
+  timestampMs: number;
+  role: TranscriptIndexRole;
+  contentLength: number;
+  /** Present only on review handoffs, for the collapsed loop label. */
+  reviewPrNumber?: number;
+}
+
 /** Cumulative token/cost accounting for a session, as viewers render it. */
 export interface SessionUsage {
   costUsd: number;
@@ -187,6 +210,9 @@ export type ProtocolClientMessage =
       supportsSeq?: boolean;
       /** This client resumes every mutation, including old-seq rewrites. */
       supportsChangeSeq?: boolean;
+      /** This client can render a complete lightweight transcript outline and
+       *  hydrate arbitrary seq ranges as they approach the viewport. */
+      supportsTranscriptIndex?: boolean;
       /** Seq-mode resume cursor: the lastSeq of the last v2 frame this
        *  client received for the session (used instead of offset/rev). */
       sinceSeq?: number;
@@ -197,6 +223,18 @@ export type ProtocolClientMessage =
       feedEpoch?: string;
     }
   | { type: "unwatch"; sessionId: string }
+  | { type: "load_transcript_index"; sessionId: string }
+  | {
+      type: "load_transcript_range";
+      sessionId: string;
+      requestId: string;
+      firstSeq: number;
+      lastSeq: number;
+      /** Continue a block larger than one bounded response. */
+      afterSeq?: number;
+      /** Index generation this request was planned against. */
+      epoch: number;
+    }
   /** The client half of `ask_question`: answers keyed by question TEXT, or
    *  null to dismiss. Only applied while `questionId` is still the session's
    *  pending ask, so a stale card can't answer a newer question. */
@@ -392,6 +430,30 @@ export type ProtocolServerMessage =
       firstSeq?: number;
       lastSeq?: number;
       lastChangeSeq?: number;
+    }
+  | {
+      /** Complete content-free outline for full-range virtual scrolling. */
+      type: "transcript_index";
+      sessionId: string;
+      entries: TranscriptIndexEntry[];
+      firstSeq: number;
+      lastSeq: number;
+      lastChangeSeq: number;
+      /** Authoritative replacement generation; stale range replies are ignored. */
+      epoch: number;
+    }
+  | {
+      /** One bounded chunk of an arbitrary indexed range. */
+      type: "transcript_range";
+      sessionId: string;
+      requestId: string;
+      entries: TranscriptEntry[];
+      firstSeq: number;
+      lastSeq: number;
+      coveredThroughSeq: number;
+      complete: boolean;
+      epoch: number;
+      lastChangeSeq: number;
     }
   | {
       /** Older entries from one "load earlier" page. Client merges by id and

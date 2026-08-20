@@ -1,4 +1,4 @@
-import { useVirtualizer } from "@tanstack/react-virtual";
+import { defaultRangeExtractor, useVirtualizer } from "@tanstack/react-virtual";
 import React, { useEffect, useRef } from "react";
 import {
 	registerTranscriptVirtualNavigation,
@@ -17,37 +17,47 @@ export interface VirtualTranscriptItem {
 
 interface Props {
 	items: VirtualTranscriptItem[];
-	/** The live edge stays ordinary DOM so opening and streaming never wait for measurement. */
+	/** Keep the live-edge tail mounted inside the same virtual coordinate space. */
 	trailingMounted: number;
+	onVisibleItems?: (items: VirtualTranscriptItem[]) => void;
+	/** Range children reuse the renderer without nesting another virtualizer. */
+	enabled?: boolean;
 }
 
 /** Loaded transcript blocks, windowed against their nearest message scroller. */
-export function VirtualTranscriptList({ items, trailingMounted }: Props) {
+export function VirtualTranscriptList({
+	items,
+	trailingMounted,
+	onVisibleItems,
+	enabled = true,
+}: Props) {
 	const rootRef = useRef<HTMLDivElement>(null);
-	const virtualCount = virtualTranscriptPrefixCount(
-		items.length,
-		trailingMounted,
-	);
 	const virtualizer = useVirtualizer<HTMLDivElement, HTMLDivElement>({
-		count: virtualCount,
+		count: items.length,
 		getScrollElement: () =>
 			rootRef.current?.closest<HTMLDivElement>(".viewer-messages") ?? null,
 		estimateSize: (index) => items[index]?.estimateSize ?? 96,
 		getItemKey: (index) => items[index]?.key ?? index,
 		overscan: 8,
+		rangeExtractor: (range) =>
+			virtualTranscriptRange(
+				defaultRangeExtractor(range),
+				range.count,
+				trailingMounted,
+			),
 		useAnimationFrameWithResizeObserver: true,
 	});
 	const virtualItems = virtualizer.getVirtualItems();
 	const canVirtualize =
-		typeof ResizeObserver !== "undefined" && virtualCount > 0;
+		enabled && typeof ResizeObserver !== "undefined" && items.length > 0;
 
 	useEffect(() => {
 		const container = rootRef.current?.closest<HTMLDivElement>(
 			".viewer-messages",
 		);
-		if (!container || virtualCount === 0) return;
+		if (!container || items.length === 0) return;
 		const indexByEntry = new Map<string, number>();
-		for (let index = 0; index < virtualCount; index++) {
+		for (let index = 0; index < items.length; index++) {
 			for (const entryId of items[index]?.entryIds ?? []) {
 				if (!indexByEntry.has(entryId)) indexByEntry.set(entryId, index);
 			}
@@ -61,7 +71,16 @@ export function VirtualTranscriptList({ items, trailingMounted }: Props) {
 			},
 		};
 		return registerTranscriptVirtualNavigation(container, navigation);
-	}, [items, virtualCount, virtualizer]);
+	}, [items, virtualizer]);
+
+	useEffect(() => {
+		if (!onVisibleItems || virtualItems.length === 0) return;
+		onVisibleItems(
+			virtualItems
+				.map((virtualItem) => items[virtualItem.index])
+				.filter((item): item is VirtualTranscriptItem => Boolean(item)),
+		);
+	}, [items, onVisibleItems, virtualItems]);
 
 	// Server rendering and minimal test DOMs have no ResizeObserver. Keeping the
 	// complete list there also makes transcript markup tests inspect real rows.
@@ -76,7 +95,7 @@ export function VirtualTranscriptList({ items, trailingMounted }: Props) {
 				className="relative w-full"
 				style={{ height: virtualizer.getTotalSize() }}
 				data-virtual-transcript
-				data-virtual-count={virtualCount}
+				data-virtual-count={items.length}
 				data-transcript-blocks={items.length}
 			>
 				{virtualItems.map((virtualItem) => {
@@ -96,16 +115,19 @@ export function VirtualTranscriptList({ items, trailingMounted }: Props) {
 					);
 				})}
 			</div>
-			{items.slice(virtualCount).map(renderStaticItem)}
 		</>
 	);
 }
 
-export function virtualTranscriptPrefixCount(
+export function virtualTranscriptRange(
+	visible: number[],
 	count: number,
 	trailingMounted: number,
-): number {
-	return Math.max(0, count - Math.max(0, trailingMounted));
+): number[] {
+	const indexes = new Set(visible);
+	const start = Math.max(0, count - Math.max(0, trailingMounted));
+	for (let index = start; index < count; index++) indexes.add(index);
+	return [...indexes].sort((a, b) => a - b);
 }
 
 function renderStaticItem(item: VirtualTranscriptItem) {

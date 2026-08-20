@@ -199,6 +199,24 @@ function classifyV2Entries(entries: SeqEntry[]): SeqEntry[] {
 	) as SeqEntry[];
 }
 
+async function sendTranscriptIndex(
+	ws: any,
+	sessionId: string,
+	isCurrent: () => boolean,
+): Promise<void> {
+	const store = transcriptStore();
+	await store.ensureTranscriptOutline(sessionId);
+	if (!isCurrent()) return;
+	const index = store.readTranscriptIndex(sessionId);
+	ws.send(
+		JSON.stringify({
+			type: "transcript_index",
+			sessionId,
+			...index,
+		}),
+	);
+}
+
 /**
  * V2 snapshot/history pages use the same bounded previews as the legacy
  * transcript path. Live transcript_append frames keep the larger store form.
@@ -351,6 +369,27 @@ function serveTranscriptV2(
 	// durable changeSeq reconciliation, closing both handshake and reconnect
 	// rewrite gaps.
 	ws.data.transcriptV2 = true;
+	const scheduleTranscriptIndex = () => {
+		if (msg.supportsTranscriptIndex !== true) return;
+		setTimeout(async () => {
+			if (
+				ws.data?.watchingSessionId !== sessionId ||
+				!ws.data?.transcriptV2
+			)
+				return;
+			try {
+				await sendTranscriptIndex(
+					ws,
+					sessionId,
+					() =>
+						ws.data?.watchingSessionId === sessionId &&
+						!!ws.data?.transcriptV2,
+				);
+			} catch (error) {
+				console.warn(`[ws] transcript index failed for ${sessionId}:`, error);
+			}
+		}, 0);
+	};
 	try {
 		const watch = startTranscriptWatch({
 			sessionId,
@@ -368,8 +407,12 @@ function serveTranscriptV2(
 				ws.data?.supportsFeed && event?.feed
 					? { ...event.feed, event: frame }
 					: frame,
+			afterResetSnapshot: scheduleTranscriptIndex,
 		});
 		v2Unsubs.set(ws, () => watch.unsubscribe());
+		// Let the bounded tail frame flush first. The complete outline is a
+		// content-free follow-up and may lazily backfill this one session.
+		scheduleTranscriptIndex();
 	} catch (error) {
 		ws.data.transcriptV2 = false;
 		throw error;
@@ -642,6 +685,75 @@ export const websocketHandlers: WebSocketHandler<WSClientData> = {
 				stopAllWatchesForClient(ws);
 				releaseTranscriptV2(ws);
 				leaveSession(ws);
+				break;
+			}
+
+			case "load_transcript_index": {
+				if (
+					ws.data?.transcriptV2 &&
+					ws.data?.watchingSessionId === msg.sessionId
+				) {
+					try {
+						await sendTranscriptIndex(
+							ws,
+							msg.sessionId,
+							() =>
+								ws.data?.watchingSessionId === msg.sessionId &&
+								!!ws.data?.transcriptV2,
+						);
+					} catch (error) {
+						console.warn(
+							`[ws] transcript index refresh failed for ${msg.sessionId}:`,
+							error,
+						);
+					}
+				}
+				break;
+			}
+
+			case "load_transcript_range": {
+				if (
+					!ws.data?.transcriptV2 ||
+					ws.data?.watchingSessionId !== msg.sessionId
+				)
+					break;
+				const firstSeq = Math.max(1, Math.floor(msg.firstSeq));
+				const lastSeq = Math.max(firstSeq, Math.floor(msg.lastSeq));
+				const afterSeq =
+					typeof msg.afterSeq === "number"
+						? Math.floor(msg.afterSeq)
+						: firstSeq - 1;
+				try {
+					const store = transcriptStore();
+					const page = store.readRange(
+						msg.sessionId,
+						firstSeq,
+						lastSeq,
+						afterSeq,
+						500,
+					);
+					ws.send(
+						JSON.stringify({
+							type: "transcript_range",
+							sessionId: msg.sessionId,
+							requestId: msg.requestId,
+							entries: clampV2InitEntries(
+								classifyV2Entries(page.entries),
+							),
+							firstSeq: page.firstSeq,
+							lastSeq: page.lastSeq,
+							coveredThroughSeq: page.coveredThroughSeq,
+							complete: page.complete,
+							epoch: store.getLastResetChangeSeq(msg.sessionId),
+							lastChangeSeq: store.getLastChangeSeq(msg.sessionId),
+						}),
+					);
+				} catch (error) {
+					console.warn(
+						`[ws] transcript range failed for ${msg.sessionId}:`,
+						error,
+					);
+				}
 				break;
 			}
 

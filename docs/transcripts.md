@@ -34,14 +34,24 @@ live viewers of server-owned sessions get pushes, not polling.
 The client advertises `supportsSeq` on `watch`; the server serves seq-mode
 when it owns the session and the store has it:
 
-- init: a small `transcript_init` tail plus a `transcript_history` page
-  moments later; older pages via `load_history {beforeSeq}`; reconnects
-  resume with `sinceSeq` — no snapshot re-send.
-- live: bus-driven `transcript_append` frames carrying `seq`.
-- collapsed detail: opening and history pages carry 512-byte previews for tool
+- init: a small `transcript_init` tail paints first. Web clients that advertise
+  `supportsTranscriptIndex` then receive a complete content-free
+  `transcript_index`, so the virtualizer owns the full scroll range without
+  downloading every message.
+- history: indexed web clients request only visible seq spans with
+  `load_transcript_range`; older clients keep prepend paging through
+  `load_history {beforeSeq}`.
+- live: bus-driven `transcript_append` frames carry `seq` and `changeSeq`, so
+  the browser updates both sparse content and the lightweight outline.
+- collapsed detail: opening and range frames carry 512-byte previews for tool
   results and intermediate assistant notes hidden inside work folds. The web
   and native clients fetch the full entry through `/api/sessions/:id/entry/:id`
   only when someone opens that message.
+
+`transcript_outline` is a one-row-per-event structural projection maintained in
+SQLite with the canonical event write. It carries ids, ordering, display roles
+and content lengths, but no message bodies. Existing sessions backfill this
+projection only when an indexed client opens them.
 
 Sessions the server does *not* own — CLI/tmux runs writing their own
 transcript files — are served by the legacy file-watcher + byte-offset

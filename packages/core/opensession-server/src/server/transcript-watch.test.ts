@@ -43,7 +43,8 @@ function entry(id: string, content: string): TranscriptEntry {
 function watch(
   state: ReturnType<typeof setup>,
   sessionId: string,
-  sinceChangeSeq?: number
+  sinceChangeSeq?: number,
+  afterResetSnapshot?: () => void
 ) {
   return startTranscriptWatch({
     sessionId,
@@ -52,6 +53,7 @@ function watch(
     subscribe: subscribeTranscript,
     isCurrent: () => true,
     ...(sinceChangeSeq === undefined ? {} : { sinceChangeSeq }),
+    ...(afterResetSnapshot ? { afterResetSnapshot } : {}),
   });
 }
 
@@ -179,12 +181,14 @@ describe("race-free transcript watch", () => {
   test("authoritative replacement sends a fresh complete init", async () => {
     const state = setup();
     const sid = `bks-reset-${crypto.randomUUID()}`;
+    let resetSnapshots = 0;
     state.store.appendTranscriptEvents(
       sid,
       Array.from({ length: 30 }, (_, i) => entry(`old-${i}`, String(i)))
     );
-    const handle = watch(state, sid);
+    const handle = watch(state, sid, undefined, () => resetSnapshots++);
     cleanups.push(() => handle.unsubscribe());
+    expect(resetSnapshots).toBe(0);
     state.frames.length = 0;
 
     state.store.replaceTranscriptEvents(sid, [entry("new", "replacement")]);
@@ -194,7 +198,7 @@ describe("race-free transcript watch", () => {
       type: "transcript_init",
       entries: [expect.objectContaining({ id: "new", seq: 1 })],
     });
-    expect(state.frames).toHaveLength(1);
+    expect(resetSnapshots).toBe(1);
   });
 
   test("reconnect from before a missed replacement receives a snapshot", () => {

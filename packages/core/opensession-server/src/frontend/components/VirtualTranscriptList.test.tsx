@@ -4,7 +4,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 import {
 	VirtualTranscriptList,
 	type VirtualTranscriptItem,
-	virtualTranscriptPrefixCount,
+	virtualTranscriptRange,
 } from "./VirtualTranscriptList";
 
 function item(index: number): VirtualTranscriptItem {
@@ -18,9 +18,9 @@ function item(index: number): VirtualTranscriptItem {
 }
 
 describe("VirtualTranscriptList", () => {
-	test("keeps the live-edge tail mounted outside the virtual prefix", () => {
-		expect(virtualTranscriptPrefixCount(40, 24)).toBe(16);
-		expect(virtualTranscriptPrefixCount(12, 24)).toBe(0);
+	test("keeps the live-edge tail in the same virtual coordinate space", () => {
+		expect(virtualTranscriptRange([10, 11], 40, 3)).toEqual([10, 11, 37, 38, 39]);
+		expect(virtualTranscriptRange([0, 1], 2, 24)).toEqual([0, 1]);
 	});
 
 	test("renders complete semantic content without browser measurement", () => {

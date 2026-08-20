@@ -1,5 +1,10 @@
 import React from "react";
 import type { SessionNote, SessionWalkthrough, TranscriptEntry } from "../lib/types";
+import type { TranscriptIndexEntry } from "@tellahq/opensession-protocol/session";
+import {
+	buildTranscriptRanges,
+	type TranscriptIndexedRange,
+} from "../lib/transcript-index";
 import { MessageBubble } from "./MessageBubble";
 import { NoteBubble } from "./NoteBubble";
 import { ToolSection, TurnBlock } from "./TurnBlock";
@@ -70,6 +75,14 @@ interface Props {
 	reviewResult?: ReviewLoopResult;
 	/** Preview/test hook; the session viewer leaves review loops folded. */
 	reviewLoopsOpen?: boolean;
+	onReviewLoopOpenChange?: (open: boolean) => void;
+	/** Complete content-free outline. When present, ranges hydrate on demand. */
+	transcriptIndex?: TranscriptIndexEntry[];
+	/** Changes only to re-arm visible range demand after a dropped response. */
+	transcriptRangeRetryGeneration?: number;
+	onLoadTranscriptRanges?: (ranges: TranscriptIndexedRange[]) => void;
+	/** Indexed range rows reuse this renderer without nesting a virtualizer. */
+	virtualize?: boolean;
 }
 
 type ReviewBlockRole =
@@ -199,7 +212,14 @@ function renderBlockEstimate(block: RenderBlock): number {
 // otherwise re-render the whole thing synchronously and stall the interaction.
 // With stable props (entries reference unchanged, callbacks memoized upstream)
 // this bails out entirely on a panel toggle. See SessionViewer's useCallbacks.
-export const TranscriptBlocks = React.memo(function TranscriptBlocks({
+export const TranscriptBlocks = React.memo(function TranscriptBlocks(
+	props: Props,
+) {
+	if (props.transcriptIndex) return <IndexedTranscriptBlocks {...props} />;
+	return <LoadedTranscriptBlocks {...props} />;
+});
+
+const LoadedTranscriptBlocks = React.memo(function LoadedTranscriptBlocks({
 	entries,
 	live,
 	onFork,
@@ -213,6 +233,8 @@ export const TranscriptBlocks = React.memo(function TranscriptBlocks({
 	slackShare,
 	reviewResult,
 	reviewLoopsOpen,
+	onReviewLoopOpenChange,
+	virtualize = true,
 }: Props) {
 	const renderedEntries = normalizeLegacyVoiceToolEntries(entries);
 	const shareAfterEntryIds = new Set<string>();
@@ -349,6 +371,7 @@ export const TranscriptBlocks = React.memo(function TranscriptBlocks({
 								: undefined
 						}
 						defaultOpen={reviewLoopsOpen}
+						onOpenChange={onReviewLoopOpenChange}
 					>
 						{block.blocks.map((inner, innerIndex) => {
 							const innerKey = renderBlockKey(inner, innerIndex);
@@ -456,9 +479,304 @@ export const TranscriptBlocks = React.memo(function TranscriptBlocks({
 		<VirtualTranscriptList
 			items={virtualItems}
 			trailingMounted={TRAILING_MOUNTED_BLOCKS}
+			enabled={virtualize}
 		/>
 	);
 });
+
+type IndexedTimelineAtom =
+	| {
+			kind: "range";
+			range: TranscriptIndexedRange;
+			timestampMs: number;
+			notes: SessionNote[];
+			walkthrough?: SessionWalkthrough;
+	  }
+	| { kind: "entry"; entry: TranscriptEntry; timestampMs: number }
+	| { kind: "note"; note: SessionNote; timestampMs: number }
+	| { kind: "walkthrough"; walkthrough: SessionWalkthrough; timestampMs: number };
+
+type IndexedTimelineItem =
+	| IndexedTimelineAtom
+	| {
+			kind: "review";
+			atoms: IndexedTimelineAtom[];
+			ranges: TranscriptIndexedRange[];
+			rounds: number;
+			prNumber: number | null;
+			timestampMs: number;
+	  };
+
+function IndexedTranscriptBlocks(props: Props) {
+	const {
+		entries,
+		transcriptIndex = [],
+		notes,
+		walkthrough,
+		onLoadTranscriptRanges,
+	} = props;
+	const [openedReviewKeys, setOpenedReviewKeys] = React.useState(
+		() => new Set<string>(),
+	);
+	const setReviewOpen = React.useCallback((key: string, open: boolean) => {
+		setOpenedReviewKeys((current) => {
+			const next = new Set(current);
+			if (open) next.add(key);
+			else next.delete(key);
+			return next;
+		});
+	}, []);
+	const ranges = buildTranscriptRanges(transcriptIndex);
+	const payloadById = new Map(entries.map((entry) => [entry.id, entry]));
+	const atoms: IndexedTimelineAtom[] = ranges.map((range) => ({
+		kind: "range",
+		range,
+		timestampMs: range.endTimestampMs,
+		notes: [],
+	}));
+	for (const entry of entries) {
+		if (typeof entry.seq === "number") continue;
+		atoms.push({
+			kind: "entry",
+			entry,
+			timestampMs: Date.parse(entry.timestamp) || 0,
+		});
+	}
+	for (const note of notes ?? []) {
+		const containing = atoms.find(
+			(atom) =>
+				atom.kind === "range" &&
+				note.ts >= atom.range.startTimestampMs &&
+				note.ts <= atom.range.endTimestampMs,
+		);
+		if (containing?.kind === "range") containing.notes.push(note);
+		else atoms.push({ kind: "note", note, timestampMs: note.ts });
+	}
+	if (walkthrough) {
+		const publishedEntryId = walkthrough.publishedEntryId;
+		const publishedAt = Date.parse(walkthrough.publishedAt) || 0;
+		const containing = atoms.find(
+			(atom) =>
+				atom.kind === "range" &&
+				(publishedEntryId
+					? atom.range.entryIds.includes(publishedEntryId)
+					: publishedAt >= atom.range.startTimestampMs &&
+						publishedAt <= atom.range.endTimestampMs),
+		);
+		if (containing?.kind === "range") containing.walkthrough = walkthrough;
+		else
+			atoms.push({
+				kind: "walkthrough",
+				walkthrough,
+				timestampMs: publishedAt,
+			});
+	}
+	atoms.sort((a, b) => a.timestampMs - b.timestampMs);
+	const timeline = groupIndexedReviewLoops(atoms);
+	const allPayloadEntries = entries.filter((entry) => typeof entry.seq === "number");
+	const lastIndex = timeline.length - 1;
+	const items: VirtualTranscriptItem[] = timeline.map((item, index) => {
+		const itemRanges = indexedItemRanges(item);
+		const entryIds = indexedItemEntryIds(item);
+		const loaded = itemRanges.every((range) =>
+			range.entryIds.every((id) => payloadById.has(id)),
+		);
+		const itemEntries = loaded
+			? allPayloadEntries.filter((entry) => entryIds.includes(entry.id))
+			: [];
+		const key = indexedItemKey(item, index);
+		const estimateSize = indexedItemEstimate(item);
+		const isLast = index === lastIndex;
+		return {
+			key,
+			anchorId: key,
+			entryIds,
+			estimateSize,
+			content:
+				item.kind === "note" ? (
+					<NoteBubble note={item.note} sessionId={props.sessionId} />
+				) : item.kind === "walkthrough" ? (
+					<WalkthroughCard walkthrough={item.walkthrough} variant="session" />
+				) : item.kind === "entry" ? (
+					<LoadedTranscriptBlocks
+						{...props}
+						entries={[item.entry]}
+						transcriptIndex={undefined}
+						notes={undefined}
+						walkthrough={undefined}
+						virtualize={false}
+						live={Boolean(props.live && isLast)}
+						onContinue={isLast ? props.onContinue : undefined}
+					/>
+				) : loaded ? (
+					<LoadedTranscriptBlocks
+						{...props}
+						entries={itemEntries}
+						transcriptIndex={undefined}
+						notes={indexedItemNotes(item)}
+						walkthrough={indexedItemWalkthrough(item)}
+						virtualize={false}
+						live={Boolean(props.live && isLast)}
+						reviewLoopsOpen={
+							item.kind === "review" && openedReviewKeys.has(key)
+								? true
+								: props.reviewLoopsOpen
+						}
+						onReviewLoopOpenChange={
+							item.kind === "review"
+								? (open) => setReviewOpen(key, open)
+								: undefined
+						}
+						onContinue={isLast ? props.onContinue : undefined}
+					/>
+				) : item.kind === "review" ? (
+					<ReviewLoopBlock
+						prNumber={item.prNumber}
+						rounds={item.rounds}
+						live={Boolean(props.live && isLast)}
+						result={isLast ? props.reviewResult : undefined}
+						onOpenChange={(open) => {
+							setReviewOpen(key, open);
+							if (open) onLoadTranscriptRanges?.(itemRanges);
+						}}
+					>
+						<TranscriptRangeLoading />
+					</ReviewLoopBlock>
+				) : (
+					<TranscriptRangeLoading />
+				),
+		};
+	});
+
+	return (
+		<VirtualTranscriptList
+			items={items}
+			trailingMounted={TRAILING_MOUNTED_BLOCKS}
+			onVisibleItems={(visible) => {
+				if (!onLoadTranscriptRanges) return;
+				const keys = new Set(visible.map((item) => item.key));
+				const wanted = timeline
+					.filter(
+						(item, index) =>
+							(item.kind !== "review" || indexedItemHasDecoration(item)) &&
+							keys.has(indexedItemKey(item, index)),
+					)
+					.flatMap(indexedItemRanges)
+					.filter((range) =>
+						range.entryIds.some((id) => !payloadById.has(id)),
+					);
+				if (wanted.length) onLoadTranscriptRanges(wanted);
+			}}
+		/>
+	);
+}
+
+function groupIndexedReviewLoops(
+	atoms: IndexedTimelineAtom[],
+): IndexedTimelineItem[] {
+	const grouped: IndexedTimelineItem[] = [];
+	for (let index = 0; index < atoms.length; index++) {
+		const atom = atoms[index]!;
+		if (atom.kind !== "range" || atom.range.headRole !== "review_handoff") {
+			grouped.push(atom);
+			continue;
+		}
+		const loop: IndexedTimelineAtom[] = [atom];
+		let rounds = atom.range.reviewRounds;
+		let prNumber = atom.range.reviewPrNumber;
+		while (index + 1 < atoms.length) {
+			const next = atoms[index + 1]!;
+			if (next.kind === "range" && next.range.headRole === "user") break;
+			index++;
+			loop.push(next);
+			if (next.kind === "range" && next.range.headRole === "review_handoff") {
+				rounds += next.range.reviewRounds;
+				prNumber ??= next.range.reviewPrNumber;
+			}
+		}
+		grouped.push({
+			kind: "review",
+			atoms: loop,
+			ranges: loop.flatMap((item) =>
+				item.kind === "range" ? [item.range] : [],
+			),
+			rounds,
+			prNumber,
+			timestampMs: atom.timestampMs,
+		});
+	}
+	return grouped;
+}
+
+function indexedItemRanges(item: IndexedTimelineItem): TranscriptIndexedRange[] {
+	if (item.kind === "range") return [item.range];
+	if (item.kind === "review") return item.ranges;
+	return [];
+}
+
+function indexedItemEntryIds(item: IndexedTimelineItem): string[] {
+	if (item.kind === "entry") return [item.entry.id];
+	if (item.kind === "range") return item.range.entryIds;
+	if (item.kind === "review") return item.ranges.flatMap((range) => range.entryIds);
+	return [];
+}
+
+function indexedItemNotes(item: IndexedTimelineItem): SessionNote[] | undefined {
+	if (item.kind === "range") return item.notes.length ? item.notes : undefined;
+	if (item.kind === "review") {
+		const notes = item.atoms.flatMap((atom) =>
+			atom.kind === "range"
+				? atom.notes
+				: atom.kind === "note"
+					? [atom.note]
+					: [],
+		);
+		return notes.length ? notes : undefined;
+	}
+	return undefined;
+}
+
+function indexedItemWalkthrough(
+	item: IndexedTimelineItem,
+): SessionWalkthrough | undefined {
+	if (item.kind === "range") return item.walkthrough;
+	if (item.kind === "review") {
+		for (const atom of item.atoms) {
+			if (atom.kind === "walkthrough") return atom.walkthrough;
+			if (atom.kind === "range" && atom.walkthrough) return atom.walkthrough;
+		}
+	}
+	return undefined;
+}
+
+function indexedItemHasDecoration(item: IndexedTimelineItem): boolean {
+	return Boolean(indexedItemNotes(item)?.length || indexedItemWalkthrough(item));
+}
+
+function indexedItemKey(item: IndexedTimelineItem, index: number): string {
+	if (item.kind === "entry") return item.entry.id;
+	if (item.kind === "range") return item.range.key;
+	if (item.kind === "review") return `review-index:${item.ranges[0]?.key ?? index}`;
+	if (item.kind === "note") return `note:${item.note.id}`;
+	return "walkthrough";
+}
+
+function indexedItemEstimate(item: IndexedTimelineItem): number {
+	if (item.kind === "range") return item.range.estimateSize;
+	if (item.kind === "review") return 48;
+	if (item.kind === "note") return 96;
+	if (item.kind === "walkthrough") return 320;
+	return 48;
+}
+
+function TranscriptRangeLoading() {
+	return (
+		<div
+			className="mx-auto mb-3 h-12 w-full max-w-[var(--session-col)] animate-pulse rounded-lg bg-hover/45"
+			aria-label="Loading messages"
+		/>
+	);
+}
 
 /** Review work uses the same grouped step rows as a normal turn, without
  * introducing another outer worker disclosure inside the review loop. */
