@@ -416,21 +416,60 @@ function readPorts(worktreeDir: string): { key: string; port: number }[] {
 }
 
 /**
- * PIDs with a LISTEN socket on a TCP port (empty if nothing is listening).
- * Uses `ss` rather than `lsof` — on this host lsof can't read the socket→pid
- * mapping without root, but `ss -p` can.
+ * One process-wide socket snapshot for every open session's Preview poll.
+ * `ss -p` walks the host process table, so spawning it once per service made
+ * PreviewButton polling consume a core and delayed unrelated session traffic.
+ * A short stale window is harmless for a control that polls every 3 to 8s.
  */
+const LISTENER_SNAPSHOT_TTL_MS = 2_000;
+let listenerSnapshot: { raw: string; at: number } | null = null;
+let listenerSnapshotRefresh: Promise<string> | null = null;
+
+async function listenerSnapshotRaw(): Promise<string> {
+  if (
+    listenerSnapshot &&
+    Date.now() - listenerSnapshot.at < LISTENER_SNAPSHOT_TTL_MS
+  ) {
+    return listenerSnapshot.raw;
+  }
+  if (!listenerSnapshotRefresh) {
+    listenerSnapshotRefresh = $`ss -tlnpH`
+      .quiet()
+      .nothrow()
+      .text()
+      .then((raw) => {
+        listenerSnapshot = { raw, at: Date.now() };
+        return raw;
+      })
+      .finally(() => {
+        listenerSnapshotRefresh = null;
+      });
+  }
+  return await listenerSnapshotRefresh;
+}
+
+/** Select socket rows by the local-address column, not by a loose substring
+ * that could match the peer address or a PID. Exported for the parser test. */
+export function listenerLinesForPort(raw: string, port: number): string[] {
+  return raw.split("\n").filter((line) => {
+    const localAddress = line.trim().split(/\s+/)[3];
+    return localAddress?.endsWith(`:${port}`) ?? false;
+  });
+}
+
+/** PIDs with a LISTEN socket on a TCP port (empty if none are visible). */
 async function listenersOnPort(port: number): Promise<number[]> {
-  const raw = await $`ss -tlnpH sport = :${port}`.quiet().nothrow().text();
+  const lines = listenerLinesForPort(await listenerSnapshotRaw(), port);
   const pids = new Set<number>();
-  for (const m of raw.matchAll(/pid=(\d+)/g)) pids.add(parseInt(m[1], 10));
+  for (const line of lines)
+    for (const match of line.matchAll(/pid=(\d+)/g))
+      pids.add(parseInt(match[1], 10));
   return [...pids];
 }
 
-/** Is anything listening on the port (regardless of pid visibility)? */
+/** Is anything listening on the port, regardless of pid visibility? */
 async function portListening(port: number): Promise<boolean> {
-  const raw = await $`ss -tlnH sport = :${port}`.quiet().nothrow().text();
-  return raw.trim().length > 0;
+  return listenerLinesForPort(await listenerSnapshotRaw(), port).length > 0;
 }
 
 async function pgidOf(pid: number): Promise<number | null> {

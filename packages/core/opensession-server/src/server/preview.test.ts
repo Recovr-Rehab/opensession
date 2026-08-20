@@ -4,6 +4,7 @@ import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import {
   getPreviewStatus,
+  listenerLinesForPort,
   parsePreviewPortalRecipes,
   repoLifecycle,
   resolvePreviewBoot,
@@ -108,6 +109,19 @@ describe("resolvePreviewBoot", () => {
   test("no mechanism at all resolves to null (UI: disabled Start)", async () => {
     const boot = await resolvePreviewBoot(WT, { id: "widget" }, existsIn([]));
     expect(boot).toBeNull();
+  });
+});
+
+describe("listenerLinesForPort", () => {
+  test("matches only the local listening port across IPv4 and IPv6", () => {
+    const raw = [
+      'LISTEN 0 512 127.0.0.1:3850 0.0.0.0:* users:(("bun",pid=42,fd=20))',
+      'LISTEN 0 512 [::]:3850 [::]:*',
+      'LISTEN 0 512 127.0.0.1:13850 0.0.0.0:* users:(("bun",pid=43,fd=20))',
+      'LISTEN 0 512 127.0.0.1:4000 127.0.0.1:3850',
+    ].join("\n");
+
+    expect(listenerLinesForPort(raw, 3850)).toEqual(raw.split("\n").slice(0, 2));
   });
 });
 
