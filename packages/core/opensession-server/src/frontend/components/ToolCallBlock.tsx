@@ -430,14 +430,16 @@ export const ToolCallBlock = React.memo(function ToolCallBlock({
         {/* Baseline, not centre: the path is mono and the ± counts are sans, so
             at one size their line boxes still centre to different baselines.
             The mark opts back out: it has no text baseline of its own, so
-            aligning it to one hangs the drawn logo below the path it labels. */}
-        <span className="flex min-w-0 flex-1 items-baseline gap-2">
-          <span className="flex min-w-0 flex-1 items-baseline gap-1.5">
+            aligning it to one hangs the drawn logo below the path it labels.
+            Nothing grows into spare room here: changes and duration should
+            follow the tool summary instead of lining up against the right edge. */}
+        <span className="flex min-w-0 items-baseline gap-2">
+          <span className="flex min-w-0 items-baseline gap-1.5">
             {fileMark && <ExtBadge name={fileMark} className="self-center" />}
             <span
               className={cn(
                 "min-w-0 text-label leading-4 text-dim",
-                isFileTool ? "flex flex-1 overflow-hidden" : "truncate"
+                isFileTool ? "flex overflow-hidden" : "truncate"
               )}
             >
               {isFileTool ? <PathSummary path={summary} /> : summary}
