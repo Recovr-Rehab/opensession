@@ -325,6 +325,18 @@ export function boxNativeFilePath(path: string): string {
   return path;
 }
 
+export const BOX_RUNTIME_HOME_COMMAND =
+  "test -d /home/user && test -w /home/user && " +
+  "if mountpoint -q /home/ubuntu; then " +
+  "test /home/ubuntu -ef /home/user || { echo 'unexpected /home/ubuntu mount' >&2; exit 1; }; " +
+  "else " +
+  "if [ -L /home/ubuntu ]; then sudo -n rm /home/ubuntu; " +
+  'elif [ -d /home/ubuntu ] && [ -z "$(ls -A /home/ubuntu)" ]; then sudo -n rmdir /home/ubuntu; ' +
+  "elif [ -e /home/ubuntu ]; then echo 'cannot replace non-empty /home/ubuntu' >&2; exit 1; fi; " +
+  "sudo -n mkdir -p /home/ubuntu && sudo -n mount --bind /home/user /home/ubuntu; " +
+  "fi && test ! -L /home/ubuntu && mountpoint -q /home/ubuntu && " +
+  "test /home/ubuntu -ef /home/user";
+
 export function boxDriver(cfg: BoxClientConfig, boxId: string): RemoteDriver {
   let runtimeHomeReady = false;
   let commandPlaneReady = false;
@@ -346,23 +358,15 @@ export function boxDriver(cfg: BoxClientConfig, boxId: string): RemoteDriver {
 
   const ensureRuntimeHome = async () => {
     // Box persists /home/user across archive/resume and named snapshots, while
-    // the VM root is rebuilt. Keep the cross-provider /home/ubuntu contract by
-    // linking it to that durable home on every fresh boot.
+    // the VM root is rebuilt. Bind-mount it at the cross-provider path on every
+    // boot: unlike a symlink, this keeps path-sensitive tools such as direnv on
+    // the stable /home/ubuntu spelling.
     const response = result(
       await boxApi<BoxCommandResponse>(
         cfg,
         "POST",
         `/boxes/${boxId}/commands`,
-        {
-          command:
-            "test -d /home/user && test -w /home/user && " +
-            "if [ -L /home/ubuntu ] && [ \"$(readlink -f /home/ubuntu)\" = /home/user ]; then :; " +
-            "elif [ -L /home/ubuntu ]; then sudo -n rm /home/ubuntu && sudo -n ln -s /home/user /home/ubuntu; " +
-            "elif [ -d /home/ubuntu ] && [ -z \"$(ls -A /home/ubuntu)\" ]; then sudo -n rmdir /home/ubuntu && sudo -n ln -s /home/user /home/ubuntu; " +
-            "elif [ ! -e /home/ubuntu ]; then sudo -n ln -s /home/user /home/ubuntu; " +
-            "else echo 'cannot map /home/ubuntu to the persistent Box home' >&2; exit 1; fi",
-          timeoutSeconds: 60,
-        },
+        { command: BOX_RUNTIME_HOME_COMMAND, timeoutSeconds: 60 },
         90_000,
       ),
     );
@@ -521,8 +525,8 @@ export function boxDriver(cfg: BoxClientConfig, boxId: string): RemoteDriver {
 
     async writeFile(path: string, content: string) {
       // Box canonicalizes file paths and permits only /home/user or /tmp.
-      // /home/ubuntu is our symlink to that persistent home, so translate the
-      // prefix explicitly and use the native file API instead of serializing
+      // /home/ubuntu is our bind mount of that persistent home, so translate
+      // the prefix explicitly and use the native file API instead of serializing
       // every launch-time credential write through a shell command.
       const nativePath = boxNativeFilePath(path);
       await afterCommandPlaneReady(() =>
@@ -1080,6 +1084,15 @@ export const boxPrewarmAdapter: PrewarmAdapter = {
   },
 };
 
+async function assertBoxRuntimeHome(driver: RemoteDriver): Promise<void> {
+  const probe = await driver.exec(
+    "test ! -L /home/ubuntu && mountpoint -q /home/ubuntu && test /home/ubuntu -ef /home/user",
+  );
+  if (probe.exitCode !== 0) {
+    throw new Error("Box did not preserve /home/ubuntu as the durable canonical home");
+  }
+}
+
 /** Workspace qualification: credentials/quota, exec semantics, file upload,
  * private preview registration, stop/resume persistence, and a distinct
  * named-snapshot restore. Every disposable box is archived in finally. */
@@ -1117,6 +1130,7 @@ export async function qualifyBoxConnection(
     await waitForLive(cfg, created.box.id, 300_000);
     let driver = boxDriver(cfg, created.box.id);
     await driver.ensureStarted();
+    await assertBoxRuntimeHome(driver);
     progress("Checking commands and private ingress", 45);
     await assertDialbackReachable(driver, "box-qualification");
     const semantics = await driver.exec(
@@ -1144,6 +1158,7 @@ export async function qualifyBoxConnection(
     await waitForLive(cfg, created.box.id, 300_000);
     driver = boxDriver(cfg, created.box.id);
     await driver.ensureStarted();
+    await assertBoxRuntimeHome(driver);
     const persisted = await driver.exec(
       "test \"$(cat /home/ubuntu/.opensession-qualification)\" = opensession-qualified",
     );
@@ -1172,6 +1187,7 @@ export async function qualifyBoxConnection(
     await waitForLive(cfg, restored.box.id, 300_000);
     const restoredDriver = boxDriver(cfg, restored.box.id);
     await restoredDriver.ensureStarted();
+    await assertBoxRuntimeHome(restoredDriver);
     const restoredProbe = await restoredDriver.exec(
       "test \"$(cat /home/ubuntu/.opensession-qualification)\" = opensession-qualified",
     );

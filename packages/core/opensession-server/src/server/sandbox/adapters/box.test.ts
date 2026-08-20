@@ -1,5 +1,10 @@
 import { describe, expect, test } from "bun:test";
-import { boxCommandPlaneUnavailable, boxMachineType, boxNativeFilePath } from "./box";
+import {
+  BOX_RUNTIME_HOME_COMMAND,
+  boxCommandPlaneUnavailable,
+  boxMachineType,
+  boxNativeFilePath,
+} from "./box";
 
 describe("Box machine profiles", () => {
   test("maps the three provider-supported resource combinations", () => {
@@ -17,6 +22,12 @@ describe("Box machine profiles", () => {
 });
 
 describe("Box persistent file paths", () => {
+  test("bind-mounts the durable home without changing its canonical spelling", () => {
+    expect(BOX_RUNTIME_HOME_COMMAND).toContain("mount --bind /home/user /home/ubuntu");
+    expect(BOX_RUNTIME_HOME_COMMAND).toContain("test ! -L /home/ubuntu");
+    expect(BOX_RUNTIME_HOME_COMMAND).not.toContain("ln -s");
+  });
+
   test("maps the cross-provider home to Box's native durable home", () => {
     expect(boxNativeFilePath("/home/ubuntu")).toBe("/home/user");
     expect(boxNativeFilePath("/home/ubuntu/.opensession/spec.json")).toBe(
