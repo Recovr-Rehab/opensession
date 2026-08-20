@@ -47,7 +47,7 @@ export const SESSION_CARD_BANNER_WIDTH = 1200;
 export const SESSION_CARD_BANNER_HEIGHT = 200;
 
 export type SessionCardVariant = "card" | "banner";
-const SESSION_CARD_VERSION = 11;
+const SESSION_CARD_VERSION = 12;
 
 const CARD_INK = "#050609";
 const CARD_PAPER = "#FFFFFF";
@@ -55,8 +55,9 @@ const CARD_PAPER = "#FFFFFF";
 const PAD_X = 56;
 const META_SIZE = 28;
 const META_TEXT_SIZE = 22;
+const META_FONT = "Inter Medium 22";
 const META_LABEL_GAP = 10;
-const META_ICON_OVERLAP = 10;
+const META_GROUP_GAP = 24;
 const META_GLYPH_SIZE = 22;
 const META_RADIUS = META_SIZE * 0.46;
 const META_OPACITY = 0.52;
@@ -306,6 +307,18 @@ async function titleWidth(title: string): Promise<number> {
 		text: {
 			text: `<span letter_spacing="${TITLE_LETTER_SPACING}">${xml(title)}</span>`,
 			font: TITLE_FONT,
+			rgba: true,
+			dpi: 72,
+		},
+	}).metadata();
+	return metadata.width ?? 0;
+}
+
+async function metaTextWidth(value: string): Promise<number> {
+	const metadata = await sharp({
+		text: {
+			text: xml(value),
+			font: META_FONT,
 			rgba: true,
 			dpi: 72,
 		},
@@ -651,6 +664,7 @@ export function sessionSocialCardSvg(
 	variant: SessionCardVariant = "card",
 	repoIcon = "",
 	shots: string[] = [],
+	ownerTextWidth?: number,
 ): string {
 	const banner = variant === "banner";
 	const height = banner ? SESSION_CARD_BANNER_HEIGHT : SESSION_CARD_HEIGHT;
@@ -671,15 +685,14 @@ export function sessionSocialCardSvg(
 	const metaTop =
 		blockTop + titleLines.length * TITLE_LINE_HEIGHT + TITLE_META_GAP;
 	const metaCenter = metaTop + META_SIZE / 2;
-	const repoX = PAD_X + META_SIZE - META_ICON_OVERLAP;
-	const iconStackWidth = repoId ? META_SIZE * 2 - META_ICON_OVERLAP : META_SIZE;
-	const metaTextX = PAD_X + iconStackWidth + META_LABEL_GAP;
+	const ownerTextX = PAD_X + META_SIZE + META_LABEL_GAP;
+	const measuredOwnerWidth =
+		ownerTextWidth ?? owner.length * META_TEXT_SIZE * 0.55;
+	const repoX = ownerTextX + measuredOwnerWidth + META_GROUP_GAP;
+	const repoTextX = repoX + META_SIZE + META_LABEL_GAP;
 	const avatarTile = squirclePath(PAD_X, metaTop, META_SIZE, META_RADIUS);
 	const repoTile = squirclePath(repoX, metaTop, META_SIZE, META_RADIUS);
 	const tileColor = repoId ? repoTileColorFor(repoId) : CARD_INK;
-	const metadata = [owner, repoId ? metaLabel(repoId) : ""]
-		.filter(Boolean)
-		.join(" · ");
 	const frames = shotFrames(variant, shots.length, height);
 	const shotDefs = frames
 		.map(
@@ -739,9 +752,10 @@ ${shotDefs}
 <rect width="1200" height="${height}" fill="${CARD_PAPER}"/>
 ${shotMarkup}
 ${titleMarkup}
-${repoMarkup}
 ${avatarMarkup}
-<text x="${metaTextX}" y="${metaCenter + 1}" dominant-baseline="middle" fill="${CARD_INK}" fill-opacity="${META_OPACITY}" font-size="${META_TEXT_SIZE}" font-weight="500">${xml(metadata)}</text>
+<text x="${ownerTextX}" y="${metaCenter + 1}" dominant-baseline="middle" fill="${CARD_INK}" fill-opacity="${META_OPACITY}" font-size="${META_TEXT_SIZE}" font-weight="500">${xml(owner)}</text>
+${repoMarkup}
+${repoId ? `<text x="${repoTextX}" y="${metaCenter + 1}" dominant-baseline="middle" fill="${CARD_INK}" fill-opacity="${META_OPACITY}" font-size="${META_TEXT_SIZE}" font-weight="500">${xml(metaLabel(repoId))}</text>` : ""}
 </svg>`;
 }
 
@@ -749,10 +763,11 @@ export async function renderSessionSocialCard(
 	data: SessionSocialCardData,
 	variant: SessionCardVariant = "card",
 ): Promise<Buffer> {
-	const [avatar, repoIcon, shots] = await Promise.all([
+	const [avatar, repoIcon, shots, ownerWidth] = await Promise.all([
 		avatarDataUrl(data.person),
 		repoIconDataUrl(data.repo),
 		shotDataUrls(data.shots, shotWidth(variant), shotHeight(variant)),
+		metaTextWidth(metaLabel(clean(data.owner))),
 	]);
 	// Missing or unreadable images give their space back to the title instead
 	// of leaving an unexplained blank where the stack would have been.
@@ -765,7 +780,15 @@ export async function renderSessionSocialCard(
 	);
 	return sharp(
 		Buffer.from(
-			sessionSocialCardSvg(data, avatar, title, variant, repoIcon, shots),
+			sessionSocialCardSvg(
+				data,
+				avatar,
+				title,
+				variant,
+				repoIcon,
+				shots,
+				ownerWidth,
+			),
 		),
 	)
 		.png()
