@@ -192,7 +192,7 @@ function GithubAuthSetupDialog({
 					}
 				>
 					<div className="flex flex-col gap-4">
-						<SetupSteps steps={githubSetupSteps("above")} />
+						<SetupSteps steps={githubSetupSteps()} />
 						<GuideBlock title="Permissions">
 							<ul className="m-0 flex flex-col gap-1.5 pl-5 text-supporting leading-relaxed text-dim">
 								<li>Contents write lets a connected teammate&rsquo;s interactive session push commits; pull-request and issue write cover PR creation, reviews, and conversation comments.</li>
@@ -214,11 +214,9 @@ function GithubAuthSetupDialog({
 	);
 }
 
-/** The GitHub App walkthrough, in one place so the setup dialog and the
- *  onboarding step cannot drift apart. `paste` names where the credential
- *  fields are from the reader's position: the dialog puts them right above
- *  this list, while onboarding opens them from Configure. */
-function githubSetupSteps(paste: "above" | "configure"): React.ReactNode[] {
+/** The GitHub App walkthrough as the dialog tells it: every step carries the
+ *  reason it matters, because that is where someone is doing the work. */
+function githubSetupSteps(): React.ReactNode[] {
 	return [
 		<>Create an organization-owned GitHub App.</>,
 		<>
@@ -231,16 +229,27 @@ function githubSetupSteps(paste: "above" | "configure"): React.ReactNode[] {
 			Install the app only on your organization. Choose all repositories, or select only the repositories Open Session should work in.
 		</>,
 		<>
-			{paste === "above"
-				? "Paste the client id and the client secret above."
-				: "Open Configure and paste the client id and the client secret."}{" "}
-			Sign-in is a device code and needs no secret, but renewing a teammate&rsquo;s token does, and without it their access stops after a few hours.
+			Paste the client id and the client secret above. Sign-in is a device code and needs no secret, but renewing a teammate&rsquo;s token does, and without it their access stops after a few hours.
 		</>,
 		<>
 			Enable GitHub sign-in, save, restart Open Session, then have each teammate connect under Personal → Account.
 		</>,
 	];
 }
+
+/** The same job at a glance, for onboarding. A first-run screen is read, not
+ *  worked through, so each step is the action alone and the reasons wait for
+ *  the setup dialog. */
+const GITHUB_ONBOARDING_STEPS: React.ReactNode[] = [
+	<>Create a GitHub App in your organization.</>,
+	<>
+		Turn on <strong>Device Flow</strong>.
+	</>,
+	<>Grant Contents, Pull requests and Issues write, Members read.</>,
+	<>Install it on your organization.</>,
+	<>Paste the client id and secret in Configure.</>,
+	<>Save, then restart.</>,
+];
 
 export function GithubAuthCard({
 	github,
@@ -345,7 +354,14 @@ export function GithubAuthCard({
 				<SettingCard>
 					<div className="grid grid-cols-[auto_minmax(0,1fr)_auto] items-start gap-x-3 gap-y-1 px-5 py-4 phone:grid-cols-[auto_minmax(0,1fr)] phone:px-3 phone:py-2">
 						<IconTile name="github" size={40} />
-						<div className="col-start-2 flex min-w-0 flex-wrap items-center gap-2">
+						<div
+							className={cn(
+								"col-start-2 flex min-w-0 flex-wrap items-center gap-2",
+								// Onboarding drops the description under this row, so the name
+								// is alone beside a 40px tile and has to center against it.
+								onboarding && "self-center",
+							)}
+						>
 							<div className="text-item-title font-semibold text-fg">
 								{onboarding ? "GitHub" : "GitHub sign-in"}
 							</div>
@@ -412,14 +428,9 @@ export function GithubAuthCard({
 				    whole workspace, so the work is a one-time setup on GitHub that a
 				    person should be able to read before opening a credentials form. */}
 				{onboarding && (
-					<SettingsSection className="mt-3 flex flex-col gap-4">
-						<div>
-							<div className="text-item-title font-semibold text-fg">How to connect</div>
-							<p className="m-0 mt-1 text-supporting leading-relaxed text-dim">
-								One GitHub App connects the whole workspace, then each teammate signs in with their own account.
-							</p>
-						</div>
-						<SetupSteps steps={githubSetupSteps("configure")} />
+					<SettingsSection className="mt-3 flex flex-col gap-3">
+						<div className="text-item-title font-semibold text-fg">How to connect</div>
+						<SetupSteps steps={GITHUB_ONBOARDING_STEPS} />
 						<LinkChips
 							className="mt-0"
 							links={[{ label: "Create GitHub App", url: github.appCreateUrl }]}
