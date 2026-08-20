@@ -2667,6 +2667,7 @@ private struct SessionInputBar: View {
                     }
                     if let onNextChat {
                         nextChatButton(action: onNextChat)
+                            .padding(.trailing, 8)
                     }
                 }
             }
