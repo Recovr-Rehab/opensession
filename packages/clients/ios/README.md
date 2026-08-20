@@ -77,10 +77,9 @@ Pure SwiftUI with SwiftStreamingMarkdown for CommonMark/GFM rendering, iOS 26+
   one header. Phones keep that header to outcome, duration and failure count;
   opening it reveals steps, tool families and changed files. Wider layouts also
   show the richer fingerprint inline. The turn's final answer escapes the fold
-  and renders as a normal message. On phones, before/after tables stack each
-  pair at full reading width, and one changed-files summary replaces the footer
-  chip cloud while opening the same Changes panel. Team notes sit in that
-  timeline without entering the agent context. The
+  and renders as a normal message. On phones, one changed-files summary
+  replaces the footer chip cloud while opening the same Changes panel. Team
+  notes sit in that timeline without entering the agent context. The
    yellow composer mode posts them directly to the team and offers only the
    author edit and delete actions.
   Tool rows use the server's presentation metadata for canonical names,

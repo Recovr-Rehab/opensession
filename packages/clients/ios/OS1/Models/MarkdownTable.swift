@@ -18,15 +18,6 @@ struct MarkdownTable: Hashable {
 
     var columnCount: Int { headers.count }
 
-    /// The comparison shape agents commonly use in final summaries. On a
-    /// phone these columns read more calmly as stacked before and after pairs.
-    var isBeforeAfterComparison: Bool {
-        guard headers.count == 2 else { return false }
-        return headers.map {
-            $0.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
-        } == ["before", "after"]
-    }
-
     /// The table written back out as GFM, for the one case the app's own
     /// layout can't serve: too many columns to fit at any width, which goes
     /// to SwiftStreamingMarkdown's scrolling table instead. Round-tripping the

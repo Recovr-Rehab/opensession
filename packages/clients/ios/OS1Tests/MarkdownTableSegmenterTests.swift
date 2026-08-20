@@ -212,22 +212,6 @@ final class MarkdownTableSegmenterTests: XCTestCase {
         XCTAssertLessThan(plan.widths.reduce(0, +), 200)
     }
 
-    func testRecognisesTwoColumnBeforeAfterComparison() {
-        let comparison = MarkdownTable(
-            headers: ["Before", "After"],
-            alignments: [.leading, .leading],
-            rows: [["Busy", "Calm"]]
-        )
-        let ordinary = MarkdownTable(
-            headers: ["Name", "Value"],
-            alignments: [.leading, .leading],
-            rows: [["State", "Ready"]]
-        )
-
-        XCTAssertTrue(comparison.isBeforeAfterComparison)
-        XCTAssertFalse(ordinary.isBeforeAfterComparison)
-    }
-
     /// The shape agents actually write for a before/after comparison: a
     /// nameless first column holding the row labels.
     func testAnEmptyLeadingHeaderCell() {

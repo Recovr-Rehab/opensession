@@ -33,85 +33,39 @@ struct MarkdownTableView: View {
     /// same split `MarkdownBody` makes for prose.
     var dimmed = false
     @Environment(\.transcriptQuoteSelection) private var quoteSelection
-    @Environment(\.horizontalSizeClass) private var horizontalSizeClass
 
     @State private var available: CGFloat = 0
 
     var body: some View {
-        Group {
-            if horizontalSizeClass == .compact, table.isBeforeAfterComparison {
-                stackedComparison
-            } else {
-                VStack(alignment: .leading, spacing: 0) {
-                    // A zero-height, full-width probe. It is proposed the message's
-                    // width whatever the table does, so a table that is briefly too
-                    // wide can never inflate the number the column solver runs on.
-                    Color.clear
-                        .frame(height: 0)
-                        .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { available = $0 }
-                    if available > 0 {
-                        let layout = TableLayoutPlan(
-                            table: measured,
-                            available: available,
-                            gutter: Self.gutter
-                        )
-                        if layout.fits {
-                            grid(layout)
-                        } else {
-                            let base = dimmed ? MarkdownRenderConfig.os1Dim : .os1Static
-                            let config = quoteSelection == nil
-                                ? base
-                                : base.withTextContextMenu(value: .os1QuoteSelection)
-                            SwiftStreamingMarkdown.MarkdownView(
-                                text: table.markdownSource(),
-                                config: config,
-                                listener: quoteSelection?.listener
-                            )
-                        }
-                    }
+        VStack(alignment: .leading, spacing: 0) {
+            // A zero-height, full-width probe. It is proposed the message's
+            // width whatever the table does, so a table that is briefly too
+            // wide can never inflate the number the column solver runs on.
+            Color.clear
+                .frame(height: 0)
+                .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { available = $0 }
+            if available > 0 {
+                let layout = TableLayoutPlan(
+                    table: measured,
+                    available: available,
+                    gutter: Self.gutter
+                )
+                if layout.fits {
+                    grid(layout)
+                } else {
+                    let base = dimmed ? MarkdownRenderConfig.os1Dim : .os1Static
+                    let config = quoteSelection == nil
+                        ? base
+                        : base.withTextContextMenu(value: .os1QuoteSelection)
+                    SwiftStreamingMarkdown.MarkdownView(
+                        text: table.markdownSource(),
+                        config: config,
+                        listener: quoteSelection?.listener
+                    )
                 }
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
-    }
-
-    /// Before and after prose needs reading width more than it needs column
-    /// alignment on a phone. Each row keeps its pairing while both values get
-    /// the full message width.
-    private var stackedComparison: some View {
-        VStack(alignment: .leading, spacing: 0) {
-            ForEach(Array(measured.rows.enumerated()), id: \.offset) { index, cells in
-                VStack(alignment: .leading, spacing: 10) {
-                    comparisonField(column: 0, cells: cells)
-                    comparisonField(column: 1, cells: cells)
-                }
-                .padding(.vertical, Self.comparisonPadding)
-                .overlay(alignment: .bottom) {
-                    if index < measured.rows.count - 1 {
-                        Rectangle()
-                            .fill(OS1VisualStyle.border.opacity(0.6))
-                            .frame(height: 0.5)
-                    }
-                }
-            }
-        }
-        .textSelection(.enabled)
-    }
-
-    @ViewBuilder
-    private func comparisonField(column: Int, cells: [MeasuredCell]) -> some View {
-        if measured.headers.indices.contains(column), cells.indices.contains(column) {
-            VStack(alignment: .leading, spacing: 3) {
-                Text(measured.headers[column].display)
-                    .font(Self.headerFont)
-                    .foregroundStyle(OS1VisualStyle.textFaint)
-                Text(cells[column].display)
-                    .font(Self.bodyFont)
-                    .foregroundStyle(bodyColor)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
-            .frame(maxWidth: .infinity, alignment: .leading)
-        }
     }
 
     private var measured: MeasuredTable { MeasuredTable.cached(for: table) }
@@ -196,13 +150,11 @@ struct MarkdownTableView: View {
     private static let headerFont = Font.system(size: 12, weight: .semibold)
     private static let cellPadding: CGFloat = 7
     private static let headerPadding: CGFloat = 5
-    private static let comparisonPadding: CGFloat = 10
     #else
     private static let bodyFont = Font.system(size: 12)
     private static let headerFont = Font.system(size: 11, weight: .semibold)
     private static let cellPadding: CGFloat = 5
     private static let headerPadding: CGFloat = 4
-    private static let comparisonPadding: CGFloat = 8
     #endif
 }
 
