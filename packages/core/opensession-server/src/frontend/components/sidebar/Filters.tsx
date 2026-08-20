@@ -157,7 +157,7 @@ export function FilterPopover({
 				    label rather than among the filters it rearranges. */}
 				<div className="flex items-center justify-between gap-3 px-2 pb-1.5 pt-1">
 					<span className="truncate text-item-title font-semibold text-fg">
-						Sidebar
+						Sidebar view
 					</span>
 					<button
 						type="button"
