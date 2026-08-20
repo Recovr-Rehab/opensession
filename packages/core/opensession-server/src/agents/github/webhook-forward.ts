@@ -24,6 +24,7 @@
  */
 
 import { configuredIntegration, configuredRepos, configuredServer } from "../../server/config";
+import { soleGithubAccount } from "../../server/github-auth";
 import { WEBHOOK_FORWARD_EVENTS } from "./constants";
 
 // ── Gating ───────────────────────────────────────────────────
@@ -128,10 +129,31 @@ export function buildForwardCommand(opts: {
 
 // ── gh + extension availability ──────────────────────────────
 
-export type GhRunner = (args: string[]) => Promise<{ code: number; stdout: string }>;
+export type GithubForwardEnv = Record<string, string | undefined>;
 
-const defaultRun: GhRunner = async (args) => {
-  const proc = Bun.spawn(args, { stdout: "pipe", stderr: "ignore", stdin: "ignore" });
+/**
+ * Give simple mode's one connected account precedence while retaining the
+ * server's ambient environment for operator installs and executable lookup.
+ */
+export function githubForwardProcessEnv(
+  base: GithubForwardEnv = process.env,
+  credential: GithubForwardEnv | null = soleGithubAccount()?.env ?? null,
+): GithubForwardEnv {
+  return credential ? { ...base, ...credential } : { ...base };
+}
+
+export type GhRunner = (
+  args: string[],
+  env?: GithubForwardEnv,
+) => Promise<{ code: number; stdout: string }>;
+
+const defaultRun: GhRunner = async (args, env = githubForwardProcessEnv()) => {
+  const proc = Bun.spawn(args, {
+    env,
+    stdout: "pipe",
+    stderr: "ignore",
+    stdin: "ignore",
+  });
   const stdout = await new Response(proc.stdout).text();
   const code = await proc.exited;
   return { code, stdout };
@@ -141,10 +163,11 @@ const defaultRun: GhRunner = async (args) => {
  *  `cli/gh-webhook` extension is installed. Runner injectable for tests. */
 export async function detectGhWebhook(
   run: GhRunner = defaultRun,
+  env: GithubForwardEnv = githubForwardProcessEnv(),
 ): Promise<{ gh: boolean; extension: boolean }> {
-  const version = await run(["gh", "--version"]).catch(() => ({ code: 1, stdout: "" }));
+  const version = await run(["gh", "--version"], env).catch(() => ({ code: 1, stdout: "" }));
   if (version.code !== 0) return { gh: false, extension: false };
-  const list = await run(["gh", "extension", "list"]).catch(() => ({ code: 1, stdout: "" }));
+  const list = await run(["gh", "extension", "list"], env).catch(() => ({ code: 1, stdout: "" }));
   const extension = list.code === 0 && /gh-webhook/i.test(list.stdout);
   return { gh: true, extension };
 }
@@ -155,8 +178,11 @@ export async function detectGhWebhook(
  * false (with ONE clear log line) when unavailable so the caller falls back to
  * the reconcile sweep instead of crashing.
  */
-export async function ensureGhWebhook(run: GhRunner = defaultRun): Promise<boolean> {
-  const { gh, extension } = await detectGhWebhook(run);
+export async function ensureGhWebhook(
+  run: GhRunner = defaultRun,
+  env: GithubForwardEnv = githubForwardProcessEnv(),
+): Promise<boolean> {
+  const { gh, extension } = await detectGhWebhook(run, env);
   if (!gh) {
     console.warn(
       "[github-forward] gh CLI not found or not authenticated — install GitHub CLI, run `gh auth login` and `gh extension install cli/gh-webhook`; falling back to the reconcile sweep",
@@ -165,7 +191,10 @@ export async function ensureGhWebhook(run: GhRunner = defaultRun): Promise<boole
   }
   if (extension) return true;
   console.log("[github-forward] cli/gh-webhook not installed — attempting `gh extension install cli/gh-webhook`");
-  const install = await run(["gh", "extension", "install", "cli/gh-webhook"]).catch(() => ({
+  const install = await run(
+    ["gh", "extension", "install", "cli/gh-webhook"],
+    env,
+  ).catch(() => ({
     code: 1,
     stdout: "",
   }));
@@ -211,7 +240,12 @@ function spawnForwarder(label: string, args: string[]): void {
   const startedAt = Date.now();
   let proc: ReturnType<typeof Bun.spawn>;
   try {
-    proc = Bun.spawn(args, { stdout: "inherit", stderr: "inherit", stdin: "ignore" });
+    proc = Bun.spawn(args, {
+      env: githubForwardProcessEnv(),
+      stdout: "inherit",
+      stderr: "inherit",
+      stdin: "ignore",
+    });
   } catch (e) {
     console.error(`[github-forward] failed to spawn forwarder for ${label}:`, e);
     scheduleRestart(label, args);

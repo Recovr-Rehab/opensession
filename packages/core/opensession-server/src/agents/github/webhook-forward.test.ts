@@ -4,6 +4,7 @@ import {
   computeTargets,
   detectGhWebhook,
   ensureGhWebhook,
+  githubForwardProcessEnv,
   isPublicUrl,
   shouldForward,
   type GhRunner,
@@ -101,20 +102,44 @@ describe("isPublicUrl", () => {
 function runner(script: Record<string, { code: number; stdout: string }>): {
   run: GhRunner;
   calls: string[][];
+  envs: Array<Record<string, string | undefined> | undefined>;
 } {
   const calls: string[][] = [];
-  const run: GhRunner = async (args) => {
+  const envs: Array<Record<string, string | undefined> | undefined> = [];
+  const run: GhRunner = async (args, env) => {
     calls.push(args);
+    envs.push(env);
     const key = args.join(" ");
     return script[key] ?? { code: 127, stdout: "" };
   };
-  return { run, calls };
+  return { run, calls, envs };
 }
+
+describe("githubForwardProcessEnv", () => {
+  test("the simple-mode credential overrides ambient GitHub auth", () => {
+    expect(
+      githubForwardProcessEnv(
+        { PATH: "/bin", GH_TOKEN: "ambient", OTHER: "kept" },
+        { GH_TOKEN: "connected", GITHUB_TOKEN: "connected" },
+      ),
+    ).toEqual({
+      PATH: "/bin",
+      GH_TOKEN: "connected",
+      GITHUB_TOKEN: "connected",
+      OTHER: "kept",
+    });
+  });
+
+  test("operator mode keeps ambient authentication", () => {
+    const ambient = { PATH: "/bin", GH_TOKEN: "operator" };
+    expect(githubForwardProcessEnv(ambient, null)).toEqual(ambient);
+  });
+});
 
 describe("detectGhWebhook", () => {
   test("gh missing ⇒ neither present", async () => {
     const { run } = runner({ "gh --version": { code: 127, stdout: "" } });
-    expect(await detectGhWebhook(run)).toEqual({ gh: false, extension: false });
+    expect(await detectGhWebhook(run, {})).toEqual({ gh: false, extension: false });
   });
 
   test("gh present, extension installed", async () => {
@@ -122,7 +147,7 @@ describe("detectGhWebhook", () => {
       "gh --version": { code: 0, stdout: "gh version 2.60.0" },
       "gh extension list": { code: 0, stdout: "cli/gh-webhook  v1.0.0\ngithub/gh-stack  v0.1" },
     });
-    expect(await detectGhWebhook(run)).toEqual({ gh: true, extension: true });
+    expect(await detectGhWebhook(run, {})).toEqual({ gh: true, extension: true });
   });
 
   test("gh present, extension missing", async () => {
@@ -130,7 +155,7 @@ describe("detectGhWebhook", () => {
       "gh --version": { code: 0, stdout: "gh version 2.60.0" },
       "gh extension list": { code: 0, stdout: "github/gh-stack  v0.1" },
     });
-    expect(await detectGhWebhook(run)).toEqual({ gh: true, extension: false });
+    expect(await detectGhWebhook(run, {})).toEqual({ gh: true, extension: false });
   });
 });
 
@@ -140,18 +165,20 @@ describe("ensureGhWebhook", () => {
       "gh --version": { code: 0, stdout: "gh version 2.60.0" },
       "gh extension list": { code: 0, stdout: "cli/gh-webhook v1" },
     });
-    expect(await ensureGhWebhook(run)).toBe(true);
+    expect(await ensureGhWebhook(run, {})).toBe(true);
     expect(calls.some((c) => c.includes("install"))).toBe(false);
   });
 
-  test("installs the extension once when gh is present but it is missing", async () => {
-    const { run, calls } = runner({
+  test("installs the extension once with the selected credential", async () => {
+    const { run, calls, envs } = runner({
       "gh --version": { code: 0, stdout: "gh version 2.60.0" },
       "gh extension list": { code: 0, stdout: "" },
       "gh extension install cli/gh-webhook": { code: 0, stdout: "installed" },
     });
-    expect(await ensureGhWebhook(run)).toBe(true);
+    const env = { PATH: "/bin", GH_TOKEN: "connected" };
+    expect(await ensureGhWebhook(run, env)).toBe(true);
     expect(calls).toContainEqual(["gh", "extension", "install", "cli/gh-webhook"]);
+    expect(envs).toEqual([env, env, env]);
   });
 
   test("falls back (false) when install fails", async () => {
@@ -160,11 +187,11 @@ describe("ensureGhWebhook", () => {
       "gh extension list": { code: 0, stdout: "" },
       "gh extension install cli/gh-webhook": { code: 1, stdout: "" },
     });
-    expect(await ensureGhWebhook(run)).toBe(false);
+    expect(await ensureGhWebhook(run, {})).toBe(false);
   });
 
   test("falls back (false) when gh is absent", async () => {
     const { run } = runner({ "gh --version": { code: 127, stdout: "" } });
-    expect(await ensureGhWebhook(run)).toBe(false);
+    expect(await ensureGhWebhook(run, {})).toBe(false);
   });
 });
