@@ -113,7 +113,10 @@ export const VIEWER_BRANCH_RENAME =
  * PWA.
  */
 export const VIEWER_HEADER_ACTIONS =
-	"viewer-header-actions pwa-header-actions flex shrink-0 items-center gap-0.5 phone:justify-end " +
+	// The tab strip overlaps the header's lower edge to tighten the two rows.
+	// Keep every header action above that overlap so its bottom edge and hit area
+	// remain intact.
+	"viewer-header-actions pwa-header-actions relative z-[1] flex shrink-0 items-center gap-0.5 phone:justify-end " +
 	// Phones give every control in the row a 44px touch target. Keyed off the
 	// row rather than written on each control because these are shared
 	// primitives (Button, and the source links below). A descendant selector also
