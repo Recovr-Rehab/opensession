@@ -225,9 +225,14 @@ export function tabClass(state: TabState): string {
 	return `${TAB_BASE} ${ink} ${phonePill} ${desktopPill}`;
 }
 
-/** The label. Gives up its width first so a long title truncates instead of
- *  pushing the close × out of the pill. */
-export const TAB_TITLE = "max-w-[150px] overflow-hidden text-ellipsis";
+/** The label fades only when its content actually overflows. Desktop titles
+ *  use the room released by the overlaid close button, then fade earlier on
+ *  hover so the revealed close control stays clear of the text. */
+export const TAB_TITLE =
+	"session-tab-title block min-w-0 max-w-[150px] overflow-hidden " +
+	"data-[overflow]:[mask-image:linear-gradient(to_right,#000_0,#000_calc(100%_-_10px),transparent_100%)] " +
+	"desktop:mr-3.5 desktop:max-w-[166px] " +
+	"desktop:group-hover/tab:[mask-image:linear-gradient(to_right,#000_0,#000_calc(100%_-_18px),transparent_100%)]";
 
 /** An icon-only view tab (Staging → a globe): drop the label's text metrics so
  *  the tab sizes to the glyph. */

@@ -169,6 +169,34 @@ type TabMember =
 	| { kind: "session"; id: string; session: UnifiedSession }
 	| { kind: "view"; id: string; view: ViewTab };
 
+/** Apply the edge fade only when the title is genuinely clipped. Keeping this
+ * as a DOM attribute avoids rerendering the full tab strip for presentation. */
+function TabTitle({
+	children,
+	onDoubleClick,
+}: {
+	children: React.ReactNode;
+	onDoubleClick?: React.MouseEventHandler<HTMLSpanElement>;
+}) {
+	const ref = useRef<HTMLSpanElement>(null);
+	useEffect(() => {
+		const title = ref.current;
+		if (!title) return;
+		const sync = () =>
+			title.toggleAttribute("data-overflow", title.scrollWidth - title.clientWidth > 1);
+		const observer = new ResizeObserver(sync);
+		observer.observe(title);
+		sync();
+		return () => observer.disconnect();
+	}, [children]);
+
+	return (
+		<span ref={ref} className={TAB_TITLE} onDoubleClick={onDoubleClick}>
+			{children}
+		</span>
+	);
+}
+
 export function SessionTabs({
 	tabs,
 	archived,
@@ -208,7 +236,7 @@ export function SessionTabs({
 	// desktop they stay pinned after the last tab. Icons run a touch bigger on
 	// touch for an easier hit.
 	const isPhone = useIsPhone();
-	const ctrlIconSize = isPhone ? 25 : 22;
+	const ctrlIconSize = isPhone ? 23 : 20;
 
 	// Drag-to-reorder the session tabs (desktop only — an x-drag would fight touch
 	// scrolling / the phone swipe gestures). `orderDraft` holds the in-flight
@@ -575,7 +603,7 @@ export function SessionTabs({
 												{v.icon}
 											</span>
 										) : (
-											<span className={TAB_TITLE}>{v.label}</span>
+											<TabTitle>{v.label}</TabTitle>
 										)}
 										{v.closable !== false && (
 											<button
@@ -638,8 +666,7 @@ export function SessionTabs({
 												}}
 											/>
 										) : (
-											<span
-												className={TAB_TITLE}
+											<TabTitle
 												onDoubleClick={(e) => {
 													e.stopPropagation();
 													setDraft(session.title);
@@ -647,7 +674,7 @@ export function SessionTabs({
 												}}
 											>
 												{session.title}
-											</span>
+											</TabTitle>
 										)}
 										{/* Who else is in this tab. The sidebar's workspace row shows
 							    the same faces for the whole strip, which says a teammate
