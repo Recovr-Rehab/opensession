@@ -193,7 +193,7 @@ describe("session social card", () => {
 		expect(svg).toContain('<rect width="1200" height="630" fill="#FFFFFF"/>');
 		expect(svg).not.toContain("aurora");
 		expect(svg).not.toContain("shotFade");
-		expect(svg).toContain('fill="#050609" font-size="40"');
+		expect(svg).toContain('fill="#050609" font-size="38"');
 		// The title owns the left edge. Owner and repo share one metadata row,
 		// with each squircle placed directly before its own label.
 		expect(svg).toContain(
@@ -226,24 +226,24 @@ describe("session social card", () => {
 			[],
 			124,
 		);
-		expect(svg).toContain('<text x="56" y="59"');
-		expect(svg).toContain('<text x="56" y="103"');
+		expect(svg).toContain('<text x="56" y="60"');
+		expect(svg).toContain('<text x="56" y="102"');
 		expect(svg).toContain(
-			'<image href="data:image/png;base64,avatar" x="56" y="135" width="28" height="28"',
+			'<image href="data:image/png;base64,avatar" x="56" y="133" width="28" height="28"',
 		);
 		expect(svg).toContain(
-			'<text x="94" y="150" dominant-baseline="middle"',
+			'<text x="94" y="147" dominant-baseline="middle"',
 		);
 		expect(svg).toContain(
-			'<text x="280" y="150" dominant-baseline="middle"',
+			'<text x="280" y="147" dominant-baseline="middle"',
 		);
 		expect(svg).toContain(">Test Person</text>");
 		expect(svg).toContain(">opensession</text>");
 		expect(svg).toMatch(
-			/<clipPath id="avatarClip" clipPathUnits="userSpaceOnUse"><path d="M68\.88 135\.00L/,
+			/<clipPath id="avatarClip" clipPathUnits="userSpaceOnUse"><path d="M68\.88 133\.00L/,
 		);
 		expect(svg).toMatch(
-			/<clipPath id="repoClip" clipPathUnits="userSpaceOnUse"><path d="M254\.88 135\.00L/,
+			/<clipPath id="repoClip" clipPathUnits="userSpaceOnUse"><path d="M254\.88 133\.00L/,
 		);
 	});
 
@@ -319,7 +319,7 @@ describe("session social card", () => {
 		expect(output).toContain("<title>Ship dynamic social cards · Open Session</title>");
 		expect(output).toContain('content="summary_large_image"');
 		expect(output).toMatch(
-			/content="https:\/\/media\.example\.test\/session-card\/sess-social-1\/[A-Za-z0-9_-]{32}\.png\?v=12"/,
+			/content="https:\/\/media\.example\.test\/session-card\/sess-social-1\/[A-Za-z0-9_-]{32}\.png\?v=13"/,
 		);
 		expect(output).toContain(
 			'property="og:url" content="https://os.example.test/session/sess-social-1"',
@@ -333,13 +333,13 @@ describe("session social card", () => {
 		).toBe("sess-social-1");
 		expect(socialSessionIdFromPath("/settings")).toBeNull();
 		expect(sessionSocialCardUrl("sess-social-1")).toMatch(
-			/^https:\/\/media\.example\.test\/session-card\/sess-social-1\/[A-Za-z0-9_-]{32}\.png\?v=12$/,
+			/^https:\/\/media\.example\.test\/session-card\/sess-social-1\/[A-Za-z0-9_-]{32}\.png\?v=13$/,
 		);
 	});
 
 	test("signs ids containing Slack timestamp dots", () => {
 		expect(sessionSocialCardUrl("slack-C123-1719860000.000000")).toMatch(
-			/^https:\/\/media\.example\.test\/session-card\/slack-C123-1719860000\.000000\/[A-Za-z0-9_-]{32}\.png\?v=12$/,
+			/^https:\/\/media\.example\.test\/session-card\/slack-C123-1719860000\.000000\/[A-Za-z0-9_-]{32}\.png\?v=13$/,
 		);
 	});
 

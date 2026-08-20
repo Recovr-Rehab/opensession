@@ -47,7 +47,7 @@ export const SESSION_CARD_BANNER_WIDTH = 1200;
 export const SESSION_CARD_BANNER_HEIGHT = 200;
 
 export type SessionCardVariant = "card" | "banner";
-const SESSION_CARD_VERSION = 12;
+const SESSION_CARD_VERSION = 13;
 
 const CARD_INK = "#050609";
 const CARD_PAPER = "#FFFFFF";
@@ -62,9 +62,9 @@ const META_GLYPH_SIZE = 22;
 const META_RADIUS = META_SIZE * 0.46;
 const META_OPACITY = 0.52;
 const TITLE_META_GAP = 10;
-const TITLE_SIZE = 40;
-const TITLE_LINE_HEIGHT = 44;
-const TITLE_FONT = "Inter SemiBold 40";
+const TITLE_SIZE = 38;
+const TITLE_LINE_HEIGHT = 42;
+const TITLE_FONT = "Inter SemiBold 38";
 const TITLE_LETTER_SPACING = -1024;
 /** Every screenshot frame stays 16:9, including the ones behind the lead shot. */
 const SHOT_BANNER_WIDTH = 304;
@@ -343,7 +343,7 @@ async function truncateTitleLine(
 	return `${characters.slice(0, low).join("").trimEnd()}...`;
 }
 
-/** Fit the title into at most two balanced 44px lines. */
+/** Fit the title into at most two balanced 42px lines. */
 export async function fitSocialCardTitle(
 	title: string,
 	maxWidth: number = SESSION_CARD_WIDTH - PAD_X * 2,
@@ -735,7 +735,7 @@ ${avatarGlyph}
 		: repoIcon
 			? `<image href="${repoIcon}" x="${repoX}" y="${metaTop}" width="${META_SIZE}" height="${META_SIZE}" preserveAspectRatio="xMidYMid slice" clip-path="url(#repoClip)"/>
 <path d="${repoTile}" fill="none" stroke="#000000" stroke-opacity="0.1"/>`
-			: `<path d="${repoTile}" fill="${xml(tileColor)}"/><text x="${repoX + META_SIZE / 2}" y="${metaCenter + 1}" text-anchor="middle" dominant-baseline="middle" fill="${REPO_TILE_INK}" font-size="14" font-weight="600">${xml(repoLetter(repoId))}</text>
+			: `<path d="${repoTile}" fill="${xml(tileColor)}"/><text x="${repoX + META_SIZE / 2}" y="${metaCenter}" text-anchor="middle" dominant-baseline="middle" fill="${REPO_TILE_INK}" font-size="14" font-weight="600">${xml(repoLetter(repoId))}</text>
 <path d="${repoTile}" fill="none" stroke="#000000" stroke-opacity="0.1"/>`;
 
 	return `<svg xmlns="http://www.w3.org/2000/svg" width="${SESSION_CARD_WIDTH}" height="${height}" viewBox="0 0 ${SESSION_CARD_WIDTH} ${height}" overflow="hidden" font-family="Inter, Arial, sans-serif">
@@ -753,9 +753,9 @@ ${shotDefs}
 ${shotMarkup}
 ${titleMarkup}
 ${avatarMarkup}
-<text x="${ownerTextX}" y="${metaCenter + 1}" dominant-baseline="middle" fill="${CARD_INK}" fill-opacity="${META_OPACITY}" font-size="${META_TEXT_SIZE}" font-weight="500">${xml(owner)}</text>
+<text x="${ownerTextX}" y="${metaCenter}" dominant-baseline="middle" fill="${CARD_INK}" fill-opacity="${META_OPACITY}" font-size="${META_TEXT_SIZE}" font-weight="500">${xml(owner)}</text>
 ${repoMarkup}
-${repoId ? `<text x="${repoTextX}" y="${metaCenter + 1}" dominant-baseline="middle" fill="${CARD_INK}" fill-opacity="${META_OPACITY}" font-size="${META_TEXT_SIZE}" font-weight="500">${xml(metaLabel(repoId))}</text>` : ""}
+${repoId ? `<text x="${repoTextX}" y="${metaCenter}" dominant-baseline="middle" fill="${CARD_INK}" fill-opacity="${META_OPACITY}" font-size="${META_TEXT_SIZE}" font-weight="500">${xml(metaLabel(repoId))}</text>` : ""}
 </svg>`;
 }
 
