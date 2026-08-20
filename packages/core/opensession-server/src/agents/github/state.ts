@@ -84,6 +84,8 @@ export interface GithubPrState {
     startedAt: string;
     /** A person stopped this run. Recovery must not start it again. */
     cancelRequestedAt?: string;
+    /** The head under review. Recovery only reuses a progress comment for this same SHA. */
+    headSha?: string;
     /** The run's progress comment id, reused only on restart recovery, not on a fresh re-trigger. */
     progressCommentId?: number;
     /** Free-text steer from the triggering message, so a restart can re-pass it. */

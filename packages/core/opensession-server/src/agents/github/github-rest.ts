@@ -44,6 +44,15 @@ export const OWN_MARKERS = [
   ADVERSARIAL_MARKER,
 ].flatMap((m) => [m, legacyMarker(m)]);
 
+/** Whether a comment is the unfinished review placeholder for this head. */
+export function isReviewProgressForHead(body: string, headSha: string): boolean {
+  if (!(body.startsWith(REVIEW_MARKER) || body.startsWith(legacyMarker(REVIEW_MARKER)))) return false;
+  const match = body.match(/🔄 Reviewing(?: `([0-9a-f]{7,40})`)?…/i);
+  if (!match) return false;
+  const shownSha = match[1];
+  return !shownSha || Boolean(headSha && headSha.toLowerCase().startsWith(shownSha.toLowerCase()));
+}
+
 export function githubConfigured(): boolean {
   return !!GITHUB_TOKEN;
 }
@@ -152,22 +161,37 @@ export async function getComment(commentId: number, ghRepo: string = GITHUB_REPO
   return r.ok && r.data ? r.data : null;
 }
 
-/** Find the current (active, not-outdated) agent review comment id, if any. */
-export async function findActiveReviewComment(prNumber: number, ghRepo: string = GITHUB_REPO): Promise<number | null> {
+async function listIssueComments(prNumber: number, ghRepo: string): Promise<IssueComment[]> {
   const list = await githubRequest<IssueComment[]>(
     "GET",
     `/repos/${ghRepo}/issues/${prNumber}/comments?per_page=100`,
   );
-  if (!list.ok || !Array.isArray(list.data)) return null;
-  // Newest first — supersede the most recent active one. Match either marker
-  // generation: pre-rename review comments start with the michael-* form.
-  const mine = list.data
+  return list.ok && Array.isArray(list.data) ? list.data : [];
+}
+
+/** Find the current (active, not-outdated) agent review comment id, if any. */
+export async function findActiveReviewComment(prNumber: number, ghRepo: string = GITHUB_REPO): Promise<number | null> {
+  // Newest first. Match either marker generation: pre-rename review comments
+  // start with the michael-* form.
+  const mine = (await listIssueComments(prNumber, ghRepo))
     .reverse()
     .find(
       (c) =>
         typeof c.body === "string" &&
         (c.body.startsWith(REVIEW_MARKER) || c.body.startsWith(legacyMarker(REVIEW_MARKER))),
     );
+  return mine ? mine.id : null;
+}
+
+/** Recover a progress POST that succeeded just before its id was persisted. */
+export async function findReviewProgressComment(
+  prNumber: number,
+  headSha: string,
+  ghRepo: string = GITHUB_REPO,
+): Promise<number | null> {
+  const mine = (await listIssueComments(prNumber, ghRepo))
+    .reverse()
+    .find((c) => typeof c.body === "string" && isReviewProgressForHead(c.body, headSha));
   return mine ? mine.id : null;
 }
 

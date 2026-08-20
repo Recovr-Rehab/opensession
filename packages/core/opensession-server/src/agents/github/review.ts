@@ -19,10 +19,14 @@ import {
 import { announceGithubRun, runGithubAgent, sessionUrl } from "./run";
 import { buildReviewPrompt, DEFAULT_REVIEW_PROMPT } from "./prompts";
 import {
+  getComment,
   postIssueComment,
+  postOrEditComment,
   editIssueComment,
   supersedeReviewComment,
   findActiveReviewComment,
+  findReviewProgressComment,
+  isReviewProgressForHead,
   submitReview,
   listReviewThreads,
   resolveReviewThread,
@@ -139,8 +143,13 @@ export async function runReview(
   try {
     const prRepo = pr.ghRepo ? repoForFullName(pr.ghRepo) : null;
     const state = getOrInitPrState(pr.number, pr.headRef, pr.ghRepo);
-    // `force` (manual Slack trigger) reviews even an already-reviewed SHA.
-    if (!force && pr.headSha && state.reviewedShas.includes(pr.headSha)) {
+    const priorRun = state.activeRun?.kind === "review" ? state.activeRun : undefined;
+    const recovering = Boolean(priorRun);
+    // Manual triggers review an already-reviewed SHA. Restart recovery does not:
+    // if the prior run completed its durable commit point before the process died,
+    // its leftover marker only needs clearing.
+    const forceFreshReview = force && !recovering;
+    if (!forceFreshReview && pr.headSha && state.reviewedShas.includes(pr.headSha)) {
       console.log(`[github] PR #${pr.number} @ ${pr.headSha.slice(0, 7)} already reviewed`);
       return null;
     }
@@ -150,11 +159,23 @@ export async function runReview(
     // `state` stays a read-only snapshot of what the PREVIOUS review left behind
     // (lastReview / lastReviewedSha below); every mutation goes through updatePrState.
     const isUpdate = state.reviewedShas.length > 0;
+    const startedAt = new Date().toISOString();
+    const sameHeadRecovery = Boolean(
+      priorRun?.headSha && pr.headSha && priorRun.headSha === pr.headSha,
+    );
+    const legacyRecovery = recovering && !priorRun?.headSha;
     updatePrState(
       pr.number,
       pr.headRef,
       (s) => {
-        s.activeRun = { kind: "review", requestedBy: "", startedAt: new Date().toISOString(), steer };
+        s.activeRun = {
+          kind: "review",
+          requestedBy: "",
+          startedAt,
+          headSha: pr.headSha || priorRun?.headSha,
+          progressCommentId: sameHeadRecovery ? priorRun?.progressCommentId : undefined,
+          steer,
+        };
       },
       pr.ghRepo,
     );
@@ -194,26 +215,45 @@ export async function runReview(
     });
     onSessionCreated?.(bksId);
 
-    // Post a fresh "reviewing…" comment immediately (progress ASAP), then collapse
-    // the previous review under an "Outdated review" <details>. Each review is its
-    // own comment; postReview edits this placeholder with the result.
+    // A fresh review posts a new placeholder and collapses the previous summary.
+    // Restart recovery edits the interrupted run's placeholder instead, so every
+    // server restart does not manufacture another "Outdated review" comment for
+    // the same head. Old state files only have summaryCommentId, so adopt it when
+    // its live body proves it is this head's unfinished placeholder.
+    let reuseId = sameHeadRecovery ? priorRun?.progressCommentId : undefined;
+    if (!reuseId && (sameHeadRecovery || legacyRecovery)) {
+      const candidateId = priorRun?.progressCommentId ?? state.summaryCommentId;
+      const candidate = candidateId ? await getComment(candidateId, pr.ghRepo) : null;
+      if (candidate && isReviewProgressForHead(candidate.body, pr.headSha)) {
+        reuseId = candidateId;
+      } else {
+        reuseId = (await findReviewProgressComment(pr.number, pr.headSha, pr.ghRepo)) ?? undefined;
+      }
+    }
     const prevId = state.summaryCommentId ?? (await findActiveReviewComment(pr.number, pr.ghRepo)) ?? undefined;
     const shortSha0 = (pr.headSha || "").slice(0, 7);
-    const placeholderId = await postIssueComment(
+    const placeholderId = await postOrEditComment(
       pr.number,
+      reuseId,
       `${REVIEW_MARKER}\n### 🤖 ${personaName()} review\n\n🔄 Reviewing${shortSha0 ? ` \`${shortSha0}\`` : ""}… · [📺 open session](${sessionUrl(pr.number, "review", pr.ghRepo)})`,
       pr.ghRepo,
     );
     if (placeholderId) {
+      let ownsRun = false;
       updatePrState(
         pr.number,
         pr.headRef,
         (s) => {
+          if (s.activeRun?.kind !== "review" || s.activeRun.startedAt !== startedAt) return;
+          ownsRun = true;
           s.summaryCommentId = placeholderId;
+          s.activeRun.progressCommentId = placeholderId;
         },
         pr.ghRepo,
       );
-      if (prevId && prevId !== placeholderId) await supersedeReviewComment(prevId, pr.ghRepo).catch(() => {});
+      if (ownsRun && prevId && prevId !== placeholderId) {
+        await supersedeReviewComment(prevId, pr.ghRepo).catch(() => {});
+      }
     }
     // If the placeholder failed, summaryCommentId keeps prevId and postReview edits it.
     if (cancellationRequested()) return finishCancelled(placeholderId || undefined);
@@ -387,7 +427,7 @@ export async function runReview(
       parsed.verdict = "request_changes";
       parsed.confidence = Math.min(typeof parsed.confidence === "number" ? parsed.confidence : 2, 2);
     }
-    await postReview(pr, details, parsed, finalResult.text, reviewError, force, finalResult.model, reviewOpts, summaryOnly, testOnBaseSection(tob) + secretScanSection(secrets));
+    await postReview(pr, details, parsed, finalResult.text, reviewError, forceFreshReview, finalResult.model, reviewOpts, summaryOnly, testOnBaseSection(tob) + secretScanSection(secrets));
 
     const outcome: ReviewResult = {
       verdict: parsed?.verdict,
