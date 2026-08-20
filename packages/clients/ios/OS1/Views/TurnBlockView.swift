@@ -472,7 +472,7 @@ struct TurnStepsView: View {
               item.result?.featuredMedia?.isEmpty != false
         else { return .single }
         switch item.presentation.family {
-        case .run, .file, .find, .web:
+        case .run, .file, .find, .web, .skill, .checklist:
             return .compact
         case .edit:
             // One file, named by the same derivation the footer's chips use —

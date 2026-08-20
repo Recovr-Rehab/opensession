@@ -117,6 +117,24 @@ describe("grouped tool run row", () => {
 		expect(html).not.toContain("**/*website*.ts");
 	});
 
+	test("keeps skills and checklist updates inside routine steps", () => {
+		const items = [
+			toolUse("before", "read", { path: "src/App.tsx" }),
+			toolUse("skill", "skill", { skill: "better-ui" }),
+			toolUse("plan", "todowrite", {
+				todos: [{ content: "Verify the worker", status: "in_progress" }],
+			}),
+			toolUse("after", "bash", { command: "bun test" }),
+		];
+		const html = render(items, new Map());
+
+		expect(html.match(/data-tool-run="true"/g)).toHaveLength(1);
+		expect(html).toContain("4 steps");
+		expect(html).toContain("Read · Skill · TodoWrite · Bash");
+		expect(html).not.toContain("better-ui");
+		expect(html).not.toContain("Verify the worker");
+	});
+
 	test("groups consecutive MCP calls as routine work", () => {
 		const items = [
 			toolUse("send-a", "opensession-sessions_send_to_session", {

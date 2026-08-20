@@ -287,6 +287,10 @@ const COMPACT_TOOL_FAMILIES = new Set([
   "file",
   "find",
   "web",
+  // Loading a skill or updating a plan is routine setup inside the same run.
+  // Keeping either direct splits the surrounding work without adding an action.
+  "skill",
+  "checklist",
   // MCP calls are routine work too. Keeping them direct split otherwise
   // uninterrupted runs into a noisy sequence of verbose call rows.
   "mcp",
