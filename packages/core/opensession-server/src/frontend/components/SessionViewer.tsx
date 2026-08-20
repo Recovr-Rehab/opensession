@@ -819,6 +819,68 @@ function pickScrollAnchor(el: HTMLElement): HTMLElement | null {
 	return anchor;
 }
 
+function holdTranscriptAnchor(
+	container: HTMLElement,
+	entryId: string,
+	top: number,
+	bottomGap: number,
+	onFound: () => void,
+): () => void {
+	let raf = 0;
+	let stopped = false;
+	let foundAt: number | null = null;
+	const startedAt = performance.now();
+	const stop = () => {
+		if (stopped) return;
+		stopped = true;
+		cancelAnimationFrame(raf);
+		container.removeEventListener("wheel", stop);
+		container.removeEventListener("touchstart", stop);
+		container.removeEventListener("pointerdown", stop);
+		window.removeEventListener("keydown", stop);
+	};
+	container.addEventListener("wheel", stop, { passive: true });
+	container.addEventListener("touchstart", stop, { passive: true });
+	container.addEventListener("pointerdown", stop, { passive: true });
+	window.addEventListener("keydown", stop);
+	const tick = () => {
+		if (stopped || !container.isConnected) {
+			stop();
+			return;
+		}
+		const target = container.querySelector<HTMLElement>(
+			`[data-eid="${CSS.escape(entryId)}"]`,
+		);
+		const now = performance.now();
+		if (target) {
+			if (foundAt === null) {
+				foundAt = now;
+				onFound();
+			}
+			const delta =
+				target.getBoundingClientRect().top -
+				container.getBoundingClientRect().top -
+				top;
+			if (Math.abs(delta) > 0.5) container.scrollTop += delta;
+		} else {
+			container.scrollTop = Math.max(
+				0,
+				container.scrollHeight - container.clientHeight - bottomGap,
+			);
+		}
+		if (
+			(foundAt !== null && now - foundAt >= 1500) ||
+			(foundAt === null && now - startedAt >= 2500)
+		) {
+			stop();
+			return;
+		}
+		raf = requestAnimationFrame(tick);
+	};
+	raf = requestAnimationFrame(tick);
+	return stop;
+}
+
 export function SessionViewer({
 	session,
 	focused = true,
@@ -1249,6 +1311,7 @@ export function SessionViewer({
 	const transcriptRangeDemandReadyRef = useRef(false);
 	const [transcriptRangeRetryGeneration, setTranscriptRangeRetryGeneration] =
 		useState(0);
+	const indexAnchorHoldCancelRef = useRef<(() => void) | null>(null);
 	const completedTranscriptRangeKeysRef = useRef(new Set<string>());
 	const transcriptRangeRequestsRef = useRef(
 		new Map<
@@ -2602,6 +2665,8 @@ export function SessionViewer({
 						setTranscriptIndexState(null);
 						transcriptIndexEpochRef.current = null;
 						transcriptRangeDemandReadyRef.current = false;
+						indexAnchorHoldCancelRef.current?.();
+						indexAnchorHoldCancelRef.current = null;
 						for (const request of transcriptRangeRequestsRef.current.values())
 							clearTimeout(request.timer);
 						transcriptRangeRequestsRef.current.clear();
@@ -2646,6 +2711,26 @@ export function SessionViewer({
 				}
 				case "transcript_index": {
 					const keepLiveEdge = followingLive.current;
+					const scrollContainer = messagesRef.current;
+					const previousBottomGap =
+						!keepLiveEdge && scrollContainer
+							? Math.max(
+									0,
+									scrollContainer.scrollHeight -
+										scrollContainer.scrollTop -
+										scrollContainer.clientHeight,
+								)
+							: null;
+					const previousAnchor =
+						!keepLiveEdge && scrollContainer
+							? pickScrollAnchor(scrollContainer)
+							: null;
+					const previousAnchorEid = previousAnchor?.dataset.eid ?? null;
+					const previousAnchorTop =
+						previousAnchor && scrollContainer
+							? previousAnchor.getBoundingClientRect().top -
+								scrollContainer.getBoundingClientRect().top
+							: null;
 					transcriptIndexExpectedRef.current = true;
 					setTranscriptIndexExpected(true);
 					transcriptIndexEpochRef.current = msg.epoch;
@@ -2657,7 +2742,29 @@ export function SessionViewer({
 					setLoadingHistory(false);
 					transcriptRangeDemandReadyRef.current = false;
 					requestAnimationFrame(() => {
-						if (keepLiveEdge) scrollToLatest("auto");
+						if (keepLiveEdge) {
+							scrollToLatest("auto");
+						} else if (previousBottomGap !== null) {
+							const container = messagesRef.current;
+							if (container) {
+								container.scrollTop = Math.max(
+									0,
+									container.scrollHeight -
+										container.clientHeight -
+										previousBottomGap,
+								);
+								if (previousAnchorEid && previousAnchorTop !== null) {
+									indexAnchorHoldCancelRef.current?.();
+									indexAnchorHoldCancelRef.current = holdTranscriptAnchor(
+										container,
+										previousAnchorEid,
+										previousAnchorTop,
+										previousBottomGap,
+										leaveLatest,
+									);
+								}
+							}
+						}
 						requestAnimationFrame(() => {
 							transcriptRangeDemandReadyRef.current = true;
 							setTranscriptRangeRetryGeneration(
