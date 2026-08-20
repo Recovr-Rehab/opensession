@@ -494,7 +494,7 @@ function ConnectionCard({
 						)}
 					</div>
 					{(connection.qualification || connection.state !== "not_configured") && (
-						<div className="col-span-2 row-start-2 flex items-start justify-between gap-4">
+						<div className="col-span-2 row-start-2 flex items-baseline justify-between gap-4">
 							{connection.qualification && (
 								<details className="min-w-0 text-meta text-faint">
 									<summary className="h-[26px] w-fit cursor-pointer select-none leading-[26px] hover:text-fg">Diagnostics</summary>
