@@ -75,8 +75,19 @@ export function VirtualTranscriptList({
 
 	useEffect(() => {
 		if (!onVisibleItems || virtualItems.length === 0) return;
+		const container = rootRef.current?.closest<HTMLDivElement>(
+			".viewer-messages",
+		);
+		const top = container?.scrollTop ?? 0;
+		const viewport = container?.clientHeight ?? 0;
+		const bottom = top + viewport;
+		const demand = virtualItems.filter(
+			(item) =>
+				!container ||
+				(item.end >= top - viewport && item.start <= bottom + viewport),
+		);
 		onVisibleItems(
-			virtualItems
+			demand
 				.map((virtualItem) => items[virtualItem.index])
 				.filter((item): item is VirtualTranscriptItem => Boolean(item)),
 		);

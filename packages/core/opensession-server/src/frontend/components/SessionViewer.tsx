@@ -1246,6 +1246,7 @@ export function SessionViewer({
 	const transcriptIndexEpochRef = useRef<number | null>(null);
 	const [transcriptRangeRetryGeneration, setTranscriptRangeRetryGeneration] =
 		useState(0);
+	const completedTranscriptRangeKeysRef = useRef(new Set<string>());
 	const transcriptRangeRequestsRef = useRef(
 		new Map<
 			string,
@@ -2482,7 +2483,11 @@ export function SessionViewer({
 			if (epoch === null) return;
 			for (const range of ranges) {
 				const key = `${range.firstSeq}:${range.lastSeq}`;
-				if (transcriptRangeRequestsRef.current.has(key)) continue;
+				if (
+					completedTranscriptRangeKeysRef.current.has(key) ||
+					transcriptRangeRequestsRef.current.has(key)
+				)
+					continue;
 				const requestId = crypto.randomUUID();
 				const timer = setTimeout(() => {
 					transcriptRangeRequestsRef.current.delete(key);
@@ -2594,6 +2599,7 @@ export function SessionViewer({
 						for (const request of transcriptRangeRequestsRef.current.values())
 							clearTimeout(request.timer);
 						transcriptRangeRequestsRef.current.clear();
+						completedTranscriptRangeKeysRef.current.clear();
 					}
 					transcriptViewStore.replace(merged, true, v2);
 					setHistoryTruncated(!!msg.truncated);
@@ -2655,6 +2661,7 @@ export function SessionViewer({
 					const [key, request] = found;
 					clearTimeout(request.timer);
 					if (msg.complete) {
+						completedTranscriptRangeKeysRef.current.add(key);
 						transcriptRangeRequestsRef.current.delete(key);
 					} else {
 						request.timer = setTimeout(() => {
