@@ -4300,7 +4300,10 @@ export function App(
 					ref={setAppHeaderEl}
 					className={appHeader({
 						detail: mobileDetail,
-						floating: route.view === "prs" || route.view === "session",
+						floating:
+							route.view === "prs" ||
+							route.view === "feed" ||
+							route.view === "session",
 					})}
 				>
 					<div className={APP_HEADER_LEFT}>
