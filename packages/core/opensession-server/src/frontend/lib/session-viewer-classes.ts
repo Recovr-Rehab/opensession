@@ -108,9 +108,12 @@ export const VIEWER_BRANCH_RENAME =
  * The trailing controls. Icon buttons sit in a tight cluster so they read as
  * one group; the labelled items in the row (the Linear/Plain links, the
  * presence facepile, the PR chip) space themselves.
+ *
+ * `pwa-header-actions` lets base.css tune these controls only in an installed
+ * PWA.
  */
 export const VIEWER_HEADER_ACTIONS =
-	"viewer-header-actions flex shrink-0 items-center gap-0.5 phone:justify-end " +
+	"viewer-header-actions pwa-header-actions flex shrink-0 items-center gap-0.5 phone:justify-end " +
 	// Phones give every control in the row a 44px touch target. Keyed off the
 	// row rather than written on each control because these are shared
 	// primitives (Button, and the source links below). A descendant selector also

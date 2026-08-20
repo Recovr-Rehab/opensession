@@ -149,9 +149,11 @@ export const APP_HEADER_LEFT = "flex items-center gap-2";
  * `border-radius: 50%` with no `corner-shape`, so this circle is a true circle
  * and must opt out of the app's squircle (see the `@supports` block in
  * base.css). Press feel is iOS: dim instantly on touch-down, ease back up.
+ *
+ * `pwa-header-back` lets base.css tune this control only in an installed PWA.
  */
 export const MOBILE_BACK =
-	"phone:m-0 phone:inline-flex phone:size-11 phone:items-center phone:justify-center " +
+	"pwa-header-back phone:m-0 phone:inline-flex phone:size-11 phone:items-center phone:justify-center " +
 	"phone:rounded-full phone:border phone:border-[color:var(--mobile-header-control-border)] phone:bg-surface phone:p-0 " +
 	"phone:text-accent phone:shadow-[var(--mobile-header-control-shadow)] " +
 	"phone:cursor-pointer phone:touch-manipulation " +
