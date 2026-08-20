@@ -262,8 +262,8 @@ export function DeskOverlay({
 				widthClassName="w-[min(650px,100%)]"
 				className={
 					phone
-						? "h-[min(600px,85dvh)] rounded-b-[var(--composer-radius)] transition-[scale,translate,opacity]! data-[starting-style]:scale-[0.9]!"
-						: "h-[600px] max-h-[80dvh] rounded-b-[var(--composer-radius)] transition-[scale,translate,opacity]! data-[starting-style]:scale-[0.9]!"
+						? "h-[min(600px,85dvh)] origin-bottom-right rounded-b-[var(--composer-radius)] transition-[scale,translate,opacity]! data-[starting-style]:translate-y-0! data-[starting-style]:scale-[0.9]!"
+						: "h-[600px] max-h-[80dvh] origin-bottom-right rounded-b-[var(--composer-radius)] transition-[scale,translate,opacity]! data-[starting-style]:translate-y-0! data-[starting-style]:scale-[0.9]!"
 				}
 				aria-label="Desk"
 			>
