@@ -255,6 +255,7 @@ import {
 } from "../lib/sidebar-lanes";
 import { sessionHasPr } from "../lib/session-prs";
 import {
+	nextRenderedSidebarChat,
 	nextRenderedSidebarItem,
 	nextUnreadRenderedWorkspaceItem,
 } from "../lib/sidebar-next";
@@ -358,7 +359,7 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 	archivedActive,
 	onOpenCatchUp,
 	catchUpActive,
-	onNextUnreadAvailableChange,
+	onNextChatAvailableChange,
 	onArchive,
 	onArchiveWorkspace,
 	onRename,
@@ -2101,17 +2102,23 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 		archiveSelected: archiveOpenSessionWithNext,
 	}));
 
-	const reportedNextUnreadAvailable = useRef<boolean | null>(null);
+	const reportedNextChatAvailable = useRef<boolean | null>(null);
 	useLayoutEffect(() => {
-		const items = Array.from(
-			sidebarScrollRef.current?.querySelectorAll<HTMLButtonElement>(
-				"[data-sidebar-list] button[data-ws-row]",
-			) ?? [],
+		const sidebar = sidebarScrollRef.current?.querySelector("[data-sidebar-list]");
+		const workspaceItems = Array.from(
+			sidebar?.querySelectorAll<HTMLButtonElement>("button[data-ws-row]") ?? [],
 		);
-		const available = !!nextUnreadRenderedWorkspaceItem(items);
-		if (reportedNextUnreadAvailable.current === available) return;
-		reportedNextUnreadAvailable.current = available;
-		onNextUnreadAvailableChange?.(available);
+		const renderedItems = Array.from(
+			sidebar?.querySelectorAll<HTMLButtonElement>("button[data-sidebar-row]") ??
+				[],
+		);
+		const available = !!(
+			nextUnreadRenderedWorkspaceItem(workspaceItems) ??
+			nextRenderedSidebarChat(renderedItems)
+		);
+		if (reportedNextChatAvailable.current === available) return;
+		reportedNextChatAvailable.current = available;
+		onNextChatAvailableChange?.(available);
 	});
 
 	// Advertised keycaps, read through the registry so a rebind in Settings

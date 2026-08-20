@@ -388,8 +388,8 @@ interface Props {
 	hideHeader?: boolean;
 	hideRightPanel?: boolean;
 	onBack: () => void;
-	/** Open the next rendered unread workspace in sidebar order. */
-	onNextUnreadWorkspace?: () => void;
+	/** Open the next chat needing attention, or continue through the sidebar. */
+	onNextChat?: () => void;
 	/** Archive through the sidebar so the nearest visible row becomes active. */
 	onArchive?: () => void;
 	/** Called after a successful archive (not unarchive), with whether archiving
@@ -893,7 +893,7 @@ export function SessionViewer({
 	hideHeader = false,
 	hideRightPanel = false,
 	onBack,
-	onNextUnreadWorkspace,
+	onNextChat,
 	onArchive,
 	onArchived,
 	send,
@@ -2488,7 +2488,7 @@ export function SessionViewer({
 	// the composer is not focused; Ctrl+R focuses it directly.
 	const archiveShortcutLabel = useShortcutLabel("session-archive");
 	const copyTranscriptLabel = useShortcutLabel("session-copy-transcript");
-	const nextUnreadWorkspaceKeys = useShortcutKeys("workspace-next-unread");
+	const nextChatKeys = useShortcutKeys("workspace-next-unread");
 	const newSiblingKeys = useShortcutKeys("session-new-sibling");
 	const transcriptDownKeys = useShortcutKeys("transcript-down");
 	const composerRef = useRef<HTMLTextAreaElement | null>(null);
@@ -5242,12 +5242,9 @@ export function SessionViewer({
 			if (editable && !editable.classList.contains("composer-textarea")) {
 				return;
 			}
-			if (
-				matchesShortcut(e, "workspace-next-unread") &&
-				onNextUnreadWorkspace
-			) {
+			if (matchesShortcut(e, "workspace-next-unread") && onNextChat) {
 				e.preventDefault();
-				onNextUnreadWorkspace();
+				onNextChat();
 				return;
 			}
 			// The sidebar handles live sessions when it can, because it knows which
@@ -5265,7 +5262,7 @@ export function SessionViewer({
 		focused,
 		archiving,
 		handleArchive,
-		onNextUnreadWorkspace,
+		onNextChat,
 		session.archived,
 	]);
 
@@ -7279,18 +7276,18 @@ export function SessionViewer({
 									users={typingUsers}
 									className="mx-auto mb-1 w-full max-w-[calc(var(--session-col)+40px)] px-5"
 								/>
-								{onNextUnreadWorkspace && (
+								{onNextChat && (
 									<div className="mx-auto mb-2 flex w-full max-w-[calc(var(--session-col)+40px)] justify-end pr-5">
 										<Tooltip
-											label="Next ready unread workspace"
-											shortcut={nextUnreadWorkspaceKeys ?? undefined}
+											label="Next chat"
+											shortcut={nextChatKeys ?? undefined}
 										>
 											<Button
 												size="lg"
 												className="min-h-10 border-divider hover:border-line phone:min-h-11"
 												trailing={<IconChevronRight size={18} aria-hidden />}
-												aria-label="Next unread workspace"
-												onClick={onNextUnreadWorkspace}
+												aria-label="Next chat"
+												onClick={onNextChat}
 											>
 												Next
 											</Button>

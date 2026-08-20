@@ -184,7 +184,10 @@ import type { ReviewQueueItem } from "./lib/review-queue";
 import { pushRecent } from "./lib/recents";
 import { setLane, type Lane } from "./lib/lanes";
 import { markRead } from "./lib/reads";
-import { nextUnreadRenderedWorkspaceItem } from "./lib/sidebar-next";
+import {
+	nextRenderedSidebarChat,
+	nextUnreadRenderedWorkspaceItem,
+} from "./lib/sidebar-next";
 import {
 	sessionPath,
 	prPath,
@@ -1060,8 +1063,8 @@ export function App(
 	// recreated each render, but effects/handlers can capture an older copy.
 	const routeRef = useRef(route);
 	const sidebarRef = useRef<SidebarHandle>(null);
-	const nextUnreadWorkspaceRef = useRef<() => void>(() => {});
-	const [nextUnreadAvailable, setNextUnreadAvailable] = useState(false);
+	const nextChatRef = useRef<() => void>(() => {});
+	const [nextChatAvailable, setNextChatAvailable] = useState(false);
 	routeRef.current = route;
 	// The mobile layout is an iOS-style navigation stack: the sidebar is the root
 	// (depth 0) and each panel is pushed over it. Every entry carries its own
@@ -3883,19 +3886,18 @@ export function App(
 								},
 							]
 						: []),
-					...(nextUnreadAvailable
+					...(nextChatAvailable
 						? [
 								{
 									id: "next-unread-workspace",
-									label: "Next unread workspace",
-									description:
-										"Open the next ready workspace with unread activity",
+									label: "Next chat",
+									description: "Open the next chat, prioritizing work that needs attention",
 									category: "Navigate" as const,
 									keywords: ["next", "unread", "ready", "attention"],
 									shortcut:
 										shortcutPrimaryKeys("workspace-next-unread") ?? undefined,
 									icon: <IconChevronRight size={18} />,
-									run: () => nextUnreadWorkspaceRef.current(),
+									run: () => nextChatRef.current(),
 								},
 							]
 						: []),
@@ -4183,25 +4185,27 @@ export function App(
 		}
 		navigate({ view: "session", id });
 	};
-	// Rendered workspace rows are the navigation order. Filters, grouping and
-	// collapsed sections all change that order, so backing session arrays cannot
-	// answer which unread workspace is actually next on screen. Session rows are
-	// deliberately excluded: Next advances to another workspace, not another tab.
-	const openNextUnreadWorkspace = () => {
-		const items = Array.from(
-			document.querySelectorAll<HTMLButtonElement>(
-				"[data-sidebar-list] button[data-ws-row]",
-			),
+	// Rendered rows are the navigation order. Filters, grouping and collapsed
+	// sections all change that order, so backing session arrays cannot answer
+	// which chat is actually next on screen. Ready unread work stays the priority;
+	// when none exists, continue from the selected chat instead.
+	const openNextChat = () => {
+		const sidebar = document.querySelector("[data-sidebar-list]");
+		const workspaceItems = Array.from(
+			sidebar?.querySelectorAll<HTMLButtonElement>("button[data-ws-row]") ?? [],
 		);
-		const next = nextUnreadRenderedWorkspaceItem(items);
-		if (!next) {
-			showToast("You’re all caught up");
-			return;
-		}
+		const renderedItems = Array.from(
+			sidebar?.querySelectorAll<HTMLButtonElement>("button[data-sidebar-row]") ??
+				[],
+		);
+		const next =
+			nextUnreadRenderedWorkspaceItem(workspaceItems) ??
+			nextRenderedSidebarChat(renderedItems);
+		if (!next) return;
 		next.scrollIntoView({ block: "nearest" });
 		next.click();
 	};
-	nextUnreadWorkspaceRef.current = openNextUnreadWorkspace;
+	nextChatRef.current = openNextChat;
 	const renderSessionPane = (
 		viewerSession: UnifiedSession,
 		socket: ReturnType<typeof useWebSocket>,
@@ -4221,11 +4225,7 @@ export function App(
 				hideHeader={splitMode && !focused}
 				hideRightPanel={splitMode && !focused}
 				onBack={goBack}
-				onNextUnreadWorkspace={
-					focused && nextUnreadAvailable
-						? openNextUnreadWorkspace
-						: undefined
-				}
+				onNextChat={focused && nextChatAvailable ? openNextChat : undefined}
 				onArchive={() =>
 					focused
 						? sidebarRef.current?.archiveSelected()
@@ -4859,7 +4859,7 @@ export function App(
 							onOpenArchived={() => navigate({ view: "archived" })}
 							onOpenCatchUp={() => navigate({ view: "catchup" })}
 							catchUpActive={route.view === "catchup"}
-							onNextUnreadAvailableChange={setNextUnreadAvailable}
+							onNextChatAvailableChange={setNextChatAvailable}
 							archivedActive={route.view === "archived"}
 							onArchive={(s, openNext) => {
 								const archive = async () => {

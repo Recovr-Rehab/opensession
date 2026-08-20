@@ -8,6 +8,10 @@ interface SidebarAttentionElement {
 	hasAttribute(name: string): boolean;
 }
 
+interface RenderedSidebarElement
+	extends SidebarItemElement,
+		SidebarAttentionElement {}
+
 /**
  * Pick the next rendered sidebar item, falling back to the previous item when
  * the current item is last. Repeated copies of the current item are skipped.
@@ -32,6 +36,28 @@ export function nextRenderedSidebarItem<T extends SidebarItemElement>(
 	for (let i = index - 1; i >= 0; i -= 1) {
 		if (items[i].getAttribute(SIDEBAR_ITEM_KEY_ATTRIBUTE) !== currentKey)
 			return items[i];
+	}
+	return null;
+}
+
+/** Pick the chat after the selected chat in rendered sidebar order. */
+export function nextRenderedSidebarChat<T extends RenderedSidebarElement>(
+	items: readonly T[],
+): T | null {
+	const selected =
+		items.find(
+			(item) =>
+				item.hasAttribute("data-selected") &&
+				item
+					.getAttribute(SIDEBAR_ITEM_KEY_ATTRIBUTE)
+					?.startsWith("session:"),
+		) ?? items.find((item) => item.hasAttribute("data-selected"));
+	if (!selected) return null;
+	const selectedIndex = items.indexOf(selected);
+	const selectedKey = selected.getAttribute(SIDEBAR_ITEM_KEY_ATTRIBUTE);
+	for (let offset = 1; offset < items.length; offset += 1) {
+		const item = items[(selectedIndex + offset) % items.length];
+		if (item.getAttribute(SIDEBAR_ITEM_KEY_ATTRIBUTE) !== selectedKey) return item;
 	}
 	return null;
 }

@@ -140,8 +140,8 @@ export const SHORTCUT_COMMANDS: ShortcutCommand[] = [
 	},
 	{
 		id: "workspace-next-unread",
-		title: "Next unread workspace",
-		description: "Open the next ready workspace with unread activity",
+		title: "Next chat",
+		description: "Open the next chat, prioritizing work that needs attention",
 		group: "Navigation",
 		defaults: ["alt+shift+arrowdown"],
 	},

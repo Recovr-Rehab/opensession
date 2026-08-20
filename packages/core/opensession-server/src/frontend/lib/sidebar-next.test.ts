@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import {
 	SIDEBAR_ITEM_KEY_ATTRIBUTE,
+	nextRenderedSidebarChat,
 	nextRenderedSidebarItem,
 	nextUnreadRenderedWorkspaceItem,
 } from "./sidebar-next";
@@ -67,6 +68,43 @@ describe("nextRenderedSidebarItem", () => {
 				"session:current",
 			),
 		).toBe(next);
+	});
+});
+
+function renderedItem(key: string, selected = false) {
+	return {
+		getAttribute(name: string) {
+			return name === SIDEBAR_ITEM_KEY_ATTRIBUTE ? key : null;
+		},
+		hasAttribute(name: string) {
+			return name === "data-selected" && selected;
+		},
+	};
+}
+
+describe("nextRenderedSidebarChat", () => {
+	test("continues after the selected session when its workspace is also selected", () => {
+		const workspace = renderedItem("workspace:current", true);
+		const session = renderedItem("session:current", true);
+		const next = renderedItem("workspace:next");
+
+		expect(nextRenderedSidebarChat([workspace, session, next])).toBe(next);
+	});
+
+	test("wraps from the last chat to the first", () => {
+		const first = renderedItem("workspace:first");
+		const last = renderedItem("workspace:last", true);
+
+		expect(nextRenderedSidebarChat([first, last])).toBe(first);
+	});
+
+	test("returns null when no rendered chat is selected", () => {
+		expect(
+			nextRenderedSidebarChat([
+				renderedItem("workspace:first"),
+				renderedItem("workspace:second"),
+			]),
+		).toBeNull();
 	});
 });
 

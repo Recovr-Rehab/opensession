@@ -105,8 +105,8 @@ export interface Props {
 	onOpenCatchUp: () => void;
 	/** True while the catch-up deck is open — highlights its entry. */
 	catchUpActive: boolean;
-	/** Report whether a ready unread workspace exists in the rendered list. */
-	onNextUnreadAvailableChange?: (available: boolean) => void;
+	/** Report whether Next can open attention work or another rendered chat. */
+	onNextChatAvailableChange?: (available: boolean) => void;
 	/**
 	 * Archive a session. `openNext` opens the rendered sidebar item after it, or
 	 * the previous item when it is last. It returns false when no item remains.
