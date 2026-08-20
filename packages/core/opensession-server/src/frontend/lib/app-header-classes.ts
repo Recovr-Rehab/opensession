@@ -152,8 +152,8 @@ export const APP_HEADER_LEFT = "flex items-center gap-2";
  */
 export const MOBILE_BACK =
 	"phone:m-0 phone:inline-flex phone:size-11 phone:items-center phone:justify-center " +
-	"phone:rounded-full phone:border phone:border-line phone:bg-surface phone:p-0 " +
-	"phone:text-accent phone:smooth-shadow-sm " +
+	"phone:rounded-full phone:border phone:border-[color:var(--mobile-header-control-border)] phone:bg-surface phone:p-0 " +
+	"phone:text-accent phone:shadow-[var(--mobile-header-control-shadow)] " +
 	"phone:cursor-pointer phone:touch-manipulation " +
 	"phone:[-webkit-tap-highlight-color:transparent] " +
 	"phone:[transition-property:opacity] phone:duration-[var(--dur)] " +
@@ -219,8 +219,8 @@ export const HEADER_TITLE_PILL =
 	"phone:flex phone:min-h-11 phone:flex-[0_1_auto] phone:min-w-0 phone:items-center " +
 	"phone:justify-start phone:gap-[9px] phone:ml-2 phone:mr-auto " +
 	"phone:py-[5px] phone:pr-4 phone:pl-[11px] " +
-	"phone:rounded-full phone:border phone:border-line phone:bg-surface " +
-	"phone:smooth-shadow-sm phone:text-fg " +
+	"phone:rounded-full phone:border phone:border-[color:var(--mobile-header-control-border)] phone:bg-surface " +
+	"phone:shadow-[var(--mobile-header-control-shadow)] phone:text-fg " +
 	"phone:pointer-events-auto";
 
 /**
@@ -347,7 +347,7 @@ const HEADER_ACTIONS_BASE =
  * On the root page the two glyphs in this slot — Filter and Search — are one
  * control, the way adjacent bar-button items group on iOS: a single capsule
  * carrying both, split by a hairline, rather than two separate circles floating
- * next to each other. So the surface (border, fill, shadow, radius) lives here
+ * next to each other. So the surface (edge, fill, shadow, radius) lives here
  * on the container and the segments inside it are transparent; `gap-0` closes
  * the 10px the loose pair sat on, and `overflow-hidden` keeps a segment's press
  * dim inside the capsule's own curve.
@@ -366,8 +366,8 @@ const HEADER_ACTIONS_BASE =
  */
 export const APP_HEADER_ACTIONS =
 	`${HEADER_ACTIONS_BASE} phone:ml-auto phone:gap-0 phone:overflow-hidden ` +
-	"phone:rounded-full phone:border phone:border-line phone:bg-surface " +
-	"phone:smooth-shadow-sm";
+	"phone:rounded-full phone:border phone:border-[color:var(--mobile-header-control-border)] phone:bg-surface " +
+	"phone:shadow-[var(--mobile-header-control-shadow)]";
 
 /**
  * On a pushed page the title pill already carries `mr-auto` to shove this
@@ -381,7 +381,7 @@ export const APP_HEADER_ACTIONS_DETAIL =
 /**
  * A segment of the grouped bar control (see `APP_HEADER_ACTIONS`): 44pt tall
  * and wider than it is high, with no chrome of its own. The capsule around it
- * draws the border, fill and shadow. The glyph is thickened past its 1.5 stroke
+ * draws the edge, fill and shadow. The glyph is thickened past its 1.5 stroke
  * because iOS nav-bar glyphs are bold and it reads spindly at this size
  * otherwise. `--header-h` in base.css leaves this control 44px below the bar's
  * 8px top inset. Move the two together.

@@ -79,6 +79,14 @@
 	   composer's case at chip scale, so it takes the composer's answer; see the
 	   light block. */
 	--button-surface: var(--control-surface);
+	/* Phone navigation controls float over live content. Dark mode keeps a
+	   defined edge because the fill alone is close to the page; light mode takes
+	   the native toolbar treatment below, where an even cast around the control
+	   replaces that edge. */
+	--mobile-header-control-border: var(--border);
+	--mobile-header-control-shadow:
+		0 1px 3px -1px rgba(0, 0, 0, 0.06),
+		0 4px 10px -4px rgba(0, 0, 0, 0.09);
 	/* The segmented control's knob: the one plate that sits in a WELL rather
 	   than on the page, so it gets its own pair of tokens.
 
@@ -446,6 +454,11 @@ html[data-theme="light"] {
 	   which is the disabled signal again. So it goes paper and lets the shadow
 	   do the lifting, exactly as the composer and the popups below do. */
 	--button-surface: #ffffff;
+	/* Native light toolbar controls do not draw a dark outline around their
+	   glass. A zero-offset cast with a little spread lifts the whole silhouette
+	   evenly, including its top edge, without turning that edge into a border. */
+	--mobile-header-control-border: transparent;
+	--mobile-header-control-shadow: 0 0 14px 1px rgba(0, 0, 0, 0.1);
 	/* The segmented knob goes paper here, like every other raised control, and
 	   wears no edge at all. A --border hairline is darker than the --bg-hover
 	   track it lies on, so it reads as an outline drawn around the option

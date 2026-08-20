@@ -5329,8 +5329,8 @@ export function SessionViewer({
 									// its neighbours are squircles. Set it back explicitly,
 									// and keep a true circle on mobile.
 									"[corner-shape:squircle] phone:[corner-shape:round]",
-									"phone:size-11 phone:min-h-11 phone:rounded-full phone:border-line phone:bg-surface phone:text-accent phone:smooth-shadow-sm",
-									overflowOpen && "bg-hover text-fg phone:border-[color-mix(in_srgb,var(--accent)_12%,transparent)] phone:bg-accent-soft phone:text-accent",
+									"phone:size-11 phone:min-h-11 phone:rounded-full phone:border-[color:var(--mobile-header-control-border)] phone:bg-surface phone:text-accent phone:shadow-[var(--mobile-header-control-shadow)]",
+									overflowOpen && "bg-hover text-fg phone:border-transparent phone:bg-accent-soft phone:text-accent",
 								)}
 								title="More actions"
 								aria-label="More actions"
