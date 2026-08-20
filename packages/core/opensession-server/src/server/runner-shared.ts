@@ -446,6 +446,11 @@ export const ASK_BASH_PERMISSIONS: Record<string, "allow" | "deny"> = {
   "find *": "allow", "head *": "allow", "tail *": "allow", "wc *": "allow",
   "tree*": "allow", "file *": "allow", "stat *": "allow", "du *": "allow",
   "df*": "allow", "which *": "allow", "pwd": "allow", "echo *": "allow",
+  // Identity, kernel, environment, and path inspection. These commands only
+  // print process or filesystem metadata and cannot mutate the host.
+  "whoami": "allow", "id": "allow", "id *": "allow", "uname": "allow",
+  "uname *": "allow", "printenv": "allow", "printenv *": "allow",
+  "readlink *": "allow", "realpath *": "allow",
   // Read-only clock reads (timestamp math in digests/triage). Only the read
   // forms — bare "date */date -s" (setting the clock) needs root and is not
   // allowed here; these globs cover `date +%s`, `date -u`, `date -d '…'`.

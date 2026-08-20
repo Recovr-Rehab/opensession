@@ -221,6 +221,12 @@ describe("askBashDenyReason", () => {
     expect(askBashDenyReason("gh pr list --state open")).toBeNull();
     expect(askBashDenyReason("systemctl is-active opensession")).toBeNull();
     expect(askBashDenyReason("date +%s")).toBeNull();
+    expect(askBashDenyReason("whoami")).toBeNull();
+    expect(askBashDenyReason("id -u")).toBeNull();
+    expect(askBashDenyReason("uname -a")).toBeNull();
+    expect(askBashDenyReason("printenv TMPDIR")).toBeNull();
+    expect(askBashDenyReason("readlink -f /home/ubuntu")).toBeNull();
+    expect(askBashDenyReason("realpath /home/ubuntu")).toBeNull();
   });
 
   test("every pipeline segment must be allowed", () => {
