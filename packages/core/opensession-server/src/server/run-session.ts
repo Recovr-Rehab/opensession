@@ -1668,6 +1668,28 @@ export async function runSessionPrompt(
 ): Promise<void> {
 	// Any explicit new run lifts a user stop — the queue may drain again.
 	stoppedSessions.delete(sessionId);
+	// A direct send to a sandbox can spend minutes provisioning before its run
+	// journal exists. Give it the same durable dispatch record as a queue drain,
+	// so a restart during provisioning requeues the complete prompt.
+	let durablePromptEntryId = promptEntryId;
+	if (!durablePromptEntryId && findSession(sessionId)?.sandbox) {
+		durablePromptEntryId = beginPromptDispatch(sessionId, [
+			{
+				content,
+				user,
+				...(images?.length
+					? {
+							images: images.map(
+								(image) => `data:${image.mediaType};base64,${image.data}`,
+							),
+						}
+					: {}),
+				...(rawFiles !== undefined ? { files: rawFiles } : {}),
+				...(contextSessions?.length ? { contextSessions } : {}),
+				...(slackReplyTo ? { slackReplyTo } : {}),
+			},
+		]);
+	}
 	// Synchronously reserve the session BEFORE the awaits below (worktree revive,
 	// title gen, upload staging) register the run with the runner — otherwise two
 	// racing prompts both pass isAgentSessionBusy and the loser's message is
@@ -1683,11 +1705,11 @@ export async function runSessionPrompt(
 			contextSessions,
 			slackReplyTo,
 			startToken,
-			promptEntryId,
+			durablePromptEntryId,
 		);
 		// Sandboxes and non-standard runners may not create an active-run journal.
 		// A completed turn is nevertheless a safe acknowledgement of its dispatch.
-		acknowledgePromptDispatch(sessionId, promptEntryId);
+		acknowledgePromptDispatch(sessionId, durablePromptEntryId);
 	} catch (e) {
 		// A throw before the run registered (workspace revive, session-note
 		// build, …) would strand the FSM in "starting" forever — the wedge the
@@ -1700,7 +1722,7 @@ export async function runSessionPrompt(
 			});
 		// A normal start failure is not a crash-recovery case. Keep the visible
 		// transcript line and its error, but do not replay it on a later restart.
-		acknowledgePromptDispatch(sessionId, promptEntryId);
+		acknowledgePromptDispatch(sessionId, durablePromptEntryId);
 		throw e;
 	} finally {
 		unmarkSessionStarting(sessionId, startToken);
