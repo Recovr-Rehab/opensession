@@ -563,9 +563,7 @@ export function ensureFrontendBuilt(): Promise<void> {
 				// renderIndexHtml stitches THIS install's config (product name,
 				// public URL, default repo, bot logins…) at boot instead of the
 				// build machine's, exactly as the on-disk prebuilt path does.
-				g.__opensessionFrontendShell = await Bun.file(
-					EMBEDDED_FRONTEND.shellPath,
-				).text();
+				g.__opensessionFrontendShell = EMBEDDED_FRONTEND.shell;
 				applyBundle(EMBEDDED_FRONTEND.meta);
 				console.log(
 					`Frontend served from embedded assets (v=${EMBEDDED_FRONTEND.version}); instance stitched at boot`,

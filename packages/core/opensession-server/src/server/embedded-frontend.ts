@@ -18,10 +18,11 @@ import type { BundleMeta } from "./frontend-build";
 export interface EmbeddedFrontend {
 	/** Cache-busting bundle version, mirrors FrontendBundle.version. */
 	version: string;
-	/** In-binary path of the instance-NEUTRAL src index.html shell
-	 *  (Bun.file-openable). The instance blob is stitched in at boot, so the
-	 *  page reflects the installed instance, not the build machine. */
-	shellPath: string;
+	/** The instance-NEUTRAL src index.html shell, inlined as a string (a `.html`
+	 *  file import is bundled by Bun as an HTML entry, not embedded as a file).
+	 *  The instance blob is stitched in at boot, so the page reflects the
+	 *  installed instance, not the build machine. */
+	shell: string;
 	/** Bundle metadata to render index.html at boot, mirrors .bundle-meta.json. */
 	meta: BundleMeta;
 	/** Served asset name (e.g. "App-abc123.js") → in-binary file path. */
