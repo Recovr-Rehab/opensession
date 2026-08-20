@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback } from "react";
-import { AnimatePresence } from "motion/react";
+import { AnimatePresence, motion } from "motion/react";
 import { fetchWorktrees, fetchModels, fetchToolAccounts, fetchSandboxStatus, requestSandboxPrewarm, suggestBranch, suggestRepos, type RepoSuggestion, configuredNewSessionRepo, fetchProviderAccounts, fetchRepos, cachedRepos, type RepoInfo, createWorkspaceApi, updateWorkspaceApi, deleteWorkspaceApi, ApiError, type ProviderAccountOption, type ModelOption, type SandboxStatusInfo } from "../lib/api";
 import { getCurrentUser } from "./UserPicker";
 import { type FileAttachment } from "../lib/images";
@@ -64,6 +64,7 @@ import { displayName } from "../brand-logos";
 import { IconTile } from "./BrandTile";
 import { Tooltip } from "../ui/tooltip";
 import { Modal, useEnterOnMount } from "../ui/modal";
+import { composerMorph } from "../ui/motion";
 import { useShortcutKeys } from "../hooks/useShortcutBindings";
 import { matchesShortcut } from "../lib/shortcuts";
 import {
@@ -806,6 +807,13 @@ export function NewSession({ onBack, inline, focusSeq, send, addHandler, connect
   }
 
   const promptRef = useRef<HTMLTextAreaElement>(null);
+  const voiceOverlayRef = useRef<HTMLDivElement>(null);
+  const [dictating, setDictating] = useState(false);
+  const [dictationClipping, setDictationClipping] = useState(false);
+  function handleDictationActive(active: boolean) {
+    setDictating(active);
+    if (active) setDictationClipping(true);
+  }
   // Hidden <input type="file"> driven by the "Add file" button — the mobile
   // path, since there's no clipboard paste there.
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -1285,7 +1293,7 @@ export function NewSession({ onBack, inline, focusSeq, send, addHandler, connect
           project, commit. One row rather than two, because a sheet over an
           open keyboard has about half a screen to spend and an attachment
           takes its share of it. */}
-      <div className={cn(HEADER, edges.top && EDGE_DIVIDER)}>
+      <div className={cn(HEADER, !dictating && edges.top && EDGE_DIVIDER)}>
         {phoneBar && (
           <>
             <Modal.Close className={PHONE_CLOSE} aria-label="Close">
@@ -1417,7 +1425,7 @@ export function NewSession({ onBack, inline, focusSeq, send, addHandler, connect
         {phoneBar && (
           <button
             type="button"
-            className={PHONE_SEND}
+            className={cn(PHONE_SEND, dictating && "invisible")}
             onClick={handleCreate}
             disabled={!canCreate}
             aria-label={CREATE_LABELS[createAction]}
@@ -1426,6 +1434,24 @@ export function NewSession({ onBack, inline, focusSeq, send, addHandler, connect
           </button>
         )}
       </div>
+
+      <motion.div
+        initial={false}
+        animate={{ height: dictating ? (isPhone ? 64 : 62) : "auto" }}
+        transition={composerMorph}
+        onAnimationComplete={() => {
+          if (!dictating) setDictationClipping(false);
+        }}
+        className={cn("relative", dictationClipping && "overflow-hidden")}
+      >
+        {/* Dictation replaces everything below Project while the card itself
+            supplies the surface, border and shadow. Keeping this target inside
+            the card avoids drawing a second rounded container over the first. */}
+        <div
+          ref={voiceOverlayRef}
+          className="pointer-events-none !absolute inset-0 !z-[6]"
+        />
+        <div className={dictating ? "invisible" : undefined}>
 
       {/* Picked services, above the field like every other thing attached to
           what you are about to send. The picker is two levels inside a menu,
@@ -1745,6 +1771,8 @@ export function NewSession({ onBack, inline, focusSeq, send, addHandler, connect
               className={FOOTER_ICON_BTN}
               disabled={busy}
               editTargetRef={promptRef}
+              overlayTargetRef={voiceOverlayRef}
+              onActiveChange={handleDictationActive}
               onText={(t) => {
                 promptHandle.current?.appendText(t);
                 promptRef.current?.focus();
@@ -1757,14 +1785,9 @@ export function NewSession({ onBack, inline, focusSeq, send, addHandler, connect
                 // rather than captured now for the same reason.
                 setTimeout(() => createRef.current(), 0);
               }}
-              // The bar covers the card it sits in, so it takes that card's
-              // corner and surface. The modal is glass; the inline card uses
-              // the Composer surface that VoiceInput carries by default.
-              overlayClassName={
-                inline
-                  ? "rounded-2xl"
-                  : "rounded-[calc(22px*var(--rf))] bg-palette-glass [backdrop-filter:var(--popup-blur)]"
-              }
+              // The parent card owns the only visible surface. This layer is
+              // just controls and waveform clipped by that card's outer edge.
+              overlayClassName="rounded-none bg-transparent [backdrop-filter:none]"
             />
 
             {!phoneBar && (
@@ -1867,6 +1890,8 @@ export function NewSession({ onBack, inline, focusSeq, send, addHandler, connect
             )}
           </div>
         </div>
+        </div>
+      </motion.div>
     </>
   );
 
