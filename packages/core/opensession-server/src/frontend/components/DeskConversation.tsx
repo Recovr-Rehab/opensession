@@ -494,6 +494,7 @@ export function DeskConversation({
 					onSend={handleSend}
 					onTyping={(active) => setTyping(sessionId, active)}
 					onDictationActive={handleDictationActive}
+					attachmentShortcutActive={presenceActive}
 					placeholder={
 						connected ? placeholder || "Ask your Desk…" : "Not connected"
 					}

@@ -2013,6 +2013,7 @@ export function Composer({
                 `.composer.composer-min .palette-icon-btn` descendant rule. */}
             <VoiceInput
               className={composerIconButtonClass}
+              shortcutActive={!!attachmentShortcutActive || focused}
               cancelClassName={addButtonClass}
               cancelFromPlus
               onText={insertDictation}

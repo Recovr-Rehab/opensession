@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from "react";
+import React, { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { motion } from "motion/react";
 import { transcribeClip } from "../lib/api";
@@ -10,13 +10,25 @@ import { duration, ease } from "../ui/motion";
 import { paletteIconBtn } from "../lib/palette-classes";
 import { composerSend, composerSendDefault } from "../lib/composer-classes";
 import { useIsPhone } from "../hooks/useIsPhone";
+import { useShortcutKeys } from "../hooks/useShortcutBindings";
+import { matchesShortcut } from "../lib/shortcuts";
+import {
+  effectiveSendKey,
+  isSendCombo,
+  MOD_ENTER_GLYPH,
+} from "../lib/send-key";
+import { getSendKeyPref, onSendKeyChanged } from "../lib/send-key-pref";
+import { isApple } from "../lib/platform";
 
 type Phase = "idle" | "requesting" | "recording" | "cancelling" | "transcribing";
 
 /** Dictation is capped. This is a session input, not a memo recorder. */
 const MAX_SECONDS = 120;
-const BAR_COUNT = 72;
-const PHONE_BAR_COUNT = 24;
+const INITIAL_BAR_COUNT = 72;
+const INITIAL_PHONE_BAR_COUNT = 24;
+const MAX_BAR_COUNT = 160;
+const BAR_WIDTH = 3;
+const BAR_GAP = 4;
 
 /* The recording bar's chrome. Every variant is written out in full rather than
    composed from a fragment: Tailwind scans source text, so a class assembled
@@ -113,6 +125,7 @@ export function VoiceInput({
   overlayTargetRef,
   editTargetRef,
   onActiveChange,
+  shortcutActive = false,
   cancelClassName,
   cancelFromPlus = false,
 }: {
@@ -137,13 +150,26 @@ export function VoiceInput({
   editTargetRef?: React.RefObject<HTMLElement | null>;
   /** Lets a host collapse its container while dictation owns the input. */
   onActiveChange?: (active: boolean) => void;
+  /** Lets this visible Composer claim the app-wide dictate shortcut. */
+  shortcutActive?: boolean;
   /** Matches cancel to the add control it replaces in a full-surface host. */
   cancelClassName?: string;
   /** Rotate the host's add glyph into cancel instead of swapping to an X. */
   cancelFromPlus?: boolean;
 }) {
   const isPhone = useIsPhone();
-  const barCount = isPhone ? PHONE_BAR_COUNT : BAR_COUNT;
+  const dictateKeys = useShortcutKeys("composer-dictate");
+  const [storedSendKey, setStoredSendKey] = useState(getSendKeyPref);
+  useEffect(
+    () => onSendKeyChanged(() => setStoredSendKey(getSendKeyPref())),
+    [],
+  );
+  const sendKey = effectiveSendKey(storedSendKey);
+  const sendKeyCaps =
+    sendKey === "mod-enter" ? [MOD_ENTER_GLYPH] : [isApple ? "↵" : "Enter"];
+  const [barCount, setBarCount] = useState(
+    isPhone ? INITIAL_PHONE_BAR_COUNT : INITIAL_BAR_COUNT,
+  );
   const [phase, setPhase] = useState<Phase>("idle");
   const [error, setError] = useState<string | null>(null);
   const [levels, setLevels] = useState<number[]>([]);
@@ -163,6 +189,8 @@ export function VoiceInput({
   /** Which button ended the clip: ↑ sends the result, ✓ just keeps it. */
   const sendRef = useRef(false);
   const timersRef = useRef<number[]>([]);
+  const waveformRef = useRef<HTMLDivElement | null>(null);
+  const idleButtonRef = useRef<HTMLButtonElement | null>(null);
 
   function cleanup() {
     timersRef.current.forEach((t) => clearInterval(t));
@@ -185,6 +213,65 @@ export function VoiceInput({
   // technology too. The portal target remains interactive; its siblings are
   // restored to exactly the inert state they had before recording.
   const active = phase !== "idle";
+  useLayoutEffect(() => {
+    const waveform = waveformRef.current;
+    if (!active || !waveform) return;
+    const measure = () => {
+      const count = Math.max(
+        1,
+        Math.min(
+          MAX_BAR_COUNT,
+          Math.floor((waveform.clientWidth + BAR_GAP) / (BAR_WIDTH + BAR_GAP)),
+        ),
+      );
+      setBarCount((current) => (current === count ? current : count));
+    };
+    measure();
+    const observer = new ResizeObserver(measure);
+    observer.observe(waveform);
+    return () => observer.disconnect();
+  }, [active]);
+  useEffect(() => {
+    function onKeyDown(event: KeyboardEvent) {
+      if (
+        event.defaultPrevented ||
+        event.repeat ||
+        disabled ||
+        phase !== "idle" ||
+        !matchesShortcut(event, "composer-dictate")
+      )
+        return;
+      const button = idleButtonRef.current;
+      const editorFocused = document.activeElement === editTargetRef?.current;
+      if (!button || (!shortcutActive && !editorFocused)) return;
+      if (button.closest("[inert], [hidden], [aria-hidden='true']")) return;
+      const rect = button.getBoundingClientRect();
+      const hit = document.elementFromPoint(
+        rect.left + rect.width / 2,
+        rect.top + rect.height / 2,
+      );
+      if (!hit || (hit !== button && !button.contains(hit))) return;
+      event.preventDefault();
+      void start();
+    }
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [disabled, editTargetRef, phase, shortcutActive]);
+  useEffect(() => {
+    if (phase !== "recording" || !onTextSend) return;
+    function onKeyDown(event: KeyboardEvent) {
+      if (
+        event.defaultPrevented ||
+        event.repeat ||
+        !isSendCombo(event, sendKey)
+      )
+        return;
+      event.preventDefault();
+      stop(true, true);
+    }
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [onTextSend, phase, sendKey]);
   useEffect(() => {
     activeChangeRef.current?.(active);
     return () => {
@@ -303,7 +390,10 @@ export function VoiceInput({
             sum += v * v;
           }
           const rms = Math.sqrt(sum / buf.length);
-          setLevels((prev) => [...prev.slice(-(BAR_COUNT - 1)), Math.min(1, rms * 4)]);
+          setLevels((prev) => [
+            ...prev.slice(-(MAX_BAR_COUNT - 1)),
+            Math.min(1, rms * 4),
+          ]);
         }, 90),
       );
     } catch {
@@ -418,7 +508,8 @@ export function VoiceInput({
           {/* Full-width track: baseline dots on the quiet/older left, live
               bars accumulating on the right by the accept buttons. */}
           <div
-            className="flex h-full min-w-0 flex-1 items-center justify-center gap-1 overflow-hidden"
+            ref={waveformRef}
+            className="mx-4 flex h-full min-w-0 flex-1 items-center justify-center gap-1 overflow-hidden phone:mx-[18px]"
             aria-hidden="true"
           >
             {Array.from({ length: barCount }, (_, i) => {
@@ -460,7 +551,7 @@ export function VoiceInput({
             </button>
           </Tooltip>
           {onTextSend && (
-            <Tooltip label="Send it">
+            <Tooltip label="Send it" shortcut={sendKeyCaps}>
               <button
                 type="button"
                 className={cn(composerSend, composerSendDefault)}
@@ -493,8 +584,9 @@ export function VoiceInput({
 
   return (
     <>
-      <Tooltip label="Dictate">
+      <Tooltip label="Dictate" shortcut={dictateKeys ?? undefined}>
         <button
+          ref={idleButtonRef}
           type="button"
           className={className}
           onClick={start}

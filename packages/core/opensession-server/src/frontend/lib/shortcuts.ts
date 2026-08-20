@@ -59,6 +59,7 @@ export type ShortcutId =
 	| "session-copy-transcript"
 	| "composer-note"
 	| "composer-attach"
+	| "composer-dictate"
 	| "composer-focus"
 	| "transcript-up"
 	| "transcript-down"
@@ -252,6 +253,13 @@ export const SHORTCUT_COMMANDS: ShortcutCommand[] = [
 		description: "Choose files to attach to the open session",
 		group: "Composer",
 		defaults: ["mod+u"],
+	},
+	{
+		id: "composer-dictate",
+		title: "Start dictation",
+		description: "Record a message in the active composer",
+		group: "Composer",
+		defaults: ["mod+d"],
 	},
 	{
 		id: "composer-focus",
