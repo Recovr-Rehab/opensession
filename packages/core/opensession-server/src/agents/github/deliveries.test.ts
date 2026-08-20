@@ -41,4 +41,17 @@ describe("GitHub delivery replay protection", () => {
     loadGithubDeliveries();
     expect(isGithubDeliveryProcessed("expired-delivery")).toBe(false);
   });
+
+  test("checks the persisted store on first access, before any explicit restore (boot window)", () => {
+    // The webhook server binds before GithubAgent.startup runs its eager load,
+    // so a redelivery can land while the in-memory map is still empty. Persist
+    // an id, then reset to that unloaded boot state and read WITHOUT calling
+    // loadGithubDeliveries: the read path must restore lazily on first touch.
+    mkdirSync(STORE_DIR, { recursive: true });
+    writeJsonAtomic(STORE, [["boot-window-delivery", Date.now() + 60_000]], false);
+    (globalThis as any).__githubDeliveryExpiry.clear();
+    (globalThis as any).__githubDeliveriesLoaded = false;
+
+    expect(isGithubDeliveryProcessed("boot-window-delivery")).toBe(true);
+  });
 });

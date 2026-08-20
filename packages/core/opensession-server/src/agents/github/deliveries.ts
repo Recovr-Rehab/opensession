@@ -20,6 +20,18 @@ const MAX_GITHUB_DELIVERIES = 500;
 const githubDeliveryExpiry: Map<string, number> = ((globalThis as any).__githubDeliveryExpiry ??=
   new Map<string, number>());
 
+/**
+ * The webhook server binds early in boot, long before the GitHub agent's
+ * startup runs, so a redelivery that lands in that window would otherwise be
+ * checked against an empty map and reprocessed. The read and write paths
+ * restore the on-disk store on first touch instead, so replay protection is in
+ * place from the first delivery regardless of boot ordering. Kept on globalThis
+ * so a hot reload does not force a redundant reload of the shared map.
+ */
+function ensureGithubDeliveriesLoaded(): void {
+  if ((globalThis as any).__githubDeliveriesLoaded !== true) loadGithubDeliveries();
+}
+
 function pruneGithubDeliveries(now = Date.now()): void {
   for (const [id, expiresAt] of githubDeliveryExpiry) {
     if (expiresAt <= now) githubDeliveryExpiry.delete(id);
@@ -41,8 +53,9 @@ function persistGithubDeliveries(): void {
   }
 }
 
-/** Restore replay protection after a full process restart. Call from the GitHub
- *  agent's startup, before the webhook server can hand it a delivery. */
+/** Restore replay protection from disk into the in-memory map after a restart.
+ *  Called eagerly from the GitHub agent's startup and lazily on the first
+ *  delivery access, whichever comes first. */
 export function loadGithubDeliveries(): void {
   githubDeliveryExpiry.clear();
   try {
@@ -60,10 +73,12 @@ export function loadGithubDeliveries(): void {
   } catch (e) {
     console.error("[github] Failed to load GitHub deliveries:", e);
   }
+  (globalThis as any).__githubDeliveriesLoaded = true;
 }
 
 /** True if this signed GitHub delivery was already accepted within its TTL. */
 export function isGithubDeliveryProcessed(id: string): boolean {
+  ensureGithubDeliveriesLoaded();
   const expiresAt = githubDeliveryExpiry.get(id);
   if (expiresAt === undefined) return false;
   if (expiresAt <= Date.now()) {
@@ -76,6 +91,7 @@ export function isGithubDeliveryProcessed(id: string): boolean {
 
 /** Record a signed GitHub delivery before dispatching its side effects. */
 export function markGithubDeliveryProcessed(id: string): void {
+  ensureGithubDeliveriesLoaded();
   githubDeliveryExpiry.set(id, Date.now() + GITHUB_DELIVERY_TTL_MS);
   pruneGithubDeliveries();
   persistGithubDeliveries();

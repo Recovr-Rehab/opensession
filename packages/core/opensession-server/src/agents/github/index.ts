@@ -299,9 +299,11 @@ export class GithubAgent implements AgentModule {
   }
 
   async startup(): Promise<void> {
-    // Restore webhook replay protection before the webhook server can hand this
-    // agent a delivery. This agent owns the /github/webhook route, so a
-    // GitHub-only install (Slack disabled) must load the store itself.
+    // Eagerly restore webhook replay protection. The webhook server binds
+    // earlier in boot, so the delivery read/write paths also restore the store
+    // lazily on first touch; this keeps it warm when no delivery arrives. This
+    // agent owns the /github/webhook route, so a GitHub-only install (Slack
+    // disabled) still loads the store itself.
     loadGithubDeliveries();
     if (!githubConfigured()) {
       console.warn("[github] GITHUB_API_TOKEN unset — review/fix/simplify can't post; agent idle");
