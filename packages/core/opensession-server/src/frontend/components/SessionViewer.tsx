@@ -280,9 +280,6 @@ import {
 } from "../lib/composer-classes";
 import {
 	msgBodyStreaming,
-	msgBubbleUser,
-	msgMedia,
-	msgOwnTurn,
 	msgRow,
 	msgStreamingRow,
 } from "../lib/msg-classes";
@@ -659,6 +656,7 @@ const RESUME_GROWTH_WINDOW_MS = 8_000;
 // trips, the pill stays put so the reader can keep going deliberately.
 const JUMP_PAGE_ENTRIES = HISTORY_PAGE_ENTRIES;
 const JUMP_MAX_ENTRIES = 4_000;
+const EMPTY_TRANSCRIPT_ENTRIES: TranscriptEntry[] = [];
 
 function modelIsCodex(id: string, models: ModelOption[]): boolean {
 	const found = models.find((m) => m.id === id);
@@ -4458,6 +4456,19 @@ export function SessionViewer({
 	const pendingBubbles = visiblePending.filter(
 		(p) => !p.busyMode && !waitingForWorkspace,
 	);
+	const optimisticTranscriptEntries = useMemo<TranscriptEntry[]>(
+		() =>
+			pendingBubbles.length === 0
+				? EMPTY_TRANSCRIPT_ENTRIES
+				: pendingBubbles.map((pending) => ({
+					id: pending.id,
+					type: "user",
+					content: pending.content,
+					timestamp: new Date(pending.sentAt).toISOString(),
+					...(pending.images?.length ? { images: pending.images } : {}),
+				})),
+		[pendingBubbles],
+	);
 	// The durable row covers a prompt the store still holds: one this tab never
 	// showed a bubble for (another tab's send, or a reload), or one whose bubble
 	// is still up. A prompt already confirmed by the server is dropped from the
@@ -7042,6 +7053,7 @@ export function SessionViewer({
 													<OpenAssetProvider value={openAssetFromTranscript}>
 														<TranscriptBlocks
 															entries={entries}
+															optimisticEntries={optimisticTranscriptEntries}
 															transcriptIndex={transcriptIndex ?? undefined}
 															transcriptRangeRetryGeneration={
 																transcriptRangeRetryGeneration
@@ -7137,31 +7149,6 @@ export function SessionViewer({
 								/>
 							)}
 
-							{pendingBubbles.map((p) => (
-								<div
-									key={p.id}
-									className={cn(msgRow, msgOwnTurn, "msg-user")}
-								>
-									{/* Optimistic sends look delivered immediately. The real
-									    entry replaces this bubble as soon as it arrives. */}
-									{p.content && (
-										<div className={msgBubbleUser}>{p.content}</div>
-									)}
-									{p.images && p.images.length > 0 && (
-										<div className={cn(msgMedia, "justify-end")}>
-											{p.images.map((src, i) => (
-												<img
-													key={i}
-													className="md-image"
-													src={src}
-													alt=""
-													loading="lazy"
-												/>
-											))}
-										</div>
-									)}
-								</div>
-							))}
 
 							{/* Reserves room so a freshly-sent turn can sit near the top while its
                 reply streams into the space below; sized by the scroll hook. */}

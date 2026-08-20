@@ -801,6 +801,37 @@ describe("TranscriptBlocks indexed ranges", () => {
 		expect(html).toContain("Newest prompt");
 	});
 
+	test("places an optimistic prompt before tool calls that landed first", () => {
+		const html = renderToStaticMarkup(
+			<TranscriptBlocks
+				transcriptIndex={[indexRow(2, "tool_use")]}
+				entries={[
+					{
+						id: "indexed-2",
+						seq: 2,
+						changeSeq: 2,
+						type: "tool_use",
+						toolName: "bash",
+						toolInput: { command: "git status" },
+						content: "Using bash",
+						timestamp: "2026-08-12T12:00:02Z",
+					},
+				]}
+				optimisticEntries={[
+					{
+						id: "outbox-prompt",
+						type: "user",
+						content: "Question before tools",
+						timestamp: "2026-08-12T12:00:01Z",
+					},
+				]}
+			/>,
+		);
+		expect(html.indexOf("Question before tools")).toBeLessThan(
+			html.indexOf("git status"),
+		);
+	});
+
 	test("keeps a partial opening range visible while its prefix hydrates", () => {
 		const html = renderToStaticMarkup(
 			<TranscriptBlocks

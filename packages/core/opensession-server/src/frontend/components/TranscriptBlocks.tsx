@@ -20,7 +20,10 @@ import {
 } from "./VirtualTranscriptList";
 import { WalkthroughCard } from "./WalkthroughCard";
 import { walkthroughInsertIndex } from "./walkthrough-placement";
-import { normalizeLegacyVoiceToolEntries } from "../lib/transcript-state";
+import {
+	normalizeLegacyVoiceToolEntries,
+	orderTranscriptEntries,
+} from "../lib/transcript-state";
 import { collectWrittenAssets } from "../lib/open-asset";
 import { classifyEntry } from "@tellahq/opensession-protocol/notices";
 import { ReviewLoopBlock } from "./ReviewLoopBlock";
@@ -46,6 +49,9 @@ type RenderBlock =
 
 interface Props {
 	entries: TranscriptEntry[];
+	/** Just-sent user turns that have not landed durably yet. They participate in
+	 *  transcript ordering so live tools can never render above their prompt. */
+	optimisticEntries?: TranscriptEntry[];
 	/** Whether the conversation is live (last work block shows a spinner / stays open). */
 	live?: boolean;
 	/** Assistant messages show a "Fork from here" action when provided. */
@@ -236,8 +242,16 @@ function isSingleToolTurn(
 export const TranscriptBlocks = React.memo(function TranscriptBlocks(
 	props: Props,
 ) {
-	if (props.transcriptIndex) return <IndexedTranscriptBlocks {...props} />;
-	return <LoadedTranscriptBlocks {...props} />;
+	const entries = React.useMemo(
+		() =>
+			props.optimisticEntries?.length
+				? orderTranscriptEntries([...props.entries, ...props.optimisticEntries])
+				: props.entries,
+		[props.entries, props.optimisticEntries],
+	);
+	const renderedProps = entries === props.entries ? props : { ...props, entries };
+	if (props.transcriptIndex) return <IndexedTranscriptBlocks {...renderedProps} />;
+	return <LoadedTranscriptBlocks {...renderedProps} />;
 });
 
 const LoadedTranscriptBlocks = React.memo(function LoadedTranscriptBlocks({
@@ -255,8 +269,12 @@ const LoadedTranscriptBlocks = React.memo(function LoadedTranscriptBlocks({
 	reviewResult,
 	reviewLoopsOpen,
 	onReviewLoopOpenChange,
+	optimisticEntries,
 	virtualize = true,
 }: Props) {
+	const optimisticEntryIds = new Set(
+		(optimisticEntries ?? []).map((entry) => entry.id),
+	);
 	const renderedEntries = normalizeLegacyVoiceToolEntries(entries)
 		.map(classifyEntry)
 		.filter((entry) => !isRenderlessUserEntry(entry));
@@ -428,7 +446,11 @@ const LoadedTranscriptBlocks = React.memo(function LoadedTranscriptBlocks({
 											entry={inner.entry}
 											owner={owner}
 											sessionId={sessionId}
-											onEdit={onEditMessage}
+											onEdit={
+												optimisticEntryIds.has(inner.entry.id)
+													? undefined
+													: onEditMessage
+											}
 										/>
 									) : null}
 								</React.Fragment>
@@ -485,7 +507,9 @@ const LoadedTranscriptBlocks = React.memo(function LoadedTranscriptBlocks({
 					entry={block.entry}
 					owner={owner}
 					sessionId={sessionId}
-					onEdit={onEditMessage}
+					onEdit={
+						optimisticEntryIds.has(block.entry.id) ? undefined : onEditMessage
+					}
 					onContinue={
 						i === groupedBlocks.length - 1 ? onContinue : undefined
 					}
@@ -568,6 +592,9 @@ function IndexedTranscriptBlocks(props: Props) {
 	const ranges = buildTranscriptRanges(transcriptIndex);
 	const payloadById = new Map(entries.map((entry) => [entry.id, entry]));
 	const indexedIds = new Set(ranges.flatMap((range) => range.entryIds));
+	const optimisticIds = new Set(
+		(props.optimisticEntries ?? []).map((entry) => entry.id),
+	);
 	const atoms: IndexedTimelineAtom[] = ranges.map((range) => ({
 		kind: "range",
 		range,
@@ -575,12 +602,30 @@ function IndexedTranscriptBlocks(props: Props) {
 		timestampMs: range.endTimestampMs,
 		notes: [],
 	}));
+	const rangeAtoms = atoms.filter(
+		(atom): atom is Extract<IndexedTimelineAtom, { kind: "range" }> =>
+			atom.kind === "range",
+	);
 	for (const entry of entries) {
 		if (typeof entry.seq === "number" || indexedIds.has(entry.id)) continue;
+		const timestampMs = Date.parse(entry.timestamp) || 0;
+		if (optimisticIds.has(entry.id) && rangeAtoms.length > 0) {
+			// A prompt can paint before its durable user row while live tool frames
+			// are already arriving. Put it into the range those tools occupy, then
+			// order that range by the immutable seq spine plus this timestamp. If no
+			// range reaches its send time yet, the durable tail is still the correct
+			// predecessor for a new turn.
+			const rangeAtom =
+				rangeAtoms.find((atom) => atom.range.endTimestampMs >= timestampMs) ??
+				rangeAtoms[rangeAtoms.length - 1]!;
+			rangeAtom.continuationEntryIds.push(entry.id);
+			rangeAtom.timestampMs = Math.max(rangeAtom.timestampMs, timestampMs);
+			continue;
+		}
 		atoms.push({
 			kind: "entry",
 			entry,
-			timestampMs: Date.parse(entry.timestamp) || 0,
+			timestampMs,
 		});
 	}
 	atoms.sort((a, b) => a.timestampMs - b.timestampMs);
@@ -642,10 +687,12 @@ function IndexedTranscriptBlocks(props: Props) {
 		const loaded = itemRanges.every((range) =>
 			range.entryIds.every((id) => payloadById.has(id)),
 		);
-		const itemEntries = entryIds.flatMap((id) => {
-			const entry = payloadById.get(id);
-			return entry ? [entry] : [];
-		});
+		const itemEntries = orderTranscriptEntries(
+			entryIds.flatMap((id) => {
+				const entry = payloadById.get(id);
+				return entry ? [entry] : [];
+			}),
+		);
 		// The opening tail can begin midway through one structural range. When the
 		// complete index arrives, keep rendering the payload already on screen
 		// while its missing prefix hydrates. Replacing real content with a 48px
