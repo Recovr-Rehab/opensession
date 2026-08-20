@@ -1,4 +1,7 @@
+import { UNDO_SHORTCUT_KEYS } from "../../lib/undo";
+import { Button } from "../../ui/button";
 import { cn } from "../../ui/cn";
+import { Tooltip } from "../../ui/tooltip";
 import { IconUndo } from "../icons";
 
 /** The merge button's five-second inline result and its reversal. */
@@ -14,34 +17,38 @@ export function MergeUndoControl({
   return (
     <div
       className={cn(
-        "inline-flex shrink-0 items-stretch whitespace-nowrap rounded-control bg-control text-dim",
-        compact ? "min-h-[22px] p-0.5" : "min-h-8 p-1 phone:min-h-11",
+        "inline-flex shrink-0 items-stretch whitespace-nowrap bg-fg/8 text-dim",
+        compact
+          ? "min-h-[22px] rounded-md text-label"
+          : "min-h-[26px] rounded-control text-xs",
         className,
       )}
     >
       <span
         aria-live="polite"
         className={cn(
-          "flex items-center font-medium",
-          compact ? "px-1.5 text-meta" : "px-2 text-label",
+          "flex items-center font-medium [text-box:trim-both_cap_alphabetic]",
+          compact ? "px-2" : "px-2.5",
         )}
       >
         PR merged
       </span>
-      <button
-        type="button"
-        onClick={onUndo}
-        title="Cancel the scheduled merge"
-        className={cn(
-          "focus-ring inline-flex cursor-pointer items-center justify-center gap-1 rounded-md bg-button font-semibold text-fg smooth-shadow-xs transition-[background-color,transform] duration-150 hover:bg-hover active:scale-[0.96]",
-          compact
-            ? "min-h-[18px] px-1.5 text-meta"
-            : "min-h-6 px-2 text-label phone:min-h-9 phone:px-3",
-        )}
-      >
-        <IconUndo size={compact ? 13 : 15} className="shrink-0 text-dim" />
-        Undo
-      </button>
+      <Tooltip label="Undo" shortcut={UNDO_SHORTCUT_KEYS}>
+        <Button
+          variant="ghost"
+          size="sm"
+          icon={<IconUndo size={20} />}
+          onClick={onUndo}
+          className={cn(
+            "relative rounded-l-none before:absolute before:inset-y-1.5 before:left-0 before:w-px before:bg-line",
+            compact
+              ? "min-h-[22px] rounded-r-md px-2 text-label"
+              : "rounded-r-control",
+          )}
+        >
+          Undo
+        </Button>
+      </Tooltip>
     </div>
   );
 }
