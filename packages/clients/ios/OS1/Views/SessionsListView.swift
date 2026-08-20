@@ -1754,6 +1754,62 @@ struct SessionsListView: View {
         }
     }
 
+    #if os(iOS)
+    /// Workspace rows in the order the sidebar actually draws them. Next chat
+    /// reads this instead of a backing sessions array because pins, grouping
+    /// and collapsed sections all change what comes after the open row.
+    private var renderedChatWorkspaces: [SidebarWorkspace] {
+        var rendered = visibleWorkspaces(pinnedWorkspaces, collapsedKey: "pinned")
+        if groupsByProject {
+            for repoGroup in repoSessionGroups {
+                guard !isCollapsed(repoBandKey(repoGroup.repo)) else { continue }
+                for group in repoGroup.sections {
+                    rendered += visibleWorkspaces(
+                        group.workspaces,
+                        collapsedKey: group.id
+                    )
+                }
+            }
+        } else {
+            for group in groups {
+                rendered += visibleWorkspaces(
+                    group.workspaces,
+                    collapsedKey: group.id
+                )
+            }
+        }
+        return rendered
+    }
+
+    /// Nil removes the button when this is the only visible chat.
+    private func nextChatAction(after session: Session) -> (() -> Void)? {
+        guard nextWorkspace(after: session) != nil else { return nil }
+        return { openNextChat(after: session) }
+    }
+
+    private func nextWorkspace(after session: Session) -> SidebarWorkspace? {
+        guard let current = workspace(containing: session), !current.isDraftWorkspace
+        else { return nil }
+        return SidebarNext.workspace(
+            after: current.id,
+            in: renderedChatWorkspaces,
+            isUnread: { ReadsStore.shared.isUnread($0.sessions) }
+        )
+    }
+
+    /// Replace the current push rather than stacking chats. Back still returns
+    /// to the sidebar in one gesture, however many times Next was used.
+    private func openNextChat(after session: Session) {
+        guard let current = workspace(containing: session),
+              let open = path.last,
+              workspace(containing: open)?.id == current.id,
+              let next = nextWorkspace(after: open)
+        else { return }
+        Haptics.play(.selection)
+        path[path.count - 1] = next.mainSession
+    }
+    #endif
+
     /// The list's view controls. A panel rather than a menu: there are seven
     /// of them now, and two are switches — every switch inside a `Menu`
     /// dismisses the whole stack, so turning two things off meant opening it
@@ -1932,6 +1988,7 @@ struct SessionsListView: View {
                     )
                     return nil
                 },
+                onNextChat: nextChatAction(after: session),
                 onRenameWorkspace: { name in
                     guard let workspace = workspace(containing: session) else { return }
                     viewModel.rename(workspace, to: name)

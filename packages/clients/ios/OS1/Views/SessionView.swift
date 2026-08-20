@@ -46,6 +46,8 @@ struct SessionView: View {
     private let onSaveComposerDraft: ((SessionViewModel.ComposerDraft) -> Void)?
     /// Opens the new-session composer from the iOS navigation bar.
     private let onNewSession: (() -> Void)?
+    /// Moves to the next visible chat, prioritizing settled unread work.
+    private let onNextChat: (() -> Void)?
     /// Worktree-level actions behind the iOS overflow menu. They belong to the
     /// sessions list, which owns the optimistic row removal and the refresh
     /// that follows — nil simply leaves those entries out of the menu.
@@ -256,6 +258,7 @@ struct SessionView: View {
         onSelectTab: ((Session) -> Void)? = nil,
         onSaveComposerDraft: ((SessionViewModel.ComposerDraft) -> Void)? = nil,
         onNewSession: (() -> Void)? = nil,
+        onNextChat: (() -> Void)? = nil,
         onRenameWorkspace: ((String) -> Void)? = nil,
         onArchiveWorkspace: (() -> Void)? = nil,
         onRestoreArchivedSession: ((Session) async -> Void)? = nil,
@@ -271,6 +274,7 @@ struct SessionView: View {
         self.onSelectTab = onSelectTab
         self.onSaveComposerDraft = onSaveComposerDraft
         self.onNewSession = onNewSession
+        self.onNextChat = onNextChat
         self.onRenameWorkspace = onRenameWorkspace
         self.onArchiveWorkspace = onArchiveWorkspace
         self.onRestoreArchivedSession = onRestoreArchivedSession
@@ -283,6 +287,7 @@ struct SessionView: View {
         workspaceNames: [String: String] = [:],
         onSaveComposerDraft: ((SessionViewModel.ComposerDraft) -> Void)? = nil,
         onNewSession: (() -> Void)? = nil,
+        onNextChat: (() -> Void)? = nil,
         onRenameWorkspace: ((String) -> Void)? = nil,
         onArchiveWorkspace: (() -> Void)? = nil,
         onRestoreArchivedSession: ((Session) async -> Void)? = nil,
@@ -294,6 +299,7 @@ struct SessionView: View {
         self.onSelectTab = nil
         self.onSaveComposerDraft = onSaveComposerDraft
         self.onNewSession = onNewSession
+        self.onNextChat = onNextChat
         self.onRenameWorkspace = onRenameWorkspace
         self.onArchiveWorkspace = onArchiveWorkspace
         self.onRestoreArchivedSession = onRestoreArchivedSession
@@ -856,7 +862,8 @@ struct SessionView: View {
                 viewModel: viewModel,
                 contentMaxWidth: contentMaxWidth,
                 horizontalInset: contentInset,
-                autoFocusWhenNeverRan: emptyContent == nil
+                autoFocusWhenNeverRan: emptyContent == nil,
+                onNextChat: onNextChat
             )
         }
         // The system treats a bottom `safeAreaBar` as adaptive chrome: when
@@ -1844,6 +1851,8 @@ struct SessionTabsView: View {
     /// to open as one (a workspace-less session falls back to the composer
     /// sheet, and a failed create has already surfaced its error).
     let onNewSession: () async -> Session?
+    /// Move from this workspace to the next visible chat in the sidebar.
+    let onNextChat: (() -> Void)?
     /// Rename the worktree these sessions share, from the session's overflow menu.
     let onRenameWorkspace: (String) -> Void
     /// Archive every session of the worktree, from the session's overflow menu.
@@ -1897,6 +1906,7 @@ struct SessionTabsView: View {
         viewModelForSession: @escaping (Session) -> SessionViewModel,
         onSaveComposerDraft: @escaping (Session, SessionViewModel.ComposerDraft) -> Void,
         onNewSession: @escaping () async -> Session?,
+        onNextChat: (() -> Void)?,
         onRenameWorkspace: @escaping (String) -> Void,
         onArchiveWorkspace: @escaping () -> Void,
         onCloseTab: @escaping (Session) -> Void,
@@ -1908,6 +1918,7 @@ struct SessionTabsView: View {
         self.viewModelForSession = viewModelForSession
         self.onSaveComposerDraft = onSaveComposerDraft
         self.onNewSession = onNewSession
+        self.onNextChat = onNextChat
         self.onRenameWorkspace = onRenameWorkspace
         self.onArchiveWorkspace = onArchiveWorkspace
         self.onCloseTab = onCloseTab
@@ -1992,6 +2003,7 @@ struct SessionTabsView: View {
                             onSaveComposerDraft(session, draft)
                         },
                         onNewSession: openNewTab,
+                        onNextChat: onNextChat,
                         onRenameWorkspace: onRenameWorkspace,
                         // Archiving the worktree from within it leaves nothing to
                         // show here, so pop back to the sessions list — the same
@@ -2558,6 +2570,8 @@ private struct SessionInputBar: View {
     /// False when the caller has put something in the transcript's place (the
     /// Desk's board), which a keyboard would cover.
     var autoFocusWhenNeverRan = true
+    /// Kept optional so non-sidebar conversations, such as the Desk, draw no row.
+    var onNextChat: (() -> Void)?
     @FocusState private var inputFocused: Bool
     /// What the "+" menu opened, if anything. One `@State` and one `.sheet`
     /// on purpose: stacking sheet modifiers on a single view leaves only the
@@ -2635,13 +2649,23 @@ private struct SessionInputBar: View {
                     )
             }
 
-            if showReplySuggestions,
-               !viewModel.isRunning,
-               viewModel.pendingQuestion == nil,
-               !noteMode,
-               !viewModel.replySuggestions.isEmpty {
-                replySuggestionRow
-                    .transition(.opacity.combined(with: .scale(scale: 0.96, anchor: .bottomLeading)))
+            if offersReplySuggestions || onNextChat != nil {
+                HStack(spacing: 8) {
+                    if offersReplySuggestions {
+                        replySuggestionRow
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .transition(
+                                .opacity.combined(
+                                    with: .scale(scale: 0.96, anchor: .bottomLeading)
+                                )
+                            )
+                    } else {
+                        Spacer(minLength: 0)
+                    }
+                    if let onNextChat {
+                        nextChatButton(action: onNextChat)
+                    }
+                }
             }
 
             if viewModel.quoteSelection.text != nil {
@@ -2816,6 +2840,35 @@ private struct SessionInputBar: View {
         .onDisappear { removeShiftReturnMonitor() }
         #endif
         .transcriptQuoteComposerRegion(viewModel.quoteSelection)
+    }
+
+    private var offersReplySuggestions: Bool {
+        showReplySuggestions
+            && !viewModel.isRunning
+            && viewModel.pendingQuestion == nil
+            && !noteMode
+            && !viewModel.replySuggestions.isEmpty
+    }
+
+    private func nextChatButton(action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            HStack(spacing: 5) {
+                Text("Next")
+                Image(systemName: "chevron.right")
+                    .font(.caption.weight(.semibold))
+            }
+            .font(.callout.weight(.medium))
+            .foregroundStyle(OS1VisualStyle.text)
+            .padding(.horizontal, 14)
+            .frame(minHeight: 44)
+            .contentShape(Capsule())
+        }
+        .buttonStyle(.plain)
+        .background(.thickMaterial, in: Capsule())
+        .glassSurface(in: Capsule(), interactive: true)
+        .fixedSize(horizontal: true, vertical: false)
+        .accessibilityLabel("Next chat")
+        .help("Next chat")
     }
 
     /// The same quiet, horizontally scrolling pills as the web and Desk
