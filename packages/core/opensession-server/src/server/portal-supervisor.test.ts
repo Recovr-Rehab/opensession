@@ -1,8 +1,8 @@
 import { afterAll, beforeEach, describe, expect, test } from "bun:test";
-import { mkdtempSync, rmSync, writeFileSync } from "fs";
+import { existsSync, mkdtempSync, rmSync, writeFileSync } from "fs";
 import { tmpdir } from "os";
 import { join } from "path";
-import { listPortalServices, listSandboxPortalServices, readPortalRegistry, reapOrphanedPortalServices, setPortalPath, startPortalService, startSandboxPortalService, stopPortalService, stopSandboxPortalService } from "./portal-supervisor";
+import { listPortalServices, listSandboxPortalServices, readPortalRegistry, reapOrphanedPortalServices, SANDBOX_PORTAL_AGENT_ENTRY, setPortalPath, startPortalService, startSandboxPortalService, stopPortalService, stopSandboxPortalService } from "./portal-supervisor";
 import type { Sandbox } from "./sandbox/provider";
 
 let worktree = "";
@@ -11,6 +11,11 @@ beforeEach(() => { worktree = mkdtempSync(join(tmpdir(), "os-portals-test-")); }
 afterAll(() => { if (worktree) rmSync(worktree, { recursive: true, force: true }); });
 
 describe("session Portal supervisor", () => {
+	test("launches the remote relay from the current runner layout", () => {
+		expect(SANDBOX_PORTAL_AGENT_ENTRY).toEndWith("/packages/core/opensession-server/src/runner-host/sandbox-portal-agent.ts");
+		expect(existsSync(SANDBOX_PORTAL_AGENT_ENTRY)).toBe(true);
+	});
+
 	test("keeps generated portal metadata and ports together in .ports.conf", () => {
 		writeFileSync(join(worktree, ".ports.conf"), "WEBAPP_PORT=3300\n");
 		const record = { name: "api", key: "PORTAL_API_PORT", command: "bun run api", port: 4200, state: "stopped" as const };

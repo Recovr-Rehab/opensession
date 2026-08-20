@@ -14,6 +14,7 @@ import { ensureSandboxPortalRelay, mintSandboxPortalGrant, revokeSandboxPortalRe
 import { remoteSandboxCallbackBaseUrl, usesOutboundSandboxPortalRelay } from "./sandbox/config";
 import { shellQuoteWord } from "./sandbox/adapters/bootstrap";
 import { sandboxHttpsPortFor } from "./sandbox/preview-ports";
+import { REPO_ROOT } from "../runner-host/protocol";
 import type { Sandbox } from "./sandbox/provider";
 import type { UnifiedSession } from "./types";
 
@@ -39,6 +40,7 @@ const MIN_PORT = 1024;
 const MAX_PORT = 19_000;
 const remoteRelayAgents: Map<string, { expiresAt: number }> = ((globalThis as Record<string, unknown>).__opensessionSandboxPortalAgents ??= new Map()) as Map<string, { expiresAt: number }>;
 const PORTAL_REAP_INTERVAL_MS = 5 * 60_000;
+export const SANDBOX_PORTAL_AGENT_ENTRY = `${REPO_ROOT}/packages/core/opensession-server/src/runner-host/sandbox-portal-agent.ts`;
 
 function portalKey(name: string): string {
 	return `PORTAL_${name.toUpperCase().replace(/-/g, "_")}_PORT`;
@@ -493,8 +495,7 @@ export async function ensureRemoteSandboxPortalAgent(input: {
 	const grant = mintSandboxPortalGrant({ sessionId: input.sessionId, sandboxId: input.sandbox.id, port: input.port });
 	const callbackBase = remoteSandboxCallbackBaseUrl().replace(/\/$/, "");
 	const endpoint = `${callbackBase}/sandbox-portal-ws?session=${encodeURIComponent(input.sessionId)}&sandbox=${encodeURIComponent(input.sandbox.id)}&port=${input.port}`;
-	const agent = "/home/ubuntu/projects/opensession/src/runner-host/sandbox-portal-agent.ts";
-	const relayLaunch = `OPENSESSION_SANDBOX_PORTAL_WS_URL=${shellQuoteWord(endpoint)} OPENSESSION_SANDBOX_PORTAL_TOKEN=${shellQuoteWord(grant.token)} OPENSESSION_SANDBOX_PORTAL_PORT=${shellQuoteWord(String(input.port))} setsid /home/ubuntu/.bun/bin/bun run ${shellQuoteWord(agent)} >/dev/null 2>&1 &`;
+	const relayLaunch = `OPENSESSION_SANDBOX_PORTAL_WS_URL=${shellQuoteWord(endpoint)} OPENSESSION_SANDBOX_PORTAL_TOKEN=${shellQuoteWord(grant.token)} OPENSESSION_SANDBOX_PORTAL_PORT=${shellQuoteWord(String(input.port))} setsid /home/ubuntu/.bun/bin/bun run ${shellQuoteWord(SANDBOX_PORTAL_AGENT_ENTRY)} >/dev/null 2>&1 &`;
 	const started = await input.sandbox.exec(["bash", "-lc", relayLaunch]);
 	if (started.exitCode !== 0) throw new Error(started.stderr.trim() || "Could not start the Sandbox Portal relay.");
 	remoteRelayAgents.set(agentKey, { expiresAt: grant.expiresAt });
