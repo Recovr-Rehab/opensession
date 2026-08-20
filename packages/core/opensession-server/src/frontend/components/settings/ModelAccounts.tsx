@@ -145,9 +145,12 @@ function OwnerSelect({
 				title={title}
 				icon={ownerIcon(value)}
 				sizeTo={quiet ? undefined : items.map((i) => i.label)}
+				children={
+					quiet ? <span className="flex h-4 items-center leading-none">{value || "Shared pool"}</span> : undefined
+				}
 				className={cn(
 					quiet &&
-						"border-transparent bg-transparent px-2 text-dim shadow-none transition-colors hover:border-transparent hover:bg-hover enabled:hover:shadow-none focus:border-transparent data-[popup-open]:border-transparent data-[popup-open]:bg-hover phone:min-h-11",
+						"w-auto border-transparent bg-transparent px-2 text-dim shadow-none transition-colors hover:border-transparent hover:bg-hover enabled:hover:shadow-none focus:border-transparent data-[popup-open]:border-transparent data-[popup-open]:bg-hover phone:min-h-11 [&>svg]:size-4",
 					className,
 				)}
 			/>
@@ -560,7 +563,7 @@ function ClaudeAccountRows({ state }: { state: ClaudeAccountsState }) {
 									onChange={(owner) => state.setOwner(account, owner)}
 									label={`Owner of ${account.name}`}
 									quiet
-									className="phone:min-w-0 phone:flex-1"
+									className="phone:ml-auto"
 									title={
 										account.owner
 											? `${account.owner}'s personal subscription. Their runs use it first, everyone else never does.`
@@ -845,7 +848,7 @@ function CodexAccountRows({ state }: { state: CodexAccountsState }) {
 								onChange={(owner) => state.setOwner(account, owner)}
 								label={`Owner of ${account.name}`}
 								quiet
-								className="phone:min-w-0 phone:flex-1"
+								className="phone:ml-auto"
 								title={
 									account.owner
 										? `${account.owner}'s personal subscription. Their runs use it first, everyone else never does.`
