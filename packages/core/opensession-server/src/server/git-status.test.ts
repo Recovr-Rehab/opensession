@@ -133,4 +133,18 @@ describe("scoped Git credentials", () => {
     expect(await gitPush("/repo", "feature", exec, { GH_TOKEN: "scoped" })).toEqual({ ok: true });
     expect(envs).toEqual([{ GH_TOKEN: "scoped" }]);
   });
+
+  test("does not send host credentials to a Runner executor", async () => {
+    const envs: Array<Record<string, string> | undefined> = [];
+    const exec = Object.assign(
+      async (_cmd: string[], opts?: { env?: Record<string, string> }) => {
+        envs.push(opts?.env);
+        return { exitCode: 0, stdout: "", stderr: "" };
+      },
+      { sandboxed: false, remote: true },
+    ) as WorkspaceExec;
+
+    expect(await gitPush("/runner/repo", "feature", exec, { GH_TOKEN: "host-only" })).toEqual({ ok: true });
+    expect(envs).toEqual([undefined]);
+  });
 });

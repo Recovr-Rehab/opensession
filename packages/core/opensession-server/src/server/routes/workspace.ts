@@ -48,6 +48,7 @@ import { REPOS, createWorktree, createWorktreeForExistingBranch, ensureScratchDi
 import { copyFileSync, existsSync, mkdirSync, readFileSync } from "fs";
 import { isClientSessionId, isNativeSessionId, newSessionId } from "../paths";
 import { isReusableEmptySession } from "../empty-session";
+import { githubMutationCredential } from "./github-credential";
 
 /**
  * Validate a `draft` field from a workspace create/patch body. `null` (clear)
@@ -672,6 +673,7 @@ export async function handleWorkspaceRoutes(
 				branch = `${src.branch}-stack-${bksId.slice(4, 10)}`;
 				worktreeDir = await createWorktree(branch, repo.id, {
 					base: src.branch,
+					gitEnv: githubMutationCredential(ctx)?.env,
 				});
 				mode = "code";
 				// Remember the layer underneath so this session's PR bases on it and
@@ -699,7 +701,11 @@ export async function handleWorkspaceRoutes(
 				// create_session's fromPr path), and stamp it as the workspace's
 				// owned worktree for later siblings.
 				branch = ws.branch;
-				worktreeDir = await createWorktreeForExistingBranch(ws.branch, ws.repo);
+				worktreeDir = await createWorktreeForExistingBranch(
+					ws.branch,
+					ws.repo,
+					githubMutationCredential(ctx)?.env,
+				);
 				mode = "code";
 				repoId = getRepo(ws.repo).id;
 				updateWorkspace(ws.id, { worktreeDir });
@@ -857,7 +863,9 @@ export async function handleWorkspaceRoutes(
 				`session-${sessionId.slice(4, 10)}`
 			).trim();
 			const oldCwd = current || repo.repo;
-			worktreeDir = await createWorktree(branch, repo.id);
+			worktreeDir = await createWorktree(branch, repo.id, {
+				gitEnv: githubMutationCredential(ctx)?.env,
+			});
 			// Best-effort: copy the ask rollout into the new worktree's hash dir
 			// so SDK resume (keyed by cwd) finds the prior conversation.
 			try {

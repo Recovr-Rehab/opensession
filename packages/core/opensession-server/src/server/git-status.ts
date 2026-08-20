@@ -200,7 +200,7 @@ export async function gitPull(
     async () => {
       async function run(args: string[]): Promise<{ stdout: string; stderr: string; code: number }> {
         if (exec) {
-          const r = await exec(args, env ? { env } : undefined);
+          const r = await exec(args, env && !exec.remote ? { env } : undefined);
           return { stdout: r.stdout, stderr: r.stderr, code: r.exitCode };
         }
         const proc = Bun.spawn(args, {
@@ -289,7 +289,7 @@ export async function gitPush(
       let err: string;
       let code: number;
       if (exec) {
-        const r = await exec(args, env ? { env } : undefined);
+        const r = await exec(args, env && !exec.remote ? { env } : undefined);
         err = r.stderr;
         code = r.exitCode;
       } else {
