@@ -16,6 +16,48 @@ typealias PlatformFont = UIFont
 typealias PlatformFont = NSFont
 #endif
 
+/// Lifecycle signals that do not enter SwiftUI's environment graph.
+///
+/// A scene-phase environment update walks the view graph before it reaches an
+/// `onChange` handler. That is expensive enough to trip the background
+/// watchdog when a long transcript is open, even if the handler lives in a
+/// small child view. Platform notifications deliver the same events without
+/// invalidating any rendered view.
+@MainActor
+enum AppLifecycle {
+    static var isActive: Bool {
+        #if os(iOS)
+        UIApplication.shared.applicationState == .active
+        #else
+        NSApplication.shared.isActive
+        #endif
+    }
+
+    static var didBecomeActiveNotification: Notification.Name {
+        #if os(iOS)
+        UIApplication.didBecomeActiveNotification
+        #else
+        NSApplication.didBecomeActiveNotification
+        #endif
+    }
+
+    static var willResignActiveNotification: Notification.Name {
+        #if os(iOS)
+        UIApplication.willResignActiveNotification
+        #else
+        NSApplication.willResignActiveNotification
+        #endif
+    }
+
+    static var didEnterBackgroundNotification: Notification.Name {
+        #if os(iOS)
+        UIApplication.didEnterBackgroundNotification
+        #else
+        NSApplication.didHideNotification
+        #endif
+    }
+}
+
 extension ToolbarItemPlacement {
     /// `.topBarTrailing` / `.topBarLeading` don't exist on macOS; map them to
     /// the equivalent slots in a Mac toolbar.

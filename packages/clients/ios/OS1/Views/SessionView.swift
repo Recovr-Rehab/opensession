@@ -3,11 +3,9 @@ import SwiftUI
 import AppKit
 #endif
 
-/// Owns session start/stop and foreground presence without making the large
-/// conversation view depend on `scenePhase`. A scene update should compare
-/// this leaf, not every conditional branch in a live transcript.
+/// Owns session start/stop and foreground presence without putting lifecycle
+/// state in the large conversation's AttributeGraph dependencies.
 private struct SessionSceneLifecycle: View {
-    @Environment(\.scenePhase) private var scenePhase
     let viewModel: SessionViewModel
 
     var body: some View {
@@ -17,18 +15,25 @@ private struct SessionSceneLifecycle: View {
                 let owner = UUID()
                 viewModel.start(owner: owner)
                 defer { viewModel.stop(owner: owner) }
-                if scenePhase != .active { viewModel.appDidEnterBackground() }
+                if !AppLifecycle.isActive { viewModel.appDidEnterBackground() }
                 while !Task.isCancelled {
                     try? await Task.sleep(for: .seconds(3_600))
                 }
             }
-            .onChange(of: scenePhase) { _, phase in
-                // Presence follows the foreground app, not input activity.
-                // Resync immediately when the app becomes active again.
-                switch phase {
-                case .active: viewModel.appDidBecomeActive()
-                case .inactive, .background: viewModel.appDidEnterBackground()
-                @unknown default: viewModel.appDidEnterBackground()
+            .task {
+                for await _ in NotificationCenter.default.notifications(
+                    named: AppLifecycle.didBecomeActiveNotification
+                ) {
+                    // Reconnect and resync as soon as the app is active.
+                    viewModel.appDidBecomeActive()
+                }
+            }
+            .task {
+                for await _ in NotificationCenter.default.notifications(
+                    named: AppLifecycle.willResignActiveNotification
+                ) {
+                    // Presence follows the foreground app, not input activity.
+                    viewModel.appDidEnterBackground()
                 }
             }
     }
@@ -806,11 +811,9 @@ struct SessionView: View {
             #endif
 
         presentedContent
-            // Scene phase is a hot environment value. Reading it in this view
-            // invalidated the entire transcript when the app backgrounded; a
-            // long live turn could spend the watchdog's full 10 seconds in
-            // SwiftUI's AttributeGraph comparison. Keep that dependency in a
-            // zero-sized lifecycle leaf instead.
+            // Platform lifecycle notifications avoid a scene-phase environment
+            // update walking this transcript during the 10-second background
+            // watchdog window. The zero-sized leaf owns only the side effects.
             .background { SessionSceneLifecycle(viewModel: viewModel) }
             .task {
                 catalog = try? await OS1API.models(workspaceId: viewModel.session.workspaceId)
