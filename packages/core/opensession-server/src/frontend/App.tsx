@@ -3894,6 +3894,15 @@ export function App(
 			run: () => setThemePref(currentTheme === "dark" ? "light" : "dark"),
 		},
 		{
+			id: "system-theme",
+			label: "Use system appearance",
+			description: "Match your device's light or dark mode",
+			category: "Actions",
+			keywords: ["system", "automatic", "theme", "appearance"],
+			icon: <IconMoon size={18} />,
+			run: () => setThemePref("system"),
+		},
+		{
 			id: "prs",
 			label: "Pull requests",
 			description: "Open the pull request list",

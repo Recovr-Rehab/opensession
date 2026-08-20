@@ -221,7 +221,7 @@ export function AppearanceSection() {
 			<SettingsGroupLabel>Appearance</SettingsGroupLabel>
 			<SettingsSection>
 				<div
-					className="flex justify-center gap-3 desktop:gap-4"
+					className="flex justify-start gap-3 desktop:gap-4"
 					role="radiogroup"
 					aria-label="Theme"
 				>
