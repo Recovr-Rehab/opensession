@@ -435,8 +435,7 @@ export function PreferencesPanel() {
 	return (
 		<SettingsPanel>
 			<SettingsHeader title="Preferences" />
-			<AppearanceSection />
-			<SettingsGroupLabel>Messages</SettingsGroupLabel>
+			<SettingsGroupLabel className="mt-0">Messages</SettingsGroupLabel>
 			<SettingCard>
 				<SettingRow
 					title="Default model"
@@ -546,6 +545,7 @@ export function PreferencesPanel() {
 					}
 				/>
 			</SettingCard>
+			<AppearanceSection />
 			<SettingsGroupLabel>Sidebar</SettingsGroupLabel>
 			<SettingCard>
 				<SidebarDisplayRows />

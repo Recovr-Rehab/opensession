@@ -59,6 +59,7 @@ import {
 	SettingsSection,
 } from "../../ui/settings";
 import { Switch } from "../../ui/switch";
+import { Tooltip } from "../../ui/tooltip";
 import { Select, SettingRow } from "./shared";
 
 // The look of the app, as it appears inside Settings → Preferences. These used
@@ -132,7 +133,7 @@ function ThemeCard({
 		// which outrank a single utility: leaving the class here would have let
 		// it keep winning against everything below.
 		<button
-			className="group flex cursor-pointer flex-col items-center gap-2.5 border-none bg-transparent p-0"
+			className="group flex w-20 cursor-pointer flex-col items-center gap-2.5 border-none bg-transparent p-0 desktop:w-28"
 			role="radio"
 			aria-checked={active}
 			data-active={active || undefined}
@@ -174,24 +175,25 @@ function AccentSwatch({
 	} as React.CSSProperties;
 
 	return (
-		<label
-			className="flex min-h-11 min-w-11 cursor-pointer items-center justify-center rounded-md p-1"
-			title={option.label}
-			style={style}
-		>
-			<input
-				type="radio"
-				name="accent-theme"
-				value={theme}
-				checked={active}
-				onChange={onClick}
-				aria-label={option.label}
-				className="peer sr-only"
-			/>
-			<span className="flex size-8 items-center justify-center rounded-full border border-line bg-[linear-gradient(135deg,color-mix(in_srgb,var(--swatch)_97%,white),color-mix(in_srgb,var(--swatch)_94%,black))] text-(--swatch-ink) outline-offset-4 transition-[scale,box-shadow] duration-150 active:scale-[0.96] peer-checked:shadow-[0_0_0_2px_var(--bg-raised),0_0_0_4px_var(--swatch)] peer-focus-visible:outline-2 peer-focus-visible:outline-accent-ink">
-				{active && <IconCheck size={16} strokeWidth={2.4} />}
-			</span>
-		</label>
+		<Tooltip label={option.label}>
+			<label
+				className="flex min-h-11 min-w-11 cursor-pointer items-center justify-center rounded-md p-1"
+				style={style}
+			>
+				<input
+					type="radio"
+					name="accent-theme"
+					value={theme}
+					checked={active}
+					onChange={onClick}
+					aria-label={option.label}
+					className="peer sr-only"
+				/>
+				<span className="flex size-8 items-center justify-center rounded-full border border-line bg-[linear-gradient(135deg,color-mix(in_srgb,var(--swatch)_97%,white),color-mix(in_srgb,var(--swatch)_94%,black))] text-(--swatch-ink) outline-offset-4 transition-[scale,box-shadow] duration-150 active:scale-[0.96] peer-checked:shadow-[0_0_0_2px_var(--bg-raised),0_0_0_4px_var(--swatch)] peer-focus-visible:outline-2 peer-focus-visible:outline-accent-ink">
+					{active && <IconCheck size={16} strokeWidth={2.4} />}
+				</span>
+			</label>
+		</Tooltip>
 	);
 }
 
@@ -216,10 +218,10 @@ export function AppearanceSection() {
 
 	return (
 		<>
-			<SettingsGroupLabel className="mt-0">Appearance</SettingsGroupLabel>
+			<SettingsGroupLabel>Appearance</SettingsGroupLabel>
 			<SettingsSection>
 				<div
-					className="grid grid-cols-3 gap-3.5"
+					className="flex justify-center gap-3 desktop:gap-4"
 					role="radiogroup"
 					aria-label="Theme"
 				>
@@ -240,10 +242,10 @@ export function AppearanceSection() {
 						Accent
 					</div>
 					<div
-						// One row per breakpoint, so the column count tracks
-						// ACCENT_THEME_OPTIONS.length. A single swatch wrapping onto its
-						// own line reads as a mistake; accent-theme.test.ts guards it.
-						className="grid grid-cols-4 gap-2 desktop:grid-cols-7"
+						// Keep the seven 44px targets together instead of stretching them
+						// across the plate. They wrap only when the viewport cannot hold
+						// the full group without shrinking its touch targets.
+						className="flex w-fit max-w-full flex-wrap gap-y-1"
 						role="radiogroup"
 						aria-label="Accent colour"
 					>
