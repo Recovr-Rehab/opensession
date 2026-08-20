@@ -265,7 +265,9 @@ struct NewSessionView: View {
                         .font(.body)
                         .foregroundStyle(.tertiary)
                         .allowsHitTesting(false)
+                    #if os(macOS)
                     recipeButton
+                    #endif
                 }
                 .padding(.horizontal, 16)
                 .padding(.top, placeholderTopPadding)
