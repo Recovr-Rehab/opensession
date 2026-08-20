@@ -472,10 +472,43 @@ describe("run journal", () => {
 
 		const result = agent.sanitizeInterruptedRuns(records, now);
 		expect(result.interrupted).toHaveLength(agent.MAX_BOOT_RECOVERIES);
-		expect(result.interrupted.find((r) => r.osSessionId === "session-0")?.runKey).toBe("run-0-new");
+		// The retained record is the newest for this session even when the
+		// oldest-first queue leaves that session beyond the boot batch.
+		expect(result.interrupted.some((r) => r.runKey === "run-0")).toBe(false);
+		expect(
+			result.quarantined.some(
+				(r) => r.run.runKey === "run-0-new" && r.reason === "boot_recovery_limit",
+			),
+		).toBe(true);
 		expect(result.interrupted.some((r) => r.runKey === "recursive")).toBe(false);
 		expect(result.quarantined.some((r) => r.run.runKey === "run-0" && r.reason === "duplicate_session")).toBe(true);
 		expect(result.quarantined.some((r) => r.run.runKey === "recursive" && r.reason === "recursive_recovery_kind")).toBe(true);
+	});
+
+	it("recovers the oldest unique runs first so repeated restarts cannot starve them", () => {
+		const now = Date.now();
+		const result = agent.sanitizeInterruptedRuns(
+			[
+				{
+					runKey: "newest",
+					osSessionId: "newest-session",
+					cwd: "/tmp",
+					startedAt: new Date(now).toISOString(),
+				},
+				{
+					runKey: "oldest",
+					osSessionId: "oldest-session",
+					cwd: "/tmp",
+					startedAt: new Date(now - 60_000).toISOString(),
+				},
+			],
+			now,
+		);
+
+		expect(result.interrupted.map((run) => run.runKey)).toEqual([
+			"oldest",
+			"newest",
+		]);
 	});
 
 	it("accepts interleaved fallback recovery markers with a bounded durable counter", () => {

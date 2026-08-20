@@ -1762,8 +1762,11 @@ export function markRecoveryProgress(run: ActiveRunRecord, event: StreamEvent): 
 }
 
 /** One boot recovery per owning session, newest journal record wins. Records
- * without a session id remain independently recoverable by run key. A hard
- * fuse prevents a malformed journal from monopolizing boot and starving HTTP. */
+ * without a session id remain independently recoverable by run key. Once
+ * deduplicated, recover the oldest work first: a restart during a busy boot
+ * must not keep inserting newer work ahead of a session that has already
+ * waited through one or more recovery sweeps. A hard fuse prevents a malformed
+ * journal from monopolizing boot and starving HTTP. */
 export function sanitizeInterruptedRuns(runs: ActiveRunRecord[], now = Date.now()): {
   interrupted: ActiveRunRecord[];
   quarantined: QuarantinedRun[];
@@ -1805,7 +1808,7 @@ export function sanitizeInterruptedRuns(runs: ActiveRunRecord[], now = Date.now(
     }
   }
   const ordered = [...newest.values()].sort(
-    (a, b) => (Date.parse(b.startedAt || "") || 0) - (Date.parse(a.startedAt || "") || 0),
+    (a, b) => (Date.parse(a.startedAt || "") || 0) - (Date.parse(b.startedAt || "") || 0),
   );
   const interrupted = ordered.slice(0, MAX_BOOT_RECOVERIES);
   quarantined.push(
