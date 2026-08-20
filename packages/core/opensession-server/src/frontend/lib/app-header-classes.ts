@@ -4,7 +4,7 @@
  * The bar is a single `<header>` in App.tsx that wears three different faces:
  * `display:none` on desktop (the brand and user controls live in the sidebar
  * there), a solid band in flow on ordinary pushed routes, and a fixed
- * transparent overlay on the two routes that scroll under it (home, a
+ * transparent overlay on the routes that scroll under it (home, Feed, and a
  * session). The faces are one element, so they migrate together: splitting
  * them would leave the overlay's `position:fixed` fighting the band's
  * `height` across two stylesheets.
@@ -62,9 +62,9 @@ const APP_HEADER_BASE =
 const APP_HEADER_DETAIL = "phone:bg-transparent";
 
 /**
- * Home and a session: the bar floats over the content instead of reserving a
- * band above it, so the list / the transcript fill the full height and scroll
- * UNDER the pills. Taps fall through the gaps between the pills to the content
+ * Home, Feed, and a session: the bar floats over the content instead of
+ * reserving a band above it, so the list / the transcript fill the full height
+ * and scroll UNDER the pills. Taps fall through the gaps between the pills to the content
  * underneath — `*:pointer-events-auto` hands them back to the pills themselves.
  *
  * `::before` is the scroll edge, and it is the reason this works at all: a blur
@@ -116,8 +116,8 @@ const APP_HEADER_OVERLAY =
  * answer for free, by source order. So the in-flow face and the floating face
  * each spell their own position, and the caller picks one.
  *
- * `detail` — a pushed page: no chrome band. `floating` — home or a session:
- * out of flow, over the scrolling content.
+ * `detail`: a pushed page with no chrome band. `floating`: home, Feed, or a
+ * session, out of flow over the scrolling content.
  */
 export function appHeader({
 	detail,
