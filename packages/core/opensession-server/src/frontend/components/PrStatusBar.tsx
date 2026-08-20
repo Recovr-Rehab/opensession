@@ -1030,14 +1030,14 @@ export function PrStatusBar({
 		);
 		const provider = pr ? providerFromUrl(pr.url) : null;
 		const externalHint = provider
-			? `${isApple ? "⌘" : "Ctrl"}-click opens on ${provider.name}`
+			? `${isApple ? "⌘" : "Ctrl"}-click opens in ${provider.name}`
 			: undefined;
 		// Two lines inside the one target: the state, then which PR it is about.
 		// The provider mark makes the modified-click destination visible without
 		// competing with the state or the primary action.
 		const labelBody = (
 			<>
-				<span className="block truncate text-item-title text-fg group-hover/prsum:text-accent">
+				<span className="block truncate text-item-title text-fg">
 					{headlineLabel}
 				</span>
 				{pr && provider && (
@@ -1102,12 +1102,20 @@ export function PrStatusBar({
 						}
 					/>
 				) : pr ? (
-					// The session already names the work. The tooltip only explains
-					// the modified-click destination that the hover arrow advertises.
 					<Tooltip
-						label={externalHint || `Open #${pr.number}`}
+						label={
+							<span className="flex flex-col gap-0.5">
+								<span>Open review</span>
+								{externalHint && (
+									<span className="font-normal text-tooltip-fg/60">
+										{externalHint}
+									</span>
+								)}
+							</span>
+						}
 						side="bottom"
 						align="start"
+						multiline
 					>
 						<a
 							className={cn(labelClass, "no-underline")}
