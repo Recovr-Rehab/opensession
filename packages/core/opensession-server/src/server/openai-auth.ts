@@ -143,7 +143,10 @@ export function openaiSeedAuthPath(seedRoot: string, accountId: string): string 
   return `${seedRoot}/${accountId}/auth.json`;
 }
 
-/** Build the least-privilege credential slice uploaded to a remote sandbox. */
+/** Build the least-privilege credential slice uploaded to a remote sandbox.
+ * API-key accounts keep their key because Pi can use it through the standard
+ * OpenAI provider. Home accounts replace their host CODEX_HOME with an inert
+ * guest value and receive a separate access-token-only OAuth seed. */
 export function buildOpenaiRemoteSeedUpload(
   accounts: CodexAccount[],
   restrictIds?: string[],
@@ -166,13 +169,19 @@ export function buildOpenaiRemoteSeedUpload(
   const seeds: Array<{ accountId: string; content: string }> = [];
   const skipped: Array<{ account: CodexAccount; reason: string }> = [];
   for (const account of eligible) {
+    // Construct the guest record field by field. The account store is loaded
+    // from JSON, so spreading it here would let an unknown future host field
+    // silently cross the remote trust boundary.
+    const projected: CodexAccount = {
+      id: account.id,
+      name: account.name,
+      kind: account.kind,
+      value: account.kind === "api_key" ? account.value : "opensession-remote-seed",
+      ...(account.owner ? { owner: account.owner } : {}),
+      createdAt: account.createdAt,
+    };
     if (account.kind === "api_key") {
-      // Pi's OpenAI provider is OAuth-only. Copying an unsupported sk-* value
-      // into third-party compute would widen authority without enabling a run.
-      skipped.push({
-        account,
-        reason: "remote Pi runs do not support OpenAI API-key accounts",
-      });
+      selected.push(projected);
       continue;
     }
     const built = buildSeededOpenaiAuth(account);
@@ -180,10 +189,7 @@ export function buildOpenaiRemoteSeedUpload(
       skipped.push({ account, reason: built.error });
       continue;
     }
-    // account.value is a host CODEX_HOME path. The guest resolves this record
-    // through OPENSESSION_OPENAI_SEED_DIR, so project an inert value rather
-    // than disclose a host path it cannot access.
-    selected.push({ ...account, value: "opensession-remote-seed" });
+    selected.push(projected);
     seeds.push({ accountId: account.id, content: JSON.stringify(built.seeded) });
   }
   return { accounts: selected, seeds, skipped };

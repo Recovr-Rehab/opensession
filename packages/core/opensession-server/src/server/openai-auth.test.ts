@@ -28,10 +28,10 @@ describe("OpenAI auth", () => {
       createdAt: "2026-08-20T00:00:00.000Z",
     };
     const apiKeyAccount: CodexAccount = {
-      id: "unsupported-api-key",
-      name: "Unsupported API key",
+      id: "scoped-api-key",
+      name: "Scoped API key",
       kind: "api_key",
-      value: "sk-must-not-cross-the-sandbox-boundary",
+      value: "sk-selected-remote-key",
       createdAt: "2026-08-20T00:00:00.000Z",
     };
     try {
@@ -41,6 +41,8 @@ describe("OpenAI auth", () => {
         JSON.stringify({
           tokens: {
             access_token: access,
+            refresh_token: "host-refresh-must-not-cross",
+            id_token: "host-id-token-must-not-cross",
             account_id: "provider-account-id",
           },
         }),
@@ -49,17 +51,16 @@ describe("OpenAI auth", () => {
       const upload = buildOpenaiRemoteSeedUpload([homeAccount, apiKeyAccount]);
       expect(upload.accounts).toEqual([
         { ...homeAccount, value: "opensession-remote-seed" },
+        apiKeyAccount,
       ]);
-      expect(upload.skipped).toEqual([
-        {
-          account: apiKeyAccount,
-          reason: "remote Pi runs do not support OpenAI API-key accounts",
-        },
-      ]);
-      expect(
-        JSON.stringify({ accounts: upload.accounts, seeds: upload.seeds }),
-      ).not.toContain(apiKeyAccount.value);
-      expect(JSON.stringify(upload.accounts)).not.toContain(hostHome);
+      expect(upload.skipped).toEqual([]);
+      const serialized = JSON.stringify({ accounts: upload.accounts, seeds: upload.seeds });
+      expect(serialized).toContain(apiKeyAccount.value);
+      expect(serialized).not.toContain(hostHome);
+      expect(serialized).not.toContain("host-refresh-must-not-cross");
+      expect(serialized).not.toContain("host-id-token-must-not-cross");
+      expect(upload.seeds).toHaveLength(1);
+      expect(upload.seeds.some((seed) => seed.accountId === apiKeyAccount.id)).toBe(false);
 
       const seed = upload.seeds[0];
       const accountDir = join(remoteRoot, seed.accountId);
@@ -86,5 +87,41 @@ describe("OpenAI auth", () => {
     } finally {
       rmSync(root, { recursive: true, force: true });
     }
+  });
+
+  test("projects only designated account fields and never spreads unknown host data", () => {
+    const selected = {
+      id: "selected",
+      name: "Selected",
+      kind: "api_key",
+      value: "sk-selected",
+      owner: "Alex",
+      createdAt: "2026-08-20T00:00:00.000Z",
+      futureHostSecret: "must-not-cross",
+      hostCredentialPath: "/home/ubuntu/.codex-secret",
+    } as CodexAccount;
+    const other = {
+      id: "other",
+      name: "Other",
+      kind: "api_key",
+      value: "sk-other",
+      createdAt: "2026-08-20T00:00:00.000Z",
+    } satisfies CodexAccount;
+
+    const upload = buildOpenaiRemoteSeedUpload([selected, other], [selected.id], "Alex");
+    expect(upload.accounts).toEqual([
+      {
+        id: "selected",
+        name: "Selected",
+        kind: "api_key",
+        value: "sk-selected",
+        owner: "Alex",
+        createdAt: "2026-08-20T00:00:00.000Z",
+      },
+    ]);
+    const serialized = JSON.stringify(upload);
+    expect(serialized).not.toContain("sk-other");
+    expect(serialized).not.toContain("must-not-cross");
+    expect(serialized).not.toContain("/home/ubuntu");
   });
 });

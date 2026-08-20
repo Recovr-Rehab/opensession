@@ -1365,9 +1365,10 @@ async function* runPiAttempt(
   // equivalent gate is `partial.content.length === 0`.)
   let sawStreamedOutput = false;
 
-  /** Another codex account that could serve this turn, or undefined when the
-   *  pool is dry or only accounts pi cannot seed (api_key) are left. A STRICT
-   *  pin never rotates: excluding the pinned id would make pickOpenaiAccount
+  /** Another OpenAI account that could serve this turn, or undefined when the
+   *  pool is dry. Both ChatGPT OAuth and standard OpenAI API-key accounts are
+   *  executable. A STRICT pin never rotates: excluding the pinned id would
+   *  make pickOpenaiAccount
    *  skip its pin branch and widen into the pool, which is the one thing a
    *  hard pin exists to prevent. */
   const nextCodexAccount = (): CodexAccount | undefined => {
@@ -1383,7 +1384,7 @@ async function* runPiAttempt(
       opts.accountStrict,
       new Set([...walk.excluded, pickedOpenai.id])
     );
-    if ("error" in next || next.kind === "api_key") return undefined;
+    if ("error" in next) return undefined;
     return next;
   };
 
@@ -1479,99 +1480,60 @@ async function* runPiAttempt(
     // session affinity and the per-(account, model) sideline are ONE shared
     // state across both engines.
     let seededOpenaiCredential: SeededOpenaiAuth["openai"] | undefined;
+    let openaiApiKeyCredential: string | undefined;
     let openaiPickReason: string | undefined;
     if (parsed.providerID === "openai") {
       const pickOut: { reason?: string } = {};
-      // pi can only seed ChatGPT-subscription (kind: home) accounts — pi's
-      // openai-codex provider is oauth-only, so API-key accounts have no
-      // injection path. Rather than dead-ending a session whose HRW hash (or
-      // designated-list order) ranks an api_key account first, re-pick with
-      // that account excluded until a home account (or a real dry pool)
-      // surfaces. An EXPLICIT api_key pin still errors: silently ignoring a
-      // pin would mask a configuration mistake.
-      // Two independent exclusions, kept apart on purpose: accounts skipped
-      // because pi cannot seed them (api_key), and accounts this TURN already
-      // burned on a usage limit. Only the first means "your pool is
-      // misconfigured", so the error below must count that set alone.
-      const skippedApiKey = new Set<string>();
-      let picked: ReturnType<typeof pickOpenaiAccount>;
-      for (;;) {
-        picked = pickOpenaiAccount(
-          parsed.modelID,
-          readModelProviderConfig()?.openaiAccounts,
-          opts.accountAffinityKey || journal?.osSessionId || cwd,
-          pickOut,
-          user,
-          opts.accountId,
-          opts.accountStrict,
-          new Set([...walk.excluded, ...skippedApiKey])
-        );
-        if ("error" in picked || picked.kind !== "api_key") break;
-        if (opts.accountId && picked.id === opts.accountId) {
-          throw new Error(
-            `pi/openai: pinned codex account "${picked.name}" is an API-key account, ` +
-              "which the Pi engine does not support. ChatGPT-subscription (kind: home) " +
-              "accounts only. Configure a supported third-party provider for API-key billing."
-          );
-        }
-        skippedApiKey.add(picked.id);
-      }
+      const picked = pickOpenaiAccount(
+        parsed.modelID,
+        readModelProviderConfig()?.openaiAccounts,
+        opts.accountAffinityKey || journal?.osSessionId || cwd,
+        pickOut,
+        user,
+        opts.accountId,
+        opts.accountStrict,
+        walk.excluded,
+      );
       if ("error" in picked) {
-        if (skippedApiKey.size) {
-          // The pool had accounts, but every eligible one was api_key: a
-          // configuration boundary, NOT exhaustion — hopping models wouldn't
-          // fix it, so no usageLimitExhausted.
-          throw new Error(
-            `pi/openai: only API-key codex accounts are currently eligible ` +
-              `(${skippedApiKey.size} skipped), which the Pi engine does not support. ` +
-              "ChatGPT-subscription (kind: home) accounts only. Use an " +
-              "a supported third-party provider for API-key billing."
-          );
-        }
         const err = new Error(`pi/openai: ${picked.error}`) as Error & {
           usageLimitExhausted?: boolean;
         };
         err.usageLimitExhausted = true;
         throw err;
       }
-      // Visible to the terminal/catch paths from HERE, not after the seed
-      // checks below: an account whose token cannot be seeded, or that sits
-      // inside pi's refresh window, genuinely cannot serve this turn. That is
-      // the condition markCodexExhausted encodes, and the one the account
-      // walk most needs to be able to rotate off.
       pickedOpenai = picked;
-      const built = buildSeededOpenaiAuth(picked);
-      if ("error" in built) {
-        // Expired/unreadable ChatGPT access token = the same condition as a
-        // dry pool: this model has no account to run on right now
-        // (previous runner-runner's bind-failure parity).
-        const err = new Error(`pi/openai: ${built.error}`) as Error & {
-          usageLimitExhausted?: boolean;
-        };
-        err.usageLimitExhausted = true;
-        throw err;
-      }
-      // pi's oauth layer refreshes whenever <5 minutes of validity remain —
-      // and the refresh MUST fail (deliberate placeholder; CODEX_HOME owns
-      // the rotating refresh family). A token entering that window is
-      // therefore the same flagged condition as an expired one, just caught
-      // before the turn burns work; without this, the failure surfaces as an
-      // unflagged "OAuth refresh failed" and the fallback walk never engages
-      // (the classifier catches the mid-turn variant of the same window).
-      const msLeft = built.seeded.openai.expires - Date.now();
-      if (msLeft <= 6 * 60_000) {
-        const err = new Error(
-          `pi/openai: codex account "${picked.name}" access token expires in ` +
-            `${Math.max(1, Math.ceil(msLeft / 60_000))} min — inside pi's refresh window, ` +
-            "which the placeholder refresh deliberately fails. Treated as a dry pool " +
-            "until the codex CLI refreshes the token."
-        ) as Error & { usageLimitExhausted?: boolean };
-        err.usageLimitExhausted = true;
-        throw err;
-      }
-      sidelineableOpenai = picked;
-      seededOpenaiCredential = built.seeded.openai;
       openaiPickReason = pickOut.reason;
+      if (picked.kind === "api_key") {
+        // Standard OpenAI API keys use Pi's ordinary OpenAI provider. They do
+        // not enter the OAuth credential store or the ChatGPT backend.
+        openaiApiKeyCredential = picked.value;
+        sidelineableOpenai = picked;
+      } else {
+        const built = buildSeededOpenaiAuth(picked);
+        if ("error" in built) {
+          const err = new Error(`pi/openai: ${built.error}`) as Error & {
+            usageLimitExhausted?: boolean;
+          };
+          err.usageLimitExhausted = true;
+          throw err;
+        }
+        // Pi refreshes OAuth credentials inside their final five minutes. The
+        // placeholder refresh must fail because CODEX_HOME owns the rotating
+        // family, so reject the token before starting the turn.
+        const msLeft = built.seeded.openai.expires - Date.now();
+        if (msLeft <= 6 * 60_000) {
+          const err = new Error(
+            `pi/openai: codex account "${picked.name}" access token expires in ` +
+              `${Math.max(1, Math.ceil(msLeft / 60_000))} min, inside pi's refresh window. ` +
+              "The placeholder refresh deliberately fails, so this account is dry " +
+              "until the codex CLI refreshes the token."
+          ) as Error & { usageLimitExhausted?: boolean };
+          err.usageLimitExhausted = true;
+          throw err;
+        }
+        seededOpenaiCredential = built.seeded.openai;
+        sidelineableOpenai = picked;
+      }
     }
 
     audit({
@@ -1632,7 +1594,34 @@ async function* runPiAttempt(
       modelsPath: null,
     });
     let piModel: ReturnType<typeof runtime.getModel>;
-    if (parsed.providerID === "openai") {
+    if (parsed.providerID === "openai" && openaiApiKeyCredential) {
+      // Raw platform keys use Pi's standard OpenAI provider, the same scoped
+      // runtime-key mechanism used by Wafer, Kimi and other API providers.
+      await runtime.setRuntimeApiKey("openai", openaiApiKeyCredential);
+      piModel = runtime.getModel("openai", parsed.modelID);
+      if (!piModel) {
+        runtime.registerProvider("openai", {
+          models: [
+            {
+              id: parsed.modelID,
+              name: parsed.modelID,
+              reasoning: true,
+              thinkingLevelMap: { xhigh: "xhigh", max: "max", minimal: "low" },
+              input: ["text", "image"],
+              cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
+              contextWindow: 272_000,
+              maxTokens: 128_000,
+            },
+          ],
+        });
+        piModel = runtime.getModel("openai", parsed.modelID);
+      }
+      if (!piModel) {
+        throw new Error(
+          `Unknown OpenAI API model "${parsed.modelID}" (could not register it with pi)`,
+        );
+      }
+    } else if (parsed.providerID === "openai") {
       // pi's builtin openai-codex provider already carries the right baseUrl
       // (chatgpt.com backend), API and catalog — our bare slugs match its
       // model ids exactly. No custom headers toward chatgpt.com: pi's own

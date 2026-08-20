@@ -18,7 +18,13 @@ describe("remote runner bootstrap", () => {
     const root = mkdtempSync(join(tmpdir(), "opensession-bootstrap-install-"));
     scratch.push(root);
     const config = join(root, "sandbox.json");
-    writeFileSync(config, "{}");
+    writeFileSync(
+      config,
+      JSON.stringify({
+        runnerRepoUrl: "https://github.com/tellahq/opensession.git",
+        cloneCredential: { type: "https-token", token: "runner-clone-secret" },
+      }),
+    );
     process.env.OPENSESSION_SANDBOX_CONFIG = config;
 
     const commands: string[] = [];
@@ -40,5 +46,8 @@ describe("remote runner bootstrap", () => {
 
     const install = commands.find((command) => command.includes(".local/bin/opensession"));
     expect(install).toStartWith("mkdir -p /home/ubuntu/.local/bin && ");
+    const originScrub = commands.find((command) => command.includes("remote set-url origin"));
+    expect(originScrub).toContain("https://github.com/tellahq/opensession.git");
+    expect(originScrub).not.toContain("runner-clone-secret");
   });
 });

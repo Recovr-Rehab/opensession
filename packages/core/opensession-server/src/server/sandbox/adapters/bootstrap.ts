@@ -64,7 +64,7 @@ import { OPENSESSION_SESSIONS_DIR, homeDir, stateDir } from "../../paths";
 import { journalSet, journalClear, type ActiveRunRecord } from "../../run-journal";
 import { shouldPersistModelSwitch, type StreamEvent } from "../../run-events";
 import { recoveryKind, restartContinuationPrompt } from "../../agent-runner";
-import { accountsForRemoteUpload } from "../../claude-accounts";
+import { accountsForRemoteUpload, type ClaudeAccount } from "../../claude-accounts";
 import { audit } from "../../audit";
 import { authedRemoteUrl } from "../../codestorage/auth";
 import { parseCsRemote } from "../../codestorage/remote";
@@ -233,29 +233,68 @@ export function projectRemotePiConfig(raw: unknown): string | null {
   );
 }
 
+function remoteReachableModels(
+  model: string | undefined,
+  fallbackModel?: string,
+): string[] {
+  const primary = toPiModel(model) || model;
+  return [
+    primary,
+    ...fallbackPlan(primary, fallbackModel).map((hop) => toPiModel(hop.id) || hop.id),
+  ].filter((candidate): candidate is string => typeof candidate === "string" && !!candidate);
+}
+
 export function remoteRunNeedsOpenai(
   model: string | undefined,
   fallbackModel?: string,
 ): boolean {
-  const primary = toPiModel(model) || model;
-  const reachable = [
-    primary,
-    ...fallbackPlan(primary, fallbackModel).map((hop) => toPiModel(hop.id) || hop.id),
-  ];
-  return reachable.some((candidate) => /^pi\/openai\//.test(candidate || ""));
+  return remoteReachableModels(model, fallbackModel).some((candidate) =>
+    /^pi\/openai\//.test(candidate),
+  );
+}
+
+export function remoteRunNeedsAnthropic(
+  model: string | undefined,
+  fallbackModel?: string,
+): boolean {
+  return remoteReachableModels(model, fallbackModel).some((candidate) =>
+    /^pi\/anthropic\//.test(candidate),
+  );
+}
+
+function remoteSettingsProviderIds(
+  model: string | undefined,
+  fallbackModel?: string,
+): Set<string> {
+  return new Set(
+    remoteReachableModels(model, fallbackModel)
+      .map(remoteModelProviderId)
+      .filter((id): id is string => !!id),
+  );
+}
+
+/** Strip host-only and unknown account fields before writing Claude tokens to a guest. */
+export function projectRemoteClaudeAccounts(accounts: ClaudeAccount[]): ClaudeAccount[] {
+  return accounts.map((account) => ({
+    id: account.id,
+    name: account.name,
+    token: account.token,
+    createdAt: account.createdAt,
+    ...(account.owner ? { owner: account.owner } : {}),
+  }));
 }
 
 /**
  * Project host Pi settings into fields consumed by an in-guest runner.
- * Third-party API keys are included only for an Pi-other launch. They
- * travel as one operator-managed scope because the in-turn fallback walk can
- * change provider without another launch boundary.
+ * Third-party API keys are included only for providers reachable by this
+ * launch's primary and fallback walk. Unreachable configured keys stay host-side.
  */
 export function projectRemoteModelProviderConfig(
   raw: unknown,
   model: string | undefined,
   trustProfile: "interactive" | "automation" = "interactive",
   pinnedAccountId?: string,
+  fallbackModel?: string,
 ): { content: string; settingsProviderIds: string[] } {
   const source = jsonRecord(raw);
   if (!source) throw new Error("Pi config must be a JSON object");
@@ -302,11 +341,11 @@ export function projectRemoteModelProviderConfig(
   }
 
   const settingsProviders: JsonRecord = {};
-  const selectedSettingsProvider = remoteModelProviderId(model);
-  if (selectedSettingsProvider) {
+  const reachableSettingsProviders = remoteSettingsProviderIds(model, fallbackModel);
+  if (reachableSettingsProviders.size) {
     for (const [id, value] of Object.entries(jsonRecord(source.providers) || {})) {
       if (id === "anthropic" || id === "openai") continue;
-      if (trustProfile === "automation" && id !== selectedSettingsProvider) continue;
+      if (!reachableSettingsProviders.has(id)) continue;
       const provider = jsonRecord(value);
       if (!provider) continue;
       const projected: JsonRecord = {};
@@ -524,6 +563,13 @@ function toHttpsUrl(origin: string): string | null {
   const ssh = origin.match(/^ssh:\/\/git@([^/]+)\/(.+?)(\.git)?$/);
   if (ssh) return `https://${ssh[1]}/${ssh[2]}.git`;
   return null;
+}
+
+function credentialFreeHttpsUrl(httpsUrl: string): string {
+  const parsed = new URL(httpsUrl);
+  parsed.username = "";
+  parsed.password = "";
+  return parsed.toString();
 }
 
 function injectToken(httpsUrl: string): string {
@@ -787,6 +833,14 @@ export async function bootstrapRemoteSandbox(
   await bootstrapRemoteBaseRuntime(driver, label);
 
   // Runner bundle: tarball if configured, else git clone at the pinned sha.
+  // Resolve the authenticated runner URL per bootstrap, use it only for the
+  // bounded clone/fetch commands, then leave a credential-free origin behind.
+  const runnerRepo = { id: "opensession", repo: REPO_ROOT, ghRepo: undefined };
+  const runnerCloneUrl = cfg.runnerBundleUrl
+    ? undefined
+    : cfg.runnerRepoUrl && toHttpsUrl(cfg.runnerRepoUrl)
+      ? injectToken(toHttpsUrl(cfg.runnerRepoUrl)!)
+      : await remoteCloneUrl(runnerRepo);
   const hasRepo = await driver.exec(`test -f ${REMOTE_REPO}/package.json`);
   if (hasRepo.exitCode !== 0) {
     if (cfg.runnerBundleUrl) {
@@ -799,15 +853,10 @@ export async function bootstrapRemoteSandbox(
         "runner bundle download",
       );
     } else {
-      const opensessionRepo = { id: "opensession", repo: REPO_ROOT, ghRepo: undefined };
-      const url =
-        cfg.runnerRepoUrl && toHttpsUrl(cfg.runnerRepoUrl)
-          ? injectToken(toHttpsUrl(cfg.runnerRepoUrl)!)
-          : await remoteCloneUrl(opensessionRepo);
-      log(`cloning runner repo ${redactUrl(url)}…`);
+      log(`cloning runner repo ${redactUrl(runnerCloneUrl!)}…`);
       need(
         await driver.exec(
-          `mkdir -p ${dirname(REMOTE_REPO)} && git clone -- ${shellQuoteWord(url)} ${REMOTE_REPO}`,
+          `mkdir -p ${dirname(REMOTE_REPO)} && git clone -- ${shellQuoteWord(runnerCloneUrl!)} ${REMOTE_REPO}`,
           { timeoutMs: 600_000 },
         ),
         "runner repo clone",
@@ -842,7 +891,7 @@ export async function bootstrapRemoteSandbox(
         log(`checking out pinned runnerSha ${cfg.runnerSha}…`);
         need(
           await driver.exec(
-            `git -C ${REMOTE_REPO} fetch --depth 1 origin ${shellQuoteWord(cfg.runnerSha)} 2>/dev/null; git -C ${REMOTE_REPO} checkout --detach ${shellQuoteWord(cfg.runnerSha)}`,
+            `git -C ${REMOTE_REPO} fetch --depth 1 ${shellQuoteWord(runnerCloneUrl!)} ${shellQuoteWord(cfg.runnerSha)} 2>/dev/null; git -C ${REMOTE_REPO} checkout --detach ${shellQuoteWord(cfg.runnerSha)}`,
             { timeoutMs: 300_000 },
           ),
           `checkout of pinned runnerSha ${cfg.runnerSha}`,
@@ -856,6 +905,15 @@ export async function bootstrapRemoteSandbox(
         }
       }
     }
+  }
+
+  if (runnerCloneUrl) {
+    need(
+      await driver.exec(
+        `git -C ${REMOTE_REPO} remote set-url origin ${shellQuoteWord(credentialFreeHttpsUrl(runnerCloneUrl))}`,
+      ),
+      "runner repo credential scrub",
+    );
   }
 
   log("bun install (this is the slow part — several minutes cold)…");
@@ -1333,12 +1391,17 @@ function makeRemoteLauncher(
     connector: (_dir, spec) => (spec.wsToken ? runWsConnector(spec.hostId) : undefined),
     async writeSpec(dir, spec) {
       mkdirSync(dir, { recursive: true });
-      writeJsonAtomic(`${dir}/${HOST_SPEC_NAME}`, spec); // host mirror (resume)
+      writeJsonAtomic(`${dir}/${HOST_SPEC_NAME}`, spec, true, 0o600); // host mirror (resume)
       const mk = await driver.exec(`mkdir -p ${shellQuoteWord(dir)}`);
       if (mk.exitCode !== 0) {
         throw new Error(`remote run dir create failed: ${mk.stderr.trim().slice(0, 300)}`);
       }
-      await driver.writeFile(`${dir}/${HOST_SPEC_NAME}`, JSON.stringify(spec));
+      const guestSpecPath = `${dir}/${HOST_SPEC_NAME}`;
+      await driver.writeFile(guestSpecPath, JSON.stringify(spec));
+      const secured = await driver.exec(`chmod 600 ${shellQuoteWord(guestSpecPath)}`);
+      if (secured.exitCode !== 0) {
+        throw new Error(`remote run spec chmod failed: ${secured.stderr.trim().slice(0, 300)}`);
+      }
     },
     async launch(hostId, dir) {
       const spec = readJsonSafe<RunHostSpec>(`${dir}/${HOST_SPEC_NAME}`);
@@ -1356,16 +1419,20 @@ function makeRemoteLauncher(
       if (automationProfile && !spec.accountId) {
         throw new Error("automation sandbox runs require a pinned model account");
       }
-      // Scoped Claude account upload — only what THIS run may use (pinned
-      // account, else pool + the run user's own personal accounts; see the
-      // module header). Rewritten every launch so pin/user changes apply and
-      // a previously-uploaded wider file never lingers.
-      const accounts = accountsForRemoteUpload(spec.user, spec.accountId);
-      if (automationProfile && !accounts.some((account) => account.id === spec.accountId)) {
-        const model = String(spec.model || "");
-        if (/^(?:claude-|pi\/anthropic\/)/.test(model)) {
-          throw new Error("the pinned automation account is not an eligible Claude account");
-        }
+      // Scoped Claude account upload. A run whose reachable model walk never
+      // enters Anthropic receives no Claude token. Otherwise an explicit pin
+      // narrows every trust profile, and the guest record drops host-only and
+      // unknown fields before serialization.
+      const usesAnthropic = remoteRunNeedsAnthropic(spec.model, spec.fallbackModel);
+      const accounts = usesAnthropic
+        ? projectRemoteClaudeAccounts(accountsForRemoteUpload(spec.user, spec.accountId))
+        : [];
+      if (
+        automationProfile &&
+        usesAnthropic &&
+        !accounts.some((account) => account.id === spec.accountId)
+      ) {
+        throw new Error("the pinned automation account is not an eligible Claude account");
       }
       // Resolve the run's MCP allowlist and dynamic credentials on the trusted
       // host, then project only those entries. Remote guests never receive the
@@ -1419,6 +1486,7 @@ function makeRemoteLauncher(
           spec.model,
           spec.trustProfile,
           spec.accountId,
+          spec.fallbackModel,
         );
         settingsProviderIds = projected.settingsProviderIds;
         await driver.writeFile(REMOTE_MODEL_PROVIDERS_CONFIG, projected.content);
@@ -1444,9 +1512,10 @@ function makeRemoteLauncher(
       // refresh token is the one rotating family shared with the host codex
       // CLI, and an in-sandbox refresh would rotate (= kill) the host copy.
       // Instead: (a) a scoped codex-accounts store so pickOpenaiAccount
-      // in-sandbox applies the same pool/openaiAccounts rules, and (b) the
-      // rotation-proof SEEDED artifact per home account (access-token-only +
-      // invalid placeholder refresh — buildOpenaiRemoteSeedUpload). Upload it
+      // in-sandbox applies the same pool/openaiAccounts rules, and (b) a raw
+      // key only for a selected API-key account, or the rotation-proof SEEDED
+      // artifact per home account (access-token-only plus an invalid placeholder
+      // refresh, built by buildOpenaiRemoteSeedUpload). Upload it
       // only when the selected model or its configured fallback can use
       // OpenAI. The fallback walk runs inside this same host, so waiting until
       // that hop would leave it without credentials.
@@ -1458,7 +1527,7 @@ function makeRemoteLauncher(
       const openaiUpload: ReturnType<typeof buildOpenaiRemoteSeedUpload> = usesOpenai
         ? buildOpenaiRemoteSeedUpload(
             listCodexAccounts(),
-            automationProfile && spec.accountId
+            spec.accountId
               ? [spec.accountId]
               : readModelProviderConfig()?.openaiAccounts,
             spec.user,
@@ -1498,9 +1567,10 @@ function makeRemoteLauncher(
           msg: "sandbox_openai_seed_upload",
           host_id: spec.hostId,
           session_id: spec.osSessionId,
-          mechanism: "oauth-subscription-seeded-remote",
+          mechanism: "scoped-openai-account-remote",
           accounts: openaiUpload.accounts.map((a) => maskOpenaiAccount(a)),
-          seeds: openaiUpload.seeds.length,
+          oauth_seeds: openaiUpload.seeds.length,
+          api_key_accounts: openaiUpload.accounts.filter((a) => a.kind === "api_key").length,
           skipped: openaiUpload.skipped.map(
             (s) => `${maskOpenaiAccount(s.account)}: ${s.reason}`,
           ),
@@ -1525,7 +1595,7 @@ function makeRemoteLauncher(
           OPENSESSION_RUN_JOURNAL: `${dir}/journal.json`,
           // Where bindOpenaiAccount finds the uploaded rotation-proof openai
           // seeds (only set when something was uploaded this launch).
-          ...(openaiUpload.accounts.length
+          ...(openaiUpload.seeds.length
             ? {
                 OPENSESSION_OPENAI_SEED_DIR: REMOTE_OPENAI_SEED_DIR,
               }

@@ -498,7 +498,7 @@ describe("runPi pi/openai account wiring (fake engine, no network)", () => {
     expect(err.usageLimitExhausted).toBe(true);
   });
 
-  test("api_key codex accounts are refused with a clear, unflagged error", async () => {
+  test("a pinned API-key account uses Pi's standard OpenAI runtime", async () => {
     writeFileSync(
       storePath,
       JSON.stringify({
@@ -507,89 +507,87 @@ describe("runPi pi/openai account wiring (fake engine, no network)", () => {
             id: "k1",
             name: "org-key",
             kind: "api_key",
-            value: "sk-test",
+            value: "sk-test-remote-runtime",
             createdAt: new Date().toISOString(),
           },
         ],
-      })
+      }),
     );
-    const events = await collect("pi/openai/gpt-5.6-sol");
-    const err = events.find((e) => e.type === "error")!;
-    expect(err).toBeDefined();
-    expect(String(err.content)).toMatch(/only API-key codex accounts are currently eligible/);
-    // Wrong account kind is a configuration wall, not an exhausted pool — it
-    // must not trigger the fallback walk.
-    expect(err.usageLimitExhausted).toBeUndefined();
-  });
 
-  test("mixed pool: an api_key pick is excluded and the home account is retried", async () => {
-    // Two accounts; whichever the HRW hash ranks first, the run must end up
-    // on the home account's path — never the api_key configuration wall.
-    // The home account here has no CODEX_HOME auth.json, so reaching
-    // buildSeededOpenaiAuth's distinct error IS the proof the re-pick landed
-    // on it.
-    const codexHome = join(dir, "codex-home-mixed");
-    mkdirSync(codexHome, { recursive: true });
-    writeFileSync(
-      storePath,
-      JSON.stringify({
-        accounts: [
-          {
-            id: "k1",
-            name: "org-key",
-            kind: "api_key",
-            value: "sk-test",
-            createdAt: new Date().toISOString(),
+    const runtimeKeys: Array<[string, string]> = [];
+    const fakeSdk = {
+      ModelRuntime: {
+        create: async () => ({
+          getModel: (_provider: string, id: string) => ({ id, name: id }),
+          registerProvider: () => {},
+          setRuntimeApiKey: async (provider: string, key: string) => {
+            runtimeKeys.push([provider, key]);
           },
-          {
-            id: "h1",
-            name: "home-acct",
-            kind: "home",
-            value: codexHome,
-            createdAt: new Date().toISOString(),
+        }),
+      },
+      SettingsManager: { inMemory: () => ({}) },
+      DefaultResourceLoader: class {
+        async reload() {}
+        getSkills() {
+          return { skills: [] };
+        }
+      },
+      SessionManager: { create: () => ({}), open: () => ({}) },
+      createAgentSession: async () => {
+        let listener: (event: any) => void = () => {};
+        const session = {
+          sessionId: "fake-api-key",
+          pendingMessageCount: 0,
+          agent: { continue: async () => {} },
+          setSteeringMode: () => {},
+          subscribe: (fn: (event: any) => void) => {
+            listener = fn;
+            return () => {};
           },
-        ],
-      })
-    );
-    const events = await collect("pi/openai/gpt-5.6-sol");
-    const err = events.find((e) => e.type === "error")!;
-    expect(err).toBeDefined();
-    // The home account's failure mode (unreadable seed), not the api_key wall.
-    expect(String(err.content)).not.toMatch(/API-key/);
-    expect(err.usageLimitExhausted).toBe(true);
-  });
+          prompt: async () => {
+            listener({
+              type: "message_end",
+              message: {
+                role: "assistant",
+                stopReason: "stop",
+                usage: {
+                  input: 1,
+                  output: 1,
+                  cacheRead: 0,
+                  cacheWrite: 0,
+                  cost: { total: 0 },
+                },
+                content: [{ type: "text", text: "ok" }],
+                timestamp: Date.now(),
+              },
+            });
+            listener({ type: "agent_settled" });
+          },
+          getLastAssistantText: () => "ok",
+          steer: async () => {},
+          abort: async () => {},
+          abortRetry: () => {},
+          dispose: () => {},
+        };
+        return { session };
+      },
+    };
 
-  test("explicitly pinned api_key account errors clearly instead of re-picking", async () => {
-    const codexHome = join(dir, "codex-home-pin");
-    mkdirSync(codexHome, { recursive: true });
-    writeFileSync(
-      storePath,
-      JSON.stringify({
-        accounts: [
-          {
-            id: "k1",
-            name: "org-key",
-            kind: "api_key",
-            value: "sk-test",
-            createdAt: new Date().toISOString(),
-          },
-          {
-            id: "h1",
-            name: "home-acct",
-            kind: "home",
-            value: codexHome,
-            createdAt: new Date().toISOString(),
-          },
-        ],
-      })
-    );
-    const events = await collect("pi/openai/gpt-5.6-sol", { accountId: "k1" });
-    const err = events.find((e) => e.type === "error")!;
-    expect(err).toBeDefined();
-    // A pin is an explicit choice — surface the configuration error, never
-    // silently hop to another account.
-    expect(String(err.content)).toMatch(/pinned codex account .* is an API-key account/);
-    expect(err.usageLimitExhausted).toBeUndefined();
+    const sdkState = globalThis as any;
+    const previousSdkPromise = sdkState.__piSdkPromise;
+    sdkState.__piSdkPromise = Promise.resolve(fakeSdk);
+    try {
+      const events = await collect("pi/openai/gpt-5.6-sol", {
+        accountId: "k1",
+        accountStrict: true,
+        disableLocalWorkspaceTools: true,
+      });
+      expect(runtimeKeys).toEqual([["openai", "sk-test-remote-runtime"]]);
+      expect(events.filter((event) => event.type === "error")).toHaveLength(0);
+      expect(events.find((event) => event.type === "done")).toMatchObject({ result: "ok" });
+    } finally {
+      sdkState.__piSdkPromise = previousSdkPromise;
+    }
   });
 
   test("expired ChatGPT access token → flagged terminal (dry-pool parity)", async () => {
@@ -693,7 +691,13 @@ describe("runPi pi/openai account wiring (fake engine, no network)", () => {
       JSON.stringify({
         accounts: [
           servingHomeAccount("live-a", "provider-a"),
-          servingHomeAccount("live-b", "provider-b"),
+          {
+            id: "live-b",
+            name: "live-b",
+            kind: "api_key",
+            value: "sk-provider-b",
+            createdAt: new Date().toISOString(),
+          },
         ],
       })
     );
@@ -707,6 +711,11 @@ describe("runPi pi/openai account wiring (fake engine, no network)", () => {
             providerAccountId: String(auth?.accountId || ""),
             getModel: (_provider: string, id: string) => ({ id, name: id }),
             registerProvider: () => {},
+            setRuntimeApiKey: async (provider: string, key: string) => {
+              if (provider === "openai" && key === "sk-provider-b") {
+                runtime.providerAccountId = "provider-b";
+              }
+            },
           };
           return runtime;
         },
@@ -714,6 +723,9 @@ describe("runPi pi/openai account wiring (fake engine, no network)", () => {
       SettingsManager: { inMemory: () => ({}) },
       DefaultResourceLoader: class {
         async reload() {}
+        getSkills() {
+          return { skills: [] };
+        }
       },
       SessionManager: {
         create: () => ({}),
