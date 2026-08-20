@@ -339,6 +339,22 @@
 	--chip-ask-fg: #e3b341;
 	--mono: "SF Mono", ui-monospace, "JetBrains Mono", Menlo, Consolas, monospace;
 	--sans: -apple-system, BlinkMacSystemFont, "Inter", "Segoe UI", sans-serif;
+	/* The web keeps desktop's compact metrics, while a phone promotes every role
+	   one rung. These are real custom properties, rather than values written
+	   directly into Tailwind's @theme block, so the same utility can follow the
+	   viewport without a `phone:` override at every call site. Raw markdown and
+	   inherited UI text read these too, which keeps the whole scale together. */
+	--type-root: 14px;
+	--type-meta: 11px;
+	--type-label: 13px;
+	--type-item-title: 14px;
+	--type-body: 15px;
+	--type-dialog-title: 17px;
+	--type-section-title: 19px;
+	--type-page-title: 24px;
+	--type-stat: 28px;
+	--type-stat-line: 32px;
+	--type-input-phone: 16px;
 	/* The weight a title takes: a page's own name, and the headings under it.
 	   It is a token rather than a fixed utility because the right weight is not
 	   the same in both themes. Light text on a dark page blooms, putting more
@@ -855,6 +871,27 @@ html[data-accent="green"] {
 			0 4px 20px rgba(0, 0, 0, 0.08);
 	}
 }
+
+/* The native iPhone UI reads transcript prose at 17pt. At phone width the PWA
+   promotes every semantic role to the next rung of its existing scale, so its
+   15px body does not look like a shrunken desktop UI beside the native app.
+   Inputs join the body at 17px, still above Safari's 16px zoom threshold. */
+@media (max-width: 720px) {
+	:root {
+		--type-root: 15px;
+		--type-meta: 13px;
+		--type-label: 14px;
+		--type-item-title: 15px;
+		--type-body: 17px;
+		--type-dialog-title: 19px;
+		--type-section-title: 24px;
+		--type-page-title: 28px;
+		--type-stat: 34px;
+		--type-stat-line: 38px;
+		--type-input-phone: 17px;
+	}
+}
+
 html[data-theme="light"] .markdown code {
 	background: rgba(149, 59, 57, 0.09);
 	color: #953b39;
@@ -932,7 +969,7 @@ body {
 	background: var(--bg);
 	color: var(--text);
 	font-family: var(--sans);
-	font-size: 14px;
+	font-size: var(--type-root);
 	/* Medium is the app's regular. Metadata and supporting copy are the
 	   exceptions: they render at 400 so their secondary text stays quiet and
 	   their smaller strokes do not close up. Bold accents stay 600/700. */
@@ -1433,13 +1470,13 @@ html.wco .app-body.sidebar-collapsed .wco-chrome {
 /* Full automated-review preview: a readable long-form scale, bounded by the
    popover rather than the viewport, with the same theme tokens as markdown. */
 .review-preview-markdown.markdown {
-	font-size: 15px;
+	font-size: var(--type-body);
 	line-height: 1.5;
 	color: var(--text-dim);
 }
 .review-preview-markdown.markdown > h3:first-child {
 	margin: 0 0 12px;
-	font-size: 19px;
+	font-size: var(--type-section-title);
 	font-weight: 600;
 	line-height: 1.25;
 	letter-spacing: -0.015em;
@@ -1786,19 +1823,19 @@ html[data-theme="light"] .composer-hl .cmp-fence {
 	color: var(--text);
 }
 .markdown h1 {
-	font-size: 19px;
+	font-size: var(--type-section-title);
 	letter-spacing: -0.018em;
 }
 .markdown h2 {
-	font-size: 17px;
+	font-size: var(--type-dialog-title);
 	letter-spacing: -0.016em;
 }
 /* The deepest two levels share the body size and are told apart by weight and
-   the space above them, which is what the scale has: 19 / 17 / body. A step of
-   its own for h4 only bought a size nobody could see. */
+   the space above them, which is what the scale has: section / dialog / body.
+   A step of its own for h4 only bought a size nobody could see. */
 .markdown h3,
 .markdown h4 {
-	font-size: 15px;
+	font-size: var(--type-body);
 }
 
 .markdown > :first-child {
@@ -1825,14 +1862,14 @@ html[data-theme="light"] .composer-hl .cmp-fence {
 .markdown table {
 	border-collapse: collapse;
 	margin: 2px 0 10px;
-	font-size: 13px;
+	font-size: var(--type-label);
 	display: block;
 	overflow-x: auto;
 	max-width: 100%;
 }
 .markdown th {
 	text-align: left;
-	font-size: 11px;
+	font-size: var(--type-meta);
 	font-weight: 600;
 	letter-spacing: -0.01em;
 	color: var(--text-faint);
@@ -2557,21 +2594,21 @@ html[data-theme="light"] span.commit-ref:hover {
    sitting later — keep them below that block. */
 .wiki-doc {
 	max-width: 780px;
-	font-size: 15px;
+	font-size: var(--type-body);
 	line-height: 1.65;
 }
 .wiki-doc h1 {
-	font-size: 19px;
+	font-size: var(--type-section-title);
 	margin: 0 0 14px;
 }
 .wiki-doc h2 {
-	font-size: 17px;
+	font-size: var(--type-dialog-title);
 	margin: 22px 0 10px;
 }
 .wiki-doc h3 {
 	/* Body size, the same as `.markdown h3`: weight and the space above carry
 	   it. Restated here only because this block re-declares its own margins. */
-	font-size: 15px;
+	font-size: var(--type-body);
 	margin: 18px 0 8px;
 }
 .wiki-doc img {
