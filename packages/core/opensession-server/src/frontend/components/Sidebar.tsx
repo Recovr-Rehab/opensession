@@ -54,7 +54,6 @@ import {
 	SIDEBAR_STUCK_BACKING,
 	SIDEBAR_SWIPE_ACTION,
 	SIDEBAR_SWIPE_ACTION_ARCHIVE,
-	SIDEBAR_SWIPE_ACTION_SNOOZE,
 	SIDEBAR_SWIPE_ACTION_OPEN,
 	SIDEBAR_SWIPE_ACTION_STAR,
 	SIDEBAR_SWIPE_ACTION_STAR_ON,
@@ -271,6 +270,7 @@ import {
 	editableOwnsCaretChord,
 	editableSwallowsArchiveChord,
 	fullSwipeThreshold,
+	swipeActionForOffset,
 	swipeCommitOffset,
 	type SwipeAction,
 	type SwipeState,
@@ -2392,7 +2392,7 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 					"--swipe-action-w",
 					`${Math.max(SWIPE_REVEAL_PX, Math.abs(offset))}px`,
 				);
-				setWsDragSide(offset < 0 ? "snooze" : offset > 0 ? "star" : null);
+				setWsDragSide(swipeActionForOffset(offset));
 				return;
 			}
 		}
@@ -2446,23 +2446,24 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 		// React never owned them, so a re-render with an undefined style prop
 		// won't remove them. Clear here; the committed wsSwipe state (if any)
 		// re-applies them through the style props on this same flush.
-		const rowEl = e.currentTarget as HTMLElement;
+		const rowEl = e.currentTarget as HTMLButtonElement;
 		rowEl.style.removeProperty("--swipe-x");
 		rowEl.parentElement?.style.removeProperty("--swipe-action-w");
 		if (rowRenameEditing(row)) return;
 		if (wasSwiping) {
 			e.preventDefault();
 			if (Math.abs(swipeOffset) >= fullSwipeThreshold(rowWidth)) {
-				const action: SwipeAction = swipeOffset < 0 ? "snooze" : "star";
+				const action = swipeActionForOffset(swipeOffset);
+				if (!action) return;
 				setWsSwipe({
 					key: row.key,
 					offset: swipeCommitOffset(action, rowWidth),
 					action,
 				});
 				window.setTimeout(() => {
-					if (action === "snooze") {
+					if (action === "archive") {
 						if (isDraftWsRow(row)) deleteDraftWsRow(row);
-						else toggleWorkspaceSnooze(row);
+						else archiveWorkspaceWithNext(row, rowEl);
 					} else {
 						workspacePinState(row).toggle();
 						setWsSwipe({ key: row.key, offset: 0, action });
@@ -2869,8 +2870,8 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 		// committing row falls back to the reconciled wsSwipe state.
 		const swipeSide: SwipeAction | null = draggingRow
 			? wsDragSide
-			: swipeAction === "snooze" || swipeOffset < 0
-				? "snooze"
+			: swipeAction === "archive" || swipeOffset < 0
+				? "archive"
 				: swipeAction === "star" || swipeOffset > 0
 					? "star"
 					: null;
@@ -2909,31 +2910,31 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 					<button
 						className={cn(
 							SIDEBAR_SWIPE_ACTION,
-							SIDEBAR_SWIPE_ACTION_SNOOZE,
-							swipeSide === "snooze" && SIDEBAR_SWIPE_ACTION_OPEN,
+							SIDEBAR_SWIPE_ACTION_ARCHIVE,
+							swipeSide === "archive" && SIDEBAR_SWIPE_ACTION_OPEN,
 							draggingRow ? "transition-none" : SIDEBAR_SWIPE_ACTION_TRANSITION,
 						)}
-						data-swipe-action={snoozed ? "unsnooze" : "snooze"}
+						data-swipe-action="archive"
 						onClick={(e) => {
 							e.stopPropagation();
 							setWsSwipe(null);
-							toggleWorkspaceSnooze(row);
+							archiveWorkspaceWithNext(row);
 						}}
-						title={snoozed ? "Unsnooze workspace" : "Snooze workspace until Some day"}
+						title="Archive workspace"
 					>
-						<IconMoon size={22} />
-						<span>{snoozed ? "Unsnooze" : "Snooze"}</span>
+						<IconArchive size={22} />
+						<span>Archive</span>
 					</button>
 				)}
-				{/* A draft row's left swipe deletes instead of snoozing: it has no
-				    session lifecycle yet, and the confirm-on-delete elsewhere (right-click,
+				{/* A draft row's left swipe deletes instead: it has no session
+				    lifecycle yet, and the confirm-on-delete elsewhere (right-click,
 				    long-press sheet) would defeat the point of a swipe. */}
 				{isPhone && isDraftWsRow(row) && (
 					<button
 						className={cn(
 							SIDEBAR_SWIPE_ACTION,
 							SIDEBAR_SWIPE_ACTION_ARCHIVE,
-							swipeSide === "snooze" && SIDEBAR_SWIPE_ACTION_OPEN,
+							swipeSide === "archive" && SIDEBAR_SWIPE_ACTION_OPEN,
 							draggingRow ? "transition-none" : SIDEBAR_SWIPE_ACTION_TRANSITION,
 						)}
 						data-swipe-action="delete"
