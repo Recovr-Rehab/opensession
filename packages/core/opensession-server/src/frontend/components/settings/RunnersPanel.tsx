@@ -185,7 +185,7 @@ function RunnerRow({ runner, admin, busy, onChange, onRevoke }: { runner: Runner
 	const labelRef = useRef<HTMLInputElement>(null);
 	return <>
 		<SettingCard>
-			<div className="grid grid-cols-[minmax(0,1fr)_5.75rem] gap-x-4 gap-y-3 px-5 py-4 desktop:grid-cols-[minmax(0,1fr)_13rem]">
+			<div className="grid grid-cols-[minmax(0,1fr)_5.75rem] gap-x-4 px-5 py-4 desktop:grid-cols-[minmax(0,1fr)_13rem]">
 				<div className="col-start-1 row-start-1 flex min-w-0 items-start gap-3">
 					<RunnerIcon />
 					<div className="min-w-0 flex-1">
@@ -203,8 +203,8 @@ function RunnerRow({ runner, admin, busy, onChange, onRevoke }: { runner: Runner
 					</div>
 				</div>
 				{admin && (
-					<div className="col-span-2 row-start-2 flex justify-end">
-						<Button size="sm" onClick={() => setEditing(true)}>Details</Button>
+					<div className="col-start-2 row-start-1 flex justify-end self-start">
+						<Button size="sm" onClick={() => setEditing(true)}>Configure</Button>
 					</div>
 				)}
 			</div>
