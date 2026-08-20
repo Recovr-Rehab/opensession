@@ -2742,6 +2742,11 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 		} else {
 			runStartSeen.current.delete(row.key);
 		}
+		// Activity-banded layouts must show the timestamp they actually rank by.
+		// A run-duration number in that slot makes a correctly sorted list look
+		// wrong (for example, "31m" above "1m"). Status lanes answer a different
+		// question, so they keep the useful live duration there.
+		const showRunDuration = runStartMs !== null && filter.groupBy === "status";
 		const swipeOffset = isPhone && wsSwipe?.key === row.key ? wsSwipe.offset : 0;
 		const swipeAction = isPhone && wsSwipe?.key === row.key ? wsSwipe.action : null;
 		const draggingRow = wsDraggingKey === row.key;
@@ -3076,24 +3081,24 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 							</span>
 						);
 					})()}
-				{/* A live workspace run always earns its elapsed ticker. Idle timestamps
-				    are reserved for standalone sessions, so an automation review does not
-				    make its PR workspace look recently active. */}
-				{runStartMs !== null && <RunTicker startMs={runStartMs} />}
+				{/* Status lanes use elapsed run time. Activity-banded layouts use the
+				    last-activity stamp below, so the visible number matches their sort. */}
+				{showRunDuration && runStartMs !== null && (
+					<RunTicker startMs={runStartMs} />
+				)}
 				{snoozeIso && !editing && (
 					// A ticker ahead of it has already pushed the cluster right; a
 					// second auto margin would split the free space between them.
 					<SnoozeBadge
 						until={snoozeIso}
-						className={runStartMs !== null ? "ml-1.5" : undefined}
+						className={showRunDuration ? "ml-1.5" : undefined}
 					/>
 				)}
-				{!isPhone &&
-					// Date-banded modes earn a timestamp on every row: the band says
-					// which day, the stamp says when within it. (Inbox bands under a
-					// project band render compact rows, so they ask for the time
-					// here rather than on the row's own second line.)
-					(inbox || groupsByRepo || !row.workspace) &&
+				{/* Date-banded modes earn a timestamp on every row: the band says
+				    which day, the stamp says when within it. Inbox bands under a
+				    project band render compact rows, so they ask for the time here
+				    rather than on the row's own second line. */}
+				{(inbox || groupsByRepo || !row.workspace) &&
 					!snoozeIso &&
 					wsTimePref !== "off" &&
 					row.lastActivity && (
@@ -3102,13 +3107,11 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 								SIDEBAR_WS_TIME,
 								wsTimePref === "hover" && SIDEBAR_WS_TIME_HOVER,
 								// The "hover" mode (the default) shows the badge only under
-								// the pointer, and a running row hides the idle badge either
-								// way — its live ticker owns the resting slot. On touch there
-								// is no hover, so the hover-mode badge shows inline like
-								// "always"; a running row still keeps just its ticker.
-								runStartMs !== null && "hidden",
+								// the pointer. On touch there is no hover, so it shows inline
+								// like "always". A status-lane run keeps its duration instead.
+								showRunDuration && "hidden",
 								wsTimePref === "hover" &&
-									runStartMs === null &&
+									!showRunDuration &&
 									"[@media(hover:none)]:inline-flex",
 							)}
 							data-ws-time=""
@@ -3125,7 +3128,7 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 							SIDEBAR_WS_DRAFT,
 							// The pencil pins itself to the row's right edge unless a
 							// ticker or a snooze countdown already did that pushing.
-							runStartMs !== null || snoozeIso ? "ml-1.5" : "ml-auto",
+							showRunDuration || snoozeIso ? "ml-1.5" : "ml-auto",
 							"group-hover:hidden",
 						)}
 						data-ws-draft=""
