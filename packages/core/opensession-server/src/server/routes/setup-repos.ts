@@ -12,6 +12,7 @@ import { $ } from "bun";
 import { chmodSync, existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "fs";
 import { tmpdir } from "os";
 import { join, resolve as resolvePath } from "path";
+import { SHIM_PATH } from "../../../../../../scripts/lib/paths";
 import { audit } from "../audit";
 import { codeStorageConfig, configuredRepos, type RepoSection } from "../config";
 import { getRepo as getCsRepo, listRepos as listCsRepos } from "../codestorage/client";
@@ -314,10 +315,28 @@ const GH_CREDENTIAL_SCRIPT = resolvePath(
  * list for this URL scope, then the minting helper. `--replace-all` keeps
  * re-runs from stacking duplicates.
  */
+function shellQuoteWord(word: string): string {
+  if (/^[A-Za-z0-9_@%+=:,./-]+$/.test(word)) return word;
+  return `'${word.replaceAll("'", `'\''`)}'`;
+}
+
+/**
+ * Use the stable installed command so a compiled release needs neither Bun nor
+ * a scripts sidecar. The source-tree fallback keeps direct development runs
+ * useful before install.sh has created the shim.
+ */
+export function githubCredentialHelperCommand(
+  shimPath = SHIM_PATH,
+  shimExists = existsSync(shimPath),
+): string {
+  if (shimExists) return `!${shellQuoteWord(shimPath)} github-credential`;
+  return `!bun ${shellQuoteWord(GH_CREDENTIAL_SCRIPT)}`;
+}
+
 async function configureGithubCredentialHelper(checkoutPath: string): Promise<void> {
   const key = "credential.https://github.com.helper";
   await $`git -C ${checkoutPath} config --replace-all ${key} ${""}`.quiet();
-  await $`git -C ${checkoutPath} config --add ${key} ${`!bun ${GH_CREDENTIAL_SCRIPT}`}`.quiet();
+  await $`git -C ${checkoutPath} config --add ${key} ${githubCredentialHelperCommand()}`.quiet();
 }
 
 async function registerGithubRepo(input: {

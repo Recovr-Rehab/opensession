@@ -375,6 +375,14 @@ async function main(): Promise<number> {
       if (positional[0] === "remove") return await runnersRemove(positional[1] ?? "");
       return await runnersList();
 
+    // Internal git credential-helper entrypoint. It stays out of --help, but is
+    // routed through the installed command so compiled releases need no Bun or
+    // source-tree sidecar.
+    case "github-credential": {
+      const { githubCredentialHelper } = await import("./lib/github-credential");
+      return await githubCredentialHelper(positional[0]);
+    }
+
     case "version":
     case "--version":
     case "-v":
