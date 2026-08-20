@@ -10,7 +10,7 @@ import { requestUser, type RouteContext } from "./context";
 import { cancelAgentRun, isAgentSessionBusy } from "../agent-runner";
 import { archiveOlderThan, setArchived, unpinArchivedSessions } from "../archive";
 import { audit } from "../audit";
-import { pendingAsks } from "../asks";
+import { pendingAskAwaitingAnswer } from "../asks";
 import { transcriptMatchSnippet } from "../jsonl-parser";
 import {
 	classifyEntries,
@@ -316,7 +316,7 @@ function enrichSession(s: UnifiedSession) {
 		...(s.workspaceId
 			? { workspaceName: workspaceName(s.workspaceId) ?? undefined }
 			: {}),
-		waitingForInput: pendingAsks.has(s.id),
+		waitingForInput: !!pendingAskAwaitingAnswer(s.id),
 		queuedCount: promptQueues.get(s.id)?.length || 0,
 		// Present on the list AND on the detail response, so one rule reads the
 		// same either side of a hydrate. `undefined` rather than `false`: it is

@@ -9,7 +9,7 @@ import type { WebSocketHandler } from "bun";
 import type { WSClientData } from "./ws-hub";
 import { cancelAgentRun, interruptAndSteerAgentRun, isAgentSessionBusy, steerAgentRun } from "./agent-runner";
 import { audit } from "./audit";
-import { pendingAsks } from "./asks";
+import { pendingAskAwaitingAnswer } from "./asks";
 import { resendPendingSlackComposer } from "./slack-compose";
 import { notifyMentions } from "./mentions";
 import { startWatching, stopAllWatchesForClient, transcriptRev } from "./file-watcher";
@@ -81,7 +81,7 @@ function sendWatchExtras(
 	sessionId: string,
 	session: NonNullable<ReturnType<typeof findSession>>,
 ): void {
-	const pendingAsk = pendingAsks.get(sessionId);
+	const pendingAsk = pendingAskAwaitingAnswer(sessionId);
 	if (pendingAsk) {
 		ws.send(
 			JSON.stringify({
@@ -1174,7 +1174,7 @@ export const websocketHandlers: WebSocketHandler<WSClientData> = {
 
 			case "answer_question": {
 				const { sessionId, questionId, answers } = msg;
-				const pending = pendingAsks.get(sessionId);
+				const pending = pendingAskAwaitingAnswer(sessionId);
 				if (pending && pending.questionId === questionId) {
 					pending.resolve(
 						answers && typeof answers === "object" ? answers : null,

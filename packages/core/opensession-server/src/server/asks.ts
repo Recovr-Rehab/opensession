@@ -60,6 +60,16 @@ export interface PendingAsk {
 export const pendingAsks: Map<string, PendingAsk> = (g.__pendingAsks ??=
 	new Map());
 
+/** The durable map may retain a restored ask after its answer arrives, until
+ * the detached run host reconnects and adopts that answer. That recovery
+ * record is not still actionable and must never be projected back as a card. */
+export function pendingAskAwaitingAnswer(
+	sessionId: string,
+): PendingAsk | undefined {
+	const pending = pendingAsks.get(sessionId);
+	return pending?.answerReceived ? undefined : pending;
+}
+
 type PersistedPendingAsk = {
 	sessionId: string;
 	questionId: string;

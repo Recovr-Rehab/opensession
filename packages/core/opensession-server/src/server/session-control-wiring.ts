@@ -18,7 +18,7 @@
 import { AUTO_CONTINUE_USER } from "./auto-continue";
 import { personaName } from "./config";
 import { cancelAgentRun, isAgentSessionBusy, steerAgentRun } from "./agent-runner";
-import { pendingAsks } from "./asks";
+import { pendingAskAwaitingAnswer } from "./asks";
 import { relinkAskThreads } from "./human-asks";
 import { SESSION_EFFORTS, type SessionEffort, interactiveDefaultModel, providerFor, resolveModel } from "./models";
 import { liftUserStop, promptQueues, recordSteer, requeueSteerReceipts, stoppedSessions } from "./queue-state";
@@ -50,7 +50,7 @@ function buildSummary(s: UnifiedSession): SessionSummary {
 	// External runs (CLI in tmux, another process) show as running via PID but
 	// aren't in our activeRuns — observe-only, can't steer/cancel them.
 	const runningExternal = !!s.isRunning && !busyHere;
-	const pending = pendingAsks.get(s.id);
+	const pending = pendingAskAwaitingAnswer(s.id);
 	const queuedCount = promptQueues.get(s.id)?.length || 0;
 
 	let state: SessionState;
@@ -105,7 +105,7 @@ registerSessionControl({
 	},
 
 	answerQuestion: (id, answers) => {
-		const pending = pendingAsks.get(id);
+		const pending = pendingAskAwaitingAnswer(id);
 		if (!pending) return false;
 		// resolve() clears the timeout, deletes the entry and unblocks makeAskHandler,
 		// which broadcasts ask_resolved and lets the run continue with these answers.

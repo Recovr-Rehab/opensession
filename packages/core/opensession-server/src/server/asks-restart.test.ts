@@ -4,6 +4,7 @@ import { tmpdir } from "os";
 import { join } from "path";
 import {
 	makeAskHandler,
+	pendingAskAwaitingAnswer,
 	pendingAsks,
 	pendingAskTimers,
 	restorePendingAsks,
@@ -154,6 +155,9 @@ describe("pending ask restart persistence", () => {
 			answerReceived: true,
 			earlyAnswer: { "Which option?": "One" },
 		});
+		// The recovery record stays durable until the run host adopts it, but a
+		// reconnecting web or native client must not receive the card again.
+		expect(pendingAskAwaitingAnswer(SESSION)).toBeUndefined();
 		const persisted = JSON.parse(readFileSync(storePath, "utf8"));
 		expect(persisted.asks[0]).toMatchObject({
 			questionId: "q-early",
@@ -178,6 +182,7 @@ describe("pending ask restart persistence", () => {
 			answerReceived: true,
 			earlyAnswer: { "Which option?": "One" },
 		});
+		expect(pendingAskAwaitingAnswer(SESSION)).toBeUndefined();
 		expect(pendingAskTimers.has(SESSION)).toBe(false);
 		expect(sent).not.toContainEqual(expect.objectContaining({ type: "ask_question" }));
 
