@@ -193,13 +193,15 @@ describe("session social card", () => {
 		expect(svg).toContain('<rect width="1200" height="630" fill="#FFFFFF"/>');
 		expect(svg).not.toContain("aurora");
 		expect(svg).not.toContain("shotFade");
-		expect(svg).toContain('fill="#050609" font-size="44"');
-		// The title owns the left edge. The repo moves into metadata with a tile
-		// exactly the same size and squircle geometry as the owner avatar.
-		expect(svg).toContain('<clipPath id="repoClip"><path d="M');
+		expect(svg).toContain('fill="#050609" font-size="40"');
+		// The title owns the left edge. Owner and repo share one metadata row,
+		// with matching squircles overlapped into one compact identity cluster.
+		expect(svg).toContain(
+			'<clipPath id="repoClip" clipPathUnits="userSpaceOnUse"><path d="M',
+		);
 		expect(svg).toContain('<text x="56"');
 		expect(svg).toContain(">O</text>");
-		expect(svg).toContain(">opensession</text>");
+		expect(svg).toContain(">Test &quot;Person&quot; · opensession</text>");
 		expect(svg).toContain('fill-opacity="0.52"');
 		expect(svg).toContain('<circle cx="12" cy="7.6" r="3.7"');
 		expect(svg).not.toContain("gpt-5.6-sol");
@@ -208,7 +210,7 @@ describe("session social card", () => {
 		expect(svg).not.toContain("Fix <cards>");
 	});
 
-	test("places matching owner and repo squircles below a two-line title", () => {
+	test("overlaps matching owner and repo squircles below a two-line title", () => {
 		const svg = sessionSocialCardSvg(
 			{
 				title: "A visual session with a useful second line",
@@ -219,26 +221,24 @@ describe("session social card", () => {
 			["A visual session with", "a useful second line"],
 			"banner",
 		);
-		expect(svg).toContain('<text x="56" y="42"');
-		expect(svg).toContain('<text x="56" y="90"');
+		expect(svg).toContain('<text x="56" y="59"');
+		expect(svg).toContain('<text x="56" y="103"');
 		expect(svg).toContain(
-			'<image href="data:image/png;base64,avatar" x="56" y="122" width="28" height="28"',
+			'<image href="data:image/png;base64,avatar" x="56" y="135" width="28" height="28"',
 		);
 		expect(svg).toContain(
-			'<text x="92" y="137" dominant-baseline="middle"',
+			'<text x="112" y="150" dominant-baseline="middle"',
 		);
-		expect(svg).toContain(
-			'<text x="92" y="169" dominant-baseline="middle"',
+		expect(svg).toContain(">Test Person · opensession</text>");
+		expect(svg).toMatch(
+			/<clipPath id="avatarClip" clipPathUnits="userSpaceOnUse"><path d="M68\.88 135\.00L/,
 		);
 		expect(svg).toMatch(
-			/<clipPath id="avatarClip"><path d="M68\.88 122\.00L/,
-		);
-		expect(svg).toMatch(
-			/<clipPath id="repoClip"><path d="M68\.88 154\.00L/,
+			/<clipPath id="repoClip" clipPathUnits="userSpaceOnUse"><path d="M86\.88 135\.00L/,
 		);
 	});
 
-	test("overlaps up to two rounded 16:9 screenshots", () => {
+	test("fans up to two rounded 16:9 screenshots from the bottom edge", () => {
 		const svg = sessionSocialCardSvg(
 			{
 				title: "A visual session",
@@ -256,18 +256,32 @@ describe("session social card", () => {
 			],
 		);
 		expect(svg).toContain(
-			'<image href="data:image/png;base64,primary" x="882" y="14.5" width="304" height="171"',
+			'<image href="data:image/png;base64,primary" x="882" y="43" width="304" height="171"',
 		);
 		expect(svg).toContain(
-			'<image href="data:image/png;base64,secondary" x="810" y="22.5" width="304" height="171"',
+			'<image href="data:image/png;base64,secondary" x="810" y="51" width="304" height="171"',
 		);
 		expect(svg).not.toContain("ignored");
+		expect(svg).toContain('transform="rotate(-5 962 222)"');
+		expect(svg).toContain('transform="rotate(2 1034 214)"');
 		expect(svg).toContain(
-			'<clipPath id="shotClip1"><path d="M832.00 22.50L1092.00 22.50',
+			'<clipPath id="shotClip1" clipPathUnits="userSpaceOnUse"><path d="M832.00 51.00L1092.00 51.00',
 		);
-		expect(svg).toContain('filter="url(#shotShadow)"');
+		expect(svg).toContain('result="ambient"');
+		expect(svg).toContain('result="contact"');
 		expect(304 / 171).toBe(16 / 9);
 		expect(svg).not.toContain("gradient");
+
+		const single = sessionSocialCardSvg(
+			{ title: "One screenshot", owner: "Test Person" },
+			"",
+			["One screenshot"],
+			"banner",
+			"",
+			["data:image/png;base64,primary"],
+		);
+		expect(single).toContain('x="882" y="14.5" width="304" height="171"');
+		expect(single).not.toContain('transform="rotate(');
 	});
 
 	test("renders a 1200 by 630 PNG", async () => {
@@ -296,7 +310,7 @@ describe("session social card", () => {
 		expect(output).toContain("<title>Ship dynamic social cards · Open Session</title>");
 		expect(output).toContain('content="summary_large_image"');
 		expect(output).toMatch(
-			/content="https:\/\/media\.example\.test\/session-card\/sess-social-1\/[A-Za-z0-9_-]{32}\.png\?v=10"/,
+			/content="https:\/\/media\.example\.test\/session-card\/sess-social-1\/[A-Za-z0-9_-]{32}\.png\?v=11"/,
 		);
 		expect(output).toContain(
 			'property="og:url" content="https://os.example.test/session/sess-social-1"',
@@ -310,13 +324,13 @@ describe("session social card", () => {
 		).toBe("sess-social-1");
 		expect(socialSessionIdFromPath("/settings")).toBeNull();
 		expect(sessionSocialCardUrl("sess-social-1")).toMatch(
-			/^https:\/\/media\.example\.test\/session-card\/sess-social-1\/[A-Za-z0-9_-]{32}\.png\?v=10$/,
+			/^https:\/\/media\.example\.test\/session-card\/sess-social-1\/[A-Za-z0-9_-]{32}\.png\?v=11$/,
 		);
 	});
 
 	test("signs ids containing Slack timestamp dots", () => {
 		expect(sessionSocialCardUrl("slack-C123-1719860000.000000")).toMatch(
-			/^https:\/\/media\.example\.test\/session-card\/slack-C123-1719860000\.000000\/[A-Za-z0-9_-]{32}\.png\?v=10$/,
+			/^https:\/\/media\.example\.test\/session-card\/slack-C123-1719860000\.000000\/[A-Za-z0-9_-]{32}\.png\?v=11$/,
 		);
 	});
 

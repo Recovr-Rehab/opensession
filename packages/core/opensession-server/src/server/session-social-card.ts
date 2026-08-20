@@ -39,15 +39,15 @@ export const SESSION_CARD_HEIGHT = 630;
 /**
  * Banner variant, for Slack. A Block Kit `image` block is always laid out at
  * the message column width, so the only thing that decides how much of the
- * conversation the card eats is its aspect ratio. Two lines are all the card
- * carries, so it is sized to two lines: a taller banner only adds blank
- * paper to every message that quotes a session.
+ * conversation the card eats is its aspect ratio. The compact title and
+ * metadata fit this short banner: a taller shape only adds blank paper to
+ * every message that quotes a session.
  */
 export const SESSION_CARD_BANNER_WIDTH = 1200;
 export const SESSION_CARD_BANNER_HEIGHT = 200;
 
 export type SessionCardVariant = "card" | "banner";
-const SESSION_CARD_VERSION = 10;
+const SESSION_CARD_VERSION = 11;
 
 const CARD_INK = "#050609";
 const CARD_PAPER = "#FFFFFF";
@@ -55,16 +55,16 @@ const CARD_PAPER = "#FFFFFF";
 const PAD_X = 56;
 const META_SIZE = 28;
 const META_TEXT_SIZE = 22;
-const META_LABEL_GAP = 8;
+const META_LABEL_GAP = 10;
+const META_ICON_OVERLAP = 10;
 const META_GLYPH_SIZE = 22;
 const META_RADIUS = META_SIZE * 0.46;
 const META_OPACITY = 0.52;
-const META_ROW_GAP = 4;
-const TITLE_META_GAP = 8;
-const TITLE_SIZE = 44;
-const TITLE_LINE_HEIGHT = 48;
-const TITLE_FONT = "Inter SemiBold 44";
-const TITLE_LETTER_SPACING = Math.round(-1.1 * 1024);
+const TITLE_META_GAP = 10;
+const TITLE_SIZE = 40;
+const TITLE_LINE_HEIGHT = 44;
+const TITLE_FONT = "Inter SemiBold 40";
+const TITLE_LETTER_SPACING = -1024;
 /** Every screenshot frame stays 16:9, including the ones behind the lead shot. */
 const SHOT_BANNER_WIDTH = 304;
 const SHOT_BANNER_HEIGHT = 171;
@@ -596,6 +596,9 @@ interface ShotFrame {
 	y: number;
 	width: number;
 	height: number;
+	rotation: number;
+	pivotX: number;
+	pivotY: number;
 	shape: string;
 }
 
@@ -608,19 +611,27 @@ function shotFrames(
 	const width = shotWidth(variant);
 	const frameHeight = shotHeight(variant);
 	const frontX = SESSION_CARD_WIDTH - width - shotInset(variant);
-	const frontY = (height - frameHeight) / 2;
+	const stacked = frameCount > 1;
+	const bottomCrop = variant === "banner" ? 14 : 20;
+	const frontY = stacked
+		? height - frameHeight + bottomCrop
+		: (height - frameHeight) / 2;
 	const offsetX = shotStackOffset(variant);
 	const lift =
 		variant === "banner" ? SHOT_BANNER_STACK_LIFT : SHOT_CARD_STACK_LIFT;
 	return Array.from({ length: frameCount }, (_, index) => {
 		const x = frontX - offsetX * index;
-		const y = frontY + (index === 0 ? 0 : index % 2 ? lift : -lift);
+		const y = frontY + (index === 0 ? 0 : lift);
+		const rotation = stacked ? (index === 0 ? 2 : -5) : 0;
 		return {
 			index,
 			x,
 			y,
 			width,
 			height: frameHeight,
+			rotation,
+			pivotX: x + width / 2,
+			pivotY: y + frameHeight,
 			shape: squircleRectPath(
 				x,
 				y,
@@ -653,34 +664,39 @@ export function sessionSocialCardSvg(
 	if (!titleLines.length) titleLines.push(productName());
 	const repoId = clean(data.repo);
 	const owner = metaLabel(clean(data.owner));
-	const metadataHeight =
-		META_SIZE + (repoId ? META_ROW_GAP + META_SIZE : 0);
+	const metadataHeight = META_SIZE;
 	const contentHeight =
 		titleLines.length * TITLE_LINE_HEIGHT + TITLE_META_GAP + metadataHeight;
 	const blockTop = (height - contentHeight) / 2;
-	const ownerTop =
+	const metaTop =
 		blockTop + titleLines.length * TITLE_LINE_HEIGHT + TITLE_META_GAP;
-	const ownerCenter = ownerTop + META_SIZE / 2;
-	const repoTop = ownerTop + META_SIZE + META_ROW_GAP;
-	const repoCenter = repoTop + META_SIZE / 2;
-	const metaTextX = PAD_X + META_SIZE + META_LABEL_GAP;
-	const avatarTile = squirclePath(PAD_X, ownerTop, META_SIZE, META_RADIUS);
-	const repoTile = squirclePath(PAD_X, repoTop, META_SIZE, META_RADIUS);
+	const metaCenter = metaTop + META_SIZE / 2;
+	const repoX = PAD_X + META_SIZE - META_ICON_OVERLAP;
+	const iconStackWidth = repoId ? META_SIZE * 2 - META_ICON_OVERLAP : META_SIZE;
+	const metaTextX = PAD_X + iconStackWidth + META_LABEL_GAP;
+	const avatarTile = squirclePath(PAD_X, metaTop, META_SIZE, META_RADIUS);
+	const repoTile = squirclePath(repoX, metaTop, META_SIZE, META_RADIUS);
 	const tileColor = repoId ? repoTileColorFor(repoId) : CARD_INK;
+	const metadata = [owner, repoId ? metaLabel(repoId) : ""]
+		.filter(Boolean)
+		.join(" · ");
 	const frames = shotFrames(variant, shots.length, height);
 	const shotDefs = frames
 		.map(
 			(frame) =>
-				`  <clipPath id="shotClip${frame.index}"><path d="${frame.shape}"/></clipPath>`,
+				`  <clipPath id="shotClip${frame.index}" clipPathUnits="userSpaceOnUse"><path d="${frame.shape}"/></clipPath>`,
 		)
 		.join("\n");
 	const shotMarkup = [...frames]
 		.reverse()
 		.map((frame) => {
 			const shot = shots[frame.index];
-			return `<path d="${frame.shape}" fill="${CARD_PAPER}" filter="url(#shotShadow)"/>
+			const transform = frame.rotation
+				? ` transform="rotate(${frame.rotation} ${frame.pivotX} ${frame.pivotY})"`
+				: "";
+			return `<g${transform}><path d="${frame.shape}" fill="${CARD_PAPER}" filter="url(#shotShadow)"/>
 <g clip-path="url(#shotClip${frame.index})"><image href="${shot}" x="${frame.x}" y="${frame.y}" width="${frame.width}" height="${frame.height}" preserveAspectRatio="xMidYMin slice"/></g>
-<path d="${frame.shape}" fill="none" stroke="${CARD_INK}" stroke-opacity="0.1"/>`;
+<path d="${frame.shape}" fill="none" stroke="#000000" stroke-opacity="0.1"/></g>`;
 		})
 		.join("\n");
 	const titleMarkup = titleLines
@@ -689,33 +705,43 @@ export function sessionSocialCardSvg(
 				`<text x="${PAD_X}" y="${blockTop + index * TITLE_LINE_HEIGHT + TITLE_LINE_HEIGHT / 2}" dominant-baseline="middle" fill="${CARD_INK}" font-size="${TITLE_SIZE}" font-weight="600" letter-spacing="-1.1">${xml(line)}</text>`,
 		)
 		.join("\n");
+	const avatarGlyph = metaGlyph(
+		PAD_X + (META_SIZE - META_GLYPH_SIZE) / 2,
+		metaCenter,
+	);
 	const avatarMarkup = avatar
-		? `<image href="${avatar}" x="${PAD_X}" y="${ownerTop}" width="${META_SIZE}" height="${META_SIZE}" preserveAspectRatio="xMidYMid slice" clip-path="url(#avatarClip)"/>`
-		: metaGlyph(
-				PAD_X + (META_SIZE - META_GLYPH_SIZE) / 2,
-				ownerCenter,
-			);
+		? `<image href="${avatar}" x="${PAD_X}" y="${metaTop}" width="${META_SIZE}" height="${META_SIZE}" preserveAspectRatio="xMidYMid slice" clip-path="url(#avatarClip)"/>
+<path d="${avatarTile}" fill="none" stroke="${CARD_PAPER}" stroke-width="3"/>
+<path d="${avatarTile}" fill="none" stroke="#000000" stroke-opacity="0.1"/>`
+		: `<path d="${avatarTile}" fill="${CARD_PAPER}"/>
+${avatarGlyph}
+<path d="${avatarTile}" fill="none" stroke="${CARD_PAPER}" stroke-width="3"/>
+<path d="${avatarTile}" fill="none" stroke="#000000" stroke-opacity="0.1"/>`;
 	const repoMarkup = !repoId
 		? ""
 		: repoIcon
-			? `<image href="${repoIcon}" x="${PAD_X}" y="${repoTop}" width="${META_SIZE}" height="${META_SIZE}" preserveAspectRatio="xMidYMid slice" clip-path="url(#repoClip)"/>`
-			: `<path d="${repoTile}" fill="${xml(tileColor)}"/><text x="${PAD_X + META_SIZE / 2}" y="${repoCenter + 1}" text-anchor="middle" dominant-baseline="middle" fill="${REPO_TILE_INK}" font-size="14" font-weight="600">${xml(repoLetter(repoId))}</text>`;
+			? `<image href="${repoIcon}" x="${repoX}" y="${metaTop}" width="${META_SIZE}" height="${META_SIZE}" preserveAspectRatio="xMidYMid slice" clip-path="url(#repoClip)"/>
+<path d="${repoTile}" fill="none" stroke="#000000" stroke-opacity="0.1"/>`
+			: `<path d="${repoTile}" fill="${xml(tileColor)}"/><text x="${repoX + META_SIZE / 2}" y="${metaCenter + 1}" text-anchor="middle" dominant-baseline="middle" fill="${REPO_TILE_INK}" font-size="14" font-weight="600">${xml(repoLetter(repoId))}</text>
+<path d="${repoTile}" fill="none" stroke="#000000" stroke-opacity="0.1"/>`;
 
-	return `<svg xmlns="http://www.w3.org/2000/svg" width="${SESSION_CARD_WIDTH}" height="${height}" viewBox="0 0 ${SESSION_CARD_WIDTH} ${height}" font-family="Inter, Arial, sans-serif">
+	return `<svg xmlns="http://www.w3.org/2000/svg" width="${SESSION_CARD_WIDTH}" height="${height}" viewBox="0 0 ${SESSION_CARD_WIDTH} ${height}" overflow="hidden" font-family="Inter, Arial, sans-serif">
 <defs>
 ${shotDefs}
-  <clipPath id="repoClip"><path d="${repoTile}"/></clipPath>
-  <clipPath id="avatarClip"><path d="${avatarTile}"/></clipPath>
-  <filter id="shotShadow" x="-20%" y="-20%" width="140%" height="150%"><feDropShadow dx="0" dy="3" stdDeviation="5" flood-color="${CARD_INK}" flood-opacity="0.14"/></filter>
+  <clipPath id="repoClip" clipPathUnits="userSpaceOnUse"><path d="${repoTile}"/></clipPath>
+  <clipPath id="avatarClip" clipPathUnits="userSpaceOnUse"><path d="${avatarTile}"/></clipPath>
+  <filter id="shotShadow" x="-20%" y="-25%" width="140%" height="155%" color-interpolation-filters="sRGB">
+    <feDropShadow in="SourceAlpha" dx="0" dy="6" stdDeviation="6" flood-color="#000000" flood-opacity="0.14" result="ambient"/>
+    <feDropShadow in="SourceAlpha" dx="0" dy="2" stdDeviation="1.25" flood-color="#000000" flood-opacity="0.2" result="contact"/>
+    <feMerge><feMergeNode in="ambient"/><feMergeNode in="contact"/><feMergeNode in="SourceGraphic"/></feMerge>
+  </filter>
 </defs>
 <rect width="1200" height="${height}" fill="${CARD_PAPER}"/>
 ${shotMarkup}
 ${titleMarkup}
-${avatarMarkup}
-${avatar ? `<path d="${avatarTile}" fill="none" stroke="${CARD_INK}" stroke-opacity="0.1"/>` : ""}
-<text x="${metaTextX}" y="${ownerCenter + 1}" dominant-baseline="middle" fill="${CARD_INK}" fill-opacity="${META_OPACITY}" font-size="${META_TEXT_SIZE}" font-weight="500">${xml(owner)}</text>
 ${repoMarkup}
-${repoId ? `<path d="${repoTile}" fill="none" stroke="${CARD_INK}" stroke-opacity="0.1"/><text x="${metaTextX}" y="${repoCenter + 1}" dominant-baseline="middle" fill="${CARD_INK}" fill-opacity="${META_OPACITY}" font-size="${META_TEXT_SIZE}" font-weight="500">${xml(metaLabel(repoId))}</text>` : ""}
+${avatarMarkup}
+<text x="${metaTextX}" y="${metaCenter + 1}" dominant-baseline="middle" fill="${CARD_INK}" fill-opacity="${META_OPACITY}" font-size="${META_TEXT_SIZE}" font-weight="500">${xml(metadata)}</text>
 </svg>`;
 }
 
