@@ -74,4 +74,3 @@ describe("saveSession", () => {
 		expect(loaded?.claudeSessionId).toBeNull();
 	});
 });
-
