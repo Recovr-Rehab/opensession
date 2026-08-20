@@ -172,11 +172,15 @@ jobs:
         run: |
           cd "$HOME/.opensession/src"
           bun -e '
-            import { renderPlist, renderUnit, supervisor } from "./scripts/lib/service";
+            import { renderLauncher, renderPlist, renderUnit, supervisor } from "./scripts/lib/service";
             const kind = supervisor();
             console.log("supervisor:", kind);
-            const text = kind === "launchd" ? renderPlist() : await renderUnit();
-            if (!text.includes("opensession.ts")) throw new Error("no ExecStart");
+            const text = kind === "launchd"
+              ? `${renderPlist()}\n${renderLauncher()}`
+              : await renderUnit();
+            if (!text.includes("opensession.ts") && !text.includes("opensession server")) {
+              throw new Error("no service command");
+            }
             const user = text.match(/^User=(.*)$/m)?.[1];
             if (user === "unknown") throw new Error("User=unknown would fail 217/USER");
             console.log("service definition ok");
