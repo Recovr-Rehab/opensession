@@ -1280,7 +1280,7 @@ export function resumeInterruptedRuns(
     if (run.runnerId) {
       rememberHandledSession(run);
       trackRecovery(run);
-      recoveryTasks.push(recoveryTask(run, async () => {
+      recoveryTasks.push(recoveryTask(run, async (releaseQueueSlot) => {
         let terminalSeen = false;
         try {
           if (abandonStoppedRecovery(run)) return;
@@ -1296,6 +1296,9 @@ export function resumeInterruptedRuns(
             );
             return;
           }
+          // The runner is attached and will keep streaming independently of
+          // boot recovery. Do not make later recoveries wait for its turn.
+          releaseQueueSlot();
           for await (const event of events) {
             if (abandonStoppedRecovery(run)) return;
             markRecoveryProgress(run, event);
@@ -1341,7 +1344,7 @@ export function resumeInterruptedRuns(
       const isDocker = run.sandboxProvider === "docker";
       rememberHandledSession(run);
       trackRecovery(run);
-      recoveryTasks.push(recoveryTask(run, async () => {
+      recoveryTasks.push(recoveryTask(run, async (releaseQueueSlot) => {
         const recoveryStartedAt = Date.now();
         let recoveryRecorded = false;
         let terminalSeen = false;
@@ -1383,6 +1386,9 @@ export function resumeInterruptedRuns(
             recordRecovery("failed", "sandbox_unavailable");
             return;
           }
+          // The sandbox host is attached. Its model turn can continue while
+          // the boot queue starts the next interrupted session.
+          releaseQueueSlot();
           for await (const event of events) {
             if (abandonStoppedRecovery(run)) return;
             markRecoveryProgress(run, event);
@@ -1422,7 +1428,7 @@ export function resumeInterruptedRuns(
     if (run.hostId && !run.sandboxId && !run.runnerId) {
       rememberHandledSession(run);
       trackRecovery(run);
-      recoveryTasks.push(recoveryTask(run, async () => {
+      recoveryTasks.push(recoveryTask(run, async (releaseQueueSlot) => {
         let terminalSeen = false;
         try {
           if (abandonStoppedRecovery(run)) return;
@@ -1505,6 +1511,9 @@ export function resumeInterruptedRuns(
             });
           }
           for await (const event of events) {
+            // A fallback re-prompt is lazy. Its first event proves that the
+            // engine has started; a live host was already attached above.
+            releaseQueueSlot();
             if (abandonStoppedRecovery(run)) return;
             markRecoveryProgress(run, event);
             if (event.type === "done" || event.type === "error") {
@@ -1550,7 +1559,7 @@ export function resumeInterruptedRuns(
       console.log(
         `[runner] Re-running interrupted ${run.kind || "run"} ${run.osSessionId || run.runKey} from scratch (never got an engine session)`
       );
-      recoveryTasks.push(recoveryTask(run, async () => {
+      recoveryTasks.push(recoveryTask(run, async (releaseQueueSlot) => {
         let terminalSeen = false;
         try {
           if (abandonStoppedRecovery(run)) return;
@@ -1599,6 +1608,9 @@ export function resumeInterruptedRuns(
             },
             onAskUser: run.osSessionId ? askHandlerFor?.(run.osSessionId) : undefined,
           })) {
+            // `runAgent` is lazy. Free the bounded boot slot only after its
+            // first event confirms the replacement engine is running.
+            releaseQueueSlot();
             if (abandonStoppedRecovery(run)) return;
             markRecoveryProgress(run, event);
             if (event.type === "done" || event.type === "error") {
@@ -1683,6 +1695,9 @@ export function resumeInterruptedRuns(
           },
           onAskUser: run.osSessionId ? askHandlerFor?.(run.osSessionId) : undefined,
         })) {
+          // A recovery slot guards startup, not the whole agent turn. Once
+          // the engine emits, later interrupted sessions may begin recovery.
+          releaseQueueSlot();
           if (abandonStoppedRecovery(run)) return;
           markRecoveryProgress(run, event);
           if (event.type === "done" || event.type === "error") {

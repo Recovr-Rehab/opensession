@@ -821,15 +821,14 @@ describe("run journal", () => {
 });
 
 describe("restart recovery queue", () => {
-	it("starts a starved recovery instead of declaring it dead", async () => {
+	it("frees its boot slot once a recovered engine has started", async () => {
 		const gates: Array<() => void> = [];
 		const gated = () =>
 			new Promise<void>((resolve) => {
 				gates.push(resolve);
 			});
 		// Four gated turns hold every queue slot (BOOT_RECOVERY_CONCURRENCY).
-		// The fifth run is the one that used to be told "send the prompt again"
-		// while its own engine turn kept running on a detached server.
+		// The fifth run must not wait for any of the first four full agent turns.
 		const fake = makeFakeEngine([
 			{ kind: "clean", gate: gated() },
 			{ kind: "clean", gate: gated() },
@@ -854,24 +853,18 @@ describe("restart recovery queue", () => {
 			});
 			clearRunState(sessionId);
 		});
-		const waitMs = 300;
-		const previousWait = agent.__setRecoveryQueueWaitMsForTest(waitMs);
 		const terminals: StreamEvent[] = [];
 		try {
-			const resumedAt = Date.now();
 			agent.resumeInterruptedRuns((_id, event) => {
 				if (event) terminals.push(event);
 			});
-			// The four gated turns never end, so a fifth engine call can only
-			// come from a recovery that started OUTSIDE the queue — and only
-			// after the wait, which is what makes this the promotion and not a
-			// free slot.
+			// Each fake emits `init` before its gate. That proves the replacement
+			// engine is live and should free the queue slot immediately, allowing
+			// all five recoveries to start despite four long-running turns.
 			while (fake.calls.length < 5) await Bun.sleep(5);
-			expect(Date.now() - resumedAt).toBeGreaterThanOrEqual(waitMs);
 			// Never a failure report for a run whose engine is still working.
 			expect(terminals.filter((event) => event.type === "error")).toEqual([]);
 		} finally {
-			agent.__setRecoveryQueueWaitMsForTest(previousWait);
 			for (const open of gates) open();
 			for (const sessionId of sessions) {
 				while (agent.isAgentSessionBusy(sessionId)) await Bun.sleep(5);
