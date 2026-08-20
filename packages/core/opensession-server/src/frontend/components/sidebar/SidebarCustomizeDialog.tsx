@@ -67,12 +67,13 @@ function OrderSection<T extends string>({
 		<section aria-labelledby={`sidebar-order-${label.toLowerCase()}`}>
 			<h3
 				id={`sidebar-order-${label.toLowerCase()}`}
-				className="m-0 mb-2 text-label font-semibold text-fg"
+				className="m-0 mb-1.5 text-label font-semibold text-fg"
 			>
 				{label}
 			</h3>
 			{order.length === 0 ? (
-				<p className="m-0 rounded-xl bg-panel px-4 py-5 text-center text-label text-faint">
+				// Left-aligned like the rows it stands in for.
+				<p className="m-0 rounded-popup bg-panel px-3 py-4 text-label text-faint">
 					No {label.toLowerCase()} available.
 				</p>
 			) : (
@@ -81,7 +82,7 @@ function OrderSection<T extends string>({
 					axis="y"
 					values={order}
 					onReorder={setDraft}
-					className="rounded-xl bg-panel p-1.5"
+					className="rounded-popup bg-panel p-1"
 					role="list"
 				>
 					{order.map((id, index) => {
@@ -94,7 +95,7 @@ function OrderSection<T extends string>({
 								value={id}
 								onDragEnd={commit}
 								whileDrag={{ scale: 1.015, zIndex: 2 }}
-								className="focus-ring group flex min-h-11 cursor-grab select-none items-center gap-3 rounded-control bg-panel px-2.5 py-2 text-item-title text-fg active:cursor-grabbing hover:bg-hover"
+								className="focus-ring group flex min-h-9 cursor-grab select-none items-center gap-2.5 rounded-control bg-panel px-2 py-1.5 text-item-title text-fg active:cursor-grabbing hover:bg-hover phone:min-h-11"
 								role="listitem"
 								tabIndex={0}
 								aria-label={`${item.label}, position ${index + 1} of ${order.length}. Use the up and down arrow keys to move it.`}
@@ -106,9 +107,11 @@ function OrderSection<T extends string>({
 								}}
 							>
 								<span className="flex size-5 shrink-0 items-center justify-center text-faint group-hover:text-dim">
-									<IconGripVertical size={20} />
+									<IconGripVertical size={18} />
 								</span>
-								<span className="flex size-6 shrink-0 items-center justify-center text-dim [&_svg]:size-[22px]">
+								{/* Shared geometry keeps every tool and repository label
+								    on the same vertical line. */}
+								<span className="flex size-5 shrink-0 items-center justify-center text-dim [&_svg]:size-[20px]">
 									{item.icon}
 								</span>
 								<span className="min-w-0 flex-1 truncate">{item.label}</span>
@@ -155,8 +158,8 @@ export function SidebarCustomizeDialog({
 	return (
 		<Modal.Root open={open} onOpenChange={onOpenChange}>
 			<Modal.Content
-				widthClassName="max-w-[34rem]"
-				className="max-h-[90dvh] gap-5 phone:p-4"
+				widthClassName="max-w-[32rem]"
+				className="max-h-[80dvh] gap-4"
 			>
 				<Modal.Header
 					title="Customize sidebar"
@@ -169,6 +172,7 @@ export function SidebarCustomizeDialog({
 						action: (
 							<Switch
 								size="sm"
+								className="phone:after:absolute phone:after:inset-x-0 phone:after:-inset-y-3 phone:after:content-['']"
 								checked={tool.shown}
 								onCheckedChange={tool.onShownChange}
 								aria-label={`${tool.shown ? "Hide" : "Show"} ${tool.label} in sidebar`}
@@ -182,7 +186,7 @@ export function SidebarCustomizeDialog({
 					items={repositories.map((repo) => ({
 						id: repo,
 						label: repoLabel(repo),
-						icon: <RepoTile name={repo} size={22} />,
+						icon: <RepoTile name={repo} size={20} />,
 					}))}
 					onCommit={onRepositoryOrderChange}
 				/>
