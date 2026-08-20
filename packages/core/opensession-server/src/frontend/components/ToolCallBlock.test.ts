@@ -5,6 +5,7 @@ import {
   mcpServerDisplayName,
   mcpToolDisplayName,
   parseMcpTool,
+  pathSummaryParts,
   toolDurationMs,
   toolDisplayName,
   toolFamily,
@@ -50,10 +51,28 @@ test("paths render relative to the session's worktrees", () => {
   // Outside every worktree, only $HOME collapses.
   expect(toolSummary("read", { filePath: "/home/user/notes.md" }, "", roots)).toBe("~/notes.md");
   expect(toolSummary("read", { filePath: "/etc/hosts" }, "", roots)).toBe("/etc/hosts");
-  // No roots (evidence pane, previews outside a session) — absolute, tidied.
+  // No roots (evidence pane, previews outside a session), absolute, tidied.
   expect(toolSummary("read", { filePath: "/home/user/projects/x/a.ts" }, "")).toBe(
     "~/projects/x/a.ts"
   );
+});
+
+test("long paths expose a stable beginning and filename around the collapsed middle", () => {
+  expect(pathSummaryParts("packages/core/protocol/src/tool-presentation.ts")).toEqual({
+    prefix: "packages/core/",
+    middle: "protocol/src",
+    filename: "tool-presentation.ts",
+  });
+  expect(pathSummaryParts("/etc/hosts")).toEqual({
+    prefix: "/etc/",
+    middle: "",
+    filename: "hosts",
+  });
+  expect(pathSummaryParts("package.json")).toEqual({
+    prefix: "",
+    middle: "",
+    filename: "package.json",
+  });
 });
 
 test("bash, grep and glob summaries drop their plumbing", () => {

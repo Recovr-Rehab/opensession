@@ -221,15 +221,34 @@ export function ToolGlyph({ toolName, size = 20 }: { toolName: string; size?: nu
   }
 }
 
-/** Path summary with the directory dimmed and the basename readable. */
+/** Collapse a long path's middle while keeping its beginning and filename. */
+export function pathSummaryParts(path: string) {
+  const slash = path.lastIndexOf("/");
+  if (slash < 0) return { prefix: "", middle: "", filename: path };
+
+  const directory = path.slice(0, slash);
+  const leadingSlash = directory.startsWith("/") ? "/" : "";
+  const directories = directory.split("/").filter(Boolean);
+  const prefixCount = Math.min(2, directories.length);
+  const prefixDirectories = directories.slice(0, prefixCount).join("/");
+  return {
+    prefix: `${leadingSlash}${prefixDirectories}${prefixDirectories ? "/" : ""}`,
+    middle: directories.slice(prefixCount).join("/"),
+    filename: path.slice(slash + 1),
+  };
+}
+
 export function PathSummary({ path }: { path: string }) {
-  const idx = path.lastIndexOf("/");
-  if (idx < 0) return <>{path}</>;
+  const { prefix, middle, filename } = pathSummaryParts(path);
+  if (!prefix) return <>{filename}</>;
   return (
-    <>
-      <span className="opacity-55">{path.slice(0, idx + 1)}</span>
-      {path.slice(idx + 1)}
-    </>
+    <span className="flex min-w-0 w-full items-baseline overflow-hidden" title={path}>
+      <span className="min-w-[4ch] shrink overflow-hidden whitespace-nowrap opacity-55">
+        {prefix}
+      </span>
+      {middle && <span className="shrink-0 opacity-55">…/</span>}
+      <span className="shrink-0">{filename}</span>
+    </span>
   );
 }
 
@@ -426,11 +445,12 @@ export const ToolCallBlock = React.memo(function ToolCallBlock({
             The mark opts back out: it has no text baseline of its own, so
             aligning it to one hangs the drawn logo below the path it labels. */}
         <span className="flex min-w-0 flex-1 items-baseline gap-2">
-          <span className="flex min-w-0 items-baseline gap-1.5">
+          <span className="flex min-w-0 flex-1 items-baseline gap-1.5">
             {fileMark && <ExtBadge name={fileMark} className="self-center" />}
             <span
               className={cn(
-                "min-w-0 truncate text-label leading-4",
+                "min-w-0 text-label leading-4",
+                isFileTool ? "flex flex-1 overflow-hidden" : "truncate",
                 failed ? "text-red/80" : "text-dim"
               )}
             >

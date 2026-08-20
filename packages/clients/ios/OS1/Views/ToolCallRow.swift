@@ -286,24 +286,38 @@ struct ToolCallRow: View {
     }
 }
 
-/// What a call is doing, on the row's own line. A path's directory dims so
-/// the filename — the part that identifies the call — survives truncation at
-/// the head. Shared with the folded edit run, which stands in for a row and
-/// so has to read as one.
+/// Keep the first two directories and filename, replacing deeper directories
+/// with one ellipsis. Character-level middle truncation remains the fallback
+/// when even that compact path cannot fit.
+func collapsedToolPath(_ path: String) -> String {
+    let parts = path.split(separator: "/").map(String.init)
+    guard parts.count > 3, let filename = parts.last else { return path }
+    let prefix = parts.prefix(2).joined(separator: "/")
+    let leadingSlash = path.hasPrefix("/") ? "/" : ""
+    return "\(leadingSlash)\(prefix)/…/\(filename)"
+}
+
+/// What a call is doing, on the row's own line. A path's directory dims, and
+/// middle truncation keeps both its beginning and filename visible. Shared
+/// with the folded edit run, which stands in for a row and has to read as one.
 struct ToolSummaryText: View {
     let summary: String
     let isPath: Bool
     var isError = false
 
+    private var displayedSummary: String {
+        isPath ? collapsedToolPath(summary) : summary
+    }
+
     var body: some View {
         Group {
-            if isPath, let slash = summary.lastIndex(of: "/") {
-                Text(summary[summary.startIndex...slash])
+            if isPath, let slash = displayedSummary.lastIndex(of: "/") {
+                Text(displayedSummary[displayedSummary.startIndex...slash])
                     .foregroundStyle(OS1VisualStyle.textFaint)
-                    + Text(summary[summary.index(after: slash)...])
+                    + Text(displayedSummary[displayedSummary.index(after: slash)...])
                     .foregroundStyle(OS1VisualStyle.textDim)
             } else {
-                Text(summary)
+                Text(displayedSummary)
                     .foregroundStyle(
                         isError ? OS1VisualStyle.redInk : OS1VisualStyle.textFaint
                     )
@@ -311,7 +325,7 @@ struct ToolSummaryText: View {
         }
         .font(.system(.caption, design: .monospaced))
         .lineLimit(1)
-        .truncationMode(isPath ? .head : .tail)
+        .truncationMode(isPath ? .middle : .tail)
     }
 }
 
