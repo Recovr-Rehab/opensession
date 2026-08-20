@@ -3342,10 +3342,9 @@ private struct SessionInputBar: View {
                     }
                 }
             }
-            // Keep the focused layout at its established 52pt height. At rest,
-            // remove only the outer inset so the pill becomes 44pt tall while
-            // every control keeps its full touch area.
-            .padding(isSingleRow && inputFocused ? 4 : 0)
+            // Keep the existing 4pt inset in every one-row state. The resting
+            // pill gets smaller through width, not tighter spacing.
+            .padding(isSingleRow ? 4 : 0)
 
             if !isSingleRow {
                 HStack(spacing: 6) {
@@ -3430,6 +3429,12 @@ private struct SessionInputBar: View {
             .animation(.snappy(duration: 0.18), value: isSingleRow)
             .animation(.snappy(duration: 0.18), value: inputFocused)
             .animation(.snappy(duration: 0.18), value: noteMode)
+            // Preserve the pill's internal spacing and shorten only its
+            // resting footprint. An open queue stays flush with the composer.
+            .padding(
+                .horizontal,
+                isSingleRow && !inputFocused && !hasQueueItems ? 8 : 0
+            )
         #endif
     }
 
