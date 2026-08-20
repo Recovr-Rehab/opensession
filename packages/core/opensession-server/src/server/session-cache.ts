@@ -43,7 +43,10 @@ const sessionsCaches: Record<SessionArchiveSlice, SessionsCache> = {
 	exclude: null,
 	only: null,
 };
-const sessionsRefreshes: Record<SessionArchiveSlice, Promise<void> | null> = {
+const sessionsRefreshes: Record<
+	SessionArchiveSlice,
+	Promise<UnifiedSession[]> | null
+> = {
 	include: null,
 	exclude: null,
 	only: null,
@@ -154,35 +157,37 @@ export function getCachedSessions(): UnifiedSession[] {
 }
 
 /**
- * Return the same fresh cache as getCachedSessions(), but let request traffic
+ * Return the same cache shape as getCachedSessions(), but let request traffic
  * through while thousands of session files are read.
  *
- * Explicit invalidation remains a hard freshness boundary. If a write lands
- * during the cooperative scan, its generation bump discards that scan and the
- * single flight retries rather than publishing a snapshot from before the
- * write. Synchronous callers keep their existing read-after-write contract.
+ * One call performs at most one cooperative scan. Session writes can invalidate
+ * the cache faster than a 9,000-file scan completes; retrying until a scan sees
+ * a completely quiet window turns that ordinary write traffic into a permanent
+ * full-core rescan loop. If a write lands mid-scan, publish the completed
+ * snapshot when no newer cache won the race. The direct native-session lookup
+ * keeps the open conversation fresh, and the next poll repairs list-level
+ * staleness without monopolising Bun's event loop.
  */
 export async function getCachedSessionsAsync(
 	slice: SessionArchiveSlice = "include",
 ): Promise<UnifiedSession[]> {
-	while (
-		!sessionsCaches[slice] ||
-		Date.now() - sessionsCaches[slice]!.ts >= CACHE_TTL
-	) {
-		if (!sessionsRefreshes[slice]) {
-			const generation = ++sessionsCacheGenerations[slice];
-			sessionsRefreshes[slice] = getAllSessionsAsync(slice)
-				.then((data) => {
-					if (sessionsCacheGenerations[slice] === generation)
-						enrichCachedSessions(slice, data);
-				})
-				.finally(() => {
-					sessionsRefreshes[slice] = null;
-				});
-		}
-		await sessionsRefreshes[slice];
+	const cached = sessionsCaches[slice];
+	if (cached && Date.now() - cached.ts < CACHE_TTL) return cached.data;
+
+	if (!sessionsRefreshes[slice]) {
+		const generation = ++sessionsCacheGenerations[slice];
+		sessionsRefreshes[slice] = getAllSessionsAsync(slice)
+			.then((data) => {
+				const current = sessionsCaches[slice];
+				if (sessionsCacheGenerations[slice] === generation || !current)
+					return enrichCachedSessions(slice, data);
+				return current.data;
+			})
+			.finally(() => {
+				sessionsRefreshes[slice] = null;
+			});
 	}
-	return sessionsCaches[slice]!.data;
+	return await sessionsRefreshes[slice];
 }
 
 /**
