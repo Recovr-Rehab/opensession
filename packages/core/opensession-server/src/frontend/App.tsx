@@ -179,6 +179,7 @@ import type { ReviewQueueItem } from "./lib/review-queue";
 import { pushRecent } from "./lib/recents";
 import { setLane, type Lane } from "./lib/lanes";
 import { markRead } from "./lib/reads";
+import { nextUnreadRenderedSidebarItem } from "./lib/sidebar-next";
 import {
 	sessionPath,
 	prPath,
@@ -4103,6 +4104,23 @@ export function App(
 		}
 		navigate({ view: "session", id });
 	};
+	// Rendered sidebar rows are the navigation order. Filters, grouping and
+	// collapsed sections all change that order, so backing session arrays cannot
+	// answer which unread workspace is actually next on screen.
+	const openNextUnread = () => {
+		const items = Array.from(
+			document.querySelectorAll<HTMLButtonElement>(
+				"[data-sidebar-list] button[data-sidebar-row]",
+			),
+		);
+		const next = nextUnreadRenderedSidebarItem(items);
+		if (!next) {
+			showToast("You’re all caught up");
+			return;
+		}
+		next.scrollIntoView({ block: "nearest" });
+		next.click();
+	};
 	const renderSessionPane = (
 		viewerSession: UnifiedSession,
 		socket: ReturnType<typeof useWebSocket>,
@@ -4122,6 +4140,7 @@ export function App(
 				hideHeader={splitMode && !focused}
 				hideRightPanel={splitMode && !focused}
 				onBack={goBack}
+				onNextUnread={focused ? openNextUnread : undefined}
 				onArchive={() =>
 					focused
 						? sidebarRef.current?.archiveSelected()

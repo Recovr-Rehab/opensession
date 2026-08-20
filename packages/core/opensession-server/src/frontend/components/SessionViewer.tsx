@@ -388,6 +388,8 @@ interface Props {
 	hideHeader?: boolean;
 	hideRightPanel?: boolean;
 	onBack: () => void;
+	/** Open the next rendered unread tab or workspace in sidebar order. */
+	onNextUnread?: () => void;
 	/** Archive through the sidebar so the nearest visible row becomes active. */
 	onArchive?: () => void;
 	/** Called after a successful archive (not unarchive), with whether archiving
@@ -891,6 +893,7 @@ export function SessionViewer({
 	hideHeader = false,
 	hideRightPanel = false,
 	onBack,
+	onNextUnread,
 	onArchive,
 	onArchived,
 	send,
@@ -7260,6 +7263,19 @@ export function SessionViewer({
 									users={typingUsers}
 									className="mx-auto mb-1 w-full max-w-[calc(var(--session-col)+40px)] px-5"
 								/>
+								{onNextUnread && (
+									<div className="mx-auto mb-2 flex w-full max-w-[calc(var(--session-col)+40px)] justify-end">
+										<Button
+											size="lg"
+											className="min-h-10 phone:min-h-11"
+											trailing={<IconChevronRight size={18} aria-hidden />}
+											aria-label="Next unread session"
+											onClick={onNextUnread}
+										>
+											Next
+										</Button>
+									</div>
+								)}
 								<Composer
 									// Uncontrolled: the draft lives in the Composer (persisted
 									// per session via draftKey). Remount on the tab-bar +

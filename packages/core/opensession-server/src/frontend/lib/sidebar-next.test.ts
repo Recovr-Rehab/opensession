@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test";
 import {
 	SIDEBAR_ITEM_KEY_ATTRIBUTE,
 	nextRenderedSidebarItem,
+	nextUnreadRenderedSidebarItem,
 } from "./sidebar-next";
 
 function item(key?: string) {
@@ -66,5 +67,61 @@ describe("nextRenderedSidebarItem", () => {
 				"session:current",
 			),
 		).toBe(next);
+	});
+});
+
+function attentionItem({
+	selected = false,
+	unread = false,
+}: {
+	selected?: boolean;
+	unread?: boolean;
+} = {}) {
+	return {
+		hasAttribute(name: string) {
+			return (
+				(name === "data-selected" && selected) ||
+				(name === "data-unread" && unread)
+			);
+		},
+	};
+}
+
+describe("nextUnreadRenderedSidebarItem", () => {
+	test("opens an unread sibling tab in the selected workspace first", () => {
+		const earlier = attentionItem({ unread: true });
+		const selected = attentionItem({ selected: true, unread: true });
+		const later = attentionItem({ unread: true });
+
+		expect(nextUnreadRenderedSidebarItem([earlier, selected, later])).toBe(
+			selected,
+		);
+	});
+
+	test("scans forward from the selected row and wraps", () => {
+		const before = attentionItem({ unread: true });
+		const selected = attentionItem({ selected: true });
+		const after = attentionItem({ unread: true });
+
+		expect(nextUnreadRenderedSidebarItem([before, selected, after])).toBe(after);
+		expect(
+			nextUnreadRenderedSidebarItem([before, selected, attentionItem()]),
+		).toBe(before);
+	});
+
+	test("uses the first unread row when nothing is selected", () => {
+		const read = attentionItem();
+		const unread = attentionItem({ unread: true });
+
+		expect(nextUnreadRenderedSidebarItem([read, unread])).toBe(unread);
+	});
+
+	test("returns null when there is nothing unread", () => {
+		expect(
+			nextUnreadRenderedSidebarItem([
+				attentionItem(),
+				attentionItem({ selected: true }),
+			]),
+		).toBeNull();
 	});
 });
