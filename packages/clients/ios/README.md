@@ -71,14 +71,16 @@ Pure SwiftUI with SwiftStreamingMarkdown for CommonMark/GFM rendering, iOS 26+
   value means the shared defaults. Ids this app has no screen for ride the
   value untouched so a change here never disturbs the browser. Long-press a
   visible row to hide it; Appearance restores it.
-- **Session view** — live transcript over the `/ws` WebSocket, grouped into
+- **Session view:** live transcript over the `/ws` WebSocket, grouped into
   turns the way the web viewer groups them: **question → folded work → answer →
   footer**. A turn's tool calls and the narration between them collapse behind
-  one header (`Worked · 4m 42s · 40 steps`, a fingerprint of the tool families
-  used, failure count, edited files and ±lines); the turn's final answer escapes
-  the fold and renders as a normal message; a footer closes it with the
-   duration, the model that wrote it, and chips for every file it touched.
-   Team notes sit in that timeline without entering the agent context. The
+  one header. Phones keep that header to outcome, duration and failure count;
+  opening it reveals steps, tool families and changed files. Wider layouts also
+  show the richer fingerprint inline. The turn's final answer escapes the fold
+  and renders as a normal message. On phones, before/after tables stack each
+  pair at full reading width, and one changed-files summary replaces the footer
+  chip cloud while opening the same Changes panel. Team notes sit in that
+  timeline without entering the agent context. The
    yellow composer mode posts them directly to the team and offers only the
    author edit and delete actions.
   Tool rows use the server's presentation metadata for canonical names,

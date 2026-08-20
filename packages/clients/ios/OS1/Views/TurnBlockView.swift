@@ -133,7 +133,9 @@ struct TurnBlockView: View {
     @ViewBuilder
     private var header: some View {
         Group {
-            if dynamicTypeSize.isAccessibilitySize {
+            if horizontalSizeClass == .compact {
+                compactHeader
+            } else if dynamicTypeSize.isAccessibilitySize {
                 wrappedHeader
             } else {
                 singleLineHeader
@@ -149,6 +151,30 @@ struct TurnBlockView: View {
         .padding(.vertical, 3)
         #endif
         .contentShape(Rectangle())
+    }
+
+    /// Phones show only the outcome and the signals that may need attention.
+    /// Steps, tool families and changed files remain one tap away inside the
+    /// fold instead of competing with the answer on every settled turn.
+    private var compactHeader: some View {
+        FlowLayout(spacing: 6) {
+            HStack(spacing: 6) {
+                chevron
+                Text(turn.isLive ? "Working" : "Worked")
+                    .font(.subheadline.weight(.medium))
+            }
+            .fixedSize()
+
+            if let duration = turn.duration,
+               let label = TranscriptFormat.duration(duration) {
+                Text("· \(label)")
+                    .font(.footnote)
+                    .fixedSize()
+            }
+
+            failureLabel
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
 
     private var singleLineHeader: some View {
@@ -774,6 +800,8 @@ struct TurnFooterView: View {
     /// Whose scratch folder the asset chips open into.
     let sessionId: String
 
+    @Environment(\.horizontalSizeClass) private var horizontalSizeClass
+
     /// How many chips a footer draws before it points at the whole list
     /// instead. A refactor can touch thirty files, and thirty wrapped chips
     /// would bury the answer they belong to.
@@ -819,22 +847,29 @@ struct TurnFooterView: View {
                 // Wrapped, not scrolled: a strip inside the transcript fights
                 // the vertical drag for the same gesture and hides its
                 // overflow behind an edge with nothing to say it's there, so
-                // the third chip onward simply wasn't reachable. Assets and
-                // edits sit together because both are things the turn
-                // produced, and both open what they name rather than just
-                // labelling it.
+                // the third chip onward simply wasn't reachable. Assets stay
+                // individually named because the transcript has no other way
+                // into them. Phone edits collapse into one summary that opens
+                // the complete Changes panel.
                 FlowLayout(spacing: 6) {
                     ForEach(footer.assets, id: \.self) { path in
                         AssetChipView(sessionId: sessionId, path: path)
                     }
-                    ForEach(shownFiles) { file in
-                        FileChipView(file: file)
-                    }
-                    if hiddenFileCount > 0 {
-                        MoreFilesChipView(
+                    if horizontalSizeClass == .compact, !footer.files.isEmpty {
+                        ChangedFilesSummaryView(
                             sessionId: sessionId,
-                            count: hiddenFileCount
+                            files: footer.files
                         )
+                    } else {
+                        ForEach(shownFiles) { file in
+                            FileChipView(file: file)
+                        }
+                        if hiddenFileCount > 0 {
+                            MoreFilesChipView(
+                                sessionId: sessionId,
+                                count: hiddenFileCount
+                            )
+                        }
                     }
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
@@ -871,6 +906,54 @@ private extension View {
             .padding(.trailing, trailing)
             .padding(.vertical, 4)
             .background(OS1VisualStyle.chipFill, in: SquircleCapsule())
+    }
+}
+
+/// One quiet summary of a phone turn's edits. Tapping it reveals every file
+/// in Changes, so the details remain available without a cloud of chips under
+/// each answer.
+struct ChangedFilesSummaryView: View {
+    let sessionId: String
+    let files: [TouchedFile]
+
+    @Environment(\.openPanel) private var openPanel
+
+    private var stats: ToolLineStats {
+        files.reduce(into: ToolLineStats()) {
+            $0 = $0 + ToolLineStats(additions: $1.additions, deletions: $1.deletions)
+        }
+    }
+
+    var body: some View {
+        Button {
+            openPanel(.changes(sessionId: sessionId))
+        } label: {
+            HStack(spacing: 4) {
+                Text("\(files.count) file\(files.count == 1 ? "" : "s")")
+                    .font(.caption)
+                    .foregroundStyle(OS1VisualStyle.textDim)
+                if !stats.isEmpty {
+                    Text("·")
+                        .font(.caption)
+                        .foregroundStyle(OS1VisualStyle.textFaint)
+                    LineStatsView(stats: stats, font: .caption.weight(.medium))
+                }
+            }
+            .footerChip(leading: 9, trailing: 9)
+        }
+        .buttonStyle(.plain)
+        .disabled(!openPanel.isAvailable)
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel("\(files.count) changed file\(files.count == 1 ? "" : "s")")
+        .accessibilityValue(changeSummary)
+        .accessibilityHint("Opens everything this session changed")
+    }
+
+    private var changeSummary: String {
+        var parts: [String] = []
+        if stats.additions > 0 { parts.append("\(stats.additions) lines added") }
+        if stats.deletions > 0 { parts.append("\(stats.deletions) lines removed") }
+        return parts.joined(separator: ", ")
     }
 }
 
