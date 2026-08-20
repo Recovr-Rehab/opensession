@@ -66,7 +66,11 @@ import { tryGetSessionControl } from "../../server/session-control";
 import { pinForUser } from "../../server/pins";
 import { getUiPrefs } from "../../server/ui-prefs";
 import { STRIPE_CONFIRM_TOOLS } from "../../server/runner-shared";
-import { runAgent, cancelAgentRun } from "../../server/agent-runner";
+import {
+  runAgent,
+  cancelAgentRun,
+  restartContinuationPrompt,
+} from "../../server/agent-runner";
 import { shouldPersistModelSwitch, type ImageInput } from "../../server/run-events";
 import {
   registerSessionMcpServers,
@@ -959,9 +963,19 @@ export async function processMessage(
   // Attachments: download the message/thread images now (refs were captured at
   // event intake) so they reach the engine as native image parts on the opening
   // prompt, instead of the agent having to fetch them afterwards.
-  let runPrompt = prompt;
+  // A durable Slack queue item may return after a service restart. Resume the
+  // existing engine turn with hidden harness context instead of submitting the
+  // person's original Slack message as a second visible user turn.
+  const continuingAfterRestart =
+    msg.restartRecovery && !!session.claudeSessionId;
+  let runPrompt = continuingAfterRestart
+    ? restartContinuationPrompt(prompt)
+    : prompt;
   let images: ImageInput[] | undefined;
-  if (msg.files?.length) {
+  // A resumed engine already has its opening attachments in history. Sending
+  // them again would create another image-bearing user turn. If no engine id
+  // was ever established, this is a true rerun and must download them again.
+  if (msg.files?.length && !continuingAfterRestart) {
     try {
       const res = await downloadSlackImages(msg.files);
       if (res.images.length) images = res.images;
@@ -980,6 +994,7 @@ export async function processMessage(
       // Interactive Slack runs get the full connector set, as before.
       mcpServers: "all",
       prompt: runPrompt,
+      promptEntryId: msg.promptEntryId,
       images,
       sessionId: session.claudeSessionId || undefined,
       cwd,

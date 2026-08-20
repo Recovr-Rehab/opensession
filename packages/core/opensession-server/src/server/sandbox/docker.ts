@@ -115,7 +115,7 @@ import { homeDir, OPENSESSION_SESSIONS_DIR } from "../paths";
 import { stateDir, } from "../paths";
 import { journalSet, journalClear, type ActiveRunRecord } from "../run-journal";
 import { shouldPersistModelSwitch, type StreamEvent } from "../run-events";
-import { recoveryKind, RESUME_CONTINUATION_PROMPT } from "../agent-runner";
+import { recoveryKind, restartContinuationPrompt } from "../agent-runner";
 import { modelSupportsSteer, providerFor } from "../models";
 import { hostRunBusy, hostSteer, hostInterruptSteer, hostCancel } from "../host-registry";
 import { registerRunToken, unregisterRunToken } from "../run-rpc";
@@ -1671,7 +1671,9 @@ export async function resumeDockerSandboxRun(
 
   // Host process died with (or before) the restart — relaunch a continuation
   // in the same sandbox so the engine session's in-container state is reused.
-  const prompt = run.claudeSessionId ? RESUME_CONTINUATION_PROMPT : run.prompt;
+  const prompt = run.claudeSessionId
+    ? restartContinuationPrompt(run.prompt)
+    : run.prompt;
   if (!prompt) return null;
   const rpcToken = oldSpec?.proxyMcpServers?.length ? crypto.randomUUID() : undefined;
   if (rpcToken) registerRunToken(rpcToken, { sessionId: run.osSessionId, user: run.user });

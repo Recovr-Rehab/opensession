@@ -8,6 +8,7 @@ import { clearRunState, getRunState, transitionRunState } from "./run-state";
 import * as shared from "./runner-shared";
 import type { StreamEvent } from "./run-events";
 import { makeFakeEngine } from "./testing/fake-engine";
+import { stripContext } from "./prompt-context";
 
 // __setActiveRunsPathForTest repoints the LIVE ACTIVE_RUNS_PATH binding, so
 // agent-runner.ts's own (already-cached, possibly earlier-imported-with-the-
@@ -490,6 +491,10 @@ describe("run journal", () => {
 		expect(agent.recoveryKind("prompt-resume-rerun", "rerun")).toBe("prompt-rerun");
 		const once = agent.resumeContinuationPrompt("original task");
 		expect(agent.resumeContinuationPrompt(once)).toBe(once);
+		const hidden = agent.restartContinuationPrompt("original task");
+		expect(hidden).toContain("original task");
+		expect(stripContext(hidden)).toBe("");
+		expect(agent.restartContinuationPrompt(hidden)).toBe(hidden);
 	});
 
 	it("runs boot recovery with bounded concurrency", async () => {

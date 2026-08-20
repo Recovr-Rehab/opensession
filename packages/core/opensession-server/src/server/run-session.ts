@@ -21,7 +21,7 @@ import {
 	steerAgentRun,
 	engineFamily,
 	interruptAndSteerAgentRun,
-	RESUME_CONTINUATION_PROMPT,
+	restartContinuationPrompt,
 	type StreamEvent,
 } from "./agent-runner";
 import { syncAgentSessionEngine } from "./agent-session-sync";
@@ -594,7 +594,7 @@ export function resumeDrainedSessions(
 		);
 		void runSessionPromptAndDrain(
 			id,
-			RESUME_CONTINUATION_PROMPT,
+			restartContinuationPrompt(r.prompt),
 			SYSTEM_RESTART_USER,
 		).catch((e) => console.error(`[resume] Wake failed for ${id}:`, e));
 	}

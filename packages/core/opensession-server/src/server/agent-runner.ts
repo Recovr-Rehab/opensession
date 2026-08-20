@@ -149,9 +149,9 @@ export interface RunAgentOpts {
   images?: ImageInput[];
   /**
    * Stable uuid for the prompt's user transcript line. Callers that persist
-   * the user line at intake (run-session) — and boot re-runs of journaled
-   * runs — pass it so the runner's own transcript write upserts the same
-   * entry instead of duplicating the bubble.
+   * the user line at intake pass it so the runner's own transcript write
+   * upserts the same entry. When omitted, runAgent derives it from the stable
+   * run token so every model attempt still writes one user bubble.
    */
   promptEntryId?: string;
   /**
@@ -396,6 +396,10 @@ export async function* runAgent(opts: RunAgentOpts): AsyncGenerator<StreamEvent>
         }
       : undefined,
     startToken: runToken,
+    // A create-path prompt has no early transcript row to name. Give it the
+    // logical run's stable id here, before the fallback walk forks opts, so a
+    // model switch upserts the opening message instead of appending it again.
+    promptEntryId: opts.promptEntryId || runToken,
     shouldCancel: () =>
       cancelledRunTokens.has(runToken) || opts.shouldCancel?.() === true,
   };
@@ -502,6 +506,10 @@ async function* runAgentInner(opts: RunAgentOpts): AsyncGenerator<StreamEvent> {
 
   let currentOpts = {
     ...opts,
+    // One human turn keeps one transcript identity across every fallback hop.
+    // Callers such as Slack do not early-persist their own id, so mint it here
+    // before the walk rather than inside each provider attempt.
+    promptEntryId: opts.promptEntryId ?? crypto.randomUUID(),
     selectedModel: opts.selectedModel ?? opts.model,
   };
   let currentModel = primaryModel;
@@ -698,17 +706,25 @@ async function* runAgentInner(opts: RunAgentOpts): AsyncGenerator<StreamEvent> {
         : [];
       handoffEntries = entries;
       if (entries.length) {
-        prompt =
-          `${wrapContext(
-            buildEngineSwitchHandoffNote({
-              fromModel: currentModel,
-              fromProvider: familyLabel(fromFamily),
-              toProvider: familyLabel(toFamily),
-              targetResuming: false,
-              entries,
-            }),
-            "handoff"
-          )}\n\n${prompt}`;
+        const handoff = buildEngineSwitchHandoffNote({
+          fromModel: currentModel,
+          fromProvider: familyLabel(fromFamily),
+          toProvider: familyLabel(toFamily),
+          targetResuming: false,
+          entries,
+        });
+        // The handoff already contains the person's request and the partial
+        // response. Sending the original prompt below it creates a second user
+        // turn and tells the fallback model to start over. A context-only turn
+        // instead asks the fresh provider to continue while rendering no new
+        // user bubble. Image turns retain the original prompt because the new
+        // provider still needs the image-bearing user message; the stable
+        // promptEntryId above makes that an upsert rather than a duplicate.
+        prompt = fallbackContinuationPrompt(
+          handoff,
+          prompt,
+          !!currentOpts.images?.length,
+        );
       } else {
         prompt +=
           "\n\n[Note: a previous attempt on another model was cut short and may have " +
@@ -1625,8 +1641,11 @@ export function resumeInterruptedRuns(
         journalClear(run.runKey);
         for await (const event of runAgent({
           prompt: repairingRecoveredResult
-            ? recoveredResultContinuationPrompt(run.prompt)
-            : resumeContinuationPrompt(run.prompt),
+            ? wrapContext(
+                recoveredResultContinuationPrompt(run.prompt),
+                "restart-recovery",
+              )
+            : restartContinuationPrompt(run.prompt),
           sessionId: run.claudeSessionId,
           cwd: run.cwd,
           mode: run.mode,
@@ -1875,6 +1894,29 @@ export function resumeContinuationPrompt(originalPrompt?: string | null): string
     "If you no longer see the earlier conversation, treat that prompt as the task " +
     "definition — do not infer the task from repository or checkout state."
   );
+}
+
+const RESTART_RECOVERY_OPEN = '<opensession:context source="restart-recovery">';
+
+/** A restart continuation is harness input, not something the person said.
+ * The engine receives it as a user-role turn, while transcript parsing strips
+ * the fenced block and therefore keeps the conversation at one user message. */
+export function restartContinuationPrompt(originalPrompt?: string | null): string {
+  const p = (originalPrompt || "").trim();
+  if (p.startsWith(RESTART_RECOVERY_OPEN)) return p;
+  return wrapContext(resumeContinuationPrompt(originalPrompt), "restart-recovery");
+}
+
+/** Build the next provider's turn without replaying the person's request.
+ * Image turns are the exception: the fresh provider needs the image-bearing
+ * message, and promptEntryId keeps its transcript row stable. */
+export function fallbackContinuationPrompt(
+  handoff: string,
+  originalPrompt: string,
+  hasImages: boolean,
+): string {
+  const context = wrapContext(handoff, "handoff");
+  return hasImages ? `${context}\n\n${originalPrompt}` : context;
 }
 
 function recoveredResultContinuationPrompt(originalPrompt?: string | null): string {

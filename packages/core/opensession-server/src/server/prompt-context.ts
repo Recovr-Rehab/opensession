@@ -44,6 +44,7 @@ export type ContextSource =
 	| "external-refs"
 	| "ticket"
 	| "auto-continue"
+	| "restart-recovery"
 	| "steer-note"
 	| "uploads-note"
 	| "unknown";
@@ -57,6 +58,7 @@ const SOURCES = new Set<string>([
 	"external-refs",
 	"ticket",
 	"auto-continue",
+	"restart-recovery",
 	"steer-note",
 	"uploads-note",
 	"unknown",

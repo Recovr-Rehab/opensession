@@ -16,11 +16,13 @@ import {
 	__setEngineForTest,
 	__setModelAvailabilityForTest,
 	engineFamily,
+	fallbackContinuationPrompt,
 	runAgent,
 } from "./agent-runner";
 import { __setActiveRunsPathForTest, activeRunRecords } from "./run-journal";
 import type { StreamEvent } from "./run-events";
 import { makeFakeEngine } from "./testing/fake-engine";
+import { stripContext } from "./prompt-context";
 
 const journalTmp = `${mkdtempSync(`${tmpdir()}/fake-engine-test-`)}/active-runs.json`;
 const prevJournal = __setActiveRunsPathForTest(journalTmp);
@@ -130,13 +132,40 @@ describe("fake engine through runAgent", () => {
 		expect(sw.switchReason).toBe("out of credits");
 		expect(fake.calls).toHaveLength(2);
 		expect(fake.calls[1].model).toBe("pi/openai/gpt-5.6-sol");
-		// Cross-family hop: no engine-session resume — a fresh session, with the
-		// empty-handoff note telling the model prior partial work may exist.
+		// The create path has no early transcript row to name. runAgent assigns
+		// one stable id to the logical turn so both model attempts upsert the same
+		// user entry instead of rendering the opening message twice.
+		expect(fake.calls[0].opts.promptEntryId).toBeTruthy();
+		expect(fake.calls[1].opts.promptEntryId).toBe(
+			fake.calls[0].opts.promptEntryId,
+		);
+		expect(fake.calls[0].opts.promptEntryId).toBe(
+			fake.calls[0].opts.startToken,
+		);
+		// Cross-family hop: no engine-session resume, just a fresh session with
+		// the empty-handoff note telling the model prior partial work may exist.
 		expect(fake.calls[1].sessionId).toBeUndefined();
 		expect(fake.calls[1].prompt).toContain("previous attempt");
 		expect(fake.calls[1].journalKind).toBe("prompt-fallback");
 		expect(fake.calls[0].firstJournaledAt).toBeTruthy();
 		expect(fake.calls[1].firstJournaledAt).toBe(fake.calls[0].firstJournaledAt);
+	});
+
+	test("a provider handoff continues without another visible user turn", () => {
+		const handoff = [
+			"## Engine handoff",
+			"Conversation transcript:",
+			"- User: keep going",
+			"- Assistant: partial work",
+		].join("\n");
+		const continued = fallbackContinuationPrompt(handoff, "keep going", false);
+		expect(continued).toContain("partial work");
+		expect(stripContext(continued)).toBe("");
+		// A fresh provider still needs an image-bearing prompt. Its stable entry
+		// id makes this an upsert rather than another transcript row.
+		expect(stripContext(fallbackContinuationPrompt(handoff, "inspect this", true))).toBe(
+			"inspect this",
+		);
 	});
 
 	test("Pi exhaustion stays on Pi while continuing through the model fallback walk", async () => {
