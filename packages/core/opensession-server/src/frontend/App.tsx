@@ -183,7 +183,7 @@ import type { ReviewQueueItem } from "./lib/review-queue";
 import { pushRecent } from "./lib/recents";
 import { setLane, type Lane } from "./lib/lanes";
 import { markRead } from "./lib/reads";
-import { nextUnreadRenderedSidebarItem } from "./lib/sidebar-next";
+import { nextUnreadRenderedWorkspaceItem } from "./lib/sidebar-next";
 import {
 	sessionPath,
 	prPath,
@@ -4164,16 +4164,17 @@ export function App(
 		}
 		navigate({ view: "session", id });
 	};
-	// Rendered sidebar rows are the navigation order. Filters, grouping and
+	// Rendered workspace rows are the navigation order. Filters, grouping and
 	// collapsed sections all change that order, so backing session arrays cannot
-	// answer which unread workspace is actually next on screen.
-	const openNextUnread = () => {
+	// answer which unread workspace is actually next on screen. Session rows are
+	// deliberately excluded: Next advances to another workspace, not another tab.
+	const openNextUnreadWorkspace = () => {
 		const items = Array.from(
 			document.querySelectorAll<HTMLButtonElement>(
-				"[data-sidebar-list] button[data-sidebar-row]",
+				"[data-sidebar-list] button[data-ws-row]",
 			),
 		);
-		const next = nextUnreadRenderedSidebarItem(items);
+		const next = nextUnreadRenderedWorkspaceItem(items);
 		if (!next) {
 			showToast("You’re all caught up");
 			return;
@@ -4200,7 +4201,7 @@ export function App(
 				hideHeader={splitMode && !focused}
 				hideRightPanel={splitMode && !focused}
 				onBack={goBack}
-				onNextUnread={focused ? openNextUnread : undefined}
+				onNextUnreadWorkspace={focused ? openNextUnreadWorkspace : undefined}
 				onArchive={() =>
 					focused
 						? sidebarRef.current?.archiveSelected()

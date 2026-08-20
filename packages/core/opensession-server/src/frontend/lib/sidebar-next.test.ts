@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test";
 import {
 	SIDEBAR_ITEM_KEY_ATTRIBUTE,
 	nextRenderedSidebarItem,
-	nextUnreadRenderedSidebarItem,
+	nextUnreadRenderedWorkspaceItem,
 } from "./sidebar-next";
 
 function item(key?: string) {
@@ -87,40 +87,43 @@ function attentionItem({
 	};
 }
 
-describe("nextUnreadRenderedSidebarItem", () => {
-	test("opens an unread sibling tab in the selected workspace first", () => {
-		const earlier = attentionItem({ unread: true });
+describe("nextUnreadRenderedWorkspaceItem", () => {
+	test("skips the selected workspace even when it has an unread session", () => {
 		const selected = attentionItem({ selected: true, unread: true });
-		const later = attentionItem({ unread: true });
+		const next = attentionItem({ unread: true });
 
-		expect(nextUnreadRenderedSidebarItem([earlier, selected, later])).toBe(
-			selected,
-		);
+		expect(nextUnreadRenderedWorkspaceItem([selected, next])).toBe(next);
 	});
 
-	test("scans forward from the selected row and wraps", () => {
+	test("scans forward from the selected workspace and wraps", () => {
 		const before = attentionItem({ unread: true });
 		const selected = attentionItem({ selected: true });
 		const after = attentionItem({ unread: true });
 
-		expect(nextUnreadRenderedSidebarItem([before, selected, after])).toBe(after);
+		expect(nextUnreadRenderedWorkspaceItem([before, selected, after])).toBe(
+			after,
+		);
 		expect(
-			nextUnreadRenderedSidebarItem([before, selected, attentionItem()]),
+			nextUnreadRenderedWorkspaceItem([
+				before,
+				selected,
+				attentionItem(),
+			]),
 		).toBe(before);
 	});
 
-	test("uses the first unread row when nothing is selected", () => {
+	test("uses the first unread workspace when nothing is selected", () => {
 		const read = attentionItem();
 		const unread = attentionItem({ unread: true });
 
-		expect(nextUnreadRenderedSidebarItem([read, unread])).toBe(unread);
+		expect(nextUnreadRenderedWorkspaceItem([read, unread])).toBe(unread);
 	});
 
-	test("returns null when there is nothing unread", () => {
+	test("returns null when only the selected workspace is unread", () => {
 		expect(
-			nextUnreadRenderedSidebarItem([
+			nextUnreadRenderedWorkspaceItem([
 				attentionItem(),
-				attentionItem({ selected: true }),
+				attentionItem({ selected: true, unread: true }),
 			]),
 		).toBeNull();
 	});

@@ -37,21 +37,20 @@ export function nextRenderedSidebarItem<T extends SidebarItemElement>(
 }
 
 /**
- * Pick the next unread item in rendered sidebar order. A selected unread
- * workspace wins because its unread activity belongs to a sibling session tab.
+ * Pick the next unread workspace in rendered sidebar order. The selected row
+ * is skipped even when another session in it is unread: this control advances
+ * between workspaces rather than stepping through one workspace's tabs.
  */
-export function nextUnreadRenderedSidebarItem<T extends SidebarAttentionElement>(
-	items: readonly T[],
-): T | null {
+export function nextUnreadRenderedWorkspaceItem<
+	T extends SidebarAttentionElement,
+>(items: readonly T[]): T | null {
 	if (items.length === 0) return null;
 	const selected = items.findIndex((item) => item.hasAttribute("data-selected"));
-	if (selected >= 0 && items[selected].hasAttribute("data-unread"))
-		return items[selected];
-
 	const start = selected >= 0 ? selected + 1 : 0;
 	for (let offset = 0; offset < items.length; offset += 1) {
-		const item = items[(start + offset) % items.length];
-		if (item.hasAttribute("data-unread")) return item;
+		const index = (start + offset) % items.length;
+		if (index === selected) continue;
+		if (items[index].hasAttribute("data-unread")) return items[index];
 	}
 	return null;
 }

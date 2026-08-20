@@ -388,8 +388,8 @@ interface Props {
 	hideHeader?: boolean;
 	hideRightPanel?: boolean;
 	onBack: () => void;
-	/** Open the next rendered unread tab or workspace in sidebar order. */
-	onNextUnread?: () => void;
+	/** Open the next rendered unread workspace in sidebar order. */
+	onNextUnreadWorkspace?: () => void;
 	/** Archive through the sidebar so the nearest visible row becomes active. */
 	onArchive?: () => void;
 	/** Called after a successful archive (not unarchive), with whether archiving
@@ -893,7 +893,7 @@ export function SessionViewer({
 	hideHeader = false,
 	hideRightPanel = false,
 	onBack,
-	onNextUnread,
+	onNextUnreadWorkspace,
 	onArchive,
 	onArchived,
 	send,
@@ -7263,14 +7263,14 @@ export function SessionViewer({
 									users={typingUsers}
 									className="mx-auto mb-1 w-full max-w-[calc(var(--session-col)+40px)] px-5"
 								/>
-								{onNextUnread && (
-									<div className="mx-auto mb-2 flex w-full max-w-[calc(var(--session-col)+40px)] justify-end">
+								{onNextUnreadWorkspace && (
+									<div className="mx-auto mb-2 flex w-full max-w-[calc(var(--session-col)+40px)] justify-end pr-5">
 										<Button
 											size="lg"
-											className="min-h-10 phone:min-h-11"
+											className="min-h-10 border-divider hover:border-line phone:min-h-11"
 											trailing={<IconChevronRight size={18} aria-hidden />}
-											aria-label="Next unread session"
-											onClick={onNextUnread}
+											aria-label="Next unread workspace"
+											onClick={onNextUnreadWorkspace}
 										>
 											Next
 										</Button>
