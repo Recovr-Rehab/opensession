@@ -103,6 +103,20 @@ describe("grouped tool run row", () => {
 		expect(html).toContain("-1");
 	});
 
+	test("keeps find inside one uninterrupted run of steps", () => {
+		const items = [
+			toolUse("before", "read", { path: "src/App.tsx" }),
+			toolUse("find", "find", { pattern: "**/*website*.ts", path: "scripts" }),
+			toolUse("after", "bash", { command: "bun test" }),
+		];
+		const html = render(items, new Map());
+
+		expect(html.match(/data-tool-run="true"/g)).toHaveLength(1);
+		expect(html).toContain("3 steps");
+		expect(html).toContain("Read · Find · Bash");
+		expect(html).not.toContain("**/*website*.ts");
+	});
+
 	test("groups consecutive MCP calls as routine work", () => {
 		const items = [
 			toolUse("send-a", "opensession-sessions_send_to_session", {

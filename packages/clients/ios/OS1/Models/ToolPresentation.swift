@@ -114,6 +114,7 @@ extension ToolPresentation {
         "edit": "Edit", "multiedit": "Edit", "patch": "Edit", "apply_patch": "Edit",
         "bash": "Bash", "shell": "Bash", "exec_command": "Bash",
         "grep": "Grep",
+        "find": "Find",
         "glob": "Glob", "list": "Glob",
         "webfetch": "WebFetch", "websearch": "WebSearch",
         "task": "Task", "skill": "Skill",
@@ -131,7 +132,7 @@ extension ToolPresentation {
         "Bash": .run, "BashOutput": .run,
         "Read": .file, "NotebookEdit": .file,
         "Edit": .edit, "Write": .edit, "FileChange": .edit,
-        "Grep": .find, "Glob": .find, "LSP": .find, "ToolSearch": .find,
+        "Grep": .find, "Find": .find, "Glob": .find, "LSP": .find, "ToolSearch": .find,
         "WebFetch": .web, "WebSearch": .web,
         "Task": .agent, "Agent": .agent, "Workflow": .agent,
         "Skill": .skill,
@@ -351,7 +352,7 @@ extension ToolPresentation {
             let pattern = string(input, "pattern") ?? ""
             let path = string(input, "path").map { tidyPath($0, worktreeDir: worktreeDir) }
             return (["/\(pattern)/", path].compactMap { $0 }.joined(separator: " "), false)
-        case "Glob":
+        case "Find", "Glob":
             let pattern = string(input, "pattern") ?? ""
             let path = string(input, "path").map { tidyPath($0, worktreeDir: worktreeDir) }
             return ([pattern, path].compactMap { $0 }.joined(separator: " "), false)

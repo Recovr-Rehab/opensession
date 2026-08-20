@@ -44,6 +44,7 @@ const TOOL_ALIASES: Record<string, string> = {
   shell: "Bash",
   exec_command: "Bash",
   grep: "Grep",
+  find: "Find",
   glob: "Glob",
   list: "Glob",
   webfetch: "WebFetch",
@@ -170,6 +171,7 @@ export function toolFamily(toolName: string): ToolFamily {
     case "FileChange":
       return "edit";
     case "Grep":
+    case "Find":
     case "Glob":
     case "LSP":
     case "ToolSearch":
@@ -363,6 +365,7 @@ export function toolDetail(toolName: string, input: unknown): ToolDetail {
       const path = toolInputString(inp, "path");
       return { kind: "text", text: `/${pattern}/`, ...(path ? { path } : {}) };
     }
+    case "Find":
     case "Glob": {
       const pattern = typeof inp.pattern === "string" ? inp.pattern : "";
       const path = toolInputString(inp, "path");

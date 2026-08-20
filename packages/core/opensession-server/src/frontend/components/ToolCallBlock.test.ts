@@ -86,7 +86,7 @@ test("path summaries truncate the complete left-aligned path", () => {
   expect(markup).not.toContain("w-full");
 });
 
-test("bash, grep and glob summaries drop their plumbing", () => {
+test("bash, grep, find and glob summaries drop their plumbing", () => {
   expect(
     toolSummary("bash", { command: "ls -la", workdir: "/tmp", timeout: 5 }, "", roots)
   ).toBe("ls -la");
@@ -99,6 +99,16 @@ test("bash, grep and glob summaries drop their plumbing", () => {
       roots
     )
   ).toBe("/foo/ src");
+  expect(
+    toolSummary(
+      "find",
+      { pattern: "**/*website*.ts", path: "/home/user/projects/opensession/scripts", limit: 100 },
+      "",
+      roots
+    )
+  ).toBe("**/*website*.ts scripts");
+  expect(canonicalToolName("find")).toBe("Find");
+  expect(toolFamily("find")).toBe("find");
   // A glob with no path used to render a stray trailing space.
   expect(toolSummary("glob", { pattern: "**/*.tsx" }, "", roots)).toBe("**/*.tsx");
 });
