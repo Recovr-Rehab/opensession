@@ -1049,6 +1049,11 @@ export function PrStatusBar({
 							size={12}
 							className="shrink-0 opacity-0 transition-opacity duration-150 group-hover/prsum:opacity-100 group-focus-visible/prsum:opacity-100"
 						/>
+						<IconArrowUpRight
+							dense
+							size={12}
+							className="shrink-0 opacity-0 transition-opacity duration-150 group-hover/prsum:opacity-100 group-focus-visible/prsum:opacity-100"
+						/>
 					</span>
 				)}
 			</>
