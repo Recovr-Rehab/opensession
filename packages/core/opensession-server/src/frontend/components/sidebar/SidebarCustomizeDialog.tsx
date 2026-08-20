@@ -64,10 +64,13 @@ function OrderSection<T extends string>({
 	}
 
 	return (
-		<section aria-labelledby={`sidebar-order-${label.toLowerCase()}`}>
+		<section
+			className="-mx-2"
+			aria-labelledby={`sidebar-order-${label.toLowerCase()}`}
+		>
 			<h3
 				id={`sidebar-order-${label.toLowerCase()}`}
-				className="m-0 mb-1.5 text-label font-semibold text-faint"
+				className="m-0 mb-1.5 px-2 text-label font-semibold text-faint"
 			>
 				{label}
 			</h3>
@@ -159,7 +162,7 @@ export function SidebarCustomizeDialog({
 		<Modal.Root open={open} onOpenChange={onOpenChange}>
 			<Modal.Content
 				widthClassName="max-w-[32rem]"
-				className="max-h-[80dvh] gap-4"
+				className="max-h-[80dvh] gap-3"
 			>
 				<Modal.Header title="Customize sidebar" />
 				<OrderSection
