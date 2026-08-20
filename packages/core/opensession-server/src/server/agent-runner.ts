@@ -1245,8 +1245,17 @@ export function resumeInterruptedRuns(
   const recoveryTasks: Array<() => Promise<void>> = [];
 
   for (const run of interrupted) {
-    // The github agent owns its own recovery (review/simplify re-trigger on the
-    // next PR event; auto-fix loops are resumed by the github agent's startup
+    // Detached review turns are consumed by the GitHub agent's persisted
+    // activeRun workflow. Leave their journal record intact so runReview can
+    // reattach the same host and continue through parsing and GitHub posting.
+    // Counting the session as handled prevents the generic drained-session wake
+    // from starting a second turn while that owner is recovering it.
+    if (run.hostId && run.kind?.startsWith("github-review")) {
+      rememberHandledSession(run);
+      continue;
+    }
+    // Other GitHub behaviors still own their recovery (simplify re-trigger on
+    // the next PR event; auto-fix loops are resumed by the GitHub startup
     // sweep). Resuming them generically would double-drive an auto-fix loop.
     if (run.kind?.startsWith("github-")) {
       rememberHandledSession(run);

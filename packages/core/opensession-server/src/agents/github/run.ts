@@ -1,13 +1,27 @@
 /**
- * Shared headless-run helper for the github agent. Composes `runAgent` like
- * automations.ts does, but persists its own visible NativeSessionFile so each
- * PR review/fix/simplify shows up as a session in the web UI, and resumes
- * the engine conversation across rounds via the deterministic per-PR session file.
+ * Shared headless-run helper for the github agent. Persists its own visible
+ * NativeSessionFile so each PR review/fix/simplify shows up as a session in the
+ * web UI, and resumes the engine conversation across rounds via the
+ * deterministic per-PR session file. Reviews use a detached run host so the
+ * model turn can outlive a service restart; the GitHub recovery marker resumes
+ * the surrounding posting workflow.
  */
 import { existsSync, readFileSync } from "fs";
 import { OPENSESSION_SESSIONS_DIR } from "../../server/paths";
 import { invalidateSessionsCache, recordRunOutcome, updateSessionFile } from "../../server/session-cache";
-import { runAgent } from "../../server/agent-runner";
+import {
+  cancelAgentRun,
+  runAgent,
+  resumeContinuationPrompt,
+} from "../../server/agent-runner";
+import { runAgentHosted, resumeLocalHostRun } from "../../server/host-client";
+import {
+  activeRunRecords,
+  journalClearIfLineage,
+  journalMarkRecoveryAttached,
+  journalStartRecovery,
+  type ActiveRunRecord,
+} from "../../server/run-journal";
 import { listAutomations } from "../../server/automations";
 import { providerFor, DEFAULT_FALLBACK_MODEL, modelLabel } from "../../server/models";
 import { engineSessionPatch } from "../../server/sessions";
@@ -18,7 +32,10 @@ import { repoForPath } from "../../server/worktree";
 import { PR_EVENT_KEY, prKey, repoForFullName } from "./constants";
 import type { NativeSessionFile } from "../../server/types";
 import { configuredServer, defaultRepo } from "../../server/config";
-import { shouldPersistModelSwitch } from "../../server/run-events";
+import {
+  shouldPersistModelSwitch,
+  type StreamEvent,
+} from "../../server/run-events";
 
 const SESSIONS_DIR = OPENSESSION_SESSIONS_DIR;
 
@@ -248,6 +265,10 @@ export interface GithubRunOpts {
   title: string;
   /** Resume the prior engine conversation for this PR+behavior if one exists. */
   resume?: boolean;
+  /** Run this turn in a detached host so it survives a service restart. */
+  detached?: boolean;
+  /** Reattach the detached turn left by this behavior's persisted recovery marker. */
+  recoverDetached?: boolean;
   /** Commit attribution for code-mode runs (the human who asked). */
   author?: GitIdentity | null;
   onSessionCreated?: (bksId: string) => void;
@@ -259,6 +280,52 @@ export interface GithubRunResult {
   error?: string;
   /** Model that actually drove the run (after any fallback switches). */
   model?: string;
+}
+
+/** Pick the newest detached turn belonging to this deterministic GitHub session. */
+export function recoverableGithubRun(
+  records: ActiveRunRecord[],
+  bksId: string,
+  kind: GithubRunKind,
+): ActiveRunRecord | undefined {
+  const journalKind = `github-${kind}`;
+  return records
+    .filter(
+      (run) =>
+        run.osSessionId === bksId &&
+        !!run.hostId &&
+        (run.kind === journalKind || run.kind?.startsWith(`${journalKind}-`)),
+    )
+    .sort(
+      (a, b) =>
+        (Date.parse(b.startedAt || "") || 0) -
+        (Date.parse(a.startedAt || "") || 0),
+    )[0];
+}
+
+async function discardGithubRunRecord(
+  run: ActiveRunRecord,
+  bksId: string,
+): Promise<void> {
+  const events = await resumeLocalHostRun(run, {});
+  if (events) {
+    cancelAgentRun(bksId, run.claudeSessionId, run.runKey);
+    for await (const _event of events) {}
+  }
+  journalClearIfLineage(run);
+}
+
+/** Stop a detached turn whose surrounding GitHub workflow is no longer recoverable. */
+export async function discardRecoverableGithubRun(
+  prNumber: number,
+  kind: GithubRunKind,
+  ghRepo?: string,
+): Promise<boolean> {
+  const bksId = bksIdFor(prNumber, kind, ghRepo);
+  const run = recoverableGithubRun(activeRunRecords(), bksId, kind);
+  if (!run) return false;
+  await discardGithubRunRecord(run, bksId);
+  return true;
 }
 
 /** Run one headless turn for a PR behavior; returns the agent's accumulated text. */
@@ -336,20 +403,95 @@ export async function runGithubAgent(opts: GithubRunOpts): Promise<GithubRunResu
   await persist(resumeFrom);
   invalidateSessionsCache();
 
+  const existingDetachedRun = opts.detached
+    ? recoverableGithubRun(activeRunRecords(), bksId, opts.kind)
+    : undefined;
+  let recoveredRun = opts.recoverDetached ? existingDetachedRun : undefined;
+
   try {
-    for await (const event of runAgent({
-      prompt: opts.prompt,
-      sessionId: resumeFrom || undefined,
-      cwd: opts.cwd,
-      mode: opts.mode,
-      model: effectiveModel,
-      confirmTools: STRIPE_CONFIRM_TOOLS,
-      aws: true,
-      author: opts.author,
-      fallbackModel: DEFAULT_FALLBACK_MODEL,
-      mcpServers: githubFlowMcpServers(),
-      journal: { osSessionId: bksId, kind: `github-${opts.kind}` },
-    })) {
+    // A new head supersedes the detached review that was running when the
+    // server stopped. Cancel and consume it before starting the replacement so
+    // two models never inspect different commits under the same session id.
+    if (existingDetachedRun && !opts.recoverDetached) {
+      console.log(
+        `[github-run] Discarding superseded ${opts.kind} host ${existingDetachedRun.hostId} for ${bksId}`,
+      );
+      await discardGithubRunRecord(existingDetachedRun, bksId);
+    }
+
+    let events: AsyncIterable<StreamEvent>;
+    if (recoveredRun) {
+      recoveredRun = journalStartRecovery(recoveredRun);
+      engineSessionId = recoveredRun.claudeSessionId || engineSessionId;
+      const reattached = await resumeLocalHostRun(recoveredRun, {});
+      if (reattached) {
+        console.log(
+          `[github-run] Reattached ${opts.kind} session ${bksId} to host ${recoveredRun.hostId}`,
+        );
+        Object.assign(
+          recoveredRun,
+          journalMarkRecoveryAttached(recoveredRun) || {},
+        );
+        events = reattached;
+      } else {
+        journalClearIfLineage(recoveredRun);
+        console.warn(
+          `[github-run] Detached host ${recoveredRun.hostId} is gone; resuming ${bksId} from its engine session`,
+        );
+        events = runAgentHosted({
+          osSessionId: bksId,
+          prompt: recoveredRun.claudeSessionId
+            ? resumeContinuationPrompt(recoveredRun.prompt)
+            : opts.prompt,
+          sessionId: recoveredRun.claudeSessionId || undefined,
+          cwd: opts.cwd,
+          mode: opts.mode,
+          model: effectiveModel,
+          confirmTools: STRIPE_CONFIRM_TOOLS,
+          aws: true,
+          author: opts.author,
+          fallbackModel: DEFAULT_FALLBACK_MODEL,
+          mcpServers: githubFlowMcpServers(),
+          trustProfile: "automation",
+          journalKind: `github-${opts.kind}`,
+          firstJournaledAt: recoveredRun.firstJournaledAt,
+          resumeAttempts: recoveredRun.resumeAttempts,
+          lastResumeAt: recoveredRun.lastResumeAt,
+        });
+      }
+    } else if (opts.detached) {
+      events = runAgentHosted({
+        osSessionId: bksId,
+        prompt: opts.prompt,
+        sessionId: resumeFrom || undefined,
+        cwd: opts.cwd,
+        mode: opts.mode,
+        model: effectiveModel,
+        confirmTools: STRIPE_CONFIRM_TOOLS,
+        aws: true,
+        author: opts.author,
+        fallbackModel: DEFAULT_FALLBACK_MODEL,
+        mcpServers: githubFlowMcpServers(),
+        trustProfile: "automation",
+        journalKind: `github-${opts.kind}`,
+      });
+    } else {
+      events = runAgent({
+        prompt: opts.prompt,
+        sessionId: resumeFrom || undefined,
+        cwd: opts.cwd,
+        mode: opts.mode,
+        model: effectiveModel,
+        confirmTools: STRIPE_CONFIRM_TOOLS,
+        aws: true,
+        author: opts.author,
+        fallbackModel: DEFAULT_FALLBACK_MODEL,
+        mcpServers: githubFlowMcpServers(),
+        journal: { osSessionId: bksId, kind: `github-${opts.kind}` },
+      });
+    }
+
+    for await (const event of events) {
       if (event.type === "init") {
         engineSessionId = event.sessionId || engineSessionId;
         if (event.provider) effectiveProvider = event.provider;
@@ -371,12 +513,13 @@ export async function runGithubAgent(opts: GithubRunOpts): Promise<GithubRunResu
             modelHistory.push({
               model: to,
               at: new Date().toISOString(),
-              by: `auto-switch — ${modelLabel(event.fromModel)} ${event.switchReason || "out of credits"}`,
+              by: `auto-switch · ${modelLabel(event.fromModel)} ${event.switchReason || "out of credits"}`,
             });
           }
         }
       } else if (event.type === "done") {
         engineSessionId = event.sessionId || engineSessionId;
+        if (event.result) text = event.result;
         if (event.provider) effectiveProvider = event.provider;
         if (event.model) effectiveModel = event.model;
       } else if (event.type === "error") {
@@ -385,6 +528,8 @@ export async function runGithubAgent(opts: GithubRunOpts): Promise<GithubRunResu
     }
   } catch (e: any) {
     errorMsg = e.message || String(e);
+  } finally {
+    if (recoveredRun) journalClearIfLineage(recoveredRun);
   }
 
   await persist(engineSessionId);

@@ -6,7 +6,12 @@
  * Deduped on head SHA so the same commit isn't reviewed twice.
  */
 import { personaName } from "../../server/config";
-import { getPrDetails, getPrDiff, type PrDetails } from "../../server/pr-info";
+import {
+  getPrDetails,
+  getPrDetailsFresh,
+  getPrDiff,
+  type PrDetails,
+} from "../../server/pr-info";
 import {
   activeRunCancellationRequested,
   claimLock,
@@ -16,7 +21,13 @@ import {
   recordReviewed,
   clearActiveRun,
 } from "./state";
-import { announceGithubRun, runGithubAgent, sessionUrl } from "./run";
+import {
+  announceGithubRun,
+  discardRecoverableGithubRun,
+  runGithubAgent,
+  sessionUrl,
+  type GithubRunResult,
+} from "./run";
 import { buildReviewPrompt, DEFAULT_REVIEW_PROMPT } from "./prompts";
 import {
   getComment,
@@ -164,6 +175,9 @@ export async function runReview(
       priorRun?.headSha && pr.headSha && priorRun.headSha === pr.headSha,
     );
     const legacyRecovery = recovering && !priorRun?.headSha;
+    const recoveredReviewResult = sameHeadRecovery
+      ? priorRun?.reviewResult
+      : undefined;
     updatePrState(
       pr.number,
       pr.headRef,
@@ -174,6 +188,7 @@ export async function runReview(
           startedAt,
           headSha: pr.headSha || priorRun?.headSha,
           progressCommentId: sameHeadRecovery ? priorRun?.progressCommentId : undefined,
+          reviewResult: recoveredReviewResult,
           steer,
         };
       },
@@ -364,32 +379,61 @@ export async function runReview(
       });
     }
 
-    if (cancellationRequested()) return finishCancelled(placeholderId || undefined);
-    console.log(`[github] Reviewing PR #${pr.number} @ ${pr.headSha.slice(0, 7)} (${isUpdate ? "update" : "initial"})`);
-    const result = await runGithubAgent({
-      prNumber: pr.number,
-      ghRepo: pr.ghRepo,
-      kind: "review",
-      prompt,
-      cwd,
-      mode: "ask",
-      model: reviewModel,
-      branch: pr.headRef,
-      title,
-      // Each review is self-contained: it reads the CURRENT full diff from the
-      // pinned worktree and posts a fresh full assessment, so
-      // we do NOT resume the prior engine session. Resuming accumulated the whole
-      // transcript across every push, and on actively-updated PRs the context grew
-      // past the engine's 1M-token limit — the run then hard-failed with "Prompt is
-      // too long" and could not be compacted (a single over-limit exchange has
-      // nothing to drop). See the 2026-07-11 dream: 12 such failures, all
-      // github-review, e.g. PR #4638 (15 errors / 0 turns). `isUpdate` still drives
-      // the "re-review the current diff" prompt framing above.
-      resume: false,
-    });
+    const persistReviewResult = (result: GithubRunResult) => {
+      updatePrState(
+        pr.number,
+        pr.headRef,
+        (s) => {
+          if (
+            s.activeRun?.kind !== "review" ||
+            s.activeRun.startedAt !== startedAt
+          ) return;
+          s.activeRun.reviewResult = {
+            text: result.text,
+            error: result.error,
+            model: result.model,
+          };
+        },
+        pr.ghRepo,
+      );
+    };
 
     if (cancellationRequested()) return finishCancelled(placeholderId || undefined);
-    let finalResult = result;
+    console.log(`[github] Reviewing PR #${pr.number} @ ${pr.headSha.slice(0, 7)} (${isUpdate ? "update" : "initial"})`);
+    let finalResult: GithubRunResult;
+    if (recoveredReviewResult) {
+      finalResult = { bksId, ...recoveredReviewResult };
+      console.log(
+        `[github] Reusing the durable model result for PR #${pr.number} after restart`,
+      );
+    } else {
+      finalResult = await runGithubAgent({
+        prNumber: pr.number,
+        ghRepo: pr.ghRepo,
+        kind: "review",
+        prompt,
+        cwd,
+        mode: "ask",
+        model: reviewModel,
+        branch: pr.headRef,
+        title,
+        // Each review is self-contained: it reads the CURRENT full diff from the
+        // pinned worktree and posts a fresh full assessment, so
+        // we do NOT resume the prior engine session. Resuming accumulated the whole
+        // transcript across every push, and on actively-updated PRs the context grew
+        // past the engine's 1M-token limit. The run then hard-failed with "Prompt is
+        // too long" and could not be compacted because a single over-limit exchange
+        // has nothing to drop. See the 2026-07-11 dream: 12 such failures, all
+        // github-review, e.g. PR #4638 (15 errors / 0 turns). `isUpdate` still drives
+        // the "re-review the current diff" prompt framing above.
+        resume: false,
+        detached: true,
+        recoverDetached: sameHeadRecovery || legacyRecovery,
+      });
+      persistReviewResult(finalResult);
+    }
+
+    if (cancellationRequested()) return finishCancelled(placeholderId || undefined);
     let parsed = parseReviewOutput(finalResult.text);
     // Fable occasionally declares a progress narration complete before it emits
     // the review contract. Give the same engine session one bounded chance to
@@ -407,7 +451,12 @@ export async function runReview(
         branch: pr.headRef,
         title,
         resume: true,
+        detached: true,
+        // If the process died during this bounded repair turn, the initial
+        // result above is durable and the surviving host belongs to the repair.
+        recoverDetached: recovering,
       });
+      persistReviewResult(finalResult);
       if (cancellationRequested()) return finishCancelled(placeholderId || undefined);
       parsed = parseReviewOutput(finalResult.text);
     }
@@ -419,6 +468,39 @@ export async function runReview(
     const tob = await testOnBase;
     const secrets = await secretScan;
     if (cancellationRequested()) return finishCancelled(placeholderId || undefined);
+
+    // Never publish an assessment against a different commit from the one the
+    // worktree and prompt were pinned to. A push while the review was running
+    // gets its own webhook/reconcile review; this result is now stale.
+    const latestPr = await getPrDetailsFresh(
+      pr.headRef,
+      pr.ghRepo || undefined,
+    );
+    if (
+      pr.headSha &&
+      latestPr?.headRefOid &&
+      latestPr.headRefOid !== pr.headSha
+    ) {
+      console.log(
+        `[github] PR #${pr.number} moved from ${pr.headSha.slice(0, 7)} to ${latestPr.headRefOid.slice(0, 7)} during review; discarding the stale result`,
+      );
+      if (placeholderId) {
+        await editIssueComment(
+          placeholderId,
+          `${REVIEW_MARKER}\n### 🤖 ${personaName()} review\n\nNew commits arrived before this review finished. Waiting for the updated review.`,
+          pr.ghRepo,
+        ).catch(() => {});
+      }
+      audit({
+        msg: "review_superseded_during_run",
+        pr_number: pr.number,
+        repo: pr.ghRepo || defaultRepo().ghRepo,
+        reviewed_sha: pr.headSha,
+        current_sha: latestPr.headRefOid,
+      });
+      return null;
+    }
+
     // A leaked credential blocks regardless of what the model concluded: the
     // verdict drops to request_changes and confidence caps at 2/5. (Not counted
     // as a "blocking finding" for the auto-fix gate — rotation is human work a
@@ -478,6 +560,13 @@ export async function runReview(
     console.error(`[github] review failed for PR #${pr.number}:`, e);
     return null;
   } finally {
+    // Any detached host still present here belongs to a workflow that returned
+    // before consuming it (for example, PR setup failed during restart
+    // recovery). Stop it before clearing the marker so no orphaned review keeps
+    // running without a posting owner.
+    await discardRecoverableGithubRun(pr.number, "review", pr.ghRepo).catch(
+      (e) => console.warn(`[github] failed to stop orphaned review host for PR #${pr.number}:`, e),
+    );
     // Clear the recovery flag on completion; a killed process leaves it set so the
     // github agent re-runs the review on startup.
     clearActiveRun(pr.number, pr.headRef, "review", pr.ghRepo);

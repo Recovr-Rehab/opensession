@@ -88,6 +88,12 @@ export interface GithubPrState {
     headSha?: string;
     /** The run's progress comment id, reused only on restart recovery, not on a fresh re-trigger. */
     progressCommentId?: number;
+    /** Durable model result. Recovery can finish GitHub posting without rerunning a completed review. */
+    reviewResult?: {
+      text: string;
+      error?: string;
+      model?: string;
+    };
     /** Free-text steer from the triggering message, so a restart can re-pass it. */
     steer?: string;
   };

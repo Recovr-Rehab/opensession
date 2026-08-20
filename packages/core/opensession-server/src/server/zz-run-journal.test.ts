@@ -90,6 +90,31 @@ describe("run journal", () => {
 		}
 	});
 
+	it("leaves a detached GitHub review journal for its posting workflow", () => {
+		const sessionId = `github-review-${crypto.randomUUID()}`;
+		const runKey = `rh-${crypto.randomUUID()}`;
+		try {
+			mod.journalSet({
+				runKey,
+				hostId: runKey,
+				osSessionId: sessionId,
+				prompt: "review this PR",
+				cwd: "/tmp",
+				kind: "github-review",
+				startedAt: new Date().toISOString(),
+			});
+			clearRunState(sessionId);
+
+			expect(agent.resumeInterruptedRuns()).toContain(sessionId);
+			expect(
+				mod.activeRunRecords().some((run) => run.runKey === runKey),
+			).toBe(true);
+		} finally {
+			mod.journalClear(runKey);
+			clearRunState(sessionId);
+		}
+	});
+
 	it("cancels a journal-owned recovery before its queued worker starts", () => {
 		const sessionId = `queued-recovery-${crypto.randomUUID()}`;
 		const runKey = `run-${crypto.randomUUID()}`;
