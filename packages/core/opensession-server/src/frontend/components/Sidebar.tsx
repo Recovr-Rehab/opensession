@@ -306,10 +306,7 @@ import { ActiveSubagentRows } from "./sidebar/ActiveSubagentRows";
 import { DraftRow } from "./sidebar/DraftRow";
 import { SidebarCtxMenu } from "./sidebar/SidebarCtxMenu";
 import { SidebarToolRows, SidebarToolsMenu } from "./sidebar/SidebarToolsMenu";
-import {
-	SidebarCustomizeDialog,
-	type SidebarCustomizeSection,
-} from "./sidebar/SidebarCustomizeDialog";
+import { SidebarCustomizeDialog } from "./sidebar/SidebarCustomizeDialog";
 import { EmptyState, ListSkeleton } from "../ui/state";
 import {
 	SIDEBAR_ROW,
@@ -705,8 +702,7 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 	// a face picked there is the sidebar you come back to.
 	const filter = useSidebarFilter();
 	const [filterOpen, setFilterOpen] = useState(false);
-	const [customizeSection, setCustomizeSection] =
-		useState<SidebarCustomizeSection | null>(null);
+	const [customizeOpen, setCustomizeOpen] = useState(false);
 	const filterBtnRef = useRef<HTMLButtonElement>(null);
 	// The phone stand-in for the header filter button (portaled into the top
 	// bar next to Search). The popover anchors to whichever button is live.
@@ -5099,9 +5095,9 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 					currentUser={currentUser}
 					onChange={setFilter}
 					onClose={() => setFilterOpen(false)}
-					onOrderSection={(section) => {
+					onCustomize={() => {
 						setFilterOpen(false);
-						setCustomizeSection(section);
+						setCustomizeOpen(true);
 					}}
 				/>
 			)}
@@ -6189,15 +6185,12 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 			onToggleTool={setToolVisible}
 			onSetSupport={setSupportSurface}
 			onToggleSource={setSidebarFeedVisible}
-			onCustomize={() => setCustomizeSection("all")}
+			onCustomize={() => setCustomizeOpen(true)}
 		/>
 		</ContextMenu.Root>
 		<SidebarCustomizeDialog
-			open={customizeSection !== null}
-			onOpenChange={(open) => {
-				if (!open) setCustomizeSection(null);
-			}}
-			section={customizeSection ?? "all"}
+			open={customizeOpen}
+			onOpenChange={setCustomizeOpen}
 			tools={sidebarMenuTools.map((tool) => ({
 				id: tool.id,
 				label: tool.label,
