@@ -4,11 +4,16 @@
  * The UI normally lives on a private host, so Slack cannot crawl its Open Graph
  * metadata. The same renderer is therefore available on the public webhook
  * origin and is also linked from the session page for clients that can crawl it.
+ *
+ * The card can carry a screenshot the session itself produced (a walkthrough
+ * shot, or an image someone pasted into the chat). That image is baked into a
+ * PNG served from a capability URL, so it travels wherever the link is pasted.
+ * Only file-backed session media is used, and only at thumbnail size.
  */
 
 import sharp from "sharp";
 import { createHmac, randomBytes, timingSafeEqual } from "crypto";
-import { chmodSync, readFileSync, writeFileSync } from "fs";
+import { chmodSync, readFileSync, statSync, writeFileSync } from "fs";
 import { repoLetter } from "../frontend/lib/repo-label";
 import {
 	DEFAULT_ACCENT_THEME,
@@ -30,7 +35,9 @@ import {
 	repoTileColor,
 } from "./repo-tile-colors";
 import { findSessionAsync } from "./session-cache";
-import type { UnifiedSession } from "./types";
+import { transcriptStore } from "./transcript-store";
+import { isWithinUploads, stagedImageRef } from "./uploads";
+import type { TranscriptEntry, UnifiedSession } from "./types";
 import { getUiPrefs } from "./ui-prefs";
 
 export const SESSION_CARD_WIDTH = 1200;
@@ -46,7 +53,7 @@ export const SESSION_CARD_BANNER_WIDTH = 1200;
 export const SESSION_CARD_BANNER_HEIGHT = 200;
 
 export type SessionCardVariant = "card" | "banner";
-const SESSION_CARD_VERSION = 6;
+const SESSION_CARD_VERSION = 7;
 
 /**
  * The card is ink, not paper: the product mark is a near-black square with a
@@ -66,14 +73,17 @@ const PAD_X = 56;
 const TILE_SIZE = 48;
 const TILE_GAP = 16;
 const TILE_RADIUS = TILE_SIZE * 0.46;
-/** The metadata line: a glyph and its label, twice over. */
+/**
+ * The metadata line: a glyph and its label, twice over. Its labels share the
+ * title's text column while the smaller person tile centres under the repo mark.
+ */
 const META_SIZE = 28;
 const META_GAP = 20;
 const META_TEXT_SIZE = 24;
 const META_LABEL_GAP = 12;
 const META_GROUP_GAP = 26;
 const META_GLYPH_SIZE = 22;
-const META_TEXT_X = PAD_X + META_SIZE + META_LABEL_GAP;
+const META_RADIUS = META_SIZE * 0.46;
 const META_FONT = "Inter Medium 24";
 const META_OPACITY = 0.55;
 const TITLE_SIZE = 48;
@@ -81,6 +91,17 @@ const TITLE_X = PAD_X + TILE_SIZE + TILE_GAP;
 const TITLE_MAX_WIDTH = SESSION_CARD_WIDTH - TITLE_X - PAD_X;
 const TITLE_FONT = "Inter SemiBold 48";
 const TITLE_LETTER_SPACING = Math.round(-1.2 * 1024);
+/**
+ * The screenshot panel. It bleeds off the right edge and runs the full height
+ * rather than sitting in the card as a framed thumbnail: a session link is
+ * read at thumbnail size, where an inset picture of a picture reads as noise.
+ * The image emerges from the ink through a soft left edge, so the words keep
+ * a quiet background whatever the screenshot happens to be.
+ */
+const SHOT_BANNER_WIDTH = 400;
+const SHOT_CARD_WIDTH = 470;
+const SHOT_FADE = 160;
+const SHOT_GAP = 28;
 
 export interface SessionSocialCardData {
 	title: string;
@@ -89,6 +110,24 @@ export interface SessionSocialCardData {
 	model?: string;
 	person?: DirectoryPerson;
 	accent: string;
+	/** Absolute path to a screenshot this session produced, when it has one. */
+	shot?: string;
+}
+
+function shotWidth(variant: SessionCardVariant): number {
+	return variant === "banner" ? SHOT_BANNER_WIDTH : SHOT_CARD_WIDTH;
+}
+
+/** How much room one line of title has, which the screenshot takes from. */
+function titleMeasure(
+	data: SessionSocialCardData,
+	variant: SessionCardVariant,
+): number {
+	const left = clean(data.repo) ? TITLE_X : PAD_X;
+	const right = data.shot
+		? SESSION_CARD_WIDTH - shotWidth(variant) - SHOT_GAP
+		: SESSION_CARD_WIDTH - PAD_X;
+	return right - left;
 }
 
 function clean(value: string | null | undefined): string {
@@ -116,6 +155,7 @@ function sessionModelLabel(session: UnifiedSession): string | undefined {
 
 export function sessionSocialCardData(
 	session: UnifiedSession,
+	options: { includeShot?: boolean } = {},
 ): SessionSocialCardData {
 	const heading = sessionCardTitle(session);
 	const ownerRef = clean(session.createdBy || session.startedBy) || productName();
@@ -125,14 +165,120 @@ export function sessionSocialCardData(
 	const accentTheme = isAccentTheme(savedAccent)
 		? savedAccent
 		: DEFAULT_ACCENT_THEME;
+	const shot = options.includeShot ? sessionShotPath(session) : undefined;
 	return {
 		title: heading.title,
 		owner: person?.fullName || ownerRef,
 		...(session.repo ? { repo: session.repo } : {}),
 		...(model ? { model } : {}),
 		...(person ? { person } : {}),
+		...(shot ? { shot } : {}),
 		accent: getAccentThemeOption(accentTheme).light,
 	};
+}
+
+const SHOT_MAX_BYTES = 24 * 1024 * 1024;
+const SHOT_SCAN_ENTRIES = 60;
+
+/**
+ * Only staged session media is eligible: a walkthrough shot or an image
+ * someone attached in the chat, both of which live under the uploads dir. The
+ * card travels on a capability URL, so a path an agent merely printed is not
+ * enough to put a file on it.
+ */
+function usableShot(path: string): boolean {
+	if (!path || !isWithinUploads(path)) return false;
+	if (!/\.(png|jpe?g|webp|gif)$/i.test(path)) return false;
+	try {
+		const { size } = statSync(path);
+		return size > 0 && size <= SHOT_MAX_BYTES;
+	} catch {
+		return false;
+	}
+}
+
+/** Resolve one transcript image without widening the card route into a file
+ * reader. Composer uploads are the only chat media eligible for the card. */
+function uploadedShot(src: string): string | undefined {
+	const staged = stagedImageRef(src);
+	return staged && usableShot(staged.path) ? staged.path : undefined;
+}
+
+/** Return the first eligible image from the requested entry order. */
+function entryShot(
+	entries: TranscriptEntry[],
+	field: "images" | "featuredMedia",
+): string | undefined {
+	for (const entry of entries) {
+		for (const src of [...(entry[field] ?? [])].reverse()) {
+			const path = uploadedShot(src);
+			if (path) return path;
+		}
+	}
+	return undefined;
+}
+
+/**
+ * Pick the picture that best says what this session is about. A walkthrough is
+ * the strongest deliberate summary. Next comes media the agent explicitly
+ * featured, then a picture a person attached in the conversation. Ordinary
+ * tool attachments are excluded because a file the agent merely read is not a
+ * useful or intentional social preview.
+ */
+function sessionShotPath(session: UnifiedSession): string | undefined {
+	for (const shot of session.walkthrough?.shots ?? []) {
+		for (const candidate of [shot.after, shot.before])
+			if (candidate && usableShot(candidate)) return candidate;
+	}
+	try {
+		const store = transcriptStore();
+		const tail = store.readTail(session.id, SHOT_SCAN_ENTRIES);
+		const newestFirst = [...tail.entries].reverse();
+		const featured = entryShot(newestFirst, "featuredMedia");
+		if (featured) return featured;
+
+		const recentUser = entryShot(
+			newestFirst.filter((entry) => entry.type === "user"),
+			"images",
+		);
+		if (recentUser) return recentUser;
+
+		if (tail.firstSeq > 1) {
+			const opening = store.readRange(
+				session.id,
+				1,
+				Number.MAX_SAFE_INTEGER,
+				0,
+				SHOT_SCAN_ENTRIES,
+			);
+			return entryShot(
+				opening.entries.filter((entry) => entry.type === "user"),
+				"images",
+			);
+		}
+	} catch {
+		// No transcript for this session yet, or the store is unavailable.
+	}
+	return undefined;
+}
+
+/** The screenshot, cropped to the panel. Top-anchored: a screenshot says what
+ *  it is in its first band, and centring it usually crops that away. */
+async function shotDataUrl(
+	path: string | undefined,
+	width: number,
+	height: number,
+): Promise<string> {
+	if (!path) return "";
+	try {
+		const png = await sharp(path, { limitInputPixels: 40_000_000 })
+			.resize(width, height, { fit: "cover", position: "top" })
+			.png()
+			.toBuffer();
+		return `data:image/png;base64,${png.toString("base64")}`;
+	} catch {
+		return "";
+	}
 }
 
 function xml(value: string): string {
@@ -179,9 +325,12 @@ async function metaWidth(text: string): Promise<number> {
 }
 
 /** Fit one 48 px Inter Semi Bold line inside the measure left of the tile. */
-export async function fitSocialCardTitle(title: string): Promise<string> {
+export async function fitSocialCardTitle(
+	title: string,
+	maxWidth: number = TITLE_MAX_WIDTH,
+): Promise<string> {
 	const value = clean(title) || productName();
-	if ((await titleWidth(value)) <= TITLE_MAX_WIDTH) return value;
+	if ((await titleWidth(value)) <= maxWidth) return value;
 
 	const characters = Array.from(value);
 	let low = 1;
@@ -189,7 +338,7 @@ export async function fitSocialCardTitle(title: string): Promise<string> {
 	while (low < high) {
 		const middle = Math.ceil((low + high) / 2);
 		const candidate = `${characters.slice(0, middle).join("").trimEnd()}...`;
-		if ((await titleWidth(candidate)) <= TITLE_MAX_WIDTH) low = middle;
+		if ((await titleWidth(candidate)) <= maxWidth) low = middle;
 		else high = middle - 1;
 	}
 	return `${characters.slice(0, low).join("").trimEnd()}...`;
@@ -370,6 +519,7 @@ export function sessionSocialCardSvg(
 	variant: SessionCardVariant = "card",
 	repoIcon = "",
 	ownerWidth = 0,
+	shot = "",
 ): string {
 	const banner = variant === "banner";
 	const height = banner ? SESSION_CARD_BANNER_HEIGHT : SESSION_CARD_HEIGHT;
@@ -394,6 +544,17 @@ export function sessionSocialCardSvg(
 	const tileColor = repoId ? repoTileColorFor(repoId) : CARD_PAPER;
 	const hasTile = !!(repoIcon || repoId);
 	const titleX = hasTile ? TITLE_X : PAD_X;
+	// A two-column grid: the smaller person tile centres under the repo mark,
+	// while the person's name starts on exactly the same x as the title.
+	const metaX = hasTile
+		? PAD_X + (TILE_SIZE - META_SIZE) / 2
+		: PAD_X;
+	const metaTextX = hasTile
+		? titleX
+		: metaX + META_SIZE + META_LABEL_GAP;
+	const avatarTile = squirclePath(metaX, metaTop, META_SIZE, META_RADIUS);
+	const shotW = shotWidth(variant);
+	const shotX = SESSION_CARD_WIDTH - shotW;
 	// Art when the repo has any, the same colored letter the app falls back to
 	// when it does not.
 	const repoMarkup = !hasTile
@@ -404,13 +565,18 @@ export function sessionSocialCardSvg(
 	// The person's own face when we have one, the `person` glyph when we do
 	// not, so the subtext keeps its shape either way.
 	const avatarMarkup = avatar
-		? `<image href="${avatar}" x="${PAD_X}" y="${metaTop}" width="${META_SIZE}" height="${META_SIZE}" preserveAspectRatio="xMidYMid slice" clip-path="url(#avatarClip)"/>`
-		: metaGlyph("person", PAD_X + (META_SIZE - META_GLYPH_SIZE) / 2, metaCenter);
+		? `<image href="${avatar}" x="${metaX}" y="${metaTop}" width="${META_SIZE}" height="${META_SIZE}" preserveAspectRatio="xMidYMid slice" clip-path="url(#avatarClip)"/>`
+		: metaGlyph("person", metaX + (META_SIZE - META_GLYPH_SIZE) / 2, metaCenter);
+	// The screenshot, when the session has one: full height, bleeding off the
+	// right edge, emerging from the ink through a soft left edge.
+	const shotMarkup = shot
+		? `<g clip-path="url(#shotClip)"><image href="${shot}" x="${shotX}" y="0" width="${shotW}" height="${height}" preserveAspectRatio="xMidYMid slice"/><rect x="${shotX}" y="0" width="${shotW}" height="${height}" fill="url(#shotFade)"/></g>`
+		: "";
 	// Where the model group starts. Measured by the caller through the same
 	// rasterizer that draws the card; the estimate keeps this callable without
 	// a render (tests, and anyone inspecting the SVG).
 	const nameWidth = ownerWidth || owner.length * META_TEXT_SIZE * 0.52;
-	const modelX = META_TEXT_X + nameWidth + META_GROUP_GAP;
+	const modelX = metaTextX + nameWidth + META_GROUP_GAP;
 	const modelMarkup = model
 		? `${metaGlyph("model", modelX, metaCenter)}<text x="${(modelX + META_GLYPH_SIZE + META_LABEL_GAP).toFixed(2)}" y="${metaCenter + 1}" dominant-baseline="middle" fill="${CARD_PAPER}" fill-opacity="${META_OPACITY}" font-family="JetBrains Mono, monospace" font-size="${META_TEXT_SIZE}" font-weight="500">${xml(model)}</text>`
 		: "";
@@ -447,8 +613,13 @@ export function sessionSocialCardSvg(
     <stop stop-color="#FFFFFF" stop-opacity="0.14"/>
     <stop offset="1" stop-color="#000000" stop-opacity="0.08"/>
   </linearGradient>
+  <linearGradient id="shotFade" x1="${shotX}" y1="0" x2="${shotX + SHOT_FADE}" y2="0" gradientUnits="userSpaceOnUse">
+    <stop stop-color="${CARD_INK}"/>
+    <stop offset="1" stop-color="${CARD_INK}" stop-opacity="0"/>
+  </linearGradient>
+  <clipPath id="shotClip"><rect x="${shotX}" y="0" width="${shotW}" height="${height}"/></clipPath>
   <clipPath id="repoClip"><path d="${tile}"/></clipPath>
-  <clipPath id="avatarClip"><circle cx="${PAD_X + META_SIZE / 2}" cy="${metaCenter}" r="${META_SIZE / 2}"/></clipPath>
+  <clipPath id="avatarClip"><path d="${avatarTile}"/></clipPath>
 </defs>
 <rect width="1200" height="${height}" fill="${CARD_INK}"/>
 <rect width="1200" height="${height}" fill="url(#aurora)"/>
@@ -456,12 +627,14 @@ export function sessionSocialCardSvg(
 <g transform="${artTransform}">
   <path d="M68.8375 226.509C-37.3322 147.543 -7.34262 36.0198 68.8375 0H399V630H84.0041C208.443 571.121 289.104 390.338 68.8375 226.509Z" fill="url(#artGradient)"/>
 </g>
+${shotMarkup}
 ${hasTile && !repoIcon ? `<circle cx="${PAD_X + TILE_SIZE / 2}" cy="${tileCenter}" r="${TILE_SIZE * 1.7}" fill="url(#tileGlow)"/>` : ""}
 ${repoMarkup}
 ${hasTile ? `<path d="${tile}" fill="none" stroke="${CARD_PAPER}" stroke-opacity="0.14"/>` : ""}
 <text x="${titleX}" y="${tileCenter + 2}" dominant-baseline="middle" fill="${CARD_PAPER}" font-size="${TITLE_SIZE}" font-weight="600" letter-spacing="-1.2">${xml(displayTitle)}</text>
 ${avatarMarkup}
-<text x="${META_TEXT_X}" y="${metaCenter + 1}" dominant-baseline="middle" fill="${CARD_PAPER}" fill-opacity="${META_OPACITY}" font-size="${META_TEXT_SIZE}" font-weight="500">${xml(owner)}</text>
+${avatar ? `<path d="${avatarTile}" fill="none" stroke="${CARD_PAPER}" stroke-opacity="0.14"/>` : ""}
+<text x="${metaTextX}" y="${metaCenter + 1}" dominant-baseline="middle" fill="${CARD_PAPER}" fill-opacity="${META_OPACITY}" font-size="${META_TEXT_SIZE}" font-weight="500">${xml(owner)}</text>
 ${modelMarkup}
 </svg>`;
 }
@@ -481,13 +654,21 @@ export async function renderSessionSocialCard(
 	data: SessionSocialCardData,
 	variant: SessionCardVariant = "card",
 ): Promise<Buffer> {
-	const [avatar, repoIcon, monoFont, title, ownerWidth] = await Promise.all([
+	const height =
+		variant === "banner" ? SESSION_CARD_BANNER_HEIGHT : SESSION_CARD_HEIGHT;
+	const [avatar, repoIcon, monoFont, ownerWidth, shot] = await Promise.all([
 		avatarDataUrl(data.person),
 		repoIconDataUrl(data.repo),
 		socialCardMonoFont(),
-		fitSocialCardTitle(data.title),
 		metaWidth(metaLabel(clean(data.owner))),
+		shotDataUrl(data.shot, shotWidth(variant), height),
 	]);
+	// A missing or unreadable image falls back to the full title measure rather
+	// than leaving an unexplained blank where its panel would have been.
+	const title = await fitSocialCardTitle(
+		data.title,
+		titleMeasure(shot ? data : { ...data, shot: undefined }, variant),
+	);
 	return sharp(
 		Buffer.from(
 			sessionSocialCardSvg(
@@ -498,6 +679,7 @@ export async function renderSessionSocialCard(
 				variant,
 				repoIcon,
 				ownerWidth,
+				shot,
 			),
 		),
 	)
@@ -639,7 +821,7 @@ export function sessionSocialCardPublicRoutes(): Map<
 			return Response.json({ error: "Not found" }, { status: 404 });
 		const session = await findSessionAsync(sessionId);
 		if (!session) return Response.json({ error: "Not found" }, { status: 404 });
-		const data = sessionSocialCardData(session);
+		const data = sessionSocialCardData(session, { includeShot: true });
 		// Only the one named shape is honoured, so a crafted `s` cannot ask us to
 		// rasterize an arbitrary geometry.
 		const variant: SessionCardVariant =

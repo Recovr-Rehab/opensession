@@ -26,11 +26,31 @@ const {
 	socialSessionIdFromPath,
 } = await import("./session-social-card");
 const { invalidateSessionsCache } = await import("./session-cache");
+const { transcriptStore } = await import("./transcript-store");
 const { patchUiPrefs } = await import("./ui-prefs");
 
 const signedRouteSessionId = "slack-C123-1719860000.000000";
 const sessionsDir = join(scratch, ".opensession-sessions");
-mkdirSync(sessionsDir, { recursive: true });
+const uploadsDir = join(sessionsDir, "uploads", "social-card-tests");
+mkdirSync(uploadsDir, { recursive: true });
+const imageBytes = await sharp({
+	create: {
+		width: 640,
+		height: 360,
+		channels: 4,
+		background: "#92b8d9",
+	},
+})
+	.png()
+	.toBuffer();
+function testImage(name: string): string {
+	const path = join(uploadsDir, name);
+	writeFileSync(path, imageBytes);
+	return path;
+}
+function mediaRef(path: string): string {
+	return `/media?path=${encodeURIComponent(path)}`;
+}
 writeFileSync(
 	join(sessionsDir, `${signedRouteSessionId}.json`),
 	JSON.stringify({
@@ -98,6 +118,71 @@ describe("session social card", () => {
 		).toBe("opus-fable");
 	});
 
+	test("prefers walkthrough, featured, then person-attached screenshots", () => {
+		const opening = testImage("opening.png");
+		const featured = testImage("featured.png");
+		const walkthrough = testImage("walkthrough.png");
+		const sessionId = "sess-social-shot-priority";
+		transcriptStore().appendTranscriptEvents(sessionId, [
+			{
+				id: "opening",
+				type: "user",
+				content: "Please fix this",
+				timestamp: "2026-08-18T12:00:00Z",
+				images: [mediaRef(opening)],
+			},
+			{
+				id: "featured",
+				type: "tool_result",
+				content: "Finished preview",
+				timestamp: "2026-08-18T12:01:00Z",
+				images: [mediaRef(featured)],
+				featuredMedia: [mediaRef(featured)],
+			},
+		]);
+
+		expect(
+			sessionSocialCardData(session({ id: sessionId }), { includeShot: true })
+				.shot,
+		).toBe(featured);
+		expect(
+			sessionSocialCardData(
+				session({
+					id: sessionId,
+					walkthrough: {
+						summary: "A clearer session card.",
+						publishedAt: "2026-08-18T12:02:00Z",
+						shots: [{ after: walkthrough }],
+					},
+				}),
+				{ includeShot: true },
+			).shot,
+		).toBe(walkthrough);
+
+		const personOnlyId = "sess-social-person-shot";
+		transcriptStore().appendTranscriptEvents(personOnlyId, [
+			{
+				id: "person-shot",
+				type: "user",
+				content: "This screenshot explains the task",
+				timestamp: "2026-08-18T12:00:00Z",
+				images: [mediaRef(opening)],
+			},
+			{
+				id: "ordinary-tool-image",
+				type: "tool_result",
+				content: "A file the agent merely read",
+				timestamp: "2026-08-18T12:01:00Z",
+				images: [mediaRef(featured)],
+			},
+		]);
+		expect(
+			sessionSocialCardData(session({ id: personOnlyId }), {
+				includeShot: true,
+			}).shot,
+		).toBe(opening);
+	});
+
 	test("uses the available title measure before truncating", async () => {
 		const fitting = "Make Open Session links feel alive";
 		expect(await fitSocialCardTitle(fitting)).toBe(fitting);
@@ -137,6 +222,41 @@ describe("session social card", () => {
 		expect(svg).not.toContain("Fix <cards>");
 	});
 
+	test("aligns squircle metadata and a screenshot with the title column", () => {
+		const svg = sessionSocialCardSvg(
+			{
+				title: "A visual session",
+				owner: "Test Person",
+				repo: "opensession",
+				model: "gpt-5.6-sol",
+				accent: "#1d82bc",
+			},
+			"data:image/png;base64,avatar",
+			"",
+			"A visual session",
+			"banner",
+			"",
+			120,
+			"data:image/png;base64,screenshot",
+		);
+		expect(svg).toContain('<text x="120"');
+		expect(svg).toContain(
+			'<image href="data:image/png;base64,avatar" x="66"',
+		);
+		expect(svg).toMatch(
+			/<clipPath id="avatarClip"><path d="M78\.88 120\.00L/,
+		);
+		expect(svg).toContain(
+			'<text x="120" y="135" dominant-baseline="middle"',
+		);
+		expect(svg).toContain(
+			'<image href="data:image/png;base64,screenshot" x="800" y="0" width="400" height="200"',
+		);
+		expect(svg).toContain(
+			'<linearGradient id="shotFade" x1="800" y1="0" x2="960" y2="0"',
+		);
+	});
+
 	test("renders a 1200 by 630 PNG", async () => {
 		const png = await renderSessionSocialCard(sessionSocialCardData(session()));
 		const metadata = await sharp(png).metadata();
@@ -163,7 +283,7 @@ describe("session social card", () => {
 		expect(output).toContain("<title>Ship dynamic social cards · Open Session</title>");
 		expect(output).toContain('content="summary_large_image"');
 		expect(output).toMatch(
-			/content="https:\/\/media\.example\.test\/session-card\/sess-social-1\/[A-Za-z0-9_-]{32}\.png\?v=6"/,
+			/content="https:\/\/media\.example\.test\/session-card\/sess-social-1\/[A-Za-z0-9_-]{32}\.png\?v=7"/,
 		);
 		expect(output).toContain(
 			'property="og:url" content="https://os.example.test/session/sess-social-1"',
@@ -177,13 +297,13 @@ describe("session social card", () => {
 		).toBe("sess-social-1");
 		expect(socialSessionIdFromPath("/settings")).toBeNull();
 		expect(sessionSocialCardUrl("sess-social-1")).toMatch(
-			/^https:\/\/media\.example\.test\/session-card\/sess-social-1\/[A-Za-z0-9_-]{32}\.png\?v=6$/,
+			/^https:\/\/media\.example\.test\/session-card\/sess-social-1\/[A-Za-z0-9_-]{32}\.png\?v=7$/,
 		);
 	});
 
 	test("signs ids containing Slack timestamp dots", () => {
 		expect(sessionSocialCardUrl("slack-C123-1719860000.000000")).toMatch(
-			/^https:\/\/media\.example\.test\/session-card\/slack-C123-1719860000\.000000\/[A-Za-z0-9_-]{32}\.png\?v=6$/,
+			/^https:\/\/media\.example\.test\/session-card\/slack-C123-1719860000\.000000\/[A-Za-z0-9_-]{32}\.png\?v=7$/,
 		);
 	});
 
