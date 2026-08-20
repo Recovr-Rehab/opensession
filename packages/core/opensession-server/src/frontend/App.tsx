@@ -5000,6 +5000,7 @@ export function App(
 								loaded={archivedLoaded}
 								onSelect={(s) => navigate({ view: "session", id: s.id })}
 								onChanged={refresh}
+								topbarActionsEl={topbarActionsEl}
 							/>
 						) : route.view === "supporttinder" ? (
 							<SupportTinder

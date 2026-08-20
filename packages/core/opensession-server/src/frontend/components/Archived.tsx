@@ -16,13 +16,14 @@ import {
 	ARCHIVED_SECTION_ROWS,
 } from "../lib/archived-classes";
 import React, { useState, useMemo, useEffect } from "react";
+import { createPortal } from "react-dom";
 import type { UnifiedSession } from "../lib/types";
 import { relativeTime, archiveSessionApi } from "../lib/api";
 import { useCurrentUser } from "./UserPicker";
 import { usePeople } from "../lib/people";
 import { canonicalNames, sessionHasOwner, sessionOwners } from "../lib/session-owner";
 import { docTitle, DEFAULT_DOC_TITLE } from "../lib/brand";
-import { PageLayout } from "../ui/page";
+import { useIsPhone } from "../hooks/useIsPhone";
 import { Button } from "../ui/button";
 import { Card } from "../ui/card";
 import { Input } from "../ui/input";
@@ -43,6 +44,8 @@ interface Props {
 	loaded: boolean;
 	onSelect: (session: UnifiedSession) => void;
 	onChanged: () => void;
+	/** The pane's top bar, where this page's controls go. */
+	topbarActionsEl?: HTMLElement | null;
 }
 
 // Same key the sidebar persists its group/repo/sort choices under, so the
@@ -137,8 +140,15 @@ function originChip(s: UnifiedSession): { label: string; tone: string } | null {
 	return null;
 }
 
-export function Archived({ sessions, loaded, onSelect, onChanged }: Props) {
+export function Archived({
+	sessions,
+	loaded,
+	onSelect,
+	onChanged,
+	topbarActionsEl,
+}: Props) {
 	const currentUser = useCurrentUser();
+	const isPhone = useIsPhone();
 	const roster = usePeople();
 	const [search, setSearch] = useState("");
 	const [busy, setBusy] = useState<string | null>(null);
@@ -241,112 +251,130 @@ export function Archived({ sessions, loaded, onSelect, onChanged }: Props) {
 		}
 	}
 
-	return (
-		<PageLayout
-			title="Archived"
-			description={
-				loaded
-					? archived.length === allArchived.length
-						? `${archived.length} archived session${archived.length === 1 ? "" : "s"}`
-						: `${archived.length} of ${allArchived.length} archived sessions`
-					: "Loading archived sessions"
-			}
-			actions={
-				<div className="flex items-center gap-2 phone:w-full">
-					<Input
-						className="w-[240px] phone:min-w-0 phone:flex-1"
-						type="search"
-						aria-label="Search archived sessions"
-						placeholder="Search archived…"
-						value={search}
-						onChange={(e) => setSearch(e.target.value)}
-					/>
-					<Menu.Root>
-						<Menu.Trigger
-							render={
-								<Button
-									icon={<IconFilter size={18} />}
-									aria-label={`Filters, ${activeFilterCount} active`}
-									className={activeFilterCount > 0 ? "text-fg" : undefined}
-								>
-									Filters{activeFilterCount > 0 ? ` ${activeFilterCount}` : ""}
-								</Button>
-							}
-						/>
-						<Menu.Popup align="end" className="min-w-[220px]">
+	// Match Pull requests: keep the page name and its controls in the pane's
+	// top bar so the list can begin with useful content instead of page chrome.
+	// The search field gives up width before the filter button does.
+	const actions = (
+		<>
+			<Input
+				className="w-[200px] min-w-[90px] shrink-[100] phone:w-auto phone:flex-1"
+				type="search"
+				aria-label="Search archived sessions"
+				placeholder="Search archived…"
+				value={search}
+				onChange={(e) => setSearch(e.target.value)}
+				spellCheck={false}
+			/>
+			<Menu.Root>
+				<Menu.Trigger
+					render={
+						<Button
+							variant="ghost"
+							icon={<IconFilter size={18} />}
+							aria-label={`Filters, ${activeFilterCount} active`}
+							className={activeFilterCount > 0 ? "shrink-0 text-fg" : "shrink-0"}
+						>
+							Filters{activeFilterCount > 0 ? ` ${activeFilterCount}` : ""}
+						</Button>
+					}
+				/>
+				<Menu.Popup align="end" className="min-w-[220px]">
+					<Menu.Group>
+						<Menu.GroupLabel>Owner</Menu.GroupLabel>
+						<Menu.RadioGroup value={owner} onValueChange={(value) => setOwner(String(value))}>
+							<Menu.RadioItem value="mine" closeOnClick>
+								<UserAvatar name={currentUser} size={18} />
+								<span className="min-w-0 flex-1">My archived</span>
+								<Menu.Check on={owner === "mine"} />
+							</Menu.RadioItem>
+							{people.map(({ key, label }) => (
+								<Menu.RadioItem key={key} value={key} closeOnClick>
+									<UserAvatar name={label} size={18} />
+									<span className="min-w-0 flex-1 truncate">{label}</span>
+									<Menu.Check on={owner === key} />
+								</Menu.RadioItem>
+							))}
+							<Menu.RadioItem value="everyone" closeOnClick>
+								<span className="size-[18px] shrink-0" />
+								<span className="min-w-0 flex-1">Everyone</span>
+								<Menu.Check on={owner === "everyone"} />
+							</Menu.RadioItem>
+						</Menu.RadioGroup>
+					</Menu.Group>
+					{repos.length > 1 && (
+						<>
+							<Menu.Separator />
 							<Menu.Group>
-								<Menu.GroupLabel>Owner</Menu.GroupLabel>
-								<Menu.RadioGroup value={owner} onValueChange={(value) => setOwner(String(value))}>
-									<Menu.RadioItem value="mine" closeOnClick>
-										<UserAvatar name={currentUser} size={18} />
-										<span className="min-w-0 flex-1">My archived</span>
-										<Menu.Check on={owner === "mine"} />
+								<Menu.GroupLabel>Repository</Menu.GroupLabel>
+								<Menu.RadioGroup value={repo} onValueChange={(value) => setRepo(String(value))}>
+									<Menu.RadioItem value="all" closeOnClick>
+										<span className="size-[18px] shrink-0" />
+										<span className="min-w-0 flex-1">All repos</span>
+										<Menu.Check on={repo === "all"} />
 									</Menu.RadioItem>
-									{people.map(({ key, label }) => (
-										<Menu.RadioItem key={key} value={key} closeOnClick>
-											<UserAvatar name={label} size={18} />
-											<span className="min-w-0 flex-1 truncate">{label}</span>
-											<Menu.Check on={owner === key} />
+									{repos.map((name) => (
+										<Menu.RadioItem key={name} value={name} closeOnClick>
+											<RepoTile name={name} size={18} />
+											<span className="min-w-0 flex-1 truncate">{repoLabel(name)}</span>
+											<Menu.Check on={repo === name} />
 										</Menu.RadioItem>
 									))}
-									<Menu.RadioItem value="everyone" closeOnClick>
-										<span className="size-[18px] shrink-0" />
-										<span className="min-w-0 flex-1">Everyone</span>
-										<Menu.Check on={owner === "everyone"} />
-									</Menu.RadioItem>
 								</Menu.RadioGroup>
 							</Menu.Group>
-							{repos.length > 1 && (
-								<>
-									<Menu.Separator />
-									<Menu.Group>
-										<Menu.GroupLabel>Repository</Menu.GroupLabel>
-										<Menu.RadioGroup value={repo} onValueChange={(value) => setRepo(String(value))}>
-											<Menu.RadioItem value="all" closeOnClick>
-												<span className="size-[18px] shrink-0" />
-												<span className="min-w-0 flex-1">All repos</span>
-												<Menu.Check on={repo === "all"} />
-											</Menu.RadioItem>
-											{repos.map((name) => (
-												<Menu.RadioItem key={name} value={name} closeOnClick>
-													<RepoTile name={name} size={18} />
-													<span className="min-w-0 flex-1 truncate">{repoLabel(name)}</span>
-													<Menu.Check on={repo === name} />
-												</Menu.RadioItem>
-											))}
-										</Menu.RadioGroup>
-									</Menu.Group>
-								</>
-							)}
-							{hasAutoArchived && (
-								<>
-									<Menu.Separator />
-									<Menu.Group>
-										<Menu.GroupLabel>Reason</Menu.GroupLabel>
-										<Menu.RadioGroup value={reason} onValueChange={(value) => setReason(value as ReasonFilter)}>
-											{(["all", "auto", "manual"] as const).map((value) => (
-												<Menu.RadioItem key={value} value={value} closeOnClick>
-													<span className="min-w-0 flex-1">{{ all: "All", auto: "Auto-archived", manual: "Manual" }[value]}</span>
-													<Menu.Check on={reason === value} />
-												</Menu.RadioItem>
-											))}
-										</Menu.RadioGroup>
-									</Menu.Group>
-								</>
-							)}
-							{activeFilterCount > 0 && (
-								<>
-									<Menu.Separator />
-									<Menu.Item onClick={() => { setOwner("everyone"); setRepo("all"); setReason("all"); }}>
-										Clear filters
-									</Menu.Item>
-								</>
-							)}
-						</Menu.Popup>
-					</Menu.Root>
-				</div>
-			}
+						</>
+					)}
+					{hasAutoArchived && (
+						<>
+							<Menu.Separator />
+							<Menu.Group>
+								<Menu.GroupLabel>Reason</Menu.GroupLabel>
+								<Menu.RadioGroup value={reason} onValueChange={(value) => setReason(value as ReasonFilter)}>
+									{(["all", "auto", "manual"] as const).map((value) => (
+										<Menu.RadioItem key={value} value={value} closeOnClick>
+											<span className="min-w-0 flex-1">{{ all: "All", auto: "Auto-archived", manual: "Manual" }[value]}</span>
+											<Menu.Check on={reason === value} />
+										</Menu.RadioItem>
+									))}
+								</Menu.RadioGroup>
+							</Menu.Group>
+						</>
+					)}
+					{activeFilterCount > 0 && (
+						<>
+							<Menu.Separator />
+							<Menu.Item onClick={() => { setOwner("everyone"); setRepo("all"); setReason("all"); }}>
+								Clear filters
+							</Menu.Item>
+						</>
+					)}
+				</Menu.Popup>
+			</Menu.Root>
+		</>
+	);
+
+	const count = loaded
+		? archived.length === allArchived.length
+			? `${archived.length} archived session${archived.length === 1 ? "" : "s"}`
+			: `${archived.length} of ${allArchived.length} archived sessions`
+		: "Loading archived sessions";
+
+	// The desktop pane provides the top-bar slot. The phone uses its own title
+	// bar, so its controls stay in the page body where they remain reachable.
+	const portaled = !!topbarActionsEl && !isPhone;
+
+	return (
+		<div
+			data-page-scroll
+			className="min-h-0 w-full flex-1 overflow-y-auto"
 		>
+			{portaled ? createPortal(actions, topbarActionsEl) : null}
+			<div className="mx-auto w-full max-w-[860px] px-6 pb-[60px] pt-7 max-[560px]:px-3.5 max-[560px]:pb-12 max-[560px]:pt-[18px]">
+				{!portaled && (
+					<div className="mb-3 flex items-center gap-2">{actions}</div>
+				)}
+				<p className="m-0 mb-[18px] text-supporting text-dim max-[560px]:mb-3.5">
+					{count}
+				</p>
 			{archived.length === 0 && !loaded ? (
 				// Not "nothing archived" — nothing YET. Claiming the list is empty
 				// while it is still in flight is what makes a slow load read as data
@@ -451,6 +479,7 @@ export function Archived({ sessions, loaded, onSelect, onChanged }: Props) {
 					)}
 				</div>
 			)}
-		</PageLayout>
+			</div>
+		</div>
 	);
 }
