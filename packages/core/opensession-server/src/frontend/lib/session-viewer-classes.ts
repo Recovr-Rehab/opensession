@@ -316,11 +316,12 @@ export const VIEWER_SUMMARY_STEP =
  *
  * The composer's own box is `--session-col` + 40px wide and starts at this
  * container's left edge, so the chips inset from here land on its content rail
- * (VIEWER_SUGGESTIONS_ROW_INLINE). The right side keeps the input's 20px, which
- * is where the Next button sat before it had company.
+ * (VIEWER_SUGGESTIONS_ROW_INLINE). Desktop keeps the input's 20px right inset.
+ * A phone uses 8px on both gaps so ordinary two-chip choices fit in full.
  */
 export const VIEWER_ACTION_ROW =
-	"mx-auto mb-2 flex w-full max-w-[calc(var(--session-col)+40px)] items-center gap-3 pr-5";
+	"mx-auto mb-2 flex w-full max-w-[calc(var(--session-col)+40px)] items-center gap-3 pr-5 " +
+	"phone:gap-2 phone:pr-2";
 
 /**
  * Where the quick-reply row hangs when it is alone in that band
@@ -396,14 +397,14 @@ export const VIEWER_SUGGESTIONS_ROW =
 /**
  * The same row once it shares VIEWER_ACTION_ROW with the Next action.
  *
- * It keeps the shadow allowance and the content-rail indent exactly as above.
- * The chips start where the draft they are offering starts, whichever band they
- * are in. It gives up only the column's own max width, because the row it is
- * in already has it. `min-w-0` is what lets the chips scroll sideways instead
- * of pushing Next off its edge when there are more of them than fit.
+ * It keeps the desktop shadow allowance and content-rail indent exactly as
+ * above. On a phone it starts on the composer's outer edge instead. That gives
+ * the rail enough room to finish ordinary two-chip choices before Next, rather
+ * than clipping the final capsule for an indent the narrow row cannot afford.
+ * `min-w-0` still lets longer choices scroll sideways instead of pushing Next.
  */
 export const VIEWER_SUGGESTIONS_ROW_INLINE =
-	"min-w-0 flex-1 -my-1 -ml-1 py-1 pr-1 pl-[19px] phone:pl-[17px]";
+	"min-w-0 flex-1 -my-1 -ml-1 py-1 pr-1 pl-[19px] phone:pl-[10px]";
 
 /* ── Banners and the delete overlay ─────────────────────────────────────── */
 

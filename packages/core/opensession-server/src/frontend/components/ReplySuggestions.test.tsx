@@ -5,6 +5,7 @@ import { composerBoxExpanded } from "../lib/composer-classes";
 import type { ReplySuggestion } from "../lib/reply-suggestions";
 import {
 	SUGGESTIONS_CLEARANCE,
+	VIEWER_ACTION_ROW,
 	VIEWER_SUGGESTIONS,
 	VIEWER_SUGGESTIONS_ROW,
 	VIEWER_SUGGESTIONS_ROW_INLINE,
@@ -42,6 +43,9 @@ describe("ReplySuggestions", () => {
 
 		expect(html).toContain("overflow-x-auto");
 		expect(html).toContain("whitespace-nowrap");
+		expect(html).toContain(
+			"data-[overflow-end]:[--reply-fade-end:transparent]",
+		);
 		expect(html).not.toContain("flex-wrap");
 	});
 
@@ -78,18 +82,22 @@ describe("ReplySuggestions", () => {
 		expect(SUGGESTIONS_CLEARANCE).toBe(`${PILL_HEIGHT + standoff}px`);
 	});
 
-	test("the chips keep the composer's rail when they move beside Next", () => {
-		// The row sits in two places: floating over the transcript when it is
-		// alone, and in the action row when there is a Next to share a line with.
-		// The indent that puts the first pill where the draft starts has to
-		// survive the move, or picking up Next shifts every chip sideways.
-		for (const pattern of [/(?:^|\s)pl-\[\d+px\]/, /\sphone:pl-\[\d+px\]/]) {
-			expect(pattern.exec(VIEWER_SUGGESTIONS_ROW_INLINE)?.[0]).toBe(
-				pattern.exec(VIEWER_SUGGESTIONS_ROW)?.[0],
-			);
-		}
-		// It has to yield rather than push Next off the column's edge when there
-		// are more chips than fit: the row scrolls sideways instead.
+	test("the chips share the narrow phone row without clipping an ordinary pair", () => {
+		// Desktop keeps the composer's content rail. A phone cannot afford that
+		// indent beside Next, so the chips move to its outer edge and both gaps
+		// tighten to the same 8px step.
+		const desktopPadding = /(?:^|\s)pl-\[(\d+)px\]/;
+		const phonePadding = /\sphone:pl-\[(\d+)px\]/;
+		expect(desktopPadding.exec(VIEWER_SUGGESTIONS_ROW_INLINE)?.[1]).toBe(
+			desktopPadding.exec(VIEWER_SUGGESTIONS_ROW)?.[1],
+		);
+		expect(Number(phonePadding.exec(VIEWER_SUGGESTIONS_ROW_INLINE)?.[1])).toBeLessThan(
+			Number(phonePadding.exec(VIEWER_SUGGESTIONS_ROW)?.[1]),
+		);
+		expect(VIEWER_ACTION_ROW).toContain("phone:gap-2");
+		expect(VIEWER_ACTION_ROW).toContain("phone:pr-2");
+
+		// Longer choices still yield rather than push Next off the edge.
 		expect(VIEWER_SUGGESTIONS_ROW_INLINE).toContain("min-w-0");
 	});
 
