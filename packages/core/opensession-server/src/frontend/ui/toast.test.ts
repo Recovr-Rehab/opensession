@@ -4,6 +4,7 @@
 // reversible action back into a silent one with nothing failing.
 
 import { beforeEach, describe, expect, test } from "bun:test";
+import { undoLatestAction } from "../lib/undo";
 import { activeToasts, dismissToast, toast } from "./toast";
 
 beforeEach(() => {
@@ -36,6 +37,15 @@ describe("toast", () => {
 		expect(t?.action?.label).toBe("Undo");
 		t?.action?.onClick();
 		expect(undone).toBe(1);
+	});
+
+	test("links a visible Undo action to the app-wide undo stack", () => {
+		let undone = 0;
+		toast("Archived", { action: { label: "Undo", onClick: () => undone++ } });
+
+		expect(undoLatestAction()).toBe(true);
+		expect(undone).toBe(1);
+		expect(activeToasts()).toHaveLength(0);
 	});
 
 	// A burst of archives must not wallpaper the screen, and the toasts that

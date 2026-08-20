@@ -1,30 +1,20 @@
-/**
- * App-wide toast system. A tiny module-level store drives a single <ToastHost/>
- * mounted once at the app root, so any code — component, hook, or plain helper —
- * can fire a toast by importing `toast()` without threading an `onToast` prop
- * down the tree.
- *
- *   import { toast } from "../ui/toast";
- *   toast("Link copied");                       // auto-detects the ✓ success look
- *   toast("Couldn't load the transcript");      // auto-detects the error look
- *   toast("Saved", { variant: "success" });     // or be explicit
- *
- * Toasts stack bottom-center, newest on top, auto-dismiss, and animate in/out
- * with the shared Motion vocabulary. Success toasts draw an animated checkmark —
- * that's the "you copied the link" confirmation.
- */
-
-import { AnimatePresence } from "motion/react";
-import { useSyncExternalStore } from "react";
-import { cn } from "./cn";
+import { Toast as BaseToast } from "@base-ui/react/toast";
+import { useEffect } from "react";
 import { AnimatedCheck } from "./copy";
-import { FloatingStatus } from "./floating-status";
+import { Tooltip } from "./tooltip";
+import {
+	clearUndoAction,
+	isEditableUndoTarget,
+	isUndoShortcut,
+	registerUndoAction,
+	UNDO_SHORTCUT_KEYS,
+	undoLatestAction,
+	type UndoHandle,
+} from "../lib/undo";
 
 export type ToastVariant = "default" | "success" | "error";
 
-/** One action offered next to the message, for a toast that has to be
- *  actionable rather than only informative ("Archived · Undo"). One at most:
- *  a toast that needs a choice is a dialog. Label it with a verb. */
+/** One action beside a message. A toast that needs a choice is a dialog. */
 export type ToastAction = {
 	label: string;
 	onClick: () => void;
@@ -32,8 +22,7 @@ export type ToastAction = {
 
 export type ToastOptions = {
 	variant?: ToastVariant;
-	/** ms before auto-dismiss. Default 3200 (success/default), 4200 (error),
-	 *  7000 with an action, which has to outlast noticing and reaching it. */
+	/** Defaults: 3200ms, 4200ms for errors, and 7000ms with an action. */
 	duration?: number;
 	action?: ToastAction;
 };
@@ -45,31 +34,23 @@ export type Toast = {
 	action?: ToastAction;
 };
 
-// Cap the stack so a burst (e.g. archiving many sessions) can't wallpaper the
-// screen — older toasts drop off the top.
-const MAX_VISIBLE = 3;
+type ToastData = {
+	id: number;
+	message: string;
+	variant: ToastVariant;
+	action?: ToastAction;
+};
 
+const MAX_VISIBLE = 3;
+const manager = BaseToast.createToastManager<ToastData>();
 let toasts: Toast[] = [];
 let nextId = 1;
-const listeners = new Set<() => void>();
-const timers = new Map<number, ReturnType<typeof setTimeout>>();
+const undoHandles = new Map<number, UndoHandle>();
 
-function emit() {
-	for (const l of listeners) l();
+function managerId(id: number) {
+	return `opensession-toast-${id}`;
 }
 
-function subscribe(fn: () => void) {
-	listeners.add(fn);
-	return () => listeners.delete(fn);
-}
-
-function getSnapshot() {
-	return toasts;
-}
-
-/** Infer the visual tone from the message when the caller didn't specify one, so
- * the many existing `onToast("… copied")` / `onToast("Couldn't …")` call sites
- * light up with the right icon for free. */
 function inferVariant(message: string): ToastVariant {
 	if (/\b(copied|saved|done|created|sent|updated)\b/i.test(message))
 		return "success";
@@ -78,115 +59,160 @@ function inferVariant(message: string): ToastVariant {
 	return "default";
 }
 
-/** Fire a toast. Returns its id so it can be dismissed early. */
-export function toast(message: string, opts: ToastOptions = {}): number {
+function removeToastState(id: number) {
+	toasts = toasts.filter((item) => item.id !== id);
+	clearUndoAction(undoHandles.get(id));
+	undoHandles.delete(id);
+}
+
+function runToastAction(id: number) {
+	const item = toasts.find((candidate) => candidate.id === id);
+	if (!item?.action) return;
+	dismissToast(id);
+	item.action.onClick();
+}
+
+/** Fire an app-wide toast. Returns its id so callers can close it early. */
+export function toast(message: string, options: ToastOptions = {}): number {
 	const id = nextId++;
-	const variant = opts.variant ?? inferVariant(message);
-	toasts = [...toasts, { id, message, variant, action: opts.action }];
-	// Drop the oldest if we're over the cap.
+	const variant = options.variant ?? inferVariant(message);
+	const item: Toast = { id, message, variant, action: options.action };
+	toasts = [...toasts, item];
+
+	if (item.action?.label.toLowerCase() === "undo") {
+		undoHandles.set(
+			id,
+			registerUndoAction(`toast:${id}`, () => runToastAction(id)),
+		);
+	}
+
 	if (toasts.length > MAX_VISIBLE) {
 		const overflow = toasts.slice(0, toasts.length - MAX_VISIBLE);
-		for (const t of overflow) clearToastTimer(t.id);
-		toasts = toasts.slice(toasts.length - MAX_VISIBLE);
+		for (const old of overflow) {
+			removeToastState(old.id);
+			manager.close(managerId(old.id));
+		}
 	}
+
 	const duration =
-		opts.duration ?? (opts.action ? 7000 : variant === "error" ? 4200 : 3200);
-	timers.set(
-		id,
-		setTimeout(() => dismissToast(id), duration),
-	);
-	emit();
+		options.duration ??
+		(options.action ? 7000 : variant === "error" ? 4200 : 3200);
+	manager.add({
+		id: managerId(id),
+		description: message,
+		type: variant,
+		timeout: duration,
+		data: { ...item },
+		onClose: () => removeToastState(id),
+	});
 	return id;
 }
 
-function clearToastTimer(id: number) {
-	const t = timers.get(id);
-	if (t) {
-		clearTimeout(t);
-		timers.delete(id);
-	}
-}
-
 export function dismissToast(id: number) {
-	clearToastTimer(id);
-	toasts = toasts.filter((t) => t.id !== id);
-	emit();
+	removeToastState(id);
+	manager.close(managerId(id));
 }
 
-/** The live stack, for tests and for anything that needs to read it without
- *  subscribing through React. */
+/** The visible stack, exposed for store-level tests. */
 export function activeToasts(): readonly Toast[] {
 	return toasts;
 }
 
 /**
- * Renders the live toast stack. Mount once, near the app root, above everything
- * else. Reads the module store via useSyncExternalStore so it re-renders on
- * every toast()/dismiss without a Context provider wrapping the tree.
+ * Base UI owns measurement, stacking, hover and focus expansion, timer pausing,
+ * swipe dismissal, and accessibility. Keep one host mounted at the app root.
  */
 export function ToastHost() {
-	const items = useSyncExternalStore(subscribe, getSnapshot, getSnapshot);
 	return (
-		<div className="pointer-events-none fixed inset-x-0 bottom-6 z-[100] flex flex-col items-center gap-2 px-4 phone:bottom-[calc(84px+env(safe-area-inset-bottom))]">
-			<AnimatePresence initial={false}>
-				{items.map((t) => (
-					<ToastCard key={t.id} toast={t} />
-				))}
-			</AnimatePresence>
-		</div>
+		<BaseToast.Provider toastManager={manager} limit={MAX_VISIBLE}>
+			<ToastViewport />
+		</BaseToast.Provider>
 	);
 }
 
-function ToastCard({ toast: t }: { toast: Toast }) {
+function ToastViewport() {
+	const { toasts: items } = BaseToast.useToastManager<ToastData>();
+
+	useEffect(() => {
+		const onKeyDown = (event: KeyboardEvent) => {
+			if (
+				!isUndoShortcut(event) ||
+				isEditableUndoTarget(event.target) ||
+				!undoLatestAction()
+			)
+				return;
+			event.preventDefault();
+			// The archive fallback also listens on window. Only one reversible
+			// action should consume this Command-Z.
+			event.stopImmediatePropagation();
+		};
+		window.addEventListener("keydown", onKeyDown, true);
+		return () => window.removeEventListener("keydown", onKeyDown, true);
+	}, []);
+
 	return (
-		<FloatingStatus
-			layout
-			role="status"
-			aria-live="polite"
-			initial={{ opacity: 0, y: 14, scale: 0.94 }}
-			animate={{ opacity: 1, y: 0, scale: 1 }}
-			exit={{ opacity: 0, y: 8, scale: 0.96 }}
-			transition={{ type: "spring", duration: 0.34, bounce: 0.22 }}
-			onClick={() => dismissToast(t.id)}
-			className={cn(
-				"pointer-events-auto cursor-default",
-				// The pill is nowrap by default, which a phone cannot afford: at
-				// 390px a message like "Archived 3 sessions · stopped 1 running
-				// turn" plus a button runs off both edges (measured). Wrap instead,
-				// and never grow past the host's padded width.
-				"max-w-full whitespace-normal",
-				// The action carries its own padding, so the pill gives its right
-				// edge back rather than sitting the button in a gutter.
-				t.action && "pr-1.5",
-			)}
+		<BaseToast.Portal>
+			<BaseToast.Viewport className="pointer-events-none fixed inset-x-0 bottom-6 z-[100] mx-auto h-[var(--toast-frontmost-height)] w-full max-w-full px-4 outline-none phone:bottom-[calc(84px+env(safe-area-inset-bottom))]">
+				{items.map((item) => (
+					<ToastCard key={item.id} toast={item} />
+				))}
+			</BaseToast.Viewport>
+		</BaseToast.Portal>
+	);
+}
+
+function ToastCard({ toast: item }: { toast: BaseToast.Root.ToastObject<ToastData> }) {
+	const data = item.data;
+	if (!data) return null;
+
+	return (
+		<BaseToast.Root
+			toast={item}
+			swipeDirection={["down", "right"]}
+			onClick={() => dismissToast(data.id)}
+			className={[
+				"pointer-events-auto absolute bottom-0 left-1/2 w-max max-w-[calc(100vw-32px)] outline-none",
+				"[z-index:calc(100-var(--toast-index))] [transform-origin:center_bottom]",
+				"[transform:translateX(calc(-50%+var(--toast-swipe-movement-x)))_translateY(calc(var(--toast-swipe-movement-y)-(var(--toast-index)*8px)))_scale(calc(1-(var(--toast-index)*0.04)))]",
+				"data-[expanded]:[transform:translateX(calc(-50%+var(--toast-swipe-movement-x)))_translateY(calc(var(--toast-swipe-movement-y)-var(--toast-offset-y)-(var(--toast-index)*8px)))_scale(1)]",
+				"transition-[transform,scale,opacity] duration-200 ease-[cubic-bezier(0.23,1,0.32,1)]",
+				"data-[starting-style]:opacity-0 data-[starting-style]:[scale:0.96] data-[ending-style]:opacity-0 data-[ending-style]:[scale:0.96] data-[limited]:opacity-0",
+			].join(" ")}
 		>
-			{t.variant === "success" && (
-				<AnimatedCheck size={17} className="shrink-0 text-green" />
-			)}
-			{t.variant === "error" && (
-				<span
-					aria-hidden
-					className="grid size-[17px] shrink-0 place-items-center rounded-full text-label font-semibold text-accent"
-				>
-					!
-				</span>
-			)}
-			<span>{t.message}</span>
-			{t.action && (
-				<button
-					type="button"
-					onClick={(e) => {
-						// The card dismisses on click, so take the event: the action
-						// runs once, and the toast still goes away after it.
-						e.stopPropagation();
-						dismissToast(t.id);
-						t.action?.onClick();
-					}}
-					className="focus-ring -my-1 ml-1 shrink-0 cursor-pointer rounded-md px-2 py-1 text-label font-semibold text-accent hover:bg-hover"
-				>
-					{t.action.label}
-				</button>
-			)}
-		</FloatingStatus>
+			<BaseToast.Content
+				className={[
+					"flex max-w-full items-center gap-2.5 whitespace-normal rounded-[999px] bg-popup-glass",
+					"px-3.5 pt-2.5 pb-2 text-label font-medium leading-tight text-fg",
+					"[backdrop-filter:var(--popup-blur)] [--smooth-ring-color:var(--popup-ring)] smooth-shadow-ring-sm",
+					data.action ? "pr-1.5" : "",
+				].join(" ")}
+			>
+				{data.variant === "success" && (
+					<AnimatedCheck size={17} className="shrink-0 text-green" />
+				)}
+				{data.variant === "error" && (
+					<span
+						aria-hidden
+						className="grid size-[17px] shrink-0 place-items-center rounded-full text-label font-semibold text-accent"
+					>
+						!
+					</span>
+				)}
+				<BaseToast.Description>{data.message}</BaseToast.Description>
+				{data.action && (
+					<Tooltip label="Undo" shortcut={UNDO_SHORTCUT_KEYS}>
+						<BaseToast.Action
+							onClick={(event) => {
+								event.stopPropagation();
+								runToastAction(data.id);
+							}}
+							className="focus-ring -my-1 ml-1 shrink-0 cursor-pointer rounded-md px-2 py-1 text-label font-semibold text-accent transition-[background-color,transform] duration-150 hover:bg-hover active:scale-[0.96]"
+						>
+							{data.action.label}
+						</BaseToast.Action>
+					</Tooltip>
+				)}
+			</BaseToast.Content>
+		</BaseToast.Root>
 	);
 }

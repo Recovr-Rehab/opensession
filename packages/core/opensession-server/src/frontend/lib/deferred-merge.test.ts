@@ -7,6 +7,7 @@ import {
 	MERGE_UNDO_DELAY_MS,
 	scheduleDeferredMerge,
 } from "./deferred-merge";
+import { undoLatestAction } from "./undo";
 
 const waitForTimer = () => new Promise((resolve) => setTimeout(resolve, 10));
 
@@ -57,6 +58,15 @@ describe("deferred merge", () => {
 		scheduleDeferredMerge("pr:shared", () => calls++, 1000);
 		expect(cancelDeferredMergeByKey("pr:shared")).toBe(true);
 		expect(deferredMergePhase("pr:shared")).toBe("idle");
+		expect(calls).toBe(0);
+	});
+
+	test("links the visible merge Undo to the app-wide shortcut", () => {
+		let calls = 0;
+		scheduleDeferredMerge("pr:shortcut", () => calls++, 1000);
+
+		expect(undoLatestAction()).toBe(true);
+		expect(deferredMergePhase("pr:shortcut")).toBe("idle");
 		expect(calls).toBe(0);
 	});
 

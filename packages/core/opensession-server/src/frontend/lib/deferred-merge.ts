@@ -1,3 +1,9 @@
+import {
+	clearUndoAction,
+	registerUndoAction,
+	type UndoHandle,
+} from "./undo";
+
 export const MERGE_UNDO_DELAY_MS = 5000;
 
 export type DeferredMergePhase = "idle" | "scheduled" | "running";
@@ -12,6 +18,7 @@ type DeferredMergeEntry = {
 	phase: Exclude<DeferredMergePhase, "idle">;
 	timer: ReturnType<typeof setTimeout> | null;
 	run: () => Promise<unknown> | unknown;
+	undo: UndoHandle | null;
 };
 
 const entries = new Map<string, DeferredMergeEntry>();
@@ -69,9 +76,12 @@ export function scheduleDeferredMerge(
 		phase: "scheduled",
 		timer: null,
 		run,
+		undo: null,
 	};
 	entry.timer = setTimeout(() => {
 		if (entries.get(key) !== entry) return;
+		clearUndoAction(entry.undo);
+		entry.undo = null;
 		entry.phase = "running";
 		emit();
 		void Promise.resolve()
@@ -84,6 +94,9 @@ export function scheduleDeferredMerge(
 			});
 	}, delayMs);
 	entries.set(key, entry);
+	entry.undo = registerUndoAction(`deferred-merge:${key}`, () => {
+		cancelScheduledMerge(key, token);
+	});
 	emit();
 	return { key, token };
 }
@@ -97,6 +110,8 @@ function cancelScheduledMerge(key: string, token?: number): boolean {
 	)
 		return false;
 	if (entry.timer) clearTimeout(entry.timer);
+	clearUndoAction(entry.undo);
+	entry.undo = null;
 	entries.delete(key);
 	emit();
 	return true;
