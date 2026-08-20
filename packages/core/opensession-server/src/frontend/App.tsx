@@ -363,6 +363,29 @@ function sessionRoute(rest: string): Route {
 		: { view: "session", id };
 }
 
+/**
+ * The URL this document loaded at, captured before anything can rewrite it.
+ *
+ * The route initializer below pushes the last open session over a cold load
+ * that lands on home, so by the time the component body runs, `location` may
+ * already describe a session rather than the link the person followed. Any
+ * question of the form "how did we get here" has to read this instead.
+ */
+const LANDING_PATH = stripBasePath(location.pathname);
+const LANDING_SEARCH = location.search;
+
+/**
+ * Did this load ask for the first-run flow? `/welcome` (or `?firstmile=1` on
+ * any route) forces it open on an instance that is already set up, so the
+ * setup walkthrough can be reviewed without emptying the instance first.
+ */
+function landedOnFirstMile(): boolean {
+	return (
+		LANDING_PATH === "/welcome" ||
+		new URLSearchParams(LANDING_SEARCH).get("firstmile") === "1"
+	);
+}
+
 function parseRoute(pathname: string): Route {
 	// Accept both prefixes: /opensession (primary) and /backstage (legacy alias).
 	pathname = stripBasePath(pathname);
@@ -593,7 +616,10 @@ export function App(
 	// pushState), so tapping the logo to go home still works.
 	const [route, setRoute] = useState<Route>(() => {
 		const parsed = parseRoute(location.pathname);
-		if (parsed.view === "prs") {
+		// `/welcome` and `?firstmile=1` parse as home (they name no view of their
+		// own), so without this guard the restore below pushes the last session
+		// over them and the first-run flow never renders for anyone who has one.
+		if (parsed.view === "prs" && !landedOnFirstMile()) {
 			// Landing on the root: stamp it as the base of the page stack so panels
 			// pushed over it can count their way back down.
 			history.replaceState(navState(0), "", location.pathname);
@@ -878,9 +904,7 @@ export function App(
 		workspacesLoaded &&
 		sessions.length === 0 &&
 		workspaces.length === 0;
-	const forceFirstMile =
-		stripBasePath(location.pathname) === "/welcome" ||
-		new URLSearchParams(location.search).get("firstmile") === "1";
+	const forceFirstMile = landedOnFirstMile();
 	const firstMileActive =
 		forceFirstMile ||
 		(auth?.admin !== false && productEmpty && !firstMileIsComplete);
@@ -916,7 +940,13 @@ export function App(
 			const path = stripBasePath(url.pathname) === "/welcome"
 				? routePath({ view: "prs" })
 				: url.pathname;
-			history.replaceState(history.state, "", `${path}${url.search}${url.hash}`);
+			// A `/welcome` load skips the home entry's navState stamp above, so give
+			// this entry a root depth on the way out or Back has nothing to count from.
+			history.replaceState(
+				history.state ?? navState(0),
+				"",
+				`${path}${url.search}${url.hash}`,
+			);
 		}
 	}
 
