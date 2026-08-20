@@ -8,7 +8,11 @@
 
 import { requestUser, type RouteContext } from "./context";
 import { listAutomations, runAutomation } from "../automations";
-import { findSession, getCachedSessions, invalidateSessionsCache } from "../session-cache";
+import {
+	findSessionAsync,
+	getCachedSessionsAsync,
+	invalidateSessionsCache,
+} from "../session-cache";
 import { type Workspace } from "../workspaces";
 
 // Land a Plain thread in a triage session: reuse the most recent live
@@ -20,7 +24,7 @@ import { type Workspace } from "../workspaces";
 async function resolvePlainTriageSession(
 	threadId: string,
 ): Promise<string | null> {
-	const existing = getCachedSessions()
+	const existing = (await getCachedSessionsAsync())
 		.filter((s) => s.plainThreadId === threadId && !s.archived)
 		.sort(
 			(a, b) =>
@@ -185,7 +189,7 @@ export async function handlePlainRoutes(
 	);
 	if (plainThreadMatch && req.method === "GET") {
 		const sessionId = decodeURIComponent(plainThreadMatch[1]);
-		const session = findSession(sessionId);
+		const session = await findSessionAsync(sessionId);
 		const threadId = session?.plainThreadId;
 		if (!threadId)
 			return Response.json(

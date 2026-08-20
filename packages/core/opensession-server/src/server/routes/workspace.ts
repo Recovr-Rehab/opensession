@@ -25,7 +25,7 @@ import { isRemoteSandboxProvider, resolveRequestedSandbox } from "../sandbox/con
 import { resolveInteractiveSandbox } from "../sandbox/defaults";
 import {
 	SESSIONS_DIR,
-	findSession,
+	findSessionAsync,
 	invalidateSessionsCache,
 	peekCachedSessions,
 	touchNativeSession,
@@ -118,7 +118,7 @@ export async function handleWorkspaceRoutes(
 		// directly instead of refreshing the entire cross-source session catalog.
 		const session =
 			findNativeSessionForFileMentions(sessionId) ??
-			(sessionId ? findSession(sessionId) : undefined);
+			(sessionId ? await findSessionAsync(sessionId) : undefined);
 		// Volume-mode sandbox workspaces have no host dir — the primary
 		// repo's `git ls-files` runs through the sandbox exec below.
 		if (
@@ -254,7 +254,7 @@ export async function handleWorkspaceRoutes(
 	if (path === "/api/skills" && req.method === "GET") {
 		const q = url.searchParams.get("q") || "";
 		const sessionId = url.searchParams.get("session");
-		const session = sessionId ? findSession(sessionId) : undefined;
+		const session = sessionId ? await findSessionAsync(sessionId) : undefined;
 		let dir: string | undefined =
 			session?.worktreeDir && existsSync(session.worktreeDir)
 				? session.worktreeDir
@@ -570,7 +570,7 @@ export async function handleWorkspaceRoutes(
 	);
 	if (newSessionMatch && req.method === "POST") {
 		const sourceId = decodeURIComponent(newSessionMatch[1]);
-		const src = findSession(sourceId);
+		const src = await findSessionAsync(sourceId);
 		if (!src)
 			return Response.json({ error: "Session not found" }, { status: 404 });
 		const body = (await req.json().catch(() => ({}))) as {
@@ -776,7 +776,7 @@ export async function handleWorkspaceRoutes(
 		// Also return the full unified session so the client can drop it into
 		// its session list and render the new session instantly, instead of
 		// flashing a loading screen until the next sessions poll lands.
-		return Response.json({ id: bksId, session: findSession(bksId) ?? null });
+		return Response.json({ id: bksId, session: await findSessionAsync(bksId) ?? null });
 	}
 
 	// Promote an ask session to code. Three shapes, because "ask" says nothing
@@ -794,7 +794,7 @@ export async function handleWorkspaceRoutes(
 	);
 	if (promoteMatch && req.method === "POST") {
 		const sessionId = decodeURIComponent(promoteMatch[1]);
-		const session = findSession(sessionId);
+		const session = await findSessionAsync(sessionId);
 		if (!session)
 			return Response.json({ error: "Session not found" }, { status: 404 });
 		if (session.source !== "opensession")
@@ -874,7 +874,7 @@ export async function handleWorkspaceRoutes(
 	);
 	if (setWorkspaceMatch && req.method === "POST") {
 		const sessionId = decodeURIComponent(setWorkspaceMatch[1]);
-		const session = findSession(sessionId);
+		const session = await findSessionAsync(sessionId);
 		if (!session)
 			return Response.json({ error: "Session not found" }, { status: 404 });
 		const body = (await req.json().catch(() => ({}))) as {
@@ -922,7 +922,7 @@ export async function handleWorkspaceRoutes(
 	);
 	if (switchableMatch && req.method === "GET") {
 		const sessionId = decodeURIComponent(switchableMatch[1]);
-		const session = findSession(sessionId);
+		const session = await findSessionAsync(sessionId);
 		if (!session)
 			return Response.json({ error: "Session not found" }, { status: 404 });
 		// `switchable`: this session type can switch its primary repo at all
@@ -983,7 +983,7 @@ export async function handleWorkspaceRoutes(
 		const body = (await req.json().catch(() => ({}))) as {
 			repo?: string;
 		};
-		const session = findSession(sessionId);
+		const session = await findSessionAsync(sessionId);
 		if (!session)
 			return Response.json({ error: "Session not found" }, { status: 404 });
 		const all = (session.attachedRepos || []).filter(

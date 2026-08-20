@@ -17,7 +17,7 @@ import {
 import { getGitStatus, gitPull, gitPush } from "../git-status";
 import { imageContentType, imageHeaders } from "../image-mime";
 import { workspaceExecFor } from "../sandbox";
-import { findSession } from "../session-cache";
+import { findSessionAsync } from "../session-cache";
 import { resolveWorktreeTarget } from "../session-repos";
 import { sessionTouchedPaths } from "../session-touched";
 import { getRepo, isSharedCheckoutDir, sessionRepoId } from "../worktree";
@@ -50,7 +50,7 @@ export async function handleSessionGitRoutes(
 		const sessionId = decodeURIComponent(
 			path.match(/^\/api\/sessions\/(.+)\/diff$/)![1],
 		);
-		const session = findSession(sessionId);
+		const session = await findSessionAsync(sessionId);
 		if (!session)
 			return Response.json({ error: "Session not found" }, { status: 404 });
 
@@ -125,7 +125,7 @@ export async function handleSessionGitRoutes(
 		const sessionId = decodeURIComponent(
 			path.match(/^\/api\/sessions\/(.+)\/code-flow$/)![1],
 		);
-		const session = findSession(sessionId);
+		const session = await findSessionAsync(sessionId);
 		if (!session)
 			return Response.json({ error: "Session not found" }, { status: 404 });
 		try {
@@ -152,7 +152,7 @@ export async function handleSessionGitRoutes(
 		const sessionId = decodeURIComponent(
 			path.match(/^\/api\/sessions\/(.+)\/diff-groups$/)![1],
 		);
-		const session = findSession(sessionId);
+		const session = await findSessionAsync(sessionId);
 		if (!session)
 			return Response.json({ error: "Session not found" }, { status: 404 });
 		const body = (await req.json().catch(() => ({}))) as {
@@ -185,7 +185,7 @@ export async function handleSessionGitRoutes(
 	);
 	if (discardMatch && req.method === "POST") {
 		const sessionId = decodeURIComponent(discardMatch[1]);
-		const session = findSession(sessionId);
+		const session = await findSessionAsync(sessionId);
 		if (!session)
 			return Response.json({ error: "Session not found" }, { status: 404 });
 		const body = (await req.json().catch(() => ({}))) as {
@@ -234,7 +234,7 @@ export async function handleSessionGitRoutes(
 		const sessionId = decodeURIComponent(
 			path.match(/^\/api\/sessions\/(.+)\/git-status$/)![1],
 		);
-		const session = findSession(sessionId);
+		const session = await findSessionAsync(sessionId);
 		if (!session)
 			return Response.json({ error: "Session not found" }, { status: 404 });
 		// Primary volume-mode workspaces have no host dir — status runs
@@ -269,7 +269,7 @@ export async function handleSessionGitRoutes(
 		const sessionId = decodeURIComponent(
 			path.match(/^\/api\/sessions\/(.+)\/worktree-image$/)![1],
 		);
-		const session = findSession(sessionId);
+		const session = await findSessionAsync(sessionId);
 		if (!session) return new Response("Session not found", { status: 404 });
 		const filePath = url.searchParams.get("path") || "";
 		const contentType = imageContentType(filePath);
@@ -326,7 +326,7 @@ export async function handleSessionGitRoutes(
 	);
 	if (worktreeFileMatch && (req.method === "GET" || req.method === "POST")) {
 		const sessionId = decodeURIComponent(worktreeFileMatch[1]);
-		const session = findSession(sessionId);
+		const session = await findSessionAsync(sessionId);
 		if (!session)
 			return Response.json({ error: "Session not found" }, { status: 404 });
 		const body =
@@ -408,7 +408,7 @@ export async function handleSessionGitRoutes(
 		const sessionId = decodeURIComponent(
 			path.match(/^\/api\/sessions\/(.+)\/git-push$/)![1],
 		);
-		const session = findSession(sessionId);
+		const session = await findSessionAsync(sessionId);
 		if (!session)
 			return Response.json({ error: "Session not found" }, { status: 404 });
 		const body = await req.json().catch(() => ({}));
@@ -438,7 +438,7 @@ export async function handleSessionGitRoutes(
 		const sessionId = decodeURIComponent(
 			path.match(/^\/api\/sessions\/(.+)\/git-pull$/)![1],
 		);
-		const session = findSession(sessionId);
+		const session = await findSessionAsync(sessionId);
 		if (!session)
 			return Response.json({ error: "Session not found" }, { status: 404 });
 		const body = await req.json().catch(() => ({}));

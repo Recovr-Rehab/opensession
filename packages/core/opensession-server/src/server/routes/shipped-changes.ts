@@ -3,7 +3,7 @@ import {
 	shippedChangeChannels,
 } from "../../agents/github/shipped-change-notify";
 import { shippedChangesChannel } from "../../agents/github/constants";
-import { findSession, updateSessionFile } from "../session-cache";
+import { findSessionAsync, updateSessionFile } from "../session-cache";
 import type { SessionSlackShare } from "../types";
 import { resolvePrTarget } from "../session-repos";
 import { prHostFor } from "../pr-host";
@@ -16,7 +16,7 @@ export async function handleShippedChangeRoutes(
 	const { req, path } = ctx;
 	const match = path.match(/^\/api\/sessions\/([^/]+)\/share-shipped-change$/);
 	if (!match || (req.method !== "GET" && req.method !== "POST")) return;
-	const session = findSession(decodeURIComponent(match[1]));
+	const session = await findSessionAsync(decodeURIComponent(match[1]));
 	if (!session)
 		return Response.json({ error: "Session not found" }, { status: 404 });
 	if (req.method === "GET") {

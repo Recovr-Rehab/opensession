@@ -307,6 +307,17 @@ export function sessionIdsFor(
 		: [sessionId];
 }
 
+/** Request-safe counterpart to sessionIdsFor. A canonical native id reads its
+ * one owned file; aliases and external sessions use the cooperative cache scan.
+ * Never make an HTTP or WebSocket handler rebuild every session synchronously
+ * just to resolve one asset namespace. */
+export async function sessionIdsForAsync(sessionId: string): Promise<string[]> {
+	const session = await findSessionAsync(sessionId);
+	return session
+		? [...new Set([session.id, ...(session.aliasIds || [])])]
+		: [sessionId];
+}
+
 // ── Serialized session-file writes ────────────────────────────────────────────
 // Every session-file writer goes through updateSessionFile: fresh read →
 // field-scoped mutator → atomic write, serialized per session id by a

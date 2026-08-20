@@ -41,9 +41,7 @@ import { getSessionControl, type SandboxRequest } from "../session-control";
 import { suggestBranchName } from "../suggest-branch";
 import { transitionRunState } from "../run-state";
 import {
-	findSession,
 	findSessionAsync,
-	getCachedSessions,
 	getCachedSessionsAsync,
 	invalidateSessionsCache,
 	maybePersistEffort,
@@ -891,7 +889,7 @@ export async function handleSessionsRoutes(
 			// No findSession GATE: the 2s session cache can lag a just-created
 			// session, and deliverToSession resolves the id (and reports unknown
 			// ids) itself. The lookup here only drives the best-effort extras.
-			const session = findSession(sessionId);
+			const session = await findSessionAsync(sessionId);
 			if (session) {
 				// The composer's effort/fast pills ride every send; persist a
 				// change so this and future runs honor it, as the WS path does.
@@ -983,7 +981,7 @@ export async function handleSessionsRoutes(
 			/^\/api\/sessions\/(.+)\/entry\/([^/]+)$/,
 		);
 		if (m && req.method === "GET") {
-			const session = findSession(decodeURIComponent(m[1]));
+			const session = await findSessionAsync(decodeURIComponent(m[1]));
 			if (!session)
 				return Response.json({ error: "Session not found" }, { status: 404 });
 			const entryId = decodeURIComponent(m[2]);
@@ -1042,7 +1040,7 @@ export async function handleSessionsRoutes(
 		);
 		if (m && req.method === "GET") {
 			const wsId = decodeURIComponent(m[1]);
-			const members = getCachedSessions().filter(
+			const members = (await getCachedSessionsAsync()).filter(
 				(s) => s.workspaceId === wsId,
 			);
 			return Response.json(await buildWorkspaceOverview(members));
@@ -1056,7 +1054,7 @@ export async function handleSessionsRoutes(
 	{
 		const m = path.match(/^\/api\/sessions\/(.+)\/overview$/);
 		if (m && req.method === "GET") {
-			const session = findSession(decodeURIComponent(m[1]));
+			const session = await findSessionAsync(decodeURIComponent(m[1]));
 			if (!session)
 				return Response.json({ error: "session not found" }, { status: 404 });
 			return Response.json(await buildWorkspaceOverview([session]));
@@ -1071,7 +1069,7 @@ export async function handleSessionsRoutes(
 			/^\/api\/sessions\/(.+)\/transcript-image\/([^/]+)\/(\d+)$/,
 		);
 		if (m && req.method === "GET") {
-			const session = findSession(decodeURIComponent(m[1]));
+			const session = await findSessionAsync(decodeURIComponent(m[1]));
 			if (!session)
 				return Response.json({ error: "Session not found" }, { status: 404 });
 			const entryId = decodeURIComponent(m[2]);
@@ -1135,7 +1133,7 @@ export async function handleSessionsRoutes(
 	if (path === "/api/sessions/search" && req.method === "GET") {
 		const q = (url.searchParams.get("q") || "").trim();
 		if (q.length < 2) return Response.json({ matches: [] });
-		const sessions = getCachedSessions();
+		const sessions = await getCachedSessionsAsync();
 		const recentIds = sessions
 			.slice()
 			.sort(
@@ -1181,7 +1179,7 @@ export async function handleSessionsRoutes(
 	{
 		const m = path.match(/^\/api\/sessions\/(.+)\/subagents$/);
 		if (m && req.method === "GET") {
-			const session = findSession(decodeURIComponent(m[1]));
+			const session = await findSessionAsync(decodeURIComponent(m[1]));
 			if (!session)
 				return Response.json(
 					{ error: "Session not found" },
@@ -1202,7 +1200,7 @@ export async function handleSessionsRoutes(
 			/^\/api\/sessions\/(.+)\/subagent\/([^/]+)$/,
 		);
 		if (m && req.method === "GET") {
-			const session = findSession(decodeURIComponent(m[1]));
+			const session = await findSessionAsync(decodeURIComponent(m[1]));
 			if (!session)
 				return Response.json(
 					{ error: "Session not found" },
@@ -1239,7 +1237,7 @@ export async function handleSessionsRoutes(
 	);
 	if (archiveMatch && req.method === "POST") {
 		const sessionId = decodeURIComponent(archiveMatch[1]);
-		const session = findSession(sessionId);
+		const session = await findSessionAsync(sessionId);
 		if (!session)
 			return Response.json({ error: "Session not found" }, { status: 404 });
 		const body = await req.json().catch(() => ({}));
@@ -1300,7 +1298,7 @@ export async function handleSessionsRoutes(
 	);
 	if (titleMatch && req.method === "PUT") {
 		const sessionId = decodeURIComponent(titleMatch[1]);
-		const session = findSession(sessionId);
+		const session = await findSessionAsync(sessionId);
 		if (!session)
 			return Response.json({ error: "Session not found" }, { status: 404 });
 		const body = await req.json().catch(() => ({}));
@@ -1319,7 +1317,7 @@ export async function handleSessionsRoutes(
 	);
 	if (statusMatch && req.method === "PUT") {
 		const sessionId = decodeURIComponent(statusMatch[1]);
-		const session = findSession(sessionId);
+		const session = await findSessionAsync(sessionId);
 		if (!session)
 			return Response.json({ error: "Session not found" }, { status: 404 });
 		const body = await req.json().catch(() => ({}));
@@ -1339,7 +1337,7 @@ export async function handleSessionsRoutes(
 	);
 	if (reviewMatch && req.method === "PUT") {
 		const sessionId = decodeURIComponent(reviewMatch[1]);
-		const session = findSession(sessionId);
+		const session = await findSessionAsync(sessionId);
 		if (!session)
 			return Response.json({ error: "Session not found" }, { status: 404 });
 		const body = await req.json().catch(() => ({}));
@@ -1535,7 +1533,7 @@ export async function handleSessionsRoutes(
 		const sessionId = decodeURIComponent(
 			path.match(/^\/api\/sessions\/(.+)$/)![1],
 		);
-		const session = findSession(sessionId);
+		const session = await findSessionAsync(sessionId);
 		if (!session)
 			return Response.json({ error: "Session not found" }, { status: 404 });
 

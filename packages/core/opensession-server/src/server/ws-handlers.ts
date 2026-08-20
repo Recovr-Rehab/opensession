@@ -25,7 +25,6 @@ import { runnerWsClose, runnerWsMessage, runnerWsOpen } from "./runner-ws";
 import { sandboxPortalRelayClose, sandboxPortalRelayMessage, sandboxPortalRelayOpen } from "./sandbox-portal-relay";
 import { type Sandbox } from "./sandbox";
 import {
-	findSession,
 	findSessionAsync,
 	invalidateSessionsCache,
 	maybePersistEffort,
@@ -80,7 +79,7 @@ function lastRestartBy(): string {
 function sendWatchExtras(
 	ws: any,
 	sessionId: string,
-	session: NonNullable<ReturnType<typeof findSession>>,
+	session: NonNullable<Awaited<ReturnType<typeof findSessionAsync>>>,
 ): void {
 	const pendingAsk = pendingAskAwaitingAnswer(sessionId);
 	if (pendingAsk) {
@@ -231,7 +230,7 @@ async function sendTranscriptIndex(
  *  grown-beyond-watermark). Also the drift RE-import: idempotent upserts, and
  *  a completed import releases the failure-side store-degraded marker. */
 function v2ImportSession(
-	session: NonNullable<ReturnType<typeof findSession>>,
+	session: NonNullable<Awaited<ReturnType<typeof findSessionAsync>>>,
 ): void {
 	// Deliberately id-less ref: guarantees the legacy merge — an id-carrying
 	// ref would route mergedSessionTranscript back into the v2 store path,
@@ -247,7 +246,7 @@ function v2ImportSession(
  *  — exactly what gets routed here by the sync-import size ceiling — no
  *  longer wedges the server for the duration of the parse. */
 async function v2ImportSessionAsync(
-	session: NonNullable<ReturnType<typeof findSession>>,
+	session: NonNullable<Awaited<ReturnType<typeof findSessionAsync>>>,
 ): Promise<void> {
 	const entries = await mergedSessionTranscriptAsync({
 		transcriptPath: session.transcriptPath ?? null,
@@ -256,7 +255,7 @@ async function v2ImportSessionAsync(
 }
 
 function v2FinishImport(
-	session: NonNullable<ReturnType<typeof findSession>>,
+	session: NonNullable<Awaited<ReturnType<typeof findSessionAsync>>>,
 	entries: ReturnType<typeof mergedSessionTranscript>,
 ): void {
 	let watermark: number | null = null;
@@ -284,7 +283,7 @@ function v2QueueBackgroundImport(sessionId: string, reimport = false): void {
 	v2BgImports.add(sessionId);
 	setTimeout(async () => {
 		try {
-			const session = findSession(sessionId);
+			const session = await findSessionAsync(sessionId);
 			if (session && (reimport || transcriptStore().needsImport(sessionId)))
 				await v2ImportSessionAsync(session);
 		} catch (e) {
@@ -304,7 +303,7 @@ function v2QueueBackgroundImport(sessionId: string, reimport = false): void {
 function serveTranscriptV2(
 	ws: any,
 	sessionId: string,
-	session: NonNullable<ReturnType<typeof findSession>>,
+	session: NonNullable<Awaited<ReturnType<typeof findSessionAsync>>>,
 	msg: any,
 ): boolean {
 	if (msg.supportsSeq !== true) return false;
@@ -798,7 +797,7 @@ export const websocketHandlers: WebSocketHandler<WSClientData> = {
 						console.warn(`[ws] v2 load_history failed for ${msg.sessionId}:`, e);
 					}
 				}
-				const session = findSession(msg.sessionId);
+				const session = await findSessionAsync(msg.sessionId);
 				if (!session?.transcriptPath) {
 					// Same no-mirror-file state as the watch fallback: serve the merged
 					// cross-engine history rather than blanking the client's view.
@@ -923,7 +922,7 @@ export const websocketHandlers: WebSocketHandler<WSClientData> = {
 					);
 					return;
 				}
-				const session = findSession(sessionId);
+				const session = await findSessionAsync(sessionId);
 				if (!session) {
 					ws.send(
 						JSON.stringify({ type: "error", message: "Session not found" }),
@@ -1083,7 +1082,7 @@ export const websocketHandlers: WebSocketHandler<WSClientData> = {
 				const { sessionId, content, user } = msg;
 				const images = parseImageDataUrls(msg.images);
 				const imageUrls = asDataUrlList(msg.images);
-				const session = findSession(sessionId);
+				const session = await findSessionAsync(sessionId);
 				if (!session) {
 					ws.send(
 						JSON.stringify({ type: "error", message: "Session not found" }),
@@ -1182,7 +1181,7 @@ export const websocketHandlers: WebSocketHandler<WSClientData> = {
 			case "take_steered_prompt": {
 				const { sessionId, queueId } = msg;
 				const actor = ws.data.authUser || ws.data.user || undefined;
-				const session = findSession(sessionId);
+				const session = await findSessionAsync(sessionId);
 				const receipt = editableSteerReceipt(sessionId, queueId, actor);
 				const retracted = !!session && !!receipt && await retractAgentSteer(
 					[session.claudeSessionId, session.codexThreadId, session.id],
@@ -1259,7 +1258,7 @@ export const websocketHandlers: WebSocketHandler<WSClientData> = {
 				const data = ws.data;
 				if (data.watchingSessionId) {
 					const sessionId = data.watchingSessionId;
-					const session = findSession(sessionId);
+					const session = await findSessionAsync(sessionId);
 					// Park the queue until the user's next explicit action —
 					// otherwise the drain would deliver the requeued steers into a
 					// fresh run the moment the stopped one winds down.
@@ -1340,7 +1339,7 @@ export const websocketHandlers: WebSocketHandler<WSClientData> = {
 				const termId = typeof msg.termId === "string" ? msg.termId : "0";
 				// Sandbox-aware: docker/daytona sessions get the shell INSIDE
 				// their sandbox; host worktree shell otherwise (terminals.ts).
-				void startSessionTerminal(ws, termId, findSession(msg.sessionId), {
+				void startSessionTerminal(ws, termId, await findSessionAsync(msg.sessionId), {
 					cols: Number(msg.cols) || undefined,
 					rows: Number(msg.rows) || undefined,
 					send: (m) => {

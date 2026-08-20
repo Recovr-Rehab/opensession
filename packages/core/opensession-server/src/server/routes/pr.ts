@@ -12,7 +12,7 @@ import { defaultRepo, personaName } from "../config";
 import { hostRepoId, prHostFor } from "../pr-host";
 import { cachedPrDetailsForSession, reconcilePrDetails } from "../pr-info";
 import { getPrStack, linkPrStack, mergePrStack } from "../pr-stack";
-import { findSession, invalidateSessionsCache } from "../session-cache";
+import { findSessionAsync, invalidateSessionsCache } from "../session-cache";
 import { getSessionControl } from "../session-control";
 import { resolvePrTarget } from "../session-repos";
 import {
@@ -195,7 +195,7 @@ export async function handlePrRoutes(
 		const sessionId = decodeURIComponent(
 			path.match(/^\/api\/sessions\/(.+)\/pr$/)![1],
 		);
-		const session = findSession(sessionId);
+		const session = await findSessionAsync(sessionId);
 		if (!session)
 			return Response.json({ error: "Session not found" }, { status: 404 });
 		const target = resolvePrTarget(
@@ -255,7 +255,7 @@ export async function handlePrRoutes(
 		const sessionId = decodeURIComponent(
 			path.match(/^\/api\/sessions\/(.+)\/pr-diff$/)![1],
 		);
-		const session = findSession(sessionId);
+		const session = await findSessionAsync(sessionId);
 		if (!session)
 			return Response.json({ error: "Session not found" }, { status: 404 });
 		const target = resolvePrTarget(
@@ -278,7 +278,7 @@ export async function handlePrRoutes(
 		const sessionId = decodeURIComponent(
 			path.match(/^\/api\/sessions\/(.+)\/pr-code-flow$/)![1],
 		);
-		const session = findSession(sessionId);
+		const session = await findSessionAsync(sessionId);
 		if (!session)
 			return Response.json({ error: "Session not found" }, { status: 404 });
 		const target = resolvePrTarget(
@@ -300,7 +300,7 @@ export async function handlePrRoutes(
 		const sessionId = decodeURIComponent(
 			path.match(/^\/api\/sessions\/(.+)\/pr-diff-groups$/)![1],
 		);
-		const session = findSession(sessionId);
+		const session = await findSessionAsync(sessionId);
 		if (!session)
 			return Response.json({ error: "Session not found" }, { status: 404 });
 		const target = resolvePrTarget(
@@ -386,7 +386,7 @@ export async function handlePrRoutes(
 		const sessionId = decodeURIComponent(
 			path.match(/^\/api\/sessions\/(.+)\/review-guide$/)![1],
 		);
-		const session = findSession(sessionId);
+		const session = await findSessionAsync(sessionId);
 		if (!session)
 			return Response.json({ error: "Session not found" }, { status: 404 });
 		const target = resolvePrTarget(
@@ -611,7 +611,7 @@ export async function handlePrRoutes(
 		const sessionId = decodeURIComponent(
 			path.match(/^\/api\/sessions\/(.+)\/pr-comment$/)![1],
 		);
-		const session = findSession(sessionId);
+		const session = await findSessionAsync(sessionId);
 		if (!session)
 			return Response.json({ error: "Session not found" }, { status: 404 });
 
@@ -653,7 +653,7 @@ export async function handlePrRoutes(
 		const sessionId = decodeURIComponent(
 			path.match(/^\/api\/sessions\/(.+)\/pr-review$/)![1],
 		);
-		const session = findSession(sessionId);
+		const session = await findSessionAsync(sessionId);
 		if (!session)
 			return Response.json({ error: "Session not found" }, { status: 404 });
 
@@ -721,7 +721,7 @@ export async function handlePrRoutes(
 		const sessionId = decodeURIComponent(
 			path.match(/^\/api\/sessions\/(.+)\/pr-merge$/)![1],
 		);
-		const session = findSession(sessionId);
+		const session = await findSessionAsync(sessionId);
 		if (!session)
 			return Response.json({ error: "Session not found" }, { status: 404 });
 
@@ -771,7 +771,7 @@ export async function handlePrRoutes(
 		const sessionId = decodeURIComponent(
 			path.match(/^\/api\/sessions\/(.+)\/pr-stack$/)![1],
 		);
-		const session = findSession(sessionId);
+		const session = await findSessionAsync(sessionId);
 		if (!session)
 			return Response.json({ error: "Session not found" }, { status: 404 });
 		const stackedOn = session.stackedOn;
@@ -840,7 +840,7 @@ export async function handlePrRoutes(
 		const sessionId = decodeURIComponent(
 			path.match(/^\/api\/sessions\/(.+)\/pr-stack-merge$/)![1],
 		);
-		const session = findSession(sessionId);
+		const session = await findSessionAsync(sessionId);
 		if (!session)
 			return Response.json({ error: "Session not found" }, { status: 404 });
 
@@ -926,7 +926,7 @@ export async function handlePrRoutes(
 		const sessionId = decodeURIComponent(
 			path.match(/^\/api\/sessions\/(.+)\/pr-close$/)![1],
 		);
-		const session = findSession(sessionId);
+		const session = await findSessionAsync(sessionId);
 		if (!session)
 			return Response.json({ error: "Session not found" }, { status: 404 });
 
@@ -959,7 +959,7 @@ export async function handlePrRoutes(
 		const sessionId = decodeURIComponent(
 			path.match(/^\/api\/sessions\/(.+)\/pr-action$/)![1],
 		);
-		const session = findSession(sessionId);
+		const session = await findSessionAsync(sessionId);
 		if (!session)
 			return Response.json({ error: "Session not found" }, { status: 404 });
 
@@ -1012,7 +1012,7 @@ export async function handlePrRoutes(
 					import("../../agents/github/state"),
 				]);
 			const bksId = bksIdFor(details.number, "review", target.ghRepo);
-			const reviewSession = findSession(bksId);
+			const reviewSession = await findSessionAsync(bksId);
 			const requested = requestActiveRunCancellation(
 				details.number,
 				target.branch,
@@ -1058,7 +1058,7 @@ export async function handlePrRoutes(
 				ok: true,
 				bksId: id,
 				openSession: true,
-				session: findSession(id) ?? null,
+				session: await findSessionAsync(id) ?? null,
 			});
 		}
 
@@ -1075,7 +1075,7 @@ export async function handlePrRoutes(
 			message: result.message,
 			url: result.url,
 			bksId: result.bksId,
-			session: result.bksId ? findSession(result.bksId) ?? null : null,
+			session: result.bksId ? await findSessionAsync(result.bksId) ?? null : null,
 			...(result.ok ? {} : { error: result.message }),
 		});
 	}

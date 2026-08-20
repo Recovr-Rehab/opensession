@@ -14,7 +14,7 @@ import {
 	readAssetAcross,
 	writeAsset,
 } from "./session-assets";
-import { sessionIdsFor } from "./session-cache";
+import { sessionIdsForAsync } from "./session-cache";
 import type { SessionSummary } from "./session-control";
 import { workspaceExecFor } from "./sandbox";
 
@@ -88,7 +88,7 @@ async function readWorkspaceFile(
 }
 
 async function readSessionAsset(sessionId: string, rel: string): Promise<Buffer> {
-	const found = await readAssetAcross(sessionIdsFor(sessionId), rel);
+	const found = await readAssetAcross(await sessionIdsForAsync(sessionId), rel);
 	if (!found) throw new Error(`no asset at ${rel}`);
 	if (found.data.byteLength > MAX_WRITE_BYTES)
 		throw new Error(

@@ -1,6 +1,6 @@
 import { readMcpConfig } from "../connections";
 import { mentionPaletteItems } from "../mention-palette";
-import { findSession, peekCachedSessions } from "../session-cache";
+import { findSessionAsync, peekCachedSessions } from "../session-cache";
 import { getAllSessions } from "../sessions";
 import { userMatchesAny } from "../shared/user-mappings";
 import { requestUser, type RouteContext } from "./context";
@@ -13,7 +13,7 @@ export async function handleMentionPaletteRoutes(
 
 	const query = ctx.url.searchParams.get("q") || "";
 	const sessionId = ctx.url.searchParams.get("session");
-	const session = sessionId ? findSession(sessionId) : undefined;
+	const session = sessionId ? await findSessionAsync(sessionId) : undefined;
 	const caller = requestUser(ctx, ctx.url.searchParams.get("user"));
 	const requestedScope = ctx.url.searchParams.getAll("mcp");
 	// An empty list means the session default: every available tool. A non-empty

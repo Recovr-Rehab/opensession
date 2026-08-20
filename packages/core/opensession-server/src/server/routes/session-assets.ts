@@ -18,7 +18,7 @@ import {
 	listAssetsAcross,
 	openAssetAcross,
 } from "../session-assets";
-import { sessionIdsFor } from "../session-cache";
+import { sessionIdsForAsync } from "../session-cache";
 
 export async function handleSessionAssetsRoutes(
 	ctx: RouteContext,
@@ -32,7 +32,7 @@ export async function handleSessionAssetsRoutes(
 	if (listMatch && req.method === "GET") {
 		try {
 			const sessionId = decodeURIComponent(listMatch[1]!);
-			const sessionIds = sessionIdsFor(sessionId);
+			const sessionIds = await sessionIdsForAsync(sessionId);
 			return Response.json({
 				dir: assetStorageLocation(sessionIds[0] || sessionId),
 				files: await listAssetsAcross(sessionIds),
@@ -55,7 +55,7 @@ export async function handleSessionAssetsRoutes(
 		try {
 			const sessionId = decodeURIComponent(rawMatch[1]!);
 			const relRaw = decodeURIComponent(rawMatch[2]!);
-			found = await openAssetAcross(sessionIdsFor(sessionId), relRaw);
+			found = await openAssetAcross(await sessionIdsForAsync(sessionId), relRaw);
 		} catch (e: any) {
 			return new Response(e?.message || "bad path", { status: 400 });
 		}
@@ -85,7 +85,7 @@ export async function handleSessionAssetsRoutes(
 			};
 			if (!body.path)
 				return Response.json({ error: "path required" }, { status: 400 });
-			await deleteAssetAcross(sessionIdsFor(sessionId), body.path);
+			await deleteAssetAcross(await sessionIdsForAsync(sessionId), body.path);
 			return Response.json({ ok: true });
 		} catch (e: any) {
 			return Response.json(

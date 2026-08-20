@@ -8,7 +8,7 @@
 
 import type { RouteContext } from "./context";
 import { getPreviewStatus, getSandboxPreviewStatus, portalRouteAuthorized, startPreview, startSandboxPreview, stopPreview, stopSandboxPreview } from "../preview";
-import { findSession } from "../session-cache";
+import { findSessionAsync } from "../session-cache";
 import { activeSandboxFor } from "../session-sandbox";
 import { existsSync } from "fs";
 import { restartPortalService, restartSandboxPortalService, stopPortalService, stopSandboxPortalService } from "../portal-supervisor";
@@ -63,7 +63,7 @@ export async function handlePreviewRoutes(
 	{
 		const m = path.match(/^\/api\/sessions\/(.+)\/preview$/);
 		if (m && req.method === "GET") {
-			const session = findSession(decodeURIComponent(m[1]));
+			const session = await findSessionAsync(decodeURIComponent(m[1]));
 			if (!session)
 				return Response.json(
 					{ error: "Session not found" },
@@ -119,7 +119,7 @@ export async function handlePreviewRoutes(
 			/^\/api\/sessions\/(.+)\/preview\/screenshot$/,
 		);
 		if (m && req.method === "POST") {
-			const session = findSession(decodeURIComponent(m[1]));
+			const session = await findSessionAsync(decodeURIComponent(m[1]));
 			if (!session)
 				return Response.json(
 					{ error: "Session not found" },
@@ -178,7 +178,7 @@ export async function handlePreviewRoutes(
 			/^\/api\/sessions\/(.+)\/preview\/start$/,
 		);
 		if (m && req.method === "POST") {
-			const session = findSession(decodeURIComponent(m[1]));
+			const session = await findSessionAsync(decodeURIComponent(m[1]));
 			if (!session)
 				return Response.json(
 					{ error: "Session not found" },
@@ -225,7 +225,7 @@ export async function handlePreviewRoutes(
 			/^\/api\/sessions\/(.+)\/preview\/stop$/,
 		);
 		if (m && req.method === "POST") {
-			const session = findSession(decodeURIComponent(m[1]));
+			const session = await findSessionAsync(decodeURIComponent(m[1]));
 			if (!session)
 				return Response.json(
 					{ error: "Session not found" },
@@ -262,7 +262,7 @@ export async function handlePreviewRoutes(
 	{
 		const m = path.match(/^\/api\/sessions\/(.+)\/portals\/([a-z0-9-]+)\/(stop|restart)$/);
 		if (m && req.method === "POST") {
-			const session = findSession(decodeURIComponent(m[1]));
+			const session = await findSessionAsync(decodeURIComponent(m[1]));
 			if (!session) return Response.json({ error: "Session not found" }, { status: 404 });
 			try {
 				if (session.runner) {
