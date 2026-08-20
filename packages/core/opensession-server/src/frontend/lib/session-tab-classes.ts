@@ -48,7 +48,8 @@ const PILL = "rounded-[calc(8px*var(--rf))]";
 export const TAB_STRIP =
 	"session-tabs group/strip relative flex min-w-0 shrink-0 items-center gap-[3px] bg-surface px-2 " +
 	// Every desktop tab bar has one closing hairline. A pseudo-element avoids
-	// changing its height, while phones keep their existing real bottom border.
+	// changing its height. Phones stay borderless so fixed chrome never becomes
+	// a grey rule across the screen.
 	"desktop:after:pointer-events-none desktop:after:absolute desktop:after:inset-x-0 " +
 	"desktop:after:bottom-0 desktop:after:h-px desktop:after:bg-divider desktop:after:content-[''] " +
 	// Desktop: a compact band. The active tab's own surface supplies the
@@ -69,9 +70,9 @@ export const TAB_STRIP =
 	"desktop:[&:has(.session-tab-new:hover)]:[--tabs-control-fade-end:64px] " +
 	// Phone: pulled out of flow and pinned flush under the header's bottom edge,
 	// so it reads as fixed chrome rather than a strip the transcript scrolls by.
+	// Its surface and selected tab provide separation without drawing a grey bar.
 	"phone:absolute phone:inset-x-0 phone:top-[var(--pane-header-h)] phone:z-[6] " +
-	"phone:m-0 phone:border-b phone:border-line phone:py-[5px] " +
-	"phone:shadow-[0_6px_12px_-8px_rgba(0,0,0,0.22)] " +
+	"phone:m-0 phone:py-[5px] " +
 	// Mobile Safari can rasterize two composited layers that merely touch with a
 	// hairline seam: overlap the header by 2px and add those 2px back as padding.
 	"phone:[.app:has(.app-header-overlay)_&]:top-[calc(var(--pane-header-h)_-_2px)] " +

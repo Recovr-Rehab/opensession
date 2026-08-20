@@ -241,7 +241,7 @@ export function Reports({
 			{showDetail && (
 				<section className="flex min-w-0 flex-1 flex-col bg-bg">
 					{isPhone ? (
-						<header className="shrink-0 border-b border-divider px-3 pb-3 pt-2">
+						<header className="shrink-0 px-3 pb-3 pt-2">
 							<button
 								type="button"
 								className="-ml-1 flex items-center gap-0.5 rounded-control border-0 bg-transparent py-1.5 pl-1 pr-2.5 text-sm font-medium text-accent cursor-pointer"

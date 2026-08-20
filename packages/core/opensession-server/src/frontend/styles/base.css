@@ -1191,16 +1191,6 @@ a {
 	height: 100%;
 }
 
-/* Installed PWA has no browser chrome, so the top bar bleeds straight into the
-   OS title/status bar with nothing separating them. Add a hairline divider along
-   the very top edge so the top bar reads as a defined bar. Browser tabs already
-   get this separation from the chrome above, so scope it to standalone. */
-@media (display-mode: standalone) {
-	.app {
-		border-top: 1px solid var(--border);
-	}
-}
-
 /* The installed phone composer is a native-feeling capsule rather than the
    desktop squircle. Safari already falls back to circular corners because it
    does not support corner-shape; this keeps Chromium PWAs consistent. Its edge,
@@ -1289,9 +1279,6 @@ body:is(.resizing-sidebar, .resizing-panel, .resizing-tab-split) {
    `(display-mode: window-controls-overlay)` media query: Electron (the Open Session
    desktop shell, packages/clients/mac) exposes the WCO geometry and env() vars but
    keeps display-mode at "browser", so the media query never matches there. */
-html.wco .app {
-	border-top: none;
-}
 /* Updated macOS shell builds supply one native visual-effect surface beneath
    Chromium. Reveal it only through the structural chrome: the sidebar, the one
    region left beside the opaque workspace. The shell capability flag keeps

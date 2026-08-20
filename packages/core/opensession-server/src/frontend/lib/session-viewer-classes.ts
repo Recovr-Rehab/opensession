@@ -546,20 +546,19 @@ export const INFO_PAGE =
 	"[animation:session-info-in_var(--dur)_var(--ease)]";
 
 const INFO_TOPBAR =
-	"session-info-topbar sticky top-0 z-[4] flex items-center border-b " +
+	"session-info-topbar sticky top-0 z-[4] flex items-center " +
 	"min-h-[calc(env(safe-area-inset-top,0px)+52px)] " +
 	"pt-[env(safe-area-inset-top,0px)] px-2 pb-0 " +
-	"[transition:background-color_var(--dur)_var(--ease),border-color_var(--dur)_var(--ease)]";
+	"[transition:background-color_var(--dur)_var(--ease)]";
 
-/** Transparent until the page scrolls, then a frosted bar with a hairline —
- *  each state carries its whole set, since two background utilities in one
- *  variant bucket resolve by Tailwind's output order. */
+/** Transparent until the page scrolls, then a frosted surface. The fill and
+ *  blur separate the fixed chrome without drawing a grey rule across it. */
 export const infoTopbarClass = (scrolled: boolean) =>
 	`${INFO_TOPBAR} ` +
 	(scrolled
-		? "border-b-line bg-[color-mix(in_srgb,var(--bg)_92%,transparent)] " +
+		? "bg-[color-mix(in_srgb,var(--bg)_92%,transparent)] " +
 			"backdrop-blur-[18px] backdrop-saturate-[1.35]"
-		: "border-b-transparent bg-transparent");
+		: "bg-transparent");
 
 const INFO_TOPBAR_TITLE =
 	"pointer-events-none absolute right-14 bottom-0 left-14 flex h-[52px] items-center justify-center " +
