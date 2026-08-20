@@ -1,5 +1,17 @@
-import { describe, expect, test } from "bun:test";
-import { githubCredentialHelperCommand, validGithubFullName } from "./setup-repos";
+import { afterEach, describe, expect, test } from "bun:test";
+import { mkdtempSync, rmSync } from "fs";
+import { tmpdir } from "os";
+import { join } from "path";
+import {
+  configureGithubCredentialHelper,
+  githubCredentialHelperCommand,
+  validGithubFullName,
+} from "./setup-repos";
+
+const tempDirs: string[] = [];
+afterEach(() => {
+  for (const dir of tempDirs.splice(0)) rmSync(dir, { recursive: true, force: true });
+});
 
 describe("validGithubFullName", () => {
   test("accepts ordinary owner/name pairs", () => {
@@ -50,5 +62,28 @@ describe("githubCredentialHelperCommand", () => {
     const command = githubCredentialHelperCommand("/missing/opensession", false);
     expect(command).toStartWith("!bun ");
     expect(command).toEndWith("scripts/gh-credential.ts");
+  });
+
+  test("records the registering login for later server-side Git operations", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "github-helper-"));
+    tempDirs.push(dir);
+    const init = Bun.spawnSync(["git", "init", "-q", dir]);
+    expect(init.exitCode).toBe(0);
+
+    await configureGithubCredentialHelper(dir, {
+      kind: "user",
+      principal: "user:alice",
+      env: { GH_TOKEN: "secret", GITHUB_TOKEN: "secret" },
+    });
+
+    const username = Bun.spawnSync([
+      "git", "-C", dir, "config", "--get", "credential.https://github.com.username",
+    ]);
+    expect(username.stdout.toString().trim()).toBe("alice");
+    const helper = Bun.spawnSync([
+      "git", "-C", dir, "config", "--get-all", "credential.https://github.com.helper",
+    ]).stdout.toString();
+    expect(helper).toContain("gh-credential");
+    expect(helper).not.toContain("secret");
   });
 });

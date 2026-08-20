@@ -333,17 +333,25 @@ export function githubCredentialHelperCommand(
   return `!bun ${shellQuoteWord(GH_CREDENTIAL_SCRIPT)}`;
 }
 
-async function configureGithubCredentialHelper(checkoutPath: string): Promise<void> {
-  const key = "credential.https://github.com.helper";
-  await $`git -C ${checkoutPath} config --replace-all ${key} ${""}`.quiet();
-  await $`git -C ${checkoutPath} config --add ${key} ${githubCredentialHelperCommand()}`.quiet();
+export async function configureGithubCredentialHelper(
+  checkoutPath: string,
+  credential: GithubCredential,
+): Promise<void> {
+  const helperKey = "credential.https://github.com.helper";
+  await $`git -C ${checkoutPath} config --replace-all ${helperKey} ${""}`.quiet();
+  await $`git -C ${checkoutPath} config --add ${helperKey} ${githubCredentialHelperCommand()}`.quiet();
+  if (credential.kind === "user") {
+    const login = credential.principal.replace(/^user:/, "");
+    const usernameKey = "credential.https://github.com.username";
+    await $`git -C ${checkoutPath} config --replace-all ${usernameKey} ${login}`.quiet();
+  }
 }
 
 async function registerGithubRepo(input: {
   fullName: string;
   id?: string;
-  /** Connected user token to clone private repos with (secretlessly). */
-  userToken?: string;
+  /** Connected user credential for the private clone and later Git operations. */
+  credential?: GithubCredential;
 }): Promise<RepoSection & { id: string }> {
   const name = input.fullName.split("/")[1];
   const id = repoIdFromName(input.id?.trim() || name);
@@ -359,12 +367,12 @@ async function registerGithubRepo(input: {
   }
   mkdirSync(root, { recursive: true });
   try {
-    await cloneGithubRepo(input.fullName, dest, input.userToken);
+    await cloneGithubRepo(input.fullName, dest, input.credential?.env.GH_TOKEN);
     // A private clone authenticated through a one-shot GIT_ASKPASS; the remote
     // it leaves is tokenless, so wire the credential helper for future
     // fetch/push. No-op for a public (tokenless) clone — the helper simply has
     // nothing to answer with.
-    if (input.userToken) await configureGithubCredentialHelper(dest);
+    if (input.credential) await configureGithubCredentialHelper(dest, input.credential);
     const inspected = await inspectRepo(dest);
     const config = rawConfig();
     const repos = {
@@ -578,13 +586,13 @@ export async function handleSetupRepoRoutes(
     }
     // The acting token lets a private clone succeed without ambient gh /
     // credential-helper auth; absent, the clone stays anonymous (public repos).
-    const userToken = actingGithubCredential(ctx)?.env.GH_TOKEN;
+    const credential = actingGithubCredential(ctx);
     try {
       const repo = await withConfigMutationLock(() =>
         registerGithubRepo({
           fullName: body!.fullName as string,
           ...(typeof body!.id === "string" ? { id: body!.id } : {}),
-          ...(userToken ? { userToken } : {}),
+          ...(credential ? { credential } : {}),
         }),
       );
       return Response.json(repo, { status: 201 });
