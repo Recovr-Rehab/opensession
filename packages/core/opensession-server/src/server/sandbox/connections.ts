@@ -196,7 +196,7 @@ export function getSandboxConnection(
 }
 
 export function sandboxAdapterSignature(provider: WorkspaceSandboxProvider): string {
-  const version = provider === "box" ? "connection-v3" : "connection-v1";
+  const version = provider === "box" ? "connection-v4" : "connection-v1";
   return `${provider}:${version}:${bootstrapSignature()}`;
 }
 

@@ -1086,7 +1086,8 @@ export const boxPrewarmAdapter: PrewarmAdapter = {
 
 async function assertBoxRuntimeHome(driver: RemoteDriver): Promise<void> {
   const probe = await driver.exec(
-    "test ! -L /home/ubuntu && mountpoint -q /home/ubuntu && test /home/ubuntu -ef /home/user",
+    "test ! -L /home/ubuntu && mountpoint -q /home/ubuntu && test /home/ubuntu -ef /home/user && " +
+      "temporary=$(mktemp -d) && case $temporary in /home/ubuntu/.tmp/*) rmdir $temporary ;; *) exit 1 ;; esac",
   );
   if (probe.exitCode !== 0) {
     throw new Error("Box did not preserve /home/ubuntu as the durable canonical home");
