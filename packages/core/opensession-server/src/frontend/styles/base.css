@@ -1203,10 +1203,12 @@ a {
 
 /* The installed phone composer is a native-feeling capsule rather than the
    desktop squircle. Safari already falls back to circular corners because it
-   does not support corner-shape; this keeps Chromium PWAs consistent. */
+   does not support corner-shape; this keeps Chromium PWAs consistent. Its edge
+   uses the same 35% border strength as the desktop composer's smooth ring. */
 @media (display-mode: standalone) and (max-width: 720px) {
-	.composer {
+	.app .composer {
 		corner-shape: round;
+		border-color: color-mix(in srgb, var(--composer-border) 35%, transparent);
 	}
 
 	/* Installed navigation uses the foreground colour instead of the custom
