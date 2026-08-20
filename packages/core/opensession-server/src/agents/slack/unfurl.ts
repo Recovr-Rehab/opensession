@@ -136,7 +136,6 @@ export function unfurlForSession(s: UnifiedSession, url: string): { blocks: any[
 
   const bits: string[] = [statusChip(s)];
   if (s.repo) bits.push(s.branch ? `${s.repo} · \`${s.branch}\`` : s.repo);
-  if (card.model) bits.push(card.model);
   if (s.mode) bits.push(s.mode);
   if (s.linearIssue?.identifier) bits.push(s.linearIssue.identifier);
   if (s.createdBy || s.startedBy) bits.push(`by ${card.owner}`);

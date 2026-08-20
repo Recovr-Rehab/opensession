@@ -16,11 +16,6 @@ import { createHmac, randomBytes, timingSafeEqual } from "crypto";
 import { chmodSync, readFileSync, statSync, writeFileSync } from "fs";
 import { repoLetter } from "../frontend/lib/repo-label";
 import {
-	DEFAULT_ACCENT_THEME,
-	getAccentThemeOption,
-	isAccentTheme,
-} from "../shared/accent-theme";
-import {
 	configuredIntegration,
 	configuredRepos,
 	configuredServer,
@@ -38,7 +33,6 @@ import { findSessionAsync } from "./session-cache";
 import { transcriptStore } from "./transcript-store";
 import { isWithinUploads, stagedImageRef } from "./uploads";
 import type { TranscriptEntry, UnifiedSession } from "./types";
-import { getUiPrefs } from "./ui-prefs";
 
 export const SESSION_CARD_WIDTH = 1200;
 export const SESSION_CARD_HEIGHT = 630;
@@ -53,14 +47,8 @@ export const SESSION_CARD_BANNER_WIDTH = 1200;
 export const SESSION_CARD_BANNER_HEIGHT = 200;
 
 export type SessionCardVariant = "card" | "banner";
-const SESSION_CARD_VERSION = 7;
+const SESSION_CARD_VERSION = 8;
 
-/**
- * The card is ink, not paper: the product mark is a near-black square with a
- * white glyph, so a session link wearing the same value reads as ours at
- * thumbnail size, which is the only size Slack ever shows it at. Sampled off
- * icon.png rather than picked by eye.
- */
 const CARD_INK = "#050609";
 const CARD_PAPER = "#FFFFFF";
 /** Left margin. */
@@ -73,49 +61,53 @@ const PAD_X = 56;
 const TILE_SIZE = 48;
 const TILE_GAP = 16;
 const TILE_RADIUS = TILE_SIZE * 0.46;
-/**
- * The metadata line: a glyph and its label, twice over. Its labels share the
- * title's text column while the smaller person tile centres under the repo mark.
- */
+/** The owner row starts under the title, with the avatar beside the name. */
 const META_SIZE = 28;
-const META_GAP = 20;
+const META_GAP = 14;
 const META_TEXT_SIZE = 24;
-const META_LABEL_GAP = 12;
-const META_GROUP_GAP = 26;
+const META_LABEL_GAP = 8;
 const META_GLYPH_SIZE = 22;
 const META_RADIUS = META_SIZE * 0.46;
-const META_FONT = "Inter Medium 24";
-const META_OPACITY = 0.55;
+const META_OPACITY = 0.52;
 const TITLE_SIZE = 48;
 const TITLE_X = PAD_X + TILE_SIZE + TILE_GAP;
 const TITLE_MAX_WIDTH = SESSION_CARD_WIDTH - TITLE_X - PAD_X;
 const TITLE_FONT = "Inter SemiBold 48";
 const TITLE_LETTER_SPACING = Math.round(-1.2 * 1024);
-/**
- * The screenshot panel. It bleeds off the right edge and runs the full height
- * rather than sitting in the card as a framed thumbnail: a session link is
- * read at thumbnail size, where an inset picture of a picture reads as noise.
- * The image emerges from the ink through a soft left edge, so the words keep
- * a quiet background whatever the screenshot happens to be.
- */
-const SHOT_BANNER_WIDTH = 400;
-const SHOT_CARD_WIDTH = 470;
-const SHOT_FADE = 160;
+/** An inset screenshot gives the white card a clear visual without covering it. */
+const SHOT_BANNER_WIDTH = 360;
+const SHOT_CARD_WIDTH = 430;
+const SHOT_BANNER_INSET = 20;
+const SHOT_CARD_INSET = 28;
+const SHOT_BANNER_RADIUS = 24;
+const SHOT_CARD_RADIUS = 32;
 const SHOT_GAP = 28;
 
 export interface SessionSocialCardData {
 	title: string;
 	owner: string;
 	repo?: string;
-	model?: string;
 	person?: DirectoryPerson;
-	accent: string;
 	/** Absolute path to a screenshot this session produced, when it has one. */
 	shot?: string;
 }
 
 function shotWidth(variant: SessionCardVariant): number {
 	return variant === "banner" ? SHOT_BANNER_WIDTH : SHOT_CARD_WIDTH;
+}
+
+function shotInset(variant: SessionCardVariant): number {
+	return variant === "banner" ? SHOT_BANNER_INSET : SHOT_CARD_INSET;
+}
+
+function shotRadius(variant: SessionCardVariant): number {
+	return variant === "banner" ? SHOT_BANNER_RADIUS : SHOT_CARD_RADIUS;
+}
+
+function shotHeight(variant: SessionCardVariant): number {
+	const cardHeight =
+		variant === "banner" ? SESSION_CARD_BANNER_HEIGHT : SESSION_CARD_HEIGHT;
+	return cardHeight - shotInset(variant) * 2;
 }
 
 /** How much room one line of title has, which the screenshot takes from. */
@@ -125,7 +117,10 @@ function titleMeasure(
 ): number {
 	const left = clean(data.repo) ? TITLE_X : PAD_X;
 	const right = data.shot
-		? SESSION_CARD_WIDTH - shotWidth(variant) - SHOT_GAP
+		? SESSION_CARD_WIDTH -
+			shotWidth(variant) -
+			shotInset(variant) -
+			SHOT_GAP
 		: SESSION_CARD_WIDTH - PAD_X;
 	return right - left;
 }
@@ -148,11 +143,6 @@ export function sessionCardTitle(
 	return { title: sessionTitle };
 }
 
-function sessionModelLabel(session: UnifiedSession): string | undefined {
-	if (!session.model) return undefined;
-	return session.model.split("/").filter(Boolean).at(-1);
-}
-
 export function sessionSocialCardData(
 	session: UnifiedSession,
 	options: { includeShot?: boolean } = {},
@@ -160,20 +150,13 @@ export function sessionSocialCardData(
 	const heading = sessionCardTitle(session);
 	const ownerRef = clean(session.createdBy || session.startedBy) || productName();
 	const person = teamDirectory().find((candidate) => samePerson(candidate, ownerRef));
-	const model = sessionModelLabel(session);
-	const savedAccent = getUiPrefs(person?.name || ownerRef).accent;
-	const accentTheme = isAccentTheme(savedAccent)
-		? savedAccent
-		: DEFAULT_ACCENT_THEME;
 	const shot = options.includeShot ? sessionShotPath(session) : undefined;
 	return {
 		title: heading.title,
 		owner: person?.fullName || ownerRef,
 		...(session.repo ? { repo: session.repo } : {}),
-		...(model ? { model } : {}),
 		...(person ? { person } : {}),
 		...(shot ? { shot } : {}),
-		accent: getAccentThemeOption(accentTheme).light,
 	};
 }
 
@@ -310,20 +293,6 @@ async function titleWidth(title: string): Promise<number> {
 	return metadata.width ?? 0;
 }
 
-/**
- * How wide the owner's name renders, so the model group can sit right after it
- * rather than at a guessed column. Measured through the same rasterizer that
- * draws the card; the SVG keeps a rough estimate as its fallback so it stays
- * callable (and testable) without a render.
- */
-async function metaWidth(text: string): Promise<number> {
-	if (!text) return 0;
-	const metadata = await sharp({
-		text: { text: xml(text), font: META_FONT, rgba: true, dpi: 72 },
-	}).metadata();
-	return metadata.width ?? 0;
-}
-
 /** Fit one 48 px Inter Semi Bold line inside the measure left of the tile. */
 export async function fitSocialCardTitle(
 	title: string,
@@ -453,15 +422,16 @@ function repoTileColorFor(id: string): string {
  * along the curve rather than approximated with beziers, so the corner is the
  * actual superellipse at any size.
  */
-function squirclePath(
+function squircleRectPath(
 	x: number,
 	y: number,
-	size: number,
-	radius = size * 0.32,
+	width: number,
+	height: number,
+	radius: number,
 	exponent = 4,
 	steps = 20,
 ): string {
-	const r = Math.min(radius, size / 2);
+	const r = Math.min(radius, width / 2, height / 2);
 	const power = 2 / exponent;
 	const corner = (
 		cx: number,
@@ -481,187 +451,107 @@ function squirclePath(
 	};
 	return [
 		`M${(x + r).toFixed(2)} ${y.toFixed(2)}`,
-		`L${(x + size - r).toFixed(2)} ${y.toFixed(2)}`,
-		corner(x + size - r, y + r, 1, -1, true),
-		corner(x + size - r, y + size - r, 1, 1, false),
-		corner(x + r, y + size - r, -1, 1, true),
+		`L${(x + width - r).toFixed(2)} ${y.toFixed(2)}`,
+		corner(x + width - r, y + r, 1, -1, true),
+		corner(x + width - r, y + height - r, 1, 1, false),
+		corner(x + r, y + height - r, -1, 1, true),
 		corner(x + r, y + r, -1, -1, false),
 		"Z",
 	].join("");
 }
 
-/**
- * A subtext glyph, in the SF Symbols idiom: one stroked outline sitting on the
- * label's own optical centre, at the label's colour and weight.
- *
- * Drawn here rather than shipped from Apple's set, which is licensed for use
- * in apps on Apple platforms and not for a PNG we hand to Slack. The shapes
- * are deliberately the plainest reading of `person` and `sparkle`, so the pair
- * reads as one family beside the name and the model.
- */
-function metaGlyph(kind: "person" | "model", x: number, cy: number): string {
+function squirclePath(
+	x: number,
+	y: number,
+	size: number,
+	radius = size * 0.32,
+): string {
+	return squircleRectPath(x, y, size, size, radius);
+}
+
+/** A person outline for sessions without a directory avatar. */
+function metaGlyph(x: number, cy: number): string {
 	const scale = META_GLYPH_SIZE / 24;
 	const transform = `translate(${x.toFixed(2)} ${(cy - META_GLYPH_SIZE / 2).toFixed(2)}) scale(${scale.toFixed(4)})`;
-	const stroke = `fill="none" stroke="${CARD_PAPER}" stroke-opacity="${META_OPACITY}" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"`;
-	const body =
-		kind === "person"
-			? `<circle cx="12" cy="7.6" r="3.7" ${stroke}/><path d="M4.7 20.1c0-4.1 3.3-6.5 7.3-6.5s7.3 2.4 7.3 6.5" ${stroke}/>`
-			: `<path d="M12 3.1L13.7 9.5L20.2 11.3L13.7 13.1L12 19.5L10.3 13.1L3.8 11.3L10.3 9.5Z" fill="${CARD_PAPER}" fill-opacity="${META_OPACITY}"/>`;
-	return `<g transform="${transform}">${body}</g>`;
+	const stroke = `fill="none" stroke="${CARD_INK}" stroke-opacity="${META_OPACITY}" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"`;
+	return `<g transform="${transform}"><circle cx="12" cy="7.6" r="3.7" ${stroke}/><path d="M4.7 20.1c0-4.1 3.3-6.5 7.3-6.5s7.3 2.4 7.3 6.5" ${stroke}/></g>`;
 }
 
 /** SVG source is exported so the visual can be inspected without PNG decoding. */
 export function sessionSocialCardSvg(
 	data: SessionSocialCardData,
 	avatar = "",
-	jetBrainsMono = "",
 	displayTitle = clean(data.title) || productName(),
 	variant: SessionCardVariant = "card",
 	repoIcon = "",
-	ownerWidth = 0,
 	shot = "",
 ): string {
 	const banner = variant === "banner";
 	const height = banner ? SESSION_CARD_BANNER_HEIGHT : SESSION_CARD_HEIGHT;
-	// One block, centred on both shapes: the repo tile and the title on the
-	// first line, everything else demoted to the second. Nothing is pinned to
-	// the bottom edge any more, which is what lets the banner get shorter
-	// without opening a hole in the middle of it.
 	const blockTop = Math.round((height - (TILE_SIZE + META_GAP + META_SIZE)) / 2);
 	const tileCenter = blockTop + TILE_SIZE / 2;
 	const metaTop = blockTop + TILE_SIZE + META_GAP;
 	const metaCenter = metaTop + META_SIZE / 2;
-	// The brand curve is scaled past the card's own height so it crops top and
-	// bottom and bleeds off the right edge. Oversized, it reads as a sweep the
-	// card was cut out of rather than a shape pasted inside the frame.
-	const artScale = (height / SESSION_CARD_HEIGHT) * 1.6;
-	const artTransform = `translate(${(SESSION_CARD_WIDTH - 399 * artScale).toFixed(2)} ${((height - SESSION_CARD_HEIGHT * artScale) / 2).toFixed(2)}) scale(${artScale.toFixed(4)})`;
-	const accent = xml(data.accent);
 	const repoId = clean(data.repo);
 	const owner = metaLabel(clean(data.owner));
-	const model = metaLabel(clean(data.model));
 	const tile = squirclePath(PAD_X, blockTop, TILE_SIZE, TILE_RADIUS);
-	const tileColor = repoId ? repoTileColorFor(repoId) : CARD_PAPER;
+	const tileColor = repoId ? repoTileColorFor(repoId) : CARD_INK;
 	const hasTile = !!(repoIcon || repoId);
 	const titleX = hasTile ? TITLE_X : PAD_X;
-	// A two-column grid: the smaller person tile centres under the repo mark,
-	// while the person's name starts on exactly the same x as the title.
-	const metaX = hasTile
-		? PAD_X + (TILE_SIZE - META_SIZE) / 2
-		: PAD_X;
-	const metaTextX = hasTile
-		? titleX
-		: metaX + META_SIZE + META_LABEL_GAP;
+	// The owner row begins under the title. Its avatar sits immediately beside
+	// the name instead of occupying a detached icon column.
+	const metaX = titleX;
+	const metaTextX = metaX + META_SIZE + META_LABEL_GAP;
 	const avatarTile = squirclePath(metaX, metaTop, META_SIZE, META_RADIUS);
 	const shotW = shotWidth(variant);
-	const shotX = SESSION_CARD_WIDTH - shotW;
-	// Art when the repo has any, the same colored letter the app falls back to
-	// when it does not.
+	const shotH = shotHeight(variant);
+	const shotPad = shotInset(variant);
+	const shotX = SESSION_CARD_WIDTH - shotW - shotPad;
+	const shotY = shotPad;
+	const shotShape = squircleRectPath(
+		shotX,
+		shotY,
+		shotW,
+		shotH,
+		shotRadius(variant),
+	);
 	const repoMarkup = !hasTile
 		? ""
 		: repoIcon
 			? `<image href="${repoIcon}" x="${PAD_X}" y="${blockTop}" width="${TILE_SIZE}" height="${TILE_SIZE}" preserveAspectRatio="xMidYMid slice" clip-path="url(#repoClip)"/>`
-			: `<path d="${tile}" fill="${xml(tileColor)}"/><path d="${tile}" fill="url(#tileSheen)"/><text x="${PAD_X + TILE_SIZE / 2}" y="${tileCenter + 1}" text-anchor="middle" dominant-baseline="middle" fill="${REPO_TILE_INK}" font-size="24" font-weight="600">${xml(repoLetter(repoId))}</text>`;
-	// The person's own face when we have one, the `person` glyph when we do
-	// not, so the subtext keeps its shape either way.
+			: `<path d="${tile}" fill="${xml(tileColor)}"/><text x="${PAD_X + TILE_SIZE / 2}" y="${tileCenter + 1}" text-anchor="middle" dominant-baseline="middle" fill="${REPO_TILE_INK}" font-size="24" font-weight="600">${xml(repoLetter(repoId))}</text>`;
 	const avatarMarkup = avatar
 		? `<image href="${avatar}" x="${metaX}" y="${metaTop}" width="${META_SIZE}" height="${META_SIZE}" preserveAspectRatio="xMidYMid slice" clip-path="url(#avatarClip)"/>`
-		: metaGlyph("person", metaX + (META_SIZE - META_GLYPH_SIZE) / 2, metaCenter);
-	// The screenshot, when the session has one: full height, bleeding off the
-	// right edge, emerging from the ink through a soft left edge.
+		: metaGlyph(metaX + (META_SIZE - META_GLYPH_SIZE) / 2, metaCenter);
 	const shotMarkup = shot
-		? `<g clip-path="url(#shotClip)"><image href="${shot}" x="${shotX}" y="0" width="${shotW}" height="${height}" preserveAspectRatio="xMidYMid slice"/><rect x="${shotX}" y="0" width="${shotW}" height="${height}" fill="url(#shotFade)"/></g>`
-		: "";
-	// Where the model group starts. Measured by the caller through the same
-	// rasterizer that draws the card; the estimate keeps this callable without
-	// a render (tests, and anyone inspecting the SVG).
-	const nameWidth = ownerWidth || owner.length * META_TEXT_SIZE * 0.52;
-	const modelX = metaTextX + nameWidth + META_GROUP_GAP;
-	const modelMarkup = model
-		? `${metaGlyph("model", modelX, metaCenter)}<text x="${(modelX + META_GLYPH_SIZE + META_LABEL_GAP).toFixed(2)}" y="${metaCenter + 1}" dominant-baseline="middle" fill="${CARD_PAPER}" fill-opacity="${META_OPACITY}" font-family="JetBrains Mono, monospace" font-size="${META_TEXT_SIZE}" font-weight="500">${xml(model)}</text>`
-		: "";
-	const fontFace = jetBrainsMono
-		? `<style>@font-face { font-family: 'JetBrains Mono'; font-style: normal; font-weight: 500; src: url('${jetBrainsMono}') format('truetype'); }</style>`
+		? `<g clip-path="url(#shotClip)"><image href="${shot}" x="${shotX}" y="${shotY}" width="${shotW}" height="${shotH}" preserveAspectRatio="xMidYMin slice"/></g><path d="${shotShape}" fill="none" stroke="${CARD_INK}" stroke-opacity="0.1"/>`
 		: "";
 
 	return `<svg xmlns="http://www.w3.org/2000/svg" width="${SESSION_CARD_WIDTH}" height="${height}" viewBox="0 0 ${SESSION_CARD_WIDTH} ${height}" font-family="Inter, Arial, sans-serif">
 <defs>
-  ${fontFace}
-  <linearGradient id="artGradient" x1="199.5" y1="0" x2="199.5" y2="630" gradientUnits="userSpaceOnUse">
-    <stop stop-color="${accent}" stop-opacity="0.18"/>
-    <stop offset="1" stop-color="${accent}" stop-opacity="0.035"/>
-  </linearGradient>
-  <radialGradient id="aurora" cx="1160" cy="${banner ? -30 : 60}" r="${banner ? 620 : 860}" gradientUnits="userSpaceOnUse">
-    <stop stop-color="${accent}" stop-opacity="0.24"/>
-    <stop offset="0.5" stop-color="${accent}" stop-opacity="0.055"/>
-    <stop offset="1" stop-color="${accent}" stop-opacity="0"/>
-  </radialGradient>
-  <pattern id="grid" width="26" height="26" patternUnits="userSpaceOnUse">
-    <circle cx="1.3" cy="1.3" r="1.3" fill="${CARD_PAPER}" fill-opacity="0.07"/>
-  </pattern>
-  <linearGradient id="gridFade" x1="0" y1="0" x2="1200" y2="0" gradientUnits="userSpaceOnUse">
-    <stop stop-color="#000000"/>
-    <stop offset="0.55" stop-color="#000000"/>
-    <stop offset="1" stop-color="#FFFFFF"/>
-  </linearGradient>
-  <mask id="gridMask"><rect width="1200" height="${height}" fill="url(#gridFade)"/></mask>
-  <radialGradient id="tileGlow" cx="${PAD_X + TILE_SIZE / 2}" cy="${tileCenter}" r="${TILE_SIZE * 1.7}" gradientUnits="userSpaceOnUse">
-    <stop stop-color="${xml(tileColor)}" stop-opacity="0.26"/>
-    <stop offset="1" stop-color="${xml(tileColor)}" stop-opacity="0"/>
-  </radialGradient>
-  <linearGradient id="tileSheen" x1="0" y1="${blockTop}" x2="0" y2="${blockTop + TILE_SIZE}" gradientUnits="userSpaceOnUse">
-    <stop stop-color="#FFFFFF" stop-opacity="0.14"/>
-    <stop offset="1" stop-color="#000000" stop-opacity="0.08"/>
-  </linearGradient>
-  <linearGradient id="shotFade" x1="${shotX}" y1="0" x2="${shotX + SHOT_FADE}" y2="0" gradientUnits="userSpaceOnUse">
-    <stop stop-color="${CARD_INK}"/>
-    <stop offset="1" stop-color="${CARD_INK}" stop-opacity="0"/>
-  </linearGradient>
-  <clipPath id="shotClip"><rect x="${shotX}" y="0" width="${shotW}" height="${height}"/></clipPath>
+  <clipPath id="shotClip"><path d="${shotShape}"/></clipPath>
   <clipPath id="repoClip"><path d="${tile}"/></clipPath>
   <clipPath id="avatarClip"><path d="${avatarTile}"/></clipPath>
 </defs>
-<rect width="1200" height="${height}" fill="${CARD_INK}"/>
-<rect width="1200" height="${height}" fill="url(#aurora)"/>
-<rect width="1200" height="${height}" fill="url(#grid)" mask="url(#gridMask)"/>
-<g transform="${artTransform}">
-  <path d="M68.8375 226.509C-37.3322 147.543 -7.34262 36.0198 68.8375 0H399V630H84.0041C208.443 571.121 289.104 390.338 68.8375 226.509Z" fill="url(#artGradient)"/>
-</g>
+<rect width="1200" height="${height}" fill="${CARD_PAPER}"/>
 ${shotMarkup}
-${hasTile && !repoIcon ? `<circle cx="${PAD_X + TILE_SIZE / 2}" cy="${tileCenter}" r="${TILE_SIZE * 1.7}" fill="url(#tileGlow)"/>` : ""}
 ${repoMarkup}
-${hasTile ? `<path d="${tile}" fill="none" stroke="${CARD_PAPER}" stroke-opacity="0.14"/>` : ""}
-<text x="${titleX}" y="${tileCenter + 2}" dominant-baseline="middle" fill="${CARD_PAPER}" font-size="${TITLE_SIZE}" font-weight="600" letter-spacing="-1.2">${xml(displayTitle)}</text>
+${hasTile ? `<path d="${tile}" fill="none" stroke="${CARD_INK}" stroke-opacity="0.1"/>` : ""}
+<text x="${titleX}" y="${tileCenter + 2}" dominant-baseline="middle" fill="${CARD_INK}" font-size="${TITLE_SIZE}" font-weight="600" letter-spacing="-1.2">${xml(displayTitle)}</text>
 ${avatarMarkup}
-${avatar ? `<path d="${avatarTile}" fill="none" stroke="${CARD_PAPER}" stroke-opacity="0.14"/>` : ""}
-<text x="${metaTextX}" y="${metaCenter + 1}" dominant-baseline="middle" fill="${CARD_PAPER}" fill-opacity="${META_OPACITY}" font-size="${META_TEXT_SIZE}" font-weight="500">${xml(owner)}</text>
-${modelMarkup}
+${avatar ? `<path d="${avatarTile}" fill="none" stroke="${CARD_INK}" stroke-opacity="0.1"/>` : ""}
+<text x="${metaTextX}" y="${metaCenter + 1}" dominant-baseline="middle" fill="${CARD_INK}" fill-opacity="${META_OPACITY}" font-size="${META_TEXT_SIZE}" font-weight="500">${xml(owner)}</text>
 </svg>`;
-}
-
-let jetBrainsMonoDataUrl = "";
-
-async function socialCardMonoFont(): Promise<string> {
-	if (jetBrainsMonoDataUrl) return jetBrainsMonoDataUrl;
-	const bytes = await Bun.file(
-		new URL("./fonts/JetBrainsMono-Medium.ttf", import.meta.url),
-	).arrayBuffer();
-	jetBrainsMonoDataUrl = `data:font/ttf;base64,${Buffer.from(bytes).toString("base64")}`;
-	return jetBrainsMonoDataUrl;
 }
 
 export async function renderSessionSocialCard(
 	data: SessionSocialCardData,
 	variant: SessionCardVariant = "card",
 ): Promise<Buffer> {
-	const height =
-		variant === "banner" ? SESSION_CARD_BANNER_HEIGHT : SESSION_CARD_HEIGHT;
-	const [avatar, repoIcon, monoFont, ownerWidth, shot] = await Promise.all([
+	const [avatar, repoIcon, shot] = await Promise.all([
 		avatarDataUrl(data.person),
 		repoIconDataUrl(data.repo),
-		socialCardMonoFont(),
-		metaWidth(metaLabel(clean(data.owner))),
-		shotDataUrl(data.shot, shotWidth(variant), height),
+		shotDataUrl(data.shot, shotWidth(variant), shotHeight(variant)),
 	]);
 	// A missing or unreadable image falls back to the full title measure rather
 	// than leaving an unexplained blank where its panel would have been.
@@ -671,16 +561,7 @@ export async function renderSessionSocialCard(
 	);
 	return sharp(
 		Buffer.from(
-			sessionSocialCardSvg(
-				data,
-				avatar,
-				monoFont,
-				title,
-				variant,
-				repoIcon,
-				ownerWidth,
-				shot,
-			),
+			sessionSocialCardSvg(data, avatar, title, variant, repoIcon, shot),
 		),
 	)
 		.png()
@@ -738,7 +619,7 @@ function validCardToken(sessionId: string, token: string): boolean {
 }
 
 function socialDescription(data: SessionSocialCardData): string {
-	return [data.owner, data.repo, data.model].filter(Boolean).join(" · ");
+	return [data.owner, data.repo].filter(Boolean).join(" · ");
 }
 
 function replaceMeta(htmlSource: string, key: string, value: string): string {

@@ -34,18 +34,24 @@ afterAll(() => {
 describe("unfurlForSession", () => {
 	test("shows the banner render of the social card", () => {
 		const unfurl = unfurlForSession(
-			session({ id: "sess-card", title: "Ship the card", createdBy: "Kent" }),
+			session({
+				id: "sess-card",
+				title: "Ship the card",
+				createdBy: "Kent",
+				model: "pi/openai/gpt-5.6-sol",
+			}),
 			"https://os.example.test/session/sess-card",
 		);
 		expect(unfurl.blocks).toContainEqual({
 			type: "image",
 			image_url: expect.stringMatching(
-				/^https:\/\/media\.example\.test\/session-card\/sess-card\/[A-Za-z0-9_-]{32}\.png\?v=7&s=banner$/,
+				/^https:\/\/media\.example\.test\/session-card\/sess-card\/[A-Za-z0-9_-]{32}\.png\?v=8&s=banner$/,
 			),
 			alt_text: "Ship the card, an Open Session by Kent",
 		});
 		// The square accessory thumbnail squashed the wide card.
 		expect(unfurl.blocks.some((b: any) => b.accessory)).toBe(false);
+		expect(JSON.stringify(unfurl.blocks)).not.toContain("gpt-5.6-sol");
 	});
 });
 

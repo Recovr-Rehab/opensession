@@ -27,7 +27,6 @@ const {
 } = await import("./session-social-card");
 const { invalidateSessionsCache } = await import("./session-cache");
 const { transcriptStore } = await import("./transcript-store");
-const { patchUiPrefs } = await import("./ui-prefs");
 
 const signedRouteSessionId = "slack-C123-1719860000.000000";
 const sessionsDir = join(scratch, ".opensession-sessions");
@@ -94,28 +93,15 @@ function session(patch: Partial<UnifiedSession> = {}): UnifiedSession {
 }
 
 describe("session social card", () => {
-	test("normalizes the session fields shown on the card", () => {
-		expect(sessionSocialCardData(session())).toMatchObject({
+	test("normalizes only the session fields shown on the card", () => {
+		const data = sessionSocialCardData(session());
+		expect(data).toMatchObject({
 			title: "Ship dynamic social cards",
 			owner: "Test Person",
 			repo: "opensession",
-			model: "gpt-5.6-sol",
-			accent: "#1d82bc",
 		});
-	});
-
-	test("uses the creator's published accent", () => {
-		patchUiPrefs("Test Person", { accent: "coral" });
-		expect(sessionSocialCardData(session()).accent).toBe("#dd233a");
-		patchUiPrefs("Test Person", { accent: null });
-	});
-
-	test("uses the model slug for the footer", () => {
-		expect(
-			sessionSocialCardData(
-				session({ model: "workspace-preset/ws-gone/opus-fable" }),
-			).model,
-		).toBe("opus-fable");
+		expect(data).not.toHaveProperty("model");
+		expect(data).not.toHaveProperty("accent");
 	});
 
 	test("prefers walkthrough, featured, then person-attached screenshots", () => {
@@ -196,28 +182,21 @@ describe("session social card", () => {
 			title: "Fix <cards> & links",
 			owner: 'Test "Person"',
 			repo: "opensession",
-			model: "gpt-5.6-sol",
-			accent: "#dd233a",
 		});
-		// The card is ink, and the creator's accent is reserved for the quiet
-		// aurora and oversized brand sweep on the right.
-		expect(svg).toContain('<rect width="1200" height="630" fill="#050609"/>');
-		expect(svg).toContain('stop-color="#dd233a" stop-opacity="0.24"');
-		expect(svg).toContain('fill="#FFFFFF" fill-opacity="0.07"');
-		expect(svg).not.toContain('<rect width="8"');
-		expect(svg).toContain('fill="#FFFFFF" font-size="48"');
+		expect(svg).toContain('<rect width="1200" height="630" fill="#FFFFFF"/>');
+		expect(svg).not.toContain("aurora");
+		expect(svg).not.toContain("shotFade");
+		expect(svg).toContain('fill="#050609" font-size="48"');
 		// The repo tile is a real squircle path, not an `rx` rounded rect, and
 		// the title starts clear of the smaller inline mark.
 		expect(svg).toContain('<clipPath id="repoClip"><path d="M');
 		expect(svg).toContain('x="120"');
 		expect(svg).toContain(">O</text>");
-		// Owner and model read as metadata rather than as a second heading,
-		// each behind its own glyph.
-		expect(svg).toContain('fill-opacity="0.55"');
+		// The owner is the only secondary field.
+		expect(svg).toContain('fill-opacity="0.52"');
 		expect(svg).toContain('<circle cx="12" cy="7.6" r="3.7"');
-		expect(svg).toContain("M12 3.1L13.7 9.5");
-		expect(svg).toContain("gpt-5.6-sol");
-		expect(svg).toContain("M68.8375 226.509C-37.3322 147.543");
+		expect(svg).not.toContain("gpt-5.6-sol");
+		expect(svg).not.toContain("M12 3.1L13.7 9.5");
 		expect(svg).toContain("Fix &lt;cards&gt; &amp; links");
 		expect(svg).not.toContain("Fix <cards>");
 	});
@@ -228,33 +207,30 @@ describe("session social card", () => {
 				title: "A visual session",
 				owner: "Test Person",
 				repo: "opensession",
-				model: "gpt-5.6-sol",
-				accent: "#1d82bc",
 			},
 			"data:image/png;base64,avatar",
-			"",
 			"A visual session",
 			"banner",
 			"",
-			120,
 			"data:image/png;base64,screenshot",
 		);
 		expect(svg).toContain('<text x="120"');
 		expect(svg).toContain(
-			'<image href="data:image/png;base64,avatar" x="66"',
+			'<image href="data:image/png;base64,avatar" x="120"',
 		);
 		expect(svg).toMatch(
-			/<clipPath id="avatarClip"><path d="M78\.88 120\.00L/,
+			/<clipPath id="avatarClip"><path d="M132\.88 117\.00L/,
 		);
 		expect(svg).toContain(
-			'<text x="120" y="135" dominant-baseline="middle"',
+			'<text x="156" y="132" dominant-baseline="middle"',
 		);
 		expect(svg).toContain(
-			'<image href="data:image/png;base64,screenshot" x="800" y="0" width="400" height="200"',
+			'<image href="data:image/png;base64,screenshot" x="820" y="20" width="360" height="160"',
 		);
 		expect(svg).toContain(
-			'<linearGradient id="shotFade" x1="800" y1="0" x2="960" y2="0"',
+			'<clipPath id="shotClip"><path d="M844.00 20.00L1156.00 20.00',
 		);
+		expect(svg).not.toContain("shotFade");
 	});
 
 	test("renders a 1200 by 630 PNG", async () => {
@@ -283,7 +259,7 @@ describe("session social card", () => {
 		expect(output).toContain("<title>Ship dynamic social cards · Open Session</title>");
 		expect(output).toContain('content="summary_large_image"');
 		expect(output).toMatch(
-			/content="https:\/\/media\.example\.test\/session-card\/sess-social-1\/[A-Za-z0-9_-]{32}\.png\?v=7"/,
+			/content="https:\/\/media\.example\.test\/session-card\/sess-social-1\/[A-Za-z0-9_-]{32}\.png\?v=8"/,
 		);
 		expect(output).toContain(
 			'property="og:url" content="https://os.example.test/session/sess-social-1"',
@@ -297,13 +273,13 @@ describe("session social card", () => {
 		).toBe("sess-social-1");
 		expect(socialSessionIdFromPath("/settings")).toBeNull();
 		expect(sessionSocialCardUrl("sess-social-1")).toMatch(
-			/^https:\/\/media\.example\.test\/session-card\/sess-social-1\/[A-Za-z0-9_-]{32}\.png\?v=7$/,
+			/^https:\/\/media\.example\.test\/session-card\/sess-social-1\/[A-Za-z0-9_-]{32}\.png\?v=8$/,
 		);
 	});
 
 	test("signs ids containing Slack timestamp dots", () => {
 		expect(sessionSocialCardUrl("slack-C123-1719860000.000000")).toMatch(
-			/^https:\/\/media\.example\.test\/session-card\/slack-C123-1719860000\.000000\/[A-Za-z0-9_-]{32}\.png\?v=7$/,
+			/^https:\/\/media\.example\.test\/session-card\/slack-C123-1719860000\.000000\/[A-Za-z0-9_-]{32}\.png\?v=8$/,
 		);
 	});
 
