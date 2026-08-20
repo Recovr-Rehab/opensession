@@ -998,8 +998,25 @@ enum OS1API {
         )
     }
 
+    /// Build the parked-draft value sent to the workspace API. Blank text is
+    /// absence, so an existing draft is patched with JSON null instead.
+    static func workspaceDraftPayload(
+        text: String,
+        autoName: Bool? = nil
+    ) -> [String: Any]? {
+        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return nil }
+        var draft: [String: Any] = [
+            "text": trimmed,
+            "updatedAt": ISO8601DateFormatter.draftStamp.string(from: Date()),
+            "by": ServerConfig.shared.userName,
+        ]
+        if let autoName { draft["autoName"] = autoName }
+        return draft
+    }
+
     /// Park an unsent New Session prompt on a workspace. A fresh draft gets a
-    /// fresh sessionless workspace; resuming one updates that same row.
+    /// fresh sessionless workspace; clearing a resumed draft removes its row.
     static func saveWorkspaceDraft(
         text: String,
         repo: String,
@@ -1007,13 +1024,7 @@ enum OS1API {
         autoName: Bool? = nil
     ) async throws -> WorkspaceSummary {
         struct WorkspaceResponse: Decodable { let workspace: WorkspaceSummary }
-        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
-        var draft: [String: Any] = [
-            "text": trimmed,
-            "updatedAt": ISO8601DateFormatter.draftStamp.string(from: Date()),
-            "by": ServerConfig.shared.userName,
-        ]
-        if let autoName { draft["autoName"] = autoName }
+        let draft = workspaceDraftPayload(text: text, autoName: autoName)
 
         let response: WorkspaceResponse
         if let workspaceId, !workspaceId.isEmpty {
@@ -1021,13 +1032,13 @@ enum OS1API {
                 withAllowedCharacters: .urlPathAllowed
             ) ?? workspaceId
             response = try await patch(
-                "/api/workspaces/\(encoded)", body: ["draft": draft]
+                "/api/workspaces/\(encoded)", body: ["draft": draft ?? NSNull()]
             )
         } else {
-            var newDraft = draft
+            guard var newDraft = draft else { throw APIError.server("A draft needs text.") }
             newDraft["autoName"] = true
             var body: [String: Any] = [
-                "name": WorkspaceDraft.workspaceName(for: trimmed),
+                "name": WorkspaceDraft.workspaceName(for: text),
                 "draft": newDraft,
                 "user": ServerConfig.shared.userName,
             ]

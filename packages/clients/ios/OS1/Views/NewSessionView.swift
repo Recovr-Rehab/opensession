@@ -862,11 +862,12 @@ struct NewSessionView: View {
         return repos.first(where: { $0.isDefault == true })?.id ?? repos.first?.id ?? ""
     }
 
-    /// Closing with text parks it first. An empty composer still closes
-    /// immediately, and a failed explicit close stays open with the error.
+    /// Closing persists the current text first. Clearing a resumed draft sends
+    /// the deletion before closing, while a fresh empty composer closes at once.
+    /// A failed explicit close stays open with the error.
     private func exitComposer() {
         let text = prompt.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !text.isEmpty else {
+        guard !text.isEmpty || initialDraft != nil else {
             dictation.stop()
             dismiss()
             return
@@ -878,7 +879,7 @@ struct NewSessionView: View {
     /// this callback, so opening the recipe library does not count as leaving.
     private func parkDraftAfterDismiss() {
         let text = prompt.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !text.isEmpty else { return }
+        guard !text.isEmpty || initialDraft != nil else { return }
         parkDraft(text, dismissWhenSaved: false)
     }
 

@@ -30,6 +30,7 @@ import {
 	VIEWER_TITLE,
 } from "../lib/session-viewer-classes";
 import { loadDraft, saveDraft, clearDraft } from "../lib/drafts";
+import { workspaceDraftPatch } from "../lib/workspace-draft";
 import { resolveNewSessionModel } from "../lib/default-model-pref";
 import { InlineAlert } from "../ui/state";
 
@@ -110,38 +111,56 @@ export function WorkspacePane({
 		return local || workspace.draft?.text || "";
 	});
 	const currentUser = useCurrentUser();
-	// Only a workspace the server already knows has a draft gets autosaved back
-	// to it. An ordinary sessionless workspace (no draft yet) must not have
-	// one invented for it just because its composer has text.
-	const hasServerDraft = !!workspace.draft;
-	const draftAutoName = workspace.draft?.autoName;
+	// Only a workspace that mounted with a server draft gets autosaved back to
+	// it. Keep that ownership for this mount after the text is cleared, so typing
+	// again can restore the row instead of leaving an unreachable local draft.
+	// An ordinary sessionless workspace still never invents a server draft.
+	const parksServerDraft = useRef(!!workspace.draft).current;
+	const draftAutoNameRef = useRef(workspace.draft?.autoName);
+	if (workspace.draft) draftAutoNameRef.current = workspace.draft.autoName;
+	const draftAutoName = draftAutoNameRef.current;
 	const promptRef = useRef(prompt);
 	promptRef.current = prompt;
 	const currentUserRef = useRef(currentUser);
 	currentUserRef.current = currentUser;
+	const serverDraftPresentRef = useRef(!!workspace.draft);
 	const serverDraftTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+	// Emptying a draft writes null, while typing again writes an object. Keep
+	// those requests in edit order so a slower text write cannot resurrect a
+	// draft after its later deletion has landed.
+	const serverDraftWrites = useRef<Promise<void>>(Promise.resolve());
 	const pushServerDraft = React.useCallback(
 		(text: string) => {
-			void updateWorkspaceApi(workspace.id, {
-				draft: {
-					text,
-					updatedAt: new Date().toISOString(),
-					by: currentUserRef.current,
-					autoName: draftAutoName,
-				},
+			const patch = workspaceDraftPatch(
+				text,
+				new Date().toISOString(),
+				currentUserRef.current,
+				draftAutoName,
+			);
+			serverDraftWrites.current = serverDraftWrites.current
+				.then(async () => {
+					const updated = await updateWorkspaceApi(workspace.id, patch);
+					const present = !!updated.draft;
+					const presenceChanged = present !== serverDraftPresentRef.current;
+					serverDraftPresentRef.current = present;
+					// Only the empty/nonempty edge changes sidebar membership. Publish
+					// the latest edge without refetching the whole list after ordinary edits.
+					if (presenceChanged && promptRef.current === text)
+						window.dispatchEvent(new Event("opensession:workspaces-changed"));
+				})
 				// Autosave must never block typing. A flaky connection just means
 				// the next keystroke's debounce tries again.
-			}).catch(() => {});
+				.catch(() => {});
 		},
 		[workspace.id, draftAutoName],
 	);
 	useEffect(() => {
 		saveDraft(draftKey, { text: prompt });
-		if (!hasServerDraft) return;
+		if (!parksServerDraft) return;
 		clearTimeout(serverDraftTimer.current);
 		serverDraftTimer.current = setTimeout(() => pushServerDraft(prompt), 800);
 		return () => clearTimeout(serverDraftTimer.current);
-	}, [draftKey, prompt, hasServerDraft, pushServerDraft]);
+	}, [draftKey, prompt, parksServerDraft, pushServerDraft]);
 	const [starting, setStarting] = useState(false);
 	const [startError, setStartError] = useState<string | null>(null);
 	const startingRef = useRef(false);
@@ -151,13 +170,11 @@ export function WorkspacePane({
 	// last few keystrokes. Not when a session start is what unmounted the
 	// pane, though: the server consumed the draft at create, and a flush
 	// would park the just-sent prompt back on the workspace as a stale draft.
-	const hasServerDraftRef = useRef(hasServerDraft);
-	hasServerDraftRef.current = hasServerDraft;
 	useEffect(() => {
 		return () => {
 			if (serverDraftTimer.current) {
 				clearTimeout(serverDraftTimer.current);
-				if (hasServerDraftRef.current && !startingRef.current)
+				if (parksServerDraft && !startingRef.current)
 					pushServerDraft(promptRef.current);
 			}
 		};
