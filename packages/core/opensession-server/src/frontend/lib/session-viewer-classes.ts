@@ -111,13 +111,13 @@ export const VIEWER_BRANCH_RENAME =
  */
 export const VIEWER_HEADER_ACTIONS =
 	"viewer-header-actions flex shrink-0 items-center gap-0.5 phone:justify-end " +
-	// Phones give every control in the row a real touch target. Keyed off the
+	// Phones give every control in the row a 44px touch target. Keyed off the
 	// row rather than written on each control because these are shared
-	// primitives (Button, and the source links below): a descendant selector is
-	// also what lets it outrank the primitive's own padding, exactly as the
-	// legacy rule did. `inline-flex`/`items-center` are not carried — the
-	// primitive is already both, on every viewport.
-	"phone:[&_button]:min-h-[38px] phone:[&_button]:px-[11px] phone:[&_button]:py-[7px] " +
+	// primitives (Button, and the source links below). A descendant selector also
+	// lets this outrank the primitive's own padding, exactly as the legacy rule
+	// did. `inline-flex` and `items-center` are not carried because the primitive
+	// is already both on every viewport.
+	"phone:[&_button]:min-h-11 phone:[&_button]:px-[11px] phone:[&_button]:py-[7px] " +
 	"phone:[&_button]:text-label";
 
 /** The presence facepile (Figma/Notion-style), just before Share. Labelled
@@ -151,14 +151,14 @@ export const VIEWER_PRESENCE_AVATAR = "-ml-2 first:ml-0";
 export const SESSION_LINK =
 	"session-link mr-1.5 rounded-control border border-line-strong px-[11px] py-[5px] " +
 	"text-label font-semibold text-dim no-underline " +
-	// Phones give it the same 38px touch target as the buttons beside it. These
-	// sit on the link rather than on the row (where the buttons' copy lives)
-	// because this is the element's own styling and nothing else wears the
-	// class in this row. Only the declarations that actually change are
-	// written: the 11px sides are already the resting value. A `phone:` variant
-	// beats the unprefixed `py-[5px]`/`text-label` on the same element because
-	// Tailwind emits every breakpoint variant after the unprefixed utilities.
-	"phone:inline-flex phone:min-h-[38px] phone:items-center phone:py-[7px] phone:text-label";
+	// Phones give it the same 44px touch target as the buttons beside it. These
+	// sit on the link rather than on the row, where the buttons' copy lives,
+	// because this is the element's own styling and nothing else wears the class
+	// in this row. Only the declarations that actually change are written: the
+	// 11px sides are already the resting value. A `phone:` variant beats the
+	// unprefixed `py-[5px]` and `text-label` on the same element because Tailwind
+	// emits every breakpoint variant after the unprefixed utilities.
+	"phone:inline-flex phone:min-h-11 phone:items-center phone:py-[7px] phone:text-label";
 export const SESSION_LINK_LINEAR = "border-[rgba(94,106,210,0.5)] text-[#7b86e8]";
 export const SESSION_LINK_PLAIN = "border-[rgba(13,148,136,0.5)] text-[#5eead4]";
 

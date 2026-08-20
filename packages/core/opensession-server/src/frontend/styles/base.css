@@ -380,11 +380,10 @@
 	/* Shared height for the desktop sidebar, session header and PR strip. */
 	--desktop-header-h: 48px;
 	/* Header height grows by the iOS status-bar inset when installed as a PWA
-     (black-translucent draws the webview under the clock/notch).
-     56 rather than 52: the bar spends 8px of it on its own top pad, so this is
-     what leaves room for the 48px controls in it (MOBILE_BAR_SEGMENT and the
-     settings mark, lib/app-header-classes.ts). Move the two together. */
-	--header-h: calc(56px + env(safe-area-inset-top, 0px));
+     (black-translucent draws the webview under the clock/notch). The bar spends
+     8px on its own top pad, leaving 44px for MOBILE_BAR_SEGMENT and the settings
+     mark in lib/app-header-classes.ts. Move the two together. */
+	--header-h: calc(52px + env(safe-area-inset-top, 0px));
 }
 
 /* Above the phone breakpoint the top bar isn't rendered at all, so nothing is
