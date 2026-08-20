@@ -5,10 +5,11 @@
  *   - from source, under `bun` (`bun run opensession.ts`, `bun scripts/cli.ts`),
  *     where a side-entrypoint is reached as `bun run <entry.ts>`; and
  *   - as a single `bun build --compile` executable, where `process.execPath` is
- *     the executable itself (not `bun`) and there is no `.ts` tree to `run` —
- *     the same executable re-invokes itself with a subcommand instead
- *     (`opensession runner-host <spec>`, `opensession mcp-proxy`). src/main.ts
- *     is the front controller that dispatches those subcommands.
+ *     the executable itself (not `bun`) and there is no `.ts` tree to `run`.
+ *     The same executable re-invokes itself with a subcommand instead, such as
+ *     `opensession runner-host <spec>`, `opensession mcp-proxy`, or
+ *     `opensession transcript-search-worker`. src/main.ts is the front
+ *     controller that dispatches those subcommands.
  *
  * The spawn sites build their argv through the helpers here so one detection
  * decides the shape in both modes. Kept dependency-free (only `node:path`) so
@@ -51,4 +52,11 @@ export function mcpProxyArgv(bun: string, entry: string, opts: { smol?: boolean 
 	return isCompiledBinary()
 		? [process.execPath, "mcp-proxy"]
 		: [bun, ...(opts.smol ? ["--smol"] : []), "run", entry];
+}
+
+/** argv to run the read-only transcript search worker. */
+export function transcriptSearchWorkerArgv(bun: string, entry: string): string[] {
+	return isCompiledBinary()
+		? [process.execPath, "transcript-search-worker"]
+		: [bun, entry];
 }

@@ -5,8 +5,8 @@
  * source install (`install.sh --source`, a git checkout + `bun install`) is
  * the self-development path and is unaffected.
  *
- * src/main.ts is the front controller (server / CLI / runner-host / mcp-proxy
- * behind one argv), and this script bakes the prebuilt SPA into the binary so
+ * src/main.ts is the front controller (server / CLI / runner-host / mcp-proxy /
+ * transcript search worker behind one argv), and this script bakes the prebuilt SPA into the binary so
  * it needs no `.frontend-dist` beside it at runtime.
  *
  * Two modes:

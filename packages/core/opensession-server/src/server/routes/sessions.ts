@@ -101,6 +101,7 @@ import {
 } from "./github-credential";
 import { defaultRepo } from "../config";
 import type { UnifiedSession } from "../types";
+import { transcriptSearchWorkerArgv } from "../../runner-host/exe";
 
 const SESSIONS_RESPONSE_TTL_MS = 5_000;
 interface SessionsResponseSnapshot {
@@ -545,7 +546,10 @@ async function searchStoredTranscripts(
 	if (!sessionIds.length || !existsSync(transcriptDbPath()))
 		return { matches: [], searchedSessions: 0 };
 	const proc = Bun.spawn(
-		[process.execPath, `${import.meta.dir}/../transcript-search-worker.ts`],
+		transcriptSearchWorkerArgv(
+			process.execPath,
+			`${import.meta.dir}/../transcript-search-worker.ts`,
+		),
 		{
 			stdin: "pipe",
 			stdout: "pipe",

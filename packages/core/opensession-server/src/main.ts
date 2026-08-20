@@ -2,12 +2,13 @@
  * Front controller for the compiled single-executable build.
  *
  * `bun build --compile` produces one `opensession` binary from THIS entry. The
- * same binary plays four roles that run as four separate processes from source
+ * same binary plays five roles that run as separate processes from source
  * (`opensession.ts`, `scripts/cli.ts`, `src/runner-host/host.ts`,
- * `src/runner-host/mcp-proxy.ts`); a compiled process has no `bun`/`.ts` tree to
- * re-exec, so it re-invokes itself with a leading subcommand instead. The spawn
- * sites emit those subcommands via src/runner-host/exe.ts (runnerHostArgv /
- * mcpProxyArgv); this file routes them back to the right module.
+ * `src/runner-host/mcp-proxy.ts`, `src/server/transcript-search-worker.ts`). A
+ * compiled process has no `bun`/`.ts` tree to re-exec, so it re-invokes itself
+ * with a leading subcommand instead. The spawn
+ * sites emit those subcommands via src/runner-host/exe.ts; this file routes
+ * them back to the right module.
  *
  * argv shape: a compiled Bun binary keeps the same layout as `bun run <file>` —
  * process.argv is [exe, <in-binary main path>, ...userArgs] — so the subcommand
@@ -18,11 +19,13 @@
  *   opensession runner-host <spec>  → host.ts   (spec at argv[2] after splice)
  *   opensession mcp-proxy           → mcp-proxy.ts (config from env)
  *   opensession executor            → executor/main.ts (fixed launch policy)
+ *   opensession transcript-search-worker
+ *                                    → transcript-search-worker.ts (JSON via stdio)
  *   opensession server              → opensession.ts (the HTTP/WS server)
  *   opensession <anything else>     → scripts/cli.ts (onboard, start, doctor, …)
  *
- * Each target runs on import (top-level side effects). Only source mode ever
- * runs those modules directly; nothing here executes under `bun run <file>`.
+ * Targets run on import or expose a small entry function for this dispatcher.
+ * Only source mode runs the modules directly.
  */
 
 export {}; // module marker so top-level await is allowed
@@ -60,6 +63,16 @@ if (sub === "runner-host") {
   process.argv.splice(2, 1);
   const { runExecutor } = await import("./executor/main");
   await runExecutor();
+} else if (sub === "transcript-search-worker") {
+  process.argv.splice(2, 1);
+  const { runTranscriptSearchWorker } =
+    await import("./server/transcript-search-worker");
+  try {
+    await runTranscriptSearchWorker();
+  } catch (error) {
+    console.error(error instanceof Error ? error.message : String(error));
+    process.exitCode = 1;
+  }
 } else if (sub === "server") {
   process.argv.splice(2, 1);
   // Surface a boot failure with a clear origin: a compiled binary's otherwise
