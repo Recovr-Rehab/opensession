@@ -378,11 +378,11 @@ export const SIDEBAR_LANE_HEADER =
 export const SIDEBAR_GROUP_NAME = "min-w-0 truncate text-left";
 
 /**
- * Phone lane captions keep a small inset for arm's-length reading. Desktop
- * captions sit directly on the header's content rail, while the hover pill
- * still runs the sidebar's full width.
+ * Phone lane captions keep a slight 2px inset for arm's-length reading.
+ * Desktop captions sit directly on the header's content rail, while the hover
+ * pill still runs the sidebar's full width.
  */
-export const SIDEBAR_LANE_NAME = "pl-1 desktop:pl-0";
+export const SIDEBAR_LANE_NAME = "pl-0.5 desktop:pl-0";
 
 /**
  * The collapse chevron. Revealed by the header's hover, and rotated to mark the
