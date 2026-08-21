@@ -1,14 +1,14 @@
-import type { SessionCommand } from "./kernel";
-import type { DeliveryActorRequest } from "./delivery-protocol";
-import type { AskActorRequest } from "./ask-protocol";
+import type {
+  LegacyGatewayEffect,
+  SessionActorReducerCommand,
+} from "./lifecycle-protocol";
 import type {
   DurableOutboxItem,
   DurableTimer,
-  RunEventDecision,
   RunEventDecisionResult,
 } from "./store";
 
-export const SESSION_KERNEL_ACTOR_VERSION = 5;
+export const SESSION_KERNEL_ACTOR_VERSION = 6;
 export const SESSION_KERNEL_MAX_WAITERS_PER_COMMAND = 64;
 export const SESSION_KERNEL_MAX_WAITERS_TOTAL = 4096;
 export const SESSION_KERNEL_MAX_EXECUTIONS_PER_SESSION = 128;
@@ -16,7 +16,12 @@ export const SESSION_KERNEL_MAX_EXECUTIONS_TOTAL = 4096;
 
 export type KernelActorAsyncRequest =
   | { t: "hello"; rpcId: string; version: number }
-  | { t: "begin"; rpcId: string; command: SessionCommand; sessionId: string }
+  | {
+      t: "begin";
+      rpcId: string;
+      command: LegacyGatewayEffect;
+      sessionId: string;
+    }
   | { t: "acknowledge"; rpcId: string; sessionId: string; requestId: string }
   | { t: "stats"; rpcId: string }
   | { t: "maintain"; rpcId: string }
@@ -80,8 +85,6 @@ type SyncBuffers = {
 
 export type KernelActorSyncRequest =
   | ({ t: "store"; method: string; args: unknown[] } & SyncBuffers)
-  | ({ t: "decide_run_event"; decision: RunEventDecision } & SyncBuffers)
-  | ({ t: "delivery"; request: DeliveryActorRequest } & SyncBuffers)
-  | ({ t: "ask"; request: AskActorRequest } & SyncBuffers);
+  | ({ t: "reduce"; command: SessionActorReducerCommand } & SyncBuffers);
 
 export type KernelActorRunEventResult = RunEventDecisionResult;

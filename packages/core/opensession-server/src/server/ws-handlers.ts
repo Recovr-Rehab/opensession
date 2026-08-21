@@ -59,6 +59,7 @@ import { join } from "node:path";
 import {
 	acknowledgeSessionCommand,
 	isRetryableSessionCommandError,
+	legacyGatewayEffect,
 	sessionKernel,
 } from "./session-kernel";
 
@@ -580,17 +581,17 @@ export const websocketHandlers: WebSocketHandler<WSClientData> = {
 			kernelDispatchTokens.add(kernelToken);
 				try {
 					const accepted =
-			await sessionKernel(commandSessionId).dispatch(
-				{
+			await sessionKernel(commandSessionId).dispatchLegacy(
+				legacyGatewayEffect("websocket_command", {
 					requestId,
-					type: msg.type,
 					payload: {
+						command: msg.type,
 						messageHash,
 						...(targetRunId !== undefined ? { targetRunId } : {}),
 					},
 					source: "websocket",
 					replaySafe: true,
-				},
+				}),
 				async () => {
 					if (
 						targetRunId !== undefined &&

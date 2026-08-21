@@ -14,7 +14,17 @@ import {
 	DeliveryOwnedMap,
 	sessionKernel,
 	tombstoneSessionKernel,
+	legacyGatewayEffect,
+	type LegacyGatewayEffect,
+	type LegacyGatewayEffectInput,
 } from ".";
+
+function testEffect(
+	input: LegacyGatewayEffectInput & { type?: string },
+): LegacyGatewayEffect {
+	const { type: _legacyTestLabel, ...effect } = input;
+	return legacyGatewayEffect("submit_prompt", effect);
+}
 
 let store: SessionKernelStore;
 let previous: SessionKernelStore | undefined;
@@ -67,8 +77,8 @@ describe("SessionKernel", () => {
 	test("serializes commands for one session", async () => {
 		const order: string[] = [];
 		const kernel = sessionKernel("s1");
-		const first = kernel.dispatch(
-			{ requestId: "a", type: "test" },
+		const first = kernel.dispatchLegacy(
+			testEffect({ requestId: "a", type: "test" }),
 			async () => {
 				order.push("a:start");
 				await Bun.sleep(5);
@@ -76,8 +86,8 @@ describe("SessionKernel", () => {
 				return "a";
 			},
 		);
-		const second = kernel.dispatch(
-			{ requestId: "b", type: "test" },
+		const second = kernel.dispatchLegacy(
+			testEffect({ requestId: "b", type: "test" }),
 			() => {
 				order.push("b");
 				return "b";
@@ -91,8 +101,8 @@ describe("SessionKernel", () => {
 	test("rejects a nested same-session dispatch instead of deadlocking", async () => {
 		const kernel = sessionKernel("nested");
 		await expect(
-			kernel.dispatch({ requestId: "outer", type: "outer" }, async () =>
-				kernel.dispatch({ requestId: "inner", type: "inner" }, () => "inner"),
+			kernel.dispatchLegacy(testEffect({ requestId: "outer", type: "outer" }), async () =>
+				kernel.dispatchLegacy(testEffect({ requestId: "inner", type: "inner" }), () => "inner"),
 			),
 		).rejects.toThrow("Nested SessionKernel dispatch");
 	});
@@ -100,29 +110,29 @@ describe("SessionKernel", () => {
 	test("session-file style mutations share the durable command mailbox", async () => {
 		const kernel = sessionKernel("lanes");
 		const order: string[] = [];
-		const command = kernel.dispatch(
-			{ requestId: "command", type: "command" },
+		const command = kernel.dispatchLegacy(
+			testEffect({ requestId: "command", type: "command" }),
 			async () => {
 				order.push("command:start");
 				await Bun.sleep(5);
 				order.push("command:end");
 			},
 		);
-		const write = kernel.runExclusive("file", () => order.push("file"));
+		const write = kernel.runExclusive("session_file_updated", () => order.push("file"));
 		await Promise.all([command, write]);
 		expect(order).toEqual(["command:start", "command:end", "file"]);
 	});
 
 	test("deduplicates a completed command durably", async () => {
 		let calls = 0;
-		const command = { requestId: "stable", type: "deliver", payload: { text: "hi" }, };
-		const first = await sessionKernel("s1").dispatch(command, () => {
+		const command = testEffect({ requestId: "stable", type: "deliver", payload: { text: "hi" }, });
+		const first = await sessionKernel("s1").dispatchLegacy(command, () => {
 			calls += 1;
 			return { status: "queued" };
 		});
 		expect(first.duplicate).toBe(false);
 		clearSessionKernel("unrelated");
-		const second = await sessionKernel("s1").dispatch(command, () => {
+		const second = await sessionKernel("s1").dispatchLegacy(command, () => {
 			calls += 1;
 			return { status: "started" };
 		});
@@ -133,13 +143,13 @@ describe("SessionKernel", () => {
 
 	test("keeps completed receipts for clients that reconnect after compaction", async () => {
 		let calls = 0;
-		const command = { requestId: "forever", type: "deliver", payload: { n: 1 } };
-		await sessionKernel("retained").dispatch(command, () => {
+		const command = testEffect({ requestId: "forever", type: "deliver", payload: { n: 1 } });
+		await sessionKernel("retained").dispatchLegacy(command, () => {
 			calls += 1;
 			return "done";
 		});
 		store.compact(Date.now() + 365 * 24 * 60 * 60_000);
-		const replay = await sessionKernel("retained").dispatch(command, () => {
+		const replay = await sessionKernel("retained").dispatchLegacy(command, () => {
 			calls += 1;
 			return "duplicate";
 		});
@@ -149,8 +159,8 @@ describe("SessionKernel", () => {
 
 	test("compacts large permanent results without forgetting the receipt", async () => {
 		let calls = 0;
-		const command = { requestId: "large", type: "take" };
-		await sessionKernel("large-result").dispatch(command, () => {
+		const command = testEffect({ requestId: "large", type: "take" });
+		await sessionKernel("large-result").dispatchLegacy(command, () => {
 			calls += 1;
 			return { item: "x".repeat(128 * 1024) };
 		});
@@ -165,7 +175,7 @@ describe("SessionKernel", () => {
 			__sessionKernelResultReleased: true,
 			sha256: receipt?.resultHash,
 		});
-		const replay = await sessionKernel("large-result").dispatch(command, () => {
+		const replay = await sessionKernel("large-result").dispatchLegacy(command, () => {
 			calls += 1;
 		});
 		expect(replay.duplicate).toBe(true);
@@ -174,15 +184,15 @@ describe("SessionKernel", () => {
 
 	test("keeps terminal failures sticky", async () => {
 		let calls = 0;
-		const command = { requestId: "terminal", type: "delete" };
+		const command = testEffect({ requestId: "terminal", type: "delete" });
 		await expect(
-			sessionKernel("failed").dispatch(command, () => {
+			sessionKernel("failed").dispatchLegacy(command, () => {
 				calls += 1;
 				throw new Error("not allowed");
 			}),
 		).rejects.toThrow("not allowed");
 		await expect(
-			sessionKernel("failed").dispatch(command, () => {
+			sessionKernel("failed").dispatchLegacy(command, () => {
 				calls += 1;
 			}),
 		).rejects.toThrow("not allowed");
@@ -190,13 +200,13 @@ describe("SessionKernel", () => {
 	});
 
 	test("rejects request id reuse with another payload", async () => {
-		await sessionKernel("s1").dispatch(
-			{ requestId: "same", type: "deliver", payload: { text: "one" } },
+		await sessionKernel("s1").dispatchLegacy(
+			testEffect({ requestId: "same", type: "deliver", payload: { text: "one" } }),
 			() => "ok",
 		);
 		await expect(
-			sessionKernel("s1").dispatch(
-				{ requestId: "same", type: "deliver", payload: { text: "two" } },
+			sessionKernel("s1").dispatchLegacy(
+				testEffect({ requestId: "same", type: "deliver", payload: { text: "two" } }),
 				() => "bad",
 			),
 		).rejects.toThrow("reused with another payload");
@@ -208,8 +218,8 @@ describe("SessionKernel", () => {
 		const firstStore = new SessionKernelStore(path);
 		__setSessionKernelStoreForTest(firstStore);
 		try {
-			await sessionKernel("restart").dispatch(
-				{ requestId: "request-1", type: "submit", payload: { text: "once" } },
+			await sessionKernel("restart").dispatchLegacy(
+				testEffect({ requestId: "request-1", type: "submit", payload: { text: "once" } }),
 				() => ({ status: "queued" }),
 			);
 			sessionKernel("restart").registerRun(
@@ -222,8 +232,8 @@ describe("SessionKernel", () => {
 			const secondStore = new SessionKernelStore(path);
 			__setSessionKernelStoreForTest(secondStore);
 			let calls = 0;
-			const replay = await sessionKernel("restart").dispatch(
-				{ requestId: "request-1", type: "submit", payload: { text: "once" } },
+			const replay = await sessionKernel("restart").dispatchLegacy(
+				testEffect({ requestId: "request-1", type: "submit", payload: { text: "once" } }),
 				() => {
 					calls += 1;
 					return { status: "started" };
@@ -253,7 +263,7 @@ describe("SessionKernel", () => {
 		firstStore.acceptCommand({
 			sessionId: "restart",
 			requestId: "accepted",
-			type: "submit",
+			type: "submit_prompt",
 			payload: { text: "once" },
 			replaySafe: true,
 		});
@@ -266,13 +276,13 @@ describe("SessionKernel", () => {
 				"pending",
 			);
 			let calls = 0;
-			const accepted = await sessionKernel("restart").dispatch(
-				{
+			const accepted = await sessionKernel("restart").dispatchLegacy(
+				testEffect({
 					requestId: "accepted",
 					type: "submit",
 					payload: { text: "once" },
 					replaySafe: true,
-				},
+				}),
 				() => {
 					calls += 1;
 					return { queued: true };
@@ -336,10 +346,10 @@ describe("SessionKernel", () => {
 
 	test("never retries a non-replay-safe timeout", async () => {
 		let calls = 0;
-		const command = { requestId: "unsafe-timeout", type: "physical" };
+		const command = testEffect({ requestId: "unsafe-timeout", type: "physical" });
 		for (let attempt = 0; attempt < 2; attempt++)
 			await expect(
-				sessionKernel("unsafe-timeout").dispatch(command, () => {
+				sessionKernel("unsafe-timeout").dispatchLegacy(command, () => {
 					calls += 1;
 					throw new Error("operation timed out");
 				}),
@@ -397,7 +407,7 @@ describe("SessionKernel", () => {
 			"was deleted",
 		);
 		await expect(
-			sessionKernel(id).dispatch({ requestId: "late", type: "prompt" }, () => {},),
+			sessionKernel(id).dispatchLegacy(testEffect({ requestId: "late", type: "prompt" }), () => {},),
 		).rejects.toThrow("was deleted");
 	});
 
@@ -514,10 +524,14 @@ describe("SessionKernel", () => {
 	});
 
 	test("commits command completion and its effects in one decision transaction", async () => {
-		await sessionKernel("decision").dispatch(
-			{ requestId: "request", type: "notify" },
+		await sessionKernel("decision").dispatchLegacy(
+			testEffect({ requestId: "request", type: "notify" }),
 			(kernel) => {
-				kernel.enqueueEffect("slack", { text: "hello" }, "message-1");
+				kernel.enqueueEffect(
+					"human_ask_deliver",
+					{ askId: "ask-one", skipUi: false },
+					"message-1",
+				);
 				return { accepted: true };
 			},
 		);
@@ -527,9 +541,9 @@ describe("SessionKernel", () => {
 		});
 		expect(store.pendingOutbox()).toEqual([
 			expect.objectContaining({
-				effectId: "decision:slack:message-1",
+				effectId: "decision:human_ask_deliver:message-1",
 				effectKey: "message-1",
-				payload: { text: "hello" },
+				payload: { askId: "ask-one", skipUi: false },
 			}),
 		]);
 	});
@@ -544,10 +558,14 @@ describe("SessionKernel", () => {
 
 	test("does not publish staged effects when a command fails", async () => {
 		await expect(
-			sessionKernel("decision-failed").dispatch(
-				{ requestId: "request", type: "notify" },
+			sessionKernel("decision-failed").dispatchLegacy(
+				testEffect({ requestId: "request", type: "notify" }),
 				(kernel) => {
-					kernel.enqueueEffect("slack", { text: "no" }, "message-1");
+					kernel.enqueueEffect(
+						"human_ask_deliver",
+						{ askId: "ask-one", skipUi: false },
+						"message-1",
+					);
 					throw new Error("decision rejected");
 				},
 			),
@@ -680,16 +698,25 @@ describe("SessionKernel durable runtime", () => {
 	});
 
 	test("unknown durable kinds cannot starve registered work", async () => {
-		const { drainSessionKernelRuntime, registerSessionEffectHandler, registerSessionTimerHandler, waitForSessionKernelRuntimeIdle, } = await import("./runtime");
+		const { drainSessionKernelRuntime, registerSessionTimerHandler, waitForSessionKernelRuntimeIdle, } = await import("./runtime");
+		const { replaceSessionEffectExecutorForTest } = await import("./effect-executors");
 		for (let i = 0; i < 120; i++) {
 			store.enqueueOutbox(`unknown-${i}`, "future_effect", null, String(i));
 			store.scheduleTimer({ sessionId: `unknown-${i}`, timerId: "future", kind: "future_timer", dueAt: Date.now() - 1, payload: null, });
 		}
-		store.enqueueOutbox("known", "known_effect", null, "known");
+		store.enqueueOutbox(
+			"known",
+			"human_ask_deliver",
+			{ askId: "known", skipUi: false },
+			"known",
+		);
 		store.scheduleTimer({ sessionId: "known", timerId: "known", kind: "known_timer", dueAt: Date.now() - 1, payload: null, });
 		let effects = 0;
 		let timers = 0;
-		const unregisterEffect = registerSessionEffectHandler("known_effect", () => { effects += 1; });
+		const unregisterEffect = replaceSessionEffectExecutorForTest(
+			"human_ask_deliver",
+			() => { effects += 1; },
+		);
 		const unregisterTimer = registerSessionTimerHandler("known_timer", () => { timers += 1; });
 		try {
 			await drainSessionKernelRuntime();
@@ -714,14 +741,18 @@ describe("SessionKernel durable runtime", () => {
 	});
 
 	test("retries an outbox effect until it succeeds", async () => {
-		const { drainSessionKernelRuntime, registerSessionEffectHandler, waitForSessionKernelRuntimeIdle, } = await import("./runtime");
+		const { drainSessionKernelRuntime, waitForSessionKernelRuntimeIdle, } = await import("./runtime");
+		const { replaceSessionEffectExecutorForTest } = await import("./effect-executors");
 		let calls = 0;
-		const unregister = registerSessionEffectHandler("notify", () => {
+		const unregister = replaceSessionEffectExecutorForTest("human_ask_deliver", () => {
 			calls += 1;
 			if (calls === 1) throw new Error("temporary");
 		});
 		try {
-			sessionKernel("outbox-session").enqueueEffect("notify", { message: "hi", });
+			sessionKernel("outbox-session").enqueueEffect(
+				"human_ask_deliver",
+				{ askId: "retry", skipUi: false },
+			);
 			await drainSessionKernelRuntime();
 			await waitForSessionKernelRuntimeIdle();
 			expect(store.pendingOutbox(Date.now() + 2_000)).toHaveLength(1);

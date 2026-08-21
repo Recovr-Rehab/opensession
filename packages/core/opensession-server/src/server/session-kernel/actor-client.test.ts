@@ -6,6 +6,18 @@ import {
   sessionKernel,
 } from "./kernel";
 import { SESSION_KERNEL_MAX_WAITERS_PER_COMMAND } from "./actor-protocol";
+import {
+  legacyGatewayEffect,
+  type LegacyGatewayEffect,
+  type LegacyGatewayEffectInput,
+} from "./lifecycle-protocol";
+
+function testEffect(
+  input: LegacyGatewayEffectInput & { type?: string },
+): LegacyGatewayEffect {
+  const { type: _legacyTestLabel, ...effect } = input;
+  return legacyGatewayEffect("submit_prompt", effect);
+}
 
 let client: SessionKernelActorClient | undefined;
 afterEach(() => {
@@ -28,11 +40,11 @@ async function actor(): Promise<SessionKernelActorClient> {
 describe("session kernel actor boundary", () => {
   test("admits independent commands while physical work is active", async () => {
     const host = await actor();
-    const first = await host.begin("s1", { requestId: "first", type: "test" });
-    const second = await host.begin("s1", {
+    const first = await host.begin("s1", testEffect({ requestId: "first", type: "test" }));
+    const second = await host.begin("s1", testEffect({
       requestId: "second",
       type: "test",
-    });
+    }));
     expect(first.executionId).toBeString();
     expect(second.executionId).toBeString();
     expect(second.executionId).not.toBe(first.executionId);
@@ -46,27 +58,27 @@ describe("session kernel actor boundary", () => {
 
   test("coalesces and bounds waiters for the same execution", async () => {
     const host = await actor();
-    const active = await host.begin("bounded", {
+    const active = await host.begin("bounded", testEffect({
       requestId: "same",
       type: "test",
       payload: { stable: true },
-    });
+    }));
     const waiting = Array.from(
       { length: SESSION_KERNEL_MAX_WAITERS_PER_COMMAND },
       () =>
-        host.begin("bounded", {
+        host.begin("bounded", testEffect({
           requestId: "same",
           type: "test",
           payload: { stable: true },
-        }),
+        })),
     );
     await Bun.sleep(25);
     await expect(
-      host.begin("bounded", {
+      host.begin("bounded", testEffect({
         requestId: "same",
         type: "test",
         payload: { stable: true },
-      }),
+      })),
     ).rejects.toMatchObject({ retryable: true });
     await host.complete(active.executionId!, "done", []);
     expect(
@@ -88,13 +100,13 @@ describe("session kernel actor boundary", () => {
       host.fail("missing-execution", "disk failed", true),
     ).rejects.toThrow();
     await expect(
-      host.begin("s1", { requestId: "after-fatal", type: "test" }),
+      host.begin("s1", testEffect({ requestId: "after-fatal", type: "test" })),
     ).rejects.toThrow();
   });
 
   test("starts compatibility work independently during an async execution", async () => {
     const host = await actor();
-    const first = await host.begin("s1", { requestId: "first", type: "test" });
+    const first = await host.begin("s1", testEffect({ requestId: "first", type: "test" }));
     const syncDuring = host.beginSync("s1", {
       requestId: "sync",
       type: "sync:transcript_append",
@@ -123,10 +135,10 @@ describe("session kernel actor boundary", () => {
 
   test("a tombstone rejects compatibility writes during an active execution", async () => {
     const host = await actor();
-    const active = await host.begin("deleted", {
+    const active = await host.begin("deleted", testEffect({
       requestId: "active",
       type: "test",
-    });
+    }));
     host.store.tombstoneSession("deleted");
     expect(() =>
       host.beginSync("deleted", {
@@ -139,17 +151,23 @@ describe("session kernel actor boundary", () => {
 
   test("persists detached writes while a command effect is active", async () => {
     const host = await actor();
-    const active = await host.begin("detached", {
+    const active = await host.begin("detached", testEffect({
       requestId: "active",
       type: "submit_prompt",
-    });
+    }));
     installSessionKernelActor(host);
     const kernel = sessionKernel("detached");
 
     kernel.setRunState({ state: "running", event: "stream_started" });
-    kernel.enqueueEffect("notify", { ok: true }, "detached-effect");
+    kernel.enqueueEffect(
+      "human_ask_deliver",
+      { askId: "detached", skipUi: false },
+      "detached-effect",
+    );
     expect(kernel.runState().state).toBe("running");
-    expect(host.store.pendingOutbox(Date.now(), 10, ["notify"])).toHaveLength(
+    expect(
+      host.store.pendingOutbox(Date.now(), 10, ["human_ask_deliver"]),
+    ).toHaveLength(
       1,
     );
 
@@ -158,10 +176,10 @@ describe("session kernel actor boundary", () => {
 
   test("reduces run events atomically while gateway work is still active", async () => {
     const host = await actor();
-    const active = await host.begin("autonomous", {
+    const active = await host.begin("autonomous", testEffect({
       requestId: "physical-work",
       type: "submit_prompt",
-    });
+    }));
     expect(
       host.decideRunEvent({ sessionId: "autonomous", event: "prompt" }),
     ).toMatchObject({ accepted: true, from: "idle", to: "starting" });
@@ -220,16 +238,16 @@ describe("session kernel actor boundary", () => {
     host.terminate();
     client = undefined;
     await expect(
-      host.begin("s1", { requestId: "after-stop", type: "test" }),
+      host.begin("s1", testEffect({ requestId: "after-stop", type: "test" })),
     ).rejects.toThrow("actor stopped");
   });
 
   test("returns a terminal failure instead of re-executing it", async () => {
     const host = await actor();
-    const first = await host.begin("sticky", {
+    const first = await host.begin("sticky", testEffect({
       requestId: "same",
       type: "test",
-    });
+    }));
     await host.complete(
       first.executionId!,
       { __sessionKernelFailure: true, message: "not allowed" },
@@ -237,7 +255,7 @@ describe("session kernel actor boundary", () => {
     );
     let failure: unknown;
     try {
-      await host.begin("sticky", { requestId: "same", type: "test" });
+      await host.begin("sticky", testEffect({ requestId: "same", type: "test" }));
     } catch (error) {
       failure = error;
     }
@@ -247,10 +265,10 @@ describe("session kernel actor boundary", () => {
 
   test("acknowledges replay results through async IPC", async () => {
     const host = await actor();
-    const admission = await host.begin("ack", {
+    const admission = await host.begin("ack", testEffect({
       requestId: "one",
       type: "take",
-    });
+    }));
     await host.complete(admission.executionId!, { item: "kept" }, []);
     await host.acknowledgeCommand("ack", "one");
     expect(host.store.command("ack", "one")?.acknowledgedAt).toBeNumber();
@@ -290,18 +308,18 @@ describe("session kernel actor boundary", () => {
 
   test("returns a committed result after an uncertain reply", async () => {
     const host = await actor();
-    const first = await host.begin("s1", {
+    const first = await host.begin("s1", testEffect({
       requestId: "same",
       type: "test",
       payload: { n: 1 },
-    });
+    }));
     await host.complete(first.executionId!, { accepted: true }, []);
     expect(
-      await host.begin("s1", {
+      await host.begin("s1", testEffect({
         requestId: "same",
         type: "test",
         payload: { n: 1 },
-      }),
+      })),
     ).toMatchObject({ duplicate: true, result: { accepted: true } });
   });
   test("resizes read-only delivery snapshots beyond the initial buffer", async () => {
@@ -331,8 +349,8 @@ describe("session kernel actor boundary", () => {
       releaseFirst = resolve;
     });
     const order: string[] = [];
-    const first = kernel.dispatch(
-      { requestId: "first-effect", type: "test", replaySafe: true },
+    const first = kernel.dispatchLegacy(
+      testEffect({ requestId: "first-effect", type: "test", replaySafe: true }),
       async () => {
         order.push("first-start");
         await firstBlocked;
@@ -340,8 +358,8 @@ describe("session kernel actor boundary", () => {
         return "first";
       },
     );
-    const second = kernel.dispatch(
-      { requestId: "second-effect", type: "test", replaySafe: true },
+    const second = kernel.dispatchLegacy(
+      testEffect({ requestId: "second-effect", type: "test", replaySafe: true }),
       () => {
         order.push("second");
         return "second";

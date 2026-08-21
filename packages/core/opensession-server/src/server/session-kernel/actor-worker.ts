@@ -49,11 +49,11 @@ export function startSessionKernelActorWorker(): void {
     try {
       if (store.isTombstoned(request.sessionId))
         throw new Error(`Session ${request.sessionId} was deleted`);
-      const key = requestKey(request.sessionId, request.command.requestId);
+      const key = requestKey(request.sessionId, request.command.commandId);
       const currentExecutionId = executingRequests.get(key);
       const existing = store.command(
         request.sessionId,
-        request.command.requestId,
+        request.command.commandId,
       );
       const terminal =
         existing?.status === "completed" ||
@@ -72,8 +72,8 @@ export function startSessionKernelActorWorker(): void {
         });
       const persisted = store.acceptCommand({
         sessionId: request.sessionId,
-        requestId: request.command.requestId,
-        type: request.command.type,
+        requestId: request.command.commandId,
+        type: request.command.operation,
         payload: request.command.payload,
         replaySafe: request.command.replaySafe,
       });
@@ -115,8 +115,8 @@ export function startSessionKernelActorWorker(): void {
       const execution: Execution = {
         executionId: crypto.randomUUID(),
         sessionId: request.sessionId,
-        requestId: request.command.requestId,
-        type: request.command.type,
+        requestId: request.command.commandId,
+        type: request.command.operation,
         waiters: [],
       };
       executions.set(execution.executionId, execution);
@@ -125,7 +125,7 @@ export function startSessionKernelActorWorker(): void {
         request.sessionId,
         (executionsPerSession.get(request.sessionId) ?? 0) + 1,
       );
-      store.markProcessing(request.sessionId, request.command.requestId);
+      store.markProcessing(request.sessionId, request.command.commandId);
       post({
         t: "begin_result",
         rpcId: request.rpcId,
@@ -295,68 +295,71 @@ export function startSessionKernelActorWorker(): void {
     const output = new Uint8Array(request.output);
     try {
       let result: unknown;
-      if (request.t === "decide_run_event")
-        result = store.applyRunEvent(request.decision);
-      else if (request.t === "delivery") {
-        const delivery = request.request;
-        if (delivery.op === "snapshot")
-          result = store.deliverySnapshot(delivery.sessionId);
-        else if (delivery.op === "entries")
-          result = store.deliveryEntries(delivery.slot);
-        else if (delivery.op === "set")
-          result = store.setDeliverySlot(
-            delivery.sessionId,
-            delivery.slot,
-            delivery.value,
-          );
-        else if (delivery.op === "delete")
-          result = store.deleteDeliverySlot(delivery.sessionId, delivery.slot);
-        else if (delivery.op === "clear_slot")
-          result = store.clearDeliverySlot(delivery.slot);
-        else if (delivery.op === "prepare_steer")
-          result = store.prepareSteerDelivery(
-            delivery.sessionId,
-            delivery.itemId,
-            delivery.item,
-          );
-        else if (delivery.op === "accept_steer")
-          result = store.acceptSteerDelivery(
-            delivery.sessionId,
-            delivery.itemId,
-          );
-        else if (delivery.op === "reject_steer")
-          result = store.rejectSteerDelivery(
-            delivery.sessionId,
-            delivery.itemId,
-          );
-        else if (delivery.op === "settle_pending_steers")
-          result = store.settlePendingSteers();
-        else if (delivery.op === "requeue_steers")
-          result = store.requeueSteerDeliveries(
-            delivery.sessionId,
-            delivery.items,
-          );
-        else if (delivery.op === "claim_dispatch")
-          result = store.claimDeliveryDispatch(delivery);
-        else if (delivery.op === "ack_dispatch")
-          result = store.ackDeliveryDispatch(
-            delivery.sessionId,
-            delivery.promptEntryId,
-          );
-        else
-          result = store.failDeliveryDispatch(
-            delivery.sessionId,
-            delivery.promptEntryId,
-          );
-      } else if (request.t === "ask") {
-        const ask = request.request;
-        if (ask.op === "snapshot") result = store.askSnapshot(ask.sessionId);
-        else if (ask.op === "entries") result = store.askEntries();
-        else if (ask.op === "set")
-          result = store.setAskRecord(ask.sessionId, ask.value);
-        else if (ask.op === "delete")
-          result = store.deleteAskRecord(ask.sessionId);
-        else result = store.clearAskRecords();
+      if (request.t === "reduce") {
+        const command = request.command;
+        if (command.kind === "run_event")
+          result = store.applyRunEvent(command.decision);
+        else if (command.kind === "delivery") {
+          const delivery = command.request;
+          if (delivery.op === "snapshot")
+            result = store.deliverySnapshot(delivery.sessionId);
+          else if (delivery.op === "entries")
+            result = store.deliveryEntries(delivery.slot);
+          else if (delivery.op === "set")
+            result = store.setDeliverySlot(
+              delivery.sessionId,
+              delivery.slot,
+              delivery.value,
+            );
+          else if (delivery.op === "delete")
+            result = store.deleteDeliverySlot(delivery.sessionId, delivery.slot);
+          else if (delivery.op === "clear_slot")
+            result = store.clearDeliverySlot(delivery.slot);
+          else if (delivery.op === "prepare_steer")
+            result = store.prepareSteerDelivery(
+              delivery.sessionId,
+              delivery.itemId,
+              delivery.item,
+            );
+          else if (delivery.op === "accept_steer")
+            result = store.acceptSteerDelivery(
+              delivery.sessionId,
+              delivery.itemId,
+            );
+          else if (delivery.op === "reject_steer")
+            result = store.rejectSteerDelivery(
+              delivery.sessionId,
+              delivery.itemId,
+            );
+          else if (delivery.op === "settle_pending_steers")
+            result = store.settlePendingSteers();
+          else if (delivery.op === "requeue_steers")
+            result = store.requeueSteerDeliveries(
+              delivery.sessionId,
+              delivery.items,
+            );
+          else if (delivery.op === "claim_dispatch")
+            result = store.claimDeliveryDispatch(delivery);
+          else if (delivery.op === "ack_dispatch")
+            result = store.ackDeliveryDispatch(
+              delivery.sessionId,
+              delivery.promptEntryId,
+            );
+          else
+            result = store.failDeliveryDispatch(
+              delivery.sessionId,
+              delivery.promptEntryId,
+            );
+        } else {
+          const ask = command.request;
+          if (ask.op === "snapshot") result = store.askSnapshot(ask.sessionId);
+          else if (ask.op === "entries") result = store.askEntries();
+          else if (ask.op === "set")
+            result = store.setAskRecord(ask.sessionId, ask.value);
+          else if (ask.op === "delete")
+            result = store.deleteAskRecord(ask.sessionId);
+          else result = store.clearAskRecords();
+        }
       } else if (request.method === "$beginSync")
         result = beginSync(request.args[0] as string, request.args[1] as any);
       else if (request.method === "$completeSync")
@@ -407,12 +410,7 @@ export function startSessionKernelActorWorker(): void {
     event: MessageEvent<KernelActorAsyncRequest | KernelActorSyncRequest>,
   ) => {
     const request = event.data;
-    if (
-      request.t === "store" ||
-      request.t === "decide_run_event" ||
-      request.t === "delivery" ||
-      request.t === "ask"
-    ) {
+    if (request.t === "store" || request.t === "reduce") {
       syncStore(request);
       return;
     }

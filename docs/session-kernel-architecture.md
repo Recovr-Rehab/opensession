@@ -139,10 +139,13 @@ firing enters the same command mailbox with a deterministic request id. A
 restart or duplicate wake therefore runs the decision once.
 
 External effects can be added to the kernel outbox in the same transaction
-that completes a command. Delivery is destination-idempotent at-least-once: a
+that completes a command. Effect payloads and fenced results are discriminated
+unions in `lifecycle-protocol.ts`. Executors register once by typed effect kind,
+validate a persisted payload before physical work, and cannot replace another
+executor for the same kind. Delivery is destination-idempotent at-least-once: a
 crash after a destination accepts an effect but before acknowledgement retries
 the stable effect id. It is exact-once only where the destination honors that
-id. Each effect has a stable destination id and unique command-local key. Registered handlers retry with exponential backoff; poison
+id. Each effect has a stable destination id and unique command-local key. Registered executors retry with exponential backoff; poison
 effects dead-letter after a bounded attempt count. Unknown kinds remain queued but
 are excluded from registered-kind work batches, so version skew cannot make them head-of-line block compatible work. Timers and
 outbox effects both dead-letter after bounded attempts; authenticated operators
@@ -176,10 +179,13 @@ A command admission is short: the actor fingerprints and persists the intent,
 allocates a fenced `executionId`, and immediately returns an execution descriptor.
 It does not retain a per-session gateway lease and does not stop reducing run,
 delivery or ask messages while physical work is active. Different command intents
-can be admitted concurrently. The gateway effect adapter preserves physical effect
-order for compatibility operations, but that queue is not authoritative: every
-item in it is already durable in the actor. A restart re-admits replay-safe intent
-and marks ambiguous non-replay-safe execution indeterminate.
+can be admitted concurrently. The temporary `LegacyGatewayEffect` adapter preserves physical effect
+order for eight compatibility call sites, but that queue is not authoritative:
+every item in it is already durable in the actor. Its operation union and exact
+production call-site baseline are structural migration fences. New lifecycle
+work must use typed reducer messages and executors rather than add a callback.
+A restart re-admits replay-safe intent and marks ambiguous non-replay-safe
+execution indeterminate.
 
 Retries of an executing request attach as bounded waiters to the same execution;
 they never allocate a second physical effect. Active executions and waiters have
