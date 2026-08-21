@@ -66,6 +66,7 @@ describe("session effect executor registry", () => {
       branch: "feature/create-one",
       worktreePath: "/worktrees/create-one",
       isolated: true,
+      existingBranch: true,
       credentialPrincipal: "user:alice",
       mode: "adopt_or_create",
       gitEnv: { GIT_ASKPASS: "must-not-cross" },
@@ -76,6 +77,7 @@ describe("session effect executor registry", () => {
       branch: "feature/create-one",
       worktreePath: "/worktrees/create-one",
       isolated: true,
+      existingBranch: true,
       credentialPrincipal: "user:alice",
       mode: "adopt_or_create",
     });

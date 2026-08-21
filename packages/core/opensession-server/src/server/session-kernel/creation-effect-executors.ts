@@ -1,3 +1,4 @@
+import { existsSync } from "fs";
 import type { GithubCredential } from "../github-auth";
 import { createWorkspace, getWorkspace, type Workspace } from "../workspaces";
 import type { WorktreeInfo } from "../worktree";
@@ -121,7 +122,13 @@ type BranchExecutorDependencies = {
       gitEnv?: Record<string, string>;
     },
   ) => Promise<string>;
+  createWorktreeForExistingBranch?: (
+    branch: string,
+    project: string,
+    gitEnv?: Record<string, string>,
+  ) => Promise<string>;
   resolveCredential?: (principal: string) => Promise<GithubCredential | null>;
+  destinationExists?: (path: string) => boolean;
   result: (item: CreationBranchEffectItem) => CreationEventDecisionResult;
   afterDestinationAccepted?: (worktreePath: string) => void;
 };
@@ -147,12 +154,26 @@ async function resolveCurrentCredential(
   return (await import("../github-auth")).githubCredentialForPrincipal(principal);
 }
 
+async function createExistingWorktree(
+  branch: string,
+  project: string,
+  gitEnv?: Record<string, string>,
+): Promise<string> {
+  return (await import("../worktree")).createWorktreeForExistingBranch(
+    branch,
+    project,
+    gitEnv,
+  );
+}
+
 const defaultBranchDependencies: BranchExecutorDependencies = {
   listWorktrees: async (project) =>
     (await import("../worktree")).listWorktrees(project),
   createWorktree: async (branch, project, options) =>
     (await import("../worktree")).createWorktree(branch, project, options),
+  createWorktreeForExistingBranch: createExistingWorktree,
   resolveCredential: resolveCurrentCredential,
+  destinationExists: existsSync,
   result: defaultBranchResult,
 };
 
@@ -173,6 +194,13 @@ export async function executeCreationBranchPrepare(
     throw new CreationEffectIndeterminateError(
       `Worktree ${payload.worktreePath} belongs to another branch`,
     );
+  if (
+    !byPath &&
+    (dependencies.destinationExists ?? existsSync)(payload.worktreePath)
+  )
+    throw new CreationEffectIndeterminateError(
+      `Worktree destination ${payload.worktreePath} exists without a registered branch`,
+    );
   let credential: GithubCredential | null = null;
   if (!byBranch && payload.credentialPrincipal) {
     credential = await (dependencies.resolveCredential ??
@@ -186,15 +214,22 @@ export async function executeCreationBranchPrepare(
         `Credential selector ${payload.credentialPrincipal} resolved to another principal`,
       );
   }
-  const acceptedPath = byBranch?.path ?? await dependencies.createWorktree(
-    payload.branch,
-    payload.project,
-    {
-      ...(payload.baseBranch ? { base: payload.baseBranch } : {}),
-      ...(payload.isolated ? { isolated: true } : {}),
-      ...(credential ? { gitEnv: credential.env } : {}),
-    },
-  );
+  const acceptedPath = byBranch?.path ?? (payload.existingBranch
+    ? await (dependencies.createWorktreeForExistingBranch ??
+        createExistingWorktree)(
+        payload.branch,
+        payload.project,
+        credential?.env,
+      )
+    : await dependencies.createWorktree(
+        payload.branch,
+        payload.project,
+        {
+          ...(payload.baseBranch ? { base: payload.baseBranch } : {}),
+          ...(payload.isolated ? { isolated: true } : {}),
+          ...(credential ? { gitEnv: credential.env } : {}),
+        },
+      ));
   if (acceptedPath !== payload.worktreePath)
     throw new CreationEffectIndeterminateError(
       `Branch ${payload.branch} materialized at an unexpected destination`,

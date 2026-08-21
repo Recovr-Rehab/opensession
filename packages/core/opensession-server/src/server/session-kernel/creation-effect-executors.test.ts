@@ -236,6 +236,31 @@ describe("creation branch effect executor", () => {
     expect(results).toBe(1);
   });
 
+  test("materializes an existing remote branch through its explicit adapter", async () => {
+    const effect = branchItem();
+    effect.payload.existingBranch = true;
+    effect.payload.credentialPrincipal = "user:alice";
+    let existingCalls = 0;
+    await executeCreationBranchPrepare(effect, {
+      listWorktrees: (async () => []) as typeof listWorktrees,
+      createWorktree: (async () => {
+        throw new Error("must not create a new branch");
+      }) as typeof createWorktree,
+      createWorktreeForExistingBranch: async (_branch, _project, gitEnv) => {
+        existingCalls += 1;
+        expect(gitEnv).toEqual({ GIT_ASKPASS: "/private/helper" });
+        return "/worktrees/create-one";
+      },
+      resolveCredential: async () => ({
+        kind: "user",
+        principal: "user:alice",
+        env: { GIT_ASKPASS: "/private/helper" },
+      }),
+      result: () => ({ accepted: true, to: "preparing" }),
+    });
+    expect(existingCalls).toBe(1);
+  });
+
   test("resolves an ephemeral Git capability only when creation is necessary", async () => {
     const effect = branchItem();
     effect.payload.credentialPrincipal = "user:alice";
@@ -256,6 +281,19 @@ describe("creation branch effect executor", () => {
     });
     expect(receivedOptions).toMatchObject({ gitEnv: secretEnv });
     expect(effect.payload).not.toHaveProperty("gitEnv");
+  });
+
+  test("fails indeterminate on an unregistered destination after a crash", async () => {
+    await expect(executeCreationBranchPrepare(branchItem(), {
+      listWorktrees: (async () => []) as typeof listWorktrees,
+      destinationExists: () => true,
+      createWorktree: (async () => {
+        throw new Error("must not overwrite an ambiguous destination");
+      }) as typeof createWorktree,
+      result: () => {
+        throw new Error("must not result");
+      },
+    })).rejects.toBeInstanceOf(CreationEffectIndeterminateError);
   });
 
   test("fails closed when branch and worktree identity disagree", async () => {
