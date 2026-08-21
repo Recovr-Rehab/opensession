@@ -320,6 +320,7 @@ const AUTOMATION_COLOR = "#d29922";
 export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 	sessions,
 	registeredRepos,
+	directToMainBranches,
 	sessionsError,
 	sessionsLoading,
 	onRetrySessions,
@@ -3088,7 +3089,12 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 							className={`size-2 shrink-0 rounded-full ${SIDEBAR_STATUS_DOT.running}`}
 						/>
 					) : (
-						<WsPrStatusMark sessions={row.sessions} size={18} workspace={row.workspace} />
+						<WsPrStatusMark
+							sessions={row.sessions}
+							size={18}
+							workspace={row.workspace}
+							shipsDirectlyToMain={rowShipsDirectlyToMain(row)}
+						/>
 					)}
 				</span>
 				{/* Inbox rows name their repo with the tile alone, in front of the
@@ -3472,6 +3478,20 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 		row.sessions[0]?.repo ||
 		sessionRepo(row.sessions[0] || ({} as UnifiedSession))
 	);
+	}
+	function shipsDirectlyToMain(
+		repo: string | undefined,
+		branch: string | null | undefined,
+	) {
+		const defaultBranch = repo ? directToMainBranches[repo] : undefined;
+		return !!defaultBranch && (!branch || branch === defaultBranch);
+	}
+	function rowShipsDirectlyToMain(row: WsRow) {
+		const repo = wsRowRepo(row);
+		const branch =
+			row.workspace?.branch ||
+			row.sessions.find((session) => session.repo === repo)?.branch;
+		return shipsDirectlyToMain(repo, branch);
 	}
 	const rowIsScratch = (row: WsRow) => isScratchWorkspace(row.sessions);
 	// Repo-less Ask workspaces get their own band above the projects. Checked
@@ -5457,6 +5477,7 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 									onSetStatus={(st) => onSetStatus([s], st)}
 								/>
 							),
+									shipsDirectlyToMain={shipsDirectlyToMain(s.repo, s.branch)}
 						});
 					}
 					for (const t of pinnedTickets) {
@@ -5914,6 +5935,7 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 														onSetStatus={(st) => onSetStatus([s], st)}
 													/>
 												);
+														shipsDirectlyToMain={shipsDirectlyToMain(s.repo, s.branch)}
 											})}
 										</div>
 									</React.Fragment>

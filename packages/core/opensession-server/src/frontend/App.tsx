@@ -697,9 +697,7 @@ export function App(
 	// Seeded from the repos this browser saw last (lib/repo-cache): PR-mention
 	// chips need the registered set to resolve, so without it the first paint of
 	// a transcript renders `opensession#128` as plain text and relinks a beat later.
-	const [registeredRepos, setRegisteredRepos] = useState<string[]>(() =>
-		cachedRepos().map((repo) => repo.id),
-	);
+	const [registeredRepoInfo, setRegisteredRepoInfo] = useState(cachedRepos);
 	const [firstMileIsComplete, setFirstMileIsComplete] =
 		useState(firstMileComplete);
 	const auth = useAuthStatus();
@@ -789,7 +787,7 @@ export function App(
 			.then((repos) => {
 				if (live) {
 					setKnownRepos(repos);
-					setRegisteredRepos(repos.map((repo) => repo.id));
+					setRegisteredRepoInfo(repos);
 				}
 			})
 			.catch(() => {});
@@ -4945,7 +4943,12 @@ export function App(
 						<Sidebar
 							ref={sidebarRef}
 							sessions={sessions}
-							registeredRepos={registeredRepos}
+							registeredRepos={registeredRepoInfo.map((repo) => repo.id)}
+							directToMainBranches={Object.fromEntries(
+								registeredRepoInfo
+									.filter((repo) => repo.sharedCheckout)
+									.map((repo) => [repo.id, repo.defaultBranch]),
+							)}
 							sessionsError={sessionsError}
 							sessionsLoading={loading}
 							onRetrySessions={() => void refresh()}
