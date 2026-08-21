@@ -174,6 +174,22 @@ function MemoryRow({
 	const [expanded, setExpanded] = useState(false);
 	const [canExpand, setCanExpand] = useState(false);
 	const textRef = useRef<HTMLDivElement>(null);
+	const editRef = useRef<HTMLTextAreaElement>(null);
+
+	useLayoutEffect(() => {
+		if (!editing) return;
+		const textarea = editRef.current;
+		if (!textarea) return;
+
+		const resize = () => {
+			textarea.style.height = "auto";
+			const borderHeight = textarea.offsetHeight - textarea.clientHeight;
+			textarea.style.height = `${textarea.scrollHeight + borderHeight}px`;
+		};
+		resize();
+		window.addEventListener("resize", resize);
+		return () => window.removeEventListener("resize", resize);
+	}, [draft, editing]);
 
 	useLayoutEffect(() => {
 		if (expanded || editing) return;
@@ -226,7 +242,9 @@ function MemoryRow({
 				{editing ? (
 					<div>
 						<Textarea
-							rows={3}
+							ref={editRef}
+							rows={1}
+							className="min-h-[7.5em] resize-none overflow-hidden text-supporting leading-relaxed"
 							value={draft}
 							autoFocus
 							onChange={(event) => setDraft(event.target.value)}
@@ -338,7 +356,7 @@ function MemoryTable({
 	}
 
 	return (
-		<SettingCard className="overflow-hidden">
+		<SettingCard className="overflow-hidden border-line">
 			<div className="overflow-x-auto">
 				<table className="w-full table-fixed border-collapse phone:block">
 					<thead className="border-b border-line text-left text-label font-semibold text-faint phone:sr-only">
