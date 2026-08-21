@@ -1016,7 +1016,11 @@ export function PrStatusBar({
 						onClick={() =>
 							run("move-branch", async () => {
 								const result = await moveSessionToBranchApi(sessionId);
-								toast(`Moved to ${result.branch}`);
+								toast(
+									result.copiedFiles
+										? `Moved to ${result.branch} · ${result.copiedFiles} file${result.copiedFiles === 1 ? "" : "s"} copied`
+										: `Moved to ${result.branch}`,
+								);
 							})
 						}
 					>
