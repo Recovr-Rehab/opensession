@@ -1132,9 +1132,8 @@ export function IconBox(p: IconProps) {
   );
 }
 
-// A handset: the native phone app, as opposed to IconStack's "the same server
-// from several places". Narrow body plus a home indicator, so it reads as a
-// phone rather than as a card or a vertical panel.
+// A handset for mobile experiences. Narrow body plus a home indicator, so it
+// reads as a phone rather than as a card or a vertical panel.
 export function IconPhone(p: IconProps) {
   return (
     <Svg {...p}>
