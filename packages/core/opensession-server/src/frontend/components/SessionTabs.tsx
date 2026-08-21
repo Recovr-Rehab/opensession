@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from "react";
 import { useShortcutLabel } from "../hooks/useShortcutBindings";
-import { Reorder } from "motion/react";
+import { motion, Reorder } from "motion/react";
 import type { UnifiedSession } from "../lib/types";
 import { TAB_COLORS, colorHex } from "../lib/tab-colors";
 import { hasDraft, onDraftsChanged } from "../lib/drafts";
@@ -161,7 +161,16 @@ interface Props {
 	 * (the + button's plain-click default), stack = new worktree branched off it,
 	 * ask = no worktree.
 	 */
-	onNewSession?: (mode: "share" | "stack" | "ask") => void;
+	onNewSession?: (
+		mode: "share" | "stack" | "ask",
+		morphFromPlus?: boolean,
+	) => void;
+	/** Shared Motion identity between the + and the empty tab's close button. */
+	newTabMorphLayoutId?: string;
+	/** The tab currently expanding out of the + control. */
+	morphingSessionId?: string | null;
+	/** The reusable empty tab keeps the rotated + as its close glyph. */
+	emptySessionId?: string | null;
 	/** Rename a session (double-click the title); empty title resets it. */
 	onRename: (id: string, title: string) => void;
 	/** Close (archive) a session — the × revealed on hover. */
@@ -232,6 +241,9 @@ export function SessionTabs({
 	onSelectView,
 	onCloseView,
 	onNewSession,
+	newTabMorphLayoutId,
+	morphingSessionId,
+	emptySessionId,
 	onRename,
 	onClose,
 	onRestore,
@@ -544,20 +556,22 @@ export function SessionTabs({
 	// New-tab "+" — plain-click shares the workspace worktree; right-click offers
 	// the stacked/ask modes.
 	const newTabButton = onNewSession && (
-		<button
+		<motion.button
+			layoutId={newTabMorphLayoutId}
 			type="button"
 			className={cn(TAB_NEW, "relative z-[1]")}
 			data-menu-open={newMenu ? "" : undefined}
 			aria-label="New session in this workspace"
 			title="New session. Shares this workspace's worktree (right-click for options)"
-			onClick={() => onNewSession("share")}
+			onClick={() => onNewSession("share", true)}
 			onContextMenu={(e) => {
 				e.preventDefault();
 				setNewMenu({ x: e.clientX, y: e.clientY });
 			}}
+			transition={{ type: "spring", duration: 0.3, bounce: 0 }}
 		>
 			<IconPlus size={ctrlIconSize} />
-		</button>
+		</motion.button>
 	);
 
 	// History: every archived (closed) session of this workspace, in one list.
@@ -648,12 +662,14 @@ export function SessionTabs({
 						const session = member.session;
 						const waiting = !!session.waitingForInput;
 						const hex = colorHex(colors[key]);
+						const morphing = key === morphingSessionId;
+						const emptyClose = key === emptySessionId;
 						return (
 							<Reorder.Item key={key} {...reorderItemProps(key, nextActive)}>
 								<ContextMenu.Root>
 									<ContextMenu.Trigger
 										render={
-											<div
+											<motion.div
 												role="tab"
 												aria-selected={key === activeId}
 												className={`group/tab ${tabClass({
@@ -662,6 +678,13 @@ export function SessionTabs({
 													colored: !!hex,
 												})}`}
 												style={hex ? ({ "--tab-color": hex } as React.CSSProperties) : undefined}
+												initial={
+													morphing
+														? { clipPath: "inset(0 0 0 82%)", opacity: 0.72 }
+														: false
+												}
+												animate={{ clipPath: "inset(0 0 0 0%)", opacity: 1 }}
+												transition={{ type: "spring", duration: 0.3, bounce: 0 }}
 												onClick={() => onSelect(session)}
 												title={session.title}
 											/>
@@ -734,18 +757,37 @@ export function SessionTabs({
 												<IconPencil size={16} dense />
 											</span>
 										)}
-										<button
-											type="button"
-											className={tabCloseClass(isPhone, key === activeId)}
-											aria-label="Close session"
-											title="Close session"
-											onClick={(e) => {
-												e.stopPropagation();
-												onClose(session);
-											}}
-										>
-											<IconX size={16} dense aria-hidden="true" />
-										</button>
+										{emptyClose ? (
+											<motion.button
+												layoutId={newTabMorphLayoutId}
+												type="button"
+												className={tabCloseClass(isPhone, key === activeId)}
+												aria-label="Close session"
+												title="Close session"
+												initial={morphing ? { rotate: 0 } : false}
+												animate={{ rotate: 45 }}
+												transition={{ type: "spring", duration: 0.3, bounce: 0 }}
+												onClick={(e) => {
+													e.stopPropagation();
+													onClose(session);
+												}}
+											>
+												<IconPlus size={16} aria-hidden="true" />
+											</motion.button>
+										) : (
+											<button
+												type="button"
+												className={tabCloseClass(isPhone, key === activeId)}
+												aria-label="Close session"
+												title="Close session"
+												onClick={(e) => {
+													e.stopPropagation();
+													onClose(session);
+												}}
+											>
+												<IconX size={16} dense aria-hidden="true" />
+											</button>
+										)}
 									</ContextMenu.Trigger>
 									{/* finalFocus=false: "Rename session" mounts the inline rename
 							    input (autoFocus) — the closing menu must not steal focus
