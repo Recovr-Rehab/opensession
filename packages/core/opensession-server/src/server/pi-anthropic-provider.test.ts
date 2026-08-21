@@ -629,8 +629,8 @@ describe("usageFromSdkResult", () => {
   });
 });
 
-describe("Claude limit notice probe", () => {
-  test("holds short output until it can rule out a synthetic limit notice", () => {
+describe("Claude account notice probe", () => {
+  test("holds short output until it can rule out a synthetic account notice", () => {
     expect(shouldDeferClaudeText("Replying normally")).toBe(true);
     expect(
       shouldDeferClaudeText(
@@ -646,6 +646,11 @@ describe("Claude limit notice probe", () => {
     expect(
       shouldDeferClaudeText(
         "You're out of usage credits. Run /usage-credits to keep using Fable 5 or /model to switch models."
+      )
+    ).toBe(true);
+    expect(
+      shouldDeferClaudeText(
+        "Your organization has disabled Claude subscription access for Claude Code · Use an Anthropic API key instead, or ask your admin to enable access"
       )
     ).toBe(true);
   });
