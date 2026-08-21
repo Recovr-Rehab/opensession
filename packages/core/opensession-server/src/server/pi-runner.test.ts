@@ -479,6 +479,12 @@ describe("isPiUsageLimitShape (provider-aware)", () => {
     expect(isPiUsageLimitShape("upstream returned 529", "anthropic")).toBe(true);
     expect(isPiUsageLimitShape("overloaded_error", "anthropic")).toBe(true);
     expect(isPiUsageLimitShape("no designated bridge account", "anthropic")).toBe(true);
+    expect(
+      isPiUsageLimitShape(
+        "Your organization has disabled Claude subscription access for Claude Code",
+        "anthropic",
+      ),
+    ).toBe(true);
     expect(isPiUsageLimitShape("ordinary tool failure", "anthropic")).toBe(false);
   });
 

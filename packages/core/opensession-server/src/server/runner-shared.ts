@@ -188,10 +188,12 @@ export function usageLimitResetAt(
 }
 
 /**
- * A Claude account whose *subscription* is the fault — an expired, downgraded,
- * or billing-blocked Max plan. The bridge surfaces it as
+ * A Claude account whose *subscription* is the fault: an expired, downgraded,
+ * billing-blocked Max plan, or an organization policy that disables Claude Code
+ * subscription access. The bridge surfaces these as either
  * "AI_APICallError: Claude Max subscription issue. Check your subscription
- * status at https://claude.ai/settings/subscription". This is NOT a usage limit
+ * status at https://claude.ai/settings/subscription" or "Your organization has
+ * disabled Claude subscription access for Claude Code". This is NOT a usage limit
  * (no reset frees it) but it IS an account-level fault that is dead on retry, so
  * callers should sideline the account and rotate off it exactly like a usage
  * limit rather than retrying the same account into a timeout. the previous runner's ai-sdk
@@ -202,7 +204,8 @@ export function isClaudeSubscriptionError(message: string): boolean {
   return (
     s.includes("subscription issue") ||
     s.includes("check your subscription") ||
-    (s.includes("claude max") && s.includes("subscription"))
+    (s.includes("claude max") && s.includes("subscription")) ||
+    (s.includes("organization has disabled") && s.includes("subscription access"))
   );
 }
 
