@@ -5027,7 +5027,7 @@ export function SessionViewer({
 	// there: it is seeded from a preference that outlives any one session, and
 	// the card can only report itself once it exists.
 	const summaryVisible =
-		summaryOpen && !showReview && !isPhone && hasRepoWork && !panelOpen;
+		summaryOpen && !isPhone && hasRepoWork && !activePanelOpen;
 	// Keep a visible left step whenever the card is up. This composes the card,
 	// transcript and composer as two sides of one pane instead of letting the
 	// reading column drift back to centre as the window grows.
@@ -6249,19 +6249,19 @@ export function SessionViewer({
 						)}
 					{/* …and the rest of what a one-line strip can't say: the diff's
 					    size, uncommitted work, who is reviewing, the assets. One
-					    floating card, so the panel can stay shut without going blind
-					    (see WorkspaceSummary's module doc). Portals, Agents and
-					    Terminal are deliberately not in it: they are places, and
-					    places live in the panel. */}
-					{!isPhone && !showReview && hasRepoWork && !panelOpen && (
+					    floating card, so the panel can stay shut without going blind,
+					    including while Review owns the main pane (see WorkspaceSummary's
+					    module doc). Portals, Agents and Terminal are deliberately not in
+					    it: they are places, and places live in the panel. */}
+					{!isPhone && hasRepoWork && !activePanelOpen && (
 						<WorkspaceSummary
 							session={session}
 							anchor={headerActionsRef}
-							// The Changes row opens the panel already on its Changes
-							// page; its other rows land on the overview.
+							// The Changes row opens the active view's panel already on its
+							// Changes page; its other rows land on the overview.
 							onOpenPanelTab={(tab) => {
 								setPanelPage(tab === "changes" ? "changes" : null);
-								setPanelOpen(true);
+								setActivePanelOpen(true);
 							}}
 							onOpenPr={() => focusPrInReview()}
 							onOpenStackPr={onOpenPr}
