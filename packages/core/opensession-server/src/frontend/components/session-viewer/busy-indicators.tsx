@@ -15,26 +15,26 @@ export function WorkspaceWaiting({
 	ghost?: boolean;
 }) {
 	return (
-		<div className="flex h-full min-h-[240px] flex-col items-center justify-center gap-1 px-6 text-center">
-			{!ghost && <PageLoader className="mb-2 text-dim" />}
+		<div className="relative flex h-full min-h-[240px] flex-col items-center justify-center gap-1 px-6 text-center">
+			{ghost && (
+				<div className="absolute inset-x-6 top-6">
+					<div className="mx-auto w-full max-w-[var(--session-col)]">
+						<Skeleton
+							label="Preparing message"
+							className="flex flex-col items-end opacity-60"
+						>
+							<SkeletonBar className="h-[42px] w-[42%] rounded-lg" />
+						</Skeleton>
+					</div>
+				</div>
+			)}
+			<PageLoader className="mb-2 text-dim" />
 			<div className="text-item-title font-semibold text-fg">
 				Creating your workspace
 			</div>
 			<div className="max-w-[340px] text-label font-medium leading-relaxed text-dim">
 				{detail}
 			</div>
-			{ghost && (
-				<div className="mt-7 w-full max-w-[var(--session-col)]">
-					<Skeleton
-						label="Preparing conversation"
-						className="flex flex-col gap-2.5 text-left opacity-60"
-					>
-						<SkeletonBar className="w-[68%]" />
-						<SkeletonBar className="w-[84%]" />
-						<SkeletonBar className="w-[51%]" />
-					</Skeleton>
-				</div>
-			)}
 		</div>
 	);
 }
