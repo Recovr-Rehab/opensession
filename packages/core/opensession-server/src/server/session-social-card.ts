@@ -43,10 +43,10 @@ export const SESSION_CARD_HEIGHT = 630;
  * a 16:9 screenshot fill most of the card.
  */
 export const SESSION_CARD_BANNER_WIDTH = 1200;
-export const SESSION_CARD_BANNER_HEIGHT = 240;
+export const SESSION_CARD_BANNER_HEIGHT = 280;
 
 export type SessionCardVariant = "card" | "banner";
-const SESSION_CARD_VERSION = 16;
+const SESSION_CARD_VERSION = 17;
 
 const CARD_INK = "#050609";
 const CARD_PAPER = "#FFFFFF";
@@ -77,18 +77,18 @@ const TITLE_LINE_HEIGHT = 42;
 const TITLE_FONT = "Inter SemiBold 38";
 const TITLE_LETTER_SPACING = -1024;
 /** Every screenshot frame stays 16:9, including the ones behind the lead shot. */
-const SHOT_BANNER_WIDTH = 384;
-const SHOT_BANNER_HEIGHT = 216;
-const SHOT_CARD_WIDTH = 448;
-const SHOT_CARD_HEIGHT = 252;
+const SHOT_BANNER_WIDTH = 448;
+const SHOT_BANNER_HEIGHT = 252;
+const SHOT_CARD_WIDTH = 528;
+const SHOT_CARD_HEIGHT = 297;
 const SHOT_BANNER_INSET = 14;
 const SHOT_CARD_INSET = 28;
 const SHOT_BANNER_RADIUS = 26;
 const SHOT_CARD_RADIUS = 28;
 const SHOT_GAP = 32;
 const SHOT_LIMIT = 2;
-const SHOT_BANNER_STACK_OFFSET = 84;
-const SHOT_CARD_STACK_OFFSET = 96;
+const SHOT_BANNER_STACK_OFFSET = 80;
+const SHOT_CARD_STACK_OFFSET = 92;
 const SHOT_BANNER_STACK_LIFT = 10;
 const SHOT_CARD_STACK_LIFT = 12;
 
