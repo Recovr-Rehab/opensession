@@ -5473,11 +5473,11 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 									onArchive={(current) => archiveWithNext(s, current)}
 									pinned={pin.pinned}
 									onTogglePin={pin.toggle}
+									shipsDirectlyToMain={shipsDirectlyToMain(s.repo, s.branch)}
 									onRename={(title) => onRename(s, title)}
 									onSetStatus={(st) => onSetStatus([s], st)}
 								/>
 							),
-									shipsDirectlyToMain={shipsDirectlyToMain(s.repo, s.branch)}
 						});
 					}
 					for (const t of pinnedTickets) {
@@ -5931,11 +5931,11 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 														onArchive={(current) => archiveWithNext(s, current)}
 														pinned={pin.pinned}
 														onTogglePin={pin.toggle}
+														shipsDirectlyToMain={shipsDirectlyToMain(s.repo, s.branch)}
 														onRename={(title) => onRename(s, title)}
 														onSetStatus={(st) => onSetStatus([s], st)}
 													/>
 												);
-														shipsDirectlyToMain={shipsDirectlyToMain(s.repo, s.branch)}
 											})}
 										</div>
 									</React.Fragment>
