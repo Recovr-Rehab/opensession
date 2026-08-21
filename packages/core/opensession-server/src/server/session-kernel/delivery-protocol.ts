@@ -27,6 +27,17 @@ export type DeliveryActorRequest =
   | { op: "ack_dispatch"; sessionId: string; promptEntryId: string }
   | { op: "fail_dispatch"; sessionId: string; promptEntryId: string };
 
+export type DeliveryMutationReply<TResult = unknown> = {
+  revision?: number;
+  result: TResult;
+};
+
+export function isDeliveryReadRequest(
+  request: DeliveryActorRequest,
+): request is Extract<DeliveryActorRequest, { op: "snapshot" | "entries" }> {
+  return request.op === "snapshot" || request.op === "entries";
+}
+
 export type DeliveryActorResult<T extends DeliveryActorRequest> =
   T extends { op: "snapshot" }
     ? DurableDeliveryState

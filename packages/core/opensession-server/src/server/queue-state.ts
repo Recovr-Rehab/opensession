@@ -11,7 +11,7 @@
  * live in run-session.ts — they need the runner.
  */
 
-import { copyFileSync, existsSync, readFileSync } from "fs";
+import { copyFileSync, existsSync, readFileSync, rmSync } from "fs";
 import { writeJsonAtomic } from "./shared/atomic-write";
 import { setTranscriptAppendListener } from "./file-watcher";
 import { stripContext } from "./prompt-context";
@@ -256,8 +256,25 @@ export function queueWithIds(
 	});
 }
 
+function removeLegacyQueueStore(storePath = QUEUE_STORE): void {
+	for (const path of [storePath, `${storePath}.bak`]) {
+		try {
+			rmSync(path, { force: true });
+		} catch (error) {
+			console.error(`[queue] Failed to remove migrated queue store ${path}:`, error);
+		}
+	}
+}
+
 export function persistQueues(storePath = QUEUE_STORE): void {
 	try {
+		// Custom paths are migration/test fixtures. The production JSON stopped
+		// being a projection once the actor acknowledged its one-time import.
+		if (
+			storePath === QUEUE_STORE &&
+			sessionKernelStore().deliveryMigrationComplete()
+		)
+			return;
 		const entries = (m: Map<string, QueueItem[]>) =>
 			Object.fromEntries(
 				[...m]
@@ -317,6 +334,7 @@ export function hydratePersistedQueueState(storePath = QUEUE_STORE): number {
   const kernelStore = sessionKernelStore();
   const migrateToKernel = storePath === QUEUE_STORE;
   if (migrateToKernel && kernelStore.deliveryMigrationComplete()) {
+    removeLegacyQueueStore(storePath);
     sessionDelivery({ op: "settle_pending_steers" });
     return (
       [...promptQueues.values(), ...steeredReceipts.values()].reduce(
@@ -326,7 +344,10 @@ export function hydratePersistedQueueState(storePath = QUEUE_STORE): number {
     );
   }
   if (!existsSync(storePath)) {
-    if (migrateToKernel) kernelStore.markDeliveryMigrationComplete();
+    if (migrateToKernel) {
+      kernelStore.markDeliveryMigrationComplete();
+      removeLegacyQueueStore(storePath);
+    }
     return 0;
   }
 	const data = readPersistedQueueState(storePath);
@@ -349,7 +370,10 @@ export function hydratePersistedQueueState(storePath = QUEUE_STORE): number {
 			});
 		}
 	}
-  if (migrateToKernel) kernelStore.markDeliveryMigrationComplete();
+  if (migrateToKernel) {
+    kernelStore.markDeliveryMigrationComplete();
+    removeLegacyQueueStore(storePath);
+  }
 	return (
 		[...promptQueues.values(), ...steeredReceipts.values()].reduce(
 			(count, items) => count + items.length,
