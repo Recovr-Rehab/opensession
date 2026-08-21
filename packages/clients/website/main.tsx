@@ -9,6 +9,7 @@ import {
 	IconClock,
 	IconGlobe,
 	IconPeople,
+	IconPhone,
 	IconPullRequest,
 	IconRepo,
 	IconRobot,
@@ -145,14 +146,20 @@ function WaitlistDialog({ open, onClose }: { open: boolean; onClose: () => void 
 	);
 }
 
-/** One cell of the capability grid: a glyph, a name, and what it means. */
+/**
+ * One cell of the capability grid: a glyph, a name, and what it means. A cell
+ * marked `soon` describes something that is not shipped yet, so the tag sits
+ * on the name where nobody can read the sentence without it.
+ */
 function Feature({
 	icon,
 	name,
+	soon,
 	children,
 }: {
 	icon: ReactNode;
 	name: string;
+	soon?: boolean;
 	children: ReactNode;
 }) {
 	return (
@@ -160,7 +167,10 @@ function Feature({
 			<span className="feature-icon" aria-hidden="true">
 				{icon}
 			</span>
-			<h3>{name}</h3>
+			<div className="feature-head">
+				<h3>{name}</h3>
+				{soon && <span className="feature-soon">Coming soon</span>}
+			</div>
 			<p>{children}</p>
 		</div>
 	);
@@ -259,8 +269,11 @@ function LandingPage() {
 							branch, beside the session that built it.
 						</Feature>
 						<Feature icon={<IconStack size={28} />} name="Everywhere you are">
-							A web app, a Mac app, a native iOS app and a browser side panel, all
-							on one server.
+							A web app, a Mac app and a browser side panel, all on one server.
+						</Feature>
+						<Feature icon={<IconPhone size={28} />} name="Native iOS app" soon>
+							Read a session, answer a question and send the next turn from your
+							phone.
 						</Feature>
 						<Feature icon={<IconRepo size={28} />} name="Open source">
 							Read it, fork it, run it. There is no hosted tier in the path that

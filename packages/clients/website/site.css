@@ -379,6 +379,30 @@ summary:focus-visible {
 	color: rgba(var(--ink-rgb), 0.62);
 }
 
+/* The name shares its line with the availability tag when there is one, so the
+   caveat cannot be read separately from the capability it qualifies. Baseline
+   alignment keeps the smaller tag sitting on the name's line, not floating. */
+.feature-head {
+	display: flex;
+	align-items: baseline;
+	flex-wrap: wrap;
+	gap: 4px 8px;
+}
+
+/* Quieter than the name and quieter than the sentence: a caveat, not a badge
+   asking to be noticed first. */
+.feature-soon {
+	border: 1px solid rgba(var(--ink-rgb), 0.16);
+	border-radius: 999px;
+	color: var(--muted);
+	font-size: 11px;
+	font-weight: 500;
+	letter-spacing: 0.01em;
+	line-height: 1.55;
+	padding: 0 7px;
+	white-space: nowrap;
+}
+
 /* A name on its own line, then what it means: the capability is the thing you
    scan for, so it gets a line rather than a bold run-in that the eye has to
    find inside a sentence. */
