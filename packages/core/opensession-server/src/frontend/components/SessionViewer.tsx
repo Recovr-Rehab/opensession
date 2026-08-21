@@ -1425,6 +1425,12 @@ export function SessionViewer({
 	const [panelPage, setPanelPage] = useState<
 		null | "changes" | "portals" | "agents" | "terminal"
 	>(null);
+	// Start a panel terminal only after its tab is opened. Keep it mounted while
+	// switching tabs, then drop it when the panel closes.
+	const [panelTerminalMounted, setPanelTerminalMounted] = useState(false);
+	useEffect(() => {
+		if (!activePanelOpen) setPanelTerminalMounted(false);
+	}, [activePanelOpen]);
 	// Closing the host that shows pages returns to the overview; that effect
 	// needs `isPhone` to know which host to watch, so it lives beside the
 	// viewport state further down.
@@ -7616,7 +7622,7 @@ export function SessionViewer({
 							) : null}
 							{/* Keep terminals mounted while switching panel tabs so their PTYs
 							    survive. Closing the panel still closes its terminals. */}
-							{hasWorkspace && (
+							{hasWorkspace && panelTerminalMounted && (
 								<div
 									className={
 										desktopPanelPage === "terminal"
@@ -7694,7 +7700,10 @@ export function SessionViewer({
 										PANEL_FOOTER_ITEM,
 										desktopPanelPage === "terminal" && "bg-hover text-fg",
 									)}
-									onClick={() => setPanelPage("terminal")}
+									onClick={() => {
+										setPanelTerminalMounted(true);
+										setPanelPage("terminal");
+									}}
 								>
 									<IconTerminal size={15} className="shrink-0" />
 									Terminal
