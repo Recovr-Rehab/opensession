@@ -3337,6 +3337,7 @@ export function App(
 						? undefined
 						: (mode) => handleNewSession(mode, side)
 				}
+				emptySessionId={emptyWorkspaceSession?.id}
 				onRename={async (id, title) => {
 					try {
 						await renameSessionApi(id, title);
@@ -3635,6 +3636,7 @@ export function App(
 	) => {
 		const neverRan =
 			s.source === "opensession" && sessionNeverRan(s);
+		const pendingCreate = neverRan && s.id === pendingSessionId;
 		const wasOpen = currentSession?.id === s.id;
 		// No split bookkeeping here: a closed tab stops being live, so the split
 		// resolves without it, and collapses on its own once a bar is emptied.
@@ -3654,6 +3656,15 @@ export function App(
 					null)
 				: null;
 		const needsNewSessionComposer = wasOpen && !next && !survivingPane;
+		if (pendingCreate) {
+			// The create response owns cleanup from here. Mark it abandoned before
+			// removing the optimistic shell so a late response cannot resurrect it.
+			abandonedSessionCreatesRef.current.add(s.id);
+			clearTimeout(pendingTimer.current);
+			setPendingSessionId(null);
+			setOptimisticSession(null);
+			unstick(s.id);
+		}
 		if (neverRan) {
 			remove(s.id);
 		} else {
@@ -3670,8 +3681,8 @@ export function App(
 			}
 		}
 		try {
-			if (neverRan) await deleteSessionApi(s.id, false);
-			else {
+			if (neverRan && !pendingCreate) await deleteSessionApi(s.id, false);
+			else if (!neverRan) {
 				const { stoppedRun } = await archiveSessionApi(s.id, true);
 				showArchivedToast(
 					[s],
@@ -3731,16 +3742,6 @@ export function App(
 			return;
 		}
 		setHiddenEmptySessionIds((hidden) => new Set(hidden).add(empty.id));
-		if (empty.id === pendingSessionId) {
-			abandonedSessionCreatesRef.current.add(empty.id);
-			clearTimeout(pendingTimer.current);
-			setPendingSessionId(null);
-			setOptimisticSession(null);
-			unstick(empty.id);
-			remove(empty.id);
-			navigate({ view: "session", id: next.id });
-			return;
-		}
 		void closeSessionNow(empty, next);
 	};
 	const closeSessionRef = useRef(closeSession);

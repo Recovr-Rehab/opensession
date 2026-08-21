@@ -1560,7 +1560,9 @@ export async function handleCreateSessionMessage(
 			attachBranch,
 		);
 
-		const title = (await nameKnownSessionReferencesForTitle(prompt))
+		const titlePrompt =
+			typeof msg.titlePrompt === "string" ? msg.titlePrompt.slice(0, 2000) : prompt;
+		const title = (await nameKnownSessionReferencesForTitle(titlePrompt))
 			.trim()
 			.split("\n")[0]
 			.slice(0, 80);
@@ -1698,7 +1700,7 @@ export async function handleCreateSessionMessage(
 		const computedSpec: ResolvedCreate = {
 			id: bksId,
 			title,
-			titlePrompt: prompt,
+			titlePrompt,
 			openingPrompt,
 			user,
 			createdBy: user || "Anonymous",
