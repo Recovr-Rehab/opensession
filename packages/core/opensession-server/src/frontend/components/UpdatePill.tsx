@@ -200,7 +200,7 @@ export function UpdatePill({ addHandler, variant = "card" }: Props) {
       aria-live="polite"
     >
       <div className="flex min-w-0 flex-1 flex-col items-start gap-0.5">
-        <span className="max-w-full truncate text-label font-medium leading-[1.3] text-fg">
+        <span className="max-w-full truncate text-supporting font-medium leading-[1.3] text-fg">
           {forced
             ? `Updating in ${secondsLeft}s…`
             : restart
@@ -215,7 +215,7 @@ export function UpdatePill({ addHandler, variant = "card" }: Props) {
       </div>
       <div className="flex shrink-0 items-center gap-1">
         <button
-          className={"inline-flex h-[30px] items-center rounded-control px-3.5 cursor-pointer border-none bg-red text-label font-semibold leading-none text-white transition-[background] duration-[var(--dur-micro)] ease-[var(--ease)] hover:bg-[color-mix(in_srgb,var(--red)_85%,black)] disabled:cursor-wait disabled:opacity-75"}
+          className={"inline-flex h-7 items-center rounded-control px-3 cursor-pointer border-none bg-red text-supporting font-semibold leading-none text-white transition-[background] duration-[var(--dur-micro)] ease-[var(--ease)] hover:bg-[color-mix(in_srgb,var(--red)_85%,black)] disabled:cursor-wait disabled:opacity-75"}
           onClick={refresh}
           disabled={refreshing}
         >

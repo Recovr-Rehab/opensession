@@ -66,7 +66,7 @@ export function RestartOverlay({ connected, addHandler }: Props) {
     explicit.current = false;
     if (phaseRef.current === "restarting") setPhase("ok");
     const by = restartByRef.current;
-    toast(`${PRODUCT_NAME} restarted${by ? ` (${by})` : ""}.`, {
+    toast(`${PRODUCT_NAME} restarted${by ? ` · ${by}` : ""}`, {
       variant: "success",
     });
   };
@@ -86,10 +86,9 @@ export function RestartOverlay({ connected, addHandler }: Props) {
     }
     if (prev && id !== prev) {
       const by = restartByRef.current;
-      toast(
-        `${PRODUCT_NAME} restarted${by ? ` (${by})` : ""}. Reconnected to the new server.`,
-        { variant: "success" },
-      );
+      toast(`${PRODUCT_NAME} restarted${by ? ` · ${by}` : ""}`, {
+        variant: "success",
+      });
     }
   };
 
@@ -233,7 +232,7 @@ export function RestartOverlay({ connected, addHandler }: Props) {
             aria-hidden
             className="size-3 shrink-0 animate-spin rounded-full border border-current/25 border-t-current text-accent"
           />
-          <span>{restarting ? `${PRODUCT_NAME} is restarting` : "Connection lost"}</span>
+          <span>{restarting ? "Restarting" : "Connection lost"}</span>
           <span className="text-faint">
             {restarting && restartBy ? restartBy : "Retrying"}
           </span>

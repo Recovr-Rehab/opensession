@@ -186,30 +186,26 @@ function ToastCard({ toast: item }: { toast: BaseToast.Root.ToastObject<ToastDat
 		>
 			<BaseToast.Content
 				className={[
-					"flex max-w-full items-center gap-2.5 whitespace-normal rounded-[999px] bg-popup-glass",
-					"px-3.5 pt-2.5 pb-2 text-label font-medium leading-tight text-fg",
+					"flex max-w-full items-center gap-2 whitespace-normal rounded-[999px] bg-popup-glass",
+					"px-3 py-1.5 text-supporting font-medium leading-tight text-fg",
 					"[backdrop-filter:var(--popup-blur)] [--smooth-ring-color:var(--popup-ring)] smooth-shadow-ring-sm",
-					// A phone keeps the same pill, only tighter: it is a passing note
-					// under the bar, not a panel.
-					"phone:gap-2 phone:py-1.5 phone:pl-3.5",
-					data.action ? "pr-1.5" : "phone:pr-3.5",
+					data.action ? "pr-1.5" : "",
 				].join(" ")}
 			>
 				{data.variant === "success" && (
-					<AnimatedCheck size={17} className="shrink-0 text-green" />
+					<AnimatedCheck size={15} className="shrink-0 text-green" />
 				)}
 				{data.variant === "error" && (
 					<span
 						aria-hidden
-						className="grid size-[17px] shrink-0 place-items-center rounded-full text-label font-semibold text-accent"
+						className="grid size-[15px] shrink-0 place-items-center rounded-full text-meta font-semibold text-accent"
 					>
 						!
 					</span>
 				)}
-				{/* Description renders a <p>, and the preflight leaves its 14px
-				    browser margins alone — which is most of the pill's height on a
-				    phone, where there is no room to spend on them. */}
-				<BaseToast.Description className="min-w-0 phone:my-0">
+				{/* Description renders a <p>; remove its browser margins so the
+				    visible height comes from the pill padding alone. */}
+				<BaseToast.Description className="my-0 min-w-0">
 					{data.message}
 				</BaseToast.Description>
 				{data.action && (
@@ -220,8 +216,8 @@ function ToastCard({ toast: item }: { toast: BaseToast.Root.ToastObject<ToastDat
 								runToastAction(data.id);
 							}}
 							// The pill stays tight, so the action carries the finger
-							// target on its own: 32px of box inside a 44px tap area.
-							className="focus-ring relative -my-1 ml-1 shrink-0 cursor-pointer rounded-md px-2 py-1 text-label font-semibold text-accent transition-[background-color,transform] duration-150 hover:bg-hover active:scale-[0.96] phone:-my-1.5 phone:ml-0.5 phone:grid phone:min-h-8 phone:place-items-center phone:rounded-[999px] phone:px-3 phone:after:absolute phone:after:inset-x-0 phone:after:top-1/2 phone:after:h-11 phone:after:-translate-y-1/2 phone:after:content-['']"
+							// target on its own: 28px of box inside a 44px tap area.
+							className="focus-ring relative -my-1 ml-1 shrink-0 cursor-pointer rounded-md px-2 py-1 text-supporting font-semibold text-accent transition-[background-color,transform] duration-150 hover:bg-hover active:scale-[0.96] phone:-my-1.5 phone:ml-0.5 phone:grid phone:min-h-7 phone:place-items-center phone:rounded-[999px] phone:px-2.5 phone:after:absolute phone:after:inset-x-0 phone:after:top-1/2 phone:after:h-11 phone:after:-translate-y-1/2 phone:after:content-['']"
 						>
 							{data.action.label}
 						</BaseToast.Action>

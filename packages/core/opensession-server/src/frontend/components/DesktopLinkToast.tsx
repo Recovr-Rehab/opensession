@@ -17,10 +17,7 @@ export function DesktopLinkToast() {
 		<AnimatePresence>
 			{!dismissed && (
 				<motion.div
-					className={cn(
-						PERSISTENT_NOTICE_CARD,
-						"gap-2 py-2 pr-2 pl-3 animate-none",
-					)}
+					className={cn(PERSISTENT_NOTICE_CARD, "animate-none")}
 					role="region"
 					aria-label="View in the app"
 					initial={{ opacity: 0, x: -12 }}
@@ -42,11 +39,11 @@ export function DesktopLinkToast() {
 				>
 					<div className="flex min-w-0 flex-1 items-center gap-2">
 						<img
-							className="size-7 shrink-0"
+							className="size-6 shrink-0"
 							src="/mac-app-icon.png"
 							alt=""
 						/>
-						<span className="min-w-0 flex-1 truncate text-label font-medium leading-[1.3] text-fg">
+						<span className="min-w-0 flex-1 truncate text-supporting font-medium leading-[1.3] text-fg">
 							View in the app
 						</span>
 					</div>
@@ -54,7 +51,7 @@ export function DesktopLinkToast() {
 						<Button
 							variant="primary"
 							size="sm"
-							icon={<IconShare size={20} />}
+							icon={<IconShare size={18} />}
 							onClick={() => {
 								// A user-initiated hidden navigation can open a custom protocol while
 								// keeping this web page available when no desktop app handles it.
