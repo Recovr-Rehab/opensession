@@ -752,7 +752,13 @@ export function App(
 		setSessionTitles(
 			sessions.map(
 				(s) =>
-					[s.id, s.workspaceName || s.title, s.isRunning, s.title] as const,
+					[
+						s.id,
+						s.workspaceName || s.title,
+						s.isRunning,
+						s.title,
+						s.aliasIds,
+					] as const,
 			),
 		);
 		setKnownPrStates(
