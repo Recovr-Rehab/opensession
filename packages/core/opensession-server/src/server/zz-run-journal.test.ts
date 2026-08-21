@@ -80,7 +80,8 @@ describe("run journal", () => {
 			expect(handled).toEqual([sessionId]);
 			expect(terminal).toMatchObject({
 				type: "error",
-				content: expect.stringContaining("restart recovery attempts"),
+				content:
+					"Restart recovery failed twice. Send the prompt again to continue.",
 			});
 			expect(agent.isAgentSessionBusy(sessionId)).toBe(false);
 			expect(mod.activeRunRecords()).toEqual([]);

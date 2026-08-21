@@ -1909,13 +1909,15 @@ export function sanitizeInterruptedRuns(runs: ActiveRunRecord[], now = Date.now(
 }
 
 function recoveryQuarantineMessage(entry: QuarantinedRun): string {
-  const reason =
-    entry.reason === "resume_attempts_exhausted"
-      ? `it already used ${entry.run.resumeAttempts ?? MAX_BOOT_RESUME_ATTEMPTS} restart recovery attempts`
-      : entry.reason === "recovery_expired"
-        ? "its durable journal lineage is older than 24 hours"
-        : "its recovery lineage was recursively re-journaled";
-  return `Restart recovery was stopped safely because ${reason}. The record was moved to the run-journal quarantine for inspection; send the prompt again to continue.`;
+  if (entry.reason === "resume_attempts_exhausted") {
+    const attempts = entry.run.resumeAttempts ?? MAX_BOOT_RESUME_ATTEMPTS;
+    const count = attempts === 2 ? "twice" : `${attempts} times`;
+    return `Restart recovery failed ${count}. Send the prompt again to continue.`;
+  }
+  if (entry.reason === "recovery_expired") {
+    return "Restart recovery expired. Send the prompt again to continue.";
+  }
+  return "Restart recovery could not continue safely. Send the prompt again to continue.";
 }
 
 export async function runRecoveryQueue(tasks: Array<() => Promise<void>>): Promise<void> {
