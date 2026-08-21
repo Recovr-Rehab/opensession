@@ -142,7 +142,7 @@ export function appHeader({
 }
 
 /** Leading slot: the brand on the root page, the Back bubble on a pushed one. */
-export const APP_HEADER_LEFT = "flex items-center gap-2";
+export const APP_HEADER_LEFT = "flex shrink-0 items-center gap-2";
 
 /**
  * What every floating control in this bar is made of: a thinned fill over a
@@ -249,6 +249,10 @@ export const HEADER_TITLE_PILL =
 	`phone:rounded-full phone:border phone:border-[color:var(--mobile-header-control-border)] ${MOBILE_CONTROL_GLASS} ` +
 	"phone:shadow-[var(--mobile-header-control-shadow)] phone:text-fg " +
 	"phone:pointer-events-auto";
+
+/** Center a plain page title independently of the leading and trailing controls. */
+export const HEADER_TITLE_PILL_CENTERED =
+	"phone:absolute phone:left-1/2 phone:ml-0 phone:mr-0 phone:[transform:translateX(-50%)]";
 
 /**
  * The pill on a page that names itself, which is every page but a session: it

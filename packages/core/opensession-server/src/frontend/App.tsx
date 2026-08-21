@@ -38,6 +38,7 @@ import {
 	HEADER_TITLE_COL,
 	HEADER_TITLE_MODEL,
 	HEADER_TITLE_PILL,
+	HEADER_TITLE_PILL_CENTERED,
 	HEADER_TITLE_PILL_FADE,
 	HEADER_TITLE_PILL_TAPPABLE,
 	HEADER_TITLE_REPO,
@@ -4532,6 +4533,7 @@ export function App(
 									? `${HEADER_TITLE_PILL_TAPPABLE} session-settings-trigger`
 									: HEADER_TITLE_PILL,
 								route.view !== "session" && HEADER_TITLE_PILL_FADE,
+								route.view === "archived" && HEADER_TITLE_PILL_CENTERED,
 							)}
 								{...(route.view === "session" && currentSession
 									? {
@@ -5165,6 +5167,7 @@ export function App(
 								onSelect={(s) => navigate({ view: "session", id: s.id })}
 								onChanged={refresh}
 								topbarActionsEl={topbarActionsEl}
+								mobileActionsEl={headerActionsEl}
 							/>
 						) : route.view === "supporttinder" ? (
 							<SupportTinder

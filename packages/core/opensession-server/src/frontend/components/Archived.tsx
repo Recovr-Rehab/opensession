@@ -44,8 +44,10 @@ interface Props {
 	loaded: boolean;
 	onSelect: (session: UnifiedSession) => void;
 	onChanged: () => void;
-	/** The pane's top bar, where this page's controls go. */
+	/** The desktop pane's top bar, where this page's controls go. */
 	topbarActionsEl?: HTMLElement | null;
+	/** The phone header's trailing slot, where Filters goes. */
+	mobileActionsEl?: HTMLElement | null;
 }
 
 // Same key the sidebar persists its group/repo/sort choices under, so the
@@ -146,6 +148,7 @@ export function Archived({
 	onSelect,
 	onChanged,
 	topbarActionsEl,
+	mobileActionsEl,
 }: Props) {
 	const currentUser = useCurrentUser();
 	const isPhone = useIsPhone();
@@ -251,104 +254,109 @@ export function Archived({
 		}
 	}
 
-	// Match Pull requests: keep the page name and its controls in the pane's
-	// top bar so the list can begin with useful content instead of page chrome.
-	// The search field gives up width before the filter button does.
+	// Match Pull requests on desktop. On a phone the title and filter share the
+	// top bar, while search gets a full-width row directly below it.
+	const searchAction = (
+		<Input
+			className="w-[200px] min-w-[90px] shrink-[100] phone:w-full"
+			type="search"
+			aria-label="Search archived sessions"
+			placeholder="Search archived…"
+			value={search}
+			onChange={(e) => setSearch(e.target.value)}
+			spellCheck={false}
+		/>
+	);
+	const filterAction = (
+		<Menu.Root>
+			<Menu.Trigger
+				render={
+					<Button
+						variant="ghost"
+						icon={<IconFilter size={18} />}
+						aria-label={`Filters, ${activeFilterCount} active`}
+						className={activeFilterCount > 0 ? "shrink-0 text-fg" : "shrink-0"}
+					>
+						Filters{activeFilterCount > 0 ? ` ${activeFilterCount}` : ""}
+					</Button>
+				}
+			/>
+			<Menu.Popup align="end" className="min-w-[220px]">
+				<Menu.Group>
+					<Menu.GroupLabel>Owner</Menu.GroupLabel>
+					<Menu.RadioGroup value={owner} onValueChange={(value) => setOwner(String(value))}>
+						<Menu.RadioItem value="mine" closeOnClick>
+							<UserAvatar name={currentUser} size={18} />
+							<span className="min-w-0 flex-1">My archived</span>
+							<Menu.Check on={owner === "mine"} />
+						</Menu.RadioItem>
+						{people.map(({ key, label }) => (
+							<Menu.RadioItem key={key} value={key} closeOnClick>
+								<UserAvatar name={label} size={18} />
+								<span className="min-w-0 flex-1 truncate">{label}</span>
+								<Menu.Check on={owner === key} />
+							</Menu.RadioItem>
+						))}
+						<Menu.RadioItem value="everyone" closeOnClick>
+							<span className="size-[18px] shrink-0" />
+							<span className="min-w-0 flex-1">Everyone</span>
+							<Menu.Check on={owner === "everyone"} />
+						</Menu.RadioItem>
+					</Menu.RadioGroup>
+				</Menu.Group>
+				{repos.length > 1 && (
+					<>
+						<Menu.Separator />
+						<Menu.Group>
+							<Menu.GroupLabel>Repository</Menu.GroupLabel>
+							<Menu.RadioGroup value={repo} onValueChange={(value) => setRepo(String(value))}>
+								<Menu.RadioItem value="all" closeOnClick>
+									<span className="size-[18px] shrink-0" />
+									<span className="min-w-0 flex-1">All repos</span>
+									<Menu.Check on={repo === "all"} />
+								</Menu.RadioItem>
+								{repos.map((name) => (
+									<Menu.RadioItem key={name} value={name} closeOnClick>
+										<RepoTile name={name} size={18} />
+										<span className="min-w-0 flex-1 truncate">{repoLabel(name)}</span>
+										<Menu.Check on={repo === name} />
+									</Menu.RadioItem>
+								))}
+							</Menu.RadioGroup>
+						</Menu.Group>
+					</>
+				)}
+				{hasAutoArchived && (
+					<>
+						<Menu.Separator />
+						<Menu.Group>
+							<Menu.GroupLabel>Reason</Menu.GroupLabel>
+							<Menu.RadioGroup value={reason} onValueChange={(value) => setReason(value as ReasonFilter)}>
+								{(["all", "auto", "manual"] as const).map((value) => (
+									<Menu.RadioItem key={value} value={value} closeOnClick>
+										<span className="min-w-0 flex-1">{{ all: "All", auto: "Auto-archived", manual: "Manual" }[value]}</span>
+										<Menu.Check on={reason === value} />
+									</Menu.RadioItem>
+								))}
+							</Menu.RadioGroup>
+						</Menu.Group>
+					</>
+				)}
+				{activeFilterCount > 0 && (
+					<>
+						<Menu.Separator />
+						<Menu.Item onClick={() => { setOwner("everyone"); setRepo("all"); setReason("all"); }}>
+							Clear filters
+						</Menu.Item>
+					</>
+				)}
+			</Menu.Popup>
+		</Menu.Root>
+	);
 	const actions = (
 		<>
-			<Input
-				className="w-[200px] min-w-[90px] shrink-[100] phone:w-auto phone:flex-1"
-				type="search"
-				aria-label="Search archived sessions"
-				placeholder="Search archived…"
-				value={search}
-				onChange={(e) => setSearch(e.target.value)}
-				spellCheck={false}
-			/>
-			<Menu.Root>
-				<Menu.Trigger
-					render={
-						<Button
-							variant="ghost"
-							icon={<IconFilter size={18} />}
-							aria-label={`Filters, ${activeFilterCount} active`}
-							className={activeFilterCount > 0 ? "shrink-0 text-fg" : "shrink-0"}
-						>
-							Filters{activeFilterCount > 0 ? ` ${activeFilterCount}` : ""}
-						</Button>
-					}
-				/>
-				<Menu.Popup align="end" className="min-w-[220px]">
-					<Menu.Group>
-						<Menu.GroupLabel>Owner</Menu.GroupLabel>
-						<Menu.RadioGroup value={owner} onValueChange={(value) => setOwner(String(value))}>
-							<Menu.RadioItem value="mine" closeOnClick>
-								<UserAvatar name={currentUser} size={18} />
-								<span className="min-w-0 flex-1">My archived</span>
-								<Menu.Check on={owner === "mine"} />
-							</Menu.RadioItem>
-							{people.map(({ key, label }) => (
-								<Menu.RadioItem key={key} value={key} closeOnClick>
-									<UserAvatar name={label} size={18} />
-									<span className="min-w-0 flex-1 truncate">{label}</span>
-									<Menu.Check on={owner === key} />
-								</Menu.RadioItem>
-							))}
-							<Menu.RadioItem value="everyone" closeOnClick>
-								<span className="size-[18px] shrink-0" />
-								<span className="min-w-0 flex-1">Everyone</span>
-								<Menu.Check on={owner === "everyone"} />
-							</Menu.RadioItem>
-						</Menu.RadioGroup>
-					</Menu.Group>
-					{repos.length > 1 && (
-						<>
-							<Menu.Separator />
-							<Menu.Group>
-								<Menu.GroupLabel>Repository</Menu.GroupLabel>
-								<Menu.RadioGroup value={repo} onValueChange={(value) => setRepo(String(value))}>
-									<Menu.RadioItem value="all" closeOnClick>
-										<span className="size-[18px] shrink-0" />
-										<span className="min-w-0 flex-1">All repos</span>
-										<Menu.Check on={repo === "all"} />
-									</Menu.RadioItem>
-									{repos.map((name) => (
-										<Menu.RadioItem key={name} value={name} closeOnClick>
-											<RepoTile name={name} size={18} />
-											<span className="min-w-0 flex-1 truncate">{repoLabel(name)}</span>
-											<Menu.Check on={repo === name} />
-										</Menu.RadioItem>
-									))}
-								</Menu.RadioGroup>
-							</Menu.Group>
-						</>
-					)}
-					{hasAutoArchived && (
-						<>
-							<Menu.Separator />
-							<Menu.Group>
-								<Menu.GroupLabel>Reason</Menu.GroupLabel>
-								<Menu.RadioGroup value={reason} onValueChange={(value) => setReason(value as ReasonFilter)}>
-									{(["all", "auto", "manual"] as const).map((value) => (
-										<Menu.RadioItem key={value} value={value} closeOnClick>
-											<span className="min-w-0 flex-1">{{ all: "All", auto: "Auto-archived", manual: "Manual" }[value]}</span>
-											<Menu.Check on={reason === value} />
-										</Menu.RadioItem>
-									))}
-								</Menu.RadioGroup>
-							</Menu.Group>
-						</>
-					)}
-					{activeFilterCount > 0 && (
-						<>
-							<Menu.Separator />
-							<Menu.Item onClick={() => { setOwner("everyone"); setRepo("all"); setReason("all"); }}>
-								Clear filters
-							</Menu.Item>
-						</>
-					)}
-				</Menu.Popup>
-			</Menu.Root>
+			{searchAction}
+			{filterAction}
 		</>
 	);
 
@@ -358,21 +366,23 @@ export function Archived({
 			: `${archived.length} of ${allArchived.length} archived sessions`
 		: "Loading archived sessions";
 
-	// The desktop pane provides the top-bar slot. The phone uses its own title
-	// bar, so its controls stay in the page body where they remain reachable.
-	const portaled = !!topbarActionsEl && !isPhone;
+	const desktopPortaled = !!topbarActionsEl && !isPhone;
+	const mobileFilterPortaled = !!mobileActionsEl && isPhone;
 
 	return (
 		<div
 			data-page-scroll
 			className="min-h-0 w-full flex-1 overflow-y-auto"
 		>
-			{portaled ? createPortal(actions, topbarActionsEl) : null}
-			<div className="mx-auto w-full max-w-[860px] px-6 pb-[60px] pt-7 max-[560px]:px-3.5 max-[560px]:pb-12 max-[560px]:pt-[18px]">
-				{!portaled && (
+			{desktopPortaled ? createPortal(actions, topbarActionsEl) : null}
+			{mobileFilterPortaled ? createPortal(filterAction, mobileActionsEl) : null}
+			<div className="mx-auto w-full max-w-[860px] px-6 pb-[60px] pt-7 phone:px-3.5 phone:pb-12 phone:pt-4">
+				{isPhone ? (
+					<div className="mb-3 w-full">{searchAction}</div>
+				) : !desktopPortaled ? (
 					<div className="mb-3 flex items-center gap-2">{actions}</div>
-				)}
-				<p className="m-0 mb-[18px] text-supporting text-dim max-[560px]:mb-3.5">
+				) : null}
+				<p className="m-0 mb-[18px] text-supporting text-dim phone:mb-3.5">
 					{count}
 				</p>
 			{archived.length === 0 && !loaded ? (
