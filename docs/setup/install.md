@@ -22,7 +22,7 @@ curl -fsSL https://raw.githubusercontent.com/tellahq/opensession/main/install.sh
 claude setup-token     # on your Max login; copy the sk-ant-… it prints
 ```
 
-Now **open the URL the installer prints** (`http://127.0.0.1:3850` by default). Add your account under Workspace → Usage
+Now **open the URL the installer prints** (`http://127.0.0.1:3850` by default). Add your account under Workspace → Providers
 (paste the `sk-ant-…`, or use the ChatGPT device-code sign-in for the OpenAI
 path), then pick your repo on the home screen, write a prompt, and create the
 session. A turn that actually runs is the only proof the install works, not a
@@ -365,7 +365,7 @@ on:
 claude setup-token   # on a Claude Max login; prints sk-ant-…
 ```
 
-Accounts are added in the web UI under **Workspace → Usage** — which means
+Accounts are added in the web UI under **Workspace → Providers**, which means
 this step happens *after* [section 8](#8-first-run): the server has to be
 running before you can paste anything into it. Mint the token whenever you
 like, start the server, then paste it. (The same page signs in ChatGPT-plan

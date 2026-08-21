@@ -34,7 +34,7 @@ Give it a model account, then run something:
 claude setup-token     # on a Claude Max login; copy the sk-ant-… it prints
 ```
 
-Open the URL, paste that token into Workspace → Usage, pick a repo, write a
+Open the URL, paste that token into Workspace → Providers, pick a repo, write a
 prompt, and create the session. A turn that actually runs is the proof the
 install works, not a health check.
 
