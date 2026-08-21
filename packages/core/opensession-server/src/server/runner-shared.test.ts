@@ -5,6 +5,7 @@ import {
   describeUsageLimitReset,
   hasRunStatusDeclaration,
   isClaudeBridgeLaunchError,
+  isClaudeSubscriptionError,
   isClaudeUsageLimitError,
   isClaudeMalformedTerminalError,
   isProviderOverloadError,
@@ -27,6 +28,22 @@ describe("isClaudeUsageLimitError", () => {
         false,
       ),
     ).toBe(true);
+  });
+});
+
+describe("isClaudeSubscriptionError", () => {
+  test("recognizes subscription and organization policy blocks", () => {
+    expect(
+      isClaudeSubscriptionError(
+        "Claude Max subscription issue. Check your subscription status.",
+      ),
+    ).toBe(true);
+    expect(
+      isClaudeSubscriptionError(
+        "Your organization has disabled Claude subscription access for Claude Code · Use an Anthropic API key instead, or ask your admin to enable access",
+      ),
+    ).toBe(true);
+    expect(isClaudeSubscriptionError("ordinary tool failure")).toBe(false);
   });
 });
 

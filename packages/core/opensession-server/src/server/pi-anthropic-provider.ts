@@ -137,17 +137,28 @@ import {
 import {
   CLAUDE_CODE_BIN,
   describeUsageLimitReset,
+  isClaudeSubscriptionError,
   isClaudeUsageLimitError,
   usageLimitResetAt,
 } from "./runner-shared";
 
 const g = globalThis as any;
 
-const LIMIT_NOTICE_PROBE_CHARS = 64;
+const ACCOUNT_NOTICE_PROBE_CHARS = 64;
 
-/** Hold a small prefix until provider limit text can be distinguished from a real answer. */
+function isClaudeAccountUnavailable(message: string, isErrorResult: boolean): boolean {
+  return (
+    isClaudeUsageLimitError(message, isErrorResult) ||
+    isClaudeSubscriptionError(message)
+  );
+}
+
+/** Hold a small prefix until provider account notices can be distinguished from a real answer. */
 export function shouldDeferClaudeText(text: string): boolean {
-  return text.length < LIMIT_NOTICE_PROBE_CHARS || isClaudeUsageLimitError(text, false);
+  return (
+    text.length < ACCOUNT_NOTICE_PROBE_CHARS ||
+    isClaudeAccountUnavailable(text, false)
+  );
 }
 
 // ── Types (derived from the SDK so pi-ai never becomes a value import) ───────
@@ -852,8 +863,8 @@ async function* runSdkAttempt(
     // (tool_use streams are ignored — the post-hook captures are authoritative
     // and a blocked-then-retried call must not double).
     let idxMap = new Map<number, number>();
-    let pendingText = new Map<number, { text: string; usageLimit: boolean }>();
-    let deferredUsageLimit: string | undefined;
+    let pendingText = new Map<number, { text: string; accountUnavailable: boolean }>();
+    let deferredAccountUnavailable: string | undefined;
     let sawStreamContent = false;
     let emittedCaptures = 0;
 
@@ -1017,7 +1028,7 @@ async function* runSdkAttempt(
             const sdkIdx = Number(ev.index);
             if (block?.type === "text") {
               sawStreamContent = true;
-              pendingText.set(sdkIdx, { text: "", usageLimit: false });
+              pendingText.set(sdkIdx, { text: "", accountUnavailable: false });
             } else if (block?.type === "thinking") {
               sawStreamContent = true;
               const contentIndex = partial.content.push({ type: "thinking", thinking: "" }) - 1;
@@ -1034,8 +1045,8 @@ async function* runSdkAttempt(
             const delta = ev.delta as Record<string, any> | undefined;
             if (pending && delta?.type === "text_delta" && typeof delta.text === "string") {
               pending.text += delta.text;
-              pending.usageLimit ||= isClaudeUsageLimitError(pending.text, false);
-              if (pending.usageLimit || shouldDeferClaudeText(pending.text)) continue;
+              pending.accountUnavailable ||= isClaudeAccountUnavailable(pending.text, false);
+              if (pending.accountUnavailable || shouldDeferClaudeText(pending.text)) continue;
               const contentIndex = partial.content.push({ type: "text", text: pending.text }) - 1;
               idxMap.set(sdkIdx, contentIndex);
               pendingText.delete(sdkIdx);
@@ -1064,8 +1075,11 @@ async function* runSdkAttempt(
             const pending = pendingText.get(sdkIdx);
             if (pending) {
               pendingText.delete(sdkIdx);
-              if (pending.usageLimit || isClaudeUsageLimitError(pending.text, false)) {
-                deferredUsageLimit = pending.text;
+              if (
+                pending.accountUnavailable ||
+                isClaudeAccountUnavailable(pending.text, false)
+              ) {
+                deferredAccountUnavailable = pending.text;
                 continue;
               }
               const contentIndex = partial.content.push({ type: "text", text: pending.text }) - 1;
@@ -1101,8 +1115,8 @@ async function* runSdkAttempt(
             if (Array.isArray(blocks)) {
               for (const b of blocks) {
                 if (!b || typeof b !== "object" || b.type !== "text" || !b.text) continue;
-                if (isClaudeUsageLimitError(b.text, false)) {
-                  deferredUsageLimit = b.text;
+                if (isClaudeAccountUnavailable(b.text, false)) {
+                  deferredAccountUnavailable = b.text;
                   continue;
                 }
                 const contentIndex = partial.content.push({ type: "text", text: b.text }) - 1;
@@ -1128,7 +1142,7 @@ async function* runSdkAttempt(
         }
         if (m.type === "result") {
           sdkSessionId = String(m.session_id || "") || sdkSessionId;
-          if (deferredUsageLimit) throw new Error(deferredUsageLimit);
+          if (deferredAccountUnavailable) throw new Error(deferredAccountUnavailable);
           // error_max_turns WITH captures is a SUCCESS (the bridge's fix):
           // models that answer a blocked call by trying the next tool burn a
           // turn per call and can blow the cap before ending cleanly — the
@@ -1253,13 +1267,13 @@ async function* runSdkAttempt(
     // dir swept/wiped): evict the mapping so the next turn replays fresh.
     if (plannedContinuation) piSdkSessionStore().delete(storeKey);
     const localCap = e?.piLocalRateCap === true;
-    const usageShaped = isClaudeUsageLimitError(message, true);
-    // Usage-limit-shaped death: sideline the picked designated account before
+    const accountUnavailable = isClaudeAccountUnavailable(message, true);
+    // Account-level death: sideline the picked designated account before
     // surfacing (claude-direct's markExhausted discipline); the preserved
     // message is what isPiUsageLimitShape classifies upstream. The local
     // rolling-cap refusal is exempt (tagged at the throw): it is 429-worded
     // for the classifier but is not account exhaustion.
-    if (account && !localCap && usageShaped) {
+    if (account && !localCap && accountUnavailable) {
       // Bench it until the reset the account itself named, when it named one:
       // a weekly limit otherwise came back into the pool in an hour and failed
       // again, every hour, until it genuinely reset.
@@ -1278,7 +1292,7 @@ async function* runSdkAttempt(
     // never ran: multiple accounts were consulted and the reader was shown the
     // last one's sentence, so working rotation read as no rotation at all.
     let poolRefusal: string | undefined;
-    if (account && (usageShaped || localCap) && partial.content.length === 0) {
+    if (account && (accountUnavailable || localCap) && partial.content.length === 0) {
       excluded.add(account.id);
       const next = pickBridgeAccount(model.id, {
         accountId: opts.accountId,

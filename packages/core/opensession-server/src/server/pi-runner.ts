@@ -44,6 +44,7 @@ import { audit, summarizeText } from "./audit";
 import { journalSet, buildRunJournalRecord, journalClear, registerActiveRunProbe } from "./run-journal";
 import {
   askBashDenyReason,
+  isClaudeSubscriptionError,
   isClaudeUsageLimitError,
   isCodexUsageLimitError,
 } from "./runner-shared";
@@ -599,7 +600,10 @@ export function isPiUsageLimitShape(message: string, providerID: string): boolea
       isCodexUsageLimitError(message) || CODEX_USAGE_LIMIT_CODE_SHAPES.test(message)
     );
   }
-  if (isClaudeUsageLimitError(message, true)) return true;
+  if (
+    isClaudeUsageLimitError(message, true) ||
+    isClaudeSubscriptionError(message)
+  ) return true;
   const s = message.toLowerCase();
   return (
     s.includes("overloaded_error") ||
