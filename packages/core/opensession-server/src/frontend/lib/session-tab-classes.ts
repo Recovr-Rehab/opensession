@@ -332,11 +332,6 @@ export const tabCloseClass = (phone: boolean, active: boolean) =>
 			: `${CLOSE_OVERLAY_POSITION} ${active ? CLOSE_OVERLAY_ACTIVE : CLOSE_OVERLAY_HIDDEN}`
 	}`;
 
-/** The reusable empty tab keeps its close control in flow at the leading edge,
- *  where the new-tab + sat, so the two controls can be one continuous object. */
-export const emptyTabCloseClass = (phone: boolean) =>
-	`${CLOSE_BASE} ${phone ? CLOSE_TOUCH : ""}`;
-
 /**
  * The trailing controls use quiet chrome with no pill fill or shadow. History
  * reveals with the strip, on focus, and while its menu is open.
