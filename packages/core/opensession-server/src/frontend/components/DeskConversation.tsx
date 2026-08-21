@@ -45,10 +45,6 @@ interface DeskConversationProps {
 	/** Drill into a session a tool call spawned (the Desk delegates constantly).
 	 *  The overlay has no side pane, so this opens it in the full viewer. */
 	onOpenSubagent?: (sessionId: string) => void;
-	/** Treat a conversation older than this as finished, so the Desk opens on
-	 *  its board rather than on a days-old chat. Display only — one click
-	 *  brings it back, and the full transcript is always in the session view. */
-	staleAfterMs?: number;
 	/** Starter prompts, shown as a scrolling pill row above the composer while
 	 *  there's no conversation. Picking one fills the composer rather than
 	 *  sending: some of them name actions with side effects, and all of them
@@ -70,7 +66,6 @@ export function DeskConversation({
 	hideBefore,
 	voiceSend,
 	onOpenSubagent,
-	staleAfterMs,
 	suggestions,
 }: DeskConversationProps) {
 	const { connected, send, setTyping, addHandler } = useWebSocket(presenceActive);
@@ -121,25 +116,12 @@ export function DeskConversation({
 	// streaming reply doesn't yank them up from scrollback.
 	const followRef = useRef(true);
 	const streamSeqRef = useRef(0);
-	const [showEarlier, setShowEarlier] = useState(false);
 
 	// The Desk's "Clear" marker: everything at/before it stays out of this view
 	// (locally-minted system lines have fresh timestamps and survive).
-	const cleared = hideBefore
+	const visibleEntries = hideBefore
 		? entries.filter((e) => !e.timestamp || e.timestamp > hideBefore)
 		: entries;
-
-	// A conversation you left days ago isn't one you're in: past staleAfterMs
-	// the Desk opens on its board instead. The cutoff is frozen at mount, so
-	// anything said in this sitting stays put no matter how long it stays open.
-	const staleCutoff = useRef(
-		staleAfterMs ? new Date(Date.now() - staleAfterMs).toISOString() : null,
-	).current;
-	const visibleEntries =
-		staleCutoff && !showEarlier
-			? cleared.filter((e) => !e.timestamp || e.timestamp > staleCutoff)
-			: cleared;
-	const earlierCount = cleared.length - visibleEntries.length;
 	const hasContent = visibleEntries.length > 0 || !!streamText || !!pending;
 
 	useEffect(() => {
@@ -378,9 +360,11 @@ export function DeskConversation({
 		// (VIEWER_INPUT), fading the overlap into its own opaque fill — the Desk
 		// sits on the palette's glass, so the rows dissolve into a mask instead.
 		<div className="relative flex h-full min-h-0 flex-col [--desk-under:18px]">
+			{/* The shared transcript virtualizer and lazy markdown/code renderers
+			    resolve their scroll root through this marker, as in SessionViewer. */}
 			<div
 				className={cn(
-					"min-h-0 flex-1 overflow-y-auto px-3 pt-2",
+					"viewer-messages min-h-0 flex-1 overflow-y-auto px-3 pt-2",
 					"pb-[calc(var(--desk-under)_+_12px)]",
 					"[-webkit-mask-image:linear-gradient(to_bottom,#000_calc(100%_-_var(--desk-under)),transparent_100%)]",
 					"[mask-image:linear-gradient(to_bottom,#000_calc(100%_-_var(--desk-under)),transparent_100%)]",
@@ -390,17 +374,8 @@ export function DeskConversation({
 			>
 				{!hasContent ? (
 					<>
-						{earlierCount > 0 && (
-							<button
-								type="button"
-								className="mx-auto mb-1 block rounded-control px-2 py-1 text-label font-medium text-faint hover:bg-hover hover:text-dim"
-								onClick={() => setShowEarlier(true)}
-							>
-								Show earlier conversation
-							</button>
-						)}
 						{/* Nothing else. A Desk with no conversation is its composer
-						    and the starter pills above it — a list of your open work
+						    and the starter pills above it. A list of your open work
 						    here was a second inbox to read past on the way to typing,
 						    and the sessions list already owns that job. */}
 					</>

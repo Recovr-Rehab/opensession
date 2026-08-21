@@ -219,10 +219,6 @@ function DeskBody({
 							onOpenSession(id);
 						}}
 						placeholder="Hand me something…"
-						// Two hours: long enough that stepping away mid-thought keeps
-						// the thread, short enough that yesterday's chat never owns the
-						// surface you summoned for today's work.
-						staleAfterMs={2 * 60 * 60 * 1000}
 						suggestions={DESK_SUGGESTIONS}
 					/>
 				) : (
