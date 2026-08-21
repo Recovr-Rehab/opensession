@@ -1,6 +1,6 @@
 import { Toast as BaseToast } from "@base-ui/react/toast";
 import { useEffect, useRef } from "react";
-import { TRANSIENT_NOTICE_LANE } from "../lib/notification-classes";
+import { TOAST_NOTICE_LANE } from "../lib/notification-classes";
 import { AnimatedCheck } from "./copy";
 import { Tooltip } from "./tooltip";
 import {
@@ -167,7 +167,7 @@ function ToastViewport() {
 	return (
 		<BaseToast.Portal>
 			<BaseToast.Viewport
-				className={`${TRANSIENT_NOTICE_LANE} toast-viewport h-[var(--toast-frontmost-height)] w-[min(480px,calc(100vw-32px))] outline-none phone:w-full phone:px-3`}
+				className={`${TOAST_NOTICE_LANE} toast-viewport mx-auto h-[var(--toast-frontmost-height)] w-[min(480px,calc(100vw-32px))] outline-none phone:w-full phone:px-3`}
 			>
 				{items.map((item) => (
 					<ToastCard key={item.id} toast={item} />
@@ -184,17 +184,17 @@ function ToastCard({ toast: item }: { toast: BaseToast.Root.ToastObject<ToastDat
 	return (
 		<BaseToast.Root
 			toast={item}
-			// Desktop receipts stay outside the reading column at top-right. Phones
-			// keep the same lane centred below their full-width header.
-			swipeDirection={["up", "right"]}
+			// Receipts rise into view above the composer. The bottom anchor makes
+			// additional receipts stack upward instead of covering the input.
+			swipeDirection={["down", "right"]}
 			onClick={() => dismissToast(data.id)}
 			className={[
-				"pointer-events-auto absolute top-0 right-0 w-max max-w-full outline-none phone:right-auto phone:left-1/2 phone:max-w-[calc(100vw-24px)]",
-				"[z-index:calc(100-var(--toast-index))] [transform-origin:right_top] phone:[transform-origin:center_top]",
-				"[transform:translateX(var(--toast-swipe-movement-x))_translateY(calc(var(--toast-swipe-movement-y)+var(--toast-index)*8px))_scale(calc(1-(var(--toast-index)*0.04)))] phone:[transform:translateX(calc(-50%+var(--toast-swipe-movement-x)))_translateY(calc(var(--toast-swipe-movement-y)+var(--toast-index)*8px))_scale(calc(1-(var(--toast-index)*0.04)))]",
-				"data-[expanded]:[transform:translateX(var(--toast-swipe-movement-x))_translateY(calc(var(--toast-swipe-movement-y)+var(--toast-offset-y)+var(--toast-index)*8px))_scale(1)] phone:data-[expanded]:[transform:translateX(calc(-50%+var(--toast-swipe-movement-x)))_translateY(calc(var(--toast-swipe-movement-y)+var(--toast-offset-y)+var(--toast-index)*8px))_scale(1)]",
-				"transition-[transform,scale,opacity] duration-200 ease-[cubic-bezier(0.23,1,0.32,1)]",
-				"data-[starting-style]:opacity-0 data-[starting-style]:[scale:0.96] data-[ending-style]:opacity-0 data-[ending-style]:[scale:0.96] data-[limited]:opacity-0",
+				"pointer-events-auto absolute bottom-0 left-1/2 w-max max-w-full outline-none phone:max-w-[calc(100vw-24px)]",
+				"[z-index:calc(100-var(--toast-index))] [transform-origin:center_bottom]",
+				"[transform:translateX(calc(-50%+var(--toast-swipe-movement-x)))_translateY(calc(var(--toast-swipe-movement-y)-var(--toast-index)*8px))_scale(calc(1-(var(--toast-index)*0.04)))]",
+				"data-[expanded]:[transform:translateX(calc(-50%+var(--toast-swipe-movement-x)))_translateY(calc(var(--toast-swipe-movement-y)-var(--toast-offset-y)-var(--toast-index)*8px))_scale(1)]",
+				"transition-[transform,translate,scale,opacity] duration-200 ease-[cubic-bezier(0.23,1,0.32,1)] motion-reduce:transition-opacity",
+				"data-[starting-style]:opacity-0 data-[starting-style]:[translate:0_8px] data-[starting-style]:[scale:0.96] data-[ending-style]:opacity-0 data-[ending-style]:[translate:0_8px] data-[ending-style]:[scale:0.96] data-[limited]:opacity-0 motion-reduce:data-[starting-style]:[translate:0_0] motion-reduce:data-[starting-style]:[scale:1] motion-reduce:data-[ending-style]:[translate:0_0] motion-reduce:data-[ending-style]:[scale:1]",
 			].join(" ")}
 		>
 			<BaseToast.Content
