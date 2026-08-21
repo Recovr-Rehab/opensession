@@ -4792,7 +4792,7 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 						// once by a strip above the tools, once by this heading — and
 						// each said it with its own ✕.
 						borrowedLens &&
-							"min-h-10 w-full rounded-row bg-blue-soft pl-3 pr-1 phone:min-h-12 phone:pl-3.5 desktop:h-full desktop:min-h-0",
+							"min-h-10 w-full rounded-row bg-blue-soft pl-3 pr-2 phone:min-h-12 phone:pl-3.5 desktop:h-full desktop:min-h-0",
 					)}
 					ref={headRef}
 				>
@@ -4815,9 +4815,7 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 											className="shrink-0"
 										/>
 									)}
-								{/* The font's visible ink sits above its line-box center. Lower it
-								    two pixels to meet the geometrically centered close icon. */}
-								<span className="min-w-0 translate-y-0.5 truncate font-semibold">
+								<span className="min-w-0 truncate font-semibold">
 									{filter.person === "everyone"
 										? "Everyone"
 										: filter.person === "unassigned"
