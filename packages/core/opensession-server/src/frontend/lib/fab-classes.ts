@@ -41,10 +41,10 @@ export const MOBILE_FAB =
 	"phone:transition-transform phone:active:scale-[0.92]";
 
 /**
- * The ⌘J Desk trigger. Desktop uses the same resting shadow as the Next
- * button, then lifts a pixel and warms the glyph on hover. Phones cancel the
- * lift (there is no pointer to lift under) and swap it for the same press tick
- * the + uses. `transition` lists the properties the states actually move.
+ * The ⌘J Desk trigger. Desktop uses the same resting shadow and border as the
+ * Next button, then lifts a pixel and warms the glyph on hover. Phones cancel
+ * the lift (there is no pointer to lift under) and swap it for the same press
+ * tick the + uses. `transition` lists the properties the states actually move.
  * `scale` and `translate` are their own properties in Tailwind v4, so a bare
  * `transform` in the list would animate neither.
  *
@@ -68,9 +68,9 @@ export const MOBILE_FAB =
  */
 export const DESK_FAB =
 	"fixed right-[18px] bottom-[18px] z-500 flex size-11 items-center justify-center " +
-	"rounded-full border border-[color:var(--composer-border)] bg-[var(--composer-surface)] text-dim " +
+	"rounded-full border border-divider bg-[var(--composer-surface)] text-dim " +
 	"smooth-shadow-xs " +
-	"transition-[color,translate,scale] hover:-translate-y-px hover:text-fg " +
+	"transition-[color,border-color,translate,scale] hover:-translate-y-px hover:border-line hover:text-fg " +
 	"phone:left-auto " +
 	"phone:right-[calc(12px+58px+12px)] phone:bottom-[calc(18px+env(safe-area-inset-bottom,0px))] " +
 	"phone:size-[58px] phone:text-fg " +
