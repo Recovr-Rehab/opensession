@@ -222,12 +222,6 @@ function renderBlockEstimate(block: RenderBlock): number {
 	return 160;
 }
 
-function isSingleToolTurn(
-	block: Extract<RenderBlock, { kind: "turn" }>,
-): boolean {
-	return block.items.length === 1 && block.items[0]?.type === "tool_use";
-}
-
 /**
  * Groups a flat transcript into per-turn fold blocks and message bubbles, then
  * renders them. A turn's working (tool calls + intermediate assistant notes)
@@ -471,21 +465,7 @@ const LoadedTranscriptBlocks = React.memo(function LoadedTranscriptBlocks({
 			(i === groupedBlocks.length - 1 ||
 				(block.kind === "turn" && i === groupedBlocks.length - 2));
 		const content =
-			block.kind === "turn" && isSingleToolTurn(block) ? (
-				// A disclosure that says only "Worked · 1 step" hides the useful
-				// row behind a label with less information. Single calls stay direct;
-				// the outer work fold starts only when it has something to group.
-				<div className="mx-auto mb-3 w-full max-w-[var(--session-col)]">
-					<ToolSection
-						items={block.items}
-						toolResults={toolResults}
-						live={isLiveTail}
-						expandAll={false}
-						onOpenSubagent={onOpenSubagent}
-						sessionId={sessionId}
-					/>
-				</div>
-			) : block.kind === "turn" ? (
+			block.kind === "turn" ? (
 				<TurnBlock
 					items={block.items}
 					toolResults={toolResults}

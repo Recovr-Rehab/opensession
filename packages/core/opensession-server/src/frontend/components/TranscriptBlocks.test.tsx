@@ -246,20 +246,20 @@ describe("TranscriptBlocks compact tool runs", () => {
 		expect(html).not.toContain("package.json");
 	});
 
-	test("leaves a lone routine call as its own row", () => {
+	test("keeps a lone live call inside its Working group", () => {
 		setTurnPrefs(null);
 		const html = renderToStaticMarkup(
 			<TranscriptBlocks live entries={toolEntries.slice(0, 3)} />,
 		);
 
-		// No fold at either level: a lone call's own row already says more than
-		// "Working · 1 step" or a nested "1 step" row.
+		// One call does not need a nested tool-run disclosure, but it still belongs
+		// inside the turn's outer work group like every other tool call.
 		expect(html).not.toContain('data-tool-run="true"');
-		expect(html).not.toContain(">Working</span>");
+		expect(html).toContain(">Working</span>");
 		expect(html).toContain("git status");
 	});
 
-	test("does not turn a settled lone call into a Worked disclosure", () => {
+	test("folds a settled lone call into its Worked group", () => {
 		setTurnPrefs(null);
 		const html = renderToStaticMarkup(
 			<TranscriptBlocks
@@ -275,9 +275,45 @@ describe("TranscriptBlocks compact tool runs", () => {
 			/>,
 		);
 
-		expect(html).not.toContain(">Worked</span>");
-		expect(html).toContain("git status");
+		expect(html).toContain(">Worked</span>");
+		expect(html).not.toContain("git status");
 		expect(html).toContain("The repository is clean.");
+	});
+
+	test("lets a worker report split work without leaving tool calls bare", () => {
+		setTurnPrefs(null);
+		const html = renderToStaticMarkup(
+			<TranscriptBlocks
+				entries={[
+					...toolEntries.slice(0, 3),
+					{
+						id: "worker-report",
+						type: "user",
+						content:
+							"[worker os-worker] <!--os:worker-report-->\nFound the relevant file.",
+						timestamp: "2026-08-13T06:00:02.500Z",
+					},
+					...toolEntries.slice(3),
+					{
+						id: "answer",
+						type: "assistant",
+						content: "Finished both checks.",
+						timestamp: "2026-08-13T06:00:05Z",
+					},
+				]}
+			/>,
+		);
+
+		expect(html.match(/>Worked<\/span>/g)).toHaveLength(2);
+		expect(html.indexOf(">Worked</span>")).toBeLessThan(
+			html.indexOf("Worker report"),
+		);
+		expect(html.indexOf("Worker report")).toBeLessThan(
+			html.lastIndexOf(">Worked</span>"),
+		);
+		expect(html).not.toContain("git status");
+		expect(html).not.toContain("package.json");
+		expect(html).toContain("Finished both checks.");
 	});
 
 	test("does not split work on a delivery row that renders nothing", () => {
@@ -859,6 +895,7 @@ describe("TranscriptBlocks indexed ranges", () => {
 	});
 
 	test("places an optimistic prompt before tool calls that landed first", () => {
+		setTurnPrefs("open", "open");
 		const html = renderToStaticMarkup(
 			<TranscriptBlocks
 				transcriptIndex={[indexRow(2, "tool_use")]}
@@ -887,6 +924,7 @@ describe("TranscriptBlocks indexed ranges", () => {
 		expect(html.indexOf("Question before tools")).toBeLessThan(
 			html.indexOf("git status"),
 		);
+		setTurnPrefs(null);
 	});
 
 	test("keeps a partial opening range visible while its prefix hydrates", () => {
