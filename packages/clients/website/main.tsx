@@ -271,12 +271,9 @@ function LandingPage() {
 						<Feature icon={<IconStack size={28} />} name="Everywhere you are">
 							A web app, a Mac app and a browser side panel, all on one server.
 						</Feature>
-						<Feature icon={<IconPhone size={28} />} name="Mobile PWA">
+						<Feature icon={<IconPhone size={28} />} name="Works on mobile">
 							Read a session, answer a question and send the next turn from your
-							phone.
-						</Feature>
-						<Feature icon={<IconPhone size={28} />} name="Native iOS app" soon>
-							A dedicated iPhone and iPad app, built for the platform.
+							phone. Native iOS coming soon.
 						</Feature>
 						<Feature icon={<IconRepo size={28} />} name="Open source">
 							Read it, fork it, run it. There is no hosted tier in the path that
