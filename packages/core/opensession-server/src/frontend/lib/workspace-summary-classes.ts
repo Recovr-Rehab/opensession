@@ -31,9 +31,13 @@
  * No radius, fill or shadow here: `ui/popover.tsx` gives every popup the same
  * `rounded-popup` glass card, and this one has no reason to be a different
  * object from the rest of them.
+ *
+ * It opens with a little more room than it closes with. The first thing in the
+ * card is a tinted plate, and a plate set at the same 8px the card ends on
+ * reads as pressed against the top edge rather than sitting inside it.
  */
 export const WS_SUMMARY_CARD =
-	"flex max-h-[min(72vh,640px)] w-[300px] flex-col overflow-y-auto py-2";
+	"flex max-h-[min(72vh,640px)] w-[300px] flex-col overflow-y-auto pt-3 pb-2";
 
 /**
  * Band label ("Assets"), taken from the sidebar so the card heads its lists
