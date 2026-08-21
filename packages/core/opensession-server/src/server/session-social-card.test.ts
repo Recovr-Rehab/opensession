@@ -222,21 +222,21 @@ describe("session social card", () => {
 			"banner",
 			[],
 		);
-		expect(svg).toContain('<text x="56" y="100"');
-		expect(svg).toContain('<text x="56" y="142"');
+		expect(svg).toContain('<text x="56" y="120"');
+		expect(svg).toContain('<text x="56" y="162"');
 		expect(svg).toContain(
-			'<image href="data:image/png;base64,avatar" x="56" y="173" width="28" height="28"',
+			'<image href="data:image/png;base64,avatar" x="56" y="193" width="28" height="28"',
 		);
 		// The label baseline places its cap band on the 28px avatar center.
-		expect(svg).toContain('<text x="94" y="195" fill=');
+		expect(svg).toContain('<text x="94" y="215" fill=');
 		expect(svg).not.toContain(
-			'<text x="94" y="195" dominant-baseline="middle"',
+			'<text x="94" y="215" dominant-baseline="middle"',
 		);
 		expect(svg).toContain(">Test Person</text>");
 		expect(svg).not.toContain(">opensession</text>");
 		expect(svg).not.toContain('stroke="#FFFFFF" stroke-width="3"');
 		expect(svg).toMatch(
-			/<clipPath id="avatarClip" clipPathUnits="userSpaceOnUse"><path d="M68\.88 173\.00L/,
+			/<clipPath id="avatarClip" clipPathUnits="userSpaceOnUse"><path d="M68\.88 193\.00L/,
 		);
 		expect(svg).not.toContain('id="repoClip"');
 	});
@@ -258,22 +258,22 @@ describe("session social card", () => {
 			],
 		);
 		expect(svg).toContain(
-			'<image href="data:image/png;base64,primary" x="726" y="33" width="464" height="261"',
+			'<image href="data:image/png;base64,primary" x="662" y="37" width="528" height="297"',
 		);
 		expect(svg).toContain(
-			'<image href="data:image/png;base64,secondary" x="646" y="43" width="464" height="261"',
+			'<image href="data:image/png;base64,secondary" x="582" y="47" width="528" height="297"',
 		);
 		expect(svg).not.toContain("ignored");
-		expect(svg).toContain('transform="rotate(-5 878 304)"');
-		expect(svg).toContain('transform="rotate(2 958 294)"');
+		expect(svg).toContain('transform="rotate(-5 846 344)"');
+		expect(svg).toContain('transform="rotate(2 926 334)"');
 		expect(svg).toContain(
-			'<clipPath id="shotClip1" clipPathUnits="userSpaceOnUse"><path d="M672.00 43.00L1084.00 43.00',
+			'<clipPath id="shotClip1" clipPathUnits="userSpaceOnUse"><path d="M608.00 47.00L1084.00 47.00',
 		);
-		expect(svg).toContain('stdDeviation="13"');
+		expect(svg).toContain('stdDeviation="22"');
 		expect(svg).toContain('result="ambient"');
 		expect(svg).toContain('result="lift"');
 		expect(svg).toContain('result="contact"');
-		expect(464 / 261).toBe(16 / 9);
+		expect(528 / 297).toBe(16 / 9);
 		expect(svg).not.toContain("gradient");
 
 		const single = sessionSocialCardSvg(
@@ -283,14 +283,13 @@ describe("session social card", () => {
 			"banner",
 			["data:image/png;base64,primary"],
 		);
-		expect(single).toContain('x="726" y="9.5" width="464" height="261"');
+		expect(single).toContain('x="662" y="11.5" width="528" height="297"');
 		expect(single).not.toContain('transform="rotate(');
 	});
 
 	test("renders a 1200 by 630 PNG", async () => {
 		const png = await renderSessionSocialCard(sessionSocialCardData(session()));
-		expect(png).not.toBeNull();
-		const metadata = await sharp(png!).metadata();
+		const metadata = await sharp(png).metadata();
 		expect(metadata.format).toBe("png");
 		expect(metadata.width).toBe(1200);
 		expect(metadata.height).toBe(630);
@@ -314,7 +313,7 @@ describe("session social card", () => {
 		expect(output).toContain("<title>Ship dynamic social cards · Open Session</title>");
 		expect(output).toContain('content="summary_large_image"');
 		expect(output).toMatch(
-			/content="https:\/\/media\.example\.test\/session-card\/sess-social-1\/[A-Za-z0-9_-]{32}\.png\?v=18"/,
+			/content="https:\/\/media\.example\.test\/session-card\/sess-social-1\/[A-Za-z0-9_-]{32}\.png\?v=19"/,
 		);
 		expect(output).toContain(
 			'property="og:url" content="https://os.example.test/session/sess-social-1"',
@@ -328,13 +327,13 @@ describe("session social card", () => {
 		).toBe("sess-social-1");
 		expect(socialSessionIdFromPath("/settings")).toBeNull();
 		expect(sessionSocialCardUrl("sess-social-1")).toMatch(
-			/^https:\/\/media\.example\.test\/session-card\/sess-social-1\/[A-Za-z0-9_-]{32}\.png\?v=18$/,
+			/^https:\/\/media\.example\.test\/session-card\/sess-social-1\/[A-Za-z0-9_-]{32}\.png\?v=19$/,
 		);
 	});
 
 	test("signs ids containing Slack timestamp dots", () => {
 		expect(sessionSocialCardUrl("slack-C123-1719860000.000000")).toMatch(
-			/^https:\/\/media\.example\.test\/session-card\/slack-C123-1719860000\.000000\/[A-Za-z0-9_-]{32}\.png\?v=18$/,
+			/^https:\/\/media\.example\.test\/session-card\/slack-C123-1719860000\.000000\/[A-Za-z0-9_-]{32}\.png\?v=19$/,
 		);
 	});
 
@@ -367,7 +366,7 @@ describe("session social card", () => {
 		expect(response.status).toBe(200);
 		const metadata = await sharp(await response.arrayBuffer()).metadata();
 		expect(metadata.width).toBe(1200);
-		expect(metadata.height).toBe(280);
+		expect(metadata.height).toBe(320);
 	});
 
 	test("renders the full card for an unrecognized shape", async () => {
