@@ -25,6 +25,7 @@ beforeEach(() => {
         access_token: accessToken,
         refresh_token: "refresh-next",
         expires_in: 28_800,
+        refresh_token_expires_in: 2_592_000,
         scope: "user:profile user:inference",
         account: { email_address: "alex@example.com" },
       });
@@ -75,6 +76,9 @@ describe("Claude OAuth account setup", () => {
 
     const credentialsPath = completed.account.credentialsPath!;
     const credentials = JSON.parse(readFileSync(credentialsPath, "utf8"));
+    expect(credentials.claudeAiOauth.refreshTokenExpiresAt).toBeGreaterThan(
+      Date.now() + 29 * 24 * 60 * 60 * 1000,
+    );
     credentials.claudeAiOauth.expiresAt = 0;
     writeFileSync(credentialsPath, JSON.stringify(credentials));
     accessToken = "sk-ant-oat01-refreshed";

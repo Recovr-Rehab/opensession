@@ -165,6 +165,7 @@ export async function completeClaudeLogin(
 
   mkdirSync(stateDir("claude-oauth"), { recursive: true, mode: 0o700 });
   const path = claudeOauthCredentialsPath(login.accountId);
+  const now = Date.now();
   writeFileAtomic(
     path,
     JSON.stringify(
@@ -172,7 +173,10 @@ export async function completeClaudeLogin(
         claudeAiOauth: {
           accessToken: body.access_token,
           refreshToken: body.refresh_token,
-          expiresAt: Date.now() + (Number(body.expires_in) || 28_800) * 1000,
+          expiresAt: now + (Number(body.expires_in) || 28_800) * 1000,
+          refreshTokenExpiresAt: Number(body.refresh_token_expires_in)
+            ? now + Number(body.refresh_token_expires_in) * 1000
+            : undefined,
           scopes: typeof body.scope === "string" ? body.scope.split(" ") : undefined,
         },
       },

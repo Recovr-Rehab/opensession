@@ -639,7 +639,7 @@ export function ClaudeAccountsSection({
 				Claude
 			</SettingsGroupLabel>
 			<Modal.Root open={showAdd} onOpenChange={setShowAdd}>
-				<Modal.Content>
+				<Modal.Content widthClassName="max-w-[32rem]">
 					<AddClaudeAccountForm
 						onAdded={() => {
 							setShowAdd(false);
@@ -1015,7 +1015,7 @@ export function ProviderAccountsSection() {
 			)}
 
 			<Modal.Root open={adding === "claude"} onOpenChange={(open) => !open && setAdding(null)}>
-				<Modal.Content>
+				<Modal.Content widthClassName="max-w-[32rem]">
 					<AddClaudeAccountForm
 						onAdded={() => {
 							setAdding(null);
@@ -1124,7 +1124,7 @@ function AddClaudeAccountForm({ onAdded }: { onAdded: () => void }) {
 		<>
 			<Modal.Header
 				title="Add Claude account"
-				description="Sign in with Claude to connect a subscription for model runs and usage tracking."
+				description="Sign in with Claude to connect a subscription."
 			/>
 			<form
 				className="flex flex-col gap-5"
@@ -1142,7 +1142,8 @@ function AddClaudeAccountForm({ onAdded }: { onAdded: () => void }) {
 							Open Claude sign-in
 						</Button>
 						<SettingRowDescription>
-							After signing in, paste the code Claude shows you.
+							This sign-in powers model runs and usage. Claude asks you to reconnect about
+							every 30 days. After signing in, paste the code Claude shows you.
 						</SettingRowDescription>
 						<Field label="Code">
 							<Input

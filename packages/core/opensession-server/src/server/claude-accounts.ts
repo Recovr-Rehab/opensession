@@ -466,6 +466,7 @@ interface OauthCreds {
   accessToken: string;
   refreshToken: string;
   expiresAt: number;
+  refreshTokenExpiresAt?: number;
 }
 
 function readCredsFile(path: string): OauthCreds | null {
@@ -476,6 +477,7 @@ function readCredsFile(path: string): OauthCreds | null {
       accessToken: o.accessToken,
       refreshToken: o.refreshToken,
       expiresAt: Number(o.expiresAt) || 0,
+      refreshTokenExpiresAt: Number(o.refreshTokenExpiresAt) || undefined,
     };
   } catch (e) {
     console.warn(`[claude-accounts] Failed to read credentials file ${path}:`, e);
@@ -536,10 +538,14 @@ async function doRefreshCredsFile(path: string, staleCreds: OauthCreds): Promise
     }
     const body: any = await res.json();
     if (!body?.access_token) return null;
+    const now = Date.now();
     const next: OauthCreds = {
       accessToken: body.access_token,
       refreshToken: body.refresh_token || creds.refreshToken,
-      expiresAt: Date.now() + (Number(body.expires_in) || 28_800) * 1000,
+      expiresAt: now + (Number(body.expires_in) || 28_800) * 1000,
+      refreshTokenExpiresAt: Number(body.refresh_token_expires_in)
+        ? now + Number(body.refresh_token_expires_in) * 1000
+        : creds.refreshTokenExpiresAt,
     };
     const raw = JSON.parse(readFileSync(path, "utf-8"));
     raw.claudeAiOauth = { ...raw.claudeAiOauth, ...next };
