@@ -450,9 +450,11 @@ const firstName = (full: string) => full.split(" ")[0] || full;
 
 function deliveryBlocks(a: HumanAsk): { fallback: string; blocks: any[] } {
   const link = `${UI_BASE}/session/${a.sessionId}`;
+  const asker =
+    firstName(a.createdBy) === firstName(a.person.name) ? "you" : a.createdBy;
   const intro =
-    `Hey ${firstName(a.person.name)} — it's *${personaName()}* :robot_face:. ` +
-    `${a.createdBy} has me working on something and needs your input:`;
+    `Hi ${firstName(a.person.name)}, I'm working on something for ${asker} ` +
+    `and need your input:`;
   const blocks: any[] = [
     { type: "section", text: { type: "mrkdwn", text: intro } },
     { type: "section", text: { type: "mrkdwn", text: `> ${a.question.replace(/\n/g, "\n> ")}` }, },
@@ -487,7 +489,7 @@ function deliveryBlocks(a: HumanAsk): { fallback: string; blocks: any[] } {
     elements: [{ type: "mrkdwn", text: `<${link}|Open the session in ${productName()}>`,
       },],
   });
-  return { fallback: `${personaName()} needs your input: ${a.question}`, blocks, };
+  return { fallback: `I need your input: ${a.question}`, blocks, };
 }
 
 /**
@@ -880,7 +882,7 @@ export function cancelAsk(id: string): boolean {
   if (a.slack) {
     void sendSlackMessage(
       a.slack.channel,
-      `:heavy_multiplication_x: _Never mind — ${personaName()} no longer needs an answer to that one. Reply here anyway if you have something to add and I'll pass it to the session._`,
+      `_Never mind, I no longer need an answer to that one. Reply here anyway if you have something to add and I'll pass it to the session._`,
       a.slack.rootTs,
     ).catch(() => {});
   }
