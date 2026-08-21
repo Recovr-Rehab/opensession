@@ -1212,16 +1212,24 @@ export async function setupRemoteWorkspace(
   repoId?: string,
   identity?: Omit<WorkloadIdentityContext, "lifecycle">,
 ): Promise<void> {
+  const startedAt = Date.now();
+  const mark = (stage: string) => console.log(`[sandbox-remote] workspace ${repoId || cwd}: ${stage} (+${Date.now() - startedAt}ms)`);
   let cloned = await driver.exec(`test -d ${shellQuoteWord(cwd)}/.git`);
   if (cloned.exitCode !== 0 && repoId) {
-    // Adopt a prewarmed clone (warmRemoteWorkspace) when one is waiting —
-    // the mv is instant and carries node_modules with it.
+    // Adopt the snapshot's warm clone without moving its multi-gigabyte lazy
+    // filesystem. Daytona otherwise hydrates every node_modules file during
+    // rename (measured at 155s for tella-fusion). A bind mount is immediate
+    // and keeps the canonical workspace spelling; symlink is the unprivileged
+    // fallback for providers that do not allow mount(2).
     const warmDir = remoteWarmWorkspaceDir(repoId);
     const adopted = await driver.exec(
-      `test -d ${shellQuoteWord(warmDir)}/.git && mkdir -p ${shellQuoteWord(dirname(cwd))} && mv ${shellQuoteWord(warmDir)} ${shellQuoteWord(cwd)}`,
+      `test -d ${shellQuoteWord(warmDir)}/.git && ` +
+        `mkdir -p ${shellQuoteWord(dirname(cwd))} ${shellQuoteWord(cwd)} && ` +
+        `(sudo -n mount --bind ${shellQuoteWord(warmDir)} ${shellQuoteWord(cwd)} 2>/dev/null || ` +
+        `(rmdir ${shellQuoteWord(cwd)} && ln -s ${shellQuoteWord(warmDir)} ${shellQuoteWord(cwd)}))`,
     );
     if (adopted.exitCode === 0) {
-      console.log(`[sandbox-remote] adopted warm workspace clone for ${repoId} → ${cwd}`);
+      console.log(`[sandbox-remote] mounted warm workspace clone for ${repoId} at ${cwd}`);
       // Repo templates are credential-free at rest. Restore the current
       // short-lived clone authority only on the session-owned copy.
       await driver.exec(
@@ -1231,6 +1239,7 @@ export async function setupRemoteWorkspace(
       // The warm clone's refs may be hours old and the session branches off
       // the default branch — freshen before the checkout below.
       await driver.exec(`git fetch origin --quiet`, { cwd, timeoutMs: 180_000 });
+      mark("warm clone fetched");
       cloned = await driver.exec(`test -d ${shellQuoteWord(cwd)}/.git`);
     }
   }
@@ -1280,11 +1289,14 @@ export async function setupRemoteWorkspace(
       );
     }
   }
+  mark("branch ready");
   // Per-session only: warm/template preparation never calls this path, so
   // private files are injected after restore and can never land in a shared
   // provider snapshot.
   await materializeRemoteWorkspaceSeedFiles(driver, cwd, repoId);
+  mark("private files seeded");
   await runRemoteLifecycleHook(driver, cwd, "setup", "fresh", repoId, identity);
+  mark("lifecycle ready");
 }
 
 const REMOTE_LIFECYCLE_DIR = `${REMOTE_HOME}/.opensession/lifecycle`;
@@ -1302,7 +1314,7 @@ export async function runRemoteLifecycleHook(
   hook: "setup" | "resume",
   bootMode: "fresh" | "resume",
   /** Stable repo identity lets a prewarmed workspace keep its one-shot setup
-   * stamp after it is moved into the adopting session's final cwd. */
+   * stamp after it is mounted at the adopting session's final cwd. */
   scopeKey?: string,
   identity?: Omit<WorkloadIdentityContext, "lifecycle">,
 ): Promise<{ ran: boolean; log: string }> {
