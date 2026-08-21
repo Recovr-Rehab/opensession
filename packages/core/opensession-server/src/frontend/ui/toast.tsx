@@ -293,7 +293,7 @@ function ToastProgress({
 			ref={lineRef}
 			aria-hidden
 			className={[
-				"pointer-events-none absolute inset-x-0 bottom-0 h-px origin-left",
+				"pointer-events-none absolute inset-x-0 bottom-0 h-0.5 origin-left",
 				variant === "success"
 					? "bg-green"
 					: variant === "error"
