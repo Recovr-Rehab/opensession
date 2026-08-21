@@ -81,6 +81,7 @@ import {
 	getAllSessions,
 	markCachedPrReviewRequestsCleared,
 	mergedSessionTranscriptAsync,
+	removeTombstonedSessionArtifacts,
 } from "../sessions";
 import { githubLoginFor } from "../shared/user-mappings";
 import { isManualStatus, setStatusOverride } from "../status-overrides";
@@ -1617,6 +1618,61 @@ export async function handleSessionsRoutes(
 				searchIndex().remove(`session:${id}`);
 			} catch {}
 		};
+		const finishDeletion = async () => {
+			// Runner workspace deletion is opt-in on the Runner. It remains
+			// best-effort so an offline machine never blocks deleting a session.
+			if (session.runner && session.repo && session.worktreeDir) {
+				void cleanupRunnerWorkspace({ runnerId: session.runner.id, sessionId: session.id, repo: session.repo, workspacePath: session.worktreeDir, user: session.createdBy || undefined, }).catch((error) =>
+					console.warn(`[runners] Workspace retained after deleting ${session.id}:`, error,),
+				);
+			}
+			purgeTranscriptRows(session.id);
+			invalidateSessionsCache();
+			// Tear down the session's sandbox (container + engine-state volumes,
+			// and in volume-workspace mode the workspace volume itself; that data
+			// loss is the mode's documented contract). Best-effort and detached:
+			// a docker hiccup must never block the delete.
+			destroySessionSandbox(session, "delete");
+			// If that was the workspace's last session, delete the workspace too.
+			// Otherwise auto-wrapped 1:1 workspaces linger as undeletable empty
+			// sidebar rows. PR-backed workspaces (`key`) stay because they regroup new
+			// sessions for the same PR.
+			if (session.workspaceId) {
+				const ws = getWorkspace(session.workspaceId);
+				const members = getAllSessions().filter(
+					(s) => s.workspaceId === session.workspaceId,
+				);
+				if (ws && !ws.key && members.length === 0)
+					deleteWorkspace(ws.id);
+			}
+			if (cleanWorktree && session.worktreeDir && session.branch) {
+				await removeWorktree(
+					session.branch,
+					repoForPath(session.worktreeDir).id,
+				);
+				// A session can span repos, and each one it spans has a checkout
+				// of its own. Cleaning up only the first would leave the rest on
+				// disk for the reaper to find days later.
+				for (const attached of session.attachedRepos || [])
+					if (attached.branch)
+						await removeWorktree(attached.branch, attached.repo);
+			}
+		};
+
+		// An older delete path could write the permanent tombstone before removing
+		// the session file. That leaves a visible ghost which the mailbox correctly
+		// refuses to mutate. Finish that already-authorized deletion without trying
+		// to re-enter its permanently closed mailbox.
+		if (sessionKernelStore().isTombstoned(session.id)) {
+			try {
+				removeTombstonedSessionArtifacts(session);
+				await finishDeletion();
+				return Response.json({ ok: true });
+			} catch (e: any) {
+				return Response.json({ error: e.message }, { status: 500 });
+			}
+		}
+
 		const result = await sessionKernel(session.id).runExclusive(
 			"delete_session",
 			async () => {
@@ -1647,44 +1703,7 @@ export async function handleSessionsRoutes(
 			// as a late writer, leaving a visible but immutable ghost session behind.
 			deleteSession(session);
 			tombstoneSessionKernel(session.id);
-			// Runner workspace deletion is opt-in on the Runner. It remains
-			// best-effort so an offline machine never blocks deleting a session.
-			if (session.runner && session.repo && session.worktreeDir) {
-				void cleanupRunnerWorkspace({ runnerId: session.runner.id, sessionId: session.id, repo: session.repo, workspacePath: session.worktreeDir, user: session.createdBy || undefined, }).catch((error) =>
-					console.warn(`[runners] Workspace retained after deleting ${session.id}:`, error,),
-				);
-			}
-			purgeTranscriptRows(session.id);
-			invalidateSessionsCache();
-			// Tear down the session's sandbox (container + engine-state volumes —
-			// and in volume-workspace mode the workspace volume itself; that data
-			// loss is the mode's documented contract). Best-effort and detached:
-			// a docker hiccup must never block the delete.
-			destroySessionSandbox(session, "delete");
-			// If that was the workspace's last session, delete the workspace too —
-			// otherwise auto-wrapped 1:1 workspaces linger as undeletable empty
-			// sidebar rows. PR-backed workspaces (`key`) stay: they regroup new
-			// sessions for the same PR.
-			if (session.workspaceId) {
-				const ws = getWorkspace(session.workspaceId);
-				const members = getAllSessions().filter(
-					(s) => s.workspaceId === session.workspaceId,
-				);
-				if (ws && !ws.key && members.length === 0)
-					deleteWorkspace(ws.id);
-			}
-			if (cleanWorktree && session.worktreeDir && session.branch) {
-				await removeWorktree(
-					session.branch,
-					repoForPath(session.worktreeDir).id,
-				);
-				// A session can span repos, and each one it spans has a checkout
-				// of its own — cleaning up only the first would leave the rest on
-				// disk for the reaper to find days later.
-				for (const attached of session.attachedRepos || [])
-					if (attached.branch)
-						await removeWorktree(attached.branch, attached.repo);
-			}
+			await finishDeletion();
 			return { status: 200, body: { ok: true } };
 		} catch (e: any) {
 			return { status: 500, body: { error: e.message } };
