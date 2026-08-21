@@ -1235,8 +1235,10 @@ export async function setupRemoteWorkspace(
         `then __start=origin/${shellQuoteWord(branch)}; else __start=origin/${shellQuoteWord(defaultBranch)}; fi; ` +
         `__current=$(git -C ${shellQuoteWord(cwd)} branch --show-current); ` +
         `if [ "$__current" != ${shellQuoteWord(branch)} ]; then ` +
-        `git -C ${shellQuoteWord(cwd)} branch -f ${shellQuoteWord(branch)} "$__start" && ` +
-        `git -C ${shellQuoteWord(cwd)} symbolic-ref HEAD refs/heads/${shellQuoteWord(branch)}; fi`
+        `__sha=$(git -C ${shellQuoteWord(cwd)} rev-parse "$__start") && ` +
+        `mkdir -p ${shellQuoteWord(`${cwd}/.git/refs/heads/${dirname(branch)}`)} && ` +
+        `printf '%s\n' "$__sha" > ${shellQuoteWord(`${cwd}/.git/refs/heads/${branch}`)} && ` +
+        `printf '%s\n' ${shellQuoteWord(`ref: refs/heads/${branch}`)} > ${shellQuoteWord(`${cwd}/.git/HEAD`)}; fi`
       : `mkdir -p ${shellQuoteWord(dirname(cwd))} ${shellQuoteWord(cwd)} && ` +
         `(sudo -n mount --bind ${shellQuoteWord(warmDir)} ${shellQuoteWord(cwd)} 2>/dev/null || ` +
         `(rmdir ${shellQuoteWord(cwd)} && ln -s ${shellQuoteWord(warmDir)} ${shellQuoteWord(cwd)}))`;
@@ -1267,7 +1269,7 @@ export async function setupRemoteWorkspace(
       } else {
         mark("using snapshot refs");
       }
-      cloned = await driver.exec(`test -d ${shellQuoteWord(cwd)}/.git`);
+      cloned = { exitCode: 0, stdout: "", stderr: "" };
     }
   }
   if (cloned.exitCode !== 0) {
