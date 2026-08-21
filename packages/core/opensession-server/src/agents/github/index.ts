@@ -1,19 +1,21 @@
 /**
  * GitHub PR agent: automated review + auto-fix + simplify for the configured repos.
  *
- * Does NOT own a webhook route — the single GitHub webhook lives in the Slack agent
- * (`POST /github/webhook`), which forwards `pull_request` events to
- * `handleGithubPrEvent` (webhook.ts). This module owns lifecycle: seeding the
- * disabled review automation, recovering interrupted auto-fix loops on restart,
- * health, and a secret-gated manual trigger for testing.
+ * Registers the shared GitHub webhook route (`POST /github/webhook`) whenever
+ * this agent runs, including GitHub-only installs and the outbound
+ * `gh webhook forward` path. Slack registers the same handler only in a
+ * Slack-only install. PR-review notifications into Slack are optional. This
+ * module also owns
+ * lifecycle: seeding the disabled review automation, recovering interrupted
+ * auto-fix loops on restart, health, and a secret-gated manual trigger.
  */
 import { configuredIntegration, defaultRepo, personaName } from "../../server/config";
-import type { AgentModule } from "../types";
 import {
   RequestBodyTooLargeError,
   readRequestTextWithinLimit,
   webhookBodyTooLargeResponse,
 } from "../../server/shared/bounded-body";
+import type { AgentModule } from "../types";
 import {
   listAutomations,
   createAutomation,
@@ -28,7 +30,13 @@ import {
 } from "./constants";
 import { DEFAULT_REVIEW_PROMPT } from "./prompts";
 import { DEFAULT_GITHUB_FLOW_MCP_SERVERS } from "./run";
-import { setGithubSessionInvalidate, resolveReviewConfig } from "./webhook";
+import {
+  setGithubSessionInvalidate,
+  resolveReviewConfig,
+  handleGithubPrEvent,
+} from "./webhook";
+import { loadGithubDeliveries } from "./deliveries";
+import { githubWebhookRoute } from "./webhook-route";
 import {
   listPrStates,
   activeCodeLoops,
@@ -41,6 +49,7 @@ import {
 } from "./state";
 import { feedbackStats } from "./feedback";
 import type { PrRef } from "./review";
+import { githubWebhookForwardStatus } from "./webhook-forward";
 
 const GITHUB_WEBHOOK_SECRET = process.env.GITHUB_WEBHOOK_SECRET || "";
 
@@ -232,10 +241,20 @@ export class GithubAgent implements AgentModule {
       return Response.json({ ok: true, behavior, prNumber });
     });
 
+    // GitHub normally owns this shared route. Slack registers the same handler
+    // only when this independently gated agent is disabled.
+    routes.set("POST /github/webhook", githubWebhookRoute);
+
     return routes;
   }
 
   async startup(): Promise<void> {
+    // Eagerly restore webhook replay protection. The webhook server binds
+    // earlier in boot, so the delivery read/write paths also restore the store
+    // lazily on first touch; this keeps it warm when no delivery arrives. A
+    // GitHub-only install has no Slack startup to warm it, so this agent loads
+    // the store itself.
+    loadGithubDeliveries();
     if (!githubConfigured()) {
       console.warn("[github] GITHUB_API_TOKEN unset — review/fix/simplify can't post; agent idle");
     }
@@ -251,6 +270,13 @@ export class GithubAgent implements AgentModule {
     // review dead on dry pools, missed delivery) is re-fired by the sweep.
     const { startReconcileSweep } = await import("./reconcile");
     startReconcileSweep();
+    // Outbound webhook delivery for no-exposure installs: gh forwards GitHub
+    // deliveries to the loopback /github/webhook over an outbound connection, so
+    // no inbound port is opened. Self-gates on the public-URL signal; when a
+    // public webhook URL is configured this is a no-op and the inbound HTTP
+    // webhook stays authoritative. The reconcile sweep above backstops either.
+    const { startGithubWebhookForward } = await import("./webhook-forward");
+    void startGithubWebhookForward();
     // Cross-PR learning: periodically re-distill the per-repo learned review
     // rules from the feedback store's outcome signals.
     const { armLearnedRulesDistiller } = await import("./learned-rules");
@@ -261,6 +287,8 @@ export class GithubAgent implements AgentModule {
 
   async shutdown(): Promise<void> {
     // Auto-fix loop state is persisted to disk after each iteration; nothing to flush.
+    const { stopGithubWebhookForward } = await import("./webhook-forward");
+    stopGithubWebhookForward();
   }
 
   health(): Record<string, unknown> {
@@ -271,6 +299,7 @@ export class GithubAgent implements AgentModule {
       trackedPrs: listPrStates().length,
       activeCodeLoops: activeCodeLoops(),
       reviewFeedback: feedbackStats(),
+      webhookForward: githubWebhookForwardStatus(),
     };
   }
 }

@@ -129,6 +129,9 @@ export async function bootstrapUserAuthOnConnect(
 				};
 			// (c) flip the sign-in gate — atomically with the roster write above.
 			github.userPrAuth = true;
+			// The process-wide org webhook forwarder needs one stable stored
+			// credential after operator mode makes soleGithubAccount() unavailable.
+			github.webhookForwardLogin = login;
 			// Consumed — clear the intent so a later connect is a plain reconnect.
 			delete github.authOnConnect;
 			persistRawConfig(config);
@@ -148,6 +151,19 @@ export async function bootstrapUserAuthOnConnect(
 		cookie: webAuthSetCookie(session.token),
 		name: session.name,
 	};
+}
+
+async function syncGithubWebhookForwarder(): Promise<void> {
+	try {
+		const { syncGithubWebhookForwardCredential } = await import(
+			"../../agents/github/webhook-forward"
+		);
+		await syncGithubWebhookForwardCredential();
+	} catch (error) {
+		// The account mutation succeeded. The old process was stopped before a
+		// replacement was attempted, so log startup failures without lying to the UI.
+		console.warn("[github-forward] could not synchronize the connected account:", error);
+	}
 }
 
 export async function handleConnectionsRoutes(
@@ -648,6 +664,7 @@ export async function handleConnectionsRoutes(
 			"../github-auth"
 		);
 		const { webAuthRequired } = await import("../web-auth");
+		const simpleMode = !webAuthRequired();
 		if (!githubConnectAvailable())
 			return Response.json({ error: "GitHub connect is not configured" }, { status: 400 });
 		if (webAuthRequired() && !ctx.authUser?.login)
@@ -675,11 +692,14 @@ export async function handleConnectionsRoutes(
 			const { githubAuthOnConnect } = await import("../github-auth");
 			if (githubAuthOnConnect()) {
 				const boot = await bootstrapUserAuthOnConnect(result.login, result.name);
-				if ("error" in boot)
+				if ("error" in boot) {
+					await syncGithubWebhookForwarder();
 					return Response.json({ status: "error", error: boot.error });
+				}
 				// Native clients can't hold the HttpOnly cookie — they ask for the
 				// token in the body (native:true) and send it back as Bearer.
 				const native = body?.native === true;
+				await syncGithubWebhookForwarder();
 				return Response.json(
 					{
 						...result,
@@ -693,6 +713,8 @@ export async function handleConnectionsRoutes(
 				);
 			}
 		}
+		if (result.status === "ok" && simpleMode)
+			await syncGithubWebhookForwarder();
 		return Response.json(result);
 	}
 
@@ -703,7 +725,8 @@ export async function handleConnectionsRoutes(
 		const login = decodeURIComponent(ghAccountMatch[1]);
 		const { removeGithubAccount, soleGithubLogin } = await import("../github-auth");
 		const { webAuthRequired } = await import("../web-auth");
-		if (webAuthRequired()) {
+		const simpleMode = !webAuthRequired();
+		if (!simpleMode) {
 			// Operator mode: you manage only your own signed-in account.
 			if (!ctx.authUser?.login || ctx.authUser.login.toLowerCase() !== login.toLowerCase()) {
 				return Response.json(
@@ -724,6 +747,10 @@ export async function handleConnectionsRoutes(
 		const removed = removeGithubAccount(login);
 		if (!removed)
 			return Response.json({ error: "Not connected" }, { status: 404 });
+		// The child keeps a copied process environment. Stop it immediately
+		// after every removal so a deleted operator credential cannot keep
+		// receiving deliveries until restart or process exit.
+		await syncGithubWebhookForwarder();
 		return Response.json({ ok: true });
 	}
 
@@ -792,6 +819,8 @@ export async function handleConnectionsRoutes(
 			} else {
 				delete github.appOrg;
 				delete github.authOnConnect;
+				delete github.webhookForwardLogin;
+				delete github.webhookForwardLogin;
 			}
 			persistRawConfig(config);
 			return Response.json({ ok: true });

@@ -1,7 +1,6 @@
 /**
- * Dispatch target for GitHub PR webhooks. The single GitHub webhook is owned by
- * the Slack agent (`POST /github/webhook`), which forwards `pull_request` events
- * here. This routes them to the review / auto-fix / simplify behaviors.
+ * Dispatch target for the shared `POST /github/webhook` handler. This routes
+ * pull request events to the review, auto-fix, and simplify behaviors.
  *
  * Defensive: never throws into the Slack handler; all behaviors are fired
  * fire-and-forget (GitHub's 10s webhook timeout).
@@ -31,6 +30,18 @@ import { DEFAULT_REVIEW_PROMPT } from "./prompts";
 let onSessionInvalidate: (() => void) | undefined;
 export function setGithubSessionInvalidate(cb: () => void): void {
   onSessionInvalidate = cb;
+}
+
+// The shared GitHub webhook route fires pull_request_review payloads at a
+// handler the Slack agent registers while building its routes. Unset otherwise.
+let onPullRequestReview: ((payload: any) => void) | undefined;
+export function setGithubPullRequestReviewHandler(
+  cb: ((payload: any) => void) | undefined,
+): void {
+  onPullRequestReview = cb;
+}
+export function firePullRequestReview(payload: any): void {
+  onPullRequestReview?.(payload);
 }
 
 const REVIEW_ACTIONS = new Set(["opened", "reopened", "synchronize", "ready_for_review"]);

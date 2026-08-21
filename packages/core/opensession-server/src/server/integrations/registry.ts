@@ -119,9 +119,15 @@ export const INTEGRATIONS: IntegrationSpec[] = [
     env: [
       { name: "SLACK_BOT_TOKEN", example: "xoxb-", required: true, description: "bot user token" },
       {
+        name: "SLACK_APP_TOKEN",
+        example: "xapp-",
+        description:
+          "app-level token with connections:write. When set, the agent runs Socket Mode (outbound WebSocket, no public URL or signing secret) instead of the HTTP event routes",
+      },
+      {
         name: "SLACK_SIGNING_SECRET",
-        required: true,
-        description: "verifies inbound event signatures",
+        description:
+          "verifies inbound event signatures for the HTTP transport; required unless SLACK_APP_TOKEN enables Socket Mode, where it is unused",
       },
       { name: "ALLOWED_SLACK_USER_ID", description: "restricts admin tools to one user" },
       { name: "WORKTREE_HOOK_SECRET", description: "shared secret for worktree hooks" },
@@ -186,7 +192,17 @@ export const INTEGRATIONS: IntegrationSpec[] = [
         required: true,
         description: "token for PR reads/writes via the gh CLI",
       },
-      { name: "GITHUB_WEBHOOK_SECRET", description: "verifies inbound webhook signatures" },
+      { name: "GITHUB_WEBHOOK_SECRET", description: "verifies inbound webhook signatures (and signs the outbound gh-forwarded deliveries)" },
+      {
+        name: "GITHUB_WEBHOOK_FORWARD",
+        description:
+          "\"true\"/\"false\" to force the outbound `gh webhook forward` delivery on/off. Unset auto-selects: on when no public webhook URL is configured (simple mode), off when one is",
+      },
+      {
+        name: "GITHUB_WEBHOOK_FORWARD_ORG",
+        description:
+          "forward org-wide with one `gh webhook forward --org` process instead of one per configured repo",
+      },
       { name: "GITHUB_BOT_LOGIN", description: "login PRs are attributed to" },
       { name: "GITHUB_MENTION_HANDLES", description: "handles that trigger the PR agent" },
     ],
