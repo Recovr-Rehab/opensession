@@ -400,6 +400,8 @@ export class DaytonaProvider implements SandboxProvider {
 
     // Find by label (authoritative), else create.
     let sbx: DaytonaSandbox | null = null;
+    let newlyCreated = false;
+    let preparedWorkspace = false;
     try {
       for await (const s of client.list({ labels: { [SESSION_LABEL]: spec.sessionId } } as any)) {
         sbx = s;
@@ -436,6 +438,7 @@ export class DaytonaProvider implements SandboxProvider {
             await cand.setAutostopInterval(cfg.idleStopMinutes || DEFAULT_IDLE_STOP_MINUTES);
             await cand.setAutoDeleteInterval(-1);
             sbx = cand;
+            preparedWorkspace = true;
             console.log(
               `[sandbox:daytona] adopted prewarmed sandbox ${cand.id} for ${spec.sessionId}`,
             );
@@ -476,6 +479,7 @@ export class DaytonaProvider implements SandboxProvider {
       };
       try {
         sbx = await create(template?.artifactId || cfg.daytona?.snapshot);
+        preparedWorkspace = Boolean(template);
       } catch (error) {
         if (!template) throw error;
         // Provider artifacts can be deleted independently of the local index.
@@ -485,30 +489,45 @@ export class DaytonaProvider implements SandboxProvider {
           `[sandbox:daytona] repo template ${template.artifactId} is unavailable; retrying cold`,
         );
         sbx = await create(cfg.daytona?.snapshot);
+        preparedWorkspace = false;
       }
+      newlyCreated = true;
       mark("sandbox created");
     }
 
     const driver = daytonaDriver(sbx);
-    await driver.ensureStarted();
+    // client.create resolves only after Daytona reports the sandbox started.
+    // A second refresh/start round trip added 2–3s to every snapshot restore.
+    if (!newlyCreated) await driver.ensureStarted();
     mark("sandbox started");
-    // Cheap dial-back probe BEFORE the expensive bootstrap: a sandbox that
-    // can't reach our callback URL can never run anything — fail fast with
-    // the documented error instead of 30s+ of doomed bootstrap.
-    await assertDialbackReachable(driver, "daytona");
-    mark("dial-back verified");
-    await bootstrapRemoteSandbox(driver, "daytona");
-    mark("runner ready");
-    await setupRemoteWorkspace(
-      driver,
-      cwd,
-      await remoteCloneUrl(repo),
-      branch,
-      repo.defaultBranch,
-      repo.id,
-      { sandboxId: sbx.id, provider: this.id, sessionId: spec.sessionId, repoId: repo.id, trustProfile: trust.trustProfile },
-    );
-    mark("workspace ready");
+    const prepareRunner = async () => {
+      // A sandbox that cannot reach our callback URL can never run anything.
+      await assertDialbackReachable(driver, "daytona");
+      mark("dial-back verified");
+      await bootstrapRemoteSandbox(driver, "daytona");
+      mark("runner ready");
+    };
+    const prepareWorkspace = async () => {
+      await setupRemoteWorkspace(
+        driver,
+        cwd,
+        await remoteCloneUrl(repo),
+        branch,
+        repo.defaultBranch,
+        repo.id,
+        { sandboxId: sbx.id, provider: this.id, sessionId: spec.sessionId, repoId: repo.id, trustProfile: trust.trustProfile },
+      );
+      mark("workspace ready");
+    };
+    // Repo snapshots and adopted prewarms already contain both the runner and
+    // lifecycle stamp, so these independent command lanes can overlap. A cold
+    // workspace remains sequential because .agents/setup may need the runner's
+    // workload-identity client.
+    if (preparedWorkspace) await Promise.all([prepareRunner(), prepareWorkspace()]);
+    else {
+      await prepareRunner();
+      await prepareWorkspace();
+    }
     writeRemoteState({
       sandboxId: sbx.id,
       provider: this.id,
