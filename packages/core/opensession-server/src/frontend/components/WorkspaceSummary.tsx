@@ -152,6 +152,8 @@ interface Props {
 	tabStripVisible?: boolean;
 	/** Review starts with the card shut and opens it below its own two bars. */
 	reviewMode?: boolean;
+	/** Keep a pinned card visible while its Changes side panel is open. */
+	forceOpen?: boolean;
 }
 
 /**
@@ -280,6 +282,7 @@ export function WorkspaceSummary({
 	onOpenChange,
 	tabStripVisible,
 	reviewMode = false,
+	forceOpen = false,
 	...body
 }: Props) {
 	/** The standing preference: whether this person keeps the card up. */
@@ -288,7 +291,7 @@ export function WorkspaceSummary({
 	pinnedRef.current = pinned;
 	/** Review opens a temporary card without changing the standing preference. */
 	const [transient, setTransient] = useState(false);
-	const canStand = workspaceSummaryCanStand(true, reviewMode);
+	const canStand = forceOpen || workspaceSummaryCanStand(true, reviewMode);
 	const open = canStand ? pinned : transient;
 	const workspaceKey = session.workspaceId || session.id;
 	const previousWorkspaceKey = useRef(workspaceKey);

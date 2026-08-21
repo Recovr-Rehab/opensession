@@ -4816,13 +4816,9 @@ export function SessionViewer({
 		mq.addEventListener("change", onChange);
 		return () => mq.removeEventListener("change", onChange);
 	}, []);
-	// The card is only mounted on a desktop-width code session with the panel
-	// shut, so read the preference through the same conditions that mount it.
-	// The flag on its own would move the transcript for a card that is not
-	// there: it is seeded from a preference that outlives any one session, and
-	// the card can only report itself once it exists.
-	const summaryVisible =
-		summaryOpen && !isPhone && hasRepoWork && !activePanelOpen;
+	// The card remains mounted when Changes opens beside it. Read the preference
+	// through the same session and width conditions that mount the card.
+	const summaryVisible = summaryOpen && !isPhone && hasRepoWork;
 	// Keep a visible left step whenever the card is up. This composes the card,
 	// transcript and composer as two sides of one pane instead of letting the
 	// reading column drift back to centre as the window grows.
@@ -6210,7 +6206,7 @@ export function SessionViewer({
 						)}
 					{/* The compact Workspace summary keeps the card's quiet row grammar.
 					    Detailed comments, files and tools open in the full side panel. */}
-					{!isPhone && hasRepoWork && !activePanelOpen && (
+					{!isPhone && hasRepoWork && (
 						<WorkspaceSummary
 							session={session}
 							anchor={headerActionsRef}
@@ -6236,6 +6232,7 @@ export function SessionViewer({
 							onOpenChange={setSummaryOpen}
 							tabStripVisible={tabStripVisible}
 							reviewMode={showReview}
+							forceOpen={activePanelOpen}
 						/>
 					)}
 					{/* Phones have no workspace panel and no status strip, so the PR
