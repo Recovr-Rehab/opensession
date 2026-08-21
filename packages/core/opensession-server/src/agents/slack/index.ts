@@ -518,8 +518,20 @@ Please address this feedback:
 }
 
 
+/** Slack owns GitHub intake only when the independently gated GitHub agent
+ * is off. Route registration and the outbound forwarder lifecycle must use the
+ * same decision or a loopback-only Slack install exposes a route nobody feeds. */
+export function slackOwnsGithubWebhookIntake(): boolean {
+  const flag = process.env.ENABLE_GITHUB_AGENT;
+  const enabled = flag == null
+    ? configuredIntegration("github").enabled === true
+    : flag === "true";
+  return !enabled;
+}
+
 export class SlackAgent implements AgentModule {
   name = "slack";
+  private ownsGithubWebhookForwarder = false;
 
   getRoutes(): Map<string, (req: Request, url: URL) => Promise<Response>> {
     const routes = new Map<
@@ -530,11 +542,8 @@ export class SlackAgent implements AgentModule {
     // Slack review notifications still consume GitHub webhooks even when the
     // independently gated GitHub agent is off. Register the shared route only
     // in that configuration so enabling both agents produces one route owner.
-    const githubFlag = process.env.ENABLE_GITHUB_AGENT;
-    const githubEnabled = githubFlag == null
-      ? configuredIntegration("github").enabled === true
-      : githubFlag === "true";
-    if (!githubEnabled) routes.set("POST /github/webhook", githubWebhookRoute);
+    if (slackOwnsGithubWebhookIntake())
+      routes.set("POST /github/webhook", githubWebhookRoute);
     setGithubPullRequestReviewHandler((payload) =>
       handlePullRequestReview(payload, branchToChannel).catch((e) =>
         console.error("[slack] Error handling PR review webhook:", e),
@@ -789,6 +798,17 @@ export class SlackAgent implements AgentModule {
     await loadQueueFromDisk();
     loadProcessedEvents();
 
+    // When the GitHub agent is disabled, Slack owns both the shared webhook
+    // route and the outbound transport feeding it. Arm this before Slack's
+    // network bootstrap so GitHub intake is not delayed by auth.test.
+    this.ownsGithubWebhookForwarder = slackOwnsGithubWebhookIntake();
+    if (this.ownsGithubWebhookForwarder) {
+      const { startGithubWebhookForward } = await import(
+        "../github/webhook-forward"
+      );
+      void startGithubWebhookForward();
+    }
+
     // Fetch team ID and bot user ID for streaming APIs
     try {
       const authResp = await fetchWithTimeout("https://slack.com/api/auth.test", {
@@ -821,6 +841,13 @@ export class SlackAgent implements AgentModule {
     // queue head on disk and let startup continue it against the saved engine
     // session; handlers render the existing card as "Restarting".
     stopSlackSocket();
+    if (this.ownsGithubWebhookForwarder) {
+      const { stopGithubWebhookForward } = await import(
+        "../github/webhook-forward"
+      );
+      stopGithubWebhookForward();
+      this.ownsGithubWebhookForwarder = false;
+    }
     const interrupted = interruptQueuesForRestart();
     console.log(`[slack] Agent shut down (${interrupted} run(s) preserved for restart)`);
   }

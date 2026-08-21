@@ -318,6 +318,7 @@ describe("connect-time auth bootstrap", () => {
       expect(admin.admin).toBe(true);
       expect(admin.name).toBe("Octo Cat");
       expect(written.integrations.github.userPrAuth).toBe(true);
+      expect(written.integrations.github.webhookForwardLogin).toBe("octocat");
       // Intent consumed; the App identity survives.
       expect(written.integrations.github.authOnConnect).toBeUndefined();
       expect(written.integrations.github.appOrg).toBe("acme-inc");

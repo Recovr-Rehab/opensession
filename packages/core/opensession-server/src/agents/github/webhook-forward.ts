@@ -18,13 +18,16 @@
  * inbound HTTP webhook stays authoritative and this stays off. Either way the
  * reconcile sweep (`reconcile.ts`) remains the fire-once backstop.
  *
- * Nothing here is armed at import — `startGithubWebhookForward()` is called from
- * the github agent's `startup()` and `stopGithubWebhookForward()` from its
- * `shutdown()`. Reading env/config at import is fine; spawning is not.
+ * Nothing here is armed at import. The GitHub agent owns the lifecycle when it
+ * is enabled; otherwise the Slack agent owns it alongside the shared webhook
+ * route. Reading env/config at import is fine; spawning is not.
  */
 
 import { configuredIntegration, configuredRepos, configuredServer } from "../../server/config";
-import { githubUserAuthActive, soleGithubAccount } from "../../server/github-auth";
+import {
+  githubUserAuthActive,
+  githubWebhookForwardCredential,
+} from "../../server/github-auth";
 import { WEBHOOK_FORWARD_EVENTS } from "./constants";
 
 // ── Gating ───────────────────────────────────────────────────
@@ -137,7 +140,8 @@ export type GithubForwardEnv = Record<string, string | undefined>;
  */
 export function githubForwardProcessEnv(
   base: GithubForwardEnv = process.env,
-  credential: GithubForwardEnv | null = soleGithubAccount()?.env ?? null,
+  credential: GithubForwardEnv | null =
+    githubWebhookForwardCredential()?.env ?? null,
   operatorMode: boolean = githubUserAuthActive(),
 ): GithubForwardEnv | null {
   if (credential) return { ...base, ...credential };

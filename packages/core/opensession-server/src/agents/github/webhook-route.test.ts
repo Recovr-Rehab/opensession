@@ -1,5 +1,5 @@
 import { afterEach, describe, it, expect } from "bun:test";
-import { SlackAgent } from "../slack/index";
+import { SlackAgent, slackOwnsGithubWebhookIntake } from "../slack/index";
 import { GithubAgent } from "./index";
 
 const savedGithubFlag = process.env.ENABLE_GITHUB_AGENT;
@@ -33,11 +33,13 @@ describe("GithubAgent webhook route", () => {
 describe("Slack-only GitHub webhook route", () => {
   it("registers the shared route when the GitHub agent is disabled", () => {
     process.env.ENABLE_GITHUB_AGENT = "false";
+    expect(slackOwnsGithubWebhookIntake()).toBe(true);
     expect(new SlackAgent().getRoutes().has("POST /github/webhook")).toBe(true);
   });
 
   it("leaves one owner when the GitHub agent is enabled", () => {
     process.env.ENABLE_GITHUB_AGENT = "true";
+    expect(slackOwnsGithubWebhookIntake()).toBe(false);
     expect(new SlackAgent().getRoutes().has("POST /github/webhook")).toBe(false);
     expect(new GithubAgent().getRoutes().has("POST /github/webhook")).toBe(true);
   });

@@ -129,6 +129,9 @@ export async function bootstrapUserAuthOnConnect(
 				};
 			// (c) flip the sign-in gate — atomically with the roster write above.
 			github.userPrAuth = true;
+			// The process-wide org webhook forwarder needs one stable stored
+			// credential after operator mode makes soleGithubAccount() unavailable.
+			github.webhookForwardLogin = login;
 			// Consumed — clear the intent so a later connect is a plain reconnect.
 			delete github.authOnConnect;
 			persistRawConfig(config);
@@ -813,6 +816,8 @@ export async function handleConnectionsRoutes(
 			} else {
 				delete github.appOrg;
 				delete github.authOnConnect;
+				delete github.webhookForwardLogin;
+				delete github.webhookForwardLogin;
 			}
 			persistRawConfig(config);
 			return Response.json({ ok: true });

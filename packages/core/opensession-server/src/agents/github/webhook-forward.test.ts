@@ -130,6 +130,16 @@ describe("githubForwardProcessEnv", () => {
     });
   });
 
+  test("a designated operator credential overrides ambient authentication", () => {
+    expect(
+      githubForwardProcessEnv(
+        { PATH: "/bin", GH_TOKEN: "ambient" },
+        { GH_TOKEN: "admin", GITHUB_TOKEN: "admin" },
+        true,
+      ),
+    ).toEqual({ PATH: "/bin", GH_TOKEN: "admin", GITHUB_TOKEN: "admin" });
+  });
+
   test("operator mode keeps ambient authentication", () => {
     const ambient = { PATH: "/bin", GH_TOKEN: "operator" };
     expect(githubForwardProcessEnv(ambient, null, true)).toEqual(ambient);
