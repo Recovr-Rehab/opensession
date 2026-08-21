@@ -102,6 +102,8 @@ import {
 	SidebarItemsSection,
 } from "./AppearancePanel";
 import { PersonalSandboxDefaultRow } from "./SandboxDefaults";
+import { RepoTile } from "../RepoTile";
+import { IconRepo, IconSparkle } from "../icons";
 
 // ── Desk voice ─────────────────────────────────────────────────────────────
 
@@ -547,11 +549,20 @@ export function PreferencesPanel() {
 										: ""
 								}
 								options={[
-									{ value: "", label: "Use the workspace default" },
-									{ value: AUTO_REPO, label: "Auto" },
+									{
+										value: "",
+										label: "Use the workspace default",
+										icon: <IconRepo size={16} />,
+									},
+									{
+										value: AUTO_REPO,
+										label: "Auto",
+										icon: <IconSparkle size={16} />,
+									},
 									...repoOptions.map((r) => ({
 										value: r.id,
 										label: r.label || r.id,
+										icon: <RepoTile name={r.id} size={16} />,
 									})),
 								]}
 								onChange={setDefaultRepoPref}

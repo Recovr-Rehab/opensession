@@ -16,6 +16,8 @@ import {
 	type RepoInfo,
 } from "../../lib/api";
 import { AUTO_REPO } from "../../lib/session-repo";
+import { RepoTile } from "../RepoTile";
+import { IconSparkle } from "../icons";
 
 /**
  * Where a new session starts for everyone who hasn't set their own preference
@@ -48,8 +50,16 @@ function DefaultRepoRow() {
 						label="Default repository"
 						value={value}
 						options={[
-							{ value: AUTO_REPO, label: "Auto" },
-							...repos.map((r) => ({ value: r.id, label: r.label || r.id })),
+							{
+								value: AUTO_REPO,
+								label: "Auto",
+								icon: <IconSparkle size={16} />,
+							},
+							...repos.map((r) => ({
+								value: r.id,
+								label: r.label || r.id,
+								icon: <RepoTile name={r.id} size={16} />,
+							})),
 						]}
 						onChange={(next) => {
 							setValue(next);
