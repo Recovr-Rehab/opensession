@@ -219,6 +219,36 @@ describe("fake-engine session runs (consumer loop end-to-end)", () => {
 		);
 	});
 
+	test("a recovered Pi run falls back to the Pi transcript for its failure chip", () => {
+		if (!redirected) return;
+		const store = transcriptStoreMod.transcriptStore();
+		if (!store.dbPath.startsWith(tmp)) return;
+
+		const sid = "bks-zz-pi-recovery-chip";
+		const engineId = "pi_zz_recovery_chip";
+		writeSessionFile(sid, {
+			claudeSessionId: "",
+			piSessionId: engineId,
+			lastEngineProvider: "pi",
+		});
+		sessionCache.invalidateSessionsCache();
+		ocTranscript.recordEngineSessionOwner(engineId, sid);
+
+		// Boot recovery failures do not always carry a terminal event session id.
+		// recordRunOutcome must resolve the active engine slot from the session.
+		sessionCache.recordRunOutcome(
+			sid,
+			"Restart recovery stopped unexpectedly. Send the prompt again to continue.",
+		);
+
+		const chip = store
+			.readTail(sid, 50)
+			.entries.find((entry) => entry.type === "system");
+		expect(chip?.content).toBe(
+			"Run failed: Restart recovery stopped unexpectedly. Send the prompt again to continue.",
+		);
+	});
+
 	test("transient fallback does not replace the selected Dial preset", async () => {
 		if (!redirected) return;
 		const sid = "bks-zz-transient-fallback";

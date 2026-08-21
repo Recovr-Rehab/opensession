@@ -7,6 +7,7 @@
 import { existsSync, readFileSync } from "fs";
 import { OPENSESSION_SESSIONS_DIR } from "./paths";
 import {
+	engineSessionIdFor,
 	getAllSessions,
 	getAllSessionsAsync,
 	readNativeSession,
@@ -585,12 +586,21 @@ export function recordRunOutcome(
 		// The transcript append is synchronous. Commit it before starting the
 		// asynchronous session-file command so the two writes cannot contend for
 		// the same actor lease.
-		if (!opts?.noticePersisted)
+		if (!opts?.noticePersisted) {
+			const provider =
+				session?.lastEngineProvider ||
+				(session?.piSessionId
+					? "pi"
+					: session?.codexThreadId
+						? "codex"
+						: "claude");
 			persistRunFailureNotice(
-				opts?.engineSessionId || session?.claudeSessionId,
+				opts?.engineSessionId ||
+					(session ? engineSessionIdFor(session, provider) : undefined),
 				errorMessage,
 				opts?.noticeLabel || "Run failed",
 			);
+		}
 		if (session?.source === "opensession")
 			void touchNativeSession(id, { lastRunError: entry });
 		// A worker that dies can't report back, and its parent is usually idle
