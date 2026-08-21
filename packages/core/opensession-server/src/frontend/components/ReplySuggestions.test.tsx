@@ -76,7 +76,7 @@ describe("ReplySuggestions", () => {
 		// composer, or the standoff eats into the 16px the reading ends on.
 		const PILL_HEIGHT = 28; // `h-7` on the chip in ReplySuggestions.
 		const NEXT_HEIGHT = 40; // `min-h-10` on the Next button in SessionViewer.
-		const NEXT_HEIGHT_PHONE = 44; // `phone:min-h-11` on the action bar buttons.
+		const NEXT_HEIGHT_PHONE = 52; // `h-13` on the phone action bar.
 		const PHONE_ROW_GAP = 8;
 		const SPACING_STEP = 4; // Tailwind's px-anchored scale (styles/tailwind.css).
 		const standoff =

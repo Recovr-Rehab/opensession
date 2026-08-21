@@ -6,10 +6,12 @@ const SHIPPED = new URL(
 	"../components/ShippedChangeComposer.tsx",
 	import.meta.url,
 );
+const COMPOSER = new URL("../components/Composer.tsx", import.meta.url);
 
-test("the installed phone composer family matches the desktop ring strength", async () => {
+test("the installed phone composer keeps a quiet edge and hides auxiliary controls", async () => {
 	const css = await Bun.file(CSS).text();
 	const shipped = await Bun.file(SHIPPED).text();
+	const composer = await Bun.file(COMPOSER).text();
 	const mediaStart = css.indexOf(
 		"@media (display-mode: standalone) and (max-width: 720px)",
 	);
@@ -23,4 +25,7 @@ test("the installed phone composer family matches the desktop ring strength", as
 	expect(standalonePhone).toContain(
 		"border-color: color-mix(in srgb, var(--composer-border) 35%, transparent)",
 	);
+	expect(standalonePhone).toContain(".app .pwa-send-option");
+	expect(standalonePhone).toContain("display: none");
+	expect(composer.match(/pwa-send-option/g)).toHaveLength(3);
 });

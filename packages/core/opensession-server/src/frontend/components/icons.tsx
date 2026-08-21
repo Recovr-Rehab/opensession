@@ -214,6 +214,15 @@ export function IconChevronRight(p: IconProps) {
   );
 }
 
+export function IconArrowRight(p: IconProps) {
+  return (
+    <Svg {...p}>
+      <path {...stroke} d="M5.25 12H18.75" />
+      <path {...stroke} d="M13.5 6.75L18.75 12L13.5 17.25" />
+    </Svg>
+  );
+}
+
 const CHECK_PATH = "M5.75 12.75L9.5 16.25L18.25 7.75";
 
 export function IconCheck(p: IconProps) {

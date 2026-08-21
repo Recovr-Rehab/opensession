@@ -361,16 +361,16 @@ export const SUGGESTIONS_CLEARANCE = "[--suggestions-under:34px]";
 
 /**
  * The same clearance once Next shares the band and gives it its height: a 40px
- * button, 44px on a phone where it keeps a full touch target, plus the same
+ * button, or the phone action bar at 52px, plus the same
  * standoff. Written out rather than derived, because Tailwind compiles the
  * class names it can find spelled in the source.
  */
 export const ACTION_CLEARANCE =
-	"[--suggestions-under:46px] phone:[--suggestions-under:50px]";
+	"[--suggestions-under:46px] phone:[--suggestions-under:58px]";
 
-/** Phone stacks quick replies above the 44px action bar. */
+/** Phone stacks quick replies above the 52px action bar. */
 export const ACTION_WITH_REPLIES_CLEARANCE =
-	"[--suggestions-under:46px] phone:[--suggestions-under:86px]";
+	"[--suggestions-under:46px] phone:[--suggestions-under:94px]";
 
 /**
  * The chips themselves, filling the action row beside Next.

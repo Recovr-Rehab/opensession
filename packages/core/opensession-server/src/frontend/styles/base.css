@@ -1233,6 +1233,12 @@ a {
 		border-color: color-mix(in srgb, var(--composer-border) 35%, transparent);
 	}
 
+	/* Keep the installed phone composer focused on drafting and sending. The
+	   browser view retains attachments, model selection, and dictation. */
+	.app .pwa-send-option {
+		display: none;
+	}
+
 	/* Installed navigation uses the foreground colour instead of the custom
 	   accent. Slightly larger glyphs make the two edge controls easier to read
 	   without changing their 44px touch targets. */

@@ -222,6 +222,7 @@ import {
 	IconPlus,
 	IconPencil,
 	IconArrowDown,
+	IconArrowRight,
 	IconArrowUp,
 	IconArrowUpToLine,
 	IconCrosshair,
@@ -5836,13 +5837,13 @@ export function SessionViewer({
 									<Button
 										variant="ghost"
 										size="md"
-										icon={<IconDotsHorizontal size={22} />}
+										icon={<IconDotsHorizontal size={isPhone ? 26 : 22} />}
 									/>
 								}
 								className={cn(
 									"[corner-shape:squircle]",
 									isPhone &&
-										"size-11 min-h-11 rounded-full border-transparent text-dim shadow-none [corner-shape:round]",
+										"size-12 min-h-12 rounded-full border-transparent text-dim shadow-none [corner-shape:round]",
 									overflowOpen && "bg-hover text-fg",
 								)}
 								title="More actions"
@@ -7251,7 +7252,7 @@ export function SessionViewer({
 											{isPhone && (
 												<div
 													className={cn(
-														"pointer-events-auto mx-auto hidden h-11 shrink-0 items-center rounded-full border border-[color:var(--mobile-header-control-border)] px-1 text-dim shadow-[var(--mobile-header-control-shadow)] phone:flex",
+														"pointer-events-auto mx-auto hidden h-13 shrink-0 items-center rounded-full border border-[color:var(--mobile-header-control-border)] px-1 text-dim shadow-[var(--mobile-header-control-shadow)] phone:flex",
 														MOBILE_CONTROL_GLASS,
 													)}
 												>
@@ -7259,8 +7260,8 @@ export function SessionViewer({
 														<Button
 															variant="ghost"
 															size="lg"
-															className="size-11 min-h-11 rounded-full [corner-shape:round]"
-															icon={<IconArchive size={20} aria-hidden />}
+															className="size-12 min-h-12 rounded-full [corner-shape:round]"
+															icon={<IconArchive size={24} aria-hidden />}
 															aria-label="Archive and open next chat"
 															disabled={archiving}
 															onClick={() => void handleArchive()}
@@ -7269,13 +7270,13 @@ export function SessionViewer({
 													<Button
 														variant="ghost"
 														size="lg"
-														className="size-11 min-h-11 rounded-full [corner-shape:round]"
-														icon={<IconChevronRight size={20} aria-hidden />}
+														className="size-12 min-h-12 rounded-full [corner-shape:round]"
+														icon={<IconArrowRight size={24} aria-hidden />}
 														aria-label="Next chat"
 														disabled={!onNextChat}
 														onClick={onNextChat}
 													/>
-													<div ref={setMobileActionMenuEl} className="inline-flex size-11" />
+													<div ref={setMobileActionMenuEl} className="inline-flex size-12" />
 												</div>
 											)}
 										</div>

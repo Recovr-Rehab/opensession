@@ -1792,7 +1792,7 @@ export function Composer({
               // `composer-pop-wrap` stays as a hook: the outside-click handler
               // above dismisses the menu for any mousedown that isn't inside one.
               className={cn(
-                "composer-pop-wrap relative inline-flex shrink-0",
+                "pwa-send-option composer-pop-wrap relative inline-flex shrink-0",
                 // Phones pull the model pill to the front of the toolbar, so the
                 // "+" has to lead it; in the resting pill it opens the row.
                 minimized ? "order-1" : "phone:order-[-2]",
@@ -1966,7 +1966,7 @@ export function Composer({
                 key="model-effort"
                 layout="position"
                 {...composerChipMotion}
-                className={composerToolbarSelect}
+                className={cn("pwa-send-option", composerToolbarSelect)}
               >
                 <ModelEffortSelect
                   className={cn(palettePill, composerToolbarPill)}
@@ -2010,7 +2010,7 @@ export function Composer({
             transition={composerMorph}
             layoutDependency={minimized}
             className={cn(
-              "inline-flex shrink-0 items-center",
+              "pwa-send-option inline-flex shrink-0 items-center",
               minimized && "order-3",
             )}
           >
