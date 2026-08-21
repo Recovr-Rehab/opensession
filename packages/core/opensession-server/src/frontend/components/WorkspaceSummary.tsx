@@ -154,6 +154,8 @@ interface Props {
 	reviewMode?: boolean;
 	/** Keep a pinned card visible while its Changes side panel is open. */
 	forceOpen?: boolean;
+	/** Render the same quiet rows inside the phone Workspace page. */
+	embedded?: boolean;
 }
 
 /**
@@ -421,7 +423,7 @@ export function WorkspaceSummary({
 			>
 				{/* Mounted only while open. This keeps its data fetches off sessions
 				    whose summary is closed. */}
-				<SummaryBody
+				<WorkspaceSummaryBody
 					session={session}
 					{...body}
 					close={() => changeOpen(false)}
@@ -431,7 +433,7 @@ export function WorkspaceSummary({
 	);
 }
 
-function SummaryBody({
+export function WorkspaceSummaryBody({
 	session,
 	onOpenPanelTab,
 	onOpenPr,
@@ -445,6 +447,7 @@ function SummaryBody({
 	send,
 	refreshTick,
 	close,
+	embedded = false,
 }: Omit<Props, "anchor" | "onOpenChange" | "tabStripVisible"> & {
 	close: () => void;
 }) {
@@ -622,7 +625,13 @@ function SummaryBody({
 	}
 
 	return (
-		<>
+		<div
+			className={
+				embedded
+					? "flex flex-col [&_button]:min-h-11 [&_a]:min-h-11"
+					: "contents"
+			}
+		>
 			{/* Which PR, where it stands, and the one thing to do about it. The
 			    strip owns all three; this card only says where they go. */}
 			<PrStatusBar
@@ -956,6 +965,6 @@ function SummaryBody({
 					)}
 				</>
 			)}
-		</>
+		</div>
 	);
 }

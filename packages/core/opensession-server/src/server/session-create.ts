@@ -1111,6 +1111,8 @@ export async function handleCreateSessionMessage(
 	};
 
 	const { prompt, user, mode } = msg;
+	const titlePrompt =
+		typeof msg.titlePrompt === "string" ? msg.titlePrompt.slice(0, 2000) : prompt;
 	const requestId =
 		typeof msg.requestId === "string" && msg.requestId
 			? msg.requestId
@@ -1351,7 +1353,7 @@ export async function handleCreateSessionMessage(
 				name:
 					(typeof msg.createWorkspace.name === "string" &&
 						msg.createWorkspace.name) ||
-					prompt.trim().split("\n")[0].slice(0, 80) ||
+					titlePrompt.trim().split("\n")[0].slice(0, 80) ||
 					"Workspace",
 				...(isRepoLess ? {} : { project: repo.id }),
 				createdBy: user || "Anonymous",
@@ -1562,8 +1564,6 @@ export async function handleCreateSessionMessage(
 			attachBranch,
 		);
 
-		const titlePrompt =
-			typeof msg.titlePrompt === "string" ? msg.titlePrompt.slice(0, 2000) : prompt;
 		const title = (await nameKnownSessionReferencesForTitle(titlePrompt))
 			.trim()
 			.split("\n")[0]

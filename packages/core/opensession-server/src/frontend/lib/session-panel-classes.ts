@@ -172,6 +172,6 @@ export const PANEL_OVERLAY =
  * isn't carried over.
  */
 export const PANEL_BACK =
-	"inline-flex size-10 cursor-pointer items-center justify-center border-0 bg-transparent p-0 " +
+	"inline-flex size-10 cursor-pointer items-center justify-center border-0 bg-transparent p-0 phone:size-11 " +
 	"text-accent touch-manipulation [-webkit-tap-highlight-color:transparent] " +
 	"active:opacity-40 [&_svg]:-ml-px";

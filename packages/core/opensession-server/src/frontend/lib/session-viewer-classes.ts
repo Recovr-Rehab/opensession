@@ -600,15 +600,14 @@ export const infoTopbarClass = (scrolled: boolean) =>
 		: "bg-transparent");
 
 const INFO_TOPBAR_TITLE =
-	"pointer-events-none absolute right-14 bottom-0 left-14 flex h-[52px] items-center justify-center " +
-	"overflow-hidden text-ellipsis whitespace-nowrap text-item-title font-semibold tracking-[-0.01em] text-fg " +
+	"pointer-events-none absolute right-14 bottom-0 left-14 block h-[52px] " +
+	"overflow-hidden text-ellipsis whitespace-nowrap text-center text-item-title font-semibold leading-[52px] tracking-[-0.01em] text-fg " +
 	// `transform`, not Tailwind's `translate` property: that is what the
 	// transition beside it names.
 	"[transition:opacity_var(--dur)_var(--ease),transform_var(--dur)_var(--ease)]";
 
-/** The bar's own title fades up as the hero scrolls away. 15px in the old
- *  sheet, which is not a step on the type scale; it is an item title, so it
- *  snaps to `text-item-title` (14px). */
+/** The bar's own title can fade with a page hero or stay visible when the
+ * compact summary starts immediately below it. */
 export const infoTopbarTitleClass = (scrolled: boolean) =>
 	`${INFO_TOPBAR_TITLE} ` +
 	(scrolled ? "opacity-100 [transform:translateY(0)]" : "opacity-0 [transform:translateY(5px)]");
@@ -635,7 +634,13 @@ export const INFO_STATUS =
 	// `mx-3` + `rounded-lg`, like every plate under it: the page has one edge.
 	"session-info-status mx-3 mb-3 overflow-hidden rounded-lg empty:hidden";
 
-export const INFO_CONTENT = "min-h-[320px]";
+export const INFO_CONTENT = "min-h-[320px] pb-2";
+
+/** One borderless card for the phone Workspace summary. The repo and model
+ * settings lead into the same rows the desktop summary uses, so this reads as
+ * one overview instead of a stack of unrelated settings plates. */
+export const INFO_SUMMARY_CARD =
+	"mx-3 mt-2 flex flex-col overflow-hidden rounded-2xl bg-panel py-2";
 
 /** A section rendered by a component of its own (Agents, Reports) rather than
  *  by WorkspaceInfo. It gets the page's inset and the same 16px gap the panel
@@ -665,22 +670,14 @@ export const INFO_LABEL_CLASS =
 	"px-3 text-label font-semibold tracking-[-0.01em] text-faint";
 export const INFO_LIST_CLASS = "grid gap-px overflow-hidden rounded-lg bg-panel p-1";
 
-/**
- * A static, full-width settings list: the repo and the model. Its rows come
- * from RepoBar and ModelMenuRow, so their shape is a child variant here rather
- * than a prop two components away — the same relationship the old `> button`
- * rule expressed.
- *
- * It is a plate like every section's (INFO_LIST_CLASS): same margin, same
- * radius, same padding, no border. It used to run 4px narrower on each side
- * with a hairline around it, which read as a different kind of thing sitting
- * above the page rather than as the page's first plate.
- */
+/** Repo and model controls at the top of the phone summary card. They keep
+ * their labelled two-line content, but give up the separate plate and border
+ * now that the summary card supplies one shared surface. */
 export const INFO_LIST =
-	"session-info-list mx-3 grid gap-px overflow-hidden rounded-lg bg-panel p-1 " +
-	"[&>button]:w-full [&>button]:justify-start [&>button]:gap-2 [&>button]:text-left " +
-	"[&>button]:rounded-control [&>button]:border-0 " +
-	"[&>button]:bg-transparent [&>button]:px-2 [&>button]:py-2.5 [&>button]:text-label [&>button]:text-fg " +
+	"session-info-list mx-2 grid gap-px pb-1 " +
+	"[&>button]:min-h-11 [&>button]:w-full [&>button]:justify-start [&>button]:gap-2 [&>button]:text-left " +
+	"[&>button]:rounded-row [&>button]:border-0 " +
+	"[&>button]:bg-transparent [&>button]:px-3 [&>button]:py-2 [&>button]:text-label [&>button]:text-fg " +
 	"[&>button:hover]:bg-hover";
 
 /** The whole-workspace view embedded below the actions.
