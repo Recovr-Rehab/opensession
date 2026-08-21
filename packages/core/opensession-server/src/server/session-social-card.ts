@@ -14,21 +14,13 @@
 import sharp from "sharp";
 import { createHmac, randomBytes, timingSafeEqual } from "crypto";
 import { chmodSync, readFileSync, statSync, writeFileSync } from "fs";
-import { repoLetter } from "../frontend/lib/repo-label";
 import {
 	configuredIntegration,
-	configuredRepos,
 	configuredServer,
 	productName,
 } from "./config";
 import { teamDirectory, type DirectoryPerson } from "./people";
 import { stateDir } from "./paths";
-import { repoIconRevision, resolveRepoIcon } from "./repo-appearance";
-import {
-	REPO_TILE_INK,
-	assignRepoTileColors,
-	repoTileColor,
-} from "./repo-tile-colors";
 import { findSessionAsync } from "./session-cache";
 import { transcriptStore } from "./transcript-store";
 import { isWithinUploads, stagedImageRef } from "./uploads";
@@ -46,7 +38,7 @@ export const SESSION_CARD_BANNER_WIDTH = 1200;
 export const SESSION_CARD_BANNER_HEIGHT = 280;
 
 export type SessionCardVariant = "card" | "banner";
-const SESSION_CARD_VERSION = 17;
+const SESSION_CARD_VERSION = 18;
 
 const CARD_INK = "#050609";
 const CARD_PAPER = "#FFFFFF";
@@ -54,9 +46,7 @@ const CARD_PAPER = "#FFFFFF";
 const PAD_X = 56;
 const META_SIZE = 28;
 const META_TEXT_SIZE = 22;
-const META_FONT = "Inter Medium 22";
 const META_LABEL_GAP = 10;
-const META_GROUP_GAP = 24;
 const META_GLYPH_SIZE = 22;
 const META_RADIUS = META_SIZE * 0.46;
 const META_OPACITY = 0.42;
@@ -77,12 +67,12 @@ const TITLE_LINE_HEIGHT = 42;
 const TITLE_FONT = "Inter SemiBold 38";
 const TITLE_LETTER_SPACING = -1024;
 /** Every screenshot frame stays 16:9, including the ones behind the lead shot. */
-const SHOT_BANNER_WIDTH = 448;
-const SHOT_BANNER_HEIGHT = 252;
-const SHOT_CARD_WIDTH = 528;
-const SHOT_CARD_HEIGHT = 297;
-const SHOT_BANNER_INSET = 14;
-const SHOT_CARD_INSET = 28;
+const SHOT_BANNER_WIDTH = 464;
+const SHOT_BANNER_HEIGHT = 261;
+const SHOT_CARD_WIDTH = 544;
+const SHOT_CARD_HEIGHT = 306;
+const SHOT_BANNER_INSET = 10;
+const SHOT_CARD_INSET = 24;
 const SHOT_BANNER_RADIUS = 26;
 const SHOT_CARD_RADIUS = 28;
 const SHOT_GAP = 32;
@@ -324,18 +314,6 @@ async function titleWidth(title: string): Promise<number> {
 	return metadata.width ?? 0;
 }
 
-async function metaTextWidth(value: string): Promise<number> {
-	const metadata = await sharp({
-		text: {
-			text: xml(value),
-			font: META_FONT,
-			rgba: true,
-			dpi: 72,
-		},
-	}).metadata();
-	return metadata.width ?? 0;
-}
-
 async function truncateTitleLine(
 	value: string,
 	maxWidth: number,
@@ -503,54 +481,6 @@ function metaLabel(value: string): string {
 }
 
 /**
- * A repo's own art, tile-sized, or "" when it wears a letter instead. Same two
- * sources the /repo-icon route serves, in the same order: a generic
- * `<id>-icon.png` shipped with the frontend, then whatever the repo's config
- * points at. Keyed on the stored art's revision so an icon changed from
- * Settings shows up on the next card rather than after a restart.
- */
-async function repoIconDataUrl(repoId?: string): Promise<string> {
-	if (!repoId) return "";
-	const repo = configuredRepos()[repoId];
-	const configured = resolveRepoIcon(repo?.icon, repo?.repo);
-	const cacheKey = `repo:${repoId}:${configured ?? ""}:${repoIconRevision(configured) ?? 0}`;
-	const cached = avatarCache.get(cacheKey);
-	if (cached !== undefined) return cached;
-	const sources: Array<string | URL> = [];
-	if (/^[a-z0-9][a-z0-9_-]{0,40}$/i.test(repoId))
-		sources.push(new URL(`../frontend/${repoId}-icon.png`, import.meta.url));
-	if (configured) sources.push(configured);
-	for (const source of sources) {
-		try {
-			const file = Bun.file(source);
-			if (!(await file.exists())) continue;
-			const data = await compactAvatar(await file.arrayBuffer());
-			rememberAvatar(cacheKey, data);
-			return data;
-		} catch {}
-	}
-	rememberAvatar(cacheKey, "");
-	return "";
-}
-
-/**
- * The tile color the rest of the app assigned this repo, so the card's tile is
- * the one the sidebar and the phone already show rather than a third opinion.
- */
-function repoTileColorFor(id: string): string {
-	const repos = configuredRepos();
-	if (!repos[id]) return repoTileColor(id);
-	const chosen: Record<string, string> = {};
-	for (const [key, repo] of Object.entries(repos)) {
-		const color = (repo as { color?: string }).color;
-		if (color) chosen[key] = color;
-	}
-	return (
-		assignRepoTileColors(Object.keys(repos), chosen)[id] ?? repoTileColor(id)
-	);
-}
-
-/**
  * A squircle: the superellipse corner the UI wears through
  * `corner-shape: squircle`, baked into a path because this rasterizes through
  * librsvg, which has no such property. An `rx` rounded rect beside the app's
@@ -672,9 +602,7 @@ export function sessionSocialCardSvg(
 	avatar = "",
 	displayTitle: string | string[] = clean(data.title) || productName(),
 	variant: SessionCardVariant = "card",
-	repoIcon = "",
 	shots: string[] = [],
-	ownerTextWidth?: number,
 ): string {
 	const banner = variant === "banner";
 	const height = banner ? SESSION_CARD_BANNER_HEIGHT : SESSION_CARD_HEIGHT;
@@ -686,7 +614,6 @@ export function sessionSocialCardSvg(
 		.filter(Boolean)
 		.slice(0, 2);
 	if (!titleLines.length) titleLines.push(productName());
-	const repoId = clean(data.repo);
 	const owner = metaLabel(clean(data.owner));
 	const metadataHeight = META_SIZE;
 	const contentHeight =
@@ -696,14 +623,8 @@ export function sessionSocialCardSvg(
 		blockTop + titleLines.length * TITLE_LINE_HEIGHT + TITLE_META_GAP;
 	const metaCenter = metaTop + META_SIZE / 2;
 	const ownerTextX = PAD_X + META_SIZE + META_LABEL_GAP;
-	const measuredOwnerWidth =
-		ownerTextWidth ?? owner.length * META_TEXT_SIZE * 0.55;
-	const repoX = ownerTextX + measuredOwnerWidth + META_GROUP_GAP;
-	const repoTextX = repoX + META_SIZE + META_LABEL_GAP;
 	const metaTextY = metaCenter + capBaselineShift(META_TEXT_SIZE);
 	const avatarTile = squirclePath(PAD_X, metaTop, META_SIZE, META_RADIUS);
-	const repoTile = squirclePath(repoX, metaTop, META_SIZE, META_RADIUS);
-	const tileColor = repoId ? repoTileColorFor(repoId) : CARD_INK;
 	const frames = shotFrames(variant, shots.length, height);
 	const shotDefs = frames
 		.map(
@@ -733,31 +654,23 @@ export function sessionSocialCardSvg(
 		PAD_X + (META_SIZE - META_GLYPH_SIZE) / 2,
 		metaCenter,
 	);
-	// No white ring: it would inset the picture by half its width and leave the
-	// avatar visibly smaller than the repo mark standing next to it.
+	// No white ring: it would inset the picture by half its width and make the
+	// avatar read smaller than its 28px frame.
 	const avatarMarkup = avatar
 		? `<image href="${avatar}" x="${PAD_X}" y="${metaTop}" width="${META_SIZE}" height="${META_SIZE}" preserveAspectRatio="xMidYMid slice" clip-path="url(#avatarClip)"/>
 <path d="${avatarTile}" fill="none" stroke="#000000" stroke-opacity="0.1"/>`
 		: `<path d="${avatarTile}" fill="${CARD_PAPER}"/>
 ${avatarGlyph}
 <path d="${avatarTile}" fill="none" stroke="#000000" stroke-opacity="0.1"/>`;
-	const repoMarkup = !repoId
-		? ""
-		: repoIcon
-			? `<image href="${repoIcon}" x="${repoX}" y="${metaTop}" width="${META_SIZE}" height="${META_SIZE}" preserveAspectRatio="xMidYMid slice" clip-path="url(#repoClip)"/>
-<path d="${repoTile}" fill="none" stroke="#000000" stroke-opacity="0.1"/>`
-			: `<path d="${repoTile}" fill="${xml(tileColor)}"/><text x="${repoX + META_SIZE / 2}" y="${metaCenter + capBaselineShift(14)}" text-anchor="middle" fill="${REPO_TILE_INK}" font-size="14" font-weight="600">${xml(repoLetter(repoId))}</text>
-<path d="${repoTile}" fill="none" stroke="#000000" stroke-opacity="0.1"/>`;
-
 	return `<svg xmlns="http://www.w3.org/2000/svg" width="${SESSION_CARD_WIDTH}" height="${height}" viewBox="0 0 ${SESSION_CARD_WIDTH} ${height}" overflow="hidden" font-family="Inter, Arial, sans-serif">
 <defs>
 ${shotDefs}
-  <clipPath id="repoClip" clipPathUnits="userSpaceOnUse"><path d="${repoTile}"/></clipPath>
   <clipPath id="avatarClip" clipPathUnits="userSpaceOnUse"><path d="${avatarTile}"/></clipPath>
-  <filter id="shotShadow" x="-20%" y="-25%" width="140%" height="155%" color-interpolation-filters="sRGB">
-    <feDropShadow in="SourceAlpha" dx="0" dy="6" stdDeviation="6" flood-color="#000000" flood-opacity="0.14" result="ambient"/>
-    <feDropShadow in="SourceAlpha" dx="0" dy="2" stdDeviation="1.25" flood-color="#000000" flood-opacity="0.2" result="contact"/>
-    <feMerge><feMergeNode in="ambient"/><feMergeNode in="contact"/><feMergeNode in="SourceGraphic"/></feMerge>
+  <filter id="shotShadow" x="-22%" y="-28%" width="144%" height="164%" color-interpolation-filters="sRGB">
+    <feDropShadow in="SourceAlpha" dx="0" dy="11" stdDeviation="13" flood-color="#000000" flood-opacity="0.13" result="ambient"/>
+    <feDropShadow in="SourceAlpha" dx="0" dy="4" stdDeviation="4.5" flood-color="#000000" flood-opacity="0.1" result="lift"/>
+    <feDropShadow in="SourceAlpha" dx="0" dy="1" stdDeviation="1" flood-color="#000000" flood-opacity="0.08" result="contact"/>
+    <feMerge><feMergeNode in="ambient"/><feMergeNode in="lift"/><feMergeNode in="contact"/><feMergeNode in="SourceGraphic"/></feMerge>
   </filter>
 </defs>
 <rect width="1200" height="${height}" fill="${CARD_PAPER}"/>
@@ -765,8 +678,6 @@ ${shotMarkup}
 ${titleMarkup}
 ${avatarMarkup}
 <text x="${ownerTextX}" y="${metaTextY}" fill="${CARD_INK}" fill-opacity="${META_OPACITY}" font-size="${META_TEXT_SIZE}" font-weight="500">${xml(owner)}</text>
-${repoMarkup}
-${repoId ? `<text x="${repoTextX}" y="${metaTextY}" fill="${CARD_INK}" fill-opacity="${META_OPACITY}" font-size="${META_TEXT_SIZE}" font-weight="500">${xml(metaLabel(repoId))}</text>` : ""}
 </svg>`;
 }
 
@@ -774,11 +685,9 @@ export async function renderSessionSocialCard(
 	data: SessionSocialCardData,
 	variant: SessionCardVariant = "card",
 ): Promise<Buffer> {
-	const [avatar, repoIcon, shots, ownerWidth] = await Promise.all([
+	const [avatar, shots] = await Promise.all([
 		avatarDataUrl(data.person),
-		repoIconDataUrl(data.repo),
 		shotDataUrls(data.shots, shotWidth(variant), shotHeight(variant)),
-		metaTextWidth(metaLabel(clean(data.owner))),
 	]);
 	// Missing or unreadable images give their space back to the title instead
 	// of leaving an unexplained blank where the stack would have been.
@@ -790,17 +699,7 @@ export async function renderSessionSocialCard(
 		),
 	);
 	return sharp(
-		Buffer.from(
-			sessionSocialCardSvg(
-				data,
-				avatar,
-				title,
-				variant,
-				repoIcon,
-				shots,
-				ownerWidth,
-			),
-		),
+		Buffer.from(sessionSocialCardSvg(data, avatar, title, variant, shots)),
 	)
 		.png()
 		.toBuffer();
