@@ -17,21 +17,19 @@ Then, end to end:
 
 ```sh
 curl -fsSL https://raw.githubusercontent.com/tellahq/opensession/main/install.sh | bash
-# onboarding: accept the defaults — bind 127.0.0.1, press enter through the
-# public base URL, point it at one repo, say no to every integration
+# installs the compiled release, onboards with defaults, starts the service,
+# and prints your local URL
 claude setup-token     # on your Max login; copy the sk-ant-… it prints
-opensession start
 ```
 
-Now **open <http://127.0.0.1:3850>**. Add your account under Workspace → Usage
+Now **open the URL the installer prints** (`http://127.0.0.1:3850` by default). Add your account under Workspace → Usage
 (paste the `sk-ant-…`, or use the ChatGPT device-code sign-in for the OpenAI
 path), then pick your repo on the home screen, write a prompt, and create the
 session. A turn that actually runs is the only proof the install works, not a
 health check.
 
-Budget 5-15 minutes on a fresh box, most of it unattended: the installer
-downloads the compiled release binary and the model CLIs (the Pi engine is bundled in the binary), and installs a
-multi-gigabyte dependency tree.
+Budget a few minutes on a fresh box, most of it unattended: the installer
+downloads the compiled release binary and the model CLIs (the Pi engine is bundled in the binary).
 
 Sections 3-7 below — automations, the env-var inventory, the `config.json`
 reference, MCP — are reference material you can skip on a first install, and
