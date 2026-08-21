@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import {
+  agentWaitWakePrompt,
   cancelAgentWait,
   getAgentWait,
   handleAgentWait,
@@ -10,6 +11,7 @@ import {
   type AgentWaitHandlerDeps,
   type PrChecksAgentWait,
 } from "../agent-waits";
+import { isContextOnly, parseContextBlocks } from "../prompt-context";
 import type { PrDetails } from "../pr-info";
 import {
   SessionKernelStore,
@@ -121,6 +123,27 @@ describe("agent wait registration", () => {
     });
     expect(cancelAgentWait("s1")).toBe(true);
     expect(getAgentWait("s1")).toBeUndefined();
+  });
+
+  test("wakes with hidden system context rather than a user message", () => {
+    const registered = registerTimerAgentWait({
+      sessionId: "s1",
+      user: "Jaap",
+      seconds: 60,
+      waitId: "call-hidden",
+      now: 1_000,
+      prompt: "Inspect the result and continue.",
+    });
+    if (!registered.ok) throw new Error(registered.error);
+    const prompt = agentWaitWakePrompt(registered.wait, "The timer finished.");
+    expect(isContextOnly(prompt)).toBe(true);
+    expect(parseContextBlocks(prompt)).toEqual([
+      {
+        source: "background-wait",
+        body: expect.stringContaining("Continue with: Inspect the result and continue."),
+      },
+    ]);
+    expect(prompt).not.toContain("[Jaap]");
   });
 
   test("rejects timer waits outside the safe bounds", () => {

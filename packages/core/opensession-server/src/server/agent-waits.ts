@@ -278,6 +278,15 @@ export interface AgentWaitHandlerDeps {
 	deliver: (wait: AgentWait, message: string) => Promise<void>;
 }
 
+export function agentWaitWakePrompt(wait: AgentWait, message: string): string {
+	return wrapContext(
+		`A durable background wait registered by the assistant has completed. ` +
+			`This is system context, not a new user message.\n\n` +
+			`Trigger: ${message}\n\nContinue with: ${wait.prompt}`,
+		"background-wait",
+	);
+}
+
 const defaultHandlerDeps: AgentWaitHandlerDeps = {
 	now: () => Date.now(),
 	getPrDetails: getPrDetailsFresh,
@@ -295,12 +304,7 @@ const defaultHandlerDeps: AgentWaitHandlerDeps = {
 	deliver: async (wait, message) => {
 		const result = await getSessionControl().deliverToSession(
 			wait.sessionId,
-			wrapContext(
-				`A durable background wait registered by the assistant has completed. ` +
-					`This is system context, not a new user message.\n\n` +
-					`Trigger: ${message}\n\nContinue with: ${wait.prompt}`,
-				"background-wait",
-			),
+			agentWaitWakePrompt(wait, message),
 			undefined,
 			{
 				deliveryId: `agent-wait:${wait.id}:wake`,
