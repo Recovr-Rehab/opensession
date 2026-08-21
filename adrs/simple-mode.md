@@ -70,8 +70,8 @@ On a fresh macOS or Ubuntu box with only `curl` and `git`:
   cannot hit the five-minute bar.
   - Artefact: a `bun build --compile` single executable, tarred as
     `opensession-<ver>-<os>-<arch>.tar.gz` beside a small `node_modules`
-    sharp sidecar (its platform native cannot be embedded), the engine seed,
-    and `release.json`. `src/main.ts` is the front controller (server / CLI /
+    sharp sidecar (its platform native cannot be embedded), the service
+    templates, and `release.json`. `src/main.ts` is the front controller (server / CLI /
     runner-host / mcp-proxy behind one argv), so the binary re-execs itself
     for its side entrypoints via `process.execPath`; the prebuilt frontend is
     baked in with `Bun.embeddedFiles`. `bun build --compile --target=bun-<os>-
