@@ -4809,7 +4809,10 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 								}}
 							>
 								{filter.person === "everyone" ? (
-									<IconPeople size={20} className="shrink-0 text-dim" />
+									<IconPeople
+										size={20}
+										className="shrink-0 translate-y-[0.5px] text-dim phone:-translate-y-px"
+									/>
 								) : (
 									filter.person !== "unassigned" && (
 										<UserAvatar
