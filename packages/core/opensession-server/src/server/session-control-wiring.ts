@@ -893,6 +893,7 @@ ${createMentionsNote}`;
 							);
 						return createWorktree(restoredSpec.branch!, restoredSpec.repoId!, {
 							...(isolatedWorktree ? { isolated: true } : {}),
+							...(restoredSpec.gitEnv ? { gitEnv: restoredSpec.gitEnv } : {}),
 						});
 					}
 				: undefined;

@@ -383,12 +383,17 @@ export async function resumePlannedCreate(sessionId: string): Promise<boolean> {
 						`Incomplete worktree exists at ${restored.wtPath}; refusing to resume the session`,
 					);
 				return restored.worktreeKind === "existing"
-					? createWorktreeForExistingBranch(restored.branch!, restored.repoId!)
+					? createWorktreeForExistingBranch(
+							restored.branch!,
+							restored.repoId!,
+							restored.gitEnv,
+						)
 					: createWorktree(restored.branch!, restored.repoId!, {
 							...(restored.stackedOn?.branch
 								? { base: restored.stackedOn.branch }
 								: {}),
 							...(restored.worktreeIsolated ? { isolated: true } : {}),
+							...(restored.gitEnv ? { gitEnv: restored.gitEnv } : {}),
 						});
 			}
 		: undefined;
@@ -1767,13 +1772,19 @@ export async function handleCreateSessionMessage(
 							? createWorktreeForExistingBranch(
 									restoredSpec.branch!,
 									restoredSpec.repoId!,
+									restoredSpec.gitEnv,
 								)
 							: createWorktree(
 									restoredSpec.branch!,
 									restoredSpec.repoId!,
-									restoredSpec.stackedOn?.branch
-										? { base: restoredSpec.stackedOn.branch }
-										: undefined,
+									{
+										...(restoredSpec.stackedOn?.branch
+											? { base: restoredSpec.stackedOn.branch }
+											: {}),
+										...(restoredSpec.gitEnv
+											? { gitEnv: restoredSpec.gitEnv }
+											: {}),
+									},
 								);
 					}
 				: undefined;
