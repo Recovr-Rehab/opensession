@@ -32,6 +32,7 @@ export function TeamSection({
 	addLabel = "Add member",
 	githubOnly = false,
 	compact = false,
+	showCount = false,
 }: {
 	onChanged: () => void | Promise<void>;
 	/** Optional label above the roster. Defaults to the roster name and count. */
@@ -41,6 +42,8 @@ export function TeamSection({
 	/** Keep onboarding focused on the GitHub identity used for sign-in. */
 	githubOnly?: boolean;
 	compact?: boolean;
+	/** Append the loaded roster size to an explicit title. */
+	showCount?: boolean;
 }) {
 	const [members, setMembers] = useState<TeamMember[] | null>(null);
 	const [loadFailed, setLoadFailed] = useState(false);
@@ -105,7 +108,8 @@ export function TeamSection({
 					</Button>
 				}
 			>
-				{title ?? `Team members${members ? ` · ${members.length}` : ""}`}
+				{title ?? "Team members"}
+				{members && (showCount || !title) ? ` · ${members.length}` : ""}
 			</SettingsGroupLabel>
 			{githubSyncError && <InlineAlert>{githubSyncError}</InlineAlert>}
 			{!members && !loadFailed ? (

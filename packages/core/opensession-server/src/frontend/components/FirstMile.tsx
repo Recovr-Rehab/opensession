@@ -289,6 +289,7 @@ export function FirstMile({ onDone }: { onDone: () => void }) {
 											<TeamSection
 												onChanged={refetch}
 												title="Members"
+												showCount
 												githubOnly
 												compact
 											/>
