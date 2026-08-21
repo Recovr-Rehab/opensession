@@ -715,11 +715,17 @@ export function PrStatusBar({
 				? series.label
 				: headline.label;
 
-	// Any PR with checks keeps the headline as the checks control. The headline
-	// still reports the most important state, while hover previews every check
-	// and click opens Review's Checks tab.
+	// An OPEN PR with checks keeps the headline as the checks control. The
+	// headline still reports the most important state, while hover previews every
+	// check and click opens Review's Checks tab.
+	//
+	// Once the PR has landed or been closed, its checks are history: they cannot
+	// change, nobody is waiting on them, and "4 checks" in green beside Merged
+	// reads as live state that still needs watching. So a settled PR drops the
+	// count and goes back to opening its own tab.
 	const checksSummary = summarizeChecks(pr);
-	const checksPr = pr && checksSummary.total > 0 ? pr : null;
+	const prSettled = pr?.state === "MERGED" || pr?.state === "CLOSED";
+	const checksPr = pr && !prSettled && checksSummary.total > 0 ? pr : null;
 	const checksTone = checksSummary.failed > 0
 		? "text-red"
 		: checksSummary.pending > 0
