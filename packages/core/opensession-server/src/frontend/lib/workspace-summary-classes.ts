@@ -69,7 +69,7 @@ export const WS_SUMMARY_SECTION =
  * before it stops reading as a cramped menu. Anything under about 28 and the
  * glyph column and the labels start to crowd.
  *
- * The glyph sits 10px from its label. A row is one thing being named, so the
+ * The glyph sits 6px from its label. A row is one thing being named, so the
  * mark and the words it belongs to should read as a pair rather than as two
  * columns; the wider gap it used to carry left the rail floating away from the
  * text it introduces.
@@ -85,7 +85,7 @@ const BAND_ROW =
 	" [.ws-summary-band_&]:mx-0 [.ws-summary-band_&]:w-full [.ws-summary-band_&]:px-2";
 
 export const WS_SUMMARY_ROW =
-	"group/ws mx-2 flex h-[31px] w-[calc(100%_-_16px)] min-w-0 shrink-0 cursor-pointer items-center gap-2.5 " +
+	"group/ws mx-2 flex h-[31px] w-[calc(100%_-_16px)] min-w-0 shrink-0 cursor-pointer items-center gap-1.5 " +
 	"rounded-row border-none bg-transparent px-2 text-left text-item-title text-fg " +
 	"hover:bg-hover focus-ring " +
 	// Inside the PR band the row is already inset by the band, and the neutral
@@ -102,7 +102,7 @@ export const WS_SUMMARY_ROW =
  * to the PR, the button does the thing.
  */
 export const WS_SUMMARY_STATUS_ROW =
-	"mx-2 flex min-h-[38px] w-[calc(100%_-_16px)] min-w-0 shrink-0 items-center gap-2.5 " +
+	"mx-2 flex min-h-[38px] w-[calc(100%_-_16px)] min-w-0 shrink-0 items-center gap-1.5 " +
 	"rounded-row px-2 text-left text-item-title text-fg" +
 	BAND_ROW;
 
