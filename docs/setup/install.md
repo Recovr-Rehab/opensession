@@ -6,10 +6,12 @@ One prerequisite the installer cannot give you: **a model subscription** — a
 Claude Max subscription for the Anthropic path, or a ChatGPT plan for the
 OpenAI one. Sessions run on subscription capacity, not on a bundled key.
 
-The tooling it does give you: the Pi engine plus the `claude` and `codex`
-CLIs, which are how you mint an account token and how the in-app ChatGPT
-sign-in works. Each is skipped if you already have it, and `--no-engine` skips
-all three.
+The tooling it does give you: the `claude` CLI, which is how you mint an
+account token (the Pi engine itself is bundled in the binary). It is skipped
+if you already have it, and `--no-engine` skips it. The `codex` CLI, which
+backs the in-app ChatGPT sign-in, is not on the default path: pass `--codex`,
+or install it later with `curl -fsSL https://chatgpt.com/codex/install.sh | sh`
+(the sign-in tells you when it is missing).
 
 Then, end to end:
 
@@ -21,14 +23,14 @@ claude setup-token     # on your Max login; copy the sk-ant-… it prints
 opensession start
 ```
 
-Now **open <http://127.0.0.1:3850>**. Add your account under Workspace → Models
+Now **open <http://127.0.0.1:3850>**. Add your account under Workspace → Usage
 (paste the `sk-ant-…`, or use the ChatGPT device-code sign-in for the OpenAI
 path), then pick your repo on the home screen, write a prompt, and create the
-session. A turn that actually runs is the only proof the install works — a
-health check is not.
+session. A turn that actually runs is the only proof the install works, not a
+health check.
 
 Budget 5-15 minutes on a fresh box, most of it unattended: the installer
-downloads Bun, the Pi engine and the two model CLIs, and installs a
+downloads the compiled release binary and the model CLIs (the Pi engine is bundled in the binary), and installs a
 multi-gigabyte dependency tree.
 
 Sections 3-7 below — automations, the env-var inventory, the `config.json`
@@ -111,24 +113,39 @@ curl -fsSL https://raw.githubusercontent.com/tellahq/opensession/main/install.sh
 ```
 
 This installs missing prerequisites, clones the source to
-`~/.opensession/src`, installs dependencies, the engine and Tailscale, puts an
-`opensession` command on your `PATH`, and runs the onboarding wizard. It is
-safe to re-run: an existing install is fast-forwarded, and existing config is
-backed up rather than overwritten.
+`~/.opensession/src` (or unpacks a release with `--artifact`), installs
+dependencies and the engine, puts an `opensession` command on your `PATH`,
+writes a default configuration (127.0.0.1:3850, a scratch repo, no
+integrations), installs and starts the service, and ends with the URL. No
+questions. `--advanced` runs the full onboarding wizard instead; a defaults
+install upgrades to a full one at any time with `opensession onboard --force`.
+It is safe to re-run: an existing install is fast-forwarded, and existing
+config is backed up rather than overwritten.
 
 Useful flags — `--dir <path>` to install elsewhere, `--channel <ref>` to track
-a branch or tag, `--no-engine` to skip Pi, `--no-tailscale` to skip
-Tailscale, `--yes` to accept defaults, `--uninstall` to remove it. `--help`
-lists them all.
+a branch or tag, `--advanced` for the wizard, `--org <name>` to set up an org
+install, `--tailscale` to install Tailscale, `--codex` for the ChatGPT sign-in
+CLI, `--no-engine` to skip the model CLI, `--yes` to never prompt, `--uninstall`
+to remove it. `--help` lists them all.
 
-### Why Tailscale is installed by default
+The engine is pinned to the OpenCode version this checkout was built against
+(`opensession.opencodeVersion` in package.json); `OPENCODE_VERSION=latest`
+(or a specific version) overrides. A release artefact also ships OpenCode's
+own first-run install prebuilt (`engine-seed/`, the `@opencode-ai/plugin`
+tree it would otherwise npm-install into `~/.config/opencode` on the first
+session) and the installer prefetches its model catalogue, so the first turn
+does not pay that minute.
+
+### Tailscale: `--tailscale`
 
 There is no authentication (see the
 [trust model](README.md#trust-model-read-this)) — the bind address *is* the
-access control. Installing the client up front means onboarding can offer your
-tailnet address as the bind default, rather than the usual path: accept
-`127.0.0.1`, discover later that a teammate cannot reach it, and reach for
-`HOST=0.0.0.0`.
+access control. The default install binds `127.0.0.1` and needs no network
+software. When the UI has to be reachable from other machines, a private
+network is the way, and installing the Tailscale client before onboarding
+(`--tailscale`, then `--advanced` or `opensession bind`) lets your tailnet
+address be the bind default, rather than the usual path: accept `127.0.0.1`,
+discover later that a teammate cannot reach it, and reach for `HOST=0.0.0.0`.
 
 **Installing the client is not joining a network.** Nothing is exposed and no
 account is touched; `tailscale up` is a separate, explicit step. To do that
@@ -136,7 +153,7 @@ part automatically too, set an [auth
 key](https://tailscale.com/kb/1085/auth-keys):
 
 ```sh
-TS_AUTHKEY=tskey-auth-... curl -fsSL https://raw.githubusercontent.com/tellahq/opensession/main/install.sh | bash
+TS_AUTHKEY=tskey-auth-... curl -fsSL https://raw.githubusercontent.com/tellahq/opensession/main/install.sh | bash -s -- --tailscale
 ```
 
 Otherwise the installer prints the `sudo tailscale up` command and carries on.
@@ -167,6 +184,14 @@ With that in place, `opensession update` pulls upstream releases into your
 fork (merging over your own commits when needed) and restarts through the
 health-gated deploy path.
 
+A default (release) install updates differently: `opensession update`
+downloads the latest published artefact for this OS/arch, unpacks it beside
+the current one under `~/.opensession/releases/`, swaps the `src` symlink
+atomically (the running server never sees a half-unpacked tree), and restarts
+the service. The previous release stays on disk, so a rollback is repointing
+`src` and restarting. `OPENSESSION_RELEASE_BASE` overrides where the artefact
+comes from; `--channel <url>` points at a specific tarball.
+
 Nothing depends on the checkout living in a particular place — the CLI derives
 paths from wherever it is running, and onboarding writes the rest into
 `~/.opensession/config.json`. If you skip onboarding, the default mcp-config
@@ -182,7 +207,7 @@ URL, your first repository, and which integrations to turn on. It writes:
 | --- | --- |
 | `~/.opensession/config.json` | instance config — re-read on change, no restart |
 | `~/.opensession.env` | secrets and feature flags, `0600` |
-| `~/.opensession/opensession.service` | systemd unit templated for this box |
+| `~/.config/systemd/user/opensession.service` | the user-scope systemd unit, rendered for this box (Linux) |
 | `~/.opensession-model-providers.json` | engine config — created as `{"enabled": true}` when absent, so the Anthropic bridge is on out of the box ([engines.md](engines.md)) |
 
 Re-run it any time with `opensession onboard --force`; the previous files are
@@ -282,7 +307,7 @@ agent-started compilers, MCP proxies, and dev servers—not only `pi`.
 | Grafana | `GRAFANA_URL`, `GRAFANA_SERVICE_ACCOUNT_TOKEN`, `LOKI_DATASOURCE_UID` | [integrations-misc.md](integrations-misc.md#grafana-poller) |
 | Voice | `OPENAI_API_KEY`, `GROQ_API_KEY`, `WHISPER_CLI`, `WHISPER_MODEL` | [integrations-misc.md](integrations-misc.md#voice--transcription) |
 | Sandboxes | `E2B_API_KEY`, `OPENSESSION_SANDBOX_CONFIG` (experimental conformance only; supported workspace connections use Settings) | [self-hosting-sandboxes](../self-hosting-sandboxes.md) |
-| AWS runs | `AGENT_AWS_REGION` | [integrations-misc.md](integrations-misc.md#aws-creds-for-runs-agent_aws_region) |
+| AWS runs (off by default) | `AGENT_AWS_CREDS`, `AGENT_AWS_REGION`, `AGENT_AWS_MINT_USER` | [integrations-misc.md](integrations-misc.md#aws-creds-for-runs-agent_aws_region) |
 | Previews | `PREVIEW_HOST` | Caddy-fronted live previews (`packages/core/opensession-server/src/server/preview.ts`) |
 
 **Feature flags** — `ENABLE_SLACK_AGENT`, `ENABLE_LINEAR_AGENT`,
@@ -340,7 +365,7 @@ on:
 claude setup-token   # on a Claude Max login; prints sk-ant-…
 ```
 
-Accounts are added in the web UI under **Workspace → Models** — which means
+Accounts are added in the web UI under **Workspace → Usage** — which means
 this step happens *after* [section 8](#8-first-run): the server has to be
 running before you can paste anything into it. Mint the token whenever you
 like, start the server, then paste it. (The same page signs in ChatGPT-plan
@@ -388,41 +413,74 @@ when idle.
 
 ## 9. Running it as a service
 
+Onboarding installs and starts the service by default; these are for a box
+where you said no, or to move between scopes.
+
 ```sh
-opensession service install     # renders the unit for this box, then enables it
+opensession service install            # user-scope unit / LaunchAgent, no root
+opensession service install --system   # /etc/systemd/system unit (sudo)
+opensession service uninstall
 opensession status
 opensession logs -f
 ```
 
-On Linux that installs the `opensession` and `opensession-executor` systemd
-units (needs sudo). On macOS it installs a
-per-user **LaunchAgent**, which needs no root at all.
+On Linux the default is a **user** unit under `~/.config/systemd/user`,
+enabled with `loginctl enable-linger` so the user manager and server survive
+logout and reboot. It needs no root on distributions that allow
+`set-self-linger`; where policy requires an administrator, the command prints
+the one-time `sudo loginctl enable-linger <user>` step. `status`, `stop`,
+`restart`, and `logs` use the installed scope automatically. Rootless mode runs
+agent turns inside the gateway process because a user manager cannot consume
+the root-owned executor credential.
+
+`--system` is the hardened operator path. It installs two independent system
+units: `opensession.service` for the gateway and session kernel, and
+`opensession-executor.service` for fixed-policy run-host launch. It also installs
+the executor credential and root-owned run-host helper. The gateway wants the
+executor but does not require or own it, so executor-only deploys do not drop
+browser sockets, session state, or active hosts. See
+[executor architecture](../executor-architecture.md).
+
+On macOS the service is a per-user **LaunchAgent**. The Linux executor sidecar
+and systemd run-host helper do not apply there.
+
+On a cloud instance the user service is not installed by default because its
+in-process agent children can reach the metadata endpoint at
+169.254.169.254. `service install` prints the controls when something answers:
+install the hardened system scope, add a host firewall rule for the service
+uid, or set `OPENSESSION_ALLOW_IMDS=1` on a box with no role worth protecting.
+See [integrations-misc.md](integrations-misc.md#aws-creds-for-runs-agent_aws_region).
 
 The repo's `opensession.service` and `opensession-executor.service` are
-**templates**, not files to install
-verbatim — it carries one deployment's user, checkout path and bun path.
-`opensession service install` rewrites those for your box. The username is
-resolved and then verified to exist: `os.userInfo()` returns the literal string
-`"unknown"` under some non-login shells, and a unit containing `User=unknown`
-installs happily and then fails every start with `status=217/USER`.
+templates, not files to copy verbatim. `opensession service install` rewrites
+the selected scope for this box. User rendering drops `User=`, makes the env
+file optional, targets `default.target`, removes the system-only executor
+dependency and credential, and disables detached execution. System rendering
+verifies the username, stamps both units, and installs the credential and
+helper. `os.userInfo()` can return the literal string `"unknown"` under a
+non-login shell, so installing an unchecked username would fail later with
+`status=217/USER`.
 
-On Tella's own deployment the unit is a copy, not a symlink — after editing the
+On Tella's own deployment the unit is a copy, not a symlink: after editing the
 repo's `opensession.service`, re-`cp` and `daemon-reload` (deploy.sh does this
 automatically).
 
 Unit choices worth knowing (comments in the file itself):
 
-- `ExecStart=bun run packages/core/opensession-server/opensession.ts` — stable production runtime, see below.
-- `EnvironmentFile=<your home>/.opensession.env` — your secrets file (the
-  path is stamped in by `opensession service install`).
-- `TimeoutStopSec=80` — must stay above `SHUTDOWN_DRAIN_MS` (60s) plus
+- `ExecStart` uses the stable installed shim for compiled releases and Bun for
+  source installs.
+- `EnvironmentFile=<your home>/.opensession.env` loads your secrets. It is
+  optional in user scope and required in system scope.
+- `LoadCredential=executor-token:/etc/opensession/executor-token` applies only
+  to system scope; rootless user scope disables the executor and detached runs.
+- `TimeoutStopSec=80` must stay above `SHUTDOWN_DRAIN_MS` (60s) plus
   buffer, or systemd SIGKILLs mid-drain.
-- `KillMode=mixed` — SIGTERM hits only the bun parent so it can drain
+- `KillMode=mixed`: SIGTERM hits only the bun parent so it can drain
   in-flight runs; the default control-group mode would kill the Claude
   children instantly and defeat the run journal.
-- `IPAddressDeny=169.254.169.254/32` — blocks the EC2 metadata endpoint for
-  the whole service cgroup (untrusted agent text must not mint cloud
-  credentials). Harmless off-cloud.
+- `IPAddressDeny=169.254.169.254/32` (system scope) blocks the EC2 metadata
+  endpoint for the whole service cgroup (untrusted agent text must not mint
+  cloud credentials). Harmless off-cloud.
 - `User`, `WorkingDirectory`, `EnvironmentFile`, `ExecStart` and `PATH=` are
   rewritten per box by `opensession service install`; the values checked into
   the repo are Tella's.

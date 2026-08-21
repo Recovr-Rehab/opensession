@@ -68,7 +68,11 @@ describe("executor deployment", () => {
     expect(helper).toContain("OPENSESSION_RUN_SPEC_HASH");
     expect(helper).toContain("OPENSESSION_RUN_JOURNAL=$dir/journal.json");
     expect(helper).toContain('if [ "$action" = "self-deploy" ]');
-    expect(helper).toContain('exec "$systemd_run"');
+    expect(helper).toContain('if [ "$runner_mode" = "compiled" ]');
+    expect(helper).toContain('"$runner_bin" runner-host "$dir/spec.json"');
+    expect(helper).toContain('"$runner_bin" run "$repo_dir/packages/core/opensession-server/src/runner-host/host.ts"');
+    expect(installer).toContain("runner mode must be source or compiled");
+    expect(helper).toContain('set -- "$systemd_run"');
   });
 
   test("credential installation rejects link redirection", async () => {

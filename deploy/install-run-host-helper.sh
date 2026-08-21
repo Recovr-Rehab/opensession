@@ -7,8 +7,8 @@ export PATH
   echo "install-run-host-helper.sh must run as root" >&2
   exit 1
 }
-[ "$#" -eq 11 ] || {
-  echo "usage: install-run-host-helper.sh <user> <repo> <bun> <home> <env-file> <hosts-root> <path> <deploy-checkout> <deploy-state> <allow-reset> <health-url>" >&2
+[ "$#" -eq 13 ] || {
+  echo "usage: install-run-host-helper.sh <user> <repo> <bun> <home> <env-file> <hosts-root> <path> <deploy-checkout> <deploy-state> <allow-reset> <health-url> <runner-mode> <runner-bin>" >&2
   exit 2
 }
 
@@ -23,6 +23,8 @@ deploy_checkout="$8"
 deploy_state="$9"
 deploy_allow_reset="${10}"
 health_url="${11}"
+runner_mode="${12}"
+runner_bin="${13}"
 script_dir="$(CDPATH= cd -- "$(dirname "$0")" && pwd)"
 helper="/usr/local/libexec/opensession-run-host"
 config="/etc/opensession/run-host.conf"
@@ -36,13 +38,13 @@ printf '%s\n' "$service_user" | grep -Eq '^[A-Za-z0-9_.-]+$' || {
   echo "invalid service user" >&2
   exit 2
 }
-for value in "$repo_dir" "$bun_bin" "$home_dir" "$env_file" "$hosts_root" "$deploy_checkout" "$deploy_state"; do
+for value in "$repo_dir" "$bun_bin" "$home_dir" "$env_file" "$hosts_root" "$deploy_checkout" "$deploy_state" "$runner_bin"; do
   case "$value" in
     /*) ;;
     *) echo "run-host paths must be absolute" >&2; exit 2 ;;
   esac
 done
-for value in "$repo_dir" "$bun_bin" "$home_dir" "$env_file" "$hosts_root" "$service_path" "$deploy_checkout" "$deploy_state" "$health_url"; do
+for value in "$repo_dir" "$bun_bin" "$home_dir" "$env_file" "$hosts_root" "$service_path" "$deploy_checkout" "$deploy_state" "$health_url" "$runner_mode" "$runner_bin"; do
   case "$value" in
     *'
 '*) echo "run-host configuration cannot contain newlines" >&2; exit 2 ;;
@@ -52,6 +54,11 @@ done
   echo "allow-reset must be 0 or 1" >&2
   exit 2
 }
+[ "$runner_mode" = "source" ] || [ "$runner_mode" = "compiled" ] || {
+  echo "runner mode must be source or compiled" >&2
+  exit 2
+}
+[ -x "$runner_bin" ] || { echo "runner executable is not executable" >&2; exit 2; }
 
 service_uid="$(id -u "$service_user")"
 service_gid="$(id -g "$service_user")"
@@ -78,6 +85,7 @@ printf '%s\n' \
   "$home_dir" "$env_file" "$hosts_root" "$systemd_run" "$systemctl_bin" \
   "$service_path" \
   "$deploy_checkout" "$deploy_state" "$deploy_allow_reset" "$health_url" \
+  "$runner_mode" "$runner_bin" \
   > "$tmp_config"
 install -o root -g root -m 0600 "$tmp_config" "$config"
 

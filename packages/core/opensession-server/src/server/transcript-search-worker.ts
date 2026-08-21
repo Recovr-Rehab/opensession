@@ -98,13 +98,13 @@ export function searchStoredTranscripts(
 	}
 }
 
-async function main(): Promise<void> {
+export async function runTranscriptSearchWorker(): Promise<void> {
 	const input = JSON.parse(await Bun.stdin.text()) as StoredTranscriptSearchInput;
 	process.stdout.write(JSON.stringify(searchStoredTranscripts(input)));
 }
 
 if (import.meta.main) {
-	main().catch((error) => {
+	runTranscriptSearchWorker().catch((error) => {
 		console.error(error instanceof Error ? error.message : String(error));
 		process.exitCode = 1;
 	});
