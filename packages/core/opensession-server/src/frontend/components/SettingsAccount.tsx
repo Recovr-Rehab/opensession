@@ -136,7 +136,7 @@ export function SettingsAccountFooter() {
 export function SettingsAccountCard() {
 	const { currentUser, githubAuth, canSignOut, subtitle } = useAccount();
 	const rowClass =
-		"flex w-full items-center gap-3 border-x-0 border-b border-t-0 border-solid border-line bg-transparent px-3.5 py-3 text-left last:border-b-0 active:bg-hover";
+		"relative flex w-full items-center gap-3 border-0 bg-transparent px-3.5 py-3 text-left after:absolute after:bottom-0 after:left-[54px] after:right-0 after:h-px after:bg-divider-soft last:after:hidden active:bg-hover";
 
 	return (
 		<div>
@@ -167,7 +167,7 @@ export function SettingsAccountCard() {
 				)}
 				{canSignOut && (
 					<button className={rowClass} onClick={() => void signOut()}>
-						<span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md bg-active text-dim">
+						<span className="flex h-7 w-7 shrink-0 items-center justify-center text-dim">
 							<IconLogOut size={20} />
 						</span>
 						<span className="min-w-0 flex-1 text-item-title font-medium text-fg">

@@ -492,10 +492,10 @@ function MobileSettings({
 											{g.hits.map(({ item: s, hint }) => (
 												<button
 													key={s.key}
-													className="flex w-full items-center gap-3 border-x-0 border-b border-t-0 border-solid border-line bg-transparent px-3.5 py-3 text-left last:border-b-0 active:bg-hover"
+													className="relative flex w-full items-center gap-3 border-0 bg-transparent px-3.5 py-3 text-left after:absolute after:bottom-0 after:left-[54px] after:right-0 after:h-px after:bg-divider-soft last:after:hidden active:bg-hover"
 													onClick={() => onSelect(s.key)}
 												>
-													<span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md bg-active text-dim">
+													<span className="flex h-7 w-7 shrink-0 items-center justify-center text-dim">
 														{s.icon}
 													</span>
 												<span className="min-w-0 flex-1 text-item-title font-medium text-fg">
