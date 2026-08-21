@@ -18,12 +18,20 @@ function sourceFiles(dir: string): string[] {
 describe("single session ownership", () => {
 	test("run, queue, ask and session-file state delegate to SessionKernel", () => {
 		expect(read("run-state.ts")).toContain("sessionKernel(sessionId)");
-		expect(read("queue-state.ts")).toContain("new SessionOwnedMap");
-		expect(read("queue-state.ts")).toContain("new SessionOwnedSet");
-		expect(read("asks.ts")).toContain("new SessionOwnedMap");
+		expect(read("queue-state.ts")).toContain("new DeliveryOwnedMap");
+		expect(read("queue-state.ts")).toContain("sessionDelivery");
+		expect(read("queue-state.ts")).not.toContain("new SessionOwnedMap");
+		expect(read("queue-state.ts")).toContain("new EphemeralSessionSet");
+		expect(read("asks.ts")).toContain("new AskOwnedMap");
+		expect(read("asks.ts")).toContain("new EphemeralSessionMap");
+		expect(read("queue-state.ts") + read("asks.ts")).not.toContain("SessionOwnedMap");
+		expect(read("session-kernel/kernel.ts")).not.toContain("getRuntime<");
+		expect(read("session-kernel/kernel.ts")).not.toContain("setRuntime<");
 		expect(read("session-cache.ts")).toContain(
 			'runExclusive("session_file_updated"',
 		);
+		expect(read("session-cache.ts")).toContain("sessionDeliveryProjection");
+		expect(read("session-cache.ts")).not.toContain("__promptQueues");
 	});
 
 	test("run-state decisions execute atomically inside the actor", () => {

@@ -1,9 +1,18 @@
 import type { SessionCommand } from "./kernel";
-import type { DurableOutboxItem, DurableTimer, RunEventDecision, RunEventDecisionResult } from "./store";
+import type { DeliveryActorRequest } from "./delivery-protocol";
+import type { AskActorRequest } from "./ask-protocol";
+import type {
+  DurableOutboxItem,
+  DurableTimer,
+  RunEventDecision,
+  RunEventDecisionResult,
+} from "./store";
 
-export const SESSION_KERNEL_ACTOR_VERSION = 3;
-export const SESSION_KERNEL_MAX_QUEUED_PER_SESSION = 128;
-export const SESSION_KERNEL_MAX_QUEUED_TOTAL = 4096;
+export const SESSION_KERNEL_ACTOR_VERSION = 4;
+export const SESSION_KERNEL_MAX_WAITERS_PER_COMMAND = 64;
+export const SESSION_KERNEL_MAX_WAITERS_TOTAL = 4096;
+export const SESSION_KERNEL_MAX_EXECUTIONS_PER_SESSION = 128;
+export const SESSION_KERNEL_MAX_EXECUTIONS_TOTAL = 4096;
 
 export type KernelActorAsyncRequest =
   | { t: "hello"; rpcId: string; version: number }
@@ -22,11 +31,17 @@ export type KernelActorAsyncRequest =
   | {
       t: "complete";
       rpcId: string;
-      leaseId: string;
+      executionId: string;
       result: unknown;
       effects: Array<{ kind: string; payload: unknown; effectKey: string }>;
     }
-  | { t: "fail"; rpcId: string; leaseId: string; error: string; retryable: boolean };
+  | {
+      t: "fail";
+      rpcId: string;
+      executionId: string;
+      error: string;
+      retryable: boolean;
+    };
 
 export type KernelActorAsyncResponse =
   | { t: "ready"; rpcId: string; version: number }
@@ -34,11 +49,22 @@ export type KernelActorAsyncResponse =
       t: "begin_result";
       rpcId: string;
       duplicate: boolean;
-      leaseId?: string;
+      executionId?: string;
       result?: unknown;
     }
-  | { t: "complete_result" | "fail_result" | "acknowledge_result" | "maintain_result"; rpcId: string }
-  | { t: "stats_result"; rpcId: string; stats: ReturnType<import("./store").SessionKernelStoreApi["stats"]> }
+  | {
+      t:
+        | "complete_result"
+        | "fail_result"
+        | "acknowledge_result"
+        | "maintain_result";
+      rpcId: string;
+    }
+  | {
+      t: "stats_result";
+      rpcId: string;
+      stats: ReturnType<import("./store").SessionKernelStoreApi["stats"]>;
+    }
   | {
       t: "runtime_work_result";
       rpcId: string;
@@ -54,6 +80,8 @@ type SyncBuffers = {
 
 export type KernelActorSyncRequest =
   | ({ t: "store"; method: string; args: unknown[] } & SyncBuffers)
-  | ({ t: "decide_run_event"; decision: RunEventDecision } & SyncBuffers);
+  | ({ t: "decide_run_event"; decision: RunEventDecision } & SyncBuffers)
+  | ({ t: "delivery"; request: DeliveryActorRequest } & SyncBuffers)
+  | ({ t: "ask"; request: AskActorRequest } & SyncBuffers);
 
 export type KernelActorRunEventResult = RunEventDecisionResult;

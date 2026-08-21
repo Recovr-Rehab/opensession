@@ -1,8 +1,10 @@
 import { SessionKernelStore } from "./store";
 import {
   SESSION_KERNEL_ACTOR_VERSION,
-  SESSION_KERNEL_MAX_QUEUED_PER_SESSION,
-  SESSION_KERNEL_MAX_QUEUED_TOTAL,
+  SESSION_KERNEL_MAX_EXECUTIONS_PER_SESSION,
+  SESSION_KERNEL_MAX_EXECUTIONS_TOTAL,
+  SESSION_KERNEL_MAX_WAITERS_PER_COMMAND,
+  SESSION_KERNEL_MAX_WAITERS_TOTAL,
   type KernelActorAsyncRequest,
   type KernelActorAsyncResponse,
   type KernelActorSyncRequest,
@@ -10,29 +12,64 @@ import {
 
 export function startSessionKernelActorWorker(): void {
   const store = new SessionKernelStore();
-  type Lease = {
-    leaseId: string;
+  type Execution = {
+    executionId: string;
     sessionId: string;
     requestId: string;
     type: string;
+    waiters: string[];
   };
-  const active = new Map<string, Lease>();
-  const queues = new Map<
-    string,
-    Array<Extract<KernelActorAsyncRequest, { t: "begin" }>>
-  >();
-  let queuedTotal = 0;
+  const executions = new Map<string, Execution>();
+  const executingRequests = new Map<string, string>();
+  let waiterTotal = 0;
+  const executionsPerSession = new Map<string, number>();
+
+  const requestKey = (sessionId: string, requestId: string) =>
+    `${sessionId}\u0000${requestId}`;
 
   function post(message: KernelActorAsyncResponse): void {
     self.postMessage(message);
   }
 
-  function grant(
+  function terminalResult(
+    request: Extract<KernelActorAsyncRequest, { t: "begin" }>,
+    result: unknown,
+  ): void {
+    post({
+      t: "begin_result",
+      rpcId: request.rpcId,
+      duplicate: true,
+      result,
+    });
+  }
+
+  function begin(
     request: Extract<KernelActorAsyncRequest, { t: "begin" }>,
   ): void {
     try {
       if (store.isTombstoned(request.sessionId))
         throw new Error(`Session ${request.sessionId} was deleted`);
+      const key = requestKey(request.sessionId, request.command.requestId);
+      const currentExecutionId = executingRequests.get(key);
+      const existing = store.command(
+        request.sessionId,
+        request.command.requestId,
+      );
+      const terminal =
+        existing?.status === "completed" ||
+        existing?.status === "indeterminate" ||
+        (existing?.status === "failed" &&
+          (!existing.retryable || !existing.replaySafe));
+      if (
+        !terminal &&
+        !currentExecutionId &&
+        ((executionsPerSession.get(request.sessionId) ?? 0) >=
+          SESSION_KERNEL_MAX_EXECUTIONS_PER_SESSION ||
+          executions.size >= SESSION_KERNEL_MAX_EXECUTIONS_TOTAL)
+      )
+        throw Object.assign(new Error("Session effect executor is full"), {
+          retryable: true,
+        });
       const persisted = store.acceptCommand({
         sessionId: request.sessionId,
         requestId: request.command.requestId,
@@ -41,158 +78,162 @@ export function startSessionKernelActorWorker(): void {
         replaySafe: request.command.replaySafe,
       });
       if (persisted.status === "completed") {
-        post({
-          t: "begin_result",
-          rpcId: request.rpcId,
-          duplicate: true,
-          result: persisted.result,
-        });
-        grantNext(request.sessionId);
+        terminalResult(request, persisted.result);
         return;
       }
       if (
-        (persisted.status === "failed" && (!persisted.retryable || !persisted.replaySafe)) ||
+        (persisted.status === "failed" &&
+          (!persisted.retryable || !persisted.replaySafe)) ||
         persisted.status === "indeterminate"
       ) {
-        post({
-          t: "begin_result",
-          rpcId: request.rpcId,
-          duplicate: true,
-          result: {
-            __sessionKernelFailure: true,
-            message: persisted.error || "Session command outcome is indeterminate",
-          },
+        terminalResult(request, {
+          __sessionKernelFailure: true,
+          message:
+            persisted.error || "Session command outcome is indeterminate",
         });
-        grantNext(request.sessionId);
         return;
       }
-      const lease: Lease = {
-        leaseId: crypto.randomUUID(),
+
+      if (currentExecutionId) {
+        const current = executions.get(currentExecutionId);
+        if (!current) throw new Error("Session command execution was lost");
+        if (
+          current.waiters.length >= SESSION_KERNEL_MAX_WAITERS_PER_COMMAND ||
+          waiterTotal >= SESSION_KERNEL_MAX_WAITERS_TOTAL
+        )
+          throw Object.assign(
+            new Error("Session command waiter limit reached"),
+            {
+              retryable: true,
+            },
+          );
+        current.waiters.push(request.rpcId);
+        waiterTotal += 1;
+        return;
+      }
+
+      const execution: Execution = {
+        executionId: crypto.randomUUID(),
         sessionId: request.sessionId,
         requestId: request.command.requestId,
         type: request.command.type,
+        waiters: [],
       };
-      active.set(request.sessionId, lease);
+      executions.set(execution.executionId, execution);
+      executingRequests.set(key, execution.executionId);
+      executionsPerSession.set(
+        request.sessionId,
+        (executionsPerSession.get(request.sessionId) ?? 0) + 1,
+      );
       store.markProcessing(request.sessionId, request.command.requestId);
       post({
         t: "begin_result",
         rpcId: request.rpcId,
         duplicate: false,
-        leaseId: lease.leaseId,
+        executionId: execution.executionId,
       });
     } catch (error) {
       post({
         t: "error",
         rpcId: request.rpcId,
         error: error instanceof Error ? error.message : String(error),
+        retryable:
+          !!error &&
+          typeof error === "object" &&
+          (error as { retryable?: boolean }).retryable === true,
       });
-      grantNext(request.sessionId);
     }
   }
 
-  function grantNext(sessionId: string): void {
-    if (active.has(sessionId)) return;
-    const queue = queues.get(sessionId);
-    const next = queue?.shift();
-    if (next) queuedTotal -= 1;
-    if (!queue?.length) queues.delete(sessionId);
-    if (next) grant(next);
+  function executionFor(executionId: string): Execution {
+    const execution = executions.get(executionId);
+    if (!execution)
+      throw new Error("Session kernel execution is no longer active");
+    return execution;
   }
 
-  function begin(
-    request: Extract<KernelActorAsyncRequest, { t: "begin" }>,
+  function releaseExecution(
+    execution: Execution,
+    outcome: { result?: unknown; error?: string; retryable?: boolean } = {},
   ): void {
-    if (active.has(request.sessionId)) {
-      const queue = queues.get(request.sessionId) ?? [];
-      if (
-        queue.some((queued) =>
-          queued.command.requestId === request.command.requestId
-        )
-      ) {
+    executions.delete(execution.executionId);
+    executingRequests.delete(
+      requestKey(execution.sessionId, execution.requestId),
+    );
+    const remaining = (executionsPerSession.get(execution.sessionId) ?? 1) - 1;
+    if (remaining > 0) executionsPerSession.set(execution.sessionId, remaining);
+    else executionsPerSession.delete(execution.sessionId);
+    for (const rpcId of execution.waiters) {
+      waiterTotal -= 1;
+      if (outcome.error !== undefined)
         post({
           t: "error",
-          rpcId: request.rpcId,
-          error: "Session command is already queued",
-          retryable: true,
+          rpcId,
+          error: outcome.error,
+          retryable: outcome.retryable,
         });
-        return;
-      }
-      if (
-        queue.length >= SESSION_KERNEL_MAX_QUEUED_PER_SESSION ||
-        queuedTotal >= SESSION_KERNEL_MAX_QUEUED_TOTAL
-      ) {
+      else
         post({
-          t: "error",
-          rpcId: request.rpcId,
-          error: "Session kernel mailbox is full",
-          retryable: true,
+          t: "begin_result",
+          rpcId,
+          duplicate: true,
+          result: outcome.result,
         });
-        return;
       }
-      queue.push(request);
-      queuedTotal += 1;
-      queues.set(request.sessionId, queue);
-      return;
-    }
-    grant(request);
-  }
-
-  function leaseFor(leaseId: string): Lease {
-    for (const lease of active.values())
-      if (lease.leaseId === leaseId) return lease;
-    throw new Error("Session kernel lease is no longer active");
   }
 
   function finish(
     request: Extract<KernelActorAsyncRequest, { t: "complete" | "fail" }>,
   ): void {
     try {
-      const lease = leaseFor(request.leaseId);
+      const execution = executionFor(request.executionId);
       if (request.t === "complete") {
-        if (!store.isTombstoned(lease.sessionId))
+        if (!store.isTombstoned(execution.sessionId))
           store.completeCommandDecision({
-            sessionId: lease.sessionId,
-            requestId: lease.requestId,
-            type: lease.type,
+            sessionId: execution.sessionId,
+            requestId: execution.requestId,
+            type: execution.type,
             result: request.result,
             effects: request.effects,
           });
         post({ t: "complete_result", rpcId: request.rpcId });
+        releaseExecution(execution, { result: request.result });
       } else {
         store.failCommand(
-          lease.sessionId,
-          lease.requestId,
+          execution.sessionId,
+          execution.requestId,
           request.error,
           request.retryable,
         );
         post({ t: "fail_result", rpcId: request.rpcId });
+        releaseExecution(execution, {
+          error: request.error,
+          retryable: request.retryable,
+        });
       }
-      active.delete(lease.sessionId);
-      grantNext(lease.sessionId);
     } catch (error) {
       post({
         t: "error",
         rpcId: request.rpcId,
         error: error instanceof Error ? error.message : String(error),
       });
-      // Settlement persistence is ownership-critical. A normal RPC error would
-      // leave the lease live and let the gateway continue serving ambiguously.
+      // Settlement persistence is ownership-critical. Continuing after an
+      // ambiguous result could let a stale executor commit over its successor.
       queueMicrotask(() => self.close());
     }
   }
 
   function beginSync(
     sessionId: string,
-    command: { requestId: string; type: string; payload?: unknown; replaySafe?: boolean },
+    command: {
+      requestId: string;
+      type: string;
+      payload?: unknown;
+      replaySafe?: boolean;
+    },
   ) {
-    // Compatibility writes can arrive from detached run callbacks while a
-    // durable command owns the session. They still execute in this Worker, so
-    // borrow its physical writer instead of trying to open a second lease (the
-    // synchronous caller cannot wait for the active gateway command without
-    // deadlocking that command's settlement).
     if (store.isTombstoned(sessionId))
       throw new Error(`Session ${sessionId} was deleted`);
-    if (active.has(sessionId)) return { duplicate: false, borrowed: true };
     const persisted = store.acceptCommand({
       sessionId,
       requestId: command.requestId,
@@ -203,43 +244,50 @@ export function startSessionKernelActorWorker(): void {
     if (persisted.status === "completed")
       return { duplicate: true, result: persisted.result };
     if (
-      (persisted.status === "failed" && (!persisted.retryable || !persisted.replaySafe)) ||
+      (persisted.status === "failed" &&
+        (!persisted.retryable || !persisted.replaySafe)) ||
       persisted.status === "indeterminate"
-    ) throw new Error(persisted.error || "Session command outcome is indeterminate");
-    const lease: Lease = {
-      leaseId: crypto.randomUUID(),
+    )
+      throw new Error(
+        persisted.error || "Session command outcome is indeterminate",
+      );
+    const key = requestKey(sessionId, command.requestId);
+    if (executingRequests.has(key))
+      throw new Error("Session command is already executing");
+    const execution: Execution = {
+      executionId: crypto.randomUUID(),
       sessionId,
       requestId: command.requestId,
       type: command.type,
+      waiters: [],
     };
-    active.set(sessionId, lease);
+    executions.set(execution.executionId, execution);
+    executingRequests.set(key, execution.executionId);
     store.markProcessing(sessionId, command.requestId);
-    return { duplicate: false, leaseId: lease.leaseId };
+    return { duplicate: false, executionId: execution.executionId };
   }
 
   function completeSync(
-    leaseId: string,
+    executionId: string,
     result: unknown,
     effects: Array<{ kind: string; payload: unknown; effectKey: string }>,
   ) {
-    const lease = leaseFor(leaseId);
-    if (!store.isTombstoned(lease.sessionId))
+    const execution = executionFor(executionId);
+    if (!store.isTombstoned(execution.sessionId))
       store.completeCommandDecision({
-        sessionId: lease.sessionId,
-        requestId: lease.requestId,
-        type: lease.type,
+        sessionId: execution.sessionId,
+        requestId: execution.requestId,
+        type: execution.type,
         result,
         effects,
       });
-    active.delete(lease.sessionId);
-    grantNext(lease.sessionId);
+    releaseExecution(execution, { result });
   }
 
-  function failSync(leaseId: string, error: string) {
-    const lease = leaseFor(leaseId);
-    store.failCommand(lease.sessionId, lease.requestId, error);
-    active.delete(lease.sessionId);
-    grantNext(lease.sessionId);
+  function failSync(executionId: string, error: string) {
+    const execution = executionFor(executionId);
+    store.failCommand(execution.sessionId, execution.requestId, error);
+    releaseExecution(execution, { error, retryable: false });
   }
 
   function syncStore(request: KernelActorSyncRequest): void {
@@ -249,7 +297,67 @@ export function startSessionKernelActorWorker(): void {
       let result: unknown;
       if (request.t === "decide_run_event")
         result = store.applyRunEvent(request.decision);
-      else if (request.method === "$beginSync")
+      else if (request.t === "delivery") {
+        const delivery = request.request;
+        if (delivery.op === "snapshot")
+          result = store.deliverySnapshot(delivery.sessionId);
+        else if (delivery.op === "entries")
+          result = store.deliveryEntries(delivery.slot);
+        else if (delivery.op === "set")
+          result = store.setDeliverySlot(
+            delivery.sessionId,
+            delivery.slot,
+            delivery.value,
+          );
+        else if (delivery.op === "delete")
+          result = store.deleteDeliverySlot(delivery.sessionId, delivery.slot);
+        else if (delivery.op === "clear_slot")
+          result = store.clearDeliverySlot(delivery.slot);
+        else if (delivery.op === "prepare_steer")
+          result = store.prepareSteerDelivery(
+            delivery.sessionId,
+            delivery.itemId,
+            delivery.item,
+          );
+        else if (delivery.op === "accept_steer")
+          result = store.acceptSteerDelivery(
+            delivery.sessionId,
+            delivery.itemId,
+          );
+        else if (delivery.op === "reject_steer")
+          result = store.rejectSteerDelivery(
+            delivery.sessionId,
+            delivery.itemId,
+          );
+        else if (delivery.op === "settle_pending_steers")
+          result = store.settlePendingSteers();
+        else if (delivery.op === "requeue_steers")
+          result = store.requeueSteerDeliveries(
+            delivery.sessionId,
+            delivery.items,
+          );
+        else if (delivery.op === "claim_dispatch")
+          result = store.claimDeliveryDispatch(delivery);
+        else if (delivery.op === "ack_dispatch")
+          result = store.ackDeliveryDispatch(
+            delivery.sessionId,
+            delivery.promptEntryId,
+          );
+        else
+          result = store.failDeliveryDispatch(
+            delivery.sessionId,
+            delivery.promptEntryId,
+          );
+      } else if (request.t === "ask") {
+        const ask = request.request;
+        if (ask.op === "snapshot") result = store.askSnapshot(ask.sessionId);
+        else if (ask.op === "entries") result = store.askEntries();
+        else if (ask.op === "set")
+          result = store.setAskRecord(ask.sessionId, ask.value);
+        else if (ask.op === "delete")
+          result = store.deleteAskRecord(ask.sessionId);
+        else result = store.clearAskRecords();
+      } else if (request.method === "$beginSync")
         result = beginSync(request.args[0] as string, request.args[1] as any);
       else if (request.method === "$completeSync")
         result = completeSync(
@@ -293,7 +401,12 @@ export function startSessionKernelActorWorker(): void {
     event: MessageEvent<KernelActorAsyncRequest | KernelActorSyncRequest>,
   ) => {
     const request = event.data;
-    if (request.t === "store" || request.t === "decide_run_event") {
+    if (
+      request.t === "store" ||
+      request.t === "decide_run_event" ||
+      request.t === "delivery" ||
+      request.t === "ask"
+    ) {
       syncStore(request);
       return;
     }
@@ -324,11 +437,7 @@ export function startSessionKernelActorWorker(): void {
       post({
         t: "runtime_work_result",
         rpcId: request.rpcId,
-        timers: store.dueTimers(
-          request.now,
-          request.limit,
-          request.timerKinds,
-        ),
+        timers: store.dueTimers(request.now, request.limit, request.timerKinds),
         outbox: store.pendingOutbox(
           request.now,
           request.limit,

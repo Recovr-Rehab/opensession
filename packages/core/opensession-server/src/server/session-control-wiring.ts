@@ -21,7 +21,7 @@ import { cancelAgentRun, isAgentSessionBusy, steerAgentRun } from "./agent-runne
 import { pendingAskAwaitingAnswer } from "./asks";
 import { relinkAskThreads } from "./human-asks";
 import { SESSION_EFFORTS, type SessionEffort, interactiveDefaultModel, providerFor, resolveModel } from "./models";
-import { deliveryQueueState, liftUserStop, promptQueues, recordSteer, requeueSteerReceipts, stoppedSessions } from "./queue-state";
+import { deliveryQueueState, liftUserStop, promptQueues, acceptQueuedSteer, prepareQueuedSteer, rejectQueuedSteer, requeueSteerReceipts, stoppedSessions } from "./queue-state";
 import { drainQueue, enqueuePrompt, runSessionPrompt, sessionMentionsNote, watchExternalRunAndDrain } from "./run-session";
 import { parseImageDataUrls, stageFileAttachments, withUploadsNote } from "./uploads";
 import { type Sandbox } from "./sandbox";
@@ -245,21 +245,42 @@ registerSessionControl({
 				// (and never steer regardless): the in-thread answer mirror only fires
 				// on a turn that carries the slackReplyTo, and a steered message can't
 				// (it folds into a turn that's already running).
+				const steerItem = {
+					id: deliveryId,
+					content,
+					user,
+					images: opts?.imageUrls,
+					contextSessions: opts?.contextSessions,
+					...(opts?.hold ? { hold: true } : {}),
+					...(opts?.reviewHandoff ? { reviewHandoff: true } : {}),
+				};
 				if (
 					opts?.busy !== "queue" &&
 					!opts?.slackReplyTo &&
 					!hasFiles &&
-					steerAgentRun(
-						[session.claudeSessionId, session.codexThreadId, session.id],
-						attributed,
-						opts?.images,
-						deliveryId,
-					)
+					prepareQueuedSteer(id, deliveryId, steerItem)
 				) {
-					recordSteer(id, { id: deliveryId, content, user, images: opts?.imageUrls });
+					if (
+						steerAgentRun(
+							[session.claudeSessionId, session.codexThreadId, session.id],
+							attributed,
+							opts?.images,
+							deliveryId,
+						)
+					) {
+						if (!acceptQueuedSteer(id, deliveryId))
+							throw new Error("Pending steer changed before runner acceptance");
+						return {
+							status: "steered" as const,
+							message: "Folded into the running turn.",
+							deliveryId,
+						};
+					}
+					rejectQueuedSteer(id, deliveryId);
+					watchExternalRunAndDrain(id);
 					return {
-						status: "steered" as const,
-						message: "Folded into the running turn.",
+						status: "queued" as const,
+						message: "Queued behind the current run.",
 						deliveryId,
 					};
 				}

@@ -1,13 +1,20 @@
 import type { SessionCommand } from "./kernel";
 import type {
   DurableCommandRecord,
+  DurableDeliveryState,
   DurableOutboxItem,
+  DeliverySlot,
   DurableRunState,
   DurableTimer,
   RunEventDecision,
   RunEventDecisionResult,
   SessionKernelStoreApi,
 } from "./store";
+import type {
+  DeliveryActorRequest,
+  DeliveryActorResult,
+} from "./delivery-protocol";
+import type { AskActorRequest, AskActorResult } from "./ask-protocol";
 import {
   SESSION_KERNEL_ACTOR_VERSION,
   type KernelActorAsyncRequest,
@@ -24,7 +31,10 @@ const LARGE_STORE_RESPONSES = new Set([
 ]);
 
 export class SessionKernelActorError extends Error {
-  constructor(message: string, readonly retryable = false) {
+  constructor(
+    message: string,
+    readonly retryable = false,
+  ) {
     super(message);
     this.name = "SessionKernelActorError";
   }
@@ -37,7 +47,7 @@ type Pending = {
 
 export class SessionKernelActorClient {
   private readonly pending = new Map<string, Pending>();
-  private readonly leases = new Map<string, string>();
+  private readonly executions = new Map<string, string>();
   private deadError?: Error;
   readonly store: SessionKernelStoreApi;
 
@@ -51,7 +61,9 @@ export class SessionKernelActorClient {
       if (!pending) return;
       this.pending.delete(response.rpcId);
       if (response.t === "error")
-        pending.reject(new SessionKernelActorError(response.error, response.retryable));
+        pending.reject(
+          new SessionKernelActorError(response.error, response.retryable),
+        );
       else pending.resolve(response);
     });
     worker.addEventListener("error", (event) => {
@@ -60,8 +72,11 @@ export class SessionKernelActorClient {
     worker.addEventListener("messageerror", () => {
       this.markDead(new Error("Session kernel actor sent an invalid message"));
     });
-    (worker as Worker & { addEventListener(type: "close", listener: () => void): void })
-      .addEventListener("close", () => {
+    (
+      worker as Worker & {
+        addEventListener(type: "close", listener: () => void): void;
+      }
+    ).addEventListener("close", () => {
         this.markDead(new Error("Session kernel actor exited"));
       });
     this.store = new RemoteStore(this);
@@ -81,7 +96,10 @@ export class SessionKernelActorClient {
     (this.store as RemoteStore).hydrateRunStates();
   }
 
-  async acknowledgeCommand(sessionId: string, requestId: string): Promise<void> {
+  async acknowledgeCommand(
+    sessionId: string,
+    requestId: string,
+  ): Promise<void> {
     const response = await this.request({
       t: "acknowledge",
       rpcId: crypto.randomUUID(),
@@ -93,14 +111,22 @@ export class SessionKernelActorClient {
   }
 
   async statsAsync(): Promise<ReturnType<SessionKernelStoreApi["stats"]>> {
-    const response = await this.request({ t: "stats", rpcId: crypto.randomUUID() });
-    if (response.t !== "stats_result") throw new Error("Invalid kernel stats response");
+    const response = await this.request({
+      t: "stats",
+      rpcId: crypto.randomUUID(),
+    });
+    if (response.t !== "stats_result")
+      throw new Error("Invalid kernel stats response");
     return response.stats;
   }
 
   async maintainAsync(): Promise<void> {
-    const response = await this.request({ t: "maintain", rpcId: crypto.randomUUID() });
-    if (response.t !== "maintain_result") throw new Error("Invalid kernel maintenance response");
+    const response = await this.request({
+      t: "maintain",
+      rpcId: crypto.randomUUID(),
+    });
+    if (response.t !== "maintain_result")
+      throw new Error("Invalid kernel maintenance response");
   }
 
   async runtimeWork(
@@ -125,7 +151,7 @@ export class SessionKernelActorClient {
   async begin(
     sessionId: string,
     command: SessionCommand,
-  ): Promise<{ duplicate: boolean; leaseId?: string; result?: unknown }> {
+  ): Promise<{ duplicate: boolean; executionId?: string; result?: unknown }> {
     const response = await this.request({
       t: "begin",
       rpcId: crypto.randomUUID(),
@@ -135,19 +161,19 @@ export class SessionKernelActorClient {
     if (response.t !== "begin_result")
       throw new Error("Invalid kernel begin response");
     const failure = response.result as
-      | { __sessionKernelFailure?: boolean; message?: string }
-      | undefined;
+      { __sessionKernelFailure?: boolean; message?: string } | undefined;
     if (failure?.__sessionKernelFailure)
       throw new SessionKernelActorError(
         failure.message || "Session command failed",
         false,
       );
-    if (response.leaseId) this.leases.set(response.leaseId, sessionId);
+    if (response.executionId)
+      this.executions.set(response.executionId, sessionId);
     return response;
   }
 
   async complete(
-    leaseId: string,
+    executionId: string,
     result: unknown,
     effects: Array<{ kind: string; payload: unknown; effectKey: string }>,
   ): Promise<void> {
@@ -155,15 +181,15 @@ export class SessionKernelActorClient {
       const response = await this.request({
         t: "complete",
         rpcId: crypto.randomUUID(),
-        leaseId,
+        executionId,
         result,
         effects,
       });
       if (response.t !== "complete_result")
         throw new Error("Invalid kernel complete response");
-      const sessionId = this.leases.get(leaseId);
+      const sessionId = this.executions.get(executionId);
       if (sessionId) (this.store as RemoteStore).noteChange(sessionId);
-      this.leases.delete(leaseId);
+      this.executions.delete(executionId);
     } catch (error) {
       const failure = error instanceof Error ? error : new Error(String(error));
       // Once handler execution has finished, a failed completion is ambiguous.
@@ -176,27 +202,27 @@ export class SessionKernelActorClient {
   beginSync(
     sessionId: string,
     command: SessionCommand,
-  ): { duplicate: boolean; borrowed?: boolean; leaseId?: string; result?: unknown } {
+  ): { duplicate: boolean; executionId?: string; result?: unknown } {
     const admission = this.callStore<{
       duplicate: boolean;
-      borrowed?: boolean;
-      leaseId?: string;
+      executionId?: string;
       result?: unknown;
     }>("$beginSync", [sessionId, command]);
-    if (admission.leaseId) this.leases.set(admission.leaseId, sessionId);
+    if (admission.executionId)
+      this.executions.set(admission.executionId, sessionId);
     return admission;
   }
 
   completeSync(
-    leaseId: string,
+    executionId: string,
     result: unknown,
     effects: Array<{ kind: string; payload: unknown; effectKey: string }>,
   ): void {
     try {
-      this.callStore("$completeSync", [leaseId, result, effects]);
-      const sessionId = this.leases.get(leaseId);
+      this.callStore("$completeSync", [executionId, result, effects]);
+      const sessionId = this.executions.get(executionId);
       if (sessionId) (this.store as RemoteStore).noteChange(sessionId);
-      this.leases.delete(leaseId);
+      this.executions.delete(executionId);
     } catch (error) {
       const failure = error instanceof Error ? error : new Error(String(error));
       this.markDead(failure);
@@ -204,10 +230,10 @@ export class SessionKernelActorClient {
     }
   }
 
-  failSync(leaseId: string, error: string): void {
+  failSync(executionId: string, error: string): void {
     try {
-      this.callStore("$failSync", [leaseId, error]);
-      this.leases.delete(leaseId);
+      this.callStore("$failSync", [executionId, error]);
+      this.executions.delete(executionId);
     } catch (cause) {
       const failure = cause instanceof Error ? cause : new Error(String(cause));
       this.markDead(failure);
@@ -215,10 +241,14 @@ export class SessionKernelActorClient {
     }
   }
 
-  async fail(leaseId: string, error: string, retryable = false): Promise<void> {
+  async fail(
+    executionId: string,
+    error: string,
+    retryable = false,
+  ): Promise<void> {
     if (!retryable) {
       await this.complete(
-        leaseId,
+        executionId,
         { __sessionKernelFailure: true, message: error.slice(0, 2_000) },
         [],
       );
@@ -228,18 +258,36 @@ export class SessionKernelActorClient {
       const response = await this.request({
         t: "fail",
         rpcId: crypto.randomUUID(),
-        leaseId,
+        executionId,
         error,
         retryable,
       });
       if (response.t !== "fail_result")
         throw new Error("Invalid kernel failure response");
-      this.leases.delete(leaseId);
+      this.executions.delete(executionId);
     } catch (cause) {
       const failure = cause instanceof Error ? cause : new Error(String(cause));
       this.markDead(failure);
       throw failure;
     }
+  }
+
+  decideAsk<T extends AskActorRequest>(request: T): AskActorResult<T> {
+    return this.callSync<AskActorResult<T>>(
+      { t: "ask", request },
+      `ask ${request.op}`,
+      request.op === "snapshot" || request.op === "entries",
+    );
+  }
+
+  decideDelivery<T extends DeliveryActorRequest>(
+    request: T,
+  ): DeliveryActorResult<T> {
+    return this.callSync<DeliveryActorResult<T>>(
+      { t: "delivery", request },
+      `delivery ${request.op}`,
+      request.op === "snapshot" || request.op === "entries",
+    );
   }
 
   decideRunEvent(decision: RunEventDecision): RunEventDecisionResult {
@@ -248,7 +296,10 @@ export class SessionKernelActorClient {
       "run event decision",
     );
     if (result.accepted)
-      (this.store as RemoteStore).noteRunState(decision.sessionId, result.state);
+      (this.store as RemoteStore).noteRunState(
+        decision.sessionId,
+        result.state,
+      );
     return result;
   }
 
@@ -263,17 +314,25 @@ export class SessionKernelActorClient {
   private callSync<TResult>(
     request:
       | { t: "store"; method: string; args: unknown[] }
-      | { t: "decide_run_event"; decision: RunEventDecision },
+      | { t: "decide_run_event"; decision: RunEventDecision }
+      | { t: "delivery"; request: DeliveryActorRequest }
+      | { t: "ask"; request: AskActorRequest },
     label: string,
     large = false,
   ): TResult {
     if (this.deadError) throw this.deadError;
-    const controlBuffer = new SharedArrayBuffer(Int32Array.BYTES_PER_ELEMENT * 2);
+    const controlBuffer = new SharedArrayBuffer(
+      Int32Array.BYTES_PER_ELEMENT * 2,
+    );
     const outputBuffer = new SharedArrayBuffer(
       large ? LARGE_OUTPUT_BYTES : SMALL_OUTPUT_BYTES,
     );
     const control = new Int32Array(controlBuffer);
-    this.worker.postMessage({ ...request, control: controlBuffer, output: outputBuffer });
+    this.worker.postMessage({
+      ...request,
+      control: controlBuffer,
+      output: outputBuffer,
+    });
     const waited = Atomics.wait(control, 0, 0, 10_000);
     if (waited === "timed-out") {
       const error = new Error(`Session kernel actor timed out in ${label}`);
@@ -281,8 +340,14 @@ export class SessionKernelActorClient {
       throw error;
     }
     const length = Atomics.load(control, 1);
-    const text = new TextDecoder().decode(new Uint8Array(outputBuffer, 0, length));
-    const response = JSON.parse(text) as { ok: boolean; result?: TResult; error?: string };
+    const text = new TextDecoder().decode(
+      new Uint8Array(outputBuffer, 0, length),
+    );
+    const response = JSON.parse(text) as {
+      ok: boolean;
+      result?: TResult;
+      error?: string;
+    };
     if (!response.ok)
       throw new Error(response.error || `Session kernel ${label} failed`);
     return response.result as TResult;
@@ -298,9 +363,8 @@ export class SessionKernelActorClient {
   ): Promise<KernelActorAsyncResponse> {
     if (this.deadError) return Promise.reject(this.deadError);
     return new Promise((resolve, reject) => {
-      // `begin` is a mailbox wait, not a liveness probe: a healthy request may
-      // sit behind a long opening run. Worker error/messageerror remains its
-      // failure signal; bounded completion/store RPCs detect a wedged actor.
+      // Duplicate begin requests wait for the active execution result. Worker
+      // error/messageerror remains their failure signal; every other RPC is bounded.
       const timeout =
         request.t === "begin"
           ? undefined
@@ -327,7 +391,8 @@ export class SessionKernelActorClient {
       } catch (error) {
         if (timeout) clearTimeout(timeout);
         this.pending.delete(request.rpcId);
-        const failure = error instanceof Error ? error : new Error(String(error));
+        const failure =
+          error instanceof Error ? error : new Error(String(error));
         this.markDead(failure);
         reject(failure);
       }
@@ -345,11 +410,16 @@ export class SessionKernelActorClient {
 
 class RemoteStore implements SessionKernelStoreApi {
   private readonly runStateCache = new Map<string, DurableRunState>();
-  private statsCache?: { at: number; value: ReturnType<SessionKernelStoreApi["stats"]> };
+  private statsCache?: {
+    at: number;
+    value: ReturnType<SessionKernelStoreApi["stats"]>;
+  };
   constructor(private readonly actor: SessionKernelActorClient) {}
   hydrateRunStates(): void {
     this.runStateCache.clear();
-    for (const state of this.call<Array<DurableRunState & { sessionId: string }>>("runStates"))
+    for (const state of this.call<
+      Array<DurableRunState & { sessionId: string }>
+    >("runStates"))
       this.runStateCache.set(state.sessionId, state);
   }
   noteRunState(sessionId: string, state: DurableRunState): void {
@@ -407,15 +477,20 @@ class RemoteStore implements SessionKernelStoreApi {
     this.call("failCommand", sessionId, requestId, error, retryable);
   }
   runState(sessionId: string) {
-    return this.runStateCache.get(sessionId) ?? {
+    return (
+      this.runStateCache.get(sessionId) ?? {
       state: "idle",
       since: new Date(0).toISOString(),
       generation: 0,
       changeSeq: 0,
-    };
+      }
+    );
   }
   runStates() {
-    return [...this.runStateCache].map(([sessionId, state]) => ({ sessionId, ...state }));
+    return [...this.runStateCache].map(([sessionId, state]) => ({
+      sessionId,
+      ...state,
+    }));
   }
   appendChange(sessionId: string, kind: string, payload?: unknown) {
     const seq = this.call<number>("appendChange", sessionId, kind, payload);
@@ -449,6 +524,91 @@ class RemoteStore implements SessionKernelStoreApi {
   clearSession(sessionId: string) {
     this.call("clearSession", sessionId);
     this.runStateCache.delete(sessionId);
+  }
+  askMigrationComplete() {
+    return this.call<boolean>("askMigrationComplete");
+  }
+  markAskMigrationComplete() {
+    this.call("markAskMigrationComplete");
+  }
+  askSnapshot(sessionId: string) {
+    return this.actor.decideAsk({ op: "snapshot", sessionId });
+  }
+  askEntries() {
+    return this.actor.decideAsk({ op: "entries" });
+  }
+  setAskRecord(sessionId: string, value: unknown) {
+    this.actor.decideAsk({ op: "set", sessionId, value });
+  }
+  deleteAskRecord(sessionId: string) {
+    return this.actor.decideAsk({ op: "delete", sessionId });
+  }
+  clearAskRecords() {
+    this.actor.decideAsk({ op: "clear" });
+  }
+  deliveryMigrationComplete() {
+    return this.call<boolean>("deliveryMigrationComplete");
+  }
+  markDeliveryMigrationComplete() {
+    this.call("markDeliveryMigrationComplete");
+  }
+  deliverySnapshot(sessionId: string) {
+    return this.actor.decideDelivery({ op: "snapshot", sessionId });
+  }
+  deliveryEntries(slot: DeliverySlot) {
+    return this.actor.decideDelivery({ op: "entries", slot });
+  }
+  setDeliverySlot(sessionId: string, slot: DeliverySlot, value: unknown) {
+    this.actor.decideDelivery({ op: "set", sessionId, slot, value });
+  }
+  deleteDeliverySlot(sessionId: string, slot: DeliverySlot) {
+    return this.actor.decideDelivery({ op: "delete", sessionId, slot });
+  }
+  clearDeliverySlot(slot: DeliverySlot) {
+    this.actor.decideDelivery({ op: "clear_slot", slot });
+  }
+  prepareSteerDelivery(sessionId: string, itemId: string, item?: unknown) {
+    return this.actor.decideDelivery({
+      op: "prepare_steer",
+      sessionId,
+      itemId,
+      item,
+    });
+  }
+  acceptSteerDelivery(sessionId: string, itemId: string) {
+    return this.actor.decideDelivery({ op: "accept_steer", sessionId, itemId });
+  }
+  rejectSteerDelivery(sessionId: string, itemId: string) {
+    return this.actor.decideDelivery({ op: "reject_steer", sessionId, itemId });
+  }
+  settlePendingSteers() {
+    return this.actor.decideDelivery({ op: "settle_pending_steers" });
+  }
+  requeueSteerDeliveries(sessionId: string, items: unknown[]) {
+    return this.actor.decideDelivery({
+      op: "requeue_steers",
+      sessionId,
+      items,
+    });
+  }
+  claimDeliveryDispatch(
+    input: Parameters<SessionKernelStoreApi["claimDeliveryDispatch"]>[0],
+  ) {
+    return this.actor.decideDelivery({ op: "claim_dispatch", ...input });
+  }
+  ackDeliveryDispatch(sessionId: string, promptEntryId: string) {
+    return this.actor.decideDelivery({
+      op: "ack_dispatch",
+      sessionId,
+      promptEntryId,
+    });
+  }
+  failDeliveryDispatch(sessionId: string, promptEntryId: string) {
+    return this.actor.decideDelivery({
+      op: "fail_dispatch",
+      sessionId,
+      promptEntryId,
+    });
   }
   scheduleTimer(timer: Parameters<SessionKernelStoreApi["scheduleTimer"]>[0]) {
     this.call("scheduleTimer", timer);
@@ -491,7 +651,8 @@ class RemoteStore implements SessionKernelStoreApi {
   stats() {
     if (this.statsCache && Date.now() - this.statsCache.at < 5_000)
       return this.statsCache.value;
-    const value = this.call<ReturnType<SessionKernelStoreApi["stats"]>>("stats");
+    const value =
+      this.call<ReturnType<SessionKernelStoreApi["stats"]>>("stats");
     this.statsCache = { at: Date.now(), value };
     return value;
   }
@@ -501,7 +662,9 @@ class RemoteStore implements SessionKernelStoreApi {
   compact(now?: number, retention?: number, changes?: number) {
     this.call("compact", now, retention, changes);
   }
-  maintain() { this.call("maintain"); }
+  maintain() {
+    this.call("maintain");
+  }
   deadLetters(limit?: number, offset?: number) {
     return this.call<ReturnType<SessionKernelStoreApi["deadLetters"]>>(
       "deadLetters",
@@ -532,12 +695,20 @@ class RemoteStore implements SessionKernelStoreApi {
     expectedToken?: string,
   ) {
     return this.call<ReturnType<SessionKernelStoreApi["noteTimerFailure"]>>(
-      "noteTimerFailure", sessionId, timerId, error, maxAttempts, expectedToken,
+      "noteTimerFailure",
+      sessionId,
+      timerId,
+      error,
+      maxAttempts,
+      expectedToken,
     );
   }
   noteOutboxFailure(id: number, error: string, maxAttempts?: number) {
     return this.call<ReturnType<SessionKernelStoreApi["noteOutboxFailure"]>>(
-      "noteOutboxFailure", id, error, maxAttempts,
+      "noteOutboxFailure",
+      id,
+      error,
+      maxAttempts,
     );
   }
 }
