@@ -672,21 +672,15 @@ struct SessionView: View {
         #endif
         .inlineTitleBarCompat()
         #if os(iOS)
-        .toolbarBackground(.hidden, for: .navigationBar)
-        // The nav bar is adaptive chrome, exactly like the bottom bar (see
-        // `inputBar`): a black code block scrolling under it hands the bar a
-        // DARK appearance, and everything in it follows — the title pill's
-        // material, fill and text all flipped, so a light-mode app wore a
-        // black capsule that restyled itself against whatever happened to be
-        // passing behind. The bar wears the appearance the rest of the screen
-        // is drawn in instead. `environment(\.colorScheme:)` is NOT enough
-        // here the way it is on the composer: toolbar content is hoisted out
-        // of the view tree into the bar's own UIKit host, which resolves
-        // dynamic colours and materials against ITS trait collection, and
-        // ignored the pinned environment entirely (measured — the pill stayed
-        // black).
-            .toolbarColorScheme(appColorScheme, for: .navigationBar)
-            #endif
+        // Keep the chat controls on native glass with the system separation
+        // shadow. Hiding this background left them floating over transcript
+        // content without a readable top edge.
+        .toolbarBackground(.ultraThinMaterial, for: .navigationBar)
+        .toolbarBackground(.visible, for: .navigationBar)
+        // Toolbar content is hosted outside this view tree, so pin its colour
+        // scheme here instead of relying on the surrounding environment.
+        .toolbarColorScheme(appColorScheme, for: .navigationBar)
+        #endif
 
         let toolbarContent = chromeContent
             .toolbar {
