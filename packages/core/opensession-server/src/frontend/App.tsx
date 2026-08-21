@@ -218,7 +218,11 @@ import {
 	receivePins,
 } from "./lib/pins";
 import { receiveMention, receiveMentionsCleared } from "./lib/mentions";
-import { personFilterFor, setFilter } from "./lib/sidebar-filter";
+import {
+	personFilterFor,
+	setFilter,
+	useSidebarFilter,
+} from "./lib/sidebar-filter";
 import { applyTabOrder, saveTabOrder, onTabOrderChanged } from "./lib/tab-order";
 import { workspaceArchivedSessions } from "./lib/workspace-archive";
 import { useWorkspaceArchive } from "./hooks/useWorkspaceArchive";
@@ -1083,6 +1087,7 @@ export function App(
 	// desktop, but as a bottom sheet over the root list on phones.
 	const settingsActive = isSettingsRoute(route);
 	const isPhone = useIsPhone();
+	const borrowedSidebar = useSidebarFilter().person !== "me";
 
 	// A pushed detail page is showing (anything but the sidebar-root home view).
 	// On phones, Settings is a sheet floating over the root page rather than a
@@ -5580,10 +5585,8 @@ export function App(
 					</div>
 				)}
 
-				{/* Mobile-only floating + on the root list page — thumb-reach shortcut
-				    to the new-session palette (desktop hides it via CSS; the sidebar's
-				    own + covers that layout). */}
-				{!mobileDetail && (
+				{/* Mobile-only floating + on your root list page. */}
+				{!mobileDetail && !borrowedSidebar && (
 					<button
 						className={MOBILE_FAB}
 						onClick={() => openPalette()}

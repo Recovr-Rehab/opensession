@@ -4168,28 +4168,30 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 							    (20px, i.e. `inset-1` on a 24px glyph) crowds the plus
 							    against its own wash. `corner-shape` has to be restated
 							    because it does not inherit into a pseudo-element. */}
-							<span
-								role="button"
-								tabIndex={0}
-								className="relative ml-auto inline-flex size-7 shrink-0 items-center justify-center rounded-md text-faint opacity-100 transition-[opacity,color] duration-150 hover:text-fg focus-visible:opacity-100 md:opacity-0 md:group-hover:opacity-100 before:absolute before:inset-0.5 before:z-0 before:rounded-sm before:[corner-shape:var(--cs)] before:transition-[background] before:content-[''] hover:before:bg-hover [&>*]:relative [&>*]:z-[1]"
-								title={
-									repo === ASK_BAND
-										? "New Ask session, no repo"
-										: `New session in ${repoLabel(repo)}`
-								}
-								onClick={(e) => {
-									e.stopPropagation();
-									onNewSessionInRepo(repo);
-								}}
-								onKeyDown={(e) => {
-									if (e.key === "Enter" || e.key === " ") {
+							{!borrowedLens && (
+								<span
+									role="button"
+									tabIndex={0}
+									className="relative ml-auto inline-flex size-7 shrink-0 items-center justify-center rounded-md text-faint opacity-100 transition-[opacity,color] duration-150 hover:text-fg focus-visible:opacity-100 md:opacity-0 md:group-hover:opacity-100 before:absolute before:inset-0.5 before:z-0 before:rounded-sm before:[corner-shape:var(--cs)] before:transition-[background] before:content-[''] hover:before:bg-hover [&>*]:relative [&>*]:z-[1]"
+									title={
+										repo === ASK_BAND
+											? "New Ask session, no repo"
+											: `New session in ${repoLabel(repo)}`
+									}
+									onClick={(e) => {
 										e.stopPropagation();
 										onNewSessionInRepo(repo);
-									}
-								}}
-							>
-								<IconPlus size={20} />
-							</span>
+									}}
+									onKeyDown={(e) => {
+										if (e.key === "Enter" || e.key === " ") {
+											e.stopPropagation();
+											onNewSessionInRepo(repo);
+										}
+									}}
+								>
+									<IconPlus size={20} />
+								</span>
+							)}
 						</button>
 						{open ? (
 							<div className="mt-0.5">
@@ -4883,7 +4885,7 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 					<div
 						className={cn(
 							"shrink-0 items-center gap-1.5",
-							isPhone ? "hidden" : "flex",
+							isPhone || borrowedLens ? "hidden" : "flex",
 						)}
 						ref={actionsRef}
 					>
@@ -4968,6 +4970,7 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 			{/* On phones the filter button lives in the top bar (next to Search);
 			    its popover anchors there. Desktop keeps it in the header. */}
 			{isPhone &&
+				!borrowedLens &&
 				headerActionsEl &&
 				createPortal(
 					<>
