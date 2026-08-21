@@ -1,13 +1,9 @@
 /**
- * Browser-based "Sign in with Claude" for usage tracking.
+ * Browser-based "Sign in with Claude" for account setup and reconnection.
  *
- * Runs authenticate with long-lived `claude setup-token` tokens, but those
- * lack the user:profile scope, so usage polling needs full OAuth login
- * credentials. Until now that meant pointing an account's credentialsPath at
- * a `claude-plan` snapshot under ~/.claude/accounts — a file the Claude CLI,
- * the claude-plan refresh cron AND this server all rotate. Anthropic rotates
- * the refresh token on every use, so multiple writers race each other out of
- * the token family and usage visibility is "sometimes lost".
+ * New accounts use this OAuth grant for both model runs and usage polling.
+ * Existing setup-token accounts can attach the same grant for usage without
+ * changing the long-lived token their runs already use.
  *
  * This flow mints a token family Open Session owns exclusively: an
  * authorization-code + PKCE login against Anthropic's public Claude Code
@@ -23,10 +19,11 @@
  * lose the PKCE verifier between "open this URL" and the code paste.
  */
 
-import { chmodSync, mkdirSync } from "fs";
+import { chmodSync, mkdirSync, rmSync } from "fs";
 import { writeFileAtomic } from "./shared/atomic-write";
 import { stateDir } from "./paths";
 import {
+  addOauthAccount,
   getAccountById,
   setAccountUsageCredentials,
   type ClaudeAccountPublic,
@@ -46,6 +43,7 @@ const LOGIN_TTL_MS = 15 * 60 * 1000;
 interface PendingLogin {
   id: string;
   accountId: string;
+  createAccount: boolean;
   verifier: string;
   createdAt: number;
 }
@@ -75,20 +73,21 @@ export function claudeOauthCredentialsPath(accountId: string): string {
   return `${stateDir("claude-oauth")}/${accountId}.json`;
 }
 
-/** Begin a PKCE sign-in that will attach usage credentials to `accountId`. */
+/** Begin a PKCE sign-in for a new account or an existing pool account. */
 export async function startClaudeLogin(
-  accountId: string
+  accountId?: string
 ): Promise<ClaudeLoginStart | { error: string }> {
   prune();
-  const account = getAccountById(accountId);
-  if (!account) return { error: "Unknown account" };
+  const account = accountId ? getAccountById(accountId) : undefined;
+  if (accountId && !account) return { error: "Unknown account" };
   const verifier = b64url(crypto.getRandomValues(new Uint8Array(32)));
   const challenge = b64url(
     new Uint8Array(await crypto.subtle.digest("SHA-256", new TextEncoder().encode(verifier)))
   );
   const login: PendingLogin = {
     id: crypto.randomUUID(),
-    accountId,
+    accountId: account?.id || crypto.randomUUID(),
+    createAccount: !account,
     verifier,
     createdAt: Date.now(),
   };
@@ -103,7 +102,7 @@ export async function startClaudeLogin(
     code_challenge_method: "S256",
     state: verifier,
   })}`;
-  return { id: login.id, url, accountName: account.name };
+  return { id: login.id, url, accountName: account?.name || "Claude account" };
 }
 
 /**
@@ -149,15 +148,15 @@ export async function completeClaudeLogin(
     return { error: "Token exchange returned no usable tokens." };
   }
 
-  const account = getAccountById(login.accountId);
-  if (!account) {
+  const account = login.createAccount ? undefined : getAccountById(login.accountId);
+  if (!login.createAccount && !account) {
     pending.delete(id);
     return { error: "The account this sign-in was for no longer exists." };
   }
   const email: string | undefined = body.account?.email_address || undefined;
-  // Usage data from the wrong subscription is actively misleading — refuse a
+  // Usage data from the wrong subscription is actively misleading. Refuse a
   // mismatched sign-in instead of silently attaching it.
-  if (account.email && email && account.email.toLowerCase() !== email.toLowerCase()) {
+  if (account?.email && email && account.email.toLowerCase() !== email.toLowerCase()) {
     pending.delete(id);
     return {
       error: `Signed into ${email}, but this pool account is ${account.email}. Sign in with the matching Claude account and try again.`,
@@ -184,11 +183,24 @@ export async function completeClaudeLogin(
   chmodSync(path, 0o600);
   pending.delete(id);
 
+  if (login.createAccount) {
+    const added = await addOauthAccount({
+      id: login.accountId,
+      token: body.access_token,
+      credentialsPath: path,
+      email,
+    });
+    if ("error" in added) {
+      rmSync(path, { force: true });
+      return added;
+    }
+    console.log(`[claude-oauth-login] ${added.name} signed in and registered`);
+    return { account: added };
+  }
+
   const updated = setAccountUsageCredentials(login.accountId, path, email);
   if (!updated) return { error: "The account this sign-in was for no longer exists." };
-  console.log(
-    `[claude-oauth-login] ${updated.name} connected usage credentials${email ? ` (${email})` : ""}`
-  );
+  console.log(`[claude-oauth-login] ${updated.name} reconnected${email ? ` (${email})` : ""}`);
   return { account: updated };
 }
 
