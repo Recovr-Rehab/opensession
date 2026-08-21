@@ -45,7 +45,7 @@ import {
   updateSlackBlocks,
 } from "../agents/slack/slack-api";
 import { configuredServer, personaName, productName } from "./config";
-import { registerSessionEffectHandler, sessionKernel } from "./session-kernel";
+import { registerSessionEffectExecutor, sessionKernel } from "./session-kernel";
 import { workspaceName } from "./workspaces";
 
 const HOME = homeDir();
@@ -625,10 +625,8 @@ export async function deliverAsk(id: string, opts?: { skipUi?: boolean },): Prom
   return true;
 }
 
-registerSessionEffectHandler("human_ask_deliver", async (item) => {
-  const payload = item.payload as
-    { askId?: unknown; skipUi?: unknown } | undefined;
-  if (typeof payload?.askId !== "string") return;
+registerSessionEffectExecutor("human_ask_deliver", async (item) => {
+  const payload = item.payload;
   const ask = asks.get(payload.askId);
   if (!ask || ask.state !== "scheduled") return;
   const delivered = await deliverAsk(payload.askId, {
