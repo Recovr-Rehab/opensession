@@ -307,23 +307,16 @@ export const VIEWER_SUMMARY_STEP =
 	"desktop:[&>*]:translate-x-[var(--ws-summary-step,0px)]";
 
 /**
- * The row of the session's own offers, on the composer's own width: the
- * quick-reply chips on the left, the Next action on the right.
- *
- * It lives inside the floating band (VIEWER_SUGGESTIONS), so both offers sit
- * on the same level, on the transcript's last rows, and the conversation
- * scrolls under them. Neither one takes flow height, so neither moves the
- * composer under your hands as it arrives or retires.
+ * The session's floating actions on the composer's own width. Desktop keeps
+ * quick replies and Next on one row. Phone stacks quick replies above a centered
+ * action bar so Archive, Next, and More stay together.
  *
  * The band already repeats the input's side padding, so `--session-col` + 40px
- * here is the composer's own box: the chips inset from this left edge land on
- * its content rail (VIEWER_SUGGESTIONS_ROW). Desktop keeps the input's 20px
- * right inset. A phone uses 8px on both gaps so ordinary two-chip choices fit
- * in full beside Next.
+ * here is the composer's own box. Desktop keeps the input's 20px right inset.
  */
 export const VIEWER_ACTION_ROW =
 	"flex w-full max-w-[calc(var(--session-col)+40px)] items-center gap-3 pr-5 " +
-	"phone:gap-2 phone:pr-2";
+	"phone:flex-col phone:gap-2 phone:pr-0";
 
 /**
  * The band the session's own offers hang in: the quick-reply chips and the
@@ -374,6 +367,10 @@ export const SUGGESTIONS_CLEARANCE = "[--suggestions-under:34px]";
  */
 export const ACTION_CLEARANCE =
 	"[--suggestions-under:46px] phone:[--suggestions-under:50px]";
+
+/** Phone stacks quick replies above the 44px action bar. */
+export const ACTION_WITH_REPLIES_CLEARANCE =
+	"[--suggestions-under:46px] phone:[--suggestions-under:86px]";
 
 /**
  * The chips themselves, filling the action row beside Next.

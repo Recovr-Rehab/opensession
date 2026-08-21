@@ -322,6 +322,7 @@ import {
 	SESSION_LINK_PLAIN,
 	PILL_CENTRED,
 	ACTION_CLEARANCE,
+	ACTION_WITH_REPLIES_CLEARANCE,
 	SUGGESTIONS_CLEARANCE,
 	TRANSCRIPT_PILL_BUTTON,
 	TRANSCRIPT_PILL_LOADING,
@@ -5050,6 +5051,8 @@ export function SessionViewer({
 	}, [composerPrefillExternal, onComposerPrefillConsumed, isPhone]);
 
 	const [overflowOpen, setOverflowOpen] = useState(false);
+	const [mobileActionMenuEl, setMobileActionMenuEl] =
+		useState<HTMLDivElement | null>(null);
 	// Left-edge swipe on phones pops the topmost overlay before the page stack:
 	// the info page registers as a higher-priority back-swipe layer, so the
 	// gesture closes it instead of popping the whole session back to the
@@ -5437,13 +5440,11 @@ export function SessionViewer({
 		!forkFrom &&
 		replySuggestions.length > 0;
 
-	/* Next is up whenever there is another chat to move on to. It shares the
-	   chips' floating band rather than sitting in flow above the composer: two
-	   offers about the same moment, on one line, with the conversation scrolling
-	   under both. What the band covers is what the transcript keeps clear, and
-	   Next is the taller of the two, so it decides that clearance. */
+	/* Desktop shows Next beside quick replies. Phone keeps Archive, Next, and More
+	   together in one centered toolbar above the composer, even when there is no
+	   next chat yet. */
 	const nextAction = !!onNextChat;
-	const actionBand = quickReplies || nextAction;
+	const actionBand = quickReplies || nextAction || isPhone;
 
 	const pickReplySuggestion = (text: string) => {
 		setComposerPrefill((current) => ({
@@ -5816,9 +5817,8 @@ export function SessionViewer({
 				);
 				// The ⋯ menu. One instance, placed by width: on desktop it rides at the
 				// end of the title cluster, where it reads as this workspace's own menu
-				// and leaves the right end of the bar to status. Phones hide the title
-				// row, so there it stays in the actions cluster as the floating pill
-				// that carries everything the bar has no room for.
+				// and leaves the right end of the bar to status. On phones its trigger
+				// moves into the centered action bar above the composer.
 				//
 				// The order runs: where this workspace sits for you, then what you can
 				// start from it, then where else it lives, then how it ends. Archive
@@ -5840,28 +5840,10 @@ export function SessionViewer({
 									/>
 								}
 								className={cn(
-									// base.css turns on the squircle via
-									// `[class*="rounded-"]:not([class*="rounded-full"])`. That
-									// `:not` is a substring test on the whole class attribute,
-									// so the mobile `rounded-full` below disqualifies this
-									// element at EVERY width and it renders plain-round while
-									// its neighbours are squircles. Set it back explicitly,
-									// and keep a true circle on mobile.
-									"[corner-shape:squircle] phone:[corner-shape:round]",
-									// The same glass the Back bubble and the title pill beside
-									// it are made of. This control is portaled INTO that bar, so
-									// it has to be the same material or it reads as a different
-									// object that happens to be round.
-									`phone:size-11 phone:min-h-11 phone:rounded-full phone:border-[color:var(--mobile-header-control-border)] ${MOBILE_CONTROL_GLASS} phone:text-accent phone:shadow-[var(--mobile-header-control-shadow)]`,
-									// Open: the accent wash replaces the plate's fill through the
-									// VARIABLE rather than a second `bg-*` utility. Two of those
-									// on one element are resolved by Tailwind's output order, not
-									// by which was written last, so the open state would be a coin
-									// flip. It also keeps the blur underneath, which is what a
-									// selected iOS toolbar item does: tinted glass, not a chip.
-									overflowOpen &&
-										"bg-hover text-fg phone:border-transparent phone:text-accent " +
-											"phone:[--mobile-header-control-surface:var(--accent-soft)]",
+									"[corner-shape:squircle]",
+									isPhone &&
+										"size-11 min-h-11 rounded-full border-transparent text-dim shadow-none [corner-shape:round]",
+									overflowOpen && "bg-hover text-fg",
 								)}
 								title="More actions"
 								aria-label="More actions"
@@ -5901,7 +5883,7 @@ export function SessionViewer({
 								{isPhone && secondaryActions(true)}
 								{archivedActions}
 								<Menu.Separator className={VIEWER_MENU_SEP} />
-								{archiveAction}
+								{(!isPhone || session.archived) && archiveAction}
 								{deleteAction}
 							</Menu.Popup>
 						</div>
@@ -6164,9 +6146,10 @@ export function SessionViewer({
 					    the Workspace toggle stays rightmost. On phones the secondary
 					    controls fold in too. */}
 					{!compactHeader && !isPhone && shareAction(false)}
-					{/* Phones only: the title row this menu normally sits in is hidden
-					    at that width, so it rides here as the floating pill instead. */}
-					{isPhone && overflowMenu}
+					{/* Phones portal this menu into the action bar above the composer. */}
+					{isPhone &&
+						mobileActionMenuEl &&
+						createPortal(overflowMenu, mobileActionMenuEl)}
 					{/* Code-workspace testing affordances dock immediately left of the
 					    side-panel toggle. The local preview launcher lives in the ⋯ menu;
 					    the globe rides here only while nothing else is showing it. The
@@ -6647,7 +6630,11 @@ export function SessionViewer({
 					className={cn(
 						"flex min-h-0 min-w-0 flex-1 flex-col [--session-under:16px]",
 						actionBand &&
-							(nextAction ? ACTION_CLEARANCE : SUGGESTIONS_CLEARANCE),
+							(nextAction || isPhone
+								? isPhone && quickReplies
+									? ACTION_WITH_REPLIES_CLEARANCE
+									: ACTION_CLEARANCE
+								: SUGGESTIONS_CLEARANCE),
 					)}
 				>
 					{showPortal && portalTarget ? (
@@ -7225,47 +7212,33 @@ export function SessionViewer({
 										</button>
 									</div>
 								)}
-								{/* The session's own offers: quick replies (see `quickReplies`
-								    above for when they show) and Next. Hung off the top of this
-								    box rather than laid out in it, for the reason
-								    VIEWER_SUGGESTIONS gives, and given the composer's own max
-								    width inside it so the two sit on its rails. */}
+								{/* Session actions float above the composer. Desktop pairs quick
+								    replies with Next. Phone centers Archive, Next, and More in one
+								    toolbar, with quick replies on their own row when present. */}
 								{actionBand && (
 									<div className={VIEWER_SUGGESTIONS}>
 										<div className={VIEWER_ACTION_ROW}>
 											{quickReplies && (
 												<ReplySuggestions
-													className={
-														nextAction
+													className={cn(
+														nextAction && !isPhone
 															? VIEWER_SUGGESTIONS_ROW_INLINE
-															: VIEWER_SUGGESTIONS_ROW
-													}
+															: VIEWER_SUGGESTIONS_ROW,
+														isPhone && "w-full flex-none self-stretch",
+													)}
 													suggestions={replySuggestions}
 													onPick={pickReplySuggestion}
 												/>
 											)}
-											{nextAction && (
-												<div className="pointer-events-auto ml-auto flex shrink-0 items-center gap-2">
-													{!session.archived && (
-														<Button
-															variant="soft"
-															size="lg"
-															className="hidden min-h-11 phone:inline-flex"
-															icon={<IconArchive size={18} aria-hidden />}
-															aria-label="Archive and open next chat"
-															disabled={archiving}
-															onClick={() => void handleArchive()}
-														>
-															Archive
-														</Button>
-													)}
+											{nextAction && !isPhone && (
+												<div className="pointer-events-auto ml-auto shrink-0">
 													<Tooltip
 														label="Next chat"
 														shortcut={nextChatKeys ?? undefined}
 													>
 														<Button
 															size="lg"
-															className="min-h-10 shrink-0 border-divider hover:border-line phone:min-h-11"
+															className="min-h-10 shrink-0 border-divider hover:border-line"
 															trailing={<IconChevronRight size={18} aria-hidden />}
 															aria-label="Next chat"
 															onClick={onNextChat}
@@ -7273,6 +7246,36 @@ export function SessionViewer({
 															Next
 														</Button>
 													</Tooltip>
+												</div>
+											)}
+											{isPhone && (
+												<div
+													className={cn(
+														"pointer-events-auto mx-auto hidden h-11 shrink-0 items-center rounded-full border border-[color:var(--mobile-header-control-border)] px-1 text-dim shadow-[var(--mobile-header-control-shadow)] phone:flex",
+														MOBILE_CONTROL_GLASS,
+													)}
+												>
+													{!session.archived && (
+														<Button
+															variant="ghost"
+															size="lg"
+															className="size-11 min-h-11 rounded-full [corner-shape:round]"
+															icon={<IconArchive size={20} aria-hidden />}
+															aria-label="Archive and open next chat"
+															disabled={archiving}
+															onClick={() => void handleArchive()}
+														/>
+													)}
+													<Button
+														variant="ghost"
+														size="lg"
+														className="size-11 min-h-11 rounded-full [corner-shape:round]"
+														icon={<IconChevronRight size={20} aria-hidden />}
+														aria-label="Next chat"
+														disabled={!onNextChat}
+														onClick={onNextChat}
+													/>
+													<div ref={setMobileActionMenuEl} className="inline-flex size-11" />
 												</div>
 											)}
 										</div>

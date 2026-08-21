@@ -5,6 +5,7 @@ import { composerBoxExpanded } from "../lib/composer-classes";
 import type { ReplySuggestion } from "../lib/reply-suggestions";
 import {
 	ACTION_CLEARANCE,
+	ACTION_WITH_REPLIES_CLEARANCE,
 	SUGGESTIONS_CLEARANCE,
 	VIEWER_ACTION_ROW,
 	VIEWER_SUGGESTIONS,
@@ -75,7 +76,8 @@ describe("ReplySuggestions", () => {
 		// composer, or the standoff eats into the 16px the reading ends on.
 		const PILL_HEIGHT = 28; // `h-7` on the chip in ReplySuggestions.
 		const NEXT_HEIGHT = 40; // `min-h-10` on the Next button in SessionViewer.
-		const NEXT_HEIGHT_PHONE = 44; // `phone:min-h-11` on the same button.
+		const NEXT_HEIGHT_PHONE = 44; // `phone:min-h-11` on the action bar buttons.
+		const PHONE_ROW_GAP = 8;
 		const SPACING_STEP = 4; // Tailwind's px-anchored scale (styles/tailwind.css).
 		const standoff =
 			Number(/\spb-(\d+(?:\.\d+)?)\s/.exec(VIEWER_SUGGESTIONS)?.[1]) *
@@ -91,24 +93,17 @@ describe("ReplySuggestions", () => {
 		expect(ACTION_CLEARANCE).toContain(
 			`phone:[--suggestions-under:${NEXT_HEIGHT_PHONE + standoff}px]`,
 		);
+		expect(ACTION_WITH_REPLIES_CLEARANCE).toContain(
+			`phone:[--suggestions-under:${PILL_HEIGHT + PHONE_ROW_GAP + NEXT_HEIGHT_PHONE + standoff}px]`,
+		);
 	});
 
-	test("the chips share the narrow phone row without clipping an ordinary pair", () => {
-		// Desktop keeps the composer's content rail. A phone cannot afford that
-		// indent beside Next, so the chips move to its outer edge and both gaps
-		// tighten to the same 8px step.
-		const desktopPadding = /(?:^|\s)pl-\[(\d+)px\]/;
-		const phonePadding = /\sphone:pl-\[(\d+)px\]/;
-		expect(desktopPadding.exec(VIEWER_SUGGESTIONS_ROW_INLINE)?.[1]).toBe(
-			desktopPadding.exec(VIEWER_SUGGESTIONS_ROW)?.[1],
-		);
-		expect(Number(phonePadding.exec(VIEWER_SUGGESTIONS_ROW_INLINE)?.[1])).toBeLessThan(
-			Number(phonePadding.exec(VIEWER_SUGGESTIONS_ROW)?.[1]),
-		);
+	test("phone stacks chips above the centered action bar", () => {
+		expect(VIEWER_ACTION_ROW).toContain("phone:flex-col");
 		expect(VIEWER_ACTION_ROW).toContain("phone:gap-2");
-		expect(VIEWER_ACTION_ROW).toContain("phone:pr-2");
+		expect(VIEWER_ACTION_ROW).toContain("phone:pr-0");
 
-		// Longer choices still yield rather than push Next off the edge.
+		// Longer desktop choices still yield rather than push Next off the edge.
 		expect(VIEWER_SUGGESTIONS_ROW_INLINE).toContain("min-w-0");
 	});
 
