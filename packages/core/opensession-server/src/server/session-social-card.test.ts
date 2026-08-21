@@ -93,7 +93,7 @@ function session(patch: Partial<UnifiedSession> = {}): UnifiedSession {
 }
 
 describe("session social card", () => {
-	test("normalizes only the session fields shown on the card", () => {
+	test("normalizes the title and external preview metadata", () => {
 		const data = sessionSocialCardData(session());
 		expect(data).toMatchObject({
 			title: "Ship dynamic social cards",
@@ -214,58 +214,40 @@ describe("session social card", () => {
 		expect(svg).not.toContain("aurora");
 		expect(svg).not.toContain("shotFade");
 		expect(svg).toContain('fill="#050609" font-size="38"');
-		// The title owns the left edge. Only the person appears beneath it, with
-		// the avatar directly before the name.
-		expect(svg).not.toContain('id="repoClip"');
+		// The title is the image's only text. Person, repo, model and status live
+		// outside the image so Slack never repeats them.
 		expect(svg).toContain('<text x="56"');
-		expect(svg).not.toContain(">O</text>");
-		expect(svg).toContain(">Test &quot;Person&quot;</text>");
-		expect(svg).not.toContain(">opensession</text>");
-		expect(svg).not.toContain(" · ");
-		expect(svg).toContain('fill-opacity="0.42"');
-		expect(svg).toContain('<circle cx="12" cy="7.6" r="3.7"');
+		expect(svg).not.toContain("Test &quot;Person&quot;");
+		expect(svg).not.toContain("opensession");
 		expect(svg).not.toContain("gpt-5.6-sol");
-		expect(svg).not.toContain("M12 3.1L13.7 9.5");
+		expect(svg).not.toContain('id="avatarClip"');
+		expect(svg).not.toContain('<circle cx="12" cy="7.6" r="3.7"');
 		expect(svg).toContain("Fix &lt;cards&gt; &amp; links");
 		expect(svg).not.toContain("Fix <cards>");
 	});
 
-	test("places the person squircle directly before its label", () => {
+	test("crops a screenshot-less banner to the balanced title", () => {
 		const svg = sessionSocialCardSvg(
 			{
 				title: "A visual session with a useful second line",
 				owner: "Test Person",
 				repo: "opensession",
 			},
-			"data:image/png;base64,avatar",
 			["A visual session with", "a useful second line"],
 			"banner",
 			[],
 			480,
 		);
-		// No screenshot, so the banner is cropped to its own content on both axes:
-		// the measured row width plus one left margin on either side.
+		// No screenshot or in-image metadata, so the crop hugs the two title lines.
 		expect(svg).toContain(
-			'<svg xmlns="http://www.w3.org/2000/svg" width="592" height="190"',
+			'<svg xmlns="http://www.w3.org/2000/svg" width="592" height="152"',
 		);
-		expect(svg).toContain('<rect width="592" height="190"');
+		expect(svg).toContain('<rect width="592" height="152"');
 		expect(svg).toContain('<text x="56" y="55"');
 		expect(svg).toContain('<text x="56" y="97"');
-		expect(svg).toContain(
-			'<image href="data:image/png;base64,avatar" x="56" y="128" width="28" height="28"',
-		);
-		// The label baseline places its cap band on the 28px avatar center.
-		expect(svg).toContain('<text x="94" y="150" fill=');
-		expect(svg).not.toContain(
-			'<text x="94" y="150" dominant-baseline="middle"',
-		);
-		expect(svg).toContain(">Test Person</text>");
-		expect(svg).not.toContain(">opensession</text>");
-		expect(svg).not.toContain('stroke="#FFFFFF" stroke-width="3"');
-		expect(svg).toMatch(
-			/<clipPath id="avatarClip" clipPathUnits="userSpaceOnUse"><path d="M68\.88 128\.00L/,
-		);
-		expect(svg).not.toContain('id="repoClip"');
+		expect(svg).not.toContain("Test Person");
+		expect(svg).not.toContain("opensession");
+		expect(svg).not.toContain('id="avatarClip"');
 	});
 
 	test("fans up to two rounded 16:9 screenshots from the bottom edge", () => {
@@ -275,7 +257,6 @@ describe("session social card", () => {
 				owner: "Test Person",
 				repo: "opensession",
 			},
-			"",
 			["A visual session"],
 			"banner",
 			[
@@ -305,7 +286,6 @@ describe("session social card", () => {
 
 		const single = sessionSocialCardSvg(
 			{ title: "One screenshot", owner: "Test Person" },
-			"",
 			["One screenshot"],
 			"banner",
 			["data:image/png;base64,primary"],
@@ -369,8 +349,8 @@ describe("session social card", () => {
 			"banner",
 		);
 		const metadata = await sharp(png!).metadata();
-		// With no meaningful screenshot, the compact fallback gives the space back.
-		expect(metadata.height).toBe(148 * 2);
+		// With no meaningful screenshot, the title-only fallback gives the space back.
+		expect(metadata.height).toBe(110 * 2);
 		expect(metadata.width).toBeLessThan(2400);
 	});
 
@@ -392,7 +372,7 @@ describe("session social card", () => {
 		expect(output).toContain("<title>Ship dynamic social cards · Open Session</title>");
 		expect(output).toContain('content="summary_large_image"');
 		expect(output).toMatch(
-			/content="https:\/\/media\.example\.test\/session-card\/sess-social-1\/[A-Za-z0-9_-]{32}\.png\?v=21"/,
+			/content="https:\/\/media\.example\.test\/session-card\/sess-social-1\/[A-Za-z0-9_-]{32}\.png\?v=22"/,
 		);
 		expect(output).toContain(
 			'property="og:url" content="https://os.example.test/session/sess-social-1"',
@@ -406,13 +386,13 @@ describe("session social card", () => {
 		).toBe("sess-social-1");
 		expect(socialSessionIdFromPath("/settings")).toBeNull();
 		expect(sessionSocialCardUrl("sess-social-1")).toMatch(
-			/^https:\/\/media\.example\.test\/session-card\/sess-social-1\/[A-Za-z0-9_-]{32}\.png\?v=21$/,
+			/^https:\/\/media\.example\.test\/session-card\/sess-social-1\/[A-Za-z0-9_-]{32}\.png\?v=22$/,
 		);
 	});
 
 	test("signs ids containing Slack timestamp dots", () => {
 		expect(sessionSocialCardUrl("slack-C123-1719860000.000000")).toMatch(
-			/^https:\/\/media\.example\.test\/session-card\/slack-C123-1719860000\.000000\/[A-Za-z0-9_-]{32}\.png\?v=21$/,
+			/^https:\/\/media\.example\.test\/session-card\/slack-C123-1719860000\.000000\/[A-Za-z0-9_-]{32}\.png\?v=22$/,
 		);
 	});
 
@@ -444,9 +424,9 @@ describe("session social card", () => {
 		const response = await route(new Request(url), url);
 		expect(response.status).toBe(200);
 		const metadata = await sharp(await response.arrayBuffer()).metadata();
-		// One title line and one metadata row, with no screenshot to make room
-		// for, rasterized at 2x so Slack's upscale to the column stays sharp.
-		expect(metadata.height).toBe(148 * 2);
+		// One title line, with no screenshot or metadata row to make room for,
+		// rasterized at 2x so Slack's upscale to the column stays sharp.
+		expect(metadata.height).toBe(110 * 2);
 		expect(metadata.width).toBeLessThan(1200);
 		expect(metadata.width! / metadata.height!).toBeGreaterThan(2);
 	});

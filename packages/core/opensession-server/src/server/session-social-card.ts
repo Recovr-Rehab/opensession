@@ -57,8 +57,8 @@ export const SESSION_CARD_HEIGHT = 630;
 /**
  * Banner variant, for Slack. A Block Kit `image` block is always laid out at
  * the message column width, so its aspect ratio decides how much space the
- * card uses. This height keeps the title and metadata centered while letting
- * a 16:9 screenshot fill most of the card.
+ * card uses. This height keeps the title centered while letting a 16:9
+ * screenshot fill most of the card.
  */
 export const SESSION_CARD_BANNER_WIDTH = 1200;
 export const SESSION_CARD_BANNER_HEIGHT = 320;
@@ -79,31 +79,12 @@ const BANNER_COMPACT_MIN_WIDTH = 520;
 const BANNER_RENDER_SCALE = 2;
 
 export type SessionCardVariant = "card" | "banner";
-const SESSION_CARD_VERSION = 21;
+const SESSION_CARD_VERSION = 22;
 
 const CARD_INK = "#050609";
 const CARD_PAPER = "#FFFFFF";
 /** Left margin. */
 const PAD_X = 56;
-const META_SIZE = 28;
-const META_TEXT_SIZE = 22;
-const META_FONT = "Inter Medium 22";
-const META_LABEL_GAP = 10;
-const META_GLYPH_SIZE = 22;
-const META_RADIUS = META_SIZE * 0.46;
-const META_OPACITY = 0.42;
-/**
- * Inter's cap height, as a share of the point size. Both labels sit on one
- * baseline placed so this band centers on the icons. `dominant-baseline:
- * middle` centers the font's whole box instead, which puts a name with no
- * descender visibly high while a word carrying a `p` looks right.
- */
-const META_CAP_RATIO = 0.727;
-/** Whole pixels, so a label's stem lands on the raster grid. */
-function capBaselineShift(fontSize: number): number {
-	return Math.round((fontSize * META_CAP_RATIO) / 2);
-}
-const TITLE_META_GAP = 10;
 const TITLE_SIZE = 38;
 const TITLE_LINE_HEIGHT = 42;
 const TITLE_FONT = "Inter SemiBold 38";
@@ -132,7 +113,6 @@ export interface SessionSocialCardData {
 	title: string;
 	owner: string;
 	repo?: string;
-	person?: DirectoryPerson;
 	/** Strongest session screenshot candidates first. The renderer keeps two. */
 	shots?: string[];
 }
@@ -204,7 +184,6 @@ export function sessionSocialCardData(
 		title: heading.title,
 		owner: person?.fullName || ownerRef,
 		...(session.repo ? { repo: session.repo } : {}),
-		...(person ? { person } : {}),
 		...(shots.length ? { shots } : {}),
 	};
 }
@@ -427,16 +406,6 @@ async function titleWidth(sharp: SharpFactory, title: string): Promise<number> {
 	return metadata.width ?? 0;
 }
 
-async function metaTextWidth(
-	sharp: SharpFactory,
-	value: string,
-): Promise<number> {
-	const metadata = await sharp({
-		text: { text: xml(value), font: META_FONT, rgba: true, dpi: 72 },
-	}).metadata();
-	return metadata.width ?? 0;
-}
-
 async function truncateTitleLine(
 	sharp: SharpFactory,
 	value: string,
@@ -553,66 +522,11 @@ export async function fitSocialCardTitle(
 	return [first, second];
 }
 
-const avatarCache = new Map<string, string>();
-const AVATAR_CACHE_LIMIT = 100;
-
-function rememberAvatar(key: string, data: string): void {
-	avatarCache.delete(key);
-	avatarCache.set(key, data);
-	if (avatarCache.size <= AVATAR_CACHE_LIMIT) return;
-	const oldest = avatarCache.keys().next().value;
-	if (oldest) avatarCache.delete(oldest);
-}
-
-async function compactAvatar(bytes: ArrayBuffer): Promise<string> {
-	const sharp = await loadSharp();
-	if (!sharp) return `data:image/png;base64,${Buffer.from(bytes).toString("base64")}`;
-	const png = await sharp(Buffer.from(bytes), { limitInputPixels: 16_000_000 })
-		.resize(160, 160, { fit: "cover" })
-		.png()
-		.toBuffer();
-	return `data:image/png;base64,${png.toString("base64")}`;
-}
-
-async function avatarDataUrl(person?: DirectoryPerson): Promise<string> {
-	if (!person) return "";
-	const cacheKey = person.image || person.github || "";
-	if (!cacheKey) return "";
-	const cached = avatarCache.get(cacheKey);
-	if (cached) return cached;
-	try {
-		if (person.image) {
-			const mediaUrl = new URL(person.image, "http://local");
-			const path = mediaUrl.searchParams.get("path");
-			if (path) {
-				const data = await compactAvatar(await Bun.file(path).arrayBuffer());
-				rememberAvatar(cacheKey, data);
-				return data;
-			}
-		}
-		if (person.github) {
-			const response = await fetch(`https://github.com/${encodeURIComponent(person.github)}.png?size=160`, {
-				signal: AbortSignal.timeout(5_000),
-			});
-			if (response.ok) {
-				const data = await compactAvatar(await response.arrayBuffer());
-				rememberAvatar(cacheKey, data);
-				return data;
-			}
-		}
-	} catch {}
-	return "";
-}
-
-function metaLabel(value: string): string {
-	return value.length > 28 ? `${value.slice(0, 27).trimEnd()}…` : value;
-}
-
 /**
  * A squircle: the superellipse corner the UI wears through
  * `corner-shape: squircle`, baked into a path because this rasterizes through
  * librsvg, which has no such property. An `rx` rounded rect beside the app's
- * real tiles reads as the wrong shape even at metadata size. Sampled along the
+ * real tiles reads as the wrong shape even at preview size. Sampled along the
  * curve rather than approximated with beziers, so the corner is the actual
  * superellipse at any size.
  */
@@ -652,23 +566,6 @@ function squircleRectPath(
 		corner(x + r, y + r, -1, -1, false),
 		"Z",
 	].join("");
-}
-
-function squirclePath(
-	x: number,
-	y: number,
-	size: number,
-	radius = size * 0.32,
-): string {
-	return squircleRectPath(x, y, size, size, radius);
-}
-
-/** A person outline for sessions without a directory avatar. */
-function metaGlyph(x: number, cy: number): string {
-	const scale = META_GLYPH_SIZE / 24;
-	const transform = `translate(${x.toFixed(2)} ${(cy - META_GLYPH_SIZE / 2).toFixed(2)}) scale(${scale.toFixed(4)})`;
-	const stroke = `fill="none" stroke="${CARD_INK}" stroke-opacity="${META_OPACITY}" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"`;
-	return `<g transform="${transform}"><circle cx="12" cy="7.6" r="3.7" ${stroke}/><path d="M4.7 20.1c0-4.1 3.3-6.5 7.3-6.5s7.3 2.4 7.3 6.5" ${stroke}/></g>`;
 }
 
 interface ShotFrame {
@@ -727,7 +624,6 @@ function shotFrames(
 /** SVG source is exported so the visual can be inspected without PNG decoding. */
 export function sessionSocialCardSvg(
 	data: SessionSocialCardData,
-	avatar = "",
 	displayTitle: string | string[] = clean(data.title) || productName(),
 	variant: SessionCardVariant = "card",
 	shots: string[] = [],
@@ -743,10 +639,7 @@ export function sessionSocialCardSvg(
 		.filter(Boolean)
 		.slice(0, 2);
 	if (!titleLines.length) titleLines.push(productName());
-	const owner = metaLabel(clean(data.owner));
-	const metadataHeight = META_SIZE;
-	const contentHeight =
-		titleLines.length * TITLE_LINE_HEIGHT + TITLE_META_GAP + metadataHeight;
+	const contentHeight = titleLines.length * TITLE_LINE_HEIGHT;
 	const compact = banner && !shots.length;
 	const height = compact
 		? contentHeight + BANNER_COMPACT_PAD_Y * 2
@@ -763,12 +656,6 @@ export function sessionSocialCardSvg(
 			)
 		: SESSION_CARD_WIDTH;
 	const blockTop = (height - contentHeight) / 2;
-	const metaTop =
-		blockTop + titleLines.length * TITLE_LINE_HEIGHT + TITLE_META_GAP;
-	const metaCenter = metaTop + META_SIZE / 2;
-	const ownerTextX = PAD_X + META_SIZE + META_LABEL_GAP;
-	const metaTextY = metaCenter + capBaselineShift(META_TEXT_SIZE);
-	const avatarTile = squirclePath(PAD_X, metaTop, META_SIZE, META_RADIUS);
 	const frames = shotFrames(variant, shots.length, height);
 	const shotDefs = frames
 		.map(
@@ -794,22 +681,9 @@ export function sessionSocialCardSvg(
 				`<text x="${PAD_X}" y="${blockTop + index * TITLE_LINE_HEIGHT + TITLE_LINE_HEIGHT / 2}" dominant-baseline="middle" fill="${CARD_INK}" font-size="${TITLE_SIZE}" font-weight="600" letter-spacing="-1.1">${xml(line)}</text>`,
 		)
 		.join("\n");
-	const avatarGlyph = metaGlyph(
-		PAD_X + (META_SIZE - META_GLYPH_SIZE) / 2,
-		metaCenter,
-	);
-	// No white ring: it would inset the picture by half its width and make the
-	// avatar read smaller than its 28px frame.
-	const avatarMarkup = avatar
-		? `<image href="${avatar}" x="${PAD_X}" y="${metaTop}" width="${META_SIZE}" height="${META_SIZE}" preserveAspectRatio="xMidYMid slice" clip-path="url(#avatarClip)"/>
-<path d="${avatarTile}" fill="none" stroke="#000000" stroke-opacity="0.1"/>`
-		: `<path d="${avatarTile}" fill="${CARD_PAPER}"/>
-${avatarGlyph}
-<path d="${avatarTile}" fill="none" stroke="#000000" stroke-opacity="0.1"/>`;
 	return `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}" overflow="hidden" font-family="Inter, Arial, sans-serif">
 <defs>
 ${shotDefs}
-  <clipPath id="avatarClip" clipPathUnits="userSpaceOnUse"><path d="${avatarTile}"/></clipPath>
   <filter id="shotShadow" x="-26%" y="-34%" width="152%" height="178%" color-interpolation-filters="sRGB">
     <feDropShadow in="SourceAlpha" dx="0" dy="18" stdDeviation="22" flood-color="#000000" flood-opacity="0.16" result="ambient"/>
     <feDropShadow in="SourceAlpha" dx="0" dy="6" stdDeviation="7" flood-color="#000000" flood-opacity="0.12" result="lift"/>
@@ -820,8 +694,6 @@ ${shotDefs}
 <rect width="${width}" height="${height}" fill="${CARD_PAPER}"/>
 ${shotMarkup}
 ${titleMarkup}
-${avatarMarkup}
-<text x="${ownerTextX}" y="${metaTextY}" fill="${CARD_INK}" fill-opacity="${META_OPACITY}" font-size="${META_TEXT_SIZE}" font-weight="500">${xml(owner)}</text>
 </svg>`;
 }
 
@@ -834,14 +706,11 @@ export async function renderSessionSocialCard(
 	const sharp = await loadSharp();
 	if (!sharp) return null;
 	const renderScale = variant === "banner" ? BANNER_RENDER_SCALE : 1;
-	const [avatar, shots] = await Promise.all([
-		avatarDataUrl(data.person),
-		shotDataUrls(
-			data.shots,
-			shotWidth(variant) * renderScale,
-			shotHeight(variant) * renderScale,
-		),
-	]);
+	const shots = await shotDataUrls(
+		data.shots,
+		shotWidth(variant) * renderScale,
+		shotHeight(variant) * renderScale,
+	);
 	// Missing or unreadable images give their space back to the title instead
 	// of leaving an unexplained blank where the stack would have been.
 	const title = await fitSocialCardTitle(
@@ -852,19 +721,13 @@ export async function renderSessionSocialCard(
 		),
 	);
 	// A card with no screenshot is cropped to what it actually holds, so measure
-	// the rows rather than leaving the title in a 1200px band of paper.
+	// the title rather than leaving it in a 1200px band of paper.
 	const compact = variant === "banner" && !shots.length;
 	const rowWidths = compact
-		? await Promise.all([
-				...title.map((line) => titleWidth(sharp, line)),
-				metaTextWidth(sharp, metaLabel(clean(data.owner))).then(
-					(w) => META_SIZE + META_LABEL_GAP + w,
-				),
-			])
+		? await Promise.all(title.map((line) => titleWidth(sharp, line)))
 		: [];
 	const svg = sessionSocialCardSvg(
 		data,
-		avatar,
 		title,
 		variant,
 		shots,
@@ -961,9 +824,9 @@ export function sessionHtmlWithSocialMeta(
   <meta property="og:url" content="${html(page)}" />
   <meta property="og:image:width" content="${SESSION_CARD_WIDTH}" />
   <meta property="og:image:height" content="${SESSION_CARD_HEIGHT}" />
-  <meta property="og:image:alt" content="${html(`${data.title}, an Open Session by ${data.owner}`)}" />
+  <meta property="og:image:alt" content="${html(`${data.title}, Open Session preview`)}" />
   <meta name="twitter:description" content="${html(description)}" />
-  <meta name="twitter:image:alt" content="${html(`${data.title}, an Open Session by ${data.owner}`)}" />`;
+  <meta name="twitter:image:alt" content="${html(`${data.title}, Open Session preview`)}" />`;
 	return output.replace(/(<meta property="og:type"[^>]*>)/, `$1${extra}`);
 }
 
@@ -1008,7 +871,6 @@ function shotFingerprint(source: string): string {
 function cardFingerprint(data: SessionSocialCardData): string {
 	return JSON.stringify({
 		...data,
-		person: data.person?.image || data.person?.github,
 		shots: data.shots?.map(shotFingerprint),
 	});
 }

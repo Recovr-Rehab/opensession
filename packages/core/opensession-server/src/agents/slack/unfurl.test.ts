@@ -45,16 +45,20 @@ describe("unfurlForSession", () => {
 		expect(unfurl.blocks).toContainEqual({
 			type: "image",
 			image_url: expect.stringMatching(
-				/^https:\/\/media\.example\.test\/session-card\/sess-card\/[A-Za-z0-9_-]{32}\.png\?v=21&s=banner$/,
+				/^https:\/\/media\.example\.test\/session-card\/sess-card\/[A-Za-z0-9_-]{32}\.png\?v=22&s=banner$/,
 			),
-			alt_text: "Ship the card, an Open Session by Kent",
+			alt_text: "Ship the card, Open Session preview",
 		});
-		// The square accessory thumbnail squashed the wide card.
+		// The card owns the title, so Slack does not repeat it in a section above.
+		expect(unfurl.blocks.map((block: any) => block.type)).toEqual([
+			"image",
+			"context",
+		]);
 		expect(unfurl.blocks.some((b: any) => b.accessory)).toBe(false);
 		expect(JSON.stringify(unfurl.blocks)).not.toContain("gpt-5.6-sol");
 	});
 
-	test("leaves out everything the card image already says", () => {
+	test("shows only the person, repo and freshness below the card", () => {
 		const unfurl = unfurlForSession(
 			session({
 				id: "sess-card",
@@ -64,19 +68,37 @@ describe("unfurlForSession", () => {
 				branch: "main",
 				mode: "code",
 				workspaceName: "Slack previews",
+				walkthrough: {
+					summary: "A summary Slack should not repeat below the image.",
+					publishedAt: "2026-08-21T12:00:00Z",
+					shots: [],
+				},
 				lastRunError: { message: "needs input", at: "2026-08-21T12:00:00Z" },
 			}),
 			"https://os.example.test/session/sess-card",
 		);
 		const context = unfurl.blocks.find((b: any) => b.type === "context");
-		expect(context?.elements[0].text).toContain("Slack previews");
+		expect(context?.elements[0].text).toMatch(
+			/^Kent  ·  opensession  ·  updated \d+[smhd] ago$/,
+		);
 		const json = JSON.stringify(unfurl.blocks);
+		expect(json).not.toContain("Slack previews");
+		expect(json).not.toContain("A summary Slack should not repeat");
 		expect(json).not.toContain("Needs input");
 		expect(json).not.toContain("`main`");
 		expect(json).not.toContain("code");
-		// The repo and the person are the card image's job.
-		expect(context?.elements[0].text).not.toContain("opensession");
-		expect(context?.elements[0].text).not.toContain("Kent");
+	});
+
+	test("does not substitute the product name for a missing person", () => {
+		const unfurl = unfurlForSession(
+			session({ id: "sess-card", title: "Ship the card", repo: "opensession" }),
+			"https://os.example.test/session/sess-card",
+		);
+		const context = unfurl.blocks.find((b: any) => b.type === "context");
+		expect(context?.elements[0].text).toMatch(
+			/^opensession  ·  updated \d+[smhd] ago$/,
+		);
+		expect(context?.elements[0].text).not.toContain("Open Session");
 	});
 });
 

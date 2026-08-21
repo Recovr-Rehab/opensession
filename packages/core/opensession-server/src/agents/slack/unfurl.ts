@@ -79,24 +79,6 @@ function relTime(iso?: string): string {
   return `${Math.round(hours / 24)}d`;
 }
 
-/**
- * A one-line "what's this about" blurb: the walkthrough summary if the agent
- * published one, else the goal/mission text. Stripped of markdown and capped so
- * the card stays compact.
- */
-function summaryLine(s: UnifiedSession): string {
-  const raw = (s.walkthrough?.summary || s.goal || "").trim();
-  if (!raw) return "";
-  // First paragraph, markdown stripped to plain-ish text.
-  let text = raw.split(/\n\s*\n/)[0].replace(/\s+/g, " ").trim();
-  text = text
-    .replace(/!?\[([^\]]*)\]\([^)]*\)/g, "$1") // links/images → their text
-    .replace(/[*_`#>]/g, "") // md emphasis / headings / code / quote
-    .trim();
-  if (text.length > 220) text = text.slice(0, 217).trimEnd() + "…";
-  return text;
-}
-
 /** "+123 −45" diff stat from the PR fields, or "" when unknown. */
 function diffStat(s: UnifiedSession): string {
   if (s.prAdditions == null && s.prDeletions == null) return "";
@@ -121,43 +103,30 @@ export function cardTitle(s: UnifiedSession): { title: string } {
 }
 
 /** Build the Block Kit unfurl body for one session. */
-export function unfurlForSession(s: UnifiedSession, url: string): { blocks: any[] } {
+export function unfurlForSession(s: UnifiedSession, _url: string): { blocks: any[] } {
   const card = sessionSocialCardData(s);
   const { title } = card;
 
-  // Only what the card image cannot say. The person is on the card, and
-  // status, repo, branch and mode read as noise next to it, so what is left is
-  // which workspace this belongs to and how fresh it is.
+  // Keep visible text single-sourced: the title lives in the image, while the
+  // context below carries only who owns the session, its repo, and freshness.
+  // A missing creator stays missing rather than becoming "Open Session".
   const bits: string[] = [];
-  if (s.workspaceName && s.workspaceName !== title) bits.push(s.workspaceName);
-  if (s.linearIssue?.identifier) bits.push(s.linearIssue.identifier);
-  if (s.isRunning && s.runStartedAt) bits.push(`running ${relTime(s.runStartedAt)}`);
-  else if (s.lastActivity) bits.push(`updated ${relTime(s.lastActivity)} ago`);
+  if (s.createdBy || s.startedBy) bits.push(card.owner);
+  if (s.repo) bits.push(s.repo);
+  const updated = relTime(s.lastActivity);
+  if (updated) bits.push(`updated ${updated} ago`);
 
   // Slack lays an `image` block out at the message column width whatever the
   // source measures, so aspect ratio is the only thing that decides how tall
-  // the preview is. Hence the banner render: same width, half the height. The
-  // accessory slot is not the answer either, it is a square thumbnail that
-  // squashes a wide card.
+  // the preview is. Hence the banner render. The accessory slot is not the
+  // answer either, it is a square thumbnail that squashes a wide card.
   const blocks: any[] = [
-    {
-      type: "section",
-      text: { type: "mrkdwn", text: `*<${url}|${esc(title)}>*` },
-    },
     {
       type: "image",
       image_url: sessionSocialCardUrl(s.id, "banner"),
-      alt_text: `${title}, an Open Session by ${card.owner}`,
+      alt_text: `${title}, Open Session preview`,
     },
   ];
-
-  const summary = summaryLine(s);
-  if (summary) {
-    blocks.push({
-      type: "section",
-      text: { type: "mrkdwn", text: esc(summary) },
-    });
-  }
 
   if (bits.length) {
     blocks.push({
