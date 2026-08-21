@@ -79,6 +79,7 @@ import {
   IconArrowDown,
   IconArrowUp,
   IconBranches,
+  IconCheck,
   IconChevronRight,
   IconCopy,
   IconDotsHorizontal,
@@ -86,6 +87,7 @@ import {
   IconGitMerge,
   IconGlobe,
   IconListCircles,
+  IconRepo,
   IconSliders,
   IconUndo,
   IconX,
@@ -99,11 +101,7 @@ import { SettingRow, SwitchRow, ValueRow } from "../ui/setting-row";
 
 import { checkClass, isDeployment, summarize } from "../lib/pr-status-derive";
 import { prStatusMark } from "../lib/pr-status";
-import {
-  PR_REPO_TAB_X,
-  PR_REPO_TABS,
-  prRepoTabClass,
-} from "../lib/pr-tone-classes";
+import { PR_REPO_TABS } from "../lib/pr-tone-classes";
 import { formatPrCommentPrompt, stripHtmlComments } from "../lib/pr-prompts";
 import { CheckRow } from "./pr/CheckRow";
 import { PrStateIcon } from "./pr/PrStateIcon";
@@ -349,6 +347,7 @@ export function PrPanel({
   // One identity for "no linked PRs", or the `targets` memo below re-runs on
   // every render for the (common) session with none.
   const linked = linkedLocal ?? linkedPrs ?? NO_LINKED_PRS;
+  const [targetPickerOpen, setTargetPickerOpen] = useState(false);
   const targets = useMemo<PrTarget[]>(
     () =>
       dedupeTargets([
@@ -1483,47 +1482,91 @@ export function PrPanel({
   );
 
   const showBar = targets.length > 1;
-  const switcher = showBar ? (
-    <div className={PR_REPO_TABS}>
-      {targets.map((t) => (
-        <button
-          key={t.key}
-          className={prRepoTabClass(t.key === active?.key)}
-          onClick={() => setActiveKey(t.key)}
-          title={
-            t.linked
-              ? `Linked PR · branch ${t.branch}`
-              : t.discovered
-                ? `PR opened by this session · branch ${t.branch}`
-                : t.primary
-                  ? "Primary repo"
-                  : "Attached repo"
-          }
-        >
-          {t.label}
-          {t.linked && t.key === active?.key && (
-            <span
-              className={PR_REPO_TAB_X}
-              role="button"
-              title="Unlink this PR from the session"
-              onClick={(e) => {
-                e.stopPropagation();
-                void handleUnlink(t);
-              }}
+  const targetPicker = showBar ? (
+    <Popover.Root open={targetPickerOpen} onOpenChange={setTargetPickerOpen}>
+      <Tooltip label="Switch review target">
+        <Popover.Trigger
+          render={
+            <Button
+              variant="ghost"
+              size="sm"
+              className="min-w-0 max-w-[180px] px-2 text-label"
+              aria-label="Switch review target"
+              icon={headerCompact ? <IconRepo size={18} /> : undefined}
+              caret={!headerCompact}
             >
-              <IconX size={12} />
-            </span>
-          )}
-        </button>
-      ))}
-      {linkable && (
-        <LinkPrControl
-          sessionId={sessionId}
-          variant="tab"
-          onLinked={handleLinked}
+              {!headerCompact && (
+                <>
+                  <span className="truncate">{active?.label}</span>
+                  <span className="shrink-0 text-faint">
+                    +{targets.length - 1}
+                  </span>
+                </>
+              )}
+            </Button>
+          }
         />
-      )}
-    </div>
+      </Tooltip>
+      <Popover.Popup
+        side="bottom"
+        align="start"
+        initialFocus
+        className="w-[280px] p-1.5"
+      >
+        <div className="px-2 py-1.5 text-meta font-medium text-faint">
+          Review target
+        </div>
+        <div className="flex flex-col gap-0.5">
+          {targets.map((target) => {
+            const selected = target.key === active?.key;
+            const detail = target.linked
+              ? "Linked pull request"
+              : target.discovered
+                ? "Opened by this session"
+                : target.primary
+                  ? "Primary repo"
+                  : "Attached repo";
+            return (
+              <button
+                key={target.key}
+                type="button"
+                className={`flex min-h-10 w-full items-center gap-2 rounded-md border-0 px-2 text-left hover:bg-hover phone:min-h-11 ${selected ? "bg-active" : "bg-transparent"}`}
+                aria-current={selected ? "page" : undefined}
+                onClick={() => {
+                  setTargetPickerOpen(false);
+                  setActiveKey(target.key);
+                }}
+              >
+                <IconBranches size={17} className="shrink-0 text-dim" />
+                <span className="min-w-0 flex-1">
+                  <span className="block truncate text-label font-medium text-fg">
+                    {target.label}
+                  </span>
+                  <span className="block truncate text-meta text-faint">
+                    {detail}
+                  </span>
+                </span>
+                {selected && (
+                  <IconCheck size={16} className="shrink-0 text-fg" />
+                )}
+              </button>
+            );
+          })}
+        </div>
+        {linkable && (
+          <div className="mt-1.5 border-t border-divider-soft px-1 pt-1.5">
+            <LinkPrControl
+              sessionId={sessionId}
+              variant="action"
+              onLinked={handleLinked}
+            />
+          </div>
+        )}
+      </Popover.Popup>
+    </Popover.Root>
+  ) : null;
+  const switcher = showBar ? (
+    <div className={PR_REPO_TABS}>{targetPicker}</div>
   ) : null;
 
   if (loading)
@@ -1916,8 +1959,6 @@ export function PrPanel({
       data-review-canvas="true"
       ref={setRoot}
     >
-      {switcher}
-
       {/* The PR identity names the canvas, so it stays edge to edge above the
           navigation and review content. */}
       <header
@@ -1937,6 +1978,7 @@ export function PrPanel({
             )}
           </span>
         </Tooltip>
+        {targetPicker}
         {/* Author and title in the session header's own breadcrumb shape: a
             tight picture-and-name pill, a chevron, then the name of the thing
             you are looking at. Same spacing and weights as RepoBar's
