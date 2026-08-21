@@ -113,6 +113,11 @@ describe("single session ownership", () => {
 		expect(create).toContain("fromPr\n\t\t\t\t\t\t\t? createWorktreeForExistingBranch");
 		expect(create.indexOf("openingPromptEntryId = beginPromptDispatch"))
 			.toBeLessThan(create.indexOf("await persist()"));
+		// The direct host run must use the create dispatch's stable transcript id.
+		// Otherwise every cold recovery mints a new user row for the same prompt.
+		expect(create).toMatch(
+			/runAgent\(\{[\s\S]*?prompt: spec\.openingPrompt,[\s\S]*?promptEntryId: openingPromptEntryId,/,
+		);
 		expect(create).not.toContain("if (requeuePromptDispatch(bksId))");
 		const routes = read("routes/sessions.ts");
 		expect(routes).not.toContain("requeuePromptDispatch(targetId)");

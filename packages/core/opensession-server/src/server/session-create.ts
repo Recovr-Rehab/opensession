@@ -716,6 +716,10 @@ export async function openCreatedSession(
 			const spanning = attachedRepoIds.length ? findSession(bksId) : null;
 			for await (const event of sandboxOpeningRun ?? runnerOpeningRun ?? runAgent({
 				prompt: spec.openingPrompt,
+				// A recovered create is the same logical turn. Reuse the durable
+				// intake id so Pi and the context log upsert the original rows
+				// instead of rendering the opening message again after each restart.
+				promptEntryId: openingPromptEntryId,
 				cwd: spec.wtPath,
 				mode: spec.mode,
 				model: spec.model,
