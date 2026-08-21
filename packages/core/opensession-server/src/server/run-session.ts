@@ -122,6 +122,7 @@ import { getWorkspace } from "./workspaces";
 import {
 	broadcastQueue,
 	beginPromptDispatch,
+	durableQueueItem,
 	acknowledgePromptDispatch,
 	failPromptDispatch,
 	clearSteerReceipts,
@@ -256,7 +257,7 @@ export function enqueuePrompt(
 	opts?: { front?: boolean },
 ): void {
 	const queue = promptQueues.get(sessionId) || [];
-	const owned = queueItem(item);
+	const owned = durableQueueItem(sessionId, queueItem(item));
 	// A durable command can be replayed after the queue write committed but
 	// before its command receipt did. Stable ids make that retry an adoption,
 	// not a second prompt.
@@ -1745,9 +1746,11 @@ export async function runSessionPrompt(
 				source: "prompt_throw",
 				error: String(e),
 			});
-		// A normal start failure is not a crash-recovery case. Keep the visible
-		// transcript line and its error, but do not replay it on a later restart.
-		acknowledgePromptDispatch(sessionId, durablePromptEntryId);
+		// A direct sandbox send owns the dispatch it created above, so a normal
+		// start failure retires that recovery record. A queue drain passes its own
+		// dispatch in and must retain it for the caller to restore atomically.
+		if (!promptEntryId)
+			acknowledgePromptDispatch(sessionId, durablePromptEntryId);
 		throw e;
 	} finally {
 		unmarkSessionStarting(sessionId, startToken);

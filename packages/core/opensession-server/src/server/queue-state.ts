@@ -17,6 +17,7 @@ import { setTranscriptAppendListener } from "./file-watcher";
 import { stripContext } from "./prompt-context";
 import { SESSIONS_DIR } from "./session-cache";
 import { setAppendHook } from "./transcript-store";
+import { stageFileAttachments, stageInlineImages } from "./uploads";
 import type { TranscriptEntry } from "./types";
 import { broadcastToSession } from "./ws-hub";
 import { AUTO_CONTINUE_USER } from "./auto-continue";
@@ -230,10 +231,28 @@ export function queueItem(item: QueueItem): QueueItem & { id: string } {
 	return { ...item, id: crypto.randomUUID() };
 }
 
-export function queueWithIds(items: QueueItem[] | undefined): QueueItem[] {
+/** Store attachment references, never inline attachment bodies, in actor state. */
+export function durableQueueItem(sessionId: string, item: QueueItem): QueueItem {
+	const images = item.images?.length
+		? stageInlineImages(sessionId, item.images, "prompt-queues")
+		: undefined;
+	const files = Array.isArray(item.files) && item.files.length
+		? stageFileAttachments(sessionId, item.files)
+		: undefined;
+	return {
+		...item,
+		...(images?.length ? { images } : { images: undefined }),
+		...(files?.length ? { files } : { files: undefined }),
+	};
+}
+
+export function queueWithIds(
+	items: QueueItem[] | undefined,
+	sessionId?: string,
+): QueueItem[] {
 	return (items || []).map((item) => {
-		if (item.id) return item;
-		return queueItem(item);
+		const owned = item.id ? item : queueItem(item);
+		return sessionId ? durableQueueItem(sessionId, owned) : owned;
 	});
 }
 
@@ -316,16 +335,16 @@ export function hydratePersistedQueueState(storePath = QUEUE_STORE): number {
 	steeredReceipts.clear();
 	promptDispatches.clear();
 	for (const [sessionId, items] of Object.entries(data.queued || {})) {
-		if (items?.length) promptQueues.set(sessionId, queueWithIds(items));
+		if (items?.length) promptQueues.set(sessionId, queueWithIds(items, sessionId));
 	}
 	for (const [sessionId, items] of Object.entries(data.steered || {})) {
-		if (items?.length) steeredReceipts.set(sessionId, queueWithIds(items));
+		if (items?.length) steeredReceipts.set(sessionId, queueWithIds(items, sessionId));
 	}
 	for (const [sessionId, dispatch] of Object.entries(data.dispatching || {})) {
 		if (dispatch?.promptEntryId && dispatch.items?.length) {
 			promptDispatches.set(sessionId, {
 				promptEntryId: dispatch.promptEntryId,
-				items: queueWithIds(dispatch.items),
+				items: queueWithIds(dispatch.items, sessionId),
 				...(dispatch.kind === "create" ? { kind: "create" as const } : {}),
 			});
 		}
@@ -372,7 +391,7 @@ export function restorePersistedQueueState(options: {
 	const queued = new Map<string, QueueItem[]>();
 	for (const [sessionId, items] of Object.entries(data.queued || {})) {
 		if (options.sessionExists(sessionId) && items?.length) {
-			queued.set(sessionId, queueWithIds(items));
+			queued.set(sessionId, queueWithIds(items, sessionId));
 		}
 	}
 	for (const [sessionId, dispatch] of Object.entries(data.dispatching || {})) {
@@ -387,7 +406,7 @@ export function restorePersistedQueueState(options: {
 					? live
 					: {
 						promptEntryId: dispatch.promptEntryId,
-						items: queueWithIds(dispatch.items),
+						items: queueWithIds(dispatch.items, sessionId),
 						kind: "create",
 					};
 			preservedDispatches.set(sessionId, createDispatch);
@@ -425,7 +444,7 @@ export function restorePersistedQueueState(options: {
 	for (const [sessionId, items] of Object.entries(data.steered || {})) {
 		if (!options.sessionExists(sessionId) || !items?.length) continue;
 		const delivered = options.deliveredUserTexts(sessionId);
-		const pending = queueWithIds(undeliveredSteers(items, delivered));
+		const pending = queueWithIds(undeliveredSteers(items, delivered), sessionId);
 		if (!pending.length) continue;
 		if (options.runOwnsSteers(sessionId)) {
 			steeredReceipts.set(sessionId, pending);
@@ -468,10 +487,11 @@ export function beginPromptDispatch(
 	requireQueued = false,
 ): string {
 	const id = promptEntryId || crypto.randomUUID();
+	const durableItems = queueWithIds(items, sessionId);
   sessionDelivery({
     op: "claim_dispatch",
     sessionId,
-    items,
+    items: durableItems,
 		promptEntryId: id,
 		...(kind ? { kind } : {}),
 		...(requireQueued ? { requireQueued: true } : {}),

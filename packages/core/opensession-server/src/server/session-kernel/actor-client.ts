@@ -23,6 +23,7 @@ import {
 
 const SMALL_OUTPUT_BYTES = 256 * 1024;
 const LARGE_OUTPUT_BYTES = 8 * 1024 * 1024;
+const MAX_DYNAMIC_OUTPUT_BYTES = 128 * 1024 * 1024;
 const LARGE_STORE_RESPONSES = new Set([
   "changesSince",
   "pendingOutbox",
@@ -319,14 +320,13 @@ export class SessionKernelActorClient {
       | { t: "ask"; request: AskActorRequest },
     label: string,
     large = false,
+    outputBytes = large ? LARGE_OUTPUT_BYTES : SMALL_OUTPUT_BYTES,
   ): TResult {
     if (this.deadError) throw this.deadError;
     const controlBuffer = new SharedArrayBuffer(
       Int32Array.BYTES_PER_ELEMENT * 2,
     );
-    const outputBuffer = new SharedArrayBuffer(
-      large ? LARGE_OUTPUT_BYTES : SMALL_OUTPUT_BYTES,
-    );
+    const outputBuffer = new SharedArrayBuffer(outputBytes);
     const control = new Int32Array(controlBuffer);
     this.worker.postMessage({
       ...request,
@@ -339,7 +339,18 @@ export class SessionKernelActorClient {
       this.markDead(error);
       throw error;
     }
+    const status = Atomics.load(control, 0);
     const length = Atomics.load(control, 1);
+    if (status === 2) {
+      if (!large || length <= outputBytes || length > MAX_DYNAMIC_OUTPUT_BYTES) {
+        const error = new Error(
+          `Session kernel ${label} response requires ${length} bytes`,
+        );
+        this.markDead(error);
+        throw error;
+      }
+      return this.callSync(request, label, large, length);
+    }
     const text = new TextDecoder().decode(
       new Uint8Array(outputBuffer, 0, length),
     );

@@ -304,6 +304,24 @@ describe("session kernel actor boundary", () => {
       }),
     ).toMatchObject({ duplicate: true, result: { accepted: true } });
   });
+  test("resizes read-only delivery snapshots beyond the initial buffer", async () => {
+    const host = await actor();
+    const content = "x".repeat(9 * 1024 * 1024);
+    host.decideDelivery({
+      op: "set",
+      sessionId: "large-delivery",
+      slot: "queued",
+      value: [{ id: "large", content }],
+    });
+    const snapshot = host.decideDelivery({
+      op: "snapshot",
+      sessionId: "large-delivery",
+    });
+    expect((snapshot.queued as Array<{ content: string }>)[0]?.content.length).toBe(
+      content.length,
+    );
+  });
+
   test("keeps actor reducers responsive while gateway effects stay ordered", async () => {
     const host = await actor();
     installSessionKernelActor(host);

@@ -378,11 +378,17 @@ export function startSessionKernelActorWorker(): void {
       const bytes = new TextEncoder().encode(
         JSON.stringify({ ok: true, result }),
       );
-      if (bytes.length > output.length)
-        throw new Error("Kernel actor response exceeded buffer");
-      output.set(bytes);
-      Atomics.store(control, 1, bytes.length);
-      Atomics.store(control, 0, 1);
+      if (bytes.length > output.length) {
+        // Large read-only snapshots retry with an exactly-sized buffer. Mutating
+        // calls are never retried by the client, so this signal cannot repeat a
+        // committed reduction.
+        Atomics.store(control, 1, bytes.length);
+        Atomics.store(control, 0, 2);
+      } else {
+        output.set(bytes);
+        Atomics.store(control, 1, bytes.length);
+        Atomics.store(control, 0, 1);
+      }
     } catch (error) {
       const bytes = new TextEncoder().encode(
         JSON.stringify({
