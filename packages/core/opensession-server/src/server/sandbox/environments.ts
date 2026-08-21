@@ -364,6 +364,7 @@ export async function prepareSandboxEnvironment(
     repo,
     provider,
     state: "preparing",
+    mode: "template",
     updatedAt: now,
     ...(settings ? { settings } : {}),
   });
@@ -416,6 +417,7 @@ export async function prepareSandboxEnvironment(
       repo,
       provider,
       state: "failed",
+      mode: "template",
       updatedAt: new Date().toISOString(),
       failureCode: code,
       failureSummary:
@@ -444,9 +446,9 @@ export function startSandboxEnvironmentMaintenance(): void {
   (globalThis as any).__sandboxEnvironmentMaintenanceStarted = true;
   for (const environment of readStored()) {
     if (
-      environment.mode !== "template" ||
       !["daytona", "box", "modal"].includes(environment.provider) ||
       (environment.state !== "stale" && environment.state !== "preparing") ||
+      (environment.mode !== "template" && environment.state !== "preparing") ||
       !sandboxConnectionReady(environment.provider)
     ) continue;
     scheduleSandboxEnvironment(environment.repo, environment.provider, {
