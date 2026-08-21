@@ -316,7 +316,7 @@ describe("single session ownership", () => {
 		expect(ws).toContain('`stop-${msg.requestId}`');
 		const routes = read("routes/sessions.ts");
 		expect(routes).toContain("await cancelAgentRunAndWait(runIds)");
-		expect(routes).toContain('.runExclusive(\n\t\t\t"delete_session"');
+		expect(routes).toMatch(/\.runExclusive\(\s*"delete_session"/);
 	});
 
 	test("create and sandbox recovery establish one execution owner", () => {
