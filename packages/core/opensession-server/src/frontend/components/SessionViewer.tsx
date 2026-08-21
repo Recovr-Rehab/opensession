@@ -326,6 +326,7 @@ import {
 	msgStreamingRow,
 } from "../lib/msg-classes";
 import { Menu, MENU_ICON } from "../ui/menu";
+import { ResponsiveDialog } from "../ui/sheet";
 import { Tooltip } from "../ui/tooltip";
 import { CopyCheck, useCopy } from "../ui/copy";
 import { toast } from "../ui/toast";
@@ -4911,14 +4912,17 @@ export function SessionViewer({
 		sessionId: string;
 		status: GitStatusInfo | null;
 	} | null>(null);
-	const [branchActionBusy, setBranchActionBusy] = useState<"move" | null>(null);
+	const [branchActionBusy, setBranchActionBusy] = useState<
+		"move" | "create" | null
+	>(null);
+	const [createPrConfirmOpen, setCreatePrConfirmOpen] = useState(false);
 	const [mobileActionMenuEl, setMobileActionMenuEl] =
 		useState<HTMLDivElement | null>(null);
 	const primaryPrNumber = prPresentation.primary?.number;
-	// PR actions are tucked into the overflow menu. Fetch git state only while
-	// that menu is open, so every mounted viewer does not add another poll.
+	// PR actions are tucked into the overflow menu. Fetch once when the session
+	// branch changes so the menu does not open first and add its actions later.
 	useEffect(() => {
-		if (!overflowOpen || !hasRepoWork || primaryPrNumber) return;
+		if (!hasRepoWork || primaryPrNumber) return;
 		let stale = false;
 		fetchGitStatus(session.id, session.repo || undefined)
 			.then((status) => {
@@ -4931,19 +4935,20 @@ export function SessionViewer({
 			stale = true;
 		};
 	}, [
-		overflowOpen,
 		hasRepoWork,
 		primaryPrNumber,
 		session.id,
 		session.repo,
+		session.branch,
 	]);
 	useEffect(() => {
 		setOverflowGit(null);
 		setBranchActionBusy(null);
+		setCreatePrConfirmOpen(false);
 	}, [session.id]);
 
 	async function moveToBranchFromMenu() {
-		if (branchActionBusy) return;
+		if (isBusy || branchActionBusy) return;
 		setBranchActionBusy("move");
 		try {
 			const result = await moveSessionToBranchApi(session.id);
@@ -4960,15 +4965,38 @@ export function SessionViewer({
 		}
 	}
 
-	function createPrFromMenu() {
+	function requestCreatePr() {
 		if (!connected) return;
-		setOverflowOpen(false);
 		send({
 			type: "prompt",
 			sessionId: session.id,
 			user: getCurrentUser(),
 			content: "Commit any remaining work, push the branch, and open a PR for it.",
 		});
+	}
+
+	function createPrFromMenu() {
+		setOverflowOpen(false);
+		requestCreatePr();
+	}
+
+	async function moveAndCreatePr() {
+		if (!connected || isBusy || branchActionBusy) return;
+		setBranchActionBusy("create");
+		try {
+			const result = await moveSessionToBranchApi(session.id);
+			setCreatePrConfirmOpen(false);
+			requestCreatePr();
+			toast(`Moved to ${result.branch}. Creating PR…`);
+		} catch (error) {
+			toast(
+				error instanceof Error
+					? error.message
+					: "Could not move to a branch",
+			);
+		} finally {
+			setBranchActionBusy(null);
+		}
 	}
 	// Left-edge swipe on phones pops the topmost overlay before the page stack:
 	// the info page registers as a higher-priority back-swipe layer, so the
@@ -5397,6 +5425,43 @@ export function SessionViewer({
 					</div>
 				</div>
 			)}
+			<ResponsiveDialog
+				open={createPrConfirmOpen}
+				onClose={() => setCreatePrConfirmOpen(false)}
+				phone={isPhone}
+				label="Move to a branch"
+				sheetClassName="px-6 pb-6 pt-3"
+				modalClassName="p-6"
+			>
+				<div className="flex flex-col gap-5">
+					<div className="flex flex-col gap-1.5">
+						<h2 className="text-title font-semibold text-fg">
+							Move to a branch?
+						</h2>
+						<p className="text-body text-dim">
+							Move this session to its own branch before creating the pull request.
+						</p>
+					</div>
+					<div className="grid grid-cols-2 gap-2">
+						<Button
+							variant="ghost"
+							className="phone:min-h-11"
+							disabled={branchActionBusy === "create"}
+							onClick={() => setCreatePrConfirmOpen(false)}
+						>
+							Cancel
+						</Button>
+						<Button
+							variant="primary"
+							className="phone:min-h-11"
+							disabled={!connected || isBusy || branchActionBusy === "create"}
+							onClick={() => void moveAndCreatePr()}
+						>
+							{branchActionBusy === "create" ? "Moving…" : "Move and create"}
+						</Button>
+					</div>
+				</div>
+			</ResponsiveDialog>
 			{!hideHeader && (() => {
 				const addToSidebarAction = (inMenu: boolean) =>
 					canAddToSidebar &&
@@ -5529,16 +5594,29 @@ export function SessionViewer({
 				const branchAction =
 					!primaryPrNumber && menuGit ? (
 						menuGit.sharedCheckout ? (
-							<Menu.Item
-								disabled={branchActionBusy === "move"}
-								onClick={() => void moveToBranchFromMenu()}
-								title="Move this session into an isolated worktree"
-							>
-								<IconNewBranch size={20} className={MENU_ICON} />
-								<span className="grow">
-									{branchActionBusy === "move" ? "Moving…" : "Move to branch"}
-								</span>
-							</Menu.Item>
+							<>
+								<Menu.Item
+									disabled={isBusy || branchActionBusy !== null}
+									onClick={() => void moveToBranchFromMenu()}
+									title="Move this session into an isolated worktree"
+								>
+									<IconNewBranch size={20} className={MENU_ICON} />
+									<span className="grow">
+										{branchActionBusy === "move" ? "Moving…" : "Move to branch"}
+									</span>
+								</Menu.Item>
+								<Menu.Item
+									disabled={!connected || isBusy || branchActionBusy !== null}
+									onClick={() => {
+										setOverflowOpen(false);
+										setCreatePrConfirmOpen(true);
+									}}
+									title="Move to a branch and create a pull request"
+								>
+									<IconPullRequest size={20} className={MENU_ICON} />
+									<span className="grow">Create PR</span>
+								</Menu.Item>
+							</>
 						) : menuGit.branch ? (
 							<Menu.Item
 								disabled={!connected}
