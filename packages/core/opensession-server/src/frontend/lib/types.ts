@@ -292,6 +292,9 @@ export interface SessionSlackShare {
 	at: string;
 	by?: string;
 	prNumber?: number;
+	/** Message timestamp. Present when the message can still be undone. */
+	ts?: string;
+	announcementKey?: string;
 }
 
 /** A team note on a session: human-to-human, interleaved into the transcript

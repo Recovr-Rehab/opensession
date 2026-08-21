@@ -558,6 +558,8 @@ export type ProtocolServerMessage =
       /** Set when the message was sent, so viewers can show where it landed. */
       channel?: { id: string; name: string };
       permalink?: string;
+      /** Message timestamp, so the sender can undo the post. */
+      ts?: string;
     }
   | { type: "notice"; sessionId?: string; message: string }
   | { type: "pong" }

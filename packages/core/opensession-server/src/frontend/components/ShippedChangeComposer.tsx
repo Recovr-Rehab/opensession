@@ -9,7 +9,7 @@ import { toast } from "../ui/toast";
 import { Tooltip } from "../ui/tooltip";
 import { BrandMark } from "./BrandMark";
 import { openLightbox } from "./MediaLightbox";
-import { IconPlus, IconX } from "./icons";
+import { IconPlus, IconUndo, IconX } from "./icons";
 import { Spinner } from "../ui/spinner";
 
 const MAX_SLACK_IMAGE_BYTES = 20 * 1024 * 1024;
@@ -18,13 +18,18 @@ export interface SlackSent {
 	channelName: string;
 	permalink?: string;
 	receiptKey?: string;
+	/** Where the message landed, so the sender can take it back out again. */
+	channelId?: string;
+	ts?: string;
 }
 
 export function SlackSentNotice({
 	channelName,
 	permalink,
 	onSendAnother,
-}: SlackSent & { onSendAnother: () => void }) {
+	onUndo,
+}: SlackSent & { onSendAnother: () => void; onUndo?: () => void | Promise<void> }) {
+	const [undoing, setUndoing] = useState(false);
 	return (
 		<div className="mx-auto mt-2 mb-6 flex w-full max-w-[var(--session-col)] items-center gap-1.5 px-1 text-label leading-5 text-dim">
 			<BrandMark name="slack" size={12} />
@@ -44,9 +49,31 @@ export function SlackSentNotice({
 					</a>
 				</>
 			)}
-			<Button variant="ghost" size="sm" className="ml-auto phone:min-h-10" onClick={onSendAnother}>
-				Send another
-			</Button>
+			<div className="ml-auto flex items-center gap-0.5">
+				{onUndo && (
+					<Tooltip label="Undo" side="bottom">
+						<Button
+							variant="ghost"
+							size="sm"
+							className="phone:size-10"
+							icon={undoing ? <Spinner size="sm" /> : <IconUndo size={16} />}
+							aria-label="Undo"
+							disabled={undoing}
+							onClick={async () => {
+								setUndoing(true);
+								try {
+									await onUndo();
+								} finally {
+									setUndoing(false);
+								}
+							}}
+						/>
+					</Tooltip>
+				)}
+				<Button variant="ghost" size="sm" className="phone:min-h-10" onClick={onSendAnother}>
+					Send another
+				</Button>
+			</div>
 		</div>
 	);
 }
@@ -69,6 +96,8 @@ export interface ShippedChangeComposerProps {
 	defaultChannel?: string;
 	nextMessage?: string;
 	sent?: SlackSent;
+	/** Offered on the receipt while the message is still deletable in Slack. */
+	onUndo?: () => void | Promise<void>;
 }
 
 export function ShippedChangeComposer({
@@ -85,6 +114,7 @@ export function ShippedChangeComposer({
 	defaultChannel,
 	nextMessage,
 	sent,
+	onUndo,
 }: ShippedChangeComposerProps) {
 	const [message, setMessage] = useState(defaultMessage);
 	const [channels, setChannels] = useState<Array<{ id: string; name: string }>>([]);
@@ -197,6 +227,7 @@ export function ShippedChangeComposer({
 		return (
 			<SlackSentNotice
 				{...sent}
+				onUndo={onUndo}
 				onSendAnother={() => {
 					setMessage(nextMessage?.trim().slice(0, 500) || "");
 					setScreenshots([]);

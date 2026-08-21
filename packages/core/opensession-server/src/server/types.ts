@@ -468,6 +468,10 @@ export interface SessionSlackShare {
   by?: string;
   /** The merged PR this share announced, for the in-transcript share card. */
   prNumber?: number;
+  /** Message timestamp. Undo needs it, and Slack only returns it sometimes. */
+  ts?: string;
+  /** Receipt to drop on undo, so the same update can be shared again. */
+  announcementKey?: string;
 }
 
 export interface NativeSessionFile {

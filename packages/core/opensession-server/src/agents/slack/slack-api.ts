@@ -229,25 +229,53 @@ export function slackFileShareTs(
 }
 
 /**
- * Link to the message an upload landed in. files.completeUploadExternal
- * answers with `{ id, title }` and no shares, so the share normally has to be
- * read back off the file. Best effort, like slackPermalink.
+ * The message an upload landed in. files.completeUploadExternal answers with
+ * `{ id, title }` and no shares, so the share normally has to be read back off
+ * the file. Best effort, like slackPermalink.
  */
-export async function slackUploadPermalink(
+export async function slackUploadTs(
   completed: any,
   channel: string,
   tokenOverride?: string,
 ): Promise<string | undefined> {
   const posted = completed?.files?.[0];
   const ts = slackFileShareTs(posted, channel);
-  if (ts) return slackPermalink(channel, ts, tokenOverride);
+  if (ts) return ts;
   if (typeof posted?.id !== "string") return undefined;
   try {
     const info = await slackApiGet("files.info", { file: posted.id }, tokenOverride);
-    const shared = slackFileShareTs(info?.file, channel);
-    return shared ? slackPermalink(channel, shared, tokenOverride) : undefined;
+    return slackFileShareTs(info?.file, channel);
   } catch {
     return undefined;
+  }
+}
+
+/** Link to the message an upload landed in. Best effort, like slackPermalink. */
+export async function slackUploadPermalink(
+  completed: any,
+  channel: string,
+  tokenOverride?: string,
+): Promise<string | undefined> {
+  const ts = await slackUploadTs(completed, channel, tokenOverride);
+  return ts ? slackPermalink(channel, ts, tokenOverride) : undefined;
+}
+
+/**
+ * Remove a message from Slack. Slack only lets a user token delete that user's
+ * own messages, which is exactly the undo we offer after a send.
+ */
+export async function deleteSlackMessage(
+  channel: string,
+  ts: string,
+  tokenOverride?: string,
+): Promise<void> {
+  const data = await slackApiCall("chat.delete", { channel, ts }, tokenOverride);
+  if (!data?.ok) {
+    throw new Error(
+      data?.error === "cant_delete_message" || data?.error === "message_not_found"
+        ? "Slack would not delete that message"
+        : data?.error || "Slack would not delete that message",
+    );
   }
 }
 

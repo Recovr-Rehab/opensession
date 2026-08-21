@@ -120,6 +120,8 @@ import {
 	reconnectSlack,
 	sendSlackComposer,
 	shareShippedChange,
+	undoShippedChange,
+	undoSlackComposer,
 } from "../lib/api/shipped-changes";
 import { suggestedShippedChangeMessage } from "../lib/shipped-change-copy";
 import {
@@ -1068,6 +1070,18 @@ export function SessionViewer({
 			}
 		}
 	}, [mergedPr, session.id]);
+	// Undo deletes the message in Slack and drops the receipt, so the card can
+	// offer the send again. Slack only lets someone delete their own message, so
+	// a teammate's post fails here rather than silently doing nothing.
+	const undoShippedChangeShare = useCallback(async (at: string) => {
+		try {
+			await undoShippedChange(session.id, at);
+			setShippedShare(null);
+			toast("Removed from Slack");
+		} catch (error: any) {
+			toast(error?.message || "Couldn't undo the Slack message");
+		}
+	}, [session.id]);
 	const reconnectShippedSlack = useCallback(async () => {
 		try {
 			await reconnectSlack();
@@ -3102,6 +3116,8 @@ export function SessionViewer({
 								channelName: msg.channel.name,
 								permalink: msg.permalink,
 								receiptKey: msg.requestId,
+								channelId: msg.channel.id,
+								ts: msg.ts,
 							});
 						}
 					}
@@ -3823,6 +3839,7 @@ export function SessionViewer({
 				shippedSentValue.channelName,
 				shippedSentValue.permalink,
 				shippedSentValue.at,
+				shippedSentValue.ts,
 			].join("\u0000")
 		: "";
 	const shippedSent = useMemo(
@@ -3853,6 +3870,9 @@ export function SessionViewer({
 										permalink: shippedSent.permalink,
 										receiptKey: shippedSent.at,
 									},
+									...(shippedSent.ts
+										? { onUndo: () => undoShippedChangeShare(shippedSent.at) }
+										: {}),
 								}
 							: {}),
 					}
@@ -3864,6 +3884,7 @@ export function SessionViewer({
 			session.walkthrough?.summary,
 			sendShippedChangeToSlack,
 			reconnectShippedSlack,
+			undoShippedChangeShare,
 			dismissShippedChangeShare,
 			shareDismissed,
 			shippedChangeStatus,
@@ -3887,6 +3908,8 @@ export function SessionViewer({
 				channelName: result.channel.name,
 				permalink: result.permalink,
 				receiptKey: slackComposer.id,
+				channelId: result.channel.id,
+				ts: result.ts,
 			});
 		} catch (error: any) {
 			setSlackComposerStatus("idle");
@@ -3898,6 +3921,19 @@ export function SessionViewer({
 			}
 		}
 	}, [session.id, slackComposer]);
+	// Slack accepts a delete only from the account that posted, which is the
+	// person's own grant token, so an undo here can never touch someone else's
+	// message.
+	const undoComposedSlackMessage = useCallback(async (sent: SlackSent) => {
+		if (!sent.channelId || !sent.ts) return;
+		try {
+			await undoSlackComposer(session.id, { channel: sent.channelId, ts: sent.ts });
+			setSlackComposerSent(null);
+			toast("Removed from Slack");
+		} catch (error: any) {
+			toast(error?.message || "Couldn't undo the Slack message");
+		}
+	}, [session.id]);
 	const cancelComposedSlackMessage = useCallback(async () => {
 		if (!slackComposer) return;
 		try {
@@ -7089,6 +7125,11 @@ export function SessionViewer({
 								<SlackSentNotice
 									{...slackComposerSent}
 									onSendAnother={handleOpenSlackComposer}
+									onUndo={
+										slackComposerSent.channelId && slackComposerSent.ts
+											? () => undoComposedSlackMessage(slackComposerSent)
+											: undefined
+									}
 								/>
 							)}
 
