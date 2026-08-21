@@ -11,6 +11,7 @@ import {
   waferModelEfforts,
   waferModelName,
   BRIDGE_PROVIDER_IDS,
+  OX_ALPHA_MODEL_ID,
 } from "./model-providers";
 import { stateDir } from "./paths";
 import { piPickerModels } from "./pi-config";
@@ -81,6 +82,7 @@ export function modelEfforts(model: string): SessionEffort[] {
     if (/^claude-(?:fable|opus|sonnet)-/.test(slug)) return CLAUDE_EFFORTS;
   }
   if (provider === "cerebras" && slug === "gpt-oss-120b") return ["low", "medium", "high"];
+  if (provider === "openrouter" && slug === OX_ALPHA_MODEL_ID) return ["low", "high", "max"];
   // Wafer's ladder is per model (its catalog owns the table) and doubles as
   // the thinking switch: Wafer serves every model with reasoning off until a
   // request carries an effort.

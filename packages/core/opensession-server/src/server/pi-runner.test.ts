@@ -319,6 +319,38 @@ describe("buildPiThirdPartyProviderPlan", () => {
     expect(plan.config).toEqual({ apiKey: "csk-test" });
   });
 
+  test("supplements OpenRouter with Ox Alpha without replacing known builtins", () => {
+    const ox = buildPiThirdPartyProviderPlan({
+      providerID: "openrouter",
+      modelID: "stealth/ox-alpha",
+      apiKey: "sk-or-test",
+      builtinModelIds: ["anthropic/claude-sonnet-4"],
+    });
+    if ("error" in ox) throw new Error(ox.error);
+    expect(ox.config).toMatchObject({
+      apiKey: "sk-or-test",
+      api: "openai-completions",
+      baseUrl: "https://openrouter.ai/api/v1",
+    });
+    expect(ox.config.models).toEqual([
+      expect.objectContaining({
+        id: "stealth/ox-alpha",
+        input: ["text", "image"],
+        contextWindow: 1_048_576,
+        maxTokens: 131_072,
+      }),
+    ]);
+
+    const builtin = buildPiThirdPartyProviderPlan({
+      providerID: "openrouter",
+      modelID: "anthropic/claude-sonnet-4",
+      apiKey: "sk-or-test",
+      builtinModelIds: ["anthropic/claude-sonnet-4"],
+    });
+    if ("error" in builtin) throw new Error(builtin.error);
+    expect(builtin.config.models).toBeUndefined();
+  });
+
   test("a model newer than both catalogs gets a conservative fallback entry", () => {
     const plan = buildPiThirdPartyProviderPlan({
       providerID: "cerebras",

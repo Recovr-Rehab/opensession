@@ -215,15 +215,14 @@ export function piDialOracleAgent(oracleAgent: string, providerID: string): stri
  * Registration plan for a third-party (non-anthropic/openai) provider — the
  * pure half of the runner's provider branch, exported for tests.
  *
- * Model metadata comes from pi's built-in provider catalog when pi knows the
- * provider (cerebras, moonshotai, xai, …); a provider pi has never heard of
- * but we catalog ourselves (Wafer — piProviderCatalog) is registered as a
- * generic OpenAI-compatible provider carrying the same model table the
- * previous runner engine injects. A provider in neither catalog fails clearly
- * instead of guessing a protocol. A model id newer than both catalogs gets a
- * conservative fallback entry — zero cost (unknown pricing must under-report,
- * not invent; tokens still record) and safe window/output floors — inheriting
- * the provider's api/baseUrl, so a catalog lag never blocks a run.
+ * Model metadata comes from Pi's built-in provider catalog when Pi knows the
+ * provider (Cerebras, Moonshot, xAI, and others). piProviderCatalog supplies a
+ * provider Pi does not know (Wafer) and models newer than its bundled snapshot
+ * (Ox Alpha on OpenRouter). A provider in neither catalog fails clearly rather
+ * than guessing a protocol. A model id newer than both catalogs gets a
+ * conservative fallback entry: zero cost because unknown pricing must
+ * under-report, plus safe window and output floors. It inherits the provider's
+ * API and base URL, so catalog lag never blocks a run.
  */
 export function buildPiThirdPartyProviderPlan(input: {
   providerID: string;
@@ -242,28 +241,30 @@ export function buildPiThirdPartyProviderPlan(input: {
         "so the Pi engine cannot guess its protocol. Configure a supported provider for this model.",
     };
   }
-  const known =
-    builtin.has(input.modelID) ||
-    !!catalog?.models.some((m) => m.id === input.modelID);
-  // Registering `models` REPLACES the provider's model list (pi's extension
-  // layer), so the self-catalog always rides along in full; builtin-backed
-  // providers with a known model pass no models at all and keep pi's own list.
-  const models = [
-    ...(catalog?.models ?? []),
-    ...(known
-      ? []
-      : [
-          {
-            id: input.modelID,
-            name: input.modelID,
-            reasoning: true,
-            input: ["text"] as Array<"text" | "image">,
-            cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
-            contextWindow: 131_072,
-            maxTokens: 32_768,
-          },
-        ]),
-  ];
+  const builtinKnown = builtin.has(input.modelID);
+  const catalogKnown = !!catalog?.models.some((m) => m.id === input.modelID);
+  // Registering `models` REPLACES the provider's model list in Pi's extension
+  // layer. Preserve Pi's full built-in list when it already knows the selected
+  // model. A self-catalogued model carries its complete table, while a model
+  // unknown to both catalogs gets that table plus a conservative fallback row.
+  const models = builtinKnown
+    ? []
+    : [
+        ...(catalog?.models ?? []),
+        ...(catalogKnown
+          ? []
+          : [
+              {
+                id: input.modelID,
+                name: input.modelID,
+                reasoning: true,
+                input: ["text"] as Array<"text" | "image">,
+                cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
+                contextWindow: 131_072,
+                maxTokens: 32_768,
+              },
+            ]),
+      ];
   return {
     config: {
       apiKey: input.apiKey,

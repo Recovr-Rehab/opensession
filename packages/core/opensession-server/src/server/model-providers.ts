@@ -36,6 +36,11 @@ export const CEREBRAS_PICKER_MODELS = [
   "zai-glm-4.7",
 ] as const;
 
+/** OpenRouter published Ox Alpha before Pi's bundled models.dev snapshot knew
+ * about it. Keep the transient free model usable at its advertised limits
+ * while the upstream catalog catches up. */
+export const OX_ALPHA_MODEL_ID = "stealth/ox-alpha";
+
 /** The reasoning levels Wafer's `reasoning_effort` accepts (docs.wafer.ai
  *  /serverless/api-reference). A subset of models.ts' SessionEffort, spelled
  *  out here so this module stays free of an import back into the registry. */
@@ -159,12 +164,9 @@ export function defaultPickerModelsForProvider(id: string): readonly string[] {
   return [];
 }
 
-/** A self-catalogued provider shaped for the Pi engine's registerProvider:
- *  the API dialect, endpoint and per-model metadata pi needs to serve a
- *  provider absent from its built-in catalog. One source of truth with the
- *  model provider injection above (model providerProviderOptions' wafer arm) — the same
- *  WAFER_MODELS table, expressed as pi-ai model entries. Cerebras needs no
- *  entry here: pi's built-in catalog already carries it. */
+/** Provider metadata shaped for Pi's registerProvider. This covers both a
+ * provider absent from Pi's built-in catalog (Wafer) and a model that landed
+ * ahead of Pi's bundled models.dev snapshot (Ox Alpha on OpenRouter). */
 export interface PiProviderCatalog {
   name: string;
   api: "openai-completions";
@@ -182,6 +184,24 @@ export interface PiProviderCatalog {
 }
 
 export function piProviderCatalog(id: string): PiProviderCatalog | undefined {
+  if (id === "openrouter") {
+    return {
+      name: "OpenRouter",
+      api: "openai-completions",
+      baseUrl: "https://openrouter.ai/api/v1",
+      models: [{
+        id: OX_ALPHA_MODEL_ID,
+        name: "Ox Alpha",
+        reasoning: true,
+        thinkingLevelMap: {},
+        // Pi currently transports text and images, not video attachments.
+        input: ["text", "image"],
+        cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
+        contextWindow: 1_048_576,
+        maxTokens: 131_072,
+      }],
+    };
+  }
   if (id !== "wafer") return undefined;
   return {
     name: "Wafer",
