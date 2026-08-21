@@ -29,7 +29,7 @@ import { type Sandbox } from "./sandbox";
 import { isRemoteSandboxProvider, resolveRequestedSandbox } from "./sandbox/config";
 import { resolveInteractiveSandbox } from "./sandbox/defaults";
 import { findSession, getCachedSessions, invalidateSessionsCache, touchNativeSession } from "./session-cache";
-import { nameSessionReferencesForTitle } from "./session-reference-title";
+import { nameKnownSessionReferencesForTitle } from "./session-reference-title";
 import {
 	getSessionControl,
 	type CreateSessionOpts,
@@ -706,8 +706,9 @@ registerSessionControl({
 			parentSession?.createdBy ||
 			personaName();
 		const sessionCreatedAt = new Date().toISOString();
+		const namedPrompt = await nameKnownSessionReferencesForTitle(prompt);
 		const title =
-			nameSessionReferencesForTitle(prompt, (id) => findSession(id))
+			namedPrompt
 				.trim()
 				.split("\n")[0]
 				.slice(0, 80) ||

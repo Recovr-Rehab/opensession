@@ -91,7 +91,7 @@ import {
 } from "./workspace-model-presets";
 import { getTitleOverride } from "./title-overrides";
 import { ensureGeneratedTitle } from "./generated-titles";
-import { nameSessionReferencesForTitle } from "./session-reference-title";
+import { nameKnownSessionReferencesForTitle } from "./session-reference-title";
 import { clearReplySuggestions, maybeSuggestReplies } from "./reply-suggestions";
 import { commitAuthorFor } from "./shared/user-mappings";
 import { writeFileAtomic, writeJsonAtomic } from "./shared/atomic-write";
@@ -2105,9 +2105,8 @@ async function runSessionPromptInner(
 	) {
 		const provisional =
 			!session.title || session.title === "New session";
-		const titleSource = nameSessionReferencesForTitle(
+		const titleSource = await nameKnownSessionReferencesForTitle(
 			provisional ? content : session.title,
-			(id) => findSession(id),
 		);
 		const firstLine = titleSource.trim().split("\n")[0].slice(0, 80);
 		if (provisional && firstLine)

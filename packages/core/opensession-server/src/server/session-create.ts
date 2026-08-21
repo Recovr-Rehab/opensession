@@ -28,7 +28,7 @@ import { getAccountById } from "./claude-accounts";
 import { getCodexAccountById } from "./codex-accounts";
 import { buildForkHandoffNote } from "./fork-handoff";
 import { ensureGeneratedTitle } from "./generated-titles";
-import { nameSessionReferencesForTitle } from "./session-reference-title";
+import { nameKnownSessionReferencesForTitle } from "./session-reference-title";
 import { onSessionIdle as onHumanAsksSessionIdle } from "./human-asks";
 import { interactiveMcpServers } from "./interactive-mcp";
 import { parseTranscriptAsync } from "./jsonl-parser";
@@ -448,10 +448,7 @@ export async function openCreatedSession(
 	// wore the raw first line) and keeps that name for life — later sessions
 	// never rename it, and a manual rename in the meantime wins.
 	const wsToName = spec.autoNameWorkspace;
-	const titlePrompt = nameSessionReferencesForTitle(
-		spec.titlePrompt,
-		(id) => findSession(id),
-	);
+	const titlePrompt = await nameKnownSessionReferencesForTitle(spec.titlePrompt);
 	void ensureGeneratedTitle(bksId, titlePrompt, spec.user, spec.model,).then(
 		(t) => {
 			if (!t) return;
@@ -1563,7 +1560,7 @@ export async function handleCreateSessionMessage(
 			attachBranch,
 		);
 
-		const title = nameSessionReferencesForTitle(prompt, (id) => findSession(id))
+		const title = (await nameKnownSessionReferencesForTitle(prompt))
 			.trim()
 			.split("\n")[0]
 			.slice(0, 80);
