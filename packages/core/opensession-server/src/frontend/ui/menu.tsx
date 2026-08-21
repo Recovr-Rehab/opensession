@@ -39,6 +39,7 @@ function Popup({
 	side,
 	align,
 	sideOffset = 8,
+	alignOffset = 0,
 	anchor,
 	finalFocus,
 	children,
@@ -47,6 +48,8 @@ function Popup({
 	side?: React.ComponentProps<typeof BaseMenu.Positioner>["side"];
 	align?: React.ComponentProps<typeof BaseMenu.Positioner>["align"];
 	sideOffset?: number;
+	/** Shift the popup along its alignment axis. */
+	alignOffset?: React.ComponentProps<typeof BaseMenu.Positioner>["alignOffset"];
 	/** Anchor something other than the trigger — an element, a ref, or a
 	 * virtual element with `getBoundingClientRect`. That last form is for a
 	 * menu whose subject is not a control at all: the composer's pill menu
@@ -64,6 +67,7 @@ function Popup({
 				side={side}
 				align={align}
 				sideOffset={sideOffset}
+				alignOffset={alignOffset}
 				anchor={anchor}
 				collisionPadding={8}
 				className="z-[10001] outline-none"
