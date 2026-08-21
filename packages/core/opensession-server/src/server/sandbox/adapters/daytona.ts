@@ -630,6 +630,13 @@ export const daytonaPrewarmAdapter: PrewarmAdapter = {
     }
   },
 
+  async keepAlive(sandboxId, opts) {
+    const client = await daytonaClient();
+    const sbx = await client.get(sandboxId);
+    await sbx.setAutostopInterval(opts.autoStopMinutes);
+    await sbx.setAutoDeleteInterval(opts.autoDeleteMinutes);
+  },
+
   async listPrewarmed() {
     const client = await daytonaClient();
     const out: Array<{ id: string; key: string }> = [];

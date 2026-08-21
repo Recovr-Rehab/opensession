@@ -575,6 +575,12 @@ if (!g.__opensessionBooted) {
 		console.error("[public-ingress] failed to start:", e);
 	}
 
+	// Restore completed sandbox prewarms and maintain any explicit keep-ready
+	// targets. This is a boot hook rather than a module-scope side effect.
+	void import("./src/server/sandbox/prewarm")
+		.then(({ startPrewarmPool }) => startPrewarmPool())
+		.catch((e) => console.error("[sandbox-prewarm] startup failed:", e));
+
 	// Start webhook server with enabled agents + automation webhook triggers
 	// + the public PR-image capability URLs (comment_on_pr_with_images).
 	agents = await loadAgents();

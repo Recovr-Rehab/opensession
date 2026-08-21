@@ -102,21 +102,30 @@ above before "tidying" any of it.
 
 ### Warm pools (prewarm)
 
-Remote providers take 30–45 seconds to hand back a usable sandbox, which is a
-long time to stare at a prompt box. The prewarm pool starts one *while you are
-still typing*, so the sandbox is ready when you hit send.
+Remote providers can take minutes to prepare a large repository. The default
+pool starts while you type and destroys an untouched sandbox after its TTL. For
+a project that must open in seconds, explicitly keep a paid sandbox ready:
 
 ```json
-"prewarm": { "enabled": true, "ttlMinutes": 10, "maxLive": 2 }
+"prewarm": {
+  "enabled": true,
+  "ttlMinutes": 10,
+  "maxLive": 2,
+  "keepReady": [
+    { "provider": "box", "repoId": "tella-fusion" },
+    { "provider": "daytona", "repoId": "tella-fusion" }
+  ]
+}
 ```
 
-`maxLive` is the setting that matters: prewarms are paid compute whether or not
-you use them, and an untouched one is destroyed after `ttlMinutes`. Default is
-deliberately 2.
+`maxLive` bounds both preparing and ready sandboxes. It must be at least the
+number of keep-ready targets. Open Session refreshes their provider lifecycle,
+restores completed entries after a coordinator restart, and starts a replacement
+as soon as one is claimed. This is explicit because idle sandboxes are paid
+compute. Without `keepReady`, the pool remains demand-driven and TTL-bound.
 
-Inert until a provider with prewarm support is configured (a Daytona/E2B API
-key, or the local Firecracker MicroVM provider) — then it defaults on. Docker
-starts fast enough locally that it does not need this.
+The pool is inert until a supported provider is configured. Docker starts fast
+enough locally that it does not need this.
 
 ### Snapshots
 
@@ -146,9 +155,9 @@ Honest status, because these are the newest parts:
   refs; the `quickSyncOnRestore` setting (a non-destructive `git fetch` +
   `git status` after a volume restore, default on) exists for exactly that. If
   a session starts confused about what branch it is on, suspect this first.
-- **Prewarm accounting** is crash-safe by cleanup rather than adoption: an
-  unclaimed prewarm left by a server restart is destroyed because the new
-  process cannot safely inherit its bootstrap promise.
+- **Prewarm restart recovery** restores completed, signature-matching entries.
+  Interrupted bootstraps are destroyed because their completion promise cannot
+  be resumed safely.
 - **The MicroVM backend is live-certified** for provisioning, engine launch,
   reconnect/replay, steering, cancellation, durable pause/wake, workspace
   survival and teardown. Each Firecracker process is unprivileged and jailed
@@ -320,17 +329,16 @@ to `provider: "local"` (today's host behavior). Env override for the path:
   // https URL (GitHub PAT / x-access-token).
   "cloneCredential": { "type": "https-token", "token": "ghp_…" },
 
-  // Warm-on-typing prewarm pool (packages/core/opensession-server/src/server/sandbox/prewarm.ts): typing a
-  // new-session prompt with a prewarm-capable provider selected (daytona,
-  // microvm — e2b has no prewarm adapter yet) starts the runner bootstrap
-  // immediately; the session create ADOPTS the warmed sandbox, cutting
-  // first-turn sandbox latency from ~30-45s+ to seconds. Absent block =
-  // these defaults, with `enabled` true whenever a daytona/e2b API key or
-  // the microvm provider is configured.
+  // Demand-driven by default. Add explicit keepReady targets when a project
+  // must open in seconds. maxLive includes both preparing and ready entries.
   "prewarm": {
-    "enabled": true,           // default: see above
-    "ttlMinutes": 10,          // destroy an untouched prewarm after N minutes
-    "maxLive": 2               // max live prewarms across all repos (paid compute)
+    "enabled": true,
+    "ttlMinutes": 10,
+    "maxLive": 2,
+    "keepReady": [
+      { "provider": "box", "repoId": "tella-fusion" },
+      { "provider": "daytona", "repoId": "tella-fusion" }
+    ]
   },
 
   // Remote runner bootstrap. Sandbox-engine models install the full runner +

@@ -119,13 +119,16 @@ export interface SandboxPrewarmConfig {
   enabled: boolean;
   /** Destroy an untouched prewarm after this many minutes (default 10). */
   ttlMinutes: number;
-  /** At most this many live prewarms across all keys (default 2 — paid compute). */
+  /** At most this many live prewarms across all keys (default 2). */
   maxLive: number;
+  /** Explicit paid-compute targets kept ready even while nobody is typing. */
+  keepReady: Array<{ provider: string; repoId: string }>;
 }
 
 const PREWARM_DEFAULTS: Omit<SandboxPrewarmConfig, "enabled"> = {
   ttlMinutes: 10,
   maxLive: 2,
+  keepReady: [],
 };
 
 export interface SandboxDaytonaConfig {
@@ -457,6 +460,22 @@ export function sandboxConfig(): SandboxConfig {
                   typeof raw.prewarm.maxLive === "number" && raw.prewarm.maxLive >= 1
                     ? Math.floor(raw.prewarm.maxLive)
                     : undefined,
+                keepReady: Array.isArray(raw.prewarm.keepReady)
+                  ? raw.prewarm.keepReady
+                      .filter(
+                        (target: unknown): target is { provider: string; repoId: string } =>
+                          Boolean(
+                            target &&
+                              typeof target === "object" &&
+                              typeof (target as any).provider === "string" &&
+                              typeof (target as any).repoId === "string",
+                          ),
+                      )
+                      .map((target: { provider: string; repoId: string }) => ({
+                        provider: target.provider.trim(),
+                        repoId: target.repoId.trim(),
+                      }))
+                  : undefined,
               }
             : undefined,
         runnerBundleUrl: str(raw?.runnerBundleUrl),
@@ -504,6 +523,12 @@ export function sandboxPrewarmConfig(): SandboxPrewarmConfig {
     enabled: cfg.prewarm?.enabled ?? prewarmProviderConfigured,
     ttlMinutes: cfg.prewarm?.ttlMinutes ?? PREWARM_DEFAULTS.ttlMinutes,
     maxLive: cfg.prewarm?.maxLive ?? PREWARM_DEFAULTS.maxLive,
+    keepReady: Array.isArray(cfg.prewarm?.keepReady)
+      ? cfg.prewarm.keepReady.filter(
+          (target): target is { provider: string; repoId: string } =>
+            typeof target?.provider === "string" && typeof target?.repoId === "string",
+        )
+      : PREWARM_DEFAULTS.keepReady,
   };
 }
 

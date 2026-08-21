@@ -658,6 +658,7 @@ export class BoxProvider implements SandboxProvider {
 
     // Find by name (authoritative — set via PATCH below), else state file.
     let box: BoxRecord | null = null;
+    let lifecycleRefreshed = false;
     try {
       box = await this.findBoxBySession(cfg, spec.sessionId);
     } catch (e) {
@@ -679,6 +680,7 @@ export class BoxProvider implements SandboxProvider {
               name: spec.sessionId,
               ttlSeconds: idleTtlSeconds(),
             });
+            lifecycleRefreshed = true;
             box = candidate;
             console.log(
               `[sandbox:box] adopted prewarmed box ${candidate.id} for ${spec.sessionId}`,
@@ -731,8 +733,9 @@ export class BoxProvider implements SandboxProvider {
       } catch (e) {
         console.warn(`[sandbox:box] rename(${box.id}) failed (state file still maps it):`, e);
       }
-    } else {
-      // Adopted an existing box — reset the archival countdown for this turn.
+    } else if (!lifecycleRefreshed) {
+      // Reused an existing box. Adoption already refreshed this countdown in
+      // the rename request above, so avoid a duplicate provider round trip.
       try {
         await boxApi(cfg, "PATCH", `/boxes/${box.id}`, { ttlSeconds: idleTtlSeconds() });
       } catch {}
@@ -1055,6 +1058,12 @@ export const boxPrewarmAdapter: PrewarmAdapter = {
       console.warn(`[sandbox:box] prewarm archive(${sandboxId}):`, error);
       throw error;
     }
+  },
+
+  async keepAlive(sandboxId, opts) {
+    await boxApi(boxClientConfig(), "PATCH", `/boxes/${sandboxId}`, {
+      ttlSeconds: Math.min(30 * 24 * 60 * 60, opts.autoStopMinutes * 60),
+    });
   },
 
   async listPrewarmed() {
