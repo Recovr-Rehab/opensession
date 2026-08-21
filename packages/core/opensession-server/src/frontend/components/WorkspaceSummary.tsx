@@ -148,13 +148,6 @@ interface Props {
 	refreshTick?: number;
 	/** Lets the session column make room for the floating card while it is open. */
 	onOpenChange?: (open: boolean) => void;
-	/**
-	 * Replace the compact fallback with the complete Workspace panel feature set.
-	 * The owner already has the live viewer state needed by Portals, Agents,
-	 * Terminal, reports and composer actions, so it composes that shared content
-	 * here instead of making this card maintain a second implementation.
-	 */
-	renderContent?: (close: () => void) => React.ReactNode;
 	/** The desktop tab strip sits between the header anchor and the transcript. */
 	tabStripVisible?: boolean;
 	/** Review starts with the card shut and opens it below its own two bars. */
@@ -285,7 +278,6 @@ export function WorkspaceSummary({
 	session,
 	anchor,
 	onOpenChange,
-	renderContent,
 	tabStripVisible,
 	reviewMode = false,
 	...body
@@ -424,17 +416,13 @@ export function WorkspaceSummary({
 				// focus on a row in here instead of the composer.
 				initialFocus={() => openedByPerson.current}
 			>
-				{/* Mounted only while open. The viewer supplies the shared Workspace
-				    content because it owns the live state for every panel feature. */}
-				{renderContent ? (
-					renderContent(() => changeOpen(false))
-				) : (
-					<SummaryBody
-						session={session}
-						{...body}
-						close={() => changeOpen(false)}
-					/>
-				)}
+				{/* Mounted only while open. This keeps its data fetches off sessions
+				    whose summary is closed. */}
+				<SummaryBody
+					session={session}
+					{...body}
+					close={() => changeOpen(false)}
+				/>
 			</Popover.Popup>
 		</Popover.Root>
 	);
@@ -818,7 +806,10 @@ function SummaryBody({
 					{changedFiles > 0 && (
 						<button
 							className={WS_SUMMARY_ROW}
-							onClick={() => go(() => onOpenPanelTab("changes"))}
+							// Opening Changes temporarily replaces this card with the side
+							// panel. Keep the pinned preference so the card returns when the
+							// panel closes.
+							onClick={() => onOpenPanelTab("changes")}
 						>
 							<span className={WS_SUMMARY_RAIL}>
 								<IconFile size={20} className={WS_SUMMARY_ICON} />

@@ -252,14 +252,6 @@ import { portalTargetFor, type PortalTarget } from "../lib/portals";
 import { StagingLink } from "./StagingLink";
 import { WorkspaceInfo } from "./WorkspaceInfo";
 import { WorkspaceSummary } from "./WorkspaceSummary";
-import {
-	WS_SUMMARY_COUNT,
-	WS_SUMMARY_ICON,
-	WS_SUMMARY_LABEL,
-	WS_SUMMARY_RAIL,
-	WS_SUMMARY_ROW,
-	WS_SUMMARY_SECTION,
-} from "../lib/workspace-summary-classes";
 import { SpinOffMenu } from "./SpinOffMenu";
 import {
 	IconSidebarRight,
@@ -5269,16 +5261,12 @@ export function SessionViewer({
 		) + subagents.filter((s) => s.status === "running").length;
 	// The header preview control used to keep this status warm. Now that the
 	// launcher lives in the overflow menu. Keep status warm while Preview or the
-	// portal browser is up, and while the workspace panel or summary is open.
-	// Their workspace controls report live portal counts. Status requests
+	// portal browser is up, and while the workspace panel is open. Its bottom
+	// bar counts live portals and its portals page lists them. Status requests
 	// also renew the authenticated Caddy routes for remote sandbox services.
 	useEffect(() => {
 		if (
-			(!showPreviewTab &&
-				!showPortal &&
-				!activePanelOpen &&
-				!infoPageOpen &&
-				!summaryOpen) ||
+			(!showPreviewTab && !showPortal && !activePanelOpen && !infoPageOpen) ||
 			!session.worktreeDir
 		)
 			return;
@@ -5300,7 +5288,6 @@ export function SessionViewer({
 		showPortal,
 		activePanelOpen,
 		infoPageOpen,
-		summaryOpen,
 		session.id,
 		session.worktreeDir,
 	]);
@@ -6221,164 +6208,12 @@ export function SessionViewer({
 								refreshTick={gitRefreshTick}
 							/>
 						)}
-					{/* The complete Workspace surface in a compact popup. It reuses the
-					    panel's content and actions so review, comments, files, media,
-					    reports and workspace tools cannot drift into two feature sets. */}
+					{/* The compact Workspace summary keeps the card's quiet row grammar.
+					    Detailed comments, files and tools open in the full side panel. */}
 					{!isPhone && hasRepoWork && !activePanelOpen && (
 						<WorkspaceSummary
 							session={session}
 							anchor={headerActionsRef}
-							renderContent={(close) => (
-								<>
-									<PrStatusBar
-										variant="summary"
-										sessionId={session.id}
-										repo={session.repo || undefined}
-										archived={session.archived}
-										prs={session.prs}
-										send={connected ? send : undefined}
-										running={isRunningLive}
-										refreshTick={gitRefreshTick}
-										onOpenPrTab={() => {
-											close();
-											focusPrInReview();
-										}}
-										onOpenStackPr={(repo, branch) => {
-											close();
-											onOpenPr?.(repo, branch);
-										}}
-										onOpenChecksTab={() => {
-											close();
-											focusPrInReview(undefined, "checks");
-										}}
-										onArchive={() => {
-											close();
-											handleArchive();
-										}}
-									>
-										<StagingLink
-											session={session}
-											variant="summary"
-											refreshTick={gitRefreshTick}
-										/>
-									</PrStatusBar>
-									<div className="px-1">
-										<WorkspaceInfo
-											sessionId={session.id}
-											workspaceId={session.workspaceId || null}
-											sessions={(workspaceSessions?.length ? workspaceSessions : [session]).map(
-												(s) => ({
-													id: s.id,
-													title: s.title,
-													createdAt: s.createdAt || "",
-													startedBy: s.startedBy,
-												}),
-											)}
-											repo={session.repo || "repository"}
-											prState={session.prState}
-											refreshTick={gitRefreshTick}
-											sandbox={session.sandbox}
-											reviewRequest={effectiveReview?.req ?? null}
-											reviewRequestSessionId={effectiveReview?.ownerId}
-											prReviewRequested={effectiveReview?.prReviewRequested}
-											reviewAcceptedFromPr={effectiveReview?.acceptedFromPr}
-											onReviewChange={onReviewChange}
-											send={connected ? send : undefined}
-											assets={assetFiles}
-											onOpenAsset={(path) => {
-												close();
-												setOverlayAssetPath(path);
-											}}
-											onOpenTab={(tab) => {
-												close();
-												if (tab === "pr") onOpenReview?.();
-												else if (tab === "staging") onOpenStaging?.();
-												else if (tab === "assets") onOpenAssets?.();
-												else if (tab === "changes") {
-													setPanelPage("changes");
-													setActivePanelOpen(true);
-												}
-											}}
-											onAddToInput={(text) => {
-												close();
-												setComposerPrefill((prefill) => ({
-													seq: (prefill?.seq ?? 0) + 1,
-													text,
-												}));
-											}}
-											onOpenSession={(id, created) => {
-												close();
-												onOpenSession?.(id, created);
-											}}
-											liveMediaCount={liveMediaCount}
-											liveMedia={liveOverviewMedia}
-										/>
-									</div>
-									{sessionReports.length > 0 && (
-										<div className="mx-2 mb-3 h-[420px] overflow-hidden rounded-lg bg-surface">
-											<SessionReportsPanel
-												reports={sessionReports}
-												onOpenNewSession={(prefill) => {
-													close();
-													onOpenNewSession(prefill);
-												}}
-											/>
-										</div>
-									)}
-									<div className={WS_SUMMARY_SECTION}>Workspace</div>
-									<button
-										type="button"
-										className={WS_SUMMARY_ROW}
-										onClick={() => {
-											close();
-											setPanelPage("portals");
-											setActivePanelOpen(true);
-										}}
-									>
-										<span className={WS_SUMMARY_RAIL}>
-											<IconGlobe size={20} className={WS_SUMMARY_ICON} />
-										</span>
-										<span className={WS_SUMMARY_LABEL}>Portals</span>
-										{livePortals > 0 && (
-											<span className={cn(WS_SUMMARY_COUNT, "text-faint")}>
-												{livePortals}
-											</span>
-										)}
-									</button>
-									<button
-										type="button"
-										className={WS_SUMMARY_ROW}
-										onClick={() => {
-											close();
-											setPanelPage("agents");
-											setActivePanelOpen(true);
-										}}
-									>
-										<span className={WS_SUMMARY_RAIL}>
-											<IconStack size={20} className={WS_SUMMARY_ICON} />
-										</span>
-										<span className={WS_SUMMARY_LABEL}>Agents</span>
-										{runningAgents > 0 && (
-											<span className={cn(WS_SUMMARY_COUNT, "text-yellow")}>
-												{runningAgents}
-											</span>
-										)}
-									</button>
-									<button
-										type="button"
-										className={WS_SUMMARY_ROW}
-										onClick={() => {
-											close();
-											onOpenTerminal?.();
-										}}
-									>
-										<span className={WS_SUMMARY_RAIL}>
-											<IconTerminal size={20} className={WS_SUMMARY_ICON} />
-										</span>
-										<span className={WS_SUMMARY_LABEL}>Terminal</span>
-									</button>
-								</>
-							)}
 							// The Changes row opens the active view's panel already on its
 							// Changes page; its other rows land on the overview.
 							onOpenPanelTab={(tab) => {
