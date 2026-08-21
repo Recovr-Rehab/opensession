@@ -4740,6 +4740,13 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 					// near-empty band between the tool cards and the first project, which
 					// read as the strip being bottom-heavy. Nothing to set off there.
 					"mt-1 pb-0.5 pt-3 phone:mt-0 phone:pt-0",
+					// A borrowed lens hides the tools strip, so this bar becomes the
+					// first thing in the phone scroll and lands exactly on the mask the
+					// floating top bar fades the list out with. A filled bar shows that
+					// edge where a plain row does not: its top few px washed out into
+					// the page and it read as clipped by the bar above it. Take back the
+					// air the tools used to stand in.
+					borrowedLens && "phone:pt-2.5",
 					// A caption starts on the rail's 16px text column; the borrowed
 					// lens's strip is a filled bar, so it takes the rows' own 8px
 					// inset instead and lines up with the workspace pills under it.
