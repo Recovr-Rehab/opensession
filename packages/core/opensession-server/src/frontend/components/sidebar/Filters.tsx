@@ -32,7 +32,7 @@ import {
 import { SwitchIndicator } from "../../ui/switch";
 import { cn } from "../../ui/cn";
 import { RepoTile, repoLabel } from "../RepoTile";
-import { IconChevronRight, IconRepo, IconSliders } from "../icons";
+import { IconChevronRight, IconRepo } from "../icons";
 import {
 	GROUP_BY_OPTIONS,
 	LAST_USED_TIME_OPTIONS,
@@ -57,13 +57,12 @@ const BACKDROP = "fixed inset-0 z-[300]";
 /** The panel itself, portalled and fixed-positioned at the anchor: the app's
  *  popup surface, so it reads as the same object as every menu it opens.
  *
- *  Padding is 12px because the rows inside carry `rounded-md` (7px × --rf) and
- *  the panel `rounded-popup` (16px × --rf): 7 + 12 lands on 16 once both scale
- *  together, which is the concentric-corner rule. `gap-0.5` keeps two adjacent
- *  hover washes from fusing into one block. */
+ *  Padding is 8px, keeping the rows inside close to the panel edge without
+ *  crowding its `rounded-popup` corners. `gap-0.5` keeps two adjacent hover
+ *  washes from fusing into one block. */
 const FILTER_POPOVER =
 	"fixed z-[301] flex flex-col gap-0.5 rounded-popup bg-popup-glass [backdrop-filter:var(--popup-blur)] [--smooth-ring-color:var(--popup-ring)] " +
-	"p-3 smooth-shadow-ring-md animate-[hovercard-in_var(--dur-micro)_var(--ease)]";
+	"p-2 smooth-shadow-ring-md animate-[hovercard-in_var(--dur-micro)_var(--ease)]";
 
 /** The same control as a row inside the Advanced menu: label, current value,
  *  and its options one level in. Reads as a menu row rather than a panel row,
@@ -105,7 +104,6 @@ export function FilterPopover({
 	currentUser,
 	onChange,
 	onClose,
-	onCustomize,
 }: {
 	anchor: HTMLElement | null;
 	filter: FilterState;
@@ -153,21 +151,6 @@ export function FilterPopover({
 		<>
 			<div className={BACKDROP} onClick={onClose} />
 			<div className={FILTER_POPOVER} style={{ left, top, width }}>
-				{/* Set order opens a separate screen, so it belongs beside the panel
-				    label rather than among the filters it rearranges. */}
-				<div className="flex items-center justify-between gap-3 px-2 pb-1.5 pt-1">
-					<span className="truncate text-item-title font-semibold text-fg">
-						Sidebar view
-					</span>
-					<button
-						type="button"
-						className="-mr-0.5 flex shrink-0 cursor-pointer select-none items-center gap-1.5 rounded-md bg-control px-2 py-1 phone:min-h-11 text-label text-dim hover:bg-hover hover:text-fg"
-						onClick={onCustomize}
-					>
-						<IconSliders size={15} className="shrink-0" />
-						<span>Set order</span>
-					</button>
-				</div>
 				{/* The section mode and project nesting are independent answers. */}
 				<ValueRow
 					label="Group by"
