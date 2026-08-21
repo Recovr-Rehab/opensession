@@ -190,7 +190,9 @@ describe("session social card", () => {
 	});
 
 	test("draws the screenshot and nothing else", () => {
-		const svg = sessionSocialCardSvg(["data:image/png;base64,primary"]);
+		const svg = sessionSocialCardSvg([
+			{ dataUrl: "data:image/png;base64,primary", width: 640, height: 360 },
+		]);
 		// The title, the person and the repo travel with the link itself, so no
 		// text is drawn on the card.
 		expect(svg).not.toContain("<text");
@@ -210,14 +212,14 @@ describe("session social card", () => {
 		expect(svg).toContain('result="lift"');
 		expect(svg).toContain('result="contact"');
 		expect(svg).not.toContain("gradient");
-		expect(640 / 360).toBe(16 / 9);
+		expect(svg).not.toContain("stroke=");
 	});
 
 	test("fans a second screenshot up from behind the first", () => {
 		const svg = sessionSocialCardSvg([
-			"data:image/png;base64,primary",
-			"data:image/png;base64,secondary",
-			"data:image/png;base64,ignored",
+			{ dataUrl: "data:image/png;base64,primary", width: 640, height: 360 },
+			{ dataUrl: "data:image/png;base64,secondary", width: 640, height: 360 },
+			{ dataUrl: "data:image/png;base64,ignored", width: 640, height: 360 },
 		]);
 		// The crop follows the rotated side and top corners, then deliberately cuts
 		// through the bottom so the fan rises out of the image boundary.
@@ -260,7 +262,30 @@ describe("session social card", () => {
 		expect(metadata.height).toBe(704);
 	});
 
-	test("keeps a portrait screenshot large in the frame", async () => {
+	test("preserves a landscape screenshot's native aspect ratio", async () => {
+		const landscape = join(uploadsDir, "landscape.png");
+		await sharp({
+			create: {
+				width: 800,
+				height: 500,
+				channels: 4,
+				background: "#d92d20",
+			},
+		})
+			.png()
+			.toFile(landscape);
+		const png = await renderSessionSocialCard({
+			title: "Keep the original shape",
+			owner: "Test Person",
+			shots: [landscape],
+		});
+		expect(png).not.toBeNull();
+		const metadata = await sharp(png!).metadata();
+		expect(metadata.width).toBe(1440);
+		expect(metadata.height).toBe(784);
+	});
+
+	test("preserves a portrait screenshot's native aspect ratio", async () => {
 		const portrait = join(uploadsDir, "portrait.png");
 		await sharp({
 			create: {
@@ -279,15 +304,16 @@ describe("session social card", () => {
 		});
 		expect(png).not.toBeNull();
 		const { data, info } = await sharp(png!).raw().toBuffer({ resolveWithObject: true });
-		expect(info.width).toBe(1440);
-		expect(info.height).toBe(704);
+		expect(info.width).toBe(800);
+		expect(info.height).toBe(1264);
 		const pixel = (x: number, y: number) => {
 			const offset = (y * info.width + x) * info.channels;
 			return [...data.subarray(offset, offset + 3)];
 		};
-		// Portraits fill the frame with a salience crop rather than a fixed top sliver.
+		// The complete 1:2 source remains 1:2 inside the card instead of being cropped.
 		expect(pixel(400, 420)).toEqual([217, 45, 32]);
-		expect(pixel(1000, 420)).toEqual([217, 45, 32]);
+		expect(pixel(400, 1100)).toEqual([217, 45, 32]);
+		expect(pixel(20, 420)).toEqual([255, 255, 255]);
 	});
 
 	test("drops ultra-wide card captures instead of nesting a card inside itself", async () => {
@@ -329,7 +355,7 @@ describe("session social card", () => {
 		expect(output).toContain("<title>Ship dynamic social cards · Open Session</title>");
 		expect(output).toContain('content="summary_large_image"');
 		expect(output).toMatch(
-			/content="https:\/\/media\.example\.test\/session-card\/sess-social-1\/[A-Za-z0-9_-]{32}\.png\?v=24"/,
+			/content="https:\/\/media\.example\.test\/session-card\/sess-social-1\/[A-Za-z0-9_-]{32}\.png\?v=25"/,
 		);
 		expect(output).toContain(
 			'property="og:url" content="https://os.example.test/session/sess-social-1"',
@@ -346,13 +372,13 @@ describe("session social card", () => {
 		).toBe("sess-social-1");
 		expect(socialSessionIdFromPath("/settings")).toBeNull();
 		expect(sessionSocialCardUrl("sess-social-1")).toMatch(
-			/^https:\/\/media\.example\.test\/session-card\/sess-social-1\/[A-Za-z0-9_-]{32}\.png\?v=24$/,
+			/^https:\/\/media\.example\.test\/session-card\/sess-social-1\/[A-Za-z0-9_-]{32}\.png\?v=25$/,
 		);
 	});
 
 	test("signs ids containing Slack timestamp dots", () => {
 		expect(sessionSocialCardUrl("slack-C123-1719860000.000000")).toMatch(
-			/^https:\/\/media\.example\.test\/session-card\/slack-C123-1719860000\.000000\/[A-Za-z0-9_-]{32}\.png\?v=24$/,
+			/^https:\/\/media\.example\.test\/session-card\/slack-C123-1719860000\.000000\/[A-Za-z0-9_-]{32}\.png\?v=25$/,
 		);
 	});
 
