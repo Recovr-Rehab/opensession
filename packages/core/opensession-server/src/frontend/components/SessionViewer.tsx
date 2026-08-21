@@ -5873,7 +5873,7 @@ export function SessionViewer({
 								className={cn(
 									"[corner-shape:squircle]",
 									isPhone &&
-										"size-11 min-h-11 rounded-full border-transparent text-dim shadow-none [corner-shape:round]",
+										"size-11 min-h-11 rounded-control border-transparent text-dim shadow-none [corner-shape:squircle]",
 									overflowOpen && "bg-hover text-fg",
 								)}
 								title="More actions"
@@ -7334,7 +7334,7 @@ export function SessionViewer({
 														<Button
 															variant="ghost"
 															size="lg"
-															className="size-11 min-h-11 rounded-full [corner-shape:round]"
+															className="size-11 min-h-11 rounded-control [corner-shape:squircle]"
 															icon={<IconArchive size={22} aria-hidden />}
 															aria-label="Archive and open next chat"
 															disabled={archiving}
@@ -7346,7 +7346,7 @@ export function SessionViewer({
 													<Button
 														variant="ghost"
 														size="lg"
-														className="size-11 min-h-11 rounded-full [corner-shape:round]"
+														className="size-11 min-h-11 rounded-control [corner-shape:squircle]"
 														icon={<IconPlus size={22} aria-hidden />}
 														aria-label="New workspace"
 														disabled={!onNewWorkspace}
@@ -7356,7 +7356,7 @@ export function SessionViewer({
 														<Button
 															variant="ghost"
 															size="lg"
-															className="size-11 min-h-11 rounded-full [corner-shape:round]"
+															className="size-11 min-h-11 rounded-control [corner-shape:squircle]"
 															icon={<IconArrowRight size={22} aria-hidden />}
 															aria-label="Next chat"
 															disabled={!onNextChat}
