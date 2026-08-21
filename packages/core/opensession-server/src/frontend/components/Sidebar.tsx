@@ -4748,12 +4748,9 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 					// read as the strip being bottom-heavy. Nothing to set off there.
 					"mt-1 pb-0.5 pt-3 phone:mt-0 phone:pt-0",
 					// A borrowed lens hides the tools strip, so this bar becomes the
-					// first thing in the phone scroll and lands exactly on the mask the
-					// floating top bar fades the list out with. A filled bar shows that
-					// edge where a plain row does not: its top few px washed out into
-					// the page and it read as clipped by the bar above it. Take back the
-					// air the tools used to stand in.
-					borrowedLens && "phone:pt-2.5",
+					// first thing in the phone scroll. Give it enough air to clear the
+					// floating top bar's fade instead of letting its top edge wash out.
+					borrowedLens && "phone:pt-4",
 					// A caption starts on the rail's 16px text column; the borrowed
 					// lens's strip is a filled bar, so it takes the rows' own 8px
 					// inset instead and lines up with the workspace pills under it.
@@ -4773,30 +4770,17 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 						// once by a strip above the tools, once by this heading — and
 						// each said it with its own ✕.
 						borrowedLens &&
-							"w-full rounded-md bg-blue-soft py-1 pl-2 pr-[3px] desktop:h-full desktop:py-0",
+							"min-h-10 w-full rounded-row bg-blue-soft pl-3 pr-1 phone:min-h-12 phone:pl-3.5 desktop:h-full desktop:min-h-0",
 					)}
 					ref={headRef}
 				>
 					{borrowedLens ? (
-						/* Whose lanes these are, and the way out of them. Someone
-						   else's lens is easy to forget you're in — the rail looks
-						   exactly like yours, just with unfamiliar work in it — so it
-						   says so on the one row that stays pinned while the list
-						   scrolls under it. The face and the colour carry it when the
-						   sidebar is too narrow for the name. */
-						<Tooltip label="Back to your workspaces">
-							<button
-								className="group/lens flex min-w-0 items-center gap-2 border-0 bg-transparent p-0 text-left text-label text-fg [font:inherit]"
-								onClick={() => setFilter({ person: "me" })}
-								// The visible label is a name; the button is the way out
-								// of that person's lens, so say both here.
-								aria-label={
-									filter.person === "everyone"
-										? "Everyone's sidebar. Back to your workspaces"
-										: filter.person === "unassigned"
-											? "Unassigned work. Back to your workspaces"
-											: `${personLensName}'s sidebar. Back to your workspaces`
-								}
+						<>
+							{/* The bar reports the active lens. Closing it is a separate
+							    action at the far edge, so the label stays visually stable and
+							    the close control gets a full touch target. */}
+							<div
+								className="flex min-w-0 flex-1 items-center gap-2 text-sm text-fg phone:text-base"
 								ref={(node) => {
 									titleRef.current = node;
 								}}
@@ -4805,16 +4789,10 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 									filter.person !== "unassigned" && (
 										<UserAvatar
 											name={personLensName}
-											size={18}
+											size={20}
 											className="shrink-0"
 										/>
 									)}
-								{/* The name alone, not "…'s sidebar": this row is the
-								    sidebar's own heading now, and the sentence version
-								    truncated at the rail's default width for anything
-								    longer than a short first name. The face, the wash and
-								    the ✕ say the rest — it reads as the person filter it
-								    is, the way the repo chip beside it reads. */}
 								<span className="min-w-0 truncate font-semibold">
 									{filter.person === "everyone"
 										? "Everyone"
@@ -4822,13 +4800,17 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 											? "Unassigned"
 											: personLensName}
 								</span>
-								<IconX
-									size={15}
-									className="shrink-0 text-dim group-hover/lens:text-fg"
-									aria-hidden="true"
-								/>
-							</button>
-						</Tooltip>
+							</div>
+							<Tooltip label="Back to your workspaces">
+								<button
+									className="flex size-8 shrink-0 items-center justify-center rounded-sm border-0 bg-transparent text-dim transition-[color,background-color,scale] hover:bg-hover hover:text-fg active:scale-[0.96] phone:size-11 motion-reduce:transform-none"
+									onClick={() => setFilter({ person: "me" })}
+									aria-label="Back to your workspaces"
+								>
+									<IconX size={18} aria-hidden="true" />
+								</button>
+							</Tooltip>
+						</>
 					) : (
 					<button
 						className={cn(
@@ -4890,7 +4872,9 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 							variant="inline"
 						/>
 					)}
-					<div className="min-w-0 flex-1" />
+					{/* The active lens label already grows to push its close control to
+					    this edge. Your own sidebar still needs the flexible spacer. */}
+					{!borrowedLens && <div className="min-w-0 flex-1" />}
 					{/* Grouped so the pair's combined width can be measured when deciding
 					    whether the repo chip fits inline. Gone on phones, where filter
 					    moves to the top bar and the red FAB covers new-session. */}
