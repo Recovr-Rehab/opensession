@@ -2,7 +2,9 @@ import { describe, expect, test } from "bun:test";
 import {
 	WS_SUMMARY_MAX_SHIFT,
 	WS_SUMMARY_ROOM_W,
+	workspaceSummaryCanStand,
 	workspaceSummaryShift,
+	workspaceSummarySideOffset,
 } from "./workspace-summary-open";
 
 /**
@@ -25,5 +27,17 @@ describe("workspaceSummaryShift", () => {
 	test("does not move a pane too narrow to show the card", () => {
 		expect(workspaceSummaryShift(WS_SUMMARY_ROOM_W - 1)).toBe(0);
 		expect(workspaceSummaryShift(0)).toBe(0);
+	});
+});
+
+describe("workspace summary in Review", () => {
+	test("starts temporary even when the pane has room", () => {
+		expect(workspaceSummaryCanStand(true, true)).toBe(false);
+		expect(workspaceSummaryCanStand(true, false)).toBe(true);
+	});
+
+	test("clears the Review identity and navigation bars", () => {
+		expect(workspaceSummarySideOffset(true, false)).toBe(59);
+		expect(workspaceSummarySideOffset(true, true)).toBe(143);
 	});
 });

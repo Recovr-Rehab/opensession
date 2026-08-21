@@ -52,7 +52,9 @@ import {
 import {
 	WS_SUMMARY_OPEN_EVENT,
 	WS_SUMMARY_OPEN_KEY,
+	workspaceSummaryCanStand,
 	workspaceSummaryOpen,
+	workspaceSummarySideOffset,
 } from "../lib/workspace-summary-open";
 import {
 	IconChevronDown,
@@ -148,6 +150,8 @@ interface Props {
 	onOpenChange?: (open: boolean) => void;
 	/** The desktop tab strip sits between the header anchor and the transcript. */
 	tabStripVisible?: boolean;
+	/** Review starts with the card shut and opens it below its own two bars. */
+	reviewMode?: boolean;
 }
 
 /**
@@ -275,12 +279,17 @@ export function WorkspaceSummary({
 	anchor,
 	onOpenChange,
 	tabStripVisible,
+	reviewMode = false,
 	...body
 }: Props) {
-	const [open, setOpen] = useState(workspaceSummaryOpen);
-	const initialOpen = useRef(open);
-	const openRef = useRef(open);
-	openRef.current = open;
+	/** The standing preference: whether this person keeps the card up. */
+	const [pinned, setPinned] = useState(workspaceSummaryOpen);
+	const pinnedRef = useRef(pinned);
+	pinnedRef.current = pinned;
+	/** Review opens a temporary card without changing the standing preference. */
+	const [transient, setTransient] = useState(false);
+	const canStand = workspaceSummaryCanStand(true, reviewMode);
+	const open = canStand ? pinned : transient;
 	const workspaceKey = session.workspaceId || session.id;
 	const previousWorkspaceKey = useRef(workspaceKey);
 	/** Whether the card open on screen is one this person just opened, as
@@ -288,16 +297,18 @@ export function WorkspaceSummary({
 	 *  the first kind may take focus. */
 	const openedByPerson = useRef(false);
 	useEffect(() => {
-		onOpenChange?.(initialOpen.current);
-		return () => onOpenChange?.(false);
-	}, [onOpenChange]);
+		onOpenChange?.(open);
+	}, [onOpenChange, open]);
+	useEffect(() => () => onOpenChange?.(false), [onOpenChange]);
+	useEffect(() => {
+		if (canStand) setTransient(false);
+	}, [canStand]);
 	useEffect(() => {
 		const syncOpen = () => {
 			const nextOpen = workspaceSummaryOpen();
-			if (nextOpen === openRef.current) return;
-			openRef.current = nextOpen;
-			setOpen(nextOpen);
-			onOpenChange?.(nextOpen);
+			if (nextOpen === pinnedRef.current) return;
+			pinnedRef.current = nextOpen;
+			setPinned(nextOpen);
 		};
 		const syncStorage = (event: StorageEvent) => {
 			if (event.key === WS_SUMMARY_OPEN_KEY) syncOpen();
@@ -308,22 +319,24 @@ export function WorkspaceSummary({
 			window.removeEventListener(WS_SUMMARY_OPEN_EVENT, syncOpen);
 			window.removeEventListener("storage", syncStorage);
 		};
-	}, [onOpenChange]);
+	}, []);
 	useEffect(() => {
 		if (previousWorkspaceKey.current === workspaceKey) return;
 		previousWorkspaceKey.current = workspaceKey;
 		const nextOpen = workspaceSummaryOpen();
-		if (nextOpen === openRef.current) return;
-		openRef.current = nextOpen;
-		setOpen(nextOpen);
-		onOpenChange?.(nextOpen);
-	}, [onOpenChange, workspaceKey]);
+		if (nextOpen === pinnedRef.current) return;
+		pinnedRef.current = nextOpen;
+		setPinned(nextOpen);
+	}, [workspaceKey]);
 	function changeOpen(nextOpen: boolean) {
 		openedByPerson.current = nextOpen;
-		openRef.current = nextOpen;
-		setOpen(nextOpen);
+		if (!canStand) {
+			setTransient(nextOpen);
+			return;
+		}
+		pinnedRef.current = nextOpen;
+		setPinned(nextOpen);
 		localStorage.setItem(WS_SUMMARY_OPEN_KEY, String(nextOpen));
-		onOpenChange?.(nextOpen);
 		window.dispatchEvent(new Event(WS_SUMMARY_OPEN_EVENT));
 	}
 	useEffect(() => {
@@ -345,7 +358,7 @@ export function WorkspaceSummary({
 		};
 		window.addEventListener("keydown", onKeyDown, true);
 		return () => window.removeEventListener("keydown", onKeyDown, true);
-	}, [open]);
+	}, [open, canStand]);
 	return (
 		<Popover.Root
 			open={open}
@@ -354,6 +367,7 @@ export function WorkspaceSummary({
 				// while the person works elsewhere in the pane or changes workspace.
 				if (
 					!nextOpen &&
+					canStand &&
 					(details.reason === "outside-press" || details.reason === "focus-out")
 				)
 					return;
@@ -386,7 +400,7 @@ export function WorkspaceSummary({
 				// the same 8 plus the 40px strip less the 5px it overlaps the header
 				// by, then the 16. The old 72 left the strip position 13px slacker
 				// than the other one.
-				sideOffset={tabStripVisible ? 59 : 24}
+				sideOffset={workspaceSummarySideOffset(Boolean(tabStripVisible), reviewMode)}
 				elevation="md"
 				// A menu's hairline is right for a strip of rows; on 300px of quiet
 				// text it reads as a box drawn around them rather than the card's own

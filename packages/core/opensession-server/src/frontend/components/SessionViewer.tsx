@@ -6278,6 +6278,7 @@ export function SessionViewer({
 							refreshTick={gitRefreshTick}
 							onOpenChange={setSummaryOpen}
 							tabStripVisible={tabStripVisible}
+							reviewMode={showReview}
 						/>
 					)}
 					{/* Phones have no workspace panel and no status strip, so the PR

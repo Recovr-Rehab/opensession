@@ -57,3 +57,20 @@ export const WS_SUMMARY_MAX_SHIFT = 160;
 export function workspaceSummaryShift(headerW: number): number {
 	return headerW >= WS_SUMMARY_ROOM_W ? WS_SUMMARY_MAX_SHIFT : 0;
 }
+
+/** Review always opens the summary on demand instead of inheriting its pin. */
+export function workspaceSummaryCanStand(
+	hasRoom: boolean,
+	reviewMode: boolean,
+): boolean {
+	return hasRoom && !reviewMode;
+}
+
+/** Clear both Review bars before placing its temporary summary card. */
+export function workspaceSummarySideOffset(
+	tabStripVisible: boolean,
+	reviewMode: boolean,
+): number {
+	const sessionOffset = tabStripVisible ? 59 : 24;
+	return sessionOffset + (reviewMode ? 84 : 0);
+}
