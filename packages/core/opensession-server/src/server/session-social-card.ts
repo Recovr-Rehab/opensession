@@ -8,10 +8,10 @@
  * The card can carry a screenshot the session itself produced (a walkthrough
  * shot, or an image someone pasted into the chat). That image is baked into a
  * PNG served from a capability URL, so it travels wherever the link is pasted.
- * Only file-backed session media is used, and only at thumbnail size.
+ * Only session-owned media is used, and only at thumbnail size.
  */
 
-import { createHmac, randomBytes, timingSafeEqual } from "crypto";
+import { createHash, createHmac, randomBytes, timingSafeEqual } from "crypto";
 import { chmodSync, readFileSync, statSync, writeFileSync } from "fs";
 import {
 	configuredIntegration,
@@ -67,9 +67,19 @@ export const SESSION_CARD_BANNER_HEIGHT = 320;
  * holding a screenshot's worth of empty paper next to the title.
  */
 const BANNER_COMPACT_PAD_Y = 34;
+/**
+ * A compact card is also cropped to its own content width. Slack lays every
+ * image out at the message column width, so the crop is what removes the empty
+ * paper: a narrower source with the same content fills the column instead of
+ * floating in the left third of it. It rasterizes at 2x so the upscale to the
+ * column stays sharp.
+ */
+const BANNER_COMPACT_MIN_WIDTH = 520;
+/** Slack commonly shows the banner on a 2x display. */
+const BANNER_RENDER_SCALE = 2;
 
 export type SessionCardVariant = "card" | "banner";
-const SESSION_CARD_VERSION = 19;
+const SESSION_CARD_VERSION = 21;
 
 const CARD_INK = "#050609";
 const CARD_PAPER = "#FFFFFF";
@@ -77,6 +87,7 @@ const CARD_PAPER = "#FFFFFF";
 const PAD_X = 56;
 const META_SIZE = 28;
 const META_TEXT_SIZE = 22;
+const META_FONT = "Inter Medium 22";
 const META_LABEL_GAP = 10;
 const META_GLYPH_SIZE = 22;
 const META_RADIUS = META_SIZE * 0.46;
@@ -108,6 +119,10 @@ const SHOT_BANNER_RADIUS = 26;
 const SHOT_CARD_RADIUS = 28;
 const SHOT_GAP = 32;
 const SHOT_LIMIT = 2;
+/** Keep fallback candidates so an unusable first image does not hide a good one. */
+const SHOT_CANDIDATE_LIMIT = 12;
+/** Anything wider than a 16:9 capture with a small tolerance crops poorly. */
+const SHOT_MAX_ASPECT = 16 / 9 + 0.02;
 const SHOT_BANNER_STACK_OFFSET = 80;
 const SHOT_CARD_STACK_OFFSET = 92;
 const SHOT_BANNER_STACK_LIFT = 10;
@@ -118,7 +133,7 @@ export interface SessionSocialCardData {
 	owner: string;
 	repo?: string;
 	person?: DirectoryPerson;
-	/** Strongest session screenshots first, capped to a small visual stack. */
+	/** Strongest session screenshot candidates first. The renderer keeps two. */
 	shots?: string[];
 }
 
@@ -203,33 +218,68 @@ const SHOT_SCAN_ENTRIES = 60;
  * card travels on a capability URL, so a path an agent merely printed is not
  * enough to put a file on it.
  */
-function usableShot(path: string): boolean {
-	if (!path || !isWithinUploads(path)) return false;
-	if (!/\.(png|jpe?g|webp|gif)$/i.test(path)) return false;
+const DATA_SHOT_RE = /^data:image\/(?:png|jpe?g|webp|gif);base64,/i;
+
+function dataShotBytes(source: string): Buffer | undefined {
+	if (!DATA_SHOT_RE.test(source)) return undefined;
+	const encoded = source.slice(source.indexOf(",") + 1);
+	if (!encoded || Math.ceil((encoded.length * 3) / 4) > SHOT_MAX_BYTES)
+		return undefined;
 	try {
-		const { size } = statSync(path);
-		return size > 0 && size <= SHOT_MAX_BYTES;
+		const bytes = Buffer.from(encoded, "base64");
+		return bytes.length > 0 && bytes.length <= SHOT_MAX_BYTES
+			? bytes
+			: undefined;
+	} catch {
+		return undefined;
+	}
+}
+
+function usableShot(source: string): boolean {
+	if (!source) return false;
+	if (source.startsWith("data:")) {
+		if (!DATA_SHOT_RE.test(source)) return false;
+		const encodedBytes = Math.ceil(
+			(source.length - source.indexOf(",") - 1) * 0.75,
+		);
+		return encodedBytes > 0 && encodedBytes <= SHOT_MAX_BYTES;
+	}
+	if (!isWithinUploads(source)) return false;
+	if (!/\.(png|jpe?g|webp|gif)$/i.test(source)) return false;
+	try {
+		const stat = statSync(source);
+		return stat.isFile() && stat.size > 0 && stat.size <= SHOT_MAX_BYTES;
 	} catch {
 		return false;
 	}
 }
 
-/** Resolve one transcript image without widening the card route into a file
- * reader. Composer uploads are the only chat media eligible for the card. */
-function uploadedShot(src: string): string | undefined {
+/** Resolve one transcript image without widening the card route into a general
+ * file reader. Composer uploads and transcript-owned data images are eligible. */
+function transcriptShot(src: string): string | undefined {
 	const staged = stagedImageRef(src);
-	return staged && usableShot(staged.path) ? staged.path : undefined;
+	if (staged && usableShot(staged.path)) return staged.path;
+	return usableShot(src) ? src : undefined;
 }
 
 /** Add eligible images from the requested entry order without duplicates. */
 function appendEntryShots(
+	sessionId: string,
 	entries: TranscriptEntry[],
 	field: "images" | "featuredMedia",
-	append: (path: string | undefined) => void,
+	append: (source: string | undefined) => boolean,
 ): void {
+	const store = transcriptStore();
 	for (const entry of entries) {
-		for (const src of [...(entry[field] ?? [])].reverse())
-			append(uploadedShot(src));
+		// Bounded transcript rows replace large data images with os-blob markers.
+		// Hydrate that one row so chat screenshots remain available to the card.
+		const needsFull =
+			entry.images?.some((src) => src.startsWith("os-blob:")) ||
+			entry.featuredMedia?.some((src) => src.startsWith("os-blob:"));
+		const source = needsFull ? store.getFullEntry(sessionId, entry.id) ?? entry : entry;
+		for (const src of [...(source[field] ?? [])].reverse()) {
+			if (!append(transcriptShot(src))) return;
+		}
 	}
 }
 
@@ -243,29 +293,31 @@ function appendEntryShots(
 function sessionShotPaths(session: UnifiedSession): string[] {
 	const paths: string[] = [];
 	const seen = new Set<string>();
-	const append = (path: string | undefined): void => {
-		if (!path || paths.length >= SHOT_LIMIT || seen.has(path) || !usableShot(path))
-			return;
-		seen.add(path);
-		paths.push(path);
+	const append = (source: string | undefined): boolean => {
+		if (paths.length >= SHOT_CANDIDATE_LIMIT) return false;
+		if (!source || seen.has(source) || !usableShot(source)) return true;
+		seen.add(source);
+		paths.push(source);
+		return paths.length < SHOT_CANDIDATE_LIMIT;
 	};
 	const walkthroughShots = session.walkthrough?.shots ?? [];
 	for (const shot of walkthroughShots) append(shot.after);
 	for (const shot of walkthroughShots) append(shot.before);
-	if (paths.length >= SHOT_LIMIT) return paths;
+	if (paths.length >= SHOT_CANDIDATE_LIMIT) return paths;
 
 	try {
 		const store = transcriptStore();
 		const tail = store.readTail(session.id, SHOT_SCAN_ENTRIES);
 		const newestFirst = [...tail.entries].reverse();
-		appendEntryShots(newestFirst, "featuredMedia", append);
+		appendEntryShots(session.id, newestFirst, "featuredMedia", append);
 		appendEntryShots(
+			session.id,
 			newestFirst.filter((entry) => entry.type === "user"),
 			"images",
 			append,
 		);
 
-		if (paths.length < SHOT_LIMIT && tail.firstSeq > 1) {
+		if (paths.length < SHOT_CANDIDATE_LIMIT && tail.firstSeq > 1) {
 			const opening = store.readRange(
 				session.id,
 				1,
@@ -274,6 +326,7 @@ function sessionShotPaths(session: UnifiedSession): string[] {
 				SHOT_SCAN_ENTRIES,
 			);
 			appendEntryShots(
+				session.id,
 				opening.entries.filter((entry) => entry.type === "user"),
 				"images",
 				append,
@@ -285,23 +338,47 @@ function sessionShotPaths(session: UnifiedSession): string[] {
 	return paths;
 }
 
-/** A screenshot cropped to a 16:9 frame. Top anchoring preserves app chrome. */
-async function shotDataUrl(
-	path: string | undefined,
+interface PreparedShot {
+	dataUrl: string;
+}
+
+/** Preserve landscape screenshots inside the 16:9 frame. Portrait captures use
+ * a salience crop instead of a fixed top sliver, so their relevant UI stays large. */
+async function prepareShot(
+	source: string | undefined,
 	width: number,
 	height: number,
-): Promise<string> {
-	if (!path) return "";
+): Promise<PreparedShot | undefined> {
+	if (!source) return undefined;
 	try {
 		const sharp = await loadSharp();
-		if (!sharp) return "";
-		const png = await sharp(path, { limitInputPixels: 40_000_000 })
-			.resize(width, height, { fit: "cover", position: "top" })
+		if (!sharp) return undefined;
+		const input = dataShotBytes(source) ?? source;
+		const image = sharp(input, { limitInputPixels: 40_000_000 });
+		const metadata = await image.metadata();
+		if (!metadata.width || !metadata.height) return undefined;
+		const swapsAxes = [5, 6, 7, 8].includes(metadata.orientation ?? 1);
+		const orientedWidth = swapsAxes ? metadata.height : metadata.width;
+		const orientedHeight = swapsAxes ? metadata.width : metadata.height;
+		const aspect = orientedWidth / orientedHeight;
+		// Card renders and message-column captures are usually ultra-wide. Putting
+		// one back inside the card creates the recursive, unreadable preview.
+		if (aspect > SHOT_MAX_ASPECT) return undefined;
+		const portrait = aspect < 1;
+		const png = await image
+			.rotate()
+			.resize(width, height, {
+				fit: portrait ? "cover" : "contain",
+				position: portrait ? "attention" : "centre",
+				background: { r: 246, g: 246, b: 248, alpha: 1 },
+			})
 			.png()
 			.toBuffer();
-		return `data:image/png;base64,${png.toString("base64")}`;
+		return {
+			dataUrl: `data:image/png;base64,${png.toString("base64")}`,
+		};
 	} catch {
-		return "";
+		return undefined;
 	}
 }
 
@@ -310,12 +387,15 @@ async function shotDataUrls(
 	width: number,
 	height: number,
 ): Promise<string[]> {
-	const results = await Promise.all(
-		(paths ?? []).slice(0, SHOT_LIMIT).map((path) =>
-			shotDataUrl(path, width, height),
-		),
-	);
-	return results.filter(Boolean);
+	const shots: PreparedShot[] = [];
+	for (const source of (paths ?? []).slice(0, SHOT_CANDIDATE_LIMIT)) {
+		const shot = await prepareShot(source, width, height);
+		if (shot) shots.push(shot);
+		if (shots.length >= SHOT_LIMIT) break;
+	}
+	// Keep source priority intact. A deliberate walkthrough image should not lose
+	// to a less relevant chat image merely because the latter is landscape.
+	return shots.map((shot) => shot.dataUrl);
 }
 
 function xml(value: string): string {
@@ -343,6 +423,16 @@ async function titleWidth(sharp: SharpFactory, title: string): Promise<number> {
 			rgba: true,
 			dpi: 72,
 		},
+	}).metadata();
+	return metadata.width ?? 0;
+}
+
+async function metaTextWidth(
+	sharp: SharpFactory,
+	value: string,
+): Promise<number> {
+	const metadata = await sharp({
+		text: { text: xml(value), font: META_FONT, rgba: true, dpi: 72 },
 	}).metadata();
 	return metadata.width ?? 0;
 }
@@ -641,6 +731,8 @@ export function sessionSocialCardSvg(
 	displayTitle: string | string[] = clean(data.title) || productName(),
 	variant: SessionCardVariant = "card",
 	shots: string[] = [],
+	/** Measured width of the widest content row, for the compact crop. */
+	contentWidth?: number,
 ): string {
 	const banner = variant === "banner";
 	const titleLines = (Array.isArray(displayTitle)
@@ -655,11 +747,21 @@ export function sessionSocialCardSvg(
 	const metadataHeight = META_SIZE;
 	const contentHeight =
 		titleLines.length * TITLE_LINE_HEIGHT + TITLE_META_GAP + metadataHeight;
-	const height = banner
-		? shots.length
+	const compact = banner && !shots.length;
+	const height = compact
+		? contentHeight + BANNER_COMPACT_PAD_Y * 2
+		: banner
 			? SESSION_CARD_BANNER_HEIGHT
-			: contentHeight + BANNER_COMPACT_PAD_Y * 2
-		: SESSION_CARD_HEIGHT;
+			: SESSION_CARD_HEIGHT;
+	const width = compact
+		? Math.min(
+				SESSION_CARD_WIDTH,
+				Math.max(
+					BANNER_COMPACT_MIN_WIDTH,
+					Math.round(contentWidth ?? 0) + PAD_X * 2,
+				),
+			)
+		: SESSION_CARD_WIDTH;
 	const blockTop = (height - contentHeight) / 2;
 	const metaTop =
 		blockTop + titleLines.length * TITLE_LINE_HEIGHT + TITLE_META_GAP;
@@ -704,7 +806,7 @@ export function sessionSocialCardSvg(
 		: `<path d="${avatarTile}" fill="${CARD_PAPER}"/>
 ${avatarGlyph}
 <path d="${avatarTile}" fill="none" stroke="#000000" stroke-opacity="0.1"/>`;
-	return `<svg xmlns="http://www.w3.org/2000/svg" width="${SESSION_CARD_WIDTH}" height="${height}" viewBox="0 0 ${SESSION_CARD_WIDTH} ${height}" overflow="hidden" font-family="Inter, Arial, sans-serif">
+	return `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}" overflow="hidden" font-family="Inter, Arial, sans-serif">
 <defs>
 ${shotDefs}
   <clipPath id="avatarClip" clipPathUnits="userSpaceOnUse"><path d="${avatarTile}"/></clipPath>
@@ -715,7 +817,7 @@ ${shotDefs}
     <feMerge><feMergeNode in="ambient"/><feMergeNode in="lift"/><feMergeNode in="contact"/><feMergeNode in="SourceGraphic"/></feMerge>
   </filter>
 </defs>
-<rect width="1200" height="${height}" fill="${CARD_PAPER}"/>
+<rect width="${width}" height="${height}" fill="${CARD_PAPER}"/>
 ${shotMarkup}
 ${titleMarkup}
 ${avatarMarkup}
@@ -731,9 +833,14 @@ export async function renderSessionSocialCard(
 	// and the rest of the compiled server remain available.
 	const sharp = await loadSharp();
 	if (!sharp) return null;
+	const renderScale = variant === "banner" ? BANNER_RENDER_SCALE : 1;
 	const [avatar, shots] = await Promise.all([
 		avatarDataUrl(data.person),
-		shotDataUrls(data.shots, shotWidth(variant), shotHeight(variant)),
+		shotDataUrls(
+			data.shots,
+			shotWidth(variant) * renderScale,
+			shotHeight(variant) * renderScale,
+		),
 	]);
 	// Missing or unreadable images give their space back to the title instead
 	// of leaving an unexplained blank where the stack would have been.
@@ -744,8 +851,30 @@ export async function renderSessionSocialCard(
 			variant,
 		),
 	);
+	// A card with no screenshot is cropped to what it actually holds, so measure
+	// the rows rather than leaving the title in a 1200px band of paper.
+	const compact = variant === "banner" && !shots.length;
+	const rowWidths = compact
+		? await Promise.all([
+				...title.map((line) => titleWidth(sharp, line)),
+				metaTextWidth(sharp, metaLabel(clean(data.owner))).then(
+					(w) => META_SIZE + META_LABEL_GAP + w,
+				),
+			])
+		: [];
+	const svg = sessionSocialCardSvg(
+		data,
+		avatar,
+		title,
+		variant,
+		shots,
+		rowWidths.length ? Math.max(...rowWidths) : undefined,
+	);
 	return sharp(
-		Buffer.from(sessionSocialCardSvg(data, avatar, title, variant, shots)),
+		Buffer.from(svg),
+		// The complete Slack banner lands at 2x, including embedded screenshots.
+		// Rendering only the outer SVG at 2x would still upscale a 1x data image.
+		renderScale > 1 ? { density: 72 * renderScale } : undefined,
 	)
 		.png()
 		.toBuffer();
@@ -865,6 +994,25 @@ function rememberCard(
 	if (oldest) cardCache.delete(oldest);
 }
 
+function shotFingerprint(source: string): string {
+	if (source.startsWith("data:"))
+		return createHash("sha256").update(source).digest("base64url");
+	try {
+		const stat = statSync(source);
+		return `${source}:${stat.size}:${stat.mtimeMs}`;
+	} catch {
+		return `${source}:missing`;
+	}
+}
+
+function cardFingerprint(data: SessionSocialCardData): string {
+	return JSON.stringify({
+		...data,
+		person: data.person?.image || data.person?.github,
+		shots: data.shots?.map(shotFingerprint),
+	});
+}
+
 export function sessionSocialCardPublicRoutes(): Map<
 	string,
 	(req: Request, url: URL) => Promise<Response>
@@ -890,8 +1038,8 @@ export function sessionSocialCardPublicRoutes(): Map<
 		// rasterize an arbitrary geometry.
 		const variant: SessionCardVariant =
 			url.searchParams.get("s") === "banner" ? "banner" : "card";
-		const cacheKey = `${session.id}@${variant}`;
-		const fingerprint = JSON.stringify(data, (key, value) => (key === "person" ? data.person?.image || data.person?.github : value));
+		const cacheKey = `${SESSION_CARD_VERSION}:${session.id}@${variant}`;
+		const fingerprint = cardFingerprint(data);
 		const cached = cardCache.get(cacheKey);
 		const now = Date.now();
 		let bytes: Buffer;

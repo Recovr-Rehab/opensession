@@ -125,12 +125,12 @@ export function unfurlForSession(s: UnifiedSession, url: string): { blocks: any[
   const card = sessionSocialCardData(s);
   const { title } = card;
 
-  // Status, branch and mode are omitted: they age badly on a pasted link and
-  // push the parts people actually scan for out of view.
+  // Only what the card image cannot say. The person is on the card, and
+  // status, repo, branch and mode read as noise next to it, so what is left is
+  // which workspace this belongs to and how fresh it is.
   const bits: string[] = [];
-  if (s.repo) bits.push(s.repo);
+  if (s.workspaceName && s.workspaceName !== title) bits.push(s.workspaceName);
   if (s.linearIssue?.identifier) bits.push(s.linearIssue.identifier);
-  if (s.createdBy || s.startedBy) bits.push(`by ${card.owner}`);
   if (s.isRunning && s.runStartedAt) bits.push(`running ${relTime(s.runStartedAt)}`);
   else if (s.lastActivity) bits.push(`updated ${relTime(s.lastActivity)} ago`);
 

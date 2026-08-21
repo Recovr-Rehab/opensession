@@ -143,7 +143,7 @@ describe("session social card", () => {
 				}),
 				{ includeShot: true },
 			).shots,
-		).toEqual([walkthrough, featured]);
+		).toEqual([walkthrough, featured, opening]);
 
 		const personOnlyId = "sess-social-person-shot";
 		transcriptStore().appendTranscriptEvents(personOnlyId, [
@@ -167,6 +167,26 @@ describe("session social card", () => {
 				includeShot: true,
 			}).shots,
 		).toEqual([opening]);
+	});
+
+	test("restores transcript-owned chat screenshots from bounded rows", () => {
+		const sessionId = "sess-social-data-shot";
+		const dataUrl = `data:image/png;base64,${imageBytes.toString("base64")}`;
+		transcriptStore().appendTranscriptEvents(sessionId, [
+			{
+				id: "data-shot",
+				type: "user",
+				content: "x".repeat(40_000),
+				timestamp: "2026-08-18T12:00:00Z",
+				images: [dataUrl],
+			},
+		]);
+		const wire = transcriptStore().readTail(sessionId).entries[0];
+		expect(wire.images).toEqual(["os-blob:data-shot/0"]);
+		expect(
+			sessionSocialCardData(session({ id: sessionId }), { includeShot: true })
+				.shots?.[0],
+		).toBe(dataUrl);
 	});
 
 	test("balances the title across at most two lines before truncating", async () => {
@@ -221,11 +241,14 @@ describe("session social card", () => {
 			["A visual session with", "a useful second line"],
 			"banner",
 			[],
+			480,
 		);
-		// No screenshot, so the banner shrinks to its own content.
+		// No screenshot, so the banner is cropped to its own content on both axes:
+		// the measured row width plus one left margin on either side.
 		expect(svg).toContain(
-			'<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="190"',
+			'<svg xmlns="http://www.w3.org/2000/svg" width="592" height="190"',
 		);
+		expect(svg).toContain('<rect width="592" height="190"');
 		expect(svg).toContain('<text x="56" y="55"');
 		expect(svg).toContain('<text x="56" y="97"');
 		expect(svg).toContain(
@@ -300,6 +323,57 @@ describe("session social card", () => {
 		expect(metadata.height).toBe(630);
 	});
 
+	test("keeps a portrait screenshot large in a crisp Slack banner", async () => {
+		const portrait = join(uploadsDir, "portrait.png");
+		await sharp({
+			create: {
+				width: 400,
+				height: 800,
+				channels: 4,
+				background: "#d92d20",
+			},
+		})
+			.png()
+			.toFile(portrait);
+		const png = await renderSessionSocialCard(
+			{ title: "Show the whole screenshot", owner: "Test Person", shots: [portrait] },
+			"banner",
+		);
+		expect(png).not.toBeNull();
+		const { data, info } = await sharp(png!).raw().toBuffer({ resolveWithObject: true });
+		expect(info.width).toBe(2400);
+		expect(info.height).toBe(640);
+		const pixel = (x: number, y: number) => {
+			const offset = (y * info.width + x) * info.channels;
+			return [...data.subarray(offset, offset + 3)];
+		};
+		// Portraits fill the frame with a salience crop rather than a fixed top sliver.
+		expect(pixel(1852, 320)).toEqual([217, 45, 32]);
+		expect(pixel(1360, 320)).toEqual([217, 45, 32]);
+	});
+
+	test("drops ultra-wide card captures instead of nesting a card inside itself", async () => {
+		const nestedCard = join(uploadsDir, "nested-card.png");
+		await sharp({
+			create: {
+				width: 1600,
+				height: 600,
+				channels: 4,
+				background: "#d92d20",
+			},
+		})
+			.png()
+			.toFile(nestedCard);
+		const png = await renderSessionSocialCard(
+			{ title: "Do not recurse", owner: "Test Person", shots: [nestedCard] },
+			"banner",
+		);
+		const metadata = await sharp(png!).metadata();
+		// With no meaningful screenshot, the compact fallback gives the space back.
+		expect(metadata.height).toBe(148 * 2);
+		expect(metadata.width).toBeLessThan(2400);
+	});
+
 	test("injects large-image metadata into the session HTML", () => {
 		const source = `<head>
 <title>Open Session</title>
@@ -318,7 +392,7 @@ describe("session social card", () => {
 		expect(output).toContain("<title>Ship dynamic social cards · Open Session</title>");
 		expect(output).toContain('content="summary_large_image"');
 		expect(output).toMatch(
-			/content="https:\/\/media\.example\.test\/session-card\/sess-social-1\/[A-Za-z0-9_-]{32}\.png\?v=19"/,
+			/content="https:\/\/media\.example\.test\/session-card\/sess-social-1\/[A-Za-z0-9_-]{32}\.png\?v=21"/,
 		);
 		expect(output).toContain(
 			'property="og:url" content="https://os.example.test/session/sess-social-1"',
@@ -332,13 +406,13 @@ describe("session social card", () => {
 		).toBe("sess-social-1");
 		expect(socialSessionIdFromPath("/settings")).toBeNull();
 		expect(sessionSocialCardUrl("sess-social-1")).toMatch(
-			/^https:\/\/media\.example\.test\/session-card\/sess-social-1\/[A-Za-z0-9_-]{32}\.png\?v=19$/,
+			/^https:\/\/media\.example\.test\/session-card\/sess-social-1\/[A-Za-z0-9_-]{32}\.png\?v=21$/,
 		);
 	});
 
 	test("signs ids containing Slack timestamp dots", () => {
 		expect(sessionSocialCardUrl("slack-C123-1719860000.000000")).toMatch(
-			/^https:\/\/media\.example\.test\/session-card\/slack-C123-1719860000\.000000\/[A-Za-z0-9_-]{32}\.png\?v=19$/,
+			/^https:\/\/media\.example\.test\/session-card\/slack-C123-1719860000\.000000\/[A-Za-z0-9_-]{32}\.png\?v=21$/,
 		);
 	});
 
@@ -363,16 +437,18 @@ describe("session social card", () => {
 		expect(metadata.height).toBe(630);
 	});
 
-	test("serves a screenshot-less banner at its content height", async () => {
+	test("crops a screenshot-less banner to its content", async () => {
 		const route = sessionSocialCardPublicRoutes().get("GET /session-card/*")!;
 		const url = new URL(sessionSocialCardUrl(signedRouteSessionId, "banner"));
 		expect(url.searchParams.get("s")).toBe("banner");
 		const response = await route(new Request(url), url);
 		expect(response.status).toBe(200);
 		const metadata = await sharp(await response.arrayBuffer()).metadata();
-		expect(metadata.width).toBe(1200);
-		// One title line and one metadata row, with no screenshot to make room for.
-		expect(metadata.height).toBe(148);
+		// One title line and one metadata row, with no screenshot to make room
+		// for, rasterized at 2x so Slack's upscale to the column stays sharp.
+		expect(metadata.height).toBe(148 * 2);
+		expect(metadata.width).toBeLessThan(1200);
+		expect(metadata.width! / metadata.height!).toBeGreaterThan(2);
 	});
 
 	test("renders the full card for an unrecognized shape", async () => {

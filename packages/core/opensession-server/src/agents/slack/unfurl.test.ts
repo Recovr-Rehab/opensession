@@ -45,7 +45,7 @@ describe("unfurlForSession", () => {
 		expect(unfurl.blocks).toContainEqual({
 			type: "image",
 			image_url: expect.stringMatching(
-				/^https:\/\/media\.example\.test\/session-card\/sess-card\/[A-Za-z0-9_-]{32}\.png\?v=19&s=banner$/,
+				/^https:\/\/media\.example\.test\/session-card\/sess-card\/[A-Za-z0-9_-]{32}\.png\?v=21&s=banner$/,
 			),
 			alt_text: "Ship the card, an Open Session by Kent",
 		});
@@ -54,7 +54,7 @@ describe("unfurlForSession", () => {
 		expect(JSON.stringify(unfurl.blocks)).not.toContain("gpt-5.6-sol");
 	});
 
-	test("omits status, branch and mode from the context line", () => {
+	test("leaves out everything the card image already says", () => {
 		const unfurl = unfurlForSession(
 			session({
 				id: "sess-card",
@@ -63,16 +63,20 @@ describe("unfurlForSession", () => {
 				repo: "opensession",
 				branch: "main",
 				mode: "code",
+				workspaceName: "Slack previews",
 				lastRunError: { message: "needs input", at: "2026-08-21T12:00:00Z" },
 			}),
 			"https://os.example.test/session/sess-card",
 		);
 		const context = unfurl.blocks.find((b: any) => b.type === "context");
-		expect(context?.elements[0].text).toContain("opensession  ·  by Kent");
+		expect(context?.elements[0].text).toContain("Slack previews");
 		const json = JSON.stringify(unfurl.blocks);
 		expect(json).not.toContain("Needs input");
 		expect(json).not.toContain("`main`");
 		expect(json).not.toContain("code");
+		// The repo and the person are the card image's job.
+		expect(context?.elements[0].text).not.toContain("opensession");
+		expect(context?.elements[0].text).not.toContain("Kent");
 	});
 });
 
