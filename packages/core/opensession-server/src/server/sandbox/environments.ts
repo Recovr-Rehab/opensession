@@ -466,7 +466,13 @@ function maintainSandboxEnvironments(): void {
       environment.provider as "daytona" | "box" | "modal",
       environment.repo,
     );
-    if (environment.state === "ready" && template) continue;
+    if (template) {
+      // Publication is the durable completion boundary. A coordinator may
+      // restart while the disposable validation sandbox is still parking;
+      // promote the recovered artifact instead of `rebuild:true` deleting it.
+      void derivedEnvironment(environment.repo, environment.provider).then(writeEnvironment);
+      continue;
+    }
     if (environment.state === "failed") continue;
     scheduleSandboxEnvironment(environment.repo, environment.provider, {
       rebuild: true,
