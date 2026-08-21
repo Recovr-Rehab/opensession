@@ -1796,6 +1796,11 @@ function MediaLightbox({
 				)
 			: null;
 	const phoneStageInset = chromeVisible || imageZoomed || commenting;
+	// Photos keeps the still centered on the screen and floats its chrome over it.
+	// Using the full bottom bar as one-sided padding made tall images look pulled
+	// upward. Preserve the same fitted size, but share that clearance between the
+	// top and bottom so the image's center stays at the viewport's center.
+	const phoneStagePadding = (68 + phoneBottomHeight) / 2;
 	const phoneAction =
 		"grid size-11 shrink-0 place-items-center rounded-full border-0 bg-transparent p-0 text-white transition-[transform,background-color,opacity] duration-[var(--dur-micro)] ease-[var(--ease)] active:scale-[0.96] disabled:opacity-[0.35]";
 
@@ -1935,10 +1940,8 @@ function MediaLightbox({
 				style={
 					isPhone
 						? {
-								paddingTop: phoneStageInset
-									? "calc(68px + env(safe-area-inset-top))"
-									: 0,
-								paddingBottom: phoneStageInset ? phoneBottomHeight : 0,
+								paddingTop: phoneStageInset ? phoneStagePadding : 0,
+								paddingBottom: phoneStageInset ? phoneStagePadding : 0,
 								transition: reduceMotion
 									? "none"
 									: "padding 0.25s cubic-bezier(0.77, 0, 0.175, 1)",
