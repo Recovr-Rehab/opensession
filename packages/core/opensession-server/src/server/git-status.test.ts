@@ -147,4 +147,33 @@ describe("scoped Git credentials", () => {
     expect(await gitPush("/runner/repo", "feature", exec, { GH_TOKEN: "host-only" })).toEqual({ ok: true });
     expect(envs).toEqual([undefined]);
   });
+
+  test("uses the in-container helper for local Docker pull and push", async () => {
+    const envs: Array<Record<string, string> | undefined> = [];
+    const exec = Object.assign(
+      async (_cmd: string[], opts?: { env?: Record<string, string> }) => {
+        envs.push(opts?.env);
+        return { exitCode: 0, stdout: "", stderr: "" };
+      },
+      { sandboxed: true, remote: false },
+    ) as WorkspaceExec;
+    const hostEnv = {
+      GH_TOKEN: "scoped",
+      GITHUB_TOKEN: "scoped",
+      GIT_CONFIG_VALUE_1: "!/home/user/.opensession/bin/opensession github-credential",
+    };
+
+    expect(await gitPull("/repo", undefined, exec, hostEnv)).toEqual({ ok: true });
+    expect(await gitPush("/repo", "feature", exec, hostEnv)).toEqual({ ok: true });
+    expect(envs).toHaveLength(2);
+    for (const env of envs) {
+      expect(env).toMatchObject({
+        GH_TOKEN: "scoped",
+        GITHUB_TOKEN: "scoped",
+        GIT_CONFIG_VALUE_0: "",
+        GIT_CONFIG_VALUE_1: "!gh auth git-credential",
+      });
+      expect(JSON.stringify(env)).not.toContain("/home/user");
+    }
+  });
 });
