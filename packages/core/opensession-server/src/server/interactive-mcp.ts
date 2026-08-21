@@ -293,6 +293,17 @@ export function interactiveMcpServers(
 								baseBranch: context.branch,
 							};
 						},
+						// The in-process servers a SCRIPT may call (mcp.opensession-assets
+						// .write_asset and friends). Passing the whole set is safe and is
+						// the point: workflow-mcp.ts intersects it with its own allowlist,
+						// so this can only ever narrow, and a server this run does not
+						// carry stays absent. Rebuilt per host because an McpServer holds
+						// exactly ONE transport — mounting the session's own instance on
+						// the workflow's in-memory pair would steal it from run-rpc. The
+						// recursion is lazy and terminates: this closure runs on a
+						// script's first mcp.* call, and the workflows server the rebuild
+						// produces is excluded from the allowlist anyway.
+						inProcessMcp: () => interactiveMcpServers(user, sessionId),
 					}),
 					// Per-session scratch assets (previewed in the Assets tab).
 					// Works in Ask mode — writes land outside the checkout.

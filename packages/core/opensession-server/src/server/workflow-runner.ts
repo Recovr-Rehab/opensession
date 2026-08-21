@@ -389,6 +389,10 @@ export interface StartWorkflowOpts {
 	mcpAllowlist?: string[];
 	/** Per-call tool denials (automation runs). */
 	deniedTools?: Record<string, string>;
+	/** Builds the in-process opensession-* servers the authoring run carries.
+	 *  Interactive sessions only; workflow-mcp.ts intersects it with its own
+	 *  allowlist. Must return FRESH instances (one transport per McpServer). */
+	inProcessMcp?: () => Record<string, unknown>;
 	/** Injected by tests; defaults to the real MCP host. */
 	mcpHost?: WorkflowMcpHost;
 }
@@ -505,6 +509,7 @@ function runWorkflow(
 							allowlist: opts.mcpAllowlist,
 							user: opts.user,
 							deniedTools: opts.deniedTools,
+							inProcessMcp: opts.inProcessMcp,
 						}),
 					);
 		}

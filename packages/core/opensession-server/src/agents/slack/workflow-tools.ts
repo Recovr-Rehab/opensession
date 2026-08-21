@@ -64,6 +64,12 @@ export interface WorkflowsToolContext {
 	/** Per-call tool denials for mcp.* (automation runs: Plain customer-facing
 	 *  writes, WorkOS identity mutation). */
 	deniedTools?: Record<string, string>;
+	/** The in-process opensession-* servers this run carries, built FRESH per
+	 *  call (an McpServer holds one transport — see workflow-mcp.ts). Supplied
+	 *  by interactive sessions only; an automation's script stays external-only.
+	 *  workflow-mcp.ts intersects the result with its own allowlist, so passing
+	 *  the full interactive set here cannot widen the script's surface. */
+	inProcessMcp?: () => Record<string, unknown>;
 }
 
 function text(s: string) {
@@ -237,6 +243,7 @@ export function createWorkflowsMcpServer(ctx: WorkflowsToolContext) {
 						budgetTotal: args.budget_tokens,
 						mcpAllowlist: ctx.mcpAllowlist,
 						deniedTools: ctx.deniedTools,
+						inProcessMcp: ctx.inProcessMcp,
 					});
 					return text(
 						`Workflow started: ${runId}. Poll workflow_status for progress; it also streams live to this session's Agents panel.`,
@@ -458,6 +465,7 @@ export function createWorkflowsMcpServer(ctx: WorkflowsToolContext) {
 						resumeFromRunId: args.run_id,
 						mcpAllowlist: ctx.mcpAllowlist,
 						deniedTools: ctx.deniedTools,
+						inProcessMcp: ctx.inProcessMcp,
 					});
 					return text(
 						`Resumed as ${runId} (journal replay from ${args.run_id}). Poll workflow_status; progress streams to the Agents panel.`,
