@@ -32,10 +32,12 @@ import { tryGetSessionControl } from "./session-control";
 import { writeJsonAtomic } from "./shared/atomic-write";
 import { broadcastToSession } from "./ws-hub";
 import {
-	SessionOwnedMap,
+	AskOwnedMap,
+	EphemeralSessionMap,
 	fireStoredSessionTimer,
 	registerSessionTimerHandler,
 	sessionKernel,
+	sessionKernelStore,
 } from "./session-kernel";
 import { wrapContext } from "./prompt-context";
 
@@ -62,9 +64,7 @@ export interface PendingAsk {
 	/** Test/isolated-instance seam; live asks use pendingAskStorePath(). */
 	storePath?: string;
 }
-export const pendingAsks: Map<string, PendingAsk> = new SessionOwnedMap(
-	"pending_ask",
-);
+export const pendingAsks: Map<string, PendingAsk> = new AskOwnedMap();
 
 /** The durable map may retain a restored ask after its answer arrives, until
  * the detached run host reconnects and adopts that answer. That recovery
@@ -92,9 +92,8 @@ type PendingAskTimer = {
 	dueAt: number;
 };
 
-export const pendingAskTimers: Map<string, PendingAskTimer> = new SessionOwnedMap(
-	"pending_ask_timer"
-);
+export const pendingAskTimers: Map<string, PendingAskTimer> =
+	new EphemeralSessionMap();
 
 export function pendingAskStorePath(): string {
 	return `${sessionsDir()}/pending-asks.json`;
@@ -528,21 +527,49 @@ function armAskEscalation(
 /** Restore run-blocking cards after a real process restart. The durable entry
  * stays display state only until the adopted engine re-emits the ask and
  * makeAskHandler adopts its original question id and askedAt. */
-export function restorePendingAsks(options: {
+export function restorePendingAsks(
+  options: {
 	storePath?: string;
 	now?: number;
 	sessionExists?: (sessionId: string) => boolean;
-} = {},): number {
+  } = {},
+): number {
 	const storePath = options.storePath ?? pendingAskStorePath();
-	if (!existsSync(storePath)) return 0;
+  const kernelStore = sessionKernelStore();
+  const actorAuthority =
+    storePath === pendingAskStorePath() && kernelStore.askMigrationComplete();
 	let stored: { asks?: PersistedPendingAsk[] };
+  if (actorAuthority) {
+    stored = {
+      asks: [...pendingAsks].map(([sessionId, ask]) => ({
+        sessionId,
+        questionId: ask.questionId,
+        questions: ask.questions as AskQuestionInput[],
+        askedAt: ask.askedAt || Date.now(),
+        ...(ask.escalatedAskId ? { escalatedAskId: ask.escalatedAskId } : {}),
+        ...(ask.escalatedPersonName
+          ? { escalatedPersonName: ask.escalatedPersonName }
+          : {}),
+        ...(ask.answerReceived
+          ? { answerReceived: true, earlyAnswer: ask.earlyAnswer ?? null }
+          : {}),
+      })),
+    };
+  } else {
+    if (!existsSync(storePath)) {
+      if (storePath === pendingAskStorePath())
+        kernelStore.markAskMigrationComplete();
+      return 0;
+    }
 	try {
 		stored = JSON.parse(readFileSync(storePath, "utf8"));
 	} catch (e) {
 		console.error("[ask] Failed to restore pending asks:", e);
 		return 0;
 	}
-	const sessionExists = options.sessionExists ?? ((sessionId) => !!findSession(sessionId));
+  }
+  const sessionExists =
+    options.sessionExists ?? ((sessionId) => !!findSession(sessionId));
 	let restored = 0;
 	for (const saved of stored.asks || []) {
 		if (
@@ -551,7 +578,7 @@ export function restorePendingAsks(options: {
 			!Array.isArray(saved.questions) ||
 			!Number.isFinite(saved.askedAt) ||
 			!sessionExists(saved.sessionId) ||
-			pendingAsks.has(saved.sessionId)
+      (!actorAuthority && pendingAsks.has(saved.sessionId))
 		) {
 			continue;
 		}
@@ -560,9 +587,7 @@ export function restorePendingAsks(options: {
 			questions: saved.questions,
 			durable: true,
 			askedAt: saved.askedAt,
-			...(saved.escalatedAskId
-				? { escalatedAskId: saved.escalatedAskId }
-				: {}),
+      ...(saved.escalatedAskId ? { escalatedAskId: saved.escalatedAskId } : {}),
 			...(saved.escalatedPersonName
 				? { escalatedPersonName: saved.escalatedPersonName }
 				: {}),
@@ -584,12 +609,7 @@ export function restorePendingAsks(options: {
 		};
 		pendingAsks.set(saved.sessionId, ask);
 		if (!ask.answerReceived) {
-			armAskEscalation(
-				saved.sessionId,
-				ask,
-				saved.questions,
-				options.now
-			);
+      armAskEscalation(saved.sessionId, ask, saved.questions, options.now);
 			broadcastToSession(saved.sessionId, {
 				type: "ask_question",
 				sessionId: saved.sessionId,
@@ -601,9 +621,13 @@ export function restorePendingAsks(options: {
 	}
 	// Drop invalid or deleted-session records immediately. A card removed before
 	// the crash is absent because its answer path persists the delete first.
+  if (storePath === pendingAskStorePath())
+    kernelStore.markAskMigrationComplete();
 	persistPendingAsks(storePath);
 	if (restored > 0) {
-		console.log(`[ask] Restored ${restored} pending question(s) from before restart`,);
+    console.log(
+      `[ask] Restored ${restored} pending question(s) from before restart`,
+    );
 	}
 	return restored;
 }

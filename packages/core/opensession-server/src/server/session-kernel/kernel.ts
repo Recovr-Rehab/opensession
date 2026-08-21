@@ -1,11 +1,16 @@
 /**
  * One logical owner for a session.
  *
- * The production kernel actor serializes commands and owns durable state for
- * exactly one session. This facade executes gateway effects only while holding
- * that actor's lease; it does not let engines or WebSockets become owners.
+ * The production kernel actor admits commands and owns durable state for exactly
+ * one session. This facade executes admitted physical effects in order, then
+ * returns their fenced results. Engines and WebSockets never become owners.
  */
 import { audit } from "../audit";
+import type { AskActorRequest, AskActorResult } from "./ask-protocol";
+import type {
+  DeliveryActorRequest,
+  DeliveryActorResult,
+} from "./delivery-protocol";
 import { AsyncLocalStorage } from "node:async_hooks";
 import {
 	SessionKernelActorError,
@@ -15,6 +20,7 @@ import {
 	SessionKernelStore,
 	type SessionKernelStoreApi,
 	type DurableCommandRecord,
+	type DurableDeliveryState,
 	type DurableRunState,
 	type DurableTimer,
 	type RunEventDecision,
@@ -40,15 +46,20 @@ export interface SessionCommandResult<TResult = unknown> {
 export function isRetryableSessionCommandError(error: unknown): boolean {
 	if (error instanceof SessionKernelActorError) return error.retryable;
 	const message = error instanceof Error ? error.message : String(error);
-	return /session kernel actor|sqlite_busy|database is locked|timed out|server restart/i.test(message);
+  return /session kernel actor|sqlite_busy|database is locked|timed out|server restart/i.test(
+    message,
+  );
 }
 
-type CommandHandler<TResult> = (kernel: SessionKernel,) => TResult | Promise<TResult>;
+type CommandHandler<TResult> = (
+  kernel: SessionKernel,
+) => TResult | Promise<TResult>;
 
 type GlobalKernelState = {
 	store?: SessionKernelStoreApi;
 	actor?: SessionKernelActorClient;
 	kernels?: Map<string, SessionKernel>;
+	deliveryProjection?: Map<string, DurableDeliveryState>;
 };
 
 const globalState = globalThis as typeof globalThis & {
@@ -63,6 +74,95 @@ type CommandContext = {
 };
 const commandContext = new AsyncLocalStorage<CommandContext>();
 
+export function sessionAsk<T extends AskActorRequest>(
+  request: T,
+): AskActorResult<T> {
+  if (state.actor) return state.actor.decideAsk(request);
+  const store = sessionKernelStore();
+  let result: unknown;
+  if (request.op === "snapshot") result = store.askSnapshot(request.sessionId);
+  else if (request.op === "entries") result = store.askEntries();
+  else if (request.op === "set")
+    result = store.setAskRecord(request.sessionId, request.value);
+  else if (request.op === "delete")
+    result = store.deleteAskRecord(request.sessionId);
+  else result = store.clearAskRecords();
+  return result as AskActorResult<T>;
+}
+
+export function sessionDelivery<T extends DeliveryActorRequest>(
+  request: T,
+): DeliveryActorResult<T> {
+  const projection = (state.deliveryProjection ??= new Map());
+  if (request.op === "snapshot") {
+    const cached = projection.get(request.sessionId);
+    if (cached) return cached as DeliveryActorResult<T>;
+  }
+  const actor = state.actor;
+  const store = sessionKernelStore();
+  let result: unknown;
+  if (actor) result = actor.decideDelivery(request);
+  else
+  if (request.op === "snapshot")
+    result = store.deliverySnapshot(request.sessionId);
+  else if (request.op === "entries")
+    result = store.deliveryEntries(request.slot);
+  else if (request.op === "set")
+    result = store.setDeliverySlot(
+      request.sessionId,
+      request.slot,
+      request.value,
+    );
+  else if (request.op === "delete")
+    result = store.deleteDeliverySlot(request.sessionId, request.slot);
+  else if (request.op === "clear_slot")
+    result = store.clearDeliverySlot(request.slot);
+  else if (request.op === "prepare_steer")
+    result = store.prepareSteerDelivery(
+      request.sessionId,
+      request.itemId,
+      request.item,
+    );
+  else if (request.op === "accept_steer")
+    result = store.acceptSteerDelivery(request.sessionId, request.itemId);
+  else if (request.op === "reject_steer")
+    result = store.rejectSteerDelivery(request.sessionId, request.itemId);
+  else if (request.op === "settle_pending_steers")
+    result = store.settlePendingSteers();
+  else if (request.op === "requeue_steers")
+    result = store.requeueSteerDeliveries(request.sessionId, request.items);
+  else if (request.op === "claim_dispatch")
+    result = store.claimDeliveryDispatch(request);
+  else if (request.op === "ack_dispatch")
+    result = store.ackDeliveryDispatch(
+      request.sessionId,
+      request.promptEntryId,
+    );
+  else
+    result = store.failDeliveryDispatch(
+      request.sessionId,
+      request.promptEntryId,
+    );
+  if (request.op === "snapshot") {
+    projection.set(request.sessionId, result as DurableDeliveryState);
+  } else if ("sessionId" in request) {
+    const snapshot = actor
+      ? actor.decideDelivery({ op: "snapshot", sessionId: request.sessionId })
+      : store.deliverySnapshot(request.sessionId);
+    projection.set(request.sessionId, snapshot);
+  } else if (request.op === "clear_slot" || request.op === "settle_pending_steers") {
+    projection.clear();
+  }
+  return result as DeliveryActorResult<T>;
+}
+
+export function sessionDeliveryProjection(sessionId: string): DurableDeliveryState {
+  const projection = (state.deliveryProjection ??= new Map());
+  const cached = projection.get(sessionId);
+  if (cached) return cached;
+  return sessionDelivery({ op: "snapshot", sessionId });
+}
+
 export function sessionKernelStore(): SessionKernelStoreApi {
 	return (state.store ??= new SessionKernelStore());
 }
@@ -74,6 +174,7 @@ export function __setSessionKernelStoreForTest(
 	state.store = store;
 	state.actor = undefined;
 	state.kernels?.clear();
+	state.deliveryProjection?.clear();
 	return previous instanceof SessionKernelStore ? previous : undefined;
 }
 
@@ -84,22 +185,24 @@ export function installSessionKernelActor(
 	state.actor = actor;
 	if (actor) state.store = actor.store;
 	state.kernels?.clear();
+	state.deliveryProjection?.clear();
 	return previous;
 }
 
 export class SessionKernel {
 	private tail: Promise<void> = Promise.resolve();
 	private queued = 0;
-	private readonly inFlight = new Map<string, Promise<SessionCommandResult<unknown>>>();
+  private readonly inFlight = new Map<
+    string,
+    Promise<SessionCommandResult<unknown>>
+  >();
 	private readonly activeCommandIds = new Set<string>();
-	private readonly runtime = new Map<string, unknown>();
 	private lastUsedAt = Date.now();
 
 	constructor(readonly sessionId: string) {}
 
 	get isIdle(): boolean {
-		return ( this.queued === 0 && this.inFlight.size === 0 && this.runtime.size === 0
-		);
+		return this.queued === 0 && this.inFlight.size === 0;
 	}
 
 	get idleSince(): number {
@@ -111,18 +214,19 @@ export class SessionKernel {
 		mutate: () => TResult,
 		record = true,
 	): TResult {
-		this. assertWritable(operation);
+		this.assertWritable(operation);
 		this.touch();
-		if (this.ownsCurrentCommand()) {
+		const apply = () => {
 			const result = mutate();
 			if (
 				record &&
-			operation !== "session_delete" &&
-			operation !== "transcript_delete"
-		)
+				operation !== "session_delete" &&
+				operation !== "transcript_delete"
+			)
 				this.recordChange(operation);
 			return result;
-		}
+		};
+		if (this.ownsCurrentCommand()) return apply();
 		if (state.actor) {
 			const requestId = crypto.randomUUID();
 			const admission = state.actor.beginSync(this.sessionId, {
@@ -131,44 +235,25 @@ export class SessionKernel {
 				source: "compatibility",
 			});
 			if (admission.duplicate) return admission.result as TResult;
-			if (admission.borrowed) {
-				// Detached callbacks can write while their long-lived command owns
-				// the mailbox. The Worker remains the sole physical writer; effects
-				// are persisted directly because there is no second decision to settle.
-				const borrowed: CommandContext = {
-					sessionId: this.sessionId,
-					requestId,
-					effects: [],
-				};
-				const result = commandContext.run(borrowed, mutate);
-				if (
-					record &&
-					operation !== "session_delete" &&
-					operation !== "transcript_delete"
-				)
-					this.recordChange(operation);
-				sessionKernelStore().enqueueOutboxMany(this.sessionId, borrowed.effects);
-				return result;
-			}
-			if (!admission.leaseId)
-			throw new Error("Session kernel actor did not grant a sync lease");
-		const context: CommandContext = {
+			if (!admission.executionId)
+				throw new Error("Session kernel actor did not create a sync execution");
+			const context: CommandContext = {
 				sessionId: this.sessionId,
 				requestId,
-				effects:
-			[],
+				effects: [],
 			};
 			this.activeCommandIds.add(requestId);
 			try {
-				const result = commandContext.run(context, mutate);
-		if (
-					record &&operation !== "session_delete" && operation !== "transcript_delete")
-			this.recordChange(operation);
-				state.actor.completeSync(admission.leaseId, result, context.effects);
+				const result = commandContext.run(context, apply);
+				state.actor.completeSync(
+					admission.executionId,
+					result,
+					context.effects,
+				);
 				return result;
 			} catch (error) {
 				state.actor.failSync(
-					admission.leaseId,
+					admission.executionId,
 					error instanceof Error ? error.message : String(error),
 				);
 				throw error;
@@ -180,14 +265,7 @@ export class SessionKernel {
 			throw new Error(
 				`Session mutation ${operation} raced the ${this.sessionId} mailbox`,
 			);
-		const result = mutate();
-		if (
-			record &&
-			operation !== "session_delete" &&
-			operation !== "transcript_delete"
-		)
-			this.recordChange(operation);
-		return result;
+		return apply();
 	}
 
 	private assertWritable(operation?: string): void {
@@ -199,11 +277,15 @@ export class SessionKernel {
 			throw new Error(`Session ${this.sessionId} was deleted`);
 	}
 
-	applyRunEvent(input: Omit<RunEventDecision, "sessionId">): RunEventDecisionResult {
+  applyRunEvent(
+    input: Omit<RunEventDecision, "sessionId">,
+  ): RunEventDecisionResult {
 		this.assertWritable(`run_state:${input.event}`);
 		this.touch();
-		const decision = { sessionId: this.sessionId, ...input };
-		return sessionKernelStore().applyRunEvent(decision);
+    return sessionKernelStore().applyRunEvent({
+      sessionId: this.sessionId,
+      ...input,
+    });
 	}
 
 	runState(): DurableRunState {
@@ -290,8 +372,7 @@ export class SessionKernel {
 			if (persisted.status === "completed") {
 				this.touch();
 				const failure = persisted.result as
-					| { __sessionKernelFailure?: boolean; message?: string }
-					| undefined;
+          { __sessionKernelFailure?: boolean; message?: string } | undefined;
 				if (failure?.__sessionKernelFailure)
 					throw new SessionKernelActorError(
 						failure.message || "Session command failed",
@@ -300,7 +381,8 @@ export class SessionKernel {
 				return { result: persisted.result as TResult, duplicate: true };
 			}
 			if (
-				(persisted.status === "failed" && (!persisted.retryable || !persisted.replaySafe)) ||
+        (persisted.status === "failed" &&
+          (!persisted.retryable || !persisted.replaySafe)) ||
 				persisted.status === "indeterminate"
 			)
 				throw new SessionKernelActorError(
@@ -322,25 +404,23 @@ export class SessionKernel {
 			command.requestId,
 			resultPromise as Promise<SessionCommandResult<unknown>>,
 		);
+    let settled = false;
+    const cleanup = () => {
+      if (settled) return;
+      settled = true;
+      this.activeCommandIds.delete(command.requestId);
+      this.queued -= 1;
+      this.inFlight.delete(command.requestId);
+      this.touch();
+    };
 
-		const run = async () => {
-			let actorLease: string | undefined;
+    const execute = async (executionId?: string) => {
 			try {
-				if (state.actor) {
-					const admission = await state.actor.begin(this.sessionId, command);
-					if (admission.duplicate) {
-						resolve({ result: admission.result as TResult, duplicate: true });
-						return;
-					}
-					actorLease = admission.leaseId;
-					if (!actorLease)
-						throw new Error("Session kernel actor did not grant a lease");
-				} else {
+        if (!state.actor)
 					sessionKernelStore().markProcessing(
 						this.sessionId,
 						command.requestId,
 					);
-				}
 				this.activeCommandIds.add(command.requestId);
 				const context: CommandContext = {
 					sessionId: this.sessionId,
@@ -349,7 +429,7 @@ export class SessionKernel {
 				};
 				const result = await commandContext.run(context, () => handler(this));
 				if (state.actor)
-					await state.actor.complete(actorLease!, result, context.effects);
+          await state.actor.complete(executionId!, result, context.effects);
 				else
 					sessionKernelStore().completeCommandDecision({
 						sessionId: this.sessionId,
@@ -372,15 +452,14 @@ export class SessionKernel {
 					command.replaySafe === true &&
 					(command.retryFailures === true ||
 						isRetryableSessionCommandError(error));
-				if (state.actor && actorLease) {
+        if (state.actor && executionId) {
 					try {
-						await state.actor.fail(
-							actorLease,
-							message,
-							retryable,
-						);
+            await state.actor.fail(executionId, message, retryable);
 					} catch (settleError) {
-						console.error(`[session-kernel] Failed to settle ${this.sessionId}/${command.requestId}:`, settleError);
+            console.error(
+              `[session-kernel] Failed to settle ${this.sessionId}/${command.requestId}:`,
+              settleError,
+            );
 					}
 				} else if (retryable)
 					sessionKernelStore().failCommand(
@@ -394,7 +473,10 @@ export class SessionKernel {
 						sessionId: this.sessionId,
 						requestId: command.requestId,
 						type: command.type,
-						result: { __sessionKernelFailure: true, message: message.slice(0, 2_000) },
+            result: {
+              __sessionKernelFailure: true,
+              message: message.slice(0, 2_000),
+            },
 						effects: [],
 					});
 				audit({
@@ -406,18 +488,59 @@ export class SessionKernel {
 				});
 				reject(error);
 			} finally {
-				this.activeCommandIds.delete(command.requestId);
-				this.queued -= 1;
-				this.inFlight.delete(command.requestId);
-				this.touch();
+        cleanup();
 			}
 		};
+
 		if (state.actor) {
-			// The actor mailbox is the sole production scheduler. The gateway keeps
-			// only same-request promise coalescing, not a second per-session queue.
-			void run();
+      void state.actor.begin(this.sessionId, command).then(
+        (admission) => {
+          if (admission.duplicate) {
+            const failure = admission.result as
+              | { __sessionKernelFailure?: boolean; message?: string }
+              | undefined;
+            if (failure?.__sessionKernelFailure)
+              reject(
+                new SessionKernelActorError(
+                  failure.message || "Session command failed",
+                  false,
+                ),
+              );
+            else
+              resolve({
+                result: admission.result as TResult,
+                duplicate: true,
+              });
+            cleanup();
+            return;
+          }
+          if (!admission.executionId) {
+            reject(
+              new Error("Session kernel actor did not create an execution"),
+            );
+            cleanup();
+            return;
+          }
+          const scheduled = this.tail.then(
+            () => execute(admission.executionId),
+            () => execute(admission.executionId),
+          );
+          this.tail = scheduled.then(
+            () => {},
+            () => {},
+          );
+        },
+        (error) => {
+          reject(error);
+          cleanup();
+        },
+      );
 		} else {
-			this.tail = this.tail.then(run, run).then(
+      const scheduled = this.tail.then(
+        () => execute(),
+        () => execute(),
+      );
+      this.tail = scheduled.then(
 				() => {},
 				() => {},
 			);
@@ -425,7 +548,7 @@ export class SessionKernel {
 		return resultPromise;
 	}
 
-	/** Serialize compatibility writes on the same mailbox as durable commands. */
+  /** Admit compatibility work, then serialize its physical gateway effect. */
 	runExclusive<TResult>(
 		name: string,
 		operation: () => TResult | Promise<TResult>,
@@ -488,30 +611,6 @@ export class SessionKernel {
 		return sessionKernelStore().changesSince(this.sessionId, changeSeq, limit);
 	}
 
-	getRuntime<T>(key: string): T | undefined {
-		this.touch();
-		return this.runtime.get(key) as T | undefined;
-	}
-
-	setRuntime<T>(key: string, value: T): void {
-		this.mutateSync(
-			`runtime_set:${key}`,
-			() => this.runtime.set(key, value),
-			false,);
-	}
-
-	deleteRuntime(key: string): boolean {
-		return this.mutateSync(
-			`runtime_delete:${key}`,
-			() => this.runtime.delete(key),
-			false,
-		);
-	}
-
-	runtimeEntries<T>(key: string): T | undefined {
-		return this.runtime.get(key) as T | undefined;
-	}
-
 	scheduleTimer(
 		timer: Omit<
 			DurableTimer,
@@ -527,7 +626,9 @@ export class SessionKernel {
 		this.mutateSync(
 			`timer_schedule:${timer.timerId}`,
 			() =>
-		sessionKernelStore().scheduleTimer({ sessionId: this.sessionId, ...timer,
+        sessionKernelStore().scheduleTimer({
+          sessionId: this.sessionId,
+          ...timer,
 				}),
 			false,
 		);
@@ -560,14 +661,20 @@ export class SessionKernel {
 				`effect:${kind}`,
 				() => {
 					const staged = commandContext.getStore();
-					if (!staged) throw new Error("Session effect has no actor decision context");
+          if (!staged)
+            throw new Error("Session effect has no actor decision context");
 					staged.effects.push({ kind, payload, effectKey });
 				},
 				false,
 			);
 			return undefined;
 		}
-		return sessionKernelStore().enqueueOutbox(this.sessionId, kind, payload, effectKey);
+    return sessionKernelStore().enqueueOutbox(
+      this.sessionId,
+      kind,
+      payload,
+      effectKey,
+    );
 	}
 
 	ownsCurrentCommand(): boolean {
@@ -581,21 +688,17 @@ export class SessionKernel {
 	clear(): void {
 		this.mutateSync(
 			"session_clear",
-			() => {
-				this.runtime.clear();
-		sessionKernelStore().clearSession(this.sessionId);
-			},
-			false,);
+			() => sessionKernelStore().clearSession(this.sessionId),
+      false,
+    );
 	}
 
 	tombstone(): void {
 		this.mutateSync(
 			"session_delete",
-			() => {
-				this.runtime.clear();
-		sessionKernelStore().tombstoneSession(this.sessionId);
-			},
-			false,);
+			() => sessionKernelStore().tombstoneSession(this.sessionId),
+      false,
+    );
 	}
 
 	private touch(): void {
@@ -607,7 +710,9 @@ function kernels(): Map<string, SessionKernel> {
 	return (state.kernels ??= new Map());
 }
 
-export function peekSessionKernel(sessionId: string,): SessionKernel | undefined {
+export function peekSessionKernel(
+  sessionId: string,
+): SessionKernel | undefined {
 	return state.kernels?.get(sessionId);
 }
 
@@ -667,7 +772,10 @@ export async function sessionKernelRuntimeWork(
 	effectKinds: string[],
 	now = Date.now(),
 	limit = 100,
-): Promise<{ timers: DurableTimer[]; outbox: import("./store").DurableOutboxItem[] }> {
+): Promise<{
+  timers: DurableTimer[];
+  outbox: import("./store").DurableOutboxItem[];
+}> {
 	if (state.actor)
 		return state.actor.runtimeWork(timerKinds, effectKinds, now, limit);
 	return {
@@ -679,7 +787,8 @@ export async function sessionKernelRuntimeWork(
 let healthCache: { at: number; value: Record<string, unknown> } | undefined;
 let healthRefresh: Promise<Record<string, unknown>> | undefined;
 export async function sessionKernelHealth(): Promise<Record<string, unknown>> {
-	if (healthCache && Date.now() - healthCache.at < 5_000) return healthCache.value;
+  if (healthCache && Date.now() - healthCache.at < 5_000)
+    return healthCache.value;
 	if (healthRefresh) return healthRefresh;
 	healthRefresh = (async () => {
 		const stats = state.actor
@@ -697,7 +806,9 @@ export async function sessionKernelHealth(): Promise<Record<string, unknown>> {
 		};
 		healthCache = { at: Date.now(), value };
 		return value;
-	})().finally(() => { healthRefresh = undefined; });
+  })().finally(() => {
+    healthRefresh = undefined;
+  });
 	return healthRefresh;
 }
 

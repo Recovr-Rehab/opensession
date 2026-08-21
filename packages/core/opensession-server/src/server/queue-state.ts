@@ -17,12 +17,18 @@ import { setTranscriptAppendListener } from "./file-watcher";
 import { stripContext } from "./prompt-context";
 import { SESSIONS_DIR } from "./session-cache";
 import { setAppendHook } from "./transcript-store";
+import { stageFileAttachments, stageInlineImages } from "./uploads";
 import type { TranscriptEntry } from "./types";
 import { broadcastToSession } from "./ws-hub";
 import { AUTO_CONTINUE_USER } from "./auto-continue";
 import { delegatedActorParent, isWorkerActor } from "./session-actors";
 import { userMatchesAny } from "./shared/user-mappings";
-import { SessionOwnedMap, SessionOwnedSet } from "./session-kernel";
+import {
+	DeliveryOwnedMap,
+	EphemeralSessionSet,
+	sessionDelivery,
+	sessionKernelStore,
+} from "./session-kernel";
 
 export type QueueItem = {
 	id?: string;
@@ -48,14 +54,14 @@ export type QueueItem = {
    * flight. Never batch it into that work or steer it mid-turn. */
 	reviewHandoff?: boolean;
 	/** When the engine ACCEPTED this message as a steer (epoch ms). Set by
-   * recordSteer, read by the clients to show how long the fold-in has been
+   * acceptQueuedSteer, read by the clients to show how long the fold-in has been
    * waiting. Acceptance is not delivery: the agent loop polls its steering
    * queue only after the current assistant message and its whole tool batch
    * finish, so a long tool call holds the message for minutes. */
 	steeredAt?: number;
 };
-export const promptQueues: Map<string, QueueItem[]> = new SessionOwnedMap(
-	"prompt_queue",
+export const promptQueues: Map<string, QueueItem[]> = new DeliveryOwnedMap(
+	"queued",
 );
 
 /** A batch removed from the queue and handed to the runner. It remains durable
@@ -67,8 +73,8 @@ export type PromptDispatch = {
 	items: QueueItem[];
 	kind?: "create";
 };
-export const promptDispatches: Map<string, PromptDispatch> = new SessionOwnedMap(
-	"prompt_dispatch"
+export const promptDispatches: Map<string, PromptDispatch> = new DeliveryOwnedMap(
+	"dispatch"
 );
 
 export function deliveryQueueState(
@@ -192,8 +198,8 @@ export function takeSteeredPrompt(
 // their turn lands they're invisible on reload, so we keep a display-only
 // receipt here: shown as "folded in" in the UI and reconciled away once the real
 // transcript entry appears. Cleared when the run finishes (or is cancelled).
-export const steeredReceipts: Map<string, QueueItem[]> = new SessionOwnedMap(
-	"steer_receipts",
+export const steeredReceipts: Map<string, QueueItem[]> = new DeliveryOwnedMap(
+	"steered",
 );
 
 // Sessions whose run the user explicitly stopped. The queue drain skips these:
@@ -201,7 +207,7 @@ export const steeredReceipts: Map<string, QueueItem[]> = new SessionOwnedMap(
 // immediately deliver them into a fresh run — "stop then instantly resume".
 // Cleared by the next explicit action (any new runSessionPrompt). In-memory
 // only: after a real restart a stop is stale anyway, and boot re-drains.
-export const stoppedSessions = new SessionOwnedSet("user_stopped");
+export const stoppedSessions = new EphemeralSessionSet();
 
 /**
  * Lift a Stop so this session's queue can drain again. Call this on any
@@ -225,10 +231,28 @@ export function queueItem(item: QueueItem): QueueItem & { id: string } {
 	return { ...item, id: crypto.randomUUID() };
 }
 
-export function queueWithIds(items: QueueItem[] | undefined): QueueItem[] {
+/** Store attachment references, never inline attachment bodies, in actor state. */
+export function durableQueueItem(sessionId: string, item: QueueItem): QueueItem {
+	const images = item.images?.length
+		? stageInlineImages(sessionId, item.images, "prompt-queues")
+		: undefined;
+	const files = Array.isArray(item.files) && item.files.length
+		? stageFileAttachments(sessionId, item.files)
+		: undefined;
+	return {
+		...item,
+		...(images?.length ? { images } : { images: undefined }),
+		...(files?.length ? { files } : { files: undefined }),
+	};
+}
+
+export function queueWithIds(
+	items: QueueItem[] | undefined,
+	sessionId?: string,
+): QueueItem[] {
 	return (items || []).map((item) => {
-		if (item.id) return item;
-		return queueItem(item);
+		const owned = item.id ? item : queueItem(item);
+		return sessionId ? durableQueueItem(sessionId, owned) : owned;
 	});
 }
 
@@ -290,27 +314,42 @@ function readPersistedQueueState(storePath: string,): PersistedQueueState | null
 /** Load raw durable maps before the server accepts writes. Ownership and
  * transcript reconciliation happen after recovery identifies adopted runs. */
 export function hydratePersistedQueueState(storePath = QUEUE_STORE): number {
-	if (!existsSync(storePath)) return 0;
+  const kernelStore = sessionKernelStore();
+  const migrateToKernel = storePath === QUEUE_STORE;
+  if (migrateToKernel && kernelStore.deliveryMigrationComplete()) {
+    sessionDelivery({ op: "settle_pending_steers" });
+    return (
+      [...promptQueues.values(), ...steeredReceipts.values()].reduce(
+        (count, items) => count + items.length,
+        0,
+      ) + promptDispatches.size
+    );
+  }
+  if (!existsSync(storePath)) {
+    if (migrateToKernel) kernelStore.markDeliveryMigrationComplete();
+    return 0;
+  }
 	const data = readPersistedQueueState(storePath);
 	if (!data) return 0;
 	promptQueues.clear();
 	steeredReceipts.clear();
 	promptDispatches.clear();
 	for (const [sessionId, items] of Object.entries(data.queued || {})) {
-		if (items?.length) promptQueues.set(sessionId, queueWithIds(items));
+		if (items?.length) promptQueues.set(sessionId, queueWithIds(items, sessionId));
 	}
 	for (const [sessionId, items] of Object.entries(data.steered || {})) {
-		if (items?.length) steeredReceipts.set(sessionId, queueWithIds(items));
+		if (items?.length) steeredReceipts.set(sessionId, queueWithIds(items, sessionId));
 	}
 	for (const [sessionId, dispatch] of Object.entries(data.dispatching || {})) {
 		if (dispatch?.promptEntryId && dispatch.items?.length) {
 			promptDispatches.set(sessionId, {
 				promptEntryId: dispatch.promptEntryId,
-				items: queueWithIds(dispatch.items),
+				items: queueWithIds(dispatch.items, sessionId),
 				...(dispatch.kind === "create" ? { kind: "create" as const } : {}),
 			});
 		}
 	}
+  if (migrateToKernel) kernelStore.markDeliveryMigrationComplete();
 	return (
 		[...promptQueues.values(), ...steeredReceipts.values()].reduce(
 			(count, items) => count + items.length,
@@ -331,18 +370,28 @@ export function restorePersistedQueueState(options: {
 	effects?: boolean;
 }): { queuedSessionIds: string[]; queuedCount: number; steeredCount: number } {
 	const storePath = options.storePath ?? QUEUE_STORE;
-	if (!existsSync(storePath)) {
-		return { queuedSessionIds: [], queuedCount: 0, steeredCount: 0 };
+  const data: PersistedQueueState =
+    storePath === QUEUE_STORE &&
+    sessionKernelStore().deliveryMigrationComplete()
+      ? {
+          queued: Object.fromEntries(promptQueues),
+          steered: Object.fromEntries(steeredReceipts),
+          dispatching: Object.fromEntries(promptDispatches),
 	}
-	const data = readPersistedQueueState(storePath);
-	if (!data) return { queuedSessionIds: [], queuedCount: 0, steeredCount: 0 };
+      : (readPersistedQueueState(storePath) ?? {});
+  if (
+    !Object.keys(data.queued || {}).length &&
+    !Object.keys(data.steered || {}).length &&
+    !Object.keys(data.dispatching || {}).length
+  )
+    return { queuedSessionIds: [], queuedCount: 0, steeredCount: 0 };
 
 	const liveDispatches = new Map(promptDispatches);
 	const preservedDispatches = new Map<string, PromptDispatch>();
 	const queued = new Map<string, QueueItem[]>();
 	for (const [sessionId, items] of Object.entries(data.queued || {})) {
 		if (options.sessionExists(sessionId) && items?.length) {
-			queued.set(sessionId, queueWithIds(items));
+			queued.set(sessionId, queueWithIds(items, sessionId));
 		}
 	}
 	for (const [sessionId, dispatch] of Object.entries(data.dispatching || {})) {
@@ -357,7 +406,7 @@ export function restorePersistedQueueState(options: {
 					? live
 					: {
 						promptEntryId: dispatch.promptEntryId,
-						items: queueWithIds(dispatch.items),
+						items: queueWithIds(dispatch.items, sessionId),
 						kind: "create",
 					};
 			preservedDispatches.set(sessionId, createDispatch);
@@ -395,7 +444,7 @@ export function restorePersistedQueueState(options: {
 	for (const [sessionId, items] of Object.entries(data.steered || {})) {
 		if (!options.sessionExists(sessionId) || !items?.length) continue;
 		const delivered = options.deliveredUserTexts(sessionId);
-		const pending = queueWithIds(undeliveredSteers(items, delivered));
+		const pending = queueWithIds(undeliveredSteers(items, delivered), sessionId);
 		if (!pending.length) continue;
 		if (options.runOwnsSteers(sessionId)) {
 			steeredReceipts.set(sessionId, pending);
@@ -417,7 +466,10 @@ export function restorePersistedQueueState(options: {
 	}
 	return {
 		queuedSessionIds: [...promptQueues.keys()],
-		queuedCount: [...promptQueues.values()].reduce((n, items) => n + items.length, 0,),
+    queuedCount: [...promptQueues.values()].reduce(
+      (n, items) => n + items.length,
+      0,
+    ),
 		steeredCount,
 	};
 }
@@ -432,22 +484,17 @@ export function beginPromptDispatch(
 	promptEntryId = items.length === 1 ? items[0]?.promptEntryId : undefined,
 	effects = true,
 	kind?: "create",
+	requireQueued = false,
 ): string {
 	const id = promptEntryId || crypto.randomUUID();
-	const existing = promptDispatches.get(sessionId);
-	if (existing?.promptEntryId === id) return id;
-	const queued = promptQueues.get(sessionId);
-	if (queued?.length) {
-		const remaining = queued.filter(
-			(item) => item.id !== id && item.promptEntryId !== id,
-		);
-		if (remaining.length) promptQueues.set(sessionId, remaining);
-		else promptQueues.delete(sessionId);
-	}
-	promptDispatches.set(sessionId, {
+	const durableItems = queueWithIds(items, sessionId);
+  sessionDelivery({
+    op: "claim_dispatch",
+    sessionId,
+    items: durableItems,
 		promptEntryId: id,
-		items: items.map((item) => ({ ...item })),
 		...(kind ? { kind } : {}),
+		...(requireQueued ? { requireQueued: true } : {}),
 	});
 	if (effects) persistQueues();
 	return id;
@@ -461,13 +508,34 @@ export function acknowledgePromptDispatch(
 	effects = true,
 ): void {
 	if (!sessionId || !promptEntryId) return;
-	const dispatch = promptDispatches.get(sessionId);
-	if (!dispatch || dispatch.promptEntryId !== promptEntryId) return;
-	promptDispatches.delete(sessionId);
-	if (effects) {
+  const acknowledged = sessionDelivery({
+    op: "ack_dispatch",
+    sessionId,
+    promptEntryId,
+  });
+  if (acknowledged && effects) {
 		persistQueues();
 		broadcastQueue(sessionId);
 	}
+}
+
+/** A runner failed before it adopted the dispatch. Restore its exact batch
+ * atomically ahead of later queued work. */
+export function failPromptDispatch(
+  sessionId: string,
+  promptEntryId: string,
+  effects = true,
+): boolean {
+  const restored = sessionDelivery({
+    op: "fail_dispatch",
+    sessionId,
+    promptEntryId,
+  });
+  if (restored && effects) {
+    persistQueues();
+    broadcastQueue(sessionId);
+  }
+  return restored;
 }
 
 /** Review handoffs drive an automated turn. They use the prompt queue for
@@ -508,25 +576,46 @@ export function broadcastQueue(sessionId: string) {
 	});
 }
 
-/** Record a steered message as a visible receipt until its run finishes.
- *
- * Stamped with the moment the engine ACCEPTED it, which is not the moment it
- * is read: pi's agent loop drains its steering queue only between turns, after
- * the current assistant message and its entire tool batch complete. A steer
- * sent during a long test run or a subagent waits for that tool to return, so
- * the receipt carries its own start time and the clients count from it. A
- * motionless chip with no elapsed time is what read as "stuck". */
-export function recordSteer(sessionId: string, item: QueueItem): void {
-	const list = steeredReceipts.get(sessionId) || [];
-	const owned = queueItem(item);
-	if (owned.id && list.some((existing) => existing.id === owned.id)) return;
-	// Stamp LAST: a message the engine bounced comes back through
-	// takeSteerReceiptForText carrying the previous attempt's stamp, and a
-	// re-steer of it is a new wait, not a continuation of the old one.
-	list.push({ ...owned, steeredAt: Date.now() });
-	steeredReceipts.set(sessionId, list);
-	persistQueues();
-	broadcastQueue(sessionId);
+/** Move one queued item into an actor-owned pending steer before touching the
+ * runner. A crash after this point recovers it as an ambiguous steer receipt
+ * instead of delivering the same message again. */
+export function prepareQueuedSteer(
+	sessionId: string,
+	itemId: string,
+	directItem?: QueueItem,
+): QueueItem | undefined {
+	return sessionDelivery({
+		op: "prepare_steer",
+		sessionId,
+		itemId,
+		...(directItem ? { item: directItem } : {}),
+	}) as QueueItem | undefined;
+}
+
+export function acceptQueuedSteer(sessionId: string, itemId: string): boolean {
+	const accepted = sessionDelivery({
+		op: "accept_steer",
+		sessionId,
+		itemId,
+	});
+	if (accepted) {
+		persistQueues();
+		broadcastQueue(sessionId);
+	}
+	return accepted;
+}
+
+export function rejectQueuedSteer(sessionId: string, itemId: string): boolean {
+	const rejected = sessionDelivery({
+		op: "reject_steer",
+		sessionId,
+		itemId,
+	});
+	if (rejected) {
+		persistQueues();
+		broadcastQueue(sessionId);
+	}
+	return rejected;
 }
 
 /** Clear a session's steer receipts once the run that owned them is done. */
@@ -686,11 +775,11 @@ export function requeueSteerReceipts(
 	const steered = steeredReceipts.get(sessionId);
 	if (!steered?.length) return 0;
 	const undelivered = undeliveredSteers(steered, deliveredUserTexts || []);
-	if (undelivered.length > 0) {
-		const queue = promptQueues.get(sessionId) || [];
-		promptQueues.set(sessionId, [...undelivered, ...queue]);
-	}
-	steeredReceipts.delete(sessionId);
+	sessionDelivery({
+		op: "requeue_steers",
+		sessionId,
+		items: undelivered,
+	});
 	if (effects) {
 		persistQueues();
 		broadcastQueue(sessionId);

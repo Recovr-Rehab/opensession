@@ -11,7 +11,7 @@ import {
 	clearSessionKernel,
 	durableSessionCommand,
 	passivateIdleSessionKernels,
-	SessionOwnedMap,
+	DeliveryOwnedMap,
 	sessionKernel,
 	tombstoneSessionKernel,
 } from ".";
@@ -35,6 +35,32 @@ test("tracked schema version matches the store reader", () => {
 			readFileSync(join(import.meta.dir, "schema-version"), "utf8").trim(),
 		),
 	).toBe(SESSION_KERNEL_SCHEMA_VERSION);
+});
+
+test("schema 6 upgrades create autonomous delivery and ask state", () => {
+	const dir = mkdtempSync(join(tmpdir(), "session-kernel-schema-"));
+	const path = join(dir, "kernel.sqlite");
+	const legacy = new Database(path);
+	legacy.exec("PRAGMA user_version = 6");
+	legacy.close();
+	const upgraded = new SessionKernelStore(path);
+	try {
+		expect(upgraded.stats().schemaVersion).toBe(7);
+		upgraded.setDeliverySlot("upgrade", "queued", [
+			{ id: "queued", content: "kept" },
+		]);
+		upgraded.setAskRecord("upgrade", {
+			questionId: "ask",
+			questions: [],
+		});
+		expect(upgraded.deliverySnapshot("upgrade").queued).toHaveLength(1);
+		expect(upgraded.askSnapshot("upgrade")).toMatchObject({
+			questionId: "ask",
+		});
+	} finally {
+		upgraded.close();
+		rmSync(dir, { recursive: true, force: true });
+	}
 });
 
 describe("SessionKernel", () => {
@@ -364,7 +390,7 @@ describe("SessionKernel", () => {
 
 	test("a deletion tombstone fences late writers", async () => {
 		const id = `deleted-${crypto.randomUUID()}`;
-		sessionKernel(id).setRuntime("queue", [{ content: "pending" }]);
+		store.setDeliverySlot(id, "queued", [{ content: "pending" }]);
 		tombstoneSessionKernel(id);
 		expect(store.isTombstoned(id)).toBe(true);
 		expect(() => sessionKernel(id).applySync("late", () => {})).toThrow(
@@ -429,6 +455,64 @@ describe("SessionKernel", () => {
 		expect(store.changesSince("fsm", 0)).toHaveLength(2);
 	});
 
+	test("claims and restores a delivery batch atomically", () => {
+		store.setDeliverySlot("delivery", "queued", [
+			{ id: "one", content: "first" },
+			{ id: "two", content: "second" },
+		]);
+		const claimed = store.claimDeliveryDispatch({
+			sessionId: "delivery",
+			items: [{ id: "one", content: "first" }],
+			promptEntryId: "entry-one",
+			requireQueued: true,
+		});
+		expect(claimed.promptEntryId).toBe("entry-one");
+		expect(store.deliverySnapshot("delivery")).toMatchObject({
+			queued: [{ id: "two", content: "second" }],
+			dispatch: {
+				promptEntryId: "entry-one",
+				items: [{ id: "one", content: "first" }],
+			},
+		});
+		expect(store.failDeliveryDispatch("delivery", "stale-entry")).toBe(false);
+		expect(store.failDeliveryDispatch("delivery", "entry-one")).toBe(true);
+		expect(store.deliverySnapshot("delivery")).toMatchObject({
+			queued: [
+				{ id: "one", content: "first" },
+				{ id: "two", content: "second" },
+			],
+		});
+		expect(store.deliverySnapshot("delivery").dispatch).toBeUndefined();
+	});
+
+	test("recovers an ambiguous prepared steer without duplicate queue delivery", () => {
+		store.setDeliverySlot("steer-recovery", "queued", [
+			{ id: "steer-one", content: "fold me in" },
+		]);
+		expect(
+			store.prepareSteerDelivery("steer-recovery", "steer-one"),
+		).toMatchObject({ id: "steer-one" });
+		expect(store.deliverySnapshot("steer-recovery")).toMatchObject({
+			queued: [],
+			pendingSteers: [{ item: { id: "steer-one" }, index: 0 }],
+		});
+		expect(store.settlePendingSteers()).toBe(1);
+		expect(store.deliverySnapshot("steer-recovery")).toMatchObject({
+			queued: [],
+			pendingSteers: [],
+			steered: [{ id: "steer-one", content: "fold me in" }],
+		});
+		expect(
+			store.requeueSteerDeliveries("steer-recovery", [
+				{ id: "steer-one", content: "fold me in" },
+			]),
+		).toBe(1);
+		expect(store.deliverySnapshot("steer-recovery")).toMatchObject({
+			queued: [{ id: "steer-one", content: "fold me in" }],
+			steered: [],
+		});
+	});
+
 	test("commits command completion and its effects in one decision transaction", async () => {
 		await sessionKernel("decision").dispatch(
 			{ requestId: "request", type: "notify" },
@@ -451,7 +535,7 @@ describe("SessionKernel", () => {
 	});
 
 	test("batches compatibility effects in one store transaction", () => {
-		expect(store.enqueueOutboxMany("borrowed", [
+		expect(store.enqueueOutboxMany("compatibility", [
 			{ kind: "one", payload: { n: 1 }, effectKey: "a" },
 			{ kind: "two", payload: { n: 2 }, effectKey: "b" },
 		])).toHaveLength(2);
@@ -471,9 +555,8 @@ describe("SessionKernel", () => {
 		expect(store.pendingOutbox()).toHaveLength(0);
 	});
 
-	test("session-owned maps isolate nested mutable values", async () => {
-		const { SessionOwnedMap } = await import("./owned-map");
-		const map = new SessionOwnedMap<Array<{ nested: { values: string[] } }>>("nested-test");
+	test("actor-owned delivery maps isolate nested mutable values", () => {
+		const map = new DeliveryOwnedMap<Array<{ nested: { values: string[] } }>>("queued");
 		const source = [{ nested: { values: ["a"] } }];
 		map.set("nested-session", source);
 		source[0].nested.values.push("source");
@@ -483,19 +566,11 @@ describe("SessionKernel", () => {
 	});
 
 	test("read projections do not activate dormant sessions", () => {
-		const projection = new SessionOwnedMap<string>("projection-test");
+		const projection = new DeliveryOwnedMap<string>("queued");
 		expect(projection.get("dormant")).toBeUndefined();
 		expect(activeSessionKernels()).toHaveLength(0);
 	});
 
-	test("passivates idle kernels but keeps runtime-owned state", () => {
-		const idle = sessionKernel("idle");
-		const busy = sessionKernel("busy");
-		busy.setRuntime("queue", [{ content: "held" }]);
-		expect(activeSessionKernels()).toHaveLength(2);
-		expect(passivateIdleSessionKernels(idle.idleSince + 61_000)).toBe(1);
-		expect(activeSessionKernels().map((kernel) => kernel.sessionId)).toEqual(["busy",]);
-	});
 });
 
 describe("SessionKernel durable runtime", () => {
