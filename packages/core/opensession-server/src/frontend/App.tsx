@@ -3015,6 +3015,11 @@ export function App(
 			.map((id) => byId.get(id))
 			.filter((s): s is UnifiedSession => !!s);
 	})();
+	// An untouched session is the workspace's reusable draft tab. While it
+	// exists the + disappears, and shortcut/menu creates focus this tab instead.
+	const emptyWorkspaceSession = workspaceSessions.find(
+		(session) => session.source === "opensession" && sessionNeverRan(session),
+	);
 	// This workspace's closed sessions, fetched scoped rather than pulled out of
 	// the whole archived index (which the app doesn't hold outside Archived).
 	// The live tab count is the refetch trigger: an archive, a restore and a new
@@ -3299,7 +3304,7 @@ export function App(
 					}
 				}}
 				onNewSession={
-					barSessions.some((session) => session.desk)
+					barSessions.some((session) => session.desk) || emptyWorkspaceSession
 						? undefined
 						: (mode) => handleNewSession(mode, side)
 				}
@@ -3391,15 +3396,26 @@ export function App(
 
 		try {
 			const created = await newSessionApi(src.id, user, mode, id);
-			if (created.id !== id) throw new Error("Server returned a different session id");
+			const createdId = created.id;
+			if (createdId !== id) {
+				// Another window won the one-empty-tab race. Drop this optimistic
+				// shell and focus the reusable tab the server returned.
+				unstick(id);
+				remove(id);
+			}
 			inject(
-				created.session ?? { ...draft, workspacePreparing: false },
+				created.session ?? {
+					...draft,
+					id: createdId,
+					workspacePreparing: false,
+				},
 				{ sticky: true },
 			);
 			clearTimeout(pendingTimer.current);
 			setPendingSessionId((pending) => (pending === id ? null : pending));
+			if (createdId !== id) navigate({ view: "session", id: createdId });
 			refresh();
-			return id;
+			return createdId;
 		} catch (error) {
 			clearTimeout(pendingTimer.current);
 			setPendingSessionId((pending) => (pending === id ? null : pending));
@@ -3446,6 +3462,11 @@ export function App(
 		mode: "share" | "stack" | "ask",
 		side: SplitSide | null = null,
 	) => {
+		if (emptyWorkspaceSession) {
+			setActiveViewTab(null);
+			navigate({ view: "session", id: emptyWorkspaceSession.id });
+			return;
+		}
 		const src = currentSession || mainSession(naturalSessions);
 		if (!src) {
 			// "+" on an empty workspace (session-less route): no sibling to clone —
@@ -4383,7 +4404,11 @@ export function App(
 				onCloseTerminal={closeTerminalTab}
 				onOpenWorkspace={() => setActiveViewTab(null)}
 				allSessions={sessions}
-				onNewSession={viewerSession.desk ? undefined : handleNewSession}
+				onNewSession={
+					viewerSession.desk || emptyWorkspaceSession
+						? undefined
+						: handleNewSession
+				}
 				onNewWorkspace={() => openPalette()}
 				onStartNewChat={(prompt) =>
 					openNewSessionInWorkspace(viewerSession, "share", prompt)

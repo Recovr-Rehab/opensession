@@ -26,6 +26,7 @@ import { resolveInteractiveSandbox } from "../sandbox/defaults";
 import {
 	SESSIONS_DIR,
 	findSessionAsync,
+	getCachedSessionsAsync,
 	invalidateSessionsCache,
 	peekCachedSessions,
 	touchNativeSession,
@@ -46,6 +47,7 @@ import { resolveModel } from "../models";
 import { REPOS, createWorktree, createWorktreeForExistingBranch, ensureScratchDir, getRepo, isSharedCheckoutDir, listWorktrees, repoForPath, sessionRepoId, worktreeHasWork, worktreeHeadBranch } from "../worktree";
 import { copyFileSync, existsSync, mkdirSync, readFileSync } from "fs";
 import { isClientSessionId, isNativeSessionId, newSessionId } from "../paths";
+import { isReusableEmptySession } from "../empty-session";
 
 /**
  * Validate a `draft` field from a workspace create/patch body. `null` (clear)
@@ -610,6 +612,19 @@ export async function handleWorkspaceRoutes(
 		const bksId = requestedId || newSessionId();
 		const existing = await findSessionAsync(bksId);
 		if (existing) return Response.json({ id: bksId, session: existing });
+		// One reusable empty tab per workspace. This server-side check closes the
+		// multi-window race that hiding the + in one browser cannot prevent.
+		const reusable = src.workspaceId
+			? (await getCachedSessionsAsync("exclude")).find(
+					(session) =>
+						session.workspaceId === src.workspaceId &&
+						isReusableEmptySession(session),
+				)
+			: isReusableEmptySession(src)
+				? src
+				: undefined;
+		if (reusable)
+			return Response.json({ id: reusable.id, session: reusable });
 		let branch = src.branch || "";
 		let worktreeDir = src.worktreeDir || "";
 		let mode: "ask" | "code" | "scratch" = src.mode || "code";
