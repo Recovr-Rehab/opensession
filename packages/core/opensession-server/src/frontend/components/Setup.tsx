@@ -349,12 +349,8 @@ export function SetupPanel({ onDone }: { onDone?: () => void }) {
                       </SettingCard>
                       <ClaudeAccountsSection compact onChanged={refreshAi} />
                       <CodexAccountsSection compact onChanged={refreshAi} />
-                      <ModelProvidersPanel compact onChanged={refreshAi} />
-                      <ModelDefaultsSection
-                        key={aiRevision}
-                        compact
-                        onChanged={refreshAi}
-                      />
+                      <ModelProvidersPanel />
+                      <ModelDefaultsSection key={aiRevision} />
                     </>
                   )}
                   {step.id === "identity" && <IdentityCard />}

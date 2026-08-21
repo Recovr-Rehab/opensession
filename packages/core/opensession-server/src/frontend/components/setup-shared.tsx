@@ -146,6 +146,7 @@ export function chipDotColor(tone: ChipTone): string {
  *  the checklist can offer a "jump to that step" without importing the wizard
  *  it is rendered by. */
 export type SetupStepId =
+	| "server"
 	| "engine"
 	| "identity"
 	| "repos"

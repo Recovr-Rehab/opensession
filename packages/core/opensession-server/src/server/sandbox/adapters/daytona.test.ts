@@ -57,13 +57,13 @@ describe("Daytona create source", () => {
     ).toBe(false);
     expect(
       daytonaSnapshotIsRecent(
-        { state: "snapshotting", updatedAt: "2026-08-11T12:55:00.000Z" },
+        { updatedAt: "2026-08-11T12:55:00.000Z" },
         now,
       ),
     ).toBe(true);
     expect(
       daytonaSnapshotIsRecent(
-        { state: "snapshotting", updatedAt: "2026-08-11T11:55:00.000Z" },
+        { updatedAt: "2026-08-11T11:55:00.000Z" },
         now,
       ),
     ).toBe(false);

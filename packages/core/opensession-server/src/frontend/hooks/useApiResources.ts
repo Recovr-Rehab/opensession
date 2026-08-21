@@ -1,5 +1,5 @@
 import { useEffect, useRef } from "react";
-import useSWR, { type SWRConfiguration } from "swr";
+import useSWR, { type SWRConfiguration, type SWRResponse } from "swr";
 import {
 	fetchDiff,
 	fetchGitStatus,
@@ -47,7 +47,7 @@ export function useSessionPrResource(
 	repo?: string,
 	branch?: string,
 	options: ApiResourceOptions<PrDetails | null> = {},
-) {
+): SWRResponse<PrDetails | null> {
 	const { enabled = true, refreshInterval = 0, revision, compare } = options;
 	const resource = useSWR<PrDetails | null>(
 		enabled ? apiSWRKey.sessionPr(sessionId, repo, branch) : null,
@@ -63,7 +63,7 @@ export function useSessionGitResource(
 	sessionId: string,
 	repo?: string,
 	options: ApiResourceOptions<GitStatusInfo | null> = {},
-) {
+): SWRResponse<GitStatusInfo | null> {
 	const { enabled = true, refreshInterval = 0, revision, compare } = options;
 	const resource = useSWR<GitStatusInfo | null>(
 		enabled ? apiSWRKey.sessionGit(sessionId, repo) : null,
@@ -78,7 +78,7 @@ export function useSessionGitResource(
 export function useSessionDiffResource(
 	sessionId: string,
 	options: ApiResourceOptions<SessionDiffResponse> = {},
-) {
+): SWRResponse<SessionDiffResponse> {
 	const { enabled = true, refreshInterval = 0, revision, compare } = options;
 	const resource = useSWR<SessionDiffResponse>(
 		enabled ? apiSWRKey.sessionDiff(sessionId) : null,
@@ -96,7 +96,7 @@ export function useSessionDiffResource(
 export function useSessionAssetsResource(
 	sessionId: string,
 	options: ApiResourceOptions<SessionAssetFile[]> = {},
-) {
+): SWRResponse<SessionAssetFile[]> {
 	const { enabled = true, refreshInterval = 0, revision, compare } = options;
 	const resource = useSWR<SessionAssetFile[]>(
 		enabled ? apiSWRKey.sessionAssets(sessionId) : null,
@@ -115,7 +115,7 @@ export function useSessionAssetsResource(
 export function useSessionOverviewResource(
 	session: OverviewSessionRef,
 	options: ApiResourceOptions<WorkspaceOverview> = {},
-) {
+): SWRResponse<WorkspaceOverview> {
 	const { enabled = true, refreshInterval = 0, revision, compare } = options;
 	const sessionRef = useRef(session);
 	sessionRef.current = session;
@@ -134,7 +134,7 @@ export function useWorkspaceOverviewResource(
 	workspaceId: string | null,
 	sessions: OverviewSessionRef[],
 	options: ApiResourceOptions<WorkspaceOverview> = {},
-) {
+): SWRResponse<WorkspaceOverview> {
 	const { enabled = true, refreshInterval = 0, revision, compare } = options;
 	const sessionsRef = useRef(sessions);
 	sessionsRef.current = sessions;
