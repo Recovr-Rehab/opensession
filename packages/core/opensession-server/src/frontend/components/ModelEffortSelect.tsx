@@ -1,6 +1,11 @@
 import React from "react";
 import type { ModelOption, ProviderAccountOption } from "../lib/api";
 import { baseModelId, engineModelId, isAnthropicModel, modelEngine } from "../lib/model-engine";
+import {
+	getRecentModels,
+	onRecentModelsChanged,
+	pushRecentModel,
+} from "../lib/model-recents";
 import { Menu } from "../ui/menu";
 import { cn } from "../ui/cn";
 import { Tooltip } from "../ui/tooltip";
@@ -275,7 +280,10 @@ function MenuHint({ children }: { children: React.ReactNode }) {
 
 type ModelMenuOption = {
 	value: string;
+	/** Label used inside its provider section. */
 	label: string;
+	/** Label used when the option stands alone in the recent list. */
+	standaloneLabel: string;
 	id: string;
 	/** Engine key (ModelOption.provider) for the legacy-fallback group headers. */
 	engine: string;
@@ -327,6 +335,11 @@ export function ModelEffortSelect({
 }: Props) {
 	const effectiveModel = model || defaultModel;
 	const isPreferredDefault = preferredDefaultModel === effectiveModel;
+	const [recentModelIds, setRecentModelIds] = React.useState(getRecentModels);
+	React.useEffect(
+		() => onRecentModelsChanged(() => setRecentModelIds(getRecentModels())),
+		[],
+	);
 	// Pi-routed ids resolve to their base list entry for label/effort/account
 	// lookups — the engine prefix is routing, not a different model.
 	const effectiveBase = baseModelId(effectiveModel);
@@ -437,15 +450,20 @@ export function ModelEffortSelect({
 	const { primaryFirst, allPrimaryOptions, allOtherOptions } = React.useMemo(() => {
 		const optionFor = (id: string): ModelMenuOption => {
 			const info = modelById.get(id);
+			const shortLabel = shortModelLabel(id, models);
+			const standaloneLabel =
+				info?.group === "dial" || info?.group === "orchestrator"
+					? info.label
+					: shortLabel;
 			return {
 				value: id === defaultModel ? "" : id,
-				// Preset rows drop their "Dial · " / "Orchestrator · " prefix — they
-				// render under "The Dial" / "The Orchestrator" group headers, where
-				// the full label would read twice.
+				// Preset rows drop their "Dial · " / "Orchestrator · " prefix because
+				// their section already names it. Recent rows use the standalone label.
 				label:
 					info?.group === "dial" || info?.group === "orchestrator"
-						? shortModelLabel(id, models).replace(/^(?:Dial|Orchestrator)\s*·\s*/, "")
-						: shortModelLabel(id, models),
+						? shortLabel.replace(/^(?:Dial|Orchestrator)\s*·\s*/, "")
+						: shortLabel,
+				standaloneLabel,
 				id,
 				engine: info?.provider || (routedModelParts(id) ? "pi" : "claude"),
 				group: info?.group,
@@ -458,6 +476,7 @@ export function ModelEffortSelect({
 		const legacyOptionFor = (m: ModelOption): ModelMenuOption => ({
 			value: m.id === defaultModel ? "" : m.id,
 			label: m.label,
+			standaloneLabel: m.label,
 			id: m.id,
 			engine: m.provider,
 		});
@@ -563,9 +582,20 @@ export function ModelEffortSelect({
 		primaryFirst && !primaryOptions.some(isSelected)
 			? otherOptions.find(isSelected)?.label
 			: undefined;
+	const recentOptions = React.useMemo(() => {
+		const available = new Map(
+			[...primaryOptions, ...otherOptions].map((option) => [option.id, option]),
+		);
+		return recentModelIds
+			.map((id) => available.get(id))
+			.filter((option): option is ModelMenuOption => !!option)
+			.slice(0, 3);
+	}, [recentModelIds, primaryOptions, otherOptions]);
 
-	const renderModelOption = (option: ModelMenuOption) => {
+	const renderModelOption = (option: ModelMenuOption, standalone = false) => {
 		const selected = isSelected(option);
+		const optionLabel = standalone ? option.standaloneLabel : option.label;
+		const optionDescription = standalone ? undefined : option.description;
 		const nextModelInfo = modelById.get(option.id);
 		const nextEfforts = nextModelInfo?.efforts ?? [];
 		// Engine stays sticky across model changes: the new id is recomposed onto
@@ -579,6 +609,7 @@ export function ModelEffortSelect({
 			<Menu.Item
 				onClick={() => {
 					onModelChange(routed ?? option.value);
+					pushRecentModel(option.id);
 					if (onEffortChange && !nextEfforts.includes(effort ?? "")) {
 						const nextEffort =
 							nextModelInfo?.fixedEffort ||
@@ -600,19 +631,19 @@ export function ModelEffortSelect({
 					disabled && "opacity-55",
 				)}
 			>
-				{option.description ? (
+				{optionDescription ? (
 					<span className="flex min-w-0 flex-1 flex-col">
-						<span className="truncate">{option.label}</span>
-						<span className="truncate text-xs text-faint">{option.description}</span>
+						<span className="truncate">{optionLabel}</span>
+						<span className="truncate text-xs text-faint">{optionDescription}</span>
 					</span>
 				) : (
-					<span className="min-w-0 truncate">{option.label}</span>
+					<span className="min-w-0 truncate">{optionLabel}</span>
 				)}
 				<Menu.Check on={selected} className="text-dim" />
 			</Menu.Item>
 		);
-		return option.description ? (
-			<Tooltip key={option.value || option.id} label={option.description} side="right" multiline>
+		return optionDescription ? (
+			<Tooltip key={option.value || option.id} label={optionDescription} side="right" multiline>
 				{item}
 			</Tooltip>
 		) : (
@@ -701,6 +732,15 @@ export function ModelEffortSelect({
 						<Menu.Separator className="my-1" />
 					</>
 				)}
+				{recentOptions.length > 0 && (
+					<>
+						<Menu.Group>
+							<Menu.GroupLabel>Recent models</Menu.GroupLabel>
+							{recentOptions.map((option) => renderModelOption(option, true))}
+						</Menu.Group>
+						<Menu.Separator className="my-1" />
+					</>
+				)}
 				<Menu.SubmenuRoot>
 					<Menu.SubmenuTrigger className="justify-between gap-3">
 						<span className="min-w-0 truncate">Model</span>
@@ -717,11 +757,11 @@ export function ModelEffortSelect({
 										{i > 0 && <Menu.Separator className="my-1" />}
 										<Menu.Group>
 											<Menu.GroupLabel>{g.label}</Menu.GroupLabel>
-											{g.options.map(renderModelOption)}
+											{g.options.map((option) => renderModelOption(option))}
 										</Menu.Group>
 									</React.Fragment>
 								))
-							: primaryOptions.map(renderModelOption)}
+							: primaryOptions.map((option) => renderModelOption(option))}
 						{otherOptions.length > 0 && (
 							<Menu.SubmenuRoot>
 								<Menu.SubmenuTrigger
@@ -744,11 +784,11 @@ export function ModelEffortSelect({
 													{i > 0 && <Menu.Separator className="my-1" />}
 													<Menu.Group>
 														<Menu.GroupLabel>{g.label}</Menu.GroupLabel>
-														{g.options.map(renderModelOption)}
+														{g.options.map((option) => renderModelOption(option))}
 													</Menu.Group>
 												</React.Fragment>
 											))
-										: otherOptions.map(renderModelOption)}
+										: otherOptions.map((option) => renderModelOption(option))}
 								</Menu.Popup>
 							</Menu.SubmenuRoot>
 						)}
