@@ -591,7 +591,11 @@ if (!g.__opensessionBooted) {
 	// Restore completed sandbox prewarms and maintain any explicit keep-ready
 	// targets. This is a boot hook rather than a module-scope side effect.
 	void import("./src/server/sandbox/prewarm")
-		.then(({ startPrewarmPool }) => startPrewarmPool())
+		.then(async ({ startPrewarmPool }) => {
+			await startPrewarmPool();
+			const { startSandboxEnvironmentMaintenance } = await import("./src/server/sandbox/environments");
+			startSandboxEnvironmentMaintenance();
+		})
 		.catch((e) => console.error("[sandbox-prewarm] startup failed:", e));
 
 	// Start webhook server with enabled agents + automation webhook triggers

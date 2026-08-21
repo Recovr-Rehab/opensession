@@ -432,6 +432,30 @@ export async function prepareSandboxEnvironment(
 }
 
 const providerQueues: Map<string, Promise<void>> = ((globalThis as any).__sandboxEnvironmentQueues ??= new Map());
+let maintenanceStarted: boolean = ((globalThis as any).__sandboxEnvironmentMaintenanceStarted ??= false);
+
+/** Resume explicitly prepared template environments after a coordinator
+ * restart. A stale/preparing record means a human already opted this
+ * repo/provider pair into paid, transient preparation; this never enables a
+ * new provider or keeps idle compute alive. */
+export function startSandboxEnvironmentMaintenance(): void {
+  if (maintenanceStarted) return;
+  maintenanceStarted = true;
+  (globalThis as any).__sandboxEnvironmentMaintenanceStarted = true;
+  for (const environment of readStored()) {
+    if (
+      environment.mode !== "template" ||
+      !["daytona", "box", "modal"].includes(environment.provider) ||
+      (environment.state !== "stale" && environment.state !== "preparing") ||
+      !sandboxConnectionReady(environment.provider)
+    ) continue;
+    scheduleSandboxEnvironment(environment.repo, environment.provider, {
+      rebuild: true,
+      user: "startup-recovery",
+      settings: environment.settings,
+    });
+  }
+}
 
 export function scheduleSandboxEnvironment(
   repo: string,
