@@ -672,11 +672,9 @@ struct SessionView: View {
         #endif
         .inlineTitleBarCompat()
         #if os(iOS)
-        // Keep the chat controls on native glass with the system separation
-        // shadow. Hiding this background left them floating over transcript
-        // content without a readable top edge.
-        .toolbarBackground(.ultraThinMaterial, for: .navigationBar)
-        .toolbarBackground(.visible, for: .navigationBar)
+        // Keep the bar itself transparent so the transcript's soft scroll-edge
+        // effect can provide the progressive blur beneath its glass controls.
+        .toolbarBackground(.hidden, for: .navigationBar)
         // Toolbar content is hosted outside this view tree, so pin its colour
         // scheme here instead of relying on the surrounding environment.
         .toolbarColorScheme(appColorScheme, for: .navigationBar)
@@ -1258,9 +1256,6 @@ struct SessionView: View {
             viewModel.quoteSelection.clear()
             return .handled
         }
-        #if os(iOS)
-        .transcriptTopWash()
-        #endif
         .defaultScrollAnchor(showingEmptyContent ? .top : .bottom)
         .defaultScrollAnchor(
             showingEmptyContent ? .top : .bottom,
