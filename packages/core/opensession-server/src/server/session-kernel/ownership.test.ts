@@ -242,7 +242,8 @@ describe("single session ownership", () => {
 	test("interrupted creates resume their environment setup, not only their prompt", () => {
 		const create = read("session-create.ts");
 		expect(create).toContain("const recoveringSession = findSession(bksId)");
-		expect(create).toContain("fromPr\n\t\t\t\t\t\t\t? createWorktreeForExistingBranch");
+		expect(create).toContain('existingBranch: restored.worktreeKind === "existing"');
+		expect(create).toContain("identity: plan.identity");
 		expect(create.indexOf("openingPromptEntryId = beginPromptDispatch"))
 			.toBeLessThan(create.indexOf("await persist()"));
 		// The direct host run must use the create dispatch's stable transcript id.
@@ -269,7 +270,12 @@ describe("single session ownership", () => {
 		expect(create).toContain("createPlan.resolved");
 		expect(create).toContain("ensureCreationPlanned(bksId, createIdentity)");
 		expect(create.match(/await requestCreationWorkspace\(\{/g)?.length).toBe(2);
-		expect(create).not.toContain("createWorkspace(");
+		expect(create).toContain("actorWorktreeMaterializer({");
+		expect(create).toContain("await requestCreationCredential({");
+		expect(create).toContain("await requestCreationBranch({");
+		expect(create).not.toMatch(/\bcreateWorkspace\(/);
+		expect(create).not.toMatch(/\bcreateWorktree\(/);
+		expect(create).not.toMatch(/\bcreateWorktreeForExistingBranch\(/);
 		expect(create).toContain("spec.openingPromptEntryId");
 		expect(wiring).toContain('legacyGatewayEffect("cancel_session"');
 		expect(wiring).toContain('legacyGatewayEffect("answer_question"');

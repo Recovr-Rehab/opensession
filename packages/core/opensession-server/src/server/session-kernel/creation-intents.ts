@@ -21,6 +21,7 @@ export type CreationBranchIntent = {
   worktreePath: string;
   baseBranch?: string;
   isolated: boolean;
+  existingBranch?: boolean;
   credentialPrincipal?: string;
 };
 
@@ -154,6 +155,7 @@ export async function requestCreationBranch(
           worktreePath: input.worktreePath,
           baseBranch: input.baseBranch,
           isolated: input.isolated,
+          existingBranch: input.existingBranch,
           credentialPrincipal: input.credentialPrincipal,
           mode: "adopt_or_create",
         },

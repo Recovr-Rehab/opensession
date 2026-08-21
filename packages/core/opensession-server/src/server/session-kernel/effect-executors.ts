@@ -84,7 +84,9 @@ function creationPayload<K extends Exclude<
     case "creation_branch_prepare":
       if (
         value.mode !== "adopt_or_create" ||
-        typeof value.isolated !== "boolean"
+        typeof value.isolated !== "boolean" ||
+        (value.existingBranch !== undefined &&
+          typeof value.existingBranch !== "boolean")
       )
         throw new Error(`Invalid ${kind} effect payload: mode`);
       return {
@@ -97,6 +99,10 @@ function creationPayload<K extends Exclude<
             ? undefined
             : requiredString(kind, value.baseBranch, "baseBranch"),
         isolated: value.isolated === true,
+        existingBranch:
+          value.existingBranch === undefined
+            ? undefined
+            : value.existingBranch === true,
         credentialPrincipal:
           value.credentialPrincipal === undefined
             ? undefined
