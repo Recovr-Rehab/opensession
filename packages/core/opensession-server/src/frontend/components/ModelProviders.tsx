@@ -21,6 +21,7 @@ import {
 	settingsInputClass,
 } from "../ui/settings";
 import { Menu } from "../ui/menu";
+import { IconTile } from "./BrandTile";
 import { IconDotsHorizontal, IconPlus, IconTrash } from "./icons";
 
 // Settings → Model providers: third-party Pi providers (xai, openrouter,
@@ -129,9 +130,7 @@ export function ModelProvidersPanel() {
 				) : (
 					providers.map((p) => (
 						<SettingRow key={p.id} className="items-start gap-x-3">
-							<span className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-md bg-active text-control-label font-bold text-dim">
-								{p.id.charAt(0).toUpperCase()}
-							</span>
+							<IconTile name={p.id} size={28} />
 							<SettingRowText>
 								<SettingRowTitle>{p.id}</SettingRowTitle>
 								<SettingRowDescription className="truncate">
