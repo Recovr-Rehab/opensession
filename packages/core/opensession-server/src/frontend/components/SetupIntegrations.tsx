@@ -247,7 +247,7 @@ const GITHUB_ONBOARDING_STEPS: React.ReactNode[] = [
 	</>,
 	<>Grant Contents, Pull requests and Issues write, Members read.</>,
 	<>Install it on your organization.</>,
-	<>Paste the client id and secret in Configure.</>,
+	<>Paste the client id and secret below.</>,
 	<>Save, then restart.</>,
 ];
 
@@ -348,6 +348,67 @@ export function GithubAuthCard({
 		}
 	}
 
+	// One form, two homes: the settings dialog opens it on demand, while
+	// onboarding puts it straight on the page. A first run has nothing to
+	// protect behind a button, and the steps above end in these two fields.
+	const configuration = (
+		<>
+			<div className="flex items-center gap-4">
+				<div className="min-w-0 flex-1">
+					<div className="text-item-title font-medium text-fg">Enable GitHub sign-in</div>
+					<div className="mt-0.5 text-supporting text-dim">
+						Takes effect after you restart Open Session.
+					</div>
+				</div>
+				<Switch
+					checked={userPrAuth}
+					onCheckedChange={setUserPrAuth}
+					disabled={saving}
+					aria-label="Enable GitHub sign-in"
+				/>
+			</div>
+			<div className="mt-4 flex flex-col gap-4 border-t border-line pt-4">
+				<SecretField
+					name="Client id"
+					type="text"
+					required
+					placeholder="Iv23li…"
+					present={github.clientIdConfigured}
+					cleared={idCleared}
+					value={clientId}
+					disabled={saving}
+					onChange={(value) => {
+						setClientId(value);
+						if (value.trim()) setClearId(false);
+					}}
+					onToggleClear={() => {
+						setClearId((current) => !current);
+						setClientId("");
+					}}
+				/>
+				<SecretField
+					name="Client secret"
+					description="Renews teammates' tokens before they expire. Signing in works without it; staying signed in does not."
+					present={secretConfigured}
+					cleared={secretCleared}
+					value={clientSecret}
+					disabled={saving}
+					onChange={(value) => {
+						setClientSecret(value);
+						if (value.trim()) setClearSecret(false);
+					}}
+					onToggleClear={() => {
+						setClearSecret((current) => !current);
+						setClientSecret("");
+					}}
+				/>
+				<p className="m-0 text-supporting text-faint">
+					Credentials stay on this server and are never shown back.
+				</p>
+			</div>
+		</>
+	);
+
 	return (
 		<>
 			<div className="grid px-4 phone:px-0">
@@ -386,13 +447,9 @@ export function GithubAuthCard({
 								)}
 							</div>
 						)}
-						<div
-							className={cn(
-								"col-start-3 row-span-2 row-start-1 ml-4 flex min-h-10 shrink-0 items-center gap-2 phone:col-span-2 phone:col-start-1 phone:row-span-1 phone:mt-4 phone:ml-0 phone:flex-col phone:items-stretch",
-								onboarding ? "phone:row-start-2" : "phone:row-start-3",
-							)}
-						>
-							{!onboarding && (github.clientIdConfigured || github.userPrAuth) && (
+						{!onboarding && (
+						<div className="col-start-3 row-span-2 row-start-1 ml-4 flex min-h-10 shrink-0 items-center gap-2 phone:col-span-2 phone:col-start-1 phone:row-span-1 phone:row-start-3 phone:mt-4 phone:ml-0 phone:flex-col phone:items-stretch">
+							{(github.clientIdConfigured || github.userPrAuth) && (
 								<>
 									<div className="hidden min-h-11 items-center justify-between text-label font-medium text-dim phone:flex">
 										<span>GitHub sign-in</span>
@@ -422,88 +479,51 @@ export function GithubAuthCard({
 								{github.clientIdConfigured ? "Configure" : "Set up"}
 							</Button>
 						</div>
+						)}
 					</div>
 				</SettingCard>
 				{/* Onboarding shows the walkthrough up front: one GitHub App serves the
 				    whole workspace, so the work is a one-time setup on GitHub that a
 				    person should be able to read before opening a credentials form. */}
 				{onboarding && (
-					<SettingsSection className="mt-3 flex flex-col gap-3">
-						<div className="text-item-title font-semibold text-fg">How to connect</div>
-						<SetupSteps steps={GITHUB_ONBOARDING_STEPS} />
-						<LinkChips
-							className="mt-0"
-							links={[{ label: "Create GitHub App", url: github.appCreateUrl }]}
-						/>
-					</SettingsSection>
+					<>
+						<SettingsSection className="mt-3 flex flex-col gap-3">
+							<div className="text-item-title font-semibold text-fg">How to connect</div>
+							<SetupSteps steps={GITHUB_ONBOARDING_STEPS} />
+							<LinkChips
+								className="mt-0"
+								links={[{ label: "Create GitHub App", url: github.appCreateUrl }]}
+							/>
+						</SettingsSection>
+						<SettingsSection className="mt-3 p-4">
+							{configuration}
+							{error && <InlineAlert>{error}</InlineAlert>}
+							<div className="mt-4 flex justify-end">
+								<Button
+									variant="primary"
+									className="phone:min-h-11 phone:w-full phone:justify-center"
+									disabled={!dirty || saving}
+									onClick={() => void handleSave()}
+								>
+									{saving ? "Saving…" : "Save"}
+								</Button>
+							</div>
+						</SettingsSection>
+					</>
 				)}
 			</div>
-			<GithubAuthSetupDialog
-				github={github}
-				open={setupOpen}
-				onOpenChange={setSetupOpen}
-				error={error}
-				dirty={dirty}
-				saving={saving}
-				onSave={() => void handleSave()}
-				configuration={
-					<>
-						<div className="flex items-center gap-4">
-							<div className="min-w-0 flex-1">
-								<div className="text-item-title font-medium text-fg">Enable GitHub sign-in</div>
-								<div className="mt-0.5 text-supporting text-dim">
-									Takes effect after you restart Open Session.
-								</div>
-							</div>
-							<Switch
-								checked={userPrAuth}
-								onCheckedChange={setUserPrAuth}
-								disabled={saving}
-								aria-label="Enable GitHub sign-in"
-							/>
-						</div>
-						<div className="mt-4 flex flex-col gap-4 border-t border-line pt-4">
-							<SecretField
-								name="Client id"
-								type="text"
-								required
-								placeholder="Iv23li…"
-								present={github.clientIdConfigured}
-								cleared={idCleared}
-								value={clientId}
-								disabled={saving}
-								onChange={(value) => {
-									setClientId(value);
-									if (value.trim()) setClearId(false);
-								}}
-								onToggleClear={() => {
-									setClearId((current) => !current);
-									setClientId("");
-								}}
-							/>
-							<SecretField
-								name="Client secret"
-								description="Renews teammates' tokens before they expire. Signing in works without it; staying signed in does not."
-								present={secretConfigured}
-								cleared={secretCleared}
-								value={clientSecret}
-								disabled={saving}
-								onChange={(value) => {
-									setClientSecret(value);
-									if (value.trim()) setClearSecret(false);
-								}}
-								onToggleClear={() => {
-									setClearSecret((current) => !current);
-									setClientSecret("");
-								}}
-							/>
-							<p className="m-0 text-supporting text-faint">
-								Credentials stay on this server and are never shown back.
-							</p>
-						</div>
-					</>
-				}
-			/>
+			{!onboarding && (
+				<GithubAuthSetupDialog
+					github={github}
+					open={setupOpen}
+					onOpenChange={setSetupOpen}
+					error={error}
+					dirty={dirty}
+					saving={saving}
+					onSave={() => void handleSave()}
+					configuration={configuration}
+				/>
+			)}
 		</>
 	);
 }
