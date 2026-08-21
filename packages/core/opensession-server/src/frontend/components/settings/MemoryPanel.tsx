@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { BASE_PATH } from "../../lib/base";
 import {
 	addMemoryEntryApi,
@@ -49,6 +49,7 @@ type MemoryKind = MemoryScopeDto["scope"]["kind"];
 type MemoryCategory = {
 	kind: MemoryKind;
 	title: string;
+	pageTitle: string;
 	description: string;
 	targetLabel: string;
 	icon: typeof IconGlobe;
@@ -59,6 +60,7 @@ const MEMORY_CATEGORIES: MemoryCategory[] = [
 	{
 		kind: "team",
 		title: "Workspace",
+		pageTitle: "Workspace memories",
 		description: "Shared across the workspace and with public Slack memory.",
 		targetLabel: "Workspace",
 		icon: IconGlobe,
@@ -67,6 +69,7 @@ const MEMORY_CATEGORIES: MemoryCategory[] = [
 	{
 		kind: "repo",
 		title: "Repositories",
+		pageTitle: "Repository memories",
 		description: "Used when a session works in that repository.",
 		targetLabel: "Repository",
 		icon: IconBranches,
@@ -74,15 +77,17 @@ const MEMORY_CATEGORIES: MemoryCategory[] = [
 	},
 	{
 		kind: "user",
-		title: "People",
-		description: "Follows the person prompting, including their Slack DM memory.",
-		targetLabel: "Person",
+		title: "Team",
+		pageTitle: "Team memories",
+		description: "Follows the teammate prompting, including their Slack DM memory.",
+		targetLabel: "Teammate",
 		icon: IconPeople,
 		tone: "green",
 	},
 	{
 		kind: "channel",
 		title: "Slack channels",
+		pageTitle: "Slack channel memories",
 		description: "Used within a specific Slack channel.",
 		targetLabel: "Slack channel",
 		icon: IconHash,
@@ -166,6 +171,19 @@ function MemoryRow({
 	const [editing, setEditing] = useState(false);
 	const [draft, setDraft] = useState(row.entry.text);
 	const [busy, setBusy] = useState(false);
+	const [expanded, setExpanded] = useState(false);
+	const [canExpand, setCanExpand] = useState(false);
+	const textRef = useRef<HTMLDivElement>(null);
+
+	useLayoutEffect(() => {
+		if (expanded || editing) return;
+		const text = textRef.current;
+		if (!text) return;
+		const frame = requestAnimationFrame(() => {
+			setCanExpand(text.scrollHeight > text.clientHeight + 1);
+		});
+		return () => cancelAnimationFrame(frame);
+	}, [editing, expanded, row.entry.text]);
 
 	async function save() {
 		const text = draft.trim();
@@ -230,8 +248,43 @@ function MemoryRow({
 						</div>
 					</div>
 				) : (
-					<div className="whitespace-pre-wrap break-words text-supporting leading-relaxed text-fg">
-						{row.entry.text}
+					<div className={expanded ? "relative" : "group/memory relative"}>
+						<div className={expanded ? "relative" : "relative h-[7.5em] overflow-hidden"}>
+							<div
+								ref={textRef}
+								className={`whitespace-pre-wrap break-words text-supporting leading-relaxed text-fg ${expanded ? "" : "line-clamp-5"}`}
+							>
+								{row.entry.text}
+							</div>
+							{!expanded && canExpand && (
+								<span
+									aria-hidden="true"
+									className="pointer-events-none absolute inset-x-0 bottom-0 h-10 bg-[linear-gradient(to_bottom,transparent,var(--settings-plate))]"
+								/>
+							)}
+						</div>
+						<div className="flex min-h-10 justify-end">
+							{!expanded && canExpand && (
+								<button
+									type="button"
+									aria-expanded="false"
+									className="focus-ring min-h-10 rounded-md border-0 bg-transparent px-2 text-meta font-semibold text-dim opacity-0 transition-opacity duration-150 hover:text-fg group-hover/memory:opacity-100 group-focus-within/memory:opacity-100 phone:opacity-100"
+									onClick={() => setExpanded(true)}
+								>
+									Show more
+								</button>
+							)}
+							{expanded && canExpand && (
+								<button
+									type="button"
+									aria-expanded="true"
+									className="focus-ring min-h-10 rounded-md border-0 bg-transparent px-2 text-meta font-semibold text-dim hover:text-fg"
+									onClick={() => setExpanded(false)}
+								>
+									Show less
+								</button>
+							)}
+						</div>
 					</div>
 				)}
 			</td>
@@ -412,15 +465,15 @@ function CategoryPage({
 
 	return (
 		<SettingsPanel>
-			<h2 className="m-0 hidden px-5 text-section-title font-semibold text-fg phone:block">
-				{category.title}
+			<h2 className="relative z-20 m-0 hidden px-5 text-section-title font-semibold text-fg phone:block">
+				{category.pageTitle}
 			</h2>
 			<SettingsHeader
-				title={category.title}
+				title={category.pageTitle}
 				description={`${category.description} ${count} ${count === 1 ? "memory" : "memories"}.`}
-				className="phone:mt-1.5"
+				className="relative z-20 phone:mt-1.5"
 			/>
-			<div className="sticky top-0 z-10 mb-3 flex items-center justify-between gap-3 bg-surface px-5 py-2">
+			<div className="sticky top-0 z-10 mb-3 flex items-center justify-between gap-3 bg-surface px-5 py-2 before:pointer-events-none before:absolute before:inset-x-0 before:bottom-full before:h-11 before:bg-[linear-gradient(to_bottom,transparent,var(--bg))] before:content-[''] phone:before:h-4">
 				<Button size="sm" variant="ghost" icon={<IconChevronLeft size={18} />} onClick={onBack}>
 					Back
 				</Button>
@@ -481,8 +534,8 @@ export function MemoryPanel() {
 		return (
 			<SettingsPanel>
 				<SettingsHeader
-					title="Memory"
-					description="Durable facts scoped to your workspace, repositories, people, and Slack channels."
+					title="Memories"
+					description="Durable facts scoped to your workspace, repositories, team, and Slack channels."
 				/>
 				{error ? (
 					<InlineAlert>{error}</InlineAlert>
@@ -512,8 +565,8 @@ export function MemoryPanel() {
 	return (
 		<SettingsPanel>
 			<SettingsHeader
-				title="Memory"
-				description="Durable facts scoped to your workspace, repositories, people, and Slack channels."
+				title="Memories"
+				description="Durable facts scoped to your workspace, repositories, team, and Slack channels."
 			/>
 			{error && <InlineAlert onDismiss={() => setError(null)}>{error}</InlineAlert>}
 			<div className="grid gap-3">

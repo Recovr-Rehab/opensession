@@ -78,25 +78,25 @@ export const SECTIONS: {
 	{
 		key: "myAccounts",
 		label: "Account",
-		group: "Personal",
+		group: "Team",
 		icon: <IconUser />,
 	},
 	{
 		key: "preferences",
 		label: "Preferences",
-		group: "Personal",
+		group: "Team",
 		icon: <IconSliders />,
 	},
 	{
 		key: "notifications",
 		label: "Notifications",
-		group: "Personal",
+		group: "Team",
 		icon: <IconBell />,
 	},
 	{
 		key: "shortcuts",
 		label: "Shortcuts",
-		group: "Personal",
+		group: "Team",
 		icon: <IconKeyboard />,
 	},
 	{
@@ -173,7 +173,7 @@ export const SECTIONS: {
 	},
 	{
 		key: "memory",
-		label: "Memory",
+		label: "Memories",
 		group: "Workspace",
 		icon: <IconDatabase />,
 	},

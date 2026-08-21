@@ -44,7 +44,7 @@ export function IntegrationsPanel() {
 					<SettingsGroupLabel>GitHub sign-in</SettingsGroupLabel>
 					<GithubAuthCard github={status.github} onSaved={setup.applyGithub} />
 					<SettingsHint>
-						After setup, teammates connect their own accounts under Personal → Account.
+						After setup, teammates connect their own accounts under Team → Account.
 					</SettingsHint>
 				</>
 			)}

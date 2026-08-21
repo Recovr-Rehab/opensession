@@ -14,6 +14,11 @@ import { SETTINGS_KEYWORDS } from "./settings-search";
 const navSections = SECTIONS.filter((s) => !TOOL_SECTIONS.has(s.key));
 
 describe("settingsPaletteActions", () => {
+	test("uses Team for personal settings and names the memory page", () => {
+		expect(SECTIONS.find((section) => section.key === "myAccounts")?.group).toBe("Team");
+		expect(SECTIONS.find((section) => section.key === "memory")?.label).toBe("Memories");
+	});
+
 	test("keeps identity settings inside General", () => {
 		expect(SECTIONS.map((section) => String(section.key))).not.toContain("identity");
 		expect(SETTINGS_KEYWORDS.general).toContain("identity");
