@@ -60,6 +60,17 @@ describe("single session ownership", () => {
 		expect(read("session-cache.ts")).not.toContain("__promptQueues");
 	});
 
+	test("delivery and ask writes fail closed without the actor in production", () => {
+		const kernel = read("session-kernel/kernel.ts");
+		expect(kernel).toContain("compatibilityStoreForTest");
+		expect(kernel).toContain('process.env.NODE_ENV !== "test"');
+		expect(kernel).toContain("requires the authoritative actor");
+		expect(kernel).toContain("projection.delete(request.sessionId)");
+		expect(kernel).not.toContain(
+			'actor.decideDelivery({ op: "snapshot", sessionId: request.sessionId })',
+		);
+	});
+
 	test("run-state decisions execute atomically inside the actor", () => {
 		const facade = read("run-state.ts");
 		const actor = read("session-kernel/actor-worker.ts");

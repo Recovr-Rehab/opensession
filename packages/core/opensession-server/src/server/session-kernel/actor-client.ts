@@ -13,9 +13,11 @@ import type {
   RunEventDecisionResult,
   SessionKernelStoreApi,
 } from "./store";
-import type {
-  DeliveryActorRequest,
-  DeliveryActorResult,
+import {
+  isDeliveryReadRequest,
+  type DeliveryActorRequest,
+  type DeliveryActorResult,
+  type DeliveryMutationReply,
 } from "./delivery-protocol";
 import type { AskActorRequest, AskActorResult } from "./ask-protocol";
 import {
@@ -296,7 +298,9 @@ export class SessionKernelActorClient {
   decideDelivery<T extends DeliveryActorRequest>(
     request: T,
   ): DeliveryActorResult<T> {
-    return this.callSync<DeliveryActorResult<T>>(
+    const response = this.callSync<
+      DeliveryActorResult<T> | DeliveryMutationReply<DeliveryActorResult<T>>
+    >(
       {
         t: "reduce",
         command: {
@@ -306,8 +310,12 @@ export class SessionKernelActorClient {
         },
       },
       `delivery ${request.op}`,
-      request.op === "snapshot" || request.op === "entries",
+      isDeliveryReadRequest(request),
     );
+    return (isDeliveryReadRequest(request)
+      ? response
+      : (response as DeliveryMutationReply<DeliveryActorResult<T>>).result
+    ) as DeliveryActorResult<T>;
   }
 
   decideRunEvent(decision: RunEventDecision): RunEventDecisionResult {

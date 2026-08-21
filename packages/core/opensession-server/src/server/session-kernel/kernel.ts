@@ -70,11 +70,19 @@ type CommandContext = {
 };
 const commandContext = new AsyncLocalStorage<CommandContext>();
 
+function compatibilityStoreForTest(domain: "ask" | "delivery") {
+	if (process.env.NODE_ENV !== "test")
+		throw new Error(
+			`Session ${domain} mutation requires the authoritative actor`,
+		);
+	return sessionKernelStore();
+}
+
 export function sessionAsk<T extends AskActorRequest>(
   request: T,
 ): AskActorResult<T> {
   if (state.actor) return state.actor.decideAsk(request);
-  const store = sessionKernelStore();
+  const store = compatibilityStoreForTest("ask");
   let result: unknown;
   if (request.op === "snapshot") result = store.askSnapshot(request.sessionId);
   else if (request.op === "entries") result = store.askEntries();
@@ -95,12 +103,12 @@ export function sessionDelivery<T extends DeliveryActorRequest>(
     if (cached) return cached as DeliveryActorResult<T>;
   }
   const actor = state.actor;
-  const store = sessionKernelStore();
   let result: unknown;
   if (actor) result = actor.decideDelivery(request);
-  else
-  if (request.op === "snapshot")
-    result = store.deliverySnapshot(request.sessionId);
+  else {
+    const store = compatibilityStoreForTest("delivery");
+    if (request.op === "snapshot")
+      result = store.deliverySnapshot(request.sessionId);
   else if (request.op === "entries")
     result = store.deliveryEntries(request.slot);
   else if (request.op === "set")
@@ -134,18 +142,16 @@ export function sessionDelivery<T extends DeliveryActorRequest>(
       request.sessionId,
       request.promptEntryId,
     );
-  else
-    result = store.failDeliveryDispatch(
-      request.sessionId,
-      request.promptEntryId,
-    );
+    else
+      result = store.failDeliveryDispatch(
+        request.sessionId,
+        request.promptEntryId,
+      );
+  }
   if (request.op === "snapshot") {
     projection.set(request.sessionId, result as DurableDeliveryState);
   } else if ("sessionId" in request) {
-    const snapshot = actor
-      ? actor.decideDelivery({ op: "snapshot", sessionId: request.sessionId })
-      : store.deliverySnapshot(request.sessionId);
-    projection.set(request.sessionId, snapshot);
+    projection.delete(request.sessionId);
   } else if (request.op === "clear_slot" || request.op === "settle_pending_steers") {
     projection.clear();
   }
