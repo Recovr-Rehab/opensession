@@ -219,7 +219,7 @@ export function RestartOverlay({ connected, addHandler }: Props) {
   if (phase === "reconnecting" || phase === "restarting") {
     const restarting = phase === "restarting" || explicit.current;
     return (
-      <div className={`${TRANSIENT_NOTICE_LANE} flex justify-center`}>
+      <div className={`${TRANSIENT_NOTICE_LANE} flex justify-end phone:justify-center`}>
         <FloatingStatus
           // Live restart status and its completion toast share one top-center
           // lane and one glass surface, so the sequence changes state in place.

@@ -5,10 +5,12 @@ import {
 } from "./notification-classes";
 
 describe("notification lanes", () => {
-	test("hangs transient feedback below the header at both widths", () => {
+	test("keeps transient feedback clear of the reading column", () => {
+		expect(TRANSIENT_NOTICE_LANE).toContain("right-4");
 		expect(TRANSIENT_NOTICE_LANE).toContain(
 			"top-[calc(var(--desktop-header-h)+8px)]",
 		);
+		expect(TRANSIENT_NOTICE_LANE).toContain("phone:inset-x-0");
 		expect(TRANSIENT_NOTICE_LANE).toContain(
 			"phone:top-[calc(var(--header-h)+8px)]",
 		);

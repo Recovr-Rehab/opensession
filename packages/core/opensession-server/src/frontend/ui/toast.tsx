@@ -1,5 +1,5 @@
 import { Toast as BaseToast } from "@base-ui/react/toast";
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
 import { TRANSIENT_NOTICE_LANE } from "../lib/notification-classes";
 import { AnimatedCheck } from "./copy";
 import { Tooltip } from "./tooltip";
@@ -39,6 +39,7 @@ type ToastData = {
 	id: number;
 	message: string;
 	variant: ToastVariant;
+	duration: number;
 	action?: ToastAction;
 };
 
@@ -83,6 +84,10 @@ function runToastAction(id: number) {
 
 /** Fire an app-wide toast. Returns its id so callers can close it early. */
 export function toast(message: string, options: ToastOptions = {}): number {
+	// Link controls already confirm the copy inline or through the platform share
+	// surface. A second floating receipt repeats the same result in a louder place.
+	if (/\blink copied\b/i.test(message)) return 0;
+
 	const id = nextId++;
 	const variant = options.variant ?? inferVariant(message);
 	const item: Toast = { id, message, variant, action: options.action };
@@ -111,7 +116,7 @@ export function toast(message: string, options: ToastOptions = {}): number {
 		description: message,
 		type: variant,
 		timeout: duration,
-		data: { ...item },
+		data: { ...item, duration },
 		onClose: () => removeToastState(id),
 	});
 	return id;
@@ -162,7 +167,7 @@ function ToastViewport() {
 	return (
 		<BaseToast.Portal>
 			<BaseToast.Viewport
-				className={`${TRANSIENT_NOTICE_LANE} mx-auto h-[var(--toast-frontmost-height)] w-full max-w-full px-4 outline-none phone:px-3`}
+				className={`${TRANSIENT_NOTICE_LANE} toast-viewport h-[var(--toast-frontmost-height)] w-[min(480px,calc(100vw-32px))] outline-none phone:w-full phone:px-3`}
 			>
 				{items.map((item) => (
 					<ToastCard key={item.id} toast={item} />
@@ -179,22 +184,22 @@ function ToastCard({ toast: item }: { toast: BaseToast.Root.ToastObject<ToastDat
 	return (
 		<BaseToast.Root
 			toast={item}
-			// Every transient notice hangs from the top lane. Up and right are the
-			// two dismissal directions that move it away from that anchor.
+			// Desktop receipts stay outside the reading column at top-right. Phones
+			// keep the same lane centred below their full-width header.
 			swipeDirection={["up", "right"]}
 			onClick={() => dismissToast(data.id)}
 			className={[
-				"pointer-events-auto absolute top-0 left-1/2 w-max max-w-[min(480px,calc(100vw-32px))] outline-none phone:max-w-[calc(100vw-24px)]",
-				"[z-index:calc(100-var(--toast-index))] [transform-origin:center_top]",
-				"[transform:translateX(calc(-50%+var(--toast-swipe-movement-x)))_translateY(calc(var(--toast-swipe-movement-y)+var(--toast-index)*8px))_scale(calc(1-(var(--toast-index)*0.04)))]",
-				"data-[expanded]:[transform:translateX(calc(-50%+var(--toast-swipe-movement-x)))_translateY(calc(var(--toast-swipe-movement-y)+var(--toast-offset-y)+var(--toast-index)*8px))_scale(1)]",
+				"pointer-events-auto absolute top-0 right-0 w-max max-w-full outline-none phone:right-auto phone:left-1/2 phone:max-w-[calc(100vw-24px)]",
+				"[z-index:calc(100-var(--toast-index))] [transform-origin:right_top] phone:[transform-origin:center_top]",
+				"[transform:translateX(var(--toast-swipe-movement-x))_translateY(calc(var(--toast-swipe-movement-y)+var(--toast-index)*8px))_scale(calc(1-(var(--toast-index)*0.04)))] phone:[transform:translateX(calc(-50%+var(--toast-swipe-movement-x)))_translateY(calc(var(--toast-swipe-movement-y)+var(--toast-index)*8px))_scale(calc(1-(var(--toast-index)*0.04)))]",
+				"data-[expanded]:[transform:translateX(var(--toast-swipe-movement-x))_translateY(calc(var(--toast-swipe-movement-y)+var(--toast-offset-y)+var(--toast-index)*8px))_scale(1)] phone:data-[expanded]:[transform:translateX(calc(-50%+var(--toast-swipe-movement-x)))_translateY(calc(var(--toast-swipe-movement-y)+var(--toast-offset-y)+var(--toast-index)*8px))_scale(1)]",
 				"transition-[transform,scale,opacity] duration-200 ease-[cubic-bezier(0.23,1,0.32,1)]",
 				"data-[starting-style]:opacity-0 data-[starting-style]:[scale:0.96] data-[ending-style]:opacity-0 data-[ending-style]:[scale:0.96] data-[limited]:opacity-0",
 			].join(" ")}
 		>
 			<BaseToast.Content
 				className={[
-					"flex max-w-full items-center gap-2 whitespace-normal rounded-[999px] bg-popup-glass",
+					"relative flex max-w-full items-center gap-2 overflow-hidden whitespace-normal rounded-[999px] bg-popup-glass",
 					"px-3 py-1.5 text-supporting font-medium leading-tight text-fg",
 					"[backdrop-filter:var(--popup-blur)] [--smooth-ring-color:var(--popup-ring)] smooth-shadow-ring-sm",
 					data.action ? "pr-1.5" : "",
@@ -234,7 +239,67 @@ function ToastCard({ toast: item }: { toast: BaseToast.Root.ToastObject<ToastDat
 						</BaseToast.Action>
 					</Tooltip>
 				)}
+				<ToastProgress duration={data.duration} variant={data.variant} />
 			</BaseToast.Content>
 		</BaseToast.Root>
+	);
+}
+
+/**
+ * A visual timer that follows Base UI's pause rules. The store pauses expiry
+ * while the stack is hovered, focused, or the tab is hidden; this line reads
+ * the same viewport state and advances only while the timer can advance.
+ */
+function ToastProgress({
+	duration,
+	variant,
+}: {
+	duration: number;
+	variant: ToastVariant;
+}) {
+	const lineRef = useRef<HTMLSpanElement>(null);
+
+	useEffect(() => {
+		const line = lineRef.current;
+		if (!line || duration <= 0) return;
+		let elapsed = 0;
+		let previous = performance.now();
+		let frame = 0;
+
+		const resetClock = () => {
+			previous = performance.now();
+		};
+		const draw = (now: number) => {
+			const viewport = line.closest(".toast-viewport");
+			const paused =
+				document.visibilityState !== "visible" ||
+				viewport?.hasAttribute("data-expanded");
+			if (!paused) elapsed += now - previous;
+			previous = now;
+			line.style.transform = `scaleX(${Math.max(0, 1 - elapsed / duration)})`;
+			if (elapsed < duration) frame = requestAnimationFrame(draw);
+		};
+
+		document.addEventListener("visibilitychange", resetClock);
+		frame = requestAnimationFrame(draw);
+		return () => {
+			document.removeEventListener("visibilitychange", resetClock);
+			cancelAnimationFrame(frame);
+		};
+	}, [duration]);
+
+	return (
+		<span
+			ref={lineRef}
+			aria-hidden
+			className={[
+				"pointer-events-none absolute inset-x-0 bottom-0 h-px origin-left",
+				variant === "success"
+					? "bg-green"
+					: variant === "error"
+						? "bg-red"
+						: "bg-accent",
+			].join(" ")}
+		/>
 	);
 }

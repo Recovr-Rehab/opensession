@@ -6,8 +6,8 @@
  * the app header so they remain visible without covering bottom controls.
  */
 export const TRANSIENT_NOTICE_LANE =
-	"pointer-events-none fixed inset-x-0 top-[calc(var(--desktop-header-h)+8px)] z-[200] " +
-	"phone:top-[calc(var(--header-h)+8px)]";
+	"pointer-events-none fixed right-4 top-[calc(var(--desktop-header-h)+8px)] z-[200] " +
+	"phone:inset-x-0 phone:right-auto phone:top-[calc(var(--header-h)+8px)]";
 
 export const PERSISTENT_NOTICE_SHELF =
 	"pointer-events-none fixed bottom-2 left-2 z-[9500] flex w-fit " +
