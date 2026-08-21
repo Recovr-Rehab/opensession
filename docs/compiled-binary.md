@@ -12,7 +12,8 @@ compiled in and run in-process. The `--source` install (a git checkout +
 
 ```bash
 # Release artefact (the default install downloads this): the target binary +
-# a sharp sidecar + the service templates + release.json, tarred.
+# a sharp sidecar + the session-kernel worker sidecar + the service templates
+# + release.json, tarred.
 bun scripts/build-compile.ts --os linux --arch arm64 --out ~/.cache/opensession-release
 
 # Just the host binary, for local testing (no sidecar).
@@ -70,6 +71,16 @@ returns `501` (the Open Graph meta tags still emit). To enable social cards,
 place a minimal `node_modules` with `sharp` + the platform `@img/sharp-*`
 beside the binary — e.g. copy `node_modules/sharp` and
 `node_modules/@img/sharp-<platform>` (+ its `sharp-libvips-<platform>`).
+
+**External: the session-kernel worker.** The kernel actor runs in a real Worker
+thread. The gateway blocks on `Atomics.wait` against a `SharedArrayBuffer` the
+worker fills, so it cannot run in-process or as a subprocess, and `bun build
+--compile` does not embed Worker entry points. The worker therefore ships as a
+`session-kernel-worker.js` sidecar beside the binary;
+`src/server/session-kernel/actor-runtime.ts` loads it from `process.execPath`'s
+directory in compiled mode, and from the TypeScript entry in a source checkout.
+Unlike sharp it is not lazy: the kernel is authoritative and starts before the
+gateway hydrates session state, so a missing sidecar fails boot, not one feature.
 
 **External: the `claude` CLI.** The Anthropic bridge is the Claude Agent SDK
 running in-process (`src/server/anthropic-bridge.ts`), and the SDK shells out

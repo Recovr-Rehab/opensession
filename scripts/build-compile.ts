@@ -213,6 +213,26 @@ async function buildSharpSidecar(stage: string, sharpVersion: string): Promise<v
 }
 
 
+/**
+ * Ship the session-kernel Worker as an on-disk `.js` sidecar. `bun build
+ * --compile` does not embed Worker entry points, so a compiled binary loads
+ * this file from beside the executable (actor-runtime.ts resolves it via
+ * process.execPath). Plain bundled JS the embedded Bun runs, so it is platform-
+ * neutral and needs no cross-target flag.
+ */
+async function buildWorkerSidecar(destDir: string): Promise<void> {
+	const entry = join(REPO_ROOT, "packages", "core", "opensession-server", "src", "session-kernel-worker.ts");
+	const out = join(destDir, "session-kernel-worker.js");
+	mkdirSync(destDir, { recursive: true });
+	const proc = Bun.spawn(["bun", "build", "--target=bun", entry, "--outfile", out], {
+		cwd: REPO_ROOT,
+		stdout: "inherit",
+		stderr: "inherit",
+	});
+	if ((await proc.exited) !== 0) throw new Error("session-kernel worker sidecar build failed");
+	console.log(`[compile] session-kernel worker sidecar: ${(statSync(out).size / 1e3).toFixed(0)} KB`);
+}
+
 async function main(): Promise<void> {
 	const { version: fver, distDir, metaPath, shellPath } = await buildFrontendDist();
 
@@ -221,6 +241,7 @@ async function main(): Promise<void> {
 	if (bareOut && !has("out") && !has("os") && !has("arch")) {
 		const outfile = resolve(bareOut);
 		await compileBinary(outfile, fver, distDir, metaPath, shellPath);
+		await buildWorkerSidecar(dirname(outfile));
 		const mb = (statSync(outfile).size / 1e6).toFixed(1);
 		console.log(`\n[compile] built ${outfile} (${mb} MB, v=${fver})`);
 		return;
@@ -257,6 +278,8 @@ async function main(): Promise<void> {
 		cpSync(source, destination);
 		chmodSync(destination, statSync(source).mode & 0o777);
 	}
+	console.log("\n== session-kernel worker sidecar");
+	await buildWorkerSidecar(stage);
 	console.log("\n== sharp sidecar");
 	await buildSharpSidecar(stage, sharpVersion);
 
