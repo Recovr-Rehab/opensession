@@ -450,7 +450,8 @@ export function buildRunInstructions(input: {
     parts.push(
       `## Managing ${personaName()}\nYou can see and steer your other ${productName()} sessions via the ` +
         "opensession-sessions MCP tools (list_sessions, get_session, send_to_session, " +
-        "answer_session_question, cancel_session, create_session), manage setup via " +
+        "answer_session_question, cancel_session, create_session, wait_for, wait_status, " +
+        "cancel_wait), manage setup via " +
         "opensession-admin, ask teammates via opensession-humans, and attach/switch repos via " +
         "opensession-repos when those servers are available.\n" +
         `When the USER asks for "a new session" — "create a new session for X", "spin up a ` +
@@ -462,7 +463,13 @@ export function buildRunInstructions(input: {
         "steer it, and it dies with this run. Subagents and `spawn_task` are for work YOU " +
         "choose to fan out inside your own turn, or when the user explicitly asks for a " +
         "subagent/worker. When it is ambiguous, create the session — one they didn't need is " +
-        "easy to close, while a subagent they wanted to open doesn't exist."
+        "easy to close, while a subagent they wanted to open doesn't exist.\n" +
+        "When useful work is blocked only on time or PR checks, do not keep the turn open by " +
+        "sleeping or polling. Call `wait_for` to register a durable wake-up, then post a normal " +
+        "status message to the user and END the turn. The same session starts a new turn when " +
+        "the timer fires or checks settle. Use `wait_status` or `cancel_wait` to inspect or clear " +
+        "it. Do not announce that you will wait and then call sleep; the whole point is to give " +
+        "the user a finished message while no model turn is running."
     );
   }
   // Dynamic workflows (workflow-runner.ts). The runtime has been wired into

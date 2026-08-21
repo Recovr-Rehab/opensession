@@ -11,6 +11,7 @@ import type { WSClientData } from "./ws-hub";
 import { cancelAgentRun, interruptAndSteerAgentRun, isAgentSessionBusy, retractAgentSteer, steerAgentRun } from "./agent-runner";
 
 import { audit } from "./audit";
+import { cancelAgentWait } from "./agent-waits";
 import { pendingAskAwaitingAnswer } from "./asks";
 import { resendPendingSlackComposer } from "./slack-compose";
 import { notifyMentions } from "./mentions";
@@ -1409,6 +1410,7 @@ export const websocketHandlers: WebSocketHandler<WSClientData> = {
 					// otherwise the drain would deliver the requeued steers into a
 					// fresh run the moment the stopped one winds down.
 					stoppedSessions.add(sessionId);
+					cancelAgentWait(sessionId);
 					if (session) {
 						// Abort the turn. This reaches the engine on every path
 						// (pi's session.abort, pi's liveSession.abort, a run

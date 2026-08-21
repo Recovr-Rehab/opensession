@@ -5,6 +5,7 @@ import {
   wrapContext,
   stripContext,
   isContextOnly,
+  parseContextBlocks,
 } from "./prompt-context";
 import { AUTO_CONTINUE_PROMPT, AUTO_CONTINUE_USER } from "./auto-continue";
 
@@ -14,6 +15,14 @@ describe("prompt-context", () => {
     expect(w).toContain(CTX_OPEN);
     expect(w).toContain(CTX_CLOSE);
     expect(w).toContain("system stuff");
+  });
+
+  it("records background waits as typed, hidden system context", () => {
+    const wait = wrapContext("Continue after CI settles.", "background-wait");
+    expect(isContextOnly(wait)).toBe(true);
+    expect(parseContextBlocks(wait)).toEqual([
+      { source: "background-wait", body: "Continue after CI settles." },
+    ]);
   });
 
   it("strips a fenced block, leaving only the human message", () => {

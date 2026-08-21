@@ -14,6 +14,7 @@ import {
 } from "../agent-runner";
 import { archiveOlderThan, setArchived, unpinArchivedSessions, } from "../archive";
 import { audit } from "../audit";
+import { cancelAgentWait } from "../agent-waits";
 import { pendingAskAwaitingAnswer } from "../asks";
 import { transcriptMatchSnippet } from "../jsonl-parser";
 import {
@@ -1302,6 +1303,7 @@ export async function handleSessionsRoutes(
 		// with no interrupt support) keeps the transcript clean and resumable
 		// on unarchive.
 		let stoppedRun = false;
+		if (archived) cancelAgentWait(session.id);
 		if (
 			archived &&
 			isAgentSessionBusy(
