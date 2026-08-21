@@ -6761,8 +6761,8 @@ export function SessionViewer({
 						>
 							{optimisticEmpty ? (
 								<div className="min-h-full flex items-center justify-center px-4 text-center text-dim">
-									{"New session in "}
-									<span className="font-medium text-fg">
+									{"New session in"}
+									<span className="ml-1 font-medium text-fg">
 										{workspaceName || session.branch || "this workspace"}
 									</span>
 									.
