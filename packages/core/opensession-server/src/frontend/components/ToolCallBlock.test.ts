@@ -4,6 +4,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 import {
   assetToolPath,
   canonicalToolName,
+  mcpLabelParts,
   mcpServerDisplayName,
   mcpToolDisplayName,
   parseMcpTool,
@@ -14,6 +15,7 @@ import {
   toolFamily,
   toolLineStats,
   toolSummary,
+  unwrapMcpDispatcher,
   visibleResultContent,
 } from "./ToolCallBlock";
 
@@ -179,13 +181,50 @@ test("MCP tools parse in both the mcp__ and flattened forms", () => {
   expect(parseMcpTool("read")).toBeNull();
 });
 
-test("MCP labels read as actions rather than machine identifiers", () => {
-	expect(mcpServerDisplayName("opensession-portals")).toBe("Open Session Portals");
-	expect(mcpToolDisplayName("start_portal")).toBe("Start portal");
-	expect(toolDisplayName("opensession-portals_start_portal")).toBe(
-		"Open Session Portals · Start portal"
-	);
-	expect(toolSummary("opensession-portals_start_portal", {}, "Using opensession-portals_start_portal")).toBe("");
+test("Open Session MCP labels read as a hierarchy", () => {
+  expect(mcpServerDisplayName("opensession-portals")).toBe("Open Session Portals");
+  expect(mcpToolDisplayName("start_portal")).toBe("Start portal");
+  expect(mcpLabelParts("opensession-workflows", "workflow_status")).toEqual([
+    "Open Session",
+    "Workflows",
+    "Status",
+  ]);
+  expect(mcpLabelParts("opensession-sessions", "get_session")).toEqual([
+    "Open Session",
+    "Sessions",
+    "Get",
+  ]);
+  expect(mcpLabelParts("opensession-connected-services", "list_connected_services")).toEqual([
+    "Open Session",
+    "Connected Services",
+    "List",
+  ]);
+  expect(mcpLabelParts("screen-studio", "start_recording")).toEqual([
+    "Screen Studio",
+    "Start recording",
+  ]);
+  expect(toolDisplayName("opensession-portals_start_portal")).toBe(
+    "Open Session · Portals · Start"
+  );
+  expect(
+    toolSummary(
+      "opensession-portals_start_portal",
+      {},
+      "Using opensession-portals_start_portal"
+    )
+  ).toBe("");
+});
+
+test("pi's MCP dispatcher renders the call inside its envelope", () => {
+  const dispatched = {
+    name: "opensession-workflows_workflow_status",
+    arguments: { runId: "run-1" },
+  };
+  expect(unwrapMcpDispatcher("mcp_call", dispatched)).toEqual({
+    toolName: "opensession-workflows_workflow_status",
+    input: { runId: "run-1" },
+  });
+  expect(toolSummary("mcp_call", dispatched, "Using mcp_call")).toBe("runId: run-1");
 });
 
 test("an assets call reads as the file it names, not its contents", () => {

@@ -119,6 +119,56 @@ export function mcpServerDisplayName(name: string): string {
     .join(" ");
 }
 
+/**
+ * Open Session's MCP servers form a real hierarchy: `opensession-workflows`
+ * is Workflows inside Open Session. Other hyphenated server ids are product
+ * names, not evidence of nesting, so `screen-studio` stays one part.
+ */
+function mcpServerParts(name: string): string[] {
+  const prefix = "opensession-";
+  return name.toLowerCase().startsWith(prefix) && name.length > prefix.length
+    ? ["Open Session", mcpServerDisplayName(name.slice(prefix.length))]
+    : [mcpServerDisplayName(name)];
+}
+
+function normalizedIdentifierWords(value: string): string[] {
+  return identifierWords(value).map((word) =>
+    word.toLowerCase().replace(/s$/, ""),
+  );
+}
+
+/**
+ * Drop a repeated scope from either side of a tool name. Open Session's tool
+ * ids use both noun-first (`workflow_status`) and verb-first (`get_session`)
+ * forms; in the hierarchy both become the useful leaf (`Status`, `Get`).
+ */
+function withoutRepeatedScope(words: string[], scope: string): string[] {
+  const normalized = words.map((word) => word.toLowerCase().replace(/s$/, ""));
+  const scopeWords = normalizedIdentifierWords(scope);
+  if (words.length <= scopeWords.length || !scopeWords.length) return words;
+  const sameAt = (offset: number) =>
+    scopeWords.every((word, index) => normalized[offset + index] === word);
+  if (sameAt(0)) return words.slice(scopeWords.length);
+  const tail = words.length - scopeWords.length;
+  return sameAt(tail) ? words.slice(0, tail) : words;
+}
+
+/**
+ * What a row calls an MCP tool, most general part first:
+ * `opensession-workflows` + `workflow_status` → ["Open Session", "Workflows",
+ * "Status"]. Parts rather than a string let clients quiet repeated context
+ * and keep the action at full strength.
+ */
+export function mcpLabelParts(server: string, tool: string): string[] {
+  const parts = mcpServerParts(server);
+  const scope = parts[parts.length - 1] ?? "";
+  const rawWords = identifierWords(tool);
+  const words = parts.length > 1
+    ? withoutRepeatedScope(rawWords, scope)
+    : rawWords;
+  return [...parts, mcpToolDisplayName(words.join("_") || tool)];
+}
+
 /** "start_preview" → "Start preview". */
 export function mcpToolDisplayName(name: string): string {
   const words = identifierWords(name).map(
@@ -134,9 +184,43 @@ export function mcpToolDisplayName(name: string): string {
 export function toolDisplayName(name?: string): string {
   if (!name) return "Tool";
   const mcp = parseMcpTool(name);
-  return mcp
-    ? `${mcpServerDisplayName(mcp.server)} · ${mcpToolDisplayName(mcp.tool)}`
-    : name;
+  return mcp ? mcpLabelParts(mcp.server, mcp.tool).join(" · ") : name;
+}
+
+/**
+ * The call a `tool_use` is really about, unwrapped from pi's dispatcher.
+ *
+ * Pi does not hand the model one tool per bridged MCP tool: the catalog stays
+ * server-side and is reached through `mcp_call` (createPiMcpBridge), so a
+ * workflow status arrives as `{name:"opensession-workflows_workflow_status",
+ * arguments:{…}}` and the tool that was called is a level down. A row that
+ * reads the envelope labels every MCP call in the transcript "MCP · Call" and
+ * spends its one summary line on `name:` and `arguments:`, which is the same
+ * row for a Slack post, a session lookup and a papercut.
+ *
+ * Unwrapping here means every derivation below (name, family, detail, asset
+ * path) sees the real call, on every client and retroactively on transcripts
+ * already stored. The server ledger unwraps the same shape for its own reasons
+ * (observedToolCall, turn-outcome.ts).
+ */
+export function unwrapMcpDispatcher(
+  toolName: string,
+  input: unknown,
+): { toolName: string; input: unknown } {
+  if (toolName.toLowerCase() !== "mcp_call") return { toolName, input };
+  const outer =
+    input && typeof input === "object" && !Array.isArray(input)
+      ? (input as Record<string, unknown>)
+      : {};
+  const inner = outer.name;
+  // A dispatcher call naming no tool is a malformed engine-side call; leave it
+  // as the envelope it is rather than invent a tool it never reached.
+  if (typeof inner !== "string" || !inner) return { toolName, input };
+  const args = outer.arguments;
+  return {
+    toolName: inner,
+    input: args && typeof args === "object" && !Array.isArray(args) ? args : {},
+  };
 }
 
 /**
@@ -252,7 +336,11 @@ export const toolCommand = (inp: Record<string, unknown>) =>
  * means, and the row that names an artifact is the only place a reader can be
  * offered a way into it.
  */
-export function assetToolPath(toolName: string, input: unknown): string {
+export function assetToolPath(rawName: string, rawInput: unknown): string {
+  // Unwrapped here as well as in `toolPresentation`, because the callers are a
+  // tool row and a turn footer that both read the entry's own toolName: an
+  // asset written through pi's dispatcher would otherwise offer no way in.
+  const { toolName, input } = unwrapMcpDispatcher(rawName, rawInput);
   if (!input || typeof input !== "object") return "";
   const mcp = parseMcpTool(toolName);
   if (mcp?.server !== "opensession-assets") return "";
@@ -484,16 +572,19 @@ export function toolLineStats(
 
 /** Everything a client needs to draw a tool row, from the call alone. */
 export function toolPresentation(entry: TranscriptEntry): ToolPresentation {
-  const raw = entry.toolName || "";
+  const { toolName: raw, input } = unwrapMcpDispatcher(
+    entry.toolName || "",
+    entry.toolInput,
+  );
   const mcp = raw ? parseMcpTool(raw) : null;
   const canonical = canonicalToolName(raw);
-  const stats = toolLineStats(raw, entry.toolInput);
+  const stats = toolLineStats(raw, input);
   return {
     canonical,
     ...(mcp ? { mcpServer: mcp.server } : {}),
     name: mcp ? mcp.tool : canonical,
     family: toolFamily(raw),
-    detail: toolDetail(raw, entry.toolInput),
+    detail: toolDetail(raw, input),
     ...(stats ? { lineStats: stats } : {}),
   };
 }

@@ -823,7 +823,8 @@ final class ToolPresentationTests: XCTestCase {
 
         XCTAssertEqual(presentation.serverLabel, "Open Session Portals")
         XCTAssertEqual(presentation.label, "Start portal")
-        XCTAssertEqual(presentation.displayName, "Open Session Portals · Start portal")
+        XCTAssertEqual(presentation.labelParts, ["Open Session", "Portals", "Start"])
+        XCTAssertEqual(presentation.displayName, "Open Session · Portals · Start")
         XCTAssertEqual(presentation.summary, "Start the preview")
         XCTAssertEqual(presentation.lineStats, ToolLineStats(additions: 4, deletions: 1))
     }
@@ -992,6 +993,51 @@ final class ToolPresentationTests: XCTestCase {
         XCTAssertEqual(presentation.name, "list_issues")
         XCTAssertEqual(presentation.family, .mcp)
         XCTAssertEqual(presentation.displayName, "Linear · List issues")
+    }
+
+    func testOpenSessionMcpLabelsReadAsAHierarchy() {
+        XCTAssertEqual(
+            ToolPresentation.mcpLabelParts(
+                server: "opensession-workflows",
+                tool: "workflow_status"
+            ),
+            ["Open Session", "Workflows", "Status"]
+        )
+        XCTAssertEqual(
+            ToolPresentation.mcpLabelParts(
+                server: "opensession-sessions",
+                tool: "get_session"
+            ),
+            ["Open Session", "Sessions", "Get"]
+        )
+        XCTAssertEqual(
+            ToolPresentation.mcpLabelParts(
+                server: "opensession-connected-services",
+                tool: "list_connected_services"
+            ),
+            ["Open Session", "Connected Services", "List"]
+        )
+        XCTAssertEqual(
+            ToolPresentation.mcpLabelParts(
+                server: "screen-studio",
+                tool: "start_recording"
+            ),
+            ["Screen Studio", "Start recording"]
+        )
+    }
+
+    func testPiMcpDispatcherUsesTheCallInsideItsEnvelope() {
+        let presentation = ToolPresentation.make(
+            toolName: "mcp_call",
+            input: .object([
+                "name": .string("opensession-workflows_workflow_status"),
+                "arguments": .object(["runId": .string("run-1")]),
+            ])
+        )
+        XCTAssertEqual(presentation.mcpServer, "opensession-workflows")
+        XCTAssertEqual(presentation.name, "workflow_status")
+        XCTAssertEqual(presentation.displayName, "Open Session · Workflows · Status")
+        XCTAssertEqual(presentation.summary, "runId: run-1")
     }
 
     /// The generic MCP summary lists inputs alphabetically, which for an

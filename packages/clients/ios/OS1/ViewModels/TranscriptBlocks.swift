@@ -215,9 +215,13 @@ struct ToolCallItem: Identifiable, Equatable {
     /// that opens it. Session assets live outside every worktree, so the path
     /// means nothing to anything but the assets tab.
     var assetPath: String? {
+        let input = ToolPresentation.resolveCall(
+            toolName: use?.toolName ?? "",
+            input: use?.toolInput
+        ).input
         guard presentation.mcpServer == "opensession-assets",
               presentation.name == "write_asset",
-              let path = use?.toolInput?["path"]?.stringValue,
+              let path = input?["path"]?.stringValue,
               !path.isEmpty
         else { return nil }
         return path

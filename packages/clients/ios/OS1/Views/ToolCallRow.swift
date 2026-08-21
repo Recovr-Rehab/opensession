@@ -19,6 +19,7 @@ struct ToolCallRow: View {
     /// Installed by the iOS session screen; absent everywhere else, which is
     /// what lets the cover offer "Show in Assets" when a stack is available.
     @Environment(\.openPanel) private var openPanel
+    @Environment(\.horizontalSizeClass) private var horizontalSizeClass
 
     private var presentation: ToolPresentation { item.presentation }
 
@@ -133,7 +134,6 @@ struct ToolCallRow: View {
             // paragraph in the turn off both edges and took the margin with
             // it.
             nameText
-                .font(.subheadline.weight(.medium))
                 .lineLimit(1)
                 // The tool is the half worth keeping; the server prefix
                 // repeats down the fold.
@@ -194,13 +194,30 @@ struct ToolCallRow: View {
         .accessibilityLabel("\(presentation.displayName). \(presentation.summary)")
     }
 
-    private var nameText: Text {
-        guard let server = presentation.serverLabel else {
-            return Text(presentation.label).foregroundStyle(OS1VisualStyle.textDim)
+    private var nameText: some View {
+        let fullParts = presentation.labelParts
+        let parts = horizontalSizeClass == .compact
+            && fullParts.first == "Open Session"
+            && fullParts.count > 2
+            ? Array(fullParts.dropFirst())
+            : fullParts
+        return HStack(spacing: 4) {
+            ForEach(Array(parts.enumerated()), id: \.offset) { index, part in
+                if index > 0 {
+                    Text("·")
+                        .font(.subheadline)
+                        .foregroundStyle(OS1VisualStyle.textFaint)
+                        .fixedSize()
+                }
+                let isContext = index < parts.count - 1
+                Text(part)
+                    .font(.subheadline.weight(isContext ? .regular : .medium))
+                    .foregroundStyle(
+                        isContext ? OS1VisualStyle.textFaint : OS1VisualStyle.textDim
+                    )
+                    .fixedSize(horizontal: isContext, vertical: false)
+            }
         }
-        return Text(server).foregroundStyle(OS1VisualStyle.textDim)
-            + Text(verbatim: " · ").foregroundStyle(OS1VisualStyle.textFaint)
-            + Text(presentation.label).foregroundStyle(OS1VisualStyle.textDim)
     }
 
     private var summaryText: some View {
@@ -488,7 +505,10 @@ struct ToolDetail: Equatable {
     ) -> ToolDetail {
         var detail = ToolDetail()
         let canonical = item.presentation.canonical
-        let input = item.use?.toolInput
+        let input = ToolPresentation.resolveCall(
+            toolName: item.use?.toolName ?? "",
+            input: item.use?.toolInput
+        ).input
 
         switch canonical {
         case "Bash":

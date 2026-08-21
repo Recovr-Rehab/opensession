@@ -34,12 +34,15 @@ struct ToolPresentation: Equatable, Sendable {
         mcpServer == nil ? name : Self.mcpToolDisplayName(name)
     }
 
-    /// Full label used in rows and collapsed previews: MCP calls read
-    /// "Linear · List issues", everything else is just the canonical name.
-    var displayName: String {
-        guard let serverLabel else { return label }
-        return "\(serverLabel) · \(label)"
-    }
+    /// Derived once in the display pass, not while SwiftUI redraws a row.
+    var hierarchy: [String] = []
+
+    /// The hierarchy a row renders, with the repeated Open Session scope split
+    /// from its server and removed from the action where possible.
+    var labelParts: [String] { hierarchy.isEmpty ? [label] : hierarchy }
+
+    /// Full label used in rows, collapsed previews and accessibility.
+    var displayName: String { labelParts.joined(separator: " · ") }
 }
 
 /// The icon buckets. One glyph per family is what makes a collapsed turn
@@ -162,7 +165,10 @@ extension ToolPresentation {
         server: TranscriptToolPresentation? = nil,
         worktreeDir: String? = nil
     ) -> ToolPresentation {
-        let raw = (toolName ?? "tool").trimmingCharacters(in: .whitespaces)
+        let outerRaw = (toolName ?? "tool").trimmingCharacters(in: .whitespaces)
+        let resolved = resolveCall(toolName: outerRaw, input: input)
+        let raw = resolved.toolName
+        let callInput = resolved.input
         let fallbackMcp = parseMcpTool(raw)
         let fallbackCanonical = fallbackMcp == nil ? canonicalName(raw) : raw
         let canonical = nonempty(server?.canonical) ?? fallbackCanonical
@@ -175,7 +181,7 @@ extension ToolPresentation {
         let localSummary = summarize(
             canonical: canonical,
             isMcp: mcpServer != nil,
-            input: input,
+            input: callInput,
             worktreeDir: worktreeDir
         )
         let (summary, isPath) = serverSummary(
@@ -185,7 +191,7 @@ extension ToolPresentation {
         ) ?? localSummary
         let files = touchedFiles(
             canonical: canonical,
-            input: input,
+            input: callInput,
             worktreeDir: worktreeDir
         )
         let stats = files.reduce(into: ToolLineStats()) {
@@ -206,7 +212,8 @@ extension ToolPresentation {
             summary: summary,
             summaryIsPath: isPath,
             lineStats: serverStats ?? (stats.isEmpty ? nil : stats),
-            touchedFiles: files
+            touchedFiles: files,
+            hierarchy: mcpServer.map { mcpLabelParts(server: $0, tool: name) } ?? []
         )
     }
 
@@ -275,6 +282,48 @@ extension ToolPresentation {
         }.joined(separator: " ")
     }
 
+    private static func mcpServerParts(_ name: String) -> [String] {
+        let prefix = "opensession-"
+        guard name.lowercased().hasPrefix(prefix), name.count > prefix.count else {
+            return [mcpServerDisplayName(name)]
+        }
+        return ["Open Session", mcpServerDisplayName(String(name.dropFirst(prefix.count)))]
+    }
+
+    private static func normalizedIdentifierWords(_ value: String) -> [String] {
+        identifierWords(value).map { $0.lowercased().replacingOccurrences(
+            of: "s$",
+            with: "",
+            options: .regularExpression
+        ) }
+    }
+
+    private static func withoutRepeatedScope(_ words: [String], scope: String) -> [String] {
+        let normalized = words.map { $0.lowercased().replacingOccurrences(
+            of: "s$",
+            with: "",
+            options: .regularExpression
+        ) }
+        let scopeWords = normalizedIdentifierWords(scope)
+        guard words.count > scopeWords.count, !scopeWords.isEmpty else { return words }
+        func same(at offset: Int) -> Bool {
+            scopeWords.indices.allSatisfy { normalized[offset + $0] == scopeWords[$0] }
+        }
+        if same(at: 0) { return Array(words.dropFirst(scopeWords.count)) }
+        let tail = words.count - scopeWords.count
+        return same(at: tail) ? Array(words.dropLast(scopeWords.count)) : words
+    }
+
+    static func mcpLabelParts(server: String, tool: String) -> [String] {
+        let parts = mcpServerParts(server)
+        let rawWords = identifierWords(tool)
+        let words = parts.count > 1
+            ? withoutRepeatedScope(rawWords, scope: parts.last ?? "")
+            : rawWords
+        let leaf = words.joined(separator: "_")
+        return parts + [mcpToolDisplayName(leaf.isEmpty ? tool : leaf)]
+    }
+
     static func mcpToolDisplayName(_ name: String) -> String {
         let words = identifierWords(name).map { word in
             identifierNames[word.lowercased()] ?? word.lowercased()
@@ -314,6 +363,22 @@ extension ToolPresentation {
 
     static func canonicalName(_ raw: String) -> String {
         aliases[raw.lowercased()] ?? raw
+    }
+
+    /// Pi stores bridged MCP calls as an `mcp_call` envelope. Resolve the call
+    /// inside it so old servers and expanded native rows show the actual tool.
+    static func resolveCall(
+        toolName: String,
+        input: JSONValue?
+    ) -> (toolName: String, input: JSONValue?) {
+        guard toolName.lowercased() == "mcp_call",
+              let inner = input?["name"]?.stringValue,
+              !inner.isEmpty
+        else { return (toolName, input) }
+        guard let arguments = input?["arguments"], case .object = arguments else {
+            return (inner, .object([:]))
+        }
+        return (inner, arguments)
     }
 
     // MARK: - Summaries

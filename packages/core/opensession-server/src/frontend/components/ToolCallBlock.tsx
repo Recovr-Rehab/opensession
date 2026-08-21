@@ -26,8 +26,7 @@ import {
   canonicalToolName,
   formatToolDetail,
   isHiddenToolInputKey,
-  mcpServerDisplayName,
-  mcpToolDisplayName,
+  mcpLabelParts,
   parseMcpTool,
   toolCommand as commandOf,
   toolDetail,
@@ -35,6 +34,7 @@ import {
   toolFilePath as filePathOf,
   toolInputString as pickStr,
   toolLineStats,
+  unwrapMcpDispatcher,
 } from "@tellahq/opensession-protocol/tool-presentation";
 import { formatDuration } from "../lib/time";
 import { ExtBadge, fileExt } from "./lang-marks";
@@ -143,12 +143,14 @@ export type { PathRoot };
 export {
   assetToolPath,
   canonicalToolName,
+  mcpLabelParts,
   mcpServerDisplayName,
   mcpToolDisplayName,
   parseMcpTool,
   toolDisplayName,
   toolFamily,
   toolLineStats,
+  unwrapMcpDispatcher,
 } from "@tellahq/opensession-protocol/tool-presentation";
 export const ToolPathRootsProvider = PathRootsContext.Provider;
 export function useToolPathRoots(): readonly PathRoot[] {
@@ -178,11 +180,14 @@ export const LiveSubagentsProvider = LiveSubagentsContext.Provider;
  * worktrees this client knows about.
  */
 export function toolSummary(
-  toolName: string,
-  input: unknown,
+  rawName: string,
+  rawInput: unknown,
   fallback: string,
   roots: readonly PathRoot[] = []
 ): string {
+  // Pi routes every bridged MCP call through its `mcp_call` dispatcher, so the
+  // envelope is what a transcript stores. Summarize the call inside it.
+  const { toolName, input } = unwrapMcpDispatcher(rawName, rawInput);
   const detail = formatToolDetail(toolDetail(toolName, input), (p) => tidyPath(p, roots));
   if (detail) return detail;
   if (parseMcpTool(toolName) && fallback.trim() === `Using ${toolName}`) return "";
@@ -351,13 +356,21 @@ export const ToolCallBlock = React.memo(function ToolCallBlock({
   useEffect(() => {
     if (hasFeaturedMedia && !userToggledRef.current) setExpanded(true);
   }, [hasFeaturedMedia]);
-  const toolName = entry.toolName || "Tool";
+  // The transcript stores pi's dispatcher envelope for every bridged MCP call,
+  // so the row resolves the call inside it once and derives everything from
+  // that: the label, the glyph, the summary, the expanded input.
+  const { toolName, input: callInput } = unwrapMcpDispatcher(
+    entry.toolName || "Tool",
+    shownInput
+  );
   const canonical = canonicalToolName(toolName);
   const roots = useToolPathRoots();
   const mcp = parseMcpTool(toolName);
-  const summary = toolSummary(toolName, shownInput, entry.content, roots);
+  const mcpParts = mcp ? mcpLabelParts(mcp.server, mcp.tool) : [];
+  const scopedOpenSession = mcpParts[0] === "Open Session" && mcpParts.length > 2;
+  const summary = toolSummary(toolName, callInput, entry.content, roots);
   const isFileTool = canonical === "Read" || canonical === "Edit" || canonical === "Write";
-  const lineStats = toolLineStats(toolName, shownInput);
+  const lineStats = toolLineStats(toolName, callInput);
   const duration = stepDuration(entry, result);
   const failed = Boolean(shownResult?.isError);
   // The language mark a file row wears in front of its path, the same one the
@@ -366,17 +379,17 @@ export const ToolCallBlock = React.memo(function ToolCallBlock({
   // scanned by language rather than by reading every path to its last word.
   // A name with no extension has no mark, and keeps the path it always had.
   const baseName = isFileTool
-    ? (filePathOf((shownInput || {}) as Record<string, unknown>).split("/").pop() ?? "")
+    ? (filePathOf((callInput || {}) as Record<string, unknown>).split("/").pop() ?? "")
     : "";
   const fileMark = fileExt(baseName) ? baseName : "";
-  const inputNode = expanded ? toolInputNode(canonical, shownInput) : null;
+  const inputNode = expanded ? toolInputNode(canonical, callInput) : null;
   const resultContent = visibleResultContent(shownResult?.content, hasMedia, failed);
   const inputNeedsPanel = canonical === "TodoWrite";
 
   // A scratch file this call named: openable straight from the row, because
   // assets live outside every worktree and nothing else in the transcript can
   // say what the path means. A delete names one too, with nothing left to open.
-  const assetPath = assetToolPath(toolName, shownInput);
+  const assetPath = assetToolPath(toolName, callInput);
   const asset = useOpenAsset();
   const assetPaths = useOpenAssetPaths();
   const canOpenAsset =
@@ -435,10 +448,41 @@ export const ToolCallBlock = React.memo(function ToolCallBlock({
         </span>
 
         {mcp ? (
-          <span className="flex min-w-0 flex-shrink-0 items-baseline gap-1 text-item-title leading-5 font-medium text-dim transition-colors group-hover:text-fg">
-            <span>{mcpServerDisplayName(mcp.server)}</span>
-            <span className="text-faint">·</span>
-            <span>{mcpToolDisplayName(mcp.tool)}</span>
+          // Most general part first, leaf last, and only the leaf at full
+          // strength: down a fold of Open Session calls the product name is the
+          // same on every row, so it should read as the path to the part that
+          // differs rather than compete with it.
+          <span
+            className="flex min-w-0 items-baseline gap-1 overflow-hidden text-item-title leading-5 font-medium text-dim transition-colors group-hover:text-fg phone:flex-shrink-0"
+            title={mcpParts.join(" · ")}
+          >
+            {mcpParts.map((part, i) => {
+              const context = i < mcpParts.length - 1;
+              return (
+                <React.Fragment key={i}>
+                  {i > 0 && (
+                    <span
+                      className={cn(
+                        "flex-shrink-0 text-faint",
+                        scopedOpenSession && i === 1 && "phone:hidden"
+                      )}
+                    >
+                      ·
+                    </span>
+                  )}
+                  <span
+                    className={cn(
+                      context
+                        ? "flex-shrink-0 font-normal opacity-70"
+                        : "truncate phone:flex-shrink-0",
+                      scopedOpenSession && i === 0 && "phone:hidden"
+                    )}
+                  >
+                    {part}
+                  </span>
+                </React.Fragment>
+              );
+            })}
           </span>
         ) : (
           <span className="flex-shrink-0 text-item-title leading-5 font-medium text-dim transition-colors group-hover:text-fg">{toolName}</span>
@@ -450,7 +494,12 @@ export const ToolCallBlock = React.memo(function ToolCallBlock({
             aligning it to one hangs the drawn logo below the path it labels.
             Nothing grows into spare room here: changes and duration should
             follow the tool summary instead of lining up against the right edge. */}
-        <span className="flex min-w-0 items-baseline gap-2">
+        <span
+          className={cn(
+            "flex min-w-0 items-baseline gap-2",
+            mcp && "phone:hidden"
+          )}
+        >
           <span className="flex min-w-0 items-baseline gap-1.5">
             {fileMark && <ExtBadge name={fileMark} className="self-center" />}
             <span
