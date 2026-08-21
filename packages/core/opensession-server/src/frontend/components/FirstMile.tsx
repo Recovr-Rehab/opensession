@@ -276,7 +276,7 @@ export function FirstMile({ onDone }: { onDone: () => void }) {
 
 									{/* A blue glass wash keeps the sections distinct while letting the page
 									    gradient tint and soften each surface. */}
-									<div className="w-full max-w-[820px] pb-8 [&_[data-setting-description]]:hidden [&_[data-settings-hint]]:hidden [&_.bg-settings-plate]:bg-blue-soft [&_.bg-settings-plate]:shadow-[inset_0_1px_0_color-mix(in_srgb,white_45%,transparent),0_12px_32px_-24px_color-mix(in_srgb,var(--blue)_45%,transparent)] [&_.bg-settings-plate]:backdrop-blur-xl [&_.border-divider-soft]:border-blue/15">
+									<div className="w-full max-w-[820px] pb-8 [&_[data-setting-description]]:hidden [&_[data-settings-hint]]:hidden [&_.bg-settings-plate]:bg-blue-soft [&_.bg-settings-plate]:shadow-[inset_0_1px_0_color-mix(in_srgb,white_45%,transparent),0_12px_32px_-24px_color-mix(in_srgb,var(--blue)_45%,transparent)] [&_.bg-settings-plate]:backdrop-blur-xl [&_.border-divider-soft]:border-blue/15 phone:[&_.bg-settings-plate]:bg-[color-mix(in_srgb,var(--blue-soft)_60%,transparent)] phone:[&_.border-divider-soft]:border-blue/10">
 										{step.id === "github" && (
 											<GithubAuthCard
 												github={status.github}
