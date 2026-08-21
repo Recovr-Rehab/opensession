@@ -29,6 +29,7 @@ import { type Sandbox } from "./sandbox";
 import { isRemoteSandboxProvider, resolveRequestedSandbox } from "./sandbox/config";
 import { resolveInteractiveSandbox } from "./sandbox/defaults";
 import { findSession, getCachedSessions, invalidateSessionsCache, touchNativeSession } from "./session-cache";
+import { nameSessionReferencesForTitle } from "./session-reference-title";
 import {
 	getSessionControl,
 	type CreateSessionOpts,
@@ -706,7 +707,10 @@ registerSessionControl({
 			personaName();
 		const sessionCreatedAt = new Date().toISOString();
 		const title =
-			prompt.trim().split("\n")[0].slice(0, 80) ||
+			nameSessionReferencesForTitle(prompt, (id) => findSession(id))
+				.trim()
+				.split("\n")[0]
+				.slice(0, 80) ||
 			(Array.isArray(rawFiles) && rawFiles.length
 				? "Attached file"
 				: imageUrls?.length ? "Image" : "New session");
