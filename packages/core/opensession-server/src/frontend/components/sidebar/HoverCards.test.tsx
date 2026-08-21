@@ -6,6 +6,7 @@ import {
 	SessionCardBody,
 	WsCardBody,
 	WsPrStatusMark,
+	WsStatusMark,
 } from "./HoverCards";
 import type { WorkspaceOverview } from "../../lib/api";
 import type { WsCardRow } from "../../lib/sidebar-hover";
@@ -191,6 +192,48 @@ describe("workspace PR status marks", () => {
 		expect(html).toContain('title="PR merged"');
 		expect(html).toContain("text-purple");
 		expect(html).not.toContain("text-faint");
+	});
+});
+
+describe("workspace run status marks", () => {
+	test("a failed subagent does not override its running parent", () => {
+		const html = renderToStaticMarkup(
+			<WsStatusMark
+				row={{
+					...row([
+						session({ isRunning: true }),
+						session({
+							id: "os-child",
+							parentSessionId: "os-test",
+							lastRunError: { message: "Worker failed", at: AGO },
+						}),
+					]),
+					status: "inprogress",
+					running: true,
+				}}
+				size={18}
+			/>,
+		);
+		expect(html).toContain("bg-yellow");
+		expect(html).not.toContain("bg-red");
+	});
+
+	test("a failed top-level session stays red", () => {
+		const html = renderToStaticMarkup(
+			<WsStatusMark
+				row={{
+					...row([
+						session({
+							lastRunError: { message: "Run failed", at: AGO },
+						}),
+					]),
+					status: "needsinput",
+				}}
+				size={18}
+			/>,
+		);
+		expect(html).toContain("bg-red");
+		expect(html).not.toContain("bg-blue");
 	});
 });
 

@@ -3,7 +3,13 @@ import { providerFromUrl } from "../../lib/provider";
 import { sessionPrMerged } from "../../lib/session-prs";
 import { MAX_HOVERCARD_MEDIA, TONE_TEXT, cardRunErrorDetail, compactNum, hoverState, prTone, prettyReview, useSessionOverview, useWsOverview, wsPrInfo, type WsCardRow } from "../../lib/sidebar-hover";
 import { SIDEBAR_STATUS_DOT, SIDEBAR_WS_SNOOZE, SIDEBAR_WS_TICKER } from "../../lib/sidebar-classes";
-import { frontingPrSession, mineStatus, pinnedLane, runNeedsAttention } from "../../lib/sidebar-lanes";
+import {
+	frontingPrSession,
+	mineStatus,
+	pinnedLane,
+	runNeedsAttention,
+	workspaceRunNeedingAttention,
+} from "../../lib/sidebar-lanes";
 import { MINE_STATUS_META, type LaneChoice, type MineStatus } from "../../lib/sidebar-types";
 import { SNOOZE_SOMEDAY, formatRemaining, snoozePresets } from "../../lib/snoozes";
 import { elapsedSince, fullTime } from "../../lib/time";
@@ -302,6 +308,10 @@ export function WsStatusMark({
 	);
 	const dot = (cls: string) =>
 		slot(<span className={`size-2 shrink-0 rounded-full ${cls}`} />);
+	if (row.sessions.some((session) => session.waitingForInput))
+		return dot(SIDEBAR_STATUS_DOT.waiting);
+	if (workspaceRunNeedingAttention(row.sessions))
+		return dot(SIDEBAR_STATUS_DOT.failed);
 	if (row.status === "needsinput") return dot(SIDEBAR_STATUS_DOT.waiting);
 	if (row.running) return dot(SIDEBAR_STATUS_DOT.running);
 	// A draft workspace has no session and so no PR to show. The flat-repo
@@ -419,7 +429,7 @@ function WsOverviewInfo({
 }) {
 	const { prSession } = wsPrInfo(row);
 	const meta = MINE_STATUS_META.find((m) => m.key === row.status);
-	const failedSession = row.sessions.find((session) => runNeedsAttention(session));
+	const failedSession = workspaceRunNeedingAttention(row.sessions);
 	return (
 		<>
 			{/* The PR facts, on one strip above the title: what changed, what the
@@ -523,7 +533,7 @@ export function WsCardBody({
 						onClick={() =>
 							onOpen(
 								row.sessions.find((c) => c.waitingForInput) ||
-									row.sessions.find((c) => runNeedsAttention(c)) ||
+									workspaceRunNeedingAttention(row.sessions) ||
 									row.sessions[0],
 							)
 						}
@@ -713,7 +723,7 @@ export function WsMobileSheet({
 						onClick={closing(() =>
 							onOpen(
 								row.sessions.find((c) => c.waitingForInput) ||
-									row.sessions.find((c) => runNeedsAttention(c)) ||
+									workspaceRunNeedingAttention(row.sessions) ||
 									row.sessions[0],
 							),
 						)}

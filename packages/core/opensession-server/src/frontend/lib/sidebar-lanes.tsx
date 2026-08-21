@@ -26,6 +26,17 @@ export function runNeedsAttention(s: UnifiedSession): boolean {
 	return !!s.lastRunError && !s.isRunning;
 }
 
+// A workspace reflects its top-level sessions, not implementation-detail
+// workers. A failed subagent must not make recovered parent work look failed.
+// Keep the child-only fallback for the unusual workspace whose parent is not
+// present in the current list, where hiding the only actionable run is worse.
+export function workspaceRunNeedingAttention(
+	sessions: UnifiedSession[],
+): UnifiedSession | undefined {
+	const topLevel = sessions.filter((session) => !session.parentSessionId);
+	return (topLevel.length > 0 ? topLevel : sessions).find(runNeedsAttention);
+}
+
 // Whether this session lives in YOUR sidebar lanes. Your own sessions always do;
 // automation runs and teammates' workspaces only once you claim them (the
 // lane entry is the claim — see lib/lanes.ts).

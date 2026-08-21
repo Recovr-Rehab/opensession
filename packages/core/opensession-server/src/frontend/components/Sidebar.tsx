@@ -251,6 +251,7 @@ import {
 	pinnedLane,
 	prLaneForSessions,
 	stripPrTitlePrefix,
+	workspaceRunNeedingAttention,
 } from "../lib/sidebar-lanes";
 import { sessionHasPr } from "../lib/session-prs";
 import {
@@ -2826,7 +2827,12 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 	) {
 		const active = rowOwnsSelection(row);
 		const editing = rowRenameEditing(row);
-		const waiting = row.status === "needsinput";
+		const hasQuestion = row.sessions.some((session) => session.waitingForInput);
+		const failed =
+			!hasQuestion && !!workspaceRunNeedingAttention(row.sessions);
+		// A manually pinned Needs input lane remains blue, but a failed top-level
+		// run gets its own red marker rather than masquerading as a question.
+		const waiting = !failed && row.status === "needsinput";
 		// A review GitHub is still asking you for. Blocked on you, like an
 		// unanswered question, so it wears the same blue mark — and it wears it in
 		// every band, not only under Needs review, because the whole point is that
@@ -3055,26 +3061,25 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 					// the blocked state — now carried visually by the row's wash —
 					// rides here rather than on a marker element.
 					aria-label={
-						waiting
-							? `${row.name}, needs your attention`
-							: needsMyReview
-								? `${row.name}, needs your review`
-								: row.name
+						failed
+							? `${row.name}, last run failed`
+							: waiting
+								? `${row.name}, needs your attention`
+								: needsMyReview
+									? `${row.name}, needs your review`
+									: row.name
 					}
 				>
-				{/* Blocked-on-you outranks every other mark, in every grouping: a
-				    row waiting on you looks the same wherever the list puts it, and
-				    the blue is the one the lane dot, the collapsed-band count and the
-				    native app already spend on it. A review you were asked for is the
-				    same kind of claim, so it takes the same dot rather than a colour
-				    of its own — the PR's own health keeps its place in the hover card.
-				    Below that, a row with no lane heading over it carries the
-				    workspace status in its own mark, while lanes provide that
-				    context and keep the richer PR lifecycle mark here instead. */}
+				{/* A question or requested review is blue. A stopped run is red, so
+				    the marker states what happened instead of implying a reply exists. */}
 				<span className={SIDEBAR_RAIL}>
 					{waiting || needsMyReview ? (
 						<span
 							className={`size-2 shrink-0 rounded-full ${SIDEBAR_STATUS_DOT.waiting}`}
+						/>
+					) : failed ? (
+						<span
+							className={`size-2 shrink-0 rounded-full ${SIDEBAR_STATUS_DOT.failed}`}
 						/>
 					) : noSectionHeading ? (
 						<WsStatusMark row={row} size={18} />
