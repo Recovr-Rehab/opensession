@@ -64,10 +64,17 @@ function creationPayload<K extends Exclude<
       return {
         ...base,
         workspaceId: requiredString(kind, value.workspaceId, "workspaceId"),
+        dedupeKey: requiredString(kind, value.dedupeKey, "dedupeKey"),
+        name: requiredString(kind, value.name, "name"),
+        createdBy: requiredString(kind, value.createdBy, "createdBy"),
         project:
           value.project === undefined
             ? undefined
             : requiredString(kind, value.project, "project"),
+        branch:
+          value.branch === undefined
+            ? undefined
+            : requiredString(kind, value.branch, "branch"),
         mode: value.mode,
       } as SessionActorEffectFor<K>["payload"];
     case "creation_branch_prepare":

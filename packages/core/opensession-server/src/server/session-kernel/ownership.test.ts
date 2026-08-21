@@ -116,6 +116,16 @@ describe("single session ownership", () => {
 		expect(read("session-kernel/kernel.ts")).toContain(
 			'msg: "session_creation_stale_result_rejected"',
 		);
+		const creationExecutors = read(
+			"session-kernel/creation-effect-executors.ts",
+		);
+		expect(creationExecutors).toContain(
+			'registerSessionEffectExecutor(\n    "creation_workspace_prepare"',
+		);
+		expect(creationExecutors).toContain("assertAdoptableWorkspace(workspace, item)");
+		expect(creationExecutors.indexOf("dependencies.result(item)")).toBeGreaterThan(
+			creationExecutors.indexOf("dependencies.createWorkspace({"),
+		);
 	});
 
 	test("run-state decisions execute atomically inside the actor", () => {

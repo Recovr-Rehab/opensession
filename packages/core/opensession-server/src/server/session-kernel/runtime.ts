@@ -13,6 +13,10 @@ import {
 } from "./effect-executors";
 import { legacyGatewayEffect } from "./lifecycle-protocol";
 import { pruneCreatePlans } from "../session-create-plan";
+import {
+  CreationEffectIndeterminateError,
+  ensureCreationEffectExecutors,
+} from "./creation-effect-executors";
 import { audit } from "../audit";
 
 type TimerHandler = (timer: DurableTimer) => void | Promise<void>;
@@ -119,7 +123,11 @@ export async function drainSessionKernelRuntime(): Promise<void> {
 				.catch((error) => {
 					const message =
 						error instanceof Error ? error.message : String(error);
-					const settled = sessionKernelStore().noteOutboxFailure(item.id, message);
+					const settled = sessionKernelStore().noteOutboxFailure(
+						item.id,
+						message,
+						error instanceof CreationEffectIndeterminateError ? 1 : 20,
+					);
 					if (settled.deadLetteredNow)
 						audit({ msg: "session_kernel_dead_lettered", kind: "outbox", session_id: item.sessionId, outbox_id: item.id, error: message });
 					console.error(
@@ -142,6 +150,7 @@ export async function drainSessionKernelRuntime(): Promise<void> {
 
 export function startSessionKernelRuntime(intervalMs = 1_000): void {
 	if (runtime.handle) return;
+	ensureCreationEffectExecutors();
 	runtime.handle = setInterval(() => {
 		void drainSessionKernelRuntime();
 	}, intervalMs);

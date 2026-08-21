@@ -7,7 +7,11 @@ export type CreationWorkspacePrepareEffect = {
   kind: "creation_workspace_prepare";
   payload: CreationEffectBase & {
     workspaceId: string;
+    dedupeKey: string;
+    name: string;
+    createdBy: string;
     project?: string;
+    branch?: string;
     mode: "adopt_or_create";
   };
 };
