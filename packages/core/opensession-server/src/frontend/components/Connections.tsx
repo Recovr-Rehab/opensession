@@ -1133,7 +1133,7 @@ export function GithubAccounts({ personal = false }: { personal?: boolean } = {}
   async function removeApp() {
     if (
       !confirm(
-        "Remove the GitHub App? You'll be able to paste a personal access token instead.",
+        "Remove the GitHub App configuration? You'll need to set up an app again before you can connect GitHub.",
       )
     )
       return;
