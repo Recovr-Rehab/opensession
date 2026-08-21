@@ -17,21 +17,19 @@ Then, end to end:
 
 ```sh
 curl -fsSL https://raw.githubusercontent.com/tellahq/opensession/main/install.sh | bash
-# onboarding: accept the defaults — bind 127.0.0.1, press enter through the
-# public base URL, point it at one repo, say no to every integration
+# installs the compiled release, onboards with defaults, starts the service,
+# and prints your local URL
 claude setup-token     # on your Max login; copy the sk-ant-… it prints
-opensession start
 ```
 
-Now **open <http://127.0.0.1:3850>**. Add your account under Workspace → Usage
+Now **open the URL the installer prints** (`http://127.0.0.1:3850` by default). Add your account under Workspace → Providers
 (paste the `sk-ant-…`, or use the ChatGPT device-code sign-in for the OpenAI
 path), then pick your repo on the home screen, write a prompt, and create the
 session. A turn that actually runs is the only proof the install works, not a
 health check.
 
-Budget 5-15 minutes on a fresh box, most of it unattended: the installer
-downloads the compiled release binary and the model CLIs (the Pi engine is bundled in the binary), and installs a
-multi-gigabyte dependency tree.
+Budget a few minutes on a fresh box, most of it unattended: the installer
+downloads the compiled release binary and the model CLIs (the Pi engine is bundled in the binary).
 
 Sections 3-7 below — automations, the env-var inventory, the `config.json`
 reference, MCP — are reference material you can skip on a first install, and
@@ -39,10 +37,11 @@ networking, TLS, GitHub and systemd are all optional for session #1. Come back
 to them when the first session has run.
 
 Prerequisites: Linux, macOS, or Windows 10/11 with WSL2, plus `git` and
-`curl`. The installer brings its own [Bun](https://bun.sh) and
-[Pi](https://pi.ai). `gh` (authenticated) is needed for
-pull-request operations. See [README.md](README.md#minimum-requirements) for
-the optional extras.
+`curl`. The default release install needs nothing else on the box: the
+compiled binary embeds the Bun runtime and the Pi engine. A source install
+uses [Bun](https://bun.sh), which the installer adds when it is missing. `gh`
+(authenticated) is needed for pull-request operations. See
+[README.md](README.md#minimum-requirements) for the optional extras.
 
 Provisioning a fresh cloud box first? [ec2.md](ec2.md). There is one
 cloud-init trap worth knowing about.
@@ -112,15 +111,17 @@ place of `Ubuntu`.
 curl -fsSL https://raw.githubusercontent.com/tellahq/opensession/main/install.sh | bash
 ```
 
-This installs missing prerequisites, clones the source to
-`~/.opensession/src` (or unpacks a release with `--artifact`), installs
-dependencies and the engine, puts an `opensession` command on your `PATH`,
-writes a default configuration (127.0.0.1:3850, a scratch repo, no
-integrations), installs and starts the service, and ends with the URL. No
-questions. `--advanced` runs the full onboarding wizard instead; a defaults
-install upgrades to a full one at any time with `opensession onboard --force`.
-It is safe to re-run: an existing install is fast-forwarded, and existing
-config is backed up rather than overwritten.
+This downloads the compiled release for your OS and architecture and unpacks
+it under `~/.opensession/releases` (with `src` linked at it), installs the
+`claude` CLI, puts an `opensession` command on your `PATH`, writes a default
+configuration (127.0.0.1:3850, a scratch repo, no integrations), installs and
+starts the service, and ends with the URL. No questions. If no release is
+published for your platform yet it falls back to a source clone; `--source`
+forces the git checkout, and `--artifact <path|url>` installs a specific
+release tarball. `--advanced` runs the full onboarding wizard instead; a
+defaults install upgrades to a full one at any time with `opensession onboard
+--force`. It is safe to re-run: an existing install is fast-forwarded, and
+existing config is backed up rather than overwritten.
 
 Useful flags — `--dir <path>` to install elsewhere, `--channel <ref>` to track
 a branch or tag, `--advanced` for the wizard, `--org <name>` to set up an org
@@ -128,13 +129,12 @@ install, `--tailscale` to install Tailscale, `--codex` for the ChatGPT sign-in
 CLI, `--no-engine` to skip the model CLI, `--yes` to never prompt, `--uninstall`
 to remove it. `--help` lists them all.
 
-The engine is pinned to the OpenCode version this checkout was built against
-(`opensession.opencodeVersion` in package.json); `OPENCODE_VERSION=latest`
-(or a specific version) overrides. A release artefact also ships OpenCode's
-own first-run install prebuilt (`engine-seed/`, the `@opencode-ai/plugin`
-tree it would otherwise npm-install into `~/.config/opencode` on the first
-session) and the installer prefetches its model catalogue, so the first turn
-does not pay that minute.
+The Pi engine is compiled into the release binary and runs in-process, so
+there is no separate engine to seed or version. A release tarball carries the
+`opensession` executable, a small `sharp` sidecar for social-card rendering,
+the systemd service templates, and `release.json`; nothing else has to be
+fetched before the first turn. The one external tool a turn needs is the
+`claude` CLI, which the installer puts on the box (`--no-engine` skips it).
 
 ### Tailscale: `--tailscale`
 
@@ -365,7 +365,7 @@ on:
 claude setup-token   # on a Claude Max login; prints sk-ant-…
 ```
 
-Accounts are added in the web UI under **Workspace → Usage** — which means
+Accounts are added in the web UI under **Workspace → Providers**, which means
 this step happens *after* [section 8](#8-first-run): the server has to be
 running before you can paste anything into it. Mint the token whenever you
 like, start the server, then paste it. (The same page signs in ChatGPT-plan
