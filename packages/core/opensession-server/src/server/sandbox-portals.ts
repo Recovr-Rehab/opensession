@@ -65,6 +65,20 @@ export function sleepingSandboxPortalStatus(sessionId: string, sandboxId?: strin
 	};
 }
 
+/** Find the session that last registered this sandbox service. The caller
+ * still verifies the live session and sandbox before restoring authority. */
+export function cachedSandboxPortalOwner(
+	sandboxId: string,
+	port: number,
+): string | null {
+	const entry = load().portals.find(
+		(item) =>
+			item.sandboxId === sandboxId &&
+			item.services.some((service) => service.port === port),
+	);
+	return entry?.sessionId ?? null;
+}
+
 export function dropCachedSandboxPortals(sandboxId: string): void {
 	const store = load();
 	const portals = store.portals.filter((entry) => entry.sandboxId !== sandboxId);

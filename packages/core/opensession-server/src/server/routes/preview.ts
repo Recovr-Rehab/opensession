@@ -46,10 +46,25 @@ export async function handlePreviewRoutes(
 	if (/^\/api\/portal-auth\/\d+$/.test(path) && req.method === "GET") {
 		const httpsPort = Number(path.slice(path.lastIndexOf("/") + 1));
 		if (!portalRouteAuthorized(httpsPort)) {
-			return Response.json(
-				{ error: "Portal route is not active" },
-				{ status: 404, headers: { "Cache-Control": "no-store" } },
-			);
+			// Caddy and its allocated URL survive a coordinator restart, but the
+			// loopback relay intentionally does not. Restore it only after this
+			// authenticated request proves the durable route still belongs to a
+			// live session and running sandbox.
+			let recovered = false;
+			try {
+				const { recoverSandboxPortalRoute } = await import(
+					"../sandbox-portal-recovery"
+				);
+				recovered = await recoverSandboxPortalRoute(httpsPort);
+			} catch (error) {
+				console.warn(`[preview] Portal ${httpsPort} recovery failed:`, error);
+			}
+			if (!recovered) {
+				return Response.json(
+					{ error: "Portal route is not active" },
+					{ status: 404, headers: { "Cache-Control": "no-store" } },
+				);
+			}
 		}
 		return new Response(null, {
 			status: 204,
