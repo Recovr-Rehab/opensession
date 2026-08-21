@@ -458,8 +458,7 @@ interface Props {
 	/** Every session — the pool the workspace-context picker and the PR panel
 	    draw their sibling sessions from. */
 	allSessions?: UnifiedSession[];
-	/** Start a new session in this workspace — surfaced in the ⋯ menu so it's
-	    reachable on a phone, where the tab strip's + button is hidden. */
+	/** Start a new session in this workspace. Phone surfaces it in the action bar. */
 	onNewSession?: (mode: "share" | "stack" | "ask") => void;
 	/** Open a sibling session with selected transcript text in its composer. */
 	onStartNewChat: (prompt: string) => void;
@@ -5441,8 +5440,8 @@ export function SessionViewer({
 		!forkFrom &&
 		replySuggestions.length > 0;
 
-	/* Desktop shows Next beside quick replies. Phone keeps Archive, Next, and More
-	   together in one centered toolbar above the composer, even when there is no
+	/* Desktop shows Next beside quick replies. Phone keeps Archive, More, New
+	   session, and Next in one centered toolbar, even when there is no
 	   next chat yet. */
 	const nextAction = !!onNextChat;
 	const actionBand = quickReplies || nextAction || isPhone;
@@ -5525,22 +5524,6 @@ export function SessionViewer({
 							aria-label="Share"
 						/>
 					);
-				// New session in this workspace — phone-only, since desktop has the
-				// always-visible + in the tab strip. On a phone the strip (and its
-				// hover-revealed +) is hidden, so the ⋯ menu is the only way to add a
-				// sibling session. Shares the workspace worktree, like the + default.
-				const newSessionAction = isPhone && onNewSession && (
-					<Menu.Item
-						onClick={() => {
-							setOverflowOpen(false);
-							onNewSession("share");
-						}}
-						title="Start a new session in this workspace"
-					>
-						<IconPlus size={20} className={MENU_ICON} />
-						<span className="grow">New session in workspace</span>
-					</Menu.Item>
-				);
 				// Closed sessions of this workspace. They normally hang off the tab
 				// strip's history button, so this appears exactly when there is no
 				// strip to hold it — a lone session, which is when someone is most
@@ -5864,7 +5847,6 @@ export function SessionViewer({
 								{isPhone && addToSidebarAction(true)}
 								{(compactHeader || isPhone) && shareAction(true)}
 								<Menu.Separator className={VIEWER_MENU_SEP} />
-								{newSessionAction}
 								{forkAction}
 								{spinOffAction}
 								{transcriptActions}
@@ -6085,8 +6067,8 @@ export function SessionViewer({
 							    session lives here beside the title (⌘⌥N does the same). The
 							    moment the strip appears, whether from a second session, an
 							    open view tab like Review, or a split, its own + takes over
-							    and this disappears, so the two never stack. Phone uses the ⋯
-							    menu's newSessionAction instead. Rendered AS the Button
+							    and this disappears, so the two never stack. Phone uses the
+							    action bar's + instead. Rendered AS the Button
 							    primitive, like the ⋯ beside it and the side-panel control at
 							    the other end of the bar, so the 32px square, radius, hover
 							    wash and press scale match by construction rather than by
@@ -6364,9 +6346,7 @@ export function SessionViewer({
 												focusPrInReview(undefined, "checks");
 											}}
 											// No onNewSession: the phone strip has room for one
-											// action beside the chip (a second truncates the
-											// headline to "M…"), and the ⋯ menu already carries
-											// "New session in workspace" on phones.
+											// action beside the chip, while the action bar carries +.
 											onArchive={handleArchive}
 											running={isRunningLive}
 											refreshTick={gitRefreshTick}
@@ -7214,8 +7194,8 @@ export function SessionViewer({
 									</div>
 								)}
 								{/* Session actions float above the composer. Desktop pairs quick
-								    replies with Next. Phone centers Archive, Next, and More in one
-								    toolbar, with quick replies on their own row when present. */}
+								    replies with Next. Phone centers Archive, More, New session, and
+								    Next, with quick replies on their own row when present. */}
 								{actionBand && (
 									<div className={VIEWER_SUGGESTIONS}>
 										<div className={VIEWER_ACTION_ROW}>
@@ -7267,6 +7247,17 @@ export function SessionViewer({
 															onClick={() => void handleArchive()}
 														/>
 													)}
+													<div ref={setMobileActionMenuEl} className="inline-flex size-12" />
+													<span className="mx-1 h-6 w-px shrink-0 bg-divider" aria-hidden />
+													<Button
+														variant="ghost"
+														size="lg"
+														className="size-12 min-h-12 rounded-full [corner-shape:round]"
+														icon={<IconPlus size={24} aria-hidden />}
+														aria-label="New session in workspace"
+														disabled={!onNewSession}
+														onClick={() => onNewSession?.("share")}
+													/>
 													<Button
 														variant="ghost"
 														size="lg"
@@ -7276,7 +7267,6 @@ export function SessionViewer({
 														disabled={!onNextChat}
 														onClick={onNextChat}
 													/>
-													<div ref={setMobileActionMenuEl} className="inline-flex size-12" />
 												</div>
 											)}
 										</div>
