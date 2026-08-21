@@ -156,7 +156,7 @@ setJournalSetListener((record) =>
 	acknowledgePromptDispatch(record.osSessionId, record.promptEntryId),
 );
 import { audit } from "./audit";
-import { githubAuthEnv, githubCredentialForLogin } from "./github-auth";
+import { githubCredentialForLogin, githubCredentialForRun } from "./github-auth";
 import {
 	announcesNextAction,
 	AUTO_CONTINUE_FABRICATED_PROMPT,
@@ -1192,7 +1192,7 @@ export async function autoPushSessionBranches(session: UnifiedSession): Promise<
 		? undefined
 		: session.createdByLogin
 			? githubCredentialForLogin(session.createdByLogin)?.env
-			: githubAuthEnv(session.createdBy || session.startedBy);
+			: githubCredentialForRun(session.createdBy || session.startedBy)?.env;
 	// Repo-less sessions (scratch, repo-less ask) have no primary branch to
 	// push, and their worktreeDir is a plain dir repoForPath would throw on.
 	// Attached repos still push: those carry their own repo and branch.

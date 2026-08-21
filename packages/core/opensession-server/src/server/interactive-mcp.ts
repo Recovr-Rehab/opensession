@@ -36,7 +36,7 @@ import { createSelfDeployMcpServer } from "./self-deploy";
 import { createWebMcpServer } from "./web-mcp";
 import { papercutsEnabledForRepo } from "./papercuts";
 import { defaultRepo, productName } from "./config";
-import { githubAuthEnv } from "./github-auth";
+import { githubCredentialForRun } from "./github-auth";
 import { REPOS, sessionRepoId } from "./worktree";
 import { registerInteractiveMcpBuilder } from "./run-rpc";
 import { automationRunMcpForSession, selfImproveMcpForSession } from "./automations";
@@ -197,9 +197,19 @@ export function interactiveMcpServers(
 					"opensession-repos": createReposMcpServer({
 						sessionId,
 						attach: (repo, branch) =>
-							attachRepo(sessionId, repo, branch, githubAuthEnv(createdBy)),
+							attachRepo(
+								sessionId,
+								repo,
+								branch,
+								githubCredentialForRun(createdBy)?.env,
+							),
 						switchPrimary: (repo) =>
-							switchPrimaryRepo(sessionId, repo, false, githubAuthEnv(createdBy)),
+							switchPrimaryRepo(
+								sessionId,
+								repo,
+								false,
+								githubCredentialForRun(createdBy)?.env,
+							),
 						snapshot: () => {
 							const s = findSession(sessionId);
 							if (!s) return null;
