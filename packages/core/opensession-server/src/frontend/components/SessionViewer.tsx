@@ -4912,7 +4912,10 @@ export function SessionViewer({
 	const [branchActionBusy, setBranchActionBusy] = useState<
 		"move" | "create" | null
 	>(null);
-	const [createPrConfirmOpen, setCreatePrConfirmOpen] = useState(false);
+	const [branchConfirmOpen, setBranchConfirmOpen] = useState(false);
+	const [branchConfirmMode, setBranchConfirmMode] = useState<
+		"move" | "create"
+	>("move");
 	const [mobileActionMenuEl, setMobileActionMenuEl] =
 		useState<HTMLDivElement | null>(null);
 	const primaryPrNumber = prPresentation.primary?.number;
@@ -4941,7 +4944,8 @@ export function SessionViewer({
 	useEffect(() => {
 		setOverflowGit(null);
 		setBranchActionBusy(null);
-		setCreatePrConfirmOpen(false);
+		setBranchConfirmOpen(false);
+		setBranchConfirmMode("move");
 	}, [session.id]);
 
 	async function moveToBranchFromMenu() {
@@ -4950,6 +4954,7 @@ export function SessionViewer({
 		try {
 			const result = await moveSessionToBranchApi(session.id);
 			setOverflowOpen(false);
+			setBranchConfirmOpen(false);
 			toast(
 				result.copiedFiles
 					? `Moved to ${result.branch} · ${result.copiedFiles} file${result.copiedFiles === 1 ? "" : "s"} copied`
@@ -4982,7 +4987,7 @@ export function SessionViewer({
 		setBranchActionBusy("create");
 		try {
 			const result = await moveSessionToBranchApi(session.id);
-			setCreatePrConfirmOpen(false);
+			setBranchConfirmOpen(false);
 			requestCreatePr();
 			toast(`Moved to ${result.branch}. Creating PR…`);
 		} catch (error) {
@@ -5423,34 +5428,45 @@ export function SessionViewer({
 				</div>
 			)}
 			<Modal.Root
-				open={createPrConfirmOpen}
+				open={branchConfirmOpen}
 				onOpenChange={(open) => {
-					if (branchActionBusy !== "create") setCreatePrConfirmOpen(open);
+					if (!branchActionBusy) setBranchConfirmOpen(open);
 				}}
-				disablePointerDismissal={branchActionBusy === "create"}
+				disablePointerDismissal={branchActionBusy !== null}
 			>
 				<Modal.Content>
 					<Modal.Header title="Move to a branch?" />
 					<Modal.Description className="m-0 text-pretty text-supporting font-normal leading-relaxed text-dim">
-						You need to move this session to a branch before you can create a PR.
+						{branchConfirmMode === "create"
+							? "You need to move this session to a branch before you can create a PR."
+							: "Copies this session’s changes to a new branch without removing them from the shared checkout."}
 					</Modal.Description>
 					<Modal.Footer>
 						<Modal.Close
 							render={
-								<Button
-									variant="ghost"
-									disabled={branchActionBusy === "create"}
-								>
+								<Button variant="ghost" disabled={branchActionBusy !== null}>
 									Cancel
 								</Button>
 							}
 						/>
 						<Button
 							variant="primary"
-							disabled={!connected || isBusy || branchActionBusy === "create"}
-							onClick={() => void moveAndCreatePr()}
+							disabled={
+								isBusy ||
+								branchActionBusy !== null ||
+								(branchConfirmMode === "create" && !connected)
+							}
+							onClick={() =>
+								void (branchConfirmMode === "create"
+									? moveAndCreatePr()
+									: moveToBranchFromMenu())
+							}
 						>
-							{branchActionBusy === "create" ? "Moving…" : "Move and create PR"}
+							{branchActionBusy
+								? "Moving…"
+								: branchConfirmMode === "create"
+									? "Move and create PR"
+									: "Move to branch"}
 						</Button>
 					</Modal.Footer>
 				</Modal.Content>
@@ -5590,7 +5606,11 @@ export function SessionViewer({
 							<>
 								<Menu.Item
 									disabled={isBusy || branchActionBusy !== null}
-									onClick={() => void moveToBranchFromMenu()}
+									onClick={() => {
+										setOverflowOpen(false);
+										setBranchConfirmMode("move");
+										setBranchConfirmOpen(true);
+									}}
 									title="Move this session into an isolated worktree"
 								>
 									<IconNewBranch size={20} className={MENU_ICON} />
@@ -5602,7 +5622,8 @@ export function SessionViewer({
 									disabled={!connected || isBusy || branchActionBusy !== null}
 									onClick={() => {
 										setOverflowOpen(false);
-										setCreatePrConfirmOpen(true);
+										setBranchConfirmMode("create");
+										setBranchConfirmOpen(true);
 									}}
 									title="Move to a branch and create a pull request"
 								>
