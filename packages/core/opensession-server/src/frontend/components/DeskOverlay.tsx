@@ -218,7 +218,7 @@ function DeskBody({
 							onClose();
 							onOpenSession(id);
 						}}
-						placeholder="Hand me something…"
+						placeholder="Ask anything…"
 						suggestions={DESK_SUGGESTIONS}
 					/>
 				) : (
