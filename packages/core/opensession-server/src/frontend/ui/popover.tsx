@@ -73,6 +73,7 @@ function Popup({
 	side,
 	align,
 	sideOffset = 8,
+	alignOffset = 0,
 	collisionPadding = 8,
 	arrow = false,
 	elevation = "md",
@@ -88,6 +89,8 @@ function Popup({
 	side?: React.ComponentProps<typeof BasePopover.Positioner>["side"];
 	align?: React.ComponentProps<typeof BasePopover.Positioner>["align"];
 	sideOffset?: number;
+	/** Shift the popup along its alignment axis. */
+	alignOffset?: React.ComponentProps<typeof BasePopover.Positioner>["alignOffset"];
 	/** Space kept between the popup and viewport clipping edges. Increase this
 	 * when a wide shadow needs more room than the compact-popover default. */
 	collisionPadding?: React.ComponentProps<
@@ -97,8 +100,8 @@ function Popup({
 	 * `sideOffset`. Matches the sidebar's legacy hover card, so a popup that
 	 * sits beside one of those reads as the same object. */
 	arrow?: boolean;
-	/** Large preview cards need a wider cast shadow than compact popovers. */
-	elevation?: "md" | "lg";
+	/** Choose a quieter or wider cast shadow for the popup's visual weight. */
+	elevation?: "sm" | "md" | "lg";
 	/** How firm the popup's hairline is. `soft` walks the ring toward the
 	 * popup's own surface, for a big card of quiet rows where the default edge
 	 * draws a box around them. Mixed toward the surface rather than faded to
@@ -123,6 +126,7 @@ function Popup({
 				side={side}
 				align={align}
 				sideOffset={sideOffset}
+				alignOffset={alignOffset}
 				anchor={anchor}
 				collisionPadding={collisionPadding}
 				// Keep the diamond clear of the popup's rounded corners.
@@ -141,7 +145,9 @@ function Popup({
 							: "[--smooth-ring-color:var(--popup-ring)]",
 						elevation === "lg"
 							? "smooth-shadow-ring-lg"
-							: "smooth-shadow-ring-md",
+							: elevation === "sm"
+								? "smooth-shadow-ring-sm"
+								: "smooth-shadow-ring-md",
 						"origin-[var(--transform-origin)] transition-[transform,opacity] duration-[120ms] ease-out",
 						"data-[starting-style]:scale-[0.97] data-[starting-style]:opacity-0",
 						"data-[ending-style]:opacity-0 data-[ending-style]:transition-none",
