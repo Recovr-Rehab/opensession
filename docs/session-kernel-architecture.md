@@ -101,10 +101,15 @@ remain process-local executor state because they are not durable decisions.
 The actor persists a fenced creation aggregate with `planned`, `preparing`,
 `opening_dispatched`, `ready`, and `failed` states. Typed creation events reject
 identity crossover, invalid transitions, and stale physical-effect results while
-other gateway work is active. The existing create-plan JSON and create gateway
-callback still prepare resources during the migration. Moving those resource
-steps behind typed effects is the next cutover; the presence or absence of a
-plan file is not actor lifecycle evidence.
+other gateway work is active. Creation reductions can now atomically persist state and a stable typed effect.
+The protocol names workspace, branch, sandbox, credential, attachment-reference,
+and opening-turn effects, including adoption or reconciliation modes and durable
+creation fences. Payload decoding strips unknown fields, so bearer credentials
+and inline attachment bodies do not cross the durable executor boundary. The
+existing create-plan JSON and create gateway callback still prepare resources
+during the migration because production executors for those effects are not yet
+registered. Wiring each physical adapter and its fenced result is the next
+cutover; the presence or absence of a plan file is not actor lifecycle evidence.
 
 ## Run ownership
 

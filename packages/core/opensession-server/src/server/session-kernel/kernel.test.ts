@@ -484,7 +484,37 @@ describe("SessionKernel", () => {
 			sessionId: "create-fsm",
 			identity: "request-one",
 			event: "preparation_started",
+			nextEffectId: "wrong-fence",
+			effect: {
+				kind: "creation_workspace_prepare",
+				effectKey: "wrong-fence",
+				payload: {
+					creationIdentity: "another-request",
+					creationGeneration: 1,
+					workspaceId: "workspace-one",
+					mode: "adopt_or_create",
+				},
+			},
+		})).toMatchObject({
+			accepted: false,
+			reason: "invalid_effect",
+			state: { state: "planned", changeSeq: 1 },
+		});
+		expect(store.applyCreationEvent({
+			sessionId: "create-fsm",
+			identity: "request-one",
+			event: "preparation_started",
 			nextEffectId: "prepare-one",
+			effect: {
+				kind: "creation_workspace_prepare",
+				effectKey: "prepare-one",
+				payload: {
+					creationIdentity: "request-one",
+					creationGeneration: 1,
+					workspaceId: "workspace-one",
+					mode: "adopt_or_create",
+				},
+			},
 		})).toMatchObject({
 			accepted: true,
 			from: "planned",
@@ -518,6 +548,18 @@ describe("SessionKernel", () => {
 			event: "opening_dispatched",
 			effectId: "prepare-one",
 			nextEffectId: "opening-one",
+			effect: {
+				kind: "creation_opening_turn",
+				effectKey: "opening-one",
+				payload: {
+					creationIdentity: "request-one",
+					creationGeneration: 1,
+					openingPromptEntryId: "entry-one",
+					runId: "run-one",
+					runGeneration: 1,
+					mode: "adopt_or_launch",
+				},
+			},
 		})).toMatchObject({
 			accepted: true,
 			to: "opening_dispatched",
@@ -542,6 +584,54 @@ describe("SessionKernel", () => {
 			reason: "identity_mismatch",
 		});
 		expect(store.changesSince("create-fsm", 0)).toHaveLength(4);
+		expect(store.pendingOutbox()).toMatchObject([
+			{ kind: "creation_workspace_prepare", effectKey: "prepare-one" },
+			{ kind: "creation_opening_turn", effectKey: "opening-one" },
+		]);
+	});
+
+	test("rolls creation state back when its durable effect cannot commit", () => {
+		const dir = mkdtempSync(join(tmpdir(), "session-kernel-create-crash-"));
+		const path = join(dir, "kernel.sqlite");
+		const crashStore = new SessionKernelStore(path);
+		try {
+			expect(crashStore.applyCreationEvent({
+				sessionId: "create-crash",
+				identity: "request-crash",
+				event: "plan",
+			}).accepted).toBe(true);
+			const injector = new Database(path);
+			injector.exec(`CREATE TRIGGER inject_creation_effect_crash
+				BEFORE INSERT ON session_kernel_outbox
+				WHEN NEW.kind = 'creation_workspace_prepare'
+				BEGIN SELECT RAISE(ABORT, 'injected effect commit crash'); END`);
+			injector.close();
+			expect(() => crashStore.applyCreationEvent({
+				sessionId: "create-crash",
+				identity: "request-crash",
+				event: "preparation_started",
+				nextEffectId: "workspace-crash",
+				effect: {
+					kind: "creation_workspace_prepare",
+					effectKey: "workspace-crash",
+					payload: {
+						creationIdentity: "request-crash",
+						creationGeneration: 1,
+						workspaceId: "workspace-crash",
+						mode: "adopt_or_create",
+					},
+				},
+			})).toThrow("injected effect commit crash");
+			expect(crashStore.creationState("create-crash")).toMatchObject({
+				state: "planned",
+				changeSeq: 1,
+			});
+			expect(crashStore.pendingOutbox()).toHaveLength(0);
+			expect(crashStore.changesSince("create-crash", 0)).toHaveLength(1);
+		} finally {
+			crashStore.close();
+			rmSync(dir, { recursive: true, force: true });
+		}
 	});
 
 	test("claims and restores a delivery batch atomically", () => {

@@ -1,5 +1,6 @@
 import type { AskActorRequest } from "./ask-protocol";
 import type { DeliveryActorRequest } from "./delivery-protocol";
+import type { CreationActorEffect } from "./creation-effect-protocol";
 import type {
   CreationEventDecision,
   RunEventDecision,
@@ -108,7 +109,7 @@ export type HumanAskDeliverEffect = {
   };
 };
 
-export type SessionActorEffect = HumanAskDeliverEffect;
+export type SessionActorEffect = HumanAskDeliverEffect | CreationActorEffect;
 export type SessionActorEffectKind = SessionActorEffect["kind"];
 export type SessionActorEffectFor<K extends SessionActorEffectKind> = Extract<
   SessionActorEffect,

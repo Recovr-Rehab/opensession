@@ -231,6 +231,16 @@ describe("session kernel actor boundary", () => {
       identity: "create-request",
       event: "preparation_started",
       nextEffectId: "prepare-effect",
+      effect: {
+        kind: "creation_workspace_prepare",
+        effectKey: "prepare-effect",
+        payload: {
+          creationIdentity: "create-request",
+          creationGeneration: 1,
+          workspaceId: "workspace-one",
+          mode: "adopt_or_create",
+        },
+      },
     })).toMatchObject({
       accepted: true,
       to: "preparing",

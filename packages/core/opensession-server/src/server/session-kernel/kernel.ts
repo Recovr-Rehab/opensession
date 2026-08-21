@@ -287,15 +287,26 @@ export class SessionKernel {
   ): CreationEventDecisionResult {
     this.assertWritable(`creation_state:${input.event}`);
     this.touch();
-    if (state.actor)
-      return state.actor.decideCreationEvent({
-        sessionId: this.sessionId,
-        ...input,
+    const result = state.actor
+      ? state.actor.decideCreationEvent({
+          sessionId: this.sessionId,
+          ...input,
+        })
+      : compatibilityStoreForTest("creation").applyCreationEvent({
+          sessionId: this.sessionId,
+          ...input,
+        });
+    if (!result.accepted && result.reason === "stale_effect")
+      audit({
+        msg: "session_creation_stale_result_rejected",
+        session_id: this.sessionId,
+        creation_identity: input.identity,
+        effect_id: input.effectId,
+        current_effect_id: result.state?.currentEffectId,
+        creation_generation: result.state?.generation,
+        event: input.event,
       });
-    return compatibilityStoreForTest("creation").applyCreationEvent({
-      sessionId: this.sessionId,
-      ...input,
-    });
+    return result;
   }
 
   creationState(): DurableCreationState | undefined {
