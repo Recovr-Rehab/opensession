@@ -47,7 +47,7 @@ jobs:
             fi
           done
 
-          gh release view "$TAG" --json assets > "$RUNNER_TEMP/release.json"
+          gh release view "$TAG" --repo "$GITHUB_REPOSITORY" --json assets > "$RUNNER_TEMP/release.json"
           jq -r '.assets[] | select(.state == "uploaded" and .size > 0) | .name' \
             "$RUNNER_TEMP/release.json" > "$RUNNER_TEMP/assets"
 
@@ -79,8 +79,8 @@ jobs:
             exit 1
           fi
 
-          if [ "$(gh release view "$TAG" --json isDraft --jq '.isDraft')" = "true" ]; then
-            gh release edit "$TAG" --draft=false --latest
+          if [ "$(gh release view "$TAG" --repo "$GITHUB_REPOSITORY" --json isDraft --jq '.isDraft')" = "true" ]; then
+            gh release edit "$TAG" --repo "$GITHUB_REPOSITORY" --draft=false --latest
           else
             echo "$TAG is already published"
           fi
