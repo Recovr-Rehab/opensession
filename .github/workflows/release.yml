@@ -7,10 +7,9 @@
 # binaries), so one Linux runner builds all four. Pi is bundled into the binary,
 # so there is no engine seed to prebuild.
 #
-# GitHub's immutable releases lock their tag and assets at publication. This
-# workflow therefore owns the full order: create or reuse a draft, upload every
-# asset, verify the draft, then publish it. Push a tag to start a release, or
-# create a draft in the GitHub UI and dispatch this workflow before publishing.
+# GitHub's immutable releases lock their tag and assets at publication. Every
+# release producer therefore uploads to the same draft. release-finalize.yml
+# publishes it only after the compiled and Mac workflows both succeed.
 name: Release
 
 on:
@@ -19,7 +18,7 @@ on:
   workflow_dispatch:
     inputs:
       tag:
-        description: "Existing tag to build and publish"
+        description: "Existing draft release tag to build"
         required: true
 
 permissions:
@@ -35,6 +34,7 @@ jobs:
         with:
           ref: ${{ github.event.inputs.tag || github.ref }}
       - name: Prepare release draft
+        if: github.ref_type == 'tag' || github.event_name == 'workflow_dispatch'
         env:
           GH_TOKEN: ${{ github.token }}
           TAG: ${{ github.event.inputs.tag || github.ref_name }}
@@ -42,11 +42,13 @@ jobs:
           set -euo pipefail
           if is_draft="$(gh release view "$TAG" --json isDraft --jq '.isDraft' 2>/dev/null)"; then
             if [ "$is_draft" != "true" ]; then
-              echo "::error title=Release is already immutable::$TAG is already published. Create the next release as a draft, or push only its tag and let this workflow publish it."
+              echo "::error title=Release is already immutable::$TAG is already published. Create the next release as a draft, or push only its tag and let the release workflows publish it."
               exit 1
             fi
-          else
-            gh release create "$TAG" --verify-tag --draft --title "$TAG" --generate-notes
+          elif ! gh release create "$TAG" --verify-tag --draft --title "$TAG" --generate-notes; then
+            sleep 2
+            is_draft="$(gh release view "$TAG" --json isDraft --jq '.isDraft')"
+            test "$is_draft" = "true"
           fi
       - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6
         with:
@@ -69,7 +71,7 @@ jobs:
             cp "$versioned" "$out/assets/opensession-$os-$arch.tar.gz"
           done
           ls -la "$out/assets"
-      - name: Upload and publish the release
+      - name: Upload release assets
         env:
           GH_TOKEN: ${{ github.token }}
           TAG: ${{ github.event.inputs.tag || github.ref_name }}
@@ -77,12 +79,11 @@ jobs:
           set -euo pipefail
           assets="$RUNNER_TEMP/release/assets"
           gh release upload "$TAG" "$assets"/* --clobber
-
-          find "$assets" -maxdepth 1 -type f -printf '%f\n' | sort > "$RUNNER_TEMP/expected-assets"
-          gh release view "$TAG" --json assets --jq '.assets[].name' | sort > "$RUNNER_TEMP/uploaded-assets"
-          if ! diff -u "$RUNNER_TEMP/expected-assets" "$RUNNER_TEMP/uploaded-assets"; then
-            echo "::error title=Release assets are incomplete::The draft asset set does not match the build output."
-            exit 1
-          fi
-
-          gh release edit "$TAG" --draft=false --latest
+          gh release view "$TAG" --json assets --jq '.assets[] | select(.state == "uploaded" and .size > 0) | .name' > "$RUNNER_TEMP/uploaded-assets"
+          for asset in "$assets"/*; do
+            name="${asset##*/}"
+            if ! grep -Fqx "$name" "$RUNNER_TEMP/uploaded-assets"; then
+              echo "::error title=Release asset is missing::$name was not uploaded to the draft."
+              exit 1
+            fi
+          done
