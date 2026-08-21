@@ -122,7 +122,10 @@ describe("single session ownership", () => {
 			"session-kernel/creation-effect-executors.ts",
 		);
 		expect(creationExecutors).toContain(
-			'registerSessionEffectExecutor(\n    "creation_workspace_prepare"',
+			'registerSessionEffectExecutor(\n      "creation_workspace_prepare"',
+		);
+		expect(creationExecutors).toContain(
+			'registerSessionEffectExecutor(\n      "creation_branch_prepare"',
 		);
 		expect(creationExecutors).toContain("assertAdoptableWorkspace(workspace, item)");
 		expect(creationExecutors.indexOf("dependencies.result(item)")).toBeGreaterThan(

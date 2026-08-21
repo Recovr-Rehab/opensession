@@ -22,6 +22,9 @@ export type CreationBranchPrepareEffect = {
   payload: CreationEffectBase & {
     project: string;
     branch: string;
+    worktreePath: string;
+    baseBranch?: string;
+    isolated: boolean;
     mode: "adopt_or_create";
   };
 };

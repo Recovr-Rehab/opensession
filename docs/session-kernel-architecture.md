@@ -123,8 +123,13 @@ physical setup and emit `creation_workspace_prepare` instead of writing a new
 workspace. Their gateway continuations wait for the completed actor receipt,
 never workspace file presence. Existing-workspace joins remain reads, while
 create-plan JSON still carries other recovery decisions.
-Branch, sandbox, credential, attachment, and opening-turn executors are also not
-yet registered. Wiring those adapters and removing the remaining create-plan
+The branch effect also has a production executor. It adopts only an exact
+project, branch, and worktree-path match, or materializes the requested branch
+with stable base and isolation options before returning its actor fence. Branch
+or path crossover is immediately indeterminate, and a crash after Git accepts
+the worktree adopts it on retry. Create entry points do not emit this effect yet.
+Sandbox, credential, attachment, and opening-turn executors are also not yet
+registered. Wiring those adapters and removing the remaining create-plan
 authority are the next cutovers; the presence or absence of a plan file is not
 actor lifecycle evidence.
 

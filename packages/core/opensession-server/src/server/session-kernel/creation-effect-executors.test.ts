@@ -3,9 +3,12 @@ import { mkdtempSync, rmSync } from "fs";
 import { tmpdir } from "os";
 import { join } from "path";
 import { createWorkspace, getWorkspace } from "../workspaces";
+import { createWorktree, listWorktrees } from "../worktree";
 import {
   CreationEffectIndeterminateError,
+  executeCreationBranchPrepare,
   executeCreationWorkspacePrepare,
+  type CreationBranchEffectItem,
   type CreationWorkspaceEffectItem,
 } from "./creation-effect-executors";
 
@@ -35,6 +38,29 @@ function item(): CreationWorkspaceEffectItem {
       createdBy: "Alice",
       project: "opensession",
       branch: "feature/create-one",
+      mode: "adopt_or_create",
+    },
+    attempts: 0,
+    nextAttemptAt: 0,
+    createdAt: 1,
+  };
+}
+
+function branchItem(): CreationBranchEffectItem {
+  return {
+    id: 2,
+    effectId: "session:creation_branch_prepare:branch-effect",
+    effectKey: "branch-effect",
+    sessionId: "session-one",
+    kind: "creation_branch_prepare",
+    payload: {
+      creationIdentity: "create-one",
+      creationGeneration: 1,
+      project: "opensession",
+      branch: "feature/create-one",
+      worktreePath: "/worktrees/create-one",
+      baseBranch: "main",
+      isolated: true,
       mode: "adopt_or_create",
     },
     attempts: 0,
@@ -129,6 +155,75 @@ describe("creation workspace effect executor", () => {
       createWorkspace,
       result: () => {
         throw new Error("result must not be sent");
+      },
+    })).rejects.toBeInstanceOf(CreationEffectIndeterminateError);
+  });
+});
+
+describe("creation branch effect executor", () => {
+  test("adopts the exact branch destination without creating it again", async () => {
+    let creates = 0;
+    let results = 0;
+    await executeCreationBranchPrepare(branchItem(), {
+      listWorktrees: (async () => [
+        { branch: "feature/create-one", path: "/worktrees/create-one" },
+      ]) as typeof listWorktrees,
+      createWorktree: (async () => {
+        creates += 1;
+        return "/worktrees/create-one";
+      }) as typeof createWorktree,
+      result: () => {
+        results += 1;
+        return { accepted: true, to: "preparing" };
+      },
+    });
+    expect(creates).toBe(0);
+    expect(results).toBe(1);
+  });
+
+  test("adopts after a crash between worktree acceptance and actor result", async () => {
+    const worktrees: Array<{ branch: string; path: string }> = [];
+    let creates = 0;
+    let results = 0;
+    const list = (async () => worktrees) as typeof listWorktrees;
+    const create = (async (branch: string) => {
+      creates += 1;
+      worktrees.push({ branch, path: "/worktrees/create-one" });
+      return "/worktrees/create-one";
+    }) as typeof createWorktree;
+    await expect(executeCreationBranchPrepare(branchItem(), {
+      listWorktrees: list,
+      createWorktree: create,
+      result: () => {
+        results += 1;
+        return { accepted: true, to: "preparing" };
+      },
+      afterDestinationAccepted: () => {
+        throw new Error("injected crash after branch acceptance");
+      },
+    })).rejects.toThrow("injected crash after branch acceptance");
+    await executeCreationBranchPrepare(branchItem(), {
+      listWorktrees: list,
+      createWorktree: create,
+      result: () => {
+        results += 1;
+        return { accepted: true, to: "preparing" };
+      },
+    });
+    expect(creates).toBe(1);
+    expect(results).toBe(1);
+  });
+
+  test("fails closed when branch and worktree identity disagree", async () => {
+    await expect(executeCreationBranchPrepare(branchItem(), {
+      listWorktrees: (async () => [
+        { branch: "feature/create-one", path: "/worktrees/other" },
+      ]) as typeof listWorktrees,
+      createWorktree: (async () => {
+        throw new Error("must not create");
+      }) as typeof createWorktree,
+      result: () => {
+        throw new Error("must not result");
       },
     })).rejects.toBeInstanceOf(CreationEffectIndeterminateError);
   });
