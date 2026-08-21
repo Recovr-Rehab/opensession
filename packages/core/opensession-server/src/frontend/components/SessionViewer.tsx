@@ -326,7 +326,7 @@ import {
 	msgStreamingRow,
 } from "../lib/msg-classes";
 import { Menu, MENU_ICON } from "../ui/menu";
-import { ResponsiveDialog } from "../ui/sheet";
+import { Modal } from "../ui/modal";
 import { Tooltip } from "../ui/tooltip";
 import { CopyCheck, useCopy } from "../ui/copy";
 import { toast } from "../ui/toast";
@@ -5425,43 +5425,39 @@ export function SessionViewer({
 					</div>
 				</div>
 			)}
-			<ResponsiveDialog
+			<Modal.Root
 				open={createPrConfirmOpen}
-				onClose={() => setCreatePrConfirmOpen(false)}
-				phone={isPhone}
-				label="Move to a branch"
-				sheetClassName="px-6 pb-6 pt-3"
-				modalClassName="p-6"
+				onOpenChange={(open) => {
+					if (branchActionBusy !== "create") setCreatePrConfirmOpen(open);
+				}}
+				disablePointerDismissal={branchActionBusy === "create"}
 			>
-				<div className="flex flex-col gap-5">
-					<div className="flex flex-col gap-1.5">
-						<h2 className="text-title font-semibold text-fg">
-							Move to a branch?
-						</h2>
-						<p className="text-body text-dim">
-							Move this session to its own branch before creating the pull request.
-						</p>
-					</div>
-					<div className="grid grid-cols-2 gap-2">
-						<Button
-							variant="ghost"
-							className="phone:min-h-11"
-							disabled={branchActionBusy === "create"}
-							onClick={() => setCreatePrConfirmOpen(false)}
-						>
-							Cancel
-						</Button>
+				<Modal.Content>
+					<Modal.Header
+						title="Move to a branch?"
+						description="You need to move this session to a branch before you can create a PR."
+					/>
+					<Modal.Footer>
+						<Modal.Close
+							render={
+								<Button
+									variant="ghost"
+									disabled={branchActionBusy === "create"}
+								>
+									Cancel
+								</Button>
+							}
+						/>
 						<Button
 							variant="primary"
-							className="phone:min-h-11"
 							disabled={!connected || isBusy || branchActionBusy === "create"}
 							onClick={() => void moveAndCreatePr()}
 						>
 							{branchActionBusy === "create" ? "Moving…" : "Move and create"}
 						</Button>
-					</div>
-				</div>
-			</ResponsiveDialog>
+					</Modal.Footer>
+				</Modal.Content>
+			</Modal.Root>
 			{!hideHeader && (() => {
 				const addToSidebarAction = (inMenu: boolean) =>
 					canAddToSidebar &&
