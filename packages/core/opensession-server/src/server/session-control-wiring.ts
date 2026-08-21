@@ -50,6 +50,7 @@ import { randomUUIDv7 } from "bun";
 import {
 	ensureCreationPlanned,
 	legacyGatewayEffect,
+	requestCreationBranch,
 	requestCreationWorkspace,
 	sessionKernel,
 	sessionKernelOwnsCurrentCommand,
@@ -655,8 +656,21 @@ registerSessionControl({
 						...(githubGitEnv ? { gitEnv: githubGitEnv } : {}),
 					};
 					wtPath = worktreePathFor(sessionBranch, repo.id, worktreeOptions);
-					materializeWorktree = () =>
-						createWorktree(sessionBranch, repo.id, worktreeOptions);
+					const plannedBranch = sessionBranch;
+					const plannedWorktreePath = wtPath;
+					materializeWorktree = githubGitEnv
+						? () => createWorktree(plannedBranch, repo.id, worktreeOptions)
+						: async () => {
+								await requestCreationBranch({
+									sessionId: bksId,
+									identity: createIdentity,
+									project: repo.id,
+									branch: plannedBranch,
+									worktreePath: plannedWorktreePath,
+									isolated: isolatedWorktree === true,
+								});
+								return plannedWorktreePath;
+							};
 				}
 			}
 		}

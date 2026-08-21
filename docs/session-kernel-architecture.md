@@ -127,8 +127,11 @@ The branch effect also has a production executor. It adopts only an exact
 project, branch, and worktree-path match, or materializes the requested branch
 with stable base and isolation options before returning its actor fence. Branch
 or path crossover is immediately indeterminate, and a crash after Git accepts
-the worktree adopts it on retry. Create entry points do not emit this effect yet.
-Sandbox, credential, attachment, and opening-turn executors are also not yet
+the worktree adopts it on retry. The MCP create path emits this branch effect
+when no ephemeral Git credential is required. Credential-bearing materialization
+stays on the explicit legacy adapter until credential resolution has a typed,
+non-secret result path. WebSocket branch creation is also still legacy.
+Sandbox, credential, attachment, and opening-turn executors are not yet
 registered. Wiring those adapters and removing the remaining create-plan
 authority are the next cutovers; the presence or absence of a plan file is not
 actor lifecycle evidence.
