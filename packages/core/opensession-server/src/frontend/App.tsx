@@ -57,6 +57,7 @@ import { Modal } from "./ui/modal";
 import { Button } from "./ui/button";
 import { suppressLayoutAnimations } from "./ui/motion";
 import { SessionViewer } from "./components/SessionViewer";
+import { AgentationFeedback } from "./components/AgentationFeedback";
 import type { PortalTarget } from "./lib/portals";
 import { NewSession } from "./components/NewSession";
 import { IconTile } from "./components/BrandTile";
@@ -5694,7 +5695,10 @@ if (!embeddedDemo) {
 				<PreviewWait sessionId={previewWaitSessionId} />
 			) : (
 				<TooltipProvider>
-					<App />
+					<>
+						<App />
+						<AgentationFeedback />
+					</>
 				</TooltipProvider>
 			)}
 		</MotionConfig>,
