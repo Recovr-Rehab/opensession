@@ -24,7 +24,7 @@
    `body.kb-open .viewer-input:has(.composer:not(.composer-min))`). The
    declarations below are what that rule used to paint. */
 export const composerBox =
-	"relative border border-[color:var(--composer-border)] bg-[var(--composer-surface)] shadow-[var(--composer-shadow)] transition-[border-color,box-shadow] " +
+	"relative border border-[color:color-mix(in_srgb,var(--composer-border)_35%,transparent)] bg-[var(--composer-surface)] shadow-[var(--composer-shadow)] transition-[border-color,box-shadow] " +
 	"desktop:border-transparent desktop:[--smooth-ring-color:var(--composer-border)] desktop:smooth-shadow-ring-soft";
 
 /** Resting/expanded box. `--composer-inset-left` is read by the "+" menu to
@@ -249,19 +249,12 @@ export const fileChipSub = "text-meta text-faint";
    the run-status flap in components/ComposerAgents.tsx). */
 /** The hairline a flap draws, matched to the edge the composer actually paints.
  *
- *  On desktop the composer carries NO border: `composerBox` makes it
- *  transparent and hands its edge to `smooth-shadow-ring-soft`, whose ring
- *  layer is `--composer-border` at 35%. A flap flush with that box, drawing the
- *  same token at full strength, is therefore about three times the ink —
- *  measured #dcdcdc against the composer's ~#ededed in light, which reads as
- *  the panel BEHIND having the harder edge. Match the ring's strength instead;
- *  the alpha composites over the flap's own fill (backgrounds paint under
- *  borders), so it lands within a couple of levels of the composer's ring.
- *
- *  Phone browsers keep the solid border. Installed PWAs use the
- *  `pwa-composer-edge` hook in base.css to match the desktop ring strength. */
+ *  The composer carries the border token at 35% strength: through a smooth
+ *  ring on desktop and a solid hairline on phone. Drawing the flap at full
+ *  strength made the panel behind it about three times darker than the input
+ *  in front. Use the same mix everywhere so the two layers keep one edge. */
 export const composerFlapBorder =
-	"pwa-composer-edge border-[color:var(--composer-border)] desktop:border-[color:color-mix(in_srgb,var(--composer-border)_35%,transparent)]";
+	"pwa-composer-edge border-[color:color-mix(in_srgb,var(--composer-border)_35%,transparent)]";
 
 /* ── The queue flap ───────────────────────────────────────────────
    The flap that folds out from behind the composer: a dimmer panel flush with

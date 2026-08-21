@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { composerFlapBorder } from "../lib/composer-classes";
+import { composerBox, composerFlapBorder } from "../lib/composer-classes";
 
 const CSS = new URL("./base.css", import.meta.url);
 const SHIPPED = new URL(
@@ -7,6 +7,15 @@ const SHIPPED = new URL(
 	import.meta.url,
 );
 const COMPOSER = new URL("../components/Composer.tsx", import.meta.url);
+
+test("phone composers use the same quiet edge as the desktop ring", () => {
+	expect(composerBox).toContain(
+		"border-[color:color-mix(in_srgb,var(--composer-border)_35%,transparent)]",
+	);
+	expect(composerFlapBorder).toContain(
+		"border-[color:color-mix(in_srgb,var(--composer-border)_35%,transparent)]",
+	);
+});
 
 test("the installed phone composer keeps a quiet edge and hides auxiliary controls", async () => {
 	const css = await Bun.file(CSS).text();
