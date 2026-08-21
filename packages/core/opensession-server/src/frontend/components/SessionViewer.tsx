@@ -169,7 +169,10 @@ import {
 	sameImages,
 	subtractStaging,
 } from "../lib/attachments";
-import { hasDraggedFiles } from "../lib/file-drag";
+import {
+	foregroundFileComposerOpen,
+	hasDraggedFiles,
+} from "../lib/file-drag";
 import {
 	isHiddenForSession,
 	onHidesChanged,
@@ -1790,6 +1793,10 @@ export function SessionViewer({
 		}
 		function handleFileDragEnter(event: DragEvent) {
 			if (!hasDraggedFiles(event.dataTransfer)) return;
+			if (foregroundFileComposerOpen()) {
+				finishFileDrag();
+				return;
+			}
 			event.preventDefault();
 			armFileDragWatchdog();
 			if (cancelledFileDragRef.current) return;
@@ -1802,6 +1809,10 @@ export function SessionViewer({
 		}
 		function handleFileDragLeave(event: DragEvent) {
 			if (!hasDraggedFiles(event.dataTransfer)) return;
+			if (foregroundFileComposerOpen()) {
+				finishFileDrag();
+				return;
+			}
 			const next = event.relatedTarget;
 			const leftApp =
 				!(next instanceof Node) || !document.documentElement.contains(next);
@@ -1825,6 +1836,10 @@ export function SessionViewer({
 		}
 		function handleFileDragOver(event: DragEvent) {
 			if (!hasDraggedFiles(event.dataTransfer)) return;
+			if (foregroundFileComposerOpen()) {
+				finishFileDrag();
+				return;
+			}
 			event.preventDefault();
 			armFileDragWatchdog();
 			if (cancelledFileDragRef.current) {
@@ -1840,6 +1855,10 @@ export function SessionViewer({
 		}
 		function handleFileDrop(event: DragEvent) {
 			if (!hasDraggedFiles(event.dataTransfer)) return;
+			if (foregroundFileComposerOpen()) {
+				finishFileDrag();
+				return;
+			}
 			event.preventDefault();
 			event.stopPropagation();
 			const cancelled = cancelledFileDragRef.current;

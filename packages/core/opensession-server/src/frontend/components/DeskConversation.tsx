@@ -10,7 +10,7 @@ import {
 	fetchModels,
 	type ModelOption,
 } from "../lib/api";
-import type { FileAttachment } from "../lib/images";
+import { splitAttachments, type FileAttachment } from "../lib/images";
 import { TranscriptBlocks } from "./TranscriptBlocks";
 import { Composer } from "./Composer";
 import { mergeTranscriptEntries } from "../lib/transcript-state";
@@ -26,6 +26,14 @@ import {
 } from "../lib/msg-classes";
 import { TypingIndicator } from "./TypingIndicator";
 import { duration, ease } from "../ui/motion";
+import {
+	addStaging,
+	countStaging,
+	NOTHING_STAGING,
+	subtractStaging,
+} from "../lib/attachments";
+import { hasDraggedFiles } from "../lib/file-drag";
+import { IconArrowUpToLine } from "./icons";
 
 interface DeskConversationProps {
 	sessionId: string;
@@ -80,6 +88,9 @@ export function DeskConversation({
 	// does; both ride along on the prompt.
 	const [images, setImages] = useState<string[]>([]);
 	const [files, setFiles] = useState<FileAttachment[]>([]);
+	const [dropStaging, setDropStaging] = useState(NOTHING_STAGING);
+	const [fileDragActive, setFileDragActive] = useState(false);
+	const fileDragWatchdogRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 	// The model pill's catalog. Empty until it loads — the pill falls back to
 	// naming the id it was given, so nothing waits on this.
 	const [models, setModels] = useState<ModelOption[]>([]);
@@ -112,6 +123,76 @@ export function DeskConversation({
 		// start makes the two pieces read as one compacting surface.
 		setDictationHidesSuggestions(active);
 	}
+	async function addDeskAttachments(picked: FileList | File[]) {
+		const selected = Array.from(picked);
+		const batch = countStaging(selected);
+		setDropStaging((current) => addStaging(current, batch));
+		try {
+			const { images: addedImages, files: addedFiles, rejected } =
+				await splitAttachments(selected);
+			if (addedImages.length)
+				setImages((current) => [...current, ...addedImages]);
+			if (addedFiles.length)
+				setFiles((current) => [...current, ...addedFiles]);
+			if (rejected.length) alert(`Couldn't attach:\n${rejected.join("\n")}`);
+		} finally {
+			setDropStaging((current) => subtractStaging(current, batch));
+		}
+	}
+
+	function resetFileDrag() {
+		if (fileDragWatchdogRef.current) clearTimeout(fileDragWatchdogRef.current);
+		fileDragWatchdogRef.current = null;
+		setFileDragActive(false);
+	}
+
+	function armFileDragWatchdog() {
+		if (fileDragWatchdogRef.current) clearTimeout(fileDragWatchdogRef.current);
+		fileDragWatchdogRef.current = setTimeout(resetFileDrag, 500);
+	}
+
+	useEffect(() => {
+		if (!presenceActive || !connected) return;
+		function handleDragEnter(event: DragEvent) {
+			if (!hasDraggedFiles(event.dataTransfer)) return;
+			event.preventDefault();
+			armFileDragWatchdog();
+			setFileDragActive(true);
+		}
+		function handleDragLeave(event: DragEvent) {
+			if (!hasDraggedFiles(event.dataTransfer)) return;
+			const next = event.relatedTarget;
+			if (next instanceof Node && document.documentElement.contains(next)) return;
+			resetFileDrag();
+		}
+		function handleDragOver(event: DragEvent) {
+			if (!hasDraggedFiles(event.dataTransfer)) return;
+			event.preventDefault();
+			armFileDragWatchdog();
+			setFileDragActive(true);
+			if (event.dataTransfer) event.dataTransfer.dropEffect = "copy";
+		}
+		function handleDrop(event: DragEvent) {
+			if (!hasDraggedFiles(event.dataTransfer)) return;
+			event.preventDefault();
+			event.stopPropagation();
+			const dropped = event.dataTransfer?.files;
+			resetFileDrag();
+			if (dropped?.length) void addDeskAttachments(dropped);
+		}
+		window.addEventListener("dragenter", handleDragEnter, true);
+		window.addEventListener("dragleave", handleDragLeave, true);
+		window.addEventListener("dragover", handleDragOver, true);
+		window.addEventListener("drop", handleDrop, true);
+		return () => {
+			window.removeEventListener("dragenter", handleDragEnter, true);
+			window.removeEventListener("dragleave", handleDragLeave, true);
+			window.removeEventListener("dragover", handleDragOver, true);
+			window.removeEventListener("drop", handleDrop, true);
+			resetFileDrag();
+		};
+	}, [presenceActive, connected, sessionId]);
+
 	// Stick to the live edge only while the reader is already there, so a
 	// streaming reply doesn't yank them up from scrollback.
 	const followRef = useRef(true);
@@ -461,42 +542,75 @@ export function DeskConversation({
 				</div>
 
 				<TypingIndicator users={typingUsers} className="mb-1 px-5" />
-				{/* The session composer itself, so the Desk gets what a session gets:
-				    attachments, dictation, @-mentions, the model and effort pill, and
-				    the same send/queue/steer gestures. */}
-				<Composer
-					draftKey={`desk:${sessionId}`}
-					onSend={handleSend}
-					onTyping={(active) => setTyping(sessionId, active)}
-					onDictationActive={handleDictationActive}
-					attachmentShortcutActive={presenceActive}
-					placeholder={
-						connected ? placeholder || "Ask your Desk…" : "Not connected"
-					}
-					disabled={!connected}
-					sendDisabled={(text) =>
-						!text.trim() && images.length === 0 && files.length === 0
-					}
-					busy={isRunning}
-					images={images}
-					onImagesChange={setImages}
-					files={files}
-					onFilesChange={setFiles}
-					prefill={prefill}
-					models={models}
-					defaultModel={defaultModel}
-					model={model}
-					onModelChange={handleModelChange}
-					modelTitle="Model and reasoning effort for your Desk"
-					effort={effort}
-					onEffortChange={setEffort}
-					mentionFetch={(q) => fetchFileMentions(q, sessionId)}
-					paletteFetch={(q) =>
-						fetchMentionSuggestions(q, sessionId, getCurrentUser())
-					}
-					autoFocus={autoFocus}
-					textareaRef={textareaRef}
-				/>
+				{/* The open Desk owns the app-wide drop over the session underneath. */}
+				<div
+					className="relative"
+					data-global-file-composer={presenceActive && connected ? "" : undefined}
+				>
+					<Composer
+						draftKey={`desk:${sessionId}`}
+						onSend={handleSend}
+						onTyping={(active) => setTyping(sessionId, active)}
+						onDictationActive={handleDictationActive}
+						attachmentShortcutActive={presenceActive}
+						placeholder={
+							connected ? placeholder || "Ask your Desk…" : "Not connected"
+						}
+						disabled={!connected}
+						sendDisabled={(text) =>
+							!text.trim() && images.length === 0 && files.length === 0
+						}
+						busy={isRunning}
+						images={images}
+						onImagesChange={setImages}
+						files={files}
+						onFilesChange={setFiles}
+						staging={dropStaging}
+						onAddAttachments={addDeskAttachments}
+						prefill={prefill}
+						models={models}
+						defaultModel={defaultModel}
+						model={model}
+						onModelChange={handleModelChange}
+						modelTitle="Model and reasoning effort for your Desk"
+						effort={effort}
+						onEffortChange={setEffort}
+						mentionFetch={(q) => fetchFileMentions(q, sessionId)}
+						paletteFetch={(q) =>
+							fetchMentionSuggestions(q, sessionId, getCurrentUser())
+						}
+						autoFocus={autoFocus}
+						textareaRef={textareaRef}
+					/>
+					<AnimatePresence initial={false}>
+						{fileDragActive && (
+							<motion.div
+								className="pointer-events-none absolute inset-0 z-[20] flex items-center justify-center gap-3 rounded-[var(--composer-radius)] bg-[color-mix(in_srgb,var(--composer-surface)_90%,transparent)] px-5 text-left [backdrop-filter:blur(8px)]"
+								initial={{ opacity: 0 }}
+								animate={{ opacity: 1 }}
+								exit={{ opacity: 0 }}
+								transition={{ type: "tween", duration: duration.micro, ease }}
+								aria-hidden="true"
+								data-composer-file-drop-overlay
+							>
+								<IconArrowUpToLine size={26} className="shrink-0 text-fg" />
+								<div className="min-w-0">
+									<div className="text-control-label font-semibold text-fg">
+										Add files
+									</div>
+									<div className="text-label leading-snug text-dim">
+										Drop here to attach them to your message.
+									</div>
+								</div>
+							</motion.div>
+						)}
+					</AnimatePresence>
+					{fileDragActive && (
+						<span className="sr-only" role="status">
+							Drop files to attach
+						</span>
+					)}
+				</div>
 			</div>
 		</div>
 	);

@@ -54,7 +54,6 @@ import {
   IconStopSquare,
   IconPencil,
   IconTrash,
-  IconArrowUpToLine,
 } from "./icons";
 import {
   composerBox,
@@ -113,9 +112,8 @@ import {
 import { getVimModePref, onVimModeChanged } from "../lib/vim-pref";
 import { useVimMode } from "../hooks/useVimMode";
 import { useIsPhone } from "../hooks/useIsPhone";
-import { hasDraggedFiles } from "../lib/file-drag";
 import { motion, AnimatePresence } from "motion/react";
-import { composerMorph, composerChipMotion, duration, ease } from "../ui/motion";
+import { composerMorph, composerChipMotion } from "../ui/motion";
 import { ModelEffortSelect, shortModelLabel } from "./ModelEffortSelect";
 import type { SessionUsage } from "../lib/types";
 
@@ -511,8 +509,6 @@ export function Composer({
   );
   const [localStaging, setLocalStaging] = useState<StagingCount>(NOTHING_STAGING);
   const activeStaging = staging ?? localStaging;
-  const [fileDragActive, setFileDragActive] = useState(false);
-  const fileDragWatchdogRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const isPhone = useIsPhone();
   const noteChord = useShortcutLabel("composer-note");
   const attachChord = useShortcutLabel("composer-attach");
@@ -698,8 +694,7 @@ export function Composer({
     isStaging(activeStaging) ||
     pastedTexts.length > 0 ||
     !!quote ||
-    hasAttached ||
-    fileDragActive;
+    hasAttached;
   const minimized = isPhone && !focused && !hasContent && !modelMenuOpen;
   const composerIconButtonClass = cn(
     paletteIconBtn,
@@ -940,64 +935,6 @@ export function Composer({
       e.preventDefault();
       void addFiles(pasted);
     }
-  }
-
-  function resetFileDrag() {
-    if (fileDragWatchdogRef.current) clearTimeout(fileDragWatchdogRef.current);
-    fileDragWatchdogRef.current = null;
-    setFileDragActive(false);
-  }
-
-  function armFileDragWatchdog() {
-    if (fileDragWatchdogRef.current) clearTimeout(fileDragWatchdogRef.current);
-    // Native OS drags do not always finish with dragleave or dragend (Escape is
-    // the common case). Dragover keeps this alive while the pointer is here.
-    fileDragWatchdogRef.current = setTimeout(resetFileDrag, 500);
-  }
-
-  useEffect(() => {
-    if (!fileDragActive) return;
-    function finishFileDrag(event: KeyboardEvent | DragEvent) {
-      if (event instanceof KeyboardEvent && event.key !== "Escape") return;
-      resetFileDrag();
-    }
-    window.addEventListener("keydown", finishFileDrag, true);
-    window.addEventListener("dragend", finishFileDrag, true);
-    return () => {
-      if (fileDragWatchdogRef.current) clearTimeout(fileDragWatchdogRef.current);
-      window.removeEventListener("keydown", finishFileDrag, true);
-      window.removeEventListener("dragend", finishFileDrag, true);
-    };
-  }, [fileDragActive]);
-
-  function handleDragEnter(e: React.DragEvent) {
-    if (!canAttach || disabled || !hasDraggedFiles(e.dataTransfer)) return;
-    e.preventDefault();
-    armFileDragWatchdog();
-    setFileDragActive(true);
-  }
-
-  function handleDragLeave(e: React.DragEvent) {
-    if (!hasDraggedFiles(e.dataTransfer)) return;
-    const next = e.relatedTarget;
-    if (next instanceof Node && e.currentTarget.contains(next)) return;
-    resetFileDrag();
-  }
-
-  function handleDragOver(e: React.DragEvent) {
-    if (!canAttach || disabled || !hasDraggedFiles(e.dataTransfer)) return;
-    e.preventDefault();
-    armFileDragWatchdog();
-    setFileDragActive(true);
-    e.dataTransfer.dropEffect = "copy";
-  }
-
-  function handleDrop(e: React.DragEvent) {
-    if (!hasDraggedFiles(e.dataTransfer)) return;
-    e.preventDefault();
-    resetFileDrag();
-    if (!canAttach || disabled || !e.dataTransfer.files.length) return;
-    void addFiles(e.dataTransfer.files);
   }
 
   function removeImage(i: number) {
@@ -1540,38 +1477,7 @@ export function Composer({
           disabled && "opacity-60",
         )}
         style={surfaceStyle}
-        onDragEnter={handleDragEnter}
-        onDragLeave={handleDragLeave}
-        onDragOver={handleDragOver}
-        onDrop={handleDrop}
       >
-        <AnimatePresence initial={false}>
-          {fileDragActive && (
-            <motion.div
-              key="file-drop-overlay"
-              className="pointer-events-none !absolute inset-0 !z-[7] flex items-center justify-center gap-3 rounded-[inherit] bg-[color-mix(in_srgb,var(--composer-surface)_90%,transparent)] px-5 text-left [backdrop-filter:blur(8px)]"
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-              transition={{ type: "tween", duration: duration.micro, ease }}
-              aria-hidden="true"
-              data-composer-file-drop-overlay
-            >
-              <IconArrowUpToLine size={26} className="shrink-0 text-fg" />
-              <div className="min-w-0">
-                <div className="text-control-label font-semibold text-fg">Add files</div>
-                <div className="text-label leading-snug text-dim">
-                  Drop here to attach them to your message.
-                </div>
-              </div>
-            </motion.div>
-          )}
-        </AnimatePresence>
-        {fileDragActive && (
-          <span className="sr-only" role="status">
-            Drop files to attach
-          </span>
-        )}
         {/* The mic lives in the toolbar, but recording replaces this entire
             surface. VoiceInput portals the active bar here so a positioned
             toolbar cannot trap it at one-row height. */}
