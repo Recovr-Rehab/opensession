@@ -22,7 +22,7 @@ const {
 	sessionSocialCardPublicRoutes,
 	sessionSocialCardSvg,
 	sessionSocialCardUrl,
-	fitSocialCardTitle,
+	hasUsableSessionShot,
 	socialSessionIdFromPath,
 } = await import("./session-social-card");
 const { invalidateSessionsCache } = await import("./session-cache");
@@ -189,121 +189,76 @@ describe("session social card", () => {
 		).toBe(dataUrl);
 	});
 
-	test("balances the title across at most two lines before truncating", async () => {
-		const fitting = "Make Open Session links feel alive";
-		expect(await fitSocialCardTitle(fitting)).toEqual([fitting]);
-
-		const wrappedTitle = "Make every shared Open Session easier to recognize";
-		const wrapped = await fitSocialCardTitle(wrappedTitle, 720);
-		expect(wrapped).toHaveLength(2);
-		expect(wrapped.join(" ")).toBe(wrappedTitle);
-
-		const truncated = await fitSocialCardTitle("W".repeat(160), 520);
-		expect(truncated).toHaveLength(2);
-		expect(truncated[1].endsWith("...")).toBe(true);
-		expect(truncated.join("").length).toBeLessThan(160);
-	});
-
-	test("matches the card geometry and escapes dynamic text", () => {
-		const svg = sessionSocialCardSvg({
-			title: "Fix <cards> & links",
-			owner: 'Test "Person"',
-			repo: "opensession",
-		});
-		expect(svg).toContain('<rect width="1200" height="630" fill="#FFFFFF"/>');
-		expect(svg).not.toContain("aurora");
-		expect(svg).not.toContain("shotFade");
-		expect(svg).toContain('fill="#050609" font-size="38"');
-		// The title is the image's only text. Person, repo, model and status live
-		// outside the image so Slack never repeats them.
-		expect(svg).toContain('<text x="56"');
-		expect(svg).not.toContain("Test &quot;Person&quot;");
-		expect(svg).not.toContain("opensession");
-		expect(svg).not.toContain("gpt-5.6-sol");
-		expect(svg).not.toContain('id="avatarClip"');
-		expect(svg).not.toContain('<circle cx="12" cy="7.6" r="3.7"');
-		expect(svg).toContain("Fix &lt;cards&gt; &amp; links");
-		expect(svg).not.toContain("Fix <cards>");
-	});
-
-	test("crops a screenshot-less banner to the balanced title", () => {
-		const svg = sessionSocialCardSvg(
-			{
-				title: "A visual session with a useful second line",
-				owner: "Test Person",
-				repo: "opensession",
-			},
-			["A visual session with", "a useful second line"],
-			"banner",
-			[],
-			480,
-		);
-		// No screenshot or in-image metadata, so the crop hugs the two title lines.
+	test("draws the screenshot and nothing else", () => {
+		const svg = sessionSocialCardSvg(["data:image/png;base64,primary"]);
+		// The title, the person and the repo travel with the link itself, so no
+		// text is drawn on the card.
+		expect(svg).not.toContain("<text");
+		expect(svg).not.toContain("font-size");
+		// Cropped to one 640x360 frame plus room for its shadow.
 		expect(svg).toContain(
-			'<svg xmlns="http://www.w3.org/2000/svg" width="592" height="152"',
+			'<svg xmlns="http://www.w3.org/2000/svg" width="720" height="444"',
 		);
-		expect(svg).toContain('<rect width="592" height="152"');
-		expect(svg).toContain('<text x="56" y="55"');
-		expect(svg).toContain('<text x="56" y="97"');
-		expect(svg).not.toContain("Test Person");
-		expect(svg).not.toContain("opensession");
-		expect(svg).not.toContain('id="avatarClip"');
-	});
-
-	test("fans up to two rounded 16:9 screenshots from the bottom edge", () => {
-		const svg = sessionSocialCardSvg(
-			{
-				title: "A visual session",
-				owner: "Test Person",
-				repo: "opensession",
-			},
-			["A visual session"],
-			"banner",
-			[
-				"data:image/png;base64,primary",
-				"data:image/png;base64,secondary",
-				"data:image/png;base64,ignored",
-			],
-		);
+		expect(svg).toContain('<rect width="720" height="444" fill="#FFFFFF"/>');
 		expect(svg).toContain(
-			'<image href="data:image/png;base64,primary" x="662" y="37" width="528" height="297"',
+			'<image href="data:image/png;base64,primary" x="40" y="30" width="640" height="360"',
 		);
-		expect(svg).toContain(
-			'<image href="data:image/png;base64,secondary" x="582" y="47" width="528" height="297"',
-		);
-		expect(svg).not.toContain("ignored");
-		expect(svg).toContain('transform="rotate(-5 846 344)"');
-		expect(svg).toContain('transform="rotate(2 926 334)"');
-		expect(svg).toContain(
-			'<clipPath id="shotClip1" clipPathUnits="userSpaceOnUse"><path d="M608.00 47.00L1084.00 47.00',
-		);
+		expect(svg).not.toContain('transform="rotate(');
 		expect(svg).toContain('stdDeviation="22"');
 		expect(svg).toContain('result="ambient"');
 		expect(svg).toContain('result="lift"');
 		expect(svg).toContain('result="contact"');
-		expect(528 / 297).toBe(16 / 9);
 		expect(svg).not.toContain("gradient");
-
-		const single = sessionSocialCardSvg(
-			{ title: "One screenshot", owner: "Test Person" },
-			["One screenshot"],
-			"banner",
-			["data:image/png;base64,primary"],
-		);
-		expect(single).toContain('x="662" y="11.5" width="528" height="297"');
-		expect(single).not.toContain('transform="rotate(');
+		expect(640 / 360).toBe(16 / 9);
 	});
 
-	test("renders a 1200 by 630 PNG", async () => {
-		const png = await renderSessionSocialCard(sessionSocialCardData(session()));
+	test("fans a second screenshot up from behind the first", () => {
+		const svg = sessionSocialCardSvg([
+			"data:image/png;base64,primary",
+			"data:image/png;base64,secondary",
+			"data:image/png;base64,ignored",
+		]);
+		// The crop follows the rotated corners, so the fan never clips itself.
+		expect(svg).toContain(
+			'<svg xmlns="http://www.w3.org/2000/svg" width="859" height="498"',
+		);
+		expect(svg).toContain(
+			'<image href="data:image/png;base64,primary" x="166" y="43" width="640" height="360"',
+		);
+		expect(svg).toContain(
+			'<image href="data:image/png;base64,secondary" x="70" y="57" width="640" height="360"',
+		);
+		expect(svg).not.toContain("ignored");
+		expect(svg).toContain('transform="rotate(2 486 403)"');
+		expect(svg).toContain('transform="rotate(-5 390 417)"');
+		expect(svg).toContain(
+			'<clipPath id="shotClip1" clipPathUnits="userSpaceOnUse"><path d="M98.00 57.00L682.00 57.00',
+		);
+	});
+
+	test("has no card at all without a usable screenshot", async () => {
+		expect(sessionSocialCardSvg([])).toBe("");
+		expect(await renderSessionSocialCard(sessionSocialCardData(session()))).toBeNull();
+		expect(await hasUsableSessionShot(sessionSocialCardData(session()))).toBe(
+			false,
+		);
+	});
+
+	test("renders a crisp 2x PNG of one screenshot", async () => {
+		const shot = testImage("render.png");
+		const png = await renderSessionSocialCard({
+			title: "Ship dynamic social cards",
+			owner: "Test Person",
+			shots: [shot],
+		});
 		expect(png).not.toBeNull();
 		const metadata = await sharp(png!).metadata();
 		expect(metadata.format).toBe("png");
-		expect(metadata.width).toBe(1200);
-		expect(metadata.height).toBe(630);
+		expect(metadata.width).toBe(1440);
+		expect(metadata.height).toBe(888);
 	});
 
-	test("keeps a portrait screenshot large in a crisp Slack banner", async () => {
+	test("keeps a portrait screenshot large in the frame", async () => {
 		const portrait = join(uploadsDir, "portrait.png");
 		await sharp({
 			create: {
@@ -315,21 +270,22 @@ describe("session social card", () => {
 		})
 			.png()
 			.toFile(portrait);
-		const png = await renderSessionSocialCard(
-			{ title: "Show the whole screenshot", owner: "Test Person", shots: [portrait] },
-			"banner",
-		);
+		const png = await renderSessionSocialCard({
+			title: "Show the whole screenshot",
+			owner: "Test Person",
+			shots: [portrait],
+		});
 		expect(png).not.toBeNull();
 		const { data, info } = await sharp(png!).raw().toBuffer({ resolveWithObject: true });
-		expect(info.width).toBe(2400);
-		expect(info.height).toBe(640);
+		expect(info.width).toBe(1440);
+		expect(info.height).toBe(888);
 		const pixel = (x: number, y: number) => {
 			const offset = (y * info.width + x) * info.channels;
 			return [...data.subarray(offset, offset + 3)];
 		};
 		// Portraits fill the frame with a salience crop rather than a fixed top sliver.
-		expect(pixel(1852, 320)).toEqual([217, 45, 32]);
-		expect(pixel(1360, 320)).toEqual([217, 45, 32]);
+		expect(pixel(400, 420)).toEqual([217, 45, 32]);
+		expect(pixel(1000, 420)).toEqual([217, 45, 32]);
 	});
 
 	test("drops ultra-wide card captures instead of nesting a card inside itself", async () => {
@@ -344,14 +300,13 @@ describe("session social card", () => {
 		})
 			.png()
 			.toFile(nestedCard);
-		const png = await renderSessionSocialCard(
-			{ title: "Do not recurse", owner: "Test Person", shots: [nestedCard] },
-			"banner",
-		);
-		const metadata = await sharp(png!).metadata();
-		// With no meaningful screenshot, the title-only fallback gives the space back.
-		expect(metadata.height).toBe(110 * 2);
-		expect(metadata.width).toBeLessThan(2400);
+		const data = {
+			title: "Do not recurse",
+			owner: "Test Person",
+			shots: [nestedCard],
+		};
+		expect(await hasUsableSessionShot(data)).toBe(false);
+		expect(await renderSessionSocialCard(data)).toBeNull();
 	});
 
 	test("injects large-image metadata into the session HTML", () => {
@@ -372,11 +327,14 @@ describe("session social card", () => {
 		expect(output).toContain("<title>Ship dynamic social cards · Open Session</title>");
 		expect(output).toContain('content="summary_large_image"');
 		expect(output).toMatch(
-			/content="https:\/\/media\.example\.test\/session-card\/sess-social-1\/[A-Za-z0-9_-]{32}\.png\?v=22"/,
+			/content="https:\/\/media\.example\.test\/session-card\/sess-social-1\/[A-Za-z0-9_-]{32}\.png\?v=23"/,
 		);
 		expect(output).toContain(
 			'property="og:url" content="https://os.example.test/session/sess-social-1"',
 		);
+		// The card is cropped to its screenshots, so it has no fixed dimensions.
+		expect(output).not.toContain("og:image:width");
+		expect(output).not.toContain("og:image:height");
 	});
 
 	test("parses both session link shapes", () => {
@@ -386,13 +344,13 @@ describe("session social card", () => {
 		).toBe("sess-social-1");
 		expect(socialSessionIdFromPath("/settings")).toBeNull();
 		expect(sessionSocialCardUrl("sess-social-1")).toMatch(
-			/^https:\/\/media\.example\.test\/session-card\/sess-social-1\/[A-Za-z0-9_-]{32}\.png\?v=22$/,
+			/^https:\/\/media\.example\.test\/session-card\/sess-social-1\/[A-Za-z0-9_-]{32}\.png\?v=23$/,
 		);
 	});
 
 	test("signs ids containing Slack timestamp dots", () => {
 		expect(sessionSocialCardUrl("slack-C123-1719860000.000000")).toMatch(
-			/^https:\/\/media\.example\.test\/session-card\/slack-C123-1719860000\.000000\/[A-Za-z0-9_-]{32}\.png\?v=22$/,
+			/^https:\/\/media\.example\.test\/session-card\/slack-C123-1719860000\.000000\/[A-Za-z0-9_-]{32}\.png\?v=23$/,
 		);
 	});
 
@@ -406,39 +364,41 @@ describe("session social card", () => {
 		expect(response.status).toBe(404);
 	});
 
+	test("answers 404 for a session with no screenshot to show", async () => {
+		const route = sessionSocialCardPublicRoutes().get("GET /session-card/*")!;
+		const url = new URL(sessionSocialCardUrl(signedRouteSessionId));
+		const response = await route(new Request(url), url);
+		expect(response.status).toBe(404);
+	});
+
 	test("serves a signed Slack-style session id", async () => {
+		transcriptStore().appendTranscriptEvents(signedRouteSessionId, [
+			{
+				id: "signed-shot",
+				type: "user",
+				content: "Here is the screen",
+				timestamp: "2026-08-18T12:00:00Z",
+				images: [mediaRef(testImage("signed.png"))],
+			},
+		]);
 		const route = sessionSocialCardPublicRoutes().get("GET /session-card/*")!;
 		const url = new URL(sessionSocialCardUrl(signedRouteSessionId));
 		const response = await route(new Request(url), url);
 		expect(response.status).toBe(200);
 		expect(response.headers.get("content-type")).toBe("image/png");
 		const metadata = await sharp(await response.arrayBuffer()).metadata();
-		expect(metadata.width).toBe(1200);
-		expect(metadata.height).toBe(630);
+		expect(metadata.width).toBe(1440);
+		expect(metadata.height).toBe(888);
 	});
 
-	test("crops a screenshot-less banner to its content", async () => {
-		const route = sessionSocialCardPublicRoutes().get("GET /session-card/*")!;
-		const url = new URL(sessionSocialCardUrl(signedRouteSessionId, "banner"));
-		expect(url.searchParams.get("s")).toBe("banner");
-		const response = await route(new Request(url), url);
-		expect(response.status).toBe(200);
-		const metadata = await sharp(await response.arrayBuffer()).metadata();
-		// One title line, with no screenshot or metadata row to make room for,
-		// rasterized at 2x so Slack's upscale to the column stays sharp.
-		expect(metadata.height).toBe(110 * 2);
-		expect(metadata.width).toBeLessThan(1200);
-		expect(metadata.width! / metadata.height!).toBeGreaterThan(2);
-	});
-
-	test("renders the full card for an unrecognized shape", async () => {
+	test("ignores an unrecognized shape parameter", async () => {
 		const route = sessionSocialCardPublicRoutes().get("GET /session-card/*")!;
 		const url = new URL(`${sessionSocialCardUrl(signedRouteSessionId)}&s=tall`);
 		const response = await route(new Request(url), url);
 		expect(response.status).toBe(200);
 		const metadata = await sharp(await response.arrayBuffer()).metadata();
-		expect(metadata.width).toBe(1200);
-		expect(metadata.height).toBe(630);
+		expect(metadata.width).toBe(1440);
+		expect(metadata.height).toBe(888);
 	});
 
 	test("rejects an invalid HMAC before resolving the session", async () => {

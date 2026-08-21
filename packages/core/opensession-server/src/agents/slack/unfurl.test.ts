@@ -61,7 +61,7 @@ afterAll(() => {
 });
 
 describe("unfurlForSession", () => {
-	test("shows the banner render when a useful screenshot is available", async () => {
+	test("shows a screenshot-only card below the linked title", async () => {
 		const unfurl = await unfurlForSession(
 			session({
 				id: "sess-card",
@@ -79,15 +79,19 @@ describe("unfurlForSession", () => {
 		expect(unfurl.blocks).toContainEqual({
 			type: "image",
 			image_url: expect.stringMatching(
-				/^https:\/\/media\.example\.test\/session-card\/sess-card\/[A-Za-z0-9_-]{32}\.png\?v=22&s=banner$/,
+				/^https:\/\/media\.example\.test\/session-card\/sess-card\/[A-Za-z0-9_-]{32}\.png\?v=23$/,
 			),
 			alt_text: "Ship the card, Open Session preview",
 		});
-		// The card owns the title, so Slack does not repeat it in a section above.
+		// Slack owns the linked title. The image below contains screenshots only.
 		expect(unfurl.blocks.map((block: any) => block.type)).toEqual([
+			"section",
 			"image",
 			"context",
 		]);
+		expect(unfurl.blocks[0].text.text).toBe(
+			"*<https://os.example.test/session/sess-card|Ship the card>*",
+		);
 		expect(unfurl.blocks.some((b: any) => b.accessory)).toBe(false);
 		expect(JSON.stringify(unfurl.blocks)).not.toContain("gpt-5.6-sol");
 	});
