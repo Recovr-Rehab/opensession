@@ -173,6 +173,7 @@ import {
 	saveWorkspaceLastSession,
 } from "./lib/workspace-last-session";
 import { sessionCarriesPr, sessionHasPr } from "./lib/session-prs";
+import { newClientSessionId } from "./lib/session-id";
 import { findPrWorkspaceId } from "./lib/pr-workspace";
 import { sessionHasWorkspace } from "./lib/session-workspace";
 import type {
@@ -3333,43 +3334,44 @@ export function App(
 	async function createNewSessionFrom(
 		src: UnifiedSession,
 		mode: "share" | "stack" | "ask",
+		id: string,
 	): Promise<string> {
-		const { id, session } = await newSessionApi(src.id, getCurrentUser(), mode);
 		const now = new Date().toISOString();
-		// Render the real tab from the endpoint response immediately. The fallback
-		// keeps the interaction working against a server that returns only the id.
-		inject(
-			session ?? {
-				...src,
-				id,
-				source: "opensession",
-				claudeSessionId: null,
-				codexThreadId: undefined,
-				title: "New session",
-				createdAt: now,
-				lastActivity: now,
-				isRunning: false,
-				transcriptPath: null,
-				startedBy: getCurrentUser(),
-				archived: false,
-				waitingForInput: false,
-				queuedCount: 0,
-				prUrl: undefined,
-				prState: undefined,
-				automation: undefined,
-				plainThreadId: undefined,
-				goal: undefined,
-				loop: undefined,
-				...(mode === "ask"
-					? {
-							branch: null,
-							worktreeDir: null,
-							mode: "ask" as const,
-						}
-					: {}),
-			},
-			{ sticky: true },
-		);
+		const user = getCurrentUser();
+		const draft: UnifiedSession = {
+			...src,
+			id,
+			source: "opensession",
+			claudeSessionId: null,
+			codexThreadId: undefined,
+			title: "New session",
+			createdAt: now,
+			lastActivity: now,
+			isRunning: false,
+			transcriptPath: null,
+			startedBy: user,
+			archived: false,
+			waitingForInput: false,
+			queuedCount: 0,
+			prUrl: undefined,
+			prState: undefined,
+			automation: undefined,
+			plainThreadId: undefined,
+			goal: undefined,
+			loop: undefined,
+			// Hold messages until the server has persisted this optimistic tab.
+			workspacePreparing: true,
+			...(mode === "ask"
+				? {
+						branch: null,
+						worktreeDir: null,
+						mode: "ask" as const,
+					}
+				: {}),
+		};
+		// The client owns the id, so the new tab can become active in the click's
+		// own frame instead of waiting for the server round trip.
+		inject(draft, { sticky: true });
 		setPendingSessionId(id);
 		setPendingNewWorkspace(false);
 		clearTimeout(pendingTimer.current);
@@ -3377,9 +3379,28 @@ export function App(
 			setPendingSessionId(null);
 			unstick(id);
 		}, 30_000);
-		refresh();
 		navigate({ view: "session", id });
-		return id;
+
+		try {
+			const created = await newSessionApi(src.id, user, mode, id);
+			if (created.id !== id) throw new Error("Server returned a different session id");
+			inject(
+				created.session ?? { ...draft, workspacePreparing: false },
+				{ sticky: true },
+			);
+			clearTimeout(pendingTimer.current);
+			setPendingSessionId((pending) => (pending === id ? null : pending));
+			refresh();
+			return id;
+		} catch (error) {
+			clearTimeout(pendingTimer.current);
+			setPendingSessionId((pending) => (pending === id ? null : pending));
+			unstick(id);
+			remove(id);
+			if (routeRef.current.view === "session" && routeRef.current.id === id)
+				navigate({ view: "session", id: src.id });
+			throw error;
+		}
 	}
 
 	function openNewSessionInWorkspace(
@@ -3412,6 +3433,7 @@ export function App(
 
 	// Open a real sibling tab immediately. Its first prompt starts the engine, so
 	// the lightweight create does no model work and keeps the interaction quick.
+	const siblingCreateRef = useRef<string | null>(null);
 	const handleNewSession = async (
 		mode: "share" | "stack" | "ask",
 		side: SplitSide | null = null,
@@ -3436,8 +3458,11 @@ export function App(
 			}
 			return;
 		}
+		if (siblingCreateRef.current) return;
+		const optimisticId = newClientSessionId();
+		siblingCreateRef.current = optimisticId;
 		try {
-			const id = await createNewSessionFrom(src, mode);
+			const id = await createNewSessionFrom(src, mode, optimisticId);
 			if (side === "right" && tabOrderKey && activeTabSplit)
 				saveTabSplit(tabOrderKey, {
 					...toStoredSplit(activeTabSplit),
@@ -3446,6 +3471,10 @@ export function App(
 				});
 		} catch (e) {
 			console.error("New session failed:", e);
+			showToast("Couldn't create a new tab.");
+		} finally {
+			if (siblingCreateRef.current === optimisticId)
+				siblingCreateRef.current = null;
 		}
 	};
 	const handleNewSessionRef = useRef(handleNewSession);
@@ -5228,10 +5257,20 @@ export function App(
 											const session =
 												sessions.find((candidate) => candidate.id === id) ??
 												currentSession;
+											const paneSocket =
+												id === pendingSessionId
+													? { ...socket, connected: false }
+													: socket;
 											return (
 												<>
 													{renderTabBar(side)}
-													{renderSessionPane(session, socket, focused, true, id ?? session.id)}
+													{renderSessionPane(
+														session,
+														paneSocket,
+														focused,
+														true,
+														id ?? session.id,
+													)}
 												</>
 											);
 										}}
@@ -5239,7 +5278,13 @@ export function App(
 								) : (
 									renderSessionPane(
 										currentSession,
-										{ connected, send, setTyping, addHandler },
+										{
+											connected:
+												connected && currentSession.id !== pendingSessionId,
+											send,
+											setTyping,
+											addHandler,
+										},
 										true,
 										false,
 									)

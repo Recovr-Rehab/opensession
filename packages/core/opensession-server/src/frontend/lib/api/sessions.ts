@@ -339,10 +339,18 @@ export async function newSessionApi(
 	sourceId: string,
 	user: string,
 	mode?: "share" | "stack" | "ask",
+	clientSessionId?: string,
 ): Promise<{ id: string; session: UnifiedSession | null }> {
 	const body = await request<{ id: string; session?: UnifiedSession }>(
 		`/sessions/${encodeURIComponent(sourceId)}/new-session`,
-		{ method: "POST", body: { user, ...(mode ? { mode } : {}) } },
+		{
+			method: "POST",
+			body: {
+				user,
+				...(mode ? { mode } : {}),
+				...(clientSessionId ? { clientSessionId } : {}),
+			},
+		},
 	);
 	return { id: body.id, session: body.session || null };
 }

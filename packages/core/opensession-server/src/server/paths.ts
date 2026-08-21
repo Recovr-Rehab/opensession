@@ -141,6 +141,14 @@ export function isNativeSessionId(id: string): boolean {
   return id.startsWith("os-") || id.startsWith("bks-");
 }
 
+/** A client-minted native id that can safely name an optimistic session. */
+export function isClientSessionId(id: unknown): id is string {
+  return (
+    typeof id === "string" &&
+    /^os-[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(id)
+  );
+}
+
 /** Mint a native session id. */
 export function newSessionId(): string {
   return `os-${randomUUIDv7()}`;

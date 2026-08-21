@@ -105,10 +105,20 @@ test("new workspace tabs create an idle sibling session", async () => {
 		return Response.json({ id: "bks-new", session: { id: "bks-new" } });
 	}) as unknown as typeof fetch;
 
-	const created = await newSessionApi("bks-source", "Kent", "share");
+	const clientSessionId = "os-019f0000-0000-7000-8000-000000000001";
+	const created = await newSessionApi(
+		"bks-source",
+		"Kent",
+		"share",
+		clientSessionId,
+	);
 	expect(created.id).toBe("bks-new");
 	expect(created.session?.id).toBe("bks-new");
 	expect(url).toBe("/api/sessions/bks-source/new-session");
 	expect(init?.method).toBe("POST");
-	expect(JSON.parse(String(init?.body))).toEqual({ user: "Kent", mode: "share" });
+	expect(JSON.parse(String(init?.body))).toEqual({
+		user: "Kent",
+		mode: "share",
+		clientSessionId,
+	});
 });

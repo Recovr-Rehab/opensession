@@ -72,6 +72,7 @@ import { type Workspace, createWorkspace, getWorkspace, updateWorkspace, } from 
 import { AUTO_REPO, createWorktree, createWorktreeForExistingBranch, ensureAskCheckout, ensureScratchDir, getRepo, isRegisteredWorktree, listWorktrees, NO_REPO, repoForPath, repoForPathOrNull, resolveUniqueBranch, sharedCheckoutForNewSessions, worktreeHeadBranch, worktreePathFor, } from "./worktree";
 import { type WSClientData, broadcastToSession, preparingWorkspaces, } from "./ws-hub";
 import { sessionIdForRequest } from "./session-request-id";
+import { isClientSessionId } from "./paths";
 import {
 	clearCreatePlan,
 	createPlanWorkspaceId,
@@ -1023,9 +1024,6 @@ export async function openCreatedSession(
 	}
 }
 
-const CLIENT_SESSION_ID =
-	/^os-[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
-
 type WebCreateSocket = ServerWebSocket<WSClientData>;
 interface PendingWebCreate {
 	sockets: Set<WebCreateSocket>;
@@ -1057,11 +1055,7 @@ export async function handleCreateSessionMessage(
 	msg: CreateSessionMessage,
 ): Promise<Record<string, unknown> | undefined> {
 	const rawClientSessionId = msg.clientSessionId;
-	if (
-		rawClientSessionId !== undefined &&
-		(typeof rawClientSessionId !== "string" ||
-			!CLIENT_SESSION_ID.test(rawClientSessionId))
-	) {
+	if (rawClientSessionId !== undefined && !isClientSessionId(rawClientSessionId)) {
 		sendCreateFrame(
 			{ sockets: new Set([ws]) },
 			{ type: "error", message: "Invalid session create id" },

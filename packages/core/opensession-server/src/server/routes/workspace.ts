@@ -44,9 +44,8 @@ import { DEFAULT_WORKSPACE_MODEL_SETTINGS, type Workspace, type WorkspaceDraft, 
 import { resolveExternalWorkspace, resolvePlainWorkspace, resolvePrWorkspace } from "../workspace-resolve";
 import { resolveModel } from "../models";
 import { REPOS, createWorktree, createWorktreeForExistingBranch, ensureScratchDir, getRepo, isSharedCheckoutDir, listWorktrees, repoForPath, sessionRepoId, worktreeHasWork, worktreeHeadBranch } from "../worktree";
-import { randomUUIDv7 } from "bun";
 import { copyFileSync, existsSync, mkdirSync, readFileSync } from "fs";
-import { isNativeSessionId } from "../paths";
+import { isClientSessionId, isNativeSessionId, newSessionId } from "../paths";
 
 /**
  * Validate a `draft` field from a workspace create/patch body. `null` (clear)
@@ -576,6 +575,8 @@ export async function handleWorkspaceRoutes(
 		const body = (await req.json().catch(() => ({}))) as {
 			user?: string;
 			mode?: "share" | "stack" | "ask";
+			/** Client-minted id lets the tab render before this request finishes. */
+			clientSessionId?: unknown;
 			/** Sandbox opt-in: true = config default provider, or an explicit
 			 *  provider id (including "modal" / "lambda-microvm" — must be configured).
 			 *  Recorded on the session file; the first prompt launches it. */
@@ -600,7 +601,15 @@ export async function handleWorkspaceRoutes(
 				},
 				{ status: 400 },
 			);
-		const bksId = `bks-${randomUUIDv7()}`;
+		const requestedId = body.clientSessionId;
+		if (requestedId !== undefined && !isClientSessionId(requestedId))
+			return Response.json(
+				{ error: "Invalid session create id" },
+				{ status: 400 },
+			);
+		const bksId = requestedId || newSessionId();
+		const existing = await findSessionAsync(bksId);
+		if (existing) return Response.json({ id: bksId, session: existing });
 		let branch = src.branch || "";
 		let worktreeDir = src.worktreeDir || "";
 		let mode: "ask" | "code" | "scratch" = src.mode || "code";
