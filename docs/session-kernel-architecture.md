@@ -111,7 +111,7 @@ The protocol names workspace, branch, sandbox, credential, attachment-reference,
 and opening-turn effects, including adoption or reconciliation modes and durable
 creation fences. Payload decoding strips unknown fields, so bearer credentials
 and inline attachment bodies do not cross the durable executor boundary. The
-The creation aggregate durably retains bounded completed-effect receipts. An
+creation aggregate durably retains bounded completed-effect receipts. An
 executor result clears the current effect and records its stable ID in the same
 state/change transaction. Actor-store restarts preserve those receipts, and a
 completed effect cannot be emitted again after its outbox row is acknowledged.
@@ -132,12 +132,15 @@ The branch effect also has a production executor. It adopts only an exact
 project, branch, and worktree-path match, or materializes the requested branch
 with stable base and isolation options before returning its actor fence. Branch
 or path crossover is immediately indeterminate, and a crash after Git accepts
-the worktree adopts it on retry. The MCP create path emits this branch effect
-when no ephemeral Git credential is required. Credential-bearing materialization
-stays on the explicit legacy adapter until credential resolution has a typed,
-non-secret result path. WebSocket branch creation is also still legacy.
-Sandbox, credential, attachment, and opening-turn executors are not yet
-registered. Wiring those adapters and removing the remaining create-plan
+the worktree adopts it on retry. Credential preparation now has a production
+executor and stable intent. It validates only a durable principal selector and
+scope, records no token or Git environment, and returns an ordinary fenced
+receipt. Branch effects can carry that selector and resolve its process-local Git
+capability only when Git creation is necessary. The credential-bearing MCP path
+is still on its explicit legacy adapter until it emits the credential and branch
+intents in sequence. WebSocket branch creation is also still legacy.
+Sandbox, attachment, and opening-turn executors are not yet registered. Wiring
+those adapters and removing the remaining create-plan
 authority are the next cutovers; the presence or absence of a plan file is not
 actor lifecycle evidence.
 
