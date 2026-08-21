@@ -53,9 +53,9 @@ const DIFF_DEL = "font-semibold text-red";
 /* One collapsible file. The header is the hover group for the edit and discard
    actions revealed inside editable worktree diffs. */
 const FILE_ROW =
-  "mb-2 overflow-clip rounded-lg border border-divider-soft bg-bg";
+  "overflow-clip rounded-lg border border-line bg-bg";
 const FILE_HEADER =
-  "group relative flex min-h-10 w-full min-w-0 items-center gap-2 px-2.5 text-left text-fg hover:bg-hover phone:min-h-11";
+  "group relative flex min-h-9 w-full min-w-0 items-center gap-1.5 px-2 text-left text-fg hover:bg-hover phone:min-h-11 phone:px-2.5";
 const STICKY_FILE_HEADER =
   "sticky top-[var(--review-file-header-top,0px)] z-[6] bg-bg";
 const FILE_TOGGLE =
@@ -807,10 +807,10 @@ export function CommentableDiff({
               size={16}
               className={`shrink-0 text-faint transition-transform ${isOpen ? "rotate-90" : ""}`}
             />
-            <span className="flex size-7 shrink-0 items-center justify-center rounded-md bg-active text-dim">
+            <span className="flex size-5 shrink-0 items-center justify-center text-dim">
               <IconFile size={17} />
             </span>
-            <span className="flex min-w-0 items-baseline gap-2 overflow-hidden text-label">
+            <span className="flex min-w-0 items-center gap-2 overflow-hidden text-label">
               <span className="shrink-0 overflow-hidden text-ellipsis whitespace-nowrap font-semibold text-fg">
                 {base}
               </span>

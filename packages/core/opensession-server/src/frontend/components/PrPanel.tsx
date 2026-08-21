@@ -2157,7 +2157,7 @@ export function PrPanel({
         )}
 
         <main
-          className={`min-w-0 flex-1 overflow-y-auto [--review-file-header-top:0px] ${page === "files" ? "bg-raised" : "bg-surface"} ${reviewing ? "pb-24 phone:pb-36" : "pb-4"}`}
+          className={`min-w-0 flex-1 overflow-y-auto bg-surface [--review-file-header-top:0px] ${reviewing ? "pb-24 phone:pb-36" : "pb-4"}`}
         >
           {page === "overview" ? (
             <SelectionToSession
@@ -2184,10 +2184,10 @@ export function PrPanel({
               </div>
             </SelectionToSession>
           ) : (
-            // The same 24px inset the chrome rows above use, so a file card's
-            // edges land under the tab strip's first tab and the view control's
-            // right edge rather than 4px inside them.
-            <div className="mx-auto max-w-[1500px] px-6 py-6 phone:px-2">
+            // Keep the review canvas close to the viewport edge. The file
+            // section's own border now carries the shape instead of a wide
+            // gray gutter around it.
+            <div className="mx-auto max-w-[1500px] px-2 py-2 phone:px-1">
               {codeView === "flow" ? (
                 <CodeFlow
                   data={codeFlow?.key === codeFlowKey ? codeFlow.data : null}
