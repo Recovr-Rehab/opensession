@@ -102,6 +102,7 @@ describe("creation workspace effect executor", () => {
                 identity: "create-one",
                 generation: 1,
                 state: "preparing" as const,
+                completedEffectIds: ["workspace-effect"],
                 changeSeq: 3,
                 updatedAt: 1,
               },

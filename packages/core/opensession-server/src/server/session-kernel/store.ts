@@ -170,7 +170,8 @@ const PROCESS_OWNER_ID = (ownerGlobal.__opensessionSessionKernelOwnerId ??=
 		bootId: linuxBootId(),
 		start: linuxProcessStart(process.pid),
 	} satisfies ProcessOwnerIdentity));
-export const SESSION_KERNEL_SCHEMA_VERSION = 8;
+export const SESSION_KERNEL_SCHEMA_VERSION = 9;
+export const SESSION_KERNEL_MAX_CREATION_EFFECT_RECEIPTS = 256;
 
 export function sessionKernelDbPath(): string {
 	// Test processes must never open the live instance state. Tests that need
@@ -203,6 +204,7 @@ export type DurableCreationState = {
   identity: string;
   generation: number;
   currentEffectId?: string;
+  completedEffectIds: string[];
   changeSeq: number;
   updatedAt: number;
 };
@@ -215,7 +217,8 @@ export type CreationEventDecisionResult = {
     | "invalid_transition"
     | "identity_mismatch"
     | "stale_effect"
-    | "invalid_effect";
+    | "invalid_effect"
+    | "effect_receipt_capacity";
   state?: DurableCreationState;
 };
 
@@ -297,6 +300,7 @@ export class SessionKernelStore {
 				state TEXT NOT NULL,
 				generation INTEGER NOT NULL DEFAULT 0,
 				current_effect_id TEXT,
+				completed_effects TEXT NOT NULL DEFAULT '[]',
 				change_seq INTEGER NOT NULL DEFAULT 0,
 				updated_at INTEGER NOT NULL
 			);
@@ -373,6 +377,17 @@ export class SessionKernelStore {
 			CREATE INDEX IF NOT EXISTS idx_sko_session
 				ON session_kernel_outbox(session_id, id);
 		`);
+    const creationColumns = new Set(
+      (
+        this.db
+          .query("PRAGMA table_info(session_kernel_creation)")
+          .all() as Array<{ name: string }>
+      ).map((column) => column.name),
+    );
+    if (!creationColumns.has("completed_effects"))
+      this.db.exec(
+        "ALTER TABLE session_kernel_creation ADD COLUMN completed_effects TEXT NOT NULL DEFAULT '[]'",
+      );
 		const commandColumns = new Set(
 			(
         this.db
@@ -868,7 +883,7 @@ export class SessionKernelStore {
   creationState(sessionId: string): DurableCreationState | undefined {
     const row = this.db
       .query(
-        `SELECT identity, state, generation, current_effect_id, change_seq, updated_at
+        `SELECT identity, state, generation, current_effect_id, completed_effects, change_seq, updated_at
          FROM session_kernel_creation WHERE session_id = ?`,
       )
       .get(sessionId) as Record<string, unknown> | null;
@@ -881,6 +896,9 @@ export class SessionKernelStore {
         row.current_effect_id == null
           ? undefined
           : String(row.current_effect_id),
+      completedEffectIds: [
+        ...(parsed<string[]>(row.completed_effects as string) ?? []),
+      ],
       changeSeq: Number(row.change_seq),
       updatedAt: Number(row.updated_at),
     };
@@ -942,9 +960,29 @@ export class SessionKernelStore {
       const changeSeq = run.changeSeq + 1;
       const generation = prior?.generation ?? 1;
       const effect = input.effect;
+      const completedEffectIds = [...(prior?.completedEffectIds ?? [])];
+      const completesNewEffect =
+        input.effectId !== undefined &&
+        !completedEffectIds.includes(input.effectId);
+      if (
+        (completesNewEffect || effect !== undefined) &&
+        completedEffectIds.length >=
+          SESSION_KERNEL_MAX_CREATION_EFFECT_RECEIPTS
+      ) {
+        result = {
+          accepted: false,
+          from,
+          to: from,
+          reason: "effect_receipt_capacity",
+          state: prior,
+        };
+        return;
+      }
+      if (completesNewEffect) completedEffectIds.push(input.effectId!);
       const invalidEffect =
         (input.nextEffectId !== undefined && !effect) ||
         (!!effect && input.nextEffectId !== effect.effectKey) ||
+        (!!effect && completedEffectIds.includes(effect.effectKey)) ||
         (!!effect &&
           (effect.payload.creationIdentity !== input.identity ||
             effect.payload.creationGeneration !== generation)) ||
@@ -972,12 +1010,14 @@ export class SessionKernelStore {
           (input.effectId === undefined ? prior?.currentEffectId : undefined);
       this.db.run(
         `INSERT INTO session_kernel_creation
-          (session_id, identity, state, generation, current_effect_id, change_seq, updated_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?)
+          (session_id, identity, state, generation, current_effect_id,
+           completed_effects, change_seq, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?)
          ON CONFLICT(session_id) DO UPDATE SET
           state = excluded.state,
           generation = excluded.generation,
           current_effect_id = excluded.current_effect_id,
+          completed_effects = excluded.completed_effects,
           change_seq = excluded.change_seq,
           updated_at = excluded.updated_at`,
         [
@@ -986,6 +1026,7 @@ export class SessionKernelStore {
           to,
           generation,
           currentEffectId ?? null,
+          json(completedEffectIds),
           changeSeq,
           now,
         ],
@@ -1041,6 +1082,7 @@ export class SessionKernelStore {
         state: to,
         generation,
         currentEffectId,
+        completedEffectIds,
         changeSeq,
         updatedAt: now,
       };
