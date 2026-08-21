@@ -7,6 +7,8 @@ import {
 	ARCHIVED_LIST,
 	ARCHIVED_ROW,
 	ARCHIVED_ROW_ACTION,
+	ARCHIVED_SWIPE_ACTION,
+	ARCHIVED_SWIPE_ROW,
 	ARCHIVED_ROW_META,
 	ARCHIVED_ROW_OPEN,
 	ARCHIVED_ROW_TRAIL,
@@ -15,7 +17,7 @@ import {
 	ARCHIVED_SECTION_LABEL,
 	ARCHIVED_SECTION_ROWS,
 } from "../lib/archived-classes";
-import React, { useState, useMemo, useEffect } from "react";
+import React, { useState, useMemo, useEffect, useRef } from "react";
 import { createPortal } from "react-dom";
 import type { UnifiedSession } from "../lib/types";
 import { relativeTime, archiveSessionApi } from "../lib/api";
@@ -27,7 +29,7 @@ import { useIsPhone } from "../hooks/useIsPhone";
 import { Button } from "../ui/button";
 import { Card } from "../ui/card";
 import { Input } from "../ui/input";
-import { Menu } from "../ui/menu";
+import { ContextMenu, Menu, MENU_ICON } from "../ui/menu";
 import { EmptyState, ListSkeleton } from "../ui/state";
 import { IconChevronRight, IconFilter, IconUnarchive } from "./icons";
 import { RepoTile } from "./RepoTile";
@@ -56,6 +58,20 @@ const SIDEBAR_FILTER_KEY = "opensession-sidebar-filter";
 
 /** How many rows the list draws before asking for a narrower search. */
 const PAGE_SIZE = 200;
+
+const RESTORE_SWIPE_PX = 82;
+const RESTORE_SWIPE_THRESHOLD = 36;
+const RESTORE_SWIPE_AXIS_LOCK = 8;
+
+type RestoreSwipe = { id: string; offset: number };
+type RestoreSwipeOrigin = { id: string; x: number; y: number; allowRight: boolean };
+
+/** Follow the finger 1:1, then add light resistance past the revealed action. */
+function restoreSwipeOffset(dx: number): number {
+	if (dx >= 0) return 0;
+	if (dx >= -RESTORE_SWIPE_PX) return dx;
+	return Math.max(-104, -RESTORE_SWIPE_PX + (dx + RESTORE_SWIPE_PX) * 0.18);
+}
 
 /**
  * `"mine"`, `"everyone"`, or one teammate's lowercased `startedBy` name — the
@@ -160,6 +176,17 @@ export function Archived({
 	const [owner, setOwner] = useState<OwnerFilter>("mine");
 	const [repo, setRepo] = useState<string>(sidebarRepo);
 	const [reason, setReason] = useState<ReasonFilter>("all");
+	const [restoreSwipe, setRestoreSwipe] = useState<RestoreSwipe | null>(null);
+	const [draggingRestoreId, setDraggingRestoreId] = useState<string | null>(null);
+	const restoreSwipeOrigin = useRef<RestoreSwipeOrigin | null>(null);
+	const restoreSwiping = useRef(false);
+	const restoreSwipeOffsetRef = useRef(0);
+
+	useEffect(() => {
+		if (isPhone) return;
+		setRestoreSwipe(null);
+		restoreSwipeOffsetRef.current = 0;
+	}, [isPhone]);
 
 	useEffect(() => {
 		document.title = docTitle("Archived");
@@ -252,6 +279,85 @@ export function Archived({
 		} finally {
 			setBusy(null);
 		}
+	}
+
+	function closeRestoreSwipe() {
+		setRestoreSwipe(null);
+		restoreSwipeOffsetRef.current = 0;
+	}
+
+	function restoreTouchStart(id: string, e: React.TouchEvent<HTMLElement>) {
+		if (!isPhone || e.touches.length !== 1) return;
+		const touch = e.touches[0];
+		const existingOffset = restoreSwipe?.id === id ? restoreSwipe.offset : 0;
+		if (restoreSwipe?.id && restoreSwipe.id !== id) closeRestoreSwipe();
+		restoreSwiping.current = false;
+		restoreSwipeOffsetRef.current = existingOffset;
+		restoreSwipeOrigin.current = {
+			id,
+			x: touch.clientX - existingOffset,
+			y: touch.clientY,
+			allowRight: existingOffset < 0,
+		};
+	}
+
+	function restoreTouchMove(id: string, e: React.TouchEvent<HTMLElement>) {
+		if (!isPhone || e.touches.length !== 1) return;
+		const origin = restoreSwipeOrigin.current;
+		if (!origin || origin.id !== id) return;
+		const touch = e.touches[0];
+		const dx = touch.clientX - origin.x;
+		const dy = touch.clientY - origin.y;
+		if (!restoreSwiping.current) {
+			const horizontal =
+				Math.abs(dx) > RESTORE_SWIPE_AXIS_LOCK && Math.abs(dx) > Math.abs(dy);
+			if (!horizontal || (dx > 0 && !origin.allowRight)) return;
+			restoreSwiping.current = true;
+			setDraggingRestoreId(id);
+		}
+		e.preventDefault();
+		const offset = restoreSwipeOffset(dx);
+		restoreSwipeOffsetRef.current = offset;
+		const row = e.currentTarget;
+		row.style.setProperty("--swipe-x", `${offset}px`);
+		row.parentElement?.style.setProperty(
+			"--swipe-action-w",
+			`${Math.max(RESTORE_SWIPE_PX, Math.abs(offset))}px`,
+		);
+	}
+
+	function restoreTouchEnd(id: string, e: React.TouchEvent<HTMLElement>) {
+		const wasSwiping = restoreSwiping.current;
+		restoreSwipeOrigin.current = null;
+		restoreSwiping.current = false;
+		setDraggingRestoreId(null);
+		const row = e.currentTarget;
+		row.style.removeProperty("--swipe-x");
+		row.parentElement?.style.removeProperty("--swipe-action-w");
+		if (wasSwiping) {
+			e.preventDefault();
+			const snapped =
+				restoreSwipeOffsetRef.current < -RESTORE_SWIPE_THRESHOLD
+					? -RESTORE_SWIPE_PX
+					: 0;
+			restoreSwipeOffsetRef.current = snapped;
+			setRestoreSwipe(snapped ? { id, offset: snapped } : null);
+			return;
+		}
+		if (restoreSwipe?.id === id) {
+			e.preventDefault();
+			closeRestoreSwipe();
+		}
+	}
+
+	function restoreTouchCancel(e: React.TouchEvent<HTMLElement>) {
+		restoreSwipeOrigin.current = null;
+		restoreSwiping.current = false;
+		setDraggingRestoreId(null);
+		const row = e.currentTarget;
+		row.style.removeProperty("--swipe-x");
+		row.parentElement?.style.removeProperty("--swipe-action-w");
+		closeRestoreSwipe();
 	}
 
 	// Match Pull requests on desktop. On a phone the title and filter share the
@@ -439,44 +545,112 @@ export function Archived({
 											</span>
 										),
 									].filter(Boolean);
+									const swipeOffset =
+										restoreSwipe?.id === s.id ? restoreSwipe.offset : 0;
+									const dragging = draggingRestoreId === s.id;
 									return (
-										<li key={s.id} className={ARCHIVED_ROW}>
-											<RepoTile name={sessionRepo(s)} />
+										<li
+											key={s.id}
+											className={ARCHIVED_SWIPE_ROW}
+											data-swipe-row=""
+											style={
+												swipeOffset
+													? ({
+															"--swipe-action-w": `${Math.max(
+																RESTORE_SWIPE_PX,
+																Math.abs(swipeOffset),
+															)}px`,
+														} as React.CSSProperties)
+													: undefined
+											}
+										>
 											<button
 												type="button"
-												className={ARCHIVED_ROW_OPEN}
-												onClick={() => onSelect(s)}
+												className={ARCHIVED_SWIPE_ACTION}
+												data-open={dragging || swipeOffset ? "" : undefined}
+												disabled={busy === s.id}
+												onClick={(e) => {
+													closeRestoreSwipe();
+													void handleUnarchive(e, s.id);
+												}}
 											>
-												<span className={ARCHIVED_ROW_TITLE}>{s.title}</span>
-												{meta.length > 0 ? (
-													<span className={ARCHIVED_ROW_META}>
-														{meta}
-														<span className="hidden shrink-0 phone:inline">
+												<IconUnarchive size={20} />
+												<span>Restore</span>
+											</button>
+											<ContextMenu.Root>
+												<ContextMenu.Trigger
+													render={
+														<div
+															className={cn(
+																ARCHIVED_ROW,
+																dragging && "phone:transition-none phone:will-change-transform",
+																swipeOffset && "phone:will-change-transform",
+															)}
+															style={
+																swipeOffset
+																	? ({ "--swipe-x": `${swipeOffset}px` } as React.CSSProperties)
+																	: undefined
+															}
+															onTouchStart={(e) => restoreTouchStart(s.id, e)}
+															onTouchMove={(e) => restoreTouchMove(s.id, e)}
+															onTouchEnd={(e) => restoreTouchEnd(s.id, e)}
+															onTouchCancel={restoreTouchCancel}
+														/>
+													}
+												>
+													<RepoTile name={sessionRepo(s)} />
+													<button
+														type="button"
+														className={ARCHIVED_ROW_OPEN}
+														onClick={() => {
+															if (restoreSwipe?.id === s.id) {
+																closeRestoreSwipe();
+																return;
+															}
+															onSelect(s);
+														}}
+													>
+														<span className={ARCHIVED_ROW_TITLE}>{s.title}</span>
+														{meta.length > 0 ? (
+															<span className={ARCHIVED_ROW_META}>
+																{meta}
+																<span className="hidden shrink-0 phone:inline">
+																	{relativeTime(s.lastActivity)}
+																</span>
+															</span>
+														) : (
+															<span className="mt-1 hidden text-meta text-faint phone:block">
+																{relativeTime(s.lastActivity)}
+															</span>
+														)}
+													</button>
+													<span className={ARCHIVED_ROW_TRAIL}>
+														<span className={ARCHIVED_ROW_TIME}>
 															{relativeTime(s.lastActivity)}
 														</span>
+														<IconChevronRight size={16} className="shrink-0" />
 													</span>
-												) : (
-													<span className="mt-1 hidden text-meta text-faint phone:block">
-														{relativeTime(s.lastActivity)}
-													</span>
-												)}
-											</button>
-											<span className={ARCHIVED_ROW_TRAIL}>
-												<span className={ARCHIVED_ROW_TIME}>
-													{relativeTime(s.lastActivity)}
-												</span>
-												<IconChevronRight size={16} className="shrink-0" />
-											</span>
-											<Button
-												size="sm"
-												className={ARCHIVED_ROW_ACTION}
-												icon={<IconUnarchive size={15} className="phone:size-[17px]" />}
-												aria-label="Restore session"
-												disabled={busy === s.id}
-												onClick={(e) => handleUnarchive(e, s.id)}
-											>
-												<span className="phone:hidden">Restore</span>
-											</Button>
+													<Button
+														size="sm"
+														className={ARCHIVED_ROW_ACTION}
+														icon={<IconUnarchive size={15} />}
+														aria-label="Restore session"
+														disabled={busy === s.id}
+														onClick={(e) => void handleUnarchive(e, s.id)}
+													>
+														Restore
+													</Button>
+												</ContextMenu.Trigger>
+												<ContextMenu.Popup>
+													<ContextMenu.Item
+														disabled={busy === s.id}
+														onClick={(e) => void handleUnarchive(e, s.id)}
+													>
+														<IconUnarchive size={18} className={MENU_ICON} />
+														<span>Restore</span>
+													</ContextMenu.Item>
+												</ContextMenu.Popup>
+											</ContextMenu.Root>
 										</li>
 									);
 								})}
