@@ -145,7 +145,7 @@ export function FilterPopover({
 	// picker is its other door, because this is the number that explains a short
 	// list.
 	const advancedChanged =
-		(filter.prs === "default" ? 0 : 1) +
+		(filter.prs === "none" ? 0 : 1) +
 		(filter.autoCreated === "hide" ? 0 : 1) +
 		(filter.emptyProjects === "show" ? 0 : 1);
 

@@ -39,10 +39,11 @@ describe("the default grouping", () => {
 });
 
 describe("readStoredFilter", () => {
-	test("nothing stored leaves both grouping axes to their defaults", () => {
+	test("nothing stored leaves grouping automatic and hides optional rows", () => {
 		const stored = readStoredFilter();
 		expect(stored.groupBy).toBe("auto");
 		expect(stored.byProject).toBe("auto");
+		expect(stored.prs).toBe("none");
 		expect(stored.autoCreated).toBe("hide");
 	});
 
@@ -130,6 +131,21 @@ describe("readStoredFilter", () => {
 		stored = readStoredFilter();
 		expect(stored.groupBy).toBe("auto");
 		expect(stored.byProject).toBe("auto");
+	});
+
+	test.each(["default", "all", "none"] as const)(
+		"an explicit %s pull request choice is preserved",
+		(prs) => {
+			write({ v: FILTER_VERSION, prs });
+			expect(readStoredFilter().prs).toBe(prs);
+		},
+	);
+
+	test("an absent or unknown pull request choice defaults to hidden", () => {
+		write({ v: FILTER_VERSION });
+		expect(readStoredFilter().prs).toBe("none");
+		write({ v: FILTER_VERSION, prs: "surprise" });
+		expect(readStoredFilter().prs).toBe("none");
 	});
 
 	test("agent-created work is shown from the version that made it a choice", () => {

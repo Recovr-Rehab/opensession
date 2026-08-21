@@ -89,10 +89,10 @@ export function readExpanded(): Set<string> {
 // each project. Repo and Person only narrow the same inventory.
 export type GroupBy = "inbox" | "activity" | "status";
 export type SortBy = "updated" | "created";
-// Session-less PR rows folded into the project lanes: the default shows your
-// own PRs + explicit review requests (the retired PR band's default sources),
-// "all" widens to everyone's open PRs (incl. automation output), "none" hides
-// PR rows entirely.
+// Session-less PR rows folded into the project lanes. New browsers hide them.
+// The historical "default" value shows your own PRs plus explicit review
+// requests, "all" widens to everyone's open PRs (including automation output),
+// and "none" hides PR rows entirely.
 export type PrsFilter = "default" | "all" | "none";
 // Workspaces an agent started for itself through the automation machine
 // identity. They stay out of the list by default. When shown, they sit in the
@@ -337,7 +337,13 @@ export function readStoredFilter(): StoredFilterState {
 					? v.person
 					: "me",
 			sort: v.sort === "created" ? "created" : "updated",
-			prs: v.prs === "all" || v.prs === "none" ? v.prs : "default",
+			// An absent value is the untouched preference, so new browsers hide PR
+			// rows. Keep every explicit historical choice, including "default",
+			// which is the persisted name for Mine + requested.
+			prs:
+				v.prs === "default" || v.prs === "all" || v.prs === "none"
+					? v.prs
+					: "none",
 			// v4's "show" was the default rather than a deliberate opt-in. Move
 			// every older browser to the safer default; v5 was the version that
 			// made it a choice, so it and everything after it say what they mean.
@@ -357,7 +363,7 @@ export function readStoredFilter(): StoredFilterState {
 			repo: "all",
 			person: "me",
 			sort: "updated",
-			prs: "default",
+			prs: "none",
 			autoCreated: "hide",
 			emptyProjects: "show",
 		};
