@@ -493,19 +493,20 @@ struct TurnStepsView: View {
         return sections
     }
 
-    /// Which run, if any, a call joins. Routine calls share one compact run;
-    /// consecutive passes over one file share an edit run, keyed on the tool
-    /// and the file so a different file — or a read in between — starts a new
-    /// one. Everything else stands alone.
+    /// Which run, if any, a call joins. With tool calls folded, the step row
+    /// stands for the turn's work, so every call joins it — a spawned worker,
+    /// an MCP call and a shell command are all one step, and one tap puts
+    /// them back with their own glyphs and chips. A worker's transcript is
+    /// still a row away, where a row outside the run only made the count lie
+    /// and split one run into three. Consecutive passes over one file share
+    /// an edit run instead, keyed on the tool and the file so a different
+    /// file — or a read in between — starts a new one.
     private func runKind(_ item: ToolCallItem) -> ToolRunKind {
         guard item.assetPath == nil,
-              item.subagentId == nil,
               // Media the agent asked to show keeps its own row, as everywhere.
               item.result?.featuredMedia?.isEmpty != false
         else { return .single }
         switch item.presentation.family {
-        case .run, .file, .find, .web, .skill, .checklist:
-            return .compact
         case .edit:
             // One file, named by the same derivation the footer's chips use —
             // a call whose input arrived clamped has none, and keeps its row.
@@ -513,7 +514,7 @@ struct TurnStepsView: View {
             let file = item.presentation.touchedFiles[0].path
             return .edits(key: "\(item.presentation.canonical)\u{0}\(file)")
         default:
-            return .single
+            return .compact
         }
     }
 }
@@ -524,7 +525,8 @@ private enum ToolRunKind: Equatable {
     case compact
     /// Repeated passes over a single file, behind one edit row.
     case edits(key: String)
-    /// Stands on its own: an asset write, a worker, anything with media.
+    /// Stands on its own: an asset write, anything with media — a row whose
+    /// content the fold would hide rather than summarize.
     case single
 
     /// Whether a neighbour of the same kind joins, or starts its own run.
