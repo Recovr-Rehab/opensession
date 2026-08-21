@@ -122,6 +122,56 @@ export function handleSocketEnvelope(
 
 const MAX_RECONNECT_MS = 30_000;
 
+export interface ConnectionAttempt<T> {
+  generation: number;
+  previous: T | null;
+  candidate: T | null;
+}
+
+/** One replacement per lifecycle generation. Slack can close the old socket
+ * while apps.connections.open is still pending, so both graceful rotation and
+ * close-driven recovery must claim this same gate. */
+export class ConnectionAttemptGate<T> {
+  private current: ConnectionAttempt<T> | null = null;
+
+  get active(): boolean {
+    return this.current !== null;
+  }
+
+  begin(generation: number, previous: T | null): ConnectionAttempt<T> | null {
+    if (this.current) return null;
+    const attempt = { generation, previous, candidate: null };
+    this.current = attempt;
+    return attempt;
+  }
+
+  owns(attempt: ConnectionAttempt<T>): boolean {
+    return this.current === attempt;
+  }
+
+  setCandidate(attempt: ConnectionAttempt<T>, candidate: T): boolean {
+    if (!this.owns(attempt)) return false;
+    attempt.candidate = candidate;
+    return true;
+  }
+
+  replacing(socket: T, generation: number): boolean {
+    return this.current?.generation === generation && this.current.previous === socket;
+  }
+
+  finish(attempt: ConnectionAttempt<T>): void {
+    if (this.owns(attempt)) this.current = null;
+  }
+
+  reset(): Array<T> {
+    const active = this.current;
+    this.current = null;
+    if (!active) return [];
+    return [...new Set([active.previous, active.candidate].filter((item): item is T => item !== null))];
+  }
+}
+
+const connectionAttempts = new ConnectionAttemptGate<WebSocket>();
 let socket: WebSocket | null = null;
 let stopped = false;
 let reconnectAttempts = 0;
@@ -168,11 +218,21 @@ function wire(
   ws: WebSocket,
   previous: WebSocket | null,
   expectedGeneration: number,
+  attempt: ConnectionAttempt<WebSocket>,
 ): void {
   ws.onopen = () => {
-    if (stopped || expectedGeneration !== generation) {
+    if (
+      stopped ||
+      expectedGeneration !== generation ||
+      !connectionAttempts.owns(attempt)
+    ) {
       ws.close();
       return;
+    }
+    connectionAttempts.finish(attempt);
+    if (reconnectTimer) {
+      clearTimeout(reconnectTimer);
+      reconnectTimer = null;
     }
     reconnectAttempts = 0;
     console.log("[slack] Socket Mode: connected");
@@ -207,9 +267,13 @@ function wire(
 
   ws.onclose = () => {
     if (stopped || expectedGeneration !== generation) return;
+    // The old socket can close while its replacement URL is still in flight.
+    // That attempt already owns recovery, so the close must not start another.
+    if (connectionAttempts.replacing(ws, expectedGeneration)) return;
     // A socket superseded by a newer one (graceful rotation) must not trigger a
-    // reconnect — only the current live socket closing does.
+    // reconnect. Only the current live or opening socket closing does.
     if (socket !== ws) return;
+    connectionAttempts.finish(attempt);
     console.warn("[slack] Socket Mode: socket closed — reconnecting");
     scheduleReconnect(expectedGeneration);
   };
@@ -220,16 +284,27 @@ async function connect(
   expectedGeneration = generation,
 ): Promise<void> {
   if (stopped || expectedGeneration !== generation) return;
+  const attempt = connectionAttempts.begin(expectedGeneration, previous);
+  if (!attempt) return;
   const url = await openConnection();
   // stopSlackSocket may have won while apps.connections.open was in flight.
-  if (stopped || expectedGeneration !== generation) return;
+  if (
+    stopped ||
+    expectedGeneration !== generation ||
+    !connectionAttempts.owns(attempt)
+  ) return;
   if (!url) {
+    connectionAttempts.finish(attempt);
     scheduleReconnect(expectedGeneration);
     return;
   }
   const ws = new WebSocket(url);
+  if (!connectionAttempts.setCandidate(attempt, ws)) {
+    ws.close();
+    return;
+  }
   socket = ws;
-  wire(ws, previous, expectedGeneration);
+  wire(ws, previous, expectedGeneration, attempt);
 }
 
 /**
@@ -245,7 +320,7 @@ function reconnectGraceful(): void {
 /** Arm Socket Mode. No-op unless SLACK_APP_TOKEN is set. Idempotent. */
 export function startSlackSocket(): void {
   if (!socketModeEnabled()) return;
-  if (socket || reconnectTimer) return; // already running
+  if (socket || reconnectTimer || connectionAttempts.active) return; // already running
   stopped = false;
   reconnectAttempts = 0;
   console.log("[slack] Socket Mode: starting (outbound WebSocket, no inbound HTTP)");
@@ -260,10 +335,12 @@ export function stopSlackSocket(): void {
     clearTimeout(reconnectTimer);
     reconnectTimer = null;
   }
-  if (socket) {
+  const openSockets = new Set(connectionAttempts.reset());
+  if (socket) openSockets.add(socket);
+  socket = null;
+  for (const openSocket of openSockets) {
     try {
-      socket.close();
+      openSocket.close();
     } catch {}
-    socket = null;
   }
 }

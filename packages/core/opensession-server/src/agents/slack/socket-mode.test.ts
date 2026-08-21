@@ -1,5 +1,9 @@
 import { describe, expect, test } from "bun:test";
-import { handleSocketEnvelope, type EnvelopeHandlers } from "./socket-mode";
+import {
+  ConnectionAttemptGate,
+  handleSocketEnvelope,
+  type EnvelopeHandlers,
+} from "./socket-mode";
 
 /**
  * Feed synthetic Socket Mode frames through the envelope router and assert the
@@ -129,5 +133,35 @@ describe("handleSocketEnvelope", () => {
     const h = harness();
     expect(() => handleSocketEnvelope("not json", h.send, h.handlers)).not.toThrow();
     expect(h.sent).toEqual([]);
+  });
+});
+
+
+describe("ConnectionAttemptGate", () => {
+  test("coalesces graceful and close-driven reconnects", () => {
+    const gate = new ConnectionAttemptGate<object>();
+    const previous = {};
+    const graceful = gate.begin(3, previous);
+    expect(graceful).not.toBeNull();
+    expect(gate.begin(3, null)).toBeNull();
+    expect(gate.replacing(previous, 3)).toBe(true);
+
+    const candidate = {};
+    expect(gate.setCandidate(graceful!, candidate)).toBe(true);
+    gate.finish(graceful!);
+    expect(gate.active).toBe(false);
+    expect(gate.begin(3, null)).not.toBeNull();
+  });
+
+  test("reset invalidates an in-flight attempt and returns every socket", () => {
+    const gate = new ConnectionAttemptGate<object>();
+    const previous = {};
+    const candidate = {};
+    const attempt = gate.begin(4, previous)!;
+    gate.setCandidate(attempt, candidate);
+
+    expect(new Set(gate.reset())).toEqual(new Set([previous, candidate]));
+    expect(gate.owns(attempt)).toBe(false);
+    expect(gate.active).toBe(false);
   });
 });
