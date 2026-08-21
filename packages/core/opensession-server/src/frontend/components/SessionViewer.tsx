@@ -7245,22 +7245,35 @@ export function SessionViewer({
 												/>
 											)}
 											{nextAction && (
-												<Tooltip
-													label="Next chat"
-													shortcut={nextChatKeys ?? undefined}
-												>
-													<Button
-														size="lg"
-														/* The band takes no clicks, so the one thing in
-														   it that is a control asks for them back. */
-														className="pointer-events-auto ml-auto min-h-10 shrink-0 border-divider hover:border-line phone:min-h-11"
-														trailing={<IconChevronRight size={18} aria-hidden />}
-														aria-label="Next chat"
-														onClick={onNextChat}
+												<div className="pointer-events-auto ml-auto flex shrink-0 items-center gap-2">
+													{!session.archived && (
+														<Button
+															variant="soft"
+															size="lg"
+															className="hidden min-h-11 phone:inline-flex"
+															icon={<IconArchive size={18} aria-hidden />}
+															aria-label="Archive and open next chat"
+															disabled={archiving}
+															onClick={() => void handleArchive()}
+														>
+															Archive
+														</Button>
+													)}
+													<Tooltip
+														label="Next chat"
+														shortcut={nextChatKeys ?? undefined}
 													>
-														Next
-													</Button>
-												</Tooltip>
+														<Button
+															size="lg"
+															className="min-h-10 shrink-0 border-divider hover:border-line phone:min-h-11"
+															trailing={<IconChevronRight size={18} aria-hidden />}
+															aria-label="Next chat"
+															onClick={onNextChat}
+														>
+															Next
+														</Button>
+													</Tooltip>
+												</div>
 											)}
 										</div>
 									</div>
