@@ -1,4 +1,5 @@
 import type { ModelOption, ProviderAccountOption } from "../lib/api";
+import { useDefaultModelPreference } from "../hooks/useDefaultModelPreference";
 import type { SessionUsage } from "../lib/types";
 import { ModelEffortSelect } from "./ModelEffortSelect";
 
@@ -38,6 +39,9 @@ export function ModelMenuRow({
 	onAccountChange: (accountId: string) => void;
 	usage?: SessionUsage;
 }) {
+	const { preferredDefaultModel, setPreferredDefaultModel } =
+		useDefaultModelPreference();
+
 	return (
 		<ModelEffortSelect
 			triggerVariant="menu-row"
@@ -46,6 +50,8 @@ export function ModelMenuRow({
 			defaultModel={defaultModel}
 			model={model}
 			onModelChange={onChange}
+			preferredDefaultModel={preferredDefaultModel}
+			onSetAsDefault={setPreferredDefaultModel}
 			fallbackModelLabel={prettyLabel}
 			effort={effort}
 			onEffortChange={onEffortChange}

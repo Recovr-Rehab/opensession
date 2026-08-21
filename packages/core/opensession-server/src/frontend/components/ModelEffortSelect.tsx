@@ -23,6 +23,10 @@ type Props = {
 	/** Current model id; "" = default. */
 	model: string;
 	onModelChange: (model: string) => void;
+	/** This person's preferred model for new sessions. */
+	preferredDefaultModel?: string;
+	/** Makes the current conversation model this person's default for new sessions. */
+	onSetAsDefault?: (model: string) => void;
 	/** Model is set elsewhere (e.g. Slack-owned sessions) — effort stays switchable. */
 	modelDisabled?: boolean;
 	modelTitle?: string;
@@ -301,6 +305,8 @@ export function ModelEffortSelect({
 	defaultModel,
 	model,
 	onModelChange,
+	preferredDefaultModel,
+	onSetAsDefault,
 	modelDisabled,
 	modelTitle,
 	effort,
@@ -320,6 +326,7 @@ export function ModelEffortSelect({
 	onOpenChange,
 }: Props) {
 	const effectiveModel = model || defaultModel;
+	const isPreferredDefault = preferredDefaultModel === effectiveModel;
 	// Pi-routed ids resolve to their base list entry for label/effort/account
 	// lookups — the engine prefix is routing, not a different model.
 	const effectiveBase = baseModelId(effectiveModel);
@@ -863,6 +870,20 @@ export function ModelEffortSelect({
 					</Menu.SubmenuRoot>
 				)}
 				<Menu.Separator className="my-1" />
+				{onSetAsDefault && (
+					<Menu.Item
+						onClick={() => onSetAsDefault(effectiveModel)}
+						disabled={isPreferredDefault}
+						title={`Use ${modelLabel} for new sessions`}
+						className={cn(
+							"justify-between gap-3",
+							isPreferredDefault && "opacity-55",
+						)}
+					>
+						<span className="min-w-0 truncate">Set as default</span>
+						<Menu.Check on={isPreferredDefault} className="text-dim" />
+					</Menu.Item>
+				)}
 				<Menu.Item
 					onClick={resetToDefault}
 					disabled={atDefault}

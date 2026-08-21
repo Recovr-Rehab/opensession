@@ -99,6 +99,7 @@ import {
   MOD_ENTER_GLYPH,
 } from "../lib/send-key";
 import { getSendKeyPref, onSendKeyChanged } from "../lib/send-key-pref";
+import { useDefaultModelPreference } from "../hooks/useDefaultModelPreference";
 import { isApple } from "../lib/platform";
 import { matchesShortcut } from "../lib/shortcuts";
 import { VoiceInput } from "./VoiceInput";
@@ -523,6 +524,10 @@ export function Composer({
     [],
   );
   const sendKey = effectiveSendKey(storedSendKey);
+  // The preference applies only to new sessions; this session's model remains
+  // the value selected in the same menu.
+  const { preferredDefaultModel, setPreferredDefaultModel } =
+    useDefaultModelPreference();
   // Follow-up behavior preferences (Settings → Preferences): what each send
   // gesture — plain Enter/the send button vs ⌘/Ctrl+Enter — does while the
   // run is busy. Both configurable; defaults queue/steer.
@@ -1985,6 +1990,8 @@ export function Composer({
                   defaultModel={defaultModel}
                   model={model}
                   onModelChange={onModelChange}
+                  preferredDefaultModel={preferredDefaultModel}
+                  onSetAsDefault={setPreferredDefaultModel}
                   modelDisabled={modelDisabled}
                   modelTitle={modelTitle}
                   effort={effort}
