@@ -486,16 +486,16 @@ export function GithubAuthCard({
 				    whole workspace, so the work is a one-time setup on GitHub that a
 				    person should be able to read before opening a credentials form. */}
 				{onboarding && (
-					<>
-						<SettingsSection className="mt-3 flex flex-col gap-3">
+					<div className="mt-3 grid grid-cols-2 items-start gap-3 phone:grid-cols-1">
+						<SettingsSection className="flex h-full flex-col gap-3">
 							<div className="text-item-title font-semibold text-fg">How to connect</div>
 							<SetupSteps steps={GITHUB_ONBOARDING_STEPS} />
 							<LinkChips
-								className="mt-0"
+								className="mt-auto pt-1"
 								links={[{ label: "Create GitHub App", url: github.appCreateUrl }]}
 							/>
 						</SettingsSection>
-						<SettingsSection className="mt-3 p-4">
+						<SettingsSection className="p-4">
 							{configuration}
 							{error && <InlineAlert>{error}</InlineAlert>}
 							<div className="mt-4 flex justify-end">
@@ -509,7 +509,7 @@ export function GithubAuthCard({
 								</Button>
 							</div>
 						</SettingsSection>
-					</>
+					</div>
 				)}
 			</div>
 			{!onboarding && (
