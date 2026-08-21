@@ -2671,11 +2671,11 @@ struct SessionsListView: View {
     private var listSections: some View {
         Group {
             #if os(iOS)
-            // Who is around, then where you can go. Both sit ABOVE the work,
-            // the way the web sidebar has carried its tools since the band
-            // lost its heading: a destination you reach by scrolling past
-            // every workspace you have is a destination nobody reaches.
-            mobilePresenceBand
+            // Where you can go, above the work: the way the web sidebar has
+            // carried its tools since the band lost its heading. A destination
+            // you reach by scrolling past every workspace you have is a
+            // destination nobody reaches. Who is around rides the Feed row's
+            // right edge, where the desktop sidebar puts it.
             mobileToolsBand
             if !pinnedWorkspaces.isEmpty {
                 Section {
@@ -3087,31 +3087,6 @@ struct SessionsListView: View {
         .listRowBackground(Color.clear)
     }
 
-    /// Who is around, at the very top of the list.
-    ///
-    /// The phone could only reach a teammate through the filter sheet, and
-    /// nothing anywhere said who was actually here. This is the web's own
-    /// answer to both (`components/Feed.tsx`): one face per person, a green
-    /// dot while they have something open, and picking one turns the list to
-    /// their work.
-    ///
-    /// It draws only once the roster has somebody on it besides you, so a
-    /// solo instance is not handed a strip holding a single face.
-    @ViewBuilder
-    private var mobilePresenceBand: some View {
-        if !TeamDirectory.shared.names.isEmpty {
-            Section {
-                SidebarPresenceStrip(
-                    person: personSelection,
-                    currentUser: ServerConfig.shared.userName
-                )
-                .listRowInsets(EdgeInsets(top: 4, leading: 0, bottom: 4, trailing: 0))
-                .listRowSeparator(.hidden)
-                .listRowBackground(Color.clear)
-            }
-        }
-    }
-
     /// The tools, above the work rather than under it.
     ///
     /// Same set and same order as the web's strip, and the same rule for what
@@ -3135,7 +3110,17 @@ struct SessionsListView: View {
             symbol: "shippingbox",
             count: nil,
             accessibility: "Open Feed",
-            hides: SidebarTools.feed
+            hides: SidebarTools.feed,
+            // The team rides this row's right edge, the way it does in the
+            // desktop sidebar: whose work you are reading is a question about
+            // the feed, so it is answered on the row that leads to it rather
+            // than in a strip of its own above the list.
+            trailing: {
+                TeamLensPile(
+                    person: personSelection,
+                    currentUser: ServerConfig.shared.userName
+                )
+            }
         ) {
             showFeed = true
         }
@@ -3150,7 +3135,8 @@ struct SessionsListView: View {
             accessibility: openTaskCount == 1
                 ? "Open Tasks, 1 open"
                 : "Open Tasks, \(openTaskCount) open",
-            hides: SidebarTools.tasks
+            hides: SidebarTools.tasks,
+            trailing: { EmptyView() }
         ) {
             showTasks = true
         }
@@ -3160,37 +3146,44 @@ struct SessionsListView: View {
     /// the one-item menu that puts it away. Built once rather than per row so
     /// the tools cannot drift apart from each other the way they would if each
     /// carried its own copy of this.
-    private func toolRow(
+    private func toolRow<Trailing: View>(
         title: String,
         symbol: String,
         count: Int?,
         accessibility: String,
         hides id: String,
+        @ViewBuilder trailing: () -> Trailing,
         open: @escaping () -> Void
     ) -> some View {
         Section {
-            Button(action: open) {
-                HStack(spacing: 9) {
-                    Image(systemName: symbol)
-                        .font(.callout)
-                        .foregroundStyle(OS1VisualStyle.textDim)
-                        .frame(width: 22, height: 22)
-                        .offset(x: 1)
-                    Text(title)
-                        .font(.callout.weight(.medium))
-                        .foregroundStyle(OS1VisualStyle.textDim)
-                    if let count {
-                        Text(verbatim: "\(count)")
-                            .font(.footnote.weight(.medium))
-                            .foregroundStyle(OS1VisualStyle.textFaint)
+            // The trailing view is a SIBLING of the button, not a child of it:
+            // a button nested inside another swallows its taps on iOS, and the
+            // point of the pile on the Feed row is that it is its own target.
+            HStack(spacing: 0) {
+                Button(action: open) {
+                    HStack(spacing: 9) {
+                        Image(systemName: symbol)
+                            .font(.callout)
+                            .foregroundStyle(OS1VisualStyle.textDim)
+                            .frame(width: 22, height: 22)
+                            .offset(x: 1)
+                        Text(title)
+                            .font(.callout.weight(.medium))
+                            .foregroundStyle(OS1VisualStyle.textDim)
+                        if let count {
+                            Text(verbatim: "\(count)")
+                                .font(.footnote.weight(.medium))
+                                .foregroundStyle(OS1VisualStyle.textFaint)
+                        }
+                        Spacer(minLength: 0)
                     }
-                    Spacer()
+                    .padding(.vertical, 11)
+                    .contentShape(Rectangle())
                 }
-                .padding(.vertical, 11)
-                .contentShape(Rectangle())
+                .buttonStyle(.plain)
+                .accessibilityLabel(accessibility)
+                trailing()
             }
-            .buttonStyle(.plain)
-            .accessibilityLabel(accessibility)
             // The same one-item menu the Plain and Reports rows carry, for the
             // same reason: the row leads somewhere rather than holding state,
             // and Settings → Appearance brings it back.
