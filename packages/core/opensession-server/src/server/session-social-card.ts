@@ -52,12 +52,12 @@ async function loadSharp(): Promise<SharpFactory | null> {
 	return sharpFactory;
 }
 
-const SESSION_CARD_VERSION = 24;
+const SESSION_CARD_VERSION = 25;
 
 const CARD_PAPER = "#FFFFFF";
-/** Every frame stays 16:9, including the one behind the lead shot. */
-const SHOT_WIDTH = 640;
-const SHOT_HEIGHT = 360;
+/** Preserve each screenshot's aspect ratio within a bounded Slack preview. */
+const SHOT_MAX_WIDTH = 640;
+const SHOT_MAX_HEIGHT = 640;
 const SHOT_RADIUS = 28;
 /** Room around the stack for its side and top shadows. */
 const SHOT_PAD_X = 40;
@@ -70,7 +70,7 @@ const SHOT_STACK_LIFT = 14;
 const SHOT_LIMIT = 2;
 /** Keep fallback candidates so an unusable first image does not hide a good one. */
 const SHOT_CANDIDATE_LIMIT = 12;
-/** Anything wider than a 16:9 capture with a small tolerance crops poorly. */
+/** Card renders are usually ultra-wide. Rejecting them prevents recursive previews. */
 const SHOT_MAX_ASPECT = 16 / 9 + 0.02;
 /** Link previews commonly render the card on a 2x display. */
 const CARD_RENDER_SCALE = 2;
@@ -248,11 +248,12 @@ function sessionShotPaths(session: UnifiedSession): string[] {
 
 interface PreparedShot {
 	dataUrl: string;
+	width: number;
+	height: number;
 }
 
 interface UsableShotSource {
 	input: Buffer | string;
-	portrait: boolean;
 	sharp: SharpFactory;
 }
 
@@ -276,7 +277,7 @@ async function usableShotSource(
 		// Card renders and message-column captures are usually ultra-wide. Putting
 		// one back inside the card creates the recursive, unreadable preview.
 		if (aspect > SHOT_MAX_ASPECT) return undefined;
-		return { input, portrait: aspect < 1, sharp };
+		return { input, sharp };
 	} catch {
 		return undefined;
 	}
@@ -292,49 +293,47 @@ export async function hasUsableSessionShot(
 	return false;
 }
 
-/** Preserve landscape screenshots inside the 16:9 frame. Portrait captures use
- * a salience crop instead of a fixed top sliver, so their relevant UI stays large. */
+/** Keep the complete screenshot and its native aspect ratio. Resizing only
+ * bounds the payload and supplies enough pixels for the card's 2x output. */
 async function prepareShot(
 	source: string | undefined,
-	width: number,
-	height: number,
 ): Promise<PreparedShot | undefined> {
 	const usable = await usableShotSource(source);
 	if (!usable) return undefined;
 	try {
-		const png = await usable.sharp(usable.input, {
+		const { data, info } = await usable.sharp(usable.input, {
 			limitInputPixels: 40_000_000,
 		})
 			.rotate()
-			.resize(width, height, {
-				fit: usable.portrait ? "cover" : "contain",
-				position: usable.portrait ? "attention" : "centre",
-				background: { r: 246, g: 246, b: 248, alpha: 1 },
+			.resize({
+				width: SHOT_MAX_WIDTH * CARD_RENDER_SCALE,
+				height: SHOT_MAX_HEIGHT * CARD_RENDER_SCALE,
+				fit: "inside",
 			})
 			.png()
-			.toBuffer();
+			.toBuffer({ resolveWithObject: true });
 		return {
-			dataUrl: `data:image/png;base64,${png.toString("base64")}`,
+			dataUrl: `data:image/png;base64,${data.toString("base64")}`,
+			width: info.width / CARD_RENDER_SCALE,
+			height: info.height / CARD_RENDER_SCALE,
 		};
 	} catch {
 		return undefined;
 	}
 }
 
-async function shotDataUrls(
+async function preparedShots(
 	paths: string[] | undefined,
-	width: number,
-	height: number,
-): Promise<string[]> {
+): Promise<PreparedShot[]> {
 	const shots: PreparedShot[] = [];
 	for (const source of (paths ?? []).slice(0, SHOT_CANDIDATE_LIMIT)) {
-		const shot = await prepareShot(source, width, height);
+		const shot = await prepareShot(source);
 		if (shot) shots.push(shot);
 		if (shots.length >= SHOT_LIMIT) break;
 	}
 	// Keep source priority intact. A deliberate walkthrough image should not lose
 	// to a less relevant chat image merely because the latter is landscape.
-	return shots.map((shot) => shot.dataUrl);
+	return shots;
 }
 
 function html(value: string): string {
@@ -391,7 +390,7 @@ function squircleRectPath(
 	].join("");
 }
 
-interface ShotFrame {
+interface ShotFrame extends PreparedShot {
 	index: number;
 	x: number;
 	y: number;
@@ -400,20 +399,23 @@ interface ShotFrame {
 	pivotY: number;
 }
 
-/** The lead shot sits right, with the second card behind it and a touch lower. */
-function shotFrames(count: number): ShotFrame[] {
-	const frameCount = Math.min(count, SHOT_LIMIT);
-	const stacked = frameCount > 1;
-	return Array.from({ length: frameCount }, (_, index) => {
-		const x = (frameCount - 1 - index) * SHOT_STACK_OFFSET;
-		const y = index === 0 ? 0 : SHOT_STACK_LIFT;
+/** The lead shot sits right, with the second card behind it. Their lower edges
+ * share a baseline so differently shaped screenshots still rise as one stack. */
+function shotFrames(shots: PreparedShot[]): ShotFrame[] {
+	const selected = shots.slice(0, SHOT_LIMIT);
+	const stacked = selected.length > 1;
+	const tallest = Math.max(...selected.map((shot) => shot.height), 0);
+	return selected.map((shot, index) => {
+		const x = (selected.length - 1 - index) * SHOT_STACK_OFFSET;
+		const y = tallest - shot.height + (index === 0 ? 0 : SHOT_STACK_LIFT);
 		return {
+			...shot,
 			index,
 			x,
 			y,
 			rotation: stacked ? (index === 0 ? 2 : -5) : 0,
-			pivotX: x + SHOT_WIDTH / 2,
-			pivotY: y + SHOT_HEIGHT,
+			pivotX: x + shot.width / 2,
+			pivotY: y + shot.height,
 		};
 	});
 }
@@ -451,9 +453,9 @@ function stackBounds(frames: ShotFrame[]): {
 	for (const frame of frames) {
 		const corners: Array<[number, number]> = [
 			[frame.x, frame.y],
-			[frame.x + SHOT_WIDTH, frame.y],
-			[frame.x + SHOT_WIDTH, frame.y + SHOT_HEIGHT],
-			[frame.x, frame.y + SHOT_HEIGHT],
+			[frame.x + frame.width, frame.y],
+			[frame.x + frame.width, frame.y + frame.height],
+			[frame.x, frame.y + frame.height],
 		];
 		for (const [cornerX, cornerY] of corners) {
 			const point = rotatePoint(
@@ -480,8 +482,8 @@ function stackBounds(frames: ShotFrame[]): {
  *
  * SVG source is exported so the visual can be inspected without PNG decoding.
  */
-export function sessionSocialCardSvg(shots: string[]): string {
-	const frames = shotFrames(shots.length);
+export function sessionSocialCardSvg(shots: PreparedShot[]): string {
+	const frames = shotFrames(shots);
 	if (!frames.length) return "";
 	const bounds = stackBounds(frames);
 	// Whole pixels: a fractional offset would print through every coordinate in
@@ -500,8 +502,8 @@ export function sessionSocialCardSvg(shots: string[]): string {
 		shape: squircleRectPath(
 			frame.x + offsetX,
 			frame.y + offsetY,
-			SHOT_WIDTH,
-			SHOT_HEIGHT,
+			frame.width,
+			frame.height,
 			SHOT_RADIUS,
 		),
 	}));
@@ -518,8 +520,7 @@ export function sessionSocialCardSvg(shots: string[]): string {
 				? ` transform="rotate(${frame.rotation} ${frame.pivotX} ${frame.pivotY})"`
 				: "";
 			return `<g${transform}><path d="${frame.shape}" fill="${CARD_PAPER}" filter="url(#shotShadow)"/>
-<g clip-path="url(#shotClip${frame.index})"><image href="${shots[frame.index]}" x="${frame.x}" y="${frame.y}" width="${SHOT_WIDTH}" height="${SHOT_HEIGHT}" preserveAspectRatio="xMidYMin slice"/></g>
-<path d="${frame.shape}" fill="none" stroke="#000000" stroke-opacity="0.1"/></g>`;
+<g clip-path="url(#shotClip${frame.index})"><image href="${frame.dataUrl}" x="${frame.x}" y="${frame.y}" width="${frame.width}" height="${frame.height}" preserveAspectRatio="xMidYMid meet"/></g></g>`;
 		})
 		.join("\n");
 	return `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}" overflow="hidden">
@@ -543,11 +544,7 @@ export async function renderSessionSocialCard(
 ): Promise<Buffer | null> {
 	const sharp = await loadSharp();
 	if (!sharp) return null;
-	const shots = await shotDataUrls(
-		data.shots,
-		SHOT_WIDTH * CARD_RENDER_SCALE,
-		SHOT_HEIGHT * CARD_RENDER_SCALE,
-	);
+	const shots = await preparedShots(data.shots);
 	const svg = sessionSocialCardSvg(shots);
 	if (!svg) return null;
 	// The whole card lands at 2x, embedded screenshots included. Rendering only
