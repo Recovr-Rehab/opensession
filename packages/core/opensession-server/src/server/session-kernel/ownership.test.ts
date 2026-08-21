@@ -57,6 +57,20 @@ describe("single session ownership", () => {
 		expect(existsSync(join(serverDir, "prompt-receipts.ts"))).toBe(false);
 	});
 
+	test("sandbox prompts are visible before remote startup can fail", () => {
+		const source = read("run-session.ts");
+		expect(source).toContain("if (content?.trim()) {");
+		expect(source).not.toContain(
+			"if (!session.sandbox && content?.trim()) {",
+		);
+	});
+
+	test("interactive remote runs do not launch host-only external MCP servers", () => {
+		expect(read("run-session.ts")).toContain(
+			"mcpServers: opts.isAutomationSession ? (opts.mcpServers ?? []) : []",
+		);
+	});
+
 	test("no server module writes session JSON outside the owner facade", () => {
 		const offenders: string[] = [];
 		for (const path of sourceFiles(serverDir)) {

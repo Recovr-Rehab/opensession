@@ -1414,7 +1414,13 @@ export async function maybeLaunchSandboxedRun(
 			model: portablePreset?.model ?? session.model,
 			selectedModel: portablePreset?.selectedModel,
 			images: opts.images,
-			mcpServers: opts.mcpServers ?? "all",
+			// Interactive remote sandboxes keep Open Session's in-process tools
+			// through proxyMcpServers below, but cannot run the host's external MCP
+			// commands or reuse its dynamic OAuth state. Sending "all" made every
+			// turn wait on a ladder of ENOENT, 401 and 60s timeout failures before
+			// the model could answer. Automation keeps its explicit fail-closed
+			// allowlist because those remote connectors are part of its contract.
+			mcpServers: opts.isAutomationSession ? (opts.mcpServers ?? []) : [],
 			proxyMcpServers,
 			rpcToken,
 			reposNote: await buildSessionNote(session, opts.user),
@@ -1813,14 +1819,15 @@ async function runSessionPromptInner(
 	const engineSessionId = engineSessionIdFor(session, provider);
 
 	// Durable intake (2026-07-24, bks-019f93ea): persist the user's message to
-	// the transcript store NOW — before the worktree/title/engine-spawn awaits —
+	// the transcript store NOW, before the worktree/title/engine-spawn awaits,
 	// so a process death anywhere in the run path can no longer lose it. The
-	// uuid threads through to the runner (promptEntryId), whose own transcript
-	// write upserts this same row (with any context decoration) instead of
-	// duplicating the bubble. Sandbox runs keep their own transcript mirror
-	// with its own ids — skip those to avoid a doubled user line.
+	// uuid threads through to every runner as promptEntryId, so a detached or
+	// sandbox host's transcript forwarding upserts this same row instead of
+	// duplicating the bubble. This must include sandbox runs: a remote host can
+	// finish empty or fail during MCP startup before it emits any transcript
+	// entry, which previously made an accepted prompt disappear completely.
 	const durablePromptEntryId = promptEntryId || crypto.randomUUID();
-	if (!session.sandbox && content?.trim()) {
+	if (content?.trim()) {
 		storeAppendUserLineEarly(
 			sessionId,
 			transcriptLineUser(content, durablePromptEntryId, undefined, images),
