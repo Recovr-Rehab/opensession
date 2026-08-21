@@ -108,6 +108,7 @@ import { ChipHoverCards } from "./components/ChipHoverCard";
 import { ShortcutCheatSheet } from "./components/ShortcutCheatSheet";
 import { UpdatePill } from "./components/UpdatePill";
 import { DesktopLinkToast } from "./components/DesktopLinkToast";
+import { PERSISTENT_NOTICE_SHELF } from "./lib/notification-classes";
 import {
 	IconArchive,
 	IconUnarchive,
@@ -5349,11 +5350,11 @@ export function App(
 				</div>
 				)}
 
-				{/* Desktop notifications float over the sidebar rather than living inside
-				    it. Their readable width and interactions therefore survive a narrow or
-				    collapsed sidebar. Phones keep the compact update pill in the top bar. */}
+				{/* Durable prompts use a separate shelf from transient feedback. The
+				    desktop shelf stays clear of the composer; phones put the compact
+				    equivalent in the app header instead. */}
 				{!isPhone && (
-					<div className="pointer-events-none fixed bottom-2 left-2 z-[9500] flex w-fit max-w-[calc(100vw-16px)] flex-col gap-2">
+					<div className={PERSISTENT_NOTICE_SHELF}>
 						{launchComplete && <DesktopLinkToast />}
 						<UpdatePill addHandler={addHandler} />
 					</div>

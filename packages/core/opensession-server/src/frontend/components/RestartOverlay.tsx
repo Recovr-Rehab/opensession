@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import type { WSServerMessage } from "../lib/types";
 import { PRODUCT_NAME } from "../lib/brand";
+import { TRANSIENT_NOTICE_LANE } from "../lib/notification-classes";
 import { FloatingStatus } from "../ui/floating-status";
 import { toast } from "../ui/toast";
 import { fetchHealthStatus } from "../lib/health";
@@ -65,7 +66,9 @@ export function RestartOverlay({ connected, addHandler }: Props) {
     explicit.current = false;
     if (phaseRef.current === "restarting") setPhase("ok");
     const by = restartByRef.current;
-    toast(`${PRODUCT_NAME} restarted${by ? ` (${by})` : ""}.`);
+    toast(`${PRODUCT_NAME} restarted${by ? ` (${by})` : ""}.`, {
+      variant: "success",
+    });
   };
 
   // Adopt/compare a server-reported bootId. First sighting just records it —
@@ -85,6 +88,7 @@ export function RestartOverlay({ connected, addHandler }: Props) {
       const by = restartByRef.current;
       toast(
         `${PRODUCT_NAME} restarted${by ? ` (${by})` : ""}. Reconnected to the new server.`,
+        { variant: "success" },
       );
     }
   };
@@ -216,26 +220,25 @@ export function RestartOverlay({ connected, addHandler }: Props) {
   if (phase === "reconnecting" || phase === "restarting") {
     const restarting = phase === "restarting" || explicit.current;
     return (
-      <FloatingStatus
-        // Same floating-surface vocabulary as the scroll-to-bottom pill and the
-        // toast this hands off to: glass fill, no border, hairline from the
-        // shadow ring — so the restart sequence doesn't change materials
-        // halfway through. The `sm` tier is the compact-control one the scroll
-        // pill uses; `md` is calibrated for a menu and reads as a grey halo on
-        // a surface this small.
-        className="pointer-events-none fixed bottom-[calc(env(safe-area-inset-bottom,0px)+14px)] left-1/2 z-[200] -translate-x-1/2 phone:bottom-auto phone:top-[calc(var(--header-h)+8px)]"
-        role="status"
-        aria-live="polite"
-      >
-        <span
-          aria-hidden
-          className="size-3 shrink-0 animate-spin rounded-full border border-current/25 border-t-current text-accent"
-        />
-        <span>{restarting ? `${PRODUCT_NAME} is restarting` : "Connection lost"}</span>
-        <span className="text-faint">
-          {restarting && restartBy ? restartBy : "Retrying"}
-        </span>
-      </FloatingStatus>
+      <div className={`${TRANSIENT_NOTICE_LANE} flex justify-center`}>
+        <FloatingStatus
+          // Live restart status and its completion toast share one top-center
+          // lane and one glass surface, so the sequence changes state in place.
+          // The `sm` ring is calibrated for a compact control; `md` reads as a
+          // grey halo on a surface this small.
+          role="status"
+          aria-live="polite"
+        >
+          <span
+            aria-hidden
+            className="size-3 shrink-0 animate-spin rounded-full border border-current/25 border-t-current text-accent"
+          />
+          <span>{restarting ? `${PRODUCT_NAME} is restarting` : "Connection lost"}</span>
+          <span className="text-faint">
+            {restarting && restartBy ? restartBy : "Retrying"}
+          </span>
+        </FloatingStatus>
+      </div>
     );
   }
 

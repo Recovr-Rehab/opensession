@@ -1,6 +1,6 @@
 import { Toast as BaseToast } from "@base-ui/react/toast";
 import { useEffect } from "react";
-import { useIsPhone } from "../hooks/useIsPhone";
+import { TRANSIENT_NOTICE_LANE } from "../lib/notification-classes";
 import { AnimatedCheck } from "./copy";
 import { Tooltip } from "./tooltip";
 import {
@@ -154,13 +154,7 @@ function ToastViewport() {
 	return (
 		<BaseToast.Portal>
 			<BaseToast.Viewport
-				className={[
-					"pointer-events-none fixed inset-x-0 bottom-6 z-[100] mx-auto h-[var(--toast-frontmost-height)] w-full max-w-full px-4 outline-none",
-					// A phone hangs the stack from the top, just under the bar, where
-					// the thumb and the composer are not. --header-h already carries the
-					// status-bar inset, and collapses to 0 above the breakpoint.
-					"phone:bottom-auto phone:top-[calc(var(--header-h)+8px)] phone:px-3",
-				].join(" ")}
+				className={`${TRANSIENT_NOTICE_LANE} mx-auto h-[var(--toast-frontmost-height)] w-full max-w-full px-4 outline-none phone:px-3`}
 			>
 				{items.map((item) => (
 					<ToastCard key={item.id} toast={item} />
@@ -172,26 +166,20 @@ function ToastViewport() {
 
 function ToastCard({ toast: item }: { toast: BaseToast.Root.ToastObject<ToastData> }) {
 	const data = item.data;
-	const isPhone = useIsPhone();
 	if (!data) return null;
 
 	return (
 		<BaseToast.Root
 			toast={item}
-			// The stack hangs from whichever edge it sits on, so the swipe that
-			// throws a toast away is the one that pushes it off that edge.
-			swipeDirection={isPhone ? ["up", "right"] : ["down", "right"]}
+			// Every transient notice hangs from the top lane. Up and right are the
+			// two dismissal directions that move it away from that anchor.
+			swipeDirection={["up", "right"]}
 			onClick={() => dismissToast(data.id)}
 			className={[
-				"pointer-events-auto absolute bottom-0 left-1/2 w-max max-w-[calc(100vw-32px)] outline-none",
-				"phone:bottom-auto phone:top-0 phone:max-w-[calc(100vw-24px)]",
-				// One transform serves both edges: --toast-dir is the sign of the
-				// stack, so the cards behind the frontmost one sit above it on
-				// desktop and below it on a phone.
-				"[--toast-dir:-1] phone:[--toast-dir:1]",
-				"[z-index:calc(100-var(--toast-index))] [transform-origin:center_bottom] phone:[transform-origin:center_top]",
-				"[transform:translateX(calc(-50%+var(--toast-swipe-movement-x)))_translateY(calc(var(--toast-swipe-movement-y)+var(--toast-dir)*var(--toast-index)*8px))_scale(calc(1-(var(--toast-index)*0.04)))]",
-				"data-[expanded]:[transform:translateX(calc(-50%+var(--toast-swipe-movement-x)))_translateY(calc(var(--toast-swipe-movement-y)+var(--toast-dir)*var(--toast-offset-y)+var(--toast-dir)*var(--toast-index)*8px))_scale(1)]",
+				"pointer-events-auto absolute top-0 left-1/2 w-max max-w-[calc(100vw-32px)] outline-none phone:max-w-[calc(100vw-24px)]",
+				"[z-index:calc(100-var(--toast-index))] [transform-origin:center_top]",
+				"[transform:translateX(calc(-50%+var(--toast-swipe-movement-x)))_translateY(calc(var(--toast-swipe-movement-y)+var(--toast-index)*8px))_scale(calc(1-(var(--toast-index)*0.04)))]",
+				"data-[expanded]:[transform:translateX(calc(-50%+var(--toast-swipe-movement-x)))_translateY(calc(var(--toast-swipe-movement-y)+var(--toast-offset-y)+var(--toast-index)*8px))_scale(1)]",
 				"transition-[transform,scale,opacity] duration-200 ease-[cubic-bezier(0.23,1,0.32,1)]",
 				"data-[starting-style]:opacity-0 data-[starting-style]:[scale:0.96] data-[ending-style]:opacity-0 data-[ending-style]:[scale:0.96] data-[limited]:opacity-0",
 			].join(" ")}

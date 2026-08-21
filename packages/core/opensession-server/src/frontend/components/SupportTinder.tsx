@@ -13,6 +13,7 @@ import { useCurrentUser } from "./UserPicker";
 import { Button } from "../ui/button";
 import { cn } from "../ui/cn";
 import { DeckDone, SwipeCard } from "../ui/swipe-deck";
+import { dismissToast, toast } from "../ui/toast";
 import { UNDO_MS, ageLabel, ageTone, shuffle } from "../lib/swipe-deck";
 
 /**
@@ -82,11 +83,7 @@ export function SupportTinder({ onExit, onOpenSession }: Props) {
 
 	const [index, setIndex] = useState(0);
 	const [dir, setDir] = useState<Action | null>(null);
-	const [toast, setToast] = useState<{
-		text: string;
-		undo?: () => void;
-	} | null>(null);
-	const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+	const toastId = useRef<number | null>(null);
 	const [busy, setBusy] = useState(false);
 	// The busy flag, readable from long-lived closures (toast undo buttons).
 	const busyRef = useRef(false);
@@ -137,13 +134,20 @@ export function SupportTinder({ onExit, onOpenSession }: Props) {
 	}, [index]);
 
 	function showToast(text: string, undo?: () => void) {
-		if (toastTimer.current) clearTimeout(toastTimer.current);
-		setToast({ text, undo });
-		toastTimer.current = setTimeout(() => setToast(null), UNDO_MS);
+		if (toastId.current !== null) dismissToast(toastId.current);
+		toastId.current = toast(text, {
+			duration: UNDO_MS,
+			...(undo
+				? {
+						variant: "success" as const,
+						action: { label: "Undo", onClick: undo },
+					}
+				: {}),
+		});
 	}
 	useEffect(
 		() => () => {
-			if (toastTimer.current) clearTimeout(toastTimer.current);
+			if (toastId.current !== null) dismissToast(toastId.current);
 		},
 		[],
 	);
@@ -459,22 +463,6 @@ export function SupportTinder({ onExit, onOpenSession }: Props) {
 				</div>
 			)}
 
-			{/* Undo / status toast. */}
-			{toast && (
-				<div className="pointer-events-none absolute bottom-24 left-1/2 z-20 -translate-x-1/2">
-					<div className="pointer-events-auto flex items-center gap-3 rounded-lg border border-line-strong bg-panel px-4 py-2.5 text-sm text-fg smooth-shadow-md">
-						{toast.text}
-						{toast.undo && (
-							<button
-								className="font-semibold text-link hover:underline"
-								onClick={toast.undo}
-							>
-								Undo
-							</button>
-						)}
-					</div>
-				</div>
-			)}
 		</div>
 	);
 }

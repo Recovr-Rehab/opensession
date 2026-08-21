@@ -2,14 +2,14 @@ import React, { useEffect, useState } from "react";
 import type { WSServerMessage } from "../lib/types";
 import { PRODUCT_NAME } from "../lib/brand";
 import { subscribeFrontendVersion } from "../lib/frontend-version";
-import { SIDEBAR_TOAST_CARD } from "../lib/sidebar-toast-classes";
+import { PERSISTENT_NOTICE_CARD } from "../lib/notification-classes";
 import { Tooltip } from "../ui/tooltip";
 
 interface Props {
   addHandler: (handler: (msg: WSServerMessage) => void) => () => void;
-  // "toast" docks to the sidebar bottom (desktop). "pill" is the compact
+  // "card" lives in the persistent desktop shelf. "pill" is the compact
   // topbar variant that sits next to the brand logo on phones.
-  variant?: "toast" | "pill";
+  variant?: "card" | "pill";
 }
 
 /** Grace before a forced update reloads a VISIBLE tab (hidden tabs reload
@@ -58,7 +58,7 @@ function os1Updates():
  *
  * Acting is normally optional — new page loads already get the new build; this
  * just nudges already-open tabs — so it's non-blocking (it never covers the
- * composer). Desktop shows a toast docked to the sidebar bottom; phones show a
+ * composer). Desktop shows a toast over the sidebar bottom; phones show a
  * compact pill in the top bar, right after the brand logo.
  *
  * `force: true` broadcasts (POST /api/admin/frontend-reload — sent before a
@@ -66,7 +66,7 @@ function os1Updates():
  * instead: hidden tabs immediately, visible tabs after a counted-down grace
  * shown on the pill/toast, or the moment the tab is hidden mid-countdown.
  */
-export function UpdatePill({ addHandler, variant = "toast" }: Props) {
+export function UpdatePill({ addHandler, variant = "card" }: Props) {
   const [show, setShow] = useState(false);
   const [by, setBy] = useState<string | null>(null);
   const [forceAt, setForceAt] = useState<number | null>(null);
@@ -195,7 +195,7 @@ export function UpdatePill({ addHandler, variant = "toast" }: Props) {
 
   return (
     <div
-      className={SIDEBAR_TOAST_CARD}
+      className={PERSISTENT_NOTICE_CARD}
       role="status"
       aria-live="polite"
     >
