@@ -14,7 +14,6 @@ import {
 	gitPushApi,
 	mergePrApi,
 	mergePrStackApi,
-	moveSessionToBranchApi,
 } from "../lib/api";
 import { stackLayersTopFirst, stackMergePlan } from "../lib/pr-stack";
 import { PR_WEBHOOK_FALLBACK_POLL_MS } from "../lib/poll";
@@ -56,7 +55,6 @@ import { Tooltip } from "../ui/tooltip";
 import { ContextMenu, Menu, MENU_ICON } from "../ui/menu";
 import { Spinner } from "../ui/spinner";
 import { Skeleton, SkeletonBar } from "../ui/state";
-import { toast } from "../ui/toast";
 import { cn } from "../ui/cn";
 import { useShortcutLabel } from "../hooks/useShortcutBindings";
 import { useDeferredMergePhase } from "../hooks/useDeferredMerge";
@@ -81,7 +79,6 @@ import {
 	IconCheck,
 	IconPlus,
 	IconArchive,
-	IconNewBranch,
 } from "./icons";
 
 /**
@@ -111,7 +108,6 @@ interface PrHeadline {
 		| "behind" // behind the branch's own upstream → Pull
 		| "behind-base" // clean tree, no PR, behind origin/<base> → Pull
 		| "no-pr"
-		| "shared"
 		| "clean";
 	label: string;
 	tone: "green" | "purple" | "red" | "yellow" | "muted";
@@ -173,16 +169,14 @@ function deriveHeadline(
 			label: `Behind by ${behind} commit${behind === 1 ? "" : "s"}`,
 			tone: "yellow",
 		};
-	// A shared checkout can still have commits waiting to push. Publish those
-	// first, then offer to move this session into its own branch.
+	// A shared-checkout repo lands work on its default branch, so unpushed
+	// commits are the only PR-adjacent state this card needs to show for it.
 	if (git?.sharedCheckout && ahead > 0)
 		return {
 			key: "ahead",
 			label: `Ahead by ${ahead} commit${ahead === 1 ? "" : "s"}`,
 			tone: "yellow",
 		};
-	if (git?.sharedCheckout)
-		return { key: "shared", label: "Shared checkout", tone: "muted" };
 	if (ahead > 0 || (git?.uncommittedFiles ?? 0) > 0)
 		return { key: "no-pr", label: "No PR open", tone: "muted" };
 	if ((git?.behindBase ?? 0) > 0)
@@ -792,10 +786,13 @@ export function PrStatusBar({
 	//
 	//  - Clean: level with the upstream, the base and the working tree. One
 	//    muted "Up to date" over a link to an empty PR tab.
-	// A shared checkout now has its own branch-move action, so only a session
-	// with no branch or reachable checkout remains empty.
+	// Shared-checkout sessions stay on main by default. Their optional branch
+	// move lives in the session's overflow menu rather than this status card.
 	const noPr = !pr && statusRows.length === 0;
-	const empty = noPr && headline.key === "clean";
+	const empty =
+		noPr &&
+		(headline.key === "clean" ||
+			(!!git?.sharedCheckout && headline.key === "no-pr"));
 
 	// The strip still holds its place while the PR fetch runs (Kent: a topbar
 	// that blinks in and out of existence shouldn't exist), so a session that
@@ -1011,28 +1008,6 @@ export function PrStatusBar({
 						Create PR
 					</PrBarButton>
 				) : null;
-			case "shared":
-				return (
-					<PrBarButton
-						className={actionBtn}
-						tone="secondary"
-						icon={<IconNewBranch size={18} />}
-						disabled={!!busy}
-						title="Create an isolated branch for this session"
-						onClick={() =>
-							run("move-branch", async () => {
-								const result = await moveSessionToBranchApi(sessionId);
-								toast(
-									result.copiedFiles
-										? `Moved to ${result.branch} · ${result.copiedFiles} file${result.copiedFiles === 1 ? "" : "s"} copied`
-										: `Moved to ${result.branch}`,
-								);
-							})
-						}
-					>
-						{busy === "move-branch" ? "Moving…" : "Move to branch"}
-					</PrBarButton>
-				);
 			case "ready": {
 				const mergeScheduled = mergePhase === "scheduled";
 				const merging = mergePhase === "running" || busy === "merge";
