@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from "react";
 import { useShortcutLabel } from "../hooks/useShortcutBindings";
-import { motion, Reorder } from "motion/react";
+import { Reorder } from "motion/react";
 import type { UnifiedSession } from "../lib/types";
 import { TAB_COLORS, colorHex } from "../lib/tab-colors";
 import { hasDraft, onDraftsChanged } from "../lib/drafts";
@@ -161,16 +161,7 @@ interface Props {
 	 * (the + button's plain-click default), stack = new worktree branched off it,
 	 * ask = no worktree.
 	 */
-	onNewSession?: (
-		mode: "share" | "stack" | "ask",
-		morphFromPlus?: boolean,
-	) => void;
-	/** Shared Motion identity between the + and the empty tab's close button. */
-	newTabMorphLayoutId?: string;
-	/** The tab currently expanding out of the + control. */
-	morphingSessionId?: string | null;
-	/** The reusable empty tab whose close control morphs from the +. */
-	emptySessionId?: string | null;
+	onNewSession?: (mode: "share" | "stack" | "ask") => void;
 	/** Rename a session (double-click the title); empty title resets it. */
 	onRename: (id: string, title: string) => void;
 	/** Close (archive) a session — the × revealed on hover. */
@@ -185,13 +176,6 @@ type NewMenu = { x: number; y: number };
 type TabMember =
 	| { kind: "session"; id: string; session: UnifiedSession }
 	| { kind: "view"; id: string; view: ViewTab };
-
-const NEW_TAB_MORPH_MS = 280;
-const NEW_TAB_MORPH_TRANSITION = {
-	type: "spring",
-	duration: NEW_TAB_MORPH_MS / 1000,
-	bounce: 0,
-} as const;
 
 /** Apply the edge fade only when the title is genuinely clipped. Keeping this
  * as a DOM attribute avoids rerendering the full tab strip for presentation. */
@@ -248,9 +232,6 @@ export function SessionTabs({
 	onSelectView,
 	onCloseView,
 	onNewSession,
-	newTabMorphLayoutId,
-	morphingSessionId,
-	emptySessionId,
 	onRename,
 	onClose,
 	onRestore,
@@ -261,14 +242,6 @@ export function SessionTabs({
 	const [newMenu, setNewMenu] = useState<NewMenu | null>(null);
 	const [editKey, setEditKey] = useState<string | null>(null);
 	const [draft, setDraft] = useState("");
-	const [closingEmptyId, setClosingEmptyId] = useState<string | null>(null);
-	const closingEmptyTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-	useEffect(
-		() => () => {
-			if (closingEmptyTimer.current) clearTimeout(closingEmptyTimer.current);
-		},
-		[],
-	);
 	// Re-render when a composer draft appears/disappears — tabs check hasDraft()
 	// during render to show the unsent-draft pencil on sibling sessions.
 	const [, setDraftsRev] = useState(0);
@@ -568,35 +541,23 @@ export function SessionTabs({
 	// somewhere to live — a lone code session then reads as [session][Review].
 	if (!inSplit && tabs.length <= 1 && viewTabs.length === 0) return null;
 
-	function closeEmptySession(session: UnifiedSession) {
-		if (closingEmptyTimer.current) return;
-		setClosingEmptyId(session.id);
-		closingEmptyTimer.current = setTimeout(() => {
-			closingEmptyTimer.current = null;
-			setClosingEmptyId(null);
-			onClose(session);
-		}, NEW_TAB_MORPH_MS);
-	}
-
 	// New-tab "+" — plain-click shares the workspace worktree; right-click offers
 	// the stacked/ask modes.
 	const newTabButton = onNewSession && (
-		<motion.button
-			layoutId={newTabMorphLayoutId}
+		<button
 			type="button"
 			className={cn(TAB_NEW, "relative z-[1]")}
 			data-menu-open={newMenu ? "" : undefined}
 			aria-label="New session in this workspace"
 			title="New session. Shares this workspace's worktree (right-click for options)"
-			onClick={() => onNewSession("share", true)}
+			onClick={() => onNewSession("share")}
 			onContextMenu={(e) => {
 				e.preventDefault();
 				setNewMenu({ x: e.clientX, y: e.clientY });
 			}}
-			transition={NEW_TAB_MORPH_TRANSITION}
 		>
 			<IconPlus size={ctrlIconSize} />
-		</motion.button>
+		</button>
 	);
 
 	// History: every archived (closed) session of this workspace, in one list.
@@ -687,9 +648,6 @@ export function SessionTabs({
 						const session = member.session;
 						const waiting = !!session.waitingForInput;
 						const hex = colorHex(colors[key]);
-						const morphing = key === morphingSessionId;
-						const emptyClose = key === emptySessionId;
-						const closingEmpty = key === closingEmptyId;
 						const titleContent =
 							editKey === key ? (
 								<input
@@ -723,7 +681,7 @@ export function SessionTabs({
 								<ContextMenu.Root>
 									<ContextMenu.Trigger
 										render={
-											<motion.div
+											<div
 												role="tab"
 												aria-selected={key === activeId}
 												className={`group/tab ${tabClass({
@@ -732,17 +690,6 @@ export function SessionTabs({
 													colored: !!hex,
 												})}`}
 												style={hex ? ({ "--tab-color": hex } as React.CSSProperties) : undefined}
-												initial={
-													morphing
-														? { clipPath: "inset(0 0 0 78%)", opacity: 0.72 }
-														: false
-												}
-												animate={
-													closingEmpty
-														? { clipPath: "inset(0 0 0 78%)", opacity: 0.72 }
-														: { clipPath: "inset(0 0 0 0%)", opacity: 1 }
-												}
-												transition={NEW_TAB_MORPH_TRANSITION}
 												onClick={() => onSelect(session)}
 												title={session.title}
 											/>
@@ -753,26 +700,7 @@ export function SessionTabs({
 										) : (
 											session.isRunning && <span className={tabDotClass(false)} />
 										)}
-										{emptyClose ? (
-											<motion.span
-												className="inline-flex min-w-0"
-												initial={
-													morphing
-														? { opacity: 0, x: 8, filter: "blur(4px)" }
-														: false
-												}
-												animate={
-													closingEmpty
-														? { opacity: 0, x: 8, filter: "blur(4px)" }
-														: { opacity: 1, x: 0, filter: "blur(0px)" }
-												}
-												transition={NEW_TAB_MORPH_TRANSITION}
-											>
-												{titleContent}
-											</motion.span>
-										) : (
-											titleContent
-										)}
+										{titleContent}
 										{/* Who else is in this tab. The sidebar's workspace row shows
 							    the same faces for the whole strip, which says a teammate
 							    is in here somewhere; on the tab it says where. Shown on
@@ -809,43 +737,18 @@ export function SessionTabs({
 												<IconPencil size={16} dense />
 											</span>
 										)}
-										{emptyClose && (morphing || closingEmpty) ? (
-											<motion.button
-												layoutId={newTabMorphLayoutId}
-												type="button"
-												className={tabCloseClass(isPhone, key === activeId)}
-												aria-label="Close session"
-												title="Close session"
-												disabled={closingEmpty}
-												initial={morphing ? { rotate: 45, scale: 1.25 } : false}
-												animate={
-													closingEmpty
-														? { rotate: 45, scale: 1.25 }
-														: { rotate: 0, scale: 1 }
-												}
-												transition={NEW_TAB_MORPH_TRANSITION}
-												onClick={(e) => {
-													e.stopPropagation();
-													closeEmptySession(session);
-												}}
-											>
-												<IconX size={16} dense aria-hidden="true" />
-											</motion.button>
-										) : (
-											<button
-												type="button"
-												className={tabCloseClass(isPhone, key === activeId)}
-												aria-label="Close session"
-												title="Close session"
-												onClick={(e) => {
-													e.stopPropagation();
-													if (emptyClose) closeEmptySession(session);
-													else onClose(session);
-												}}
-											>
-												<IconX size={16} dense aria-hidden="true" />
-											</button>
-										)}
+										<button
+											type="button"
+											className={tabCloseClass(isPhone, key === activeId)}
+											aria-label="Close session"
+											title="Close session"
+											onClick={(e) => {
+												e.stopPropagation();
+												onClose(session);
+											}}
+										>
+											<IconX size={16} dense aria-hidden="true" />
+										</button>
 									</ContextMenu.Trigger>
 									{/* finalFocus=false: "Rename session" mounts the inline rename
 							    input (autoFocus) — the closing menu must not steal focus

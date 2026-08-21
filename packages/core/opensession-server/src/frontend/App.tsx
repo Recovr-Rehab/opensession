@@ -3334,18 +3334,8 @@ export function App(
 				onNewSession={
 					barSessions.some((session) => session.desk) || emptyWorkspaceSession
 						? undefined
-						: (mode, morphFromPlus) =>
-							handleNewSession(mode, side, morphFromPlus)
+						: (mode) => handleNewSession(mode, side)
 				}
-				newTabMorphLayoutId={
-					tabOrderKey
-						? `new-session-control:${tabOrderKey}:${side ?? "main"}`
-						: undefined
-				}
-				morphingSessionId={
-					newTabMorph?.side === side ? newTabMorph.id : null
-				}
-				emptySessionId={emptyWorkspaceSession?.id}
 				onRename={async (id, title) => {
 					try {
 						await renameSessionApi(id, title);
@@ -3525,21 +3515,9 @@ export function App(
 	// Open a real sibling tab immediately. Its first prompt starts the engine, so
 	// the lightweight create does no model work and keeps the interaction quick.
 	const siblingCreateRef = useRef<string | null>(null);
-	const [newTabMorph, setNewTabMorph] = useState<{
-		id: string;
-		side: SplitSide | null;
-	} | null>(null);
-	const newTabMorphTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-	useEffect(
-		() => () => {
-			if (newTabMorphTimer.current) clearTimeout(newTabMorphTimer.current);
-		},
-		[],
-	);
 	const handleNewSession = async (
 		mode: "share" | "stack" | "ask",
 		side: SplitSide | null = null,
-		morphFromPlus = false,
 	) => {
 		if (emptyWorkspaceSession) {
 			setActiveViewTab(null);
@@ -3569,16 +3547,6 @@ export function App(
 		if (siblingCreateRef.current) return;
 		const optimisticId = newClientSessionId();
 		siblingCreateRef.current = optimisticId;
-		if (morphFromPlus) {
-			if (newTabMorphTimer.current) clearTimeout(newTabMorphTimer.current);
-			setNewTabMorph({ id: optimisticId, side });
-			newTabMorphTimer.current = setTimeout(() => {
-				setNewTabMorph((current) =>
-					current?.id === optimisticId ? null : current,
-				);
-				newTabMorphTimer.current = null;
-			}, 320);
-		}
 		try {
 			const id = await createNewSessionFrom(src, mode, optimisticId);
 			if (side === "right" && tabOrderKey && activeTabSplit)
@@ -3588,9 +3556,6 @@ export function App(
 					rightActive: id,
 				});
 		} catch (e) {
-			setNewTabMorph((current) =>
-				current?.id === optimisticId ? null : current,
-			);
 			console.error("New session failed:", e);
 			showToast("Couldn't create a new tab.");
 		} finally {
