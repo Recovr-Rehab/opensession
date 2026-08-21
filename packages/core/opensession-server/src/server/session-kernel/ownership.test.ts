@@ -261,8 +261,10 @@ describe("single session ownership", () => {
 		expect(wiring).toContain("createPlan.resolved");
 		expect(wiring).toContain("ensureCreationPlanned(bksId, createIdentity)");
 		expect(wiring).toContain("await requestCreationWorkspace({");
-		expect(wiring).toContain("await requestCreationBranch({");
-		expect(wiring).not.toContain("createWorkspace(");
+		expect(wiring.match(/await requestCreationCredential\(\{/g)?.length).toBe(2);
+		expect(wiring.match(/await requestCreationBranch\(\{/g)?.length).toBe(2);
+		expect(wiring).not.toMatch(/\bcreateWorkspace\(/);
+		expect(wiring).not.toMatch(/\bcreateWorktree\(/);
 		const create = read("session-create.ts");
 		expect(create).toContain("createPlan.resolved");
 		expect(create).toContain("ensureCreationPlanned(bksId, createIdentity)");

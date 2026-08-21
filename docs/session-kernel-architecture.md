@@ -136,9 +136,10 @@ the worktree adopts it on retry. Credential preparation now has a production
 executor and stable intent. It validates only a durable principal selector and
 scope, records no token or Git environment, and returns an ordinary fenced
 receipt. Branch effects can carry that selector and resolve its process-local Git
-capability only when Git creation is necessary. The credential-bearing MCP path
-is still on its explicit legacy adapter until it emits the credential and branch
-intents in sequence. WebSocket branch creation is also still legacy.
+capability only when Git creation is necessary. Both fresh and restored MCP
+creates emit the credential receipt before the credential-bound branch intent;
+no MCP create path calls Git worktree creation directly. WebSocket branch
+creation is still legacy.
 Sandbox, attachment, and opening-turn executors are not yet registered. Wiring
 those adapters and removing the remaining create-plan
 authority are the next cutovers; the presence or absence of a plan file is not
