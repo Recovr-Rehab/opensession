@@ -11,7 +11,6 @@
  * Only file-backed session media is used, and only at thumbnail size.
  */
 
-import sharp from "sharp";
 import { createHmac, randomBytes, timingSafeEqual } from "crypto";
 import { chmodSync, readFileSync, statSync, writeFileSync } from "fs";
 import {
@@ -26,6 +25,33 @@ import { transcriptStore } from "./transcript-store";
 import { isWithinUploads, stagedImageRef } from "./uploads";
 import type { TranscriptEntry, UnifiedSession } from "./types";
 
+/**
+ * sharp is loaded lazily and treated as optional. Its platform `@img/sharp-*`
+ * native cannot be embedded into a `bun build --compile` executable (it is
+ * resolved from the on-disk sidecar at runtime, not bundled), so a top-level
+ * import would crash boot where the sidecar is absent. Load it on first use
+ * instead: when it (or its native) is missing, the PNG social-card endpoint
+ * degrades to a 501 and the Open Graph meta tags still emit, so the server
+ * boots and serves the UI either way.
+ */
+type SharpFactory = typeof import("sharp");
+let sharpFactory: SharpFactory | null | undefined; // undefined = not tried yet
+
+async function loadSharp(): Promise<SharpFactory | null> {
+	if (sharpFactory !== undefined) return sharpFactory;
+	try {
+		const mod = await import("sharp");
+		sharpFactory = ((mod as { default?: SharpFactory }).default ?? mod) as SharpFactory;
+	} catch (e) {
+		console.warn(
+			"[social-card] sharp unavailable — PNG social cards disabled (Open Graph tags still emit):",
+			e instanceof Error ? e.message : e,
+		);
+		sharpFactory = null;
+	}
+	return sharpFactory;
+}
+
 export const SESSION_CARD_WIDTH = 1200;
 export const SESSION_CARD_HEIGHT = 630;
 /**
@@ -36,6 +62,11 @@ export const SESSION_CARD_HEIGHT = 630;
  */
 export const SESSION_CARD_BANNER_WIDTH = 1200;
 export const SESSION_CARD_BANNER_HEIGHT = 320;
+/**
+ * Without a screenshot the banner shrinks to its own content instead of
+ * holding a screenshot's worth of empty paper next to the title.
+ */
+const BANNER_COMPACT_PAD_Y = 34;
 
 export type SessionCardVariant = "card" | "banner";
 const SESSION_CARD_VERSION = 19;
@@ -262,6 +293,8 @@ async function shotDataUrl(
 ): Promise<string> {
 	if (!path) return "";
 	try {
+		const sharp = await loadSharp();
+		if (!sharp) return "";
 		const png = await sharp(path, { limitInputPixels: 40_000_000 })
 			.resize(width, height, { fit: "cover", position: "top" })
 			.png()
@@ -302,7 +335,7 @@ function html(value: string): string {
 		.replaceAll(">", "&gt;");
 }
 
-async function titleWidth(title: string): Promise<number> {
+async function titleWidth(sharp: SharpFactory, title: string): Promise<number> {
 	const metadata = await sharp({
 		text: {
 			text: `<span letter_spacing="${TITLE_LETTER_SPACING}">${xml(title)}</span>`,
@@ -315,17 +348,18 @@ async function titleWidth(title: string): Promise<number> {
 }
 
 async function truncateTitleLine(
+	sharp: SharpFactory,
 	value: string,
 	maxWidth: number,
 ): Promise<string> {
-	if ((await titleWidth(value)) <= maxWidth) return value;
+	if ((await titleWidth(sharp, value)) <= maxWidth) return value;
 	const characters = Array.from(value);
 	let low = 1;
 	let high = characters.length - 1;
 	while (low < high) {
 		const middle = Math.ceil((low + high) / 2);
 		const candidate = `${characters.slice(0, middle).join("").trimEnd()}...`;
-		if ((await titleWidth(candidate)) <= maxWidth) low = middle;
+		if ((await titleWidth(sharp, candidate)) <= maxWidth) low = middle;
 		else high = middle - 1;
 	}
 	return `${characters.slice(0, low).join("").trimEnd()}...`;
@@ -337,8 +371,10 @@ export async function fitSocialCardTitle(
 	maxWidth: number = SESSION_CARD_WIDTH - PAD_X * 2,
 ): Promise<string[]> {
 	const value = clean(title) || productName();
+	const sharp = await loadSharp();
+	if (!sharp) return [value];
 	const measure = Math.max(80, maxWidth);
-	if ((await titleWidth(value)) <= measure) return [value];
+	if ((await titleWidth(sharp, value)) <= measure) return [value];
 
 	const boundaries = Array.from(value.matchAll(/\s+/g), (match) => match.index!);
 	const measured = new Map<
@@ -352,8 +388,8 @@ export async function fitSocialCardTitle(
 		const first = value.slice(0, split).trim();
 		const second = value.slice(split).trim();
 		const [firstWidth, secondWidth] = await Promise.all([
-			titleWidth(first),
-			titleWidth(second),
+			titleWidth(sharp, first),
+			titleWidth(sharp, second),
 		]);
 		const result = { first, second, firstWidth, secondWidth };
 		measured.set(index, result);
@@ -415,7 +451,7 @@ export async function fitSocialCardTitle(
 	let high = characters.length - 1;
 	while (low < high) {
 		const middle = Math.ceil((low + high) / 2);
-		if ((await titleWidth(characters.slice(0, middle).join(""))) <= measure)
+		if ((await titleWidth(sharp, characters.slice(0, middle).join(""))) <= measure)
 			low = middle;
 		else high = middle - 1;
 	}
@@ -423,7 +459,7 @@ export async function fitSocialCardTitle(
 	const wordBreak = value.lastIndexOf(" ", split);
 	if (wordBreak >= Math.floor(split * 0.6)) split = wordBreak;
 	const first = value.slice(0, split).trim();
-	const second = await truncateTitleLine(value.slice(split).trim(), measure);
+	const second = await truncateTitleLine(sharp, value.slice(split).trim(), measure);
 	return [first, second];
 }
 
@@ -439,6 +475,8 @@ function rememberAvatar(key: string, data: string): void {
 }
 
 async function compactAvatar(bytes: ArrayBuffer): Promise<string> {
+	const sharp = await loadSharp();
+	if (!sharp) return `data:image/png;base64,${Buffer.from(bytes).toString("base64")}`;
 	const png = await sharp(Buffer.from(bytes), { limitInputPixels: 16_000_000 })
 		.resize(160, 160, { fit: "cover" })
 		.png()
@@ -605,7 +643,6 @@ export function sessionSocialCardSvg(
 	shots: string[] = [],
 ): string {
 	const banner = variant === "banner";
-	const height = banner ? SESSION_CARD_BANNER_HEIGHT : SESSION_CARD_HEIGHT;
 	const titleLines = (Array.isArray(displayTitle)
 		? displayTitle
 		: [displayTitle]
@@ -618,6 +655,11 @@ export function sessionSocialCardSvg(
 	const metadataHeight = META_SIZE;
 	const contentHeight =
 		titleLines.length * TITLE_LINE_HEIGHT + TITLE_META_GAP + metadataHeight;
+	const height = banner
+		? shots.length
+			? SESSION_CARD_BANNER_HEIGHT
+			: contentHeight + BANNER_COMPACT_PAD_Y * 2
+		: SESSION_CARD_HEIGHT;
 	const blockTop = (height - contentHeight) / 2;
 	const metaTop =
 		blockTop + titleLines.length * TITLE_LINE_HEIGHT + TITLE_META_GAP;
@@ -684,7 +726,11 @@ ${avatarMarkup}
 export async function renderSessionSocialCard(
 	data: SessionSocialCardData,
 	variant: SessionCardVariant = "card",
-): Promise<Buffer> {
+): Promise<Buffer | null> {
+	// Null when sharp is unavailable: the route answers 501, while metadata
+	// and the rest of the compiled server remain available.
+	const sharp = await loadSharp();
+	if (!sharp) return null;
 	const [avatar, shots] = await Promise.all([
 		avatarDataUrl(data.person),
 		shotDataUrls(data.shots, shotWidth(variant), shotHeight(variant)),
@@ -852,7 +898,13 @@ export function sessionSocialCardPublicRoutes(): Map<
 		if (cached && cached.fingerprint === fingerprint && now - cached.at < CARD_CACHE_MS) {
 			bytes = cached.bytes;
 		} else {
-			bytes = await renderSessionSocialCard(data, variant);
+			const rendered = await renderSessionSocialCard(data, variant);
+			if (!rendered)
+				return Response.json(
+					{ error: "Social card rendering unavailable (sharp not installed)" },
+					{ status: 501 },
+				);
+			bytes = rendered;
 			rememberCard(cacheKey, { fingerprint, bytes, at: now });
 		}
 		return new Response(bytes.slice().buffer as ArrayBuffer, {

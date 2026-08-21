@@ -222,21 +222,25 @@ describe("session social card", () => {
 			"banner",
 			[],
 		);
-		expect(svg).toContain('<text x="56" y="120"');
-		expect(svg).toContain('<text x="56" y="162"');
+		// No screenshot, so the banner shrinks to its own content.
 		expect(svg).toContain(
-			'<image href="data:image/png;base64,avatar" x="56" y="193" width="28" height="28"',
+			'<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="190"',
+		);
+		expect(svg).toContain('<text x="56" y="55"');
+		expect(svg).toContain('<text x="56" y="97"');
+		expect(svg).toContain(
+			'<image href="data:image/png;base64,avatar" x="56" y="128" width="28" height="28"',
 		);
 		// The label baseline places its cap band on the 28px avatar center.
-		expect(svg).toContain('<text x="94" y="215" fill=');
+		expect(svg).toContain('<text x="94" y="150" fill=');
 		expect(svg).not.toContain(
-			'<text x="94" y="215" dominant-baseline="middle"',
+			'<text x="94" y="150" dominant-baseline="middle"',
 		);
 		expect(svg).toContain(">Test Person</text>");
 		expect(svg).not.toContain(">opensession</text>");
 		expect(svg).not.toContain('stroke="#FFFFFF" stroke-width="3"');
 		expect(svg).toMatch(
-			/<clipPath id="avatarClip" clipPathUnits="userSpaceOnUse"><path d="M68\.88 193\.00L/,
+			/<clipPath id="avatarClip" clipPathUnits="userSpaceOnUse"><path d="M68\.88 128\.00L/,
 		);
 		expect(svg).not.toContain('id="repoClip"');
 	});
@@ -289,7 +293,8 @@ describe("session social card", () => {
 
 	test("renders a 1200 by 630 PNG", async () => {
 		const png = await renderSessionSocialCard(sessionSocialCardData(session()));
-		const metadata = await sharp(png).metadata();
+		expect(png).not.toBeNull();
+		const metadata = await sharp(png!).metadata();
 		expect(metadata.format).toBe("png");
 		expect(metadata.width).toBe(1200);
 		expect(metadata.height).toBe(630);
@@ -358,7 +363,7 @@ describe("session social card", () => {
 		expect(metadata.height).toBe(630);
 	});
 
-	test("serves the banner variant at full width, two lines tall", async () => {
+	test("serves a screenshot-less banner at its content height", async () => {
 		const route = sessionSocialCardPublicRoutes().get("GET /session-card/*")!;
 		const url = new URL(sessionSocialCardUrl(signedRouteSessionId, "banner"));
 		expect(url.searchParams.get("s")).toBe("banner");
@@ -366,7 +371,8 @@ describe("session social card", () => {
 		expect(response.status).toBe(200);
 		const metadata = await sharp(await response.arrayBuffer()).metadata();
 		expect(metadata.width).toBe(1200);
-		expect(metadata.height).toBe(320);
+		// One title line and one metadata row, with no screenshot to make room for.
+		expect(metadata.height).toBe(148);
 	});
 
 	test("renders the full card for an unrecognized shape", async () => {
