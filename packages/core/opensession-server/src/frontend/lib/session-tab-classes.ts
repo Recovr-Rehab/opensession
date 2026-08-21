@@ -209,8 +209,15 @@ export const TAB_TITLE =
  *  the tab sizes to the glyph. */
 export const TAB_VICON = "inline-flex items-center justify-center leading-none";
 
-/** Unsent draft in a sibling session. */
-export const TAB_DRAFT = "inline-flex flex-none items-center text-dim";
+/** Unsent draft in a sibling session. The title already reserves 14px for the
+ * close control, so the pencil uses that room on hover instead of sitting
+ * underneath the control as it appears. */
+export const TAB_DRAFT =
+	"inline-flex flex-none items-center text-dim " +
+	"[@media_(hover:hover)_and_(pointer:fine)]:transition-transform " +
+	"[@media_(hover:hover)_and_(pointer:fine)]:group-hover/tab:-translate-x-3.5 " +
+	"[@media_(hover:hover)_and_(pointer:fine)]:group-focus-within/tab:-translate-x-3.5 " +
+	"motion-reduce:transition-none";
 
 /**
  * Teammates who have THIS tab open. The sidebar answers "someone is in this
@@ -291,7 +298,7 @@ export const PR_DOT_TONE: Record<string, string> = {
 
 const CLOSE_BASE =
 	"-my-0.5 -mr-[3px] inline-flex size-4 shrink-0 cursor-pointer items-center justify-center " +
-	"rounded-sm border-0 bg-transparent p-0 font-[inherit] text-[15px] leading-none text-dim " +
+	"rounded-sm border-0 bg-transparent p-0 text-dim " +
 	"hover:bg-pressed hover:text-fg [@media_(hover:none)]:size-[26px] [@media_(hover:none)]:-mr-1";
 
 /** Desktop close controls share one absolute position, so selecting a tab never

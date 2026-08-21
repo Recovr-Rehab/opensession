@@ -8,7 +8,15 @@ import { relativeTime } from "../lib/api";
 import { Menu, ContextMenu } from "../ui/menu";
 import { sessionPath, absoluteLink, copyToClipboard } from "../lib/share-link";
 import { copySessionTranscript } from "../lib/transcript-copy";
-import { IconChevronRight, IconHistory, IconPencil, IconPlus, IconRestore, IconRobot } from "./icons";
+import {
+	IconChevronRight,
+	IconHistory,
+	IconPencil,
+	IconPlus,
+	IconRestore,
+	IconRobot,
+	IconX,
+} from "./icons";
 import { isAutomationSession } from "../lib/landing-session";
 import { ArchivedSessionItems } from "./ArchivedSessionItems";
 import { useIsPhone } from "../hooks/useIsPhone";
@@ -630,7 +638,7 @@ export function SessionTabs({
 													onCloseView(v.id);
 												}}
 											>
-												×
+												<IconX size={16} dense aria-hidden="true" />
 											</button>
 										)}
 									</div>
@@ -723,7 +731,7 @@ export function SessionTabs({
 							    already on screen in the composer — no pencil needed). */}
 										{key !== activeId && hasDraft(`session:${key}`) && (
 											<span className={TAB_DRAFT} title="Unsent draft">
-												<IconPencil size={20} />
+												<IconPencil size={16} dense />
 											</span>
 										)}
 										<button
@@ -736,7 +744,7 @@ export function SessionTabs({
 												onClose(session);
 											}}
 										>
-											×
+											<IconX size={16} dense aria-hidden="true" />
 										</button>
 									</ContextMenu.Trigger>
 									{/* finalFocus=false: "Rename session" mounts the inline rename
