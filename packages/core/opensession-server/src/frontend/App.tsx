@@ -1295,6 +1295,12 @@ export function App(
 		else restore();
 	}
 
+	// Escape leaves Settings, the same way its Back control does. The window-level
+	// handler below is installed once, so it reads the current closer through a
+	// ref; null when Settings is not the open surface.
+	const leaveSettingsRef = useRef<(() => void) | null>(null);
+	leaveSettingsRef.current = settingsActive ? leaveSettings : null;
+
 	// Edge-swipe-from-left pops the pushed page back to the sidebar on phones.
 	useBackSwipe({
 		active: mobileDetail,
@@ -1727,6 +1733,20 @@ export function App(
 			if (e.key === "Escape") {
 				if (searchOpenRef.current) setSearchOpen(false);
 				else if (paletteOpenRef.current) closePalette();
+				else if (leaveSettingsRef.current) {
+					// A field, a menu or a modal inside Settings owns the keystroke
+					// first: only an unclaimed Escape closes the whole surface.
+					if (e.defaultPrevented || blockingOverlayOpen()) return;
+					const target = e.target as HTMLElement | null;
+					if (
+						target &&
+						(target.tagName === "INPUT" ||
+							target.tagName === "TEXTAREA" ||
+							target.isContentEditable)
+					)
+						return;
+					leaveSettingsRef.current();
+				}
 			}
 		};
 		window.addEventListener("keydown", onKey);
