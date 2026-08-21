@@ -169,7 +169,7 @@ interface Props {
 	newTabMorphLayoutId?: string;
 	/** The tab currently expanding out of the + control. */
 	morphingSessionId?: string | null;
-	/** The reusable empty tab keeps the rotated + as its close glyph. */
+	/** The reusable empty tab whose close control morphs from the +. */
 	emptySessionId?: string | null;
 	/** Rename a session (double-click the title); empty title resets it. */
 	onRename: (id: string, title: string) => void;
@@ -809,7 +809,7 @@ export function SessionTabs({
 												<IconPencil size={16} dense />
 											</span>
 										)}
-										{emptyClose ? (
+										{emptyClose && (morphing || closingEmpty) ? (
 											<motion.button
 												layoutId={newTabMorphLayoutId}
 												type="button"
@@ -839,7 +839,8 @@ export function SessionTabs({
 												title="Close session"
 												onClick={(e) => {
 													e.stopPropagation();
-													onClose(session);
+													if (emptyClose) closeEmptySession(session);
+													else onClose(session);
 												}}
 											>
 												<IconX size={16} dense aria-hidden="true" />
