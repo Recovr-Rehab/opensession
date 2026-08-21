@@ -705,11 +705,25 @@ export function PrStatusBar({
 				? series.label
 				: headline.label;
 
-	// When checks are the reason for the headline, the headline IS the checks
-	// control: hovering it shows them, clicking it opens Review's Checks tab —
-	// so the strip needs no View checks button beside it.
-	const checksPr =
-		pr && (headline.key === "running" || headline.key === "failing") ? pr : null;
+	// Any PR with checks keeps the headline as the checks control. The headline
+	// still reports the most important state, while hover previews every check
+	// and click opens Review's Checks tab.
+	const checksSummary = summarizeChecks(pr);
+	const checksPr = pr && checksSummary.total > 0 ? pr : null;
+	const checksTone = checksSummary.failed > 0
+		? "text-red"
+		: checksSummary.pending > 0
+			? "text-yellow"
+			: checksSummary.passed > 0
+				? "text-green"
+				: "text-faint";
+	const checksLabel = checksSummary.failed > 0
+		? `${checksSummary.failed} of ${checksSummary.total} checks failed`
+		: checksSummary.pending > 0
+			? `${checksSummary.pending} of ${checksSummary.total} checks pending`
+			: checksSummary.passed > 0
+				? `${checksSummary.passed} check${checksSummary.passed === 1 ? "" : "s"} passed`
+				: `${checksSummary.total} check${checksSummary.total === 1 ? "" : "s"}`;
 
 	async function run(name: string, fn: () => Promise<unknown>) {
 		if (busy) return;
@@ -1072,7 +1086,13 @@ export function PrStatusBar({
 				{pr && provider && (
 					<span className="flex items-center gap-1 truncate text-meta text-faint group-hover/prsum:text-dim">
 						<BrandMark name={provider.key} size={12} className="shrink-0" />
-						<span className="truncate">#{pr.number}</span>
+						<span className="shrink-0">#{pr.number}</span>
+						{checksPr && (
+							<>
+								<span aria-hidden="true">·</span>
+								<span className={cn("truncate", checksTone)}>{checksLabel}</span>
+							</>
+						)}
 						<IconArrowUpRight
 							dense
 							size={12}
@@ -1109,11 +1129,9 @@ export function PrStatusBar({
 				    so repeating it with a glyph would only take space from that label.
 				    Renders nothing when the PR has no preview, and the row closes up. */}
 				{children}
-				{/* When checks are the reason for the headline, the headline IS the
-				    checks control, exactly as on the strip: hovering lists them,
-				    clicking opens Review's Checks tab. That popup is the hover
-				    answer here, so this branch gets no tooltip beside it. The PR's
-				    own title stays as the native fallback. */}
+				{/* When checks exist, the headline is their control: hovering lists
+				    them and clicking opens Review's Checks tab. The PR's own title
+				    stays as the native fallback. */}
 				{checksPr ? (
 					<PrChecksPopover
 						checks={checksPr.checks}
