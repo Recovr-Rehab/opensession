@@ -4,7 +4,7 @@ const path = require("node:path");
 
 exports.default = async function beforePack(context) {
   if (context.electronPlatformName !== "darwin") return;
-  const root = context.appDir;
+  const root = context.packager.projectDir;
   const outputDir = path.join(root, "build", "vendor");
   const output = path.join(outputDir, "os1-dictation");
   const source = path.join(root, "native", "DictationHelper.swift");
