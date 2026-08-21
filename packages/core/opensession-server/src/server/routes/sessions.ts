@@ -1663,7 +1663,7 @@ export async function handleSessionsRoutes(
 		// the session file. That leaves a visible ghost which the mailbox correctly
 		// refuses to mutate. Finish that already-authorized deletion without trying
 		// to re-enter its permanently closed mailbox.
-		if (sessionKernelStore().isTombstoned(session.id)) {
+		const recoverTombstonedDeletion = async () => {
 			try {
 				removeTombstonedSessionArtifacts(session);
 				await finishDeletion();
@@ -1671,10 +1671,13 @@ export async function handleSessionsRoutes(
 			} catch (e: any) {
 				return Response.json({ error: e.message }, { status: 500 });
 			}
-		}
+		};
+		if (sessionKernelStore().isTombstoned(session.id))
+			return recoverTombstonedDeletion();
 
-		const result = await sessionKernel(session.id).runExclusive(
-			"delete_session",
+		try {
+			const result = await sessionKernel(session.id).runExclusive(
+				"delete_session",
 			async () => {
 		try {
 			const runIds = [
@@ -1709,10 +1712,18 @@ export async function handleSessionsRoutes(
 			return { status: 500, body: { error: e.message } };
 		}
 			},
-		);
-		// Actor commands cross a Worker boundary. Keep their result cloneable and
-		// construct the Response only after the mailbox has settled.
-		return Response.json(result.body, { status: result.status });
+			);
+			// Actor commands cross a Worker boundary. Keep their result cloneable and
+			// construct the Response only after the mailbox has settled.
+			return Response.json(result.body, { status: result.status });
+		} catch (error) {
+			// A concurrent delete can write the tombstone after the check above but
+			// before this request reaches the mailbox. Treat that race as the same
+			// idempotent recovery instead of surfacing a false failure.
+			if (sessionKernelStore().isTombstoned(session.id))
+				return recoverTombstonedDeletion();
+			throw error;
+		}
 	}
 
 	return undefined;
