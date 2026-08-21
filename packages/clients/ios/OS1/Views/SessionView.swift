@@ -3305,7 +3305,12 @@ private struct SessionInputBar: View {
                     ),
                     prompt: Text(composerPlaceholder).foregroundStyle(
                         noteMode ? OS1VisualStyle.notePlaceholder : OS1VisualStyle.textFaint
-                    )
+                    ),
+                    // Without the vertical axis a TextField is a one-line
+                    // field that scrolls sideways: the lineLimit below is
+                    // inert, the box never grows, and the multi-line layout
+                    // underneath can never be reached.
+                    axis: .vertical
                 ) {
                     Text(noteMode ? "Team note" : "Message")
                 }
