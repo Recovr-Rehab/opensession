@@ -87,6 +87,7 @@ import {
   IconGitMerge,
   IconGlobe,
   IconListCircles,
+  IconMessage,
   IconSliders,
   IconUndo,
   IconX,
@@ -2049,25 +2050,25 @@ export function PrPanel({
         {pr.state === "OPEN" &&
           !pr.isDraft &&
           caps.reviewComments &&
-          !reviewing && (
-          /* The one call to action on this canvas, so it takes the accent
-             plate. Green is the app's affirmative tone (approve, merge) and
-             the state glyph beside it is already wearing it; a green Review
-             button next to a green Open glyph made two different things
-             claim the same colour. */
-          <Button
-            variant="primary"
-            size="sm"
-            className={pr.staging?.url ? undefined : "ml-auto"}
-            onClick={() => {
-              setReviewing(true);
-              setPage("files");
-            }}
-          >
-            Review
-          </Button>
-        )}
+          !reviewing &&
+          !headerCompact && (
+            /* The one call to action on a wide canvas, so it takes the accent
+               plate. Compact canvases move it into the actions menu instead
+               of squeezing the repository and pull request identity. */
+            <Button
+              variant="primary"
+              size="sm"
+              className={pr.staging?.url ? undefined : "ml-auto"}
+              onClick={() => {
+                setReviewing(true);
+                setPage("files");
+              }}
+            >
+              Review
+            </Button>
+          )}
         {canMergeAfterReview &&
+          !headerCompact &&
           (mergeScheduled ? (
             <MergeUndoControl
               className={
@@ -2113,6 +2114,21 @@ export function PrPanel({
             />
           </Tooltip>
           <Menu.Popup align="end">
+            {headerCompact &&
+              pr.state === "OPEN" &&
+              !pr.isDraft &&
+              caps.reviewComments &&
+              !reviewing && (
+                <Menu.Item
+                  onClick={() => {
+                    setReviewing(true);
+                    setPage("files");
+                  }}
+                >
+                  <IconMessage size={18} className={MENU_ICON} />
+                  <span className="min-w-0 flex-1 truncate">Start review</span>
+                </Menu.Item>
+              )}
             <Menu.Item
               render={<a href={pr.url} target="_blank" rel="noopener" />}
             >
