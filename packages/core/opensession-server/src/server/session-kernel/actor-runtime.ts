@@ -1,6 +1,8 @@
 import { SessionKernelActorClient } from "./actor-client";
 import { installSessionKernelActor } from "./kernel";
 import { setServiceReadiness } from "../service-readiness";
+import { dirname, join } from "node:path";
+import { isCompiledBinary } from "../../runner-host/exe";
 
 type ActorRuntimeState = {
   client?: SessionKernelActorClient;
@@ -11,17 +13,27 @@ const globalActor = globalThis as typeof globalThis & {
 };
 const runtime = (globalActor.__opensessionSessionKernelActor ??= {});
 
+/**
+ * The kernel runs in a real Worker thread: the client blocks on Atomics.wait
+ * against a SharedArrayBuffer the worker fills, so neither an in-process port
+ * nor a subprocess can stand in for it. `bun build --compile` does not embed
+ * Worker entry points, so a compiled binary loads the worker from a sibling
+ * `session-kernel-worker.js` shipped beside the executable (scripts/build-
+ * compile.ts stages it next to the sharp sidecar). A source checkout runs the
+ * TypeScript entry directly.
+ */
+function sessionKernelWorkerUrl(): string {
+  return isCompiledBinary()
+    ? join(dirname(process.execPath), "session-kernel-worker.js")
+    : new URL("../../session-kernel-worker.ts", import.meta.url).href;
+}
+
 /** Start the authoritative actor before the gateway hydrates mutable session state. */
 export function startSessionKernelActor(): Promise<void> {
   if (runtime.client) return Promise.resolve();
   if (runtime.starting) return runtime.starting;
   runtime.starting = (async () => {
-    const worker = new Worker(
-      new URL("../../session-kernel-worker.ts", import.meta.url).href,
-      {
-        type: "module",
-      },
-    );
+    const worker = new Worker(sessionKernelWorkerUrl(), { type: "module" });
     const client = new SessionKernelActorClient(worker, (error) => {
       setServiceReadiness("failed", error);
       console.error("[session-kernel] authoritative actor failed; stopping gateway:", error);

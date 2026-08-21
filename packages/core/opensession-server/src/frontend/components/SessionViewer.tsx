@@ -6762,17 +6762,25 @@ export function SessionViewer({
 								// Worktree prep in flight. The first message waits in the
 								// queue flap below and sends the moment this clears.
 								<WorkspaceWaiting detail="Your messages send when it's ready." />
-							) : entries.length === 0 && !session.transcriptPath ? (
+							) : entries.length === 0 &&
+								!hasLiveConversation &&
+								!session.transcriptPath ? (
 								// A fresh session with no run yet is just an empty conversation —
 								// blank canvas, the composer below is the UI. Only a session
-								// that *ran* but has no transcript file gets the notice. When
-								// the workspace has sibling sessions, the canvas offers their
-								// transcripts as attachable context for the first message.
+								// that *ran*, has no transcript file, and has nothing in flight
+								// gets the notice: the first turn of a just-created session
+								// flips `ran` the moment it starts, seconds before its first
+								// entry lands, so a live conversation reads as "no transcript"
+								// unless it wins here. A session with anything live falls
+								// through to the transcript below, which is where the sent
+								// bubble and the streaming reply render. When the workspace has
+								// sibling sessions, the canvas offers their transcripts as
+								// attachable context for the first message.
 								session.ran ? (
 									<div className="py-10 text-center text-faint">
 										No transcript available for this session
 									</div>
-								) : !hasLiveConversation && contextSessionOptions.length > 0 ? (
+								) : contextSessionOptions.length > 0 ? (
 									// Simple centered empty state: the whole region centers the
 									// heading + attachable-context chips so a fresh session reads as a
 									// calm blank canvas rather than a top-left form.
