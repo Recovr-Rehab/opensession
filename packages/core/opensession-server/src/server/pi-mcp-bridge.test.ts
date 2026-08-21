@@ -199,6 +199,33 @@ describe("registration", () => {
     expect(bridge.discoveryTools).toEqual([]);
     await bridge.close();
   });
+
+  test("defers an uncached proxy catalog until mcp_search", async () => {
+    const audits: Array<{ server: string; tool: string }> = [];
+    const bridge = await createPiMcpBridge({
+      mcpServers: [],
+      deniedToolIds: new Set(),
+      callTimeoutMs: 100,
+      inProcessMcp: {
+        deferred: { command: "/definitely/not/an-mcp-server" },
+      },
+      onAudit: (event) => audits.push({ server: event.server, tool: event.tool }),
+    });
+    openBridges.push(bridge);
+
+    expect(bridge.tools).toEqual([]);
+    expect(bridge.discoveryTools.map((tool) => tool.name)).toEqual(["mcp_search", "mcp_call"]);
+    expect(audits).toEqual([]);
+
+    const warn = console.warn;
+    console.warn = () => {};
+    try {
+      await exec(discoveryToolByName(bridge, "mcp_search"), { query: "anything" });
+    } finally {
+      console.warn = warn;
+    }
+    expect(audits).toEqual([{ server: "deferred", tool: "tools/list" }]);
+  });
 });
 
 describe("denied tools", () => {
