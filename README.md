@@ -86,7 +86,8 @@ for me. Go step by step and ask me one question at a time before acting.
    setup-token` on a Max login) and/or a ChatGPT-plan Codex login. The
    installer put both CLIs on this box already.
 5. Networking: keep it on 127.0.0.1 unless I pick Tailscale or an SSH
-   tunnel. Never expose it publicly — there is no built-in auth.
+   tunnel. GitHub sign-in is available, but keep the server private even when
+   I enable it.
 6. Finish: `opensession start`, then `opensession doctor` until clean, and
    give me the URL to open.
 7. Verify it really works: open the UI, create a session on my repo with a
@@ -124,9 +125,10 @@ Then read the real setup guide — secrets, accounts, integrations, systemd:
 - [docs/self-hosting-sandboxes.md](docs/self-hosting-sandboxes.md) — isolated
   Docker/Daytona/E2B/Box/Modal/AWS Lambda MicroVM execution for sessions
 
-> **No built-in authentication.** Open Session trusts everyone who can reach the
-> address it binds to. Keep it on Tailscale, a private network, or behind an SSH
-> tunnel — never expose it publicly. See the
+> **Authentication is available, and it is opt-in.** By default, Open Session
+> trusts everyone who can reach the address it binds to. GitHub sign-in can
+> restrict access to configured team members. Keep the server on Tailscale, a
+> private network, or behind an SSH tunnel even when sign-in is enabled. See the
 > [trust model](docs/setup/README.md#trust-model-read-this), and
 > [networking.md](docs/setup/networking.md) for how to set that up.
 
