@@ -83,6 +83,31 @@ export function porcelainPaths(status: string): string[] {
   return out;
 }
 
+/** Select the credential transport for the process that will run Git. Host
+ * calls use the stable Open Session helper supplied by github-auth. Local
+ * Docker calls cannot reach that host path, so they use gh inside the
+ * container. Remote sandboxes and Runners keep their own projected transport. */
+export function gitCredentialEnvForExec(
+  env?: Record<string, string>,
+  exec?: WorkspaceExec,
+): Record<string, string> | undefined {
+  if (!env) return undefined;
+  if (exec?.remote) return undefined;
+  if (!exec?.sandboxed) return env;
+  const token = env.GH_TOKEN || env.GITHUB_TOKEN;
+  if (!token) return undefined;
+  return {
+    GH_TOKEN: token,
+    GITHUB_TOKEN: token,
+    GIT_TERMINAL_PROMPT: "0",
+    GIT_CONFIG_COUNT: "2",
+    GIT_CONFIG_KEY_0: "credential.https://github.com.helper",
+    GIT_CONFIG_VALUE_0: "",
+    GIT_CONFIG_KEY_1: "credential.https://github.com.helper",
+    GIT_CONFIG_VALUE_1: "!gh auth git-credential",
+  };
+}
+
 const FETCH_TTL = 90_000;
 const lastFetch = new Map<string, number>();
 
@@ -189,6 +214,7 @@ export async function gitPull(
   dir: string,
   fromBase?: string,
   exec?: WorkspaceExec,
+  env?: Record<string, string>,
 ): Promise<{ ok: true } | { error: string }> {
   return audited(
     {
@@ -197,12 +223,17 @@ export async function gitPull(
       args: { dir, fromBase: fromBase || null, sandboxed: exec?.sandboxed || undefined },
     },
     async () => {
+      const operationEnv = gitCredentialEnvForExec(env, exec);
       async function run(args: string[]): Promise<{ stdout: string; stderr: string; code: number }> {
         if (exec) {
-          const r = await exec(args);
+          const r = await exec(args, operationEnv ? { env: operationEnv } : undefined);
           return { stdout: r.stdout, stderr: r.stderr, code: r.exitCode };
         }
-        const proc = Bun.spawn(args, { stdout: "pipe", stderr: "pipe" });
+        const proc = Bun.spawn(args, {
+          env: { ...process.env, ...operationEnv },
+          stdout: "pipe",
+          stderr: "pipe",
+        });
         const [stdout, stderr, code] = await Promise.all([
           new Response(proc.stdout).text(),
           new Response(proc.stderr).text(),
@@ -271,6 +302,7 @@ export async function gitPush(
   dir: string,
   branch: string,
   exec?: WorkspaceExec,
+  env?: Record<string, string>,
 ): Promise<{ ok: true } | { error: string }> {
   return audited(
     {
@@ -279,15 +311,20 @@ export async function gitPush(
       args: { dir, branch, sandboxed: exec?.sandboxed || undefined },
     },
     async () => {
+      const operationEnv = gitCredentialEnvForExec(env, exec);
       const args = ["git", "-C", dir, "push", "-u", "origin", "HEAD"];
       let err: string;
       let code: number;
       if (exec) {
-        const r = await exec(args);
+        const r = await exec(args, operationEnv ? { env: operationEnv } : undefined);
         err = r.stderr;
         code = r.exitCode;
       } else {
-        const proc = Bun.spawn(args, { stdout: "pipe", stderr: "pipe" });
+        const proc = Bun.spawn(args, {
+          env: { ...process.env, ...operationEnv },
+          stdout: "pipe",
+          stderr: "pipe",
+        });
         [err, code] = await Promise.all([
           new Response(proc.stderr).text(),
           proc.exited,

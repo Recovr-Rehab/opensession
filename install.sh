@@ -28,6 +28,11 @@
 #                                              sign-in); off by default
 #   --tailscale           WITH_TAILSCALE=1     also install Tailscale (off by
 #                                              default; --no-tailscale still accepted)
+#   --org <name>          OPENSESSION_ORG      set this instance up for a GitHub
+#                                              org: an org-owned GitHub App plus
+#                                              per-user sign-in, turned on when
+#                                              the first admin connects. Omit for
+#                                              a single-user install.
 #   --advanced                                 interactive onboarding (all the
 #                                              questions); default writes defaults
 #                                              and asks nothing
@@ -58,6 +63,10 @@ RELEASE_BASE="${OPENSESSION_RELEASE_BASE:-https://github.com/tellahq/opensession
 FROM_SOURCE=0
 [ -n "${OPENSESSION_REPO:-}${OPENSESSION_CHANNEL:-}" ] && FROM_SOURCE=1
 CHANNEL="${OPENSESSION_CHANNEL:-}"
+# The GitHub org this instance is for. Set = onboarding writes an org App owner
+# and the intent to turn on per-user sign-in at first connect; unset = today's
+# single-user install.
+ORG="${OPENSESSION_ORG:-}"
 NO_MODIFY_PATH="${NO_MODIFY_PATH:-0}"
 NO_ONBOARD="${NO_ONBOARD:-0}"
 NO_ENGINE="${NO_ENGINE:-0}"
@@ -75,6 +84,7 @@ while [ $# -gt 0 ]; do
     --channel) CHANNEL="$2"; FROM_SOURCE=1; shift 2 ;;
     --repo) REPO="$2"; FROM_SOURCE=1; shift 2 ;;
     --artifact) ARTIFACT="$2"; shift 2 ;;
+    --org) ORG="$2"; shift 2 ;;
     --source) FROM_SOURCE=1; shift ;;
     --no-modify-path) NO_MODIFY_PATH=1; shift ;;
     --no-onboard) NO_ONBOARD=1; shift ;;
@@ -795,12 +805,27 @@ if [ -n "${OPENSESSION_CLAUDE_TOKEN:-}" ]; then
   good "Claude token staged in ~/.opensession-claude-token (imported at first start)"
 fi
 
-# Default: write defaults, start the service, print the URL.
+# The one question the simple install asks: an organization sets up a shared,
+# org-owned GitHub app and per-user sign-in; blank keeps it single-user with no
+# sign-in. Default path only (advanced onboarding asks it itself), only when
+# nothing set it already, and only with a real terminal — a piped `curl | bash`
+# reads the answer from /dev/tty, and a non-interactive run (CI, --yes) stays
+# single-user.
+if [ "$ADVANCED" != "1" ] && [ -z "$ORG" ] && [ "$NO_PROMPT" != "1" ] && [ "$STDIN_PATH" = "/dev/tty" ]; then
+  step "GitHub organization"
+  printf '  Enter your GitHub org name or leave blank for a personal install: ' >/dev/tty
+  read -r ORG </dev/tty || ORG=""
+  ORG="$(printf '%s' "$ORG" | tr -d '[:space:]')"
+fi
+
+# Default: write defaults (and the org above), start the service, print the URL.
 # --advanced is the operator path with every question.
+# --org, when given, records the App owner and per-user sign-in intent (never a
+# live gate flip — nobody is signed in yet). Onboard ignores it on a re-run.
 if [ "$ADVANCED" = "1" ]; then
-  run_interactive "$BIN_DIR/opensession" onboard || true
+  run_interactive "$BIN_DIR/opensession" onboard ${ORG:+--org "$ORG"} || true
 else
-  run_interactive "$BIN_DIR/opensession" onboard --defaults || true
+  run_interactive "$BIN_DIR/opensession" onboard --defaults ${ORG:+--org "$ORG"} || true
 fi
 
 # Ensure the service independently of onboarding. On a re-run onboard sees an

@@ -143,7 +143,10 @@ function restoreValue(value: unknown): unknown {
 export function snapshotResolvedCreate(
   value: Record<string, unknown>,
 ): Record<string, unknown> {
-  return snapshotValue(value) as Record<string, unknown>;
+  // gitEnv carries short-lived bearer tokens. A durable plan keeps only the
+  // non-secret gitPrincipal and resolves its current token during recovery.
+  const { gitEnv: _ephemeralGitEnv, ...durable } = value;
+  return snapshotValue(durable) as Record<string, unknown>;
 }
 
 export function restoreResolvedCreate<T>(

@@ -58,6 +58,11 @@ import {
 	snapshotResolvedCreate,
 	updateCreatePlan,
 } from "./session-create-plan";
+import {
+	githubCredentialForLogin,
+	githubCredentialForPrincipal,
+	githubCredentialForRun,
+} from "./github-auth";
 import { existsSync, watch } from "fs";
 import { branchNameFromPrompt } from "./suggest-branch";
 
@@ -469,6 +474,14 @@ registerSessionControl({
 			: resolvePinnedAccountId(model, accountIdInput, user);
 		const images = parseImageDataUrls(imageUrls);
 		const parentSession = parentSessionId ? findSession(parentSessionId) : null;
+		// opensession-sessions is withheld from automation-owned runs. Scope the
+		// server-owned worktree fetch to this trusted interactive creator.
+		const githubCredential = parentSession?.automation
+			? null
+			: parentSession?.createdByLogin
+				? githubCredentialForLogin(parentSession.createdByLogin)
+				: githubCredentialForRun(user || parentSession?.createdBy);
+		const githubGitEnv = githubCredential?.env;
 		// Attribution only (CreateSessionInput.spawnedBy): the session whose agent
 		// asked for this one, recorded even when the create was standalone and
 		// carries no parent link. It is what lets the sidebar keep an agent's own
@@ -609,7 +622,10 @@ registerSessionControl({
 				// is the difference between this session getting a tree of its own
 				// and joining every other session in the live main checkout.
 				if (!wtPath) {
-					const worktreeOptions = isolatedWorktree ? { isolated: true } : {};
+					const worktreeOptions = {
+						...(isolatedWorktree ? { isolated: true } : {}),
+						...(githubGitEnv ? { gitEnv: githubGitEnv } : {}),
+					};
 					wtPath = worktreePathFor(sessionBranch, repo.id, worktreeOptions);
 					materializeWorktree = () =>
 						createWorktree(sessionBranch, repo.id, worktreeOptions);
@@ -842,6 +858,8 @@ ${createMentionsNote}`;
 			openingPromptEntryId: `create-${requestId}`,
 			// Persist the full decision before git creates anything. The opening
 			// setup materializes this deterministic path after announcement.
+			gitPrincipal: githubCredential?.principal,
+			gitEnv: githubGitEnv,
 			needsWorktree: !!materializeWorktree,
 			worktreeKind: "new",
 			worktreeIsolated: isolatedWorktree === true,
@@ -857,6 +875,9 @@ ${createMentionsNote}`;
 		const restoredSpec = createPlan.resolved
 			? restoreResolvedCreate<ResolvedCreate>(createPlan.resolved)
 			: undefined;
+		const restoredGitEnv = githubCredentialForPrincipal(
+			restoredSpec?.gitPrincipal,
+		)?.env;
 		const restoredWorktreeReady =
 			restoredSpec?.needsWorktree &&
 			typeof restoredSpec.wtPath === "string" &&
@@ -881,6 +902,7 @@ ${createMentionsNote}`;
 							);
 						return createWorktree(restoredSpec.branch!, restoredSpec.repoId!, {
 							...(isolatedWorktree ? { isolated: true } : {}),
+							...(restoredGitEnv ? { gitEnv: restoredGitEnv } : {}),
 						});
 					}
 				: undefined;
@@ -889,6 +911,7 @@ ${createMentionsNote}`;
 					...computedSpec,
 					...restoredSpec,
 					images: computedSpec.images,
+					gitEnv: restoredGitEnv,
 					materializeWorktree: restoredMaterializer,
 					needsWorktree: !!restoredMaterializer,
 				}

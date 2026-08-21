@@ -774,8 +774,10 @@ export async function createWorktreeForFollowup(
 export async function createWorktreeForExistingBranch(
   branch: string,
   repoId?: string,
+  gitEnv?: Record<string, string>,
 ): Promise<string> {
   const repo = getRepo(repoId);
+  const shell = gitEnv ? $.env({ ...process.env, ...gitEnv }) : $;
   const existing = (await listWorktrees(repo.id)).find((w) => w.branch === branch);
   if (existing) return existing.path;
 
@@ -783,7 +785,7 @@ export async function createWorktreeForExistingBranch(
   await withGitLock(async () => {
     await $`git -C ${repo.repo} worktree prune`.quiet();
     if (existsSync(wtPath)) return; // pruned stale registration; dir already usable
-    await $`git -C ${repo.repo} fetch origin ${branch} --quiet`.nothrow();
+    await shell`git -C ${repo.repo} fetch origin ${branch} --quiet`.nothrow();
     const hasLocal =
       (await $`git -C ${repo.repo} show-ref --verify --quiet refs/heads/${branch}`.nothrow())
         .exitCode === 0;
@@ -913,9 +915,10 @@ export async function resolveUniqueBranch(
 export async function createWorktree(
   branch: string,
   repoId?: string,
-  opts?: { base?: string; isolated?: boolean },
+  opts?: { base?: string; isolated?: boolean; gitEnv?: Record<string, string> },
 ): Promise<string> {
   const repo = getRepo(repoId);
+  const shell = opts?.gitEnv ? $.env({ ...process.env, ...opts.gitEnv }) : $;
 
   // Shared-checkout repos (opensession) don't get a per-session worktree: the
   // session works in the live main checkout on the default branch so its edits
@@ -932,11 +935,11 @@ export async function createWorktree(
   const base = opts?.base;
 
   await withGitLock(async () => {
-    await $`git -C ${repo.repo} fetch origin ${repo.defaultBranch} --quiet`.nothrow();
+    await shell`git -C ${repo.repo} fetch origin ${repo.defaultBranch} --quiet`.nothrow();
     let startPoint = await defaultStartPoint(repo);
     if (base) {
       // Stacked worktree: fetch the base (it may be remote-only), then branch off it.
-      await $`git -C ${repo.repo} fetch origin ${base} --quiet`.nothrow();
+      await shell`git -C ${repo.repo} fetch origin ${base} --quiet`.nothrow();
       startPoint = await resolveStartPoint(repo.repo, base, repo.defaultBranch);
     }
     const add =
@@ -995,13 +998,16 @@ export async function createWorktree(
  */
 export async function prepareAttachedWorktree(
   repoId: string,
-  branch: string
+  branch: string,
+  gitEnv?: Record<string, string>,
 ): Promise<{ repo: string; branch: string; dir: string }> {
   const repo = getRepo(repoId);
   if (sharedCheckoutForNewSessions(repo)) {
     throw new Error(`${repo.id} is a shared-checkout repo and can't be attached as an isolated worktree`);
   }
   const existing = (await listWorktrees(repo.id)).find((w) => w.branch === branch);
-  const dir = existing?.path || (await createWorktree(branch, repo.id));
+  const dir =
+    existing?.path ||
+    (await createWorktree(branch, repo.id, gitEnv ? { gitEnv } : undefined));
   return { repo: repo.id, branch, dir };
 }
