@@ -288,8 +288,7 @@ struct ToolCallRow: View {
 
 /// What a call is doing, on the row's own line. A path's directory dims, and
 /// middle truncation keeps both its beginning and filename visible only when
-/// the full path cannot fit. Shared with the folded edit run, which stands in
-/// for a row and has to read as one.
+/// the full path cannot fit.
 struct ToolSummaryText: View {
     let summary: String
     let isPath: Bool
