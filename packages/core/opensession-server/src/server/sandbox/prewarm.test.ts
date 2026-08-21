@@ -121,13 +121,14 @@ function writeConfig(overrides: Record<string, unknown>): void {
  *  probes. `gate` (when provided) holds create() open so bootstrapping-state
  *  concurrency can be asserted. */
 function makeFakeAdapter(
-  opts: { markerAnswer?: string; gate?: Promise<void>; destroyGate?: Promise<void> } = {},
+  opts: { markerAnswer?: string; gate?: Promise<void>; destroyGate?: Promise<void>; transientMarkerFailures?: number } = {},
 ) {
   const created: string[] = [];
   const destroyed: string[] = [];
   const keptAlive: string[] = [];
   const resources: Array<{ cpu?: number; memoryMb?: number; diskGb?: number } | undefined> = [];
   let n = 0;
+  let transientMarkerFailures = opts.transientMarkerFailures || 0;
   const adapter: PrewarmAdapter = {
     async create(_labels, createOptions) {
       if (opts.gate) await opts.gate;
@@ -139,6 +140,10 @@ function makeFakeAdapter(
         driver: {
           async exec(cmd: string) {
             if (cmd.includes(".bks-bootstrapped")) {
+              if (transientMarkerFailures > 0) {
+                transientMarkerFailures -= 1;
+                throw new Error("box API POST /commands failed: HTTP 502");
+              }
               return { exitCode: 0, stdout: opts.markerAnswer ?? "sha-A", stderr: "" };
             }
             return { exitCode: 0, stdout: "__OPENSESSION_NO_CURL__", stderr: "" };
@@ -195,6 +200,13 @@ describe("requestPrewarm", () => {
     expect(done.sandboxId).toBe(fake.created[0]);
     // State file persisted for restart reaping.
     expect(existsSync(join(prewarmDir(), "daytona-tella-fusion.json"))).toBe(true);
+  });
+
+  test.skipIf(killSwitch)("retries transient bootstrap transport failures", async () => {
+    const fake = makeFakeAdapter({ transientMarkerFailures: 2 });
+    expect((await requestPrewarm("daytona", "tella-fusion")).state).toBe("bootstrapping");
+    await until(() => readyEntry()?.state === "ready");
+    expect(fake.created).toHaveLength(1);
   });
 
   test.skipIf(killSwitch)("passes the opted-in project's machine settings to the provider", async () => {

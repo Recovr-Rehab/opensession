@@ -252,6 +252,23 @@ function prewarmSignature(provider: string, resources?: SandboxMachineSettings):
   return `${bootstrapSignature()}|${shape}|${JSON.stringify(resources || {})}`;
 }
 
+const TRANSIENT_PREWARM_ERROR = /HTTP (?:429|5\d\d)|timed? ?out|timeout|temporar|connection|socket|transport|ECONNRESET|EPIPE/i;
+
+async function retryTransientPrewarmStep<T>(label: string, run: () => Promise<T>): Promise<T> {
+  let last: unknown;
+  for (let attempt = 1; attempt <= 3; attempt += 1) {
+    try {
+      return await run();
+    } catch (error) {
+      last = error;
+      if (!TRANSIENT_PREWARM_ERROR.test(error instanceof Error ? error.message : String(error)) || attempt === 3) throw error;
+      console.warn(`[sandbox-prewarm] ${label} transient failure; retrying (${attempt}/3):`, error);
+      await new Promise((resolve) => setTimeout(resolve, attempt * 500));
+    }
+  }
+  throw last;
+}
+
 function setPrewarmStage(
   entry: PrewarmEntry,
   stage: string,
@@ -499,8 +516,10 @@ async function runPrewarmBootstrap(record: PrewarmRecord, adapter: PrewarmAdapte
     if (!repo) throw new Error(`unknown prewarm repo ${entry.repoId}`);
     if (restoredFromTemplate && adapter.publishTemplate) {
       setPrewarmStage(entry, "Validating existing template", 65);
-      await assertDialbackReachable(driver, `${entry.provider}-prewarm`);
-      await bootstrapRemoteSandbox(driver, `${entry.provider}-prewarm`);
+      await retryTransientPrewarmStep(`${entry.key} bootstrap`, async () => {
+        await assertDialbackReachable(driver, `${entry.provider}-prewarm`);
+        await bootstrapRemoteSandbox(driver, `${entry.provider}-prewarm`);
+      });
       const { validateRemoteRepoTemplate } = await import("./remote-repo-template");
       await validateRemoteRepoTemplate(
         driver,
@@ -512,8 +531,10 @@ async function runPrewarmBootstrap(record: PrewarmRecord, adapter: PrewarmAdapte
       await adapter.prepare(driver, repo, `${entry.provider}-prewarm`);
     } else {
       setPrewarmStage(entry, "Installing runner tools", 25);
-      await assertDialbackReachable(driver, `${entry.provider}-prewarm`);
-      await bootstrapRemoteSandbox(driver, `${entry.provider}-prewarm`);
+      await retryTransientPrewarmStep(`${entry.key} bootstrap`, async () => {
+        await assertDialbackReachable(driver, `${entry.provider}-prewarm`);
+        await bootstrapRemoteSandbox(driver, `${entry.provider}-prewarm`);
+      });
       if (!current()) {
         void destroyRecord(record, "superseded mid-bootstrap");
         return;
