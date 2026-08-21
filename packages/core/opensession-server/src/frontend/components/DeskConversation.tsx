@@ -32,7 +32,10 @@ import {
 	NOTHING_STAGING,
 	subtractStaging,
 } from "../lib/attachments";
-import { hasDraggedFiles } from "../lib/file-drag";
+import {
+	foregroundFileComposerOwns,
+	hasDraggedFiles,
+} from "../lib/file-drag";
 import { IconArrowUpToLine } from "./icons";
 
 interface DeskConversationProps {
@@ -108,6 +111,7 @@ export function DeskConversation({
 	} | null>(null);
 	const bodyRef = useRef<HTMLDivElement | null>(null);
 	const textareaRef = useRef<HTMLTextAreaElement | null>(null);
+	const globalFileComposerRef = useRef<HTMLDivElement | null>(null);
 
 	useEffect(() => {
 		if (!autoFocus) return;
@@ -153,20 +157,35 @@ export function DeskConversation({
 
 	useEffect(() => {
 		if (!presenceActive || !connected) return;
+		function ownsFileDrag() {
+			return foregroundFileComposerOwns(globalFileComposerRef.current);
+		}
 		function handleDragEnter(event: DragEvent) {
 			if (!hasDraggedFiles(event.dataTransfer)) return;
+			if (!ownsFileDrag()) {
+				resetFileDrag();
+				return;
+			}
 			event.preventDefault();
 			armFileDragWatchdog();
 			setFileDragActive(true);
 		}
 		function handleDragLeave(event: DragEvent) {
 			if (!hasDraggedFiles(event.dataTransfer)) return;
+			if (!ownsFileDrag()) {
+				resetFileDrag();
+				return;
+			}
 			const next = event.relatedTarget;
 			if (next instanceof Node && document.documentElement.contains(next)) return;
 			resetFileDrag();
 		}
 		function handleDragOver(event: DragEvent) {
 			if (!hasDraggedFiles(event.dataTransfer)) return;
+			if (!ownsFileDrag()) {
+				resetFileDrag();
+				return;
+			}
 			event.preventDefault();
 			armFileDragWatchdog();
 			setFileDragActive(true);
@@ -174,6 +193,10 @@ export function DeskConversation({
 		}
 		function handleDrop(event: DragEvent) {
 			if (!hasDraggedFiles(event.dataTransfer)) return;
+			if (!ownsFileDrag()) {
+				resetFileDrag();
+				return;
+			}
 			event.preventDefault();
 			event.stopPropagation();
 			const dropped = event.dataTransfer?.files;
@@ -544,6 +567,7 @@ export function DeskConversation({
 				<TypingIndicator users={typingUsers} className="mb-1 px-5" />
 				{/* The open Desk owns the app-wide drop over the session underneath. */}
 				<div
+					ref={globalFileComposerRef}
 					className="relative"
 					data-global-file-composer={presenceActive && connected ? "" : undefined}
 				>

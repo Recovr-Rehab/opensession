@@ -74,6 +74,15 @@ test("the new session payload persists fast mode", async () => {
   expect(createPayload).toContain("...(fastMode ? { fastMode: true } : {})");
 });
 
+test("the floating composer owns app-wide file drops", async () => {
+  const source = await Bun.file(new URL("./NewSession.tsx", import.meta.url)).text();
+
+  expect(source).toContain('data-global-file-composer="new-session"');
+  expect(source).toContain("foregroundFileComposerOwns(composer)");
+  expect(source).toContain("void addAttachments(dropped)");
+  expect(source).toContain("data-composer-file-drop-overlay");
+});
+
 test("dismissing a nonempty composer parks it without an explicit draft action", async () => {
   const source = await Bun.file(new URL("./NewSession.tsx", import.meta.url)).text();
   const closeStart = source.indexOf("onOpenChange={(next) =>");

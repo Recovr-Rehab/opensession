@@ -40,6 +40,7 @@ import { ComposerContextChip } from "./ComposerContextChip";
 import {
   IconPaperclip,
   IconArrowUp,
+  IconArrowUpToLine,
   IconChevronDown,
   IconChevronRight,
   IconConnections,
@@ -65,7 +66,7 @@ import { displayName } from "../brand-logos";
 import { IconTile } from "./BrandTile";
 import { Tooltip } from "../ui/tooltip";
 import { Modal, useEnterOnMount } from "../ui/modal";
-import { composerMorph } from "../ui/motion";
+import { composerMorph, duration, ease } from "../ui/motion";
 import { useShortcutKeys } from "../hooks/useShortcutBindings";
 import { matchesShortcut } from "../lib/shortcuts";
 import {
@@ -73,6 +74,10 @@ import {
 	composerSend,
 	composerSendDefault,
 } from "../lib/composer-classes";
+import {
+  foregroundFileComposerOwns,
+  hasDraggedFiles,
+} from "../lib/file-drag";
 import { askSurface } from "../lib/tinted-surface";
 import { toast } from "../ui/toast";
 import { cn } from "../ui/cn";
@@ -637,6 +642,8 @@ export function NewSession({ onBack, inline, focusSeq, send, addHandler, connect
   const [images, setImages] = useState<string[]>(() => loadDraft(DRAFT_KEY).images);
   const [files, setFiles] = useState<FileAttachment[]>(() => loadDraft(DRAFT_KEY).files);
   const [staging, setStaging] = useState<StagingCount>(NOTHING_STAGING);
+  const [fileDragActive, setFileDragActive] = useState(false);
+  const fileDragWatchdogRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const adoptDraftAttachments = useCallback(() => {
     const stored = loadDraft(DRAFT_KEY);
     setImages((prev) => (sameImages(prev, stored.images) ? prev : stored.images));
@@ -1280,6 +1287,83 @@ export function NewSession({ onBack, inline, focusSeq, send, addHandler, connect
 
   // One frame closed so the palette animates in; App mounts us already-open.
   const open = useEnterOnMount();
+
+  function resetFileDrag() {
+    if (fileDragWatchdogRef.current) clearTimeout(fileDragWatchdogRef.current);
+    fileDragWatchdogRef.current = null;
+    setFileDragActive(false);
+  }
+
+  function armFileDragWatchdog() {
+    if (fileDragWatchdogRef.current) clearTimeout(fileDragWatchdogRef.current);
+    fileDragWatchdogRef.current = setTimeout(resetFileDrag, 500);
+  }
+
+  useEffect(() => {
+    if (inline || !open) return;
+    function ownsFileDrag() {
+      const composer = document.querySelector<HTMLElement>(
+        '[data-global-file-composer="new-session"]',
+      );
+      return foregroundFileComposerOwns(composer);
+    }
+    function handleDragEnter(event: DragEvent) {
+      if (!hasDraggedFiles(event.dataTransfer)) return;
+      if (!ownsFileDrag()) {
+        resetFileDrag();
+        return;
+      }
+      event.preventDefault();
+      armFileDragWatchdog();
+      setFileDragActive(true);
+    }
+    function handleDragLeave(event: DragEvent) {
+      if (!hasDraggedFiles(event.dataTransfer)) return;
+      if (!ownsFileDrag()) {
+        resetFileDrag();
+        return;
+      }
+      const next = event.relatedTarget;
+      if (next instanceof Node && document.documentElement.contains(next)) return;
+      resetFileDrag();
+    }
+    function handleDragOver(event: DragEvent) {
+      if (!hasDraggedFiles(event.dataTransfer)) return;
+      if (!ownsFileDrag()) {
+        resetFileDrag();
+        return;
+      }
+      event.preventDefault();
+      armFileDragWatchdog();
+      setFileDragActive(true);
+      if (event.dataTransfer) event.dataTransfer.dropEffect = "copy";
+    }
+    function handleDrop(event: DragEvent) {
+      if (!hasDraggedFiles(event.dataTransfer)) return;
+      if (!ownsFileDrag()) {
+        resetFileDrag();
+        return;
+      }
+      event.preventDefault();
+      event.stopPropagation();
+      const dropped = event.dataTransfer?.files;
+      resetFileDrag();
+      if (dropped?.length) void addAttachments(dropped);
+    }
+    window.addEventListener("dragenter", handleDragEnter, true);
+    window.addEventListener("dragleave", handleDragLeave, true);
+    window.addEventListener("dragover", handleDragOver, true);
+    window.addEventListener("drop", handleDrop, true);
+    window.addEventListener("dragend", resetFileDrag, true);
+    return () => {
+      window.removeEventListener("dragenter", handleDragEnter, true);
+      window.removeEventListener("dragleave", handleDragLeave, true);
+      window.removeEventListener("dragover", handleDragOver, true);
+      window.removeEventListener("drop", handleDrop, true);
+      window.removeEventListener("dragend", resetFileDrag, true);
+      resetFileDrag();
+    };
+  }, [inline, open]);
 
   // Ask mode's surface, shared with the session composer so one mode is one
   // strength wherever you meet it. Only the base differs: mixed into
@@ -1957,6 +2041,7 @@ export function NewSession({ onBack, inline, focusSeq, send, addHandler, connect
       disablePointerDismissal={busy || mentionOpen}
     >
       <Modal.Content
+        data-global-file-composer="new-session"
         variant="palette"
         widthClassName="w-[min(820px,100%)] phone:w-full"
         viewportClassName="phone:items-end phone:px-0 phone:pb-0 phone:pt-3"
@@ -1985,6 +2070,34 @@ export function NewSession({ onBack, inline, focusSeq, send, addHandler, connect
         finalFocus={() => !createdRef.current}
       >
         {card}
+        <AnimatePresence initial={false}>
+          {fileDragActive && (
+            <motion.div
+              className="pointer-events-none !absolute inset-0 z-[20] flex items-center justify-center gap-3 rounded-[calc(22px*var(--rf))] bg-[color-mix(in_srgb,var(--popup-surface)_90%,transparent)] px-5 text-left [backdrop-filter:blur(8px)]"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              transition={{ type: "tween", duration: duration.micro, ease }}
+              aria-hidden="true"
+              data-composer-file-drop-overlay
+            >
+              <IconArrowUpToLine size={26} className="shrink-0 text-fg" />
+              <div className="min-w-0">
+                <div className="text-control-label font-semibold text-fg">
+                  Add files
+                </div>
+                <div className="text-label leading-snug text-dim">
+                  Drop here to attach them to your message.
+                </div>
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
+        {fileDragActive && (
+          <span className="sr-only" role="status">
+            Drop files to attach
+          </span>
+        )}
       </Modal.Content>
     </Modal.Root>
   );
