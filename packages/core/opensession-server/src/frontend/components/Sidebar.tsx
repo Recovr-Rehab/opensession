@@ -78,7 +78,7 @@ import {
 	isScratchWorkspace,
 	spawnedSessionBelongsInSidebar,
 	workspaceMainSession,
-	workspaceRowOwnsSession,
+	workspaceRowOwnsSelection,
 } from "../lib/sidebar-workspaces";
 import type { ReviewQueueItem } from "../lib/review-queue";
 import {
@@ -1440,7 +1440,7 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 		// `mentionsRev` the @-mention badge (mentionFor, same cache pattern).
 	}, [filtered, sessions, workspaces, selectedId, reads, search, filter, lanes, activeReviewPrKeys, mentionsRev, activeWorkspaceSubagentIds, selectedWorkspaceId, canonical]);
 	const rowOwnsSelection = (row: WsRow) =>
-		workspaceRowOwnsSession(row, selectedSession);
+		workspaceRowOwnsSelection(row, selectedSession, selectedWorkspaceId);
 	const selectionBelongsToWorkspaceRow = allWsRows.some(rowOwnsSelection);
 	const automationRowSelected = (session: UnifiedSession) =>
 		session.id === selectedId && !selectionBelongsToWorkspaceRow;
@@ -3683,7 +3683,7 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 		return lanes;
 	}
 
-	// Activity sections use the old inbox rhythm: blocked work first, then
+	// Activity sections keep blocked work first, then parked drafts, followed by
 	// Recent, Yesterday, and Earlier. Rows rank by activity inside each band.
 	function renderInboxBands(
 		rows: WsRow[],
@@ -3705,14 +3705,16 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 			prs: ReviewQueueItem[];
 		}> = [
 			{ key: "needsaction", label: "Needs action", rows: [], prs: [] },
+			{ key: "drafts", label: "Drafts", rows: [], prs: [] },
 			{ key: "recent", label: "Recent", rows: [], prs: [] },
 			{ key: "yesterday", label: "Yesterday", rows: [], prs: [] },
 			{ key: "earlier", label: "Earlier", rows: [], prs: [] },
 		];
-		const [needsAction, recent, yesterday, earlier] = bands;
+		const [needsAction, drafts, recent, yesterday, earlier] = bands;
 		for (const row of sorted) {
 			const time = Date.parse(row.lastActivity || "");
-			if (row.status === "needsinput" || row.mention)
+			if (isDraftWsRow(row)) drafts.rows.push(row);
+			else if (row.status === "needsinput" || row.mention)
 				needsAction.rows.push(row);
 			else if (row.running || time >= todayMs) recent.rows.push(row);
 			else if (time >= yesterdayMs) yesterday.rows.push(row);
