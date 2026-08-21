@@ -59,11 +59,12 @@ UI and API at the root of your instance URL.
 - [Bun](https://bun.sh) — runtime, package manager, and bundler. No Node/Vite.
   The installer brings its own; you only need it up front for a manual install.
 - `git`, and the [`gh` CLI](https://cli.github.com) for PR operations.
-- The `pi` binary — the engine that runs every agent turn. The installer
-  installs it by default (`--no-engine` opts out).
-- The `claude` CLI (Claude Code) — the bundled Meridian bridge shells out to
-  it for Anthropic models (`OPENSESSION_CLAUDE_BIN`, default: `claude` found
-  on `PATH`).
+- The Pi engine runs every agent turn. It is compiled into the release binary
+  and runs in-process; a source install gets it through `bun install`. Nothing
+  installs a separate `pi` binary on the box.
+- The `claude` CLI (Claude Code) is what the bundled Meridian bridge shells out
+  to for Anthropic models (`OPENSESSION_CLAUDE_BIN`, default: `claude` found on
+  `PATH`). The installer adds it by default (`--no-engine` opts out).
 - **Tailscale** — the recommended way to expose the UI at all. The installer
   installs it with `--tailscale` (the default install binds loopback only);
   joining a network is a separate step that needs your account.

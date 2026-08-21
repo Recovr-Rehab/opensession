@@ -20,20 +20,40 @@ first.
 curl -fsSL https://raw.githubusercontent.com/tellahq/opensession/main/install.sh | bash
 ```
 
-Installs Bun, the `claude` and `codex` CLIs, and the
-Tailscale client if you do not have them, clones the source to
-`~/.opensession/src`, puts an `opensession` command on your `PATH`, and walks
-you through configuration. Budget 5-15 minutes on a fresh box — mostly
-unattended download and dependency install.
+On a fresh box this downloads the compiled release for your OS and
+architecture, unpacks it under `~/.opensession`, installs the `claude` CLI,
+puts an `opensession` command on your `PATH`, writes a default configuration,
+and installs and starts a per-user service (a LaunchAgent on macOS, a `systemd
+--user` unit on Linux). No questions. The last line it prints is a local URL,
+by default <http://127.0.0.1:3850>. Budget 5 to 15 minutes, mostly unattended
+download.
+
+Give it a model account, then run something:
 
 ```sh
-opensession start      # run it
-opensession doctor     # check the install
-opensession update     # pull, reinstall, restart
+claude setup-token     # on a Claude Max login; copy the sk-ant-… it prints
+```
+
+Open the URL, paste that token into Workspace → Usage, pick a repo, write a
+prompt, and create the session. A turn that actually runs is the proof the
+install works, not a health check.
+
+Check on it any time:
+
+```sh
+opensession doctor     # verify the install and report engine readiness
+opensession status     # is the service up?
+opensession update     # upgrade in place, health-gated
 opensession --help     # everything else
 ```
 
-Or run it straight from a checkout:
+Connect GitHub and the other integrations later from **Settings →
+Connections** in the UI; [docs/setup/github.md](docs/setup/github.md) covers
+the GitHub setup.
+
+Or install from a source checkout instead. This is the path for
+self-development (sessions that modify Open Session itself) and for
+contributing:
 
 ```sh
 git clone https://github.com/tellahq/opensession.git
@@ -83,8 +103,8 @@ for me. Go step by step and ask me one question at a time before acting.
    integrations to enable (Slack, GitHub, Linear, Plain, Stripe — all
    optional, all can wait).
 4. Model accounts: help me add a Claude subscription token (`claude
-   setup-token` on a Max login) and/or a ChatGPT-plan Codex login. The
-   installer put both CLIs on this box already.
+   setup-token` on a Max login). The installer put the `claude` CLI on this
+   box already; add the `codex` CLI with `--codex` for a ChatGPT-plan login.
 5. Networking: keep it on 127.0.0.1 unless I pick Tailscale or an SSH
    tunnel. GitHub sign-in is available, but keep the server private even when
    I enable it.

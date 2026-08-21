@@ -39,10 +39,11 @@ networking, TLS, GitHub and systemd are all optional for session #1. Come back
 to them when the first session has run.
 
 Prerequisites: Linux, macOS, or Windows 10/11 with WSL2, plus `git` and
-`curl`. The installer brings its own [Bun](https://bun.sh) and
-[Pi](https://pi.ai). `gh` (authenticated) is needed for
-pull-request operations. See [README.md](README.md#minimum-requirements) for
-the optional extras.
+`curl`. The default release install needs nothing else on the box: the
+compiled binary embeds the Bun runtime and the Pi engine. A source install
+uses [Bun](https://bun.sh), which the installer adds when it is missing. `gh`
+(authenticated) is needed for pull-request operations. See
+[README.md](README.md#minimum-requirements) for the optional extras.
 
 Provisioning a fresh cloud box first? [ec2.md](ec2.md). There is one
 cloud-init trap worth knowing about.
@@ -112,15 +113,17 @@ place of `Ubuntu`.
 curl -fsSL https://raw.githubusercontent.com/tellahq/opensession/main/install.sh | bash
 ```
 
-This installs missing prerequisites, clones the source to
-`~/.opensession/src` (or unpacks a release with `--artifact`), installs
-dependencies and the engine, puts an `opensession` command on your `PATH`,
-writes a default configuration (127.0.0.1:3850, a scratch repo, no
-integrations), installs and starts the service, and ends with the URL. No
-questions. `--advanced` runs the full onboarding wizard instead; a defaults
-install upgrades to a full one at any time with `opensession onboard --force`.
-It is safe to re-run: an existing install is fast-forwarded, and existing
-config is backed up rather than overwritten.
+This downloads the compiled release for your OS and architecture and unpacks
+it under `~/.opensession/releases` (with `src` linked at it), installs the
+`claude` CLI, puts an `opensession` command on your `PATH`, writes a default
+configuration (127.0.0.1:3850, a scratch repo, no integrations), installs and
+starts the service, and ends with the URL. No questions. If no release is
+published for your platform yet it falls back to a source clone; `--source`
+forces the git checkout, and `--artifact <path|url>` installs a specific
+release tarball. `--advanced` runs the full onboarding wizard instead; a
+defaults install upgrades to a full one at any time with `opensession onboard
+--force`. It is safe to re-run: an existing install is fast-forwarded, and
+existing config is backed up rather than overwritten.
 
 Useful flags — `--dir <path>` to install elsewhere, `--channel <ref>` to track
 a branch or tag, `--advanced` for the wizard, `--org <name>` to set up an org
@@ -128,13 +131,12 @@ install, `--tailscale` to install Tailscale, `--codex` for the ChatGPT sign-in
 CLI, `--no-engine` to skip the model CLI, `--yes` to never prompt, `--uninstall`
 to remove it. `--help` lists them all.
 
-The engine is pinned to the OpenCode version this checkout was built against
-(`opensession.opencodeVersion` in package.json); `OPENCODE_VERSION=latest`
-(or a specific version) overrides. A release artefact also ships OpenCode's
-own first-run install prebuilt (`engine-seed/`, the `@opencode-ai/plugin`
-tree it would otherwise npm-install into `~/.config/opencode` on the first
-session) and the installer prefetches its model catalogue, so the first turn
-does not pay that minute.
+The Pi engine is compiled into the release binary and runs in-process, so
+there is no separate engine to seed or version. A release tarball carries the
+`opensession` executable, a small `sharp` sidecar for social-card rendering,
+the systemd service templates, and `release.json`; nothing else has to be
+fetched before the first turn. The one external tool a turn needs is the
+`claude` CLI, which the installer puts on the box (`--no-engine` skips it).
 
 ### Tailscale: `--tailscale`
 

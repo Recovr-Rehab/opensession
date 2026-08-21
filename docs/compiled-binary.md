@@ -3,18 +3,19 @@
 The default simple-mode artefact is one self-contained executable built with
 [`bun build --compile`](https://bun.com/docs/bundler/executables): the server,
 CLI, run host and MCP proxy behind one argv, with the prebuilt frontend baked
-in. It boots and serves the UI with nothing on `PATH` except the external
-engine CLIs (`opencode` / `claude`). The `--source` install (a git checkout +
+in. It boots and serves the UI with nothing on `PATH` except the `claude` CLI
+(and `codex` for the ChatGPT path); the Pi engine and its Anthropic bridge are
+compiled in and run in-process. The `--source` install (a git checkout +
 `bun install`) stays as the self-development and contributor path.
 
 ## Build
 
 ```bash
 # Release artefact (the default install downloads this): the target binary +
-# a sharp sidecar + the engine seed + release.json, tarred.
+# a sharp sidecar + the service templates + release.json, tarred.
 bun scripts/build-compile.ts --os linux --arch arm64 --out ~/.cache/opensession-release
 
-# Just the host binary, for local testing (no sidecar, no seed).
+# Just the host binary, for local testing (no sidecar).
 bun scripts/build-compile.ts --outfile dist/opensession
 ```
 
@@ -70,20 +71,13 @@ place a minimal `node_modules` with `sharp` + the platform `@img/sharp-*`
 beside the binary — e.g. copy `node_modules/sharp` and
 `node_modules/@img/sharp-<platform>` (+ its `sharp-libvips-<platform>`).
 
-**External — opencode plugins.** The external `opencode serve` / meridian
-processes load their plugins from FILE PATHS on disk, which a compiled binary
-cannot provide from its `/$bunfs` (and `Bun.resolveSync` inside a compiled
-binary resolves against the embedded graph, not a disk `node_modules`). So the
-artefact ships an `opencode-plugins/` sidecar beside the binary: the Meridian
-bridge stack (`opencode-with-claude`, `@rynfar/meridian`,
-`@rynfar/meridian-plugin-opencode-scrub`, exact-pinned and patched as the
-checkout installs them, with the never-run Claude Code / Agent SDK per-platform
-binaries pruned) plus the `opencode-plugin-*.js` files. `pluginsRoot()`
-(`src/runner-host/exe.ts`) points at this sidecar when compiled, and the
-meridian packages resolve by reading the sidecar package's `package.json` entry
-by hand. Without it a Claude turn fails with "the meridian bridge packages are
-not installed". Source mode resolves from `import.meta.dir` / the checkout
-`node_modules` unchanged.
+**External: the `claude` CLI.** The Anthropic bridge is the Claude Agent SDK
+running in-process (`src/server/anthropic-bridge.ts`), and the SDK shells out
+to the installed `claude` binary (`OPENSESSION_CLAUDE_BIN`, default `claude` on
+`PATH`) for every `pi/anthropic/*` turn. The binary is not embedded: the
+installer puts it on the box (`--no-engine` skips it) and `doctor` reports it
+when missing. The Pi engine and its provider adapters compile into the binary
+and resolve from the embedded graph, so no plugins sidecar ships beside it.
 
 Other native addons in the dependency tree (`@libsql/*`, `@cbor-extract/*`,
 `@anthropic-ai/claude-agent-sdk` audio-capture, `@mariozechner/clipboard`,
@@ -95,8 +89,8 @@ feature runs. The build-only natives (`@tailwindcss/oxide`, `lightningcss`,
 ## What doesn't work in this mode
 
 Features absent or degraded in the compiled binary versus a source/tarball
-install. Everything the shipped artefact covers (the sharp sidecar, the engine
-seed, install/service/update, non-sandbox turns) works and is not listed here.
+install. Everything the shipped artefact covers (the sharp sidecar,
+install/service/update, non-sandbox turns) works and is not listed here.
 
 - **On-box self-development.** No source tree ships in the binary, so code
   sessions cannot run against the Open Session checkout itself (the
