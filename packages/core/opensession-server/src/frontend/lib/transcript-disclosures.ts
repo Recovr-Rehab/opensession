@@ -21,10 +21,11 @@ type RememberedDisclosure = {
 
 /**
  * Keeps a person's disclosure choices attached to transcript entries rather
- * than React component instances. A live turn gets a new render key as steps
- * arrive, and virtualized history can unmount it entirely. Looking up every
- * overlapping entry lets a replacement group recover the last explicit
- * choice; single-entry disclosures use the same ledger to survive remounts.
+ * than React component instances. Live appends keep their mounted turn, but
+ * sparse history hydration can replace a partial group and virtualization can
+ * unmount it entirely. Looking up every overlapping entry lets a replacement
+ * group recover the last explicit choice; single-entry disclosures use the
+ * same ledger to survive remounts.
  */
 export function createTranscriptDisclosureLedger(
 	maxEntries = 20_000,

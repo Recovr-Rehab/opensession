@@ -5,6 +5,10 @@ import {
 	buildTranscriptRanges,
 	type TranscriptIndexedRange,
 } from "../lib/transcript-index";
+import {
+	turnMountKey,
+	turnScrollAnchor,
+} from "../lib/transcript-block-identity";
 import { MessageBubble } from "./MessageBubble";
 import { NoteBubble } from "./NoteBubble";
 import { ToolSection, TurnBlock } from "./TurnBlock";
@@ -191,7 +195,7 @@ function renderBlockEntries(block: RenderBlock): TranscriptEntry[] {
 }
 
 function renderBlockKey(block: RenderBlock, index: number): string {
-	if (block.kind === "turn") return block.items[block.items.length - 1].id;
+	if (block.kind === "turn") return turnMountKey(block.items);
 	if (block.kind === "walkthrough") return "walkthrough";
 	if (block.kind === "note") return `note:${block.note.id}`;
 	if (block.kind === "footer") return `${block.entry.id}:footer`;
@@ -203,8 +207,7 @@ function renderBlockKey(block: RenderBlock, index: number): string {
 }
 
 function renderBlockAnchor(block: RenderBlock, key: string): string {
-	if (block.kind === "turn")
-		return `${block.items[block.items.length - 1].id}#turn`;
+	if (block.kind === "turn") return turnScrollAnchor(block.items);
 	return key;
 }
 

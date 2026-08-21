@@ -25,6 +25,7 @@ import {
   TurnLineStatsCard,
 } from "./TurnFooter";
 import { transcriptDisclosureLedger } from "../lib/transcript-disclosures";
+import { turnScrollAnchor } from "../lib/transcript-block-identity";
 
 interface Props {
   /** The folded part of one assistant turn: tool_use + intermediate assistant
@@ -160,7 +161,6 @@ export const TurnBlock = React.memo(function TurnBlock({
       sections.push({ kind: "msg", entry: it });
     }
   }
-  const lastItem = items[items.length - 1];
   // Survives the fold: a marked screenshot is the answer to "show me", so
   // closing the turn takes the steps and leaves the picture. Only while the
   // steps are hidden — expanded, the media renders in the row that produced
@@ -174,7 +174,7 @@ export const TurnBlock = React.memo(function TurnBlock({
       className="mx-auto mb-3 w-full max-w-[var(--session-col)]"
       // Anchor identity for the history scroll hold: the LAST item survives a
       // history page merging older items into this turn (the first doesn't).
-      data-eid={lastItem ? `${lastItem.id}#turn` : undefined}
+      data-eid={turnScrollAnchor(items)}
     >
       <button
         type="button"
