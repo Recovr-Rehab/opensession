@@ -28,16 +28,17 @@
  * the window. Everything above the assets is short and never scrolls in
  * practice.
  *
- * No radius, fill or shadow here: `ui/popover.tsx` gives every popup the same
- * `rounded-popup` glass card, and this one has no reason to be a different
- * object from the rest of them.
+ * This is broader and taller than the compact menus that use `rounded-popup`,
+ * so its corner takes one small step up. The inner PR band inherits that step
+ * below, keeping the two surfaces visually concentric.
  *
  * It opens with a little more room than it closes with. The first thing in the
  * card is a tinted plate, and a plate set at the same 8px the card ends on
  * reads as pressed against the top edge rather than sitting inside it.
  */
 export const WS_SUMMARY_CARD =
-	"flex max-h-[min(72vh,640px)] w-[300px] flex-col overflow-y-auto pt-3 pb-2";
+	"flex max-h-[min(72vh,640px)] w-[300px] flex-col overflow-y-auto pt-3 pb-2 " +
+	"[border-radius:calc(18px*var(--rf))]!";
 
 /**
  * Band label ("Assets"), taken from the sidebar so the card heads its lists
@@ -126,7 +127,7 @@ export const WS_SUMMARY_STATUS_ROW =
  */
 export const WS_SUMMARY_BAND =
 	"ws-summary-band mx-2 mb-1 flex min-w-0 shrink-0 flex-col " +
-	"[border-radius:calc(var(--radius-popup)_-_2px)] [corner-shape:squircle]";
+	"[border-radius:calc(16px*var(--rf))] [corner-shape:squircle]";
 
 /** The band's inner padding, once it has a fill to hold. An untinted band is
  *  invisible, so it stays flush and the rows keep the list's own pitch. */
