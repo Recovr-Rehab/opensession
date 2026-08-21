@@ -42,6 +42,7 @@ import {
   openDirectMessage,
   postSlackBlocks,
   sendSlackMessage,
+  updateSlackBlocks,
 } from "../agents/slack/slack-api";
 import { configuredServer, personaName, productName } from "./config";
 import { registerSessionEffectHandler, sessionKernel } from "./session-kernel";
@@ -450,14 +451,20 @@ export function registerAsk(input: CreateAskInput): HumanAsk {
 const escapeMrkdwn = (text: string) =>
   text.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 
-function deliveryBlocks(a: HumanAsk): { fallback: string; blocks: any[] } {
-  const link = `${UI_BASE}/session/${a.sessionId}`;
+function askDestination(a: HumanAsk): { link: string; subject: string } {
   const session = findSession(a.sessionId);
-  const subject =
-    session?.workspaceName ||
-    (session?.workspaceId ? workspaceName(session.workspaceId) : null) ||
-    session?.title ||
-    "this session";
+  return {
+    link: `${UI_BASE}/session/${a.sessionId}`,
+    subject:
+      session?.workspaceName ||
+      (session?.workspaceId ? workspaceName(session.workspaceId) : null) ||
+      session?.title ||
+      "this session",
+  };
+}
+
+function deliveryBlocks(a: HumanAsk): { fallback: string; blocks: any[] } {
+  const { link, subject } = askDestination(a);
   const intro = `*${personaName()} needs your input on <${link}|${escapeMrkdwn(subject)}>*`;
   const blocks: any[] = [
     { type: "section", text: { type: "mrkdwn", text: intro } },
@@ -492,6 +499,68 @@ function deliveryBlocks(a: HumanAsk): { fallback: string; blocks: any[] } {
     fallback: `${personaName()} needs your input on ${subject}: ${a.question}`,
     blocks,
   };
+}
+
+function answeredBlocks(
+  a: HumanAsk,
+  answer: string,
+  answeredBy: string,
+  answeredIn: string,
+): { fallback: string; blocks: any[] } {
+  const { link, subject } = askDestination(a);
+  const blocks: any[] = [
+    {
+      type: "section",
+      text: {
+        type: "mrkdwn",
+        text: `*${personaName()} received your input on <${link}|${escapeMrkdwn(subject)}>*`,
+      },
+    },
+    { type: "section", text: { type: "mrkdwn", text: a.question } },
+  ];
+  if (a.context) {
+    blocks.push({
+      type: "section",
+      text: { type: "mrkdwn", text: a.context.slice(0, 2900) },
+    });
+  }
+  blocks.push({
+    type: "context",
+    elements: [
+      {
+        type: "plain_text",
+        text: `Answered in ${answeredIn} by ${answeredBy}: ${answer}`.slice(0, 2000),
+        emoji: false,
+      },
+    ],
+  });
+  return {
+    fallback: `${personaName()} received input on ${subject}: ${answer}`,
+    blocks,
+  };
+}
+
+function markSlackAskAnswered(
+  a: HumanAsk,
+  answer: string,
+  answeredBy: string,
+  answeredIn: string,
+): void {
+  if (!a.slack) return;
+  const settled = answeredBlocks(a, answer, answeredBy, answeredIn);
+  void updateSlackBlocks(
+    a.slack.channel,
+    a.slack.rootTs,
+    settled.fallback,
+    settled.blocks,
+  )
+    .then((result) => {
+      if (!result?.ok)
+        throw new Error(result?.error || "Slack rejected the message update");
+    })
+    .catch((error) =>
+      console.error(`[human-asks] couldn't mark ${a.id} answered in Slack:`, error),
+    );
 }
 
 /**
@@ -747,12 +816,9 @@ export function noteAskThreadReply(input: {
   });
 }
 
-/** Resolve an ask with an answer given in the session UI — either the card
- *  humans-tools puts up alongside the DM for block asks, or a uiFirst card that
- *  is still inside its pre-Slack window. Fires the live block resolver (the
- *  awaiting tool call returns this answer) and, when a DM did go out, posts a
- *  follow-up in that thread so the teammate isn't left answering a moot
- *  question. Returns true if the ask was still outstanding. */
+/** Resolve an ask with an answer given in the session UI. If Slack already
+ *  received the ask, replace its card with a read-only answered state so the
+ *  teammate cannot answer the same question again. */
 export function resolveAskFromUI(askId: string, answer: string, answeredBy: string,): boolean {
   const a = asks.get(askId);
   if (!a) return false;
@@ -768,13 +834,7 @@ export function resolveAskFromUI(askId: string, answer: string, answeredBy: stri
     answered_by: answeredBy,
   });
   resolveAsk(a, answer, answeredBy, "ui");
-  if (a.slack) {
-    void sendSlackMessage(
-      a.slack.channel,
-      `:white_check_mark: _${answeredBy} answered this in ${productName()} — all set: "${answer.slice(0, 280)}"_`,
-      a.slack.rootTs,
-    ).catch(() => {});
-  }
+  markSlackAskAnswered(a, answer, answeredBy, productName());
   return true;
 }
 
@@ -792,6 +852,7 @@ export function resolveByOption(askId: string, label: string): boolean {
     via: "button",
   });
   resolveAsk(a, label, a.person.name);
+  markSlackAskAnswered(a, label, a.person.name, "Slack");
   return true;
 }
 

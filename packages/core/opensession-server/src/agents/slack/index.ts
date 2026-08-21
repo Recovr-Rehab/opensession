@@ -380,22 +380,13 @@ export class SlackAgent implements AgentModule {
           return new Response("", { status: 200 });
         }
 
-        // Human-in-the-loop ask — option button picked.
+        // Human-in-the-loop ask: resolve it, then let the ask registry replace
+        // the original card with its read-only answered state.
         const haOpt = actionId.match(/^humanask-(.+)-opt-(\d+)$/);
         if (haOpt?.[1]) {
           const askId = haOpt[1];
           const label = action.value;
           setImmediate(() => resolveHumanAsk(askId, label));
-          const msgChannel = payload.channel?.id;
-          const msgTs = payload.message?.ts;
-          if (msgChannel && msgTs) {
-            const kept = (payload.message?.blocks || []).filter((b: any) => b.type !== "actions");
-            kept.push({
-              type: "context",
-              elements: [{ type: "mrkdwn", text: `:white_check_mark: _You answered: ${label}_` }],
-            });
-            await updateSlackBlocks(msgChannel, msgTs, `Answered: ${label}`, kept);
-          }
           return new Response("", { status: 200 });
         }
 
