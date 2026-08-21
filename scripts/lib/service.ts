@@ -597,8 +597,12 @@ export async function install(
         await Bun.write(STAGED_UNIT_PATH, unit);
         await Bun.write(STAGED_EXECUTOR_UNIT_PATH, executorUnit);
         const serviceUser = await resolveUsername();
-        const bun = bunPath();
-        const pathValue = servicePath(bun.replace(/\/bun$/, ""));
+        const compiled = isCompiledBinary();
+        const runnerBin = compiled ? SHIM_PATH : bunPath();
+        const bun = compiled ? runnerBin : bunPath();
+        const pathValue = servicePath(
+          compiled ? BIN_DIR : bun.replace(/\/bun$/, ""),
+        );
         const executorWasActive =
           (await run(["systemctl", "is-active", EXECUTOR_SERVICE_NAME]))
             .stdout === "active";
@@ -627,6 +631,8 @@ export async function install(
             process.env.OPENSESSION_DEPLOY_ALLOW_RESET === "1" ? "1" : "0",
             process.env.OPENSESSION_HEALTH_URL ||
               "http://127.0.0.1:3850/api/health",
+            compiled ? "compiled" : "source",
+            runnerBin,
           ],
           ["sudo", "-n", RUN_HOST_HELPER, "check"],
           ["sudo", "cp", STAGED_UNIT_PATH, SERVICE_PATH],
@@ -752,6 +758,17 @@ export async function install(
       );
       return false;
   }
+}
+
+/** Restart the independent executor after a system-scope release swap. */
+export async function restartExecutor(): Promise<number> {
+  if (supervisor() !== "systemd" || installedScope() !== "system") return 0;
+  return await runInherit([
+    "sudo",
+    "systemctl",
+    "restart",
+    EXECUTOR_SERVICE_NAME,
+  ]);
 }
 
 export async function control(

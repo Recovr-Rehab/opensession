@@ -484,7 +484,9 @@ async function restartReleaseWithRollback(
   }
   heading("Restart (health-gated)");
   const base = await healthBaseUrl();
-  const restarted = (await service.control("restart")) === 0;
+  const executorRestarted = (await service.restartExecutor()) === 0;
+  const restarted =
+    executorRestarted && (await service.control("restart")) === 0;
   const healthy = restarted && (await service.waitHealthy(base));
   if (healthy) {
     ok("restarted and healthy");
@@ -515,6 +517,7 @@ async function restartReleaseWithRollback(
     );
     return 1;
   }
+  await service.restartExecutor();
   await service.control("restart");
   fail("rolled back to the previous release", "the new one did not come up");
   return 1;

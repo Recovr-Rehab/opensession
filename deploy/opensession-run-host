@@ -25,13 +25,20 @@ deploy_checkout="$(line 12)"
 deploy_state="$(line 13)"
 deploy_allow_reset="$(line 14)"
 health_url="$(line 15)"
+runner_mode="$(line 16)"
+runner_bin="$(line 17)"
 
 check_config() {
   [ -n "$service_user" ]
   [ "$service_uid" -eq "$service_uid" ] 2>/dev/null
   [ "$service_gid" -eq "$service_gid" ] 2>/dev/null
   [ -d "$repo_dir" ]
-  [ -x "$bun_bin" ]
+  [ "$runner_mode" = "source" ] || [ "$runner_mode" = "compiled" ]
+  [ -x "$runner_bin" ]
+  if [ "$runner_mode" = "source" ]; then
+    [ -x "$bun_bin" ]
+    [ -f "$repo_dir/packages/core/opensession-server/src/runner-host/host.ts" ]
+  fi
   [ -d "$home_dir" ]
   [ -x "$systemd_run" ]
   [ -x "$systemctl_bin" ]
@@ -55,8 +62,8 @@ fi
 
 if [ "$action" = "check-version" ]; then
   [ "$#" -eq 2 ] || exit 2
-  [ "$2" = "1" ] || {
-    echo "run-host helper version mismatch: installed=1 expected=$2" >&2
+  [ "$2" = "2" ] || {
+    echo "run-host helper version mismatch: installed=2 expected=$2" >&2
     exit 3
   }
   exit 0
@@ -120,7 +127,7 @@ case "$action" in
       echo "missing run-host spec" >&2
       exit 2
     }
-    exec "$systemd_run" \
+    set -- "$systemd_run" \
       --collect --quiet \
       "--unit=$unit" \
       "--description=Open Session run host $host_id" \
@@ -135,8 +142,11 @@ case "$action" in
       -p "Environment=OPENSESSION_RUN_SPEC_HASH=$spec_hash" \
       -p "IPAddressDeny=169.254.169.254/32" \
       -p "StandardOutput=journal" \
-      -p "StandardError=journal" \
-      "$bun_bin" run "$repo_dir/packages/core/opensession-server/src/runner-host/host.ts" "$dir/spec.json"
+      -p "StandardError=journal"
+    if [ "$runner_mode" = "compiled" ]; then
+      exec "$@" "$runner_bin" runner-host "$dir/spec.json"
+    fi
+    exec "$@" "$runner_bin" run "$repo_dir/packages/core/opensession-server/src/runner-host/host.ts" "$dir/spec.json"
     ;;
   stop)
     [ "$#" -eq 2 ] || exit 2

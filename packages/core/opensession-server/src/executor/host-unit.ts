@@ -13,7 +13,7 @@ import {
 } from "../runner-host/protocol";
 
 export const RUN_HOST_HELPER = "/usr/local/libexec/opensession-run-host";
-export const RUN_HOST_HELPER_VERSION = 1;
+export const RUN_HOST_HELPER_VERSION = 2;
 
 export async function verifyRunHostHelper(): Promise<void> {
   if (!existsSync(RUN_HOST_HELPER))

@@ -17,9 +17,9 @@
  *   bun scripts/build-compile.ts --os linux --arch arm64 [--out <dir>]
  *       The full release artefact `opensession-<ver>-<os>-<arch>.tar.gz`:
  *         opensession                 the target binary
- *         node_modules/               sharp + @img/sharp-<target> sidecar, so the
- *                                     binary resolves sharp beside itself and the
- *                                     social-card endpoint works (501 without it)
+ *         node_modules/               sharp + @img/sharp-<target> sidecar
+ *         opensession*.service        system service templates
+ *         deploy/                     fixed executor credential/helper policy
  *         release.json                version, commit, target, kind
  *       `bun build --compile --target=bun-<os>-<arch>` cross-compiles from any
  *       host, so one runner builds every target.
@@ -29,7 +29,7 @@
  * every asset, compile, then restore the stub so the working tree stays clean.
  */
 
-import { cpSync, existsSync, mkdirSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync } from "fs";
+import { chmodSync, cpSync, existsSync, mkdirSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync } from "fs";
 import { dirname, join, relative, resolve } from "path";
 
 const REPO_ROOT = resolve(import.meta.dir, "..");
@@ -241,9 +241,22 @@ async function main(): Promise<void> {
 
 	console.log(`\n== compile ${name}`);
 	await compileBinary(join(stage, "opensession"), fver, distDir, metaPath, shellPath);
-	// service.ts renders the systemd unit from this template at REPO_ROOT, which
-	// for a binary install is the release dir — ship it beside the binary.
-	cpSync(join(REPO_ROOT, "opensession.service"), join(stage, "opensession.service"));
+	// System scope is optional, but it must be fully installable from the same
+	// binary artifact. These root-owned policy files are inputs to the installer,
+	// never caller-controlled argv passed across the executor boundary.
+	for (const rel of [
+		"opensession.service",
+		"opensession-executor.service",
+		"deploy/install-executor-credential.sh",
+		"deploy/install-run-host-helper.sh",
+		"deploy/opensession-run-host",
+	]) {
+		const source = join(REPO_ROOT, rel);
+		const destination = join(stage, rel);
+		mkdirSync(dirname(destination), { recursive: true });
+		cpSync(source, destination);
+		chmodSync(destination, statSync(source).mode & 0o777);
+	}
 	console.log("\n== sharp sidecar");
 	await buildSharpSidecar(stage, sharpVersion);
 

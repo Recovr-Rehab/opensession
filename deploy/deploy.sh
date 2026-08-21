@@ -160,7 +160,8 @@ esac
   "$RUN_HOST_ENV_FILE" \
   "$SESSIONS_DIR/run-hosts" "$EXECUTOR_PATH" \
   "$REPO_DIR" "$SERVICE_HOME_DIR/.opensession-deploy" \
-  "${OPENSESSION_DEPLOY_ALLOW_RESET:-0}" "$HEALTH_URL"
+  "${OPENSESSION_DEPLOY_ALLOW_RESET:-0}" "$HEALTH_URL" \
+  source "$EXECUTOR_BUN"
 run_as_service_user sudo -n /usr/local/libexec/opensession-run-host check
 
 EXECUTOR_UNIT_RENDERED="$(mktemp)"
