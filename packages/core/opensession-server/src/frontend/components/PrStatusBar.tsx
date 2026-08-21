@@ -717,13 +717,7 @@ export function PrStatusBar({
 			: checksSummary.passed > 0
 				? "text-green"
 				: "text-faint";
-	const checksLabel = checksSummary.failed > 0
-		? `${checksSummary.failed} of ${checksSummary.total} checks failed`
-		: checksSummary.pending > 0
-			? `${checksSummary.pending} of ${checksSummary.total} checks pending`
-			: checksSummary.passed > 0
-				? `${checksSummary.passed} check${checksSummary.passed === 1 ? "" : "s"} passed`
-				: `${checksSummary.total} check${checksSummary.total === 1 ? "" : "s"}`;
+	const checksLabel = `${checksSummary.total} check${checksSummary.total === 1 ? "" : "s"}`;
 
 	async function run(name: string, fn: () => Promise<unknown>) {
 		if (busy) return;
