@@ -57,7 +57,12 @@ import { asDataUrlList, countImageRefs, parseImageDataUrls } from "../uploads";
 import { notifyMentions } from "../mentions";
 import { reviewTeamFor } from "../people";
 import { sendPushToUser } from "../push";
-import { sessionKernel, sessionKernelStore, tombstoneSessionKernel, } from "../session-kernel";
+import {
+	legacyGatewayEffect,
+	sessionKernel,
+	sessionKernelStore,
+	tombstoneSessionKernel,
+} from "../session-kernel";
 import {
 	canonicalCommandPayload,
 	sessionIdForRequest,
@@ -722,10 +727,9 @@ export async function handleSessionsRoutes(
 			const requestId = suppliedRequestId || crypto.randomUUID();
 			const actorScope = ctx.authUser?.login || actor || "anonymous";
 			const targetId = sessionIdForRequest(actorScope, requestId);
-			const accepted = await sessionKernel(targetId).dispatch(
-				{
+			const accepted = await sessionKernel(targetId).dispatchLegacy(
+				legacyGatewayEffect("create_session", {
 					requestId,
-					type: "create_session",
 					payload: {
 						targetId,
 						hash: new Bun.CryptoHasher("sha256")
@@ -734,7 +738,7 @@ export async function handleSessionsRoutes(
 					},
 					source: "rest",
 					replaySafe: true,
-				},
+				}),
 				async () => {
 					return getSessionControl().createSession({
 						id: targetId,

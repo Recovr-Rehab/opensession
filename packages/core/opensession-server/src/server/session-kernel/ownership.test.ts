@@ -1,6 +1,10 @@
 import { describe, expect, test } from "bun:test";
 import { existsSync, readdirSync, readFileSync, statSync } from "fs";
 import { join, resolve } from "path";
+import {
+	LEGACY_GATEWAY_EFFECT_OPERATIONS,
+	LEGACY_GATEWAY_EFFECT_SITE_BASELINE,
+} from "./lifecycle-protocol";
 
 const serverDir = resolve(import.meta.dir, "..");
 const read = (relative: string) => readFileSync(join(serverDir, relative), "utf8");
@@ -16,6 +20,28 @@ function sourceFiles(dir: string): string[] {
 }
 
 describe("single session ownership", () => {
+	test("legacy gateway effects cannot grow without changing the migration fence", () => {
+		const production = sourceFiles(serverDir).filter(
+			(path) => !path.endsWith(".test.ts"),
+		);
+		const sites = production.reduce((count, path) => {
+			const source = readFileSync(path, "utf8");
+			return count + (source.match(/\.dispatchLegacy\(/g)?.length ?? 0);
+		}, 0);
+		expect(sites).toBe(LEGACY_GATEWAY_EFFECT_SITE_BASELINE);
+		expect(LEGACY_GATEWAY_EFFECT_OPERATIONS).toEqual([
+			"answer_question",
+			"cancel_session",
+			"create_session",
+			"delete_session",
+			"session_file_updated",
+			"submit_prompt",
+			"timer_fired",
+			"websocket_command",
+		]);
+		expect(read("session-kernel/kernel.ts")).not.toContain("async dispatch<");
+	});
+
 	test("run, queue, ask and session-file state delegate to SessionKernel", () => {
 		expect(read("run-state.ts")).toContain("sessionKernel(sessionId)");
 		expect(read("queue-state.ts")).toContain("new DeliveryOwnedMap");
@@ -38,8 +64,9 @@ describe("single session ownership", () => {
 		const facade = read("run-state.ts");
 		const actor = read("session-kernel/actor-worker.ts");
 		expect(facade).toContain(".applyRunEvent({");
-		expect(actor).toContain('request.t === "decide_run_event"');
-		expect(actor).toContain("store.applyRunEvent(request.decision)");
+		expect(actor).toContain('request.t === "reduce"');
+		expect(actor).toContain('command.kind === "run_event"');
+		expect(actor).toContain("store.applyRunEvent(command.decision)");
 		expect(read("session-kernel/run-state-machine.ts")).toContain(
 			"export function nextRunState",
 		);
@@ -59,8 +86,8 @@ describe("single session ownership", () => {
 
 	test("all shared prompt delivery uses the durable command mailbox", () => {
 		const control = read("session-control-wiring.ts");
-		expect(control).toContain('type: "submit_prompt"');
-		expect(control).toContain("sessionKernel(id).dispatch");
+		expect(control).toContain('legacyGatewayEffect("submit_prompt"');
+		expect(control).toContain("sessionKernel(id).dispatchLegacy");
 		expect(read("routes/sessions.ts")).not.toContain("promptReceipt(");
 		expect(existsSync(join(serverDir, "prompt-receipts.ts"))).toBe(false);
 		const steerEligibility = control.indexOf('opts?.busy !== "queue"');
@@ -115,7 +142,7 @@ describe("single session ownership", () => {
 	test("Slack ask delivery is a durable production outbox effect", () => {
 		const source = read("human-asks.ts");
 		expect(source).toContain(
-			'registerSessionEffectHandler("human_ask_deliver"',
+			'registerSessionEffectExecutor("human_ask_deliver"',
 		);
 		expect(source).toContain('"human_ask_deliver",');
 		expect(source.match(/deliverAsk\(/g)?.length).toBe(2);
@@ -123,11 +150,11 @@ describe("single session ownership", () => {
 
 	test("create and cancel retries keep stable ownership targets", () => {
 		const ws = read("ws-handlers.ts");
-		expect(ws).toContain('"create_session",');
+		expect(ws).toContain('legacyGatewayEffect("websocket_command"');
 		expect(ws).toContain("sessionIdForRequest");
 		expect(ws).toContain('typeof msg.sessionId === "string"');
 		const routes = read("routes/sessions.ts");
-		expect(routes).toContain('type: "create_session"');
+		expect(routes).toContain('legacyGatewayEffect("create_session"');
 		expect(routes).toContain("id: targetId");
 		expect(read("../../../protocol/src/session.ts")).toContain(
 			'type: "cancel"; sessionId?: string; requestId?: string',
@@ -157,8 +184,8 @@ describe("single session ownership", () => {
 		const create = read("session-create.ts");
 		expect(create).toContain("createPlan.resolved");
 		expect(create).toContain("spec.openingPromptEntryId");
-		expect(wiring).toContain('type: "cancel_session"');
-		expect(wiring).toContain('type: "answer_question"');
+		expect(wiring).toContain('legacyGatewayEffect("cancel_session"');
+		expect(wiring).toContain('legacyGatewayEffect("answer_question"');
 		const tools = read("../agents/slack/sessions-tools.ts");
 		expect(tools).toContain("durableToolRequestId");
 		expect(tools).toContain('durableToolRequestId(ctx, "create_session", extra)');

@@ -1,4 +1,7 @@
-import type { SessionCommand } from "./kernel";
+import type {
+  LegacyGatewayEffect,
+  SessionActorReducerCommand,
+} from "./lifecycle-protocol";
 import type {
   DurableCommandRecord,
   DurableDeliveryState,
@@ -151,7 +154,7 @@ export class SessionKernelActorClient {
 
   async begin(
     sessionId: string,
-    command: SessionCommand,
+    command: LegacyGatewayEffect,
   ): Promise<{ duplicate: boolean; executionId?: string; result?: unknown }> {
     const response = await this.request({
       t: "begin",
@@ -202,7 +205,13 @@ export class SessionKernelActorClient {
 
   beginSync(
     sessionId: string,
-    command: SessionCommand,
+    command: {
+      requestId: string;
+      type: string;
+      payload?: unknown;
+      source?: string;
+      replaySafe?: boolean;
+    },
   ): { duplicate: boolean; executionId?: string; result?: unknown } {
     const admission = this.callStore<{
       duplicate: boolean;
@@ -275,7 +284,10 @@ export class SessionKernelActorClient {
 
   decideAsk<T extends AskActorRequest>(request: T): AskActorResult<T> {
     return this.callSync<AskActorResult<T>>(
-      { t: "ask", request },
+      {
+        t: "reduce",
+        command: { kind: "ask", commandId: crypto.randomUUID(), request },
+      },
       `ask ${request.op}`,
       request.op === "snapshot" || request.op === "entries",
     );
@@ -285,7 +297,14 @@ export class SessionKernelActorClient {
     request: T,
   ): DeliveryActorResult<T> {
     return this.callSync<DeliveryActorResult<T>>(
-      { t: "delivery", request },
+      {
+        t: "reduce",
+        command: {
+          kind: "delivery",
+          commandId: crypto.randomUUID(),
+          request,
+        },
+      },
       `delivery ${request.op}`,
       request.op === "snapshot" || request.op === "entries",
     );
@@ -293,7 +312,14 @@ export class SessionKernelActorClient {
 
   decideRunEvent(decision: RunEventDecision): RunEventDecisionResult {
     const result = this.callSync<RunEventDecisionResult>(
-      { t: "decide_run_event", decision },
+      {
+        t: "reduce",
+        command: {
+          kind: "run_event",
+          commandId: crypto.randomUUID(),
+          decision,
+        },
+      },
       "run event decision",
     );
     if (result.accepted)
@@ -315,9 +341,7 @@ export class SessionKernelActorClient {
   private callSync<TResult>(
     request:
       | { t: "store"; method: string; args: unknown[] }
-      | { t: "decide_run_event"; decision: RunEventDecision }
-      | { t: "delivery"; request: DeliveryActorRequest }
-      | { t: "ask"; request: AskActorRequest },
+      | { t: "reduce"; command: SessionActorReducerCommand },
     label: string,
     large = false,
     outputBytes = large ? LARGE_OUTPUT_BYTES : SMALL_OUTPUT_BYTES,

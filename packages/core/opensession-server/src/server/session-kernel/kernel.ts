@@ -7,6 +7,14 @@
  */
 import { audit } from "../audit";
 import type { AskActorRequest, AskActorResult } from "./ask-protocol";
+import {
+	legacyGatewayEffect,
+	type LegacyGatewayEffect,
+	type LegacyGatewayEffectOperation,
+	type SessionActorEffectFor,
+	type SessionActorEffectKind,
+	type StagedSessionActorEffect,
+} from "./lifecycle-protocol";
 import type {
   DeliveryActorRequest,
   DeliveryActorResult,
@@ -26,17 +34,6 @@ import {
 	type RunEventDecision,
 	type RunEventDecisionResult,
 } from "./store";
-
-export interface SessionCommand<TPayload = unknown> {
-	requestId: string;
-	type: string;
-	payload?: TPayload;
-	source?: string;
-	/** Physical work may be safely re-entered after actor loss because it adopts stable effects. */
-	replaySafe?: boolean;
-	/** Retry handler failures regardless of message classification (timers/outbox-style policy). */
-	retryFailures?: boolean;
-}
 
 export interface SessionCommandResult<TResult = unknown> {
 	result: TResult;
@@ -66,11 +63,10 @@ const globalState = globalThis as typeof globalThis & {
 	__opensessionSessionKernel?: GlobalKernelState;
 };
 const state = (globalState.__opensessionSessionKernel ??= {});
-type StagedEffect = { kind: string; payload: unknown; effectKey: string };
 type CommandContext = {
 	sessionId: string;
 	requestId: string;
-	effects: StagedEffect[];
+	effects: StagedSessionActorEffect[];
 };
 const commandContext = new AsyncLocalStorage<CommandContext>();
 
@@ -348,24 +344,24 @@ export class SessionKernel {
 		);
 	}
 
-	async dispatch<TResult>(
-		command: SessionCommand,
+	async dispatchLegacy<TResult>(
+		command: LegacyGatewayEffect,
 		handler: CommandHandler<TResult>,
 	): Promise<SessionCommandResult<TResult>> {
 		this.assertWritable();
-		if (!command.requestId)
+		if (!command.commandId)
 			throw new Error("Session commands require requestId");
 		if (this.ownsCurrentCommand())
 			throw new Error(`Nested SessionKernel dispatch for ${this.sessionId}`);
-		const existingPromise = this.inFlight.get(command.requestId);
+		const existingPromise = this.inFlight.get(command.commandId);
 		if (existingPromise)
 			return existingPromise as Promise<SessionCommandResult<TResult>>;
 
 		if (!state.actor) {
 			const persisted = sessionKernelStore().acceptCommand({
 				sessionId: this.sessionId,
-				requestId: command.requestId,
-				type: command.type,
+				requestId: command.commandId,
+				type: command.operation,
 				payload: command.payload,
 				replaySafe: command.replaySafe,
 			});
@@ -401,16 +397,16 @@ export class SessionKernel {
 			},
 		);
 		this.inFlight.set(
-			command.requestId,
+			command.commandId,
 			resultPromise as Promise<SessionCommandResult<unknown>>,
 		);
     let settled = false;
     const cleanup = () => {
       if (settled) return;
       settled = true;
-      this.activeCommandIds.delete(command.requestId);
+      this.activeCommandIds.delete(command.commandId);
       this.queued -= 1;
-      this.inFlight.delete(command.requestId);
+      this.inFlight.delete(command.commandId);
       this.touch();
     };
 
@@ -419,12 +415,12 @@ export class SessionKernel {
         if (!state.actor)
 					sessionKernelStore().markProcessing(
 						this.sessionId,
-						command.requestId,
+						command.commandId,
 					);
-				this.activeCommandIds.add(command.requestId);
+				this.activeCommandIds.add(command.commandId);
 				const context: CommandContext = {
 					sessionId: this.sessionId,
-					requestId: command.requestId,
+					requestId: command.commandId,
 					effects: [],
 				};
 				const result = await commandContext.run(context, () => handler(this));
@@ -433,16 +429,16 @@ export class SessionKernel {
 				else
 					sessionKernelStore().completeCommandDecision({
 						sessionId: this.sessionId,
-						requestId: command.requestId,
-						type: command.type,
+						requestId: command.commandId,
+						type: command.operation,
 						result,
 						effects: context.effects,
 					});
 				audit({
 					msg: "session_command_completed",
 					session_id: this.sessionId,
-					request_id: command.requestId,
-					command: command.type,
+					request_id: command.commandId,
+					command: command.operation,
 					source: command.source,
 				});
 				resolve({ result, duplicate: false });
@@ -457,22 +453,22 @@ export class SessionKernel {
             await state.actor.fail(executionId, message, retryable);
 					} catch (settleError) {
             console.error(
-              `[session-kernel] Failed to settle ${this.sessionId}/${command.requestId}:`,
+              `[session-kernel] Failed to settle ${this.sessionId}/${command.commandId}:`,
               settleError,
             );
 					}
 				} else if (retryable)
 					sessionKernelStore().failCommand(
 						this.sessionId,
-						command.requestId,
+						command.commandId,
 						message,
 						true,
 					);
 				else
 					sessionKernelStore().completeCommandDecision({
 						sessionId: this.sessionId,
-						requestId: command.requestId,
-						type: command.type,
+						requestId: command.commandId,
+						type: command.operation,
             result: {
               __sessionKernelFailure: true,
               message: message.slice(0, 2_000),
@@ -482,8 +478,8 @@ export class SessionKernel {
 				audit({
 					msg: "session_command_failed",
 					session_id: this.sessionId,
-					request_id: command.requestId,
-					command: command.type,
+					request_id: command.commandId,
+					command: command.operation,
 					error: message,
 				});
 				reject(error);
@@ -550,7 +546,10 @@ export class SessionKernel {
 
   /** Admit compatibility work, then serialize its physical gateway effect. */
 	runExclusive<TResult>(
-		name: string,
+		name: Extract<
+			LegacyGatewayEffectOperation,
+			"session_file_updated" | "delete_session"
+		>,
 		operation: () => TResult | Promise<TResult>,
 	): Promise<TResult> {
 		this.assertWritable();
@@ -562,12 +561,11 @@ export class SessionKernel {
 		};
 		if (this.ownsCurrentCommand()) return ownedOperation();
 		if (state.actor) {
-			return this.dispatch(
-				{
+			return this.dispatchLegacy(
+				legacyGatewayEffect(name, {
 					requestId: crypto.randomUUID(),
-					type: `exclusive:${name}`,
 					source: "compatibility",
-				},
+				}),
 				operation,
 			).then((accepted) => accepted.result);
 		}
@@ -642,9 +640,9 @@ export class SessionKernel {
 		);
 	}
 
-	enqueueEffect(
-		kind: string,
-		payload: unknown,
+	enqueueEffect<K extends SessionActorEffectKind>(
+		kind: K,
+		payload: SessionActorEffectFor<K>["payload"],
 		effectKey: string = crypto.randomUUID(),
 	): number | undefined {
 		this.touch();
@@ -653,7 +651,7 @@ export class SessionKernel {
 			current?.sessionId === this.sessionId &&
 			this.activeCommandIds.has(current.requestId)
 		) {
-			current.effects.push({ kind, payload, effectKey });
+			current.effects.push({ kind, payload, effectKey } as StagedSessionActorEffect);
 			return undefined;
 		}
 		if (state.actor) {
@@ -663,7 +661,7 @@ export class SessionKernel {
 					const staged = commandContext.getStore();
           if (!staged)
             throw new Error("Session effect has no actor decision context");
-					staged.effects.push({ kind, payload, effectKey });
+					staged.effects.push({ kind, payload, effectKey } as StagedSessionActorEffect);
 				},
 				false,
 			);

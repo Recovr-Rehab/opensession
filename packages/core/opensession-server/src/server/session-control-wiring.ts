@@ -46,7 +46,11 @@ import { ownedWorktree } from "./session-workspace";
 import { createWorktree, ensureAskCheckout, ensureScratchDir, getRepo, isRegisteredWorktree, listWorktrees, repoForPath, repoForPathOrNull, resolveUniqueBranch, worktreePathFor } from "./worktree";
 import { broadcastToSession } from "./ws-hub";
 import { randomUUIDv7 } from "bun";
-import { sessionKernel, sessionKernelOwnsCurrentCommand } from "./session-kernel";
+import {
+	legacyGatewayEffect,
+	sessionKernel,
+	sessionKernelOwnsCurrentCommand,
+} from "./session-kernel";
 import {
 	canonicalCommandPayload,
 	sessionIdForRequest,
@@ -141,14 +145,13 @@ registerSessionControl({
 	answerQuestion: async (id, answers, opts) => {
 		const requestId = opts?.requestId || randomUUIDv7();
 		const questionId = pendingAskAwaitingAnswer(id)?.questionId || null;
-		const accepted = await sessionKernel(id).dispatch(
-			{
+		const accepted = await sessionKernel(id).dispatchLegacy(
+			legacyGatewayEffect("answer_question", {
 				requestId,
-				type: "answer_question",
 				payload: { questionId, answers },
 				source: "session_control",
 				replaySafe: true,
-			},
+			}),
 			() => {
 				const pending = pendingAskAwaitingAnswer(id);
 				if (!pending || pending.questionId !== questionId) return false;
@@ -345,14 +348,13 @@ registerSessionControl({
 		};
 		if (sessionKernelOwnsCurrentCommand(id)) return deliverOwned();
 		try {
-			const accepted = await sessionKernel(id).dispatch(
-				{
+			const accepted = await sessionKernel(id).dispatchLegacy(
+				legacyGatewayEffect("submit_prompt", {
 					requestId: deliveryId,
-					type: "submit_prompt",
 					payload: identity,
 					source: "session_control",
-				replaySafe: true,
-				},
+					replaySafe: true,
+				}),
 				deliverOwned,
 			);
 			return {
@@ -368,14 +370,13 @@ registerSessionControl({
 	cancelSession: async (id, opts) => {
 		const requestId = opts?.requestId || randomUUIDv7();
 		const targetRunId = sessionKernel(id).runState().currentRunId || null;
-		const accepted = await sessionKernel(id).dispatch(
-			{
+		const accepted = await sessionKernel(id).dispatchLegacy(
+			legacyGatewayEffect("cancel_session", {
 				requestId,
-				type: "cancel_session",
 				payload: { targetRunId },
 				source: "session_control",
 				replaySafe: true,
-			},
+			}),
 			() => {
 				if ((sessionKernel(id).runState().currentRunId || null) !== targetRunId)
 					throw new Error("The run targeted by this command has already changed");
@@ -408,14 +409,13 @@ registerSessionControl({
 			const identity = new Bun.CryptoHasher("sha256")
 				.update(canonicalCommandPayload(ownedInput))
 				.digest("hex");
-			const accepted = await sessionKernel(commandOwner).dispatch(
-				{
+			const accepted = await sessionKernel(commandOwner).dispatchLegacy(
+				legacyGatewayEffect("create_session", {
 					requestId,
-					type: "create_session",
 					payload: { targetId: requestedId, identity },
 					source: "session_control",
-				replaySafe: true,
-				},
+					replaySafe: true,
+				}),
 				() => getSessionControl().createSession(ownedInput),
 			);
 			return accepted.result;

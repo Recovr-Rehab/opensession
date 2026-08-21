@@ -6,16 +6,18 @@ import {
 	sessionKernelStore,
 	maintainSessionKernel,
 } from "./kernel";
-import type { DurableOutboxItem, DurableTimer } from "./store";
+import type { DurableTimer } from "./store";
+import {
+	executeSessionEffect,
+	registeredSessionEffectKinds,
+} from "./effect-executors";
+import { legacyGatewayEffect } from "./lifecycle-protocol";
 import { pruneCreatePlans } from "../session-create-plan";
 import { audit } from "../audit";
 
 type TimerHandler = (timer: DurableTimer) => void | Promise<void>;
-type EffectHandler = (item: DurableOutboxItem) => void | Promise<void>;
-
 type RuntimeState = {
 	timerHandlers: Map<string, TimerHandler>;
-	effectHandlers: Map<string, EffectHandler>;
 	handle?: ReturnType<typeof setInterval>;
 	draining?: boolean;
 	lastCompactAt?: number;
@@ -28,7 +30,6 @@ const globalRuntime = globalThis as typeof globalThis & {
 };
 const runtime: RuntimeState = (globalRuntime.__opensessionSessionKernelRuntime ??= {
 	timerHandlers: new Map(),
-	effectHandlers: new Map(),
 });
 
 export function registerSessionTimerHandler(
@@ -42,24 +43,12 @@ export function registerSessionTimerHandler(
 	};
 }
 
-export function registerSessionEffectHandler(
-	kind: string,
-	handler: EffectHandler,
-): () => void {
-	runtime.effectHandlers.set(kind, handler);
-	return () => {
-		if (runtime.effectHandlers.get(kind) === handler)
-			runtime.effectHandlers.delete(kind);
-	};
-}
-
 export async function fireSessionTimer(timer: DurableTimer): Promise<boolean> {
 	const handler = runtime.timerHandlers.get(timer.kind);
 	if (!handler) return false;
-	await sessionKernel(timer.sessionId).dispatch(
-		{
+	await sessionKernel(timer.sessionId).dispatchLegacy(
+		legacyGatewayEffect("timer_fired", {
 			requestId: `timer:${timer.timerId}:${timer.token}`,
-			type: "timer_fired",
 			payload: {
 				timerId: timer.timerId,
 				kind: timer.kind,
@@ -67,9 +56,9 @@ export async function fireSessionTimer(timer: DurableTimer): Promise<boolean> {
 				payload: timer.payload,
 			},
 			source: "timer",
-				replaySafe: true,
-				retryFailures: true,
-		},
+			replaySafe: true,
+			retryFailures: true,
+		}),
 		() => handler(timer),
 	);
 	sessionKernelStore().settleTimerSuccess(timer.sessionId, timer.timerId, timer.token);
@@ -89,7 +78,7 @@ export async function drainSessionKernelRuntime(): Promise<void> {
 	runtime.draining = true;
 	try {
 		const timerKinds = [...runtime.timerHandlers.keys()];
-		const effectKinds = [...runtime.effectHandlers.keys()];
+		const effectKinds = registeredSessionEffectKinds();
 		const work = await sessionKernelRuntimeWork(timerKinds, effectKinds);
 		const activeTimers = (runtime.activeTimers ??= new Set());
 		for (const timer of work.timers) {
@@ -122,13 +111,11 @@ export async function drainSessionKernelRuntime(): Promise<void> {
 		for (const item of work.outbox) {
 			if (activeOutbox.size >= 8) break;
 			if (activeOutbox.has(item.id)) continue;
-			const handler = runtime.effectHandlers.get(item.kind);
-			if (!handler) continue;
 			activeOutbox.add(item.id);
-			void Promise.resolve()
-				.then(() => handler(item))
-				.then(() =>
-			sessionKernelStore().ackOutbox(item.id))
+			void executeSessionEffect(item)
+				.then((executed) => {
+					if (executed) sessionKernelStore().ackOutbox(item.id);
+				})
 				.catch((error) => {
 					const message =
 						error instanceof Error ? error.message : String(error);
