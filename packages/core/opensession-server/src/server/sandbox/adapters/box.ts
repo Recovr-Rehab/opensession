@@ -645,6 +645,8 @@ export class BoxProvider implements SandboxProvider {
   }
 
   private async ensureInner(spec: SandboxSessionSpec): Promise<Sandbox> {
+    const startedAt = Date.now();
+    const mark = (stage: string) => console.log(`[sandbox:box] ${spec.sessionId}: ${stage} (+${Date.now() - startedAt}ms)`);
     if (spec.attachedDirs?.length) {
       throw new Error("attached repos are not supported in remote sandboxes — detach them or use docker/local");
     }
@@ -656,15 +658,12 @@ export class BoxProvider implements SandboxProvider {
     const cwd =
       spec.cwd || prevState?.cwd || worktreePathFor(branch, repo.id, { isolated: true });
 
-    // Find by name (authoritative — set via PATCH below), else state file.
+    // The durable local mapping is written immediately after provider create,
+    // before workspace setup. Prefer its O(1) id lookup: listing up to 500
+    // account Boxes for a brand-new session added avoidable provider latency.
     let box: BoxRecord | null = null;
     let lifecycleRefreshed = false;
-    try {
-      box = await this.findBoxBySession(cfg, spec.sessionId);
-    } catch (e) {
-      console.warn(`[sandbox:box] name lookup failed (will create):`, e);
-    }
-    if (!box && prevState) {
+    if (prevState) {
       try {
         box = await getBox(cfg, prevState.sandboxId);
       } catch {}
@@ -726,7 +725,10 @@ export class BoxProvider implements SandboxProvider {
         created = await create();
       }
       box = created.box;
-      // The session name is the recovery index (the API has no labels). A
+      mark("box created");
+      // The session name is the provider-side recovery index. The durable
+      // local id written below is the hot path; the name remains useful for
+      // operator recovery when local state is lost. A
       // rename failure is non-fatal — the local state file still maps it.
       try {
         await boxApi(cfg, "PATCH", `/boxes/${box.id}`, { name: spec.sessionId });
@@ -741,12 +743,27 @@ export class BoxProvider implements SandboxProvider {
       } catch {}
     }
 
+    writeRemoteState({
+      sandboxId: box.id,
+      provider: this.id,
+      sessionId: spec.sessionId,
+      cwd,
+      repoId: repo.id,
+      branch,
+      createdAt: prevState?.createdAt || new Date().toISOString(),
+      lastActivityAt: new Date().toISOString(),
+      ...trust,
+    });
+
     const driver = boxDriver(cfg, box.id);
     await driver.ensureStarted();
+    mark("box started");
     // Cheap dial-back probe BEFORE the expensive bootstrap — same rationale
     // as daytona: a box that can't reach our callback URL can never run.
     await assertDialbackReachable(driver, "box");
+    mark("dial-back verified");
     await bootstrapRemoteSandbox(driver, "box");
+    mark("runner ready");
     await setupRemoteWorkspace(
       driver,
       cwd,
@@ -756,6 +773,7 @@ export class BoxProvider implements SandboxProvider {
       repo.id,
       { sandboxId: box.id, provider: this.id, sessionId: spec.sessionId, repoId: repo.id, trustProfile: trust.trustProfile },
     );
+    mark("workspace ready");
     writeRemoteState({
       sandboxId: box.id,
       provider: this.id,
@@ -770,24 +788,6 @@ export class BoxProvider implements SandboxProvider {
     return this.makeHandle(cfg, box.id, spec.sessionId, cwd);
   }
 
-  /** Cursor-paginated list, matched by name client-side (no server filter). */
-  private async findBoxBySession(
-    cfg: BoxClientConfig,
-    sessionId: string,
-  ): Promise<BoxRecord | null> {
-    let cursor: string | null = null;
-    for (let page = 0; page < 5; page++) {
-      const qs = `limit=100${cursor ? `&cursor=${encodeURIComponent(cursor)}` : ""}`;
-      const res: BoxListPage = await boxApi<BoxListPage>(cfg, "GET", `/boxes?${qs}`);
-      const hit = (res.boxes || []).find(
-        (b) => b.name === sessionId && String(b.state || "") !== "error",
-      );
-      if (hit) return hit;
-      if (!res.pageInfo?.hasMore || !res.pageInfo.nextCursor) return null;
-      cursor = res.pageInfo.nextCursor;
-    }
-    return null;
-  }
 
   private makeHandle(
     cfg: BoxClientConfig,

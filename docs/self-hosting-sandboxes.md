@@ -628,13 +628,15 @@ Sandboxes**. It is stored as an opaque workspace secret; new Boxes use
 
 - Projects opt in independently. Preparation runs the repository setup inside
   a Box, scrubs launch credentials, and publishes a named snapshot. Subsequent
-  prewarms and sessions restore that exact prepared filesystem, fetch the current
-  default branch on adoption, and are sized
+  prewarms and sessions restore that exact prepared filesystem and are sized
   with Box's fixed **Small** (2 vCPU / 4 GB / at least 40 GB), **Default** (4 /
   8 GB / at least 80 GB), or **Large** (8 / 16 GB / at least 100 GB) profile.
 - Warm-on-typing creates a Box while the user composes and the new session
   adopts it. Cold creation falls back cleanly when a named snapshot has gone
-  stale.
+  stale. Snapshot restores branch from the snapshot's `origin/main` without a
+  synchronous fetch: fetching and checking out first forced Box to hydrate the
+  9.6 GB lazy filesystem and added 40 seconds. Templates live for 24 hours, so
+  fetch explicitly when a task needs a newer upstream commit.
 - The command API's synchronous limit is 600 seconds. Longer work and
   background commands use Box's native detached-process endpoint and poll its
   separate stdout/stderr and exit status.
