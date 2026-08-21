@@ -31,9 +31,13 @@
  * No radius, fill or shadow here: `ui/popover.tsx` gives every popup the same
  * `rounded-popup` glass card, and this one has no reason to be a different
  * object from the rest of them.
+ *
+ * It opens with a little more room than it closes with. The first thing in the
+ * card is a tinted plate, and a plate set at the same 8px the card ends on
+ * reads as pressed against the top edge rather than sitting inside it.
  */
 export const WS_SUMMARY_CARD =
-	"flex max-h-[min(72vh,640px)] w-[300px] flex-col overflow-y-auto py-2";
+	"flex max-h-[min(72vh,640px)] w-[300px] flex-col overflow-y-auto pt-3 pb-2";
 
 /**
  * Band label ("Assets"), taken from the sidebar so the card heads its lists
@@ -41,17 +45,21 @@ export const WS_SUMMARY_CARD =
  * but not their 31px pitch: a label belongs to the rows under it, so it keeps
  * the gap above and gives up most of the one below.
  *
- * It opens its band with the gap a hairline used to hold. A label in bold ink
- * over a run of quiet rows already reads as the start of something, so the
- * line under it was drawing a boundary the type had drawn first, and the card
- * says elsewhere that nothing in it carries a rule.
+ * It opens its band with the gap a hairline used to hold. A label set apart by
+ * space already reads as the start of something, so the line under it was
+ * drawing a boundary the layout had drawn first, and the card says elsewhere
+ * that nothing in it carries a rule.
+ *
+ * Quiet ink, medium weight. The label names a band, it does not compete with
+ * the rows in it: a bold, darker heading over four grey rows made the heading
+ * the loudest thing in a card whose subject is the rows.
  *
  * The band above it has no label. It holds the state of the work itself, which
  * is what the card IS, and a heading over it could only repeat the card's own
  * name back at you.
  */
 export const WS_SUMMARY_SECTION =
-	"mt-3 flex h-[22px] shrink-0 items-center px-4 text-label font-semibold text-dim first:mt-1 " +
+	"mt-3 flex h-[22px] shrink-0 items-center px-4 text-label font-medium text-faint first:mt-1 " +
 	// The PR plate already closes with its own bottom breathing room. Do not
 	// stack the next section's full top gap on it as well.
 	"[.ws-summary-band+&]:mt-0";
@@ -61,6 +69,11 @@ export const WS_SUMMARY_SECTION =
  * before it stops reading as a cramped menu. Anything under about 28 and the
  * glyph column and the labels start to crowd.
  *
+ * The glyph sits 6px from its label. A row is one thing being named, so the
+ * mark and the words it belongs to should read as a pair rather than as two
+ * columns; the wider gap it used to carry left the rail floating away from the
+ * text it introduces.
+ *
  * `group/ws` lets a trailing action fade in on hover without reserving its own
  * hover state.
  */
@@ -69,10 +82,10 @@ export const WS_SUMMARY_SECTION =
  *  are module-scope consts, so a reference from a line above would evaluate in
  *  the temporal dead zone and throw at import. */
 const BAND_ROW =
-	" [.ws-summary-band_&]:mx-0 [.ws-summary-band_&]:w-full [.ws-summary-band_&]:px-3";
+	" [.ws-summary-band_&]:mx-0 [.ws-summary-band_&]:w-full [.ws-summary-band_&]:px-2";
 
 export const WS_SUMMARY_ROW =
-	"group/ws mx-2 flex h-[31px] w-[calc(100%_-_16px)] min-w-0 shrink-0 cursor-pointer items-center gap-3.5 " +
+	"group/ws mx-2 flex h-[31px] w-[calc(100%_-_16px)] min-w-0 shrink-0 cursor-pointer items-center gap-1.5 " +
 	"rounded-row border-none bg-transparent px-2 text-left text-item-title text-fg " +
 	"hover:bg-hover focus-ring " +
 	// Inside the PR band the row is already inset by the band, and the neutral
@@ -89,7 +102,7 @@ export const WS_SUMMARY_ROW =
  * to the PR, the button does the thing.
  */
 export const WS_SUMMARY_STATUS_ROW =
-	"mx-2 flex min-h-[38px] w-[calc(100%_-_16px)] min-w-0 shrink-0 items-center gap-3.5 " +
+	"mx-2 flex min-h-[38px] w-[calc(100%_-_16px)] min-w-0 shrink-0 items-center gap-1.5 " +
 	"rounded-row px-2 text-left text-item-title text-fg" +
 	BAND_ROW;
 
@@ -107,13 +120,13 @@ export const WS_SUMMARY_STATUS_ROW =
  * all: a PR with nothing to report has no colour to lend, and a grey plate
  * would only draw a box around two rows.
  *
- * Its 8px outer gutter matches the card's top padding, and it gives its rows
- * 12px inside. Its radius subtracts that shared inset from the popup token, so
- * the tinted plate follows the popup's outer corner exactly.
+ * Its 8px outer gutter keeps its rows on the card's 16px content rail. Its
+ * radius stays near the popup's own: subtracting the full gutter left a plate
+ * this short reading as a rectangle, so it gives up 2px instead of 8.
  */
 export const WS_SUMMARY_BAND =
 	"ws-summary-band mx-2 mb-1 flex min-w-0 shrink-0 flex-col " +
-	"[border-radius:calc(var(--radius-popup)_-_8px)] [corner-shape:squircle]";
+	"[border-radius:calc(var(--radius-popup)_-_2px)] [corner-shape:squircle]";
 
 /** The band's inner padding, once it has a fill to hold. An untinted band is
  *  invisible, so it stays flush and the rows keep the list's own pitch. */
@@ -176,9 +189,15 @@ export const WS_SUMMARY_STATE = "shrink-0 text-meta font-medium";
  * carries a fill, and each frame's own border is enough to hold the row
  * together. It keeps the rows' 16px content rail, so a frame starts at the
  * same left edge as every label above it.
+ *
+ * `pt-2` is what makes its label sit like every other one. A row band gets the
+ * gap under its heading for free: the row is 31px around a 15px line, so its
+ * text starts 8px below the label's box. A frame has no such slack and would
+ * butt straight up against the heading, which reads as a tighter label than
+ * the ones over Review and Changes. Pay the 8px here instead.
  */
 export const WS_SUMMARY_STRIP =
-	"mx-2 flex snap-x snap-mandatory gap-2 overflow-x-auto overflow-y-hidden px-2 pb-1 " +
+	"mx-2 flex snap-x snap-mandatory gap-2 overflow-x-auto overflow-y-hidden px-2 pt-2 pb-1 " +
 	"[scroll-padding-left:8px] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden";
 
 /** One frame in that strip: the picture, with its filename under it. */

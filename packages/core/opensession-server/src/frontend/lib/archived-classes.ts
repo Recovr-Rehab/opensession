@@ -4,6 +4,19 @@
  */
 export const ARCHIVED_LIST = "-mx-3";
 
+/**
+ * Phone Search lives at the thumb edge instead of spending permanent room
+ * under the navigation bar. The fade keeps rows legible as they pass behind
+ * the floating field without drawing a hard toolbar divider.
+ */
+export const ARCHIVED_PHONE_SEARCH_DOCK =
+	"pointer-events-none fixed inset-x-0 bottom-0 z-30 hidden px-3.5 pt-6 " +
+	"pb-[max(12px,env(safe-area-inset-bottom,0px))] phone:block " +
+	"phone:[body.kb-open_&]:pb-3 " +
+	"before:pointer-events-none before:absolute before:inset-0 before:-z-[1] " +
+	"before:bg-[linear-gradient(to_bottom,transparent_0%,var(--bg)_48%)] " +
+	"[&>input]:pointer-events-auto";
+
 /** Section labels and row contents share the page's content edge. The list
  * itself extends 12px beyond it so the hover wash has room to breathe. */
 export const ARCHIVED_SECTION_LABEL =
@@ -46,8 +59,8 @@ export const ARCHIVED_ROW =
 	"after:pointer-events-none after:absolute after:right-3 after:bottom-0 after:left-[42px] " +
 	"after:h-px after:bg-line after:transition-opacity after:duration-[var(--dur-micro)] " +
 	"hover:after:opacity-0 focus-within:after:opacity-0 " +
-	"phone:z-[1] phone:gap-2.5 phone:touch-pan-y phone:bg-surface phone:py-3 phone:pr-3 " +
-	"phone:transform-[translateX(var(--swipe-x,0))] phone:after:left-[40px]";
+	"phone:z-[1] phone:gap-2.5 phone:touch-pan-y phone:bg-surface phone:px-4 phone:py-3.5 " +
+	"phone:transform-[translateX(var(--swipe-x,0))] phone:after:left-[44px]";
 
 /**
  * The open action, stretched over the whole row by its own `::after` so a click

@@ -1,8 +1,7 @@
 import { SessionKernelActorClient } from "./actor-client";
 import { installSessionKernelActor } from "./kernel";
 import { setServiceReadiness } from "../service-readiness";
-import { dirname, join } from "node:path";
-import { isCompiledBinary } from "../../runner-host/exe";
+import { workerEntry } from "../../runner-host/exe";
 
 type ActorRuntimeState = {
   client?: SessionKernelActorClient;
@@ -22,10 +21,8 @@ const runtime = (globalActor.__opensessionSessionKernelActor ??= {});
  * compile.ts stages it next to the sharp sidecar). A source checkout runs the
  * TypeScript entry directly.
  */
-function sessionKernelWorkerUrl(): string {
-  return isCompiledBinary()
-    ? join(dirname(process.execPath), "session-kernel-worker.js")
-    : new URL("../../session-kernel-worker.ts", import.meta.url).href;
+function sessionKernelWorkerUrl(): string | URL {
+  return workerEntry("session-kernel-worker.js", new URL("../../session-kernel-worker.ts", import.meta.url).href);
 }
 
 /** Start the authoritative actor before the gateway hydrates mutable session state. */

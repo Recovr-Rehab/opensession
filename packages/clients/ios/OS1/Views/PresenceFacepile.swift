@@ -41,9 +41,9 @@ struct PresenceFacepile: View {
     /// overlap to read as a pile, short of hiding a face behind its neighbour.
     private var overlap: CGFloat { stacked ? size / 3 : -2 }
 
-    /// The seam's width. Two points, like the web's 2px box-shadow: one hair
-    /// is invisible against a photograph, three starts to read as a border.
-    private let seamWidth: CGFloat = 2
+    /// A one-point cutout keeps overlapping photos distinct without making
+    /// the separator heavier than the row it belongs to.
+    private let seamWidth: CGFloat = 1
 
     var body: some View {
         if viewers.isEmpty {
@@ -95,7 +95,10 @@ struct PresenceFacepile: View {
             .background {
                 if separated, separation == .seam {
                     SquircleCapsule()
-                        .fill(OS1VisualStyle.raised)
+                        // This is the row showing through, not a frame around
+                        // the picture. Using its exact canvas avoids a grey
+                        // halo on the white sidebar.
+                        .fill(OS1VisualStyle.background)
                         .frame(width: size, height: size)
                         .offset(x: -seamWidth)
                 }

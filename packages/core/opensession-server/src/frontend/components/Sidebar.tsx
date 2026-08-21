@@ -320,6 +320,7 @@ const AUTOMATION_COLOR = "#d29922";
 export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 	sessions,
 	registeredRepos,
+	directToMainBranches,
 	sessionsError,
 	sessionsLoading,
 	onRetrySessions,
@@ -3088,7 +3089,12 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 							className={`size-2 shrink-0 rounded-full ${SIDEBAR_STATUS_DOT.running}`}
 						/>
 					) : (
-						<WsPrStatusMark sessions={row.sessions} size={18} workspace={row.workspace} />
+						<WsPrStatusMark
+							sessions={row.sessions}
+							size={18}
+							workspace={row.workspace}
+							shipsDirectlyToMain={rowShipsDirectlyToMain(row)}
+						/>
 					)}
 				</span>
 				{/* Inbox rows name their repo with the tile alone, in front of the
@@ -3472,6 +3478,20 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 		row.sessions[0]?.repo ||
 		sessionRepo(row.sessions[0] || ({} as UnifiedSession))
 	);
+	}
+	function shipsDirectlyToMain(
+		repo: string | undefined,
+		branch: string | null | undefined,
+	) {
+		const defaultBranch = repo ? directToMainBranches[repo] : undefined;
+		return !!defaultBranch && (!branch || branch === defaultBranch);
+	}
+	function rowShipsDirectlyToMain(row: WsRow) {
+		const repo = wsRowRepo(row);
+		const branch =
+			row.workspace?.branch ||
+			row.sessions.find((session) => session.repo === repo)?.branch;
+		return shipsDirectlyToMain(repo, branch);
 	}
 	const rowIsScratch = (row: WsRow) => isScratchWorkspace(row.sessions);
 	// Repo-less Ask workspaces get their own band above the projects. Checked
@@ -4168,28 +4188,30 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 							    (20px, i.e. `inset-1` on a 24px glyph) crowds the plus
 							    against its own wash. `corner-shape` has to be restated
 							    because it does not inherit into a pseudo-element. */}
-							<span
-								role="button"
-								tabIndex={0}
-								className="relative ml-auto inline-flex size-7 shrink-0 items-center justify-center rounded-md text-faint opacity-100 transition-[opacity,color] duration-150 hover:text-fg focus-visible:opacity-100 md:opacity-0 md:group-hover:opacity-100 before:absolute before:inset-0.5 before:z-0 before:rounded-sm before:[corner-shape:var(--cs)] before:transition-[background] before:content-[''] hover:before:bg-hover [&>*]:relative [&>*]:z-[1]"
-								title={
-									repo === ASK_BAND
-										? "New Ask session, no repo"
-										: `New session in ${repoLabel(repo)}`
-								}
-								onClick={(e) => {
-									e.stopPropagation();
-									onNewSessionInRepo(repo);
-								}}
-								onKeyDown={(e) => {
-									if (e.key === "Enter" || e.key === " ") {
+							{!borrowedLens && (
+								<span
+									role="button"
+									tabIndex={0}
+									className="relative ml-auto inline-flex size-7 shrink-0 items-center justify-center rounded-md text-faint opacity-100 transition-[opacity,color] duration-150 hover:text-fg focus-visible:opacity-100 md:opacity-0 md:group-hover:opacity-100 before:absolute before:inset-0.5 before:z-0 before:rounded-sm before:[corner-shape:var(--cs)] before:transition-[background] before:content-[''] hover:before:bg-hover [&>*]:relative [&>*]:z-[1]"
+									title={
+										repo === ASK_BAND
+											? "New Ask session, no repo"
+											: `New session in ${repoLabel(repo)}`
+									}
+									onClick={(e) => {
 										e.stopPropagation();
 										onNewSessionInRepo(repo);
-									}
-								}}
-							>
-								<IconPlus size={20} />
-							</span>
+									}}
+									onKeyDown={(e) => {
+										if (e.key === "Enter" || e.key === " ") {
+											e.stopPropagation();
+											onNewSessionInRepo(repo);
+										}
+									}}
+								>
+									<IconPlus size={20} />
+								</span>
+							)}
 						</button>
 						{open ? (
 							<div className="mt-0.5">
@@ -4805,7 +4827,7 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 							</div>
 							<Tooltip label="Back to your workspaces">
 								<button
-									className="flex size-8 shrink-0 items-center justify-center rounded-sm border-0 bg-transparent text-dim transition-[color,background-color,scale] hover:bg-hover hover:text-fg active:scale-[0.96] phone:size-11 motion-reduce:transform-none"
+									className="relative flex size-10 shrink-0 items-center justify-center rounded-full border-0 bg-transparent text-dim transition-[color,scale] before:absolute before:inset-1 before:rounded-full before:transition-colors before:content-[''] hover:text-fg hover:before:bg-hover active:scale-[0.96] phone:size-11 motion-reduce:transform-none [&>*]:relative [&>*]:z-[1]"
 									onClick={() => setFilter({ person: "me" })}
 									aria-label="Back to your workspaces"
 								>
@@ -4883,7 +4905,7 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 					<div
 						className={cn(
 							"shrink-0 items-center gap-1.5",
-							isPhone ? "hidden" : "flex",
+							isPhone || borrowedLens ? "hidden" : "flex",
 						)}
 						ref={actionsRef}
 					>
@@ -4968,6 +4990,7 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 			{/* On phones the filter button lives in the top bar (next to Search);
 			    its popover anchors there. Desktop keeps it in the header. */}
 			{isPhone &&
+				!borrowedLens &&
 				headerActionsEl &&
 				createPortal(
 					<>
@@ -5450,6 +5473,7 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 									onArchive={(current) => archiveWithNext(s, current)}
 									pinned={pin.pinned}
 									onTogglePin={pin.toggle}
+									shipsDirectlyToMain={shipsDirectlyToMain(s.repo, s.branch)}
 									onRename={(title) => onRename(s, title)}
 									onSetStatus={(st) => onSetStatus([s], st)}
 								/>
@@ -5907,6 +5931,7 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 														onArchive={(current) => archiveWithNext(s, current)}
 														pinned={pin.pinned}
 														onTogglePin={pin.toggle}
+														shipsDirectlyToMain={shipsDirectlyToMain(s.repo, s.branch)}
 														onRename={(title) => onRename(s, title)}
 														onSetStatus={(st) => onSetStatus([s], st)}
 													/>

@@ -13,9 +13,16 @@ beforeEach(() => {
 
 describe("toast", () => {
 	test("fires and dismisses", () => {
-		const id = toast("Link copied");
-		expect(activeToasts().map((t) => t.message)).toEqual(["Link copied"]);
+		const id = toast("Saved as draft");
+		expect(activeToasts().map((t) => t.message)).toEqual(["Saved as draft"]);
 		dismissToast(id);
+		expect(activeToasts()).toHaveLength(0);
+	});
+
+	test("leaves link-copy confirmation to the control or platform", () => {
+		expect(toast("Link copied")).toBe(0);
+		expect(toast("Preview link copied")).toBe(0);
+		expect(toast("Pull request link copied")).toBe(0);
 		expect(activeToasts()).toHaveLength(0);
 	});
 

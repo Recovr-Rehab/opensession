@@ -8,6 +8,8 @@ export interface Props {
 	sessions: UnifiedSession[];
 	/** Repositories registered on this instance, including ones with no sessions yet. */
 	registeredRepos: string[];
+	/** Shared-checkout repos whose sessions ship on the default branch, keyed by repo id. */
+	directToMainBranches: Record<string, string>;
 	/** The initial/live session list request failed entirely. */
 	sessionsError: string | null;
 	/** True until the first session-list request settles. */

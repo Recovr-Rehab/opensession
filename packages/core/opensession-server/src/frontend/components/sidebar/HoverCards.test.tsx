@@ -193,6 +193,18 @@ describe("workspace PR status marks", () => {
 		expect(html).toContain("text-purple");
 		expect(html).not.toContain("text-faint");
 	});
+
+	test("uses an idle dot when the repo ships directly to main", () => {
+		const html = renderToStaticMarkup(
+			<WsPrStatusMark
+				sessions={[session({ branch: "main" })]}
+				size={18}
+				shipsDirectlyToMain
+			/>,
+		);
+		expect(html).toContain("bg-faint");
+		expect(html).not.toContain("No pull request");
+	});
 });
 
 describe("workspace run status marks", () => {

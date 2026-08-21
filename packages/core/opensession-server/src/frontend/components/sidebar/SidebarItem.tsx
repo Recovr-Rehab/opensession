@@ -101,6 +101,7 @@ export function SidebarItem({
 	onArchive: onArchiveRequest,
 	pinned,
 	onTogglePin,
+	shipsDirectlyToMain = false,
 	onRename,
 	onSetStatus,
 }: {
@@ -120,6 +121,8 @@ export function SidebarItem({
 	onArchive: (current: HTMLButtonElement | null) => void;
 	pinned: boolean;
 	onTogglePin: () => void;
+	/** The session commits to the repo's default branch, so no PR is expected. */
+	shipsDirectlyToMain?: boolean;
 	onRename: (title: string) => void;
 	/** Pin this session into a sidebar lane (null = back to derived). Present on
 	    automation rows — it's how an automation run graduates into your lanes. */
@@ -490,7 +493,11 @@ export function SidebarItem({
 							className={`size-2 shrink-0 rounded-full ${SIDEBAR_STATUS_DOT.running}`}
 						/>
 					) : (
-						<WsPrStatusMark sessions={[session]} size={18} />
+						<WsPrStatusMark
+							sessions={[session]}
+							size={18}
+							shipsDirectlyToMain={shipsDirectlyToMain}
+						/>
 					)}
 				</span>
 				{editing ? (

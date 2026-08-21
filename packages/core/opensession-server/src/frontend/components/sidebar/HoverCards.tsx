@@ -200,6 +200,7 @@ export function WsPrStatusMark({
 	sessions,
 	size,
 	workspace,
+	shipsDirectlyToMain = false,
 }: {
 	sessions: UnifiedSession[];
 	size: number;
@@ -208,6 +209,8 @@ export function WsPrStatusMark({
 		prNumber?: number;
 		draft?: { text: string } | null;
 	} | null;
+	/** This work lands on the default branch, so an absent PR is not missing work. */
+	shipsDirectlyToMain?: boolean;
 }) {
 	// Read the authoritative multi-PR projection before the legacy flat fields.
 	// A Slack session can own a discovered PR through `prs[]` while `prUrl` and
@@ -243,6 +246,18 @@ export function WsPrStatusMark({
 				/>
 			);
 		}
+		// A shared checkout ships on the default branch. The grey PR glyph used to
+		// imply that this row was missing a PR it should create; here no PR is the
+		// intended path, so keep the lane's quiet idle dot instead.
+		if (shipsDirectlyToMain)
+			return (
+				<span
+					className="flex shrink-0 items-center justify-center"
+					style={{ width: size, height: size }}
+				>
+					<span className={`size-2 shrink-0 rounded-full ${SIDEBAR_STATUS_DOT.idle}`} />
+				</span>
+			);
 		return (
 			<span className="flex items-center" title="No pull request">
 				<IconPullRequest size={size} className="text-faint" />

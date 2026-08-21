@@ -5,6 +5,7 @@ import { sessionSourceLabel } from "../lib/brand";
 import { SOURCE_CHIP, sourceChipTone } from "../lib/source-chip-classes";
 import {
 	ARCHIVED_LIST,
+	ARCHIVED_PHONE_SEARCH_DOCK,
 	ARCHIVED_ROW,
 	ARCHIVED_ROW_ACTION,
 	ARCHIVED_SWIPE_ACTION,
@@ -361,10 +362,10 @@ export function Archived({
 	}
 
 	// Match Pull requests on desktop. On a phone the title and filter share the
-	// top bar, while search gets a full-width row directly below it.
+	// top bar, while Search floats at the thumb edge below the list.
 	const searchAction = (
 		<Input
-			className="w-[200px] min-w-[90px] shrink-[100] phone:w-full"
+			className="w-[200px] min-w-[90px] shrink-[100] phone:min-h-11 phone:w-full phone:px-3.5 phone:text-input-phone"
 			type="search"
 			aria-label="Search archived sessions"
 			placeholder="Search archived…"
@@ -484,10 +485,8 @@ export function Archived({
 		>
 			{desktopPortaled ? createPortal(actions, topbarActionsEl) : null}
 			{mobileFilterPortaled ? createPortal(filterAction, mobileActionsEl) : null}
-			<div className="mx-auto w-full max-w-[860px] px-6 pb-[60px] pt-7 phone:px-3.5 phone:pb-12 phone:pt-2 phone:[body.kb-open_&]:pt-[max(env(safe-area-inset-top,0px),8px)]">
-				{isPhone ? (
-					<div className="mb-3 w-full">{searchAction}</div>
-				) : !desktopPortaled ? (
+			<div className="mx-auto w-full max-w-[860px] px-6 pb-[60px] pt-7 phone:px-3.5 phone:pb-[calc(5.5rem+env(safe-area-inset-bottom,0px))] phone:pt-2 phone:[body.kb-open_&]:pb-[5rem] phone:[body.kb-open_&]:pt-[max(env(safe-area-inset-top,0px),8px)]">
+				{!isPhone && !desktopPortaled ? (
 					<div className="mb-3 flex items-center gap-2">{actions}</div>
 				) : null}
 				<p className="m-0 mb-[18px] text-supporting text-dim phone:mb-3.5">
@@ -666,6 +665,7 @@ export function Archived({
 				</div>
 			)}
 			</div>
+			{isPhone ? <div className={ARCHIVED_PHONE_SEARCH_DOCK}>{searchAction}</div> : null}
 		</div>
 	);
 }

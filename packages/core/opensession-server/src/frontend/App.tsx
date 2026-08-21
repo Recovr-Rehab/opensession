@@ -218,7 +218,11 @@ import {
 	receivePins,
 } from "./lib/pins";
 import { receiveMention, receiveMentionsCleared } from "./lib/mentions";
-import { personFilterFor, setFilter } from "./lib/sidebar-filter";
+import {
+	personFilterFor,
+	setFilter,
+	useSidebarFilter,
+} from "./lib/sidebar-filter";
 import { applyTabOrder, saveTabOrder, onTabOrderChanged } from "./lib/tab-order";
 import { workspaceArchivedSessions } from "./lib/workspace-archive";
 import { useWorkspaceArchive } from "./hooks/useWorkspaceArchive";
@@ -693,9 +697,7 @@ export function App(
 	// Seeded from the repos this browser saw last (lib/repo-cache): PR-mention
 	// chips need the registered set to resolve, so without it the first paint of
 	// a transcript renders `opensession#128` as plain text and relinks a beat later.
-	const [registeredRepos, setRegisteredRepos] = useState<string[]>(() =>
-		cachedRepos().map((repo) => repo.id),
-	);
+	const [registeredRepoInfo, setRegisteredRepoInfo] = useState(cachedRepos);
 	const [firstMileIsComplete, setFirstMileIsComplete] =
 		useState(firstMileComplete);
 	const auth = useAuthStatus();
@@ -785,7 +787,7 @@ export function App(
 			.then((repos) => {
 				if (live) {
 					setKnownRepos(repos);
-					setRegisteredRepos(repos.map((repo) => repo.id));
+					setRegisteredRepoInfo(repos);
 				}
 			})
 			.catch(() => {});
@@ -1083,6 +1085,7 @@ export function App(
 	// desktop, but as a bottom sheet over the root list on phones.
 	const settingsActive = isSettingsRoute(route);
 	const isPhone = useIsPhone();
+	const borrowedSidebar = useSidebarFilter().person !== "me";
 
 	// A pushed detail page is showing (anything but the sidebar-root home view).
 	// On phones, Settings is a sheet floating over the root page rather than a
@@ -4905,7 +4908,12 @@ export function App(
 						<Sidebar
 							ref={sidebarRef}
 							sessions={sessions}
-							registeredRepos={registeredRepos}
+							registeredRepos={registeredRepoInfo.map((repo) => repo.id)}
+							directToMainBranches={Object.fromEntries(
+								registeredRepoInfo
+									.filter((repo) => repo.sharedCheckout)
+									.map((repo) => [repo.id, repo.defaultBranch]),
+							)}
 							sessionsError={sessionsError}
 							sessionsLoading={loading}
 							onRetrySessions={() => void refresh()}
@@ -5142,6 +5150,10 @@ export function App(
 						    sidebar's top chrome row, which vanishes when the sidebar is
 						    collapsed — this floating copy shows only then (CSS-gated). */}
 						<TitleBar pane />
+						{/* The overlapping collapsed controls require the pane's header to
+						    opt out of native dragging. Keep one empty grip beside them so the
+						    window can still move without stealing any control's clicks. */}
+						<div className="wco-collapsed-drag-handle" aria-hidden="true" />
 						{/* Floating re-open control, shown only while the desktop sidebar
 						    is collapsed (CSS-gated). Mirrors the brand-row toggle so the
 						    sidebar can always be brought back. */}
@@ -5541,10 +5553,8 @@ export function App(
 					</div>
 				)}
 
-				{/* Mobile-only floating + on the root list page — thumb-reach shortcut
-				    to the new-session palette (desktop hides it via CSS; the sidebar's
-				    own + covers that layout). */}
-				{!mobileDetail && (
+				{/* Mobile-only floating + on your root list page. */}
+				{!mobileDetail && !borrowedSidebar && (
 					<button
 						className={MOBILE_FAB}
 						onClick={() => openPalette()}

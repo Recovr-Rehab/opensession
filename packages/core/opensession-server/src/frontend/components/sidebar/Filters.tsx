@@ -226,6 +226,7 @@ export function FilterPopover({
 						align="end"
 						sideOffset={6}
 						alignOffset={isPhone ? -6 : -30}
+						className="[&>div]:p-2"
 					>
 						{/* Inbox has stable creation order and Activity owns recency.
 						    Status is the one layout where choosing lane order still makes

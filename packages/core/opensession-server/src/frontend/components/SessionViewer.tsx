@@ -37,6 +37,7 @@ import { isGitHubAttribution } from "@tellahq/opensession-protocol/notices";
 import type { TranscriptIndexEntry } from "@tellahq/opensession-protocol/session";
 import type {
 	UnifiedSession,
+	GitStatusInfo,
 	SessionNote,
 	SessionSlackShare,
 	TranscriptEntry,
@@ -101,7 +102,9 @@ import {
 	fetchSessionNotesApi,
 	postSessionNoteApi,
 	fetchPr,
+	fetchGitStatus,
 	fetchPreview,
+	moveSessionToBranchApi,
 	portalActionApi,
 	type WorkspaceMediaItem,
 	type ModelOption,
@@ -268,6 +271,7 @@ import {
 	IconEye,
 	IconInbox,
 	IconBranches,
+	IconNewBranch,
 	IconPullRequest,
 	IconLink,
 	IconSparkle,
@@ -322,6 +326,7 @@ import {
 	msgStreamingRow,
 } from "../lib/msg-classes";
 import { Menu, MENU_ICON } from "../ui/menu";
+import { Modal } from "../ui/modal";
 import { Tooltip } from "../ui/tooltip";
 import { CopyCheck, useCopy } from "../ui/copy";
 import { toast } from "../ui/toast";
@@ -4903,8 +4908,96 @@ export function SessionViewer({
 	}, [composerPrefillExternal, onComposerPrefillConsumed, isPhone]);
 
 	const [overflowOpen, setOverflowOpen] = useState(false);
+	const [overflowGit, setOverflowGit] = useState<{
+		sessionId: string;
+		status: GitStatusInfo | null;
+	} | null>(null);
+	const [branchActionBusy, setBranchActionBusy] = useState<
+		"move" | "create" | null
+	>(null);
+	const [createPrConfirmOpen, setCreatePrConfirmOpen] = useState(false);
 	const [mobileActionMenuEl, setMobileActionMenuEl] =
 		useState<HTMLDivElement | null>(null);
+	const primaryPrNumber = prPresentation.primary?.number;
+	// PR actions are tucked into the overflow menu. Fetch once when the session
+	// branch changes so the menu does not open first and add its actions later.
+	useEffect(() => {
+		if (!hasRepoWork || primaryPrNumber) return;
+		let stale = false;
+		fetchGitStatus(session.id, session.repo || undefined)
+			.then((status) => {
+				if (!stale) setOverflowGit({ sessionId: session.id, status });
+			})
+			.catch(() => {
+				if (!stale) setOverflowGit({ sessionId: session.id, status: null });
+			});
+		return () => {
+			stale = true;
+		};
+	}, [
+		hasRepoWork,
+		primaryPrNumber,
+		session.id,
+		session.repo,
+		session.branch,
+	]);
+	useEffect(() => {
+		setOverflowGit(null);
+		setBranchActionBusy(null);
+		setCreatePrConfirmOpen(false);
+	}, [session.id]);
+
+	async function moveToBranchFromMenu() {
+		if (isBusy || branchActionBusy) return;
+		setBranchActionBusy("move");
+		try {
+			const result = await moveSessionToBranchApi(session.id);
+			setOverflowOpen(false);
+			toast(
+				result.copiedFiles
+					? `Moved to ${result.branch} · ${result.copiedFiles} file${result.copiedFiles === 1 ? "" : "s"} copied`
+					: `Moved to ${result.branch}`,
+			);
+		} catch (error) {
+			toast(error instanceof Error ? error.message : "Could not move to a branch");
+		} finally {
+			setBranchActionBusy(null);
+		}
+	}
+
+	function requestCreatePr() {
+		if (!connected) return;
+		send({
+			type: "prompt",
+			sessionId: session.id,
+			user: getCurrentUser(),
+			content: "Commit any remaining work, push the branch, and open a PR for it.",
+		});
+	}
+
+	function createPrFromMenu() {
+		setOverflowOpen(false);
+		requestCreatePr();
+	}
+
+	async function moveAndCreatePr() {
+		if (!connected || isBusy || branchActionBusy) return;
+		setBranchActionBusy("create");
+		try {
+			const result = await moveSessionToBranchApi(session.id);
+			setCreatePrConfirmOpen(false);
+			requestCreatePr();
+			toast(`Moved to ${result.branch}. Creating PR…`);
+		} catch (error) {
+			toast(
+				error instanceof Error
+					? error.message
+					: "Could not move to a branch",
+			);
+		} finally {
+			setBranchActionBusy(null);
+		}
+	}
 	// Left-edge swipe on phones pops the topmost overlay before the page stack:
 	// the info page registers as a higher-priority back-swipe layer, so the
 	// gesture closes it instead of popping the whole session back to the
@@ -5332,6 +5425,39 @@ export function SessionViewer({
 					</div>
 				</div>
 			)}
+			<Modal.Root
+				open={createPrConfirmOpen}
+				onOpenChange={(open) => {
+					if (branchActionBusy !== "create") setCreatePrConfirmOpen(open);
+				}}
+				disablePointerDismissal={branchActionBusy === "create"}
+			>
+				<Modal.Content>
+					<Modal.Header title="Move to a branch?" />
+					<Modal.Description className="m-0 text-pretty text-supporting font-normal leading-relaxed text-dim">
+						You need to move this session to a branch before you can create a PR.
+					</Modal.Description>
+					<Modal.Footer>
+						<Modal.Close
+							render={
+								<Button
+									variant="ghost"
+									disabled={branchActionBusy === "create"}
+								>
+									Cancel
+								</Button>
+							}
+						/>
+						<Button
+							variant="primary"
+							disabled={!connected || isBusy || branchActionBusy === "create"}
+							onClick={() => void moveAndCreatePr()}
+						>
+							{branchActionBusy === "create" ? "Moving…" : "Move and create PR"}
+						</Button>
+					</Modal.Footer>
+				</Modal.Content>
+			</Modal.Root>
 			{!hideHeader && (() => {
 				const addToSidebarAction = (inMenu: boolean) =>
 					canAddToSidebar &&
@@ -5459,6 +5585,45 @@ export function SessionViewer({
 						</Menu.Popup>
 					</Menu.SubmenuRoot>
 				);
+				const menuGit =
+					overflowGit?.sessionId === session.id ? overflowGit.status : null;
+				const branchAction =
+					!primaryPrNumber && menuGit ? (
+						menuGit.sharedCheckout ? (
+							<>
+								<Menu.Item
+									disabled={isBusy || branchActionBusy !== null}
+									onClick={() => void moveToBranchFromMenu()}
+									title="Move this session into an isolated worktree"
+								>
+									<IconNewBranch size={20} className={MENU_ICON} />
+									<span className="grow">
+										{branchActionBusy === "move" ? "Moving…" : "Move to branch"}
+									</span>
+								</Menu.Item>
+								<Menu.Item
+									disabled={!connected || isBusy || branchActionBusy !== null}
+									onClick={() => {
+										setOverflowOpen(false);
+										setCreatePrConfirmOpen(true);
+									}}
+									title="Move to a branch and create a pull request"
+								>
+									<IconPullRequest size={20} className={MENU_ICON} />
+									<span className="grow">Create PR</span>
+								</Menu.Item>
+							</>
+						) : menuGit.branch ? (
+							<Menu.Item
+								disabled={!connected}
+								onClick={createPrFromMenu}
+								title="Ask this session to create a pull request"
+							>
+								<IconPullRequest size={20} className={MENU_ICON} />
+								<span className="grow">Create PR</span>
+							</Menu.Item>
+						) : null
+					) : null;
 				// What this workspace is to you: its name, and whether it sits in your
 				// sidebar. These lead the menu because they describe the session rather
 				// than doing something with it. Pin used to lead here too and no longer
@@ -5716,6 +5881,12 @@ export function SessionViewer({
 								{forkAction}
 								{spinOffAction}
 								{transcriptActions}
+								{branchAction && (
+									<>
+										<Menu.Separator className={VIEWER_MENU_SEP} />
+										{branchAction}
+									</>
+								)}
 								{/* Preview waits for its status before rendering, so it used to
 								    be parked below Delete to keep the rows above it still. That
 								    request is a local read that settles inside the popup's own

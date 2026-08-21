@@ -11,8 +11,8 @@
 
 /**
  * A hook name, not styling. Three places ask "is a popup open?" through it:
- * `base.css` hands the Electron title-bar drag region back to the page
- * (`html.wco:has(.app-menu-popup)`) so an outside press can dismiss, and
+ * `base.css` hands the Electron title-bar drag region back to the page while
+ * a visible popup carries this hook, so an outside press can dismiss, and
  * `ui/sheet.tsx` plus `components/AssetView.tsx` step out of the way of
  * Escape and the arrow keys while a popup owns them. Any popup that owns
  * those keys wears it.

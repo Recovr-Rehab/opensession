@@ -110,25 +110,23 @@ export async function unfurlForSession(
 ): Promise<{ blocks: any[] }> {
   const card = sessionSocialCardData(s, { includeShot: true });
   const { title } = card;
-  const hasScreenshot = await hasUsableSessionShot(card);
 
-  // Keep visible text single-sourced. A screenshot card owns the title. When
-  // there is no useful screenshot, a linked title replaces the image rather
-  // than rasterizing an empty white card.
-  const blocks: any[] = hasScreenshot
-    ? [
-        {
-          type: "image",
-          image_url: sessionSocialCardUrl(s.id, "banner"),
-          alt_text: `${title}, Open Session preview`,
-        },
-      ]
-    : [
-        {
-          type: "section",
-          text: { type: "mrkdwn", text: `*<${url}|${esc(title)}>*` },
-        },
-      ];
+  // The linked title always leads. The card below it is the session's own
+  // screenshots and nothing else, so it only appears when there is one to
+  // show: an empty rectangle says less than no image at all.
+  const blocks: any[] = [
+    {
+      type: "section",
+      text: { type: "mrkdwn", text: `*<${url}|${esc(title)}>*` },
+    },
+  ];
+  if (await hasUsableSessionShot(card)) {
+    blocks.push({
+      type: "image",
+      image_url: sessionSocialCardUrl(s.id),
+      alt_text: `${title}, Open Session preview`,
+    });
+  }
 
   // A missing creator stays missing rather than becoming "Open Session".
   const bits: string[] = [];

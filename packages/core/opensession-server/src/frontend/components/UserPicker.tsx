@@ -189,12 +189,12 @@ function AuthCard({
 }) {
 	return (
 		// Before sign-in there is no sidebar or header, so the desktop shell has
-		// none of the rows it normally makes draggable (base.css, `html.wco`) and
-		// the window cannot be moved at all. The backdrop is the handle here; the
-		// card opts back out so its controls stay clickable.
-		<div className="relative flex h-screen items-center justify-center overflow-hidden p-6 [html.wco_&]:[-webkit-app-region:drag] [html.wco_&]:[app-region:drag]">
+		// none of the rows it normally makes draggable. The backdrop is the handle
+		// here; the card opts back out so its controls stay clickable. The durable
+		// shell capability keeps this working if WCO geometry disappears.
+		<div className="relative flex h-screen items-center justify-center overflow-hidden p-6 [html.wco_&]:[-webkit-app-region:drag] [html.wco_&]:[app-region:drag] [html.desktop-shell_&]:[-webkit-app-region:drag] [html.desktop-shell_&]:[app-region:drag]">
 			<AuthBackdrop />
-			<div className="relative w-[400px] max-w-full rounded-2xl bg-surface p-8 text-center shadow-(--auth-card-edge) phone:p-6 [html.wco_&]:[-webkit-app-region:no-drag] [html.wco_&]:[app-region:no-drag]">
+			<div className="relative w-[400px] max-w-full rounded-2xl bg-surface p-8 text-center shadow-(--auth-card-edge) phone:p-6 [html.wco_&]:[-webkit-app-region:no-drag] [html.wco_&]:[app-region:no-drag] [html.desktop-shell_&]:[-webkit-app-region:no-drag] [html.desktop-shell_&]:[app-region:no-drag]">
 				<img
 					src={`${BASE_PATH}/mac-app-icon.png`}
 					alt=""
@@ -287,7 +287,7 @@ export function UserGate({ children }: { children: React.ReactNode }) {
 		// The same backdrop, so the wait and the card it resolves into are one
 		// screen rather than a white flash and then a picture.
 		return (
-			<div className="relative flex h-screen items-center justify-center overflow-hidden [html.wco_&]:[-webkit-app-region:drag] [html.wco_&]:[app-region:drag]">
+			<div className="relative flex h-screen items-center justify-center overflow-hidden [html.wco_&]:[-webkit-app-region:drag] [html.wco_&]:[app-region:drag] [html.desktop-shell_&]:[-webkit-app-region:drag] [html.desktop-shell_&]:[app-region:drag]">
 				<AuthBackdrop />
 				{showAuthWait ? (
 					<div role="status" aria-live="polite" className="relative text-supporting text-dim">

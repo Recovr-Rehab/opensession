@@ -1028,11 +1028,18 @@ md.use({
         // chip + data-session-id so the delegated handler (SessionViewer)
         // navigates client-side; href stays for middle/cmd-click and for
         // surfaces without the handler (full-page load, same tab).
-        if (internal.sessionId)
+        if (internal.sessionId) {
+          // A label that is only the id (bare or in a codespan) repeats what
+          // the chip already identifies, at full 39-char length. Label it
+          // from the session's own name instead, like a bare id in prose.
+          const label = (token.text ?? "").trim().replace(/^`+|`+$/g, "");
+          if (SESSION_ID_EXACT.test(label))
+            return sessionLink(internal.sessionId, token.href);
           return sessionChip(internal.sessionId, text, {
             href: token.href,
             tip: token.title || sessionTip(internal.sessionId),
           });
+        }
         if (internal.automationId)
           return automationChip(internal.automationId, text, token.href);
         return `<a href="${attr(token.href)}"${title}>${text}</a>`;

@@ -52,62 +52,28 @@ async function loadSharp(): Promise<SharpFactory | null> {
 	return sharpFactory;
 }
 
-export const SESSION_CARD_WIDTH = 1200;
-export const SESSION_CARD_HEIGHT = 630;
-/**
- * Banner variant, for Slack. A Block Kit `image` block is always laid out at
- * the message column width, so its aspect ratio decides how much space the
- * card uses. This height keeps the title centered while letting a 16:9
- * screenshot fill most of the card.
- */
-export const SESSION_CARD_BANNER_WIDTH = 1200;
-export const SESSION_CARD_BANNER_HEIGHT = 320;
-/**
- * Without a screenshot the banner shrinks to its own content instead of
- * holding a screenshot's worth of empty paper next to the title.
- */
-const BANNER_COMPACT_PAD_Y = 34;
-/**
- * A compact card is also cropped to its own content width. Slack lays every
- * image out at the message column width, so the crop is what removes the empty
- * paper: a narrower source with the same content fills the column instead of
- * floating in the left third of it. It rasterizes at 2x so the upscale to the
- * column stays sharp.
- */
-const BANNER_COMPACT_MIN_WIDTH = 520;
-/** Slack commonly shows the banner on a 2x display. */
-const BANNER_RENDER_SCALE = 2;
+const SESSION_CARD_VERSION = 24;
 
-export type SessionCardVariant = "card" | "banner";
-const SESSION_CARD_VERSION = 22;
-
-const CARD_INK = "#050609";
 const CARD_PAPER = "#FFFFFF";
-/** Left margin. */
-const PAD_X = 56;
-const TITLE_SIZE = 38;
-const TITLE_LINE_HEIGHT = 42;
-const TITLE_FONT = "Inter SemiBold 38";
-const TITLE_LETTER_SPACING = -1024;
-/** Every screenshot frame stays 16:9, including the ones behind the lead shot. */
-const SHOT_BANNER_WIDTH = 528;
-const SHOT_BANNER_HEIGHT = 297;
-const SHOT_CARD_WIDTH = 576;
-const SHOT_CARD_HEIGHT = 324;
-const SHOT_BANNER_INSET = 10;
-const SHOT_CARD_INSET = 24;
-const SHOT_BANNER_RADIUS = 26;
-const SHOT_CARD_RADIUS = 28;
-const SHOT_GAP = 32;
+/** Every frame stays 16:9, including the one behind the lead shot. */
+const SHOT_WIDTH = 640;
+const SHOT_HEIGHT = 360;
+const SHOT_RADIUS = 28;
+/** Room around the stack for its side and top shadows. */
+const SHOT_PAD_X = 40;
+const SHOT_PAD_TOP = 30;
+/** Hide the lower edge so the screenshots rise out of the card. */
+const SHOT_BOTTOM_CROP = 38;
+/** How far the card behind sits to the left, and how much lower. */
+const SHOT_STACK_OFFSET = 96;
+const SHOT_STACK_LIFT = 14;
 const SHOT_LIMIT = 2;
 /** Keep fallback candidates so an unusable first image does not hide a good one. */
 const SHOT_CANDIDATE_LIMIT = 12;
 /** Anything wider than a 16:9 capture with a small tolerance crops poorly. */
 const SHOT_MAX_ASPECT = 16 / 9 + 0.02;
-const SHOT_BANNER_STACK_OFFSET = 80;
-const SHOT_CARD_STACK_OFFSET = 92;
-const SHOT_BANNER_STACK_LIFT = 10;
-const SHOT_CARD_STACK_LIFT = 12;
+/** Link previews commonly render the card on a 2x display. */
+const CARD_RENDER_SCALE = 2;
 
 export interface SessionSocialCardData {
 	title: string;
@@ -115,43 +81,6 @@ export interface SessionSocialCardData {
 	repo?: string;
 	/** Strongest session screenshot candidates first. The renderer keeps two. */
 	shots?: string[];
-}
-
-function shotWidth(variant: SessionCardVariant): number {
-	return variant === "banner" ? SHOT_BANNER_WIDTH : SHOT_CARD_WIDTH;
-}
-
-function shotInset(variant: SessionCardVariant): number {
-	return variant === "banner" ? SHOT_BANNER_INSET : SHOT_CARD_INSET;
-}
-
-function shotRadius(variant: SessionCardVariant): number {
-	return variant === "banner" ? SHOT_BANNER_RADIUS : SHOT_CARD_RADIUS;
-}
-
-function shotHeight(variant: SessionCardVariant): number {
-	return variant === "banner" ? SHOT_BANNER_HEIGHT : SHOT_CARD_HEIGHT;
-}
-
-function shotStackOffset(variant: SessionCardVariant): number {
-	return variant === "banner"
-		? SHOT_BANNER_STACK_OFFSET
-		: SHOT_CARD_STACK_OFFSET;
-}
-
-/** How much room each title line has to the left of the screenshot stack. */
-function titleMeasure(
-	data: SessionSocialCardData,
-	variant: SessionCardVariant,
-): number {
-	const shotCount = Math.min(data.shots?.length ?? 0, SHOT_LIMIT);
-	const stackLeft = shotCount
-		? SESSION_CARD_WIDTH -
-			shotWidth(variant) -
-			shotInset(variant) -
-			shotStackOffset(variant) * (shotCount - 1)
-		: SESSION_CARD_WIDTH - PAD_X;
-	return stackLeft - SHOT_GAP - PAD_X;
 }
 
 function clean(value: string | null | undefined): string {
@@ -408,149 +337,12 @@ async function shotDataUrls(
 	return shots.map((shot) => shot.dataUrl);
 }
 
-function xml(value: string): string {
-	return value
-		.replaceAll("&", "&amp;")
-		.replaceAll("<", "&lt;")
-		.replaceAll(">", "&gt;")
-		.replaceAll('"', "&quot;")
-		.replaceAll("'", "&apos;");
-}
-
 function html(value: string): string {
 	return value
 		.replaceAll("&", "&amp;")
 		.replaceAll('"', "&quot;")
 		.replaceAll("<", "&lt;")
 		.replaceAll(">", "&gt;");
-}
-
-async function titleWidth(sharp: SharpFactory, title: string): Promise<number> {
-	const metadata = await sharp({
-		text: {
-			text: `<span letter_spacing="${TITLE_LETTER_SPACING}">${xml(title)}</span>`,
-			font: TITLE_FONT,
-			rgba: true,
-			dpi: 72,
-		},
-	}).metadata();
-	return metadata.width ?? 0;
-}
-
-async function truncateTitleLine(
-	sharp: SharpFactory,
-	value: string,
-	maxWidth: number,
-): Promise<string> {
-	if ((await titleWidth(sharp, value)) <= maxWidth) return value;
-	const characters = Array.from(value);
-	let low = 1;
-	let high = characters.length - 1;
-	while (low < high) {
-		const middle = Math.ceil((low + high) / 2);
-		const candidate = `${characters.slice(0, middle).join("").trimEnd()}...`;
-		if ((await titleWidth(sharp, candidate)) <= maxWidth) low = middle;
-		else high = middle - 1;
-	}
-	return `${characters.slice(0, low).join("").trimEnd()}...`;
-}
-
-/** Fit the title into at most two balanced 42px lines. */
-export async function fitSocialCardTitle(
-	title: string,
-	maxWidth: number = SESSION_CARD_WIDTH - PAD_X * 2,
-): Promise<string[]> {
-	const value = clean(title) || productName();
-	const sharp = await loadSharp();
-	if (!sharp) return [value];
-	const measure = Math.max(80, maxWidth);
-	if ((await titleWidth(sharp, value)) <= measure) return [value];
-
-	const boundaries = Array.from(value.matchAll(/\s+/g), (match) => match.index!);
-	const measured = new Map<
-		number,
-		{ first: string; second: string; firstWidth: number; secondWidth: number }
-	>();
-	const at = async (index: number) => {
-		const cached = measured.get(index);
-		if (cached) return cached;
-		const split = boundaries[index];
-		const first = value.slice(0, split).trim();
-		const second = value.slice(split).trim();
-		const [firstWidth, secondWidth] = await Promise.all([
-			titleWidth(sharp, first),
-			titleWidth(sharp, second),
-		]);
-		const result = { first, second, firstWidth, secondWidth };
-		measured.set(index, result);
-		return result;
-	};
-
-	if (boundaries.length) {
-		let low = 0;
-		let high = boundaries.length - 1;
-		while (low < high) {
-			const middle = Math.floor((low + high) / 2);
-			if ((await at(middle)).secondWidth <= measure) high = middle;
-			else low = middle + 1;
-		}
-		const firstValid = low;
-		low = firstValid;
-		high = boundaries.length - 1;
-		while (low < high) {
-			const middle = Math.ceil((low + high) / 2);
-			if ((await at(middle)).firstWidth <= measure) low = middle;
-			else high = middle - 1;
-		}
-		const lastValid = low;
-		const firstEdge = await at(firstValid);
-		const lastEdge = await at(lastValid);
-		if (
-			firstValid <= lastValid &&
-			firstEdge.secondWidth <= measure &&
-			firstEdge.firstWidth <= measure &&
-			lastEdge.firstWidth <= measure
-		) {
-			low = firstValid;
-			high = lastValid;
-			while (low < high) {
-				const middle = Math.floor((low + high) / 2);
-				const candidate = await at(middle);
-				if (candidate.firstWidth >= candidate.secondWidth) high = middle;
-				else low = middle + 1;
-			}
-			const candidates = [low - 1, low]
-				.filter((index) => index >= firstValid && index <= lastValid);
-			let best = await at(candidates[0]);
-			for (const index of candidates.slice(1)) {
-				const candidate = await at(index);
-				if (
-					Math.abs(candidate.firstWidth - candidate.secondWidth) <
-					Math.abs(best.firstWidth - best.secondWidth)
-				)
-					best = candidate;
-			}
-			return [best.first, best.second];
-		}
-	}
-
-	// A long unbroken word, or a title too long for two complete lines. Fill the
-	// first line, prefer a nearby word boundary, then ellipsize only line two.
-	const characters = Array.from(value);
-	let low = 1;
-	let high = characters.length - 1;
-	while (low < high) {
-		const middle = Math.ceil((low + high) / 2);
-		if ((await titleWidth(sharp, characters.slice(0, middle).join(""))) <= measure)
-			low = middle;
-		else high = middle - 1;
-	}
-	let split = low;
-	const wordBreak = value.lastIndexOf(" ", split);
-	if (wordBreak >= Math.floor(split * 0.6)) split = wordBreak;
-	const first = value.slice(0, split).trim();
-	const second = await truncateTitleLine(sharp, value.slice(split).trim(), measure);
-	return [first, second];
 }
 
 /**
@@ -603,116 +395,134 @@ interface ShotFrame {
 	index: number;
 	x: number;
 	y: number;
-	width: number;
-	height: number;
 	rotation: number;
 	pivotX: number;
 	pivotY: number;
-	shape: string;
 }
 
-function shotFrames(
-	variant: SessionCardVariant,
-	count: number,
-	height: number,
-): ShotFrame[] {
+/** The lead shot sits right, with the second card behind it and a touch lower. */
+function shotFrames(count: number): ShotFrame[] {
 	const frameCount = Math.min(count, SHOT_LIMIT);
-	const width = shotWidth(variant);
-	const frameHeight = shotHeight(variant);
-	const frontX = SESSION_CARD_WIDTH - width - shotInset(variant);
 	const stacked = frameCount > 1;
-	const bottomCrop = variant === "banner" ? 14 : 20;
-	const frontY = stacked
-		? height - frameHeight + bottomCrop
-		: (height - frameHeight) / 2;
-	const offsetX = shotStackOffset(variant);
-	const lift =
-		variant === "banner" ? SHOT_BANNER_STACK_LIFT : SHOT_CARD_STACK_LIFT;
 	return Array.from({ length: frameCount }, (_, index) => {
-		const x = frontX - offsetX * index;
-		const y = frontY + (index === 0 ? 0 : lift);
-		const rotation = stacked ? (index === 0 ? 2 : -5) : 0;
+		const x = (frameCount - 1 - index) * SHOT_STACK_OFFSET;
+		const y = index === 0 ? 0 : SHOT_STACK_LIFT;
 		return {
 			index,
 			x,
 			y,
-			width,
-			height: frameHeight,
-			rotation,
-			pivotX: x + width / 2,
-			pivotY: y + frameHeight,
-			shape: squircleRectPath(
-				x,
-				y,
-				width,
-				frameHeight,
-				shotRadius(variant),
-			),
+			rotation: stacked ? (index === 0 ? 2 : -5) : 0,
+			pivotX: x + SHOT_WIDTH / 2,
+			pivotY: y + SHOT_HEIGHT,
 		};
 	});
 }
 
-/** SVG source is exported so the visual can be inspected without PNG decoding. */
-export function sessionSocialCardSvg(
-	data: SessionSocialCardData,
-	displayTitle: string | string[] = clean(data.title) || productName(),
-	variant: SessionCardVariant = "card",
-	shots: string[] = [],
-	/** Measured width of the widest content row, for the compact crop. */
-	contentWidth?: number,
-): string {
-	const banner = variant === "banner";
-	const titleLines = (Array.isArray(displayTitle)
-		? displayTitle
-		: [displayTitle]
-	)
-		.map(clean)
-		.filter(Boolean)
-		.slice(0, 2);
-	if (!titleLines.length) titleLines.push(productName());
-	const contentHeight = titleLines.length * TITLE_LINE_HEIGHT;
-	const compact = banner && !shots.length;
-	const height = compact
-		? contentHeight + BANNER_COMPACT_PAD_Y * 2
-		: banner
-			? SESSION_CARD_BANNER_HEIGHT
-			: SESSION_CARD_HEIGHT;
-	const width = compact
-		? Math.min(
-				SESSION_CARD_WIDTH,
-				Math.max(
-					BANNER_COMPACT_MIN_WIDTH,
-					Math.round(contentWidth ?? 0) + PAD_X * 2,
-				),
-			)
-		: SESSION_CARD_WIDTH;
-	const blockTop = (height - contentHeight) / 2;
-	const frames = shotFrames(variant, shots.length, height);
-	const shotDefs = frames
+function rotatePoint(
+	x: number,
+	y: number,
+	pivotX: number,
+	pivotY: number,
+	degrees: number,
+): { x: number; y: number } {
+	if (!degrees) return { x, y };
+	const radians = (degrees * Math.PI) / 180;
+	const cos = Math.cos(radians);
+	const sin = Math.sin(radians);
+	const dx = x - pivotX;
+	const dy = y - pivotY;
+	return {
+		x: pivotX + dx * cos - dy * sin,
+		y: pivotY + dx * sin + dy * cos,
+	};
+}
+
+/** The fan's true extent, corners rotated, so the crop hugs what is drawn. */
+function stackBounds(frames: ShotFrame[]): {
+	minX: number;
+	minY: number;
+	maxX: number;
+	maxY: number;
+} {
+	let minX = Infinity;
+	let minY = Infinity;
+	let maxX = -Infinity;
+	let maxY = -Infinity;
+	for (const frame of frames) {
+		const corners: Array<[number, number]> = [
+			[frame.x, frame.y],
+			[frame.x + SHOT_WIDTH, frame.y],
+			[frame.x + SHOT_WIDTH, frame.y + SHOT_HEIGHT],
+			[frame.x, frame.y + SHOT_HEIGHT],
+		];
+		for (const [cornerX, cornerY] of corners) {
+			const point = rotatePoint(
+				cornerX,
+				cornerY,
+				frame.pivotX,
+				frame.pivotY,
+				frame.rotation,
+			);
+			minX = Math.min(minX, point.x);
+			minY = Math.min(minY, point.y);
+			maxX = Math.max(maxX, point.x);
+			maxY = Math.max(maxY, point.y);
+		}
+	}
+	return { minX, minY, maxX, maxY };
+}
+
+/**
+ * The card is the session's screenshots and nothing else. The title travels
+ * with the link itself (Slack's own line, or og:title), so drawing it here
+ * would say the same thing twice. No screenshot means no card: the caller
+ * shows a plain link instead of an empty rectangle.
+ *
+ * SVG source is exported so the visual can be inspected without PNG decoding.
+ */
+export function sessionSocialCardSvg(shots: string[]): string {
+	const frames = shotFrames(shots.length);
+	if (!frames.length) return "";
+	const bounds = stackBounds(frames);
+	// Whole pixels: a fractional offset would print through every coordinate in
+	// the file for no visible gain.
+	const offsetX = Math.round(SHOT_PAD_X - bounds.minX);
+	const offsetY = Math.round(SHOT_PAD_TOP - bounds.minY);
+	const width = Math.round(bounds.maxX - bounds.minX) + SHOT_PAD_X * 2;
+	const height =
+		Math.round(bounds.maxY - bounds.minY) + SHOT_PAD_TOP - SHOT_BOTTOM_CROP;
+	const placed = frames.map((frame) => ({
+		...frame,
+		x: frame.x + offsetX,
+		y: frame.y + offsetY,
+		pivotX: frame.pivotX + offsetX,
+		pivotY: frame.pivotY + offsetY,
+		shape: squircleRectPath(
+			frame.x + offsetX,
+			frame.y + offsetY,
+			SHOT_WIDTH,
+			SHOT_HEIGHT,
+			SHOT_RADIUS,
+		),
+	}));
+	const shotDefs = placed
 		.map(
 			(frame) =>
 				`  <clipPath id="shotClip${frame.index}" clipPathUnits="userSpaceOnUse"><path d="${frame.shape}"/></clipPath>`,
 		)
 		.join("\n");
-	const shotMarkup = [...frames]
+	const shotMarkup = [...placed]
 		.reverse()
 		.map((frame) => {
-			const shot = shots[frame.index];
 			const transform = frame.rotation
 				? ` transform="rotate(${frame.rotation} ${frame.pivotX} ${frame.pivotY})"`
 				: "";
 			return `<g${transform}><path d="${frame.shape}" fill="${CARD_PAPER}" filter="url(#shotShadow)"/>
-<g clip-path="url(#shotClip${frame.index})"><image href="${shot}" x="${frame.x}" y="${frame.y}" width="${frame.width}" height="${frame.height}" preserveAspectRatio="xMidYMin slice"/></g>
+<g clip-path="url(#shotClip${frame.index})"><image href="${shots[frame.index]}" x="${frame.x}" y="${frame.y}" width="${SHOT_WIDTH}" height="${SHOT_HEIGHT}" preserveAspectRatio="xMidYMin slice"/></g>
 <path d="${frame.shape}" fill="none" stroke="#000000" stroke-opacity="0.1"/></g>`;
 		})
 		.join("\n");
-	const titleMarkup = titleLines
-		.map(
-			(line, index) =>
-				`<text x="${PAD_X}" y="${blockTop + index * TITLE_LINE_HEIGHT + TITLE_LINE_HEIGHT / 2}" dominant-baseline="middle" fill="${CARD_INK}" font-size="${TITLE_SIZE}" font-weight="600" letter-spacing="-1.1">${xml(line)}</text>`,
-		)
-		.join("\n");
-	return `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}" overflow="hidden" font-family="Inter, Arial, sans-serif">
+	return `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}" overflow="hidden">
 <defs>
 ${shotDefs}
   <filter id="shotShadow" x="-26%" y="-34%" width="152%" height="178%" color-interpolation-filters="sRGB">
@@ -724,52 +534,25 @@ ${shotDefs}
 </defs>
 <rect width="${width}" height="${height}" fill="${CARD_PAPER}"/>
 ${shotMarkup}
-${titleMarkup}
 </svg>`;
 }
 
+/** Null when there is nothing to draw, or when sharp is unavailable. */
 export async function renderSessionSocialCard(
 	data: SessionSocialCardData,
-	variant: SessionCardVariant = "card",
 ): Promise<Buffer | null> {
-	// Null when sharp is unavailable: the route answers 501, while metadata
-	// and the rest of the compiled server remain available.
 	const sharp = await loadSharp();
 	if (!sharp) return null;
-	const renderScale = variant === "banner" ? BANNER_RENDER_SCALE : 1;
 	const shots = await shotDataUrls(
 		data.shots,
-		shotWidth(variant) * renderScale,
-		shotHeight(variant) * renderScale,
+		SHOT_WIDTH * CARD_RENDER_SCALE,
+		SHOT_HEIGHT * CARD_RENDER_SCALE,
 	);
-	// Missing or unreadable images give their space back to the title instead
-	// of leaving an unexplained blank where the stack would have been.
-	const title = await fitSocialCardTitle(
-		data.title,
-		titleMeasure(
-			shots.length ? { ...data, shots } : { ...data, shots: undefined },
-			variant,
-		),
-	);
-	// A card with no screenshot is cropped to what it actually holds, so measure
-	// the title rather than leaving it in a 1200px band of paper.
-	const compact = variant === "banner" && !shots.length;
-	const rowWidths = compact
-		? await Promise.all(title.map((line) => titleWidth(sharp, line)))
-		: [];
-	const svg = sessionSocialCardSvg(
-		data,
-		title,
-		variant,
-		shots,
-		rowWidths.length ? Math.max(...rowWidths) : undefined,
-	);
-	return sharp(
-		Buffer.from(svg),
-		// The complete Slack banner lands at 2x, including embedded screenshots.
-		// Rendering only the outer SVG at 2x would still upscale a 1x data image.
-		renderScale > 1 ? { density: 72 * renderScale } : undefined,
-	)
+	const svg = sessionSocialCardSvg(shots);
+	if (!svg) return null;
+	// The whole card lands at 2x, embedded screenshots included. Rendering only
+	// the outer SVG at 2x would still upscale a 1x data image.
+	return sharp(Buffer.from(svg), { density: 72 * CARD_RENDER_SCALE })
 		.png()
 		.toBuffer();
 }
@@ -782,12 +565,8 @@ function publicBase(): string {
 	).replace(/\/+$/, "");
 }
 
-export function sessionSocialCardUrl(
-	sessionId: string,
-	variant: SessionCardVariant = "card",
-): string {
-	const shape = variant === "banner" ? "&s=banner" : "";
-	return `${publicBase()}/session-card/${encodeURIComponent(sessionId)}/${cardToken(sessionId)}.png?v=${SESSION_CARD_VERSION}${shape}`;
+export function sessionSocialCardUrl(sessionId: string): string {
+	return `${publicBase()}/session-card/${encodeURIComponent(sessionId)}/${cardToken(sessionId)}.png?v=${SESSION_CARD_VERSION}`;
 }
 
 let cachedCardSecret = "";
@@ -853,8 +632,6 @@ export function sessionHtmlWithSocialMeta(
 	const extra = `
   <meta property="og:description" content="${html(description)}" />
   <meta property="og:url" content="${html(page)}" />
-  <meta property="og:image:width" content="${SESSION_CARD_WIDTH}" />
-  <meta property="og:image:height" content="${SESSION_CARD_HEIGHT}" />
   <meta property="og:image:alt" content="${html(`${data.title}, Open Session preview`)}" />
   <meta name="twitter:description" content="${html(description)}" />
   <meta name="twitter:image:alt" content="${html(`${data.title}, Open Session preview`)}" />`;
@@ -927,11 +704,12 @@ export function sessionSocialCardPublicRoutes(): Map<
 		const session = await findSessionAsync(sessionId);
 		if (!session) return Response.json({ error: "Not found" }, { status: 404 });
 		const data = sessionSocialCardData(session, { includeShot: true });
-		// Only the one named shape is honoured, so a crafted `s` cannot ask us to
-		// rasterize an arbitrary geometry.
-		const variant: SessionCardVariant =
-			url.searchParams.get("s") === "banner" ? "banner" : "card";
-		const cacheKey = `${SESSION_CARD_VERSION}:${session.id}@${variant}`;
+		if (!(await loadSharp()))
+			return Response.json(
+				{ error: "Social card rendering unavailable (sharp not installed)" },
+				{ status: 501 },
+			);
+		const cacheKey = `${SESSION_CARD_VERSION}:${session.id}`;
 		const fingerprint = cardFingerprint(data);
 		const cached = cardCache.get(cacheKey);
 		const now = Date.now();
@@ -939,12 +717,10 @@ export function sessionSocialCardPublicRoutes(): Map<
 		if (cached && cached.fingerprint === fingerprint && now - cached.at < CARD_CACHE_MS) {
 			bytes = cached.bytes;
 		} else {
-			const rendered = await renderSessionSocialCard(data, variant);
-			if (!rendered)
-				return Response.json(
-					{ error: "Social card rendering unavailable (sharp not installed)" },
-					{ status: 501 },
-				);
+			const rendered = await renderSessionSocialCard(data);
+			// A session with no usable screenshot has no card. Callers show a plain
+			// link rather than an empty rectangle.
+			if (!rendered) return Response.json({ error: "Not found" }, { status: 404 });
 			bytes = rendered;
 			rememberCard(cacheKey, { fingerprint, bytes, at: now });
 		}

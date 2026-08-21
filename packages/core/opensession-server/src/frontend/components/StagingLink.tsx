@@ -63,10 +63,9 @@ const SUMMARY_MARK =
 const SUMMARY_MARK_HOVER =
 	"hover:bg-[color-mix(in_srgb,currentColor_26%,transparent)] " +
 	"active:scale-[0.96] active:bg-[color-mix(in_srgb,currentColor_34%,transparent)]";
-/* Pulls the pair together. The status row spaces its parts 14px apart, which
-   is the distance between a mark and the words it belongs to. Two marks at
-   that distance read as two columns rather than as one leading cluster. */
-const SUMMARY_MARK_PAIR = "-mr-2";
+/* The mark's 20px glyph sits inside a 28px target. Pull its box 4px toward the
+   following label so the visible glyph keeps the row's 6px icon-to-text gap. */
+const SUMMARY_MARK_PAIR = "-mr-1";
 
 /* Spinning ring around the globe while the preview environment builds.
    border-t-current picks up the amber/green icon tone; the ring sits just

@@ -648,6 +648,34 @@ export function SessionTabs({
 						const session = member.session;
 						const waiting = !!session.waitingForInput;
 						const hex = colorHex(colors[key]);
+						const titleContent =
+							editKey === key ? (
+								<input
+									className={TAB_RENAME}
+									value={draft}
+									autoFocus
+									onChange={(e) => setDraft(e.target.value)}
+									onClick={(e) => e.stopPropagation()}
+									onDoubleClick={(e) => e.stopPropagation()}
+									onBlur={commitRename}
+									onKeyDown={(e) => {
+										if (e.key === "Enter") commitRename();
+										else if (e.key === "Escape") setEditKey(null);
+										e.stopPropagation();
+									}}
+								/>
+							) : (
+								<TabTitle
+									reserveClose
+									onDoubleClick={(e) => {
+										e.stopPropagation();
+										setDraft(session.title);
+										setEditKey(key);
+									}}
+								>
+									{session.title}
+								</TabTitle>
+							);
 						return (
 							<Reorder.Item key={key} {...reorderItemProps(key, nextActive)}>
 								<ContextMenu.Root>
@@ -672,32 +700,7 @@ export function SessionTabs({
 										) : (
 											session.isRunning && <span className={tabDotClass(false)} />
 										)}
-										{editKey === key ? (
-											<input
-												className={TAB_RENAME}
-												value={draft}
-												autoFocus
-												onChange={(e) => setDraft(e.target.value)}
-												onClick={(e) => e.stopPropagation()}
-												onDoubleClick={(e) => e.stopPropagation()}
-												onBlur={commitRename}
-												onKeyDown={(e) => {
-													if (e.key === "Enter") commitRename();
-													else if (e.key === "Escape") setEditKey(null);
-													e.stopPropagation();
-												}}
-											/>
-										) : (
-											<TabTitle
-												onDoubleClick={(e) => {
-													e.stopPropagation();
-													setDraft(session.title);
-													setEditKey(key);
-												}}
-											>
-												{session.title}
-											</TabTitle>
-										)}
+										{titleContent}
 										{/* Who else is in this tab. The sidebar's workspace row shows
 							    the same faces for the whole strip, which says a teammate
 							    is in here somewhere; on the tab it says where. Shown on

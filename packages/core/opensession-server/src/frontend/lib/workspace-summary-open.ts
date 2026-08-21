@@ -71,6 +71,6 @@ export function workspaceSummarySideOffset(
 	tabStripVisible: boolean,
 	reviewMode: boolean,
 ): number {
-	const sessionOffset = tabStripVisible ? 45 : 16;
+	const sessionOffset = tabStripVisible ? 49 : 20;
 	return sessionOffset + (reviewMode ? 84 : 0);
 }

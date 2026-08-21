@@ -3107,7 +3107,7 @@ struct SessionsListView: View {
     private var mobileFeedRow: some View {
         toolRow(
             title: "Feed",
-            symbol: "shippingbox",
+            symbol: "waveform.path.ecg",
             count: nil,
             accessibility: "Open Feed",
             hides: SidebarTools.feed,

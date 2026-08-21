@@ -1042,12 +1042,12 @@ struct SessionView: View {
         } label: {
             VStack(alignment: .leading, spacing: 1) {
                 // No run dot up here: the bar is identity and navigation,
-                // and the running state now reads where the work is — the
+                // and the running state now reads where the work is, in the
                 // clock at the end of the transcript.
                 HStack(spacing: 4) {
                     // A machine owns this conversation. Same glyph and same
-                    // slot as the web header's automation link, and the same
-                    // reason: origin reads beside the name it produced.
+                    // slot as the web header's automation link. Origin reads
+                    // beside the name it produced.
                     if viewModel.session.isAutomation {
                         WebIcon(kind: .robot, size: 15, color: OS1VisualStyle.textDim)
                             .accessibilityHidden(true)
@@ -1055,47 +1055,32 @@ struct SessionView: View {
                     Text(identityTitle)
                         .font(.callout.weight(.semibold))
                         .foregroundStyle(OS1VisualStyle.text)
-                        .fixedSize(horizontal: true, vertical: false)
+                        .lineLimit(1)
                 }
-                .frame(width: 176, alignment: .leading)
-                .clipped()
-                .mask(titleTrailingFade)
+                .frame(maxWidth: .infinity, alignment: .leading)
                 if !dynamicTypeSize.isAccessibilitySize {
                     Text(headerSubtitle)
                         .font(.footnote)
                         .foregroundStyle(OS1VisualStyle.textDim)
-                        .fixedSize(horizontal: true, vertical: false)
-                        .frame(width: 176, alignment: .leading)
-                        .clipped()
-                        .mask(titleTrailingFade)
+                        .lineLimit(1)
+                        .frame(maxWidth: .infinity, alignment: .leading)
                 }
             }
-            // Keep this surface outside the navigation bar's glass morphs.
-            // A glass button here can flatten the system Back control into a
-            // square after the trailing actions menu closes.
-            .padding(.leading, 4)
-            .padding(.trailing, 10)
+            // Like WhatsApp, identity begins after Back and takes the room up
+            // to the actions. Keeping it outside the bar's glass morphs also
+            // prevents a closing menu from flattening the Back control.
+            .padding(.leading, 10)
+            .padding(.trailing, 12)
             .padding(.vertical, 1)
-            .frame(width: 190, alignment: .leading)
+            .frame(maxWidth: .infinity, alignment: .leading)
             .contentShape(Capsule())
             .background(OS1VisualStyle.background.opacity(0.7), in: Capsule())
             .background(.thickMaterial, in: Capsule())
         }
         .buttonStyle(.plain)
         .tint(.primary)
+        .frame(maxWidth: .infinity, alignment: .leading)
         .accessibilityLabel("Workspace details")
-    }
-
-    private var titleTrailingFade: LinearGradient {
-        LinearGradient(
-            stops: [
-                .init(color: .black, location: 0),
-                .init(color: .black, location: 0.86),
-                .init(color: .clear, location: 1),
-            ],
-            startPoint: .leading,
-            endPoint: .trailing
-        )
     }
     #endif
 
