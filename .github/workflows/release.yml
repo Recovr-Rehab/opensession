@@ -56,8 +56,11 @@ jobs:
       - name: Install dependencies
         run: bun install --frozen-lockfile
       - name: Build artefacts
+        env:
+          TAG: ${{ github.event.inputs.tag || github.ref_name }}
         run: |
           set -euo pipefail
+          version="${TAG#v}"
           out="$RUNNER_TEMP/release"
           mkdir -p "$out/assets"
           for target in linux/x64 linux/arm64 darwin/x64 darwin/arm64; do
@@ -65,8 +68,9 @@ jobs:
             # The default artefact is the compiled single-executable
             # (build-compile.ts, cross-compiled per target). The source install
             # path is a git checkout, so no tarball is published for it.
-            bun scripts/build-compile.ts --os "$os" --arch "$arch" --out "$out"
-            versioned="$(ls "$out"/opensession-*-"$os"-"$arch".tar.gz)"
+            bun scripts/build-compile.ts --version "$version" --os "$os" --arch "$arch" --out "$out"
+            versioned="$out/opensession-$version-$os-$arch.tar.gz"
+            test -s "$versioned"
             cp "$versioned" "$out/assets/"
             cp "$versioned" "$out/assets/opensession-$os-$arch.tar.gz"
           done
