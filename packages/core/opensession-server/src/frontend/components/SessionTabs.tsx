@@ -46,6 +46,7 @@ import {
 	TAB_VICON,
 	tabClass,
 	tabCloseClass,
+	emptyTabCloseClass,
 	tabDotClass,
 } from "../lib/session-tab-classes";
 import { cn } from "../ui/cn";
@@ -186,6 +187,13 @@ type TabMember =
 	| { kind: "session"; id: string; session: UnifiedSession }
 	| { kind: "view"; id: string; view: ViewTab };
 
+const NEW_TAB_MORPH_MS = 280;
+const NEW_TAB_MORPH_TRANSITION = {
+	type: "spring",
+	duration: NEW_TAB_MORPH_MS / 1000,
+	bounce: 0,
+} as const;
+
 /** Apply the edge fade only when the title is genuinely clipped. Keeping this
  * as a DOM attribute avoids rerendering the full tab strip for presentation. */
 function TabTitle({
@@ -254,6 +262,14 @@ export function SessionTabs({
 	const [newMenu, setNewMenu] = useState<NewMenu | null>(null);
 	const [editKey, setEditKey] = useState<string | null>(null);
 	const [draft, setDraft] = useState("");
+	const [closingEmptyId, setClosingEmptyId] = useState<string | null>(null);
+	const closingEmptyTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+	useEffect(
+		() => () => {
+			if (closingEmptyTimer.current) clearTimeout(closingEmptyTimer.current);
+		},
+		[],
+	);
 	// Re-render when a composer draft appears/disappears — tabs check hasDraft()
 	// during render to show the unsent-draft pencil on sibling sessions.
 	const [, setDraftsRev] = useState(0);
@@ -553,6 +569,16 @@ export function SessionTabs({
 	// somewhere to live — a lone code session then reads as [session][Review].
 	if (!inSplit && tabs.length <= 1 && viewTabs.length === 0) return null;
 
+	function closeEmptySession(session: UnifiedSession) {
+		if (closingEmptyTimer.current) return;
+		setClosingEmptyId(session.id);
+		closingEmptyTimer.current = setTimeout(() => {
+			closingEmptyTimer.current = null;
+			setClosingEmptyId(null);
+			onClose(session);
+		}, NEW_TAB_MORPH_MS);
+	}
+
 	// New-tab "+" — plain-click shares the workspace worktree; right-click offers
 	// the stacked/ask modes.
 	const newTabButton = onNewSession && (
@@ -568,7 +594,7 @@ export function SessionTabs({
 				e.preventDefault();
 				setNewMenu({ x: e.clientX, y: e.clientY });
 			}}
-			transition={{ type: "spring", duration: 0.3, bounce: 0 }}
+			transition={NEW_TAB_MORPH_TRANSITION}
 		>
 			<IconPlus size={ctrlIconSize} />
 		</motion.button>
@@ -664,6 +690,35 @@ export function SessionTabs({
 						const hex = colorHex(colors[key]);
 						const morphing = key === morphingSessionId;
 						const emptyClose = key === emptySessionId;
+						const closingEmpty = key === closingEmptyId;
+						const titleContent =
+							editKey === key ? (
+								<input
+									className={TAB_RENAME}
+									value={draft}
+									autoFocus
+									onChange={(e) => setDraft(e.target.value)}
+									onClick={(e) => e.stopPropagation()}
+									onDoubleClick={(e) => e.stopPropagation()}
+									onBlur={commitRename}
+									onKeyDown={(e) => {
+										if (e.key === "Enter") commitRename();
+										else if (e.key === "Escape") setEditKey(null);
+										e.stopPropagation();
+									}}
+								/>
+							) : (
+								<TabTitle
+									reserveClose={!emptyClose}
+									onDoubleClick={(e) => {
+										e.stopPropagation();
+										setDraft(session.title);
+										setEditKey(key);
+									}}
+								>
+									{session.title}
+								</TabTitle>
+							);
 						return (
 							<Reorder.Item key={key} {...reorderItemProps(key, nextActive)}>
 								<ContextMenu.Root>
@@ -677,49 +732,75 @@ export function SessionTabs({
 													waiting,
 													colored: !!hex,
 												})}`}
-												style={hex ? ({ "--tab-color": hex } as React.CSSProperties) : undefined}
+												style={
+													{
+														...(hex ? { "--tab-color": hex } : {}),
+														...(emptyClose ? { paddingLeft: 8 } : {}),
+													} as React.CSSProperties
+												}
 												initial={
 													morphing
-														? { clipPath: "inset(0 0 0 82%)", opacity: 0.72 }
+														? { clipPath: "inset(0 78% 0 0)", opacity: 0.72 }
 														: false
 												}
-												animate={{ clipPath: "inset(0 0 0 0%)", opacity: 1 }}
-												transition={{ type: "spring", duration: 0.3, bounce: 0 }}
+												animate={
+													closingEmpty
+														? { clipPath: "inset(0 78% 0 0)", opacity: 0.72 }
+														: { clipPath: "inset(0 0% 0 0)", opacity: 1 }
+												}
+												transition={NEW_TAB_MORPH_TRANSITION}
 												onClick={() => onSelect(session)}
 												title={session.title}
 											/>
 										}
 									>
+										{emptyClose && (
+											<motion.button
+												layoutId={newTabMorphLayoutId}
+												type="button"
+												className={emptyTabCloseClass(isPhone)}
+												aria-label="Close session"
+												title="Close session"
+												disabled={closingEmpty}
+												initial={morphing ? { rotate: 0, scale: 1 } : false}
+												animate={
+													closingEmpty
+														? { rotate: 0, scale: 1 }
+														: { rotate: 45, scale: 0.76 }
+												}
+												transition={NEW_TAB_MORPH_TRANSITION}
+												onClick={(e) => {
+													e.stopPropagation();
+													closeEmptySession(session);
+												}}
+											>
+												<IconPlus size={16} aria-hidden="true" />
+											</motion.button>
+										)}
 										{waiting ? (
 											<span className={tabDotClass(true)} />
 										) : (
 											session.isRunning && <span className={tabDotClass(false)} />
 										)}
-										{editKey === key ? (
-											<input
-												className={TAB_RENAME}
-												value={draft}
-												autoFocus
-												onChange={(e) => setDraft(e.target.value)}
-												onClick={(e) => e.stopPropagation()}
-												onDoubleClick={(e) => e.stopPropagation()}
-												onBlur={commitRename}
-												onKeyDown={(e) => {
-													if (e.key === "Enter") commitRename();
-													else if (e.key === "Escape") setEditKey(null);
-													e.stopPropagation();
-												}}
-											/>
-										) : (
-											<TabTitle
-												onDoubleClick={(e) => {
-													e.stopPropagation();
-													setDraft(session.title);
-													setEditKey(key);
-												}}
+										{emptyClose ? (
+											<motion.span
+												className="inline-flex min-w-0"
+												initial={
+													morphing
+														? { opacity: 0, x: -8, filter: "blur(4px)" }
+														: false
+												}
+												animate={
+													closingEmpty
+														? { opacity: 0, x: -8, filter: "blur(4px)" }
+														: { opacity: 1, x: 0, filter: "blur(0px)" }
+												}
+												transition={NEW_TAB_MORPH_TRANSITION}
 											>
-												{session.title}
-											</TabTitle>
+												{titleContent}
+											</motion.span>
+										) : (
+											titleContent
 										)}
 										{/* Who else is in this tab. The sidebar's workspace row shows
 							    the same faces for the whole strip, which says a teammate
@@ -757,24 +838,7 @@ export function SessionTabs({
 												<IconPencil size={16} dense />
 											</span>
 										)}
-										{emptyClose ? (
-											<motion.button
-												layoutId={newTabMorphLayoutId}
-												type="button"
-												className={tabCloseClass(isPhone, key === activeId)}
-												aria-label="Close session"
-												title="Close session"
-												initial={morphing ? { rotate: 0 } : false}
-												animate={{ rotate: 45 }}
-												transition={{ type: "spring", duration: 0.3, bounce: 0 }}
-												onClick={(e) => {
-													e.stopPropagation();
-													onClose(session);
-												}}
-											>
-												<IconPlus size={16} aria-hidden="true" />
-											</motion.button>
-										) : (
+										{!emptyClose && (
 											<button
 												type="button"
 												className={tabCloseClass(isPhone, key === activeId)}
