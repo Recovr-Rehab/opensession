@@ -86,12 +86,35 @@ describe("single session ownership", () => {
 
 	test("creation decisions enter a typed actor reducer", () => {
 		const protocol = read("session-kernel/lifecycle-protocol.ts");
+		const creationEffects = read("session-kernel/creation-effect-protocol.ts");
 		const actor = read("session-kernel/actor-worker.ts");
+		const store = read("session-kernel/store.ts");
 		expect(protocol).toContain('kind: "creation_event"');
 		expect(actor).toContain('command.kind === "creation_event"');
 		expect(actor).toContain("store.applyCreationEvent(command.decision)");
 		expect(read("session-kernel/creation-state-machine.ts")).toContain(
 			"export function nextCreationState",
+		);
+		for (const kind of [
+			"creation_workspace_prepare",
+			"creation_branch_prepare",
+			"creation_sandbox_prepare",
+			"creation_credential_resolve",
+			"creation_attachment_stage",
+			"creation_opening_turn",
+		]) expect(creationEffects).toContain(`kind: "${kind}"`);
+		expect(creationEffects).not.toContain("dataUrl");
+		expect(creationEffects).not.toContain("token:");
+		const creationReduction = store.slice(
+			store.indexOf("applyCreationEvent("),
+			store.indexOf("applyRunEvent("),
+		);
+		expect(creationReduction).toContain("this.enqueueOutbox(");
+		expect(creationReduction.indexOf("this.enqueueOutbox(")).toBeLessThan(
+			creationReduction.indexOf("tx.immediate()"),
+		);
+		expect(read("session-kernel/kernel.ts")).toContain(
+			'msg: "session_creation_stale_result_rejected"',
 		);
 	});
 

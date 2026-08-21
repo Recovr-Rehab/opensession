@@ -18,6 +18,116 @@ type EffectExecutors = {
   [K in SessionActorEffectKind]?: EffectExecutor<K>;
 };
 
+function recordPayload(kind: string, payload: unknown): Record<string, unknown> {
+  if (!payload || typeof payload !== "object" || Array.isArray(payload))
+    throw new Error(`Invalid ${kind} effect payload`);
+  return payload as Record<string, unknown>;
+}
+
+function requiredString(
+  kind: string,
+  value: unknown,
+  field: string,
+): string {
+  if (typeof value !== "string" || value.length === 0)
+    throw new Error(`Invalid ${kind} effect payload: ${field}`);
+  return value;
+}
+
+function creationBase(kind: string, value: Record<string, unknown>) {
+  if (
+    typeof value.creationIdentity !== "string" ||
+    value.creationIdentity.length === 0 ||
+    !Number.isSafeInteger(value.creationGeneration) ||
+    Number(value.creationGeneration) < 1
+  )
+    throw new Error(`Invalid ${kind} effect payload: creation fence`);
+  return {
+    creationIdentity: value.creationIdentity,
+    creationGeneration: Number(value.creationGeneration),
+  };
+}
+
+function creationPayload<K extends Exclude<
+  SessionActorEffectKind,
+  "human_ask_deliver"
+>>(
+  kind: K,
+  payload: unknown,
+): SessionActorEffectFor<K>["payload"] {
+  const value = recordPayload(kind, payload);
+  const base = creationBase(kind, value);
+  switch (kind) {
+    case "creation_workspace_prepare":
+      if (value.mode !== "adopt_or_create")
+        throw new Error(`Invalid ${kind} effect payload: mode`);
+      return {
+        ...base,
+        workspaceId: requiredString(kind, value.workspaceId, "workspaceId"),
+        project:
+          value.project === undefined
+            ? undefined
+            : requiredString(kind, value.project, "project"),
+        mode: value.mode,
+      } as SessionActorEffectFor<K>["payload"];
+    case "creation_branch_prepare":
+      if (value.mode !== "adopt_or_create")
+        throw new Error(`Invalid ${kind} effect payload: mode`);
+      return {
+        ...base,
+        project: requiredString(kind, value.project, "project"),
+        branch: requiredString(kind, value.branch, "branch"),
+        mode: value.mode,
+      } as SessionActorEffectFor<K>["payload"];
+    case "creation_sandbox_prepare":
+      if (value.mode !== "adopt_or_create")
+        throw new Error(`Invalid ${kind} effect payload: mode`);
+      return {
+        ...base,
+        provider: requiredString(kind, value.provider, "provider"),
+        sandboxKey: requiredString(kind, value.sandboxKey, "sandboxKey"),
+        mode: value.mode,
+      } as SessionActorEffectFor<K>["payload"];
+    case "creation_credential_resolve":
+      if (value.mode !== "resolve_current")
+        throw new Error(`Invalid ${kind} effect payload: mode`);
+      return {
+        ...base,
+        principal: requiredString(kind, value.principal, "principal"),
+        scope: requiredString(kind, value.scope, "scope"),
+        mode: value.mode,
+      } as SessionActorEffectFor<K>["payload"];
+    case "creation_attachment_stage":
+      if (value.mode !== "reconcile_or_stage")
+        throw new Error(`Invalid ${kind} effect payload: mode`);
+      return {
+        ...base,
+        attachmentId: requiredString(kind, value.attachmentId, "attachmentId"),
+        sourceRef: requiredString(kind, value.sourceRef, "sourceRef"),
+        digest: requiredString(kind, value.digest, "digest"),
+        mode: value.mode,
+      } as SessionActorEffectFor<K>["payload"];
+    case "creation_opening_turn":
+      if (
+        value.mode !== "adopt_or_launch" ||
+        !Number.isSafeInteger(value.runGeneration) ||
+        Number(value.runGeneration) < 1
+      )
+        throw new Error(`Invalid ${kind} effect payload: opening fence`);
+      return {
+        ...base,
+        openingPromptEntryId: requiredString(
+          kind,
+          value.openingPromptEntryId,
+          "openingPromptEntryId",
+        ),
+        runId: requiredString(kind, value.runId, "runId"),
+        runGeneration: Number(value.runGeneration),
+        mode: value.mode,
+      } as SessionActorEffectFor<K>["payload"];
+  }
+}
+
 function humanAskDeliverPayload(
   payload: unknown,
 ): SessionActorEffectFor<"human_ask_deliver">["payload"] {
@@ -33,6 +143,18 @@ const payloadDecoders: {
   ) => SessionActorEffectFor<K>["payload"];
 } = {
   human_ask_deliver: humanAskDeliverPayload,
+  creation_workspace_prepare: (payload) =>
+    creationPayload("creation_workspace_prepare", payload),
+  creation_branch_prepare: (payload) =>
+    creationPayload("creation_branch_prepare", payload),
+  creation_sandbox_prepare: (payload) =>
+    creationPayload("creation_sandbox_prepare", payload),
+  creation_credential_resolve: (payload) =>
+    creationPayload("creation_credential_resolve", payload),
+  creation_attachment_stage: (payload) =>
+    creationPayload("creation_attachment_stage", payload),
+  creation_opening_turn: (payload) =>
+    creationPayload("creation_opening_turn", payload),
 };
 
 export class SessionEffectExecutorRegistry {

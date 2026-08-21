@@ -16,6 +16,7 @@ import {
   type CreationEvent,
   type CreationState,
 } from "./creation-state-machine";
+import type { StagedCreationActorEffect } from "./creation-effect-protocol";
 import { chmodSync, existsSync, mkdirSync, readFileSync, statSync } from "fs";
 import { dirname } from "path";
 import { sessionsDir } from "../paths";
@@ -193,6 +194,7 @@ export type CreationEventDecision = {
   effectId?: string;
   /** Stable effect emitted by this reduction, when it advances physical work. */
   nextEffectId?: string;
+  effect?: StagedCreationActorEffect;
   detail?: Record<string, unknown>;
 };
 
@@ -209,7 +211,11 @@ export type CreationEventDecisionResult = {
   accepted: boolean;
   from?: CreationState;
   to?: CreationState;
-  reason?: "invalid_transition" | "identity_mismatch" | "stale_effect";
+  reason?:
+    | "invalid_transition"
+    | "identity_mismatch"
+    | "stale_effect"
+    | "invalid_effect";
   state?: DurableCreationState;
 };
 
@@ -901,7 +907,12 @@ export class SessionKernelStore {
       }
       const requiresEffectResult =
         !!prior?.currentEffectId &&
-        ["opening_dispatched", "succeeded", "failed"].includes(input.event);
+        [
+          "preparation_started",
+          "opening_dispatched",
+          "succeeded",
+          "failed",
+        ].includes(input.event);
       if (
         (requiresEffectResult || input.effectId !== undefined) &&
         prior?.currentEffectId !== input.effectId
@@ -930,9 +941,34 @@ export class SessionKernelStore {
       const run = this.runState(input.sessionId);
       const changeSeq = run.changeSeq + 1;
       const generation = prior?.generation ?? 1;
+      const effect = input.effect;
+      const invalidEffect =
+        (input.nextEffectId !== undefined && !effect) ||
+        (!!effect && input.nextEffectId !== effect.effectKey) ||
+        (!!effect &&
+          (effect.payload.creationIdentity !== input.identity ||
+            effect.payload.creationGeneration !== generation)) ||
+        (!!effect &&
+          input.event === "opening_dispatched" &&
+          effect.kind !== "creation_opening_turn") ||
+        (!!effect &&
+          input.event === "preparation_started" &&
+          effect.kind === "creation_opening_turn") ||
+        (!!effect &&
+          !["preparation_started", "opening_dispatched"].includes(input.event));
+      if (invalidEffect) {
+        result = {
+          accepted: false,
+          from,
+          to: from,
+          reason: "invalid_effect",
+          state: prior,
+        };
+        return;
+      }
       const currentEffectId = ["ready", "failed"].includes(to)
         ? undefined
-        : input.nextEffectId ?? prior?.currentEffectId;
+        : effect?.effectKey ?? prior?.currentEffectId;
       this.db.run(
         `INSERT INTO session_kernel_creation
           (session_id, identity, state, generation, current_effect_id, change_seq, updated_at)
@@ -974,6 +1010,13 @@ export class SessionKernelStore {
           now,
         ],
       );
+      if (effect)
+        this.enqueueOutbox(
+          input.sessionId,
+          effect.kind,
+          effect.payload,
+          effect.effectKey,
+        );
       this.db.run(
         `INSERT INTO session_kernel_changes
           (session_id, change_seq, kind, payload, created_at)
