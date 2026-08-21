@@ -200,7 +200,7 @@ export function SidebarCustomizeDialog({
 				label="Customize sidebar"
 				sheetClassName="max-h-[88dvh]"
 			>
-				<div className="flex shrink-0 items-center gap-3 px-4 pb-3 pt-0.5">
+				<div className="flex shrink-0 items-center gap-3 px-6 pb-4 pt-0.5">
 					<h2 className="m-0 min-w-0 flex-1 text-dialog-title font-semibold leading-tight tracking-[-0.01em] text-fg">
 						Customize sidebar
 					</h2>
@@ -211,7 +211,7 @@ export function SidebarCustomizeDialog({
 						<IconX />
 					</SheetIconButton>
 				</div>
-				<SheetBody className="flex flex-1 flex-col gap-3 px-4 pb-4">
+				<SheetBody className="flex flex-1 flex-col gap-3 px-6 pb-6">
 					{sections}
 				</SheetBody>
 			</ResponsiveDialog>
