@@ -215,6 +215,7 @@ interface SessionName {
   tab?: string;
 }
 let sessionTitles = new Map<string, SessionName>();
+let workspaceTitles = new Map<string, string>();
 const sessionTitleListeners = new Set<() => void>();
 /** Sessions whose agent is mid-run, for the chip's live dot. */
 let runningSessions = new Set<string>();
@@ -264,7 +265,25 @@ export function setSessionTitles(
   for (const listener of sessionTitleListeners) listener();
 }
 
-/** Re-render draft projections when a session is named or renamed. */
+/** Register id to name for workspace mentions in composer drafts. */
+export function setWorkspaceTitles(
+  entries: Iterable<readonly [string, string | null | undefined]>,
+): void {
+  const next = new Map<string, string>();
+  for (const [id, name] of entries) {
+    const label = String(name ?? "").trim();
+    if (id && label) next.set(id, label);
+  }
+  if (
+    next.size === workspaceTitles.size &&
+    [...next].every(([id, name]) => workspaceTitles.get(id) === name)
+  )
+    return;
+  workspaceTitles = next;
+  for (const listener of sessionTitleListeners) listener();
+}
+
+/** Re-render draft projections when a referenced session or workspace is renamed. */
 export function onSessionTitlesChanged(listener: () => void): () => void {
   sessionTitleListeners.add(listener);
   return () => sessionTitleListeners.delete(listener);
@@ -364,6 +383,11 @@ function syncRenderedSessionRuns(): void {
  */
 export function sessionTitleFor(id: string): string | undefined {
   return sessionTitles.get(id)?.label;
+}
+
+/** The name shown for a stable workspace mention in a composer draft. */
+export function workspaceTitleFor(id: string): string | undefined {
+  return workspaceTitles.get(id);
 }
 
 export function shortSessionId(id: string): string {

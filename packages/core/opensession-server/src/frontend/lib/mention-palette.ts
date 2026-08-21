@@ -27,6 +27,7 @@ export type MentionCategory =
 	| "Emoji"
 	| "People"
 	| "Tools"
+	| "Workspaces"
 	| "Sessions"
 	| "Actions"
 	| "Files"
@@ -36,6 +37,7 @@ const CATEGORY_ORDER: MentionCategory[] = [
 	"Emoji",
 	"People",
 	"Tools",
+	"Workspaces",
 	"Sessions",
 	"Actions",
 	"Files",
@@ -46,6 +48,7 @@ export function mentionCategory(item: MentionSuggestion): MentionCategory {
 	if (item.kind === "emoji") return "Emoji";
 	if (item.kind === "person") return "People";
 	if (item.kind === "tool") return "Tools";
+	if (item.kind === "workspace") return "Workspaces";
 	if (item.kind === "session") return "Sessions";
 	if (item.kind === "action") return "Actions";
 	if (item.kind === "skill") return "Skills";

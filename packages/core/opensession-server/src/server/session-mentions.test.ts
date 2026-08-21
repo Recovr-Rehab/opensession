@@ -22,12 +22,29 @@ describe("sessionMentionsNote exclusion (no double-context)", () => {
 		expect(note).toContain("bks-bbbb-1");
 	});
 
-	it("returns null when every mention was inlined", () => {
+	it("returns null when every session mention was inlined", () => {
 		const note = sessionMentionsNote(
 			"@session:bks-aaaa-1 @session:bks-aaaa-2",
 			new Set(["bks-aaaa-1", "bks-aaaa-2"]),
 		);
 		expect(note).toBeNull();
+	});
+
+	it("resolves workspace tokens even when there are no session mentions", () => {
+		const note = sessionMentionsNote("Review @workspace:ws-missing");
+		expect(note).toContain("Workspaces:");
+		expect(note).toContain(
+			"@workspace:ws-missing · no workspace with this id",
+		);
+		expect(note).toContain("active member sessions");
+	});
+
+	it("ignores workspace tokens inside fenced context", () => {
+		expect(
+			sessionMentionsNote(
+				wrapContext("Review @workspace:ws-hidden", "handoff"),
+			),
+		).toBeNull();
 	});
 });
 

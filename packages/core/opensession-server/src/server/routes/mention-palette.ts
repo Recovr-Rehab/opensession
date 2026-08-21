@@ -3,6 +3,7 @@ import { mentionPaletteItems } from "../mention-palette";
 import { findSessionAsync, peekCachedSessions } from "../session-cache";
 import { getAllSessions } from "../sessions";
 import { userMatchesAny } from "../shared/user-mappings";
+import { listWorkspaces } from "../workspaces";
 import { requestUser, type RouteContext } from "./context";
 
 export async function handleMentionPaletteRoutes(
@@ -41,6 +42,7 @@ export async function handleMentionPaletteRoutes(
 		items: mentionPaletteItems({
 			query,
 			toolNames,
+			workspaces: listWorkspaces(),
 			sessions: cachedSessions.length ? cachedSessions : await getAllSessions(),
 			currentSessionId: sessionId,
 		}),

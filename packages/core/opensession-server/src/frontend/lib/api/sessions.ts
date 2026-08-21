@@ -228,14 +228,14 @@ export async function fetchSessionSubagents(sessionId: string): Promise<{
 
 /** A single "@"-mention suggestion. `insert` is what lands in the textarea. */
 export interface FileMention {
-	/** Repo-relative path (files) or session title (sessions), for display. */
+	/** Repo-relative path or the display name of a referenced object. */
 	display: string;
-	/** Text inserted after the "@": path, `repo:path`, or `session:<id>`. */
+	/** Text inserted after the "@": path, `repo:path`, or a typed stable id. */
 	insert: string;
 	/** Repo label, set only when more than one repo is searched (cross-repo). */
 	repo?: string;
 	/** Entry type; absent means a file. */
-	kind?: "session" | "skill" | "dir" | "person" | "tool";
+	kind?: "workspace" | "session" | "skill" | "dir" | "person" | "tool";
 	/** Subtitle for non-file entries (e.g. a session's branch, a skill's description). */
 	sub?: string;
 }

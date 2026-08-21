@@ -118,6 +118,7 @@ import {
 } from "./session-cache";
 import { markRecapPendingIfUnwatched } from "./recap";
 import { broadcastToSession, sessionWatchers } from "./ws-hub";
+import { getWorkspace } from "./workspaces";
 import {
 	broadcastQueue,
 	beginPromptDispatch,
@@ -2702,53 +2703,87 @@ async function runSessionPromptInner(
 }
 
 /**
- * Expand `@session:os-…` mentions in a prompt into a footer the agent can act
- * on with its opensession-sessions tools. The mention token itself stays in place
- * (it carries the id); the footer resolves each id to a title/state and points
- * at the tools — including slash commands over send_to_session (e.g. "/loop").
+ * Expand session and workspace mentions into a footer the agent can act on
+ * with its opensession-sessions tools. Tokens stay in the visible prompt while
+ * this note resolves stable ids into names, state, and workspace membership.
  * Interactive sessions only: automations don't get opensession-sessions.
  */
 export function sessionMentionsNote(
 	content: string,
 	excludeIds?: Iterable<string>,
 ): string | null {
-	// Only the human's visible message counts: fenced <opensession:context> blocks
-	// (attached session transcripts, handoffs) name sessions as @session:<id> too,
-	// and those must not grow a redundant — and unfenced, so user-visible —
-	// mentions footer. `|| ""` because a non-string reaching here crashed the
-	// whole process on 2026-07-27 (stripContext passes falsy input through).
+	// Only the human's visible message counts. Fenced <opensession:context> blocks
+	// can carry references too, and those must not grow a redundant, unfenced
+	// mentions footer. `|| ""` guards the falsy input stripContext passes through.
 	content = stripContext(content || "");
-	// A session attached as a digest above already carries its context; skip it here
-	// so it doesn't also get a pointer footer for the same id.
+	// A session attached as a digest already carries its context. Skip it here so
+	// it doesn't also get a pointer footer for the same id.
 	const skip = new Set(excludeIds ?? []);
-	const ids = [
+	const sessionIds = [
 		...new Set(
-			// `os-` is the minted prefix; `bks-` is the pre-rename one, which
-			// every session started before 2026-08-05 still carries.
+			// `os-` is the minted prefix. `bks-` is the pre-rename one kept by
+			// sessions created before 2026-08-05.
 			[...content.matchAll(/@session:((?:os|bks)-[0-9a-f-]+)/g)].map(
-				(m) => m[1],
+				(match) => match[1],
 			),
 		),
 	].filter((id) => !skip.has(id));
-	if (!ids.length) return null;
-	const lines = ids.map((id) => {
-		const s = findSession(id);
-		if (!s) return `- @session:${id} — (no session with this id)`;
-		const busy = isAgentSessionBusy(s.claudeSessionId, s.codexThreadId, s.id);
-		const bits = [
-			s.title || "Untitled",
-			s.branch ? `branch ${s.branch}` : null,
-			busy ? "running" : "idle",
-		].filter(Boolean);
-		return `- @session:${id} — ${bits.join(" · ")}`;
-	});
+	const workspaceIds = [
+		...new Set(
+			[...content.matchAll(/@workspace:(ws-[A-Za-z0-9_-]+)/g)].map(
+				(match) => match[1],
+			),
+		),
+	];
+	if (!sessionIds.length && !workspaceIds.length) return null;
+
+	const sections: string[] = [];
+	if (sessionIds.length) {
+		const lines = sessionIds.map((id) => {
+			const session = findSession(id);
+			if (!session) return `- @session:${id} · no session with this id`;
+			const busy = isAgentSessionBusy(
+				session.claudeSessionId,
+				session.codexThreadId,
+				session.id,
+			);
+			const bits = [
+				session.title || "Untitled",
+				session.branch ? `branch ${session.branch}` : null,
+				busy ? "running" : "idle",
+			].filter(Boolean);
+			return `- @session:${id} · ${bits.join(" · ")}`;
+		});
+		sections.push(`Sessions:\n${lines.join("\n")}`);
+	}
+	if (workspaceIds.length) {
+		const sessions = getCachedSessions();
+		const lines = workspaceIds.map((id) => {
+			const workspace = getWorkspace(id);
+			if (!workspace) return `- @workspace:${id} · no workspace with this id`;
+			const members = sessions.filter(
+				(session) => session.workspaceId === id && !session.archived,
+			);
+			const memberText = members.length
+				? members
+						.map(
+							(session) =>
+								`@session:${session.id} (${session.title || "Untitled"})`,
+						)
+						.join(", ")
+				: "no active sessions";
+			const details = [workspace.repo, workspace.branch].filter(Boolean);
+			return `- @workspace:${id} · ${workspace.name}${details.length ? ` · ${details.join(" · ")}` : ""} · ${memberText}`;
+		});
+		sections.push(`Workspaces:\n${lines.join("\n")}`);
+	}
+
 	return (
-		`[The @session mentions above refer to other Open Session sessions:\n${lines.join("\n")}\n` +
-		`Use the opensession-sessions MCP tools with these ids: get_session (state, pending question, ` +
-		`transcript tail), send_to_session (a message — or a slash command handled by opensession ` +
-		`itself, e.g. "/loop 15m <prompt>" to set a recurring self-prompt on the target that fires ` +
-		`only while it is idle, "/loop stop" to clear it; this works on your own session id too), ` +
-		`answer_session_question, cancel_session.]`
+		`[The @ mentions above refer to Open Session work:\n${sections.join("\n\n")}\n` +
+		`A workspace mention means its active member sessions. Use the opensession-sessions MCP tools ` +
+		`with the resolved session ids: get_session (state, pending question, transcript tail), ` +
+		`send_to_session (a message or a slash command such as "/loop 15m <prompt>"), ` +
+		`answer_session_question, or cancel_session.]`
 	);
 }
 

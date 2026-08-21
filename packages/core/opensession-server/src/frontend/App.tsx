@@ -5,6 +5,7 @@ import {
 	setKnownRepos,
 	setKnownPrStates,
 	setSessionTitles,
+	setWorkspaceTitles,
 } from "./lib/markdown";
 import { reviewRequestTargetsPerson } from "./lib/review-queue";
 import { repoLabel } from "./lib/repo-label";
@@ -926,6 +927,13 @@ export function App(
 	// change (a new PR session can auto-create a workspace server-side).
 	const [workspaces, setWorkspaces] = useState<Workspace[]>([]);
 	const [workspacesLoaded, setWorkspacesLoaded] = useState(false);
+	// Workspace mentions keep stable ids in the prompt while the composer shows
+	// the same human name as the sidebar and workspace route.
+	useEffect(() => {
+		setWorkspaceTitles(
+			workspaces.map((workspace) => [workspace.id, workspace.name] as const),
+		);
+	}, [workspaces]);
 	// Read by the PR-link opener, which runs from a document-level listener and
 	// therefore can't close over the render's value.
 	const workspacesRef = useRef(workspaces);

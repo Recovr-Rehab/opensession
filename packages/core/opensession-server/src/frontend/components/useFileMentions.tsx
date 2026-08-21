@@ -6,7 +6,7 @@ import { UserAvatar } from "./UserAvatar";
 import { cn } from "../ui/cn";
 import { IconTile } from "./BrandTile";
 import { displayName as brandDisplayName } from "../brand-logos";
-import { IconBolt, IconFile, IconFolder, IconMessage, IconPlug } from "./icons";
+import { IconBolt, IconFile, IconFolder, IconMessage, IconPlug, IconStack } from "./icons";
 import { peopleMentionMatches, usePeople } from "../lib/people";
 import { useCurrentUser } from "./UserPicker";
 import {
@@ -452,6 +452,7 @@ export function useFileMentions({ value, onChange, textareaRef, mentionFetch, pa
             {group.category}
           </div>
           {group.items.map(({ item, index: i }) => {
+            const isWorkspace = item.kind === "workspace";
             const isSession = item.kind === "session";
             const isSkill = item.kind === "skill";
             const isDir = item.kind === "dir";
@@ -460,7 +461,7 @@ export function useFileMentions({ value, onChange, textareaRef, mentionFetch, pa
             const isAction = item.kind === "action";
             const isEmoji = item.kind === "emoji";
             const path = item.display;
-            const slash = isSession || isSkill || isPerson || isTool || isAction || isEmoji
+            const slash = isWorkspace || isSession || isSkill || isPerson || isTool || isAction || isEmoji
               ? -1
               : path.lastIndexOf("/");
             const dir = slash >= 0 ? path.slice(0, slash + 1) : "";
@@ -497,6 +498,10 @@ export function useFileMentions({ value, onChange, textareaRef, mentionFetch, pa
                   <UserAvatar name={item.display} size={20} />
                 ) : isTool ? (
                   <IconTile name={item.insert} size={20} />
+                ) : isWorkspace ? (
+                  <span className="flex size-5 shrink-0 items-center justify-center rounded-md bg-active text-dim">
+                    <IconStack size={14} />
+                  </span>
                 ) : isSession ? (
                   <span className="flex size-5 shrink-0 items-center justify-center rounded-md bg-active text-dim">
                     <IconMessage size={14} />
@@ -523,7 +528,7 @@ export function useFileMentions({ value, onChange, textareaRef, mentionFetch, pa
                   <span className="overflow-hidden text-ellipsis text-meta text-faint">
                     @{item.insert}
                   </span>
-                ) : isSession || isSkill || isPerson || isAction ? (
+                ) : isWorkspace || isSession || isSkill || isPerson || isAction ? (
                   item.sub && (
                     <span className="overflow-hidden text-ellipsis text-meta text-faint">
                       {item.sub}
