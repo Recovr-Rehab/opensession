@@ -40,7 +40,11 @@ export function nextRenderedSidebarItem<T extends SidebarItemElement>(
 	return null;
 }
 
-/** Pick the chat after the selected chat in rendered sidebar order. */
+/**
+ * Pick the chat after the selected chat in rendered sidebar order, skipping
+ * chats whose turn is still running: this control moves you to work you can
+ * actually read, not to an agent mid-answer.
+ */
 export function nextRenderedSidebarChat<T extends RenderedSidebarElement>(
 	items: readonly T[],
 ): T | null {
@@ -57,7 +61,9 @@ export function nextRenderedSidebarChat<T extends RenderedSidebarElement>(
 	const selectedKey = selected.getAttribute(SIDEBAR_ITEM_KEY_ATTRIBUTE);
 	for (let offset = 1; offset < items.length; offset += 1) {
 		const item = items[(selectedIndex + offset) % items.length];
-		if (item.getAttribute(SIDEBAR_ITEM_KEY_ATTRIBUTE) !== selectedKey) return item;
+		if (item.getAttribute(SIDEBAR_ITEM_KEY_ATTRIBUTE) === selectedKey) continue;
+		if (item.hasAttribute("data-running")) continue;
+		return item;
 	}
 	return null;
 }

@@ -71,13 +71,16 @@ describe("nextRenderedSidebarItem", () => {
 	});
 });
 
-function renderedItem(key: string, selected = false) {
+function renderedItem(key: string, selected = false, running = false) {
 	return {
 		getAttribute(name: string) {
 			return name === SIDEBAR_ITEM_KEY_ATTRIBUTE ? key : null;
 		},
 		hasAttribute(name: string) {
-			return name === "data-selected" && selected;
+			return (
+				(name === "data-selected" && selected) ||
+				(name === "data-running" && running)
+			);
 		},
 	};
 }
@@ -96,6 +99,21 @@ describe("nextRenderedSidebarChat", () => {
 		const last = renderedItem("workspace:last", true);
 
 		expect(nextRenderedSidebarChat([first, last])).toBe(first);
+	});
+
+	test("skips a chat whose turn is still running", () => {
+		const selected = renderedItem("workspace:current", true);
+		const running = renderedItem("workspace:running", false, true);
+		const ready = renderedItem("workspace:ready");
+
+		expect(nextRenderedSidebarChat([selected, running, ready])).toBe(ready);
+	});
+
+	test("returns null when every other chat is running", () => {
+		const selected = renderedItem("workspace:current", true);
+		const running = renderedItem("workspace:running", false, true);
+
+		expect(nextRenderedSidebarChat([selected, running])).toBeNull();
 	});
 
 	test("returns null when no rendered chat is selected", () => {
