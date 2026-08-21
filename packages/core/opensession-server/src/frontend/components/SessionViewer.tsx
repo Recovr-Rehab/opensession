@@ -5906,13 +5906,13 @@ export function SessionViewer({
 									<Button
 										variant="ghost"
 										size="md"
-										icon={<IconDotsHorizontal size={isPhone ? 26 : 22} />}
+										icon={<IconDotsHorizontal size={22} />}
 									/>
 								}
 								className={cn(
 									"[corner-shape:squircle]",
 									isPhone &&
-										"size-12 min-h-12 rounded-full border-transparent text-dim shadow-none [corner-shape:round]",
+										"size-11 min-h-11 rounded-full border-transparent text-dim shadow-none [corner-shape:round]",
 									overflowOpen && "bg-hover text-fg",
 								)}
 								title="More actions"
@@ -7341,7 +7341,7 @@ export function SessionViewer({
 											{isPhone && (
 												<div
 													className={cn(
-														"pointer-events-auto mx-auto hidden h-13 shrink-0 items-center rounded-full border border-[color:var(--mobile-header-control-border)] px-1 text-dim shadow-[var(--mobile-header-control-shadow)] phone:flex",
+														"pointer-events-auto mx-auto hidden h-12 shrink-0 items-center rounded-full border border-[color:var(--mobile-header-control-border)] px-0.5 text-dim shadow-[var(--mobile-header-control-shadow)] phone:flex phone:[body.kb-open_&]:hidden",
 														MOBILE_CONTROL_GLASS,
 													)}
 												>
@@ -7349,20 +7349,20 @@ export function SessionViewer({
 														<Button
 															variant="ghost"
 															size="lg"
-															className="size-12 min-h-12 rounded-full [corner-shape:round]"
-															icon={<IconArchive size={24} aria-hidden />}
+															className="size-11 min-h-11 rounded-full [corner-shape:round]"
+															icon={<IconArchive size={22} aria-hidden />}
 															aria-label="Archive and open next chat"
 															disabled={archiving}
 															onClick={() => void handleArchive()}
 														/>
 													)}
-													<div ref={setMobileActionMenuEl} className="inline-flex size-12" />
-													<span className="mx-1 h-6 w-px shrink-0 bg-divider" aria-hidden />
+													<div ref={setMobileActionMenuEl} className="inline-flex size-11" />
+													<span className="mx-0.5 h-5 w-px shrink-0 bg-divider" aria-hidden />
 													<Button
 														variant="ghost"
 														size="lg"
-														className="size-12 min-h-12 rounded-full [corner-shape:round]"
-														icon={<IconPlus size={24} aria-hidden />}
+														className="size-11 min-h-11 rounded-full [corner-shape:round]"
+														icon={<IconPlus size={22} aria-hidden />}
 														aria-label="New workspace"
 														disabled={!onNewWorkspace}
 														onClick={onNewWorkspace}
@@ -7371,8 +7371,8 @@ export function SessionViewer({
 														<Button
 															variant="ghost"
 															size="lg"
-															className="size-12 min-h-12 rounded-full [corner-shape:round]"
-															icon={<IconArrowRight size={24} aria-hidden />}
+															className="size-11 min-h-11 rounded-full [corner-shape:round]"
+															icon={<IconArrowRight size={22} aria-hidden />}
 															aria-label="Next chat"
 															disabled={!onNextChat}
 															onClick={onNextChat}

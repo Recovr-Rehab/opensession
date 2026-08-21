@@ -361,16 +361,18 @@ export const SUGGESTIONS_CLEARANCE = "[--suggestions-under:34px]";
 
 /**
  * The same clearance once Next shares the band and gives it its height: a 40px
- * button, or the phone action bar at 52px, plus the same
- * standoff. Written out rather than derived, because Tailwind compiles the
- * class names it can find spelled in the source.
+ * button, or the phone action bar at 48px, plus the same standoff. The phone
+ * toolbar hides while the keyboard is open, so its clearance retires too.
+ * Written out rather than derived, because Tailwind compiles the class names it
+ * can find spelled in the source.
  */
 export const ACTION_CLEARANCE =
-	"[--suggestions-under:46px] phone:[--suggestions-under:58px]";
+	"[--suggestions-under:46px] phone:[--suggestions-under:54px] phone:[body.kb-open_&]:[--suggestions-under:0px]";
 
-/** Phone stacks quick replies above the 52px action bar. */
+/** Phone stacks quick replies above the 48px action bar. With the keyboard up,
+ * only the 28px reply row and its 6px standoff remain. */
 export const ACTION_WITH_REPLIES_CLEARANCE =
-	"[--suggestions-under:46px] phone:[--suggestions-under:94px]";
+	"[--suggestions-under:46px] phone:[--suggestions-under:90px] phone:[body.kb-open_&]:[--suggestions-under:34px]";
 
 /**
  * The chips themselves, filling the action row beside Next.

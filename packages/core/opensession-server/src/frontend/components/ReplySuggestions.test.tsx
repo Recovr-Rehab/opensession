@@ -76,7 +76,7 @@ describe("ReplySuggestions", () => {
 		// composer, or the standoff eats into the 16px the reading ends on.
 		const PILL_HEIGHT = 28; // `h-7` on the chip in ReplySuggestions.
 		const NEXT_HEIGHT = 40; // `min-h-10` on the Next button in SessionViewer.
-		const NEXT_HEIGHT_PHONE = 52; // `h-13` on the phone action bar.
+		const NEXT_HEIGHT_PHONE = 48; // `h-12` on the phone action bar.
 		const PHONE_ROW_GAP = 8;
 		const SPACING_STEP = 4; // Tailwind's px-anchored scale (styles/tailwind.css).
 		const standoff =
@@ -95,6 +95,12 @@ describe("ReplySuggestions", () => {
 		);
 		expect(ACTION_WITH_REPLIES_CLEARANCE).toContain(
 			`phone:[--suggestions-under:${PILL_HEIGHT + PHONE_ROW_GAP + NEXT_HEIGHT_PHONE + standoff}px]`,
+		);
+		expect(ACTION_CLEARANCE).toContain(
+			"phone:[body.kb-open_&]:[--suggestions-under:0px]",
+		);
+		expect(ACTION_WITH_REPLIES_CLEARANCE).toContain(
+			`phone:[body.kb-open_&]:[--suggestions-under:${PILL_HEIGHT + standoff}px]`,
 		);
 	});
 
