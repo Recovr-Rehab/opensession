@@ -293,19 +293,34 @@ export async function invalidateSandboxEnvironmentsForRepo(repo: string): Promis
   for (const provider of ["daytona", "box", "modal", "microvm"] as const) {
     const stored = storedEnvironment(repo, provider);
     if (!stored) continue;
+    // Remote repo templates contain a credential-free warm clone. Adoption
+    // fetches the current default branch before creating the session branch,
+    // so deleting a multi-gigabyte provider snapshot on every push creates a
+    // minutes-long cold-start gap without improving source freshness.
+    if (provider === "daytona" || provider === "box" || provider === "modal") {
+      const current = await derivedEnvironment(repo, provider);
+      writeEnvironment(current.state === "ready" ? current : {
+        repo,
+        provider,
+        state: "stale",
+        mode: "template",
+        updatedAt: new Date().toISOString(),
+        ...(stored.settings ? { settings: stored.settings } : {}),
+      });
+      continue;
+    }
     await invalidatePrewarm(provider, repo).catch((error) => {
       console.warn(`[sandbox:${provider}] failed to release prewarm for ${repo}:`, error);
     });
     await removeTemplate(repo, provider).catch((error) => {
       console.warn(`[sandbox:${provider}] failed to delete stale template for ${repo}:`, error);
     });
-    const now = new Date().toISOString();
     writeEnvironment({
       repo,
       provider,
       state: "stale",
       mode: "template",
-      updatedAt: now,
+      updatedAt: new Date().toISOString(),
       ...(stored.settings ? { settings: stored.settings } : {}),
     });
   }
@@ -434,29 +449,39 @@ export async function prepareSandboxEnvironment(
 }
 
 const providerQueues: Map<string, Promise<void>> = ((globalThis as any).__sandboxEnvironmentQueues ??= new Map());
-let maintenanceStarted: boolean = ((globalThis as any).__sandboxEnvironmentMaintenanceStarted ??= false);
+let maintenanceTimer: ReturnType<typeof setInterval> | undefined = (globalThis as any).__sandboxEnvironmentMaintenanceTimer;
 
-/** Resume explicitly prepared template environments after a coordinator
- * restart. A stale/preparing record means a human already opted this
- * repo/provider pair into paid, transient preparation; this never enables a
- * new provider or keeps idle compute alive. */
-export function startSandboxEnvironmentMaintenance(): void {
-  if (maintenanceStarted) return;
-  maintenanceStarted = true;
-  (globalThis as any).__sandboxEnvironmentMaintenanceStarted = true;
+/** Resume explicitly prepared template environments and refresh expired
+ * provider artifacts. A stored template record means a human already opted
+ * this repo/provider pair into paid, transient preparation; this never enables
+ * a new provider or keeps idle compute alive. */
+function maintainSandboxEnvironments(): void {
   for (const environment of readStored()) {
     if (
       !["daytona", "box", "modal"].includes(environment.provider) ||
-      (environment.state !== "stale" && environment.state !== "preparing") ||
       (environment.mode !== "template" && environment.state !== "preparing") ||
       !sandboxConnectionReady(environment.provider)
     ) continue;
+    const template = readRemoteRepoTemplate(
+      environment.provider as "daytona" | "box" | "modal",
+      environment.repo,
+    );
+    if (environment.state === "ready" && template) continue;
+    if (environment.state === "failed") continue;
     scheduleSandboxEnvironment(environment.repo, environment.provider, {
       rebuild: true,
-      user: "startup-recovery",
+      user: "template-maintenance",
       settings: environment.settings,
     });
   }
+}
+
+export function startSandboxEnvironmentMaintenance(): void {
+  if (maintenanceTimer) return;
+  maintainSandboxEnvironments();
+  maintenanceTimer = setInterval(maintainSandboxEnvironments, 10 * 60_000);
+  maintenanceTimer.unref?.();
+  (globalThis as any).__sandboxEnvironmentMaintenanceTimer = maintenanceTimer;
 }
 
 export function scheduleSandboxEnvironment(

@@ -578,8 +578,10 @@ Daytona API/SDK: volume-style workspace cloned in-sandbox over https
 (`cloneCredential`), ws transport always, runner bootstrapped on first
 ensure. A prewarm clones the repo, runs `.agents/setup`, scrubs clone and
 model authority, and publishes a 24-hour Daytona snapshot. Later prewarms
-restore that provider artifact into a new sandbox and skip setup. Idle-stop
-is native (`autoStopInterval`).
+restore that provider artifact into a new sandbox and skip setup. The warm clone
+fetches the current default branch when a session adopts it, so default-branch
+pushes do not discard the snapshot and force a cold-start gap. Idle-stop is
+native (`autoStopInterval`).
 
 - Connect in Workspace → Sandboxes with a Daytona API key and a reachable
   public callback origin. Settings owns region/resource/snapshot overrides;
@@ -626,7 +628,8 @@ Sandboxes**. It is stored as an opaque workspace secret; new Boxes use
 
 - Projects opt in independently. Preparation runs the repository setup inside
   a Box, scrubs launch credentials, and publishes a named snapshot. Subsequent
-  prewarms and sessions restore that exact prepared filesystem and are sized
+  prewarms and sessions restore that exact prepared filesystem, fetch the current
+  default branch on adoption, and are sized
   with Box's fixed **Small** (2 vCPU / 4 GB / at least 40 GB), **Default** (4 /
   8 GB / at least 80 GB), or **Large** (8 / 16 GB / at least 100 GB) profile.
 - Warm-on-typing creates a Box while the user composes and the new session

@@ -384,6 +384,8 @@ export class DaytonaProvider implements SandboxProvider {
   }
 
   private async ensureInner(spec: SandboxSessionSpec): Promise<Sandbox> {
+    const startedAt = Date.now();
+    const mark = (stage: string) => console.log(`[sandbox:daytona] ${spec.sessionId}: ${stage} (+${Date.now() - startedAt}ms)`);
     if (spec.attachedDirs?.length) {
       throw new Error("attached repos are not supported in remote sandboxes — detach them or use docker/local");
     }
@@ -484,15 +486,19 @@ export class DaytonaProvider implements SandboxProvider {
         );
         sbx = await create(cfg.daytona?.snapshot);
       }
+      mark("sandbox created");
     }
 
     const driver = daytonaDriver(sbx);
     await driver.ensureStarted();
+    mark("sandbox started");
     // Cheap dial-back probe BEFORE the expensive bootstrap: a sandbox that
     // can't reach our callback URL can never run anything — fail fast with
     // the documented error instead of 30s+ of doomed bootstrap.
     await assertDialbackReachable(driver, "daytona");
+    mark("dial-back verified");
     await bootstrapRemoteSandbox(driver, "daytona");
+    mark("runner ready");
     await setupRemoteWorkspace(
       driver,
       cwd,
@@ -502,6 +508,7 @@ export class DaytonaProvider implements SandboxProvider {
       repo.id,
       { sandboxId: sbx.id, provider: this.id, sessionId: spec.sessionId, repoId: repo.id, trustProfile: trust.trustProfile },
     );
+    mark("workspace ready");
     writeRemoteState({
       sandboxId: sbx.id,
       provider: this.id,
