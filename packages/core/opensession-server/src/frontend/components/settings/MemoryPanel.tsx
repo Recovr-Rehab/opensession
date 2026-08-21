@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { BASE_PATH } from "../../lib/base";
 import {
 	addMemoryEntryApi,
 	deleteMemoryEntryApi,
@@ -8,58 +9,177 @@ import {
 	type MemoryEntryDto,
 	type MemoryScopeDto,
 } from "../../lib/api";
-import { Button } from "../../ui/button";
-import { Textarea } from "../../ui/input";
 import {
+	markTileClass,
+	markTileGradient,
+	markTileInk,
+	markTileShadow,
+	type MarkTone,
+} from "../../lib/mark-tile";
+import { Button } from "../../ui/button";
+import { Field, Select, Textarea } from "../../ui/input";
+import { Modal } from "../../ui/modal";
+import {
+	SettingCard,
 	SettingCardSkeleton,
-	SettingsGroupLabel,
 	SettingsHeader,
 	SettingsPanel,
-	SettingsSection,
 } from "../../ui/settings";
 import { EmptyState, InlineAlert } from "../../ui/state";
 import { toast } from "../../ui/toast";
-import { IconPencil, IconPlus, IconTrash } from "../icons";
+import {
+	IconBranches,
+	IconChevronLeft,
+	IconChevronRight,
+	IconGlobe,
+	IconHash,
+	IconPencil,
+	IconPeople,
+	IconPlus,
+	IconTrash,
+} from "../icons";
 import { getCurrentUser } from "../UserPicker";
 
-// ── Memory: the repo/user/team/channel stores behind the opensession-memory
-// tools and Slack channel memory — view, add, edit and delete entries. ──
+// Settings maintenance for the repo, user, workspace, and Slack channel stores
+// behind the opensession-memory tools. This is only a different view over the
+// existing scopes and CRUD routes; storage and prompt injection stay unchanged.
 
-const MEMORY_GROUPS: {
-	kind: MemoryScopeDto["scope"]["kind"];
+type MemoryKind = MemoryScopeDto["scope"]["kind"];
+
+type MemoryCategory = {
+	kind: MemoryKind;
 	title: string;
-	/** Fixed groups render even when empty (there's always an add target). */
-	fixed: boolean;
-}[] = [
-	{ kind: "team", title: "Team", fixed: true },
-	{ kind: "repo", title: "Repos", fixed: true },
-	{ kind: "user", title: "People", fixed: false },
-	{ kind: "channel", title: "Slack channels", fixed: false },
+	description: string;
+	targetLabel: string;
+	icon: typeof IconGlobe;
+	tone: MarkTone;
+};
+
+const MEMORY_CATEGORIES: MemoryCategory[] = [
+	{
+		kind: "team",
+		title: "Workspace",
+		description: "Shared across the workspace and with public Slack memory.",
+		targetLabel: "Workspace",
+		icon: IconGlobe,
+		tone: "indigo",
+	},
+	{
+		kind: "repo",
+		title: "Repositories",
+		description: "Used when a session works in that repository.",
+		targetLabel: "Repository",
+		icon: IconBranches,
+		tone: "sky",
+	},
+	{
+		kind: "user",
+		title: "People",
+		description: "Follows the person prompting, including their Slack DM memory.",
+		targetLabel: "Person",
+		icon: IconPeople,
+		tone: "green",
+	},
+	{
+		kind: "channel",
+		title: "Slack channels",
+		description: "Used within a specific Slack channel.",
+		targetLabel: "Slack channel",
+		icon: IconHash,
+		tone: "orange",
+	},
 ];
 
-function MemoryEntryRow({
-	scopeKey,
-	entry,
+function CategoryIcon({ category }: { category: MemoryCategory }) {
+	const size = 40;
+	const Icon = category.icon;
+	return (
+		<span
+			className={markTileClass(size)}
+			style={{
+				width: size,
+				height: size,
+				backgroundImage: markTileGradient(category.tone),
+				color: "#fff",
+				boxShadow: markTileShadow(markTileInk(category.tone)),
+			}}
+		>
+			<Icon size={22} />
+		</span>
+	);
+}
+
+function memoryCount(scopes: MemoryScopeDto[]): number {
+	return scopes.reduce((total, scoped) => total + scoped.entries.length, 0);
+}
+
+function CategoryCard({
+	category,
+	scopes,
+	onOpen,
+}: {
+	category: MemoryCategory;
+	scopes: MemoryScopeDto[];
+	onOpen: () => void;
+}) {
+	const count = memoryCount(scopes);
+	return (
+		<SettingCard>
+			<button
+				type="button"
+				className="focus-ring group flex w-full items-center gap-3 rounded-2xl px-5 py-4 text-left hover:bg-hover phone:items-start"
+				onClick={onOpen}
+			>
+				<CategoryIcon category={category} />
+				<span className="min-w-0 flex-1">
+					<span className="block text-item-title font-semibold text-fg">{category.title}</span>
+					<span className="mt-1 block text-supporting leading-relaxed text-dim">
+						{category.description}
+					</span>
+					<span className="mt-1.5 hidden text-label font-medium text-dim phone:block">
+						{count} {count === 1 ? "memory" : "memories"}
+					</span>
+				</span>
+				<span className="flex shrink-0 items-center gap-2 self-center text-label font-medium text-dim phone:self-start phone:pt-2">
+					<span className="phone:hidden">{count} {count === 1 ? "memory" : "memories"}</span>
+					<IconChevronRight size={20} className="text-faint group-hover:text-dim" />
+				</span>
+			</button>
+		</SettingCard>
+	);
+}
+
+type MemoryTableRow = {
+	scoped: MemoryScopeDto;
+	entry: MemoryEntryDto;
+};
+
+function MemoryRow({
+	row,
+	showScope,
 	onChanged,
 }: {
-	scopeKey: string;
-	entry: MemoryEntryDto;
+	row: MemoryTableRow;
+	showScope: boolean;
 	onChanged: () => void;
 }) {
 	const [editing, setEditing] = useState(false);
-	const [draft, setDraft] = useState(entry.text);
+	const [draft, setDraft] = useState(row.entry.text);
 	const [busy, setBusy] = useState(false);
 
 	async function save() {
 		const text = draft.trim();
-		if (!text || text === entry.text) return setEditing(false);
+		if (!text || text === row.entry.text) {
+			setEditing(false);
+			return;
+		}
 		setBusy(true);
 		try {
-			await updateMemoryEntryApi(scopeKey, entry.id, text);
+			await updateMemoryEntryApi(row.scoped.scope.key, row.entry.id, text);
 			setEditing(false);
 			onChanged();
-		} catch (e: any) {
-			toast(e?.message || "Failed to update memory", { variant: "error" });
+		} catch (error: any) {
+			toast(error?.message || "Failed to update memory", { variant: "error" });
 		} finally {
 			setBusy(false);
 		}
@@ -68,242 +188,344 @@ function MemoryEntryRow({
 	async function remove() {
 		setBusy(true);
 		try {
-			await deleteMemoryEntryApi(scopeKey, entry.id);
+			await deleteMemoryEntryApi(row.scoped.scope.key, row.entry.id);
 			toast("Memory forgotten", { variant: "success" });
 			onChanged();
-		} catch (e: any) {
-			toast(e?.message || "Failed to delete memory", { variant: "error" });
+		} catch (error: any) {
+			toast(error?.message || "Failed to delete memory", { variant: "error" });
 			setBusy(false);
 		}
 	}
 
-	if (editing)
-		return (
-			<div className="border-b border-line px-5 py-3 last:border-b-0">
-				<Textarea
-					rows={2}
-					value={draft}
-					autoFocus
-					onChange={(e) => setDraft(e.target.value)}
-					onKeyDown={(e) => {
-						if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) save();
-						if (e.key === "Escape") setEditing(false);
-					}}
-				/>
-				<div className="mt-1.5 flex items-center gap-2">
-					<Button
-						variant="primary"
-						size="sm"
-						disabled={busy || !draft.trim()}
-						onClick={save}
-					>
-						Save
-					</Button>
-					<Button
-						variant="ghost"
-						size="sm"
-						onClick={() => {
-							setDraft(entry.text);
-							setEditing(false);
-						}}
-					>
-						Cancel
-					</Button>
-					{/* Both shortcuts were already wired and undiscoverable. */}
-					<span className="ml-auto text-meta text-faint">⌘↵ to save · Esc to cancel</span>
-				</div>
-			</div>
-		);
-
 	return (
-		<div className="group flex items-start gap-2 border-b border-line px-5 py-3 last:border-b-0">
-			<div className="min-w-0 flex-1">
-				<div className="text-item-title font-medium leading-snug text-fg">
-					{entry.text}
-				</div>
-				<div className="mt-0.5 text-meta font-medium text-faint">
-					{entry.by} · {relativeTime(entry.at)}
-				</div>
-			</div>
-			<div className="flex shrink-0 items-center gap-1">
-				<Button
-					size="sm"
-					variant="ghost"
-					aria-label="Edit memory"
-					icon={<IconPencil size={16} />}
-					disabled={busy}
-					onClick={() => {
-						setDraft(entry.text);
-						setEditing(true);
-					}}
-				/>
-				<Button
-					size="sm"
-					variant="ghost"
-					aria-label="Forget memory"
-					className="hover:text-red"
-					icon={<IconTrash size={16} />}
-					disabled={busy}
-					onClick={remove}
-				/>
-			</div>
-		</div>
+		<tr className="border-t border-line align-top first:border-t-0 phone:grid phone:grid-cols-[minmax(0,1fr)_auto] phone:gap-x-3 phone:px-4 phone:py-3">
+			{showScope && (
+				<td className="w-32 px-4 py-3 text-label font-medium text-dim phone:col-start-1 phone:row-start-1 phone:w-auto phone:p-0">
+					{row.scoped.scope.label}
+				</td>
+			)}
+			<td className="px-4 py-3 phone:col-span-2 phone:row-start-2 phone:mt-1 phone:p-0">
+				{editing ? (
+					<div>
+						<Textarea
+							rows={3}
+							value={draft}
+							autoFocus
+							onChange={(event) => setDraft(event.target.value)}
+							onKeyDown={(event) => {
+								if (event.key === "Enter" && (event.metaKey || event.ctrlKey)) void save();
+								if (event.key === "Escape") setEditing(false);
+							}}
+						/>
+						<div className="mt-2 flex items-center gap-2">
+							<Button size="sm" variant="primary" disabled={busy || !draft.trim()} onClick={() => void save()}>
+								Save
+							</Button>
+							<Button size="sm" variant="ghost" disabled={busy} onClick={() => {
+								setDraft(row.entry.text);
+								setEditing(false);
+							}}>
+								Cancel
+							</Button>
+						</div>
+					</div>
+				) : (
+					<div className="whitespace-pre-wrap break-words text-supporting leading-relaxed text-fg">
+						{row.entry.text}
+					</div>
+				)}
+			</td>
+			<td className="w-32 px-4 py-3 text-meta text-faint phone:col-start-1 phone:row-start-3 phone:mt-2 phone:w-auto phone:p-0">
+				<div className="font-medium text-dim">{row.entry.by}</div>
+				<div className="mt-0.5">{relativeTime(row.entry.at)}</div>
+			</td>
+			<td className="w-20 px-4 py-2.5 phone:col-start-2 phone:row-start-1 phone:w-auto phone:p-0">
+				{!editing && (
+					<div className="flex justify-end gap-1">
+						<Button
+							size="sm"
+							variant="ghost"
+							aria-label="Edit memory"
+							className="phone:size-11 phone:min-h-11"
+							icon={<IconPencil size={16} />}
+							disabled={busy}
+							onClick={() => {
+								setDraft(row.entry.text);
+								setEditing(true);
+							}}
+						/>
+						<Button
+							size="sm"
+							variant="ghost"
+							aria-label="Forget memory"
+							className="hover:text-red phone:size-11 phone:min-h-11"
+							icon={<IconTrash size={16} />}
+							disabled={busy}
+							onClick={() => void remove()}
+						/>
+					</div>
+				)}
+			</td>
+		</tr>
 	);
 }
 
-function MemoryScopeCard({
-	scoped,
+function MemoryTable({
+	scopes,
 	onChanged,
 }: {
-	scoped: MemoryScopeDto;
+	scopes: MemoryScopeDto[];
 	onChanged: () => void;
 }) {
-	const [adding, setAdding] = useState(false);
+	const rows = scopes
+		.flatMap((scoped) => scoped.entries.map((entry) => ({ scoped, entry })))
+		.sort((left, right) => Date.parse(right.entry.at) - Date.parse(left.entry.at));
+	const showScope = scopes.length > 1;
+
+	if (!rows.length) {
+		return <EmptyState placement="card">No memories in this category yet.</EmptyState>;
+	}
+
+	return (
+		<SettingCard className="overflow-hidden">
+			<div className="overflow-x-auto">
+				<table className="w-full table-fixed border-collapse phone:block">
+					<thead className="border-b border-line text-left text-label font-semibold text-faint phone:sr-only">
+						<tr>
+							{showScope && <th className="w-32 px-4 py-2.5">Scope</th>}
+							<th className="px-4 py-2.5">Memory</th>
+							<th className="w-32 px-4 py-2.5">Saved</th>
+							<th className="w-20 px-4 py-2.5 text-right">Actions</th>
+						</tr>
+					</thead>
+					<tbody className="phone:block">
+						{rows.map((row) => (
+							<MemoryRow
+								key={`${row.scoped.scope.key}:${row.entry.id}`}
+								row={row}
+								showScope={showScope}
+								onChanged={onChanged}
+							/>
+						))}
+					</tbody>
+				</table>
+			</div>
+		</SettingCard>
+	);
+}
+
+function AddMemoryDialog({
+	category,
+	scopes,
+	open,
+	onOpenChange,
+	onChanged,
+}: {
+	category: MemoryCategory;
+	scopes: MemoryScopeDto[];
+	open: boolean;
+	onOpenChange: (open: boolean) => void;
+	onChanged: () => void;
+}) {
+	const [scopeKey, setScopeKey] = useState(scopes[0]?.scope.key || "");
 	const [draft, setDraft] = useState("");
 	const [busy, setBusy] = useState(false);
 
+	useEffect(() => {
+		if (open) {
+			setScopeKey(scopes[0]?.scope.key || "");
+			setDraft("");
+		}
+	}, [open, scopes]);
+
 	async function add() {
 		const text = draft.trim();
-		if (!text) return;
+		if (!scopeKey || !text) return;
 		setBusy(true);
 		try {
-			await addMemoryEntryApi(scoped.scope.key, text, getCurrentUser() || "settings");
-			setDraft("");
-			setAdding(false);
+			await addMemoryEntryApi(scopeKey, text, getCurrentUser() || "settings");
 			toast("Memory saved", { variant: "success" });
+			onOpenChange(false);
 			onChanged();
-		} catch (e: any) {
-			toast(e?.message || "Failed to add memory", { variant: "error" });
+		} catch (error: any) {
+			toast(error?.message || "Failed to add memory", { variant: "error" });
 		} finally {
 			setBusy(false);
 		}
 	}
 
 	return (
-		<SettingsSection className="mb-2 overflow-hidden p-0">
-			<div className="flex items-center justify-between border-b border-line px-5 py-2.5">
-				<div className="text-supporting font-semibold text-fg">
-					{scoped.scope.label}
-				</div>
-				<Button
-					size="sm"
-					variant="ghost"
-					aria-label={`Add memory to ${scoped.scope.label}`}
-					icon={<IconPlus size={16} />}
-					onClick={() => setAdding(true)}
-				>
-					Add
-				</Button>
-			</div>
-			{scoped.entries.length === 0 && !adding && (
-				<div className="px-5 py-3 text-item-title font-medium text-faint">
-					No memories yet.
-				</div>
-			)}
-			{/* Directly under the Add button that opened it. It used to render
-			    after every entry, so on a long scope the form appeared far below
-			    the button and clicking Add looked like it did nothing. */}
-			{adding && (
-				<div className="border-b border-line px-5 py-3">
+		<Modal.Root open={open} onOpenChange={onOpenChange}>
+			<Modal.Content>
+				<Modal.Header
+					title={`Add ${category.title.toLowerCase()} memory`}
+					description="Save a durable, self-contained fact for this scope."
+				/>
+				{scopes.length > 1 && (
+					<Field label={category.targetLabel}>
+						<Select value={scopeKey} onChange={(event) => setScopeKey(event.target.value)}>
+							{scopes.map((scoped) => (
+								<option key={scoped.scope.key} value={scoped.scope.key}>
+									{scoped.scope.label}
+								</option>
+							))}
+						</Select>
+					</Field>
+				)}
+				<Field label="Memory">
 					<Textarea
-						rows={2}
-						placeholder="A durable, self-contained fact…"
+						rows={4}
 						value={draft}
 						autoFocus
-						onChange={(e) => setDraft(e.target.value)}
-						onKeyDown={(e) => {
-							if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) add();
-							if (e.key === "Escape") setAdding(false);
+						placeholder="A durable, self-contained fact…"
+						onChange={(event) => setDraft(event.target.value)}
+						onKeyDown={(event) => {
+							if (event.key === "Enter" && (event.metaKey || event.ctrlKey)) void add();
 						}}
 					/>
-					<div className="mt-1.5 flex items-center gap-2">
-						<Button
-							variant="primary"
-							size="sm"
-							disabled={busy || !draft.trim()}
-							onClick={add}
-						>
-							Save
-						</Button>
-						<Button variant="ghost" size="sm" onClick={() => setAdding(false)}>
-							Cancel
-						</Button>
-						<span className="ml-auto text-meta text-faint">⌘↵ to save · Esc to cancel</span>
-					</div>
-				</div>
+				</Field>
+				<Modal.Footer>
+					<Modal.Close render={<Button variant="ghost" disabled={busy}>Cancel</Button>} />
+					<Button variant="primary" disabled={busy || !scopeKey || !draft.trim()} onClick={() => void add()}>
+						{busy ? "Saving…" : "Save memory"}
+					</Button>
+				</Modal.Footer>
+			</Modal.Content>
+		</Modal.Root>
+	);
+}
+
+function CategoryPage({
+	category,
+	scopes,
+	onBack,
+	onChanged,
+}: {
+	category: MemoryCategory;
+	scopes: MemoryScopeDto[];
+	onBack: () => void;
+	onChanged: () => void;
+}) {
+	const [adding, setAdding] = useState(false);
+	const count = memoryCount(scopes);
+	const canAdd = scopes.length > 0;
+
+	return (
+		<SettingsPanel>
+			<h2 className="m-0 hidden px-5 text-section-title font-semibold text-fg phone:block">
+				{category.title}
+			</h2>
+			<SettingsHeader
+				title={category.title}
+				description={`${category.description} ${count} ${count === 1 ? "memory" : "memories"}.`}
+				className="phone:mt-1.5"
+			/>
+			<div className="sticky top-0 z-10 mb-3 flex items-center justify-between gap-3 bg-surface px-5 py-2">
+				<Button size="sm" variant="ghost" icon={<IconChevronLeft size={18} />} onClick={onBack}>
+					Back
+				</Button>
+				<Button size="sm" icon={<IconPlus size={16} />} disabled={!canAdd} onClick={() => setAdding(true)}>
+					Add memory
+				</Button>
+			</div>
+			{!canAdd ? (
+				<EmptyState placement="card">
+					No {category.title.toLowerCase()} scopes exist yet. They appear here after that scope first stores a memory.
+				</EmptyState>
+			) : (
+				<MemoryTable scopes={scopes} onChanged={onChanged} />
 			)}
-			{scoped.entries.map((e) => (
-				<MemoryEntryRow
-					key={e.id}
-					scopeKey={scoped.scope.key}
-					entry={e}
-					onChanged={onChanged}
-				/>
-			))}
-		</SettingsSection>
+			<AddMemoryDialog
+				category={category}
+				scopes={scopes}
+				open={adding}
+				onOpenChange={setAdding}
+				onChanged={onChanged}
+			/>
+		</SettingsPanel>
 	);
 }
 
 export function MemoryPanel() {
 	const [scopes, setScopes] = useState<MemoryScopeDto[] | null>(null);
+	const [selectedKind, setSelectedKind] = useState<MemoryKind | null>(null);
 	const [error, setError] = useState<string | null>(null);
 
 	function reload() {
 		fetchMemory()
-			.then((r) => setScopes(r.scopes))
-			.catch((e) => setError(e.message));
+			.then(async (response) => {
+				// Configured Slack channels are valid memory scopes even before their
+				// first entry creates a store file. Merge them into the UI model so the
+				// existing POST /api/memory route can create that first entry without
+				// any memory-storage or backend contract change.
+				const channels = await fetch(`${BASE_PATH}/api/slack/channels`)
+					.then((result) => result.ok ? result.json() : null)
+					.then((body: { channels?: Array<{ id: string; name: string }> } | null) => body?.channels || [])
+					.catch(() => []);
+				const next = [...response.scopes];
+				for (const channel of channels) {
+					const key = `channel-${channel.id}`;
+					if (!next.some((scoped) => scoped.scope.key === key)) {
+						next.push({ scope: { key, kind: "channel", label: channel.name }, entries: [] });
+					}
+				}
+				setScopes(next);
+				setError(null);
+			})
+			.catch((fetchError) => setError(fetchError.message));
 	}
+
 	useEffect(reload, []);
 
-	const header = (
-		<SettingsHeader
-			title="Memory"
-			description="Facts that matching sessions remember. Team memory spans the workspace, repo memory follows the repo, and people memory follows whoever is prompting."
-		/>
-	);
-
-	if (!scopes)
+	if (!scopes) {
 		return (
 			<SettingsPanel>
-				{header}
+				<SettingsHeader
+					title="Memory"
+					description="Durable facts scoped to your workspace, repositories, people, and Slack channels."
+				/>
 				{error ? (
 					<InlineAlert>{error}</InlineAlert>
 				) : (
-					// Only the fixed groups: those always render, so their labels
-					// are known before the scopes are. People and Slack channels
-					// appear only if there are any, and a label standing in for a
-					// group that may not exist is a claim rather than a placeholder.
-					MEMORY_GROUPS.filter((g) => g.fixed).map((g) => (
-						<div key={g.kind}>
-							<SettingsGroupLabel>{g.title}</SettingsGroupLabel>
-							<SettingCardSkeleton
-								rows={2}
-								label={`Loading ${g.title.toLowerCase()} memory`}
-							/>
-						</div>
-					))
+					<div className="grid gap-3">
+						{MEMORY_CATEGORIES.map((category) => (
+							<SettingCardSkeleton key={category.kind} rows={1} icon={40} label={`Loading ${category.title.toLowerCase()} memory`} />
+						))}
+					</div>
 				)}
 			</SettingsPanel>
 		);
+	}
+
+	const selectedCategory = MEMORY_CATEGORIES.find((category) => category.kind === selectedKind);
+	if (selectedCategory) {
+		return (
+			<CategoryPage
+				category={selectedCategory}
+				scopes={scopes.filter((scoped) => scoped.scope.kind === selectedCategory.kind)}
+				onBack={() => setSelectedKind(null)}
+				onChanged={reload}
+			/>
+		);
+	}
 
 	return (
 		<SettingsPanel>
-			{header}
-			{MEMORY_GROUPS.map((g) => {
-				const inGroup = scopes.filter((s) => s.scope.kind === g.kind);
-				if (!inGroup.length && !g.fixed) return null;
-				return (
-					<div key={g.kind}>
-						<SettingsGroupLabel>{g.title}</SettingsGroupLabel>
-						{inGroup.map((s) => (
-							<MemoryScopeCard key={s.scope.key} scoped={s} onChanged={reload} />
-						))}
-						{!inGroup.length && (
-							<EmptyState placement="card">Nothing remembered yet.</EmptyState>
-						)}
-					</div>
-				);
-			})}
+			<SettingsHeader
+				title="Memory"
+				description="Durable facts scoped to your workspace, repositories, people, and Slack channels."
+			/>
+			{error && <InlineAlert onDismiss={() => setError(null)}>{error}</InlineAlert>}
+			<div className="grid gap-3">
+				{MEMORY_CATEGORIES.map((category) => (
+					<CategoryCard
+						key={category.kind}
+						category={category}
+						scopes={scopes.filter((scoped) => scoped.scope.kind === category.kind)}
+						onOpen={() => setSelectedKind(category.kind)}
+					/>
+				))}
+			</div>
 		</SettingsPanel>
 	);
 }
