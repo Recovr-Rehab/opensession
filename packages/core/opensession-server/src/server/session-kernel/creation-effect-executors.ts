@@ -58,6 +58,13 @@ function assertAdoptableWorkspace(
     throw new CreationEffectIndeterminateError(
       `Workspace ${payload.workspaceId} exists for another branch`,
     );
+  if (
+    payload.worktreeDir !== undefined &&
+    workspace.worktreeDir !== payload.worktreeDir
+  )
+    throw new CreationEffectIndeterminateError(
+      `Workspace ${payload.workspaceId} exists for another worktree`,
+    );
 }
 
 /**
@@ -80,6 +87,7 @@ export async function executeCreationWorkspacePrepare(
       createdBy: payload.createdBy,
       repo: payload.project,
       branch: payload.branch,
+      worktreeDir: payload.worktreeDir,
     });
   }
   dependencies.afterDestinationAccepted?.(workspace);

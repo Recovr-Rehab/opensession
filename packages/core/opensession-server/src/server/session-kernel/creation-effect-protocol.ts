@@ -12,6 +12,7 @@ export type CreationWorkspacePrepareEffect = {
     createdBy: string;
     project?: string;
     branch?: string;
+    worktreeDir?: string;
     mode: "adopt_or_create";
   };
 };

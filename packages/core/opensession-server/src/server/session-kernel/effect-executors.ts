@@ -75,6 +75,10 @@ function creationPayload<K extends Exclude<
           value.branch === undefined
             ? undefined
             : requiredString(kind, value.branch, "branch"),
+        worktreeDir:
+          value.worktreeDir === undefined
+            ? undefined
+            : requiredString(kind, value.worktreeDir, "worktreeDir"),
         mode: value.mode,
       } as SessionActorEffectFor<K>["payload"];
     case "creation_branch_prepare":

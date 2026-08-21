@@ -251,6 +251,9 @@ describe("single session ownership", () => {
 		const wiring = read("session-control-wiring.ts");
 		expect(wiring).toContain("updateCreatePlan(bksId, createIdentity)");
 		expect(wiring).toContain("createPlan.resolved");
+		expect(wiring).toContain("ensureCreationPlanned(bksId, createIdentity)");
+		expect(wiring).toContain("await requestCreationWorkspace({");
+		expect(wiring).not.toContain("createWorkspace(");
 		const create = read("session-create.ts");
 		expect(create).toContain("createPlan.resolved");
 		expect(create).toContain("spec.openingPromptEntryId");

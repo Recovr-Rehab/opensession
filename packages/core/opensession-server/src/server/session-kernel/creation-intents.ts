@@ -1,0 +1,108 @@
+import { sessionKernel } from "./kernel";
+import type { DurableCreationState } from "./store";
+
+export type CreationWorkspaceIntent = {
+  sessionId: string;
+  identity: string;
+  workspaceId: string;
+  dedupeKey: string;
+  name: string;
+  createdBy: string;
+  project?: string;
+  branch?: string;
+  worktreeDir?: string;
+};
+
+type CreationIntentKernel = Pick<
+  ReturnType<typeof sessionKernel>,
+  "creationState" | "applyCreationEvent"
+>;
+
+type CreationIntentOptions = {
+  kernel?: CreationIntentKernel;
+  timeoutMs?: number;
+  pollMs?: number;
+};
+
+function assertIdentity(
+  state: DurableCreationState,
+  identity: string,
+): void {
+  if (state.identity !== identity)
+    throw new Error("Create request identity crossed durable session ownership");
+  if (state.state === "failed")
+    throw new Error("Session creation has already failed");
+}
+
+export function ensureCreationPlanned(
+  sessionId: string,
+  identity: string,
+  kernel: CreationIntentKernel = sessionKernel(sessionId),
+): DurableCreationState {
+  const existing = kernel.creationState();
+  if (existing) {
+    assertIdentity(existing, identity);
+    return existing;
+  }
+  const planned = kernel.applyCreationEvent({ identity, event: "plan" });
+  if (!planned.accepted || !planned.state)
+    throw new Error(`Creation plan was rejected: ${planned.reason || "unknown"}`);
+  return planned.state;
+}
+
+/** Emit one stable workspace intent and wait for its actor receipt, never its file. */
+export async function requestCreationWorkspace(
+  input: CreationWorkspaceIntent,
+  options: CreationIntentOptions = {},
+): Promise<DurableCreationState> {
+  const kernel = options.kernel ?? sessionKernel(input.sessionId);
+  let state = ensureCreationPlanned(input.sessionId, input.identity, kernel);
+  const effectId = `workspace:${input.workspaceId}`;
+  if (state.completedEffectIds.includes(effectId)) return state;
+  if (state.currentEffectId && state.currentEffectId !== effectId)
+    throw new Error(
+      `Creation effect ${state.currentEffectId} must settle before ${effectId}`,
+    );
+  if (!state.currentEffectId) {
+    const emitted = kernel.applyCreationEvent({
+      identity: input.identity,
+      event: "preparation_started",
+      nextEffectId: effectId,
+      effect: {
+        kind: "creation_workspace_prepare",
+        effectKey: effectId,
+        payload: {
+          creationIdentity: input.identity,
+          creationGeneration: state.generation,
+          workspaceId: input.workspaceId,
+          dedupeKey: input.dedupeKey,
+          name: input.name,
+          createdBy: input.createdBy,
+          project: input.project,
+          branch: input.branch,
+          worktreeDir: input.worktreeDir,
+          mode: "adopt_or_create",
+        },
+      },
+    });
+    if (!emitted.accepted || !emitted.state)
+      throw new Error(
+        `Creation workspace intent was rejected: ${emitted.reason || "unknown"}`,
+      );
+    state = emitted.state;
+  }
+  const deadline = Date.now() + (options.timeoutMs ?? 30_000);
+  while (!state.completedEffectIds.includes(effectId)) {
+    if (Date.now() >= deadline)
+      throw new Error(
+        `Creation workspace effect ${effectId} remains durably pending`,
+      );
+    await Bun.sleep(options.pollMs ?? 25);
+    const current = kernel.creationState();
+    if (!current)
+      throw new Error("Creation state disappeared while workspace work was pending");
+    assertIdentity(current, input.identity);
+    state = current;
+  }
+  return state;
+}

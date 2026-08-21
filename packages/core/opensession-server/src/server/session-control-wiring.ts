@@ -42,13 +42,15 @@ import { engineUserTexts, getAllSessions, mergedSessionTranscript } from "./sess
 import { rebuildIndex } from "./slack-links";
 import { handleSlashCommand } from "./slash-commands";
 import { type UnifiedSession } from "./types";
-import { type Workspace, createWorkspace, getWorkspace, updateWorkspace } from "./workspaces";
+import { type Workspace, getWorkspace, updateWorkspace } from "./workspaces";
 import { ownedWorktree } from "./session-workspace";
 import { createWorktree, ensureAskCheckout, ensureScratchDir, getRepo, isRegisteredWorktree, listWorktrees, repoForPath, repoForPathOrNull, resolveUniqueBranch, worktreePathFor } from "./worktree";
 import { broadcastToSession } from "./ws-hub";
 import { randomUUIDv7 } from "bun";
 import {
+	ensureCreationPlanned,
 	legacyGatewayEffect,
+	requestCreationWorkspace,
 	sessionKernel,
 	sessionKernelOwnsCurrentCommand,
 } from "./session-kernel";
@@ -461,6 +463,7 @@ registerSessionControl({
 				createdAt: completedCreate.createdAt || new Date().toISOString(),
 			};
 		}
+		ensureCreationPlanned(bksId, createIdentity);
 		// Fork: branch a new session off an existing one — same rules as the
 		// web create (shares the source's cwd/branch/model; Claude sources are
 		// cloned via SDK forkSession, others get a transcript handoff). An
@@ -748,15 +751,23 @@ registerSessionControl({
 					ownedWorktree(wsParent?.worktreeDir) ?? ownedWorktree(wtPath);
 				const wsName =
 					wsParent?.title || wsParent?.branch || title || "Workspace";
-				const ws = getWorkspace(plannedWorkspaceId) || createWorkspace({
-					id: plannedWorkspaceId,
+				await requestCreationWorkspace({
+					sessionId: bksId,
+					identity: createIdentity,
+					workspaceId: plannedWorkspaceId,
+					dedupeKey: `session-create:${createIdentity}`,
 					name: wsName,
-					...(isRepoLess ? {} : { repo: wsParent?.repo || repo.id }),
 					createdBy:
 						creator || wsParent?.createdBy || wsParent?.startedBy || "Anonymous",
+					...(isRepoLess ? {} : { project: wsParent?.repo || repo.id }),
 					...(branchForWs ? { branch: branchForWs } : {}),
 					...(dir ? { worktreeDir: dir } : {}),
 				});
+				const ws = getWorkspace(plannedWorkspaceId);
+				if (!ws)
+					throw new Error(
+						`Workspace ${plannedWorkspaceId} projection is missing after actor receipt`,
+					);
 				resolvedWorkspaceId = ws.id;
 				// Only when the name was seeded from this session's own first line
 				// (compared before createWorkspace trims it): a workspace named
