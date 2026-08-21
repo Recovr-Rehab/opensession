@@ -110,6 +110,8 @@ import {
 	PR_WEBHOOK_FALLBACK_POLL_MS,
 } from "../lib/poll";
 import { sessionPrPresentation } from "../lib/session-prs";
+import { refChipText, refLabel, refTone, worstPrRef } from "../lib/pr-refs";
+import { prPhoneChipClass } from "../lib/pr-tone-classes";
 import type { PrFocus } from "../lib/pr-focus";
 import { reviewLoopResult } from "../lib/review-loop";
 import { CONTINUE_AFTER_FAILURE_PROMPT } from "../lib/continue-run";
@@ -1095,6 +1097,12 @@ export function SessionViewer({
 		prPresentation.primary?.source !== "primary"
 			? prPresentation.primary
 			: undefined;
+	// The one PR a phone's top bar shows. The primary if there is one, else the
+	// series' worst state, so a failing attached-repo PR is not hidden behind a
+	// green one. Undefined when the session has no PR at all — the bar then
+	// carries nothing rather than a chip that says "none".
+	const phonePr =
+		prPresentation.primary ?? worstPrRef(prPresentation.additional);
 	// PRs the server matched to this session through their body's attribution
 	// footer — opened on a branch the session doesn't own, so they'd otherwise
 	// have no Review tab of their own.
@@ -6256,6 +6264,28 @@ export function SessionViewer({
 							onOpenChange={setSummaryOpen}
 							tabStripVisible={tabStripVisible}
 						/>
+					)}
+					{/* Phones have no workspace panel and no status strip, so the PR
+					    state had nowhere to show: you had to open the info page to
+					    learn whether checks were red. One toned chip in the bar's
+					    right slot says the number and the state in its colour, and
+					    tapping it opens Review on that PR. Only when the session
+					    actually has one: a chip that says "no PR" is chrome. */}
+					{isPhone && phonePr && (
+						<button
+							type="button"
+							className={prPhoneChipClass(refTone(phonePr))}
+							title={refLabel(phonePr)}
+							aria-label={refLabel(phonePr)}
+							onClick={() =>
+								focusPrInReview({
+									repo: phonePr.repo,
+									branch: phonePr.branch,
+								})
+							}
+						>
+							{refChipText(phonePr, session.repo || undefined)}
+						</button>
 					)}
 					{!isPhone && panelAvailable && (
 						<Tooltip
