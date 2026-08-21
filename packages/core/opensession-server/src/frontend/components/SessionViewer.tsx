@@ -5433,10 +5433,10 @@ export function SessionViewer({
 				disablePointerDismissal={branchActionBusy === "create"}
 			>
 				<Modal.Content>
-					<Modal.Header
-						title="Move to a branch?"
-						description="You need to move this session to a branch before you can create a PR."
-					/>
+					<Modal.Header title="Move to a branch?" />
+					<Modal.Description className="m-0 text-pretty text-supporting font-normal leading-relaxed text-dim">
+						You need to move this session to a branch before you can create a PR.
+					</Modal.Description>
 					<Modal.Footer>
 						<Modal.Close
 							render={
@@ -5453,7 +5453,7 @@ export function SessionViewer({
 							disabled={!connected || isBusy || branchActionBusy === "create"}
 							onClick={() => void moveAndCreatePr()}
 						>
-							{branchActionBusy === "create" ? "Moving…" : "Move and create"}
+							{branchActionBusy === "create" ? "Moving…" : "Move and create PR"}
 						</Button>
 					</Modal.Footer>
 				</Modal.Content>
