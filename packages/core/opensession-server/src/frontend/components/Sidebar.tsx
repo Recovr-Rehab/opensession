@@ -160,6 +160,7 @@ import {
 	IconListCircles,
 	IconMessages,
 	IconFeed,
+	IconPeople,
 	IconPullRequest,
 } from "./icons";
 import { Button } from "../ui/button";
@@ -4807,14 +4808,17 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 									titleRef.current = node;
 								}}
 							>
-								{filter.person !== "everyone" &&
+								{filter.person === "everyone" ? (
+									<IconPeople size={20} className="shrink-0 text-dim" />
+								) : (
 									filter.person !== "unassigned" && (
 										<UserAvatar
 											name={personLensName}
 											size={20}
 											className="shrink-0"
 										/>
-									)}
+									)
+								)}
 								<span className="min-w-0 truncate font-semibold">
 									{filter.person === "everyone"
 										? "Everyone"
