@@ -47,6 +47,7 @@ export const BRANDS: Record<string, { bg: string; fg?: string }> = {
   xai: { bg: "#000000" },
   moonshotai: { bg: "#16162e" },
   cerebras: { bg: "#f15a29" },
+  wafer: { bg: "#000000" },
   openrouter: { bg: "#000000", fg: "#c8ff00" },
   deepseek: { bg: "#4d6bfe" },
   // Engines. Not connectable services, but the same marks under the same
@@ -270,6 +271,14 @@ export const BRAND_LOGOS: Record<string, BrandLogo> = {
     "viewBox": "0 0 24 24",
     "paths": [
       "M18.654 3.87a5.087 5.087 0 110 10.174L23.7 19.09c.64.641.187 1.737-.72 1.737H8.48a8.479 8.479 0 010-16.958h10.175zM8.479 7.26a5.087 5.087 0 100 10.176 5.087 5.087 0 000-10.175z"
+    ]
+  },
+  // Wafer publishes a wordmark and no icon, so the mark is its leading W,
+  // cropped to that glyph's own bounds out of the wordmark.
+  "wafer": {
+    "viewBox": "0 7.1729 24.5486 16.8285",
+    "paths": [
+      "M17.7458 21.6347L13.8742 10.0014C13.8585 9.95184 13.8407 9.9043 13.8229 9.85666L13.7498 9.66439H10.8304L10.7593 9.85666C10.7414 9.90229 10.7257 9.94983 10.7079 9.99939L6.86996 21.5614L2.52834 7.17285H0L5.01124 23.7239C5.01717 23.7417 5.02112 23.7576 5.02704 23.7735L5.10013 24.0014H8.53314L12.2743 12.7506L16.0154 24.0014H19.4484L24.5486 7.17285H22.0894L17.7458 21.6347Z"
     ]
   },
   "deepseek": {
