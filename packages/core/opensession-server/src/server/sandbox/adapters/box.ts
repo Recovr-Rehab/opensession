@@ -969,6 +969,24 @@ async function waitForNamedSnapshot(
   throw new Error(`Box named snapshot ${name} was not ready after ${timeoutMs}ms`);
 }
 
+async function recoverBoxRepoTemplate(
+  cfg: BoxClientConfig,
+  repoId: string,
+) {
+  const stored = readRemoteRepoTemplate("box", repoId);
+  if (stored) return stored;
+  const name = boxSnapshotName(repoId);
+  let snapshot = await getNamedSnapshot(cfg, name);
+  if (snapshot && boxSnapshotSaveIsRecoverable(snapshot)) {
+    await waitForNamedSnapshot(cfg, name);
+    snapshot = await getNamedSnapshot(cfg, name);
+  }
+  if (snapshot?.status !== "ready") return null;
+  writeRemoteRepoTemplate("box", repoId, name);
+  console.log(`[sandbox:box] recovered completed repo template ${name}`);
+  return readRemoteRepoTemplate("box", repoId);
+}
+
 async function deleteNamedSnapshot(cfg: BoxClientConfig, name: string): Promise<void> {
   try {
     await boxApi(cfg, "DELETE", `/named-snapshots/${encodeURIComponent(name)}`);
@@ -1018,7 +1036,7 @@ export const boxPrewarmAdapter: PrewarmAdapter = {
     const key = labels[PREWARM_KEY_LABEL] || "";
     const repoId = key.startsWith("box:") ? key.slice("box:".length) : "";
     if (!repoId) throw new Error(`invalid Box prewarm key: ${key || "(missing)"}`);
-    const template = readRemoteRepoTemplate("box", repoId);
+    const template = await recoverBoxRepoTemplate(cfg, repoId);
     const type = boxMachineType(opts.resources);
     const create = (from?: string) =>
       boxApi<{ box: BoxRecord }>(
