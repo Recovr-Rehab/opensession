@@ -1093,6 +1093,11 @@ export const boxPrewarmAdapter: PrewarmAdapter = {
       console.log(`[sandbox:box] recovered in-flight post-setup repo template ${name}`);
       return;
     }
+    // Box already captures a final filesystem snapshot while stopping. Saving
+    // a named template from that archived state reuses the completed capture;
+    // saving from a running multi-gigabyte tella-fusion Box stayed in `saving`
+    // for hours and was repeatedly interrupted by coordinator restarts.
+    await stopBox(cfg, sandboxId);
     if (existing) {
       await deleteNamedSnapshot(cfg, name);
       await waitForNamedSnapshotGone(cfg, name);
