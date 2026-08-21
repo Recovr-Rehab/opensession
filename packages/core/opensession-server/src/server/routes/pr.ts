@@ -103,6 +103,30 @@ export async function handlePrRoutes(
 		return Response.json({ prs: getOpenPrs() });
 	}
 
+	// Resolved review threads shown at the bottom of each file. GitHub's REST
+	// pull-request shape omits thread resolution, so this reads the GraphQL
+	// reviewThreads connection used by the review agent. The UI keeps these
+	// collapsed until someone asks to see the conversation.
+	if (path === "/api/pr-review-threads" && req.method === "GET") {
+		const number = parseInt(url.searchParams.get("number") || "", 10);
+		if (!Number.isFinite(number) || number < 1)
+			return Response.json({ error: "number required" }, { status: 400 });
+		const repo = getRepo(url.searchParams.get("repo") || undefined);
+		if (repo.host && repo.host !== "github")
+			return Response.json({ threads: [] });
+		const { listReviewThreads } = await import(
+			"../../agents/github/github-rest"
+		);
+		return prApiResponse(
+			async () => ({
+				threads: (await listReviewThreads(number, repo.ghRepo)).filter(
+					(thread) => thread.isResolved && thread.path,
+				),
+			}),
+			{ threads: [] },
+		);
+	}
+
 	// GitHub's per-viewer "Viewed" file state on a PR (the review canvas
 	// checkboxes). GET lists the viewer's VIEWED paths; POST marks/unmarks one
 	// file. State lives on GitHub (markFileAsViewed), so it round-trips with

@@ -28,6 +28,7 @@ import {
   fetchPrDiff,
   fetchPrCodeFlow,
   fetchPrDiffGroups,
+  fetchPrReviewThreads,
   fetchPrViewedFiles,
   fetchPrFile,
   setPrFileViewed,
@@ -49,6 +50,7 @@ import {
   mergePrPreviewApi,
   closePrPreviewApi,
 } from "../lib/api";
+import type { PrReviewThread } from "../lib/api/prs";
 import { Button } from "../ui/button";
 import { Checkbox } from "../ui/checkbox";
 import { toast } from "../ui/toast";
@@ -567,6 +569,10 @@ export function PrPanel({
   } | null>(null);
   const prViewedRef = useRef(prViewed);
   prViewedRef.current = prViewed;
+  const [reviewThreads, setReviewThreads] = useState<{
+    key: string;
+    threads: PrReviewThread[];
+  } | null>(null);
   const rootRef = useRef<HTMLDivElement | null>(null);
   /**
    * The rail collapses on the panel's own width, not the viewport's. In the
@@ -684,11 +690,25 @@ export function PrPanel({
       .catch(() => {
         if (isCurrent()) setGit(null);
       });
+      const reviewThreadsRequest = prRequest.then(async () => {
+        if (!prResult) return;
+        try {
+          const threads = await fetchPrReviewThreads(
+            active?.repo,
+            prResult.number,
+          );
+          if (isCurrent()) setReviewThreads({ key: loadTargetKey, threads });
+        } catch {
+          // Resolved threads are supporting context. A provider or credential
+          // failure must not block the diff itself.
+        }
+      });
 
       const promise = Promise.allSettled([
         prRequest,
         diffRequest,
         gitRequest,
+        reviewThreadsRequest,
       ]).then(() => undefined);
     loadInFlightRef.current = { key: loadTargetKey, promise };
     void promise.then(() => {
@@ -720,6 +740,7 @@ export function PrPanel({
     setReviewing(false);
     setReviewOpen(false);
     setPrViewed(null);
+    setReviewThreads(null);
     setCodeFlow(null);
     setCodeFlowLoading(false);
     setCodeFlowError(null);
@@ -1423,6 +1444,11 @@ export function PrPanel({
         placeholder: `Comment on #${diff.number}, added to your pending review…`,
         pendingComments: reviewing ? pending : undefined,
         onRemovePending: handleRemovePending,
+        reviewThreads:
+          reviewThreads?.key === loadTargetKey
+            ? reviewThreads.threads
+            : undefined,
+        commentRepo: markdownRepo,
         onSubmit: handleAddPending,
         imageSrcs,
         fileActions,
@@ -1444,6 +1470,9 @@ export function PrPanel({
       provider.name,
       pending,
       handleRemovePending,
+      reviewThreads,
+      loadTargetKey,
+      markdownRepo,
       handleAddPending,
       imageSrcs,
       fileActions,
@@ -2128,7 +2157,7 @@ export function PrPanel({
         )}
 
         <main
-          className={`min-w-0 flex-1 overflow-y-auto bg-surface [--review-file-header-top:0px] ${reviewing ? "pb-24 phone:pb-36" : "pb-4"}`}
+          className={`min-w-0 flex-1 overflow-y-auto [--review-file-header-top:0px] ${page === "files" ? "bg-raised" : "bg-surface"} ${reviewing ? "pb-24 phone:pb-36" : "pb-4"}`}
         >
           {page === "overview" ? (
             <SelectionToSession

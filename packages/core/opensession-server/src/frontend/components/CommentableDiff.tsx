@@ -17,9 +17,13 @@ import type {
 } from "@pierre/diffs";
 import type { Editor, EditorOptions } from "@pierre/diffs/edit";
 import type { DiffFileGroup } from "../lib/types";
+import type { PrReviewThread } from "../lib/api/prs";
+import { renderPrCommentMarkdown } from "../lib/markdown";
+import { stripHtmlComments } from "../lib/pr-prompts";
 import {
   IconArrowUpRight,
   IconCheck,
+  IconCheckCircle,
   IconChevronRight,
   IconCopy,
   IconDotsHorizontal,
@@ -39,6 +43,7 @@ import { Spinner } from "../ui/spinner";
 import { EmptyState } from "../ui/state";
 import { Menu, MENU_ICON } from "../ui/menu";
 import { toast } from "../ui/toast";
+import { UserAvatar } from "./UserAvatar";
 
 /* The +/− counts. DiffPanel's summary strip carries the same pair, and the two
    must read alike. */
@@ -47,11 +52,12 @@ const DIFF_DEL = "font-semibold text-red";
 
 /* One collapsible file. The header is the hover group for the edit and discard
    actions revealed inside editable worktree diffs. */
-const FILE_ROW = "mb-2 overflow-clip rounded-xl bg-panel";
+const FILE_ROW =
+  "mb-2 overflow-clip rounded-lg border border-divider-soft bg-bg";
 const FILE_HEADER =
-  "group relative flex min-h-12 w-full min-w-0 items-center gap-2 px-3 text-left text-fg hover:bg-hover";
+  "group relative flex min-h-10 w-full min-w-0 items-center gap-2 px-2.5 text-left text-fg hover:bg-hover phone:min-h-11";
 const STICKY_FILE_HEADER =
-  "sticky top-[var(--review-file-header-top,0px)] z-[6] bg-panel";
+  "sticky top-[var(--review-file-header-top,0px)] z-[6] bg-bg";
 const FILE_TOGGLE =
   "focus-ring flex min-w-0 flex-1 cursor-pointer items-center gap-2 self-stretch border-none bg-transparent p-0 text-left text-fg";
 
@@ -150,6 +156,11 @@ interface Props {
    */
   pendingComments?: PendingComment[];
   onRemovePending?: (id: string) => void;
+  /** Provider-native resolved conversations, grouped beneath their file and
+   * collapsed until the reader opens one. */
+  reviewThreads?: PrReviewThread[];
+  /** Repository context for qualified links inside review comments. */
+  commentRepo?: string;
   /**
    * When provided, each file row gets a hover-revealed "Discard" action that
    * resets the file to its base state (removing it from the diff). Only wired
@@ -261,6 +272,8 @@ export function CommentableDiff({
   onSubmit,
   pendingComments,
   onRemovePending,
+  reviewThreads,
+  commentRepo,
   onDiscard,
   imageSrcs,
   groups,
@@ -696,6 +709,17 @@ export function CommentableDiff({
     return m;
   }, [pendingComments]);
 
+  const resolvedByFile = useMemo(() => {
+    const byPath = new Map<string, PrReviewThread[]>();
+    for (const thread of reviewThreads || []) {
+      if (!thread.isResolved || !thread.path) continue;
+      const threads = byPath.get(thread.path) || [];
+      threads.push(thread);
+      byPath.set(thread.path, threads);
+    }
+    return byPath;
+  }, [reviewThreads]);
+
   // A file is open when the reader expanded it, or when something inside it
   // has to stay on screen: a comment being written, comments already added, an
   // edit session (collapsing would unmount the editor mid-edit).
@@ -737,6 +761,7 @@ export function CommentableDiff({
     // already drawn open, and the diff drops in a frame or two later.
     const mounted = (mountRank.get(i) ?? 0) < mountBudget;
     const isViewed = viewed.has(file.name);
+    const resolved = resolvedByFile.get(file.name) || [];
     const editable =
       !!editFile && file.type !== "deleted" && !IMAGE_EXT.test(file.name);
     const s = stats[i];
@@ -1009,6 +1034,17 @@ export function CommentableDiff({
               loadDiffFiles={isEditing ? loadDiffFiles : undefined}
             />
           ))}
+        {resolved.length > 0 && (
+          <div className="flex flex-col gap-1.5 border-t border-divider-soft bg-raised p-2">
+            {resolved.map((thread) => (
+              <ResolvedReviewThread
+                key={thread.id}
+                thread={thread}
+                repo={commentRepo}
+              />
+            ))}
+          </div>
+        )}
       </div>
     );
   };
@@ -1123,6 +1159,77 @@ export function CommentableDiff({
           : "Click a line number (drag for a range) to comment."}
       </div>
     </div>
+  );
+}
+
+/** A resolved provider-native thread. Its summary stays in the file until the
+ * reader asks to expand the full conversation. */
+function ResolvedReviewThread({
+  thread,
+  repo,
+}: {
+  thread: PrReviewThread;
+  repo?: string;
+}) {
+  const [open, setOpen] = useState(false);
+  const comments = thread.comments.flatMap((comment) => {
+    const body = stripHtmlComments(comment.body);
+    return body ? [{ ...comment, body }] : [];
+  });
+  if (!comments.length) return null;
+  const count = comments.length;
+  const author = thread.rootAuthor || comments[0].login || "Unknown";
+
+  return (
+    <article className="overflow-hidden rounded-md border border-divider-soft bg-bg">
+      <button
+        type="button"
+        className="focus-ring flex min-h-11 w-full cursor-pointer items-center gap-2 border-0 bg-transparent px-3 py-2 text-left text-label text-dim hover:bg-hover"
+        aria-expanded={open}
+        onClick={() => setOpen((value) => !value)}
+      >
+        <IconCheckCircle size={17} className="shrink-0 text-dim" />
+        <span className="min-w-0 flex-1 truncate">
+          {count} resolved {count === 1 ? "comment" : "comments"} from {author}
+        </span>
+        <IconChevronRight
+          size={16}
+          className={`shrink-0 text-faint transition-transform ${open ? "rotate-90" : ""}`}
+        />
+      </button>
+      {open && (
+        <div className="border-t border-divider-soft">
+          {comments.map((comment, index) => (
+            <div
+              key={`${thread.id}-${index}`}
+              className="px-3 py-3 [&+&]:border-t [&+&]:border-divider-soft"
+            >
+              <div className="mb-2 flex items-center gap-2">
+                <UserAvatar
+                  name={comment.login || "Unknown"}
+                  login={comment.login || null}
+                  size={22}
+                />
+                <span className="text-label font-semibold text-fg">
+                  {comment.login || "Unknown"}
+                </span>
+                {index === 0 && thread.isOutdated && (
+                  <span className="rounded-sm bg-yellow-soft px-1.5 py-0.5 text-meta font-medium text-yellow">
+                    Outdated
+                  </span>
+                )}
+              </div>
+              <div
+                className="markdown text-label leading-relaxed text-dim"
+                dangerouslySetInnerHTML={{
+                  __html: renderPrCommentMarkdown(comment.body, { repo }),
+                }}
+              />
+            </div>
+          ))}
+        </div>
+      )}
+    </article>
   );
 }
 

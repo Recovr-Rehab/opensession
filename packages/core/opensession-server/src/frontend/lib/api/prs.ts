@@ -191,6 +191,37 @@ export async function discardDiffFile(
 	});
 }
 
+/** One comment inside a provider-native code review thread. */
+export interface PrReviewThreadComment {
+  login: string;
+  body: string;
+}
+
+/** A resolved inline review conversation, rendered collapsed below its file. */
+export interface PrReviewThread {
+  id: string;
+  isResolved: boolean;
+  isOutdated: boolean;
+  path: string | null;
+  line: number | null;
+  rootAuthor: string;
+  comments: PrReviewThreadComment[];
+}
+
+/** Resolved code-review threads for one pull request. */
+export async function fetchPrReviewThreads(
+  repo: string | undefined,
+  number: number,
+): Promise<PrReviewThread[]> {
+  const qs = new URLSearchParams({ number: String(number) });
+  if (repo) qs.set("repo", repo);
+  const data = await request<{ threads: PrReviewThread[] }>(
+    `/pr-review-threads?${qs}`,
+    { label: "Failed to load resolved comments" },
+  );
+  return data?.threads || [];
+}
+
 /** The viewer's GitHub "Viewed" file state on a PR (review canvas checkboxes). */
 export async function fetchPrViewedFiles(
 	repo: string | undefined,
