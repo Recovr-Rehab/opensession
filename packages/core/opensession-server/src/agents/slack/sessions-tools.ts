@@ -941,7 +941,7 @@ export function createSessionsMcpServer(
           prompt: z.string().describe("Self-contained task prompt: scope, relevant files, constraints, acceptance criteria, and what to report."),
           repo: z.string().optional().describe("Registered repo id. Defaults to this session's repo."),
           branch: z.string().optional().describe("Branch for code mode when the child can't share this session's worktree (standalone or different repo)."),
-          model: z.string().optional().describe("Optional model id (e.g. 'gpt-5.5' for a Codex worker, or a Claude model id)."),
+          model: z.string().optional().describe("Optional model id (e.g. 'gpt-5.6-sol' for a Codex worker, or a Claude model id)."),
           mode: z.enum(["ask", "code", "scratch"]).optional().describe("'code' (default) can edit files / open PRs; 'ask' is read-only."),
           sandbox: z.union([z.boolean(), z.enum(["docker", "daytona", "e2b", "box", "modal", "microvm", "lambda-microvm"])]).optional().describe("Run the child in an isolated sandbox: true = the server's default provider, or an explicit configured provider id."),
         },
