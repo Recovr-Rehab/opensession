@@ -1,5 +1,6 @@
 import { Toast as BaseToast } from "@base-ui/react/toast";
 import { useEffect } from "react";
+import { useIsPhone } from "../hooks/useIsPhone";
 import { AnimatedCheck } from "./copy";
 import { Tooltip } from "./tooltip";
 import {
@@ -152,7 +153,15 @@ function ToastViewport() {
 
 	return (
 		<BaseToast.Portal>
-			<BaseToast.Viewport className="pointer-events-none fixed inset-x-0 bottom-6 z-[100] mx-auto h-[var(--toast-frontmost-height)] w-full max-w-full px-4 outline-none phone:bottom-[calc(84px+env(safe-area-inset-bottom))]">
+			<BaseToast.Viewport
+				className={[
+					"pointer-events-none fixed inset-x-0 bottom-6 z-[100] mx-auto h-[var(--toast-frontmost-height)] w-full max-w-full px-4 outline-none",
+					// A phone hangs the stack from the top, just under the bar, where
+					// the thumb and the composer are not. --header-h already carries the
+					// status-bar inset, and collapses to 0 above the breakpoint.
+					"phone:bottom-auto phone:top-[calc(var(--header-h)+8px)] phone:px-3",
+				].join(" ")}
+			>
 				{items.map((item) => (
 					<ToastCard key={item.id} toast={item} />
 				))}
@@ -163,18 +172,26 @@ function ToastViewport() {
 
 function ToastCard({ toast: item }: { toast: BaseToast.Root.ToastObject<ToastData> }) {
 	const data = item.data;
+	const isPhone = useIsPhone();
 	if (!data) return null;
 
 	return (
 		<BaseToast.Root
 			toast={item}
-			swipeDirection={["down", "right"]}
+			// The stack hangs from whichever edge it sits on, so the swipe that
+			// throws a toast away is the one that pushes it off that edge.
+			swipeDirection={isPhone ? ["up", "right"] : ["down", "right"]}
 			onClick={() => dismissToast(data.id)}
 			className={[
 				"pointer-events-auto absolute bottom-0 left-1/2 w-max max-w-[calc(100vw-32px)] outline-none",
-				"[z-index:calc(100-var(--toast-index))] [transform-origin:center_bottom]",
-				"[transform:translateX(calc(-50%+var(--toast-swipe-movement-x)))_translateY(calc(var(--toast-swipe-movement-y)-(var(--toast-index)*8px)))_scale(calc(1-(var(--toast-index)*0.04)))]",
-				"data-[expanded]:[transform:translateX(calc(-50%+var(--toast-swipe-movement-x)))_translateY(calc(var(--toast-swipe-movement-y)-var(--toast-offset-y)-(var(--toast-index)*8px)))_scale(1)]",
+				"phone:bottom-auto phone:top-0 phone:max-w-[calc(100vw-24px)]",
+				// One transform serves both edges: --toast-dir is the sign of the
+				// stack, so the cards behind the frontmost one sit above it on
+				// desktop and below it on a phone.
+				"[--toast-dir:-1] phone:[--toast-dir:1]",
+				"[z-index:calc(100-var(--toast-index))] [transform-origin:center_bottom] phone:[transform-origin:center_top]",
+				"[transform:translateX(calc(-50%+var(--toast-swipe-movement-x)))_translateY(calc(var(--toast-swipe-movement-y)+var(--toast-dir)*var(--toast-index)*8px))_scale(calc(1-(var(--toast-index)*0.04)))]",
+				"data-[expanded]:[transform:translateX(calc(-50%+var(--toast-swipe-movement-x)))_translateY(calc(var(--toast-swipe-movement-y)+var(--toast-dir)*var(--toast-offset-y)+var(--toast-dir)*var(--toast-index)*8px))_scale(1)]",
 				"transition-[transform,scale,opacity] duration-200 ease-[cubic-bezier(0.23,1,0.32,1)]",
 				"data-[starting-style]:opacity-0 data-[starting-style]:[scale:0.96] data-[ending-style]:opacity-0 data-[ending-style]:[scale:0.96] data-[limited]:opacity-0",
 			].join(" ")}
@@ -184,7 +201,10 @@ function ToastCard({ toast: item }: { toast: BaseToast.Root.ToastObject<ToastDat
 					"flex max-w-full items-center gap-2.5 whitespace-normal rounded-[999px] bg-popup-glass",
 					"px-3.5 pt-2.5 pb-2 text-label font-medium leading-tight text-fg",
 					"[backdrop-filter:var(--popup-blur)] [--smooth-ring-color:var(--popup-ring)] smooth-shadow-ring-sm",
-					data.action ? "pr-1.5" : "",
+					// A phone keeps the same pill, only tighter: it is a passing note
+					// under the bar, not a panel.
+					"phone:gap-2 phone:py-1.5 phone:pl-3.5",
+					data.action ? "pr-1.5" : "phone:pr-3.5",
 				].join(" ")}
 			>
 				{data.variant === "success" && (
@@ -198,7 +218,12 @@ function ToastCard({ toast: item }: { toast: BaseToast.Root.ToastObject<ToastDat
 						!
 					</span>
 				)}
-				<BaseToast.Description>{data.message}</BaseToast.Description>
+				{/* Description renders a <p>, and the preflight leaves its 14px
+				    browser margins alone — which is most of the pill's height on a
+				    phone, where there is no room to spend on them. */}
+				<BaseToast.Description className="min-w-0 phone:my-0">
+					{data.message}
+				</BaseToast.Description>
 				{data.action && (
 					<Tooltip label="Undo" shortcut={UNDO_SHORTCUT_KEYS}>
 						<BaseToast.Action
@@ -206,7 +231,9 @@ function ToastCard({ toast: item }: { toast: BaseToast.Root.ToastObject<ToastDat
 								event.stopPropagation();
 								runToastAction(data.id);
 							}}
-							className="focus-ring -my-1 ml-1 shrink-0 cursor-pointer rounded-md px-2 py-1 text-label font-semibold text-accent transition-[background-color,transform] duration-150 hover:bg-hover active:scale-[0.96]"
+							// The pill stays tight, so the action carries the finger
+							// target on its own: 32px of box inside a 44px tap area.
+							className="focus-ring relative -my-1 ml-1 shrink-0 cursor-pointer rounded-md px-2 py-1 text-label font-semibold text-accent transition-[background-color,transform] duration-150 hover:bg-hover active:scale-[0.96] phone:-my-1.5 phone:ml-0.5 phone:grid phone:min-h-8 phone:place-items-center phone:rounded-[999px] phone:px-3 phone:after:absolute phone:after:inset-x-0 phone:after:top-1/2 phone:after:h-11 phone:after:-translate-y-1/2 phone:after:content-['']"
 						>
 							{data.action.label}
 						</BaseToast.Action>
