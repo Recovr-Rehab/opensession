@@ -114,7 +114,7 @@ export function sandboxPortalRelayMessage(ws: any, raw: string | Buffer): boolea
  * immediate retry races the WebSocket dial and surfaces a transient 503. */
 export async function waitForSandboxPortalRelay(
 	input: { sessionId: string; sandboxId: string; port: number },
-	timeoutMs = 30_000,
+	timeoutMs = 60_000,
 ): Promise<boolean> {
 	const id = key(input.sessionId, input.sandboxId, input.port);
 	const deadline = Date.now() + timeoutMs;
