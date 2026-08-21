@@ -20,6 +20,21 @@ afterEach(() => {
 });
 
 describe("durable create plan", () => {
+  test("never persists ephemeral GitHub bearer tokens", () => {
+    const snapshot = snapshotResolvedCreate({
+      gitPrincipal: "user:alice",
+      gitEnv: {
+        GH_TOKEN: "gho_secret",
+        GITHUB_TOKEN: "gho_secret",
+        GIT_CONFIG_VALUE_1: "!opensession github-credential",
+      },
+      branch: "feature/private",
+    });
+    expect(snapshot.gitPrincipal).toBe("user:alice");
+    expect(snapshot.gitEnv).toBeUndefined();
+    expect(JSON.stringify(snapshot)).not.toContain("gho_secret");
+  });
+
   test("preserves explicitly absent resolved decisions", () => {
     const snapshot = snapshotResolvedCreate({
       model: "pi/openai/gpt-5.5",

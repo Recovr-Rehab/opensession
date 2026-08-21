@@ -58,7 +58,11 @@ import {
 	snapshotResolvedCreate,
 	updateCreatePlan,
 } from "./session-create-plan";
-import { githubAuthEnv, githubCredentialForLogin } from "./github-auth";
+import {
+	githubCredentialForLogin,
+	githubCredentialForPrincipal,
+	githubCredentialForRun,
+} from "./github-auth";
 import { existsSync, watch } from "fs";
 import { branchNameFromPrompt } from "./suggest-branch";
 
@@ -472,11 +476,12 @@ registerSessionControl({
 		const parentSession = parentSessionId ? findSession(parentSessionId) : null;
 		// opensession-sessions is withheld from automation-owned runs. Scope the
 		// server-owned worktree fetch to this trusted interactive creator.
-		const githubGitEnv = parentSession?.automation
-			? undefined
+		const githubCredential = parentSession?.automation
+			? null
 			: parentSession?.createdByLogin
-				? githubCredentialForLogin(parentSession.createdByLogin)?.env
-				: githubAuthEnv(user || parentSession?.createdBy);
+				? githubCredentialForLogin(parentSession.createdByLogin)
+				: githubCredentialForRun(user || parentSession?.createdBy);
+		const githubGitEnv = githubCredential?.env;
 		// Attribution only (CreateSessionInput.spawnedBy): the session whose agent
 		// asked for this one, recorded even when the create was standalone and
 		// carries no parent link. It is what lets the sidebar keep an agent's own
@@ -853,6 +858,7 @@ ${createMentionsNote}`;
 			openingPromptEntryId: `create-${requestId}`,
 			// Persist the full decision before git creates anything. The opening
 			// setup materializes this deterministic path after announcement.
+			gitPrincipal: githubCredential?.principal,
 			gitEnv: githubGitEnv,
 			needsWorktree: !!materializeWorktree,
 			worktreeKind: "new",
@@ -869,6 +875,9 @@ ${createMentionsNote}`;
 		const restoredSpec = createPlan.resolved
 			? restoreResolvedCreate<ResolvedCreate>(createPlan.resolved)
 			: undefined;
+		const restoredGitEnv = githubCredentialForPrincipal(
+			restoredSpec?.gitPrincipal,
+		)?.env;
 		const restoredWorktreeReady =
 			restoredSpec?.needsWorktree &&
 			typeof restoredSpec.wtPath === "string" &&
@@ -893,7 +902,7 @@ ${createMentionsNote}`;
 							);
 						return createWorktree(restoredSpec.branch!, restoredSpec.repoId!, {
 							...(isolatedWorktree ? { isolated: true } : {}),
-							...(restoredSpec.gitEnv ? { gitEnv: restoredSpec.gitEnv } : {}),
+							...(restoredGitEnv ? { gitEnv: restoredGitEnv } : {}),
 						});
 					}
 				: undefined;
@@ -902,6 +911,7 @@ ${createMentionsNote}`;
 					...computedSpec,
 					...restoredSpec,
 					images: computedSpec.images,
+					gitEnv: restoredGitEnv,
 					materializeWorktree: restoredMaterializer,
 					needsWorktree: !!restoredMaterializer,
 				}

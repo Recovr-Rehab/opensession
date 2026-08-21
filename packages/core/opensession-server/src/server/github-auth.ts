@@ -45,6 +45,7 @@ import { audit } from "./audit";
 import { configuredIdentity, getConfig } from "./config";
 import { writeJsonAtomic } from "./shared/atomic-write";
 import { fetchWithTimeout } from "./shared/fetch-with-timeout";
+import { githubGitCredentialEnv } from "./github-git-credential";
 
 const HOME = homeDir();
 
@@ -785,17 +786,9 @@ export function githubUserLoginForRun(user?: string | null): string | null {
  * for the trust gate (interactive, non-least-privilege runs only).
  */
 export function githubAuthEnv(user?: string | null): Record<string, string> {
-  const login = githubUserLoginForRun(user);
-  if (login) {
-    const account = readStore().users[login.toLowerCase()];
-    if (account && tokenUsable(account))
-      return { GH_TOKEN: account.token, GITHUB_TOKEN: account.token };
-  }
-  // Simple mode has no per-user mapping (githubUserLoginForRun returns null when
-  // sign-in is off), but the single connected account IS the identity for every
-  // interactive run. soleGithubAccount() is null in operator mode, so the two
-  // paths never overlap.
-  return soleGithubAccount()?.env ?? {};
+  const credential = githubCredentialForRun(user);
+  const token = credential?.env.GH_TOKEN;
+  return token ? { GH_TOKEN: token, GITHUB_TOKEN: token } : {};
 }
 
 /** A remote sandbox cannot read the server's per-user grant store. Its trusted
@@ -838,7 +831,9 @@ export function githubRunEnv(user?: string | null): Record<string, string> {
 
 export interface GithubCredential {
   kind: "service" | "user";
+  /** Durable, non-secret selector. Raw tokens must never be persisted. */
   principal: string;
+  /** Ephemeral child-process capability, including a process-local Git helper. */
   env: Record<string, string>;
 }
 
@@ -848,16 +843,50 @@ export const serviceGithubCredential: GithubCredential = {
   env: {},
 };
 
-/** Exact-login lookup for an already authenticated web request. */
-export function githubCredentialForLogin(login: string): GithubCredential | null {
-  if (!githubUserAuthActive()) return null;
-  const account = readStore().users[login.toLowerCase()];
-  if (!account?.token || !tokenUsable(account)) return null;
+function credentialForAccount(account: StoredAccount): GithubCredential {
   return {
     kind: "user",
     principal: `user:${account.login.toLowerCase()}`,
-    env: { GH_TOKEN: account.token, GITHUB_TOKEN: account.token },
+    env: githubGitCredentialEnv(account.token),
   };
+}
+
+function usableAccountForLogin(login: string): StoredAccount | null {
+  const account = readStore().users[login.toLowerCase()];
+  return account?.token && tokenUsable(account) ? account : null;
+}
+
+/** Exact-login lookup for an already authenticated web request. */
+export function githubCredentialForLogin(login: string): GithubCredential | null {
+  if (!githubUserAuthActive()) return null;
+  const account = usableAccountForLogin(login);
+  return account ? credentialForAccount(account) : null;
+}
+
+/** Resolve the current token for a server-minted durable selector. This lookup
+ * deliberately ignores the current simple/operator mode: recovery must retain
+ * the exact original identity, never switch to whichever account is sole now. */
+export function githubCredentialForPrincipal(
+  principal?: string | null,
+): GithubCredential | null {
+  if (principal === "service") return serviceGithubCredential;
+  if (!principal?.startsWith("user:")) return null;
+  const login = principal.slice("user:".length);
+  if (!login) return null;
+  const account = usableAccountForLogin(login);
+  return account ? credentialForAccount(account) : null;
+}
+
+/** Credential for a trusted interactive run. Callers still own the trust gate. */
+export function githubCredentialForRun(
+  user?: string | null,
+): GithubCredential | null {
+  const login = githubUserLoginForRun(user);
+  if (login) {
+    const account = usableAccountForLogin(login);
+    return account ? credentialForAccount(account) : null;
+  }
+  return soleGithubAccount();
 }
 
 /** The usable stored accounts (token present and not expired). */
@@ -880,11 +909,7 @@ export function soleGithubAccount(): GithubCredential | null {
   const usable = usableAccounts();
   if (usable.length !== 1) return null;
   const account = usable[0]!;
-  return {
-    kind: "user",
-    principal: `user:${account.login.toLowerCase()}`,
-    env: { GH_TOKEN: account.token, GITHUB_TOKEN: account.token },
-  };
+  return credentialForAccount(account);
 }
 
 /** The sole connected login in simple mode (for routes that manage it by

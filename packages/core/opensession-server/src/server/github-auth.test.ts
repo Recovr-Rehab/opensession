@@ -17,6 +17,7 @@ import {
   githubAuthEnv,
   githubRunEnv,
   githubCredentialForLogin,
+  githubCredentialForPrincipal,
   githubReconnectRequired,
   githubUserAuthActive,
   githubUserAuthSettings,
@@ -325,12 +326,34 @@ describe("token lookups + runner env", () => {
   test("builds a credential only for the exact connected login", () => {
     enableFeature();
     seedToken("Alice");
-    expect(githubCredentialForLogin("alice")).toEqual({
+    const credential = githubCredentialForLogin("alice");
+    expect(credential).toMatchObject({
       kind: "user",
       principal: "user:alice",
-      env: { GH_TOKEN: "gho_test123", GITHUB_TOKEN: "gho_test123" },
+      env: {
+        GH_TOKEN: "gho_test123",
+        GITHUB_TOKEN: "gho_test123",
+        GIT_TERMINAL_PROMPT: "0",
+        GIT_CONFIG_COUNT: "2",
+        GIT_CONFIG_VALUE_0: "",
+      },
     });
+    expect(credential?.env.GIT_CONFIG_VALUE_1).toContain("credential");
+    expect(credential?.env.GIT_CONFIG_VALUE_1).not.toContain("gho_test123");
     expect(githubCredentialForLogin("bob")).toBeNull();
+  });
+
+  test("durable principals resolve the current token without changing identity", () => {
+    enableFeature();
+    seedToken("Alice", "gho_old");
+    expect(githubCredentialForPrincipal("user:alice")?.env.GH_TOKEN).toBe("gho_old");
+
+    seedToken("Alice", "gho_refreshed");
+    const recovered = githubCredentialForPrincipal("user:alice");
+    expect(recovered?.principal).toBe("user:alice");
+    expect(recovered?.env.GH_TOKEN).toBe("gho_refreshed");
+    expect(JSON.stringify(recovered)).not.toContain("gho_old");
+    expect(githubCredentialForPrincipal("user:bob")).toBeNull();
   });
 
   test("rejects a device-flow login that differs from the signed-in user", () => {

@@ -11,8 +11,7 @@
 import { $ } from "bun";
 import { chmodSync, existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "fs";
 import { tmpdir } from "os";
-import { join, resolve as resolvePath } from "path";
-import { SHIM_PATH } from "../../../../../../scripts/lib/paths";
+import { join } from "path";
 import { audit } from "../audit";
 import { codeStorageConfig, configuredRepos, type RepoSection } from "../config";
 import { getRepo as getCsRepo, listRepos as listCsRepos } from "../codestorage/client";
@@ -23,6 +22,7 @@ import {
   withConfigMutationLock,
 } from "../config-mutation";
 import { githubCredentialForLogin, soleGithubAccount, type GithubCredential } from "../github-auth";
+import { githubCredentialHelperCommand } from "../github-git-credential";
 import { homeDir } from "../paths";
 import { fetchWithTimeout } from "../shared/fetch-with-timeout";
 import type { RouteContext } from "./context";
@@ -31,6 +31,8 @@ import { inspectRepo, repoIdFromName } from "./repo-inspection";
 /** Strict: this value reaches a spawn argv (always array-spawned, never a
  *  shell string — the regex is belt AND suspenders). */
 export const GITHUB_FULL_NAME_RE = /^[\w.-]+\/[\w.-]+$/;
+
+export { githubCredentialHelperCommand };
 
 export function validGithubFullName(value: unknown): value is string {
   return typeof value === "string" && GITHUB_FULL_NAME_RE.test(value);
@@ -300,37 +302,6 @@ async function cloneGithubRepo(
 
 function checkoutsRoot(): string {
   return `${homeDir()}/checkouts`;
-}
-
-const GH_CREDENTIAL_SCRIPT = resolvePath(
-  import.meta.dir,
-  "../../../../../../scripts/gh-credential.ts",
-);
-
-/**
- * Wire a URL-scoped git credential helper on a github.com checkout so ambient
- * `git fetch`/`git push` resolve the currently connected token at use time,
- * without the token ever persisting in the remote. Mirrors
- * configureCsCredentialHelper: an empty value first resets any inherited helper
- * list for this URL scope, then the minting helper. `--replace-all` keeps
- * re-runs from stacking duplicates.
- */
-function shellQuoteWord(word: string): string {
-  if (/^[A-Za-z0-9_@%+=:,./-]+$/.test(word)) return word;
-  return `'${word.replaceAll("'", `'\''`)}'`;
-}
-
-/**
- * Use the stable installed command so a compiled release needs neither Bun nor
- * a scripts sidecar. The source-tree fallback keeps direct development runs
- * useful before install.sh has created the shim.
- */
-export function githubCredentialHelperCommand(
-  shimPath = SHIM_PATH,
-  shimExists = existsSync(shimPath),
-): string {
-  if (shimExists) return `!${shellQuoteWord(shimPath)} github-credential`;
-  return `!bun ${shellQuoteWord(GH_CREDENTIAL_SCRIPT)}`;
 }
 
 async function configureGithubCredentialHelper(checkoutPath: string): Promise<void> {
