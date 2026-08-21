@@ -248,7 +248,7 @@ function MemoryRow({
 						</div>
 					</div>
 				) : (
-					<div className={expanded ? "relative" : "group/memory relative"}>
+					<div className="group/memory relative">
 						<div className={expanded ? "relative" : "relative h-[7.5em] overflow-hidden"}>
 							<div
 								ref={textRef}
@@ -263,13 +263,13 @@ function MemoryRow({
 								/>
 							)}
 						</div>
-						<div className="flex min-h-10 items-center justify-between gap-2">
-							<div className="min-w-0">
+						<div className="flex h-10 min-h-10 items-center justify-between gap-2">
+							<div className="flex h-10 min-w-0 items-center">
 								{!expanded && canExpand && (
 									<button
 										type="button"
 										aria-expanded="false"
-										className="focus-ring min-h-10 rounded-md border-0 bg-transparent px-0 text-meta font-semibold text-dim opacity-0 transition-opacity duration-150 hover:text-fg group-hover/memory:opacity-100 group-focus-within/memory:opacity-100 phone:opacity-100"
+										className="focus-ring inline-flex h-10 min-h-10 items-center rounded-md border-0 bg-transparent px-0 text-meta font-semibold leading-none text-dim opacity-0 transition-opacity duration-150 hover:text-fg group-hover/memory:opacity-100 group-focus-within/memory:opacity-100 phone:opacity-100"
 										onClick={() => setExpanded(true)}
 									>
 										Read all
@@ -279,14 +279,14 @@ function MemoryRow({
 									<button
 										type="button"
 										aria-expanded="true"
-										className="focus-ring min-h-10 rounded-md border-0 bg-transparent px-0 text-meta font-semibold text-dim hover:text-fg"
+										className="focus-ring inline-flex h-10 min-h-10 items-center rounded-md border-0 bg-transparent px-0 text-meta font-semibold leading-none text-dim hover:text-fg"
 										onClick={() => setExpanded(false)}
 									>
 										Show less
 									</button>
 								)}
 							</div>
-							<div className="ml-auto flex shrink-0 justify-end gap-1">
+							<div className="ml-auto flex h-10 shrink-0 items-center justify-end gap-1 opacity-0 transition-opacity duration-150 group-hover/memory:opacity-100 group-focus-within/memory:opacity-100 phone:opacity-100">
 								<Button
 									size="sm"
 									variant="ghost"
