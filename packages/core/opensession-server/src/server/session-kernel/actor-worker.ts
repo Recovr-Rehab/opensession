@@ -9,6 +9,7 @@ import {
   type KernelActorAsyncResponse,
   type KernelActorSyncRequest,
 } from "./actor-protocol";
+import { isDeliveryReadRequest } from "./delivery-protocol";
 
 export function startSessionKernelActorWorker(): void {
   const store = new SessionKernelStore();
@@ -350,6 +351,13 @@ export function startSessionKernelActorWorker(): void {
               delivery.sessionId,
               delivery.promptEntryId,
             );
+          if (!isDeliveryReadRequest(delivery))
+            result = {
+              result,
+              ...("sessionId" in delivery
+                ? { revision: store.deliverySnapshot(delivery.sessionId).revision }
+                : {}),
+            };
         } else {
           const ask = command.request;
           if (ask.op === "snapshot") result = store.askSnapshot(ask.sessionId);

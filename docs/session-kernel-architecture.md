@@ -76,20 +76,24 @@ delivering the opening prompt.
 ## Runtime ownership
 
 The actor owns two durable aggregates that previously lived in unrelated global
-maps and JSON files:
+maps and JSON files. Production delivery and ask access fails closed when the
+actor is unavailable. The direct store adapter exists only for isolated tests.
 
 - Delivery state: ordered prompt queue, one pre-journal dispatch and steer receipts.
 - Blocking ask facts: question identity, content, escalation and recovery state.
 
 Delivery mutation and dispatch claim, acknowledgement or failure are short typed
-Worker reductions. Claiming a batch removes it from the queue and installs its
+Worker reductions. Mutation replies contain only the operation result and new
+revision. They invalidate the gateway projection instead of returning or eagerly
+refetching the full attachment-bearing aggregate. Claiming a batch removes it from the queue and installs its
 dispatch in one SQLite transaction. Failure atomically restores that exact batch
 ahead of later work. Steering first moves an item to a pending-steer checkpoint,
 then reports runner acceptance or rejection as a second typed fact. Restart treats
 an unresolved checkpoint as ambiguous acceptance and reconciles it through the
 receipt and transcript path instead of delivering a duplicate turn. The old queue and ask JSON formats are imported once under
-durable migration markers, then written only as compatibility mirrors, never read
-as authority again. Resolver closures, timeout handles and the explicit Stop latch
+durable migration markers, then deleted. Default-path writers no-op after the
+marker commits; only explicit test/migration fixture paths retain JSON output.
+Resolver closures, timeout handles and the explicit Stop latch
 remain process-local executor state because they are not durable decisions.
 
 ## Run ownership

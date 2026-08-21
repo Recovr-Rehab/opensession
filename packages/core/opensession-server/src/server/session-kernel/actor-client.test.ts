@@ -3,6 +3,7 @@ import { SessionKernelActorClient } from "./actor-client";
 import {
   __setSessionKernelStoreForTest,
   installSessionKernelActor,
+  sessionDelivery,
   sessionKernel,
 } from "./kernel";
 import { SESSION_KERNEL_MAX_WAITERS_PER_COMMAND } from "./actor-protocol";
@@ -338,6 +339,30 @@ describe("session kernel actor boundary", () => {
     expect((snapshot.queued as Array<{ content: string }>)[0]?.content.length).toBe(
       content.length,
     );
+  });
+
+  test("delivery mutations invalidate projections without fetching a snapshot", async () => {
+    const host = await actor();
+    const original = host.decideDelivery.bind(host);
+    let snapshotCalls = 0;
+    host.decideDelivery = ((request) => {
+      if (request.op === "snapshot") snapshotCalls += 1;
+      return original(request);
+    }) as typeof host.decideDelivery;
+    installSessionKernelActor(host);
+
+    sessionDelivery({
+      op: "set",
+      sessionId: "small-mutation-reply",
+      slot: "queued",
+      value: [{ id: "queued", content: "hello" }],
+    });
+    expect(snapshotCalls).toBe(0);
+    expect(
+      sessionDelivery({ op: "snapshot", sessionId: "small-mutation-reply" })
+        .revision,
+    ).toBe(1);
+    expect(snapshotCalls).toBe(1);
   });
 
   test("keeps actor reducers responsive while gateway effects stay ordered", async () => {
