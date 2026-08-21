@@ -45,6 +45,7 @@ import {
 } from "../agents/slack/slack-api";
 import { configuredServer, personaName, productName } from "./config";
 import { registerSessionEffectHandler, sessionKernel } from "./session-kernel";
+import { workspaceName } from "./workspaces";
 
 const HOME = homeDir();
 const STORE = `${OPENSESSION_SESSIONS_DIR}/human-asks.json`;
@@ -446,18 +447,21 @@ export function registerAsk(input: CreateAskInput): HumanAsk {
   return ask;
 }
 
-const firstName = (full: string) => full.split(" ")[0] || full;
+const escapeMrkdwn = (text: string) =>
+  text.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 
 function deliveryBlocks(a: HumanAsk): { fallback: string; blocks: any[] } {
   const link = `${UI_BASE}/session/${a.sessionId}`;
-  const asker =
-    firstName(a.createdBy) === firstName(a.person.name) ? "you" : a.createdBy;
-  const intro =
-    `Hi ${firstName(a.person.name)}, I'm working on something for ${asker} ` +
-    `and need your input:`;
+  const session = findSession(a.sessionId);
+  const subject =
+    session?.workspaceName ||
+    (session?.workspaceId ? workspaceName(session.workspaceId) : null) ||
+    session?.title ||
+    "this session";
+  const intro = `*${personaName()} needs your input on <${link}|${escapeMrkdwn(subject)}>*`;
   const blocks: any[] = [
     { type: "section", text: { type: "mrkdwn", text: intro } },
-    { type: "section", text: { type: "mrkdwn", text: `> ${a.question.replace(/\n/g, "\n> ")}` }, },
+    { type: "section", text: { type: "mrkdwn", text: a.question }, },
   ];
   if (a.context) {
     blocks.push({ type: "section", text: { type: "mrkdwn", text: a.context.slice(0, 2900) }, });
@@ -484,12 +488,10 @@ function deliveryBlocks(a: HumanAsk): { fallback: string; blocks: any[] } {
       ],
     });
   }
-  blocks.push({
-    type: "context",
-    elements: [{ type: "mrkdwn", text: `<${link}|Open the session in ${productName()}>`,
-      },],
-  });
-  return { fallback: `I need your input: ${a.question}`, blocks, };
+  return {
+    fallback: `${personaName()} needs your input on ${subject}: ${a.question}`,
+    blocks,
+  };
 }
 
 /**
@@ -882,7 +884,7 @@ export function cancelAsk(id: string): boolean {
   if (a.slack) {
     void sendSlackMessage(
       a.slack.channel,
-      `_Never mind, I no longer need an answer to that one. Reply here anyway if you have something to add and I'll pass it to the session._`,
+      `_This question no longer needs an answer. Reply here anyway if you have something to add and I'll pass it to the session._`,
       a.slack.rootTs,
     ).catch(() => {});
   }

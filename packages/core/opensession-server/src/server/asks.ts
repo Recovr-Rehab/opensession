@@ -830,7 +830,6 @@ async function escalateAskToSlack(
 			createdBy: session?.startedBy || personaName(),
 			person,
 			question,
-			context: `_Nobody picked this up in ${productName()} within 4 minutes, so I'm bringing it to you._`,
 			options,
 			mode: "block",
 			deliver: "now",
