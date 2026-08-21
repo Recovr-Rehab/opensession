@@ -329,7 +329,7 @@ export function prChipClass(tone: PrTone, size: ChipSize): string {
  *  and with both ends its own because it is one target rather than half of a
  *  split button. */
 export function prPhoneChipClass(tone: PrTone): string {
-	return `${CHIP_BASE} ${CHIP_TONE[tone]} min-h-11 shrink-0 cursor-pointer rounded-control px-2.5 text-label`;
+	return `${CHIP_BASE} ${CHIP_TONE[tone]} min-h-11 shrink-0 cursor-pointer rounded-full px-2.5 text-label`;
 }
 
 /** The outbound half of the split button: same tone, square inner corner, and
