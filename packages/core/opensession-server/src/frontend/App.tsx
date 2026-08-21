@@ -5142,6 +5142,10 @@ export function App(
 						    sidebar's top chrome row, which vanishes when the sidebar is
 						    collapsed — this floating copy shows only then (CSS-gated). */}
 						<TitleBar pane />
+						{/* The overlapping collapsed controls require the pane's header to
+						    opt out of native dragging. Keep one empty grip beside them so the
+						    window can still move without stealing any control's clicks. */}
+						<div className="wco-collapsed-drag-handle" aria-hidden="true" />
 						{/* Floating re-open control, shown only while the desktop sidebar
 						    is collapsed (CSS-gated). Mirrors the brand-row toggle so the
 						    sidebar can always be brought back. */}
