@@ -96,6 +96,7 @@ struct PreferencesSettingsView: View {
     @AppStorage("os1.appearance.turnActivity") private var nativeTurnWork = "running"
     @AppStorage("os1.appearance.toolCalls") private var nativeToolCalls = "folded"
     @AppStorage("os1.composer.replySuggestions") private var nativeReplySuggestions = true
+    @AppStorage("os1.composer.nextChatButton") private var nativeNextChatButton = true
     @AppStorage("os1.transcript.liveTyping") private var nativeLiveTyping = false
     @AppStorage("os1.desk.voice") private var deskVoice = "off"
     /// The one control on this screen that stays on the device — see the type
@@ -113,6 +114,7 @@ struct PreferencesSettingsView: View {
     @State private var turnWork: String
     @State private var toolCalls: String
     @State private var replySuggestions: Bool
+    @State private var nextChatButton: Bool
     @State private var liveTyping: Bool
     @State private var loading = true
     @State private var saving = false
@@ -146,6 +148,7 @@ struct PreferencesSettingsView: View {
             "turn-activity": activity.work.rawValue,
             "tool-calls": activity.tools.rawValue,
             "reply-suggestions": (defaults.object(forKey: "os1.composer.replySuggestions") as? Bool ?? true) ? "on" : "off",
+            "next-chat-button": (defaults.object(forKey: "os1.composer.nextChatButton") as? Bool ?? true) ? "on" : "off",
             "live-typing": (defaults.object(forKey: "os1.transcript.liveTyping") as? Bool ?? false) ? "on" : "off",
         ]
         _seededPrefs = State(initialValue: seeded)
@@ -157,6 +160,7 @@ struct PreferencesSettingsView: View {
         _turnWork = State(initialValue: seeded["turn-activity"] ?? "running")
         _toolCalls = State(initialValue: seeded["tool-calls"] ?? "folded")
         _replySuggestions = State(initialValue: seeded["reply-suggestions"] != "off")
+        _nextChatButton = State(initialValue: seeded["next-chat-button"] != "off")
         _liveTyping = State(initialValue: seeded["live-typing"] == "on")
         let cachedCatalog = SettingsCache.value("model-catalog", as: ModelCatalogSettings.self)
         _models = State(initialValue: cachedCatalog?.models ?? [])
@@ -254,8 +258,9 @@ struct PreferencesSettingsView: View {
 
             Section {
                 Toggle("Quick replies", isOn: $replySuggestions)
+                Toggle("Next button", isOn: $nextChatButton)
             } footer: {
-                Text("Suggest short follow-ups above the composer when a turn ends on a choice. Picking one fills the draft.")
+                Text("Quick replies fill the draft. Next opens the next chat.")
             }
 
             #if os(iOS)
@@ -321,6 +326,7 @@ struct PreferencesSettingsView: View {
         .onChange(of: turnWork) { _, _ in commit() }
         .onChange(of: toolCalls) { _, _ in commit() }
         .onChange(of: replySuggestions) { _, _ in commit() }
+        .onChange(of: nextChatButton) { _, _ in commit() }
         .onChange(of: liveTyping) { _, _ in commit() }
         .onDisappear { commit() }
     }
@@ -374,6 +380,10 @@ struct PreferencesSettingsView: View {
                     NativePreferences.replySuggestionsEnabled(prefs["reply-suggestions"])
                         ?? replySuggestions
                 ) ? "on" : "off",
+                "next-chat-button": (
+                    NativePreferences.nextChatButtonEnabled(prefs["next-chat-button"])
+                        ?? nextChatButton
+                ) ? "on" : "off",
                 "live-typing": (
                     NativePreferences.liveTypingEnabled(prefs["live-typing"]) ?? liveTyping
                 ) ? "on" : "off",
@@ -392,6 +402,9 @@ struct PreferencesSettingsView: View {
             if (replySuggestions ? "on" : "off") == seededPrefs["reply-suggestions"] {
                 replySuggestions = server["reply-suggestions"] != "off"
             }
+            if (nextChatButton ? "on" : "off") == seededPrefs["next-chat-button"] {
+                nextChatButton = server["next-chat-button"] != "off"
+            }
             if (liveTyping ? "on" : "off") == seededPrefs["live-typing"] {
                 liveTyping = server["live-typing"] == "on"
             }
@@ -404,6 +417,7 @@ struct PreferencesSettingsView: View {
             nativeTurnWork = turnWork
             nativeToolCalls = toolCalls
             nativeReplySuggestions = replySuggestions
+            nativeNextChatButton = nextChatButton
             nativeLiveTyping = liveTyping
             savedPrefs = server
             if let legacyValue = prefs["turn-activity"],
@@ -483,6 +497,9 @@ struct PreferencesSettingsView: View {
             replySuggestions = NativePreferences.replySuggestionsEnabled(
                 confirmed["reply-suggestions"]
             ) ?? replySuggestions
+            nextChatButton = NativePreferences.nextChatButtonEnabled(
+                confirmed["next-chat-button"]
+            ) ?? nextChatButton
             liveTyping = NativePreferences.liveTypingEnabled(
                 confirmed["live-typing"]
             ) ?? liveTyping
@@ -496,6 +513,7 @@ struct PreferencesSettingsView: View {
             nativeTurnWork = turnWork
             nativeToolCalls = toolCalls
             nativeReplySuggestions = replySuggestions
+            nativeNextChatButton = nextChatButton
             nativeLiveTyping = liveTyping
             savedPrefs = confirmed
         } catch {
@@ -518,6 +536,7 @@ struct PreferencesSettingsView: View {
             "turn-activity": turnWork,
             "tool-calls": toolCalls,
             "reply-suggestions": replySuggestions ? "on" : "off",
+            "next-chat-button": nextChatButton ? "on" : "off",
             "live-typing": liveTyping ? "on" : "off",
         ]
     }

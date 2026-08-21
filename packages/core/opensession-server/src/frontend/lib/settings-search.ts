@@ -59,6 +59,8 @@ export const SETTINGS_KEYWORDS: Record<string, string[]> = {
 		"steer",
 		"queue",
 		"follow-up",
+		"next button",
+		"next chat",
 		"vim mode",
 		"pin new sessions",
 		"tool calls",

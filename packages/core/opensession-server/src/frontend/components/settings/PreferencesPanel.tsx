@@ -71,6 +71,11 @@ import {
 	setReplySuggestionsPref,
 } from "../../lib/reply-suggestions";
 import {
+	getNextChatButtonPref,
+	onNextChatButtonChanged,
+	setNextChatButtonPref,
+} from "../../lib/next-chat-pref";
+import {
 	getVimModePref,
 	onVimModeChanged,
 	setVimModePref,
@@ -432,6 +437,9 @@ export function PreferencesPanel() {
 	const [quickReplies, setQuickReplies] = useState<boolean>(
 		getReplySuggestionsPref,
 	);
+	const [nextChatButton, setNextChatButton] = useState<boolean>(
+		getNextChatButtonPref,
+	);
 	const [pinNew, setPinNew] = useState<boolean>(getPinNewSessions);
 	const [pinNewWs, setPinNewWs] = useState<boolean>(getPinNewWorkspaces);
 	useEffect(() => onSendKeyChanged(() => setSendKey(getSendKeyPref())), []);
@@ -441,6 +449,13 @@ export function PreferencesPanel() {
 		() =>
 			onReplySuggestionsChanged(() =>
 				setQuickReplies(getReplySuggestionsPref()),
+			),
+		[],
+	);
+	useEffect(
+		() =>
+			onNextChatButtonChanged(() =>
+				setNextChatButton(getNextChatButtonPref()),
 			),
 		[],
 	);
@@ -598,6 +613,17 @@ export function PreferencesPanel() {
 							aria-label="Quick replies"
 							checked={quickReplies}
 							onCheckedChange={setReplySuggestionsPref}
+						/>
+					}
+				/>
+				<SettingRow
+					title="Next button"
+					desc="Show the Next button above the composer."
+					control={
+						<Switch
+							aria-label="Next button"
+							checked={nextChatButton}
+							onCheckedChange={setNextChatButtonPref}
 						/>
 					}
 				/>

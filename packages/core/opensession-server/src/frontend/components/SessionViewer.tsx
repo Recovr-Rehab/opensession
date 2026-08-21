@@ -75,6 +75,10 @@ import {
 	onReplySuggestionsChanged,
 	type ReplySuggestion,
 } from "../lib/reply-suggestions";
+import {
+	getNextChatButtonPref,
+	onNextChatButtonChanged,
+} from "../lib/next-chat-pref";
 import { MarkdownBody, useMarkdownRepo } from "./MarkdownBody";
 import {
 	OpenAssetPathsProvider,
@@ -1474,6 +1478,18 @@ export function SessionViewer({
 		() =>
 			onReplySuggestionsChanged(() =>
 				setShowReplySuggestions(getReplySuggestionsPref()),
+			),
+		[],
+	);
+	// Settings → Preferences, default on. This only hides the visible button;
+	// the keyboard shortcut and command palette action remain available.
+	const [showNextChatButton, setShowNextChatButton] = useState(
+		getNextChatButtonPref,
+	);
+	useEffect(
+		() =>
+			onNextChatButtonChanged(() =>
+				setShowNextChatButton(getNextChatButtonPref()),
 			),
 		[],
 	);
@@ -5487,10 +5503,9 @@ export function SessionViewer({
 		!forkFrom &&
 		replySuggestions.length > 0;
 
-	/* Desktop shows Next beside quick replies. Phone keeps Archive, More, New
-	   workspace, and Next in one centered toolbar, even when there is no
-	   next chat yet. */
-	const nextAction = !!onNextChat;
+	/* Desktop shows Next beside quick replies. Phone keeps the remaining session
+	   actions in one centered toolbar when Next is hidden. */
+	const nextAction = showNextChatButton && !!onNextChat;
 	const actionBand = quickReplies || nextAction || isPhone;
 
 	const pickReplySuggestion = (text: string) => {
@@ -7283,8 +7298,8 @@ export function SessionViewer({
 									</div>
 								)}
 								{/* Session actions float above the composer. Desktop pairs quick
-								    replies with Next. Phone centers Archive, More, New workspace,
-								    and Next, with quick replies on their own row when present. */}
+								    replies with Next. Phone centers the visible actions, with quick
+								    replies on their own row when present. */}
 								{actionBand && (
 									<div className={VIEWER_SUGGESTIONS}>
 										<div className={VIEWER_ACTION_ROW}>
@@ -7347,15 +7362,17 @@ export function SessionViewer({
 														disabled={!onNewWorkspace}
 														onClick={onNewWorkspace}
 													/>
-													<Button
-														variant="ghost"
-														size="lg"
-														className="size-12 min-h-12 rounded-full [corner-shape:round]"
-														icon={<IconArrowRight size={24} aria-hidden />}
-														aria-label="Next chat"
-														disabled={!onNextChat}
-														onClick={onNextChat}
-													/>
+													{showNextChatButton && (
+														<Button
+															variant="ghost"
+															size="lg"
+															className="size-12 min-h-12 rounded-full [corner-shape:round]"
+															icon={<IconArrowRight size={24} aria-hidden />}
+															aria-label="Next chat"
+															disabled={!onNextChat}
+															onClick={onNextChat}
+														/>
+													)}
 												</div>
 											)}
 										</div>
