@@ -87,7 +87,6 @@ import {
   IconGitMerge,
   IconGlobe,
   IconListCircles,
-  IconRepo,
   IconSliders,
   IconUndo,
   IconX,
@@ -1490,18 +1489,15 @@ export function PrPanel({
             <Button
               variant="ghost"
               size="sm"
-              className="min-w-0 max-w-[180px] px-2 text-label"
-              aria-label="Switch review target"
-              icon={headerCompact ? <IconRepo size={18} /> : undefined}
-              caret={!headerCompact}
+              className="min-w-0 max-w-[180px] px-2 text-label phone:min-h-9 phone:max-w-[104px]"
+              aria-label={`Switch review target. Current: ${active?.label || "repository"}`}
+              caret
             >
+              <span className="truncate">{active?.label}</span>
               {!headerCompact && (
-                <>
-                  <span className="truncate">{active?.label}</span>
-                  <span className="shrink-0 text-faint">
-                    +{targets.length - 1}
-                  </span>
-                </>
+                <span className="shrink-0 text-faint">
+                  +{targets.length - 1}
+                </span>
               )}
             </Button>
           }
@@ -1983,20 +1979,20 @@ export function PrPanel({
             tight picture-and-name pill, a chevron, then the name of the thing
             you are looking at. Same spacing and weights as RepoBar's
             `[icon] repo › title`, so the two headers read as one bar. */}
-        <span className="flex shrink-0 items-center gap-[7px] text-item-title font-medium text-fg">
-          <UserAvatar
-            name={pr.author}
-            login={provider.key === "github" ? pr.author : null}
-            size={18}
-            edge={false}
-            title={pr.author}
-          />
-          {!headerCompact && (
-            <span className="max-w-[180px] truncate">{pr.author}</span>
-          )}
-        </span>
         {!headerCompact && (
-          <IconChevronRight size={18} className="shrink-0 text-faint" />
+          <>
+            <span className="flex shrink-0 items-center gap-[7px] text-item-title font-medium text-fg">
+              <UserAvatar
+                name={pr.author}
+                login={provider.key === "github" ? pr.author : null}
+                size={18}
+                edge={false}
+                title={pr.author}
+              />
+              <span className="max-w-[180px] truncate">{pr.author}</span>
+            </span>
+            <IconChevronRight size={18} className="shrink-0 text-faint" />
+          </>
         )}
         {/* Title only. Counts, commits and the sessions on this PR are the
             rail's job, so the bar stays one line of identity.
@@ -2033,7 +2029,7 @@ export function PrPanel({
             onOpenPr={onOpenPr}
           />
         )}
-        {pr.staging?.url && (
+        {pr.staging?.url && !headerCompact && (
           <Tooltip label="Open the preview environment">
             <a
               /* An icon-only control carries its glyph ~6px inside its box,
