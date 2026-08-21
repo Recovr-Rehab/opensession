@@ -309,7 +309,7 @@ export const VIEWER_SUMMARY_STEP =
 /**
  * The session's floating actions on the composer's own width. Desktop keeps
  * quick replies and Next on one row. Phone stacks quick replies above a centered
- * action bar with Archive, More, New session, and Next.
+ * action bar with Archive, More, New workspace, and Next.
  *
  * The band already repeats the input's side padding, so `--session-col` + 40px
  * here is the composer's own box. Desktop keeps the input's 20px right inset.

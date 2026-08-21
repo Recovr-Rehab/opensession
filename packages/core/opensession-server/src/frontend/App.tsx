@@ -4348,6 +4348,7 @@ export function App(
 				onOpenWorkspace={() => setActiveViewTab(null)}
 				allSessions={sessions}
 				onNewSession={viewerSession.desk ? undefined : handleNewSession}
+				onNewWorkspace={() => openPalette()}
 				onStartNewChat={(prompt) =>
 					openNewSessionInWorkspace(viewerSession, "share", prompt)
 				}

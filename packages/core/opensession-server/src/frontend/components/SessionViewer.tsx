@@ -458,8 +458,10 @@ interface Props {
 	/** Every session — the pool the workspace-context picker and the PR panel
 	    draw their sibling sessions from. */
 	allSessions?: UnifiedSession[];
-	/** Start a new session in this workspace. Phone surfaces it in the action bar. */
+	/** Start a new session in this workspace. Phone surfaces it in More. */
 	onNewSession?: (mode: "share" | "stack" | "ask") => void;
+	/** Start a session in a new workspace. Phone surfaces it as +. */
+	onNewWorkspace?: () => void;
 	/** Open a sibling session with selected transcript text in its composer. */
 	onStartNewChat: (prompt: string) => void;
 	/** True when the tab strip is on screen (2+ sessions, an open view tab, or a
@@ -920,6 +922,7 @@ export function SessionViewer({
 	onSetStatus,
 	allSessions,
 	onNewSession,
+	onNewWorkspace,
 	onStartNewChat,
 	tabStripVisible,
 	archivedSessions,
@@ -5441,7 +5444,7 @@ export function SessionViewer({
 		replySuggestions.length > 0;
 
 	/* Desktop shows Next beside quick replies. Phone keeps Archive, More, New
-	   session, and Next in one centered toolbar, even when there is no
+	   workspace, and Next in one centered toolbar, even when there is no
 	   next chat yet. */
 	const nextAction = !!onNextChat;
 	const actionBand = quickReplies || nextAction || isPhone;
@@ -5524,6 +5527,20 @@ export function SessionViewer({
 							aria-label="Share"
 						/>
 					);
+				// The tab strip hides on phones, so More carries its
+				// sibling-session action.
+				const newSessionAction = isPhone && onNewSession && (
+					<Menu.Item
+						onClick={() => {
+							setOverflowOpen(false);
+							onNewSession("share");
+						}}
+						title="Start a new session in this workspace"
+					>
+						<IconPlus size={20} className={MENU_ICON} />
+						<span className="grow">New session in workspace</span>
+					</Menu.Item>
+				);
 				// Closed sessions of this workspace. They normally hang off the tab
 				// strip's history button, so this appears exactly when there is no
 				// strip to hold it — a lone session, which is when someone is most
@@ -5847,6 +5864,7 @@ export function SessionViewer({
 								{isPhone && addToSidebarAction(true)}
 								{(compactHeader || isPhone) && shareAction(true)}
 								<Menu.Separator className={VIEWER_MENU_SEP} />
+								{newSessionAction}
 								{forkAction}
 								{spinOffAction}
 								{transcriptActions}
@@ -6067,8 +6085,8 @@ export function SessionViewer({
 							    session lives here beside the title (⌘⌥N does the same). The
 							    moment the strip appears, whether from a second session, an
 							    open view tab like Review, or a split, its own + takes over
-							    and this disappears, so the two never stack. Phone uses the
-							    action bar's + instead. Rendered AS the Button
+							    and this disappears, so the two never stack. Phone keeps this
+							    sibling-session action in More. Rendered AS the Button
 							    primitive, like the ⋯ beside it and the side-panel control at
 							    the other end of the bar, so the 32px square, radius, hover
 							    wash and press scale match by construction rather than by
@@ -6345,8 +6363,8 @@ export function SessionViewer({
 												setInfoPageOpen(false);
 												focusPrInReview(undefined, "checks");
 											}}
-											// No onNewSession: the phone strip has room for one
-											// action beside the chip, while the action bar carries +.
+											// No onNewSession: the phone strip has room for one action beside
+											// the chip, while More carries the sibling action.
 											onArchive={handleArchive}
 											running={isRunningLive}
 											refreshTick={gitRefreshTick}
@@ -7194,8 +7212,8 @@ export function SessionViewer({
 									</div>
 								)}
 								{/* Session actions float above the composer. Desktop pairs quick
-								    replies with Next. Phone centers Archive, More, New session, and
-								    Next, with quick replies on their own row when present. */}
+								    replies with Next. Phone centers Archive, More, New workspace,
+								    and Next, with quick replies on their own row when present. */}
 								{actionBand && (
 									<div className={VIEWER_SUGGESTIONS}>
 										<div className={VIEWER_ACTION_ROW}>
@@ -7254,9 +7272,9 @@ export function SessionViewer({
 														size="lg"
 														className="size-12 min-h-12 rounded-full [corner-shape:round]"
 														icon={<IconPlus size={24} aria-hidden />}
-														aria-label="New session in workspace"
-														disabled={!onNewSession}
-														onClick={() => onNewSession?.("share")}
+														aria-label="New workspace"
+														disabled={!onNewWorkspace}
+														onClick={onNewWorkspace}
 													/>
 													<Button
 														variant="ghost"
