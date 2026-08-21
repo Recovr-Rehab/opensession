@@ -923,6 +923,11 @@ export function App(
 	// allowed to substitute the previous session while this id is still local.
 	const [optimisticSession, setOptimisticSession] =
 		useState<UnifiedSession | null>(null);
+	// A deleted blank can reappear in a sessions poll that started before its
+	// DELETE finished. Hide it for this page's lifetime so leaving stays final.
+	const [hiddenEmptySessionIds, setHiddenEmptySessionIds] = useState<Set<string>>(
+		() => new Set(),
+	);
 	const [pendingNewWorkspace, setPendingNewWorkspace] = useState(false);
 	// Who's viewing what, app-wide (from global_presence).
 	const [teamViewing, setTeamViewing] = useState<
@@ -2995,6 +3000,7 @@ export function App(
 				.filter(
 					(s) =>
 						liveTab(s) &&
+						!hiddenEmptySessionIds.has(s.id) &&
 						s.workspaceId === activeWorkspaceId &&
 						// Workers never take a tab — they are reached from the header's
 						// worker menu and read as a level below their parent.
@@ -3006,6 +3012,7 @@ export function App(
 					.filter(
 						(s) =>
 							liveTab(s) &&
+							!hiddenEmptySessionIds.has(s.id) &&
 							s.worktreeDir === currentSession.worktreeDir && !s.parentSessionId,
 					)
 					.sort(byCreated)
@@ -3671,6 +3678,12 @@ export function App(
 		} catch (e) {
 			console.error("Close failed:", e);
 			if (neverRan) {
+				setHiddenEmptySessionIds((hidden) => {
+					if (!hidden.has(s.id)) return hidden;
+					const next = new Set(hidden);
+					next.delete(s.id);
+					return next;
+				});
 				inject(s);
 			} else {
 				patch(s.id, { archived: false, archivedReason: undefined });
@@ -3713,6 +3726,7 @@ export function App(
 			navigate({ view: "session", id: next.id });
 			return;
 		}
+		setHiddenEmptySessionIds((hidden) => new Set(hidden).add(empty.id));
 		if (empty.id === pendingSessionId) {
 			abandonedSessionCreatesRef.current.add(empty.id);
 			clearTimeout(pendingTimer.current);
