@@ -210,6 +210,22 @@ describe("single session ownership", () => {
 		}
 	});
 
+	test("opening runs settle session-file writes before continuing", () => {
+		const create = read("session-create.ts");
+		const writes = create
+			.split("\n")
+			.filter((line) => line.includes("touchNativeSession("));
+		expect(writes.length).toBeGreaterThan(0);
+		for (const line of writes) expect(line).toContain("await touchNativeSession(");
+
+		const cache = read("session-cache.ts");
+		const outcome = cache.indexOf("if (errorMessage) {");
+		const transcript = cache.indexOf("persistRunFailureNotice(", outcome);
+		const sessionFile = cache.indexOf("void touchNativeSession(id", outcome);
+		expect(transcript).toBeGreaterThan(outcome);
+		expect(sessionFile).toBeGreaterThan(transcript);
+	});
+
 	test("WebSocket session mutations enter the mailbox before dispatch", () => {
 		const source = read("ws-handlers.ts");
 		expect(source).toContain("kernelCommands.has(msg.type)");

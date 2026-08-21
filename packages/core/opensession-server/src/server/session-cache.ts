@@ -360,8 +360,8 @@ export function updateSessionFile(
 export function touchNativeSession(
 	bksId: string,
 	patch: Partial<NativeSessionFile>,
-): void {
-	updateSessionFile(bksId, (data) => ({
+): Promise<void> {
+	return updateSessionFile(bksId, (data) => ({
 		...data,
 		...patch,
 		lastActivity: new Date().toISOString(),
@@ -582,14 +582,17 @@ export function recordRunOutcome(
 			at: new Date().toISOString(),
 		};
 		runErrors.set(id, entry);
-		if (session?.source === "opensession")
-			touchNativeSession(id, { lastRunError: entry });
+		// The transcript append is synchronous. Commit it before starting the
+		// asynchronous session-file command so the two writes cannot contend for
+		// the same actor lease.
 		if (!opts?.noticePersisted)
 			persistRunFailureNotice(
 				opts?.engineSessionId || session?.claudeSessionId,
 				errorMessage,
 				opts?.noticeLabel || "Run failed",
 			);
+		if (session?.source === "opensession")
+			void touchNativeSession(id, { lastRunError: entry });
 		// A worker that dies can't report back, and its parent is usually idle
 		// (spawn_task returns immediately), so nothing polls either — the server
 		// says it instead. Fire-and-forget, dynamic import to keep this module

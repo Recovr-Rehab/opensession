@@ -689,7 +689,7 @@ export async function openCreatedSession(
 					...(cloneToken ? { cloneToken } : {}),
 					user: spec.user,
 				});
-				touchNativeSession(bksId, {
+				await touchNativeSession(bksId, {
 					runner: { id: spec.runnerTarget.id, name: spec.runnerTarget.name, workspacePath: spec.runnerTarget.workspacePath, lifecycle: "awake", },
 				});
 				const created = findSession(bksId);
@@ -779,7 +779,7 @@ export async function openCreatedSession(
 					if (event.model) effectiveModel = event.model;
 					// Session was persisted/announced before setup — just record
 					// the engine id so the run is resumable while it streams.
-					touchNativeSession(
+					await touchNativeSession(
 						bksId,
 						{
 							...engineSessionPatch(
@@ -818,7 +818,7 @@ export async function openCreatedSession(
 								at: new Date().toISOString(),
 								by: reason,
 							});
-							touchNativeSession(bksId, {
+							await touchNativeSession(bksId, {
 								model: selectedModel,
 								modelHistory,
 							});
@@ -915,7 +915,7 @@ export async function openCreatedSession(
 
 			if (!persisted) await persist();
 			else
-				touchNativeSession(
+				await touchNativeSession(
 					bksId,
 					{
 						...engineSessionPatch(
@@ -936,7 +936,7 @@ export async function openCreatedSession(
 			// Persist opening-run usage regardless of which branch ran
 			// above (persist() writes the base file without it).
 			if (latestUsage)
-				touchNativeSession(bksId, { usage: latestUsage });
+				await touchNativeSession(bksId, { usage: latestUsage });
 			recordRunOutcome(bksId, runFailure, {
 				engineSessionId,
 				noticePersisted: failureNoticePersisted,
@@ -987,7 +987,7 @@ export async function openCreatedSession(
 		// no session to scope to, so the raw error goes back to the caller.
 		if (announced) {
 			if (spec.runnerTarget) {
-				touchNativeSession(bksId, {
+				await touchNativeSession(bksId, {
 					runner: {
 						id: spec.runnerTarget.id,
 						name: spec.runnerTarget.name,
