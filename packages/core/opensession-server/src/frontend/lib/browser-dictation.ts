@@ -36,10 +36,26 @@ type SpeechRecognizer = EventTarget & {
 
 type SpeechRecognizerConstructor = new () => SpeechRecognizer;
 
+type DesktopDictationAPI = {
+  start(
+    id: string,
+    sampleRate: number,
+    language: string,
+  ): Promise<{ ok?: boolean }>;
+  push(id: string, samples: Float32Array): void;
+  finish(id: string): Promise<{ text?: string }>;
+  cancel(id: string): void;
+  onText(callback: (payload: { id?: string; text?: string }) => void): () => void;
+};
+
 declare global {
   interface Window {
     SpeechRecognition?: SpeechRecognizerConstructor;
     webkitSpeechRecognition?: SpeechRecognizerConstructor;
+    os1?: {
+      dictation?: DesktopDictationAPI;
+      [key: string]: unknown;
+    };
   }
 }
 
@@ -68,15 +84,94 @@ export type BrowserDictation = {
   cancel(): void;
 };
 
+function startDesktopDictation(
+  api: DesktopDictationAPI,
+  stream: MediaStream,
+  onTranscript: (text: string) => void,
+): BrowserDictation | null {
+  const Ctx = window.AudioContext || (window as any).webkitAudioContext;
+  if (!Ctx) return null;
+
+  let context: AudioContext;
+  let source: MediaStreamAudioSourceNode;
+  let processor: ScriptProcessorNode;
+  let silentOutput: GainNode;
+  try {
+    context = new Ctx();
+    source = context.createMediaStreamSource(stream);
+    processor = context.createScriptProcessor(2_048, 1, 1);
+    silentOutput = context.createGain();
+    silentOutput.gain.value = 0;
+    source.connect(processor);
+    processor.connect(silentOutput);
+    silentOutput.connect(context.destination);
+  } catch {
+    return null;
+  }
+
+  const id = crypto.randomUUID();
+  let stopped = false;
+  const unsubscribe = api.onText((payload) => {
+    if (payload.id === id && typeof payload.text === "string" && payload.text) {
+      onTranscript(payload.text);
+    }
+  });
+  const started = api
+    .start(id, context.sampleRate, navigator.languages?.[0] || navigator.language || "en-US")
+    .catch(() => ({ ok: false }));
+
+  processor.onaudioprocess = (event) => {
+    if (stopped) return;
+    // Web Audio reuses its channel buffer after this callback. Copy before the
+    // context bridge transfers the samples to Electron's main process.
+    api.push(id, new Float32Array(event.inputBuffer.getChannelData(0)));
+  };
+
+  function stopCapture() {
+    if (stopped) return;
+    stopped = true;
+    processor.onaudioprocess = null;
+    source.disconnect();
+    processor.disconnect();
+    silentOutput.disconnect();
+    void context.close().catch(() => {});
+    unsubscribe();
+  }
+
+  return {
+    async finish() {
+      // Let the final audio callback include the release of the last word.
+      await new Promise((resolve) => window.setTimeout(resolve, 45));
+      stopCapture();
+      const status = await started;
+      if (!status?.ok) {
+        api.cancel(id);
+        return "";
+      }
+      return (await api.finish(id).catch(() => ({ text: "" }))).text?.trim() || "";
+    },
+    cancel() {
+      stopCapture();
+      api.cancel(id);
+    },
+  };
+}
+
 /**
- * Start a live recognizer if this browser has one. The caller should keep its
- * MediaRecorder running in parallel because browser speech services can be
- * unavailable even when the API exists.
+ * Start the fastest live recognizer this client provides. Electron streams PCM
+ * to its native Apple Speech helper. Browsers use Web Speech. MediaRecorder
+ * keeps running in parallel because either live service can still fail.
  */
 export function startBrowserDictation(
   onTranscript: (text: string) => void,
+  stream?: MediaStream,
 ): BrowserDictation | null {
   if (typeof window === "undefined") return null;
+  const desktop = window.os1?.dictation;
+  if (desktop && stream) {
+    const native = startDesktopDictation(desktop, stream, onTranscript);
+    if (native) return native;
+  }
   const Recognition = window.SpeechRecognition || window.webkitSpeechRecognition;
   if (!Recognition) return null;
 

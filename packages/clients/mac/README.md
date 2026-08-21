@@ -87,10 +87,17 @@ asked.
   default browser. Window close hides to the dock; state persists across
   launches.
 - `src/preload.js`: exposes `window.os1` (`desktop`, `setBadge`, `clearBadge`,
-  `updates`) for the frontend to feature-detect and mirror its app badge to the
-  dock, plus `server` for the two shell pages below. The main process refuses
-  `server` calls from anything but a `file://` page, so the app a server serves
-  cannot repoint the shell.
+  `updates`, `dictation`) for the frontend to feature-detect and mirror its app
+  badge to the dock, plus `server` for the two shell pages below. The main
+  process refuses `server` calls from anything but a `file://` page, so the app
+  a server serves cannot repoint the shell.
+- Native dictation: Electron exposes Chromium's speech-recognition API without
+  connecting it to a working service. The renderer therefore streams mono PCM
+  through the preload bridge to `native/DictationHelper.swift`, a signed helper
+  that uses Apple Speech and prefers its on-device recognizer. The browser's
+  recorded clip stays available as the server fallback if native recognition
+  is unavailable. `scripts/before-pack.js` compiles the helper before every
+  local or release package.
 - `src/setup.html`: the server prompt, shown when nothing is stored yet and
   again from Change Server. It checks the address before saving it.
 - `src/offline.html` — retry screen for when the configured server is

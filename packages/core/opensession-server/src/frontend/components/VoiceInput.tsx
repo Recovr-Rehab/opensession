@@ -425,9 +425,12 @@ export function VoiceInput({
     // Browser speech recognition streams partial text while the clip is still
     // being recorded. The audio blob remains the accuracy-preserving fallback
     // when the browser service is absent or fails.
-    speechRef.current = startBrowserDictation((text) => {
-      if (request === requestRef.current) setLiveTranscript(text);
-    });
+    speechRef.current = startBrowserDictation(
+      (text) => {
+        if (request === requestRef.current) setLiveTranscript(text);
+      },
+      stream,
+    );
     setPhase("recording");
   }
 

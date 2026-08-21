@@ -19,7 +19,9 @@ const {
 const path = require("node:path");
 const fs = require("node:fs");
 const { execFile } = require("node:child_process");
+const { NativeDictation } = require("./native-dictation");
 const packageConfig = require("../package.json").opensession || {};
+const nativeDictation = new NativeDictation();
 
 // AppKit can show its persistent-window crash-recovery prompt before Electron
 // finishes launching. On macOS 26 that modal can trap the browser process and
@@ -936,6 +938,27 @@ app.whenReady().then(async () => {
     showWindow();
   });
 
+  ipcMain.handle("os1:dictation-start", (e, id, sampleRate, language) => {
+    if (!inWindow(e.senderFrame?.url ?? "")) return { ok: false };
+    const sender = e.sender;
+    return nativeDictation.start(id, Number(sampleRate), language, (text) => {
+      if (sender.isDestroyed() || !inWindow(sender.getURL())) return;
+      sender.send("os1:dictation-text", { id, text });
+    });
+  });
+  ipcMain.on("os1:dictation-audio", (e, id, samples) => {
+    if (!inWindow(e.senderFrame?.url ?? "")) return;
+    nativeDictation.push(id, samples);
+  });
+  ipcMain.handle("os1:dictation-finish", (e, id) => {
+    if (!inWindow(e.senderFrame?.url ?? "")) return { text: "" };
+    return nativeDictation.finish(id);
+  });
+  ipcMain.on("os1:dictation-cancel", (e, id) => {
+    if (!inWindow(e.senderFrame?.url ?? "")) return;
+    nativeDictation.cancel(id);
+  });
+
   ipcMain.handle("os1:update-state", (e) =>
     inWindow(e.senderFrame?.url ?? "")
       ? updateState
@@ -1034,6 +1057,7 @@ app.on("continue-activity", (e, _type, _userInfo, details) => {
 
 app.on("before-quit", () => {
   quitting = true;
+  nativeDictation.cancel();
   saveWindowState();
 });
 
