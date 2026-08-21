@@ -380,6 +380,9 @@ describe("session creator metadata", () => {
 			const listedTools = await client.listTools();
 			const listTool = listedTools.tools.find((tool) => tool.name === "list_sessions");
 			expect(listTool?.inputSchema.properties).toHaveProperty("createdBy");
+			expect(listedTools.tools.map((tool) => tool.name)).toEqual(
+				expect.arrayContaining(["wait_for", "wait_status", "cancel_wait"]),
+			);
 
 			const result = await client.callTool({
 				name: "list_sessions",
