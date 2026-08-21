@@ -968,7 +968,8 @@ export class SessionKernelStore {
       }
       const currentEffectId = ["ready", "failed"].includes(to)
         ? undefined
-        : effect?.effectKey ?? prior?.currentEffectId;
+        : effect?.effectKey ??
+          (input.effectId === undefined ? prior?.currentEffectId : undefined);
       this.db.run(
         `INSERT INTO session_kernel_creation
           (session_id, identity, state, generation, current_effect_id, change_seq, updated_at)

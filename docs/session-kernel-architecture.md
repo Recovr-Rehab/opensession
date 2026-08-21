@@ -106,10 +106,18 @@ The protocol names workspace, branch, sandbox, credential, attachment-reference,
 and opening-turn effects, including adoption or reconciliation modes and durable
 creation fences. Payload decoding strips unknown fields, so bearer credentials
 and inline attachment bodies do not cross the durable executor boundary. The
-existing create-plan JSON and create gateway callback still prepare resources
-during the migration because production executors for those effects are not yet
-registered. Wiring each physical adapter and its fenced result is the next
-cutover; the presence or absence of a plan file is not actor lifecycle evidence.
+The workspace effect now has a production executor. It creates a fixed-ID,
+dedupe-keyed workspace or adopts the exact existing destination, then returns a
+fenced result through the creation reducer before the outbox item is
+acknowledged. A crash after the atomic workspace write adopts on retry. A crash
+after result acceptance replays as an audited stale no-op. Identity, project, or
+branch ambiguity dead-letters immediately instead of overwriting the workspace.
+The existing create-plan JSON and create gateway callback still invoke this work
+directly because create entry points do not emit the effect yet. Branch,
+sandbox, credential, attachment, and opening-turn executors are also not yet
+registered. Wiring those adapters and replacing create-plan authority are the
+next cutovers; the presence or absence of a plan file is not actor lifecycle
+evidence.
 
 ## Run ownership
 

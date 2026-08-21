@@ -492,6 +492,9 @@ describe("SessionKernel", () => {
 					creationIdentity: "another-request",
 					creationGeneration: 1,
 					workspaceId: "workspace-one",
+					dedupeKey: "creation:workspace-one",
+					name: "Workspace one",
+					createdBy: "Alice",
 					mode: "adopt_or_create",
 				},
 			},
@@ -512,6 +515,9 @@ describe("SessionKernel", () => {
 					creationIdentity: "request-one",
 					creationGeneration: 1,
 					workspaceId: "workspace-one",
+					dedupeKey: "creation:workspace-one",
+					name: "Workspace one",
+					createdBy: "Alice",
 					mode: "adopt_or_create",
 				},
 			},
@@ -590,6 +596,46 @@ describe("SessionKernel", () => {
 		]);
 	});
 
+	test("clears an accepted creation effect so replay is a stale no-op", () => {
+		const sessionId = "create-result-replay";
+		const identity = "request-result-replay";
+		expect(store.applyCreationEvent({ sessionId, identity, event: "plan" }).accepted).toBe(true);
+		expect(store.applyCreationEvent({
+			sessionId,
+			identity,
+			event: "preparation_started",
+			nextEffectId: "workspace-result-replay",
+			effect: {
+				kind: "creation_workspace_prepare",
+				effectKey: "workspace-result-replay",
+				payload: {
+					creationIdentity: identity,
+					creationGeneration: 1,
+					workspaceId: "ws-result-replay",
+					dedupeKey: "creation:result-replay",
+					name: "Result replay",
+					createdBy: "Alice",
+					mode: "adopt_or_create",
+				},
+			},
+		}).accepted).toBe(true);
+		expect(store.applyCreationEvent({
+			sessionId,
+			identity,
+			event: "preparation_started",
+			effectId: "workspace-result-replay",
+		})).toMatchObject({
+			accepted: true,
+			state: { state: "preparing", currentEffectId: undefined },
+		});
+		expect(store.applyCreationEvent({
+			sessionId,
+			identity,
+			event: "preparation_started",
+			effectId: "workspace-result-replay",
+		})).toMatchObject({ accepted: false, reason: "stale_effect" });
+	});
+
 	test("rolls creation state back when its durable effect cannot commit", () => {
 		const dir = mkdtempSync(join(tmpdir(), "session-kernel-create-crash-"));
 		const path = join(dir, "kernel.sqlite");
@@ -618,6 +664,9 @@ describe("SessionKernel", () => {
 						creationIdentity: "request-crash",
 						creationGeneration: 1,
 						workspaceId: "workspace-crash",
+						dedupeKey: "creation:workspace-crash",
+						name: "Workspace crash",
+						createdBy: "Alice",
 						mode: "adopt_or_create",
 					},
 				},
