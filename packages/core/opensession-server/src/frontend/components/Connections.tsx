@@ -1383,8 +1383,8 @@ export function GithubAccounts({ personal = false }: { personal?: boolean } = {}
                     <div className="flex flex-col gap-2">
                       <div className="text-label font-medium text-fg">GitHub App</div>
                       <div className="text-meta leading-snug text-faint">
-                        Install your own app on the repos you choose and authorize
-                        with a one-time code. Nothing secret to paste.
+                        Install your own app on the repos you choose, then authorize
+                        with a one-time code.
                       </div>
                       <div className="flex flex-wrap items-center gap-2.5">
                         <Button variant="primary" onClick={() => setWizardOpen(true)}>
