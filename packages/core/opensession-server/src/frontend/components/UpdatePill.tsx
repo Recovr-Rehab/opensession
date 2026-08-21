@@ -166,9 +166,13 @@ export function UpdatePill({ addHandler, variant = "card" }: Props) {
           "inline-flex h-7 shrink-0 items-center rounded-full [corner-shape:squircle] px-[13px] " +
           "cursor-pointer border-none bg-red text-label font-semibold leading-none text-white transition-[background] duration-[var(--dur-micro)] ease-[var(--ease)] hover:bg-[color-mix(in_srgb,var(--red)_85%,black)] disabled:cursor-wait disabled:opacity-75 " +
           "animate-[update-toast-in_var(--dur-lg)_var(--ease)] motion-reduce:animate-none " +
-          // Phone: the pill sits last in the brand row and grows to a tap target.
-          "phone:[.app-brand_&]:order-3 phone:[.app-brand_&]:h-[34px] " +
-          "phone:[.app-brand_&]:px-[18px] phone:[.app-brand_&]:text-[15px]"
+          // Phone: keep the visible pill compact while a pseudo-element grows
+          // its tap target to the full 44px header row.
+          "phone:[.app-brand_&]:relative phone:[.app-brand_&]:order-3 " +
+          "phone:[.app-brand_&]:h-7 phone:[.app-brand_&]:px-3 phone:[.app-brand_&]:text-supporting " +
+          "phone:[.app-brand_&]:after:absolute phone:[.app-brand_&]:after:inset-x-0 " +
+          "phone:[.app-brand_&]:after:top-1/2 phone:[.app-brand_&]:after:h-11 " +
+          "phone:[.app-brand_&]:after:-translate-y-1/2 phone:[.app-brand_&]:after:content-['']"
         }
         onClick={refresh}
         disabled={refreshing}

@@ -53,10 +53,18 @@ function managerId(id: number) {
 }
 
 function inferVariant(message: string): ToastVariant {
-	if (/\b(copied|saved|done|created|sent|updated)\b/i.test(message))
-		return "success";
-	if (/couldn'?t|can'?t|failed|error|no |nothing/i.test(message))
+	if (
+		/\b(could not|couldn'?t|can not|can'?t|failed|failure|error|nothing|missed|lost|unavailable)\b|\bno\s|larger than|waiting for approval/i.test(
+			message,
+		)
+	)
 		return "error";
+	if (
+		/\b(copied|saved|done|created|sent|updated|added|removed|enabled|disabled|registered|connected|disconnected|linked|unlinked|archived|reopened|restored|forgotten|started|works|restarted|switched)\b/i.test(
+			message,
+		)
+	)
+		return "success";
 	return "default";
 }
 
@@ -176,7 +184,7 @@ function ToastCard({ toast: item }: { toast: BaseToast.Root.ToastObject<ToastDat
 			swipeDirection={["up", "right"]}
 			onClick={() => dismissToast(data.id)}
 			className={[
-				"pointer-events-auto absolute top-0 left-1/2 w-max max-w-[calc(100vw-32px)] outline-none phone:max-w-[calc(100vw-24px)]",
+				"pointer-events-auto absolute top-0 left-1/2 w-max max-w-[min(480px,calc(100vw-32px))] outline-none phone:max-w-[calc(100vw-24px)]",
 				"[z-index:calc(100-var(--toast-index))] [transform-origin:center_top]",
 				"[transform:translateX(calc(-50%+var(--toast-swipe-movement-x)))_translateY(calc(var(--toast-swipe-movement-y)+var(--toast-index)*8px))_scale(calc(1-(var(--toast-index)*0.04)))]",
 				"data-[expanded]:[transform:translateX(calc(-50%+var(--toast-swipe-movement-x)))_translateY(calc(var(--toast-swipe-movement-y)+var(--toast-offset-y)+var(--toast-index)*8px))_scale(1)]",
@@ -205,7 +213,10 @@ function ToastCard({ toast: item }: { toast: BaseToast.Root.ToastObject<ToastDat
 				)}
 				{/* Description renders a <p>; remove its browser margins so the
 				    visible height comes from the pill padding alone. */}
-				<BaseToast.Description className="my-0 min-w-0">
+				<BaseToast.Description
+					className="my-0 min-w-0 line-clamp-2"
+					title={data.message}
+				>
 					{data.message}
 				</BaseToast.Description>
 				{data.action && (

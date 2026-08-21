@@ -19,14 +19,14 @@ describe("toast", () => {
 		expect(activeToasts()).toHaveLength(0);
 	});
 
-	test("infers the tone from the message when none is given", () => {
-		toast("Link copied");
-		toast("Couldn't load the transcript");
+	test("infers the tone from common app feedback", () => {
 		toast("Archived");
+		toast("Provider removed");
+		toast("Could not save that file");
 		expect(activeToasts().map((t) => t.variant)).toEqual([
 			"success",
+			"success",
 			"error",
-			"default",
 		]);
 	});
 
