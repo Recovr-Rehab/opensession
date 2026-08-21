@@ -37,8 +37,9 @@ export const WS_SUMMARY_CARD =
 
 /**
  * Band label ("Assets"), taken from the sidebar so the card heads its lists
- * the way the sidebar heads its own. It shares the rows' 16px content rail and
- * their 31px pitch, so it does not sit tighter than the list it heads.
+ * the way the sidebar heads its own. It shares the rows' 16px content rail,
+ * but not their 31px pitch: a label belongs to the rows under it, so it keeps
+ * the gap above and gives up most of the one below.
  *
  * It opens its band with the gap a hairline used to hold. A label in bold ink
  * over a run of quiet rows already reads as the start of something, so the
@@ -50,7 +51,7 @@ export const WS_SUMMARY_CARD =
  * name back at you.
  */
 export const WS_SUMMARY_SECTION =
-	"mt-2 flex h-[31px] shrink-0 items-center px-4 text-label font-semibold text-dim first:mt-0 " +
+	"mt-3 flex h-[22px] shrink-0 items-center px-4 text-label font-semibold text-dim first:mt-1 " +
 	// The PR plate already closes with its own bottom breathing room. Do not
 	// stack the next section's full top gap on it as well.
 	"[.ws-summary-band+&]:mt-0";
