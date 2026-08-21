@@ -21,7 +21,7 @@ import { cancelAgentRun, isAgentSessionBusy, steerAgentRun } from "./agent-runne
 import { pendingAskAwaitingAnswer } from "./asks";
 import { relinkAskThreads } from "./human-asks";
 import { SESSION_EFFORTS, type SessionEffort, interactiveDefaultModel, providerFor, resolveModel } from "./models";
-import { deliveryQueueState, liftUserStop, promptQueues, acceptQueuedSteer, prepareQueuedSteer, rejectQueuedSteer, requeueSteerReceipts, stoppedSessions } from "./queue-state";
+import { deliveryQueueState, durableQueueItem, liftUserStop, promptQueues, acceptQueuedSteer, prepareQueuedSteer, rejectQueuedSteer, requeueSteerReceipts, stoppedSessions } from "./queue-state";
 import { drainQueue, enqueuePrompt, runSessionPrompt, sessionMentionsNote, watchExternalRunAndDrain } from "./run-session";
 import { parseImageDataUrls, stageFileAttachments, withUploadsNote } from "./uploads";
 import { type Sandbox } from "./sandbox";
@@ -245,7 +245,7 @@ registerSessionControl({
 				// (and never steer regardless): the in-thread answer mirror only fires
 				// on a turn that carries the slackReplyTo, and a steered message can't
 				// (it folds into a turn that's already running).
-				const steerItem = {
+				const steerItem = durableQueueItem(id, {
 					id: deliveryId,
 					content,
 					user,
@@ -253,7 +253,7 @@ registerSessionControl({
 					contextSessions: opts?.contextSessions,
 					...(opts?.hold ? { hold: true } : {}),
 					...(opts?.reviewHandoff ? { reviewHandoff: true } : {}),
-				};
+				});
 				if (
 					opts?.busy !== "queue" &&
 					!opts?.slackReplyTo &&

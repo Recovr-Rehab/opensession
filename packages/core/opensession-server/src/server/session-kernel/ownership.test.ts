@@ -63,6 +63,9 @@ describe("single session ownership", () => {
 		expect(control).toContain("sessionKernel(id).dispatch");
 		expect(read("routes/sessions.ts")).not.toContain("promptReceipt(");
 		expect(existsSync(join(serverDir, "prompt-receipts.ts"))).toBe(false);
+		const steerItem = control.indexOf("const steerItem = durableQueueItem(id");
+		expect(steerItem).toBeGreaterThan(-1);
+		expect(control.indexOf("prepareQueuedSteer(id", steerItem)).toBeGreaterThan(steerItem);
 	});
 
 	test("no server module writes session JSON outside the owner facade", () => {
