@@ -30,7 +30,7 @@ import {
 	VIEWER_HEADER_ACTIONS,
 	VIEWER_TITLE,
 } from "../lib/session-viewer-classes";
-import { loadDraft, saveDraft, clearDraft } from "../lib/drafts";
+import { loadDraft, saveDraft, clearDraft, workspaceDraftKey } from "../lib/drafts";
 import {
 	addStaging,
 	attachToDraft,
@@ -117,7 +117,7 @@ export function WorkspacePane({
 	topbarEl,
 	rightPanelEl,
 }: Props) {
-	const draftKey = `workspace-home:${workspace.id}`;
+	const draftKey = workspaceDraftKey(workspace.id);
 	// Seed from the local (this-browser) draft first: it's the freshest thing
 	// typed here. Fall back to the server's parked draft (typed on
 	// another device, or by whoever saved it from the New Session composer).

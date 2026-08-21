@@ -38,6 +38,12 @@ export interface ComposerDraft {
  *  one is already in the other. */
 export const NEW_SESSION_DRAFT_KEY = "new-session";
 
+/** The draft key for a workspace's own composer. Attachments parked from the
+ *  new-session palette land here, which is where WorkspacePane reads them. */
+export function workspaceDraftKey(workspaceId: string): string {
+  return `workspace-home:${workspaceId}`;
+}
+
 const EMPTY: ComposerDraft = { text: "", images: [], files: [], pastedTexts: [] };
 const drafts = new Map<string, ComposerDraft>();
 /** Text last confirmed by the server. Persisted beside each local draft so a

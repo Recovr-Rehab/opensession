@@ -102,3 +102,21 @@ test("dismissing a nonempty composer parks it without an explicit draft action",
   expect(source).not.toContain('action: "draft"');
   expect(source).not.toContain("Save as draft");
 });
+
+test("a parked draft keeps the composer copy and carries its attachments", async () => {
+  const source = await Bun.file(new URL("./NewSession.tsx", import.meta.url)).text();
+  const parkStart = source.indexOf("async function parkDraftOnExit()");
+  const parkEnd = source.indexOf("const createRef", parkStart);
+  const park = source.slice(parkStart, parkEnd);
+
+  expect(parkStart).toBeGreaterThan(-1);
+  // Leaving copies the draft, it never empties the composer.
+  expect(park).not.toContain('saveDraft(DRAFT_KEY, { text: "" })');
+  // The workspace composer reads staged files from its own draft key.
+  expect(park).toContain("saveDraft(workspaceDraftKey(workspace.id), {");
+  expect(park).toContain("images: staged.images,");
+  expect(park).toContain("files: staged.files,");
+  // Closing twice updates the workspace the first close made.
+  expect(park).toContain("parkedWorkspaceId");
+  expect(source).toContain("let parkedWorkspaceId: string | null = null;");
+});

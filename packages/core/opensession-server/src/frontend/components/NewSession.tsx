@@ -9,6 +9,7 @@ import {
   clearDraft,
   onDraftsChanged,
   NEW_SESSION_DRAFT_KEY as DRAFT_KEY,
+  workspaceDraftKey,
 } from "../lib/drafts";
 import {
   addStaging,
@@ -429,6 +430,13 @@ type PendingDraftPark = {
 // flight. If that prompt starts a session first, the late response must not
 // leave a second, stale draft workspace behind.
 const pendingDraftParks = new Set<PendingDraftPark>();
+
+// The workspace an unscoped park created for this composer's draft. The draft
+// survives closing now, so opening and closing again re-parks the same text:
+// update that workspace instead of leaving a second one beside it. Cleared
+// when the draft is consumed by a create. Module-level because the palette
+// unmounts between the two closes.
+let parkedWorkspaceId: string | null = null;
 
 function consumePendingDraftParks(text: string, workspaceId?: string) {
   for (const operation of pendingDraftParks) {
@@ -1007,6 +1015,8 @@ export function NewSession({ onBack, inline, focusSeq, send, addHandler, connect
         promptHandle.current?.dropPendingDraftWrite();
         dropStagingAttachments(DRAFT_KEY);
         clearDraft(DRAFT_KEY);
+        // The next draft is a new one, so it gets its own workspace.
+        parkedWorkspaceId = null;
         // "Create more" stays in the palette and resets for the next task. The
         // other actions close it after App handles the same announcement.
         if (createAction === "more" || inline) {
@@ -1062,9 +1072,10 @@ export function NewSession({ onBack, inline, focusSeq, send, addHandler, connect
   // Nothing runs. This never sends create_session, so it is separate from
   // handleCreate's session_created wait below.
   //
-  // The local composer draft stays in place while the request runs. On success
-  // clear only the exact text that moved, preserving attachments and anything
-  // typed after reopening. On failure, the local copy remains the fallback.
+  // The local composer draft is never cleared by leaving: reopening the
+  // palette shows exactly what you typed, and the parked workspace draft is a
+  // copy, not a move. Staged attachments are copied onto the workspace's own
+  // composer, so the draft you find in the sidebar has its files too.
   const parkingDraftRef = useRef(false);
   async function parkDraftOnExit() {
     const text = promptText.current.trim();
@@ -1079,23 +1090,48 @@ export function NewSession({ onBack, inline, focusSeq, send, addHandler, connect
     pendingDraftParks.add(operation);
     const draft = { text, updatedAt: new Date().toISOString(), by: getCurrentUser() };
     try {
+      const createWorkspace = () =>
+        createWorkspaceApi({
+          name: firstNonEmptyLine(text).slice(0, 80) || "Draft",
+          ...(repo && repo !== NO_REPO ? { repo } : {}),
+          draft: { ...draft, autoName: true },
+        });
       const workspace = workspaceId
         ? // Scoped to an existing workspace: update its draft, never rename it.
           await updateWorkspaceApi(workspaceId, { draft })
-        : await createWorkspaceApi({
-            name: firstNonEmptyLine(text).slice(0, 80) || "Draft",
-            ...(repo && repo !== NO_REPO ? { repo } : {}),
-            draft: { ...draft, autoName: true },
-          });
+        : parkedWorkspaceId
+          ? // Re-parking the draft this palette already saved. The name still
+            // follows the text server-side while autoName holds. Only a
+            // workspace that is gone earns a fresh one; any other failure is
+            // reported rather than answered with a duplicate.
+            await updateWorkspaceApi(parkedWorkspaceId, {
+              draft: { ...draft, autoName: true },
+            }).catch((e) => {
+              if (e instanceof ApiError && e.status === 404) {
+                parkedWorkspaceId = null;
+                return createWorkspace();
+              }
+              throw e;
+            })
+          : await createWorkspace();
       if (operation.consumed) {
         // The same prompt started while this request was in flight. Remove the
         // late draft instead of leaving a duplicate beside the live session.
         if (workspaceId) await updateWorkspaceApi(workspaceId, { draft: null });
-        else await deleteWorkspaceApi(workspace.id);
-      } else {
-        if (loadDraft(DRAFT_KEY).text.trim() === text) {
-          saveDraft(DRAFT_KEY, { text: "" });
+        else {
+          if (parkedWorkspaceId === workspace.id) parkedWorkspaceId = null;
+          await deleteWorkspaceApi(workspace.id);
         }
+      } else {
+        if (!workspaceId) parkedWorkspaceId = workspace.id;
+        // Attachments live in this browser's draft store, not on the server
+        // record, so hand them to the workspace composer directly.
+        const staged = loadDraft(DRAFT_KEY);
+        saveDraft(workspaceDraftKey(workspace.id), {
+          text,
+          images: staged.images,
+          files: staged.files,
+        });
         toast("Saved as draft", { variant: "success" });
       }
       window.dispatchEvent(new Event("opensession:workspaces-changed"));
