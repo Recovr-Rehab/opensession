@@ -1393,26 +1393,31 @@ html.wco {
    pages had two such rows, and the window could only be dragged by the
    sidebar. Rows: the sidebar brand row, the session header, the plain pane
    title, the PR bar, the analytics bar, and both report headers. */
-html.wco .wco-chrome {
+/* `desktop-shell` is the durable Electron capability. `wco` still drives the
+   geometry and spacing, but Chromium can transiently report its overlay as
+   hidden while the BrowserWindow still has no native titlebar. Dragging must
+   survive that report or the window has no way to move. */
+html:is(.wco, .desktop-shell) .wco-chrome {
 	-webkit-app-region: drag;
 	app-region: drag;
 }
-html.wco .wco-chrome
+html:is(.wco, .desktop-shell) .wco-chrome
 	:is(button, a, input, select, textarea, [role="button"], [tabindex]) {
 	-webkit-app-region: no-drag;
 	app-region: no-drag;
 }
-/* Chromium withholds pointer events from native drag regions. While a menu is
-   mounted, temporarily return the chrome to the page so its outside press can
-   dismiss the menu; native dragging resumes as soon as the popup unmounts. */
-html.wco:has(.app-menu-popup) .wco-chrome {
+/* Chromium withholds pointer events from native drag regions. While a visible
+   menu is mounted, temporarily return the chrome to the page so its outside
+   press can dismiss the menu. A hidden keep-mounted popup must not disable
+   window dragging indefinitely. */
+html:is(.wco, .desktop-shell):has(.app-menu-popup:not([hidden])) .wco-chrome {
 	-webkit-app-region: no-drag;
 	app-region: no-drag;
 }
 /* The media lightbox floats over the draggable first row. Electron does not
    reliably let an overlapping sibling carve clickable links out of that row,
    so suspend the underlying drag region while the lightbox is mounted. */
-html.wco:has([data-media-lightbox]) .wco-chrome {
+html:is(.wco, .desktop-shell):has([data-media-lightbox]) .wco-chrome {
 	-webkit-app-region: no-drag;
 	app-region: no-drag;
 }
@@ -1441,8 +1446,8 @@ html.wco:has([data-media-lightbox]) .wco-chrome {
    of it, so the generic header no-drag rule above does not reach them. Mark the
    floating cluster itself as interactive or the desktop shell consumes clicks
    as window drags while the sidebar is collapsed. */
-html.wco .sidebar-reopen,
-html.wco .wco-nav-pane {
+html:is(.wco, .desktop-shell) .sidebar-reopen,
+html:is(.wco, .desktop-shell) .wco-nav-pane {
 	-webkit-app-region: no-drag;
 	app-region: no-drag;
 }
@@ -1467,7 +1472,7 @@ html.wco .app-body.sidebar-collapsed .detail-topbar-title {
    overlapping sibling of the draggable header. The collapsed controls float
    above that header, so make the underlying row non-draggable in this state;
    otherwise it intercepts sidebar/back/forward clicks before they reach DOM. */
-html.wco .app-body.sidebar-collapsed .wco-chrome {
+html:is(.wco, .desktop-shell) .app-body.sidebar-collapsed .wco-chrome {
 	-webkit-app-region: no-drag;
 	app-region: no-drag;
 }

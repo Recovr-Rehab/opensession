@@ -82,7 +82,8 @@ export const VIEWER_TITLE =
 export const VIEWER_BRANCH =
 	"min-w-0 max-w-[420px] select-text overflow-hidden text-ellipsis whitespace-nowrap text-item-title " +
 	"[-webkit-touch-callout:default] " +
-	"[html.wco_&]:[-webkit-app-region:no-drag] [html.wco_&]:[app-region:no-drag]";
+	"[html.wco_&]:[-webkit-app-region:no-drag] [html.wco_&]:[app-region:no-drag] " +
+	"[html.desktop-shell_&]:[-webkit-app-region:no-drag] [html.desktop-shell_&]:[app-region:no-drag]";
 
 /**
  * A crumb BEFORE the session's own name: the session a worker was spawned from.

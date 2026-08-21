@@ -149,6 +149,13 @@
         window.addEventListener("orientationchange", resyncStandaloneScreen);
       }
 
+      // The Electron shell owns a hidden native titlebar even when Chromium
+      // temporarily stops reporting Window Controls Overlay geometry. Keep a
+      // separate capability class so its drag regions do not depend on that
+      // transient browser API.
+      if (window.os1 && window.os1.desktop === true)
+        document.documentElement.classList.add("desktop-shell");
+
       // Only updated desktop-shell builds provide a native visual-effect
       // backdrop. The capability check keeps the remotely served UI opaque in
       // older shells, which expose `desktop` but still use an opaque window.
