@@ -381,6 +381,10 @@ struct SessionsListView: View {
             // Same shape, same reason: one read, and only so the Tasks row can
             // say how much is on the list before you open it.
             .task { await refreshOpenTaskCount() }
+            // The presence strip draws only once the roster names somebody, so
+            // the list has to be what loads it: gating the band on a roster its
+            // own child would have fetched is a strip that never appears.
+            .task { await TeamDirectory.shared.ensureLoaded() }
             #endif
             .onDisappear {
                 viewModel.stopPolling()
@@ -2667,6 +2671,12 @@ struct SessionsListView: View {
     private var listSections: some View {
         Group {
             #if os(iOS)
+            // Who is around, then where you can go. Both sit ABOVE the work,
+            // the way the web sidebar has carried its tools since the band
+            // lost its heading: a destination you reach by scrolling past
+            // every workspace you have is a destination nobody reaches.
+            mobilePresenceBand
+            mobileToolsBand
             if !pinnedWorkspaces.isEmpty {
                 Section {
                     ForEach(
@@ -2746,12 +2756,12 @@ struct SessionsListView: View {
             let autoCreatedHeld = filterOutcome.autoCreatedHeld
             if autoCreatedHeld > 0 { autoCreatedSwitch(held: autoCreatedHeld) }
 
+            // The tools moved to the top of the list on the phone (see
+            // `mobileToolsBand`). The Mac keeps the Plain feed row down here,
+            // where a window with room to spare can carry it at the foot of
+            // the workspaces it belongs beside.
+            #if os(macOS)
             if supportLocation.showsSidebar { plainSidebarRow }
-            #if os(iOS)
-            if !isFeedHidden { mobileFeedRow }
-            if !isTasksHidden { mobileTasksRow }
-            if supportLocation.showsPage { mobileSupportToolRow }
-            if !isReportsHidden && reportGroupCount > 0 { mobileReportsRow }
             #endif
 
             // The archived entry is a destination, not a proof that its index
@@ -3075,6 +3085,45 @@ struct SessionsListView: View {
         ))
         .listRowSeparator(.hidden)
         .listRowBackground(Color.clear)
+    }
+
+    /// Who is around, at the very top of the list.
+    ///
+    /// The phone could only reach a teammate through the filter sheet, and
+    /// nothing anywhere said who was actually here. This is the web's own
+    /// answer to both (`components/Feed.tsx`): one face per person, a green
+    /// dot while they have something open, and picking one turns the list to
+    /// their work.
+    ///
+    /// It draws only once the roster has somebody on it besides you, so a
+    /// solo instance is not handed a strip holding a single face.
+    @ViewBuilder
+    private var mobilePresenceBand: some View {
+        if !TeamDirectory.shared.names.isEmpty {
+            Section {
+                SidebarPresenceStrip(
+                    person: personSelection,
+                    currentUser: ServerConfig.shared.userName
+                )
+                .listRowInsets(EdgeInsets(top: 4, leading: 0, bottom: 4, trailing: 0))
+                .listRowSeparator(.hidden)
+                .listRowBackground(Color.clear)
+            }
+        }
+    }
+
+    /// The tools, above the work rather than under it.
+    ///
+    /// Same set and same order as the web's strip, and the same rule for what
+    /// shows: each row is one account-level preference away, and Support is
+    /// the three-way location choice rather than a switch.
+    @ViewBuilder
+    private var mobileToolsBand: some View {
+        if !isFeedHidden { mobileFeedRow }
+        if !isTasksHidden { mobileTasksRow }
+        if supportLocation.showsSidebar { plainSidebarRow }
+        if supportLocation.showsPage { mobileSupportToolRow }
+        if !isReportsHidden && reportGroupCount > 0 { mobileReportsRow }
     }
 
     /// What the team shipped. Merged pull requests and commits in one list,

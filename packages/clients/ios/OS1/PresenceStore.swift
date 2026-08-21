@@ -18,6 +18,31 @@ final class PresenceStore {
     private var reconnectTask: Task<Void, Never>?
     private var connectedScope: String?
 
+    /// Everyone who is looking at anything right now, keyed the way every
+    /// people surface keys a person: the lowercased first name. The sidebar's
+    /// presence strip asks this of a teammate the roster named, which is a
+    /// different question from `viewers(of:)` — that one is "who is in THIS
+    /// row", this one is "who is around at all".
+    var presentKeys: Set<String> {
+        var keys: Set<String> = []
+        for users in bySession.values {
+            for user in users {
+                guard let first = user.split(separator: " ").first else { continue }
+                keys.insert(first.lowercased())
+            }
+        }
+        return keys
+    }
+
+    /// Is this person looking at something right now? Takes a display name in
+    /// any of the spellings the wire uses, since the key is its first token.
+    func isPresent(_ name: String) -> Bool {
+        guard let first = name.trimmingCharacters(in: .whitespacesAndNewlines)
+            .split(separator: " ").first
+        else { return false }
+        return presentKeys.contains(first.lowercased())
+    }
+
     /// Everyone else focused on any session represented by a sidebar row.
     func viewers(of sessions: [Session]) -> [String] {
         guard !bySession.isEmpty else { return [] }
