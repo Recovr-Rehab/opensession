@@ -262,6 +262,26 @@ describe("session chip labels", () => {
     expect(running).toContain("· running");
   });
 
+  it("names a link whose label is only the session id", () => {
+    setSessionTitles([[id, "Move shared sessions into PR branches"]]);
+    const url = `http://127.0.0.1:3850/session/${id}`;
+    // A label that repeats the id says nothing the chip does not already say,
+    // at 39 characters. Both spellings agents write get the name instead.
+    expect(renderMarkdown(`Session: [${id}](${url})`)).toContain(
+      '<span class="session-link-label">Move shared sessions into PR branches</span>',
+    );
+    expect(renderMarkdown(`Session: [\`${id}\`](${url}) is done.`)).toContain(
+      '<span class="session-link-label">Move shared sessions into PR branches</span>',
+    );
+  });
+
+  it("shortens an id-only link label when no title is known", () => {
+    const url = `http://127.0.0.1:3850/session/${id}`;
+    const html = renderMarkdown(`Session: [${id}](${url})`);
+    expect(html).toContain('<span class="session-link-label">bks-019f24b5…</span>');
+    expect(html).toContain('data-session-label="id"');
+  });
+
   it("ignores blank titles and unrelated sessions", () => {
     setSessionTitles([
       [id, "   "],
