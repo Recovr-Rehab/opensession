@@ -41,6 +41,7 @@ import {
   runPi,
   runPiSmokeTurn,
 } from "./pi-runner";
+import type { PiBashAuditEvent } from "./pi-runner";
 import { __setCodexAccountsPathForTest } from "./codex-accounts";
 import type { ResolvedWorkspaceModelPreset } from "./workspace-model-presets";
 
@@ -1029,6 +1030,79 @@ describe("makePiBashTool exit-gated completion", () => {
       (tool as any).execute("t3", { command: "sleep 60" }, ac.signal, undefined)
     ).rejects.toThrow(/aborted/i);
     expect(Date.now() - started).toBeLessThan(8_000);
+  });
+
+  test("emits paired, redacted audit events for a successful command", async () => {
+    const events: PiBashAuditEvent[] = [];
+    const auditedTool = makePiBashTool({
+      cwd: tmpdir(),
+      env,
+      gated: false,
+      unattended: false,
+      onAudit: (event) => events.push(event),
+    });
+    const command = "sleep 0.01; printf 'token=top-secret'";
+    await (auditedTool as any).execute("audit-ok", { command }, undefined, undefined);
+
+    expect(events).toHaveLength(2);
+    expect(events[0]).toMatchObject({
+      phase: "start",
+      command_kind: "sleep",
+      sleep_calls: 1,
+      sleep_seconds: 0.01,
+      timeout_s: 120,
+    });
+    expect(events[1]).toMatchObject({
+      phase: "finish",
+      outcome: "ok",
+      exit_code: 0,
+      timed_out: false,
+      cancelled: false,
+    });
+    expect(events[0]?.command_sha256).toMatch(/^[a-f0-9]{64}$/);
+    expect(events[0]?.command_sha256).toBe(events[1]?.command_sha256);
+    expect(events[1]?.duration_ms).toBeGreaterThanOrEqual(0);
+    expect(JSON.stringify(events)).not.toContain("top-secret");
+  });
+
+  test("records timeout and cancellation outcomes", async () => {
+    const timeoutEvents: PiBashAuditEvent[] = [];
+    const timeoutTool = makePiBashTool({
+      cwd: tmpdir(),
+      env,
+      gated: false,
+      unattended: false,
+      onAudit: (event) => timeoutEvents.push(event),
+    });
+    await expect(
+      (timeoutTool as any).execute("audit-timeout", { command: "sleep 60", timeout: 0.1 })
+    ).rejects.toThrow(/timed out/);
+    expect(timeoutEvents.at(-1)).toMatchObject({
+      phase: "finish",
+      outcome: "timed_out",
+      timed_out: true,
+      cancelled: false,
+    });
+
+    const cancelEvents: PiBashAuditEvent[] = [];
+    const cancelTool = makePiBashTool({
+      cwd: tmpdir(),
+      env,
+      gated: false,
+      unattended: false,
+      onAudit: (event) => cancelEvents.push(event),
+    });
+    const ac = new AbortController();
+    setTimeout(() => ac.abort(), 100);
+    await expect(
+      (cancelTool as any).execute("audit-cancel", { command: "sleep 60" }, ac.signal)
+    ).rejects.toThrow(/aborted/i);
+    expect(cancelEvents.at(-1)).toMatchObject({
+      phase: "finish",
+      outcome: "cancelled",
+      timed_out: false,
+      cancelled: true,
+    });
   });
 });
 
