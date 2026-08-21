@@ -166,6 +166,7 @@ import {
 	defaultSessionWorkspaceView,
 	mainSession,
 	pickLandingSession,
+	sessionNeverRan,
 } from "./lib/landing-session";
 import {
 	getWorkspaceLastSession,
@@ -3514,10 +3515,7 @@ export function App(
 	// feels instant. Shared by the tab ×, the tab context menu, and ⌘W.
 	const closeSessionNow = async (s: UnifiedSession) => {
 		const neverRan =
-			s.source === "opensession" &&
-			!s.ran &&
-			!s.isRunning &&
-			!s.queuedCount;
+			s.source === "opensession" && sessionNeverRan(s);
 		const wasOpen = currentSession?.id === s.id;
 		// No split bookkeeping here: a closed tab stops being live, so the split
 		// resolves without it, and collapses on its own once a bar is emptied.

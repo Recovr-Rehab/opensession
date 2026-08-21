@@ -474,6 +474,42 @@ describe("HostHandle model recovery", () => {
     kernelStore.close();
   });
 
+  test("hard-stops a host whose cooperative cancel never settles", async () => {
+    const root = mkdtempSync(join(tmpdir(), "host-client-cancel-test-"));
+    roots.push(root);
+    const dir = join(root, "rh-cancel");
+    mkdirSync(dir);
+    const sent: any[] = [];
+    let stopped = 0;
+    const launcher: HostLauncher = {
+      alive: () => true,
+      newRunDir: (hostId) => join(root, hostId),
+      launch: async () => {},
+      stop: async () => { stopped += 1; },
+      connector: () => ({
+        connect: async () => ({
+          send: (message) => { sent.push(message); return true; },
+          close: () => {},
+        }),
+      }),
+    };
+    const spec: RunHostSpec = {
+      hostId: "rh-cancel",
+      osSessionId: "os-cancel",
+      prompt: "test",
+      cwd: "/tmp",
+    };
+    const handle = new HostHandle(dir, spec, {}, launcher, spec.hostId, 1);
+
+    await handle.connectWithWait(100);
+    expect(handle.requestCancel()).toBe(true);
+    await Bun.sleep(10);
+
+    expect(sent.map((message) => message.t)).toEqual(["cancel", "shutdown"]);
+    expect(stopped).toBe(1);
+    expect(handle.ended).toBe(true);
+  });
+
   test("respawns with the host's latest fallback state", async () => {
     const root = mkdtempSync(join(tmpdir(), "host-client-respawn-test-"));
     roots.push(root);

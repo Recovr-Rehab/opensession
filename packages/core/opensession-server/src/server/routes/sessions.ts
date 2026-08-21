@@ -1611,7 +1611,7 @@ export async function handleSessionsRoutes(
 				searchIndex().remove(`session:${id}`);
 			} catch {}
 		};
-		return await sessionKernel(session.id).runExclusive(
+		const result = await sessionKernel(session.id).runExclusive(
 			"delete_session",
 			async () => {
 		try {
@@ -1624,10 +1624,10 @@ export async function handleSessionsRoutes(
 				runIds.some((id) => !!id && isAgentSessionBusy(id!)) &&
 				!(await cancelAgentRunAndWait(runIds))
 			) {
-				return Response.json(
-					{ error: "The session is still stopping. Retry deletion shortly." },
-					{ status: 409 },
-				);
+				return {
+					status: 409,
+					body: { error: "The session is still stopping. Retry deletion shortly." },
+				};
 			}
 			// Local Portals are their own detached process groups. Stop them before
 			// deleting session metadata or optionally removing the worktree.
@@ -1635,9 +1635,12 @@ export async function handleSessionsRoutes(
 				await dropRunnerPortalRoutes(session.id, session.runner.id, session.startedBy || undefined,);
 			else if (session.worktreeDir && !session.sandbox?.sandboxId)
 				await stopAllPortalServices({ sessionId: session.id, worktreeDir: session.worktreeDir, });
-			// Fence late engine frames and file writers before removing external state.
-			tombstoneSessionKernel(session.id);
+			// The serialized delete must remove the file before its permanent tombstone.
+			// Tombstoning first drops this active kernel from the map, so deleteSession's
+			// nested compatibility write re-enters through a fresh kernel and is fenced
+			// as a late writer, leaving a visible but immutable ghost session behind.
 			deleteSession(session);
+			tombstoneSessionKernel(session.id);
 			// Runner workspace deletion is opt-in on the Runner. It remains
 			// best-effort so an offline machine never blocks deleting a session.
 			if (session.runner && session.repo && session.worktreeDir) {
@@ -1676,12 +1679,15 @@ export async function handleSessionsRoutes(
 					if (attached.branch)
 						await removeWorktree(attached.branch, attached.repo);
 			}
-			return Response.json({ ok: true });
+			return { status: 200, body: { ok: true } };
 		} catch (e: any) {
-			return Response.json({ error: e.message }, { status: 500 });
+			return { status: 500, body: { error: e.message } };
 		}
 			},
 		);
+		// Actor commands cross a Worker boundary. Keep their result cloneable and
+		// construct the Response only after the mailbox has settled.
+		return Response.json(result.body, { status: result.status });
 	}
 
 	return undefined;

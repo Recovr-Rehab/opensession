@@ -704,6 +704,7 @@ export class HostHandle {
     private cb: HandleCallbacks,
     private launcher: HostLauncher = systemdHostLauncher,
     private readonly logicalRunId: string = spec.hostId,
+    private readonly cancelGraceMs = 5_000,
   ) {
     this.connector =
       launcher.connector?.(dir, spec) ??
@@ -795,21 +796,30 @@ export class HostHandle {
   }
 
   private cancelHost(): boolean {
-    if (this.send({ t: "cancel" })) return true;
-    if (!this.launcher.stop) return false;
-    if (!this.stopRequested) {
-      this.stopRequested = true;
-      void this.launcher.stop(this.ctl.hostId, this.dir).then(
-        () => this.finish(),
-        (error) => {
-          this.stopRequested = false;
-          console.error(
-            `[host-client] could not prove cancelled host ${this.ctl.hostId} absent:`,
-            error,
-          );
-        },
-      );
-    }
+    if (this.endedClean || this.stopRequested) return true;
+    const delivered = this.send({ t: "cancel" });
+    if (!this.launcher.stop) return delivered;
+
+    // A cooperative abort can wedge inside an MCP/tool await. Do not leave that
+    // detached host as a permanent owner: after a short grace, stop its isolated
+    // execution boundary and prove it absent. Without this backstop every server
+    // restart reattaches the same cancelled host and makes the session look alive
+    // while all of its now-stale frames are rejected.
+    this.stopRequested = true;
+    void (async () => {
+      if (delivered && this.cancelGraceMs > 0) await Bun.sleep(this.cancelGraceMs);
+      if (this.endedClean) return;
+      try {
+        await this.launcher.stop!(this.ctl.hostId, this.dir);
+        this.finish();
+      } catch (error) {
+        this.stopRequested = false;
+        console.error(
+          `[host-client] could not prove cancelled host ${this.ctl.hostId} absent:`,
+          error,
+        );
+      }
+    })();
     return true;
   }
 
