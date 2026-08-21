@@ -1,7 +1,12 @@
 import { describe, expect, test } from "bun:test";
 import React from "react";
 import { renderToStaticMarkup } from "react-dom/server";
-import { CardOverview, SessionCardBody, WsCardBody } from "./HoverCards";
+import {
+	CardOverview,
+	SessionCardBody,
+	WsCardBody,
+	WsPrStatusMark,
+} from "./HoverCards";
 import type { WorkspaceOverview } from "../../lib/api";
 import type { WsCardRow } from "../../lib/sidebar-hover";
 import type { UnifiedSession } from "../../lib/types";
@@ -163,6 +168,32 @@ describe("hover cards drop the repo and the idle timestamp", () => {
 // surface draws rather than a dim text link: the number says which PR, the
 // colour says how it stands. Both come off the derivation the header uses
 // (lib/pr-refs), so the two surfaces cannot disagree about one PR.
+describe("workspace PR status marks", () => {
+	test("shows merged for a discovered PR without legacy flat PR fields", () => {
+		const html = renderToStaticMarkup(
+			<WsPrStatusMark
+				sessions={[
+					session({
+						prs: [
+							{
+								repo: "tella-fusion",
+								branch: "retry-workflow-support-mcp",
+								source: "discovered",
+								state: "MERGED",
+								number: 5883,
+							},
+						],
+					}),
+				]}
+				size={18}
+			/>,
+		);
+		expect(html).toContain('title="PR merged"');
+		expect(html).toContain("text-purple");
+		expect(html).not.toContain("text-faint");
+	});
+});
+
 describe("the card's PR is the chip the rest of the app draws", () => {
 	// The anchor's own tag, so a colour on the status line above it cannot be
 	// mistaken for a colour on the chip.

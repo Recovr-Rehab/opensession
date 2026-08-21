@@ -203,6 +203,16 @@ export function WsPrStatusMark({
 		draft?: { text: string } | null;
 	} | null;
 }) {
+	// Read the authoritative multi-PR projection before the legacy flat fields.
+	// A Slack session can own a discovered PR through `prs[]` while `prUrl` and
+	// `prState` stay empty, and that landed work still needs the merged mark.
+	if (sessions.some(sessionPrMerged)) {
+		return (
+			<span className="flex items-center" title="PR merged">
+				<IconPullRequest size={size} className="text-purple" />
+			</span>
+		);
+	}
 	const session = frontingPrSession(sessions);
 	if (!session) {
 		// Rows that can never have a PR — feed/scratch workspaces (repo-less
@@ -230,13 +240,6 @@ export function WsPrStatusMark({
 		return (
 			<span className="flex items-center" title="No pull request">
 				<IconPullRequest size={size} className="text-faint" />
-			</span>
-		);
-	}
-	if (session.prState === "MERGED") {
-		return (
-			<span className="flex items-center" title="PR merged">
-				<IconPullRequest size={size} className="text-purple" />
 			</span>
 		);
 	}
