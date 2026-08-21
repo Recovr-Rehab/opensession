@@ -60,3 +60,16 @@ export function transcriptSearchWorkerArgv(bun: string, entry: string): string[]
 		? [process.execPath, "transcript-search-worker"]
 		: [bun, entry];
 }
+
+/**
+ * Resolve a Web Worker entry that survives `bun build --compile`, which does not
+ * embed Worker entry points: at runtime `new Worker(new URL("./w.ts",
+ * import.meta.url))` resolves to a bunfs path that was never bundled and fails
+ * with ModuleNotFound. A compiled binary loads the worker from a sibling
+ * `<name>.js` staged beside the executable (scripts/build-compile.ts, next to
+ * the sharp sidecar); a source checkout runs the TypeScript entry at `sourceUrl`.
+ * Keep the sidecar names in sync with build-compile's WORKER_SIDECARS list.
+ */
+export function workerEntry(sidecarName: string, sourceUrl: string | URL): string | URL {
+	return isCompiledBinary() ? join(dirname(process.execPath), sidecarName) : sourceUrl;
+}
