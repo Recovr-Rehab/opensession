@@ -122,7 +122,9 @@ import { getWorkspace } from "./workspaces";
 import {
 	broadcastQueue,
 	beginPromptDispatch,
+	durableQueueItem,
 	acknowledgePromptDispatch,
+	failPromptDispatch,
 	clearSteerReceipts,
 	isGitHubQueueItem,
 	persistQueues,
@@ -130,7 +132,9 @@ import {
 	promptQueues,
 	queuedPromptIndex,
 	queueItem,
-	recordSteer,
+	acceptQueuedSteer,
+	prepareQueuedSteer,
+	rejectQueuedSteer,
 	requeueSteerReceipts,
 	restorePersistedQueueState,
 	steeredReceipts,
@@ -254,7 +258,7 @@ export function enqueuePrompt(
 	opts?: { front?: boolean },
 ): void {
 	const queue = promptQueues.get(sessionId) || [];
-	const owned = queueItem(item);
+	const owned = durableQueueItem(sessionId, queueItem(item));
 	// A durable command can be replayed after the queue write committed but
 	// before its command receipt did. Stable ids make that retry an adoption,
 	// not a second prompt.
@@ -365,6 +369,7 @@ export function steerQueuedPrompt(
 			? `[${item.user}] ${item.content}`
 			: item.content;
 	const images = parseImageDataUrls(item.images || []);
+	if (!item.id || !prepareQueuedSteer(sessionId, item.id)) return false;
 	if (
 		!steerAgentRun(
 			[session.claudeSessionId, session.codexThreadId, session.id],
@@ -373,14 +378,11 @@ export function steerQueuedPrompt(
 			item.id,
 		)
 	) {
-		queue.splice(index, 0, item);
+		rejectQueuedSteer(sessionId, item.id);
 		return false;
 	}
-	if (queue.length > 0) promptQueues.set(sessionId, queue);
-	else promptQueues.delete(sessionId);
-	recordSteer(sessionId, item);
-	persistQueues();
-	broadcastQueue(sessionId);
+	if (!acceptQueuedSteer(sessionId, item.id))
+		throw new Error("Pending steer changed before runner acceptance");
 	return true;
 }
 
@@ -991,12 +993,19 @@ async function drainQueueInner(sessionId: string): Promise<void> {
 		}
 		queueHoldNotified.delete(sessionId);
 		const batch = plan.batch;
-		if (plan.rest.length > 0) promptQueues.set(sessionId, plan.rest);
-		else promptQueues.delete(sessionId);
+		// Claiming removes this exact batch and installs its dispatch in one actor
+		// transaction. A crash cannot leave the items in neither location.
 		// Persist the delivery intent before starting work. If the process dies
 		// after this point but before the runner journals its run, boot restores
 		// this batch to the front of the queue.
-		const promptEntryId = beginPromptDispatch(sessionId, batch);
+		const promptEntryId = beginPromptDispatch(
+			sessionId,
+			batch,
+			undefined,
+			true,
+			undefined,
+			true,
+		);
 		broadcastQueue(sessionId);
 		let combined = batch
 			.map((m) =>
@@ -1036,11 +1045,7 @@ async function drainQueueInner(sessionId: string): Promise<void> {
 		} catch (e) {
 			// The batch was already spliced out and persisted away — put it back at
 			// the front of the queue so a throw doesn't lose the messages.
-			acknowledgePromptDispatch(sessionId, promptEntryId, false);
-			const current = promptQueues.get(sessionId) || [];
-			promptQueues.set(sessionId, [...batch, ...current]);
-			persistQueues();
-			broadcastQueue(sessionId);
+			failPromptDispatch(sessionId, promptEntryId);
 			throw e;
 		}
 	}
@@ -1753,9 +1758,11 @@ export async function runSessionPrompt(
 				source: "prompt_throw",
 				error: String(e),
 			});
-		// A normal start failure is not a crash-recovery case. Keep the visible
-		// transcript line and its error, but do not replay it on a later restart.
-		acknowledgePromptDispatch(sessionId, durablePromptEntryId);
+		// A direct sandbox send owns the dispatch it created above, so a normal
+		// start failure retires that recovery record. A queue drain passes its own
+		// dispatch in and must retain it for the caller to restore atomically.
+		if (!promptEntryId)
+			acknowledgePromptDispatch(sessionId, durablePromptEntryId);
 		throw e;
 	} finally {
 		unmarkSessionStarting(sessionId, startToken);

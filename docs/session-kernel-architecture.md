@@ -1,9 +1,8 @@
 # Session kernel architecture
 
 Open Session has one logical owner for every session. The owner is a
-`SessionKernel` actor addressed by the canonical session id. Its writable store
-and lease coordinator run in a separate Worker isolate; the gateway reaches it
-through a versioned IPC client. HTTP routes, WebSocket handlers, MCP tools,
+`SessionKernel` actor addressed by the canonical session id. Its writable store and autonomous reducers run in a separate Worker isolate;
+the gateway reaches it through a versioned IPC client. HTTP routes, WebSocket handlers, MCP tools,
 automations, timers, recovery, and executors are clients of that owner. They do not own session lifecycle state themselves.
 
 ## Invariant
@@ -27,6 +26,7 @@ a model run or gateway callback before processing the next state fact.
 
 - Durable commands, keyed by session id and client request id.
 - Authoritative run state, run id, and generation.
+- Durable delivery and blocking-ask aggregates with monotonic revisions.
 - A monotonic session change stream.
 - Durable timers.
 - A retrying effect outbox.
@@ -42,7 +42,7 @@ returns the complete committed result without duplicating attachment bodies
 forever. Reusing an id with another payload is
 rejected. WebSocket receipt replay is capability-negotiated. Mutations wait
 behind the hello handshake, then become durable commands on a capable server
-or one-shot sends on an older server. A command whose actor lease was
+or one-shot sends on an older server. A command whose physical execution was
 interrupted becomes pending again only when its server call site explicitly declares
 the operation replay-safe. Replay policy is not part of client request identity,
 and the first policy-aware migration preserves pre-existing interrupted receipts. The default is fail-closed: interrupted physical work
@@ -75,17 +75,22 @@ delivering the opening prompt.
 
 ## Runtime ownership
 
-The kernel owns the runtime slots previously stored in unrelated global maps:
+The actor owns two durable aggregates that previously lived in unrelated global
+maps and JSON files:
 
-- Prompt queues and dispatch receipts.
-- Steer receipts and the explicit Stop latch.
-- Pending asks and their timer handles.
+- Delivery state: ordered prompt queue, one pre-journal dispatch and steer receipts.
+- Blocking ask facts: question identity, content, escalation and recovery state.
 
-The existing queue and ask persistence formats remain readable during this
-migration. Runtime values are exposed as immutable copies, so mutations cannot
-bypass an actor lease by changing an array returned from a Map-compatible view.
-Idle gateway facades without runtime state passivate. Addressing a session activates it
-again from durable state.
+Delivery mutation and dispatch claim, acknowledgement or failure are short typed
+Worker reductions. Claiming a batch removes it from the queue and installs its
+dispatch in one SQLite transaction. Failure atomically restores that exact batch
+ahead of later work. Steering first moves an item to a pending-steer checkpoint,
+then reports runner acceptance or rejection as a second typed fact. Restart treats
+an unresolved checkpoint as ambiguous acceptance and reconciles it through the
+receipt and transcript path instead of delivering a duplicate turn. The old queue and ask JSON formats are imported once under
+durable migration markers, then written only as compatibility mirrors, never read
+as authority again. Resolver closures, timeout handles and the explicit Stop latch
+remain process-local executor state because they are not durable decisions.
 
 ## Run ownership
 
@@ -163,31 +168,33 @@ and replay committed changes without becoming another session owner.
 
 ## Process boundary
 
-The writable `SessionKernelStore` and per-session lease coordinator run in
+The writable `SessionKernelStore` and autonomous per-session coordinator run in
 `session-kernel-worker.ts`, a separate JavaScript actor isolate. The gateway
-starts and handshakes that actor before hydrating queue or ask projections.
-Run-state facts use exhaustive typed IPC and are reduced autonomously in the
-Worker. Runtime timer/outbox work is loaded through asynchronous typed IPC, so
-the one-second wake does not block the gateway or allocate fixed multi-megabyte
-SharedArrayBuffers. Remaining gateway command closures still use the older lease
-adapter while their queue, ask, create and turn behavior moves into typed
-reducers. Synchronous compatibility writes use a bounded SharedArrayBuffer RPC;
-when they must run during an older lease, the Worker remains the sole physical
-writer and batches any resulting outbox effects in one transaction. This bridge
-is not the target API and must shrink with each migrated domain.
+starts and handshakes that actor before hydrating projections.
 
-Unmigrated decision closures still execute in the gateway as effect adapters,
-but every such execution is fenced by the compatibility lease and its command
-result is committed by the actor. Run-state transitions no longer use that
-path. Terminal failures are durable receipts and do not execute again.
-If the actor is lost after physical execution begins, commands fail closed as
-`indeterminate` unless the call site explicitly declares a stable adoption path
-with `replaySafe`. Handler failures can retry only for replay-safe commands;
-durable timer commands opt into policy-driven retries until their timer
-dead-letters. Session JSON and transcript databases remain specialized
-physical stores whose writes run under that lease. Moving the actor from a Worker to an
-independently supervised Unix process is now a transport and failure-isolation
-change, not an ownership migration; no second writer or fallback is permitted.
+A command admission is short: the actor fingerprints and persists the intent,
+allocates a fenced `executionId`, and immediately returns an execution descriptor.
+It does not retain a per-session gateway lease and does not stop reducing run,
+delivery or ask messages while physical work is active. Different command intents
+can be admitted concurrently. The gateway effect adapter preserves physical effect
+order for compatibility operations, but that queue is not authoritative: every
+item in it is already durable in the actor. A restart re-admits replay-safe intent
+and marks ambiguous non-replay-safe execution indeterminate.
+
+Retries of an executing request attach as bounded waiters to the same execution;
+they never allocate a second physical effect. Active executions and waiters have
+per-session and process-wide limits. Completion and failure messages carry the
+`executionId`; an unknown or stale id fail-stops the actor rather than committing
+over a successor. Settlement commits the command result and its typed outbox
+effects transactionally, then releases attached waiters.
+
+Synchronous transcript and session-file compatibility callbacks use their own
+short execution IDs against the same physical SQLite writer. They can run while an
+async effect is suspended without borrowing its ownership. Session JSON and the
+transcript database remain specialized effect stores, but their writes are admitted
+and receipted by the actor. Moving the Worker to an independently supervised Unix
+process is therefore a transport and failure-isolation change, not an ownership
+migration; no fallback writer is permitted.
 
 ## Tests
 
@@ -204,7 +211,7 @@ new direct session-file writers. Existing queue, ask, journal, transcript,
 host-client, and recovery suites exercise their compatibility facades through
 the kernel.
 
-## Writer lease and deletion fencing
+## Writer claim and deletion fencing
 
 The SQLite store carries a singleton writer claim with the process id and an
 unpredictable owner token. Startup acquires that claim before checking or

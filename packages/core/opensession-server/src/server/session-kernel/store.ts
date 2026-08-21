@@ -6,12 +6,17 @@
  * but they never participate in admission or recovery decisions.
  */
 import { Database } from "bun:sqlite";
-import { nextRunState, type RunEvent, type RunState } from "./run-state-machine";
+import {
+  nextRunState,
+  type RunEvent,
+  type RunState,
+} from "./run-state-machine";
 import { chmodSync, existsSync, mkdirSync, readFileSync, statSync } from "fs";
 import { dirname } from "path";
 import { sessionsDir } from "../paths";
 
-export type DurableCommandStatus = "pending" | "processing" | "completed" | "failed" | "indeterminate";
+export type DurableCommandStatus =
+  "pending" | "processing" | "completed" | "failed" | "indeterminate";
 
 export interface DurableCommandRecord {
 	sessionId: string;
@@ -54,6 +59,17 @@ export interface DurableTimer {
 	createdAt: number;
 }
 
+export type DurableDeliveryState = {
+  revision: number;
+  queued: unknown[];
+  dispatch?: unknown;
+  steered: unknown[];
+  pendingSteers: Array<{ item: unknown; index: number; preparedAt: number }>;
+  updatedAt: number;
+};
+
+export type DeliverySlot = "queued" | "dispatch" | "steered";
+
 export interface DurableOutboxItem {
 	id: number;
 	effectId: string;
@@ -88,29 +104,48 @@ const parsed = <T>(value: string | null | undefined): T | undefined => {
 };
 type ProcessOwnerIdentity = { token: string; bootId?: string; start?: string };
 function linuxBootId(): string | undefined {
-	try { return readFileSync("/proc/sys/kernel/random/boot_id", "utf8").trim(); }
-	catch { return undefined; }
+  try {
+    return readFileSync("/proc/sys/kernel/random/boot_id", "utf8").trim();
+  } catch {
+    return undefined;
+  }
 }
 function linuxProcessStart(pid: number): string | undefined {
 	try {
 		const stat = readFileSync(`/proc/${pid}/stat`, "utf8");
-		const fields = stat.slice(stat.lastIndexOf(")") + 2).trim().split(/\s+/);
+    const fields = stat
+      .slice(stat.lastIndexOf(")") + 2)
+      .trim()
+      .split(/\s+/);
 		return fields[19];
-	} catch { return undefined; }
+  } catch {
+    return undefined;
+  }
 }
 function parseOwnerIdentity(value: string): ProcessOwnerIdentity | undefined {
 	try {
 		const parsed = JSON.parse(value) as ProcessOwnerIdentity;
 		return typeof parsed?.token === "string" ? parsed : undefined;
-	} catch { return undefined; }
+  } catch {
+    return undefined;
+  }
 }
 function plausibleLegacyOwner(pid: number): boolean {
 	try {
-		const command = readFileSync(`/proc/${pid}/cmdline`, "utf8").replace(/\0/g, " ");
+    const command = readFileSync(`/proc/${pid}/cmdline`, "utf8").replace(
+      /\0/g,
+      " ",
+    );
 		if (!command.includes("opensession.ts")) return false;
-		const environment = readFileSync(`/proc/${pid}/environ`, "utf8").split("\0");
-		const stateDir = environment.find((entry) => entry.startsWith("OPENSESSION_STATE_DIR="))?.slice("OPENSESSION_STATE_DIR=".length);
-		const sessionOverride = environment.find((entry) => entry.startsWith("OPENSESSION_SESSIONS_DIR="))?.slice("OPENSESSION_SESSIONS_DIR=".length);
+    const environment = readFileSync(`/proc/${pid}/environ`, "utf8").split(
+      "\0",
+    );
+    const stateDir = environment
+      .find((entry) => entry.startsWith("OPENSESSION_STATE_DIR="))
+      ?.slice("OPENSESSION_STATE_DIR=".length);
+    const sessionOverride = environment
+      .find((entry) => entry.startsWith("OPENSESSION_SESSIONS_DIR="))
+      ?.slice("OPENSESSION_SESSIONS_DIR=".length);
 		if (sessionOverride && sessionOverride !== sessionsDir()) return false;
 		if (stateDir && !sessionsDir().startsWith(stateDir)) return false;
 		return true;
@@ -129,8 +164,7 @@ const PROCESS_OWNER_ID = (ownerGlobal.__opensessionSessionKernelOwnerId ??=
 		bootId: linuxBootId(),
 		start: linuxProcessStart(process.pid),
 	} satisfies ProcessOwnerIdentity));
-export const SESSION_KERNEL_SCHEMA_VERSION = 6;
-
+export const SESSION_KERNEL_SCHEMA_VERSION = 7;
 
 export function sessionKernelDbPath(): string {
 	// Test processes must never open the live instance state. Tests that need
@@ -200,6 +234,10 @@ export class SessionKernelStore {
 				pid INTEGER NOT NULL,
 				claimed_at INTEGER NOT NULL
 			);
+			CREATE TABLE IF NOT EXISTS session_kernel_migrations (
+				name TEXT PRIMARY KEY,
+				completed_at INTEGER NOT NULL
+			);
 			CREATE TABLE IF NOT EXISTS session_kernel_tombstones (
 				session_id TEXT PRIMARY KEY,
 				deleted_at INTEGER NOT NULL
@@ -212,6 +250,21 @@ export class SessionKernelStore {
 				generation INTEGER NOT NULL DEFAULT 0,
 				current_run_id TEXT,
 				change_seq INTEGER NOT NULL DEFAULT 0,
+				updated_at INTEGER NOT NULL
+			);
+			CREATE TABLE IF NOT EXISTS session_kernel_asks (
+				session_id TEXT PRIMARY KEY,
+				revision INTEGER NOT NULL DEFAULT 0,
+				record TEXT NOT NULL,
+				updated_at INTEGER NOT NULL
+			);
+			CREATE TABLE IF NOT EXISTS session_kernel_delivery (
+				session_id TEXT PRIMARY KEY,
+				revision INTEGER NOT NULL DEFAULT 0,
+				queued TEXT NOT NULL DEFAULT '[]',
+				dispatch TEXT,
+				steered TEXT NOT NULL DEFAULT '[]',
+				pending_steers TEXT NOT NULL DEFAULT '[]',
 				updated_at INTEGER NOT NULL
 			);
 			CREATE TABLE IF NOT EXISTS session_kernel_commands (
@@ -274,23 +327,35 @@ export class SessionKernelStore {
 		`);
 		const commandColumns = new Set(
 			(
-				this.db.query("PRAGMA table_info(session_kernel_commands)").all() as Array<{ name: string }>
+        this.db
+          .query("PRAGMA table_info(session_kernel_commands)")
+          .all() as Array<{ name: string }>
 			).map((column) => column.name),
 		);
 		if (!commandColumns.has("payload_hash"))
-			this.db.exec("ALTER TABLE session_kernel_commands ADD COLUMN payload_hash TEXT");
+      this.db.exec(
+        "ALTER TABLE session_kernel_commands ADD COLUMN payload_hash TEXT",
+      );
 		if (!commandColumns.has("replay_safe")) {
-			this.db.exec("ALTER TABLE session_kernel_commands ADD COLUMN replay_safe INTEGER NOT NULL DEFAULT 0");
+      this.db.exec(
+        "ALTER TABLE session_kernel_commands ADD COLUMN replay_safe INTEGER NOT NULL DEFAULT 0",
+      );
 			// Pre-policy releases re-admitted every interrupted command. Preserve that
 			// contract across the upgrade instead of turning live receipts indeterminate.
 			this.db.run("UPDATE session_kernel_commands SET replay_safe = 1");
 		}
 		if (!commandColumns.has("retryable"))
-			this.db.exec("ALTER TABLE session_kernel_commands ADD COLUMN retryable INTEGER");
+      this.db.exec(
+        "ALTER TABLE session_kernel_commands ADD COLUMN retryable INTEGER",
+      );
 		if (!commandColumns.has("result_hash"))
-			this.db.exec("ALTER TABLE session_kernel_commands ADD COLUMN result_hash TEXT");
+      this.db.exec(
+        "ALTER TABLE session_kernel_commands ADD COLUMN result_hash TEXT",
+      );
 		if (!commandColumns.has("result_released"))
-			this.db.exec("ALTER TABLE session_kernel_commands ADD COLUMN result_released INTEGER NOT NULL DEFAULT 0");
+      this.db.exec(
+        "ALTER TABLE session_kernel_commands ADD COLUMN result_released INTEGER NOT NULL DEFAULT 0",
+      );
 		if (schemaVersion < 6) {
 			this.db.exec("DROP INDEX IF EXISTS idx_skc_compact");
 			this.db.run(
@@ -299,18 +364,28 @@ export class SessionKernelStore {
 			);
 		}
 		if (!commandColumns.has("terminal_failure")) {
-			this.db.exec("ALTER TABLE session_kernel_commands ADD COLUMN terminal_failure INTEGER NOT NULL DEFAULT 0");
+      this.db.exec(
+        "ALTER TABLE session_kernel_commands ADD COLUMN terminal_failure INTEGER NOT NULL DEFAULT 0",
+      );
 			this.db.run(
 				`UPDATE session_kernel_commands SET terminal_failure = 1
 				 WHERE result LIKE '%"__sessionKernelFailure":true%'`,
 			);
 		}
 		if (!commandColumns.has("acknowledged_at"))
-			this.db.exec("ALTER TABLE session_kernel_commands ADD COLUMN acknowledged_at INTEGER");
+      this.db.exec(
+        "ALTER TABLE session_kernel_commands ADD COLUMN acknowledged_at INTEGER",
+      );
 		if (schemaVersion < 4) {
 		const unhashedCommands = this.db
-				.query("SELECT session_id, request_id, payload FROM session_kernel_commands WHERE payload_hash IS NULL")
-				.all() as Array<{ session_id: string; request_id: string; payload: string }>;
+        .query(
+          "SELECT session_id, request_id, payload FROM session_kernel_commands WHERE payload_hash IS NULL",
+        )
+        .all() as Array<{
+        session_id: string;
+        request_id: string;
+        payload: string;
+      }>;
 			const setPayloadHash = this.db.query(
 				"UPDATE session_kernel_commands SET payload_hash = ? WHERE session_id = ? AND request_id = ?",
 			);
@@ -321,13 +396,23 @@ export class SessionKernelStore {
 					command.request_id,
 				);
 			const unhashedResults = this.db
-				.query("SELECT session_id, request_id, result FROM session_kernel_commands WHERE result IS NOT NULL AND result_hash IS NULL")
-				.all() as Array<{ session_id: string; request_id: string; result: string }>;
+        .query(
+          "SELECT session_id, request_id, result FROM session_kernel_commands WHERE result IS NOT NULL AND result_hash IS NULL",
+        )
+        .all() as Array<{
+        session_id: string;
+        request_id: string;
+        result: string;
+      }>;
 			const setResultHash = this.db.query(
 				"UPDATE session_kernel_commands SET result_hash = ? WHERE session_id = ? AND request_id = ?",
 			);
 			for (const command of unhashedResults)
-				setResultHash.run(digest(command.result), command.session_id, command.request_id);
+        setResultHash.run(
+          digest(command.result),
+          command.session_id,
+          command.request_id,
+        );
 		}
 
 		const outboxColumns = new Set(
@@ -366,7 +451,9 @@ export class SessionKernelStore {
 		);
 		if (!timerColumns.has("token")) {
 			this.db.exec("ALTER TABLE session_kernel_timers ADD COLUMN token TEXT");
-			this.db.run("UPDATE session_kernel_timers SET token = lower(hex(randomblob(16))) WHERE token IS NULL");
+      this.db.run(
+        "UPDATE session_kernel_timers SET token = lower(hex(randomblob(16))) WHERE token IS NULL",
+      );
 		}
 		if (!timerColumns.has("attempts"))
 			this.db.exec(
@@ -388,14 +475,17 @@ export class SessionKernelStore {
 			this.db.exec(
 				"ALTER TABLE session_kernel_timers ADD COLUMN created_at INTEGER NOT NULL DEFAULT 0",
 			);
-			this.db.run("UPDATE session_kernel_timers SET created_at = due_at WHERE created_at = 0");
+      this.db.run(
+        "UPDATE session_kernel_timers SET created_at = due_at WHERE created_at = 0",
+      );
 		}
 		if (schemaVersion < 4)
 			this.db.run(
 				"UPDATE session_kernel_outbox SET effect_id = COALESCE(effect_id, 'legacy:' || id), effect_key = COALESCE(effect_key, 'legacy:' || id)",
 			);
 		this.db.exec(
-			"CREATE UNIQUE INDEX IF NOT EXISTS idx_sko_effect ON session_kernel_outbox(session_id, kind, effect_key)",);
+      "CREATE UNIQUE INDEX IF NOT EXISTS idx_sko_effect ON session_kernel_outbox(session_id, kind, effect_key)",
+    );
 		this.db.exec(`
 			CREATE INDEX IF NOT EXISTS idx_skc_active_created
 				ON session_kernel_commands(created_at)
@@ -430,15 +520,17 @@ export class SessionKernelStore {
 				ON session_kernel_outbox(dead_lettered_at DESC)
 				WHERE dead_lettered_at IS NOT NULL;
 		`);
-		this.db.exec("DROP INDEX IF EXISTS idx_skc_updated; DROP INDEX IF EXISTS idx_skc_status_created;");
+    this.db.exec(
+      "DROP INDEX IF EXISTS idx_skc_updated; DROP INDEX IF EXISTS idx_skc_status_created;",
+    );
 		this.db.exec(`PRAGMA user_version = ${SESSION_KERNEL_SCHEMA_VERSION}`);
 		if (path !== ":memory:") {
 			try {
 				chmodSync(path, 0o600);
 			} catch {}
 		}
-		// A processing lease dies with its actor. Keep the durable intent pending so
-		// the client's receipt outbox can re-admit the exact same command id.
+    // A processing execution dies with its actor. Keep replay-safe intent pending
+    // so the client's receipt outbox can re-admit the exact same command id.
 		this.db.run(
 			"UPDATE session_kernel_commands SET status = 'pending', error = 'actor restarted before acknowledgement', updated_at = ? WHERE status = 'processing' AND replay_safe = 1",
 			[Date.now()],
@@ -448,8 +540,10 @@ export class SessionKernelStore {
 			[Date.now()],
 		);
 		const stateRows = this.db
-			.query(`SELECT session_id, run_state, run_since, last_event, generation,
-				current_run_id, change_seq FROM session_kernel_state`,)
+      .query(
+        `SELECT session_id, run_state, run_since, last_event, generation,
+				current_run_id, change_seq FROM session_kernel_state`,
+      )
 			.all() as Record<string, unknown>[];
 		for (const row of stateRows) {
 			this.dirtyChangeSessions.add(String(row.session_id));
@@ -468,7 +562,9 @@ export class SessionKernelStore {
 	private claimWriter(): void {
 		const transaction = this.db.transaction(() => {
 			const current = this.db
-				.query("SELECT owner_id, pid FROM session_kernel_owner WHERE singleton = 1",)
+        .query(
+          "SELECT owner_id, pid FROM session_kernel_owner WHERE singleton = 1",
+        )
 				.get() as { owner_id: string; pid: number } | null;
 			if (current && current.owner_id !== PROCESS_OWNER_ID) {
 				let alive = false;
@@ -481,11 +577,15 @@ export class SessionKernelStore {
 					const bootId = linuxBootId();
 					const start = linuxProcessStart(current.pid);
 					if (
-						recorded?.bootId && recorded.start &&
-						bootId && start &&
+            recorded?.bootId &&
+            recorded.start &&
+            bootId &&
+            start &&
 						(recorded.bootId !== bootId || recorded.start !== start)
-					) alive = false;
-					else if (!recorded && !plausibleLegacyOwner(current.pid)) alive = false;
+          )
+            alive = false;
+          else if (!recorded && !plausibleLegacyOwner(current.pid))
+            alive = false;
 				}
 				if (alive)
 					throw new Error(
@@ -507,11 +607,16 @@ export class SessionKernelStore {
 		if (this.closeable) this.db.close();
 	}
 
-	command(sessionId: string, requestId: string,): DurableCommandRecord | undefined {
+  command(
+    sessionId: string,
+    requestId: string,
+  ): DurableCommandRecord | undefined {
 		const row = this.db
-			.query(`SELECT session_id, request_id, type, payload, payload_hash, status, replay_safe, retryable, result, result_hash, terminal_failure, acknowledged_at, error,
+      .query(
+        `SELECT session_id, request_id, type, payload, payload_hash, status, replay_safe, retryable, result, result_hash, terminal_failure, acknowledged_at, error,
 				created_at, updated_at FROM session_kernel_commands
-				WHERE session_id = ? AND request_id = ?`,)
+				WHERE session_id = ? AND request_id = ?`,
+      )
 			.get(sessionId, requestId) as Record<string, unknown> | null;
 		if (!row) return undefined;
 		return {
@@ -526,7 +631,8 @@ export class SessionKernelStore {
 			createdAt: Number(row.created_at),
 			updatedAt: Number(row.updated_at),
 			replaySafe: Number(row.replay_safe) === 1,
-			retryable: row.retryable == null ? undefined : Number(row.retryable) === 1,
+      retryable:
+        row.retryable == null ? undefined : Number(row.retryable) === 1,
 			acknowledgedAt:
 				row.acknowledged_at == null ? undefined : Number(row.acknowledged_at),
 			resultHash: row.result_hash == null ? undefined : String(row.result_hash),
@@ -549,19 +655,29 @@ export class SessionKernelStore {
 				(session_id, request_id, type, payload, payload_hash, status, replay_safe, created_at, updated_at)
 			 VALUES (?, ?, ?, ?, ?, 'pending', ?, ?, ?)
 			 ON CONFLICT(session_id, request_id) DO NOTHING`,
-			[input.sessionId, input.requestId, input.type, payloadText, payloadHash, input.replaySafe ? 1 : 0, now, now,],
+      [
+        input.sessionId,
+        input.requestId,
+        input.type,
+        payloadText,
+        payloadHash,
+        input.replaySafe ? 1 : 0,
+        now,
+        now,
+      ],
 		);
 		let record = this.command(input.sessionId, input.requestId);
 		if (!record) throw new Error("Session command was not persisted");
-		if (
-			record.type !== input.type ||
-			record.payloadHash !== payloadHash
-		) {
+    if (record.type !== input.type || record.payloadHash !== payloadHash) {
 			throw new Error(
 				`Session command id ${input.requestId} was reused with another payload`,
 			);
 		}
-		if (input.replaySafe && !record.replaySafe && record.status !== "indeterminate") {
+    if (
+      input.replaySafe &&
+      !record.replaySafe &&
+      record.status !== "indeterminate"
+    ) {
 			this.db.run(
 				"UPDATE session_kernel_commands SET replay_safe = 1 WHERE session_id = ? AND request_id = ?",
 				[input.sessionId, input.requestId],
@@ -585,7 +701,14 @@ export class SessionKernelStore {
 			`UPDATE session_kernel_commands SET status = 'completed', payload = 'null',
 				result = ?, result_hash = ?, result_released = 0, terminal_failure = ?, error = NULL,
 				retryable = NULL, updated_at = ? WHERE session_id = ? AND request_id = ?`,
-			[stored.text, stored.hash, stored.terminalFailure ? 1 : 0, Date.now(), sessionId, requestId],
+      [
+        stored.text,
+        stored.hash,
+        stored.terminalFailure ? 1 : 0,
+        Date.now(),
+        sessionId,
+        requestId,
+      ],
 		);
 	}
 
@@ -598,7 +721,13 @@ export class SessionKernelStore {
 		this.db.run(
 			`UPDATE session_kernel_commands SET status = 'failed', payload = 'null', error = ?, retryable = ?,
 				updated_at = ? WHERE session_id = ? AND request_id = ?`,
-			[error.slice(0, 2_000), retryable ? 1 : 0, Date.now(), sessionId, requestId],
+      [
+        error.slice(0, 2_000),
+        retryable ? 1 : 0,
+        Date.now(),
+        sessionId,
+        requestId,
+      ],
 		);
 	}
 
@@ -666,12 +795,19 @@ export class SessionKernelStore {
 		sessionId: string,
 		afterChangeSeq: number,
 		limit = 500,
-	): Array<{ changeSeq: number; kind: string; payload: unknown; createdAt: number; }> {
+  ): Array<{
+    changeSeq: number;
+    kind: string;
+    payload: unknown;
+    createdAt: number;
+  }> {
 		const rows = this.db
-			.query(`SELECT change_seq, kind, payload, created_at
+      .query(
+        `SELECT change_seq, kind, payload, created_at
 				FROM session_kernel_changes
 				WHERE session_id = ? AND change_seq > ?
-				ORDER BY change_seq LIMIT ?`,)
+				ORDER BY change_seq LIMIT ?`,
+      )
 			.all(sessionId, afterChangeSeq, limit) as Record<string, unknown>[];
 		return rows.map((row) => ({
 			changeSeq: Number(row.change_seq),
@@ -690,7 +826,13 @@ export class SessionKernelStore {
 			const from = prior.state as RunState;
 			const to = nextRunState(from, input.event);
 			if (!to) {
-				result = { accepted: false, from, to: from, reason: "invalid_transition", state: prior };
+        result = {
+          accepted: false,
+          from,
+          to: from,
+          reason: "invalid_transition",
+          state: prior,
+        };
 				return;
 			}
 			if (
@@ -713,13 +855,17 @@ export class SessionKernelStore {
 			}
 			const registers =
 				!!input.runKey &&
-				(input.event === "run_registered" || input.event === "boot_journal_found");
-			const generation = registers && prior.currentRunId !== input.runKey
+        (input.event === "run_registered" ||
+          input.event === "boot_journal_found");
+      const generation =
+        registers && prior.currentRunId !== input.runKey
 				? prior.generation + 1
 				: prior.generation;
 			const currentRunId = ["idle", "stopped", "failed"].includes(to)
 				? undefined
-				: (registers ? input.runKey : prior.currentRunId);
+        : registers
+          ? input.runKey
+          : prior.currentRunId;
 			const changeSeq = prior.changeSeq + 1;
 			this.db.run(
 				`INSERT INTO session_kernel_state
@@ -734,13 +880,27 @@ export class SessionKernelStore {
 					current_run_id = excluded.current_run_id,
 					change_seq = excluded.change_seq,
 					updated_at = excluded.updated_at`,
-				[input.sessionId, to, since, input.event, generation, currentRunId ?? null, changeSeq, now],
+        [
+          input.sessionId,
+          to,
+          since,
+          input.event,
+          generation,
+          currentRunId ?? null,
+          changeSeq,
+          now,
+        ],
 			);
 			this.db.run(
 				`INSERT INTO session_kernel_changes
 					(session_id, change_seq, kind, payload, created_at)
 				 VALUES (?, ?, 'run_state', ?, ?)`,
-				[input.sessionId, changeSeq, json({ state: to, event: input.event, detail: input.detail }), now],
+        [
+          input.sessionId,
+          changeSeq,
+          json({ state: to, event: input.event, detail: input.detail }),
+          now,
+        ],
 			);
 			const state: DurableRunState = {
 				state: to,
@@ -806,7 +966,11 @@ export class SessionKernelStore {
 				[
 					input.sessionId,
 					changeSeq,
-					json({ state: input.state, event: input.event, detail: input.detail, }),
+          json({
+            state: input.state,
+            event: input.event,
+            detail: input.detail,
+          }),
 					now,
 				],
 			);
@@ -829,7 +993,9 @@ export class SessionKernelStore {
 
 	isTombstoned(sessionId: string, now = Date.now()): boolean {
 		const row = this.db
-			.query("SELECT deleted_at FROM session_kernel_tombstones WHERE session_id = ?",)
+      .query(
+        "SELECT deleted_at FROM session_kernel_tombstones WHERE session_id = ?",
+      )
 			.get(sessionId) as { deleted_at: number } | null;
 		if (!row) return false;
 		void now;
@@ -840,6 +1006,8 @@ export class SessionKernelStore {
 		const tx = this.db.transaction(() => {
 			for (const table of [
 				"session_kernel_state",
+        "session_kernel_asks",
+        "session_kernel_delivery",
 				"session_kernel_commands",
 				"session_kernel_changes",
 				"session_kernel_timers",
@@ -861,6 +1029,8 @@ export class SessionKernelStore {
 		const tx = this.db.transaction(() => {
 			for (const table of [
 				"session_kernel_state",
+        "session_kernel_asks",
+        "session_kernel_delivery",
 				"session_kernel_commands",
 				"session_kernel_changes",
 				"session_kernel_timers",
@@ -874,8 +1044,509 @@ export class SessionKernelStore {
 		this.dirtyChangeSessions.delete(sessionId);
 	}
 
+  askMigrationComplete(): boolean {
+    return !!this.db
+      .query("SELECT 1 FROM session_kernel_migrations WHERE name = 'ask_v1'")
+      .get();
+  }
+
+  markAskMigrationComplete(): void {
+    this.db.run(
+      "INSERT OR IGNORE INTO session_kernel_migrations (name, completed_at) VALUES ('ask_v1', ?)",
+      [Date.now()],
+    );
+  }
+
+  deliveryMigrationComplete(): boolean {
+    return !!this.db
+      .query(
+        "SELECT 1 FROM session_kernel_migrations WHERE name = 'delivery_v1'",
+      )
+      .get();
+  }
+
+  markDeliveryMigrationComplete(): void {
+    this.db.run(
+      "INSERT OR IGNORE INTO session_kernel_migrations (name, completed_at) VALUES ('delivery_v1', ?)",
+      [Date.now()],
+    );
+  }
+
+  askSnapshot(sessionId: string): unknown | undefined {
+    const row = this.db
+      .query("SELECT record FROM session_kernel_asks WHERE session_id = ?")
+      .get(sessionId) as { record: string } | null;
+    return row ? parsed(row.record) : undefined;
+  }
+
+  askEntries(): Array<[string, unknown]> {
+    return (
+      this.db
+        .query(
+          "SELECT session_id, record FROM session_kernel_asks ORDER BY session_id",
+        )
+        .all() as Array<{ session_id: string; record: string }>
+    ).map((row) => [row.session_id, parsed(row.record)]);
+  }
+
+  private mutateAskRecord(
+    sessionId: string,
+    value: unknown | undefined,
+  ): boolean {
+    if (value !== undefined && this.isTombstoned(sessionId))
+      throw new Error(`Session ${sessionId} was deleted`);
+    const existed = this.askSnapshot(sessionId) !== undefined;
+    if (value === undefined && !existed) return false;
+    const now = Date.now();
+    let nextRunState!: DurableRunState;
+    const tx = this.db.transaction(() => {
+      if (value === undefined)
+        this.db.run("DELETE FROM session_kernel_asks WHERE session_id = ?", [
+          sessionId,
+        ]);
+      else {
+        const prior = this.db
+          .query(
+            "SELECT revision FROM session_kernel_asks WHERE session_id = ?",
+          )
+          .get(sessionId) as { revision: number } | null;
+        this.db.run(
+          `INSERT INTO session_kernel_asks
+					 (session_id, revision, record, updated_at) VALUES (?, ?, ?, ?)
+					 ON CONFLICT(session_id) DO UPDATE SET revision = excluded.revision,
+					 record = excluded.record, updated_at = excluded.updated_at`,
+          [sessionId, Number(prior?.revision ?? 0) + 1, json(value), now],
+        );
+      }
+      const priorRun = this.runState(sessionId);
+      const changeSeq = priorRun.changeSeq + 1;
+      const since =
+        priorRun.since === new Date(0).toISOString()
+          ? new Date(now).toISOString()
+          : priorRun.since;
+      this.db.run(
+        `INSERT INTO session_kernel_state
+				 (session_id, run_state, run_since, last_event, generation,
+				  current_run_id, change_seq, updated_at)
+				 VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+				 ON CONFLICT(session_id) DO UPDATE SET
+				 change_seq = excluded.change_seq, updated_at = excluded.updated_at`,
+        [
+          sessionId,
+          priorRun.state,
+          since,
+          priorRun.lastEvent ?? null,
+          priorRun.generation,
+          priorRun.currentRunId ?? null,
+          changeSeq,
+          now,
+        ],
+      );
+      this.db.run(
+        `INSERT INTO session_kernel_changes
+				 (session_id, change_seq, kind, payload, created_at)
+				 VALUES (?, ?, 'ask_state', ?, ?)`,
+        [sessionId, changeSeq, json({ active: value !== undefined }), now],
+      );
+      nextRunState = { ...priorRun, since, changeSeq };
+    });
+    tx.immediate();
+    this.runStateCache.set(sessionId, nextRunState);
+    this.dirtyChangeSessions.add(sessionId);
+    return existed;
+  }
+
+  setAskRecord(sessionId: string, value: unknown): void {
+    this.mutateAskRecord(sessionId, value);
+  }
+
+  deleteAskRecord(sessionId: string): boolean {
+    return this.mutateAskRecord(sessionId, undefined);
+  }
+
+  clearAskRecords(): void {
+    for (const [sessionId] of this.askEntries())
+      this.deleteAskRecord(sessionId);
+  }
+
+  private deliveryRow(sessionId: string): DurableDeliveryState {
+    const row = this.db
+      .query(
+        "SELECT revision, queued, dispatch, steered, pending_steers, updated_at FROM session_kernel_delivery WHERE session_id = ?",
+      )
+      .get(sessionId) as Record<string, unknown> | null;
+    if (!row)
+      return {
+        revision: 0,
+        queued: [],
+        steered: [],
+        pendingSteers: [],
+        updatedAt: 0,
+      };
+    return {
+      revision: Number(row.revision),
+      queued: parsed<unknown[]>(String(row.queued)) ?? [],
+      dispatch: parsed(row.dispatch as string | null),
+      steered: parsed<unknown[]>(String(row.steered)) ?? [],
+      pendingSteers:
+        parsed<Array<{ item: unknown; index: number; preparedAt: number }>>(
+          String(row.pending_steers),
+        ) ?? [],
+      updatedAt: Number(row.updated_at),
+    };
+  }
+
+  deliverySnapshot(sessionId: string): DurableDeliveryState {
+    return this.deliveryRow(sessionId);
+  }
+
+  deliveryEntries(slot: DeliverySlot): Array<[string, unknown]> {
+    const column =
+      slot === "queued"
+        ? "queued"
+        : slot === "steered"
+          ? "steered"
+          : "dispatch";
+    const rows = this.db
+      .query(
+        `SELECT session_id, ${column} AS value FROM session_kernel_delivery
+			 WHERE ${column} IS NOT NULL${slot === "dispatch" ? "" : ` AND ${column} != '[]'`}`,
+      )
+      .all() as Array<{ session_id: string; value: string }>;
+    return rows.map((row) => [row.session_id, parsed(row.value)]);
+  }
+
+  private mutateDelivery(
+    sessionId: string,
+    kind: string,
+    mutate: (state: DurableDeliveryState) => unknown,
+  ): { state: DurableDeliveryState; result: unknown } {
+    if (this.isTombstoned(sessionId))
+      throw new Error(`Session ${sessionId} was deleted`);
+    let state!: DurableDeliveryState;
+    let result: unknown;
+    let nextRunState!: DurableRunState;
+    const now = Date.now();
+    const tx = this.db.transaction(() => {
+      const priorDelivery = this.deliveryRow(sessionId);
+      const working: DurableDeliveryState = {
+        ...priorDelivery,
+        queued: [...priorDelivery.queued],
+        steered: [...priorDelivery.steered],
+        pendingSteers: [...priorDelivery.pendingSteers],
+      };
+      result = mutate(working);
+      state = {
+        ...working,
+        revision: priorDelivery.revision + 1,
+        updatedAt: now,
+      };
+      this.db.run(
+        `INSERT INTO session_kernel_delivery
+				 (session_id, revision, queued, dispatch, steered, pending_steers, updated_at)
+				 VALUES (?, ?, ?, ?, ?, ?, ?)
+				 ON CONFLICT(session_id) DO UPDATE SET
+				 revision = excluded.revision, queued = excluded.queued,
+				 dispatch = excluded.dispatch, steered = excluded.steered,
+				 pending_steers = excluded.pending_steers,
+				 updated_at = excluded.updated_at`,
+        [
+          sessionId,
+          state.revision,
+          json(state.queued),
+          state.dispatch === undefined ? null : json(state.dispatch),
+          json(state.steered),
+          json(state.pendingSteers),
+          now,
+        ],
+      );
+      const priorRun = this.runState(sessionId);
+      const changeSeq = priorRun.changeSeq + 1;
+      const since =
+        priorRun.since === new Date(0).toISOString()
+          ? new Date(now).toISOString()
+          : priorRun.since;
+      this.db.run(
+        `INSERT INTO session_kernel_state
+				 (session_id, run_state, run_since, last_event, generation,
+				  current_run_id, change_seq, updated_at)
+				 VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+				 ON CONFLICT(session_id) DO UPDATE SET
+				 change_seq = excluded.change_seq, updated_at = excluded.updated_at`,
+        [
+          sessionId,
+          priorRun.state,
+          since,
+          priorRun.lastEvent ?? null,
+          priorRun.generation,
+          priorRun.currentRunId ?? null,
+          changeSeq,
+          now,
+        ],
+      );
+      this.db.run(
+        `INSERT INTO session_kernel_changes
+				 (session_id, change_seq, kind, payload, created_at)
+				 VALUES (?, ?, ?, ?, ?)`,
+        [sessionId, changeSeq, kind, json({ revision: state.revision }), now],
+      );
+      nextRunState = { ...priorRun, since, changeSeq };
+    });
+    tx.immediate();
+    this.runStateCache.set(sessionId, nextRunState);
+    this.dirtyChangeSessions.add(sessionId);
+    return { state, result };
+  }
+
+  setDeliverySlot(sessionId: string, slot: DeliverySlot, value: unknown): void {
+    this.mutateDelivery(sessionId, `delivery_${slot}_set`, (state) => {
+      if (slot === "queued") state.queued = Array.isArray(value) ? value : [];
+      else if (slot === "steered")
+        state.steered = Array.isArray(value) ? value : [];
+      else state.dispatch = value;
+    });
+  }
+
+  deleteDeliverySlot(sessionId: string, slot: DeliverySlot): boolean {
+    const prior = this.deliveryRow(sessionId);
+    const existed =
+      slot === "dispatch"
+        ? prior.dispatch !== undefined
+        : (slot === "queued" ? prior.queued : prior.steered).length > 0;
+    if (!existed) return false;
+    this.mutateDelivery(sessionId, `delivery_${slot}_delete`, (state) => {
+      if (slot === "queued") state.queued = [];
+      else if (slot === "steered") state.steered = [];
+      else state.dispatch = undefined;
+    });
+    return true;
+  }
+
+  clearDeliverySlot(slot: DeliverySlot): void {
+    for (const [sessionId] of this.deliveryEntries(slot))
+      this.deleteDeliverySlot(sessionId, slot);
+  }
+
+  prepareSteerDelivery(
+    sessionId: string,
+    itemId: string,
+    directItem?: unknown,
+  ): unknown | undefined {
+    return this.mutateDelivery(sessionId, "delivery_steer_prepared", (state) => {
+      const queue = state.queued as Array<{ id?: string }>;
+      const index = queue.findIndex((item) => item.id === itemId);
+      if (index < 0 && directItem === undefined) return undefined;
+      const item =
+        index >= 0
+          ? queue.splice(index, 1)[0]
+          : directItem && typeof directItem === "object"
+            ? { ...(directItem as Record<string, unknown>), id: itemId }
+            : { id: itemId, value: directItem };
+      state.queued = queue;
+      state.pendingSteers.push({
+        item,
+        index: index >= 0 ? index : 0,
+        preparedAt: Date.now(),
+      });
+      return item;
+    }).result;
+  }
+
+  acceptSteerDelivery(sessionId: string, itemId: string): boolean {
+    const current = this.deliveryRow(sessionId).pendingSteers.find(
+      (pending) => (pending.item as { id?: string }).id === itemId,
+    );
+    if (!current) return false;
+    this.mutateDelivery(sessionId, "delivery_steer_accepted", (state) => {
+      const index = state.pendingSteers.findIndex(
+        (pending) => (pending.item as { id?: string }).id === itemId,
+      );
+      if (index < 0) throw new Error("Pending steer changed before acceptance");
+      const [pending] = state.pendingSteers.splice(index, 1);
+      state.steered.push({
+        ...(pending.item as Record<string, unknown>),
+        steeredAt: Date.now(),
+      });
+    });
+    return true;
+  }
+
+  rejectSteerDelivery(sessionId: string, itemId: string): boolean {
+    const current = this.deliveryRow(sessionId).pendingSteers.find(
+      (pending) => (pending.item as { id?: string }).id === itemId,
+    );
+    if (!current) return false;
+    this.mutateDelivery(sessionId, "delivery_steer_rejected", (state) => {
+      const index = state.pendingSteers.findIndex(
+        (pending) => (pending.item as { id?: string }).id === itemId,
+      );
+      if (index < 0) throw new Error("Pending steer changed before rejection");
+      const [pending] = state.pendingSteers.splice(index, 1);
+      state.queued.splice(
+        Math.min(pending.index, state.queued.length),
+        0,
+        pending.item,
+      );
+    });
+    return true;
+  }
+
+  requeueSteerDeliveries(sessionId: string, items: unknown[]): number {
+    if (items.length === 0 && this.deliveryRow(sessionId).steered.length === 0)
+      return 0;
+    this.mutateDelivery(sessionId, "delivery_steers_requeued", (state) => {
+      const ids = new Set(
+        (items as Array<{ id?: string }>).map((item) => item.id).filter(Boolean),
+      );
+      state.queued = [
+        ...items,
+        ...(state.queued as Array<{ id?: string }>).filter(
+          (item) => !item.id || !ids.has(item.id),
+        ),
+      ];
+      state.steered = [];
+    });
+    return items.length;
+  }
+
+  settlePendingSteers(): number {
+    const rows = this.db.query(
+      "SELECT session_id FROM session_kernel_delivery WHERE pending_steers != '[]'",
+    ).all() as Array<{ session_id: string }>;
+    let count = 0;
+    for (const row of rows) {
+      this.mutateDelivery(row.session_id, "delivery_steer_recovered", (state) => {
+        for (const pending of state.pendingSteers) {
+          state.steered.push({
+            ...(pending.item as Record<string, unknown>),
+            steeredAt: pending.preparedAt,
+          });
+          count += 1;
+        }
+        state.pendingSteers = [];
+      });
+    }
+    return count;
+  }
+
+  claimDeliveryDispatch(input: {
+    sessionId: string;
+    items: Array<{ id?: string; promptEntryId?: string } & Record<string, unknown>>;
+    promptEntryId: string;
+    kind?: "create";
+    requireQueued?: boolean;
+  }): { promptEntryId: string; items: unknown[]; revision: number } {
+    const mutation = this.mutateDelivery(
+      input.sessionId,
+      "delivery_dispatch_claimed",
+      (state) => {
+        const existing = state.dispatch as
+          { promptEntryId?: string; items?: unknown[] } | undefined;
+        if (existing?.promptEntryId === input.promptEntryId) return existing;
+        if (existing) throw new Error("A prompt dispatch is already active");
+        const ids = new Set(
+          input.items.flatMap(
+            (item) => [item.id, item.promptEntryId].filter(Boolean) as string[],
+          ),
+        );
+        const queued = state.queued as Array<{
+          id?: string;
+          promptEntryId?: string;
+        }>;
+        if (input.requireQueued) {
+          const queuedIds = new Set(
+            queued.flatMap(
+              (item) => [item.id, item.promptEntryId].filter(Boolean) as string[],
+            ),
+          );
+          if (
+            !input.items.every(
+              (item) =>
+                !!(item.id || item.promptEntryId) &&
+                !![item.id, item.promptEntryId].find(
+                  (id) => id && queuedIds.has(id),
+                ),
+            )
+          )
+            throw new Error("Queued prompt changed before dispatch claim");
+        }
+        const dispatchItems = input.items;
+        state.queued = queued.filter(
+          (item) =>
+            !(
+              (item.id && ids.has(item.id)) ||
+              (item.promptEntryId && ids.has(item.promptEntryId))
+            ),
+        );
+        state.dispatch = {
+          promptEntryId: input.promptEntryId,
+          items: dispatchItems,
+          ...(input.kind ? { kind: input.kind } : {}),
+        };
+        return state.dispatch;
+      },
+    );
+    const dispatch = mutation.result as {
+      promptEntryId: string;
+      items: unknown[];
+    };
+    return { ...dispatch, revision: mutation.state.revision };
+  }
+
+  ackDeliveryDispatch(sessionId: string, promptEntryId: string): boolean {
+    const current = this.deliveryRow(sessionId).dispatch as
+      { promptEntryId?: string } | undefined;
+    if (current?.promptEntryId !== promptEntryId) return false;
+    this.mutateDelivery(
+      sessionId,
+      "delivery_dispatch_acknowledged",
+      (state) => {
+        const dispatch = state.dispatch as
+          { promptEntryId?: string } | undefined;
+        if (dispatch?.promptEntryId !== promptEntryId)
+          throw new Error("Prompt dispatch changed before acknowledgement");
+        state.dispatch = undefined;
+      },
+    );
+    return true;
+  }
+
+  failDeliveryDispatch(sessionId: string, promptEntryId: string): boolean {
+    const current = this.deliveryRow(sessionId).dispatch as
+      { promptEntryId?: string } | undefined;
+    if (current?.promptEntryId !== promptEntryId) return false;
+    this.mutateDelivery(sessionId, "delivery_dispatch_failed", (state) => {
+      const dispatch = state.dispatch as
+        { promptEntryId?: string; items?: unknown[] } | undefined;
+      if (dispatch?.promptEntryId !== promptEntryId)
+        throw new Error("Prompt dispatch changed before failure settlement");
+      const restored = dispatch.items ?? [];
+      const restoredIds = new Set(
+        (restored as Array<{ id?: string }>)
+          .map((item) => item.id)
+          .filter(Boolean),
+      );
+      state.queued = [
+        ...restored,
+        ...(state.queued as Array<{ id?: string }>).filter(
+          (item) => !item.id || !restoredIds.has(item.id),
+        ),
+      ];
+      state.dispatch = undefined;
+    });
+    return true;
+  }
+
 	scheduleTimer(
-		timer: Omit<DurableTimer, "token" | "attempts" | "nextAttemptAt" | "lastError" | "deadLetteredAt" | "createdAt">,
+    timer: Omit<
+      DurableTimer,
+      | "token"
+      | "attempts"
+      | "nextAttemptAt"
+      | "lastError"
+      | "deadLetteredAt"
+      | "createdAt"
+    >,
 	): void {
 		const token = crypto.randomUUID();
 		this.db.run(
@@ -887,8 +1558,16 @@ export class SessionKernelStore {
 			 payload = excluded.payload, attempts = 0,
 			 next_attempt_at = excluded.next_attempt_at, last_error = NULL,
 			 dead_lettered_at = NULL, created_at = excluded.created_at`,
-			[timer.sessionId, timer.timerId, timer.kind, timer.dueAt, token,
-				json(timer.payload), timer.dueAt, Date.now()],
+      [
+        timer.sessionId,
+        timer.timerId,
+        timer.kind,
+        timer.dueAt,
+        token,
+        json(timer.payload),
+        timer.dueAt,
+        Date.now(),
+      ],
 		);
 	}
 
@@ -896,7 +1575,8 @@ export class SessionKernelStore {
 		const row = this.db
 			.query(
 				`SELECT session_id, timer_id, kind, due_at, token, payload, attempts, next_attempt_at, last_error, dead_lettered_at, created_at
-         FROM session_kernel_timers WHERE session_id = ? AND timer_id = ?`,)
+         FROM session_kernel_timers WHERE session_id = ? AND timer_id = ?`,
+      )
 			.get(sessionId, timerId) as Record<string, unknown> | null;
 		return row
 			? {
@@ -910,7 +1590,10 @@ export class SessionKernelStore {
 					nextAttemptAt: Number(row.next_attempt_at),
 					lastError:
 						row.last_error == null ? undefined : String(row.last_error),
-					deadLetteredAt: row.dead_lettered_at == null ? undefined : Number(row.dead_lettered_at),
+          deadLetteredAt:
+            row.dead_lettered_at == null
+              ? undefined
+              : Number(row.dead_lettered_at),
 					createdAt: Number(row.created_at),
 			}
 			: undefined;
@@ -923,11 +1606,17 @@ export class SessionKernelStore {
 		);
 	}
 
-	settleTimerSuccess(sessionId: string, timerId: string, token: string): boolean {
-		return this.db.run(
+  settleTimerSuccess(
+    sessionId: string,
+    timerId: string,
+    token: string,
+  ): boolean {
+    return (
+      this.db.run(
 			"DELETE FROM session_kernel_timers WHERE session_id = ? AND timer_id = ? AND token = ?",
 			[sessionId, timerId, token],
-		).changes > 0;
+      ).changes > 0
+    );
 	}
 
 	dueTimers(
@@ -993,8 +1682,12 @@ export class SessionKernelStore {
 		return { updated: true, deadLetteredNow: deadLetteredAt !== null };
 	}
 
-	enqueueOutbox(sessionId: string, kind: string, payload: unknown,
-		effectKey: string = crypto.randomUUID(),): number {
+  enqueueOutbox(
+    sessionId: string,
+    kind: string,
+    payload: unknown,
+    effectKey: string = crypto.randomUUID(),
+  ): number {
 		const effectId = `${sessionId}:${kind}:${effectKey}`;
 		this.db.run(
 			`INSERT INTO session_kernel_outbox
@@ -1017,7 +1710,14 @@ export class SessionKernelStore {
 		const ids: number[] = [];
 		const tx = this.db.transaction(() => {
 			for (const effect of effects)
-				ids.push(this.enqueueOutbox(sessionId, effect.kind, effect.payload, effect.effectKey));
+        ids.push(
+          this.enqueueOutbox(
+            sessionId,
+            effect.kind,
+            effect.payload,
+            effect.effectKey,
+          ),
+        );
 		});
 		tx.immediate();
 		return ids;
@@ -1107,7 +1807,8 @@ export class SessionKernelStore {
          next_attempt_at, last_error, dead_lettered_at, created_at
          FROM session_kernel_outbox
          WHERE dead_lettered_at IS NULL AND next_attempt_at <= ?${kindFilter}
-         ORDER BY next_attempt_at, id LIMIT ?`,)
+         ORDER BY next_attempt_at, id LIMIT ?`,
+      )
 			.all(now, ...(kinds || []), limit) as Record<string, unknown>[];
 		return rows.map((row) => ({
 			id: Number(row.id),
@@ -1144,22 +1845,35 @@ export class SessionKernelStore {
 		const count = (table: string, where = "") =>
 			Number(
 				(
-					this.db.query(`SELECT COUNT(*) AS n FROM ${table} ${where}`).get() as {
+          this.db
+            .query(`SELECT COUNT(*) AS n FROM ${table} ${where}`)
+            .get() as {
 						n: number;
 					}
 				).n,
 			);
-		const oldest = (table: string, column: string, where = ""): number | undefined => {
+    const oldest = (
+      table: string,
+      column: string,
+      where = "",
+    ): number | undefined => {
 			const row = this.db
 				.query(`SELECT MIN(${column}) AS oldest FROM ${table} ${where}`)
 				.get() as { oldest: number | null };
 			return row.oldest == null ? undefined : Number(row.oldest);
 		};
-		const pragma = (name: string) => Number(
-			Object.values(this.db.query(`PRAGMA ${name}`).get() as Record<string, unknown>)[0] ?? 0,
+    const pragma = (name: string) =>
+      Number(
+        Object.values(
+          this.db.query(`PRAGMA ${name}`).get() as Record<string, unknown>,
+        )[0] ?? 0,
 		);
 		const fileBytes = (path: string) => {
-			try { return statSync(path).size; } catch { return 0; }
+      try {
+        return statSync(path).size;
+      } catch {
+        return 0;
+      }
 		};
 		return {
 			sessions: count("session_kernel_state"),
@@ -1168,12 +1882,14 @@ export class SessionKernelStore {
 				"WHERE status IN ('pending', 'processing')",
 			),
 			pendingTimers: count("session_kernel_timers"),
-			pendingOutbox: count("session_kernel_outbox",
+      pendingOutbox: count(
+        "session_kernel_outbox",
 				"WHERE dead_lettered_at IS NULL",
 			),
 			deadLetteredOutbox: count(
 				"session_kernel_outbox",
-				"WHERE dead_lettered_at IS NOT NULL",),
+        "WHERE dead_lettered_at IS NOT NULL",
+      ),
 			deadLetteredTimers: count(
 				"session_kernel_timers",
 				"WHERE dead_lettered_at IS NOT NULL",
@@ -1253,16 +1969,20 @@ export class SessionKernelStore {
 	}
 
 	deadLetters(limit = 100, offset = 0) {
-		const timers = this.db.query(
+    const timers = this.db
+      .query(
 			`SELECT session_id, timer_id, kind, due_at, attempts, next_attempt_at, last_error, dead_lettered_at, created_at
 			 FROM session_kernel_timers WHERE dead_lettered_at IS NOT NULL
 			 ORDER BY dead_lettered_at DESC LIMIT ? OFFSET ?`,
-		).all(limit, offset) as Record<string, unknown>[];
-		const outbox = this.db.query(
+      )
+      .all(limit, offset) as Record<string, unknown>[];
+    const outbox = this.db
+      .query(
 			`SELECT id, effect_id, effect_key, session_id, kind, attempts, next_attempt_at, last_error, dead_lettered_at, created_at
 			 FROM session_kernel_outbox WHERE dead_lettered_at IS NOT NULL
 			 ORDER BY dead_lettered_at DESC LIMIT ? OFFSET ?`,
-		).all(limit, offset) as Record<string, unknown>[];
+      )
+      .all(limit, offset) as Record<string, unknown>[];
 		return {
 			timers: timers.map((row) => ({
 				sessionId: String(row.session_id),
@@ -1288,8 +2008,24 @@ export class SessionKernelStore {
 				deadLetteredAt: Number(row.dead_lettered_at),
 			})),
 			totals: {
-				timers: Number((this.db.query("SELECT COUNT(*) AS n FROM session_kernel_timers WHERE dead_lettered_at IS NOT NULL").get() as { n: number }).n),
-				outbox: Number((this.db.query("SELECT COUNT(*) AS n FROM session_kernel_outbox WHERE dead_lettered_at IS NOT NULL").get() as { n: number }).n),
+        timers: Number(
+          (
+            this.db
+              .query(
+                "SELECT COUNT(*) AS n FROM session_kernel_timers WHERE dead_lettered_at IS NOT NULL",
+              )
+              .get() as { n: number }
+          ).n,
+        ),
+        outbox: Number(
+          (
+            this.db
+              .query(
+                "SELECT COUNT(*) AS n FROM session_kernel_outbox WHERE dead_lettered_at IS NOT NULL",
+              )
+              .get() as { n: number }
+          ).n,
+        ),
 			},
 			nextOffset:
 				timers.length === limit || outbox.length === limit
@@ -1338,7 +2074,11 @@ export class SessionKernelStore {
 		this.db.run("DELETE FROM session_kernel_outbox WHERE id = ?", [id]);
 	}
 
-	noteOutboxFailure(id: number, error: string, maxAttempts = 20): { updated: boolean; deadLetteredNow: boolean } {
+  noteOutboxFailure(
+    id: number,
+    error: string,
+    maxAttempts = 20,
+  ): { updated: boolean; deadLetteredNow: boolean } {
 		const row = this.db
 			.query("SELECT attempts FROM session_kernel_outbox WHERE id = ?")
 			.get(id) as { attempts: number } | null;

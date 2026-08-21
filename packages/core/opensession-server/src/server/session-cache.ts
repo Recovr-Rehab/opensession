@@ -32,7 +32,7 @@ import {
 } from "./models";
 import { writeJsonAtomic } from "./shared/atomic-write";
 import type { UnifiedSession, NativeSessionFile } from "./types";
-import { sessionKernel } from "./session-kernel";
+import { sessionDeliveryProjection, sessionKernel } from "./session-kernel";
 
 export const SESSIONS_DIR = OPENSESSION_SESSIONS_DIR;
 
@@ -223,11 +223,10 @@ export function isRunSettled(sessionId: string): boolean {
 	) {
 		return false;
 	}
-	// promptQueues lives in queue-state.ts, which imports SESSIONS_DIR from
-	// this module — importing it back would be a TDZ-crashing cycle. The map
-	// is parked on globalThis (hot-reload survival), so read it there.
-	const queues = g.__promptQueues as Map<string, unknown[]> | undefined;
-	if ((queues?.get(id)?.length ?? 0) > 0) return false;
+	// Queue authority lives in the actor. Read its per-session delivery snapshot
+	// directly rather than reaching through queue-state's former global map.
+	if (sessionDeliveryProjection(id).queued.length > 0)
+		return false;
 	return true;
 }
 
@@ -583,9 +582,8 @@ export function recordRunOutcome(
 			at: new Date().toISOString(),
 		};
 		runErrors.set(id, entry);
-		// The transcript append is synchronous. Commit it before starting the
-		// asynchronous session-file command so the two writes cannot contend for
-		// the same actor lease.
+		// The transcript append is synchronous. Commit the visible notice before
+		// starting the asynchronous session-file projection.
 		if (!opts?.noticePersisted) {
 			const provider =
 				session?.lastEngineProvider ||

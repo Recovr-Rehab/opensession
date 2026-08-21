@@ -19,7 +19,7 @@ import { INIT_WIRE_CLAMP_BYTES, entriesForWire, parseTranscriptAsync, parseTrans
 import { providerFor } from "./models";
 
 import { appendTranscriptEntries, clearTranscriptStoreDegraded, transcriptLineRunnerNotice } from "./transcript-persistence";
-import { deleteQueuedPrompt, editableSteerReceipt, liftUserStop, persistQueues, promptQueues, queueDisplayState, queueItem, recordSteer, reorderQueuedPrompt, requeueSteerReceipts, steeredReceipts, stoppedSessions, takeQueuedPrompt, takeSteeredPrompt, updateQueuedPrompt } from "./queue-state";
+import { deleteQueuedPrompt, editableSteerReceipt, liftUserStop, persistQueues, promptQueues, queueDisplayState, durableQueueItem, queueItem, acceptQueuedSteer, prepareQueuedSteer, rejectQueuedSteer, reorderQueuedPrompt, requeueSteerReceipts, steeredReceipts, stoppedSessions, takeQueuedPrompt, takeSteeredPrompt, updateQueuedPrompt } from "./queue-state";
 
 import { transitionRunState } from "./run-state";
 import { abortTurnAndDrain, drainQueue, enqueuePrompt, interruptQueuedPrompt, runSessionPrompt, runSessionPromptAndDrain, steerQueuedPrompt, watchExternalRunAndDrain, } from "./run-session";
@@ -1180,7 +1180,10 @@ export const websocketHandlers: WebSocketHandler<WSClientData> = {
 						break;
 					}
 					const attributed = user ? `[${user}] ${content}` : content;
-					const steerItem = queueItem({ id: msg.requestId, content, user, images: imageUrls });
+					const steerItem = durableQueueItem(
+						sessionId,
+						queueItem({ id: msg.requestId, content, user, images: imageUrls }),
+					);
 					// Images fold into the live run as content blocks; disk-staged
 					// files can't ride the steer channel, so a send carrying files
 					// falls through to the queue (its drain delivers images + files
@@ -1191,22 +1194,23 @@ export const websocketHandlers: WebSocketHandler<WSClientData> = {
 						msg.busyMode === "steer" &&
 						!hasFiles &&
 						!hasContext &&
-						steerAgentRun(
-							[session.claudeSessionId, session.codexThreadId, session.id],
-							attributed,
-							images,
-
-							steerItem.id,
-
-						)
+						steerItem.id &&
+						prepareQueuedSteer(sessionId, steerItem.id, steerItem)
 					) {
-						// The message lands in the transcript when its turn starts. Until
-						// then a steer receipt is the durable visible record (survives
-						// reload/leave); kept out of promptQueues so the drain never
-						// re-delivers it, and cleared when the run finishes.
-
-						recordSteer(sessionId, steerItem);
-
+						if (
+							steerAgentRun(
+								[session.claudeSessionId, session.codexThreadId, session.id],
+								attributed,
+								images,
+								steerItem.id,
+							)
+						) {
+							if (!acceptQueuedSteer(sessionId, steerItem.id))
+								throw new Error("Pending steer changed before runner acceptance");
+						} else {
+							rejectQueuedSteer(sessionId, steerItem.id);
+							watchExternalRunAndDrain(sessionId);
+						}
 						break;
 					}
 					enqueuePrompt(sessionId, {
