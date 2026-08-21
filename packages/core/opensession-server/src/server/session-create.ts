@@ -102,6 +102,8 @@ export interface CreateSessionMessage {
 	/** Client-minted native id used to replay this create safely after reconnect. */
 	clientSessionId?: unknown;
 	prompt: string;
+	/** Prompt with session-reference display names, used only for title generation. */
+	titlePrompt?: unknown;
 	requestId?: string;
 	user?: string;
 	mode?: string;
