@@ -52,9 +52,9 @@ async function loadSharp(): Promise<SharpFactory | null> {
 	return sharpFactory;
 }
 
-const SESSION_CARD_VERSION = 25;
+const SESSION_CARD_VERSION = 26;
 
-const CARD_PAPER = "#FFFFFF";
+const SHOT_BACKING = "#FFFFFF";
 /** Preserve each screenshot's aspect ratio within a bounded Slack preview. */
 const SHOT_MAX_WIDTH = 640;
 const SHOT_MAX_HEIGHT = 640;
@@ -519,8 +519,9 @@ export function sessionSocialCardSvg(shots: PreparedShot[]): string {
 			const transform = frame.rotation
 				? ` transform="rotate(${frame.rotation} ${frame.pivotX} ${frame.pivotY})"`
 				: "";
-			return `<g${transform}><path d="${frame.shape}" fill="${CARD_PAPER}" filter="url(#shotShadow)"/>
-<g clip-path="url(#shotClip${frame.index})"><image href="${frame.dataUrl}" x="${frame.x}" y="${frame.y}" width="${frame.width}" height="${frame.height}" preserveAspectRatio="xMidYMid meet"/></g></g>`;
+			return `<g${transform}><path d="${frame.shape}" fill="${SHOT_BACKING}" filter="url(#shotShadow)"/>
+<g clip-path="url(#shotClip${frame.index})"><image href="${frame.dataUrl}" x="${frame.x}" y="${frame.y}" width="${frame.width}" height="${frame.height}" preserveAspectRatio="xMidYMid meet"/></g>
+<path d="${frame.shape}" fill="none" stroke="#000000" stroke-opacity="0.1" stroke-width="1"/></g>`;
 		})
 		.join("\n");
 	return `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}" overflow="hidden">
@@ -533,7 +534,6 @@ ${shotDefs}
     <feMerge><feMergeNode in="ambient"/><feMergeNode in="lift"/><feMergeNode in="contact"/><feMergeNode in="SourceGraphic"/></feMerge>
   </filter>
 </defs>
-<rect width="${width}" height="${height}" fill="${CARD_PAPER}"/>
 ${shotMarkup}
 </svg>`;
 }

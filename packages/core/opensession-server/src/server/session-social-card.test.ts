@@ -202,9 +202,14 @@ describe("session social card", () => {
 		expect(svg).toContain(
 			'<svg xmlns="http://www.w3.org/2000/svg" width="720" height="352"',
 		);
-		expect(svg).toContain('<rect width="720" height="352" fill="#FFFFFF"/>');
+		// There is no outer card surface. Transparent pixels carry only the
+		// screenshot's shadow, while the screenshot itself gets a quiet outline.
+		expect(svg).not.toContain('<rect width="720" height="352"');
 		expect(svg).toContain(
 			'<image href="data:image/png;base64,primary" x="40" y="30" width="640" height="360"',
+		);
+		expect(svg).toContain(
+			'fill="none" stroke="#000000" stroke-opacity="0.1" stroke-width="1"',
 		);
 		expect(svg).not.toContain('transform="rotate(');
 		expect(svg).toContain('stdDeviation="22"');
@@ -212,7 +217,6 @@ describe("session social card", () => {
 		expect(svg).toContain('result="lift"');
 		expect(svg).toContain('result="contact"');
 		expect(svg).not.toContain("gradient");
-		expect(svg).not.toContain("stroke=");
 	});
 
 	test("fans a second screenshot up from behind the first", () => {
@@ -260,6 +264,7 @@ describe("session social card", () => {
 		expect(metadata.format).toBe("png");
 		expect(metadata.width).toBe(1440);
 		expect(metadata.height).toBe(704);
+		expect(metadata.hasAlpha).toBe(true);
 	});
 
 	test("preserves a landscape screenshot's native aspect ratio", async () => {
@@ -313,7 +318,7 @@ describe("session social card", () => {
 		// The complete 1:2 source remains 1:2 inside the card instead of being cropped.
 		expect(pixel(400, 420)).toEqual([217, 45, 32]);
 		expect(pixel(400, 1100)).toEqual([217, 45, 32]);
-		expect(pixel(20, 420)).toEqual([255, 255, 255]);
+		expect(info.channels).toBe(4);
 	});
 
 	test("drops ultra-wide card captures instead of nesting a card inside itself", async () => {
@@ -355,7 +360,7 @@ describe("session social card", () => {
 		expect(output).toContain("<title>Ship dynamic social cards · Open Session</title>");
 		expect(output).toContain('content="summary_large_image"');
 		expect(output).toMatch(
-			/content="https:\/\/media\.example\.test\/session-card\/sess-social-1\/[A-Za-z0-9_-]{32}\.png\?v=25"/,
+			/content="https:\/\/media\.example\.test\/session-card\/sess-social-1\/[A-Za-z0-9_-]{32}\.png\?v=26"/,
 		);
 		expect(output).toContain(
 			'property="og:url" content="https://os.example.test/session/sess-social-1"',
@@ -372,13 +377,13 @@ describe("session social card", () => {
 		).toBe("sess-social-1");
 		expect(socialSessionIdFromPath("/settings")).toBeNull();
 		expect(sessionSocialCardUrl("sess-social-1")).toMatch(
-			/^https:\/\/media\.example\.test\/session-card\/sess-social-1\/[A-Za-z0-9_-]{32}\.png\?v=25$/,
+			/^https:\/\/media\.example\.test\/session-card\/sess-social-1\/[A-Za-z0-9_-]{32}\.png\?v=26$/,
 		);
 	});
 
 	test("signs ids containing Slack timestamp dots", () => {
 		expect(sessionSocialCardUrl("slack-C123-1719860000.000000")).toMatch(
-			/^https:\/\/media\.example\.test\/session-card\/slack-C123-1719860000\.000000\/[A-Za-z0-9_-]{32}\.png\?v=25$/,
+			/^https:\/\/media\.example\.test\/session-card\/slack-C123-1719860000\.000000\/[A-Za-z0-9_-]{32}\.png\?v=26$/,
 		);
 	});
 
