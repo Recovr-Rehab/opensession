@@ -195,11 +195,12 @@ describe("session social card", () => {
 		// text is drawn on the card.
 		expect(svg).not.toContain("<text");
 		expect(svg).not.toContain("font-size");
-		// Cropped to one 640x360 frame plus room for its shadow.
+		// The frame extends below the 352px viewport, so its lower edge is cut off
+		// instead of floating above a shelf of white space.
 		expect(svg).toContain(
-			'<svg xmlns="http://www.w3.org/2000/svg" width="720" height="444"',
+			'<svg xmlns="http://www.w3.org/2000/svg" width="720" height="352"',
 		);
-		expect(svg).toContain('<rect width="720" height="444" fill="#FFFFFF"/>');
+		expect(svg).toContain('<rect width="720" height="352" fill="#FFFFFF"/>');
 		expect(svg).toContain(
 			'<image href="data:image/png;base64,primary" x="40" y="30" width="640" height="360"',
 		);
@@ -218,9 +219,10 @@ describe("session social card", () => {
 			"data:image/png;base64,secondary",
 			"data:image/png;base64,ignored",
 		]);
-		// The crop follows the rotated corners, so the fan never clips itself.
+		// The crop follows the rotated side and top corners, then deliberately cuts
+		// through the bottom so the fan rises out of the image boundary.
 		expect(svg).toContain(
-			'<svg xmlns="http://www.w3.org/2000/svg" width="859" height="498"',
+			'<svg xmlns="http://www.w3.org/2000/svg" width="859" height="406"',
 		);
 		expect(svg).toContain(
 			'<image href="data:image/png;base64,primary" x="166" y="43" width="640" height="360"',
@@ -255,7 +257,7 @@ describe("session social card", () => {
 		const metadata = await sharp(png!).metadata();
 		expect(metadata.format).toBe("png");
 		expect(metadata.width).toBe(1440);
-		expect(metadata.height).toBe(888);
+		expect(metadata.height).toBe(704);
 	});
 
 	test("keeps a portrait screenshot large in the frame", async () => {
@@ -278,7 +280,7 @@ describe("session social card", () => {
 		expect(png).not.toBeNull();
 		const { data, info } = await sharp(png!).raw().toBuffer({ resolveWithObject: true });
 		expect(info.width).toBe(1440);
-		expect(info.height).toBe(888);
+		expect(info.height).toBe(704);
 		const pixel = (x: number, y: number) => {
 			const offset = (y * info.width + x) * info.channels;
 			return [...data.subarray(offset, offset + 3)];
@@ -327,7 +329,7 @@ describe("session social card", () => {
 		expect(output).toContain("<title>Ship dynamic social cards · Open Session</title>");
 		expect(output).toContain('content="summary_large_image"');
 		expect(output).toMatch(
-			/content="https:\/\/media\.example\.test\/session-card\/sess-social-1\/[A-Za-z0-9_-]{32}\.png\?v=23"/,
+			/content="https:\/\/media\.example\.test\/session-card\/sess-social-1\/[A-Za-z0-9_-]{32}\.png\?v=24"/,
 		);
 		expect(output).toContain(
 			'property="og:url" content="https://os.example.test/session/sess-social-1"',
@@ -344,13 +346,13 @@ describe("session social card", () => {
 		).toBe("sess-social-1");
 		expect(socialSessionIdFromPath("/settings")).toBeNull();
 		expect(sessionSocialCardUrl("sess-social-1")).toMatch(
-			/^https:\/\/media\.example\.test\/session-card\/sess-social-1\/[A-Za-z0-9_-]{32}\.png\?v=23$/,
+			/^https:\/\/media\.example\.test\/session-card\/sess-social-1\/[A-Za-z0-9_-]{32}\.png\?v=24$/,
 		);
 	});
 
 	test("signs ids containing Slack timestamp dots", () => {
 		expect(sessionSocialCardUrl("slack-C123-1719860000.000000")).toMatch(
-			/^https:\/\/media\.example\.test\/session-card\/slack-C123-1719860000\.000000\/[A-Za-z0-9_-]{32}\.png\?v=23$/,
+			/^https:\/\/media\.example\.test\/session-card\/slack-C123-1719860000\.000000\/[A-Za-z0-9_-]{32}\.png\?v=24$/,
 		);
 	});
 
@@ -388,7 +390,7 @@ describe("session social card", () => {
 		expect(response.headers.get("content-type")).toBe("image/png");
 		const metadata = await sharp(await response.arrayBuffer()).metadata();
 		expect(metadata.width).toBe(1440);
-		expect(metadata.height).toBe(888);
+		expect(metadata.height).toBe(704);
 	});
 
 	test("ignores an unrecognized shape parameter", async () => {
@@ -398,7 +400,7 @@ describe("session social card", () => {
 		expect(response.status).toBe(200);
 		const metadata = await sharp(await response.arrayBuffer()).metadata();
 		expect(metadata.width).toBe(1440);
-		expect(metadata.height).toBe(888);
+		expect(metadata.height).toBe(704);
 	});
 
 	test("rejects an invalid HMAC before resolving the session", async () => {

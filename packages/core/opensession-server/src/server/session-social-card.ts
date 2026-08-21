@@ -52,17 +52,18 @@ async function loadSharp(): Promise<SharpFactory | null> {
 	return sharpFactory;
 }
 
-const SESSION_CARD_VERSION = 23;
+const SESSION_CARD_VERSION = 24;
 
 const CARD_PAPER = "#FFFFFF";
 /** Every frame stays 16:9, including the one behind the lead shot. */
 const SHOT_WIDTH = 640;
 const SHOT_HEIGHT = 360;
 const SHOT_RADIUS = 28;
-/** Room around the stack for its shadow to fall. */
+/** Room around the stack for its side and top shadows. */
 const SHOT_PAD_X = 40;
 const SHOT_PAD_TOP = 30;
-const SHOT_PAD_BOTTOM = 54;
+/** Hide the lower edge so the screenshots rise out of the card. */
+const SHOT_BOTTOM_CROP = 38;
 /** How far the card behind sits to the left, and how much lower. */
 const SHOT_STACK_OFFSET = 96;
 const SHOT_STACK_LIFT = 14;
@@ -489,7 +490,7 @@ export function sessionSocialCardSvg(shots: string[]): string {
 	const offsetY = Math.round(SHOT_PAD_TOP - bounds.minY);
 	const width = Math.round(bounds.maxX - bounds.minX) + SHOT_PAD_X * 2;
 	const height =
-		Math.round(bounds.maxY - bounds.minY) + SHOT_PAD_TOP + SHOT_PAD_BOTTOM;
+		Math.round(bounds.maxY - bounds.minY) + SHOT_PAD_TOP - SHOT_BOTTOM_CROP;
 	const placed = frames.map((frame) => ({
 		...frame,
 		x: frame.x + offsetX,
