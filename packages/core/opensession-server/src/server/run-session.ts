@@ -91,6 +91,7 @@ import {
 } from "./workspace-model-presets";
 import { getTitleOverride } from "./title-overrides";
 import { ensureGeneratedTitle } from "./generated-titles";
+import { nameSessionReferencesForTitle } from "./session-reference-title";
 import { clearReplySuggestions, maybeSuggestReplies } from "./reply-suggestions";
 import { commitAuthorFor } from "./shared/user-mappings";
 import { writeFileAtomic, writeJsonAtomic } from "./shared/atomic-write";
@@ -2104,12 +2105,16 @@ async function runSessionPromptInner(
 	) {
 		const provisional =
 			!session.title || session.title === "New session";
-		const firstLine = content.trim().split("\n")[0].slice(0, 80);
+		const titleSource = nameSessionReferencesForTitle(
+			provisional ? content : session.title,
+			(id) => findSession(id),
+		);
+		const firstLine = titleSource.trim().split("\n")[0].slice(0, 80);
 		if (provisional && firstLine)
 			touchNativeSession(session.id, { title: firstLine });
 		void ensureGeneratedTitle(
 			session.id,
-			provisional ? content : session.title,
+			titleSource,
 			user || session.startedBy || undefined,
 			session.model || undefined,
 		).then((t) => {

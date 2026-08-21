@@ -28,6 +28,7 @@ import { getAccountById } from "./claude-accounts";
 import { getCodexAccountById } from "./codex-accounts";
 import { buildForkHandoffNote } from "./fork-handoff";
 import { ensureGeneratedTitle } from "./generated-titles";
+import { nameSessionReferencesForTitle } from "./session-reference-title";
 import { onSessionIdle as onHumanAsksSessionIdle } from "./human-asks";
 import { interactiveMcpServers } from "./interactive-mcp";
 import { parseTranscriptAsync } from "./jsonl-parser";
@@ -447,7 +448,11 @@ export async function openCreatedSession(
 	// wore the raw first line) and keeps that name for life — later sessions
 	// never rename it, and a manual rename in the meantime wins.
 	const wsToName = spec.autoNameWorkspace;
-	void ensureGeneratedTitle(bksId, spec.titlePrompt, spec.user, spec.model,).then(
+	const titlePrompt = nameSessionReferencesForTitle(
+		spec.titlePrompt,
+		(id) => findSession(id),
+	);
+	void ensureGeneratedTitle(bksId, titlePrompt, spec.user, spec.model,).then(
 		(t) => {
 			if (!t) return;
 			invalidateSessionsCache();
@@ -1558,7 +1563,10 @@ export async function handleCreateSessionMessage(
 			attachBranch,
 		);
 
-		const title = prompt.trim().split("\n")[0].slice(0, 80);
+		const title = nameSessionReferencesForTitle(prompt, (id) => findSession(id))
+			.trim()
+			.split("\n")[0]
+			.slice(0, 80);
 		// Every session lives in a workspace (session-workspace.ts). A create
 		// that resolved none — no picker choice, no fork parent, no
 		// explicit id — mints its own here rather than surfacing as an
