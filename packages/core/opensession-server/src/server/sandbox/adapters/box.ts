@@ -918,6 +918,8 @@ interface NamedSnapshot {
   name: string;
   status: "saving" | "ready" | "failed";
   error?: string;
+  createdAt?: string;
+  updatedAt?: string;
 }
 
 function boxSnapshotName(repoId: string): string {
@@ -964,6 +966,19 @@ async function deleteNamedSnapshot(cfg: BoxClientConfig, name: string): Promise<
   } catch (error) {
     if (!isNotFound(error)) throw error;
   }
+}
+
+async function waitForNamedSnapshotGone(
+  cfg: BoxClientConfig,
+  name: string,
+  timeoutMs = 2 * 60_000,
+): Promise<void> {
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    if (!(await getNamedSnapshot(cfg, name))) return;
+    await sleep(2_000);
+  }
+  throw new Error(`Box named snapshot ${name} was not deleted after ${timeoutMs}ms`);
 }
 
 async function stopBox(cfg: BoxClientConfig, boxId: string): Promise<void> {
@@ -1040,7 +1055,19 @@ export const boxPrewarmAdapter: PrewarmAdapter = {
     const driver = boxDriver(cfg, sandboxId);
     await sealRemoteRepoTemplate(driver, "box", repo);
     const existing = await getNamedSnapshot(cfg, name);
-    if (existing?.status === "saving") await waitForNamedSnapshot(cfg, name);
+    if (existing?.status === "saving") {
+      // Snapshot publication survives a coordinator restart. Its deterministic
+      // name includes the runner signature, so finishing this in-flight save
+      // is the exact artifact the restarted prewarm needs.
+      await waitForNamedSnapshot(cfg, name);
+      writeRemoteRepoTemplate("box", repo.id, name);
+      console.log(`[sandbox:box] recovered in-flight post-setup repo template ${name}`);
+      return;
+    }
+    if (existing) {
+      await deleteNamedSnapshot(cfg, name);
+      await waitForNamedSnapshotGone(cfg, name);
+    }
     await boxApi(cfg, "POST", "/named-snapshots", { boxId: sandboxId, name }, 60_000);
     await waitForNamedSnapshot(cfg, name);
     writeRemoteRepoTemplate("box", repo.id, name);

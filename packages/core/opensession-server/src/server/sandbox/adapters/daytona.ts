@@ -172,6 +172,29 @@ export function daytonaSnapshotIsRecoverable(snapshot: {
   );
 }
 
+function daytonaNotFound(error: unknown): boolean {
+  const detail = error as { statusCode?: number; errorCode?: string };
+  return detail?.statusCode === 404 || /not.?found/i.test(detail?.errorCode || "");
+}
+
+export function daytonaSnapshotIsRecent(snapshot: {
+  createdAt?: unknown;
+  updatedAt?: unknown;
+}, now = Date.now()): boolean {
+  const startedAt = Date.parse(String(snapshot.updatedAt || snapshot.createdAt || ""));
+  const age = now - startedAt;
+  return Number.isFinite(startedAt) && age >= 0 && age < 60 * 60_000;
+}
+
+async function getDaytonaSnapshot(client: Daytona, name: string): Promise<any | null> {
+  try {
+    return await client.snapshot.get(name);
+  } catch (error) {
+    if (daytonaNotFound(error)) return null;
+    throw error;
+  }
+}
+
 async function recoverDaytonaRepoTemplate(
   client: Daytona,
   repoId: string,
@@ -179,15 +202,41 @@ async function recoverDaytonaRepoTemplate(
   const stored = readRemoteRepoTemplate("daytona", repoId);
   if (stored) return stored;
   const name = remoteRepoTemplateName("daytona", repoId);
-  try {
-    const snapshot = await client.snapshot.get(name);
-    if (!daytonaSnapshotIsRecoverable(snapshot as any)) return null;
-    writeRemoteRepoTemplate("daytona", repoId, name);
-    console.log(`[sandbox:daytona] recovered completed repo template ${name}`);
-    return readRemoteRepoTemplate("daytona", repoId);
-  } catch {
-    return null;
+  let snapshot = await getDaytonaSnapshot(client, name);
+  if (
+    snapshot &&
+    daytonaSnapshotIsRecent(snapshot) &&
+    !daytonaSnapshotIsRecoverable(snapshot)
+  ) {
+    // Snapshot publication continues provider-side across a coordinator
+    // restart. Wait for that current-signature artifact instead of launching
+    // a second cold workspace beside it.
+    const deadline = Date.now() + 5 * 60_000;
+    while (Date.now() < deadline && daytonaSnapshotIsRecent(snapshot)) {
+      const state = String(snapshot.state || "").toLowerCase();
+      if (/fail|error/.test(state)) break;
+      await new Promise((resolve) => setTimeout(resolve, 5_000));
+      snapshot = await getDaytonaSnapshot(client, name);
+      if (!snapshot || daytonaSnapshotIsRecoverable(snapshot)) break;
+    }
   }
+  if (!snapshot || !daytonaSnapshotIsRecoverable(snapshot)) return null;
+  writeRemoteRepoTemplate("daytona", repoId, name);
+  console.log(`[sandbox:daytona] recovered completed repo template ${name}`);
+  return readRemoteRepoTemplate("daytona", repoId);
+}
+
+async function waitForDaytonaSnapshotGone(
+  client: Daytona,
+  name: string,
+  timeoutMs = 2 * 60_000,
+): Promise<void> {
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    if (!(await getDaytonaSnapshot(client, name))) return;
+    await new Promise((resolve) => setTimeout(resolve, 2_000));
+  }
+  throw new Error(`Daytona snapshot ${name} was not deleted after ${timeoutMs}ms`);
 }
 
 async function daytonaClient(): Promise<Daytona> {
@@ -594,21 +643,15 @@ export const daytonaPrewarmAdapter: PrewarmAdapter = {
     const name = remoteRepoTemplateName("daytona", repo.id);
     const sbx = await client.get(sandboxId);
     await sealRemoteRepoTemplate(daytonaDriver(sbx), "daytona", repo);
-    try {
-      const existing = await client.snapshot.get(name);
-      // Daytona can finish a large snapshot just after the SDK's wait timed
-      // out. Recover that provider-side success on the next request instead
-      // of deleting and rebuilding the same 10+ GiB artifact. The narrow
-      // window does not defeat the template TTL's deliberate daily refresh.
-      if (daytonaSnapshotIsRecoverable(existing as any)) {
-        writeRemoteRepoTemplate("daytona", repo.id, name);
-        console.log(`[sandbox:daytona] recovered completed post-setup repo template ${name}`);
-        return;
-      }
+    const recovered = await recoverDaytonaRepoTemplate(client, repo.id);
+    if (recovered) return;
+    const existing = await getDaytonaSnapshot(client, name);
+    if (existing) {
       await client.snapshot.delete(existing);
-    } catch {}
+      await waitForDaytonaSnapshotGone(client, name);
+    }
     // Full repository templates are materially larger than Daytona's base
-    // images; the live opensession template takes about six minutes to seal.
+    // images; the live Open Session template takes about six minutes to seal.
     await sbx._experimental_createSnapshot(name, 900);
     const { previous } = writeRemoteRepoTemplate("daytona", repo.id, name);
     if (previous?.artifactId && previous.artifactId !== name) {
