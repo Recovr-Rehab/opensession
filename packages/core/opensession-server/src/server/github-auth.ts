@@ -895,6 +895,31 @@ function usableAccounts(): StoredAccount[] {
 }
 
 /**
+ * Credential used by the process-wide webhook forwarder. Simple mode has one
+ * connected identity. Operator mode uses the login designated when the org App
+ * enabled sign-in, with the first connected admin as a migration fallback for
+ * configs written before that field existed. This is server-owned intake, not a
+ * user-scoped action, so choosing one stable admin is deliberate.
+ */
+export function githubWebhookForwardCredential(): GithubCredential | null {
+  if (!githubUserAuthActive()) return soleGithubAccount();
+  const designated = trimmedConfig(
+    githubIntegrationConfig(),
+    "webhookForwardLogin",
+  );
+  if (designated) {
+    const credential = githubCredentialForLogin(designated);
+    if (credential) return credential;
+  }
+  for (const member of configuredIdentity().team) {
+    if (member.admin !== true || !member.github) continue;
+    const credential = githubCredentialForLogin(member.github);
+    if (credential) return credential;
+  }
+  return null;
+}
+
+/**
  * The acting GitHub identity in SIMPLE MODE — one install, one user, so the
  * single connected account (a pasted PAT, or a device-flow token) IS the
  * identity, resolved without any web session (there is none: webAuthRequired()
