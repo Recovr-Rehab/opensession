@@ -59,8 +59,8 @@ export const ARCHIVED_ROW =
 	"after:pointer-events-none after:absolute after:right-3 after:bottom-0 after:left-[42px] " +
 	"after:h-px after:bg-line after:transition-opacity after:duration-[var(--dur-micro)] " +
 	"hover:after:opacity-0 focus-within:after:opacity-0 " +
-	"phone:z-[1] phone:gap-2.5 phone:touch-pan-y phone:bg-surface phone:px-4 phone:py-3.5 " +
-	"phone:transform-[translateX(var(--swipe-x,0))] phone:after:left-[44px]";
+	"phone:z-[1] phone:gap-2.5 phone:touch-pan-y phone:bg-surface phone:px-[18px] phone:py-4 " +
+	"phone:transform-[translateX(var(--swipe-x,0))] phone:after:left-[46px]";
 
 /**
  * The open action, stretched over the whole row by its own `::after` so a click

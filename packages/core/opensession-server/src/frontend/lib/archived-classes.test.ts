@@ -16,8 +16,8 @@ test("archived phone search stays at the thumb edge", () => {
 
 test("archived phone rows reveal Restore instead of reserving a button", () => {
 	expect(ARCHIVED_ROW_ACTION).toContain("phone:hidden");
-	expect(ARCHIVED_ROW).toContain("phone:px-4");
-	expect(ARCHIVED_ROW).toContain("phone:py-3.5");
+	expect(ARCHIVED_ROW).toContain("phone:px-[18px]");
+	expect(ARCHIVED_ROW).toContain("phone:py-4");
 	expect(ARCHIVED_ROW).not.toContain("phone:pr-[54px]");
 	expect(ARCHIVED_SWIPE_ROW).toContain("[--swipe-action-w:0px]");
 	expect(ARCHIVED_SWIPE_ACTION).toContain("data-[open]:opacity-100");
