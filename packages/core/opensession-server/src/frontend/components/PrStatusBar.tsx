@@ -14,6 +14,7 @@ import {
 	gitPushApi,
 	mergePrApi,
 	mergePrStackApi,
+	moveSessionToBranchApi,
 } from "../lib/api";
 import { stackLayersTopFirst, stackMergePlan } from "../lib/pr-stack";
 import { PR_WEBHOOK_FALLBACK_POLL_MS } from "../lib/poll";
@@ -55,6 +56,7 @@ import { Tooltip } from "../ui/tooltip";
 import { ContextMenu, Menu, MENU_ICON } from "../ui/menu";
 import { Spinner } from "../ui/spinner";
 import { Skeleton, SkeletonBar } from "../ui/state";
+import { toast } from "../ui/toast";
 import { cn } from "../ui/cn";
 import { useShortcutLabel } from "../hooks/useShortcutBindings";
 import { useDeferredMergePhase } from "../hooks/useDeferredMerge";
@@ -79,6 +81,7 @@ import {
 	IconCheck,
 	IconPlus,
 	IconArchive,
+	IconNewBranch,
 } from "./icons";
 
 /**
@@ -108,6 +111,7 @@ interface PrHeadline {
 		| "behind" // behind the branch's own upstream → Pull
 		| "behind-base" // clean tree, no PR, behind origin/<base> → Pull
 		| "no-pr"
+		| "shared"
 		| "clean";
 	label: string;
 	tone: "green" | "purple" | "red" | "yellow" | "muted";
@@ -169,15 +173,16 @@ function deriveHeadline(
 			label: `Behind by ${behind} commit${behind === 1 ? "" : "s"}`,
 			tone: "yellow",
 		};
-	// A shared-checkout repo (Open Session's own) lands work as a commit on its
-	// default branch and never opens a PR, so unpushed commits are the whole
-	// story there — "No PR open · Create PR" would be the wrong move.
+	// A shared checkout can still have commits waiting to push. Publish those
+	// first, then offer to move this session into its own branch.
 	if (git?.sharedCheckout && ahead > 0)
 		return {
 			key: "ahead",
 			label: `Ahead by ${ahead} commit${ahead === 1 ? "" : "s"}`,
 			tone: "yellow",
 		};
+	if (git?.sharedCheckout)
+		return { key: "shared", label: "Shared checkout", tone: "muted" };
 	if (ahead > 0 || (git?.uncommittedFiles ?? 0) > 0)
 		return { key: "no-pr", label: "No PR open", tone: "muted" };
 	if ((git?.behindBase ?? 0) > 0)
@@ -781,15 +786,10 @@ export function PrStatusBar({
 	//
 	//  - Clean: level with the upstream, the base and the working tree. One
 	//    muted "Up to date" over a link to an empty PR tab.
-	//  - Nothing but a dirty tree on a shared-checkout repo (Open Session's
-	//    own), where work lands as a commit on the default branch and no PR is
-	//    ever opened. "Create PR" is the wrong move there, and uncommitted work
-	//    is the Git status section's subject, not this strip's.
+	// A shared checkout now has its own branch-move action, so only a session
+	// with no branch or reachable checkout remains empty.
 	const noPr = !pr && statusRows.length === 0;
-	const empty =
-		noPr &&
-		(headline.key === "clean" ||
-			(!!git?.sharedCheckout && headline.key === "no-pr"));
+	const empty = noPr && headline.key === "clean";
 
 	// The strip still holds its place while the PR fetch runs (Kent: a topbar
 	// that blinks in and out of existence shouldn't exist), so a session that
@@ -1005,6 +1005,24 @@ export function PrStatusBar({
 						Create PR
 					</PrBarButton>
 				) : null;
+			case "shared":
+				return (
+					<PrBarButton
+						className={actionBtn}
+						tone="secondary"
+						icon={<IconNewBranch size={18} />}
+						disabled={!!busy}
+						title="Create an isolated branch for this session"
+						onClick={() =>
+							run("move-branch", async () => {
+								const result = await moveSessionToBranchApi(sessionId);
+								toast(`Moved to ${result.branch}`);
+							})
+						}
+					>
+						{busy === "move-branch" ? "Moving…" : "Move to branch"}
+					</PrBarButton>
+				);
 			case "ready": {
 				const mergeScheduled = mergePhase === "scheduled";
 				const merging = mergePhase === "running" || busy === "merge";

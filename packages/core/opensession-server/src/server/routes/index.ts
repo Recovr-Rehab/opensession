@@ -26,6 +26,7 @@ import { handleSessionsRoutes } from "./sessions";
 import { handleShippedChangeRoutes } from "./shipped-changes";
 import { handlePrRoutes } from "./pr";
 import { handleSessionGitRoutes } from "./session-git";
+import { handleSessionBranchRoutes } from "./session-branch";
 import { handlePreviewRoutes } from "./preview";
 import { handleWorkspaceRoutes } from "./workspace";
 import { handleAutomationsRoutes } from "./automations";
@@ -84,6 +85,7 @@ export const routeHandlers: RouteHandler[] = [
 	handleSessionsRoutes,
 	handlePrRoutes,
 	handleSessionGitRoutes,
+	handleSessionBranchRoutes,
 	handlePreviewRoutes,
 	handleWorkspaceRoutes,
 	handleAutomationsRoutes,

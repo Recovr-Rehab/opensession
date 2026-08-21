@@ -334,6 +334,16 @@ export async function promoteSessionApi(
 	);
 }
 
+/** Move a shared-checkout session into its own isolated branch. */
+export async function moveSessionToBranchApi(
+	sessionId: string,
+): Promise<{ branch: string; worktreeDir: string }> {
+	return request<{ branch: string; worktreeDir: string }>(
+		`/sessions/${encodeURIComponent(sessionId)}/move-to-branch`,
+		{ method: "POST" },
+	);
+}
+
 /** Create an idle sibling tab. The first prompt starts its engine run. */
 export async function newSessionApi(
 	sourceId: string,
