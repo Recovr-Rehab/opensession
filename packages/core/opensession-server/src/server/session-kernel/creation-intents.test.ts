@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import {
   requestCreationBranch,
+  requestCreationCredential,
   requestCreationWorkspace,
 } from "./creation-intents";
 import {
@@ -41,6 +42,7 @@ const branchInput = {
   worktreePath: "/worktrees/branch-intent",
   baseBranch: "main",
   isolated: true,
+  credentialPrincipal: "user:alice",
 };
 
 describe("creation workspace intents", () => {
@@ -164,6 +166,7 @@ describe("creation branch intents", () => {
             worktreePath: "/worktrees/branch-intent",
             baseBranch: "main",
             isolated: true,
+            credentialPrincipal: "user:alice",
           },
         },
       ]);
@@ -187,6 +190,48 @@ describe("creation branch intents", () => {
         pollMs: 1,
       })).rejects.toThrow("remains durably pending");
       expect(store.pendingOutbox()).toHaveLength(1);
+    } finally {
+      store.close();
+    }
+  });
+});
+
+describe("creation credential intents", () => {
+  test("persists only a stable selector and scope before receipt", async () => {
+    const input = {
+      sessionId: "create-credential-intent",
+      identity: "request-credential-intent",
+      principal: "user:alice",
+      scope: "git:opensession",
+    };
+    const { store, kernel } = harness(input.sessionId);
+    try {
+      setTimeout(() => {
+        store.applyCreationEvent({
+          sessionId: input.sessionId,
+          identity: input.identity,
+          event: "preparation_started",
+          effectId: `credential:${input.principal}:${input.scope}`,
+        });
+      }, 5);
+      const state = await requestCreationCredential(input, {
+        kernel,
+        timeoutMs: 200,
+        pollMs: 1,
+      });
+      expect(state.completedEffectIds).toEqual([
+        `credential:${input.principal}:${input.scope}`,
+      ]);
+      const [effect] = store.pendingOutbox();
+      expect(effect).toMatchObject({
+        kind: "creation_credential_resolve",
+        payload: {
+          principal: "user:alice",
+          scope: "git:opensession",
+        },
+      });
+      expect(JSON.stringify(effect)).not.toContain("gitEnv");
+      expect(JSON.stringify(effect)).not.toContain("token");
     } finally {
       store.close();
     }

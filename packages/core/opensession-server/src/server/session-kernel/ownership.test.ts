@@ -127,6 +127,11 @@ describe("single session ownership", () => {
 		expect(creationExecutors).toContain(
 			'registerSessionEffectExecutor(\n      "creation_branch_prepare"',
 		);
+		expect(creationExecutors).toContain(
+			'"creation_credential_resolve",\n      executeCreationCredentialResolve',
+		);
+		expect(creationExecutors).toContain("resolveCurrentCredential");
+		expect(creationExecutors).not.toContain("payload.gitEnv");
 		expect(creationExecutors).toContain("assertAdoptableWorkspace(workspace, item)");
 		expect(creationExecutors.indexOf("dependencies.result(item)")).toBeGreaterThan(
 			creationExecutors.indexOf("dependencies.createWorkspace({"),
