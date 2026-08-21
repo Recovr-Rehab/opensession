@@ -12,7 +12,7 @@ export function WorkspaceWaiting({ detail }: { detail: string }) {
 		<div className="flex h-full min-h-[240px] flex-col items-center justify-center gap-1 px-6 text-center">
 			<PageLoader className="mb-2 text-dim" />
 			<div className="text-item-title font-semibold text-fg">
-				Setting up your workspace
+				Creating your workspace
 			</div>
 			<div className="max-w-[340px] text-label font-medium leading-relaxed text-dim">
 				{detail}
