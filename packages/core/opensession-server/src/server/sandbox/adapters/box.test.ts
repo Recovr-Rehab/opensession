@@ -5,6 +5,7 @@ import {
   boxComposeShell,
   boxMachineType,
   boxNativeFilePath,
+  boxSnapshotSaveIsRecoverable,
 } from "./box";
 
 describe("Box machine profiles", () => {
@@ -19,6 +20,15 @@ describe("Box machine profiles", () => {
     expect(() => boxMachineType({ cpu: 4, memoryMb: 4_096, diskGb: 80 })).toThrow(
       "Choose one of Box's Small, Default, or Large machine sizes",
     );
+  });
+});
+
+describe("Box named snapshots", () => {
+  test("recovers only recent in-flight saves", () => {
+    const now = Date.parse("2026-08-21T10:00:00.000Z");
+    expect(boxSnapshotSaveIsRecoverable({ status: "saving", createdAt: "2026-08-21T09:45:00.000Z" }, now)).toBe(true);
+    expect(boxSnapshotSaveIsRecoverable({ status: "saving", createdAt: "2026-08-21T08:00:00.000Z" }, now)).toBe(false);
+    expect(boxSnapshotSaveIsRecoverable({ status: "ready", createdAt: "2026-08-21T09:55:00.000Z" }, now)).toBe(false);
   });
 });
 

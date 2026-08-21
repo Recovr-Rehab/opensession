@@ -922,6 +922,15 @@ interface NamedSnapshot {
   updatedAt?: string;
 }
 
+export function boxSnapshotSaveIsRecoverable(
+  snapshot: Pick<NamedSnapshot, "status" | "createdAt" | "updatedAt">,
+  now = Date.now(),
+): boolean {
+  const startedAt = Date.parse(snapshot.updatedAt || snapshot.createdAt || "");
+  const age = now - startedAt;
+  return snapshot.status === "saving" && Number.isFinite(startedAt) && age >= 0 && age < 20 * 60_000;
+}
+
 function boxSnapshotName(repoId: string): string {
   return remoteRepoTemplateName("box", repoId).slice(0, 63).replace(/-+$/, "");
 }
@@ -1055,10 +1064,12 @@ export const boxPrewarmAdapter: PrewarmAdapter = {
     const driver = boxDriver(cfg, sandboxId);
     await sealRemoteRepoTemplate(driver, "box", repo);
     const existing = await getNamedSnapshot(cfg, name);
-    if (existing?.status === "saving") {
+    if (existing && boxSnapshotSaveIsRecoverable(existing)) {
       // Snapshot publication survives a coordinator restart. Its deterministic
-      // name includes the runner signature, so finishing this in-flight save
-      // is the exact artifact the restarted prewarm needs.
+      // name includes the runner signature, so finishing this recent in-flight
+      // save is the exact artifact the restarted prewarm needs. A provider save
+      // stuck longer than 20 minutes is deleted and rebuilt below instead of
+      // blocking every rebuild on the same dead operation forever.
       await waitForNamedSnapshot(cfg, name);
       writeRemoteRepoTemplate("box", repo.id, name);
       console.log(`[sandbox:box] recovered in-flight post-setup repo template ${name}`);
