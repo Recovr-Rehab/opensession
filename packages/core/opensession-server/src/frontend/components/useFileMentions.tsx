@@ -18,6 +18,7 @@ import {
 } from "../lib/mention-palette";
 import { emojiContextAt, emojiMentionSuggestions } from "../lib/emoji";
 import { caretPoint } from "../lib/caret-coords";
+import { PHONE_QUERY } from "../lib/breakpoints";
 
 /**
  * Find the active "@"-mention being typed at the caret. Returns the index of
@@ -301,7 +302,7 @@ export function useFileMentions({ value, onChange, textareaRef, mentionFetch, pa
           ? caretPoint(textareaRef.current, mention.start)
           : null;
       if (caret) {
-        const GUTTER = 8;
+        const GUTTER = window.matchMedia(PHONE_QUERY).matches ? 16 : 8;
         const width =
           mention?.kind === "emoji"
             ? 240
