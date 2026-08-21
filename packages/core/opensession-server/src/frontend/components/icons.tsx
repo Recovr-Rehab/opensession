@@ -1132,6 +1132,18 @@ export function IconBox(p: IconProps) {
   );
 }
 
+// A handset: the native phone app, as opposed to IconStack's "the same server
+// from several places". Narrow body plus a home indicator, so it reads as a
+// phone rather than as a card or a vertical panel.
+export function IconPhone(p: IconProps) {
+  return (
+    <Svg {...p}>
+      <rect {...stroke} x="8.25" y="4.75" width="7.5" height="14.5" rx="2" />
+      <path {...stroke} d="M10.75 16.75H13.25" />
+    </Svg>
+  );
+}
+
 // Friendly machine face for automation-owned sessions. Kept geometric and
 // neutral so it reads as origin, not as a chat persona or assistant avatar.
 export function IconRobot(p: IconProps) {
