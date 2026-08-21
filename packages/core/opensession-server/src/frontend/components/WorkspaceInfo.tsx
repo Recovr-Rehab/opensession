@@ -9,6 +9,7 @@ import { useResolvedTheme } from "./CodeHighlight";
 import {
 	setSessionReviewerApi,
 	acceptReviewApi,
+	cancelPrReviewApi,
 	triggerPrActionApi,
 	sessionAssetPreviewUrl,
 	type PrAgentAction,
@@ -574,6 +575,8 @@ function AgentReviewCard({
 	children?: React.ReactNode;
 }) {
 	const [busy, setBusy] = useState<PrAgentAction | null>(null);
+	const [reviewCancelling, setReviewCancelling] = useState(false);
+	const [reviewCancelRequested, setReviewCancelRequested] = useState(false);
 	const [done, setDone] = useState<{
 		label: string;
 		bksId?: string;
@@ -587,7 +590,10 @@ function AgentReviewCard({
 	const score = review?.confidence;
 	const stale = !!review?.stale;
 	const actionable = pr.state === "OPEN";
-	const active = !!pr.reviewActive || busy === "review" || !!reviewQueued;
+	const active =
+		(!!pr.reviewActive && !reviewCancelRequested) ||
+		busy === "review" ||
+		!!reviewQueued;
 	const canFix = actionable && !!review && !stale && review.findings > 0;
 	const scoreTone = stale
 		? "text-faint"
@@ -646,7 +652,22 @@ function AgentReviewCard({
 		) {
 			setReviewQueued(null);
 		}
+		if (!pr.reviewActive) setReviewCancelRequested(false);
 	}, [pr.reviewActive, pr.osReview?.at, reviewQueued]);
+
+	async function cancelReview() {
+		if (!pr.reviewActive || reviewCancelling) return;
+		setReviewCancelling(true);
+		setError(null);
+		try {
+			await cancelPrReviewApi(sessionId, getCurrentUser(), repo);
+			setReviewCancelRequested(true);
+		} catch (error: any) {
+			setError(error?.message || "Couldn't cancel the review");
+		} finally {
+			setReviewCancelling(false);
+		}
+	}
 
 	async function run(action: (typeof PR_AGENT_ACTIONS)[number]) {
 		if (busy) return;
@@ -804,11 +825,11 @@ function AgentReviewCard({
 						<button
 							type="button"
 							className={gitActionClass(rowTone)}
-							disabled={busy !== null || active}
-							onClick={() => run(primary)}
-							title={primary.hint}
+							disabled={busy !== null || reviewCancelling}
+							onClick={active ? () => void cancelReview() : () => void run(primary)}
+							title={active ? `Cancel ${AGENT_NAME} review` : primary.hint}
 						>
-							{primaryLabel}
+							{active ? (reviewCancelling ? "Stopping" : "Cancel") : primaryLabel}
 						</button>
 					)}
 				</div>
