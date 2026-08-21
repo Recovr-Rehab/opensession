@@ -106,6 +106,12 @@ The protocol names workspace, branch, sandbox, credential, attachment-reference,
 and opening-turn effects, including adoption or reconciliation modes and durable
 creation fences. Payload decoding strips unknown fields, so bearer credentials
 and inline attachment bodies do not cross the durable executor boundary. The
+The creation aggregate durably retains bounded completed-effect receipts. An
+executor result clears the current effect and records its stable ID in the same
+state/change transaction. Actor-store restarts preserve those receipts, and a
+completed effect cannot be emitted again after its outbox row is acknowledged.
+The receipt set rejects new completions at a fixed capacity before acceptance.
+
 The workspace effect now has a production executor. It creates a fixed-ID,
 dedupe-keyed workspace or adopts the exact existing destination, then returns a
 fenced result through the creation reducer before the outbox item is

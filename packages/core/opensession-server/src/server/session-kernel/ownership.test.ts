@@ -110,6 +110,8 @@ describe("single session ownership", () => {
 			store.indexOf("applyRunEvent("),
 		);
 		expect(creationReduction).toContain("this.enqueueOutbox(");
+		expect(creationReduction).toContain("completedEffectIds.push(input.effectId!)");
+		expect(store).toContain("SESSION_KERNEL_MAX_CREATION_EFFECT_RECEIPTS");
 		expect(creationReduction.indexOf("this.enqueueOutbox(")).toBeLessThan(
 			creationReduction.indexOf("tx.immediate()"),
 		);

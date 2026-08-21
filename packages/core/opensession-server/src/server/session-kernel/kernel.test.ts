@@ -5,6 +5,7 @@ import { join } from "path";
 import { tmpdir } from "os";
 import {
 	SESSION_KERNEL_SCHEMA_VERSION,
+	SESSION_KERNEL_MAX_CREATION_EFFECT_RECEIPTS,
 	SessionKernelStore,
 	__setSessionKernelStoreForTest,
 	activeSessionKernels,
@@ -45,6 +46,19 @@ test("tracked schema version matches the store reader", () => {
 			readFileSync(join(import.meta.dir, "schema-version"), "utf8").trim(),
 		),
 	).toBe(SESSION_KERNEL_SCHEMA_VERSION);
+});
+
+test("refuses an unsafe schema downgrade", () => {
+	const dir = mkdtempSync(join(tmpdir(), "session-kernel-newer-schema-"));
+	const path = join(dir, "kernel.sqlite");
+	const newer = new Database(path);
+	newer.exec(`PRAGMA user_version = ${SESSION_KERNEL_SCHEMA_VERSION + 1}`);
+	newer.close();
+	try {
+		expect(() => new SessionKernelStore(path)).toThrow("newer than supported");
+	} finally {
+		rmSync(dir, { recursive: true, force: true });
+	}
 });
 
 test("schema 6 upgrades create autonomous creation, delivery and ask state", () => {
@@ -626,7 +640,11 @@ describe("SessionKernel", () => {
 			effectId: "workspace-result-replay",
 		})).toMatchObject({
 			accepted: true,
-			state: { state: "preparing", currentEffectId: undefined },
+			state: {
+				state: "preparing",
+				currentEffectId: undefined,
+				completedEffectIds: ["workspace-result-replay"],
+			},
 		});
 		expect(store.applyCreationEvent({
 			sessionId,
@@ -634,6 +652,132 @@ describe("SessionKernel", () => {
 			event: "preparation_started",
 			effectId: "workspace-result-replay",
 		})).toMatchObject({ accepted: false, reason: "stale_effect" });
+		const [settledEffect] = store.pendingOutbox();
+		store.ackOutbox(settledEffect.id);
+		expect(store.applyCreationEvent({
+			sessionId,
+			identity,
+			event: "preparation_started",
+			nextEffectId: "workspace-result-replay",
+			effect: {
+				kind: "creation_workspace_prepare",
+				effectKey: "workspace-result-replay",
+				payload: {
+					creationIdentity: identity,
+					creationGeneration: 1,
+					workspaceId: "ws-result-replay",
+					dedupeKey: "creation:result-replay",
+					name: "Result replay",
+					createdBy: "Alice",
+					mode: "adopt_or_create",
+				},
+			},
+		})).toMatchObject({ accepted: false, reason: "invalid_effect" });
+		expect(store.pendingOutbox()).toHaveLength(0);
+	});
+
+	test("persists completed creation effect receipts across actor-store restart", () => {
+		const dir = mkdtempSync(join(tmpdir(), "session-kernel-create-receipt-"));
+		const path = join(dir, "kernel.sqlite");
+		let durableStore = new SessionKernelStore(path);
+		try {
+			const sessionId = "create-receipt-restart";
+			const identity = "request-receipt-restart";
+			durableStore.applyCreationEvent({ sessionId, identity, event: "plan" });
+			durableStore.applyCreationEvent({
+				sessionId,
+				identity,
+				event: "preparation_started",
+				nextEffectId: "workspace-receipt-restart",
+				effect: {
+					kind: "creation_workspace_prepare",
+					effectKey: "workspace-receipt-restart",
+					payload: {
+						creationIdentity: identity,
+						creationGeneration: 1,
+						workspaceId: "ws-receipt-restart",
+						dedupeKey: "creation:receipt-restart",
+						name: "Receipt restart",
+						createdBy: "Alice",
+						mode: "adopt_or_create",
+					},
+				},
+			});
+			durableStore.applyCreationEvent({
+				sessionId,
+				identity,
+				event: "preparation_started",
+				effectId: "workspace-receipt-restart",
+			});
+			durableStore.close();
+			durableStore = new SessionKernelStore(path);
+			expect(durableStore.creationState(sessionId)).toMatchObject({
+				state: "preparing",
+				currentEffectId: undefined,
+				completedEffectIds: ["workspace-receipt-restart"],
+			});
+		} finally {
+			durableStore.close();
+			rmSync(dir, { recursive: true, force: true });
+		}
+	});
+
+	test("rejects creation effect capacity before accepting more work", () => {
+		const sessionId = "create-receipt-capacity";
+		const identity = "request-receipt-capacity";
+		store.applyCreationEvent({ sessionId, identity, event: "plan" });
+		for (let index = 0; index < SESSION_KERNEL_MAX_CREATION_EFFECT_RECEIPTS; index += 1) {
+			const effectId = `workspace-capacity-${index}`;
+			expect(store.applyCreationEvent({
+				sessionId,
+				identity,
+				event: "preparation_started",
+				nextEffectId: effectId,
+				effect: {
+					kind: "creation_workspace_prepare",
+					effectKey: effectId,
+					payload: {
+						creationIdentity: identity,
+						creationGeneration: 1,
+						workspaceId: `ws-capacity-${index}`,
+						dedupeKey: `creation:capacity-${index}`,
+						name: "Capacity",
+						createdBy: "Alice",
+						mode: "adopt_or_create",
+					},
+				},
+			}).accepted).toBe(true);
+			expect(store.applyCreationEvent({
+				sessionId,
+				identity,
+				event: "preparation_started",
+				effectId,
+			}).accepted).toBe(true);
+		}
+		const outboxBefore = store.pendingOutbox(Date.now(), 10_000).length;
+		expect(store.applyCreationEvent({
+			sessionId,
+			identity,
+			event: "preparation_started",
+			nextEffectId: "workspace-over-capacity",
+			effect: {
+				kind: "creation_workspace_prepare",
+				effectKey: "workspace-over-capacity",
+				payload: {
+					creationIdentity: identity,
+					creationGeneration: 1,
+					workspaceId: "ws-over-capacity",
+					dedupeKey: "creation:over-capacity",
+					name: "Over capacity",
+					createdBy: "Alice",
+					mode: "adopt_or_create",
+				},
+			},
+		})).toMatchObject({
+			accepted: false,
+			reason: "effect_receipt_capacity",
+		});
+		expect(store.pendingOutbox(Date.now(), 10_000)).toHaveLength(outboxBefore);
 	});
 
 	test("rolls creation state back when its durable effect cannot commit", () => {
