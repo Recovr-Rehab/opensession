@@ -256,6 +256,9 @@ describe("single session ownership", () => {
 		expect(wiring).not.toContain("createWorkspace(");
 		const create = read("session-create.ts");
 		expect(create).toContain("createPlan.resolved");
+		expect(create).toContain("ensureCreationPlanned(bksId, createIdentity)");
+		expect(create.match(/await requestCreationWorkspace\(\{/g)?.length).toBe(2);
+		expect(create).not.toContain("createWorkspace(");
 		expect(create).toContain("spec.openingPromptEntryId");
 		expect(wiring).toContain('legacyGatewayEffect("cancel_session"');
 		expect(wiring).toContain('legacyGatewayEffect("answer_question"');

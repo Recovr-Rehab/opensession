@@ -68,7 +68,11 @@ import { type NativeSessionFile, type SessionUsage, type UnifiedSession, } from 
 import { parseImageDataUrls, stageFileAttachments, withUploadsNote, } from "./uploads";
 import { resolvePlainWorkspace } from "./workspace-resolve";
 import { resolveWorkspaceModelPreset } from "./workspace-model-presets";
-import { type Workspace, createWorkspace, getWorkspace, updateWorkspace, } from "./workspaces";
+import { type Workspace, getWorkspace, updateWorkspace, } from "./workspaces";
+import {
+	ensureCreationPlanned,
+	requestCreationWorkspace,
+} from "./session-kernel";
 import { AUTO_REPO, createWorktree, createWorktreeForExistingBranch, ensureAskCheckout, ensureScratchDir, getRepo, isRegisteredWorktree, listWorktrees, NO_REPO, repoForPath, repoForPathOrNull, resolveUniqueBranch, sharedCheckoutForNewSessions, worktreeHeadBranch, worktreePathFor, } from "./worktree";
 import { type WSClientData, broadcastToSession, preparingWorkspaces, } from "./ws-hub";
 import { sessionIdForRequest } from "./session-request-id";
@@ -1131,6 +1135,7 @@ export async function handleCreateSessionMessage(
 		finishCreate();
 		return response;
 	}
+	ensureCreationPlanned(bksId, createIdentity);
 	// This WebSocket create is interactive. The raw credential reaches only the
 	// server-owned materializer; recovery persists and resolves its principal.
 	const githubCredential = ws.data.authLogin
@@ -1334,16 +1339,24 @@ export async function handleCreateSessionMessage(
 		}
 		if (!workspace) {
 			createdWorkspaceNow = true;
-			workspace = getWorkspace(plannedWorkspaceId) || createWorkspace({
-				id: plannedWorkspaceId,
+			await requestCreationWorkspace({
+				sessionId: bksId,
+				identity: createIdentity,
+				workspaceId: plannedWorkspaceId,
+				dedupeKey: `session-create:${createIdentity}`,
 				name:
 					(typeof msg.createWorkspace.name === "string" &&
 						msg.createWorkspace.name) ||
 					prompt.trim().split("\n")[0].slice(0, 80) ||
 					"Workspace",
-				...(isRepoLess ? {} : { repo: repo.id }),
+				...(isRepoLess ? {} : { project: repo.id }),
 				createdBy: user || "Anonymous",
 			});
+			workspace = getWorkspace(plannedWorkspaceId);
+			if (!workspace)
+				throw new Error(
+					`Workspace ${plannedWorkspaceId} projection is missing after actor receipt`,
+				);
 		}
 	}
 	// Set once the session has been announced to the client (early
@@ -1558,15 +1571,30 @@ export async function handleCreateSessionMessage(
 			!forkSource?.workspaceId &&
 			!(typeof msg.workspaceId === "string" && msg.workspaceId)
 		) {
-			workspace = createWorkspace({
+			const plannedWorkspaceId =
+				createPlan.workspaceId || createPlanWorkspaceId(bksId);
+			if (!createPlan.workspaceId)
+				createPlan = updateCreatePlan(bksId, createIdentity, {
+					workspaceId: plannedWorkspaceId,
+				});
+			await requestCreationWorkspace({
+				sessionId: bksId,
+				identity: createIdentity,
+				workspaceId: plannedWorkspaceId,
+				dedupeKey: `session-create:${createIdentity}`,
 				name: title || "Workspace",
-				...(isRepoLess ? {} : { repo: repo.id }),
+				...(isRepoLess ? {} : { project: repo.id }),
 				createdBy: user || "Anonymous",
 				...(sessionBranch ? { branch: sessionBranch } : {}),
-				// Only an isolated worktree is owned — a shared main/ask
+				// Only an isolated worktree is owned. A shared main or ask
 				// checkout is used by every other session there too.
 				...(ownedWorktree(wtPath) ? { worktreeDir: wtPath } : {}),
 			});
+			workspace = getWorkspace(plannedWorkspaceId);
+			if (!workspace)
+				throw new Error(
+					`Workspace ${plannedWorkspaceId} projection is missing after actor receipt`,
+				);
 			mintedForSession = true;
 		}
 		// An auto-created workspace is renamed ONCE from the generated
