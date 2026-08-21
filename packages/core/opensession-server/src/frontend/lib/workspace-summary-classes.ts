@@ -32,12 +32,11 @@
  * so its corner takes one small step up. The inner PR band inherits that step
  * below, keeping the two surfaces visually concentric.
  *
- * It opens with a little more room than it closes with. The first thing in the
- * card is a tinted plate, and a plate set at the same 8px the card ends on
- * reads as pressed against the top edge rather than sitting inside it.
+ * Its 8px top and bottom padding keeps the first plate close to the card edge
+ * without pressing against it.
  */
 export const WS_SUMMARY_CARD =
-	"flex max-h-[min(72vh,640px)] w-[300px] flex-col overflow-y-auto pt-3 pb-2 " +
+	"flex max-h-[min(72vh,640px)] w-[300px] flex-col overflow-y-auto py-2 " +
 	"[border-radius:calc(18px*var(--rf))]!";
 
 /**
