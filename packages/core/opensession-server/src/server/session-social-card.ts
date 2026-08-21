@@ -321,20 +321,24 @@ interface PreparedShot {
 	dataUrl: string;
 }
 
-/** Preserve landscape screenshots inside the 16:9 frame. Portrait captures use
- * a salience crop instead of a fixed top sliver, so their relevant UI stays large. */
-async function prepareShot(
+interface UsableShotSource {
+	input: Buffer | string;
+	portrait: boolean;
+	sharp: SharpFactory;
+}
+
+/** Apply the renderer's actual screenshot gate without rasterizing the card. */
+async function usableShotSource(
 	source: string | undefined,
-	width: number,
-	height: number,
-): Promise<PreparedShot | undefined> {
+): Promise<UsableShotSource | undefined> {
 	if (!source) return undefined;
 	try {
 		const sharp = await loadSharp();
 		if (!sharp) return undefined;
 		const input = dataShotBytes(source) ?? source;
-		const image = sharp(input, { limitInputPixels: 40_000_000 });
-		const metadata = await image.metadata();
+		const metadata = await sharp(input, {
+			limitInputPixels: 40_000_000,
+		}).metadata();
 		if (!metadata.width || !metadata.height) return undefined;
 		const swapsAxes = [5, 6, 7, 8].includes(metadata.orientation ?? 1);
 		const orientedWidth = swapsAxes ? metadata.height : metadata.width;
@@ -343,12 +347,39 @@ async function prepareShot(
 		// Card renders and message-column captures are usually ultra-wide. Putting
 		// one back inside the card creates the recursive, unreadable preview.
 		if (aspect > SHOT_MAX_ASPECT) return undefined;
-		const portrait = aspect < 1;
-		const png = await image
+		return { input, portrait: aspect < 1, sharp };
+	} catch {
+		return undefined;
+	}
+}
+
+/** Whether Slack can show a meaningful screenshot card for this session. */
+export async function hasUsableSessionShot(
+	data: SessionSocialCardData,
+): Promise<boolean> {
+	for (const source of (data.shots ?? []).slice(0, SHOT_CANDIDATE_LIMIT)) {
+		if (await usableShotSource(source)) return true;
+	}
+	return false;
+}
+
+/** Preserve landscape screenshots inside the 16:9 frame. Portrait captures use
+ * a salience crop instead of a fixed top sliver, so their relevant UI stays large. */
+async function prepareShot(
+	source: string | undefined,
+	width: number,
+	height: number,
+): Promise<PreparedShot | undefined> {
+	const usable = await usableShotSource(source);
+	if (!usable) return undefined;
+	try {
+		const png = await usable.sharp(usable.input, {
+			limitInputPixels: 40_000_000,
+		})
 			.rotate()
 			.resize(width, height, {
-				fit: portrait ? "cover" : "contain",
-				position: portrait ? "attention" : "centre",
+				fit: usable.portrait ? "cover" : "contain",
+				position: usable.portrait ? "attention" : "centre",
 				background: { r: 246, g: 246, b: 248, alpha: 1 },
 			})
 			.png()

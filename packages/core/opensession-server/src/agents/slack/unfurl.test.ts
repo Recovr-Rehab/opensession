@@ -1,7 +1,8 @@
 import { afterAll, describe, expect, test } from "bun:test";
-import { mkdtempSync, rmSync } from "fs";
+import { mkdirSync, mkdtempSync, rmSync } from "fs";
 import { tmpdir } from "os";
 import { join } from "path";
+import sharp from "sharp";
 import type { UnifiedSession } from "../../server/types";
 
 // Unfurl modules resolve their state directory and UI host at import.
@@ -16,6 +17,33 @@ process.env.OPENSESSION_SESSION_CARD_BASE = "https://media.example.test";
 process.env.OPENSESSION_SESSION_CARD_SECRET = "test-session-social-card-secret-32-bytes";
 
 const { cardTitle, handleLinkShared, unfurlForSession } = await import("./unfurl");
+const { UPLOADS_DIR } = await import("../../server/uploads");
+mkdirSync(UPLOADS_DIR, { recursive: true });
+const uploadsDir = mkdtempSync(join(UPLOADS_DIR, "unfurl-tests-"));
+const screenshot = join(uploadsDir, "screenshot.png");
+const recursiveCard = join(uploadsDir, "recursive-card.png");
+await Promise.all([
+	sharp({
+		create: {
+			width: 1280,
+			height: 720,
+			channels: 4,
+			background: "#92b8d9",
+		},
+	})
+		.png()
+		.toFile(screenshot),
+	sharp({
+		create: {
+			width: 1600,
+			height: 600,
+			channels: 4,
+			background: "#ffffff",
+		},
+	})
+		.png()
+		.toFile(recursiveCard),
+]);
 
 afterAll(() => {
 	if (previousStateDir === undefined) delete process.env.OPENSESSION_STATE_DIR;
@@ -28,17 +56,23 @@ afterAll(() => {
 	if (previousCardSecret === undefined)
 		delete process.env.OPENSESSION_SESSION_CARD_SECRET;
 	else process.env.OPENSESSION_SESSION_CARD_SECRET = previousCardSecret;
+	rmSync(uploadsDir, { recursive: true, force: true });
 	rmSync(scratch, { recursive: true, force: true });
 });
 
 describe("unfurlForSession", () => {
-	test("shows the banner render of the social card", () => {
-		const unfurl = unfurlForSession(
+	test("shows the banner render when a useful screenshot is available", async () => {
+		const unfurl = await unfurlForSession(
 			session({
 				id: "sess-card",
 				title: "Ship the card",
 				createdBy: "Kent",
 				model: "pi/openai/gpt-5.6-sol",
+				walkthrough: {
+					summary: "A visual walkthrough.",
+					publishedAt: "2026-08-21T12:00:00Z",
+					shots: [{ after: screenshot }],
+				},
 			}),
 			"https://os.example.test/session/sess-card",
 		);
@@ -58,8 +92,36 @@ describe("unfurlForSession", () => {
 		expect(JSON.stringify(unfurl.blocks)).not.toContain("gpt-5.6-sol");
 	});
 
-	test("shows only the person, repo and freshness below the card", () => {
-		const unfurl = unfurlForSession(
+	test("replaces an empty image card with the linked title", async () => {
+		for (const shots of [[], [{ after: recursiveCard }]]) {
+			const unfurl = await unfurlForSession(
+				session({
+					id: "sess-card",
+					title: "Ship the card",
+					createdBy: "Kent",
+					walkthrough: {
+						summary: "No useful screenshot.",
+						publishedAt: "2026-08-21T12:00:00Z",
+						shots,
+					},
+				}),
+				"https://os.example.test/session/sess-card",
+			);
+			expect(unfurl.blocks.map((block: any) => block.type)).toEqual([
+				"section",
+				"context",
+			]);
+			expect(unfurl.blocks[0].text.text).toBe(
+				"*<https://os.example.test/session/sess-card|Ship the card>*",
+			);
+			expect(unfurl.blocks.some((block: any) => block.type === "image")).toBe(
+				false,
+			);
+		}
+	});
+
+	test("shows only the person, repo and freshness below the card", async () => {
+		const unfurl = await unfurlForSession(
 			session({
 				id: "sess-card",
 				title: "Ship the card",
@@ -89,8 +151,8 @@ describe("unfurlForSession", () => {
 		expect(json).not.toContain("code");
 	});
 
-	test("does not substitute the product name for a missing person", () => {
-		const unfurl = unfurlForSession(
+	test("does not substitute the product name for a missing person", async () => {
+		const unfurl = await unfurlForSession(
 			session({ id: "sess-card", title: "Ship the card", repo: "opensession" }),
 			"https://os.example.test/session/sess-card",
 		);

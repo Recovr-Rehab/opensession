@@ -15,6 +15,7 @@ import { findSessionAsync } from "../../server/session-cache";
 import type { UnifiedSession } from "../../server/types";
 import { configuredServer } from "../../server/config";
 import {
+  hasUsableSessionShot,
   sessionCardTitle,
   sessionSocialCardData,
   sessionSocialCardUrl,
@@ -103,30 +104,38 @@ export function cardTitle(s: UnifiedSession): { title: string } {
 }
 
 /** Build the Block Kit unfurl body for one session. */
-export function unfurlForSession(s: UnifiedSession, _url: string): { blocks: any[] } {
-  const card = sessionSocialCardData(s);
+export async function unfurlForSession(
+  s: UnifiedSession,
+  url: string,
+): Promise<{ blocks: any[] }> {
+  const card = sessionSocialCardData(s, { includeShot: true });
   const { title } = card;
+  const hasScreenshot = await hasUsableSessionShot(card);
 
-  // Keep visible text single-sourced: the title lives in the image, while the
-  // context below carries only who owns the session, its repo, and freshness.
+  // Keep visible text single-sourced. A screenshot card owns the title. When
+  // there is no useful screenshot, a linked title replaces the image rather
+  // than rasterizing an empty white card.
+  const blocks: any[] = hasScreenshot
+    ? [
+        {
+          type: "image",
+          image_url: sessionSocialCardUrl(s.id, "banner"),
+          alt_text: `${title}, Open Session preview`,
+        },
+      ]
+    : [
+        {
+          type: "section",
+          text: { type: "mrkdwn", text: `*<${url}|${esc(title)}>*` },
+        },
+      ];
+
   // A missing creator stays missing rather than becoming "Open Session".
   const bits: string[] = [];
   if (s.createdBy || s.startedBy) bits.push(card.owner);
   if (s.repo) bits.push(s.repo);
   const updated = relTime(s.lastActivity);
   if (updated) bits.push(`updated ${updated} ago`);
-
-  // Slack lays an `image` block out at the message column width whatever the
-  // source measures, so aspect ratio is the only thing that decides how tall
-  // the preview is. Hence the banner render. The accessory slot is not the
-  // answer either, it is a square thumbnail that squashes a wide card.
-  const blocks: any[] = [
-    {
-      type: "image",
-      image_url: sessionSocialCardUrl(s.id, "banner"),
-      alt_text: `${title}, Open Session preview`,
-    },
-  ];
 
   if (bits.length) {
     blocks.push({
@@ -187,7 +196,7 @@ export async function handleLinkShared(
     if (!id) continue;
     const session = await deps.findSession(id);
     if (!session) continue;
-    unfurls[link.url] = unfurlForSession(session, link.url);
+    unfurls[link.url] = await unfurlForSession(session, link.url);
   }
 
   if (Object.keys(unfurls).length === 0) return;
