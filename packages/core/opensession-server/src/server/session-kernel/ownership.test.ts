@@ -63,8 +63,10 @@ describe("single session ownership", () => {
 		expect(control).toContain("sessionKernel(id).dispatch");
 		expect(read("routes/sessions.ts")).not.toContain("promptReceipt(");
 		expect(existsSync(join(serverDir, "prompt-receipts.ts"))).toBe(false);
+		const steerEligibility = control.indexOf('opts?.busy !== "queue"');
 		const steerItem = control.indexOf("const steerItem = durableQueueItem(id");
-		expect(steerItem).toBeGreaterThan(-1);
+		expect(steerEligibility).toBeGreaterThan(-1);
+		expect(steerItem).toBeGreaterThan(steerEligibility);
 		expect(control.indexOf("prepareQueuedSteer(id", steerItem)).toBeGreaterThan(steerItem);
 	});
 

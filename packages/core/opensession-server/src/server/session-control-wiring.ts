@@ -245,21 +245,23 @@ registerSessionControl({
 				// (and never steer regardless): the in-thread answer mirror only fires
 				// on a turn that carries the slackReplyTo, and a steered message can't
 				// (it folds into a turn that's already running).
-				const steerItem = durableQueueItem(id, {
-					id: deliveryId,
-					content,
-					user,
-					images: opts?.imageUrls,
-					contextSessions: opts?.contextSessions,
-					...(opts?.hold ? { hold: true } : {}),
-					...(opts?.reviewHandoff ? { reviewHandoff: true } : {}),
-				});
 				if (
 					opts?.busy !== "queue" &&
 					!opts?.slackReplyTo &&
-					!hasFiles &&
-					prepareQueuedSteer(id, deliveryId, steerItem)
+					!hasFiles
 				) {
+					const steerItem = durableQueueItem(id, {
+						id: deliveryId,
+						content,
+						user,
+						images: opts?.imageUrls,
+						contextSessions: opts?.contextSessions,
+						...(opts?.hold ? { hold: true } : {}),
+						...(opts?.reviewHandoff ? { reviewHandoff: true } : {}),
+					});
+					if (!prepareQueuedSteer(id, deliveryId, steerItem)) {
+						throw new Error("Delivery changed before steer preparation");
+					}
 					if (
 						steerAgentRun(
 							[session.claudeSessionId, session.codexThreadId, session.id],
