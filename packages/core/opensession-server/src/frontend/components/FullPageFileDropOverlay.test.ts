@@ -7,5 +7,6 @@ test("the foreground composer drop fade covers the whole page", async () => {
 
   expect(source).toContain("createPortal(");
   expect(source).toContain("fixed inset-0 z-[12000]");
+  expect(source).toContain("[backdrop-filter:blur(6px)]");
   expect(source).toContain("Drop anywhere to attach them to your message.");
 });
