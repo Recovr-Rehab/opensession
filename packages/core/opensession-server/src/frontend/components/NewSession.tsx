@@ -40,7 +40,6 @@ import { ComposerContextChip } from "./ComposerContextChip";
 import {
   IconPaperclip,
   IconArrowUp,
-  IconArrowUpToLine,
   IconChevronDown,
   IconChevronRight,
   IconConnections,
@@ -66,7 +65,7 @@ import { displayName } from "../brand-logos";
 import { IconTile } from "./BrandTile";
 import { Tooltip } from "../ui/tooltip";
 import { Modal, useEnterOnMount } from "../ui/modal";
-import { composerMorph, duration, ease } from "../ui/motion";
+import { composerMorph } from "../ui/motion";
 import { useShortcutKeys } from "../hooks/useShortcutBindings";
 import { matchesShortcut } from "../lib/shortcuts";
 import {
@@ -78,6 +77,7 @@ import {
   foregroundFileComposerOwns,
   hasDraggedFiles,
 } from "../lib/file-drag";
+import { FullPageFileDropOverlay } from "./FullPageFileDropOverlay";
 import { askSurface } from "../lib/tinted-surface";
 import { toast } from "../ui/toast";
 import { cn } from "../ui/cn";
@@ -2070,34 +2070,7 @@ export function NewSession({ onBack, inline, focusSeq, send, addHandler, connect
         finalFocus={() => !createdRef.current}
       >
         {card}
-        <AnimatePresence initial={false}>
-          {fileDragActive && (
-            <motion.div
-              className="pointer-events-none !absolute inset-0 z-[20] flex items-center justify-center gap-3 rounded-[calc(22px*var(--rf))] bg-[color-mix(in_srgb,var(--popup-surface)_90%,transparent)] px-5 text-left [backdrop-filter:blur(8px)]"
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-              transition={{ type: "tween", duration: duration.micro, ease }}
-              aria-hidden="true"
-              data-composer-file-drop-overlay
-            >
-              <IconArrowUpToLine size={26} className="shrink-0 text-fg" />
-              <div className="min-w-0">
-                <div className="text-control-label font-semibold text-fg">
-                  Add files
-                </div>
-                <div className="text-label leading-snug text-dim">
-                  Drop here to attach them to your message.
-                </div>
-              </div>
-            </motion.div>
-          )}
-        </AnimatePresence>
-        {fileDragActive && (
-          <span className="sr-only" role="status">
-            Drop files to attach
-          </span>
-        )}
+        <FullPageFileDropOverlay active={fileDragActive} />
       </Modal.Content>
     </Modal.Root>
   );

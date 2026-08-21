@@ -80,7 +80,7 @@ test("the floating composer owns app-wide file drops", async () => {
   expect(source).toContain('data-global-file-composer="new-session"');
   expect(source).toContain("foregroundFileComposerOwns(composer)");
   expect(source).toContain("void addAttachments(dropped)");
-  expect(source).toContain("data-composer-file-drop-overlay");
+  expect(source).toContain("<FullPageFileDropOverlay active={fileDragActive} />");
 });
 
 test("dismissing a nonempty composer parks it without an explicit draft action", async () => {

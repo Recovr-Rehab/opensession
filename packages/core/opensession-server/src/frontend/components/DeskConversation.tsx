@@ -36,7 +36,7 @@ import {
 	foregroundFileComposerOwns,
 	hasDraggedFiles,
 } from "../lib/file-drag";
-import { IconArrowUpToLine } from "./icons";
+import { FullPageFileDropOverlay } from "./FullPageFileDropOverlay";
 
 interface DeskConversationProps {
 	sessionId: string;
@@ -606,34 +606,7 @@ export function DeskConversation({
 						autoFocus={autoFocus}
 						textareaRef={textareaRef}
 					/>
-					<AnimatePresence initial={false}>
-						{fileDragActive && (
-							<motion.div
-								className="pointer-events-none absolute inset-0 z-[20] flex items-center justify-center gap-3 rounded-[var(--composer-radius)] bg-[color-mix(in_srgb,var(--composer-surface)_90%,transparent)] px-5 text-left [backdrop-filter:blur(8px)]"
-								initial={{ opacity: 0 }}
-								animate={{ opacity: 1 }}
-								exit={{ opacity: 0 }}
-								transition={{ type: "tween", duration: duration.micro, ease }}
-								aria-hidden="true"
-								data-composer-file-drop-overlay
-							>
-								<IconArrowUpToLine size={26} className="shrink-0 text-fg" />
-								<div className="min-w-0">
-									<div className="text-control-label font-semibold text-fg">
-										Add files
-									</div>
-									<div className="text-label leading-snug text-dim">
-										Drop here to attach them to your message.
-									</div>
-								</div>
-							</motion.div>
-						)}
-					</AnimatePresence>
-					{fileDragActive && (
-						<span className="sr-only" role="status">
-							Drop files to attach
-						</span>
-					)}
+					<FullPageFileDropOverlay active={fileDragActive} />
 				</div>
 			</div>
 		</div>
