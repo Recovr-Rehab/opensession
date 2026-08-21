@@ -255,13 +255,14 @@ export const HEADER_TITLE_PILL_CENTERED =
 	"phone:absolute phone:left-1/2 phone:ml-0 phone:mr-0 phone:[transform:translateX(-50%)]";
 
 /**
- * Archived gives Search the full phone width below this bar. While that field
- * is focused, the controls recede and the page rises into their space. Both
+ * Archived keeps Search at the phone's bottom edge. While that field is
+ * focused, the controls recede and the page rises into their space. Both
  * directions are transitions so a quick focus change reverses from its current
- * position instead of restarting.
+ * position instead of restarting. Overflow stays visible while resting so the
+ * floating controls' shadows can extend below the header box.
  */
 export const ARCHIVED_SEARCH_HEADER =
-	"phone:overflow-hidden phone:transition-[height,padding-top,opacity,transform] " +
+	"phone:transition-[height,padding-top,opacity,transform] " +
 	"phone:duration-[var(--dur)] phone:ease-[var(--ease)] " +
 	"phone:[body.kb-open_&]:h-0 phone:[body.kb-open_&]:pt-0 " +
 	"phone:[body.kb-open_&]:pointer-events-none phone:[body.kb-open_&]:opacity-0 " +
