@@ -43,8 +43,10 @@ forever. Reusing an id with another payload is
 rejected. WebSocket receipt replay is capability-negotiated. Mutations wait
 behind the hello handshake, then become durable commands on a capable server
 or one-shot sends on an older server. A command whose physical execution was
-interrupted becomes pending again only when its server call site explicitly declares
-the operation replay-safe. Replay policy is not part of client request identity,
+interrupted becomes a retryable durable failure receipt only when its server
+call site explicitly declares the operation replay-safe. Admission committed but
+never marked as executing is also promoted to that safe retry receipt on actor
+restart, because no physical callback could have begun. Replay policy is not part of client request identity,
 and the first policy-aware migration preserves pre-existing interrupted receipts. The default is fail-closed: interrupted physical work
 becomes `indeterminate` and cannot execute again without reconciliation. Web and
 native clients keep every unresolved mutation envelope until `command_result`,
@@ -52,6 +54,9 @@ without age or count eviction, then replay the same request id after reconnect
 or app restart. Chrome keeps unresolved create and follow-up intents by request
 identity instead of overwriting one ambiguous request with the next. Completed retries return the
 stored result; interrupted retries re-enter the actor with the original id.
+Readiness ages only pending or processing commands. Indeterminate outcomes have
+separate count and oldest-age metrics, so a retained forensic receipt cannot make
+an unrelated active command report the whole actor service as stale.
 
 Large attachments are not copied into the command journal. Their content hash
 is part of the command identity. Create requests derive a stable session id
