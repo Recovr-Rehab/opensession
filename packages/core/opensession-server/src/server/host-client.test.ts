@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, test } from "bun:test";
-import { mkdtempSync, mkdirSync, rmSync } from "fs";
+import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from "fs";
 import { tmpdir } from "os";
 import { join } from "path";
 import {
@@ -20,6 +20,12 @@ import {
   __setSessionKernelStoreForTest,
   sessionKernel,
 } from "./session-kernel";
+import { hostRunBusy } from "./host-registry";
+import {
+  __setActiveRunsPathForTest,
+  takeInterruptedRuns,
+  type ActiveRunRecord,
+} from "./run-journal";
 
 const roots: string[] = [];
 
@@ -135,6 +141,40 @@ describe("local run-host capability", () => {
     expect(localRunHostsSupported("darwin", true, commands)).toBe(false);
     expect(localRunHostsSupported("linux", false, commands)).toBe(false);
     expect(localRunHostsSupported("linux", true, () => null)).toBe(false);
+  });
+
+  test("keeps a fresh host out of the boot recovery claim", () => {
+    const hostId = `rh-${crypto.randomUUID()}`;
+    const osSessionId = `os-${crypto.randomUUID()}`;
+    const spec: RunHostSpec = {
+      hostId,
+      osSessionId,
+      prompt: "run once",
+      cwd: "/tmp",
+    };
+    const handle = makeHandle(spec);
+    const journalRoot = mkdtempSync(join(tmpdir(), "host-claim-test-"));
+    roots.push(journalRoot);
+    const journalPath = join(journalRoot, "active-runs.json");
+    const previousJournal = __setActiveRunsPathForTest(journalPath);
+    const record: ActiveRunRecord = {
+      runKey: hostId,
+      hostId,
+      osSessionId,
+      prompt: spec.prompt,
+      cwd: spec.cwd,
+      kind: "prompt",
+      startedAt: new Date().toISOString(),
+    };
+    writeFileSync(journalPath, JSON.stringify({ [hostId]: record }));
+
+    try {
+      expect(hostRunBusy(hostId)).toBe(true);
+      expect(takeInterruptedRuns()).toEqual([]);
+    } finally {
+      handle.abandon();
+      __setActiveRunsPathForTest(previousJournal);
+    }
   });
 });
 

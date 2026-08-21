@@ -1172,6 +1172,14 @@ export function resumeInterruptedRuns(
       model: run.model,
     });
   };
+  const recoveryStillOwnsJournal = (run: ActiveRunRecord): boolean => {
+    const expectedLineage = run.firstJournaledAt || run.startedAt;
+    return activeRunRecords().some((current) =>
+      current.runKey === run.runKey &&
+      current.osSessionId === run.osSessionId &&
+      (current.firstJournaledAt || current.startedAt) === expectedLineage
+    );
+  };
   const abandonStoppedRecovery = (run: ActiveRunRecord): boolean => {
     const cancelled = cancelledRecoveries.delete(run);
     if (
@@ -1572,7 +1580,7 @@ export function resumeInterruptedRuns(
             } else emitRecoveryEvent(run, event);
           }
           if (abandonStoppedRecovery(run)) return;
-          if (!terminalSeen) {
+          if (!terminalSeen && recoveryStillOwnsJournal(run)) {
             reportRecoveryFailure(
               run,
               "Restart recovery ended before the detached run host returned a final result. Send the prompt again to continue.",
@@ -1581,7 +1589,7 @@ export function resumeInterruptedRuns(
         } catch (e) {
           console.error(`[runner] Local host resume failed for ${run.runKey}:`, e);
           if (abandonStoppedRecovery(run)) return;
-          if (!terminalSeen)
+          if (!terminalSeen && recoveryStillOwnsJournal(run))
             reportRecoveryFailure(
               run,
               "Restart recovery failed while reconnecting to the detached run host. Send the prompt again to continue.",

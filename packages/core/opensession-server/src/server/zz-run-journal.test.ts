@@ -1000,4 +1000,45 @@ describe("restart recovery reattach", () => {
 		}
 	});
 
+	it("does not report a recovery error after another owner settles the run", async () => {
+		const sessionId = `local-host-superseded-${crypto.randomUUID()}`;
+		const hostId = `rh-${crypto.randomUUID()}`;
+		const startedAt = new Date().toISOString();
+		const run: mod.ActiveRunRecord = {
+			runKey: hostId,
+			hostId,
+			osSessionId: sessionId,
+			claudeSessionId: `pi-${crypto.randomUUID()}`,
+			prompt: "finish once",
+			cwd: "/tmp",
+			model: "pi/anthropic/claude-sonnet-5",
+			kind: "prompt",
+			firstJournaledAt: startedAt,
+			startedAt,
+		};
+		mod.journalSet(run);
+		clearRunState(sessionId);
+		const streamEnded = Promise.withResolvers<void>();
+		agent.__setLocalHostResumeForTest(async () =>
+			(async function* () {
+				mod.journalClear(hostId);
+				transitionRunState(sessionId, "turn_end", { run_key: hostId });
+				streamEnded.resolve();
+			})(),
+		);
+		const terminals: StreamEvent[] = [];
+
+		try {
+			expect(agent.resumeInterruptedRuns((_id, event) => {
+				if (event) terminals.push(event);
+			})).toEqual([sessionId]);
+			await streamEnded.promise;
+			await Bun.sleep(10);
+			expect(terminals).toEqual([]);
+			expect(mod.activeRunRecords()).toEqual([]);
+		} finally {
+			clearRunState(sessionId);
+		}
+	});
+
 });
