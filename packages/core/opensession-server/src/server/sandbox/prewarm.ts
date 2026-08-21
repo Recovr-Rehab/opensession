@@ -108,6 +108,8 @@ export interface PrewarmEntry {
   lastTouchedAt: string;
   claimedAt?: string;
   claimedBy?: string;
+  /** Prepared compute was stopped while its reusable disk remains available. */
+  parked?: boolean;
 }
 
 /** What the adapters implement so the pool stays provider-agnostic (e2b
@@ -565,13 +567,11 @@ async function runPrewarmBootstrap(record: PrewarmRecord, adapter: PrewarmAdapte
         record.sealing = false;
       }
     }
-    if (
-      !releaseToWaiter() &&
-      !isKeepReady(entry.provider, entry.repoId) &&
-      adapter.park
-    ) {
+    if (!releaseToWaiter() && adapter.park) {
       setPrewarmStage(entry, "Finalizing", 95);
       await adapter.park(sandboxId);
+      entry.parked = true;
+      persist(entry);
     }
     if (!current()) {
       void destroyRecord(record, "superseded mid-park");
@@ -833,20 +833,23 @@ export async function sweepPrewarms(now = Date.now()): Promise<void> {
       if (isKeepReady(entry.provider, entry.repoId)) {
         entry.lastTouchedAt = new Date(now).toISOString();
         persist(entry);
-        if (
-          entry.state === "ready" &&
-          entry.sandboxId &&
-          now - (record.keptAliveAt || 0) >= KEEP_READY_KEEPALIVE_MS
-        ) {
-          record.keptAliveAt = now;
+        if (entry.state === "ready" && entry.sandboxId) {
           try {
             const adapter = await adapterFor(entry.provider);
-            await adapter?.keepAlive?.(entry.sandboxId, {
-              autoStopMinutes: cfg.ttlMinutes + BACKSTOP_STOP_EXTRA_MIN,
-              autoDeleteMinutes: BACKSTOP_DELETE_MIN,
-            });
+            if (!entry.parked && adapter?.park) {
+              await adapter.park(entry.sandboxId);
+              entry.parked = true;
+              persist(entry);
+            }
+            if (now - (record.keptAliveAt || 0) >= KEEP_READY_KEEPALIVE_MS) {
+              record.keptAliveAt = now;
+              await adapter?.keepAlive?.(entry.sandboxId, {
+                autoStopMinutes: cfg.ttlMinutes + BACKSTOP_STOP_EXTRA_MIN,
+                autoDeleteMinutes: BACKSTOP_DELETE_MIN,
+              });
+            }
           } catch (error) {
-            console.warn(`[sandbox-prewarm] keep-alive failed for ${entry.key}:`, error);
+            console.warn(`[sandbox-prewarm] parked keep-alive failed for ${entry.key}:`, error);
           }
         }
       } else if (now - Date.parse(entry.lastTouchedAt) > ttlMs) {

@@ -104,7 +104,7 @@ above before "tidying" any of it.
 
 Remote providers can take minutes to prepare a large repository. The default
 pool starts while you type and destroys an untouched sandbox after its TTL. For
-a project that must open in seconds, explicitly keep a paid sandbox ready:
+a project that must open quickly, explicitly keep a sandbox prepared:
 
 ```json
 "prewarm": {
@@ -118,11 +118,12 @@ a project that must open in seconds, explicitly keep a paid sandbox ready:
 }
 ```
 
-`maxLive` bounds both preparing and ready sandboxes. It must be at least the
-number of keep-ready targets. Open Session refreshes their provider lifecycle,
-restores completed entries after a coordinator restart, and starts a replacement
-as soon as one is claimed. This is explicit because idle sandboxes are paid
-compute. Without `keepReady`, the pool remains demand-driven and TTL-bound.
+`maxLive` bounds both preparing and prepared sandboxes. It must be at least the
+number of keep-ready targets. Open Session parks prepared capacity when the
+provider retains its disk on stop, so Box and Daytona stop billing compute while
+waiting. A claim resumes that disk, and its replacement prepares in the
+background before parking again. Completed entries survive coordinator restarts.
+Without `keepReady`, the pool remains demand-driven and TTL-bound.
 
 The pool is inert until a supported provider is configured. Docker starts fast
 enough locally that it does not need this.

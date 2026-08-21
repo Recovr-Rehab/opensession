@@ -344,8 +344,9 @@ describe("keep-ready prewarms", () => {
 
     await startPrewarmPool();
     await until(() => readyEntry()?.state === "ready");
-    expect(parks).toBe(0);
+    expect(parks).toBe(1);
     expect(publications).toBe(0);
+    expect(readyEntry()?.parked).toBe(true);
     const first = readyEntry()!.sandboxId!;
     expect(claimPrewarm("daytona", "tella-fusion", "bks-first")?.sandboxId).toBe(first);
 

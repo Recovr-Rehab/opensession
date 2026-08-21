@@ -121,7 +121,7 @@ export interface SandboxPrewarmConfig {
   ttlMinutes: number;
   /** At most this many live prewarms across all keys (default 2). */
   maxLive: number;
-  /** Explicit paid-compute targets kept ready even while nobody is typing. */
+  /** Explicit targets kept prepared even while nobody is typing. */
   keepReady: Array<{ provider: string; repoId: string }>;
 }
 

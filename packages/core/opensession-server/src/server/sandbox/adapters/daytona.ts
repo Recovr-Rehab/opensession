@@ -663,6 +663,12 @@ export const daytonaPrewarmAdapter: PrewarmAdapter = {
     console.log(`[sandbox:daytona] published post-setup repo template ${name}`);
   },
 
+  async park(sandboxId) {
+    const client = await daytonaClient();
+    const sbx = await client.get(sandboxId);
+    if (sbx && stateOf(sbx) === "running") await sbx.stop();
+  },
+
   async destroy(sandboxId) {
     try {
       const client = await daytonaClient();
