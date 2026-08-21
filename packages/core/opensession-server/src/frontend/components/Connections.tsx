@@ -762,15 +762,14 @@ function GithubAppWizard({
               )}
             </div>
             {createReady ? (
-              <a href={createUrl} target="_blank" rel="noreferrer">
-                <Button
-                  ref={setStepFocus}
-                  variant="primary"
-                  icon={<IconArrowUpRight size={20} />}
-                >
-                  Create app on GitHub
-                </Button>
-              </a>
+              <Button
+                ref={setStepFocus}
+                variant="primary"
+                icon={<IconArrowUpRight size={20} />}
+                render={<a href={createUrl} target="_blank" rel="noreferrer" />}
+              >
+                Create app on GitHub
+              </Button>
             ) : (
               <Button
                 ref={setStepFocus}
@@ -922,15 +921,14 @@ function GithubAppWizard({
               reaches only the repos you pick here.
             </div>
             {installUrl && (
-              <a href={installUrl} target="_blank" rel="noreferrer">
-                <Button
-                  ref={setStepFocus}
-                  variant="primary"
-                  icon={<IconArrowUpRight size={20} />}
-                >
-                  Install on your repositories
-                </Button>
-              </a>
+              <Button
+                ref={setStepFocus}
+                variant="primary"
+                icon={<IconArrowUpRight size={20} />}
+                render={<a href={installUrl} target="_blank" rel="noreferrer" />}
+              >
+                Install on your repositories
+              </Button>
             )}
             <Modal.Footer>
               <Button
@@ -965,15 +963,16 @@ function GithubAppWizard({
                 </div>
                 <div className="flex flex-wrap items-center gap-2.5">
                   <DeviceCode code={flow.userCode} />
-                  <a href={flow.verificationUri} target="_blank" rel="noreferrer">
-                    <Button
-                      size="sm"
-                      variant="primary"
-                      icon={<IconArrowUpRight size={20} />}
-                    >
-                      Open GitHub
-                    </Button>
-                  </a>
+                  <Button
+                    size="sm"
+                    variant="primary"
+                    icon={<IconArrowUpRight size={20} />}
+                    render={
+                      <a href={flow.verificationUri} target="_blank" rel="noreferrer" />
+                    }
+                  >
+                    Open GitHub
+                  </Button>
                 </div>
                 <div className="flex items-center gap-2 text-supporting text-dim">
                   <PulseDot size={7} />
@@ -1203,11 +1202,14 @@ export function GithubAccounts({ personal = false }: { personal?: boolean } = {}
       </div>
       <div className="flex flex-wrap items-center gap-2.5">
         <DeviceCode code={flow.userCode} />
-        <a href={flow.verificationUri} target="_blank" rel="noreferrer">
-          <Button size="sm" variant="primary" icon={<IconArrowUpRight size={20} />}>
-            Open GitHub
-          </Button>
-        </a>
+        <Button
+          size="sm"
+          variant="primary"
+          icon={<IconArrowUpRight size={20} />}
+          render={<a href={flow.verificationUri} target="_blank" rel="noreferrer" />}
+        >
+          Open GitHub
+        </Button>
       </div>
       <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-supporting text-dim">
         {/* Dot and status are one item: as two siblings of a wrapping row, a
@@ -1331,15 +1333,20 @@ export function GithubAccounts({ personal = false }: { personal?: boolean } = {}
                         {flowState === "starting" ? "Starting…" : "Connect GitHub App"}
                       </Button>
                       {data.appInstallUrl && (
-                        <a href={data.appInstallUrl} target="_blank" rel="noreferrer">
-                          <Button
-                            size="sm"
-                            variant="ghost"
-                            icon={<IconArrowUpRight size={20} />}
-                          >
-                            Install on your repositories
-                          </Button>
-                        </a>
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          icon={<IconArrowUpRight size={20} />}
+                          render={
+                            <a
+                              href={data.appInstallUrl}
+                              target="_blank"
+                              rel="noreferrer"
+                            />
+                          }
+                        >
+                          Install on your repositories
+                        </Button>
                       )}
                     </div>
                     <div className="text-meta leading-snug text-faint">
