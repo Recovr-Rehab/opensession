@@ -4,7 +4,6 @@ import { Reorder } from "motion/react";
 import type { UnifiedSession } from "../lib/types";
 import { TAB_COLORS, colorHex } from "../lib/tab-colors";
 import { hasDraft, onDraftsChanged } from "../lib/drafts";
-import { relativeTime } from "../lib/api";
 import { Menu, ContextMenu } from "../ui/menu";
 import { sessionPath, absoluteLink, copyToClipboard } from "../lib/share-link";
 import { copySessionTranscript } from "../lib/transcript-copy";
@@ -13,17 +12,12 @@ import {
 	IconHistory,
 	IconPencil,
 	IconPlus,
-	IconRestore,
-	IconRobot,
 	IconX,
 } from "./icons";
-import { isAutomationSession } from "../lib/landing-session";
 import { ArchivedSessionItems } from "./ArchivedSessionItems";
 import { useIsPhone } from "../hooks/useIsPhone";
 import { UserAvatar } from "./UserAvatar";
 import {
-	NEW_MENU,
-	NEW_MENU_ITEM,
 	PANEL_TAB_DOT,
 	TAB_ACTIONS,
 	TAB_DRAFT,
@@ -33,8 +27,6 @@ import {
 	TAB_FACES_MORE,
 	TAB_GROUP,
 	TAB_HISTORY,
-	TAB_ITEM,
-	TAB_ITEM_DRAGGING,
 	TAB_NEW,
 	TAB_RENAME,
 	TAB_SCROLL,
@@ -49,6 +41,7 @@ import {
 	tabDotClass,
 } from "../lib/session-tab-classes";
 import { cn } from "../ui/cn";
+import { useTabReorder } from "./session-tabs/useTabReorder";
 
 /**
  * The tab strip is scoped to ONE Workspace: it shows the sibling sessions of the
@@ -172,7 +165,6 @@ interface Props {
 	onToast: (message: string) => void;
 }
 
-type NewMenu = { x: number; y: number };
 type TabMember =
 	| { kind: "session"; id: string; session: UnifiedSession }
 	| { kind: "view"; id: string; view: ViewTab };
@@ -239,7 +231,6 @@ export function SessionTabs({
 }: Props) {
 	const copyTranscriptLabel = useShortcutLabel("session-copy-transcript");
 	const closeLabel = useShortcutLabel("session-close");
-	const [newMenu, setNewMenu] = useState<NewMenu | null>(null);
 	const [editKey, setEditKey] = useState<string | null>(null);
 	const [draft, setDraft] = useState("");
 	// Re-render when a composer draft appears/disappears — tabs check hasDraft()
@@ -253,124 +244,15 @@ export function SessionTabs({
 	const isPhone = useIsPhone();
 	const ctrlIconSize = isPhone ? 23 : 20;
 
-	// Drag-to-reorder the session tabs (desktop only — an x-drag would fight touch
-	// scrolling / the phone swipe gestures). `orderDraft` holds the in-flight
-	// order during a drag so the strip stays smooth; it's cleared on drop once
-	// the parent's reordered `tabs` come back. `justDragged` swallows the click
-	// that fires synchronously after a drop so it doesn't select the tab.
-	const [orderDraft, setOrderDraft] = useState<string[] | null>(null);
-	const orderDraftRef = useRef<string[] | null>(null);
-	const justDragged = useRef(false);
-	const dragPoint = useRef<{ x: number; y: number } | null>(null);
-	const stopPointerTracking = useRef<(() => void) | null>(null);
-	// The frame the split preview is waiting on, so both ends of the drag can
-	// drop it: a queued preview must never land after the drag has cleared it.
-	const splitDragFrame = useRef(0);
-	function cancelSplitDragFrame() {
-		if (!splitDragFrame.current) return;
-		cancelAnimationFrame(splitDragFrame.current);
-		splitDragFrame.current = 0;
-	}
-	// A lone tab has nowhere to go WITHIN its own bar — but in a split it can
-	// still be dragged into the other column, so the count only gates a single
-	// unsplit strip.
-	const canDragTabs = !isPhone && (inSplit || tabs.length + viewTabs.length > 1);
-
-	// Where the dragged tab will land. Inactive desktop tabs are flat text on the
-	// strip's background, so a dragged one has no surface to separate it from the
-	// labels it passes. It lifts into a chip (`TAB_ITEM_DRAGGING`) and this ghost
-	// marks the gap it left behind. Reorder already opens that gap live; the
-	// ghost just makes an otherwise invisible hole readable.
-	const [dropSlot, setDropSlot] = useState<{
-		key: string;
-		left: number;
-		width: number;
-	} | null>(null);
-	const groupRef = useRef<HTMLDivElement | null>(null);
-	// Unit widths + inter-tab gap, measured once at drag start: they can't change
-	// mid-drag, so the slot's x is arithmetic from the live key order rather than
-	// a re-measure of siblings that are still spring-animating into place.
-	const dragMetrics = useRef<{
-		widths: Map<string, number>;
-		gap: number;
-		key: string;
-	} | null>(null);
-
-	/** Position the ghost at `key`'s slot in the given left-to-right unit order. */
-	function placeDropSlot(keys: string[]) {
-		const metrics = dragMetrics.current;
-		if (!metrics) return;
-		const index = keys.indexOf(metrics.key);
-		if (index < 0) return setDropSlot(null);
-		let left = 0;
-		for (let i = 0; i < index; i++) left += (metrics.widths.get(keys[i]) ?? 0) + metrics.gap;
-		setDropSlot({ key: metrics.key, left, width: metrics.widths.get(metrics.key) ?? 0 });
-	}
-
-	function beginDrag(key: string) {
-		const group = groupRef.current;
-		if (!group) return;
-		// offsetWidth/offsetLeft (layout box) rather than rects: whileDrag's scale
-		// is already applied to the dragged item and would inflate its width.
-		const items = [...group.children].filter(
-			(el): el is HTMLElement => el instanceof HTMLElement && !!el.dataset.tabKey,
-		);
-		const widths = new Map(items.map((el) => [el.dataset.tabKey!, el.offsetWidth] as const));
-		const gap =
-			items.length > 1
-				? Math.max(0, items[1].offsetLeft - (items[0].offsetLeft + items[0].offsetWidth))
-				: 0;
-		dragMetrics.current = { widths, gap, key };
-		placeDropSlot(items.map((el) => el.dataset.tabKey!));
-	}
-
-	function endDrag() {
-		dragMetrics.current = null;
-		setDropSlot(null);
-	}
-
-	/**
-	 * Follow the pointer for the whole drag so the split preview can track it.
-	 * The drop itself is handled in the item's `onDragEnd`, which reads the last
-	 * point from `dragPoint` — this only keeps that ref (and the preview) fresh.
-	 */
-	function trackPointer(id: string, event: React.PointerEvent) {
-		stopPointerTracking.current?.();
-		dragPoint.current = { x: event.clientX, y: event.clientY };
-		// The ref follows every pointer event, because the drop reads it
-		// synchronously. The PREVIEW only needs the position the next frame is
-		// drawn with, and it costs a parent state update, so it takes one per
-		// frame and only when the point has actually moved.
-		let sent: { x: number; y: number } | null = null;
-		const flush = () => {
-			splitDragFrame.current = 0;
-			const point = dragPoint.current;
-			if (!point || (sent && sent.x === point.x && sent.y === point.y)) return;
-			sent = point;
-			onSplitDrag?.(id, point);
-		};
-		const move = (pointer: PointerEvent) => {
-			dragPoint.current = { x: pointer.clientX, y: pointer.clientY };
-			if (!splitDragFrame.current)
-				splitDragFrame.current = requestAnimationFrame(flush);
-		};
-		const finish = () => {
-			cancelSplitDragFrame();
-			window.removeEventListener("pointermove", move);
-			window.removeEventListener("pointerup", up);
-			window.removeEventListener("pointercancel", cancel);
-			stopPointerTracking.current = null;
-			onSplitDrag?.(null);
-		};
-		const up = () => finish();
-		const cancel = () => finish();
-		stopPointerTracking.current = cancel;
-		window.addEventListener("pointermove", move);
-		window.addEventListener("pointerup", up);
-		window.addEventListener("pointercancel", cancel);
-	}
-
-	useEffect(() => () => stopPointerTracking.current?.(), []);
+	// A lone unsplit tab has nowhere to move. Split bars remain draggable so their
+	// final tab can cross into the other column.
+	const tabDrag = useTabReorder({
+		enabled: !isPhone && (inSplit || tabs.length + viewTabs.length > 1),
+		editingId: editKey,
+		onReorder: onReorderTabs,
+		onSplitDrag,
+		onSplitDrop,
+	});
 
 	// Sessions and view panes are one draggable row: the same drag that moves a
 	// session moves Review or Assets, and a pane can end up anywhere among the
@@ -383,7 +265,7 @@ export function SessionTabs({
 		...tabs.map((session): TabMember => ({ kind: "session", id: session.id, session })),
 		...viewTabs.map((view): TabMember => ({ kind: "view", id: view.id, view })),
 	];
-	const rank = new Map((orderDraft ?? tabOrder).map((id, i) => [id, i] as const));
+	const rank = new Map((tabDrag.draftOrder ?? tabOrder).map((id, i) => [id, i] as const));
 	const orderedMembers = members
 		.map((member, natural) => ({ member, natural }))
 		.sort((a, b) => {
@@ -447,88 +329,10 @@ export function SessionTabs({
 		return () => observer.disconnect();
 	}, [tabs.length, viewTabs.length]);
 
-	// Drop: hand the new order to the parent (which persists it and feeds it back
-	// as the next `tabs`), swallow the trailing click, then release the draft.
-	function commitReorder() {
-		justDragged.current = true;
-		setTimeout(() => {
-			justDragged.current = false;
-		}, 0);
-		const order = orderDraftRef.current;
-		orderDraftRef.current = null;
-		setOrderDraft(null);
-		endDrag();
-		if (order) onReorderTabs(order);
-	}
-
-	function reorderTabs(keys: string[]) {
-		orderDraftRef.current = keys;
-		setOrderDraft(keys);
-		placeDropSlot(keys);
-	}
-
-	/**
-	 * The drag wiring every tab in the strip shares — sessions and view panes are
-	 * the same kind of draggable item, differing only in what they render.
-	 * A drag that ends over the pane hands the tab to the other split column
-	 * (`onSplitDrop`) instead of committing a reorder.
-	 */
-	function reorderItemProps(key: string, nextActive: boolean) {
-		const draggable = canDragTabs && editKey !== key;
-		return {
-			as: "div" as const,
-			value: key,
-			"data-tab-key": key,
-			"data-next-active": nextActive ? "" : undefined,
-			dragListener: draggable,
-			onPointerDown: (event: React.PointerEvent) => {
-				if (draggable) trackPointer(key, event);
-			},
-			onDragStart: () => beginDrag(key),
-			onDragEnd: () => {
-				cancelSplitDragFrame();
-				onSplitDrag?.(null);
-				const point = dragPoint.current;
-				dragPoint.current = null;
-				if (point && onSplitDrop?.(key, point)) {
-					orderDraftRef.current = null;
-					setOrderDraft(null);
-					endDrag();
-					justDragged.current = true;
-					setTimeout(() => (justDragged.current = false), 0);
-					return;
-				}
-				commitReorder();
-			},
-			whileDrag: { scale: 1.02, zIndex: 3 },
-			onClickCapture: (e: React.MouseEvent) => {
-				if (justDragged.current) {
-					e.stopPropagation();
-					e.preventDefault();
-				}
-			},
-			className: dropSlot?.key === key ? `${TAB_ITEM} ${TAB_ITEM_DRAGGING}` : TAB_ITEM,
-		};
-	}
-
 	function commitRename() {
 		if (editKey !== null) onRename(editKey, draft.trim());
 		setEditKey(null);
 	}
-
-	useEffect(() => {
-		if (!newMenu) return;
-		const close = () => setNewMenu(null);
-		const onKey = (e: KeyboardEvent) => e.key === "Escape" && close();
-		window.addEventListener("click", close);
-		window.addEventListener("scroll", close, true);
-		window.addEventListener("keydown", onKey);
-		return () => {
-			window.removeEventListener("click", close);
-			window.removeEventListener("scroll", close, true);
-			window.removeEventListener("keydown", onKey);
-		};
-	}, [newMenu]);
 
 	// Closed sessions of this workspace, if there are any to offer.
 	const hasHistory = showHistory && archived.length > 0;
@@ -541,23 +345,35 @@ export function SessionTabs({
 	// somewhere to live — a lone code session then reads as [session][Review].
 	if (!inSplit && tabs.length <= 1 && viewTabs.length === 0) return null;
 
-	// New-tab "+" — plain-click shares the workspace worktree; right-click offers
-	// the stacked/ask modes.
+	// Plain-click shares the workspace worktree. The standard context menu owns
+	// right-click positioning, dismissal, focus and keyboard behavior.
 	const newTabButton = onNewSession && (
-		<button
-			type="button"
-			className={cn(TAB_NEW, "relative z-[1]")}
-			data-menu-open={newMenu ? "" : undefined}
-			aria-label="New session in this workspace"
-			title="New session. Shares this workspace's worktree (right-click for options)"
-			onClick={() => onNewSession("share")}
-			onContextMenu={(e) => {
-				e.preventDefault();
-				setNewMenu({ x: e.clientX, y: e.clientY });
-			}}
-		>
-			<IconPlus size={ctrlIconSize} />
-		</button>
+		<ContextMenu.Root>
+			<ContextMenu.Trigger
+				render={
+					<button
+						type="button"
+						className={cn(TAB_NEW, "relative z-[1]")}
+						aria-label="New session in this workspace"
+						title="New session. Shares this workspace's worktree (right-click for options)"
+						onClick={() => onNewSession("share")}
+					/>
+				}
+			>
+				<IconPlus size={ctrlIconSize} />
+			</ContextMenu.Trigger>
+			<ContextMenu.Popup className="min-w-[250px]">
+				<ContextMenu.Item onClick={() => onNewSession("share")}>
+					New session · share worktree
+				</ContextMenu.Item>
+				<ContextMenu.Item onClick={() => onNewSession("stack")}>
+					New session · stacked worktree
+				</ContextMenu.Item>
+				<ContextMenu.Item onClick={() => onNewSession("ask")}>
+					New session · ask (no worktree)
+				</ContextMenu.Item>
+			</ContextMenu.Popup>
+		</ContextMenu.Root>
 	);
 
 	// History: every archived (closed) session of this workspace, in one list.
@@ -580,16 +396,19 @@ export function SessionTabs({
 				<Reorder.Group
 					as="div"
 					axis="x"
-					ref={groupRef}
+					ref={tabDrag.groupRef}
 					className={TAB_GROUP}
 					values={orderedKeys}
-					onReorder={reorderTabs}
+					onReorder={tabDrag.handleReorder}
 				>
 					{/* First child so the tabs sliding over it paint on top. */}
-					{dropSlot && (
+					{tabDrag.dropSlot && (
 						<div
 							className={TAB_DROP_SLOT}
-							style={{ left: dropSlot.left, width: dropSlot.width }}
+							style={{
+								left: tabDrag.dropSlot.left,
+								width: tabDrag.dropSlot.width,
+							}}
 							aria-hidden="true"
 						/>
 					)}
@@ -603,7 +422,7 @@ export function SessionTabs({
 						if (member.kind === "view") {
 							const v = member.view;
 							return (
-								<Reorder.Item key={key} {...reorderItemProps(key, nextActive)}>
+								<Reorder.Item key={key} {...tabDrag.itemProps(key, nextActive)}>
 									<div
 										role="tab"
 										aria-selected={v.active}
@@ -677,7 +496,7 @@ export function SessionTabs({
 								</TabTitle>
 							);
 						return (
-							<Reorder.Item key={key} {...reorderItemProps(key, nextActive)}>
+							<Reorder.Item key={key} {...tabDrag.itemProps(key, nextActive)}>
 								<ContextMenu.Root>
 									<ContextMenu.Trigger
 										render={
@@ -839,44 +658,6 @@ export function SessionTabs({
 			{!isPhone && newTabButton}
 			{!isPhone && <div className={TAB_ACTIONS}>{historyMenu}</div>}
 
-			{newMenu && onNewSession && (
-				<div
-					className={NEW_MENU}
-					style={{ left: newMenu.x, top: newMenu.y }}
-					onClick={(e) => e.stopPropagation()}
-				>
-					<button
-						type="button"
-						className={NEW_MENU_ITEM}
-						onClick={() => {
-							setNewMenu(null);
-							onNewSession("share");
-						}}
-					>
-						New session · share worktree
-					</button>
-					<button
-						type="button"
-						className={NEW_MENU_ITEM}
-						onClick={() => {
-							setNewMenu(null);
-							onNewSession("stack");
-						}}
-					>
-						New session · stacked worktree
-					</button>
-					<button
-						type="button"
-						className={NEW_MENU_ITEM}
-						onClick={() => {
-							setNewMenu(null);
-							onNewSession("ask");
-						}}
-					>
-						New session · ask (no worktree)
-					</button>
-				</div>
-			)}
 		</div>
 	);
 }

@@ -378,18 +378,6 @@ export const TAB_HISTORY =
 	"data-[popup-open]:bg-hover data-[popup-open]:text-fg " +
 	CTRL_REVEAL;
 
-/** The + tab's right-click mode menu (share / stacked / ask): a fixed popup
- *  anchored at the cursor, so it escapes the tab strip's overflow clipping.
- *  This carries the surface too — it used to come from `.tab-color-menu`, a
- *  rule named after the swatch row it no longer dresses (those chips live in the
- *  tab context menu now). Above every other popup on the pane at z-1000. */
-export const NEW_MENU =
-	"fixed z-[1000] flex min-w-[250px] flex-col gap-px rounded-popup bg-popup-glass [backdrop-filter:var(--popup-blur)] [--smooth-ring-color:var(--popup-ring)] p-1 " +
-	"smooth-shadow-ring-md";
-export const NEW_MENU_ITEM =
-	"block w-full cursor-pointer whitespace-nowrap rounded-[calc(6px*var(--rf))] border-0 " +
-	"bg-transparent px-2 py-1.5 text-left text-label text-fg hover:bg-hover";
-
 /* ── Tab colour swatches ─────────────────────────────────────────────────────
    The row of colour chips in a tab's context menu. Each chip carries its colour
    as an inline style (the palette is data, see lib/tab-colors), so what's left
