@@ -580,7 +580,7 @@ function ClaudeAccountRows({ state }: { state: ClaudeAccountsState }) {
 									<Menu.Popup align="end" sideOffset={4}>
 										<Menu.Item onClick={() => state.setSignIn(account)}>
 											<IconPlug size={16} className="text-faint" />
-											Sign in with Claude…
+											Connect usage…
 										</Menu.Item>
 										{account.authKind === "setup-token" && (
 											<Menu.Item onClick={() => state.setCredentialsPath(account)}>
@@ -641,11 +641,11 @@ export function ClaudeAccountsSection({
 			<Modal.Root open={showAdd} onOpenChange={setShowAdd}>
 				<Modal.Content widthClassName="max-w-[32rem]">
 					<AddClaudeAccountForm
-						onAdded={() => {
-							setShowAdd(false);
+						onAccountAdded={() => {
 							void state.load();
 							void onChanged?.();
 						}}
+						onDone={() => setShowAdd(false)}
 					/>
 				</Modal.Content>
 			</Modal.Root>
@@ -1017,10 +1017,8 @@ export function ProviderAccountsSection() {
 			<Modal.Root open={adding === "claude"} onOpenChange={(open) => !open && setAdding(null)}>
 				<Modal.Content widthClassName="max-w-[32rem]">
 					<AddClaudeAccountForm
-						onAdded={() => {
-							setAdding(null);
-							void claude.load();
-						}}
+						onAccountAdded={() => void claude.load()}
+						onDone={() => setAdding(null)}
 					/>
 				</Modal.Content>
 			</Modal.Root>
@@ -1061,7 +1059,17 @@ export function ProviderAccountsSection() {
 
 // ── Add forms ──────────────────────────────────────────────────────────────
 
-function AddClaudeAccountForm({ onAdded }: { onAdded: () => void }) {
+function AddClaudeAccountForm({
+	onAccountAdded,
+	onDone,
+}: {
+	onAccountAdded: () => void;
+	onDone: () => void;
+}) {
+	const [account, setAccount] = useState<ClaudeAccountInfo | null>(null);
+	const [name, setName] = useState("");
+	const [token, setToken] = useState("");
+	const [owner, setOwner] = useState("");
 	const [login, setLogin] = useState<{ id: string; url: string } | null>(null);
 	const [code, setCode] = useState("");
 	const [saving, setSaving] = useState(false);
@@ -1070,13 +1078,14 @@ function AddClaudeAccountForm({ onAdded }: { onAdded: () => void }) {
 	pending.current.id = login?.id;
 
 	useEffect(() => {
+		if (!account) return;
 		let cancelled = false;
 		void (async () => {
 			try {
 				const res = await fetch(`${BASE_PATH}/api/claude-accounts/oauth-login`, {
 					method: "POST",
 					headers: { "Content-Type": "application/json" },
-					body: "{}",
+					body: JSON.stringify({ accountId: account.id }),
 				});
 				const body = await res.json();
 				if (!res.ok) throw new Error(body.error || `Failed: ${res.status}`);
@@ -1094,9 +1103,32 @@ function AddClaudeAccountForm({ onAdded }: { onAdded: () => void }) {
 				}).catch(() => {});
 			}
 		};
-	}, []);
+	}, [account]);
 
-	async function handleAdd() {
+	async function handleAddToken() {
+		setSaving(true);
+		setError(null);
+		try {
+			const res = await fetch(`${BASE_PATH}/api/claude-accounts`, {
+				method: "POST",
+				headers: { "Content-Type": "application/json" },
+				body: JSON.stringify({
+					name: name.trim(),
+					token: token.replace(/\s+/g, ""),
+					...(owner.trim() ? { owner: owner.trim() } : {}),
+				}),
+			});
+			const body = await res.json();
+			if (!res.ok) throw new Error(body.error || `Failed: ${res.status}`);
+			setAccount(body);
+			onAccountAdded();
+		} catch (cause: any) {
+			setError(cause.message);
+		}
+		setSaving(false);
+	}
+
+	async function handleConnectUsage() {
 		if (!login) return;
 		setSaving(true);
 		setError(null);
@@ -1112,38 +1144,43 @@ function AddClaudeAccountForm({ onAdded }: { onAdded: () => void }) {
 			const body = await res.json();
 			if (!res.ok) throw new Error(body.error || `Failed: ${res.status}`);
 			pending.current.done = true;
-			toast(`Connected ${body.account?.email || body.account?.name || "Claude account"}`);
-			onAdded();
+			toast(`Usage tracking connected for ${body.account?.name || account?.name || "Claude"}`);
+			onAccountAdded();
+			onDone();
 		} catch (cause: any) {
 			setError(cause.message);
 			setSaving(false);
 		}
 	}
 
-	return (
-		<>
-			<Modal.Header
-				title="Add Claude account"
-				description="Sign in with Claude to connect a subscription."
-			/>
-			<form
-				className="flex flex-col gap-5"
-				onSubmit={(event) => {
-					event.preventDefault();
-					if (login && code.trim() && !saving) void handleAdd();
-				}}
-			>
-				{login ? (
+	if (account) {
+		return (
+			<>
+				<Modal.Header
+					title="Connect usage tracking"
+					description="The setup token is connected for model runs."
+				/>
+				<form
+					className="flex flex-col gap-5"
+					onSubmit={(event) => {
+						event.preventDefault();
+						if (login && code.trim() && !saving) void handleConnectUsage();
+					}}
+				>
 					<div className="flex flex-col gap-3 rounded-md bg-surface px-4 py-3">
-						<Button
-							render={<a className="self-start" href={login.url} target="_blank" rel="noreferrer" />}
-							icon={<IconPlug size={16} />}
-						>
-							Open Claude sign-in
-						</Button>
+						{login ? (
+							<Button
+								render={<a className="self-start" href={login.url} target="_blank" rel="noreferrer" />}
+								icon={<IconPlug size={16} />}
+							>
+								Open Claude sign-in
+							</Button>
+						) : !error ? (
+							<LoadingState placement="row">Preparing sign-in…</LoadingState>
+						) : null}
 						<SettingRowDescription>
-							This sign-in powers model runs and usage. Claude asks you to reconnect about
-							every 30 days. After signing in, paste the code Claude shows you.
+							Sign in with the same Claude account to show usage and reset times. Claude asks
+							you to reconnect about every 30 days.
 						</SettingRowDescription>
 						<Field label="Code">
 							<Input
@@ -1154,17 +1191,76 @@ function AddClaudeAccountForm({ onAdded }: { onAdded: () => void }) {
 								spellCheck={false}
 							/>
 						</Field>
+						<p className="m-0 text-meta leading-relaxed text-faint">
+							You can finish later. Runs can use this account without usage tracking.
+						</p>
 					</div>
-				) : !error ? (
-					<LoadingState placement="row">Preparing sign-in…</LoadingState>
-				) : null}
+
+					{error && <InlineAlert>{error}</InlineAlert>}
+
+					<Modal.Footer>
+						<Button variant="ghost" type="button" disabled={saving} onClick={onDone}>
+							Finish later
+						</Button>
+						<Button variant="primary" type="submit" disabled={saving || !login || !code.trim()}>
+							{saving ? "Connecting…" : "Connect usage"}
+						</Button>
+					</Modal.Footer>
+				</form>
+			</>
+		);
+	}
+
+	const ready = Boolean(name.trim() && token.trim());
+	return (
+		<>
+			<Modal.Header
+				title="Add Claude account"
+				description="Claude uses a setup token for model runs and a separate sign-in for usage tracking."
+			/>
+			<form
+				className="flex flex-col gap-5"
+				onSubmit={(event) => {
+					event.preventDefault();
+					if (ready && !saving) void handleAddToken();
+				}}
+			>
+				<div className="flex flex-col gap-3">
+					<Field label="Name">
+						<Input
+							required
+							value={name}
+							onChange={(event) => setName(event.target.value)}
+							placeholder="team"
+							autoCapitalize="none"
+							spellCheck={false}
+						/>
+					</Field>
+					<Field label="Setup token">
+						<Input
+							required
+							type="password"
+							autoComplete="off"
+							value={token}
+							onChange={(event) => setToken(event.target.value)}
+							placeholder="sk-ant-oat01-…"
+						/>
+					</Field>
+					<p className="m-0 text-meta leading-relaxed text-faint">
+						Run <code>claude setup-token</code> while signed into this Claude account. The
+						token powers model runs for about one year.
+					</p>
+					<Field label="Owner" title="Personal sub: this person's runs use the account first, with the shared pool as backup. Shared pool: used by everyone and by automations.">
+						<OwnerSelect value={owner} onChange={setOwner} label="Owner" />
+					</Field>
+				</div>
 
 				{error && <InlineAlert>{error}</InlineAlert>}
 
 				<Modal.Footer>
 					<Modal.Close render={<Button variant="ghost" disabled={saving}>Cancel</Button>} />
-					<Button variant="primary" type="submit" disabled={saving || !login || !code.trim()}>
-						{saving ? "Connecting…" : "Add account"}
+					<Button variant="primary" type="submit" disabled={saving || !ready}>
+						{saving ? "Validating…" : "Continue"}
 					</Button>
 				</Modal.Footer>
 			</form>
@@ -1173,9 +1269,9 @@ function AddClaudeAccountForm({ onAdded }: { onAdded: () => void }) {
 }
 
 /**
- * "Sign in with Claude" reconnects an existing account with PKCE OAuth. The
- * server hands us an authorize
- * URL; the user signs in on any device and pastes back the code Anthropic
+ * "Connect usage" attaches PKCE OAuth to an existing setup-token account.
+ * The server hands us an authorize URL; the user signs in on any device and pastes
+ * back the code Anthropic
  * displays (`…#…`), which the server exchanges and stores.
  *
  * Renders as an expansion directly beneath the triggering account row inside
@@ -1241,7 +1337,7 @@ function ClaudeSignInForm({
 			);
 			const body = await res.json();
 			if (!res.ok) throw new Error(body.error || `Failed: ${res.status}`);
-			toast(`Connected ${account.name}`);
+			toast(`Usage tracking connected for ${account.name}`);
 			onDone();
 		} catch (e: any) {
 			setError(e.message);
@@ -1290,7 +1386,7 @@ function ClaudeSignInForm({
 					onClick={handleConnect}
 					disabled={busy || !login || !code.trim()}
 				>
-					{busy ? "Connecting…" : "Connect account"}
+					{busy ? "Connecting…" : "Connect usage"}
 				</Button>
 			</div>
 		</div>

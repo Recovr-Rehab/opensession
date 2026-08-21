@@ -1,10 +1,10 @@
 /**
  * Claude account pool for opensession runs.
  *
- * Accounts can use either a long-lived token from `claude setup-token` or an
- * auto-refreshing Claude OAuth login. Runs get the current access token injected
- * as CLAUDE_CODE_OAUTH_TOKEN, so switching accounts never touches the host
- * Claude CLI login.
+ * Each account uses a long-lived token from `claude setup-token` for model
+ * runs. A separate, optional Claude OAuth login reads usage and reset times.
+ * Runs get only the setup token as CLAUDE_CODE_OAUTH_TOKEN, so usage OAuth
+ * expiry never interrupts model work or touches the host Claude CLI login.
  *
  * Tokens live in ~/.opensession-claude-accounts.json (mode 0600). Usage per
  * account is polled from the OAuth usage endpoint every POLL_INTERVAL_MS and
@@ -61,7 +61,7 @@ export interface ClaudeAccount {
   id: string;
   name: string;
   token: string;
-  /** Missing on legacy records, which are setup-token accounts. */
+  /** Compatibility for OAuth-only records created by an earlier build. */
   authKind?: "oauth";
   email?: string;
   plan?: string;
@@ -80,10 +80,9 @@ export interface ClaudeAccount {
   usageScope?: "missing";
   // Optional path to a full OAuth credentials file (same shape as
   // ~/.claude/.credentials.json). Login credentials carry the user:profile
-  // scope that setup-tokens lack. For setup-token accounts this only restores
-  // usage visibility. For OAuth accounts Open Session also mirrors each
-  // refreshed access token into `token`, which keeps every local and remote
-  // runner on the same account-pool contract.
+  // scope that setup-tokens lack. For normal setup-token accounts this only
+  // restores usage visibility. Legacy OAuth-only records still mirror each
+  // refreshed access token into `token` until they are replaced.
   credentialsPath?: string;
 }
 
@@ -901,51 +900,6 @@ export function getAccountById(id: string): ClaudeAccount | undefined {
 
 export function hasAccounts(): boolean {
   return readStore().length > 0;
-}
-
-export async function addOauthAccount(input: {
-  id: string;
-  token: string;
-  credentialsPath: string;
-  email?: string;
-}): Promise<ClaudeAccountPublic | { error: string }> {
-  const token = input.token.replace(/\s+/g, "");
-  if (!/^sk-ant-/.test(token)) {
-    return { error: "Claude sign-in returned an invalid access token." };
-  }
-  const accounts = readStore();
-  const email = input.email?.trim() || undefined;
-  if (email && accounts.some((account) => account.email?.toLowerCase() === email.toLowerCase())) {
-    return { error: `${email} is already connected. Reconnect it from that account's menu.` };
-  }
-  if (accounts.some((account) => account.token === token)) {
-    return { error: "This Claude account is already connected." };
-  }
-  const profile = await fetchProfile(token);
-  const resolvedEmail = email || profile.email;
-  const baseName = resolvedEmail || "Claude";
-  let name = baseName;
-  for (let suffix = 2; accounts.some((account) => account.name === name); suffix++) {
-    name = `${baseName} ${suffix}`;
-  }
-  const usage = await fetchUsage(token, `add:${input.id}`);
-  if (usage.errorStatus === 401) {
-    return { error: `Claude sign-in validation failed: ${usage.error}` };
-  }
-  const account: ClaudeAccount = {
-    id: input.id,
-    name,
-    token,
-    authKind: "oauth",
-    email: resolvedEmail,
-    plan: profile.plan,
-    createdAt: new Date().toISOString(),
-    credentialsPath: input.credentialsPath,
-  };
-  writeStore([...accounts, account]);
-  if (!usage.error) usageCache.set(account.id, usage);
-  console.log(`[claude-accounts] Added OAuth account ${name}`);
-  return toPublic(account);
 }
 
 export async function addAccount(
