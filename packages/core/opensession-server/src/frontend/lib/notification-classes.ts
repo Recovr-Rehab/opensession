@@ -1,13 +1,18 @@
 /**
  * Screen-level notification lanes.
  *
- * Short-lived feedback and live status share the top-center lane. Persistent
- * prompts use the bottom-left desktop shelf; their phone equivalents belong in
- * the app header so they remain visible without covering bottom controls.
+ * Live status stays near the app header. Toast receipts sit above the composer,
+ * where they confirm an action without pulling attention away from the input.
+ * Persistent prompts use the bottom-left desktop shelf; their phone equivalents
+ * belong in the app header so they remain visible without covering controls.
  */
 export const TRANSIENT_NOTICE_LANE =
 	"pointer-events-none fixed right-4 top-[calc(var(--desktop-header-h)+8px)] z-[200] " +
 	"phone:inset-x-0 phone:right-auto phone:top-[calc(var(--header-h)+8px)]";
+
+export const TOAST_NOTICE_LANE =
+	"pointer-events-none fixed inset-x-0 bottom-[112px] z-[200] " +
+	"phone:bottom-[calc(max(16px,env(safe-area-inset-bottom,0px))+132px)]";
 
 export const PERSISTENT_NOTICE_SHELF =
 	"pointer-events-none fixed bottom-2 left-2 z-[9500] flex w-fit " +
