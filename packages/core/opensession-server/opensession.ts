@@ -592,9 +592,12 @@ if (!g.__opensessionBooted) {
 	// targets. This is a boot hook rather than a module-scope side effect.
 	void import("./src/server/sandbox/prewarm")
 		.then(async ({ startPrewarmPool }) => {
-			await startPrewarmPool();
+			// Restoration happens synchronously before the first sweep await. Do not
+			// make snapshot maintenance wait behind slow provider orphan cleanup.
+			const poolStartup = startPrewarmPool();
 			const { startSandboxEnvironmentMaintenance } = await import("./src/server/sandbox/environments");
 			startSandboxEnvironmentMaintenance();
+			await poolStartup;
 		})
 		.catch((e) => console.error("[sandbox-prewarm] startup failed:", e));
 
