@@ -298,7 +298,9 @@ export function startSessionKernelActorWorker(): void {
       let result: unknown;
       if (request.t === "reduce") {
         const command = request.command;
-        if (command.kind === "run_event")
+        if (command.kind === "creation_event")
+          result = store.applyCreationEvent(command.decision);
+        else if (command.kind === "run_event")
           result = store.applyRunEvent(command.decision);
         else if (command.kind === "delivery") {
           const delivery = command.request;

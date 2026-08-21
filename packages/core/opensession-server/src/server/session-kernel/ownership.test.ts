@@ -84,6 +84,17 @@ describe("single session ownership", () => {
 		);
 	});
 
+	test("creation decisions enter a typed actor reducer", () => {
+		const protocol = read("session-kernel/lifecycle-protocol.ts");
+		const actor = read("session-kernel/actor-worker.ts");
+		expect(protocol).toContain('kind: "creation_event"');
+		expect(actor).toContain('command.kind === "creation_event"');
+		expect(actor).toContain("store.applyCreationEvent(command.decision)");
+		expect(read("session-kernel/creation-state-machine.ts")).toContain(
+			"export function nextCreationState",
+		);
+	});
+
 	test("run-state decisions execute atomically inside the actor", () => {
 		const facade = read("run-state.ts");
 		const actor = read("session-kernel/actor-worker.ts");

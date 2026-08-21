@@ -47,7 +47,7 @@ test("tracked schema version matches the store reader", () => {
 	).toBe(SESSION_KERNEL_SCHEMA_VERSION);
 });
 
-test("schema 6 upgrades create autonomous delivery and ask state", () => {
+test("schema 6 upgrades create autonomous creation, delivery and ask state", () => {
 	const dir = mkdtempSync(join(tmpdir(), "session-kernel-schema-"));
 	const path = join(dir, "kernel.sqlite");
 	const legacy = new Database(path);
@@ -55,7 +55,7 @@ test("schema 6 upgrades create autonomous delivery and ask state", () => {
 	legacy.close();
 	const upgraded = new SessionKernelStore(path);
 	try {
-		expect(upgraded.stats().schemaVersion).toBe(7);
+		expect(upgraded.stats().schemaVersion).toBe(SESSION_KERNEL_SCHEMA_VERSION);
 		upgraded.setDeliverySlot("upgrade", "queued", [
 			{ id: "queued", content: "kept" },
 		]);
@@ -67,6 +67,11 @@ test("schema 6 upgrades create autonomous delivery and ask state", () => {
 		expect(upgraded.askSnapshot("upgrade")).toMatchObject({
 			questionId: "ask",
 		});
+		expect(upgraded.applyCreationEvent({
+			sessionId: "upgrade",
+			identity: "create-request",
+			event: "plan",
+		})).toMatchObject({ accepted: true, to: "planned" });
 	} finally {
 		upgraded.close();
 		rmSync(dir, { recursive: true, force: true });
@@ -463,6 +468,80 @@ describe("SessionKernel", () => {
 			state: { currentRunId: "run-1", generation: 1, changeSeq: 2 },
 		});
 		expect(store.changesSince("fsm", 0)).toHaveLength(2);
+	});
+
+	test("owns creation transitions and rejects stale effect results", () => {
+		expect(store.applyCreationEvent({
+			sessionId: "create-fsm",
+			identity: "request-one",
+			event: "plan",
+		})).toMatchObject({
+			accepted: true,
+			to: "planned",
+			state: { generation: 1, changeSeq: 1 },
+		});
+		expect(store.applyCreationEvent({
+			sessionId: "create-fsm",
+			identity: "request-one",
+			event: "preparation_started",
+			nextEffectId: "prepare-one",
+		})).toMatchObject({
+			accepted: true,
+			from: "planned",
+			to: "preparing",
+			state: { currentEffectId: "prepare-one", changeSeq: 2 },
+		});
+		expect(store.applyCreationEvent({
+			sessionId: "create-fsm",
+			identity: "request-one",
+			event: "opening_dispatched",
+			nextEffectId: "opening-one",
+		})).toMatchObject({
+			accepted: false,
+			reason: "stale_effect",
+			state: { state: "preparing", currentEffectId: "prepare-one" },
+		});
+		expect(store.applyCreationEvent({
+			sessionId: "create-fsm",
+			identity: "request-one",
+			event: "opening_dispatched",
+			effectId: "stale-prepare",
+			nextEffectId: "opening-one",
+		})).toMatchObject({
+			accepted: false,
+			reason: "stale_effect",
+			state: { state: "preparing", currentEffectId: "prepare-one" },
+		});
+		expect(store.applyCreationEvent({
+			sessionId: "create-fsm",
+			identity: "request-one",
+			event: "opening_dispatched",
+			effectId: "prepare-one",
+			nextEffectId: "opening-one",
+		})).toMatchObject({
+			accepted: true,
+			to: "opening_dispatched",
+			state: { currentEffectId: "opening-one", changeSeq: 3 },
+		});
+		expect(store.applyCreationEvent({
+			sessionId: "create-fsm",
+			identity: "request-one",
+			event: "succeeded",
+			effectId: "opening-one",
+		})).toMatchObject({
+			accepted: true,
+			to: "ready",
+			state: { currentEffectId: undefined, changeSeq: 4 },
+		});
+		expect(store.applyCreationEvent({
+			sessionId: "create-fsm",
+			identity: "request-two",
+			event: "plan",
+		})).toMatchObject({
+			accepted: false,
+			reason: "identity_mismatch",
+		});
+		expect(store.changesSince("create-fsm", 0)).toHaveLength(4);
 	});
 
 	test("claims and restores a delivery batch atomically", () => {
