@@ -402,15 +402,10 @@ export class DaytonaProvider implements SandboxProvider {
     let sbx: DaytonaSandbox | null = null;
     let newlyCreated = false;
     let preparedWorkspace = false;
-    try {
-      for await (const s of client.list({ labels: { [SESSION_LABEL]: spec.sessionId } } as any)) {
-        sbx = s;
-        break;
-      }
-    } catch (e) {
-      console.warn(`[sandbox:daytona] label lookup failed (will create):`, e);
-    }
-    if (!sbx && prevState) {
+    // The durable local mapping is written immediately after provider create,
+    // before workspace setup. Prefer its O(1) id lookup: Daytona's filtered
+    // account-wide list took 20–21s even when no matching sandbox existed.
+    if (prevState) {
       try {
         sbx = await client.get(prevState.sandboxId);
       } catch {}
@@ -494,6 +489,21 @@ export class DaytonaProvider implements SandboxProvider {
       newlyCreated = true;
       mark("sandbox created");
     }
+
+    // Persist the provider id before any optional setup. A coordinator restart
+    // can now recover directly instead of scanning provider labels or creating
+    // a duplicate sandbox after a partially completed launch.
+    writeRemoteState({
+      sandboxId: sbx.id,
+      provider: this.id,
+      sessionId: spec.sessionId,
+      cwd,
+      repoId: repo.id,
+      branch,
+      createdAt: prevState?.createdAt || new Date().toISOString(),
+      lastActivityAt: new Date().toISOString(),
+      ...trust,
+    });
 
     const driver = daytonaDriver(sbx);
     // client.create resolves only after Daytona reports the sandbox started.
