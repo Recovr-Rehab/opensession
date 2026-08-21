@@ -5,7 +5,7 @@
 // is ignored (the row falls back to its derived lane) and the Sidebar prunes
 // it, marking the row unread so the wake is visible. The public API stays
 // synchronous (an in-memory cache): the store is a lib/user-map instance,
-// which owns the hydration and the optimistic whole-map PUT.
+// which owns hydration and ordered per-key delta writes.
 import { fetchSnoozes, saveSnoozesApi } from "./api";
 import { makeUserMap } from "./user-map";
 
@@ -15,7 +15,7 @@ export const SNOOZE_SOMEDAY = "someday";
 const store = makeUserMap<string>({
 	changeEvent: CHANGE_EVENT,
 	fetchMap: fetchSnoozes,
-	saveMap: saveSnoozesApi,
+	saveDelta: saveSnoozesApi,
 });
 
 export function getSnoozes(): Record<string, string> {

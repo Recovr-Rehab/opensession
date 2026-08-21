@@ -59,9 +59,15 @@ final class WorkspaceSnoozeStore {
 
     private(set) var snoozes: [String: String] = [:]
     private var context: NativePreferences.Context?
-    private var pending: [String: String?] = [:]
-    private var mutationRevision = 0
+
+    private enum Change: Equatable {
+        case set(String)
+        case remove
+    }
+
+    private var pending: [String: Change] = [:]
     private var hasHydrated = false
+    private var isSaving = false
 
     private init() {}
 
@@ -71,9 +77,11 @@ final class WorkspaceSnoozeStore {
         guard let loaded = try? await SettingsAPI.snoozes(user: requestContext.user),
               NativePreferences.context() == requestContext else { return }
         var merged = loaded
-        for (key, value) in pending {
-            if let value { merged[key] = value }
-            else { merged.removeValue(forKey: key) }
+        for (key, change) in pending {
+            switch change {
+            case .set(let value): merged[key] = value
+            case .remove: merged.removeValue(forKey: key)
+            }
         }
         snoozes = merged
         hasHydrated = true
@@ -104,13 +112,12 @@ final class WorkspaceSnoozeStore {
 
         for key in matchingKeys(workspace) {
             snoozes.removeValue(forKey: key)
-            pending.updateValue(nil, forKey: key)
+            pending[key] = .remove
         }
         if let until {
             snoozes[rowKey] = until
-            pending[rowKey] = .some(until)
+            pending[rowKey] = .set(until)
         }
-        mutationRevision += 1
         if hasHydrated { save(context: requestContext) }
     }
 
@@ -119,17 +126,40 @@ final class WorkspaceSnoozeStore {
     }
 
     private func save(context requestContext: NativePreferences.Context) {
-        let revision = mutationRevision
-        let snapshot = snoozes
+        guard hasHydrated, !isSaving, !pending.isEmpty else { return }
+        let captured = pending
+        let set = captured.compactMapValues { change -> String? in
+            if case .set(let value) = change { return value }
+            return nil
+        }
+        let remove = captured.compactMap { key, change in
+            if case .remove = change { return key }
+            return nil
+        }
+        isSaving = true
         Task { [weak self] in
-            guard let saved = try? await SettingsAPI.saveSnoozes(
+            let saved = try? await SettingsAPI.saveSnoozes(
                 user: requestContext.user,
-                snoozes: snapshot
-            ), let self,
-            NativePreferences.context() == requestContext,
-            self.mutationRevision == revision else { return }
-            self.snoozes = saved
-            self.pending.removeAll()
+                set: set,
+                remove: remove
+            )
+            guard let self,
+                  self.context == requestContext,
+                  NativePreferences.context() == requestContext else { return }
+            self.isSaving = false
+            guard let saved else { return }
+            for (key, change) in captured where self.pending[key] == change {
+                self.pending.removeValue(forKey: key)
+            }
+            var merged = saved
+            for (key, change) in self.pending {
+                switch change {
+                case .set(let value): merged[key] = value
+                case .remove: merged.removeValue(forKey: key)
+                }
+            }
+            self.snoozes = merged
+            self.save(context: requestContext)
         }
     }
 
@@ -143,6 +173,6 @@ final class WorkspaceSnoozeStore {
         snoozes = [:]
         pending = [:]
         hasHydrated = false
-        mutationRevision += 1
+        isSaving = false
     }
 }

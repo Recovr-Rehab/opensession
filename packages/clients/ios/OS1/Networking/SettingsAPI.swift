@@ -145,7 +145,7 @@ enum SettingsAPI {
     }
 
     /// Per-user sidebar hides, shared with the web sidebar (row key → ISO
-    /// hidden-at). PUT replaces the whole map, like pins and snoozes.
+    /// hidden-at). Writes send only the keys changed by this client.
     static func hides(user: String) async throws -> [String: String] {
         struct Response: Decodable, Sendable { var hides: [String: String]? }
         let response: Response = try await request("/api/hides", query: ["user": user])
@@ -153,11 +153,15 @@ enum SettingsAPI {
     }
 
     @discardableResult
-    static func saveHides(user: String, hides: [String: String]) async throws -> [String: String] {
+    static func saveHides(
+        user: String,
+        set: [String: String],
+        remove: [String]
+    ) async throws -> [String: String] {
         struct Response: Decodable, Sendable { var hides: [String: String]? }
-        let body: [String: Any] = ["user": user, "hides": hides]
+        let body: [String: Any] = ["user": user, "set": set, "remove": remove]
         let response: Response = try await request("/api/hides", method: "PUT", body: body)
-        return response.hides ?? hides
+        return response.hides ?? [:]
     }
 
     /// Per-user sidebar lanes, shared with the web sidebar (session id → the
@@ -208,7 +212,7 @@ enum SettingsAPI {
     }
 
     /// Per-user workspace snoozes, shared with the web sidebar. Values are an
-    /// ISO wake time or `someday`; PUT replaces the whole row-keyed map.
+    /// ISO wake time or `someday`; writes contain only changed row keys.
     static func snoozes(user: String) async throws -> [String: String] {
         struct Response: Decodable, Sendable { var snoozes: [String: String]? }
         let response: Response = try await request("/api/snoozes", query: ["user": user])
@@ -218,16 +222,17 @@ enum SettingsAPI {
     @discardableResult
     static func saveSnoozes(
         user: String,
-        snoozes: [String: String]
+        set: [String: String],
+        remove: [String]
     ) async throws -> [String: String] {
         struct Response: Decodable, Sendable { var snoozes: [String: String]? }
-        let body: [String: Any] = ["user": user, "snoozes": snoozes]
+        let body: [String: Any] = ["user": user, "set": set, "remove": remove]
         let response: Response = try await request(
             "/api/snoozes",
             method: "PUT",
             body: body
         )
-        return response.snoozes ?? snoozes
+        return response.snoozes ?? [:]
     }
 
     /// Per-user read marks, shared with the web sidebar (session id → the ISO
