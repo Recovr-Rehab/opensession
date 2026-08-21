@@ -817,11 +817,11 @@ export function SessionTabs({
 												aria-label="Close session"
 												title="Close session"
 												disabled={closingEmpty}
-												initial={morphing ? { rotate: 0, scale: 1 } : false}
+												initial={morphing ? { rotate: 45, scale: 1.25 } : false}
 												animate={
 													closingEmpty
-														? { rotate: 0, scale: 1 }
-														: { rotate: 45, scale: 0.76 }
+														? { rotate: 45, scale: 1.25 }
+														: { rotate: 0, scale: 1 }
 												}
 												transition={NEW_TAB_MORPH_TRANSITION}
 												onClick={(e) => {
@@ -829,7 +829,7 @@ export function SessionTabs({
 													closeEmptySession(session);
 												}}
 											>
-												<IconPlus size={16} aria-hidden="true" />
+												<IconX size={16} dense aria-hidden="true" />
 											</motion.button>
 										) : (
 											<button
