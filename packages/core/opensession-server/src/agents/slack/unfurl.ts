@@ -65,15 +65,6 @@ function esc(t: string): string {
   return t.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 }
 
-function statusChip(s: UnifiedSession): string {
-  if (s.isRunning) return "🟢 In progress";
-  if (s.lastRunError) return "🔴 Needs input";
-  if (s.prState === "MERGED") return "🟣 Merged";
-  if (s.prState === "CLOSED") return "⚪ Closed";
-  if (s.prState === "OPEN" || s.prUrl) return "🔵 In review";
-  return "⚪ Idle";
-}
-
 /** Bare relative duration: "5m" / "2h" / "3d" — no "ago" suffix, callers add it. */
 function relTime(iso?: string): string {
   if (!iso) return "";
@@ -134,9 +125,10 @@ export function unfurlForSession(s: UnifiedSession, url: string): { blocks: any[
   const card = sessionSocialCardData(s);
   const { title } = card;
 
-  const bits: string[] = [statusChip(s)];
-  if (s.repo) bits.push(s.branch ? `${s.repo} · \`${s.branch}\`` : s.repo);
-  if (s.mode) bits.push(s.mode);
+  // Status, branch and mode are omitted: they age badly on a pasted link and
+  // push the parts people actually scan for out of view.
+  const bits: string[] = [];
+  if (s.repo) bits.push(s.repo);
   if (s.linearIssue?.identifier) bits.push(s.linearIssue.identifier);
   if (s.createdBy || s.startedBy) bits.push(`by ${card.owner}`);
   if (s.isRunning && s.runStartedAt) bits.push(`running ${relTime(s.runStartedAt)}`);
@@ -167,10 +159,12 @@ export function unfurlForSession(s: UnifiedSession, url: string): { blocks: any[
     });
   }
 
-  blocks.push({
-    type: "context",
-    elements: [{ type: "mrkdwn", text: bits.join("  ·  ") }],
-  });
+  if (bits.length) {
+    blocks.push({
+      type: "context",
+      elements: [{ type: "mrkdwn", text: bits.join("  ·  ") }],
+    });
+  }
 
   if (s.prUrl) {
     const num = s.prNumber ? `#${s.prNumber}` : "PR";
