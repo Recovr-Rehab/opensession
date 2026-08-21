@@ -1,9 +1,11 @@
 import React, { useEffect, useRef, useState } from "react";
 import { Reorder } from "motion/react";
+import { useIsPhone } from "../../hooks/useIsPhone";
 import type { SidebarToolId } from "../../lib/sidebar-tools";
 import { Modal } from "../../ui/modal";
+import { ResponsiveDialog, SheetBody, SheetIconButton } from "../../ui/sheet";
 import { Switch } from "../../ui/switch";
-import { IconGripVertical } from "../icons";
+import { IconGripVertical, IconX } from "../icons";
 import { RepoTile, repoLabel } from "../RepoTile";
 
 type OrderItem<T extends string> = {
@@ -158,6 +160,64 @@ export function SidebarCustomizeDialog({
 	onToolOrderChange: (order: SidebarToolId[]) => void;
 	onRepositoryOrderChange: (order: string[]) => void;
 }) {
+	const isPhone = useIsPhone();
+	const sections = (
+		<>
+			<OrderSection
+				label="Tools"
+				items={tools.map((tool) => ({
+					...tool,
+					action: (
+						<Switch
+							size="sm"
+							className="phone:after:absolute phone:after:inset-x-0 phone:after:-inset-y-3 phone:after:content-['']"
+							checked={tool.shown}
+							onCheckedChange={tool.onShownChange}
+							aria-label={`${tool.shown ? "Hide" : "Show"} ${tool.label} in sidebar`}
+						/>
+					),
+				}))}
+				onCommit={onToolOrderChange}
+			/>
+			<OrderSection
+				label="Repositories"
+				items={repositories.map((repo) => ({
+					id: repo,
+					label: repoLabel(repo),
+					icon: <RepoTile name={repo} size={20} />,
+				}))}
+				onCommit={onRepositoryOrderChange}
+			/>
+		</>
+	);
+
+	if (isPhone) {
+		return (
+			<ResponsiveDialog
+				open={open}
+				onClose={() => onOpenChange(false)}
+				phone
+				label="Customize sidebar"
+				sheetClassName="max-h-[88dvh]"
+			>
+				<div className="flex shrink-0 items-center gap-3 px-4 pb-3 pt-0.5">
+					<h2 className="m-0 min-w-0 flex-1 text-dialog-title font-semibold leading-tight tracking-[-0.01em] text-fg">
+						Customize sidebar
+					</h2>
+					<SheetIconButton
+						aria-label="Close"
+						onClick={() => onOpenChange(false)}
+					>
+						<IconX />
+					</SheetIconButton>
+				</div>
+				<SheetBody className="flex flex-1 flex-col gap-3 px-4 pb-4">
+					{sections}
+				</SheetBody>
+			</ResponsiveDialog>
+		);
+	}
+
 	return (
 		<Modal.Root open={open} onOpenChange={onOpenChange}>
 			<Modal.Content
@@ -165,31 +225,7 @@ export function SidebarCustomizeDialog({
 				className="max-h-[80dvh] gap-3"
 			>
 				<Modal.Header title="Customize sidebar" />
-				<OrderSection
-					label="Tools"
-					items={tools.map((tool) => ({
-						...tool,
-						action: (
-							<Switch
-								size="sm"
-								className="phone:after:absolute phone:after:inset-x-0 phone:after:-inset-y-3 phone:after:content-['']"
-								checked={tool.shown}
-								onCheckedChange={tool.onShownChange}
-								aria-label={`${tool.shown ? "Hide" : "Show"} ${tool.label} in sidebar`}
-							/>
-						),
-					}))}
-					onCommit={onToolOrderChange}
-				/>
-				<OrderSection
-					label="Repositories"
-					items={repositories.map((repo) => ({
-						id: repo,
-						label: repoLabel(repo),
-						icon: <RepoTile name={repo} size={20} />,
-					}))}
-					onCommit={onRepositoryOrderChange}
-				/>
+				{sections}
 			</Modal.Content>
 		</Modal.Root>
 	);
