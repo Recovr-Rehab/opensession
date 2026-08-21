@@ -25,6 +25,7 @@
  */
 
 import { randomUUIDv7 } from "bun";
+import { workerEntry } from "../runner-host/exe";
 import {
 	appendWorkflowJournal,
 	cancelLiveWorkflow,
@@ -1217,7 +1218,7 @@ function runWorkflow(
 		// Minimal env (belt) on top of the worker-side scrub (braces) — a Bun
 		// Worker is a same-process thread and would otherwise inherit the
 		// server's full secret-bearing process.env.
-		worker = new Worker(new URL("./workflow-worker.ts", import.meta.url).href, {
+		worker = new Worker(workerEntry("workflow-worker.js", new URL("./workflow-worker.ts", import.meta.url).href), {
 			env: { WORKFLOW_WORKER: "1" },
 		} as WorkerOptions);
 		worker.addEventListener("message", (event) => {

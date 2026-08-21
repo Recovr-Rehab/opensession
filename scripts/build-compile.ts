@@ -220,17 +220,30 @@ async function buildSharpSidecar(stage: string, sharpVersion: string): Promise<v
  * process.execPath). Plain bundled JS the embedded Bun runs, so it is platform-
  * neutral and needs no cross-target flag.
  */
-async function buildWorkerSidecar(destDir: string): Promise<void> {
-	const entry = join(REPO_ROOT, "packages", "core", "opensession-server", "src", "session-kernel-worker.ts");
-	const out = join(destDir, "session-kernel-worker.js");
+/**
+ * Web Workers do not embed into `bun build --compile` binaries, so each worker
+ * ships as an on-disk `.js` sidecar beside the executable and is resolved from
+ * process.execPath's dir at runtime (workerEntry in runner-host/exe.ts). Keep
+ * this list in sync with those workerEntry sidecar names.
+ */
+const WORKER_SIDECARS: Array<{ entry: string; name: string }> = [
+	{ entry: "packages/core/opensession-server/src/session-kernel-worker.ts", name: "session-kernel-worker.js" },
+	{ entry: "packages/core/opensession-server/src/server/workflow-worker.ts", name: "workflow-worker.js" },
+	{ entry: "packages/core/opensession-server/src/server/code-flow-worker.ts", name: "code-flow-worker.js" },
+];
+
+async function buildWorkerSidecars(destDir: string): Promise<void> {
 	mkdirSync(destDir, { recursive: true });
-	const proc = Bun.spawn(["bun", "build", "--target=bun", entry, "--outfile", out], {
-		cwd: REPO_ROOT,
-		stdout: "inherit",
-		stderr: "inherit",
-	});
-	if ((await proc.exited) !== 0) throw new Error("session-kernel worker sidecar build failed");
-	console.log(`[compile] session-kernel worker sidecar: ${(statSync(out).size / 1e3).toFixed(0)} KB`);
+	for (const { entry, name } of WORKER_SIDECARS) {
+		const out = join(destDir, name);
+		const proc = Bun.spawn(["bun", "build", "--target=bun", join(REPO_ROOT, entry), "--outfile", out], {
+			cwd: REPO_ROOT,
+			stdout: "inherit",
+			stderr: "inherit",
+		});
+		if ((await proc.exited) !== 0) throw new Error(`${name} sidecar build failed`);
+		console.log(`[compile] ${name} sidecar: ${(statSync(out).size / 1e3).toFixed(0)} KB`);
+	}
 }
 
 async function main(): Promise<void> {
@@ -241,7 +254,7 @@ async function main(): Promise<void> {
 	if (bareOut && !has("out") && !has("os") && !has("arch")) {
 		const outfile = resolve(bareOut);
 		await compileBinary(outfile, fver, distDir, metaPath, shellPath);
-		await buildWorkerSidecar(dirname(outfile));
+		await buildWorkerSidecars(dirname(outfile));
 		const mb = (statSync(outfile).size / 1e6).toFixed(1);
 		console.log(`\n[compile] built ${outfile} (${mb} MB, v=${fver})`);
 		return;
@@ -278,8 +291,8 @@ async function main(): Promise<void> {
 		cpSync(source, destination);
 		chmodSync(destination, statSync(source).mode & 0o777);
 	}
-	console.log("\n== session-kernel worker sidecar");
-	await buildWorkerSidecar(stage);
+	console.log("\n== worker sidecars");
+	await buildWorkerSidecars(stage);
 	console.log("\n== sharp sidecar");
 	await buildSharpSidecar(stage, sharpVersion);
 
