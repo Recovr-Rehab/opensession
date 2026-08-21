@@ -334,13 +334,18 @@ describe("keep-ready prewarms", () => {
     });
     const fake = makeFakeAdapter();
     let parks = 0;
+    let publications = 0;
     fake.adapter.park = async () => {
       parks++;
+    };
+    fake.adapter.publishTemplate = async () => {
+      publications++;
     };
 
     await startPrewarmPool();
     await until(() => readyEntry()?.state === "ready");
     expect(parks).toBe(0);
+    expect(publications).toBe(0);
     const first = readyEntry()!.sandboxId!;
     expect(claimPrewarm("daytona", "tella-fusion", "bks-first")?.sandboxId).toBe(first);
 

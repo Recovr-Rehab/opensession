@@ -547,12 +547,16 @@ async function runPrewarmBootstrap(record: PrewarmRecord, adapter: PrewarmAdapte
       void destroyRecord(record, "superseded mid-warm");
       return;
     }
-    // A person is waiting for this workspace now. Hand them the prepared
-    // sandbox before optional publication/parking work. Daytona repository
-    // templates can take six minutes to seal, while adoption is immediate.
-    // The claim replaces the short pool lifecycle with the session lifecycle.
+    // A waiting session or keep-ready target needs the prepared sandbox now.
+    // Hand it over before optional publication or parking work. Repository
+    // templates can take minutes to seal, while adoption is immediate.
     const releaseToWaiter = () => (record.waiters || 0) > 0;
-    if (adapter.publishTemplate && !restoredFromTemplate && !releaseToWaiter()) {
+    if (
+      adapter.publishTemplate &&
+      !restoredFromTemplate &&
+      !releaseToWaiter() &&
+      !isKeepReady(entry.provider, entry.repoId)
+    ) {
       record.sealing = true;
       setPrewarmStage(entry, "Sealing reusable template", 82);
       try {
