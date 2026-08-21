@@ -928,6 +928,8 @@ export const SIDEBAR_STATUS_DOT = {
 	/** Yellow to match the "In progress" lane — green means "In review". */
 	running:
 		"bg-yellow animate-[pulse_1.4s_ease-in-out_infinite] motion-reduce:[animation-duration:1.4s]! motion-reduce:[animation-iteration-count:infinite]!",
+	/** A stopped run is actionable, but it is not a question for the person. */
+	failed: "bg-red shadow-[0_0_6px_var(--red)]",
 	waiting:
 		"bg-blue shadow-[0_0_6px_var(--blue)] animate-[pulse_1.2s_ease-in-out_infinite] motion-reduce:[animation-duration:1.2s]! motion-reduce:[animation-iteration-count:infinite]!",
 	idle: "bg-faint",
