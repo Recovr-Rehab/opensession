@@ -1,5 +1,5 @@
 import { $ } from "bun";
-import { existsSync, mkdirSync, readFileSync, realpathSync, statSync } from "fs";
+import { existsSync, mkdirSync, readFileSync, realpathSync, statSync, unlinkSync } from "fs";
 import { resolve as resolvePath } from "path";
 import type { UnifiedSession } from "./types";
 import { stopPreview } from "./preview";
@@ -226,6 +226,52 @@ export function withGitLock<T>(fn: () => Promise<T>): Promise<T> {
     () => {},
   );
   return run;
+}
+
+const STALE_REVIEW_INDEX_LOCK_MS = 5 * 60_000;
+
+/**
+ * A killed Git command can leave an index.lock in a review worktree forever.
+ * Review worktrees are disposable and only OS owns them, but never remove a
+ * recent lock or one lsof reports as still held: that would race a real Git
+ * operation. If lsof itself cannot positively report an unheld lock, leave it
+ * alone and let Git surface its normal error.
+ */
+async function clearStaleReviewIndexLock(wtPath: string): Promise<boolean> {
+  let lockPath: string;
+  try {
+    const gitdir = readFileSync(`${wtPath}/.git`, "utf8").match(/^gitdir:\s*(.+)$/m)?.[1]?.trim();
+    if (!gitdir) return false;
+    lockPath = resolvePath(wtPath, gitdir, "index.lock");
+  } catch {
+    return false;
+  }
+
+  if (!existsSync(lockPath)) return true;
+
+  let age: number;
+  try {
+    age = Date.now() - statSync(lockPath).mtimeMs;
+  } catch {
+    return false;
+  }
+  if (age < STALE_REVIEW_INDEX_LOCK_MS) return false;
+
+  const holders = await $`lsof -t -- ${lockPath}`.quiet().nothrow();
+  // lsof exits 1 with no output when no process has the path open. Any other
+  // result, including a missing/broken lsof, is deliberately fail-closed.
+  if (holders.exitCode !== 1 || holders.stderr.toString().trim()) return false;
+
+  try {
+    unlinkSync(lockPath);
+    console.warn(`[worktree] removed stale review index lock: ${lockPath}`);
+    return true;
+  } catch (error) {
+    // Another process may have recreated the lock between lsof and unlink.
+    // The following Git command remains the authority, so do not hide errors.
+    console.warn(`[worktree] could not remove stale review index lock ${lockPath}:`, error);
+    return false;
+  }
 }
 
 export interface WorktreeInfo {
@@ -638,11 +684,24 @@ export async function createReviewWorktreeForPrHead(
     if (existsSync(wtPath)) {
       // A code session recovering from a deleted worktree may have borrowed this
       // path and switched it onto the source branch. Restore review ownership.
-      await $`git -C ${wtPath} switch -C ${headRef}-os-review origin/${headRef}`.quiet();
-      await $`git -C ${wtPath} reset --hard origin/${headRef}`.quiet();
-      return wtPath;
+      const repairAllowed = await clearStaleReviewIndexLock(wtPath);
+      try {
+        await $`git -C ${wtPath} switch -C ${headRef}-os-review origin/${headRef}`.quiet();
+        await $`git -C ${wtPath} reset --hard origin/${headRef}`.quiet();
+        return wtPath;
+      } catch (error) {
+        // A restart can kill `git worktree add` after it creates the directory
+        // but before it finishes the index. That checkout is disposable. Once
+        // no active index lock can be present, replace it instead of retrying
+        // the same permanently half-initialized directory on every PR push.
+        if (!repairAllowed || !(await clearStaleReviewIndexLock(wtPath))) throw error;
+        console.warn(`[worktree] recreating unusable review worktree: ${wtPath}`);
+        await $`git -C ${repo.repo} worktree remove --force --force ${wtPath}`.quiet();
+        await $`git -C ${repo.repo} worktree prune`.quiet();
+      }
+    } else {
+      await $`git -C ${repo.repo} worktree prune`.quiet();
     }
-    await $`git -C ${repo.repo} worktree prune`.quiet();
     await $`git -C ${repo.repo} worktree add ${wtPath} -B ${headRef}-os-review origin/${headRef}`;
     return wtPath;
   });
