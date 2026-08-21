@@ -78,7 +78,7 @@ function OrderSection<T extends string>({
 			</h3>
 			{order.length === 0 ? (
 				// Left-aligned like the rows it stands in for.
-				<p className="m-0 rounded-lg bg-panel px-2 py-4 text-label text-faint">
+				<p className="m-0 rounded-lg bg-panel px-2 py-4 text-label text-faint phone:bg-settings-plate">
 					No {label.toLowerCase()} available.
 				</p>
 			) : (
@@ -87,7 +87,7 @@ function OrderSection<T extends string>({
 					axis="y"
 					values={order}
 					onReorder={setDraft}
-					className="rounded-lg bg-panel p-0.5"
+					className="rounded-lg bg-panel p-0.5 phone:bg-settings-plate"
 					role="list"
 				>
 					{order.map((id, index) => {
@@ -100,7 +100,7 @@ function OrderSection<T extends string>({
 								value={id}
 								onDragEnd={commit}
 								whileDrag={{ scale: 1.015, zIndex: 2 }}
-								className="focus-ring group flex min-h-9 cursor-grab select-none items-center gap-2 rounded-control bg-panel px-1.5 py-1.5 text-item-title text-fg active:cursor-grabbing hover:bg-hover phone:min-h-11"
+								className="focus-ring group flex min-h-9 cursor-grab select-none items-center gap-2 rounded-control bg-panel px-1.5 py-1.5 text-item-title text-fg active:cursor-grabbing hover:bg-hover phone:min-h-11 phone:bg-settings-plate"
 								role="listitem"
 								tabIndex={0}
 								aria-label={`${item.label}, position ${index + 1} of ${order.length}. Use the up and down arrow keys to move it.`}
@@ -211,7 +211,7 @@ export function SidebarCustomizeDialog({
 						<IconX />
 					</SheetIconButton>
 				</div>
-				<SheetBody className="flex flex-1 flex-col gap-3 px-6 pb-6">
+				<SheetBody className="flex flex-1 flex-col gap-5 px-6 pb-6">
 					{sections}
 				</SheetBody>
 			</ResponsiveDialog>
