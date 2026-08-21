@@ -19,6 +19,10 @@ import {
 } from "../lib/send-key";
 import { getSendKeyPref, onSendKeyChanged } from "../lib/send-key-pref";
 import { isApple } from "../lib/platform";
+import {
+  startBrowserDictation,
+  type BrowserDictation,
+} from "../lib/browser-dictation";
 
 type Phase = "idle" | "requesting" | "recording" | "cancelling" | "transcribing";
 
@@ -100,10 +104,10 @@ const PLUS_TO_CANCEL = {
 /**
  * Wispr-Flow-style dictation control shared by the session Composer and the
  * New-session palette. Idle it's just a mic button; tapping it takes over the
- * whole input surface with a recording bar (cancel × · live waveform · save ✓ ·
- * save and send ↑), then an animated "Transcribing..." label while the clip
- * runs through /api/transcribe, and finally hands the text to `onText` or, when the send
- * button asked for it, to `onTextSend`.
+ * whole input surface with a recording bar (cancel × · live transcript · save
+ * ✓ · save and send ↑), then hands the browser's final text to `onText` or,
+ * when the send button asked for it, to `onTextSend`. Browsers without live
+ * speech recognition keep the prior /api/transcribe fallback.
  *
  * ✓ and ↑ differ only in what happens after the text lands: ✓ leaves it in the
  * draft to read and edit (and dictating again appends to it), ↑ sends the
@@ -172,7 +176,10 @@ export function VoiceInput({
   const [phase, setPhase] = useState<Phase>("idle");
   const [error, setError] = useState<string | null>(null);
   const [levels, setLevels] = useState<number[]>([]);
+  const [liveTranscript, setLiveTranscript] = useState("");
   const recRef = useRef<MediaRecorder | null>(null);
+  const speechRef = useRef<BrowserDictation | null>(null);
+  const speechResultRef = useRef<Promise<string> | null>(null);
   /** Invalidates an unresolved permission request when recording is cancelled
    *  or the control unmounts. A late stream is stopped instead of recording. */
   const requestRef = useRef(0);
@@ -203,6 +210,8 @@ export function VoiceInput({
   useEffect(
     () => () => {
       requestRef.current++;
+      speechRef.current?.cancel();
+      speechRef.current = null;
       cleanup();
     },
     [],
@@ -320,6 +329,10 @@ export function VoiceInput({
     // Take over the field in the same gesture that asked for the mic. Waiting
     // for a permission round trip first made the button appear unresponsive.
     const request = ++requestRef.current;
+    speechRef.current?.cancel();
+    speechRef.current = null;
+    speechResultRef.current = null;
+    setLiveTranscript("");
     setPhase("requesting");
     // The bar hides the field, so the caret must leave it too: a keystroke
     // into text nobody can see is an edit made blind, and the dictation is
@@ -362,11 +375,13 @@ export function VoiceInput({
     };
     rec.onstop = () => {
       const accepted = acceptRef.current;
+      const browserResult = speechResultRef.current;
+      speechResultRef.current = null;
       const blob = new Blob(chunksRef.current, {
         type: rec.mimeType || mime || "audio/webm",
       });
       cleanup();
-      if (accepted) void finish(blob, request);
+      if (accepted) void finish(blob, request, browserResult);
       else finishCancellation();
     };
 
@@ -407,10 +422,17 @@ export function VoiceInput({
       }, 1000),
     );
     rec.start(250);
+    // Browser speech recognition streams partial text while the clip is still
+    // being recorded. The audio blob remains the accuracy-preserving fallback
+    // when the browser service is absent or fails.
+    speechRef.current = startBrowserDictation((text) => {
+      if (request === requestRef.current) setLiveTranscript(text);
+    });
     setPhase("recording");
   }
 
   function finishCancellation() {
+    setLiveTranscript("");
     setPhase("cancelling");
     timersRef.current.push(
       window.setTimeout(() => {
@@ -430,14 +452,30 @@ export function VoiceInput({
     if (!rec || rec.state === "inactive") return;
     acceptRef.current = accept;
     sendRef.current = accept && send;
-    if (accept) setPhase("transcribing");
+    const speech = speechRef.current;
+    speechRef.current = null;
+    if (accept) {
+      setPhase("transcribing");
+      speechResultRef.current = speech?.finish() ?? null;
+    } else {
+      speech?.cancel();
+      speechResultRef.current = null;
+    }
     rec.stop();
   }
 
-  async function finish(blob: Blob, request: number) {
+  async function finish(
+    blob: Blob,
+    request: number,
+    browserResult: Promise<string> | null,
+  ) {
     let restoreFocus = false;
     try {
-      const text = await transcribeClip(blob);
+      // A live browser result avoids uploading and reprocessing the complete
+      // clip. The existing server transcription remains the fallback, so an
+      // unsupported browser or a speech-service outage behaves as before.
+      const liveText = (await browserResult?.catch(() => ""))?.trim() || "";
+      const text = liveText || (await transcribeClip(blob));
       if (request !== requestRef.current) return;
       const callbacks = callbacksRef.current;
       if (!text) {
@@ -456,6 +494,7 @@ export function VoiceInput({
     } finally {
       if (request === requestRef.current) {
         sendRef.current = false;
+        setLiveTranscript("");
         setPhase("idle");
         if (restoreFocus) restoreEditorFocus();
       }
@@ -508,20 +547,32 @@ export function VoiceInput({
               bars accumulating on the right by the accept buttons. */}
           <div
             ref={waveformRef}
-            className="mx-4 flex h-full min-w-0 flex-1 items-center justify-center gap-1 overflow-hidden phone:mx-[18px]"
+            className="relative mx-4 flex h-full min-w-0 flex-1 items-center justify-center gap-1 overflow-hidden phone:mx-[18px]"
             aria-hidden="true"
           >
-            {Array.from({ length: barCount }, (_, i) => {
-              const l = levels[levels.length - barCount + i];
-              const active = l !== undefined;
-              return (
-                <span
-                  key={i}
-                  className={active ? WAVE_BAR_LIVE : WAVE_BAR_IDLE}
-                  style={{ height: active ? `${16 + l * 84}%` : undefined }}
-                />
-              );
-            })}
+            <div
+              className={cn(
+                "absolute inset-0 flex items-center justify-center gap-1 transition-opacity",
+                liveTranscript && "opacity-15",
+              )}
+            >
+              {Array.from({ length: barCount }, (_, i) => {
+                const l = levels[levels.length - barCount + i];
+                const active = l !== undefined;
+                return (
+                  <span
+                    key={i}
+                    className={active ? WAVE_BAR_LIVE : WAVE_BAR_IDLE}
+                    style={{ height: active ? `${16 + l * 84}%` : undefined }}
+                  />
+                );
+              })}
+            </div>
+            {liveTranscript && (
+              <span className="relative z-[1] block min-w-0 truncate text-label text-fg">
+                {liveTranscript}
+              </span>
+            )}
           </div>
           <Tooltip label="Keep it. The text lands in the draft to edit.">
             <button
@@ -572,27 +623,36 @@ export function VoiceInput({
           {...ROW_MOTION}
         >
           <span className="sr-only">Transcribing</span>
-          <span
-            className="shrink-0 text-label font-medium text-dim"
-            aria-hidden="true"
-          >
-            Transcribing
-            <span className="inline-flex">
-              {TRANSCRIBING_DOT_STARTS.map((start, index) => (
-                <motion.span
-                  key={index}
-                  initial={{ opacity: 0 }}
-                  animate={{ opacity: [0, 0, 1, 1, 0, 0] }}
-                  transition={{
-                    ...TRANSCRIBING_DOT_MOTION,
-                    times: [0, start, start + 0.06, 0.72, 0.78, 1],
-                  }}
-                >
-                  .
-                </motion.span>
-              ))}
+          {liveTranscript ? (
+            <span
+              className="min-w-0 truncate text-label text-fg"
+              aria-hidden="true"
+            >
+              {liveTranscript}
             </span>
-          </span>
+          ) : (
+            <span
+              className="shrink-0 text-label font-medium text-dim"
+              aria-hidden="true"
+            >
+              Transcribing
+              <span className="inline-flex">
+                {TRANSCRIBING_DOT_STARTS.map((start, index) => (
+                  <motion.span
+                    key={index}
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: [0, 0, 1, 1, 0, 0] }}
+                    transition={{
+                      ...TRANSCRIBING_DOT_MOTION,
+                      times: [0, start, start + 0.06, 0.72, 0.78, 1],
+                    }}
+                  >
+                    .
+                  </motion.span>
+                ))}
+              </span>
+            </span>
+          )}
         </motion.div>
       )}
     </div>
