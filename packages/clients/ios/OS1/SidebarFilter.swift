@@ -114,6 +114,27 @@ enum SidebarPersonLens {
         guard !a.isEmpty, !b.isEmpty else { return false }
         return a == b || a.hasPrefix(b) || b.hasPrefix(a)
     }
+
+    /// Is the list showing somebody else's work? Anything but `me` is a
+    /// borrowed list, the same rule the web sidebar reads (`borrowedLens` in
+    /// components/Sidebar.tsx).
+    static func isBorrowed(_ key: String) -> Bool { stored(key) != me }
+
+    /// What the bar over a borrowed list calls the lens. A person key is
+    /// stored lowercased, so the roster's own spelling is asked for first and
+    /// the raw key is only a fallback for somebody outside it.
+    static func label(for key: String, agentName: String, roster: [String]) -> String {
+        switch stored(key) {
+        case me: return "You"
+        case everyone: return "Everyone"
+        case unassigned: return "Unassigned"
+        default:
+            let value = stored(key)
+            if !agentName.isEmpty, nameMatches(agentName, key: value) { return agentName }
+            if let named = roster.first(where: { nameMatches($0, key: value) }) { return named }
+            return value.prefix(1).uppercased() + value.dropFirst()
+        }
+    }
 }
 
 /// A row nobody started by hand: an agent minted this session or workspace

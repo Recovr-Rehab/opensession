@@ -1108,6 +1108,11 @@ struct SessionsListView: View {
                     if env["OS1_OPEN_CATCHUP"] != nil {
                         showCatchUp = true
                     }
+                    // The person lens is a picker two sheets deep, so a
+                    // scripted run cannot reach a borrowed list any other way.
+                    if let lens = env["OS1_PERSON_LENS"], !lens.isEmpty {
+                        peopleFilterRaw = lens
+                    }
                     #endif
                 }
                 .sheet(item: $newSessionRequest) { request in
@@ -3094,11 +3099,86 @@ struct SessionsListView: View {
     /// the three-way location choice rather than a switch.
     @ViewBuilder
     private var mobileToolsBand: some View {
-        if !isFeedHidden { mobileFeedRow }
-        if !isTasksHidden { mobileTasksRow }
-        if supportLocation.showsSidebar { plainSidebarRow }
-        if supportLocation.showsPage { mobileSupportToolRow }
-        if !isReportsHidden && reportGroupCount > 0 { mobileReportsRow }
+        // None of the tools belong to the person whose list you are borrowing:
+        // Tasks and Catch up are yours, and Feed, Plain and Reports are the
+        // whole team's. Under a bar with someone else's name on it they read as
+        // theirs, so a borrowed list is their workspaces and the bar out.
+        if SidebarPersonLens.isBorrowed(person) {
+            borrowedLensBar
+        } else {
+            if !isFeedHidden { mobileFeedRow }
+            if !isTasksHidden { mobileTasksRow }
+            if supportLocation.showsSidebar { plainSidebarRow }
+            if supportLocation.showsPage { mobileSupportToolRow }
+            if !isReportsHidden && reportGroupCount > 0 { mobileReportsRow }
+        }
+    }
+
+    /// Whose list this is, when it is not yours.
+    ///
+    /// The same bar the web sidebar puts at the top of a borrowed lens
+    /// (`borrowedLens` in components/Sidebar.tsx): a filled row that names the
+    /// person and carries the one action that belongs to it, which is leaving.
+    /// Without it the phone showed a teammate's workspaces with nothing saying
+    /// so, and the way back was buried in the filter panel.
+    private var borrowedLensBar: some View {
+        Section {
+            HStack(spacing: 8) {
+                if person == SidebarPersonLens.everyone {
+                    Image(systemName: "person.2")
+                        .font(.system(size: 15, weight: .medium))
+                        .foregroundStyle(OS1VisualStyle.textDim)
+                        .frame(width: 22, height: 22)
+                } else if person != SidebarPersonLens.unassigned {
+                    UserAvatar(person: borrowedLensName, size: 22)
+                }
+                Text(borrowedLensName)
+                    .font(.callout.weight(.semibold))
+                    .foregroundStyle(OS1VisualStyle.text)
+                    .lineLimit(1)
+                Spacer(minLength: 8)
+                Button {
+                    Haptics.play(.selection)
+                    withAnimation(.snappy(duration: 0.22)) {
+                        peopleFilterRaw = SidebarPersonLens.me
+                    }
+                } label: {
+                    Image(systemName: "xmark")
+                        .font(.system(size: 15, weight: .semibold))
+                        .foregroundStyle(OS1VisualStyle.textDim)
+                        .frame(width: 34, height: 34)
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("Back to your workspaces")
+                // The 34pt target overhangs the glyph, so pull it back out to
+                // the margin the way the repo bands' "+" does.
+                .padding(.trailing, -8)
+            }
+            .padding(.leading, 12)
+            .padding(.trailing, 10)
+            .padding(.vertical, 7)
+            .background {
+                RoundedRectangle(cornerRadius: 12, style: .continuous)
+                    .fill(OS1VisualStyle.blueSoft)
+            }
+            .accessibilityElement(children: .contain)
+        }
+        .listRowInsets(EdgeInsets(
+            top: 2, leading: sidebarMargin, bottom: 6, trailing: sidebarMargin
+        ))
+        .listRowSeparator(.hidden)
+        .listRowBackground(Color.clear)
+    }
+
+    /// What the bar calls the lens. Everyone reads as itself rather than as
+    /// "All workspaces", since the bar already says these are workspaces.
+    private var borrowedLensName: String {
+        SidebarPersonLens.label(
+            for: person,
+            agentName: InstanceIdentity.shared.personaName,
+            roster: TeamDirectory.shared.names
+        )
     }
 
     /// What the team shipped. Merged pull requests and commits in one list,
