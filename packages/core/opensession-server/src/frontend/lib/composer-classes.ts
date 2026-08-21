@@ -33,7 +33,14 @@ export const composerBox =
 export const composerBoxExpanded =
 	"rounded-[var(--composer-radius)] px-3.5 pt-3.5 pb-2.5 [--composer-inset-left:15px] phone:px-3 phone:pt-2.5 phone:pb-[9px] phone:[--composer-inset-left:13px]";
 
-/** Phone resting pill: one row, even 4px inset, clear of the screen edges.
+/** Phone resting pill: one row, even 4px inset, held well clear of the screen
+ *  edges. The inset is wider than the expanded box's on purpose: at rest the
+ *  composer is a short capsule floating over the transcript, and running it
+ *  edge to edge made it read as a bar rather than a pill. The internal padding
+ *  stays at 4px, so the pill gets smaller through width, not tighter spacing.
+ *  Matches the native iOS composer, which steps its resting pill in by the
+ *  same 8pt on each side.
+ *
  *  Motion animates the radius between this and the expanded box; the class is
  *  here so a first paint (and any non-animated host) lands on the same shape.
  *
@@ -46,7 +53,7 @@ export const composerBoxExpanded =
  *  way; only the corner curve differs. Installed phone PWAs override that
  *  curve to `round` in base.css, while keeping this same capsule geometry. */
 export const composerBoxMinimized =
-	"mx-1.5 flex items-center gap-1 rounded-[999px] p-1 [--composer-inset-left:5px]";
+	"mx-3.5 flex items-center gap-1 rounded-[999px] p-1 [--composer-inset-left:5px]";
 
 /* ── The draft field ──────────────────────────────────────────────
    `.composer-textarea` stays on the markup as a hook too: it is read as a
