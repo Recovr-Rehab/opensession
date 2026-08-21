@@ -268,90 +268,92 @@ export function Archived({
 		/>
 	);
 	const filterAction = (
-		<Menu.Root>
-			<Menu.Trigger
-				render={
-					<Button
-						variant="ghost"
-						icon={<IconFilter size={18} />}
-						aria-label={`Filters, ${activeFilterCount} active`}
-						className={activeFilterCount > 0 ? "shrink-0 text-fg" : "shrink-0"}
-					>
-						Filters{activeFilterCount > 0 ? ` ${activeFilterCount}` : ""}
-					</Button>
-				}
-			/>
-			<Menu.Popup align="end" className="min-w-[220px]">
-				<Menu.Group>
-					<Menu.GroupLabel>Owner</Menu.GroupLabel>
-					<Menu.RadioGroup value={owner} onValueChange={(value) => setOwner(String(value))}>
-						<Menu.RadioItem value="mine" closeOnClick>
-							<UserAvatar name={currentUser} size={18} />
-							<span className="min-w-0 flex-1">My archived</span>
-							<Menu.Check on={owner === "mine"} />
-						</Menu.RadioItem>
-						{people.map(({ key, label }) => (
-							<Menu.RadioItem key={key} value={key} closeOnClick>
-								<UserAvatar name={label} size={18} />
-								<span className="min-w-0 flex-1 truncate">{label}</span>
-								<Menu.Check on={owner === key} />
+		<>
+			<Menu.Root>
+				<Menu.Trigger
+					render={
+						<Button
+							variant="ghost"
+							icon={<IconFilter size={18} />}
+							aria-label={`Filters, ${activeFilterCount} active`}
+							className={activeFilterCount > 0 ? "shrink-0 text-fg" : "shrink-0"}
+						>
+							Filters{activeFilterCount > 0 ? ` ${activeFilterCount}` : ""}
+						</Button>
+					}
+				/>
+				<Menu.Popup align="end" className="min-w-[220px]">
+					<Menu.Group>
+						<Menu.GroupLabel>Owner</Menu.GroupLabel>
+						<Menu.RadioGroup value={owner} onValueChange={(value) => setOwner(String(value))}>
+							<Menu.RadioItem value="mine" closeOnClick>
+								<UserAvatar name={currentUser} size={18} />
+								<span className="min-w-0 flex-1">My archived</span>
+								<Menu.Check on={owner === "mine"} />
 							</Menu.RadioItem>
-						))}
-						<Menu.RadioItem value="everyone" closeOnClick>
-							<span className="size-[18px] shrink-0" />
-							<span className="min-w-0 flex-1">Everyone</span>
-							<Menu.Check on={owner === "everyone"} />
-						</Menu.RadioItem>
-					</Menu.RadioGroup>
-				</Menu.Group>
-				{repos.length > 1 && (
-					<>
-						<Menu.Separator />
-						<Menu.Group>
-							<Menu.GroupLabel>Repository</Menu.GroupLabel>
-							<Menu.RadioGroup value={repo} onValueChange={(value) => setRepo(String(value))}>
-								<Menu.RadioItem value="all" closeOnClick>
-									<span className="size-[18px] shrink-0" />
-									<span className="min-w-0 flex-1">All repos</span>
-									<Menu.Check on={repo === "all"} />
+							{people.map(({ key, label }) => (
+								<Menu.RadioItem key={key} value={key} closeOnClick>
+									<UserAvatar name={label} size={18} />
+									<span className="min-w-0 flex-1 truncate">{label}</span>
+									<Menu.Check on={owner === key} />
 								</Menu.RadioItem>
-								{repos.map((name) => (
-									<Menu.RadioItem key={name} value={name} closeOnClick>
-										<RepoTile name={name} size={18} />
-										<span className="min-w-0 flex-1 truncate">{repoLabel(name)}</span>
-										<Menu.Check on={repo === name} />
+							))}
+							<Menu.RadioItem value="everyone" closeOnClick>
+								<span className="size-[18px] shrink-0" />
+								<span className="min-w-0 flex-1">Everyone</span>
+								<Menu.Check on={owner === "everyone"} />
+							</Menu.RadioItem>
+						</Menu.RadioGroup>
+					</Menu.Group>
+					{repos.length > 1 && (
+						<>
+							<Menu.Separator />
+							<Menu.Group>
+								<Menu.GroupLabel>Repository</Menu.GroupLabel>
+								<Menu.RadioGroup value={repo} onValueChange={(value) => setRepo(String(value))}>
+									<Menu.RadioItem value="all" closeOnClick>
+										<span className="size-[18px] shrink-0" />
+										<span className="min-w-0 flex-1">All repos</span>
+										<Menu.Check on={repo === "all"} />
 									</Menu.RadioItem>
-								))}
-							</Menu.RadioGroup>
-						</Menu.Group>
-					</>
-				)}
-				{hasAutoArchived && (
-					<>
-						<Menu.Separator />
-						<Menu.Group>
-							<Menu.GroupLabel>Reason</Menu.GroupLabel>
-							<Menu.RadioGroup value={reason} onValueChange={(value) => setReason(value as ReasonFilter)}>
-								{(["all", "auto", "manual"] as const).map((value) => (
-									<Menu.RadioItem key={value} value={value} closeOnClick>
-										<span className="min-w-0 flex-1">{{ all: "All", auto: "Auto-archived", manual: "Manual" }[value]}</span>
-										<Menu.Check on={reason === value} />
-									</Menu.RadioItem>
-								))}
-							</Menu.RadioGroup>
-						</Menu.Group>
-					</>
-				)}
-				{activeFilterCount > 0 && (
-					<>
-						<Menu.Separator />
-						<Menu.Item onClick={() => { setOwner("everyone"); setRepo("all"); setReason("all"); }}>
-							Clear filters
-						</Menu.Item>
-					</>
-				)}
-			</Menu.Popup>
-		</Menu.Root>
+									{repos.map((name) => (
+										<Menu.RadioItem key={name} value={name} closeOnClick>
+											<RepoTile name={name} size={18} />
+											<span className="min-w-0 flex-1 truncate">{repoLabel(name)}</span>
+											<Menu.Check on={repo === name} />
+										</Menu.RadioItem>
+									))}
+								</Menu.RadioGroup>
+							</Menu.Group>
+						</>
+					)}
+					{hasAutoArchived && (
+						<>
+							<Menu.Separator />
+							<Menu.Group>
+								<Menu.GroupLabel>Reason</Menu.GroupLabel>
+								<Menu.RadioGroup value={reason} onValueChange={(value) => setReason(value as ReasonFilter)}>
+									{(["all", "auto", "manual"] as const).map((value) => (
+										<Menu.RadioItem key={value} value={value} closeOnClick>
+											<span className="min-w-0 flex-1">{{ all: "All", auto: "Auto-archived", manual: "Manual" }[value]}</span>
+											<Menu.Check on={reason === value} />
+										</Menu.RadioItem>
+									))}
+								</Menu.RadioGroup>
+							</Menu.Group>
+						</>
+					)}
+					{activeFilterCount > 0 && (
+						<>
+							<Menu.Separator />
+							<Menu.Item onClick={() => { setOwner("everyone"); setRepo("all"); setReason("all"); }}>
+								Clear filters
+							</Menu.Item>
+						</>
+					)}
+				</Menu.Popup>
+			</Menu.Root>
+		</>
 	);
 	const actions = (
 		<>
