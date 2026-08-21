@@ -620,7 +620,7 @@ Post a comment on this session's PR (or an explicit PR) with screenshots that RE
 
 ## opensession-slack
 
-Open an editable Slack composer — the human still presses Send.
+Open an editable Slack composer. The human still presses Send.
 
 - **Source** `packages/core/opensession-server/src/agents/slack/slack-compose-tools.ts`
 - **Wired in** `packages/core/opensession-server/src/server/interactive-mcp.ts`

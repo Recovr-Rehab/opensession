@@ -10,6 +10,7 @@
 import { realpathSync } from "fs";
 import { join } from "path";
 import { configuredServer, githubBotLogins, githubWriteOwners, personaName, productName } from "./config";
+import { renderInternalMcpCapabilities } from "./mcp-capabilities";
 import { githubLoginFor, type GitIdentity } from "./shared/user-mappings";
 
 const UI_BASE =
@@ -353,6 +354,8 @@ export function buildRunInstructions(input: {
     );
   }
   const inprocEarly = (input.inProcessMcp || {}) as Record<string, unknown>;
+  const internalMcpCapabilities = renderInternalMcpCapabilities(inprocEarly, productName());
+  if (internalMcpCapabilities) parts.push(internalMcpCapabilities);
   if (inprocEarly["opensession-assets"]) {
     parts.push(
       "## Session assets\nThis session has asset storage outside every repo. " +
