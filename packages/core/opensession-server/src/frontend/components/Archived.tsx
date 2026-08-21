@@ -378,7 +378,7 @@ export function Archived({
 		>
 			{desktopPortaled ? createPortal(actions, topbarActionsEl) : null}
 			{mobileFilterPortaled ? createPortal(filterAction, mobileActionsEl) : null}
-			<div className="mx-auto w-full max-w-[860px] px-6 pb-[60px] pt-7 phone:px-3.5 phone:pb-12 phone:pt-4">
+			<div className="mx-auto w-full max-w-[860px] px-6 pb-[60px] pt-7 phone:px-3.5 phone:pb-12 phone:pt-2 phone:[body.kb-open_&]:pt-[max(env(safe-area-inset-top,0px),8px)]">
 				{isPhone ? (
 					<div className="mb-3 w-full">{searchAction}</div>
 				) : !desktopPortaled ? (

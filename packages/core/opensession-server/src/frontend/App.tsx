@@ -36,6 +36,7 @@ import {
 	APP_HEADER_ACTIONS,
 	APP_HEADER_ACTIONS_DETAIL,
 	APP_HEADER_LEFT,
+	ARCHIVED_SEARCH_HEADER,
 	HEADER_TITLE_COL,
 	HEADER_TITLE_MODEL,
 	HEADER_TITLE_PILL,
@@ -4535,13 +4536,16 @@ export function App(
 				{route.view !== "catchup" && (
 				<header
 					ref={setAppHeaderEl}
-					className={appHeader({
-						detail: mobileDetail,
-						floating:
-							route.view === "prs" ||
-							route.view === "feed" ||
-							route.view === "session",
-					})}
+					className={cn(
+						appHeader({
+							detail: mobileDetail,
+							floating:
+								route.view === "prs" ||
+								route.view === "feed" ||
+								route.view === "session",
+						}),
+						route.view === "archived" && ARCHIVED_SEARCH_HEADER,
+					)}
 				>
 					<div className={APP_HEADER_LEFT}>
 						{mobileDetail ? (

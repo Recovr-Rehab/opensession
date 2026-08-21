@@ -1,6 +1,7 @@
 import { expect, test } from "bun:test";
 import {
 	APP_HEADER_ACTIONS,
+	ARCHIVED_SEARCH_HEADER,
 	HEADER_TITLE_PILL,
 	MOBILE_BACK,
 	MOBILE_CONTROL_GLASS,
@@ -22,6 +23,15 @@ test("phone navigation chrome has no hard divider bars", async () => {
 	expect(infoTopbarClass(true)).not.toContain("border-b");
 	expect(infoTopbarClass(false)).not.toContain("border-b");
 	expect(REPORTS_COLUMN_HEADER).not.toMatch(/(?<!desktop:)border-b/);
+});
+
+test("archived search focus collapses the phone header", () => {
+	expect(ARCHIVED_SEARCH_HEADER).toContain("phone:[body.kb-open_&]:h-0");
+	expect(ARCHIVED_SEARCH_HEADER).toContain("phone:[body.kb-open_&]:opacity-0");
+	expect(ARCHIVED_SEARCH_HEADER).toContain(
+		"phone:transition-[height,padding-top,opacity,transform]",
+	);
+	expect(ARCHIVED_SEARCH_HEADER).toContain("motion-reduce:transition-none");
 });
 
 test("every floating phone header control is made of the same glass", async () => {
