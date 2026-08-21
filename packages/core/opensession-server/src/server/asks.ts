@@ -6,7 +6,7 @@
  * whole time, so whoever answers first (web or Slack) wins.
  */
 
-import { existsSync, readFileSync } from "fs";
+import { existsSync, readFileSync, rmSync } from "fs";
 import { personaName, productName } from "./config";
 import {
 	awaitBlockingAnswer,
@@ -99,8 +99,23 @@ export function pendingAskStorePath(): string {
 	return `${sessionsDir()}/pending-asks.json`;
 }
 
+function removeLegacyAskStore(storePath = pendingAskStorePath()): void {
+	try {
+		rmSync(storePath, { force: true });
+	} catch (error) {
+		console.error(`[ask] Failed to remove migrated ask store ${storePath}:`, error);
+	}
+}
+
 export function persistPendingAsks(storePath = pendingAskStorePath()): void {
 	try {
+		// Custom paths remain useful migration/test fixtures. Production JSON is
+		// retired after the actor records its one-time import receipt.
+		if (
+			storePath === pendingAskStorePath() &&
+			sessionKernelStore().askMigrationComplete()
+		)
+			return;
 		const asks: PersistedPendingAsk[] = [];
 		for (const [sessionId, ask] of pendingAsks) {
 			if (!ask.durable || !ask.askedAt) continue;
@@ -540,6 +555,7 @@ export function restorePendingAsks(
     storePath === pendingAskStorePath() && kernelStore.askMigrationComplete();
 	let stored: { asks?: PersistedPendingAsk[] };
   if (actorAuthority) {
+    removeLegacyAskStore(storePath);
     stored = {
       asks: [...pendingAsks].map(([sessionId, ask]) => ({
         sessionId,
@@ -557,8 +573,10 @@ export function restorePendingAsks(
     };
   } else {
     if (!existsSync(storePath)) {
-      if (storePath === pendingAskStorePath())
+      if (storePath === pendingAskStorePath()) {
         kernelStore.markAskMigrationComplete();
+        removeLegacyAskStore(storePath);
+      }
       return 0;
     }
 	try {
@@ -621,8 +639,10 @@ export function restorePendingAsks(
 	}
 	// Drop invalid or deleted-session records immediately. A card removed before
 	// the crash is absent because its answer path persists the delete first.
-  if (storePath === pendingAskStorePath())
+  if (storePath === pendingAskStorePath()) {
     kernelStore.markAskMigrationComplete();
+    removeLegacyAskStore(storePath);
+  }
 	persistPendingAsks(storePath);
 	if (restored > 0) {
     console.log(

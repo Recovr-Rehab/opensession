@@ -60,6 +60,19 @@ describe("single session ownership", () => {
 		expect(read("session-cache.ts")).not.toContain("__promptQueues");
 	});
 
+	test("delivery and ask JSON are one-time imports, never post-migration writers", () => {
+		const queue = read("queue-state.ts");
+		const asks = read("asks.ts");
+		expect(queue).toContain("removeLegacyQueueStore(storePath)");
+		expect(queue).toContain("deliveryMigrationComplete()");
+		expect(asks).toContain("removeLegacyAskStore(storePath)");
+		expect(asks).toContain("askMigrationComplete()");
+		expect(queue.indexOf("deliveryMigrationComplete()"))
+			.toBeLessThan(queue.indexOf("writeJsonAtomic("));
+		expect(asks.indexOf("askMigrationComplete()"))
+			.toBeLessThan(asks.indexOf("writeJsonAtomic("));
+	});
+
 	test("delivery and ask writes fail closed without the actor in production", () => {
 		const kernel = read("session-kernel/kernel.ts");
 		expect(kernel).toContain("compatibilityStoreForTest");

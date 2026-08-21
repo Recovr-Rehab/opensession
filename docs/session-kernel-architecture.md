@@ -91,8 +91,9 @@ ahead of later work. Steering first moves an item to a pending-steer checkpoint,
 then reports runner acceptance or rejection as a second typed fact. Restart treats
 an unresolved checkpoint as ambiguous acceptance and reconciles it through the
 receipt and transcript path instead of delivering a duplicate turn. The old queue and ask JSON formats are imported once under
-durable migration markers, then written only as compatibility mirrors, never read
-as authority again. Resolver closures, timeout handles and the explicit Stop latch
+durable migration markers, then deleted. Default-path writers no-op after the
+marker commits; only explicit test/migration fixture paths retain JSON output.
+Resolver closures, timeout handles and the explicit Stop latch
 remain process-local executor state because they are not durable decisions.
 
 ## Run ownership
