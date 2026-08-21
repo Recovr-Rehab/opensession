@@ -32,9 +32,11 @@ describe("transcript disclosure ledger", () => {
 
 	test("does not carry choices between sessions or disclosure levels", () => {
 		const ledger = createTranscriptDisclosureLedger();
-		ledger.write("tool-run", "session-1", ["step-a"], true);
+		ledger.write("tool-call", "session-1", ["step-a"], false);
 
-		expect(ledger.read("tool-run", "session-2", ["step-a"])).toBeUndefined();
+		expect(ledger.read("tool-call", "session-1", ["step-a"])).toBe(false);
+		expect(ledger.read("tool-call", "session-2", ["step-a"])).toBeUndefined();
+		expect(ledger.read("tool-run", "session-1", ["step-a"])).toBeUndefined();
 		expect(ledger.read("turn", "session-1", ["step-a"])).toBeUndefined();
 	});
 

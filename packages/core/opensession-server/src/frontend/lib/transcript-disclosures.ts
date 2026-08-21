@@ -1,4 +1,4 @@
-export type TranscriptDisclosureKind = "turn" | "tool-run";
+export type TranscriptDisclosureKind = "turn" | "tool-run" | "tool-call";
 
 export interface TranscriptDisclosureLedger {
 	read(
@@ -23,7 +23,8 @@ type RememberedDisclosure = {
  * Keeps a person's disclosure choices attached to transcript entries rather
  * than React component instances. A live turn gets a new render key as steps
  * arrive, and virtualized history can unmount it entirely. Looking up every
- * overlapping entry lets the replacement recover the last explicit choice.
+ * overlapping entry lets a replacement group recover the last explicit
+ * choice; single-entry disclosures use the same ledger to survive remounts.
  */
 export function createTranscriptDisclosureLedger(
 	maxEntries = 20_000,

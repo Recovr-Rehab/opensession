@@ -1,4 +1,10 @@
-import React, { createContext, useContext, useEffect, useState } from "react";
+import React, {
+  createContext,
+  useContext,
+  useEffect,
+  useRef,
+  useState,
+} from "react";
 import type { TranscriptEntry } from "../lib/types";
 import { CodeHighlight } from "./LazyCode";
 import { langForFile, langForGrep } from "../lib/lang";
@@ -35,6 +41,7 @@ import { ExtBadge, fileExt } from "./lang-marks";
 import { openGalleryFrom } from "./MediaLightbox";
 import { useOpenAsset, useOpenAssetPaths } from "../lib/open-asset";
 import { assetPathForMediaSrc } from "../lib/asset-preview";
+import { transcriptDisclosureLedger } from "../lib/transcript-disclosures";
 // Re-exported so the session view keeps one import for the transcript's
 // context providers; the context itself lives with the rest of the
 // open-an-asset behaviour, which the turn footer shares.
@@ -298,12 +305,23 @@ export const ToolCallBlock = React.memo(function ToolCallBlock({
 }: Props) {
   const entryNeedsHydration = entry.contentClamped || isBoundedToolInput(entry.toolInput);
   const resultNeedsHydration = Boolean(result?.contentClamped);
-  // Default closed, and open only for media the agent asked to SHOW — an
-  // OPENSESSION_IMAGE/_VIDEO marker (server-side: featuredMedia). Media it
-  // merely touched — a Read of a PNG, a path that turned up in output — still
-  // attaches and is one click away, but opening every one of those turns a
-  // forty-screenshot verification loop into forty full-size images.
-  const [expanded, setExpanded] = useState(Boolean(result?.featuredMedia?.length));
+  // Default closed, and open only for media the agent asked to SHOW. Keep an
+  // explicit choice on the transcript entry rather than this component: the
+  // history virtualizer unmounts off-screen rows, and a live turn remounts its
+  // children whenever its last-entry key changes. Component-local state made
+  // either path forget that a person had opened or closed this detail.
+  const [rememberedExpanded] = useState(() =>
+    transcriptDisclosureLedger.read("tool-call", sessionId, [entry.id])
+  );
+  const [expanded, setExpanded] = useState(
+    rememberedExpanded ?? Boolean(result?.featuredMedia?.length)
+  );
+  const userToggledRef = useRef(rememberedExpanded !== undefined);
+  function rememberExpansion(next: boolean) {
+    userToggledRef.current = true;
+    transcriptDisclosureLedger.write("tool-call", sessionId, [entry.id], next);
+    setExpanded(next);
+  }
   const fullEntry = useHydratedTranscriptEntry(
     entry,
     expanded && Boolean(entryNeedsHydration),
@@ -327,12 +345,11 @@ export const ToolCallBlock = React.memo(function ToolCallBlock({
       : imageCount === 0
         ? `${videoCount} video${videoCount === 1 ? "" : "s"}`
         : `${imageCount + videoCount} media`;
-  // Featured media streaming in later still opens the row; incidental media no
-  // longer does — which also means a row you collapsed by hand stays collapsed
-  // when the next screenshot arrives.
+  // Featured media streaming in later opens an untouched row. Once a person
+  // has chosen either state, that choice wins across later results and remounts.
   const hasFeaturedMedia = Boolean(shownResult?.featuredMedia?.length);
   useEffect(() => {
-    if (hasFeaturedMedia) setExpanded(true);
+    if (hasFeaturedMedia && !userToggledRef.current) setExpanded(true);
   }, [hasFeaturedMedia]);
   const toolName = entry.toolName || "Tool";
   const canonical = canonicalToolName(toolName);
@@ -394,7 +411,7 @@ export const ToolCallBlock = React.memo(function ToolCallBlock({
       <button
         type="button"
         aria-expanded={expanded}
-        onClick={() => setExpanded(!expanded)}
+        onClick={() => rememberExpansion(!expanded)}
         className={cn(
           // Baseline, not centre: the 14px tool name, the 13px mono path and
           // the 11px trailing meta all ride this row, and centring aligns
