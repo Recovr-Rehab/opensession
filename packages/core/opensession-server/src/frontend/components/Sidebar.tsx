@@ -4793,9 +4793,9 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 											className="shrink-0"
 										/>
 									)}
-								{/* The font's visible ink sits slightly above its line-box center.
-								    Lower it one pixel to meet the geometrically centered close icon. */}
-								<span className="min-w-0 translate-y-px truncate font-semibold">
+								{/* The font's visible ink sits above its line-box center. Lower it
+								    two pixels to meet the geometrically centered close icon. */}
+								<span className="min-w-0 translate-y-0.5 truncate font-semibold">
 									{filter.person === "everyone"
 										? "Everyone"
 										: filter.person === "unassigned"
