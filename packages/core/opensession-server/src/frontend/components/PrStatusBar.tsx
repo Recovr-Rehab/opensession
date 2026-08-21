@@ -186,6 +186,11 @@ function deriveHeadline(
 			label: `${git!.behindBase} commit${git!.behindBase === 1 ? "" : "s"} behind ${git!.baseBranch}`,
 			tone: "muted",
 		};
+	// A pushed branch is level with its upstream, so `ahead` is zero even when
+	// it still needs a PR. Keep the creation path in the summary for every clean
+	// session worktree, not only while commits or dirty files happen to be local.
+	if (git?.branch && !git.sharedCheckout)
+		return { key: "no-pr", label: "No PR open", tone: "muted" };
 	return { key: "clean", label: "Up to date", tone: "muted" };
 }
 
