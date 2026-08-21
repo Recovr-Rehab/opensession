@@ -49,6 +49,7 @@ import {
 	WS_SUMMARY_BAND,
 	WS_SUMMARY_BAND_PAD,
 	WS_SUMMARY_LABEL,
+	WS_SUMMARY_SECTION,
 	WS_SUMMARY_STATUS_ROW,
 } from "../lib/workspace-summary-classes";
 import { Tooltip } from "../ui/tooltip";
@@ -1229,9 +1230,19 @@ export function PrStatusBar({
 				)}
 			</div>
 		);
-		if (statusRows.length === 0) return primarySummary;
+		const heading = (
+			<div className={WS_SUMMARY_SECTION}>Pull requests</div>
+		);
+		if (statusRows.length === 0)
+			return (
+				<>
+					{heading}
+					{primarySummary}
+				</>
+			);
 		return (
 			<>
+				{heading}
 				{primarySummary}
 				<PrSeriesRows
 					refs={statusRows}
