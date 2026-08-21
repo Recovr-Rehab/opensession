@@ -50,7 +50,10 @@ export const WS_SUMMARY_CARD =
  * name back at you.
  */
 export const WS_SUMMARY_SECTION =
-	"mt-2 flex h-[31px] shrink-0 items-center px-4 text-label font-semibold text-dim first:mt-0";
+	"mt-2 flex h-[31px] shrink-0 items-center px-4 text-label font-semibold text-dim first:mt-0 " +
+	// The PR plate already closes with its own bottom breathing room. Do not
+	// stack the next section's full top gap on it as well.
+	"[.ws-summary-band+&]:mt-0";
 
 /**
  * A row. 31px tall on a 300px card, which is the proportion a dense list needs
@@ -64,7 +67,8 @@ export const WS_SUMMARY_SECTION =
  *  band supplies one for the whole group. Declared before its first use: these
  *  are module-scope consts, so a reference from a line above would evaluate in
  *  the temporal dead zone and throw at import. */
-const BAND_ROW = " [.ws-summary-band_&]:mx-0 [.ws-summary-band_&]:w-full";
+const BAND_ROW =
+	" [.ws-summary-band_&]:mx-0 [.ws-summary-band_&]:w-full [.ws-summary-band_&]:px-3";
 
 export const WS_SUMMARY_ROW =
 	"group/ws mx-2 flex h-[31px] w-[calc(100%_-_16px)] min-w-0 shrink-0 cursor-pointer items-center gap-3.5 " +
@@ -102,12 +106,12 @@ export const WS_SUMMARY_STATUS_ROW =
  * all: a PR with nothing to report has no colour to lend, and a grey plate
  * would only draw a box around two rows.
  *
- * It takes the rows' own gutter and their `rounded-row` corner, so the tint
- * lands exactly where a hover pill would and the band reads as part of the
- * list rather than as a header bolted over it.
+ * It keeps a slim 4px outer gutter and gives its rows 12px inside. Together
+ * those preserve the card's 16px content rail while giving the tinted plate
+ * enough padding around the headline.
  */
 export const WS_SUMMARY_BAND =
-	"ws-summary-band mx-2 mb-1 flex min-w-0 shrink-0 flex-col rounded-row";
+	"ws-summary-band mx-1 mb-1 flex min-w-0 shrink-0 flex-col rounded-row";
 
 /** The band's inner padding, once it has a fill to hold. An untinted band is
  *  invisible, so it stays flush and the rows keep the list's own pitch. */
