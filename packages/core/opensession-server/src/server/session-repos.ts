@@ -444,6 +444,7 @@ export async function attachRepo(
 	sessionId: string,
 	repoId: string,
 	branch?: string,
+	gitEnv?: Record<string, string>,
 ): Promise<{ attached: AttachedRepo; all: AttachedRepo[] }> {
 	const session = findSession(sessionId);
 	if (!session) throw new Error("Session not found");
@@ -462,7 +463,7 @@ export async function attachRepo(
 		throw new Error("No branch to attach on — pass a branch name");
 	}
 
-	const attached = await prepareAttachedWorktree(repoId, effectiveBranch);
+	const attached = await prepareAttachedWorktree(repoId, effectiveBranch, gitEnv);
 	// Read-modify-write inside the session-file lock rather than from the
 	// snapshot above: cutting the worktree takes as long as a fetch, and a
 	// create attaching several repos in a row must not have the last one's list
@@ -560,6 +561,7 @@ export async function switchPrimaryRepo(
 	sessionId: string,
 	repoId: string,
 	force = false,
+	gitEnv?: Record<string, string>,
 ): Promise<{ repo: string; branch: string; worktreeDir: string }> {
 	const session = findSession(sessionId);
 	if (!session) throw new Error("Session not found");
@@ -596,7 +598,11 @@ export async function switchPrimaryRepo(
 		const worktrees = await listWorktrees(target.id);
 		wtPath =
 			worktrees.find((w) => w.branch === branch)?.path ||
-			(await createWorktree(branch, target.id));
+			(await createWorktree(
+				branch,
+				target.id,
+				gitEnv ? { gitEnv } : undefined,
+			));
 	}
 
 	// Drop the target from attached repos if it was attached — it's the primary now.

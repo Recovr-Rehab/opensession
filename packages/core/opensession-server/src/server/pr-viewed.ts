@@ -13,6 +13,7 @@
 import type { RouteContext } from "./routes/context";
 import { githubCredentialForLogin, githubUserLoginForRun } from "./github-auth";
 import { botGhToken } from "./github-limit";
+import { githubMutationCredential } from "./routes/github-credential";
 import { fetchWithTimeout } from "./shared/fetch-with-timeout";
 
 export interface PrViewedFiles {
@@ -27,10 +28,19 @@ async function viewerToken(
 	ctx: RouteContext,
 	claimedUser?: string | null,
 ): Promise<string | null> {
+	// Use the same request-scoped resolver as the other human-triggered PR
+	// actions. In simple mode this selects the sole connected account; with
+	// sign-in enabled it selects only the verified requester's account.
+	const requestCredential = githubMutationCredential(ctx);
+	if (requestCredential?.env.GH_TOKEN)
+		return requestCredential.env.GH_TOKEN;
+
+	// Preserve the older identity-table lookup for deployments that still send
+	// a claimed user without web sign-in, then retain the historical bot fallback.
 	const login = ctx.authUser?.login ?? githubUserLoginForRun(claimedUser);
 	if (login) {
-		const cred = githubCredentialForLogin(login);
-		if (cred?.env.GH_TOKEN) return cred.env.GH_TOKEN;
+		const credential = githubCredentialForLogin(login);
+		if (credential?.env.GH_TOKEN) return credential.env.GH_TOKEN;
 	}
 	return botGhToken();
 }

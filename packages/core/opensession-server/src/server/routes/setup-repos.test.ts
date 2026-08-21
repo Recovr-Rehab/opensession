@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { validGithubFullName } from "./setup-repos";
+import { githubCredentialHelperCommand, validGithubFullName } from "./setup-repos";
 
 describe("validGithubFullName", () => {
   test("accepts ordinary owner/name pairs", () => {
@@ -36,4 +36,20 @@ describe("validGithubFullName", () => {
     // https URL via array spawn, so a "-"-prefixed owner can't become a flag.
     expect(validGithubFullName("--flag/repo")).toBe(true);
   });
+});
+
+
+describe("githubCredentialHelperCommand", () => {
+  test("uses the stable installed command for compiled releases", () => {
+    expect(
+      githubCredentialHelperCommand("/home/alice/Open Session/bin/opensession", true),
+    ).toBe("!'/home/alice/Open Session/bin/opensession' github-credential");
+  });
+
+  test("falls back to the source script before the shim is installed", () => {
+    const command = githubCredentialHelperCommand("/missing/opensession", false);
+    expect(command).toStartWith("!bun ");
+    expect(command).toEndWith("scripts/gh-credential.ts");
+  });
+
 });

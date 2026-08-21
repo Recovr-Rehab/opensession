@@ -81,6 +81,12 @@ import {
 	snapshotResolvedCreate,
 	updateCreatePlan,
 } from "./session-create-plan";
+import {
+	githubCredentialForLogin,
+	githubCredentialForPrincipal,
+	soleGithubAccount,
+} from "./github-auth";
+
 
 /**
  * The `create_session` client message fields the flow reads. Fields typed
@@ -227,6 +233,10 @@ export interface ResolvedCreate {
    * so its system note and any sandbox mounts already know about them.
    */
 	attachRepos?: { repos: string[]; branch: string };
+	/** Durable, non-secret selector for trusted server-owned worktree fetches. */
+	gitPrincipal?: string;
+	/** Ephemeral capability. snapshotResolvedCreate always strips this field. */
+	gitEnv?: Record<string, string>;
 	stackedOn?: { repo: string; branch: string };
 	/** Workspace recorded on the session file. */
 	workspaceId?: string;
@@ -324,11 +334,12 @@ async function attachCreateRepos(
 	sessionId: string,
 	plan: { repos: string[]; branch: string },
 	io: CreateSessionIO,
+	gitEnv?: Record<string, string>,
 ): Promise<string[]> {
 	const attached: string[] = [];
 	for (const repoId of plan.repos) {
 		try {
-			await attachRepo(sessionId, repoId, plan.branch);
+			await attachRepo(sessionId, repoId, plan.branch, gitEnv);
 			attached.push(repoId);
 		} catch (e) {
 			io.emit({
@@ -363,6 +374,7 @@ export async function resumePlannedCreate(sessionId: string): Promise<boolean> {
 	const dispatch = promptDispatches.get(sessionId);
 	if (!plan?.resolved || dispatch?.kind !== "create") return false;
 	const restored = restoreResolvedCreate<ResolvedCreate>(plan.resolved);
+	const restoredGitEnv = githubCredentialForPrincipal(restored.gitPrincipal)?.env;
 	if (
 		typeof restored.wtPath !== "string" ||
 		typeof restored.branch !== "string" ||
@@ -378,12 +390,17 @@ export async function resumePlannedCreate(sessionId: string): Promise<boolean> {
 						`Incomplete worktree exists at ${restored.wtPath}; refusing to resume the session`,
 					);
 				return restored.worktreeKind === "existing"
-					? createWorktreeForExistingBranch(restored.branch!, restored.repoId!)
+					? createWorktreeForExistingBranch(
+							restored.branch!,
+							restored.repoId!,
+							restoredGitEnv,
+						)
 					: createWorktree(restored.branch!, restored.repoId!, {
 							...(restored.stackedOn?.branch
 								? { base: restored.stackedOn.branch }
 								: {}),
 							...(restored.worktreeIsolated ? { isolated: true } : {}),
+							...(restoredGitEnv ? { gitEnv: restoredGitEnv } : {}),
 						});
 			}
 		: undefined;
@@ -393,6 +410,7 @@ export async function resumePlannedCreate(sessionId: string): Promise<boolean> {
 		id: sessionId,
 		openingPromptEntryId: dispatch.promptEntryId,
 		images: parseImageDataUrls(imageUrls),
+		gitEnv: restoredGitEnv,
 		materializeWorktree,
 		needsWorktree: !!materializeWorktree,
 	};
@@ -633,7 +651,8 @@ export async function openCreatedSession(
 						attachedRepoIds = await attachCreateRepos(
 							bksId,
 							pendingAttach,
-							io
+							io,
+							spec.gitEnv,
 						);
 				} finally {
 					// Ready (or failed — the error surfaces separately): flip the
@@ -1112,6 +1131,14 @@ export async function handleCreateSessionMessage(
 		finishCreate();
 		return response;
 	}
+	// This WebSocket create is interactive. The raw credential reaches only the
+	// server-owned materializer; recovery persists and resolves its principal.
+	const githubCredential = ws.data.authLogin
+		? githubCredentialForLogin(ws.data.authLogin)
+		: ws.data.authAutomation
+			? null
+			: soleGithubAccount();
+	const githubGitEnv = githubCredential?.env;
 	// Mutable: a brand-new code branch is made collision-free below (a
 	// name clashing with an existing `name/...` ref — or vice versa —
 	// makes `git worktree add -b` fail, killing the session).
@@ -1705,17 +1732,18 @@ export async function handleCreateSessionMessage(
 			volumeWorkspace,
 			remoteSandbox,
 			openingPromptEntryId: `create-${requestId || bksId}`,
+			gitPrincipal: githubCredential?.principal,
+			gitEnv: githubGitEnv,
 			needsWorktree,
 			worktreeKind: fromPr ? "existing" : "new",
 			materializeWorktree: needsWorktree
 				? () =>
 						fromPr
-							? createWorktreeForExistingBranch(branch, repo.id)
-							: createWorktree(
-									branch,
-									repo.id,
-									stackBase ? { base: stackBase } : undefined,
-								)
+							? createWorktreeForExistingBranch(branch, repo.id, githubGitEnv)
+							: createWorktree(branch, repo.id, {
+									...(stackBase ? { base: stackBase } : {}),
+									...(githubGitEnv ? { gitEnv: githubGitEnv } : {}),
+								})
 				: undefined,
 			fork: canFork
 				? {
@@ -1728,6 +1756,9 @@ export async function handleCreateSessionMessage(
 		const restoredSpec = createPlan.resolved
 			? restoreResolvedCreate<ResolvedCreate>(createPlan.resolved)
 			: undefined;
+		const restoredGitEnv = githubCredentialForPrincipal(
+			restoredSpec?.gitPrincipal,
+		)?.env;
 		const restoredWorktreeReady =
 			restoredSpec?.needsWorktree &&
 			typeof restoredSpec.wtPath === "string" &&
@@ -1754,13 +1785,19 @@ export async function handleCreateSessionMessage(
 							? createWorktreeForExistingBranch(
 									restoredSpec.branch!,
 									restoredSpec.repoId!,
+									restoredGitEnv,
 								)
 							: createWorktree(
 									restoredSpec.branch!,
 									restoredSpec.repoId!,
-									restoredSpec.stackedOn?.branch
-										? { base: restoredSpec.stackedOn.branch }
-										: undefined,
+									{
+										...(restoredSpec.stackedOn?.branch
+											? { base: restoredSpec.stackedOn.branch }
+											: {}),
+										...(restoredGitEnv
+											? { gitEnv: restoredGitEnv }
+											: {}),
+									},
 								);
 					}
 				: undefined;
@@ -1769,6 +1806,7 @@ export async function handleCreateSessionMessage(
 					...computedSpec,
 					...restoredSpec,
 					images: computedSpec.images,
+					gitEnv: restoredGitEnv,
 					materializeWorktree: restoredMaterializer,
 					needsWorktree: !!restoredMaterializer,
 				}

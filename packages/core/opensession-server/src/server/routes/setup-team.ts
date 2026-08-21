@@ -73,8 +73,10 @@ function validateMemberFields(
 }
 
 /** The raw `identity.team` array (unknown keys preserved), plus the raw
- *  config it lives in — mutate the array, then persist the config. */
-function rawTeam(config: Record<string, unknown>): MemberPatch[] {
+ *  config it lives in — mutate the array, then persist the config. Exported so
+ *  the connect-time auth bootstrap (routes/connections.ts) upserts the first
+ *  admin through the same array the team CRUD uses. */
+export function rawTeam(config: Record<string, unknown>): MemberPatch[] {
   const identity =
     config.identity && typeof config.identity === "object" && !Array.isArray(config.identity)
       ? (config.identity as Record<string, unknown>)
@@ -100,11 +102,9 @@ function memberGithub(entry: MemberPatch): string {
  * people step, so a normal first-mile flow has this by the time it needs it. */
 function githubOrganization(): string | null {
   const integration = configuredIntegration("github");
-  const explicit =
-    typeof integration.installationOwner === "string"
-      ? integration.installationOwner.trim()
-      : "";
-  if (explicit) return explicit;
+  const explicit = [integration.installationOwner, integration.appOrg]
+    .find((owner): owner is string => typeof owner === "string" && !!owner.trim());
+  if (explicit) return explicit.trim();
 
   const counts = new Map<string, { owner: string; count: number }>();
   for (const repo of Object.values(configuredRepos())) {

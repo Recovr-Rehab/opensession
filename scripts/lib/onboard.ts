@@ -53,6 +53,15 @@ export type OnboardOptions = {
   force?: boolean;
   /** Write every default and ask nothing (the installer's default path). */
   defaults?: boolean;
+  /**
+   * The GitHub org this instance is for (install `--org`). Its presence is what
+   * turns a single-user install into an org one: it records the App's owning org
+   * AND the intent to turn on per-user sign-in at first connect (config
+   * `integrations.github.appOrg` + `authOnConnect`). It never writes userPrAuth —
+   * nobody is signed in at install time, so flipping the gate here would lock the
+   * operator out. Absent = today's single-user install, byte-identical.
+   */
+  org?: string;
 };
 
 /** "Open Session" -> "OS". Falls back to the first two characters. */
@@ -73,9 +82,12 @@ export type Answers = {
   repoGhRepo?: string;
   worktreesDir: string;
   enabled: string[];
+  /** The GitHub org this install is for (from `--org`), or undefined for a
+   *  single-user install. Set from OnboardOptions, never prompted. */
+  org?: string;
 };
 
-function collect(): Answers {
+function collect(orgFlag?: string): Answers {
   heading("Instance configuration");
   info(
     dim(
@@ -84,6 +96,16 @@ function collect(): Answers {
         "  restart, and `opensession bind` handles that one on its own.",
     ),
   );
+
+  // The one answer that changes the install's shape: an organization sets up a
+  // shared org-owned GitHub App and per-user GitHub sign-in; blank keeps it
+  // single-user with no sign-in. `--org` answers it without asking; on the
+  // defaults path (no tty) it stays blank.
+  const org =
+    orgFlag?.trim() ||
+    (canPrompt()
+      ? ask("GitHub organization (blank for a personal, single-user install)", "").trim()
+      : "");
 
   const productName = ask("Product name", "Open Session");
 
@@ -152,6 +174,7 @@ function collect(): Answers {
     repoGhRepo: detectGhRepo(repoPath),
     worktreesDir,
     enabled,
+    org: org || undefined,
   };
 }
 
@@ -177,16 +200,30 @@ function detectGhRepo(dir: string): string | undefined {
   }
 }
 
-/** Exported for tests: the config.json object onboarding writes, so it can be
- *  asserted without running the full installer side effects. */
+/** Exported for tests: the config.json object onboarding writes, so the org
+ *  intent mapping (appOrg + authOnConnect, never userPrAuth) can be asserted
+ *  without running the full installer side effects. */
 export function buildConfig(a: Answers): Record<string, unknown> {
-  // Every non-`always` integration written explicitly off.
+  // Every non-`always` integration written explicitly off. An org install also
+  // records its intent on the github section: the App's owning org and a flag to
+  // turn on per-user sign-in at the first connect. NEVER userPrAuth — nobody is
+  // signed in yet, so gating the app here would lock the operator out. The flip
+  // happens at the connect step, in a request that also mints their session
+  // (routes/connections.ts). A single-user install writes neither key, so its
+  // config is byte-identical to before.
   const integrations = Object.fromEntries(
     INTEGRATIONS.filter((i) => !i.always).map((i) => [
       i.id,
       { enabled: a.enabled.includes(i.id) } as Record<string, unknown>,
     ]),
   );
+  if (a.org) {
+    integrations.github = {
+      ...(integrations.github ?? {}),
+      appOrg: a.org,
+      authOnConnect: true,
+    };
+  }
   return {
     server: {
       host: a.host,
@@ -274,6 +311,16 @@ export async function onboard(opts: OnboardOptions = {}): Promise<number> {
   // defaults. Backups make that recoverable, not harmless.
   if (existsSync(CONFIG_PATH) && !opts.force) {
     warn(`${CONFIG_PATH} already exists — this box is already onboarded.`);
+    // `--org` sets up the App owner and per-user sign-in intent, but only on a
+    // FIRST onboard: re-running here would silently change an existing
+    // instance's auth posture, so it is ignored and said so.
+    if (opts.org) {
+      info(
+        dim(
+          `--org is a first-onboard setting; this box already has a config, so it is ignored.`,
+        ),
+      );
+    }
     info(
       dim(
         `Smaller changes have their own commands: ${bold("opensession bind")} (move to the\n` +
@@ -290,7 +337,7 @@ export async function onboard(opts: OnboardOptions = {}): Promise<number> {
     }
   }
 
-  const answers = collect();
+  const answers = collect(opts.org);
 
   heading("Writing configuration");
   mkdirSync(OPENSESSION_HOME, { recursive: true });

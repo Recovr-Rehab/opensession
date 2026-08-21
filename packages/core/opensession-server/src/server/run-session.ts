@@ -156,6 +156,7 @@ setJournalSetListener((record) =>
 	acknowledgePromptDispatch(record.osSessionId, record.promptEntryId),
 );
 import { audit } from "./audit";
+import { githubCredentialForLogin, githubCredentialForRun } from "./github-auth";
 import {
 	announcesNextAction,
 	AUTO_CONTINUE_FABRICATED_PROMPT,
@@ -1187,6 +1188,11 @@ export function foldSessionUsage(
  * refetch the instant the push lands.
  */
 export async function autoPushSessionBranches(session: UnifiedSession): Promise<void> {
+	const githubGitEnv = session.automation || session.automationId
+		? undefined
+		: session.createdByLogin
+			? githubCredentialForLogin(session.createdByLogin)?.env
+			: githubCredentialForRun(session.createdBy || session.startedBy)?.env;
 	// Repo-less sessions (scratch, repo-less ask) have no primary branch to
 	// push, and their worktreeDir is a plain dir repoForPath would throw on.
 	// Attached repos still push: those carry their own repo and branch.
@@ -1224,7 +1230,7 @@ export async function autoPushSessionBranches(session: UnifiedSession): Promise<
 			continue;
 		}
 		if (!git.hasUpstream || git.ahead <= 0 || git.behind > 0) continue;
-		const result = await gitPush(dir, branch, exec);
+		const result = await gitPush(dir, branch, exec, githubGitEnv);
 		if ("error" in result) {
 			console.warn(
 				`[auto-push] ${session.id} ${repoId}/${branch}: ${result.error}`,

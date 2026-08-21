@@ -47,6 +47,7 @@ ${bold("opensession")} — self-hosted agent infrastructure
 ${bold("Setup")}
   onboard [--force]        configure this box (writes config + env + service)
                            --defaults: no questions, the installer's path
+                           --org <name>: set up an org App + per-user sign-in
   bind [address]           move the server to a new bind address and restart
                            (no address: this box's tailnet IP)
   team [add|remove]        manage the identity roster (attribution, sign-in)
@@ -276,6 +277,7 @@ async function main(): Promise<number> {
       return await onboard({
         force: flags.has("--force"),
         defaults: flags.has("--defaults"),
+        org: flagValue("--org"),
       });
 
     case "bind":
@@ -372,6 +374,14 @@ async function main(): Promise<number> {
       if (positional[0] === "pair") return await runnersPair();
       if (positional[0] === "remove") return await runnersRemove(positional[1] ?? "");
       return await runnersList();
+
+    // Internal git credential-helper entrypoint. It stays out of --help, but is
+    // routed through the installed command so compiled releases need no Bun or
+    // source-tree sidecar.
+    case "github-credential": {
+      const { githubCredentialHelper } = await import("./lib/github-credential");
+      return await githubCredentialHelper(positional[0]);
+    }
 
     case "version":
     case "--version":
