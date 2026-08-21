@@ -3,7 +3,10 @@ import type {
   SessionActorReducerCommand,
 } from "./lifecycle-protocol";
 import type {
+  CreationEventDecision,
+  CreationEventDecisionResult,
   DurableCommandRecord,
+  DurableCreationState,
   DurableDeliveryState,
   DurableOutboxItem,
   DeliverySlot,
@@ -318,6 +321,22 @@ export class SessionKernelActorClient {
     ) as DeliveryActorResult<T>;
   }
 
+  decideCreationEvent(
+    decision: CreationEventDecision,
+  ): CreationEventDecisionResult {
+    return this.callSync<CreationEventDecisionResult>(
+      {
+        t: "reduce",
+        command: {
+          kind: "creation_event",
+          commandId: crypto.randomUUID(),
+          decision,
+        },
+      },
+      "creation event decision",
+    );
+  }
+
   decideRunEvent(decision: RunEventDecision): RunEventDecisionResult {
     const result = this.callSync<RunEventDecisionResult>(
       {
@@ -518,6 +537,15 @@ class RemoteStore implements SessionKernelStoreApi {
     retryable = false,
   ) {
     this.call("failCommand", sessionId, requestId, error, retryable);
+  }
+  creationState(sessionId: string): DurableCreationState | undefined {
+    return this.call<DurableCreationState | undefined>(
+      "creationState",
+      sessionId,
+    );
+  }
+  applyCreationEvent(input: CreationEventDecision) {
+    return this.actor.decideCreationEvent(input);
   }
   runState(sessionId: string) {
     return (

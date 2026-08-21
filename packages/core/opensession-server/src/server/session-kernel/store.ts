@@ -11,6 +11,11 @@ import {
   type RunEvent,
   type RunState,
 } from "./run-state-machine";
+import {
+  nextCreationState,
+  type CreationEvent,
+  type CreationState,
+} from "./creation-state-machine";
 import { chmodSync, existsSync, mkdirSync, readFileSync, statSync } from "fs";
 import { dirname } from "path";
 import { sessionsDir } from "../paths";
@@ -164,7 +169,7 @@ const PROCESS_OWNER_ID = (ownerGlobal.__opensessionSessionKernelOwnerId ??=
 		bootId: linuxBootId(),
 		start: linuxProcessStart(process.pid),
 	} satisfies ProcessOwnerIdentity));
-export const SESSION_KERNEL_SCHEMA_VERSION = 7;
+export const SESSION_KERNEL_SCHEMA_VERSION = 8;
 
 export function sessionKernelDbPath(): string {
 	// Test processes must never open the live instance state. Tests that need
@@ -178,6 +183,34 @@ export type RunEventDecision = {
 	event: RunEvent;
 	detail?: Record<string, unknown>;
 	runKey?: string;
+};
+
+export type CreationEventDecision = {
+  sessionId: string;
+  identity: string;
+  event: CreationEvent;
+  /** Effect result being applied, fenced against the current effect. */
+  effectId?: string;
+  /** Stable effect emitted by this reduction, when it advances physical work. */
+  nextEffectId?: string;
+  detail?: Record<string, unknown>;
+};
+
+export type DurableCreationState = {
+  state: CreationState;
+  identity: string;
+  generation: number;
+  currentEffectId?: string;
+  changeSeq: number;
+  updatedAt: number;
+};
+
+export type CreationEventDecisionResult = {
+  accepted: boolean;
+  from?: CreationState;
+  to?: CreationState;
+  reason?: "invalid_transition" | "identity_mismatch" | "stale_effect";
+  state?: DurableCreationState;
 };
 
 export type RunEventDecisionResult = {
@@ -249,6 +282,15 @@ export class SessionKernelStore {
 				last_event TEXT,
 				generation INTEGER NOT NULL DEFAULT 0,
 				current_run_id TEXT,
+				change_seq INTEGER NOT NULL DEFAULT 0,
+				updated_at INTEGER NOT NULL
+			);
+			CREATE TABLE IF NOT EXISTS session_kernel_creation (
+				session_id TEXT PRIMARY KEY,
+				identity TEXT NOT NULL,
+				state TEXT NOT NULL,
+				generation INTEGER NOT NULL DEFAULT 0,
+				current_effect_id TEXT,
 				change_seq INTEGER NOT NULL DEFAULT 0,
 				updated_at INTEGER NOT NULL
 			);
@@ -817,6 +859,161 @@ export class SessionKernelStore {
 		}));
 	}
 
+  creationState(sessionId: string): DurableCreationState | undefined {
+    const row = this.db
+      .query(
+        `SELECT identity, state, generation, current_effect_id, change_seq, updated_at
+         FROM session_kernel_creation WHERE session_id = ?`,
+      )
+      .get(sessionId) as Record<string, unknown> | null;
+    if (!row) return undefined;
+    return {
+      identity: String(row.identity),
+      state: String(row.state) as CreationState,
+      generation: Number(row.generation),
+      currentEffectId:
+        row.current_effect_id == null
+          ? undefined
+          : String(row.current_effect_id),
+      changeSeq: Number(row.change_seq),
+      updatedAt: Number(row.updated_at),
+    };
+  }
+
+  applyCreationEvent(
+    input: CreationEventDecision,
+  ): CreationEventDecisionResult {
+    if (this.isTombstoned(input.sessionId))
+      throw new Error(`Session ${input.sessionId} was deleted`);
+    const now = Date.now();
+    let result!: CreationEventDecisionResult;
+    const tx = this.db.transaction(() => {
+      const prior = this.creationState(input.sessionId);
+      if (prior && prior.identity !== input.identity) {
+        result = {
+          accepted: false,
+          from: prior.state,
+          to: prior.state,
+          reason: "identity_mismatch",
+          state: prior,
+        };
+        return;
+      }
+      const requiresEffectResult =
+        !!prior?.currentEffectId &&
+        ["opening_dispatched", "succeeded", "failed"].includes(input.event);
+      if (
+        (requiresEffectResult || input.effectId !== undefined) &&
+        prior?.currentEffectId !== input.effectId
+      ) {
+        result = {
+          accepted: false,
+          from: prior?.state,
+          to: prior?.state,
+          reason: "stale_effect",
+          state: prior,
+        };
+        return;
+      }
+      const from = prior?.state;
+      const to = nextCreationState(from, input.event);
+      if (!to) {
+        result = {
+          accepted: false,
+          from,
+          to: from,
+          reason: "invalid_transition",
+          state: prior,
+        };
+        return;
+      }
+      const run = this.runState(input.sessionId);
+      const changeSeq = run.changeSeq + 1;
+      const generation = prior?.generation ?? 1;
+      const currentEffectId = ["ready", "failed"].includes(to)
+        ? undefined
+        : input.nextEffectId ?? prior?.currentEffectId;
+      this.db.run(
+        `INSERT INTO session_kernel_creation
+          (session_id, identity, state, generation, current_effect_id, change_seq, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?)
+         ON CONFLICT(session_id) DO UPDATE SET
+          state = excluded.state,
+          generation = excluded.generation,
+          current_effect_id = excluded.current_effect_id,
+          change_seq = excluded.change_seq,
+          updated_at = excluded.updated_at`,
+        [
+          input.sessionId,
+          input.identity,
+          to,
+          generation,
+          currentEffectId ?? null,
+          changeSeq,
+          now,
+        ],
+      );
+      this.db.run(
+        `INSERT INTO session_kernel_state
+          (session_id, run_state, run_since, last_event, generation,
+           current_run_id, change_seq, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+         ON CONFLICT(session_id) DO UPDATE SET
+          change_seq = excluded.change_seq,
+          updated_at = excluded.updated_at`,
+        [
+          input.sessionId,
+          run.state,
+          run.since === new Date(0).toISOString()
+            ? new Date(now).toISOString()
+            : run.since,
+          run.lastEvent ?? null,
+          run.generation,
+          run.currentRunId ?? null,
+          changeSeq,
+          now,
+        ],
+      );
+      this.db.run(
+        `INSERT INTO session_kernel_changes
+          (session_id, change_seq, kind, payload, created_at)
+         VALUES (?, ?, 'creation_state', ?, ?)`,
+        [
+          input.sessionId,
+          changeSeq,
+          json({
+            identity: input.identity,
+            state: to,
+            event: input.event,
+            effectId: input.effectId,
+            nextEffectId: input.nextEffectId,
+            detail: input.detail,
+          }),
+          now,
+        ],
+      );
+      const state: DurableCreationState = {
+        identity: input.identity,
+        state: to,
+        generation,
+        currentEffectId,
+        changeSeq,
+        updatedAt: now,
+      };
+      result = { accepted: true, from, to, state };
+    });
+    tx.immediate();
+    if (result.accepted) {
+      const run = this.runState(input.sessionId);
+      this.runStateCache.set(input.sessionId, {
+        ...run,
+        changeSeq: result.state!.changeSeq,
+      });
+      this.dirtyChangeSessions.add(input.sessionId);
+    }
+    return result;
+  }
+
 	applyRunEvent(input: RunEventDecision): RunEventDecisionResult {
 		const now = Date.now();
 		const since = new Date(now).toISOString();
@@ -1006,6 +1203,7 @@ export class SessionKernelStore {
 		const tx = this.db.transaction(() => {
 			for (const table of [
 				"session_kernel_state",
+        "session_kernel_creation",
         "session_kernel_asks",
         "session_kernel_delivery",
 				"session_kernel_commands",
@@ -1029,6 +1227,7 @@ export class SessionKernelStore {
 		const tx = this.db.transaction(() => {
 			for (const table of [
 				"session_kernel_state",
+        "session_kernel_creation",
         "session_kernel_asks",
         "session_kernel_delivery",
 				"session_kernel_commands",

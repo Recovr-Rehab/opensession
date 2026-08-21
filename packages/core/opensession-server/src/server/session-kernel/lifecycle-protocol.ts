@@ -1,6 +1,9 @@
 import type { AskActorRequest } from "./ask-protocol";
 import type { DeliveryActorRequest } from "./delivery-protocol";
-import type { RunEventDecision } from "./store";
+import type {
+  CreationEventDecision,
+  RunEventDecision,
+} from "./store";
 
 /**
  * Temporary physical work that still executes as a gateway callback.
@@ -54,6 +57,11 @@ export type RunFence = {
 };
 
 export type SessionActorReducerCommand =
+  | {
+      kind: "creation_event";
+      commandId: string;
+      decision: CreationEventDecision;
+    }
   | {
       kind: "run_event";
       commandId: string;

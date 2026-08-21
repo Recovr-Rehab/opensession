@@ -215,6 +215,34 @@ describe("session kernel actor boundary", () => {
     await host.complete(active.executionId!, "done", []);
   });
 
+  test("reduces creation events while gateway work is active", async () => {
+    const host = await actor();
+    const active = await host.begin(
+      "creating",
+      testEffect({ requestId: "physical-create", type: "create_session" }),
+    );
+    expect(host.decideCreationEvent({
+      sessionId: "creating",
+      identity: "create-request",
+      event: "plan",
+    })).toMatchObject({ accepted: true, to: "planned" });
+    expect(host.decideCreationEvent({
+      sessionId: "creating",
+      identity: "create-request",
+      event: "preparation_started",
+      nextEffectId: "prepare-effect",
+    })).toMatchObject({
+      accepted: true,
+      to: "preparing",
+      state: { currentEffectId: "prepare-effect" },
+    });
+    expect(host.store.creationState("creating")).toMatchObject({
+      state: "preparing",
+      identity: "create-request",
+    });
+    await host.complete(active.executionId!, "done", []);
+  });
+
   test("hydrates persisted run state into the gateway projection", async () => {
     const host = await actor();
     host.callStore("setRunState", [

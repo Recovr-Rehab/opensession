@@ -27,7 +27,10 @@ import {
 import {
 	SessionKernelStore,
 	type SessionKernelStoreApi,
+	type CreationEventDecision,
+	type CreationEventDecisionResult,
 	type DurableCommandRecord,
+	type DurableCreationState,
 	type DurableDeliveryState,
 	type DurableRunState,
 	type DurableTimer,
@@ -70,7 +73,7 @@ type CommandContext = {
 };
 const commandContext = new AsyncLocalStorage<CommandContext>();
 
-function compatibilityStoreForTest(domain: "ask" | "delivery") {
+function compatibilityStoreForTest(domain: "ask" | "creation" | "delivery") {
 	if (process.env.NODE_ENV !== "test")
 		throw new Error(
 			`Session ${domain} mutation requires the authoritative actor`,
@@ -278,6 +281,27 @@ export class SessionKernel {
 		)
 			throw new Error(`Session ${this.sessionId} was deleted`);
 	}
+
+  applyCreationEvent(
+    input: Omit<CreationEventDecision, "sessionId">,
+  ): CreationEventDecisionResult {
+    this.assertWritable(`creation_state:${input.event}`);
+    this.touch();
+    if (state.actor)
+      return state.actor.decideCreationEvent({
+        sessionId: this.sessionId,
+        ...input,
+      });
+    return compatibilityStoreForTest("creation").applyCreationEvent({
+      sessionId: this.sessionId,
+      ...input,
+    });
+  }
+
+  creationState(): DurableCreationState | undefined {
+    this.touch();
+    return sessionKernelStore().creationState(this.sessionId);
+  }
 
   applyRunEvent(
     input: Omit<RunEventDecision, "sessionId">,

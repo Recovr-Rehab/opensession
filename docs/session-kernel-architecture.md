@@ -96,6 +96,16 @@ marker commits; only explicit test/migration fixture paths retain JSON output.
 Resolver closures, timeout handles and the explicit Stop latch
 remain process-local executor state because they are not durable decisions.
 
+## Creation ownership
+
+The actor persists a fenced creation aggregate with `planned`, `preparing`,
+`opening_dispatched`, `ready`, and `failed` states. Typed creation events reject
+identity crossover, invalid transitions, and stale physical-effect results while
+other gateway work is active. The existing create-plan JSON and create gateway
+callback still prepare resources during the migration. Moving those resource
+steps behind typed effects is the next cutover; the presence or absence of a
+plan file is not actor lifecycle evidence.
+
 ## Run ownership
 
 Run state is durable and explicit. Run events are typed actor messages. The
