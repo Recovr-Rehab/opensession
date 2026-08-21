@@ -281,15 +281,11 @@ export function useFileMentions({ value, onChange, textareaRef, mentionFetch, pa
 
   const open = !!mention && suggestions.length > 0;
 
-  // Position the popup against the wrapper. It renders in a portal with fixed
-  // viewport coordinates so an overflow:hidden ancestor (e.g. the new-session
-  // palette card) can't clip it. Opens upward by default, flips downward when
-  // there isn't room above.
-  //
-  // The emoji picker is the exception: it answers two characters typed inside
-  // a sentence, so it anchors to the shortcode itself rather than to the field.
-  // A full-width panel at the field's left edge reads as unrelated to what you
-  // are typing when the caret is halfway across a wide composer.
+  // The popup renders in a portal with fixed viewport coordinates so an
+  // overflow:hidden ancestor cannot clip it. Inline triggers anchor to the
+  // character that opened them: the command palette belongs beside the `@`,
+  // and emoji suggestions belong beside their shortcode. Slash commands still
+  // align to the field because `/` only opens at its first character.
   useLayoutEffect(() => {
     if (!open) {
       setPos(null);
@@ -301,24 +297,25 @@ export function useFileMentions({ value, onChange, textareaRef, mentionFetch, pa
       const rect = el.getBoundingClientRect();
       const POPUP_MAX = 420;
       const caret =
-        mention?.kind === "emoji"
+        mention?.kind === "emoji" || mention?.kind === "file"
           ? caretPoint(textareaRef.current, mention.start)
           : null;
       if (caret) {
-        const WIDTH = 240;
         const GUTTER = 8;
-        // Stay inside the viewport, and never left of the field: a shortcode
-        // at the very start of a line would otherwise hang off its edge.
+        const width =
+          mention?.kind === "emoji"
+            ? 240
+            : Math.min(520, rect.width, window.innerWidth - GUTTER * 2);
         const left = Math.max(
           GUTTER,
-          Math.min(caret.left - 8, window.innerWidth - WIDTH - GUTTER),
+          Math.min(caret.left - 8, window.innerWidth - width - GUTTER),
         );
         const spaceAbove = caret.top;
         const spaceBelow = window.innerHeight - caret.bottom;
         const down = spaceAbove < POPUP_MAX && spaceBelow > spaceAbove;
         setPos({
           left,
-          width: WIDTH,
+          width,
           ...(down
             ? {
                 top: caret.bottom + 6,
