@@ -34,6 +34,19 @@ export const AUTO_CONTINUE_FABRICATED_PROMPT =
 	"input only the human can give.";
 
 /**
+ * In-runner retry nudge for a turn whose FINAL model completion came back
+ * completely empty — zero content blocks, stopReason "stop" (2026-08-21
+ * os-01a02486: stealth/ox-alpha via OpenRouter ended a 10-minute turn on
+ * `content: []` with all-zero usage; pi settled it as a clean turn and the
+ * user had to ask "done?"). pi-runner sends this once via session.prompt();
+ * the fence keeps it out of the rendered transcript.
+ */
+export const EMPTY_REPLY_RETRY_PROMPT =
+	"[empty-response] Your previous reply reached the engine completely empty — " +
+	"no text and no tool calls. Send your final answer for the user's last " +
+	"message now: the summary, result, or question you intended to deliver.";
+
+/**
  * Redelivery nudge for user messages a dead turn never read. A busy-send
  * steer is a noReply engine-history append the running turn only picks up at
  * its NEXT LLM step — so when that turn dies first (wedged subagent, abort,

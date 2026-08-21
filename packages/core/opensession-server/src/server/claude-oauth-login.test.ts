@@ -3,6 +3,7 @@ import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "fs";
 import { tmpdir } from "os";
 import { join } from "path";
 import {
+  addAccount,
   listAccountsPublic,
   pickAccount,
   refreshAllUsage,
@@ -11,13 +12,15 @@ import { completeClaudeLogin, startClaudeLogin } from "./claude-oauth-login";
 
 const realFetch = globalThis.fetch;
 let dir = "";
-let accessToken = "sk-ant-oat01-first";
+let accessToken = "sk-ant-oat01-usage-first";
+let usageConnected = false;
 
 beforeEach(() => {
   dir = mkdtempSync(join(tmpdir(), "opensession-claude-oauth-"));
   process.env.OPENSESSION_STATE_DIR = dir;
   process.env.OPENSESSION_CLAUDE_ACCOUNTS_PATH = join(dir, "accounts.json");
-  accessToken = "sk-ant-oat01-first";
+  accessToken = "sk-ant-oat01-usage-first";
+  usageConnected = false;
   globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
     const url = String(input);
     if (url.endsWith("/v1/oauth/token")) {
@@ -37,6 +40,7 @@ beforeEach(() => {
       });
     }
     if (url.endsWith("/api/oauth/usage")) {
+      if (!usageConnected) return new Response("missing scope", { status: 403 });
       return Response.json({
         five_hour: { utilization: 12, resets_at: null },
         seven_day: { utilization: 34, resets_at: null },
@@ -53,12 +57,19 @@ afterEach(() => {
   rmSync(dir, { recursive: true, force: true });
 });
 
-describe("Claude OAuth account setup", () => {
-  test("creates a runnable account without a setup token and mirrors refreshes", async () => {
-    const started = await startClaudeLogin();
+describe("Claude OAuth usage setup", () => {
+  test("keeps the setup token for runs while OAuth credentials refresh usage", async () => {
+    const added = await addAccount("Alex", "sk-ant-oat01-setup");
+    expect(added).not.toHaveProperty("error");
+    if ("error" in added) throw new Error(added.error);
+    expect(added.noUsageScope).toBe(true);
+    expect(pickAccount()?.token).toBe("sk-ant-oat01-setup");
+
+    const started = await startClaudeLogin(added.id);
     expect(started).not.toHaveProperty("error");
     if ("error" in started) throw new Error(started.error);
 
+    usageConnected = true;
     const completed = await completeClaudeLogin(
       started.id,
       "authorization-code#state",
@@ -67,12 +78,13 @@ describe("Claude OAuth account setup", () => {
     if ("error" in completed) throw new Error(completed.error);
 
     expect(completed.account).toMatchObject({
-      name: "alex@example.com",
+      name: "Alex",
       email: "alex@example.com",
-      authKind: "oauth",
+      authKind: "setup-token",
+      noUsageScope: false,
       usable: true,
     });
-    expect(pickAccount()?.token).toBe("sk-ant-oat01-first");
+    expect(pickAccount()?.token).toBe("sk-ant-oat01-setup");
 
     const credentialsPath = completed.account.credentialsPath!;
     const credentials = JSON.parse(readFileSync(credentialsPath, "utf8"));
@@ -81,18 +93,18 @@ describe("Claude OAuth account setup", () => {
     );
     credentials.claudeAiOauth.expiresAt = 0;
     writeFileSync(credentialsPath, JSON.stringify(credentials));
-    accessToken = "sk-ant-oat01-refreshed";
+    accessToken = "sk-ant-oat01-usage-refreshed";
 
     await refreshAllUsage();
 
-    expect(pickAccount()?.token).toBe("sk-ant-oat01-refreshed");
-    expect(listAccountsPublic()[0]?.authKind).toBe("oauth");
+    expect(pickAccount()?.token).toBe("sk-ant-oat01-setup");
+    expect(listAccountsPublic()[0]?.authKind).toBe("setup-token");
     expect(
       JSON.parse(
         readFileSync(process.env.OPENSESSION_CLAUDE_ACCOUNTS_PATH!, "utf8"),
       ),
     ).toMatchObject({
-      accounts: [{ token: "sk-ant-oat01-refreshed", authKind: "oauth" }],
+      accounts: [{ token: "sk-ant-oat01-setup", credentialsPath }],
     });
   });
 });

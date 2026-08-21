@@ -93,9 +93,24 @@ export function sandboxHttpsPortFor(sandboxId: string, containerPort: number): n
   throw new Error("sandbox preview https-port range exhausted (20000-27999 all allocated)");
 }
 
-/** Existing allocation only — never allocates (stop/teardown paths). */
+/** Existing allocation only, never allocates (stop/teardown paths). */
 export function lookupSandboxHttpsPort(sandboxId: string, containerPort: number): number | null {
   return readAllocations()[keyFor(sandboxId, containerPort)] ?? null;
+}
+
+/** Reverse an existing allocation so the authenticated Portal route can
+ * rebuild its process-local relay after an Open Session restart. */
+export function sandboxAllocationForHttpsPort(
+  httpsPort: number,
+): { sandboxId: string; containerPort: number } | null {
+  for (const [key, allocated] of Object.entries(readAllocations())) {
+    if (allocated !== httpsPort) continue;
+    const split = key.lastIndexOf(":");
+    const sandboxId = key.slice(0, split);
+    const containerPort = Number(key.slice(split + 1));
+    if (sandboxId && Number.isInteger(containerPort)) return { sandboxId, containerPort };
+  }
+  return null;
 }
 
 /**

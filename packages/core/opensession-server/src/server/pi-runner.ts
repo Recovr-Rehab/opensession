@@ -27,6 +27,7 @@ import {
   stat as fsStat,
   writeFile as fsWriteFile,
 } from "fs/promises";
+import { createHash } from "node:crypto";
 import { basename, dirname, join, resolve, sep } from "path";
 import type {
   AgentSession,
@@ -70,6 +71,7 @@ import {
 import { buildRunInstructions } from "./run-instructions";
 import { logInjectedContext, logStandingContext, logStandingJson } from "./context-log";
 import { wrapContext } from "./prompt-context";
+import { EMPTY_REPLY_RETRY_PROMPT } from "./auto-continue";
 import { bashAskPolicyReply } from "./command-policy";
 import {
   appendTranscriptEntries,
@@ -115,6 +117,21 @@ export const PI_MODEL_PREFIX = "pi/";
 /** State root: server-owned agentDir, per-unified-session pi session dirs,
  *  and the smoke-turn scratch cwd. Never ~/.pi. */
 export const PI_STATE_DIR = stateDir("pi");
+
+/** How many content blocks of an assistant message a reader could actually
+ *  see: non-empty text blocks and tool calls. Thinking-only or empty content
+ *  counts zero — that is the empty-completion shape the pump loop retries. */
+export function assistantRenderableBlockCount(content: unknown): number {
+  if (!Array.isArray(content)) return 0;
+  let n = 0;
+  for (const b of content) {
+    if (!b || typeof b !== "object") continue;
+    const block = b as { type?: string; text?: unknown; id?: unknown };
+    if (block.type === "text" && typeof block.text === "string" && block.text.trim()) n++;
+    else if (block.type === "toolCall" && block.id) n++;
+  }
+  return n;
+}
 
 /** Split `pi/<provider>/<model>` (model may itself contain slashes). */
 export function parsePiModel(
@@ -1009,6 +1026,65 @@ const BASH_OUTPUT_CAP = 40_000;
 const BASH_DEFAULT_TIMEOUT_S = 120;
 const BASH_MAX_TIMEOUT_S = 600;
 
+/** A non-sensitive command shape for audit events. Command text never belongs
+ * in the audit log: it commonly contains bearer tokens, customer data, and
+ * shell-expanded credentials. The hash still joins a start to its finish and
+ * lets an authorized investigator correlate a command with its source. */
+export interface PiBashAuditEvent {
+  phase: "start" | "finish";
+  command_sha256: string;
+  command_bytes: number;
+  command_kind: string;
+  sleep_calls?: number;
+  sleep_seconds?: number;
+  timeout_s: number;
+  duration_ms?: number;
+  exit_code?: number | null;
+  timed_out?: boolean;
+  cancelled?: boolean;
+  outcome?: "ok" | "failed" | "timed_out" | "cancelled";
+}
+
+const AUDITED_COMMAND_KINDS = new Set([
+  "bun",
+  "cat",
+  "cd",
+  "curl",
+  "echo",
+  "find",
+  "git",
+  "gh",
+  "ls",
+  "printf",
+  "rg",
+  "sed",
+  "sleep",
+]);
+
+/** Keep command observability useful without recording arguments or text. */
+function summarizeBashAuditCommand(command: string): Omit<
+  PiBashAuditEvent,
+  "phase" | "timeout_s" | "duration_ms" | "exit_code" | "timed_out" | "cancelled" | "outcome"
+> {
+  const firstWord = command.trim().match(/^(?:[A-Za-z_]\w*=[^\s]+\s+)*([A-Za-z][\w.-]*)/)?.[1];
+  const commandKind = firstWord && AUDITED_COMMAND_KINDS.has(firstWord) ? firstWord : "shell";
+  let sleepCalls = 0;
+  let sleepSeconds = 0;
+  for (const match of command.matchAll(
+    /(?:^|[;&|]\s*|\n\s*)sleep\s+(\d+(?:\.\d+)?)([smhd]?)(?=\s|[;&|]|$)/g
+  )) {
+    sleepCalls++;
+    const factor = { s: 1, m: 60, h: 3_600, d: 86_400 }[match[2] || "s"] ?? 1;
+    sleepSeconds += Number(match[1]) * factor;
+  }
+  return {
+    command_sha256: createHash("sha256").update(command).digest("hex"),
+    command_bytes: new TextEncoder().encode(command).byteLength,
+    command_kind: commandKind,
+    ...(sleepCalls > 0 ? { sleep_calls: sleepCalls, sleep_seconds: sleepSeconds } : {}),
+  };
+}
+
 /** The custom `bash` tool: same name/schema surface as pi's built-in (so the
  *  model needs no new habits) but execution is ours — Bun.spawn with the
  *  MINIMAL env only, never the server process env. `gated` additionally
@@ -1030,6 +1106,7 @@ export function makePiBashTool(input: {
   unattended: boolean;
   sessionId?: string;
   runKind?: string;
+  onAudit?: (event: PiBashAuditEvent) => void;
 }): ToolDefinition<any, any, any> {
   return {
     name: "bash",
@@ -1079,116 +1156,132 @@ export function makePiBashTool(input: {
           : BASH_DEFAULT_TIMEOUT_S;
 
       if (signal?.aborted) throw new Error("Command aborted");
+      const commandAudit = summarizeBashAuditCommand(command);
+      const commandStartedAt = Date.now();
+      input.onAudit?.({ phase: "start", ...commandAudit, timeout_s: timeoutS });
       // setsid makes bash a process-group leader, so kill(-pid) reaches the
       // grandchildren a plain proc.kill() misses (bash may already be gone
       // when the timeout fires). Absent setsid (macOS), degrade to the
       // direct-child kill.
       const setsidPath = Bun.which("setsid");
-      const proc = Bun.spawn(
-        setsidPath
-          ? [setsidPath, "/bin/bash", "-c", command]
-          : ["/bin/bash", "-c", command],
-        {
-          cwd: input.cwd,
-          env: input.env,
-          stdin: "ignore",
-          stdout: "pipe",
-          stderr: "pipe",
-        }
-      );
-      const killTree = () => {
-        const killGroup = (sig: "SIGTERM" | "SIGKILL") => {
-          try {
-            if (setsidPath) process.kill(-proc.pid, sig);
-            else proc.kill(sig);
-          } catch {}
-        };
-        killGroup("SIGTERM");
-        // Escalate for SIGTERM-ignorers; unref'd so a dead group never holds
-        // the process (or this tool's return) open.
-        const escalate = setTimeout(() => killGroup("SIGKILL"), 1_500);
-        (escalate as unknown as { unref?: () => void }).unref?.();
-      };
-
-      let out = "";
-      let droppedChars = 0;
-      let lastUpdate = 0;
-      const emitPartial = () => {
-        const now = Date.now();
-        if (now - lastUpdate < 250) return;
-        lastUpdate = now;
-        onUpdate?.({ content: [{ type: "text", text: out }], details: {} });
-      };
-      const append = (chunk: string) => {
-        out += chunk;
-        if (out.length > BASH_OUTPUT_CAP) {
-          droppedChars += out.length - BASH_OUTPUT_CAP;
-          out = out.slice(out.length - BASH_OUTPUT_CAP);
-        }
-        emitPartial();
-      };
-      const readers: ReadableStreamDefaultReader<Uint8Array>[] = [];
-      const drain = async (stream: ReadableStream<Uint8Array> | null) => {
-        if (!stream) return;
-        const dec = new TextDecoder();
-        const reader = stream.getReader();
-        readers.push(reader);
-        try {
-          while (true) {
-            const { done, value } = await reader.read();
-            if (done) break;
-            if (value) append(dec.decode(value, { stream: true }));
-          }
-        } catch {
-          // reader.cancel() below lands here — captured output stands.
-        } finally {
-          try {
-            reader.releaseLock();
-          } catch {}
-        }
-      };
-
       let timedOut = false;
-      const timer = setTimeout(() => {
-        timedOut = true;
-        killTree();
-      }, timeoutS * 1000);
-      const onAbort = () => killTree();
-      signal?.addEventListener("abort", onAbort, { once: true });
-
       let exitCode: number | null = null;
       try {
-        // Exit-gated completion: the drains alone can outlive bash forever
-        // when a backgrounded child inherited the pipes, so wait for exit
-        // first, then give the drains a short grace to flush and cut them.
-        const drains = Promise.all([drain(proc.stdout), drain(proc.stderr)]);
-        exitCode = await proc.exited;
-        await Promise.race([drains, Bun.sleep(250)]);
-      } finally {
-        clearTimeout(timer);
-        signal?.removeEventListener("abort", onAbort);
-        for (const reader of readers) {
-          // cancel() rejects (async) when the drain already released the
-          // reader — swallow both the sync throw and the rejection.
-          try {
-            reader.cancel().catch(() => {});
-          } catch {}
-        }
-      }
+        const proc = Bun.spawn(
+          setsidPath
+            ? [setsidPath, "/bin/bash", "-c", command]
+            : ["/bin/bash", "-c", command],
+          {
+            cwd: input.cwd,
+            env: input.env,
+            stdin: "ignore",
+            stdout: "pipe",
+            stderr: "pipe",
+          }
+        );
+        const killTree = () => {
+          const killGroup = (sig: "SIGTERM" | "SIGKILL") => {
+            try {
+              if (setsidPath) process.kill(-proc.pid, sig);
+              else proc.kill(sig);
+            } catch {}
+          };
+          killGroup("SIGTERM");
+          // Escalate for SIGTERM-ignorers; unref'd so a dead group never holds
+          // the process (or this tool's return) open.
+          const escalate = setTimeout(() => killGroup("SIGKILL"), 1_500);
+          (escalate as unknown as { unref?: () => void }).unref?.();
+        };
 
-      const text =
-        (droppedChars > 0
-          ? `[output truncated: first ${droppedChars} characters dropped]\n`
-          : "") + out;
-      if (signal?.aborted) throw new Error("Command aborted");
-      if (timedOut)
-        throw new Error(`${text}\nCommand timed out after ${timeoutS}s`.trim());
-      if (exitCode !== 0)
-        throw new Error(`${text}\nCommand exited with code ${exitCode}`.trim());
-      return {
-        content: [{ type: "text", text: text || "(no output)" }],
-        details: { exitCode, truncatedChars: droppedChars || undefined },
-      };
+        let out = "";
+        let droppedChars = 0;
+        let lastUpdate = 0;
+        const emitPartial = () => {
+          const now = Date.now();
+          if (now - lastUpdate < 250) return;
+          lastUpdate = now;
+          onUpdate?.({ content: [{ type: "text", text: out }], details: {} });
+        };
+        const append = (chunk: string) => {
+          out += chunk;
+          if (out.length > BASH_OUTPUT_CAP) {
+            droppedChars += out.length - BASH_OUTPUT_CAP;
+            out = out.slice(out.length - BASH_OUTPUT_CAP);
+          }
+          emitPartial();
+        };
+        const readers: ReadableStreamDefaultReader<Uint8Array>[] = [];
+        const drain = async (stream: ReadableStream<Uint8Array> | null) => {
+          if (!stream) return;
+          const dec = new TextDecoder();
+          const reader = stream.getReader();
+          readers.push(reader);
+          try {
+            while (true) {
+              const { done, value } = await reader.read();
+              if (done) break;
+              if (value) append(dec.decode(value, { stream: true }));
+            }
+          } catch {
+            // reader.cancel() below lands here — captured output stands.
+          } finally {
+            try {
+              reader.releaseLock();
+            } catch {}
+          }
+        };
+
+        const timer = setTimeout(() => {
+          timedOut = true;
+          killTree();
+        }, timeoutS * 1000);
+        const onAbort = () => killTree();
+        signal?.addEventListener("abort", onAbort, { once: true });
+        try {
+          // Exit-gated completion: the drains alone can outlive bash forever
+          // when a backgrounded child inherited the pipes, so wait for exit
+          // first, then give the drains a short grace to flush and cut them.
+          const drains = Promise.all([drain(proc.stdout), drain(proc.stderr)]);
+          exitCode = await proc.exited;
+          await Promise.race([drains, Bun.sleep(250)]);
+        } finally {
+          clearTimeout(timer);
+          signal?.removeEventListener("abort", onAbort);
+          for (const reader of readers) {
+            // cancel() rejects (async) when the drain already released the
+            // reader — swallow both the sync throw and the rejection.
+            try {
+              reader.cancel().catch(() => {});
+            } catch {}
+          }
+        }
+
+        const text =
+          (droppedChars > 0
+            ? `[output truncated: first ${droppedChars} characters dropped]\n`
+            : "") + out;
+        if (signal?.aborted) throw new Error("Command aborted");
+        if (timedOut)
+          throw new Error(`${text}\nCommand timed out after ${timeoutS}s`.trim());
+        if (exitCode !== 0)
+          throw new Error(`${text}\nCommand exited with code ${exitCode}`.trim());
+        return {
+          content: [{ type: "text", text: text || "(no output)" }],
+          details: { exitCode, truncatedChars: droppedChars || undefined },
+        };
+      } finally {
+        const cancelled = Boolean(signal?.aborted);
+        input.onAudit?.({
+          phase: "finish",
+          ...commandAudit,
+          timeout_s: timeoutS,
+          duration_ms: Date.now() - commandStartedAt,
+          exit_code: exitCode,
+          timed_out: timedOut,
+          cancelled,
+          outcome: cancelled ? "cancelled" : timedOut ? "timed_out" : exitCode === 0 ? "ok" : "failed",
+        });
+      }
     },
   };
 }
@@ -1949,6 +2042,16 @@ async function* runPiAttempt(
               unattended: policy.unattended,
               sessionId: journal?.osSessionId,
               runKind: journal?.kind,
+              onAudit: (event) =>
+                audit({
+                  msg: `pi_command_${event.phase}`,
+                  request_id: requestId,
+                  run_key: runKey,
+                  session_id: journal?.osSessionId,
+                  run_kind: journal?.kind,
+                  model,
+                  ...event,
+                }),
             })
           );
           break;
@@ -2310,6 +2413,14 @@ async function* runPiAttempt(
     // Final assistant outcome (stopReason error/aborted → terminal error).
     let lastStopReason: string | undefined;
     let lastErrorMessage: string | undefined;
+    // Renderable content blocks (real text or tool calls) of the LATEST
+    // assistant message; -1 = none seen yet. Providers occasionally return a
+    // well-formed completion with ZERO content blocks and stopReason "stop"
+    // (2026-08-21 os-01a02486: stealth/ox-alpha via OpenRouter ended a
+    // 10-minute turn on content:[] with all-zero usage). pi settles that as a
+    // clean turn, so the session goes idle with no summary and the user has
+    // to ask "done?". The pump loop retries such finishes once.
+    let lastAssistantRenderableBlocks = -1;
 
     // Content persistence rides message_end/compaction_end. entry_appended is
     // deliberately unhandled: in 0.83.0 it fires ONLY for extension custom
@@ -2361,6 +2472,7 @@ async function* runPiAttempt(
             if (msg.role === "assistant") {
               lastStopReason = msg.stopReason;
               lastErrorMessage = msg.errorMessage;
+              lastAssistantRenderableBlocks = assistantRenderableBlockCount(msg.content);
               const u = msg.usage;
               if (u && typeof u.input === "number") {
                 sawUsage = true;
@@ -2572,6 +2684,10 @@ async function* runPiAttempt(
     // agent_end-queued messages; the constructor-lifetime event subscription
     // keeps streaming/persisting) instead of losing it.
     let steerDrains = 0;
+    // One bounded continuation for an empty final completion (see
+    // lastAssistantRenderableBlocks). The nudge is fenced like every other
+    // injection, so the transcript never shows it as a user bubble.
+    let emptyFinishRetries = 0;
     while (true) {
       while (queue.length) yield queue.shift()!;
       if (promptOutcome) {
@@ -2585,6 +2701,28 @@ async function* runPiAttempt(
           promptOutcome = null;
           void Promise.resolve()
             .then(() => liveSession.agent.continue())
+            .then(
+              () => settlePrompt({ ok: true }),
+              (e: unknown) => settlePrompt({ ok: false, error: e })
+            );
+          continue;
+        }
+        if (
+          promptOutcome.ok &&
+          !abort.signal.aborted &&
+          emptyFinishRetries < 1 &&
+          lastStopReason === "stop" &&
+          lastAssistantRenderableBlocks === 0
+        ) {
+          emptyFinishRetries++;
+          const notice =
+            "Model returned an empty response — asking it once more to finish its reply";
+          push({ type: "runner_notice", text: notice });
+          promptOutcome = null;
+          void session
+            .prompt(wrapContext(EMPTY_REPLY_RETRY_PROMPT, "auto-continue"), {
+              expandPromptTemplates: false,
+            })
             .then(
               () => settlePrompt({ ok: true }),
               (e: unknown) => settlePrompt({ ok: false, error: e })
@@ -2614,6 +2752,22 @@ async function* runPiAttempt(
 
     // ── Terminal (at most one; user cancels end with none) ──────────────────
     const failed: { ok: boolean; error?: unknown } = promptOutcome!;
+    if (failed.ok && lastStopReason === "stop" && lastAssistantRenderableBlocks === 0) {
+      // The retry (if it ran) also came back empty — never end silently on a
+      // provider glitch; leave a visible chip explaining the missing reply.
+      persistRunEntries([
+        {
+          id: crypto.randomUUID(),
+          type: "system",
+          content:
+            "The model ended this turn with an empty response (no text or tool calls)" +
+            (emptyFinishRetries > 0
+              ? " and an automatic retry produced nothing too. Send another message to continue."
+              : "."),
+          timestamp: nowIso(),
+        },
+      ]);
+    }
     if (abort.signal.aborted) {
       // User cancel ends QUIETLY — no terminal event, the generator just
       // returns (previous runner-runner's MessageAbortedError exemption). A terminal

@@ -63,14 +63,14 @@ export async function handleAccountsRoutes(
 		return Response.json({ accounts: listAccountsPublic() });
 	}
 
-	// "Sign in with Claude" uses PKCE. With accountId this reconnects an
-	// existing account. Without it the flow creates a new OAuth-backed pool
-	// account after the code exchange. Keep this ahead of the generic matchers.
+	// "Sign in with Claude" attaches usage OAuth to an existing setup-token
+	// account. Keep this ahead of the generic /claude-accounts/:id matchers.
 	if (path === "/api/claude-accounts/oauth-login" && req.method === "POST") {
 		const body = await req.json().catch(() => null);
-		const result = await startClaudeLogin(
-			typeof body?.accountId === "string" ? body.accountId : undefined,
-		);
+		if (typeof body?.accountId !== "string" || !body.accountId) {
+			return Response.json({ error: "accountId is required" }, { status: 400 });
+		}
+		const result = await startClaudeLogin(body.accountId);
 		if ("error" in result) return Response.json(result, { status: 400 });
 		return Response.json(result);
 	}

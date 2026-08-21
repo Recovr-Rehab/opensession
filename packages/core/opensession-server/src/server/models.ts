@@ -806,6 +806,10 @@ export function toPiModel(model?: string | null): string | undefined {
     const replacement = match && RETIRED_CODEX_REROUTE[match[1]];
     return replacement ? `pi/openai/${replacement}` : requested;
   }
+  if (requested.startsWith("openai/")) {
+    const native = requested.slice("openai/".length);
+    return `pi/openai/${RETIRED_CODEX_REROUTE[native] || native}`;
+  }
   if (requested === BEST_AVAILABLE_CODEX_MODEL || requested.startsWith("codex-")) {
     return `pi/openai/${DEFAULT_CODEX_MODEL}`;
   }
@@ -1002,7 +1006,12 @@ export function resolveModel(input: string): ModelInfo | null {
   const value = input.trim().toLowerCase();
   if (!value) return null;
   for (const model of KNOWN_MODELS) {
-    if (model.id === value || model.aliases.includes(value)) return model;
+    if (model.id === value || model.aliases.includes(value)) {
+      const replacement = RETIRED_CODEX_REROUTE[model.id];
+      return replacement
+        ? KNOWN_MODELS.find((candidate) => candidate.id === replacement)!
+        : model;
+    }
   }
   if (value.startsWith("dial/") || value.startsWith("orchestrator/")) {
     const preset = modelPreset(value);
@@ -1011,8 +1020,9 @@ export function resolveModel(input: string): ModelInfo | null {
       : null;
   }
   if (value.startsWith("pi/")) {
-    return value.slice("pi/".length).includes("/")
-      ? { id: value, provider: "pi", label: piModelLabel(value), aliases: [] }
+    const routed = toPiModel(value) || value;
+    return routed.slice("pi/".length).includes("/")
+      ? { id: routed, provider: "pi", label: piModelLabel(routed), aliases: [] }
       : null;
   }
   if (value.startsWith("claude-")) return { id: value, provider: "claude", label: value, aliases: [] };

@@ -106,15 +106,17 @@ function claudeIssues(): Issue[] {
     const label = a.owner ? `your personal Claude sub "${a.name}"` : `pool Claude account "${a.name}"`;
     const err = a.usage?.error || "";
     const relogin = a.credentialsPath?.includes(".opensession-claude-oauth")
-      ? `Reconnect it in Settings → Usage → account menu → "Sign in with Claude".`
+      ? `Reconnect usage in Settings → Providers → account menu → "Connect usage".`
       : a.credentialsPath
-        ? `Re-login on the VPS: \`CLAUDE_CONFIG_DIR=${a.credentialsPath.replace(/\/credentials\.json$/, "")} claude login\` — or switch it to the web flow: Settings → Usage → account menu → "Sign in with Claude".`
-        : "Generate a fresh token with `claude setup-token` and update it in Settings → Usage.";
+        ? `Re-login on the VPS: \`CLAUDE_CONFIG_DIR=${a.credentialsPath.replace(/\/credentials\.json$/, "")} claude login\`, or switch to the web flow in Settings → Providers → account menu → "Connect usage".`
+        : "Generate a fresh token with `claude setup-token` and update it in Settings → Providers.";
 
     if (a.usage?.errorStatus === 401) {
       issues.push({
-        key: `claude:${a.id}:revoked`,
-        message: `It's ${personaName()} — ${label} has a revoked/invalid token (401 from Anthropic). Runs on it will fail. ${relogin}`,
+        key: `claude:${a.id}:${a.credentialsPath ? "usage-revoked" : "revoked"}`,
+        message: a.credentialsPath
+          ? `It's ${personaName()}. Usage tracking for ${label} needs a new Claude sign-in. Model runs keep using its setup token. ${relogin}`
+          : `It's ${personaName()}. ${label} has a revoked or invalid setup token (401 from Anthropic), so model runs on it will fail. ${relogin}`,
         notify: who,
       });
       continue;

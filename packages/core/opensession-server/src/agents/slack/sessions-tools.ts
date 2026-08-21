@@ -18,6 +18,12 @@
  */
 import { audit } from "../../server/audit";
 import {
+  cancelAgentWait,
+  getAgentWait,
+  registerPrChecksAgentWait,
+  registerTimerAgentWait,
+} from "../../server/agent-waits";
+import {
   configuredServer,
   defaultRepo,
   personaName,
@@ -618,6 +624,120 @@ export function createSessionsMcpServer(
       // Control (trusted user only)
       // ---------------------------------------------------------------------
       tool(
+        "wait_for",
+        "End this turn cleanly and wake this same session later without sleeping in a tool call. Register the wait, then write the human a normal status/final message and STOP the turn. A timer wakes after the requested delay. A pr_checks wait polls durably outside the model turn, waits for the check set to remain settled, then starts a new turn with the result; it also wakes on PR close/merge or timeout. One wait may be active per session, and a new one replaces it. Never call sleep after this tool succeeds.",
+        {
+          kind: z
+            .enum(["timer", "pr_checks"])
+            .describe("timer for a one-shot delay, or pr_checks to wake when this branch's PR checks settle."),
+          seconds: z
+            .number()
+            .optional()
+            .describe("Timer delay in seconds, required for kind=timer. Minimum 10 seconds, maximum 24 hours."),
+          repo: z
+            .string()
+            .optional()
+            .describe("Registered repo id for kind=pr_checks. Defaults to this session's primary repo."),
+          branch: z
+            .string()
+            .optional()
+            .describe("PR branch for kind=pr_checks. Defaults to this session's primary branch."),
+          timeout_seconds: z
+            .number()
+            .optional()
+            .describe("Maximum PR wait before waking anyway. Defaults to 2 hours, maximum 24 hours."),
+          prompt: z
+            .string()
+            .optional()
+            .describe("Instructions for the new turn after wake-up. Keep them self-contained. A sensible continuation is supplied by default."),
+        },
+        async (
+          args: {
+            kind: "timer" | "pr_checks";
+            seconds?: number;
+            repo?: string;
+            branch?: string;
+            timeout_seconds?: number;
+            prompt?: string;
+          },
+          extra: any,
+        ) => {
+          const sessionId = ctx.currentSessionId;
+          if (!sessionId)
+            return text("This run has no Open Session id, so it cannot register a background wait.");
+          const waitId = durableToolRequestId(ctx, "wait_for", extra);
+          const current = getSessionControl().getSession(sessionId);
+          const result =
+            args.kind === "timer"
+              ? registerTimerAgentWait({
+                  sessionId,
+                  user: ctx.createdBy,
+                  seconds: args.seconds ?? Number.NaN,
+                  prompt: args.prompt,
+                  waitId,
+                })
+              : registerPrChecksAgentWait({
+                  sessionId,
+                  user: ctx.createdBy,
+                  repo: args.repo || current?.repo || "",
+                  branch: args.branch || current?.branch || "",
+                  timeoutSeconds: args.timeout_seconds,
+                  prompt: args.prompt,
+                  waitId,
+                });
+          if (!result.ok) return text(result.error);
+          audit({
+            msg: "agent_wait_registered",
+            session_id: sessionId,
+            wait_id: result.wait.id,
+            wait_kind: result.wait.kind,
+            replaced: result.replaced,
+          });
+          const when =
+            result.wait.kind === "timer"
+              ? new Date(result.wait.dueAt).toISOString()
+              : `when ${result.wait.repo}/${result.wait.branch} checks settle (timeout ${new Date(result.wait.deadlineAt).toISOString()})`;
+          return text(
+            `Background wait \`${result.wait.id}\` registered for ${when}. ` +
+              `${result.replaced ? "It replaced the previous wait. " : ""}` +
+              "Now write the human a concise status message and end this turn. Do not poll or sleep; this session will be triggered automatically.",
+          );
+        },
+      ),
+      tool(
+        "wait_status",
+        "Inspect the background wait registered by this session.",
+        {},
+        async () => {
+          const sessionId = ctx.currentSessionId;
+          if (!sessionId) return text("This run has no Open Session id.");
+          const wait = getAgentWait(sessionId);
+          if (!wait) return text("No background wait is registered for this session.");
+          if (wait.kind === "timer")
+            return text(`Timer wait \`${wait.id}\` wakes at ${new Date(wait.dueAt).toISOString()}.`);
+          return text(
+            `PR wait \`${wait.id}\` watches ${wait.repo}/${wait.branch}; timeout ${new Date(wait.deadlineAt).toISOString()}.`,
+          );
+        },
+      ),
+      tool(
+        "cancel_wait",
+        "Cancel this session's registered background wait. This does not stop a currently running turn.",
+        {},
+        async () => {
+          const sessionId = ctx.currentSessionId;
+          if (!sessionId) return text("This run has no Open Session id.");
+          const cancelled = cancelAgentWait(sessionId);
+          if (cancelled)
+            audit({ msg: "agent_wait_cancelled", session_id: sessionId });
+          return text(
+            cancelled
+              ? "Background wait cancelled."
+              : "No background wait was registered.",
+          );
+        },
+      ),
+      tool(
         "answer_session_question",
         "Answer a session that's paused on a question (state 'waiting_question'). Provide answers as a map from each question's header to the chosen option label (see get_session for the headers and options). This unblocks the run so it continues.",
         {
@@ -941,7 +1061,7 @@ export function createSessionsMcpServer(
           prompt: z.string().describe("Self-contained task prompt: scope, relevant files, constraints, acceptance criteria, and what to report."),
           repo: z.string().optional().describe("Registered repo id. Defaults to this session's repo."),
           branch: z.string().optional().describe("Branch for code mode when the child can't share this session's worktree (standalone or different repo)."),
-          model: z.string().optional().describe("Optional model id (e.g. 'gpt-5.5' for a Codex worker, or a Claude model id)."),
+          model: z.string().optional().describe("Optional model id (e.g. 'gpt-5.6-sol' for a Codex worker, or a Claude model id)."),
           mode: z.enum(["ask", "code", "scratch"]).optional().describe("'code' (default) can edit files / open PRs; 'ask' is read-only."),
           sandbox: z.union([z.boolean(), z.enum(["docker", "daytona", "e2b", "box", "modal", "microvm", "lambda-microvm"])]).optional().describe("Run the child in an isolated sandbox: true = the server's default provider, or an explicit configured provider id."),
         },

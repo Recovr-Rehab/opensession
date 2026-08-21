@@ -30,6 +30,7 @@ import {
 	DEFAULT_FALLBACK_MODEL,
 	getDefaultModel,
 	modelEfforts,
+	resolveModel,
 	type SessionEffort,
 } from "./models";
 import { createWorktree, getRepo, removeWorktree } from "./worktree";
@@ -469,7 +470,8 @@ function agentEffort(model: string, requested?: string): string | undefined {
 
 export const workflowExecutor: WorkflowExecutor = {
 	async execute(req: WorkflowAgentRequest, ctx: WorkflowExecCtx): Promise<WorkflowAgentOutcome> {
-		const model = req.opts.model || ctx.defaultModel || getDefaultModel();
+		const requestedModel = req.opts.model || ctx.defaultModel || getDefaultModel();
+		const model = resolveModel(requestedModel)?.id || requestedModel;
 		const effort = agentEffort(model, req.opts.effort);
 		const write = req.opts.write === true;
 

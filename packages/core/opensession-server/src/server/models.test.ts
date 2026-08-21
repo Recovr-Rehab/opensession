@@ -24,7 +24,12 @@ describe("Pi-only model routing", () => {
 
   test("reroutes retired OpenAI slugs", () => {
     expect(toPiModel("gpt-5.5")).toBe("pi/openai/gpt-5.6-sol");
+    expect(toPiModel("openai/gpt-5.5")).toBe("pi/openai/gpt-5.6-sol");
     expect(toPiModel("pi/openai/gpt-5.4-mini")).toBe("pi/openai/gpt-5.6-luna");
+    expect(resolveModel("gpt5.5")?.id).toBe("gpt-5.6-sol");
+    expect(resolveModel("pi/openai/gpt-5.5")?.id).toBe(
+      "pi/openai/gpt-5.6-sol",
+    );
   });
 
   test("routes every accepted id to Pi", () => {

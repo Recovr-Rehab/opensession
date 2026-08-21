@@ -440,7 +440,7 @@ export async function runReview(
     }
 
     if (cancellationRequested()) return finishCancelled(placeholderId || undefined);
-    let parsed = parseReviewOutput(finalResult.text);
+    let parsed = parseReviewOutput(finalResult.text, cwd);
     // Fable occasionally declares a progress narration complete before it emits
     // the review contract. Give the same engine session one bounded chance to
     // turn its completed inspection into a postable verdict.
@@ -468,7 +468,7 @@ export async function runReview(
       }
       persistReviewResult(finalResult);
       if (cancellationRequested()) return finishCancelled(placeholderId || undefined);
-      parsed = parseReviewOutput(finalResult.text);
+      parsed = parseReviewOutput(finalResult.text, cwd);
     }
     const reviewError =
       finalResult.error ||
@@ -814,32 +814,55 @@ export function extractBalancedJson(s: string): string | null {
  * cuts the block at that inner fence — that's exactly what dumped raw narration
  * onto PR #4388.
  */
-export function parseReviewOutput(text: string): ReviewOutput | null {
+export function parseReviewOutput(text: string, cwd?: string): ReviewOutput | null {
   if (!text) return null;
   const opener = text.lastIndexOf("```json");
   const candidate = extractBalancedJson(opener === -1 ? text : text.slice(opener)) ?? text;
   try {
     const obj = JSON.parse(candidate.trim());
     if (obj && typeof obj === "object") {
-      // Models drift from the contract's exact field names (Sol on PR #5286
-      // returned file/details/summary and a 0-1 confidence) — accept the common
-      // aliases rather than dropping the whole review into the raw-text fallback.
+      // Models drift from the contract's exact field names. Sol has emitted both
+      // summary/file/details aliases and its native code-review shape
+      // (overall_correctness, overall_explanation, priority, code_location).
+      // Normalize those known structured forms instead of discarding a usable
+      // verdict and spending a continuation that may contradict the first pass.
+      const findingPath = (f: any): string | undefined => {
+        const raw =
+          typeof f.path === "string"
+            ? f.path
+            : typeof f.file === "string"
+              ? f.file
+              : typeof f.code_location?.absolute_file_path === "string"
+                ? f.code_location.absolute_file_path
+                : undefined;
+        if (!raw || !raw.startsWith("/")) return raw;
+        const root = cwd?.replace(/\/+$/, "");
+        return root && raw.startsWith(`${root}/`) ? raw.slice(root.length + 1) : undefined;
+      };
       const findings: Finding[] = Array.isArray(obj.findings)
         ? obj.findings
-            .map((f: any) =>
-              f && typeof f === "object"
-                ? {
-                    ...f,
-                    path: typeof f.path === "string" ? f.path : f.file,
-                    body:
-                      typeof f.body === "string"
-                        ? f.body
-                        : typeof f.details === "string"
-                          ? f.details
-                          : f.description,
-                  }
-                : f,
-            )
+            .map((f: any) => {
+              if (!f || typeof f !== "object") return f;
+              const priority = Number.isInteger(f.priority) && f.priority >= 0 && f.priority <= 3
+                ? `P${f.priority}`
+                : undefined;
+              const title = typeof f.title === "string"
+                ? f.title.replace(/^\[P[0-3]\]\s*/, "")
+                : undefined;
+              return {
+                ...f,
+                path: findingPath(f),
+                line: Number.isFinite(f.line) ? f.line : f.code_location?.line_range?.start,
+                severity: typeof f.severity === "string" ? f.severity : priority,
+                title,
+                body:
+                  typeof f.body === "string"
+                    ? f.body
+                    : typeof f.details === "string"
+                      ? f.details
+                      : f.description,
+              };
+            })
             .filter((f: any) => f && typeof f.path === "string" && Number.isFinite(f.line) && typeof f.body === "string")
             .map((f: any) => ({
               path: f.path,
@@ -856,15 +879,25 @@ export function parseReviewOutput(text: string): ReviewOutput | null {
       // — drop it instead of rendering "0.98/5" or letting a scaled-up fraction
       // satisfy the ≥4/5 "safe to merge" gates on a request_changes review.
       const rawConfidence = typeof obj.confidence === "number" ? obj.confidence : undefined;
+      const verdict =
+        typeof obj.verdict === "string"
+          ? obj.verdict
+          : obj.overall_correctness === "patch is correct"
+            ? "approve"
+            : obj.overall_correctness === "patch is incorrect"
+              ? "request_changes"
+              : undefined;
       return {
-        verdict: obj.verdict,
+        verdict,
         confidence: rawConfidence !== undefined && rawConfidence >= 1 && rawConfidence <= 5 ? rawConfidence : undefined,
         summary_markdown:
           typeof obj.summary_markdown === "string"
             ? obj.summary_markdown
             : typeof obj.summary === "string"
               ? obj.summary
-              : undefined,
+              : typeof obj.overall_explanation === "string"
+                ? obj.overall_explanation
+                : undefined,
         diagram:
           obj.diagram && typeof obj.diagram === "object" && typeof obj.diagram.mermaid === "string"
             ? { type: typeof obj.diagram.type === "string" ? obj.diagram.type : undefined, mermaid: obj.diagram.mermaid }

@@ -16,6 +16,7 @@
  */
 
 import { AUTO_CONTINUE_USER } from "./auto-continue";
+import { cancelAgentWait } from "./agent-waits";
 import { personaName } from "./config";
 import { cancelAgentRun, isAgentSessionBusy, steerAgentRun } from "./agent-runner";
 import { pendingAskAwaitingAnswer } from "./asks";
@@ -383,13 +384,14 @@ registerSessionControl({
 				const session = findSession(id);
 				if (!session) return false;
 				stoppedSessions.add(id);
+				const cancelledWait = cancelAgentWait(id);
 				const cancelled = cancelAgentRun(
 					session.claudeSessionId,
 					session.codexThreadId,
 					session.id,
 				);
 				requeueSteerReceipts(id, engineUserTexts(session));
-				return cancelled;
+				return cancelled || cancelledWait;
 			},
 		);
 		return accepted.result;
