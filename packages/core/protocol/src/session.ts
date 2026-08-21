@@ -355,6 +355,8 @@ export type ProtocolClientMessage =
        *  configured provider id. Omit = host. */
       sandbox?: boolean | string;
       images?: string[];
+      /** Non-image composer attachments, staged server-side or kept inline. */
+      files?: unknown;
       /** Reasoning effort persisted on the new session and enforced per run. */
       effort?: "none" | "low" | "medium" | "high" | "xhigh" | "max";
       /** OpenAI priority service tier for the opening and later turns. */

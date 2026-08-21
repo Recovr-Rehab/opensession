@@ -1,6 +1,7 @@
 import { AGENT_NAME } from "../lib/brand";
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
+import { motion } from "motion/react";
 import type { Workspace, UnifiedSession, WSServerMessage } from "../lib/types";
 import { fetchModels, updateWorkspaceApi, type ModelOption } from "../lib/api";
 import { Composer } from "./Composer";
@@ -15,7 +16,7 @@ import { WorkspaceInfo } from "./WorkspaceInfo";
 import { useCurrentUser } from "./UserPicker";
 import { useIsPhone } from "../hooks/useIsPhone";
 import { useSidePanel } from "../hooks/useSidePanel";
-import { IconSidebarRight } from "./icons";
+import { IconArrowUpToLine, IconSidebarRight } from "./icons";
 import { Button } from "../ui/button";
 import { Tooltip } from "../ui/tooltip";
 import {
@@ -30,9 +31,23 @@ import {
 	VIEWER_TITLE,
 } from "../lib/session-viewer-classes";
 import { loadDraft, saveDraft, clearDraft } from "../lib/drafts";
+import {
+	addStaging,
+	attachToDraft,
+	countStaging,
+	dropStagingAttachments,
+	isStaging,
+	NOTHING_STAGING,
+	sameFiles,
+	sameImages,
+	subtractStaging,
+} from "../lib/attachments";
+import type { FileAttachment } from "../lib/images";
+import { hasDraggedFiles } from "../lib/file-drag";
 import { workspaceDraftPatch } from "../lib/workspace-draft";
 import { resolveNewSessionModel } from "../lib/default-model-pref";
 import { InlineAlert } from "../ui/state";
+import { duration, ease } from "../ui/motion";
 
 interface Props {
 	workspace: Workspace;
@@ -110,6 +125,14 @@ export function WorkspacePane({
 		const local = loadDraft(draftKey).text;
 		return local || workspace.draft?.text || "";
 	});
+	// Workspace drafts share the ordinary composer attachment path. The server
+	// draft carries text across devices; staged attachments stay in this
+	// browser's draft store until the first session consumes them.
+	const [images, setImages] = useState<string[]>(() => loadDraft(draftKey).images);
+	const [files, setFiles] = useState<FileAttachment[]>(() => loadDraft(draftKey).files);
+	const [staging, setStaging] = useState(NOTHING_STAGING);
+	const [fileDragActive, setFileDragActive] = useState(false);
+	const fileDragWatchdogRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 	const currentUser = useCurrentUser();
 	// Only a workspace that mounted with a server draft gets autosaved back to
 	// it. Keep that ownership for this mount after the text is cleared, so typing
@@ -155,12 +178,14 @@ export function WorkspacePane({
 		[workspace.id, draftAutoName],
 	);
 	useEffect(() => {
-		saveDraft(draftKey, { text: prompt });
+		saveDraft(draftKey, { text: prompt, images, files });
+	}, [draftKey, prompt, images, files]);
+	useEffect(() => {
 		if (!parksServerDraft) return;
 		clearTimeout(serverDraftTimer.current);
 		serverDraftTimer.current = setTimeout(() => pushServerDraft(prompt), 800);
 		return () => clearTimeout(serverDraftTimer.current);
-	}, [draftKey, prompt, parksServerDraft, pushServerDraft]);
+	}, [prompt, parksServerDraft, pushServerDraft]);
 	const [starting, setStarting] = useState(false);
 	const [startError, setStartError] = useState<string | null>(null);
 	const startingRef = useRef(false);
@@ -219,6 +244,7 @@ export function WorkspacePane({
 				setStarting(false);
 				setStartError(msg.message || "Failed to start the session.");
 			} else if (msg.type === "session_created" && startingRef.current) {
+				dropStagingAttachments(draftKey);
 				clearDraft(draftKey);
 				// Cancel any in-flight draft autosave too: the server consumed
 				// the workspace draft at create, and a late debounce landing
@@ -229,6 +255,86 @@ export function WorkspacePane({
 		});
 	}, [addHandler, draftKey]);
 	useEffect(() => () => clearTimeout(startTimer.current), []);
+
+	const addWorkspaceAttachments = React.useCallback(
+		async (picked: FileList | File[]) => {
+			const selected = Array.from(picked);
+			const batch = countStaging(selected);
+			setStaging((current) => addStaging(current, batch));
+			try {
+				const { rejected, applied } = await attachToDraft(draftKey, selected);
+				if (applied) {
+					const stored = loadDraft(draftKey);
+					setImages((current) =>
+						sameImages(current, stored.images) ? current : stored.images,
+					);
+					setFiles((current) =>
+						sameFiles(current, stored.files) ? current : stored.files,
+					);
+				}
+				if (rejected.length) alert(`Couldn't attach:\n${rejected.join("\n")}`);
+			} finally {
+				setStaging((current) => subtractStaging(current, batch));
+			}
+		},
+		[draftKey],
+	);
+
+	useEffect(() => {
+		if (tab !== null || !connected || starting) {
+			setFileDragActive(false);
+			return;
+		}
+		function resetFileDrag() {
+			if (fileDragWatchdogRef.current)
+				clearTimeout(fileDragWatchdogRef.current);
+			fileDragWatchdogRef.current = null;
+			setFileDragActive(false);
+		}
+		function armFileDragWatchdog() {
+			if (fileDragWatchdogRef.current)
+				clearTimeout(fileDragWatchdogRef.current);
+			fileDragWatchdogRef.current = setTimeout(resetFileDrag, 500);
+		}
+		function handleDragEnter(event: DragEvent) {
+			if (!hasDraggedFiles(event.dataTransfer)) return;
+			event.preventDefault();
+			armFileDragWatchdog();
+			setFileDragActive(true);
+		}
+		function handleDragLeave(event: DragEvent) {
+			if (!hasDraggedFiles(event.dataTransfer)) return;
+			const next = event.relatedTarget;
+			if (next instanceof Node && document.documentElement.contains(next)) return;
+			resetFileDrag();
+		}
+		function handleDragOver(event: DragEvent) {
+			if (!hasDraggedFiles(event.dataTransfer)) return;
+			event.preventDefault();
+			armFileDragWatchdog();
+			setFileDragActive(true);
+			if (event.dataTransfer) event.dataTransfer.dropEffect = "copy";
+		}
+		function handleDrop(event: DragEvent) {
+			if (!hasDraggedFiles(event.dataTransfer)) return;
+			event.preventDefault();
+			event.stopPropagation();
+			const dropped = event.dataTransfer?.files;
+			resetFileDrag();
+			if (dropped?.length) void addWorkspaceAttachments(dropped);
+		}
+		window.addEventListener("dragenter", handleDragEnter, true);
+		window.addEventListener("dragleave", handleDragLeave, true);
+		window.addEventListener("dragover", handleDragOver, true);
+		window.addEventListener("drop", handleDrop, true);
+		return () => {
+			window.removeEventListener("dragenter", handleDragEnter, true);
+			window.removeEventListener("dragleave", handleDragLeave, true);
+			window.removeEventListener("dragover", handleDragOver, true);
+			window.removeEventListener("drop", handleDrop, true);
+			resetFileDrag();
+		};
+	}, [tab, connected, starting, addWorkspaceAttachments]);
 
 	// The Review pane's target: the workspace's own PR branch, rendered through
 	// the newest session that carries it (session PR APIs) or the repo+branch
@@ -265,7 +371,13 @@ export function WorkspacePane({
 
 	function handleStart() {
 		const q = prompt.trim();
-		if (!q || starting || !connected) return;
+		if (
+			(!q && images.length === 0 && files.length === 0) ||
+			isStaging(staging) ||
+			starting ||
+			!connected
+		)
+			return;
 		setStarting(true);
 		startingRef.current = true;
 		setStartError(null);
@@ -298,6 +410,16 @@ export function WorkspacePane({
 			prompt: q,
 			user: currentUser,
 			...(model ? { model } : {}),
+			...(images.length ? { images } : {}),
+			...(files.length
+				? {
+						files: files.map((file) =>
+							file.path
+								? { name: file.name, path: file.path }
+								: { name: file.name, dataUrl: file.dataUrl },
+						),
+					}
+				: {}),
 		});
 		// App navigates into the session on session_created.
 	}
@@ -437,6 +559,29 @@ export function WorkspacePane({
 	// info panel already say which workspace it belongs to.
 	return withPanel(
 		<div className={`${VIEW_MAIN} flex flex-col h-full min-h-0`}>
+			{fileDragActive &&
+				createPortal(
+					<>
+						<motion.div
+							className="pointer-events-none fixed inset-0 z-[12000] flex flex-col items-center justify-center bg-[color-mix(in_srgb,var(--bg-panel)_68%,transparent)] px-6 text-center"
+							initial={{ opacity: 0 }}
+							animate={{ opacity: 1 }}
+							transition={{ type: "tween", duration: duration.base, ease }}
+							aria-hidden="true"
+							data-file-drop-overlay
+						>
+							<IconArrowUpToLine size={40} className="text-fg" />
+							<div className="mt-4 text-title font-semibold text-fg">Add files</div>
+							<div className="mt-1 text-label text-dim">
+								Drop here to attach them to your message.
+							</div>
+						</motion.div>
+						<span className="sr-only" role="status">
+							Drop files to attach
+						</span>
+					</>,
+					document.body,
+				)}
 			<div className="flex-1 min-h-0 overflow-y-auto" />
 			<div className="w-full max-w-[760px] mx-auto px-5 pb-5 shrink-0">
 				<Composer
@@ -445,13 +590,24 @@ export function WorkspacePane({
 					onSend={handleStart}
 					placeholder={starting ? "Starting…" : "Start a session in this workspace…"}
 					disabled={starting}
-					sendDisabled={starting || !connected || !prompt.trim()}
+					sendDisabled={
+						starting ||
+						!connected ||
+						isStaging(staging) ||
+						(!prompt.trim() && images.length === 0 && files.length === 0)
+					}
 					sendTitle="Start a session in this workspace (Enter)"
 					models={models}
 					defaultModel={defaultModel}
 					model={model}
 					onModelChange={setModel}
 					modelTitle="Model for this session"
+					images={images}
+					onImagesChange={setImages}
+					files={files}
+					onFilesChange={setFiles}
+					staging={staging}
+					onAddAttachments={addWorkspaceAttachments}
 				/>
 				{startError && <InlineAlert className="mt-2.5">{startError}</InlineAlert>}
 			</div>
