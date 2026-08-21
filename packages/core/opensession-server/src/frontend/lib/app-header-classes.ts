@@ -259,12 +259,16 @@ export const HEADER_TITLE_PILL_CENTERED =
  * focused, the controls recede and the page rises into their space. Both
  * directions are transitions so a quick focus change reverses from its current
  * position instead of restarting. Overflow stays visible while resting so the
- * floating controls' shadows can extend below the header box.
+ * floating controls' shadows can extend below the header box. Archived also
+ * gives those shadows an extra 8px above the controls, keeping their top edge
+ * inside the viewport when there is no status-bar safe area.
  */
 export const ARCHIVED_SEARCH_HEADER =
+	"phone:h-[calc(60px+env(safe-area-inset-top,0px))]! " +
+	"phone:pt-[max(env(safe-area-inset-top,0px),16px)]! " +
 	"phone:transition-[height,padding-top,opacity,transform] " +
 	"phone:duration-[var(--dur)] phone:ease-[var(--ease)] " +
-	"phone:[body.kb-open_&]:h-0 phone:[body.kb-open_&]:pt-0 " +
+	"phone:[body.kb-open_&]:h-0! phone:[body.kb-open_&]:pt-0! " +
 	"phone:[body.kb-open_&]:pointer-events-none phone:[body.kb-open_&]:opacity-0 " +
 	"phone:[body.kb-open_&]:[transform:translateY(-8px)] motion-reduce:transition-none";
 
