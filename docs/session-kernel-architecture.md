@@ -118,11 +118,11 @@ fenced result through the creation reducer before the outbox item is
 acknowledged. A crash after the atomic workspace write adopts on retry. A crash
 after result acceptance replays as an audited stale no-op. Identity, project, or
 branch ambiguity dead-letters immediately instead of overwriting the workspace.
-The interactive MCP create path now records the actor plan before physical
-setup and emits `creation_workspace_prepare` instead of writing a new workspace.
-Its gateway continuation waits for the completed actor receipt, never workspace
-file presence. Existing-workspace joins and the WebSocket create path have not
-yet cut over, and create-plan JSON still carries other recovery decisions.
+The interactive MCP and WebSocket create paths now record the actor plan before
+physical setup and emit `creation_workspace_prepare` instead of writing a new
+workspace. Their gateway continuations wait for the completed actor receipt,
+never workspace file presence. Existing-workspace joins remain reads, while
+create-plan JSON still carries other recovery decisions.
 Branch, sandbox, credential, attachment, and opening-turn executors are also not
 yet registered. Wiring those adapters and removing the remaining create-plan
 authority are the next cutovers; the presence or absence of a plan file is not
