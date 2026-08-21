@@ -45,17 +45,21 @@ export const WS_SUMMARY_CARD =
  * but not their 31px pitch: a label belongs to the rows under it, so it keeps
  * the gap above and gives up most of the one below.
  *
- * It opens its band with the gap a hairline used to hold. A label in bold ink
- * over a run of quiet rows already reads as the start of something, so the
- * line under it was drawing a boundary the type had drawn first, and the card
- * says elsewhere that nothing in it carries a rule.
+ * It opens its band with the gap a hairline used to hold. A label set apart by
+ * space already reads as the start of something, so the line under it was
+ * drawing a boundary the layout had drawn first, and the card says elsewhere
+ * that nothing in it carries a rule.
+ *
+ * Quiet ink, medium weight. The label names a band, it does not compete with
+ * the rows in it: a bold, darker heading over four grey rows made the heading
+ * the loudest thing in a card whose subject is the rows.
  *
  * The band above it has no label. It holds the state of the work itself, which
  * is what the card IS, and a heading over it could only repeat the card's own
  * name back at you.
  */
 export const WS_SUMMARY_SECTION =
-	"mt-3 flex h-[22px] shrink-0 items-center px-4 text-label font-semibold text-dim first:mt-1 " +
+	"mt-3 flex h-[22px] shrink-0 items-center px-4 text-label font-medium text-faint first:mt-1 " +
 	// The PR plate already closes with its own bottom breathing room. Do not
 	// stack the next section's full top gap on it as well.
 	"[.ws-summary-band+&]:mt-0";

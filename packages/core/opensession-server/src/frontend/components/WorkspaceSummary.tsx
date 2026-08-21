@@ -620,6 +620,23 @@ function SummaryBody({
 
 	return (
 		<>
+			{/* The band under this label holds the PR itself, so the label names it
+			    the way every other band in the card is named. The preview deploy sits
+			    at the end of the label rather than inside the band: it is one glyph
+			    about the same PR, and the band's own row is already carrying the
+			    state, the number and the action. */}
+			<div className={cn(WS_SUMMARY_SECTION, "justify-between gap-2")}>
+				<span>Pull requests</span>
+				{/* It is the globe the header carries while this card is shut: the
+				    header stands down when the card is up, the same way it does for
+				    the workspace panel, so the deploy is in exactly one place at a
+				    time. Renders nothing when the PR has no preview. */}
+				<StagingLink
+					session={session}
+					variant="summary"
+					refreshTick={refreshTick}
+				/>
+			</div>
 			{/* Which PR, where it stands, and the one thing to do about it. The
 			    strip owns all three; this card only says where they go. */}
 			<PrStatusBar
@@ -639,19 +656,7 @@ function SummaryBody({
 				}
 				onOpenChecksTab={() => go(onOpenChecks)}
 				onArchive={onArchive ? () => go(onArchive) : undefined}
-			>
-				{/* The PR's preview deploy, inside the band with the rest of that
-				    PR's state rather than as a loose row under it. It is the globe
-				    the header carries while this card is shut: the header stands
-				    down when the card is up, the same way it does for the workspace
-				    panel, so the deploy is in exactly one place at a time. Renders
-				    nothing when the PR has no preview. */}
-				<StagingLink
-					session={session}
-					variant="summary"
-					refreshTick={refreshTick}
-				/>
-			</PrStatusBar>
+			/>
 
 			{/* One review section for both the automated reading and the people asked
 			    to review. The final row owns the picker, so adding or changing a
