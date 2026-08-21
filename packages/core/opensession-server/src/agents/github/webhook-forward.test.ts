@@ -145,6 +145,21 @@ describe("githubForwardProcessEnv", () => {
     expect(githubForwardProcessEnv(ambient, null, true)).toEqual(ambient);
   });
 
+  test("Slack-only mode maps the configured service token for gh", () => {
+    expect(
+      githubForwardProcessEnv(
+        { PATH: "/bin", GITHUB_API_TOKEN: "service" },
+        null,
+        false,
+      ),
+    ).toEqual({
+      PATH: "/bin",
+      GITHUB_API_TOKEN: "service",
+      GH_TOKEN: "service",
+      GITHUB_TOKEN: "service",
+    });
+  });
+
   test("disconnected simple mode has no forwarder credential", () => {
     expect(githubForwardProcessEnv({ GH_TOKEN: "ambient" }, null, false)).toBeNull();
   });

@@ -145,6 +145,16 @@ export function githubForwardProcessEnv(
   operatorMode: boolean = githubUserAuthActive(),
 ): GithubForwardEnv | null {
   if (credential) return { ...base, ...credential };
+  // Operator installs may deliberately authenticate gh through its ambient
+  // GH_TOKEN/GITHUB_TOKEN. Preserve that before considering the service token.
+  if (operatorMode && (base.GH_TOKEN || base.GITHUB_TOKEN)) return { ...base };
+  // Slack-only legacy installs use the server's restricted service credential
+  // and have no per-user account store. gh does not read GITHUB_API_TOKEN, so
+  // project it onto the names the CLI accepts. A random ambient GH_TOKEN still
+  // cannot enter disconnected simple mode: only this explicit service key can.
+  const serviceToken = base.GITHUB_API_TOKEN?.trim();
+  if (serviceToken)
+    return { ...base, GH_TOKEN: serviceToken, GITHUB_TOKEN: serviceToken };
   return operatorMode ? { ...base } : null;
 }
 

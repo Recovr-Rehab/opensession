@@ -153,7 +153,7 @@ export async function bootstrapUserAuthOnConnect(
 	};
 }
 
-async function syncSimpleGithubWebhookForwarder(): Promise<void> {
+async function syncGithubWebhookForwarder(): Promise<void> {
 	try {
 		const { syncGithubWebhookForwardCredential } = await import(
 			"../../agents/github/webhook-forward"
@@ -693,13 +693,13 @@ export async function handleConnectionsRoutes(
 			if (githubAuthOnConnect()) {
 				const boot = await bootstrapUserAuthOnConnect(result.login, result.name);
 				if ("error" in boot) {
-					await syncSimpleGithubWebhookForwarder();
+					await syncGithubWebhookForwarder();
 					return Response.json({ status: "error", error: boot.error });
 				}
 				// Native clients can't hold the HttpOnly cookie — they ask for the
 				// token in the body (native:true) and send it back as Bearer.
 				const native = body?.native === true;
-				await syncSimpleGithubWebhookForwarder();
+				await syncGithubWebhookForwarder();
 				return Response.json(
 					{
 						...result,
@@ -714,7 +714,7 @@ export async function handleConnectionsRoutes(
 			}
 		}
 		if (result.status === "ok" && simpleMode)
-			await syncSimpleGithubWebhookForwarder();
+			await syncGithubWebhookForwarder();
 		return Response.json(result);
 	}
 
@@ -747,7 +747,10 @@ export async function handleConnectionsRoutes(
 		const removed = removeGithubAccount(login);
 		if (!removed)
 			return Response.json({ error: "Not connected" }, { status: 404 });
-		if (simpleMode) await syncSimpleGithubWebhookForwarder();
+		// The child keeps a copied process environment. Stop it immediately
+		// after every removal so a deleted operator credential cannot keep
+		// receiving deliveries until restart or process exit.
+		await syncGithubWebhookForwarder();
 		return Response.json({ ok: true });
 	}
 
