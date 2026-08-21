@@ -393,17 +393,16 @@ export function WorkspaceSummary({
 				align="end"
 				anchor={anchor}
 				positionerClassName="z-[5000]"
-				// Pull past the header action row's 16px inset, then keep a compact
-				// 8px edge gutter. Its quieter shadow does not need more clearance.
-				alignOffset={-8}
-				collisionPadding={8}
-				// The card hangs 8px below whatever chrome it clears, in both
+				// Pull past the header action row's 16px inset to leave a consistent
+				// 12px edge gutter. Its quiet shadow does not need more clearance.
+				alignOffset={-4}
+				collisionPadding={12}
+				// The card hangs 12px below whatever chrome it clears, in both
 				// positions: the same gutter it keeps at the window's right edge, so
-				// it reads as inset into a corner rather than dropped lower than it
-				// is pulled in. Offsets are measured from the actions row the card
-				// anchors to, whose box ends 8px above the header's own bottom edge
-				// and 37px above the tab strip's: 8 + 8 with no strip, 37 + 8 with
-				// one.
+				// it reads as inset into a corner. Offsets are measured from the
+				// actions row the card anchors to, whose box ends 8px above the
+				// header's own bottom edge and 37px above the tab strip's: 8 + 12
+				// with no strip, 37 + 12 with one.
 				sideOffset={workspaceSummarySideOffset(Boolean(tabStripVisible), reviewMode)}
 				elevation="sm"
 				// A menu's hairline is right for a strip of rows; on 300px of quiet
