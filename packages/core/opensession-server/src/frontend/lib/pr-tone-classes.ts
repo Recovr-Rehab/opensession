@@ -198,22 +198,6 @@ export const PR_SUMMARY_BAND_BG: Record<PrTone, string> = {
 	muted: "",
 };
 
-/** State fill for each stacked PR in the workspace summary. The resting color
- * matches the primary PR band, while hover deepens the same hue instead of
- * replacing it with the card's neutral hover wash. Muted states still get a
- * quiet neutral fill so every layer keeps the same visual shape. */
-export const PR_SUMMARY_ROW_BG: Record<PrTone, string> = {
-	green:
-		"bg-[color-mix(in_srgb,var(--green)_11%,transparent)] hover:bg-[color-mix(in_srgb,var(--green)_16%,transparent)]",
-	purple:
-		"bg-[color-mix(in_srgb,var(--purple)_10%,transparent)] hover:bg-[color-mix(in_srgb,var(--purple)_15%,transparent)]",
-	red: "bg-[color-mix(in_srgb,var(--red)_11%,transparent)] hover:bg-[color-mix(in_srgb,var(--red)_16%,transparent)]",
-	yellow:
-		"bg-[color-mix(in_srgb,var(--yellow)_10%,transparent)] hover:bg-[color-mix(in_srgb,var(--yellow)_15%,transparent)]",
-	muted:
-		"bg-[color-mix(in_srgb,var(--text)_4%,transparent)] hover:bg-[color-mix(in_srgb,var(--text)_8%,transparent)]",
-};
-
 /** A session that shipped one feature as several PRs: the primary strip plus a
  *  row per sibling, as one continuous block of status. */
 export const PR_BAR_STACK = `flex min-w-0 flex-col ${PR_BAR_IN_CARD}`;
