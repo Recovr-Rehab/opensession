@@ -333,6 +333,77 @@ describe("HostHandle model recovery", () => {
 		}
 	});
 
+	test("applies transcript frames after the run settled (reattach backfill)", () => {
+		const root = mkdtempSync(join(tmpdir(), "host-client-settled-transcript-test-"));
+		roots.push(root);
+		const store = new TranscriptStore(join(root, "transcripts.db"));
+		const previous = __setTranscriptStoreForTest(store);
+		const kernelStore = new SessionKernelStore(join(root, "kernel.db"));
+		const previousKernel = __setSessionKernelStoreForTest(kernelStore);
+		const spec: RunHostSpec = {
+			hostId: "rh-settled",
+			osSessionId: "os-settled-transcript",
+			prompt: "test",
+			cwd: "/tmp",
+		};
+		const kernel = sessionKernel(spec.osSessionId);
+		kernel.registerRun(spec.hostId, "running", "run_registered");
+		// The restart/settle race: the run goes idle BEFORE the host's
+		// reattach hello replays its transcript history (2026-08-21
+		// os-01a02469 — the turn's closing summary was lost this way).
+		kernel.setRunState({ state: "idle", event: "turn_end" });
+		const handle = makeHandle(spec);
+		try {
+			(handle as any).handleMsg({
+				t: "transcript",
+				engineSessionId: spec.osSessionId,
+				lines: [transcriptLineUser("late summary", "prompt-late")],
+			});
+			expect(store.readTail(spec.osSessionId, 10).entries).toMatchObject([
+				{ id: "prompt-late", type: "user", content: "late summary" },
+			]);
+		} finally {
+			(handle as any).finish();
+			__setTranscriptStoreForTest(previous);
+			__setSessionKernelStoreForTest(previousKernel);
+			kernelStore.close();
+		}
+	});
+
+	test("rejects transcript frames while a different live run owns the session", () => {
+		const root = mkdtempSync(join(tmpdir(), "host-client-superseded-transcript-test-"));
+		roots.push(root);
+		const store = new TranscriptStore(join(root, "transcripts.db"));
+		const previous = __setTranscriptStoreForTest(store);
+		const kernelStore = new SessionKernelStore(join(root, "kernel.db"));
+		const previousKernel = __setSessionKernelStoreForTest(kernelStore);
+		const spec: RunHostSpec = {
+			hostId: "rh-zombie",
+			osSessionId: "os-superseded-transcript",
+			prompt: "test",
+			cwd: "/tmp",
+		};
+		sessionKernel(spec.osSessionId).registerRun(
+			"rh-newer",
+			"running",
+			"run_registered",
+		);
+		const handle = makeHandle(spec);
+		try {
+			(handle as any).handleMsg({
+				t: "transcript",
+				engineSessionId: spec.osSessionId,
+				lines: [transcriptLineUser("zombie", "prompt-zombie")],
+			});
+			expect(store.readTail(spec.osSessionId, 10).entries).toEqual([]);
+		} finally {
+			(handle as any).finish();
+			__setTranscriptStoreForTest(previous);
+			__setSessionKernelStoreForTest(previousKernel);
+			kernelStore.close();
+		}
+	});
+
 	test("rejects transcript frames from a stale host generation", () => {
 		const root = mkdtempSync(join(tmpdir(), "host-client-stale-transcript-test-"));
 		roots.push(root);

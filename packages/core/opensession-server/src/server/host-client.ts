@@ -902,8 +902,28 @@ export class HostHandle {
   }
 
   private acceptsSideEffectFrame(frameType: string): boolean {
-    if (sessionKernel(this.spec.osSessionId).isCurrentRun(this.logicalRunId))
-      return true;
+    const kernel = sessionKernel(this.spec.osSessionId);
+    if (kernel.isCurrentRun(this.logicalRunId)) return true;
+    // Transcript frames are idempotent uuid-keyed upserts of history the host
+    // already durably wrote (transcript-relay replay on every reattach). They
+    // must survive the run SETTLING before the replay lands: a restart can
+    // mark the run idle between the host's final entries and the reconnect's
+    // hello, and rejecting then silently drops the turn's closing summary
+    // (2026-08-21 os-01a02469: the model's final message was produced during
+    // that window, all 40 replayed frames were rejected as stale, and the user
+    // had to ask "pr?"). Reject only while a DIFFERENT live run owns the
+    // session — that is the cross-run interleaving the fence exists for; a
+    // settled session has no writer to race with.
+    if (frameType === "transcript") {
+      const current = kernel.runState();
+      const ownedByAnotherLiveRun =
+        ["running", "ask_blocked", "interrupted", "reattaching"].includes(
+          current.state,
+        ) &&
+        !!current.currentRunId &&
+        current.currentRunId !== this.logicalRunId;
+      if (!ownedByAnotherLiveRun) return true;
+    }
     this.requestCancel();
     audit({
       msg: "stale_executor_frame_rejected",

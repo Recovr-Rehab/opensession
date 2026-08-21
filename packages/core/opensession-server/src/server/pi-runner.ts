@@ -71,6 +71,7 @@ import {
 import { buildRunInstructions } from "./run-instructions";
 import { logInjectedContext, logStandingContext, logStandingJson } from "./context-log";
 import { wrapContext } from "./prompt-context";
+import { EMPTY_REPLY_RETRY_PROMPT } from "./auto-continue";
 import { bashAskPolicyReply } from "./command-policy";
 import {
   appendTranscriptEntries,
@@ -116,6 +117,21 @@ export const PI_MODEL_PREFIX = "pi/";
 /** State root: server-owned agentDir, per-unified-session pi session dirs,
  *  and the smoke-turn scratch cwd. Never ~/.pi. */
 export const PI_STATE_DIR = stateDir("pi");
+
+/** How many content blocks of an assistant message a reader could actually
+ *  see: non-empty text blocks and tool calls. Thinking-only or empty content
+ *  counts zero — that is the empty-completion shape the pump loop retries. */
+export function assistantRenderableBlockCount(content: unknown): number {
+  if (!Array.isArray(content)) return 0;
+  let n = 0;
+  for (const b of content) {
+    if (!b || typeof b !== "object") continue;
+    const block = b as { type?: string; text?: unknown; id?: unknown };
+    if (block.type === "text" && typeof block.text === "string" && block.text.trim()) n++;
+    else if (block.type === "toolCall" && block.id) n++;
+  }
+  return n;
+}
 
 /** Split `pi/<provider>/<model>` (model may itself contain slashes). */
 export function parsePiModel(
@@ -2397,6 +2413,14 @@ async function* runPiAttempt(
     // Final assistant outcome (stopReason error/aborted → terminal error).
     let lastStopReason: string | undefined;
     let lastErrorMessage: string | undefined;
+    // Renderable content blocks (real text or tool calls) of the LATEST
+    // assistant message; -1 = none seen yet. Providers occasionally return a
+    // well-formed completion with ZERO content blocks and stopReason "stop"
+    // (2026-08-21 os-01a02486: stealth/ox-alpha via OpenRouter ended a
+    // 10-minute turn on content:[] with all-zero usage). pi settles that as a
+    // clean turn, so the session goes idle with no summary and the user has
+    // to ask "done?". The pump loop retries such finishes once.
+    let lastAssistantRenderableBlocks = -1;
 
     // Content persistence rides message_end/compaction_end. entry_appended is
     // deliberately unhandled: in 0.83.0 it fires ONLY for extension custom
@@ -2448,6 +2472,7 @@ async function* runPiAttempt(
             if (msg.role === "assistant") {
               lastStopReason = msg.stopReason;
               lastErrorMessage = msg.errorMessage;
+              lastAssistantRenderableBlocks = assistantRenderableBlockCount(msg.content);
               const u = msg.usage;
               if (u && typeof u.input === "number") {
                 sawUsage = true;
@@ -2659,6 +2684,10 @@ async function* runPiAttempt(
     // agent_end-queued messages; the constructor-lifetime event subscription
     // keeps streaming/persisting) instead of losing it.
     let steerDrains = 0;
+    // One bounded continuation for an empty final completion (see
+    // lastAssistantRenderableBlocks). The nudge is fenced like every other
+    // injection, so the transcript never shows it as a user bubble.
+    let emptyFinishRetries = 0;
     while (true) {
       while (queue.length) yield queue.shift()!;
       if (promptOutcome) {
@@ -2672,6 +2701,28 @@ async function* runPiAttempt(
           promptOutcome = null;
           void Promise.resolve()
             .then(() => liveSession.agent.continue())
+            .then(
+              () => settlePrompt({ ok: true }),
+              (e: unknown) => settlePrompt({ ok: false, error: e })
+            );
+          continue;
+        }
+        if (
+          promptOutcome.ok &&
+          !abort.signal.aborted &&
+          emptyFinishRetries < 1 &&
+          lastStopReason === "stop" &&
+          lastAssistantRenderableBlocks === 0
+        ) {
+          emptyFinishRetries++;
+          const notice =
+            "Model returned an empty response — asking it once more to finish its reply";
+          push({ type: "runner_notice", text: notice });
+          promptOutcome = null;
+          void session
+            .prompt(wrapContext(EMPTY_REPLY_RETRY_PROMPT, "auto-continue"), {
+              expandPromptTemplates: false,
+            })
             .then(
               () => settlePrompt({ ok: true }),
               (e: unknown) => settlePrompt({ ok: false, error: e })
@@ -2701,6 +2752,22 @@ async function* runPiAttempt(
 
     // ── Terminal (at most one; user cancels end with none) ──────────────────
     const failed: { ok: boolean; error?: unknown } = promptOutcome!;
+    if (failed.ok && lastStopReason === "stop" && lastAssistantRenderableBlocks === 0) {
+      // The retry (if it ran) also came back empty — never end silently on a
+      // provider glitch; leave a visible chip explaining the missing reply.
+      persistRunEntries([
+        {
+          id: crypto.randomUUID(),
+          type: "system",
+          content:
+            "The model ended this turn with an empty response (no text or tool calls)" +
+            (emptyFinishRetries > 0
+              ? " and an automatic retry produced nothing too. Send another message to continue."
+              : "."),
+          timestamp: nowIso(),
+        },
+      ]);
+    }
     if (abort.signal.aborted) {
       // User cancel ends QUIETLY — no terminal event, the generator just
       // returns (previous runner-runner's MessageAbortedError exemption). A terminal

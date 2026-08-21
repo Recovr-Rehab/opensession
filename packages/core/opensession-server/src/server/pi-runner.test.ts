@@ -22,6 +22,7 @@ import { join } from "path";
 import {
   acceptSteerOnce,
   assertContainedPiPath,
+  assistantRenderableBlockCount,
   buildPiThirdPartyProviderPlan,
   isPiSessionBusy,
   isPiUsageLimitShape,
@@ -76,6 +77,28 @@ describe("retractPendingSteer", () => {
     expect(pending.map((item) => item.steerId)).toEqual(["first", "third"]);
     expect(replayed).toEqual(pending);
     expect(retractPendingSteer(pending, "missing", () => {})).toBe(false);
+  });
+});
+
+describe("assistantRenderableBlockCount (empty-completion guard)", () => {
+  test("counts text and tool-call blocks, ignoring thinking-only content", () => {
+    expect(
+      assistantRenderableBlockCount([
+        { type: "thinking", thinking: "hmm" },
+        { type: "text", text: "Done." },
+        { type: "toolCall", id: "t1", name: "bash" },
+      ]),
+    ).toBe(2);
+  });
+
+  test("zero for the empty-completion shapes providers emit", () => {
+    // The exact os-01a02486 shape: content: [] with stopReason "stop".
+    expect(assistantRenderableBlockCount([])).toBe(0);
+    expect(assistantRenderableBlockCount(undefined)).toBe(0);
+    // Whitespace-only text and thinking-only replies are equally invisible.
+    expect(assistantRenderableBlockCount([{ type: "text", text: "  \n" }])).toBe(0);
+    expect(assistantRenderableBlockCount([{ type: "thinking", thinking: "..." }])).toBe(0);
+    expect(assistantRenderableBlockCount([null, 42, {}])).toBe(0);
   });
 });
 
