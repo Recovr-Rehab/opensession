@@ -141,6 +141,7 @@ import { useHydratedSession } from "./hooks/useHydratedSession";
 import { useWebSocket } from "./hooks/useWebSocket";
 import { useBackSwipe } from "./hooks/useBackSwipe";
 import { useIsPhone } from "./hooks/useIsPhone";
+import { useDeskFabPosition } from "./hooks/useDeskFabPosition";
 import { useShortcutKeys } from "./hooks/useShortcutBindings";
 import { useInputAlerts } from "./hooks/useInputAlerts";
 import { useScrollEdge } from "./hooks/useScrollEdge";
@@ -3091,6 +3092,10 @@ export function App(
 	// either column of a split either. The split is kept, not cleared — going back
 	// up to the parent restores it.
 	const activeTabSplit = currentSession && !viewingWorker ? tabSplit : null;
+	const deskFabPosition = useDeskFabPosition(
+		!isPhone && !activeViewTabShown,
+		`${focusedTopTabId ?? ""}:${activeTabSplit?.rightActive ?? ""}:${activeTabSplit?.ratio ?? ""}`,
+	);
 	const toStoredSplit = (split: ResolvedSplit): TabSplit => ({
 		right: split.right,
 		leftActive: split.leftActive,
@@ -5475,12 +5480,12 @@ export function App(
 						<button
 							className={DESK_FAB}
 							style={
-								activeViewTabShown
-									? ({
-											positionAnchor: "auto",
-											left: "auto",
-											positionTryFallbacks: "none",
-										} as React.CSSProperties)
+								deskFabPosition
+									? {
+											left: deskFabPosition.left,
+											right: "auto",
+											bottom: deskFabPosition.bottom,
+										}
 									: undefined
 							}
 							onClick={() =>
