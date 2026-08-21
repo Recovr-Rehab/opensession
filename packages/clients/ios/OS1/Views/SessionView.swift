@@ -3566,38 +3566,23 @@ private struct SessionInputBar: View {
         #endif
     }
 
-    /// Idle sends stay one tap. During a run, the phone opens both delivery
-    /// choices on tap so steering never depends on discovering or winning a
-    /// long-press gesture. The Mac keeps its primary action because its
-    /// modifier key provides a reliable second path.
+    /// A tap sends with the person's busy-send preference. During a run, a
+    /// long press exposes Steer and Queue without shrinking the familiar send
+    /// arrow or spending the common tap on a menu.
     @ViewBuilder
     private var sendButton: some View {
         if noteMode {
-            Button { send() } label: { sendButtonFace() }
+            Button { send() } label: { sendButtonFace }
                 .buttonStyle(.plain)
                 .disabled(!canSubmit)
                 .frame(width: 44, height: 44)
                 .contentShape(Circle())
                 .accessibilityLabel("Add note")
         } else if viewModel.isRunning {
-            #if os(iOS)
             Menu {
                 busySendActions
             } label: {
-                sendButtonFace(showsMenu: true)
-            }
-            .menuOrder(.fixed)
-            .buttonStyle(.plain)
-            .disabled(!canSubmit)
-            .frame(width: 44, height: 44)
-            .contentShape(Circle())
-            .accessibilityLabel("Send options")
-            .accessibilityHint("Choose whether to steer this run or queue the message.")
-            #else
-            Menu {
-                busySendActions
-            } label: {
-                sendButtonFace()
+                sendButtonFace
             } primaryAction: {
                 send()
             }
@@ -3607,23 +3592,29 @@ private struct SessionInputBar: View {
             .frame(width: 44, height: 44)
             .contentShape(Circle())
             .accessibilityLabel("Send")
-            .accessibilityHint(
-                busySend == "steer"
-                    ? "Steers this run. Open the menu to queue instead."
-                    : "Queues for after this run. Open the menu to steer instead."
-            )
-            #endif
+            .accessibilityHint(busySendAccessibilityHint)
         } else {
             Button {
                 send()
             } label: {
-                sendButtonFace()
+                sendButtonFace
             }
             .buttonStyle(.plain)
             .disabled(!canSubmit)
             .frame(width: 44, height: 44)
             .contentShape(Circle())
         }
+    }
+
+    private var busySendAccessibilityHint: String {
+        let action = busySend == "steer"
+            ? "Steers this run."
+            : "Queues for after this run."
+        #if os(iOS)
+        return "\(action) Touch and hold for more send options."
+        #else
+        return "\(action) Open the menu for more send options."
+        #endif
     }
 
     @ViewBuilder
@@ -3646,34 +3637,27 @@ private struct SessionInputBar: View {
         }
     }
 
-    /// The same disc in every state. The small chevron appears only when a tap
-    /// opens delivery choices instead of sending immediately.
-    private func sendButtonFace(showsMenu: Bool = false) -> some View {
-        HStack(spacing: 2) {
-            Image(systemName: "arrow.up")
-                .font(.system(size: 13, weight: .semibold))
-            if showsMenu {
-                Image(systemName: "chevron.down")
-                    .font(.system(size: 7, weight: .bold))
-            }
-        }
-        .offset(x: showsMenu ? 1 : 0)
-        // Explicit colours for the resting state, not the semantic
-        // `.fill.secondary` / `Color.secondary` pair: both are faint
-        // to begin with, and the dimming SwiftUI applies to a disabled
-        // button on top of that left the disc invisible against the
-        // near-white composer (measured: 242 vs a 252 background).
-        .foregroundStyle(
-            canSubmit ? OS1VisualStyle.onAccent : OS1VisualStyle.textDim
-        )
-        .frame(width: 32, height: 32)
-        .background(
-            canSubmit
-                ? AnyShapeStyle(OS1VisualStyle.accent)
-                : AnyShapeStyle(OS1VisualStyle.hover),
-            in: Circle()
-        )
-        .animation(.easeOut(duration: 0.15), value: canSubmit)
+    /// The same full-size send arrow in every state. Long-press behavior stays
+    /// invisible until it is useful, like other system button menus.
+    private var sendButtonFace: some View {
+        Image(systemName: "arrow.up")
+            .font(.system(size: 15, weight: .semibold))
+            // Explicit colours for the resting state, not the semantic
+            // `.fill.secondary` / `Color.secondary` pair: both are faint
+            // to begin with, and the dimming SwiftUI applies to a disabled
+            // button on top of that left the disc invisible against the
+            // near-white composer (measured: 242 vs a 252 background).
+            .foregroundStyle(
+                canSubmit ? OS1VisualStyle.onAccent : OS1VisualStyle.textDim
+            )
+            .frame(width: 32, height: 32)
+            .background(
+                canSubmit
+                    ? AnyShapeStyle(OS1VisualStyle.accent)
+                    : AnyShapeStyle(OS1VisualStyle.hover),
+                in: Circle()
+            )
+            .animation(.easeOut(duration: 0.15), value: canSubmit)
     }
 
     private var canSubmit: Bool {
@@ -3687,17 +3671,22 @@ private struct SessionInputBar: View {
 
     private func send(busyModeOverride: String? = nil) {
         guard canSubmit else { return }
-        // Play on the accepted control action itself. This stays in sync with
-        // menu picks and keyboard sends even when the composer changes shape.
-        Haptics.play(.send)
         if noteMode {
             addingNote = true
             Task {
-                if await viewModel.addSessionNote() { noteMode = false }
+                if await viewModel.addSessionNote() {
+                    Haptics.play(.send)
+                    noteMode = false
+                }
                 addingNote = false
             }
         } else {
+            let previousSend = viewModel.sendSeq
             viewModel.sendDraft(busyModeOverride: busyModeOverride)
+            // The outbox accepted it synchronously. Play here so button taps,
+            // menu picks, and keyboard sends all get one firm confirmation,
+            // while a full outbox gets the warning cue instead.
+            if viewModel.sendSeq != previousSend { Haptics.play(.send) }
         }
     }
 
