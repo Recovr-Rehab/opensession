@@ -106,12 +106,13 @@ export const WS_SUMMARY_STATUS_ROW =
  * all: a PR with nothing to report has no colour to lend, and a grey plate
  * would only draw a box around two rows.
  *
- * It keeps a slim 4px outer gutter and gives its rows 12px inside. Together
- * those preserve the card's 16px content rail while giving the tinted plate
- * enough padding around the headline.
+ * Its 8px outer gutter matches the card's top padding, and it gives its rows
+ * 12px inside. Its radius subtracts that shared inset from the popup token, so
+ * the tinted plate follows the popup's outer corner exactly.
  */
 export const WS_SUMMARY_BAND =
-	"ws-summary-band mx-1 mb-1 flex min-w-0 shrink-0 flex-col rounded-row";
+	"ws-summary-band mx-2 mb-1 flex min-w-0 shrink-0 flex-col " +
+	"[border-radius:calc(var(--radius-popup)_-_8px)] [corner-shape:squircle]";
 
 /** The band's inner padding, once it has a fill to hold. An untinted band is
  *  invisible, so it stays flush and the rows keep the list's own pitch. */
