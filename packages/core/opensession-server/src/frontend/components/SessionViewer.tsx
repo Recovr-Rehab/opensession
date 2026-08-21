@@ -1205,9 +1205,9 @@ export function SessionViewer({
 	const [viewers, setViewers] = useState<string[]>([]);
 	const [typingUsers, setTypingUsers] = useState<string[]>([]);
 	// The create run is still preparing this session's worktree (new workspaces
-	// announce the session before the slow git work). While true the Workspace
-	// panel shows creation progress, and the opening message holds above the
-	// composer. Flipped off by the workspace_status event, kept in sync with
+	// announce the session before the slow git work). While true the conversation
+	// shows creation progress, and the opening message holds above the composer.
+	// Flipped off by the workspace_status event, kept in sync with
 	// the sessions poll otherwise.
 	const [workspacePreparing, setWorkspacePreparing] = useState(
 		!!session.workspacePreparing,
@@ -2203,8 +2203,7 @@ export function SessionViewer({
 	// or Plain thread still need somewhere to show the Agents tab.
 	const panelAvailable =
 		!hideRightPanel &&
-		(workspacePreparing ||
-			hasWorkspace ||
+		(hasWorkspace ||
 			hasPlain ||
 			workflowRuns.length > 0 ||
 			subagents.length > 0 ||
@@ -6366,20 +6365,22 @@ export function SessionViewer({
 											: workspaceName || session.title}
 									</div>
 								</div>
-								{waitingForWorkspace ? (
-									<WorkspaceWaiting detail="This takes a moment." />
-								) : panelPage === "changes" ? (
-									// Same offset as the panel's Changes page, against
-									// this page's taller bar (52px plus the notch).
-									<div className="[&_.sticky]:top-[calc(env(safe-area-inset-top,0px)+52px)]">
-										<DiffPanel
-											sessionId={session.id}
-											isRunning={isBusy}
-											canSend={connected && !isBusy && !noEngine}
-											send={send}
-											diff={diffState}
-										/>
-									</div>
+								{panelPage === "changes" ? (
+									waitingForWorkspace ? (
+										<WorkspaceWaiting detail="This takes a moment." />
+									) : (
+										// Same offset as the panel's Changes page, against
+										// this page's taller bar (52px plus the notch).
+										<div className="[&_.sticky]:top-[calc(env(safe-area-inset-top,0px)+52px)]">
+											<DiffPanel
+												sessionId={session.id}
+												isRunning={isBusy}
+												canSend={connected && !isBusy && !noEngine}
+												send={send}
+												diff={diffState}
+											/>
+										</div>
+									)
 								) : (
 								<>
 								<div className={INFO_HERO}>
@@ -6944,10 +6945,10 @@ export function SessionViewer({
 							onClick={handleMessagesClick}
 						>
 							{waitingForWorkspace ? (
-								// Keep workspace creation out of the conversation. The opening
-								// message stays visible in the queue flap beside the composer,
-								// while the Workspace panel owns the creation status.
-								<div className="min-h-full" aria-hidden="true" />
+								<WorkspaceWaiting
+									detail="Your message will send when it's ready."
+									ghost
+								/>
 							) : optimisticEmpty ? (
 								<div className="min-h-full flex items-center justify-center px-4 text-center text-dim">
 									{"New session in"}
@@ -7596,28 +7597,30 @@ export function SessionViewer({
 						    App.tsx), Assets and the PR the same way. What stays here is
 						    what you read at a glance while your work runs beside it. */}
 						<div className={PANEL_BODY}>
-							{waitingForWorkspace ? (
-								<WorkspaceWaiting detail="This takes a moment." />
-							) : panelPage === "changes" ? (
+							{panelPage === "changes" ? (
 								<>
 									<PanelPageHeader
 										title="Changes"
 										onBack={() => setPanelPage(null)}
 									/>
-									{/* DiffPanel's own bars stick to this same scroll
-									    container at top-0, which is behind the header
-									    above. Drop them by its height so the file summary
-									    and the Files/Code flow toggle stay reachable while
-									    you read, instead of hiding under it. */}
-									<div className="[&_.sticky]:top-12">
-										<DiffPanel
-											sessionId={session.id}
-											isRunning={isBusy}
-											canSend={connected && !isBusy && !noEngine}
-											send={send}
-											diff={diffState}
-										/>
-									</div>
+									{waitingForWorkspace ? (
+										<WorkspaceWaiting detail="This takes a moment." />
+									) : (
+										// DiffPanel's own bars stick to this same scroll
+										// container at top-0, which is behind the header
+										// above. Drop them by its height so the file summary
+										// and the Files/Code flow toggle stay reachable while
+										// you read, instead of hiding under it.
+										<div className="[&_.sticky]:top-12">
+											<DiffPanel
+												sessionId={session.id}
+												isRunning={isBusy}
+												canSend={connected && !isBusy && !noEngine}
+												send={send}
+												diff={diffState}
+											/>
+										</div>
+									)}
 								</>
 							) : panelPage === "portals" ? (
 								<PortalsPage
