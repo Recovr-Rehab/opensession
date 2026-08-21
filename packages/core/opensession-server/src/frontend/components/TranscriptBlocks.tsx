@@ -598,7 +598,7 @@ function IndexedTranscriptBlocks(props: Props) {
 	const optimisticIds = new Set(
 		(props.optimisticEntries ?? []).map((entry) => entry.id),
 	);
-	const atoms: IndexedTimelineAtom[] = ranges.map((range) => ({
+	let atoms: IndexedTimelineAtom[] = ranges.map((range) => ({
 		kind: "range",
 		range,
 		continuationEntryIds: [],
@@ -631,7 +631,7 @@ function IndexedTranscriptBlocks(props: Props) {
 			timestampMs,
 		});
 	}
-	atoms.sort((a, b) => a.timestampMs - b.timestampMs);
+	atoms = sortIndexedTimelineAtoms(atoms);
 	// Live turn frames arrive before their durable sequence numbers. Keep a
 	// separate overlay on the durable tail range so one assistant turn cannot
 	// temporarily split into a settled Worked group and a loose call. The range
@@ -681,7 +681,7 @@ function IndexedTranscriptBlocks(props: Props) {
 				timestampMs: publishedAt,
 			});
 	}
-	atoms.sort((a, b) => a.timestampMs - b.timestampMs);
+	atoms = sortIndexedTimelineAtoms(atoms);
 	const timeline = groupIndexedReviewLoops(atoms);
 	const lastIndex = timeline.length - 1;
 	const items: VirtualTranscriptItem[] = timeline.map((item, index) => {
@@ -793,6 +793,38 @@ function IndexedTranscriptBlocks(props: Props) {
 
 function isLiveToolEntry(entry: TranscriptEntry): boolean {
 	return entry.type === "tool_use" || entry.type === "tool_result";
+}
+
+/**
+ * Conversation ranges are ordered by the immutable seq spine, exactly like the
+ * entries inside them. Only decorations that have no seq are placed by time.
+ *
+ * A range's timestamp is its LAST row, so a message that arrives mid-turn opens
+ * a range stamped earlier than the turn still emitting tool rows above it. That
+ * makes range timestamps non-monotonic for as long as the new message has no
+ * work under it yet, and sorting the whole timeline by them hoists the newer
+ * message above the older turn until the next durable row lands.
+ */
+function sortIndexedTimelineAtoms(
+	atoms: IndexedTimelineAtom[],
+): IndexedTimelineAtom[] {
+	const byTime = (a: IndexedTimelineAtom, b: IndexedTimelineAtom) =>
+		a.timestampMs - b.timestampMs;
+	const spine = atoms
+		.filter(
+			(atom): atom is Extract<IndexedTimelineAtom, { kind: "range" }> =>
+				atom.kind === "range",
+		)
+		.sort((a, b) => a.range.firstSeq - b.range.firstSeq);
+	if (!spine.length) return [...atoms].sort(byTime);
+	const result: IndexedTimelineAtom[] = [...spine];
+	for (const atom of atoms.filter((atom) => atom.kind !== "range").sort(byTime)) {
+		const index = result.findIndex(
+			(candidate) => candidate.timestampMs > atom.timestampMs,
+		);
+		result.splice(index === -1 ? result.length : index, 0, atom);
+	}
+	return result;
 }
 
 function groupIndexedReviewLoops(

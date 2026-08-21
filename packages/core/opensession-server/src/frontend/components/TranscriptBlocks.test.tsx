@@ -801,6 +801,63 @@ describe("TranscriptBlocks indexed ranges", () => {
 		expect(html).toContain("Newest prompt");
 	});
 
+	test("keeps a message that arrived mid-turn below the turn it interrupted", () => {
+		// The interrupting message is stamped 09:56:47, while the turn it landed in
+		// the middle of kept emitting tool rows until 09:56:52. Its range is newer by
+		// seq and older by time, so only the seq spine orders these two correctly.
+		const ms = (clock: string) => Date.parse(`2026-08-21T09:56:${clock}Z`);
+		const html = renderToStaticMarkup(
+			<TranscriptBlocks
+				transcriptIndex={[
+					indexRow(1, "user", { timestampMs: ms("28.274") }),
+					indexRow(2, "tool_use", { timestampMs: ms("52.223") }),
+					indexRow(3, "tool_result", { timestampMs: ms("52.269") }),
+					indexRow(4, "user", { timestampMs: ms("47.472") }),
+				]}
+				entries={[
+					{
+						id: "indexed-1",
+						seq: 1,
+						changeSeq: 1,
+						type: "user",
+						content: "First question",
+						timestamp: "2026-08-21T09:56:28.274Z",
+					},
+					{
+						id: "indexed-2",
+						seq: 2,
+						changeSeq: 2,
+						type: "tool_use",
+						toolName: "grep",
+						toolInput: { pattern: "filterMcpServers" },
+						content: "Using grep",
+						timestamp: "2026-08-21T09:56:52.223Z",
+					},
+					{
+						id: "indexed-3",
+						seq: 3,
+						changeSeq: 3,
+						type: "tool_result",
+						toolUseId: "indexed-2",
+						content: "runner-shared.ts",
+						timestamp: "2026-08-21T09:56:52.269Z",
+					},
+					{
+						id: "indexed-4",
+						seq: 4,
+						changeSeq: 4,
+						type: "user",
+						content: "Second question",
+						timestamp: "2026-08-21T09:56:47.472Z",
+					},
+				]}
+			/>,
+		);
+		expect(html.indexOf("First question")).toBeLessThan(
+			html.indexOf("Second question"),
+		);
+	});
+
 	test("places an optimistic prompt before tool calls that landed first", () => {
 		const html = renderToStaticMarkup(
 			<TranscriptBlocks
