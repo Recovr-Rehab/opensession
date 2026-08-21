@@ -223,7 +223,7 @@ export function RestartOverlay({ connected, addHandler }: Props) {
         // halfway through. The `sm` tier is the compact-control one the scroll
         // pill uses; `md` is calibrated for a menu and reads as a grey halo on
         // a surface this small.
-        className="pointer-events-none fixed bottom-[calc(env(safe-area-inset-bottom,0px)+14px)] left-1/2 z-[200] -translate-x-1/2"
+        className="pointer-events-none fixed bottom-[calc(env(safe-area-inset-bottom,0px)+14px)] left-1/2 z-[200] -translate-x-1/2 phone:bottom-auto phone:top-[calc(var(--header-h)+8px)]"
         role="status"
         aria-live="polite"
       >
