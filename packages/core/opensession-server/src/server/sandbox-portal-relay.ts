@@ -146,7 +146,7 @@ async function relayFetch(input: { sessionId: string; sandboxId: string; port: n
 	if (bytes && bytes.byteLength > 5 * 1024 * 1024) return new Response("Portal request is too large", { status: 413 });
 	const id = crypto.randomUUID();
 	const result = await new Promise<RelayResponse>((resolve) => {
-		const timer = setTimeout(() => { connection.pending.delete(id); resolve({ status: 504, headers: {} }); }, 30_000);
+		const timer = setTimeout(() => { connection.pending.delete(id); resolve({ status: 504, headers: {} }); }, 60_000);
 		connection.pending.set(id, { resolve, timer });
 		try { connection.ws.send(JSON.stringify({ t: "http", id, method: request.method, path: new URL(request.url).pathname + new URL(request.url).search, headers: safeHeaders(request.headers), ...(bytes ? { body: Buffer.from(bytes).toString("base64") } : {}) })); }
 		catch { clearTimeout(timer); connection.pending.delete(id); resolve({ status: 502, headers: {} }); }
