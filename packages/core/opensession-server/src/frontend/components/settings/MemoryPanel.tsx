@@ -263,27 +263,52 @@ function MemoryRow({
 								/>
 							)}
 						</div>
-						<div className="flex min-h-10 justify-end">
-							{!expanded && canExpand && (
-								<button
-									type="button"
-									aria-expanded="false"
-									className="focus-ring min-h-10 rounded-md border-0 bg-transparent px-2 text-meta font-semibold text-dim opacity-0 transition-opacity duration-150 hover:text-fg group-hover/memory:opacity-100 group-focus-within/memory:opacity-100 phone:opacity-100"
-									onClick={() => setExpanded(true)}
-								>
-									Show more
-								</button>
-							)}
-							{expanded && canExpand && (
-								<button
-									type="button"
-									aria-expanded="true"
-									className="focus-ring min-h-10 rounded-md border-0 bg-transparent px-2 text-meta font-semibold text-dim hover:text-fg"
-									onClick={() => setExpanded(false)}
-								>
-									Show less
-								</button>
-							)}
+						<div className="flex min-h-10 items-center justify-between gap-2">
+							<div className="min-w-0">
+								{!expanded && canExpand && (
+									<button
+										type="button"
+										aria-expanded="false"
+										className="focus-ring min-h-10 rounded-md border-0 bg-transparent px-0 text-meta font-semibold text-dim opacity-0 transition-opacity duration-150 hover:text-fg group-hover/memory:opacity-100 group-focus-within/memory:opacity-100 phone:opacity-100"
+										onClick={() => setExpanded(true)}
+									>
+										Read all
+									</button>
+								)}
+								{expanded && canExpand && (
+									<button
+										type="button"
+										aria-expanded="true"
+										className="focus-ring min-h-10 rounded-md border-0 bg-transparent px-0 text-meta font-semibold text-dim hover:text-fg"
+										onClick={() => setExpanded(false)}
+									>
+										Show less
+									</button>
+								)}
+							</div>
+							<div className="ml-auto flex shrink-0 justify-end gap-1">
+								<Button
+									size="sm"
+									variant="ghost"
+									aria-label="Edit memory"
+									className="size-10 min-h-10 phone:size-11 phone:min-h-11"
+									icon={<IconPencil size={16} />}
+									disabled={busy}
+									onClick={() => {
+										setDraft(row.entry.text);
+										setEditing(true);
+									}}
+								/>
+								<Button
+									size="sm"
+									variant="ghost"
+									aria-label="Forget memory"
+									className="size-10 min-h-10 hover:text-red phone:size-11 phone:min-h-11"
+									icon={<IconTrash size={16} />}
+									disabled={busy}
+									onClick={() => void remove()}
+								/>
+							</div>
 						</div>
 					</div>
 				)}
@@ -291,33 +316,6 @@ function MemoryRow({
 			<td className="w-32 px-4 py-3 text-meta text-faint phone:col-start-1 phone:row-start-3 phone:mt-2 phone:w-auto phone:p-0">
 				<div className="font-medium text-dim">{row.entry.by}</div>
 				<div className="mt-0.5">{relativeTime(row.entry.at)}</div>
-			</td>
-			<td className="w-20 px-4 py-2.5 phone:col-start-2 phone:row-start-1 phone:w-auto phone:p-0">
-				{!editing && (
-					<div className="flex justify-end gap-1">
-						<Button
-							size="sm"
-							variant="ghost"
-							aria-label="Edit memory"
-							className="phone:size-11 phone:min-h-11"
-							icon={<IconPencil size={16} />}
-							disabled={busy}
-							onClick={() => {
-								setDraft(row.entry.text);
-								setEditing(true);
-							}}
-						/>
-						<Button
-							size="sm"
-							variant="ghost"
-							aria-label="Forget memory"
-							className="hover:text-red phone:size-11 phone:min-h-11"
-							icon={<IconTrash size={16} />}
-							disabled={busy}
-							onClick={() => void remove()}
-						/>
-					</div>
-				)}
 			</td>
 		</tr>
 	);
@@ -348,7 +346,6 @@ function MemoryTable({
 							{showScope && <th className="w-32 px-4 py-2.5">Scope</th>}
 							<th className="px-4 py-2.5">Memory</th>
 							<th className="w-32 px-4 py-2.5">Saved</th>
-							<th className="w-20 px-4 py-2.5 text-right">Actions</th>
 						</tr>
 					</thead>
 					<tbody className="phone:block">
