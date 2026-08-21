@@ -84,6 +84,7 @@ struct AttachImagesButton: View {
             .frame(width: 27, height: 27)
             #endif
             .contentShape(Circle())
+            .accessibilityLabel("Attach images")
     }
 }
 
@@ -156,7 +157,7 @@ struct AttachedImagesRow: View {
     #endif
 
     var body: some View {
-        ScrollView(.horizontal, showsIndicators: false) {
+        ScrollView(.horizontal) {
             HStack(spacing: 8) {
                 ForEach(images) { image in
                     ZStack(alignment: .topTrailing) {
@@ -170,12 +171,14 @@ struct AttachedImagesRow: View {
                                 .foregroundStyle(.white, .black.opacity(0.6))
                         }
                         .buttonStyle(.plain)
+                        .accessibilityLabel("Remove attached image")
                         .padding(2)
                     }
                 }
             }
             .padding(.vertical, 2)
         }
+        .scrollIndicators(.hidden)
         // `item:` rather than a bool, on both: the presentation renders the
         // image it was opened with even if the strip changes underneath it.
         #if os(iOS)
@@ -754,6 +757,8 @@ struct FullScreenImagePreview: View {
         .allowsHitTesting(chromeVisible)
     }
 
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
     @ViewBuilder private var caption: some View {
         if walkthroughLabel != nil || label != nil {
             HStack(spacing: 8) {
@@ -784,27 +789,43 @@ struct FullScreenImagePreview: View {
     /// the strip in step, so the two never tell you different things.
     private var filmstrip: some View {
         ScrollViewReader { strip in
-            ScrollView(.horizontal, showsIndicators: false) {
+            ScrollView(.horizontal) {
                 HStack(spacing: 4) {
                     ForEach(Array(items.enumerated()), id: \.offset) { position, item in
-                        PreviewThumbnail(item: item, isSelected: position == index)
-                            .id(position)
-                            .onTapGesture {
-                                withAnimation(.easeInOut(duration: 0.22)) { index = position }
-                            }
-                            .accessibilityLabel("Image \(position + 1) of \(items.count)")
-                            .accessibilityAddTraits(position == index ? [.isSelected] : [])
+                        Button {
+                            select(position)
+                        } label: {
+                            PreviewThumbnail(item: item, isSelected: position == index)
+                        }
+                        .buttonStyle(.plain)
+                        .frame(minWidth: 44, minHeight: 44)
+                        .id(position)
+                        .accessibilityLabel("Image \(position + 1) of \(items.count)")
+                        .accessibilityAddTraits(position == index ? [.isSelected] : [])
                     }
                 }
                 .padding(.horizontal, 24)
             }
+            .scrollIndicators(.hidden)
             .frame(height: 46)
             .onAppear { strip.scrollTo(index, anchor: .center) }
             .onChange(of: index) { _, position in
-                withAnimation(.easeInOut(duration: 0.22)) {
+                if reduceMotion {
                     strip.scrollTo(position, anchor: .center)
+                } else {
+                    withAnimation(.easeInOut(duration: 0.22)) {
+                        strip.scrollTo(position, anchor: .center)
+                    }
                 }
             }
+        }
+    }
+
+    private func select(_ position: Int) {
+        if reduceMotion {
+            index = position
+        } else {
+            withAnimation(.easeInOut(duration: 0.22)) { index = position }
         }
     }
 

@@ -570,6 +570,7 @@ struct NoticeRow: View {
     let state: TurnFoldState
     var failureContinuation: FailureContinuationAction? = nil
 
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.openURL) private var openURL
 
     private var tone: NoticeTone { NoticeTone(rawValue: notice.tone) ?? .info }
@@ -601,12 +602,10 @@ struct NoticeRow: View {
         )
         .frame(maxWidth: .infinity)
         .contentShape(Rectangle())
-        .onTapGesture {
-            guard notice.isCollapsible else { return }
-            withAnimation(.snappy(duration: 0.2, extraBounce: 0)) { state.toggle() }
-        }
-        .accessibilityAddTraits(
-            tone == .error && failureContinuation == nil ? .isStaticText : []
+        .onTapGesture(perform: toggleNotice)
+        .accessibilityAddTraits(accessibilityTraits)
+        .accessibilityValue(
+            notice.isCollapsible ? (state.expanded ? "Expanded" : "Collapsed") : ""
         )
     }
 
@@ -618,12 +617,13 @@ struct NoticeRow: View {
     /// sentence.
     @ViewBuilder private var content: some View {
         if notice.showsBodyInline, !entry.text.isEmpty {
-            (Text("\(notice.title): ")
+            let title = Text("\(notice.title): ")
                 .font(.footnote.weight(.semibold))
                 .foregroundStyle(tone.color)
-                + Text(entry.text)
+            let body = Text(entry.text)
                 .font(.footnote)
-                .foregroundStyle(OS1VisualStyle.textDim))
+                .foregroundStyle(OS1VisualStyle.textDim)
+            Text("\(title)\(body)")
                 .textSelection(.enabled)
                 .frame(maxWidth: .infinity, alignment: .leading)
         } else {
@@ -665,6 +665,25 @@ struct NoticeRow: View {
                         .foregroundStyle(OS1VisualStyle.link)
                 }
             }
+        }
+    }
+
+    private func toggleNotice() {
+        guard notice.isCollapsible else { return }
+        if reduceMotion {
+            state.toggle()
+        } else {
+            withAnimation(.snappy(duration: 0.2, extraBounce: 0)) { state.toggle() }
+        }
+    }
+
+    private var accessibilityTraits: AccessibilityTraits {
+        if notice.isCollapsible {
+            .isButton
+        } else if tone == .error && failureContinuation == nil {
+            .isStaticText
+        } else {
+            []
         }
     }
 }

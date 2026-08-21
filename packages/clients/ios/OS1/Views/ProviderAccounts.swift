@@ -242,9 +242,16 @@ private struct AccountUsageRow: View {
                 Button(account.owner?.isEmpty == false ? "Shared" : "Owner", action: onToggleOwnership)
                     .buttonStyle(.borderless)
                 Button(role: .destructive, action: onRemove) {
-                    Image(systemName: "trash")
+                    Label(
+                        "Remove \(account.name ?? account.email ?? "account")",
+                        systemImage: "trash"
+                    )
                 }
+                .labelStyle(.iconOnly)
                 .buttonStyle(.borderless)
+                #if os(iOS)
+                .frame(minWidth: 44, minHeight: 44)
+                #endif
             }
             meter
         }
