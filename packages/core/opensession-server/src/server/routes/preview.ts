@@ -45,6 +45,7 @@ export async function handlePreviewRoutes(
 	// Caddy continue, while an unauthenticated request never reaches here.
 	if (/^\/api\/portal-auth\/\d+$/.test(path) && req.method === "GET") {
 		const httpsPort = Number(path.slice(path.lastIndexOf("/") + 1));
+		let recoveredNow = false;
 		if (!portalRouteAuthorized(httpsPort)) {
 			// Caddy and its allocated URL survive a coordinator restart, but the
 			// loopback relay intentionally does not. Restore it only after this
@@ -56,6 +57,7 @@ export async function handlePreviewRoutes(
 					"../sandbox-portal-recovery"
 				);
 				recovered = await recoverSandboxPortalRoute(httpsPort);
+				recoveredNow = recovered;
 			} catch (error) {
 				console.warn(`[preview] Portal ${httpsPort} recovery failed:`, error);
 			}
@@ -65,6 +67,19 @@ export async function handlePreviewRoutes(
 					{ status: 404, headers: { "Cache-Control": "no-store" } },
 				);
 			}
+		}
+		if (recoveredNow) {
+			// Caddy chose the old loopback upstream before forward_auth ran. A
+			// same-origin redirect makes the browser retry against the route we
+			// just replaced, instead of continuing to that dead process and
+			// surfacing one misleading 502.
+			return new Response(null, {
+				status: 307,
+				headers: {
+					"Cache-Control": "no-store",
+					Location: req.headers.get("x-forwarded-uri") || "/",
+				},
+			});
 		}
 		return new Response(null, {
 			status: 204,

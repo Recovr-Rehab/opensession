@@ -8,6 +8,7 @@
  */
 import { ensureRemoteSandboxPortalAgent } from "./portal-supervisor";
 import { portalRouteAuthorized } from "./preview";
+import { waitForSandboxPortalRelay } from "./sandbox-portal-relay";
 import { sandboxAllocationForHttpsPort } from "./sandbox/preview-ports";
 import { cachedSandboxPortalOwner } from "./sandbox-portals";
 import { findSessionAsync } from "./session-cache";
@@ -41,10 +42,12 @@ async function recoverSandboxPortalRouteInner(httpsPort: number): Promise<boolea
 	) return false;
 	const sandbox = await activeSandboxFor(session);
 	if (!sandbox) return false;
-	await ensureRemoteSandboxPortalAgent({
+	const relayIdentity = {
 		sessionId,
-		sandbox,
+		sandboxId: allocation.sandboxId,
 		port: allocation.containerPort,
-	});
+	};
+	await ensureRemoteSandboxPortalAgent({ sessionId, sandbox, port: allocation.containerPort });
+	if (!(await waitForSandboxPortalRelay(relayIdentity))) return false;
 	return portalRouteAuthorized(httpsPort);
 }

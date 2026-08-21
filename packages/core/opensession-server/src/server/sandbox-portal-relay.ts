@@ -109,6 +109,23 @@ export function sandboxPortalRelayMessage(ws: any, raw: string | Buffer): boolea
 	pending.resolve({ status: Number.isInteger(message.status) ? message.status : 502, headers: message.headers && typeof message.headers === "object" ? message.headers : {}, body: typeof message.body === "string" ? message.body : undefined });
 	return true;
 }
+/** Wait for a newly launched outbound sidecar before redirecting the browser
+ * back through Caddy. Without this, recovery replaces the stale route but the
+ * immediate retry races the WebSocket dial and surfaces a transient 503. */
+export async function waitForSandboxPortalRelay(
+	input: { sessionId: string; sandboxId: string; port: number },
+	timeoutMs = 30_000,
+): Promise<boolean> {
+	const id = key(input.sessionId, input.sandboxId, input.port);
+	const deadline = Date.now() + timeoutMs;
+	while (Date.now() < deadline) {
+		const connection = connections.get(id);
+		if (connection && connection.expiresAt > Date.now()) return true;
+		await Bun.sleep(100);
+	}
+	return false;
+}
+
 export function sandboxPortalRelayClose(ws: any): boolean {
 	if (ws.data?.kind !== "sandbox-portal-relay") return false;
 	const connection = connections.get(key(ws.data.sessionId, ws.data.sandboxId, ws.data.port));
