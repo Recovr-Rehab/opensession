@@ -128,7 +128,7 @@ export function ModelProvidersPanel() {
 					</EmptyState>
 				) : (
 					providers.map((p) => (
-						<SettingRow key={p.id}>
+						<SettingRow key={p.id} className="items-start gap-x-3">
 							<span className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-md bg-active text-control-label font-bold text-dim">
 								{p.id.charAt(0).toUpperCase()}
 							</span>
