@@ -37,7 +37,12 @@ import {
   type RunAgentOpts,
   type StreamEvent,
 } from "./agent-runner";
-import { journalClear, journalSet, type ActiveRunRecord } from "./run-journal";
+import {
+  journalClear,
+  journalSet,
+  registerActiveRunProbe,
+  type ActiveRunRecord,
+} from "./run-journal";
 import {
   shouldPersistModelSwitch,
   type ImageInput,
@@ -53,6 +58,7 @@ import {
   registerHostRun,
   addHostRunKey,
   unregisterHostRun,
+  hostRunBusy,
   type HostRunControl,
 } from "./host-registry";
 import { registerRunToken, unregisterRunToken } from "./run-rpc";
@@ -83,6 +89,16 @@ import {
 
 const HOSTS_DIR = runHostsDir(OPENSESSION_SESSIONS_DIR);
 const DISABLE_FILE = `${OPENSESSION_SESSIONS_DIR}/disable-run-hosts`;
+
+// A fresh host can be journaled while the boot recovery sweep is still
+// starting. Reserve its key before launch so takeInterruptedRuns does not
+// attach a second HostHandle to a run this process already drives. HostHandle
+// registration takes over once launch completes.
+const activeHostedRunKeys: Set<string> = ((globalThis as any)
+  .__activeHostedRunKeys ??= new Set());
+registerActiveRunProbe(
+  (runKey) => activeHostedRunKeys.has(runKey) || hostRunBusy(runKey),
+);
 
 export function localRunHostsSupported(
   platform = process.platform,
@@ -172,7 +188,11 @@ export async function* runAgentHosted(opts: HostedRunOpts): AsyncGenerator<Strea
       console.error("[host-client] spawn failed — falling back to in-process run:", e);
     }
     if (spawned) {
-      yield* hostedEventsWithJournal(spawned.handle, spawned.spec);
+      try {
+        yield* hostedEventsWithJournal(spawned.handle, spawned.spec);
+      } finally {
+        activeHostedRunKeys.delete(spawned.spec.hostId);
+      }
       return;
     }
   }
@@ -368,6 +388,9 @@ async function spawnHostRun(
 
   let handle: HostHandle | undefined;
   let launchCompleted = false;
+  // Reserve before journalSet. The server accepts prompts while boot recovery
+  // is starting, and the sweep must not adopt a host launched by this process.
+  activeHostedRunKeys.add(hostId);
   try {
     // Persist before launch. If opensession restarts between systemd-run and
     // socket attachment, the boot sweep can still find the surviving host.
@@ -406,6 +429,7 @@ async function spawnHostRun(
       }
     }
     if (!(error instanceof ExecutorProtocolError && error.ambiguousLaunch)) {
+      activeHostedRunKeys.delete(hostId);
       // The HostHandle ctor registered its host-registry control. Drop it only
       // after absence is proven; uncertain launches must remain visibly busy.
       handle?.abandon();
@@ -726,7 +750,10 @@ export class HostHandle {
         this.send({ t: "interrupt_steer", text, images }),
       cancel: () => this.cancelHost(),
     };
-    registerHostRun([spec.osSessionId, spec.engineSessionId], this.ctl);
+    registerHostRun(
+      [logicalRunId, spec.hostId, spec.osSessionId, spec.engineSessionId],
+      this.ctl,
+    );
     if (spec.engineSessionId) this.engineSessionId = spec.engineSessionId;
   }
 

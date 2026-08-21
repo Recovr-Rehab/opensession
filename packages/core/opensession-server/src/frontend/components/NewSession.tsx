@@ -9,6 +9,7 @@ import {
   clearDraft,
   onDraftsChanged,
   NEW_SESSION_DRAFT_KEY as DRAFT_KEY,
+  workspaceDraftKey,
 } from "../lib/drafts";
 import {
   addStaging,
@@ -73,6 +74,11 @@ import {
 	composerSend,
 	composerSendDefault,
 } from "../lib/composer-classes";
+import {
+  foregroundFileComposerOwns,
+  hasDraggedFiles,
+} from "../lib/file-drag";
+import { FullPageFileDropOverlay } from "./FullPageFileDropOverlay";
 import { askSurface } from "../lib/tinted-surface";
 import { toast } from "../ui/toast";
 import { cn } from "../ui/cn";
@@ -425,6 +431,13 @@ type PendingDraftPark = {
 // leave a second, stale draft workspace behind.
 const pendingDraftParks = new Set<PendingDraftPark>();
 
+// The workspace an unscoped park created for this composer's draft. The draft
+// survives closing now, so opening and closing again re-parks the same text:
+// update that workspace instead of leaving a second one beside it. Cleared
+// when the draft is consumed by a create. Module-level because the palette
+// unmounts between the two closes.
+let parkedWorkspaceId: string | null = null;
+
 function consumePendingDraftParks(text: string, workspaceId?: string) {
   for (const operation of pendingDraftParks) {
     if (operation.text === text && operation.workspaceId === workspaceId) {
@@ -637,6 +650,8 @@ export function NewSession({ onBack, inline, focusSeq, send, addHandler, connect
   const [images, setImages] = useState<string[]>(() => loadDraft(DRAFT_KEY).images);
   const [files, setFiles] = useState<FileAttachment[]>(() => loadDraft(DRAFT_KEY).files);
   const [staging, setStaging] = useState<StagingCount>(NOTHING_STAGING);
+  const [fileDragActive, setFileDragActive] = useState(false);
+  const fileDragWatchdogRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const adoptDraftAttachments = useCallback(() => {
     const stored = loadDraft(DRAFT_KEY);
     setImages((prev) => (sameImages(prev, stored.images) ? prev : stored.images));
@@ -1000,6 +1015,8 @@ export function NewSession({ onBack, inline, focusSeq, send, addHandler, connect
         promptHandle.current?.dropPendingDraftWrite();
         dropStagingAttachments(DRAFT_KEY);
         clearDraft(DRAFT_KEY);
+        // The next draft is a new one, so it gets its own workspace.
+        parkedWorkspaceId = null;
         // "Create more" stays in the palette and resets for the next task. The
         // other actions close it after App handles the same announcement.
         if (createAction === "more" || inline) {
@@ -1055,9 +1072,10 @@ export function NewSession({ onBack, inline, focusSeq, send, addHandler, connect
   // Nothing runs. This never sends create_session, so it is separate from
   // handleCreate's session_created wait below.
   //
-  // The local composer draft stays in place while the request runs. On success
-  // clear only the exact text that moved, preserving attachments and anything
-  // typed after reopening. On failure, the local copy remains the fallback.
+  // The local composer draft is never cleared by leaving: reopening the
+  // palette shows exactly what you typed, and the parked workspace draft is a
+  // copy, not a move. Staged attachments are copied onto the workspace's own
+  // composer, so the draft you find in the sidebar has its files too.
   const parkingDraftRef = useRef(false);
   async function parkDraftOnExit() {
     const text = promptText.current.trim();
@@ -1072,23 +1090,48 @@ export function NewSession({ onBack, inline, focusSeq, send, addHandler, connect
     pendingDraftParks.add(operation);
     const draft = { text, updatedAt: new Date().toISOString(), by: getCurrentUser() };
     try {
+      const createWorkspace = () =>
+        createWorkspaceApi({
+          name: firstNonEmptyLine(text).slice(0, 80) || "Draft",
+          ...(repo && repo !== NO_REPO ? { repo } : {}),
+          draft: { ...draft, autoName: true },
+        });
       const workspace = workspaceId
         ? // Scoped to an existing workspace: update its draft, never rename it.
           await updateWorkspaceApi(workspaceId, { draft })
-        : await createWorkspaceApi({
-            name: firstNonEmptyLine(text).slice(0, 80) || "Draft",
-            ...(repo && repo !== NO_REPO ? { repo } : {}),
-            draft: { ...draft, autoName: true },
-          });
+        : parkedWorkspaceId
+          ? // Re-parking the draft this palette already saved. The name still
+            // follows the text server-side while autoName holds. Only a
+            // workspace that is gone earns a fresh one; any other failure is
+            // reported rather than answered with a duplicate.
+            await updateWorkspaceApi(parkedWorkspaceId, {
+              draft: { ...draft, autoName: true },
+            }).catch((e) => {
+              if (e instanceof ApiError && e.status === 404) {
+                parkedWorkspaceId = null;
+                return createWorkspace();
+              }
+              throw e;
+            })
+          : await createWorkspace();
       if (operation.consumed) {
         // The same prompt started while this request was in flight. Remove the
         // late draft instead of leaving a duplicate beside the live session.
         if (workspaceId) await updateWorkspaceApi(workspaceId, { draft: null });
-        else await deleteWorkspaceApi(workspace.id);
-      } else {
-        if (loadDraft(DRAFT_KEY).text.trim() === text) {
-          saveDraft(DRAFT_KEY, { text: "" });
+        else {
+          if (parkedWorkspaceId === workspace.id) parkedWorkspaceId = null;
+          await deleteWorkspaceApi(workspace.id);
         }
+      } else {
+        if (!workspaceId) parkedWorkspaceId = workspace.id;
+        // Attachments live in this browser's draft store, not on the server
+        // record, so hand them to the workspace composer directly.
+        const staged = loadDraft(DRAFT_KEY);
+        saveDraft(workspaceDraftKey(workspace.id), {
+          text,
+          images: staged.images,
+          files: staged.files,
+        });
         toast("Saved as draft", { variant: "success" });
       }
       window.dispatchEvent(new Event("opensession:workspaces-changed"));
@@ -1280,6 +1323,83 @@ export function NewSession({ onBack, inline, focusSeq, send, addHandler, connect
 
   // One frame closed so the palette animates in; App mounts us already-open.
   const open = useEnterOnMount();
+
+  function resetFileDrag() {
+    if (fileDragWatchdogRef.current) clearTimeout(fileDragWatchdogRef.current);
+    fileDragWatchdogRef.current = null;
+    setFileDragActive(false);
+  }
+
+  function armFileDragWatchdog() {
+    if (fileDragWatchdogRef.current) clearTimeout(fileDragWatchdogRef.current);
+    fileDragWatchdogRef.current = setTimeout(resetFileDrag, 500);
+  }
+
+  useEffect(() => {
+    if (inline || !open) return;
+    function ownsFileDrag() {
+      const composer = document.querySelector<HTMLElement>(
+        '[data-global-file-composer="new-session"]',
+      );
+      return foregroundFileComposerOwns(composer);
+    }
+    function handleDragEnter(event: DragEvent) {
+      if (!hasDraggedFiles(event.dataTransfer)) return;
+      if (!ownsFileDrag()) {
+        resetFileDrag();
+        return;
+      }
+      event.preventDefault();
+      armFileDragWatchdog();
+      setFileDragActive(true);
+    }
+    function handleDragLeave(event: DragEvent) {
+      if (!hasDraggedFiles(event.dataTransfer)) return;
+      if (!ownsFileDrag()) {
+        resetFileDrag();
+        return;
+      }
+      const next = event.relatedTarget;
+      if (next instanceof Node && document.documentElement.contains(next)) return;
+      resetFileDrag();
+    }
+    function handleDragOver(event: DragEvent) {
+      if (!hasDraggedFiles(event.dataTransfer)) return;
+      if (!ownsFileDrag()) {
+        resetFileDrag();
+        return;
+      }
+      event.preventDefault();
+      armFileDragWatchdog();
+      setFileDragActive(true);
+      if (event.dataTransfer) event.dataTransfer.dropEffect = "copy";
+    }
+    function handleDrop(event: DragEvent) {
+      if (!hasDraggedFiles(event.dataTransfer)) return;
+      if (!ownsFileDrag()) {
+        resetFileDrag();
+        return;
+      }
+      event.preventDefault();
+      event.stopPropagation();
+      const dropped = event.dataTransfer?.files;
+      resetFileDrag();
+      if (dropped?.length) void addAttachments(dropped);
+    }
+    window.addEventListener("dragenter", handleDragEnter, true);
+    window.addEventListener("dragleave", handleDragLeave, true);
+    window.addEventListener("dragover", handleDragOver, true);
+    window.addEventListener("drop", handleDrop, true);
+    window.addEventListener("dragend", resetFileDrag, true);
+    return () => {
+      window.removeEventListener("dragenter", handleDragEnter, true);
+      window.removeEventListener("dragleave", handleDragLeave, true);
+      window.removeEventListener("dragover", handleDragOver, true);
+      window.removeEventListener("drop", handleDrop, true);
+      window.removeEventListener("dragend", resetFileDrag, true);
+      resetFileDrag();
+    };
+  }, [inline, open]);
 
   // Ask mode's surface, shared with the session composer so one mode is one
   // strength wherever you meet it. Only the base differs: mixed into
@@ -1957,6 +2077,7 @@ export function NewSession({ onBack, inline, focusSeq, send, addHandler, connect
       disablePointerDismissal={busy || mentionOpen}
     >
       <Modal.Content
+        data-global-file-composer="new-session"
         variant="palette"
         widthClassName="w-[min(820px,100%)] phone:w-full"
         viewportClassName="phone:items-end phone:px-0 phone:pb-0 phone:pt-3"
@@ -1985,6 +2106,7 @@ export function NewSession({ onBack, inline, focusSeq, send, addHandler, connect
         finalFocus={() => !createdRef.current}
       >
         {card}
+        <FullPageFileDropOverlay active={fileDragActive} />
       </Modal.Content>
     </Modal.Root>
   );

@@ -219,15 +219,19 @@ export function openLightbox(
 	origin?: Element | null,
 ) {
 	const source = mediaElement(origin);
-	const commentSessionId = commentSessionIdFor(source);
+	const fromDom = commentSessionIdFor(source);
 	host?.({
-		items: items.map((item) =>
-			item.kind === "image" &&
-			!("commentSessionId" in item && item.commentSessionId) &&
-			commentSessionId
-				? { ...item, commentSessionId }
-				: item,
-		),
+		// A workspace-media item names its own session, which is the only hint a
+		// gallery outside the transcript (the Shots panel, a hover card) has: the
+		// clicked thumbnail has no transcript ancestor to read the id off.
+		items: items.map((item) => {
+			if (item.kind !== "image") return item;
+			const commentSessionId =
+				("commentSessionId" in item ? item.commentSessionId : undefined) ||
+				("sessionId" in item ? item.sessionId : undefined) ||
+				fromDom;
+			return commentSessionId ? { ...item, commentSessionId } : item;
+		}),
 		index,
 		origin: source,
 	});

@@ -397,12 +397,13 @@ export function WorkspaceSummary({
 				// 8px edge gutter. Its quieter shadow does not need more clearance.
 				alignOffset={-8}
 				collisionPadding={8}
-				// The card hangs 16px below whatever chrome it clears, in both
-				// positions. Offsets are measured from the actions row, which ends 8px
-				// above the header's bottom edge: 8 + 16 with no strip, and with one,
-				// the same 8 plus the 40px strip less the 5px it overlaps the header
-				// by, then the 16. The old 72 left the strip position 13px slacker
-				// than the other one.
+				// The card hangs 8px below whatever chrome it clears, in both
+				// positions: the same gutter it keeps at the window's right edge, so
+				// it reads as inset into a corner rather than dropped lower than it
+				// is pulled in. Offsets are measured from the actions row the card
+				// anchors to, whose box ends 8px above the header's own bottom edge
+				// and 37px above the tab strip's: 8 + 8 with no strip, 37 + 8 with
+				// one.
 				sideOffset={workspaceSummarySideOffset(Boolean(tabStripVisible), reviewMode)}
 				elevation="sm"
 				// A menu's hairline is right for a strip of rows; on 300px of quiet

@@ -439,6 +439,8 @@ interface Props {
 	setTyping: (sessionId: string, active: boolean) => void;
 	addHandler: (handler: (msg: WSServerMessage) => void) => () => void;
 	connected: boolean;
+	/** A client-minted blank tab whose server record is still being persisted. */
+	optimisticEmpty?: boolean;
 	/** Opening prompt shown while a just-created session is still catching up
 	    through the session poll. Reconciles away when the transcript arrives. */
 	initialPending?: {
@@ -673,6 +675,7 @@ export function SessionViewer({
 	setTyping,
 	addHandler,
 	connected,
+	optimisticEmpty = false,
 	initialPending,
 	topbarEl,
 	headerRepoEl,
@@ -6756,7 +6759,15 @@ export function SessionViewer({
 							onScroll={handleMessagesScroll}
 							onClick={handleMessagesClick}
 						>
-							{loading ? (
+							{optimisticEmpty ? (
+								<div className="min-h-full flex items-center justify-center px-4 text-center text-dim">
+									{"New session in"}
+									<span className="ml-1 font-medium text-fg">
+										{workspaceName || session.branch || "this workspace"}
+									</span>
+									.
+								</div>
+							) : loading ? (
 								<ConversationLoading />
 							) : waitingForWorkspace ? (
 								// Worktree prep in flight. The first message waits in the

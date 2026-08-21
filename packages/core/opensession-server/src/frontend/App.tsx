@@ -12,6 +12,7 @@ import { repoLabel } from "./lib/repo-label";
 import { NO_REPO } from "./lib/session-repo";
 import { ASK_BAND } from "./lib/sidebar-workspaces";
 import React, { useCallback, useEffect, useRef, useState } from "react";
+import { flushSync } from "react-dom";
 import { createRoot } from "react-dom/client";
 import { MotionConfig } from "motion/react";
 import { MarkdownRepoProvider } from "./components/MarkdownBody";
@@ -138,6 +139,7 @@ import {
 import { DeskOverlay } from "./components/DeskOverlay";
 import { useSessions } from "./hooks/useSessions";
 import { useHydratedSession } from "./hooks/useHydratedSession";
+import { hasDraft } from "./lib/drafts";
 import { useWebSocket } from "./hooks/useWebSocket";
 import { useBackSwipe } from "./hooks/useBackSwipe";
 import { useIsPhone } from "./hooks/useIsPhone";
@@ -299,6 +301,9 @@ type Route =
 // Stable empty stack, so a session with no sub-agent open hands the same array
 // identity down every render (the transcript memo compares props by identity).
 const NO_SUBAGENTS: SubagentRef[] = [];
+// An optimistic session must not consume transcript frames from the socket that
+// is still watching the tab it replaced. It starts listening after persistence.
+const IGNORE_WS_MESSAGES = () => () => {};
 
 // A link into a sub-agent carries agent ids, never their labels. The pane reads
 // the real one off the sub-agent's own transcript and reports it back, so the
@@ -913,6 +918,16 @@ export function App(
 	// "Session not found". pendingNewWorkspace words it for a brand-new
 	// workspace vs. a session added to an existing one.
 	const [pendingSessionId, setPendingSessionId] = useState<string | null>(null);
+	// Keep the complete local shell beside the route until persistence lands.
+	// The session list and detail fetches are independent, so neither should be
+	// allowed to substitute the previous session while this id is still local.
+	const [optimisticSession, setOptimisticSession] =
+		useState<UnifiedSession | null>(null);
+	// A deleted blank can reappear in a sessions poll that started before its
+	// DELETE finished. Hide it for this page's lifetime so leaving stays final.
+	const [hiddenEmptySessionIds, setHiddenEmptySessionIds] = useState<Set<string>>(
+		() => new Set(),
+	);
 	const [pendingNewWorkspace, setPendingNewWorkspace] = useState(false);
 	// Who's viewing what, app-wide (from global_presence).
 	const [teamViewing, setTeamViewing] = useState<
@@ -1787,9 +1802,11 @@ export function App(
 	// splash as soon as its one session is ready.
 	const listedSession: UnifiedSession | null =
 		route.view === "session"
-			? sessions.find(
-					(s) => s.id === route.id || s.aliasIds?.includes(route.id),
-				) || null
+			? optimisticSession?.id === route.id
+				? optimisticSession
+				: sessions.find(
+						(s) => s.id === route.id || s.aliasIds?.includes(route.id),
+					) || null
 			: null;
 	const currentSession = useHydratedSession(
 		route.view === "session" ? route.id : null,
@@ -1963,6 +1980,9 @@ export function App(
 			// fallback). A real session is retained by the next poll; a phantom
 			// from a failed create is reconciled away instead of lingering.
 			unstick(pendingSessionId);
+			setOptimisticSession((pending) =>
+				pending?.id === pendingSessionId ? null : pending,
+			);
 		}
 	}, [route, pendingSessionId, unstick]);
 
@@ -2980,6 +3000,7 @@ export function App(
 				.filter(
 					(s) =>
 						liveTab(s) &&
+						!hiddenEmptySessionIds.has(s.id) &&
 						s.workspaceId === activeWorkspaceId &&
 						// Workers never take a tab — they are reached from the header's
 						// worker menu and read as a level below their parent.
@@ -2991,6 +3012,7 @@ export function App(
 					.filter(
 						(s) =>
 							liveTab(s) &&
+							!hiddenEmptySessionIds.has(s.id) &&
 							s.worktreeDir === currentSession.worktreeDir && !s.parentSessionId,
 					)
 					.sort(byCreated)
@@ -3264,10 +3286,7 @@ export function App(
 				showHistory={side !== "left"}
 				colors={tabColors}
 				viewers={tabViewers}
-				onSelect={(s) => {
-					setActiveViewTab(null);
-					navigate({ view: "session", id: s.id });
-				}}
+				onSelect={selectSessionTab}
 				onSetColor={(key, color) => setTabColors(setTabColor(key, color))}
 				tabOrder={stripTabIds}
 				onReorderTabs={(ids) => saveTabOrder(tabOrderKey, mergeBarOrder(ids))}
@@ -3350,6 +3369,10 @@ export function App(
 		excludeId: currentSession?.id,
 	});
 
+	// A create can still be in flight when its blank tab is left. Remember that
+	// local id so the response is discarded and its just-created file removed.
+	const abandonedSessionCreatesRef = useRef<Set<string>>(new Set());
+
 	async function createNewSessionFrom(
 		src: UnifiedSession,
 		mode: "share" | "stack" | "ask",
@@ -3367,6 +3390,9 @@ export function App(
 			createdAt: now,
 			lastActivity: now,
 			isRunning: false,
+			// This is a blank local shell, regardless of whether the source tab ran.
+			// Inheriting `ran` makes the viewer hydrate a transcript that cannot exist.
+			ran: false,
 			transcriptPath: null,
 			startedBy: user,
 			archived: false,
@@ -3378,8 +3404,9 @@ export function App(
 			plainThreadId: undefined,
 			goal: undefined,
 			loop: undefined,
-			// Hold messages until the server has persisted this optimistic tab.
-			workspacePreparing: true,
+			// This sibling reuses an already-ready workspace. The disconnected pane
+			// holds messages locally until the server has persisted the session.
+			workspacePreparing: false,
 			...(mode === "ask"
 				? {
 						branch: null,
@@ -3388,14 +3415,19 @@ export function App(
 					}
 				: {}),
 		};
-		// The client owns the id, so the new tab can become active in the click's
-		// own frame instead of waiting for the server round trip.
-		inject(draft, { sticky: true });
+		// Commit the local shell before changing the route. Without this boundary,
+		// the route can render against the previous list and keep the old session's
+		// conversation visible until the create response arrives.
+		flushSync(() => {
+			inject(draft, { sticky: true });
+			setOptimisticSession(draft);
+		});
 		setPendingSessionId(id);
 		setPendingNewWorkspace(false);
 		clearTimeout(pendingTimer.current);
 		pendingTimer.current = setTimeout(() => {
 			setPendingSessionId(null);
+			setOptimisticSession((pending) => (pending?.id === id ? null : pending));
 			unstick(id);
 		}, 30_000);
 		navigate({ view: "session", id });
@@ -3403,6 +3435,20 @@ export function App(
 		try {
 			const created = await newSessionApi(src.id, user, mode, id);
 			const createdId = created.id;
+			if (abandonedSessionCreatesRef.current.delete(id)) {
+				unstick(id);
+				remove(id);
+				setPendingSessionId((pending) => (pending === id ? null : pending));
+				setOptimisticSession((pending) => (pending?.id === id ? null : pending));
+				// A different id belongs to another window's reusable tab. Only delete
+				// the session this request actually created.
+				if (createdId === id)
+					await deleteSessionApi(createdId, false).catch((error) =>
+						console.error("Abandoned empty session cleanup failed:", error),
+					);
+				refresh();
+				return createdId;
+			}
 			if (createdId !== id) {
 				// Another window won the one-empty-tab race. Drop this optimistic
 				// shell and focus the reusable tab the server returned.
@@ -3419,12 +3465,14 @@ export function App(
 			);
 			clearTimeout(pendingTimer.current);
 			setPendingSessionId((pending) => (pending === id ? null : pending));
+			setOptimisticSession((pending) => (pending?.id === id ? null : pending));
 			if (createdId !== id) navigate({ view: "session", id: createdId });
 			refresh();
 			return createdId;
 		} catch (error) {
 			clearTimeout(pendingTimer.current);
 			setPendingSessionId((pending) => (pending === id ? null : pending));
+			setOptimisticSession((pending) => (pending?.id === id ? null : pending));
 			unstick(id);
 			remove(id);
 			if (routeRef.current.view === "session" && routeRef.current.id === id)
@@ -3577,7 +3625,10 @@ export function App(
 	// nothing to recover, so it's deleted outright instead of cluttering
 	// Archived. The local list updates before the request returns so closing
 	// feels instant. Shared by the tab ×, the tab context menu, and ⌘W.
-	const closeSessionNow = async (s: UnifiedSession) => {
+	const closeSessionNow = async (
+		s: UnifiedSession,
+		preferredNext?: UnifiedSession,
+	) => {
 		const neverRan =
 			s.source === "opensession" && sessionNeverRan(s);
 		const wasOpen = currentSession?.id === s.id;
@@ -3585,7 +3636,9 @@ export function App(
 		// resolves without it, and collapses on its own once a bar is emptied.
 		// Leaving the id in the record means restoring the session later puts it
 		// back in the bar it was closed from.
-		const next = wasOpen ? workspaceSessions.find((c) => c.id !== s.id) : null;
+		const next = wasOpen
+			? preferredNext ?? workspaceSessions.find((c) => c.id !== s.id)
+			: null;
 		// Closing the last session doesn't have to conjure a new one: a workspace
 		// pane (Review, Conversation, Video) renders without a session, so the
 		// strip is left holding just that tab. The foregrounded pane wins, so
@@ -3625,6 +3678,12 @@ export function App(
 		} catch (e) {
 			console.error("Close failed:", e);
 			if (neverRan) {
+				setHiddenEmptySessionIds((hidden) => {
+					if (!hidden.has(s.id)) return hidden;
+					const next = new Set(hidden);
+					next.delete(s.id);
+					return next;
+				});
 				inject(s);
 			} else {
 				patch(s.id, { archived: false, archivedReason: undefined });
@@ -3653,6 +3712,33 @@ export function App(
 		confirmRunningCloses([session], onConfirm);
 	const closeSession = (s: UnifiedSession) =>
 		confirmRunningClose(s, () => void closeSessionNow(s));
+	const selectSessionTab = (next: UnifiedSession) => {
+		const empty =
+			currentSession &&
+			currentSession.id !== next.id &&
+			currentSession.source === "opensession" &&
+			sessionNeverRan(currentSession) &&
+			!hasDraft(`session:${currentSession.id}`)
+				? currentSession
+				: null;
+		setActiveViewTab(null);
+		if (!empty) {
+			navigate({ view: "session", id: next.id });
+			return;
+		}
+		setHiddenEmptySessionIds((hidden) => new Set(hidden).add(empty.id));
+		if (empty.id === pendingSessionId) {
+			abandonedSessionCreatesRef.current.add(empty.id);
+			clearTimeout(pendingTimer.current);
+			setPendingSessionId(null);
+			setOptimisticSession(null);
+			unstick(empty.id);
+			remove(empty.id);
+			navigate({ view: "session", id: next.id });
+			return;
+		}
+		void closeSessionNow(empty, next);
+	};
 	const closeSessionRef = useRef(closeSession);
 	closeSessionRef.current = closeSession;
 	// Bring archived sessions back. Optimistic like the archive paths: the local
@@ -4330,6 +4416,9 @@ export function App(
 				setTyping={socket.setTyping}
 				addHandler={socket.addHandler}
 				connected={socket.connected}
+				optimisticEmpty={
+					focused && route.view === "session" && route.id === pendingSessionId
+				}
 				initialPending={pendingInitialPrompts[viewerSession.id]}
 				topbarEl={focused ? topbarEl : null}
 				headerActionsEl={focused ? headerActionsEl : null}
@@ -5301,7 +5390,11 @@ export function App(
 												currentSession;
 											const paneSocket =
 												id === pendingSessionId
-													? { ...socket, connected: false }
+													? {
+															...socket,
+															connected: false,
+															addHandler: IGNORE_WS_MESSAGES,
+														}
 													: socket;
 											return (
 												<>
@@ -5325,7 +5418,10 @@ export function App(
 												connected && currentSession.id !== pendingSessionId,
 											send,
 											setTyping,
-											addHandler,
+											addHandler:
+												currentSession.id === pendingSessionId
+													? IGNORE_WS_MESSAGES
+													: addHandler,
 										},
 										true,
 										false,

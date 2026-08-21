@@ -37,7 +37,7 @@ describe("workspace summary in Review", () => {
 	});
 
 	test("clears the Review identity and navigation bars", () => {
-		expect(workspaceSummarySideOffset(true, false)).toBe(59);
-		expect(workspaceSummarySideOffset(true, true)).toBe(143);
+		expect(workspaceSummarySideOffset(true, false)).toBe(45);
+		expect(workspaceSummarySideOffset(true, true)).toBe(129);
 	});
 });

@@ -222,7 +222,7 @@ export function FilterPopover({
 							/>
 						</span>
 					</Menu.Trigger>
-					<Menu.Popup align="end" sideOffset={6}>
+					<Menu.Popup align="end" sideOffset={6} alignOffset={-6}>
 						{/* Inbox has stable creation order and Activity owns recency.
 						    Status is the one layout where choosing lane order still makes
 						    sense, so only it offers this override. */}
