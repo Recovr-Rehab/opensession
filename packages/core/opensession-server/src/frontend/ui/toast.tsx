@@ -14,7 +14,10 @@ import {
 	IconTrash,
 } from "../components/icons";
 import { useIsPhone } from "../hooks/useIsPhone";
-import { TOAST_NOTICE_LANE } from "../lib/notification-classes";
+import {
+	ONGOING_TOAST_POSITION,
+	TOAST_NOTICE_LANE,
+} from "../lib/notification-classes";
 import { toastIconName, type ToastIconName } from "../lib/toast-icon";
 import { AnimatedCheck } from "./copy";
 import { Tooltip } from "./tooltip";
@@ -278,6 +281,7 @@ function ToastCard({ toast: item }: { toast: BaseToast.Root.ToastObject<ToastDat
 			onClick={data.ongoing ? undefined : () => dismissToast(data.id)}
 			className={[
 				`${data.ongoing ? "pointer-events-none" : "pointer-events-auto"} absolute bottom-0 left-1/2 w-max max-w-full outline-none phone:max-w-[calc(100vw-24px)]`,
+				data.ongoing ? ONGOING_TOAST_POSITION : "",
 				"[z-index:calc(100-var(--toast-index))] [transform-origin:center_bottom]",
 				"[transform:translateX(calc(-50%+var(--toast-swipe-movement-x)))_translateY(calc(var(--toast-swipe-movement-y)-var(--toast-index)*8px))_scale(calc(1-(var(--toast-index)*0.04)))]",
 				"data-[expanded]:[transform:translateX(calc(-50%+var(--toast-swipe-movement-x)))_translateY(calc(var(--toast-swipe-movement-y)-var(--toast-offset-y)-var(--toast-index)*8px))_scale(1)]",
@@ -289,6 +293,7 @@ function ToastCard({ toast: item }: { toast: BaseToast.Root.ToastObject<ToastDat
 				className={[
 					"relative flex max-w-full items-center gap-2 overflow-hidden whitespace-normal rounded-[999px] bg-popup",
 					"py-1.5 text-supporting font-medium leading-tight text-fg smooth-shadow-md",
+					data.ongoing ? "border border-divider-soft" : "",
 					iconName ? "pl-2.5" : "pl-3",
 					data.action ? "pr-1.5" : "pr-3",
 				].join(" ")}

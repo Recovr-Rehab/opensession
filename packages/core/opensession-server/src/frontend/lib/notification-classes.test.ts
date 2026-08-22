@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import {
+	ONGOING_TOAST_POSITION,
 	PERSISTENT_NOTICE_SHELF,
 	TOAST_NOTICE_LANE,
 	TRANSIENT_NOTICE_LANE,
@@ -26,6 +27,13 @@ describe("notification lanes", () => {
 		expect(TOAST_NOTICE_LANE).toContain("inset-x-0");
 		expect(TOAST_NOTICE_LANE).toContain("bottom-[124px]");
 		expect(TOAST_NOTICE_LANE).not.toContain("top-");
+	});
+
+	test("moves ongoing phone status below the header and tab strip", () => {
+		expect(ONGOING_TOAST_POSITION).toContain("phone:fixed");
+		expect(ONGOING_TOAST_POSITION).toContain("var(--pane-header-h)");
+		expect(ONGOING_TOAST_POSITION).toContain("var(--strip-clearance,0px)");
+		expect(ONGOING_TOAST_POSITION).toContain("phone:bottom-auto");
 	});
 
 	test("keeps durable desktop prompts in a separate shelf", () => {
