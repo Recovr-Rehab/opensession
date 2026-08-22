@@ -86,6 +86,20 @@ test("the default create exposes its deterministic session id immediately", asyn
   expect(createHandler).toContain("onCreateStarted?.(optimisticCreate)");
 });
 
+test("immediate create preserves the latest draft until success", async () => {
+  const source = await Bun.file(new URL("./NewSession.tsx", import.meta.url)).text();
+  const createStart = source.indexOf("function handleCreate()");
+  const createEnd = source.indexOf("const canCreate =", createStart);
+  const createHandler = source.slice(createStart, createEnd);
+
+  const drop = createHandler.indexOf("dropPendingDraftWrite()");
+  const park = createHandler.indexOf("saveDraft(DRAFT_KEY, { text: prompt })");
+  const handoff = createHandler.indexOf("onCreateStarted?.(optimisticCreate)");
+  expect(drop).toBeGreaterThan(-1);
+  expect(drop).toBeLessThan(park);
+  expect(park).toBeLessThan(handoff);
+});
+
 test("the new session title uses the visible names of pasted session links", async () => {
   const source = await Bun.file(new URL("./NewSession.tsx", import.meta.url)).text();
   const createStart = source.indexOf('type: "create_session"');

@@ -1279,6 +1279,14 @@ export function NewSession({ onBack, inline, focusSeq, send, addHandler, connect
     try {
       send(createMessage);
       consumePendingDraftParks(prompt, workspaceId);
+      if (createAction === "open") {
+        // App opens the optimistic session immediately, which unmounts this
+        // field before its success handler can cancel the debounced write.
+        // Park the exact text synchronously so an error can restore it, then
+        // App clears it once session_created confirms the create.
+        promptHandle.current?.dropPendingDraftWrite();
+        saveDraft(DRAFT_KEY, { text: prompt });
+      }
       onCreateStarted?.(optimisticCreate);
     } catch (error) {
       creatingRef.current = false;

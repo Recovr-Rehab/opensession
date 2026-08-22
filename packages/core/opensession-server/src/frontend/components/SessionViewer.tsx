@@ -9,7 +9,7 @@ import React, {
 	useSyncExternalStore,
 } from "react";
 import { createPortal } from "react-dom";
-import { motion, Reorder } from "motion/react";
+import { AnimatePresence, motion, Reorder } from "motion/react";
 import { duration, ease } from "../ui/motion";
 import { TranscriptSkeleton } from "../ui/state";
 import { renderMarkdown } from "../lib/markdown";
@@ -220,8 +220,8 @@ import { useLivePlan } from "./session-viewer/use-live-plan";
 import {
 	BusyInline,
 	ConversationLoading,
-	SessionStarting,
 	SteerWaiting,
+	WorkspaceSetup,
 	WorkspaceWaiting,
 } from "./session-viewer/busy-indicators";
 import { StreamingMessage } from "./session-viewer/streaming-message";
@@ -289,7 +289,6 @@ import {
 	IconStack,
 } from "./icons";
 import { SessionRelations, type RelatedSession } from "./SessionRelations";
-import { PageLoader } from "../ui/page-loader";
 import {
 	SOURCE_CHIP,
 	SOURCE_CHIP_ARCHIVED,
@@ -2248,6 +2247,10 @@ export function SessionViewer({
 	const waitingForWorkspace =
 		promoting ||
 		(workspacePreparing && entries.length === 0 && !liveTurnStore.hasText());
+	// The optimistic shell exists before the server can confirm whether setup is
+	// needed. Keep that brief gap in the same loading state, with its opening
+	// message in the queue rather than flashing it into an otherwise empty chat.
+	const settingUpWorkspace = waitingForWorkspace || optimisticEmpty;
 
 	// Live worktree diff, handed to the Changes page as `diff=` so opening it
 	// reads the poll the panel already runs rather than starting a second one.
@@ -4260,9 +4263,9 @@ export function SessionViewer({
 			!pendingReconciliation.landed.has(item.id) &&
 			!pendingReconciliation.expired.has(item.id),
 	);
-	const pendingQueue = visiblePending.filter((p) => p.busyMode || waitingForWorkspace);
+	const pendingQueue = visiblePending.filter((p) => p.busyMode || settingUpWorkspace);
 	const pendingBubbles = visiblePending.filter(
-		(p) => !p.busyMode && !waitingForWorkspace,
+		(p) => !p.busyMode && !settingUpWorkspace,
 	);
 	const optimisticTranscriptEntries = useMemo<TranscriptEntry[]>(
 		() =>
@@ -4326,8 +4329,8 @@ export function SessionViewer({
 		queuedSessionMessageCount +
 		pendingQueue.length +
 		durableOutbox.length;
-	const queueTitle = waitingForWorkspace
-		? `Creating your workspace · ${queueCount} queued`
+	const queueTitle = settingUpWorkspace
+		? `Setting up workspace · ${queueCount} queued`
 		: [
 				queuedMessageCount
 					? `${queuedMessageCount} ${queuedMessageCount === 1 ? "message" : "messages"} queued`
@@ -4583,7 +4586,7 @@ export function SessionViewer({
 					>
 						<div className={composerQueueActions}>
 							<span className={composerQueueSendingStatus} role="status">
-								{waitingForWorkspace ? (
+								{settingUpWorkspace ? (
 									"Queued"
 								) : (
 									<span className={composerQueueSendingShimmer}>Queueing</span>
@@ -6831,19 +6834,11 @@ export function SessionViewer({
 							onScroll={handleMessagesScroll}
 							onClick={handleMessagesClick}
 						>
-							{waitingForWorkspace ? (
-								<WorkspaceWaiting
-									detail="Your message will send when it's ready."
-									ghost
-								/>
-							) : optimisticEmpty ? (
-								<SessionStarting
-									workspaceName={
-										workspaceName || session.branch || "this workspace"
-									}
-								/>
+							<AnimatePresence initial={false} mode="popLayout">
+							{settingUpWorkspace ? (
+								<WorkspaceSetup key="workspace-setup" />
 							) : loading ? (
-								<ConversationLoading />
+								<ConversationLoading key="conversation-loading" />
 							) : entries.length === 0 &&
 								!hasLiveConversation &&
 								!session.transcriptPath ? (
@@ -6995,8 +6990,9 @@ export function SessionViewer({
 									</OpenAssetPathsProvider>
 								</>
 							)}
+							</AnimatePresence>
 
-							{isBusy && !waitingForWorkspace && (
+							{isBusy && !settingUpWorkspace && (
 								<BusyInline
 									since={busySince}
 									stoppingSince={stopRequestedAt}
@@ -7272,8 +7268,10 @@ export function SessionViewer({
 									quote={quote}
 									onQuoteClear={clearQuote}
 									placeholder={
-										!connected
-											? "Send when reconnected…"
+										settingUpWorkspace
+											? "Queue while workspace sets up…"
+											: !connected
+												? "Send when reconnected…"
 											: forkFrom
 												? "New direction…"
 												: promoting

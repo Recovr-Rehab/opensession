@@ -2733,20 +2733,6 @@ html[data-theme="light"] span.commit-ref:hover {
 	to { opacity: 1; }
 }
 
-/* The page loader's wave (ui/page-loader), referenced from the longhand
-   `[animation-name:page-loader-bar]` in lib/page-loader-classes.
-
-   It restates index.html's `splash-bar` on purpose. The launch splash has to
-   paint before the bundle has parsed, so the shell carries its own copy of both
-   the keyframe and the bar geometry; this is the same wave, for regions inside
-   the app that are still empty. If one moves, move the other — a launch screen
-   and a loading page that breathe at different rates is exactly the kind of
-   drift nobody sees in review and everybody feels. */
-@keyframes page-loader-bar {
-	0%, 100% { transform: scaleY(0.6); }
-	50% { transform: scaleY(1); }
-}
-
 /* The pixel spinner's wave. Referenced from the longhand
    `[animation-name:pixel-snake-trail]` in lib/pixel-spinner-classes. */
 @keyframes pixel-snake-trail {
