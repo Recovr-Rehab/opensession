@@ -2152,37 +2152,32 @@ export function SessionViewer({
 		return () => window.removeEventListener("keydown", onKeyDown);
 	}, [focused, session.id]);
 
-	const isAsk = session.mode === "ask";
-	const hasWorkspace = sessionHasWorkspace(session);
+	// Switching modes is immediate in the interface. The only slow part is the
+	// workspace setup behind it, so code affordances appear now and show their
+	// own setup state until the server has cut the branch.
+	const [promoting, setPromoting] = useState(false);
+	const [promotionReady, setPromotionReady] = useState(false);
+	const codeMode = session.mode === "code" || promoting || promotionReady;
+	const isAsk = session.mode === "ask" && !codeMode;
+	const hasWorkspace = sessionHasWorkspace(session) || codeMode;
 	// Everything that only makes sense against a repo: the diff, the Changes
 	// tab, the PR strip, the repo switch/attach bar. A repo-less session still
 	// has a workspace (terminal, agents, assets run in its scratch dir), so
-	// these ride their own flag rather than `hasWorkspace`. Without it the
-	// panel reports the git state of whatever encloses that dir, which is not
-	// this session's work and may not be anyone's.
-	const hasRepoWork = hasWorkspace && !session.repoLess;
-	// Ask→code promotion: creates a worktree and flips the session to code mode.
-	// The 5s session poll picks up the mode change and re-renders with the full
-	// code affordances (diff/PR tabs, RepoBar).
-	const [promoting, setPromoting] = useState(false);
-	// `onDone` closes the composer menu the action was picked from — called on
-	// both paths, so a failure returns you to a usable menu instead of a row
-	// stuck on "Switching to code…".
+	// these ride their own flag rather than `hasWorkspace`. Promotion gives a
+	// repo-less Ask session the selected/default repo on the server.
+	const hasRepoWork = hasWorkspace && (!session.repoLess || codeMode);
 	async function handlePromote(onDone?: () => void) {
 		if (promoting) return;
 		setPromoting(true);
+		onDone?.();
 		try {
-			const { branch } = await promoteSessionApi(session.id);
-			// The session poll flips the header, tabs and RepoBar a beat later;
-			// say what happened now, and name the branch — the session may have
-			// adopted the tree it was already reading rather than cutting a new
-			// one, and that difference matters before the first edit.
-			toast(branch ? `Code mode on ${branch}` : "Switched to code mode");
+			await promoteSessionApi(session.id);
+			setPromotionReady(true);
+			setPromoting(false);
 		} catch (e) {
 			toast(e instanceof Error ? e.message : "Could not switch to code mode");
 			setPromoting(false);
 		}
-		onDone?.();
 	}
 	// A linked Plain thread gets a read-only conversation sidebar (+ jump-to-Plain),
 	// available even for ask-mode sessions that have no code workspace.
@@ -2252,7 +2247,8 @@ export function SessionViewer({
 	// a stale sessions poll re-asserting the flag after the workspace_status
 	// event already cleared it.
 	const waitingForWorkspace =
-		workspacePreparing && entries.length === 0 && !liveTurnStore.hasText();
+		promoting ||
+		(workspacePreparing && entries.length === 0 && !liveTurnStore.hasText());
 
 	// Live worktree diff, handed to the Changes page as `diff=` so opening it
 	// reads the poll the panel already runs rather than starting a second one.
@@ -7286,18 +7282,21 @@ export function SessionViewer({
 											? "Send when reconnected…"
 											: forkFrom
 												? "New direction…"
-												: isBusy
-													? "Queue for when it finishes…"
-													: isAsk
-															? `Ask ${AGENT_NAME}, read-only…`
-															: `Ask ${AGENT_NAME}…`
+												: promoting
+													? "Setting up code workspace…"
+													: isBusy
+														? "Queue for when it finishes…"
+														: isAsk
+																? `Ask ${AGENT_NAME}, read-only…`
+																: `Ask ${AGENT_NAME}…`
 									}
 									disabled={!connected && !!forkFrom}
 									sendDisabled={(text) =>
-										!text.trim() &&
-										images.length === 0 &&
-										(noteMode || files.length === 0) &&
-										!forkFrom
+										promoting ||
+										(!text.trim() &&
+											images.length === 0 &&
+											(noteMode || files.length === 0) &&
+											!forkFrom)
 									}
 									// Tints the composer green and names the mode in a chip above
 									// the field. Only opensession sessions can promote (the
@@ -7321,11 +7320,9 @@ export function SessionViewer({
 									// same confirmation Escape does.
 									stopRequest={stopRequest}
 									// Leaving ask mode is a setting of this session, so it sits in
-									// the composer's "+" with the rest of them rather than as its
-									// own chip. The row stays open reading "Switching to code…"
-									// until the server answers — cutting a worktree isn't always
-									// instant. Only opensession sessions can promote (the server owns
-									// that rule); elsewhere the row would be a dead end.
+									// the composer's "+" with the rest of them. It disappears as
+									// soon as selected; workspace setup reports progress on the
+									// code surfaces that are waiting for it.
 									menuExtra={({ close }) => (
 										<>
 											<button

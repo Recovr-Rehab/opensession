@@ -39,12 +39,12 @@ import { persistRawConfig, rawConfig, withConfigMutationLock } from "../config-m
 import { AUTO_REPO } from "../worktree";
 import { searchSkills } from "../skills";
 import { handleSlashCommand } from "../slash-commands";
-import { suggestBranchName } from "../suggest-branch";
+import { sanitizeBranchSlug } from "../suggest-branch";
 import { type NativeSessionFile, type StackedOn } from "../types";
 import { DEFAULT_WORKSPACE_MODEL_SETTINGS, type Workspace, type WorkspaceDraft, type WorkspaceModelSettings, createWorkspace, deleteWorkspace, getWorkspace, listWorkspaces, updateWorkspace } from "../workspaces";
 import { resolveExternalWorkspace, resolvePlainWorkspace, resolvePrWorkspace } from "../workspace-resolve";
 import { resolveModel } from "../models";
-import { REPOS, createWorktree, createWorktreeForExistingBranch, ensureScratchDir, getRepo, isSharedCheckoutDir, listWorktrees, repoForPath, sessionRepoId, worktreeHasWork, worktreeHeadBranch } from "../worktree";
+import { REPOS, createWorktree, createWorktreeForExistingBranch, ensureScratchDir, getRepo, isSharedCheckoutDir, listWorktrees, repoForPath, resolveUniqueBranch, sessionRepoId, worktreeHasWork, worktreeHeadBranch } from "../worktree";
 import { copyFileSync, existsSync, mkdirSync, readFileSync } from "fs";
 import { isClientSessionId, isNativeSessionId, newSessionId } from "../paths";
 import { isReusableEmptySession } from "../empty-session";
@@ -857,11 +857,15 @@ export async function handleWorkspaceRoutes(
 			branch = "";
 			worktreeDir = repo.repo;
 		} else {
-			branch = (
-				body.branch ||
-				(await suggestBranchName(session.title || "session")) ||
-				`session-${sessionId.slice(4, 10)}`
-			).trim();
+			// Promotion already has a generated session title. Reusing it avoids a
+			// second model turn just to name the branch, which used to hold this
+			// request for seconds when the naming model's account pool was busy.
+			const generated =
+				sanitizeBranchSlug(session.title || "") ||
+				`session-${sessionId.slice(4, 10)}`;
+			branch = body.branch
+				? body.branch.trim()
+				: await resolveUniqueBranch(generated, repo.id);
 			const oldCwd = current || repo.repo;
 			worktreeDir = await createWorktree(branch, repo.id, {
 				gitEnv: githubMutationCredential(ctx)?.env,
@@ -881,11 +885,12 @@ export async function handleWorkspaceRoutes(
 				console.warn(`[promote] transcript copy failed for ${sessionId}:`, e);
 			}
 		}
-		touchNativeSession(sessionId, {
+		await touchNativeSession(sessionId, {
 			mode: "code",
 			branch,
 			worktreeDir,
 			repo: repo.id,
+			repoLess: false,
 		});
 		// Materialize the workspace's worktree if it doesn't own one yet. A
 		// shared checkout is owned by nobody, so it never becomes a
