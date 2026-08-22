@@ -6,8 +6,9 @@ import { FloatingStatus } from "../ui/floating-status";
 import { toast } from "../ui/toast";
 import { fetchHealthStatus } from "../lib/health";
 
-// Grace before showing anything — most socket blips reconnect within this.
-const PILL_DELAY_MS = 2500;
+// Give foreground recovery enough time to probe and replace the stale PWA
+// socket before showing anything. Background time never counts toward this.
+const PILL_DELAY_MS = 8_000;
 // A disconnect older than this whose health probe ALSO fails escalates from
 // the calm pill to the full restart overlay (covers hard crashes).
 const ESCALATE_AFTER_MS = 22_000;
@@ -131,9 +132,12 @@ export function RestartOverlay({ connected, addHandler }: Props) {
     [addHandler]
   );
 
-  // Disconnect tracking: after a short grace, show the calm reconnecting pill.
-  // On reconnect, clear it and settle the blip-vs-restart question via bootId
-  // (hello handles new servers; one health fetch covers old ones).
+  // Disconnect tracking: after a foreground grace, show the calm reconnecting
+  // pill. Backgrounding a PWA routinely kills its socket, so hiding the page
+  // cancels the grace and reopening starts it again instead of flashing stale
+  // connection state. On reconnect, clear the pill and settle the
+  // blip-vs-restart question via bootId (hello handles new servers; one health
+  // fetch covers old ones).
   useEffect(() => {
     if (connected) {
       disconnectedAt.current = null;
@@ -145,10 +149,30 @@ export function RestartOverlay({ connected, addHandler }: Props) {
       }
       return;
     }
-    if (phase !== "ok" && phase !== "restarting") return;
     disconnectedAt.current ??= Date.now();
-    const t = setTimeout(() => setPhase("reconnecting"), phase === "restarting" ? 0 : PILL_DELAY_MS);
-    return () => clearTimeout(t);
+    if (phase === "crashed") return;
+
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const schedule = () => {
+      if (timer !== undefined) clearTimeout(timer);
+      timer = undefined;
+      if (document.visibilityState === "hidden") {
+        if (phaseRef.current === "reconnecting" && !explicit.current) setPhase("ok");
+        return;
+      }
+      if (phaseRef.current !== "ok" && phaseRef.current !== "restarting") return;
+      const delay = phaseRef.current === "restarting" ? 0 : PILL_DELAY_MS;
+      timer = setTimeout(() => {
+        if (document.visibilityState !== "hidden") setPhase("reconnecting");
+      }, delay);
+    };
+
+    schedule();
+    document.addEventListener("visibilitychange", schedule);
+    return () => {
+      if (timer !== undefined) clearTimeout(timer);
+      document.removeEventListener("visibilitychange", schedule);
+    };
   }, [connected, phase]);
 
   // Escalation: still disconnected after a while AND health unreachable →
