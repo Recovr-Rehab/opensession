@@ -108,6 +108,7 @@ import {
 	type ModelOption,
 	type ProviderAccountOption,
 	type SessionSubagentSnapshot,
+	type PreviewPortalRecipe,
 	type PreviewStatus,
 } from "../lib/api";
 import {
@@ -5285,6 +5286,19 @@ export function SessionViewer({
 	}, [showAssets, assetFiles.length, onCloseAssets]);
 	const [previewStatus, setPreviewStatus] = useState<PreviewStatus | null>(null);
 	useEffect(() => setPreviewStatus(null), [session.id]);
+	async function startDeclaredPortal(recipe: PreviewPortalRecipe) {
+		if (!recipe.command) {
+			if (!recipe.skill) throw new Error("This Portal has no start command.");
+			send({
+				type: "prompt",
+				sessionId: session.id,
+				user: getCurrentUser(),
+				content: `Use the $${recipe.skill} skill to start the “${recipe.name}” Portal, then verify it is ready.`,
+			});
+			return;
+		}
+		setPreviewStatus(await startPortalRecipeApi(session.id, recipe.id));
+	}
 	// Services with a route we can open: what the panel's bottom bar reports
 	// beside Portals, so the count is the openable ones rather than every port
 	// the repository declares.
@@ -6373,7 +6387,11 @@ export function SessionViewer({
 								role="dialog"
 								aria-modal="true"
 								aria-label={
-									panelPage === "changes" ? "Changes" : "Workspace details"
+									panelPage === "changes"
+										? "Changes"
+										: panelPage === "portals"
+											? "Portals"
+											: "Workspace details"
 								}
 							>
 								{/* The phone's drill-in: this page is the workspace panel here,
@@ -6416,7 +6434,9 @@ export function SessionViewer({
 									>
 										{panelPage === "changes"
 											? "Changes"
-											: workspaceName || session.title}
+											: panelPage === "portals"
+												? "Portals"
+												: workspaceName || session.title}
 									</div>
 								</div>
 								{panelPage === "changes" ? (
@@ -6435,6 +6455,22 @@ export function SessionViewer({
 											/>
 										</div>
 									)
+								) : panelPage === "portals" ? (
+									<PortalsPage
+										sessionId={session.id}
+										status={previewStatus}
+										activePortal={portalTarget}
+										onBack={() => setPanelPage(null)}
+										hideHeader
+										onOpenPortal={(target) => {
+											setInfoPageOpen(false);
+											onOpenPortal?.(target);
+										}}
+										onStartPortal={startDeclaredPortal}
+										onPortalAction={async (name, action) => {
+											setPreviewStatus(await portalActionApi(session.id, name, action));
+										}}
+									/>
 								) : (
 									<>
 										<div className={INFO_HERO}>
@@ -6492,6 +6528,20 @@ export function SessionViewer({
 														sandbox={session.sandbox}
 													/>
 												</div>
+											)}
+											{hasWorkspace && (
+												<button
+													type="button"
+													className="focus-ring flex min-h-11 w-full items-center gap-3 rounded-2xl bg-panel px-5 py-2 text-left transition-[background-color,scale] hover:bg-hover active:scale-[0.96]"
+													onClick={() => setPanelPage("portals")}
+												>
+													<IconGlobe size={18} className="shrink-0 text-dim" />
+													<span className="min-w-0 flex-1 text-label font-medium text-fg">Portals</span>
+													{livePortals > 0 && (
+														<span className="tabular-nums text-label text-faint">{livePortals} live</span>
+													)}
+													<IconChevronRight size={16} className="shrink-0 text-faint" />
+												</button>
 											)}
 											<WorkspaceSummaryBody
 												embedded
@@ -7671,19 +7721,7 @@ export function SessionViewer({
 									activePortal={portalTarget}
 									onBack={() => setActivePanelOpen(false)}
 									onOpenPortal={onOpenPortal}
-									onStartPortal={async (recipe) => {
-										if (!recipe.command) {
-											if (!recipe.skill) throw new Error("This Portal has no start command.");
-											send({
-												type: "prompt",
-												sessionId: session.id,
-												user: getCurrentUser(),
-												content: `Use the $${recipe.skill} skill to start the “${recipe.name}” Portal, then verify it is ready.`,
-											});
-											return;
-										}
-										setPreviewStatus(await startPortalRecipeApi(session.id, recipe.id));
-									}}
+									onStartPortal={startDeclaredPortal}
 									onPortalAction={async (name, action) => {
 										setPreviewStatus(
 											await portalActionApi(session.id, name, action),

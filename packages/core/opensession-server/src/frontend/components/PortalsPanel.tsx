@@ -45,6 +45,7 @@ export function PortalsPage({
 	status,
 	activePortal,
 	onBack,
+	hideHeader = false,
 	onOpenPortal,
 	onStartPortal,
 	onPortalAction,
@@ -53,6 +54,7 @@ export function PortalsPage({
 	status: PreviewStatus | null;
 	activePortal?: PortalTarget | null;
 	onBack: () => void;
+	hideHeader?: boolean;
 	onOpenPortal?: (target: PortalTarget) => void;
 	onStartPortal?: (recipe: PreviewPortalRecipe) => Promise<void>;
 	onPortalAction?: (name: string, action: "stop" | "restart") => Promise<void>;
@@ -69,17 +71,19 @@ export function PortalsPage({
 
 	return (
 		<>
-			<PanelPageHeader
-				title="Portals"
-				onBack={onBack}
-				trailing={
-					liveCount > 0 && (
-						<span className="shrink-0 px-1 text-label font-semibold tabular-nums text-faint">
-							{liveCount} live
-						</span>
-					)
-				}
-			/>
+			{!hideHeader && (
+				<PanelPageHeader
+					title="Portals"
+					onBack={onBack}
+					trailing={
+						liveCount > 0 && (
+							<span className="shrink-0 px-1 text-label font-semibold tabular-nums text-faint">
+								{liveCount} live
+							</span>
+						)
+					}
+				/>
+			)}
 			<div className="grid gap-4 px-2 pt-2 pb-[22px]">
 			{error ? (
 				<div role="alert" className="rounded-control bg-red-soft px-3 py-2 text-label text-red">
