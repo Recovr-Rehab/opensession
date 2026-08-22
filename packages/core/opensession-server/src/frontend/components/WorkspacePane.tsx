@@ -3,7 +3,13 @@ import React, { useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { motion } from "motion/react";
 import type { Workspace, UnifiedSession, WSServerMessage } from "../lib/types";
-import { fetchModels, updateWorkspaceApi, type ModelOption } from "../lib/api";
+import {
+	fetchModels,
+	fetchSession,
+	fetchWorkspaceOverview,
+	updateWorkspaceApi,
+	type ModelOption,
+} from "../lib/api";
 import { Composer } from "./Composer";
 import { ConversationPane } from "./ConversationPane";
 import { FeedWebPane, refWebPanel } from "./FeedWebPane";
@@ -13,6 +19,7 @@ import { PrPanel } from "./PrPanel";
 import type { PrFocus } from "../lib/pr-focus";
 import { RepoTile } from "./RepoTile";
 import { WorkspaceInfo } from "./WorkspaceInfo";
+import { WorkspaceSummary } from "./WorkspaceSummary";
 import { useCurrentUser } from "./UserPicker";
 import { useIsPhone } from "../hooks/useIsPhone";
 import { useSidePanel } from "../hooks/useSidePanel";
@@ -51,6 +58,8 @@ import {
 import { resolveNewSessionModel } from "../lib/default-model-pref";
 import { InlineAlert } from "../ui/state";
 import { duration, ease } from "../ui/motion";
+import { mainSession } from "../lib/landing-session";
+import { sessionCarriesPr } from "../lib/session-prs";
 
 interface Props {
 	workspace: Workspace;
@@ -357,20 +366,65 @@ export function WorkspacePane({
 		: workspace.branch
 			? { repo: workspace.repo || "repository", branch: workspace.branch }
 			: null;
-	const reviewSession = useMemo(() => {
-		if (!reviewTarget) return null;
-		return (
-			[...sessions]
-				.filter(
-					(s) =>
-						(s.repo || "repository") === reviewTarget.repo &&
-						s.branch === reviewTarget.branch,
-				)
-				.sort((a, b) =>
-					(b.lastActivity || "").localeCompare(a.lastActivity || ""),
-				)[0] || null
+	const reviewSessions = useMemo(() => {
+		if (!reviewTarget) return [];
+		return sessions.filter(
+			(s) =>
+				s.workspaceId === workspace.id && sessionCarriesPr(s, reviewTarget),
 		);
-	}, [sessions, reviewTarget?.repo, reviewTarget?.branch]);
+	}, [sessions, workspace.id, reviewTarget?.repo, reviewTarget?.branch]);
+	// PR APIs can use the freshest carrier, while workspace presentation belongs
+	// to the human conversation that produced the change. Keeping those roles
+	// separate prevents a newer bks-ghpr automation session from replacing the
+	// walkthrough, assets and summary of the implementation session.
+	const reviewSession = useMemo(
+		() =>
+			[...reviewSessions].sort((a, b) =>
+				(b.lastActivity || "").localeCompare(a.lastActivity || ""),
+			)[0] || null,
+		[reviewSessions],
+	);
+	const listedPresentationSession = useMemo(
+		() =>
+			mainSession(
+				[...reviewSessions].sort((a, b) =>
+					(a.createdAt || "").localeCompare(b.createdAt || ""),
+				),
+			) ?? null,
+		[reviewSessions],
+	);
+	const [hydratedPresentationSession, setHydratedPresentationSession] =
+		useState<UnifiedSession | null>(null);
+	useEffect(() => {
+		setHydratedPresentationSession(null);
+		if (listedPresentationSession || tab !== "review") return;
+		let stale = false;
+		const load = async () => {
+			try {
+				// The overview is already workspace-scoped on the server and includes
+				// archived/filtered members. Its opening prompt identifies the human
+				// session even when the sidebar's live slice cannot see that session.
+				const overview = await fetchWorkspaceOverview(workspace.id);
+				const ids = [overview.prompt?.sessionId, overview.lastMessage?.sessionId];
+				for (const id of ids) {
+					if (!id) continue;
+					const candidate = await fetchSession(id);
+					if (!stale && candidate) {
+						setHydratedPresentationSession(candidate);
+						return;
+					}
+				}
+			} catch {
+				// A genuinely session-less PR still renders through preview APIs.
+			}
+		};
+		void load();
+		return () => {
+			stale = true;
+		};
+	}, [listedPresentationSession, tab, workspace.id]);
+	const presentationSession =
+		listedPresentationSession ?? hydratedPresentationSession ?? reviewSession;
 
 	function handleStart() {
 		const q = prompt.trim();
@@ -422,7 +476,7 @@ export function WorkspacePane({
 	// The session-scoped APIs the panel's PR / diff / git rows read through. A
 	// session-less workspace has none, and the panel simply shows what the
 	// workspace record and its overview already say.
-	const anchorSession = workspaceSessions[0] ?? reviewSession;
+	const anchorSession = presentationSession ?? workspaceSessions[0] ?? reviewSession;
 
 	// The workspace's right column: the same panel a session shows, with the
 	// same Info block in it. A workspace is a first-class surface, so the chrome
@@ -458,13 +512,28 @@ export function WorkspacePane({
 
 	// The header row, in the app's own top-bar slot so it lands exactly where a
 	// session's header does — beside the pane, not across the panel.
+	const headerActionsRef = useRef<HTMLDivElement>(null);
 	const header = !isPhone && (
 		<div className={VIEWER_HEADER}>
 			<div className={VIEWER_TITLE}>
 				{workspace.repo && <RepoTile name={workspace.repo} />}
 				<span className={VIEWER_BRANCH}>{workspace.name}</span>
 			</div>
-			<div className={VIEWER_HEADER_ACTIONS}>
+			<div ref={headerActionsRef} className={VIEWER_HEADER_ACTIONS}>
+				{tab === "review" && presentationSession && !panelOpen && (
+					<WorkspaceSummary
+						session={presentationSession}
+						anchor={headerActionsRef}
+						onOpenPanelTab={() => setPanelOpen(true)}
+						onOpenPr={() => {}}
+						onOpenStackPr={onOpenPr}
+						onOpenChecks={() => {}}
+						onOpenSession={onOpenSession}
+						send={connected && !presentationSession.archived ? send : undefined}
+						tabStripVisible
+						reviewMode
+					/>
+				)}
 				<Tooltip label="Toggle side panel">
 					<Button
 						variant="ghost"
@@ -508,7 +577,7 @@ export function WorkspacePane({
 					onOpenSession={
 						reviewSession ? () => onOpenSession(reviewSession.id) : undefined
 					}
-					walkthrough={reviewSession?.walkthrough}
+					walkthrough={presentationSession?.walkthrough}
 				/>
 			</div>,
 		);

@@ -17,6 +17,19 @@ export function defaultSessionWorkspaceView(
 }
 
 /**
+ * A bare workspace route decides whether it has a session exactly once. Wait
+ * for both lists before making that decision: workspaces commonly arrive first,
+ * and treating an unfinished session list as empty strands a real workspace on
+ * WorkspacePane's session-less Review shell instead of its SessionViewer.
+ */
+export function workspaceLandingReady(
+	workspacesLoaded: boolean,
+	sessionsLoading: boolean,
+): boolean {
+	return workspacesLoaded && !sessionsLoading;
+}
+
+/**
  * True for an untouched "New session" shell: never ran a turn (no engine session
  * on any provider), nothing running or queued, and no activity since
  * creation. These rows are minted eagerly by the new-session endpoints so a tab

@@ -4,6 +4,7 @@ import {
 	defaultSessionWorkspaceView,
 	mainSession,
 	newSessionSource,
+	workspaceLandingReady,
 	workspaceSessionSeed,
 	pinMainSessionFirst,
 	pickLandingSession,
@@ -60,6 +61,14 @@ describe("defaultSessionWorkspaceView", () => {
 		expect(
 			defaultSessionWorkspaceView({ key: "ghpr-4972" }, true, false),
 		).toBeNull();
+	});
+});
+
+describe("workspaceLandingReady", () => {
+	test("waits for sessions before deciding a workspace is session-less", () => {
+		expect(workspaceLandingReady(true, true)).toBe(false);
+		expect(workspaceLandingReady(false, false)).toBe(false);
+		expect(workspaceLandingReady(true, false)).toBe(true);
 	});
 });
 

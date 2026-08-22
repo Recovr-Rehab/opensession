@@ -195,6 +195,7 @@ import {
 	defaultSessionWorkspaceView,
 	mainSession,
 	newSessionSource,
+	workspaceLandingReady,
 	workspaceSessionSeed,
 	pickLandingSession,
 	sessionNeverRan,
@@ -2302,7 +2303,11 @@ export function App(
 	// opens Review. Declared after the wsKey reset effect above so the landing
 	// choice wins the same commit.
 	useEffect(() => {
-		if (route.view !== "workspace" || !workspacesLoaded) return;
+		if (
+			route.view !== "workspace" ||
+			!workspaceLandingReady(workspacesLoaded, loading)
+		)
+			return;
 		// One-shot: closing the Review tab replaces the URL (dropping /review),
 		// which re-runs this effect — without the suppress it would immediately
 		// re-seed the default pane and reopen the tab just closed.
@@ -2411,6 +2416,7 @@ export function App(
 	}, [
 		route.view === "workspace" ? `${route.id}:${route.tab ?? ""}` : null,
 		workspacesLoaded,
+		loading,
 	]);
 	// A PR reference (`/pr/<repo>/<number>`) that GitHub doesn't know: the
 	// number came out of prose, so it can be a typo or an invention.
