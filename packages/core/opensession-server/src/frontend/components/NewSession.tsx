@@ -34,6 +34,7 @@ import { isApple } from "../lib/platform";
 import { AUTO_REPO, NO_REPO } from "../lib/session-repo";
 import { getDefaultRepoPref, setDefaultRepoPref } from "../lib/default-repo-pref";
 import { repoSelectionHint, toggleRepoSelection } from "../lib/repo-selection";
+import { fallbackBranchName } from "../lib/workspace-draft";
 import {
   NewSessionPrompt,
   type NewSessionPromptHandle,
@@ -462,18 +463,6 @@ function draftParkInFlight(text: string, workspaceId?: string): boolean {
       operation.text === text &&
       operation.workspaceId === workspaceId,
   );
-}
-
-/** Fallback branch name from the prompt when Haiku's auto-suggest hasn't landed. */
-function slugifyBranch(text: string): string {
-  const slug = text
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, "-")
-    .replace(/^-+|-+$/g, "")
-    .split("-")
-    .slice(0, 6)
-    .join("-");
-  return slug || "new-session";
 }
 
 export function NewSession({ onBack, inline, focusSeq, send, addHandler, connected, prefillPrompt, initialMcpServers, forceMode, workspaceId, modelWorkspaceId, forceRepo, forceBranch, onCreateStarted }: Props) {
@@ -1195,9 +1184,9 @@ export function NewSession({ onBack, inline, focusSeq, send, addHandler, connect
     // answer. Start a fresh branch in the fallback repo instead of reusing it.
     const branch =
       createRepo === AUTO_REPO
-        ? slugifyBranch(prompt)
+        ? fallbackBranchName(prompt)
         : selectedWorktree === "__new__"
-          ? newBranch.trim() || slugifyBranch(prompt)
+          ? newBranch.trim() || fallbackBranchName(prompt)
           : selectedWorktree;
     const attachRepos =
       repo === AUTO_REPO

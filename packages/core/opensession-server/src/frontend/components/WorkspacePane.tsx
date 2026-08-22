@@ -44,7 +44,10 @@ import {
 } from "../lib/attachments";
 import type { FileAttachment } from "../lib/images";
 import { hasDraggedFiles } from "../lib/file-drag";
-import { workspaceDraftPatch } from "../lib/workspace-draft";
+import {
+	workspaceComposerTarget,
+	workspaceDraftPatch,
+} from "../lib/workspace-draft";
 import { resolveNewSessionModel } from "../lib/default-model-pref";
 import { InlineAlert } from "../ui/state";
 import { duration, ease } from "../ui/motion";
@@ -390,22 +393,14 @@ export function WorkspacePane({
 				`${AGENT_NAME} didn't respond. Check your connection and try again.`,
 			);
 		}, 15_000);
-		// PR-backed workspaces start on the PR's existing head branch (fromPr:
-		// isolated worktree even on shared-checkout repos); ticket/plain
-		// workspaces start ask-style, and the server links plainThreadId from the
-		// workspace record and injects the ticket context. Feed-item workspaces
-		// (externalRefs, no repo, such as a linked video) start in scratch mode:
-		// repo-less scratch dir, write+bash allowed, MCP as usual.
+		// PR-backed workspaces keep their existing branch. A parked draft with a
+		// repo starts in Code on a fresh branch, matching the New session palette
+		// it came from. Ticket workspaces without a draft remain Ask, while repo-less
+		// feed workspaces start in Scratch.
+		const target = workspaceComposerTarget(workspace, q);
 		send({
 			type: "create_session",
-			mode: workspace.branch
-				? "code"
-				: workspace.externalRefs?.length && !workspace.repo
-					? "scratch"
-					: "ask",
-			branch: workspace.branch || "",
-			...(workspace.repo ? { repo: workspace.repo } : {}),
-			...(workspace.branch ? { fromPr: true } : {}),
+			...target,
 			workspaceId: workspace.id,
 			prompt: q,
 			user: currentUser,
