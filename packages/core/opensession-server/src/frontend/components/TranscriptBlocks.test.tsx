@@ -374,6 +374,40 @@ describe("TranscriptBlocks compact tool runs", () => {
 		expect(html).not.toContain('data-eid="edit-1"');
 	});
 
+	test("keeps server-derived code totals on the one Working row", () => {
+		setTurnPrefs(null);
+		const html = renderToStaticMarkup(
+			<TranscriptBlocks
+				live
+				entries={[
+					{ id: "prompt", type: "user", content: "Implement it", timestamp: "2026-08-13T06:00:00Z" },
+					{
+						id: "remote-edit",
+						type: "tool_use",
+						toolUseId: "remote-edit-call",
+						toolName: "remote_code_change",
+						toolInput: {},
+						content: "Editing",
+						timestamp: "2026-08-13T06:00:01Z",
+						presentation: {
+							canonical: "Edit",
+							name: "Edit",
+							family: "edit",
+							detail: { kind: "none" },
+							lineStats: { additions: 400, deletions: 23 },
+						},
+					},
+				]}
+			/>,
+		);
+
+		expect(html).toContain(">Working</span>");
+		expect(html).toContain("1 step</span>");
+		expect(html).toContain("+400");
+		expect(html).toContain("-23");
+		expect(html).not.toContain('data-tool-run="true"');
+	});
+
 	test("shows every call in place under the always-expanded preference", () => {
 		setTurnPrefs("expanded");
 		const html = renderToStaticMarkup(

@@ -130,16 +130,16 @@ export const TurnBlock = React.memo(function TurnBlock({
   // event, and this walks every step it has taken so far (collectTouchedFiles
   // skips non-tool entries itself, so `items` and `tools` give the same set).
   const editedFiles = useMemo(() => collectTouchedFiles(items), [items]);
-  // Change detail stays behind this disclosure. The Changes tab remains the
-  // place for per-file diffs; this is only a compact turn-level summary.
-  const additions = editedFiles.reduce((n, f) => n + f.additions, 0);
-  const deletions = editedFiles.reduce((n, f) => n + f.deletions, 0);
+  // Presentation stats cover code-writing tools that do not expose their input
+  // as a plain Edit or Write call. Keep the parsed files for the hover card,
+  // but let the server-derived aggregate own the summary's total.
+  const toolAggregate =
+    tools.length > 0 ? toolRunAggregate(tools, toolResults, live) : null;
+  const additions = toolAggregate?.additions ?? 0;
+  const deletions = toolAggregate?.deletions ?? 0;
   // A tool-only turn has no inner summary row anymore, so keep the small bits
   // of aggregate status that do add information on the one remaining row.
-  const toolOnlyAggregate =
-    !hasNarration && tools.length > 0
-      ? toolRunAggregate(tools, toolResults, live)
-      : null;
+  const toolOnlyAggregate = !hasNarration ? toolAggregate : null;
 
   const countsLabel =
     tools.length > 0
@@ -217,7 +217,13 @@ export const TurnBlock = React.memo(function TurnBlock({
         )}
         {/* Hovering the counts opens what they count: the lines this turn
             wrote, per file, without unfolding it. */}
-        {additions + deletions > 0 && <TurnLineStatsCard files={editedFiles} />}
+        {additions + deletions > 0 && (
+          <TurnLineStatsCard
+            files={editedFiles}
+            additions={additions}
+            deletions={deletions}
+          />
+        )}
         {toolOnlyAggregate?.mediaLabel && (
           <span className="flex-shrink-0 text-meta text-faint">
             {toolOnlyAggregate.mediaLabel}
@@ -583,7 +589,9 @@ function toolRunAggregate(
     videos += result?.videos?.length ?? 0;
     // Summed from what the rows themselves show, so opening the fold adds up
     // to the number that was on it.
-    const stats = toolLineStats(entry.toolName || "Tool", entry.toolInput);
+    const stats =
+      entry.presentation?.lineStats ??
+      toolLineStats(entry.toolName || "Tool", entry.toolInput);
     additions += stats?.additions ?? 0;
     deletions += stats?.deletions ?? 0;
   }
