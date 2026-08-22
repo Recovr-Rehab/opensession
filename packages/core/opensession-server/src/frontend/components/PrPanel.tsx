@@ -1635,18 +1635,8 @@ export function PrPanel({
       <div className="flex h-full min-h-0 flex-1 flex-col overflow-y-auto">
         <div className={PR_NO_PR_BAR}>
           {targetPicker}
-          <span className="flex min-w-0 items-center gap-1.5 text-label text-dim">
-            <IconBranches size={17} className="shrink-0 text-faint" />
-            <span className="truncate">{branchLabel || "Working changes"}</span>
-          </span>
-          <span className="flex-1" />
-          {linkable && (
-            <LinkPrControl
-              sessionId={sessionId}
-              variant="action"
-              onLinked={handleLinked}
-            />
-          )}
+          {/* The action leads the bar: opening the PR is what this state is
+              for, and the branch beside it only says which one. */}
           {showWorktreeDiff && !!send && (
             <Button
               variant="primary"
@@ -1659,6 +1649,18 @@ export function PrPanel({
               {prRequested ? "Opening…" : "Create PR"}
             </Button>
           )}
+          {linkable && (
+            <LinkPrControl
+              sessionId={sessionId}
+              variant="action"
+              onLinked={handleLinked}
+            />
+          )}
+          <span className="flex min-w-0 items-center gap-1.5 text-label text-dim">
+            <IconBranches size={17} className="shrink-0 text-faint" />
+            <span className="truncate">{branchLabel || "Working changes"}</span>
+          </span>
+          <span className="flex-1" />
         </div>
         {walkthrough && (
           <div className="mx-auto w-full max-w-[760px] px-4 pt-4 sm:px-5">
