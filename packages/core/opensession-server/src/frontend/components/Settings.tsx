@@ -85,7 +85,7 @@ export type { SettingsSectionKey, ToolSectionKey };
 
 /** Sections that are browsed rather than read down, and take the wider
  *  column for it (see SETTINGS_PANEL_FRAME_GALLERY). */
-const GALLERY_SECTIONS = new Set<SettingsSectionKey>(["library", "setup"]);
+const GALLERY_SECTIONS = new Set<SettingsSectionKey>(["library"]);
 
 // Settings is a dense mix of headings, row titles, labels, descriptions,
 // fields, and tool panels. Body roles share 150% leading; heading and title
@@ -214,14 +214,11 @@ function NavSearch({
  * sheet's detail page. Tool panels come in via children (App owns them). */
 function SectionPanel({
 	section,
-	onBack,
 	workspace,
 	onOpenOnboarding,
 	children,
 }: {
 	section: SettingsSectionKey;
-	/** Leaving settings. The Setup wizard's last step offers it as "Done". */
-	onBack?: () => void;
 	workspace?: Workspace;
 	onOpenOnboarding: () => void;
 	children?: React.ReactNode;
@@ -234,7 +231,7 @@ function SectionPanel({
 			{section === "shortcuts" && <ShortcutsPanel />}
 			{section === "general" && <GeneralPanel />}
 			{section === "setup" && (
-				<SetupPanel onDone={onBack} onOpenOnboarding={onOpenOnboarding} />
+				<SetupPanel onOpenOnboarding={onOpenOnboarding} />
 			)}
 			{section === "repos" && <ReposPanel />}
 			{section === "members" && <MembersPanel />}
@@ -408,7 +405,6 @@ export function Settings({
 					>
 						<SectionPanel
 							section={active}
-							onBack={onBack}
 							workspace={workspace}
 							onOpenOnboarding={onOpenOnboarding}
 						>
@@ -578,7 +574,6 @@ function MobileSettings({
 										<div className={SETTINGS_PANEL_FRAME_SHEET}>
 											<SectionPanel
 												section={shownSection}
-												onBack={onBack}
 												workspace={workspace}
 												onOpenOnboarding={onOpenOnboarding}
 											>
