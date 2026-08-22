@@ -204,7 +204,7 @@ function LandingPage() {
 				</a>
 
 				<h1>
-					Your team’s control room{" "}
+					The multiplayer control room{" "}
 					<span>for coding agents</span>
 				</h1>
 
