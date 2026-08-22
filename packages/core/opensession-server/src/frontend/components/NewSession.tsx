@@ -121,17 +121,23 @@ interface Props {
   forceBranch?: string;
   /** Lets App render the pending session shell before the created session appears
       in the polled session list. */
-  onCreateStarted?: (draft: {
-    prompt: string;
-    mode: "ask" | "code" | "scratch";
-    repo: string;
-    branch: string | null;
-    workspaceId?: string;
-    model?: string;
-    images?: string[];
-    /** Start the session without following it — leave the current view alone. */
-    background?: boolean;
-  }) => void;
+  onCreateStarted?: (draft: NewSessionCreateDraft) => void;
+}
+
+export interface NewSessionCreateDraft {
+  /** The client-minted id the server persists for this session. */
+  id: string;
+  prompt: string;
+  mode: "ask" | "code" | "scratch";
+  repo: string;
+  branch: string | null;
+  workspaceId?: string;
+  model?: string;
+  images?: string[];
+  /** Open the optimistic session as soon as the create message is sent. */
+  openImmediately?: boolean;
+  /** Start the session without following it. */
+  background?: boolean;
 }
 
 interface Worktree {
@@ -1211,7 +1217,9 @@ export function NewSession({ onBack, inline, focusSeq, send, addHandler, connect
         : createMode === "code" && selectedWorktree === "__new__"
           ? "stack"
           : "share";
-    const optimisticCreate = {
+    const clientSessionId = newClientSessionId();
+    const optimisticCreate: NewSessionCreateDraft = {
+      id: clientSessionId,
       prompt,
       mode: createMode,
       // The optimistic shell is replaced once the persisted record lands.
@@ -1225,10 +1233,11 @@ export function NewSession({ onBack, inline, focusSeq, send, addHandler, connect
       ...(workspaceId ? { workspaceId } : {}),
       ...(model ? { model } : {}),
       ...(images.length ? { images } : {}),
-      // App navigates into a created session by default; this asks it not to.
+      // The default action opens against this deterministic id without waiting
+      // for workspace or model setup. The other actions keep their own surface.
+      ...(createAction === "open" ? { openImmediately: true } : {}),
       ...(createAction === "background" ? { background: true } : {}),
     };
-    const clientSessionId = newClientSessionId();
     const createMessage = {
       type: "create_session",
       clientSessionId,

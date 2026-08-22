@@ -59,7 +59,12 @@ import { suppressLayoutAnimations } from "./ui/motion";
 import { SessionViewer } from "./components/SessionViewer";
 import { AgentationFeedback } from "./components/AgentationFeedback";
 import type { PortalTarget } from "./lib/portals";
-import { NewSession } from "./components/NewSession";
+import {
+	NewSession,
+	type NewSessionCreateDraft,
+} from "./components/NewSession";
+import { clearDraft, NEW_SESSION_DRAFT_KEY } from "./lib/drafts";
+import { dropStagingAttachments } from "./lib/attachments";
 import { IconTile } from "./components/BrandTile";
 import { displayName } from "./brand-logos";
 import type { NewSessionPrefill } from "./lib/new-session-link";
@@ -707,19 +712,10 @@ export function App(
 	const { connected, send, setTyping, addHandler } = useWebSocket();
 	const sessionsRef = useRef(sessions);
 	sessionsRef.current = sessions;
-	type PendingCreateDraft = {
-		prompt: string;
-		mode: "ask" | "code" | "scratch";
-		repo: string;
-		branch: string | null;
-		workspaceId?: string;
-		model?: string;
-		images?: string[];
+	type PendingCreateDraft = NewSessionCreateDraft & {
 		startedAt: string;
 		user: string;
 		originPath: string;
-		/** "Create in background": start the session, stay in the current view. */
-		background?: boolean;
 	};
 	const pendingCreateDraftRef = useRef<PendingCreateDraft | null>(null);
 	const [pendingInitialPrompts, setPendingInitialPrompts] = useState<
@@ -1705,6 +1701,74 @@ export function App(
 		if (stripBasePath(location.pathname) === "/new") goBack();
 	}, []);
 
+	const startNewSessionCreate = React.useCallback(
+		(started: NewSessionCreateDraft) => {
+			const startedAt = new Date().toISOString();
+			const user = getCurrentUser();
+			const draft: PendingCreateDraft = {
+				...started,
+				startedAt,
+				user,
+				originPath: routePath(routeRef.current),
+			};
+			pendingCreateDraftRef.current = draft;
+			if (!started.openImmediately) return;
+
+			const shell: UnifiedSession = {
+				id: started.id,
+				claudeSessionId: null,
+				source: "opensession",
+				branch: started.branch,
+				worktreeDir: null,
+				startedBy: user,
+				title: started.workspaceId ? "New session" : "New workspace",
+				lastActivity: startedAt,
+				createdAt: startedAt,
+				isRunning: true,
+				runStartedAt: startedAt,
+				transcriptPath: null,
+				mode: started.mode,
+				repo: started.repo,
+				workspaceId: started.workspaceId || null,
+				model: started.model,
+				archived: false,
+				// The server replaces this conservative starting state as soon as
+				// session_created confirms whether environment setup is needed.
+				workspacePreparing: true,
+			};
+			flushSync(() => {
+				inject(shell, { sticky: true });
+				setOptimisticSession(shell);
+				setPalette({ open: false });
+			});
+			if (started.prompt || started.images?.length) {
+				setPendingInitialPrompts((current) => ({
+					...current,
+					[started.id]: {
+						content: started.prompt,
+						user,
+						sentAt: new Date(startedAt).getTime(),
+						...(started.images?.length ? { images: started.images } : {}),
+					},
+				}));
+			}
+			setPendingSessionId(started.id);
+			setPendingNewWorkspace(!started.workspaceId);
+			clearTimeout(pendingTimer.current);
+			pendingTimer.current = setTimeout(() => {
+				setPendingSessionId((pending) =>
+					pending === started.id ? null : pending,
+				);
+				setOptimisticSession((pending) =>
+					pending?.id === started.id ? null : pending,
+				);
+				unstick(started.id);
+			}, 120_000);
+			navigate({ view: "session", id: started.id });
+		},
+		[inject, navigate, setPalette, unstick],
+	);
+
 	useEffect(() => {
 		const onPop = () => {
 			// Depth travels with the entry (history.state), so there is nothing to
@@ -1876,6 +1940,39 @@ export function App(
 	// When a session is created from the New Session form or Ask box, jump straight into it
 	useEffect(() => {
 		return addHandler((msg) => {
+			if (msg.type === "error") {
+				const draft = pendingCreateDraftRef.current;
+				const errorSessionId = "sessionId" in msg ? msg.sessionId : undefined;
+				if (
+					draft?.openImmediately &&
+					(!errorSessionId || errorSessionId === draft.id)
+				) {
+					pendingCreateDraftRef.current = null;
+					clearTimeout(pendingTimer.current);
+					setPendingSessionId((pending) =>
+						pending === draft.id ? null : pending,
+					);
+					setOptimisticSession((pending) =>
+						pending?.id === draft.id ? null : pending,
+					);
+					setPendingInitialPrompts((current) => {
+						if (!current[draft.id]) return current;
+						const next = { ...current };
+						delete next[draft.id];
+						return next;
+					});
+					unstick(draft.id);
+					remove(draft.id);
+					if (
+						routeRef.current.view === "session" &&
+						routeRef.current.id === draft.id
+					) navigate(parseRoute(draft.originPath));
+					primeSoftKeyboard();
+					setPaletteState((current) => ({ ...current, open: true }));
+					toast(msg.message || "Couldn't create the session.");
+					return;
+				}
+			}
 			if (msg.type === "pins_changed") {
 				receivePins(msg.user, msg.pins);
 				return;
@@ -1895,6 +1992,24 @@ export function App(
 			if (msg.type === "session_created") {
 				const draft = pendingCreateDraftRef.current;
 				pendingCreateDraftRef.current = null;
+				const openedOptimistically =
+					draft?.openImmediately === true && draft.id === msg.id;
+				if (openedOptimistically) {
+					clearDraft(NEW_SESSION_DRAFT_KEY);
+					dropStagingAttachments(NEW_SESSION_DRAFT_KEY);
+					clearTimeout(pendingTimer.current);
+					setPendingSessionId((pending) =>
+						pending === msg.id ? null : pending,
+					);
+					setPendingNewWorkspace(false);
+					setOptimisticSession((pending) =>
+						pending?.id === msg.id ? null : pending,
+					);
+					patch(msg.id, {
+						workspaceId: msg.workspaceId || draft.workspaceId || null,
+						workspacePreparing: !!msg.preparingWorkspace,
+					});
+				}
 				const stillOwnsForeground = shouldOpenCreatedSession(
 					draft,
 					routePath(routeRef.current),
@@ -1964,22 +2079,24 @@ export function App(
 						});
 					}, 120_000);
 				}
-				// Mark it pending so the viewer shows "Starting…" until the poll
-				// catches up; a fallback timeout clears it so a failed create can't
-				// stick — including dropping the sticky optimistic copy above.
-				setPendingSessionId(msg.id);
-				setPendingNewWorkspace(!!msg.newWorkspace);
-				clearTimeout(pendingTimer.current);
-				pendingTimer.current = setTimeout(() => {
-					setPendingSessionId(null);
-					unstick(msg.id);
-				}, 30000);
+				if (!openedOptimistically) {
+					// Mark it pending so the viewer shows "Starting…" until the poll
+					// catches up; a fallback timeout clears it so a failed create can't
+					// stick — including dropping the sticky optimistic copy above.
+					setPendingSessionId(msg.id);
+					setPendingNewWorkspace(!!msg.newWorkspace);
+					clearTimeout(pendingTimer.current);
+					pendingTimer.current = setTimeout(() => {
+						setPendingSessionId(null);
+						unstick(msg.id);
+					}, 30000);
+				}
 				refresh();
 				refreshWorkspaces();
 				if (stillOwnsForeground) navigate({ view: "session", id: msg.id });
 			}
 		});
-	}, [addHandler, refresh, refreshWorkspaces, unstick]);
+	}, [addHandler, navigate, patch, refresh, refreshWorkspaces, remove, unstick]);
 
 	// Drop the pending flag once we've navigated away from the pending session (its
 	// fallback timeout clears it otherwise). We deliberately DON'T clear it the
@@ -5523,14 +5640,7 @@ export function App(
 											send={send}
 											addHandler={addHandler}
 											connected={connected}
-											onCreateStarted={(draft) => {
-												pendingCreateDraftRef.current = {
-													...draft,
-													startedAt: new Date().toISOString(),
-													user: getCurrentUser(),
-													originPath: routePath(routeRef.current),
-												};
-											}}
+											onCreateStarted={startNewSessionCreate}
 										/>
 									)}
 								</div>
@@ -5657,14 +5767,7 @@ export function App(
 						forceBranch={palette.branch}
 						forceMode={palette.mode}
 						initialMcpServers={palette.mcpServers}
-						onCreateStarted={(draft) => {
-							pendingCreateDraftRef.current = {
-								...draft,
-								startedAt: new Date().toISOString(),
-								user: getCurrentUser(),
-								originPath: routePath(routeRef.current),
-							};
-						}}
+						onCreateStarted={startNewSessionCreate}
 					/>
 				)}
 

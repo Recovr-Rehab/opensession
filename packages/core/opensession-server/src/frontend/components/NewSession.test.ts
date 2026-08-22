@@ -74,6 +74,18 @@ test("the new session payload persists fast mode", async () => {
   expect(createPayload).toContain("...(fastMode ? { fastMode: true } : {})");
 });
 
+test("the default create exposes its deterministic session id immediately", async () => {
+  const source = await Bun.file(new URL("./NewSession.tsx", import.meta.url)).text();
+  const createStart = source.indexOf("function handleCreate()");
+  const createEnd = source.indexOf("const canCreate =", createStart);
+  const createHandler = source.slice(createStart, createEnd);
+
+  expect(createHandler).toContain("const clientSessionId = newClientSessionId()");
+  expect(createHandler).toContain("id: clientSessionId");
+  expect(createHandler).toContain('createAction === "open" ? { openImmediately: true }');
+  expect(createHandler).toContain("onCreateStarted?.(optimisticCreate)");
+});
+
 test("the new session title uses the visible names of pasted session links", async () => {
   const source = await Bun.file(new URL("./NewSession.tsx", import.meta.url)).text();
   const createStart = source.indexOf('type: "create_session"');
