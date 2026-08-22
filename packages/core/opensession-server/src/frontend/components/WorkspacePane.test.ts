@@ -7,6 +7,9 @@ const viewerSource = await Bun.file(
 const prPanelSource = await Bun.file(
 	new URL("./PrPanel.tsx", import.meta.url),
 ).text();
+const reviewToolbarSource = await Bun.file(
+	new URL("./pr/ReviewToolbar.tsx", import.meta.url),
+).text();
 const summarySource = await Bun.file(
 	new URL("./WorkspaceSummary.tsx", import.meta.url),
 ).text();
@@ -51,22 +54,25 @@ test("workspace Review keeps the implementation summary beside the PR canvas", (
 	expect(source).toContain("walkthrough={presentationSession?.walkthrough}");
 });
 
-test("the PR toolbar keeps a compact fallback navigation row", () => {
-	const toolbarStart = prPanelSource.indexOf(
-		'<div\n        className={`shrink-0 bg-surface',
-	);
-	const toolbarEnd = prPanelSource.indexOf(">", toolbarStart);
-	const toolbar = prPanelSource.slice(toolbarStart, toolbarEnd);
+test("reviews with and without a PR share the floating toolbar", () => {
 	const reviewBar = prPanelSource.slice(
 		prPanelSource.indexOf("const reviewBar"),
 		prPanelSource.indexOf("const reviewBar") + 500,
 	);
 
-	expect(toolbar).toContain("desktop:mt-2.5");
-	expect(toolbar).toContain("desktop:mb-2");
-	expect(toolbar).toContain("desktop:overflow-hidden");
-	expect(toolbar).toContain("desktop:rounded-lg");
-	expect(toolbar).toContain("desktop:border desktop:border-line");
+	expect(
+		prPanelSource.match(/<ReviewToolbar compact=\{compactToolbar\}>/g)?.length,
+	).toBe(2);
+	expect(prPanelSource).toContain(
+		"<ReviewToolbar compact={compactToolbar}>\n          <div className={PR_NO_PR_BAR}>",
+	);
+	expect(reviewToolbarSource).toContain("desktop:mt-2.5");
+	expect(reviewToolbarSource).toContain("desktop:mb-2");
+	expect(reviewToolbarSource).toContain("desktop:overflow-hidden");
+	expect(reviewToolbarSource).toContain("desktop:rounded-lg");
+	expect(reviewToolbarSource).toContain(
+		"desktop:border desktop:border-line",
+	);
 	expect(reviewBar).toContain("h-8");
 	expect(reviewBar).toContain("phone:h-11");
 	expect(reviewBar).toContain("bg-panel");
@@ -88,8 +94,8 @@ test("wide Review moves page navigation into the summary and uses one toolbar ro
 	expect(prPanelSource).toContain(
 		'compactToolbar ? "overflow-x-hidden overflow-y-auto"',
 	);
-	expect(prPanelSource).toContain("desktop:mb-0");
-	expect(prPanelSource).toContain("WS_SUMMARY_REVIEW_BAR_CLEARANCE");
+	expect(reviewToolbarSource).toContain("desktop:mb-0");
+	expect(reviewToolbarSource).toContain("WS_SUMMARY_REVIEW_BAR_CLEARANCE");
 	expect(prPanelSource).toContain(
 		"compactToolbar ? WS_SUMMARY_REVIEW_CANVAS_CLEARANCE",
 	);

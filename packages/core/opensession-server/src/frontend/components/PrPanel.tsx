@@ -73,7 +73,6 @@ import {
 import { providerFromUrl, prCapabilities } from "../lib/provider";
 import { pollWhileVisible, PR_WEBHOOK_FALLBACK_POLL_MS } from "../lib/poll";
 import {
-  WS_SUMMARY_REVIEW_BAR_CLEARANCE,
   WS_SUMMARY_REVIEW_CANVAS_CLEARANCE,
 } from "../lib/workspace-summary-classes";
 import { Textarea } from "../ui/input";
@@ -116,6 +115,7 @@ import { StackLinkSection } from "./pr/Stack";
 import { PrStackChip } from "./pr/StackPopover";
 import { ReviewRail } from "./pr/ReviewRail";
 import { GitStatusRows } from "./pr/GitStatus";
+import { ReviewToolbar } from "./pr/ReviewToolbar";
 import { InlineAlert, LoadingState } from "../ui/state";
 import { CodeFlow } from "./CodeFlow";
 import { revealDiffFile } from "../lib/diff-navigation";
@@ -1649,35 +1649,37 @@ export function PrPanel({
     };
     return (
       <div className="flex h-full min-h-0 flex-1 flex-col overflow-y-auto">
-        <div className={PR_NO_PR_BAR}>
-          {targetPicker}
-          {/* The action leads the bar: opening the PR is what this state is
-              for, and the branch beside it only says which one. */}
-          {showWorktreeDiff && !!send && (
-            <Button
-              variant="primary"
-              size="sm"
-              className="phone:min-h-11"
-              icon={<IconPullRequest size={20} />}
-              disabled={prRequested}
-              onClick={createPr}
-            >
-              {prRequested ? "Opening…" : "Create PR"}
-            </Button>
-          )}
-          {linkable && (
-            <LinkPrControl
-              sessionId={sessionId}
-              variant="action"
-              onLinked={handleLinked}
-            />
-          )}
-          <span className="flex min-w-0 items-center gap-1.5 text-label text-dim">
-            <IconBranches size={17} className="shrink-0 text-faint" />
-            <span className="truncate">{branchLabel || "Working changes"}</span>
-          </span>
-          <span className="flex-1" />
-        </div>
+        <ReviewToolbar compact={compactToolbar}>
+          <div className={PR_NO_PR_BAR}>
+            {targetPicker}
+            {/* The action leads the bar: opening the PR is what this state is
+                for, and the branch beside it only says which one. */}
+            {showWorktreeDiff && !!send && (
+              <Button
+                variant="primary"
+                size="sm"
+                className="phone:min-h-11"
+                icon={<IconPullRequest size={20} />}
+                disabled={prRequested}
+                onClick={createPr}
+              >
+                {prRequested ? "Opening…" : "Create PR"}
+              </Button>
+            )}
+            {linkable && (
+              <LinkPrControl
+                sessionId={sessionId}
+                variant="action"
+                onLinked={handleLinked}
+              />
+            )}
+            <span className="flex min-w-0 items-center gap-1.5 text-label text-dim">
+              <IconBranches size={17} className="shrink-0 text-faint" />
+              <span className="truncate">{branchLabel || "Working changes"}</span>
+            </span>
+            <span className="flex-1" />
+          </div>
+        </ReviewToolbar>
         {walkthrough && (
           <div className="mx-auto w-full max-w-[760px] px-4 pt-4 sm:px-5">
             <WalkthroughCard walkthrough={walkthrough} />
@@ -2060,9 +2062,7 @@ export function PrPanel({
       {/* The summary owns page navigation when it stands beside this canvas,
           so desktop can fold file controls into one identity row. Narrow and
           phone layouts keep the independent navigation row. */}
-      <div
-        className={`shrink-0 bg-surface desktop:mt-2.5 desktop:overflow-hidden desktop:rounded-lg desktop:border desktop:border-line ${compactToolbar ? `sticky top-0 z-20 desktop:mb-0 desktop:ml-2 ${WS_SUMMARY_REVIEW_BAR_CLEARANCE}` : "desktop:mx-2 desktop:mb-2"}`}
-      >
+      <ReviewToolbar compact={compactToolbar}>
       <header className="flex h-10 shrink-0 items-center gap-2.5 px-6 phone:px-3">
         {/* State, in the app's own PR language, filled rather than drawn: the
             tone washes the whole chip and the glyph and word share its ink.
@@ -2267,7 +2267,7 @@ export function PrPanel({
         </Menu.Root>
       </header>
       {reviewBar}
-      </div>
+      </ReviewToolbar>
 
       {caps.stacks && !pr.stack && (
         <StackLinkSection pr={pr} sessionId={sessionId} onLinked={load} />
