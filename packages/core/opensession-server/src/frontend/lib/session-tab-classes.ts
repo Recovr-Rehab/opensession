@@ -31,9 +31,11 @@ import { MOBILE_CONTROL_GLASS_EFFECTS } from "./app-header-classes";
  * exception list; they now carry that exception themselves — see `tabDotClass`.
  */
 
-/** 8px, the tab pill's corner. Authored the way base.css authors every corner
- *  so it tracks the squircle bump; there is no 8px step in the radius scale. */
+/** 8px, the compact trailing controls' corner. Authored the way base.css
+ * authors every corner; there is no 8px step in the radius scale. */
 const PILL = "rounded-[calc(8px*var(--rf))]";
+/** Tabs sit one radius step quieter than their adjacent controls. */
+const TAB_SHAPE = "rounded-md";
 
 /* ── The strip ──────────────────────────────────────────────────────────── */
 
@@ -132,7 +134,7 @@ export const TAB_ITEM =
 /** Picked up: an inactive desktop tab has no surface of its own and would smear
  *  over every label it passes. It lifts into an opaque chip while dragging. */
 export const TAB_ITEM_DRAGGING =
-	`${PILL} cursor-grabbing bg-panel smooth-shadow-ring-sm`;
+	`${TAB_SHAPE} cursor-grabbing bg-panel smooth-shadow-ring-sm`;
 
 /**
  * Where the dragged tab will land. Reorder already opens the gap live, but an
@@ -162,7 +164,7 @@ export const TAB_ACTIONS = "ml-auto flex flex-none items-center gap-[3px]";
  */
 const TAB_BASE =
 	"relative inline-flex max-w-[200px] shrink-0 cursor-pointer items-center gap-1.5 whitespace-nowrap " +
-	`${PILL} border-0 px-2.5 py-1.5 text-label shadow-none ` +
+	`${TAB_SHAPE} border-0 px-2.5 py-1.5 text-label shadow-none ` +
 	"transition-[background-color,color] " +
 	`phone:rounded-full phone:border phone:border-[color:var(--mobile-header-control-border)] ` +
 	`phone:shadow-[var(--mobile-header-control-shadow)] ${MOBILE_CONTROL_GLASS_EFFECTS}`;
