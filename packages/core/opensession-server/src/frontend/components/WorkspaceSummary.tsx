@@ -669,7 +669,7 @@ export function WorkspaceSummaryBody({
 	const prGroupClass = embedded
 		? cn(
 				groupClass,
-				"py-0 [&_.ws-summary-band]:mx-0 [&_.ws-summary-band]:mb-0 [&_.ws-summary-band]:[border-radius:inherit]",
+				"py-0 [&_.ws-summary-band]:mx-0 [&_.ws-summary-band]:mb-0 [&_.ws-summary-band]:p-2 [&_.ws-summary-band]:[border-radius:inherit]",
 			)
 		: groupClass;
 
