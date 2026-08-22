@@ -862,6 +862,16 @@ export function AssetOverlay({
 			showSize={listed}
 		/>
 	);
+	const actions = (
+		<AssetOverlayActionBar
+			sessionId={sessionId}
+			file={file}
+			refresh={refresh}
+			onClose={onClose}
+			onOpenAsTab={onOpenAsTab ? () => onOpenAsTab(file.path) : undefined}
+			phone={isPhone}
+		/>
+	);
 
 	return (
 		<ResponsiveDialog
@@ -882,20 +892,13 @@ export function AssetOverlay({
 					!isPhone && "rounded-[inherit]",
 				)}
 			>
-				{/* Safe actions form one centered bar. Close keeps the corner, and
-				    destructive Delete remains behind More. */}
-				<div className="flex min-h-10 shrink-0 items-center justify-center px-12 phone:min-h-11">
-					<AssetOverlayActionBar
-						sessionId={sessionId}
-						file={file}
-						refresh={refresh}
-						onClose={onClose}
-						onOpenAsTab={
-							onOpenAsTab ? () => onOpenAsTab(file.path) : undefined
-						}
-						phone={isPhone}
-					/>
-				</div>
+				{/* Desktop keeps the centered action bar above the asset. Phones put
+				    the same controls at the bottom, beside the caption and pager. */}
+				{!isPhone && (
+					<div className="flex min-h-10 shrink-0 items-center justify-center px-12">
+						{actions}
+					</div>
+				)}
 				<div className="relative flex min-h-0 flex-1">
 					{missingPath === file.path ? (
 						<div className="flex min-h-0 flex-1 items-center justify-center px-6 text-center text-label text-faint">
@@ -914,6 +917,11 @@ export function AssetOverlay({
 					)}
 				</div>
 				{isPhone && footer}
+				{isPhone && (
+					<div className="flex min-h-14 shrink-0 items-center justify-center px-5">
+						{actions}
+					</div>
+				)}
 			</div>
 			{!isPhone && footer}
 			{isPhone ? (
