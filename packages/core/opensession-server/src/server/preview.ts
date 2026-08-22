@@ -591,9 +591,17 @@ async function ensurePreviewRoute(
   requestHeaders: Record<string, string> = {},
 ): Promise<boolean> {
   const signature = JSON.stringify([upstream, requestHeaders]);
-  if (previewRoutes.get(httpsPort) === signature) return true;
-  const server = previewServerConfig(httpsPort, upstream, host);
   const path = `${caddyAdmin()}/config/apps/http/servers/preview_${httpsPort}`;
+  if (previewRoutes.get(httpsPort) === signature) {
+    // A Caddyfile reload replaces dynamic admin-API routes without notifying
+    // this process. Verify the cached route still exists before trusting it,
+    // otherwise status can report a URL whose listener was silently removed.
+    try {
+      if ((await fetch(path)).ok) return true;
+    } catch {}
+    previewRoutes.delete(httpsPort);
+  }
+  const server = previewServerConfig(httpsPort, upstream, host);
   const put = () =>
     fetch(path, {
       method: "PUT",
