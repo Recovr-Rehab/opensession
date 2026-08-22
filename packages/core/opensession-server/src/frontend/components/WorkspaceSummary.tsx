@@ -3,6 +3,7 @@ import {
 	cancelPrReviewApi,
 	setSessionReviewerApi,
 	sessionAssetPreviewUrl,
+	triggerPrActionApi,
 } from "../lib/api";
 import {
 	useSessionAssetsResource,
@@ -125,6 +126,8 @@ interface Props {
 	onOpenChecks: () => void;
 	/** Open the Assets tab (the Assets list's destination). */
 	onOpenAssets?: () => void;
+	/** Open the live Auto-fix session created from a review finding. */
+	onOpenSession?: (id: string, created?: UnifiedSession | null) => void;
 	/** Archive through the owning viewer, so it can select the neighbouring
 	 *  sidebar row. Offered by the PR block once the work has landed. */
 	onArchive?: () => void;
@@ -446,6 +449,7 @@ export function WorkspaceSummaryBody({
 	onOpenStackPr,
 	onOpenChecks,
 	onOpenAssets,
+	onOpenSession,
 	onArchive,
 	reviewRequest,
 	prReviewRequested,
@@ -504,6 +508,8 @@ export function WorkspaceSummaryBody({
 	const [reviewError, setReviewError] = useState<string | null>(null);
 	const [reviewBusy, setReviewBusy] = useState(false);
 	const [reviewCancelling, setReviewCancelling] = useState(false);
+	const [fixBusy, setFixBusy] = useState(false);
+	const [fixError, setFixError] = useState<string | null>(null);
 	useEffect(() => {
 		setSelectedReview(reviewRequest ?? null);
 		setReviewError(null);
@@ -542,6 +548,11 @@ export function WorkspaceSummaryBody({
 	const osReview = pr?.osReview;
 	const osReviewActive = Boolean(pr?.reviewActive);
 	const showOsReview = osReviewActive || Boolean(osReview);
+	const canFixOsReview =
+		pr?.state === "OPEN" &&
+		Boolean(osReview) &&
+		!osReview?.stale &&
+		Boolean(osReview?.findings);
 	let osReviewState = "Not reviewed yet";
 	if (osReviewActive) osReviewState = "Reviewing…";
 	else if (pr?.state === "MERGED") osReviewState = "Merged";
@@ -605,6 +616,28 @@ export function WorkspaceSummaryBody({
 			setReviewError(error?.message || "Couldn't cancel the review");
 		} finally {
 			setReviewCancelling(false);
+		}
+	}
+
+	async function fixOsReview() {
+		if (!canFixOsReview || fixBusy) return;
+		setFixBusy(true);
+		setFixError(null);
+		try {
+			const result = await triggerPrActionApi(
+				session.id,
+				"autofix",
+				getCurrentUser(),
+				session.repo || undefined,
+			);
+			if (!result.ok) throw new Error(result.error || result.message || "Couldn't start");
+			if (result.openSession && result.bksId && onOpenSession) {
+				go(() => onOpenSession(result.bksId!, result.session ?? null));
+			}
+		} catch (error: any) {
+			setFixError(error?.message || "Couldn't start Auto-fix");
+		} finally {
+			setFixBusy(false);
 		}
 	}
 
@@ -678,65 +711,82 @@ export function WorkspaceSummaryBody({
 				    reviewer never requires opening the workspace panel. */}
 				<div className={WS_SUMMARY_SECTION}>Review</div>
 				{showOsReview && (
-					<button
-						className={cn(
-							WS_SUMMARY_ROW,
-							"disabled:cursor-default disabled:opacity-70",
-						)}
-						onClick={
-							osReviewActive
-								? () => void cancelOsReview()
-								: () => go(() => onOpenPanelTab("info"))
-						}
-						disabled={reviewCancelling}
-						aria-label={
-							osReviewActive ? `Cancel ${AGENT_NAME} review` : undefined
-						}
-						title={`${AGENT_NAME}${osScore ? ` · ${osScore}/5` : ""} · ${
-							reviewCancelling ? "Cancelling…" : osReviewState
-						}`}
-					>
-						<span className={WS_SUMMARY_RAIL}>
-							<IconRobot
-								size={20}
-								className={cn(WS_SUMMARY_ICON, osReviewActive && "animate-pulse")}
-							/>
-						</span>
-						<span className={WS_SUMMARY_LABEL}>
-							{AGENT_NAME}
+					<>
+						<button
+							className={cn(
+								WS_SUMMARY_ROW,
+								"disabled:cursor-default disabled:opacity-70",
+							)}
+							onClick={
+								osReviewActive
+									? () => void cancelOsReview()
+									: canFixOsReview
+										? () => void fixOsReview()
+										: () => go(() => onOpenPanelTab("info"))
+							}
+							disabled={reviewCancelling || fixBusy}
+							aria-label={
+								osReviewActive
+									? `Cancel ${AGENT_NAME} review`
+									: canFixOsReview
+										? `Fix ${AGENT_NAME} review findings`
+										: undefined
+							}
+							title={`${AGENT_NAME}${osScore ? ` · ${osScore}/5` : ""} · ${
+								reviewCancelling ? "Cancelling…" : osReviewState
+							}`}
+						>
+							<span className={WS_SUMMARY_RAIL}>
+								<IconRobot
+									size={20}
+									className={cn(WS_SUMMARY_ICON, osReviewActive && "animate-pulse")}
+								/>
+							</span>
+							<span className={WS_SUMMARY_LABEL}>
+								{AGENT_NAME}
+								{osReviewActive ? (
+									<>
+										<span className="text-faint"> · </span>
+										<span className="text-dim">
+											{reviewCancelling ? "Cancelling…" : "Reviewing…"}
+										</span>
+									</>
+								) : osScore ? (
+									<>
+										<span className="text-faint"> · </span>
+										<span className={cn("tabular-nums", osScoreTone)}>{osScore}/5</span>
+									</>
+								) : null}
+							</span>
 							{osReviewActive ? (
-								<>
-									<span className="text-faint"> · </span>
-									<span className="text-dim">
-										{reviewCancelling ? "Cancelling…" : "Reviewing…"}
-									</span>
-								</>
-							) : osScore ? (
-								<>
-									<span className="text-faint"> · </span>
-									<span className={cn("tabular-nums", osScoreTone)}>{osScore}/5</span>
-								</>
-							) : null}
-						</span>
-						{osReviewActive ? (
-							<span className={WS_SUMMARY_ACTION}>
-								{reviewCancelling ? "Stopping" : "Cancel"}
-							</span>
-						) : (
-							<span
-								className={cn(
-									WS_SUMMARY_STATE,
-									osReview?.stale
-										? "text-faint"
-										: osReview?.blocking
-											? "text-red"
-											: "text-dim",
-								)}
-							>
-								{osReviewState}
-							</span>
+								<span className={WS_SUMMARY_ACTION}>
+									{reviewCancelling ? "Stopping" : "Cancel"}
+								</span>
+							) : canFixOsReview ? (
+								<span className={cn(WS_SUMMARY_ACTION, "text-red")}>
+									{fixBusy ? "Starting…" : "Fix"}
+								</span>
+							) : (
+								<span
+									className={cn(
+										WS_SUMMARY_STATE,
+										osReview?.stale
+											? "text-faint"
+											: osReview?.blocking
+												? "text-red"
+												: "text-dim",
+									)}
+								>
+									{osReviewState}
+								</span>
+							)}
+						</button>
+						{fixError && (
+							<div className="px-4 py-1 text-supporting text-red" role="alert">
+								{fixError}
+							</div>
 						)}
-					</button>
+					</>
 				)}
 				{otherReviewers.map((reviewer) => (
 					<button

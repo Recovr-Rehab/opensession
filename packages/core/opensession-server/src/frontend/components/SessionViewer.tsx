@@ -6232,6 +6232,7 @@ export function SessionViewer({
 							onOpenStackPr={onOpenPr}
 							onOpenChecks={() => focusPrInReview(undefined, "checks")}
 							onOpenAssets={onOpenAssets}
+							onOpenSession={onOpenSession}
 							onArchive={handleArchive}
 							// Already resolved across the workspace's sessions (the
 							// request may live on a sibling), and already folded
@@ -6460,6 +6461,7 @@ export function SessionViewer({
 														setInfoPageOpen(false);
 														onOpenAssets?.();
 													}}
+													onOpenSession={onOpenSession}
 													onArchive={handleArchive}
 													reviewRequest={effectiveReview?.req ?? null}
 													prReviewRequested={effectiveReview?.prReviewRequested}
@@ -7551,6 +7553,7 @@ export function SessionViewer({
 												focusPrInReview(undefined, "checks")
 											}
 											onOpenAssets={onOpenAssets}
+											onOpenSession={onOpenSession}
 											onArchive={handleArchive}
 											reviewRequest={effectiveReview?.req ?? null}
 											prReviewRequested={effectiveReview?.prReviewRequested}
