@@ -734,19 +734,13 @@ struct FullScreenImagePreview: View {
                 HStack {
                     if let topLeading { topLeading }
                     Spacer()
-                    Button {
+                    Button("Close image", systemImage: "xmark") {
                         dismiss()
-                    } label: {
-                        Image(systemName: "xmark")
-                            .font(.system(size: 15, weight: .semibold))
-                            .foregroundStyle(.white)
-                            .frame(width: 36, height: 36)
-                            .background(.black.opacity(0.55), in: Circle())
-                            .frame(width: 44, height: 44)
-                            .contentShape(Rectangle())
                     }
-                    .buttonStyle(.plain)
-                    .accessibilityLabel("Close image")
+                    .labelStyle(.iconOnly)
+                    .buttonStyle(.glass)
+                    .buttonBorderShape(.circle)
+                    .controlSize(.large)
                 }
 
                 if let title {
