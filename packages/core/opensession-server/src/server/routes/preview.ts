@@ -17,6 +17,7 @@ import { getRepo } from "../worktree";
 import { sleepingSandboxPortalStatus } from "../sandbox-portals";
 import type { UnifiedSession } from "../types";
 import { createWorkloadIdentityEnv } from "../workload-identity";
+import { shellQuoteWord } from "../sandbox/adapters/bootstrap";
 
 export function unavailableSandboxPreviewStatus(
 	session: Pick<UnifiedSession, "sandbox">,
@@ -35,13 +36,13 @@ export function unavailableSandboxPreviewStatus(
 	};
 }
 
-function recipeCommand(recipe: PreviewPortalRecipe): string {
+export function recipeCommand(recipe: PreviewPortalRecipe): string {
 	if (!recipe.command) throw new Error("This Portal still needs an agent-assisted starter.");
 	const exports = [
 		recipe.serviceKey ? `export ${recipe.serviceKey}=\"$PORT\"` : "",
 		recipe.serviceKey === "WEBAPP_PORT" ? 'export WEBAPP_PORT="$PORT" PREVIEW_URL="$PORTAL_URL"' : "",
 	].filter(Boolean).join("; ");
-	return `${exports ? `${exports}; ` : ""}exec ${recipe.command}`;
+	return `bash -lc ${shellQuoteWord(`${exports ? `${exports}; ` : ""}exec ${recipe.command}`)}`;
 }
 
 function recipeStartOptions(recipe: PreviewPortalRecipe) {

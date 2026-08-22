@@ -1,5 +1,20 @@
 import { describe, expect, test } from "bun:test";
-import { unavailableSandboxPreviewStatus } from "./preview";
+import { recipeCommand, unavailableSandboxPreviewStatus } from "./preview";
+
+describe("declared Portal commands", () => {
+	test("wraps environment exports inside the supervised shell", () => {
+		const command = recipeCommand({
+			id: "app",
+			name: "App",
+			command: "./.agents/start.sh",
+			serviceKey: "WEBAPP_PORT",
+		});
+		expect(command).toStartWith("bash -lc ");
+		expect(command).toContain('export WEBAPP_PORT="$PORT"');
+		expect(command).toContain("exec ./.agents/start.sh");
+		expect(command).not.toStartWith("exec export");
+	});
+});
 
 describe("preview routing while a sandbox is unavailable", () => {
 	test("keeps a preparing sandbox off the host preview path", () => {
