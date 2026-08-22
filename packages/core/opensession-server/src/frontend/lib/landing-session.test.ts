@@ -3,6 +3,7 @@ import {
 	sessionNeverRan,
 	defaultSessionWorkspaceView,
 	mainSession,
+	newSessionSource,
 	pinMainSessionFirst,
 	pickLandingSession,
 } from "./landing-session";
@@ -96,6 +97,21 @@ describe("mainSession", () => {
 			"main",
 			"sibling",
 		]);
+	});
+});
+
+describe("newSessionSource", () => {
+	test("uses archived history when Review is the workspace's only tab", () => {
+		const archived = session({ id: "archived", archived: true, ran: true });
+		expect(newSessionSource(null, [], [archived])).toBe(archived);
+	});
+
+	test("prefers the open or live session over archived history", () => {
+		const current = session({ id: "current", ran: true });
+		const live = session({ id: "live", ran: true });
+		const archived = session({ id: "archived", archived: true, ran: true });
+		expect(newSessionSource(current, [live], [archived])).toBe(current);
+		expect(newSessionSource(null, [live], [archived])).toBe(live);
 	});
 });
 

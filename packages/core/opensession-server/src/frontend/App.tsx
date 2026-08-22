@@ -172,6 +172,7 @@ import {
 	renameSessionApi,
 	setSessionStatusApi,
 	newSessionApi,
+	fetchWorkspaceArchivedSessions,
 	fetchWorkspaces,
 	updateWorkspaceApi,
 	deleteWorkspaceApi,
@@ -186,6 +187,7 @@ import {
 import {
 	defaultSessionWorkspaceView,
 	mainSession,
+	newSessionSource,
 	pickLandingSession,
 	sessionNeverRan,
 } from "./lib/landing-session";
@@ -3698,7 +3700,26 @@ export function App(
 			navigate({ view: "session", id: emptyWorkspaceSession.id });
 			return;
 		}
-		const src = currentSession || mainSession(naturalSessions);
+		let src = newSessionSource(
+			currentSession,
+			naturalSessions,
+			archivedSessions,
+		);
+		// A Review-only workspace can paint before its scoped archive request
+		// finishes. Resolve that history on demand so an immediate + still creates
+		// the blank sibling tab instead of falling through to the global composer.
+		if (!src && activeWorkspaceId) {
+			try {
+				src = newSessionSource(
+					null,
+					[],
+					await fetchWorkspaceArchivedSessions(activeWorkspaceId),
+				);
+			} catch {
+				// The composer fallback below still lets a genuinely session-less
+				// workspace start work when its history cannot be read.
+			}
+		}
 		if (!src) {
 			// "+" on an empty workspace (session-less route): no sibling to clone —
 			// open the new-session palette scoped to it, same as onOpenWorkspace.

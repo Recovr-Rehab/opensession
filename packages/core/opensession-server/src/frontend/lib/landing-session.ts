@@ -62,6 +62,19 @@ export function mainSession(
 }
 
 /**
+ * The session whose workspace settings seed a new sibling tab. A workspace can
+ * have only a Review pane after its last session was closed, so its newest
+ * archived session remains a valid source instead of forcing the global composer.
+ */
+export function newSessionSource(
+	current: UnifiedSession | null | undefined,
+	liveOldestFirst: UnifiedSession[],
+	archivedNewestFirst: UnifiedSession[],
+): UnifiedSession | undefined {
+	return current ?? mainSession(liveOldestFirst) ?? archivedNewestFirst[0];
+}
+
+/**
  * Keep the workspace's main session at the leading edge while preserving the
  * user's saved order for every sibling session.
  */
