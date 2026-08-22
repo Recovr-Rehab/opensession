@@ -11,8 +11,18 @@ test("the phone palette rests on top of the keyboard instead of behind it", asyn
 	expect(sheet).not.toContain("phone:pb-0 phone:pt-3");
 	// And it may never grow past the strip the keyboard leaves.
 	expect(sheet).toContain("phone:[body.kb-open_&]:max-h-[min(43dvh,100%)]");
-	// The var is only written while something asks for it.
-	expect(sheet).toContain("return trackKeyboardInset();");
+});
+
+test("the same focus that flags the keyboard measures it, for every surface", async () => {
+	const app = await Bun.file(new URL("../App.tsx", import.meta.url)).text();
+	const start = app.indexOf("// Track the on-screen keyboard via input focus");
+	const effect = app.slice(start, app.indexOf("}, []);", start));
+
+	expect(start).toBeGreaterThan(-1);
+	// One owner, so the palette sheet and the session composer cannot disagree
+	// about how tall the keyboard is.
+	expect(effect).toContain("releaseInset ??= trackKeyboardInset();");
+	expect(effect).toContain("releaseInset = null;");
 });
 
 test("the keyboard inset is measured against the fixed viewport, not the document", async () => {

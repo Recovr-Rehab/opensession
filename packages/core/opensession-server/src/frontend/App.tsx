@@ -81,6 +81,7 @@ import { displayName } from "./brand-logos";
 import type { NewSessionPrefill } from "./lib/new-session-link";
 import { shouldOpenCreatedSession } from "./lib/new-session-navigation";
 import { primeSoftKeyboard } from "./lib/soft-keyboard";
+import { trackKeyboardInset } from "./lib/keyboard-inset";
 import {
 	SessionSearch,
 	type CommandPaletteAction,
@@ -1123,7 +1124,13 @@ export function App(
 	// while the keyboard covers that area. A `kb-open` body class lets the
 	// composer drop its safe-area bottom padding so it sits snug above the
 	// keyboard instead of floating ~34px above it.
+	//
+	// The same focus is what starts measuring HOW MUCH the keyboard covers
+	// (`--kb-inset`, lib/keyboard-inset): the class says a keyboard is up, the
+	// variable says how tall it is, and a surface resting on the bottom edge
+	// needs both.
 	useEffect(() => {
+		let releaseInset: (() => void) | null = null;
 		const isText = (el: Element | null) =>
 			!!el &&
 			(el.tagName === "TEXTAREA" ||
@@ -1133,13 +1140,18 @@ export function App(
 					)) ||
 				(el as HTMLElement).isContentEditable);
 		const onIn = (e: FocusEvent) => {
-			if (isText(e.target as Element)) document.body.classList.add("kb-open");
+			if (!isText(e.target as Element)) return;
+			document.body.classList.add("kb-open");
+			releaseInset ??= trackKeyboardInset();
 		};
 		const onOut = () => {
 			// activeElement updates a tick after focusout; defer so moving between
 			// fields doesn't flicker the class off and back on.
 			setTimeout(() => {
-				if (!isText(document.activeElement)) document.body.classList.remove("kb-open");
+				if (isText(document.activeElement)) return;
+				document.body.classList.remove("kb-open");
+				releaseInset?.();
+				releaseInset = null;
 			}, 0);
 		};
 		document.addEventListener("focusin", onIn);
@@ -1147,6 +1159,7 @@ export function App(
 		return () => {
 			document.removeEventListener("focusin", onIn);
 			document.removeEventListener("focusout", onOut);
+			releaseInset?.();
 		};
 	}, []);
 	useEffect(() => {

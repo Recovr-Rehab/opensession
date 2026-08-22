@@ -288,10 +288,14 @@ export const VIEWER_INPUT =
 	// the very bottom edge. That gap is also all the room the composer's shadow
 	// gets in mobile Safari, where there is no safe-area inset.
 	"phone:px-3 phone:pb-[max(16px,env(safe-area-inset-bottom,0px))] " +
-	// Keyboard up: iOS keeps reporting the inset even though the keyboard now
-	// covers that area. Keep the ordinary 12px gap instead so the expanded
-	// composer's curved bottom and shadow remain inside the visible viewport.
-	"phone:[body.kb-open_&:has(.composer:not(.composer-min))]:pb-3";
+	// Keyboard up: iOS keeps reporting the safe-area inset even though the
+	// keyboard now covers that area, so the ordinary 12px gap takes over — and
+	// it is measured from the top of the KEYBOARD, not the bottom of the window.
+	// This column is laid out in the fixed viewport, which iOS does not shrink
+	// for the keyboard, so without `--kb-inset` (lib/keyboard-inset) the composer
+	// sits behind the keys and the page has to be panned to reach it. The
+	// variable is 0px wherever nothing covers the window.
+	"phone:[body.kb-open_&]:pb-[calc(12px+var(--kb-inset,0px))]";
 
 /**
  * The step the transcript and the composer take while the workspace summary

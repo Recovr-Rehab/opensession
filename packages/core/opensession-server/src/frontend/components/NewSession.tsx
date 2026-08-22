@@ -61,7 +61,6 @@ import { newClientSessionId } from "../lib/session-id";
 import { VoiceInput } from "./VoiceInput";
 import { useIsPhone } from "../hooks/useIsPhone";
 import { handOffSoftKeyboard } from "../lib/soft-keyboard";
-import { trackKeyboardInset } from "../lib/keyboard-inset";
 import { PaletteSelect } from "./PaletteSelect";
 import { RepoTile } from "./RepoTile";
 import { ModelEffortSelect } from "./ModelEffortSelect";
@@ -852,13 +851,6 @@ export function NewSession({ onBack, inline, focusSeq, send, addHandler, connect
   useEffect(() => {
     if (inline) return;
     handOffSoftKeyboard(() => promptRef.current);
-  }, [inline]);
-
-  // The sheet rests on top of the keyboard rather than behind it, so measure
-  // what the keyboard covers for as long as the sheet is up.
-  useEffect(() => {
-    if (inline) return;
-    return trackKeyboardInset();
   }, [inline]);
 
   // (The prompt's auto-grow, its scroll-fade and the draft store it writes
