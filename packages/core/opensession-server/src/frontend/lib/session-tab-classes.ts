@@ -64,9 +64,9 @@ export const TAB_STRIP =
 	// bars start at the top of an overflow-clipped column, so their full box stays
 	// in flow instead of losing its top edge outside that column.
 	"desktop:h-10 desktop:py-0 " +
-	// When the pinned + is pointed at, soften enough of the adjacent tab to reach
-	// its label rather than fading only its trailing padding and close control.
-	// The scroll mask consumes this inherited override below.
+	// When overflowing tabs pass under the pinned +, pointing at the control
+	// softens enough of the edge to reach the adjacent label. TAB_SCROLL gates
+	// the mask itself on data-overflow, so tabs that fit never fade.
 	"desktop:[&:has(.session-tab-new:hover)]:[--tabs-control-fade-end:64px] " +
 	// Phone: pulled out of flow and pinned flush under the header's bottom edge,
 	// so it reads as fixed chrome rather than a strip the transcript scrolls by.
@@ -106,10 +106,7 @@ export const TAB_SCROLL =
 	"supports-[animation-timeline:scroll()]:[animation:session-tabs-fade-start_1ms_both,session-tabs-fade-end_1ms_both] " +
 	"supports-[animation-timeline:scroll()]:[animation-timeline:scroll(self_inline),scroll(self_inline)] " +
 	"supports-[animation-timeline:scroll()]:[animation-range:0_24px,calc(100%_-_24px)_100%] " +
-	"supports-[animation-timeline:scroll()]:data-[overflow]:[mask-image:linear-gradient(to_right,transparent_0,#000_var(--tabs-fade-start),#000_calc(100%_-_max(var(--tabs-fade-end),var(--tabs-control-fade-end,0px))),transparent_100%)] " +
-	// The + hover fade also applies when the tabs fit. In that case data-overflow
-	// is absent, but the adjacent label still needs to recede behind the control.
-	"desktop:[.session-tabs:has(.session-tab-new:hover)_&]:[mask-image:linear-gradient(to_right,transparent_0,#000_var(--tabs-fade-start),#000_calc(100%_-_max(var(--tabs-fade-end),var(--tabs-control-fade-end,0px))),transparent_100%)]";
+	"supports-[animation-timeline:scroll()]:data-[overflow]:[mask-image:linear-gradient(to_right,transparent_0,#000_var(--tabs-fade-start),#000_calc(100%_-_max(var(--tabs-fade-end),var(--tabs-control-fade-end,0px))),transparent_100%)]";
 
 /**
  * The drag-to-reorder group wraps EVERY tab — sessions and view panes alike —
