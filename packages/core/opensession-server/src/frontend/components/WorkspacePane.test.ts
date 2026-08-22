@@ -50,16 +50,23 @@ test("workspace Review keeps the implementation summary beside the PR canvas", (
 	expect(source).toContain("walkthrough={presentationSession?.walkthrough}");
 });
 
-test("the PR top bar floats beside the workspace summary", () => {
-	const headerStart = prPanelSource.indexOf("<header");
-	const headerEnd = prPanelSource.indexOf(">", headerStart);
-	const header = prPanelSource.slice(headerStart, headerEnd);
+test("the PR identity and navigation share one floating two-line bar", () => {
+	const toolbarStart = prPanelSource.indexOf(
+		'<div className="shrink-0 desktop:mx-3',
+	);
+	const toolbarEnd = prPanelSource.indexOf(">", toolbarStart);
+	const toolbar = prPanelSource.slice(toolbarStart, toolbarEnd);
+	const reviewBar = prPanelSource.slice(
+		prPanelSource.indexOf("const reviewBar"),
+		prPanelSource.indexOf("const reviewBar") + 500,
+	);
 
-	expect(header).toContain("desktop:mx-3");
-	expect(header).toContain("desktop:mt-2.5");
-	expect(header).toContain("desktop:mb-3");
-	expect(header).toContain("desktop:rounded-xl");
-	expect(header).not.toContain("shadow-[inset_0_-1px_0_var(--border)]");
+	expect(toolbar).toContain("desktop:mt-2.5");
+	expect(toolbar).toContain("desktop:mb-3");
+	expect(toolbar).toContain("desktop:overflow-hidden");
+	expect(toolbar).toContain("desktop:rounded-xl");
+	expect(reviewBar).toContain("bg-panel");
+	expect(reviewBar).toContain("phone:bg-surface");
 });
 
 test("the PR top bar leaves merge to the summary and actions menu", () => {
