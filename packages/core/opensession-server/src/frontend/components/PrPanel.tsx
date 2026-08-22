@@ -2023,7 +2023,7 @@ export function PrPanel({
       {/* One floating, two-line review bar beside the workspace summary: PR
           identity first, navigation and view controls second. Phone keeps both
           lines edge to edge because there is no summary column to pair with. */}
-      <div className="shrink-0 desktop:mx-2 desktop:mt-2.5 desktop:mb-2 desktop:overflow-hidden desktop:rounded-xl desktop:bg-panel">
+      <div className="shrink-0 desktop:mx-2 desktop:mt-2.5 desktop:mb-2 desktop:overflow-hidden desktop:rounded-lg desktop:bg-panel">
       <header
         className={`flex h-10 shrink-0 items-center gap-2.5 px-6 phone:px-3 ${statusMark.bgClassName}`}
       >

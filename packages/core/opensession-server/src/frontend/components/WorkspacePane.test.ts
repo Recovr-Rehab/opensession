@@ -64,7 +64,7 @@ test("the PR identity and navigation share one floating two-line bar", () => {
 	expect(toolbar).toContain("desktop:mt-2.5");
 	expect(toolbar).toContain("desktop:mb-2");
 	expect(toolbar).toContain("desktop:overflow-hidden");
-	expect(toolbar).toContain("desktop:rounded-xl");
+	expect(toolbar).toContain("desktop:rounded-lg");
 	expect(reviewBar).toContain("bg-panel");
 	expect(reviewBar).toContain("phone:bg-surface");
 	expect(reviewBar).toContain("desktop:-ml-3");
