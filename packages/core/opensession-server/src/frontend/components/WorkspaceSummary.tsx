@@ -664,7 +664,7 @@ export function WorkspaceSummaryBody({
 	}
 
 	const groupClass = embedded
-		? "flex flex-col overflow-hidden rounded-2xl bg-panel py-2 empty:hidden"
+		? "flex flex-col overflow-hidden rounded-2xl bg-raised py-2 empty:hidden"
 		: "contents";
 
 	return (
