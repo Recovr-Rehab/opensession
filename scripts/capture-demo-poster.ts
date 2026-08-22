@@ -51,6 +51,16 @@ const APP_HEIGHT = Math.round((APP_WIDTH * 0.5547) / 0.888);
  */
 const PHONE_WIDTH = 346;
 const PHONE_HEIGHT = Math.round((PHONE_WIDTH * 852) / 393);
+/**
+ * The status bar's band, handed to the page as a real safe-area inset rather
+ * than as padding, so the app reserves it the way it does on a device: its
+ * phone header already measures `env(safe-area-inset-top)` into its own
+ * height. product-demo.html paints the clock and the indicators into it.
+ *
+ * 54pt is the bar on a 393pt iPhone 17 Pro, carried to this layout at the
+ * same 1.2x the rest of the UI is drawn at.
+ */
+const PHONE_STATUS_H = Math.round((54 * PHONE_WIDTH) / 393);
 
 const SHOTS = [
   { name: "demo-poster", width: APP_WIDTH, height: APP_HEIGHT, mobile: false, dpr: 2 },
@@ -109,6 +119,10 @@ try {
       await t.send("Emulation.setEmulatedMedia", {
         features: [{ name: "prefers-color-scheme", value: theme }],
       });
+      if (shot.mobile)
+        await t.send("Emulation.setSafeAreaInsetsOverride", {
+          insets: { top: PHONE_STATUS_H },
+        });
       await t.send("Emulation.setDeviceMetricsOverride", {
         width: shot.width,
         height: shot.height,

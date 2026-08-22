@@ -718,9 +718,14 @@ localStorage.setItem(
 // Two marks the app asks the server for and this page has to answer itself:
 // the repo icon, and the phone top bar's app icon, which was rendering as a
 // broken-image tile for every visitor narrow enough to get the phone layout.
+//
+// Matched on `*=` rather than `$=`: the app cache-busts that icon
+// (`/mac-app-icon.png?v=7` in useOrganizationIcon.ts), and a suffix match
+// cannot see past a query string, so the tile silently came back broken the
+// day the `?v=` was added. Anything ending in the file name still matches.
 const repoMarkObserver = new MutationObserver(() => {
 	for (const image of document.querySelectorAll<HTMLImageElement>(
-		'img[src*="/repo-icon/opensession.png"], img[src$="/mac-app-icon.png"]',
+		'img[src*="/repo-icon/opensession.png"], img[src*="/mac-app-icon.png"]',
 	)) {
 		if (image.src !== new URL(openSessionMark, location.href).href) {
 			image.src = openSessionMark;
