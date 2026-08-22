@@ -1218,6 +1218,10 @@ export function NewSession({ onBack, inline, focusSeq, send, addHandler, connect
           ? "stack"
           : "share";
     const clientSessionId = newClientSessionId();
+    // The server applies `defaultModel` when no personal override is sent. Carry
+    // that known choice into the optimistic shell so the phone title bar does
+    // not wait for its own catalog fetch before naming the model.
+    const optimisticModel = model || defaultModel;
     const optimisticCreate: NewSessionCreateDraft = {
       id: clientSessionId,
       prompt,
@@ -1231,7 +1235,7 @@ export function NewSession({ onBack, inline, focusSeq, send, addHandler, connect
           : createRepo,
       branch: createMode === "code" ? branch : null,
       ...(workspaceId ? { workspaceId } : {}),
-      ...(model ? { model } : {}),
+      ...(optimisticModel ? { model: optimisticModel } : {}),
       ...(images.length ? { images } : {}),
       // The default action opens against this deterministic id without waiting
       // for workspace or model setup. The other actions keep their own surface.

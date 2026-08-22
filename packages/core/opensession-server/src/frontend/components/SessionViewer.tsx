@@ -6466,7 +6466,7 @@ export function SessionViewer({
 			    picture of yourself. */}
 			{isPhone &&
 				headerRepoEl &&
-				(session.desk || hasWorkspace) &&
+				(session.desk || session.repo || hasWorkspace) &&
 				createPortal(
 					session.desk ? (
 						deskOwner && personKey(deskOwner) !== personKey(currentUser) ? (
@@ -6493,7 +6493,7 @@ export function SessionViewer({
 			    workspace/session setting, can be changed. */}
 			{isPhone &&
 				headerModelEl &&
-				(hasWorkspace || models.length > 0) &&
+				(hasWorkspace || effectiveModel || models.length > 0) &&
 				createPortal(
 					<span
 						className={`${HEADER_SESSIONBAR} session-settings-trigger`}
@@ -6514,8 +6514,10 @@ export function SessionViewer({
 						    steady and the working state reads alongside model · cost. */}
 						{isRunningLive && <PulseDot size={7} />}
 						{/* Repo now leads the pill (portaled into headerRepoEl in front of
-						    the title), so the metadata line is just model · cost. */}
-						{models.length > 0 && (
+						    the title), so the metadata line is just model · cost. The id
+						    has its own friendly fallback, so the optimistic shell can name
+						    it before this view's catalog fetch finishes. */}
+						{effectiveModel && (
 							<span className={HEADER_SESSIONBAR_MODEL}>
 								{/* Drop the "Claude " prefix — "Opus 4.8" reads fine in the
 								    thin subtitle and leaves room for the cost meter. */}
