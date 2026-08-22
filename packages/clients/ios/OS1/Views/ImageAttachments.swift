@@ -616,7 +616,8 @@ struct FullScreenImagePreview: View {
     @State private var copied = false
 
     /// The close-button row, below the top safe area.
-    private static let topBarHeight: CGFloat = 64
+    private static let topBarHeight: CGFloat = 68
+    private static let backdropOpacity = 0.85
 
     init(
         items: [PreviewImage],
@@ -651,24 +652,34 @@ struct FullScreenImagePreview: View {
     }
 
     var body: some View {
-        GeometryReader { proxy in
-            let safeTop = proxy.safeAreaInsets.top
-            let safeBottom = proxy.safeAreaInsets.bottom
-            ZStack(alignment: .top) {
-                Color.black
-                    .opacity(1 - dismissalProgress * 0.55)
-                    .ignoresSafeArea()
+        let safeArea = keyWindowSafeArea
+        ZStack(alignment: .top) {
+            Color.black
+                .opacity(Self.backdropOpacity * (1 - Double(dismissalProgress)))
+                .ignoresSafeArea()
 
-                pager
+            pager
 
-                topBar(safeTop: safeTop)
-            }
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
-            .overlay(alignment: .bottom) { bottomBar(safeBottom: safeBottom) }
+            topBar(safeTop: safeArea.top)
         }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .overlay(alignment: .bottom) { bottomBar(safeBottom: safeArea.bottom) }
         .ignoresSafeArea()
-        .statusBarHidden()
+        .presentationBackground(.clear)
+        .preferredColorScheme(.dark)
+        .statusBarHidden(!chromeVisible)
         .persistentSystemOverlays(chromeVisible ? .automatic : .hidden)
+    }
+
+    /// A full-screen cover deliberately ignores SwiftUI's safe area, which
+    /// makes `GeometryProxy.safeAreaInsets` read as zero. The window still
+    /// owns the physical insets around the Dynamic Island and home indicator.
+    private var keyWindowSafeArea: UIEdgeInsets {
+        UIApplication.shared.connectedScenes
+            .compactMap { $0 as? UIWindowScene }
+            .flatMap(\.windows)
+            .first(where: \.isKeyWindow)?
+            .safeAreaInsets ?? .zero
     }
 
     private var pager: some View {
@@ -711,41 +722,51 @@ struct FullScreenImagePreview: View {
     }
 
     private func topBar(safeTop: CGFloat) -> some View {
-        ZStack {
-            HStack {
-                if let topLeading { topLeading }
-                Spacer()
-                Button {
-                    dismiss()
-                } label: {
-                    Image(systemName: "xmark")
-                        .font(.system(size: 15, weight: .semibold))
-                        .foregroundStyle(.white)
-                        .frame(width: 36, height: 36)
-                        .background(.black.opacity(0.55), in: Circle())
-                        .frame(width: 44, height: 44)
-                        .contentShape(Rectangle())
-                }
-                .buttonStyle(.plain)
-                .accessibilityLabel("Close image")
-            }
+        ZStack(alignment: .top) {
+            LinearGradient(
+                colors: [.black.opacity(0.58), .black.opacity(0)],
+                startPoint: .top,
+                endPoint: .bottom
+            )
+            .ignoresSafeArea(edges: .top)
 
-            if let title {
-                // Center the context independently of the edge actions, like
-                // Photos centers its date above the image.
-                Text(title)
-                    .font(.subheadline.weight(.semibold))
-                    .foregroundStyle(.white)
-                    .lineLimit(1)
-                    .truncationMode(.tail)
-                    .padding(.horizontal, 12)
-                    .frame(height: 36)
-                    .background(.black.opacity(0.55), in: Capsule())
-                    .padding(.horizontal, 52)
+            ZStack {
+                HStack {
+                    if let topLeading { topLeading }
+                    Spacer()
+                    Button {
+                        dismiss()
+                    } label: {
+                        Image(systemName: "xmark")
+                            .font(.system(size: 15, weight: .semibold))
+                            .foregroundStyle(.white)
+                            .frame(width: 36, height: 36)
+                            .background(.black.opacity(0.55), in: Circle())
+                            .frame(width: 44, height: 44)
+                            .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel("Close image")
+                }
+
+                if let title {
+                    // Center the context independently of the edge actions, like
+                    // Photos centers its date above the image.
+                    Text(title)
+                        .font(.subheadline.weight(.semibold))
+                        .foregroundStyle(.white)
+                        .lineLimit(1)
+                        .truncationMode(.tail)
+                        .padding(.horizontal, 12)
+                        .frame(height: 36)
+                        .background(.black.opacity(0.55), in: Capsule())
+                        .padding(.horizontal, 52)
+                }
             }
+            .frame(height: 44)
+            .padding(.horizontal, 16)
+            .padding(.top, safeTop + 12)
         }
-        .padding(.horizontal, 16)
-        .padding(.top, safeTop + 12)
         .frame(maxWidth: .infinity)
         .frame(height: safeTop + Self.topBarHeight, alignment: .top)
         .opacity(chromeVisible ? 1 - dismissalProgress : 0)
