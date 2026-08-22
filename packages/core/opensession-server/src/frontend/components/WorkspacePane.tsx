@@ -660,6 +660,7 @@ export function WorkspacePane({
 						reviewSession ? () => onOpenSession(reviewSession.id) : undefined
 					}
 					walkthrough={presentationSession?.walkthrough}
+					hideWideOverviewRail={Boolean(presentationSession)}
 				/>
 			</div>,
 		);

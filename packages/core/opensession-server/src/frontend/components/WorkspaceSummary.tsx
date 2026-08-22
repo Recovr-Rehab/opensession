@@ -421,6 +421,7 @@ export function WorkspaceSummary({
 				<WorkspaceSummaryBody
 					session={session}
 					{...body}
+					reviewMode={reviewMode}
 					close={() => changeOpen(false)}
 				/>
 			</Popover.Popup>
@@ -445,6 +446,7 @@ export function WorkspaceSummaryBody({
 	refreshTick,
 	close,
 	embedded = false,
+	reviewMode = false,
 }: Omit<Props, "anchor" | "onOpenChange" | "tabStripVisible"> & {
 	close: () => void;
 }) {
@@ -491,6 +493,7 @@ export function WorkspaceSummaryBody({
 			{ additions: 0, deletions: 0, files: 0 },
 		) ?? null;
 	const [prompted, setPrompted] = useState(false);
+	const [changesOpen, setChangesOpen] = useState(false);
 	const [selectedReview, setSelectedReview] = useState(reviewRequest ?? null);
 	const [reviewError, setReviewError] = useState<string | null>(null);
 	const [reviewBusy, setReviewBusy] = useState(false);
@@ -883,24 +886,63 @@ export function WorkspaceSummaryBody({
 				<div className={groupClass}>
 					<div className={WS_SUMMARY_SECTION}>Changes</div>
 					{changedFiles > 0 && (
-						<button
-							className={WS_SUMMARY_ROW}
-							// Opening Changes temporarily replaces this card with the side
-							// panel. Keep the pinned preference so the card returns when the
-							// panel closes.
-							onClick={() => onOpenPanelTab("changes")}
-						>
-							<span className={WS_SUMMARY_RAIL}>
-								<IconFile size={20} className={WS_SUMMARY_ICON} />
-							</span>
-							<span className={WS_SUMMARY_LABEL}>
-								{changedFiles} file{changedFiles === 1 ? "" : "s"} changed
-							</span>
-							<span className={WS_SUMMARY_COUNT}>
-								<span className="text-green">+{additions}</span>{" "}
-								<span className="text-red">−{deletions}</span>
-							</span>
-						</button>
+						<>
+							<button
+								className={WS_SUMMARY_ROW}
+								// Review already owns the full Files changed canvas. Keep the
+								// summary in place and reveal its filenames here; elsewhere this
+								// row still opens the workspace Changes panel.
+								onClick={() =>
+									reviewMode
+										? setChangesOpen((open) => !open)
+										: onOpenPanelTab("changes")
+								}
+								aria-expanded={reviewMode ? changesOpen : undefined}
+							>
+								<span className={WS_SUMMARY_RAIL}>
+									<IconFile size={20} className={WS_SUMMARY_ICON} />
+								</span>
+								<span className={WS_SUMMARY_LABEL}>
+									{changedFiles} file{changedFiles === 1 ? "" : "s"} changed
+								</span>
+								<span className={WS_SUMMARY_COUNT}>
+									<span className="text-green">+{additions}</span>{" "}
+									<span className="text-red">−{deletions}</span>
+								</span>
+								{reviewMode && (
+									<IconChevronDown
+										size={14}
+										className={cn(
+											"shrink-0 text-faint transition-transform motion-reduce:transition-none",
+											changesOpen && "rotate-180",
+										)}
+									/>
+								)}
+							</button>
+							{reviewMode && changesOpen && pr?.files?.length ? (
+								<div className="pb-1">
+									{pr.files.map((file) => (
+										<div
+											key={file.path}
+											className="mx-2 flex min-h-7 min-w-0 items-center gap-1.5 px-2 text-label text-dim"
+										>
+											<span className={WS_SUMMARY_RAIL} aria-hidden />
+											<span className={WS_SUMMARY_LABEL} title={file.path}>
+												{file.path}
+											</span>
+											<span className={WS_SUMMARY_COUNT}>
+												{file.additions > 0 && (
+													<span className="text-green">+{file.additions}</span>
+												)}{" "}
+												{file.deletions > 0 && (
+													<span className="text-red">−{file.deletions}</span>
+												)}
+											</span>
+										</div>
+									))}
+								</div>
+							) : null}
+						</>
 					)}
 					{dirty > 0 && (
 						<button

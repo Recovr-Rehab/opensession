@@ -6889,6 +6889,7 @@ export function SessionViewer({
 									linkedPrs={session.linkedPrs}
 									discoveredPrs={discoveredPrs}
 									focusTarget={reviewFocus}
+									hideWideOverviewRail
 									linkable
 									walkthrough={session.walkthrough}
 								/>
