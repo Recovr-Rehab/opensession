@@ -2093,7 +2093,6 @@ async function* runPiAttempt(
       user,
       author,
       githubUserLogin,
-      deniedToolNotes: policy.noteGroups,
       commandPolicyGated: bashGated,
       dialOracle:
         resolved?.dial && dialOracleAgent
