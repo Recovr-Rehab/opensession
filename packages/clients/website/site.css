@@ -349,13 +349,16 @@ summary:focus-visible {
    The size is not a taste: the window stands for a 14-inch MacBook Pro's
    screen, 302mm across its 94.4cqw, which puts 1mm at 0.313cqw. An iPhone 17
    Pro is 71.9 by 150mm, so it is 22.5 by 46.9cqw and the two objects are
-   drawn at one physical scale. The corner is the device's own: its body
-   rounds at about 11.2mm on a 71.9mm width, which is 15.6% of the width, or
-   3.5cqw. Authored circular and multiplied by --rf like every other corner
-   here, so a squircle browser lands on that number and Safari reaches the
-   same visual weight with a plain arc. An iPhone's corner is a continuous
-   curve rather than a quarter circle, which is exactly what the squircle
-   branch draws. */
+   drawn at one physical scale.
+
+   The corner runs past the device's own 15.6%, deliberately. A squircle hugs
+   its corner far tighter than a circular arc of the same radius, so drawing
+   the measured number reads squarer than the phone in your hand: the shape is
+   right, the amount of it is not. 20.4% of the width is where the curve
+   matches, and the object is small enough on the page that the extra is read
+   as the device's own softness rather than as a rounder rectangle. Authored
+   circular and multiplied by --rf like every other corner here, so Safari
+   reaches the same visual weight with a plain arc. */
 .demo-phone {
 	position: absolute;
 	right: 2.5cqw;
@@ -364,7 +367,7 @@ summary:focus-visible {
 	height: 46.9cqw;
 	object-fit: cover;
 	object-position: top center;
-	border-radius: calc(2.6cqw * var(--rf)) calc(2.6cqw * var(--rf)) 0 0;
+	border-radius: calc(3.4cqw * var(--rf)) calc(3.4cqw * var(--rf)) 0 0;
 	corner-shape: var(--cs);
 	background: var(--window);
 	/* A hairline for the device's own edge, and a shadow deeper than the
