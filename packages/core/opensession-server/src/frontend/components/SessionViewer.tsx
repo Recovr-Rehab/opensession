@@ -5495,6 +5495,7 @@ export function SessionViewer({
 						<Button
 							size="md"
 							variant="default"
+							className="mr-1.5"
 							icon={<IconInbox size={20} />}
 							onClick={addToSidebar}
 							title="Keep this workspace in your sidebar"
