@@ -1,6 +1,20 @@
 import { Toast as BaseToast } from "@base-ui/react/toast";
 import { useEffect, useRef } from "react";
+import {
+	IconArchive,
+	IconArrowUp,
+	IconBranches,
+	IconCopy,
+	IconLink,
+	IconPlay,
+	IconPlug,
+	IconPlus,
+	IconRestore,
+	IconServer,
+	IconTrash,
+} from "../components/icons";
 import { TOAST_NOTICE_LANE } from "../lib/notification-classes";
+import { toastIconName, type ToastIconName } from "../lib/toast-icon";
 import { AnimatedCheck } from "./copy";
 import { Tooltip } from "./tooltip";
 import {
@@ -205,17 +219,7 @@ function ToastCard({ toast: item }: { toast: BaseToast.Root.ToastObject<ToastDat
 					data.action ? "pr-1.5" : "",
 				].join(" ")}
 			>
-				{data.variant === "success" && (
-					<AnimatedCheck size={15} className="shrink-0 text-dim" />
-				)}
-				{data.variant === "error" && (
-					<span
-						aria-hidden
-						className="grid size-[15px] shrink-0 place-items-center rounded-full text-meta font-semibold text-dim"
-					>
-						!
-					</span>
-				)}
+				<ToastStatusIcon name={toastIconName(data.message, data.variant)} />
 				{/* Description renders a <p>; remove its browser margins so the
 				    visible height comes from the pill padding alone. */}
 				<BaseToast.Description
@@ -243,6 +247,47 @@ function ToastCard({ toast: item }: { toast: BaseToast.Root.ToastObject<ToastDat
 			</BaseToast.Content>
 		</BaseToast.Root>
 	);
+}
+
+function ToastStatusIcon({ name }: { name: ToastIconName | null }) {
+	const className = "shrink-0 text-dim";
+	switch (name) {
+		case "archive":
+			return <IconArchive size={15} className={className} aria-hidden />;
+		case "branches":
+			return <IconBranches size={15} className={className} aria-hidden />;
+		case "check":
+			return <AnimatedCheck size={15} className={className} />;
+		case "copy":
+			return <IconCopy size={15} className={className} aria-hidden />;
+		case "link":
+			return <IconLink size={15} className={className} aria-hidden />;
+		case "play":
+			return <IconPlay size={15} className={className} aria-hidden />;
+		case "plug":
+			return <IconPlug size={15} className={className} aria-hidden />;
+		case "plus":
+			return <IconPlus size={15} className={className} aria-hidden />;
+		case "restore":
+			return <IconRestore size={15} className={className} aria-hidden />;
+		case "send":
+			return <IconArrowUp size={15} className={className} aria-hidden />;
+		case "server":
+			return <IconServer size={15} className={className} aria-hidden />;
+		case "trash":
+			return <IconTrash size={15} className={className} aria-hidden />;
+		case "error":
+			return (
+				<span
+					aria-hidden
+					className="grid size-[15px] shrink-0 place-items-center rounded-full text-meta font-semibold text-dim"
+				>
+					!
+				</span>
+			);
+		default:
+			return null;
+	}
 }
 
 /**
