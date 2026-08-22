@@ -105,7 +105,6 @@ import { UserGate, getCurrentUser, useAuthStatus, useCurrentUser } from "./compo
 import { PreviewWait, matchPreviewWaitRoute } from "./components/PreviewWait";
 import { SettingsButton } from "./components/SettingsButton";
 import { TitleBar } from "./components/TitleBar";
-import { Settings } from "./components/Settings";
 import { FirstMile } from "./components/FirstMile";
 import {
 	completeFirstMile,
@@ -219,6 +218,7 @@ import type { ReviewQueueItem } from "./lib/review-queue";
 import { pushRecent } from "./lib/recents";
 import { setLane, type Lane } from "./lib/lanes";
 import { markRead } from "./lib/reads";
+import { resolveAnonymousUserPath } from "./lib/auth-ready";
 import {
 	nextRenderedSidebarChat,
 	nextUnreadRenderedWorkspaceItem,
@@ -291,6 +291,23 @@ import type { UnifiedSession } from "./lib/types";
 import "./styles/base.css";
 import "./styles/legacy.css";
 import { EmptyState, LoadingState } from "./ui/state";
+
+function deferred<T extends React.ComponentType<any>>(
+	load: () => Promise<{ default: T }>,
+	fallback: React.ReactNode = null,
+): T {
+	const Component = React.lazy(load);
+	const Deferred = (props: React.ComponentProps<T>) => (
+		<React.Suspense fallback={fallback}>
+			<Component {...(props as any)} />
+		</React.Suspense>
+	);
+	return Deferred as T;
+}
+
+const Settings = deferred(() =>
+	import("./components/Settings").then((module) => ({ default: module.Settings })),
+);
 
 type Route =
 	// The app's root. There is no home: `/` lands on the pull request list,
@@ -1761,9 +1778,10 @@ export function App(
 		let stale = false;
 		const load = async () => {
 			try {
-				const res = await fetch(
+				const path = await resolveAnonymousUserPath(
 					`${BASE_PATH}/api/todos?user=${encodeURIComponent(getCurrentUser())}`,
 				);
+				const res = await fetch(path);
 				const data = (await res.json()) as { todos?: unknown[] };
 				if (!stale) setTaskCount(data.todos?.length ?? 0);
 			} catch {}
