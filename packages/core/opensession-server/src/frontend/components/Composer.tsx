@@ -1943,6 +1943,41 @@ export function Composer({
             </motion.div>
           )}
 
+          {/* The installed PWA deliberately hides the "+" and its auxiliary
+              options, but a team note is a primary message type, not an
+              attachment setting. Keep that path directly visible on the
+              phone PWA while browsers continue to find it in the "+" menu. */}
+          {onNoteModeChange && (
+            <span
+              className={cn(
+                "pwa-note-option hidden shrink-0 pwa:phone:inline-flex",
+                minimized && "order-3",
+              )}
+            >
+              <Tooltip
+                label={noteMode ? "Back to prompting" : "Write a team note"}
+              >
+                <button
+                  type="button"
+                  className={cn(
+                    composerIconButtonClass,
+                    "size-11",
+                    noteMode &&
+                      "text-yellow before:bg-[color-mix(in_srgb,var(--yellow-tint)_18%,transparent)] hover:text-yellow hover:before:bg-[color-mix(in_srgb,var(--yellow-tint)_24%,transparent)]",
+                  )}
+                  {...tapProps(() => onNoteModeChange(!noteMode))}
+                  disabled={disabled}
+                  aria-label={
+                    noteMode ? "Back to prompting" : "Write a team note"
+                  }
+                  aria-pressed={noteMode}
+                >
+                  <IconNote size={22} />
+                </button>
+              </Tooltip>
+            </span>
+          )}
+
           {/* Ask mode used to keep a marker here, next to the "+". It says
               itself in a chip above the field now, with the ✕ that leaves it
               (see ComposerContextChip), which is where note mode already
