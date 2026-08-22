@@ -25,6 +25,10 @@ struct WorktreeInfoView: View {
     @State private var overview: OS1API.WorkspaceOverview?
     @State private var conversationImage: WorkspaceImageSelection?
     @State private var conversationVideo: OS1API.WorkspaceOverview.Media?
+    #if DEBUG
+    /// Lets the native capture tool reach this tap-only viewer on a simulator.
+    @State private var didOpenImageForCapture = false
+    #endif
     @State private var sandboxStatus: SessionSandboxStatus?
     @State private var sandboxLoading = false
     @State private var sandboxAction: SessionSandboxAction?
@@ -97,7 +101,13 @@ struct WorktreeInfoView: View {
                 SessionPanelView(panel: panel, viewModel: viewModel)
             }
             .fullScreenCover(item: $conversationImage) { selection in
-                FullScreenImagePreview(items: conversationImageGallery, index: selection.index)
+                // Opened from the workspace sheet, so the viewer keeps saying
+                // which workspace the picture belongs to.
+                FullScreenImagePreview(
+                    items: conversationImageGallery,
+                    index: selection.index,
+                    title: workspaceTitle
+                )
             }
             .fullScreenCover(item: $conversationVideo) { media in
                 WorkspaceVideoPreview(media: media)
@@ -915,6 +925,16 @@ struct WorktreeInfoView: View {
         }
     }
 
+    /// Use the same name as the workspace header and sidebar. The selected
+    /// session can have a different title when this workspace has several tabs.
+    private var workspaceTitle: String {
+        SessionsListViewModel.worktreeTitle(
+            for: currentSession,
+            in: sessions,
+            workspaceNames: [:]
+        )
+    }
+
     private func openConversationMedia(_ item: WorkspaceMediaItem) {
         guard case .conversation(let media) = item.source else { return }
         if media.kind == "video" {
@@ -1194,7 +1214,21 @@ struct WorktreeInfoView: View {
         sandboxLoading = false
         loadFailed = gitStatus == nil && diff == nil && overview == nil
         loading = false
+        #if DEBUG
+        openImageForCaptureIfRequested()
+        #endif
     }
+
+    #if DEBUG
+    private func openImageForCaptureIfRequested() {
+        guard !didOpenImageForCapture,
+              ProcessInfo.processInfo.environment["OS1_OPEN_WORKSPACE_IMAGE"] == "1",
+              !conversationImageGallery.isEmpty
+        else { return }
+        didOpenImageForCapture = true
+        conversationImage = WorkspaceImageSelection(index: 0)
+    }
+    #endif
 
     private func loadSandboxResult() async -> Result<SessionSandboxStatus?, Error> {
         guard remoteSandbox != nil else { return .success(nil) }
