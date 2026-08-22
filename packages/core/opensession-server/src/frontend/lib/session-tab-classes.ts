@@ -351,9 +351,9 @@ const CTRL_BASE =
 	"font-[inherit] leading-none text-dim transition-[background-color,color] " +
 	"hover:bg-hover hover:text-fg";
 
-/** Desktop trailing controls match the tabs' 28px height with a square target. */
+/** Desktop trailing controls match the tabs' 28px box and circular corner. */
 const CTRL_DESKTOP =
-	"desktop:size-7 desktop:min-h-auto desktop:self-center desktop:rounded-control desktop:p-0";
+	"desktop:size-7 desktop:min-h-auto desktop:self-center desktop:rounded-md desktop:p-0 desktop:[corner-shape:round]";
 
 /**
  * New-tab "+". Always visible once there is a strip, so adding a sibling does
