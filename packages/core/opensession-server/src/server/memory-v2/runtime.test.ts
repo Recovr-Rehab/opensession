@@ -145,6 +145,34 @@ describe("memory v2 runtime migration", () => {
 		expect(restarted.store.get("rollback-edit")?.state).toBe("archived");
 	});
 
+	test("archives rows deleted during legacy rollback while retaining their aliases", async () => {
+		await saveScope("workspace", [{
+			id: "rollback-delete",
+			text: "A rollback fact that will be removed.",
+			by: "Fable",
+			at: "2026-04-05T00:00:00Z",
+		}]);
+		await ensureMemoryV2Ready();
+		process.env.OPENSESSION_MEMORY_MODE = "legacy";
+		await saveScope("workspace", []);
+		process.env.OPENSESSION_MEMORY_MODE = "v2";
+		closeMemoryRuntime();
+		const restarted = await ensureMemoryV2Ready();
+		expect(restarted.store.get("rollback-delete")?.state).toBe("archived");
+		expect(restarted.store.legacyRaw("rollback-delete")).toContain("will be removed");
+		process.env.OPENSESSION_MEMORY_MODE = "legacy";
+		await saveScope("workspace", [{
+			id: "rollback-delete",
+			text: "A rollback fact that will be removed.",
+			by: "Fable",
+			at: "2026-04-05T00:00:00Z",
+		}]);
+		process.env.OPENSESSION_MEMORY_MODE = "v2";
+		closeMemoryRuntime();
+		const restored = await ensureMemoryV2Ready();
+		expect(restored.store.get("rollback-delete")?.state).toBe("active");
+	});
+
 	test("does not overwrite later v2 edits from unchanged source JSON", async () => {
 		await saveScope("workspace", [{
 			id: "v2-edit",

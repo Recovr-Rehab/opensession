@@ -79,7 +79,9 @@ export async function importLegacyMemoryDirectory(
       continue;
     }
     const scopeKey = basename(name, ".json");
+    const sourceKey = `${file}#${scopeKey}`;
     const seenLegacyIds = new Set<string>();
+    let sourceCanReconcile = true;
     for (let index = 0; index < parsed.entries.length; index += 1) {
       const entry = parsed.entries[index];
       result.discovered += 1;
@@ -91,10 +93,10 @@ export async function importLegacyMemoryDirectory(
       const legacyId = entry.id?.trim() || `row-${index}`;
       if (seenLegacyIds.has(legacyId)) {
         result.errors.push({ file: `${file}:${legacyId}`, error: "Duplicate legacy memory id." });
+        sourceCanReconcile = false;
         continue;
       }
       seenLegacyIds.add(legacyId);
-      const sourceKey = `${file}#${scopeKey}`;
       const state: MemoryState = entry.supersededBy
         ? "superseded"
         : entry.archivedAt
@@ -125,8 +127,10 @@ export async function importLegacyMemoryDirectory(
         else result.alreadyImported += 1;
       } catch (error) {
         result.errors.push({ file: `${file}:${legacyId}`, error: errorMessage(error) });
+        sourceCanReconcile = false;
       }
     }
+    if (sourceCanReconcile) store.reconcileLegacySource(sourceKey, seenLegacyIds);
   }
   for (const relation of relations) {
     const memoryId = store.legacyMapping(relation.sourceKey, relation.legacyId);

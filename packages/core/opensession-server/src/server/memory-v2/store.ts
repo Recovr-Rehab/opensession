@@ -119,6 +119,7 @@ export class MemoryStore {
         memory_id TEXT NOT NULL,
         imported_at TEXT NOT NULL,
         raw_json TEXT,
+        source_present INTEGER NOT NULL DEFAULT 1,
         PRIMARY KEY(source_key, legacy_id),
         FOREIGN KEY(memory_id) REFERENCES memory_records(id) ON DELETE CASCADE
       );
@@ -130,6 +131,9 @@ export class MemoryStore {
     `);
     try {
       this.db.exec("ALTER TABLE memory_legacy_imports ADD COLUMN raw_json TEXT;");
+    } catch {}
+    try {
+      this.db.exec("ALTER TABLE memory_legacy_imports ADD COLUMN source_present INTEGER NOT NULL DEFAULT 1;");
     } catch {}
   }
 
@@ -405,9 +409,9 @@ export class MemoryStore {
     ).get(sourceKey, legacyId) as RecordRow | null;
     if (previous) {
       const currentRaw = this.db.query(
-        "SELECT raw_json FROM memory_legacy_imports WHERE source_key = ? AND legacy_id = ?",
-      ).get(sourceKey, legacyId) as { raw_json: string | null } | null;
-      if (!rawJson || currentRaw?.raw_json === rawJson) {
+        "SELECT raw_json, source_present FROM memory_legacy_imports WHERE source_key = ? AND legacy_id = ?",
+      ).get(sourceKey, legacyId) as { raw_json: string | null; source_present: number } | null;
+      if ((!rawJson || currentRaw?.raw_json === rawJson) && currentRaw?.source_present === 1) {
         return { record: fromRow(previous), imported: false };
       }
       const prepared = prepareCreate(input, now);
@@ -426,9 +430,9 @@ export class MemoryStore {
         );
         this.syncFts(previous.id, prepared.summary, prepared.details, prepared.tags);
         this.db.run(
-          `UPDATE memory_legacy_imports SET raw_json = ?
+          `UPDATE memory_legacy_imports SET raw_json = ?, source_present = 1
            WHERE source_key = ? AND legacy_id = ?`,
-          [rawJson, sourceKey, legacyId],
+          [rawJson ?? null, sourceKey, legacyId],
         );
       });
       tx.immediate();
@@ -464,6 +468,35 @@ export class MemoryStore {
       "SELECT memory_id FROM memory_legacy_imports WHERE source_key = ? AND legacy_id = ?",
     ).get(sourceKey, legacyId) as { memory_id: string } | null;
     return row?.memory_id ?? null;
+  }
+
+  /** Mark mappings removed from a successfully-read legacy source as absent.
+   * The alias and raw payload remain available for rollback diagnostics. */
+  reconcileLegacySource(sourceKey: string, presentLegacyIds: Set<string>, now = new Date()): number {
+    const mappings = this.db.query(
+      "SELECT legacy_id, memory_id FROM memory_legacy_imports WHERE source_key = ?",
+    ).all(sourceKey) as Array<{ legacy_id: string; memory_id: string }>;
+    const removed = mappings.filter((mapping) => !presentLegacyIds.has(mapping.legacy_id));
+    if (removed.length === 0) return 0;
+    const tx = this.db.transaction(() => {
+      for (const mapping of removed) {
+        this.db.run(
+          "UPDATE memory_legacy_imports SET source_present = 0 WHERE source_key = ? AND legacy_id = ?",
+          [sourceKey, mapping.legacy_id],
+        );
+        const stillPresent = this.db.query(
+          "SELECT 1 FROM memory_legacy_imports WHERE memory_id = ? AND source_present = 1 LIMIT 1",
+        ).get(mapping.memory_id);
+        if (!stillPresent) {
+          this.db.run(
+            "UPDATE memory_records SET state = 'archived', updated_at = ? WHERE id = ?",
+            [now.toISOString(), mapping.memory_id],
+          );
+        }
+      }
+    });
+    tx.immediate();
+    return removed.length;
   }
 
   legacyRaw(legacyId: string): string | null {

@@ -158,10 +158,10 @@ export async function loadScope(scope: string): Promise<MemoryEntry[]> {
 }
 
 export async function saveScope(scope: string, entries: MemoryEntry[]): Promise<void> {
-  writeJsonAtomic(scopeFile(scope), { entries });
   const runtime = await import("../../server/memory-v2/runtime");
   const mode = runtime.memoryRolloutMode();
   if (mode === "legacy" || mode === "shadow") markMemoryImportDirty();
+  writeJsonAtomic(scopeFile(scope), { entries });
   if (mode === "shadow") await runtime.refreshMemoryV2Shadow();
 }
 
