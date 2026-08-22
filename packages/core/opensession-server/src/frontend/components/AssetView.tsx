@@ -43,7 +43,7 @@ import { useIsPhone } from "../hooks/useIsPhone";
 import { Button } from "../ui/button";
 import { cn } from "../ui/cn";
 import { Menu } from "../ui/menu";
-import { ResponsiveDialog, SheetIconButton } from "../ui/sheet";
+import { ResponsiveDialog } from "../ui/sheet";
 import { toast } from "../ui/toast";
 import { Tooltip } from "../ui/tooltip";
 import { MarkdownBody } from "./MarkdownBody";
@@ -93,7 +93,10 @@ function AssetPager({
 						size="sm"
 						icon={<IconChevronLeft size={16} />}
 						aria-label="Previous asset"
-						className="size-9"
+						className={cn(
+							"size-9",
+							onDark && "text-white/60 hover:bg-white/15 hover:text-white",
+						)}
 						onClick={onPrevious}
 					/>
 				</Tooltip>
@@ -146,7 +149,10 @@ function AssetPager({
 						size="sm"
 						icon={<IconChevronRight size={16} />}
 						aria-label="Next asset"
-						className="size-9"
+						className={cn(
+							"size-9",
+							onDark && "text-white/60 hover:bg-white/15 hover:text-white",
+						)}
 						onClick={onNext}
 					/>
 				</Tooltip>
@@ -243,12 +249,17 @@ function AssetMenu({
 			<Menu.Trigger
 				aria-label={deleteOnly ? "More asset actions" : "Asset actions"}
 				className={cn(
-					"flex shrink-0 items-center justify-center border-0 text-dim hover:text-fg data-[popup-open]:text-fg",
+					"flex shrink-0 items-center justify-center border-0",
 					bar
-						? "size-10 rounded-full bg-transparent transition-[transform,background-color,color] active:scale-[0.96] hover:bg-hover data-[popup-open]:bg-hover phone:size-11"
+						? cn(
+								"size-10 rounded-full bg-transparent transition-[transform,background-color,color] active:scale-[0.96] phone:size-11",
+								phone
+									? "text-dim hover:bg-hover hover:text-fg data-[popup-open]:bg-hover data-[popup-open]:text-fg"
+									: "text-white/60 hover:bg-white/15 hover:text-white data-[popup-open]:bg-white/15 data-[popup-open]:text-white",
+							)
 						: phone
-							? "size-11 rounded-full bg-panel active:bg-pressed data-[popup-open]:bg-pressed"
-							: "size-7 rounded-control bg-transparent hover:bg-hover data-[popup-open]:bg-hover",
+							? "size-11 rounded-full bg-panel text-dim active:bg-pressed data-[popup-open]:bg-pressed data-[popup-open]:text-fg"
+							: "size-7 rounded-control bg-transparent text-dim hover:bg-hover hover:text-fg data-[popup-open]:bg-hover data-[popup-open]:text-fg",
 				)}
 			>
 				<IconDotsHorizontal size={phone ? 24 : 16} />
@@ -317,9 +328,11 @@ function AssetOverlayActionBar({
 	const name = file.path.split("/").pop() || "asset";
 	const commentable = assetPreviewKind(file.path) === "image";
 	const actionClass = cn(
-		"inline-flex h-10 shrink-0 cursor-pointer items-center justify-center gap-1.5 rounded-full border-0 bg-transparent px-2 text-xs text-dim no-underline",
-		"transition-[transform,background-color,color,opacity] duration-[var(--dur-micro)] ease-[var(--ease)] active:scale-[0.96] hover:bg-hover hover:text-fg",
-		phone && "size-11 px-0",
+		"inline-flex h-10 shrink-0 cursor-pointer items-center justify-center gap-1.5 rounded-full border-0 bg-transparent px-2 text-xs no-underline",
+		"transition-[transform,background-color,color,opacity] duration-[var(--dur-micro)] ease-[var(--ease)] active:scale-[0.96]",
+		phone
+			? "size-11 px-0 text-dim hover:bg-hover hover:text-fg"
+			: "text-white/60 hover:bg-white/15 hover:text-white",
 	);
 	const labelClass = phone ? "sr-only" : undefined;
 
@@ -432,8 +445,8 @@ function AssetOverlayActionBar({
  * What you are looking at, under the file — name, then description, then the
  * pager. The same stack the media lightbox puts under a picture, because an
  * asset and a screenshot are the same gesture: glance at one thing lifted over
- * the conversation. Actions stay up top with Close, so nothing down here reads
- * as a control.
+ * the conversation. Actions stay in their own toolbar, so this stack remains
+ * a description rather than another row of controls.
  */
 function AssetOverlayFooter({
 	file,
@@ -451,17 +464,15 @@ function AssetOverlayFooter({
 		<div
 			className={cn(
 				"z-20 flex shrink-0 flex-col items-center gap-1 px-3 py-2",
-				phone
-					? "border-t border-line"
-					: "absolute left-0 right-0 top-full mt-2",
+				!phone && "absolute left-0 right-0 top-full mt-2",
 			)}
 		>
 			<div className="flex max-w-full flex-col items-center gap-0.5 text-center">
 				<div className="flex max-w-full items-center justify-center gap-2">
 					<div
 						className={cn(
-							"max-w-full truncate font-medium",
-							phone ? "text-label text-fg" : "text-sm text-white",
+							"max-w-full truncate font-medium text-white",
+							phone ? "text-label" : "text-sm",
 						)}
 						title={file.path}
 					>
@@ -469,10 +480,7 @@ function AssetOverlayFooter({
 					</div>
 					{showSize && (
 						<span
-							className={cn(
-								"shrink-0 text-meta",
-								phone ? "text-faint" : "text-white/55",
-							)}
+							className="shrink-0 text-meta text-white/55"
 						>
 							{formatAssetSize(file.size)}
 						</span>
@@ -481,8 +489,8 @@ function AssetOverlayFooter({
 				{file.description && (
 					<div
 						className={cn(
-							"max-w-[min(720px,90vw)] line-clamp-2 leading-snug",
-							phone ? "text-supporting text-dim" : "text-sm text-white/75",
+							"max-w-[min(720px,90vw)] line-clamp-2 leading-snug text-white/75",
+							phone ? "text-supporting" : "text-sm",
 						)}
 					>
 						{file.description}
@@ -491,7 +499,7 @@ function AssetOverlayFooter({
 			</div>
 			<div className="flex max-w-full items-center justify-center gap-2">
 				{navigation && (
-					<AssetPager navigation={navigation} arrows={phone} onDark={!phone} />
+					<AssetPager navigation={navigation} arrows={phone} onDark />
 				)}
 			</div>
 		</div>
@@ -837,6 +845,8 @@ export function AssetOverlay({
 	if (!shown) return null;
 	const file = assetFileFor(shown, files);
 	const name = file.path.split("/").pop() || file.path;
+	const kind = assetPreviewKind(file.path);
+	const visual = kind === "image" || kind === "video";
 	const listed = files.some((candidate) => candidate.path === shown);
 	const listedIndex = files.findIndex((candidate) => candidate.path === shown);
 	const navigate = (direction: -1 | 1) => {
@@ -885,29 +895,34 @@ export function AssetOverlay({
 			onClose={onClose}
 			phone={isPhone}
 			label={`Preview ${name}`}
-			// The default modal is a 30rem confirm box; an artifact needs the
-			// room a page or a chart was drawn for. `max-w-none` first, or the
-			// default clamp wins.
-			modalClassName="h-[min(820px,78vh)] w-[min(1120px,84vw)] max-w-none overflow-visible"
-			sheetClassName="h-[94dvh]"
-			backdropClassName={!isPhone ? "bg-black/65" : undefined}
+			// Assets float directly on the scrim, like transcript media. Files
+			// that need a page surface bring their own inside the stage below.
+			modalClassName="h-[min(820px,78vh)] w-[min(1120px,84vw)] max-w-none overflow-visible bg-transparent [box-shadow:none]!"
+			sheetClassName="top-0 h-[100dvh] max-h-none bg-black [border-radius:0]! [box-shadow:none]!"
+			backdropClassName="bg-black/85"
+			showPhoneGrabber={false}
 		>
 			<div
 				className={cn(
 					"flex min-h-0 flex-1 flex-col overflow-hidden",
-					!isPhone && "rounded-[inherit]",
+					isPhone && "bg-black",
 				)}
 			>
 				{/* Desktop keeps the centered action bar above the asset. Phones put
 				    the same controls at the bottom, beside the caption and pager. */}
 				{!isPhone && (
-					<div className="flex min-h-10 shrink-0 items-center justify-center px-12">
+					<div className="flex min-h-10 shrink-0 items-center justify-center px-12 pb-2">
 						{actions}
 					</div>
 				)}
-				<div className="relative flex min-h-0 flex-1">
+				<div
+					className={cn(
+						"relative flex min-h-0 flex-1",
+						!visual && "m-3 overflow-hidden rounded-xl bg-surface text-fg",
+					)}
+				>
 					{missingPath === file.path ? (
-						<div className="flex min-h-0 flex-1 items-center justify-center px-6 text-center text-label text-faint">
+						<div className="flex min-h-0 flex-1 items-center justify-center px-6 text-center text-label text-white/60">
 							This file is no longer available.
 						</div>
 					) : (
@@ -924,30 +939,31 @@ export function AssetOverlay({
 				</div>
 				{isPhone && footer}
 				{isPhone && (
-					<div className="flex shrink-0 items-center justify-center px-5 py-2">
+					<div className="flex shrink-0 items-center justify-center px-5 pt-2 pb-4">
 						{actions}
 					</div>
 				)}
 			</div>
 			{!isPhone && footer}
 			{isPhone ? (
-				<SheetIconButton
+				<button
+					type="button"
 					aria-label="Close"
-					className="absolute right-3 top-[21px] z-20"
+					className="absolute right-3 top-3 z-20 grid size-11 place-items-center rounded-full border-0 bg-white/15 text-white backdrop-blur-xl transition-[transform,background-color] active:scale-[0.96] hover:bg-white/20"
 					onClick={onClose}
 				>
 					<IconX size={24} />
-				</SheetIconButton>
+				</button>
 			) : (
 				<Tooltip label="Close">
-					<Button
-						variant="ghost"
-						size="md"
-						icon={<IconX size={18} />}
+					<button
+						type="button"
 						aria-label="Close"
-						className="absolute right-2 top-1 z-20 size-8"
+						className="absolute right-0 top-0 z-20 grid size-10 place-items-center rounded-full border-0 bg-white/15 text-white backdrop-blur-xl transition-[transform,background-color] active:scale-[0.96] hover:bg-white/20"
 						onClick={onClose}
-					/>
+					>
+						<IconX size={20} />
+					</button>
 				</Tooltip>
 			)}
 			{!isPhone && navigation && (
