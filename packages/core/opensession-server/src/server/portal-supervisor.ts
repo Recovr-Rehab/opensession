@@ -151,13 +151,19 @@ function hostPortalOps(worktreeDir: string): PortalOps {
 	};
 }
 
-async function waitForPortalPort(ops: PortalOps, port: number, timeoutMs = 15_000): Promise<boolean> {
+async function waitForPortalPort(
+	ops: PortalOps,
+	port: number,
+	pid: number,
+	timeoutMs = 15_000,
+): Promise<"ready" | "exited" | "timeout"> {
 	const until = Date.now() + timeoutMs;
 	while (Date.now() < until) {
-		if (await ops.probePort(port)) return true;
+		if (await ops.probePort(port)) return "ready";
+		if (!(await ops.pidAlive(pid))) return "exited";
 		await Bun.sleep(200);
 	}
-	return false;
+	return "timeout";
 }
 
 async function allocatePort(worktreeDir: string): Promise<number> {
@@ -266,10 +272,14 @@ async function startPortal(ops: PortalOps, input: {
 	const record = { ...base, pid };
 	await ops.writeRegistry(upsert(records, record));
 	const readyTimeoutMs = Math.min(300_000, Math.max(5_000, input.readyTimeoutMs ?? 15_000));
-	if (!(await waitForPortalPort(ops, port, readyTimeoutMs))) {
-		const failed = { ...record, state: "failed" as const, lastError: `Nothing listened on port ${port} within ${Math.round(readyTimeoutMs / 1_000)} seconds.` };
+	const readiness = await waitForPortalPort(ops, port, pid, readyTimeoutMs);
+	if (readiness !== "ready") {
+		const lastError = readiness === "exited"
+			? "The Portal process exited before it started listening."
+			: `Nothing listened on port ${port} within ${Math.round(readyTimeoutMs / 1_000)} seconds.`;
+		const failed = { ...record, state: "failed" as const, lastError };
 		await ops.writeRegistry(upsert(records, failed));
-		throw new Error(failed.lastError);
+		throw new Error(lastError);
 	}
 	const awake = { ...record, state: "awake" as const };
 	await ops.writeRegistry(upsert(records, awake));
