@@ -7,18 +7,14 @@ import { Button } from "../ui/button";
 import { cn } from "../ui/cn";
 import { duration, ease } from "../ui/motion";
 import { LoadingState } from "../ui/state";
-import { SettingCard, SettingRow, SettingRowTitle } from "../ui/settings";
 import { GithubAuthCard } from "./SetupIntegrations";
 import { ReposSection } from "./SetupRepos";
 import { SetupRestart } from "./SetupRestart";
 import { TeamSection } from "./SetupTeam";
 import { OrganizationProfileSection } from "./settings/GeneralPanel";
-import {
-	ClaudeAccountsSection,
-	CodexAccountsSection,
-} from "./settings/ModelAccounts";
+import { ProviderAccountsSection } from "./settings/ModelAccounts";
 import { IconCheck, IconChevronLeft } from "./icons";
-import { StateChip, githubAuthState, type SetupStatus } from "./setup-shared";
+import { githubAuthState, type SetupStatus } from "./setup-shared";
 
 interface FirstMileStep {
 	id: "welcome" | "github" | "organization" | "team" | "ai" | "repos" | "ready";
@@ -38,39 +34,55 @@ const STEPS: FirstMileStep[] = [
 
 function FirstMileSummary({ status }: { status: SetupStatus }) {
 	const github = githubAuthState(status.github);
-	const rows = [
-		{ title: "GitHub", tone: github.tone, label: github.label },
+	const tiles = [
+		{ title: "GitHub", ready: github.tone === "on", label: github.label },
 		{
 			title: "AI",
-			tone: status.engine.ready ? ("on" as const) : ("warn" as const),
+			ready: status.engine.ready,
 			label: status.engine.ready ? "Ready" : "Needs setup",
 		},
 		{
 			title: "Repositories",
-			tone: status.repos.length > 0 ? ("on" as const) : ("warn" as const),
-			label: status.repos.length > 0 ? `${status.repos.length} added` : "None",
+			ready: status.repos.length > 0,
+			label: status.repos.length > 0 ? `${status.repos.length} added` : "None added",
 		},
 		{
 			title: "Team",
-			tone: status.team.count > 0 ? ("on" as const) : ("warn" as const),
+			ready: status.team.count > 0,
 			label:
 				status.team.count > 0
 					? `${status.team.count} ${status.team.count === 1 ? "member" : "members"}`
-					: "None",
+					: "No members",
 		},
 	];
 
 	return (
-		<SettingCard>
-			{rows.map((row) => (
-				<SettingRow key={row.title}>
-					<SettingRowTitle>{row.title}</SettingRowTitle>
-					<div className="ml-auto">
-						<StateChip tone={row.tone} label={row.label} />
+		<div className="grid grid-cols-4 gap-3 phone:grid-cols-2">
+			{tiles.map((tile) => (
+				<div
+					key={tile.title}
+					className={cn(
+						"flex aspect-square min-w-0 flex-col justify-between rounded-xl border p-4 backdrop-blur-xl phone:rounded-lg phone:p-3.5",
+						tile.ready
+							? "border-green/20 bg-green-soft shadow-[inset_0_1px_0_color-mix(in_srgb,white_45%,transparent),0_12px_28px_-24px_color-mix(in_srgb,var(--green)_45%,transparent)]"
+							: "border-divider-soft bg-settings-plate/65",
+					)}
+				>
+					<div
+						className={cn(
+							"flex size-8 items-center justify-center rounded-full",
+							tile.ready ? "bg-bg/60 text-green" : "bg-faint/10 text-faint",
+						)}
+					>
+						{tile.ready ? <IconCheck size={18} /> : <span className="size-2 rounded-full bg-current" />}
 					</div>
-				</SettingRow>
+					<div className="min-w-0">
+						<div className="text-item-title font-semibold text-fg">{tile.title}</div>
+						<div className="mt-1 truncate text-supporting text-dim">{tile.label}</div>
+					</div>
+				</div>
 			))}
-		</SettingCard>
+		</div>
 	);
 }
 
@@ -301,22 +313,12 @@ export function FirstMile({ onDone }: { onDone: () => void }) {
 											/>
 										)}
 										{step.id === "ai" && (
-											<div className="flex flex-col gap-4">
-												<ClaudeAccountsSection />
-												<CodexAccountsSection />
-											</div>
+											<ProviderAccountsSection onboarding onChanged={refetch} />
 										)}
 										{step.id === "repos" && (
 											<ReposSection repos={status.repos} onChanged={refetch} compact />
 										)}
-										{step.id === "ready" && (
-											<>
-												<div className="mx-auto mb-6 flex size-16 items-center justify-center rounded-full bg-green-soft text-green">
-													<IconCheck size={30} />
-												</div>
-												<FirstMileSummary status={status} />
-											</>
-										)}
+										{step.id === "ready" && <FirstMileSummary status={status} />}
 									</div>
 								</>
 							)}
