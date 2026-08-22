@@ -865,22 +865,51 @@ if [ "$ADVANCED" != "1" ] && [ "$NO_ONBOARD" != "1" ]; then
   fi
 fi
 
+# Resolve both addresses before the summary. The public URL is what the person
+# opens; the bind address is the truthful local health probe when a reverse
+# proxy or custom domain fronts the server.
+url=""
+health_url=""
+server_ready=0
+if [ -f "$OPENSESSION_HOME/config.json" ]; then
+  url="$(sed -n 's/.*"publicBaseUrl": *"\([^"]*\)".*/\1/p' "$OPENSESSION_HOME/config.json" | head -1)"
+  host="$(sed -n 's/.*"host": *"\([^"]*\)".*/\1/p' "$OPENSESSION_HOME/config.json" | head -1)"
+  port="$(sed -n 's/.*"port": *\([0-9]*\).*/\1/p' "$OPENSESSION_HOME/config.json" | head -1)"
+  host="${host:-127.0.0.1}"
+  port="${port:-3850}"
+  case "$host" in 0.0.0.0|::|\[::\]) host="127.0.0.1" ;; esac
+  health_url="http://$host:$port"
+  [ -n "$url" ] || url="$health_url"
+  if curl -fsS --max-time 3 "$health_url/api/health" >/dev/null 2>&1; then
+    server_ready=1
+  fi
+fi
+
 printf '\n'
-step "Done"
+if [ "$ADVANCED" != "1" ] && [ "$server_ready" != "1" ]; then
+  step "Needs attention"
+  if [ -z "$url" ]; then
+    warn "the installer did not create the server configuration"
+  else
+    warn "the server did not start at $health_url"
+    info "Expected URL: ${B}$url${N}"
+  fi
+  info "Inspect the failure: ${B}$BIN_DIR/opensession logs -n 80${N}"
+  info "Retry startup:       ${B}$BIN_DIR/opensession start${N}"
+else
+  step "Done"
+fi
 info "opensession status    ${D}is the server up?${N}"
 info "opensession doctor    ${D}check the install${N}"
 info "opensession --help    ${D}everything else${N}"
 show_path_refresh_hint
-# The last line is the URL, when there is a server to open. Read the bind from
-# the config the wizard just wrote; a public URL set there wins.
-if [ -f "$OPENSESSION_HOME/config.json" ]; then
-  url="$(sed -n 's/.*"publicBaseUrl": *"\([^"]*\)".*/\1/p' "$OPENSESSION_HOME/config.json" | head -1)"
-  if [ -z "$url" ]; then
-    port="$(sed -n 's/.*"port": *\([0-9]*\).*/\1/p' "$OPENSESSION_HOME/config.json" | head -1)"
-    url="http://127.0.0.1:${port:-3850}"
-  fi
-  if curl -fsS --max-time 3 "$url/api/health" >/dev/null 2>&1; then
-    printf '\n  %sOpen %s%s\n' "$B" "$url" "$N"
-  fi
+if [ "$server_ready" = "1" ]; then
+  printf '\n  %sOpen %s%s\n' "$B" "$url" "$N"
 fi
 printf '\n'
+
+# Simple mode promises a running server. Do not report a successful install
+# when launchd or systemd accepted a unit that then failed to boot.
+if [ "$ADVANCED" != "1" ] && [ "$server_ready" != "1" ]; then
+  exit 1
+fi

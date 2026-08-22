@@ -255,6 +255,7 @@ describe("simple mode install", () => {
     );
     expectOk(r, "install.sh");
     expect(r.stdout).toContain("Done");
+    expect(r.stdout).toContain(`Open http://127.0.0.1:${PORT}`);
     if (!commandWasOnPath) {
       expect(r.stdout).toContain("Run this in your current shell: source ~/.bashrc");
     }
