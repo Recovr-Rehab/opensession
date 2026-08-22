@@ -677,7 +677,7 @@ export function claimPrewarm(
   const p = pool();
   const record = p.get(key);
   const entry = record?.entry;
-  if (!entry || entry.state !== "ready" || !entry.sandboxId) return null;
+  if (!entry || entry.refreshTemplate || entry.state !== "ready" || !entry.sandboxId) return null;
   if (entry.signature !== prewarmSignature(provider, entry.resources)) {
     // Runner pin or provider create-shape changed since this was warmed —
     // never adopt (stale payload / wrong-sized sandbox).
@@ -737,7 +737,7 @@ export async function claimPrewarmOrWait(
   const key = `${provider}:${repoId}`;
   const record = pool().get(key);
   const entry = record?.entry;
-  if (!entry || entry.state !== "bootstrapping") return null;
+  if (!entry || entry.refreshTemplate || entry.state !== "bootstrapping") return null;
   // Provider snapshot creation cannot be interrupted. Starting the user's
   // cold fallback now is faster than waiting two minutes and then doing the
   // same cold create, which was the five-minute startup failure this guards.
