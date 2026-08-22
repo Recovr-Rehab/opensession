@@ -922,7 +922,10 @@ export function App(
 	// a page's own list. Only one of the two is ever in the pane, and the bar
 	// no longer carries a line of its own, so a page that failed to answer here
 	// would leave content vanishing at an unmarked edge.
-	useScrollEdge(topbarEl, ".viewer-messages, [data-page-scroll]");
+	useScrollEdge(
+		topbarEl,
+		".viewer-messages, [data-page-scroll], [data-review-canvas]",
+	);
 	useScrollEdge(sidebarBrandEl, "[data-sidebar-scroll]");
 	// Centered under the mobile top-bar title: the composer's model pill is hidden
 	// on phones, so the session viewer portals a compact tap-to-switch model
