@@ -2287,7 +2287,7 @@ export function PrPanel({
       )}
 
       <div
-        className={`flex min-h-0 flex-1 ${compactToolbar ? `${WS_SUMMARY_REVIEW_CANVAS_CLEARANCE} desktop:[--review-file-tree-top:52px]` : ""}`}
+        className={`flex min-h-0 flex-1 ${compactToolbar ? `${WS_SUMMARY_REVIEW_CANVAS_CLEARANCE} desktop:[--review-file-tree-top:62px]` : ""}`}
       >
         {page === "files" && fileListMode !== "hidden" && files.length > 0 && (
           <PrFileTree
@@ -2301,8 +2301,8 @@ export function PrPanel({
         <main
           // Wide review scrolls the toolbar and canvas in one container. Once
           // the toolbar sticks, file titles clear its 10px inset, 40px row,
-          // and 2px border instead of disappearing underneath it.
-          className={`min-w-0 flex-1 bg-surface [--review-file-header-top:0px] ${compactToolbar ? "overflow-y-visible desktop:[--review-file-header-top:52px]" : "overflow-y-auto"} ${reviewing ? "pb-24 phone:pb-36" : "pb-4"}`}
+          // 2px border, and 10px canvas gap instead of disappearing under it.
+          className={`min-w-0 flex-1 bg-surface [--review-file-header-top:0px] ${compactToolbar ? "overflow-y-visible desktop:[--review-file-header-top:62px]" : "overflow-y-auto"} ${reviewing ? "pb-24 phone:pb-36" : "pb-4"}`}
         >
           {page === "overview" ? (
             <SelectionToSession

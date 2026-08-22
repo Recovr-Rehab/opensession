@@ -121,14 +121,15 @@ test("wide Review moves page navigation into the summary and uses one toolbar ro
 	expect(prPanelSource).toContain(
 		'compactToolbar ? "overflow-x-hidden overflow-y-auto"',
 	);
+	expect(reviewToolbarSource).toContain("desktop:top-2.5");
 	expect(reviewToolbarSource).toContain("desktop:mb-0");
 	expect(reviewToolbarSource).toContain("WS_SUMMARY_REVIEW_BAR_CLEARANCE");
 	expect(prPanelSource).toContain("WS_SUMMARY_REVIEW_CANVAS_CLEARANCE");
 	expect(prPanelSource).toContain(
-		"desktop:[--review-file-tree-top:52px]",
+		"desktop:[--review-file-tree-top:62px]",
 	);
 	expect(prPanelSource).toContain(
-		'compactToolbar ? "overflow-y-visible desktop:[--review-file-header-top:52px]" : "overflow-y-auto"',
+		'compactToolbar ? "overflow-y-visible desktop:[--review-file-header-top:62px]" : "overflow-y-auto"',
 	);
 });
 
