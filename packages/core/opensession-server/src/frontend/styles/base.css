@@ -1262,8 +1262,9 @@ a {
 	}
 
 	/* Keep the installed phone composer focused on drafting and sending. The
-	   browser view retains attachments, model selection, and dictation. */
-	.app .pwa-send-option {
+	   add menu remains available for images and session options; only model
+	   selection and dictation stay in the browser view. */
+	.app .pwa-composer-auxiliary {
 		display: none;
 	}
 
