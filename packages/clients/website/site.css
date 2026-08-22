@@ -24,16 +24,9 @@
 	   everything secondary is one flat mid grey, and the hairline is plain
 	   black at 9%. A single hue family is what keeps the page quiet. */
 	--ink: #0a0a0a;
-	/* --page stays white: setup.css uses it as the label colour on filled
-	   controls. The landing page paints --page-wash instead, the same cool
-	   base plus two faint blue lifts the onboarding screen uses, so the two
-	   surfaces read as one product rather than a white page and a tinted one. */
 	--page: #fff;
-	--page-wash: #f1f2f5;
-	--wash-a: rgba(18, 128, 207, 0.07);
-	--wash-b: rgba(91, 110, 225, 0.06);
 	/* One quiet card fill and one hairline, used by every section in the feed.
-	   The card sits a step lighter than the washed page, so a section reads as
+	   The page is white and the cards are a step off it, so a section reads as
 	   a panel without a shadow or a second colour doing the work. */
 	--card: #fafafb;
 	--line: rgba(var(--ink-rgb), 0.09);
@@ -91,13 +84,7 @@
 
 body {
 	margin: 0;
-	background:
-		radial-gradient(circle at 12% 8%, var(--wash-a), transparent 30rem),
-		radial-gradient(circle at 88% 82%, var(--wash-b), transparent 32rem),
-		var(--page-wash);
-	/* The feed is taller than the viewport, so a scrolling wash would drag its
-	   two lifts off screen. Fixed keeps them where they were placed. */
-	background-attachment: fixed;
+	background: var(--page);
 	color: var(--ink);
 	/* Medium, slightly tightened, everywhere. Inter at 400 goes thin and loose
 	   on a near-white panel; 500 with a hair of negative tracking is what the
@@ -226,7 +213,7 @@ summary:focus-visible {
 .card {
 	padding: 34px;
 	border: 1px solid var(--line);
-	border-radius: calc(24px * var(--rf));
+	border-radius: calc(28px * var(--rf));
 	corner-shape: var(--cs);
 	background: var(--card);
 }
@@ -262,7 +249,7 @@ summary:focus-visible {
 	container-type: size;
 	aspect-ratio: 3 / 2;
 	border: 1px solid var(--line);
-	border-radius: calc(24px * var(--rf));
+	border-radius: calc(28px * var(--rf));
 	corner-shape: var(--cs);
 	background: var(--stage-bg);
 }
@@ -647,7 +634,7 @@ summary:focus-visible {
 	width: min(100% - 32px, 440px);
 	padding: clamp(26px, 4vw, 34px);
 	border: 0;
-	border-radius: calc(22px * var(--rf));
+	border-radius: calc(25px * var(--rf));
 	corner-shape: var(--cs);
 	background: var(--surface);
 	box-shadow: 0 24px 60px var(--surface-shadow);
@@ -767,7 +754,7 @@ summary:focus-visible {
 
 	.card {
 		padding: 22px;
-		border-radius: calc(19px * var(--rf));
+		border-radius: calc(22px * var(--rf));
 		corner-shape: var(--cs);
 	}
 
@@ -781,7 +768,7 @@ summary:focus-visible {
 
 	.stage {
 		aspect-ratio: 5 / 4;
-		border-radius: calc(19px * var(--rf));
+		border-radius: calc(22px * var(--rf));
 		corner-shape: var(--cs);
 	}
 
@@ -874,9 +861,6 @@ summary:focus-visible {
 		color-scheme: dark;
 		--ink: #f4f4f5;
 		--page: #0c0c0d;
-		--page-wash: #101011;
-		--wash-a: rgba(18, 128, 207, 0.1);
-		--wash-b: rgba(91, 110, 225, 0.09);
 		--card: #141416;
 		--line: rgba(255, 255, 255, 0.1);
 		--muted: #939397;
