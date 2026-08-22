@@ -23,11 +23,13 @@ import { renderPrCommentMarkdown } from "../lib/markdown";
 import { stripHtmlComments } from "../lib/pr-prompts";
 import {
   IconArrowUpRight,
+  IconArrowUpToLine,
   IconCheck,
   IconCheckCircle,
   IconChevronRight,
   IconCopy,
   IconDotsHorizontal,
+  IconEye,
   IconFile,
   IconLink,
   IconPencil,
@@ -1053,6 +1055,7 @@ export function CommentableDiff({
     );
   };
 
+  const viewedCount = countViewed(viewed, files);
   const controls = (
     <>
       {groupsLoading && (
@@ -1069,18 +1072,29 @@ export function CommentableDiff({
         </span>
       )}
       {viewedEnabled && (
-        <span className="text-meta text-faint">
-          {countViewed(viewed, files)} of {files.length} viewed
+        <span
+          className="flex items-center gap-1 text-meta text-faint tabular-nums"
+          aria-label={`${viewedCount} of ${files.length} files viewed`}
+        >
+          <IconEye size={20} />
+          {viewedCount} of {files.length}
         </span>
       )}
       {allowExpandAll && (
-        <button
-          type="button"
-          className="cursor-pointer border-none bg-transparent px-1 py-0.5 font-sans text-label font-medium text-faint hover:text-fg"
-          onClick={toggleAll}
-        >
-          {allOpen ? "Collapse all" : "Expand all"}
-        </button>
+        <Tooltip label={allOpen ? "Collapse all" : "Expand all"}>
+          <Button
+            variant="ghost"
+            size="sm"
+            icon={
+              <IconArrowUpToLine
+                size={20}
+                className={allOpen ? undefined : "rotate-180"}
+              />
+            }
+            aria-label={allOpen ? "Collapse all" : "Expand all"}
+            onClick={toggleAll}
+          />
+        </Tooltip>
       )}
     </>
   );
