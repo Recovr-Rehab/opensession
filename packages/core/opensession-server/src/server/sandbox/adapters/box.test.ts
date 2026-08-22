@@ -36,6 +36,7 @@ describe("Box persistent file paths", () => {
   test("bind-mounts the durable home without changing its canonical spelling", () => {
     expect(BOX_RUNTIME_HOME_COMMAND).toContain("mount --bind /home/user /home/ubuntu");
     expect(BOX_RUNTIME_HOME_COMMAND).toContain("test ! -L /home/ubuntu");
+    expect(BOX_RUNTIME_HOME_COMMAND).toContain("umount /home/ubuntu");
     expect(BOX_RUNTIME_HOME_COMMAND).not.toContain("ln -s");
   });
 

@@ -328,14 +328,15 @@ export function boxNativeFilePath(path: string): string {
 export const BOX_RUNTIME_HOME_COMMAND =
   "test -d /home/user && test -w /home/user && " +
   "if mountpoint -q /home/ubuntu; then " +
-  "test /home/ubuntu -ef /home/user || { echo 'unexpected /home/ubuntu mount' >&2; exit 1; }; " +
+  "if ! test /home/ubuntu -ef /home/user; then " +
+  "sudo -n umount /home/ubuntu && sudo -n mount --bind /home/user /home/ubuntu; fi; " +
   "else " +
   "if [ -L /home/ubuntu ]; then sudo -n rm /home/ubuntu; " +
   'elif [ -d /home/ubuntu ] && [ -z "$(ls -A /home/ubuntu)" ]; then sudo -n rmdir /home/ubuntu; ' +
   "elif [ -e /home/ubuntu ]; then echo 'cannot replace non-empty /home/ubuntu' >&2; exit 1; fi; " +
   "sudo -n mkdir -p /home/ubuntu && sudo -n mount --bind /home/user /home/ubuntu; " +
   "fi && test ! -L /home/ubuntu && mountpoint -q /home/ubuntu && " +
-  "test /home/ubuntu -ef /home/user";
+  "test /home/ubuntu -ef /home/user && test -w /home/ubuntu";
 
 export function boxDriver(cfg: BoxClientConfig, boxId: string): RemoteDriver {
   let runtimeHomeReady = false;
