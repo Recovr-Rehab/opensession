@@ -21,6 +21,15 @@ const ARCHIVED_QUERY = "?archived=only&slim=1";
  */
 const ARCHIVED_POLL_MS = 30_000;
 
+export function sessionPatchNeedsAcknowledgement(
+  patch: Partial<UnifiedSession>,
+): boolean {
+  // Runtime state comes from the open chat's WebSocket before the cached list
+  // can observe it. Keep that exact state across list polls until the matching
+  // stop frame arrives, just as an archive survives an older poll in flight.
+  return "archived" in patch || "isRunning" in patch;
+}
+
 export function reconcilePendingSessionPatches(
   sessions: UnifiedSession[],
   pendingPatches: Map<string, Partial<UnifiedSession>>,
@@ -367,11 +376,13 @@ export function useSessions({
     (id: string, patch: Partial<UnifiedSession>) => {
       lastTextRef.current = null;
       etagRef.current = null;
-      if ("archived" in patch) {
+      if (sessionPatchNeedsAcknowledgement(patch)) {
         pendingPatchRef.current.set(id, {
           ...pendingPatchRef.current.get(id),
           ...patch,
         });
+      }
+      if ("archived" in patch) {
         const at = Date.now();
         const drop = <V,>(prev: Map<string, V>) => {
           if (!prev.has(id)) return prev;

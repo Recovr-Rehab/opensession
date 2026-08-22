@@ -4215,6 +4215,13 @@ export function App(
 		// the viewer relays a session_status on every (re)open, and re-stamping
 		// here reset the sidebar's elapsed ticker to zero on each session switch.
 		const prev = sessionsRef.current.find((s) => s.id === id);
+		// The watch handshake repeats the current state on every open. Avoid
+		// replacing a list row, and re-rendering its workspace, when it agrees.
+		if (
+			prev?.isRunning === isRunning &&
+			(isRunning ? !!prev.runStartedAt : !prev.runStartedAt)
+		)
+			return;
 		patch(id, {
 			isRunning,
 			runStartedAt: isRunning
