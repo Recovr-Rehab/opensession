@@ -118,13 +118,14 @@ Pure SwiftUI with SwiftStreamingMarkdown for CommonMark/GFM rendering, iOS 26+
    queries only that workspace's closed siblings and restores one directly into
    the strip. A workspace down to one session draws no strip, so that history
    moves to the Closed sessions submenu of the session's overflow menu, which
-   reopens a row the same way. On macOS, where the sidebar is the live-session switcher, the
-   same scoped history lives in the selected session's toolbar instead. On iOS the
-   trailing nav-bar control is a native overflow menu carrying this worktree's
-   actions — new session, worktree details, its pull request panel, rename,
-   share link, hide/restore, and archive (which pops back to the list) — the same
-   set the sidebar row offers under long press. A
-  bounded cache keeps recently visited conversations loaded while their
+   reopens a row the same way. On macOS, where the sidebar is the live-session
+   switcher, the same scoped history lives in the selected session's toolbar
+   instead. On iOS, the PWA-style Liquid Glass action bar floats above the
+   composer with Archive, session actions, New session, and Next chat. Focusing
+   the composer contracts it into a short glass line. The actions menu carries
+   worktree details, the pull request panel, rename, share, hide or restore, and
+   archive, matching the sidebar row's long-press menu. A bounded cache keeps
+   recently visited conversations loaded while their
   off-screen sockets remain disconnected, so returning to a page does not show
   a loading screen. Fenced Markdown, expanded tool inputs and code assets use
   the PWA's GitHub light/dark syntax palette. Native-owned code surfaces show

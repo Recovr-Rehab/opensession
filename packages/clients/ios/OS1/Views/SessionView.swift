@@ -698,28 +698,7 @@ struct SessionView: View {
                     PresenceFacepile(viewers: viewModel.otherViewers, size: 24)
                 }
             }
-            #if os(iOS)
-            ToolbarItem(placement: .topTrailingCompat) {
-                SessionActionsMenu(
-                    viewModel: viewModel,
-                    tabs: tabs,
-                    workspaceNames: workspaceNames,
-                    catalog: catalog,
-                    onNewSession: onNewSession,
-                    onRenameWorkspace: onRenameWorkspace,
-                    onArchiveWorkspace: onArchiveWorkspace,
-                    showWorktreeInfo: $showWorktreeInfo,
-                    showPrPanel: $showPrPanel,
-                    renaming: $renamingWorkspace,
-                    renameText: $renameText,
-                    // Handed down rather than read from the environment: a
-                    // toolbar's content is hoisted out of the view tree, and
-                    // what reaches it there isn't something to bet a menu on.
-                    openPanel: openPanel,
-                    workspaceHistory: workspaceHistory
-                )
-            }
-            #else
+            #if os(macOS)
             // macOS retains the PR chip in its roomier toolbar; on iOS the
             // same panel lives in the title-opened workspace sheet.
             if let prNumber = viewModel.prDetails?.number ?? viewModel.session.prNumber {
@@ -862,7 +841,13 @@ struct SessionView: View {
                 contentMaxWidth: contentMaxWidth,
                 horizontalInset: contentInset,
                 autoFocusWhenNeverRan: emptyContent == nil,
-                onNextChat: onNextChat
+                onNextChat: onNextChat,
+                // The session's actions ride above the composer on iOS (see
+                // `SessionActionBar`), which is why the navigation bar has no
+                // ⋯ of its own there.
+                onArchiveWorkspace: onArchiveWorkspace,
+                onNewSession: onNewSession,
+                actionMenu: actionsMenu
             )
         }
         // The system treats a bottom `safeAreaBar` as adaptive chrome: when
@@ -874,6 +859,33 @@ struct SessionView: View {
         // black). Pin the appearance the rest of the screen is using; the
         // glass keeps its own look, it just stops repainting the app.
         .environment(\.colorScheme, appColorScheme)
+    }
+
+    /// The ⋯ menu, erased so the input bar can carry it without becoming
+    /// generic. Built here because every binding it writes to is this view's
+    /// state. nil on the Mac, whose roomier toolbar keeps its own controls.
+    private var actionsMenu: AnyView? {
+        #if os(iOS)
+        AnyView(
+            SessionActionsMenu(
+                viewModel: viewModel,
+                tabs: tabs,
+                workspaceNames: workspaceNames,
+                catalog: catalog,
+                onNewSession: onNewSession,
+                onRenameWorkspace: onRenameWorkspace,
+                onArchiveWorkspace: onArchiveWorkspace,
+                showWorktreeInfo: $showWorktreeInfo,
+                showPrPanel: $showPrPanel,
+                renaming: $renamingWorkspace,
+                renameText: $renameText,
+                openPanel: openPanel,
+                workspaceHistory: workspaceHistory
+            )
+        )
+        #else
+        nil
+        #endif
     }
 
     /// Ghost rows in the transcript's own geometry, rather than a spinner in
@@ -1658,7 +1670,7 @@ private struct SessionActionsMenu: View {
             }
         } label: {
             Image(systemName: "ellipsis")
-                .foregroundStyle(OS1VisualStyle.text)
+                .foregroundStyle(OS1VisualStyle.textDim)
         }
         .accessibilityLabel("Session actions")
         .confirmationDialog(
@@ -2559,6 +2571,12 @@ private struct SessionInputBar: View {
     var autoFocusWhenNeverRan = true
     /// Kept optional so non-sidebar conversations, such as the Desk, draw no row.
     var onNextChat: (() -> Void)?
+    /// The rest of the iOS action bar above the composer. Each is optional
+    /// for the same reason: a conversation with no workspace behind it (the
+    /// Desk) simply draws fewer buttons.
+    var onArchiveWorkspace: (() -> Void)?
+    var onNewSession: (() -> Void)?
+    var actionMenu: AnyView?
     @FocusState private var inputFocused: Bool
     /// What the "+" menu opened, if anything. One `@State` and one `.sheet`
     /// on purpose: stacking sheet modifiers on a single view leaves only the
@@ -2636,6 +2654,19 @@ private struct SessionInputBar: View {
                     )
             }
 
+            // Next chat is a button of its own here only on the Mac. On iOS
+            // it is one seat in the action bar below, next to the other
+            // session actions, rather than a second control saying the same
+            // thing a few points away.
+            #if os(iOS)
+            if offersReplySuggestions {
+                replySuggestionRow
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .transition(
+                        .opacity.combined(with: .scale(scale: 0.96, anchor: .bottomLeading))
+                    )
+            }
+            #else
             if offersReplySuggestions || (showNextChatButton && onNextChat != nil) {
                 HStack(spacing: 8) {
                     if offersReplySuggestions {
@@ -2655,6 +2686,7 @@ private struct SessionInputBar: View {
                     }
                 }
             }
+            #endif
 
             if viewModel.quoteSelection.text != nil {
                 selectedTextChip
@@ -2686,6 +2718,22 @@ private struct SessionInputBar: View {
                     .padding(.horizontal, 12)
                     .accessibilityAddTraits(.updatesFrequently)
             }
+
+            #if os(iOS)
+            // Above the composer, and hidden into a line while the keyboard
+            // is up: the actions belong to the conversation you are looking
+            // at, and the row they sit in is the one the keyboard wants back.
+            if hasActionBar {
+                SessionActionBar(
+                    collapsed: inputFocused,
+                    onArchive: onArchiveWorkspace,
+                    onNewSession: onNewSession,
+                    onNextChat: showNextChatButton ? onNextChat : nil,
+                    menu: actionMenu
+                )
+                .padding(.bottom, 6)
+            }
+            #endif
 
             VStack(spacing: 0) {
                 if hasQueueItems {
@@ -2766,6 +2814,15 @@ private struct SessionInputBar: View {
         // Desk opens with a keyboard covering its own board.
         .onAppear {
             if viewModel.session.neverRan && autoFocusWhenNeverRan { inputFocused = true }
+            #if DEBUG && os(iOS)
+            // Open with the keyboard up, for the same reason as the panel
+            // hooks in `SessionView`: a headless capture host can tap
+            // nothing, so the focused state is only reachable this way. It
+            // is the state where the action bar contracts into a line.
+            if ProcessInfo.processInfo.environment["OS1_FOCUS_COMPOSER"] == "1" {
+                inputFocused = true
+            }
+            #endif
         }
         // Leaving the session must not leave the mic or typing status open.
         .onDisappear {
@@ -2829,6 +2886,17 @@ private struct SessionInputBar: View {
         #endif
         .transcriptQuoteComposerRegion(viewModel.quoteSelection)
     }
+
+    #if os(iOS)
+    /// Whether the action bar has anything to hold. A conversation with no
+    /// workspace behind it draws no bar at all rather than an empty capsule.
+    private var hasActionBar: Bool {
+        onArchiveWorkspace != nil
+            || onNewSession != nil
+            || actionMenu != nil
+            || (showNextChatButton && onNextChat != nil)
+    }
+    #endif
 
     private var offersReplySuggestions: Bool {
         showReplySuggestions
