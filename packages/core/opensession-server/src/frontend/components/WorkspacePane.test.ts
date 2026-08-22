@@ -7,6 +7,9 @@ const viewerSource = await Bun.file(
 const prPanelSource = await Bun.file(
 	new URL("./PrPanel.tsx", import.meta.url),
 ).text();
+const summarySource = await Bun.file(
+	new URL("./WorkspaceSummary.tsx", import.meta.url),
+).text();
 
 test("workspace draft composers accept and persist attachments", () => {
 	const composerStart = source.lastIndexOf("<Composer");
@@ -50,9 +53,9 @@ test("workspace Review keeps the implementation summary beside the PR canvas", (
 	expect(source).toContain("walkthrough={presentationSession?.walkthrough}");
 });
 
-test("the PR identity and navigation share one floating two-line bar", () => {
+test("the PR toolbar keeps a compact fallback navigation row", () => {
 	const toolbarStart = prPanelSource.indexOf(
-		'<div className="shrink-0 desktop:mx-2',
+		'<div className="shrink-0 bg-surface desktop:mx-2',
 	);
 	const toolbarEnd = prPanelSource.indexOf(">", toolbarStart);
 	const toolbar = prPanelSource.slice(toolbarStart, toolbarEnd);
@@ -73,6 +76,17 @@ test("the PR identity and navigation share one floating two-line bar", () => {
 	expect(reviewBar).toContain("desktop:-ml-3");
 	expect(prPanelSource).toContain('["files", "Files",');
 	expect(prPanelSource).toContain("<ActiveCodeViewIcon size={18} />");
+});
+
+test("wide Review moves page navigation into the summary and uses one toolbar row", () => {
+	expect(source).toContain("reviewPage={reviewPage}");
+	expect(source).toContain("onReviewPageChange={setReviewPage}");
+	expect(source).toContain("compactToolbar={reviewSummaryVisible}");
+	expect(prPanelSource).toContain("const reviewBar = !compactToolbar");
+	expect(prPanelSource).toContain("{compactToolbar && fileControls}");
+	expect(summarySource).toContain('aria-label="Pull request pages"');
+	expect(summarySource).toContain('onReviewPageChange("overview")');
+	expect(summarySource).toContain('onReviewPageChange("files")');
 });
 
 test("a lone Review hides the tab strip and keeps New tab in the header", () => {

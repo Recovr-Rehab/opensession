@@ -144,6 +144,7 @@ const CODE_VIEWS = {
   flow: { label: "Code flow", Icon: IconBranches },
 } as const;
 type CodeView = keyof typeof CODE_VIEWS;
+export type PrReviewPage = "overview" | "files";
 
 const NO_PR_FILES: NonNullable<PrDetails["files"]> = [];
 const NOOP_SEND = () => {};
@@ -236,6 +237,11 @@ interface Props {
   /** The surrounding review header already offers the workspace summary.
    * Keep this panel's metadata rail only when it stacks for a narrow canvas. */
   hideWideOverviewRail?: boolean;
+  /** Controlled page for hosts that move Review navigation into the summary. */
+  page?: PrReviewPage;
+  onPageChange?: (page: PrReviewPage) => void;
+  /** Move file controls into the identity row and omit the secondary row. */
+  compactToolbar?: boolean;
 }
 
 interface PrDiffData {
@@ -344,6 +350,9 @@ export function PrPanel({
   onOpenPr,
   addHandler,
   hideWideOverviewRail = false,
+  page: controlledPage,
+  onPageChange,
+  compactToolbar = false,
 }: Props) {
   // Local copy of the linked-PR list so link/unlink applies instantly; the
   // sessions list catches up on its next refresh.
@@ -493,7 +502,15 @@ export function PrPanel({
    * code page uses, held apart from the page so a trip to Overview and back
    * never re-triggers guide or code-flow generation.
    */
-  const [page, setPage] = useState<"overview" | "files">("files");
+  const [localPage, setLocalPage] = useState<PrReviewPage>("files");
+  const page = controlledPage ?? localPage;
+  const setPage = useCallback(
+    (next: PrReviewPage) => {
+      setLocalPage(next);
+      onPageChange?.(next);
+    },
+    [onPageChange],
+  );
   const [codeView, setCodeView] = useState<"all" | "guide" | "flow">("all");
   /** A check chip elsewhere in the app asked for the checks (focusTarget). */
   const [focusChecksSeq, setFocusChecksSeq] = useState(0);
@@ -1940,7 +1957,83 @@ export function PrPanel({
 
   const ActiveCodeViewIcon = CODE_VIEWS[codeView].Icon;
 
-  const reviewBar = (
+  const fileControls = page === "files" && (
+    <div
+      className={`flex shrink-0 items-center gap-1.5 phone:gap-2 ${compactToolbar ? "" : "ml-auto"}`}
+    >
+      {handEdited.length > 0 && send && (
+        <Button
+          variant="default"
+          size="sm"
+          onClick={tellAgentAboutEdits}
+          title="Sends a note listing your hand-edits so they get committed and pushed"
+        >
+          Tell {AGENT_NAME} about {handEdited.length} edit
+          {handEdited.length === 1 ? "" : "s"}
+        </Button>
+      )}
+      <span className="flex shrink-0 items-center gap-1 text-label tabular-nums">
+        <span className="text-green">+{pr.additions}</span>
+        <span className="text-red">−{pr.deletions}</span>
+      </span>
+      <div
+        ref={setDiffControlsTarget}
+        className="flex shrink-0 items-center gap-1.5 phone:gap-2"
+      />
+      <Menu.Root>
+        <Tooltip label="Change the view">
+          <Menu.Trigger
+            render={
+              <Button
+                variant="default"
+                size="sm"
+                className="text-fg"
+                aria-label={`View: ${CODE_VIEWS[codeView].label}`}
+                caret
+              >
+                <ActiveCodeViewIcon size={18} />
+              </Button>
+            }
+          />
+        </Tooltip>
+        <Menu.Popup align="end" className="min-w-[210px]">
+          <Menu.RadioGroup
+            value={codeView}
+            onValueChange={(next) => {
+              const key = String(next) as CodeView;
+              if (key === "flow" && codeView !== "flow" && codeFlowError) {
+                setCodeFlow(null);
+                setCodeFlowError(null);
+              }
+              setCodeView(key);
+            }}
+          >
+            {(Object.keys(CODE_VIEWS) as CodeView[]).map((key) => {
+              const { label, Icon } = CODE_VIEWS[key];
+              return (
+                <Menu.RadioItem
+                  key={key}
+                  value={key}
+                  closeOnClick
+                  disabled={
+                    key === "flow" &&
+                    ((!diff?.patch && !diff?.skippedFiles) || !prPatchVersion)
+                  }
+                >
+                  <Icon size={18} className={MENU_ICON} />
+                  <span className="min-w-0 flex-1 truncate">{label}</span>
+                  <Menu.Check on={codeView === key} />
+                </Menu.RadioItem>
+              );
+            })}
+          </Menu.RadioGroup>
+        </Menu.Popup>
+      </Menu.Root>
+      {codeSettings}
+    </div>
+  );
+
+  const reviewBar = !compactToolbar && (
     <div className="flex h-8 shrink-0 items-center gap-1.5 overflow-x-auto overflow-y-hidden bg-panel px-6 [scrollbar-width:none] phone:h-11 phone:gap-2 phone:bg-surface phone:px-2 phone:shadow-[inset_0_-1px_0_var(--border)] [&::-webkit-scrollbar]:hidden">
       <div
         className="flex shrink-0 items-center gap-0.5 self-stretch desktop:-ml-3"
@@ -1950,79 +2043,7 @@ export function PrPanel({
       >
         {pageTabs}
       </div>
-      {page === "files" && (
-        <div className="ml-auto flex shrink-0 items-center gap-1.5 phone:gap-2">
-          {handEdited.length > 0 && send && (
-            <Button
-              variant="default"
-              size="sm"
-              onClick={tellAgentAboutEdits}
-              title="Sends a note listing your hand-edits so they get committed and pushed"
-            >
-              Tell {AGENT_NAME} about {handEdited.length} edit
-              {handEdited.length === 1 ? "" : "s"}
-            </Button>
-          )}
-          <span className="flex shrink-0 items-center gap-1 text-label tabular-nums">
-            <span className="text-green">+{pr.additions}</span>
-            <span className="text-red">−{pr.deletions}</span>
-          </span>
-          <div
-            ref={setDiffControlsTarget}
-            className="flex shrink-0 items-center gap-1.5 phone:gap-2"
-          />
-          <Menu.Root>
-            <Tooltip label="Change the view">
-              <Menu.Trigger
-                render={
-                  <Button
-                    variant="default"
-                    size="sm"
-                    className="text-fg"
-                    aria-label={`View: ${CODE_VIEWS[codeView].label}`}
-                    caret
-                  >
-                    <ActiveCodeViewIcon size={18} />
-                  </Button>
-                }
-              />
-            </Tooltip>
-            <Menu.Popup align="end" className="min-w-[210px]">
-              <Menu.RadioGroup
-                value={codeView}
-                onValueChange={(next) => {
-                  const key = String(next) as CodeView;
-                  if (key === "flow" && codeView !== "flow" && codeFlowError) {
-                    setCodeFlow(null);
-                    setCodeFlowError(null);
-                  }
-                  setCodeView(key);
-                }}
-              >
-                {(Object.keys(CODE_VIEWS) as CodeView[]).map((key) => {
-                  const { label, Icon } = CODE_VIEWS[key];
-                  return (
-                    <Menu.RadioItem
-                      key={key}
-                      value={key}
-                      closeOnClick
-                      disabled={
-                        key === "flow" &&
-                        ((!diff?.patch && !diff?.skippedFiles) || !prPatchVersion)
-                      }
-                    >
-                      <Icon size={18} className={MENU_ICON} />
-                      <span className="min-w-0 flex-1 truncate">{label}</span>
-                      <Menu.Check on={codeView === key} />
-                    </Menu.RadioItem>
-                  );
-                })}
-              </Menu.RadioGroup>
-            </Menu.Popup>
-          </Menu.Root>
-          {codeSettings}
-        </div>
-      )}
+      {fileControls}
     </div>
   );
 
@@ -2032,9 +2053,9 @@ export function PrPanel({
       data-review-canvas="true"
       ref={setRoot}
     >
-      {/* One floating, two-line review bar beside the workspace summary: PR
-          identity first, navigation and view controls second. Phone keeps both
-          lines edge to edge because there is no summary column to pair with. */}
+      {/* The summary owns page navigation when it stands beside this canvas,
+          so desktop can fold file controls into one identity row. Narrow and
+          phone layouts keep the independent navigation row. */}
       <div className="shrink-0 bg-surface desktop:mx-2 desktop:mt-2.5 desktop:mb-2 desktop:overflow-hidden desktop:rounded-lg desktop:border desktop:border-line">
       <header className="flex h-10 shrink-0 items-center gap-2.5 px-6 phone:px-3">
         {/* State, in the app's own PR language, filled rather than drawn: the
@@ -2093,6 +2114,7 @@ export function PrPanel({
             </a>
           </Tooltip>
         </h1>
+        {compactToolbar && fileControls}
         {/* A stack is secondary navigation, not page content. Keep its compact
             position/size chip in the identity bar and reveal the full rail in
             the shared popover instead of spending permanent canvas height. */}

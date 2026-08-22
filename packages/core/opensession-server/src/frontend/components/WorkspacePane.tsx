@@ -21,7 +21,7 @@ import { ConversationPane } from "./ConversationPane";
 import { FeedWebPane, refWebPanel } from "./FeedWebPane";
 import { SlackChannelPane } from "./SlackChannelPane";
 import { MarkdownRepoProvider } from "./MarkdownBody";
-import { PrPanel } from "./PrPanel";
+import { PrPanel, type PrReviewPage } from "./PrPanel";
 import type { PrFocus } from "../lib/pr-focus";
 import { RepoTile } from "./RepoTile";
 import { WorkspaceInfo } from "./WorkspaceInfo";
@@ -246,6 +246,7 @@ export function WorkspacePane({
 	// preference. If someone opens it here, keep that choice while this pane stays
 	// mounted, then restore the ordinary preference on the other tabs.
 	const [reviewPanelOpen, setReviewPanelOpen] = useState(false);
+	const [reviewPage, setReviewPage] = useState<PrReviewPage>("files");
 	const panelOpen = tab === "review" ? reviewPanelOpen : sidePanel.open;
 	const setPanelOpen = tab === "review" ? setReviewPanelOpen : sidePanel.setOpen;
 
@@ -386,6 +387,7 @@ export function WorkspacePane({
 		: workspace.branch
 			? { repo: workspace.repo || "repository", branch: workspace.branch }
 			: null;
+	useEffect(() => setReviewPage("files"), [reviewTarget?.repo, reviewTarget?.branch]);
 	const reviewSessions = useMemo(() => {
 		if (!reviewTarget) return [];
 		return sessions.filter(
@@ -607,6 +609,8 @@ export function WorkspacePane({
 						onOpenChange={setReviewSummaryOpen}
 						tabStripVisible={tabStripVisible}
 						reviewMode
+						reviewPage={reviewPage}
+						onReviewPageChange={setReviewPage}
 						hasRoom={reviewSummaryHasRoom}
 					/>
 				)}
@@ -661,6 +665,9 @@ export function WorkspacePane({
 					}
 					walkthrough={presentationSession?.walkthrough}
 					hideWideOverviewRail={Boolean(presentationSession)}
+					page={reviewPage}
+					onPageChange={setReviewPage}
+					compactToolbar={reviewSummaryVisible}
 				/>
 			</div>,
 		);
