@@ -22,6 +22,7 @@ import type {
 } from "../lib/types";
 import { PrSessionsList, prRelatedSessions } from "./PrSessions";
 import { WalkthroughCard } from "./WalkthroughCard";
+import { DiffPanel } from "./DiffPanel";
 import {
   API_BASE,
   fetchPr,
@@ -147,6 +148,7 @@ const CODE_VIEWS = {
 type CodeView = keyof typeof CODE_VIEWS;
 
 const NO_PR_FILES: NonNullable<PrDetails["files"]> = [];
+const NOOP_SEND = () => {};
 
 function useStoredCodeSetting<T extends string>(
   key: string,
@@ -1592,34 +1594,53 @@ export function PrPanel({
       </div>
     );
 
-  if (!pr)
+  if (!pr) {
+    const showWorktreeDiff =
+      !!sessionId && !previewTarget && !active?.linked && !active?.discovered;
+    const sessionRunning = !!sessions?.find(
+      (session) => session.id === sessionId,
+    )?.isRunning;
     return (
-        <div className="flex h-full min-h-0 flex-1 flex-col overflow-y-auto">
-          {switcher}
-          <div className="mx-auto flex w-full max-w-[760px] flex-col gap-4 px-4 py-4 sm:px-5">
-            {walkthrough && <WalkthroughCard walkthrough={walkthrough} />}
-            <PrCard title="Git status">
-              <GitStatusRows
-                git={git}
-                pr={null}
-                sessionId={sessionId}
-                repo={active?.repo}
-                send={send}
-                onRefresh={load}
-              />
-            </PrCard>
-            {linkable && !showBar && (
-              <div className="flex flex-wrap items-center gap-2">
+      <div className="flex h-full min-h-0 flex-1 flex-col overflow-y-auto">
+        {switcher}
+        <div className="mx-auto flex w-full max-w-[760px] flex-col gap-4 px-4 py-4 sm:px-5">
+          {walkthrough && <WalkthroughCard walkthrough={walkthrough} />}
+          <PrCard title="Git status">
+            <GitStatusRows
+              git={git}
+              pr={null}
+              sessionId={sessionId}
+              repo={active?.repo}
+              send={send}
+              onRefresh={load}
+            />
+          </PrCard>
+          {linkable && !showBar && (
+            <div className="flex flex-wrap items-center gap-2">
               <LinkPrControl
                 sessionId={sessionId}
                 variant="action"
                 onLinked={handleLinked}
               />
-              </div>
-            )}
+            </div>
+          )}
         </div>
+        {showWorktreeDiff && (
+          <div
+            className="mx-auto w-full max-w-[1500px] px-2 pb-4 phone:px-1"
+            data-no-pr-worktree-diff
+          >
+            <DiffPanel
+              sessionId={sessionId}
+              isRunning={sessionRunning}
+              canSend={!!send && !!editGate}
+              send={send ?? NOOP_SEND}
+            />
+          </div>
+        )}
       </div>
     );
+  }
 
   // Bot bookkeeping comments are pure HTML markers — hide them, and strip
   // leading markers from real comments' previews.
