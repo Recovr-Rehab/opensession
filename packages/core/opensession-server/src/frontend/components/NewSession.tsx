@@ -61,6 +61,7 @@ import { newClientSessionId } from "../lib/session-id";
 import { VoiceInput } from "./VoiceInput";
 import { useIsPhone } from "../hooks/useIsPhone";
 import { handOffSoftKeyboard } from "../lib/soft-keyboard";
+import { trackKeyboardInset } from "../lib/keyboard-inset";
 import { PaletteSelect } from "./PaletteSelect";
 import { RepoTile } from "./RepoTile";
 import { ModelEffortSelect } from "./ModelEffortSelect";
@@ -851,6 +852,13 @@ export function NewSession({ onBack, inline, focusSeq, send, addHandler, connect
   useEffect(() => {
     if (inline) return;
     handOffSoftKeyboard(() => promptRef.current);
+  }, [inline]);
+
+  // The sheet rests on top of the keyboard rather than behind it, so measure
+  // what the keyboard covers for as long as the sheet is up.
+  useEffect(() => {
+    if (inline) return;
+    return trackKeyboardInset();
   }, [inline]);
 
   // (The prompt's auto-grow, its scroll-fade and the draft store it writes
@@ -2106,20 +2114,25 @@ export function NewSession({ onBack, inline, focusSeq, send, addHandler, connect
         data-global-file-composer="new-session"
         variant="palette"
         widthClassName="w-[min(820px,100%)] phone:w-full"
-        viewportClassName="phone:items-end phone:px-0 phone:pb-0 phone:pt-3"
+        // The bottom pad is the keyboard's own height (lib/keyboard-inset).
+        // The sheet is anchored to the bottom of the LAYOUT viewport, which iOS
+        // does not shrink for the keyboard, so without it the composer sits
+        // behind the keys and the page has to be panned to reach it. It is 0px
+        // wherever nothing covers the window.
+        viewportClassName="phone:items-end phone:px-0 phone:pb-[var(--kb-inset,0px)] phone:pt-3"
         className={cn(
           // A phone sheet carries a rounder top corner than the floating
           // palette does: it meets the screen's own edge on three sides, so the
           // two corners it keeps are the whole of its shape.
           //
-          // The keyboard cap is what keeps the title bar on screen. The sheet
-          // is anchored to the bottom of the LAYOUT viewport and grows upward,
-          // and `dvh` does not shrink for the keyboard, so a tall enough sheet
-          // (a prompt carrying an image) ran off the top of the screen and took
+          // The keyboard cap is what keeps the title bar on screen: a tall
+          // enough sheet (a prompt carrying an image) ran off the top and took
           // dismiss and send with it. 43dvh fits the strip left above an iPhone
-          // keyboard and its suggestion bar; past that the prompt scrolls,
+          // keyboard and its suggestion bar, and the 100% holds the sheet
+          // inside that strip on a client whose keyboard is taller than the
+          // one 43dvh was measured against. Past the cap the prompt scrolls,
           // which is what its scroller is for.
-          "max-h-[calc(89dvh-1rem)] phone:max-h-[calc(100dvh-12px)] phone:[body.kb-open_&]:max-h-[43dvh] phone:rounded-t-[calc(28px*var(--rf))] phone:rounded-b-none phone:[&_textarea]:min-h-[160px] phone:[&_textarea]:text-input-phone",
+          "max-h-[calc(89dvh-1rem)] phone:max-h-[calc(100dvh-12px)] phone:[body.kb-open_&]:max-h-[min(43dvh,100%)] phone:rounded-t-[calc(28px*var(--rf))] phone:rounded-b-none phone:[&_textarea]:min-h-[160px] phone:[&_textarea]:text-input-phone",
           ASK_SURFACE,
           mode === "ask" && "before:opacity-100 after:opacity-100",
         )}
