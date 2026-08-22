@@ -1387,7 +1387,7 @@ function sandboxExists(sandbox: Sandbox): (p: string) => Promise<boolean> {
  * dev-services.sh's format (harmless for repos that ignore it — a lifecycle
  * start.sh just reads $WEBAPP_PORT from its env).
  */
-async function seedSandboxPortsConf(
+export async function seedSandboxPortsConf(
   sandbox: Sandbox,
   worktreeDir: string,
   webappPort: number,
@@ -1396,7 +1396,9 @@ async function seedSandboxPortsConf(
   const fresh = freshPortsConfText(webappPort, "sandbox preview").replace(/\n/g, "\\n");
   await sandbox.exec([
     "sh", "-c",
-    `if [ -f ${conf} ]; then sed -i 's/^WEBAPP_PORT=.*/WEBAPP_PORT=${webappPort}/' ${conf}; ` +
+    `if [ -f ${conf} ]; then ` +
+      `if grep -q '^WEBAPP_PORT=' ${conf}; then sed -i 's/^WEBAPP_PORT=.*/WEBAPP_PORT=${webappPort}/' ${conf}; ` +
+      `else printf '\\nWEBAPP_PORT=${webappPort}\\n' >> ${conf}; fi; ` +
       `else printf '${fresh}' > ${conf}; fi`,
   ]);
 }
