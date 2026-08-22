@@ -176,7 +176,7 @@ export type TabState = {
 
 /**
  * The selected tab is the only ordinary desktop tab with a surface. Phone tabs
- * share the top bar's glass, with the selected state painted more strongly.
+ * are all glass: the selected one is the bright plate, the rest a dimmer wash.
  * Custom colours stay visible as an explicit exception, but use a quieter mix
  * while inactive.
  */
@@ -186,13 +186,14 @@ export function tabClass(state: TabState): string {
 	const surface = colored
 		? active
 			? "bg-[color-mix(in_srgb,var(--tab-color)_22%,var(--bg-panel))] " +
-				"hover:bg-[color-mix(in_srgb,var(--tab-color)_28%,var(--bg-panel))]"
+				"hover:bg-[color-mix(in_srgb,var(--tab-color)_28%,var(--bg-panel))] " +
+				"phone:bg-[color-mix(in_srgb,var(--tab-color)_22%,var(--mobile-tab-surface-selected))]"
 			: "bg-[color-mix(in_srgb,var(--tab-color)_9%,transparent)] " +
 				"hover:bg-[color-mix(in_srgb,var(--tab-color)_16%,transparent)] " +
-				"phone:bg-[color-mix(in_srgb,var(--tab-color)_9%,var(--mobile-header-control-surface))]"
+				"phone:bg-[color-mix(in_srgb,var(--tab-color)_9%,var(--mobile-tab-surface))]"
 		: active
-			? "bg-panel hover:bg-hover"
-			: "bg-transparent hover:bg-hover phone:bg-[var(--mobile-header-control-surface)]";
+			? "bg-panel hover:bg-hover phone:bg-[var(--mobile-tab-surface-selected)]"
+			: "bg-transparent hover:bg-hover phone:bg-[var(--mobile-tab-surface)]";
 
 	return `${TAB_BASE} ${ink} ${surface}`;
 }
