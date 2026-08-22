@@ -254,7 +254,7 @@ function AssetMenu({
 						? cn(
 								"size-10 rounded-full bg-transparent transition-[transform,background-color,color] active:scale-[0.96] phone:size-11",
 								phone
-									? "text-dim hover:bg-hover hover:text-fg data-[popup-open]:bg-hover data-[popup-open]:text-fg"
+									? "text-white/55 hover:bg-white/10 hover:text-white/80 data-[popup-open]:bg-white/10 data-[popup-open]:text-white/80"
 									: "text-white/60 hover:bg-white/15 hover:text-white data-[popup-open]:bg-white/15 data-[popup-open]:text-white",
 							)
 						: phone
@@ -331,7 +331,7 @@ function AssetOverlayActionBar({
 		"inline-flex h-10 shrink-0 cursor-pointer items-center justify-center gap-1.5 rounded-full border-0 bg-transparent px-2 text-xs no-underline",
 		"transition-[transform,background-color,color,opacity] duration-[var(--dur-micro)] ease-[var(--ease)] active:scale-[0.96]",
 		phone
-			? "size-11 px-0 text-dim hover:bg-hover hover:text-fg"
+			? "size-11 px-0 text-white/55 hover:bg-white/10 hover:text-white/80"
 			: "text-white/60 hover:bg-white/15 hover:text-white",
 	);
 	const labelClass = phone ? "sr-only" : undefined;
@@ -357,7 +357,8 @@ function AssetOverlayActionBar({
 			aria-label="Asset actions"
 			className={cn(
 				"flex items-center justify-center gap-1",
-				phone && "rounded-full bg-panel p-1 smooth-shadow-sm",
+				phone &&
+					"rounded-full bg-white/10 p-1 ring-1 ring-white/10 backdrop-blur-xl",
 			)}
 		>
 			{commentable && (
