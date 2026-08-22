@@ -13,8 +13,8 @@ beforeEach(() => {
 
 describe("toast", () => {
 	test("fires and dismisses", () => {
-		const id = toast("Saved as draft");
-		expect(activeToasts().map((t) => t.message)).toEqual(["Saved as draft"]);
+		const id = toast("Archived");
+		expect(activeToasts().map((t) => t.message)).toEqual(["Archived"]);
 		dismissToast(id);
 		expect(activeToasts()).toHaveLength(0);
 	});

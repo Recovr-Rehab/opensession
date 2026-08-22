@@ -1133,7 +1133,6 @@ export function NewSession({ onBack, inline, focusSeq, send, addHandler, connect
           images: staged.images,
           files: staged.files,
         });
-        toast("Saved as draft", { variant: "success" });
       }
       window.dispatchEvent(new Event("opensession:workspaces-changed"));
     } catch (e) {
