@@ -318,6 +318,8 @@ struct UserBubble: View {
     var owner: String?
     var onEdit: ((TranscriptEntry) -> Void)?
 
+    @Environment(\.colorScheme) private var colorScheme
+
     /// The name to credit, and whether it came back through Slack. Nil when
     /// this turn is the viewer's own. The rule itself lives in
     /// `MessageAttribution` so it can be tested without a view.
@@ -378,7 +380,9 @@ struct UserBubble: View {
                                 : nil
                         )
                         .overlay {
-                            shape.stroke(OS1VisualStyle.border, lineWidth: 0.5)
+                            if needsHairline {
+                                shape.stroke(OS1VisualStyle.border, lineWidth: 0.5)
+                            }
                         }
                         .textSelection(.enabled)
                         .contextMenu {
@@ -408,6 +412,21 @@ struct UserBubble: View {
         520
         #else
         .infinity
+        #endif
+    }
+
+    /// Whether the bubble needs a drawn edge, or whether its fill already is
+    /// one. On iOS in light appearance the bubble sits a clear 14/255 under
+    /// `chatCanvas`, and a separator on top of that step reads as a box drawn
+    /// round the words rather than as a message. Everywhere else the step is
+    /// too small to carry the shape alone: dark puts the bubble a few points
+    /// over a near-black page, and on the Mac it is the LIFTED surface, about
+    /// 6/255 off the window background in light.
+    private var needsHairline: Bool {
+        #if os(macOS)
+        true
+        #else
+        colorScheme == .dark
         #endif
     }
 }
