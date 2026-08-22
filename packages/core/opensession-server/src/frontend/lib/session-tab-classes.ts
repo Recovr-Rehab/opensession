@@ -132,7 +132,7 @@ export const TAB_ITEM =
 /** Picked up: an inactive desktop tab has no surface of its own and would smear
  *  over every label it passes. It lifts into an opaque chip while dragging. */
 export const TAB_ITEM_DRAGGING =
-	`${PILL} cursor-grabbing bg-panel smooth-shadow-ring-sm desktop:rounded-control`;
+	`${PILL} cursor-grabbing bg-panel smooth-shadow-ring-sm`;
 
 /**
  * Where the dragged tab will land. Reorder already opens the gap live, but an
@@ -162,7 +162,7 @@ export const TAB_ACTIONS = "ml-auto flex flex-none items-center gap-[3px]";
  */
 const TAB_BASE =
 	"relative inline-flex max-w-[200px] shrink-0 cursor-pointer items-center gap-1.5 whitespace-nowrap " +
-	"rounded-control border-0 px-2.5 py-1.5 text-label shadow-none " +
+	`${PILL} border-0 px-2.5 py-1.5 text-label shadow-none ` +
 	"transition-[background-color,color] " +
 	`phone:rounded-full phone:border phone:border-[color:var(--mobile-header-control-border)] ` +
 	`phone:shadow-[var(--mobile-header-control-shadow)] ${MOBILE_CONTROL_GLASS_EFFECTS}`;
