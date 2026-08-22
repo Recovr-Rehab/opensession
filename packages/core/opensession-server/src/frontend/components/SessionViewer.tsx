@@ -11,8 +11,8 @@ import React, {
 import { createPortal } from "react-dom";
 import { AnimatePresence, motion, Reorder } from "motion/react";
 import { duration, ease } from "../ui/motion";
+import { Spinner } from "../ui/spinner";
 import { TranscriptSkeleton } from "../ui/state";
-import { renderMarkdown } from "../lib/markdown";
 import { LiveTurnStore } from "../lib/live-turn-store";
 import { getLiveTypingPref } from "../lib/live-typing-pref";
 import { isTimelineOnlyRunnerNotice } from "../lib/runner-events";
@@ -32,7 +32,6 @@ import {
 import { markNotesRead } from "../lib/note-reads";
 import { clearMention, onMentionsChanged } from "../lib/mentions";
 import { QuoteSelection } from "./QuoteSelection";
-import type { NewTabMorphOrigin } from "./SessionTabs";
 import { plainThreadUrl } from "./PlainThreadPanel";
 import { isGitHubAttribution } from "@tellahq/opensession-protocol/notices";
 import type { TranscriptIndexEntry } from "@tellahq/opensession-protocol/session";
@@ -51,11 +50,12 @@ import {
 	orderTranscriptEntries,
 	queueAttribution,
 } from "../lib/transcript-state";
-import { TranscriptBlocks } from "./TranscriptBlocks";
 import {
 	HISTORY_PAGE_ENTRIES,
 	shouldContinueHistoryReveal,
 } from "../lib/transcript-history";
+import { SessionTranscript } from "./SessionTranscript";
+import type { NewTabMorphOrigin } from "./SessionTabs";
 import { MessageRail } from "./MessageRail";
 import { collectSentMessages } from "../lib/sent-messages";
 import {
@@ -81,11 +81,7 @@ import {
 	getNextChatButtonPref,
 	onNextChatButtonChanged,
 } from "../lib/next-chat-pref";
-import { MarkdownBody, useMarkdownRepo } from "./MarkdownBody";
-import {
-	OpenAssetPathsProvider,
-	useOpenAssetPaths,
-} from "../lib/open-asset";
+import { OpenAssetPathsProvider } from "../lib/open-asset";
 import { SubagentPane, type SubagentRef } from "./SubagentPane";
 import { ShellPanel } from "./TerminalPanel";
 import { getCurrentUser, useCurrentUser } from "./UserPicker";
@@ -107,6 +103,7 @@ import {
 	fetchPreview,
 	moveSessionToBranchApi,
 	portalActionApi,
+	type WorkspaceMediaItem,
 	type ModelOption,
 	type ProviderAccountOption,
 	type SessionSubagentSnapshot,
@@ -211,7 +208,6 @@ import {
 	cacheTranscriptView,
 	cachedTranscriptView,
 	peekCachedTranscriptView,
-	type CachedTranscriptView,
 } from "./session-viewer/transcript-cache";
 import {
 	holdTranscriptAnchor,
@@ -225,7 +221,6 @@ import {
 	WorkspaceSetup,
 	WorkspaceWaiting,
 } from "./session-viewer/busy-indicators";
-import { StreamingMessage } from "./session-viewer/streaming-message";
 import { AskCard } from "./AskCard";
 import { PrPanel } from "./PrPanel";
 import { PrStatusBar } from "./PrStatusBar";
@@ -322,11 +317,7 @@ import {
 	composerQueueSendingStatus,
 	composerQueueTitle,
 } from "../lib/composer-classes";
-import {
-	msgBodyStreaming,
-	msgRow,
-	msgStreamingRow,
-} from "../lib/msg-classes";
+import { msgRow } from "../lib/msg-classes";
 import { Menu, MENU_ICON } from "../ui/menu";
 import { Modal } from "../ui/modal";
 import { Tooltip } from "../ui/tooltip";
@@ -1078,6 +1069,11 @@ export function SessionViewer({
 	// this is the FIRST render, before the session's detail has hydrated, and
 	// the list row carries the answer where it no longer carries the ids.
 	const [loading, setLoading] = useState(!cachedTranscript && !!session.ran);
+	// A cached transcript paints immediately while the watch handshake catches it
+	// up. Keep that background work visible without replacing readable history.
+	const [loadingMoreTranscript, setLoadingMoreTranscript] = useState(
+		Boolean(cachedTranscript),
+	);
 	// The initial transcript is the tail only when the file is large; these drive
 	// the "load earlier history" affordance at the top of the conversation.
 	const [historyTruncated, setHistoryTruncated] = useState(
@@ -1711,6 +1707,7 @@ export function SessionViewer({
 	// pin new turns near the top, and surface a "Jump to latest" affordance.
 	const {
 		containerRef: messagesRef,
+		setContainerRef: setMessagesRef,
 		spacerRef,
 		followingLive,
 		following,
@@ -2417,6 +2414,7 @@ export function SessionViewer({
 					return;
 				}
 			}
+			if (up) leaveLatest();
 			el.scrollBy({
 				top: up ? -delta : delta,
 				behavior: "smooth",
@@ -2424,7 +2422,7 @@ export function SessionViewer({
 		}
 		window.addEventListener("keydown", onKeyDown);
 		return () => window.removeEventListener("keydown", onKeyDown);
-	}, [focused, messagesRef, scrollToLatest]);
+	}, [focused, messagesRef, scrollToLatest, leaveLatest]);
 
 	// A "new tab" while this session is open is a fresh session *in this session*:
 	// clear the composer and jump to the live edge. We skip the first run (and
@@ -2612,6 +2610,9 @@ export function SessionViewer({
 					loadingHistoryRef.current = false;
 					setLoadingHistory(false);
 					setLoading(false);
+					// Indexed mode still owes the complete outline after this bounded
+					// tail. Keep the quiet footer spinner until that frame arrives.
+					if (!v2) setLoadingMoreTranscript(false);
 					// A whole-history walk ends here when the server answers with the
 					// whole transcript — the legacy path's only way to serve a backlog,
 					// and the seq path's fallback when a store read fails. A TRUNCATED
@@ -2675,6 +2676,7 @@ export function SessionViewer({
 					setTranscriptIndexExpected(true);
 					transcriptIndexEpochRef.current = msg.epoch;
 					setTranscriptIndexState({ sessionId: session.id, entries: msg.entries });
+					setLoadingMoreTranscript(false);
 					setHistoryTruncated(false);
 					backgroundHistoryRef.current = false;
 					historyRevealRef.current = null;
@@ -2945,6 +2947,10 @@ export function SessionViewer({
 					}
 					break;
 				case "session_status":
+					// This is the final frame in a legacy watch handshake. Indexed mode
+					// still owes its complete outline after this frame.
+					if (transcriptSeqRef.current?.sessionId !== session.id)
+						setLoadingMoreTranscript(false);
 					setIsRunningLive(msg.isRunning);
 					if (!msg.isRunning) {
 						// Every isRunning:false broadcast follows its run's stream_done,
@@ -3314,9 +3320,8 @@ export function SessionViewer({
 					resumeWatchRef.current = null;
 					scrollToLatest("auto");
 				}
-				relayout();
 			}),
-		[liveTurnStore, relayout, scrollToLatest],
+		[liveTurnStore, scrollToLatest],
 	);
 	useEffect(() => {
 		const el = messagesRef.current;
@@ -4278,10 +4283,10 @@ export function SessionViewer({
 			pendingBubbles.length === 0
 				? EMPTY_TRANSCRIPT_ENTRIES
 				: pendingBubbles.map((pending) => ({
-					id: pending.id,
-					type: "user",
-					content: pending.content,
-					timestamp: new Date(pending.sentAt).toISOString(),
+				id: pending.id,
+				type: "user",
+				content: pending.content,
+				timestamp: new Date(pending.sentAt).toISOString(),
 					...(pending.images?.length ? { images: pending.images } : {}),
 				})),
 		[pendingBubbles],
@@ -4792,6 +4797,16 @@ export function SessionViewer({
 	useLayoutEffect(() => {
 		const el = headerRef.current;
 		if (!el) return;
+		// Once by hand, before the first paint: the observer's own opening callback
+		// lands after it, and this width decides whether the summary card has room
+		// to stand open. A frame late is a frame of a card lying across a narrow
+		// transcript. Content box, to match what the observer reports below.
+		const box = getComputedStyle(el);
+		setHeaderW(
+			el.clientWidth -
+				parseFloat(box.paddingLeft) -
+				parseFloat(box.paddingRight),
+		);
 		const ro = new ResizeObserver((entries) => {
 			for (const e of entries) setHeaderW(e.contentRect.width);
 		});
@@ -4817,17 +4832,22 @@ export function SessionViewer({
 		mq.addEventListener("change", onChange);
 		return () => mq.removeEventListener("change", onChange);
 	}, []);
-	// The compact card and the full panel are two views of the same summary.
-	// Show only the one the person chose, never both at once.
+	// Whether the pane can hold the card beside the reading column instead of
+	// over it. Unmeasured counts as room: the width lands in a layout effect
+	// before the first paint, and assuming the common case keeps a pinned card
+	// from blinking on wide panes. Below the threshold the card hides itself and
+	// the header takes back the strip it had stood down for.
+	const summaryHasRoom = headerW === 0 || headerW >= WS_SUMMARY_ROOM_W;
 	const summaryVisible =
-		summaryOpen && !activePanelOpen && !isPhone && hasRepoWork;
+		summaryOpen &&
+		summaryHasRoom &&
+		!activePanelOpen &&
+		!isPhone &&
+		hasRepoWork;
 	// Keep a visible left step whenever the card is up. This composes the card,
 	// transcript and composer as two sides of one pane instead of letting the
 	// reading column drift back to centre as the window grows.
-	const summaryStep =
-		summaryVisible && headerW >= WS_SUMMARY_ROOM_W
-			? workspaceSummaryShift(headerW)
-			: 0;
+	const summaryStep = summaryVisible ? workspaceSummaryShift(headerW) : 0;
 	const summaryStepStyle =
 		summaryStep > 0
 			? ({ "--ws-summary-step": `-${summaryStep}px` } as React.CSSProperties)
@@ -5073,6 +5093,28 @@ export function SessionViewer({
 	// The pile is about the people you can't see, so your own sockets come out
 	// first (lib/presence.ts documents why, and is tested).
 	const others = otherViewers(viewers, me);
+
+	// Media queued for the current turn has not reached the workspace overview
+	// yet, so carry it into the phone summary directly.
+	const liveOverviewMedia = useMemo<WorkspaceMediaItem[]>(() => {
+		const fromImages = (
+			items: Array<{ images?: string[]; sentAt?: number }>,
+		): WorkspaceMediaItem[] =>
+			items.flatMap((item) =>
+				(item.images || []).map((src, i) => ({
+					kind: "image" as const,
+					src,
+					sessionId: session.id,
+					sessionTitle: session.title,
+					at: new Date((item.sentAt || Date.now()) + i).toISOString(),
+				})),
+			);
+		return [
+			...fromImages(pending),
+			...fromImages(queued),
+			...fromImages(visibleSteered),
+		];
+	}, [pending, queued, visibleSteered, session.id, session.title]);
 
 	async function handleDelete(cleanWorktree: boolean) {
 		setDeleteLabel(
@@ -6244,6 +6286,9 @@ export function SessionViewer({
 							onOpenChange={setSummaryOpen}
 							tabStripVisible={tabStripVisible}
 							reviewMode={showReview}
+							// Too narrow for both, and the card gets out of the way
+							// until someone asks for it from the same button.
+							hasRoom={summaryHasRoom}
 						/>
 					)}
 					{/* Phones have no workspace panel and no status strip, so the PR
@@ -6420,66 +6465,67 @@ export function SessionViewer({
 											</div>
 										</div>
 										<div className={INFO_CONTENT}>
-											<div className={INFO_SUMMARY_CARD}>
-												{session.sandbox && (
-													<div className="flex min-h-11 items-center rounded-2xl bg-panel px-5 py-2">
-														<SandboxBadge
-															sessionId={session.id}
-															sandbox={session.sandbox}
-														/>
-													</div>
-												)}
-												<WorkspaceSummaryBody
-													embedded
-													session={session}
-													onOpenPanelTab={(tab) => {
-														if (tab === "changes") {
-															setPanelPage("changes");
-															return;
-														}
-														setInfoPageOpen(false);
-														focusPrInReview();
-													}}
-													onOpenPr={() => {
-														setInfoPageOpen(false);
-														focusPrInReview();
-													}}
-													onOpenStackPr={(repo, branch) => {
-														setInfoPageOpen(false);
-														onOpenPr?.(repo, branch);
-													}}
-													onOpenChecks={() => {
-														setInfoPageOpen(false);
-														focusPrInReview(undefined, "checks");
-													}}
-													onOpenAssets={() => {
-														setInfoPageOpen(false);
-														onOpenAssets?.();
-													}}
-													onOpenSession={onOpenSession}
-													onArchive={handleArchive}
-													reviewRequest={effectiveReview?.req ?? null}
-													prReviewRequested={effectiveReview?.prReviewRequested}
-													running={isRunningLive}
-													send={connected ? send : undefined}
-													refreshTick={gitRefreshTick}
-													close={() => setInfoPageOpen(false)}
-												/>
-											</div>
-											{(workflowRuns.length > 0 || subagents.length > 0) && (
-												<div className={INFO_SECTION}>
-													<WorkflowPanel
+										<div className={INFO_SUMMARY_CARD}>
+											{session.sandbox && (
+												<div className="flex min-h-11 items-center rounded-2xl bg-panel px-5 py-2">
+													<SandboxBadge
 														sessionId={session.id}
-														runs={workflowRuns}
-														onCancel={cancelWorkflowRun}
-														subagents={subagents}
-														onOpenSubagent={(agentId, label) => {
-															setInfoPageOpen(false);
-															openSubagent(agentId, label);
-														}}
+														sandbox={session.sandbox}
 													/>
 												</div>
 											)}
+											<WorkspaceSummaryBody
+												embedded
+												session={session}
+												onOpenPanelTab={(tab) => {
+													if (tab === "changes") {
+														setPanelPage("changes");
+														return;
+													}
+													setInfoPageOpen(false);
+													focusPrInReview();
+												}}
+												onOpenPr={() => {
+													setInfoPageOpen(false);
+													focusPrInReview();
+												}}
+												onOpenStackPr={(repo, branch) => {
+													setInfoPageOpen(false);
+													onOpenPr?.(repo, branch);
+												}}
+												onOpenChecks={() => {
+													setInfoPageOpen(false);
+													focusPrInReview(undefined, "checks");
+												}}
+												onOpenAssets={() => {
+													setInfoPageOpen(false);
+													onOpenAssets?.();
+												}}
+												onOpenSession={onOpenSession}
+												onArchive={handleArchive}
+												reviewRequest={effectiveReview?.req ?? null}
+												prReviewRequested={effectiveReview?.prReviewRequested}
+												running={isRunningLive}
+												send={connected ? send : undefined}
+												refreshTick={gitRefreshTick}
+												liveMedia={liveOverviewMedia}
+												close={() => setInfoPageOpen(false)}
+											/>
+										</div>
+										{(workflowRuns.length > 0 || subagents.length > 0) && (
+											<div className={INFO_SECTION}>
+												<WorkflowPanel
+													sessionId={session.id}
+													runs={workflowRuns}
+													onCancel={cancelWorkflowRun}
+													subagents={subagents}
+													onOpenSubagent={(agentId, label) => {
+														setInfoPageOpen(false);
+														openSubagent(agentId, label);
+													}}
+												/>
+											</div>
+										)}
 											{sessionReports.length > 0 && (
 												<div className={INFO_SECTION}>
 													<SessionReportsPanel
@@ -6889,7 +6935,7 @@ export function SessionViewer({
 								// the card's side of the composition.
 								summaryStep > 0 && VIEWER_SUMMARY_STEP,
 							)}
-							ref={messagesRef}
+							ref={setMessagesRef}
 							data-lightbox-session-id={session.id}
 							onScroll={handleMessagesScroll}
 							onClick={handleMessagesClick}
@@ -7002,16 +7048,18 @@ export function SessionViewer({
 											<ToolPathRootsProvider value={toolPathRoots}>
 												<LiveSubagentsProvider value={liveSubagents}>
 													<OpenAssetProvider value={openAssetFromTranscript}>
-														<TranscriptBlocks
-															entries={entries}
-															optimisticEntries={optimisticTranscriptEntries}
-															transcriptIndex={transcriptIndex ?? undefined}
-															transcriptRangeRetryGeneration={
-																transcriptRangeRetryGeneration
-															}
-															onLoadTranscriptRanges={loadTranscriptRanges}
-															live={isBusy}
-															sessionId={session.id}
+												<SessionTranscript
+													entries={entries}
+													optimisticEntries={optimisticTranscriptEntries}
+													transcriptIndex={transcriptIndex ?? undefined}
+													transcriptRangeRetryGeneration={
+														transcriptRangeRetryGeneration
+													}
+													onLoadTranscriptRanges={loadTranscriptRanges}
+													live={isBusy}
+													sessionId={session.id}
+													liveTurnStore={liveTurnStore}
+													onLiveLayout={relayout}
 															reviewResult={reviewResult}
 															onEditMessage={editSentMessageInComposer}
 															// Same gate the composer sends under: a busy session
@@ -7042,15 +7090,20 @@ export function SessionViewer({
 												</LiveSubagentsProvider>
 											</ToolPathRootsProvider>
 										</React.Profiler>
-
-										<StreamingMessage
-											store={liveTurnStore}
-											sessionId={session.id}
-										/>
 									</OpenAssetPathsProvider>
 								</>
 							)}
 							</AnimatePresence>
+
+							{loadingMoreTranscript && (
+								<div
+									role="status"
+									aria-label="Loading more messages"
+									className="mx-auto flex max-w-[var(--session-col)] justify-center py-3 text-faint"
+								>
+									<Spinner />
+								</div>
+							)}
 
 							{isBusy && !settingUpWorkspace && (
 								<BusyInline
@@ -7555,6 +7608,7 @@ export function SessionViewer({
 											running={isRunningLive}
 											send={connected ? send : undefined}
 											refreshTick={gitRefreshTick}
+											liveMedia={liveOverviewMedia}
 											close={() => setActivePanelOpen(false)}
 										/>
 									</div>

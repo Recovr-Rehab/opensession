@@ -159,7 +159,7 @@ import {
 	IconWrench,
 } from "./components/icons";
 import { DeskOverlay } from "./components/DeskOverlay";
-import { useSessions } from "./hooks/useSessions";
+import { sidebarSessionsQuery, useSessions } from "./hooks/useSessions";
 import { useHydratedSession } from "./hooks/useHydratedSession";
 import { hasDraft } from "./lib/drafts";
 import { useWebSocket } from "./hooks/useWebSocket";
@@ -717,6 +717,16 @@ export function App(
 		}
 		return parsed;
 	});
+	const currentUser = useCurrentUser();
+	const sidebarFilter = useSidebarFilter();
+	const liveSessionsQuery = sidebarSessionsQuery({
+		user: currentUser,
+		person: sidebarFilter.person,
+		repo: sidebarFilter.repo,
+		autoCreated: sidebarFilter.autoCreated,
+		...(route.view === "session" ? { selectedSessionId: route.id } : {}),
+		...(route.view === "workspace" ? { selectedWorkspaceId: route.id } : {}),
+	});
 	const {
 		sessions,
 		loading,
@@ -728,7 +738,10 @@ export function App(
 		unstick,
 		patch,
 		remove,
-	} = useSessions({ loadArchived: route.view === "archived" });
+	} = useSessions({
+		loadArchived: route.view === "archived",
+		liveQuery: liveSessionsQuery,
+	});
 	const [launchComplete, setLaunchComplete] = useState(false);
 	// Seeded from the repos this browser saw last (lib/repo-cache): PR-mention
 	// chips need the registered set to resolve, so without it the first paint of
@@ -738,7 +751,6 @@ export function App(
 		useState(firstMileComplete);
 	const [forceFirstMile, setForceFirstMile] = useState(landedOnFirstMile);
 	const auth = useAuthStatus();
-	const currentUser = useCurrentUser();
 	const { connected, send, setTyping, addHandler } = useWebSocket();
 	const sessionsRef = useRef(sessions);
 	sessionsRef.current = sessions;
@@ -1147,7 +1159,7 @@ export function App(
 	// desktop, but as a bottom sheet over the root list on phones.
 	const settingsActive = isSettingsRoute(route);
 	const isPhone = useIsPhone();
-	const borrowedSidebar = useSidebarFilter().person !== "me";
+	const borrowedSidebar = sidebarFilter.person !== "me";
 
 	// A pushed detail page is showing (anything but the sidebar-root home view).
 	// On phones, Settings is a sheet floating over the root page rather than a
