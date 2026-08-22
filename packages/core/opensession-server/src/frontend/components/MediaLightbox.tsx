@@ -561,6 +561,10 @@ const DOUBLE_TAP_SCALE = 2.5;
  * the corner of the surface it sits on. */
 const DIAGRAM_PADDING = 16;
 
+/** How far a slow downward drag has to travel before letting go closes. A
+ * flick gets there sooner. */
+const DISMISS_DISTANCE = 120;
+
 /**
  * Pinch/pan/zoom surface for one image, or for one diagram — a mermaid chart
  * keeps its vector markup here rather than arriving as a picture, so the
@@ -616,6 +620,8 @@ function ZoomableMedia({
 	onTapMedia,
 	onZoomChange,
 	onSwipe,
+	onDismiss,
+	onDragProgress,
 	enterFrom = 0,
 	viewTransitionName,
 	commentMode = false,
@@ -633,6 +639,11 @@ function ZoomableMedia({
 	onZoomChange: (zoomed: boolean) => void;
 	/** Page to the previous (-1) / next (+1) item; absent when there is one. */
 	onSwipe?: (direction: -1 | 1) => void;
+	/** A touch drag downwards past the threshold closes. Absent on desktop,
+	 *  where dragging a picture is not how anything is dismissed. */
+	onDismiss?: () => void;
+	/** How far that drag has got, 0 to 1, so the scrim can lift with it. */
+	onDragProgress?: (progress: number) => void;
 	/** Direction the previous item left in, so this one enters from the far
 	 * side; 0 for the first item shown. */
 	enterFrom?: -1 | 0 | 1;
@@ -654,7 +665,9 @@ function ZoomableMedia({
 	/** Cached layoutOrigin(), see there. Null means "measure on next read". */
 	const layout = useRef<{ x: number; y: number; w: number; h: number } | null>(null);
 	const t = useRef({ s: 1, tx: 0, ty: 0 });
-	const swipeX = useRef(0);
+	/** The in-progress drag written to the wrapper: sideways for a page turn,
+	 * downwards for a dismissal. */
+	const drag = useRef({ x: 0, y: 0 });
 	const pointers = useRef(new Map<number, { x: number; y: number }>());
 	const gesture = useRef<{
 		moved: boolean;
@@ -667,6 +680,8 @@ function ZoomableMedia({
 		pinched: boolean;
 		/** null while the drag's intent is still undecided. */
 		swiping: boolean | null;
+		/** Decided at the same moment as `swiping`, and never both. */
+		dismissing: boolean;
 	} | null>(null);
 	const lastTap = useRef<{
 		at: number;
@@ -755,19 +770,27 @@ function ZoomableMedia({
 		}
 	}
 
-	/** The page-drag offset, written to the wrapper so it composes with the
-	 * img's own zoom transform instead of fighting it. */
-	function applySwipe(dx: number, animate = false) {
-		swipeX.current = dx;
+	/** The drag offset, written to the wrapper so it composes with the img's
+	 * own zoom transform instead of fighting it. A downward drag also shrinks
+	 * the picture, which is what makes it read as being put back rather than
+	 * slid aside. */
+	function applyDrag(dx: number, dy = 0, animate = false) {
+		drag.current = { x: dx, y: dy };
 		const wrap = wrapRef.current;
 		if (!wrap) return;
 		wrap.style.transition = animate
 			? "transform 0.24s cubic-bezier(0.32, 0.72, 0, 1), opacity 0.24s ease-out"
 			: "none";
-		wrap.style.transform = dx ? `translateX(${dx}px)` : "";
+		const pull = Math.max(0, dy);
+		const scale = 1 - Math.min(pull / 1600, 0.12);
+		wrap.style.transform =
+			dx || dy ? `translate(${dx}px, ${dy}px) scale(${scale})` : "";
 		// A touch of fade sells the hand-off; the picture stays legible enough
-		// to see what you are dragging towards.
-		wrap.style.opacity = dx ? String(1 - Math.min(Math.abs(dx) / 900, 0.3)) : "1";
+		// to see what you are dragging towards, or away from.
+		const fade =
+			Math.min(Math.abs(dx) / 900, 0.3) + Math.min(pull / 700, 0.45);
+		wrap.style.opacity = dx || dy ? String(1 - fade) : "1";
+		onDragProgress?.(Math.min(pull / DISMISS_DISTANCE, 1));
 	}
 
 	// The item is keyed by src, so a page turn mounts a fresh surface: slide it
@@ -780,8 +803,8 @@ function ZoomableMedia({
 		// The wrapper is translated for the length of this, so the img's rect is
 		// in motion and must not be cached from it.
 		layout.current = null;
-		applySwipe(enterFrom * Math.min(140, window.innerWidth * 0.25));
-		const frame = requestAnimationFrame(() => applySwipe(0, true));
+		applyDrag(enterFrom * Math.min(140, window.innerWidth * 0.25));
+		const frame = requestAnimationFrame(() => applyDrag(0, 0, true));
 		return () => cancelAnimationFrame(frame);
 	}, [enterFrom, src]);
 
@@ -1029,9 +1052,10 @@ function ZoomableMedia({
 				m0: { x: (pts[0].x + pts[1].x) / 2, y: (pts[0].y + pts[1].y) / 2 },
 				pinched: true,
 				swiping: false,
+				dismissing: false,
 			};
-			// A second finger means this was never a page turn.
-			if (swipeX.current) applySwipe(0, true);
+			// A second finger means this was never a page turn or a dismissal.
+			if (drag.current.x || drag.current.y) applyDrag(0, 0, true);
 		} else if (pts.length === 1) {
 			gesture.current = {
 				moved: false,
@@ -1043,6 +1067,7 @@ function ZoomableMedia({
 				m0: pts[0],
 				pinched: false,
 				swiping: null,
+				dismissing: false,
 			};
 		}
 	}
@@ -1107,15 +1132,20 @@ function ZoomableMedia({
 			if (t.current.s > 1 && !g.pinched) {
 				t.current = clamp({ s: g.t0.s, tx: g.t0.tx + dx, ty: g.t0.ty + dy });
 				apply();
-			} else if (onSwipe && !g.pinched && t.current.s === 1) {
+			} else if ((onSwipe || onDismiss) && !g.pinched && t.current.s === 1) {
 				// Decide once, at the threshold: a drag that starts out mostly
-				// sideways pages, anything else is left alone (a vertical flick
-				// on the backdrop, a hesitant press) so the intent can't flip
-				// mid-gesture.
+				// sideways pages to the neighbouring item, one that starts out
+				// vertical puts the picture back. Deciding once means the intent
+				// can't flip mid-gesture.
 				if (g.swiping === null && Math.hypot(dx, dy) > 8) {
-					g.swiping = Math.abs(dx) > Math.abs(dy) * 1.2;
+					const sideways = Math.abs(dx) > Math.abs(dy) * 1.2;
+					g.swiping = !!onSwipe && sideways;
+					g.dismissing =
+						!!onDismiss && !sideways && e.pointerType !== "mouse";
 				}
-				if (g.swiping) applySwipe(dx);
+				if (g.swiping) applyDrag(dx);
+				// Up is not a dismissal, so it only rubber-bands.
+				else if (g.dismissing) applyDrag(dx, dy > 0 ? dy : dy / 3);
 			}
 		}
 	}
@@ -1137,8 +1167,9 @@ function ZoomableMedia({
 		if (gesture.current) {
 			gesture.current.moved = true;
 			gesture.current.swiping = false;
+			gesture.current.dismissing = false;
 		}
-		if (swipeX.current) applySwipe(0, true);
+		if (drag.current.x || drag.current.y) applyDrag(0, 0, true);
 		onPointerEnd(e);
 	}
 
@@ -1186,7 +1217,24 @@ function ZoomableMedia({
 			) {
 				onSwipe?.(dx < 0 ? 1 : -1);
 			} else {
-				applySwipe(0, true);
+				applyDrag(0, 0, true);
+			}
+			return;
+		}
+		// A drag downwards resolves on the same terms as a page turn: past a
+		// fifth of the screen, or a flick of any size, closes — otherwise the
+		// picture springs back and nothing changed.
+		if (g.dismissing) {
+			const dy = p.y - g.p0.y;
+			const speed = dy / Math.max(1, performance.now() - g.downAt);
+			gesture.current = null;
+			if (
+				dy > Math.min(DISMISS_DISTANCE, window.innerHeight * 0.2) ||
+				(speed > 0.5 && dy > 32)
+			) {
+				onDismiss?.();
+			} else {
+				applyDrag(0, 0, true);
 			}
 			return;
 		}
@@ -1539,6 +1587,22 @@ function MediaLightbox({
 		onIndex(i);
 	};
 	const requestClose = () => onClose(!imageZoomed);
+	// The scrim lifts with a dismissal drag, so what is underneath is already
+	// showing through before the finger leaves the glass. Written straight to
+	// the element like the drag transform itself: a re-render per pointer move
+	// is what this whole surface is built to avoid. A rejected drag restores the
+	// scrim over the same quarter-second that returns the picture.
+	const dragScrim = (progress: number) => {
+		const el = dialogRef.current;
+		if (!el) return;
+		el.style.transition =
+			progress === 0 && !reduceMotion
+				? "background-color 0.24s ease-out"
+				: "none";
+		el.style.backgroundColor = progress
+			? `rgb(0 0 0 / ${(1 - progress * 0.55).toFixed(3)})`
+			: "";
+	};
 	const togglePhoneChrome = () => {
 		if (!isPhone || commenting) return;
 		setChromeVisible((visible) => !visible);
@@ -2003,6 +2067,14 @@ function MediaLightbox({
 									? (d) => (d === 1 ? next() : prev())
 									: undefined
 							}
+							// Drag down to close, the way every photo viewer on a
+							// phone does. The picture has already left its thumbnail
+							// behind by then, so it fades out from where the finger
+							// dropped it rather than flying back.
+							onDismiss={
+								isPhone && !commenting ? () => onClose(false) : undefined
+							}
+							onDragProgress={isPhone ? dragScrim : undefined}
 							enterFrom={direction}
 							viewTransitionName={heroTransitionName}
 							commentMode={commenting}
