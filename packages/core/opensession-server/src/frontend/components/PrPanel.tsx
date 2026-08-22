@@ -2019,10 +2019,10 @@ export function PrPanel({
       data-review-canvas="true"
       ref={setRoot}
     >
-      {/* The PR identity names the canvas, so it stays edge to edge above the
-          navigation and review content. */}
+      {/* The PR identity floats beside the workspace summary. Phone keeps the
+          edge-to-edge bar because there is no summary column to pair it with. */}
       <header
-        className={`flex h-10 shrink-0 items-center gap-2.5 px-6 shadow-[inset_0_-1px_0_var(--border)] phone:px-3 ${statusMark.bgClassName}`}
+        className={`flex h-10 shrink-0 items-center gap-2.5 px-6 phone:px-3 desktop:mx-3 desktop:mt-2.5 desktop:mb-3 desktop:rounded-xl ${statusMark.bgClassName}`}
       >
         {/* State, in the app's own PR language, filled rather than drawn: the
             tone washes the whole chip and the glyph and word share its ink.

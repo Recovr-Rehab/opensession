@@ -50,6 +50,18 @@ test("workspace Review keeps the implementation summary beside the PR canvas", (
 	expect(source).toContain("walkthrough={presentationSession?.walkthrough}");
 });
 
+test("the PR top bar floats beside the workspace summary", () => {
+	const headerStart = prPanelSource.indexOf("<header");
+	const headerEnd = prPanelSource.indexOf(">", headerStart);
+	const header = prPanelSource.slice(headerStart, headerEnd);
+
+	expect(header).toContain("desktop:mx-3");
+	expect(header).toContain("desktop:mt-2.5");
+	expect(header).toContain("desktop:mb-3");
+	expect(header).toContain("desktop:rounded-xl");
+	expect(header).not.toContain("shadow-[inset_0_-1px_0_var(--border)]");
+});
+
 test("the PR top bar leaves merge to the summary and actions menu", () => {
 	const headerStart = prPanelSource.indexOf("<header");
 	const menuStart = prPanelSource.indexOf("<Menu.Root>", headerStart);
