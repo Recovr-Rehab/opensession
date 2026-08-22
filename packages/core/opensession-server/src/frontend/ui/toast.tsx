@@ -194,6 +194,7 @@ function ToastViewport() {
 function ToastCard({ toast: item }: { toast: BaseToast.Root.ToastObject<ToastData> }) {
 	const data = item.data;
 	if (!data) return null;
+	const iconName = toastIconName(data.message, data.variant);
 
 	return (
 		<BaseToast.Root
@@ -214,12 +215,13 @@ function ToastCard({ toast: item }: { toast: BaseToast.Root.ToastObject<ToastDat
 			<BaseToast.Content
 				className={[
 					"relative flex max-w-full items-center gap-2 overflow-hidden whitespace-normal rounded-[999px] bg-popup-glass",
-					"px-3 py-1.5 text-supporting font-medium leading-tight text-fg",
+					"py-1.5 text-supporting font-medium leading-tight text-fg",
 					"[backdrop-filter:var(--popup-blur)] [--smooth-ring-color:var(--popup-ring)] smooth-shadow-ring-sm",
-					data.action ? "pr-1.5" : "",
+					iconName ? "pl-2.5" : "pl-3",
+					data.action ? "pr-1.5" : "pr-3",
 				].join(" ")}
 			>
-				<ToastStatusIcon name={toastIconName(data.message, data.variant)} />
+				<ToastStatusIcon name={iconName} />
 				{/* Description renders a <p>; remove its browser margins so the
 				    visible height comes from the pill padding alone. */}
 				<BaseToast.Description
@@ -253,34 +255,34 @@ function ToastStatusIcon({ name }: { name: ToastIconName | null }) {
 	const className = "shrink-0 text-dim";
 	switch (name) {
 		case "archive":
-			return <IconArchive size={15} className={className} aria-hidden />;
+			return <IconArchive size={14} className={className} aria-hidden />;
 		case "branches":
-			return <IconBranches size={15} className={className} aria-hidden />;
+			return <IconBranches size={14} className={className} aria-hidden />;
 		case "check":
-			return <AnimatedCheck size={15} className={className} />;
+			return <AnimatedCheck size={14} className={className} />;
 		case "copy":
-			return <IconCopy size={15} className={className} aria-hidden />;
+			return <IconCopy size={14} className={className} aria-hidden />;
 		case "link":
-			return <IconLink size={15} className={className} aria-hidden />;
+			return <IconLink size={14} className={className} aria-hidden />;
 		case "play":
-			return <IconPlay size={15} className={className} aria-hidden />;
+			return <IconPlay size={14} className={className} aria-hidden />;
 		case "plug":
-			return <IconPlug size={15} className={className} aria-hidden />;
+			return <IconPlug size={14} className={className} aria-hidden />;
 		case "plus":
-			return <IconPlus size={15} className={className} aria-hidden />;
+			return <IconPlus size={14} className={className} aria-hidden />;
 		case "restore":
-			return <IconRestore size={15} className={className} aria-hidden />;
+			return <IconRestore size={14} className={className} aria-hidden />;
 		case "send":
-			return <IconArrowUp size={15} className={className} aria-hidden />;
+			return <IconArrowUp size={14} className={className} aria-hidden />;
 		case "server":
-			return <IconServer size={15} className={className} aria-hidden />;
+			return <IconServer size={14} className={className} aria-hidden />;
 		case "trash":
-			return <IconTrash size={15} className={className} aria-hidden />;
+			return <IconTrash size={14} className={className} aria-hidden />;
 		case "error":
 			return (
 				<span
 					aria-hidden
-					className="grid size-[15px] shrink-0 place-items-center rounded-full text-meta font-semibold text-dim"
+					className="grid size-3.5 shrink-0 place-items-center rounded-full text-meta font-semibold text-dim"
 				>
 					!
 				</span>
