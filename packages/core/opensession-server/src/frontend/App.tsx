@@ -68,7 +68,7 @@ import {
 	NewSession,
 	type NewSessionCreateDraft,
 } from "./components/NewSession";
-import { clearDraft, NEW_SESSION_DRAFT_KEY } from "./lib/drafts";
+import { clearDraft, saveDraft, NEW_SESSION_DRAFT_KEY } from "./lib/drafts";
 import { dropStagingAttachments } from "./lib/attachments";
 import { IconTile } from "./components/BrandTile";
 import { displayName } from "./brand-logos";
@@ -1994,6 +1994,14 @@ export function App(
 					});
 					unstick(draft.id);
 					remove(draft.id);
+					// The accepted send cleared the global composer immediately. Put
+					// its submitted payload back before reopening only when creation
+					// itself fails, so recovery never holds the normal path hostage.
+					saveDraft(NEW_SESSION_DRAFT_KEY, {
+						text: draft.prompt,
+						images: draft.images ?? [],
+						files: draft.files ?? [],
+					});
 					if (
 						routeRef.current.view === "session" &&
 						routeRef.current.id === draft.id

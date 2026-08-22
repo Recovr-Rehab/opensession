@@ -134,6 +134,7 @@ export interface NewSessionCreateDraft {
   workspaceId?: string;
   model?: string;
   images?: string[];
+  files?: FileAttachment[];
   /** Open the optimistic session as soon as the create message is sent. */
   openImmediately?: boolean;
   /** Start the session without following it. */
@@ -628,7 +629,8 @@ export function NewSession({ onBack, inline, focusSeq, send, addHandler, connect
   const [newBranch, setNewBranch] = useState(prefill.branch);
   // An explicit prefill (Home hand-off, deep link) wins; otherwise restore the
   // stored draft so closing the palette / navigating away doesn't lose a
-  // half-written task. Cleared on session_created.
+  // half-written task. A default create clears it as soon as the send is
+  // accepted; App restores the submitted copy if creation fails.
   //
   // The draft itself belongs to NewSessionPrompt rather than to this component,
   // because typing must not re-render the palette around it. What stays here is
@@ -1237,6 +1239,7 @@ export function NewSession({ onBack, inline, focusSeq, send, addHandler, connect
       ...(workspaceId ? { workspaceId } : {}),
       ...(optimisticModel ? { model: optimisticModel } : {}),
       ...(images.length ? { images } : {}),
+      ...(files.length ? { files } : {}),
       // The default action opens against this deterministic id without waiting
       // for workspace or model setup. The other actions keep their own surface.
       ...(createAction === "open" ? { openImmediately: true } : {}),
@@ -1284,12 +1287,14 @@ export function NewSession({ onBack, inline, focusSeq, send, addHandler, connect
       send(createMessage);
       consumePendingDraftParks(prompt, workspaceId);
       if (createAction === "open") {
-        // App opens the optimistic session immediately, which unmounts this
-        // field before its success handler can cancel the debounced write.
-        // Park the exact text synchronously so an error can restore it, then
-        // App clears it once session_created confirms the create.
+        // The send was accepted. Consume the global composer now, before App
+        // opens the optimistic session, so reopening it during workspace setup
+        // starts on the next message rather than the one already queued.
+        // App owns the submitted copy and restores it if creation fails.
         promptHandle.current?.dropPendingDraftWrite();
-        saveDraft(DRAFT_KEY, { text: prompt });
+        dropStagingAttachments(DRAFT_KEY);
+        clearDraft(DRAFT_KEY);
+        promptHandle.current?.setText("");
       }
       onCreateStarted?.(optimisticCreate);
     } catch (error) {
