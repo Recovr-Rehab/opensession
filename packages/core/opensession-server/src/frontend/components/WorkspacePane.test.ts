@@ -115,8 +115,9 @@ test("wide Review moves page navigation into the summary and uses one toolbar ro
 	);
 	expect(reviewToolbarSource).toContain("desktop:mb-0");
 	expect(reviewToolbarSource).toContain("WS_SUMMARY_REVIEW_BAR_CLEARANCE");
+	expect(prPanelSource).toContain("WS_SUMMARY_REVIEW_CANVAS_CLEARANCE");
 	expect(prPanelSource).toContain(
-		"compactToolbar ? WS_SUMMARY_REVIEW_CANVAS_CLEARANCE",
+		"desktop:[--review-file-tree-top:52px]",
 	);
 	expect(prPanelSource).toContain(
 		'compactToolbar ? "overflow-y-visible desktop:[--review-file-header-top:52px]" : "overflow-y-auto"',
