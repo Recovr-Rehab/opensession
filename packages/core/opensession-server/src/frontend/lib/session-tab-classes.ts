@@ -206,8 +206,8 @@ export const TAB_TITLE =
 	"session-tab-title block min-w-0 max-w-[150px] overflow-hidden " +
 	"data-[overflow]:[mask-image:linear-gradient(to_right,#000_0,#000_calc(100%_-_10px),transparent_100%)] " +
 	"desktop:max-w-[166px] " +
-	"desktop:group-hover/tab:[mask-image:linear-gradient(to_right,#000_0,#000_calc(100%_-_28px),transparent_100%)] " +
-	"desktop:group-focus-within/tab:[mask-image:linear-gradient(to_right,#000_0,#000_calc(100%_-_28px),transparent_100%)]";
+	"desktop:group-hover/tab:[mask-image:linear-gradient(to_right,#000_0,#000_calc(100%_-_32px),transparent_100%)] " +
+	"desktop:group-focus-within/tab:[mask-image:linear-gradient(to_right,#000_0,#000_calc(100%_-_32px),transparent_100%)]";
 
 /** An icon-only view tab (Staging → a globe): drop the label's text metrics so
  *  the tab sizes to the glyph. */
