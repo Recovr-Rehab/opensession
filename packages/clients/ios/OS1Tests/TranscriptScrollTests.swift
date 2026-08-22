@@ -305,6 +305,7 @@ final class FoldStateTests: XCTestCase {
             id: id,
             anchorId: id,
             items: [],
+            hasNarration: false,
             isLive: live,
             duration: nil,
             families: [.run],
@@ -379,6 +380,7 @@ final class FoldStateTests: XCTestCase {
         narrated.items = [
             .message(TranscriptEntry(id: "note", type: "assistant", content: "Checking.")),
         ]
+        narrated.hasNarration = true
         narrated.failureCount = 1
         XCTAssertTrue(narrated.defaultExpanded(preference: TurnActivity(work: .folded)))
 

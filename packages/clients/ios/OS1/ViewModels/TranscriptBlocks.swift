@@ -292,12 +292,7 @@ struct WorkTurn: Identifiable, Equatable {
     var livePreview: String?
 
     var hasFailure: Bool { failureCount > 0 }
-    var hasNarration: Bool {
-        items.contains {
-            if case .message = $0 { return true }
-            return false
-        }
-    }
+    var hasNarration: Bool
 
     /// A fold this long is a wall on a phone. Media and failures still pull a
     /// short turn open — that's how you see a screenshot or a stack trace
@@ -725,6 +720,10 @@ enum TranscriptGrouping {
             id: firstId,
             anchorId: lastId,
             items: items,
+            hasNarration: items.contains {
+                if case .message = $0 { return true }
+                return false
+            },
             isLive: isLive,
             duration: isLive ? nil : duration(from: start, to: end),
             families: Array(families.prefix(6)),
