@@ -886,14 +886,24 @@ export function PrStatusBar({
 							</PrBarButton>
 						)}
 						{isArchived ? (
-							<PrBarButton
-								className={actionBtn}
-								tone="secondary"
-								icon={<IconArchive size={18} />}
-								disabled
-							>
-								Archived
-							</PrBarButton>
+							<Tooltip label="Unarchive session" side="bottom">
+								<PrBarButton
+									className={actionBtn}
+									tone="secondary"
+									icon={<IconArchive size={18} />}
+									aria-label="Unarchive session"
+									disabled={!!busy}
+									onClick={() =>
+										run("unarchive", async () => {
+											if (onArchive) onArchive();
+											else await archiveSessionApi(sessionId, false);
+											setIsArchived(false);
+										})
+									}
+								>
+									{busy === "unarchive" ? "Unarchiving…" : "Archived"}
+								</PrBarButton>
+							</Tooltip>
 						) : canArchive ? (
 							<PrBarButton
 								className={actionBtn}
