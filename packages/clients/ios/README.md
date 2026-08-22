@@ -275,12 +275,16 @@ Pure SwiftUI with SwiftStreamingMarkdown for CommonMark/GFM rendering, iOS 26+
   Store"), which CI fetches from App Store Connect at build time
   (`ci/fetch-provisioning-profile.mjs`) rather than carrying as a secret.
 - **Live Activities** — an optional, device-local switch under Settings →
-  Notifications shows one aggregate of the signed-in person's running sessions
-  on the Lock Screen and Dynamic Island. It renders at most three privacy-
-  sensitive titles plus the total count, opens an individual session through
-  `OpenSessionIntent`, and ends when the last run finishes. Foreground state is
-  reconciled from the existing sessions poll; background starts and updates use
-  ActivityKit push tokens registered with `/api/live-activities/*`.
+  Notifications shows one aggregate of the signed-in person's running and
+  unread sessions on the Lock Screen and Dynamic Island. It renders at most
+  three privacy-sensitive active titles plus the active and unread counts,
+  opens an individual session through `OpenSessionIntent`, and stays visible
+  after the last run finishes while work remains unread. Foreground state is
+  reconciled from the existing sessions poll and shared `/api/reads` marks;
+  background starts and updates use ActivityKit push tokens registered with
+  `/api/live-activities/*`. A separate device-local switch can put that same
+  unread session count on the iPhone Home Screen and Dock icon without enabling
+  alert banners or sounds.
 - **Connection care** — client-initiated pings every 20s (the server never
   pings; required against half-open iOS sockets), auto-reconnect with a banner,
   optimistic local echo of your prompts until the server's copy arrives.
@@ -402,7 +406,7 @@ Then run the `OS1` scheme on iOS 26+.
 OS1/
   OS1App.swift               App entry; forces Settings on first run
   NativePreferences.swift    Cross-device preference hydration/cache
-  NativeNotifications.swift  Local notifications for finished/blocked runs
+  NativeNotifications.swift  Local notifications and the iOS unread icon badge
   PlatformCompat.swift       iOS/macOS API bridging shims
   Models/
     Session.swift            Tolerant subset of the server's UnifiedSession

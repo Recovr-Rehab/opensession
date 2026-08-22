@@ -11,6 +11,7 @@ struct NotificationsSettingsView: View {
     @AppStorage("os1.notifications.needsInput") private var needsInputAlerts = true
     @AppStorage("os1.notifications.runComplete") private var runCompleteAlerts = true
     #if os(iOS)
+    @AppStorage("os1.notifications.unreadBadge") private var unreadBadge = false
     @AppStorage(LiveActivityCoordinator.preferenceKey) private var liveActivities = false
     #endif
 
@@ -18,6 +19,9 @@ struct NotificationsSettingsView: View {
         Form {
             Section {
                 Toggle("Push alerts on this device", isOn: $pushAlerts)
+                #if os(iOS)
+                Toggle("Badge unread sessions", isOn: $unreadBadge)
+                #endif
                 Picker("Completion sound", selection: $completionSound) {
                     Text("Default").tag("default")
                     Text("None").tag("none")
@@ -30,7 +34,7 @@ struct NotificationsSettingsView: View {
             } header: {
                 Text("Alerts")
             } footer: {
-                Text("These alert preferences apply only to this native \(AppBrand.productName) app and device.")
+                Text("These notification preferences apply only to this native \(AppBrand.productName) app and device.")
             }
 
             Section("Events") {
@@ -40,7 +44,7 @@ struct NotificationsSettingsView: View {
 
             #if os(iOS)
             Section {
-                Toggle("Show active sessions", isOn: $liveActivities)
+                Toggle("Show session activity", isOn: $liveActivities)
             } header: {
                 Text("Live Activities")
             } footer: {
@@ -50,14 +54,24 @@ struct NotificationsSettingsView: View {
         }
         .navigationTitle("Notifications")
         .onChange(of: pushAlerts) { _, enabled in
-            guard enabled else { return }
             Task {
-                if !(await NativeNotifications.requestAuthorization()) {
+                if enabled, !(await NativeNotifications.requestAuthorization()) {
                     pushAlerts = false
+                } else {
+                    NativeNotifications.refreshBadge()
                 }
             }
         }
         #if os(iOS)
+        .onChange(of: unreadBadge) { _, enabled in
+            Task {
+                if enabled, !(await NativeNotifications.requestBadgeAuthorization()) {
+                    unreadBadge = false
+                } else {
+                    NativeNotifications.refreshBadge()
+                }
+            }
+        }
         .onChange(of: liveActivities) { _, enabled in
             Task {
                 if enabled {
@@ -73,7 +87,7 @@ struct NotificationsSettingsView: View {
     #if os(iOS)
     private var liveActivityFooter: String {
         LiveActivityCoordinator.shared.areActivitiesAvailable
-            ? "Shows your running sessions on the Lock Screen and Dynamic Island. Session titles follow your Lock Screen privacy settings."
+            ? "Shows running and unread sessions on the Lock Screen and Dynamic Island. Session titles follow your Lock Screen privacy settings."
             : "Live Activities are disabled for \(AppBrand.appName) in iPhone Settings."
     }
     #endif

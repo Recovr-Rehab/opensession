@@ -10,6 +10,7 @@ import { requestUser, type RouteContext } from "./context";
 import { frontend } from "../frontend-build";
 import { getPins as getUserPins, setPins as setUserPins } from "../pins";
 import { getReads as getUserReads, setReads as setUserReads } from "../reads";
+import { scheduleLiveActivitySync } from "../live-activities";
 import { getDrafts, MAX_DRAFT_LENGTH, upsertDraft } from "../drafts";
 import { addSessionMemory, describeScope, forgetSessionMemory, listAllMemory, updateMemoryEntry } from "../session-memory";
 import { getLanes as getUserLanes, setLanes as setUserLanes } from "../lanes";
@@ -309,7 +310,9 @@ export async function handlePrefsRoutes(
 			);
 		}
 		const user = requestUser(ctx, body.user) || "Anonymous";
-		return Response.json({ reads: setUserReads(user, body.reads) });
+		const reads = setUserReads(user, body.reads);
+		scheduleLiveActivitySync();
+		return Response.json({ reads });
 	}
 
 	// ── Per-user unsent composer drafts ──
