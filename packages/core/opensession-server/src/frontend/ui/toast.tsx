@@ -270,8 +270,8 @@ function ToastCard({ toast: item }: { toast: BaseToast.Root.ToastObject<ToastDat
 		>
 			<BaseToast.Content
 				className={[
-					"relative flex max-w-full items-center gap-2 overflow-hidden whitespace-normal rounded-[999px] bg-tooltip",
-					"py-1.5 text-supporting font-medium leading-tight text-tooltip-fg smooth-shadow-md",
+					"relative flex max-w-full items-center gap-2 overflow-hidden whitespace-normal rounded-[999px] bg-popup",
+					"py-1.5 text-supporting font-medium leading-tight text-fg smooth-shadow-md",
 					iconName ? "pl-2.5" : "pl-3",
 					data.action ? "pr-1.5" : "pr-3",
 				].join(" ")}
@@ -294,7 +294,7 @@ function ToastCard({ toast: item }: { toast: BaseToast.Root.ToastObject<ToastDat
 							}}
 							// The pill stays tight, so the action carries the finger
 							// target on its own: 28px of box inside a 44px tap area.
-							className="focus-ring relative -my-1 ml-1 shrink-0 cursor-pointer rounded-md px-2 py-1 text-supporting font-semibold text-tooltip-fg transition-[background-color,transform] duration-150 hover:bg-tooltip-fg/10 active:scale-[0.96] phone:-my-1.5 phone:ml-0.5 phone:grid phone:min-h-7 phone:place-items-center phone:rounded-[999px] phone:px-2.5 phone:after:absolute phone:after:inset-x-0 phone:after:top-1/2 phone:after:h-11 phone:after:-translate-y-1/2 phone:after:content-['']"
+							className="focus-ring relative -my-1 ml-1 shrink-0 cursor-pointer rounded-md px-2 py-1 text-supporting font-semibold text-accent transition-[background-color,transform] duration-150 hover:bg-hover active:scale-[0.96] phone:-my-1.5 phone:ml-0.5 phone:grid phone:min-h-7 phone:place-items-center phone:rounded-[999px] phone:px-2.5 phone:after:absolute phone:after:inset-x-0 phone:after:top-1/2 phone:after:h-11 phone:after:-translate-y-1/2 phone:after:content-['']"
 						>
 							{data.action.label}
 						</BaseToast.Action>
@@ -307,7 +307,7 @@ function ToastCard({ toast: item }: { toast: BaseToast.Root.ToastObject<ToastDat
 }
 
 function ToastStatusIcon({ name }: { name: ToastIconName | null }) {
-	const className = "shrink-0 text-tooltip-fg/70";
+	const className = "shrink-0 text-dim";
 	switch (name) {
 		case "archive":
 			return <IconArchive size={14} className={className} aria-hidden />;
@@ -337,7 +337,7 @@ function ToastStatusIcon({ name }: { name: ToastIconName | null }) {
 			return (
 				<span
 					aria-hidden
-					className="grid size-3.5 shrink-0 place-items-center rounded-full text-meta font-semibold text-tooltip-fg/70"
+					className="grid size-3.5 shrink-0 place-items-center rounded-full text-meta font-semibold text-dim"
 				>
 					!
 				</span>
@@ -388,7 +388,7 @@ function ToastProgress({ duration }: { duration: number }) {
 		<span
 			ref={lineRef}
 			aria-hidden
-			className="pointer-events-none absolute inset-x-0 bottom-0 h-0.5 origin-left bg-tooltip-fg/30"
+			className="pointer-events-none absolute inset-x-0 bottom-0 h-0.5 origin-left bg-dim/35"
 		/>
 	);
 }

@@ -3025,9 +3025,7 @@ export function SessionViewer({
 					break;
 				case "cache_warning":
 					if (msg.sessionId !== session.id) break;
-					toast("Prompt cache missed; this turn reprocessed the full context.", {
-						duration: 6000,
-					});
+					toast("Prompt cache missed");
 					break;
 				case "notice":
 					setEntries((prev) => [
