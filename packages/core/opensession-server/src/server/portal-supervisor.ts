@@ -553,7 +553,7 @@ export async function startSandboxPortalService(input: {
 		urlFor: (port) => `https://${configuredServer().previewHost}:${sandboxHttpsPortFor(input.sandbox.id, port)}`,
 		launch: async ({ name, command, port, url }) => {
 			const logPath = `.opensession-portal-${name}.log`;
-			const launch = `HOME=/home/ubuntu PATH=${shellQuoteWord(SANDBOX_PORTAL_PATH)} PORT=${shellQuoteWord(String(port))} PORTAL_URL=${shellQuoteWord(url)} OPENSESSION_PORTAL=${shellQuoteWord(name)} setsid bash -lc ${shellQuoteWord(`exec ${command}`)} >${shellQuoteWord(logPath)} 2>&1 & echo $!`;
+			const launch = `HOME=/home/ubuntu PATH=${shellQuoteWord(SANDBOX_PORTAL_PATH)} PORT=${shellQuoteWord(String(port))} PORTAL_URL=${shellQuoteWord(url)} OPENSESSION_PORTAL=${shellQuoteWord(name)} setsid bash -c ${shellQuoteWord(`exec ${command}`)} >${shellQuoteWord(logPath)} 2>&1 & echo $!`;
 			const launched = await input.sandbox.exec(["bash", "-lc", launch], { env: input.env });
 			const pid = Number(launched.stdout.trim().split(/\s+/).at(-1));
 			if (launched.exitCode !== 0 || !Number.isInteger(pid) || pid < 2) throw new Error(launched.stderr.trim() || "Could not start the Portal process.");

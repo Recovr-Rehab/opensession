@@ -42,7 +42,7 @@ export function recipeCommand(recipe: PreviewPortalRecipe): string {
 		recipe.serviceKey ? `export ${recipe.serviceKey}=\"$PORT\"` : "",
 		recipe.serviceKey === "WEBAPP_PORT" ? 'export WEBAPP_PORT="$PORT" PREVIEW_URL="$PORTAL_URL"' : "",
 	].filter(Boolean).join("; ");
-	return `bash -lc ${shellQuoteWord(`${exports ? `${exports}; ` : ""}exec ${recipe.command}`)}`;
+	return `bash -c ${shellQuoteWord(`${exports ? `${exports}; ` : ""}exec ${recipe.command}`)}`;
 }
 
 function recipeStartOptions(recipe: PreviewPortalRecipe) {

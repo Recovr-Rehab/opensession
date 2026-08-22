@@ -9,7 +9,7 @@ describe("declared Portal commands", () => {
 			command: "./.agents/start.sh",
 			serviceKey: "WEBAPP_PORT",
 		});
-		expect(command).toStartWith("bash -lc ");
+		expect(command).toStartWith("bash -c ");
 		expect(command).toContain('export WEBAPP_PORT="$PORT"');
 		expect(command).toContain("exec ./.agents/start.sh");
 		expect(command).not.toStartWith("exec export");
