@@ -1306,6 +1306,12 @@ struct SessionView: View {
             },
             failureContinuation: continuation
         )
+        .environment(
+            \.imageRegionCommentAction,
+            ImageRegionCommentAction { text, image in
+                viewModel.sendImageRegionComment(text, image: image)
+            }
+        )
         .id(block.id)
         .transcriptTail(block.id == tailId)
     }
