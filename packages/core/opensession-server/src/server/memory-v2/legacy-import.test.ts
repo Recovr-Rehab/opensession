@@ -53,7 +53,7 @@ describe("legacy JSON migration", () => {
     }
   });
 
-	test("shares an existing exact record instead of duplicating it", async () => {
+  test("shares an existing exact record instead of duplicating it", async () => {
     const dir = mkdtempSync(join(tmpdir(), "memory-v2-import-dedup-"));
     dirs.push(dir);
     const legacyDir = join(dir, "legacy");
@@ -69,6 +69,37 @@ describe("legacy JSON migration", () => {
       expect(store.list().items).toHaveLength(1);
       expect(store.list().items[0].id).toBe(existing.id);
       expect((await importLegacyMemoryDirectory(store, legacyDir)).alreadyImported).toBe(1);
+    } finally {
+      store.close();
+    }
+  });
+
+  test("does not archive a native record when its deduplicated legacy alias is removed", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "memory-v2-import-native-dedup-"));
+    dirs.push(dir);
+    const legacyDir = join(dir, "legacy");
+    const store = new MemoryStore(join(dir, "memory.db"));
+    try {
+      const native = store.create({
+        scopeKey: "workspace",
+        summary: "A fact already reviewed in Settings.",
+        details: "A fact already reviewed in Settings.",
+        kind: "reference",
+        tier: "retrievable",
+        source: { type: "settings" },
+      });
+      await Bun.write(join(legacyDir, "workspace.json"), JSON.stringify({ entries: [{
+        id: "native-alias",
+        text: "A fact already reviewed in Settings.",
+        by: "Fable",
+        at: "2026-08-20T00:00:00Z",
+      }] }));
+      await importLegacyMemoryDirectory(store, legacyDir);
+      expect(store.get("native-alias")?.id).toBe(native.id);
+      await Bun.write(join(legacyDir, "workspace.json"), JSON.stringify({ entries: [] }));
+      await importLegacyMemoryDirectory(store, legacyDir);
+      expect(store.get(native.id)?.state).toBe("active");
+      expect(store.legacyRaw("native-alias")).toContain("reviewed in Settings");
     } finally {
       store.close();
     }

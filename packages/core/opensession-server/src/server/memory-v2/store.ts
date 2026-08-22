@@ -120,6 +120,7 @@ export class MemoryStore {
         imported_at TEXT NOT NULL,
         raw_json TEXT,
         source_present INTEGER NOT NULL DEFAULT 1,
+        record_owned INTEGER NOT NULL DEFAULT 0,
         PRIMARY KEY(source_key, legacy_id),
         FOREIGN KEY(memory_id) REFERENCES memory_records(id) ON DELETE CASCADE
       );
@@ -134,6 +135,13 @@ export class MemoryStore {
     } catch {}
     try {
       this.db.exec("ALTER TABLE memory_legacy_imports ADD COLUMN source_present INTEGER NOT NULL DEFAULT 1;");
+    } catch {}
+    try {
+      this.db.exec("ALTER TABLE memory_legacy_imports ADD COLUMN record_owned INTEGER NOT NULL DEFAULT 0;");
+      this.db.exec(
+        `UPDATE memory_legacy_imports SET record_owned = 1 WHERE memory_id IN
+         (SELECT id FROM memory_records WHERE tags_json LIKE '%"legacy-import"%')`,
+      );
     } catch {}
   }
 
@@ -409,10 +417,38 @@ export class MemoryStore {
     ).get(sourceKey, legacyId) as RecordRow | null;
     if (previous) {
       const currentRaw = this.db.query(
-        "SELECT raw_json, source_present FROM memory_legacy_imports WHERE source_key = ? AND legacy_id = ?",
-      ).get(sourceKey, legacyId) as { raw_json: string | null; source_present: number } | null;
+        `SELECT raw_json, source_present, record_owned FROM memory_legacy_imports
+         WHERE source_key = ? AND legacy_id = ?`,
+      ).get(sourceKey, legacyId) as {
+        raw_json: string | null;
+        source_present: number;
+        record_owned: number;
+      } | null;
       if ((!rawJson || currentRaw?.raw_json === rawJson) && currentRaw?.source_present === 1) {
         return { record: fromRow(previous), imported: false };
+      }
+      if (currentRaw?.record_owned === 0) {
+        if (!rawJson || currentRaw.raw_json === rawJson) {
+          this.db.run(
+            `UPDATE memory_legacy_imports SET source_present = 1
+             WHERE source_key = ? AND legacy_id = ?`,
+            [sourceKey, legacyId],
+          );
+          return { record: fromRow(previous), imported: false };
+        }
+        const prepared = prepareCreate(input, now);
+        const tx = this.db.transaction(() => {
+          const duplicate = this.findDuplicate(prepared.scopeKey, prepared.fingerprint);
+          const target = duplicate ?? this.insertPreparedUnsafe({ ...prepared, state, supersededBy });
+          const recordOwned = duplicate ? Number(duplicate.tags.includes("legacy-import")) : 1;
+          this.db.run(
+            `UPDATE memory_legacy_imports SET memory_id = ?, raw_json = ?, source_present = 1,
+             record_owned = ? WHERE source_key = ? AND legacy_id = ?`,
+            [target.id, rawJson, recordOwned, sourceKey, legacyId],
+          );
+          return target;
+        });
+        return { record: tx.immediate(), imported: false };
       }
       const prepared = prepareCreate(input, now);
       const tx = this.db.transaction(() => {
@@ -447,16 +483,20 @@ export class MemoryStore {
       if (mapped) return { record: this.require(mapped.memory_id), imported: false };
 
       let record: MemoryRecord;
+      let recordOwned: number;
       const duplicate = this.findDuplicate(prepared.scopeKey, prepared.fingerprint);
       if (duplicate) {
         record = duplicate;
+        recordOwned = 0;
       } else {
         record = this.insertPreparedUnsafe({ ...prepared, state, supersededBy });
+        recordOwned = 1;
       }
       this.db.run(
         `INSERT INTO memory_legacy_imports
-         (source_key, legacy_id, memory_id, imported_at, raw_json) VALUES (?, ?, ?, ?, ?)`,
-        [sourceKey, legacyId, record.id, now.toISOString(), rawJson ?? null],
+         (source_key, legacy_id, memory_id, imported_at, raw_json, record_owned)
+         VALUES (?, ?, ?, ?, ?, ?)`,
+        [sourceKey, legacyId, record.id, now.toISOString(), rawJson ?? null, recordOwned],
       );
       return { record, imported: true };
     });
@@ -487,7 +527,10 @@ export class MemoryStore {
         const stillPresent = this.db.query(
           "SELECT 1 FROM memory_legacy_imports WHERE memory_id = ? AND source_present = 1 LIMIT 1",
         ).get(mapping.memory_id);
-        if (!stillPresent) {
+        const importOwned = this.db.query(
+          "SELECT 1 FROM memory_legacy_imports WHERE memory_id = ? AND record_owned = 1 LIMIT 1",
+        ).get(mapping.memory_id);
+        if (!stillPresent && importOwned) {
           this.db.run(
             "UPDATE memory_records SET state = 'archived', updated_at = ? WHERE id = ?",
             [now.toISOString(), mapping.memory_id],
