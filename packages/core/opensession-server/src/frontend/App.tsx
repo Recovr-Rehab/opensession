@@ -16,7 +16,13 @@ import {
 	storeSidebarCollapsed,
 } from "./lib/sidebar-collapse";
 import { openWorkspaceSummary } from "./lib/workspace-summary-open";
-import React, { useCallback, useEffect, useRef, useState } from "react";
+import React, {
+	useCallback,
+	useEffect,
+	useLayoutEffect,
+	useRef,
+	useState,
+} from "react";
 import { flushSync } from "react-dom";
 import { createRoot } from "react-dom/client";
 import { MotionConfig } from "motion/react";
@@ -242,7 +248,12 @@ import {
 	setFilter,
 	useSidebarFilter,
 } from "./lib/sidebar-filter";
-import { applyTabOrder, saveTabOrder, onTabOrderChanged } from "./lib/tab-order";
+import {
+	appendNewTabs,
+	applyTabOrder,
+	saveTabOrder,
+	onTabOrderChanged,
+} from "./lib/tab-order";
 import { workspaceArchivedSessions } from "./lib/workspace-archive";
 import { useWorkspaceArchive } from "./hooks/useWorkspaceArchive";
 import {
@@ -2652,9 +2663,8 @@ export function App(
 					},
 				]
 			: [];
-	// Review leftmost, then Conversation, Preview environment, Preview, Portal,
-	// Assets, Terminal, and the sub-agent drill-in last (it comes and goes with
-	// the session).
+	// This list is only the fallback for tabs with no saved position. Once a tab
+	// opens, the mixed session-and-pane order below keeps it at the right edge.
 	// The workspace home joins these once the strip would otherwise be empty —
 	// see `homeViewTabs`, which needs the session tabs to know that.
 	const paneViewTabs: ViewTab[] = [
@@ -3285,6 +3295,18 @@ export function App(
 	const stripTabIds = tabOrderKey
 		? applyTabOrder(tabOrderKey, naturalStripTabIds)
 		: naturalStripTabIds;
+	const previousStripRef = useRef<{ key: string; ids: string[] } | null>(null);
+	useLayoutEffect(() => {
+		const previous = previousStripRef.current;
+		if (!tabOrderKey || previous?.key !== tabOrderKey) {
+			previousStripRef.current = { key: tabOrderKey, ids: stripTabIds };
+			return;
+		}
+		const appended = appendNewTabs(previous.ids, stripTabIds);
+		previousStripRef.current = { key: tabOrderKey, ids: appended };
+		if (appended.some((id, index) => id !== stripTabIds[index]))
+			saveTabOrder(tabOrderKey, appended);
+	}, [tabOrderKey, stripTabIds]);
 	// Teammates per tab, your own devices removed and one entry per person, so
 	// the strip can say WHICH session someone is in — the sidebar's workspace
 	// faces only say they are in this workspace somewhere.
