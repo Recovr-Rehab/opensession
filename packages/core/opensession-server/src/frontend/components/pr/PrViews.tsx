@@ -16,7 +16,7 @@ function PrDescriptionCard({
       </div>
     );
   return (
-    <article className="min-w-0 rounded-xl border border-divider-soft bg-surface smooth-shadow-xs">
+    <article className="min-w-0 rounded-xl border border-line/60 bg-surface smooth-shadow-sm">
       <div className="flex items-center gap-2 border-b border-divider px-4 py-3">
         <span className="flex size-7 items-center justify-center rounded-full bg-active text-meta font-semibold text-fg">
           {author.slice(0, 1).toUpperCase()}
@@ -80,7 +80,7 @@ export function ConversationView({
               /* A grid item's automatic minimum size is its min-content
                  width, so a wide comment (a deploy table, a long path) would
                  otherwise stretch the track past the viewport. */
-              className="group min-w-0 rounded-xl border border-divider-soft bg-surface smooth-shadow-xs"
+              className="group min-w-0 rounded-xl border border-line/60 bg-surface smooth-shadow-sm"
               key={`${comment.url || comment.createdAt || index}`}
             >
               <div className="flex items-center gap-2 border-b border-divider px-4 py-3">
