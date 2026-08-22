@@ -458,6 +458,9 @@ async function handleLegacyMemoryRoutes(ctx: RouteContext): Promise<Response | u
 		const body = await req.json().catch(() => null);
 		const scope = describeScope(String(body?.scopeKey || ""));
 		if (!scope) return Response.json({ error: "invalid scopeKey" }, { status: 400 });
+		if (!canAccessMemoryScope(ctx, scope.key)) {
+			return Response.json({ error: "entry not found" }, { status: 404 });
+		}
 		const entry = await addSessionMemory(scope, String(body?.summary || body?.text || ""), "settings");
 		invalidateMemorySnapshot();
 		return Response.json({ entry: legacySummaryEntry(scope, entry) });
@@ -467,6 +470,9 @@ async function handleLegacyMemoryRoutes(ctx: RouteContext): Promise<Response | u
 		const scope = describeScope(String(body?.scopeKey || ""));
 		const ids = Array.isArray(body?.ids) ? body.ids.map(String) : [];
 		if (!scope || ids.length < 2) return Response.json({ error: "scopeKey and ids required" }, { status: 400 });
+		if (!canAccessMemoryScope(ctx, scope.key)) {
+			return Response.json({ error: "entry not found" }, { status: 404 });
+		}
 		const entry = await addSessionMemory(scope, String(body?.summary || ""), "settings", {
 			supersedes: ids,
 			scopes: [scope],

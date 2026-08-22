@@ -1,5 +1,5 @@
 import { audit } from "../audit";
-import { wrapContext } from "../prompt-context";
+import { neutralizeContextSentinels, wrapContext } from "../prompt-context";
 import { ensureMemoryV2Ready, memoryRolloutMode } from "./runtime";
 import {
   RETRIEVED_MEMORY_BUDGET_BYTES,
@@ -99,7 +99,10 @@ export async function retrieveMemoryForPrompt(
   const { store } = await ensureMemoryV2Ready();
   store.expireDue();
   const selected = retrieveMemory(
-    asRetrievalRecords(matchingRecords(store, scopes.scopeKeys, query)),
+    asRetrievalRecords(matchingRecords(store, scopes.scopeKeys, query)).map((record) => ({
+      ...record,
+      summary: neutralizeContextSentinels(record.summary),
+    })),
     query,
     {
       scopeKeys: scopes.scopeKeys,

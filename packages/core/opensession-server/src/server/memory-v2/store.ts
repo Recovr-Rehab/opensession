@@ -404,14 +404,35 @@ export class MemoryStore {
        WHERE i.source_key = ? AND i.legacy_id = ?`,
     ).get(sourceKey, legacyId) as RecordRow | null;
     if (previous) {
-      if (rawJson) {
+      const currentRaw = this.db.query(
+        "SELECT raw_json FROM memory_legacy_imports WHERE source_key = ? AND legacy_id = ?",
+      ).get(sourceKey, legacyId) as { raw_json: string | null } | null;
+      if (!rawJson || currentRaw?.raw_json === rawJson) {
+        return { record: fromRow(previous), imported: false };
+      }
+      const prepared = prepareCreate(input, now);
+      const tx = this.db.transaction(() => {
+        this.throwIfDuplicate(prepared.scopeKey, prepared.fingerprint, previous.id);
         this.db.run(
-          `UPDATE memory_legacy_imports SET raw_json = COALESCE(raw_json, ?)
+          `UPDATE memory_records SET scope_key = ?, summary = ?, details = ?, kind = ?, tier = ?,
+           state = ?, source_json = ?, created_at = ?, updated_at = ?, last_confirmed_at = ?,
+           expires_at = ?, supersedes_json = ?, superseded_by = ?, fingerprint = ?, tags_json = ?
+           WHERE id = ?`,
+          [prepared.scopeKey, prepared.summary, prepared.details ?? null, prepared.kind, prepared.tier,
+            state, JSON.stringify(prepared.source), prepared.createdAt, prepared.updatedAt,
+            prepared.lastConfirmedAt ?? null, prepared.expiresAt ?? null,
+            JSON.stringify(prepared.supersedes), supersededBy ?? null, prepared.fingerprint,
+            JSON.stringify(prepared.tags), previous.id],
+        );
+        this.syncFts(previous.id, prepared.summary, prepared.details, prepared.tags);
+        this.db.run(
+          `UPDATE memory_legacy_imports SET raw_json = ?
            WHERE source_key = ? AND legacy_id = ?`,
           [rawJson, sourceKey, legacyId],
         );
-      }
-      return { record: fromRow(previous), imported: false };
+      });
+      tx.immediate();
+      return { record: this.require(previous.id), imported: false };
     }
 
     const prepared = prepareCreate(input, now);

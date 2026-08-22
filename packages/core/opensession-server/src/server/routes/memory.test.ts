@@ -188,4 +188,31 @@ describe("memory v2 routes", () => {
 		));
 		expect(removed?.status).toBe(200);
 	});
+
+	test("applies private-scope authorization to legacy creates and merges", async () => {
+		const team = configuredIdentity().team;
+		const viewer = team[0];
+		const other = team.find((member) => member.slackId && member.github !== viewer?.github);
+		if (!viewer?.github || !other?.slackId) return;
+		process.env.OPENSESSION_MEMORY_MODE = "legacy";
+		for (const [path, body] of [
+			["/api/memory", {
+				scopeKey: `user-${other.slackId}`,
+				summary: "Unauthorized private write.",
+			}],
+			["/api/memory/merge", {
+				scopeKey: `user-${other.slackId}`,
+				ids: ["one", "two"],
+				summary: "Unauthorized private merge.",
+			}],
+		] as const) {
+			const ctx = context(path, {
+				method: "POST",
+				headers: { "content-type": "application/json" },
+				body: JSON.stringify(body),
+			});
+			ctx.authUser = { login: viewer.github, name: viewer.name };
+			expect((await handleMemoryRoutes(ctx))?.status).toBe(404);
+		}
+	});
 });

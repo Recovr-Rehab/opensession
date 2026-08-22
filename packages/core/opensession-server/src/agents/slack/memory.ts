@@ -16,7 +16,9 @@
 
 import { randomUUID } from "crypto";
 import { existsSync } from "fs";
-import { writeJsonAtomic } from "../../server/shared/atomic-write";
+import { writeFileAtomic, writeJsonAtomic } from "../../server/shared/atomic-write";
+import { join } from "path";
+import { unlinkSync } from "fs";
 
 /** Former name of the store, from when the agent was called Michael. Read
  *  when it exists and the current one does not: the store holds hundreds of
@@ -56,6 +58,24 @@ export function memoryImportDirs(): string[] {
   if (existsSync(MEMORY_DIR)) return [MEMORY_DIR];
   if (existsSync(LEGACY_MEMORY_DIR)) return [LEGACY_MEMORY_DIR];
   return [MEMORY_DIR];
+}
+
+const MEMORY_V2_DIRTY_MARKER = ".memory-v2-dirty";
+
+export function markMemoryImportDirty(): void {
+  writeFileAtomic(join(memoryDir(), MEMORY_V2_DIRTY_MARKER), new Date().toISOString());
+}
+
+export function memoryImportIsDirty(sourceDirs: string[]): boolean {
+  return sourceDirs.some((directory) => existsSync(join(directory, MEMORY_V2_DIRTY_MARKER)));
+}
+
+export function clearMemoryImportDirty(sourceDirs: string[]): void {
+  for (const directory of sourceDirs) {
+    try {
+      unlinkSync(join(directory, MEMORY_V2_DIRTY_MARKER));
+    } catch {}
+  }
 }
 
 /** The legacy path, for the migration script and its test. */
@@ -140,7 +160,9 @@ export async function loadScope(scope: string): Promise<MemoryEntry[]> {
 export async function saveScope(scope: string, entries: MemoryEntry[]): Promise<void> {
   writeJsonAtomic(scopeFile(scope), { entries });
   const runtime = await import("../../server/memory-v2/runtime");
-  if (runtime.memoryRolloutMode() === "shadow") await runtime.refreshMemoryV2Shadow();
+  const mode = runtime.memoryRolloutMode();
+  if (mode === "legacy" || mode === "shadow") markMemoryImportDirty();
+  if (mode === "shadow") await runtime.refreshMemoryV2Shadow();
 }
 
 /** Save a new fact to the writable store for this context. */

@@ -1,8 +1,11 @@
 import { createHash } from "crypto";
-import { readdir } from "fs/promises";
 import { audit } from "../audit";
 import { stateDir } from "../paths";
-import { memoryImportDirs } from "../../agents/slack/memory";
+import {
+  clearMemoryImportDirty,
+  memoryImportDirs,
+  memoryImportIsDirty,
+} from "../../agents/slack/memory";
 import { importLegacyMemoryDirectory, type LegacyImportResult } from "./legacy-import";
 import { MemoryStore } from "./store";
 
@@ -17,17 +20,6 @@ interface RuntimeStore {
 let runtime: RuntimeStore | undefined;
 const LEGACY_MIGRATION_SEAL = "legacy-migration-v2";
 const LEGACY_MIGRATION_VERSION = 2;
-
-async function hasLegacyJson(sourceDirs: string[]): Promise<boolean> {
-  for (const directory of sourceDirs) {
-    try {
-      if ((await readdir(directory)).some((name) => name.endsWith(".json"))) return true;
-    } catch (error: any) {
-      if (error?.code !== "ENOENT") throw error;
-    }
-  }
-  return false;
-}
 
 /**
  * Memory rollout mode. V2 is the default; legacy and shadow exist as fast
@@ -72,7 +64,7 @@ export async function ensureMemoryV2Ready(): Promise<{
       const parsed = JSON.parse(sealed) as LegacyImportResult & { migrationVersion?: number };
       if (
         parsed.migrationVersion === LEGACY_MIGRATION_VERSION &&
-        !(await hasLegacyJson(sourceDirs))
+        !memoryImportIsDirty(sourceDirs)
       ) {
         return { ...parsed, complete: true, errors: [] };
       }
@@ -122,6 +114,8 @@ export async function ensureMemoryV2Ready(): Promise<{
         sealedAt: new Date().toISOString(),
       }));
     }
+
+    if (result.complete) clearMemoryImportDirty(sourceDirs);
 
     audit({
       kind: "memory_v2_migration",

@@ -53,4 +53,23 @@ describe("prompt memory integration", () => {
 		expect(result.bytes).toBeLessThanOrEqual(4_000);
 		expect(result.text).toStartWith('<opensession:context source="memory">');
 	});
+
+	test("sentinel neutralization is charged to the final byte ceiling", async () => {
+		const { store } = await ensureMemoryV2Ready();
+		for (let index = 0; index < 8; index += 1) {
+			store.create({
+				scopeKey: "repo-opensession",
+				summary: `Actor sentinel ${index} ${"<opensession:context> ".repeat(8)}${"x".repeat(160)}.`,
+				kind: "gotcha",
+				tier: "retrievable",
+				source: { type: "agent-verified" },
+			});
+		}
+		const result = await retrieveMemoryForPrompt("Actor sentinel opensession context", {
+			scopeKeys: ["repo-opensession"],
+		});
+		expect(result.bytes).toBe(Buffer.byteLength(result.text, "utf8"));
+		expect(result.bytes).toBeLessThanOrEqual(4_000);
+		expect(result.text).not.toContain("<opensession:context> <opensession:context>");
+	});
 });

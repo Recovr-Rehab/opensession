@@ -120,4 +120,42 @@ describe("memory v2 runtime migration", () => {
 		expect(memoryStore().get("shadow-write")?.summary)
 			.toBe("A fact written during shadow comparison.");
 	});
+
+	test("reconciles edits and lifecycle changes made during legacy rollback", async () => {
+		await saveScope("workspace", [{
+			id: "rollback-edit",
+			text: "The original rollback fact.",
+			by: "Fable",
+			at: "2026-04-03T00:00:00Z",
+		}]);
+		const first = await ensureMemoryV2Ready();
+		expect(first.store.get("rollback-edit")?.state).toBe("active");
+		process.env.OPENSESSION_MEMORY_MODE = "legacy";
+		await saveScope("workspace", [{
+			id: "rollback-edit",
+			text: "The corrected rollback fact.",
+			by: "Fable",
+			at: "2026-04-04T00:00:00Z",
+			archivedAt: "2026-04-05T00:00:00Z",
+		}]);
+		process.env.OPENSESSION_MEMORY_MODE = "v2";
+		closeMemoryRuntime();
+		const restarted = await ensureMemoryV2Ready();
+		expect(restarted.store.get("rollback-edit")?.summary).toBe("The corrected rollback fact.");
+		expect(restarted.store.get("rollback-edit")?.state).toBe("archived");
+	});
+
+	test("does not overwrite later v2 edits from unchanged source JSON", async () => {
+		await saveScope("workspace", [{
+			id: "v2-edit",
+			text: "The source JSON fact.",
+			by: "Fable",
+			at: "2026-04-06T00:00:00Z",
+		}]);
+		const first = await ensureMemoryV2Ready();
+		first.store.update("v2-edit", { summary: "The reviewed v2 fact." });
+		closeMemoryRuntime();
+		const restarted = await ensureMemoryV2Ready();
+		expect(restarted.store.get("v2-edit")?.summary).toBe("The reviewed v2 fact.");
+	});
 });
