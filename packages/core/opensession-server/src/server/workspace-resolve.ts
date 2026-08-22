@@ -19,6 +19,7 @@ import {
   findWorkspaceByKey,
   getWorkspace,
   stampWorkspaceIdentity,
+  updateWorkspace,
   type Workspace,
 } from "./workspaces";
 import { getCachedSessions, updateSessionFile } from "./session-cache";
@@ -52,6 +53,37 @@ function sessionMatchesPr(
 function newestFirst(sessions: UnifiedSession[]): UnifiedSession[] {
   return [...sessions].sort(
     (a, b) => (Date.parse(b.createdAt) || 0) - (Date.parse(a.createdAt) || 0),
+  );
+}
+
+function prWorkspaceName(
+  number: number | undefined,
+  branch: string | undefined,
+  title: string | undefined,
+): string {
+  return number !== undefined
+    ? `#${number} ${(title || "").trim()}`.trim().slice(0, 120)
+    : `PR ${branch}`.slice(0, 120);
+}
+
+/** Upgrade only the exact placeholder minted when PR metadata was incomplete.
+ * A person may rename any other PR workspace, and later resolves must preserve it. */
+function repairPrWorkspaceName(
+  workspace: Workspace,
+  number: number | undefined,
+  branch: string | undefined,
+  title: string | undefined,
+): Workspace {
+  if (!title?.trim()) return workspace;
+  const placeholders = [
+    number !== undefined ? `#${number}` : null,
+    branch ? `PR ${branch}`.slice(0, 120) : null,
+  ];
+  if (!placeholders.includes(workspace.name)) return workspace;
+  return (
+    updateWorkspace(workspace.id, {
+      name: prWorkspaceName(number, branch, title),
+    }) || workspace
   );
 }
 
@@ -158,8 +190,10 @@ export async function resolvePrWorkspace(input: {
     // 1. Provenance key (workspaces minted from this PR before).
     const byKey = key ? findWorkspaceByKey(key) : null;
     if (byKey) {
-      adoptSiblingSessions(byKey.id, matches);
-      return { workspace: byKey, created: false, pr };
+      const stamped = stampWorkspaceIdentity(byKey.id, stamp) || byKey;
+      const named = repairPrWorkspaceName(stamped, number, branch, title);
+      adoptSiblingSessions(named.id, matches);
+      return { workspace: named, created: false, pr };
     }
 
     // 2. A session already carrying this PR that's filed under a workspace.
@@ -184,12 +218,8 @@ export async function resolvePrWorkspace(input: {
 
     // 4. Mint a session-less PR workspace (no worktreeDir — the first session
     // materializes it via the create_session fromPr path).
-    const name =
-      number !== undefined
-        ? `#${number} ${(title || "").trim()}`.trim().slice(0, 120)
-        : `PR ${branch}`.slice(0, 120);
     const workspace = createWorkspace({
-      name,
+      name: prWorkspaceName(number, branch, title),
       repo: repoId,
       createdBy: input.createdBy,
       ...(key ? { key } : {}),

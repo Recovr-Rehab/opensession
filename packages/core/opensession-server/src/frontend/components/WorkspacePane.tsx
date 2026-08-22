@@ -23,7 +23,7 @@ import { SlackChannelPane } from "./SlackChannelPane";
 import { MarkdownRepoProvider } from "./MarkdownBody";
 import { PrPanel, type PrReviewPage } from "./PrPanel";
 import type { PrFocus } from "../lib/pr-focus";
-import { RepoTile } from "./RepoTile";
+import { RepoTile, repoLabel } from "./RepoTile";
 import { WorkspaceInfo } from "./WorkspaceInfo";
 import { WorkspaceSummary } from "./WorkspaceSummary";
 import { useCurrentUser } from "./UserPicker";
@@ -562,7 +562,14 @@ export function WorkspacePane({
 	const header = !isPhone && (
 		<div ref={headerRef} className={VIEWER_HEADER}>
 			<div className={VIEWER_TITLE}>
-				{workspace.repo && <RepoTile name={workspace.repo} />}
+				{workspace.repo && (
+					<span className="flex min-w-0 shrink-0 items-center gap-[7px]">
+						<RepoTile name={workspace.repo} />
+						<span className="max-w-[180px] -translate-y-px truncate">
+							{repoLabel(workspace.repo)}
+						</span>
+					</span>
+				)}
 				<span className={VIEWER_BRANCH}>{workspace.name}</span>
 				{!tabStripVisible && onNewSession && (
 					<Tooltip label="New tab in this workspace">
