@@ -1027,6 +1027,17 @@ export interface RecentPrEntry extends Omit<OpenPrEntry, "reviewActive" | "osRev
 	state: "OPEN" | "MERGED" | "CLOSED";
 	additions: number;
 	deletions: number;
+	/** The session named by the trusted attribution footer, when there is one. */
+	sessionId?: string;
+}
+
+/** Only trusted authors may turn a PR-body link into an in-app session route. */
+function trustedPrSessionId(pr: Pick<PrInfo, "author" | "sessionRef">): string | undefined {
+	if (!pr.sessionRef) return undefined;
+	const author = pr.author.toLowerCase();
+	return githubBotLogins().includes(author) || githubLoginToPersonKey(author)
+		? pr.sessionRef
+		: undefined;
 }
 
 /** The recent repo-wide PR window, including PRs created outside Open Session. */
@@ -1064,6 +1075,7 @@ export function getRecentPrs(): RecentPrEntry[] {
 				checks: pr.checks,
 				mergeable: pr.mergeable,
 				reviewRequested: pr.reviewRequested,
+				sessionId: trustedPrSessionId(pr),
 			});
 		}
 	}
@@ -1094,8 +1106,9 @@ export async function getRecentPrsForPerson(person: string): Promise<RecentPrEnt
 		createdAt: string;
 		updatedAt: string;
 		assignees?: Array<{ login?: string }>;
+		body?: string;
 	};
-	const fields = "headRefName,url,state,number,title,isDraft,additions,deletions,author,createdAt,updatedAt,assignees";
+	const fields = "headRefName,url,state,number,title,isDraft,additions,deletions,author,createdAt,updatedAt,assignees,body";
 	const out = new Map(
 		getRecentPrs().filter((pr) => pr.person === key).map((pr) => [pr.url, pr]),
 	);
@@ -1115,6 +1128,7 @@ export async function getRecentPrsForPerson(person: string): Promise<RecentPrEnt
 		for (const pr of prs || []) {
 			const author = pr.author?.login || pr.author?.name || "";
 			const assignees = (pr.assignees || []).map((entry) => entry.login || "").filter(Boolean);
+			const sessionRef = sessionRefFromPrBody(pr.body);
 			out.set(pr.url, {
 				repo: repo.id,
 				branch: pr.headRefName,
@@ -1133,6 +1147,7 @@ export async function getRecentPrsForPerson(person: string): Promise<RecentPrEnt
 				checks: { total: 0, passed: 0, failed: 0, pending: 0 },
 				mergeable: "UNKNOWN",
 				reviewRequested: [],
+				sessionId: trustedPrSessionId({ author, sessionRef }),
 			});
 		}
 	}

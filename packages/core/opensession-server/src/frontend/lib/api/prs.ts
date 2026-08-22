@@ -42,6 +42,8 @@ export interface RecentPr extends OpenPr {
 	state: "OPEN" | "MERGED" | "CLOSED";
 	additions: number;
 	deletions: number;
+	/** The Open Session session that created this PR, when attributed. */
+	sessionId?: string;
 }
 
 /** Recent PRs across repos, including PRs merged outside Open Session. */
