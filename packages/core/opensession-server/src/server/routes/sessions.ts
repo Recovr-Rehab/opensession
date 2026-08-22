@@ -15,7 +15,10 @@ import {
 import { archiveOlderThan, setArchived, unpinArchivedSessions, } from "../archive";
 import { audit } from "../audit";
 import { cancelAgentWait } from "../agent-waits";
-import { pendingAskAwaitingAnswer } from "../asks";
+import {
+	pendingAskAwaitingAnswer,
+	pendingAskIdsAwaitingAnswer,
+} from "../asks";
 import { transcriptMatchSnippet } from "../jsonl-parser";
 import {
 	classifyEntries,
@@ -38,6 +41,7 @@ import {
 
 import {
 	clientVisibleQueuedCount,
+	clientVisibleQueuedCounts,
 	requeueSteerReceipts,
 	stoppedSessions,
 } from "../queue-state";
@@ -326,7 +330,22 @@ async function sessionsListResponse(
  * Shared by the list and by the single-session route, so a session hydrated on
  * open carries exactly what the list would have handed the client.
  */
-function enrichSession(s: UnifiedSession) {
+type SessionListRuntimeSignals = {
+	waitingForInput: Set<string>;
+	queuedCounts: Map<string, number>;
+};
+
+function sessionListRuntimeSignals(): SessionListRuntimeSignals {
+	return {
+		waitingForInput: pendingAskIdsAwaitingAnswer(),
+		queuedCounts: clientVisibleQueuedCounts(),
+	};
+}
+
+function enrichSession(
+	s: UnifiedSession,
+	signals?: SessionListRuntimeSignals,
+) {
 	const generatedTitle =
 		getGeneratedTitle(s.id) ??
 		s.aliasIds?.map((id) => getGeneratedTitle(id)).find(Boolean);
@@ -376,8 +395,12 @@ function enrichSession(s: UnifiedSession) {
 		...(s.workspaceId
 			? { workspaceName: workspaceName(s.workspaceId) ?? undefined }
 			: {}),
-		waitingForInput: !!pendingAskAwaitingAnswer(s.id),
-		queuedCount: clientVisibleQueuedCount(s.id),
+		waitingForInput: signals
+			? signals.waitingForInput.has(s.id)
+			: !!pendingAskAwaitingAnswer(s.id),
+		queuedCount: signals
+			? signals.queuedCounts.get(s.id) || 0
+			: clientVisibleQueuedCount(s.id),
 		// Present on the list AND on the detail response, so one rule reads the
 		// same either side of a hydrate. `undefined` rather than `false`: it is
 		// dropped by JSON.stringify, and a session object a client builds
@@ -676,6 +699,7 @@ function refreshSessionsResponse(
 	const current = sessionsResponseRefreshes.get(variant);
 	if (current) return current;
 	const refresh = (async () => {
+		const signals = sessionListRuntimeSignals();
 		const slice =
 			variant === "exclude"
 				? "exclude"
@@ -687,7 +711,7 @@ function refreshSessionsResponse(
 				? indexedSidebarSessions()
 				: indexedSessions(slice);
 		const sliced = (indexed ?? (await getCachedSessionsAsync(slice))).map(
-			enrichSession,
+			(session) => enrichSession(session, signals),
 		);
 		const listed =
 			variant === "exclude" && !indexed ? sidebarLiveSessions(sliced) : sliced;
@@ -864,7 +888,8 @@ export async function handleSessionsRoutes(
 				(await getCachedSessionsAsync("only")).filter((session) =>
 					inWorkspaceGroup(session, scope),
 				);
-			const rows = selected.map(enrichSession);
+			const signals = sessionListRuntimeSignals();
+			const rows = selected.map((session) => enrichSession(session, signals));
 			const text = JSON.stringify(
 				variant === "only-slim"
 					? rows.map(archivedIndexRow)
