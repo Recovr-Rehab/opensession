@@ -64,6 +64,7 @@ import { IconTile } from "./components/BrandTile";
 import { displayName } from "./brand-logos";
 import type { NewSessionPrefill } from "./lib/new-session-link";
 import { shouldOpenCreatedSession } from "./lib/new-session-navigation";
+import { primeSoftKeyboard } from "./lib/soft-keyboard";
 import {
 	SessionSearch,
 	type CommandPaletteAction,
@@ -1407,6 +1408,9 @@ export function App(
 	const paletteOpenRef = useRef(palette.open);
 	paletteOpenRef.current = palette.open;
 	const openPalette = React.useCallback((prompt?: string, mcpServers?: string[]) => {
+		// The prompt mounts a frame later, too late for iOS to raise the keyboard
+		// for it. Hold the keyboard open from inside the tap instead.
+		primeSoftKeyboard();
 		// This is the global new-session action. It must not inherit the workspace
 		// behind it: without workspaceId, NewSession creates a workspace with its
 		// first session. Its model combinations are safe to use as a picker source,

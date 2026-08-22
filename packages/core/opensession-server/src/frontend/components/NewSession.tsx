@@ -59,6 +59,7 @@ import type { WSClientMessage, WSServerMessage } from "../lib/types";
 import { newClientSessionId } from "../lib/session-id";
 import { VoiceInput } from "./VoiceInput";
 import { useIsPhone } from "../hooks/useIsPhone";
+import { handOffSoftKeyboard } from "../lib/soft-keyboard";
 import { PaletteSelect } from "./PaletteSelect";
 import { RepoTile } from "./RepoTile";
 import { ModelEffortSelect } from "./ModelEffortSelect";
@@ -845,6 +846,15 @@ export function NewSession({ onBack, inline, focusSeq, send, addHandler, connect
     if (!inline) return;
     promptRef.current?.focus();
   }, [inline, focusSeq]);
+
+  // On a phone the dialog's own initialFocus lands a frame after the tap that
+  // opened it, which is too late for iOS to raise the keyboard. The tap parked
+  // the keyboard on a stand-in field (lib/soft-keyboard); take it over here,
+  // as soon as the real prompt exists.
+  useEffect(() => {
+    if (inline) return;
+    handOffSoftKeyboard(() => promptRef.current);
+  }, [inline]);
 
   // (The prompt's auto-grow, its scroll-fade and the draft store it writes
   // through all live in NewSessionPrompt now, beside the text they read.)
