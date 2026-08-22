@@ -59,7 +59,15 @@ type ResolvedSandboxProvider = Extract<
 >["provider"];
 
 import { SESSION_EFFORTS, findSession, findSessionAsync, invalidateSessionsCache, recordRunOutcome, touchNativeSession, updateSessionFile } from "./session-cache";
-import { attachRepo, buildBranchNote, buildReposNote, memoryNoteFor, planCreateAttachRepos, workspaceOwningWorktree } from "./session-repos";
+import {
+	attachRepo,
+	buildBranchNote,
+	buildReposNote,
+	memoryNoteFor,
+	planCreateAttachRepos,
+	retrievedMemoryNoteFor,
+	workspaceOwningWorktree,
+} from "./session-repos";
 
 import { ownedWorktree } from "./session-workspace";
 import { engineSessionPatch } from "./sessions";
@@ -699,6 +707,15 @@ export async function openCreatedSession(
 				}
 			}
 
+			const retrievedMemory = await retrievedMemoryNoteFor(
+				spec.openingPrompt,
+				spec.user,
+				[...spec.memoryRepoIds, ...attachedRepoIds],
+			);
+			const openingPromptForRun = retrievedMemory
+				? `${retrievedMemory}\n\n${spec.openingPrompt}`
+				: spec.openingPrompt;
+
 			// Sandbox session: route the OPENING turn through the same
 			// launcher the prompt path uses (the session file was persisted
 			// above, so it resolves) — bind mode included, so the first turn
@@ -715,7 +732,7 @@ export async function openCreatedSession(
 				const created = findSession(bksId);
 				sandboxOpeningRun = created
 					? await maybeLaunchSandboxedRun(created, {
-							prompt: spec.openingPrompt,
+							prompt: openingPromptForRun,
 							cwd: spec.wtPath,
 							user: spec.user,
 							images: spec.images,
@@ -752,7 +769,7 @@ export async function openCreatedSession(
 				const created = findSession(bksId);
 				runnerOpeningRun = created
 					? await maybeLaunchRunnerRun(created, {
-						prompt: spec.openingPrompt,
+						prompt: openingPromptForRun,
 						images: spec.images,
 						mcpServers: spec.runMcpServers ?? [],
 						user: spec.user,
@@ -772,7 +789,7 @@ export async function openCreatedSession(
 			// worktrees that were actually cut.
 			const spanning = attachedRepoIds.length ? findSession(bksId) : null;
 			for await (const event of sandboxOpeningRun ?? runnerOpeningRun ?? runAgent({
-				prompt: spec.openingPrompt,
+				prompt: openingPromptForRun,
 				// A recovered create is the same logical turn. Reuse the durable
 				// intake id so Pi and the context log upsert the original rows
 				// instead of rendering the opening message again after each restart.

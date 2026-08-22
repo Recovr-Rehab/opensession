@@ -41,9 +41,21 @@ let memoryDirOverride: string | null = null;
  */
 export function memoryDir(): string {
   if (memoryDirOverride) return memoryDirOverride;
+  if (process.env.OPENSESSION_STATE_DIR) {
+    return `${process.env.OPENSESSION_STATE_DIR}/.opensession-memory`;
+  }
   if (existsSync(MEMORY_DIR)) return MEMORY_DIR;
   if (existsSync(LEGACY_MEMORY_DIR)) return LEGACY_MEMORY_DIR;
   return MEMORY_DIR;
+}
+
+/** Legacy JSON roots eligible for a v2 import. Isolated instances never read
+ * the live home-directory stores. */
+export function memoryImportDirs(): string[] {
+  if (memoryDirOverride || process.env.OPENSESSION_STATE_DIR) return [memoryDir()];
+  if (existsSync(MEMORY_DIR)) return [MEMORY_DIR];
+  if (existsSync(LEGACY_MEMORY_DIR)) return [LEGACY_MEMORY_DIR];
+  return [MEMORY_DIR];
 }
 
 /** The legacy path, for the migration script and its test. */
@@ -127,6 +139,8 @@ export async function loadScope(scope: string): Promise<MemoryEntry[]> {
 
 export async function saveScope(scope: string, entries: MemoryEntry[]): Promise<void> {
   writeJsonAtomic(scopeFile(scope), { entries });
+  const runtime = await import("../../server/memory-v2/runtime");
+  if (runtime.memoryRolloutMode() === "shadow") await runtime.refreshMemoryV2Shadow();
 }
 
 /** Save a new fact to the writable store for this context. */
@@ -136,6 +150,27 @@ export async function addMemory(
   by: string
 ): Promise<MemoryEntry> {
   const { writable } = resolveScopes(ctx);
+  const { memoryRolloutMode } = await import("../../server/memory-v2/runtime");
+  if (memoryRolloutMode() === "v2") {
+    const { ensureMemoryV2Ready, legacySummary } = await import("../../server/memory-v2");
+    const { store } = await ensureMemoryV2Ready();
+    const summary = legacySummary(text);
+    const record = store.create({
+      scopeKey: writable,
+      summary,
+      ...(summary === text.trim() ? {} : { details: text }),
+      kind: "reference",
+      tier: "retrievable",
+      source: { type: "slack", actor: by || undefined, channelId: ctx.channel },
+      tags: ["slack"],
+    });
+    return {
+      id: record.id,
+      text: record.summary,
+      by: by || "someone",
+      at: record.createdAt,
+    };
+  }
   const entries = await loadScope(writable);
   const entry: MemoryEntry = {
     id: randomUUID().slice(0, 8),
@@ -159,6 +194,34 @@ export interface MemoryView {
 
 export async function listMemory(ctx: MemoryContext): Promise<MemoryView> {
   const { writable, sharedReadonly } = resolveScopes(ctx);
+  const { memoryRolloutMode } = await import("../../server/memory-v2/runtime");
+  if (memoryRolloutMode() === "v2") {
+    const { ensureMemoryV2Ready } = await import("../../server/memory-v2");
+    const { store } = await ensureMemoryV2Ready();
+    const read = (scopeKey: string): MemoryEntry[] => {
+      const out: MemoryEntry[] = [];
+      let cursor: string | undefined;
+      do {
+        const page = store.list(
+          { scopeKeys: [scopeKey], states: ["active"] },
+          { cursor, limit: 100 },
+        );
+        out.push(...page.items.map((record) => ({
+          id: record.id,
+          text: record.summary,
+          by: record.source.type,
+          at: record.createdAt,
+        })));
+        cursor = page.nextCursor;
+      } while (cursor && out.length < 50);
+      return out.slice(0, 50);
+    };
+    return {
+      local: read(writable),
+      shared: sharedReadonly ? read(sharedReadonly) : [],
+      localIsWorkspace: writable === "workspace",
+    };
+  }
   // Archived entries are excluded everywhere a human or a prompt reads memory;
   // only the maintenance surfaces ask for them explicitly.
   const local = activeMemories(await loadScope(writable));
@@ -176,6 +239,32 @@ export async function forgetMemory(
   id: string
 ): Promise<ForgetResult> {
   const { writable, sharedReadonly } = resolveScopes(ctx);
+  const { memoryRolloutMode } = await import("../../server/memory-v2/runtime");
+  if (memoryRolloutMode() === "v2") {
+    const { ensureMemoryV2Ready } = await import("../../server/memory-v2");
+    const { store } = await ensureMemoryV2Ready();
+    const record = store.get(id);
+    if (!record || record.scopeKey !== writable) {
+      if (record && sharedReadonly && record.scopeKey === sharedReadonly) {
+        return {
+          ok: false,
+          error:
+            "That entry is workspace memory and is read-only here. Change it from a public channel or Memory settings.",
+        };
+      }
+      return { ok: false, error: `No memory entry with id "${id}" in this scope.` };
+    }
+    store.delete(id);
+    return {
+      ok: true,
+      removed: {
+        id: record.id,
+        text: record.summary,
+        by: record.source.type,
+        at: record.createdAt,
+      },
+    };
+  }
   const entries = await loadScope(writable);
   const idx = entries.findIndex((e) => e.id === id);
   if (idx === -1) {
@@ -198,8 +287,29 @@ export async function forgetMemory(
   return { ok: true, removed };
 }
 
-/** Render this context's memory for injection into the system prompt. */
-export async function renderMemoryForPrompt(ctx: MemoryContext): Promise<string> {
+/** Render prompt-matched memory as fenced turn context. */
+export async function renderMemoryForPrompt(
+  ctx: MemoryContext,
+  query = "",
+): Promise<string> {
+  const { memoryRolloutMode } = await import("../../server/memory-v2/runtime");
+  const mode = memoryRolloutMode();
+  if (mode === "v2") {
+    const { writable, sharedReadonly } = resolveScopes(ctx);
+    const { retrieveMemoryForPrompt } = await import("../../server/memory-v2");
+    return (
+      await retrieveMemoryForPrompt(query, {
+        scopeKeys: [writable, ...(sharedReadonly ? [sharedReadonly] : [])],
+      })
+    ).text;
+  }
+  if (mode === "shadow") {
+    const { writable, sharedReadonly } = resolveScopes(ctx);
+    const { retrieveMemoryForPrompt } = await import("../../server/memory-v2");
+    void retrieveMemoryForPrompt(query, {
+      scopeKeys: [writable, ...(sharedReadonly ? [sharedReadonly] : [])],
+    }).catch(() => {});
+  }
   const { local, shared, localIsWorkspace } = await listMemory(ctx);
   if (local.length === 0 && shared.length === 0) return "";
 
