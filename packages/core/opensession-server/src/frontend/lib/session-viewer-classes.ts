@@ -651,11 +651,10 @@ export const INFO_STATUS =
 
 export const INFO_CONTENT = "min-h-[320px] pb-2";
 
-/** One borderless card for the phone Workspace summary. The repo and model
- * settings lead into the same rows the desktop summary uses, so this reads as
- * one overview instead of a stack of unrelated settings plates. */
-export const INFO_SUMMARY_CARD =
-	"mx-3 mt-2 flex flex-col overflow-hidden rounded-2xl bg-panel py-2";
+/** The phone Workspace summary's card stack. Each semantic section supplies
+ * its own quiet background, so Review, Changes and media can be scanned as
+ * separate groups without returning to the old bordered dashboard. */
+export const INFO_SUMMARY_CARD = "mx-3 mt-2 flex flex-col gap-2.5";
 
 /** A section rendered by a component of its own (Agents, Reports) rather than
  *  by WorkspaceInfo. It gets the page's inset and the same 16px gap the panel
@@ -689,7 +688,7 @@ export const INFO_LIST_CLASS = "grid gap-px overflow-hidden rounded-lg bg-panel 
  * their labelled two-line content, but give up the separate plate and border
  * now that the summary card supplies one shared surface. */
 export const INFO_LIST =
-	"session-info-list mx-2 grid gap-px pb-1 " +
+	"session-info-list grid gap-px overflow-hidden rounded-2xl bg-panel p-2 " +
 	"[&>button]:min-h-11 [&>button]:w-full [&>button]:justify-start [&>button]:gap-2 [&>button]:text-left " +
 	"[&>button]:rounded-row [&>button]:border-0 " +
 	"[&>button]:bg-transparent [&>button]:px-3 [&>button]:py-2 [&>button]:text-label [&>button]:text-fg " +
