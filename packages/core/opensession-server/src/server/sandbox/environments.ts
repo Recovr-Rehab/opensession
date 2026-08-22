@@ -202,7 +202,6 @@ async function derivedEnvironment(
         mode: "template",
         updatedAt: template.createdAt,
         preparedAt: template.createdAt,
-        expiresAt: template.expiresAt,
         ...(stored?.settings ? { settings: stored.settings } : {}),
       };
     }
@@ -451,10 +450,10 @@ export async function prepareSandboxEnvironment(
 const providerQueues: Map<string, Promise<void>> = ((globalThis as any).__sandboxEnvironmentQueues ??= new Map());
 let maintenanceTimer: ReturnType<typeof setInterval> | undefined = (globalThis as any).__sandboxEnvironmentMaintenanceTimer;
 
-/** Resume explicitly prepared template environments and refresh expired
- * provider artifacts. A stored template record means a human already opted
- * this repo/provider pair into paid, transient preparation; this never enables
- * a new provider or keeps idle compute alive. */
+/** Resume explicitly prepared template environments whose preparation inputs
+ * changed or whose provider artifact disappeared. A stored record means a
+ * human opted this repo/provider pair into transient preparation; this never
+ * enables a new provider or keeps idle compute alive. */
 function maintainSandboxEnvironments(): void {
   for (const environment of readStored()) {
     if (

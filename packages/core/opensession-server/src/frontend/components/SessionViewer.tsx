@@ -103,6 +103,7 @@ import {
 	fetchPreview,
 	moveSessionToBranchApi,
 	portalActionApi,
+	startPortalRecipeApi,
 	type WorkspaceMediaItem,
 	type ModelOption,
 	type ProviderAccountOption,
@@ -238,7 +239,6 @@ import {
 } from "./SessionReportsPanel";
 import type { NewSessionPrefill } from "../lib/new-session-link";
 import type { WorkflowRunSnapshot } from "../../server/workflow-types";
-import { PreviewButton } from "./PreviewButton";
 import { ArchivedSessionItems } from "./ArchivedSessionItems";
 import { PreviewPane } from "./PreviewPane";
 import { PortalPane } from "./PortalPane";
@@ -5945,18 +5945,6 @@ export function SessionViewer({
 										{branchAction}
 									</>
 								)}
-								{/* Preview waits for its status before rendering, so it used to
-								    be parked below Delete to keep the rows above it still. That
-								    request is a local read that settles inside the popup's own
-								    120ms enter, and keeping the two destructive rows last is
-								    worth more than the last of that stillness. */}
-								<PreviewButton
-									session={session}
-									onAttachImage={(img) => setImages((prev) => [...prev, img])}
-									onStatusChange={setPreviewStatus}
-									onOpenTab={onOpenPreviewTab}
-									variant="menu"
-								/>
 								<Menu.Separator className={VIEWER_MENU_SEP} />
 								{isPhone && secondaryActions(true)}
 								{archivedActions}
@@ -7683,18 +7671,19 @@ export function SessionViewer({
 									activePortal={portalTarget}
 									onBack={() => setActivePanelOpen(false)}
 									onOpenPortal={onOpenPortal}
-									onStartPortal={(recipe) =>
-										send({
-											type: "prompt",
-											sessionId: session.id,
-											user: getCurrentUser(),
-											content:
-												`Use the $${recipe.skill} skill to start the “${recipe.name}” portal for this session. ` +
-												(recipe.serviceKey
-													? `Make sure it listens on the ${recipe.serviceKey} port declared in .ports.conf, then report when it is ready.`
-													: "Expose its listening port in .ports.conf with a descriptive *_PORT key, then report when it is ready."),
-										})
-									}
+									onStartPortal={async (recipe) => {
+										if (!recipe.command) {
+											if (!recipe.skill) throw new Error("This Portal has no start command.");
+											send({
+												type: "prompt",
+												sessionId: session.id,
+												user: getCurrentUser(),
+												content: `Use the $${recipe.skill} skill to start the “${recipe.name}” Portal, then verify it is ready.`,
+											});
+											return;
+										}
+										setPreviewStatus(await startPortalRecipeApi(session.id, recipe.id));
+									}}
 									onPortalAction={async (name, action) => {
 										setPreviewStatus(
 											await portalActionApi(session.id, name, action),

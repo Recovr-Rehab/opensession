@@ -14,10 +14,14 @@ export interface PreviewService {
 }
 
 export interface PreviewPortalRecipe {
+	id: string;
 	name: string;
 	description?: string;
-	skill: string;
+	command?: string;
+	skill?: string;
 	serviceKey?: string;
+	port?: number;
+	readyTimeoutSeconds?: number;
 }
 
 export interface PreviewStatus {
@@ -61,6 +65,16 @@ export async function stopPreviewApi(
 	return request<PreviewStatus>(
 		`/sessions/${encodeURIComponent(sessionId)}/preview/stop`,
 		{ method: "POST", label: "Failed to stop preview" },
+	);
+}
+
+export async function startPortalRecipeApi(
+	sessionId: string,
+	recipeId: string,
+): Promise<PreviewStatus> {
+	return request(
+		`/sessions/${encodeURIComponent(sessionId)}/portals/${encodeURIComponent(recipeId)}/start`,
+		{ method: "POST", label: "Failed to start Portal" },
 	);
 }
 

@@ -88,14 +88,22 @@ export interface PreviewService {
 }
 
 export interface PreviewPortalRecipe {
+  /** Stable, URL-safe identifier used by the direct start endpoint. */
+  id: string;
   /** Human-facing service name shown in the Portals panel. */
   name: string;
   /** Optional one-line explanation supplied by the repository. */
   description?: string;
-  /** User-invocable skill the session agent should use to start it. */
-  skill: string;
-  /** .ports.conf key expected to become live after the skill runs. */
+  /** Direct command supervised by Open Session in the session workspace. */
+  command?: string;
+  /** Legacy agent-assisted starter. New recipes should declare command. */
+  skill?: string;
+  /** Environment/.ports.conf key assigned to the supervised port. */
   serviceKey?: string;
+  /** Optional fixed port for projects whose tooling requires a known range. */
+  port?: number;
+  /** How long this service may take to bind its port. */
+  readyTimeoutSeconds?: number;
 }
 
 export interface PreviewStatus {
@@ -127,8 +135,16 @@ export function parsePreviewPortalRecipes(raw: string | null): PreviewPortalReci
       if (!value || typeof value !== "object" || Array.isArray(value)) return [];
       const item = value as Record<string, unknown>;
       const name = typeof item.name === "string" ? item.name.trim() : "";
-      const skill = typeof item.skill === "string" ? item.skill.trim() : "";
-      if (!name || name.length > 80 || !/^[a-z0-9][a-z0-9-]{0,63}$/.test(skill)) return [];
+      const skill = typeof item.skill === "string" && /^[a-z0-9][a-z0-9-]{0,63}$/.test(item.skill.trim())
+        ? item.skill.trim()
+        : undefined;
+      const idValue = typeof item.id === "string" ? item.id.trim() : skill;
+      const id = idValue && /^[a-z][a-z0-9-]{0,62}$/.test(idValue) ? idValue : undefined;
+      const command =
+        typeof item.command === "string" && item.command.trim().length <= 2_000
+          ? item.command.trim()
+          : undefined;
+      if (!name || name.length > 80 || !id || (!command && !skill)) return [];
       const description =
         typeof item.description === "string" && item.description.trim().length <= 240
           ? item.description.trim()
@@ -137,7 +153,23 @@ export function parsePreviewPortalRecipes(raw: string | null): PreviewPortalReci
         typeof item.serviceKey === "string" && /^[A-Z][A-Z0-9_]*_PORT$/.test(item.serviceKey)
           ? item.serviceKey
           : undefined;
-      return [{ name, skill, ...(description ? { description } : {}), ...(serviceKey ? { serviceKey } : {}) }];
+      const port = Number.isInteger(item.port) && Number(item.port) >= 1_024 && Number(item.port) <= 19_000
+        ? Number(item.port)
+        : undefined;
+      const readyTimeoutSeconds =
+        Number.isInteger(item.readyTimeoutSeconds) && Number(item.readyTimeoutSeconds) >= 5 && Number(item.readyTimeoutSeconds) <= 300
+          ? Number(item.readyTimeoutSeconds)
+          : undefined;
+      return [{
+        id,
+        name,
+        ...(description ? { description } : {}),
+        ...(command ? { command } : {}),
+        ...(skill ? { skill } : {}),
+        ...(serviceKey ? { serviceKey } : {}),
+        ...(port ? { port } : {}),
+        ...(readyTimeoutSeconds ? { readyTimeoutSeconds } : {}),
+      }];
     });
   } catch {
     return [];
@@ -677,6 +709,7 @@ export async function getPreviewStatus(worktreeDir: string): Promise<PreviewStat
     };
   }
   const ports = readPorts(worktreeDir);
+  const portalRecipes = hostPreviewPortalRecipes(worktreeDir);
 	const portalRecords = await listPortalServices(worktreeDir);
 	const portalByKey = new Map(portalRecords.map((record) => [record.key, record]));
   const observedServices: PreviewService[] = await Promise.all(
@@ -687,7 +720,7 @@ export async function getPreviewStatus(worktreeDir: string): Promise<PreviewStat
 		// whose port had been taken over report itself as running.
 		if (portal) {
 			return {
-				name: portal.name, key, port,
+				name: portalRecipes.find((recipe) => recipe.serviceKey === key)?.name ?? portal.name, key, port,
 				running: portal.state === "awake",
 				pids: portal.pid ? [portal.pid] : [],
 				...(portal.description ? { description: portal.description } : {}),
@@ -755,7 +788,7 @@ export async function getPreviewStatus(worktreeDir: string): Promise<PreviewStat
       !!webapp?.running ||
       (repo != null && (await resolvePreviewBoot(worktreeDir, repo, hostExists)) != null),
     services,
-    portalRecipes: hostPreviewPortalRecipes(worktreeDir),
+    portalRecipes,
   };
 }
 
@@ -1309,7 +1342,7 @@ export async function getSandboxPreviewStatus(
     }
     // PIDs are container-internal — meaningless to the host UI; leave empty.
     services.push({
-		name: portal?.name ?? friendly(key),
+		name: portalRecipes.find((recipe) => recipe.serviceKey === key)?.name ?? portal?.name ?? friendly(key),
       key,
       port,
       running,

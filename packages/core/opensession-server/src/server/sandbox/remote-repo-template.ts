@@ -3,13 +3,15 @@
  *
  * Daytona stores templates as provider snapshots, Box as named snapshots,
  * and Modal as Image ids returned by Sandbox.snapshotFilesystem(). This file owns only the
- * small local index that maps (provider, repo, runner/create signature) to the
- * provider artifact.  The artifact itself is credential-free and expires
- * after 24 hours; adapters are responsible for publishing/deleting it.
+ * small local index that maps (provider, repo, runtime/create signature and
+ * project preparation inputs) to the provider artifact. The artifact itself
+ * is credential-free and durable; adapters replace it only when an input that
+ * affects setup changes.
  */
 
 import { createHash, randomUUID } from "crypto";
 import { existsSync, mkdirSync, readFileSync, unlinkSync } from "fs";
+import { join } from "path";
 import { OPENSESSION_SESSIONS_DIR } from "../paths";
 import { writeJsonAtomic } from "../shared/atomic-write";
 import { sandboxConfig } from "./config";
@@ -20,6 +22,7 @@ import {
   type RemoteDriver,
 } from "./adapters/bootstrap";
 import { getSandboxConnection } from "./connections";
+import { configuredRepos } from "../config";
 
 export type RemoteTemplateProvider = "daytona" | "box" | "modal";
 
@@ -29,10 +32,13 @@ export interface RemoteRepoTemplate {
   artifactId: string;
   signature: string;
   createdAt: string;
-  expiresAt: string;
+  /** Legacy informational field. Expiry no longer invalidates stopped storage. */
+  expiresAt?: string;
+  projectSignature?: string;
 }
 
-export const REMOTE_REPO_TEMPLATE_TTL_MS = 24 * 60 * 60 * 1000;
+/** Provider storage backstop where an API requires a finite snapshot TTL. */
+export const REMOTE_REPO_TEMPLATE_TTL_MS = 30 * 24 * 60 * 60 * 1_000;
 
 export function remoteRepoTemplateProofPath(repoId: string): string {
   return `/home/ubuntu/.opensession/repo-template-${clean(repoId)}.json`;
@@ -128,6 +134,30 @@ function clean(value: string): string {
   return value.replace(/[^A-Za-z0-9_.-]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 80);
 }
 
+const PROJECT_PREPARATION_INPUTS = [
+  ".agents/setup",
+  ".agents/sandbox-environment.json",
+  "bun.lock",
+] as const;
+
+/** Hash only files whose bytes affect the reusable prepared filesystem. */
+export function projectPreparationSignature(repoId: string): string {
+  const repo = configuredRepos()[repoId];
+  const hash = createHash("sha256");
+  hash.update(`project-preparation-v1\0${repoId}\0`);
+  if (!repo) return hash.update("<unregistered>").digest("hex");
+  for (const relative of PROJECT_PREPARATION_INPUTS) {
+    hash.update(`${relative}\0`);
+    try {
+      hash.update(readFileSync(join(repo.repo, relative)));
+    } catch {
+      hash.update("<absent>");
+    }
+    hash.update("\0");
+  }
+  return hash.digest("hex");
+}
+
 function dir(): string {
   return `${process.env.OPENSESSION_SESSIONS_DIR || OPENSESSION_SESSIONS_DIR}/sandbox-repo-templates`;
 }
@@ -137,8 +167,8 @@ function file(provider: RemoteTemplateProvider, repoId: string): string {
 }
 
 /** Includes every create-time input whose change makes an artifact unsafe to
- * reuse. The repo contents intentionally age out on the 24-hour TTL; adoption
- * fetches the current default branch before creating the session branch. */
+ * reuse. Source freshness is handled by adoption's fetch; dependency/setup
+ * freshness is handled separately by projectPreparationSignature. */
 export function remoteRepoTemplateSignature(
   provider: RemoteTemplateProvider,
 ): string {
@@ -173,23 +203,28 @@ export function remoteRepoTemplateName(
 export function readRemoteRepoTemplate(
   provider: RemoteTemplateProvider,
   repoId: string,
-  now = Date.now(),
+  _now = Date.now(),
 ): RemoteRepoTemplate | null {
   try {
     const path = file(provider, repoId);
     if (!existsSync(path)) return null;
     const entry = JSON.parse(readFileSync(path, "utf-8")) as RemoteRepoTemplate;
+    const projectSignature = projectPreparationSignature(repoId);
     if (
       entry.provider !== provider ||
       entry.repoId !== repoId ||
       !entry.artifactId ||
       entry.signature !== remoteRepoTemplateSignature(provider) ||
-      Date.parse(entry.expiresAt) <= now
+      (entry.projectSignature != null && entry.projectSignature !== projectSignature)
     ) {
       try {
         unlinkSync(path);
       } catch {}
       return null;
+    }
+    if (!entry.projectSignature) {
+      entry.projectSignature = projectSignature;
+      writeJsonAtomic(path, entry);
     }
     return entry;
   } catch {
@@ -213,8 +248,8 @@ export function writeRemoteRepoTemplate(
     repoId,
     artifactId,
     signature: remoteRepoTemplateSignature(provider),
+    projectSignature: projectPreparationSignature(repoId),
     createdAt: new Date(now).toISOString(),
-    expiresAt: new Date(now + REMOTE_REPO_TEMPLATE_TTL_MS).toISOString(),
   };
   mkdirSync(dir(), { recursive: true });
   writeJsonAtomic(path, current);

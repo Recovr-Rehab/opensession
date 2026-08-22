@@ -30,17 +30,11 @@ afterEach(() => {
 });
 
 describe("remote repo template index", () => {
-  test("round-trips only while signature and ttl match", async () => {
+  test("keeps credential-free stopped artifacts until an input changes", async () => {
     const mod = await import(`./remote-repo-template?roundtrip=${Math.random()}`);
     mod.writeRemoteRepoTemplate("modal", "app", "im-1", 1_000);
     expect(mod.readRemoteRepoTemplate("modal", "app", 2_000)?.artifactId).toBe("im-1");
-    expect(
-      mod.readRemoteRepoTemplate(
-        "modal",
-        "app",
-        1_000 + mod.REMOTE_REPO_TEMPLATE_TTL_MS + 1,
-      ),
-    ).toBeNull();
+    expect(mod.readRemoteRepoTemplate("modal", "app", 365 * 24 * 60 * 60_000)?.artifactId).toBe("im-1");
   });
 
   test("create-shape changes invalidate the local artifact mapping", async () => {

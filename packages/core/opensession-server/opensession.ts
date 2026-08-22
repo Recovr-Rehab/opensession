@@ -41,7 +41,6 @@ import {
 } from "./src/server/github-auth";
 import { startGoalTicker } from "./src/server/goal-runner";
 import { startSessionIndexSweeper } from "./src/server/session-index";
-import { ensurePreviewPoolScheduler } from "./src/server/preview-pool";
 import { ensureWarmTemplateScheduler } from "./src/server/warm-template";
 import { handleRunnerWsUpgrade } from "./src/server/runner-ws";
 import { handleSandboxPortalRelayUpgrade } from "./src/server/sandbox-portal-relay";
@@ -713,7 +712,6 @@ if (!g.__opensessionBooted) {
 
 	// Warm dev-server pool + warm git templates: docker-level sweeps, so only
 	// the server that owns the daemon runs them.
-	ensurePreviewPoolScheduler();
 	ensureWarmTemplateScheduler();
 
 	// Fire due /loop self-prompts and wake due goals — both start real engine

@@ -222,27 +222,32 @@ describe("repoLifecycle", () => {
 });
 
 describe("preview portal recipes", () => {
-  test("reads skill-backed starters from portals.json", () => {
+  test("reads direct supervised starters from portals.json", () => {
     expect(
       parsePreviewPortalRecipes(
         JSON.stringify({
-          warmRoutes: ["/"],
           portals: [
             {
+              id: "tella-local",
               name: "Tella local",
               description: "Authenticated local webapp",
-              skill: "tella-local",
+              command: "./.agents/start.sh",
               serviceKey: "WEBAPP_PORT",
+              port: 3300,
+              readyTimeoutSeconds: 180,
             },
           ],
         }),
       ),
     ).toEqual([
       {
+        id: "tella-local",
         name: "Tella local",
         description: "Authenticated local webapp",
-        skill: "tella-local",
+        command: "./.agents/start.sh",
         serviceKey: "WEBAPP_PORT",
+        port: 3300,
+        readyTimeoutSeconds: 180,
       },
     ]);
   });
@@ -257,6 +262,6 @@ describe("preview portal recipes", () => {
           ],
         }),
       ),
-    ).toEqual([{ name: "Safe", skill: "docs" }]);
+    ).toEqual([{ id: "docs", name: "Safe", skill: "docs" }]);
   });
 });

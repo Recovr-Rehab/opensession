@@ -7,15 +7,16 @@
  */
 
 import type { RouteContext } from "./context";
-import { getPreviewStatus, getSandboxPreviewStatus, portalRouteAuthorized, startPreview, startSandboxPreview, stopPreview, stopSandboxPreview } from "../preview";
+import { getPreviewStatus, getSandboxPreviewStatus, portalRouteAuthorized, sandboxPreviewIdentityContext, startPreview, startSandboxPreview, stopPreview, stopSandboxPreview, type PreviewPortalRecipe } from "../preview";
 import { findSessionAsync } from "../session-cache";
 import { activeSandboxFor } from "../session-sandbox";
 import { existsSync } from "fs";
-import { restartPortalService, restartSandboxPortalService, stopPortalService, stopSandboxPortalService } from "../portal-supervisor";
+import { restartPortalService, restartSandboxPortalService, startPortalService, startSandboxPortalService, stopPortalService, stopSandboxPortalService } from "../portal-supervisor";
 import { restartRunnerPortal, runnerPortalPreviewStatus, startRunnerPortal, stopRunnerPortal } from "../runner-portals";
 import { getRepo } from "../worktree";
 import { sleepingSandboxPortalStatus } from "../sandbox-portals";
 import type { UnifiedSession } from "../types";
+import { createWorkloadIdentityEnv } from "../workload-identity";
 
 export function unavailableSandboxPreviewStatus(
 	session: Pick<UnifiedSession, "sandbox">,
@@ -31,6 +32,26 @@ export function unavailableSandboxPreviewStatus(
 		bootable: false,
 		services: [],
 		sandboxLifecycle: sandbox.lifecycle || "preparing",
+	};
+}
+
+function recipeCommand(recipe: PreviewPortalRecipe): string {
+	if (!recipe.command) throw new Error("This Portal still needs an agent-assisted starter.");
+	const exports = [
+		recipe.serviceKey ? `export ${recipe.serviceKey}=\"$PORT\"` : "",
+		recipe.serviceKey === "WEBAPP_PORT" ? 'export WEBAPP_PORT="$PORT" PREVIEW_URL="$PORTAL_URL"' : "",
+	].filter(Boolean).join("; ");
+	return `${exports ? `${exports}; ` : ""}exec ${recipe.command}`;
+}
+
+function recipeStartOptions(recipe: PreviewPortalRecipe) {
+	return {
+		name: recipe.id,
+		command: recipeCommand(recipe),
+		...(recipe.port ? { port: recipe.port } : {}),
+		...(recipe.serviceKey ? { key: recipe.serviceKey } : {}),
+		...(recipe.description ? { description: recipe.description } : {}),
+		...(recipe.readyTimeoutSeconds ? { readyTimeoutMs: recipe.readyTimeoutSeconds * 1_000 } : {}),
 	};
 }
 
@@ -286,6 +307,51 @@ export async function handlePreviewRoutes(
 		}
 	}
 
+	// Declared repository Portals start directly under the supervisor. This is
+	// an explicit compute action, so it may wake a sleeping Sandbox. The recipe
+	// is re-read from the session workspace instead of accepting a browser-sent
+	// command.
+	{
+		const m = path.match(/^\/api\/sessions\/(.+)\/portals\/([a-z0-9-]+)\/start$/);
+		if (m && req.method === "POST") {
+			const session = await findSessionAsync(decodeURIComponent(m[1]));
+			if (!session) return Response.json({ error: "Session not found" }, { status: 404 });
+			try {
+				const sandbox = session.worktreeDir
+					? await activeSandboxFor(session, { wake: true })
+					: null;
+				if (session.sandbox?.sandboxId && !sandbox)
+					return Response.json({ error: "This session's Sandbox is unavailable" }, { status: 409 });
+				if (!session.worktreeDir)
+					return Response.json({ error: "Session has no Portal workspace" }, { status: 400 });
+				const current = sandbox
+					? await getSandboxPreviewStatus(sandbox, session.worktreeDir, session.id)
+					: await getPreviewStatus(session.worktreeDir);
+				const recipe = current.portalRecipes.find((candidate) => candidate.id === m[2]);
+				if (!recipe) return Response.json({ error: "Portal recipe not found" }, { status: 404 });
+				const options = recipeStartOptions(recipe);
+				if (session.runner) {
+					await startRunnerPortal({ session, user: session.startedBy || undefined, ...options });
+					return Response.json(await runnerPortalPreviewStatus(session, session.startedBy || undefined));
+				}
+				if (sandbox) {
+					const repo = getRepo(session.repo);
+					const env = createWorkloadIdentityEnv(
+						sandboxPreviewIdentityContext(sandbox, repo.id, "interactive"),
+					);
+					await startSandboxPortalService({ sessionId: session.id, sandbox, ...options, env });
+					return Response.json(await getSandboxPreviewStatus(sandbox, session.worktreeDir, session.id));
+				}
+				if (!existsSync(session.worktreeDir))
+					return Response.json({ error: "Session has no Portal workspace" }, { status: 400 });
+				await startPortalService({ sessionId: session.id, worktreeDir: session.worktreeDir, ...options });
+				return Response.json(await getPreviewStatus(session.worktreeDir));
+			} catch (error) {
+				return Response.json({ error: error instanceof Error ? error.message : String(error) }, { status: 400 });
+			}
+		}
+	}
+
 	// A Portal control is scoped to the named service in this session's own
 	// workspace. An explicit restart is allowed to wake a Sandbox; stop stays
 	// non-waking so an inspection action never starts compute by accident.
@@ -307,8 +373,21 @@ export async function handlePreviewRoutes(
 					return Response.json({ error: "This session's Sandbox is sleeping or unavailable" }, { status: 409 });
 				if (sandbox) {
 					if (m[3] === "stop") await stopSandboxPortalService({ sessionId: session.id, sandbox, name: m[2] });
-					else await restartSandboxPortalService({ sessionId: session.id, sandbox, name: m[2] });
-						return Response.json(await getSandboxPreviewStatus(sandbox, session.worktreeDir!, session.id));
+					else {
+						const status = await getSandboxPreviewStatus(sandbox, session.worktreeDir!, session.id);
+						const recipe = status.portalRecipes.find((candidate) => candidate.id === m[2] && candidate.command);
+						const env = recipe
+							? createWorkloadIdentityEnv(sandboxPreviewIdentityContext(sandbox, getRepo(session.repo).id, "interactive"))
+							: undefined;
+						await restartSandboxPortalService({
+							sessionId: session.id,
+							sandbox,
+							name: m[2],
+							env,
+							...(recipe?.readyTimeoutSeconds ? { readyTimeoutMs: recipe.readyTimeoutSeconds * 1_000 } : {}),
+						});
+					}
+					return Response.json(await getSandboxPreviewStatus(sandbox, session.worktreeDir!, session.id));
 				}
 				if (!session.worktreeDir || !existsSync(session.worktreeDir))
 					return Response.json({ error: "Session has no Portal workspace" }, { status: 400 });

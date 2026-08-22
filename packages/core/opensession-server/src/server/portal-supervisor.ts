@@ -38,6 +38,7 @@ const PREFIX = "# opensession-portal ";
 const NAME = /^[a-z][a-z0-9-]{0,62}$/;
 const MIN_PORT = 1024;
 const MAX_PORT = 19_000;
+const SANDBOX_PORTAL_PATH = "/home/ubuntu/.bun/bin:/home/ubuntu/.local/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin";
 const remoteRelayAgents: Map<string, { expiresAt: number }> = ((globalThis as Record<string, unknown>).__opensessionSandboxPortalAgents ??= new Map()) as Map<string, { expiresAt: number }>;
 const PORTAL_REAP_INTERVAL_MS = 5 * 60_000;
 export const SANDBOX_PORTAL_AGENT_ENTRY = `${REPO_ROOT}/packages/core/opensession-server/src/runner-host/sandbox-portal-agent.ts`;
@@ -57,6 +58,12 @@ function validatePort(port: number): number {
 	return port;
 }
 
+function validateKey(key?: string): string | undefined {
+	if (key == null) return undefined;
+	if (!/^[A-Z][A-Z0-9_]*_PORT$/.test(key)) throw new Error("Portal service keys must be uppercase *_PORT names.");
+	return key;
+}
+
 function registryPath(worktreeDir: string): string { return join(worktreeDir, ".ports.conf"); }
 
 function parsePortalRegistry(contents: string): PortalRecord[] {
@@ -66,7 +73,7 @@ function parsePortalRegistry(contents: string): PortalRecord[] {
 		try {
 			const value = JSON.parse(line.slice(PREFIX.length)) as PortalRecord;
 			if (!value || typeof value !== "object" || !NAME.test(value.name) || !Number.isInteger(value.port) || typeof value.command !== "string") continue;
-			records.push({ ...value, key: portalKey(value.name), port: validatePort(value.port) });
+			records.push({ ...value, key: validateKey(value.key) ?? portalKey(value.name), port: validatePort(value.port) });
 		} catch {}
 	}
 	return records;
@@ -220,7 +227,9 @@ async function startPortal(ops: PortalOps, input: {
 	name: string;
 	command: string;
 	port?: number;
+	key?: string;
 	description?: string;
+	readyTimeoutMs?: number;
 	/** Host Portals record their owner so a restarted server can reap them; Sandbox Portals die with the Sandbox. */
 	ownsProcess: boolean;
 	allocatePort: (records: PortalRecord[]) => Promise<number>;
@@ -240,7 +249,7 @@ async function startPortal(ops: PortalOps, input: {
 	await input.qualifyPort?.(port, records);
 	const url = input.urlFor(port);
 	const base: PortalRecord = {
-		name, key: portalKey(name), command, port,
+		name, key: validateKey(input.key) ?? portalKey(name), command, port,
 		...(input.ownsProcess ? { sessionId: input.sessionId } : {}),
 		...(input.description?.trim() ? { description: input.description.trim().slice(0, 240) } : {}),
 		state: "starting", startedAt: new Date().toISOString(),
@@ -256,8 +265,9 @@ async function startPortal(ops: PortalOps, input: {
 	}
 	const record = { ...base, pid };
 	await ops.writeRegistry(upsert(records, record));
-	if (!(await waitForPortalPort(ops, port))) {
-		const failed = { ...record, state: "failed" as const, lastError: `Nothing listened on port ${port} within 15 seconds.` };
+	const readyTimeoutMs = Math.min(300_000, Math.max(5_000, input.readyTimeoutMs ?? 15_000));
+	if (!(await waitForPortalPort(ops, port, readyTimeoutMs))) {
+		const failed = { ...record, state: "failed" as const, lastError: `Nothing listened on port ${port} within ${Math.round(readyTimeoutMs / 1_000)} seconds.` };
 		await ops.writeRegistry(upsert(records, failed));
 		throw new Error(failed.lastError);
 	}
@@ -297,7 +307,11 @@ export async function startPortalService(input: {
 	name: string;
 	command: string;
 	port?: number;
+	key?: string;
 	description?: string;
+	readyTimeoutMs?: number;
+	/** Narrow, caller-owned additions for a trusted declared recipe. */
+	env?: Record<string, string>;
 }): Promise<PortalRecord & { url: string }> {
 	const started = await startPortal(hostPortalOps(input.worktreeDir), {
 		...input,
@@ -312,6 +326,7 @@ export async function startPortalService(input: {
 				env: {
 					PATH: process.env.PATH || "/usr/local/bin:/usr/bin:/bin",
 					HOME: process.env.HOME || "/tmp",
+					...input.env,
 					PORT: String(port), PORTAL_URL: url, OPENSESSION_PORTAL: name,
 					// Next's detached telemetry flusher escapes the Portal process group
 					// during shutdown. Portals do not need telemetry, so never create it.
@@ -424,12 +439,12 @@ export function startPortalReaper(
 	console.log(`[portals] orphan reaper started (every ${PORTAL_REAP_INTERVAL_MS / 60_000}m)`);
 }
 
-export async function restartPortalService(input: { sessionId: string; worktreeDir: string; name: string }): Promise<PortalRecord & { url: string }> {
+export async function restartPortalService(input: { sessionId: string; worktreeDir: string; name: string; env?: Record<string, string>; readyTimeoutMs?: number }): Promise<PortalRecord & { url: string }> {
 	const name = validateName(input.name);
 	const current = readPortalRegistry(input.worktreeDir).find((record) => record.name === name);
 	if (!current) throw new Error(`Portal '${name}' does not exist.`);
 	await stopPortalService(input);
-	return startPortalService({ sessionId: input.sessionId, worktreeDir: input.worktreeDir, name, command: current.command, port: current.port, description: current.description });
+	return startPortalService({ ...input, name, key: current.key, command: current.command, port: current.port, description: current.description });
 }
 
 export function setPortalPath(worktreeDir: string, path: string, name?: string): PortalRecord[] {
@@ -521,7 +536,11 @@ export async function startSandboxPortalService(input: {
 	name: string;
 	command: string;
 	port?: number;
+	key?: string;
 	description?: string;
+	readyTimeoutMs?: number;
+	/** Short-lived workload identity for a trusted declared recipe. */
+	env?: Record<string, string>;
 }): Promise<PortalRecord> {
 	const awake = await startPortal(sandboxPortalOps(input.sandbox), {
 		...input,
@@ -534,8 +553,8 @@ export async function startSandboxPortalService(input: {
 		urlFor: (port) => `https://${configuredServer().previewHost}:${sandboxHttpsPortFor(input.sandbox.id, port)}`,
 		launch: async ({ name, command, port, url }) => {
 			const logPath = `.opensession-portal-${name}.log`;
-			const launch = `PORT=${shellQuoteWord(String(port))} PORTAL_URL=${shellQuoteWord(url)} OPENSESSION_PORTAL=${shellQuoteWord(name)} setsid bash -lc ${shellQuoteWord(`exec ${command}`)} >${shellQuoteWord(logPath)} 2>&1 & echo $!`;
-			const launched = await input.sandbox.exec(["bash", "-lc", launch]);
+			const launch = `HOME=/home/ubuntu PATH=${shellQuoteWord(SANDBOX_PORTAL_PATH)} PORT=${shellQuoteWord(String(port))} PORTAL_URL=${shellQuoteWord(url)} OPENSESSION_PORTAL=${shellQuoteWord(name)} setsid bash -lc ${shellQuoteWord(`exec ${command}`)} >${shellQuoteWord(logPath)} 2>&1 & echo $!`;
+			const launched = await input.sandbox.exec(["bash", "-lc", launch], { env: input.env });
 			const pid = Number(launched.stdout.trim().split(/\s+/).at(-1));
 			if (launched.exitCode !== 0 || !Number.isInteger(pid) || pid < 2) throw new Error(launched.stderr.trim() || "Could not start the Portal process.");
 			return pid;
@@ -563,12 +582,12 @@ export async function stopSandboxPortalService(input: { sessionId: string; sandb
 	return stopped;
 }
 
-export async function restartSandboxPortalService(input: { sessionId: string; sandbox: Sandbox; name: string }): Promise<PortalRecord> {
+export async function restartSandboxPortalService(input: { sessionId: string; sandbox: Sandbox; name: string; env?: Record<string, string>; readyTimeoutMs?: number }): Promise<PortalRecord> {
 	const name = validateName(input.name);
 	const current = (await sandboxPortalOps(input.sandbox).readRegistry()).find((record) => record.name === name);
 	if (!current) throw new Error(`Portal '${name}' does not exist.`);
 	await stopSandboxPortalService(input);
-	return startSandboxPortalService({ sessionId: input.sessionId, sandbox: input.sandbox, name, command: current.command, port: current.port, description: current.description });
+	return startSandboxPortalService({ ...input, name, key: current.key, command: current.command, port: current.port, description: current.description });
 }
 
 export async function setSandboxPortalPath(sandbox: Sandbox, path: string, name?: string): Promise<PortalRecord[]> {
