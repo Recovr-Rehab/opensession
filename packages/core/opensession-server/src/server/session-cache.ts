@@ -172,11 +172,13 @@ function enrichCachedSessions(
 
 export function getCachedSessions(): UnifiedSession[] {
 	const cached = sessionsCaches.include;
-	if (
-		cached &&
-		!cached.invalidated &&
-		Date.now() - cached.ts < CACHE_TTL
-	) {
+	// Targeted writes update the authoritative session file and SQLite list row
+	// immediately. Rebuilding the entire materialized list after each one only
+	// turns active-run bookkeeping into continuous 10,000-row deserialization.
+	// Whole-list synchronous consumers may use the last complete snapshot for
+	// this short TTL, matching the async path below; direct session reads remain
+	// current.
+	if (cached && Date.now() - cached.ts < CACHE_TTL) {
 		return cached.data;
 	}
 	const indexed = indexedSessions("include");
