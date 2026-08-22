@@ -48,6 +48,10 @@ export const WS_SUMMARY_CARD =
  */
 export const WS_SUMMARY_REVIEW_CLEARANCE = "desktop:mr-[324px]";
 
+/** The review toolbar follows the file canvas's 8px inner gutter as well as the
+ * summary column, so their visible borders finish on the same vertical line. */
+export const WS_SUMMARY_REVIEW_BAR_CLEARANCE = "desktop:mr-[332px]";
+
 /**
  * Band label ("Assets"), taken from the sidebar so the card heads its lists
  * the way the sidebar heads its own. It shares the rows' 16px content rail,

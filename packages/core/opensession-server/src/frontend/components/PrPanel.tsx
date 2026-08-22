@@ -72,7 +72,10 @@ import {
 } from "../lib/pr-focus";
 import { providerFromUrl, prCapabilities } from "../lib/provider";
 import { pollWhileVisible, PR_WEBHOOK_FALLBACK_POLL_MS } from "../lib/poll";
-import { WS_SUMMARY_REVIEW_CLEARANCE } from "../lib/workspace-summary-classes";
+import {
+  WS_SUMMARY_REVIEW_BAR_CLEARANCE,
+  WS_SUMMARY_REVIEW_CLEARANCE,
+} from "../lib/workspace-summary-classes";
 import { Textarea } from "../ui/input";
 import {
   IconArrowDown,
@@ -2058,7 +2061,7 @@ export function PrPanel({
           so desktop can fold file controls into one identity row. Narrow and
           phone layouts keep the independent navigation row. */}
       <div
-        className={`shrink-0 bg-surface desktop:mt-2.5 desktop:mb-2 desktop:overflow-hidden desktop:rounded-lg desktop:border desktop:border-line ${compactToolbar ? `sticky top-0 z-20 desktop:ml-2 ${WS_SUMMARY_REVIEW_CLEARANCE}` : "desktop:mx-2"}`}
+        className={`shrink-0 bg-surface desktop:mt-2.5 desktop:mb-2 desktop:overflow-hidden desktop:rounded-lg desktop:border desktop:border-line ${compactToolbar ? `sticky top-0 z-20 desktop:ml-2 ${WS_SUMMARY_REVIEW_BAR_CLEARANCE}` : "desktop:mx-2"}`}
       >
       <header className="flex h-10 shrink-0 items-center gap-2.5 px-6 phone:px-3">
         {/* State, in the app's own PR language, filled rather than drawn: the
