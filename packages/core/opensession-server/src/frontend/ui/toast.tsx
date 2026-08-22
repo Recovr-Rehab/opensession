@@ -206,12 +206,12 @@ function ToastCard({ toast: item }: { toast: BaseToast.Root.ToastObject<ToastDat
 				].join(" ")}
 			>
 				{data.variant === "success" && (
-					<AnimatedCheck size={15} className="shrink-0 text-green" />
+					<AnimatedCheck size={15} className="shrink-0 text-dim" />
 				)}
 				{data.variant === "error" && (
 					<span
 						aria-hidden
-						className="grid size-[15px] shrink-0 place-items-center rounded-full text-meta font-semibold text-accent"
+						className="grid size-[15px] shrink-0 place-items-center rounded-full text-meta font-semibold text-dim"
 					>
 						!
 					</span>
@@ -239,7 +239,7 @@ function ToastCard({ toast: item }: { toast: BaseToast.Root.ToastObject<ToastDat
 						</BaseToast.Action>
 					</Tooltip>
 				)}
-				<ToastProgress duration={data.duration} variant={data.variant} />
+				<ToastProgress duration={data.duration} />
 			</BaseToast.Content>
 		</BaseToast.Root>
 	);
@@ -250,13 +250,7 @@ function ToastCard({ toast: item }: { toast: BaseToast.Root.ToastObject<ToastDat
  * while the stack is hovered, focused, or the tab is hidden; this line reads
  * the same viewport state and advances only while the timer can advance.
  */
-function ToastProgress({
-	duration,
-	variant,
-}: {
-	duration: number;
-	variant: ToastVariant;
-}) {
+function ToastProgress({ duration }: { duration: number }) {
 	const lineRef = useRef<HTMLSpanElement>(null);
 
 	useEffect(() => {
@@ -292,14 +286,7 @@ function ToastProgress({
 		<span
 			ref={lineRef}
 			aria-hidden
-			className={[
-				"pointer-events-none absolute inset-x-0 bottom-0 h-0.5 origin-left",
-				variant === "success"
-					? "bg-green"
-					: variant === "error"
-						? "bg-red"
-						: "bg-accent",
-			].join(" ")}
+			className="pointer-events-none absolute inset-x-0 bottom-0 h-0.5 origin-left bg-dim/35"
 		/>
 	);
 }
