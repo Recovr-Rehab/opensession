@@ -417,8 +417,12 @@ export function DiffPanel({
         />
       ) : (
       /* @pierre/diffs sizes its own generated markup, which no utility on our
-         side can reach — hold it inside the panel from here. */
-      <div className="px-2.5 pt-2.5 pb-7 [&_[class*=pierre]]:max-w-full">
+         side can reach — hold it inside the panel from here. A parent toolbar
+         supplies the review canvas's shared 8px inset; standalone Changes
+         keeps this panel's own inset. */
+      <div
+        className={`${toolbarTarget === undefined ? "px-2.5 pt-2.5" : "px-0 pt-0"} pb-7 [&_[class*=pierre]]:max-w-full`}
+      >
         <CommentableDiff
           key={cur.repo}
           patch={d.rawPatch || ""}

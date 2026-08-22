@@ -1633,7 +1633,6 @@ export function PrPanel({
     const sessionRunning = !!sessions?.find(
       (session) => session.id === sessionId,
     )?.isRunning;
-    const branchLabel = active?.branch || git?.branch;
     // The branch's own changes are the review here, so they lead. Opening the
     // PR is the one action this state offers, and it sits in the bar rather
     // than inside a card below the diff.
@@ -1654,8 +1653,8 @@ export function PrPanel({
         <ReviewToolbar compact={compactToolbar}>
           <div className={PR_NO_PR_BAR}>
             {targetPicker}
-            {/* The action leads the bar: opening the PR is what this state is
-                for, and the branch beside it only says which one. */}
+            {/* Opening the PR is what this state is for, so its action leads
+                before the shared diff controls. */}
             {showWorktreeDiff && !!send && (
               <Button
                 variant="primary"
@@ -1675,10 +1674,6 @@ export function PrPanel({
                 onLinked={handleLinked}
               />
             )}
-            <span className="flex min-w-0 items-center gap-1.5 text-label text-dim">
-              <IconBranches size={17} className="shrink-0 text-faint" />
-              <span className="truncate">{branchLabel || "Working changes"}</span>
-            </span>
             {showWorktreeDiff && (
               <div
                 ref={setWorktreeToolbarTarget}
@@ -1694,7 +1689,7 @@ export function PrPanel({
         )}
         {showWorktreeDiff ? (
           <div
-            className="mx-auto w-full max-w-[1500px] px-2 py-4 phone:px-1"
+            className={`max-w-[1500px] px-2 py-2 phone:w-full phone:px-1 ${compactToolbar ? `w-auto ${WS_SUMMARY_REVIEW_CANVAS_CLEARANCE}` : "mx-auto w-full"}`}
             data-no-pr-worktree-diff
           >
             <DiffPanel
@@ -2282,7 +2277,7 @@ export function PrPanel({
       )}
 
       <div
-        className={`flex min-h-0 flex-1 ${compactToolbar ? WS_SUMMARY_REVIEW_CANVAS_CLEARANCE : ""}`}
+        className={`flex min-h-0 flex-1 ${compactToolbar ? `${WS_SUMMARY_REVIEW_CANVAS_CLEARANCE} desktop:[--review-file-tree-top:52px]` : ""}`}
       >
         {page === "files" && fileListMode !== "hidden" && files.length > 0 && (
           <PrFileTree
@@ -2294,7 +2289,10 @@ export function PrPanel({
         )}
 
         <main
-          className={`min-w-0 flex-1 bg-surface [--review-file-header-top:0px] ${compactToolbar ? "overflow-y-visible" : "overflow-y-auto"} ${reviewing ? "pb-24 phone:pb-36" : "pb-4"}`}
+          // Wide review scrolls the toolbar and canvas in one container. Once
+          // the toolbar sticks, file titles clear its 10px inset, 40px row,
+          // and 2px border instead of disappearing underneath it.
+          className={`min-w-0 flex-1 bg-surface [--review-file-header-top:0px] ${compactToolbar ? "overflow-y-visible desktop:[--review-file-header-top:52px]" : "overflow-y-auto"} ${reviewing ? "pb-24 phone:pb-36" : "pb-4"}`}
         >
           {page === "overview" ? (
             <SelectionToSession

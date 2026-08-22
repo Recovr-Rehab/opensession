@@ -41,17 +41,10 @@ export const WS_SUMMARY_CARD =
 	"[--popup-blur:blur(32px)_saturate(1.6)_brightness(1.12)] " +
 	"[border-radius:calc(18px*var(--rf))]!";
 
-/**
- * Review gives the standing summary its own column instead of letting the
- * popup cover the diff. The 324px clearance is the 300px card, its 12px edge
- * gutter, and another 12px between the card and review canvas.
- */
-export const WS_SUMMARY_REVIEW_CLEARANCE = "desktop:mr-[324px]";
-
-/** Wide Review scrolls outside the summary column. The paired clearances
- * stay 8px apart because the file canvas supplies its own 8px inner gutter;
- * this keeps its border aligned with the toolbar while tightening the space
- * before the summary card. */
+/** Wide Review keeps its scroller full width so the native scrollbar stays at
+ * the window edge, beyond the summary card. These child clearances reserve the
+ * summary column instead. They stay 8px apart because the file canvas supplies
+ * its own 8px inner gutter, keeping its border aligned with the toolbar. */
 export const WS_SUMMARY_REVIEW_BAR_CLEARANCE = "desktop:mr-[316px]";
 export const WS_SUMMARY_REVIEW_CANVAS_CLEARANCE = "desktop:mr-[308px]";
 

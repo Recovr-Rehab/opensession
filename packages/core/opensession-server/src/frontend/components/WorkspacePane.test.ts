@@ -51,9 +51,8 @@ test("workspace Review keeps the implementation summary beside the PR canvas", (
 	expect(source).toContain("session={presentationSession}");
 	expect(source).toContain("onOpenChange={setReviewSummaryOpen}");
 	expect(source).toContain("compactToolbar={reviewSummaryVisible}");
-	expect(viewerSource).toContain(
-		"summaryVisible && WS_SUMMARY_REVIEW_CLEARANCE",
-	);
+	expect(viewerSource).toContain("compactToolbar={summaryVisible}");
+	expect(viewerSource).not.toContain("WS_SUMMARY_REVIEW_CLEARANCE");
 	expect(source).toContain("walkthrough={presentationSession?.walkthrough}");
 });
 
@@ -85,14 +84,20 @@ test("reviews with and without a PR share the floating toolbar", () => {
 	expect(prPanelSource).toContain("<ActiveCodeViewIcon size={18} />");
 });
 
-test("a review without a PR combines its branch and diff controls", () => {
+test("a review without a PR combines and aligns its controls", () => {
 	expect(prPanelSource).toContain("ref={setWorktreeToolbarTarget}");
 	expect(prPanelSource).toContain(
 		"toolbarTarget={worktreeToolbarTarget}",
 	);
+	expect(prPanelSource).toContain(
+		'${compactToolbar ? `w-auto ${WS_SUMMARY_REVIEW_CANVAS_CLEARANCE}` : "mx-auto w-full"}',
+	);
 	expect(diffPanelSource).toContain("toolbarTarget === undefined");
 	expect(diffPanelSource).toContain(
 		"createPortal(toolbarContents, toolbarTarget)",
+	);
+	expect(diffPanelSource).toContain(
+		'toolbarTarget === undefined ? "px-2.5 pt-2.5" : "px-0 pt-0"',
 	);
 });
 
@@ -114,7 +119,7 @@ test("wide Review moves page navigation into the summary and uses one toolbar ro
 		"compactToolbar ? WS_SUMMARY_REVIEW_CANVAS_CLEARANCE",
 	);
 	expect(prPanelSource).toContain(
-		'compactToolbar ? "overflow-y-visible" : "overflow-y-auto"',
+		'compactToolbar ? "overflow-y-visible desktop:[--review-file-header-top:52px]" : "overflow-y-auto"',
 	);
 });
 
