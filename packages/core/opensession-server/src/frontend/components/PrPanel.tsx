@@ -89,6 +89,7 @@ import {
   IconGlobe,
   IconListCircles,
   IconMessage,
+  IconPullRequest,
   IconSliders,
   IconUndo,
   IconX,
@@ -102,7 +103,7 @@ import { SettingRow, SwitchRow, ValueRow } from "../ui/setting-row";
 
 import { checkClass, isDeployment, summarize } from "../lib/pr-status-derive";
 import { prStatusMark } from "../lib/pr-status";
-import { PR_REPO_TABS } from "../lib/pr-tone-classes";
+import { PR_NO_PR_BAR, PR_REPO_TABS } from "../lib/pr-tone-classes";
 import { formatPrCommentPrompt, stripHtmlComments } from "../lib/pr-prompts";
 import { CheckRow } from "./pr/CheckRow";
 import { PrStateIcon } from "./pr/PrStateIcon";
@@ -471,6 +472,15 @@ export function PrPanel({
   const [closing, setClosing] = useState(false);
   const [confirmClose, setConfirmClose] = useState(false);
   const [closeError, setCloseError] = useState<string | null>(null);
+  // The branch has no PR yet and the bar's Create PR action has been asked for.
+  // The agent does the work, so this only confirms the ask briefly while the PR
+  // itself is still being created.
+  const [prRequested, setPrRequested] = useState(false);
+  useEffect(() => {
+    if (!prRequested) return;
+    const timer = window.setTimeout(() => setPrRequested(false), 6000);
+    return () => window.clearTimeout(timer);
+  }, [prRequested]);
   const { copy: copyPrLink } = useCopy();
   // Merging is a separate decision from approving, so it starts off: the
   // reviewer opts into it, and the primary action stays "Approve".
@@ -1605,34 +1615,59 @@ export function PrPanel({
     const sessionRunning = !!sessions?.find(
       (session) => session.id === sessionId,
     )?.isRunning;
+    const branchLabel = active?.branch || git?.branch;
+    // The branch's own changes are the review here, so they lead. Opening the
+    // PR is the one action this state offers, and it sits in the bar rather
+    // than inside a card below the diff.
+    const createPr = () => {
+      if (!send || !sessionId) return;
+      send({
+        type: "prompt",
+        sessionId,
+        user: getCurrentUser(),
+        content:
+          "Commit any remaining work, push the branch, and open a PR for it.",
+      });
+      setPrRequested(true);
+      toast(`Asked ${AGENT_NAME} to open a pull request`);
+    };
     return (
       <div className="flex h-full min-h-0 flex-1 flex-col overflow-y-auto">
-        {switcher}
-        <div className="mx-auto flex w-full max-w-[760px] flex-col gap-4 px-4 py-4 sm:px-5">
-          {walkthrough && <WalkthroughCard walkthrough={walkthrough} />}
-          <PrCard title="Git status">
-            <GitStatusRows
-              git={git}
-              pr={null}
+        <div className={PR_NO_PR_BAR}>
+          {targetPicker}
+          <span className="flex min-w-0 items-center gap-1.5 text-label text-dim">
+            <IconBranches size={17} className="shrink-0 text-faint" />
+            <span className="truncate">{branchLabel || "Working changes"}</span>
+          </span>
+          <span className="flex-1" />
+          {linkable && (
+            <LinkPrControl
               sessionId={sessionId}
-              repo={active?.repo}
-              send={send}
-              onRefresh={load}
+              variant="action"
+              onLinked={handleLinked}
             />
-          </PrCard>
-          {linkable && !showBar && (
-            <div className="flex flex-wrap items-center gap-2">
-              <LinkPrControl
-                sessionId={sessionId}
-                variant="action"
-                onLinked={handleLinked}
-              />
-            </div>
+          )}
+          {showWorktreeDiff && !!send && (
+            <Button
+              variant="primary"
+              size="sm"
+              className="phone:min-h-11"
+              icon={<IconPullRequest size={20} />}
+              disabled={prRequested}
+              onClick={createPr}
+            >
+              {prRequested ? "Opening…" : "Create PR"}
+            </Button>
           )}
         </div>
-        {showWorktreeDiff && (
+        {walkthrough && (
+          <div className="mx-auto w-full max-w-[760px] px-4 pt-4 sm:px-5">
+            <WalkthroughCard walkthrough={walkthrough} />
+          </div>
+        )}
+        {showWorktreeDiff ? (
           <div
-            className="mx-auto w-full max-w-[1500px] px-2 pb-4 phone:px-1"
+            className="mx-auto w-full max-w-[1500px] px-2 py-4 phone:px-1"
             data-no-pr-worktree-diff
           >
             <DiffPanel
@@ -1641,6 +1676,19 @@ export function PrPanel({
               canSend={!!send && !!editGate}
               send={send ?? NOOP_SEND}
             />
+          </div>
+        ) : (
+          <div className="mx-auto flex w-full max-w-[760px] flex-col gap-4 px-4 py-4 sm:px-5">
+            <PrCard title="Git status">
+              <GitStatusRows
+                git={git}
+                pr={null}
+                sessionId={sessionId}
+                repo={active?.repo}
+                send={send}
+                onRefresh={load}
+              />
+            </PrCard>
           </div>
         )}
       </div>

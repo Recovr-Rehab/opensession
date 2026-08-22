@@ -401,6 +401,11 @@ export const PR_ROW_STATE =
  */
 export const PR_REPO_TABS =
 	"flex gap-1 overflow-x-auto border-b border-divider px-3 py-2";
+/* The bar over a branch with no pull request yet: the target picker and branch
+ * on the left, Create pull request on the right. Same divider and rhythm as
+ * the repo tabs, so the canvas keeps one top edge whether or not a PR exists. */
+export const PR_NO_PR_BAR =
+	"flex shrink-0 items-center gap-2 border-b border-divider px-3 py-2";
 const PR_REPO_TAB =
 	"inline-flex cursor-pointer items-center gap-1.5 whitespace-nowrap rounded-md border px-2.5 py-[3px] text-label phone:px-3 phone:py-2";
 export const prRepoTabClass = (selected: boolean) =>

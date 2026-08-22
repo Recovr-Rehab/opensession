@@ -48,8 +48,8 @@ export function LinkPrControl({
         size="sm"
         className={
           variant === "tab"
-            ? "rounded-sm border-dashed bg-transparent px-2.5 py-1 text-xs text-faint shadow-none"
-            : "rounded-sm bg-panel px-3 py-2 text-xs shadow-none hover:bg-hover"
+            ? "rounded-sm border-dashed bg-transparent px-2.5 py-1 text-xs text-faint shadow-none phone:min-h-11"
+            : "rounded-sm bg-panel px-3 py-2 text-xs shadow-none hover:bg-hover phone:min-h-11"
         }
         onClick={() => setOpen(true)}
         title="Link another PR to this session"
