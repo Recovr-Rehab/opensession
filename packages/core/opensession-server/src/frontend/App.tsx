@@ -5812,6 +5812,27 @@ export function App(
 								onNewSession={() => openPalette()}
 								onShowArchived={refreshArchived}
 								onOpenAnalytics={() => navigate({ view: "analytics" })}
+								onAddToSidebar={async (pr) => {
+									const { workspaceId } = await resolveWorkspaceApi({
+										pr: {
+											repo: pr.repo,
+											branch: pr.branch,
+											number: pr.number,
+											title: pr.title,
+										},
+									});
+									refreshWorkspaces();
+									return workspaceId;
+								}}
+								onOpenWorkspace={(workspaceId, pr) => {
+									focusReviewPr({
+										repo: pr.repo,
+										branch: pr.branch,
+										number: pr.number,
+										workspaceId,
+									});
+									navigate({ view: "workspace", id: workspaceId, tab: "review" });
+								}}
 								topbarActionsEl={topbarActionsEl}
 							/>
 						) : null}

@@ -12,6 +12,10 @@ import {
   type WorktreeRow,
 } from "../lib/pr-rows";
 import { Button } from "../ui/button";
+import { useIsPhone } from "../hooks/useIsPhone";
+import { ResponsiveDialog } from "../ui/sheet";
+import { toast } from "../ui/toast";
+import { PrQueuePreview } from "./PrQueuePreview";
 import { useCurrentUser } from "./UserPicker";
 import { UserAvatar } from "./UserAvatar";
 import { RepoTile, repoLabel } from "./RepoTile";
@@ -35,6 +39,8 @@ import {
   IconPlus,
   IconPullRequest,
   IconRepo,
+  IconSidebarLeft,
+  IconX,
 } from "./icons";
 
 interface Props {
@@ -44,9 +50,18 @@ interface Props {
   onNewSession: () => void;
   onShowArchived: () => void;
   onOpenAnalytics?: () => void;
+  /** Create or adopt the PR's workspace without leaving the preview. */
+  onAddToSidebar: (pr: PrPreviewTarget) => Promise<string>;
+  /** Open a PR workspace after it is already represented in the sidebar. */
+  onOpenWorkspace: (workspaceId: string, pr: PrPreviewTarget) => void;
   /** The pane's top bar, where this page's controls go. */
   topbarActionsEl?: HTMLElement | null;
 }
+
+type PrPreviewTarget = Pick<
+  WorktreeRow,
+  "repo" | "branch" | "title" | "number" | "workspaceId" | "state"
+>;
 
 const compactFmt = new Intl.NumberFormat("en", {
   notation: "compact",
@@ -202,9 +217,12 @@ export function Prs({
   onNewSession,
   onShowArchived,
   onOpenAnalytics,
+  onAddToSidebar,
+  onOpenWorkspace,
   topbarActionsEl,
 }: Props) {
   const currentUser = useCurrentUser();
+  const isPhone = useIsPhone();
   const [query, setQuery] = useState("");
   const [workspaceId, setWorkspaceId] = useState("all");
   const [repo, setRepo] = useState("all");
@@ -225,6 +243,31 @@ export function Prs({
   const [recentPrs, setRecentPrs] = useState<RecentPr[]>([]);
   const [personPrs, setPersonPrs] = useState<RecentPr[]>([]);
   const [stats, setStats] = useState<HomeStats | null>(readCachedHomeStats);
+  const [preview, setPreview] = useState<PrPreviewTarget | null>(null);
+  const [addingToSidebar, setAddingToSidebar] = useState(false);
+
+  function openPreviewTarget(repo: string, branch: string) {
+    setPreview({ repo, branch, title: repo, state: "OPEN", workspaceId: null });
+  }
+
+  async function addPreviewToSidebar() {
+    if (!preview || addingToSidebar) return;
+    const target = preview;
+    setAddingToSidebar(true);
+    try {
+      const workspaceId = await onAddToSidebar(target);
+      setPreview((current) =>
+        current?.repo === target.repo && current.branch === target.branch
+          ? { ...current, workspaceId }
+          : current,
+      );
+      toast("Added to sidebar");
+    } catch {
+      toast("Couldn't add to sidebar");
+    } finally {
+      setAddingToSidebar(false);
+    }
+  }
 
   useEffect(() => {
     let active = true;
@@ -581,9 +624,7 @@ export function Prs({
                           <button
                             key={row.key}
                             className={PR_ROW}
-                            onClick={() =>
-                              row.session ? onSelect(row.session) : row.url && window.open(row.url, "_blank", "noopener")
-                            }
+                            onClick={() => setPreview(row)}
                             title={`${repoLabel(row.repo)} · ${row.branch}`}
                           >
                             {/* Hue is for the rows with something to say. A
@@ -642,6 +683,76 @@ export function Prs({
           </div>
         )}
       </div>
+
+      <ResponsiveDialog
+        open={Boolean(preview)}
+        onClose={() => setPreview(null)}
+        phone={isPhone}
+        label={preview ? `Pull request: ${preview.title}` : "Pull request"}
+        showPhoneGrabber={false}
+        modalClassName="h-[min(820px,85vh)] w-[min(1280px,92vw)] max-w-none bg-surface"
+        sheetClassName="top-0 h-[100dvh] max-h-none bg-surface [border-radius:0]! [box-shadow:none]!"
+      >
+        {preview && (
+          <>
+            <div className="flex min-h-13 shrink-0 items-center gap-2 border-b border-line bg-panel px-3 phone:min-h-14">
+              <div className="flex min-w-0 flex-1 items-center gap-2 px-1 text-item-title font-medium text-fg">
+                <IconPullRequest size={19} className="shrink-0 text-dim" />
+                <span className="truncate">{repoLabel(preview.repo)}</span>
+                {preview.number && (
+                  <span className="shrink-0 font-normal tabular-nums text-faint">
+                    #{preview.number}
+                  </span>
+                )}
+              </div>
+              {preview.workspaceId ? (
+                <Button
+                  variant="default"
+                  className="min-h-10 shrink-0 phone:min-h-11"
+                  icon={<IconSidebarLeft size={18} />}
+                  onClick={() => {
+                    onOpenWorkspace(preview.workspaceId!, preview);
+                    setPreview(null);
+                  }}
+                >
+                  Open workspace
+                </Button>
+              ) : preview.state === "OPEN" ? (
+                <Button
+                  variant="default"
+                  className="min-h-10 shrink-0 phone:min-h-11"
+                  icon={<IconSidebarLeft size={18} />}
+                  disabled={addingToSidebar}
+                  onClick={() => void addPreviewToSidebar()}
+                >
+                  {addingToSidebar ? "Adding…" : "Add to sidebar"}
+                </Button>
+              ) : null}
+              <Button
+                variant="ghost"
+                className="size-10 shrink-0 phone:size-11"
+                icon={<IconX size={20} />}
+                aria-label="Close pull request"
+                onClick={() => setPreview(null)}
+              />
+            </div>
+            <div className="min-h-0 flex-1">
+              <PrQueuePreview
+                key={`${preview.repo}:${preview.branch}`}
+                repo={preview.repo}
+                branch={preview.branch}
+                sessions={sessions}
+                onOpenSession={(id) => {
+                  const session = sessions.find((item) => item.id === id);
+                  if (session) onSelect(session);
+                  setPreview(null);
+                }}
+                onOpenPr={openPreviewTarget}
+              />
+            </div>
+          </>
+        )}
+      </ResponsiveDialog>
     </div>
   );
 }
