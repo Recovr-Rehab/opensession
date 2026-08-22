@@ -467,11 +467,7 @@ export function SessionTabs({
 										onClick={() => onSelectView(v.id)}
 										title={v.label}
 									>
-										{/* Review's PR dot can change when another session tab becomes current.
-										    Keep its slot so that status update never shifts the tab row. */}
-										{(v.dotClass || v.id.startsWith("review:")) && (
-											<span className={`${PANEL_TAB_DOT} ${v.dotClass ?? "invisible"}`} />
-										)}
+										{v.dotClass && <span className={`${PANEL_TAB_DOT} ${v.dotClass}`} />}
 										{v.icon ? (
 											<span
 												className={cn(TAB_VICON, v.closable !== false && "desktop:mr-3.5")}
