@@ -130,7 +130,7 @@ export const VIEWER_HEADER_ACTIONS =
 /** The presence facepile (Figma/Notion-style), just before Share. Labelled
  *  items in the row space themselves off the icon cluster; the icons keep the
  *  row's tight 2px gap. */
-export const VIEWER_PRESENCE = "mr-1.5 flex items-center";
+export const VIEWER_PRESENCE = "mx-1.5 flex items-center";
 
 /**
  * One face in it. They overlap by 8px so the pile reads as a stack, and the
