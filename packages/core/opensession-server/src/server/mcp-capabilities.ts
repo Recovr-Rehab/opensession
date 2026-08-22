@@ -171,20 +171,12 @@ export function renderInternalMcpCapabilities(
   }
   if (!available.size) return "";
 
-  const lines = Object.entries(INTERNAL_MCP_CAPABILITIES)
-    .filter(([name]) => available.has(name as InternalMcpServerName))
-    .map(([name, capability]) => `- \`${name}\` · ${capability.guidance}`);
+  const names = Object.keys(INTERNAL_MCP_CAPABILITIES)
+    .filter((name) => available.has(name as InternalMcpServerName))
+    .map((name) => `\`${name}\``);
 
   return (
-    `## ${product} internal tools\n` +
-    `These internal MCP capabilities are available in this run. For a ${product} operation ` +
-    `covered below, use \`mcp_search\` to find the exact tool and read its schema, then call it ` +
-    `through \`mcp_call\` rather than recreating that operation through undocumented shell ` +
-    `commands or direct API calls. This does not replace normal shell and file tools for repo ` +
-    `work or diagnostics. Use only capabilities relevant to the task. Tool availability does ` +
-    `not override run policy, confirmation gates, or user-approval requirements. For ` +
-    `deployments, credentials, persistent services, publishing, or external communication, ` +
-    `verify the target and scope and call the tool only when the task requires it.\n\n` +
-    lines.join("\n")
+    `## ${product} internal tools\nUse \`mcp_search\` to find an exact tool and its schema, ` +
+    `then call it with \`mcp_call\`. Available servers: ${names.join(", ")}.`
   );
 }

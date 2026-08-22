@@ -27,7 +27,6 @@ describe("internal MCP capability guidance", () => {
     expect(note).toContain("`mcp_search`");
     expect(note).toContain("`mcp_call`");
     expect(note).toContain("`opensession-runners`");
-    expect(note).toContain("trusted and persistent, not a Sandbox");
     expect(note).toContain("`opensession-memory`");
     expect(note).not.toContain("`opensession-workflows`");
     expect(note).not.toContain("`external`");
@@ -37,12 +36,13 @@ describe("internal MCP capability guidance", () => {
     const names = Object.keys(INTERNAL_MCP_CAPABILITIES);
     const reversed = Object.fromEntries([...names].reverse().map((name) => [name, {}]));
     const note = renderInternalMcpCapabilities(reversed);
-    const capabilityLines = note.split("\n").filter((line) => line.startsWith("- `opensession-"));
+    const renderedNames = [...note.matchAll(/`(opensession-[^`]+)`/g)].map(
+      (match) => match[1],
+    );
 
-    expect(capabilityLines).toHaveLength(names.length);
-    expect(capabilityLines.map((line) => line.match(/`([^`]+)`/)?.[1])).toEqual(names);
-    expect(new Set(capabilityLines).size).toBe(capabilityLines.length);
-    expect(note.length).toBeLessThan(4_500);
+    expect(renderedNames).toEqual(names);
+    expect(new Set(renderedNames).size).toBe(renderedNames.length);
+    expect(note.length).toBeLessThan(1_000);
   });
 
   test("legacy aliases render once under their canonical names", () => {
@@ -76,6 +76,6 @@ describe("internal MCP capability guidance", () => {
     expect(prompt).toContain("`opensession-papercuts`");
     expect(prompt).not.toContain("`opensession-runners`");
     expect(prompt).toContain("## Dynamic workflows");
-    expect(prompt).toContain("## Log papercuts");
+    expect(prompt).toContain("## Papercuts");
   });
 });
