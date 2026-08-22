@@ -146,6 +146,7 @@ const REMOTE_MCP_CONFIG = `${REMOTE_HOME}/.opensession-mcp-config.json`;
 const REMOTE_NODE_VERSION = "24.18.1";
 const REMOTE_NODE_MAJOR = Number(REMOTE_NODE_VERSION.split(".")[0]);
 const REMOTE_JUST_VERSION = "1.43.1";
+const REMOTE_GH_VERSION = "2.83.1";
 const REMOTE_RUNTIME_REVISION = "workspace-runtime-v7";
 const REMOTE_REPO = REPO_ROOT; // /home/ubuntu/projects/opensession
 const BOOTSTRAP_MARKER = `${REMOTE_HOME}/.bks-bootstrapped`;
@@ -698,7 +699,7 @@ export function bootstrapSignature(): string {
   const base = cfg.runnerSha || cfg.runnerBundleUrl || "unpinned";
   return (
     `${base}+node@${REMOTE_NODE_VERSION}+just@${REMOTE_JUST_VERSION}` +
-    `+${REMOTE_RUNTIME_REVISION}`
+    `+gh@${REMOTE_GH_VERSION}+${REMOTE_RUNTIME_REVISION}`
   );
 }
 
@@ -806,6 +807,38 @@ async function bootstrapRemoteBaseRuntime(
       `test "$(${remoteJust} --version | awk '{print $2}')" = "${REMOTE_JUST_VERSION}"`,
     ),
     `just ${REMOTE_JUST_VERSION} check`,
+  );
+
+  // gh: the Docker sandbox image (deploy/sandbox/Dockerfile) ships it, and
+  // agent runs rely on it for GitHub interactions such as PRs, checks, and API calls.
+  // Remote provider base images (Daytona and friends) don't carry it, so
+  // install the pinned official release, checksum-verified, into /usr/local/bin.
+  const remoteGh = "/usr/local/bin/gh";
+  log(`ensuring gh ${REMOTE_GH_VERSION}…`);
+  need(
+    await driver.exec(
+      `test -x ${remoteGh} && test "$(${remoteGh} --version | head -n1 | awk '{print $3}')" = "${REMOTE_GH_VERSION}" || ` +
+        `{ case "$(uname -m)" in x86_64) arch=amd64;; aarch64|arm64) arch=arm64;; ` +
+        `*) echo "unsupported gh architecture: $(uname -m)" >&2; exit 1;; esac; ` +
+        `dist=gh_${REMOTE_GH_VERSION}_linux_$arch; tmp=$(mktemp -d); ` +
+        `trap 'rm -rf "$tmp"' EXIT; ` +
+        `curl -fsSL https://github.com/cli/cli/releases/download/v${REMOTE_GH_VERSION}/$dist.tar.gz -o "$tmp/$dist.tar.gz" && ` +
+        `curl -fsSL https://github.com/cli/cli/releases/download/v${REMOTE_GH_VERSION}/gh_${REMOTE_GH_VERSION}_checksums.txt -o "$tmp/checksums.txt" && ` +
+        `expected=$(grep "  $dist.tar.gz$" "$tmp/checksums.txt") && test -n "$expected" && ` +
+        `printf '%s\\n' "$expected" | (cd "$tmp" && sha256sum -c -) && ` +
+        `tar -xzf "$tmp/$dist.tar.gz" -C "$tmp" && ` +
+        `if [ "$(id -u)" = 0 ]; then install -m 0755 "$tmp/$dist/bin/gh" ${remoteGh}; ` +
+        `elif command -v sudo >/dev/null 2>&1; then sudo -n install -m 0755 "$tmp/$dist/bin/gh" ${remoteGh}; ` +
+        `else echo "root privileges are required to install gh ${REMOTE_GH_VERSION}" >&2; exit 1; fi; }`,
+      { timeoutMs: 120_000 },
+    ),
+    `gh ${REMOTE_GH_VERSION} install`,
+  );
+  need(
+    await driver.exec(
+      `test "$(${remoteGh} --version | head -n1 | awk '{print $3}')" = "${REMOTE_GH_VERSION}"`,
+    ),
+    `gh ${REMOTE_GH_VERSION} check`,
   );
 
   log("ensuring bun…");

@@ -46,6 +46,9 @@ describe("remote runner bootstrap", () => {
 
     const install = commands.find((command) => command.includes(".local/bin/opensession"));
     expect(install).toStartWith("mkdir -p /home/ubuntu/.local/bin && ");
+    const ghInstall = commands.find((command) => command.includes("releases/download/v2.83.1"));
+    expect(ghInstall).toContain("sha256sum -c -");
+    expect(ghInstall).toContain("/usr/local/bin/gh");
     const originScrub = commands.find((command) => command.includes("remote set-url origin"));
     expect(originScrub).toContain("https://github.com/tellahq/opensession.git");
     expect(originScrub).not.toContain("runner-clone-secret");
