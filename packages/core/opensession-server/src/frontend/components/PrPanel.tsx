@@ -1944,8 +1944,9 @@ export function PrPanel({
     </Popover.Root>
   );
 
-  /* The review has two pages, kept beside each other in the sticky bar so the
-     navigation stays visible without taking width from the review canvas. */
+  /* The review has two pages. Without the workspace summary they sit in a
+     small floating switcher, leaving the identity and file controls in the
+     same toolbar positions used while the summary is open. */
   const pageTabs = (
     [
       ["overview", "Overview", comments.length || undefined],
@@ -2053,16 +2054,16 @@ export function PrPanel({
   );
 
   const reviewBar = !compactToolbar && (
-    <div className="flex h-8 shrink-0 items-center gap-1.5 overflow-x-auto overflow-y-hidden bg-panel px-6 [scrollbar-width:none] phone:h-11 phone:gap-2 phone:bg-surface phone:px-2 phone:shadow-[inset_0_-1px_0_var(--border)] [&::-webkit-scrollbar]:hidden">
+    <div className="flex h-8 shrink-0 items-center gap-1.5 overflow-x-auto overflow-y-hidden bg-surface [scrollbar-width:none] desktop:absolute desktop:left-2 desktop:top-[calc(100%+8px)] desktop:z-20 desktop:rounded-lg desktop:border desktop:border-line phone:h-11 phone:gap-2 phone:px-2 phone:shadow-[inset_0_-1px_0_var(--border)] [&::-webkit-scrollbar]:hidden">
       <div
-        className="flex shrink-0 items-center gap-0.5 self-stretch desktop:-ml-3"
+        className="flex shrink-0 items-center gap-0.5 self-stretch"
         role="tablist"
         aria-orientation="horizontal"
         aria-label="Pull request pages"
       >
         {pageTabs}
       </div>
-      {fileControls}
+      {phoneLayout && fileControls}
     </div>
   );
 
@@ -2072,9 +2073,9 @@ export function PrPanel({
       data-review-canvas="true"
       ref={setRoot}
     >
-      {/* The summary owns page navigation when it stands beside this canvas,
-          so desktop can fold file controls into one identity row. Narrow and
-          phone layouts keep the independent navigation row. */}
+      {/* Desktop always keeps file controls in the identity row, so opening
+          the summary only relocates page navigation. Phone keeps one
+          edge-to-edge navigation and controls row below the identity. */}
       <ReviewToolbar compact={compactToolbar}>
       <header className="flex h-10 shrink-0 items-center gap-2.5 px-6 phone:px-3">
         {/* State, in the app's own PR language, filled rather than drawn: the
@@ -2133,7 +2134,7 @@ export function PrPanel({
             </a>
           </Tooltip>
         </h1>
-        {compactToolbar && fileControls}
+        {(compactToolbar || !phoneLayout) && fileControls}
         {/* A stack is secondary navigation, not page content. Keep its compact
             position/size chip in the identity bar and reveal the full rail in
             the shared popover instead of spending permanent canvas height. */}
@@ -2287,7 +2288,7 @@ export function PrPanel({
       )}
 
       <div
-        className={`flex min-h-0 flex-1 ${compactToolbar ? `${WS_SUMMARY_REVIEW_CANVAS_CLEARANCE} desktop:flex-none desktop:[--review-file-tree-top:62px]` : ""}`}
+        className={`flex min-h-0 flex-1 ${compactToolbar ? `${WS_SUMMARY_REVIEW_CANVAS_CLEARANCE} desktop:flex-none desktop:[--review-file-tree-top:62px]` : "desktop:pt-12"}`}
       >
         {page === "files" && fileListMode !== "hidden" && files.length > 0 && (
           <PrFileTree

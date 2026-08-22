@@ -77,9 +77,9 @@ test("reviews with and without a PR share the floating toolbar", () => {
 	);
 	expect(reviewBar).toContain("h-8");
 	expect(reviewBar).toContain("phone:h-11");
-	expect(reviewBar).toContain("bg-panel");
-	expect(reviewBar).toContain("phone:bg-surface");
-	expect(reviewBar).toContain("desktop:-ml-3");
+	expect(reviewBar).toContain("bg-surface");
+	expect(reviewBar).toContain("desktop:absolute");
+	expect(reviewBar).toContain("desktop:top-[calc(100%+8px)]");
 	expect(prPanelSource).toContain('["files", "Files",');
 	expect(prPanelSource).toContain("<ActiveCodeViewIcon size={18} />");
 });
@@ -109,12 +109,14 @@ test("a review without a PR combines and aligns its controls", () => {
 	);
 });
 
-test("wide Review moves page navigation into the summary and uses one toolbar row", () => {
+test("wide Review keeps its controls stable while page navigation moves", () => {
 	expect(source).toContain("reviewPage={reviewPage}");
 	expect(source).toContain("onReviewPageChange={setReviewPage}");
 	expect(source).toContain("compactToolbar={reviewSummaryVisible}");
 	expect(prPanelSource).toContain("const reviewBar = !compactToolbar");
-	expect(prPanelSource).toContain("{compactToolbar && fileControls}");
+	expect(prPanelSource).toContain("{phoneLayout && fileControls}");
+	expect(prPanelSource).toContain("{(compactToolbar || !phoneLayout) && fileControls}");
+	expect(prPanelSource).toContain('"desktop:pt-12"');
 	expect(summarySource).toContain('aria-label="Pull request pages"');
 	expect(summarySource).toContain('onReviewPageChange("overview")');
 	expect(summarySource).toContain('onReviewPageChange("files")');
