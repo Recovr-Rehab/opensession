@@ -431,9 +431,9 @@
 	--desktop-header-h: 48px;
 	/* Header height grows by the iOS status-bar inset when installed as a PWA
      (black-translucent draws the webview under the clock/notch). The bar spends
-     8px on its own top pad, leaving 44px for MOBILE_BAR_SEGMENT and the settings
+     8px on its own top pad, leaving 40px for MOBILE_BAR_SEGMENT and the settings
      mark in lib/app-header-classes.ts. Move the two together. */
-	--header-h: calc(52px + env(safe-area-inset-top, 0px));
+	--header-h: calc(48px + env(safe-area-inset-top, 0px));
 }
 
 /* Above the phone breakpoint the top bar isn't rendered at all, so nothing is

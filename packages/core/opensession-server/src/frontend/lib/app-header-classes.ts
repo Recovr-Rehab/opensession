@@ -198,25 +198,25 @@ export const APP_BRAND = "app-brand flex min-w-0 items-center gap-0.5";
  * The mark, as the Settings trigger. `order-1` seats it before the update pill
  * (which claims `order-3`); the 4px indent lines the MARK up with the list's
  * 16px text column below rather than with the bar's own 12px edge. The button
- * sits 4px in because the mark starts at the button's left edge. Its 56px image
- * overhangs the 44px button by 6px a side against the transparent margin baked
+ * sits 4px in because the mark starts at the button's left edge. Its 48px image
+ * overhangs the 40px button by 4px a side against the transparent margin baked
  * into the untrimmed asset.
  */
 export const APP_LOGO_BUTTON =
-	"relative inline-flex size-11 items-center justify-center rounded-control " +
+	"relative inline-flex size-10 items-center justify-center rounded-control " +
 	"border-none bg-transparent p-0 text-inherit cursor-pointer " +
 	"[-webkit-tap-highlight-color:transparent] active:bg-hover " +
 	"phone:order-1 phone:ml-1";
 
 /**
- * Sized so the MARK measures ~45px, close to the 44px bar buttons opposite it.
- * Those buttons are outlines around air and this is solid ink, so exact visual
- * equality would read mark-heavy. The box runs bigger than the mark because,
- * unlike a repo icon, this asset is not trimmed. It carries its artwork on 80%
- * of its canvas, so 56 × 0.8 ≈ 45px of ink. The overflow is transparent margin
- * and touches nothing.
+ * Sized so the MARK measures ~38px, a step under the 40px bar buttons opposite
+ * it. Those buttons are outlines around air and this is solid ink, so exact
+ * visual equality would read mark-heavy. The box runs bigger than the mark
+ * because, unlike a repo icon, this asset is not trimmed. It carries its
+ * artwork on 80% of its canvas, so 48 × 0.8 ≈ 38px of ink. The overflow is
+ * transparent margin and touches nothing.
  */
-export const APP_LOGO_IMAGE = "block size-14";
+export const APP_LOGO_IMAGE = "block size-12";
 
 /**
  * Live connection dot on the avatar's corner (the desktop sidebar's chrome
@@ -428,21 +428,25 @@ export const APP_HEADER_ACTIONS_DETAIL =
 	`${HEADER_ACTIONS_BASE} phone:ml-2.5 phone:flex-none phone:gap-2.5`;
 
 /**
- * A segment of the grouped bar control (see `APP_HEADER_ACTIONS`): 44pt tall
+ * A segment of the grouped bar control (see `APP_HEADER_ACTIONS`): 40pt tall
  * and wider than it is high, with no chrome of its own. The capsule around it
  * draws the edge, fill and shadow. The glyph is thickened past its 1.5 stroke
  * because iOS nav-bar glyphs are bold and it reads spindly at this size
- * otherwise. `--header-h` in base.css leaves this control 44px below the bar's
+ * otherwise. `--header-h` in base.css leaves this control 40px below the bar's
  * 8px top inset. Move the two together.
+ *
+ * 40 rather than 44: the segment is wider than it is tall, so the target the
+ * thumb actually meets stays past 44pt across, and the bar reads as chrome
+ * rather than as the tallest thing on the screen.
  */
 const MOBILE_BAR_SEGMENT =
-	"phone:relative phone:inline-flex phone:h-11 phone:w-13 phone:shrink-0 " +
+	"phone:relative phone:inline-flex phone:h-10 phone:w-13 phone:shrink-0 " +
 	"phone:items-center phone:justify-center phone:rounded-none " +
 	"phone:border-none phone:bg-transparent phone:p-0 phone:shadow-none " +
 	"phone:cursor-pointer phone:touch-manipulation " +
 	"phone:[-webkit-tap-highlight-color:transparent] " +
 	"phone:active:opacity-35 phone:active:duration-0 " +
-	"phone:[&_svg]:size-[25px] phone:[&_svg]:[stroke-width:2]";
+	"phone:[&_svg]:size-[23px] phone:[&_svg]:[stroke-width:2]";
 
 /**
  * Search — the trailing half of the pair. No rule divides it from the filter:
