@@ -19,7 +19,7 @@ export const WS_SUMMARY_OPEN_EVENT =
 	"opensession-workspace-summary-open-changed";
 
 export function workspaceSummaryOpen(): boolean {
-	return localStorage.getItem(WS_SUMMARY_OPEN_KEY) === "true";
+	return localStorage.getItem(WS_SUMMARY_OPEN_KEY) !== "false";
 }
 
 /**
@@ -58,15 +58,15 @@ export function workspaceSummaryShift(headerW: number): number {
 	return headerW >= WS_SUMMARY_ROOM_W ? WS_SUMMARY_MAX_SHIFT : 0;
 }
 
-/** Review always opens the summary on demand instead of inheriting its pin. */
+/** Any pane with enough room keeps the summary open, including Review. */
 export function workspaceSummaryCanStand(
 	hasRoom: boolean,
-	reviewMode: boolean,
+	_reviewMode: boolean,
 ): boolean {
-	return hasRoom && !reviewMode;
+	return hasRoom;
 }
 
-/** Clear both Review bars before placing its temporary summary card. */
+/** Clear both Review bars before placing its summary card. */
 export function workspaceSummarySideOffset(
 	tabStripVisible: boolean,
 	reviewMode: boolean,

@@ -1,8 +1,10 @@
 import { describe, expect, test } from "bun:test";
 import {
 	WS_SUMMARY_MAX_SHIFT,
+	WS_SUMMARY_OPEN_KEY,
 	WS_SUMMARY_ROOM_W,
 	workspaceSummaryCanStand,
+	workspaceSummaryOpen,
 	workspaceSummaryShift,
 	workspaceSummarySideOffset,
 } from "./workspace-summary-open";
@@ -30,10 +32,37 @@ describe("workspaceSummaryShift", () => {
 	});
 });
 
+describe("workspace summary preference", () => {
+	test("defaults open until the person explicitly closes it", () => {
+		const previous = Object.getOwnPropertyDescriptor(
+			globalThis,
+			"localStorage",
+		);
+		const stored = new Map<string, string>();
+		Object.defineProperty(globalThis, "localStorage", {
+			configurable: true,
+			value: {
+				getItem: (key: string) => stored.get(key) ?? null,
+			},
+		});
+		try {
+			expect(workspaceSummaryOpen()).toBe(true);
+			stored.set(WS_SUMMARY_OPEN_KEY, "true");
+			expect(workspaceSummaryOpen()).toBe(true);
+			stored.set(WS_SUMMARY_OPEN_KEY, "false");
+			expect(workspaceSummaryOpen()).toBe(false);
+		} finally {
+			if (previous) Object.defineProperty(globalThis, "localStorage", previous);
+			else Reflect.deleteProperty(globalThis, "localStorage");
+		}
+	});
+});
+
 describe("workspace summary in Review", () => {
-	test("starts temporary even when the pane has room", () => {
-		expect(workspaceSummaryCanStand(true, true)).toBe(false);
+	test("inherits the standing preference when the pane has room", () => {
+		expect(workspaceSummaryCanStand(true, true)).toBe(true);
 		expect(workspaceSummaryCanStand(true, false)).toBe(true);
+		expect(workspaceSummaryCanStand(false, true)).toBe(false);
 	});
 
 	test("clears the Review identity and navigation bars", () => {
