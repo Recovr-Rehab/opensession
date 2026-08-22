@@ -292,9 +292,8 @@ function ToastCard({ toast: item }: { toast: BaseToast.Root.ToastObject<ToastDat
 		>
 			<BaseToast.Content
 				className={[
-					"relative flex max-w-full items-center gap-2 overflow-hidden whitespace-normal rounded-[999px] bg-popup",
+					"relative flex max-w-full items-center gap-2 overflow-hidden whitespace-normal rounded-[999px] border border-divider-soft bg-popup",
 					"py-1.5 text-supporting font-medium leading-tight text-fg smooth-shadow-md",
-					data.ongoing ? "border border-divider-soft" : "",
 					iconName ? "pl-2.5" : "pl-3",
 					data.action ? "pr-1.5" : "pr-3",
 				].join(" ")}
