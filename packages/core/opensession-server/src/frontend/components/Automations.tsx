@@ -19,6 +19,7 @@ import {
   type AutomationDraft,
 } from "../lib/api";
 import { fetchWorkspaces } from "../lib/api/workspaces";
+import { providerAccountLabel } from "../lib/provider-account";
 import type { Workspace } from "../lib/types";
 import { getCurrentUser } from "./UserPicker";
 import { CheckStatusIcon } from "./CheckStatusIcon";
@@ -583,8 +584,11 @@ export function Automations({ onOpenSession, selectedId, onSelect }: Props) {
                       <>
                         <DetailKey>Account</DetailKey>
                         <span className="text-dim">
-                          {providerAccounts.find((x) => x.id === sel.accountId)?.name ||
-                            "pinned account"}
+                          {providerAccountLabel(
+                            providerAccounts.find((x) => x.id === sel.accountId) ?? {
+                              name: "pinned account",
+                            },
+                          )}
                           <span className="text-faint">
                             {sel.accountStrict === false
                               ? " · preferred, falls back to the shared pool"
@@ -2014,7 +2018,7 @@ function AutomationForm({
               <option value="">Auto · shared pool rotation</option>
               {eligibleAccounts.map((x) => (
                 <option key={x.id} value={x.id}>
-                  {x.name}
+                  {providerAccountLabel(x)}
                   {x.owner ? ` · ${x.owner}'s` : ""}
                 </option>
               ))}

@@ -103,7 +103,8 @@ function claudeIssues(): Issue[] {
   const issues: Issue[] = [];
   for (const a of listAccountsPublic()) {
     const who = a.owner || FALLBACK_TEAMMATE;
-    const label = a.owner ? `your personal Claude sub "${a.name}"` : `pool Claude account "${a.name}"`;
+    const identity = a.email?.trim() || a.name;
+    const label = a.owner ? `your personal Claude sub "${identity}"` : `pool Claude account "${identity}"`;
     const err = a.usage?.error || "";
     const relogin = a.credentialsPath?.includes(".opensession-claude-oauth")
       ? `Reconnect usage in Settings → Providers → account menu → "Connect usage".`
@@ -170,13 +171,14 @@ function codexIssues(): Issue[] {
   const issues: Issue[] = [];
   for (const a of listCodexAccountsPublic()) {
     if (a.kind !== "home") continue; // API keys don't expire on a clock.
+    const identity = a.email?.trim() || a.name;
     const home = a.valueMasked; // for kind=home this is the CODEX_HOME path
     const fix = `Fix on the VPS: \`CODEX_HOME=${home} codex login\` (or copy a fresh ~/.codex/auth.json into ${home}/).`;
     const authPath = `${home}/auth.json`;
     if (!existsSync(authPath)) {
       issues.push({
         key: `codex:${a.id}:auth-missing`,
-        message: `It's ${personaName()} — codex account "${a.name}" has no auth.json at ${authPath}; OpenAI-model runs on it will fail. ${fix}`,
+        message: `It's ${personaName()} — codex account "${identity}" has no auth.json at ${authPath}; OpenAI-model runs on it will fail. ${fix}`,
         notify: FALLBACK_TEAMMATE,
       });
       continue;
@@ -187,7 +189,7 @@ function codexIssues(): Issue[] {
     } catch {
       issues.push({
         key: `codex:${a.id}:auth-unreadable`,
-        message: `It's ${personaName()} — codex account "${a.name}": ${authPath} isn't valid JSON; OpenAI-model runs on it will fail. ${fix}`,
+        message: `It's ${personaName()} — codex account "${identity}": ${authPath} isn't valid JSON; OpenAI-model runs on it will fail. ${fix}`,
         notify: FALLBACK_TEAMMATE,
       });
       continue;
@@ -199,13 +201,13 @@ function codexIssues(): Issue[] {
     if (left <= 0) {
       issues.push({
         key: `codex:${a.id}:access-expired`,
-        message: `It's ${personaName()} — codex account "${a.name}"'s ChatGPT access token is expired, so OpenAI-model runs (and the Fable→Sol fallback) fail on it. ${fix}`,
+        message: `It's ${personaName()} — codex account "${identity}"'s ChatGPT access token is expired, so OpenAI-model runs (and the Fable→Sol fallback) fail on it. ${fix}`,
         notify: FALLBACK_TEAMMATE,
       });
     } else if (left < CODEX_ACCESS_WARN_MS) {
       issues.push({
         key: `codex:${a.id}:access-expiring`,
-        message: `It's ${personaName()} — heads-up: codex account "${a.name}"'s ChatGPT access token expires in ${days(left)} and only refreshes when a codex turn runs. ${fix}`,
+        message: `It's ${personaName()} — heads-up: codex account "${identity}"'s ChatGPT access token expires in ${days(left)} and only refreshes when a codex turn runs. ${fix}`,
         notify: FALLBACK_TEAMMATE,
       });
     }

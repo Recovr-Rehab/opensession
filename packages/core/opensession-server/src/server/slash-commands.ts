@@ -183,18 +183,20 @@ export function handleSlashCommand(
 		? listCodexAccountsPublic()
 		: listAccountsPublic()
 	).filter((account) => !account.owner || (!!user && userMatchesAny(user, [account.owner])));
+	const accountLabel = (account: (typeof accounts)[number]) =>
+		account.email?.trim() || account.name;
 	if (accountCommand && (!accountInput || accountInput === "show" || accountInput === "list")) {
 		const current = session.accountId
 			? accounts.find((a) => a.id === session.accountId)
 			: null;
 		const line = (a: (typeof accounts)[number]) =>
-			`${a.id === session.accountId ? "• " : "  "}${a.name}` +
+			`${a.id === session.accountId ? "• " : "  "}${accountLabel(a)}` +
 			`${a.owner ? ` (personal — ${a.owner})` : " (pool)"}` +
 			`${a.usable ? "" : " — exhausted"}`;
 		return [
-			`${providerLabel} account: ${current ? current.name : "auto (personal-first, pool fallback)"}`,
+			`${providerLabel} account: ${current ? accountLabel(current) : "auto (personal-first, pool fallback)"}`,
 			"",
-			"Available (set with /account <name>, or /account auto to unpin):",
+			"Available (set with /account <email>, or /account auto to unpin):",
 			...accounts.map(line),
 		].join("\n");
 	}
@@ -216,11 +218,12 @@ export function handleSlashCommand(
 		const input = accountInput;
 		const match =
 			accounts.find((a) => a.id === input) ||
+			accounts.find((a) => accountLabel(a).toLowerCase() === input.toLowerCase()) ||
 			accounts.find((a) => a.name.toLowerCase() === input.toLowerCase());
 		if (!match) {
 			return [
 				`Unknown ${providerLabel} account "${input}". Available:`,
-				...accounts.map((a) => `  ${a.name}${a.owner ? ` (personal — ${a.owner})` : " (pool)"}`),
+				...accounts.map((a) => `  ${accountLabel(a)}${a.owner ? ` (personal — ${a.owner})` : " (pool)"}`),
 			].join("\n");
 		}
 		touchNativeSession(session.id, { accountId: match.id });
@@ -228,13 +231,13 @@ export function handleSlashCommand(
 			type: "subscription_changed",
 			sessionId: session.id,
 			accountId: match.id,
-			name: match.name,
+			name: accountLabel(match),
 			by: user,
 		});
 		const exhaustedNote = match.usable
 			? ""
 			: " Heads up: this account is currently exhausted, so runs fall back to the pool until it resets.";
-		return `${providerLabel} account pinned to ${match.name}. Applies from the next prompt.${exhaustedNote}`;
+		return `${providerLabel} account pinned to ${accountLabel(match)}. Applies from the next prompt.${exhaustedNote}`;
 	}
 
 	// /compact is a built-in command of the Claude Agent SDK, not a opensession

@@ -148,6 +148,7 @@ export async function fetchModels(workspaceId?: string): Promise<{
 export interface ProviderAccountOption {
 	id: string;
 	name: string;
+	email?: string;
 	provider: "claude" | "codex";
 	/** Personal-sub owner, if any (else it's a shared-pool account). */
 	owner?: string;
@@ -164,6 +165,7 @@ export async function fetchProviderAccounts(): Promise<ProviderAccountOption[]> 
 			return (data?.accounts ?? []).map((a) => ({
 				id: a.id,
 				name: a.name,
+				email: typeof a.email === "string" ? a.email : undefined,
 				provider,
 				owner: a.owner || undefined,
 				usable: a.usable !== false,

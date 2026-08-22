@@ -1,6 +1,7 @@
 import { BASE_PATH } from "../../lib/base";
-import React, { useEffect, useRef, useState, useCallback, type RefObject } from "react";
+import React, { useEffect, useRef, useState, useCallback } from "react";
 import { usePeople } from "../../lib/people";
+import { providerAccountLabel } from "../../lib/provider-account";
 import { UserAvatar } from "../UserAvatar";
 import {
 	claudeLimits,
@@ -75,6 +76,7 @@ interface ClaudeAccountInfo {
 interface CodexAccountInfo {
 	id: string;
 	name: string;
+	email?: string;
 	kind: "api_key" | "home";
 	valueMasked: string;
 	owner?: string;
@@ -434,7 +436,7 @@ function useClaudeAccounts() {
 	}, [load]);
 
 	async function remove(account: ClaudeAccountInfo) {
-		if (!confirm(`Remove Claude account "${account.name}"? Runs will stop using this account.`)) return;
+		if (!confirm(`Remove Claude account "${providerAccountLabel(account)}"? Runs will stop using this account.`)) return;
 		try {
 			const res = await fetch(
 				`${BASE_PATH}/api/claude-accounts/${encodeURIComponent(account.id)}`,
@@ -514,7 +516,9 @@ function ClaudeAccountRows({ state }: { state: ClaudeAccountsState }) {
 		<>
 			{[...(state.accounts || [])]
 				.sort(
-					(left, right) => left.name.localeCompare(right.name) || left.id.localeCompare(right.id),
+					(left, right) =>
+						providerAccountLabel(left).localeCompare(providerAccountLabel(right)) ||
+						left.id.localeCompare(right.id),
 				)
 				.map((account) => (
 					<React.Fragment key={account.id}>
@@ -522,16 +526,18 @@ function ClaudeAccountRows({ state }: { state: ClaudeAccountsState }) {
 							<AccountProviderMark name="claude" />
 							<SettingRowText>
 								<div className="flex min-w-0 items-center gap-2">
-									<SettingRowTitle className="truncate">{account.name}</SettingRowTitle>
+									<SettingRowTitle className="truncate">
+										{providerAccountLabel(account)}
+									</SettingRowTitle>
 									<ClaudeAccountStatus a={account} />
 								</div>
 								<SettingRowDescription
 									className="truncate text-meta"
-									title={[account.email, account.plan?.replace("default_claude_", ""), account.tokenMasked]
+									title={["Anthropic", account.plan?.replace("default_claude_", ""), account.tokenMasked]
 										.filter(Boolean)
 										.join(" · ")}
 								>
-									Anthropic · {account.email || account.tokenMasked}
+									Anthropic
 									{account.plan ? ` · ${account.plan.replace("default_claude_", "")}` : ""}
 								</SettingRowDescription>
 								{account.noUsageScope && !account.usage ? (
@@ -561,7 +567,7 @@ function ClaudeAccountRows({ state }: { state: ClaudeAccountsState }) {
 								<OwnerSelect
 									value={account.owner || ""}
 									onChange={(owner) => state.setOwner(account, owner)}
-									label={`Owner of ${account.name}`}
+									label={`Owner of ${providerAccountLabel(account)}`}
 									quiet
 									className="phone:ml-auto"
 									title={
@@ -573,7 +579,7 @@ function ClaudeAccountRows({ state }: { state: ClaudeAccountsState }) {
 								<Menu.Root>
 									<Menu.Trigger
 										className={rowMenuTriggerClasses}
-										aria-label={`Manage ${account.name}`}
+										aria-label={`Manage ${providerAccountLabel(account)}`}
 									>
 										<IconDotsHorizontal size={18} />
 									</Menu.Trigger>
@@ -798,7 +804,7 @@ function useCodexAccounts() {
 	}
 
 	async function remove(account: CodexAccountInfo) {
-		if (!confirm(`Remove Codex account "${account.name}"? Runs will stop using it.`)) return;
+		if (!confirm(`Remove Codex account "${providerAccountLabel(account)}"? Runs will stop using it.`)) return;
 		try {
 			const res = await fetch(
 				`${BASE_PATH}/api/codex-accounts/${encodeURIComponent(account.id)}`,
@@ -822,14 +828,18 @@ function CodexAccountRows({ state }: { state: CodexAccountsState }) {
 		<>
 			{[...(state.accounts || [])]
 				.sort(
-					(left, right) => left.name.localeCompare(right.name) || left.id.localeCompare(right.id),
+					(left, right) =>
+						providerAccountLabel(left).localeCompare(providerAccountLabel(right)) ||
+						left.id.localeCompare(right.id),
 				)
 				.map((account) => (
 					<SettingRow key={account.id} className="items-start gap-x-3 phone:px-4">
 						<AccountProviderMark name="codex" />
 						<SettingRowText>
 							<div className="flex min-w-0 items-center gap-2">
-								<SettingRowTitle className="truncate">{account.name}</SettingRowTitle>
+								<SettingRowTitle className="truncate">
+									{providerAccountLabel(account)}
+								</SettingRowTitle>
 								<CodexAccountStatus account={account} />
 							</div>
 							<SettingRowDescription className="truncate text-meta" title={account.valueMasked}>
@@ -846,7 +856,7 @@ function CodexAccountRows({ state }: { state: CodexAccountsState }) {
 							<OwnerSelect
 								value={account.owner || ""}
 								onChange={(owner) => state.setOwner(account, owner)}
-								label={`Owner of ${account.name}`}
+								label={`Owner of ${providerAccountLabel(account)}`}
 								quiet
 								className="phone:ml-auto"
 								title={
@@ -858,7 +868,7 @@ function CodexAccountRows({ state }: { state: CodexAccountsState }) {
 							<Menu.Root>
 								<Menu.Trigger
 									className={rowMenuTriggerClasses}
-									aria-label={`Manage ${account.name}`}
+									aria-label={`Manage ${providerAccountLabel(account)}`}
 								>
 									<IconDotsHorizontal size={18} />
 								</Menu.Trigger>
@@ -888,7 +898,6 @@ export function CodexAccountsSection({
 } = {}) {
 	const state = useCodexAccounts();
 	const [showAdd, setShowAdd] = useState(false);
-	const addNameRef = useRef<HTMLInputElement>(null);
 	const available =
 		state.accounts?.filter((account) => account.usable && !account.exhaustedUntil).length ?? 0;
 	return (
@@ -903,9 +912,8 @@ export function CodexAccountsSection({
 				OpenAI Codex
 			</SettingsGroupLabel>
 			<Modal.Root open={showAdd} onOpenChange={setShowAdd}>
-				<Modal.Content initialFocus={addNameRef}>
+				<Modal.Content>
 					<AddCodexAccountForm
-						nameRef={addNameRef}
 						onAdded={() => {
 							setShowAdd(false);
 							void state.load();
@@ -955,21 +963,20 @@ export function ProviderAccountsSection({
 	const claude = useClaudeAccounts();
 	const codex = useCodexAccounts();
 	const [adding, setAdding] = useState<"claude" | "codex" | null>(null);
-	const codexNameRef = useRef<HTMLInputElement>(null);
 	const loading = claude.accounts === null || codex.accounts === null;
 	const empty = !loading && claude.accounts?.length === 0 && codex.accounts?.length === 0;
 	const refreshing = claude.refreshing || codex.refreshing;
 	const onboardingAccounts = [
 		...(claude.accounts || []).map((account) => ({
 			id: `claude-${account.id}`,
-			name: account.name,
+			label: providerAccountLabel(account),
 			provider: "Claude" as const,
 			icon: "claude" as const,
 			ready: account.usable && !account.exhaustedUntil,
 		})),
 		...(codex.accounts || []).map((account) => ({
 			id: `codex-${account.id}`,
-			name: account.name,
+			label: providerAccountLabel(account),
 			provider: "OpenAI" as const,
 			icon: "codex" as const,
 			ready: account.usable && !account.exhaustedUntil,
@@ -1050,9 +1057,8 @@ export function ProviderAccountsSection({
 				</Modal.Content>
 			</Modal.Root>
 			<Modal.Root open={adding === "codex"} onOpenChange={(open) => !open && setAdding(null)}>
-				<Modal.Content initialFocus={codexNameRef}>
+				<Modal.Content>
 					<AddCodexAccountForm
-						nameRef={codexNameRef}
 						onAdded={() => {
 							setAdding(null);
 							void codex.load();
@@ -1077,7 +1083,7 @@ export function ProviderAccountsSection({
 							<SettingRow key={account.id}>
 								<IconTile name={account.icon} size={28} />
 								<SettingRowText>
-									<SettingRowTitle>{account.name}</SettingRowTitle>
+									<SettingRowTitle>{account.label}</SettingRowTitle>
 									<div className="mt-0.5 text-meta text-dim">{account.provider}</div>
 								</SettingRowText>
 								<span
@@ -1193,7 +1199,15 @@ function AddClaudeAccountForm({
 			const body = await res.json();
 			if (!res.ok) throw new Error(body.error || `Failed: ${res.status}`);
 			pending.current.done = true;
-			toast(`Usage tracking connected for ${body.account?.name || account?.name || "Claude"}`);
+			toast(
+				`Usage tracking connected for ${
+					body.account
+						? providerAccountLabel(body.account)
+						: account
+							? providerAccountLabel(account)
+							: "Claude"
+				}`,
+			);
 			onAccountAdded();
 			onDone();
 		} catch (cause: any) {
@@ -1275,12 +1289,14 @@ function AddClaudeAccountForm({
 				}}
 			>
 				<div className="flex flex-col gap-3">
-					<Field label="Name">
+					<Field label="Email">
 						<Input
 							required
+							type="email"
+							autoComplete="email"
 							value={name}
 							onChange={(event) => setName(event.target.value)}
-							placeholder="team"
+							placeholder="person@example.com"
 							autoCapitalize="none"
 							spellCheck={false}
 						/>
@@ -1386,7 +1402,7 @@ function ClaudeSignInForm({
 			);
 			const body = await res.json();
 			if (!res.ok) throw new Error(body.error || `Failed: ${res.status}`);
-			toast(`Usage tracking connected for ${account.name}`);
+			toast(`Usage tracking connected for ${providerAccountLabel(account)}`);
 			onDone();
 		} catch (e: any) {
 			setError(e.message);
@@ -1449,6 +1465,7 @@ interface CodexDeviceLogin {
 	url?: string;
 	code?: string;
 	error?: string;
+	account?: CodexAccountInfo;
 }
 
 /** How a Codex account is added: a ChatGPT sign-in, an existing CODEX_HOME
@@ -1460,13 +1477,7 @@ const KIND_ITEMS = [
 	{ value: "api_key", label: "OpenAI API key" },
 ];
 
-function AddCodexAccountForm({
-	nameRef,
-	onAdded,
-}: {
-	nameRef: RefObject<HTMLInputElement | null>;
-	onAdded: () => void;
-}) {
+function AddCodexAccountForm({ onAdded }: { onAdded: () => void }) {
 	const [name, setName] = useState("");
 	const [kind, setKind] = useState<"device" | "oauth" | "api_key" | "home">("device");
 	const [value, setValue] = useState("");
@@ -1507,7 +1518,6 @@ function AddCodexAccountForm({
 				method: "POST",
 				headers: { "Content-Type": "application/json" },
 				body: JSON.stringify({
-					name: name.trim(),
 					...(owner.trim() ? { owner: owner.trim() } : {}),
 				}),
 			});
@@ -1553,7 +1563,6 @@ function AddCodexAccountForm({
 				method: "POST",
 				headers: { "Content-Type": "application/json" },
 				body: JSON.stringify({
-					name: name.trim(),
 					...(owner.trim() ? { owner: owner.trim() } : {}),
 				}),
 			});
@@ -1581,7 +1590,7 @@ function AddCodexAccountForm({
 			);
 			const body = await res.json();
 			if (!res.ok) throw new Error(body.error || `Failed: ${res.status}`);
-			toast(`Codex account "${name.trim()}" added to the pool`);
+			toast(`Codex account ${providerAccountLabel(body.account)} added to the pool`);
 			pending.current.done = true;
 			onAdded();
 			return;
@@ -1599,7 +1608,7 @@ function AddCodexAccountForm({
 				method: "POST",
 				headers: { "Content-Type": "application/json" },
 				body: JSON.stringify({
-					name: name.trim(),
+					...(kind === "api_key" ? { name: name.trim() } : {}),
 					kind,
 					value: value.trim(),
 					...(owner.trim() ? { owner: owner.trim() } : {}),
@@ -1635,7 +1644,7 @@ function AddCodexAccountForm({
 					</>
 				) : kind === "home" ? (
 					<>
-						On the VPS run <code>CODEX_HOME=~/.codex-accounts/&lt;name&gt; codex login</code>{" "}
+						On the VPS run <code>CODEX_HOME=~/.codex-accounts/&lt;account&gt; codex login</code>{" "}
 						(or copy an <code>auth.json</code> from another machine into that directory),
 						then register the directory here.
 					</>
@@ -1650,27 +1659,27 @@ function AddCodexAccountForm({
 					event.preventDefault();
 					if (saving) return;
 					if (kind === "device") {
-						if (name.trim() && !loginPending && login?.state !== "done") void handleStartDeviceLogin();
+						if (!loginPending && login?.state !== "done") void handleStartDeviceLogin();
 					} else if (kind === "oauth") {
 						if (oauth) {
 							if (oauthCode.trim()) void handleCompleteOauth();
-						} else if (name.trim()) void handleStartOauth();
-					} else if (name.trim() && value.trim()) void handleAdd();
+						} else void handleStartOauth();
+					} else if (value.trim() && (kind !== "api_key" || name.trim())) void handleAdd();
 				}}
 			>
 			<div className="flex flex-col gap-3">
-				<Field label="Name">
-					<Input
-						ref={nameRef}
-						required
-						value={name}
-						onChange={(e) => setName(e.target.value)}
-						placeholder="team"
-						disabled={!!login || !!oauth}
-						autoCapitalize="none"
-						spellCheck={false}
-					/>
-				</Field>
+				{kind === "api_key" && (
+					<Field label="Name">
+						<Input
+							required
+							value={name}
+							onChange={(e) => setName(e.target.value)}
+							placeholder="Platform key"
+							autoCapitalize="none"
+							spellCheck={false}
+						/>
+					</Field>
+				)}
 				<Field label="Kind">
 					<Select.Root
 						items={KIND_ITEMS}
@@ -1743,7 +1752,10 @@ function AddCodexAccountForm({
 						</>
 					)}
 					{login.state === "done" && (
-						<div>Signed in. Account "{login.name}" added to the pool.</div>
+						<div>
+							Signed in. {login.account ? providerAccountLabel(login.account) : "Account"} added
+							to the pool.
+						</div>
 					)}
 					{login.state === "error" && (
 						<InlineAlert
@@ -1801,7 +1813,7 @@ function AddCodexAccountForm({
 					<Button
 						variant="primary"
 						type="submit"
-						disabled={saving || !name.trim() || !!loginPending || login?.state === "done"}
+						disabled={saving || !!loginPending || login?.state === "done"}
 					>
 						{saving ? "Starting…" : loginPending ? "Waiting for sign-in…" : "Start sign-in"}
 					</Button>
@@ -1811,7 +1823,7 @@ function AddCodexAccountForm({
 							{saving ? "Connecting…" : "Connect"}
 						</Button>
 					) : (
-						<Button variant="primary" type="submit" disabled={saving || !name.trim()}>
+						<Button variant="primary" type="submit" disabled={saving}>
 							{saving ? "Starting…" : "Start sign-in"}
 						</Button>
 					)
@@ -1819,7 +1831,7 @@ function AddCodexAccountForm({
 					<Button
 						variant="primary"
 						type="submit"
-						disabled={saving || !name.trim() || !value.trim()}
+						disabled={saving || !value.trim() || (kind === "api_key" && !name.trim())}
 					>
 						{saving ? "Adding…" : "Add account"}
 					</Button>

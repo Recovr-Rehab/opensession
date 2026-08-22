@@ -1,6 +1,7 @@
 import React from "react";
 import type { ModelOption, ProviderAccountOption } from "../lib/api";
 import { baseModelId, engineModelId, isAnthropicModel, modelEngine } from "../lib/model-engine";
+import { providerAccountLabel } from "../lib/provider-account";
 import {
 	getRecentModels,
 	onRecentModelsChanged,
@@ -400,7 +401,7 @@ export function ModelEffortSelect({
 				{ fast: true, label: "Fast" },
 			]
 		: [{ fast: false, label: "Standard" }];
-	const accountLabel = currentAccount ? currentAccount.name : "Auto";
+	const accountLabel = currentAccount ? providerAccountLabel(currentAccount) : "Auto";
 	// Routing stays sticky across model changes even though engine selection is
 	// no longer exposed. Existing sessions keep their stored routing prefix.
 	const activeEngine = modelEngine(effectiveModel);
@@ -904,7 +905,7 @@ export function ModelEffortSelect({
 										)}
 									>
 										<span className="min-w-0 truncate">
-											{a.name}
+											{providerAccountLabel(a)}
 											{a.owner ? ` · ${a.owner}` : ""}
 											{a.usable ? "" : " · exhausted"}
 										</span>

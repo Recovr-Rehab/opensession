@@ -105,12 +105,15 @@ function prune(): void {
  * flow completes. One in-flight attempt per account name.
  */
 export function startDeviceLogin(
-  name: string,
+  name = "",
   owner?: string
 ): DeviceLoginPublic | { error: string } {
   prune();
-  const trimmed = name.trim();
-  if (!trimmed) return { error: "Name is required" };
+  const loginId = crypto.randomUUID();
+  // A subscription needs no user-authored label. The temporary value only
+  // names its login directory; addCodexAccount replaces it with the email from
+  // auth.json once sign-in completes. Keep accepting a name for older clients.
+  const trimmed = name.trim() || `chatgpt-${loginId.slice(0, 8)}`;
   const slug = trimmed.toLowerCase().replace(/[^a-z0-9._-]+/g, "-").replace(/^-+|-+$/g, "");
   if (!slug) return { error: "Name must contain letters or digits" };
   if (listCodexAccounts().some((a) => a.name === trimmed)) {
@@ -134,7 +137,7 @@ export function startDeviceLogin(
   }
 
   const l: DeviceLogin = {
-    id: crypto.randomUUID(),
+    id: loginId,
     name: trimmed,
     ...(owner?.trim() ? { owner: owner.trim() } : {}),
     dir,

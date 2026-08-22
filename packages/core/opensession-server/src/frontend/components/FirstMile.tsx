@@ -71,12 +71,12 @@ function FirstMileSummary({
 	}
 	const accountCount = status.engine.claudeAccounts + status.engine.codexAccounts;
 	const accounts = [
-		...Array.from({ length: status.engine.claudeAccounts }, (_, index) => ({
-			name: `Claude account ${index + 1}`,
+		...Array.from({ length: status.engine.claudeAccounts }, () => ({
+			label: "Claude subscription",
 			provider: "claude" as const,
 		})),
-		...Array.from({ length: status.engine.codexAccounts }, (_, index) => ({
-			name: `Codex account ${index + 1}`,
+		...Array.from({ length: status.engine.codexAccounts }, () => ({
+			label: "OpenAI subscription",
 			provider: "codex" as const,
 		})),
 	];
@@ -118,8 +118,8 @@ function FirstMileSummary({
 				<div className="flex -space-x-2">
 					{accounts.slice(0, 4).map((account, index) => (
 						<span
-							key={`${account.provider}-${account.name}-${index}`}
-							title={account.name}
+							key={`${account.provider}-${index}`}
+							title={account.label}
 							className="flex size-7 items-center justify-center rounded-full border border-bg bg-bg/85 text-fg"
 						>
 							<BrandMark name={account.provider} size={15} />
