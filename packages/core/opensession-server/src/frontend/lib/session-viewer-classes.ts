@@ -80,7 +80,7 @@ export const VIEWER_TITLE =
  * out — its text stays selectable and copyable.
  */
 export const VIEWER_BRANCH =
-	"min-w-0 max-w-[420px] select-text overflow-hidden text-ellipsis whitespace-nowrap text-item-title " +
+	"min-w-0 max-w-[420px] -translate-y-px select-text overflow-hidden text-ellipsis whitespace-nowrap text-item-title " +
 	"[-webkit-touch-callout:default] " +
 	"[html.wco_&]:[-webkit-app-region:no-drag] [html.wco_&]:[app-region:no-drag] " +
 	"[html.desktop-shell_&]:[-webkit-app-region:no-drag] [html.desktop-shell_&]:[app-region:no-drag]";

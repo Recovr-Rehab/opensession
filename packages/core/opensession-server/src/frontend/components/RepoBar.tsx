@@ -192,7 +192,9 @@ export function RepoBar({
         title="Click to switch or attach another repo"
       >
         <RepoTile name={primary} />
-        <span className="max-w-[180px] truncate">{busy ?? repoLabel(primary)}</span>
+        {/* Type sits optically high beside a centered image tile: its descender
+            space otherwise makes the word look low even when the line boxes agree. */}
+        <span className="max-w-[180px] -translate-y-px truncate">{busy ?? repoLabel(primary)}</span>
         {attached.length > 0 && (
           <span
             className="text-label text-dim"
