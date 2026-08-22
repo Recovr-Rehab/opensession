@@ -2720,18 +2720,17 @@ private struct SessionInputBar: View {
             }
 
             #if os(iOS)
-            // Above the composer, and hidden into a line while the keyboard
-            // is up: the actions belong to the conversation you are looking
-            // at, and the row they sit in is the one the keyboard wants back.
+            // The keyboard gets this row back completely while you write.
+            // The bar folds toward the composer so its exit and return stay
+            // spatially tied to the field that caused them.
             if hasActionBar {
                 SessionActionBar(
-                    collapsed: inputFocused,
+                    hidden: inputFocused,
                     onArchive: onArchiveWorkspace,
                     onNewSession: onNewSession,
                     onNextChat: showNextChatButton ? onNextChat : nil,
                     menu: actionMenu
                 )
-                .padding(.bottom, 6)
             }
             #endif
 
@@ -2818,7 +2817,7 @@ private struct SessionInputBar: View {
             // Open with the keyboard up, for the same reason as the panel
             // hooks in `SessionView`: a headless capture host can tap
             // nothing, so the focused state is only reachable this way. It
-            // is the state where the action bar contracts into a line.
+            // is the state where the action bar is hidden.
             if ProcessInfo.processInfo.environment["OS1_FOCUS_COMPOSER"] == "1" {
                 inputFocused = true
             }

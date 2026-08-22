@@ -122,7 +122,8 @@ Pure SwiftUI with SwiftStreamingMarkdown for CommonMark/GFM rendering, iOS 26+
    switcher, the same scoped history lives in the selected session's toolbar
    instead. On iOS, the PWA-style Liquid Glass action bar floats above the
    composer with Archive, session actions, New session, and Next chat. Focusing
-   the composer contracts it into a short glass line. The actions menu carries
+   the composer hides it completely so the keyboard gets that space back. The
+   actions menu carries
    worktree details, the pull request panel, rename, share, hide or restore, and
    archive, matching the sidebar row's long-press menu. A bounded cache keeps
    recently visited conversations loaded while their
