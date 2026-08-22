@@ -204,7 +204,7 @@ function LandingPage() {
 				</a>
 
 				<h1>
-					The multiplayer control room{" "}
+					Your team’s control room{" "}
 					<span>for coding agents</span>
 				</h1>
 
@@ -240,7 +240,7 @@ function LandingPage() {
 							Point a session at whatever model suits the work, and change it
 							mid-run without losing the thread.
 						</Feature>
-						<Feature icon={<IconPeople size={28} />} name="Sessions are shared">
+						<Feature icon={<IconPeople size={28} />} name="Multiplayer by default">
 							Anyone on the team opens the same session, sees the run as it
 							happens, and sends the next turn.
 						</Feature>
@@ -293,7 +293,7 @@ function LandingPage() {
 							Whatever the engine supports. A session names a model rather than a
 							vendor, and you can change that model between turns.
 						</Question>
-						<Question q="What does shared actually mean?">
+						<Question q="What does multiplayer actually mean?">
 							One session, many people. The transcript updates live for everyone
 							watching, you can see who else is there, and anyone can send the
 							next turn or answer a question the agent asked.
