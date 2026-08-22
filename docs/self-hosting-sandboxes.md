@@ -634,11 +634,10 @@ Sandboxes**. It is stored as an opaque workspace secret; new Boxes use
   8 GB / at least 80 GB), or **Large** (8 / 16 GB / at least 100 GB) profile.
 - Warm-on-typing creates a Box while the user composes and the new session
   adopts it. Cold creation falls back cleanly when a named snapshot has gone
-  stale. Snapshot restores branch from the snapshot's `origin/main` without a
-  synchronous fetch: fetching and checking out first forced Box to hydrate the
-  9.6 GB lazy filesystem and added 40 seconds. The image registry replaces the
-  named snapshot every 30 minutes, so this fast path remains closely bounded
-  to the current default branch without hydrating the full lazy filesystem.
+  stale. The image registry replaces the named snapshot every 30 minutes. A
+  session then fetches only its requested branch and resets the lazy checkout
+  to that small delta, rather than fetching every ref and hydrating the 9.6 GB
+  filesystem. Feature-branch sessions therefore never begin on snapshot main.
 - The command API's synchronous limit is 600 seconds. Longer work and
   background commands use Box's native detached-process endpoint and poll its
   separate stdout/stderr and exit status.

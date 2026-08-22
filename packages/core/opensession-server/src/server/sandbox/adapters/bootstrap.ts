@@ -1291,17 +1291,21 @@ export async function setupRemoteWorkspace(
           { cwd },
         );
       }
-      // Daytona can fetch and update the lazy tree within the startup budget.
-      // Box copy-on-write hydration makes that checkout take another 40s, so
-      // it starts directly at the snapshot's credential-free origin/main.
-      // Its 24-hour template refresh bounds staleness; the agent can fetch
-      // explicitly when a task needs the newest upstream commit.
-      if (identity?.provider !== "box") {
-        await driver.exec(`git fetch origin --quiet`, { cwd, timeoutMs: 180_000 });
-        mark("warm clone fetched");
-      } else {
-        mark("using snapshot refs");
+      // Repository images keep this delta small. Daytona refreshes all refs;
+      // Box fetches only the requested branch so its lazy filesystem hydrates
+      // changed files rather than the full repository. A code session must
+      // never begin on snapshot main when the requested feature branch was not
+      // present when that image was built.
+      const refreshed = identity?.provider === "box"
+        ? await driver.exec(
+            `git fetch origin ${shellQuoteWord(branch)} --quiet && git reset --hard FETCH_HEAD`,
+            { cwd, timeoutMs: 180_000 },
+          )
+        : await driver.exec(`git fetch origin --quiet`, { cwd, timeoutMs: 180_000 });
+      if (refreshed.exitCode !== 0) {
+        throw new Error(`could not sync ${repoId} workspace to ${branch}: ${(refreshed.stderr || refreshed.stdout).trim().slice(0, 300)}`);
       }
+      mark("warm clone fetched");
       cloned = { exitCode: 0, stdout: "", stderr: "" };
     }
   }
