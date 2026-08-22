@@ -66,9 +66,13 @@ test("the PR identity and navigation share one floating two-line bar", () => {
 	expect(toolbar).toContain("desktop:overflow-hidden");
 	expect(toolbar).toContain("desktop:rounded-lg");
 	expect(toolbar).toContain("desktop:border desktop:border-line");
+	expect(reviewBar).toContain("h-8");
+	expect(reviewBar).toContain("phone:h-11");
 	expect(reviewBar).toContain("bg-panel");
 	expect(reviewBar).toContain("phone:bg-surface");
 	expect(reviewBar).toContain("desktop:-ml-3");
+	expect(prPanelSource).toContain('["files", "Files",');
+	expect(prPanelSource).toContain("<ActiveCodeViewIcon size={18} />");
 });
 
 test("a lone Review hides the tab strip and keeps New tab in the header", () => {

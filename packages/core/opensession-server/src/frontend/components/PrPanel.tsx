@@ -1913,14 +1913,14 @@ export function PrPanel({
   const pageTabs = (
     [
       ["overview", "Overview", comments.length || undefined],
-      ["files", "Files changed", files.length || undefined],
+      ["files", "Files", files.length || undefined],
     ] as const
   ).map(([key, label, count]) => (
     <button
       key={key}
       role="tab"
       aria-selected={page === key}
-      className={`flex h-10 shrink-0 items-center gap-1.5 border-0 bg-transparent px-3 text-control-label font-medium transition-colors phone:h-11 ${
+      className={`flex h-8 shrink-0 items-center gap-1.5 border-0 bg-transparent px-3 text-label font-medium transition-colors phone:h-11 phone:text-control-label ${
         page === key ? "text-fg" : "text-dim hover:text-fg"
       }`}
       onClick={() => setPage(key)}
@@ -1938,8 +1938,10 @@ export function PrPanel({
     </button>
   ));
 
+  const ActiveCodeViewIcon = CODE_VIEWS[codeView].Icon;
+
   const reviewBar = (
-    <div className="flex h-10 shrink-0 items-center gap-2 overflow-x-auto overflow-y-hidden bg-panel px-6 [scrollbar-width:none] phone:h-11 phone:bg-surface phone:px-2 phone:shadow-[inset_0_-1px_0_var(--border)] [&::-webkit-scrollbar]:hidden">
+    <div className="flex h-8 shrink-0 items-center gap-1.5 overflow-x-auto overflow-y-hidden bg-panel px-6 [scrollbar-width:none] phone:h-11 phone:gap-2 phone:bg-surface phone:px-2 phone:shadow-[inset_0_-1px_0_var(--border)] [&::-webkit-scrollbar]:hidden">
       <div
         className="flex shrink-0 items-center gap-0.5 self-stretch desktop:-ml-3"
         role="tablist"
@@ -1949,7 +1951,7 @@ export function PrPanel({
         {pageTabs}
       </div>
       {page === "files" && (
-        <div className="ml-auto flex shrink-0 items-center gap-2">
+        <div className="ml-auto flex shrink-0 items-center gap-1.5 phone:gap-2">
           {handEdited.length > 0 && send && (
             <Button
               variant="default"
@@ -1961,20 +1963,26 @@ export function PrPanel({
               {handEdited.length === 1 ? "" : "s"}
             </Button>
           )}
-          <span className="flex shrink-0 items-center gap-1.5 text-label tabular-nums">
+          <span className="flex shrink-0 items-center gap-1 text-label tabular-nums">
             <span className="text-green">+{pr.additions}</span>
             <span className="text-red">−{pr.deletions}</span>
           </span>
           <div
             ref={setDiffControlsTarget}
-            className="flex shrink-0 items-center gap-2"
+            className="flex shrink-0 items-center gap-1.5 phone:gap-2"
           />
           <Menu.Root>
             <Tooltip label="Change the view">
               <Menu.Trigger
                 render={
-                  <Button variant="default" size="sm" className="text-fg" caret>
-                    {CODE_VIEWS[codeView].label}
+                  <Button
+                    variant="default"
+                    size="sm"
+                    className="text-fg"
+                    aria-label={`View: ${CODE_VIEWS[codeView].label}`}
+                    caret
+                  >
+                    <ActiveCodeViewIcon size={18} />
                   </Button>
                 }
               />
