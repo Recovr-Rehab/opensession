@@ -66,7 +66,7 @@
  * decoration.
  */
 export const PANEL_SHELL =
-	"viewer-panel relative flex min-h-0 w-[var(--panel-w,32%)] min-w-[320px] shrink-0 flex-col " +
+	"viewer-panel @container relative flex min-h-0 w-[var(--panel-w,32%)] min-w-[320px] shrink-0 flex-col " +
 	"max-w-[max(480px,calc(100vw-620px))] border-l border-divider bg-panel-surface [--bg-panel:var(--panel-plate)] " +
 	// From 920px down it stops being a column in the layout and becomes an
 	// overlay over the session, anchored under the top bar (--header-h is 0 on
@@ -151,7 +151,8 @@ export const PANEL_FOOTER =
 /** One place on that bar: an icon, a word, and whatever it wants to report. */
 export const PANEL_FOOTER_ITEM =
 	"focus-ring flex min-w-0 items-center gap-1.5 rounded-control px-2 py-1 " +
-	"text-label text-dim transition-colors hover:bg-hover hover:text-fg";
+	"text-label text-dim transition-colors hover:bg-hover hover:text-fg " +
+	"@max-[380px]:flex-1 @max-[380px]:justify-center @max-[380px]:px-1";
 
 /**
  * The scrim behind the panel once it stops being a column and starts being an

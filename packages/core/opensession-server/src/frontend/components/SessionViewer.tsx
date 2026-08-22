@@ -7568,7 +7568,7 @@ export function SessionViewer({
 									onClick={() => setPanelPage("summary")}
 								>
 									<IconListCircles size={15} className="shrink-0" />
-									Summary
+									<span className="@max-[380px]:hidden">Summary</span>
 								</button>
 								<button
 									type="button"
@@ -7580,7 +7580,7 @@ export function SessionViewer({
 									onClick={() => setPanelPage("changes")}
 								>
 									<IconFile size={15} className="shrink-0" />
-									Changes
+									<span className="@max-[380px]:hidden">Changes</span>
 								</button>
 								<button
 									type="button"
@@ -7592,9 +7592,9 @@ export function SessionViewer({
 									onClick={() => setPanelPage("portals")}
 								>
 									<IconGlobe size={15} className="shrink-0" />
-									Portals
+									<span className="@max-[380px]:hidden">Portals</span>
 									{livePortals > 0 && (
-										<span className="shrink-0 tabular-nums text-faint">
+										<span className="shrink-0 tabular-nums text-faint @max-[380px]:hidden">
 											{livePortals}
 										</span>
 									)}
@@ -7609,9 +7609,9 @@ export function SessionViewer({
 									onClick={() => setPanelPage("agents")}
 								>
 									<IconStack size={15} className="shrink-0" />
-									Agents
+									<span className="@max-[380px]:hidden">Agents</span>
 									{runningAgents > 0 && (
-										<span className="shrink-0 tabular-nums text-yellow">
+										<span className="shrink-0 tabular-nums text-yellow @max-[380px]:hidden">
 											{runningAgents}
 										</span>
 									)}
@@ -7629,7 +7629,7 @@ export function SessionViewer({
 									}}
 								>
 									<IconTerminal size={15} className="shrink-0" />
-									Terminal
+									<span className="@max-[380px]:hidden">Terminal</span>
 								</button>
 							</div>
 						)}
