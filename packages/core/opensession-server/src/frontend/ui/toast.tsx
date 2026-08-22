@@ -13,6 +13,7 @@ import {
 	IconServer,
 	IconTrash,
 } from "../components/icons";
+import { useIsPhone } from "../hooks/useIsPhone";
 import { TOAST_NOTICE_LANE } from "../lib/notification-classes";
 import { toastIconName, type ToastIconName } from "../lib/toast-icon";
 import { AnimatedCheck } from "./copy";
@@ -193,23 +194,24 @@ function ToastViewport() {
 
 function ToastCard({ toast: item }: { toast: BaseToast.Root.ToastObject<ToastData> }) {
 	const data = item.data;
+	const isPhone = useIsPhone();
 	if (!data) return null;
 	const iconName = toastIconName(data.message, data.variant);
 
 	return (
 		<BaseToast.Root
 			toast={item}
-			// Receipts rise into view above the composer. The bottom anchor makes
-			// additional receipts stack upward instead of covering the input.
-			swipeDirection={["down", "right"]}
+			// Desktop receipts rise above the composer; phone receipts drop below
+			// the top chrome. Swiping follows the nearest screen edge.
+			swipeDirection={isPhone ? ["up", "right"] : ["down", "right"]}
 			onClick={() => dismissToast(data.id)}
 			className={[
-				"pointer-events-auto absolute bottom-0 left-1/2 w-max max-w-full outline-none phone:max-w-[calc(100vw-24px)]",
-				"[z-index:calc(100-var(--toast-index))] [transform-origin:center_bottom]",
-				"[transform:translateX(calc(-50%+var(--toast-swipe-movement-x)))_translateY(calc(var(--toast-swipe-movement-y)-var(--toast-index)*8px))_scale(calc(1-(var(--toast-index)*0.04)))]",
-				"data-[expanded]:[transform:translateX(calc(-50%+var(--toast-swipe-movement-x)))_translateY(calc(var(--toast-swipe-movement-y)-var(--toast-offset-y)-var(--toast-index)*8px))_scale(1)]",
+				"pointer-events-auto absolute bottom-0 left-1/2 w-max max-w-full outline-none phone:top-0 phone:bottom-auto phone:max-w-[calc(100vw-24px)]",
+				"[z-index:calc(100-var(--toast-index))] [transform-origin:center_bottom] phone:[transform-origin:center_top]",
+				"[transform:translateX(calc(-50%+var(--toast-swipe-movement-x)))_translateY(calc(var(--toast-swipe-movement-y)-var(--toast-index)*8px))_scale(calc(1-(var(--toast-index)*0.04)))] phone:[transform:translateX(calc(-50%+var(--toast-swipe-movement-x)))_translateY(calc(var(--toast-swipe-movement-y)+var(--toast-index)*8px))_scale(calc(1-(var(--toast-index)*0.04)))]",
+				"data-[expanded]:[transform:translateX(calc(-50%+var(--toast-swipe-movement-x)))_translateY(calc(var(--toast-swipe-movement-y)-var(--toast-offset-y)-var(--toast-index)*8px))_scale(1)] phone:data-[expanded]:[transform:translateX(calc(-50%+var(--toast-swipe-movement-x)))_translateY(calc(var(--toast-swipe-movement-y)+var(--toast-offset-y)+var(--toast-index)*8px))_scale(1)]",
 				"transition-[transform,translate,scale,opacity] duration-200 ease-[cubic-bezier(0.23,1,0.32,1)] motion-reduce:transition-opacity",
-				"data-[starting-style]:opacity-0 data-[starting-style]:[translate:0_8px] data-[starting-style]:[scale:0.96] data-[ending-style]:opacity-0 data-[ending-style]:[translate:0_8px] data-[ending-style]:[scale:0.96] data-[limited]:opacity-0 motion-reduce:data-[starting-style]:[translate:0_0] motion-reduce:data-[starting-style]:[scale:1] motion-reduce:data-[ending-style]:[translate:0_0] motion-reduce:data-[ending-style]:[scale:1]",
+				"data-[starting-style]:opacity-0 data-[starting-style]:[translate:0_8px] phone:data-[starting-style]:[translate:0_-8px] data-[starting-style]:[scale:0.96] data-[ending-style]:opacity-0 data-[ending-style]:[translate:0_8px] phone:data-[ending-style]:[translate:0_-8px] data-[ending-style]:[scale:0.96] data-[limited]:opacity-0 motion-reduce:data-[starting-style]:[translate:0_0] motion-reduce:data-[starting-style]:[scale:1] motion-reduce:data-[ending-style]:[translate:0_0] motion-reduce:data-[ending-style]:[scale:1]",
 			].join(" ")}
 		>
 			<BaseToast.Content
