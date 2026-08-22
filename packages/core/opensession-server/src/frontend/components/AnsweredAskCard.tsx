@@ -66,9 +66,9 @@ function ChoiceRow({
 	);
 }
 
-/** A durable receipt for an answer sent through AskCard. It sits in the
- * assistant side of the transcript, but its quiet surface and status label
- * distinguish it from the agent's own prose. Every offered option stays for
+/** A durable receipt for an answer sent through AskCard. It sits on the
+ * sender side of the transcript, while its quiet surface and status label
+ * distinguish it from an ordinary message. Every offered option stays for
  * context, with the exact choice marked as selected. */
 export function AnsweredAskCard({
 	record,
@@ -83,7 +83,7 @@ export function AnsweredAskCard({
 
 	return (
 		<div className={msgRow} data-eid={entryId} data-answered-ask="">
-			<div className="max-w-[min(600px,90%)] rounded-2xl bg-panel p-4 [corner-shape:var(--cs)]">
+			<div className="max-w-[min(600px,90%)] self-end rounded-2xl bg-panel p-4 [corner-shape:var(--cs)]">
 				<div className="flex flex-wrap items-center gap-x-1.5 gap-y-0.5 text-label font-semibold">
 					<span
 						aria-hidden="true"
