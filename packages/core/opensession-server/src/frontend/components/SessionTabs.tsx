@@ -456,7 +456,10 @@ export function SessionTabs({
 											<span className={`${PANEL_TAB_DOT} ${v.dotClass ?? "invisible"}`} />
 										)}
 										{v.icon ? (
-											<span className={TAB_VICON} aria-hidden="true">
+											<span
+												className={cn(TAB_VICON, v.closable !== false && "desktop:mr-3.5")}
+												aria-hidden="true"
+											>
 												{v.icon}
 											</span>
 										) : (
