@@ -62,9 +62,9 @@ const SUMMARY_MARK =
 const SUMMARY_MARK_HOVER =
 	"hover:bg-[color-mix(in_srgb,currentColor_26%,transparent)] " +
 	"active:scale-[0.96] active:bg-[color-mix(in_srgb,currentColor_34%,transparent)]";
-/* The mark's 20px glyph sits inside a 28px target. Pull its box 4px toward the
-   following action so the visible glyph keeps the row's 6px icon-to-control gap. */
-const SUMMARY_MARK_PAIR = "-mr-1";
+/* The mark's 20px glyph sits inside a 28px target. Pull its box 2px toward the
+   following action so the visible glyph keeps an 8px icon-to-control gap. */
+const SUMMARY_MARK_PAIR = "-mr-0.5";
 
 /* Spinning ring around the globe while the preview environment builds.
    border-t-current picks up the amber/green icon tone; the ring sits just
