@@ -29,7 +29,7 @@ import { WorkspaceSummary } from "./WorkspaceSummary";
 import { useCurrentUser } from "./UserPicker";
 import { useIsPhone } from "../hooks/useIsPhone";
 import { useSidePanel } from "../hooks/useSidePanel";
-import { IconArrowUpToLine, IconSidebarRight } from "./icons";
+import { IconArrowUpToLine, IconPlus, IconSidebarRight } from "./icons";
 import { Button } from "../ui/button";
 import { Tooltip } from "../ui/tooltip";
 import { cn } from "../ui/cn";
@@ -67,6 +67,7 @@ import { InlineAlert } from "../ui/state";
 import { duration, ease } from "../ui/motion";
 import { mainSession } from "../lib/landing-session";
 import { sessionCarriesPr } from "../lib/session-prs";
+import type { NewTabMorphOrigin } from "./SessionTabs";
 import {
 	workspaceSummaryOpen,
 	WS_SUMMARY_ROOM_W,
@@ -96,6 +97,11 @@ interface Props {
 	 * means. See lib/pr-focus.ts.
 	 */
 	focusPr?: PrFocus & { workspaceId?: string };
+	/** Whether the workspace has a real choice of tabs. A lone Review pane keeps
+	 *  the strip hidden and moves its + into the header, like a lone Chat. */
+	tabStripVisible: boolean;
+	/** Start a sibling session from the header when the lone-tab strip is hidden. */
+	onNewSession?: (origin?: NewTabMorphOrigin) => void;
 	/** The app's top-bar slot. The header row portals in here, the same slot and
 	    the same row a session's header uses, so the chrome doesn't change shape
 	    when a workspace has no session yet. */
@@ -138,6 +144,8 @@ export function WorkspacePane({
 	onOpenSession,
 	onOpenPr,
 	focusPr,
+	tabStripVisible,
+	onNewSession,
 	topbarEl,
 	rightPanelEl,
 }: Props) {
@@ -555,6 +563,35 @@ export function WorkspacePane({
 			<div className={VIEWER_TITLE}>
 				{workspace.repo && <RepoTile name={workspace.repo} />}
 				<span className={VIEWER_BRANCH}>{workspace.name}</span>
+				{!tabStripVisible && onNewSession && (
+					<Tooltip label="New tab in this workspace">
+						<Button
+							variant="ghost"
+							size="md"
+							className="-ml-1 flex-none rounded-control"
+							onClick={(event) => {
+								const reduceMotion = window.matchMedia(
+									"(prefers-reduced-motion: reduce)",
+								).matches;
+								const rect = event.detail > 0 && !reduceMotion
+									? event.currentTarget.getBoundingClientRect()
+									: null;
+								onNewSession(
+									rect
+										? {
+												left: rect.left,
+												top: rect.top,
+												width: rect.width,
+												height: rect.height,
+											}
+										: undefined,
+								);
+							}}
+							aria-label="New tab"
+							icon={<IconPlus size={22} />}
+						/>
+					</Tooltip>
+				)}
 			</div>
 			<div ref={headerActionsRef} className={VIEWER_HEADER_ACTIONS}>
 				{tab === "review" && presentationSession && !panelOpen && (
@@ -568,7 +605,7 @@ export function WorkspacePane({
 						onOpenSession={onOpenSession}
 						send={connected && !presentationSession.archived ? send : undefined}
 						onOpenChange={setReviewSummaryOpen}
-						tabStripVisible
+						tabStripVisible={tabStripVisible}
 						reviewMode
 						hasRoom={reviewSummaryHasRoom}
 					/>

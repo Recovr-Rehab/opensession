@@ -52,7 +52,7 @@ test("workspace Review keeps the implementation summary beside the PR canvas", (
 
 test("the PR identity and navigation share one floating two-line bar", () => {
 	const toolbarStart = prPanelSource.indexOf(
-		'<div className="shrink-0 desktop:mx-3',
+		'<div className="shrink-0 desktop:mx-2',
 	);
 	const toolbarEnd = prPanelSource.indexOf(">", toolbarStart);
 	const toolbar = prPanelSource.slice(toolbarStart, toolbarEnd);
@@ -62,11 +62,19 @@ test("the PR identity and navigation share one floating two-line bar", () => {
 	);
 
 	expect(toolbar).toContain("desktop:mt-2.5");
-	expect(toolbar).toContain("desktop:mb-3");
+	expect(toolbar).toContain("desktop:mb-2");
 	expect(toolbar).toContain("desktop:overflow-hidden");
 	expect(toolbar).toContain("desktop:rounded-xl");
 	expect(reviewBar).toContain("bg-panel");
 	expect(reviewBar).toContain("phone:bg-surface");
+	expect(reviewBar).toContain("desktop:-ml-3");
+});
+
+test("a lone Review hides the tab strip and keeps New tab in the header", () => {
+	expect(source).toContain("tabStripVisible: boolean");
+	expect(source).toContain("!tabStripVisible && onNewSession");
+	expect(source).toContain("tabStripVisible={tabStripVisible}");
+	expect(source).toContain('aria-label="New tab"');
 });
 
 test("the PR top bar leaves merge to the summary and actions menu", () => {

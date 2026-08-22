@@ -263,6 +263,7 @@ import {
 	onTabSplitChanged,
 	saveTabSplit,
 	resolveSplit,
+	shouldShowTabStrip,
 	type ResolvedSplit,
 	type TabSplit,
 } from "./lib/split-tabs";
@@ -3358,6 +3359,11 @@ export function App(
 	// either column of a split either. The split is kept, not cleared — going back
 	// up to the parent restores it.
 	const activeTabSplit = currentSession && !viewingWorker ? tabSplit : null;
+	const tabStripVisible = shouldShowTabStrip(
+		stripTabIds.length,
+		!!activeTabSplit,
+		!!viewingWorker,
+	);
 	const deskFabPosition = useDeskFabPosition(
 		!isPhone && !activeViewTabShown,
 		`${focusedTopTabId ?? ""}:${activeTabSplit?.rightActive ?? ""}:${activeTabSplit?.ratio ?? ""}`,
@@ -4785,18 +4791,13 @@ export function App(
 					openNewSessionInWorkspace(viewerSession, "share", prompt)
 				}
 				// Mirrors SessionTabs' own "render nothing" rule so the header's
-				// lone-session + never doubles up with the strip's — and, just as
+				// lone-tab + never doubles up with the strip's — and, just as
 				// important, so it APPEARS whenever the strip doesn't. Closed
 				// sessions are not part of the rule: they live in the strip's
 				// history button when there is a strip and in the header's ⋯ menu
 				// when there isn't, so counting them here would leave a lone
 				// session with neither + .
-				tabStripVisible={
-					!viewingWorker &&
-					(!!activeTabSplit ||
-						workspaceSessions.length > 1 ||
-						viewTabs.length > 0)
-				}
+				tabStripVisible={tabStripVisible}
 				archivedSessions={archivedSessions}
 				onRestoreSession={restoreSession}
 				parentSession={
@@ -5466,7 +5467,7 @@ export function App(
 								</span>
 							)}
 						</div>
-						{!activeTabSplit && !viewingWorker && renderTabBar(null)}
+						{!activeTabSplit && tabStripVisible && renderTabBar(null)}
 						{splitDropSide && (
 							<div
 								className={tabSplitDropPreviewClass(splitDropSide)}
@@ -5496,6 +5497,13 @@ export function App(
 									workspace={routeWorkspace}
 									workspaceSessions={workspaceSessions}
 									sessions={sessions}
+									tabStripVisible={tabStripVisible}
+									onNewSession={
+										workspaceSessions.some((session) => session.desk) ||
+										emptyWorkspaceSession
+											? undefined
+											: (origin) => void handleNewSession("share", null, origin)
+									}
 									tab={
 										reviewActive
 											? "review"

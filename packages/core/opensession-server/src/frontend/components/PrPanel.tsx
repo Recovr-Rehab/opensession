@@ -1754,6 +1754,7 @@ export function PrPanel({
             <Button
               variant="ghost"
               size="sm"
+              className="desktop:-mr-1.5"
               aria-label="Code view settings"
               icon={<IconSliders size={18} />}
             />
@@ -1936,7 +1937,7 @@ export function PrPanel({
   const reviewBar = (
     <div className="flex h-10 shrink-0 items-center gap-2 overflow-x-auto overflow-y-hidden bg-panel px-6 [scrollbar-width:none] phone:h-11 phone:bg-surface phone:px-2 phone:shadow-[inset_0_-1px_0_var(--border)] [&::-webkit-scrollbar]:hidden">
       <div
-        className="flex shrink-0 items-center gap-0.5 self-stretch"
+        className="flex shrink-0 items-center gap-0.5 self-stretch desktop:-ml-3"
         role="tablist"
         aria-orientation="horizontal"
         aria-label="Pull request pages"
@@ -2022,7 +2023,7 @@ export function PrPanel({
       {/* One floating, two-line review bar beside the workspace summary: PR
           identity first, navigation and view controls second. Phone keeps both
           lines edge to edge because there is no summary column to pair with. */}
-      <div className="shrink-0 desktop:mx-3 desktop:mt-2.5 desktop:mb-3 desktop:overflow-hidden desktop:rounded-xl desktop:bg-panel">
+      <div className="shrink-0 desktop:mx-2 desktop:mt-2.5 desktop:mb-2 desktop:overflow-hidden desktop:rounded-xl desktop:bg-panel">
       <header
         className={`flex h-10 shrink-0 items-center gap-2.5 px-6 phone:px-3 ${statusMark.bgClassName}`}
       >
