@@ -1486,7 +1486,7 @@ const MAX_VISIBLE_DOTS = 7;
 // Download / Open: quiet pills in the top action cluster, matching the asset
 // preview's separation between actions above and descriptions below.
 const lightboxAction =
-	"inline-flex h-10 shrink-0 cursor-pointer items-center justify-center gap-1 rounded-full border-0 bg-transparent px-2 text-xs text-white/60 no-underline transition-colors hover:bg-white/15 hover:text-white phone:h-11";
+	"inline-flex h-10 shrink-0 cursor-pointer items-center justify-center gap-1 rounded-full border-0 bg-transparent px-2 text-xs text-white/60 no-underline transition-[transform,background-color,color] active:scale-[0.96] hover:bg-white/15 hover:text-white phone:h-11";
 
 const PREVIEW_LABEL: Record<LightboxItem["kind"], string> = {
 	image: "Image preview",
@@ -1903,15 +1903,18 @@ function MediaLightbox({
 		>
 			<div
 				className={cn(
-					"absolute right-[calc(12px+env(safe-area-inset-right))] top-[calc(12px+env(safe-area-inset-top))] z-10 flex items-center gap-1",
+					"pointer-events-none absolute left-[calc(12px+env(safe-area-inset-left))] right-[calc(12px+env(safe-area-inset-right))] top-[calc(12px+env(safe-area-inset-top))] z-10 flex items-center justify-center",
 					isPhone &&
 						"transition-[opacity,transform] duration-[var(--dur)] ease-[var(--ease)] motion-reduce:transition-none",
-					isPhone && !chromeVisible && "pointer-events-none -translate-y-2 opacity-0",
+					isPhone && !chromeVisible && "-translate-y-2 opacity-0",
 				)}
 				inert={isPhone && !chromeVisible ? true : undefined}
 				aria-hidden={isPhone && !chromeVisible ? true : undefined}
 			>
-				<div className={isPhone ? "hidden" : "contents"}>
+				{/* Keep the actions on the viewport's centerline while Close owns the
+				    right corner. Grouping both at the edge made the row read like loose
+				    header controls rather than one action bar. */}
+				<div className={isPhone ? "hidden" : "pointer-events-auto flex items-center gap-1"}>
 				{commentable && (
 					<button
 						type="button"
@@ -2004,7 +2007,7 @@ function MediaLightbox({
 				<button
 					ref={closeRef}
 					type="button"
-					className={navBtn}
+					className={cn(navBtn, "pointer-events-auto absolute right-0")}
 					onClick={requestClose}
 					aria-label="Close"
 				>
