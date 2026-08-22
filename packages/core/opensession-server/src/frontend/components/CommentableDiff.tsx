@@ -46,6 +46,7 @@ import { Spinner } from "../ui/spinner";
 import { EmptyState } from "../ui/state";
 import { Menu, MENU_ICON } from "../ui/menu";
 import { toast } from "../ui/toast";
+import { useStickyEdges } from "../hooks/useStickyEdges";
 import { UserAvatar } from "./UserAvatar";
 
 /* The +/− counts. DiffPanel's summary strip carries the same pair, and the two
@@ -55,12 +56,12 @@ const DIFF_DEL = "font-semibold text-red";
 
 /* One collapsible file. The header is the hover group for the edit and discard
    actions revealed inside editable worktree diffs. */
-const FILE_ROW =
-  "overflow-clip rounded-lg border border-line bg-bg";
+const FILE_ROW = "rounded-lg border border-line bg-bg";
 const FILE_HEADER =
   "group relative flex min-h-9 w-full min-w-0 items-center gap-1.5 px-2 text-left text-fg hover:bg-hover phone:min-h-11 phone:px-2.5";
+const FILE_BODY = "overflow-clip rounded-b-lg";
 const STICKY_FILE_HEADER =
-  "sticky top-[var(--review-file-header-top,0px)] z-[6] bg-bg";
+  "sticky top-[var(--review-file-header-top,0px)] z-[6] bg-bg data-[stuck]:bg-raised data-[stuck]:shadow-[inset_0_-1px_0_var(--divider)]";
 const FILE_TOGGLE =
   "focus-ring flex min-w-0 flex-1 cursor-pointer items-center gap-2 self-stretch border-none bg-transparent p-0 text-left text-fg";
 
@@ -422,6 +423,8 @@ export function CommentableDiff({
   // Copying the path is the reliable way to get it out of the diff — text
   // selection breaks wherever the surrounding surface sets user-select: none.
   const [copied, setCopied] = useState<string | null>(null);
+  const [stickyRoot, setStickyRoot] = useState<HTMLDivElement | null>(null);
+  useStickyEdges(stickyRoot, stickyFileHeaders);
   const copiedTimer = useRef<ReturnType<typeof setTimeout> | undefined>(
     undefined,
   );
@@ -798,7 +801,8 @@ export function CommentableDiff({
           // `diff-file-header` is a DOM hook, not styling — no rule reaches it
           // any more: PrPanel's Files card finds this row by that class to
           // scroll to and expand a file (`el.querySelector(".diff-file-header")`).
-          className={`${FILE_HEADER} ${stickyFileHeaders ? STICKY_FILE_HEADER : "bg-transparent"}`}
+          className={`${FILE_HEADER} ${isOpen || resolved.length > 0 ? "rounded-t-lg" : "rounded-lg"} ${stickyFileHeaders ? STICKY_FILE_HEADER : "bg-transparent"}`}
+          data-sticky-edge={stickyFileHeaders ? "" : undefined}
         >
           <button
             type="button"
@@ -1019,36 +1023,40 @@ export function CommentableDiff({
             </Menu.Root>
           )}
         </div>
-        {isOpen &&
-          (imageSrcs && IMAGE_EXT.test(file.name) ? (
-            <ImageDiffRow file={file} srcs={imageSrcs(file)} />
-          ) : !mounted ? null : (
-            <FileDiffRow
-              key={theme}
-              file={file}
-              fileIndex={i}
-              theme={theme}
-              diffStyle={diffStyle}
-              wrapLines={wrapLines}
-              structuralHighlighting={structuralHighlighting}
-              annotations={annotations}
-              selectedLines={isDraftFile ? draft!.range : null}
-              onSelect={handleSelect}
-              renderAnnotation={renderAnnotation}
-              editing={isEditing}
-              createEditor={isEditing ? createEditor : undefined}
-              loadDiffFiles={isEditing ? loadDiffFiles : undefined}
-            />
-          ))}
-        {resolved.length > 0 && (
-          <div className="flex flex-col gap-1.5 border-t border-divider-soft bg-raised p-2">
-            {resolved.map((thread) => (
-              <ResolvedReviewThread
-                key={thread.id}
-                thread={thread}
-                repo={commentRepo}
-              />
-            ))}
+        {(isOpen || resolved.length > 0) && (
+          <div className={FILE_BODY}>
+            {isOpen &&
+              (imageSrcs && IMAGE_EXT.test(file.name) ? (
+                <ImageDiffRow file={file} srcs={imageSrcs(file)} />
+              ) : !mounted ? null : (
+                <FileDiffRow
+                  key={theme}
+                  file={file}
+                  fileIndex={i}
+                  theme={theme}
+                  diffStyle={diffStyle}
+                  wrapLines={wrapLines}
+                  structuralHighlighting={structuralHighlighting}
+                  annotations={annotations}
+                  selectedLines={isDraftFile ? draft!.range : null}
+                  onSelect={handleSelect}
+                  renderAnnotation={renderAnnotation}
+                  editing={isEditing}
+                  createEditor={isEditing ? createEditor : undefined}
+                  loadDiffFiles={isEditing ? loadDiffFiles : undefined}
+                />
+              ))}
+            {resolved.length > 0 && (
+              <div className="flex flex-col gap-1.5 border-t border-divider-soft bg-raised p-2">
+                {resolved.map((thread) => (
+                  <ResolvedReviewThread
+                    key={thread.id}
+                    thread={thread}
+                    repo={commentRepo}
+                  />
+                ))}
+              </div>
+            )}
           </div>
         )}
       </div>
@@ -1100,7 +1108,7 @@ export function CommentableDiff({
   );
 
   return (
-    <div className="flex flex-col gap-2.5">
+    <div ref={setStickyRoot} className="flex flex-col gap-2.5">
       {confirmation && (
         <div className="rounded-md bg-green-soft px-3 py-1.5 text-label font-semibold text-green">
           {confirmation}
