@@ -1385,7 +1385,7 @@ export function App(
 	// The "new session" ⌘K palette. It's an overlay driven by its own state (not a
 	// route), so it can open over any view; the <base>/new route still opens it
 	// so old links keep working.
-	const [palette, setPalette] = useState<{
+	const [palette, setPaletteState] = useState<{
 		open: boolean;
 		prompt?: string;
 		// When starting a session inside a workspace, prefill it + its shared repo
@@ -1401,6 +1401,14 @@ export function App(
 	}>(() =>
 		route.view === "new" ? { open: true, prompt: route.prompt } : { open: false },
 	);
+	// Every direct action that opens the palette goes through here, so the phone
+	// keyboard is raised from inside the tap rather than a frame later, when iOS
+	// no longer grants it (lib/soft-keyboard). The prompt takes the keyboard over
+	// as soon as it mounts.
+	const setPalette = React.useCallback((next: typeof palette) => {
+		if (next.open) primeSoftKeyboard();
+		setPaletteState(next);
+	}, []);
 	// Bumped by the sidebar's draft row to put the caret back in the empty
 	// state's session input. The row and that card are the same unstarted
 	// session seen from two places.
@@ -1408,9 +1416,6 @@ export function App(
 	const paletteOpenRef = useRef(palette.open);
 	paletteOpenRef.current = palette.open;
 	const openPalette = React.useCallback((prompt?: string, mcpServers?: string[]) => {
-		// The prompt mounts a frame later, too late for iOS to raise the keyboard
-		// for it. Hold the keyboard open from inside the tap instead.
-		primeSoftKeyboard();
 		// This is the global new-session action. It must not inherit the workspace
 		// behind it: without workspaceId, NewSession creates a workspace with its
 		// first session. Its model combinations are safe to use as a picker source,
