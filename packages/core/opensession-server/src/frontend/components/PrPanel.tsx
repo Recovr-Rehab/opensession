@@ -233,9 +233,6 @@ interface Props {
   onOpenPr?: (repo: string, branch: string) => void;
   /** WS handler hook — resets the new-session form on server errors. */
   addHandler?: (handler: (msg: WSServerMessage) => void) => () => void;
-  /** The surrounding review header already offers the workspace summary.
-   * Keep this panel's metadata rail only when it stacks for a narrow canvas. */
-  hideWideOverviewRail?: boolean;
 }
 
 interface PrDiffData {
@@ -343,7 +340,6 @@ export function PrPanel({
   onOpenSessionById,
   onOpenPr,
   addHandler,
-  hideWideOverviewRail = false,
 }: Props) {
   // Local copy of the linked-PR list so link/unlink applies instantly; the
   // sessions list catches up on its next refresh.
@@ -2273,7 +2269,7 @@ export function PrPanel({
                     pr={pr}
                   />
                 </div>
-                {!railStacked && !hideWideOverviewRail && rail}
+                {!railStacked && rail}
               </div>
             </SelectionToSession>
           ) : (
