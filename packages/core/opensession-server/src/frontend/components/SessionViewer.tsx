@@ -337,7 +337,6 @@ import {
 	WS_SUMMARY_ROOM_W,
 	workspaceSummaryShift,
 } from "../lib/workspace-summary-open";
-import { WS_SUMMARY_REVIEW_CLEARANCE } from "../lib/workspace-summary-classes";
 import { blockingOverlayOpen } from "../lib/blocking-overlay";
 import { matchesShortcut } from "../lib/shortcuts";
 import { PulseDot } from "../ui/status";
@@ -6866,12 +6865,7 @@ export function SessionViewer({
 							</div>
 						) : null
 					) : showReview && hasWorkspace ? (
-						<div
-							className={cn(
-								VIEWER_REVIEW_MAIN,
-								summaryVisible && WS_SUMMARY_REVIEW_CLEARANCE,
-							)}
-						>
+						<div className={VIEWER_REVIEW_MAIN}>
 							<PrPanel
 									onOpenPr={onOpenPr}
 									sessionId={session.id}
@@ -6894,6 +6888,7 @@ export function SessionViewer({
 									hideWideOverviewRail
 									linkable
 									walkthrough={session.walkthrough}
+									compactToolbar={summaryVisible}
 								/>
 						</div>
 					) : (
@@ -7052,7 +7047,7 @@ export function SessionViewer({
 										title="Start a conversation"
 										className="min-h-full px-4"
 									>
-										Ask a question or describe what you want to work on.
+										Ask a question or describe your task.
 									</EmptyState>
 								)
 							) : entries.length === 0 && !hasLiveConversation ? (
