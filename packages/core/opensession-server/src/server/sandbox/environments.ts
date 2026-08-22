@@ -11,6 +11,7 @@ import {
 import {
   invalidateRemoteRepoTemplate,
   readRemoteRepoTemplate,
+  remoteRepoTemplateNeedsRefresh,
 } from "./remote-repo-template";
 import {
   invalidatePrewarm,
@@ -344,6 +345,7 @@ export async function prepareSandboxEnvironment(
   provider: WorkspaceSandboxProvider,
   options: {
     rebuild?: boolean;
+    refresh?: boolean;
     user?: string;
     settings?: SandboxMachineSettings;
     onProgress?: (stage: string, progress: number, detail?: string) => void;
@@ -386,7 +388,12 @@ export async function prepareSandboxEnvironment(
   try {
     const deadline = Date.now() + 20 * 60_000;
     while (Date.now() < deadline) {
-      const requested = await requestPrewarm(provider, repo, options.user || "workspace-setup");
+      const requested = await requestPrewarm(
+        provider,
+        repo,
+        options.user || "workspace-setup",
+        { refreshTemplate: options.refresh },
+      );
       const entry = prewarmStatus(provider, repo);
       if (entry?.stage) options.onProgress?.(entry.stage, entry.progress || 10);
       else if (requested.state === "at-capacity") {
@@ -465,11 +472,19 @@ function maintainSandboxEnvironments(): void {
       environment.provider as "daytona" | "box" | "modal",
       environment.repo,
     );
-    if (template) {
+    if (template && !remoteRepoTemplateNeedsRefresh(template)) {
       // Publication is the durable completion boundary. A coordinator may
       // restart while the disposable validation sandbox is still parking;
-      // promote the recovered artifact instead of `rebuild:true` deleting it.
+      // promote the recovered artifact instead of deleting it.
       void derivedEnvironment(environment.repo, environment.provider).then(writeEnvironment);
+      continue;
+    }
+    if (template) {
+      scheduleSandboxEnvironment(environment.repo, environment.provider, {
+        refresh: true,
+        user: "image-registry-refresh",
+        settings: environment.settings,
+      });
       continue;
     }
     if (environment.state === "failed") continue;
@@ -484,7 +499,7 @@ function maintainSandboxEnvironments(): void {
 export function startSandboxEnvironmentMaintenance(): void {
   if (maintenanceTimer) return;
   maintainSandboxEnvironments();
-  maintenanceTimer = setInterval(maintainSandboxEnvironments, 10 * 60_000);
+  maintenanceTimer = setInterval(maintainSandboxEnvironments, 60_000);
   maintenanceTimer.unref?.();
   (globalThis as any).__sandboxEnvironmentMaintenanceTimer = maintenanceTimer;
 }
@@ -492,7 +507,7 @@ export function startSandboxEnvironmentMaintenance(): void {
 export function scheduleSandboxEnvironment(
   repo: string,
   provider: WorkspaceSandboxProvider,
-  options: { rebuild?: boolean; user?: string; settings?: SandboxMachineSettings } = {},
+  options: { rebuild?: boolean; refresh?: boolean; user?: string; settings?: SandboxMachineSettings } = {},
 ) {
   const existing = listSandboxOperations().find(
     (operation) =>

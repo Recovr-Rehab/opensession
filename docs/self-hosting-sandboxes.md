@@ -577,10 +577,11 @@ Self-hostable sandbox platform (Helm/K8s) with a hosted cloud. The adapter
 Daytona API/SDK: volume-style workspace cloned in-sandbox over https
 (`cloneCredential`), ws transport always, runner bootstrapped on first
 ensure. A prewarm clones the repo, runs `.agents/setup`, scrubs clone and
-model authority, and publishes a 24-hour Daytona snapshot. Later prewarms
-restore that provider artifact into a new sandbox and skip setup. The warm clone
-fetches the current default branch when a session adopts it, so default-branch
-pushes do not discard the snapshot and force a cold-start gap. Idle-stop is
+model authority, and publishes a Daytona snapshot. The image registry refreshes
+source snapshots every 30 minutes without discarding the old mapping until the
+replacement is ready. Later sessions restore that artifact, fetch only the
+small source delta, and skip setup. Preparation inputs such as `bun.lock` and
+`.agents/setup` invalidate the image separately. Idle-stop is
 native (`autoStopInterval`).
 
 - Connect in Workspace → Sandboxes with a Daytona API key and a reachable
@@ -635,8 +636,9 @@ Sandboxes**. It is stored as an opaque workspace secret; new Boxes use
   adopts it. Cold creation falls back cleanly when a named snapshot has gone
   stale. Snapshot restores branch from the snapshot's `origin/main` without a
   synchronous fetch: fetching and checking out first forced Box to hydrate the
-  9.6 GB lazy filesystem and added 40 seconds. Templates live for 24 hours, so
-  fetch explicitly when a task needs a newer upstream commit.
+  9.6 GB lazy filesystem and added 40 seconds. The image registry replaces the
+  named snapshot every 30 minutes, so this fast path remains closely bounded
+  to the current default branch without hydrating the full lazy filesystem.
 - The command API's synchronous limit is 600 seconds. Longer work and
   background commands use Box's native detached-process endpoint and poll its
   separate stdout/stderr and exit status.
@@ -678,9 +680,10 @@ contract as the other remote providers.
   terminates the container and deletes its workspace; the next turn creates a
   fresh sandbox, so push code-mode work early.
 - The prewarm adapter publishes Modal filesystem Images after `.agents/setup`
-  and credential scrubbing (24-hour TTL). A restored prewarm preserves the
-  exact seal and setup output, then is adopted by the session. Shell-tab
-  remote PTY remains provider-dependent work.
+  and credential scrubbing. The image registry refreshes them every 30 minutes,
+  while input signatures rebuild immediately when setup or lockfiles change.
+  A restored prewarm preserves the exact seal and setup output, then is adopted
+  by the session. Shell-tab remote PTY remains provider-dependent work.
 - The 41/41 live conformance pass covered provisioning, bootstrap, git/exec,
   idempotent reuse, encrypted preview tunnels, a distinct filesystem-image
   restore, real agent execution, WS reconnect/steer/cancel, and cleanup.

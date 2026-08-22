@@ -37,8 +37,17 @@ export interface RemoteRepoTemplate {
   projectSignature?: string;
 }
 
+/** Ramp-style source-image cadence. Compute runs only while replacing an image. */
+export const REMOTE_REPO_TEMPLATE_REFRESH_MS = 30 * 60 * 1_000;
 /** Provider storage backstop where an API requires a finite snapshot TTL. */
 export const REMOTE_REPO_TEMPLATE_TTL_MS = 30 * 24 * 60 * 60 * 1_000;
+
+export function remoteRepoTemplateNeedsRefresh(
+  template: Pick<RemoteRepoTemplate, "createdAt">,
+  now = Date.now(),
+): boolean {
+  return now - Date.parse(template.createdAt) >= REMOTE_REPO_TEMPLATE_REFRESH_MS;
+}
 
 export function remoteRepoTemplateProofPath(repoId: string): string {
   return `/home/ubuntu/.opensession/repo-template-${clean(repoId)}.json`;

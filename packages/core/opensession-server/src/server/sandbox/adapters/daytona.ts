@@ -674,12 +674,14 @@ export const daytonaPrewarmAdapter: PrewarmAdapter = {
     };
   },
 
-  async publishTemplate(sandboxId, repo) {
+  async publishTemplate(sandboxId, repo, _label, options) {
     const client = await daytonaClient();
     const name = remoteRepoTemplateName("daytona", repo.id);
     const sbx = await client.get(sandboxId);
     await sealRemoteRepoTemplate(daytonaDriver(sbx), "daytona", repo);
-    const recovered = await recoverDaytonaRepoTemplate(client, repo.id);
+    const recovered = options?.replace
+      ? null
+      : await recoverDaytonaRepoTemplate(client, repo.id);
     if (recovered) return;
     const existing = await getDaytonaSnapshot(client, name);
     if (existing) {

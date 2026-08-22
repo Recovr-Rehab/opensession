@@ -67,6 +67,10 @@ import {
   bootstrapRemoteSandbox,
   bootstrapSignature,
   listRemoteStates,
+  remoteCloneUrl,
+  remoteWarmWorkspaceDir,
+  scrubRemoteWarmWorkspaceAuthority,
+  shellQuoteWord,
   type RemoteDriver,
 } from "./adapters/bootstrap";
 
@@ -109,6 +113,8 @@ export interface PrewarmEntry {
   lastTouchedAt: string;
   claimedAt?: string;
   claimedBy?: string;
+  /** Refresh an existing project image in place before publishing replacement. */
+  refreshTemplate?: boolean;
   /** Prepared compute was stopped while its reusable disk remains available. */
   parked?: boolean;
 }
@@ -150,6 +156,7 @@ export interface PrewarmAdapter {
     sandboxId: string,
     repo: (typeof REPOS)[string],
     label: string,
+    options?: { replace?: boolean },
   ): Promise<void>;
   /** Release compute after preparation while retaining the prepared disk.
    * Providers without a durable stopped state simply omit this. */
@@ -385,6 +392,7 @@ export async function requestPrewarm(
   provider: string,
   repoId: string,
   user?: string,
+  options: { refreshTemplate?: boolean } = {},
 ): Promise<{ state: PrewarmRequestState; sandboxId?: string }> {
   if (!isRemoteSandboxProvider(provider) || !(repoId in REPOS)) {
     return { state: "unsupported" };
@@ -419,8 +427,14 @@ export async function requestPrewarm(
     entry = undefined;
   }
   if (entry && (entry.state === "bootstrapping" || entry.state === "ready")) {
-    touchPrewarm(provider, repoId);
-    return { state: entry.state, sandboxId: entry.sandboxId };
+    if (options.refreshTemplate && !entry.refreshTemplate) {
+      await invalidatePrewarm(provider, repoId);
+      record = undefined;
+      entry = undefined;
+    } else {
+      touchPrewarm(provider, repoId);
+      return { state: entry.state, sandboxId: entry.sandboxId };
+    }
   }
   if (entry?.state === "failed") {
     if (Date.now() - Date.parse(entry.lastTouchedAt) < FAILED_RETRY_MS) {
@@ -447,6 +461,7 @@ export async function requestPrewarm(
     state: "bootstrapping",
     signature: prewarmSignature(provider, resources),
     user,
+    ...(options.refreshTemplate ? { refreshTemplate: true } : {}),
     ...(resources ? { resources } : {}),
     stage: "Creating sandbox",
     progress: 10,
@@ -527,6 +542,21 @@ async function runPrewarmBootstrap(record: PrewarmRecord, adapter: PrewarmAdapte
         entry.provider as "daytona" | "box" | "modal",
         repo,
       );
+      if (entry.refreshTemplate) {
+        setPrewarmStage(entry, "Syncing the latest project image", 72);
+        const warmDir = remoteWarmWorkspaceDir(repo.id);
+        const cloneUrl = await remoteCloneUrl(repo);
+        const refreshed = await driver.exec(
+          `git remote set-url origin ${shellQuoteWord(cloneUrl)} && ` +
+            `git fetch origin ${shellQuoteWord(repo.defaultBranch)} --quiet && ` +
+            `git reset --hard ${shellQuoteWord(`origin/${repo.defaultBranch}`)}`,
+          { cwd: warmDir, timeoutMs: 10 * 60_000 },
+        );
+        if (refreshed.exitCode !== 0) {
+          throw new Error(`could not refresh ${repo.id} project image: ${(refreshed.stderr || refreshed.stdout).trim().slice(0, 300)}`);
+        }
+        await scrubRemoteWarmWorkspaceAuthority(driver, repo, warmDir);
+      }
     } else if (adapter.prepare) {
       setPrewarmStage(entry, "Preparing project workspace", 40);
       await adapter.prepare(driver, repo, `${entry.provider}-prewarm`);
@@ -577,14 +607,19 @@ async function runPrewarmBootstrap(record: PrewarmRecord, adapter: PrewarmAdapte
     const releaseToWaiter = () => (record.waiters || 0) > 0;
     if (
       adapter.publishTemplate &&
-      !restoredFromTemplate &&
+      (!restoredFromTemplate || entry.refreshTemplate) &&
       !releaseToWaiter() &&
       !isKeepReady(entry.provider, entry.repoId)
     ) {
       record.sealing = true;
       setPrewarmStage(entry, "Sealing reusable template", 82);
       try {
-        await adapter.publishTemplate(sandboxId, repo, `${entry.provider}-prewarm`);
+        await adapter.publishTemplate(
+          sandboxId,
+          repo,
+          `${entry.provider}-prewarm`,
+          { replace: entry.refreshTemplate },
+        );
       } finally {
         record.sealing = false;
       }
