@@ -7,10 +7,12 @@ import { Button } from "../ui/button";
 import { cn } from "../ui/cn";
 import { duration, ease } from "../ui/motion";
 import { LoadingState } from "../ui/state";
+import { BrandMark } from "./BrandTile";
 import { GithubAuthCard } from "./SetupIntegrations";
 import { ReposSection } from "./SetupRepos";
 import { SetupRestart } from "./SetupRestart";
 import { TeamSection } from "./SetupTeam";
+import { UserAvatar } from "./UserAvatar";
 import { OrganizationProfileSection } from "./settings/GeneralPanel";
 import { ProviderAccountsSection } from "./settings/ModelAccounts";
 import { IconCheck, IconChevronLeft } from "./icons";
@@ -32,19 +34,86 @@ const STEPS: FirstMileStep[] = [
 	{ id: "ready", label: "Ready", title: "You’re ready" },
 ];
 
+function PreviewOverflow({ count }: { count: number }) {
+	if (count <= 0) return null;
+	return (
+		<span className="flex size-7 items-center justify-center rounded-full border border-bg bg-bg/85 text-meta font-semibold text-dim">
+			+{count}
+		</span>
+	);
+}
+
 function FirstMileSummary({ status }: { status: SetupStatus }) {
 	const github = githubAuthState(status.github);
+	let githubOrganization = status.github.appOrg || "";
+	if (!githubOrganization) {
+		try {
+			const match = new URL(status.github.appCreateUrl).pathname.match(/^\/organizations\/([^/]+)/);
+			githubOrganization = match?.[1] ? decodeURIComponent(match[1]) : "";
+		} catch {}
+	}
+	const accountCount = status.engine.claudeAccounts + status.engine.codexAccounts;
+	const accounts = [
+		...Array.from({ length: status.engine.claudeAccounts }, (_, index) => ({
+			name: `Claude account ${index + 1}`,
+			provider: "claude" as const,
+		})),
+		...Array.from({ length: status.engine.codexAccounts }, (_, index) => ({
+			name: `Codex account ${index + 1}`,
+			provider: "codex" as const,
+		})),
+	];
 	const tiles = [
-		{ title: "GitHub", ready: github.tone === "on", label: github.label },
 		{
-			title: "AI",
+			title: "GitHub",
+			ready: github.tone === "on",
+			label: github.label,
+			preview: (
+				<div className="flex max-w-full items-center gap-1.5 rounded-full bg-bg/65 py-1 pr-2 pl-1 text-meta font-medium text-fg">
+					<span className="flex size-6 shrink-0 items-center justify-center rounded-full bg-fg text-bg">
+						<BrandMark name="github" size={15} />
+					</span>
+					<span className="truncate">{githubOrganization || "GitHub"}</span>
+				</div>
+			),
+		},
+		{
+			title: "AI subscriptions",
 			ready: status.engine.ready,
-			label: status.engine.ready ? "Ready" : "Needs setup",
+			label: `${accountCount} ${accountCount === 1 ? "account" : "accounts"} connected`,
+			preview: (
+				<div className="flex -space-x-2">
+					{accounts.slice(0, 4).map((account, index) => (
+						<span
+							key={`${account.provider}-${account.name}-${index}`}
+							title={account.name}
+							className="flex size-7 items-center justify-center rounded-full border border-bg bg-bg/85 text-fg"
+						>
+							<BrandMark name={account.provider} size={15} />
+						</span>
+					))}
+					<PreviewOverflow count={accounts.length - 4} />
+				</div>
+			),
 		},
 		{
 			title: "Repositories",
 			ready: status.repos.length > 0,
 			label: status.repos.length > 0 ? `${status.repos.length} added` : "None added",
+			preview: (
+				<div className="flex -space-x-2">
+					{status.repos.slice(0, 4).map((repo) => (
+						<span
+							key={repo.id}
+							title={repo.label}
+							className="flex size-7 items-center justify-center rounded-md border border-bg bg-bg/85 text-meta font-semibold uppercase text-dim"
+						>
+							{repo.label.slice(0, 2)}
+						</span>
+					))}
+					<PreviewOverflow count={status.repos.length - 4} />
+				</div>
+			),
 		},
 		{
 			title: "Team",
@@ -53,6 +122,14 @@ function FirstMileSummary({ status }: { status: SetupStatus }) {
 				status.team.count > 0
 					? `${status.team.count} ${status.team.count === 1 ? "member" : "members"}`
 					: "No members",
+			preview: (
+				<div className="flex -space-x-2">
+					{status.team.names.slice(0, 4).map((name) => (
+						<UserAvatar key={name} name={name} size={28} className="border border-bg" />
+					))}
+					<PreviewOverflow count={status.team.names.length - 4} />
+				</div>
+			),
 		},
 	];
 
@@ -68,17 +145,24 @@ function FirstMileSummary({ status }: { status: SetupStatus }) {
 							: "border-divider-soft bg-settings-plate/65",
 					)}
 				>
-					<div
-						className={cn(
-							"flex size-8 items-center justify-center rounded-full",
-							tile.ready ? "bg-bg/60 text-green" : "bg-faint/10 text-faint",
-						)}
-					>
-						{tile.ready ? <IconCheck size={18} /> : <span className="size-2 rounded-full bg-current" />}
+					<div className="flex min-w-0 items-start justify-between gap-2">
+						<div className="min-w-0">{tile.preview}</div>
+						<div
+							className={cn(
+								"flex size-8 shrink-0 items-center justify-center rounded-full",
+								tile.ready ? "bg-bg/60 text-green" : "bg-faint/10 text-faint",
+							)}
+						>
+							{tile.ready ? (
+								<IconCheck size={18} />
+							) : (
+								<span className="size-2 rounded-full bg-current" />
+							)}
+						</div>
 					</div>
 					<div className="min-w-0">
 						<div className="text-item-title font-semibold text-fg">{tile.title}</div>
-						<div className="mt-1 truncate text-supporting text-dim">{tile.label}</div>
+						<div className="mt-1 text-supporting leading-snug text-dim">{tile.label}</div>
 					</div>
 				</div>
 			))}
