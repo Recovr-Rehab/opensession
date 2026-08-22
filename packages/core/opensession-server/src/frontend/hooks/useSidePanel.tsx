@@ -1,18 +1,23 @@
 import { useEffect, useRef, useState } from "react";
 import { PANEL_RESIZE } from "../lib/session-panel-classes";
+import {
+	SIDE_PANEL_OPEN_KEY,
+	sidePanelOpen,
+	storeSidePanelOpen,
+} from "../lib/side-panel-open";
 import { suppressLayoutAnimations } from "../ui/motion";
 
 /**
  * The right side panel's open state and width, shared by every surface that
  * shows one: the session viewer and the session-less workspace route.
  *
- * Open state is deliberately transient. Each host chooses its initial state:
- * sessions open on Summary, while the session-less workspace route starts
- * closed. A window event keeps simultaneous panel hosts in sync without
- * carrying the open state into the next browser load.
+ * Open state is a browser-wide view choice. The summary card is the default;
+ * once the person opens the panel, it stays open as they move between
+ * workspaces or reload. A window event keeps simultaneous panel hosts in sync,
+ * while the storage event does the same across tabs.
  *
- * Width remains in localStorage. The handle drags from the panel's left edge,
- * so its width is the pointer's distance from the container's right side.
+ * Width also remains in localStorage. The handle drags from the panel's left
+ * edge, so its width is the pointer's distance from the container's right side.
  */
 const OPEN_CHANGE_EVENT = "opensession-panel-open-changed";
 const WIDTH_KEY = "opensession-panel-w";
@@ -28,25 +33,27 @@ export interface SidePanel {
 	resizeHandle: React.ReactNode;
 }
 
-export function useSidePanel({
-	defaultOpen = false,
-}: {
-	defaultOpen?: boolean | (() => boolean);
-} = {}): SidePanel {
-	const [open, setOpenState] = useState(() =>
-		typeof defaultOpen === "function" ? defaultOpen() : defaultOpen,
-	);
+export function useSidePanel(): SidePanel {
+	const [open, setOpenState] = useState(sidePanelOpen);
 	useEffect(() => {
 		const syncOpen = (event: Event) => {
 			if (!(event instanceof CustomEvent) || typeof event.detail !== "boolean")
 				return;
 			setOpenState(event.detail);
 		};
+		const syncStorage = (event: StorageEvent) => {
+			if (event.key === SIDE_PANEL_OPEN_KEY) setOpenState(sidePanelOpen());
+		};
 		window.addEventListener(OPEN_CHANGE_EVENT, syncOpen);
-		return () => window.removeEventListener(OPEN_CHANGE_EVENT, syncOpen);
+		window.addEventListener("storage", syncStorage);
+		return () => {
+			window.removeEventListener(OPEN_CHANGE_EVENT, syncOpen);
+			window.removeEventListener("storage", syncStorage);
+		};
 	}, []);
 	function setOpen(next: boolean) {
 		setOpenState(next);
+		storeSidePanelOpen(next);
 		window.dispatchEvent(new CustomEvent(OPEN_CHANGE_EVENT, { detail: next }));
 	}
 
