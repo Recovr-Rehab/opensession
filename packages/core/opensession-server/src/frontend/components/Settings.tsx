@@ -85,7 +85,7 @@ export type { SettingsSectionKey, ToolSectionKey };
 
 /** Sections that are browsed rather than read down, and take the wider
  *  column for it (see SETTINGS_PANEL_FRAME_GALLERY). */
-const GALLERY_SECTIONS = new Set<SettingsSectionKey>(["library"]);
+const GALLERY_SECTIONS = new Set<SettingsSectionKey>(["library", "setup"]);
 
 // Settings is a dense mix of headings, row titles, labels, descriptions,
 // fields, and tool panels. Body roles share 150% leading; heading and title
