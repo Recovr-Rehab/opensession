@@ -683,9 +683,9 @@ export function Composer({
 
   // Phones get a ChatGPT-style resting state: while the field is empty and
   // unfocused, the composer collapses to a single-row pill ("+ · placeholder ·
-  // mic · send"), hiding the model/effort/goal chips. Focusing the field,
-  // adding content, or entering note mode expands it to the full toolbar so
-  // the Team note context stays on its own row above the field.
+  // mic · send"), hiding the model/effort/goal chips. Note mode keeps this
+  // compact yellow state too; focusing the field reveals its context chip.
+  // Focusing the field or adding content expands it to the full toolbar.
   // The open model menu also holds it expanded: the portaled popup takes focus
   // (blurring the textarea), and collapsing would unmount the pill trigger and
   // slam the menu shut mid-interaction.
@@ -702,8 +702,7 @@ export function Composer({
     pastedTexts.length > 0 ||
     !!quote ||
     hasAttached;
-  const minimized =
-    isPhone && !focused && !hasContent && !noteMode && !modelMenuOpen;
+  const minimized = isPhone && !focused && !hasContent && !modelMenuOpen;
   const composerIconButtonClass = cn(
     paletteIconBtn,
     minimized && paletteIconBtnRound,
@@ -1533,10 +1532,10 @@ export function Composer({
             )}
             {/* Note mode is context attached to the next send, exactly like a
                 quoted selection, so it says so in the same place and the same
-                shape rather than as a marker down in the toolbar — where the ✕
-                had to be small enough to fit beside the "+" and the model pill,
-                which made it hard to read and hard to hit. */}
-            {noteMode && (
+                shape rather than as a marker down in the toolbar. The resting
+                phone pill communicates it through its yellow surface and
+                placeholder; the named chip appears once the field expands. */}
+            {noteMode && !minimized && (
               <ComposerContextChip
                 key="note-mode"
                 icon={<IconNote size={15} />}
