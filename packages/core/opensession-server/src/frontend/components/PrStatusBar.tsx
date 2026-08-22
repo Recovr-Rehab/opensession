@@ -863,10 +863,10 @@ export function PrStatusBar({
 			case "merged": {
 				// Landed work is a fork in the road: file the session away, or keep
 				// going in a fresh one. Don't offer to archive a session that still
-				// has open PRs in its series just because the primary one landed —
-				// the new session stands either way, since the branch is behind it.
+				// has open PRs in its series just because the primary one landed.
+				// The new session stands either way, since the branch is behind it.
 				const canArchive = !isArchived && openSiblings === 0;
-				if (!onNewSession && !canArchive) return null;
+				if (!onNewSession && !canArchive && !isArchived) return null;
 				return (
 					<div className="flex items-center gap-2">
 						{onNewSession && (
@@ -885,7 +885,16 @@ export function PrStatusBar({
 								<span className="@max-[440px]:hidden">Continue</span>
 							</PrBarButton>
 						)}
-						{canArchive && (
+						{isArchived ? (
+							<PrBarButton
+								className={actionBtn}
+								tone="secondary"
+								icon={<IconArchive size={18} />}
+								disabled
+							>
+								Archived
+							</PrBarButton>
+						) : canArchive ? (
 							<PrBarButton
 								className={actionBtn}
 								// The merged strip's own purple, filled: archiving is what
@@ -904,7 +913,7 @@ export function PrStatusBar({
 							>
 								{busy === "archive" ? "Archiving…" : "Archive"}
 							</PrBarButton>
-						)}
+						) : null}
 					</div>
 				);
 			}
