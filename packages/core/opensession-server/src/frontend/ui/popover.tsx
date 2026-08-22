@@ -70,6 +70,8 @@ function Root<Payload = unknown>({
 function Popup({
 	className,
 	positionerClassName,
+	portalContainer,
+	positionMethod,
 	side,
 	align,
 	sideOffset = 8,
@@ -86,6 +88,12 @@ function Popup({
 	/** Override the portal layer for standing page-level surfaces that should
 	 * sit behind modal and palette backdrops. */
 	positionerClassName?: string;
+	/** Render the positioner inside a moving layout ancestor. This keeps a popup
+	 * attached by normal browser layout when that whole ancestor moves. */
+	portalContainer?: React.ComponentProps<typeof BasePopover.Portal>["container"];
+	positionMethod?: React.ComponentProps<
+		typeof BasePopover.Positioner
+	>["positionMethod"];
 	side?: React.ComponentProps<typeof BasePopover.Positioner>["side"];
 	align?: React.ComponentProps<typeof BasePopover.Positioner>["align"];
 	sideOffset?: number;
@@ -121,8 +129,9 @@ function Popup({
 	children: React.ReactNode;
 }) {
 	return (
-		<BasePopover.Portal>
+		<BasePopover.Portal container={portalContainer}>
 			<BasePopover.Positioner
+				positionMethod={positionMethod}
 				side={side}
 				align={align}
 				sideOffset={sideOffset}

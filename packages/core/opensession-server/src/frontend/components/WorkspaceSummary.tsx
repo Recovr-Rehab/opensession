@@ -397,6 +397,12 @@ export function WorkspaceSummary({
 				side="bottom"
 				align="end"
 				anchor={anchor}
+				// Keep the floating layer inside the header actions it follows. The
+				// right panel changes the chat pane's width on every pointer move;
+				// portaling to body leaves anchor tracking a frame behind, while this
+				// ancestor moves the card and the chat edge in the same layout pass.
+				portalContainer={anchor}
+				positionMethod="absolute"
 				positionerClassName="z-[5000]"
 				// Pull past the header action row's 16px inset to leave a consistent
 				// 12px edge gutter. Its quiet shadow does not need more clearance.
