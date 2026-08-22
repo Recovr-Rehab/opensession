@@ -40,6 +40,8 @@ export type ToastOptions = {
 	variant?: ToastVariant;
 	/** Defaults: 3200ms, 4200ms for errors, and 7000ms with an action. */
 	duration?: number;
+	/** Keeps live status visible until its owner dismisses it. */
+	ongoing?: boolean;
 	action?: ToastAction;
 };
 
@@ -47,6 +49,7 @@ export type Toast = {
 	id: number;
 	message: string;
 	variant: ToastVariant;
+	ongoing?: boolean;
 	action?: ToastAction;
 };
 
@@ -55,6 +58,7 @@ type ToastData = {
 	message: string;
 	variant: ToastVariant;
 	duration: number;
+	ongoing?: boolean;
 	action?: ToastAction;
 };
 
@@ -105,7 +109,13 @@ export function toast(message: string, options: ToastOptions = {}): number {
 
 	const id = nextId++;
 	const variant = options.variant ?? inferVariant(message);
-	const item: Toast = { id, message, variant, action: options.action };
+	const item: Toast = {
+		id,
+		message,
+		variant,
+		ongoing: options.ongoing,
+		action: options.action,
+	};
 	toasts = [...toasts, item];
 
 	if (item.action?.label.toLowerCase() === "undo") {
@@ -125,7 +135,13 @@ export function toast(message: string, options: ToastOptions = {}): number {
 
 	const duration =
 		options.duration ??
-		(options.action ? 7000 : variant === "error" ? 4200 : 3200);
+		(options.ongoing
+			? 0
+			: options.action
+				? 7000
+				: variant === "error"
+					? 4200
+					: 3200);
 	manager.add({
 		id: managerId(id),
 		description: message,
@@ -256,11 +272,12 @@ function ToastCard({ toast: item }: { toast: BaseToast.Root.ToastObject<ToastDat
 		<BaseToast.Root
 			toast={item}
 			// Receipts rise above the composer at every width, so swiping down
-			// follows the nearest screen edge.
-			swipeDirection={["down", "right"]}
-			onClick={() => dismissToast(data.id)}
+			// follows the nearest screen edge. Live status is passive and stays
+			// until the process that owns it dismisses it.
+			swipeDirection={data.ongoing ? [] : ["down", "right"]}
+			onClick={data.ongoing ? undefined : () => dismissToast(data.id)}
 			className={[
-				"pointer-events-auto absolute bottom-0 left-1/2 w-max max-w-full outline-none phone:max-w-[calc(100vw-24px)]",
+				`${data.ongoing ? "pointer-events-none" : "pointer-events-auto"} absolute bottom-0 left-1/2 w-max max-w-full outline-none phone:max-w-[calc(100vw-24px)]`,
 				"[z-index:calc(100-var(--toast-index))] [transform-origin:center_bottom]",
 				"[transform:translateX(calc(-50%+var(--toast-swipe-movement-x)))_translateY(calc(var(--toast-swipe-movement-y)-var(--toast-index)*8px))_scale(calc(1-(var(--toast-index)*0.04)))]",
 				"data-[expanded]:[transform:translateX(calc(-50%+var(--toast-swipe-movement-x)))_translateY(calc(var(--toast-swipe-movement-y)-var(--toast-offset-y)-var(--toast-index)*8px))_scale(1)]",
@@ -276,7 +293,7 @@ function ToastCard({ toast: item }: { toast: BaseToast.Root.ToastObject<ToastDat
 					data.action ? "pr-1.5" : "pr-3",
 				].join(" ")}
 			>
-				<ToastStatusIcon name={iconName} />
+				<ToastStatusIcon name={iconName} ongoing={data.ongoing} />
 				{/* Description renders a <p>; remove its browser margins so the
 				    visible height comes from the pill padding alone. */}
 				<BaseToast.Description
@@ -300,14 +317,30 @@ function ToastCard({ toast: item }: { toast: BaseToast.Root.ToastObject<ToastDat
 						</BaseToast.Action>
 					</Tooltip>
 				)}
-				<ToastProgress duration={data.duration} />
+				{!data.ongoing && data.duration > 0 && (
+					<ToastProgress duration={data.duration} />
+				)}
 			</BaseToast.Content>
 		</BaseToast.Root>
 	);
 }
 
-function ToastStatusIcon({ name }: { name: ToastIconName | null }) {
+function ToastStatusIcon({
+	name,
+	ongoing,
+}: {
+	name: ToastIconName | null;
+	ongoing?: boolean;
+}) {
 	const className = "shrink-0 text-dim";
+	if (ongoing)
+		return (
+			<span
+				aria-hidden
+				className="size-3 shrink-0 animate-spin rounded-full border border-current/25 border-t-current text-accent"
+			/>
+		);
+
 	switch (name) {
 		case "archive":
 			return <IconArchive size={14} className={className} aria-hidden />;

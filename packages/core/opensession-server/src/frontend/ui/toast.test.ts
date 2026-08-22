@@ -36,6 +36,13 @@ describe("toast", () => {
 		]);
 	});
 
+	test("marks live status as ongoing until its owner dismisses it", () => {
+		const id = toast("Restarting", { ongoing: true });
+		expect(activeToasts()[0]).toMatchObject({ id, ongoing: true });
+		dismissToast(id);
+		expect(activeToasts()).toHaveLength(0);
+	});
+
 	test("carries an action for reversible feedback", () => {
 		let undone = 0;
 		toast("Item removed", { action: { label: "Undo", onClick: () => undone++ } });

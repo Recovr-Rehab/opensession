@@ -1,9 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import type { WSServerMessage } from "../lib/types";
 import { PRODUCT_NAME } from "../lib/brand";
-import { TRANSIENT_NOTICE_LANE } from "../lib/notification-classes";
-import { FloatingStatus } from "../ui/floating-status";
-import { toast } from "../ui/toast";
+import { dismissToast, toast } from "../ui/toast";
 import { fetchHealthStatus } from "../lib/health";
 
 // Give foreground recovery enough time to probe and replace the stale PWA
@@ -54,6 +52,7 @@ export function RestartOverlay({ connected, addHandler }: Props) {
   restartByRef.current = restartBy;
   const bootId = useRef<string | null>(null);
   const sawDown = useRef(false);
+  const statusToast = useRef<number | null>(null);
   // Set when the server explicitly told us it's going down; cleared only by
   // resolveRestart. The old instance's socket can stay open into the drain, so
   // "connected + health answering" alone must not clear the pill instantly.
@@ -65,6 +64,10 @@ export function RestartOverlay({ connected, addHandler }: Props) {
 
   const resolveRestart = () => {
     explicit.current = false;
+    if (statusToast.current !== null) {
+      dismissToast(statusToast.current);
+      statusToast.current = null;
+    }
     if (phaseRef.current === "restarting") setPhase("ok");
     const by = restartByRef.current;
     toast(`${PRODUCT_NAME} restarted${by ? ` · ${by}` : ""}`, {
@@ -240,30 +243,23 @@ export function RestartOverlay({ connected, addHandler }: Props) {
     };
   }, [phase]);
 
-  if (phase === "reconnecting" || phase === "restarting") {
+  // Connection recovery uses the regular toast lane above the composer. Unlike
+  // a receipt, this status has no expiry line and stays until recovery settles.
+  useEffect(() => {
+    if (phase !== "reconnecting" && phase !== "restarting") return;
     const restarting = phase === "restarting" || explicit.current;
-    return (
-      <div className={`${TRANSIENT_NOTICE_LANE} flex justify-end phone:justify-center`}>
-        <FloatingStatus
-          // Live restart status and its completion toast share one top-center
-          // lane and one glass surface, so the sequence changes state in place.
-          // The `sm` ring is calibrated for a compact control; `md` reads as a
-          // grey halo on a surface this small.
-          role="status"
-          aria-live="polite"
-        >
-          <span
-            aria-hidden
-            className="size-3 shrink-0 animate-spin rounded-full border border-current/25 border-t-current text-accent"
-          />
-          <span>{restarting ? "Restarting" : "Connection lost"}</span>
-          <span className="text-faint">
-            {restarting && restartBy ? restartBy : "Retrying"}
-          </span>
-        </FloatingStatus>
-      </div>
+    const id = toast(
+      restarting
+        ? `Restarting${restartBy ? ` · ${restartBy}` : ""}`
+        : "Connection lost · Retrying",
+      { ongoing: true },
     );
-  }
+    statusToast.current = id;
+    return () => {
+      dismissToast(id);
+      if (statusToast.current === id) statusToast.current = null;
+    };
+  }, [phase, restartBy]);
 
   if (phase !== "crashed") return null;
 
