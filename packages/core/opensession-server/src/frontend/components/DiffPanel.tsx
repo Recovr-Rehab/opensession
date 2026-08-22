@@ -134,6 +134,8 @@ export function DiffPanel({ sessionId, isRunning, canSend, send, diff }: Props) 
   const [flowError, setFlowError] = useState<string | null>(null);
   const flowGeneration = useRef(0);
   const panelRef = useRef<HTMLDivElement | null>(null);
+  const [diffControlsTarget, setDiffControlsTarget] =
+    useState<HTMLDivElement | null>(null);
 
 	const loadFlow = useCallback(async () => {
     if (!cur || !flowKey) return;
@@ -339,8 +341,11 @@ export function DiffPanel({ sessionId, isRunning, canSend, send, diff }: Props) 
             {handEdited.length === 1 ? "" : "s"}
           </Button>
         )}
+        <div
+          ref={setDiffControlsTarget}
+          className="ml-auto flex shrink-0 items-center gap-2"
+        />
         <Segmented
-          className="ml-auto"
           size="sm"
           label="Diff view"
           value={view}
@@ -396,6 +401,7 @@ export function DiffPanel({ sessionId, isRunning, canSend, send, diff }: Props) 
           key={cur.repo}
           patch={d.rawPatch || ""}
           defaultExpandedFiles={10}
+          controlsTarget={diffControlsTarget}
           groups={
             groups?.repo === cur.repo && groups.patch === d.rawPatch
               ? groups.groups || undefined

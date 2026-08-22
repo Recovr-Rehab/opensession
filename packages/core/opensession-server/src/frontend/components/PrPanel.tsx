@@ -583,6 +583,8 @@ export function PrPanel({
    * conversation instead of sitting beside it.
    */
   const [rootEl, setRootEl] = useState<HTMLDivElement | null>(null);
+  const [diffControlsTarget, setDiffControlsTarget] =
+    useState<HTMLDivElement | null>(null);
   const [railStacked, setRailStacked] = useState(false);
   const [headerCompact, setHeaderCompact] = useState(
     () => window.matchMedia("(max-width: 720px)").matches,
@@ -1427,6 +1429,7 @@ export function PrPanel({
     () =>
       diff && {
         diffStyle,
+        controlsTarget: codeView === "all" ? diffControlsTarget : undefined,
         wrapLines,
         structuralHighlighting: structuralSetting === "1",
         showFileStats: fileStatsSetting === "1",
@@ -1458,6 +1461,8 @@ export function PrPanel({
     [
       diff,
       diffStyle,
+      codeView,
+      diffControlsTarget,
       wrapLines,
       structuralSetting,
       fileStatsSetting,
@@ -1922,6 +1927,10 @@ export function PrPanel({
             <span className="text-green">+{pr.additions}</span>
             <span className="text-red">−{pr.deletions}</span>
           </span>
+          <div
+            ref={setDiffControlsTarget}
+            className="flex shrink-0 items-center gap-2"
+          />
           <Menu.Root>
             <Tooltip label="Change the view">
               <Menu.Trigger

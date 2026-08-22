@@ -6,6 +6,7 @@ import React, {
   useEffect,
   startTransition,
 } from "react";
+import { createPortal } from "react-dom";
 import { parsePatchFiles } from "@pierre/diffs";
 import { EditProvider, FileDiff } from "@pierre/diffs/react";
 import type {
@@ -117,6 +118,8 @@ interface Props {
   defaultExpandedFiles?: number;
   /** Omit the global expander when mounting every file would exhaust the tab. */
   allowExpandAll?: boolean;
+  /** Move the global file controls into a parent toolbar. Omit to keep them inline. */
+  controlsTarget?: Element | null;
   onSubmit: (target: CommentTarget, text: string) => Promise<void>;
   /**
    * When provided, changed image files render the actual pictures (before/after)
@@ -265,6 +268,7 @@ export function CommentableDiff({
   patch,
   defaultExpandedFiles = 0,
   allowExpandAll = true,
+  controlsTarget,
   submitLabel,
   placeholder,
   disabled,
@@ -1049,6 +1053,38 @@ export function CommentableDiff({
     );
   };
 
+  const controls = (
+    <>
+      {groupsLoading && (
+        <span className={GROUPS_NOTE} role="status">
+          <Spinner className="text-faint" />
+          Organizing files…
+        </span>
+      )}
+      {!groupsLoading && groupedFiles && (
+        <span
+          className={`${GROUPS_NOTE} before:size-[5px] before:rounded-full before:bg-accent before:content-['']`}
+        >
+          AI organized
+        </span>
+      )}
+      {viewedEnabled && (
+        <span className="text-meta text-faint">
+          {countViewed(viewed, files)} of {files.length} viewed
+        </span>
+      )}
+      {allowExpandAll && (
+        <button
+          type="button"
+          className="cursor-pointer border-none bg-transparent px-1 py-0.5 font-sans text-label font-medium text-faint hover:text-fg"
+          onClick={toggleAll}
+        >
+          {allOpen ? "Collapse all" : "Expand all"}
+        </button>
+      )}
+    </>
+  );
+
   return (
     <div className="flex flex-col gap-2.5">
       {confirmation && (
@@ -1056,35 +1092,11 @@ export function CommentableDiff({
           {confirmation}
         </div>
       )}
-      <div className="-mb-1 flex items-center justify-end">
-        {groupsLoading && (
-          <span className={GROUPS_NOTE} role="status">
-            <Spinner className="text-faint" />
-            Organizing files…
-          </span>
-        )}
-        {!groupsLoading && groupedFiles && (
-          <span
-            className={`${GROUPS_NOTE} before:size-[5px] before:rounded-full before:bg-accent before:content-['']`}
-          >
-            AI organized
-          </span>
-        )}
-        {viewedEnabled && (
-          <span className="text-meta text-faint">
-            {countViewed(viewed, files)} of {files.length} viewed
-          </span>
-        )}
-        {allowExpandAll && (
-          <button
-            type="button"
-            className="cursor-pointer border-none bg-transparent px-1 py-0.5 font-sans text-label font-medium text-faint hover:text-fg"
-            onClick={toggleAll}
-          >
-            {allOpen ? "Collapse all" : "Expand all"}
-          </button>
-        )}
-      </div>
+      {controlsTarget === undefined ? (
+        <div className="-mb-1 flex items-center justify-end">{controls}</div>
+      ) : controlsTarget ? (
+        createPortal(controls, controlsTarget)
+      ) : null}
       {groupedFiles
         ? groupedFiles.map((group) => {
             const groupKey = `${group.title}\0${group.indices.join(",")}`;
