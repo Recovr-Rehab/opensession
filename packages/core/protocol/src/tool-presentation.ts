@@ -43,13 +43,17 @@ const TOOL_ALIASES: Record<string, string> = {
   bash: "Bash",
   shell: "Bash",
   exec_command: "Bash",
+  notebook_edit: "NotebookEdit",
+  str_replace_editor: "Edit",
   grep: "Grep",
   find: "Find",
   glob: "Glob",
   list: "Glob",
   ls: "Glob",
   webfetch: "WebFetch",
+  web_fetch: "WebFetch",
   websearch: "WebSearch",
+  web_search: "WebSearch",
   task: "Task",
   skill: "Skill",
   todowrite: "TodoWrite",
@@ -270,6 +274,10 @@ export function toolFamily(toolName: string): ToolFamily {
       return "agent";
     case "Skill":
       return "skill";
+    case "TaskCreate":
+    case "TaskUpdate":
+    case "TaskList":
+    case "TaskGet":
     case "TodoWrite":
       return "checklist";
     default:

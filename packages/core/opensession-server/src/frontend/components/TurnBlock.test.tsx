@@ -133,6 +133,8 @@ describe("grouped tool run row", () => {
 		const items = [
 			toolUse("before", "read", { path: "src/App.tsx" }),
 			toolUse("skill", "skill", { skill: "better-ui" }),
+			toolUse("task-create", "TaskCreate", { subject: "Verify the worker" }),
+			toolUse("task-update", "TaskUpdate", { taskId: "1", status: "in_progress" }),
 			toolUse("plan", "todowrite", {
 				todos: [{ content: "Verify the worker", status: "in_progress" }],
 			}),
@@ -141,8 +143,8 @@ describe("grouped tool run row", () => {
 		const html = render(items, new Map());
 
 		expect(html.match(/data-tool-run="true"/g)).toHaveLength(1);
-		expect(html).toContain("4 steps");
-		expect(html).toContain("Read · Skill · TodoWrite · Bash");
+		expect(html).toContain("6 steps");
+		expect(html).toContain("Read · Skill · TaskCreate · TaskUpdate · TodoWrite · Bash");
 		expect(html).not.toContain("better-ui");
 		expect(html).not.toContain("Verify the worker");
 	});

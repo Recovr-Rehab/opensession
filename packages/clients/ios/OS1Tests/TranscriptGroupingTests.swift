@@ -971,17 +971,24 @@ final class ToolPresentationTests: XCTestCase {
     }
 
     func testEngineDialectsFoldOntoOneName() {
-        for raw in ["bash", "shell", "exec_command"] {
+        let dialects = [
+            ("bash", "Bash"),
+            ("shell", "Bash"),
+            ("exec_command", "Bash"),
+            ("apply_patch", "Edit"),
+            ("str_replace_editor", "Edit"),
+            ("notebook_edit", "NotebookEdit"),
+            ("ls", "Glob"),
+            ("web_fetch", "WebFetch"),
+            ("web_search", "WebSearch"),
+        ]
+        for (raw, canonical) in dialects {
             XCTAssertEqual(
                 ToolPresentation.make(toolName: raw, input: nil).canonical,
-                "Bash",
-                "\(raw) should read as Bash"
+                canonical,
+                "\(raw) should read as \(canonical)"
             )
         }
-        XCTAssertEqual(
-            ToolPresentation.make(toolName: "apply_patch", input: nil).canonical,
-            "Edit"
-        )
     }
 
     func testMcpNamesSplitIntoServerAndTool() {

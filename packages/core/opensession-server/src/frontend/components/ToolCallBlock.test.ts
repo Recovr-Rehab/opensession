@@ -116,6 +116,11 @@ test("bash, grep, find and glob summaries drop their plumbing", () => {
   expect(canonicalToolName("ls")).toBe("Glob");
   expect(toolFamily("ls")).toBe("find");
   expect(toolDisplayName("ls")).toBe("ls");
+  expect(canonicalToolName("web_search")).toBe("WebSearch");
+  expect(toolFamily("web_fetch")).toBe("web");
+  expect(toolFamily("notebook_edit")).toBe("file");
+  expect(toolFamily("str_replace_editor")).toBe("edit");
+  expect(toolFamily("TaskUpdate")).toBe("checklist");
   // A glob with no path used to render a stray trailing space.
   expect(toolSummary("glob", { pattern: "**/*.tsx" }, "", roots)).toBe("**/*.tsx");
 });
