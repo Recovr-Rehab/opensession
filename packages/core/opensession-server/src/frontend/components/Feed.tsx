@@ -142,8 +142,17 @@ export function Feed({ sessions, teamViewing, onSelect }: Props) {
 	// them: working, then online, then whoever moved most recently.
 	const chips = [...team].sort((a, b) => Number(b.isYou) - Number(a.isYou));
 
-	// Picking a person is also the sidebar you turn to.
+	const [recentPrs, setRecentPrs] = useState<RecentPr[]>([]);
+	const [recentPrsLoading, setRecentPrsLoading] = useState(true);
+	const [personPrs, setPersonPrs] = useState<RecentPr[]>([]);
+	const [personPrsLoading, setPersonPrsLoading] = useState(false);
+
+	// Picking a person is also the sidebar you turn to. Mark their request in
+	// flight before changing scope, rather than waiting for the next effect, so
+	// the first filtered paint cannot make the same false empty-state claim.
 	const pick = (next: Scope) => {
+		setPersonPrs([]);
+		setPersonPrsLoading(next.kind === "person");
 		setScope(next);
 		setFilter({
 			person: personLensFilter(
@@ -152,11 +161,6 @@ export function Feed({ sessions, teamViewing, onSelect }: Props) {
 			),
 		});
 	};
-
-	const [recentPrs, setRecentPrs] = useState<RecentPr[]>([]);
-	const [recentPrsLoading, setRecentPrsLoading] = useState(true);
-	const [personPrs, setPersonPrs] = useState<RecentPr[]>([]);
-	const [personPrsLoading, setPersonPrsLoading] = useState(false);
 	// Repos that ship without pull requests — Open Session's own — say what
 	// they shipped in commits instead, and land in the same list.
 	const [commits, setCommits] = useState<RecentCommit[]>([]);
