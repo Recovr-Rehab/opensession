@@ -546,11 +546,15 @@ export function SessionTabs({
 												}}
 												role="tab"
 												aria-selected={key === activeId}
-												className={`group/tab ${tabClass({
-													active: key === activeId,
-													waiting,
-													colored: !!hex,
-												})}`}
+												className={cn(
+													"group/tab",
+													tabClass({
+														active: key === activeId,
+														waiting,
+														colored: !!hex,
+													}),
+													emptyVisual && "desktop:pr-7",
+												)}
 												style={{
 													...(hex ? { "--tab-color": hex } : {}),
 													...(emptyVisual
