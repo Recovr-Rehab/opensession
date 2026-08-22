@@ -368,6 +368,7 @@ import {
 	ACTION_WITH_REPLIES_CLEARANCE,
 	SCROLL_ACTION_CLEARANCE,
 	SUGGESTIONS_CLEARANCE,
+	TRANSCRIPT_ICON_BUTTON,
 	TRANSCRIPT_PILL_BUTTON,
 	TRANSCRIPT_PILL_LOADING,
 	TRANSCRIPT_PILL_SPINNER,
@@ -1710,7 +1711,6 @@ export function SessionViewer({
 		spacerRef,
 		followingLive,
 		following,
-		newBelow,
 		showScrollToBottom,
 		atTop,
 		scrollToLatest,
@@ -7155,9 +7155,11 @@ export function SessionViewer({
 								>
 									<button
 										className={cn(
-											TRANSCRIPT_PILL_BUTTON,
+											TRANSCRIPT_ICON_BUTTON,
 											`absolute bottom-[calc(24px+var(--suggestions-under,0px))] left-1/2 z-[5] ${PILL_CENTRED}`,
 										)}
+										type="button"
+										aria-label="Scroll to the bottom"
 										onClick={() => scrollToLatest("auto")}
 									>
 										<IconArrowDown
@@ -7165,7 +7167,6 @@ export function SessionViewer({
 											className="text-dim transition-transform group-hover:translate-y-px"
 											aria-hidden
 										/>
-										{newBelow ? "New messages" : "Scroll to bottom"}
 									</button>
 								</Tooltip>
 							)}
@@ -7231,7 +7232,9 @@ export function SessionViewer({
 														shortcut={transcriptDownKeys ?? undefined}
 													>
 														<button
-															className={TRANSCRIPT_PILL_BUTTON}
+															className={TRANSCRIPT_ICON_BUTTON}
+															type="button"
+															aria-label="Scroll to the bottom"
 															onClick={() => scrollToLatest("auto")}
 														>
 															<IconArrowDown
@@ -7239,7 +7242,6 @@ export function SessionViewer({
 																className="text-dim transition-transform group-hover:translate-y-px"
 																aria-hidden
 															/>
-															{newBelow ? "New messages" : "Scroll to bottom"}
 														</button>
 													</Tooltip>
 												</div>

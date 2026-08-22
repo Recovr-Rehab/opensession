@@ -503,11 +503,17 @@ const PILL_PRESSABLE =
 	"group relative cursor-pointer transition-[scale] " +
 	"before:pointer-events-none before:absolute before:inset-0 before:rounded-[inherit] " +
 	"before:[corner-shape:inherit] before:bg-transparent before:transition-colors before:content-[''] " +
-	"after:absolute after:-inset-1 after:content-[''] hover:before:bg-hover " +
+	"after:absolute after:content-[''] hover:before:bg-hover " +
 	"focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-fg active:scale-[0.96]";
 
-export const TRANSCRIPT_PILL_BUTTON = `${TRANSCRIPT_PILL} ${PILL_PRESSABLE}`;
-export const FLOATING_PILL_BUTTON = `${FLOATING_PILL} ${PILL_PRESSABLE}`;
+export const TRANSCRIPT_PILL_BUTTON = `${TRANSCRIPT_PILL} ${PILL_PRESSABLE} after:-inset-1`;
+export const FLOATING_PILL_BUTTON = `${FLOATING_PILL} ${PILL_PRESSABLE} after:-inset-1`;
+
+/** A compact transcript action whose visible surface is only the glyph. */
+export const TRANSCRIPT_ICON_BUTTON =
+	"inline-flex size-8 items-center justify-center rounded-full bg-popup-glass text-fg " +
+	"[backdrop-filter:var(--popup-blur)] [--smooth-ring-color:var(--popup-ring)] smooth-shadow-ring-sm " +
+	`${PILL_PRESSABLE} after:-inset-1.5`;
 
 /**
  * Centring for a pill that floats over the transcript.
