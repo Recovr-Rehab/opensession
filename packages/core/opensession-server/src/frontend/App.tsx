@@ -817,6 +817,11 @@ export function App(
 	// that (see the `.mobile-detail` CSS and the back button below). It's inert on
 	// desktop, where the sidebar + detail are a static split.
 	const detailPaneRef = useRef<HTMLElement | null>(null);
+	const [detailPaneEl, setDetailPaneEl] = useState<HTMLElement | null>(null);
+	const captureDetailPane = useCallback((node: HTMLElement | null) => {
+		detailPaneRef.current = node;
+		setDetailPaneEl(node);
+	}, []);
 	// Desktop-only: collapse the left sidebar entirely (persisted per browser). A
 	// new browser starts collapsed so the workspace summary and conversation lead;
 	// opening it once remains an explicit preference. On mobile the page-stack
@@ -3820,11 +3825,7 @@ export function App(
 		try {
 			if (neverRan && !pendingCreate) await deleteSessionApi(s.id, false);
 			else if (!neverRan) {
-				const { stoppedRun } = await archiveSessionApi(s.id, true);
-				showArchivedToast(
-					[s],
-					stoppedRun ? "stopped the running turn" : undefined,
-				);
+				await archiveSessionApi(s.id, true);
 				rememberArchived([s.id]);
 			}
 		} catch (e) {
@@ -3905,31 +3906,8 @@ export function App(
 	};
 	const unarchiveSession = (session: UnifiedSession) => unarchiveSessions([session]);
 
-	// Every archive announces itself and offers the way back. ⌘Z already undoes
-	// one, but only for people who know it is there, and archiving is one
-	// keypress or one mis-aimed swipe from being an accident.
-	// The toast holds the sessions it archived rather than reading the undo
-	// stack, so a second archive landing on top cannot repoint this Undo at the
-	// wrong session.
-	const undoArchive = async (archived: UnifiedSession[]) => {
-		if (!archived.length) return;
-		if (!(await unarchiveSessions(archived))) return;
-		const ids = new Set(archived.map((s) => s.id));
-		setArchiveUndo((prev) =>
-			prev
-				.map((entry) => entry.filter((id) => !ids.has(id)))
-				.filter((entry) => entry.length),
-		);
-		navigate({ view: "session", id: archived[0].id });
-	};
-	const showArchivedToast = (archived: UnifiedSession[], note?: string) => {
-		if (!archived.length) return;
-		const what =
-			archived.length === 1 ? "Archived" : `Archived ${archived.length} sessions`;
-		toast(note ? `${what} · ${note}` : what, {
-			action: { label: "Undo", onClick: () => void undoArchive(archived) },
-		});
-	};
+	// Archiving stays quiet. The row disappearing confirms the action, and the
+	// app-wide undo shortcut restores the latest archived session or workspace.
 
 	// The newest undo entry that's still restorable, resolved against the live
 	// list: an entry whose sessions were unarchived elsewhere (or deleted) falls
@@ -4544,11 +4522,7 @@ export function App(
 						? sidebarRef.current?.archiveSelected()
 						: closeSession(viewerSession)
 				}
-				onArchived={(stoppedRun) => {
-					showArchivedToast(
-						[viewerSession],
-						stoppedRun ? "stopped the running turn" : undefined,
-					);
+				onArchived={() => {
 					// Only fires when the viewer archived on its own — with onArchive
 					// passed (a focused pane) it defers to the sidebar path instead, so
 					// this can't double-record.
@@ -4724,7 +4698,7 @@ export function App(
 		<UserGate>
 			<RestartOverlay connected={connected} addHandler={addHandler} />
 			<MediaLightboxHost />
-			<ToastHost />
+			<ToastHost container={settingsActive ? null : detailPaneEl} />
 			<Modal.Root
 				open={runningCloseConfirmation !== null}
 				onOpenChange={(open) => {
@@ -5197,11 +5171,7 @@ export function App(
 									if (wasOpen && !openNext?.()) goBack();
 									patch(s.id, { archived: true, archivedReason: "manual" });
 									try {
-										const { stoppedRun } = await archiveSessionApi(s.id, true);
-										showArchivedToast(
-											[s],
-											stoppedRun ? "stopped the running turn" : undefined,
-										);
+										await archiveSessionApi(s.id, true);
 										rememberArchived([s.id]);
 									} catch (e) {
 										console.error("Archive failed:", e);
@@ -5229,15 +5199,8 @@ export function App(
 										patch(session.id, { archived: true, archivedReason: "manual" });
 									}
 									try {
-										const results = await Promise.all(
+										await Promise.all(
 											sessions.map((c) => archiveSessionApi(c.id, true)),
-										);
-										const stopped = results.filter((r) => r.stoppedRun).length;
-										showArchivedToast(
-											sessions,
-											stopped > 0
-												? `stopped ${stopped} running turn${stopped === 1 ? "" : "s"}`
-												: undefined,
 										);
 										// One entry for the whole row, so ⌘Z brings the
 										// workspace back in a single press.
@@ -5284,7 +5247,7 @@ export function App(
 					</div>
 
 					<div className={WORKSPACE_SHELL}>
-						<main className={DETAIL_PANE} ref={detailPaneRef}>
+						<main className={DETAIL_PANE} ref={captureDetailPane}>
 						{/* WCO back/forward fallback: the primary cluster lives in the
 						    sidebar's top chrome row, which vanishes when the sidebar is
 						    collapsed — this floating copy shows only then (CSS-gated). */}

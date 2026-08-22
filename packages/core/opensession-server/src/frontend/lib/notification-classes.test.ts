@@ -22,22 +22,10 @@ describe("notification lanes", () => {
 		expect(TRANSIENT_NOTICE_LANE).not.toContain("bottom-");
 	});
 
-	test("centres toast receipts above the desktop composer", () => {
+	test("centres toast receipts above the composer", () => {
 		expect(TOAST_NOTICE_LANE).toContain("inset-x-0");
 		expect(TOAST_NOTICE_LANE).toContain("bottom-[124px]");
-	});
-
-	test("keeps phone receipts below the top bar and tabs", () => {
-		expect(TOAST_NOTICE_LANE).toContain(
-			"phone:top-[calc(var(--header-h)+8px)]",
-		);
-		expect(TOAST_NOTICE_LANE).toContain("phone:bottom-auto");
-		expect(TOAST_NOTICE_LANE).toContain(
-			"phone:[body:has(.session-tab-view)_&]:top-[calc(var(--header-h)+54px)]",
-		);
-		expect(TOAST_NOTICE_LANE).toContain(
-			"phone:[body:has(.session-tab-reorder~.session-tab-reorder)_&]:top-[calc(var(--header-h)+54px)]",
-		);
+		expect(TOAST_NOTICE_LANE).not.toContain("top-");
 	});
 
 	test("keeps durable desktop prompts in a separate shelf", () => {

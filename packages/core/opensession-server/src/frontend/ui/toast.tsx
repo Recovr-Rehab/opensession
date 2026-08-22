@@ -1,5 +1,5 @@
 import { Toast as BaseToast } from "@base-ui/react/toast";
-import { useEffect, useRef } from "react";
+import { useEffect, useLayoutEffect, useRef } from "react";
 import {
 	IconArchive,
 	IconArrowUp,
@@ -151,16 +151,70 @@ export function activeToasts(): readonly Toast[] {
  * Base UI owns measurement, stacking, hover and focus expansion, timer pausing,
  * swipe dismissal, and accessibility. Keep one host mounted at the app root.
  */
-export function ToastHost() {
+export function ToastHost({ container }: { container?: HTMLElement | null }) {
 	return (
 		<BaseToast.Provider toastManager={manager} limit={MAX_VISIBLE}>
-			<ToastViewport />
+			<ToastViewport container={container} />
 		</BaseToast.Provider>
 	);
 }
 
-function ToastViewport() {
+function ToastViewport({ container }: { container?: HTMLElement | null }) {
 	const { toasts: items } = BaseToast.useToastManager<ToastData>();
+	const isPhone = useIsPhone();
+	const viewportRef = useRef<HTMLDivElement>(null);
+
+	// Desktop aligns to the rendered composer rather than the window. Its centre
+	// moves with the sidebar, workspace panel, and summary-card transform.
+	useLayoutEffect(() => {
+		const viewport = viewportRef.current;
+		if (!viewport || !container || isPhone) return;
+		let composer: Element | null = null;
+		let frame = 0;
+		const resizeObserver = new ResizeObserver(() => scheduleAlign());
+		const align = () => {
+			frame = 0;
+			const nextComposer = container.querySelector(".composer");
+			if (nextComposer !== composer) {
+				if (composer) resizeObserver.unobserve(composer);
+				composer = nextComposer;
+				if (composer) resizeObserver.observe(composer);
+			}
+			if (!composer) {
+				viewport.style.left = "0px";
+				viewport.style.right = "0px";
+				return;
+			}
+			const containerRect = container.getBoundingClientRect();
+			const composerRect = composer.getBoundingClientRect();
+			const left = `${Math.max(0, Math.round(composerRect.left - containerRect.left))}px`;
+			const right = `${Math.max(0, Math.round(containerRect.right - composerRect.right))}px`;
+			if (viewport.style.left !== left) viewport.style.left = left;
+			if (viewport.style.right !== right) viewport.style.right = right;
+		};
+		function scheduleAlign() {
+			if (!frame) frame = requestAnimationFrame(align);
+		}
+		resizeObserver.observe(container);
+		const mutationObserver = new MutationObserver((mutations) => {
+			if (mutations.every(({ target }) => viewport.contains(target))) return;
+			scheduleAlign();
+		});
+		mutationObserver.observe(container, {
+			attributes: true,
+			childList: true,
+			subtree: true,
+			attributeFilter: ["class", "style"],
+		});
+		window.addEventListener("resize", scheduleAlign);
+		align();
+		return () => {
+			if (frame) cancelAnimationFrame(frame);
+			resizeObserver.disconnect();
+			mutationObserver.disconnect();
+			window.removeEventListener("resize", scheduleAlign);
+		};
+	}, [container, isPhone, items.length]);
 
 	useEffect(() => {
 		const onKeyDown = (event: KeyboardEvent) => {
@@ -180,9 +234,10 @@ function ToastViewport() {
 	}, []);
 
 	return (
-		<BaseToast.Portal>
+		<BaseToast.Portal container={container ?? undefined}>
 			<BaseToast.Viewport
-				className={`${TOAST_NOTICE_LANE} toast-viewport mx-auto h-[var(--toast-frontmost-height)] w-[min(480px,calc(100vw-32px))] outline-none phone:w-full phone:px-3`}
+				ref={viewportRef}
+				className={`${TOAST_NOTICE_LANE} ${container ? "absolute" : "fixed"} toast-viewport mx-auto h-[var(--toast-frontmost-height)] w-[min(480px,calc(100vw-32px))] outline-none phone:w-full phone:px-3`}
 			>
 				{items.map((item) => (
 					<ToastCard key={item.id} toast={item} />
@@ -194,31 +249,29 @@ function ToastViewport() {
 
 function ToastCard({ toast: item }: { toast: BaseToast.Root.ToastObject<ToastData> }) {
 	const data = item.data;
-	const isPhone = useIsPhone();
 	if (!data) return null;
 	const iconName = toastIconName(data.message, data.variant);
 
 	return (
 		<BaseToast.Root
 			toast={item}
-			// Desktop receipts rise above the composer; phone receipts drop below
-			// the top chrome. Swiping follows the nearest screen edge.
-			swipeDirection={isPhone ? ["up", "right"] : ["down", "right"]}
+			// Receipts rise above the composer at every width, so swiping down
+			// follows the nearest screen edge.
+			swipeDirection={["down", "right"]}
 			onClick={() => dismissToast(data.id)}
 			className={[
-				"pointer-events-auto absolute bottom-0 left-1/2 w-max max-w-full outline-none phone:top-0 phone:bottom-auto phone:max-w-[calc(100vw-24px)]",
-				"[z-index:calc(100-var(--toast-index))] [transform-origin:center_bottom] phone:[transform-origin:center_top]",
-				"[transform:translateX(calc(-50%+var(--toast-swipe-movement-x)))_translateY(calc(var(--toast-swipe-movement-y)-var(--toast-index)*8px))_scale(calc(1-(var(--toast-index)*0.04)))] phone:[transform:translateX(calc(-50%+var(--toast-swipe-movement-x)))_translateY(calc(var(--toast-swipe-movement-y)+var(--toast-index)*8px))_scale(calc(1-(var(--toast-index)*0.04)))]",
-				"data-[expanded]:[transform:translateX(calc(-50%+var(--toast-swipe-movement-x)))_translateY(calc(var(--toast-swipe-movement-y)-var(--toast-offset-y)-var(--toast-index)*8px))_scale(1)] phone:data-[expanded]:[transform:translateX(calc(-50%+var(--toast-swipe-movement-x)))_translateY(calc(var(--toast-swipe-movement-y)+var(--toast-offset-y)+var(--toast-index)*8px))_scale(1)]",
+				"pointer-events-auto absolute bottom-0 left-1/2 w-max max-w-full outline-none phone:max-w-[calc(100vw-24px)]",
+				"[z-index:calc(100-var(--toast-index))] [transform-origin:center_bottom]",
+				"[transform:translateX(calc(-50%+var(--toast-swipe-movement-x)))_translateY(calc(var(--toast-swipe-movement-y)-var(--toast-index)*8px))_scale(calc(1-(var(--toast-index)*0.04)))]",
+				"data-[expanded]:[transform:translateX(calc(-50%+var(--toast-swipe-movement-x)))_translateY(calc(var(--toast-swipe-movement-y)-var(--toast-offset-y)-var(--toast-index)*8px))_scale(1)]",
 				"transition-[transform,translate,scale,opacity] duration-200 ease-[cubic-bezier(0.23,1,0.32,1)] motion-reduce:transition-opacity",
-				"data-[starting-style]:opacity-0 data-[starting-style]:[translate:0_8px] phone:data-[starting-style]:[translate:0_-8px] data-[starting-style]:[scale:0.96] data-[ending-style]:opacity-0 data-[ending-style]:[translate:0_8px] phone:data-[ending-style]:[translate:0_-8px] data-[ending-style]:[scale:0.96] data-[limited]:opacity-0 motion-reduce:data-[starting-style]:[translate:0_0] motion-reduce:data-[starting-style]:[scale:1] motion-reduce:data-[ending-style]:[translate:0_0] motion-reduce:data-[ending-style]:[scale:1]",
+				"data-[starting-style]:opacity-0 data-[starting-style]:[translate:0_8px] data-[starting-style]:[scale:0.96] data-[ending-style]:opacity-0 data-[ending-style]:[translate:0_8px] data-[ending-style]:[scale:0.96] data-[limited]:opacity-0 motion-reduce:data-[starting-style]:[translate:0_0] motion-reduce:data-[starting-style]:[scale:1] motion-reduce:data-[ending-style]:[translate:0_0] motion-reduce:data-[ending-style]:[scale:1]",
 			].join(" ")}
 		>
 			<BaseToast.Content
 				className={[
-					"relative flex max-w-full items-center gap-2 overflow-hidden whitespace-normal rounded-[999px] bg-popup-glass",
-					"py-1.5 text-supporting font-medium leading-tight text-fg",
-					"[backdrop-filter:var(--popup-blur)] [--smooth-ring-color:var(--popup-ring)] smooth-shadow-ring-sm",
+					"relative flex max-w-full items-center gap-2 overflow-hidden whitespace-normal rounded-[999px] bg-tooltip",
+					"py-1.5 text-supporting font-medium leading-tight text-tooltip-fg smooth-shadow-md",
 					iconName ? "pl-2.5" : "pl-3",
 					data.action ? "pr-1.5" : "pr-3",
 				].join(" ")}
@@ -241,7 +294,7 @@ function ToastCard({ toast: item }: { toast: BaseToast.Root.ToastObject<ToastDat
 							}}
 							// The pill stays tight, so the action carries the finger
 							// target on its own: 28px of box inside a 44px tap area.
-							className="focus-ring relative -my-1 ml-1 shrink-0 cursor-pointer rounded-md px-2 py-1 text-supporting font-semibold text-accent transition-[background-color,transform] duration-150 hover:bg-hover active:scale-[0.96] phone:-my-1.5 phone:ml-0.5 phone:grid phone:min-h-7 phone:place-items-center phone:rounded-[999px] phone:px-2.5 phone:after:absolute phone:after:inset-x-0 phone:after:top-1/2 phone:after:h-11 phone:after:-translate-y-1/2 phone:after:content-['']"
+							className="focus-ring relative -my-1 ml-1 shrink-0 cursor-pointer rounded-md px-2 py-1 text-supporting font-semibold text-tooltip-fg transition-[background-color,transform] duration-150 hover:bg-tooltip-fg/10 active:scale-[0.96] phone:-my-1.5 phone:ml-0.5 phone:grid phone:min-h-7 phone:place-items-center phone:rounded-[999px] phone:px-2.5 phone:after:absolute phone:after:inset-x-0 phone:after:top-1/2 phone:after:h-11 phone:after:-translate-y-1/2 phone:after:content-['']"
 						>
 							{data.action.label}
 						</BaseToast.Action>
@@ -254,7 +307,7 @@ function ToastCard({ toast: item }: { toast: BaseToast.Root.ToastObject<ToastDat
 }
 
 function ToastStatusIcon({ name }: { name: ToastIconName | null }) {
-	const className = "shrink-0 text-dim";
+	const className = "shrink-0 text-tooltip-fg/70";
 	switch (name) {
 		case "archive":
 			return <IconArchive size={14} className={className} aria-hidden />;
@@ -284,7 +337,7 @@ function ToastStatusIcon({ name }: { name: ToastIconName | null }) {
 			return (
 				<span
 					aria-hidden
-					className="grid size-3.5 shrink-0 place-items-center rounded-full text-meta font-semibold text-dim"
+					className="grid size-3.5 shrink-0 place-items-center rounded-full text-meta font-semibold text-tooltip-fg/70"
 				>
 					!
 				</span>
@@ -335,7 +388,7 @@ function ToastProgress({ duration }: { duration: number }) {
 		<span
 			ref={lineRef}
 			aria-hidden
-			className="pointer-events-none absolute inset-x-0 bottom-0 h-0.5 origin-left bg-dim/35"
+			className="pointer-events-none absolute inset-x-0 bottom-0 h-0.5 origin-left bg-tooltip-fg/30"
 		/>
 	);
 }
