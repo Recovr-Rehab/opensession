@@ -679,6 +679,10 @@ localStorage.setItem("opensession-last-session", activeSessionId);
 // instead of the session it was written to show.
 localStorage.setItem("opensession-last-session-user", "Alex");
 localStorage.setItem("opensession-panel-open", "false");
+// The workspace summary card is open by default in the product, and it paints
+// over the transcript for the frames before the header is measured. That flash
+// is what a screenshot catches, so the demo starts with the card put away.
+localStorage.setItem("opensession-workspace-summary-open", "false");
 localStorage.setItem("opensession-panel-tab", "workflows");
 localStorage.setItem("opensession-sidebar-collapsed", "0");
 localStorage.setItem("opensession-sidebar-w", "300");
