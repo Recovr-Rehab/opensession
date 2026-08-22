@@ -181,12 +181,9 @@ type TabMember =
 function TabTitle({
 	children,
 	onDoubleClick,
-	reserveClose = true,
 }: {
 	children: React.ReactNode;
 	onDoubleClick?: React.MouseEventHandler<HTMLSpanElement>;
-	/** Keep the tab width stable while its close control changes visibility. */
-	reserveClose?: boolean;
 }) {
 	const ref = useRef<HTMLSpanElement>(null);
 	useEffect(() => {
@@ -201,11 +198,7 @@ function TabTitle({
 	}, [children]);
 
 	return (
-		<span
-			ref={ref}
-			className={cn(TAB_TITLE, reserveClose && "desktop:mr-3.5")}
-			onDoubleClick={onDoubleClick}
-		>
+		<span ref={ref} className={TAB_TITLE} onDoubleClick={onDoubleClick}>
 			{children}
 		</span>
 	);
@@ -463,19 +456,16 @@ export function SessionTabs({
 											<span className={`${PANEL_TAB_DOT} ${v.dotClass ?? "invisible"}`} />
 										)}
 										{v.icon ? (
-											<span
-												className={cn(TAB_VICON, v.closable !== false && "desktop:mr-3.5")}
-												aria-hidden="true"
-											>
+											<span className={TAB_VICON} aria-hidden="true">
 												{v.icon}
 											</span>
 										) : (
-											<TabTitle reserveClose={v.closable !== false}>{v.label}</TabTitle>
+											<TabTitle>{v.label}</TabTitle>
 										)}
 										{v.closable !== false && (
 											<button
 												type="button"
-												className={tabCloseClass(isPhone, v.active)}
+												className={tabCloseClass(isPhone)}
 												aria-label={`Close ${v.label}`}
 												title={`Close ${v.label}`}
 												onClick={(e) => {
@@ -514,7 +504,6 @@ export function SessionTabs({
 								/>
 							) : (
 								<TabTitle
-									reserveClose
 									onDoubleClick={(e) => {
 										e.stopPropagation();
 										setDraft(session.title);
@@ -606,7 +595,7 @@ export function SessionTabs({
 										)}
 										<button
 											type="button"
-											className={tabCloseClass(isPhone, key === activeId)}
+											className={tabCloseClass(isPhone)}
 											aria-label="Close session"
 											title="Close session"
 											onClick={(e) => {

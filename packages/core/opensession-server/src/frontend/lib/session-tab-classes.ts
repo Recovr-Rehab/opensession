@@ -198,13 +198,14 @@ export function tabClass(state: TabState): string {
 	return `${TAB_BASE} ${ink} ${surface}`;
 }
 
-/** The label fades only when its content actually overflows. TabTitle adds
- *  stable trailing room for close, then fades under the control on hover. */
+/** The label uses the close control's space while the tab is idle. Hovering
+ *  reveals close over the title, with a wider fade keeping both legible. */
 export const TAB_TITLE =
 	"session-tab-title block min-w-0 max-w-[150px] overflow-hidden " +
 	"data-[overflow]:[mask-image:linear-gradient(to_right,#000_0,#000_calc(100%_-_10px),transparent_100%)] " +
 	"desktop:max-w-[166px] " +
-	"desktop:group-hover/tab:[mask-image:linear-gradient(to_right,#000_0,#000_calc(100%_-_18px),transparent_100%)]";
+	"desktop:group-hover/tab:[mask-image:linear-gradient(to_right,#000_0,#000_calc(100%_-_28px),transparent_100%)] " +
+	"desktop:group-focus-within/tab:[mask-image:linear-gradient(to_right,#000_0,#000_calc(100%_-_28px),transparent_100%)]";
 
 /** An icon-only view tab (Staging → a globe): drop the label's text metrics so
  *  the tab sizes to the glyph. */
@@ -302,7 +303,7 @@ const CLOSE_BASE =
 	"rounded-sm border-0 bg-transparent p-0 text-dim " +
 	"hover:bg-pressed hover:text-fg [@media_(hover:none)]:size-[26px] [@media_(hover:none)]:-mr-1";
 
-/** Desktop close controls share one absolute position, so selecting a tab never
+/** Desktop close controls share one absolute position, so revealing one never
  * changes its width and never asks Motion to shuffle every sibling. */
 const CLOSE_OVERLAY_POSITION =
 	"[@media_(hover:hover)_and_(pointer:fine)]:absolute " +
@@ -319,19 +320,11 @@ const CLOSE_OVERLAY_HIDDEN =
 	"[@media_(hover:hover)_and_(pointer:fine)]:focus-visible:pointer-events-auto " +
 	"[@media_(hover:hover)_and_(pointer:fine)]:focus-visible:opacity-100";
 
-const CLOSE_OVERLAY_ACTIVE =
-	"[@media_(hover:hover)_and_(pointer:fine)]:pointer-events-auto " +
-	"[@media_(hover:hover)_and_(pointer:fine)]:opacity-100";
-
 /** Phones have no hover, so close stays in flow with a finger-sized hit area. */
 const CLOSE_TOUCH = "size-[26px] -mr-1";
 
-export const tabCloseClass = (phone: boolean, active: boolean) =>
-	`${CLOSE_BASE} ${
-		phone
-			? CLOSE_TOUCH
-			: `${CLOSE_OVERLAY_POSITION} ${active ? CLOSE_OVERLAY_ACTIVE : CLOSE_OVERLAY_HIDDEN}`
-	}`;
+export const tabCloseClass = (phone: boolean) =>
+	`${CLOSE_BASE} ${phone ? CLOSE_TOUCH : `${CLOSE_OVERLAY_POSITION} ${CLOSE_OVERLAY_HIDDEN}`}`;
 
 /**
  * The trailing controls use quiet chrome with no pill fill or shadow. History
