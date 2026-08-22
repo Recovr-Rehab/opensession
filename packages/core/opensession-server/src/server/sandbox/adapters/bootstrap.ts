@@ -1505,6 +1505,8 @@ function makeRemoteLauncher(
         console.log(`[sandbox-remote] launch ${hostId.slice(0, 11)}: ${step} (+${Date.now() - t0}ms)`);
       await driver.ensureStarted();
       mark("sandbox started");
+      const secureFiles: string[] = [];
+      const secureDirectories: string[] = [];
       const automationProfile = spec.trustProfile === "automation";
       if (automationProfile && !spec.accountId) {
         throw new Error("automation sandbox runs require a pinned model account");
@@ -1547,9 +1549,7 @@ function makeRemoteLauncher(
           JSON.stringify({ mcpServers: projectedMcp }, null, 2) + "\n",
         ),
       ]);
-      await driver.exec(
-        `chmod 600 ${shellQuoteWord(claudeAccountsPath)} ${shellQuoteWord(REMOTE_MCP_CONFIG)}`,
-      );
+      secureFiles.push(claudeAccountsPath, REMOTE_MCP_CONFIG);
 
       // Interactive parity for GitHub uses a run-scoped access-token file.
       // Do not put it in spec.json or the launch command, and never project it
@@ -1561,7 +1561,7 @@ function makeRemoteLauncher(
       const githubAuthPath = `${dir}/github-auth.json`;
       if (githubAuth.GH_TOKEN) {
         await driver.writeFile(githubAuthPath, JSON.stringify(githubAuth));
-        await driver.exec(`chmod 600 ${shellQuoteWord(githubAuthPath)}`);
+        secureFiles.push(githubAuthPath);
       } else {
         await driver.exec(`rm -f ${shellQuoteWord(githubAuthPath)}`);
       }
@@ -1595,7 +1595,7 @@ function makeRemoteLauncher(
         );
         settingsProviderIds = projected.settingsProviderIds;
         await driver.writeFile(REMOTE_MODEL_PROVIDERS_CONFIG, projected.content);
-        await driver.exec(`chmod 600 ${shellQuoteWord(REMOTE_MODEL_PROVIDERS_CONFIG)}`);
+        secureFiles.push(REMOTE_MODEL_PROVIDERS_CONFIG);
       } else {
         await driver.exec(`rm -f ${shellQuoteWord(REMOTE_MODEL_PROVIDERS_CONFIG)}`);
       }
@@ -1607,7 +1607,7 @@ function makeRemoteLauncher(
       const piContent = projectRemotePiConfig(readPiEngineConfig());
       if (piContent) {
         await driver.writeFile(REMOTE_PI_CONFIG, piContent);
-        await driver.exec(`chmod 600 ${shellQuoteWord(REMOTE_PI_CONFIG)}`);
+        secureFiles.push(REMOTE_PI_CONFIG);
       } else {
         await driver.exec(`rm -f ${shellQuoteWord(REMOTE_PI_CONFIG)}`);
       }
@@ -1656,18 +1656,25 @@ function makeRemoteLauncher(
           codexStorePath,
           JSON.stringify({ accounts: openaiUpload.accounts }, null, 2) + "\n",
         );
-        // Fresh seed dir per launch — stale per-account seeds never linger.
+        secureFiles.push(codexStorePath);
+        // Fresh seed dir per launch. Create every parent in one command, then
+        // use providers' native file lanes concurrently and secure all launch
+        // material in one final chmod. This avoids serial command admission on
+        // Box without ever launching the host before permissions settle.
+        const seeds = openaiUpload.seeds.map((seed) => ({
+          path: openaiSeedAuthPath(REMOTE_OPENAI_SEED_DIR, seed.accountId),
+          content: seed.content,
+        }));
+        const seedDirectories = [
+          REMOTE_OPENAI_SEED_DIR,
+          ...seeds.map((seed) => dirname(seed.path)),
+        ];
         await driver.exec(
-          `chmod 600 ${codexStorePath} && rm -rf ${shellQuoteWord(REMOTE_OPENAI_SEED_DIR)}`,
+          `rm -rf ${shellQuoteWord(REMOTE_OPENAI_SEED_DIR)} && mkdir -p ${seedDirectories.map(shellQuoteWord).join(" ")}`,
         );
-        for (const seed of openaiUpload.seeds) {
-          const seedPath = openaiSeedAuthPath(REMOTE_OPENAI_SEED_DIR, seed.accountId);
-          await driver.exec(
-            `mkdir -p ${shellQuoteWord(dirname(seedPath))} && chmod 700 ${shellQuoteWord(REMOTE_OPENAI_SEED_DIR)} ${shellQuoteWord(dirname(seedPath))}`,
-          );
-          await driver.writeFile(seedPath, seed.content);
-          await driver.exec(`chmod 600 ${shellQuoteWord(seedPath)}`);
-        }
+        await Promise.all(seeds.map((seed) => driver.writeFile(seed.path, seed.content)));
+        secureFiles.push(...seeds.map((seed) => seed.path));
+        secureDirectories.push(...seedDirectories);
         audit({
           msg: "sandbox_openai_seed_upload",
           host_id: spec.hostId,
@@ -1684,6 +1691,19 @@ function makeRemoteLauncher(
         await driver.exec(
           `rm -f ${codexStorePath} && rm -rf ${shellQuoteWord(REMOTE_OPENAI_SEED_DIR)}`,
         );
+      }
+      const secured = await driver.exec(
+        [
+          secureDirectories.length
+            ? `chmod 700 ${[...new Set(secureDirectories)].map(shellQuoteWord).join(" ")}`
+            : "",
+          secureFiles.length
+            ? `chmod 600 ${[...new Set(secureFiles)].map(shellQuoteWord).join(" ")}`
+            : "",
+        ].filter(Boolean).join(" && "),
+      );
+      if (secured.exitCode !== 0) {
+        throw new Error(`could not secure remote launch material: ${secured.stderr.trim().slice(0, 300)}`);
       }
       mark("accounts uploaded");
       // Remote sandboxes default to the public ingress when it is enabled.
