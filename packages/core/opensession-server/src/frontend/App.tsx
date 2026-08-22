@@ -15,6 +15,7 @@ import {
 	sidebarStartsCollapsed,
 	storeSidebarCollapsed,
 } from "./lib/sidebar-collapse";
+import { openWorkspaceSummary } from "./lib/workspace-summary-open";
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import { flushSync } from "react-dom";
 import { createRoot } from "react-dom/client";
@@ -833,6 +834,7 @@ export function App(
 		setSidebarCollapsed((v) => {
 			const next = !v;
 			storeSidebarCollapsed(next);
+			if (next) openWorkspaceSummary();
 			return next;
 		});
 	}
