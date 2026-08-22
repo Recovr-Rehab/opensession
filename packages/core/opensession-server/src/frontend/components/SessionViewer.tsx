@@ -32,6 +32,7 @@ import {
 import { markNotesRead } from "../lib/note-reads";
 import { clearMention, onMentionsChanged } from "../lib/mentions";
 import { QuoteSelection } from "./QuoteSelection";
+import type { NewTabMorphOrigin } from "./SessionTabs";
 import { plainThreadUrl } from "./PlainThreadPanel";
 import { isGitHubAttribution } from "@tellahq/opensession-protocol/notices";
 import type { TranscriptIndexEntry } from "@tellahq/opensession-protocol/session";
@@ -505,7 +506,10 @@ interface Props {
 	    draw their sibling sessions from. */
 	allSessions?: UnifiedSession[];
 	/** Start a new session in this workspace. Phone surfaces it in More. */
-	onNewSession?: (mode: "share" | "stack" | "ask") => void;
+	onNewSession?: (
+		mode: "share" | "stack" | "ask",
+		origin?: NewTabMorphOrigin,
+	) => void;
 	/** Start a session in a new workspace. Phone surfaces it as +. */
 	onNewWorkspace?: () => void;
 	/** Open a sibling session with selected transcript text in its composer. */
@@ -2252,10 +2256,10 @@ export function SessionViewer({
 	const waitingForWorkspace =
 		promoting ||
 		(workspacePreparing && entries.length === 0 && !liveTurnStore.hasText());
-	// The optimistic shell exists before the server can confirm whether setup is
-	// needed. Keep that brief gap in the same loading state, with its opening
-	// message in the queue rather than flashing it into an otherwise empty chat.
-	const settingUpWorkspace = waitingForWorkspace || optimisticEmpty;
+	// A sibling session already owns a ready workspace, so its optimistic shell
+	// can show the blank conversation and composer immediately. A genuinely new
+	// workspace keeps the setup state until its worktree is ready.
+	const settingUpWorkspace = waitingForWorkspace && !optimisticEmpty;
 
 	// Live worktree diff, handed to the Changes page as `diff=` so opening it
 	// reads the poll the panel already runs rather than starting a second one.
@@ -6110,7 +6114,25 @@ export function SessionViewer({
 											variant="ghost"
 											size="md"
 											className="flex-none rounded-control"
-											onClick={() => onNewSession("share")}
+											onClick={(event) => {
+												const animate =
+													event.detail > 0 &&
+													!window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+												const rect = animate
+													? event.currentTarget.getBoundingClientRect()
+													: null;
+												onNewSession(
+													"share",
+													rect
+														? {
+																left: rect.left,
+																top: rect.top,
+																width: rect.width,
+																height: rect.height,
+															}
+														: undefined,
+												);
+											}}
 											aria-label="New tab"
 											// 22, the standard standalone step the ⋯ and side-panel
 											// glyphs use. IconPlus now draws the set's 14.5 span, so

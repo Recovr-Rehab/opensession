@@ -114,7 +114,11 @@ import {
 	settingsReturnForNavigation,
 	type SettingsReturn,
 } from "./lib/settings-navigation";
-import { SessionTabs, type ViewTab } from "./components/SessionTabs";
+import {
+	SessionTabs,
+	type NewTabMorphOrigin,
+	type ViewTab,
+} from "./components/SessionTabs";
 import type { SubagentRef } from "./components/SubagentPane";
 import { SessionSplit, type SplitSide } from "./components/SessionSplit";
 import { RestartOverlay } from "./components/RestartOverlay";
@@ -936,6 +940,19 @@ export function App(
 	// "Session not found". pendingNewWorkspace words it for a brand-new
 	// workspace vs. a session added to an existing one.
 	const [pendingSessionId, setPendingSessionId] = useState<string | null>(null);
+	const [newTabMorph, setNewTabMorph] = useState<{
+		id: string;
+		origin: NewTabMorphOrigin;
+	} | null>(null);
+	const newTabMorphTimer = useRef<ReturnType<typeof setTimeout> | undefined>(
+		undefined,
+	);
+	useEffect(
+		() => () => {
+			if (newTabMorphTimer.current) clearTimeout(newTabMorphTimer.current);
+		},
+		[],
+	);
 	// Keep the complete local shell beside the route until persistence lands.
 	// The session list and detail fetches are independent, so neither should be
 	// allowed to substitute the previous session while this id is still local.
@@ -3479,9 +3496,11 @@ export function App(
 				onNewSession={
 					barSessions.some((session) => session.desk) || emptyWorkspaceSession
 						? undefined
-						: (mode) => handleNewSession(mode, side)
+						: (mode, origin) => handleNewSession(mode, side, origin)
 				}
 				emptySessionId={emptyWorkspaceSession?.id}
+				morphingSessionId={newTabMorph?.id}
+				morphOrigin={newTabMorph?.origin}
 				onRename={async (id, title) => {
 					try {
 						await renameSessionApi(id, title);
@@ -3526,6 +3545,7 @@ export function App(
 		src: UnifiedSession,
 		mode: "share" | "stack" | "ask",
 		id: string,
+		morphOrigin?: NewTabMorphOrigin,
 	): Promise<string> {
 		const now = new Date().toISOString();
 		const user = getCurrentUser();
@@ -3567,12 +3587,19 @@ export function App(
 		// Commit the local shell before changing the route. Without this boundary,
 		// the route can render against the previous list and keep the old session's
 		// conversation visible until the create response arrives.
+		if (newTabMorphTimer.current) clearTimeout(newTabMorphTimer.current);
 		flushSync(() => {
 			inject(draft, { sticky: true });
 			setOptimisticSession(draft);
+			setPendingSessionId(id);
+			setPendingNewWorkspace(false);
+			setNewTabMorph(morphOrigin ? { id, origin: morphOrigin } : null);
 		});
-		setPendingSessionId(id);
-		setPendingNewWorkspace(false);
+		if (morphOrigin)
+			newTabMorphTimer.current = setTimeout(() => {
+				setNewTabMorph((current) => (current?.id === id ? null : current));
+				newTabMorphTimer.current = undefined;
+			}, 260);
 		clearTimeout(pendingTimer.current);
 		pendingTimer.current = setTimeout(() => {
 			setPendingSessionId(null);
@@ -3664,6 +3691,7 @@ export function App(
 	const handleNewSession = async (
 		mode: "share" | "stack" | "ask",
 		side: SplitSide | null = null,
+		morphOrigin?: NewTabMorphOrigin,
 	) => {
 		if (emptyWorkspaceSession) {
 			setActiveViewTab(null);
@@ -3694,7 +3722,12 @@ export function App(
 		const optimisticId = newClientSessionId();
 		siblingCreateRef.current = optimisticId;
 		try {
-			const id = await createNewSessionFrom(src, mode, optimisticId);
+			const id = await createNewSessionFrom(
+				src,
+				mode,
+				optimisticId,
+				morphOrigin,
+			);
 			if (side === "right" && tabOrderKey && activeTabSplit)
 				saveTabSplit(tabOrderKey, {
 					...toStoredSplit(activeTabSplit),
@@ -4535,7 +4568,10 @@ export function App(
 				addHandler={socket.addHandler}
 				connected={socket.connected}
 				optimisticEmpty={
-					focused && route.view === "session" && route.id === pendingSessionId
+					!pendingNewWorkspace &&
+					focused &&
+					route.view === "session" &&
+					route.id === pendingSessionId
 				}
 				initialPending={pendingInitialPrompts[viewerSession.id]}
 				topbarEl={focused ? topbarEl : null}
@@ -4620,7 +4656,7 @@ export function App(
 				onNewSession={
 					viewerSession.desk || emptyWorkspaceSession
 						? undefined
-						: handleNewSession
+						: (mode, origin) => handleNewSession(mode, null, origin)
 				}
 				onNewWorkspace={() => openPalette()}
 				onStartNewChat={(prompt) =>
