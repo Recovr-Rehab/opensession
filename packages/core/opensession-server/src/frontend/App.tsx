@@ -11,6 +11,10 @@ import { reviewRequestTargetsPerson } from "./lib/review-queue";
 import { repoLabel } from "./lib/repo-label";
 import { NO_REPO } from "./lib/session-repo";
 import { ASK_BAND } from "./lib/sidebar-workspaces";
+import {
+	sidebarStartsCollapsed,
+	storeSidebarCollapsed,
+} from "./lib/sidebar-collapse";
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import { flushSync } from "react-dom";
 import { createRoot } from "react-dom/client";
@@ -813,16 +817,17 @@ export function App(
 	// that (see the `.mobile-detail` CSS and the back button below). It's inert on
 	// desktop, where the sidebar + detail are a static split.
 	const detailPaneRef = useRef<HTMLElement | null>(null);
-	// Desktop-only: collapse the left sidebar entirely (persisted per browser). On
-	// mobile the page-stack (mobileDetail) governs the sidebar instead; this hides
-	// the static desktop column and swaps in a floating re-open control.
-	const [sidebarCollapsed, setSidebarCollapsed] = useState<boolean>(
-		() => localStorage.getItem("opensession-sidebar-collapsed") === "1",
-	);
+	// Desktop-only: collapse the left sidebar entirely (persisted per browser). A
+	// new browser starts collapsed so the workspace summary and conversation lead;
+	// opening it once remains an explicit preference. On mobile the page-stack
+	// (mobileDetail) governs the sidebar instead; this hides the static desktop
+	// column and swaps in a floating re-open control.
+	const [sidebarCollapsed, setSidebarCollapsed] =
+		useState<boolean>(sidebarStartsCollapsed);
 	function toggleSidebarCollapsed() {
 		setSidebarCollapsed((v) => {
 			const next = !v;
-			localStorage.setItem("opensession-sidebar-collapsed", next ? "1" : "0");
+			storeSidebarCollapsed(next);
 			return next;
 		});
 	}
