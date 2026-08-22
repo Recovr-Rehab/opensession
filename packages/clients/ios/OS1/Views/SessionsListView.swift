@@ -2557,7 +2557,7 @@ struct SessionsListView: View {
     }
     #endif
 
-    /// Reversible filing shared with the web. Snooze means Some day when the
+    /// Reversible filing shared with the web. Snooze means Someday when the
     /// row has no explicit wake date; a snoozed row gets Unsnooze.
     @ViewBuilder
     private func snoozeButton(
@@ -3926,7 +3926,7 @@ struct SessionRow: View {
     /// A parked workspace prompt has no session yet. It reuses the row's
     /// layout, but its pencil is the state mark rather than a session status.
     var isWorkspaceDraft = false
-    /// Active snooze value: an ISO wake time or Some day.
+    /// Active snooze value: an ISO wake time or Someday.
     var snoozeValue: String? = nil
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     /// Settings → Appearance → Show last used time. Off by default, like the
@@ -3959,7 +3959,7 @@ struct SessionRow: View {
                         if let onToggleSnooze {
                             filingButton(
                                 snoozeValue != nil ? "moon.fill" : "moon",
-                                help: snoozeValue != nil ? "Unsnooze" : "Snooze until Some day",
+                                help: snoozeValue != nil ? "Unsnooze" : "Snooze until Someday",
                                 action: onToggleSnooze
                             )
                         }

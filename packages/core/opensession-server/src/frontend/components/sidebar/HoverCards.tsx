@@ -188,7 +188,7 @@ export function SnoozeBadge({
 	return (
 		<span
 			className={cn(SIDEBAR_WS_SNOOZE, className)}
-			title={until === SNOOZE_SOMEDAY ? "Snoozed: Some day" : `Snoozed until ${new Date(until).toLocaleString()}`}
+			title={until === SNOOZE_SOMEDAY ? "Snoozed: Someday" : `Snoozed until ${new Date(until).toLocaleString()}`}
 		>
 			<IconMoon size={20} />
 			{formatRemaining(until, now)}

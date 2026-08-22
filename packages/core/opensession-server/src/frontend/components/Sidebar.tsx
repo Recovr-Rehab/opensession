@@ -3315,7 +3315,7 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 					{row.sessions.length > 0 ? (
 						<>
 							<Tooltip
-								label={snoozed ? "Unsnooze workspace" : "Snooze workspace until Some day"}
+								label={snoozed ? "Unsnooze workspace" : "Snooze workspace until Someday"}
 							>
 								<span
 									role="button"
