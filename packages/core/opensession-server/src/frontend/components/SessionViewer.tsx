@@ -1,4 +1,5 @@
 import { BASE_PATH } from "../lib/base";
+import { PHONE_QUERY } from "../lib/breakpoints";
 import React, {
 	useCallback,
 	useEffect,
@@ -1410,7 +1411,10 @@ export function SessionViewer({
 		setOpen: setPanelOpen,
 		style: panelStyle,
 		resizeHandle: panelResizeHandle,
-	} = useSidePanel();
+	} = useSidePanel({
+		defaultOpen: () =>
+			typeof window === "undefined" || !window.matchMedia(PHONE_QUERY).matches,
+	});
 	// Review starts with a clear canvas without overwriting the browser-wide
 	// workspace-panel preference. Its own toggle can open the panel for this view,
 	// while returning to a session restores that session's ordinary panel state.

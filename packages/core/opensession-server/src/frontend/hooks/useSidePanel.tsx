@@ -6,10 +6,10 @@ import { suppressLayoutAnimations } from "../ui/motion";
  * The right side panel's open state and width, shared by every surface that
  * shows one: the session viewer and the session-less workspace route.
  *
- * Open state is deliberately transient. The summary is the resting workspace
- * surface, so a new page starts with this detail panel closed and opens it only
- * for Changes, Portals, Agents or Terminal. A window event keeps simultaneous
- * panel hosts in sync without carrying the open state into the next session.
+ * Open state is deliberately transient. Each host chooses its initial state:
+ * sessions open on Summary, while the session-less workspace route starts
+ * closed. A window event keeps simultaneous panel hosts in sync without
+ * carrying the open state into the next browser load.
  *
  * Width remains in localStorage. The handle drags from the panel's left edge,
  * so its width is the pointer's distance from the container's right side.
@@ -28,8 +28,14 @@ export interface SidePanel {
 	resizeHandle: React.ReactNode;
 }
 
-export function useSidePanel(): SidePanel {
-	const [open, setOpenState] = useState(false);
+export function useSidePanel({
+	defaultOpen = false,
+}: {
+	defaultOpen?: boolean | (() => boolean);
+} = {}): SidePanel {
+	const [open, setOpenState] = useState(() =>
+		typeof defaultOpen === "function" ? defaultOpen() : defaultOpen,
+	);
 	useEffect(() => {
 		const syncOpen = (event: Event) => {
 			if (!(event instanceof CustomEvent) || typeof event.detail !== "boolean")
