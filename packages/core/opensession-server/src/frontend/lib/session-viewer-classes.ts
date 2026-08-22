@@ -316,7 +316,7 @@ export const VIEWER_SUMMARY_STEP =
  * here is the composer's own box. Desktop keeps the input's 20px right inset.
  */
 export const VIEWER_ACTION_ROW =
-	"flex w-full max-w-[calc(var(--session-col)+40px)] items-center gap-3 pr-5 " +
+	"flex w-full max-w-[calc(var(--session-col)+40px)] items-center justify-end gap-3 pr-5 " +
 	"phone:flex-col phone:gap-2 phone:pr-0";
 
 /** Keep the reading action centred between replies and Next when all three
