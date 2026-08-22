@@ -1,8 +1,8 @@
 import React, { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { BASE_PATH } from "../lib/base";
 import {
+	msgSystemInline,
 	msgSystemRow,
-	msgSystemText,
 } from "../lib/msg-classes";
 import { Button } from "../ui/button";
 
@@ -93,7 +93,7 @@ export function SessionContextMessage({ sessionId }: { sessionId: string }) {
 
 	return (
 		<div ref={rowRef} className={msgSystemRow} data-session-context>
-			<span className={msgSystemText}>
+			<span className={msgSystemInline}>
 				<Button
 					size="sm"
 					variant="ghost"
