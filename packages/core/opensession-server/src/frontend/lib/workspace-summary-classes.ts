@@ -43,10 +43,11 @@ export const WS_SUMMARY_CARD =
 
 /** Wide Review keeps its scroller full width so the native scrollbar stays at
  * the window edge, beyond the summary card. These child clearances reserve the
- * summary column instead. They stay 8px apart because the file canvas supplies
- * its own 8px inner gutter, keeping its border aligned with the toolbar. */
-export const WS_SUMMARY_REVIEW_BAR_CLEARANCE = "desktop:mr-[316px]";
-export const WS_SUMMARY_REVIEW_CANVAS_CLEARANCE = "desktop:mr-[308px]";
+ * summary column with an 8px visible gap. They stay 8px apart because the file
+ * canvas supplies its own 8px inner gutter, keeping its border aligned with the
+ * toolbar. */
+export const WS_SUMMARY_REVIEW_BAR_CLEARANCE = "desktop:mr-[320px]";
+export const WS_SUMMARY_REVIEW_CANVAS_CLEARANCE = "desktop:mr-[312px]";
 
 /**
  * Band label ("Assets"), taken from the sidebar so the card heads its lists
