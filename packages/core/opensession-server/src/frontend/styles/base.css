@@ -1076,6 +1076,22 @@ body.kb-open {
 	height: 100% !important;
 }
 
+/* A palette is a surface you type into, so the page behind it must hold still.
+   Base UI's `trap-focus` mode deliberately neither inerts nor scroll-locks the
+   page (the "@"-mention popup portals to <body> and inerting would kill it), so
+   on a phone the transcript or list underneath still panned under the sheet and
+   took the composer with it. `touch-action` is the smallest lever that stops
+   it: it blocks the pan without touching overflow, so no scroller loses its
+   position and nothing reflows. Effective touch-action is the intersection down
+   the ancestor chain, so one declaration on the app root covers every scroller
+   inside it, and the palette itself is portaled outside .app and keeps
+   scrolling its own prompt. `:not([hidden])` is load-bearing: a keepMounted
+   palette (the Desk) is in the DOM from boot and would otherwise lock the page
+   forever. */
+body:has(.palette-backdrop:not([hidden])) .app {
+	touch-action: none;
+}
+
 /* ── Native feel: UI chrome isn't text-selectable ────────────────
    Disable text selection everywhere by default so labels, buttons,
    nav, headers, tabs and status text behave like a native app — no
