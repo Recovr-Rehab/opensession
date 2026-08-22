@@ -597,6 +597,11 @@ struct MacImagePreview: View {
 /// keeps them to pan the photo.
 struct FullScreenImagePreview: View {
     let items: [PreviewImage]
+    /// Where the picture came from, shown in the top bar the way Photos shows
+    /// the day it was taken: opening an image from a workspace should not lose
+    /// which workspace you were in. Absent for viewers whose context is
+    /// already obvious (a diagram, an attachment you just picked).
+    private let title: String?
     private let topLeading: AnyView?
 
     @Environment(\.dismiss) private var dismiss
@@ -616,8 +621,14 @@ struct FullScreenImagePreview: View {
     /// The close-button row, above the safe area.
     private static let topBarHeight: CGFloat = 52
 
-    init(items: [PreviewImage], index: Int, topLeading: AnyView? = nil) {
+    init(
+        items: [PreviewImage],
+        index: Int,
+        title: String? = nil,
+        topLeading: AnyView? = nil
+    ) {
         self.items = items
+        self.title = title?.isEmpty == true ? nil : title
         self.topLeading = topLeading
         _index = State(initialValue: min(max(index, 0), max(items.count - 1, 0)))
     }
@@ -713,20 +724,36 @@ struct FullScreenImagePreview: View {
     }
 
     private func topBar(safeTop: CGFloat) -> some View {
-        HStack {
-            if let topLeading { topLeading }
-            Spacer()
-            Button {
-                dismiss()
-            } label: {
-                Image(systemName: "xmark")
-                    .font(.system(size: 15, weight: .semibold))
-                    .foregroundStyle(.white)
-                    .frame(width: 36, height: 36)
-                    .background(.black.opacity(0.55), in: Circle())
+        ZStack {
+            HStack {
+                if let topLeading { topLeading }
+                Spacer()
+                Button {
+                    dismiss()
+                } label: {
+                    Image(systemName: "xmark")
+                        .font(.system(size: 15, weight: .semibold))
+                        .foregroundStyle(.white)
+                        .frame(width: 36, height: 36)
+                        .background(.black.opacity(0.55), in: Circle())
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("Close image")
             }
-            .buttonStyle(.plain)
-            .accessibilityLabel("Close image")
+
+            if let title {
+                // Center the context independently of the edge actions, like
+                // Photos centers its date above the image.
+                Text(title)
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(.white)
+                    .lineLimit(1)
+                    .truncationMode(.tail)
+                    .padding(.horizontal, 12)
+                    .frame(height: 36)
+                    .background(.black.opacity(0.55), in: Capsule())
+                    .padding(.horizontal, 52)
+            }
         }
         .padding(.horizontal, 16)
         .padding(.top, safeTop + 8)
