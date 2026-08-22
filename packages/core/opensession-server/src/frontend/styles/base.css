@@ -95,14 +95,14 @@
 	--mobile-header-control-border: var(--border);
 	--mobile-header-control-surface: color-mix(in srgb, var(--bg) 68%, transparent);
 	--mobile-header-control-blur: blur(20px) saturate(1.7);
-	/* The docked tab strip follows iOS: the selected tab is an opaque plate one
-	   step above the canvas, while the rest sit on a dimmer glass wash. */
+	/* The docked tab strip follows iOS: the selected tab is the bright plate and
+	   the rest sit a step under it. Both are OPAQUE on purpose. iOS paints its
+	   pills over a thick material, so the transcript passing behind them is a
+	   change in tone, never legible text; a thinned fill here put running code
+	   through the tab labels. The blur stays for the pill's edge, not to see
+	   through it. */
 	--mobile-tab-surface-selected: var(--bg-hover);
-	--mobile-tab-surface: color-mix(
-		in srgb,
-		var(--bg) 45%,
-		var(--mobile-header-control-surface)
-	);
+	--mobile-tab-surface: var(--bg-raised);
 	--mobile-header-control-shadow:
 		inset 0 1px 0 rgba(255, 255, 255, 0.07),
 		0 1px 3px -1px rgba(0, 0, 0, 0.06),
@@ -504,13 +504,10 @@ html[data-theme="light"] {
 	   the plate has to stay lighter than it to keep reading as glass rather than
 	   as a grey wash over the words underneath. */
 	--mobile-header-control-surface: color-mix(in srgb, var(--bg) 62%, transparent);
-	/* iOS makes the selected tab pure white in light mode. */
+	/* Light mode reaches the same two weights from the other side: the selected
+	   tab is pure white, the rest the grey a step under it. */
 	--mobile-tab-surface-selected: var(--bg);
-	--mobile-tab-surface: color-mix(
-		in srgb,
-		var(--bg-hover) 48%,
-		var(--mobile-header-control-surface)
-	);
+	--mobile-tab-surface: var(--bg-hover);
 	--mobile-header-control-shadow:
 		inset 0 1px 0 rgba(255, 255, 255, 0.6),
 		0 0 14px 1px rgba(0, 0, 0, 0.1);
