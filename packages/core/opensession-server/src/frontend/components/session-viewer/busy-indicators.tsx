@@ -7,6 +7,24 @@ import { PulseDot } from "../../ui/status";
 import { cn } from "../../ui/cn";
 import { msgRow } from "../../lib/msg-classes";
 
+// The outgoing first message, standing in as a ghost bubble while the session
+// gets ready. Absolutely placed so it holds the top of the canvas while the
+// status text stays optically centered.
+function PreparedMessageGhost() {
+	return (
+		<div className="absolute inset-x-6 top-6">
+			<div className="mx-auto w-full max-w-[var(--session-col)]">
+				<Skeleton
+					label="Preparing message"
+					className="flex flex-col items-end opacity-60"
+				>
+					<SkeletonBar className="h-[42px] w-[42%] rounded-lg" />
+				</Skeleton>
+			</div>
+		</div>
+	);
+}
+
 export function WorkspaceWaiting({
 	detail,
 	ghost = false,
@@ -16,24 +34,30 @@ export function WorkspaceWaiting({
 }) {
 	return (
 		<div className="relative flex h-full min-h-[240px] flex-col items-center justify-center gap-1 px-6 text-center">
-			{ghost && (
-				<div className="absolute inset-x-6 top-6">
-					<div className="mx-auto w-full max-w-[var(--session-col)]">
-						<Skeleton
-							label="Preparing message"
-							className="flex flex-col items-end opacity-60"
-						>
-							<SkeletonBar className="h-[42px] w-[42%] rounded-lg" />
-						</Skeleton>
-					</div>
-				</div>
-			)}
+			{ghost && <PreparedMessageGhost />}
 			<PageLoader className="mb-2 text-dim" />
 			<div className="text-item-title font-semibold text-fg">
 				Creating your workspace
 			</div>
 			<div className="max-w-[340px] text-label font-medium leading-relaxed text-dim">
 				{detail}
+			</div>
+		</div>
+	);
+}
+
+// A session opened optimistically, before its record exists. Same shape as
+// WorkspaceWaiting so the two loading canvases read as one state, with the
+// label stacked over the workspace name: a long name wrapped mid-sentence at
+// phone width otherwise.
+export function SessionStarting({ workspaceName }: { workspaceName: string }) {
+	return (
+		<div className="relative flex h-full min-h-[240px] flex-col items-center justify-center gap-1 px-6 text-center">
+			<PreparedMessageGhost />
+			<PageLoader className="mb-2 text-dim" />
+			<div className="text-label font-medium text-dim">New session in</div>
+			<div className="max-w-[340px] text-item-title font-semibold leading-snug text-fg">
+				{workspaceName}
 			</div>
 		</div>
 	);

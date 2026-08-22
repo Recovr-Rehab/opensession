@@ -220,6 +220,7 @@ import { useLivePlan } from "./session-viewer/use-live-plan";
 import {
 	BusyInline,
 	ConversationLoading,
+	SessionStarting,
 	SteerWaiting,
 	WorkspaceWaiting,
 } from "./session-viewer/busy-indicators";
@@ -6846,13 +6847,11 @@ export function SessionViewer({
 									ghost
 								/>
 							) : optimisticEmpty ? (
-								<div className="min-h-full flex items-center justify-center px-4 text-center text-dim">
-									{"New session in"}
-									<span className="ml-1 font-medium text-fg">
-										{workspaceName || session.branch || "this workspace"}
-									</span>
-									.
-								</div>
+								<SessionStarting
+									workspaceName={
+										workspaceName || session.branch || "this workspace"
+									}
+								/>
 							) : loading ? (
 								<ConversationLoading />
 							) : entries.length === 0 &&
@@ -6878,12 +6877,13 @@ export function SessionViewer({
 									// heading + attachable-context chips so a fresh session reads as a
 									// calm blank canvas rather than a top-left form.
 									<div className="min-h-full flex flex-col items-center justify-center text-center w-full max-w-[840px] mx-auto px-4">
-										<div className="text-dim mb-4">
-											New session in{" "}
-											<span className="text-fg font-medium">
+										<div className="mb-4">
+											<div className="text-label font-medium text-dim">
+												New session in
+											</div>
+											<div className="max-w-[340px] mx-auto text-item-title font-semibold leading-snug text-fg">
 												{workspaceName || session.branch || "this workspace"}
-											</span>
-											.
+											</div>
 										</div>
 										<div className="text-dim mb-3">Add session transcripts</div>
 										<div className="flex flex-wrap items-center justify-center gap-2">
