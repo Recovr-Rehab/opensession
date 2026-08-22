@@ -71,6 +71,37 @@ test("keeps the item state as the only in-tab send lock", async () => {
 	outbox.dispose();
 });
 
+test("reports a handled command before retiring its durable row", async () => {
+	const outbox = new PromptOutbox({
+		storage: memoryStorage(),
+		scope: "handled-command",
+		deliver: async (_sessionId, body) => ({
+			status: "handled",
+			message: `Goal pinned: ${body.content}`,
+			deliveryId: body.clientId,
+		}),
+	});
+	const deliveries: Array<{ content: string; status: string; message: string }> = [];
+	outbox.observeDelivery((item, result) =>
+		deliveries.push({
+			content: item.content,
+			status: result.status,
+			message: result.message,
+		}),
+	);
+	outbox.enqueue({ sessionId: "s1", content: "/goal ship it" });
+	await outbox.flush();
+	expect(deliveries).toEqual([
+		{
+			content: "/goal ship it",
+			status: "handled",
+			message: "Goal pinned: /goal ship it",
+		},
+	]);
+	expect(outbox.list()).toEqual([]);
+	outbox.dispose();
+});
+
 test("keeps a retryable failed head item and exposes it for retry or editing", async () => {
 	const storage = memoryStorage();
 	let fail = true;

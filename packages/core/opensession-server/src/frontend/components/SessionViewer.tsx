@@ -1294,6 +1294,31 @@ export function SessionViewer({
 		promptOutbox.list(session.id),
 	);
 	useEffect(() => {
+		const stopObserving = promptOutbox.observeDelivery((item, result) => {
+			if (item.sessionId !== session.id || result.status !== "handled") return;
+			// Slash commands are consumed by Open Session, so no user transcript
+			// entry or queue echo will ever reconcile their optimistic row. The old
+			// WebSocket composer received an inline notice; preserve that feedback
+			// now that sends travel through the durable REST outbox.
+			const pendingId = `outbox-${item.clientId}`;
+			setPending((current) =>
+				current.filter((entry) => entry.id !== pendingId),
+			);
+			const noticeId = `prompt-delivery-${result.deliveryId || item.clientId}`;
+			setEntries((current) =>
+				current.some((entry) => entry.id === noticeId)
+					? current
+					: [
+							...current,
+							{
+								id: noticeId,
+								type: "system",
+								content: result.message,
+								timestamp: new Date().toISOString(),
+							},
+						],
+			);
+		});
 		const sync = () => {
 			const items = promptOutbox.list(session.id);
 			setOutboxItems(items);
@@ -1309,7 +1334,10 @@ export function SessionViewer({
 		sync();
 		const unsubscribe = promptOutbox.subscribe(sync);
 		void promptOutbox.flush();
-		return unsubscribe;
+		return () => {
+			unsubscribe();
+			stopObserving();
+		};
 	}, [session.id]);
 	useEffect(() => {
 		if (connected) void promptOutbox.flush();
