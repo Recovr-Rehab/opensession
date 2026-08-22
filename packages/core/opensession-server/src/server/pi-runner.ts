@@ -2083,7 +2083,6 @@ async function* runPiAttempt(
       isRepoLess: !cwdRepo,
       reposNote: opts.reposNote,
       prReviewer: opts.prReviewer,
-      scratchDir: opts.scratchDir,
       // Same host-awareness as the previous runner runner: code.storage repos get
       // push-the-branch instructions instead of `gh pr create`.
       repoHost: isScratch ? undefined : cwdRepo?.host,
@@ -2093,7 +2092,6 @@ async function* runPiAttempt(
       user,
       author,
       githubUserLogin,
-      commandPolicyGated: bashGated,
       dialOracle:
         resolved?.dial && dialOracleAgent
           ? {

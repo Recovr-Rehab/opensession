@@ -146,37 +146,3 @@ export const INTERNAL_MCP_CAPABILITIES = {
       "Manage this running goal's cadence, status, and durable fact ledger.",
   },
 } as const satisfies Record<string, InternalMcpCapability>;
-
-export type InternalMcpServerName = keyof typeof INTERNAL_MCP_CAPABILITIES;
-
-const LEGACY_INTERNAL_MCP_ALIASES: Readonly<Record<string, InternalMcpServerName>> = {
-  "michael-sessions": "opensession-sessions",
-  "michael-ask": "opensession-ask",
-};
-
-export function canonicalInternalMcpName(name: string): InternalMcpServerName | undefined {
-  if (name in INTERNAL_MCP_CAPABILITIES) return name as InternalMcpServerName;
-  return LEGACY_INTERNAL_MCP_ALIASES[name];
-}
-
-/** Render only the internal capabilities this exact run carries. */
-export function renderInternalMcpCapabilities(
-  inProcessMcp: Record<string, unknown> | undefined,
-  product = "Open Session",
-): string {
-  const available = new Set<InternalMcpServerName>();
-  for (const name of Object.keys(inProcessMcp ?? {})) {
-    const canonical = canonicalInternalMcpName(name);
-    if (canonical) available.add(canonical);
-  }
-  if (!available.size) return "";
-
-  const names = Object.keys(INTERNAL_MCP_CAPABILITIES)
-    .filter((name) => available.has(name as InternalMcpServerName))
-    .map((name) => `\`${name}\``);
-
-  return (
-    `## ${product} internal tools\nUse \`mcp_search\` to find an exact tool and its schema, ` +
-    `then call it with \`mcp_call\`. Available servers: ${names.join(", ")}.`
-  );
-}
