@@ -405,7 +405,7 @@ export const PR_REPO_TABS =
  * gets its edge from the shared floating toolbar; phone keeps the divider used
  * by its edge-to-edge review chrome. */
 export const PR_NO_PR_BAR =
-	"flex shrink-0 items-center gap-2 px-3 py-2 phone:border-b phone:border-divider";
+	"flex shrink-0 items-center gap-2 overflow-x-auto px-3 py-2 whitespace-nowrap [scrollbar-width:none] phone:border-b phone:border-divider [&>*]:shrink-0 [&::-webkit-scrollbar]:hidden";
 const PR_REPO_TAB =
 	"inline-flex cursor-pointer items-center gap-1.5 whitespace-nowrap rounded-md border px-2.5 py-[3px] text-label phone:px-3 phone:py-2";
 export const prRepoTabClass = (selected: boolean) =>

@@ -7,6 +7,9 @@ const viewerSource = await Bun.file(
 const prPanelSource = await Bun.file(
 	new URL("./PrPanel.tsx", import.meta.url),
 ).text();
+const diffPanelSource = await Bun.file(
+	new URL("./DiffPanel.tsx", import.meta.url),
+).text();
 const reviewToolbarSource = await Bun.file(
 	new URL("./pr/ReviewToolbar.tsx", import.meta.url),
 ).text();
@@ -80,6 +83,17 @@ test("reviews with and without a PR share the floating toolbar", () => {
 	expect(reviewBar).toContain("desktop:-ml-3");
 	expect(prPanelSource).toContain('["files", "Files",');
 	expect(prPanelSource).toContain("<ActiveCodeViewIcon size={18} />");
+});
+
+test("a review without a PR combines its branch and diff controls", () => {
+	expect(prPanelSource).toContain("ref={setWorktreeToolbarTarget}");
+	expect(prPanelSource).toContain(
+		"toolbarTarget={worktreeToolbarTarget}",
+	);
+	expect(diffPanelSource).toContain("toolbarTarget === undefined");
+	expect(diffPanelSource).toContain(
+		"createPortal(toolbarContents, toolbarTarget)",
+	);
 });
 
 test("wide Review moves page navigation into the summary and uses one toolbar row", () => {

@@ -617,6 +617,8 @@ export function PrPanel({
   const [rootEl, setRootEl] = useState<HTMLDivElement | null>(null);
   const [diffControlsTarget, setDiffControlsTarget] =
     useState<HTMLDivElement | null>(null);
+  const [worktreeToolbarTarget, setWorktreeToolbarTarget] =
+    useState<HTMLDivElement | null>(null);
   const [railStacked, setRailStacked] = useState(false);
   const [headerCompact, setHeaderCompact] = useState(
     () => window.matchMedia("(max-width: 720px)").matches,
@@ -1677,7 +1679,12 @@ export function PrPanel({
               <IconBranches size={17} className="shrink-0 text-faint" />
               <span className="truncate">{branchLabel || "Working changes"}</span>
             </span>
-            <span className="flex-1" />
+            {showWorktreeDiff && (
+              <div
+                ref={setWorktreeToolbarTarget}
+                className="ml-auto flex shrink-0 items-center gap-2.5 text-label"
+              />
+            )}
           </div>
         </ReviewToolbar>
         {walkthrough && (
@@ -1695,6 +1702,7 @@ export function PrPanel({
               isRunning={sessionRunning}
               canSend={!!send && !!editGate}
               send={send ?? NOOP_SEND}
+              toolbarTarget={worktreeToolbarTarget}
             />
           </div>
         ) : (

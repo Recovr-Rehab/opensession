@@ -1,5 +1,6 @@
 import { repoLabel } from "../lib/repo-label";
 import React, { useEffect, useState, useCallback, useRef } from "react";
+import { createPortal } from "react-dom";
 import type {
   CodeFlowResult,
   DiffFileGroup,
@@ -38,6 +39,8 @@ interface Props {
   /** Shared diff state (lifted so the Changes tab badge and this panel poll
    *  once, not twice). When omitted, the panel fetches on its own. */
   diff?: SessionDiffState;
+  /** Move the diff summary and view controls into a parent review toolbar. */
+  toolbarTarget?: HTMLDivElement | null;
 }
 
 export interface SessionDiffState {
@@ -107,7 +110,14 @@ export function useSessionDiff(
   return { repos, loading, error, reload };
 }
 
-export function DiffPanel({ sessionId, isRunning, canSend, send, diff }: Props) {
+export function DiffPanel({
+  sessionId,
+  isRunning,
+  canSend,
+  send,
+  diff,
+  toolbarTarget,
+}: Props) {
   const [active, setActive] = useState(0);
   const [view, setView] = useState<"files" | "flow">("files");
   const [groups, setGroups] = useState<{
@@ -288,6 +298,83 @@ export function DiffPanel({ sessionId, isRunning, canSend, send, diff }: Props) 
   if (!cur) return <DiffEmptyState isRunning={isRunning} />;
   const d = cur.diff;
 
+  const toolbarContents = (
+    <>
+      <span className="text-dim">
+        {d.files.length} file{d.files.length === 1 ? "" : "s"} changed
+      </span>
+      <span className={DIFF_ADD}>+{d.totalAdditions}</span>
+      <span className={DIFF_DEL}>−{d.totalDeletions}</span>
+      {d.truncated && (
+        <span className="rounded-sm bg-yellow/15 px-[7px] py-px text-meta font-bold text-yellow">
+          truncated
+        </span>
+      )}
+      {handEdited.length > 0 && canSend && (
+        <Button
+          variant="default"
+          size="sm"
+          className="ml-2 min-h-0 px-2 py-0.5 text-meta"
+          onClick={tellAgentAboutEdits}
+          title="Sends a note listing your hand-edits so they get reviewed and committed"
+        >
+          Tell {AGENT_NAME} about {handEdited.length} edit
+          {handEdited.length === 1 ? "" : "s"}
+        </Button>
+      )}
+      <div
+        ref={setDiffControlsTarget}
+        className="ml-auto flex shrink-0 items-center gap-2"
+      />
+      <Segmented
+        size="sm"
+        label="Diff view"
+        value={view}
+        onValueChange={(next) => {
+          if (next === "flow") {
+            if (view !== "flow" && flowError) {
+              setFlow(null);
+              setFlowError(null);
+            }
+            setView("flow");
+            return;
+          }
+          setView("files");
+        }}
+      >
+        <SegmentedOption value="files">Files</SegmentedOption>
+        <SegmentedOption value="flow" disabled={!patchVersion}>
+          Code flow
+        </SegmentedOption>
+      </Segmented>
+      <Tooltip label="Refresh diff">
+        <Button
+          variant="ghost"
+          size="sm"
+          className="min-h-0 px-1.5 py-0.5 text-sm text-faint hover:text-fg"
+          onClick={() => {
+            if (view === "flow") {
+              void refreshFlow();
+              return;
+            }
+            void reload();
+          }}
+          aria-label="Refresh diff"
+        >
+          ↻
+        </Button>
+      </Tooltip>
+    </>
+  );
+  const toolbar =
+    toolbarTarget === undefined ? (
+      <div className="sticky top-0 z-1 flex items-center gap-2.5 overflow-x-auto border-b border-divider bg-panel-surface px-3.5 py-2.5 text-label whitespace-nowrap [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+        {toolbarContents}
+      </div>
+    ) : toolbarTarget ? (
+      createPortal(toolbarContents, toolbarTarget)
+    ) : null;
+
   return (
     <div className="flex min-h-0 flex-col" ref={panelRef}>
       {multi && (
@@ -318,72 +405,7 @@ export function DiffPanel({ sessionId, isRunning, canSend, send, diff }: Props) 
         </div>
       )}
 
-      <div className="sticky top-0 z-1 flex items-center gap-2.5 overflow-x-auto border-b border-divider bg-panel-surface px-3.5 py-2.5 text-label whitespace-nowrap [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-        <span className="text-dim">
-          {d.files.length} file{d.files.length === 1 ? "" : "s"} changed
-        </span>
-        <span className={DIFF_ADD}>+{d.totalAdditions}</span>
-        <span className={DIFF_DEL}>−{d.totalDeletions}</span>
-        {d.truncated && (
-          <span className="rounded-sm bg-yellow/15 px-[7px] py-px text-meta font-bold text-yellow">
-            truncated
-          </span>
-        )}
-        {handEdited.length > 0 && canSend && (
-          <Button
-            variant="default"
-            size="sm"
-            className="ml-2 min-h-0 px-2 py-0.5 text-meta"
-            onClick={tellAgentAboutEdits}
-            title="Sends a note listing your hand-edits so they get reviewed and committed"
-          >
-            Tell {AGENT_NAME} about {handEdited.length} edit
-            {handEdited.length === 1 ? "" : "s"}
-          </Button>
-        )}
-        <div
-          ref={setDiffControlsTarget}
-          className="ml-auto flex shrink-0 items-center gap-2"
-        />
-        <Segmented
-          size="sm"
-          label="Diff view"
-          value={view}
-          onValueChange={(next) => {
-            if (next === "flow") {
-              if (view !== "flow" && flowError) {
-                setFlow(null);
-                setFlowError(null);
-              }
-              setView("flow");
-              return;
-            }
-            setView("files");
-          }}
-        >
-          <SegmentedOption value="files">Files</SegmentedOption>
-          <SegmentedOption value="flow" disabled={!patchVersion}>
-            Code flow
-          </SegmentedOption>
-        </Segmented>
-        <Tooltip label="Refresh diff">
-          <Button
-            variant="ghost"
-            size="sm"
-            className="min-h-0 px-1.5 py-0.5 text-sm text-faint hover:text-fg"
-				onClick={() => {
-					if (view === "flow") {
-						void refreshFlow();
-                return;
-              }
-              void reload();
-            }}
-            aria-label="Refresh diff"
-          >
-            ↻
-          </Button>
-        </Tooltip>
-      </div>
+      {toolbar}
 
       {view === "flow" ? (
         <CodeFlow
