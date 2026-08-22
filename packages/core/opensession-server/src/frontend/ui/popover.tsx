@@ -39,8 +39,13 @@ function Trigger({
 function Root<Payload = unknown>({
 	actionsRef,
 	onOpenChange,
+	exclusive = true,
 	...props
-}: BasePopover.Root.Props<Payload>) {
+}: BasePopover.Root.Props<Payload> & {
+	/** Keep false for a popover nested inside another popup. Opening a child
+	 * should not dismiss the parent that owns its trigger. */
+	exclusive?: boolean;
+}) {
 	const internalActionsRef = React.useRef<BasePopover.Root.Actions | null>(null);
 	const entry = React.useMemo(
 		() => ({ close: () => internalActionsRef.current?.close() }),
@@ -59,8 +64,10 @@ function Root<Payload = unknown>({
 			{...props}
 			actionsRef={internalActionsRef}
 			onOpenChange={(open, eventDetails) => {
-				if (open) group?.activate(entry);
-				else group?.deactivate(entry);
+				if (exclusive) {
+					if (open) group?.activate(entry);
+					else group?.deactivate(entry);
+				}
 				onOpenChange?.(open, eventDetails);
 			}}
 		/>
@@ -204,5 +211,6 @@ function Popup({
 export const Popover = {
 	Root,
 	Trigger,
+	Close: BasePopover.Close,
 	Popup,
 };
