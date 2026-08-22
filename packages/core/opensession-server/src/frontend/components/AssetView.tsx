@@ -56,6 +56,7 @@ import {
 	IconCopy,
 	IconDotsHorizontal,
 	IconLink,
+	IconMessage,
 	IconTrash,
 	IconX,
 } from "./icons";
@@ -293,7 +294,7 @@ function AssetMenu({
 
 /** Safe file actions stay visible in the overlay, matching the media
  * lightbox. Delete remains behind More so a destructive action never reads as
- * a peer of Download, Copy link, and Open. */
+ * a peer of Comment, Download, Copy link, and Open. */
 function AssetOverlayActionBar({
 	sessionId,
 	file,
@@ -314,6 +315,7 @@ function AssetOverlayActionBar({
 	const downloadUrl = sessionAssetDownloadUrl(sessionId, file);
 	const nativeShare = canUseNativeIOSShare();
 	const name = file.path.split("/").pop() || "asset";
+	const commentable = assetPreviewKind(file.path) === "image";
 	const actionClass = cn(
 		"inline-flex h-10 shrink-0 cursor-pointer items-center justify-center gap-1.5 rounded-full border-0 bg-transparent px-2 text-xs text-dim no-underline",
 		"transition-[transform,background-color,color,opacity] duration-[var(--dur-micro)] ease-[var(--ease)] active:scale-[0.96] hover:bg-hover hover:text-fg",
@@ -339,6 +341,31 @@ function AssetOverlayActionBar({
 
 	return (
 		<nav aria-label="Asset actions" className="flex items-center justify-center gap-1">
+			{commentable && (
+				<button
+					type="button"
+					className={actionClass}
+					onClick={() =>
+						openLightbox(
+							[
+								{
+									kind: "image",
+									src: rawUrl,
+									sessionTitle: file.path,
+									description: file.description,
+									commentSessionId: sessionId,
+								},
+							],
+							0,
+							null,
+							{ startCommenting: true },
+						)
+					}
+				>
+					<IconMessage size={phone ? 20 : 15} />
+					<span className={labelClass}>Comment</span>
+				</button>
+			)}
 			{nativeShare ? (
 				<button type="button" className={actionClass} onClick={download}>
 					<IconArrowDown size={phone ? 20 : 15} />
