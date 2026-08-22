@@ -734,6 +734,13 @@ fi
 
 # ── PATH ────────────────────────────────────────────────────────────────────
 
+# An installer subprocess cannot update the PATH of the shell that launched it.
+# Remember whether the command already works there so the final output can name
+# the profile to source when this is a fresh install.
+PATH_NEEDS_REFRESH=1
+command -v opensession >/dev/null 2>&1 && PATH_NEEDS_REFRESH=0
+PATH_REFRESH_PROFILE=""
+
 add_to_path() {
   config_file="$1"; line="$2"
   if grep -Fxq "$line" "$config_file" 2>/dev/null; then
@@ -775,6 +782,9 @@ if [ "$NO_MODIFY_PATH" != "1" ]; then
   esac
   for profile in $profiles; do
     add_to_path "$profile" "$line"
+    if [ -z "$PATH_REFRESH_PROFILE" ] && grep -Fxq "$line" "$profile" 2>/dev/null; then
+      PATH_REFRESH_PROFILE="$profile"
+    fi
   done
 fi
 export PATH="$BIN_DIR:$PATH"
@@ -782,12 +792,26 @@ export PATH="$BIN_DIR:$PATH"
 # GitHub Actions needs PATH additions written to a file rather than exported.
 [ -n "${GITHUB_PATH:-}" ] && echo "$BIN_DIR" >>"$GITHUB_PATH"
 
+show_path_refresh_hint() {
+  [ "$PATH_NEEDS_REFRESH" = "1" ] || return 0
+  if [ -n "$PATH_REFRESH_PROFILE" ]; then
+    display_profile="$PATH_REFRESH_PROFILE"
+    case "$display_profile" in
+      "$HOME"/*) display_profile="~/${display_profile#"$HOME"/}" ;;
+    esac
+    info "Run this in your current shell: ${B}source $display_profile${N}"
+  elif [ "$NO_MODIFY_PATH" = "1" ]; then
+    info "Add ${B}$BIN_DIR${N} to PATH before running opensession."
+  fi
+}
+
 # ── onboard ─────────────────────────────────────────────────────────────────
 
 if [ "$NO_ONBOARD" = "1" ]; then
   printf '\n'
   step "Installed"
   info "Next: ${B}opensession onboard${N}"
+  show_path_refresh_hint
   exit 0
 fi
 
@@ -846,10 +870,7 @@ step "Done"
 info "opensession status    ${D}is the server up?${N}"
 info "opensession doctor    ${D}check the install${N}"
 info "opensession --help    ${D}everything else${N}"
-case ":$PATH:" in
-  *":$BIN_DIR:"*) ;;
-  *) muted "open a new shell (or source your profile) to get 'opensession' on PATH" ;;
-esac
+show_path_refresh_hint
 # The last line is the URL, when there is a server to open. Read the bind from
 # the config the wizard just wrote; a public URL set there wins.
 if [ -f "$OPENSESSION_HOME/config.json" ]; then
