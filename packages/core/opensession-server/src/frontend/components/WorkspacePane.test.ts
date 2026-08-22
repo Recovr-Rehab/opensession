@@ -98,7 +98,7 @@ test("a review without a PR combines and aligns its controls", () => {
 		'compactToolbar ? "overflow-y-visible" : "overflow-y-auto"',
 	);
 	expect(prPanelSource).toContain(
-		'${compactToolbar ? `w-auto ${WS_SUMMARY_REVIEW_CANVAS_CLEARANCE}` : "mx-auto w-full"}',
+		'${compactToolbar ? `w-auto pt-0 ${WS_SUMMARY_REVIEW_CANVAS_CLEARANCE}` : "mx-auto w-full pt-2"}',
 	);
 	expect(diffPanelSource).toContain("toolbarTarget === undefined");
 	expect(diffPanelSource).toContain(
@@ -123,15 +123,18 @@ test("wide Review keeps its controls stable while page navigation moves", () => 
 	expect(prPanelSource).toContain(
 		'compactToolbar ? "overflow-x-hidden overflow-y-auto"',
 	);
-	expect(reviewToolbarSource).toContain("desktop:top-2.5");
+	expect(reviewToolbarSource).toContain("sticky top-0");
 	expect(reviewToolbarSource).toContain("desktop:mb-0");
 	expect(reviewToolbarSource).toContain("WS_SUMMARY_REVIEW_BAR_CLEARANCE");
 	expect(prPanelSource).toContain("WS_SUMMARY_REVIEW_CANVAS_CLEARANCE");
 	expect(prPanelSource).toContain(
-		"desktop:[--review-file-tree-top:62px]",
+		"desktop:[--review-file-tree-gap:0px] desktop:[--review-file-tree-top:52px]",
 	);
 	expect(prPanelSource).toContain(
-		'compactToolbar ? "overflow-y-visible desktop:[--review-file-header-top:62px]" : "overflow-y-auto"',
+		'compactToolbar ? "overflow-y-visible desktop:[--review-file-header-top:53px]" : "overflow-y-auto"',
+	);
+	expect(prPanelSource).toContain(
+		'${compactToolbar ? "pt-0" : "pt-2"}',
 	);
 });
 

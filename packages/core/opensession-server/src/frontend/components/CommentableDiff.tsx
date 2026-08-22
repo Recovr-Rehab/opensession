@@ -48,6 +48,7 @@ import { Menu, MENU_ICON } from "../ui/menu";
 import { toast } from "../ui/toast";
 import { useStickyEdges } from "../hooks/useStickyEdges";
 import { UserAvatar } from "./UserAvatar";
+import { ExtBadge, fileExt } from "./lang-marks";
 
 /* The +/− counts. DiffPanel's summary strip carries the same pair, and the two
    must read alike. */
@@ -56,14 +57,14 @@ const DIFF_DEL = "font-semibold text-red";
 
 /* One collapsible file. The header is the hover group for the edit and discard
    actions revealed inside editable worktree diffs. */
-const FILE_ROW = "rounded-lg border border-line bg-bg";
+const FILE_ROW = "overflow-clip rounded-lg border border-line bg-bg";
 const FILE_HEADER =
   "group relative flex min-h-9 w-full min-w-0 items-center gap-1.5 px-2 text-left text-fg hover:bg-hover phone:min-h-11 phone:px-2.5";
 const FILE_BODY = "overflow-clip rounded-b-lg";
 const STICKY_FILE_HEADER =
   "sticky top-[var(--review-file-header-top,0px)] z-[6] bg-bg data-[stuck]:bg-raised data-[stuck]:shadow-[inset_0_-1px_0_var(--divider)]";
 const FILE_TOGGLE =
-  "focus-ring flex min-w-0 flex-1 cursor-pointer items-center gap-2 self-stretch border-none bg-transparent p-0 text-left text-fg";
+  "focus-ring flex min-w-0 cursor-pointer items-center gap-2 self-stretch border-none bg-transparent p-0 text-left text-fg";
 
 /* Revealed on row hover but always occupying its space (opacity, not display),
    so nothing can shift under the pointer. Focus reveals it too — hover cannot
@@ -71,10 +72,14 @@ const FILE_TOGGLE =
 const REVEAL =
   "pointer-events-none opacity-0 group-hover:pointer-events-auto group-hover:opacity-100 focus-visible:pointer-events-auto focus-visible:opacity-100";
 const REVEALED = "pointer-events-auto opacity-100";
-/* Borderless icon-only actions, overlaid on the stats so revealing the larger
-   icon cannot change the row's dimensions. No cursor here on purpose: the
-   in-flight discard wants `cursor-default`, and two cursor utilities on one
-   element resolve by Tailwind's output order, not by which was written last. */
+/* The edit action sits directly after the filename and always reserves its
+   space, so revealing it cannot shift the rest of the row. */
+const INLINE_ACTION =
+  "inline-flex shrink-0 items-center justify-center rounded-md border-none bg-transparent transition-[color,background,opacity]";
+/* The discard action overlays the stats at the row's trailing edge. No cursor
+   here on purpose: the in-flight state wants `cursor-default`, and two cursor
+   utilities on one element resolve by Tailwind's output order, not by which
+   was written last. */
 const ROW_ACTION =
   "absolute top-1/2 inline-flex -translate-y-1/2 items-center justify-center rounded-md border-none bg-transparent transition-[color,background,opacity]";
 
@@ -818,7 +823,11 @@ export function CommentableDiff({
               className={`shrink-0 text-faint transition-transform ${isOpen ? "rotate-90" : ""}`}
             />
             <span className="flex size-5 shrink-0 items-center justify-center text-dim">
-              <IconFile size={17} />
+              {fileExt(base) ? (
+                <ExtBadge name={base} size={14} />
+              ) : (
+                <IconFile size={17} />
+              )}
             </span>
             <span className="flex min-w-0 items-center gap-2 overflow-hidden text-label">
               <span className="shrink-0 overflow-hidden text-ellipsis whitespace-nowrap font-semibold text-fg">
@@ -831,11 +840,26 @@ export function CommentableDiff({
               )}
             </span>
           </button>
+          {editable && !isEditing && (
+            <Tooltip label="Edit file in place">
+              <button
+                type="button"
+                className={`${INLINE_ACTION} ${REVEAL} cursor-pointer p-[3px] text-faint hover:bg-hover hover:text-fg phone:pointer-events-auto phone:opacity-100`}
+                aria-label="Edit this file in place"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  void startEdit(file, i);
+                }}
+              >
+                <IconPencil size={16} />
+              </button>
+            </Tooltip>
+          )}
           <Tooltip label={copied === file.name ? "Copied" : "Copy path"}>
             <Button
               variant="ghost"
               size="sm"
-              className={copied === file.name ? "text-green" : "text-faint"}
+              className={`phone:hidden ${copied === file.name ? "text-green" : "text-faint"}`}
               aria-label={`Copy path ${file.name}`}
               icon={
                 copied === file.name ? (
@@ -881,23 +905,6 @@ export function CommentableDiff({
                 {savingEdit ? "Saving…" : "Save"}
               </Button>
             </span>
-          )}
-          {editable && !isEditing && (
-            <Tooltip label="Edit file in place">
-              <button
-                type="button"
-                // Sits left of the discard icon; both are only wired on
-                // live-worktree diffs, so the pair always appears together.
-                className={`${ROW_ACTION} ${REVEAL} right-9 cursor-pointer p-[3px] text-faint hover:bg-hover hover:text-fg`}
-                aria-label="Edit this file in place"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  void startEdit(file, i);
-                }}
-              >
-                <IconPencil size={16} />
-              </button>
-            </Tooltip>
           )}
           {onDiscard && (
             <Tooltip

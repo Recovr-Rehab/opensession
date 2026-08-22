@@ -1698,7 +1698,7 @@ export function PrPanel({
           )}
           {showWorktreeDiff ? (
             <div
-              className={`max-w-[1500px] px-2 py-2 phone:w-full phone:px-1 ${compactToolbar ? `w-auto ${WS_SUMMARY_REVIEW_CANVAS_CLEARANCE}` : "mx-auto w-full"}`}
+              className={`max-w-[1500px] px-2 pb-2 phone:w-full phone:px-1 ${compactToolbar ? `w-auto pt-0 ${WS_SUMMARY_REVIEW_CANVAS_CLEARANCE}` : "mx-auto w-full pt-2"}`}
               data-no-pr-worktree-diff
             >
               <DiffPanel
@@ -2288,7 +2288,7 @@ export function PrPanel({
       )}
 
       <div
-        className={`flex min-h-0 flex-1 ${compactToolbar ? `${WS_SUMMARY_REVIEW_CANVAS_CLEARANCE} desktop:flex-none desktop:[--review-file-tree-top:62px]` : "desktop:pt-12"}`}
+        className={`flex min-h-0 flex-1 ${compactToolbar ? `${WS_SUMMARY_REVIEW_CANVAS_CLEARANCE} desktop:flex-none desktop:[--review-file-tree-gap:0px] desktop:[--review-file-tree-top:52px]` : "desktop:pt-12"}`}
       >
         {page === "files" && fileListMode !== "hidden" && files.length > 0 && (
           <PrFileTree
@@ -2302,8 +2302,8 @@ export function PrPanel({
         <main
           // Wide review scrolls the toolbar and canvas in one container. Once
           // the toolbar sticks, file titles clear its 10px inset, 40px row,
-          // 2px border, and 10px canvas gap instead of disappearing under it.
-          className={`min-w-0 flex-1 bg-surface [--review-file-header-top:0px] ${compactToolbar ? "overflow-y-visible desktop:[--review-file-header-top:62px]" : "overflow-y-auto"} ${reviewing ? "pb-24 phone:pb-36" : "pb-4"}`}
+          // 2px border, and the file card's own 1px border.
+          className={`min-w-0 flex-1 bg-surface [--review-file-header-top:0px] ${compactToolbar ? "overflow-y-visible desktop:[--review-file-header-top:53px]" : "overflow-y-auto"} ${reviewing ? "pb-24 phone:pb-36" : "pb-4"}`}
         >
           {page === "overview" ? (
             <SelectionToSession
@@ -2333,7 +2333,9 @@ export function PrPanel({
             // Keep the review canvas close to the viewport edge. The file
             // section's own border now carries the shape instead of a wide
             // gray gutter around it.
-            <div className="mx-auto max-w-[1500px] px-2 py-2 phone:px-1">
+            <div
+              className={`mx-auto max-w-[1500px] px-2 pb-2 phone:px-1 ${compactToolbar ? "pt-0" : "pt-2"}`}
+            >
               {codeView === "flow" ? (
                 <CodeFlow
                   data={codeFlow?.key === codeFlowKey ? codeFlow.data : null}
