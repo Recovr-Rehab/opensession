@@ -206,8 +206,8 @@ export const TAB_TITLE =
 	"session-tab-title block min-w-0 max-w-[150px] overflow-hidden " +
 	"data-[overflow]:[mask-image:linear-gradient(to_right,#000_0,#000_calc(100%_-_10px),transparent_100%)] " +
 	"desktop:max-w-[166px] " +
-	"desktop:group-hover/tab:[mask-image:linear-gradient(to_right,#000_0,#000_calc(100%_-_32px),transparent_100%)] " +
-	"desktop:group-focus-within/tab:[mask-image:linear-gradient(to_right,#000_0,#000_calc(100%_-_32px),transparent_100%)]";
+	"desktop:group-hover/tab:[mask-image:linear-gradient(to_right,#000_0,#000_calc(100%_-_36px),transparent_100%)] " +
+	"desktop:group-focus-within/tab:[mask-image:linear-gradient(to_right,#000_0,#000_calc(100%_-_36px),transparent_100%)]";
 
 /** An icon-only view tab (Staging → a globe): drop the label's text metrics so
  *  the tab sizes to the glyph. */
@@ -351,26 +351,25 @@ const CTRL_BASE =
 	"font-[inherit] leading-none text-dim transition-[background-color,color] " +
 	"hover:bg-hover hover:text-fg";
 
+/** Desktop trailing controls match the tabs' 28px height with a square target. */
+const CTRL_DESKTOP =
+	"desktop:size-7 desktop:min-h-auto desktop:self-center desktop:rounded-control desktop:p-0";
+
 /**
  * New-tab "+". Always visible once there is a strip, so adding a sibling does
  * not depend on discovering a hover state. It keeps a comfortable square hit
- * area on touch and matches the header's ⋯ control on desktop.
+ * area on touch and matches the tabs on desktop.
  */
 export const TAB_NEW =
-	`session-tab-new ${CTRL_BASE} justify-center text-[15px] ` +
-	"desktop:min-h-auto desktop:self-center desktop:rounded-control " +
-	"desktop:px-[5px] desktop:py-[3px] desktop:text-[22px]";
+	`session-tab-new ${CTRL_BASE} ${CTRL_DESKTOP} justify-center text-[15px] desktop:text-[22px]`;
 
 /**
  * Archived-sessions menu. Same desktop footprint as the "+" it sits beside:
- * the two are one pair of quiet square controls after the last tab, and a
- * taller plate here read as a control stretched to fill the 40px band. Stays
- * lit while its menu is open (`data-popup-open`).
+ * the two are one pair of quiet square controls after the last tab. Stays lit
+ * while its menu is open (`data-popup-open`).
  */
 export const TAB_HISTORY =
-	`${CTRL_BASE} justify-center ` +
-	"desktop:min-h-auto desktop:self-center desktop:rounded-control " +
-	"desktop:px-[5px] desktop:py-[3px] " +
+	`${CTRL_BASE} ${CTRL_DESKTOP} justify-center ` +
 	"data-[popup-open]:bg-hover data-[popup-open]:text-fg " +
 	CTRL_REVEAL;
 
