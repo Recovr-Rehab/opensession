@@ -15,7 +15,7 @@ import { TeamSection } from "./SetupTeam";
 import { UserAvatar } from "./UserAvatar";
 import { OrganizationProfileSection } from "./settings/GeneralPanel";
 import { ProviderAccountsSection } from "./settings/ModelAccounts";
-import { IconCheck, IconChevronLeft } from "./icons";
+import { IconCheck, IconChevronLeft, IconRepo } from "./icons";
 import { githubAuthState, type SetupStatus } from "./setup-shared";
 
 interface FirstMileStep {
@@ -34,10 +34,21 @@ const STEPS: FirstMileStep[] = [
 	{ id: "ready", label: "Ready", title: "You’re ready" },
 ];
 
-function PreviewOverflow({ count }: { count: number }) {
+function PreviewOverflow({
+	count,
+	transparent = false,
+}: {
+	count: number;
+	transparent?: boolean;
+}) {
 	if (count <= 0) return null;
 	return (
-		<span className="flex size-7 items-center justify-center rounded-full border border-bg bg-bg/85 text-meta font-semibold text-dim">
+		<span
+			className={cn(
+				"flex size-7 items-center justify-center rounded-full border text-meta font-semibold text-dim",
+				transparent ? "border-transparent bg-transparent" : "border-bg bg-bg/85",
+			)}
+		>
 			+{count}
 		</span>
 	);
@@ -70,9 +81,23 @@ function FirstMileSummary({ status }: { status: SetupStatus }) {
 			label: github.label,
 			preview: (
 				<div className="flex max-w-full items-center gap-1.5 rounded-full bg-bg/65 py-1 pr-2 pl-1 text-meta font-medium text-fg">
-					<span className="flex size-6 shrink-0 items-center justify-center rounded-full bg-fg text-bg">
-						<BrandMark name="github" size={15} />
-					</span>
+					{githubOrganization ? (
+						<span className="relative flex size-6 shrink-0">
+							<UserAvatar
+								name={githubOrganization}
+								login={githubOrganization}
+								size={24}
+								className="rounded-full"
+							/>
+							<span className="absolute -right-0.5 -bottom-0.5 flex size-2.5 items-center justify-center rounded-full bg-fg text-bg ring-1 ring-bg">
+								<BrandMark name="github" size={7} />
+							</span>
+						</span>
+					) : (
+						<span className="flex size-6 shrink-0 items-center justify-center rounded-full bg-fg text-bg">
+							<BrandMark name="github" size={15} />
+						</span>
+					)}
 					<span className="truncate">{githubOrganization || "GitHub"}</span>
 				</div>
 			),
@@ -106,9 +131,9 @@ function FirstMileSummary({ status }: { status: SetupStatus }) {
 						<span
 							key={repo.id}
 							title={repo.label}
-							className="flex size-7 items-center justify-center rounded-md border border-bg bg-bg/85 text-meta font-semibold uppercase text-dim"
+							className="flex size-7 items-center justify-center rounded-full border border-bg bg-bg/85 text-dim"
 						>
-							{repo.label.slice(0, 2)}
+							<IconRepo size={14} />
 						</span>
 					))}
 					<PreviewOverflow count={status.repos.length - 4} />
@@ -127,7 +152,7 @@ function FirstMileSummary({ status }: { status: SetupStatus }) {
 					{status.team.names.slice(0, 4).map((name) => (
 						<UserAvatar key={name} name={name} size={28} className="border border-bg" />
 					))}
-					<PreviewOverflow count={status.team.names.length - 4} />
+					<PreviewOverflow count={status.team.names.length - 4} transparent />
 				</div>
 			),
 		},
@@ -139,7 +164,7 @@ function FirstMileSummary({ status }: { status: SetupStatus }) {
 				<div
 					key={tile.title}
 					className={cn(
-						"flex aspect-square min-w-0 flex-col justify-between rounded-xl border p-4 backdrop-blur-xl phone:rounded-lg phone:p-3.5",
+						"flex aspect-square min-w-0 flex-col justify-between rounded-2xl border p-4 backdrop-blur-xl phone:rounded-xl phone:p-3.5",
 						tile.ready
 							? "border-green/20 bg-green-soft shadow-[inset_0_1px_0_color-mix(in_srgb,white_45%,transparent),0_12px_28px_-24px_color-mix(in_srgb,var(--green)_45%,transparent)]"
 							: "border-divider-soft bg-settings-plate/65",
