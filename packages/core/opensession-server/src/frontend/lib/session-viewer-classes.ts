@@ -637,7 +637,8 @@ export const INFO_HERO =
  *  `text-page-title` (22px). */
 export const INFO_NAME =
 	"max-w-full text-page-title font-semibold leading-[1.2] tracking-[-0.02em] break-words text-fg";
-export const INFO_SUB = "text-label font-medium text-dim";
+export const INFO_SUB =
+	"flex min-h-11 w-full max-w-full items-center justify-center gap-x-1 px-6 text-label font-medium text-dim";
 
 /** Phone PR strip frame: spacing + clipping only. The status tone itself
  * reaches the outer radius, so the row does not become a card inside a card. */

@@ -25,10 +25,10 @@ interface Props {
    *  - "breadcrumb" (default): the desktop session-header pill, followed by a
    *    "›" separator before the title.
    *  - "menu-row": a full-width row styled like the ⋯ overflow menu's other
-   *    items, so the switch/attach menu is reachable from there on a phone (the
-   *    phone top bar just *shows* the repo — settings live behind the heading).
+   *    items.
+   *  - "hero": the compact repository link below the phone Workspace title.
    */
-  variant?: "breadcrumb" | "menu-row";
+  variant?: "breadcrumb" | "menu-row" | "hero";
 }
 
 /**
@@ -174,6 +174,17 @@ export function RepoBar({
           </span>
         </span>
         <IconChevronRight size={16} className="shrink-0 text-faint" />
+      </Menu.Trigger>
+    ) : variant === "hero" ? (
+      <Menu.Trigger
+        className="inline-flex min-h-11 max-w-full shrink-0 cursor-pointer items-center rounded-md border-0 bg-transparent px-1.5 text-label font-medium text-dim transition-[color,background-color,scale] hover:bg-hover hover:text-fg active:scale-[0.96] data-[popup-open]:bg-hover data-[popup-open]:text-fg"
+        title="Switch or attach another repository"
+        aria-label={`Repository: ${repoLabel(primary)}. Change repository`}
+      >
+        <span className="truncate">{busy ?? repoLabel(primary)}</span>
+        {attached.length > 0 && (
+          <span className="ml-1 text-faint">+{attached.length}</span>
+        )}
       </Menu.Trigger>
     ) : (
       <Menu.Trigger

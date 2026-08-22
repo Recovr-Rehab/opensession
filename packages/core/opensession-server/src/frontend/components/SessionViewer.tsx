@@ -398,7 +398,6 @@ import {
 	VIEWER_TITLE,
 	INFO_CONTENT,
 	INFO_HERO,
-	INFO_LIST,
 	INFO_NAME,
 	INFO_PAGE,
 	INFO_SECTION,
@@ -6384,56 +6383,52 @@ export function SessionViewer({
 												{workspaceName || session.title}
 											</h1>
 											<div className={INFO_SUB}>
-												{[
-													session.desk ? null : session.repo || "repository",
-													models.length > 0
-														? metadataModelLabel(effectiveModel, models)
-														: null,
-												]
-													.filter(Boolean)
-													.join("  ·  ")}
+												{!session.desk && hasRepoWork && (
+													<RepoBar
+														sessionId={session.id}
+														primaryRepo={session.repo || "repository"}
+														branch={session.branch}
+														initialAttached={session.attachedRepos || []}
+														variant="hero"
+													/>
+												)}
+												{!session.desk && hasRepoWork && models.length > 0 && (
+													<span aria-hidden="true">·</span>
+												)}
+												{session.source === "opensession" && models.length > 0 ? (
+													<ModelMenuRow
+														models={models}
+														model={model}
+														defaultModel={defaultModel}
+														onChange={handleModelChange}
+														prettyLabel={prettyModel}
+														effort={effort}
+														onEffortChange={setEffort}
+														fastMode={fastMode}
+														onFastModeChange={setFastMode}
+														accounts={accounts}
+														accountId={accountId}
+														onAccountChange={handleAccountChange}
+														usage={usage}
+														variant="hero"
+													/>
+												) : models.length > 0 ? (
+													<span className="inline-flex min-h-11 items-center px-1.5">
+														{metadataModelLabel(effectiveModel, models)}
+													</span>
+												) : null}
 											</div>
 										</div>
 										<div className={INFO_CONTENT}>
 											<div className={INFO_SUMMARY_CARD}>
-												{/* Repository and model remain directly editable here. They
-												    lead into the same quiet rows as the desktop summary. */}
-												<div className={INFO_LIST}>
-													{hasRepoWork && (
-														<RepoBar
+												{session.sandbox && (
+													<div className="flex min-h-11 items-center rounded-2xl bg-panel px-5 py-2">
+														<SandboxBadge
 															sessionId={session.id}
-															primaryRepo={session.repo || "repository"}
-															branch={session.branch}
-															initialAttached={session.attachedRepos || []}
-															variant="menu-row"
+															sandbox={session.sandbox}
 														/>
-													)}
-													{session.source === "opensession" && models.length > 0 && (
-														<ModelMenuRow
-															models={models}
-															model={model}
-															defaultModel={defaultModel}
-															onChange={handleModelChange}
-															prettyLabel={prettyModel}
-															effort={effort}
-															onEffortChange={setEffort}
-															fastMode={fastMode}
-															onFastModeChange={setFastMode}
-															accounts={accounts}
-															accountId={accountId}
-															onAccountChange={handleAccountChange}
-															usage={usage}
-														/>
-													)}
-													{session.sandbox && (
-														<div className="flex min-h-11 items-center px-3">
-															<SandboxBadge
-																sessionId={session.id}
-																sandbox={session.sandbox}
-															/>
-														</div>
-													)}
-												</div>
+													</div>
+												)}
 												<WorkspaceSummaryBody
 													embedded
 													session={session}
