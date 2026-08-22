@@ -22,14 +22,14 @@
 	-moz-osx-font-smoothing: grayscale;
 	/* Neutral greys, not blue-black ink on a warm card: text is near-black,
 	   everything secondary is one flat mid grey, and the hairline is plain
-	   black at 9%. A single hue family is what keeps the page quiet. */
+	   black at 6%. A single hue family is what keeps the page quiet. */
 	--ink: #0a0a0a;
 	--page: #fff;
 	/* One quiet card fill and one hairline, used by every section in the feed.
 	   The page is white and the cards are a step off it, so a section reads as
 	   a panel without a shadow or a second colour doing the work. */
 	--card: #fafafb;
-	--line: rgba(var(--ink-rgb), 0.09);
+	--line: rgba(var(--ink-rgb), 0.06);
 	--muted: #787878;
 	/* The product's accent with more chroma, so the one filled control on the
 	   page carries some voltage: the app's own #1f82bb reads muted at this size
@@ -340,9 +340,11 @@ summary:focus-visible {
 	pointer-events: auto;
 }
 
-/* The phone, in front of the window at their shared bottom-right origin.
-   Everything here is in cqw, a percentage of the stage's own width, so the
-   pair keeps its composition at every size the stage takes.
+/* The phone, in front of the window near their shared bottom-right origin.
+   A small right inset keeps the whole phone edge visible, while its bottom
+   still carries through the stage. Everything here is in cqw, a percentage
+   of the stage's own width, so the pair keeps its composition at every size
+   the stage takes.
 
    The size is not a taste: the window stands for a 14-inch MacBook Pro's
    screen, 302mm across its 94.4cqw, which puts 1mm at 0.313cqw. An iPhone 17
@@ -352,13 +354,13 @@ summary:focus-visible {
    here so the squircle browsers land on the shape the phone really has. */
 .demo-phone {
 	position: absolute;
-	right: -1px;
+	right: 2.5cqw;
 	bottom: -1px;
 	width: 22.5cqw;
 	height: 46.9cqw;
 	object-fit: cover;
 	object-position: top center;
-	border-radius: calc(2cqw * var(--rf)) 0 0 0;
+	border-radius: calc(2cqw * var(--rf)) calc(2cqw * var(--rf)) 0 0;
 	corner-shape: var(--cs);
 	background: var(--window);
 	/* A hairline for the device's own edge, and a shadow deeper than the
@@ -865,7 +867,7 @@ summary:focus-visible {
 		--ink: #f4f4f5;
 		--page: #0c0c0d;
 		--card: #141416;
-		--line: rgba(255, 255, 255, 0.1);
+		--line: rgba(255, 255, 255, 0.07);
 		--muted: #939397;
 		--ink-rgb: 255, 255, 255;
 		--stage-bg: #14171d;
