@@ -666,6 +666,12 @@ export function WorkspaceSummaryBody({
 	const groupClass = embedded
 		? "flex flex-col overflow-hidden rounded-2xl bg-raised py-2 empty:hidden"
 		: "contents";
+	const prGroupClass = embedded
+		? cn(
+				groupClass,
+				"py-0 [&_.ws-summary-band]:mx-0 [&_.ws-summary-band]:mb-0 [&_.ws-summary-band]:[border-radius:inherit]",
+			)
+		: groupClass;
 
 	return (
 		<div
@@ -675,7 +681,7 @@ export function WorkspaceSummaryBody({
 					: "contents"
 			}
 		>
-			<div className={groupClass}>
+			<div className={prGroupClass}>
 				{/* Which PR, where it stands, and the one thing to do about it. The
 				    strip owns all three; this card only says where they go. */}
 				<PrStatusBar
