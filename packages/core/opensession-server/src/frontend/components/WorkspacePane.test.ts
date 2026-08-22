@@ -1,6 +1,12 @@
 import { expect, test } from "bun:test";
 
 const source = await Bun.file(new URL("./WorkspacePane.tsx", import.meta.url)).text();
+const viewerSource = await Bun.file(
+	new URL("./SessionViewer.tsx", import.meta.url),
+).text();
+const prPanelSource = await Bun.file(
+	new URL("./PrPanel.tsx", import.meta.url),
+).text();
 
 test("workspace draft composers accept and persist attachments", () => {
 	const composerStart = source.lastIndexOf("<Composer");
@@ -28,11 +34,31 @@ test("the first workspace session receives its draft attachments", () => {
 	expect(source).toContain("dropStagingAttachments(draftKey)");
 });
 
-test("workspace Review keeps the implementation summary over the PR canvas", () => {
+test("workspace Review keeps the implementation summary beside the PR canvas", () => {
 	expect(source).toContain("sessionCarriesPr(s, reviewTarget)");
 	expect(source).toContain("s.workspaceId === workspace.id");
 	expect(source).toContain("fetchWorkspaceOverview(workspace.id)");
 	expect(source).toContain("<WorkspaceSummary");
 	expect(source).toContain("session={presentationSession}");
+	expect(source).toContain("onOpenChange={setReviewSummaryOpen}");
+	expect(source).toContain(
+		"reviewSummaryVisible && WS_SUMMARY_REVIEW_CLEARANCE",
+	);
+	expect(viewerSource).toContain(
+		"summaryVisible && WS_SUMMARY_REVIEW_CLEARANCE",
+	);
 	expect(source).toContain("walkthrough={presentationSession?.walkthrough}");
+});
+
+test("the PR top bar leaves merge to the summary and actions menu", () => {
+	const headerStart = prPanelSource.indexOf("<header");
+	const menuStart = prPanelSource.indexOf("<Menu.Root>", headerStart);
+	const menuEnd = prPanelSource.indexOf("</Menu.Root>", menuStart);
+
+	expect(headerStart).toBeGreaterThan(-1);
+	expect(menuStart).toBeGreaterThan(headerStart);
+	expect(prPanelSource.slice(headerStart, menuStart)).not.toContain(
+		"Squash and merge",
+	);
+	expect(prPanelSource.slice(menuStart, menuEnd)).toContain("Squash and merge");
 });

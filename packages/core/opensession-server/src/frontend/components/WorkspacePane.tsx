@@ -1,5 +1,11 @@
 import { AGENT_NAME } from "../lib/brand";
-import React, { useEffect, useMemo, useRef, useState } from "react";
+import React, {
+	useEffect,
+	useLayoutEffect,
+	useMemo,
+	useRef,
+	useState,
+} from "react";
 import { createPortal } from "react-dom";
 import { motion } from "motion/react";
 import type { Workspace, UnifiedSession, WSServerMessage } from "../lib/types";
@@ -26,6 +32,7 @@ import { useSidePanel } from "../hooks/useSidePanel";
 import { IconArrowUpToLine, IconSidebarRight } from "./icons";
 import { Button } from "../ui/button";
 import { Tooltip } from "../ui/tooltip";
+import { cn } from "../ui/cn";
 import {
 	PANEL_BODY,
 	PANEL_OVERLAY,
@@ -60,6 +67,11 @@ import { InlineAlert } from "../ui/state";
 import { duration, ease } from "../ui/motion";
 import { mainSession } from "../lib/landing-session";
 import { sessionCarriesPr } from "../lib/session-prs";
+import {
+	workspaceSummaryOpen,
+	WS_SUMMARY_ROOM_W,
+} from "../lib/workspace-summary-open";
+import { WS_SUMMARY_REVIEW_CLEARANCE } from "../lib/workspace-summary-classes";
 
 interface Props {
 	workspace: Workspace;
@@ -512,9 +524,34 @@ export function WorkspacePane({
 
 	// The header row, in the app's own top-bar slot so it lands exactly where a
 	// session's header does — beside the pane, not across the panel.
+	const headerRef = useRef<HTMLDivElement>(null);
 	const headerActionsRef = useRef<HTMLDivElement>(null);
+	const [headerW, setHeaderW] = useState(0);
+	const [reviewSummaryOpen, setReviewSummaryOpen] = useState(workspaceSummaryOpen);
+	useLayoutEffect(() => {
+		const el = headerRef.current;
+		if (!el) return;
+		const box = getComputedStyle(el);
+		setHeaderW(
+			el.clientWidth -
+				parseFloat(box.paddingLeft) -
+				parseFloat(box.paddingRight),
+		);
+		const observer = new ResizeObserver(([entry]) => {
+			setHeaderW(entry.contentRect.width);
+		});
+		observer.observe(el);
+		return () => observer.disconnect();
+	}, [topbarEl]);
+	const reviewSummaryHasRoom = headerW === 0 || headerW >= WS_SUMMARY_ROOM_W;
+	const reviewSummaryVisible =
+		tab === "review" &&
+		reviewSummaryOpen &&
+		reviewSummaryHasRoom &&
+		!panelOpen &&
+		!isPhone;
 	const header = !isPhone && (
-		<div className={VIEWER_HEADER}>
+		<div ref={headerRef} className={VIEWER_HEADER}>
 			<div className={VIEWER_TITLE}>
 				{workspace.repo && <RepoTile name={workspace.repo} />}
 				<span className={VIEWER_BRANCH}>{workspace.name}</span>
@@ -530,8 +567,10 @@ export function WorkspacePane({
 						onOpenChecks={() => {}}
 						onOpenSession={onOpenSession}
 						send={connected && !presentationSession.archived ? send : undefined}
+						onOpenChange={setReviewSummaryOpen}
 						tabStripVisible
 						reviewMode
+						hasRoom={reviewSummaryHasRoom}
 					/>
 				)}
 				<Tooltip label="Toggle side panel">
@@ -564,7 +603,13 @@ export function WorkspacePane({
 
 	if (tab === "review" && reviewTarget) {
 		return withPanel(
-			<div className={`${VIEW_MAIN} h-full min-h-0 bg-surface`}>
+			<div
+				className={cn(
+					VIEW_MAIN,
+					"h-full min-h-0 bg-surface",
+					reviewSummaryVisible && WS_SUMMARY_REVIEW_CLEARANCE,
+				)}
+			>
 				<PrPanel
 					onOpenPr={onOpenPr}
 					key={`${reviewTarget.repo}:${reviewTarget.branch}`}

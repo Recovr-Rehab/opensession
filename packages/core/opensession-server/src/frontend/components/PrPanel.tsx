@@ -2130,38 +2130,6 @@ export function PrPanel({
               Review
             </Button>
           )}
-        {canMergeAfterReview &&
-          !headerCompact &&
-          (mergeScheduled ? (
-            <MergeUndoControl
-              className={
-                !pr.staging?.url && !(caps.reviewComments && !reviewing)
-                  ? "ml-auto"
-                  : undefined
-              }
-              onUndo={handleMerge}
-            />
-          ) : (
-            <Button
-              variant="success-strong"
-              size="sm"
-              className={
-                !pr.staging?.url && !(caps.reviewComments && !reviewing)
-                  ? "ml-auto"
-                  : undefined
-              }
-              icon={!merging ? <IconGitMerge size={18} /> : undefined}
-              disabled={merging}
-              onClick={handleMerge}
-              title="Squash and merge this pull request"
-            >
-              {merging
-                ? "Merging…"
-                : headerCompact
-                  ? "Merge"
-                  : "Squash and merge"}
-            </Button>
-          ))}
         <Menu.Root>
           <Tooltip label="Pull request actions">
             <Menu.Trigger
