@@ -11,8 +11,14 @@ import {
 	getAllSessions,
 	getAllSessionsAsync,
 	readNativeSession,
+	readNativeSessionListRow,
 	type SessionArchiveSlice,
 } from "./sessions";
+import {
+	indexedSessions,
+	upsertIndexedSession,
+	upsertIndexedSessions,
+} from "./session-list-store";
 import { activeRunRecords } from "./run-journal";
 import {
 	getRunState,
@@ -90,10 +96,7 @@ export function invalidateSessionsCache(): void {
 	for (const snapshot of responses?.values() || []) snapshot.expiresAt = 0;
 }
 
-function enrichCachedSessions(
-	slice: SessionArchiveSlice,
-	data: UnifiedSession[],
-): UnifiedSession[] {
+function enrichSessionRuntime(data: UnifiedSession[]): UnifiedSession[] {
 	// Earliest run-start per session id, from the run journal — feeds the "in
 	// progress" elapsed ticker and survives a page refresh (a session can carry
 	// its bks id and its engine session id across records; key on both).
@@ -137,6 +140,14 @@ function enrichCachedSessions(
 		if (rs !== "idle") s.runState = rs;
 		checkRunStateWedge(s.id, rs, liveEngineBusy);
 	}
+	return data;
+}
+
+function enrichCachedSessions(
+	slice: SessionArchiveSlice,
+	data: UnifiedSession[],
+): UnifiedSession[] {
+	enrichSessionRuntime(data);
 	const ts = Date.now();
 	sessionsCaches[slice] = { data, ts, invalidated: false };
 	// An internal/legacy whole-list scan already paid for both halves. Seed the
@@ -168,6 +179,8 @@ export function getCachedSessions(): UnifiedSession[] {
 	) {
 		return cached.data;
 	}
+	const indexed = indexedSessions("include");
+	if (indexed) return enrichCachedSessions("include", indexed);
 	// Supersede any cooperative scan already in flight. Its generation check
 	// prevents the older snapshot from replacing this synchronous result.
 	sessionsCacheGenerations.include++;
@@ -194,15 +207,21 @@ export async function getCachedSessionsAsync(
 	slice: SessionArchiveSlice = "include",
 ): Promise<UnifiedSession[]> {
 	const cached = sessionsCaches[slice];
-	const needsRefresh =
-		!cached || cached.invalidated || Date.now() - cached.ts >= CACHE_TTL;
+	// Async callers may serve a complete snapshot through the short TTL even
+	// after a targeted write. The SQLite row and detail endpoint are already
+	// current; invalidation must not turn a burst of writes into a burst of
+	// whole-list deserializations.
+	const needsRefresh = !cached || Date.now() - cached.ts >= CACHE_TTL;
 	if (cached && !needsRefresh) return cached.data;
+	const indexed = indexedSessions(slice);
+	if (indexed) return enrichCachedSessions(slice, indexed);
 
 	if (!sessionsRefreshes[slice]) {
 		const generation = ++sessionsCacheGenerations[slice];
 		const startingCache = sessionsCaches[slice];
 		sessionsRefreshes[slice] = getAllSessionsAsync(slice)
 			.then((data) => {
+				upsertIndexedSessions(data, slice);
 				const current = sessionsCaches[slice];
 				if (
 					sessionsCacheGenerations[slice] === generation ||
@@ -391,6 +410,11 @@ export function updateSessionFile(
 		const rev = (current as { rev?: unknown }).rev;
 		(next as { rev?: number }).rev = (typeof rev === "number" ? rev : 0) + 1;
 		writeJsonAtomic(path, next);
+		const indexed = readNativeSessionListRow(sessionId);
+		if (indexed) {
+			enrichSessionRuntime([indexed]);
+			upsertIndexedSession(indexed);
+		}
 		invalidateSessionsCache();
 	});
 }

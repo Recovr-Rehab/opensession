@@ -43,6 +43,7 @@ import {
 } from "../queue-state";
 
 import { markPrReviewNotified } from "../pr-review-notifications";
+import { getPrsByRepo } from "../pr-cache";
 import { getReviewRequest, setReviewAccepted, setReviewRequest, } from "../review-requests";
 import { getSessionControl, type SandboxRequest } from "../session-control";
 import { transitionRunState } from "../run-state";
@@ -84,9 +85,10 @@ import {
 	removeTombstonedSessionArtifacts,
 } from "../sessions";
 import { githubLoginFor } from "../shared/user-mappings";
-import { isManualStatus, setStatusOverride } from "../status-overrides";
+import { getStatusOverride, isManualStatus, setStatusOverride } from "../status-overrides";
 import { getSubagentTranscript, listSubagents } from "../subagents";
-import { setTitleOverride } from "../title-overrides";
+import { getTitleOverride, setTitleOverride } from "../title-overrides";
+import { getGeneratedTitle } from "../generated-titles";
 import { buildWorkspaceOverview, resolveTranscriptImage, } from "../workspace-overview";
 import { type Workspace, deleteWorkspace, getWorkspace, workspaceName, } from "../workspaces";
 import { prHostFor } from "../pr-host";
@@ -109,6 +111,11 @@ import {
 import { defaultRepo } from "../config";
 import type { UnifiedSession } from "../types";
 import { transcriptSearchWorkerArgv } from "../../runner-host/exe";
+import {
+	indexedSessions,
+	indexedSidebarSessions,
+	indexedWorkspaceSessions,
+} from "../session-list-store";
 
 const SESSIONS_RESPONSE_TTL_MS = 5_000;
 interface SessionsResponseSnapshot {
@@ -320,8 +327,46 @@ async function sessionsListResponse(
  * open carries exactly what the list would have handed the client.
  */
 function enrichSession(s: UnifiedSession) {
+	const generatedTitle =
+		getGeneratedTitle(s.id) ??
+		s.aliasIds?.map((id) => getGeneratedTitle(id)).find(Boolean);
+	const titleOverride =
+		getTitleOverride(s.id) ??
+		s.aliasIds?.map((id) => getTitleOverride(id)).find(Boolean);
+	const manualStatus =
+		getStatusOverride(s.id) ??
+		s.aliasIds?.map((id) => getStatusOverride(id)).find(Boolean);
+	const reviewRequest =
+		getReviewRequest(s.id) ??
+		s.aliasIds?.map((id) => getReviewRequest(id)).find(Boolean);
+	const currentPr = s.branch
+		? getPrsByRepo().get(s.repo || defaultRepo().id)?.get(s.branch)
+		: undefined;
 	return {
 		...s,
+		...(generatedTitle ? { title: generatedTitle } : {}),
+		...(titleOverride ? { title: titleOverride, titleOverridden: true } : {}),
+		...(manualStatus ? { manualStatus } : {}),
+		...(reviewRequest ? { reviewRequest } : {}),
+		...(currentPr
+			? {
+					prUrl: currentPr.url,
+					prState: currentPr.state,
+					prMergeable: currentPr.mergeable,
+					prNumber: currentPr.number,
+					prTitle: currentPr.title,
+					prIsDraft: currentPr.isDraft,
+					prAdditions: currentPr.additions,
+					prDeletions: currentPr.deletions,
+					prChangedFiles: currentPr.changedFiles,
+					prReviewDecision: currentPr.reviewDecision,
+					prReviewRequested: currentPr.reviewRequested,
+					prReviewedBy: currentPr.reviewedBy,
+					prAuthor: currentPr.author,
+					prUpdatedAt: currentPr.updatedAt,
+					prChecks: currentPr.checks,
+				}
+			: {}),
 		repo: s.repo || defaultRepo().id,
 		// The name of the workspace this session is filed under. A sidebar row
 		// names a workspace, never one of its tabs, and the workspace list is
@@ -637,9 +682,15 @@ function refreshSessionsResponse(
 				: variant === "include"
 					? "include"
 					: "only";
-		const sliced = (await getCachedSessionsAsync(slice)).map(enrichSession);
+		const indexed =
+			variant === "exclude"
+				? indexedSidebarSessions()
+				: indexedSessions(slice);
+		const sliced = (indexed ?? (await getCachedSessionsAsync(slice))).map(
+			enrichSession,
+		);
 		const listed =
-			variant === "exclude" ? sidebarLiveSessions(sliced) : sliced;
+			variant === "exclude" && !indexed ? sidebarLiveSessions(sliced) : sliced;
 		const text = JSON.stringify(
 			variant === "only-slim"
 				? listed.map(archivedIndexRow)
@@ -805,9 +856,15 @@ export async function handleSessionsRoutes(
 		// workspace would grow an entry per workspace forever.
 		const scope = archivedScope(url.searchParams, variant);
 		if (scope) {
-			const rows = (await getCachedSessionsAsync("only"))
-				.filter((s) => inWorkspaceGroup(s, scope))
-				.map(enrichSession);
+			const indexed = scope.workspaceId
+				? indexedWorkspaceSessions(scope.workspaceId, scope.worktreeDir)
+				: null;
+			const selected =
+				indexed ??
+				(await getCachedSessionsAsync("only")).filter((session) =>
+					inWorkspaceGroup(session, scope),
+				);
+			const rows = selected.map(enrichSession);
 			const text = JSON.stringify(
 				variant === "only-slim"
 					? rows.map(archivedIndexRow)
