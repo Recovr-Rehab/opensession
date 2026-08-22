@@ -1416,12 +1416,11 @@ export function SessionViewer({
 	const [reviewPanelOpen, setReviewPanelOpen] = useState(false);
 	const activePanelOpen = showReview ? reviewPanelOpen : panelOpen;
 	const setActivePanelOpen = showReview ? setReviewPanelOpen : setPanelOpen;
-	// The desktop panel has four pages. Null means Changes there, while phones
-	// still use null for their Workspace details overview and push Changes from
-	// that page. Keeping one state preserves the phone drill-in without giving
-	// the desktop panel a duplicate overview.
+	// The desktop panel starts on Summary, then keeps the selected tab when it
+	// closes so reopening returns to the person's last place. Phones still use
+	// null for their Workspace details overview and push Changes from that page.
 	const [panelPage, setPanelPage] = useState<
-		null | "changes" | "portals" | "agents" | "terminal"
+		null | "summary" | "changes" | "portals" | "agents" | "terminal"
 	>(null);
 	// Start a panel terminal only after its tab is opened. Keep it mounted while
 	// switching tabs, then drop it when the panel closes.
@@ -4809,9 +4808,10 @@ export function SessionViewer({
 		mq.addEventListener("change", onChange);
 		return () => mq.removeEventListener("change", onChange);
 	}, []);
-	// The card remains mounted when Changes opens beside it. Read the preference
-	// through the same session and width conditions that mount the card.
-	const summaryVisible = summaryOpen && !isPhone && hasRepoWork;
+	// The compact card and the full panel are two views of the same summary.
+	// Show only the one the person chose, never both at once.
+	const summaryVisible =
+		summaryOpen && !activePanelOpen && !isPhone && hasRepoWork;
 	// Keep a visible left step whenever the card is up. This composes the card,
 	// transcript and composer as two sides of one pane instead of letting the
 	// reading column drift back to centre as the window grows.
@@ -4823,13 +4823,8 @@ export function SessionViewer({
 		summaryStep > 0
 			? ({ "--ws-summary-step": `-${summaryStep}px` } as React.CSSProperties)
 			: undefined;
-	// Closing the panel (desktop) or the info page (phone) drops back to the
-	// overview, so re-opening it doesn't land mid-drill-in. Each width watches
-	// only its own host: a phone's side panel is never rendered, so keying this
-	// on panelOpen alone would clear the page the info page had just pushed.
-	useEffect(() => {
-		if (!isPhone && !activePanelOpen) setPanelPage(null);
-	}, [isPhone, activePanelOpen]);
+	// Phone drill-ins return to Workspace details when their page closes. The
+	// desktop panel deliberately keeps its selected tab while it is closed.
 	useEffect(() => {
 		if (isPhone && !infoPageOpen) setPanelPage(null);
 	}, [isPhone, infoPageOpen]);
@@ -6180,7 +6175,7 @@ export function SessionViewer({
 						)}
 					{/* The compact Workspace summary keeps the card's quiet row grammar.
 					    Detailed comments, files and tools open in the full side panel. */}
-					{!isPhone && hasRepoWork && (
+					{!isPhone && hasRepoWork && !activePanelOpen && (
 						<WorkspaceSummary
 							session={session}
 							anchor={headerActionsRef}
@@ -6210,7 +6205,6 @@ export function SessionViewer({
 							onOpenChange={setSummaryOpen}
 							tabStripVisible={tabStripVisible}
 							reviewMode={showReview}
-							forceOpen={activePanelOpen}
 						/>
 					)}
 					{/* Phones have no workspace panel and no status strip, so the PR
@@ -7442,7 +7436,7 @@ export function SessionViewer({
             it opens as a full-height column beside the left sidebar (not just
             below the session header). */}
 				{(() => {
-				const desktopPanelPage = panelPage ?? "changes";
+				const desktopPanelPage = panelPage ?? "summary";
 				const rightRegion = (
 					<>
 				{!isPhone && panelAvailable && activePanelOpen && (
@@ -7451,10 +7445,40 @@ export function SessionViewer({
 				{!isPhone && panelAvailable && activePanelOpen ? (
 					<div className={PANEL_SHELL} style={panelStyle}>
 						{panelResizeHandle}
-						{/* The summary owns the workspace overview. This panel is only the
-						    four places that benefit from dedicated room. */}
 						<div className={PANEL_BODY}>
-							{desktopPanelPage === "changes" ? (
+							{desktopPanelPage === "summary" ? (
+								<>
+									<PanelPageHeader
+										title="Summary"
+										onBack={() => setActivePanelOpen(false)}
+									/>
+									<div className="flex flex-col pb-3">
+										<WorkspaceSummaryBody
+											session={session}
+											onOpenPanelTab={(tab) => {
+												if (tab === "changes") {
+													setPanelPage("changes");
+													return;
+												}
+												focusPrInReview();
+											}}
+											onOpenPr={() => focusPrInReview()}
+											onOpenStackPr={onOpenPr}
+											onOpenChecks={() =>
+												focusPrInReview(undefined, "checks")
+											}
+											onOpenAssets={onOpenAssets}
+											onArchive={handleArchive}
+											reviewRequest={effectiveReview?.req ?? null}
+											prReviewRequested={effectiveReview?.prReviewRequested}
+											running={isRunningLive}
+											send={connected ? send : undefined}
+											refreshTick={gitRefreshTick}
+											close={() => setActivePanelOpen(false)}
+										/>
+									</div>
+								</>
+							) : desktopPanelPage === "changes" ? (
 								<>
 									<PanelPageHeader
 										title="Changes"
@@ -7536,6 +7560,18 @@ export function SessionViewer({
 						</div>
 						{hasWorkspace && (
 							<div className={PANEL_FOOTER}>
+								<button
+									type="button"
+									aria-pressed={desktopPanelPage === "summary"}
+									className={cn(
+										PANEL_FOOTER_ITEM,
+										desktopPanelPage === "summary" && "bg-hover text-fg",
+									)}
+									onClick={() => setPanelPage("summary")}
+								>
+									<IconListCircles size={15} className="shrink-0" />
+									Summary
+								</button>
 								<button
 									type="button"
 									aria-pressed={desktopPanelPage === "changes"}
