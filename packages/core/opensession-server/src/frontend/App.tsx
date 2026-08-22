@@ -3748,6 +3748,9 @@ export function App(
 			return;
 		}
 		if (siblingCreateRef.current) return;
+		// The new session is the tab the + opens. Clear Review (or any other pane)
+		// before routing so its persisted workspace suffix cannot keep winning.
+		setActiveViewTab(null);
 		const optimisticId = newClientSessionId();
 		siblingCreateRef.current = optimisticId;
 		try {
