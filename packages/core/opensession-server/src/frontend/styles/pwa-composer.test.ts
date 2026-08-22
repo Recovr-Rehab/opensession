@@ -17,6 +17,15 @@ test("phone composers use the same quiet edge as the desktop ring", () => {
 	);
 });
 
+test("team note mode keeps its context above the phone field", async () => {
+	const composer = await Bun.file(COMPOSER).text();
+	const minimizedStart = composer.indexOf("const minimized =");
+	const minimizedEnd = composer.indexOf(";", minimizedStart);
+
+	expect(minimizedStart).toBeGreaterThan(-1);
+	expect(composer.slice(minimizedStart, minimizedEnd)).toContain("!noteMode");
+});
+
 test("the installed phone composer keeps its add menu and hides only auxiliary controls", async () => {
 	const css = await Bun.file(CSS).text();
 	const shipped = await Bun.file(SHIPPED).text();

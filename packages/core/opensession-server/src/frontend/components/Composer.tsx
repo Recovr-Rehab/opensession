@@ -683,8 +683,9 @@ export function Composer({
 
   // Phones get a ChatGPT-style resting state: while the field is empty and
   // unfocused, the composer collapses to a single-row pill ("+ · placeholder ·
-  // mic · send"), hiding the model/effort/goal chips. Focusing the field or
-  // adding any content (text or attachment) expands it to the full toolbar.
+  // mic · send"), hiding the model/effort/goal chips. Focusing the field,
+  // adding content, or entering note mode expands it to the full toolbar so
+  // the Team note context stays on its own row above the field.
   // The open model menu also holds it expanded: the portaled popup takes focus
   // (blurring the textarea), and collapsing would unmount the pill trigger and
   // slam the menu shut mid-interaction.
@@ -701,7 +702,8 @@ export function Composer({
     pastedTexts.length > 0 ||
     !!quote ||
     hasAttached;
-  const minimized = isPhone && !focused && !hasContent && !modelMenuOpen;
+  const minimized =
+    isPhone && !focused && !hasContent && !noteMode && !modelMenuOpen;
   const composerIconButtonClass = cn(
     paletteIconBtn,
     minimized && paletteIconBtnRound,
