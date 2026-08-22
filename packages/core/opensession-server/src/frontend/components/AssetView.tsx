@@ -340,7 +340,13 @@ function AssetOverlayActionBar({
 	}
 
 	return (
-		<nav aria-label="Asset actions" className="flex items-center justify-center gap-1">
+		<nav
+			aria-label="Asset actions"
+			className={cn(
+				"flex items-center justify-center gap-1",
+				phone && "rounded-full bg-panel p-1 smooth-shadow-sm",
+			)}
+		>
 			{commentable && (
 				<button
 					type="button"
@@ -918,7 +924,7 @@ export function AssetOverlay({
 				</div>
 				{isPhone && footer}
 				{isPhone && (
-					<div className="flex min-h-14 shrink-0 items-center justify-center px-5">
+					<div className="flex shrink-0 items-center justify-center px-5 py-2">
 						{actions}
 					</div>
 				)}
