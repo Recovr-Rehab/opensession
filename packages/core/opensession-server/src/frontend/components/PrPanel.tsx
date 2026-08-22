@@ -2287,7 +2287,7 @@ export function PrPanel({
       )}
 
       <div
-        className={`flex min-h-0 flex-1 ${compactToolbar ? `${WS_SUMMARY_REVIEW_CANVAS_CLEARANCE} desktop:[--review-file-tree-top:62px]` : ""}`}
+        className={`flex min-h-0 flex-1 ${compactToolbar ? `${WS_SUMMARY_REVIEW_CANVAS_CLEARANCE} desktop:flex-none desktop:[--review-file-tree-top:62px]` : ""}`}
       >
         {page === "files" && fileListMode !== "hidden" && files.length > 0 && (
           <PrFileTree
