@@ -52,12 +52,15 @@ import { getReviewRequest, setReviewAccepted, setReviewRequest, } from "../revie
 import { getSessionControl, type SandboxRequest } from "../session-control";
 import { transitionRunState } from "../run-state";
 import {
+	enrichSessionRuntime,
 	findSessionAsync,
 	getCachedSessionsAsync,
 	invalidateSessionsCache,
 	maybePersistEffort,
 	maybePersistFastMode,
 	runErrors,
+	sessionRuntimeSnapshot,
+	type SessionRuntimeSnapshot,
 } from "../session-cache";
 import { asDataUrlList, countImageRefs, parseImageDataUrls } from "../uploads";
 import { notifyMentions } from "../mentions";
@@ -333,12 +336,14 @@ async function sessionsListResponse(
 type SessionListRuntimeSignals = {
 	waitingForInput: Set<string>;
 	queuedCounts: Map<string, number>;
+	runtime: SessionRuntimeSnapshot;
 };
 
 function sessionListRuntimeSignals(): SessionListRuntimeSignals {
 	return {
 		waitingForInput: pendingAskIdsAwaitingAnswer(),
 		queuedCounts: clientVisibleQueuedCounts(),
+		runtime: sessionRuntimeSnapshot(),
 	};
 }
 
@@ -346,6 +351,9 @@ function enrichSession(
 	s: UnifiedSession,
 	signals?: SessionListRuntimeSignals,
 ) {
+	// The materialized row may still say a completed run is active. Reconcile
+	// both edges from live runtime state before serializing any list or detail.
+	enrichSessionRuntime([s], signals?.runtime);
 	const generatedTitle =
 		getGeneratedTitle(s.id) ??
 		s.aliasIds?.map((id) => getGeneratedTitle(id)).find(Boolean);

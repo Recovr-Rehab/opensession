@@ -96,7 +96,13 @@ export function invalidateSessionsCache(): void {
 	for (const snapshot of responses?.values() || []) snapshot.expiresAt = 0;
 }
 
-function enrichSessionRuntime(data: UnifiedSession[]): UnifiedSession[] {
+export interface SessionRuntimeSnapshot {
+	runStarts: Map<string, string>;
+	journalBusy: Set<string>;
+}
+
+/** Capture shared run-journal state once for a whole list projection. */
+export function sessionRuntimeSnapshot(): SessionRuntimeSnapshot {
 	// Earliest run-start per session id, from the run journal — feeds the "in
 	// progress" elapsed ticker and survives a page refresh (a session can carry
 	// its bks id and its engine session id across records; key on both).
@@ -111,6 +117,14 @@ function enrichSessionRuntime(data: UnifiedSession[]): UnifiedSession[] {
 			if (!prev || r.startedAt < prev) runStarts.set(key, r.startedAt);
 		}
 	}
+	return { runStarts, journalBusy };
+}
+
+export function enrichSessionRuntime(
+	data: UnifiedSession[],
+	snapshot = sessionRuntimeSnapshot(),
+): UnifiedSession[] {
+	const { runStarts, journalBusy } = snapshot;
 	// Sessions driven from the web UI run in-process; surface those too
 	for (const s of data) {
 		const rs = getRunState(s.id);
@@ -128,14 +142,18 @@ function enrichSessionRuntime(data: UnifiedSession[]): UnifiedSession[] {
 			journalBusy.has(s.id) ||
 			(!!s.claudeSessionId && journalBusy.has(s.claudeSessionId)) ||
 			(!!s.codexThreadId && journalBusy.has(s.codexThreadId));
-		if (!s.isRunning && (engineBusy || recoveryBusy || isRunStateUnsettled(rs))) {
-			s.isRunning = true;
-		}
+		// Indexed rows are snapshots and may still carry `isRunning: true` from
+		// an earlier write. Runtime state is authoritative in both directions:
+		// promote a newly active run and demote a finished one so the sidebar can
+		// leave In progress on its next poll.
+		s.isRunning = engineBusy || recoveryBusy || isRunStateUnsettled(rs);
 		if (s.isRunning) {
 			s.runStartedAt =
 				runStarts.get(s.id) ||
 				(s.claudeSessionId ? runStarts.get(s.claudeSessionId) : undefined) ||
 				(s.codexThreadId ? runStarts.get(s.codexThreadId) : undefined);
+		} else {
+			delete s.runStartedAt;
 		}
 		if (rs !== "idle") s.runState = rs;
 		checkRunStateWedge(s.id, rs, liveEngineBusy);
