@@ -1218,13 +1218,11 @@ export function PrStatusBar({
 				{renderAction()}
 			</>
 		);
-		// Without a preview mark, give the headline more space from the band's
-		// left edge. Merged is shorter and quieter, so it only needs half the step.
+		// Without a preview mark, give the headline a small step from the band's
+		// left edge without letting the padding crowd the status and action.
 		const summaryRowClass = cn(
 			WS_SUMMARY_STATUS_ROW,
-			headline.key === "merged"
-				? "[&&:not(:has([data-summary-preview]))]:pl-3"
-				: "[&&:not(:has([data-summary-preview]))]:pl-4",
+			"[&&:not(:has([data-summary-preview]))]:pl-3",
 		);
 		const primarySummary = (
 			<div
