@@ -331,19 +331,42 @@ export function parseSuggestions(raw: string | null): ReplySuggestion[] {
 }
 
 /**
- * Did the turn's last assistant message literally ask something? A question
- * mark is a crude test, but it is the agent's own punctuation rather than a
- * judgement call, and every false positive it lets through still has to get
- * past the model's own "quote the sentence where it asked" rule.
+ * How much of the closing message counts as "the end". A `?` in the third
+ * paragraph of a long report is the agent quoting the task or narrating its
+ * own reasoning; a question it wants answered is the last thing it says.
  */
-function endsOnAQuestion(excerpt: Awaited<ReturnType<typeof transcriptExcerpt>>): boolean {
-	const entries = excerpt.windows.flatMap((w) => w.entries);
+const CLOSING_PARAGRAPHS = 2;
+
+/**
+ * Did the turn's last assistant message literally END on a question? A
+ * question mark is a crude test, but it is the agent's own punctuation rather
+ * than a judgement call, and every false positive it lets through still has to
+ * get past the model's own "quote the sentence where it asked" rule.
+ *
+ * Two kinds of `?` are not the agent asking, and both are common enough to
+ * matter: one inside code (a shell glob, a query string, a ternary), and one
+ * buried mid-report ("the question was whether X?"). Code is stripped, and
+ * only the closing paragraphs are read.
+ */
+export function endsOnAQuestion(
+	entries: { type: string; content?: string }[],
+): boolean {
 	for (let i = entries.length - 1; i >= 0; i--) {
 		const e = entries[i];
 		if (e.type !== "assistant") continue;
 		const text = (e.content || "").trim();
 		if (!text) continue;
-		return text.includes("?");
+		const prose = text
+			.replace(/```[\s\S]*?```/g, " ")
+			.replace(/`[^`\n]*`/g, " ")
+			.replace(/https?:\/\/\S+/g, " ");
+		const closing = prose
+			.split(/\n\s*\n/)
+			.map((p) => p.trim())
+			.filter(Boolean)
+			.slice(-CLOSING_PARAGRAPHS)
+			.join("\n");
+		return closing.includes("?");
 	}
 	return false;
 }
@@ -365,7 +388,7 @@ async function generate(sessionId: string, user?: string): Promise<void> {
 		// human anything, so there is nothing to offer a reply to. This skips the
 		// model call outright on the great majority of turns, which is both the
 		// cost saving and the reason a row now means something when it appears.
-		if (!endsOnAQuestion(excerpt)) return;
+		if (!endsOnAQuestion(excerpt.windows.flatMap((w) => w.entries))) return;
 		// Same inert-data framing as recap and session-index: the transcript may
 		// contain instruction-shaped text, and it is material to read, never
 		// directives to this call.

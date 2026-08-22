@@ -1,9 +1,63 @@
 import { describe, expect, it } from "bun:test";
 import {
 	MAX_SUGGESTIONS,
+	endsOnAQuestion,
 	parseSuggestions,
 	sanitizeSuggestion,
 } from "./reply-suggestions";
+
+const assistant = (content: string) => ({ type: "assistant", content });
+
+describe("endsOnAQuestion", () => {
+	it("passes a turn that closes on a question to the human", () => {
+		expect(
+			endsOnAQuestion([
+				assistant("I found two issues.\n\nWant me to fix both, or just the first?"),
+			]),
+		).toBe(true);
+	});
+
+	it("rejects a turn that just reports, however obvious the next step", () => {
+		expect(endsOnAQuestion([assistant("Fixed both, pushed, tests pass.")])).toBe(false);
+		expect(endsOnAQuestion([])).toBe(false);
+		expect(endsOnAQuestion([{ type: "tool_result", content: "ok?" }])).toBe(false);
+	});
+
+	it("ignores a question mark that belongs to code or a URL", () => {
+		// A glob, a ternary and a query string are not the agent asking anything.
+		expect(
+			endsOnAQuestion([assistant("Ran `ls *.?s` and it worked.")]),
+		).toBe(false);
+		expect(
+			endsOnAQuestion([
+				assistant("Done.\n\n```ts\nconst x = a ? b : c;\n```"),
+			]),
+		).toBe(false);
+		expect(
+			endsOnAQuestion([assistant("Opened https://x.dev/pr?tab=files for review.")]),
+		).toBe(false);
+	});
+
+	it("ignores a question buried mid-report rather than asked at the end", () => {
+		expect(
+			endsOnAQuestion([
+				assistant(
+					"You asked whether the cache was stale?\n\nIt was.\n\nFixed it and pushed.",
+				),
+			]),
+		).toBe(false);
+	});
+
+	it("reads the last assistant message, not an older one", () => {
+		expect(
+			endsOnAQuestion([
+				assistant("Should I keep going?"),
+				{ type: "user", content: "yes" },
+				assistant("Done."),
+			]),
+		).toBe(false);
+	});
+});
 
 describe("sanitizeSuggestion", () => {
 	it("keeps a well-formed chip", () => {
