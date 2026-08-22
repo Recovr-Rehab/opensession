@@ -140,7 +140,7 @@ export function buildRunInstructions(input: {
   }
 
   const inproc = (input.inProcessMcp || {}) as Record<string, unknown>;
-  if (inproc["opensession-sessions"] || inproc["michael-sessions"]) {
+  if (inproc["opensession-sessions"]) {
     parts.push(
       "## New sessions\nA request for a new session means `create_session`, not an " +
         "in-process worker."
