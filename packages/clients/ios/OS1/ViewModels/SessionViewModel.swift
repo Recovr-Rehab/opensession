@@ -92,6 +92,7 @@ final class SessionViewModel {
     private(set) var replySuggestions: [ReplySuggestion] = []
     private(set) var pendingSlackComposer: SlackComposeRequest?
     private(set) var slackComposeReceipt: SlackComposeReceipt?
+    private(set) var isUndoingSlackComposeReceipt = false
     private(set) var connectionState: ConnectionState = .connecting
     private(set) var isLoadingConversation = true
     /// A watch that never receives transcript_init is not a loading state
@@ -130,6 +131,28 @@ final class SessionViewModel {
         slackComposeReceipt = receipt
     }
 
+    func undoSlackComposeReceipt() async {
+        guard !isUndoingSlackComposeReceipt,
+              let receipt = slackComposeReceipt,
+              let channelId = receipt.channel?.id,
+              let ts = receipt.ts,
+              receipt.canUndo
+        else { return }
+
+        isUndoingSlackComposeReceipt = true
+        defer { isUndoingSlackComposeReceipt = false }
+        do {
+            try await slackComposerUndoer(session.id, channelId, ts)
+            guard slackComposeReceipt?.requestId == receipt.requestId else { return }
+            slackComposeReceipt = nil
+            notice = "Removed from Slack"
+        } catch {
+            notice = error.localizedDescription.isEmpty
+                ? "Couldn't undo the Slack message"
+                : error.localizedDescription
+        }
+    }
+
     // ── Pull request ──
     /// PR details for the session's branch (toolbar chip + PR panel).
     /// nil until the first fetch lands — the chip falls back to the sessions
@@ -152,6 +175,7 @@ final class SessionViewModel {
     private(set) var workflowLoadFailed = false
     private var workflowEventRevision = 0
     private let workflowLoader: @MainActor (String) async throws -> [WorkflowRun]
+    private let slackComposerUndoer: @MainActor (String, String, String) async throws -> Void
 
     // ── Session goal ──
     /// Goal set from this app (`/goal`), used to label the composer menu's
@@ -408,6 +432,11 @@ final class SessionViewModel {
         },
         workflowLoader: @escaping @MainActor (String) async throws -> [WorkflowRun] = {
             try await OS1API.workflowRuns(sessionId: $0)
+        },
+        slackComposerUndoer: @escaping @MainActor (
+            String, String, String
+        ) async throws -> Void = {
+            try await OS1API.undoSlackComposer(sessionId: $0, channelId: $1, ts: $2)
         }
     ) {
         self.session = session
@@ -416,6 +445,7 @@ final class SessionViewModel {
         self.conversationLoadTimeout = conversationLoadTimeout
         self.prLoader = prLoader
         self.workflowLoader = workflowLoader
+        self.slackComposerUndoer = slackComposerUndoer
         self.isRunning = session.isRunning ?? false
         self.usage = session.usage
         self.model = session.model ?? ""

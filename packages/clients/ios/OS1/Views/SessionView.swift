@@ -1226,7 +1226,12 @@ struct SessionView: View {
                 .transcriptTail(true)
         }
         if let receipt = viewModel.slackComposeReceipt {
-            SlackComposeReceiptRow(receipt: receipt)
+            SlackComposeReceiptRow(
+                receipt: receipt,
+                isUndoing: viewModel.isUndoingSlackComposeReceipt
+            ) {
+                Task { await viewModel.undoSlackComposeReceipt() }
+            }
                 .id("slack-receipt-\(receipt.id)")
                 .transcriptTail(true)
         }
@@ -1407,6 +1412,8 @@ private extension View {
 
 private struct SlackComposeReceiptRow: View {
     let receipt: SlackComposeReceipt
+    let isUndoing: Bool
+    let onUndo: () -> Void
 
     var body: some View {
         HStack(spacing: 6) {
@@ -1426,6 +1433,14 @@ private struct SlackComposeReceiptRow: View {
                     Link("Open in Slack", destination: url)
                         .underline()
                 }
+                if receipt.canUndo {
+                    Text("·").foregroundStyle(OS1VisualStyle.textFaint)
+                    Button(isUndoing ? "Undoing…" : "Undo", action: onUndo)
+                        .buttonStyle(.plain)
+                        .underline()
+                        .disabled(isUndoing)
+                        .accessibilityHint("Removes this message from Slack")
+                }
             } else {
                 Text("Slack message cancelled")
             }
@@ -1433,7 +1448,7 @@ private struct SlackComposeReceiptRow: View {
         .font(.footnote)
         .foregroundStyle(OS1VisualStyle.textDim)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .accessibilityElement(children: .combine)
+        .accessibilityElement(children: .contain)
     }
 }
 
