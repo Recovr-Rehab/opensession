@@ -89,6 +89,14 @@ test("a review without a PR combines and aligns its controls", () => {
 	expect(prPanelSource).toContain(
 		"toolbarTarget={worktreeToolbarTarget}",
 	);
+	expect(
+		prPanelSource.match(
+			/`selectable relative flex h-full min-h-0 flex-col bg-surface \$\{compactToolbar \? "overflow-x-hidden overflow-y-auto" : "overflow-hidden"\}`/g,
+		)?.length,
+	).toBe(2);
+	expect(prPanelSource).toContain(
+		'compactToolbar ? "overflow-y-visible" : "overflow-y-auto"',
+	);
 	expect(prPanelSource).toContain(
 		'${compactToolbar ? `w-auto ${WS_SUMMARY_REVIEW_CANVAS_CLEARANCE}` : "mx-auto w-full"}',
 	);

@@ -1649,7 +1649,10 @@ export function PrPanel({
       toast(`Asked ${AGENT_NAME} to open a pull request`);
     };
     return (
-      <div className="flex h-full min-h-0 flex-1 flex-col overflow-y-auto">
+      <div
+        className={`selectable relative flex h-full min-h-0 flex-col bg-surface ${compactToolbar ? "overflow-x-hidden overflow-y-auto" : "overflow-hidden"}`}
+        data-review-canvas="true"
+      >
         <ReviewToolbar compact={compactToolbar}>
           <div className={PR_NO_PR_BAR}>
             {targetPicker}
@@ -1682,38 +1685,45 @@ export function PrPanel({
             )}
           </div>
         </ReviewToolbar>
-        {walkthrough && (
-          <div className="mx-auto w-full max-w-[760px] px-4 pt-4 sm:px-5">
-            <WalkthroughCard walkthrough={walkthrough} />
-          </div>
-        )}
-        {showWorktreeDiff ? (
-          <div
-            className={`max-w-[1500px] px-2 py-2 phone:w-full phone:px-1 ${compactToolbar ? `w-auto ${WS_SUMMARY_REVIEW_CANVAS_CLEARANCE}` : "mx-auto w-full"}`}
-            data-no-pr-worktree-diff
-          >
-            <DiffPanel
-              sessionId={sessionId}
-              isRunning={sessionRunning}
-              canSend={!!send && !!editGate}
-              send={send ?? NOOP_SEND}
-              toolbarTarget={worktreeToolbarTarget}
-            />
-          </div>
-        ) : (
-          <div className="mx-auto flex w-full max-w-[760px] flex-col gap-4 px-4 py-4 sm:px-5">
-            <PrCard title="Git status">
-              <GitStatusRows
-                git={git}
-                pr={null}
+        {/* Match the PR-backed canvas: without a standing summary, content
+            owns the scrollport and the toolbar stays outside it. With the
+            summary, the shared outer scrollport lets its toolbar stick. */}
+        <main
+          className={`min-h-0 flex-1 bg-surface ${compactToolbar ? "overflow-y-visible" : "overflow-y-auto"}`}
+        >
+          {walkthrough && (
+            <div className="mx-auto w-full max-w-[760px] px-4 pt-4 sm:px-5">
+              <WalkthroughCard walkthrough={walkthrough} />
+            </div>
+          )}
+          {showWorktreeDiff ? (
+            <div
+              className={`max-w-[1500px] px-2 py-2 phone:w-full phone:px-1 ${compactToolbar ? `w-auto ${WS_SUMMARY_REVIEW_CANVAS_CLEARANCE}` : "mx-auto w-full"}`}
+              data-no-pr-worktree-diff
+            >
+              <DiffPanel
                 sessionId={sessionId}
-                repo={active?.repo}
-                send={send}
-                onRefresh={load}
+                isRunning={sessionRunning}
+                canSend={!!send && !!editGate}
+                send={send ?? NOOP_SEND}
+                toolbarTarget={worktreeToolbarTarget}
               />
-            </PrCard>
-          </div>
-        )}
+            </div>
+          ) : (
+            <div className="mx-auto flex w-full max-w-[760px] flex-col gap-4 px-4 py-4 sm:px-5">
+              <PrCard title="Git status">
+                <GitStatusRows
+                  git={git}
+                  pr={null}
+                  sessionId={sessionId}
+                  repo={active?.repo}
+                  send={send}
+                  onRefresh={load}
+                />
+              </PrCard>
+            </div>
+          )}
+        </main>
       </div>
     );
   }
