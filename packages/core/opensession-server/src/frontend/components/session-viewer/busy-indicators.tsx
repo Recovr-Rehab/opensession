@@ -22,9 +22,14 @@ export function WorkspaceSetup() {
 			transition={{ type: "tween", duration: duration.base, ease }}
 			className="flex min-h-full w-full items-center justify-center px-6"
 		>
-			<div className="flex items-center gap-2.5 text-item-title font-semibold text-dim">
-				<Spinner size="md" className="text-faint" />
-				Setting up workspace
+			<div className="flex flex-col items-center text-center">
+				<Spinner size="md" className="mb-2.5 text-faint" />
+				<div className="text-item-title font-semibold text-fg">
+					Setting up workspace
+				</div>
+				<div className="mt-1 text-label font-medium text-dim">
+					Your message will send when it’s ready.
+				</div>
 			</div>
 		</motion.div>
 	);
