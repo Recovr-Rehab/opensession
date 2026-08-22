@@ -1611,6 +1611,12 @@ html:is(.wco, .desktop-shell)
 	border-radius: calc(8px * var(--rf)); corner-shape: var(--cs);
 	padding: 10px 12px;
 	margin: 2px 0 8px;
+	/* Preserve authored indentation and line breaks, but soft-wrap long lines so
+	   a fence reads at the conversation width instead of becoming a scroller.
+	   `anywhere` also catches URLs, hashes, and generated identifiers that have
+	   no natural wrap point. */
+	white-space: pre-wrap;
+	overflow-wrap: anywhere;
 	overflow-x: auto;
 	font-family: var(--mono);
 	/* The same ratio the inline chip below uses, so a block and an inline run
