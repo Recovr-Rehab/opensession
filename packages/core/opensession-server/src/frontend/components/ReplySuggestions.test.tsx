@@ -6,8 +6,10 @@ import type { ReplySuggestion } from "../lib/reply-suggestions";
 import {
 	ACTION_CLEARANCE,
 	ACTION_WITH_REPLIES_CLEARANCE,
+	SCROLL_ACTION_CLEARANCE,
 	SUGGESTIONS_CLEARANCE,
 	VIEWER_ACTION_ROW,
+	VIEWER_ACTION_ROW_WITH_SCROLL,
 	VIEWER_SUGGESTIONS,
 	VIEWER_SUGGESTIONS_ROW,
 	VIEWER_SUGGESTIONS_ROW_INLINE,
@@ -75,6 +77,7 @@ describe("ReplySuggestions", () => {
 		// the tallest thing in the band plus however far the band stands off the
 		// composer, or the standoff eats into the 16px the reading ends on.
 		const PILL_HEIGHT = 28; // `h-7` on the chip in ReplySuggestions.
+		const SCROLL_HEIGHT = 32; // `min-h-8` on the reading action.
 		const NEXT_HEIGHT = 40; // `min-h-10` on the Next button in SessionViewer.
 		const NEXT_HEIGHT_PHONE = 48; // `h-12` on the phone action bar.
 		const PHONE_ROW_GAP = 8;
@@ -86,6 +89,9 @@ describe("ReplySuggestions", () => {
 		expect(standoff).toBeGreaterThan(0);
 		expect(SUGGESTIONS_CLEARANCE).toBe(
 			`[--suggestions-under:${PILL_HEIGHT + standoff}px]`,
+		);
+		expect(SCROLL_ACTION_CLEARANCE).toBe(
+			`[--suggestions-under:${SCROLL_HEIGHT + standoff}px]`,
 		);
 		expect(ACTION_CLEARANCE).toContain(
 			`[--suggestions-under:${NEXT_HEIGHT + standoff}px]`,
@@ -101,6 +107,13 @@ describe("ReplySuggestions", () => {
 		);
 		expect(ACTION_WITH_REPLIES_CLEARANCE).toContain(
 			`phone:[body.kb-open_&]:[--suggestions-under:${PILL_HEIGHT + standoff}px]`,
+		);
+	});
+
+	test("desktop centers the reading action between replies and Next", () => {
+		expect(VIEWER_ACTION_ROW_WITH_SCROLL).toContain("desktop:grid");
+		expect(VIEWER_ACTION_ROW_WITH_SCROLL).toContain(
+			"desktop:grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)]",
 		);
 	});
 

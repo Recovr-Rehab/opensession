@@ -319,6 +319,12 @@ export const VIEWER_ACTION_ROW =
 	"flex w-full max-w-[calc(var(--session-col)+40px)] items-center gap-3 pr-5 " +
 	"phone:flex-col phone:gap-2 phone:pr-0";
 
+/** Keep the reading action centred between replies and Next when all three
+ * share the desktop row. Equal side tracks let either side yield and scroll
+ * without moving the middle control off the conversation's centre line. */
+export const VIEWER_ACTION_ROW_WITH_SCROLL =
+	"desktop:grid desktop:grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)]";
+
 /**
  * The band the session's own offers hang in: the quick-reply chips and the
  * Next action (VIEWER_ACTION_ROW).
@@ -359,6 +365,9 @@ export const VIEWER_SUGGESTIONS =
  * clear of the input. ReplySuggestions.test.tsx holds the two together.
  */
 export const SUGGESTIONS_CLEARANCE = "[--suggestions-under:34px]";
+
+/** A 32px reading action plus the action band's 6px standoff. */
+export const SCROLL_ACTION_CLEARANCE = "[--suggestions-under:38px]";
 
 /**
  * The same clearance once Next shares the band and gives it its height: a 40px

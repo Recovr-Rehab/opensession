@@ -366,12 +366,14 @@ import {
 	PILL_CENTRED,
 	ACTION_CLEARANCE,
 	ACTION_WITH_REPLIES_CLEARANCE,
+	SCROLL_ACTION_CLEARANCE,
 	SUGGESTIONS_CLEARANCE,
 	TRANSCRIPT_PILL_BUTTON,
 	TRANSCRIPT_PILL_LOADING,
 	TRANSCRIPT_PILL_SPINNER,
 	TRANSCRIPT_PILL_TOP,
 	VIEWER_ACTION_ROW,
+	VIEWER_ACTION_ROW_WITH_SCROLL,
 	VIEWER_BRANCH,
 	VIEWER_BRANCH_EDITABLE,
 	VIEWER_BRANCH_RENAME,
@@ -5338,10 +5340,11 @@ export function SessionViewer({
 		!forkFrom &&
 		replySuggestions.length > 0;
 
-	/* Desktop shows Next beside quick replies. Phone keeps the remaining session
-	   actions in one centered toolbar when Next is hidden. */
+	/* Desktop shows reading controls between quick replies and Next. Phone keeps
+	   its existing standalone reading control and centered session toolbar. */
 	const nextAction = showNextChatButton && !!onNextChat;
-	const actionBand = quickReplies || nextAction || isPhone;
+	const scrollAction = showScrollToBottom && entries.length > 0;
+	const actionBand = quickReplies || nextAction || scrollAction || isPhone;
 
 	const pickReplySuggestion = (text: string) => {
 		setComposerPrefill((current) => ({
@@ -6579,7 +6582,9 @@ export function SessionViewer({
 								? isPhone && quickReplies
 									? ACTION_WITH_REPLIES_CLEARANCE
 									: ACTION_CLEARANCE
-								: SUGGESTIONS_CLEARANCE),
+								: scrollAction
+									? SCROLL_ACTION_CLEARANCE
+									: SUGGESTIONS_CLEARANCE),
 					)}
 				>
 					{showPortal && portalTarget ? (
@@ -7105,35 +7110,29 @@ export function SessionViewer({
 								</div>
 							)}
 
-							{showScrollToBottom && entries.length > 0 && (
-									/* The pill and the chord do the same thing — a Down that
-									   would land at the live edge resumes following — so the
-									   button is where that chord is worth advertising. */
-									<Tooltip
-										label="Scroll to the bottom"
-										shortcut={transcriptDownKeys ?? undefined}
+							{scrollAction && isPhone && (
+								/* Phone keeps this above its stacked action rows. Desktop
+								   places the same control inside the shared row below. */
+								<Tooltip
+									label="Scroll to the bottom"
+									shortcut={transcriptDownKeys ?? undefined}
+								>
+									<button
+										className={cn(
+											TRANSCRIPT_PILL_BUTTON,
+											`absolute bottom-[calc(24px+var(--suggestions-under,0px))] left-1/2 z-[5] ${PILL_CENTRED}`,
+										)}
+										onClick={() => scrollToLatest("auto")}
 									>
-										<button
-											className={cn(
-												TRANSCRIPT_PILL_BUTTON,
-												// Rides up over the quick-reply row when there is
-												// one: both float in this same band, and the pill
-												// is centred while the chips run from the left, so
-												// on a narrow column they otherwise land on top of
-												// each other.
-												`absolute bottom-[calc(24px+var(--suggestions-under,0px))] left-1/2 z-[5] ${PILL_CENTRED}`,
-											)}
-											onClick={() => scrollToLatest("auto")}
-										>
-											<IconArrowDown
-												size={13}
-												className="text-dim transition-transform group-hover:translate-y-px"
-												aria-hidden
-											/>
-											{newBelow ? "New messages" : "Scroll to bottom"}
-										</button>
-									</Tooltip>
-								)}
+										<IconArrowDown
+											size={13}
+											className="text-dim transition-transform group-hover:translate-y-px"
+											aria-hidden
+										/>
+										{newBelow ? "New messages" : "Scroll to bottom"}
+									</button>
+								</Tooltip>
+							)}
 							</div>
 
 							<div
@@ -7170,21 +7169,47 @@ export function SessionViewer({
 								    replies on their own row when present. */}
 								{actionBand && (
 									<div className={VIEWER_SUGGESTIONS}>
-										<div className={VIEWER_ACTION_ROW}>
+										<div
+											className={cn(
+												VIEWER_ACTION_ROW,
+												scrollAction && VIEWER_ACTION_ROW_WITH_SCROLL,
+											)}
+										>
 											{quickReplies && (
 												<ReplySuggestions
 													className={cn(
 														nextAction && !isPhone
 															? VIEWER_SUGGESTIONS_ROW_INLINE
 															: VIEWER_SUGGESTIONS_ROW,
+														"desktop:col-start-1 desktop:row-start-1 desktop:w-full",
 														isPhone && "w-full flex-none self-stretch",
 													)}
 													suggestions={replySuggestions}
 													onPick={pickReplySuggestion}
 												/>
 											)}
+											{scrollAction && !isPhone && (
+												<div className="pointer-events-auto col-start-2 row-start-1 shrink-0 justify-self-center">
+													<Tooltip
+														label="Scroll to the bottom"
+														shortcut={transcriptDownKeys ?? undefined}
+													>
+														<button
+															className={TRANSCRIPT_PILL_BUTTON}
+															onClick={() => scrollToLatest("auto")}
+														>
+															<IconArrowDown
+																size={13}
+																className="text-dim transition-transform group-hover:translate-y-px"
+																aria-hidden
+															/>
+															{newBelow ? "New messages" : "Scroll to bottom"}
+														</button>
+													</Tooltip>
+												</div>
+											)}
 											{nextAction && !isPhone && (
-												<div className="pointer-events-auto ml-auto shrink-0">
+												<div className="pointer-events-auto col-start-3 row-start-1 shrink-0 justify-self-end">
 													<Tooltip
 														label="Next chat"
 														shortcut={nextChatKeys ?? undefined}
