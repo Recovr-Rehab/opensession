@@ -4297,7 +4297,16 @@ export function App(
 					: route.view === "pr" && route.number !== undefined
 						? `${repoLabel(route.repo)} #${route.number}`
 					: route.view === "workspace"
-						? routeWorkspace?.name || "Workspace"
+						? routeWorkspace
+							? [
+									routeWorkspace.repo
+										? repoLabel(routeWorkspace.repo)
+										: null,
+									routeWorkspace.name,
+								]
+									.filter(Boolean)
+									.join(" · ")
+							: "Workspace"
 						: "";
 
 	// Whether the bar is holding that name yet. It stays quiet while the page
