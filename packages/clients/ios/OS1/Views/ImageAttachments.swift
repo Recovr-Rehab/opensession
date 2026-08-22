@@ -1304,11 +1304,24 @@ final class ZoomScrollView: UIScrollView {
     }
 
     private func configureZoom(for size: CGSize) {
+        // The frame and content size below describe the *unzoomed* image, so
+        // they can only be written at scale 1: rewriting the frame of a view
+        // the scroll view is holding a zoom transform on desynchronizes the
+        // two, and every scale derived afterwards (the fit a double tap zooms
+        // back out to) is computed from geometry that no longer matches what
+        // is on screen. Chrome leaving refits a photo that is zoomed in, which
+        // is exactly when that happens.
+        let box = availableSize
+        let wasZoomedOut = isZoomedOut
+        let previousScale = zoomScale
+        if zoomScale != 1 {
+            maximumZoomScale = 1
+            minimumZoomScale = 1
+            zoomScale = 1
+        }
         imageView.frame = CGRect(origin: .zero, size: size)
         contentSize = size
 
-        let box = availableSize
-        let wasZoomedOut = isZoomedOut
         let fit = min(box.width / size.width, box.height / size.height)
         // Zooming to one image pixel per device pixel is what makes the dense
         // UI screenshots this viewer mostly shows readable; the 4x floor keeps
@@ -1321,7 +1334,9 @@ final class ZoomScrollView: UIScrollView {
         // A chrome change refits a photo that was sitting at the fit scale.
         // Pulling a zoomed-in one back because the bars left would throw away
         // whatever you had gone in to read.
-        if wasZoomedOut || zoomScale < fit { zoomScale = fit }
+        zoomScale = wasZoomedOut || previousScale < fit
+            ? fit
+            : min(previousScale, maximumZoomScale)
         zoomDidChange()
     }
 
