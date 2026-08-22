@@ -839,12 +839,12 @@ export function NewSession({ onBack, inline, focusSeq, send, addHandler, connect
   // effect here would run a frame before the dialog's popup exists.)
   //
   // Inline there is no dialog to do it, and the children mount in the same
-  // commit, so an ordinary effect is enough. On a phone it waits for an
-  // explicit `focusSeq` bump: arriving on a page should not raise the keyboard.
+  // commit, so an ordinary effect is enough. On a phone this raises the
+  // keyboard right away, so starting a session is one tap and then typing.
   useEffect(() => {
-    if (!inline || (isPhone && !focusSeq)) return;
+    if (!inline) return;
     promptRef.current?.focus();
-  }, [inline, focusSeq, isPhone]);
+  }, [inline, focusSeq]);
 
   // (The prompt's auto-grow, its scroll-fade and the draft store it writes
   // through all live in NewSessionPrompt now, beside the text they read.)
