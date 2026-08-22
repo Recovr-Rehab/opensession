@@ -223,6 +223,8 @@ function LandingPage() {
 						Open source and self-hosted.
 						<br />
 						Any model, on machines you own.
+						<br />
+						Available on macOS, iOS and web.
 					</p>
 				</div>
 			</aside>
