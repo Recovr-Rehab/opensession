@@ -34,8 +34,8 @@ import { MOBILE_CONTROL_GLASS_EFFECTS } from "./app-header-classes";
 /** 8px, the compact trailing controls' corner. Authored the way base.css
  * authors every corner; there is no 8px step in the radius scale. */
 const PILL = "rounded-[calc(8px*var(--rf))]";
-/** Tabs sit one radius step quieter than their adjacent controls. */
-const TAB_SHAPE = "rounded-md";
+/** Desktop tabs use the standard medium squircle; phones become round pills. */
+const TAB_SHAPE = "desktop:rounded-md desktop:[corner-shape:squircle]";
 
 /* ── The strip ──────────────────────────────────────────────────────────── */
 
@@ -351,9 +351,9 @@ const CTRL_BASE =
 	"font-[inherit] leading-none text-dim transition-[background-color,color] " +
 	"hover:bg-hover hover:text-fg";
 
-/** Desktop trailing controls match the tabs' 28px box and circular corner. */
+/** Desktop trailing controls match the tabs' 28px box and medium radius. */
 const CTRL_DESKTOP =
-	"desktop:size-7 desktop:min-h-auto desktop:self-center desktop:rounded-md desktop:p-0 desktop:[corner-shape:round]";
+	"desktop:size-7 desktop:min-h-auto desktop:self-center desktop:rounded-md desktop:p-0";
 
 /**
  * New-tab "+". Always visible once there is a strip, so adding a sibling does
