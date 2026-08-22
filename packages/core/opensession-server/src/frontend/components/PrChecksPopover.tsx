@@ -12,9 +12,12 @@ import { CheckStatusIcon } from "./CheckStatusIcon";
 export function PrChecksPopover({
 	checks,
 	trigger,
+	exclusive = true,
 }: {
 	checks: PrCheck[];
 	trigger: React.ReactElement;
+	/** Disable global popup exclusivity when this preview lives inside a popup. */
+	exclusive?: boolean;
 }) {
 	const order: Record<CheckVisual, number> = {
 		failure: 0,
@@ -45,7 +48,7 @@ export function PrChecksPopover({
 	);
 
 	return (
-		<Popover.Root>
+		<Popover.Root exclusive={exclusive}>
 			<Popover.Trigger render={trigger} openOnHover delay={200} closeDelay={120} />
 			<Popover.Popup
 				side="left"

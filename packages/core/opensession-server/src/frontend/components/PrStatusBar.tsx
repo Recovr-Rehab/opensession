@@ -1150,6 +1150,9 @@ export function PrStatusBar({
 				    stays as the native fallback. */}
 				{checksPr ? (
 					<PrChecksPopover
+						// This checks preview belongs to the standing summary popup. It
+						// must not let the global popup group dismiss its parent card.
+						exclusive={false}
 						checks={checksPr.checks}
 						trigger={
 							<a
