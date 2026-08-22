@@ -1910,19 +1910,29 @@ export function makeRemoteSandbox(parts: RemoteSandboxParts): Sandbox {
     async exec(cmd: string[], opts?: ExecOpts): Promise<ExecResult> {
       await parts.driver.ensureStarted();
       touch();
-      const result = await parts.driver.exec(shellQuote(cmd), {
+      const remoteOptions = {
         cwd: parts.cwd,
         env: {
           ...createWorkloadIdentityEnv({
             sandboxId: parts.sandboxId,
             provider: parts.providerId,
-            lifecycle: "run",
+            lifecycle: "run" as const,
             sessionId: parts.sessionId,
           }),
           ...opts?.env,
         },
-        detached: opts?.background,
-      });
+        timeoutMs: opts?.timeoutMs,
+      };
+      if (opts?.background) {
+        try {
+          await parts.driver.execBackground(shellQuote(cmd), remoteOptions);
+          touch();
+          return { exitCode: 0, stdout: "", stderr: "" };
+        } catch (error) {
+          return { exitCode: 1, stdout: "", stderr: error instanceof Error ? error.message : String(error) };
+        }
+      }
+      const result = await parts.driver.exec(shellQuote(cmd), remoteOptions);
       touch();
       return result;
     },
