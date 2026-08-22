@@ -12,7 +12,7 @@ import { createPortal } from "react-dom";
 import { AnimatePresence, motion, Reorder } from "motion/react";
 import { duration, ease } from "../ui/motion";
 import { Spinner } from "../ui/spinner";
-import { TranscriptSkeleton } from "../ui/state";
+import { EmptyState, TranscriptSkeleton } from "../ui/state";
 import { LiveTurnStore } from "../lib/live-turn-store";
 import { getLiveTypingPref } from "../lib/live-typing-pref";
 import { isTimelineOnlyRunnerNotice } from "../lib/runner-events";
@@ -281,6 +281,7 @@ import {
 	IconListCircles,
 	IconGlobe,
 	IconRobot,
+	IconMessage,
 	IconArrowUpRight,
 	IconStack,
 } from "./icons";
@@ -7044,7 +7045,15 @@ export function SessionViewer({
 											)}
 										</div>
 									</div>
-								) : null
+								) : (
+									<EmptyState
+										icon={<IconMessage size={22} />}
+										title="Start a conversation"
+										className="min-h-full px-4"
+									>
+										Ask a question or describe what you want to work on.
+									</EmptyState>
+								)
 							) : entries.length === 0 && !hasLiveConversation ? (
 								<div className="py-10 text-center text-faint">Empty transcript</div>
 							) : (
