@@ -124,7 +124,9 @@ interface Props {
 	/** Open another layer of the stack on its own PR page. */
 	onOpenStackPr?: (repo: string, branch: string) => void;
 	onOpenChecks: () => void;
-	/** Open the Assets tab (the Assets list's destination). */
+	/** Preview one asset over the session without leaving the summary. */
+	onOpenAsset?: (path: string) => void;
+	/** Open the full Assets tab (the Assets list's deliberate destination). */
 	onOpenAssets?: () => void;
 	/** Open the live Auto-fix session created from a review finding. */
 	onOpenSession?: (id: string, created?: UnifiedSession | null) => void;
@@ -430,6 +432,7 @@ export function WorkspaceSummaryBody({
 	onOpenPr,
 	onOpenStackPr,
 	onOpenChecks,
+	onOpenAsset,
 	onOpenAssets,
 	onOpenSession,
 	onArchive,
@@ -507,6 +510,16 @@ export function WorkspaceSummaryBody({
 	function go(open?: () => void) {
 		close();
 		open?.();
+	}
+
+	/** Lift one file over the session. The full Assets tab is a deliberate
+	 *  follow-up from that preview, not the thumbnail's default destination. */
+	function openAsset(path: string) {
+		if (onOpenAsset) {
+			onOpenAsset(path);
+			return;
+		}
+		go(onOpenAssets);
 	}
 
 	function askCommit() {
@@ -930,7 +943,7 @@ export function WorkspaceSummaryBody({
 									// list of quiet rows. It also keeps the two strips the same
 									// size when a card shows both.
 									className={cn(WS_SUMMARY_FRAME, "w-[calc((100%_-_30px)/2)]")}
-									onClick={() => go(onOpenAssets)}
+									onClick={() => openAsset(file.path)}
 									title={file.path}
 								>
 									<span className={WS_SUMMARY_FRAME_MEDIA}>
@@ -980,7 +993,7 @@ export function WorkspaceSummaryBody({
 							<button
 								key={file.path}
 								className={WS_SUMMARY_ROW}
-								onClick={() => go(onOpenAssets)}
+								onClick={() => openAsset(file.path)}
 								title={file.path}
 							>
 								<span className={WS_SUMMARY_RAIL}>
@@ -1004,9 +1017,9 @@ export function WorkspaceSummaryBody({
 						))
 					)}
 					{/* Only under the list, where the last row is the only thing that
-					    says the folder ends here. The strip answers it three times over
-					    already: the heading carries the count, the sliver of the next
-					    frame says it scrolls, and any tile opens the Assets tab. */}
+					    says the folder ends here. The strip answers it three times over:
+					    the heading carries the count, the sliver of the next frame says
+					    it scrolls, and each tile previews its file on top. */}
 					{assetView === "list" && assetsHidden > 0 && (
 						<button className={WS_SUMMARY_ROW} onClick={() => go(onOpenAssets)}>
 							<span className={WS_SUMMARY_RAIL} />

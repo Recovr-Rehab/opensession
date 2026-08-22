@@ -6272,6 +6272,7 @@ export function SessionViewer({
 							onOpenPr={() => focusPrInReview()}
 							onOpenStackPr={onOpenPr}
 							onOpenChecks={() => focusPrInReview(undefined, "checks")}
+							onOpenAsset={openAssetFromTranscript}
 							onOpenAssets={onOpenAssets}
 							onOpenSession={onOpenSession}
 							onArchive={handleArchive}
@@ -6497,6 +6498,7 @@ export function SessionViewer({
 													setInfoPageOpen(false);
 													focusPrInReview(undefined, "checks");
 												}}
+												onOpenAsset={openAssetFromTranscript}
 												onOpenAssets={() => {
 													setInfoPageOpen(false);
 													onOpenAssets?.();
@@ -7600,6 +7602,7 @@ export function SessionViewer({
 											onOpenChecks={() =>
 												focusPrInReview(undefined, "checks")
 											}
+											onOpenAsset={openAssetFromTranscript}
 											onOpenAssets={onOpenAssets}
 											onOpenSession={onOpenSession}
 											onArchive={handleArchive}
