@@ -347,36 +347,18 @@ export function WorkspaceSummary({
 		localStorage.setItem(WS_SUMMARY_OPEN_KEY, String(nextOpen));
 		window.dispatchEvent(new Event(WS_SUMMARY_OPEN_EVENT));
 	}
-	useEffect(() => {
-		if (!open) return;
-		const onKeyDown = (event: KeyboardEvent) => {
-			if (event.key !== "Escape" || event.defaultPrevented) return;
-			// A menu or modal opened from the summary owns the first Escape. Capture
-			// otherwise lets the card close before the composer can treat the same key
-			// as a request to stop a running turn.
-			if (
-				document.querySelector(
-					'.app-menu-popup, [role="dialog"][aria-modal="true"]:not([hidden])',
-				)
-			)
-				return;
-			event.preventDefault();
-			event.stopPropagation();
-			changeOpen(false);
-		};
-		window.addEventListener("keydown", onKeyDown, true);
-		return () => window.removeEventListener("keydown", onKeyDown, true);
-	}, [open, canStand]);
 	return (
 		<Popover.Root
 			open={open}
 			onOpenChange={(nextOpen, details) => {
 				// This is a pinned workspace view, not a transient menu. Keep it open
 				// while the person works elsewhere in the pane or changes workspace.
+				// Escape belongs to the surface behind the card, never to the card itself.
 				if (
 					!nextOpen &&
-					canStand &&
-					(details.reason === "outside-press" || details.reason === "focus-out")
+					(details.reason === "escape-key" ||
+						(canStand &&
+							(details.reason === "outside-press" || details.reason === "focus-out")))
 				)
 					return;
 				changeOpen(nextOpen);
