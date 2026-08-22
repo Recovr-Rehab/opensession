@@ -428,11 +428,15 @@ const LANDING_SEARCH = location.search;
  * any route) forces it open on an instance that is already set up, so the
  * setup walkthrough can be reviewed without emptying the instance first.
  */
-function landedOnFirstMile(): boolean {
+function firstMileRequested(pathname: string, search: string): boolean {
 	return (
-		LANDING_PATH === "/welcome" ||
-		new URLSearchParams(LANDING_SEARCH).get("firstmile") === "1"
+		stripBasePath(pathname) === "/welcome" ||
+		new URLSearchParams(search).get("firstmile") === "1"
 	);
+}
+
+function landedOnFirstMile(): boolean {
+	return firstMileRequested(LANDING_PATH, LANDING_SEARCH);
 }
 
 function parseRoute(pathname: string): Route {
@@ -721,6 +725,7 @@ export function App(
 	const [registeredRepoInfo, setRegisteredRepoInfo] = useState(cachedRepos);
 	const [firstMileIsComplete, setFirstMileIsComplete] =
 		useState(firstMileComplete);
+	const [forceFirstMile, setForceFirstMile] = useState(landedOnFirstMile);
 	const auth = useAuthStatus();
 	const currentUser = useCurrentUser();
 	const { connected, send, setTyping, addHandler } = useWebSocket();
@@ -1000,7 +1005,6 @@ export function App(
 		workspacesLoaded &&
 		sessions.length === 0 &&
 		workspaces.length === 0;
-	const forceFirstMile = landedOnFirstMile();
 	const firstMileActive =
 		forceFirstMile ||
 		(auth?.admin !== false && productEmpty && !firstMileIsComplete);
@@ -1028,14 +1032,21 @@ export function App(
 		return unsubscribe;
 	}, []);
 
+	function openFirstMile() {
+		// Keep the settings entry below the walkthrough so browser Back returns to
+		// the button that opened it. The walkthrough is app state, not a document
+		// reload, which also works inside the phone settings sheet.
+		history.pushState(history.state, "", `${BASE_PATH}/welcome`);
+		setForceFirstMile(true);
+	}
+
 	function finishFirstMile() {
 		completeFirstMile();
 		if (forceFirstMile) {
 			const url = new URL(location.href);
 			url.searchParams.delete("firstmile");
-			const path = stripBasePath(url.pathname) === "/welcome"
-				? routePath({ view: "prs" })
-				: url.pathname;
+			const leavingWelcome = stripBasePath(url.pathname) === "/welcome";
+			const path = leavingWelcome ? routePath({ view: "prs" }) : url.pathname;
 			// A `/welcome` load skips the home entry's navState stamp above, so give
 			// this entry a root depth on the way out or Back has nothing to count from.
 			history.replaceState(
@@ -1043,6 +1054,8 @@ export function App(
 				"",
 				`${path}${url.search}${url.hash}`,
 			);
+			setForceFirstMile(false);
+			if (leavingWelcome) setRoute({ view: "prs" });
 		}
 	}
 
@@ -1806,7 +1819,8 @@ export function App(
 	useEffect(() => {
 		const onPop = () => {
 			// Depth travels with the entry (history.state), so there is nothing to
-			// recompute here — just follow the URL we landed on.
+			// recompute here. Follow the URL we landed on.
+			setForceFirstMile(firstMileRequested(location.pathname, location.search));
 			setRoute(parseRoute(location.pathname));
 		};
 		window.addEventListener("popstate", onPop);
@@ -4967,6 +4981,7 @@ export function App(
 				{settingsActive && (
 					<Settings
 						onBack={leaveSettings}
+						onOpenOnboarding={openFirstMile}
 						workspace={settingsWorkspaceId ? workspaces.find((workspace) => workspace.id === settingsWorkspaceId) : undefined}
 						section={
 							route.view === "settings"
