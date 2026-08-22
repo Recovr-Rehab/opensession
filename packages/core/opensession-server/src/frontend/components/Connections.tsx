@@ -787,13 +787,6 @@ function GithubAppWizard({
                 UI changes, so the text carries the flow and stays correct. */}
             <ul className="flex flex-col gap-2">
               <WizardCheck>
-                Choose any <span className="text-fg">GitHub App name</span> you like.
-              </WizardCheck>
-              <WizardCheck>
-                The <span className="text-fg">Homepage URL</span> can be any URL,
-                such as your company website.
-              </WizardCheck>
-              <WizardCheck>
                 Confirm <span className="text-fg">Device Flow</span> is checked.
               </WizardCheck>
               <WizardCheck>
