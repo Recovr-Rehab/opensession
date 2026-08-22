@@ -20,6 +20,7 @@ import {
 } from "../lib/notification-classes";
 import { toastIconName, type ToastIconName } from "../lib/toast-icon";
 import { AnimatedCheck } from "./copy";
+import { Spinner } from "./spinner";
 import { Tooltip } from "./tooltip";
 import {
 	clearUndoAction,
@@ -338,13 +339,7 @@ function ToastStatusIcon({
 	ongoing?: boolean;
 }) {
 	const className = "shrink-0 text-dim";
-	if (ongoing)
-		return (
-			<span
-				aria-hidden
-				className="size-3 shrink-0 animate-spin rounded-full border border-current/25 border-t-current text-accent"
-			/>
-		);
+	if (ongoing) return <Spinner className="text-dim" />;
 
 	switch (name) {
 		case "archive":
