@@ -188,6 +188,7 @@ import {
 	defaultSessionWorkspaceView,
 	mainSession,
 	newSessionSource,
+	workspaceSessionSeed,
 	pickLandingSession,
 	sessionNeverRan,
 } from "./lib/landing-session";
@@ -660,6 +661,8 @@ function samePanel(a: Route, b: Route): boolean {
 	const id = (r: Route) => ("id" in r ? r.id : undefined);
 	return id(a) !== undefined && id(a) === id(b);
 }
+
+class MissingWorkspaceSessionSourceError extends Error {}
 
 export function App(
 	{
@@ -3556,6 +3559,7 @@ export function App(
 		mode: "share" | "stack" | "ask",
 		id: string,
 		morphOrigin?: NewTabMorphOrigin,
+		persistedSource: Promise<UnifiedSession> = Promise.resolve(src),
 	): Promise<string> {
 		const now = new Date().toISOString();
 		const user = getCurrentUser();
@@ -3619,7 +3623,8 @@ export function App(
 		navigate({ view: "session", id });
 
 		try {
-			const created = await newSessionApi(src.id, user, mode, id);
+			const source = await persistedSource;
+			const created = await newSessionApi(source.id, user, mode, id);
 			const createdId = created.id;
 			if (abandonedSessionCreatesRef.current.delete(id)) {
 				unstick(id);
@@ -3661,8 +3666,13 @@ export function App(
 			setOptimisticSession((pending) => (pending?.id === id ? null : pending));
 			unstick(id);
 			remove(id);
-			if (routeRef.current.view === "session" && routeRef.current.id === id)
-				navigate({ view: "session", id: src.id });
+			if (routeRef.current.view === "session" && routeRef.current.id === id) {
+				if (src.id.startsWith("workspace:") && src.workspaceId) {
+					navigate({ view: "workspace", id: src.workspaceId, tab: "review" });
+				} else {
+					navigate({ view: "session", id: src.id });
+				}
+			}
 			throw error;
 		}
 	}
@@ -3708,43 +3718,45 @@ export function App(
 			navigate({ view: "session", id: emptyWorkspaceSession.id });
 			return;
 		}
+
+		const openSessionlessWorkspaceComposer = () => {
+			if (route.view !== "workspace") return;
+			const workspace = workspaces.find((item) => item.id === route.id);
+			setPalette({
+				open: true,
+				workspaceId: route.id,
+				repo: workspace?.repo,
+				branch: workspace?.branch,
+				// Feed workspaces without a repo start in Scratch.
+				...(workspace?.externalRefs?.length && !workspace.repo
+					? { mode: "scratch" as const }
+					: {}),
+			});
+		};
+
 		let src = newSessionSource(
 			currentSession,
 			naturalSessions,
 			archivedSessions,
 		);
-		// A Review-only workspace can paint before its scoped archive request
-		// finishes. Resolve that history on demand so an immediate + still creates
-		// the blank sibling tab instead of falling through to the global composer.
-		if (!src && activeWorkspaceId) {
-			try {
-				src = newSessionSource(
-					null,
-					[],
-					await fetchWorkspaceArchivedSessions(activeWorkspaceId),
-				);
-			} catch {
-				// The composer fallback below still lets a genuinely session-less
-				// workspace start work when its history cannot be read.
-			}
+		let persistedSource: Promise<UnifiedSession> | undefined;
+		if (!src && activeWorkspaceId && wsRecord) {
+			// Paint and route the local tab now. The cold archived-session lookup can
+			// take several seconds, but it is needed only when the server persists it.
+			src = workspaceSessionSeed(wsRecord, getCurrentUser());
+			persistedSource = (async () => {
+				try {
+					const archived = await fetchWorkspaceArchivedSessions(activeWorkspaceId);
+					const source = newSessionSource(null, [], archived);
+					if (source) return source;
+				} catch {
+					// Fall through to the existing session-less composer below.
+				}
+				throw new MissingWorkspaceSessionSourceError();
+			})();
 		}
 		if (!src) {
-			// "+" on an empty workspace (session-less route): no sibling to clone —
-			// open the new-session palette scoped to it, same as onOpenWorkspace.
-			if (route.view === "workspace") {
-				const p = workspaces.find((x) => x.id === route.id);
-				setPalette({
-					open: true,
-					workspaceId: route.id,
-					repo: p?.repo,
-					branch: p?.branch,
-					// Feed workspaces (externalRefs, no repo) default new sessions
-					// to Scratch — repo-less, like their existing sessions.
-					...(p?.externalRefs?.length && !p?.repo
-						? { mode: "scratch" as const }
-						: {}),
-				});
-			}
+			openSessionlessWorkspaceComposer();
 			return;
 		}
 		if (siblingCreateRef.current) return;
@@ -3759,6 +3771,7 @@ export function App(
 				mode,
 				optimisticId,
 				morphOrigin,
+				persistedSource,
 			);
 			if (side === "right" && tabOrderKey && activeTabSplit)
 				saveTabSplit(tabOrderKey, {
@@ -3766,9 +3779,13 @@ export function App(
 					right: [...activeTabSplit.right, id],
 					rightActive: id,
 				});
-		} catch (e) {
-			console.error("New session failed:", e);
-			showToast("Couldn't create a new tab.");
+		} catch (error) {
+			if (error instanceof MissingWorkspaceSessionSourceError) {
+				openSessionlessWorkspaceComposer();
+			} else {
+				console.error("New session failed:", error);
+				showToast("Couldn't create a new tab.");
+			}
 		} finally {
 			if (siblingCreateRef.current === optimisticId)
 				siblingCreateRef.current = null;

@@ -4,6 +4,7 @@ import {
 	defaultSessionWorkspaceView,
 	mainSession,
 	newSessionSource,
+	workspaceSessionSeed,
 	pinMainSessionFirst,
 	pickLandingSession,
 } from "./landing-session";
@@ -112,6 +113,32 @@ describe("newSessionSource", () => {
 		const archived = session({ id: "archived", archived: true, ran: true });
 		expect(newSessionSource(current, [live], [archived])).toBe(current);
 		expect(newSessionSource(null, [live], [archived])).toBe(live);
+	});
+});
+
+describe("workspaceSessionSeed", () => {
+	test("projects a Review-only workspace into an immediate local tab", () => {
+		const seed = workspaceSessionSeed(
+			{
+				id: "ws-1",
+				name: "Review PR 42",
+				repo: "opensession",
+				branch: "fix-tabs",
+				worktreeDir: "/tmp/fix-tabs",
+				createdBy: "Kent",
+				createdAt: "2026-08-22T09:00:00.000Z",
+			},
+			"Kent",
+		);
+		expect(seed).toMatchObject({
+			id: "workspace:ws-1",
+			workspaceId: "ws-1",
+			repo: "opensession",
+			branch: "fix-tabs",
+			worktreeDir: "/tmp/fix-tabs",
+			mode: "code",
+			startedBy: "Kent",
+		});
 	});
 });
 

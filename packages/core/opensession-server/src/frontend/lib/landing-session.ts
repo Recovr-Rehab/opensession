@@ -75,6 +75,30 @@ export function newSessionSource(
 }
 
 /**
+ * Local-only session shape that lets a Review-only workspace paint its blank
+ * tab while the archived source needed by the create endpoint is still loading.
+ */
+export function workspaceSessionSeed(
+	workspace: Workspace,
+	startedBy: string,
+): UnifiedSession {
+	return {
+		id: `workspace:${workspace.id}`,
+		source: "opensession",
+		branch: workspace.branch ?? null,
+		worktreeDir: workspace.worktreeDir ?? null,
+		startedBy,
+		title: "New session",
+		lastActivity: workspace.createdAt,
+		createdAt: workspace.createdAt,
+		isRunning: false,
+		workspaceId: workspace.id,
+		repo: workspace.repo,
+		mode: workspace.repo || workspace.worktreeDir ? "code" : "scratch",
+	};
+}
+
+/**
  * Keep the workspace's main session at the leading edge while preserving the
  * user's saved order for every sibling session.
  */
