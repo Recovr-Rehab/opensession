@@ -120,6 +120,7 @@ export function animateEmptyTabClose(button: HTMLButtonElement): void {
 	const clippedLeft = Math.max(0, rect.width - collapsedWidth);
 	const deltaX = -clippedLeft;
 	const radius = clipRadius(tab);
+	const surfaceColor = getComputedStyle(tab).backgroundColor;
 	const ghost = tab.cloneNode(true) as HTMLElement;
 	ghost.removeAttribute("role");
 	ghost.removeAttribute("aria-selected");
@@ -148,6 +149,14 @@ export function animateEmptyTabClose(button: HTMLButtonElement): void {
 					transform: `translateX(${deltaX}px)`,
 					clipPath: `inset(0 0 0 ${clippedLeft}px round ${radius})`,
 				},
+			],
+			morphTiming(),
+		),
+		ghost.animate(
+			[
+				{ backgroundColor: surfaceColor },
+				{ backgroundColor: surfaceColor, offset: 0.65 },
+				{ backgroundColor: "rgba(0, 0, 0, 0)" },
 			],
 			morphTiming(),
 		),
