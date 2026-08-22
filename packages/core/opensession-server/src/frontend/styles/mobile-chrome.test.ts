@@ -5,8 +5,14 @@ import {
 	HEADER_TITLE_PILL,
 	MOBILE_BACK,
 	MOBILE_CONTROL_GLASS,
+	MOBILE_CONTROL_GLASS_EFFECTS,
+	appHeader,
 } from "../lib/app-header-classes";
-import { TAB_STRIP } from "../lib/session-tab-classes";
+import {
+	TAB_ITEM,
+	TAB_STRIP,
+	tabClass,
+} from "../lib/session-tab-classes";
 import { REPORTS_COLUMN_HEADER } from "../lib/reports-classes";
 import { infoTopbarClass } from "../lib/session-viewer-classes";
 
@@ -20,6 +26,8 @@ test("phone navigation chrome has no hard divider bars", async () => {
 	);
 	expect(TAB_STRIP).not.toContain("phone:border-b");
 	expect(TAB_STRIP).not.toContain("phone:shadow-[");
+	expect(TAB_STRIP).toContain("phone:bg-transparent");
+	expect(TAB_ITEM).toContain("phone:after:hidden");
 	expect(infoTopbarClass(true)).not.toContain("border-b");
 	expect(infoTopbarClass(false)).not.toContain("border-b");
 	expect(REPORTS_COLUMN_HEADER).not.toMatch(/(?<!desktop:)border-b/);
@@ -50,6 +58,28 @@ test("every floating phone header control is made of the same glass", async () =
 		// A page-coloured fill is what made these read as paper stickers.
 		expect(control).not.toContain("phone:bg-surface");
 	}
+
+	const inactiveTab = tabClass({
+		active: false,
+		waiting: false,
+		colored: false,
+	});
+	const activeTab = tabClass({ active: true, waiting: false, colored: false });
+	expect(inactiveTab).toContain(MOBILE_CONTROL_GLASS_EFFECTS);
+	expect(inactiveTab).toContain(
+		"phone:bg-[var(--mobile-header-control-surface)]",
+	);
+	expect(activeTab).toContain(MOBILE_CONTROL_GLASS_EFFECTS);
+	expect(activeTab).toContain("bg-panel");
+	expect(activeTab).not.toContain(
+		"phone:bg-[var(--mobile-header-control-surface)]",
+	);
+
+	const floatingHeader = appHeader({ detail: false, floating: true });
+	expect(floatingHeader).not.toContain("]:bg-surface");
+	expect(floatingHeader).toContain(
+		"phone:[.app:has(.session-tabs)_&]:before:h-full",
+	);
 
 	// Glass is an enhancement: both opt-outs collapse the fill back to opaque.
 	const optOuts = css.match(

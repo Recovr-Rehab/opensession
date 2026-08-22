@@ -75,10 +75,10 @@ const APP_HEADER_DETAIL = "phone:bg-transparent";
  * the bar's own stacking context, so still above the page, but below the pills,
  * which are positioned siblings that would otherwise be washed out by it.
  *
- * When the docked tab strip is present the whole top block goes opaque instead:
- * a transparent header ghosting the transcript above a solid tab bar looks
- * broken. The header is a sibling of the pane, so that state is keyed off the
- * nearest common ancestor.
+ * When the docked tab strip is present, the scroll edge stops at the header so
+ * it cannot wash over the tab labels. The tabs carry their own glass material.
+ * The header is a sibling of the pane, so that state is keyed off the nearest
+ * common ancestor.
  *
  * Immersive reading: SessionViewer sets `body.chrome-collapsed` from the
  * transcript's scroll direction and the bar slides off-screen. A transform, so
@@ -94,12 +94,9 @@ const APP_HEADER_OVERLAY =
 	// the bar with the `translate` property, which the transition above does not
 	// name — the bar would jump off-screen instead of sliding.
 	"phone:[body.chrome-collapsed_&]:[transform:translateY(-100%)] " +
-	"phone:[.app:has(.session-tab-view)_&]:bg-surface " +
-	"phone:[.app:has(.session-tab-view)_&]:min-h-[var(--header-h)] " +
-	"phone:[.app:has(.session-tab-reorder~.session-tab-reorder)_&]:bg-surface " +
-	"phone:[.app:has(.session-tab-reorder~.session-tab-reorder)_&]:min-h-[var(--header-h)] " +
 	"phone:before:absolute phone:before:inset-x-0 phone:before:top-0 " +
 	"phone:before:bottom-auto phone:before:z-[-1] phone:before:h-[calc(100%+30px)] " +
+	"phone:[.app:has(.session-tabs)_&]:before:h-full " +
 	"phone:before:pointer-events-none phone:before:content-[''] " +
 	// The fade is thinned deliberately. It used to be SOLID `--bg` for its first
 	// half, which is exactly the band the controls sit in, so each control was
@@ -158,10 +155,13 @@ export const APP_HEADER_LEFT = "flex shrink-0 items-center gap-2";
  * base.css collapses the fill back to an opaque `--bg` where the browser has no
  * backdrop-filter at all, and for reduced transparency.
  */
-export const MOBILE_CONTROL_GLASS =
-	"phone:bg-[var(--mobile-header-control-surface)] " +
+export const MOBILE_CONTROL_GLASS_EFFECTS =
 	"phone:[backdrop-filter:var(--mobile-header-control-blur)] " +
 	"phone:[-webkit-backdrop-filter:var(--mobile-header-control-blur)]";
+
+export const MOBILE_CONTROL_GLASS =
+	"phone:bg-[var(--mobile-header-control-surface)] " +
+	MOBILE_CONTROL_GLASS_EFFECTS;
 
 /**
  * Back control on a pushed page: a circular bubble carrying just the chevron,

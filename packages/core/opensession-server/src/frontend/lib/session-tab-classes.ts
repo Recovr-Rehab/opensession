@@ -1,13 +1,14 @@
+import { MOBILE_CONTROL_GLASS_EFFECTS } from "./app-header-classes";
+
 /**
- * The session tab strip's vocabulary, as finished utility classes — what used
+ * The session tab strip's vocabulary, as finished utility classes. This used
  * to be the `session-tab*` family in legacy.css.
  *
  * Two things shape everything here.
  *
- * 1. Desktop and the phone PWA share one floating look: inactive tabs are quiet
- *    labels separated by short rules, while the active tab sits on a filled,
- *    rounded surface. Phone-only rules position the docked strip and preserve
- *    touch controls, but they do not redefine the tab states.
+ * 1. Desktop keeps quiet labels separated by short rules. On the phone PWA,
+ *    every tab uses the same glass capsule as the top bar, while the active tab
+ *    keeps a stronger filled surface.
  *
  * 2. Each tab state carries its whole colour set. A colored tab does not layer
  *    a fill over the plain tab's fill; `tabClass` returns exactly one background
@@ -46,7 +47,9 @@ const PILL = "rounded-[calc(8px*var(--rf))]";
  * carried over.
  */
 export const TAB_STRIP =
-	"session-tabs group/strip relative flex min-w-0 shrink-0 items-center gap-[3px] bg-surface px-2 " +
+	"session-tabs group/strip relative flex min-w-0 shrink-0 items-center gap-[3px] px-2 " +
+	"desktop:bg-surface phone:bg-transparent " +
+	"phone:pointer-events-none phone:*:pointer-events-auto " +
 	// Every desktop tab bar has one closing hairline. A pseudo-element avoids
 	// changing its height. Phones stay borderless so fixed chrome never becomes
 	// a grey rule across the screen.
@@ -70,13 +73,9 @@ export const TAB_STRIP =
 	"desktop:[&:has(.session-tab-new:hover)]:[--tabs-control-fade-end:64px] " +
 	// Phone: pulled out of flow and pinned flush under the header's bottom edge,
 	// so it reads as fixed chrome rather than a strip the transcript scrolls by.
-	// Its surface and selected tab provide separation without drawing a grey bar.
+	// The header's scroll-edge blur continues behind these glass controls.
 	"phone:absolute phone:inset-x-0 phone:top-[var(--pane-header-h)] phone:z-[6] " +
 	"phone:m-0 phone:py-[5px] " +
-	// Mobile Safari can rasterize two composited layers that merely touch with a
-	// hairline seam: overlap the header by 2px and add those 2px back as padding.
-	"phone:[.app:has(.app-header-overlay)_&]:top-[calc(var(--pane-header-h)_-_2px)] " +
-	"phone:[.app:has(.app-header-overlay)_&]:pt-[7px] " +
 	// Immersive reading: SessionViewer sets body.chrome-collapsed from the
 	// transcript's scroll direction and the bar slides off with the top bar.
 	// `transform`, not the `translate` property, because that is what the
@@ -119,13 +118,13 @@ export const TAB_SCROLL =
 export const TAB_GROUP = "relative inline-flex flex-none items-center gap-[3px]";
 
 /** Each tab's Reorder.Item wrapper. `relative` lets whileDrag's z-index lift
- *  the dragged tab over its siblings. A short rule separates quiet inactive
- *  tabs at every width. The selected tab and final tab need no trailing rule. */
+ *  the dragged tab over its siblings. Desktop uses a short rule between quiet
+ *  inactive tabs. Phone capsules separate themselves. */
 export const TAB_ITEM =
 	"session-tab-reorder relative inline-flex shrink-0 items-center " +
 	"after:pointer-events-none after:absolute after:top-1/2 " +
 	"after:-right-0.5 after:h-3 after:w-px after:-translate-y-1/2 " +
-	"after:bg-divider after:content-[''] last:after:hidden " +
+	"after:bg-divider after:content-[''] last:after:hidden phone:after:hidden " +
 	// The active surface supplies both edges. Hide the trailing divider when
 	// either this item or its next sibling is active.
 	"[&:has(>[aria-selected=true])]:after:hidden data-[next-active]:after:hidden";
@@ -164,7 +163,9 @@ export const TAB_ACTIONS = "ml-auto flex flex-none items-center gap-[3px]";
 const TAB_BASE =
 	"relative inline-flex max-w-[200px] shrink-0 cursor-pointer items-center gap-1.5 whitespace-nowrap " +
 	"rounded-control border-0 px-2.5 py-1.5 text-label shadow-none " +
-	"transition-[background-color,color]";
+	"transition-[background-color,color] " +
+	`phone:rounded-full phone:border phone:border-[color:var(--mobile-header-control-border)] ` +
+	`phone:shadow-[var(--mobile-header-control-shadow)] ${MOBILE_CONTROL_GLASS_EFFECTS}`;
 
 export type TabState = {
 	active: boolean;
@@ -174,9 +175,10 @@ export type TabState = {
 };
 
 /**
- * One shared tab state for desktop and the phone PWA. The selected tab is the
- * only ordinary tab with a surface. Custom colours stay visible as an explicit
- * exception, but use a quieter mix while inactive.
+ * The selected tab is the only ordinary desktop tab with a surface. Phone tabs
+ * share the top bar's glass, with the selected state painted more strongly.
+ * Custom colours stay visible as an explicit exception, but use a quieter mix
+ * while inactive.
  */
 export function tabClass(state: TabState): string {
 	const { active, waiting, colored } = state;
@@ -186,10 +188,11 @@ export function tabClass(state: TabState): string {
 			? "bg-[color-mix(in_srgb,var(--tab-color)_22%,var(--bg-panel))] " +
 				"hover:bg-[color-mix(in_srgb,var(--tab-color)_28%,var(--bg-panel))]"
 			: "bg-[color-mix(in_srgb,var(--tab-color)_9%,transparent)] " +
-				"hover:bg-[color-mix(in_srgb,var(--tab-color)_16%,transparent)]"
+				"hover:bg-[color-mix(in_srgb,var(--tab-color)_16%,transparent)] " +
+				"phone:bg-[color-mix(in_srgb,var(--tab-color)_9%,var(--mobile-header-control-surface))]"
 		: active
 			? "bg-panel hover:bg-hover"
-			: "bg-transparent hover:bg-hover";
+			: "bg-transparent hover:bg-hover phone:bg-[var(--mobile-header-control-surface)]";
 
 	return `${TAB_BASE} ${ink} ${surface}`;
 }
