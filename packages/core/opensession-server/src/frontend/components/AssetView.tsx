@@ -362,18 +362,18 @@ function AssetOverlayActionBar({
 						)
 					}
 				>
-					<IconMessage size={phone ? 20 : 15} />
+					<IconMessage size={phone ? 24 : 15} />
 					<span className={labelClass}>Comment</span>
 				</button>
 			)}
 			{nativeShare ? (
 				<button type="button" className={actionClass} onClick={download}>
-					<IconArrowDown size={phone ? 20 : 15} />
+					<IconArrowDown size={phone ? 24 : 15} />
 					<span className={labelClass}>Download</span>
 				</button>
 			) : (
 				<a href={downloadUrl} className={actionClass} aria-label="Download">
-					<IconArrowDown size={phone ? 20 : 15} />
+					<IconArrowDown size={phone ? 24 : 15} />
 					<span className={labelClass}>Download</span>
 				</a>
 			)}
@@ -384,17 +384,17 @@ function AssetOverlayActionBar({
 					copyToClipboard(absoluteLink(stableUrl), () => toast("Link copied"))
 				}
 			>
-				<IconLink size={phone ? 20 : 15} />
+				<IconLink size={phone ? 24 : 15} />
 				<span className={labelClass}>Copy link</span>
 			</button>
 			{onOpenAsTab ? (
 				<button type="button" className={actionClass} onClick={onOpenAsTab}>
-					<IconArrowUpRight size={phone ? 20 : 15} />
+					<IconArrowUpRight size={phone ? 24 : 15} />
 					<span className={labelClass}>Open</span>
 				</button>
 			) : nativeShare ? (
 				<button type="button" className={actionClass} onClick={open}>
-					<IconArrowUpRight size={phone ? 20 : 15} />
+					<IconArrowUpRight size={phone ? 24 : 15} />
 					<span className={labelClass}>Open or share</span>
 				</button>
 			) : (
@@ -405,7 +405,7 @@ function AssetOverlayActionBar({
 					className={actionClass}
 					aria-label="Open"
 				>
-					<IconArrowUpRight size={phone ? 20 : 15} />
+					<IconArrowUpRight size={phone ? 24 : 15} />
 					<span className={labelClass}>Open</span>
 				</a>
 			)}
