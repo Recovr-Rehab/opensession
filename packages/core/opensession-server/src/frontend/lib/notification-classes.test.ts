@@ -15,6 +15,10 @@ describe("notification lanes", () => {
 		expect(TRANSIENT_NOTICE_LANE).toContain(
 			"phone:top-[calc(var(--header-h)+8px)]",
 		);
+		// The desktop `right-4` outranks `inset-x-0` in the compiled sheet, so the
+		// phone lane has to reset the right edge itself or the pill sits flush left.
+		expect(TRANSIENT_NOTICE_LANE).toContain("phone:right-0");
+		expect(TRANSIENT_NOTICE_LANE).not.toContain("phone:right-auto");
 		expect(TRANSIENT_NOTICE_LANE).not.toContain("bottom-");
 	});
 

@@ -8,7 +8,7 @@
  */
 export const TRANSIENT_NOTICE_LANE =
 	"pointer-events-none fixed right-4 top-[calc(var(--desktop-header-h)+8px)] z-[200] " +
-	"phone:inset-x-0 phone:right-auto phone:top-[calc(var(--header-h)+8px)]";
+	"phone:inset-x-0 phone:right-0 phone:px-3 phone:top-[calc(var(--header-h)+8px)]";
 
 export const TOAST_NOTICE_LANE =
 	"pointer-events-none fixed inset-x-0 bottom-[124px] z-[200] " +
