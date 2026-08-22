@@ -230,6 +230,7 @@ struct SessionView: View {
     private var tailId: String? {
         if let receipt = viewModel.slackComposeReceipt { return "slack-receipt-\(receipt.id)" }
         if let ask = viewModel.pendingQuestion { return "ask-\(ask.id)" }
+        if let sent = viewModel.sentAskAnswer { return "ask-sent-\(sent.id)" }
         // While work is in flight the run clock IS the last row.
         if viewModel.isRunning { return "run-status" }
         if !viewModel.liveText.isEmpty { return "live-stream" }
@@ -523,6 +524,9 @@ struct SessionView: View {
                         }
                         .onChange(of: viewModel.slackComposeReceipt) {
                             // The composer closes into this durable receipt.
+                            scrollToBottom(proxy, animated: true)
+                        }
+                        .onChange(of: viewModel.sentAskAnswer) {
                             scrollToBottom(proxy, animated: true)
                         }
 
@@ -1203,6 +1207,11 @@ struct SessionView: View {
             }
             .id("ask-\(ask.id)")
             .transcriptTail(true)
+        }
+        if let sent = viewModel.sentAskAnswer {
+            AnsweredAskCard(ask: sent.ask)
+                .id("ask-sent-\(sent.id)")
+                .transcriptTail(true)
         }
         if let receipt = viewModel.slackComposeReceipt {
             SlackComposeReceiptRow(receipt: receipt)

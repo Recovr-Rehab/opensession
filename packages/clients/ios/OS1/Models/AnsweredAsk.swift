@@ -48,3 +48,30 @@ struct AnsweredAsk: Decodable, Equatable, Sendable {
         )
     }
 }
+
+extension AnsweredAsk {
+    /// Build the same receipt shape immediately from the answer sent on the wire.
+    init(question: AskQuestion, answers: [String: String]) {
+        self.init(
+            version: 1,
+            questions: question.questions.map { asked in
+                Question(
+                    question: asked.question,
+                    header: asked.header,
+                    options: asked.options?.map {
+                        Option(label: $0.label, description: $0.description)
+                    },
+                    multiSelect: asked.multiSelect,
+                    answer: answers[asked.question] ?? ""
+                )
+            }
+        )
+    }
+}
+
+/// An answer shown until the matching durable transcript record arrives.
+struct SentAskAnswer: Identifiable, Equatable, Sendable {
+    let id: String
+    let ask: AnsweredAsk
+    let existingRecordIDs: Set<String>
+}

@@ -85,6 +85,8 @@ final class SessionViewModel {
     private(set) var otherViewers: [String] = []
     private(set) var otherTypingUsers: [String] = []
     private(set) var pendingQuestion: AskQuestion?
+    /// The answer this device just sent, shown until its transcript record arrives.
+    private(set) var sentAskAnswer: SentAskAnswer?
     /// Quick replies for the last settled turn. A pick fills the draft; it
     /// never sends, because the server's suggestion is still only a guess.
     private(set) var replySuggestions: [ReplySuggestion] = []
@@ -1130,6 +1132,28 @@ final class SessionViewModel {
     func answer(question: AskQuestion, answers: [String: String]?) {
         socket?.answer(sessionId: session.id, questionId: question.id, answers: answers)
         pendingQuestion = nil
+        sentAskAnswer = answers.map {
+            SentAskAnswer(
+                id: question.id,
+                ask: AnsweredAsk(question: question, answers: $0),
+                existingRecordIDs: Set(entries.lazy.filter {
+                    $0.notice?.ask != nil || $0.ask != nil
+                }.map(\.id))
+            )
+        }
+    }
+
+    private func retireSentAskAnswer(against incoming: [TranscriptEntry]) {
+        guard let sent = sentAskAnswer else { return }
+        let landed = incoming.contains { entry in
+            guard !sent.existingRecordIDs.contains(entry.id),
+                  let record = entry.notice?.ask ?? entry.ask,
+                  record.questions.count == sent.ask.questions.count else { return false }
+            return zip(record.questions, sent.ask.questions).allSatisfy { pair in
+                pair.0.question == pair.1.question && pair.0.answer == pair.1.answer
+            }
+        }
+        if landed { sentAskAnswer = nil }
     }
 
     func cancelRun() {
@@ -1522,6 +1546,7 @@ final class SessionViewModel {
             isLoadingConversation = false
             liveEntries.removeAll()
             localEchoIds = Set(pendingEchoes.map(\.id))
+            retireSentAskAnswer(against: newEntries)
             // A resync snapshot is authoritative for landed messages — no
             // upsert runs on it, so retire delivered chips here.
             if !deliveringItems.isEmpty {
@@ -1553,6 +1578,7 @@ final class SessionViewModel {
         case .transcriptAppend(let id, let appended, let cursor) where id == session.id:
             upsert(appended)
             applyTranscriptAppendCursor(cursor)
+            retireSentAskAnswer(against: appended)
             // Landed durably — drop the ephemeral copies (match by id, or by
             // toolUseId in case the two channels mint different entry ids).
             liveEntries.removeAll { live in
@@ -1770,6 +1796,7 @@ final class SessionViewModel {
         case .askQuestion(let id, let question) where id == session.id:
             let isNewQuestion = pendingQuestion?.id != question.id
             pendingQuestion = question
+            if sentAskAnswer?.id != question.id { sentAskAnswer = nil }
             if isNewQuestion {
                 NativeNotifications.post(
                     event: "needsInput",

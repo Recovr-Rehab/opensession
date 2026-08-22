@@ -1067,6 +1067,75 @@ final class SessionViewModelTests: XCTestCase {
         XCTAssertNil(viewModel.pendingQuestion)
     }
 
+    private func askedQuestion() -> AskQuestion {
+        AskQuestion(id: "ask-1", questions: [
+            AskQuestion.Question(
+                question: "Which app?",
+                header: "Target",
+                options: [
+                    AskQuestion.Option(label: "iOS", description: "The native app"),
+                    AskQuestion.Option(label: "Web", description: nil),
+                ],
+                multiSelect: nil
+            )
+        ])
+    }
+
+    func testAnsweringLeavesAReceiptUntilTheRecordLands() {
+        let viewModel = makeViewModel()
+        let question = askedQuestion()
+        var olderRecord = entry("older-ask-record", "system")
+        olderRecord.ask = AnsweredAsk(question: question, answers: ["Which app?": "iOS"])
+        viewModel.handle(.transcriptInit(
+            sessionId: "bks-1",
+            entries: [olderRecord],
+            cursor: .empty
+        ))
+        viewModel.handle(.askQuestion(sessionId: "bks-1", question: question))
+        viewModel.answer(question: question, answers: ["Which app?": "iOS"])
+
+        XCTAssertNil(viewModel.pendingQuestion)
+        XCTAssertEqual(viewModel.sentAskAnswer?.id, "ask-1")
+        let receipt = viewModel.sentAskAnswer?.ask.questions.first
+        XCTAssertEqual(receipt?.answer, "iOS")
+        XCTAssertEqual(receipt?.header, "Target")
+        XCTAssertEqual(receipt?.options?.map(\.label), ["iOS", "Web"])
+
+        viewModel.handle(.transcriptInit(
+            sessionId: "bks-1",
+            entries: [olderRecord],
+            cursor: .empty
+        ))
+        XCTAssertNotNil(viewModel.sentAskAnswer)
+
+        var record = entry("new-ask-record", "system")
+        record.ask = AnsweredAsk(question: question, answers: ["Which app?": "iOS"])
+        viewModel.handle(.transcriptAppend(sessionId: "bks-1", entries: [record]))
+        XCTAssertNil(viewModel.sentAskAnswer)
+    }
+
+    func testDismissedQuestionLeavesNoReceipt() {
+        let viewModel = makeViewModel()
+        let question = askedQuestion()
+        viewModel.handle(.askQuestion(sessionId: "bks-1", question: question))
+        viewModel.answer(question: question, answers: nil)
+        XCTAssertNil(viewModel.sentAskAnswer)
+    }
+
+    func testNewQuestionClearsAnUnretiredReceipt() {
+        let viewModel = makeViewModel()
+        let question = askedQuestion()
+        viewModel.handle(.askQuestion(sessionId: "bks-1", question: question))
+        viewModel.answer(question: question, answers: ["Which app?": "iOS"])
+        XCTAssertNotNil(viewModel.sentAskAnswer)
+
+        viewModel.handle(.askQuestion(
+            sessionId: "bks-1",
+            question: AskQuestion(id: "ask-2", questions: [])
+        ))
+        XCTAssertNil(viewModel.sentAskAnswer)
+    }
+
     /// A server notice used to pin itself over the composer. It joins the
     /// transcript now, so the composer stays empty — and an empty frame is
     /// the server clearing rather than an event, so nothing new lands.

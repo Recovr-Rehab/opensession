@@ -202,8 +202,9 @@ Pure SwiftUI with SwiftStreamingMarkdown for CommonMark/GFM rendering, iOS 26+
   Opening a file with OS from Files or another app starts a fresh composer with
   that file attached. Images use the vision channel; other files upload to the
   session's staged file channel before Start becomes available.
-- **AskUserQuestion** — blocking questions render as an inline card with option
-  buttons + free-text answer, wired to `answer_question`.
+- **AskUserQuestion:** blocking questions render as an inline card with option
+  buttons + free-text answer, wired to `answer_question`. After you submit, the
+  card becomes a read-only receipt showing the question and your answer.
 - **PR panel** — sessions with a pull request expose a row in the title-opened
   workspace sheet and the overflow menu; it opens a panel with state, review
   decision, conflicts, every check with its status, and reviewers, via
