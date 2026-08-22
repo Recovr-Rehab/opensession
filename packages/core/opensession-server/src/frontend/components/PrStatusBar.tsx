@@ -1090,7 +1090,7 @@ export function PrStatusBar({
 		// wrapper would drop the focus ring with the box.
 		const labelClass = cn(
 			WS_SUMMARY_LABEL,
-			"group/prsum cursor-pointer rounded-sm border-none bg-transparent p-0 text-left focus-ring",
+			"group/prsum cursor-pointer rounded-sm border-none bg-transparent p-0 text-left focus-ring phone:flex phone:flex-col phone:justify-center",
 		);
 		const provider = pr ? providerFromUrl(pr.url) : null;
 		const externalHint = provider
