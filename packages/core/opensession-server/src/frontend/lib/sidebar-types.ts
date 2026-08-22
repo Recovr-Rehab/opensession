@@ -42,9 +42,9 @@ export interface Props {
 	    automation's NAME — session rows only carry the name, not the id. */
 	onOpenAutomation: (name: string) => void;
 	/**
-	 * Open a PR row's workspace (resolve-or-create), on that PR's Review tab —
-	 * the row is a pull request, and a workspace with several PRs has a row each,
-	 * so the one you clicked decides which the pane lands on.
+	 * Open a sessionless PR row's workspace (resolve-or-create), on that PR's
+	 * Review tab. Once the PR belongs to a visible workspace, that workspace is
+	 * its only sidebar row.
 	 */
 	onOpenPrItem: (item: ReviewQueueItem) => void;
 	/** The open workspace id (route or the open session's), for row selection. */

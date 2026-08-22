@@ -2,6 +2,21 @@ import { DEFAULT_REPO_ID } from "./brand";
 import { sessionCarriesPr } from "./session-prs";
 import type { UnifiedSession, Workspace } from "./types";
 
+type PrIdentity = { repo: string; number?: number; branch?: string };
+
+/** Whether the workspace record itself identifies this PR. */
+export function workspaceCarriesPr(
+	workspace: Workspace,
+	pr: PrIdentity,
+): boolean {
+	const repo = workspace.repo || DEFAULT_REPO_ID;
+	if (repo !== pr.repo) return false;
+	return (
+		(pr.number !== undefined && workspace.prNumber === pr.number) ||
+		(!!pr.branch && workspace.branch === pr.branch)
+	);
+}
+
 /**
  * Which workspace a PR belongs to, answered from what the app already holds.
  *
@@ -19,18 +34,17 @@ import type { UnifiedSession, Workspace } from "./types";
 export function findPrWorkspaceId(
 	workspaces: Workspace[],
 	sessions: UnifiedSession[],
-	pr: { repo: string; number?: number; branch?: string },
+	pr: PrIdentity,
 ): string | null {
-	const repoOf = (w: Workspace) => w.repo || DEFAULT_REPO_ID;
 	if (pr.number !== undefined) {
-		const byNumber = workspaces.find(
-			(w) => w.prNumber === pr.number && repoOf(w) === pr.repo,
+		const byNumber = workspaces.find((workspace) =>
+			workspaceCarriesPr(workspace, { repo: pr.repo, number: pr.number }),
 		);
 		if (byNumber) return byNumber.id;
 	}
 	if (pr.branch) {
-		const byBranch = workspaces.find(
-			(w) => w.branch === pr.branch && repoOf(w) === pr.repo,
+		const byBranch = workspaces.find((workspace) =>
+			workspaceCarriesPr(workspace, { repo: pr.repo, branch: pr.branch }),
 		);
 		if (byBranch) return byBranch.id;
 	}

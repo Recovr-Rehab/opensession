@@ -255,8 +255,9 @@ import {
 	stripPrTitlePrefix,
 	workspaceRunNeedingAttention,
 } from "../lib/sidebar-lanes";
-import { sessionHasPr } from "../lib/session-prs";
+import { sessionCarriesPr, sessionHasPr } from "../lib/session-prs";
 import { sessionHasWorkspace } from "../lib/session-workspace";
+import { workspaceCarriesPr } from "../lib/pr-workspace";
 import {
 	nextRenderedSidebarChat,
 	nextRenderedSidebarItem,
@@ -1800,27 +1801,48 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 		() => buildReviewQueue(openPrs || [], sessions, currentUser, githubLogin),
 		[openPrs, sessions, currentUser, githubLogin],
 	);
-	// Session-backed PRs ride their workspace row (which already wears the PR
-	// state); a PR row renders only when no rendered workspace row carries the
-	// same repo+branch. Dedupe is against the rows in view — not all wsRows —
-	// so a teammate's PR outside your person lens can still surface as a PR
-	// row when the PR filter includes it.
-	const prRowItems = useMemo(() => {
-		if (!workspaceDataReady || filter.prs === "none") return [];
-		const q = search.trim().toLowerCase();
-		const covered = new Set<string>();
-		const rowsInView = [
+	const workspaceRowsInView = useMemo(
+		() => [
 			...activeFocusWsRows,
 			...pinnedWsRows,
 			...snoozedWsRows,
 			...needsReviewRows,
 			...awaitingReviewRows,
 			...approvedReviewRows,
-		];
-		for (const r of rowsInView)
-			for (const c of r.sessions) for (const k of sessionPrKeys(c)) covered.add(k);
+		],
+		[
+			activeFocusWsRows,
+			pinnedWsRows,
+			snoozedWsRows,
+			needsReviewRows,
+			awaitingReviewRows,
+			approvedReviewRows,
+		],
+	);
+	// A PR already represented by a workspace belongs to that workspace row.
+	// Match both the workspace's own PR identity and every PR carried by its
+	// sessions, including linked and cross-repo PRs. Dedupe is against rows in
+	// view so a teammate's hidden workspace can still surface through the PR
+	// filter.
+	const workspaceCoveredPrUrls = useMemo(() => {
+		const covered = new Set<string>();
+		for (const item of reviewQueueItems) {
+			if (
+				workspaceRowsInView.some(
+					(row) =>
+						(!!row.workspace && workspaceCarriesPr(row.workspace, item.pr)) ||
+						row.sessions.some((session) => sessionCarriesPr(session, item.pr)),
+				)
+			)
+				covered.add(item.pr.url);
+		}
+		return covered;
+	}, [reviewQueueItems, workspaceRowsInView]);
+	const prRowItems = useMemo(() => {
+		if (!workspaceDataReady || filter.prs === "none") return [];
+		const q = search.trim().toLowerCase();
 		return reviewQueueItems.filter((item) => {
-			if (covered.has(`${item.pr.repo}\n${item.pr.branch}`)) return false;
+			if (workspaceCoveredPrUrls.has(item.pr.url)) return false;
 			if (filter.repo !== "all" && item.pr.repo !== filter.repo)
 				return false;
 			if (
@@ -1841,13 +1863,8 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 		});
 	}, [
 		reviewQueueItems,
+		workspaceCoveredPrUrls,
 		workspaceDataReady,
-		activeFocusWsRows,
-		pinnedWsRows,
-		snoozedWsRows,
-		needsReviewRows,
-		awaitingReviewRows,
-		approvedReviewRows,
 		filter.repo,
 		filter.person,
 		filter.prs,
@@ -1940,8 +1957,8 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 	// that need row membership; archive navigation reads the rendered DOM below.
 	const wsRowOrder = useMemo(
 		() => {
-			// Pinned rows appear in the Pinned band AND their status lane —
-			// dedupe by key so the archive-next walk sees each row once.
+			// Review placements can still overlap Pinned; dedupe by key so the
+			// archive-next walk sees each workspace once.
 			const seen = new Set<string>();
 			return [
 				...needsReviewRows,
@@ -2807,9 +2824,8 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 		return renderWsRowImpl(row, false, true);
 	}
 
-	// Pinned is an orthogonal shortcut, so the selected workspace can appear
-	// there and in its primary lane. Its children render only at the primary
-	// placement, keeping one visible subagent row per session.
+	// Pinned is the row's visible placement while it is pinned. Its children stay
+	// hidden here, keeping one visible subagent row per session.
 	function renderPinnedWsRow(row: WsRow) {
 		return renderWsRowImpl(row, false, false, false);
 	}
@@ -3872,7 +3888,7 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 	function renderRepoGroups() {
 		const byRepo = new Map<string, WsRow[]>();
 		const snoozedByRepo = new Map<string, WsRow[]>();
-		const scratchRows = focusWsRows.filter(
+		const scratchRows = activeFocusWsRows.filter(
 			(row) => !rowIsFeedOnly(row) && rowIsScratch(row),
 		);
 		const scratchSnoozedRows = snoozedWsRows.filter(
@@ -3892,7 +3908,7 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 		// file them under the default project, which is the one place they
 		// certainly don't belong.
 		const bandOf = (r: WsRow) => (rowIsAsk(r) ? ASK_BAND : wsRowRepo(r));
-		for (const r of focusWsRows)
+		for (const r of activeFocusWsRows)
 			if (!rowIsFeedOnly(r) && !rowIsScratch(r))
 				bucket(byRepo, bandOf(r)).push(r);
 		// Each repo's snoozed rows stay in that repo's own band, as a Snoozed
@@ -5406,7 +5422,10 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 						.map((e) =>
 							reviewQueueItems.find((i) => i.pr.url === e.slice(3)),
 						)
-						.filter((i): i is ReviewQueueItem => !!i);
+						.filter((i): i is ReviewQueueItem => !!i)
+						// Once a workspace carries this PR, the workspace row is the
+						// single place for it, even if an older standalone PR pin remains.
+						.filter((item) => !workspaceCoveredPrUrls.has(item.pr.url));
 					if (
 						!pinnedRows.length &&
 						!pinnedLoose.length &&
@@ -5711,7 +5730,7 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 					) : (
 						[
 							...renderWorkspaceGrouping(
-								focusWsRows,
+								activeFocusWsRows,
 								"",
 								snoozedWsRows,
 								undefined,

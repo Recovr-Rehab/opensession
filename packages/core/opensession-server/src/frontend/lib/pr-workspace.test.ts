@@ -1,5 +1,5 @@
 import { describe, expect, it } from "bun:test";
-import { findPrWorkspaceId } from "./pr-workspace";
+import { findPrWorkspaceId, workspaceCarriesPr } from "./pr-workspace";
 import type { UnifiedSession, Workspace } from "./types";
 
 const ws = (w: Partial<Workspace> & { id: string }): Workspace =>
@@ -16,6 +16,36 @@ const session = (s: Partial<UnifiedSession> & { id: string }): UnifiedSession =>
 		createdAt: new Date().toISOString(),
 		...s,
 	}) as UnifiedSession;
+
+describe("workspaceCarriesPr", () => {
+	it("matches either the PR number or branch within the same repo", () => {
+		const workspace = ws({
+			id: "w1",
+			repo: "opensession",
+			prNumber: 8,
+			branch: "fix-sidebar",
+		});
+
+		expect(
+			workspaceCarriesPr(workspace, { repo: "opensession", number: 8 }),
+		).toBe(true);
+		expect(
+			workspaceCarriesPr(workspace, {
+				repo: "opensession",
+				branch: "fix-sidebar",
+			}),
+		).toBe(true);
+	});
+
+	it("does not match another repository", () => {
+		expect(
+			workspaceCarriesPr(
+				ws({ id: "w1", repo: "tella-fusion", prNumber: 8 }),
+				{ repo: "opensession", number: 8 },
+			),
+		).toBe(false);
+	});
+});
 
 describe("findPrWorkspaceId", () => {
 	it("matches a workspace minted for the PR number", () => {
