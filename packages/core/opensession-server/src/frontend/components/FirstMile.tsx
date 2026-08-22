@@ -166,7 +166,7 @@ function FirstMileSummary({ status }: { status: SetupStatus }) {
 					className={cn(
 						"flex aspect-square min-w-0 flex-col justify-between rounded-2xl border p-4 backdrop-blur-xl phone:rounded-xl phone:p-3.5",
 						tile.ready
-							? "border-green/20 bg-green-soft shadow-[inset_0_1px_0_color-mix(in_srgb,white_45%,transparent),0_12px_28px_-24px_color-mix(in_srgb,var(--green)_45%,transparent)]"
+							? "border-transparent bg-green-soft shadow-[inset_0_1px_0_color-mix(in_srgb,white_45%,transparent),0_12px_28px_-24px_color-mix(in_srgb,var(--green)_45%,transparent)]"
 							: "border-divider-soft bg-settings-plate/65",
 					)}
 				>
