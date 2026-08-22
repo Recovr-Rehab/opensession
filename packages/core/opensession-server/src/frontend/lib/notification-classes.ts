@@ -11,7 +11,7 @@ export const TRANSIENT_NOTICE_LANE =
 	"phone:inset-x-0 phone:right-auto phone:top-[calc(var(--header-h)+8px)]";
 
 export const TOAST_NOTICE_LANE =
-	"pointer-events-none fixed inset-x-0 bottom-[112px] z-[200] " +
+	"pointer-events-none fixed inset-x-0 bottom-[124px] z-[200] " +
 	"phone:bottom-[calc(max(16px,env(safe-area-inset-bottom,0px))+132px)]";
 
 export const PERSISTENT_NOTICE_SHELF =

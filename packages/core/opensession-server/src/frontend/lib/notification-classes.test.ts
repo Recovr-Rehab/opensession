@@ -20,7 +20,7 @@ describe("notification lanes", () => {
 
 	test("centres toast receipts above the composer", () => {
 		expect(TOAST_NOTICE_LANE).toContain("inset-x-0");
-		expect(TOAST_NOTICE_LANE).toContain("bottom-[112px]");
+		expect(TOAST_NOTICE_LANE).toContain("bottom-[124px]");
 		expect(TOAST_NOTICE_LANE).toContain(
 			"phone:bottom-[calc(max(16px,env(safe-area-inset-bottom,0px))+132px)]",
 		);
