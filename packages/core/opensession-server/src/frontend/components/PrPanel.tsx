@@ -2035,17 +2035,15 @@ export function PrPanel({
       {/* One floating, two-line review bar beside the workspace summary: PR
           identity first, navigation and view controls second. Phone keeps both
           lines edge to edge because there is no summary column to pair with. */}
-      <div className="shrink-0 desktop:mx-2 desktop:mt-2.5 desktop:mb-2 desktop:overflow-hidden desktop:rounded-lg desktop:border desktop:border-line desktop:bg-panel">
-      <header
-        className={`flex h-10 shrink-0 items-center gap-2.5 px-6 phone:px-3 ${statusMark.bgClassName}`}
-      >
+      <div className="shrink-0 bg-surface desktop:mx-2 desktop:mt-2.5 desktop:mb-2 desktop:overflow-hidden desktop:rounded-lg desktop:border desktop:border-line">
+      <header className="flex h-10 shrink-0 items-center gap-2.5 px-6 phone:px-3">
         {/* State, in the app's own PR language, filled rather than drawn: the
             tone washes the whole chip and the glyph and word share its ink.
             It is its own object, so it gets more air than the pieces of the
             identity line it precedes. */}
         <Tooltip label={statusMark.label}>
           <span
-            className={`mr-1.5 flex h-6 shrink-0 items-center gap-1.5 ${statusMark.className}`}
+            className={`mr-1.5 flex h-6 shrink-0 items-center gap-1.5 rounded-control px-2 ${statusMark.bgClassName} ${statusMark.className}`}
           >
             <PrStateIcon state={pr.state} isDraft={pr.isDraft} />
             {!headerCompact && (
