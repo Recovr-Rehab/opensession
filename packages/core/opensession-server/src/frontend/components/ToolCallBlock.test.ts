@@ -111,6 +111,11 @@ test("bash, grep, find and glob summaries drop their plumbing", () => {
   ).toBe("**/*website*.ts scripts");
   expect(canonicalToolName("find")).toBe("Find");
   expect(toolFamily("find")).toBe("find");
+  // A directory listing is a search, not an unknown tool: left in `other` it
+  // read as a standalone row and split the run of steps around it.
+  expect(canonicalToolName("ls")).toBe("Glob");
+  expect(toolFamily("ls")).toBe("find");
+  expect(toolDisplayName("ls")).toBe("ls");
   // A glob with no path used to render a stray trailing space.
   expect(toolSummary("glob", { pattern: "**/*.tsx" }, "", roots)).toBe("**/*.tsx");
 });

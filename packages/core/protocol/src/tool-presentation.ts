@@ -47,6 +47,7 @@ const TOOL_ALIASES: Record<string, string> = {
   find: "Find",
   glob: "Glob",
   list: "Glob",
+  ls: "Glob",
   webfetch: "WebFetch",
   websearch: "WebSearch",
   task: "Task",

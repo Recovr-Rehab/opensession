@@ -117,6 +117,18 @@ describe("grouped tool run row", () => {
 		expect(html).not.toContain("**/*website*.ts");
 	});
 
+	test("keeps a directory listing inside the run around it", () => {
+		const items = [
+			toolUse("grep", "grep", { pattern: "tab", path: "src" }),
+			toolUse("ls", "ls", { path: "src/frontend" }),
+			toolUse("after", "grep", { pattern: "pane-header", path: "src" }),
+		];
+		const html = render(items, new Map());
+
+		expect(html.match(/data-tool-run="true"/g)).toHaveLength(1);
+		expect(html).toContain("3 steps");
+	});
+
 	test("keeps skills and checklist updates inside routine steps", () => {
 		const items = [
 			toolUse("before", "read", { path: "src/App.tsx" }),
