@@ -395,9 +395,12 @@ import {
 	VIEWER_SUMMARY_STEP,
 	VIEWER_TITLE,
 	INFO_CONTENT,
+	INFO_HERO,
 	INFO_LIST,
+	INFO_NAME,
 	INFO_PAGE,
 	INFO_SECTION,
+	INFO_SUB,
 	INFO_SUMMARY_CARD,
 	infoTopbarClass,
 	infoTopbarTitleClass,
@@ -4998,6 +5001,7 @@ export function SessionViewer({
 	// gesture closes it instead of popping the whole session back to the
 	// sidebar (App's layer, priority 0).
 	const infoPageRef = useRef<HTMLDivElement | null>(null);
+	const infoHeroNameRef = useRef<HTMLHeadingElement | null>(null);
 	useBackSwipe({
 		active: isPhone && infoPageOpen,
 		onBack: () => setInfoPageOpen(false),
@@ -5005,17 +5009,26 @@ export function SessionViewer({
 		priority: 2,
 	});
 	useEffect(() => {
-		if (!infoPageOpen) {
+		if (!infoPageOpen || panelPage !== null) {
 			setInfoPageScrolled(false);
 			return;
 		}
 		const root = infoPageRef.current;
-		if (!root) return;
-		const sync = () => setInfoPageScrolled(root.scrollTop > 4);
-		sync();
-		root.addEventListener("scroll", sync, { passive: true });
-		return () => root.removeEventListener("scroll", sync);
-	}, [infoPageOpen, isPhone]);
+		const title = infoHeroNameRef.current;
+		if (!root || !title) return;
+		const topbar = root.querySelector<HTMLElement>(".session-info-topbar");
+		const topInset = Math.ceil(topbar?.getBoundingClientRect().height || 52);
+		const observer = new IntersectionObserver(
+			([entry]) => setInfoPageScrolled(!entry.isIntersecting),
+			{
+				root,
+				rootMargin: `-${topInset}px 0px 0px`,
+				threshold: 0,
+			},
+		);
+		observer.observe(title);
+		return () => observer.disconnect();
+	}, [infoPageOpen, isPhone, panelPage]);
 	useEffect(() => {
 		if (!infoPageOpen) return;
 		const app = document.querySelector<HTMLElement>(".app");
@@ -6279,11 +6292,10 @@ export function SessionViewer({
 									panelPage === "changes" ? "Changes" : "Workspace details"
 								}
 							>
-								{/* The phone's drill-in: this page IS the workspace panel
-								    here, so Changes navigates it rather than opening a
-								    column this width never renders. Same chevron, one
-								    level further in, and the bar names where you are
-								    straight away since there's no hero to scroll past. */}
+								{/* The phone's drill-in: this page is the workspace panel here,
+								    so Changes navigates it rather than opening a column. The
+								    workspace title moves into this bar as its large identity
+								    header scrolls away, like chat info on a phone. */}
 								<div
 									className={infoTopbarClass(
 										infoPageScrolled || panelPage !== null,
@@ -6314,7 +6326,9 @@ export function SessionViewer({
 										</svg>
 									</button>
 									<div
-										className={infoTopbarTitleClass(true)}
+										className={infoTopbarTitleClass(
+											infoPageScrolled || panelPage !== null,
+										)}
 									>
 										{panelPage === "changes"
 											? "Changes"
@@ -6338,105 +6352,127 @@ export function SessionViewer({
 										</div>
 									)
 								) : (
-									<div className={INFO_CONTENT}>
-										<div className={INFO_SUMMARY_CARD}>
-											{/* Repository and model remain directly editable here. They
-											    lead into the same quiet rows as the desktop summary. */}
-											<div className={INFO_LIST}>
-												{hasRepoWork && (
-													<RepoBar
-														sessionId={session.id}
-														primaryRepo={session.repo || "repository"}
-														branch={session.branch}
-														initialAttached={session.attachedRepos || []}
-														variant="menu-row"
-													/>
-												)}
-												{session.source === "opensession" && models.length > 0 && (
-													<ModelMenuRow
-														models={models}
-														model={model}
-														defaultModel={defaultModel}
-														onChange={handleModelChange}
-														prettyLabel={prettyModel}
-														effort={effort}
-														onEffortChange={setEffort}
-														fastMode={fastMode}
-														onFastModeChange={setFastMode}
-														accounts={accounts}
-														accountId={accountId}
-														onAccountChange={handleAccountChange}
-														usage={usage}
-													/>
-												)}
-												{session.sandbox && (
-													<div className="flex min-h-11 items-center px-3">
-														<SandboxBadge
-															sessionId={session.id}
-															sandbox={session.sandbox}
-														/>
-													</div>
-												)}
+									<>
+										<div className={INFO_HERO}>
+											{session.desk ? (
+												<IconDesk size={40} className="text-dim" />
+											) : (
+												<RepoTile name={session.repo || "repository"} size={40} />
+											)}
+											<h1 className={INFO_NAME} ref={infoHeroNameRef}>
+												{workspaceName || session.title}
+											</h1>
+											<div className={INFO_SUB}>
+												{[
+													session.desk ? null : session.repo || "repository",
+													models.length > 0
+														? metadataModelLabel(effectiveModel, models)
+														: null,
+												]
+													.filter(Boolean)
+													.join("  ·  ")}
 											</div>
-											<WorkspaceSummaryBody
-												embedded
-												session={session}
-												onOpenPanelTab={(tab) => {
-													if (tab === "changes") {
-														setPanelPage("changes");
-														return;
-													}
-													setInfoPageOpen(false);
-													focusPrInReview();
-												}}
-												onOpenPr={() => {
-													setInfoPageOpen(false);
-													focusPrInReview();
-												}}
-												onOpenStackPr={(repo, branch) => {
-													setInfoPageOpen(false);
-													onOpenPr?.(repo, branch);
-												}}
-												onOpenChecks={() => {
-													setInfoPageOpen(false);
-													focusPrInReview(undefined, "checks");
-												}}
-												onOpenAssets={() => {
-													setInfoPageOpen(false);
-													onOpenAssets?.();
-												}}
-												onArchive={handleArchive}
-												reviewRequest={effectiveReview?.req ?? null}
-												prReviewRequested={effectiveReview?.prReviewRequested}
-												running={isRunningLive}
-												send={connected ? send : undefined}
-												refreshTick={gitRefreshTick}
-												close={() => setInfoPageOpen(false)}
-											/>
 										</div>
-										{(workflowRuns.length > 0 || subagents.length > 0) && (
-											<div className={INFO_SECTION}>
-												<WorkflowPanel
-													sessionId={session.id}
-													runs={workflowRuns}
-													onCancel={cancelWorkflowRun}
-													subagents={subagents}
-													onOpenSubagent={(agentId, label) => {
+										<div className={INFO_CONTENT}>
+											<div className={INFO_SUMMARY_CARD}>
+												{/* Repository and model remain directly editable here. They
+												    lead into the same quiet rows as the desktop summary. */}
+												<div className={INFO_LIST}>
+													{hasRepoWork && (
+														<RepoBar
+															sessionId={session.id}
+															primaryRepo={session.repo || "repository"}
+															branch={session.branch}
+															initialAttached={session.attachedRepos || []}
+															variant="menu-row"
+														/>
+													)}
+													{session.source === "opensession" && models.length > 0 && (
+														<ModelMenuRow
+															models={models}
+															model={model}
+															defaultModel={defaultModel}
+															onChange={handleModelChange}
+															prettyLabel={prettyModel}
+															effort={effort}
+															onEffortChange={setEffort}
+															fastMode={fastMode}
+															onFastModeChange={setFastMode}
+															accounts={accounts}
+															accountId={accountId}
+															onAccountChange={handleAccountChange}
+															usage={usage}
+														/>
+													)}
+													{session.sandbox && (
+														<div className="flex min-h-11 items-center px-3">
+															<SandboxBadge
+																sessionId={session.id}
+																sandbox={session.sandbox}
+															/>
+														</div>
+													)}
+												</div>
+												<WorkspaceSummaryBody
+													embedded
+													session={session}
+													onOpenPanelTab={(tab) => {
+														if (tab === "changes") {
+															setPanelPage("changes");
+															return;
+														}
 														setInfoPageOpen(false);
-														openSubagent(agentId, label);
+														focusPrInReview();
 													}}
+													onOpenPr={() => {
+														setInfoPageOpen(false);
+														focusPrInReview();
+													}}
+													onOpenStackPr={(repo, branch) => {
+														setInfoPageOpen(false);
+														onOpenPr?.(repo, branch);
+													}}
+													onOpenChecks={() => {
+														setInfoPageOpen(false);
+														focusPrInReview(undefined, "checks");
+													}}
+													onOpenAssets={() => {
+														setInfoPageOpen(false);
+														onOpenAssets?.();
+													}}
+													onArchive={handleArchive}
+													reviewRequest={effectiveReview?.req ?? null}
+													prReviewRequested={effectiveReview?.prReviewRequested}
+													running={isRunningLive}
+													send={connected ? send : undefined}
+													refreshTick={gitRefreshTick}
+													close={() => setInfoPageOpen(false)}
 												/>
 											</div>
-										)}
-										{sessionReports.length > 0 && (
-											<div className={INFO_SECTION}>
-												<SessionReportsPanel
-													reports={sessionReports}
-													onOpenNewSession={onOpenNewSession}
-												/>
-											</div>
-										)}
-									</div>
+											{(workflowRuns.length > 0 || subagents.length > 0) && (
+												<div className={INFO_SECTION}>
+													<WorkflowPanel
+														sessionId={session.id}
+														runs={workflowRuns}
+														onCancel={cancelWorkflowRun}
+														subagents={subagents}
+														onOpenSubagent={(agentId, label) => {
+															setInfoPageOpen(false);
+															openSubagent(agentId, label);
+														}}
+													/>
+												</div>
+											)}
+											{sessionReports.length > 0 && (
+												<div className={INFO_SECTION}>
+													<SessionReportsPanel
+														reports={sessionReports}
+														onOpenNewSession={onOpenNewSession}
+													/>
+												</div>
+											)}
+										</div>
+									</>
 								)}
 							</div>,
 							document.body,
