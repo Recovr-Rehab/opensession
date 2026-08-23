@@ -5,9 +5,11 @@ import markUrl from "../mac/build/icon-512.png";
 import nativeMarkUrl from "../ios/OS1/Assets.xcassets/AppIcon.appiconset/AppIcon-1024.png";
 import {
   IconCheck,
+  IconCheckCircle,
   IconChevronLeft,
   IconCopy,
   IconGlobe,
+  IconServer,
   IconTerminal,
 } from "../../core/opensession-server/src/frontend/components/icons";
 import "./site.css";
@@ -15,6 +17,13 @@ import "./setup.css";
 import { AgentationFeedback } from "./AgentationFeedback";
 
 type ProviderId = "hetzner" | "digitalocean" | "aws" | "macmini" | "existing";
+type SetupOptionId =
+  | "new"
+  | "existing"
+  | "local"
+  | "remote"
+  | "ubuntu"
+  | "debian";
 
 interface Provider {
   id: ProviderId;
@@ -81,6 +90,37 @@ const providers: Provider[] = [
     login: "root",
   },
 ];
+
+function setupOptionsFor(provider: Provider): Array<{
+  id: SetupOptionId;
+  name: string;
+  detail: string;
+}> {
+  if (provider.id === "macmini") {
+    return [
+      { id: "local", name: "Set up this Mac", detail: "Enable Remote Login" },
+      { id: "remote", name: "Set up another Mac", detail: "Connect over SSH" },
+    ];
+  }
+  if (provider.id === "existing") {
+    return [
+      { id: "ubuntu", name: "Ubuntu 24.04", detail: "Recommended" },
+      { id: "debian", name: "Debian 12", detail: "Also supported" },
+    ];
+  }
+  return [
+    {
+      id: "new",
+      name: "Create a new server",
+      detail: `Guided ${provider.name} setup`,
+    },
+    {
+      id: "existing",
+      name: "Use an existing server",
+      detail: "I already have its SSH details",
+    },
+  ];
+}
 
 const installCommand =
   "curl -fsSL https://raw.githubusercontent.com/tellahq/opensession/main/install.sh | bash";
@@ -185,14 +225,16 @@ function Choice({
   );
 }
 
-const stepLabels = ["Server", "Connect", "Tailscale", "Download", "Open"];
+const stepLabels = ["Server", "Setup", "Tailscale", "Download", "Open"];
 
 function StepNav({
   step,
   onSelect,
+  canSelect,
 }: {
   step: number;
   onSelect: (step: number) => void;
+  canSelect: (step: number) => boolean;
 }) {
   return (
     <nav className="setup-step-nav" aria-label="Setup steps">
@@ -204,10 +246,11 @@ function StepNav({
             index < step ? "done" : index === step ? "current" : undefined
           }
           aria-current={index === step ? "step" : undefined}
+          disabled={!canSelect(index)}
           onClick={() => onSelect(index)}
         >
           <span className="setup-step-dot" aria-hidden="true" />
-          <span>{label}</span>
+          <span className="setup-step-label">{label}</span>
         </button>
       ))}
     </nav>
@@ -219,12 +262,14 @@ function StepLayout({
   title,
   description,
   brand,
+  contentClassName,
   children,
 }: {
   step: number;
   title: string;
   description: string;
   brand?: ReactNode;
+  contentClassName?: string;
   children: ReactNode;
 }) {
   return (
@@ -236,24 +281,54 @@ function StepLayout({
         <p>{description}</p>
         {brand}
       </div>
-      <div className="setup-step-content">{children}</div>
+      <div
+        className={`setup-step-content${contentClassName ? ` ${contentClassName}` : ""}`}
+      >
+        {children}
+      </div>
     </div>
   );
 }
 
 function SetupPage() {
   const [step, setStep] = useState(0);
-  const [providerId, setProviderId] = useState<ProviderId>("hetzner");
-  const provider = providers.find((item) => item.id === providerId)!;
+  const [providerId, setProviderId] = useState<ProviderId | null>(null);
+  const provider = providers.find((item) => item.id === providerId) ?? providers[0]!;
+  const [setupOption, setSetupOption] = useState<SetupOptionId | null>(null);
   const [login, setLogin] = useState(provider.login);
   const [serverAddress, setServerAddress] = useState("");
+  const [serverConnected, setServerConnected] = useState(false);
   const [tailnetAddress, setTailnetAddress] = useState("");
 
   function chooseProvider(next: Provider) {
     setProviderId(next.id);
+    setSetupOption(null);
     setLogin(next.login);
+    setServerConnected(false);
   }
 
+  const hasServerDetails = Boolean(serverAddress.trim() && login.trim());
+  const serverSetupItems =
+    provider.id === "macmini"
+      ? [
+          "Use a dedicated Apple silicon Mac",
+          "Turn on Remote Login in System Settings",
+          "Keep it powered on and connected",
+        ]
+      : provider.id === "existing"
+        ? [
+            setupOption === "debian" ? "Use Debian 12" : "Use Ubuntu 24.04",
+            "Provide at least 2 vCPU, 8 GB RAM, and 50 GB disk",
+            "Make sure your account has sudo access",
+          ]
+        : [
+            setupOption === "existing"
+              ? `Open your existing ${provider.name} server`
+              : `Create a ${provider.name} server`,
+            "Choose Ubuntu 24.04",
+            "Use at least 2 vCPU, 8 GB RAM, and 50 GB disk",
+            "Add your SSH key",
+          ];
   const sshCommand = `ssh ${login || "ubuntu"}@${serverAddress || "YOUR_SERVER_IP"}`;
   const instanceUrl = (() => {
     const address = tailnetAddress.trim();
@@ -286,93 +361,219 @@ function SetupPage() {
       <StepLayout
         step={1}
         title="Choose a server"
-        description="Open Session runs on a machine you control."
+        description="Choose where Open Session will run and how you want to set it up."
+        contentClassName="setup-step-content-split"
       >
-        <div className="setup-choices">
-          {providers.map((item) => (
-            <Choice
-              key={item.id}
-              provider={item}
-              selected={item.id === providerId}
-              onSelect={() => chooseProvider(item)}
-            />
-          ))}
-        </div>
-        <div className="setup-recommendation">
-          <strong>
-            {provider.id === "macmini"
-              ? "Use a dedicated Mac mini"
-              : "Start with Ubuntu 24.04"}
-          </strong>
-          <span>
-            {provider.id === "macmini"
-              ? "Apple silicon · 16 GB memory · macOS 14 or later"
-              : "2 vCPU · 8 GB RAM · 50 GB disk"}
-          </span>
-          {provider.url && (
-            <a href={provider.url} target="_blank" rel="noreferrer">
-              Open {provider.name} <span aria-hidden="true">↗</span>
-            </a>
-          )}
+        <div className="setup-server-picker">
+          <section className="setup-server-list-panel">
+            <div className="setup-choices">
+              {providers.map((item) => (
+                <Choice
+                  key={item.id}
+                  provider={item}
+                  selected={item.id === providerId}
+                  onSelect={() => chooseProvider(item)}
+                />
+              ))}
+            </div>
+          </section>
+
+          <section
+            className="setup-server-options-panel"
+            data-empty={!providerId || undefined}
+            aria-live="polite"
+          >
+            {providerId ? (
+              <div className="setup-server-options-content" key={providerId}>
+                <div className="setup-server-options-heading">
+                  <ProviderLogo provider={provider} />
+                  <div>
+                    <strong>Set up {provider.name}</strong>
+                    <span>Choose one option to continue.</span>
+                  </div>
+                </div>
+                <div className="setup-server-options">
+                  {setupOptionsFor(provider).map((option) => (
+                    <button
+                      type="button"
+                      key={option.id}
+                      className="setup-server-option"
+                      data-selected={setupOption === option.id || undefined}
+                      aria-pressed={setupOption === option.id}
+                      onClick={() => {
+                        setSetupOption(option.id);
+                        setServerConnected(false);
+                      }}
+                    >
+                      <span>
+                        <strong>{option.name}</strong>
+                        <small>{option.detail}</small>
+                      </span>
+                      <span className="setup-radio" aria-hidden="true" />
+                    </button>
+                  ))}
+                </div>
+                <div className="setup-server-option-spec">
+                  <strong>
+                    {provider.id === "macmini"
+                      ? "Dedicated Mac recommended"
+                      : setupOption === "debian"
+                        ? "Debian 12"
+                        : "Ubuntu 24.04"}
+                  </strong>
+                  <span>
+                    {provider.id === "macmini"
+                      ? "Apple silicon · 16 GB memory · macOS 14 or later"
+                      : "2 vCPU · 8 GB RAM · 50 GB disk"}
+                  </span>
+                </div>
+              </div>
+            ) : (
+              <div className="setup-server-options-empty">
+                <IconServer size={28} />
+                <strong>Choose a server</strong>
+                <span>Setup options will appear here.</span>
+              </div>
+            )}
+          </section>
         </div>
       </StepLayout>
     </section>,
     <section className="setup-panel" key="connect">
       <StepLayout
         step={2}
-        title="Connect over SSH"
-        description="Open Terminal on your Mac and connect to the server."
+        title={`Set up ${provider.name}`}
+        description="Create the server, connect over SSH, and confirm it is ready."
+        contentClassName="setup-step-content-split"
       >
-        <div className="setup-instruction-block">
-          <div className="setup-instruction-heading">
-            <span>1 · Server credentials</span>
-            <strong>Enter your connection details</strong>
-            <p>Find the server IP and username in your hosting provider.</p>
-          </div>
-          <div className="setup-fields">
-            <label>
-              <span>IP address</span>
-              <input
-                value={serverAddress}
-                onChange={(event) => setServerAddress(event.target.value)}
-                placeholder="203.0.113.10"
-                inputMode="url"
-                autoComplete="off"
-              />
-            </label>
-            <label className="setup-user-field">
-              <span>Username</span>
-              <input
-                value={login}
-                onChange={(event) => setLogin(event.target.value)}
-                autoComplete="username"
-              />
-            </label>
-          </div>
-          <CopyCommand command={sshCommand} label="SSH command" />
+        <div className="setup-server-setup">
+          <section className="setup-server-guide">
+            <div className="setup-server-provider">
+              <ProviderLogo provider={provider} />
+              <div>
+                <strong>{provider.name}</strong>
+                <span>{provider.detail}</span>
+              </div>
+              {provider.url && setupOption === "new" && (
+                <a href={provider.url} target="_blank" rel="noreferrer">
+                  Create server <span aria-hidden="true">↗</span>
+                </a>
+              )}
+            </div>
+
+            <ol className="setup-server-checklist">
+              {serverSetupItems.map((item, index) => (
+                <li key={item}>
+                  <span>{index + 1}</span>
+                  {item}
+                </li>
+              ))}
+            </ol>
+
+            <div className="setup-instruction-heading setup-server-credentials-heading">
+              <span>Connection</span>
+              <strong>Connect over SSH</strong>
+              <p>Enter the details from your provider, then run the command.</p>
+            </div>
+            <div className="setup-fields">
+              <label>
+                <span>IP address or hostname</span>
+                <input
+                  value={serverAddress}
+                  onChange={(event) => {
+                    setServerAddress(event.target.value);
+                    setServerConnected(false);
+                  }}
+                  placeholder="203.0.113.10"
+                  inputMode="url"
+                  autoComplete="off"
+                />
+              </label>
+              <label className="setup-user-field">
+                <span>Username</span>
+                <input
+                  value={login}
+                  onChange={(event) => {
+                    setLogin(event.target.value);
+                    setServerConnected(false);
+                  }}
+                  autoComplete="username"
+                />
+              </label>
+            </div>
+            <CopyCommand command={sshCommand} label="SSH command" />
+
+            {login === "root" ? (
+              <div className="setup-substep">
+                <div className="setup-substep-heading">
+                  <span>Open Session user</span>
+                  <strong>Create a separate admin user</strong>
+                  <p>Run this after the SSH connection opens.</p>
+                </div>
+                <CopyCommand
+                  command={createUserCommand}
+                  label="create user command"
+                />
+                <div className="setup-reconnect">
+                  <strong>Reconnect as the new user</strong>
+                  <code>ssh opensession@{serverAddress || "YOUR_SERVER_IP"}</code>
+                </div>
+              </div>
+            ) : (
+              <p className="setup-note">
+                <IconTerminal size={17} /> Keep the SSH session open for the
+                next step.
+              </p>
+            )}
+          </section>
+
+          <aside
+            className="setup-server-status"
+            data-connected={serverConnected || undefined}
+            aria-live="polite"
+          >
+            <div className="setup-connection-visual" aria-hidden="true">
+              <span className="setup-connection-node">
+                <IconTerminal size={23} />
+              </span>
+              <span className="setup-connection-track">
+                <span />
+              </span>
+              <span className="setup-connection-node">
+                <IconServer size={23} />
+              </span>
+            </div>
+            <div className="setup-server-status-copy">
+              <strong>
+                {serverConnected ? "Server connected" : "Waiting for your server"}
+              </strong>
+              <p>
+                {serverConnected
+                  ? `${login}@${serverAddress} is ready.`
+                  : hasServerDetails
+                    ? "Run the SSH command, then confirm when Terminal connects."
+                    : "Add the server address and username to continue."}
+              </p>
+            </div>
+            <button
+              type="button"
+              className="setup-confirm-connection"
+              data-connected={serverConnected || undefined}
+              disabled={!hasServerDetails || serverConnected}
+              aria-pressed={serverConnected}
+              onClick={() => setServerConnected(true)}
+            >
+              <span className="setup-confirm-icon" aria-hidden="true">
+                <IconServer className="setup-confirm-icon-pending" size={18} />
+                <IconCheckCircle
+                  className="setup-confirm-icon-connected"
+                  size={18}
+                />
+              </span>
+              {serverConnected ? "Connected" : "I've connected over SSH"}
+            </button>
+          </aside>
         </div>
-        {login === "root" ? (
-          <div className="setup-substep">
-            <div className="setup-substep-heading">
-              <span>2 · Open Session user</span>
-              <strong>Create a separate admin user</strong>
-              <p>Run Open Session from this account instead of root.</p>
-            </div>
-            <CopyCommand
-              command={createUserCommand}
-              label="create user command"
-            />
-            <div className="setup-reconnect">
-              <strong>Reconnect as the new user</strong>
-              <code>ssh opensession@{serverAddress || "YOUR_SERVER_IP"}</code>
-            </div>
-          </div>
-        ) : (
-          <p className="setup-note">
-            <IconTerminal size={17} /> Your provider may ask you to add an SSH
-            key when you create the server.
-          </p>
-        )}
       </StepLayout>
     </section>,
     <section className="setup-panel" key="tailscale">
@@ -538,44 +739,61 @@ function SetupPage() {
   return (
     <div className="setup-page" data-setup-wizard>
       <header className="setup-header">
-        <a className="setup-brand" href="/" aria-label="Open Session home">
-          <Mark />
-          <span>Open Session</span>
-        </a>
-        <a className="setup-home-link" href="/">
-          Back to website
+        <button
+          type="button"
+          className="setup-header-back"
+          onClick={() => setStep((current) => Math.max(0, current - 1))}
+          disabled={step === 0}
+          aria-label="Back"
+        >
+          <IconChevronLeft size={18} />
+        </button>
+        <StepNav
+          step={step}
+          onSelect={setStep}
+          canSelect={(nextStep) =>
+            nextStep === 0 || Boolean(setupOption && (nextStep === 1 || serverConnected))
+          }
+        />
+        <a className="setup-home-link" href="./">
+          <span className="setup-home-wide">Back to website</span>
+          <span className="setup-home-compact">Exit</span>
         </a>
       </header>
 
-      <main className="setup-window">
-        <div className="setup-panel-wrap">{panels[step]}</div>
+      <main className="setup-panel-wrap">{panels[step]}</main>
 
-        <div className="setup-actions">
+      <footer className="setup-actions">
+        <button
+          type="button"
+          className="setup-back"
+          onClick={() => setStep((current) => Math.max(0, current - 1))}
+          disabled={step === 0}
+        >
+          <IconChevronLeft size={17} />
+          Back
+        </button>
+        {step < 4 ? (
           <button
             type="button"
-            className="setup-back"
-            onClick={() => setStep((current) => Math.max(0, current - 1))}
-            disabled={step === 0}
+            className="setup-continue"
+            onClick={() => setStep(step + 1)}
+            disabled={
+              (step === 0 && !setupOption) || (step === 1 && !serverConnected)
+            }
           >
-            <IconChevronLeft size={17} />
-            Back
+            {step === 0 && !setupOption
+              ? "Choose setup option"
+              : step === 1 && !serverConnected
+                ? "Confirm connection"
+                : "Next"}
           </button>
-          <StepNav step={step} onSelect={setStep} />
-          {step < 4 ? (
-            <button
-              type="button"
-              className="setup-continue"
-              onClick={() => setStep(step + 1)}
-            >
-              Next
-            </button>
-          ) : (
-            <a className="setup-quiet-button" href="/">
-              Back to website
-            </a>
-          )}
-        </div>
-      </main>
+        ) : (
+          <a className="setup-quiet-button" href="./">
+            Back to website
+          </a>
+        )}
+      </footer>
     </div>
   );
 }
