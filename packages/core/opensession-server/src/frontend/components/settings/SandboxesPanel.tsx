@@ -846,58 +846,63 @@ export function SandboxesPanel() {
 											: "Snapshot is stale";
 								return (
 									<SettingCard key={`${environment.repo}:${environment.provider}`}>
-										<div className="flex flex-wrap items-start gap-3 px-5 py-3.5">
-											<SandboxProviderLogo provider={environment.provider} />
-											<div className="min-w-0 flex-1">
-												<div className="text-item-title font-medium text-fg">{environment.repo}</div>
-												<div
-													className={cn(
-														"mt-0.5 text-supporting",
-														environment.state === "failed" && !running ? "text-red" : "text-dim",
-													)}
-												>
-													{provider.label} · {status}
-												</div>
-												<div className="mt-1 text-meta text-faint">{machineSummary(environment)}</div>
-												{running && (
-													<div className="mt-2 max-w-[24rem]">
-														<div className="h-1 overflow-hidden rounded-full bg-hover">
-															<div
-																className="h-full rounded-full bg-accent transition-[width] duration-[var(--dur)]"
-																style={{ width: `${operation.progress || 2}%` }}
-															/>
-														</div>
-														{operation.detail && (
-															<div className="mt-1 text-meta text-faint">{operation.detail}</div>
+										<div className="grid grid-cols-[minmax(0,1fr)_auto] gap-x-4 gap-y-3 px-5 py-3.5">
+											<div className="col-span-2 row-start-1 flex min-w-0 items-start gap-3">
+												<SandboxProviderLogo provider={environment.provider} />
+												<div className="min-w-0 flex-1">
+													<div className="text-item-title font-medium text-fg">{environment.repo}</div>
+													<div
+														className={cn(
+															"mt-0.5 text-supporting",
+															environment.state === "failed" && !running ? "text-red" : "text-dim",
 														)}
+													>
+														{provider.label} · {status}
 													</div>
-												)}
+													<div className="mt-1 text-meta text-faint">{machineSummary(environment)}</div>
+													{running && (
+														<div className="mt-2 max-w-[24rem]">
+															<div className="h-1 overflow-hidden rounded-full bg-hover">
+																<div
+																	className="h-full rounded-full bg-accent transition-[width] duration-[var(--dur)]"
+																	style={{ width: `${operation.progress || 2}%` }}
+																/>
+															</div>
+															{operation.detail && (
+																<div className="mt-1 text-meta text-faint">{operation.detail}</div>
+															)}
+														</div>
+													)}
+												</div>
+											</div>
+											<div className="col-span-2 row-start-2 flex items-baseline justify-between gap-4">
 												{(operation || environment.failureCode) && (
-													<details className="mt-2 text-meta text-faint">
-														<summary className="w-fit cursor-pointer select-none hover:text-fg">Details</summary>
-														<div className="mt-1 grid gap-0.5 pl-2">
+													<details className="ml-10 min-w-0 text-meta text-faint">
+														<summary className="h-[26px] w-fit cursor-pointer select-none leading-[26px] hover:text-fg">Details</summary>
+														<div className="mt-1 grid gap-0.5 pl-3">
 															{operation && <span>{operation.stage} · updated {new Date(operation.updatedAt).toLocaleString()}</span>}
 															{(environment.failureCode || operation?.failureCode) && <span>Code {environment.failureCode || operation?.failureCode}</span>}
 														</div>
 													</details>
 												)}
+												<Button
+													className="ml-auto shrink-0"
+													size="sm"
+													disabled={!canManage || running}
+													onClick={() => {
+														setEnvironmentTarget(environment);
+														setEnvironmentDialogOpen(true);
+													}}
+												>
+													{running
+														? "Preparing…"
+														: environment.state === "failed"
+															? "Retry"
+															: environment.state === "stale"
+																? "Refresh"
+																: "Configure"}
+												</Button>
 											</div>
-											<Button
-												size="sm"
-												disabled={!canManage || running}
-												onClick={() => {
-													setEnvironmentTarget(environment);
-													setEnvironmentDialogOpen(true);
-												}}
-											>
-												{running
-													? "Preparing…"
-													: environment.state === "failed"
-														? "Retry"
-														: environment.state === "stale"
-															? "Refresh"
-															: "Configure"}
-											</Button>
 										</div>
 									</SettingCard>
 								);
