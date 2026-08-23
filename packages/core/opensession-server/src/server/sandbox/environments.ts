@@ -396,7 +396,13 @@ export async function prepareSandboxEnvironment(
         provider,
         repo,
         options.user || "workspace-setup",
-        { refreshTemplate: options.refresh },
+        {
+          refreshTemplate: options.refresh,
+          // Daytona and Box can retain a stopped disk with zero compute. It
+          // removes slow snapshot materialization from the first-turn path;
+          // Modal has no park() and therefore keeps image-only behavior.
+          standby: true,
+        },
       );
       const entry = prewarmStatus(provider, repo);
       if (entry?.stage) options.onProgress?.(entry.stage, entry.progress || 10);
@@ -404,10 +410,11 @@ export async function prepareSandboxEnvironment(
         options.onProgress?.("Waiting for provider capacity", 5);
       }
       if (requested.state === "ready" || entry?.state === "ready") {
-        // Publishing is complete before the pool flips Ready. Release this
-        // build sandbox so preparing many repos stays within the paid cap;
-        // the retained provider artifact is what sessions restore.
-        await invalidatePrewarm(provider, repo);
+        // Providers with a real stopped state retain one zero-compute standby
+        // beside the durable artifact. Others release the build sandbox.
+        if (!(entry?.standby && entry.parked)) {
+          await invalidatePrewarm(provider, repo);
+        }
         options.onProgress?.("Verifying template", 98);
         const derived = await derivedEnvironment(repo, provider);
         if (derived.state !== "ready") {
