@@ -403,6 +403,9 @@ export interface RemoteSandboxState extends SandboxTrustPolicy {
   repoId?: string;
   resources?: { cpu?: number; memoryMb?: number; diskGb?: number };
   branch?: string;
+  /** Session-private provider image used when ephemeral compute disappears. */
+  checkpointArtifactId?: string;
+  checkpointCreatedAt?: string;
   createdAt: string;
   lastActivityAt: string;
 }

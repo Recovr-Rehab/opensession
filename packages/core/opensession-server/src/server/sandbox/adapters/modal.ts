@@ -57,6 +57,18 @@ const DEFAULT_IDLE_STOP_MINUTES = 30;
 const MAX_LIFETIME_MS = 24 * 60 * 60 * 1000;
 const RECREATE_BEFORE_EXPIRY_MS = 60 * 60 * 1000;
 
+function modalCheckpointLocks(): Map<string, Promise<void>> {
+  const g = globalThis as typeof globalThis & {
+    __opensessionModalCheckpointLocks?: Map<string, Promise<void>>;
+  };
+  return (g.__opensessionModalCheckpointLocks ||= new Map());
+}
+
+async function waitForModalCheckpoint(sandboxId: string | undefined): Promise<void> {
+  if (!sandboxId) return;
+  await modalCheckpointLocks().get(sandboxId)?.catch(() => {});
+}
+
 function modalConfig(): ReturnType<typeof sandboxConfig> {
   const cfg = sandboxConfig();
   const settings = getSandboxConnection("modal")?.settings || {};
@@ -181,6 +193,8 @@ export class ModalProvider implements SandboxProvider {
       createIfMissing: true,
     });
     let prevState = findRemoteStateBySession(this.id, spec.sessionId);
+    await waitForModalCheckpoint(prevState?.sandboxId);
+    prevState = findRemoteStateBySession(this.id, spec.sessionId);
     const trust = resolveTrustPolicy(spec, prevState);
     const repo = getRepo(spec.repo || prevState?.repoId);
     const branch = spec.branch || prevState?.branch || repo.defaultBranch;
@@ -211,30 +225,21 @@ export class ModalProvider implements SandboxProvider {
       prevState = null;
     }
     // Modal's absolute timeout is not extended by activity. Leave a one-hour
-    // margin so a newly-started turn cannot be killed by the 24-hour deadline.
+    // margin and rotate through a session-private image before a new turn can
+    // be killed by the 24-hour deadline. This preserves uncommitted work.
     if (
       sandbox &&
       prevState &&
       Date.now() - Date.parse(prevState.createdAt) >=
         MAX_LIFETIME_MS - RECREATE_BEFORE_EXPIRY_MS
     ) {
-      const pending = await modalDriver(sandbox).exec(
-        `cd ${shellQuoteWord(cwd)} && ` +
-          `git rev-parse --verify '@{upstream}' >/dev/null 2>&1 && ` +
-          `test -z "$(git status --porcelain)" && ` +
-          `test -z "$(git log --format=%H '@{upstream}..HEAD')"`,
-      );
-      if (pending.exitCode !== 0) {
-        throw new Error(
-          "Modal sandbox is nearing its hard lifetime without a clean, fully pushed upstream branch; commit and push before it can rotate",
-        );
-      }
+      await this.checkpoint(sandbox.sandboxId);
+      prevState = findRemoteStateBySession(this.id, spec.sessionId);
       await sandbox.terminate();
       removeRemoteState(this.id, sandbox.sandboxId);
-      prevState = null;
       sandbox = null;
     }
-    if (!sandbox) {
+    if (!sandbox && !prevState?.checkpointArtifactId) {
       const claim = await claimPrewarmOrWait(this.id, repo.id, spec.sessionId);
       if (claim) {
         try {
@@ -259,10 +264,9 @@ export class ModalProvider implements SandboxProvider {
       }
     }
     if (!sandbox) {
-      if (prevState) {
-        removeRemoteState(this.id, prevState.sandboxId);
-        prevState = null;
-      }
+      const checkpointArtifactId = prevState?.checkpointArtifactId;
+      const checkpointCreatedAt = prevState?.checkpointCreatedAt;
+      if (prevState) removeRemoteState(this.id, prevState.sandboxId);
       console.log(`[sandbox:modal] creating sandbox for ${spec.sessionId}`);
       const template = readRemoteRepoTemplate("modal", repo.id);
       const create = async (imageId?: string) => {
@@ -283,16 +287,48 @@ export class ModalProvider implements SandboxProvider {
           encryptedPorts: cfg.modal?.publicPreviews ? cfg.previewPorts : undefined,
         });
       };
+      let restoredCheckpoint = Boolean(checkpointArtifactId);
       try {
-        sandbox = await create(template?.artifactId);
+        sandbox = await create(checkpointArtifactId || template?.artifactId);
       } catch (error) {
-        if (!template) throw error;
-        invalidateRemoteRepoTemplate("modal", repo.id);
-        console.warn(
-          `[sandbox:modal] repo template ${template.artifactId} is unavailable; retrying cold`,
-        );
-        sandbox = await create();
+        if (checkpointArtifactId) {
+          restoredCheckpoint = false;
+          await client.images.delete(checkpointArtifactId).catch(() => {});
+          console.warn(
+            `[sandbox:modal] session checkpoint ${checkpointArtifactId} is unavailable; retrying from the project image`,
+          );
+          try {
+            sandbox = await create(template?.artifactId);
+          } catch (templateError) {
+            if (!template) throw templateError;
+            invalidateRemoteRepoTemplate("modal", repo.id);
+            sandbox = await create();
+          }
+        } else if (template) {
+          invalidateRemoteRepoTemplate("modal", repo.id);
+          console.warn(
+            `[sandbox:modal] repo template ${template.artifactId} is unavailable; retrying cold`,
+          );
+          sandbox = await create();
+        } else {
+          throw error;
+        }
       }
+      prevState = restoredCheckpoint && checkpointArtifactId
+        ? {
+            sandboxId: sandbox.sandboxId,
+            provider: this.id,
+            sessionId: spec.sessionId,
+            cwd,
+            repoId: repo.id,
+            branch,
+            checkpointArtifactId,
+            checkpointCreatedAt,
+            createdAt: new Date().toISOString(),
+            lastActivityAt: new Date().toISOString(),
+            ...trust,
+          }
+        : null;
       created = true;
     }
 
@@ -326,6 +362,12 @@ export class ModalProvider implements SandboxProvider {
       branch,
       createdAt: createdAt || new Date().toISOString(),
       lastActivityAt: new Date().toISOString(),
+      ...(prevState?.checkpointArtifactId
+        ? {
+            checkpointArtifactId: prevState.checkpointArtifactId,
+            checkpointCreatedAt: prevState.checkpointCreatedAt,
+          }
+        : {}),
       ...trust,
     });
     return this.makeHandle(sandbox, spec.sessionId, cwd);
@@ -379,14 +421,57 @@ export class ModalProvider implements SandboxProvider {
     }
   }
 
+  async checkpoint(sandboxId: string): Promise<void> {
+    const locks = modalCheckpointLocks();
+    const existing = locks.get(sandboxId);
+    if (existing) return existing;
+    const task = this.checkpointInner(sandboxId).finally(() => {
+      if (locks.get(sandboxId) === task) locks.delete(sandboxId);
+    });
+    locks.set(sandboxId, task);
+    return task;
+  }
+
+  private async checkpointInner(sandboxId: string): Promise<void> {
+    const state = readRemoteState(this.id, sandboxId);
+    if (!state || state.sessionId.startsWith("__prewarm__:")) return;
+    const client = await modalClient();
+    const sandbox = await client.sandboxes.fromId(sandboxId);
+    if ((await sandbox.poll()) !== null) return;
+    const image = await sandbox.snapshotFilesystem({
+      timeoutMs: 10 * 60_000,
+      ttlMs: REMOTE_REPO_TEMPLATE_TTL_MS,
+    });
+    const current = readRemoteState(this.id, sandboxId);
+    if (!current || current.sessionId !== state.sessionId) {
+      await client.images.delete(image.imageId).catch(() => {});
+      return;
+    }
+    const previous = current.checkpointArtifactId;
+    current.checkpointArtifactId = image.imageId;
+    current.checkpointCreatedAt = new Date().toISOString();
+    writeRemoteState(current);
+    if (previous && previous !== image.imageId) {
+      await client.images.delete(previous).catch(() => {});
+    }
+    console.log(
+      `[sandbox:modal] checkpointed ${state.sessionId} as ${image.imageId}`,
+    );
+  }
+
   async destroy(sandboxId: string): Promise<void> {
+    await waitForModalCheckpoint(sandboxId);
+    const state = readRemoteState(this.id, sandboxId);
+    const client = await modalClient();
     try {
-      const client = await modalClient();
       const sandbox = await client.sandboxes.fromId(sandboxId);
       await sandbox.terminate();
     } catch (e) {
       console.warn(`[sandbox:modal] destroy(${sandboxId}):`, e);
       if ((e as { name?: string })?.name !== "NotFoundError") throw e;
+    }
+    if (state?.checkpointArtifactId) {
+      await client.images.delete(state.checkpointArtifactId).catch(() => {});
     }
     removeRemoteState(this.id, sandboxId);
   }

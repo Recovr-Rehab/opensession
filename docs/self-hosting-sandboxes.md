@@ -675,10 +675,13 @@ contract as the other remote providers.
 - Modal encrypted tunnel URLs are public Internet endpoints. Preview tunnels
   stay disabled unless `modal.publicPreviews` is explicitly `true`; only use
   that option for dev servers that are safe to expose publicly.
-- Modal caps a sandbox's lifetime at 24 hours. Idle timeout or lifetime expiry
-  terminates the container and deletes its workspace; the next turn creates a
-  fresh sandbox, so push code-mode work early.
-- The prewarm adapter publishes Modal filesystem Images after `.agents/setup`
+- Modal caps a sandbox's lifetime at 24 hours and deletes a terminated
+  container's filesystem. After each clean turn Open Session therefore writes
+  one session-private filesystem Image. An idle or near-lifetime follow-up
+  restores that exact workspace, including uncommitted work, before syncing
+  credentials and starting the runner. Each successful checkpoint replaces the
+  previous one; session deletion removes it.
+- The prewarm adapter publishes credential-free Modal filesystem Images after `.agents/setup`
   and credential scrubbing. The image registry refreshes them every 30 minutes,
   while input signatures rebuild immediately when setup or lockfiles change.
   A restored prewarm preserves the exact seal and setup output, then is adopted

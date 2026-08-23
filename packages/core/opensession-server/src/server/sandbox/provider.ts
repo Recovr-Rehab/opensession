@@ -206,6 +206,9 @@ export interface SandboxProvider {
   pause?(sandboxId: string): Promise<void>;
   /** Wake a paused sandbox and return its live handle. */
   resume?(sandboxId: string): Promise<Sandbox | null>;
+  /** Persist a session-owned filesystem checkpoint after a clean turn.
+   * Providers whose stopped sandboxes retain disk do not need this hook. */
+  checkpoint?(sandboxId: string): Promise<void>;
   /** Tear the sandbox down (session delete/archive). Workspace data outlives
    *  it where the provider stores it on the host (local worktrees always do). */
   destroy(sandboxId: string): Promise<void>;

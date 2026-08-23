@@ -2725,6 +2725,24 @@ async function runSessionPromptInner(
 	// any "when_done" / "on_pr" human asks waiting on this session. Idempotent.
 	if (!promptQueues.get(sessionId)?.length) {
 		onHumanAsksSessionIdle(sessionId);
+		// Ephemeral providers can persist an exact, session-private filesystem
+		// image now that the turn is quiescent. This is detached from response
+		// latency; the provider serializes a follow-up restore behind it.
+		if (
+			!endedWithError &&
+			sandboxRun?.sandboxId &&
+			isRunnableSandboxProvider(sandboxRun.sandboxProvider)
+		) {
+			const provider = getSandboxProvider(sandboxRun.sandboxProvider);
+			if (provider.checkpoint) {
+				void provider.checkpoint(sandboxRun.sandboxId).catch((error) => {
+					console.warn(
+						`[sandbox] checkpoint ${sandboxRun!.sandboxId} after ${sessionId} failed:`,
+						error,
+					);
+				});
+			}
+		}
 		// Publish any commits the turn left unpushed so the status header doesn't
 		// linger on "Ahead by N commits" (see autoPushSessionBranches). Only on a
 		// clean finish — an errored/aborted turn may be mid-work. Fire-and-forget.
