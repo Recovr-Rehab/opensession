@@ -133,6 +133,28 @@ export interface ResolvedWorkspace {
 }
 
 /**
+ * A session-less PR workspace still belongs in the active workspace payload
+ * while its PR is open. The sidebar resolves a bare PR row before navigating;
+ * without this exception the active-only workspace fetch immediately hid the
+ * new record and the destination rendered “Workspace not found.”
+ */
+export function workspaceBacksOpenPr(
+  workspace: Pick<Workspace, "repo" | "prNumber" | "branch">,
+  openPrs: Array<{ repo: string; number: number; branch: string }>,
+  defaultRepoId: string,
+): boolean {
+  if (workspace.prNumber === undefined && !workspace.branch) return false;
+  const repo = workspace.repo || defaultRepoId;
+  return openPrs.some(
+    (pr) =>
+      pr.repo === repo &&
+      (workspace.prNumber !== undefined
+        ? pr.number === workspace.prNumber
+        : pr.branch === workspace.branch),
+  );
+}
+
+/**
  * Resolve the one workspace for a PR. Lookup order (adopt before create):
  * dedupe key → newest PR-matching session's workspace → worktree owner →
  * mint a session-less `ghpr-` workspace. Returns null when the PR can't be

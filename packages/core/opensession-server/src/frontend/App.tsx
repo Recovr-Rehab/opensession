@@ -1054,7 +1054,7 @@ export function App(
 		forceFirstMile ||
 		(auth?.admin !== false && productEmpty && !firstMileIsComplete);
 	const refreshWorkspaces = React.useCallback(() => {
-		fetchWorkspaces()
+		return fetchWorkspaces()
 			.then(setWorkspaces)
 			.catch(() => {})
 			.finally(() => setWorkspacesLoaded(true));
@@ -3073,7 +3073,9 @@ export function App(
 						title: item.pr.title,
 					},
 				});
-				refreshWorkspaces();
+				// The resolved workspace can be session-less, so wait for the active
+				// workspace payload to carry it before routing to its Review pane.
+				await refreshWorkspaces();
 				focusReviewPr({
 					repo: item.pr.repo,
 					branch: item.pr.branch,
@@ -3100,7 +3102,7 @@ export function App(
 						title: pr.title,
 					},
 				});
-				refreshWorkspaces();
+				await refreshWorkspaces();
 				focusReviewPr({
 					repo: pr.repo,
 					branch: pr.branch,

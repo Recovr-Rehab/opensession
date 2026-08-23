@@ -26,7 +26,9 @@ process.env.OPENSESSION_STATE_DIR = scratch;
 process.env.OPENSESSION_CONFIG = configPath;
 
 const { createWorkspace, getWorkspace } = await import("./workspaces");
-const { resolvePrWorkspace } = await import("./workspace-resolve");
+const { resolvePrWorkspace, workspaceBacksOpenPr } = await import(
+  "./workspace-resolve"
+);
 
 beforeEach(() => {
   process.env.OPENSESSION_STATE_DIR = scratch;
@@ -39,6 +41,43 @@ afterAll(() => {
   if (previousConfig === undefined) delete process.env.OPENSESSION_CONFIG;
   else process.env.OPENSESSION_CONFIG = previousConfig;
   rmSync(scratch, { recursive: true, force: true });
+});
+
+describe("workspaceBacksOpenPr", () => {
+  const openPrs = [
+    {
+      repo: repoId,
+      number: 9128,
+      branch: "skip-running-next-fallbacks",
+    },
+  ];
+
+  test("keeps a session-less workspace active while its PR is open", () => {
+    expect(
+      workspaceBacksOpenPr(
+        { repo: repoId, prNumber: 9128, branch: "skip-running-next-fallbacks" },
+        openPrs,
+        "fallback",
+      ),
+    ).toBe(true);
+  });
+
+  test("does not revive closed or cross-repo PR workspaces", () => {
+    expect(
+      workspaceBacksOpenPr(
+        { repo: repoId, prNumber: 9129, branch: "other" },
+        openPrs,
+        "fallback",
+      ),
+    ).toBe(false);
+    expect(
+      workspaceBacksOpenPr(
+        { repo: "other-repo", prNumber: 9128 },
+        openPrs,
+        "fallback",
+      ),
+    ).toBe(false);
+  });
 });
 
 describe("resolvePrWorkspace", () => {

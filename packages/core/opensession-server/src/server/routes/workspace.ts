@@ -33,7 +33,7 @@ import {
 	updateSessionFile,
 } from "../session-cache";
 import { attachRepo, switchPrimaryRepo, workspaceOwningWorktree } from "../session-repos";
-import { getAllSessions, getTranscriptPath } from "../sessions";
+import { getAllSessions, getOpenPrs, getTranscriptPath } from "../sessions";
 import { configuredIdentity, configuredRepos, defaultRepo, newSessionRepoDefault } from "../config";
 import { persistRawConfig, rawConfig, withConfigMutationLock } from "../config-mutation";
 import { AUTO_REPO } from "../worktree";
@@ -42,7 +42,7 @@ import { handleSlashCommand } from "../slash-commands";
 import { sanitizeBranchSlug } from "../suggest-branch";
 import { type NativeSessionFile, type StackedOn } from "../types";
 import { DEFAULT_WORKSPACE_MODEL_SETTINGS, type Workspace, type WorkspaceDraft, type WorkspaceModelSettings, createWorkspace, deleteWorkspace, getWorkspace, listWorkspaces, updateWorkspace, workspaceListVersion } from "../workspaces";
-import { resolveExternalWorkspace, resolvePlainWorkspace, resolvePrWorkspace } from "../workspace-resolve";
+import { resolveExternalWorkspace, resolvePlainWorkspace, resolvePrWorkspace, workspaceBacksOpenPr } from "../workspace-resolve";
 import { resolveModel } from "../models";
 import { REPOS, createWorktree, createWorktreeForExistingBranch, ensureScratchDir, getRepo, isSharedCheckoutDir, listWorktrees, repoForPath, resolveUniqueBranch, sessionRepoId, worktreeHasWork, worktreeHeadBranch } from "../worktree";
 import { copyFileSync, existsSync, mkdirSync, readFileSync } from "fs";
@@ -435,8 +435,12 @@ export async function handleWorkspaceRoutes(
 				(await getCachedSessionsAsync("exclude"))
 					.map((session) => session.workspaceId)
 					.filter((id): id is string => typeof id === "string" && !!id));
+			const openPrs = getOpenPrs();
 			workspaces = workspaces.filter(
-				(workspace) => activeWorkspaceIds.has(workspace.id) || !!workspace.draft,
+				(workspace) =>
+					activeWorkspaceIds.has(workspace.id) ||
+					!!workspace.draft ||
+					workspaceBacksOpenPr(workspace, openPrs, defaultRepo().id),
 			);
 		}
 		return conditionalJsonResponse(req, {
