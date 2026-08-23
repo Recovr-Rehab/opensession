@@ -183,7 +183,7 @@ test("Review loading and errors stay centered beside the summary", () => {
 		'const reviewStateClass = `flex-1 ${compactToolbar ? WS_SUMMARY_REVIEW_CANVAS_CLEARANCE : ""}`',
 	);
 	expect(prPanelSource).toContain(
-		"<LoadingState className={reviewStateClass}>",
+		'<LoadingState className={`${reviewStateClass} -translate-y-5`}>',
 	);
 	expect(prPanelSource).toContain('title="Couldn’t load pull request"');
 	expect(prPanelSource).toContain('className={reviewStateClass}\n          role="alert"');
