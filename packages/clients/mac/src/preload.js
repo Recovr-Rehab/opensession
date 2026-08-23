@@ -16,12 +16,10 @@ contextBridge.exposeInMainWorld("os1", {
   // behind whatever the person was actually looking at.
   focusWindow: () => ipcRenderer.send("os1:focus-window"),
   organizations: {
-    showMenu: ({ x, y }) => ipcRenderer.send("os1:organizations-menu", { x, y }),
-    onOpenSettings: (cb) => {
-      const listener = () => cb();
-      ipcRenderer.on("os1:organizations-open-settings", listener);
-      return () => ipcRenderer.removeListener("os1:organizations-open-settings", listener);
-    },
+    list: () => ipcRenderer.invoke("os1:organizations-list"),
+    switch: (id) => ipcRenderer.send("os1:organizations-switch", id),
+    add: () => ipcRenderer.send("os1:organizations-add"),
+    manage: () => ipcRenderer.send("os1:organizations-manage"),
   },
   // Electron does not connect Chromium's Web Speech API to a recognition
   // service. Stream the renderer's microphone PCM to the shell's signed native

@@ -1,5 +1,6 @@
 import React from "react";
 import type { ReviewQueueItem } from "./review-queue";
+import type { SettingsSectionKey } from "./settings-sections";
 import type { FeedDescriptor, FeedItem, SupportThread, UnifiedSession, Workspace } from "./types";
 
 export type OpenNextSidebarItem = () => boolean;
@@ -34,8 +35,8 @@ export interface Props {
 	onOpenFeed: () => void;
 	/** Whether the active server socket is connected. */
 	connected: boolean;
-	/** Open Settings from the organization row. */
-	onOpenSettings: () => void;
+	/** Open Settings from the organization menu. */
+	onOpenSettings: (section?: SettingsSectionKey) => void;
 	/** True while the Tasks tool is open. */
 	tasksActive: boolean;
 	/** Open the current user's task list. */

@@ -1019,40 +1019,6 @@ function organizationAccountMenuItems(stored = readStoredAccounts()) {
   }));
 }
 
-function showOrganizationMenu(position) {
-  if (!win || win.isDestroyed()) return;
-  const menu = Menu.buildFromTemplate([
-    ...organizationAccountMenuItems(),
-    { type: "separator" },
-    {
-      label: "Add organization…",
-      click: () => {
-        addingAccount = true;
-        showWindow();
-        showSetup();
-      },
-    },
-    {
-      label: "Edit current server…",
-      click: () => {
-        addingAccount = false;
-        showWindow();
-        showSetup();
-      },
-    },
-    { type: "separator" },
-    {
-      label: "Settings…",
-      click: () => {
-        if (win && !win.isDestroyed()) win.webContents.send("os1:organizations-open-settings");
-      },
-    },
-  ]);
-  const x = Math.max(0, Math.round(Number(position?.x) || 0));
-  const y = Math.max(0, Math.round(Number(position?.y) || 0));
-  menu.popup({ window: win, x, y });
-}
-
 // Electron's default menu, plus "Check for Updates…" in the app menu — the
 // standard roles keep all the stock items and shortcuts (edit, view, window).
 function buildAppMenu() {
@@ -1168,10 +1134,35 @@ app.whenReady().then(async () => {
     else showWindow();
   });
 
-  ipcMain.on("os1:organizations-menu", (e, position) => {
+  const fromActiveOrganizationPicker = (e) => {
     const source = e.senderFrame?.url ?? "";
-    if (!win || e.sender !== win.webContents || !inActiveWindow(source)) return;
-    showOrganizationMenu(position);
+    return !!win && e.sender === win.webContents && inActiveWindow(source);
+  };
+  ipcMain.handle("os1:organizations-list", (e) => {
+    if (!fromActiveOrganizationPicker(e)) return null;
+    const stored = readStoredAccounts();
+    return {
+      activeId: stored.activeId,
+      accounts: stored.accounts.map((account, index) => ({
+        id: account.id,
+        label: account.label,
+        unread: badgeByOrigin.get(new URL(account.url).origin) || 0,
+        shortcut: index < 9 ? index + 1 : null,
+      })),
+    };
+  });
+  ipcMain.on("os1:organizations-switch", (e, id) => {
+    if (fromActiveOrganizationPicker(e) && typeof id === "string") switchAccount(id);
+  });
+  ipcMain.on("os1:organizations-add", (e) => {
+    if (!fromActiveOrganizationPicker(e)) return;
+    addingAccount = true;
+    showSetup();
+  });
+  ipcMain.on("os1:organizations-manage", (e) => {
+    if (!fromActiveOrganizationPicker(e)) return;
+    addingAccount = false;
+    showSetup();
   });
 
   ipcMain.handle("os1:dictation-start", (e, id, sampleRate, language) => {

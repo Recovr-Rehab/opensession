@@ -5250,7 +5250,7 @@ export function App(
 							feedActive={route.view === "feed"}
 							onOpenFeed={() => navigate({ view: "feed" })}
 							connected={connected}
-							onOpenSettings={() => navigate({ view: "settings" })}
+							onOpenSettings={(section) => navigate({ view: "settings", section })}
 							tasksActive={route.view === "tasks"}
 							onOpenTasks={() => navigate({ view: "tasks" })}
 							taskCount={taskCount}
