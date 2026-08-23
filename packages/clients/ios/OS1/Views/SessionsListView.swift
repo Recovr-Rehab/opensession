@@ -961,6 +961,13 @@ struct SessionsListView: View {
                 // centred on its own before the field shoved it right.
                 .searchable(text: $searchText, prompt: "Search sessions")
                 .toolbar {
+                    ToolbarItem(placement: .topLeadingCompat) {
+                        ServerAccountPicker(iconSize: 32, compact: true) {
+                            showSettings = true
+                        }
+                        .padding(.leading, sidebarMargin - 20)
+                    }
+                    .sharedBackgroundVisibility(.hidden)
                     ToolbarItem(placement: .topTrailingCompat) {
                         filterButton
                     }
@@ -3085,7 +3092,6 @@ struct SessionsListView: View {
     /// the three-way location choice rather than a switch.
     @ViewBuilder
     private var mobileToolsBand: some View {
-        mobileOrganizationRow
         // None of the tools belong to the person whose list you are borrowing:
         // Tasks and Catch up are yours, and Feed, Plain and Reports are the
         // whole team's. Under a bar with someone else's name on it they read as
@@ -3099,23 +3105,6 @@ struct SessionsListView: View {
             if supportLocation.showsPage { mobileSupportToolRow }
             if !isReportsHidden && reportGroupCount > 0 { mobileReportsRow }
         }
-    }
-
-    /// The active organization, above the tools that belong to it. Keeping the
-    /// switcher in the list leaves the navigation bar for actions only.
-    private var mobileOrganizationRow: some View {
-        Section {
-            ServerAccountPicker(iconSize: 34) {
-                showSettings = true
-            }
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .padding(.vertical, 7)
-        }
-        .listRowInsets(EdgeInsets(
-            top: 2, leading: sidebarMargin, bottom: 6, trailing: sidebarMargin
-        ))
-        .listRowSeparator(.hidden)
-        .listRowBackground(Color.clear)
     }
 
     /// Whose list this is, when it is not yours.

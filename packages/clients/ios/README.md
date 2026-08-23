@@ -294,8 +294,8 @@ Pure SwiftUI with SwiftStreamingMarkdown for CommonMark/GFM rendering, iOS 26+
   optimistic local echo of your prompts until the server's copy arrives.
 - **Settings** — native SwiftUI Tools, Personal, and Workspace administration,
   plus multi-organization server/GitHub/token configuration and a connection
-  test. The organization row above Feed switches servers and shows the active
-  connection on the logo; each account keeps its own keychain token, and
+  test. The top-bar logo on iOS and the row above Feed on macOS switch servers
+  and show the active connection; each account keeps its own keychain token, and
   passive WebSockets remain connected for inactive accounts
   while the app is active so mentions can badge the picker. Cross-device
   composer and session preferences refresh at launch and when the app foregrounds.
