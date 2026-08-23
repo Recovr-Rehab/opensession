@@ -117,6 +117,7 @@ import {
 } from "./github-credential";
 import { defaultRepo } from "../config";
 import type { UnifiedSession } from "../types";
+import { shareWorkspacePrRefs } from "../session-pr-target";
 import {
 	indexedSessions,
 	indexedSidebarSessions,
@@ -714,6 +715,7 @@ function refreshSidebarSessionsResponse(
 		const sliced = (
 			indexed ?? (await getCachedSessionsAsync("exclude"))
 		).map((session) => enrichSession(session, signals));
+		shareWorkspacePrRefs(sliced);
 		const bounded = indexed ? sliced : sidebarLiveSessions(sliced);
 		const scoped = scopeSessionsForSidebar(
 			bounded,
@@ -755,6 +757,7 @@ function refreshSessionsResponse(
 		const sliced = (indexed ?? (await getCachedSessionsAsync(slice))).map(
 			(session) => enrichSession(session, signals),
 		);
+		shareWorkspacePrRefs(sliced);
 		const listed =
 			variant === "exclude" && !indexed ? sidebarLiveSessions(sliced) : sliced;
 		const text = JSON.stringify(
@@ -946,6 +949,7 @@ export async function handleSessionsRoutes(
 				);
 			const signals = sessionListRuntimeSignals();
 			const rows = selected.map((session) => enrichSession(session, signals));
+			shareWorkspacePrRefs(rows);
 			const text = JSON.stringify(
 				variant === "only-slim"
 					? rows.map(archivedIndexRow)
