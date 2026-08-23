@@ -1009,18 +1009,55 @@ function openHome() {
   else showSetup();
 }
 
-// Electron's default menu, plus "Check for Updates…" in the app menu — the
-// standard roles keep all the stock items and shortcuts (edit, view, window).
-function buildAppMenu() {
-  if (process.platform !== "darwin") return;
-  const stored = readStoredAccounts();
-  const organizationItems = stored.accounts.map((account, index) => ({
+function organizationAccountMenuItems(stored = readStoredAccounts()) {
+  return stored.accounts.map((account, index) => ({
     label: `${account.label}${badgeByOrigin.get(new URL(account.url).origin) ? ` (${badgeByOrigin.get(new URL(account.url).origin)})` : ""}`,
     type: "radio",
     checked: account.id === stored.activeId,
     accelerator: index < 9 ? `CommandOrControl+Shift+${index + 1}` : undefined,
     click: () => switchAccount(account.id),
   }));
+}
+
+function showOrganizationMenu(position) {
+  if (!win || win.isDestroyed()) return;
+  const menu = Menu.buildFromTemplate([
+    ...organizationAccountMenuItems(),
+    { type: "separator" },
+    {
+      label: "Add organization…",
+      click: () => {
+        addingAccount = true;
+        showWindow();
+        showSetup();
+      },
+    },
+    {
+      label: "Edit current server…",
+      click: () => {
+        addingAccount = false;
+        showWindow();
+        showSetup();
+      },
+    },
+    { type: "separator" },
+    {
+      label: "Settings…",
+      click: () => {
+        if (win && !win.isDestroyed()) win.webContents.send("os1:organizations-open-settings");
+      },
+    },
+  ]);
+  const x = Math.max(0, Math.round(Number(position?.x) || 0));
+  const y = Math.max(0, Math.round(Number(position?.y) || 0));
+  menu.popup({ window: win, x, y });
+}
+
+// Electron's default menu, plus "Check for Updates…" in the app menu — the
+// standard roles keep all the stock items and shortcuts (edit, view, window).
+function buildAppMenu() {
+  if (process.platform !== "darwin") return;
+  const organizationItems = organizationAccountMenuItems();
   Menu.setApplicationMenu(
     Menu.buildFromTemplate([
       {
@@ -1129,6 +1166,12 @@ app.whenReady().then(async () => {
     const account = stored.accounts.find((candidate) => new URL(candidate.url).origin === origin);
     if (account && account.id !== stored.activeId) switchAccount(account.id, source);
     else showWindow();
+  });
+
+  ipcMain.on("os1:organizations-menu", (e, position) => {
+    const source = e.senderFrame?.url ?? "";
+    if (!win || e.sender !== win.webContents || !inActiveWindow(source)) return;
+    showOrganizationMenu(position);
   });
 
   ipcMain.handle("os1:dictation-start", (e, id, sampleRate, language) => {

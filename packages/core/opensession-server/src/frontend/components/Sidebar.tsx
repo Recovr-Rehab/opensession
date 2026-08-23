@@ -309,6 +309,7 @@ import { DraftRow } from "./sidebar/DraftRow";
 import { SidebarCtxMenu } from "./sidebar/SidebarCtxMenu";
 import { SidebarToolRows, SidebarToolsMenu } from "./sidebar/SidebarToolsMenu";
 import { SidebarCustomizeDialog } from "./sidebar/SidebarCustomizeDialog";
+import { OrganizationSwitcher } from "./OrganizationSwitcher";
 import { EmptyState, ListSkeleton } from "../ui/state";
 import {
 	SIDEBAR_ROW,
@@ -335,6 +336,8 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 	onOpenPrs,
 	feedActive,
 	onOpenFeed,
+	connected,
+	onOpenSettings,
 	tasksActive,
 	onOpenTasks,
 	taskCount = 0,
@@ -4592,13 +4595,9 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 			    sidebar looking empty), and the ••• menu that chose which tools
 			    show is now in the right-click menu on any tool row, beside the
 			    "Remove from toolbar" that already lived there. Take the last
-			    tool off and the strip unmounts, which is recoverable exactly as
-			    it was before: the sidebar's own right-click menu lists every
-			    tool, Settings behind it. The band header rendered only while at
-			    least one tool was visible, so it was never the escape hatch
-			    either. */}
-			{visibleTools.length > 0 && (
-				<nav
+			    tool off and the organization selector remains; the sidebar's own
+			    right-click menu still lists every tool. */}
+			<nav
 					className={cn(
 						// `--sidebar-nav-x` is the sidebar's own (SIDEBAR_NAV_X); the strip
 						// reads it rather than setting one, so the tools sit on the same
@@ -4612,14 +4611,16 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 						// reads the same on both clients, shows every tool at once without
 						// a gesture, and takes a quarter of the height per tool.
 						//
-						// The tools are the first thing in the rail now that their heading
-						// is gone, so the top pad is theirs rather than a correction
-						// against a heading's box: it sets the tools off from the chrome
-						// above them the way the caption used to. Bottom pad is the gap to
-						// the Workspaces heading.
+						// The organization row leads this rail now that the old heading is
+						// gone. The top pad sets it off from the chrome; the bottom pad is
+						// the gap to the Workspaces heading.
 						"flex flex-col gap-0.5 px-[var(--sidebar-nav-x)] pt-2 pb-1.5",
 					)}
 				>
+					<OrganizationSwitcher
+						connected={connected}
+						onOpenSettings={onOpenSettings}
+					/>
 					{visibleTools.map((tool) => {
 						const rowClass = cn(
 							// One look at both widths. Only the box changes, and only
@@ -4772,7 +4773,6 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 						);
 					})}
 				</nav>
-			)}
 			</div>
 
 			<div className="block max-w-full min-w-0 flex-none">

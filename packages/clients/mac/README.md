@@ -68,10 +68,11 @@ empty local state, optionally rsync'd from prod.
 The app asks the first time it opens and keeps an account list plus its active
 organization in `server.json`, so a build is not tied to one address. A bare
 host resolves to `https`, except on this machine, and the answer is checked
-against `/api/health` before it is saved. **OS → Organizations** switches with
-⌘⇧1…9, adds an organization, or edits the active server. Inactive organizations
-stay loaded in hidden sandboxed windows so their WebSockets and notifications
-remain live; their unread counts aggregate into the Dock badge and menu labels.
+against `/api/health` before it is saved. The organization row above Feed and
+**OS → Organizations** both switch accounts; ⌘⇧1…9 remains available from the
+keyboard. Inactive organizations stay loaded in hidden sandboxed windows so
+WebSockets and notifications remain live; unread counts aggregate into the Dock
+badge and menu labels.
 
 `OS1_URL` overrides the stored answer for one run. Distributions set the address
 the first-run screen offers with `opensession.defaultServer` in `package.json`

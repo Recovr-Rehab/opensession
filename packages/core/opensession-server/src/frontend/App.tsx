@@ -46,7 +46,6 @@ import {
 } from "./lib/app-shell-classes";
 import {
 	appHeader,
-	APP_BRAND,
 	APP_HEADER_ACTIONS,
 	APP_HEADER_ACTIONS_DETAIL,
 	ARCHIVED_SEARCH_HEADER,
@@ -111,7 +110,6 @@ import { Analytics } from "./components/Analytics";
 import { Tasks } from "./components/Tasks";
 import { UserGate, getCurrentUser, useAuthStatus, useCurrentUser } from "./components/UserPicker";
 import { PreviewWait, matchPreviewWaitRoute } from "./components/PreviewWait";
-import { SettingsButton } from "./components/SettingsButton";
 import { TitleBar } from "./components/TitleBar";
 import { FirstMile } from "./components/FirstMile";
 import {
@@ -4362,19 +4360,6 @@ export function App(
 	const titleHandedOver = useLargeTitleHandoff(topbarEl, topbarTitle);
 	const phoneTitleHandedOver = useLargeTitleHandoff(appHeaderEl, topbarTitle);
 
-	// Mobile top-bar brand: logo only, as the settings trigger. On desktop the
-	// avatar in the chrome row plays that part instead, so the top stays just
-	// the title + the collapse toggle.
-	const brand = (
-		<div className={APP_BRAND}>
-			<SettingsButton
-				variant="brand"
-				onOpenSettings={() => navigate({ view: "settings" })}
-				connected={connected}
-			/>
-		</div>
-	);
-
 	// The "toggle left sidebar" panel glyph — a framed rectangle with a divider
 	// marking the collapsible left column. Reused by the brand-row collapse button
 	// and the floating re-open control. Sized to match the right-panel toggle
@@ -4975,10 +4960,9 @@ export function App(
 					<FirstMile onDone={finishFirstMile} />
 				) : (
 				<>
-				{/* Mobile-only top bar. On the sidebar-root page it shows the brand;
-				    on a pushed page (a session or other view) the brand is replaced by
-				    a Back chevron that pops back to the root, iOS-style. On desktop the
-				    brand/user live in the sidebar and this bar is hidden. The catch-up
+				{/* Mobile-only top bar. On the sidebar-root page organization identity
+				    lives in the first sidebar row; on a pushed page a Back chevron pops
+				    back to the root, iOS-style. On desktop this bar is hidden. The catch-up
 				    deck renders its own header (back + "N Left" + new-workspace), so we
 				    suppress this one there to avoid a duplicate back bar. */}
 				{route.view !== "catchup" && (
@@ -5008,12 +4992,7 @@ export function App(
 								}
 							/>
 						) : (
-							<>
-								{brand}
-								{/* Update nudge lives in the top bar on phones, right after
-								    the brand logo (desktop keeps the sidebar-bottom toast). */}
-								<UpdatePill addHandler={addHandler} variant="pill" />
-							</>
+							<UpdatePill addHandler={addHandler} variant="pill" />
 						)}
 					</TopBarLeading>
 					{/* Centered page title on pushed pages, iOS-sheet style. Sessions
@@ -5201,10 +5180,10 @@ export function App(
 					>
 						{/* Desktop chrome row — identical on web and in the desktop shell
 						    (the shell additionally insets it past the traffic lights and
-						    makes it a drag region): collapse toggle + the avatar settings
-						    trigger on the left, back/forward + search at the right edge.
-						    No app brand inside the app. Hidden on mobile, where the top
-						    bar carries the brand instead. */}
+						    makes it a drag region): collapse toggle on the left,
+						    back/forward + search at the right edge. Organization identity
+						    now leads the sidebar itself, above Feed. Hidden on mobile,
+						    where navigation uses the floating top bar instead. */}
 						{/* `sidebar-brand` / `sidebar-brand-actions` stay as hooks: base.css
 						    drives the WCO/desktop-shell chrome off them (traffic-light
 						    inset). `wco-chrome` is what makes the row a window drag
@@ -5248,11 +5227,6 @@ export function App(
 									</button>
 								</Tooltip>
 							</div>
-							<SettingsButton
-								variant="user"
-								onOpenSettings={() => navigate({ view: "settings" })}
-								connected={connected}
-							/>
 							<TitleBar onSearch={() => setSearchOpen(true)} />
 						</div>
 						<Sidebar
@@ -5275,6 +5249,8 @@ export function App(
 							onOpenPrs={() => navigate({ view: "prs" })}
 							feedActive={route.view === "feed"}
 							onOpenFeed={() => navigate({ view: "feed" })}
+							connected={connected}
+							onOpenSettings={() => navigate({ view: "settings" })}
 							tasksActive={route.view === "tasks"}
 							onOpenTasks={() => navigate({ view: "tasks" })}
 							taskCount={taskCount}

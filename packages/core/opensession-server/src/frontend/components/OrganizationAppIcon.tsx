@@ -1,12 +1,12 @@
 import React, { useState } from "react";
-import { APP_LOGO_IMAGE } from "../lib/app-header-classes";
+import { cn } from "../ui/cn";
 import {
 	DEFAULT_APP_ICON_URL,
 	useOrganizationIcon,
 } from "../hooks/useOrganizationIcon";
 
 /** The organization mark when configured, with the bundled app mark as fallback. */
-export function OrganizationAppIcon() {
+export function OrganizationAppIcon({ className }: { className?: string }) {
 	const configuredSrc = useOrganizationIcon();
 	const [failedSrc, setFailedSrc] = useState<string | null>(null);
 	const usesOrganizationIcon =
@@ -15,11 +15,12 @@ export function OrganizationAppIcon() {
 
 	return (
 		<img
-			className={
+			className={cn(
 				usesOrganizationIcon
 					? "block size-11 rounded-control object-cover"
-					: APP_LOGO_IMAGE
-			}
+					: "block size-11",
+				className,
+			)}
 			src={src}
 			alt=""
 			onError={() => {

@@ -15,6 +15,14 @@ contextBridge.exposeInMainWorld("os1", {
   // window stays where it is, so the click routed the app to the right session
   // behind whatever the person was actually looking at.
   focusWindow: () => ipcRenderer.send("os1:focus-window"),
+  organizations: {
+    showMenu: ({ x, y }) => ipcRenderer.send("os1:organizations-menu", { x, y }),
+    onOpenSettings: (cb) => {
+      const listener = () => cb();
+      ipcRenderer.on("os1:organizations-open-settings", listener);
+      return () => ipcRenderer.removeListener("os1:organizations-open-settings", listener);
+    },
+  },
   // Electron does not connect Chromium's Web Speech API to a recognition
   // service. Stream the renderer's microphone PCM to the shell's signed native
   // helper instead, which uses Apple's on-device recognizer when available.

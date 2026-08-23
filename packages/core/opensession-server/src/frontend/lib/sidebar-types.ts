@@ -32,6 +32,10 @@ export interface Props {
 	feedActive: boolean;
 	/** Open the Feed page. */
 	onOpenFeed: () => void;
+	/** Whether the active server socket is connected. */
+	connected: boolean;
+	/** Open Settings from the organization row. */
+	onOpenSettings: () => void;
 	/** True while the Tasks tool is open. */
 	tasksActive: boolean;
 	/** Open the current user's task list. */
