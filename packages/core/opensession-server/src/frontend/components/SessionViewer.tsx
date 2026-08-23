@@ -959,7 +959,13 @@ export function SessionViewer({
 		[toolPathRootsKey], // eslint-disable-line react-hooks/exhaustive-deps
 	);
 	const githubReviewRepos = reviewRepos;
-	const panelReviewRepos = promotedPr ? NO_REVIEW_REPOS : githubReviewRepos;
+	// With no session-owned primary, workspace PRs are the only real review
+	// targets. This includes the multi-PR case where no single ref was promoted;
+	// leaving the current repo target first opened an empty “Create PR” canvas.
+	const workspaceOnlyPrs =
+		!prPresentation.primary && prPresentation.additional.length > 0;
+	const panelReviewRepos =
+		promotedPr || workspaceOnlyPrs ? NO_REVIEW_REPOS : githubReviewRepos;
 	const shellTimingRef = useRef({
 		sessionId: session.id,
 		startedAt: performance.now(),
@@ -5236,9 +5242,10 @@ export function SessionViewer({
 	// relevance gate; the server caches PR details for 30s, so the duplicate
 	// fetch stays cheap). Kept here because StagingLink mounts per layout
 	// variant, so a window listener inside it would register multiple times.
-	const stagingRelevant =
-		!!session.prUrl &&
-		session.prState === "OPEN";
+	const stagingRelevant = phonePr
+		? (phonePr.state ??
+				(phonePr.source === "primary" ? session.prState : undefined)) === "OPEN"
+		: !!session.prUrl && session.prState === "OPEN";
 	const [staging, setStaging] = useState<{
 		url: string;
 		status: string;
@@ -5258,7 +5265,7 @@ export function SessionViewer({
 		}
 		let alive = true;
 		const load = () =>
-			fetchPr(session.id)
+			fetchPr(session.id, phonePr?.repo, phonePr?.branch)
 				.then((pr) => {
 					if (alive) {
 						setStaging(pr?.staging ?? null);
@@ -5272,7 +5279,13 @@ export function SessionViewer({
 			alive = false;
 			stop();
 		};
-	}, [session.id, stagingRelevant, gitRefreshTick]);
+	}, [
+		session.id,
+		stagingRelevant,
+		gitRefreshTick,
+		phonePr?.repo,
+		phonePr?.branch,
+	]);
 	const stagingUrl = staging
 		? withPreviewPath(staging.url, session.previewPath)
 		: null;

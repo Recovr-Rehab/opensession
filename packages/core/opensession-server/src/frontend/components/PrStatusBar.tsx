@@ -6,6 +6,7 @@ import {
 	refLabel,
 	refTone,
 	summarizePrSeries,
+	worstPrRef,
 	type SessionPrRef,
 } from "../lib/pr-refs";
 import {
@@ -584,8 +585,13 @@ export function PrStatusBar({
 	refreshTick,
 }: Props) {
 	const presentation = useMemo(() => sessionPrPresentation(prs), [prs]);
+	// A tab with no PR of its own can receive several workspace PRs from sibling
+	// sessions. Pick one of those explicitly rather than falling through to this
+	// tab's unrelated branch, which made the workspace summary say “Create PR”.
+	const presented =
+		presentation.primary ?? worstPrRef(presentation.additional);
 	const promoted =
-		presentation.primary?.source !== "primary" ? presentation.primary : undefined;
+		presented?.source !== "primary" ? presented : undefined;
 	const targetRepo = promoted?.repo || repo;
 	const targetBranch = promoted?.branch;
 	const prResource = useSessionPrResource(

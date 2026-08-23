@@ -2,6 +2,8 @@ import { useEffect, useState } from "react";
 import { PR_WEBHOOK_FALLBACK_POLL_MS } from "../lib/poll";
 import { useSessionPrResource } from "../hooks/useApiResources";
 import type { PrCheck, UnifiedSession } from "../lib/types";
+import { worstPrRef } from "../lib/pr-refs";
+import { sessionPrPresentation } from "../lib/session-prs";
 import { withPreviewPath } from "../lib/preview-url";
 import { WS_SUMMARY_ICON } from "../lib/workspace-summary-classes";
 import { cn } from "../ui/cn";
@@ -134,12 +136,18 @@ export function StagingLink({
 
 	// A merged/closed PR's alias no longer points at this change. The link is a
 	// pre-merge testing affordance. Repos without deployment metadata simply
-	// return no staging URL.
-	const relevant = !!session.prUrl && session.prState === "OPEN";
+	// return no staging URL. PR refs are shared across a workspace, so a tab
+	// without a PR of its own deliberately targets one of the workspace's refs.
+	const presentation = sessionPrPresentation(session.prs);
+	const target = presentation.primary ?? worstPrRef(presentation.additional);
+	const relevant = target
+		? (target.state ??
+				(target.source === "primary" ? session.prState : undefined)) === "OPEN"
+		: !!session.prUrl && session.prState === "OPEN";
 	const prResource = useSessionPrResource(
 		session.id,
-		session.repo || undefined,
-		undefined,
+		target?.repo || session.repo || undefined,
+		target?.branch,
 		{
 			enabled: relevant,
 			refreshInterval: PR_WEBHOOK_FALLBACK_POLL_MS,

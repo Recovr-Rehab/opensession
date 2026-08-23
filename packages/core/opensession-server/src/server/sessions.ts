@@ -25,7 +25,11 @@ import {
 } from "./transcript-persistence";
 import { activeRunRecords } from "./run-journal";
 import { configuredRepos, defaultRepo } from "./config";
-import { prWorkspaceReader, sessionPrBranch } from "./session-pr-target";
+import {
+  prWorkspaceReader,
+  sessionPrBranch,
+  shareWorkspacePrRefs,
+} from "./session-pr-target";
 import { readPrState } from "../agents/github/state";
 import {
   getPrsByRepo,
@@ -1216,6 +1220,11 @@ function* assembleSessionSteps(
     }
     if (refs.length > 0) session.prs = refs;
   }
+
+  // PR lookup starts from each session's branches and attribution footers, but
+  // Review and the summary belong to the workspace. Project the resulting set
+  // back onto every live tab so switching chats cannot hide a sibling's PR.
+  shareWorkspacePrRefs(selectedSessions);
 
   // Apply auto-generated summary titles (the short Conductor-style name),
   // keyed by unified id or merged alias id. Sits UNDER a manual rename (applied

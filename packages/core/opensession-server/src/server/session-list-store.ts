@@ -12,6 +12,7 @@ import { Database } from "bun:sqlite";
 import { chmodSync, existsSync, mkdirSync } from "fs";
 import { dirname } from "path";
 import { statePath } from "./paths";
+import { shareWorkspacePrRefs } from "./session-pr-target";
 import type { UnifiedSession } from "./types";
 
 export type SessionListSlice = "include" | "exclude" | "only";
@@ -41,6 +42,10 @@ function decodeRows(rows: StoredRow[]): UnifiedSession[] {
 			// next targeted write or full rebuild replaces it.
 		}
 	}
+	// The index stores independently enriched session rows. PRs are workspace
+	// state, so restore their cross-tab projection after decoding any list slice;
+	// otherwise the indexed fast path regresses to tab-owned PR visibility.
+	shareWorkspacePrRefs(sessions);
 	return sessions;
 }
 
