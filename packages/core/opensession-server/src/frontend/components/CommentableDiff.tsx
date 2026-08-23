@@ -817,6 +817,12 @@ export function CommentableDiff({
           className={`${FILE_HEADER} ${stickyFileHeaders ? STICKY_FILE_HEADER : "bg-transparent"}`}
           data-sticky-edge={stickyFileHeaders ? "" : undefined}
         >
+          {stickyFileHeaders && (
+            <span
+              aria-hidden="true"
+              className="pointer-events-none absolute inset-0 hidden rounded-t-lg shadow-[inset_0_0_0_1px_var(--border),inset_0_-1px_0_var(--divider)] group-data-[stuck]:block"
+            />
+          )}
           <button
             type="button"
             className={`diff-file-header ${FILE_TOGGLE}`}
