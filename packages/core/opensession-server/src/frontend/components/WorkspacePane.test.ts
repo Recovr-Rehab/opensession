@@ -125,13 +125,14 @@ test("wide Review keeps its controls stable while page navigation moves", () => 
 	);
 	expect(reviewToolbarSource).toContain("sticky top-0");
 	expect(reviewToolbarSource).toContain("desktop:mb-0");
+	expect(reviewToolbarSource).toContain("desktop:pb-2");
 	expect(reviewToolbarSource).toContain("WS_SUMMARY_REVIEW_BAR_CLEARANCE");
 	expect(prPanelSource).toContain("WS_SUMMARY_REVIEW_CANVAS_CLEARANCE");
 	expect(prPanelSource).toContain(
-		"desktop:[--review-file-tree-gap:0px] desktop:[--review-file-tree-top:52px]",
+		"desktop:[--review-file-tree-gap:0px] desktop:[--review-file-tree-top:60px]",
 	);
 	expect(prPanelSource).toContain(
-		'compactToolbar ? "overflow-y-visible desktop:[--review-file-header-top:53px]" : "overflow-y-auto"',
+		'compactToolbar ? "overflow-y-visible desktop:[--review-file-header-top:61px]" : "overflow-y-auto"',
 	);
 	expect(prPanelSource).toContain(
 		'${compactToolbar ? "pt-0" : "pt-2"}',

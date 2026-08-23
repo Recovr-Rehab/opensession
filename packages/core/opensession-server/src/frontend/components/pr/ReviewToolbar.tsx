@@ -5,7 +5,7 @@ import { WS_SUMMARY_REVIEW_BAR_CLEARANCE } from "../../lib/workspace-summary-cla
  * The floating review toolbar shared by branches with and without a pull
  * request. It stays edge to edge on phone and clears the standing workspace
  * summary on wide review canvases. The sticky outer surface also masks code
- * scrolling through the 10px inset above the bordered toolbar.
+ * scrolling through the insets around the bordered toolbar.
  */
 export function ReviewToolbar({
   children,
@@ -15,7 +15,7 @@ export function ReviewToolbar({
   compact: boolean;
 }) {
   const placement = compact
-    ? `sticky top-0 z-20 desktop:mb-0 desktop:ml-2 ${WS_SUMMARY_REVIEW_BAR_CLEARANCE}`
+    ? `sticky top-0 z-20 desktop:mb-0 desktop:ml-2 desktop:pb-2 ${WS_SUMMARY_REVIEW_BAR_CLEARANCE}`
     : "desktop:mx-2 desktop:mb-2";
 
   return (
