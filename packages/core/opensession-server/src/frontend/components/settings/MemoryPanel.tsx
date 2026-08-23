@@ -17,6 +17,7 @@ import { Checkbox } from "../../ui/checkbox";
 import { useConfirm } from "../../ui/confirm";
 import { Field, Input, Select, Textarea } from "../../ui/input";
 import { Modal } from "../../ui/modal";
+import { OptionSelect } from "../../ui/select";
 import {
 	SettingCard,
 	SettingCardSkeleton,
@@ -813,26 +814,49 @@ function CategoryPage({
 							<IconSearch size={16} className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-faint" />
 							<Input className="pl-9 phone:min-h-11 phone:text-input-phone" type="search" value={query} placeholder="Search memories" onChange={(event) => { setQuery(event.target.value); resetPage(); }} />
 						</label>
-						<Select aria-label={category.targetLabel} className="phone:min-h-11 phone:text-input-phone" value={scopeKey} onChange={(event) => { setScopeKey(event.target.value); resetPage(); }}>
-							{scopes.map((scope) => <option key={scope.scope.key} value={scope.scope.key}>{scope.scope.label}</option>)}
-						</Select>
-						<Select aria-label="Memory kind" className="phone:min-h-11 phone:text-input-phone" value={kind} onChange={(event) => { setKind(event.target.value as MemoryRecordKind | ""); resetPage(); }}>
-							<option value="">All kinds</option>
-							{Object.entries(KIND_LABELS).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
-						</Select>
-						<Select aria-label="Memory state" className="phone:min-h-11 phone:text-input-phone" value={state} onChange={(event) => { setState(event.target.value as MemoryState | ""); resetPage(); }}>
-							<option value="">Active</option>
-							<option value="archived">Archived</option>
-							<option value="expired">Expired</option>
-							<option value="superseded">Superseded</option>
-						</Select>
+						<OptionSelect
+							label={category.targetLabel}
+							className="phone:min-h-11 phone:text-input-phone"
+							value={scopeKey}
+							options={scopes.map(({ scope }) => ({ value: scope.key, label: scope.label }))}
+							onChange={(value) => { setScopeKey(value); resetPage(); }}
+						/>
+						<OptionSelect<MemoryRecordKind | "">
+							label="Memory kind"
+							className="phone:min-h-11 phone:text-input-phone"
+							value={kind}
+							options={[
+								{ value: "", label: "All kinds" },
+								...Object.entries(KIND_LABELS).map(([value, label]) => ({ value: value as MemoryRecordKind, label })),
+							]}
+							onChange={(value) => { setKind(value); resetPage(); }}
+						/>
+						<OptionSelect<MemoryState | "">
+							label="Memory state"
+							className="phone:min-h-11 phone:text-input-phone"
+							value={state}
+							options={[
+								{ value: "", label: "Active" },
+								{ value: "archived", label: "Archived" },
+								{ value: "expired", label: "Expired" },
+								{ value: "superseded", label: "Superseded" },
+							]}
+							onChange={(value) => { setState(value); resetPage(); }}
+						/>
 					</div>
 					<div className="mt-2 flex items-center justify-between gap-3 phone:flex-col phone:items-stretch">
-						<Select aria-label="Review state" size="sm" className="max-w-44 phone:min-h-11 phone:max-w-none phone:text-input-phone" value={review} onChange={(event) => { setReview(event.target.value as typeof review); resetPage(); }}>
-							<option value="">All review states</option>
-							<option value="needs_review">Needs review</option>
-							<option value="confirmed">Confirmed</option>
-						</Select>
+						<OptionSelect<typeof review>
+							label="Review state"
+							size="sm"
+							className="max-w-44 phone:min-h-11 phone:max-w-none phone:text-input-phone"
+							value={review}
+							options={[
+								{ value: "", label: "All review states" },
+								{ value: "needs_review", label: "Needs review" },
+								{ value: "confirmed", label: "Confirmed" },
+							]}
+							onChange={(value) => { setReview(value); resetPage(); }}
+						/>
 						<span className="text-meta text-faint">{selectedScope?.count || 0} total · {selectedScope?.pinnedCount || 0} pinned · {selectedScope?.reviewCount || 0} to review</span>
 					</div>
 				</SettingCard>
