@@ -1,4 +1,5 @@
 import { existsSync } from "fs";
+import { resolve } from "path";
 import type { GithubCredential } from "../github-auth";
 import type {
   Sandbox,
@@ -138,6 +139,10 @@ type BranchExecutorDependencies = {
   ) => Promise<string>;
   resolveCredential?: (principal: string) => Promise<GithubCredential | null>;
   destinationExists?: (path: string) => boolean;
+  isSharedCheckoutDestination?: (
+    project: string,
+    path: string,
+  ) => Promise<boolean>;
   result: (item: CreationBranchEffectItem) => CreationEventDecisionResult;
   afterDestinationAccepted?: (worktreePath: string) => void;
 };
@@ -175,6 +180,15 @@ async function createExistingWorktree(
   );
 }
 
+async function isSharedCheckoutDestination(
+  project: string,
+  path: string,
+): Promise<boolean> {
+  const { getRepo, sharedCheckoutForNewSessions } = await import("../worktree");
+  const repo = getRepo(project);
+  return sharedCheckoutForNewSessions(repo) && resolve(repo.repo) === resolve(path);
+}
+
 const defaultBranchDependencies: BranchExecutorDependencies = {
   listWorktrees: async (project) =>
     (await import("../worktree")).listWorktrees(project),
@@ -183,6 +197,7 @@ const defaultBranchDependencies: BranchExecutorDependencies = {
   createWorktreeForExistingBranch: createExistingWorktree,
   resolveCredential: resolveCurrentCredential,
   destinationExists: existsSync,
+  isSharedCheckoutDestination,
   result: defaultBranchResult,
 };
 
@@ -203,15 +218,23 @@ export async function executeCreationBranchPrepare(
     throw new CreationEffectIndeterminateError(
       `Worktree ${payload.worktreePath} belongs to another branch`,
     );
+  const sharedCheckout =
+    !byBranch &&
+    await (dependencies.isSharedCheckoutDestination ??
+      isSharedCheckoutDestination)(
+      payload.project,
+      payload.worktreePath,
+    );
   if (
     !byPath &&
+    !sharedCheckout &&
     (dependencies.destinationExists ?? existsSync)(payload.worktreePath)
   )
     throw new CreationEffectIndeterminateError(
       `Worktree destination ${payload.worktreePath} exists without a registered branch`,
     );
   let credential: GithubCredential | null = null;
-  if (!byBranch && payload.credentialPrincipal) {
+  if (!byBranch && !sharedCheckout && payload.credentialPrincipal) {
     credential = await (dependencies.resolveCredential ??
       resolveCurrentCredential)(payload.credentialPrincipal);
     if (!credential)
@@ -223,7 +246,9 @@ export async function executeCreationBranchPrepare(
         `Credential selector ${payload.credentialPrincipal} resolved to another principal`,
       );
   }
-  const acceptedPath = byBranch?.path ?? (payload.existingBranch
+  const acceptedPath = byBranch?.path ?? (sharedCheckout
+    ? payload.worktreePath
+    : payload.existingBranch
     ? await (dependencies.createWorktreeForExistingBranch ??
         createExistingWorktree)(
         payload.branch,

@@ -313,6 +313,29 @@ describe("creation branch effect executor", () => {
     expect(effect.payload).not.toHaveProperty("gitEnv");
   });
 
+  test("adopts a configured shared checkout without requiring a branch worktree", async () => {
+    const effect = branchItem();
+    effect.payload.worktreePath = "/projects/opensession";
+    effect.payload.credentialPrincipal = "user:alice";
+    let results = 0;
+    await executeCreationBranchPrepare(effect, {
+      listWorktrees: (async () => []) as typeof listWorktrees,
+      destinationExists: () => true,
+      isSharedCheckoutDestination: async () => true,
+      createWorktree: (async () => {
+        throw new Error("must not create inside a shared checkout");
+      }) as typeof createWorktree,
+      resolveCredential: async () => {
+        throw new Error("must not resolve Git credentials for adoption");
+      },
+      result: () => {
+        results += 1;
+        return { accepted: true, to: "preparing" };
+      },
+    });
+    expect(results).toBe(1);
+  });
+
   test("fails indeterminate on an unregistered destination after a crash", async () => {
     await expect(executeCreationBranchPrepare(branchItem(), {
       listWorktrees: (async () => []) as typeof listWorktrees,
