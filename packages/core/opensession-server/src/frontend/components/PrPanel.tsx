@@ -77,8 +77,6 @@ import {
 } from "../lib/workspace-summary-classes";
 import { Textarea } from "../ui/input";
 import {
-  IconArrowDown,
-  IconArrowUp,
   IconBranches,
   IconCheck,
   IconChevronRight,
@@ -98,11 +96,15 @@ import { Tooltip } from "../ui/tooltip";
 import { TopBar } from "../ui/top-bar";
 import { Popover } from "../ui/popover";
 import { Segmented, SegmentedOption } from "../ui/segmented";
-import { SettingRow, SwitchRow, ValueRow } from "../ui/setting-row";
-import { CodeDisplaySettings } from "./CodeDisplaySettings";
+import { SettingRow } from "../ui/setting-row";
+import {
+  CodeDisplaySettings,
+  CodeOrganizationSettings,
+  DiffSourceSetting,
+} from "./CodeDisplaySettings";
 import {
   useCodeDisplaySettings,
-  useStoredCodeSetting,
+  useCodeOrganizationSettings,
 } from "../hooks/useCodeDisplaySettings";
 
 import { checkClass, isDeployment, summarize } from "../lib/pr-status-derive";
@@ -146,6 +148,7 @@ export {
 type ReviewEvent = "COMMENT" | "APPROVE" | "REQUEST_CHANGES";
 
 type CodeView = "all" | "guide" | "flow";
+type DiffSource = "pull-request" | "worktree";
 export type PrReviewPage = "overview" | "files";
 
 const NO_PR_FILES: NonNullable<PrDetails["files"]> = [];
@@ -496,6 +499,13 @@ export function PrPanel({
     [onPageChange],
   );
   const [codeView, setCodeView] = useState<"all" | "guide" | "flow">("all");
+  const [diffSource, setDiffSource] = useState<DiffSource>("pull-request");
+  const worktreeAvailable =
+    !!sessionId && !previewTarget && !active?.linked && !active?.discovered;
+  const sessionRunning = !!sessions?.find(
+    (session) => session.id === sessionId,
+  )?.isRunning;
+  useEffect(() => setDiffSource("pull-request"), [loadTargetKey]);
   /** A check chip elsewhere in the app asked for the checks (focusTarget). */
   const [focusChecksSeq, setFocusChecksSeq] = useState(0);
   /** A file picked on Overview, waiting for the code page to have its diff. */
@@ -513,31 +523,14 @@ export function PrPanel({
     showFileStats,
     codeTheme,
   } = codeDisplaySettings;
-  const [grouping, changeGrouping] = useStoredCodeSetting(
-    "opensession-pr-grouping",
-    ["none", "ai"] as const,
-    "none",
-  );
-  const [fileListMode, changeFileListMode] = useStoredCodeSetting(
-    "opensession-pr-file-list",
-    ["flat", "tree", "hidden"] as const,
-    "hidden",
-  );
-  const [fileOrder, changeFileOrder] = useStoredCodeSetting(
-    "opensession-pr-file-order",
-    ["path", "changes", "pull-request"] as const,
-    "path",
-  );
-  const [sortDirection, changeSortDirection] = useStoredCodeSetting(
-    "opensession-pr-file-order-direction",
-    ["asc", "desc"] as const,
-    "asc",
-  );
-  const [hideReviewedSetting, changeHideReviewedSetting] = useStoredCodeSetting(
-    "opensession-pr-hide-reviewed",
-    ["0", "1"] as const,
-    "0",
-  );
+  const organizationSettings = useCodeOrganizationSettings();
+  const {
+    grouping,
+    fileListMode,
+    fileOrder,
+    sortDirection,
+    hideReviewed,
+  } = organizationSettings;
   // Keyed like the code flow below, so one target's guide never renders under
   // another's diff and a slow response can't land after the panel moved on.
   const [guide, setGuide] = useState<{
@@ -1376,7 +1369,6 @@ export function PrPanel({
   const files = pr?.files ?? NO_PR_FILES;
   const reviewedFiles =
     prViewed?.key === viewedKey ? prViewed.viewed : undefined;
-  const hideReviewed = hideReviewedSetting === "1";
   const reviewFiles = useMemo(() => {
     const visible =
       hideReviewed && reviewedFiles
@@ -1605,9 +1597,6 @@ export function PrPanel({
   if (!pr) {
     const showWorktreeDiff =
       !!sessionId && !previewTarget && !active?.linked && !active?.discovered;
-    const sessionRunning = !!sessions?.find(
-      (session) => session.id === sessionId,
-    )?.isRunning;
     // The branch's own changes are the review here, so they lead. Opening the
     // PR is the one action this state offers, and it sits in the bar rather
     // than inside a card below the diff.
@@ -1786,6 +1775,12 @@ export function PrPanel({
         initialFocus
         className="flex w-[340px] flex-col gap-0.5 p-3"
       >
+        {worktreeAvailable && (
+          <>
+            <DiffSourceSetting value={diffSource} onValueChange={setDiffSource} />
+            <div aria-hidden className="mx-2 my-1.5 h-px bg-line" />
+          </>
+        )}
         <SettingRow label="Code view">
           <Segmented
             label="Code view"
@@ -1815,86 +1810,10 @@ export function PrPanel({
 
         <div aria-hidden className="mx-2 my-1.5 h-px bg-line" />
 
-        <SettingRow label="File list">
-          <Segmented
-            label="File list"
-            size="sm"
-            value={fileListMode}
-            onValueChange={(next) =>
-              changeFileListMode(next as "flat" | "tree" | "hidden")
-            }
-          >
-            <SegmentedOption value="flat">Flat</SegmentedOption>
-            <SegmentedOption value="tree">Tree</SegmentedOption>
-            <SegmentedOption value="hidden">Hidden</SegmentedOption>
-          </Segmented>
-        </SettingRow>
-        <SwitchRow
-          label="Hide reviewed"
-          checked={hideReviewed}
-          disabled={!reviewedFiles}
-          onCheckedChange={(checked) =>
-            changeHideReviewedSetting(checked ? "1" : "0")
-          }
-        />
-        <ValueRow
-          label="Group by"
-          value={grouping}
-          options={[
-            { value: "none", label: "No grouping" },
-            { value: "ai", label: "Purpose" },
-          ]}
-          onSelect={(next) => changeGrouping(next as "none" | "ai")}
-        />
-        {/* Direction is not a fourth thing to sort by, so it sits under the
-            three that are, and the arrow rides the value: which way the list
-            runs is worth reading without opening the menu. */}
-        <ValueRow
-          label="Sort by"
-          value={fileOrder}
-          options={[
-            { value: "path", label: "Path" },
-            { value: "changes", label: "Changed lines" },
-            { value: "pull-request", label: "Pull request" },
-          ]}
-          onSelect={(next) =>
-            changeFileOrder(next as "path" | "changes" | "pull-request")
-          }
-          trailing={
-            sortDirection === "asc" ? (
-              <IconArrowUp size={15} className="shrink-0 text-dim" />
-            ) : (
-              <IconArrowDown size={15} className="shrink-0 text-dim" />
-            )
-          }
-          footer={
-            <Menu.RadioGroup
-              value={sortDirection}
-              onValueChange={(next) =>
-                changeSortDirection(String(next) as "asc" | "desc")
-              }
-            >
-              {/* No glyph on these two: the orders above carry none, and one
-                  indented pair under them would put two label x's in one
-                  menu. The arrow rides the row's value instead. */}
-              {(
-                [
-                  ["asc", "Ascending"],
-                  ["desc", "Descending"],
-                ] as const
-              ).map(([value, label]) => (
-                <Menu.RadioItem
-                  key={value}
-                  value={value}
-                  closeOnClick
-                  className="justify-between gap-3"
-                >
-                  <span className="min-w-0 truncate">{label}</span>
-                  <Menu.Check on={sortDirection === value} />
-                </Menu.RadioItem>
-              ))}
-            </Menu.RadioGroup>
-          }
+        <CodeOrganizationSettings
+          settings={organizationSettings}
+          reviewedFilesAvailable={!!reviewedFiles}
+          defaultOrderLabel="Pull request"
         />
 
         <div aria-hidden className="mx-2 my-1.5 h-px bg-line" />
@@ -1939,22 +1858,31 @@ export function PrPanel({
     <div
       className={`flex shrink-0 items-center gap-1.5 phone:gap-2 ${compactToolbar ? "" : "ml-auto"}`}
     >
-      {handEdited.length > 0 && send && (
-        <Button
-          variant="default"
-          size="sm"
-          onClick={tellAgentAboutEdits}
-          title="Sends a note listing your hand-edits so they get committed and pushed"
-        >
-          Tell {AGENT_NAME} about {handEdited.length} edit
-          {handEdited.length === 1 ? "" : "s"}
-        </Button>
+      {diffSource === "worktree" ? (
+        <div
+          ref={setWorktreeToolbarTarget}
+          className="flex shrink-0 items-center gap-2.5 text-label"
+        />
+      ) : (
+        <>
+          {handEdited.length > 0 && send && (
+            <Button
+              variant="default"
+              size="sm"
+              onClick={tellAgentAboutEdits}
+              title="Sends a note listing your hand-edits so they get committed and pushed"
+            >
+              Tell {AGENT_NAME} about {handEdited.length} edit
+              {handEdited.length === 1 ? "" : "s"}
+            </Button>
+          )}
+          <div
+            ref={setDiffControlsTarget}
+            className="flex shrink-0 items-center gap-1.5 phone:gap-2"
+          />
+          {codeSettings}
+        </>
       )}
-      <div
-        ref={setDiffControlsTarget}
-        className="flex shrink-0 items-center gap-1.5 phone:gap-2"
-      />
-      {codeSettings}
     </div>
   );
 
@@ -2083,6 +2011,7 @@ export function PrPanel({
               size="sm"
               className={pr.staging?.url ? undefined : "ml-auto"}
               onClick={() => {
+                setDiffSource("pull-request");
                 setReviewing(true);
                 setPage("files");
               }}
@@ -2112,6 +2041,7 @@ export function PrPanel({
               !reviewing && (
                 <Menu.Item
                   onClick={() => {
+                    setDiffSource("pull-request");
                     setReviewing(true);
                     setPage("files");
                   }}
@@ -2195,14 +2125,17 @@ export function PrPanel({
       <div
         className={`flex min-h-0 flex-1 ${compactToolbar ? `${WS_SUMMARY_REVIEW_CANVAS_CLEARANCE} desktop:flex-none desktop:[--review-file-tree-gap:0px] desktop:[--review-file-tree-top:60px]` : "desktop:pt-12"}`}
       >
-        {page === "files" && fileListMode !== "hidden" && files.length > 0 && (
-          <PrFileTree
-            files={reviewFiles}
-            mode={fileListMode}
-            showFileStats={showFileStats}
-            onOpenFile={scrollToFile}
-          />
-        )}
+        {page === "files" &&
+          diffSource === "pull-request" &&
+          fileListMode !== "hidden" &&
+          files.length > 0 && (
+            <PrFileTree
+              files={reviewFiles}
+              mode={fileListMode}
+              showFileStats={showFileStats}
+              onOpenFile={scrollToFile}
+            />
+          )}
 
         <main
           // Wide review scrolls the toolbar and canvas in one container. Once
@@ -2241,7 +2174,18 @@ export function PrPanel({
             <div
               className={`mx-auto max-w-[1500px] px-2 pb-2 phone:px-1 ${compactToolbar ? "pt-0" : "pt-2"}`}
             >
-              {codeView === "flow" ? (
+              {diffSource === "worktree" ? (
+                <DiffPanel
+                  sessionId={sessionId}
+                  isRunning={sessionRunning}
+                  canSend={!!send && !!editGate}
+                  send={send ?? NOOP_SEND}
+                  repo={activeRepoId}
+                  toolbarTarget={worktreeToolbarTarget}
+                  source="worktree"
+                  onSourceChange={setDiffSource}
+                />
+              ) : codeView === "flow" ? (
                 <CodeFlow
                   data={codeFlow?.key === codeFlowKey ? codeFlow.data : null}
                   loading={

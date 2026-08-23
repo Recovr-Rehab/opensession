@@ -28,8 +28,16 @@ import { CodeFlow } from "./CodeFlow";
 import { revealDiffFile } from "../lib/diff-navigation";
 import { IconRestore, IconSliders } from "./icons";
 import { Popover } from "../ui/popover";
-import { CodeDisplaySettings } from "./CodeDisplaySettings";
-import { useCodeDisplaySettings } from "../hooks/useCodeDisplaySettings";
+import {
+  CodeDisplaySettings,
+  CodeOrganizationSettings,
+  DiffSourceSetting,
+} from "./CodeDisplaySettings";
+import {
+  useCodeDisplaySettings,
+  useCodeOrganizationSettings,
+} from "../hooks/useCodeDisplaySettings";
+import { PrFileTree } from "./pr/PrFileTree";
 
 /* The +/− counts. Kept as constants because CommentableDiff carries the same
    pair on its file rows and group headers, and the two must read alike. */
@@ -44,8 +52,13 @@ interface Props {
   /** Shared diff state (lifted so the Changes tab badge and this panel poll
    *  once, not twice). When omitted, the panel fetches on its own. */
   diff?: SessionDiffState;
+  /** Start on this repository when Review switches from its PR diff. */
+  repo?: string;
   /** Move the diff summary and view controls into a parent review toolbar. */
   toolbarTarget?: HTMLDivElement | null;
+  /** Shown when Review can switch between its PR and live worktree diffs. */
+  source?: "pull-request" | "worktree";
+  onSourceChange?: (source: "pull-request" | "worktree") => void;
 }
 
 export interface SessionDiffState {
@@ -121,7 +134,10 @@ export function DiffPanel({
   canSend,
   send,
   diff,
+  repo,
   toolbarTarget,
+  source,
+  onSourceChange,
 }: Props) {
   const [active, setActive] = useState(0);
   const [view, setView] = useState<"files" | "flow">("files");
@@ -129,6 +145,13 @@ export function DiffPanel({
   // writes the same rendering preferences as Review, with a narrow-safe
   // unified fallback until the person picks a layout.
   const codeDisplaySettings = useCodeDisplaySettings("unified");
+  const organizationSettings = useCodeOrganizationSettings();
+  const {
+    grouping,
+    fileListMode,
+    fileOrder,
+    sortDirection,
+  } = organizationSettings;
   const [groups, setGroups] = useState<{
     repo: string;
     patch: string;
@@ -143,6 +166,11 @@ export function DiffPanel({
   const changed = (repos || []).filter(
     (repo) => repo.diff.rawPatch?.trim() || repo.diff.files.length > 0,
   );
+  useEffect(() => {
+    if (!repo) return;
+    const index = changed.findIndex((candidate) => candidate.repo === repo);
+    if (index >= 0) setActive((current) => (current === index ? current : index));
+  }, [repo, changed.map((candidate) => candidate.repo).join("\0")]);
   const cur = changed[Math.min(active, changed.length - 1)] || changed[0] || null;
   const groupPatch = cur?.diff.rawPatch || "";
   const groupFileCount = cur?.diff.files.length || 0;
@@ -212,7 +240,7 @@ export function DiffPanel({
   }
 
   useEffect(() => {
-    if (!cur || !groupPatch || groupFileCount < 3) {
+    if (grouping !== "ai" || !cur || !groupPatch || groupFileCount < 3) {
       setGroups(null);
       setGroupsLoading(false);
       return;
@@ -242,7 +270,7 @@ export function DiffPanel({
       live = false;
       if (retryTimer) clearTimeout(retryTimer);
     };
-  }, [sessionId, cur?.repo, groupPatch, groupFileCount, groupsRetry]);
+  }, [sessionId, cur?.repo, groupPatch, groupFileCount, groupsRetry, grouping]);
 
   async function handleDiscard(repo: string, path: string, oldPath?: string) {
     await discardDiffFile(sessionId, path, repo, oldPath);
@@ -296,16 +324,120 @@ export function DiffPanel({
     });
   }
 
+  const codeSettings = (
+    <Popover.Root>
+      <Tooltip label="Code view settings">
+        <Popover.Trigger
+          render={
+            <Button
+              variant="ghost"
+              size="sm"
+              aria-label="Code view settings"
+              icon={<IconSliders size={18} />}
+            />
+          }
+        />
+      </Tooltip>
+      <Popover.Popup
+        side="bottom"
+        align="end"
+        initialFocus
+        className="flex w-[340px] max-w-[calc(100vw-24px)] flex-col gap-0.5 p-3"
+      >
+        {source && onSourceChange && (
+          <>
+            <DiffSourceSetting value={source} onValueChange={onSourceChange} />
+            <div aria-hidden className="mx-2 my-1.5 h-px bg-line" />
+          </>
+        )}
+        <SettingRow label="Code view">
+          <Segmented
+            size="sm"
+            label="Code view"
+            value={view}
+            onValueChange={(next) => {
+              if (next === "flow") {
+                if (view !== "flow" && flowError) {
+                  setFlow(null);
+                  setFlowError(null);
+                }
+                setView("flow");
+                return;
+              }
+              setView("files");
+            }}
+          >
+            <SegmentedOption value="files">Changes</SegmentedOption>
+            <SegmentedOption value="guide" disabled>
+              Guide
+            </SegmentedOption>
+            <SegmentedOption value="flow" disabled={!patchVersion}>
+              Flow
+            </SegmentedOption>
+          </Segmented>
+        </SettingRow>
+
+        <div aria-hidden className="mx-2 my-1.5 h-px bg-line" />
+
+        <CodeOrganizationSettings
+          settings={organizationSettings}
+          reviewedFilesAvailable={false}
+          defaultOrderLabel="Worktree"
+        />
+
+        <div aria-hidden className="mx-2 my-1.5 h-px bg-line" />
+
+        <CodeDisplaySettings {...codeDisplaySettings} />
+      </Popover.Popup>
+    </Popover.Root>
+  );
+  const emptyControls = (
+    <div className="ml-auto flex shrink-0 items-center gap-2">
+      {codeSettings}
+      <Tooltip label="Refresh diff">
+        <Button
+          variant="ghost"
+          size="sm"
+          icon={<IconRestore size={18} />}
+          onClick={() => void reload()}
+          aria-label="Refresh diff"
+        />
+      </Tooltip>
+    </div>
+  );
+  const emptyToolbar =
+    toolbarTarget === undefined ? emptyControls : toolbarTarget ? createPortal(emptyControls, toolbarTarget) : null;
+  const emptyState = (
+    <>
+      {emptyToolbar}
+      <DiffEmptyState isRunning={isRunning} />
+    </>
+  );
+
   if (loading) return <LoadingState>Loading diff…</LoadingState>;
   if (error) return <InlineAlert className="m-4">{error}</InlineAlert>;
-  if (!repos || !repos.length) return <DiffEmptyState isRunning={isRunning} />;
+  if (!repos || !repos.length) return emptyState;
 
   // Repos that actually have changes; if none, show the empty state.
-  if (!changed.length) return <DiffEmptyState isRunning={isRunning} />;
+  if (!changed.length) return emptyState;
 
   const multi = changed.length > 1;
-  if (!cur) return <DiffEmptyState isRunning={isRunning} />;
+  if (!cur) return emptyState;
   const d = cur.diff;
+  const orderedFiles = [...d.files];
+  if (fileOrder === "pull-request") {
+    if (sortDirection === "desc") orderedFiles.reverse();
+  } else {
+    const direction = sortDirection === "asc" ? 1 : -1;
+    orderedFiles.sort((left, right) => {
+      const result =
+        fileOrder === "changes"
+          ? left.additions + left.deletions - right.additions - right.deletions
+          : left.path.localeCompare(right.path);
+      return (result || left.path.localeCompare(right.path)) * direction;
+    });
+  }
+  const visibleFileOrder = orderedFiles.map((file) => file.path);
 
   const toolbarContents = (
     <>
@@ -341,51 +473,7 @@ export function DiffPanel({
           ref={setDiffControlsTarget}
           className="flex shrink-0 items-center gap-2"
         />
-        <Popover.Root>
-          <Tooltip label="Code view settings">
-            <Popover.Trigger
-              render={
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  aria-label="Code view settings"
-                  icon={<IconSliders size={18} />}
-                />
-              }
-            />
-          </Tooltip>
-          <Popover.Popup
-            side="bottom"
-            align="end"
-            initialFocus
-            className="flex w-[340px] max-w-[calc(100vw-24px)] flex-col gap-0.5 p-3"
-          >
-            <SettingRow label="View">
-              <Segmented
-                size="sm"
-                label="Diff view"
-                value={view}
-                onValueChange={(next) => {
-                  if (next === "flow") {
-                    if (view !== "flow" && flowError) {
-                      setFlow(null);
-                      setFlowError(null);
-                    }
-                    setView("flow");
-                    return;
-                  }
-                  setView("files");
-                }}
-              >
-                <SegmentedOption value="files">Files</SegmentedOption>
-                <SegmentedOption value="flow" disabled={!patchVersion}>
-                  Code flow
-                </SegmentedOption>
-              </Segmented>
-            </SettingRow>
-            <CodeDisplaySettings {...codeDisplaySettings} />
-          </Popover.Popup>
-        </Popover.Root>
+        {codeSettings}
         <Tooltip label="Refresh diff">
           <Button
             variant="ghost"
@@ -427,7 +515,6 @@ export function DiffPanel({
       {multi && (
         <div className="sticky top-[var(--diff-panel-top,0px)] z-2 flex gap-1 overflow-x-auto border-b border-divider bg-panel-surface px-2.5 py-1.5">
           {changed.map((r, i) => {
-            const n = r.diff.totalAdditions + r.diff.totalDeletions;
             return (
               <button
                 key={r.repo}
@@ -454,6 +541,16 @@ export function DiffPanel({
 
       {toolbar}
 
+      <div className="flex min-h-0 min-w-0 flex-1">
+        {fileListMode !== "hidden" && orderedFiles.length > 0 && (
+          <PrFileTree
+            files={orderedFiles}
+            mode={fileListMode}
+            showFileStats={codeDisplaySettings.showFileStats}
+            onOpenFile={openFlowLocation}
+          />
+        )}
+        <div className="min-w-0 flex-1">
       {view === "flow" ? (
         <CodeFlow
           data={flow?.key === flowKey ? flow.data : null}
@@ -480,15 +577,18 @@ export function DiffPanel({
           structuralHighlighting={codeDisplaySettings.structuralHighlighting}
           showFileStats={codeDisplaySettings.showFileStats}
           codeTheme={codeDisplaySettings.codeTheme}
+          visibleFileOrder={visibleFileOrder}
           // The sidebar owns this scrollport. Keep each file's title below its
           // standing toolbar until the following file pushes it away.
           stickyFileHeaders={toolbarTarget === undefined}
           groups={
-            groups?.repo === cur.repo && groups.patch === d.rawPatch
+            grouping === "ai" &&
+            groups?.repo === cur.repo &&
+            groups.patch === d.rawPatch
               ? groups.groups || undefined
               : undefined
           }
-          groupsLoading={groupsLoading}
+          groupsLoading={grouping === "ai" && groupsLoading}
           showGroupsStatus={false}
           submitLabel={`Send to ${AGENT_NAME}`}
           placeholder={`Leave feedback on these lines. ${AGENT_NAME} picks it up in this session…`}
@@ -532,6 +632,8 @@ export function DiffPanel({
         />
       </div>
       )}
+        </div>
+      </div>
     </div>
   );
 }

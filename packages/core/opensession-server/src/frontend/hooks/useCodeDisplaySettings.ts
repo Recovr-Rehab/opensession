@@ -16,6 +16,19 @@ export interface CodeDisplaySettingsState {
   changeCodeTheme: (next: CodeTheme) => void;
 }
 
+export interface CodeOrganizationSettingsState {
+  grouping: "none" | "ai";
+  changeGrouping: (next: "none" | "ai") => void;
+  fileListMode: "flat" | "tree" | "hidden";
+  changeFileListMode: (next: "flat" | "tree" | "hidden") => void;
+  fileOrder: "path" | "changes" | "pull-request";
+  changeFileOrder: (next: "path" | "changes" | "pull-request") => void;
+  sortDirection: "asc" | "desc";
+  changeSortDirection: (next: "asc" | "desc") => void;
+  hideReviewed: boolean;
+  changeHideReviewed: (next: boolean) => void;
+}
+
 const SETTING_EVENT = "opensession-code-setting";
 
 export function useStoredCodeSetting<T extends string>(
@@ -55,6 +68,48 @@ export function useStoredCodeSetting<T extends string>(
     // decide when this listener needs a new validation closure.
   }, [key, allowedKey]);
   return [value, change];
+}
+
+/** File organization preferences shared by Review and sidebar Changes. */
+export function useCodeOrganizationSettings(): CodeOrganizationSettingsState {
+  const [grouping, changeGrouping] = useStoredCodeSetting(
+    "opensession-pr-grouping",
+    ["none", "ai"] as const,
+    "none",
+  );
+  const [fileListMode, changeFileListMode] = useStoredCodeSetting(
+    "opensession-pr-file-list",
+    ["flat", "tree", "hidden"] as const,
+    "hidden",
+  );
+  const [fileOrder, changeFileOrder] = useStoredCodeSetting(
+    "opensession-pr-file-order",
+    ["path", "changes", "pull-request"] as const,
+    "path",
+  );
+  const [sortDirection, changeSortDirection] = useStoredCodeSetting(
+    "opensession-pr-file-order-direction",
+    ["asc", "desc"] as const,
+    "asc",
+  );
+  const [hideReviewedSetting, changeHideReviewedSetting] = useStoredCodeSetting(
+    "opensession-pr-hide-reviewed",
+    ["0", "1"] as const,
+    "0",
+  );
+
+  return {
+    grouping,
+    changeGrouping,
+    fileListMode,
+    changeFileListMode,
+    fileOrder,
+    changeFileOrder,
+    sortDirection,
+    changeSortDirection,
+    hideReviewed: hideReviewedSetting === "1",
+    changeHideReviewed: (next) => changeHideReviewedSetting(next ? "1" : "0"),
+  };
 }
 
 /** Rendering preferences shared by the full Review canvas and sidebar Changes. */

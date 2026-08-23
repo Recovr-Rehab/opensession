@@ -773,6 +773,13 @@ export function SessionViewer({
 		() => sessionPrPresentation(session.prs),
 		[session.prs],
 	);
+	const worktreeDiffSource: "worktree" | undefined =
+		onOpenReview && (prPresentation.primary || prPresentation.additional.length)
+			? "worktree"
+			: undefined;
+	const changeWorktreeDiffSource = (next: "pull-request" | "worktree") => {
+		if (next === "pull-request") onOpenReview?.();
+	};
 	const mergedPrValue =
 		prPresentation.primary?.state === "MERGED"
 			? prPresentation.primary
@@ -6547,6 +6554,8 @@ export function SessionViewer({
 												canSend={connected && !isBusy && !noEngine}
 												send={send}
 												diff={diffState}
+												source={worktreeDiffSource}
+												onSourceChange={changeWorktreeDiffSource}
 											/>
 										</div>
 									)
@@ -7817,6 +7826,8 @@ export function SessionViewer({
 										canSend={connected && !isBusy && !noEngine}
 										send={send}
 										diff={diffState}
+										source={worktreeDiffSource}
+										onSourceChange={changeWorktreeDiffSource}
 									/>
 								)
 							) : desktopPanelPage === "portals" ? (
