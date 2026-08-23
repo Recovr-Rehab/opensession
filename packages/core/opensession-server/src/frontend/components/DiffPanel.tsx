@@ -391,28 +391,7 @@ export function DiffPanel({
       </Popover.Popup>
     </Popover.Root>
   );
-  const emptyControls = (
-    <div className="ml-auto flex shrink-0 items-center gap-2">
-      {codeSettings}
-      <Tooltip label="Refresh diff">
-        <Button
-          variant="ghost"
-          size="sm"
-          icon={<IconRestore size={18} />}
-          onClick={() => void reload()}
-          aria-label="Refresh diff"
-        />
-      </Tooltip>
-    </div>
-  );
-  const emptyToolbar =
-    toolbarTarget === undefined ? emptyControls : toolbarTarget ? createPortal(emptyControls, toolbarTarget) : null;
-  const emptyState = (
-    <>
-      {emptyToolbar}
-      <DiffEmptyState isRunning={isRunning} />
-    </>
-  );
+  const emptyState = <DiffEmptyState isRunning={isRunning} />;
 
   if (loading) return <LoadingState>Loading diff…</LoadingState>;
   if (error) return <InlineAlert className="m-4">{error}</InlineAlert>;
