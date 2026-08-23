@@ -21,6 +21,7 @@ import { OptionSelect } from "../../ui/select";
 import {
 	SettingCard,
 	SettingCardSkeleton,
+	SettingGroup,
 	SettingsHeader,
 	SettingsPanel,
 } from "../../ui/settings";
@@ -808,57 +809,58 @@ function CategoryPage({
 			)}
 			{canAdd && (
 				<SettingCard className="mb-3 p-4">
-					<div className="grid grid-cols-[minmax(12rem,1fr)_repeat(3,minmax(8rem,auto))] gap-2 phone:grid-cols-1">
-						<label className="relative block min-w-0">
-							<span className="sr-only">Search memories</span>
-							<IconSearch size={16} className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-faint" />
-							<Input className="pl-9 phone:min-h-11 phone:text-input-phone" type="search" value={query} placeholder="Search memories" onChange={(event) => { setQuery(event.target.value); resetPage(); }} />
-						</label>
-						<OptionSelect
-							label={category.targetLabel}
-							className="phone:min-h-11 phone:text-input-phone"
-							value={scopeKey}
-							options={scopes.map(({ scope }) => ({ value: scope.key, label: scope.label }))}
-							onChange={(value) => { setScopeKey(value); resetPage(); }}
-						/>
-						<OptionSelect<MemoryRecordKind | "">
-							label="Memory kind"
-							className="phone:min-h-11 phone:text-input-phone"
-							value={kind}
-							options={[
-								{ value: "", label: "All kinds" },
-								...Object.entries(KIND_LABELS).map(([value, label]) => ({ value: value as MemoryRecordKind, label })),
-							]}
-							onChange={(value) => { setKind(value); resetPage(); }}
-						/>
-						<OptionSelect<MemoryState | "">
-							label="Memory state"
-							className="phone:min-h-11 phone:text-input-phone"
-							value={state}
-							options={[
-								{ value: "", label: "Active" },
-								{ value: "archived", label: "Archived" },
-								{ value: "expired", label: "Expired" },
-								{ value: "superseded", label: "Superseded" },
-							]}
-							onChange={(value) => { setState(value); resetPage(); }}
-						/>
-					</div>
-					<div className="mt-2 flex items-center justify-between gap-3 phone:flex-col phone:items-stretch">
-						<OptionSelect<typeof review>
-							label="Review state"
-							size="sm"
-							className="max-w-44 phone:min-h-11 phone:max-w-none phone:text-input-phone"
-							value={review}
-							options={[
-								{ value: "", label: "All review states" },
-								{ value: "needs_review", label: "Needs review" },
-								{ value: "confirmed", label: "Confirmed" },
-							]}
-							onChange={(value) => { setReview(value); resetPage(); }}
-						/>
-						<span className="text-meta text-faint">{selectedScope?.count || 0} total · {selectedScope?.pinnedCount || 0} pinned · {selectedScope?.reviewCount || 0} to review</span>
-					</div>
+					<SettingGroup className="gap-2">
+						<div className="grid grid-cols-4 items-center gap-2 phone:grid-cols-1">
+							<label className="relative col-span-2 block min-w-0 phone:col-span-1">
+								<span className="sr-only">Search memories</span>
+								<IconSearch size={16} className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-faint" />
+								<Input className="pl-9 phone:min-h-11 phone:text-input-phone" type="search" value={query} placeholder="Search memories" onChange={(event) => { setQuery(event.target.value); resetPage(); }} />
+							</label>
+							<span className="col-span-2 text-right text-meta text-faint phone:col-span-1 phone:text-left">{selectedScope?.count || 0} total · {selectedScope?.pinnedCount || 0} pinned · {selectedScope?.reviewCount || 0} to review</span>
+						</div>
+						<div className="grid grid-cols-4 gap-2 phone:grid-cols-1">
+							<OptionSelect
+								label={category.targetLabel}
+								className="phone:min-h-11 phone:text-input-phone"
+								value={scopeKey}
+								options={scopes.map(({ scope }) => ({ value: scope.key, label: scope.label }))}
+								onChange={(value) => { setScopeKey(value); resetPage(); }}
+							/>
+							<OptionSelect<MemoryRecordKind | "">
+								label="Memory kind"
+								className="phone:min-h-11 phone:text-input-phone"
+								value={kind}
+								options={[
+									{ value: "", label: "All kinds" },
+									...Object.entries(KIND_LABELS).map(([value, label]) => ({ value: value as MemoryRecordKind, label })),
+								]}
+								onChange={(value) => { setKind(value); resetPage(); }}
+							/>
+							<OptionSelect<MemoryState | "">
+								label="Memory state"
+								className="phone:min-h-11 phone:text-input-phone"
+								value={state}
+								options={[
+									{ value: "", label: "Active" },
+									{ value: "archived", label: "Archived" },
+									{ value: "expired", label: "Expired" },
+									{ value: "superseded", label: "Superseded" },
+								]}
+								onChange={(value) => { setState(value); resetPage(); }}
+							/>
+							<OptionSelect<typeof review>
+								label="Review state"
+								className="phone:min-h-11 phone:text-input-phone"
+								value={review}
+								options={[
+									{ value: "", label: "All review states" },
+									{ value: "needs_review", label: "Needs review" },
+									{ value: "confirmed", label: "Confirmed" },
+								]}
+								onChange={(value) => { setReview(value); resetPage(); }}
+							/>
+						</div>
+					</SettingGroup>
 				</SettingCard>
 			)}
 			{!canAdd ? (
