@@ -10,6 +10,7 @@ import {
   IconCopy,
   IconGlobe,
   IconServer,
+  IconSparkle,
   IconTerminal,
 } from "../../core/opensession-server/src/frontend/components/icons";
 import "./site.css";
@@ -258,14 +259,12 @@ function StepNav({
 }
 
 function StepLayout({
-  step,
   title,
   description,
   brand,
   contentClassName,
   children,
 }: {
-  step: number;
   title: string;
   description: string;
   brand?: ReactNode;
@@ -275,9 +274,7 @@ function StepLayout({
   return (
     <div className="setup-step-layout">
       <div className="setup-copy setup-step-copy">
-        <h1 tabIndex={-1}>
-          {step} {title}
-        </h1>
+        <h1 tabIndex={-1}>{title}</h1>
         <p>{description}</p>
         {brand}
       </div>
@@ -359,7 +356,6 @@ function SetupPage() {
   const panels = [
     <section className="setup-panel" key="server">
       <StepLayout
-        step={1}
         title="Choose a server"
         description="Choose where Open Session will run and how you want to set it up."
         contentClassName="setup-step-content-split"
@@ -430,9 +426,11 @@ function SetupPage() {
               </div>
             ) : (
               <div className="setup-server-options-empty">
-                <IconServer size={28} />
+                <div className="setup-server-options-empty-icon" aria-hidden="true">
+                  <IconSparkle size={24} />
+                </div>
                 <strong>Choose a server</strong>
-                <span>Setup options will appear here.</span>
+                <span>Select one to see setup options.</span>
               </div>
             )}
           </section>
@@ -441,7 +439,6 @@ function SetupPage() {
     </section>,
     <section className="setup-panel" key="connect">
       <StepLayout
-        step={2}
         title={`Set up ${provider.name}`}
         description="Create the server, connect over SSH, and confirm it is ready."
         contentClassName="setup-step-content-split"
@@ -578,7 +575,6 @@ function SetupPage() {
     </section>,
     <section className="setup-panel" key="tailscale">
       <StepLayout
-        step={3}
         title="Secure access"
         description="Tailscale creates a private network between your server and devices, keeping Open Session off the public internet. Sign in once, then add every device that needs access."
         brand={
@@ -624,7 +620,6 @@ function SetupPage() {
     </section>,
     <section className="setup-panel" key="install">
       <StepLayout
-        step={4}
         title="Download Open Session"
         description="Choose a Mac app, or install the server from Terminal."
       >
@@ -683,7 +678,6 @@ function SetupPage() {
     </section>,
     <section className="setup-panel" key="open">
       <StepLayout
-        step={5}
         title="Finish in Open Session"
         description="Open your private instance to connect GitHub, AI, and your repositories."
       >
