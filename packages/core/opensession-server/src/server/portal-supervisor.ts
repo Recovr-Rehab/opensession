@@ -549,7 +549,12 @@ export async function ensureRemoteSandboxPortalAgent(input: {
 		const endpoint = `${callbackBase}/sandbox-portal-ws?session=${encodeURIComponent(input.sessionId)}&sandbox=${encodeURIComponent(input.sandbox.id)}&port=${input.port}`;
 		const logDir = `/home/ubuntu/.opensession-session-scratch/${input.sessionId}`;
 		const logPath = `${logDir}/sandbox-portal-${input.port}.log`;
-		const relayLaunch = `mkdir -p ${shellQuoteWord(logDir)} && OPENSESSION_SANDBOX_PORTAL_WS_URL=${shellQuoteWord(endpoint)} OPENSESSION_SANDBOX_PORTAL_TOKEN=${shellQuoteWord(grant.token)} OPENSESSION_SANDBOX_PORTAL_PORT=${shellQuoteWord(String(input.port))} OPENSESSION_SANDBOX_PORTAL_EXPIRES_AT=${shellQuoteWord(String(grant.expiresAt))} exec /home/ubuntu/.bun/bin/bun run ${shellQuoteWord(SANDBOX_PORTAL_AGENT_ENTRY)} </dev/null >${shellQuoteWord(logPath)} 2>&1`;
+		// Portal transport fixes must not wait for a repository image refresh or
+		// mutate the prepared project. Copy this small, self-contained sidecar
+		// into session scratch on every launch; the app workspace stays untouched.
+		const agentPath = `${logDir}/sandbox-portal-agent.ts`;
+		const agentPayload = Buffer.from(readFileSync(SANDBOX_PORTAL_AGENT_ENTRY, "utf8")).toString("base64");
+		const relayLaunch = `mkdir -p ${shellQuoteWord(logDir)} && printf %s ${shellQuoteWord(agentPayload)} | base64 -d > ${shellQuoteWord(agentPath)} && OPENSESSION_SANDBOX_PORTAL_WS_URL=${shellQuoteWord(endpoint)} OPENSESSION_SANDBOX_PORTAL_TOKEN=${shellQuoteWord(grant.token)} OPENSESSION_SANDBOX_PORTAL_PORT=${shellQuoteWord(String(input.port))} OPENSESSION_SANDBOX_PORTAL_EXPIRES_AT=${shellQuoteWord(String(grant.expiresAt))} exec /home/ubuntu/.bun/bin/bun run ${shellQuoteWord(agentPath)} </dev/null >${shellQuoteWord(logPath)} 2>&1`;
 		const started = await input.sandbox.exec(["bash", "-c", relayLaunch], { background: true, timeoutMs: 15_000 });
 		if (started.exitCode !== 0) throw new Error(started.stderr.trim() || "Could not start the Sandbox Portal relay.");
 		remoteRelayAgents.set(agentKey, { expiresAt: grant.expiresAt });

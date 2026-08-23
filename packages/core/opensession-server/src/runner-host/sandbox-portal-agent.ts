@@ -20,7 +20,28 @@ export function loopbackHeaders(value: unknown, port: number): Headers {
 	return headers;
 }
 
-async function respond(socket: WebSocket, msg: any, port: number): Promise<void> {
+export type PortalResponseSender = (message: string) => Promise<void>;
+
+/** Serialize large HTTP result frames until the previous frame has left the
+ * client-side WebSocket buffer. Browser requests may still fetch loopback in
+ * parallel; only the one constrained outbound connection is paced. */
+export function createPortalResponseSender(
+	socket: WebSocket,
+	wait: () => Promise<unknown> = () => Bun.sleep(2),
+): PortalResponseSender {
+	let tail = Promise.resolve();
+	return (message: string) => {
+		const sending = tail.then(async () => {
+			while (socket.readyState === WebSocket.OPEN && socket.bufferedAmount > 0) await wait();
+			if (socket.readyState !== WebSocket.OPEN) throw new Error("Portal relay socket closed");
+			socket.send(message);
+		});
+		tail = sending.catch(() => {});
+		return sending;
+	};
+}
+
+async function respond(send: PortalResponseSender, msg: any, port: number): Promise<void> {
 	const id = typeof msg.id === "string" ? msg.id : "";
 	const path = typeof msg.path === "string" ? msg.path : "";
 	const method = typeof msg.method === "string" ? msg.method.toUpperCase() : "GET";
@@ -33,9 +54,9 @@ async function respond(socket: WebSocket, msg: any, port: number): Promise<void>
 		if (bytes.byteLength > 10 * 1024 * 1024) throw new Error("response too large");
 		const headers: Record<string, string> = {};
 		for (const [name, value] of response.headers) if (!HOP.has(name.toLowerCase())) headers[name] = value;
-		socket.send(JSON.stringify({ t: "http_result", id, status: response.status, headers, body: Buffer.from(bytes).toString("base64") }));
+		await send(JSON.stringify({ t: "http_result", id, status: response.status, headers, body: Buffer.from(bytes).toString("base64") }));
 	} catch {
-		socket.send(JSON.stringify({ t: "http_result", id, status: 502, headers: {} }));
+		try { await send(JSON.stringify({ t: "http_result", id, status: 502, headers: {} })); } catch {}
 	}
 }
 
@@ -89,8 +110,9 @@ async function run(endpoint: string, token: string, port: number, expiresAt: num
 			let opened = false;
 			try { socket = new WebSocket(endpoint, { headers: { authorization: `Bearer ${token}` } } as any); }
 			catch { resolve(false); return; }
+			const sendResponse = createPortalResponseSender(socket);
 			socket.addEventListener("open", () => { opened = true; });
-			socket.addEventListener("message", (event) => { try { const message = JSON.parse(String(event.data)); if (message.t === "http") void respond(socket, message, port); else if (message.t === "ws_open") openWebSocket(socket, sockets, message, port); else if (message.t === "ws_send") sendWebSocket(sockets, message); else if (message.t === "ws_close") { const state = sockets.get(String(message.id)); if (state) try { state.socket.close(); } catch {} } } catch {} });
+			socket.addEventListener("message", (event) => { try { const message = JSON.parse(String(event.data)); if (message.t === "http") void respond(sendResponse, message, port); else if (message.t === "ws_open") openWebSocket(socket, sockets, message, port); else if (message.t === "ws_send") sendWebSocket(sockets, message); else if (message.t === "ws_close") { const state = sockets.get(String(message.id)); if (state) try { state.socket.close(); } catch {} } } catch {} });
 			socket.addEventListener("close", () => { for (const state of sockets.values()) try { state.socket.close(); } catch {} sockets.clear(); resolve(opened); }, { once: true });
 			socket.addEventListener("error", () => { try { socket.close(); } catch {} });
 		});

@@ -18,11 +18,11 @@ type RelayResponse = { status: number; headers: Record<string, string>; body?: s
 /** A browser can ask Turbopack for dozens of multi-megabyte chunks at once.
  * The outbound Portal rides one WebSocket, whose client-side send buffer drops
  * responses when all of those loopback fetches finish together. Keep fetches
- * below the measured backpressure cliff. The compatibility sidecar sends each
- * response as one WebSocket frame, so sustained multi-megabyte chunk bursts
- * must be serialized. This gate is per Portal connection, so sibling services
- * never block each other. */
-export function createRelayRequestLimiter(maxConcurrent = 1): RelayRequestLimiter {
+ * below the measured backpressure cliff. The sidecar fetches a bounded set in
+ * parallel and serializes the resulting WebSocket frames behind its actual
+ * send buffer. This gate is per Portal connection, so sibling services never
+ * block each other. */
+export function createRelayRequestLimiter(maxConcurrent = 8): RelayRequestLimiter {
 	if (!Number.isInteger(maxConcurrent) || maxConcurrent < 1) throw new Error("Portal relay concurrency must be positive");
 	let active = 0;
 	const waiters: Array<() => void> = [];
@@ -201,7 +201,7 @@ export async function ensureSandboxPortalRelay(input: { sessionId: string; sandb
 	if (!relay) {
 		const server = Bun.serve<{ id: string; connection: Connection; path: string; headers: Record<string, string> }>({
 			hostname: "127.0.0.1", port: 0,
-			// Browser asset bursts wait behind the single-frame sidecar queue.
+			// Browser asset bursts wait behind the sidecar's response-frame queue.
 			// Bun's 10s default closes those quiet upstream sockets and Caddy turns
 			// the EOF into a misleading 502 before the request reaches its turn.
 			idleTimeout: 120,

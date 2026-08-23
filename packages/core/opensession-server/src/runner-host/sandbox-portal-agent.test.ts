@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { loopbackHeaders, openWebSocket, relayRetryDelayMs, sendWebSocket, type PortalSocketState } from "./sandbox-portal-agent";
+import { createPortalResponseSender, loopbackHeaders, openWebSocket, relayRetryDelayMs, sendWebSocket, type PortalSocketState } from "./sandbox-portal-agent";
 
 test("uses local-dev host semantics and disables upstream compression", () => {
 	const headers = loopbackHeaders({ host: "portal.example:22000", "accept-encoding": "gzip, br", cookie: "session=abc" }, 4300);
@@ -33,6 +33,27 @@ class FakeWebSocket extends EventTarget {
 		this.dispatchEvent(new Event("open"));
 	}
 }
+
+test("paces HTTP result frames behind WebSocket backpressure", async () => {
+	const sent: string[] = [];
+	const waits: Array<() => void> = [];
+	const relay = {
+		readyState: WebSocket.OPEN,
+		bufferedAmount: 0,
+		send(message: string) { sent.push(message); relay.bufferedAmount = message.length; },
+	};
+	const socket = relay as unknown as WebSocket;
+	const send = createPortalResponseSender(socket, () => new Promise<void>((resolve) => waits.push(resolve)));
+
+	await send("first");
+	const second = send("second");
+	await Promise.resolve();
+	expect(sent).toEqual(["first"]);
+	(socket as unknown as { bufferedAmount: number }).bufferedAmount = 0;
+	waits.shift()!();
+	await second;
+	expect(sent).toEqual(["first", "second"]);
+});
 
 test("queues immediate WebSocket frames until the loopback socket opens", () => {
 	const relay = { send() {} } as unknown as WebSocket;
