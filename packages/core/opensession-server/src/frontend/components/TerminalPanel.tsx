@@ -330,7 +330,10 @@ function ShellView({
     <div
       className={`flex-1 min-h-0 overflow-hidden bg-surface pl-4 pt-2 pb-1.5 ${visible ? "" : "hidden"}`}
     >
-      <div ref={hostRef} className="size-full overflow-hidden" />
+      {/* Ghostty mounts its hidden keyboard textarea absolutely. Keep this
+          host positioned so that input remains inside the terminal instead of
+          escaping to the page's top-left corner. */}
+      <div ref={hostRef} className="relative size-full overflow-hidden" />
     </div>
   );
 }
