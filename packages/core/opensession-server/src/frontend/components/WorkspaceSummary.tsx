@@ -35,6 +35,7 @@ import {
 } from "../lib/people";
 import { isBotAuthor } from "../lib/pr-comments";
 import { Popover } from "../ui/popover";
+import { Button } from "../ui/button";
 import { Menu } from "../ui/menu";
 import { Tooltip } from "../ui/tooltip";
 import { cn } from "../ui/cn";
@@ -70,7 +71,6 @@ import {
 	IconPeople,
 	IconPlay,
 	IconPlayRectangle,
-	IconPullRequest,
 	IconRobot,
 	IconStack,
 } from "./icons";
@@ -823,18 +823,27 @@ export function WorkspaceSummaryBody({
 
 			<div className={groupClass}>
 				{/* One review section for both the automated reading and the people asked
-				    to review. The first row opens the complete workspace review; the final
-				    row owns the picker, so neither action requires the workspace panel. */}
-				<div className={WS_SUMMARY_SECTION}>Review</div>
-				{!reviewMode && (
-					<button className={WS_SUMMARY_ROW} onClick={() => go(onOpenPr)}>
-						<span className={WS_SUMMARY_RAIL}>
-							<IconPullRequest size={20} className={WS_SUMMARY_ICON} />
-						</span>
-						<span className={WS_SUMMARY_LABEL}>Workspace review</span>
-						<span className={WS_SUMMARY_ACTION}>Open</span>
-					</button>
-				)}
+				    to review. Its action opens the complete workspace review; the final row
+				    owns the picker, so neither action requires the workspace panel. */}
+				<div
+					className={cn(
+						WS_SUMMARY_SECTION,
+						"justify-between",
+						embedded ? "h-11" : "h-7",
+					)}
+				>
+					<span>Review</span>
+					{!reviewMode && (
+						<Button
+							variant="ghost"
+							size="sm"
+							className="min-h-6 px-2 text-meta phone:min-h-11"
+							onClick={() => go(onOpenPr)}
+						>
+							Open
+						</Button>
+					)}
+				</div>
 			{showOsReview && (
 				<>
 					<button
