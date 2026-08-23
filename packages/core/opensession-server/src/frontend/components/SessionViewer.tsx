@@ -326,6 +326,7 @@ import { Tooltip } from "../ui/tooltip";
 import { CopyCheck, useCopy } from "../ui/copy";
 import { toast } from "../ui/toast";
 import { copySessionTranscript } from "../lib/transcript-copy";
+import { takePendingSessionFork } from "../lib/pending-session-fork";
 import { isPinned, togglePin, onPinsChanged } from "../lib/pins";
 import { getLane, onLanesChanged, type Lane } from "../lib/lanes";
 import { ownedBy } from "../lib/sidebar-lanes";
@@ -1194,6 +1195,10 @@ export function SessionViewer({
 	// When set, the next send forks a new session branching from this message
 	// instead of continuing this one.
 	const [forkFrom, setForkFrom] = useState<string | null>(null);
+	useEffect(() => {
+		const messageId = takePendingSessionFork(session.id);
+		if (messageId) setForkFrom(messageId);
+	}, [session.id]);
 	const [isStreaming, setIsStreaming] = useState(false);
 	const [isRunningLive, setIsRunningLive] = useState(session.isRunning);
 	// Bumped on git pushes and matching GitHub webhook events so every mounted PR

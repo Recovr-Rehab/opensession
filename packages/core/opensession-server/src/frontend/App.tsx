@@ -5557,6 +5557,16 @@ export function App(
 										}
 										refreshWorkspaces();
 									}}
+									onArchiveSession={(session, archived) => {
+										if (archived) closeSession(session);
+										else void unarchiveSessions([session]);
+									}}
+									onDeleteSession={async (session, cleanWorktree) => {
+										await deleteSessionApi(session.id, cleanWorktree);
+										remove(session.id);
+										refresh();
+									}}
+									onOpenNewSession={openPrefilledSession}
 									rightPanelEl={rightPanelEl}
 								/>
 							) : workspacesLoaded ? (

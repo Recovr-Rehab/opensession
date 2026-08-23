@@ -8,16 +8,23 @@ import React, {
 } from "react";
 import { createPortal } from "react-dom";
 import { motion } from "motion/react";
-import type { Workspace, UnifiedSession, WSServerMessage } from "../lib/types";
+import type {
+	TranscriptEntry,
+	Workspace,
+	UnifiedSession,
+	WSServerMessage,
+} from "../lib/types";
 import {
 	fetchModels,
 	fetchSession,
+	fetchTranscript,
 	fetchWorkspaceOverview,
 	updateWorkspaceApi,
 	type ModelOption,
 } from "../lib/api";
 import { Composer } from "./Composer";
 import { ConversationPane } from "./ConversationPane";
+import { SpinOffMenu } from "./SpinOffMenu";
 import { FeedWebPane, refWebPanel } from "./FeedWebPane";
 import { SlackChannelPane } from "./SlackChannelPane";
 import { MarkdownRepoProvider } from "./MarkdownBody";
@@ -30,17 +37,24 @@ import { useCurrentUser } from "./UserPicker";
 import { useIsPhone } from "../hooks/useIsPhone";
 import { useSidePanel } from "../hooks/useSidePanel";
 import {
+	IconArchive,
 	IconArrowUpToLine,
+	IconBranches,
 	IconChevronRight,
+	IconCopy,
 	IconDotsHorizontal,
+	IconFile,
 	IconLink,
+	IconListCircles,
 	IconPencil,
 	IconPlus,
 	IconSidebarRight,
+	IconTrash,
 } from "./icons";
 import { Button } from "../ui/button";
 import { Menu, MENU_ICON } from "../ui/menu";
 import { CopyCheck, useCopy } from "../ui/copy";
+import { toast } from "../ui/toast";
 import { Tooltip } from "../ui/tooltip";
 import { cn } from "../ui/cn";
 import {
@@ -53,6 +67,7 @@ import {
 	VIEWER_BRANCH_EDITABLE,
 	VIEWER_BRANCH_RENAME,
 	VIEWER_HEADER,
+	VIEWER_DELETE_CONFIRM,
 	VIEWER_HEADER_ACTIONS,
 	VIEWER_OVERFLOW,
 	VIEWER_TITLE,
@@ -81,6 +96,9 @@ import { duration, ease } from "../ui/motion";
 import { mainSession } from "../lib/landing-session";
 import { sessionCarriesPr } from "../lib/session-prs";
 import type { NewTabMorphOrigin } from "./SessionTabs";
+import type { NewSessionPrefill } from "../lib/new-session-link";
+import { copySessionTranscript } from "../lib/transcript-copy";
+import { setPendingSessionFork } from "../lib/pending-session-fork";
 import {
 	workspaceSummaryOpen,
 	WS_SUMMARY_ROOM_W,
@@ -123,6 +141,13 @@ interface Props {
 	headerActionsEl?: HTMLElement | null;
 	/** Rename from the shared workspace menu or by double-clicking the title. */
 	onRenameWorkspace?: (name: string) => void | Promise<void>;
+	/** Session actions shown when this workspace-wide pane has a presentation session. */
+	onArchiveSession?: (session: UnifiedSession, archived: boolean) => void;
+	onDeleteSession?: (
+		session: UnifiedSession,
+		cleanWorktree: boolean,
+	) => void | Promise<void>;
+	onOpenNewSession?: (prefill: NewSessionPrefill) => void;
 	/** The app's right-column slot — see the header note; the info panel portals
 	    in here so it is a full-height column rather than a box below the tabs. */
 	rightPanelEl?: HTMLElement | null;
@@ -166,6 +191,9 @@ export function WorkspacePane({
 	topbarEl,
 	headerActionsEl,
 	onRenameWorkspace,
+	onArchiveSession,
+	onDeleteSession,
+	onOpenNewSession,
 	rightPanelEl,
 }: Props) {
 	const draftKey = workspaceDraftKey(workspace.id);
@@ -186,6 +214,12 @@ export function WorkspacePane({
 	const fileDragWatchdogRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 	const [overflowOpen, setOverflowOpen] = useState(false);
 	const [renameDraft, setRenameDraft] = useState<string | null>(null);
+	const [menuEntries, setMenuEntries] = useState<TranscriptEntry[]>([]);
+	const [menuEntriesSessionId, setMenuEntriesSessionId] = useState<string | null>(
+		null,
+	);
+	const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+	const [deleting, setDeleting] = useState(false);
 	const workspaceCopy = useCopy();
 	const currentUser = useCurrentUser();
 	// Only a workspace that mounted with a server draft gets autosaved back to
@@ -469,6 +503,23 @@ export function WorkspacePane({
 	}, [listedPresentationSession, tab, workspace.id]);
 	const presentationSession =
 		listedPresentationSession ?? hydratedPresentationSession ?? reviewSession;
+	useEffect(() => {
+		if (!overflowOpen || !presentationSession) return;
+		if (menuEntriesSessionId === presentationSession.id) return;
+		let stale = false;
+		void fetchTranscript(presentationSession.id)
+			.then((entries) => {
+				if (stale) return;
+				setMenuEntries((entries as TranscriptEntry[]) || []);
+				setMenuEntriesSessionId(presentationSession.id);
+			})
+			.catch(() => {
+				if (!stale) setMenuEntriesSessionId(presentationSession.id);
+			});
+		return () => {
+			stale = true;
+		};
+	}, [overflowOpen, presentationSession?.id, menuEntriesSessionId]);
 
 	function handleStart() {
 		const q = prompt.trim();
@@ -589,6 +640,28 @@ export function WorkspacePane({
 		if (name && name !== workspace.name) void onRenameWorkspace?.(name);
 	}
 
+	const sessionMenuEntries =
+		presentationSession?.id === menuEntriesSessionId ? menuEntries : [];
+	const lastAssistantId = sessionMenuEntries.findLast(
+		(entry) => entry.type === "assistant",
+	)?.id;
+
+	async function deletePresentationSession(cleanWorktree: boolean) {
+		if (!presentationSession || !onDeleteSession || deleting) return;
+		setDeleting(true);
+		try {
+			await onDeleteSession(presentationSession, cleanWorktree);
+			setOverflowOpen(false);
+			setShowDeleteConfirm(false);
+		} catch (error) {
+			toast(error instanceof Error ? error.message : "Delete failed", {
+				variant: "error",
+			});
+		} finally {
+			setDeleting(false);
+		}
+	}
+
 	// One workspace menu, placed in the title cluster on desktop and portaled
 	// into the phone's trailing nav slot. Its trigger is the same Button/Menu
 	// composition as SessionViewer's ⋯, so the bar does not change controls when
@@ -624,18 +697,20 @@ export function WorkspacePane({
 							<span className="grow">Rename workspace</span>
 						</Menu.Item>
 					)}
-					<Menu.Item onClick={() => workspaceCopy.copy(window.location.href)}>
-						<CopyCheck
-							copied={workspaceCopy.copied}
-							idle={<IconLink size={20} />}
-							size={20}
-							className={MENU_ICON}
-						/>
-						<span className="grow">
-							{workspaceCopy.copied ? "Copied" : "Share"}
-						</span>
-					</Menu.Item>
-					{onNewSession && (
+					{isPhone && (
+						<Menu.Item onClick={() => workspaceCopy.copy(window.location.href)}>
+							<CopyCheck
+								copied={workspaceCopy.copied}
+								idle={<IconLink size={20} />}
+								size={20}
+								className={MENU_ICON}
+							/>
+							<span className="grow">
+								{workspaceCopy.copied ? "Copied" : "Share"}
+							</span>
+						</Menu.Item>
+					)}
+					{isPhone && onNewSession && (
 						<>
 							<Menu.Separator />
 							<Menu.Item onClick={() => onNewSession()}>
@@ -644,6 +719,130 @@ export function WorkspacePane({
 							</Menu.Item>
 						</>
 					)}
+					{presentationSession?.source === "opensession" &&
+						presentationSession.ran &&
+						lastAssistantId && (
+							<Menu.Item
+								onClick={() => {
+									setPendingSessionFork(
+										presentationSession.id,
+										lastAssistantId,
+									);
+									onOpenSession(presentationSession.id);
+								}}
+							>
+								<IconBranches size={20} className={MENU_ICON} />
+								<span className="grow">Fork session</span>
+							</Menu.Item>
+						)}
+					{presentationSession && onOpenNewSession && (
+						<SpinOffMenu
+							session={presentationSession}
+							entries={sessionMenuEntries}
+							send={send}
+							connected={connected}
+							onOpenNewSession={onOpenNewSession}
+						/>
+					)}
+					{presentationSession && (
+						<Menu.SubmenuRoot>
+							<Menu.SubmenuTrigger title="Copy this session's transcript">
+								<IconCopy size={20} className={MENU_ICON} />
+								<span className="grow">Copy transcript</span>
+								<IconChevronRight size={16} className="text-faint" />
+							</Menu.SubmenuTrigger>
+							<Menu.Popup className="min-w-[210px]">
+								<Menu.Item
+									onClick={() =>
+										void copySessionTranscript(
+											presentationSession,
+											"concise",
+											toast,
+										)
+									}
+								>
+									<IconListCircles size={20} className={MENU_ICON} />
+									<span className="grow">Concise</span>
+								</Menu.Item>
+								<Menu.Item
+									onClick={() =>
+										void copySessionTranscript(
+											presentationSession,
+											"full",
+											toast,
+										)
+									}
+								>
+									<IconFile size={20} className={MENU_ICON} />
+									<span className="grow">Full</span>
+								</Menu.Item>
+							</Menu.Popup>
+						</Menu.SubmenuRoot>
+					)}
+					{presentationSession && (onArchiveSession || onDeleteSession) && (
+						<Menu.Separator />
+					)}
+					{!isPhone && presentationSession && onArchiveSession && (
+						<Menu.Item
+							onClick={() =>
+								onArchiveSession(
+									presentationSession,
+									!presentationSession.archived,
+								)
+							}
+						>
+							<IconArchive size={20} className={MENU_ICON} />
+							<span className="grow">
+								{presentationSession.archived
+									? "Unarchive session"
+									: "Archive session"}
+							</span>
+						</Menu.Item>
+					)}
+					{presentationSession && onDeleteSession &&
+						(!showDeleteConfirm ? (
+							<Menu.Item
+								closeOnClick={false}
+								className="text-red data-[highlighted]:bg-red-soft data-[highlighted]:text-red"
+								onClick={() => setShowDeleteConfirm(true)}
+							>
+								<IconTrash size={20} />
+								<span className="grow">Delete session</span>
+							</Menu.Item>
+						) : (
+							<div className={VIEWER_DELETE_CONFIRM}>
+								{presentationSession.worktreeDir &&
+									presentationSession.mode !== "ask" && (
+										<Button
+											variant="danger"
+											size="sm"
+											className="min-h-0 px-3 py-[5px] text-label"
+											onClick={() => void deletePresentationSession(true)}
+											disabled={deleting}
+										>
+											{deleting ? "…" : "+ Worktree"}
+										</Button>
+									)}
+								<Button
+									variant="warning"
+									size="sm"
+									className="min-h-0 px-3 py-[5px] text-label"
+									onClick={() => void deletePresentationSession(false)}
+									disabled={deleting}
+								>
+									{deleting ? "…" : "Session"}
+								</Button>
+								<Button
+									variant="soft"
+									size="sm"
+									className="min-h-0 px-3 py-[5px] text-label"
+									onClick={() => setShowDeleteConfirm(false)}
+									disabled={deleting}
+								>
+									Cancel
+								</Button>
+							</div>
+						))}
 				</Menu.Popup>
 			</div>
 		</Menu.Root>
