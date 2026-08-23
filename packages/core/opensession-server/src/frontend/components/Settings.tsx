@@ -30,7 +30,7 @@ import {
 	type ToolSectionKey,
 } from "../lib/settings-sections";
 import { Input } from "../ui/input";
-import { BottomSheet, SheetIconButton } from "../ui/sheet";
+import { PhonePage, SheetIconButton } from "../ui/sheet";
 import { PhoneTopBar, PhoneTopBarTitle } from "../ui/top-bar";
 import { Connections } from "./Connections";
 import {
@@ -461,10 +461,10 @@ function MobileSettings({
 	const pageEase = "transition-transform duration-[var(--dur-lg)] ease-[var(--ease)]";
 
 	return (
-		<BottomSheet
+		<PhonePage
 			onClose={onBack}
 			label="Settings"
-			className={cn("settings-sheet h-[93dvh]", SETTINGS_LEADING)}
+			className={cn("settings-sheet", SETTINGS_LEADING)}
 		>
 			{(dismiss) => (
 				<>
@@ -588,6 +588,6 @@ function MobileSettings({
 					</div>
 				</>
 			)}
-		</BottomSheet>
+		</PhonePage>
 	);
 }

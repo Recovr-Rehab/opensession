@@ -83,6 +83,7 @@ export function ResponsiveDialog({
 	modalClassName,
 	backdropClassName,
 	showPhoneGrabber = true,
+	phonePresentation = "sheet",
 	children,
 }: {
 	open: boolean;
@@ -108,9 +109,12 @@ export function ResponsiveDialog({
 	backdropClassName?: string;
 	/** Full-screen phone lightboxes close explicitly and have no sheet grabber. */
 	showPhoneGrabber?: boolean;
+	/** A page covers the viewport without sheet chrome, a backdrop, or drag dismissal. */
+	phonePresentation?: "sheet" | "page";
 	children: React.ReactNode | ((dismiss: () => void) => React.ReactNode);
 }) {
-	// The sheet always animates: its drag-to-dismiss needs something to follow.
+	const phonePage = phone && phonePresentation === "page";
+	// Phone surfaces always animate. Desktop HUD-style overlays can opt out.
 	const animated = phone || desktopTransition !== "none";
 	const phase = usePhase(open, animated, phone ? SHEET_MS : MODAL_MS);
 	const panelRef = React.useRef<HTMLDivElement>(null);
@@ -233,20 +237,22 @@ export function ResponsiveDialog({
 			aria-label={label}
 			aria-hidden={parked || undefined}
 		>
-			<div
-				className={cn(
-					"absolute inset-0 bg-black/45",
-					backdropClassName,
-					animated && [
-						"transition-opacity",
-						phone
-							? "duration-[var(--dur-lg)]"
-							: "duration-[var(--dur)]",
-						shown ? "opacity-100" : "opacity-0",
-					],
-				)}
-				onClick={onClose}
-			/>
+			{!phonePage && (
+				<div
+					className={cn(
+						"absolute inset-0 bg-black/45",
+						backdropClassName,
+						animated && [
+							"transition-opacity",
+							phone
+								? "duration-[var(--dur-lg)]"
+								: "duration-[var(--dur)]",
+							shown ? "opacity-100" : "opacity-0",
+						],
+					)}
+					onClick={onClose}
+				/>
+			)}
 			<div
 				ref={panelRef}
 				tabIndex={-1}
@@ -256,7 +262,9 @@ export function ResponsiveDialog({
 					// and its circular fallback with everything else.
 					"absolute flex flex-col overflow-hidden outline-none [corner-shape:squircle]",
 					phone
-						? "inset-x-0 bottom-0 max-h-[94dvh] rounded-t-[calc(var(--sheet-radius,34px)*var(--rf))] bg-surface pb-[env(safe-area-inset-bottom)] shadow-[0_-12px_40px_rgba(0,0,0,0.35)]"
+						? phonePage
+							? "inset-0 h-dvh max-h-none rounded-none bg-surface pb-[env(safe-area-inset-bottom)] pt-[env(safe-area-inset-top)] shadow-none"
+							: "inset-x-0 bottom-0 max-h-[94dvh] rounded-t-[calc(var(--sheet-radius,34px)*var(--rf))] bg-surface pb-[env(safe-area-inset-bottom)] shadow-[0_-12px_40px_rgba(0,0,0,0.35)]"
 						: "left-1/2 top-1/2 max-h-[85vh] w-[92vw] max-w-[30rem] -translate-x-1/2 -translate-y-1/2 rounded-[calc(18px*var(--rf))] bg-raised smooth-shadow-ring-lg",
 					animated &&
 						(phone
@@ -271,7 +279,7 @@ export function ResponsiveDialog({
 					phone ? sheetClassName : modalClassName,
 				)}
 			>
-				{phone && showPhoneGrabber && (
+				{phone && !phonePage && showPhoneGrabber && (
 					<div
 						className="flex shrink-0 touch-none justify-center pb-1.5 pt-2.5"
 						onTouchStart={onTouchStart}
@@ -387,25 +395,23 @@ export function SheetItem({
 	);
 }
 
-/**
- * Phone-only bottom sheet with a self-closing contract: owners render it while
- * it should exist and unmount it in `onClose`, so the exit animation has to run
- * before they hear about it.
- */
-export function BottomSheet({
-	onClose,
-	label,
-	className,
-	children,
-}: {
-	/** Called after the exit animation — unmount the sheet here. */
+type PhoneSurfaceProps = {
+	/** Called after the exit animation. Unmount the surface here. */
 	onClose: () => void;
 	/** Accessible dialog label. */
 	label: string;
-	/** Extra classes for the sheet panel (e.g. a fixed height). */
+	/** Extra classes for the phone surface. */
 	className?: string;
 	children: React.ReactNode | ((dismiss: () => void) => React.ReactNode);
-}) {
+};
+
+function DismissiblePhoneSurface({
+	onClose,
+	label,
+	className,
+	presentation,
+	children,
+}: PhoneSurfaceProps & { presentation: "sheet" | "page" }) {
 	const [open, setOpen] = React.useState(true);
 	const closingRef = React.useRef(false);
 
@@ -422,9 +428,20 @@ export function BottomSheet({
 			onClose={dismiss}
 			phone
 			label={label}
+			phonePresentation={presentation}
 			sheetClassName={className}
 		>
 			{children}
 		</ResponsiveDialog>
 	);
+}
+
+/** Phone-only bottom sheet with a self-closing contract. */
+export function BottomSheet(props: PhoneSurfaceProps) {
+	return <DismissiblePhoneSurface {...props} presentation="sheet" />;
+}
+
+/** Full-screen phone page that covers the current app surface. */
+export function PhonePage(props: PhoneSurfaceProps) {
+	return <DismissiblePhoneSurface {...props} presentation="page" />;
 }
