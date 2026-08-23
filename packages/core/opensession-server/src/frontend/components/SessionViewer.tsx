@@ -1461,11 +1461,11 @@ export function SessionViewer({
 	const [reviewPanelOpen, setReviewPanelOpen] = useState(false);
 	const activePanelOpen = showReview ? reviewPanelOpen : panelOpen;
 	const setActivePanelOpen = showReview ? setReviewPanelOpen : setPanelOpen;
-	// The desktop panel starts on Summary, then keeps the selected tab when it
+	// The desktop panel starts on Changes, then keeps the selected tool when it
 	// closes so reopening returns to the person's last place. Phones still use
 	// null for their Workspace details overview and push Changes from that page.
 	const [panelPage, setPanelPage] = useState<
-		null | "summary" | "changes" | "portals" | "agents" | "terminal"
+		null | "changes" | "portals" | "agents" | "terminal"
 	>(null);
 	// Start a panel terminal only after its tab is opened. Keep it mounted while
 	// switching tabs, then drop it when the panel closes.
@@ -7693,7 +7693,7 @@ export function SessionViewer({
             it opens as a full-height column beside the left sidebar (not just
             below the session header). */}
 				{(() => {
-				const desktopPanelPage = panelPage ?? "summary";
+				const desktopPanelPage = panelPage ?? "changes";
 				const rightRegion = (
 					<>
 				{!isPhone && panelAvailable && activePanelOpen && (
@@ -7703,42 +7703,7 @@ export function SessionViewer({
 					<div className={PANEL_SHELL} style={panelStyle}>
 						{panelResizeHandle}
 						<div className={PANEL_BODY}>
-							{desktopPanelPage === "summary" ? (
-								<>
-									<PanelPageHeader
-										title="Summary"
-										onBack={() => setActivePanelOpen(false)}
-									/>
-									<div className="flex flex-col pb-3">
-										<WorkspaceSummaryBody
-											session={session}
-											onOpenPanelTab={(tab) => {
-												if (tab === "changes") {
-													setPanelPage("changes");
-													return;
-												}
-												focusPrInReview();
-											}}
-											onOpenPr={() => focusPrInReview()}
-											onOpenStackPr={onOpenPr}
-											onOpenChecks={() =>
-												focusPrInReview(undefined, "checks")
-											}
-											onOpenAsset={openAssetFromTranscript}
-											onOpenAssets={onOpenAssets}
-											onOpenSession={onOpenSession}
-											onArchive={handleArchive}
-											reviewRequest={effectiveReview?.req ?? null}
-											prReviewRequested={effectiveReview?.prReviewRequested}
-											running={isRunningLive}
-											send={connected ? send : undefined}
-											refreshTick={gitRefreshTick}
-											liveMedia={liveOverviewMedia}
-											close={() => setActivePanelOpen(false)}
-										/>
-									</div>
-								</>
-							) : desktopPanelPage === "changes" ? (
+							{desktopPanelPage === "changes" ? (
 								<>
 									<PanelPageHeader
 										title="Changes"
@@ -7809,18 +7774,6 @@ export function SessionViewer({
 						</div>
 						{hasWorkspace && (
 							<div className={PANEL_FOOTER}>
-								<button
-									type="button"
-									aria-pressed={desktopPanelPage === "summary"}
-									className={cn(
-										PANEL_FOOTER_ITEM,
-										desktopPanelPage === "summary" && "bg-hover text-fg",
-									)}
-									onClick={() => setPanelPage("summary")}
-								>
-									<IconListCircles size={15} className="shrink-0" />
-									<span className="@max-[380px]:hidden">Summary</span>
-								</button>
 								<button
 									type="button"
 									aria-pressed={desktopPanelPage === "changes"}
