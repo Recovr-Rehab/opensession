@@ -81,7 +81,9 @@ test("reviews with and without a PR share the floating toolbar", () => {
 	expect(reviewBar).toContain("desktop:absolute");
 	expect(reviewBar).toContain("desktop:top-[calc(100%+8px)]");
 	expect(prPanelSource).toContain('["files", "Files",');
-	expect(prPanelSource).toContain("<ActiveCodeViewIcon size={18} />");
+	expect(prPanelSource).toContain('label="Code view"');
+	expect(prPanelSource).toContain("showViewedProgress: false");
+	expect(prPanelSource).not.toContain("<ActiveCodeViewIcon");
 });
 
 test("a review without a PR combines and aligns its controls", () => {

@@ -1458,6 +1458,7 @@ export function PrPanel({
       diff && {
         diffStyle,
         controlsTarget: codeView === "all" ? diffControlsTarget : undefined,
+        showViewedProgress: false,
         wrapLines,
         structuralHighlighting: structuralSetting === "1",
         showFileStats: fileStatsSetting === "1",
@@ -1810,6 +1811,29 @@ export function PrPanel({
         initialFocus
         className="flex w-[340px] flex-col gap-0.5 p-3"
       >
+        <ValueRow
+          label="Code view"
+          value={codeView}
+          options={(Object.keys(CODE_VIEWS) as CodeView[]).map((key) => {
+            const { label, Icon } = CODE_VIEWS[key];
+            return {
+              value: key,
+              label,
+              icon: <Icon size={18} />,
+              disabled:
+                key === "flow" &&
+                ((!diff?.patch && !diff?.skippedFiles) || !prPatchVersion),
+            };
+          })}
+          onSelect={(next) => {
+            const key = next as CodeView;
+            if (key === "flow" && codeView !== "flow" && codeFlowError) {
+              setCodeFlow(null);
+              setCodeFlowError(null);
+            }
+            setCodeView(key);
+          }}
+        />
         <SettingRow label="Diff layout">
           <Segmented
             label="Diff layout"
@@ -1975,8 +1999,6 @@ export function PrPanel({
     </button>
   ));
 
-  const ActiveCodeViewIcon = CODE_VIEWS[codeView].Icon;
-
   const fileControls = page === "files" && (
     <div
       className={`flex shrink-0 items-center gap-1.5 phone:gap-2 ${compactToolbar ? "" : "ml-auto"}`}
@@ -1992,63 +2014,10 @@ export function PrPanel({
           {handEdited.length === 1 ? "" : "s"}
         </Button>
       )}
-      <span className="flex shrink-0 items-center gap-1 text-label tabular-nums">
-        <span className="text-green">+{pr.additions}</span>
-        <span className="text-red">−{pr.deletions}</span>
-      </span>
       <div
         ref={setDiffControlsTarget}
         className="flex shrink-0 items-center gap-1.5 phone:gap-2"
       />
-      <Menu.Root>
-        <Tooltip label="Change the view">
-          <Menu.Trigger
-            render={
-              <Button
-                variant="default"
-                size="sm"
-                className="text-fg"
-                aria-label={`View: ${CODE_VIEWS[codeView].label}`}
-                caret
-              >
-                <ActiveCodeViewIcon size={18} />
-              </Button>
-            }
-          />
-        </Tooltip>
-        <Menu.Popup align="end" className="min-w-[210px]">
-          <Menu.RadioGroup
-            value={codeView}
-            onValueChange={(next) => {
-              const key = String(next) as CodeView;
-              if (key === "flow" && codeView !== "flow" && codeFlowError) {
-                setCodeFlow(null);
-                setCodeFlowError(null);
-              }
-              setCodeView(key);
-            }}
-          >
-            {(Object.keys(CODE_VIEWS) as CodeView[]).map((key) => {
-              const { label, Icon } = CODE_VIEWS[key];
-              return (
-                <Menu.RadioItem
-                  key={key}
-                  value={key}
-                  closeOnClick
-                  disabled={
-                    key === "flow" &&
-                    ((!diff?.patch && !diff?.skippedFiles) || !prPatchVersion)
-                  }
-                >
-                  <Icon size={18} className={MENU_ICON} />
-                  <span className="min-w-0 flex-1 truncate">{label}</span>
-                  <Menu.Check on={codeView === key} />
-                </Menu.RadioItem>
-              );
-            })}
-          </Menu.RadioGroup>
-        </Menu.Popup>
-      </Menu.Root>
       {codeSettings}
     </div>
   );
@@ -2077,7 +2046,7 @@ export function PrPanel({
           the summary only relocates page navigation. Phone keeps one
           edge-to-edge navigation and controls row below the identity. */}
       <ReviewToolbar compact={compactToolbar}>
-      <header className="flex h-10 shrink-0 items-center gap-2.5 px-6 phone:px-3">
+      <header className="flex h-10 shrink-0 items-center gap-2.5 px-4 phone:px-3">
         {/* State, in the app's own PR language, filled rather than drawn: the
             tone washes the whole chip and the glyph and word share its ink.
             It is its own object, so it gets more air than the pieces of the

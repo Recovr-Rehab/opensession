@@ -15,6 +15,7 @@ export interface SettingOption {
 	value: string;
 	label: string;
 	icon?: React.ReactNode;
+	disabled?: boolean;
 }
 
 /** A setting whose control draws itself: a segmented control, a stepper, a
@@ -98,6 +99,7 @@ export function ValueOptions({
 					key={option.value}
 					value={option.value}
 					closeOnClick
+					disabled={option.disabled}
 					className="justify-between gap-3"
 				>
 					<span className="flex min-w-0 items-center gap-2">

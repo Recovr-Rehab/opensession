@@ -128,6 +128,8 @@ interface Props {
   allowExpandAll?: boolean;
   /** Move the global file controls into a parent toolbar. Omit to keep them inline. */
   controlsTarget?: Element | null;
+  /** Show the aggregate viewed-file count beside the global controls. */
+  showViewedProgress?: boolean;
   onSubmit: (target: CommentTarget, text: string) => Promise<void>;
   /**
    * When provided, changed image files render the actual pictures (before/after)
@@ -277,6 +279,7 @@ export function CommentableDiff({
   defaultExpandedFiles = 0,
   allowExpandAll = true,
   controlsTarget,
+  showViewedProgress = true,
   submitLabel,
   placeholder,
   disabled,
@@ -1086,7 +1089,7 @@ export function CommentableDiff({
           AI organized
         </span>
       )}
-      {viewedEnabled && (
+      {viewedEnabled && showViewedProgress && (
         <span
           className="flex items-center gap-1 text-meta text-faint tabular-nums"
           aria-label={`${viewedCount} of ${files.length} files viewed`}
