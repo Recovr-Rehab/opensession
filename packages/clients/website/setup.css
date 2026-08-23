@@ -303,6 +303,7 @@
 	display: flex;
 	margin-top: 20px;
 	padding-inline: 2px;
+	border: 0;
 	flex-direction: column;
 }
 
