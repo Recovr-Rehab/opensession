@@ -1,6 +1,7 @@
 import React, { useEffect } from "react";
 import { APP_LOGO_STATUS } from "../lib/app-header-classes";
 import { useOrganizationName } from "../hooks/useOrganizationIcon";
+import { SIDEBAR_RAIL_GAP } from "../lib/sidebar-classes";
 import { IconChevronDown } from "./icons";
 import { OrganizationAppIcon } from "./OrganizationAppIcon";
 
@@ -40,12 +41,12 @@ export function OrganizationSwitcher({
 
 	return (
 		<button
-			className="group flex min-h-10 w-full items-center gap-2 rounded-row bg-transparent px-[calc(var(--sidebar-icon-left)-var(--sidebar-nav-x))] text-left text-body font-semibold text-fg transition-[background-color,scale] hover:bg-hover active:scale-[0.96] phone:min-h-12 phone:text-base motion-reduce:transform-none"
+			className={`group flex w-full items-center ${SIDEBAR_RAIL_GAP} rounded-row bg-transparent px-[calc(var(--sidebar-icon-left)-var(--sidebar-nav-x))] py-[var(--sidebar-tool-pad)] text-left text-body font-medium text-fg transition-[background-color,scale] hover:bg-hover active:scale-[0.96] phone:py-[13px] desktop:text-item-title motion-reduce:transform-none`}
 			onClick={open}
 			aria-label={bridge ? `Switch organization, current: ${name}` : "Open organization settings"}
 		>
-			<span className="relative inline-flex size-8 shrink-0 items-center justify-center">
-				<OrganizationAppIcon className="size-8 rounded-md object-cover" />
+			<span className="relative inline-flex size-[22px] shrink-0 items-center justify-center">
+				<OrganizationAppIcon className="size-[22px] rounded-sm object-cover" />
 				<span
 					className={APP_LOGO_STATUS}
 					style={{ background: connected ? "var(--green)" : "var(--red)" }}
