@@ -72,6 +72,21 @@ describe("session Portal supervisor", () => {
 		expect((await listPortalServices(worktree))[0]?.state).toBe("stopped");
 	});
 
+	test("terminates a Portal process group when readiness times out", async () => {
+		const port = 18_704;
+		const pidFile = join(worktree, "timed-out.pid");
+		await expect(startPortalService({
+			sessionId: "os-timeout-test", worktreeDir: worktree, name: "slow-app", port,
+			command: `bash -c 'echo $$ > ${pidFile}; exec sleep 60'`, readyTimeoutMs: 5_000,
+		})).rejects.toThrow("Nothing listened on port 18704 within 5 seconds.");
+		const pid = Number(await Bun.file(pidFile).text());
+		expect(pid).toBeGreaterThan(1);
+		expect(() => process.kill(pid, 0)).toThrow();
+		const failed = readPortalRegistry(worktree)[0];
+		expect(failed).toMatchObject({ name: "slow-app", state: "failed" });
+		expect(failed?.pid).toBeUndefined();
+	}, 10_000);
+
 	test("reaps a Portal whose durable owner no longer owns the worktree", async () => {
 		const port = 18_703;
 		await startPortalService({
