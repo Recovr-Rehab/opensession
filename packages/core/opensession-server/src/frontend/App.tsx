@@ -5517,7 +5517,7 @@ export function App(
 						{/* Top bar: session name + actions (portaled in by SessionViewer)
 						    on session routes, a plain title otherwise. Sits above the tab
 						    strip so the session identity reads first, tabs below it. */}
-						<div className={DETAIL_TOPBAR} ref={setTopbarEl}>
+						<TopBar className={DETAIL_TOPBAR} ref={setTopbarEl}>
 							{route.view !== "session" &&
 								// A workspace portals in the same header row a session
 								// does (WorkspacePane) rather than taking the plain title.
@@ -5541,7 +5541,7 @@ export function App(
 									/>
 								</TopBarTitle>
 							)}
-						</div>
+						</TopBar>
 						{!activeTabSplit && tabStripVisible && renderTabBar(null)}
 						{splitDropSide && (
 							<div
