@@ -297,7 +297,11 @@ async function startPortal(ops: PortalOps, input: {
 		const lastError = readiness === "exited"
 			? "The Portal process exited before it started listening."
 			: `Nothing listened on port ${port} within ${Math.round(readyTimeoutMs / 1_000)} seconds.`;
-		const failed = { ...record, state: "failed" as const, lastError };
+		// A timed-out process may still be compiling and can leave watchers or
+		// lock files behind. Never lose its PID by overwriting the failed record
+		// before the complete process group has been terminated.
+		await terminatePortalProcess(ops, pid);
+		const failed = { ...record, pid: undefined, state: "failed" as const, lastError };
 		await ops.writeRegistry(upsert(records, failed));
 		throw new Error(lastError);
 	}
@@ -306,15 +310,18 @@ async function startPortal(ops: PortalOps, input: {
 	return { ...awake, url };
 }
 
+async function terminatePortalProcess(ops: PortalOps, pid?: number): Promise<void> {
+	if (!pid || pid < 2 || !(await ops.pidAlive(pid))) return;
+	await ops.signalGroup(pid, "SIGTERM");
+	await Bun.sleep(1_500);
+	if (await ops.pidAlive(pid)) await ops.signalGroup(pid, "SIGKILL");
+}
+
 async function stopPortal(ops: PortalOps, name: string): Promise<PortalRecord> {
 	const records = await ops.readRegistry();
 	const current = records.find((record) => record.name === name);
 	if (!current) throw new Error(`Portal '${name}' does not exist.`);
-	if (current.pid && current.pid > 1) {
-		await ops.signalGroup(current.pid, "SIGTERM");
-		await Bun.sleep(1_500);
-		await ops.signalGroup(current.pid, "SIGKILL");
-	}
+	await terminatePortalProcess(ops, current.pid);
 	const stopped = { ...current, state: "stopped" as const, pid: undefined };
 	await ops.writeRegistry(upsert(records, stopped));
 	return stopped;
