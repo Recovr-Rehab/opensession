@@ -348,6 +348,7 @@ import {
 import { blockingOverlayOpen } from "../lib/blocking-overlay";
 import { matchesShortcut } from "../lib/shortcuts";
 import { PulseDot } from "../ui/status";
+import { OverflowFadeText } from "../ui/overflow-fade-text";
 import {
 	PANEL_BODY,
 	PANEL_TAB,
@@ -6155,7 +6156,7 @@ export function SessionViewer({
 							}}
 						/>
 					) : (
-						<span
+						<OverflowFadeText
 							className={`${VIEWER_BRANCH} ${onRename ? VIEWER_BRANCH_EDITABLE : ""}`}
 							title={
 								parentSession
@@ -6180,7 +6181,7 @@ export function SessionViewer({
 							}
 						>
 							{parentSession ? session.title : workspaceName || session.title}
-						</span>
+						</OverflowFadeText>
 					)}
 					{/* Where the session came FROM, as a quiet mark AFTER the name. It
 					    used to be a tinted pill at the head of the row, which made the

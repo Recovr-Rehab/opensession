@@ -73,6 +73,7 @@ import {
 	TopBarTitle,
 } from "./ui/top-bar";
 import { suppressLayoutAnimations } from "./ui/motion";
+import { OverflowFadeText } from "./ui/overflow-fade-text";
 import { SessionViewer } from "./components/SessionViewer";
 import { AgentationFeedback } from "./components/AgentationFeedback";
 import type { PortalTarget } from "./lib/portals";
@@ -5046,15 +5047,15 @@ export function App(
 									: {})}
 						>
 							{/* Slack-header layout: the repo tile leads the pill (portaled in
-							    by SessionViewer), with the name on top and the model · cost
-							    metadata below it in a stacked column. The whole pill is one
+							    by SessionViewer), or the archive mark replaces it for archived
+							    sessions. The name sits over model · cost. The whole pill is one
 							    tap target that opens the session's deeper info page. */}
 							{route.view === "session" && currentSession && (
 								<span className={HEADER_TITLE_REPO} ref={setHeaderRepoEl} />
 							)}
 							<span className={HEADER_TITLE_COL}>
 								<span className={HEADER_TITLE_ROW}>
-									<span className={HEADER_TITLE_TEXT}>
+									<OverflowFadeText className={HEADER_TITLE_TEXT}>
 										{route.view === "session"
 											? // A worker names ITSELF here. The workspace name is what
 												// its parent shows, so borrowing it would leave the two
@@ -5068,7 +5069,7 @@ export function App(
 													currentSession?.title ||
 													""
 											: topbarTitle}
-									</span>
+									</OverflowFadeText>
 									{currentSession && sessionWasAgentStarted(currentSession) && (
 										<IconRobot
 											size={16}
