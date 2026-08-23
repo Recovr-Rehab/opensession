@@ -57,6 +57,7 @@ import { CopyCheck, useCopy } from "../ui/copy";
 import { toast } from "../ui/toast";
 import { Tooltip } from "../ui/tooltip";
 import { cn } from "../ui/cn";
+import { TopBar, TopBarActions, TopBarLeading } from "../ui/top-bar";
 import {
 	PANEL_BODY,
 	PANEL_OVERLAY,
@@ -849,8 +850,8 @@ export function WorkspacePane({
 	);
 
 	const header = !isPhone && (
-		<div ref={headerRef} className={VIEWER_HEADER}>
-			<div className={VIEWER_TITLE}>
+		<TopBar ref={headerRef} className={VIEWER_HEADER}>
+			<TopBarLeading className={VIEWER_TITLE}>
 				{workspace.repo && (
 					<span className="flex min-w-0 shrink-0 items-center gap-[7px]">
 						<RepoTile name={workspace.repo} />
@@ -930,8 +931,8 @@ export function WorkspacePane({
 						/>
 					</Tooltip>
 				)}
-			</div>
-			<div ref={headerActionsRef} className={VIEWER_HEADER_ACTIONS}>
+			</TopBarLeading>
+			<TopBarActions ref={headerActionsRef} className={VIEWER_HEADER_ACTIONS}>
 				{tab === "review" && presentationSession && !panelOpen && (
 					<WorkspaceSummary
 						session={presentationSession}
@@ -960,8 +961,8 @@ export function WorkspacePane({
 						icon={<IconSidebarRight size={22} />}
 					/>
 				</Tooltip>
-			</div>
-		</div>
+			</TopBarActions>
+		</TopBar>
 	);
 
 	// Everything on this pane — the PR body, review comments, the info panel —

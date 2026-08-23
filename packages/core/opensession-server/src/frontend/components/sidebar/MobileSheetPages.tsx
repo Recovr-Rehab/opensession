@@ -1,6 +1,7 @@
 import type { ReactNode } from "react";
 import { MINE_STATUS_META, type MineStatus } from "../../lib/sidebar-types";
 import { SheetBody, SheetIconButton, SheetItem } from "../../ui/sheet";
+import { TopBar, TopBarTitle } from "../../ui/top-bar";
 import { IconCheck, IconChevronLeft, IconChevronRight } from "../icons";
 
 export type LanePickerValue = MineStatus | "mixed" | null;
@@ -53,7 +54,10 @@ export function SheetPageHeader({
 	onBack: () => void;
 }) {
 	return (
-		<div className="relative flex h-11 shrink-0 items-center justify-center px-3">
+		<TopBar
+			as="header"
+			className="relative h-11 shrink-0 justify-center px-3"
+		>
 			<SheetIconButton
 				className="absolute left-3"
 				onClick={onBack}
@@ -61,8 +65,10 @@ export function SheetPageHeader({
 			>
 				<IconChevronLeft size={24} />
 			</SheetIconButton>
-			<span className="text-section-title font-title text-fg">{title}</span>
-		</div>
+			<TopBarTitle className="text-section-title font-title text-fg">
+				{title}
+			</TopBarTitle>
+		</TopBar>
 	);
 }
 

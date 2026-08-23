@@ -67,11 +67,12 @@ import { ToastHost, toast } from "./ui/toast";
 import { Modal } from "./ui/modal";
 import { Button } from "./ui/button";
 import {
-	MobileTopBar,
-	MobileTopBarActions,
-	MobileTopBarBack,
-	MobileTopBarLeading,
-} from "./ui/mobile-top-bar";
+	TopBar,
+	TopBarActions,
+	TopBarBack,
+	TopBarLeading,
+	TopBarTitle,
+} from "./ui/top-bar";
 import { suppressLayoutAnimations } from "./ui/motion";
 import { SessionViewer } from "./components/SessionViewer";
 import { AgentationFeedback } from "./components/AgentationFeedback";
@@ -936,7 +937,7 @@ export function App(
 	// The top bar above the tab strip. The session viewer portals its header
 	// (session name + actions, incl. the workspace-panel toggle) into this slot so
 	// the layout reads name-on-top / tabs-below; other views render a plain title.
-	const [topbarEl, setTopbarEl] = useState<HTMLDivElement | null>(null);
+	const [topbarEl, setTopbarEl] = useState<HTMLElement | null>(null);
 	// Trailing slot of that same bar, for a page whose controls belong in the
 	// window's chrome rather than in a strip above its own list. Pull requests
 	// portals its search, filters and CTA here, so the bar holds the page's
@@ -4981,7 +4982,8 @@ export function App(
 				    deck renders its own header (back + "N Left" + new-workspace), so we
 				    suppress this one there to avoid a duplicate back bar. */}
 				{route.view !== "catchup" && (
-				<MobileTopBar
+				<TopBar
+					as="header"
 					ref={setAppHeaderEl}
 					className={cn(
 						appHeader({
@@ -4994,9 +4996,10 @@ export function App(
 						route.view === "archived" && ARCHIVED_SEARCH_HEADER,
 					)}
 				>
-					<MobileTopBarLeading>
+					<TopBarLeading className="shrink-0">
 						{mobileDetail ? (
-							<MobileTopBarBack
+							<TopBarBack
+								floating
 								onClick={goBack}
 								aria-label={
 									route.view === "session" && currentSession?.parentSessionId
@@ -5012,7 +5015,7 @@ export function App(
 								<UpdatePill addHandler={addHandler} variant="pill" />
 							</>
 						)}
-					</MobileTopBarLeading>
+					</TopBarLeading>
 					{/* Centered page title on pushed pages, iOS-sheet style. Sessions
 					    show the workspace name (per-session titles live on the tabs) plus a
 					    working dot while the engine runs; other views show their plain
@@ -5087,7 +5090,7 @@ export function App(
 							</span>
 						</span>
 					)}
-					<MobileTopBarActions
+					<TopBarActions
 						className={
 							mobileDetail ? APP_HEADER_ACTIONS_DETAIL : APP_HEADER_ACTIONS
 						}
@@ -5106,8 +5109,8 @@ export function App(
 								<IconSearch size={22} />
 							</button>
 						)}
-					</MobileTopBarActions>
-				</MobileTopBar>
+					</TopBarActions>
+				</TopBar>
 				)}
 
 				{settingsActive && (
@@ -5524,7 +5527,7 @@ export function App(
 								// pages, and a page keeps its name in its body. The bar picks
 								// that name up once it has scrolled out of sight, the way the
 								// chat header names the session. See hooks/useLargeTitle.ts.
-								<span className={DETAIL_TOPBAR_TITLE}>
+								<TopBarTitle className={DETAIL_TOPBAR_TITLE}>
 									<span
 										className={DETAIL_TOPBAR_TITLE_TEXT}
 										data-shown={titleHandedOver || undefined}
@@ -5532,11 +5535,11 @@ export function App(
 										{topbarTitle}
 									</span>
 									{/* Filled by the page, if it has controls to put here. */}
-									<span
+									<TopBarActions
 										className={DETAIL_TOPBAR_ACTIONS}
 										ref={setTopbarActionsEl}
 									/>
-								</span>
+								</TopBarTitle>
 							)}
 						</div>
 						{!activeTabSplit && tabStripVisible && renderTabBar(null)}

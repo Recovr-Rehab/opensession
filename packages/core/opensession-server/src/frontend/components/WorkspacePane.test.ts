@@ -197,7 +197,7 @@ test("a lone Review hides the tab strip and keeps New tab in the header", () => 
 });
 
 test("the PR top bar leaves merge to the summary and actions menu", () => {
-	const headerStart = prPanelSource.indexOf("<header");
+	const headerStart = prPanelSource.indexOf('<TopBar as="header"');
 	const menuStart = prPanelSource.indexOf("<Menu.Root>", headerStart);
 	const menuEnd = prPanelSource.indexOf("</Menu.Root>", menuStart);
 

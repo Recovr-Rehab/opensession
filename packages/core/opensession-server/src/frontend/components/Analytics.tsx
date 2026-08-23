@@ -9,6 +9,7 @@ import { Button } from "../ui/button";
 import { Segmented, SegmentedOption } from "../ui/segmented";
 import { DateRangeField } from "../ui/date-picker";
 import { PageTitle } from "../ui/page-header";
+import { TopBar, TopBarActions, TopBarTitle } from "../ui/top-bar";
 import { cn } from "../ui/cn";
 import {
 	DETAIL_TOPBAR_TITLE_TEXT,
@@ -929,7 +930,8 @@ export function Analytics() {
 			    The fill is the page's own, so there is no seam to draw at rest;
 			    SCROLL_EDGE_DIVIDER grows the hairline once something is actually
 			    passing underneath. */}
-			<header
+			<TopBar
+				as="header"
 				ref={setBarEl}
 				className={cn(
 					"wco-chrome flex h-[var(--desktop-header-h)] shrink-0 items-center",
@@ -946,7 +948,7 @@ export function Analytics() {
 				    was a small copy of the word stacked 60px above the real one, which
 				    read as a mistake rather than as chrome. */}
 				<div className="mx-auto flex w-full max-w-[1080px] flex-wrap items-center justify-between gap-3 px-4 md:px-6">
-					<span
+					<TopBarTitle
 						className={cn(
 							"text-item-title font-semibold text-fg",
 							DETAIL_TOPBAR_TITLE_TEXT,
@@ -954,23 +956,25 @@ export function Analytics() {
 						data-shown={titleHandedOver || undefined}
 					>
 						Analytics
-					</span>
+					</TopBarTitle>
 					{/* The presets and the span are one control: they set one value
 					    between them, and it carries the chrome tier the rest of the bar
 					    is on rather than a plate per end. */}
-					<DateRangeField
-						label="Date range"
+					<TopBarActions>
+						<DateRangeField
+							label="Date range"
 						from={from}
 						to={to}
 						max={utcToday()}
 						presets={PRESETS}
-						onRangeChange={(start, end) => {
-							setFrom(start);
-							setTo(end);
-						}}
-					/>
+							onRangeChange={(start, end) => {
+								setFrom(start);
+								setTo(end);
+							}}
+						/>
+					</TopBarActions>
 				</div>
-			</header>
+			</TopBar>
 
 			<div className="analytics-scroll min-h-0 flex-1 overflow-y-auto">
 				{/* No top padding: every block in here opens with its own `mt-4`,

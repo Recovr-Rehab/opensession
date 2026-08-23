@@ -295,11 +295,13 @@ import {
 import { sessionWasAgentStarted } from "../lib/sidebar-placement";
 import { Button } from "../ui/button";
 import {
-	MobileTopBar,
-	MobileTopBarAction,
-	MobileTopBarActions,
-	MobileTopBarBack,
-} from "../ui/mobile-top-bar";
+	TopBar,
+	TopBarAction,
+	TopBarActions,
+	TopBarBack,
+	TopBarLeading,
+	TopBarTitle,
+} from "../ui/top-bar";
 import { cn } from "../ui/cn";
 import {
 	composerMenuIcon,
@@ -5999,7 +6001,7 @@ export function SessionViewer({
 								// buttons by construction instead of by hand-matching.
 								render={
 									infoPageOpen ? (
-										<MobileTopBarAction icon={<IconDotsHorizontal size={22} />} />
+										<TopBarAction floating icon={<IconDotsHorizontal size={22} />} />
 									) : (
 										<Button
 											variant="ghost"
@@ -6055,11 +6057,11 @@ export function SessionViewer({
 					</Menu.Root>
 				);
 				const header = (
-					<div
+					<TopBar
 						className={VIEWER_HEADER}
 						ref={headerRef}
 					>
-						<div className={VIEWER_TITLE}>
+						<TopBarLeading className={VIEWER_TITLE}>
 					{!session.desk &&
 						session.worktreeDir &&
 						hasWorkspace &&
@@ -6311,8 +6313,8 @@ export function SessionViewer({
 								)}
 						</div>
 					)}
-				</div>
-				<div className={VIEWER_HEADER_ACTIONS} ref={headerActionsRef}>
+				</TopBarLeading>
+				<TopBarActions className={VIEWER_HEADER_ACTIONS} ref={headerActionsRef}>
 					{!isPhone && secondaryActions(false)}
 					{!isPhone && addToSidebarAction(false)}
 					{/* Whoever ELSE has the session open, right before Share. Your
@@ -6468,8 +6470,8 @@ export function SessionViewer({
 							/>
 						</Tooltip>
 					)}
-				</div>
-			</div>
+				</TopBarActions>
+			</TopBar>
 				);
 				// Phones: the whole header rides in the top bar's right slot (the
 				// title row is CSS-hidden there — the centered bar title replaces
@@ -6494,12 +6496,14 @@ export function SessionViewer({
 								    so Changes navigates it rather than opening a column. The
 								    workspace title moves into this bar as its large identity
 								    header scrolls away, like chat info on a phone. */}
-								<MobileTopBar
+								<TopBar
+									as="header"
 									className={infoTopbarClass(
 										infoPageScrolled || panelPage !== null,
 									)}
 								>
-									<MobileTopBarBack
+									<TopBarBack
+										floating
 										className="relative z-[1]"
 										onClick={() =>
 											panelPage
@@ -6513,7 +6517,7 @@ export function SessionViewer({
 										}
 										autoFocus
 									/>
-									<div
+									<TopBarTitle
 										className={infoTopbarTitleClass(
 											infoPageScrolled || panelPage !== null,
 										)}
@@ -6523,13 +6527,13 @@ export function SessionViewer({
 											: panelPage === "portals"
 												? "Portals"
 												: workspaceName || session.title}
-									</div>
+									</TopBarTitle>
 									{/* The same session menu moves with the person into Workspace
 									    details instead of remaining behind the full-screen page. */}
-									<MobileTopBarActions className="relative z-[1]">
+									<TopBarActions className="relative z-[1]">
 										{overflowMenu}
-									</MobileTopBarActions>
-								</MobileTopBar>
+									</TopBarActions>
+								</TopBar>
 								{panelPage === "changes" ? (
 									waitingForWorkspace ? (
 										<WorkspaceWaiting detail="This takes a moment." />

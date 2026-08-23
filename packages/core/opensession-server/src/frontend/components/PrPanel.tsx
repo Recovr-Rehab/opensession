@@ -95,6 +95,7 @@ import {
 import { Menu, MENU_ICON } from "../ui/menu";
 import { Modal, useEnterOnMount } from "../ui/modal";
 import { Tooltip } from "../ui/tooltip";
+import { TopBar } from "../ui/top-bar";
 import { Popover } from "../ui/popover";
 import { Segmented, SegmentedOption } from "../ui/segmented";
 import { SettingRow, SwitchRow, ValueRow } from "../ui/setting-row";
@@ -1978,7 +1979,7 @@ export function PrPanel({
           the summary only relocates page navigation. Phone keeps one
           edge-to-edge navigation and controls row below the identity. */}
       <ReviewToolbar compact={compactToolbar}>
-      <header className="flex h-10 shrink-0 items-center gap-2.5 px-4 phone:px-3">
+      <TopBar as="header" className="h-10 shrink-0 gap-2.5 px-4 phone:px-3">
         {/* State, in the app's own PR language, filled rather than drawn: the
             tone washes the whole chip and the glyph and word share its ink.
             It is its own object, so it gets more air than the pieces of the
@@ -2180,7 +2181,7 @@ export function PrPanel({
             )}
           </Menu.Popup>
         </Menu.Root>
-      </header>
+      </TopBar>
       {reviewBar}
       </ReviewToolbar>
 

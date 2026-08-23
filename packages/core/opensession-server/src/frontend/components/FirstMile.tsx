@@ -7,6 +7,7 @@ import { Button } from "../ui/button";
 import { cn } from "../ui/cn";
 import { duration, ease } from "../ui/motion";
 import { LoadingState } from "../ui/state";
+import { TopBar } from "../ui/top-bar";
 import { BrandMark } from "./BrandTile";
 import { GithubAuthCard } from "./SetupIntegrations";
 import { ReposSection } from "./SetupRepos";
@@ -280,7 +281,10 @@ export function FirstMile({ onDone }: { onDone: () => void }) {
 				aria-hidden="true"
 			/>
 
-			<header className="relative z-10 grid grid-cols-[1fr_auto_1fr] items-center px-8 phone:px-4">
+			<TopBar
+				as="header"
+				className="relative z-10 grid grid-cols-[1fr_auto_1fr] px-8 phone:px-4"
+			>
 				<Button
 					variant="ghost"
 					size="lg"
@@ -333,7 +337,7 @@ export function FirstMile({ onDone }: { onDone: () => void }) {
 				) : (
 					<div className="col-start-3" />
 				)}
-			</header>
+			</TopBar>
 
 			<main
 				ref={mainRef}
