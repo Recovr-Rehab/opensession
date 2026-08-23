@@ -2146,12 +2146,11 @@ html[data-theme="light"] .composer-hl .cmp-fence {
 	border: 0;
 	border-radius: calc(12px * var(--rf)); corner-shape: var(--cs);
 	background: transparent;
-	color: var(--text-dim);
+	color: var(--text-faint);
 	cursor: pointer;
 }
 .md-code-settings-trigger {
 	position: relative;
-	color: var(--text-faint);
 }
 .md-code-settings-trigger::before {
 	content: "";
@@ -2166,7 +2165,7 @@ html[data-theme="light"] .composer-hl .cmp-fence {
 }
 .md-code-copy:hover {
 	background: var(--hover);
-	color: var(--text);
+	color: var(--text-dim);
 }
 .md-code-settings-trigger:hover,
 .md-code-settings-trigger[data-open] {
