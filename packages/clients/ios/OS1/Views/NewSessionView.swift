@@ -1,8 +1,9 @@
 import SwiftUI
 
 /// Compose a new session, laid out like the palette on the desktop: the repo
-/// reads across the top, the prompt fills the middle, and how it runs sits in
-/// the footer with the attach button. Code is the quiet default. Ask and
+/// names the iOS title bar (and reads across the top on Mac), the prompt fills
+/// the middle, and how it runs sits in the footer with the attach button. Code
+/// is the quiet default. Ask and
 /// Sandbox sit behind More options, while dictation stays one tap away at the
 /// trailing edge. Connected services have no native equivalent yet, so they
 /// stay absent rather than half-present.
@@ -112,7 +113,9 @@ struct NewSessionView: View {
     var body: some View {
         NavigationStack {
             VStack(spacing: 0) {
+                #if os(macOS)
                 header
+                #endif
                 editor
                 if !images.isEmpty || !files.isEmpty {
                     VStack(spacing: 6) {
@@ -134,8 +137,10 @@ struct NewSessionView: View {
                     .padding(.horizontal, 16)
                     .padding(.bottom, 6)
                 }
+                #if os(macOS)
                 Divider()
                 controls
+                #endif
             }
             // Keep the sheet surface behind the translucent keyboard.
             // Otherwise its background stops at the keyboard safe-area edge,
@@ -143,10 +148,19 @@ struct NewSessionView: View {
             .background(
                 OS1VisualStyle.background.ignoresSafeArea(.keyboard, edges: .bottom)
             )
+            #if os(iOS)
+            // The selected repository is the identity of this composer. Keep
+            // "New session" for the action that opened it rather than spending
+            // the title slot on a state every sheet here already implies.
+            .navigationTitle(repoLabel)
+            #else
             .navigationTitle("New session")
+            #endif
             .inlineTitleBarCompat()
             .toolbar {
                 #if os(iOS)
+                ToolbarItem(placement: .principal) { repoChip }
+
                 // Both ends draw their own circle, so both hide the toolbar's
                 // glass: a capsule around the send disc read as a white ring on
                 // the black accent, and the ✕'s glass — white on a white sheet —
@@ -157,6 +171,25 @@ struct NewSessionView: View {
                     .sharedBackgroundVisibility(.hidden)
                 ToolbarItem(placement: .cancellationAction) { cancelButton }
                     .sharedBackgroundVisibility(.hidden)
+
+                // Two native Liquid Glass groups: attachment and session
+                // options on the left, model and voice on the right. The
+                // flexible toolbar spacer keeps their materials separate, and
+                // the system adds its scroll edge only while editor text moves
+                // underneath. There is deliberately no permanent divider.
+                ToolbarItem(placement: .bottomBar) {
+                    AttachImagesButton(images: $images, usesSystemButtonStyle: true)
+                }
+                ToolbarItem(placement: .bottomBar) { moreOptionsMenu }
+                ToolbarSpacer(.flexible, placement: .bottomBar)
+                ToolbarItem(placement: .bottomBar) { modelChip }
+                ToolbarItem(placement: .bottomBar) {
+                    ComposerDictationButton(
+                        dictation: dictation,
+                        draft: $prompt,
+                        usesSystemButtonStyle: true
+                    )
+                }
                 #else
                 ToolbarItem(placement: .confirmationAction) { startButton }
                 ToolbarItem(placement: .cancellationAction) { cancelButton }
@@ -464,7 +497,9 @@ struct NewSessionView: View {
             }
         }
         .menuStyle(.button)
+        #if os(macOS)
         .buttonStyle(.plain)
+        #endif
         .disabled(repos.isEmpty && mode != "ask")
     }
 
@@ -646,7 +681,6 @@ struct NewSessionView: View {
                 .contentShape(Circle())
         }
         .menuStyle(.button)
-        .buttonStyle(.plain)
         .accessibilityLabel("More options")
         .accessibilityValue(mode == "ask" ? "Ask on" : "Code")
     }
@@ -740,7 +774,9 @@ struct NewSessionView: View {
             )
         }
         .menuStyle(.button)
+        #if os(macOS)
         .buttonStyle(.plain)
+        #endif
     }
 
     private func modelButton(_ option: ModelOption) -> some View {
@@ -858,12 +894,17 @@ struct NewSessionView: View {
         .padding(.horizontal, 10)
         .padding(.vertical, 6)
         #endif
+        #if os(iOS)
+        // The iOS labels live inside system toolbar glass. A second fill here
+        // would make the repository and model look like pills inside pills.
+        .frame(minHeight: 44)
+        #else
         .background(
             highlighted ? AnyShapeStyle(.tint.opacity(0.15)) : AnyShapeStyle(.fill.tertiary),
             in: Capsule()
         )
+        #endif
         #if os(iOS)
-        .frame(minHeight: 44)
         .contentShape(Rectangle())
         #else
         .contentShape(Capsule())
