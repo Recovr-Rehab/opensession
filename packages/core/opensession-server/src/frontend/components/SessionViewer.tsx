@@ -292,7 +292,14 @@ import {
 	SOURCE_CHIP_ARCHIVED_LABEL,
 	sourceChipTone,
 } from "../lib/source-chip-classes";
+import { sessionWasAgentStarted } from "../lib/sidebar-placement";
 import { Button } from "../ui/button";
+import {
+	MobileTopBar,
+	MobileTopBarAction,
+	MobileTopBarActions,
+	MobileTopBarBack,
+} from "../ui/mobile-top-bar";
 import { cn } from "../ui/cn";
 import {
 	composerMenuIcon,
@@ -342,7 +349,6 @@ import { blockingOverlayOpen } from "../lib/blocking-overlay";
 import { matchesShortcut } from "../lib/shortcuts";
 import { PulseDot } from "../ui/status";
 import {
-	PANEL_BACK,
 	PANEL_BODY,
 	PANEL_TAB,
 	PANEL_TABS,
@@ -5986,15 +5992,20 @@ export function SessionViewer({
 								// and press scale are identical to the share and side-panel
 								// buttons by construction instead of by hand-matching.
 								render={
-									<Button
-										variant="ghost"
-										size="md"
-										icon={<IconDotsHorizontal size={22} />}
-									/>
+									infoPageOpen ? (
+										<MobileTopBarAction icon={<IconDotsHorizontal size={22} />} />
+									) : (
+										<Button
+											variant="ghost"
+											size="md"
+											icon={<IconDotsHorizontal size={22} />}
+										/>
+									)
 								}
 								className={cn(
-									"[corner-shape:squircle]",
-									isPhone &&
+									!infoPageOpen && "[corner-shape:squircle]",
+									!infoPageOpen &&
+										isPhone &&
 										"size-11 min-h-11 rounded-control border-transparent text-dim shadow-none [corner-shape:squircle]",
 									overflowOpen && "bg-hover text-fg",
 								)}
@@ -6175,10 +6186,11 @@ export function SessionViewer({
 								{session.source}
 							</span>
 						))}
-					{/* Automation runs already live under the Automations band, so repeating
-					    their slug here competes with the workspace title. A quiet recurring
-					    clock keeps the origin visible; its tooltip carries the exact name. */}
-					{session.automation && (
+					{/* A quiet robot after the title says the opening turn came from an
+					    agent action. Named automation runs link to their settings; report
+					    tasks and delegated sessions keep the same mark without pretending
+					    they are owned by that automation. */}
+					{session.automation ? (
 						<Tooltip label={`Automation · ${session.automation}`} side="bottom">
 							<a
 								href={`${BASE_PATH}/automations/${encodeURIComponent(session.automationId || session.automation)}`}
@@ -6188,7 +6200,16 @@ export function SessionViewer({
 								<IconRobot size={18} />
 							</a>
 						</Tooltip>
-					)}
+					) : sessionWasAgentStarted(session) ? (
+						<span
+							className="-ml-1 inline-flex size-6 shrink-0 items-center justify-center text-faint"
+							role="img"
+							aria-label="Started by an agent"
+							title="Started by an agent"
+						>
+							<IconRobot size={18} />
+						</span>
+					) : null}
 					{/* Sandbox badge: this session's runs execute inside an isolated
 					    container (docker/daytona/e2b). Renders nothing for host sessions
 					    — purely from session fields, no container polling. */}
@@ -6467,13 +6488,13 @@ export function SessionViewer({
 								    so Changes navigates it rather than opening a column. The
 								    workspace title moves into this bar as its large identity
 								    header scrolls away, like chat info on a phone. */}
-								<div
+								<MobileTopBar
 									className={infoTopbarClass(
 										infoPageScrolled || panelPage !== null,
 									)}
 								>
-									<button
-										className={`${PANEL_BACK} relative z-[1]`}
+									<MobileTopBarBack
+										className="relative z-[1]"
 										onClick={() =>
 											panelPage
 												? setPanelPage(null)
@@ -6485,17 +6506,7 @@ export function SessionViewer({
 												: "Back to session"
 										}
 										autoFocus
-									>
-										<svg width="11" height="18" viewBox="0 0 11 18" fill="none">
-											<path
-												d="M9 1.5L2 9l7 7.5"
-												stroke="currentColor"
-												strokeWidth="2.25"
-												strokeLinecap="round"
-												strokeLinejoin="round"
-											/>
-										</svg>
-									</button>
+									/>
 									<div
 										className={infoTopbarTitleClass(
 											infoPageScrolled || panelPage !== null,
@@ -6509,8 +6520,10 @@ export function SessionViewer({
 									</div>
 									{/* The same session menu moves with the person into Workspace
 									    details instead of remaining behind the full-screen page. */}
-									<div className="relative z-[1] ml-auto">{overflowMenu}</div>
-								</div>
+									<MobileTopBarActions className="relative z-[1]">
+										{overflowMenu}
+									</MobileTopBarActions>
+								</MobileTopBar>
 								{panelPage === "changes" ? (
 									waitingForWorkspace ? (
 										<WorkspaceWaiting detail="This takes a moment." />

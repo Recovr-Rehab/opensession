@@ -7,6 +7,7 @@ import {
 	MOBILE_CONTROL_GLASS,
 	MOBILE_CONTROL_GLASS_EFFECTS,
 	MOBILE_SEARCH_BTN,
+	MOBILE_TOP_BAR_CONTROL,
 	appHeader,
 	mobileFilterBtn,
 } from "../lib/app-header-classes";
@@ -28,7 +29,13 @@ test("floating phone navigation stays pinned while chat chrome collapses", () =>
 });
 
 test("phone top-bar actions use neutral ink", () => {
-	for (const control of [MOBILE_BACK, MOBILE_SEARCH_BTN, mobileFilterBtn(true)]) {
+	expect(MOBILE_BACK).toContain(MOBILE_TOP_BAR_CONTROL);
+	for (const control of [
+		MOBILE_TOP_BAR_CONTROL,
+		MOBILE_BACK,
+		MOBILE_SEARCH_BTN,
+		mobileFilterBtn(true),
+	]) {
 		expect(control).toContain("phone:text-fg");
 		expect(control).not.toContain("phone:text-accent");
 	}

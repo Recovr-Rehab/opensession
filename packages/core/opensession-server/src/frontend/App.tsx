@@ -1,8 +1,11 @@
 import { BASE_PATH, stripBasePath } from "./lib/base";
 import { DEFAULT_REPO_ID, PRODUCT_NAME } from "./lib/brand";
 import {
+	onSessionTitleResolutionRequested,
+	retrySessionTitleResolution,
 	setKnownRepos,
 	setKnownPrStates,
+	setResolvedSessionTitles,
 	setSessionTitles,
 	setWorkspaceTitles,
 } from "./lib/markdown";
@@ -46,7 +49,6 @@ import {
 	APP_BRAND,
 	APP_HEADER_ACTIONS,
 	APP_HEADER_ACTIONS_DETAIL,
-	APP_HEADER_LEFT,
 	ARCHIVED_SEARCH_HEADER,
 	HEADER_TITLE_COL,
 	HEADER_TITLE_MODEL,
@@ -57,7 +59,6 @@ import {
 	HEADER_TITLE_REPO,
 	HEADER_TITLE_ROW,
 	HEADER_TITLE_TEXT,
-	MOBILE_BACK,
 	MOBILE_SEARCH_BTN,
 } from "./lib/app-header-classes";
 import { DESK_FAB, MOBILE_FAB } from "./lib/fab-classes";
@@ -65,6 +66,12 @@ import { SIDEBAR_CHROME_BTN } from "./lib/sidebar-classes";
 import { ToastHost, toast } from "./ui/toast";
 import { Modal } from "./ui/modal";
 import { Button } from "./ui/button";
+import {
+	MobileTopBar,
+	MobileTopBarActions,
+	MobileTopBarBack,
+	MobileTopBarLeading,
+} from "./ui/mobile-top-bar";
 import { suppressLayoutAnimations } from "./ui/motion";
 import { SessionViewer } from "./components/SessionViewer";
 import { AgentationFeedback } from "./components/AgentationFeedback";
@@ -152,6 +159,7 @@ import {
 	IconFeed,
 	IconPlus,
 	IconPullRequest,
+	IconRobot,
 	IconSearch,
 	IconSidebarLeft,
 	IconStack,
@@ -161,6 +169,7 @@ import { DeskOverlay } from "./components/DeskOverlay";
 import { sidebarSessionsQuery, useSessions } from "./hooks/useSessions";
 import { useHydratedSession } from "./hooks/useHydratedSession";
 import { hasDraft } from "./lib/drafts";
+import { sessionWasAgentStarted } from "./lib/sidebar-placement";
 import { useWebSocket } from "./hooks/useWebSocket";
 import { useBackSwipe } from "./hooks/useBackSwipe";
 import { useIsPhone } from "./hooks/useIsPhone";
@@ -174,6 +183,7 @@ import { onPushNavigate, registerServiceWorker } from "./lib/push";
 import {
 	archiveSessionApi,
 	deleteSessionApi,
+	fetchSession,
 	renameSessionApi,
 	setSessionStatusApi,
 	newSessionApi,
@@ -838,6 +848,35 @@ export function App(
 			]),
 		);
 	}, [sessions]);
+	// The live list intentionally omits archived history. Resolve only archived
+	// sessions that a visible transcript or draft actually references, rather
+	// than restoring the several-thousand-row archived payload to cold start.
+	useEffect(
+		() =>
+			onSessionTitleResolutionRequested((ids) => {
+				for (const requestedId of ids) {
+					void fetchSession(requestedId)
+						.then((session) => {
+							setResolvedSessionTitles([
+								{
+									requestedId,
+									...(session
+										? {
+												id: session.id,
+												title: session.workspaceName || session.title,
+												tabTitle: session.title,
+												aliases: session.aliasIds,
+												archived: session.archived === true,
+											}
+										: { title: null }),
+								},
+							]);
+						})
+						.catch(() => retrySessionTitleResolution(requestedId));
+				}
+			}),
+		[],
+	);
 	// Same deal for PR-mention chips (`opensession#128`): markdown.ts only links
 	// a qualified mention it can place, so it needs the repos this instance
 	// serves — their ids to match on, their GitHub names for the cmd-click
@@ -4937,7 +4976,7 @@ export function App(
 				    deck renders its own header (back + "N Left" + new-workspace), so we
 				    suppress this one there to avoid a duplicate back bar. */}
 				{route.view !== "catchup" && (
-				<header
+				<MobileTopBar
 					ref={setAppHeaderEl}
 					className={cn(
 						appHeader({
@@ -4950,27 +4989,16 @@ export function App(
 						route.view === "archived" && ARCHIVED_SEARCH_HEADER,
 					)}
 				>
-					<div className={APP_HEADER_LEFT}>
+					<MobileTopBarLeading>
 						{mobileDetail ? (
-							<button
-								className={MOBILE_BACK}
+							<MobileTopBarBack
 								onClick={goBack}
 								aria-label={
 									route.view === "session" && currentSession?.parentSessionId
 										? "Back to the session that started this one"
 										: "Back to sidebar"
 								}
-							>
-								<svg width="11" height="18" viewBox="0 0 11 18" fill="none">
-									<path
-										d="M9 1.5L2 9l7 7.5"
-										stroke="currentColor"
-										strokeWidth="2.25"
-										strokeLinecap="round"
-										strokeLinejoin="round"
-									/>
-								</svg>
-							</button>
+							/>
 						) : (
 							<>
 								{brand}
@@ -4979,7 +5007,7 @@ export function App(
 								<UpdatePill addHandler={addHandler} variant="pill" />
 							</>
 						)}
-					</div>
+					</MobileTopBarLeading>
 					{/* Centered page title on pushed pages, iOS-sheet style. Sessions
 					    show the workspace name (per-session titles live on the tabs) plus a
 					    working dot while the engine runs; other views show their plain
@@ -5039,6 +5067,13 @@ export function App(
 													""
 											: topbarTitle}
 									</span>
+									{currentSession && sessionWasAgentStarted(currentSession) && (
+										<IconRobot
+											size={16}
+											className="shrink-0 text-faint"
+											aria-label="Started by an agent"
+										/>
+									)}
 								</span>
 								{route.view === "session" && currentSession && (
 									// Filled by SessionViewer's portal (compact model selector).
@@ -5047,7 +5082,7 @@ export function App(
 							</span>
 						</span>
 					)}
-					<div
+					<MobileTopBarActions
 						className={
 							mobileDetail ? APP_HEADER_ACTIONS_DETAIL : APP_HEADER_ACTIONS
 						}
@@ -5066,8 +5101,8 @@ export function App(
 								<IconSearch size={22} />
 							</button>
 						)}
-					</div>
-				</header>
+					</MobileTopBarActions>
+				</MobileTopBar>
 				)}
 
 				{settingsActive && (

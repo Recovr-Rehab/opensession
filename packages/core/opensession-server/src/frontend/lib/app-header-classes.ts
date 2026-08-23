@@ -157,27 +157,22 @@ export const MOBILE_CONTROL_GLASS =
 	MOBILE_CONTROL_GLASS_EFFECTS;
 
 /**
- * Back control on a pushed page: a circular bubble carrying just the chevron,
- * no "Back" word — the same white floating surface and soft shadow as the
- * title pill and the actions beside it, so the whole bar reads as one set of
- * floating controls. The chevron is nudged a pixel left of dead-centre because
- * the glyph's mass leans right.
- *
- * `rounded-full`, not `rounded-[999px]`: the rule spelled a bare
- * `border-radius: 50%` with no `corner-shape`, so this circle is a true circle
- * and must opt out of the app's squircle (see the `@supports` block in
- * base.css). Press feel is iOS: dim instantly on touch-down, ease back up.
- *
- * `pwa-header-back` lets base.css tune this control only in an installed PWA.
+ * One circular mobile top-bar control: Back, More and future page actions all
+ * share this material, size, neutral ink and press response. `rounded-full`,
+ * not `rounded-[999px]`, keeps the platform's true-circle toolbar shape.
  */
-export const MOBILE_BACK =
-	"pwa-header-back phone:m-0 phone:inline-flex phone:size-11 phone:items-center phone:justify-center " +
+export const MOBILE_TOP_BAR_CONTROL =
+	"phone:m-0 phone:inline-flex phone:size-11 phone:min-h-11 phone:items-center phone:justify-center " +
 	`phone:rounded-full phone:border phone:border-[color:var(--mobile-header-control-border)] ${MOBILE_CONTROL_GLASS} phone:p-0 ` +
 	"phone:text-fg phone:shadow-[var(--mobile-header-control-shadow)] " +
 	"phone:cursor-pointer phone:touch-manipulation " +
 	"phone:[-webkit-tap-highlight-color:transparent] " +
 	"phone:[transition-property:opacity] phone:duration-[var(--dur)] " +
-	"phone:ease-[var(--ease)] phone:active:opacity-40 phone:active:duration-0 " +
+	"phone:ease-[var(--ease)] phone:active:scale-100 phone:active:opacity-40 phone:active:duration-0";
+
+/** Back adds only its PWA hook and the chevron's optical left nudge. */
+export const MOBILE_BACK =
+	`pwa-header-back ${MOBILE_TOP_BAR_CONTROL} ` +
 	"phone:[&_svg]:-ml-px phone:[&_svg]:shrink-0";
 
 /**

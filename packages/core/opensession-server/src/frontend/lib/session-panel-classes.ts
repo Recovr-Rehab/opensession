@@ -164,15 +164,3 @@ export const PANEL_OVERLAY =
 	"max-[920px]:fixed max-[920px]:inset-[var(--header-h)_0_0_0] max-[920px]:z-[25] " +
 	"max-[920px]:block max-[920px]:bg-[rgba(0,0,0,0.45)] " +
 	"phone:inset-0 phone:z-[45] phone:bg-[rgba(0,0,0,0.5)]";
-
-/**
- * Chevron-back at the top of the panel on phones — the panel is a deeper page
- * reached from the ⋯ menu, so it carries its own way back to the session,
- * matching the top-bar back chevron (no "Back" word). The old sheet gave it a
- * `6px 0 0 6px` margin that both of its call sites immediately zeroed; it
- * isn't carried over.
- */
-export const PANEL_BACK =
-	"inline-flex size-10 cursor-pointer items-center justify-center border-0 bg-transparent p-0 phone:size-11 " +
-	"text-accent touch-manipulation [-webkit-tap-highlight-color:transparent] " +
-	"active:opacity-40 [&_svg]:-ml-px";
