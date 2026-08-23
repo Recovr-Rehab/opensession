@@ -5047,8 +5047,8 @@ export function App(
 									: {})}
 						>
 							{/* Slack-header layout: the repo tile leads the pill (portaled in
-							    by SessionViewer), or the archive mark replaces it for archived
-							    sessions. The name sits over model · cost. The whole pill is one
+							    by SessionViewer), with the name on top and the model · cost
+							    metadata below it in a stacked column. The whole pill is one
 							    tap target that opens the session's deeper info page. */}
 							{route.view === "session" && currentSession && (
 								<span className={HEADER_TITLE_REPO} ref={setHeaderRepoEl} />
