@@ -119,7 +119,7 @@ import { PrStackChip } from "./pr/StackPopover";
 import { ReviewRail } from "./pr/ReviewRail";
 import { GitStatusRows } from "./pr/GitStatus";
 import { ReviewToolbar } from "./pr/ReviewToolbar";
-import { InlineAlert, LoadingState } from "../ui/state";
+import { EmptyState, LoadingState } from "../ui/state";
 import { CodeFlow } from "./CodeFlow";
 import { revealDiffFile } from "../lib/diff-navigation";
 import { PrFileTree } from "./pr/PrFileTree";
@@ -1559,11 +1559,15 @@ export function PrPanel({
     <div className={PR_REPO_TABS}>{targetPicker}</div>
   ) : null;
 
+  const reviewStateClass = `flex-1 ${compactToolbar ? WS_SUMMARY_REVIEW_CANVAS_CLEARANCE : ""}`;
+
   if (loading)
     return (
       <div className="flex min-h-0 flex-1 flex-col">
         {switcher}
-        <LoadingState className="flex-1">Loading pull request…</LoadingState>
+        <LoadingState className={reviewStateClass}>
+          Loading pull request…
+        </LoadingState>
       </div>
     );
 
@@ -1571,17 +1575,23 @@ export function PrPanel({
     return (
       <div className="flex min-h-0 flex-1 flex-col">
         {switcher}
-        <InlineAlert
-          className="m-4"
-          retryLabel="Retry"
-          onRetry={() => {
-            setLoading(true);
-            setLoadError(null);
-            void load(true);
-          }}
-        >
-          {loadError}
-        </InlineAlert>
+        <EmptyState
+          className={reviewStateClass}
+          role="alert"
+          title="Couldn’t load pull request"
+          action={
+            <Button
+              size="sm"
+              onClick={() => {
+                setLoading(true);
+                setLoadError(null);
+                void load(true);
+              }}
+            >
+              Try again
+            </Button>
+          }
+        />
       </div>
     );
 

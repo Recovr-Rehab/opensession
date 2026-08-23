@@ -178,6 +178,17 @@ test("wide Review keeps its controls stable while page navigation moves", () => 
 	);
 });
 
+test("Review loading and errors stay centered beside the summary", () => {
+	expect(prPanelSource).toContain(
+		'const reviewStateClass = `flex-1 ${compactToolbar ? WS_SUMMARY_REVIEW_CANVAS_CLEARANCE : ""}`',
+	);
+	expect(prPanelSource).toContain(
+		"<LoadingState className={reviewStateClass}>",
+	);
+	expect(prPanelSource).toContain('title="Couldn’t load pull request"');
+	expect(prPanelSource).toContain('className={reviewStateClass}\n          role="alert"');
+});
+
 test("a lone Review hides the tab strip and keeps New tab in the header", () => {
 	expect(source).toContain("tabStripVisible: boolean");
 	expect(source).toContain("!tabStripVisible && onNewSession");
