@@ -127,10 +127,14 @@ function modalDriver(sandbox: ModalSandbox): RemoteDriver {
   return {
     async exec(cmd: string, opts?: RemoteExecOpts) {
       try {
-        const process = await sandbox.exec(["sh", "-lc", cmd], {
+        // A login shell runs Modal's image profile hooks, which emit OSC
+        // terminal-title sequences even without a PTY. Those bytes corrupt
+        // machine-readable stdout (and once poisoned a sourced `.ports.conf`).
+        const process = await sandbox.exec(["sh", "-c", cmd], {
           workdir: opts?.cwd,
           env: opts?.env,
           timeoutMs: opts?.timeoutMs ?? 120_000,
+          pty: false,
         });
         const [stdout, stderr, exitCode] = await Promise.all([
           process.stdout.readText(),
@@ -144,9 +148,10 @@ function modalDriver(sandbox: ModalSandbox): RemoteDriver {
     },
 
     async execBackground(cmd: string, opts?: RemoteExecOpts) {
-      await sandbox.exec(["sh", "-lc", cmd], {
+      await sandbox.exec(["sh", "-c", cmd], {
         workdir: opts?.cwd,
         env: opts?.env,
+        pty: false,
       });
     },
 
@@ -155,9 +160,9 @@ function modalDriver(sandbox: ModalSandbox): RemoteDriver {
       // does not implement. Stream through the process stdin instead.
       const process = await sandbox.exec([
         "sh",
-        "-lc",
+        "-c",
         `mkdir -p $(dirname ${shellQuoteWord(path)}) && cat > ${shellQuoteWord(path)}`,
-      ]);
+      ], { pty: false });
       await process.stdin.writeText(content);
       await process.stdin.close();
       const exitCode = await process.wait();

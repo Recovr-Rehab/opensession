@@ -35,6 +35,22 @@ describe("session Portal supervisor", () => {
 		expect(Bun.file(join(worktree, ".ports.conf")).text()).resolves.toContain("WEBAPP_PORT=3300");
 	});
 
+	test("removes provider terminal control sequences before persisting the registry", async () => {
+		const record = { name: "web", key: "WEBAPP_PORT", command: "just dev", port: 4000, state: "stopped" as const };
+		writeFileSync(
+			join(worktree, ".ports.conf"),
+			`\x1b]0;@modal: cat .ports.conf\x07${PREFIX(record)}\nWEBAPP_PORT=4000\n`,
+		);
+
+		setPortalPath(worktree, "/videos", "web");
+
+		const text = await Bun.file(join(worktree, ".ports.conf")).text();
+		expect(text).not.toContain("\x1b");
+		expect(text).not.toContain("@modal");
+		expect(text).toContain("WEBAPP_PORT=4000");
+		expect(readPortalRegistry(worktree)[0]).toMatchObject({ defaultPath: "/videos" });
+	});
+
 	test("starts, verifies, and stops only its own process group", async () => {
 		const port = 18_701;
 		process.env.PORTAL_SUPERVISOR_TEST_SECRET = "must-not-reach-portal";

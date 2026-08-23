@@ -67,9 +67,22 @@ function validateKey(key?: string): string | undefined {
 
 function registryPath(worktreeDir: string): string { return join(worktreeDir, ".ports.conf"); }
 
+/**
+ * Provider command transports must return byte-clean stdout, but keep the
+ * registry safe if one accidentally wraps output in terminal title/prompt
+ * sequences. Persisting those bytes turns `.ports.conf` into executable junk
+ * when a repository sources it during startup.
+ */
+function sanitizePortalRegistryText(contents: string): string {
+	return contents
+		.replace(/\x1b\][^\x07\x1b]*(?:\x07|\x1b\\)/g, "")
+		.replace(/\x1b\[[0-?]*[ -/]*[@-~]/g, "")
+		.replace(/[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]/g, "");
+}
+
 function parsePortalRegistry(contents: string): PortalRecord[] {
 	const records: PortalRecord[] = [];
-	for (const line of contents.split("\n")) {
+	for (const line of sanitizePortalRegistryText(contents).split("\n")) {
 		if (!line.startsWith(PREFIX)) continue;
 		try {
 			const value = JSON.parse(line.slice(PREFIX.length)) as PortalRecord;
@@ -86,7 +99,7 @@ export function readPortalRegistry(worktreeDir: string): PortalRecord[] {
 }
 
 function serializedPortalRegistry(previousText: string, records: PortalRecord[]): string {
-	const previous = previousText.split("\n");
+	const previous = sanitizePortalRegistryText(previousText).split("\n");
 	const generatedKeys = new Set(records.map((record) => record.key));
 	const kept = previous.filter((line) => {
 		if (line.startsWith(PREFIX)) return false;
@@ -476,14 +489,14 @@ export function setPortalPath(worktreeDir: string, path: string, name?: string):
  * qualified by `getSandboxPreviewStatus` before Caddy exposes them.
  */
 async function readSandboxPortalRegistry(sandbox: Sandbox): Promise<{ text: string; records: PortalRecord[] }> {
-	const response = await sandbox.exec(["bash", "-lc", "cat .ports.conf 2>/dev/null || true"]);
+	const response = await sandbox.exec(["bash", "-c", "cat .ports.conf 2>/dev/null || true"]);
 	return { text: response.stdout, records: parsePortalRegistry(response.stdout) };
 }
 
 async function writeSandboxPortalRegistry(sandbox: Sandbox, records: PortalRecord[]): Promise<void> {
 	const { text } = await readSandboxPortalRegistry(sandbox);
 	const data = Buffer.from(serializedPortalRegistry(text, records)).toString("base64");
-	const response = await sandbox.exec(["bash", "-lc", `printf %s ${shellQuoteWord(data)} | base64 -d > .ports.conf`]);
+	const response = await sandbox.exec(["bash", "-c", `printf %s ${shellQuoteWord(data)} | base64 -d > .ports.conf`]);
 	if (response.exitCode !== 0) throw new Error(response.stderr.trim() || "Could not update the Sandbox Portal registry.");
 }
 
@@ -501,7 +514,7 @@ function sandboxPortalOps(sandbox: Sandbox, sessionId?: string): PortalOps {
 		},
 		signalGroup: async (pid, signal) => {
 			const flag = signal === "SIGKILL" ? "-KILL" : "-TERM";
-			await sandbox.exec(["bash", "-lc", `kill ${flag} -- -${pid} 2>/dev/null || kill ${flag} ${pid} 2>/dev/null || true`]);
+			await sandbox.exec(["bash", "-c", `kill ${flag} -- -${pid} 2>/dev/null || kill ${flag} ${pid} 2>/dev/null || true`]);
 		},
 	};
 }
@@ -532,7 +545,7 @@ export async function ensureRemoteSandboxPortalAgent(input: {
 	const logDir = `/home/ubuntu/.opensession-session-scratch/${input.sessionId}`;
 	const logPath = `${logDir}/sandbox-portal-${input.port}.log`;
 	const relayLaunch = `mkdir -p ${shellQuoteWord(logDir)} && OPENSESSION_SANDBOX_PORTAL_WS_URL=${shellQuoteWord(endpoint)} OPENSESSION_SANDBOX_PORTAL_TOKEN=${shellQuoteWord(grant.token)} OPENSESSION_SANDBOX_PORTAL_PORT=${shellQuoteWord(String(input.port))} OPENSESSION_SANDBOX_PORTAL_EXPIRES_AT=${shellQuoteWord(String(grant.expiresAt))} exec /home/ubuntu/.bun/bin/bun run ${shellQuoteWord(SANDBOX_PORTAL_AGENT_ENTRY)} </dev/null >${shellQuoteWord(logPath)} 2>&1`;
-	const started = await input.sandbox.exec(["bash", "-lc", relayLaunch], { background: true, timeoutMs: 15_000 });
+	const started = await input.sandbox.exec(["bash", "-c", relayLaunch], { background: true, timeoutMs: 15_000 });
 	if (started.exitCode !== 0) throw new Error(started.stderr.trim() || "Could not start the Sandbox Portal relay.");
 	remoteRelayAgents.set(agentKey, { expiresAt: grant.expiresAt });
 	return ensureSandboxPortalRelay({ sessionId: input.sessionId, sandboxId: input.sandbox.id, port: input.port });
@@ -573,7 +586,7 @@ export async function startSandboxPortalService(input: {
 		launch: async ({ name, command, port, url }) => {
 			const logPath = `.opensession-portal-${name}.log`;
 			const launch = `HOME=/home/ubuntu PATH=${shellQuoteWord(SANDBOX_PORTAL_PATH)} PORT=${shellQuoteWord(String(port))} PORTAL_URL=${shellQuoteWord(url)} OPENSESSION_PORTAL=${shellQuoteWord(name)} setsid bash -c ${shellQuoteWord(`exec ${command}`)} >${shellQuoteWord(logPath)} 2>&1 & printf '__OS_PORTAL_PID__=%s\\n' $!`;
-			const launched = await input.sandbox.exec(["bash", "-lc", launch], { env: input.env });
+			const launched = await input.sandbox.exec(["bash", "-c", launch], { env: input.env });
 			const pid = Number(launched.stdout.match(/__OS_PORTAL_PID__=(\d+)/)?.[1]);
 			if (launched.exitCode !== 0 || !Number.isInteger(pid) || pid < 2) throw new Error(launched.stderr.trim() || "Could not start the Portal process.");
 			return pid;
