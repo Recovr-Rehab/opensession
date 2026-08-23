@@ -168,12 +168,13 @@ export const MOBILE_TOP_BAR_CONTROL =
 	"phone:cursor-pointer phone:touch-manipulation " +
 	"phone:[-webkit-tap-highlight-color:transparent] " +
 	"phone:[transition-property:opacity] phone:duration-[var(--dur)] " +
-	"phone:ease-[var(--ease)] phone:active:scale-100 phone:active:opacity-40 phone:active:duration-0";
+	"phone:ease-[var(--ease)] phone:active:scale-100 phone:active:opacity-40 phone:active:duration-0 " +
+	"phone:[&_svg]:size-[26px] phone:[&_svg]:shrink-0";
 
 /** Back adds only its PWA hook and the chevron's optical left nudge. */
 export const MOBILE_BACK =
 	`pwa-header-back ${MOBILE_TOP_BAR_CONTROL} ` +
-	"phone:[&_svg]:-ml-px phone:[&_svg]:shrink-0";
+	"phone:[&_svg]:size-[34px] phone:[&_svg]:-ml-px";
 
 /**
  * Product mark + the update nudge, kept tight together. `app-brand` stays on

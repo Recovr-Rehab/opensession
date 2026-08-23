@@ -17,6 +17,6 @@ test("installed phone header controls use larger foreground icons", async () => 
 	expect(standalonePhone).toContain(".app .pwa-header-back");
 	expect(standalonePhone).toContain(".app .pwa-header-actions button");
 	expect(standalonePhone).toContain("color: var(--text)");
-	expect(standalonePhone).toContain("width: 13px");
+	expect(standalonePhone).toContain("width: 34px");
 	expect(standalonePhone).toContain("width: 25px");
 });

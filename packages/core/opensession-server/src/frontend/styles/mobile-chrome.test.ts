@@ -29,7 +29,9 @@ test("floating phone navigation stays pinned while chat chrome collapses", () =>
 });
 
 test("phone top-bar actions use neutral ink", () => {
+	expect(MOBILE_TOP_BAR_CONTROL).toContain("phone:[&_svg]:size-[26px]");
 	expect(MOBILE_BACK).toContain(MOBILE_TOP_BAR_CONTROL);
+	expect(MOBILE_BACK).toContain("phone:[&_svg]:size-[34px]");
 	for (const control of [
 		MOBILE_TOP_BAR_CONTROL,
 		MOBILE_BACK,

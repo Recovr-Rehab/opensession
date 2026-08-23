@@ -83,7 +83,7 @@ export const MobileTopBarBack = React.forwardRef<
 			ref={ref}
 			variant="ghost"
 			size="md"
-			icon={<IconChevronLeft size={22} />}
+			icon={<IconChevronLeft size={34} />}
 			className={cn(MOBILE_BACK, className)}
 			{...props}
 		/>
