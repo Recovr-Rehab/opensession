@@ -406,10 +406,14 @@ export function DiffPanel({
   );
   const toolbar =
     toolbarTarget === undefined ? (
+      // Paint through the section's 10px top gutter. The gutter still belongs
+      // to the diff below, but code cannot scroll through its empty space.
       <div
-        className={`sticky ${multi ? "top-[calc(var(--diff-panel-top,0px)+37px)] phone:top-[calc(var(--diff-panel-top,0px)+47px)]" : "top-[var(--diff-panel-top,0px)]"} z-1 flex items-center gap-2.5 overflow-x-auto border-b border-divider bg-panel-surface px-3.5 py-2.5 text-label whitespace-nowrap [scrollbar-width:none] [&::-webkit-scrollbar]:hidden`}
+        className={`sticky ${multi ? "top-[calc(var(--diff-panel-top,0px)+37px)] phone:top-[calc(var(--diff-panel-top,0px)+47px)]" : "top-[var(--diff-panel-top,0px)]"} z-1 bg-panel-surface after:absolute after:inset-x-0 after:top-full after:h-2.5 after:bg-panel-surface after:content-['']`}
       >
-        {toolbarContents}
+        <div className="flex items-center gap-2.5 overflow-x-auto border-b border-divider px-3.5 py-2.5 text-label whitespace-nowrap [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+          {toolbarContents}
+        </div>
       </div>
     ) : toolbarTarget ? (
       createPortal(toolbarContents, toolbarTarget)
@@ -417,7 +421,7 @@ export function DiffPanel({
 
   return (
     <div
-      className={`@container flex min-h-0 flex-col ${multi ? "[--review-file-header-top:calc(var(--diff-panel-top,0px)+84px)] phone:[--review-file-header-top:calc(var(--diff-panel-top,0px)+94px)]" : "[--review-file-header-top:calc(var(--diff-panel-top,0px)+47px)]"}`}
+      className={`@container flex min-h-0 flex-col ${multi ? "[--review-file-header-top:calc(var(--diff-panel-top,0px)+94px)] phone:[--review-file-header-top:calc(var(--diff-panel-top,0px)+104px)]" : "[--review-file-header-top:calc(var(--diff-panel-top,0px)+57px)]"}`}
       ref={panelRef}
     >
       {multi && (
@@ -464,7 +468,7 @@ export function DiffPanel({
          supplies the review canvas's shared 8px inset; standalone Changes
          keeps this panel's own inset. */
       <div
-        className={`${toolbarTarget === undefined ? "px-2.5 pt-2.5" : "px-0 pt-0"} pb-7 [&_[class*=pierre]]:max-w-full`}
+        className={`${toolbarTarget === undefined ? "px-2.5 pt-2.5" : "px-0 pt-0"} min-w-0 max-w-full overflow-clip pb-7 [&_[class*=pierre]]:max-w-full`}
       >
         <CommentableDiff
           key={cur.repo}
