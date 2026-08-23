@@ -6,6 +6,7 @@ import {
   getPreviewStatus,
   listenerLinesForPort,
   parsePreviewPortalRecipes,
+  recipeStartOptions,
   repoLifecycle,
   resolvePreviewBoot,
   sandboxPreviewIdentityContext,
@@ -250,6 +251,23 @@ describe("preview portal recipes", () => {
         readyTimeoutSeconds: 180,
       },
     ]);
+  });
+
+  test("turns a declared service into trusted supervisor options", () => {
+    expect(
+      recipeStartOptions({
+        id: "tella-local",
+        name: "Tella local",
+        command: "./.agents/start.sh",
+        serviceKey: "WEBAPP_PORT",
+        readyTimeoutSeconds: 180,
+      }),
+    ).toEqual({
+      name: "tella-local",
+      command: expect.stringContaining('export WEBAPP_PORT="$PORT"'),
+      key: "WEBAPP_PORT",
+      readyTimeoutMs: 180_000,
+    });
   });
 
   test("drops recipes that could inject a prompt or invalid port key", () => {
