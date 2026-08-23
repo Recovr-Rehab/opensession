@@ -1609,7 +1609,7 @@ html:is(.wco, .desktop-shell)
 .markdown pre {
 	background: #0c0c10;
 	border: 1px solid var(--border);
-	border-radius: calc(12px * var(--rf)); corner-shape: var(--cs);
+	border-radius: calc(18px * var(--rf)); corner-shape: var(--cs);
 	padding: 10px 12px;
 	margin: 2px 0 8px;
 	/* Preserve authored indentation and line breaks, but soft-wrap long lines so
