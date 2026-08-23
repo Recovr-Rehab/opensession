@@ -69,6 +69,8 @@ import {
   listRemoteStates,
   remoteCloneUrl,
   remoteWarmWorkspaceDir,
+  resetRemoteSetupLifecycleStamp,
+  runRemoteLifecycleHook,
   scrubRemoteWarmWorkspaceAuthority,
   shellQuoteWord,
   type RemoteDriver,
@@ -562,6 +564,16 @@ async function runPrewarmBootstrap(record: PrewarmRecord, adapter: PrewarmAdapte
           if (refreshed.exitCode !== 0) {
             throw new Error(`could not refresh ${repo.id} project image: ${(refreshed.stderr || refreshed.stdout).trim().slice(0, 300)}`);
           }
+        });
+        // Updating source without rerunning setup republishes stale generated
+        // output. For tella-fusion that turns the user's first Portal start
+        // into an 80–100s ReScript rebuild, defeating the prepared image.
+        setPrewarmStage(entry, "Rebuilding prepared project image", 76);
+        await resetRemoteSetupLifecycleStamp(driver, repo.id);
+        await runRemoteLifecycleHook(driver, warmDir, "setup", "fresh", repo.id, {
+          sandboxId: entry.sandboxId || `prewarm:${entry.key}`,
+          provider: entry.provider,
+          repoId: repo.id,
         });
         await scrubRemoteWarmWorkspaceAuthority(driver, repo, warmDir);
       }

@@ -1379,6 +1379,21 @@ function remoteLifecycleKey(cwd: string): string {
   return cwd.replace(/[^A-Za-z0-9_.-]+/g, "-").replace(/^-+|-+$/g, "").slice(-120);
 }
 
+/** A source-image refresh changes the checked-out project after the original
+ * setup stamp was captured. Clear that one stamp so the refreshed artifact
+ * rebuilds generated output and dependency state before publication. */
+export async function resetRemoteSetupLifecycleStamp(
+  driver: RemoteDriver,
+  scopeKey: string,
+): Promise<void> {
+  const key = remoteLifecycleKey(scopeKey) || "workspace";
+  const stamp = `${REMOTE_LIFECYCLE_DIR}/${key}-setup.done`;
+  const cleared = await driver.exec(`rm -f ${shellQuoteWord(stamp)}`);
+  if (cleared.exitCode !== 0) {
+    throw new Error(`could not reset ${scopeKey} setup stamp: ${cleared.stderr.trim()}`);
+  }
+}
+
 /** Run repo-owned lifecycle hooks inside a volume-only remote workspace.
  * `setup` is one-shot per durable sandbox disk; `resume` runs on every real
  * wake. Logs stay outside the repo so they never pollute git status. */

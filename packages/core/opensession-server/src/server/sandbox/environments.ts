@@ -9,10 +9,12 @@ import {
   type WorkspaceSandboxProvider,
 } from "./connections";
 import {
+  BOX_REPO_TEMPLATE_REFRESH_MS,
   invalidateRemoteRepoTemplate,
   readRemoteRepoTemplate,
   remoteRepoTemplateNeedsRefresh,
 } from "./remote-repo-template";
+import { isTransientSandboxStartError } from "./reliability";
 import {
   invalidatePrewarm,
   prewarmStatus,
@@ -33,6 +35,8 @@ export interface SandboxEnvironment {
   expiresAt?: string;
   failureCode?: string;
   failureSummary?: string;
+  /** Persisted backoff for recoverable provider/setup failures. */
+  retryAt?: string;
   mode?: "template" | "per_session";
   settings?: SandboxMachineSettings;
 }
@@ -434,6 +438,18 @@ export async function prepareSandboxEnvironment(
       typeof (error as { code?: unknown })?.code === "string"
         ? String((error as { code: string }).code)
         : "ENVIRONMENT_SETUP_FAILED";
+    const failureSummary =
+      code === "ENVIRONMENT_TIMEOUT"
+        ? "Project setup took too long. Try rebuilding it."
+        : error instanceof Error
+          ? error.message.slice(0, 500)
+          : "Project setup failed. Rebuild it to try again.";
+    const quotaLimited = /(?:rate.?limit|quota|plan allows|per day)/i.test(failureSummary);
+    const retryDelayMs = quotaLimited
+      ? BOX_REPO_TEMPLATE_REFRESH_MS
+      : isTransientSandboxStartError(error)
+        ? 15 * 60_000
+        : 0;
     const failure: SandboxEnvironment = {
       repo,
       provider,
@@ -441,12 +457,10 @@ export async function prepareSandboxEnvironment(
       mode: "template",
       updatedAt: new Date().toISOString(),
       failureCode: code,
-      failureSummary:
-        code === "ENVIRONMENT_TIMEOUT"
-          ? "Project setup took too long. Try rebuilding it."
-          : error instanceof Error
-            ? error.message.slice(0, 500)
-            : "Project setup failed. Rebuild it to try again.",
+      failureSummary,
+      ...(retryDelayMs
+        ? { retryAt: new Date(Date.now() + retryDelayMs).toISOString() }
+        : {}),
       ...(settings ? { settings } : {}),
     };
     writeEnvironment(failure);
@@ -468,6 +482,10 @@ function maintainSandboxEnvironments(): void {
       (environment.mode !== "template" && environment.state !== "preparing") ||
       !sandboxConnectionReady(environment.provider)
     ) continue;
+    if (
+      environment.state === "failed" &&
+      (!environment.retryAt || Date.parse(environment.retryAt) > Date.now())
+    ) continue;
     const template = readRemoteRepoTemplate(
       environment.provider as "daytona" | "box" | "modal",
       environment.repo,
@@ -487,7 +505,6 @@ function maintainSandboxEnvironments(): void {
       });
       continue;
     }
-    if (environment.state === "failed") continue;
     scheduleSandboxEnvironment(environment.repo, environment.provider, {
       rebuild: true,
       user: "template-maintenance",
