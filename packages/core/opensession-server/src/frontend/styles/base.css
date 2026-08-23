@@ -2126,7 +2126,7 @@ html[data-theme="light"] .composer-hl .cmp-fence {
 }
 /* Keep the first line clear of both visible icon controls. */
 .md-code-wrap > pre {
-	padding-right: 96px;
+	padding-right: 80px;
 }
 .md-code-controls {
 	position: absolute;
@@ -2140,8 +2140,8 @@ html[data-theme="light"] .composer-hl .cmp-fence {
 .md-code-settings-trigger {
 	display: grid;
 	place-items: center;
-	width: 40px;
-	height: 40px;
+	width: 32px;
+	height: 32px;
 	padding: 0;
 	border: 0;
 	border-radius: calc(12px * var(--rf)); corner-shape: var(--cs);
@@ -2204,7 +2204,7 @@ html[data-theme="light"] .composer-hl .cmp-fence {
    are the same tokens as ui/popover. */
 .md-code-settings {
 	position: absolute;
-	top: 48px;
+	top: 40px;
 	right: 0;
 	z-index: 2;
 	display: flex;
