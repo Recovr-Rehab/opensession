@@ -328,13 +328,10 @@ function AssetOverlayActionBar({
 	const name = file.path.split("/").pop() || "asset";
 	const commentable = assetPreviewKind(file.path) === "image";
 	const actionClass = cn(
-		"inline-flex h-10 shrink-0 cursor-pointer items-center justify-center gap-1.5 rounded-full border-0 bg-transparent px-2 text-xs no-underline",
-		"transition-[transform,background-color,color,opacity] duration-[var(--dur-micro)] ease-[var(--ease)] active:scale-[0.96]",
-		phone
-			? "size-11 px-0 text-white/55 hover:bg-white/10 hover:text-white/80"
-			: "text-white/60 hover:bg-white/15 hover:text-white",
+		"h-10 shrink-0 cursor-pointer rounded-full text-xs",
+		phone && "size-11 px-0 text-white/55 hover:bg-white/10 hover:text-white/80",
 	);
-	const labelClass = phone ? "sr-only" : undefined;
+	const actionLabel = (label: string) => (phone ? null : label);
 
 	async function download() {
 		try {
@@ -353,7 +350,8 @@ function AssetOverlayActionBar({
 	}
 
 	return (
-		<nav
+		<div
+			role="group"
 			aria-label="Asset actions"
 			className={cn(
 				"flex items-center justify-center gap-1",
@@ -362,9 +360,12 @@ function AssetOverlayActionBar({
 			)}
 		>
 			{commentable && (
-				<button
-					type="button"
+				<Button
+					variant="overlay"
+					size="sm"
+					icon={<IconMessage size={phone ? 24 : 15} />}
 					className={actionClass}
+					aria-label={phone ? "Comment" : undefined}
 					onClick={() =>
 						openLightbox(
 							[
@@ -382,52 +383,77 @@ function AssetOverlayActionBar({
 						)
 					}
 				>
-					<IconMessage size={phone ? 24 : 15} />
-					<span className={labelClass}>Comment</span>
-				</button>
+					{actionLabel("Comment")}
+				</Button>
 			)}
 			{nativeShare ? (
-				<button type="button" className={actionClass} onClick={download}>
-					<IconArrowDown size={phone ? 24 : 15} />
-					<span className={labelClass}>Download</span>
-				</button>
+				<Button
+					variant="overlay"
+					size="sm"
+					icon={<IconArrowDown size={phone ? 24 : 15} />}
+					className={actionClass}
+					aria-label={phone ? "Download" : undefined}
+					onClick={download}
+				>
+					{actionLabel("Download")}
+				</Button>
 			) : (
-				<a href={downloadUrl} className={actionClass} aria-label="Download">
-					<IconArrowDown size={phone ? 24 : 15} />
-					<span className={labelClass}>Download</span>
-				</a>
+				<Button
+					variant="overlay"
+					size="sm"
+					icon={<IconArrowDown size={phone ? 24 : 15} />}
+					className={actionClass}
+					aria-label={phone ? "Download" : undefined}
+					render={<a href={downloadUrl} />}
+				>
+					{actionLabel("Download")}
+				</Button>
 			)}
-			<button
-				type="button"
+			<Button
+				variant="overlay"
+				size="sm"
+				icon={<IconLink size={phone ? 24 : 15} />}
 				className={actionClass}
+				aria-label={phone ? "Copy link" : undefined}
 				onClick={() =>
 					copyToClipboard(absoluteLink(stableUrl), () => toast("Link copied"))
 				}
 			>
-				<IconLink size={phone ? 24 : 15} />
-				<span className={labelClass}>Copy link</span>
-			</button>
+				{actionLabel("Copy link")}
+			</Button>
 			{onOpenAsTab ? (
-				<button type="button" className={actionClass} onClick={onOpenAsTab}>
-					<IconArrowUpRight size={phone ? 24 : 15} />
-					<span className={labelClass}>Open</span>
-				</button>
-			) : nativeShare ? (
-				<button type="button" className={actionClass} onClick={open}>
-					<IconArrowUpRight size={phone ? 24 : 15} />
-					<span className={labelClass}>Open or share</span>
-				</button>
-			) : (
-				<a
-					href={rawUrl}
-					target="_blank"
-					rel="noreferrer"
+				<Button
+					variant="overlay"
+					size="sm"
+					icon={<IconArrowUpRight size={phone ? 24 : 15} />}
 					className={actionClass}
-					aria-label="Open"
+					aria-label={phone ? "Open" : undefined}
+					onClick={onOpenAsTab}
 				>
-					<IconArrowUpRight size={phone ? 24 : 15} />
-					<span className={labelClass}>Open</span>
-				</a>
+					{actionLabel("Open")}
+				</Button>
+			) : nativeShare ? (
+				<Button
+					variant="overlay"
+					size="sm"
+					icon={<IconArrowUpRight size={phone ? 24 : 15} />}
+					className={actionClass}
+					aria-label={phone ? "Open or share" : undefined}
+					onClick={open}
+				>
+					{actionLabel("Open or share")}
+				</Button>
+			) : (
+				<Button
+					variant="overlay"
+					size="sm"
+					icon={<IconArrowUpRight size={phone ? 24 : 15} />}
+					className={actionClass}
+					aria-label={phone ? "Open" : undefined}
+					render={<a href={rawUrl} target="_blank" rel="noreferrer" />}
+				>
+					{actionLabel("Open")}
+				</Button>
 			)}
 			<AssetMenu
 				sessionId={sessionId}
@@ -438,7 +464,7 @@ function AssetOverlayActionBar({
 				deleteOnly
 				bar
 			/>
-		</nav>
+		</div>
 	);
 }
 

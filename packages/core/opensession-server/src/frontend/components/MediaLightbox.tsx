@@ -23,6 +23,7 @@ import {
 	type WalkthroughMediaLabel,
 } from "../lib/walkthrough-label";
 import { useIsPhone } from "../hooks/useIsPhone";
+import { Button } from "../ui/button";
 import { cn } from "../ui/cn";
 import { toast } from "../ui/toast";
 import {
@@ -1491,8 +1492,7 @@ const MAX_VISIBLE_DOTS = 7;
 
 // Download / Open: quiet pills in the top action cluster, matching the asset
 // preview's separation between actions above and descriptions below.
-const lightboxAction =
-	"inline-flex h-10 shrink-0 cursor-pointer items-center justify-center gap-1 rounded-full border-0 bg-transparent px-2 text-xs text-white/60 no-underline transition-[transform,background-color,color] active:scale-[0.96] hover:bg-white/15 hover:text-white phone:h-11";
+const lightboxAction = "h-10 shrink-0 cursor-pointer rounded-full text-xs";
 
 const PREVIEW_LABEL: Record<LightboxItem["kind"], string> = {
 	image: "Image preview",
@@ -1922,95 +1922,115 @@ function MediaLightbox({
 				{/* Keep the actions on the viewport's centerline while Close owns the
 				    right corner. Grouping both at the edge made the row read like loose
 				    header controls rather than one action bar. */}
-				<div className={isPhone ? "hidden" : "pointer-events-auto flex items-center gap-1"}>
-				{commentable && (
-					<button
-						type="button"
-						className={cn(
-							lightboxAction,
-							commenting && "bg-white/15 text-white",
-						)}
-						onClick={() => {
-							if (commenting) resetComment();
-							else {
-								setCommenting(true);
-								setCommentError(null);
-							}
-						}}
-						aria-pressed={commenting}
-						aria-label={commenting ? "Cancel image comment" : "Comment on image"}
-					>
-						<IconMessage size={14} />
-						Comment
-					</button>
-				)}
-				{nativeShare ? (
-					<button
-						type="button"
-						className={cn(lightboxAction, "phone:w-11 phone:px-0")}
-						onClick={saveItem}
-						disabled={saving}
-						aria-label={saving ? "Preparing download" : "Download"}
-					>
-						<IconArrowDown size={14} />
-						<span className="phone:sr-only">{saving ? "Preparing…" : "Download"}</span>
-					</button>
-				) : (
-					<a
-						href={downloadHref(item)}
-						aria-label="Download"
-						download={
-							item.src.startsWith("data:") || item.src.startsWith("blob:")
-								? suggestedName(item)
-								: undefined
-						}
-						className={cn(lightboxAction, "phone:w-11 phone:px-0")}
-					>
-						<IconArrowDown size={14} />
-						<span className="phone:sr-only">Download</span>
-					</a>
-				)}
-				{!item.src.startsWith("data:") && (
-					<>
-						{/* The file's own URL: what you paste into an upload, a
-						    ticket, or a message to someone who can reach this instance. */}
-						<button
-							type="button"
-							aria-label={copied ? "Link copied" : "Copy link"}
-							onClick={() =>
-								copyToClipboard(shareableSrc(item), () =>
-									setCopiedSrc(item.src),
-								)
-							}
-							className={cn(lightboxAction, "phone:w-11 phone:px-0")}
+				<div
+					role="group"
+					aria-label="Media actions"
+					className={isPhone ? "hidden" : "pointer-events-auto flex items-center gap-1"}
+				>
+					{commentable && (
+						<Button
+							variant="overlay"
+							size="sm"
+							icon={<IconMessage size={14} />}
+							className={cn(
+								lightboxAction,
+								commenting && "bg-white/15 text-white",
+							)}
+							onClick={() => {
+								if (commenting) resetComment();
+								else {
+									setCommenting(true);
+									setCommentError(null);
+								}
+							}}
+							aria-pressed={commenting}
+							aria-label={commenting ? "Cancel image comment" : "Comment on image"}
 						>
-							{copied ? <IconCheck size={14} /> : <IconLink size={14} />}
-							<span className="phone:sr-only">{copied ? "Copied" : "Copy link"}</span>
-						</button>
-						{nativeShare ? (
-							<button
-								type="button"
-								onClick={openItem}
-								className={cn(lightboxAction, "phone:w-11 phone:px-0")}
-								aria-label="Open or share"
+							Comment
+						</Button>
+					)}
+					{nativeShare ? (
+						<Button
+							variant="overlay"
+							size="sm"
+							icon={<IconArrowDown size={14} />}
+							className={lightboxAction}
+							onClick={saveItem}
+							disabled={saving}
+							aria-label={saving ? "Preparing download" : "Download"}
+						>
+							{saving ? "Preparing…" : "Download"}
+						</Button>
+					) : (
+						<Button
+							variant="overlay"
+							size="sm"
+							icon={<IconArrowDown size={14} />}
+							className={lightboxAction}
+							aria-label="Download"
+							render={
+								<a
+									href={downloadHref(item)}
+									download={
+										item.src.startsWith("data:") || item.src.startsWith("blob:")
+											? suggestedName(item)
+											: undefined
+									}
+								/>
+							}
+						>
+							Download
+						</Button>
+					)}
+					{!item.src.startsWith("data:") && (
+						<>
+							{/* The file's own URL: what you paste into an upload, a
+							    ticket, or a message to someone who can reach this instance. */}
+							<Button
+								variant="overlay"
+								size="sm"
+								icon={copied ? <IconCheck size={14} /> : <IconLink size={14} />}
+								className={lightboxAction}
+								aria-label={copied ? "Link copied" : "Copy link"}
+								onClick={() =>
+									copyToClipboard(shareableSrc(item), () =>
+										setCopiedSrc(item.src),
+									)
+								}
 							>
-								<IconArrowUpRight size={14} />
-								<span className="phone:sr-only">Open or share</span>
-							</button>
-						) : (
-							<a
-								href={item.src}
-								target="_blank"
-								rel="noopener noreferrer"
-								className={cn(lightboxAction, "phone:w-11 phone:px-0")}
-								aria-label="Open"
-							>
-								<IconArrowUpRight size={14} />
-								<span className="phone:sr-only">Open</span>
-							</a>
-						)}
-					</>
-				)}
+								{copied ? "Copied" : "Copy link"}
+							</Button>
+							{nativeShare ? (
+								<Button
+									variant="overlay"
+									size="sm"
+									icon={<IconArrowUpRight size={14} />}
+									className={lightboxAction}
+									onClick={openItem}
+									aria-label="Open or share"
+								>
+									Open or share
+								</Button>
+							) : (
+								<Button
+									variant="overlay"
+									size="sm"
+									icon={<IconArrowUpRight size={14} />}
+									className={lightboxAction}
+									aria-label="Open"
+									render={
+										<a
+											href={item.src}
+											target="_blank"
+											rel="noopener noreferrer"
+										/>
+									}
+								>
+									Open
+								</Button>
+							)}
+						</>
+					)}
 				</div>
 				<button
 					ref={closeRef}
