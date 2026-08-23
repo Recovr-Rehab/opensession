@@ -240,6 +240,11 @@ export const VIEWER_MESSAGES =
 	// Keep the reader's place when content loads or expands above them.
 	"[overflow-anchor:auto] px-5 pt-0 " +
 	"pb-[calc(var(--session-under)_+_var(--suggestions-under,0px)_+_16px)] " +
+	// A focused phone composer is fixed and no longer reserves flow height,
+	// while the transcript's layout viewport still extends behind the keyboard.
+	// Clear both measured obstructions so even a tall draft and the last live
+	// status row can scroll completely into the visible strip above them.
+	"phone:[body.kb-open_&]:pb-[calc(var(--kb-inset,0px)_+_var(--viewer-input-height,64px)_+_var(--suggestions-under,0px)_+_8px)] " +
 	// Wider side padding where the message rail lives, so its ticks have a
 	// gutter of their own instead of sitting on the bubbles (lib/message-rail.ts).
 	`${RAIL_GUTTER_CLASS} ` +
@@ -289,9 +294,9 @@ export const VIEWER_INPUT =
 	// Fixed bottom already follows the visible keyboard edge on iOS Safari, so do
 	// not add `--kb-inset` again: that double-counts the keyboard and lifts the
 	// composer by hundreds of pixels. The painted wrapper keeps the solid tail of
-	// the fade behind the ordinary 12px gap down to the keyboard.
+	// the fade behind a compact 8px gap down to the keyboard.
 	"phone:[body.kb-open_&]:fixed phone:[body.kb-open_&]:inset-x-0 phone:[body.kb-open_&]:bottom-0 " +
-	"phone:[body.kb-open_&]:pb-3";
+	"phone:[body.kb-open_&]:pb-2";
 
 /**
  * The step the transcript and the composer take while the workspace summary

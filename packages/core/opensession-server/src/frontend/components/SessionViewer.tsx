@@ -1760,6 +1760,31 @@ export function SessionViewer({
 		relayout,
 		onScroll,
 	} = useSessionScroll(true);
+	const [viewerInput, setViewerInput] = useState<HTMLDivElement | null>(null);
+	// The focused phone composer is fixed above the keyboard, so it contributes
+	// no height to the transcript's flex layout. Publish its real height without
+	// re-rendering on each draft line: the scroll padding can then clear the
+	// whole composer instead of assuming the resting one-row pill.
+	useLayoutEffect(() => {
+		if (!viewerInput || typeof ResizeObserver === "undefined") return;
+		const region = viewerInput.parentElement;
+		if (!region) return;
+		const measure = () => {
+			region.style.setProperty(
+				"--viewer-input-height",
+				`${Math.ceil(viewerInput.getBoundingClientRect().height)}px`,
+			);
+			relayout();
+		};
+		measure();
+		const observer = new ResizeObserver(measure);
+		// Keyboard focus changes the wrapper's padding, not its content box.
+		observer.observe(viewerInput, { box: "border-box" });
+		return () => {
+			observer.disconnect();
+			region.style.removeProperty("--viewer-input-height");
+		};
+	}, [relayout, viewerInput]);
 
 	useLayoutEffect(() => {
 		const pending = pendingIndexPositionRef.current;
@@ -7343,6 +7368,7 @@ export function SessionViewer({
 							</div>
 
 							<div
+								ref={setViewerInput}
 								className={cn(
 									VIEWER_INPUT,
 									// Moves with the transcript above it, or the composer would
