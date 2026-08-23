@@ -172,7 +172,7 @@ export const WS_SUMMARY_ACTION =
 /** A count parked at a place row's right edge (live portals, working agents).
  *  Tone comes from the caller; a number that only reports gets `text-faint`,
  *  one that means something is running gets `text-yellow`, exactly as the
- *  panel's own bottom bar reads them. */
+ *  panel's own tab strip reads them. */
 export const WS_SUMMARY_COUNT = "shrink-0 text-meta tabular-nums";
 
 /** The PR row's trailing state word ("Draft", "Merged", "Changes requested").

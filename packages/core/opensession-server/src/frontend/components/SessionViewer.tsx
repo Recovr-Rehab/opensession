@@ -345,8 +345,8 @@ import { PulseDot } from "../ui/status";
 import {
 	PANEL_BACK,
 	PANEL_BODY,
-	PANEL_FOOTER,
-	PANEL_FOOTER_ITEM,
+	PANEL_TAB,
+	PANEL_TABS,
 	PANEL_INFO_TOP,
 	PANEL_OVERLAY,
 	PANEL_SHELL,
@@ -5342,7 +5342,7 @@ export function SessionViewer({
 		}
 		setPreviewStatus(await startPortalRecipeApi(session.id, recipe.id));
 	}
-	// Services with a route we can open: what the panel's bottom bar reports
+	// Services with a route we can open: what the panel's tab strip reports
 	// beside Portals, so the count is the openable ones rather than every port
 	// the repository declares.
 	const livePortals = (previewStatus?.services ?? []).filter((service) =>
@@ -7702,6 +7702,71 @@ export function SessionViewer({
 				{!isPhone && panelAvailable && activePanelOpen ? (
 					<div className={PANEL_SHELL} style={panelStyle}>
 						{panelResizeHandle}
+						{hasWorkspace && (
+							<div className={PANEL_TABS}>
+								<button
+									type="button"
+									aria-pressed={desktopPanelPage === "changes"}
+									className={cn(
+										PANEL_TAB,
+										desktopPanelPage === "changes" && "bg-hover text-fg",
+									)}
+									onClick={() => setPanelPage("changes")}
+								>
+									<IconFile size={15} className="shrink-0" />
+									<span className="@max-[380px]:hidden">Changes</span>
+								</button>
+								<button
+									type="button"
+									aria-pressed={desktopPanelPage === "portals"}
+									className={cn(
+										PANEL_TAB,
+										desktopPanelPage === "portals" && "bg-hover text-fg",
+									)}
+									onClick={() => setPanelPage("portals")}
+								>
+									<IconGlobe size={15} className="shrink-0" />
+									<span className="@max-[380px]:hidden">Portals</span>
+									{livePortals > 0 && (
+										<span className="shrink-0 tabular-nums text-faint @max-[380px]:hidden">
+											{livePortals}
+										</span>
+									)}
+								</button>
+								<button
+									type="button"
+									aria-pressed={desktopPanelPage === "agents"}
+									className={cn(
+										PANEL_TAB,
+										desktopPanelPage === "agents" && "bg-hover text-fg",
+									)}
+									onClick={() => setPanelPage("agents")}
+								>
+									<IconStack size={15} className="shrink-0" />
+									<span className="@max-[380px]:hidden">Agents</span>
+									{runningAgents > 0 && (
+										<span className="shrink-0 tabular-nums text-yellow @max-[380px]:hidden">
+											{runningAgents}
+										</span>
+									)}
+								</button>
+								<button
+									type="button"
+									aria-pressed={desktopPanelPage === "terminal"}
+									className={cn(
+										PANEL_TAB,
+										desktopPanelPage === "terminal" && "bg-hover text-fg",
+									)}
+									onClick={() => {
+										setPanelTerminalMounted(true);
+										setPanelPage("terminal");
+									}}
+								>
+									<IconTerminal size={15} className="shrink-0" />
+									<span className="@max-[380px]:hidden">Terminal</span>
+								</button>
+							</div>
+						)}
 						<div className={PANEL_BODY}>
 							{desktopPanelPage === "changes" ? (
 								<>
@@ -7772,71 +7837,6 @@ export function SessionViewer({
 								</div>
 							)}
 						</div>
-						{hasWorkspace && (
-							<div className={PANEL_FOOTER}>
-								<button
-									type="button"
-									aria-pressed={desktopPanelPage === "changes"}
-									className={cn(
-										PANEL_FOOTER_ITEM,
-										desktopPanelPage === "changes" && "bg-hover text-fg",
-									)}
-									onClick={() => setPanelPage("changes")}
-								>
-									<IconFile size={15} className="shrink-0" />
-									<span className="@max-[380px]:hidden">Changes</span>
-								</button>
-								<button
-									type="button"
-									aria-pressed={desktopPanelPage === "portals"}
-									className={cn(
-										PANEL_FOOTER_ITEM,
-										desktopPanelPage === "portals" && "bg-hover text-fg",
-									)}
-									onClick={() => setPanelPage("portals")}
-								>
-									<IconGlobe size={15} className="shrink-0" />
-									<span className="@max-[380px]:hidden">Portals</span>
-									{livePortals > 0 && (
-										<span className="shrink-0 tabular-nums text-faint @max-[380px]:hidden">
-											{livePortals}
-										</span>
-									)}
-								</button>
-								<button
-									type="button"
-									aria-pressed={desktopPanelPage === "agents"}
-									className={cn(
-										PANEL_FOOTER_ITEM,
-										desktopPanelPage === "agents" && "bg-hover text-fg",
-									)}
-									onClick={() => setPanelPage("agents")}
-								>
-									<IconStack size={15} className="shrink-0" />
-									<span className="@max-[380px]:hidden">Agents</span>
-									{runningAgents > 0 && (
-										<span className="shrink-0 tabular-nums text-yellow @max-[380px]:hidden">
-											{runningAgents}
-										</span>
-									)}
-								</button>
-								<button
-									type="button"
-									aria-pressed={desktopPanelPage === "terminal"}
-									className={cn(
-										PANEL_FOOTER_ITEM,
-										desktopPanelPage === "terminal" && "bg-hover text-fg",
-									)}
-									onClick={() => {
-										setPanelTerminalMounted(true);
-										setPanelPage("terminal");
-									}}
-								>
-									<IconTerminal size={15} className="shrink-0" />
-									<span className="@max-[380px]:hidden">Terminal</span>
-								</button>
-							</div>
-						)}
 					</div>
 				) : null}
 					</>

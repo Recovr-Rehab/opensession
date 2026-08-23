@@ -51,7 +51,7 @@ interface Props {
 	/** Opens a sub-agent's conversation in its own view tab. */
 	onOpenSubagent?: (agentId: string, label: string) => void;
 	/** Set when this renders as a page pushed on top of the workspace panel
-	 *  (the Agents item on its bottom bar). Page mode carries a back header and
+	 *  (the Agents item in its tab strip). Page mode carries a back header and
 	 *  shows the empty state; without it this is a section of the phone info
 	 *  page, which renders nothing until a run exists. */
 	onBack?: () => void;
@@ -324,8 +324,8 @@ export function WorkflowPanel({
 		</>
 	);
 
-	// Page mode: pushed on top of the workspace panel from its bottom bar, the
-	// same one level deep that Portals opens to. It owns the whole column, so
+	// Page mode: selected in the workspace panel's tab strip, the same level
+	// that Portals opens to. It owns the whole column, so
 	// it carries the back header and can afford the empty state.
 	if (onBack)
 		return (

@@ -37,7 +37,7 @@ function DiscoveringRow() {
 
 /**
  * The portals page: the panel one level deeper, opened from the Portals item
- * on the panel's bottom bar. The recipes this repository can start, every
+ * in the panel's tab strip. The recipes this repository can start, every
  * discovered service, and the restart and stop controls for the ones we manage.
  */
 export function PortalsPage({
