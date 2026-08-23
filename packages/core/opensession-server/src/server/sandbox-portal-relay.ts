@@ -46,6 +46,9 @@ const relays: Map<string, Relay> = (g.__opensessionSandboxPortalRelays ??= new M
 type BrowserSocket = { ws: any; connection: Connection };
 const browserSockets: Map<string, BrowserSocket> = (g.__opensessionSandboxPortalBrowserSockets ??= new Map()) as Map<string, BrowserSocket>;
 const HOP_HEADERS = new Set(["connection", "host", "content-length", "transfer-encoding", "upgrade", "keep-alive", "proxy-authenticate", "proxy-authorization", "te", "trailer"]);
+// The sidecar aborts its loopback fetch at 240s. Give its final error frame ten
+// seconds to cross the WebSocket before the coordinator declares the request lost.
+const RELAY_REQUEST_TIMEOUT_MS = 250_000;
 
 function key(sessionId: string, sandboxId: string, port: number): string { return `${sessionId}:${sandboxId}:${port}`; }
 function safeHeaders(headers: Headers): Record<string, string> {
@@ -181,7 +184,7 @@ async function relayFetch(input: { sessionId: string; sandboxId: string; port: n
 		if (bytes && bytes.byteLength > 5 * 1024 * 1024) return new Response("Portal request is too large", { status: 413 });
 		const id = crypto.randomUUID();
 		const result = await new Promise<RelayResponse>((resolve) => {
-			const timer = setTimeout(() => { connection.pending.delete(id); resolve({ status: 504, headers: {} }); }, 60_000);
+			const timer = setTimeout(() => { connection.pending.delete(id); resolve({ status: 504, headers: {} }); }, RELAY_REQUEST_TIMEOUT_MS);
 			connection.pending.set(id, { resolve, timer });
 			try { connection.ws.send(JSON.stringify({ t: "http", id, method: request.method, path: new URL(request.url).pathname + new URL(request.url).search, headers: safeHeaders(request.headers), ...(bytes ? { body: Buffer.from(bytes).toString("base64") } : {}) })); }
 			catch { clearTimeout(timer); connection.pending.delete(id); resolve({ status: 502, headers: {} }); }
