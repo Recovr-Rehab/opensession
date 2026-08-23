@@ -5,6 +5,7 @@ import { EmptyState } from "../ui/state";
 import {
   TAB_GROUP,
   TAB_ITEM,
+  TAB_NEW,
   TAB_SCROLL,
   TAB_TITLE,
   tabClass,
@@ -178,12 +179,12 @@ export function ShellPanel({
         {tabs.length < MAX_SHELL_TABS && (
           <button
             type="button"
-            className="focus-ring inline-flex size-7 shrink-0 cursor-pointer items-center justify-center rounded-md border-0 bg-transparent p-0 text-dim"
+            className={TAB_NEW}
             onClick={addTab}
             title="New terminal tab"
             aria-label="New terminal tab"
           >
-            <IconPlus size={18} aria-hidden="true" />
+            <IconPlus size={20} aria-hidden="true" />
           </button>
         )}
       </div>
