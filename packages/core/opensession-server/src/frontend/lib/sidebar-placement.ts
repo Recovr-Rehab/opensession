@@ -49,6 +49,37 @@ export function sessionWasAutoCreated(session: {
 	);
 }
 
+/** A session whose opening turn came from an agent action, not a composer. */
+export function sessionWasAgentStarted(session: {
+	id: string;
+	branch?: string | null;
+	automation?: string;
+	parentSessionId?: string;
+	spawnedBy?: string;
+	agentStarted?: boolean;
+	createdBy?: string | null;
+	startedBy?: string | null;
+}): boolean {
+	return Boolean(
+		session.agentStarted ||
+			session.automation ||
+			session.parentSessionId ||
+			session.spawnedBy ||
+			session.id.startsWith("bks-ghpr-") ||
+			// Report fan-out predates `agentStarted`; its durable branch prefix
+			// keeps existing sessions identifiable after this field ships.
+			session.branch?.startsWith("report-") ||
+			sessionWasAutoCreated(session),
+	);
+}
+
+/** A row where every represented session was opened by an agent action. */
+export function rowWasAgentStarted(row: WsRow): boolean {
+	if (row.sessions.length > 0)
+		return row.sessions.every(sessionWasAgentStarted);
+	return rowWasAutoCreated(row);
+}
+
 /**
  * A normal workspace or session created through the browser automation
  * identity. Automation runs are a different product concept and keep their

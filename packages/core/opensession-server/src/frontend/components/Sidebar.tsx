@@ -195,6 +195,7 @@ import {
 	placeSidebarRows,
 	rowAutoCreatedInLens,
 	rowOriginSource,
+	rowWasAgentStarted,
 	rowWasAutoCreated,
 	rowsAtPlacement,
 } from "../lib/sidebar-placement";
@@ -3170,10 +3171,9 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 						{stripPrTitlePrefix(row.name)}
 					</span>
 				)}
-				{/* Auto-created work reads as an ordinary workspace, so it says so
-				    beside its own name. The separated section only holds while the
-				    default lens and grouping do. */}
-				{!editing && rowWasAutoCreated(row) && <AutoCreatedMark />}
+				{/* Keep machine origin beside the row whether it came from the
+				    automation identity, an automation run, or a report's Fix action. */}
+				{!editing && rowWasAgentStarted(row) && <AutoCreatedMark />}
 				{/* Where the work came from, when the whole row came from one place:
 				    a Slack thread, a Linear issue. Same slot and ink as the mark
 				    above (SidebarItem carries the session-row half). */}

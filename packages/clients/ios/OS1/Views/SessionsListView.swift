@@ -4000,7 +4000,7 @@ struct SessionRow: View {
             // tile: this row is a machine's run, not yours. Faint and a step
             // under the tile so a band of automation rows stays a list rather
             // than a wall of glyphs.
-            if session.isAutomation || autoCreated {
+            if session.wasAgentStarted || autoCreated {
                 WebIcon(kind: .robot, size: tileSize, color: OS1VisualStyle.textFaint)
                     .accessibilityHidden(true)
             }

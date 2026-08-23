@@ -6,8 +6,10 @@ import {
 	classifySidebarPlacement,
 	placeSidebarRows,
 	rowAutoCreatedInLens,
+	rowWasAgentStarted,
 	rowWasAutoCreated,
 	rowsAtPlacement,
+	sessionWasAgentStarted,
 	sessionWasAutoCreated,
 	type SidebarPlacement,
 } from "./sidebar-placement";
@@ -261,6 +263,24 @@ describe("sidebar row placement", () => {
 				personFilter: "automation",
 			}),
 		).toBe("status");
+	});
+
+	test("marks every non-composer origin as agent-started", () => {
+		expect(
+			sessionWasAgentStarted(session("report", { agentStarted: true })),
+		).toBe(true);
+		expect(
+			sessionWasAgentStarted(session("legacy-report", { branch: "report-fix-ios" })),
+		).toBe(true);
+		expect(
+			sessionWasAgentStarted(session("child", { parentSessionId: "parent" })),
+		).toBe(true);
+		expect(sessionWasAgentStarted(session("mine"))).toBe(false);
+
+		const reportRow = row("report", [
+			session("report", { agentStarted: true }),
+		]);
+		expect(rowWasAgentStarted(reportRow)).toBe(true);
 	});
 
 	test("never treats automation runs as auto-created work", () => {

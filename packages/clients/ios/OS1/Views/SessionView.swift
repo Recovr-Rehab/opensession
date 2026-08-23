@@ -1042,6 +1042,10 @@ struct SessionView: View {
     private var macSessionTitle: some View {
         HStack(spacing: 8) {
             RepoTile(name: viewModel.session.effectiveRepo, size: 20)
+            if viewModel.session.wasAgentStarted {
+                WebIcon(kind: .robot, size: 15, color: OS1VisualStyle.textDim)
+                    .accessibilityHidden(true)
+            }
             Text(viewModel.session.displayTitle)
                 .font(.headline)
                 .lineLimit(1)
@@ -1071,7 +1075,7 @@ struct SessionView: View {
                     // A machine owns this conversation. Same glyph and same
                     // slot as the web header's automation link. Origin reads
                     // beside the name it produced.
-                    if viewModel.session.isAutomation {
+                    if viewModel.session.wasAgentStarted {
                         WebIcon(kind: .robot, size: 15, color: OS1VisualStyle.textDim)
                             .accessibilityHidden(true)
                     }

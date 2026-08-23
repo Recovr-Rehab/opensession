@@ -131,6 +131,8 @@ export interface UnifiedSession {
   workspaceName?: string;
   /** Parent/orchestrator session when spawned as a worker sub-session. */
   parentSessionId?: string;
+  /** Started by a server-side agent action rather than a person's composer. */
+  agentStarted?: boolean;
   /** The session whose agent created this as an internal helper. Visible
    *  create_session results omit this and stay in the user's workspaces. */
   spawnedBy?: string;
@@ -512,6 +514,8 @@ export interface NativeSessionFile {
   stackedOn?: StackedOn;
   /** Parent/orchestrator session when this session was spawned as a visible worker sub-session. */
   parentSessionId?: string;
+  /** Started by a server-side agent action rather than a person's composer. */
+  agentStarted?: boolean;
   /** The session whose agent created this as an internal helper (see
    *  UnifiedSession.spawnedBy). Visible create_session results omit it. */
   spawnedBy?: string;

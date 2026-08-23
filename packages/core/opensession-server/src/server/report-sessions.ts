@@ -88,6 +88,7 @@ export async function startReportSessions(input: {
 				mode: "code",
 				branch,
 				isolatedWorktree: true,
+				agentStarted: true,
 				...(repo ? { repo } : {}),
 				...(input.user ? { user: input.user } : {}),
 			});

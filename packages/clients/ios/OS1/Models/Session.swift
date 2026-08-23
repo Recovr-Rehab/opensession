@@ -99,6 +99,10 @@ struct Session: Identifiable, Decodable, Equatable, Hashable {
     var startedBy: String?
     var createdBy: String?
     var createdByLogin: String?
+    /// Parent/orchestrator when this is a visible worker session.
+    var parentSessionId: String?
+    /// The opening turn came from a server-side action, not a person's composer.
+    var agentStarted: Bool?
     /// The session id of the run that started this one from inside itself
     /// (`create_session` in an agent's own turn). Set only for those: work the
     /// Desk delegates on a person's behalf is deliberately unmarked
@@ -132,6 +136,20 @@ struct Session: Identifiable, Decodable, Equatable, Hashable {
     /// the bulk of server noise a person's list should hide by default.
     var isAutomation: Bool {
         automation?.isAutomation ?? (startedBy?.hasSuffix("(automation)") ?? false)
+    }
+
+    /// The opening turn came from an agent action rather than a composer.
+    /// The branch/id fallbacks preserve this mark on older PR and report runs.
+    var wasAgentStarted: Bool {
+        agentStarted == true
+            || isAutomation
+            || parentSessionId?.isEmpty == false
+            || spawnedBy?.isEmpty == false
+            || id.hasPrefix("bks-ghpr-")
+            || (branch?.hasPrefix("report-") ?? false)
+            || [createdBy, startedBy].contains { name in
+                name?.trimmingCharacters(in: .whitespaces).lowercased() == "automation"
+            }
     }
 
     /// The ordinary user entries belong to this person when they carry no

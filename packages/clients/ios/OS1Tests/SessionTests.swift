@@ -474,6 +474,17 @@ final class SessionTests: XCTestCase {
         XCTAssertFalse(try session(#"{"id":"seven"}"#).isAutomation)
     }
 
+    func testAgentStartedAcceptsExplicitAndLegacyOrigins() throws {
+        XCTAssertTrue(try session(#"{"id":"report","agentStarted":true}"#).wasAgentStarted)
+        XCTAssertTrue(
+            try session(#"{"id":"legacy-report","branch":"report-fix-ios"}"#).wasAgentStarted
+        )
+        XCTAssertTrue(
+            try session(#"{"id":"child","parentSessionId":"parent"}"#).wasAgentStarted
+        )
+        XCTAssertFalse(try session(#"{"id":"manual"}"#).wasAgentStarted)
+    }
+
     func testTranscriptOwnerFallsBackToCreatedBy() throws {
         XCTAssertEqual(
             try session(#"{"id":"one","createdBy":"Michiel"}"#).transcriptOwner,

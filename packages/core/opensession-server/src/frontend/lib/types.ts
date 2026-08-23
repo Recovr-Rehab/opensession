@@ -415,6 +415,8 @@ export interface UnifiedSession {
 	workspaceName?: string;
 	/** Parent/orchestrator session when spawned as a worker sub-session. */
 	parentSessionId?: string;
+	/** Started by a server-side agent action rather than a person's composer. */
+	agentStarted?: boolean;
 	/** The session whose agent created this one through `create_session`, set
 	 *  even for a standalone create (which has no parentSessionId). An agent's
 	 *  own helper session belongs to that agent's run, so the sidebar leaves it

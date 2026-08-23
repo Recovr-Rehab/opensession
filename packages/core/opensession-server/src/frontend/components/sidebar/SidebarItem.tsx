@@ -19,7 +19,7 @@ import {
 	SIDEBAR_WS_DRAFT,
 } from "../../lib/sidebar-classes";
 import { isClaimed, mineStatus, pinnedLane, runNeedsAttention, stripPrTitlePrefix } from "../../lib/sidebar-lanes";
-import { sessionWasAutoCreated } from "../../lib/sidebar-placement";
+import { sessionWasAgentStarted } from "../../lib/sidebar-placement";
 import { LONG_PRESS_MS, LONG_PRESS_SLOP, SWIPE_AXIS_LOCK_PX, SWIPE_COMMIT_MS, SWIPE_OPEN_THRESHOLD, SWIPE_REVEAL_PX, clampSwipe, fullSwipeThreshold, swipeCommitOffset, type SwipeAction } from "../../lib/sidebar-swipe";
 import type { LaneChoice } from "../../lib/sidebar-types";
 import type { UnifiedSession } from "../../lib/types";
@@ -537,11 +537,9 @@ export function SidebarItem({
 						{stripPrTitlePrefix(session.title)}
 					</span>
 				)}
-				{/* Nobody started this one by hand. An automation RUN is a different
-				    concept with a band of its own, so it is not marked here. */}
-				{!editing && !session.automation && sessionWasAutoCreated(session) && (
-					<AutoCreatedMark />
-				)}
+				{/* Nobody started this one in a composer. The same quiet mark covers
+				    automation runs, report tasks, and sessions an agent minted itself. */}
+				{!editing && sessionWasAgentStarted(session) && <AutoCreatedMark />}
 				{/* Started somewhere else: a Slack thread, a Linear issue. Same slot
 				    and ink as the mark above, since both answer "where did this row
 				    come from" for a list that mixes origins. */}

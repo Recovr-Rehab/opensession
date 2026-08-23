@@ -853,6 +853,7 @@ function nativeSessionRow(data: NativeSessionFile): UnifiedSession {
     repoLess: data.repoLess || data.mode === "scratch" || undefined,
     workspaceId: data.workspaceId ?? null,
     parentSessionId: data.parentSessionId,
+    agentStarted: data.agentStarted,
     spawnedBy: data.spawnedBy,
     desk: data.desk,
     spawnDepth: data.spawnDepth,

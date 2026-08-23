@@ -587,6 +587,9 @@ export function archivedIndexRow(
 		...(s.archivedReason ? { archivedReason: s.archivedReason } : {}),
 		...(s.mode ? { mode: s.mode } : {}),
 		...(s.automation ? { automation: s.automation } : {}),
+		// Says the row came from an agent action rather than a person's composer.
+		// History and sidebar rows keep that origin visible after archival too.
+		...(s.agentStarted ? { agentStarted: true } : {}),
 		// Says the row is a worker rather than someone's own conversation.
 		// The history menu marks those, so a workspace whose archive is mostly
 		// review and worker runs still reads as a list of what PEOPLE closed.

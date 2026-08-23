@@ -180,6 +180,15 @@ describe("archivedIndexRow", () => {
 		});
 	});
 
+	test("keeps the agent-started marker the history and sidebar rows read", () => {
+		expect(
+			archivedIndexRow(archivedSession({ agentStarted: true })).agentStarted,
+		).toBe(true);
+		expect(archivedIndexRow(archivedSession())).not.toHaveProperty(
+			"agentStarted",
+		);
+	});
+
 	test("keeps the worker marker the history menu reads", () => {
 		// A workspace closes far more agent runs than conversations, and the
 		// menu marks them so the sessions people had still stand out.

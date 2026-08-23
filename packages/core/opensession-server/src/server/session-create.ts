@@ -266,6 +266,8 @@ export interface ResolvedCreate {
 	/** Workspace to rename once the generated title lands (minted by THIS create). */
 	autoNameWorkspace?: Workspace | null;
 	parentSessionId?: string;
+	/** Started by a server-side agent action rather than a person's composer. */
+	agentStarted?: boolean;
 	/** Agent that created this session (SessionData.spawnedBy). */
 	spawnedBy?: string;
 	reportBack?: boolean;
@@ -556,6 +558,7 @@ export async function openCreatedSession(
 				...(spec.parentSessionId
 					? { parentSessionId: spec.parentSessionId }
 					: {}),
+				...(spec.agentStarted ? { agentStarted: true } : {}),
 				...(spec.spawnedBy ? { spawnedBy: spec.spawnedBy } : {}),
 				// Persisted so the failure beacon (handoff-evidence.ts) can tell
 				// a worker that owes its parent a report from a child session

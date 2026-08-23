@@ -121,6 +121,8 @@ export interface CreateSessionOpts {
   isolatedWorktree?: boolean;
   /** Parent/orchestrator session id when this is a worker sub-session. */
   parentSessionId?: string;
+  /** Started by a server-side agent action rather than a person typing in a composer. */
+  agentStarted?: boolean;
   /**
    * The session whose agent issued an internal helper create. Visible
    * create_session results should omit this so they remain in the user's
