@@ -2,11 +2,13 @@
 
 import { z } from "zod";
 import { createSdkMcpServer, tool } from "./inprocess-mcp";
-import { getPreviewStatus, getSandboxPreviewStatus } from "./preview";
+import { getPreviewStatus, getSandboxPreviewStatus, sandboxPreviewIdentityContext } from "./preview";
 import { listPortalServices, listSandboxPortalServices, restartPortalService, restartSandboxPortalService, setPortalPath, setSandboxPortalPath, startPortalService, startSandboxPortalService, stopPortalService, stopSandboxPortalService } from "./portal-supervisor";
 import { listRunnerPortalServices, restartRunnerPortal, runnerPortalUrl, setRunnerPortalPath, startRunnerPortal, stopRunnerPortal } from "./runner-portals";
 import type { UnifiedSession } from "./types";
 import type { Sandbox } from "./sandbox/provider";
+import { createWorkloadIdentityEnv } from "./workload-identity";
+import { getRepo } from "./worktree";
 
 export interface PortalsMcpContext {
 	sessionId: string;
@@ -29,6 +31,14 @@ async function portalStatus(ctx: PortalsMcpContext, dir: string, sandbox: Sandbo
 	return sandbox ? getSandboxPreviewStatus(sandbox, dir, ctx.sessionId) : getPreviewStatus(dir);
 }
 
+function sandboxPortalEnv(ctx: PortalsMcpContext, sandbox: Sandbox): Record<string, string> {
+	const session = ctx.runner();
+	if (!session?.repo) return {};
+	return createWorkloadIdentityEnv(
+		sandboxPreviewIdentityContext(sandbox, getRepo(session.repo).id, "interactive"),
+	);
+}
+
 export function createPortalsMcpServer(ctx: PortalsMcpContext) {
 	return createSdkMcpServer({
 		name: "opensession-portals", version: "1.0.0", tools: [
@@ -45,7 +55,7 @@ export function createPortalsMcpServer(ctx: PortalsMcpContext) {
 					const sandbox = await ctx.sandbox({ wake: true });
 					if (!sandbox && ctx.hasSandbox()) return result("Could not start Portal: this session's Sandbox is unavailable.");
 					const portal = sandbox
-						? await startSandboxPortalService({ sessionId: ctx.sessionId, sandbox, ...args })
+						? await startSandboxPortalService({ sessionId: ctx.sessionId, sandbox, ...args, env: sandboxPortalEnv(ctx, sandbox) })
 						: await startPortalService({ sessionId: ctx.sessionId, worktreeDir: dir, ...args });
 					const status = await portalStatus(ctx, dir, sandbox);
 					const service = status.services.find((candidate) => candidate.key === portal.key);
@@ -97,7 +107,7 @@ export function createPortalsMcpServer(ctx: PortalsMcpContext) {
 					const sandbox = await ctx.sandbox({ wake: true });
 					if (!sandbox && ctx.hasSandbox()) return result("Could not restart Portal: this session's Sandbox is unavailable.");
 					const portal = sandbox
-						? await restartSandboxPortalService({ sessionId: ctx.sessionId, sandbox, name })
+						? await restartSandboxPortalService({ sessionId: ctx.sessionId, sandbox, name, env: sandboxPortalEnv(ctx, sandbox) })
 						: await restartPortalService({ sessionId: ctx.sessionId, worktreeDir: dir, name });
 					const status = await portalStatus(ctx, dir, sandbox);
 					return result(`${portal.name} restarted at ${status.services.find((candidate) => candidate.key === portal.key)?.previewUrl ?? "its authenticated Portal URL"}.`);
