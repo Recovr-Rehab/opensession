@@ -266,8 +266,8 @@ export function Settings({
 }: {
 	onBack: () => void;
 	/** Active section, derived from the route (tools have their own URLs).
-	 * Undefined = no explicit section: desktop defaults to Notifications, the
-	 * phone sheet shows its root list of sections. */
+	 * Undefined = no explicit section: desktop defaults to General, while the
+	 * phone sheet stays on its root list of sections. */
 	section?: SettingsSectionKey;
 	/** Navigate to a section — App maps tool keys to their own routes. */
 	onSelect: (key: SettingsSectionKey) => void;
@@ -319,10 +319,10 @@ export function Settings({
 			</MobileSettings>
 		);
 
-	// Default landing = the first non-tool row in the nav. Tool sections can't be
-	// the default: their panel arrives as `children`, which App only passes on a
-	// tool route, so a bare /settings would render an empty pane.
-	const active = visibleSection ?? "myAccounts";
+	// A bare /settings lands on the workspace's General page on desktop. Keep the
+	// section out of the URL so the same route can remain at the nav root on phones.
+	// General is admin-only, so members without access fall back to Account.
+	const active = visibleSection ?? (auth?.admin === false ? "myAccounts" : "general");
 	const shown = filterGroups(groups, query);
 	const firstHit = shown[0]?.hits[0]?.item;
 

@@ -155,7 +155,7 @@ export function OrganizationSwitcher({
 					</span>
 				</div>
 				<Menu.Separator />
-				<Menu.Item className={itemClass} onClick={() => onOpenSettings("general")}>
+				<Menu.Item className={itemClass} onClick={() => onOpenSettings()}>
 					<IconGear size={19} className={MENU_ICON} />
 					<span className="min-w-0 flex-1 truncate">Settings</span>
 				</Menu.Item>
