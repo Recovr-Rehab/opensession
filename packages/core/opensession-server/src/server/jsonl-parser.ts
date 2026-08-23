@@ -1158,16 +1158,41 @@ export function clampEntriesForWire(
   return entries.map((e) => clampEntryForWire(e, maxBytes));
 }
 
+/** Strip injected context from already-stored user entries. New parser output
+ * is clean before persistence, but old transcript-store rows can contain the
+ * pre-fence pinned-goal suffix. An injection-only row has no conversation to
+ * render; media-bearing rows stay so an attachment cannot disappear with it. */
+function stripStoredUserContext(entries: TranscriptEntry[]): TranscriptEntry[] {
+  let changed = false;
+  const shown: TranscriptEntry[] = [];
+  for (const entry of entries) {
+    if (entry.type !== "user") {
+      shown.push(entry);
+      continue;
+    }
+    const content = stripContext(entry.content);
+    if (content === entry.content) {
+      shown.push(entry);
+      continue;
+    }
+    changed = true;
+    if (content.trim() || entry.images?.length || entry.files?.length) {
+      shown.push({ ...entry, content });
+    }
+  }
+  return changed ? shown : entries;
+}
+
 /**
- * Everything a batch of entries needs before it leaves the server: classify
- * how each one reads (notices.ts), say what each tool call is
- * (tool-presentation.ts), then clamp what's left.
+ * Everything a batch of entries needs before it leaves the server: strip
+ * injected context, classify how each entry reads (notices.ts), say what each
+ * tool call is (tool-presentation.ts), then clamp what's left.
  *
- * That order is load-bearing. The classifier strips delivery plumbing —
- * sentinels, "[Name] " prefixes, the "💬 X answered" header — out of
- * `content`, so clamping afterwards measures the text a reader will actually
- * see. Classifying is also why history needs no migration: it runs on the way
- * out, over entries persisted long before any of these markers existed.
+ * That order is load-bearing. The context pass strips fenced and legacy
+ * injections; the classifier strips delivery plumbing such as "[Name] "
+ * prefixes and the "💬 X answered" header. Clamping afterwards therefore
+ * measures the text a reader will actually see. Running both on the way out is
+ * why history needs no migration, even for rows persisted before the markers.
  *
  * Use this at every send site; `clampEntriesForWire` alone would ship raw
  * plumbing to a client that no longer knows how to parse it.
@@ -1177,7 +1202,9 @@ export function entriesForWire(
   maxBytes: number = WIRE_CLAMP_BYTES
 ): TranscriptEntry[] {
   return clampEntriesForWire(
-    withToolPresentations(classifyEntries(dropContextInjections(entries))),
+    withToolPresentations(
+      classifyEntries(stripStoredUserContext(dropContextInjections(entries)))
+    ),
     maxBytes
   );
 }

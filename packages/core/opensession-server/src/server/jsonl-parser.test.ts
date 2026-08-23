@@ -3,6 +3,7 @@ import { mkdtempSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
+  entriesForWire,
   extractImageMarkers,
   extractImplicitMedia,
   extractVideoMarkers,
@@ -90,6 +91,36 @@ const BASIC_LINES = [
   toolResultLine("u2", "toolu_001", "file-a.txt\nfile-b.txt"),
   assistantLine("a2", "There are two files."),
 ];
+
+describe("entriesForWire", () => {
+  const pinnedGoal =
+    "[Pinned session goal — keep working toward it and note how this turn advanced it: Ship the stable sandbox flow.]";
+
+  it("removes legacy pinned goals from stored user messages", () => {
+    const [entry] = entriesForWire([
+      {
+        id: "legacy-user",
+        type: "user",
+        content: `What did Ramp report?\n\n${pinnedGoal}`,
+        timestamp: TS,
+      },
+    ]);
+    expect(entry.content).toBe("What did Ramp report?");
+  });
+
+  it("drops legacy goal-only user rows", () => {
+    expect(
+      entriesForWire([
+        {
+          id: "legacy-goal-only",
+          type: "user",
+          content: pinnedGoal,
+          timestamp: TS,
+        },
+      ]),
+    ).toEqual([]);
+  });
+});
 
 describe("parseTranscript", () => {
   it("parses basic user/assistant turns in order", () => {
