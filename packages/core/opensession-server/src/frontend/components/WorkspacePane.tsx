@@ -1002,6 +1002,7 @@ export function WorkspacePane({
 					page={reviewPage}
 					onPageChange={setReviewPage}
 					compactToolbar={reviewSummaryVisible}
+					flushToolbarTop={!tabStripVisible}
 				/>
 			</div>,
 		);

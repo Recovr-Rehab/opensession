@@ -26,6 +26,15 @@ test("top bars share structure while keeping feature layout classes", () => {
 	expect(html).toContain("Actions");
 });
 
+test("column hosts can stretch portaled top-bar rows", () => {
+	const html = renderToStaticMarkup(
+		<TopBar className="flex-col items-stretch">Hosted row</TopBar>,
+	);
+
+	expect(html).toContain("items-stretch");
+	expect(html).not.toContain("items-center");
+});
+
 test("floating controls reuse application mobile chrome", () => {
 	const html = renderToStaticMarkup(
 		<>

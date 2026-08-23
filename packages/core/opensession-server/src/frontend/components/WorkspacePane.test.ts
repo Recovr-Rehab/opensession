@@ -66,12 +66,16 @@ test("reviews with and without a PR share the floating toolbar", () => {
 	);
 
 	expect(
-		prPanelSource.match(/<ReviewToolbar compact=\{compactToolbar\}>/g)?.length,
+		prPanelSource.match(
+			/<ReviewToolbar compact=\{compactToolbar\} flushTop=\{flushToolbarTop\}>/g,
+		)?.length,
 	).toBe(2);
 	expect(prPanelSource).toContain(
-		"<ReviewToolbar compact={compactToolbar}>\n          <div className={PR_NO_PR_BAR}>",
+		"<ReviewToolbar compact={compactToolbar} flushTop={flushToolbarTop}>\n          <div className={PR_NO_PR_BAR}>",
 	);
-	expect(reviewToolbarSource).toContain("desktop:mt-2.5");
+	expect(reviewToolbarSource).toContain(
+		'flushTop ? "" : "desktop:mt-2.5"',
+	);
 	expect(reviewToolbarSource).toContain("desktop:mb-2");
 	expect(reviewToolbarSource).toContain("desktop:overflow-hidden");
 	expect(reviewToolbarSource).toContain("desktop:rounded-lg");
@@ -194,10 +198,12 @@ test("Review loading and errors stay centered beside the summary", () => {
 	expect(prPanelSource).toContain('className={reviewStateClass}\n          role="alert"');
 });
 
-test("a lone Review hides the tab strip and keeps New tab in the header", () => {
+test("a lone Review hides the tab strip, closes the toolbar gap, and keeps New tab in the header", () => {
 	expect(source).toContain("tabStripVisible: boolean");
 	expect(source).toContain("!tabStripVisible && onNewSession");
 	expect(source).toContain("tabStripVisible={tabStripVisible}");
+	expect(source).toContain("flushToolbarTop={!tabStripVisible}");
+	expect(viewerSource).toContain("flushToolbarTop={!tabStripVisible}");
 	expect(source).toContain('aria-label="New tab"');
 });
 

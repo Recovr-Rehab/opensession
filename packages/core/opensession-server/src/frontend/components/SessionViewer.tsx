@@ -7036,6 +7036,7 @@ export function SessionViewer({
 									linkable
 									walkthrough={session.walkthrough}
 									compactToolbar={summaryVisible}
+									flushToolbarTop={!tabStripVisible}
 								/>
 						</div>
 					) : (

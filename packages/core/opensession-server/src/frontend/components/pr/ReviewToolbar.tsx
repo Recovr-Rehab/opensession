@@ -10,9 +10,12 @@ import { WS_SUMMARY_REVIEW_BAR_CLEARANCE } from "../../lib/workspace-summary-cla
 export function ReviewToolbar({
   children,
   compact,
+  flushTop = false,
 }: {
   children: ReactNode;
   compact: boolean;
+  /** A lone workspace tab has no strip between the pane header and Review. */
+  flushTop?: boolean;
 }) {
   const placement = compact
     ? `sticky top-0 z-20 desktop:mb-0 desktop:ml-2 desktop:pb-2 ${WS_SUMMARY_REVIEW_BAR_CLEARANCE}`
@@ -22,7 +25,7 @@ export function ReviewToolbar({
     <>
       <div className={`relative shrink-0 bg-surface ${placement}`}>
         <div
-          className={`relative bg-surface desktop:mt-2.5 desktop:rounded-lg desktop:border desktop:border-line ${compact ? "desktop:overflow-hidden" : "desktop:overflow-visible"}`}
+          className={`relative bg-surface ${flushTop ? "" : "desktop:mt-2.5"} desktop:rounded-lg desktop:border desktop:border-line ${compact ? "desktop:overflow-hidden" : "desktop:overflow-visible"}`}
         >
           {children}
         </div>

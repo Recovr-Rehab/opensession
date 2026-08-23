@@ -172,7 +172,7 @@ export const SCROLL_EDGE_DIVIDER =
  *  `:has(+ .session-tabs)`: a split gives each column its own strip, nested a
  *  level down from this row. */
 export const DETAIL_TOPBAR =
-	`detail-topbar flex min-w-0 shrink-0 flex-col empty:hidden ${SCROLL_EDGE_DIVIDER} ` +
+	`detail-topbar flex min-w-0 shrink-0 flex-col items-stretch empty:hidden ${SCROLL_EDGE_DIVIDER} ` +
 	"[.detail-pane:has(.session-tabs)_&]:after:content-none";
 
 /**
