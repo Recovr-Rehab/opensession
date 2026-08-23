@@ -18,10 +18,11 @@ type RelayResponse = { status: number; headers: Record<string, string>; body?: s
 /** A browser can ask Turbopack for dozens of multi-megabyte chunks at once.
  * The outbound Portal rides one WebSocket, whose client-side send buffer drops
  * responses when all of those loopback fetches finish together. Keep fetches
- * concurrent, but well below the measured backpressure cliff (32 fails while
- * four is stable). This gate is per Portal connection, so sibling services
- * never block each other and normal API requests retain useful parallelism. */
-export function createRelayRequestLimiter(maxConcurrent = 4): RelayRequestLimiter {
+ * below the measured backpressure cliff. The compatibility sidecar sends each
+ * response as one WebSocket frame, so sustained multi-megabyte chunk bursts
+ * must be serialized. This gate is per Portal connection, so sibling services
+ * never block each other. */
+export function createRelayRequestLimiter(maxConcurrent = 1): RelayRequestLimiter {
 	if (!Number.isInteger(maxConcurrent) || maxConcurrent < 1) throw new Error("Portal relay concurrency must be positive");
 	let active = 0;
 	const waiters: Array<() => void> = [];
