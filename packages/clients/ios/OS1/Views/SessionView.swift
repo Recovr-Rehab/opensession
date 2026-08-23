@@ -1079,10 +1079,11 @@ struct SessionView: View {
                         WebIcon(kind: .robot, size: 15, color: OS1VisualStyle.textDim)
                             .accessibilityHidden(true)
                     }
-                    Text(identityTitle)
-                        .font(.callout.weight(.semibold))
+                    SingleLineFadeText(
+                        text: identityTitle,
+                        font: .callout.weight(.semibold)
+                    )
                         .foregroundStyle(OS1VisualStyle.text)
-                        .lineLimit(1)
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
                 if !dynamicTypeSize.isAccessibilitySize {
@@ -2732,12 +2733,10 @@ private struct SessionInputBar: View {
             }
 
             #if os(iOS)
-            // The keyboard gets this row back completely while you write.
-            // The bar folds toward the composer so its exit and return stay
-            // spatially tied to the field that caused them.
+            // Keep the actions with the composer inside the keyboard-adjusted
+            // safe-area bar, so they remain directly above an open keyboard.
             if hasActionBar {
                 SessionActionBar(
-                    hidden: inputFocused,
                     onArchive: onArchiveWorkspace,
                     onNewSession: onNewSession,
                     onNextChat: showNextChatButton ? onNextChat : nil,
@@ -2828,8 +2827,7 @@ private struct SessionInputBar: View {
             #if DEBUG && os(iOS)
             // Open with the keyboard up, for the same reason as the panel
             // hooks in `SessionView`: a headless capture host can tap
-            // nothing, so the focused state is only reachable this way. It
-            // is the state where the action bar is hidden.
+            // nothing, so the focused state is only reachable this way.
             if ProcessInfo.processInfo.environment["OS1_FOCUS_COMPOSER"] == "1" {
                 inputFocused = true
             }
