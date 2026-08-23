@@ -328,9 +328,11 @@ function AssetOverlayActionBar({
 	const name = file.path.split("/").pop() || "asset";
 	const commentable = assetPreviewKind(file.path) === "image";
 	const actionClass = cn(
-		"h-10 shrink-0 cursor-pointer rounded-full text-xs",
-		phone && "size-11 px-0 text-white/55 hover:bg-white/10 hover:text-white/80",
+		"shrink-0 cursor-pointer",
+		phone &&
+			"size-11 rounded-full px-0 text-xs text-white/55 hover:bg-white/10 hover:text-white/80",
 	);
+	const actionSize: "sm" | "md" = phone ? "sm" : "md";
 	const actionLabel = (label: string) => (phone ? null : label);
 
 	async function download() {
@@ -362,8 +364,8 @@ function AssetOverlayActionBar({
 			{commentable && (
 				<Button
 					variant="overlay"
-					size="sm"
-					icon={<IconMessage size={phone ? 24 : 15} />}
+					size={actionSize}
+					icon={<IconMessage size={phone ? 24 : 20} />}
 					className={actionClass}
 					aria-label={phone ? "Comment" : undefined}
 					onClick={() =>
@@ -389,8 +391,8 @@ function AssetOverlayActionBar({
 			{nativeShare ? (
 				<Button
 					variant="overlay"
-					size="sm"
-					icon={<IconArrowDown size={phone ? 24 : 15} />}
+					size={actionSize}
+					icon={<IconArrowDown size={phone ? 24 : 20} />}
 					className={actionClass}
 					aria-label={phone ? "Download" : undefined}
 					onClick={download}
@@ -400,8 +402,8 @@ function AssetOverlayActionBar({
 			) : (
 				<Button
 					variant="overlay"
-					size="sm"
-					icon={<IconArrowDown size={phone ? 24 : 15} />}
+					size={actionSize}
+					icon={<IconArrowDown size={phone ? 24 : 20} />}
 					className={actionClass}
 					aria-label={phone ? "Download" : undefined}
 					render={<a href={downloadUrl} />}
@@ -411,8 +413,8 @@ function AssetOverlayActionBar({
 			)}
 			<Button
 				variant="overlay"
-				size="sm"
-				icon={<IconLink size={phone ? 24 : 15} />}
+				size={actionSize}
+				icon={<IconLink size={phone ? 24 : 20} />}
 				className={actionClass}
 				aria-label={phone ? "Copy link" : undefined}
 				onClick={() =>
@@ -424,8 +426,8 @@ function AssetOverlayActionBar({
 			{onOpenAsTab ? (
 				<Button
 					variant="overlay"
-					size="sm"
-					icon={<IconArrowUpRight size={phone ? 24 : 15} />}
+					size={actionSize}
+					icon={<IconArrowUpRight size={phone ? 24 : 20} />}
 					className={actionClass}
 					aria-label={phone ? "Open" : undefined}
 					onClick={onOpenAsTab}
@@ -435,8 +437,8 @@ function AssetOverlayActionBar({
 			) : nativeShare ? (
 				<Button
 					variant="overlay"
-					size="sm"
-					icon={<IconArrowUpRight size={phone ? 24 : 15} />}
+					size={actionSize}
+					icon={<IconArrowUpRight size={phone ? 24 : 20} />}
 					className={actionClass}
 					aria-label={phone ? "Open or share" : undefined}
 					onClick={open}
@@ -446,8 +448,8 @@ function AssetOverlayActionBar({
 			) : (
 				<Button
 					variant="overlay"
-					size="sm"
-					icon={<IconArrowUpRight size={phone ? 24 : 15} />}
+					size={actionSize}
+					icon={<IconArrowUpRight size={phone ? 24 : 20} />}
 					className={actionClass}
 					aria-label={phone ? "Open" : undefined}
 					render={<a href={rawUrl} target="_blank" rel="noreferrer" />}

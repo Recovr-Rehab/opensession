@@ -1490,9 +1490,9 @@ function ZoomableMedia({
 // of dropping the dots entirely. Edge dots shrink to hint that more lie beyond.
 const MAX_VISIBLE_DOTS = 7;
 
-// Download / Open: quiet pills in the top action cluster, matching the asset
+// Download / Open: quiet buttons in the top action cluster, matching the asset
 // preview's separation between actions above and descriptions below.
-const lightboxAction = "h-10 shrink-0 cursor-pointer rounded-full text-xs";
+const lightboxAction = "shrink-0 cursor-pointer";
 
 const PREVIEW_LABEL: Record<LightboxItem["kind"], string> = {
 	image: "Image preview",
@@ -1930,8 +1930,8 @@ function MediaLightbox({
 					{commentable && (
 						<Button
 							variant="overlay"
-							size="sm"
-							icon={<IconMessage size={14} />}
+							size="md"
+							icon={<IconMessage size={20} />}
 							className={cn(
 								lightboxAction,
 								commenting && "bg-white/15 text-white",
@@ -1952,8 +1952,8 @@ function MediaLightbox({
 					{nativeShare ? (
 						<Button
 							variant="overlay"
-							size="sm"
-							icon={<IconArrowDown size={14} />}
+							size="md"
+							icon={<IconArrowDown size={20} />}
 							className={lightboxAction}
 							onClick={saveItem}
 							disabled={saving}
@@ -1964,8 +1964,8 @@ function MediaLightbox({
 					) : (
 						<Button
 							variant="overlay"
-							size="sm"
-							icon={<IconArrowDown size={14} />}
+							size="md"
+							icon={<IconArrowDown size={20} />}
 							className={lightboxAction}
 							aria-label="Download"
 							render={
@@ -1988,8 +1988,8 @@ function MediaLightbox({
 							    ticket, or a message to someone who can reach this instance. */}
 							<Button
 								variant="overlay"
-								size="sm"
-								icon={copied ? <IconCheck size={14} /> : <IconLink size={14} />}
+								size="md"
+								icon={copied ? <IconCheck size={20} /> : <IconLink size={20} />}
 								className={lightboxAction}
 								aria-label={copied ? "Link copied" : "Copy link"}
 								onClick={() =>
@@ -2003,8 +2003,8 @@ function MediaLightbox({
 							{nativeShare ? (
 								<Button
 									variant="overlay"
-									size="sm"
-									icon={<IconArrowUpRight size={14} />}
+									size="md"
+									icon={<IconArrowUpRight size={20} />}
 									className={lightboxAction}
 									onClick={openItem}
 									aria-label="Open or share"
@@ -2014,8 +2014,8 @@ function MediaLightbox({
 							) : (
 								<Button
 									variant="overlay"
-									size="sm"
-									icon={<IconArrowUpRight size={14} />}
+									size="md"
+									icon={<IconArrowUpRight size={20} />}
 									className={lightboxAction}
 									aria-label="Open"
 									render={
