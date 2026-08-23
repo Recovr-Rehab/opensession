@@ -107,7 +107,7 @@ const STRIP_RE =
 // user prompts. Keep those stored turns clean too, not only prompts created
 // after the fence migration.
 const LEGACY_PINNED_GOAL_RE =
-	/\n\n\[Pinned session goal — keep working toward it and note how this turn advanced it: [\s\S]*\]\s*$/;
+	/(?:^|\n\n)\[Pinned session goal — keep working toward it and note how this turn advanced it: [\s\S]*\]\s*$/;
 // A delivery attribution ("[Name] ", added when a prompt is handed to the
 // engine) with nothing left after the fence is stripped: the whole turn was
 // plumbing, so the prefix is all the transcript would carry. Left in, it

@@ -60,9 +60,12 @@ describe("prompt-context", () => {
   });
 
   it("strips legacy pinned-goal suffixes from stored user turns", () => {
-    const prompt =
-      "What did Ramp report?\n\n[Pinned session goal — keep working toward it and note how this turn advanced it: Ship the stable sandbox flow.]";
-    expect(stripContext(prompt)).toBe("What did Ramp report?");
+    const suffix =
+      "[Pinned session goal — keep working toward it and note how this turn advanced it: Ship the stable sandbox flow.]";
+    expect(stripContext(`What did Ramp report?\n\n${suffix}`)).toBe(
+      "What did Ramp report?",
+    );
+    expect(stripContext(suffix)).toBe("");
   });
 
   it("leaves plain text untouched", () => {
