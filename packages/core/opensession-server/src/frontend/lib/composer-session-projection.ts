@@ -4,7 +4,11 @@ import {
 	SESSION_PILL_MARGIN,
 	type SessionRange,
 } from "./composer-highlight";
-import { sessionTitleFor, workspaceTitleFor } from "./markdown";
+import {
+	sessionArchivedFor,
+	sessionTitleFor,
+	workspaceTitleFor,
+} from "./markdown";
 
 export interface DisplaySessionRange extends SessionRange {
 	canonicalStart: number;
@@ -66,6 +70,8 @@ export function projectComposerSessions(
 		const label = title
 			? (range.kind === "workspace" ? title : SESSION_GLYPH_SLOT + title)
 			: undefined;
+		const archived =
+			range.kind !== "workspace" && !!title && sessionArchivedFor(range.id);
 		const token = label ?? canonicalText.slice(range.start, range.end);
 		const leadingMargin = range.start > 0 ? SESSION_PILL_MARGIN : "";
 		const trailingMargin =
@@ -77,6 +83,7 @@ export function projectComposerSessions(
 			end: displayText.length,
 			id: range.id,
 			...(range.kind ? { kind: range.kind } : {}),
+			...(archived ? { archived: true } : {}),
 			canonicalStart: range.start,
 			canonicalEnd: range.end,
 			label,

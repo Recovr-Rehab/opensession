@@ -2,14 +2,18 @@ import { afterEach, beforeAll, describe, expect, it } from "bun:test";
 import {
   renderMarkdown,
   renderPrCommentMarkdown,
+  onSessionTitleResolutionRequested,
+  resetResolvedSessionTitles,
   setKnownPeople,
   setKnownRepos,
   setKnownPrStates,
+  setResolvedSessionTitles,
   setSessionTitles,
 } from "./markdown";
 
 afterEach(() => {
   setSessionTitles([]);
+  resetResolvedSessionTitles();
   setKnownRepos([]);
   setKnownPrStates([]);
 });
@@ -193,6 +197,55 @@ describe("session chip labels", () => {
     expect(renderMarkdown(`Delegated to \`${id}\`.`)).toContain(
       '<span class="session-link-label">Fix the sidebar hover states</span>',
     );
+  });
+
+  it("requests an unknown reference for on-demand resolution", async () => {
+    const requested: string[][] = [];
+    const unsubscribe = onSessionTitleResolutionRequested((ids) =>
+      requested.push(ids),
+    );
+    try {
+      renderMarkdown(`Delegated to \`${id}\`.`);
+      await Promise.resolve();
+      expect(requested).toEqual([[id]]);
+    } finally {
+      unsubscribe();
+    }
+  });
+
+  it("names archived references and replaces the conversation glyph", () => {
+    setResolvedSessionTitles([
+      {
+        requestedId: id,
+        title: "Fix the sidebar hover states",
+        archived: true,
+      },
+    ]);
+    const html = renderMarkdown(`Delegated to \`${id}\`.`);
+    expect(html).toContain(
+      '<span class="session-link-label">Fix the sidebar hover states</span>',
+    );
+    expect(html).toContain("data-session-archived");
+    expect(html).toContain('<rect x="4" y="4.75" width="16" height="4"');
+    expect(html).toContain(`(${id}) · archived`);
+  });
+
+  it("keeps the id fallback when the referenced session was deleted", async () => {
+    setResolvedSessionTitles([{ requestedId: id, title: null }]);
+    const requested: string[][] = [];
+    const unsubscribe = onSessionTitleResolutionRequested((ids) =>
+      requested.push(ids),
+    );
+    try {
+      const html = renderMarkdown(`Delegated to \`${id}\`.`);
+      await Promise.resolve();
+      expect(html).toContain(
+        '<span class="session-link-label">bks-019f24b5…</span>',
+      );
+      expect(requested).toEqual([]);
+    } finally {
+      unsubscribe();
+    }
   });
 
   it("corrects an id chip that mounted before titles arrived", () => {

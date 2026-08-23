@@ -136,6 +136,15 @@ describe("session ids in the mirror", () => {
 		);
 	});
 
+	test("an archived session uses the archived glyph class", () => {
+		const label = SESSION_GLYPH_SLOT + "Clean pasted session links";
+		expect(
+			composerHighlightHtml(label, [], [
+				{ start: 0, end: label.length, id: ID, label, archived: true },
+			]),
+		).toContain('class="cmp-session cmp-session-named cmp-archived"');
+	});
+
 	test("keeps projected margin outside the painted session pill", () => {
 		const label = SESSION_GLYPH_SLOT + "Clean pasted session links";
 		const shown = SESSION_PILL_MARGIN + label + SESSION_PILL_MARGIN;

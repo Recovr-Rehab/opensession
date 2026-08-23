@@ -213,14 +213,136 @@ interface SessionName {
    *  conversation a chip opens, and two chips into one workspace would
    *  otherwise be identical down to the tooltip. */
   tab?: string;
+  /** On-demand metadata carries this for references outside the live list. */
+  archived?: boolean;
 }
 let sessionTitles = new Map<string, SessionName>();
+/** Names resolved on demand for archived references. Kept separate because
+ *  each live-list poll replaces `sessionTitles` wholesale. */
+let resolvedSessionTitles = new Map<string, SessionName>();
+let unavailableSessionIds = new Set<string>();
+const queuedSessionTitleRequests = new Set<string>();
+const inFlightSessionTitleRequests = new Set<string>();
+const sessionTitleRequestListeners = new Set<(ids: string[]) => void>();
+let sessionTitleRequestFlushQueued = false;
 let workspaceTitles = new Map<string, string>();
 const sessionTitleListeners = new Set<() => void>();
 /** Sessions whose agent is mid-run, for the chip's live dot. */
 let runningSessions = new Set<string>();
 const SESSION_TITLE_MAX = 38;
 const SESSION_ID_SHORT = 12; // `os-019fb3ad2` / `bks-019fb3ad`
+
+function knownSessionName(id: string): SessionName | undefined {
+  return sessionTitles.get(id) ?? resolvedSessionTitles.get(id);
+}
+
+function flushSessionTitleRequests(): void {
+  sessionTitleRequestFlushQueued = false;
+  if (!queuedSessionTitleRequests.size || !sessionTitleRequestListeners.size)
+    return;
+  const ids = [...queuedSessionTitleRequests];
+  queuedSessionTitleRequests.clear();
+  for (const id of ids) inFlightSessionTitleRequests.add(id);
+  for (const listener of sessionTitleRequestListeners) listener(ids);
+}
+
+function queueSessionTitleRequest(id: string): void {
+  if (
+    knownSessionName(id) ||
+    unavailableSessionIds.has(id) ||
+    queuedSessionTitleRequests.has(id) ||
+    inFlightSessionTitleRequests.has(id)
+  )
+    return;
+  queuedSessionTitleRequests.add(id);
+  if (sessionTitleRequestFlushQueued) return;
+  sessionTitleRequestFlushQueued = true;
+  queueMicrotask(flushSessionTitleRequests);
+}
+
+/** Ask the app shell to resolve ids omitted from its deliberately live-only list. */
+export function onSessionTitleResolutionRequested(
+  listener: (ids: string[]) => void,
+): () => void {
+  sessionTitleRequestListeners.add(listener);
+  // A transcript can render before App's effect subscribes. Requeue any work a
+  // Strict Mode effect cleanup may also have left in flight.
+  for (const id of inFlightSessionTitleRequests) queuedSessionTitleRequests.add(id);
+  inFlightSessionTitleRequests.clear();
+  if (queuedSessionTitleRequests.size && !sessionTitleRequestFlushQueued) {
+    sessionTitleRequestFlushQueued = true;
+    queueMicrotask(flushSessionTitleRequests);
+  }
+  return () => sessionTitleRequestListeners.delete(listener);
+}
+
+export interface ResolvedSessionTitle {
+  requestedId: string;
+  /** Canonical id when the request used an alias. */
+  id?: string;
+  title?: string | null;
+  tabTitle?: string | null;
+  aliases?: readonly string[];
+  archived?: boolean;
+}
+
+/** Publish lightweight metadata fetched for references outside the live list.
+ *  A missing title marks a deleted/unknown id so it keeps the honest id label. */
+export function setResolvedSessionTitles(
+  entries: Iterable<ResolvedSessionTitle>,
+): void {
+  let changed = false;
+  for (const entry of entries) {
+    inFlightSessionTitleRequests.delete(entry.requestedId);
+    queuedSessionTitleRequests.delete(entry.requestedId);
+    const label = cleanSessionTitle(String(entry.title ?? "").trim());
+    if (!label) {
+      unavailableSessionIds.add(entry.requestedId);
+      continue;
+    }
+    const tab = cleanSessionTitle(String(entry.tabTitle ?? "").trim());
+    const name: SessionName = {
+      label,
+      ...(tab && tab !== label ? { tab } : {}),
+      ...(entry.archived ? { archived: true } : {}),
+    };
+    const ids = [entry.requestedId, entry.id, ...(entry.aliases ?? [])].filter(
+      (id): id is string => !!id,
+    );
+    for (const id of ids) {
+      unavailableSessionIds.delete(id);
+      const had = resolvedSessionTitles.get(id);
+      if (
+        !had ||
+        had.label !== name.label ||
+        had.tab !== name.tab ||
+        had.archived !== name.archived
+      ) {
+        resolvedSessionTitles.set(id, name);
+        changed = true;
+      }
+    }
+  }
+  if (!changed) return;
+  syncRenderedSessionTitles();
+  mdCache.clear();
+  for (const listener of sessionTitleListeners) listener();
+}
+
+/** A failed request may be attempted again on a later render. */
+export function retrySessionTitleResolution(id: string): void {
+  inFlightSessionTitleRequests.delete(id);
+}
+
+/** Test isolation for the module-level on-demand cache. */
+export function resetResolvedSessionTitles(): void {
+  resolvedSessionTitles = new Map();
+  unavailableSessionIds = new Set();
+  queuedSessionTitleRequests.clear();
+  inFlightSessionTitleRequests.clear();
+  sessionTitleRequestFlushQueued = false;
+  mdCache.clear();
+}
 
 /**
  * Register id → name (whether that session is running, and its own tab title
@@ -247,7 +369,13 @@ export function setSessionTitles(
     const tab = cleanSessionTitle(String(tabTitle ?? "").trim());
     const ids = [id, ...(aliases ?? [])].filter(Boolean);
     const name = { label, ...(tab && tab !== label ? { tab } : {}) };
-    if (label) for (const knownId of ids) next.set(knownId, name);
+    if (label)
+      for (const knownId of ids) {
+        next.set(knownId, name);
+        queuedSessionTitleRequests.delete(knownId);
+        inFlightSessionTitleRequests.delete(knownId);
+        unavailableSessionIds.delete(knownId);
+      }
     if (isRunning) for (const knownId of ids) running.add(knownId);
   }
   runningSessions = running;
@@ -400,11 +528,20 @@ function syncRenderedSessionTitles(): void {
     "a.session-link[data-session-id]",
   )) {
     const id = anchor.dataset.sessionId;
-    const title = id ? sessionTitles.get(id)?.label : undefined;
+    if (!id) continue;
+    const name = knownSessionName(id);
+    if (!name) {
+      queueSessionTitleRequest(id);
+      continue;
+    }
     const label = anchor.querySelector<HTMLElement>(".session-link-label");
-    if (!id || !title || !label) continue;
-    label.textContent = sessionLabel(title);
+    if (!label) continue;
+    label.textContent = sessionLabel(name.label);
     delete anchor.dataset.sessionLabel;
+    if (name.archived) anchor.dataset.sessionArchived = "";
+    else delete anchor.dataset.sessionArchived;
+    const icon = anchor.querySelector<HTMLElement>(".session-link-icon");
+    if (icon) icon.innerHTML = sessionIconSvg(name.archived);
     anchor.title = sessionTip(id);
   }
 }
@@ -414,7 +551,14 @@ function syncRenderedSessionTitles(): void {
  * the same registry, so a reference keeps one name before and after sending.
  */
 export function sessionTitleFor(id: string): string | undefined {
-  return sessionTitles.get(id)?.label;
+  const name = knownSessionName(id);
+  if (!name) queueSessionTitleRequest(id);
+  return name?.label;
+}
+
+/** Whether a resolved session reference points into archived history. */
+export function sessionArchivedFor(id: string): boolean {
+  return knownSessionName(id)?.archived === true;
 }
 
 /** The name shown for a stable workspace mention in a composer draft. */
@@ -432,15 +576,26 @@ export function shortSessionId(id: string): string {
     : `${id.slice(0, SESSION_ID_SHORT).replace(/-+$/, "")}…`;
 }
 
-// The chip's leading glyph: a conversation, because that is what opens when
-// you click it. Same 24-grid, 1.5 stroke and 18px box as the PR chip's branch
-// glyph, so the two chips sit on one line without either looking heavier.
-const SESSION_CHIP_ICON =
-  `<span class="session-link-icon" aria-hidden="true">` +
+// The chip's leading glyph names the destination state: a conversation for
+// live work, the shared archive crate for archived history. Same 24-grid, 1.5
+// stroke and 18px box as the PR chip's branch glyph.
+const SESSION_CONVERSATION_SVG =
   `<svg viewBox="0 0 24 24" fill="none"><path d="M6.75 5.25H17.25C18.3546 5.25` +
   ` 19.25 6.14543 19.25 7.25V14.25C19.25 15.3546 18.3546 16.25 17.25 16.25H11.25` +
   `L7.25 19.25V16.25H6.75C5.64543 16.25 4.75 15.3546 4.75 14.25V7.25C4.75 6.14543` +
-  ` 5.64543 5.25 6.75 5.25Z"/></svg></span>`;
+  ` 5.64543 5.25 6.75 5.25Z"/></svg>`;
+const SESSION_ARCHIVE_SVG =
+  `<svg viewBox="0 0 24 24" fill="none"><rect x="4" y="4.75" width="16" height="4" rx="1"/>` +
+  `<path d="M5.5 8.75V17.25C5.5 18.3546 6.39543 19.25 7.5 19.25H16.5C17.6046` +
+  ` 19.25 18.5 18.3546 18.5 17.25V8.75"/><path d="M10 12.25H14"/></svg>`;
+
+function sessionIconSvg(archived?: boolean): string {
+  return archived ? SESSION_ARCHIVE_SVG : SESSION_CONVERSATION_SVG;
+}
+
+function sessionChipIcon(archived?: boolean): string {
+  return `<span class="session-link-icon" aria-hidden="true">${sessionIconSvg(archived)}</span>`;
+}
 
 /**
  * The chip markup shared by both ways a session reference is written: a bare
@@ -450,7 +605,7 @@ const SESSION_CHIP_ICON =
 function sessionChip(
   id: string,
   label: string,
-  opts: { href?: string; tip?: string; idLabel?: boolean },
+  opts: { href?: string; tip?: string; idLabel?: boolean; archived?: boolean },
 ): string {
   // With an href it's a real link (cmd/middle-click open a tab); without one
   // the delegated click handler is the only way in, so it needs the button role
@@ -461,11 +616,12 @@ function sessionChip(
   return (
     `<a ${anchor}class="session-link" data-session-id="${attr(id)}"` +
     `${opts.idLabel ? ' data-session-label="id"' : ""}` +
+    `${opts.archived ? " data-session-archived" : ""}` +
     // Baked from the current set so a fresh chip is right on first paint;
     // syncRenderedSessionRuns corrects it from then on.
     `${runningSessions.has(id) ? " data-session-running" : ""}` +
     `${opts.tip ? ` title="${attr(opts.tip)}"` : ""}>` +
-    `${SESSION_CHIP_ICON}<span class="session-link-label">${label}</span></a>`
+    `${sessionChipIcon(opts.archived)}<span class="session-link-label">${label}</span></a>`
   );
 }
 
@@ -476,12 +632,18 @@ function sessionLabel(title: string): string {
 }
 
 function sessionLink(id: string, href?: string): string {
-  const title = sessionTitles.get(id)?.label;
-  const label = title ? sessionLabel(title) : shortSessionId(id);
+  const name = knownSessionName(id);
+  if (!name) queueSessionTitleRequest(id);
+  const label = name ? sessionLabel(name.label) : shortSessionId(id);
   // The label is lossy either way (truncated title, abbreviated id), so the
   // full id always stays in the tooltip. data-session-label marks the id
   // fallback for the monospace treatment.
-  return sessionChip(id, attr(label), { href, tip: sessionTip(id), idLabel: !title });
+  return sessionChip(id, attr(label), {
+    href,
+    tip: sessionTip(id),
+    idLabel: !name,
+    archived: name?.archived,
+  });
 }
 
 const AUTOMATION_CHIP_ICON =
@@ -504,11 +666,15 @@ function automationChip(id: string, label?: string, href?: string): string {
  *  The label names the workspace, so the session's own title goes here when it
  *  differs. That is the only thing separating two chips into one workspace. */
 function sessionTip(id: string): string {
-  const name = sessionTitles.get(id);
-  const running = runningSessions.has(id) ? " · running" : "";
-  if (!name) return `Open session ${id}${running}`;
+  const name = knownSessionName(id);
+  const status = runningSessions.has(id)
+    ? " · running"
+    : name?.archived
+      ? " · archived"
+      : "";
+  if (!name) return `Open session ${id}${status}`;
   const tab = name.tab ? ` · ${name.tab}` : "";
-  return `Open ${name.label}${tab} (${id})${running}`;
+  return `Open ${name.label}${tab} (${id})${status}`;
 }
 
 // Agents write pull requests the GitHub way — a bare `#5528`, sometimes

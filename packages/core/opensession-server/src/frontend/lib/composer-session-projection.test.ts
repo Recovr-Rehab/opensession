@@ -1,5 +1,10 @@
 import { beforeEach, describe, expect, test } from "bun:test";
-import { setSessionTitles, setWorkspaceTitles } from "./markdown";
+import {
+	resetResolvedSessionTitles,
+	setResolvedSessionTitles,
+	setSessionTitles,
+	setWorkspaceTitles,
+} from "./markdown";
 import {
 	SESSION_GLYPH_SLOT,
 	SESSION_PILL_MARGIN,
@@ -17,6 +22,7 @@ const WORKSPACE_ID = "ws-28712580-a369-4d58-996b-f8c23e523ed1";
 
 describe("composer session projection", () => {
 	beforeEach(() => {
+		resetResolvedSessionTitles();
 		setSessionTitles([[ID, "Clean pasted session links"]]);
 		setWorkspaceTitles([[WORKSPACE_ID, "Release planning"]]);
 	});
@@ -38,6 +44,19 @@ describe("composer session projection", () => {
 				label,
 			},
 		]);
+	});
+
+	test("marks an on-demand archived title for the archive glyph", () => {
+		setSessionTitles([]);
+		setResolvedSessionTitles([
+			{ requestedId: ID, title: "Clean pasted session links", archived: true },
+		]);
+		const projected = projectComposerSessions(ID);
+		expect(projected.sessions[0]).toMatchObject({
+			id: ID,
+			label: `${SESSION_GLYPH_SLOT}Clean pasted session links`,
+			archived: true,
+		});
 	});
 
 	test("keeps edits outside a token in canonical text", () => {

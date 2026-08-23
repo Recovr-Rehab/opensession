@@ -98,6 +98,8 @@ export interface SessionRange {
 	kind?: "session" | "workspace";
 	/** Visible title when the textarea is projecting this id as a named token. */
 	label?: string;
+	/** The resolved session is archived, so its glyph names that state. */
+	archived?: boolean;
 }
 
 /**
@@ -223,7 +225,7 @@ function sessionHtml(text: string, range: SessionRange): string {
 			: 0;
 		return (
 			before +
-			`<span class="cmp-session cmp-session-named${range.kind === "workspace" ? " cmp-workspace" : ""}">` +
+			`<span class="cmp-session cmp-session-named${range.kind === "workspace" ? " cmp-workspace" : ""}${range.archived ? " cmp-archived" : ""}">` +
 			(slot ? `<span class="cmp-sglyph">${esc(token.slice(0, slot))}</span>` : "") +
 			`${esc(token.slice(slot))}</span>` +
 			after
