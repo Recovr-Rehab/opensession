@@ -1275,7 +1275,10 @@ struct SessionView: View {
             showingEmptyContent ? .top : .bottom,
             for: .sizeChanges
         )
-        .scrollDismissesKeyboardCompat()
+        // Keep the composer anchored above an open keyboard while the reader
+        // scrolls. Interactive dismissal drags both down and can park the
+        // composer partly outside the viewport.
+        .scrollKeepsKeyboardPresentedCompat()
         .scrollPosition($scrollPosition)
     }
 
