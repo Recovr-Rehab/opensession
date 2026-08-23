@@ -316,10 +316,12 @@ function Header({
 			{/* `font-normal` is load-bearing, not decoration: base.css runs the app
 			    at weight 500, so a description that merely drops `font-medium`
 			    still renders at the field labels' exact size, weight and colour.
-			    `-mt-2.5` is the shell's `gap-4` minus the 6px this line has always
-			    sat below the title. */}
+			    The header's -mb-3 already reclaims 12px of the shell's gap. Pulling
+			    this line back only 2px leaves it 2px below the sticky bar's painted
+			    edge; the old -mt-2.5 moved its first 6px behind that opaque bar and
+			    clipped the tops of every standard modal description. */}
 			{description && (
-				<BaseDialog.Description className="m-0 -mt-2.5 text-pretty text-supporting font-normal leading-relaxed text-dim">
+				<BaseDialog.Description className="m-0 -mt-0.5 text-pretty text-supporting font-normal leading-relaxed text-dim">
 					{description}
 				</BaseDialog.Description>
 			)}
