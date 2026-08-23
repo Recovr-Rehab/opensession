@@ -32,10 +32,15 @@ import { useSidePanel } from "../hooks/useSidePanel";
 import {
 	IconArrowUpToLine,
 	IconChevronRight,
+	IconDotsHorizontal,
+	IconLink,
+	IconPencil,
 	IconPlus,
 	IconSidebarRight,
 } from "./icons";
 import { Button } from "../ui/button";
+import { Menu, MENU_ICON } from "../ui/menu";
+import { CopyCheck, useCopy } from "../ui/copy";
 import { Tooltip } from "../ui/tooltip";
 import { cn } from "../ui/cn";
 import {
@@ -45,8 +50,11 @@ import {
 } from "../lib/session-panel-classes";
 import {
 	VIEWER_BRANCH,
+	VIEWER_BRANCH_EDITABLE,
+	VIEWER_BRANCH_RENAME,
 	VIEWER_HEADER,
 	VIEWER_HEADER_ACTIONS,
+	VIEWER_OVERFLOW,
 	VIEWER_TITLE,
 } from "../lib/session-viewer-classes";
 import { loadDraft, saveDraft, clearDraft, workspaceDraftKey } from "../lib/drafts";
@@ -110,6 +118,11 @@ interface Props {
 	    the same row a session's header uses, so the chrome doesn't change shape
 	    when a workspace has no session yet. */
 	topbarEl?: HTMLElement | null;
+	/** The phone top bar's trailing slot. The same workspace menu used in the
+	    desktop title cluster portals here so both widths expose one menu. */
+	headerActionsEl?: HTMLElement | null;
+	/** Rename from the shared workspace menu or by double-clicking the title. */
+	onRenameWorkspace?: (name: string) => void | Promise<void>;
 	/** The app's right-column slot — see the header note; the info panel portals
 	    in here so it is a full-height column rather than a box below the tabs. */
 	rightPanelEl?: HTMLElement | null;
@@ -151,6 +164,8 @@ export function WorkspacePane({
 	tabStripVisible,
 	onNewSession,
 	topbarEl,
+	headerActionsEl,
+	onRenameWorkspace,
 	rightPanelEl,
 }: Props) {
 	const draftKey = workspaceDraftKey(workspace.id);
@@ -169,6 +184,9 @@ export function WorkspacePane({
 	const [staging, setStaging] = useState(NOTHING_STAGING);
 	const [fileDragActive, setFileDragActive] = useState(false);
 	const fileDragWatchdogRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+	const [overflowOpen, setOverflowOpen] = useState(false);
+	const [renameDraft, setRenameDraft] = useState<string | null>(null);
+	const workspaceCopy = useCopy();
 	const currentUser = useCurrentUser();
 	// Only a workspace that mounted with a server draft gets autosaved back to
 	// it. Keep that ownership for this mount after the text is cleared, so typing
@@ -564,6 +582,73 @@ export function WorkspacePane({
 		reviewSummaryHasRoom &&
 		!panelOpen &&
 		!isPhone;
+
+	function commitWorkspaceRename() {
+		const name = renameDraft?.trim();
+		setRenameDraft(null);
+		if (name && name !== workspace.name) void onRenameWorkspace?.(name);
+	}
+
+	// One workspace menu, placed in the title cluster on desktop and portaled
+	// into the phone's trailing nav slot. Its trigger is the same Button/Menu
+	// composition as SessionViewer's ⋯, so the bar does not change controls when
+	// the foreground tab changes from a session to a workspace-wide pane.
+	const workspaceMenu = (
+		<Menu.Root open={overflowOpen} onOpenChange={setOverflowOpen}>
+			<div className={VIEWER_OVERFLOW}>
+				<Menu.Trigger
+					render={
+						<Button
+							variant="ghost"
+							size="md"
+							icon={<IconDotsHorizontal size={22} />}
+						/>
+					}
+					className={cn(
+						"[corner-shape:squircle]",
+						isPhone &&
+							"size-11 min-h-11 rounded-control border-transparent text-dim shadow-none [corner-shape:squircle]",
+						overflowOpen && "bg-hover text-fg",
+					)}
+					title="More actions"
+					aria-label="More actions"
+				/>
+				<Menu.Popup
+					align={isPhone ? "end" : "start"}
+					sideOffset={6}
+					className="min-w-[240px] max-w-[min(300px,calc(100vw-24px))]"
+				>
+					{onRenameWorkspace && (
+						<Menu.Item onClick={() => setRenameDraft(workspace.name)}>
+							<IconPencil size={20} className={MENU_ICON} />
+							<span className="grow">Rename workspace</span>
+						</Menu.Item>
+					)}
+					<Menu.Item onClick={() => workspaceCopy.copy(window.location.href)}>
+						<CopyCheck
+							copied={workspaceCopy.copied}
+							idle={<IconLink size={20} />}
+							size={20}
+							className={MENU_ICON}
+						/>
+						<span className="grow">
+							{workspaceCopy.copied ? "Copied" : "Share"}
+						</span>
+					</Menu.Item>
+					{onNewSession && (
+						<>
+							<Menu.Separator />
+							<Menu.Item onClick={() => onNewSession()}>
+								<IconPlus size={20} className={MENU_ICON} />
+								<span className="grow">New session in workspace</span>
+							</Menu.Item>
+						</>
+					)}
+				</Menu.Popup>
+			</div>
+		</Menu.Root>
+	);
+
 	const header = !isPhone && (
 		<div ref={headerRef} className={VIEWER_HEADER}>
 			<div className={VIEWER_TITLE}>
@@ -582,7 +667,41 @@ export function WorkspacePane({
 						aria-hidden="true"
 					/>
 				)}
-				<span className={VIEWER_BRANCH}>{workspace.name}</span>
+				{renameDraft !== null ? (
+					<input
+						className={VIEWER_BRANCH_RENAME}
+						value={renameDraft}
+						autoFocus
+						onChange={(event) => setRenameDraft(event.target.value)}
+						onFocus={(event) => event.target.select()}
+						onBlur={commitWorkspaceRename}
+						onKeyDown={(event) => {
+							if (event.key === "Enter") commitWorkspaceRename();
+							else if (event.key === "Escape") setRenameDraft(null);
+							event.stopPropagation();
+						}}
+					/>
+				) : (
+					<span
+						className={cn(
+							VIEWER_BRANCH,
+							onRenameWorkspace && VIEWER_BRANCH_EDITABLE,
+						)}
+						title={
+							onRenameWorkspace
+								? `${workspace.name} · double-click to rename`
+								: workspace.name
+						}
+						onDoubleClick={
+							onRenameWorkspace
+								? () => setRenameDraft(workspace.name)
+								: undefined
+						}
+					>
+						{workspace.name}
+					</span>
+				)}
+				{workspaceMenu}
 				{!tabStripVisible && onNewSession && (
 					<Tooltip label="New tab in this workspace">
 						<Button
@@ -653,6 +772,9 @@ export function WorkspacePane({
 	const withPanel = (main: React.ReactNode) => (
 		<MarkdownRepoProvider repo={workspace.repo}>
 			{topbarEl && header ? createPortal(header, topbarEl) : null}
+			{isPhone && headerActionsEl
+				? createPortal(workspaceMenu, headerActionsEl)
+				: null}
 			<div className="flex h-full min-h-0">
 				<div className="flex-1 min-w-0 min-h-0">{main}</div>
 			</div>

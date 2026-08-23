@@ -5548,6 +5548,15 @@ export function App(
 									addHandler={addHandler}
 									onOpenSession={openSession}
 									topbarEl={topbarEl}
+									headerActionsEl={headerActionsEl}
+									onRenameWorkspace={async (name) => {
+										try {
+											await updateWorkspaceApi(routeWorkspace.id, { name });
+										} catch (error) {
+											console.error("Rename workspace failed:", error);
+										}
+										refreshWorkspaces();
+									}}
 									rightPanelEl={rightPanelEl}
 								/>
 							) : workspacesLoaded ? (
