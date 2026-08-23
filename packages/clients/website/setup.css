@@ -209,7 +209,6 @@
 	box-shadow:
 		inset 0 1px 0 rgba(255, 255, 255, 0.52),
 		0 18px 46px -36px rgba(18, 128, 207, 0.48);
-	backdrop-filter: blur(18px);
 }
 
 .setup-server-list-panel {
@@ -1367,7 +1366,6 @@ a.setup-download-card:hover {
 @keyframes setup-options-panel-enter {
 	from {
 		opacity: 0;
-		filter: blur(4px);
 		transform: translateX(14px) scale(0.985);
 	}
 }
