@@ -77,6 +77,15 @@ export async function sealRemoteRepoTemplate(
   if (origin.exitCode !== 0 || /https?:\/\/[^/\s]+@/i.test(origin.stdout)) {
     throw new Error(`refusing to snapshot ${repo.id}: clone authority was not scrubbed`);
   }
+  const dirty = await driver.exec("git status --porcelain --untracked-files=no", {
+    cwd: warmDir,
+  });
+  if (dirty.exitCode !== 0 || dirty.stdout.trim()) {
+    throw new Error(
+      `refusing to snapshot ${repo.id}: setup changed tracked project files` +
+        (dirty.stdout.trim() ? ` (${dirty.stdout.trim().split("\\n").slice(0, 5).join(", ")})` : ""),
+    );
+  }
   const sensitive = await driver.exec(
     "for f in " +
       [

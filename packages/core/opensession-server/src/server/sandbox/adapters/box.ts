@@ -259,21 +259,24 @@ async function waitForLive(
 ): Promise<void> {
   const deadline = Date.now() + deadlineMs;
   let last = "";
+  let resumeRequested = false;
   while (Date.now() < deadline) {
     const box = await getBox(cfg, boxId);
     if (!box) throw new Error(`box ${boxId} is gone`);
     last = String(box.state || "");
     if (LIVE_STATES.has(last)) return;
     if (last === "error") throw new Error(`box ${boxId} is in error state`);
-    if (last === "archived") {
+    if (last === "archived" && !resumeRequested) {
+      resumeRequested = true;
       try {
         await boxApi(cfg, "POST", `/boxes/${boxId}/resume`, {
           noEnv: true,
           ttlSeconds: idleTtlSeconds(),
         });
       } catch (e) {
-        // Racing resumes 4xx — the state poll below decides.
-        console.warn(`[sandbox:box] resume(${boxId}) failed (will re-poll):`, e);
+        // The response may be lost after Box accepted the wake. Never turn one
+        // follow-up into dozens of start-counting resume requests.
+        console.warn(`[sandbox:box] resume(${boxId}) failed (will only poll):`, e);
       }
     }
     await sleep(3_000);
@@ -384,6 +387,7 @@ export function boxDriver(cfg: BoxClientConfig, boxId: string): RemoteDriver {
   const waitForCommandPlane = async () => {
     const deadline = Date.now() + 90_000;
     let last: unknown;
+    let resumeRequested = false;
     while (Date.now() < deadline) {
       try {
         const probe = await boxApi<BoxCommandResponse>(
@@ -407,13 +411,15 @@ export function boxDriver(cfg: BoxClientConfig, boxId: string): RemoteDriver {
       } catch (error) {
         last = error;
         if (!boxCommandPlaneUnavailable(error)) throw error;
-        // A Box can briefly report `idle` while its restored VM is still
-        // bringing the command service online. Resume is idempotent here;
-        // only the explicit 409 proves no user command has run.
-        try {
-          await boxApi(cfg, "POST", `/boxes/${boxId}/resume`, { noEnv: true }, 30_000);
-        } catch (resumeError) {
-          if (!boxCommandPlaneUnavailable(resumeError)) throw resumeError;
+        // Resume consumes the provider's daily start quota even when repeated
+        // for the same archived Box. Request it once, then readiness-poll only.
+        if (!resumeRequested) {
+          resumeRequested = true;
+          try {
+            await boxApi(cfg, "POST", `/boxes/${boxId}/resume`, { noEnv: true }, 30_000);
+          } catch (resumeError) {
+            if (!boxCommandPlaneUnavailable(resumeError)) throw resumeError;
+          }
         }
         await sleep(POLL_INTERVAL_MS);
       }
@@ -718,7 +724,7 @@ export class BoxProvider implements SandboxProvider {
       try {
         created = await create(template?.artifactId);
       } catch (error) {
-        if (!template) throw error;
+        if (!template || !isNotFound(error)) throw error;
         invalidateRemoteRepoTemplate("box", repo.id);
         console.warn(
           `[sandbox:box] repo template ${template.artifactId} is unavailable; retrying cold`,
@@ -1057,7 +1063,7 @@ export const boxPrewarmAdapter: PrewarmAdapter = {
     try {
       response = await create(template?.artifactId);
     } catch (error) {
-      if (!template) throw error;
+      if (!template || !isNotFound(error)) throw error;
       invalidateRemoteRepoTemplate("box", repoId);
       restoredFromTemplate = false;
       response = await create();

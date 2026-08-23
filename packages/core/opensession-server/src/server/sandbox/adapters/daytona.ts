@@ -476,9 +476,10 @@ export class DaytonaProvider implements SandboxProvider {
         sbx = await create(template?.artifactId || cfg.daytona?.snapshot);
         preparedWorkspace = Boolean(template);
       } catch (error) {
-        if (!template) throw error;
+        if (!template || !daytonaNotFound(error)) throw error;
         // Provider artifacts can be deleted independently of the local index.
-        // Drop the stale mapping and retry the configured base snapshot once.
+        // Drop only a confirmed-missing mapping. A timeout, conflict, or rate
+        // limit must not destroy a valid fleet-wide fast path.
         invalidateRemoteRepoTemplate("daytona", repo.id);
         console.warn(
           `[sandbox:daytona] repo template ${template.artifactId} is unavailable; retrying cold`,
@@ -662,7 +663,7 @@ export const daytonaPrewarmAdapter: PrewarmAdapter = {
     try {
       sbx = await create(template?.artifactId || cfg.daytona?.snapshot);
     } catch (error) {
-      if (!template) throw error;
+      if (!template || !daytonaNotFound(error)) throw error;
       invalidateRemoteRepoTemplate("daytona", repoId);
       restoredFromTemplate = false;
       sbx = await create(cfg.daytona?.snapshot);

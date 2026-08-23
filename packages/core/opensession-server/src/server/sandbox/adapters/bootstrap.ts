@@ -967,7 +967,7 @@ export async function bootstrapRemoteSandbox(
 
   log("bun install (this is the slow part — several minutes cold)…");
   need(
-    await driver.exec(`cd ${REMOTE_REPO} && HOME=${REMOTE_HOME} ${REMOTE_BUN} install`, {
+    await driver.exec(`cd ${REMOTE_REPO} && HOME=${REMOTE_HOME} ${REMOTE_BUN} install --frozen-lockfile`, {
       timeoutMs: 900_000,
     }),
     "bun install of the runner bundle",
@@ -1204,7 +1204,7 @@ export async function warmRemoteWorkspace(
   const bunEnv = `HOME=${REMOTE_HOME} PATH=${shellQuoteWord(REMOTE_PATH)}`;
   const deps = repo.depsInstall
     ? `cd ${shellQuoteWord(dir)} && ${bunEnv} sh -c ${shellQuoteWord(repo.depsInstall)}`
-    : `cd ${shellQuoteWord(dir)} && ${bunEnv} sh -c 'if [ -f package.json ]; then ${REMOTE_BUN} install; fi'`;
+    : `cd ${shellQuoteWord(dir)} && ${bunEnv} sh -c 'if [ -f package.json ]; then ${REMOTE_BUN} install --frozen-lockfile; fi'`;
   log("installing deps…");
   const r = await driver.exec(deps, { timeoutMs: 900_000 });
   if (r.exitCode !== 0) {
