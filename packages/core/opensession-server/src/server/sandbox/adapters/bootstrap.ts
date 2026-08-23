@@ -1228,8 +1228,11 @@ export async function scrubRemoteWarmWorkspaceAuthority(
   const safeOrigin = repo.ghRepo
     ? `https://github.com/${repo.ghRepo}.git`
     : "https://invalid.invalid/opensession-credential-scrubbed.git";
+  // Also drop any stale git lock files so a snapshot published after an
+  // interrupted git operation cannot poison every sandbox restored from it
+  // ("index.lock: File exists" on the next refresh).
   const scrubbed = await driver.exec(
-    `git remote set-url origin ${shellQuoteWord(safeOrigin)}`,
+    `find .git -name "*.lock" -type f -delete 2>/dev/null; git remote set-url origin ${shellQuoteWord(safeOrigin)}`,
     { cwd: dir },
   );
   if (scrubbed.exitCode !== 0) {
