@@ -3468,12 +3468,12 @@ private struct SessionInputBar: View {
                 #endif
         }
         #if os(iOS)
-        // Match the web phone composer's quiet edge: 35% of the semantic
-        // border at a half-point, enough to hold the white shape without
-        // competing with the Liquid Glass actions above it.
+        // Keep the web phone composer's quiet half-point edge, with enough
+        // semantic-border contrast to hold the white shape against the canvas
+        // without competing with the Liquid Glass actions above it.
         .overlay {
             composerShape.strokeBorder(
-                OS1VisualStyle.border.opacity(0.35),
+                OS1VisualStyle.border.opacity(0.5),
                 lineWidth: 0.5
             )
         }
