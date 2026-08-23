@@ -4,8 +4,10 @@ import { APP_LOGO_STATUS } from "../lib/app-header-classes";
 import { BASE_PATH } from "../lib/base";
 import { SIDEBAR_RAIL_GAP } from "../lib/sidebar-classes";
 import { Button } from "../ui/button";
+import { Field, Input } from "../ui/input";
 import { Menu, MENU_ICON } from "../ui/menu";
 import { Modal } from "../ui/modal";
+import { InlineAlert } from "../ui/state";
 import { toast } from "../ui/toast";
 import { IconTile } from "./BrandTile";
 import { setupRequest } from "./setup-shared";
@@ -32,10 +34,18 @@ type OrganizationList = {
 	accounts: OrganizationAccount[];
 };
 
+type AddOrganizationResult = {
+	ok: boolean;
+	error?: string;
+	canAddAnyway?: boolean;
+	url?: string;
+};
+
 type OrganizationBridge = {
+	inlineAdd?: boolean;
 	list?: () => Promise<OrganizationList | null>;
 	switch?: (id: string) => void;
-	add?: () => void;
+	add?: (url: string, check?: boolean) => Promise<AddOrganizationResult>;
 	manage?: () => void;
 };
 
@@ -63,6 +73,11 @@ export function OrganizationSwitcher({
 	]);
 	const [activeId, setActiveId] = useState(fallbackId);
 	const [memberCount, setMemberCount] = useState<number | null>(null);
+	const [addOpen, setAddOpen] = useState(false);
+	const [serverAddress, setServerAddress] = useState("");
+	const [addError, setAddError] = useState<string | null>(null);
+	const [canAddAnyway, setCanAddAnyway] = useState(false);
+	const [adding, setAdding] = useState(false);
 	const [inviteOpen, setInviteOpen] = useState(false);
 	const [invitedLogin, setInvitedLogin] = useState<string | null>(null);
 	const [copied, setCopied] = useState(false);
@@ -84,6 +99,33 @@ export function OrganizationSwitcher({
 	const subtitle = `${status}${memberCount === null ? "" : ` · ${memberCount} ${memberCount === 1 ? "member" : "members"}`}`;
 	const itemClass = "phone:min-h-11";
 	const organizationUrl = `${window.location.origin}${BASE_PATH}/`;
+
+	function openAddOrganization() {
+		setServerAddress("");
+		setAddError(null);
+		setCanAddAnyway(false);
+		setAddOpen(true);
+	}
+
+	async function addOrganization(check: boolean) {
+		if (!bridge?.add || !serverAddress.trim() || adding) return;
+		setAdding(true);
+		setAddError(null);
+		try {
+			const result = await bridge.add(serverAddress, check);
+			if (result.ok) {
+				setAddOpen(false);
+				return;
+			}
+			if (result.url) setServerAddress(result.url);
+			setCanAddAnyway(!!result.canAddAnyway);
+			setAddError(result.error || "Couldn’t add that organization.");
+		} catch {
+			setAddError("Couldn’t add that organization.");
+		} finally {
+			setAdding(false);
+		}
+	}
 
 	async function copyOrganizationLink() {
 		try {
@@ -166,8 +208,11 @@ export function OrganizationSwitcher({
 						<span className="text-label tabular-nums text-faint">{memberCount}</span>
 					)}
 				</Menu.Item>
-				<Menu.Item className={itemClass} onClick={() => setInviteOpen(true)}>
-					<IconPlus size={19} className={MENU_ICON} />
+				<Menu.Item
+					className={`${itemClass} text-purple`}
+					onClick={() => setInviteOpen(true)}
+				>
+					<IconPlus size={19} className="text-purple" />
 					<span className="min-w-0 flex-1 truncate">Invite member</span>
 				</Menu.Item>
 				<Menu.Separator />
@@ -209,9 +254,12 @@ export function OrganizationSwitcher({
 							);
 						})}
 					</Menu.RadioGroup>
-					{bridge?.add && (
-						<Menu.Item className={itemClass} onClick={() => bridge.add?.()}>
-							<IconPlus size={19} className={MENU_ICON} />
+					{bridge?.inlineAdd && bridge.add && (
+						<Menu.Item
+							className={`${itemClass} text-blue`}
+							onClick={openAddOrganization}
+						>
+							<IconPlus size={19} className="text-blue" />
 							<span className="min-w-0 flex-1 truncate">Add organization</span>
 						</Menu.Item>
 					)}
@@ -226,6 +274,71 @@ export function OrganizationSwitcher({
 				</Menu.Group>
 			</Menu.Popup>
 		</Menu.Root>
+		<Modal.Root
+			open={addOpen}
+			onOpenChange={(open) => {
+				if (!adding) setAddOpen(open);
+			}}
+		>
+			<Modal.Content>
+				<Modal.Header
+					title="Add organization"
+					description="Connect another Open Session server."
+				/>
+				<form
+					className="flex flex-col gap-3"
+					onSubmit={(event) => {
+						event.preventDefault();
+						void addOrganization(true);
+					}}
+				>
+					<Field label="Server address">
+						<Input
+							value={serverAddress}
+							onChange={(event) => {
+								setServerAddress(event.target.value);
+								setAddError(null);
+								setCanAddAnyway(false);
+							}}
+							placeholder="os.example.com"
+							inputMode="url"
+							autoCapitalize="none"
+							autoComplete="off"
+							spellCheck={false}
+							autoFocus
+							disabled={adding}
+							required
+						/>
+					</Field>
+					{addError && <InlineAlert>{addError}</InlineAlert>}
+					<Modal.Footer>
+						<Button
+							variant="ghost"
+							onClick={() => setAddOpen(false)}
+							disabled={adding}
+						>
+							Cancel
+						</Button>
+						<Button
+							variant="primary"
+							type={canAddAnyway ? "button" : "submit"}
+							onClick={
+								canAddAnyway ? () => void addOrganization(false) : undefined
+							}
+							disabled={!serverAddress.trim() || adding}
+						>
+							{adding
+								? canAddAnyway
+									? "Adding…"
+									: "Checking…"
+								: canAddAnyway
+									? "Add anyway"
+									: "Add organization"}
+						</Button>
+					</Modal.Footer>
+				</form>
+			</Modal.Content>
+		</Modal.Root>
 		<GithubMemberDialog
 			open={inviteOpen}
 			onOpenChange={setInviteOpen}

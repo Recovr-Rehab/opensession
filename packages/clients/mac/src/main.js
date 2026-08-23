@@ -298,6 +298,18 @@ async function probeServer(url) {
   }
 }
 
+async function resolveServer(raw) {
+  const url = normalizeServerUrl(raw);
+  if (!url) return { ok: false, error: "That doesn't look like a server address." };
+  const reached = await probeServer(url);
+  if (reached.ok) return { ok: true, url };
+  // A bare tailnet or LAN host often serves plain HTTP. Match the first-run
+  // flow by trying it only when the person did not choose a scheme themselves.
+  const plain = hasScheme(raw) ? null : url.replace(/^https:/, "http:");
+  if (plain && (await probeServer(plain)).ok) return { ok: true, url: plain };
+  return { ...reached, url };
+}
+
 function showSetup() {
   if (!win || win.isDestroyed()) return;
   clearStallGuard();
@@ -1154,10 +1166,37 @@ app.whenReady().then(async () => {
   ipcMain.on("os1:organizations-switch", (e, id) => {
     if (fromActiveOrganizationPicker(e) && typeof id === "string") switchAccount(id);
   });
-  ipcMain.on("os1:organizations-add", (e) => {
-    if (!fromActiveOrganizationPicker(e)) return;
-    addingAccount = true;
-    showSetup();
+  ipcMain.handle("os1:organizations-add", async (e, raw, check = true) => {
+    if (!fromActiveOrganizationPicker(e)) return { ok: false };
+    const normalized = normalizeServerUrl(raw);
+    const resolved = check
+      ? await resolveServer(raw)
+      : { ok: !!normalized, url: normalized };
+    if (!resolved.ok || !resolved.url) {
+      return {
+        ok: false,
+        error: resolved.error || "Couldn't reach that Open Session server.",
+        canAddAnyway: !!resolved.url,
+        url: resolved.url,
+      };
+    }
+    const stored = readStoredAccounts();
+    if (stored.accounts.some((account) => account.url === resolved.url)) {
+      return { ok: false, error: "That organization is already added." };
+    }
+    const account = {
+      id: crypto.randomUUID(),
+      label: new URL(resolved.url).host,
+      url: resolved.url,
+    };
+    stored.accounts.push(account);
+    if (!writeStoredAccounts(stored)) {
+      return { ok: false, error: "Couldn't save that organization." };
+    }
+    // Let invoke resolve before navigation destroys its renderer, then activate
+    // the new account through the normal switch path.
+    setImmediate(() => switchAccount(account.id));
+    return { ok: true };
   });
   ipcMain.on("os1:organizations-manage", (e) => {
     if (!fromActiveOrganizationPicker(e)) return;
@@ -1216,16 +1255,7 @@ app.whenReady().then(async () => {
   });
   ipcMain.handle("os1:server-probe", async (e, raw) => {
     if (!fromShellPage(e)) return { ok: false };
-    const url = normalizeServerUrl(raw);
-    if (!url) return { ok: false, error: "That doesn't look like a server address." };
-    const reached = await probeServer(url);
-    if (reached.ok) return { ok: true, url };
-    // Nothing they typed said https, and an instance on a LAN or a tailnet is
-    // often plain http. Trying is cheaper than expecting them to know, and it
-    // only ever happens after the secure form failed outright.
-    const plain = hasScheme(raw) ? null : url.replace(/^https:/, "http:");
-    if (plain && (await probeServer(plain)).ok) return { ok: true, url: plain };
-    return { ...reached, url };
+    return resolveServer(raw);
   });
   ipcMain.handle("os1:server-save", (e, raw) => {
     if (!fromShellPage(e)) return { ok: false };

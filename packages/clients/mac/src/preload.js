@@ -16,9 +16,11 @@ contextBridge.exposeInMainWorld("os1", {
   // behind whatever the person was actually looking at.
   focusWindow: () => ipcRenderer.send("os1:focus-window"),
   organizations: {
+    inlineAdd: true,
     list: () => ipcRenderer.invoke("os1:organizations-list"),
     switch: (id) => ipcRenderer.send("os1:organizations-switch", id),
-    add: () => ipcRenderer.send("os1:organizations-add"),
+    add: (url, check = true) =>
+      ipcRenderer.invoke("os1:organizations-add", url, check),
     manage: () => ipcRenderer.send("os1:organizations-manage"),
   },
   // Electron does not connect Chromium's Web Speech API to a recognition

@@ -68,9 +68,10 @@ empty local state, optionally rsync'd from prod.
 The app asks the first time it opens and keeps an account list plus its active
 organization in `server.json`, so a build is not tied to one address. A bare
 host resolves to `https`, except on this machine, and the answer is checked
-against `/api/health` before it is saved. The organization row above Feed and
-**OS → Organizations** both switch accounts; ⌘⇧1…9 remains available from the
-keyboard. Inactive organizations stay loaded in hidden sandboxed windows so
+against `/api/health` before it is saved. **Add organization** opens that
+address check in an in-app modal. The organization row above Feed and **OS →
+Organizations** both switch accounts; ⌘⇧1…9 remains available from the keyboard.
+Inactive organizations stay loaded in hidden sandboxed windows so
 WebSockets and notifications remain live; unread counts aggregate into the Dock
 badge and menu labels.
 
@@ -100,7 +101,9 @@ asked.
   is unavailable. `scripts/before-pack.js` compiles the helper before every
   local or release package.
 - `src/setup.html`: the server prompt, shown when nothing is stored yet and
-  when adding or editing an organization. It checks the address before saving it.
+  when adding from the native app menu or editing an organization. The in-app
+  organization menu uses its own modal instead. Both check the address before
+  saving it.
 - `src/offline.html` — retry screen for when the configured server is
   unreachable, with a way back to that prompt, since a stored address that is
   wrong looks exactly like a server that is down.
