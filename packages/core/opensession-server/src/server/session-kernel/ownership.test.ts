@@ -128,7 +128,13 @@ describe("single session ownership", () => {
 			'registerSessionEffectExecutor(\n      "creation_branch_prepare"',
 		);
 		expect(creationExecutors).toContain(
+			'"creation_sandbox_prepare",\n      executeCreationSandboxPrepare',
+		);
+		expect(creationExecutors).toContain(
 			'"creation_credential_resolve",\n      executeCreationCredentialResolve',
+		);
+		expect(creationExecutors).toContain(
+			"payload.sandboxKey !== item.sessionId",
 		);
 		expect(creationExecutors).toContain("resolveCurrentCredential");
 		expect(creationExecutors).not.toContain("payload.gitEnv");

@@ -8,9 +8,11 @@ import {
   CreationEffectIndeterminateError,
   executeCreationBranchPrepare,
   executeCreationCredentialResolve,
+  executeCreationSandboxPrepare,
   executeCreationWorkspacePrepare,
   type CreationBranchEffectItem,
   type CreationCredentialEffectItem,
+  type CreationSandboxEffectItem,
   type CreationWorkspaceEffectItem,
 } from "./creation-effect-executors";
 
@@ -84,6 +86,34 @@ function credentialItem(): CreationCredentialEffectItem {
       principal: "user:alice",
       scope: "git:opensession",
       mode: "resolve_current",
+    },
+    attempts: 0,
+    nextAttemptAt: 0,
+    createdAt: 1,
+  };
+}
+
+function sandboxItem(): CreationSandboxEffectItem {
+  return {
+    id: 4,
+    effectId: "session:creation_sandbox_prepare:sandbox-effect",
+    effectKey: "sandbox-effect",
+    sessionId: "session-one",
+    kind: "creation_sandbox_prepare",
+    payload: {
+      creationIdentity: "create-one",
+      creationGeneration: 1,
+      provider: "modal",
+      sandboxKey: "session-one",
+      repo: "opensession",
+      branch: "feature/create-one",
+      sessionMode: "code",
+      cwd: "/worktrees/create-one",
+      base: "main",
+      attachedDirs: ["/worktrees/attached"],
+      trustProfile: "interactive",
+      egressAllowlist: ["github.com"],
+      mode: "adopt_or_create",
     },
     attempts: 0,
     nextAttemptAt: 0,
@@ -304,6 +334,64 @@ describe("creation branch effect executor", () => {
       createWorktree: (async () => {
         throw new Error("must not create");
       }) as typeof createWorktree,
+      result: () => {
+        throw new Error("must not result");
+      },
+    })).rejects.toBeInstanceOf(CreationEffectIndeterminateError);
+  });
+});
+
+describe("creation sandbox effect executor", () => {
+  test("adopts after a crash between provider acceptance and actor result", async () => {
+    let ensures = 0;
+    let results = 0;
+    const ensure = async (_provider: string, spec: any) => {
+      ensures += 1;
+      expect(spec).toMatchObject({
+        sessionId: "session-one",
+        repo: "opensession",
+        branch: "feature/create-one",
+        mode: "code",
+        trustProfile: "interactive",
+      });
+      return { id: "sandbox-one", provider: "modal" as const };
+    };
+    await expect(executeCreationSandboxPrepare(sandboxItem(), {
+      ensure,
+      result: () => {
+        results += 1;
+        return { accepted: true, to: "preparing" };
+      },
+      afterDestinationAccepted: () => {
+        throw new Error("injected crash after sandbox acceptance");
+      },
+    })).rejects.toThrow("injected crash after sandbox acceptance");
+    await executeCreationSandboxPrepare(sandboxItem(), {
+      ensure,
+      result: (_effect, sandboxId) => {
+        results += 1;
+        expect(sandboxId).toBe("sandbox-one");
+        return { accepted: true, to: "preparing" };
+      },
+    });
+    expect(ensures).toBe(2);
+    expect(results).toBe(1);
+  });
+
+  test("rejects sandbox key or provider crossover before actor result", async () => {
+    const crossed = sandboxItem();
+    crossed.payload.sandboxKey = "another-session";
+    await expect(executeCreationSandboxPrepare(crossed, {
+      ensure: async () => {
+        throw new Error("must not ensure");
+      },
+      result: () => {
+        throw new Error("must not result");
+      },
+    })).rejects.toBeInstanceOf(CreationEffectIndeterminateError);
+
+    await expect(executeCreationSandboxPrepare(sandboxItem(), {
+      ensure: async () => ({ id: "sandbox-one", provider: "docker" }),
       result: () => {
         throw new Error("must not result");
       },

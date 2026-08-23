@@ -1,5 +1,9 @@
 import { existsSync } from "fs";
 import type { GithubCredential } from "../github-auth";
+import type {
+  Sandbox,
+  SandboxSessionSpec,
+} from "../sandbox/provider";
 import { createWorkspace, getWorkspace, type Workspace } from "../workspaces";
 import type { WorktreeInfo } from "../worktree";
 import { registerSessionEffectExecutor } from "./effect-executors";
@@ -13,6 +17,7 @@ import type {
 type WorkspaceEffect = SessionActorEffectFor<"creation_workspace_prepare">;
 type BranchEffect = SessionActorEffectFor<"creation_branch_prepare">;
 type CredentialEffect = SessionActorEffectFor<"creation_credential_resolve">;
+type SandboxEffect = SessionActorEffectFor<"creation_sandbox_prepare">;
 export type CreationWorkspaceEffectItem = Omit<
   DurableOutboxItem,
   "kind" | "payload"
@@ -25,6 +30,10 @@ export type CreationCredentialEffectItem = Omit<
   DurableOutboxItem,
   "kind" | "payload"
 > & CredentialEffect;
+export type CreationSandboxEffectItem = Omit<
+  DurableOutboxItem,
+  "kind" | "payload"
+> & SandboxEffect;
 
 export class CreationEffectIndeterminateError extends Error {
   readonly indeterminate = true;
@@ -242,6 +251,76 @@ export async function executeCreationBranchPrepare(
   );
 }
 
+type SandboxExecutorDependencies = {
+  ensure: (
+    provider: string,
+    spec: SandboxSessionSpec,
+  ) => Promise<Pick<Sandbox, "id" | "provider">>;
+  result: (item: CreationSandboxEffectItem, sandboxId: string) => CreationEventDecisionResult;
+  afterDestinationAccepted?: (sandbox: Pick<Sandbox, "id" | "provider">) => void;
+};
+
+function defaultSandboxResult(
+  item: CreationSandboxEffectItem,
+  sandboxId: string,
+): CreationEventDecisionResult {
+  return sessionKernel(item.sessionId).applyCreationEvent({
+    identity: item.payload.creationIdentity,
+    event: "preparation_started",
+    effectId: item.effectKey,
+    detail: {
+      provider: item.payload.provider,
+      sandboxKey: item.payload.sandboxKey,
+      sandboxId,
+    },
+  });
+}
+
+const defaultSandboxDependencies: SandboxExecutorDependencies = {
+  ensure: async (providerId, spec) => {
+    const [{ getSandboxProvider }, { ensureSandboxWithTransientRetry }] =
+      await Promise.all([
+        import("../sandbox"),
+        import("../sandbox/reliability"),
+      ]);
+    return ensureSandboxWithTransientRetry(getSandboxProvider(providerId), spec);
+  },
+  result: defaultSandboxResult,
+};
+
+/** Create or adopt the provider resource keyed by this canonical session. */
+export async function executeCreationSandboxPrepare(
+  item: CreationSandboxEffectItem,
+  dependencies: SandboxExecutorDependencies = defaultSandboxDependencies,
+): Promise<void> {
+  const payload = item.payload;
+  if (payload.sandboxKey !== item.sessionId)
+    throw new CreationEffectIndeterminateError(
+      `Sandbox key ${payload.sandboxKey} crossed session ownership`,
+    );
+  const sandbox = await dependencies.ensure(payload.provider, {
+    sessionId: payload.sandboxKey,
+    repo: payload.repo,
+    branch: payload.branch,
+    mode: payload.sessionMode,
+    cwd: payload.cwd,
+    base: payload.base,
+    attachedDirs: payload.attachedDirs,
+    trustProfile: payload.trustProfile,
+    egressAllowlist: payload.egressAllowlist,
+  });
+  if (sandbox.provider !== payload.provider)
+    throw new CreationEffectIndeterminateError(
+      `Sandbox ${sandbox.id} was returned by another provider`,
+    );
+  dependencies.afterDestinationAccepted?.(sandbox);
+  const result = dependencies.result(item, sandbox.id);
+  if (result.accepted || result.reason === "stale_effect") return;
+  throw new CreationEffectIndeterminateError(
+    `Sandbox effect ${item.effectId} result was rejected: ${result.reason || "unknown"}`,
+  );
+}
+
 type CredentialExecutorDependencies = {
   resolveCredential: (principal: string) => Promise<GithubCredential | null>;
   result: (item: CreationCredentialEffectItem) => CreationEventDecisionResult;
@@ -293,6 +372,7 @@ const registrationGlobal = globalThis as typeof globalThis & {
   __opensessionCreationWorkspaceExecutorRegistered?: boolean;
   __opensessionCreationBranchExecutorRegistered?: boolean;
   __opensessionCreationCredentialExecutorRegistered?: boolean;
+  __opensessionCreationSandboxExecutorRegistered?: boolean;
 };
 
 export function ensureCreationEffectExecutors(): void {
@@ -309,6 +389,13 @@ export function ensureCreationEffectExecutors(): void {
       executeCreationBranchPrepare,
     );
     registrationGlobal.__opensessionCreationBranchExecutorRegistered = true;
+  }
+  if (!registrationGlobal.__opensessionCreationSandboxExecutorRegistered) {
+    registerSessionEffectExecutor(
+      "creation_sandbox_prepare",
+      executeCreationSandboxPrepare,
+    );
+    registrationGlobal.__opensessionCreationSandboxExecutorRegistered = true;
   }
   if (!registrationGlobal.__opensessionCreationCredentialExecutorRegistered) {
     registerSessionEffectExecutor(

@@ -36,6 +36,14 @@ export type CreationSandboxPrepareEffect = {
   payload: CreationEffectBase & {
     provider: string;
     sandboxKey: string;
+    repo?: string;
+    branch?: string;
+    sessionMode?: "ask" | "code" | "scratch";
+    cwd?: string;
+    base?: string;
+    attachedDirs?: string[];
+    trustProfile?: "interactive" | "automation";
+    egressAllowlist?: string[];
     mode: "adopt_or_create";
   };
 };
