@@ -167,7 +167,9 @@ struct TurnBlockView: View {
     /// Phones keep the outcome, step count, and code totals visible. Tool
     /// families and changed-file names remain one tap away inside the fold.
     private var compactHeader: some View {
-        FlowLayout(spacing: 6) {
+        // “Worked” is subheadline-sized while its counts are footnotes. Align
+        // their baselines rather than the tops of two different font boxes.
+        FlowLayout(spacing: 6, alignment: .firstTextBaseline) {
             HStack(spacing: 6) {
                 chevron
                 Text(turn.isLive ? "Working" : "Worked")
