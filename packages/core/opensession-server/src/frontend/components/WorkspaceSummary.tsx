@@ -432,9 +432,9 @@ export function WorkspaceSummary({
 				// ancestor moves the card and the chat edge in the same layout pass.
 				portalContainer={anchor}
 				positionMethod="absolute"
-				// The summary is deliberately the top workspace layer. It stays above
-				// sticky diff headers, review controls and the side-panel overlay.
-				positionerClassName="z-[2147483647]"
+				// The summary stays above sticky workspace chrome, but reserves the
+				// final z-index step for hover previews opened from inside the card.
+				positionerClassName="z-[2147483646]"
 				// Pull past the header action row's 16px inset to leave a consistent
 				// 12px edge gutter. Its quiet shadow does not need more clearance.
 				alignOffset={-4}

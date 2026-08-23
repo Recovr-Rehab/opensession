@@ -6,6 +6,9 @@ const popoverSource = await Bun.file(
 const statusBarSource = await Bun.file(
 	new URL("./PrStatusBar.tsx", import.meta.url),
 ).text();
+const summarySource = await Bun.file(
+	new URL("./WorkspaceSummary.tsx", import.meta.url),
+).text();
 
 test("the summary's checks preview stays open above its parent popup", () => {
 	const summaryStart = statusBarSource.indexOf('if (variant === "summary")');
@@ -16,6 +19,7 @@ test("the summary's checks preview stays open above its parent popup", () => {
 	expect(summary).toContain("<PrChecksPopover");
 	expect(summary).toContain("nested");
 	expect(popoverSource).toContain("<Popover.Root exclusive={!nested}>");
+	expect(summarySource).toContain('positionerClassName="z-[2147483646]"');
 	expect(popoverSource).toContain(
 		'positionerClassName={nested ? "z-[2147483647]" : undefined}',
 	);
