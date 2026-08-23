@@ -15,6 +15,14 @@ enum OS1VisualStyle {
     static let panel = Color(uiColor: .tertiarySystemBackground)
     static let hover = Color(uiColor: .quaternarySystemFill)
     static let border = Color(uiColor: .separator)
+    /// The chat composer needs a crisp edge against both its near-white canvas
+    /// and the black dark-mode page. A separator is too faint after blending,
+    /// so use neutral ink tuned independently for each appearance.
+    static let composerBorder = Color(uiColor: UIColor { traits in
+        traits.userInterfaceStyle == .dark
+            ? UIColor(white: 1, alpha: 0.20)
+            : UIColor(white: 0, alpha: 0.16)
+    })
     static let text = Color(uiColor: .label)
     static let textDim = Color(uiColor: .secondaryLabel)
     static let textFaint = Color(uiColor: .tertiaryLabel)

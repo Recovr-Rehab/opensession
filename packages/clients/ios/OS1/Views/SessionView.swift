@@ -3475,13 +3475,12 @@ private struct SessionInputBar: View {
                 #endif
         }
         #if os(iOS)
-        // Keep the web phone composer's quiet half-point edge, with enough
-        // semantic-border contrast to hold the white shape against the canvas
-        // without competing with the Liquid Glass actions above it.
+        // A subtle full-point edge keeps the solid input distinct from the
+        // canvas. Its neutral ink resolves separately in light and dark mode.
         .overlay {
             composerShape.strokeBorder(
-                OS1VisualStyle.border.opacity(0.5),
-                lineWidth: 0.5
+                OS1VisualStyle.composerBorder,
+                lineWidth: 1
             )
         }
         // Growth and the one-row → multi-line morph both want to track the
