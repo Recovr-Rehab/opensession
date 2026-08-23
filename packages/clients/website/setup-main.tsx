@@ -206,7 +206,7 @@ function StepNav({
           onClick={() => onSelect(index)}
         >
           <span className="setup-step-dot" aria-hidden="true" />
-          <span>{label}</span>
+          <span className="setup-step-label">{label}</span>
         </button>
       ))}
     </nav>
@@ -537,44 +537,48 @@ function SetupPage() {
   return (
     <div className="setup-page" data-setup-wizard>
       <header className="setup-header">
-        <a className="setup-brand" href="/" aria-label="Open Session home">
-          <Mark />
-          <span>Open Session</span>
-        </a>
-        <a className="setup-home-link" href="/">
-          Back to website
+        <button
+          type="button"
+          className="setup-header-back"
+          onClick={() => setStep((current) => Math.max(0, current - 1))}
+          disabled={step === 0}
+          aria-label="Back"
+        >
+          <IconChevronLeft size={18} />
+        </button>
+        <StepNav step={step} onSelect={setStep} />
+        <a className="setup-home-link" href="./">
+          <span className="setup-home-wide">Back to website</span>
+          <span className="setup-home-compact">Exit</span>
         </a>
       </header>
 
-      <main className="setup-window">
-        <div className="setup-panel-wrap">{panels[step]}</div>
+      <main className="setup-panel-wrap">{panels[step]}</main>
 
-        <div className="setup-actions">
+      <footer className="setup-actions">
+        <button
+          type="button"
+          className="setup-back"
+          onClick={() => setStep((current) => Math.max(0, current - 1))}
+          disabled={step === 0}
+        >
+          <IconChevronLeft size={17} />
+          Back
+        </button>
+        {step < 4 ? (
           <button
             type="button"
-            className="setup-back"
-            onClick={() => setStep((current) => Math.max(0, current - 1))}
-            disabled={step === 0}
+            className="setup-continue"
+            onClick={() => setStep(step + 1)}
           >
-            <IconChevronLeft size={17} />
-            Back
+            Next
           </button>
-          <StepNav step={step} onSelect={setStep} />
-          {step < 4 ? (
-            <button
-              type="button"
-              className="setup-continue"
-              onClick={() => setStep(step + 1)}
-            >
-              Next
-            </button>
-          ) : (
-            <a className="setup-quiet-button" href="/">
-              Back to website
-            </a>
-          )}
-        </div>
-      </main>
+        ) : (
+          <a className="setup-quiet-button" href="./">
+            Back to website
+          </a>
+        )}
+      </footer>
     </div>
   );
 }
