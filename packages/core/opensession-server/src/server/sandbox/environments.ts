@@ -9,7 +9,6 @@ import {
   type WorkspaceSandboxProvider,
 } from "./connections";
 import {
-  BOX_REPO_TEMPLATE_REFRESH_MS,
   invalidateRemoteRepoTemplate,
   readRemoteRepoTemplate,
   remoteRepoTemplateNeedsRefresh,
@@ -25,6 +24,7 @@ import { listSandboxOperations, startSandboxOperation } from "./operations";
 
 const invalidationTimers: Map<string, ReturnType<typeof setTimeout>> =
   ((globalThis as any).__sandboxEnvironmentInvalidationTimers ??= new Map());
+const PROVIDER_QUOTA_RETRY_MS = 60 * 60_000;
 
 export interface SandboxEnvironment {
   repo: string;
@@ -453,7 +453,7 @@ export async function prepareSandboxEnvironment(
           : "Project setup failed. Rebuild it to try again.";
     const quotaLimited = /(?:rate.?limit|quota|plan allows|per day)/i.test(failureSummary);
     const retryDelayMs = quotaLimited
-      ? BOX_REPO_TEMPLATE_REFRESH_MS
+      ? PROVIDER_QUOTA_RETRY_MS
       : isTransientSandboxStartError(error)
         ? 15 * 60_000
         : 0;
@@ -489,10 +489,14 @@ function maintainSandboxEnvironments(): void {
       (environment.mode !== "template" && environment.state !== "preparing") ||
       !sandboxConnectionReady(environment.provider)
     ) continue;
-    if (
-      environment.state === "failed" &&
-      (!environment.retryAt || Date.parse(environment.retryAt) > Date.now())
-    ) continue;
+    if (environment.state === "failed") {
+      const retryAt = environment.retryAt
+        ? Date.parse(environment.retryAt)
+        : /(?:rate.?limit|quota|plan allows|per day)/i.test(environment.failureSummary || "")
+          ? Date.parse(environment.updatedAt) + PROVIDER_QUOTA_RETRY_MS
+          : Number.NaN;
+      if (!Number.isFinite(retryAt) || retryAt > Date.now()) continue;
+    }
     const template = readRemoteRepoTemplate(
       environment.provider as "daytona" | "box" | "modal",
       environment.repo,
