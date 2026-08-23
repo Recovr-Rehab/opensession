@@ -29,7 +29,7 @@ export function ReviewToolbar({
       </div>
       {compact && (
         <div
-          className="pointer-events-none sticky top-[60px] z-[5] hidden h-3 -mb-3 bg-[linear-gradient(to_bottom,var(--bg),transparent)] desktop:block"
+          className="pointer-events-none sticky top-[60px] z-[5] mx-2 hidden h-3 -mb-3 overflow-clip rounded-t-lg bg-[linear-gradient(to_bottom,var(--bg),transparent)] desktop:block"
           aria-hidden="true"
         />
       )}
