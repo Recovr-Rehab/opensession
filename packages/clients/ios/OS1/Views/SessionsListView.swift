@@ -962,10 +962,10 @@ struct SessionsListView: View {
                 .searchable(text: $searchText, prompt: "Search sessions")
                 .toolbar {
                     ToolbarItem(placement: .topLeadingCompat) {
-                        ServerAccountPicker(iconSize: 32) {
+                        ServerAccountPicker(iconSize: 44, compact: true) {
                             showSettings = true
                         }
-                        .padding(.leading, sidebarMargin - 20)
+                        .padding(.leading, sidebarMargin - 33.5)
                     }
                     .sharedBackgroundVisibility(.hidden)
                     ToolbarItem(placement: .topTrailingCompat) {
