@@ -165,7 +165,7 @@ test("the phone composer uses the shared top bar and sheet corner", async () => 
 
   expect(source).toContain("<PhoneTopBar");
   expect(source).toContain("<PhoneTopBarAction");
-  expect(source).toContain("var(--sheet-radius,34px)");
+  expect(source).toContain("phone:rounded-t-[calc(40px*var(--rf))]");
 });
 
 test("a parked draft keeps the composer copy and carries its attachments", async () => {
