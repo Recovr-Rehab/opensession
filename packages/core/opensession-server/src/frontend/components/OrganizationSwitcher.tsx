@@ -160,7 +160,7 @@ export function OrganizationSwitcher({
 					aria-label={`Open organization menu, current: ${name}`}
 				>
 					<span className="relative inline-flex size-[22px] shrink-0 items-center justify-center">
-						<OrganizationAppIcon className="size-[22px] rounded-sm object-cover" />
+						<OrganizationAppIcon className="size-5 rounded-sm object-cover" />
 						<span
 							className={APP_LOGO_STATUS}
 							style={{ background: connected ? "var(--green)" : "var(--red)" }}
