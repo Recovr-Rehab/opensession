@@ -41,25 +41,38 @@ export function createPortalResponseSender(
 	};
 }
 
-async function respond(send: PortalResponseSender, msg: any, port: number): Promise<void> {
+export type PortalRequestControllers = Map<string, AbortController>;
+
+export function cancelPortalRequest(requests: PortalRequestControllers, msg: any): void {
+	const id = typeof msg.id === "string" ? msg.id : "";
+	if (id) requests.get(id)?.abort();
+}
+
+async function respond(send: PortalResponseSender, msg: any, port: number, requests: PortalRequestControllers): Promise<void> {
 	const id = typeof msg.id === "string" ? msg.id : "";
 	const path = typeof msg.path === "string" ? msg.path : "";
 	const method = typeof msg.method === "string" ? msg.method.toUpperCase() : "GET";
 	if (!id || !path.startsWith("/") || path.startsWith("//") || !/^[A-Z]{3,10}$/.test(method)) return;
+	const controller = new AbortController();
+	requests.set(id, controller);
+	const timeout = setTimeout(() => controller.abort(), 240_000);
 	try {
 		const body = typeof msg.body === "string" ? Buffer.from(msg.body, "base64") : undefined;
 		if (body && body.byteLength > 5 * 1024 * 1024) throw new Error("request too large");
 		// A first visit to a large Next/Turbopack route can compile for several
 		// minutes. Keep the request bounded, but do not sever a healthy Portal
 		// midway through its cold build and turn it into an empty proxy 502.
-		const response = await fetch(`http://127.0.0.1:${port}${path}`, { method, headers: loopbackHeaders(msg.headers, port), body: body && method !== "GET" && method !== "HEAD" ? body : undefined, redirect: "manual", signal: AbortSignal.timeout(240_000) });
+		const response = await fetch(`http://127.0.0.1:${port}${path}`, { method, headers: loopbackHeaders(msg.headers, port), body: body && method !== "GET" && method !== "HEAD" ? body : undefined, redirect: "manual", signal: controller.signal });
 		const bytes = new Uint8Array(await response.arrayBuffer());
 		if (bytes.byteLength > 10 * 1024 * 1024) throw new Error("response too large");
 		const headers: Record<string, string> = {};
 		for (const [name, value] of response.headers) if (!HOP.has(name.toLowerCase())) headers[name] = value;
 		await send(JSON.stringify({ t: "http_result", id, status: response.status, headers, body: Buffer.from(bytes).toString("base64") }));
 	} catch {
-		try { await send(JSON.stringify({ t: "http_result", id, status: 502, headers: {} })); } catch {}
+		try { await send(JSON.stringify({ t: "http_result", id, status: controller.signal.aborted ? 499 : 502, headers: {} })); } catch {}
+	} finally {
+		clearTimeout(timeout);
+		if (requests.get(id) === controller) requests.delete(id);
 	}
 }
 
@@ -109,14 +122,15 @@ async function run(endpoint: string, token: string, port: number, expiresAt: num
 	while (Date.now() < expiresAt) {
 		const connected = await new Promise<boolean>((resolve) => {
 			const sockets = new Map<string, PortalSocketState>();
+			const requests: PortalRequestControllers = new Map();
 			let socket: WebSocket;
 			let opened = false;
 			try { socket = new WebSocket(endpoint, { headers: { authorization: `Bearer ${token}` } } as any); }
 			catch { resolve(false); return; }
 			const sendResponse = createPortalResponseSender(socket);
 			socket.addEventListener("open", () => { opened = true; });
-			socket.addEventListener("message", (event) => { try { const message = JSON.parse(String(event.data)); if (message.t === "http") void respond(sendResponse, message, port); else if (message.t === "ws_open") openWebSocket(socket, sockets, message, port); else if (message.t === "ws_send") sendWebSocket(sockets, message); else if (message.t === "ws_close") { const state = sockets.get(String(message.id)); if (state) try { state.socket.close(); } catch {} } } catch {} });
-			socket.addEventListener("close", () => { for (const state of sockets.values()) try { state.socket.close(); } catch {} sockets.clear(); resolve(opened); }, { once: true });
+			socket.addEventListener("message", (event) => { try { const message = JSON.parse(String(event.data)); if (message.t === "http") void respond(sendResponse, message, port, requests); else if (message.t === "http_cancel") cancelPortalRequest(requests, message); else if (message.t === "ws_open") openWebSocket(socket, sockets, message, port); else if (message.t === "ws_send") sendWebSocket(sockets, message); else if (message.t === "ws_close") { const state = sockets.get(String(message.id)); if (state) try { state.socket.close(); } catch {} } } catch {} });
+			socket.addEventListener("close", () => { for (const request of requests.values()) request.abort(); requests.clear(); for (const state of sockets.values()) try { state.socket.close(); } catch {} sockets.clear(); resolve(opened); }, { once: true });
 			socket.addEventListener("error", () => { try { socket.close(); } catch {} });
 		});
 		failedAttempts = connected ? 0 : failedAttempts + 1;
