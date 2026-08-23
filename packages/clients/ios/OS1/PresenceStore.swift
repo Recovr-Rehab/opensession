@@ -85,6 +85,18 @@ final class PresenceStore {
         clearPresence()
     }
 
+    /// Applies the active account's global-presence snapshot. Kept as the
+    /// direct seam used by tests and by any non-socket snapshot source.
+    func apply(_ viewing: [PresenceEntry]) {
+        let config = ServerConfig.shared
+        let mapped = mappedPresence(viewing, me: config.userName)
+        presenceByAccount[config.activeId] = mapped
+        bySession = mapped
+        if !mapped.isEmpty {
+            Task { await TeamDirectory.shared.ensureLoaded() }
+        }
+    }
+
     private func connect(account: ServerAccount, connection: ServerConnection) {
         let socket = OS1Socket(connection: connection)
         socket.onEvent = { [weak self] event in
