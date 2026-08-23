@@ -411,7 +411,7 @@ export function DiffPanel({
       <div
         className={`sticky ${multi ? "top-[calc(var(--diff-panel-top,0px)+37px)] phone:top-[calc(var(--diff-panel-top,0px)+47px)]" : "top-[var(--diff-panel-top,0px)]"} z-1 bg-panel-surface after:absolute after:inset-x-0 after:top-full after:h-2.5 after:bg-panel-surface after:content-['']`}
       >
-        <div className="flex items-center gap-2.5 overflow-x-auto border-b border-divider px-3.5 py-2.5 text-label whitespace-nowrap [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+        <div className="flex h-10 items-center gap-2.5 overflow-x-auto border-b border-divider px-3.5 text-label whitespace-nowrap [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
           {toolbarContents}
         </div>
       </div>
@@ -421,7 +421,7 @@ export function DiffPanel({
 
   return (
     <div
-      className={`@container flex min-h-0 flex-col ${multi ? "[--review-file-header-top:calc(var(--diff-panel-top,0px)+94px)] phone:[--review-file-header-top:calc(var(--diff-panel-top,0px)+104px)]" : "[--review-file-header-top:calc(var(--diff-panel-top,0px)+57px)]"}`}
+      className={`@container flex min-h-0 flex-col ${multi ? "[--review-file-header-top:calc(var(--diff-panel-top,0px)+87px)] phone:[--review-file-header-top:calc(var(--diff-panel-top,0px)+97px)]" : "[--review-file-header-top:calc(var(--diff-panel-top,0px)+50px)]"}`}
       ref={panelRef}
     >
       {multi && (
