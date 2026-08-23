@@ -60,6 +60,61 @@ export const TopBarActions = React.forwardRef<
 	);
 });
 
+/**
+ * Phone navigation row shared by full-screen pages and sheets. Position and
+ * surface stay with the feature; its 44px rhythm and centred title do not.
+ */
+export const PhoneTopBar = React.forwardRef<
+	HTMLElement,
+	Omit<TopBarProps, "as">
+>(
+	function PhoneTopBar({ className, ...props }, ref) {
+		return (
+			<TopBar
+				as="header"
+				ref={ref}
+				className={cn(
+					"phone:relative phone:h-11 phone:shrink-0 phone:justify-center phone:px-3",
+					className,
+				)}
+				{...props}
+			/>
+		);
+	},
+);
+
+export const PhoneTopBarTitle = React.forwardRef<
+	HTMLDivElement,
+	React.ComponentPropsWithoutRef<"div">
+>(function PhoneTopBarTitle({ className, ...props }, ref) {
+	return (
+		<TopBarTitle
+			ref={ref}
+			className={cn("text-body font-title text-fg", className)}
+			{...props}
+		/>
+	);
+});
+
+/** The quiet 44px disc used for Back, Close and secondary phone actions. */
+export const PhoneTopBarAction = React.forwardRef<
+	HTMLButtonElement,
+	Omit<ButtonProps, "children">
+>(function PhoneTopBarAction({ className, ...props }, ref) {
+	return (
+		<Button
+			ref={ref}
+			variant="ghost"
+			size="md"
+			className={cn(
+				"size-11 min-h-11 shrink-0 touch-manipulation rounded-full bg-panel p-0 text-dim shadow-none hover:bg-pressed active:scale-[0.96] [&_svg]:size-6",
+				className,
+			)}
+			{...props}
+		/>
+	);
+});
+
 type TopBarActionProps = Omit<ButtonProps, "children"> & {
 	icon: React.ReactNode;
 	floating?: boolean;

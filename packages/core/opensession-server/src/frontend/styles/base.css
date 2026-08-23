@@ -1480,7 +1480,7 @@ html:is(.wco, .desktop-shell) .wco-nav-pane {
 	-webkit-app-region: no-drag;
 	app-region: no-drag;
 }
-.app-body.sidebar-collapsed .detail-pane .wco-nav-pane {
+html:is(.wco, .desktop-shell) .app-body.sidebar-collapsed .detail-pane .wco-nav-pane {
 	display: flex;
 	align-items: center;
 	gap: 2px;

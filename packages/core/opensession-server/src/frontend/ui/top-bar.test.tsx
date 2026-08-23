@@ -1,6 +1,9 @@
 import { expect, test } from "bun:test";
 import { renderToStaticMarkup } from "react-dom/server";
 import {
+	PhoneTopBar,
+	PhoneTopBarAction,
+	PhoneTopBarTitle,
 	TopBar,
 	TopBarAction,
 	TopBarActions,
@@ -33,6 +36,20 @@ test("column hosts can stretch portaled top-bar rows", () => {
 
 	expect(html).toContain("items-stretch");
 	expect(html).not.toContain("items-center");
+});
+
+test("phone pages and sheets share one bar and action rhythm", () => {
+	const html = renderToStaticMarkup(
+		<PhoneTopBar>
+			<PhoneTopBarAction aria-label="Close" icon={<span>Close</span>} />
+			<PhoneTopBarTitle>Settings</PhoneTopBarTitle>
+		</PhoneTopBar>,
+	);
+
+	expect(html).toContain("phone:h-11");
+	expect(html).toContain("size-11");
+	expect(html).toContain("rounded-full");
+	expect(html).toContain("Settings");
 });
 
 test("floating controls reuse application mobile chrome", () => {

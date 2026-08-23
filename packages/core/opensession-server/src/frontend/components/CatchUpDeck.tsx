@@ -26,6 +26,12 @@ import { useCurrentUser } from "./UserPicker";
 import { shortTime, elapsedSince } from "../lib/time";
 import { SwipeCard } from "../ui/swipe-deck";
 import { PulseDot } from "../ui/status";
+import {
+	PhoneTopBar,
+	PhoneTopBarAction,
+	PhoneTopBarTitle,
+} from "../ui/top-bar";
+import { IconChevronLeft, IconPlus } from "./icons";
 
 /**
  * Catch-up deck — a Slack-style "swipe through your unread" card stack. Each
@@ -240,46 +246,27 @@ export function CatchUpDeck({
 			    a desktop-width card), and the up-fling of Keep Unread crosses the
 			    whole row. Cards pass UNDER the bar instead of over it, so the
 			    counter stays readable through every swipe. */}
-			<div className="relative z-10 flex w-full shrink-0 items-center justify-between bg-surface px-4 pb-3 pt-[max(12px,env(safe-area-inset-top))]">
-				<button
-					className="hidden h-10 w-10 items-center justify-center rounded-control bg-transparent text-dim hover:bg-panel hover:text-fg phone:flex"
+			<PhoneTopBar className="relative z-10 w-full bg-surface px-4 pb-3 pt-[max(12px,env(safe-area-inset-top))] phone:h-auto">
+				<PhoneTopBarAction
+					className="hidden phone:inline-flex"
 					onClick={onExit}
 					title="Back"
 					aria-label="Back"
-				>
-					<svg width="26" height="26" viewBox="0 0 16 16" fill="none">
-						<path
-							d="M10 3.5 5.5 8l4.5 4.5"
-							stroke="currentColor"
-							strokeWidth="1.6"
-							strokeLinecap="round"
-							strokeLinejoin="round"
-						/>
-					</svg>
-				</button>
-				<div className="absolute left-1/2 -translate-x-1/2 text-sm font-semibold text-fg">
+					icon={<IconChevronLeft size={24} />}
+				/>
+				<PhoneTopBarTitle className="absolute left-1/2 -translate-x-1/2 text-sm font-semibold">
 					{done ? "All caught up" : `${remaining} Left`}
-				</div>
-				{/* ml-auto, not just justify-between: with the chevron hidden this is
-				    the row's only in-flow child (the counter is absolutely centered),
-				    and justify-between would pack it against the left edge. */}
-				<button
-					className="ml-auto flex h-10 w-10 items-center justify-center rounded-control bg-transparent text-dim hover:bg-panel hover:text-fg"
+				</PhoneTopBarTitle>
+				{/* ml-auto, not just justify-between: with Back hidden this is the
+				    row's only in-flow child on desktop. */}
+				<PhoneTopBarAction
+					className="ml-auto"
 					onClick={onNewWorkspace}
 					title="New workspace"
 					aria-label="New workspace"
-				>
-					<svg width="26" height="26" viewBox="0 0 24 24" fill="none">
-						<path
-							d="M12 5.75V18.25M18.25 12H5.75"
-							stroke="currentColor"
-							strokeWidth="1.6"
-							strokeLinecap="round"
-							strokeLinejoin="round"
-						/>
-					</svg>
-				</button>
-			</div>
+					icon={<IconPlus size={24} />}
+				/>
+			</PhoneTopBar>
 
 			{done ? (
 				<CaughtUp total={total} onExit={onExit} />

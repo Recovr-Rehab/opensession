@@ -1,6 +1,7 @@
 import * as React from "react";
 import { createPortal } from "react-dom";
 import { cn } from "./cn";
+import { PhoneTopBarAction } from "./top-bar";
 
 /**
  * The app's sheet/dialog language for surfaces that own their own open state —
@@ -294,16 +295,11 @@ export function SheetIconButton({
 	...props
 }: React.ButtonHTMLAttributes<HTMLButtonElement>) {
 	return (
-		<button
-			type="button"
-			className={cn(
-				"focus-ring grid size-11 shrink-0 touch-manipulation place-items-center rounded-full border-none bg-panel p-0 text-dim active:bg-pressed [&_svg]:size-6",
-				className,
-			)}
+		<PhoneTopBarAction
+			className={className}
+			icon={children}
 			{...props}
-		>
-			{children}
-		</button>
+		/>
 	);
 }
 

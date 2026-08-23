@@ -85,6 +85,7 @@ import { FullPageFileDropOverlay } from "./FullPageFileDropOverlay";
 import { askSurface } from "../lib/tinted-surface";
 import { toast } from "../ui/toast";
 import { cn } from "../ui/cn";
+import { PhoneTopBar, PhoneTopBarAction } from "../ui/top-bar";
 import {
 	paletteIconBtn,
 	paletteIconBtnOn,
@@ -184,7 +185,7 @@ const LAST_REPO_KEY = "opensession-new-session-repo";
  *  than the strip a keyboard leaves visible, which cut the bar off the top of
  *  the screen as soon as an attachment took its own space. */
 const HEADER =
-	"flex items-center gap-2 border-b border-transparent px-4 pt-4 pb-[11px] phone:px-3 phone:pb-3 phone:pt-3";
+	"flex items-center gap-2 border-b border-transparent px-4 pt-4 pb-[11px] phone:h-auto phone:px-3 phone:pb-3 phone:pt-3";
 /** Merged onto HEADER/FOOTER by `cn()`, which drops the transparent colour. */
 const EDGE_DIVIDER = "border-line";
 /** The header's picker, which doubles as the palette's title: bigger, solid,
@@ -218,10 +219,6 @@ const MOBILE_PICKER =
  *  plus the label's own truncation buy. */
 const MOBILE_TRIGGER =
 	"phone:min-h-11 phone:gap-1 phone:rounded-[999px] phone:px-2.5 phone:py-1.5 phone:text-label phone:font-medium phone:[&_svg:first-child]:size-4";
-/** The send disc's neutral twin: same 44px circle and glyph box, so dismiss and
- *  commit read as one pair rather than a bare icon beside a solid action. */
-const PHONE_CLOSE =
-	"focus-ring relative flex size-11 items-center justify-center rounded-full bg-hover p-0 text-fg transition-colors hover:bg-pressed";
 /** The composer's own send disc, so the gesture that commits a prompt looks the
  *  same in the palette as it does in a session. Sized up to the 44px target the
  *  rest of this bar keeps. */
@@ -1450,12 +1447,17 @@ export function NewSession({ onBack, inline, focusSeq, send, addHandler, connect
           project, commit. One row rather than two, because a sheet over an
           open keyboard has about half a screen to spend and an attachment
           takes its share of it. */}
-      <div className={cn(HEADER, !dictating && edges.top && EDGE_DIVIDER)}>
+      <PhoneTopBar className={cn(HEADER, !dictating && edges.top && EDGE_DIVIDER)}>
         {phoneBar && (
           <>
-            <Modal.Close className={PHONE_CLOSE} aria-label="Close">
-              <IconX size={22} />
-            </Modal.Close>
+            <Modal.Close
+              render={
+                <PhoneTopBarAction
+                  aria-label="Close"
+                  icon={<IconX size={22} />}
+                />
+              }
+            />
             {/* The sheet still has a name, it just isn't drawn: the dialog
                 needs one, and a screen reader has no card to look at. */}
             <Modal.Title className="sr-only">New session</Modal.Title>
@@ -1590,7 +1592,7 @@ export function NewSession({ onBack, inline, focusSeq, send, addHandler, connect
             <IconArrowUp size={22} />
           </button>
         )}
-      </div>
+      </PhoneTopBar>
 
       <motion.div
         initial={false}
@@ -2124,7 +2126,7 @@ export function NewSession({ onBack, inline, focusSeq, send, addHandler, connect
           // inside that strip on a client whose keyboard is taller than the
           // one 43dvh was measured against. Past the cap the prompt scrolls,
           // which is what its scroller is for.
-          "max-h-[calc(89dvh-1rem)] phone:max-h-[calc(100dvh-12px)] phone:[body.kb-open_&]:max-h-[min(43dvh,100%)] phone:rounded-t-[calc(28px*var(--rf))] phone:rounded-b-none phone:[&_textarea]:min-h-[160px] phone:[&_textarea]:text-input-phone",
+          "max-h-[calc(89dvh-1rem)] phone:max-h-[calc(100dvh-12px)] phone:[body.kb-open_&]:max-h-[min(43dvh,100%)] phone:rounded-t-[calc(var(--sheet-radius,34px)*var(--rf))] phone:rounded-b-none phone:[&_textarea]:min-h-[160px] phone:[&_textarea]:text-input-phone",
           ASK_SURFACE,
           mode === "ask" && "before:opacity-100 after:opacity-100",
         )}

@@ -31,6 +31,7 @@ import {
 } from "../lib/settings-sections";
 import { Input } from "../ui/input";
 import { BottomSheet, SheetIconButton } from "../ui/sheet";
+import { PhoneTopBar, PhoneTopBarTitle } from "../ui/top-bar";
 import { Connections } from "./Connections";
 import {
 	IconChevronLeft,
@@ -467,7 +468,7 @@ function MobileSettings({
 		>
 			{(dismiss) => (
 				<>
-					<div className="relative flex h-11 shrink-0 items-center justify-center px-3">
+					<PhoneTopBar>
 						{detail && (
 							<SheetIconButton
 								className="absolute left-3"
@@ -481,9 +482,9 @@ function MobileSettings({
 						    h1 hides in here (`[.settings-sheet_&]:hidden` in ui/settings).
 						    This compact navigation chrome uses the 17px body step instead of
 						    the larger desktop page-heading scale. */}
-						<span className="text-body font-title text-fg">
+						<PhoneTopBarTitle>
 							{detail ? shownLabel : "Settings"}
-						</span>
+						</PhoneTopBarTitle>
 						<SheetIconButton
 							className="absolute right-3"
 							onClick={dismiss}
@@ -491,7 +492,7 @@ function MobileSettings({
 						>
 							<IconX size={24} />
 						</SheetIconButton>
-					</div>
+					</PhoneTopBar>
 
 					<div className="relative min-h-0 flex-1 overflow-hidden">
 						{/* Root page: grouped section list over a bottom search bar.

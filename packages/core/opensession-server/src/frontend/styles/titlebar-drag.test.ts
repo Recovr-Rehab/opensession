@@ -22,6 +22,9 @@ test("Electron titlebar drag regions do not depend on WCO visibility", async () 
 		"html:is(.wco, .desktop-shell):has(.app-menu-popup:not([hidden])) .wco-chrome",
 	);
 	expect(css).not.toContain("html.wco:has(.app-menu-popup) .wco-chrome");
+	expect(css).toContain(
+		"html:is(.wco, .desktop-shell) .app-body.sidebar-collapsed .detail-pane .wco-nav-pane",
+	);
 	expect(userPicker).toContain(
 		"[html.desktop-shell_&]:[-webkit-app-region:drag]",
 	);
