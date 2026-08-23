@@ -1,5 +1,5 @@
 import type { FormEvent, ReactNode } from "react";
-import { lazy, Suspense, useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { createRoot } from "react-dom/client";
 import markUrl from "../mac/build/icon-512.png";
 import {
@@ -18,6 +18,7 @@ import {
 	IconTerminal,
 } from "../../core/opensession-server/src/frontend/components/icons";
 import "./site.css";
+import { AgentationFeedback } from "./AgentationFeedback";
 import { ProductDemo } from "./ProductDemo";
 import { TellaBackground } from "./TellaBackground";
 
@@ -27,10 +28,6 @@ import { TellaBackground } from "./TellaBackground";
  * writes the same Markdown format without needing the app server.
  */
 const waitlistEndpoint = "/api/waitlist";
-
-const Agentation = lazy(() =>
-	import("agentation").then((module) => ({ default: module.Agentation })),
-);
 
 function Mark() {
 	return (
@@ -333,20 +330,12 @@ function LandingPage() {
 	);
 }
 
-const feedbackHost =
-	["localhost", "127.0.0.1"].includes(window.location.hostname) ||
-	window.location.hostname.endsWith(".ts.net");
-
 const root = document.getElementById("root");
 if (!root) throw new Error("Missing landing page root");
 
 createRoot(root).render(
 	<>
 		<LandingPage />
-		{feedbackHost && (
-			<Suspense fallback={null}>
-				<Agentation />
-			</Suspense>
-		)}
+		<AgentationFeedback />
 	</>,
 );

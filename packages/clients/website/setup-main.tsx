@@ -12,6 +12,7 @@ import {
 } from "../../core/opensession-server/src/frontend/components/icons";
 import "./site.css";
 import "./setup.css";
+import { AgentationFeedback } from "./AgentationFeedback";
 
 type ProviderId = "hetzner" | "digitalocean" | "aws" | "macmini" | "existing";
 
@@ -579,4 +580,9 @@ function SetupPage() {
   );
 }
 
-createRoot(document.getElementById("root")!).render(<SetupPage />);
+createRoot(document.getElementById("root")!).render(
+  <>
+    <SetupPage />
+    <AgentationFeedback />
+  </>,
+);
