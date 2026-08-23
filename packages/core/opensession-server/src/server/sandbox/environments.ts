@@ -502,6 +502,17 @@ function maintainSandboxEnvironments(): void {
       // restart while the disposable validation sandbox is still parking;
       // promote the recovered artifact instead of deleting it.
       void derivedEnvironment(environment.repo, environment.provider).then(writeEnvironment);
+      if (environment.provider === "daytona" || environment.provider === "box") {
+        const standby = prewarmStatus(environment.provider, environment.repo);
+        if (!(standby?.standby && standby.parked)) {
+          void requestPrewarm(
+            environment.provider,
+            environment.repo,
+            "environment-standby",
+            { standby: true },
+          );
+        }
+      }
       continue;
     }
     if (template) {
