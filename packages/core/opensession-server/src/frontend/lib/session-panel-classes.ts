@@ -146,7 +146,7 @@ export const PANEL_BODY = "min-h-0 flex-1 overflow-y-auto";
  * the selected page scrolls, and its bottom rule separates chrome from page.
  */
 export const PANEL_TABS =
-	"flex shrink-0 items-center gap-1 border-b border-divider px-2 py-1.5";
+	"flex h-[var(--desktop-header-h)] shrink-0 items-center gap-1 border-b border-divider px-2";
 
 /** One tab: an icon, a word, and whatever that destination wants to report. */
 export const PANEL_TAB =

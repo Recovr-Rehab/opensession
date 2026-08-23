@@ -7781,25 +7781,17 @@ export function SessionViewer({
 						)}
 						<div className={PANEL_BODY}>
 							{desktopPanelPage === "changes" ? (
-								<>
-									<PanelPageHeader
-										title="Changes"
-										onBack={() => setActivePanelOpen(false)}
+								waitingForWorkspace ? (
+									<WorkspaceWaiting detail="This takes a moment." />
+								) : (
+									<DiffPanel
+										sessionId={session.id}
+										isRunning={isBusy}
+										canSend={connected && !isBusy && !noEngine}
+										send={send}
+										diff={diffState}
 									/>
-									{waitingForWorkspace ? (
-										<WorkspaceWaiting detail="This takes a moment." />
-									) : (
-										<div className="[&_.sticky]:top-12">
-											<DiffPanel
-												sessionId={session.id}
-												isRunning={isBusy}
-												canSend={connected && !isBusy && !noEngine}
-												send={send}
-												diff={diffState}
-											/>
-										</div>
-									)}
-								</>
+								)
 							) : desktopPanelPage === "portals" ? (
 								<PortalsPage
 									sessionId={session.id}
