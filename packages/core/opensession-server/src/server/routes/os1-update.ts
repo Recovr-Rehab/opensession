@@ -77,6 +77,18 @@ export function isMacReleaseAsset(name: string | undefined): boolean {
 	return /^(OpenSession|OS1)-.*-arm64\.zip$/.test(name || "");
 }
 
+export function chromeDownloadTag(path: string): string | null {
+	return path.match(
+		/^\/api\/packages\/clients\/chrome\/download\/(os1-chrome-v[\w.-]+)\.crx$/,
+	)?.[1] ?? null;
+}
+
+export function macDownloadTag(path: string): string | null {
+	return path.match(
+		/^\/api\/packages\/clients\/mac\/download\/(v\d+\.\d+\.\d+[\w.-]*)\.zip$/,
+	)?.[1] ?? null;
+}
+
 function parseVersion(v: string): [number, number, number] | null {
 	const m = String(v)
 		.trim()
@@ -254,12 +266,10 @@ export async function handleOs1UpdateRoutes(
 	}
 
 	// The signed .crx Chrome installs from.
-	const crx = path.match(
-		/^\/api\/os1-chrome\/download\/(os1-chrome-v[\w.-]+)\.crx$/,
-	);
-	if (crx) {
+	const crxTag = chromeDownloadTag(path);
+	if (crxTag) {
 		const rel = await chromeLatestRelease();
-		if (!rel || rel.tag !== crx[1]) {
+		if (!rel || rel.tag !== crxTag) {
 			return Response.json({ error: "Unknown release" }, { status: 404 });
 		}
 		const file = await cachedAssetPath(rel, CHROME_CACHE_DIR);
@@ -306,10 +316,10 @@ export async function handleOs1UpdateRoutes(
 	}
 
 	// The signed app zip Squirrel installs from.
-	const dl = path.match(/^\/api\/os1-mac\/download\/(v\d+\.\d+\.\d+[\w.-]*)\.zip$/);
-	if (dl) {
+	const macTag = macDownloadTag(path);
+	if (macTag) {
 		const rel = await latestRelease();
-		if (!rel || rel.tag !== dl[1]) {
+		if (!rel || rel.tag !== macTag) {
 			return Response.json({ error: "Unknown release" }, { status: 404 });
 		}
 		const file = await cachedAssetPath(rel);
