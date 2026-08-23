@@ -1566,7 +1566,9 @@ export function PrPanel({
       <div className="flex min-h-0 flex-1 flex-col">
         {switcher}
         <LoadingState className={reviewStateClass}>
-          Loading pull request…
+          <span className="text-control-label font-medium text-fg">
+            Loading pull request…
+          </span>
         </LoadingState>
       </div>
     );
@@ -1578,6 +1580,7 @@ export function PrPanel({
         <EmptyState
           className={reviewStateClass}
           role="alert"
+          icon={<IconX size={22} className="text-red" />}
           title="Couldn’t load pull request"
           action={
             <Button
