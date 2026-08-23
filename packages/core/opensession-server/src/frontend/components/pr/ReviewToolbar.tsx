@@ -15,7 +15,7 @@ export function ReviewToolbar({
   compact: boolean;
 }) {
   const placement = compact
-    ? `sticky top-0 z-20 desktop:mb-0 desktop:ml-2 desktop:pb-2 ${WS_SUMMARY_REVIEW_BAR_CLEARANCE}`
+    ? `sticky top-0 z-20 desktop:mb-0 desktop:ml-2 desktop:pb-2 desktop:after:pointer-events-none desktop:after:absolute desktop:after:inset-x-0 desktop:after:top-full desktop:after:h-3 desktop:after:[background:linear-gradient(to_bottom,var(--bg)_0%,transparent_100%)] desktop:after:content-[''] ${WS_SUMMARY_REVIEW_BAR_CLEARANCE}`
     : "desktop:mx-2 desktop:mb-2";
 
   return (
