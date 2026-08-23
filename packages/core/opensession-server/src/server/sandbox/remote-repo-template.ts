@@ -101,6 +101,7 @@ export async function sealRemoteRepoTemplate(
     provider,
     repoId: repo.id,
     signature: remoteRepoTemplateSignature(provider),
+    projectSignature: projectPreparationSignature(repo.id),
     nonce,
     sealedAt: new Date().toISOString(),
   });
@@ -125,7 +126,13 @@ export async function validateRemoteRepoTemplate(
   if (proof.exitCode !== 0) {
     throw new Error(`restored ${provider} template has no seal for ${repo.id}`);
   }
-  let parsed: { provider?: string; repoId?: string; signature?: string; nonce?: string };
+  let parsed: {
+    provider?: string;
+    repoId?: string;
+    signature?: string;
+    projectSignature?: string;
+    nonce?: string;
+  };
   try {
     parsed = JSON.parse(proof.stdout);
   } catch {
@@ -135,6 +142,7 @@ export async function validateRemoteRepoTemplate(
     parsed.provider !== provider ||
     parsed.repoId !== repo.id ||
     parsed.signature !== remoteRepoTemplateSignature(provider) ||
+    parsed.projectSignature !== projectPreparationSignature(repo.id) ||
     !parsed.nonce
   ) {
     throw new Error(`restored ${provider} template seal does not match ${repo.id}`);
@@ -221,7 +229,7 @@ export function remoteRepoTemplateSignature(
           cloud: settings.cloud || null,
         };
   return createHash("sha256")
-    .update(`${bootstrapSignature()}|${JSON.stringify(shape)}`)
+    .update(`repo-template-v2|${bootstrapSignature()}|${JSON.stringify(shape)}`)
     .digest("hex");
 }
 
@@ -230,7 +238,10 @@ export function remoteRepoTemplateName(
   provider: RemoteTemplateProvider,
   repoId: string,
 ): string {
-  const suffix = remoteRepoTemplateSignature(provider).slice(0, 16);
+  const suffix = createHash("sha256")
+    .update(`${remoteRepoTemplateSignature(provider)}|${projectPreparationSignature(repoId)}`)
+    .digest("hex")
+    .slice(0, 16);
   return `opensession-${clean(repoId).slice(0, 36)}-${suffix}`;
 }
 
