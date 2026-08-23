@@ -19,7 +19,10 @@ struct TranscriptRow: View {
     /// Who started this session, for crediting turns that carry no explicit
     /// sender (see `UserBubble`). Nil for automations and sub-agents.
     var owner: String?
+    var outbox: Outbox?
     var onEditMessage: ((TranscriptEntry) -> Void)?
+    var onEditUnsent: ((Outbox.Item) -> Void)?
+    var onDeleteUnsent: ((Outbox.Item) -> Void)?
     var onEditNote: ((SessionNote, String) async throws -> Void)?
     var onDeleteNote: ((SessionNote) async throws -> Void)?
     var failureContinuation: FailureContinuationAction? = nil
@@ -49,7 +52,10 @@ struct TranscriptRow: View {
                     entry: entry,
                     sessionId: sessionId,
                     owner: owner,
-                    onEdit: onEditMessage
+                    outbox: outbox,
+                    onEdit: onEditMessage,
+                    onEditUnsent: onEditUnsent,
+                    onDeleteUnsent: onDeleteUnsent
                 )
             } else if entry.isAssistant {
                 AssistantMessage(
@@ -316,9 +322,17 @@ struct UserBubble: View {
     /// sender. Nil for automations (whose turns aren't a person's words) and
     /// for sub-agent transcripts.
     var owner: String?
+    var outbox: Outbox?
     var onEdit: ((TranscriptEntry) -> Void)?
+    var onEditUnsent: ((Outbox.Item) -> Void)?
+    var onDeleteUnsent: ((Outbox.Item) -> Void)?
 
     @Environment(\.colorScheme) private var colorScheme
+
+    private var outboxItem: Outbox.Item? {
+        guard entry.id.hasPrefix("local-") else { return nil }
+        return outbox?.item(id: String(entry.id.dropFirst("local-".count)))
+    }
 
     /// The name to credit, and whether it came back through Slack. Nil when
     /// this turn is the viewer's own. The rule itself lives in
@@ -391,7 +405,13 @@ struct UserBubble: View {
                             } label: {
                                 Label("Copy message", systemImage: "doc.on.doc")
                             }
-                            if attribution == nil, let onEdit {
+                            if let item = outboxItem, let onEditUnsent {
+                                Button {
+                                    onEditUnsent(item)
+                                } label: {
+                                    Label("Edit message", systemImage: "square.and.pencil")
+                                }
+                            } else if attribution == nil, let onEdit {
                                 Button {
                                     onEdit(entry)
                                 } label: {
@@ -400,6 +420,15 @@ struct UserBubble: View {
                             }
                             TimestampLabel(date: entry.timestampDate)
                         }
+                }
+                if let item = outboxItem, let outbox {
+                    OutboxMessageStatus(
+                        item: item,
+                        isSending: outbox.sendingId == item.id,
+                        onEdit: onEditUnsent.map { edit in { edit(item) } },
+                        onRetry: item.failed ? { outbox.retry(id: item.id) } : nil,
+                        onDelete: { onDeleteUnsent?(item) }
+                    )
                 }
             }
             .frame(maxWidth: userMessageMaxWidth, alignment: .trailing)
@@ -428,6 +457,54 @@ struct UserBubble: View {
         #else
         colorScheme == .dark
         #endif
+    }
+}
+
+/// Delivery state stays attached to the message it describes. A send can be
+/// retried for minutes or refused outright, and neither should turn the chat
+/// blank after the composer has already cleared.
+private struct OutboxMessageStatus: View {
+    let item: Outbox.Item
+    let isSending: Bool
+    var onEdit: (() -> Void)?
+    var onRetry: (() -> Void)?
+    let onDelete: () -> Void
+
+    private var isError: Bool { item.failed || item.attempts > 0 }
+
+    private var label: String {
+        if item.failed {
+            return item.lastError.map { "Couldn’t send: \($0)" } ?? "Couldn’t send"
+        }
+        if item.attempts > 0 {
+            return item.lastError.map { "Couldn’t send. Retrying: \($0)" }
+                ?? "Couldn’t send. Retrying…"
+        }
+        return isSending ? "Sending…" : "Waiting to send…"
+    }
+
+    var body: some View {
+        VStack(alignment: .trailing, spacing: 0) {
+            Label(label, systemImage: isError ? "exclamationmark.circle.fill" : "arrow.up.circle")
+                .font(.caption)
+                .foregroundStyle(isError ? OS1VisualStyle.redInk : OS1VisualStyle.textFaint)
+                .multilineTextAlignment(.trailing)
+                .lineLimit(3)
+            HStack(spacing: 16) {
+                if let onRetry {
+                    Button("Retry", action: onRetry)
+                        .foregroundStyle(OS1VisualStyle.redInk)
+                }
+                if let onEdit {
+                    Button("Edit", action: onEdit)
+                }
+                Button("Delete", role: .destructive, action: onDelete)
+            }
+            .font(.caption.weight(.medium))
+            .foregroundStyle(OS1VisualStyle.textDim)
+            .buttonStyle(.plain)
+            .frame(minHeight: 40)
+        }
     }
 }
 

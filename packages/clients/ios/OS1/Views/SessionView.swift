@@ -1301,8 +1301,15 @@ struct SessionView: View {
             // An automation's turns are not a person's words, so they get no
             // author fallback. The web makes the same exception.
             owner: viewModel.session.transcriptOwner,
+            outbox: viewModel.outbox,
             onEditMessage: { entry in
                 viewModel.editSentMessageInComposer(entry)
+            },
+            onEditUnsent: { item in
+                viewModel.editUnsent(item)
+            },
+            onDeleteUnsent: { item in
+                viewModel.discardUnsent(item)
             },
             onEditNote: { note, text in
                 try await viewModel.editSessionNote(note, text: text)
@@ -2618,16 +2625,6 @@ private struct SessionInputBar: View {
     /// a long dictation does — state living in the button would die mid-word.
     @State private var dictation = Dictation()
     @State private var sessionProjection = ComposerSessionProjectionState()
-    /// Whether the outbox's pending rows have earned their place in the flap.
-    /// EVERY send lands in the outbox first, so rendering those rows the
-    /// instant they appear made the flap blink open and shut on ordinary
-    /// sends — a queue-looking panel for a message that was fine, gone before
-    /// you could read it. A send that the server takes normally is
-    /// acknowledged in a few hundred milliseconds and is better represented
-    /// by what it becomes (a transcript bubble, or a queued row while a run
-    /// is in flight), so the pending row waits out that window and only shows
-    /// up when the send is genuinely slow, offline, or refused.
-    @State private var pendingSendVisible = false
     /// Notes are one-message context: they post straight to the team and never
     /// enter the engine or busy-message queue.
     @State private var noteMode = false
@@ -2839,20 +2836,6 @@ private struct SessionInputBar: View {
             dictation.stop()
             viewModel.userIsTyping(false)
         }
-        // Reveal (or re-hide) the outbox's pending rows. Re-runs whenever the
-        // pending set changes, which is what makes the window per-send rather
-        // than a latch that stays open for the rest of the session.
-        .task(id: outboxSignature) {
-            let pending = viewModel.outbox.items(for: viewModel.session.id)
-            if pending.isEmpty {
-                pendingSendVisible = false
-                return
-            }
-            if pending.contains(where: \.failed) || pendingSendVisible { return }
-            try? await Task.sleep(for: Self.pendingRevealDelay)
-            guard !Task.isCancelled else { return }
-            pendingSendVisible = true
-        }
         // Presented from the bar, not from the "+" itself: the button moves
         // between the collapsed pill and the expanded toolbar, and a sheet
         // anchored to a view that goes away closes with it.
@@ -2966,31 +2949,9 @@ private struct SessionInputBar: View {
         .scrollIndicators(.hidden)
     }
 
-    /// Messages this app is still holding for the server. Read here, in the
-    /// input bar, rather than in `SessionView.body` — an outbox change must
-    /// not re-evaluate the whole transcript.
-    private var unsentItems: [Outbox.Item] {
-        let pending = viewModel.outbox.items(for: viewModel.session.id)
-        // A refused message is never held back: it needs the person.
-        return pendingSendVisible ? pending : pending.filter(\.failed)
-    }
-
-    /// Identity of what's pending, so the reveal timer restarts when the set
-    /// changes and stops when the server has taken everything.
-    private var outboxSignature: String {
-        viewModel.outbox.items(for: viewModel.session.id)
-            .map { "\($0.id)\($0.failed ? "!" : "")" }
-            .joined(separator: "|")
-    }
-
-    /// ~0.7s: long enough that a healthy send never opens the flap, short
-    /// enough that a stalled one is still owned up to while the person is
-    /// looking at the composer they just sent from.
-    private static let pendingRevealDelay: Duration = .milliseconds(700)
-
     private var hasQueueItems: Bool {
         !viewModel.deliveringItems.isEmpty || !viewModel.steeredItems.isEmpty
-            || !viewModel.queuedItems.isEmpty || !unsentItems.isEmpty
+            || !viewModel.queuedItems.isEmpty
     }
 
     /// The compact chip floating above the composer: what is waiting to be
@@ -3187,34 +3148,6 @@ private struct SessionInputBar: View {
                         onDelete: { viewModel.deleteQueued(item) }
                     )
             }
-            // Still ours: written, saved, not yet acknowledged by the server.
-            // These sit last because they're the furthest from the transcript.
-            ForEach(unsentItems) { item in
-                QueuedMessageRow(
-                    // Images stay on disk as blobs — the row flags that the
-                    // message carries attachments rather than paying a read
-                    // per body evaluation to thumbnail them.
-                    item: QueueItem(
-                        id: item.id,
-                        content: item.content,
-                        user: item.user,
-                        hasFiles: !item.imageFiles.isEmpty
-                    ),
-                    phase: item.failed ? .failed : .unsent,
-                    showsDivider: item.id != firstRowId,
-                    detail: item.failed
-                        ? item.lastError
-                        : (viewModel.outbox.sendingId == item.id ? "Sending…" : nil),
-                    // Nothing has been sent yet, so "edit" is literally taking
-                    // the message back — it returns to the composer whole,
-                    // images included, and the outbox copy goes away.
-                    onEdit: viewModel.outbox.sendingId == item.id
-                        ? nil : { viewModel.editUnsent(item) },
-                    onRetry: item.failed
-                        ? { viewModel.outbox.retry(id: item.id) } : nil,
-                    onDelete: { viewModel.outbox.delete(id: item.id) }
-                )
-            }
         }
         .padding(.top, 10)
         // 14 of this is tucked under the composer by the negative padding
@@ -3270,7 +3203,6 @@ private struct SessionInputBar: View {
         viewModel.deliveringItems.first?.id
             ?? viewModel.steeredItems.first?.id
             ?? viewModel.queuedItems.first?.id
-            ?? unsentItems.first?.id
     }
 
     private var queueTitle: String {
@@ -3281,12 +3213,6 @@ private struct SessionInputBar: View {
         let sessionMessageCount = queuedPresentations.lazy.filter(\.isSessionMessage).count
         let queued = viewModel.queuedItems.count - reviewCount - sessionMessageCount
         let inFlight = viewModel.steeredItems.count + viewModel.deliveringItems.count
-        let unsent = unsentItems.count
-        // Unsent leads: "waiting on your connection" is the more urgent fact,
-        // and it's the one the person can act on.
-        if unsent > 0 && queued == 0 && inFlight == 0 {
-            return "\(unsent) unsent \(unsent == 1 ? "message" : "messages")"
-        }
         var parts: [String] = []
         if queued > 0 {
             parts.append("\(queued) \(queued == 1 ? "message" : "messages") queued")
@@ -3304,7 +3230,6 @@ private struct SessionInputBar: View {
         // the running turn, and calling them queued reads as "my message
         // didn't go through" (the web learned this the hard way).
         if inFlight > 0 { parts.append("\(inFlight) in flight") }
-        if unsent > 0 { parts.append("\(unsent) unsent") }
         return parts.joined(separator: " · ")
     }
 
@@ -3316,7 +3241,6 @@ private struct SessionInputBar: View {
         parts.append(contentsOf: viewModel.deliveringItems.map { "d\($0.id)" })
         parts.append(contentsOf: viewModel.steeredItems.map { "s\($0.id)" })
         parts.append(contentsOf: viewModel.queuedItems.map { "q\($0.id):\($0.content.count)" })
-        parts.append(contentsOf: unsentItems.map { "u\($0.id)\($0.failed ? "!" : "")" })
         return parts.joined(separator: "|")
     }
 
@@ -3865,22 +3789,18 @@ private struct SessionInputBar: View {
 
     // MARK: - Queue rows
 
-    /// One message that isn't in the transcript yet. "Unsent" hasn't reached
-    /// the server at all (no signal, or it's still being retried) and is held
-    /// on disk until it does; "Undelivered" is one the server refused, waiting
-    /// on the person. "Queued" holds until the run fully finishes; "Steering"
-    /// is accepted for the run's next turn boundary but can still be pulled
-    /// back before it crosses that boundary; "Delivering" has left the server
-    /// queue and is waiting on its transcript echo (~1s file watcher) — inert,
-    /// just kept visible.
+    /// One server-accepted message that isn't in the transcript yet. "Queued"
+    /// holds until the run fully finishes; "Steering" is accepted for the
+    /// run's next turn boundary but can still be pulled back before it crosses
+    /// that boundary; "Delivering" has left the server queue and is waiting on
+    /// its transcript echo (~1s file watcher), so it is inert but stays visible.
     private struct QueuedMessageRow: View {
-        enum Phase { case queued, steering, delivering, unsent, failed }
+        enum Phase { case queued, steering, delivering }
 
         let item: QueueItem
         let phase: Phase
         /// Every row but the first draws the hairline above it.
         var showsDivider = false
-        var detail: String?
         var onSteer: (() -> Void)?
         /// Deliver-now on a steering receipt: end the run's current step so
         /// the message lands immediately instead of waiting out a long tool
@@ -3890,7 +3810,6 @@ private struct SessionInputBar: View {
         /// -1 moves the message one place towards the front of the queue,
         /// +1 one place back. Absent when there's nothing to reorder.
         var onMove: ((Int) -> Void)?
-        var onRetry: (() -> Void)?
         var onDelete: (() -> Void)?
 
         /// Live drag state: how far the row rides the finger, and how much of
@@ -3913,8 +3832,6 @@ private struct SessionInputBar: View {
             case .queued: nil
             case .steering: "Steering · delivers when this step ends"
             case .delivering: "Delivering…"
-            case .unsent: detail ?? "Unsent — sends when you're back online"
-            case .failed: detail ?? "Couldn't send"
             }
         }
 
@@ -3923,11 +3840,7 @@ private struct SessionInputBar: View {
         /// carries the colour and the label stays quiet, so a flap full of
         /// messages doesn't read as a flap full of warnings.
         private var labelColor: Color {
-            switch phase {
-            case .unsent: OS1VisualStyle.yellowInk
-            case .failed: OS1VisualStyle.redInk
-            case .queued, .steering, .delivering: OS1VisualStyle.textFaint
-            }
+            OS1VisualStyle.textFaint
         }
 
         /// Queued is the flap's ordinary state, so it wears no mark at all:
@@ -3951,14 +3864,6 @@ private struct SessionInputBar: View {
                 EmptyView()
             case .steering, .delivering:
                 PulsingDot(color: OS1VisualStyle.green, size: 6)
-            case .unsent:
-                Image(systemName: "arrow.up.circle")
-                    .font(.caption2)
-                    .foregroundStyle(OS1VisualStyle.yellowInk)
-            case .failed:
-                Image(systemName: "exclamationmark.triangle.fill")
-                    .font(.caption2)
-                    .foregroundStyle(OS1VisualStyle.redInk)
             }
         }
 
@@ -4060,9 +3965,6 @@ private struct SessionInputBar: View {
                 HStack(spacing: 0) {
                     if let onDelete {
                         rowAction("xmark", "Discard message", onDelete)
-                    }
-                    if let onRetry {
-                        rowAction("arrow.clockwise", "Try again", onRetry)
                     }
                     if let onSteer {
                         rowAction("arrow.up", "Steer into this run", onSteer)
@@ -4208,9 +4110,6 @@ private struct SessionInputBar: View {
             if let onMove {
                 Button("Move up", systemImage: "arrow.up.to.line") { onMove(-1) }
                 Button("Move down", systemImage: "arrow.down.to.line") { onMove(1) }
-            }
-            if let onRetry {
-                Button("Try again", systemImage: "arrow.clockwise", action: onRetry)
             }
             if let onDelete {
                 Button(role: .destructive, action: onDelete) {

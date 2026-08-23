@@ -185,9 +185,13 @@ Pure SwiftUI with SwiftStreamingMarkdown for CommonMark/GFM rendering, iOS 26+
   session token rides in as a cookie scoped to that session's assets path, so
   relative references between assets resolve — while markdown and code render
   natively.
-- **Prompting** — WS `prompt` frames (the server has no REST prompt endpoint).
-  Sending while a run is active queues, exactly like the web UI. Stop button
-  sends `cancel` for the watched session. The floating glass composer uses a
+- **Prompting** — durable sends enter the on-device `Outbox` before the
+  composer clears, then use the idempotent REST prompt route so delivery has an
+  acknowledgement. The local message appears in the transcript immediately;
+  offline retries and refusals keep their status and actions attached to that
+  bubble, including across relaunches. Server-accepted busy sends move into the
+  queue, exactly like the web UI. Stop sends `cancel` for the watched session.
+  The floating glass composer uses a
   progressive material fade so transcript content recedes cleanly beneath it;
   its full surface focuses the field and keeps a comfortable keyboard gap.
 - **Dictation** — the composer's mic (first of the trailing controls, ahead of

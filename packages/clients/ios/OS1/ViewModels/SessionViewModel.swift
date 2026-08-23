@@ -448,8 +448,14 @@ final class SessionViewModel {
                 timestamp: ISO8601DateFormatter().string(from: .now),
                 images: seed.images.isEmpty ? nil : seed.images
             )]
-            rebuildDisplayItems()
         }
+        // A composer send lives in the outbox until the server accepts it. Put
+        // that durable local copy back in the conversation after a relaunch so
+        // a failed or offline send never leaves an unexplained blank chat.
+        for item in outbox.items(for: session.id) where item.purpose == nil {
+            appendOutboxEcho(item)
+        }
+        if !entries.isEmpty { rebuildDisplayItems() }
     }
 
     /// A cached conversation may be reopened from an older list-row snapshot.
@@ -921,7 +927,7 @@ final class SessionViewModel {
         let busyMode = busyModeOverride
             ?? UserDefaults.standard.string(forKey: "os1.composer.busySend")
             ?? "queue"
-        guard outbox.enqueue(
+        guard let item = outbox.enqueue(
             sessionId: session.id,
             content: text,
             images: images,
@@ -929,11 +935,16 @@ final class SessionViewModel {
             fastMode: fastMode ? true : nil,
             busyMode: busyMode,
             user: ServerConfig.shared.userName
-        ) != nil else {
+        ) else {
             // Full: keep the draft where it is rather than swallowing it.
             notice = "Too many unsent messages — send or delete some first."
             return
         }
+        // The outbox is already durable, so the conversation can own the
+        // optimistic copy immediately. Its status remains attached to this
+        // bubble until the server accepts, rejects, or queues the message.
+        appendOutboxEcho(item, images: images)
+        rebuildDisplayItems()
         // You can't be done with a session you're actively working in: prompting
         // clears any sidebar hide covering it (opening it deliberately doesn't).
         HideStore.shared.unhide(for: session)
@@ -942,6 +953,26 @@ final class SessionViewModel {
         attachedImages = []
         quoteSelection.clear()
         sendSeq += 1
+    }
+
+    private func appendOutboxEcho(_ item: Outbox.Item, images: [String]? = nil) {
+        let localId = "local-\(item.id)"
+        guard !entries.contains(where: { $0.id == localId }) else { return }
+        localEchoIds.insert(localId)
+        let sources = images ?? outbox.images(for: item)
+        entries.append(TranscriptEntry(
+            id: localId,
+            type: "user",
+            content: item.content,
+            timestamp: ISO8601DateFormatter().string(from: item.createdAt),
+            images: sources.isEmpty ? nil : sources
+        ))
+    }
+
+    private func removeOutboxEcho(_ item: Outbox.Item) {
+        let localId = "local-\(item.id)"
+        localEchoIds.remove(localId)
+        entries.removeAll { $0.id == localId }
     }
 
     /// The server took a message: put it where the server says it went. This
@@ -954,6 +985,8 @@ final class SessionViewModel {
         }
         switch delivery.status {
         case "queued", "steered":
+            removeOutboxEcho(item)
+            rebuildDisplayItems()
             // Held server-side; it enters the transcript when the queue
             // delivers it. Show the chip the queue_update will replace —
             // unless that update has already arrived. The socket routinely
@@ -980,8 +1013,15 @@ final class SessionViewModel {
         case "handled":
             // A slash command (/model, /goal …) — the server's answer is the
             // whole result; nothing enters the transcript.
+            removeOutboxEcho(item)
+            rebuildDisplayItems()
             if !delivery.message.isEmpty { notice = delivery.message }
         default:
+            // The bubble was minted when the composer accepted the message.
+            // Delivery only removes its outbox status; there is no second
+            // optimistic copy to append.
+            let localId = "local-\(item.id)"
+            if entries.contains(where: { $0.id == localId }) { return }
             // The server's own copy of this message may already be on screen:
             // its transcript entry is broadcast at intake, before this reply
             // was even written, so on a slow link the entry wins the race —
@@ -997,7 +1037,6 @@ final class SessionViewModel {
                 landedUserEntries.remove(at: landed)
                 return
             }
-            let localId = "local-\(item.id)"
             localEchoIds.insert(localId)
             entries.append(TranscriptEntry(
                 id: localId,
@@ -1396,7 +1435,13 @@ final class SessionViewModel {
         }
         draft = draft.isEmpty ? item.content : draft + "\n\n" + item.content
         attachedImages.append(contentsOf: images)
+        discardUnsent(item)
+    }
+
+    func discardUnsent(_ item: Outbox.Item) {
+        removeOutboxEcho(item)
         outbox.delete(id: item.id)
+        rebuildDisplayItems()
     }
 
     /// Put one of the viewer's sent turns back into the ordinary composer.

@@ -1435,9 +1435,9 @@ final class SendDraftTests: XCTestCase {
         XCTAssertEqual(viewModel.draft, "", "the composer accepted the message")
         XCTAssertEqual(unsent.map(\.content), ["written in a tunnel"])
         XCTAssertFalse(unsent[0].failed, "no connection is not a refusal")
-        XCTAssertTrue(
-            viewModel.entries.isEmpty,
-            "nothing enters the transcript until the server has it"
+        XCTAssertEqual(
+            viewModel.entries.map(\.text), ["written in a tunnel"],
+            "the durable outbox copy must stay visible in the conversation"
         )
 
         await comeBackOnline()
@@ -1454,6 +1454,13 @@ final class SendDraftTests: XCTestCase {
 
         let relaunched = Outbox(directory: outboxDirectory, monitorNetwork: false)
         XCTAssertEqual(relaunched.items(for: "bks-1").map(\.content), ["still owed"])
+        let reopened = SessionViewModel(
+            session: Session(id: "bks-1"), socketFactory: { self.socket }, outbox: relaunched
+        )
+        XCTAssertEqual(
+            reopened.entries.map(\.text), ["still owed"],
+            "reopening the chat must restore the original unsent message"
+        )
     }
 
     /// Order is meaning: message 2 must never overtake message 1, so a
@@ -1490,7 +1497,10 @@ final class SendDraftTests: XCTestCase {
         XCTAssertEqual(unsent.map(\.content), ["nope"])
         XCTAssertTrue(unsent[0].failed)
         XCTAssertEqual(unsent[0].lastError, "Session has no engine to resume yet.")
-        XCTAssertTrue(viewModel.entries.isEmpty)
+        XCTAssertEqual(
+            viewModel.entries.map(\.text), ["nope"],
+            "a refusal must keep the original message in the conversation"
+        )
 
         // Retry once the reason is gone.
         stubbedOutcome = nil
@@ -1558,8 +1568,9 @@ final class SendDraftTests: XCTestCase {
     func testDiscardingAnUnsentMessageRemovesIt() async {
         stubbedOutcome = .unavailable("offline")
         await send("never mind")
-        outbox.delete(id: unsent[0].id)
+        viewModel.discardUnsent(unsent[0])
         XCTAssertTrue(unsent.isEmpty)
+        XCTAssertTrue(viewModel.entries.isEmpty)
 
         await comeBackOnline()
         XCTAssertTrue(deliveries.map(\.item.content).filter { $0 == "never mind" }.count == 1,
