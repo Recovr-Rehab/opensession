@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from "react";
 import type { Workspace } from "../lib/types";
+import { randomUUID } from "../lib/random-uuid";
 import { defaultWorkspaceModelSettings, fetchModels, updateWorkspaceApi, invalidateModelsCache, type ModelOption } from "../lib/api";
 import { Button } from "../ui/button";
 import { CardList } from "../ui/card";
@@ -28,7 +29,7 @@ type Preset = NonNullable<Settings["presets"]>[number];
 type Supporting = NonNullable<Preset["supporting"]>[number];
 
 const blankPreset = (): Preset => ({
-	id: crypto.randomUUID().slice(0, 8),
+	id: randomUUID().slice(0, 8),
 	label: "New preset",
 	instructions: "",
 	lead: { model: "", effort: "high" },

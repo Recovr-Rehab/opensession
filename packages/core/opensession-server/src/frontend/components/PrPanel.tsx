@@ -1,5 +1,6 @@
 import { repoLabel } from "../lib/repo-label";
 import { AGENT_NAME } from "../lib/brand";
+import { randomUUID } from "../lib/random-uuid";
 import React, {
   useEffect,
   useState,
@@ -964,7 +965,7 @@ export function PrPanel({
     async (target: CommentTarget, text: string) => {
       setPending((prev) => [
         ...prev,
-        { ...target, text, id: crypto.randomUUID() },
+        { ...target, text, id: randomUUID() },
       ]);
     setReviewDone(null);
     },

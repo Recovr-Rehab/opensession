@@ -80,3 +80,17 @@ http:
     timeout: 5000
     body:
       - '"ok"'
+  # Stable shell assets must be embedded in the single-executable install, not
+  # only available from a source checkout beside the server.
+  http://127.0.0.1:{{.Vars.port}}/mac-app-icon.png:
+    status: 200
+    timeout: 5000
+  http://127.0.0.1:{{.Vars.port}}/signin-bg.webp:
+    status: 200
+    timeout: 5000
+  http://127.0.0.1:{{.Vars.port}}/sw.js:
+    status: 200
+    timeout: 5000
+  http://127.0.0.1:{{.Vars.port}}/splash/apple-splash-1206-2622.png:
+    status: 200
+    timeout: 5000

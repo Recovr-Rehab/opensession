@@ -6,6 +6,8 @@
  * failed browser recognizer still uses the server's full-clip transcription.
  */
 
+import { randomUUID } from "./random-uuid";
+
 type SpeechResult = {
   readonly isFinal: boolean;
   readonly length: number;
@@ -109,7 +111,7 @@ function startDesktopDictation(
     return null;
   }
 
-  const id = crypto.randomUUID();
+  const id = randomUUID();
   let stopped = false;
   const unsubscribe = api.onText((payload) => {
     if (payload.id === id && typeof payload.text === "string" && payload.text) {
