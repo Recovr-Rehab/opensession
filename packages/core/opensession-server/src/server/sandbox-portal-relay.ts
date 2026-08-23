@@ -59,6 +59,8 @@ function safeHeaders(headers: Headers): Record<string, string> {
 
 export function mintSandboxPortalGrant(input: { sessionId: string; sandboxId: string; port: number; ttlMs?: number }): SandboxPortalGrant {
 	if (!/^[A-Za-z0-9_.-]{3,160}$/.test(input.sessionId) || !/^[A-Za-z0-9_.-]{3,240}$/.test(input.sandboxId) || !Number.isInteger(input.port) || input.port < 1024 || input.port > 19000) throw new Error("Invalid Sandbox Portal registration");
+	const now = Date.now();
+	for (const [token, grant] of grants) if (grant.expiresAt <= now) grants.delete(token);
 	const token = randomBytes(24).toString("base64url");
 	const expiresAt = Date.now() + Math.min(Math.max(input.ttlMs ?? 10 * 60_000, 10_000), 60 * 60_000);
 	grants.set(token, { sessionId: input.sessionId, sandboxId: input.sandboxId, port: input.port, expiresAt });
@@ -77,9 +79,24 @@ function grantForSandboxPortal(token: string, expected: Omit<StoredGrant, "expir
 	return a.length === b.length && timingSafeEqual(a, b) ? grant : undefined;
 }
 
+function teardownConnection(connection: Connection, code: number, reason: string): void {
+	clearTimeout(connection.expiryTimer);
+	for (const pending of connection.pending.values()) {
+		clearTimeout(pending.timer);
+		pending.resolve({ status: 502, headers: {} });
+	}
+	connection.pending.clear();
+	for (const [id, browser] of browserSockets) {
+		if (browser.connection !== connection) continue;
+		browserSockets.delete(id);
+		try { browser.ws.close(); } catch {}
+	}
+	try { connection.ws.close(code, reason); } catch {}
+}
+
 export function revokeSandboxPortalGrants(sandboxId: string): void {
 	for (const [token, grant] of grants) if (grant.sandboxId === sandboxId) grants.delete(token);
-	for (const [id, connection] of connections) if (connection.sandboxId === sandboxId) { clearTimeout(connection.expiryTimer); try { connection.ws.close(1008, "portal revoked"); } catch {} connections.delete(id); }
+	for (const [id, connection] of connections) if (connection.sandboxId === sandboxId) { teardownConnection(connection, 1008, "portal revoked"); connections.delete(id); }
 	for (const [id, relay] of relays) if (relay.sandboxId === sandboxId) { try { relay.server.stop(true); } catch {} void import("./preview").then(({ dropAuthenticatedPortalRoute }) => dropAuthenticatedPortalRoute(sandboxHttpsPortFor(sandboxId, relay.port))); relays.delete(id); }
 }
 
@@ -87,7 +104,7 @@ export function revokeSandboxPortalGrants(sandboxId: string): void {
  * same Sandbox. Used for explicit stop and failed restarts. */
 export function revokeSandboxPortalRelay(sandboxId: string, port: number): void {
 	for (const [token, grant] of grants) if (grant.sandboxId === sandboxId && grant.port === port) grants.delete(token);
-	for (const [id, connection] of connections) if (connection.sandboxId === sandboxId && connection.port === port) { clearTimeout(connection.expiryTimer); try { connection.ws.close(1008, "portal stopped"); } catch {} connections.delete(id); }
+	for (const [id, connection] of connections) if (connection.sandboxId === sandboxId && connection.port === port) { teardownConnection(connection, 1008, "portal stopped"); connections.delete(id); }
 	for (const [id, relay] of relays) if (relay.sandboxId === sandboxId && relay.port === port) { try { relay.server.stop(true); } catch {} void import("./preview").then(({ dropAuthenticatedPortalRoute }) => dropAuthenticatedPortalRoute(sandboxHttpsPortFor(sandboxId, port))); relays.delete(id); }
 }
 
@@ -111,9 +128,10 @@ export function sandboxPortalRelayOpen(ws: any): boolean {
 	const { sessionId, sandboxId, port } = ws.data;
 	const id = key(sessionId, sandboxId, port);
 	const previous = connections.get(id);
-	if (previous) { clearTimeout(previous.expiryTimer); previous.ws?.close?.(1000, "replaced"); }
+	if (previous) teardownConnection(previous, 1000, "replaced");
 	const expiresAt = Number(ws.data.expiresAt);
 	const closeAtExpiry = setTimeout(() => { try { ws.close(1008, "portal credential expired"); } catch {} }, Math.max(0, expiresAt - Date.now()));
+	closeAtExpiry.unref?.();
 	connections.set(id, { ws, sessionId, sandboxId, port, expiresAt, expiryTimer: closeAtExpiry, pending: new Map(), limitRequests: createRelayRequestLimiter() });
 	return true;
 }
@@ -165,9 +183,7 @@ export function sandboxPortalRelayClose(ws: any): boolean {
 	if (ws.data?.kind !== "sandbox-portal-relay") return false;
 	const connection = connections.get(key(ws.data.sessionId, ws.data.sandboxId, ws.data.port));
 	if (connection && connection.ws === ws) {
-		clearTimeout(connection.expiryTimer);
-		for (const pending of connection.pending.values()) { clearTimeout(pending.timer); pending.resolve({ status: 502, headers: {} }); }
-		for (const [id, browser] of browserSockets) if (browser.connection === connection) { try { browser.ws.close(); } catch {} browserSockets.delete(id); }
+		teardownConnection(connection, 1000, "closed");
 		connections.delete(key(ws.data.sessionId, ws.data.sandboxId, ws.data.port));
 	}
 	return true;
@@ -201,6 +217,7 @@ async function relayFetch(input: { sessionId: string; sandboxId: string; port: n
 			};
 			request.signal.addEventListener("abort", cancel, { once: true });
 			timer = setTimeout(() => finish({ status: 504, headers: {} }), RELAY_REQUEST_TIMEOUT_MS);
+			timer.unref?.();
 			connection.pending.set(id, { resolve: finish, timer });
 			try { connection.ws.send(JSON.stringify({ t: "http", id, method: request.method, path: new URL(request.url).pathname + new URL(request.url).search, headers: safeHeaders(request.headers), ...(bytes ? { body: Buffer.from(bytes).toString("base64") } : {}) })); }
 			catch { clearTimeout(timer); finish({ status: 502, headers: {} }); }

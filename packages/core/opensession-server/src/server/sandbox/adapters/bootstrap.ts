@@ -1232,7 +1232,9 @@ export async function scrubRemoteWarmWorkspaceAuthority(
   // interrupted git operation cannot poison every sandbox restored from it
   // ("index.lock: File exists" on the next refresh).
   const scrubbed = await driver.exec(
-    `find .git -name "*.lock" -type f -delete 2>/dev/null; git remote set-url origin ${shellQuoteWord(safeOrigin)}`,
+    `find .git -name "*.lock" -type f -delete 2>/dev/null; ` +
+      `rm -f .git/opensession-adopted-by; ` +
+      `git remote set-url origin ${shellQuoteWord(safeOrigin)}`,
     { cwd: dir },
   );
   if (scrubbed.exitCode !== 0) {
@@ -1274,23 +1276,28 @@ export async function setupRemoteWorkspace(
     // provider command. A warm adoption previously spent four to six serial
     // SDK round trips here, and Daytona fetched every remote ref. If the
     // requested branch is new, start it from the current default branch.
+    const owner = `${warmDir}/.git/opensession-adopted-by`;
     const prepare =
-      `test -d ${shellQuoteWord(warmDir)}/.git && (${attach}) && ` +
+      `test -d ${shellQuoteWord(warmDir)}/.git && ` +
+      `{ if [ -f ${shellQuoteWord(owner)} ] && [ "$(cat ${shellQuoteWord(owner)})" != ${shellQuoteWord(cwd)} ]; then exit 73; fi; } && ` +
+      `(${attach}) && ` +
       `git -C ${shellQuoteWord(cwd)} remote set-url origin ${shellQuoteWord(cloneUrl)} && ` +
       `(if git -C ${shellQuoteWord(cwd)} fetch origin ${shellQuoteWord(branch)} --quiet; ` +
       `then __start=FETCH_HEAD; else ` +
       `git -C ${shellQuoteWord(cwd)} fetch origin ${shellQuoteWord(defaultBranch)} --quiet && __start=FETCH_HEAD; fi; ` +
-      `git -C ${shellQuoteWord(cwd)} checkout -B ${shellQuoteWord(branch)} "$__start")`;
+      `git -C ${shellQuoteWord(cwd)} checkout -B ${shellQuoteWord(branch)} "$__start") && ` +
+      `printf '%s\\n' ${shellQuoteWord(cwd)} > ${shellQuoteWord(owner)}`;
     const adopted = await driver.exec(prepare, { timeoutMs: 180_000 });
     if (adopted.exitCode === 0) {
       adoptedBranchPrepared = true;
       console.log(`[sandbox-remote] mounted warm workspace clone for ${repoId} at ${cwd}`);
       mark("warm clone fetched");
       cloned = { exitCode: 0, stdout: "", stderr: "" };
-    } else {
+    } else if (adopted.exitCode !== 73) {
       // A present warm tree with a failed fetch/checkout is not a cold-clone
       // signal. Falling through would try to clone over the attached tree and
-      // hide the actionable provider/Git error.
+      // hide the actionable provider/Git error. Exit 73 is the explicit
+      // already-owned signal and safely falls through before attach.
       const warmTree = await driver.exec(`test -d ${shellQuoteWord(warmDir)}/.git`);
       if (warmTree.exitCode === 0) {
         throw new Error(
