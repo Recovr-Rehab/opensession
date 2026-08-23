@@ -49,27 +49,28 @@ export async function handlePreviewRoutes(
 	if (/^\/api\/portal-auth\/\d+$/.test(path) && req.method === "GET") {
 		const httpsPort = Number(path.slice(path.lastIndexOf("/") + 1));
 		let recoveredNow = false;
-		if (!portalRouteAuthorized(httpsPort)) {
-			// Caddy and its allocated URL survive a coordinator restart, but the
-			// loopback relay intentionally does not. Restore it only after this
-			// authenticated request proves the durable route still belongs to a
-			// live session and running sandbox.
-			let recovered = false;
-			try {
-				const { recoverSandboxPortalRoute } = await import(
-					"../sandbox-portal-recovery"
-				);
-				recovered = await recoverSandboxPortalRoute(httpsPort);
-				recoveredNow = recovered;
-			} catch (error) {
-				console.warn(`[preview] Portal ${httpsPort} recovery failed:`, error);
+		try {
+			const { recoverSandboxPortalRoute, sandboxPortalRouteConnected } = await import(
+				"../sandbox-portal-recovery"
+			);
+			// Caddy routes and their authorization can outlive the outbound relay.
+			// Verify both on every authenticated request; a disconnected sandbox
+			// gets a fresh sidecar before Caddy proxies to a dead loopback socket.
+			if (!portalRouteAuthorized(httpsPort) || !sandboxPortalRouteConnected(httpsPort)) {
+				recoveredNow = await recoverSandboxPortalRoute(httpsPort);
+				if (!recoveredNow) {
+					return Response.json(
+						{ error: "Portal route is not active" },
+						{ status: 404, headers: { "Cache-Control": "no-store" } },
+					);
+				}
 			}
-			if (!recovered) {
-				return Response.json(
-					{ error: "Portal route is not active" },
-					{ status: 404, headers: { "Cache-Control": "no-store" } },
-				);
-			}
+		} catch (error) {
+			console.warn(`[preview] Portal ${httpsPort} recovery failed:`, error);
+			return Response.json(
+				{ error: "Portal route is not active" },
+				{ status: 404, headers: { "Cache-Control": "no-store" } },
+			);
 		}
 		if (recoveredNow) {
 			// Caddy chose the old loopback upstream before forward_auth ran. A
