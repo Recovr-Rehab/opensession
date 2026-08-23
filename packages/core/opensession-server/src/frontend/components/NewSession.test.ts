@@ -160,12 +160,13 @@ test("dismissing a nonempty composer parks it without an explicit draft action",
   expect(source).not.toContain("Save as draft");
 });
 
-test("the phone composer uses the shared top bar and sheet corner", async () => {
+test("the phone composer keeps its buttons concentric with the sheet corner", async () => {
   const source = await Bun.file(new URL("./NewSession.tsx", import.meta.url)).text();
 
   expect(source).toContain("<PhoneTopBar");
   expect(source).toContain("<PhoneTopBarAction");
   expect(source).toContain("phone:rounded-t-[calc(40px*var(--rf))]");
+  expect(source).toContain("phone:px-[18px] phone:pb-3 phone:pt-[18px]");
 });
 
 test("a parked draft keeps the composer copy and carries its attachments", async () => {

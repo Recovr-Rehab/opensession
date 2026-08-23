@@ -185,7 +185,7 @@ const LAST_REPO_KEY = "opensession-new-session-repo";
  *  than the strip a keyboard leaves visible, which cut the bar off the top of
  *  the screen as soon as an attachment took its own space. */
 const HEADER =
-	"flex items-center gap-2 border-b border-transparent px-4 pt-4 pb-[11px] phone:h-auto phone:px-3 phone:pb-3 phone:pt-3";
+	"flex items-center gap-2 border-b border-transparent px-4 pt-4 pb-[11px] phone:h-auto phone:px-[18px] phone:pb-3 phone:pt-[18px]";
 /** Merged onto HEADER/FOOTER by `cn()`, which drops the transparent colour. */
 const EDGE_DIVIDER = "border-line";
 /** The header's picker, which doubles as the palette's title: bigger, solid,
