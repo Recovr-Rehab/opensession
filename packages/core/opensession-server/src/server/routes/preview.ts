@@ -7,7 +7,7 @@
  */
 
 import type { RouteContext } from "./context";
-import { getPreviewStatus, getSandboxPreviewStatus, portalRouteAuthorized, sandboxPreviewIdentityContext, startPreview, startSandboxPreview, stopPreview, stopSandboxPreview, type PreviewPortalRecipe } from "../preview";
+import { getPreviewStatus, getSandboxPreviewStatus, portalRouteAuthorized, recipeStartOptions, sandboxPreviewIdentityContext, startPreview, startSandboxPreview, stopPreview, stopSandboxPreview } from "../preview";
 import { findSessionAsync } from "../session-cache";
 import { activeSandboxFor } from "../session-sandbox";
 import { existsSync } from "fs";
@@ -17,7 +17,8 @@ import { getRepo } from "../worktree";
 import { sleepingSandboxPortalStatus } from "../sandbox-portals";
 import type { UnifiedSession } from "../types";
 import { createWorkloadIdentityEnv } from "../workload-identity";
-import { shellQuoteWord } from "../sandbox/adapters/bootstrap";
+
+export { recipeCommand } from "../preview";
 
 export function unavailableSandboxPreviewStatus(
 	session: Pick<UnifiedSession, "sandbox">,
@@ -33,26 +34,6 @@ export function unavailableSandboxPreviewStatus(
 		bootable: false,
 		services: [],
 		sandboxLifecycle: sandbox.lifecycle || "preparing",
-	};
-}
-
-export function recipeCommand(recipe: PreviewPortalRecipe): string {
-	if (!recipe.command) throw new Error("This Portal still needs an agent-assisted starter.");
-	const exports = [
-		recipe.serviceKey ? `export ${recipe.serviceKey}=\"$PORT\"` : "",
-		recipe.serviceKey === "WEBAPP_PORT" ? 'export WEBAPP_PORT="$PORT" PREVIEW_URL="$PORTAL_URL"' : "",
-	].filter(Boolean).join("; ");
-	return `bash -c ${shellQuoteWord(`${exports ? `${exports}; ` : ""}exec ${recipe.command}`)}`;
-}
-
-function recipeStartOptions(recipe: PreviewPortalRecipe) {
-	return {
-		name: recipe.id,
-		command: recipeCommand(recipe),
-		...(recipe.port ? { port: recipe.port } : {}),
-		...(recipe.serviceKey ? { key: recipe.serviceKey } : {}),
-		...(recipe.description ? { description: recipe.description } : {}),
-		...(recipe.readyTimeoutSeconds ? { readyTimeoutMs: recipe.readyTimeoutSeconds * 1_000 } : {}),
 	};
 }
 

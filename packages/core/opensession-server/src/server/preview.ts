@@ -125,6 +125,26 @@ export interface PreviewStatus {
   portalRecipes: PreviewPortalRecipe[];
 }
 
+export function recipeCommand(recipe: PreviewPortalRecipe): string {
+  if (!recipe.command) throw new Error("This Portal still needs an agent-assisted starter.");
+  const exports = [
+    recipe.serviceKey ? `export ${recipe.serviceKey}="$PORT"` : "",
+    recipe.serviceKey === "WEBAPP_PORT" ? 'export WEBAPP_PORT="$PORT" PREVIEW_URL="$PORTAL_URL"' : "",
+  ].filter(Boolean).join("; ");
+  return `bash -c ${shellQuoteWord(`${exports ? `${exports}; ` : ""}exec ${recipe.command}`)}`;
+}
+
+export function recipeStartOptions(recipe: PreviewPortalRecipe) {
+  return {
+    name: recipe.id,
+    command: recipeCommand(recipe),
+    ...(recipe.port ? { port: recipe.port } : {}),
+    ...(recipe.serviceKey ? { key: recipe.serviceKey } : {}),
+    ...(recipe.description ? { description: recipe.description } : {}),
+    ...(recipe.readyTimeoutSeconds ? { readyTimeoutMs: recipe.readyTimeoutSeconds * 1_000 } : {}),
+  };
+}
+
 /** Parse the safe, declarative contents of .agents/portals.json. */
 export function parsePreviewPortalRecipes(raw: string | null): PreviewPortalRecipe[] {
   if (!raw) return [];
