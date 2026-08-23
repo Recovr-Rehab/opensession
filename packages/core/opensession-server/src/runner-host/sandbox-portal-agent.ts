@@ -49,7 +49,10 @@ async function respond(send: PortalResponseSender, msg: any, port: number): Prom
 	try {
 		const body = typeof msg.body === "string" ? Buffer.from(msg.body, "base64") : undefined;
 		if (body && body.byteLength > 5 * 1024 * 1024) throw new Error("request too large");
-		const response = await fetch(`http://127.0.0.1:${port}${path}`, { method, headers: loopbackHeaders(msg.headers, port), body: body && method !== "GET" && method !== "HEAD" ? body : undefined, redirect: "manual", signal: AbortSignal.timeout(60_000) });
+		// A first visit to a large Next/Turbopack route can compile for several
+		// minutes. Keep the request bounded, but do not sever a healthy Portal
+		// midway through its cold build and turn it into an empty proxy 502.
+		const response = await fetch(`http://127.0.0.1:${port}${path}`, { method, headers: loopbackHeaders(msg.headers, port), body: body && method !== "GET" && method !== "HEAD" ? body : undefined, redirect: "manual", signal: AbortSignal.timeout(240_000) });
 		const bytes = new Uint8Array(await response.arrayBuffer());
 		if (bytes.byteLength > 10 * 1024 * 1024) throw new Error("response too large");
 		const headers: Record<string, string> = {};
