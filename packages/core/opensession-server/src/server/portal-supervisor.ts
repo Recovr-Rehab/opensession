@@ -625,11 +625,28 @@ async function startSandboxPortalServiceInner(input: SandboxPortalStartInput): P
 		urlFor: (port) => `https://${configuredServer().previewHost}:${sandboxHttpsPortFor(input.sandbox.id, port)}`,
 		launch: async ({ name, command, port, url }) => {
 			const logPath = `.opensession-portal-${name}.log`;
-			const launch = `HOME=/home/ubuntu PATH=${shellQuoteWord(SANDBOX_PORTAL_PATH)} PORT=${shellQuoteWord(String(port))} PORTAL_URL=${shellQuoteWord(url)} OPENSESSION_PORTAL=${shellQuoteWord(name)} setsid bash -c ${shellQuoteWord(`exec ${command}`)} >${shellQuoteWord(logPath)} 2>&1 & printf '__OS_PORTAL_PID__=%s\\n' $!`;
-			const launched = await input.sandbox.exec(["bash", "-c", launch], { env: input.env });
-			const pid = Number(launched.stdout.match(/__OS_PORTAL_PID__=(\d+)/)?.[1]);
-			if (launched.exitCode !== 0 || !Number.isInteger(pid) || pid < 2) throw new Error(launched.stderr.trim() || "Could not start the Portal process.");
-			return pid;
+			const pidPath = `.opensession-portal-${name}.pid`;
+			// Provider command endpoints are allowed to reap children when a
+			// synchronous shell returns. Start the service through the provider's
+			// native detached lane, and publish its durable process-group id through
+			// a short-lived workspace marker instead of shelling into the background.
+			const launch = `printf '%s\\n' $$ > ${shellQuoteWord(pidPath)} && HOME=/home/ubuntu PATH=${shellQuoteWord(SANDBOX_PORTAL_PATH)} PORT=${shellQuoteWord(String(port))} PORTAL_URL=${shellQuoteWord(url)} OPENSESSION_PORTAL=${shellQuoteWord(name)} exec setsid bash -c ${shellQuoteWord(`exec ${command}`)} >${shellQuoteWord(logPath)} 2>&1`;
+			const launched = await input.sandbox.exec(["bash", "-c", launch], {
+				env: input.env,
+				background: true,
+				timeoutMs: 15_000,
+			});
+			if (launched.exitCode !== 0) throw new Error(launched.stderr.trim() || "Could not start the Portal process.");
+			for (let attempt = 0; attempt < 20; attempt++) {
+				const marker = await input.sandbox.exec(["bash", "-c", `cat ${shellQuoteWord(pidPath)} 2>/dev/null || true`]);
+				const pid = Number(marker.stdout.trim());
+				if (Number.isInteger(pid) && pid >= 2) {
+					await input.sandbox.exec(["rm", "-f", pidPath]);
+					return pid;
+				}
+				await Bun.sleep(250);
+			}
+			throw new Error("The detached Portal process did not publish its process id.");
 		},
 	});
 	await ensureRemoteSandboxPortalAgent({ sessionId: input.sessionId, sandbox: input.sandbox, port: awake.port });
