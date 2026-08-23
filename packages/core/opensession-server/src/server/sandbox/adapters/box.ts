@@ -39,6 +39,7 @@
  */
 
 import { chmodSync, existsSync, mkdirSync, readFileSync } from "fs";
+import { dirname } from "path";
 import { stateDir } from "../../paths";
 import { getRepo, worktreePathFor } from "../../worktree";
 import { sandboxConfig } from "../config";
@@ -99,6 +100,7 @@ interface BoxRecord {
   state?: string;
   url?: string | null;
   ip?: string | null;
+  sshEndpoint?: string | null;
   type?: BoxMachineType;
 }
 
@@ -341,6 +343,78 @@ export const BOX_RUNTIME_HOME_COMMAND =
   "fi && test ! -L /home/ubuntu && mountpoint -q /home/ubuntu && " +
   "test /home/ubuntu -ef /home/user && test -w /home/ubuntu";
 
+function boxSshTargets(): Map<string, BoxSshTarget> {
+  const global = globalThis as typeof globalThis & {
+    __opensessionBoxSshTargets?: Map<string, BoxSshTarget>;
+  };
+  return (global.__opensessionBoxSshTargets ??= new Map());
+}
+
+function parseBoxSshEndpoint(endpoint: string | null | undefined): { host: string; port: number } | null {
+  const value = endpoint?.trim();
+  if (!value) return null;
+  const bracketed = value.match(/^\[([^\]]+)\]:(\d+)$/);
+  if (bracketed) return { host: bracketed[1]!, port: Number(bracketed[2]) };
+  const separator = value.lastIndexOf(":");
+  if (separator <= 0) return null;
+  const port = Number(value.slice(separator + 1));
+  if (!Number.isInteger(port) || port < 1 || port > 65_535) return null;
+  return { host: value.slice(0, separator), port };
+}
+
+function existingBoxSshTarget(box: BoxRecord, user = "user"): BoxSshTarget | null {
+  const endpoint = parseBoxSshEndpoint(box.sshEndpoint);
+  if (!endpoint || !existsSync(boxSshPrivateKey)) return null;
+  return { ...endpoint, user, privateKeyPath: boxSshPrivateKey };
+}
+
+function boxSshArgs(target: BoxSshTarget, command: string): string[] {
+  return [
+    "ssh", "-p", String(target.port), "-i", target.privateKeyPath,
+    "-o", "BatchMode=yes", "-o", "IdentitiesOnly=yes",
+    "-o", "StrictHostKeyChecking=accept-new",
+    "-o", `UserKnownHostsFile=${boxSshKeyDir}/known_hosts`,
+    "-o", "ConnectTimeout=15", "-o", "ServerAliveInterval=15",
+    "-o", "ServerAliveCountMax=2", `${target.user}@${target.host}`, command,
+  ];
+}
+
+async function boxSshExec(target: BoxSshTarget, shell: string, timeoutMs: number) {
+  const process = Bun.spawn(boxSshArgs(target, shell), {
+    stdin: "ignore",
+    stdout: "pipe",
+    stderr: "pipe",
+  });
+  let timedOut = false;
+  const timer = setTimeout(() => {
+    timedOut = true;
+    try { process.kill(); } catch {}
+  }, timeoutMs);
+  timer.unref?.();
+  const [stdout, stderr, exitCode] = await Promise.all([
+    new Response(process.stdout).text(),
+    new Response(process.stderr).text(),
+    process.exited,
+  ]).finally(() => clearTimeout(timer));
+  return { exitCode: timedOut ? 124 : exitCode, stdout, stderr };
+}
+
+async function boxSshWriteFile(target: BoxSshTarget, path: string, content: string): Promise<void> {
+  const command = `mkdir -p ${shellQuoteWord(dirname(path))} && cat > ${shellQuoteWord(path)}`;
+  const process = Bun.spawn(boxSshArgs(target, command), {
+    stdin: "pipe",
+    stdout: "pipe",
+    stderr: "pipe",
+  });
+  process.stdin.write(content);
+  await process.stdin.end();
+  const [stderr, exitCode] = await Promise.all([
+    new Response(process.stderr).text(),
+    process.exited,
+  ]);
+  if (exitCode !== 0) throw new Error(`Box SSH writeFile(${path}) failed: ${stderr.trim().slice(0, 300)}`);
+}
+
 export function boxDriver(cfg: BoxClientConfig, boxId: string): RemoteDriver {
   let runtimeHomeReady = false;
   let commandPlaneReady = false;
@@ -507,6 +581,8 @@ export function boxDriver(cfg: BoxClientConfig, boxId: string): RemoteDriver {
     async exec(cmd: string, opts?: RemoteExecOpts) {
       const shell = boxComposeShell(cmd, opts);
       const timeoutMs = opts?.timeoutMs ?? 120_000;
+      const ssh = boxSshTargets().get(boxId);
+      if (ssh) return boxSshExec(ssh, shell, timeoutMs);
       // Keep short probes on Box's reliable synchronous endpoint. Long setup
       // work and explicitly backgrounded workspace work use its independent
       // detached-process lane, so a clone or fetch cannot monopolize the
@@ -524,13 +600,23 @@ export function boxDriver(cfg: BoxClientConfig, boxId: string): RemoteDriver {
     },
 
     async execBackground(cmd: string, opts?: RemoteExecOpts) {
-      const started = await afterCommandPlaneReady(() => startDetached(boxComposeShell(cmd, opts)));
+      const shell = boxComposeShell(cmd, opts);
+      const ssh = boxSshTargets().get(boxId);
+      if (ssh) {
+        const detached = `nohup bash -c ${shellQuoteWord(shell)} </dev/null >/dev/null 2>&1 &`;
+        const result = await boxSshExec(ssh, detached, opts?.timeoutMs ?? 30_000);
+        if (result.exitCode !== 0) throw new Error(result.stderr.trim() || "Box SSH background launch failed");
+        return;
+      }
+      const started = await afterCommandPlaneReady(() => startDetached(shell));
       if (!Number.isInteger(started.processId)) {
         throw new Error("Box returned no process id for background command");
       }
     },
 
     async writeFile(path: string, content: string) {
+      const ssh = boxSshTargets().get(boxId);
+      if (ssh) return boxSshWriteFile(ssh, path, content);
       // Box canonicalizes file paths and permits only /home/user or /tmp.
       // /home/ubuntu is our bind mount of that persistent home, so translate
       // the prefix explicitly and use the native file API instead of serializing
@@ -548,15 +634,45 @@ export function boxDriver(cfg: BoxClientConfig, boxId: string): RemoteDriver {
     },
 
     async ensureStarted() {
-      const box = await getBox(cfg, boxId);
+      let box = await getBox(cfg, boxId);
       if (!box) throw new Error(`box ${boxId} is gone`);
       if (!LIVE_STATES.has(String(box.state || ""))) {
         runtimeHomeReady = false;
         commandPlaneReady = false;
+        boxSshTargets().delete(boxId);
         await waitForLive(cfg, boxId, 300_000);
+        box = await getBox(cfg, boxId);
+        if (!box) throw new Error(`box ${boxId} disappeared after resume`);
       }
+
+      // Box recommends a customer daemon/SSH lane for high-frequency control.
+      // Its per-command HTTP proxy can report box_direct_failed while the VM
+      // and durable disk are healthy. Reuse the installed key and the current
+      // IPv4 endpoint after coordinator restarts and archive/resume rotations.
+      const existingSsh = existingBoxSshTarget(box);
+      if (existingSsh) {
+        const probe = await boxSshExec(existingSsh, "true", 20_000);
+        if (probe.exitCode === 0) {
+          boxSshTargets().set(boxId, existingSsh);
+          const home = await boxSshExec(existingSsh, BOX_RUNTIME_HOME_COMMAND, 60_000);
+          if (home.exitCode !== 0) {
+            boxSshTargets().delete(boxId);
+            throw new Error(`Box SSH could not restore /home/ubuntu: ${(home.stderr || home.stdout).trim().slice(0, 200)}`);
+          }
+          runtimeHomeReady = true;
+          commandPlaneReady = true;
+          return;
+        }
+      }
+
       if (!commandPlaneReady) await waitForCommandPlane();
       if (!runtimeHomeReady) await ensureRuntimeHome();
+      try {
+        const target = await installBoxSshTarget(cfg, box);
+        boxSshTargets().set(boxId, target);
+      } catch (error) {
+        console.warn(`[sandbox:box] could not establish SSH control lane for ${boxId}:`, error);
+      }
     },
   };
 }
@@ -569,6 +685,7 @@ interface BoxSshKeyResponse {
 
 export interface BoxSshTarget {
   host: string;
+  port: number;
   user: string;
   privateKeyPath: string;
 }
@@ -618,28 +735,43 @@ async function ensureBoxSshKey(): Promise<{ privateKeyPath: string; publicKey: s
   }
 }
 
-/** Wake a Box and install Open Session's dedicated public key for a real
- * interactive terminal. The private key never leaves this host. */
-export async function boxSshTarget(sandboxId: string): Promise<BoxSshTarget> {
-  const cfg = boxClientConfig();
-  const box = await getBox(cfg, sandboxId);
-  if (!box || stateOf(box) === "gone") throw new Error(`box ${sandboxId} is gone`);
-  await boxDriver(cfg, sandboxId).ensureStarted();
+async function installBoxSshTarget(
+  cfg: BoxClientConfig,
+  box: BoxRecord,
+): Promise<BoxSshTarget> {
   const key = await ensureBoxSshKey();
   const response = await boxApi<BoxSshKeyResponse>(
     cfg,
     "POST",
-    `/boxes/${sandboxId}/sshkey`,
+    `/boxes/${box.id}/sshkey`,
     { key: key.publicKey },
     60_000,
   );
-  const host = response.machineIp || box.ip;
-  if (!response.success || !host) throw new Error("Box did not return an SSH address");
+  const endpoint = parseBoxSshEndpoint(box.sshEndpoint);
+  if (!response.success || !endpoint) {
+    throw new Error("Box did not return a reachable SSH endpoint");
+  }
   return {
-    host,
+    ...endpoint,
     user: response.sshUser || "user",
     privateKeyPath: key.privateKeyPath,
   };
+}
+
+/** Wake a Box and install Open Session's dedicated public key for a real
+ * interactive terminal. The private key never leaves this host. */
+export async function boxSshTarget(sandboxId: string): Promise<BoxSshTarget> {
+  const cfg = boxClientConfig();
+  let box = await getBox(cfg, sandboxId);
+  if (!box || stateOf(box) === "gone") throw new Error(`box ${sandboxId} is gone`);
+  await boxDriver(cfg, sandboxId).ensureStarted();
+  box = await getBox(cfg, sandboxId);
+  if (!box) throw new Error(`box ${sandboxId} disappeared after resume`);
+  const cached = boxSshTargets().get(sandboxId);
+  if (cached) return cached;
+  const target = await installBoxSshTarget(cfg, box);
+  boxSshTargets().set(sandboxId, target);
+  return target;
 }
 
 // ── Provider ──────────────────────────────────────────────────────────────────
