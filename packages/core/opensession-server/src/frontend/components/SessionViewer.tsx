@@ -6315,6 +6315,7 @@ export function SessionViewer({
 					{!compactHeader && !isPhone && shareAction(false)}
 					{/* Phones portal this menu into the action bar above the composer. */}
 					{isPhone &&
+						!infoPageOpen &&
 						mobileActionMenuEl &&
 						createPortal(overflowMenu, mobileActionMenuEl)}
 					{/* Code-workspace testing affordances dock immediately left of the
@@ -6507,6 +6508,9 @@ export function SessionViewer({
 												? "Portals"
 												: workspaceName || session.title}
 									</div>
+									{/* The same session menu moves with the person into Workspace
+									    details instead of remaining behind the full-screen page. */}
+									<div className="relative z-[1] ml-auto">{overflowMenu}</div>
 								</div>
 								{panelPage === "changes" ? (
 									waitingForWorkspace ? (

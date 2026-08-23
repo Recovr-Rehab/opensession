@@ -633,13 +633,13 @@ export const infoTopbarTitleClass = (scrolled: boolean) =>
 /** Identity block: repo tile, name, and the repo · model line. The tile gets a
  *  soft key shadow here that it doesn't carry elsewhere. */
 export const INFO_HERO =
-	"flex flex-col items-center gap-[9px] px-5 pt-0.5 pb-5 text-center " +
+	"flex flex-col items-center gap-0 px-5 pt-0.5 pb-5 text-center " +
 	"[&_.repo-tile]:smooth-shadow-ring-sm";
 
 /** 20px in the old sheet — the page's one heading, so it snaps to
  *  `text-page-title` (22px). */
 export const INFO_NAME =
-	"max-w-full text-page-title font-semibold leading-[1.2] tracking-[-0.02em] break-words text-fg";
+	"mt-[9px] max-w-full text-page-title font-semibold leading-[1.2] tracking-[-0.02em] break-words text-fg";
 export const INFO_SUB =
 	"flex min-h-11 w-full max-w-full items-center justify-center gap-x-1 px-6 text-label font-medium text-dim";
 
