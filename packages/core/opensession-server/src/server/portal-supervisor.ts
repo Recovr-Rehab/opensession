@@ -583,7 +583,7 @@ export async function listSandboxPortalServices(sandbox: Sandbox): Promise<Porta
 	return listPortals(sandboxPortalOps(sandbox));
 }
 
-export async function startSandboxPortalService(input: {
+type SandboxPortalStartInput = {
 	sessionId: string;
 	sandbox: Sandbox;
 	name: string;
@@ -594,7 +594,26 @@ export async function startSandboxPortalService(input: {
 	readyTimeoutMs?: number;
 	/** Short-lived workload identity for a trusted declared recipe. */
 	env?: Record<string, string>;
-}): Promise<PortalRecord> {
+};
+
+function sandboxPortalOperations(): Map<string, Promise<PortalRecord>> {
+	const global = globalThis as typeof globalThis & { __opensessionSandboxPortalOperations?: Map<string, Promise<PortalRecord>> };
+	return (global.__opensessionSandboxPortalOperations ??= new Map());
+}
+
+function withSandboxPortalOperation(input: Pick<SandboxPortalStartInput, "sandbox" | "name">, operation: () => Promise<PortalRecord>): Promise<PortalRecord> {
+	const operations = sandboxPortalOperations();
+	const key = `${input.sandbox.id}:${validateName(input.name)}`;
+	const current = operations.get(key);
+	if (current) return current;
+	const task = operation().finally(() => {
+		if (operations.get(key) === task) operations.delete(key);
+	});
+	operations.set(key, task);
+	return task;
+}
+
+async function startSandboxPortalServiceInner(input: SandboxPortalStartInput): Promise<PortalRecord> {
 	const awake = await startPortal(sandboxPortalOps(input.sandbox, input.sessionId), {
 		...input,
 		ownsProcess: false,
@@ -627,6 +646,10 @@ export async function startSandboxPortalService(input: {
 	return record;
 }
 
+export function startSandboxPortalService(input: SandboxPortalStartInput): Promise<PortalRecord> {
+	return withSandboxPortalOperation(input, () => startSandboxPortalServiceInner(input));
+}
+
 export async function stopSandboxPortalService(input: { sessionId: string; sandbox: Sandbox; name: string }): Promise<PortalRecord> {
 	const stopped = await stopPortal(sandboxPortalOps(input.sandbox, input.sessionId), validateName(input.name));
 	revokeSandboxPortalRelay(input.sandbox.id, stopped.port);
@@ -635,12 +658,31 @@ export async function stopSandboxPortalService(input: { sessionId: string; sandb
 	return stopped;
 }
 
-export async function restartSandboxPortalService(input: { sessionId: string; sandbox: Sandbox; name: string; env?: Record<string, string>; readyTimeoutMs?: number }): Promise<PortalRecord> {
-	const name = validateName(input.name);
-	const current = (await sandboxPortalOps(input.sandbox).readRegistry()).find((record) => record.name === name);
-	if (!current) throw new Error(`Portal '${name}' does not exist.`);
-	await stopSandboxPortalService(input);
-	return startSandboxPortalService({ ...input, name, key: current.key, command: current.command, port: current.port, description: current.description });
+export function restartSandboxPortalService(input: {
+	sessionId: string;
+	sandbox: Sandbox;
+	name: string;
+	command?: string;
+	port?: number;
+	key?: string;
+	description?: string;
+	env?: Record<string, string>;
+	readyTimeoutMs?: number;
+}): Promise<PortalRecord> {
+	return withSandboxPortalOperation(input, async () => {
+		const name = validateName(input.name);
+		const current = (await sandboxPortalOps(input.sandbox).readRegistry()).find((record) => record.name === name);
+		if (!current) throw new Error(`Portal '${name}' does not exist.`);
+		await stopSandboxPortalService(input);
+		return startSandboxPortalServiceInner({
+			...input,
+			name,
+			key: input.key ?? current.key,
+			command: input.command ?? current.command,
+			port: input.port ?? current.port,
+			description: input.description ?? current.description,
+		});
+	});
 }
 
 export async function setSandboxPortalPath(sandbox: Sandbox, path: string, name?: string): Promise<PortalRecord[]> {
