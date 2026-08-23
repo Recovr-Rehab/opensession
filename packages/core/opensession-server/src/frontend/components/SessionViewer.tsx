@@ -5695,6 +5695,31 @@ export function SessionViewer({
 						</Menu.Popup>
 					</Menu.SubmenuRoot>
 				);
+				// Portals is a workspace tool, not the lead fact on the phone's
+				// workspace overview. Keep it reachable from the shared ⋯ menu at
+				// every width; desktop opens its panel page, phone opens the drill-in.
+				const portalsAction = hasWorkspace && (
+					<Menu.Item
+						onClick={() => {
+							setOverflowOpen(false);
+							setPanelPage("portals");
+							if (isPhone) {
+								setInfoPageScrolled(false);
+								setInfoPageOpen(true);
+							} else {
+								setActivePanelOpen(true);
+							}
+						}}
+					>
+						<IconGlobe size={20} className={MENU_ICON} />
+						<span className="grow">Portals</span>
+						{livePortals > 0 && (
+							<span className="shrink-0 tabular-nums text-faint">
+								{livePortals} live
+							</span>
+						)}
+					</Menu.Item>
+				);
 				const menuGit =
 					overflowGit?.sessionId === session.id ? overflowGit.status : null;
 				const branchAction =
@@ -5996,6 +6021,7 @@ export function SessionViewer({
 								{forkAction}
 								{spinOffAction}
 								{transcriptActions}
+								{portalsAction}
 								{branchAction && (
 									<>
 										<Menu.Separator className={VIEWER_MENU_SEP} />
@@ -6571,20 +6597,6 @@ export function SessionViewer({
 														sandbox={session.sandbox}
 													/>
 												</div>
-											)}
-											{hasWorkspace && (
-												<button
-													type="button"
-													className="focus-ring flex min-h-11 w-full items-center gap-3 rounded-2xl bg-panel px-5 py-2 text-left transition-[background-color,scale] hover:bg-hover active:scale-[0.96]"
-													onClick={() => setPanelPage("portals")}
-												>
-													<IconGlobe size={18} className="shrink-0 text-dim" />
-													<span className="min-w-0 flex-1 text-label font-medium text-fg">Portals</span>
-													{livePortals > 0 && (
-														<span className="tabular-nums text-label text-faint">{livePortals} live</span>
-													)}
-													<IconChevronRight size={16} className="shrink-0 text-faint" />
-												</button>
 											)}
 											<WorkspaceSummaryBody
 												embedded
