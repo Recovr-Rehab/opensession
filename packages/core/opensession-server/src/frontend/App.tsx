@@ -926,12 +926,17 @@ export function App(
 	const [sidebarCollapsed, setSidebarCollapsed] =
 		useState<boolean>(sidebarStartsCollapsed);
 	function toggleSidebarCollapsed() {
+		// The sidebar changes the tab strip's available width in one frame. Reorder
+		// items otherwise treat that shell resize as a layout move and glide every
+		// tab sideways, even though no tab was reordered.
+		const restoreMotion = suppressLayoutAnimations();
 		setSidebarCollapsed((v) => {
 			const next = !v;
 			storeSidebarCollapsed(next);
 			if (next) openWorkspaceSummary();
 			return next;
 		});
+		restoreMotion();
 	}
 	// The top bar above the tab strip. The session viewer portals its header
 	// (session name + actions, incl. the workspace-panel toggle) into this slot so
