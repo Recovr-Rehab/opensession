@@ -4308,7 +4308,7 @@ export function App(
 									routeWorkspace.name,
 								]
 									.filter(Boolean)
-									.join(" · ")
+									.join(" › ")
 							: "Workspace"
 						: "";
 

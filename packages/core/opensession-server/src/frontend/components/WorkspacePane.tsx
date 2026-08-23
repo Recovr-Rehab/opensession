@@ -29,7 +29,12 @@ import { WorkspaceSummary } from "./WorkspaceSummary";
 import { useCurrentUser } from "./UserPicker";
 import { useIsPhone } from "../hooks/useIsPhone";
 import { useSidePanel } from "../hooks/useSidePanel";
-import { IconArrowUpToLine, IconPlus, IconSidebarRight } from "./icons";
+import {
+	IconArrowUpToLine,
+	IconChevronRight,
+	IconPlus,
+	IconSidebarRight,
+} from "./icons";
 import { Button } from "../ui/button";
 import { Tooltip } from "../ui/tooltip";
 import { cn } from "../ui/cn";
@@ -569,6 +574,13 @@ export function WorkspacePane({
 							{repoLabel(workspace.repo)}
 						</span>
 					</span>
+				)}
+				{workspace.repo && (
+					<IconChevronRight
+						size={18}
+						className="-mx-1 shrink-0 text-faint"
+						aria-hidden="true"
+					/>
 				)}
 				<span className={VIEWER_BRANCH}>{workspace.name}</span>
 				{!tabStripVisible && onNewSession && (
