@@ -203,6 +203,25 @@ describe("requestPrewarm", () => {
     expect(existsSync(join(prewarmDir(), "daytona-tella-fusion.json"))).toBe(true);
   });
 
+  test.skipIf(killSwitch)("retains and replenishes a parked zero-compute standby", async () => {
+    const fake = makeFakeAdapter();
+    fake.adapter.publishTemplate = async () => {};
+    fake.adapter.park = async () => {};
+
+    expect(
+      (await requestPrewarm("daytona", "tella-fusion", "environment", { standby: true })).state,
+    ).toBe("bootstrapping");
+    await until(() => readyEntry()?.state === "ready");
+    expect(readyEntry()).toMatchObject({ standby: true, parked: true });
+
+    await sweepPrewarms(Date.now() + 24 * 60 * 60_000);
+    expect(fake.destroyed).toEqual([]);
+    expect(claimPrewarm("daytona", "tella-fusion", "session-1")).toEqual({
+      sandboxId: "pw-1",
+    });
+    await until(() => fake.created.length === 2);
+  });
+
   test.skipIf(killSwitch)("retries transient bootstrap transport failures", async () => {
     const fake = makeFakeAdapter({ transientMarkerFailures: 2 });
     expect((await requestPrewarm("daytona", "tella-fusion")).state).toBe("bootstrapping");

@@ -119,6 +119,9 @@ export interface PrewarmEntry {
   refreshTemplate?: boolean;
   /** Prepared compute was stopped while its reusable disk remains available. */
   parked?: boolean;
+  /** Zero-compute standby retained beside the image for providers whose
+   * snapshot restore is too slow for an interactive first turn. */
+  standby?: boolean;
 }
 
 /** What the adapters implement so the pool stays provider-agnostic (e2b
@@ -172,6 +175,8 @@ export interface PrewarmAdapter {
 
 const SWEEP_INTERVAL_MS = 60_000;
 const KEEP_READY_KEEPALIVE_MS = 5 * 60_000;
+const STANDBY_KEEPALIVE_MS = 6 * 60 * 60_000;
+const STANDBY_DELETE_MIN = 30 * 24 * 60;
 /** Don't hammer a broken provider while the user keeps typing. */
 const FAILED_RETRY_MS = 90_000;
 /** How long a claimed tombstone protects the adopted sandbox from the orphan
@@ -397,7 +402,7 @@ export async function requestPrewarm(
   provider: string,
   repoId: string,
   user?: string,
-  options: { refreshTemplate?: boolean } = {},
+  options: { refreshTemplate?: boolean; standby?: boolean } = {},
 ): Promise<{ state: PrewarmRequestState; sandboxId?: string }> {
   if (!isRemoteSandboxProvider(provider) || !(repoId in REPOS)) {
     return { state: "unsupported" };
@@ -451,7 +456,8 @@ export async function requestPrewarm(
 
   // Caps — this is paid compute.
   const live = [...p.values()].filter(
-    ({ entry: e }) => e.state === "bootstrapping" || e.state === "ready",
+    ({ entry: e }) =>
+      e.state === "bootstrapping" || (e.state === "ready" && !e.parked),
   );
   if (live.length >= cfg.maxLive) return { state: "at-capacity" };
 
@@ -459,6 +465,7 @@ export async function requestPrewarm(
   if (!adapter) return { state: "unsupported" };
 
   const now = new Date().toISOString();
+  const standby = Boolean(options.standby && adapter.park);
   const fresh: PrewarmEntry = {
     key,
     provider,
@@ -467,6 +474,7 @@ export async function requestPrewarm(
     signature: prewarmSignature(provider, resources),
     user,
     ...(options.refreshTemplate ? { refreshTemplate: true } : {}),
+    ...(standby ? { standby: true } : {}),
     ...(resources ? { resources } : {}),
     stage: "Creating sandbox",
     progress: 10,
@@ -522,7 +530,7 @@ async function runPrewarmBootstrap(record: PrewarmRecord, adapter: PrewarmAdapte
       { [PREWARM_LABEL]: "1", [PREWARM_KEY_LABEL]: entry.key, "opensession.sandbox": "1" },
       {
         autoStopMinutes: ttl + BACKSTOP_STOP_EXTRA_MIN,
-        autoDeleteMinutes: BACKSTOP_DELETE_MIN,
+        autoDeleteMinutes: entry.standby ? STANDBY_DELETE_MIN : BACKSTOP_DELETE_MIN,
         resources: entry.resources,
       },
     );
@@ -728,8 +736,10 @@ export function claimPrewarm(
   // the adopted sandbox from the orphan audit until the grace passes.
   p.delete(key);
   p.set(`${key}#${entry.sandboxId}`, record);
-  if (isKeepReady(provider, repoId)) {
-    void requestPrewarm(provider, repoId, entry.user).catch((error) => {
+  if (isKeepReady(provider, repoId) || entry.standby) {
+    void requestPrewarm(provider, repoId, entry.user, {
+      standby: entry.standby,
+    }).catch((error) => {
       console.warn(`[sandbox-prewarm] could not replenish ${key}:`, error);
     });
   }
@@ -867,6 +877,7 @@ export function restoreReadyPrewarms(now = Date.now()): number {
         fileFor(entry) !== `${dir}/${name}` ||
         entry.signature !== prewarmSignature(entry.provider, entry.resources) ||
         (!isKeepReady(entry.provider, entry.repoId) &&
+          !(entry.standby && entry.parked) &&
           now - Date.parse(entry.lastTouchedAt) > ttlMs) ||
         p.has(entry.key)
       ) continue;
@@ -931,7 +942,7 @@ export async function sweepPrewarms(now = Date.now()): Promise<void> {
   for (const [key, record] of [...p.entries()]) {
     const { entry } = record;
     if (entry.state === "bootstrapping" || entry.state === "ready") {
-      if (isKeepReady(entry.provider, entry.repoId)) {
+      if (isKeepReady(entry.provider, entry.repoId) || (entry.standby && entry.parked)) {
         entry.lastTouchedAt = new Date(now).toISOString();
         persist(entry);
         if (entry.state === "ready" && entry.sandboxId) {
@@ -942,11 +953,14 @@ export async function sweepPrewarms(now = Date.now()): Promise<void> {
               entry.parked = true;
               persist(entry);
             }
-            if (now - (record.keptAliveAt || 0) >= KEEP_READY_KEEPALIVE_MS) {
+            const keepAliveMs = entry.standby
+              ? STANDBY_KEEPALIVE_MS
+              : KEEP_READY_KEEPALIVE_MS;
+            if (now - (record.keptAliveAt || 0) >= keepAliveMs) {
               record.keptAliveAt = now;
               await adapter?.keepAlive?.(entry.sandboxId, {
                 autoStopMinutes: cfg.ttlMinutes + BACKSTOP_STOP_EXTRA_MIN,
-                autoDeleteMinutes: BACKSTOP_DELETE_MIN,
+                autoDeleteMinutes: entry.standby ? STANDBY_DELETE_MIN : BACKSTOP_DELETE_MIN,
               });
             }
           } catch (error) {
