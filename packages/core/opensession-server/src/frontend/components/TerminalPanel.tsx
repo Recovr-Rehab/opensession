@@ -2,6 +2,15 @@ import React, { useEffect, useRef, useState } from "react";
 import type { WSServerMessage } from "../lib/types";
 import { Button } from "../ui/button";
 import { EmptyState } from "../ui/state";
+import {
+  TAB_GROUP,
+  TAB_ITEM,
+  TAB_SCROLL,
+  TAB_TITLE,
+  tabClass,
+  tabCloseClass,
+} from "../lib/session-tab-classes";
+import { IconPlus, IconX } from "./icons";
 
 /**
  * Interactive terminals over server-side PTYs in the session's worktree:
@@ -91,12 +100,6 @@ interface ShellTabSpec {
 /** The server caps PTYs per socket at 8 (terminals.ts) — mirror it here. */
 const MAX_SHELL_TABS = 8;
 
-/** The selected tab, one step past `soft`'s own fill. Both are ink over
- * whatever is behind them, so the selected tab is darker than its neighbours
- * on every surface — a fixed value (`bg-active`) is lighter than a soft plate
- * once the strip sits on a panel, which reads as the wrong tab selected. */
-const TAB_SELECTED = "!bg-[color-mix(in_srgb,var(--text)_16%,transparent)]";
-
 export function ShellPanel({
   sessionId,
   send,
@@ -131,43 +134,57 @@ export function ShellPanel({
 
   return (
     <div className="flex flex-col h-full min-h-0">
-      <div className="flex items-center gap-1 px-3 pt-1.5 pb-1 shrink-0 flex-wrap">
-        {tabs.map((t) => (
-          <div key={t.id} className="inline-flex items-stretch">
-            <Button
-              size="sm"
-              variant="soft"
-              className={`rounded-r-none pr-1.5 ${
-                t.id === activeId ? `${TAB_SELECTED} !text-fg` : ""
-              }`}
-              onClick={() => setActiveId(t.id)}
-            >
-              Terminal {t.n}
-            </Button>
-            <Button
-              size="sm"
-              aria-label={`Close terminal ${t.n}`}
-              title="Close terminal (kills its PTY)"
-              variant="soft"
-              className={`w-6 rounded-l-none px-0 text-faint ${
-                t.id === activeId ? TAB_SELECTED : ""
-              }`}
-              onClick={() => closeTab(t.id)}
-            >
-              ×
-            </Button>
+      <div
+        className="relative flex h-10 min-w-0 shrink-0 items-center gap-[3px] border-b border-divider bg-surface px-2"
+        role="tablist"
+        aria-label="Terminals"
+      >
+        <div className={TAB_SCROLL}>
+          <div className={TAB_GROUP}>
+            {tabs.map((t, index) => {
+              const active = t.id === activeId;
+              const nextActive = tabs[index + 1]?.id === activeId;
+              return (
+                <div
+                  key={t.id}
+                  className={TAB_ITEM}
+                  data-next-active={nextActive || undefined}
+                >
+                  <div
+                    role="tab"
+                    aria-selected={active}
+                    className={`group/tab ${tabClass({ active, waiting: false, colored: false })}`}
+                    onClick={() => setActiveId(t.id)}
+                  >
+                    <span className={TAB_TITLE}>Terminal {t.n}</span>
+                    <button
+                      type="button"
+                      className={tabCloseClass(false)}
+                      aria-label={`Close terminal ${t.n}`}
+                      title="Close terminal (kills its PTY)"
+                      onClick={(event) => {
+                        event.stopPropagation();
+                        closeTab(t.id);
+                      }}
+                    >
+                      <IconX size={16} dense aria-hidden="true" />
+                    </button>
+                  </div>
+                </div>
+              );
+            })}
           </div>
-        ))}
+        </div>
         {tabs.length < MAX_SHELL_TABS && (
-          <Button
-            size="sm"
-            variant="soft"
+          <button
+            type="button"
+            className="focus-ring inline-flex size-7 shrink-0 cursor-pointer items-center justify-center rounded-md border-0 bg-transparent p-0 text-dim"
             onClick={addTab}
             title="New terminal tab"
             aria-label="New terminal tab"
           >
-            +
-          </Button>
+            <IconPlus size={18} aria-hidden="true" />
+          </button>
         )}
       </div>
       {tabs.length === 0 ? (
