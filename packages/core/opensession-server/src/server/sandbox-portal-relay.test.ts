@@ -18,7 +18,20 @@ test("stopping one Portal revokes only its bound credential", () => {
 	expect(verifySandboxPortalGrant(web.token, { sessionId: "bks-stop", sandboxId: "sandbox-stop", port: 4501 })).toBe(true);
 });
 
-test("bounds concurrent relay requests without dropping queued work", async () => {
+test("serializes relay requests by default", async () => {
+	const limit = createRelayRequestLimiter();
+	let release!: () => void;
+	const started: number[] = [];
+	const first = limit(async () => { started.push(1); await new Promise<void>((resolve) => { release = resolve; }); });
+	const second = limit(async () => { started.push(2); });
+	await Bun.sleep(0);
+	expect(started).toEqual([1]);
+	release();
+	await Promise.all([first, second]);
+	expect(started).toEqual([1, 2]);
+});
+
+test("bounds explicit relay concurrency without dropping queued work", async () => {
 	const limit = createRelayRequestLimiter(2);
 	const releases: Array<() => void> = [];
 	const started: number[] = [];

@@ -22,7 +22,7 @@ type RelayResponse = { status: number; headers: Record<string, string>; body?: s
  * parallel and serializes the resulting WebSocket frames behind its actual
  * send buffer. This gate is per Portal connection, so sibling services never
  * block each other. */
-export function createRelayRequestLimiter(maxConcurrent = 8): RelayRequestLimiter {
+export function createRelayRequestLimiter(maxConcurrent = 1): RelayRequestLimiter {
 	if (!Number.isInteger(maxConcurrent) || maxConcurrent < 1) throw new Error("Portal relay concurrency must be positive");
 	let active = 0;
 	const waiters: Array<() => void> = [];
