@@ -12,12 +12,12 @@ import { CheckStatusIcon } from "./CheckStatusIcon";
 export function PrChecksPopover({
 	checks,
 	trigger,
-	exclusive = true,
+	nested = false,
 }: {
 	checks: PrCheck[];
 	trigger: React.ReactElement;
-	/** Disable global popup exclusivity when this preview lives inside a popup. */
-	exclusive?: boolean;
+	/** Keep a parent popup open and paint this hover preview above its layer. */
+	nested?: boolean;
 }) {
 	const order: Record<CheckVisual, number> = {
 		failure: 0,
@@ -48,9 +48,13 @@ export function PrChecksPopover({
 	);
 
 	return (
-		<Popover.Root exclusive={exclusive}>
+		<Popover.Root exclusive={!nested}>
 			<Popover.Trigger render={trigger} openOnHover delay={200} closeDelay={120} />
 			<Popover.Popup
+				// The workspace summary already owns the app's top workspace layer.
+				// Its hover preview is the child interaction, so it paints later on
+				// that same layer rather than falling behind the card.
+				positionerClassName={nested ? "z-[2147483647]" : undefined}
 				side="left"
 				align="start"
 				sideOffset={10}

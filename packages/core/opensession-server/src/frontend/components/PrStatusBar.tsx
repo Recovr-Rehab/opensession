@@ -1150,9 +1150,9 @@ export function PrStatusBar({
 				    stays as the native fallback. */}
 				{checksPr ? (
 					<PrChecksPopover
-						// This checks preview belongs to the standing summary popup. It
-						// must not let the global popup group dismiss its parent card.
-						exclusive={false}
+						// This checks preview belongs above the standing summary popup.
+						// Keep its parent open while the pointer moves into the preview.
+						nested
 						checks={checksPr.checks}
 						trigger={
 							<a
