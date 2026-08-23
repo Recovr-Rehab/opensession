@@ -445,7 +445,9 @@ interface Props {
 	setTyping: (sessionId: string, active: boolean) => void;
 	addHandler: (handler: (msg: WSServerMessage) => void) => () => void;
 	connected: boolean;
-	/** A client-minted blank tab whose server record is still being persisted. */
+	/** A client-minted session whose server record is still being persisted. */
+	pendingCreation?: boolean;
+	/** A client-minted blank tab in an existing, already-ready workspace. */
 	optimisticEmpty?: boolean;
 	/** Opening prompt shown while a just-created session is still catching up
 	    through the session poll. Reconciles away when the transcript arrives. */
@@ -684,6 +686,7 @@ export function SessionViewer({
 	setTyping,
 	addHandler,
 	connected,
+	pendingCreation = false,
 	optimisticEmpty = false,
 	initialPending,
 	topbarEl,
@@ -2331,9 +2334,12 @@ export function SessionViewer({
 	// Live worktree diff, handed to the Changes page as `diff=` so opening it
 	// reads the poll the panel already runs rather than starting a second one.
 	// Parked unless a workspace surface is open on a code session: the panel
-	// column on desktop, the info page on a phone.
+	// column on desktop, the info page on a phone. A client-minted session is not
+	// queryable until create persistence lands; leaving the resource parked makes
+	// Changes use its ordinary empty state instead of flashing a transient 404.
 	const diffState = useSessionDiff(session.id, {
-		enabled: hasRepoWork && (activePanelOpen || infoPageOpen),
+		enabled:
+			!pendingCreation && hasRepoWork && (activePanelOpen || infoPageOpen),
 		isRunning: isBusy,
 	});
 

@@ -4766,6 +4766,11 @@ export function App(
 				setTyping={socket.setTyping}
 				addHandler={socket.addHandler}
 				connected={socket.connected}
+				pendingCreation={
+					focused &&
+					route.view === "session" &&
+					route.id === pendingSessionId
+				}
 				optimisticEmpty={
 					!pendingNewWorkspace &&
 					focused &&
