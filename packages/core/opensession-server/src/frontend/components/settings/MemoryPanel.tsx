@@ -42,6 +42,7 @@ import {
 	IconRestore,
 	IconSearch,
 	IconTrash,
+	IconX,
 } from "../icons";
 import { getCurrentUser } from "../UserPicker";
 import {
@@ -797,18 +798,53 @@ function CategoryPage({
 				<Button size="sm" variant="ghost" className="phone:min-h-11" icon={<IconChevronLeft size={18} />} onClick={onBack}>
 					Back
 				</Button>
-				<Button size="sm" className="phone:min-h-11" icon={<IconPlus size={16} />} disabled={!canAdd} onClick={() => setAdding(true)}>
-					Add memory
-				</Button>
-			</div>
-			{selectedIds.size >= 2 && (
-				<div className="mb-3 flex items-center justify-between rounded-lg bg-active px-4 py-2 phone:min-h-11">
-					<span className="text-label font-medium text-dim">{selectedIds.size} selected</span>
-					<Button size="sm" variant="soft" className="phone:min-h-11" onClick={() => setMerging(true)}>Merge</Button>
+				<div className="flex min-w-0 items-center gap-2">
+					{selectedIds.size >= 2 && (
+						<>
+							<Button
+								size="sm"
+								variant="ghost"
+								className="group phone:min-h-11"
+								aria-label={`Clear ${selectedIds.size} selected memories`}
+								title="Clear selection"
+								onClick={() => setSelectedIds(new Set())}
+							>
+								<span className="grid place-items-center phone:hidden">
+									<span className="col-start-1 row-start-1 transition-opacity group-hover:opacity-0 group-focus-visible:opacity-0">{selectedIds.size} selected</span>
+									<IconX size={16} className="col-start-1 row-start-1 opacity-0 transition-opacity group-hover:opacity-100 group-focus-visible:opacity-100" />
+								</span>
+								<span className="hidden items-center gap-1.5 phone:flex">
+									{selectedIds.size} selected
+									<IconX size={16} />
+								</span>
+							</Button>
+							<Button size="sm" variant="soft" className="phone:min-h-11" onClick={() => setMerging(true)}>Merge</Button>
+						</>
+					)}
+					<Button
+						size="sm"
+						className={selectedIds.size >= 2 ? "phone:hidden" : "phone:min-h-11"}
+						icon={<IconPlus size={16} />}
+						disabled={!canAdd}
+						onClick={() => setAdding(true)}
+					>
+						Add memory
+					</Button>
+					{selectedIds.size >= 2 && (
+						<Button
+							size="sm"
+							className="hidden phone:inline-flex phone:min-h-11 phone:w-11"
+							icon={<IconPlus size={18} />}
+							aria-label="Add memory"
+							title="Add memory"
+							disabled={!canAdd}
+							onClick={() => setAdding(true)}
+						/>
+					)}
 				</div>
-			)}
+			</div>
 			{canAdd && (
-				<SettingCard className="mb-3 p-4">
+				<SettingCard className="mb-3 border-line p-4">
 					<SettingGroup className="gap-2">
 						<div className="grid grid-cols-4 items-center gap-2 phone:grid-cols-1">
 							<label className="relative col-span-2 block min-w-0 phone:col-span-1">
