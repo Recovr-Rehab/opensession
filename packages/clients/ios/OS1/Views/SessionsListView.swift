@@ -950,13 +950,9 @@ struct SessionsListView: View {
         NavigationStack(path: $path) {
             loadingOrList
                 .inlineTitleBarCompat()
-                // The system search field: iOS 26 places it at the bottom edge
-                // on iPhone (the Liquid Glass search treatment), replacing the
-                // old toolbar toggle + inline field. It sits on the CONTAINER
-                // rather than on the list, so the bottom bar is whole from the
-                // first frame — hung off the list, it appeared only once the
-                // first poll landed, and the Desk button spent the load
-                // centred on its own before the field shoved it right.
+                // Keep search on the container rather than the list so its
+                // toolbar item is present from the first frame, before the
+                // initial session poll lands.
                 .searchable(text: $searchText, prompt: "Search sessions")
                 .toolbar {
                     ToolbarItem(placement: .topLeadingCompat) {
@@ -990,14 +986,14 @@ struct SessionsListView: View {
                         }
                         .accessibilityLabel("New session")
                     }
-                    DefaultToolbarItem(kind: .search, placement: .bottomBar)
-                    ToolbarSpacer(.fixed, placement: .bottomBar)
+                    DefaultToolbarItem(kind: .search, placement: .topBarTrailing)
+                    ToolbarSpacer(.fixed, placement: .topBarTrailing)
                     // Catch up is a tool, so it answers to the account's tool
                     // visibility the same way Reports does. It ships on, since
                     // the deck is built from unread work every account already
                     // has and needs nothing set up.
                     if !isCatchUpHidden {
-                        ToolbarItem(placement: .bottomBar) {
+                        ToolbarItem(placement: .topBarTrailing) {
                             Button {
                                 showCatchUp = true
                             } label: {
@@ -1015,7 +1011,7 @@ struct SessionsListView: View {
                             )
                         }
                     }
-                    ToolbarItem(placement: .bottomBar) {
+                    ToolbarItem(placement: .topBarTrailing) {
                         Button {
                             showDesk = true
                         } label: {
