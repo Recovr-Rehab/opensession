@@ -138,7 +138,18 @@ function PREFIX(record: unknown): string { return `# opensession-portal ${JSON.s
 function sandboxFor(cwd: string, port: number): Sandbox {
 	return {
 		id: "sandbox-portal-test", provider: "docker", cwd,
-		async exec(command) {
+		async exec(command, options) {
+			if (options?.background) {
+				const proc = Bun.spawn(command, {
+					cwd,
+					env: { ...process.env, ...options.env },
+					stdin: "ignore",
+					stdout: "ignore",
+					stderr: "ignore",
+				});
+				proc.unref();
+				return { exitCode: 0, stdout: "", stderr: "" };
+			}
 			const proc = Bun.spawn(command, { cwd, stdout: "pipe", stderr: "pipe" });
 			const [stdout, stderr, exitCode] = await Promise.all([
 				new Response(proc.stdout).text(), new Response(proc.stderr).text(), proc.exited,

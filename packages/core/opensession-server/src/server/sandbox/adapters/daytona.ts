@@ -280,8 +280,11 @@ function daytonaDriver(sbx: DaytonaSandbox): RemoteDriver {
       const sid = `bks-run-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`;
       await sbx.process.createSession(sid);
       const cd = opts?.cwd ? `cd ${shellQuoteWord(opts.cwd)} && ` : "";
+      const env = opts?.env && Object.keys(opts.env).length
+        ? `env ${Object.entries(opts.env).map(([key, value]) => `${key}=${shellQuoteWord(value)}`).join(" ")} `
+        : "";
       await sbx.process.executeSessionCommand(sid, {
-        command: `${cd}${cmd}`,
+        command: `${cd}${env}${cmd}`,
         runAsync: true,
       } as any);
     },

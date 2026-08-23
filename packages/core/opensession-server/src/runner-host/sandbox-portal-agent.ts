@@ -146,5 +146,5 @@ if (import.meta.main) {
 	const port = Number(process.env.OPENSESSION_SANDBOX_PORTAL_PORT);
 	const expiresAt = Number(process.env.OPENSESSION_SANDBOX_PORTAL_EXPIRES_AT);
 	if (!endpoint || !token || !Number.isInteger(port) || !Number.isFinite(expiresAt)) process.exit(2);
-	void run(endpoint, token, port, expiresAt);
+	await run(endpoint, token, port, expiresAt);
 }
