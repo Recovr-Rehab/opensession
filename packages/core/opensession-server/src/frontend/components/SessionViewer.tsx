@@ -288,8 +288,6 @@ import {
 import { SessionRelations, type RelatedSession } from "./SessionRelations";
 import {
 	SOURCE_CHIP,
-	SOURCE_CHIP_ARCHIVED,
-	SOURCE_CHIP_ARCHIVED_LABEL,
 	sourceChipTone,
 } from "../lib/source-chip-classes";
 import { sessionWasAgentStarted } from "../lib/sidebar-placement";
@@ -471,8 +469,8 @@ interface Props {
 	    here instead. Desktop ignores it. */
 	headerModelEl?: HTMLElement | null;
 	/** Leading slot inside the mobile top-bar title pill. The repo tile portals
-	    here so it sits in front of the title (Slack-header style), rather than
-	    inline in the metadata line below. Desktop ignores it. */
+	    here so it sits in front of the title (Slack-header style); an archived
+	    session replaces it with its archive mark. Desktop ignores it. */
 	headerRepoEl?: HTMLElement | null;
 	/** App-level right-column node (sibling of the left sidebar); when present the
 	    workspace/sub-agent panel portals here so it spans the full height from the
@@ -6132,6 +6130,16 @@ export function SessionViewer({
 							/>
 						</>
 					)}
+					{session.archived && (
+						<span
+							className="inline-flex shrink-0 items-center justify-center text-dim"
+							role="img"
+							aria-label="Archived"
+							title="Archived"
+						>
+							<IconArchive size={20} />
+						</span>
+					)}
 					{renameDraft !== null ? (
 						<input
 							className={VIEWER_BRANCH_RENAME}
@@ -6237,20 +6245,6 @@ export function SessionViewer({
 							models={models}
 							onOpen={onOpenSession}
 						/>
-					)}
-					{session.archived && (
-						<button
-							type="button"
-							className={SOURCE_CHIP_ARCHIVED}
-							onClick={handleArchive}
-							disabled={archiving}
-							title="Click to unarchive"
-						>
-							{/* `dense`: below the set's floor on purpose, so the word sets
-							    the chip's height and the glyph rides with it. */}
-							<IconArchive size={16} dense />
-							<span className={SOURCE_CHIP_ARCHIVED_LABEL}>Archived</span>
-						</button>
 					)}
 					{/* This workspace's own controls, at the end of its own cluster: the
 					    ⋯ menu, then the lone-session "+ New tab". The menu used to sit at
@@ -6716,8 +6710,8 @@ export function SessionViewer({
 				);
 			})()}
 
-			{/* Repo tile leads the mobile title pill (Slack-header style) — it
-			    portals into the pill's leading slot in front of the name. A Desk
+			{/* Repo tile leads the mobile title pill (Slack-header style), except
+			    when an archive mark replaces it for an archived session. A Desk
 			    has no repo, and every Desk is titled just "Desk": opening a
 			    teammate's from the People band gave a pill with nothing in front
 			    of the name — no way to tell whose it is, and the name sitting
@@ -6726,9 +6720,13 @@ export function SessionViewer({
 			    picture of yourself. */}
 			{isPhone &&
 				headerRepoEl &&
-				(session.desk || session.repo || hasWorkspace) &&
+				(session.archived || session.desk || session.repo || hasWorkspace) &&
 				createPortal(
-					session.desk ? (
+					session.archived ? (
+						<span role="img" aria-label="Archived" title="Archived">
+							<IconArchive size={20} className="text-dim" />
+						</span>
+					) : session.desk ? (
 						deskOwner && personKey(deskOwner) !== personKey(currentUser) ? (
 							<UserAvatar
 								name={deskOwner}
