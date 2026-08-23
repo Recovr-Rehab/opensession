@@ -98,6 +98,11 @@ import { Tooltip } from "../ui/tooltip";
 import { Popover } from "../ui/popover";
 import { Segmented, SegmentedOption } from "../ui/segmented";
 import { SettingRow, SwitchRow, ValueRow } from "../ui/setting-row";
+import { CodeDisplaySettings } from "./CodeDisplaySettings";
+import {
+  useCodeDisplaySettings,
+  useStoredCodeSetting,
+} from "../hooks/useCodeDisplaySettings";
 
 import { checkClass, isDeployment, summarize } from "../lib/pr-status-derive";
 import { prStatusMark } from "../lib/pr-status";
@@ -144,27 +149,6 @@ export type PrReviewPage = "overview" | "files";
 
 const NO_PR_FILES: NonNullable<PrDetails["files"]> = [];
 const NOOP_SEND = () => {};
-
-function useStoredCodeSetting<T extends string>(
-  key: string,
-  allowed: readonly T[],
-  fallback: T,
-): [T, (next: T) => void] {
-  const [value, setValue] = useState<T>(() => {
-    const stored = localStorage.getItem(key) as T | null;
-    return stored && allowed.includes(stored) ? stored : fallback;
-  });
-  const change = useCallback(
-    (next: T) => {
-      setValue(next);
-      try {
-        localStorage.setItem(key, next);
-      } catch {}
-    },
-    [key],
-  );
-  return [value, change];
-}
 
 interface Props {
   sessionId: string;
@@ -513,32 +497,18 @@ export function PrPanel({
   /** A file picked on Overview, waiting for the code page to have its diff. */
   const [pendingReveal, setPendingReveal] = useState<string | null>(null);
   const phoneLayout = window.matchMedia("(max-width: 720px)").matches;
-  const [diffStyle, changeDiffStyle] = useStoredCodeSetting(
-    "opensession-pr-diff-style",
-    ["unified", "split"] as const,
+  // Rendering preferences are shared with sidebar Changes, so choosing wrap,
+  // split view, highlighting or a theme in either viewer updates the other.
+  const codeDisplaySettings = useCodeDisplaySettings(
     phoneLayout ? "unified" : "split",
   );
-  // Long lines scroll sideways by default (GitHub's behaviour). Wrapping keeps
-  // them all on screen, which matters most in split view where each side is
-  // half as wide.
-  const [wrapSetting, changeWrapSetting] = useStoredCodeSetting(
-    "opensession-pr-diff-wrap",
-    ["0", "1"] as const,
-    "0",
-  );
-  const wrapLines = wrapSetting === "1";
-  const changeWrapLines = (wrap: boolean) =>
-    changeWrapSetting(wrap ? "1" : "0");
-  const [structuralSetting, changeStructuralSetting] = useStoredCodeSetting(
-    "opensession-pr-structural-highlighting",
-    ["0", "1"] as const,
-    "1",
-  );
-  const [fileStatsSetting, changeFileStatsSetting] = useStoredCodeSetting(
-    "opensession-pr-file-stats",
-    ["0", "1"] as const,
-    "1",
-  );
+  const {
+    diffStyle,
+    wrapLines,
+    structuralHighlighting,
+    showFileStats,
+    codeTheme,
+  } = codeDisplaySettings;
   const [grouping, changeGrouping] = useStoredCodeSetting(
     "opensession-pr-grouping",
     ["none", "ai"] as const,
@@ -563,11 +533,6 @@ export function PrPanel({
     "opensession-pr-hide-reviewed",
     ["0", "1"] as const,
     "0",
-  );
-  const [codeTheme, changeCodeTheme] = useStoredCodeSetting(
-    "opensession-pr-code-theme",
-    ["system", "light", "dark"] as const,
-    "system",
   );
   // Keyed like the code flow below, so one target's guide never renders under
   // another's diff and a slow response can't land after the panel moved on.
@@ -1452,8 +1417,8 @@ export function PrPanel({
         controlsTarget: codeView === "all" ? diffControlsTarget : undefined,
         showViewedProgress: false,
         wrapLines,
-        structuralHighlighting: structuralSetting === "1",
-        showFileStats: fileStatsSetting === "1",
+        structuralHighlighting,
+        showFileStats,
         codeTheme,
         visibleFileOrder,
         stickyFileHeaders: true,
@@ -1485,8 +1450,8 @@ export function PrPanel({
       codeView,
       diffControlsTarget,
       wrapLines,
-      structuralSetting,
-      fileStatsSetting,
+      structuralHighlighting,
+      showFileStats,
       codeTheme,
       visibleFileOrder,
       prViewed,
@@ -1917,52 +1882,7 @@ export function PrPanel({
 
         <div aria-hidden className="mx-2 my-1.5 h-px bg-line" />
 
-        <SettingRow label="Layout">
-          <Segmented
-            label="Diff layout"
-            size="sm"
-            value={diffStyle}
-            onValueChange={(next) =>
-              changeDiffStyle(next as "unified" | "split")
-            }
-          >
-            <SegmentedOption value="split">Split</SegmentedOption>
-            <SegmentedOption value="unified">Unified</SegmentedOption>
-          </Segmented>
-        </SettingRow>
-        <SwitchRow
-          label="Wrap lines"
-          checked={wrapLines}
-          onCheckedChange={changeWrapLines}
-        />
-        <SwitchRow
-          label="Highlight changed words"
-          checked={structuralSetting === "1"}
-          onCheckedChange={(checked) =>
-            changeStructuralSetting(checked ? "1" : "0")
-          }
-        />
-        <SwitchRow
-          label="Line counts"
-          checked={fileStatsSetting === "1"}
-          onCheckedChange={(checked) =>
-            changeFileStatsSetting(checked ? "1" : "0")
-          }
-        />
-        <SettingRow label="Theme">
-          <Segmented
-            label="Code theme"
-            size="sm"
-            value={codeTheme}
-            onValueChange={(next) =>
-              changeCodeTheme(next as "system" | "light" | "dark")
-            }
-          >
-            <SegmentedOption value="system">Match app</SegmentedOption>
-            <SegmentedOption value="light">Light</SegmentedOption>
-            <SegmentedOption value="dark">Dark</SegmentedOption>
-          </Segmented>
-        </SettingRow>
+        <CodeDisplaySettings {...codeDisplaySettings} />
       </Popover.Popup>
     </Popover.Root>
   );
@@ -2262,7 +2182,7 @@ export function PrPanel({
           <PrFileTree
             files={reviewFiles}
             mode={fileListMode}
-            showFileStats={fileStatsSetting === "1"}
+            showFileStats={showFileStats}
             onOpenFile={scrollToFile}
           />
         )}

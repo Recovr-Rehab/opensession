@@ -25,6 +25,10 @@ import { AGENT_NAME } from "../lib/brand";
 import { InlineAlert, LoadingState } from "../ui/state";
 import { CodeFlow } from "./CodeFlow";
 import { revealDiffFile } from "../lib/diff-navigation";
+import { IconSliders } from "./icons";
+import { Popover } from "../ui/popover";
+import { CodeDisplaySettings } from "./CodeDisplaySettings";
+import { useCodeDisplaySettings } from "../hooks/useCodeDisplaySettings";
 
 /* The +/− counts. Kept as constants because CommentableDiff carries the same
    pair on its file rows and group headers, and the two must read alike. */
@@ -120,6 +124,10 @@ export function DiffPanel({
 }: Props) {
   const [active, setActive] = useState(0);
   const [view, setView] = useState<"files" | "flow">("files");
+  // Sidebar Changes is another code viewer, not a reduced diff. It reads and
+  // writes the same rendering preferences as Review, with a narrow-safe
+  // unified fallback until the person picks a layout.
+  const codeDisplaySettings = useCodeDisplaySettings("unified");
   const [groups, setGroups] = useState<{
     repo: string;
     patch: string;
@@ -322,53 +330,80 @@ export function DiffPanel({
           {handEdited.length === 1 ? "" : "s"}
         </Button>
       )}
-      <div
-        ref={setDiffControlsTarget}
-        className="ml-auto flex shrink-0 items-center gap-2"
-      />
-      <Segmented
-        size="sm"
-        label="Diff view"
-        value={view}
-        onValueChange={(next) => {
-          if (next === "flow") {
-            if (view !== "flow" && flowError) {
-              setFlow(null);
-              setFlowError(null);
-            }
-            setView("flow");
-            return;
-          }
-          setView("files");
-        }}
-      >
-        <SegmentedOption value="files">Files</SegmentedOption>
-        <SegmentedOption value="flow" disabled={!patchVersion}>
-          Code flow
-        </SegmentedOption>
-      </Segmented>
-      <Tooltip label="Refresh diff">
-        <Button
-          variant="ghost"
+      {/* Keep the viewing controls together. In a narrow viewer the whole
+          cluster takes a second row, so every option stays visible without a
+          sideways toolbar scroll or a popup anchored beyond the viewport. */}
+      <div className="ml-auto flex shrink-0 items-center gap-2 @max-[540px]:w-full @max-[540px]:justify-end">
+        <div
+          ref={setDiffControlsTarget}
+          className="flex shrink-0 items-center gap-2"
+        />
+        <Segmented
           size="sm"
-          className="min-h-0 px-1.5 py-0.5 text-sm text-faint hover:text-fg"
-          onClick={() => {
-            if (view === "flow") {
-              void refreshFlow();
+          label="Diff view"
+          value={view}
+          onValueChange={(next) => {
+            if (next === "flow") {
+              if (view !== "flow" && flowError) {
+                setFlow(null);
+                setFlowError(null);
+              }
+              setView("flow");
               return;
             }
-            void reload();
+            setView("files");
           }}
-          aria-label="Refresh diff"
         >
-          ↻
-        </Button>
-      </Tooltip>
+          <SegmentedOption value="files">Files</SegmentedOption>
+          <SegmentedOption value="flow" disabled={!patchVersion}>
+            Code flow
+          </SegmentedOption>
+        </Segmented>
+        <Popover.Root>
+          <Tooltip label="Code view settings">
+            <Popover.Trigger
+              render={
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  aria-label="Code view settings"
+                  icon={<IconSliders size={18} />}
+                />
+              }
+            />
+          </Tooltip>
+          <Popover.Popup
+            side="bottom"
+            align="end"
+            initialFocus
+            className="flex w-[340px] max-w-[calc(100vw-24px)] flex-col gap-0.5 p-3"
+          >
+            <CodeDisplaySettings {...codeDisplaySettings} />
+          </Popover.Popup>
+        </Popover.Root>
+        <Tooltip label="Refresh diff">
+          <Button
+            variant="ghost"
+            size="sm"
+            className="min-h-0 px-1.5 py-0.5 text-sm text-faint hover:text-fg"
+            onClick={() => {
+              if (view === "flow") {
+                void refreshFlow();
+                return;
+              }
+              void reload();
+            }}
+            aria-label="Refresh diff"
+          >
+            ↻
+          </Button>
+        </Tooltip>
+      </div>
     </>
   );
   const toolbar =
     toolbarTarget === undefined ? (
-      <div className="sticky top-0 z-1 flex items-center gap-2.5 overflow-x-auto border-b border-divider bg-panel-surface px-3.5 py-2.5 text-label whitespace-nowrap [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+      <div className="sticky top-0 z-1 flex items-center gap-2.5 overflow-x-auto border-b border-divider bg-panel-surface px-3.5 py-2.5 text-label whitespace-nowrap @max-[540px]:flex-wrap @max-[540px]:gap-y-1.5 @max-[540px]:overflow-x-hidden @max-[540px]:py-2 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
         {toolbarContents}
       </div>
     ) : toolbarTarget ? (
@@ -376,7 +411,7 @@ export function DiffPanel({
     ) : null;
 
   return (
-    <div className="flex min-h-0 flex-col" ref={panelRef}>
+    <div className="@container flex min-h-0 flex-col" ref={panelRef}>
       {multi && (
         <div className="sticky top-0 z-2 flex gap-1 overflow-x-auto border-b border-divider bg-panel-surface px-2.5 py-1.5">
           {changed.map((r, i) => {
@@ -428,6 +463,11 @@ export function DiffPanel({
           patch={d.rawPatch || ""}
           defaultExpandedFiles={10}
           controlsTarget={diffControlsTarget}
+          diffStyle={codeDisplaySettings.diffStyle}
+          wrapLines={codeDisplaySettings.wrapLines}
+          structuralHighlighting={codeDisplaySettings.structuralHighlighting}
+          showFileStats={codeDisplaySettings.showFileStats}
+          codeTheme={codeDisplaySettings.codeTheme}
           groups={
             groups?.repo === cur.repo && groups.patch === d.rawPatch
               ? groups.groups || undefined

@@ -89,7 +89,8 @@ const CARD_INPUT =
   "resize-y rounded-md border border-line-strong bg-raised px-2.5 py-2 font-sans text-label leading-[1.45] text-fg outline-none focus:border-accent";
 
 /* The "Organizing files…" / "AI organized" note, left of the toolbar's actions. */
-const GROUPS_NOTE = "mr-auto flex items-center gap-[7px] text-label text-faint";
+const GROUPS_NOTE =
+  "mr-auto flex items-center gap-[7px] text-label text-faint phone:hidden @max-[540px]:hidden";
 
 /* A changed image, shown as the actual picture. Checkerboard backing so
    transparency reads as transparency rather than as white. */

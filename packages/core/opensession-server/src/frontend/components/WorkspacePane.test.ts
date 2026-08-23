@@ -10,6 +10,9 @@ const prPanelSource = await Bun.file(
 const diffPanelSource = await Bun.file(
 	new URL("./DiffPanel.tsx", import.meta.url),
 ).text();
+const codeDisplaySource = await Bun.file(
+	new URL("./CodeDisplaySettings.tsx", import.meta.url),
+).text();
 const reviewToolbarSource = await Bun.file(
 	new URL("./pr/ReviewToolbar.tsx", import.meta.url),
 ).text();
@@ -112,6 +115,34 @@ test("a review without a PR combines and aligns its controls", () => {
 	expect(diffPanelSource).toContain(
 		'toolbarTarget === undefined ? "px-2.5 pt-2.5" : "px-0 pt-0"',
 	);
+});
+
+test("sidebar Changes shares Review's code display options", () => {
+	expect(prPanelSource).toContain(
+		"<CodeDisplaySettings {...codeDisplaySettings} />",
+	);
+	expect(diffPanelSource).toContain(
+		"<CodeDisplaySettings {...codeDisplaySettings} />",
+	);
+	expect(diffPanelSource).toContain(
+		"diffStyle={codeDisplaySettings.diffStyle}",
+	);
+	expect(diffPanelSource).toContain(
+		"wrapLines={codeDisplaySettings.wrapLines}",
+	);
+	expect(diffPanelSource).toContain(
+		"structuralHighlighting={codeDisplaySettings.structuralHighlighting}",
+	);
+	expect(diffPanelSource).toContain(
+		"showFileStats={codeDisplaySettings.showFileStats}",
+	);
+	expect(diffPanelSource).toContain(
+		"codeTheme={codeDisplaySettings.codeTheme}",
+	);
+	expect(codeDisplaySource).toContain('label="Wrap lines"');
+	expect(codeDisplaySource).toContain('value="split"');
+	expect(codeDisplaySource).toContain('value="unified"');
+	expect(codeDisplaySource).toContain('value="system"');
 });
 
 test("wide Review keeps its controls stable while page navigation moves", () => {
