@@ -13,6 +13,9 @@ struct AttachImagesButton: View {
     @Binding var images: [AttachedImage]
     var maxCount: Int = 6
     var systemImage = "paperclip"
+    /// Toolbar items keep the system style so iOS can fold them into the
+    /// surrounding Liquid Glass group. Composer buttons stay visually bare.
+    var usesSystemButtonStyle = false
 
     #if os(iOS)
     @State private var pickerItems: [PhotosPickerItem] = []
@@ -22,31 +25,16 @@ struct AttachImagesButton: View {
 
     private var remaining: Int { max(0, maxCount - images.count) }
 
+    @ViewBuilder
     var body: some View {
         #if os(iOS)
-        PhotosPicker(
-            selection: $pickerItems,
-            maxSelectionCount: remaining,
-            matching: .images
-        ) {
-            icon
-        }
-        // Plain, like the macOS branch: the default picker button style
-        // tints the paperclip blue instead of leaving it secondary gray.
-        .buttonStyle(.plain)
-        .disabled(remaining == 0)
-        .onChange(of: pickerItems) {
-            guard !pickerItems.isEmpty else { return }
-            let picked = pickerItems
-            pickerItems = []
-            Task {
-                for item in picked {
-                    guard let data = try? await item.loadTransferable(type: Data.self),
-                          let image = AttachedImage(rawData: data)
-                    else { continue }
-                    if images.count < maxCount { images.append(image) }
-                }
-            }
+        if usesSystemButtonStyle {
+            imagePicker
+        } else {
+            // Plain, like the macOS branch: outside a toolbar the default
+            // picker style tints the paperclip blue instead of leaving it
+            // secondary gray.
+            imagePicker.buttonStyle(.plain)
         }
         #else
         Button {
@@ -73,6 +61,32 @@ struct AttachImagesButton: View {
         }
         #endif
     }
+
+    #if os(iOS)
+    private var imagePicker: some View {
+        PhotosPicker(
+            selection: $pickerItems,
+            maxSelectionCount: remaining,
+            matching: .images
+        ) {
+            icon
+        }
+        .disabled(remaining == 0)
+        .onChange(of: pickerItems) {
+            guard !pickerItems.isEmpty else { return }
+            let picked = pickerItems
+            pickerItems = []
+            Task {
+                for item in picked {
+                    guard let data = try? await item.loadTransferable(type: Data.self),
+                          let image = AttachedImage(rawData: data)
+                    else { continue }
+                    if images.count < maxCount { images.append(image) }
+                }
+            }
+        }
+    }
+    #endif
 
     private var icon: some View {
         Image(systemName: systemImage)
