@@ -67,10 +67,9 @@ final class ServerConfig {
     private(set) var accounts: [ServerAccount]
     private(set) var activeId: String
     private(set) var accountBadges: [String: Int] = [:]
-    private var credentialRevision = 0
+    private var tokens: [String: String]
 
     @ObservationIgnored private let environmentAccountID: String?
-    @ObservationIgnored private let environmentToken: String?
 
     private init() {
         let defaults = UserDefaults.standard
@@ -93,13 +92,13 @@ final class ServerConfig {
                 githubLogin: ""
             )]
             activeId = id
+            let token = env["OS1_TOKEN"] ?? ""
+            tokens = [id: token]
             environmentAccountID = id
-            environmentToken = env["OS1_TOKEN"] ?? ""
             return
         }
 
         environmentAccountID = nil
-        environmentToken = nil
         if let decodedAccounts, !decodedAccounts.isEmpty {
             accounts = decodedAccounts
             let storedID = defaults.string(forKey: Self.activeIDDefaultsKey)
@@ -108,6 +107,9 @@ final class ServerConfig {
             } else {
                 activeId = decodedAccounts[0].id
             }
+            tokens = Dictionary(uniqueKeysWithValues: decodedAccounts.map { account in
+                (account.id, Keychain.get(Self.tokenKey(for: account.id)) ?? "")
+            })
             return
         }
 
@@ -124,8 +126,10 @@ final class ServerConfig {
             githubLogin: defaults.string(forKey: Self.legacyGithubLoginDefaultsKey) ?? ""
         )]
         activeId = id
-        if let token = Keychain.get(Self.legacyTokenKeychainKey), !token.isEmpty {
-            Keychain.set(token, for: Self.tokenKey(for: id))
+        let legacyToken = Keychain.get(Self.legacyTokenKeychainKey) ?? ""
+        tokens = [id: legacyToken]
+        if !legacyToken.isEmpty {
+            Keychain.set(legacyToken, for: Self.tokenKey(for: id))
             Keychain.delete(Self.legacyTokenKeychainKey)
         }
         persist()
@@ -151,20 +155,16 @@ final class ServerConfig {
     }
 
     var token: String {
-        get {
-            _ = credentialRevision
-            if activeId == environmentAccountID { return environmentToken ?? "" }
-            return Keychain.get(Self.tokenKey(for: activeId)) ?? ""
-        }
+        get { tokens[activeId] ?? "" }
         set {
             guard activeId != environmentAccountID else { return }
+            tokens[activeId] = newValue
             if newValue.isEmpty {
                 Keychain.delete(Self.tokenKey(for: activeId))
                 githubLogin = ""
             } else {
                 Keychain.set(newValue, for: Self.tokenKey(for: activeId))
             }
-            credentialRevision += 1
         }
     }
 
@@ -178,6 +178,7 @@ final class ServerConfig {
             userName: Self.placeholderUserName,
             githubLogin: ""
         ))
+        tokens[id] = ""
         activeId = id
         persist()
         return id
@@ -195,6 +196,7 @@ final class ServerConfig {
             return
         }
         Keychain.delete(Self.tokenKey(for: id))
+        tokens[id] = nil
         accounts.remove(at: index)
         accountBadges[id] = nil
         if accounts.isEmpty {
@@ -206,6 +208,7 @@ final class ServerConfig {
                 userName: Self.placeholderUserName,
                 githubLogin: ""
             )]
+            tokens[nextID] = ""
         }
         if !accounts.contains(where: { $0.id == activeId }) {
             activeId = accounts[min(index, accounts.count - 1)].id
@@ -225,11 +228,8 @@ final class ServerConfig {
     }
 
     func connection(for account: ServerAccount) -> ServerConnection? {
-        _ = credentialRevision
         guard let baseURL = Self.normalizedURL(account.url) else { return nil }
-        let accountToken = account.id == environmentAccountID
-            ? environmentToken ?? ""
-            : Keychain.get(Self.tokenKey(for: account.id)) ?? ""
+        let accountToken = tokens[account.id] ?? ""
         guard !accountToken.trimmingCharacters(in: .whitespaces).isEmpty else { return nil }
         return ServerConnection(accountID: account.id, baseURL: baseURL, token: accountToken)
     }
