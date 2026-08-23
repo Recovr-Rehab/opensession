@@ -82,6 +82,9 @@ test("reviews with and without a PR share the floating toolbar", () => {
 	expect(reviewBar).toContain("desktop:top-[calc(100%+8px)]");
 	expect(prPanelSource).toContain('["files", "Files",');
 	expect(prPanelSource).toContain('label="Code view"');
+	expect(prPanelSource).toContain(
+		'<SegmentedOption value="all">Changes</SegmentedOption>',
+	);
 	expect(prPanelSource).toContain("showViewedProgress: false");
 	expect(prPanelSource).not.toContain("<ActiveCodeViewIcon");
 });

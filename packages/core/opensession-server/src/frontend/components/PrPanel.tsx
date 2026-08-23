@@ -84,10 +84,8 @@ import {
   IconChevronRight,
   IconCopy,
   IconDotsHorizontal,
-  IconFile,
   IconGitMerge,
   IconGlobe,
-  IconListCircles,
   IconMessage,
   IconPullRequest,
   IconSliders,
@@ -141,13 +139,7 @@ export {
 
 type ReviewEvent = "COMMENT" | "APPROVE" | "REQUEST_CHANGES";
 
-/** The lenses the code page can be read through, in menu order. */
-const CODE_VIEWS = {
-  all: { label: "All changes", Icon: IconFile },
-  guide: { label: "Review guide", Icon: IconListCircles },
-  flow: { label: "Code flow", Icon: IconBranches },
-} as const;
-type CodeView = keyof typeof CODE_VIEWS;
+type CodeView = "all" | "guide" | "flow";
 export type PrReviewPage = "overview" | "files";
 
 const NO_PR_FILES: NonNullable<PrDetails["files"]> = [];
@@ -1811,29 +1803,32 @@ export function PrPanel({
         initialFocus
         className="flex w-[340px] flex-col gap-0.5 p-3"
       >
-        <ValueRow
-          label="Code view"
-          value={codeView}
-          options={(Object.keys(CODE_VIEWS) as CodeView[]).map((key) => {
-            const { label, Icon } = CODE_VIEWS[key];
-            return {
-              value: key,
-              label,
-              icon: <Icon size={18} />,
-              disabled:
-                key === "flow" &&
-                ((!diff?.patch && !diff?.skippedFiles) || !prPatchVersion),
-            };
-          })}
-          onSelect={(next) => {
-            const key = next as CodeView;
-            if (key === "flow" && codeView !== "flow" && codeFlowError) {
-              setCodeFlow(null);
-              setCodeFlowError(null);
-            }
-            setCodeView(key);
-          }}
-        />
+        <SettingRow label="Code view">
+          <Segmented
+            label="Code view"
+            size="sm"
+            value={codeView}
+            onValueChange={(next) => {
+              const key = next as CodeView;
+              if (key === "flow" && codeView !== "flow" && codeFlowError) {
+                setCodeFlow(null);
+                setCodeFlowError(null);
+              }
+              setCodeView(key);
+            }}
+          >
+            <SegmentedOption value="all">Changes</SegmentedOption>
+            <SegmentedOption value="guide">Guide</SegmentedOption>
+            <SegmentedOption
+              value="flow"
+              disabled={
+                (!diff?.patch && !diff?.skippedFiles) || !prPatchVersion
+              }
+            >
+              Flow
+            </SegmentedOption>
+          </Segmented>
+        </SettingRow>
         <SettingRow label="Diff layout">
           <Segmented
             label="Diff layout"
