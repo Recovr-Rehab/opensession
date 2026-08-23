@@ -6534,9 +6534,9 @@ export function SessionViewer({
 									waitingForWorkspace ? (
 										<WorkspaceWaiting detail="This takes a moment." />
 									) : (
-										// Same offset as the panel's Changes page, against
-										// this page's taller bar (52px plus the notch).
-										<div className="[&_.sticky]:top-[calc(env(safe-area-inset-top,0px)+52px)]">
+										// The Changes toolbar clears this page's taller bar
+										// (52px plus the notch); file titles add its own height.
+										<div className="[--diff-panel-top:calc(env(safe-area-inset-top,0px)+52px)]">
 											<DiffPanel
 												sessionId={session.id}
 												isRunning={isBusy}

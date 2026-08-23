@@ -406,7 +406,9 @@ export function DiffPanel({
   );
   const toolbar =
     toolbarTarget === undefined ? (
-      <div className="sticky top-0 z-1 flex items-center gap-2.5 overflow-x-auto border-b border-divider bg-panel-surface px-3.5 py-2.5 text-label whitespace-nowrap [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+      <div
+        className={`sticky ${multi ? "top-[calc(var(--diff-panel-top,0px)+37px)] phone:top-[calc(var(--diff-panel-top,0px)+47px)]" : "top-[var(--diff-panel-top,0px)]"} z-1 flex items-center gap-2.5 overflow-x-auto border-b border-divider bg-panel-surface px-3.5 py-2.5 text-label whitespace-nowrap [scrollbar-width:none] [&::-webkit-scrollbar]:hidden`}
+      >
         {toolbarContents}
       </div>
     ) : toolbarTarget ? (
@@ -414,9 +416,12 @@ export function DiffPanel({
     ) : null;
 
   return (
-    <div className="@container flex min-h-0 flex-col" ref={panelRef}>
+    <div
+      className={`@container flex min-h-0 flex-col ${multi ? "[--review-file-header-top:calc(var(--diff-panel-top,0px)+84px)] phone:[--review-file-header-top:calc(var(--diff-panel-top,0px)+94px)]" : "[--review-file-header-top:calc(var(--diff-panel-top,0px)+47px)]"}`}
+      ref={panelRef}
+    >
       {multi && (
-        <div className="sticky top-0 z-2 flex gap-1 overflow-x-auto border-b border-divider bg-panel-surface px-2.5 py-1.5">
+        <div className="sticky top-[var(--diff-panel-top,0px)] z-2 flex gap-1 overflow-x-auto border-b border-divider bg-panel-surface px-2.5 py-1.5">
           {changed.map((r, i) => {
             const n = r.diff.totalAdditions + r.diff.totalDeletions;
             return (
@@ -471,6 +476,9 @@ export function DiffPanel({
           structuralHighlighting={codeDisplaySettings.structuralHighlighting}
           showFileStats={codeDisplaySettings.showFileStats}
           codeTheme={codeDisplaySettings.codeTheme}
+          // The sidebar owns this scrollport. Keep each file's title below its
+          // standing toolbar until the following file pushes it away.
+          stickyFileHeaders={toolbarTarget === undefined}
           groups={
             groups?.repo === cur.repo && groups.patch === d.rawPatch
               ? groups.groups || undefined
