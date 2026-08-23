@@ -293,7 +293,10 @@ Pure SwiftUI with SwiftStreamingMarkdown for CommonMark/GFM rendering, iOS 26+
   pings; required against half-open iOS sockets), auto-reconnect with a banner,
   optimistic local echo of your prompts until the server's copy arrives.
 - **Settings** — native SwiftUI Tools, Personal, and Workspace administration,
-  plus server/GitHub/token configuration and a connection test. Cross-device
+  plus multi-organization server/GitHub/token configuration and a connection
+  test. The sidebar header switches organizations; each account keeps its own
+  keychain token, and passive WebSockets remain connected for inactive accounts
+  while the app is active so mentions can badge the picker. Cross-device
   composer and session preferences refresh at launch and when the app foregrounds.
   On macOS, custom account keyboard bindings drive the supported app commands and
   their command-menu hints; iOS keeps its system shortcut and widget guide.
@@ -385,9 +388,10 @@ page down and the snapshot loses the bottom of the diagram.
 
 Settings has in-app GitHub device-flow sign-in (`GitHubAuth.swift` —
 `POST /api/auth/device`, then `/api/auth/device/poll` with `native: true`;
-the server mints a web-session token and returns it in the poll body). The
-token is kept in the keychain and rides as `Authorization: Bearer <token>`
-everywhere, including the WebSocket upgrade. Pasting a token manually still
+the server mints a web-session token and returns it in the poll body). Each
+organization's token is kept in a separately keyed keychain item and rides as
+`Authorization: Bearer <token>` everywhere, including its WebSocket upgrade.
+Pasting a token manually still
 works as a fallback: tokens are the `opensession_auth` cookie values minted
 at web sign-in, stored server-side in `~/.opensession-web-sessions.json`.
 

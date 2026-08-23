@@ -57,6 +57,11 @@ final class OS1Socket: SessionSocket {
     var onEvent: ((ServerEvent) -> Void)?
     var onClose: ((String?) -> Void)?
     private var onMutationRejected: ((String) -> Void)?
+    private let connection: ServerConnection?
+
+    init(connection: ServerConnection? = ServerConfig.shared.connection) {
+        self.connection = connection
+    }
 
     func setMutationRejectedHandler(_ handler: @escaping (String) -> Void) {
         onMutationRejected = handler
@@ -72,7 +77,7 @@ final class OS1Socket: SessionSocket {
     private var commandNegotiated = false
     private lazy var mutationOutbox = SocketMutationOutbox(
         key: SocketMutationOutbox.storageKey(
-            server: ServerConfig.shared.baseURLString,
+            server: connection?.baseURL.absoluteString ?? "",
             user: ServerConfig.shared.githubLogin.isEmpty
                 ? ServerConfig.shared.userName
                 : ServerConfig.shared.githubLogin
@@ -80,7 +85,7 @@ final class OS1Socket: SessionSocket {
     )
 
     func connect() {
-        guard let url = ServerConfig.shared.wsURL else {
+        guard let connection, let url = connection.wsURL else {
             onClose?("Server URL not set")
             return
         }
@@ -88,7 +93,7 @@ final class OS1Socket: SessionSocket {
         supportsCommandResults = false
         commandNegotiated = false
         lastPong = Date()
-        let request = ServerConfig.shared.authorizedRequest(url)
+        let request = connection.authorizedRequest(url)
         let task = URLSession.shared.webSocketTask(with: request)
         // Default cap is 1 MB — a heavy session's transcript_init chunk (up
         // to ~120 entries × 32 KB wire clamp) blows past it, receive() throws,

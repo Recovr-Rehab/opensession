@@ -1,12 +1,9 @@
 import Foundation
 import Observation
 
-/// Who on the team is focused on which session, app-wide. The sidebar consumes
-/// this global view; the session header gets its own per-session presence frame.
-///
-/// This listener owns a WebSocket because the sidebar still needs updates when
-/// no session is selected. It never sends `watch`, so it cannot make its owner
-/// appear on a session.
+/// Who on the team is focused on which session, app-wide. One passive socket
+/// stays connected for every configured account, so inactive organizations can
+/// still deliver mention events and badge the account picker.
 @MainActor
 @Observable
 final class PresenceStore {
@@ -14,15 +11,11 @@ final class PresenceStore {
 
     private(set) var bySession: [String: [String]] = [:]
 
-    private var socket: OS1Socket?
-    private var reconnectTask: Task<Void, Never>?
-    private var connectedScope: String?
+    private var sockets: [String: OS1Socket] = [:]
+    private var connectedAccounts: [String: ServerConnection] = [:]
+    private var reconnectTasks: [String: Task<Void, Never>] = [:]
+    private var presenceByAccount: [String: [String: [String]]] = [:]
 
-    /// Everyone who is looking at anything right now, keyed the way every
-    /// people surface keys a person: the lowercased first name. The sidebar's
-    /// presence strip asks this of a teammate the roster named, which is a
-    /// different question from `viewers(of:)` — that one is "who is in THIS
-    /// row", this one is "who is around at all".
     var presentKeys: Set<String> {
         var keys: Set<String> = []
         for users in bySession.values {
@@ -34,8 +27,6 @@ final class PresenceStore {
         return keys
     }
 
-    /// Is this person looking at something right now? Takes a display name in
-    /// any of the spellings the wire uses, since the key is its first token.
     func isPresent(_ name: String) -> Bool {
         guard let first = name.trimmingCharacters(in: .whitespacesAndNewlines)
             .split(separator: " ").first
@@ -43,7 +34,6 @@ final class PresenceStore {
         return presentKeys.contains(first.lowercased())
     }
 
-    /// Everyone else focused on any session represented by a sidebar row.
     func viewers(of sessions: [Session]) -> [String] {
         guard !bySession.isEmpty else { return [] }
         var seen = Set<String>()
@@ -58,62 +48,95 @@ final class PresenceStore {
 
     func start() {
         let config = ServerConfig.shared
-        guard config.isConfigured else { return stop() }
-        let scope = "\(config.baseURLString)|\(config.token)"
-        if socket != nil, connectedScope == scope { return }
-        if connectedScope != scope {
-            stop()
-            connectedScope = scope
+        let connections = config.accounts.compactMap { account in
+            config.connection(for: account).map { (account, $0) }
         }
-        let socket = OS1Socket()
-        socket.onEvent = { [weak self] event in
-            switch event {
-            case .globalPresence(let viewing):
-                self?.apply(viewing)
-            case .mention(let user, let mention):
-                MentionStore.shared.receive(user: user, mention: mention)
-            case .mentionsCleared(let user, let sessionId):
-                MentionStore.shared.receiveCleared(user: user, sessionId: sessionId)
-            default:
-                break
-            }
+        let desiredConnections = Dictionary(
+            uniqueKeysWithValues: connections.map { ($0.0.id, $0.1) }
+        )
+
+        for id in Array(sockets.keys) where connectedAccounts[id] != desiredConnections[id] {
+            sockets.removeValue(forKey: id)?.disconnect()
+            connectedAccounts[id] = nil
+            reconnectTasks.removeValue(forKey: id)?.cancel()
+            presenceByAccount[id] = nil
         }
-        socket.onClose = { [weak self] _ in self?.scheduleReconnect() }
-        self.socket = socket
-        socket.connect()
+        bySession = presenceByAccount[config.activeId] ?? [:]
+
+        for (account, connection) in connections where sockets[account.id] == nil {
+            connect(account: account, connection: connection)
+        }
     }
 
-    /// Inactive/backgrounded apps stop listening without invalidating the
-    /// retained session graph or forgetting which account should reconnect.
+    /// iOS cannot retain network execution indefinitely in the background.
+    /// Suspend every account together, then reconnect all of them on activation.
     func suspend() {
-        reconnectTask?.cancel()
-        reconnectTask = nil
-        let suspendedSocket = socket
-        socket = nil
-        suspendedSocket?.disconnect()
+        for task in reconnectTasks.values { task.cancel() }
+        reconnectTasks.removeAll()
+        let connected = sockets.values
+        sockets.removeAll()
+        connectedAccounts.removeAll()
+        for socket in connected { socket.disconnect() }
     }
 
-    /// Sign-out and account/config changes discard presence and connection scope.
     func stop() {
         suspend()
-        connectedScope = nil
+        presenceByAccount.removeAll()
         clearPresence()
     }
 
-    func apply(_ viewing: [PresenceEntry]) {
-        let me = ServerConfig.shared.userName
-            .trimmingCharacters(in: .whitespacesAndNewlines)
-            .lowercased()
+    private func connect(account: ServerAccount, connection: ServerConnection) {
+        let socket = OS1Socket(connection: connection)
+        socket.onEvent = { [weak self] event in
+            self?.received(event, account: account)
+        }
+        socket.onClose = { [weak self] _ in
+            self?.socketClosed(accountID: account.id)
+        }
+        sockets[account.id] = socket
+        connectedAccounts[account.id] = connection
+        socket.connect()
+    }
+
+    private func received(_ event: ServerEvent, account: ServerAccount) {
+        let config = ServerConfig.shared
+        switch event {
+        case .globalPresence(let viewing):
+            let mapped = mappedPresence(viewing, me: account.userName)
+            presenceByAccount[account.id] = mapped
+            if account.id == config.activeId {
+                bySession = mapped
+                if !mapped.isEmpty {
+                    Task { await TeamDirectory.shared.ensureLoaded() }
+                }
+            }
+        case .mention(let user, let mention):
+            if account.id == config.activeId {
+                MentionStore.shared.receive(user: user, mention: mention)
+            } else {
+                config.incrementBadge(for: account.id)
+            }
+        case .mentionsCleared(let user, let sessionId):
+            if account.id == config.activeId {
+                MentionStore.shared.receiveCleared(user: user, sessionId: sessionId)
+            }
+        default:
+            break
+        }
+    }
+
+    private func mappedPresence(
+        _ viewing: [PresenceEntry],
+        me: String
+    ) -> [String: [String]] {
+        let me = me.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
         var next: [String: [String]] = [:]
         for entry in viewing {
             let first = entry.user.split(separator: " ").first?.lowercased() ?? ""
             guard !first.isEmpty, first != me else { continue }
             next[entry.sessionId, default: []].append(entry.user)
         }
-        bySession = next
-        if !next.isEmpty {
-            Task { await TeamDirectory.shared.ensureLoaded() }
-        }
+        return next
     }
 
     private func clearPresence() {
@@ -121,17 +144,15 @@ final class PresenceStore {
         bySession = [:]
     }
 
-    private func scheduleReconnect() {
-        guard socket != nil else { return }
-        clearPresence()
-        reconnectTask?.cancel()
-        let scope = connectedScope
-        reconnectTask = Task { [weak self] in
+    private func socketClosed(accountID: String) {
+        sockets[accountID] = nil
+        connectedAccounts[accountID] = nil
+        reconnectTasks[accountID]?.cancel()
+        reconnectTasks[accountID] = Task { [weak self] in
             try? await Task.sleep(for: .seconds(3))
-            guard let self, !Task.isCancelled, self.connectedScope == scope else { return }
-            self.socket = nil
-            self.connectedScope = nil
-            self.start()
+            guard !Task.isCancelled else { return }
+            self?.reconnectTasks[accountID] = nil
+            self?.start()
         }
     }
 }

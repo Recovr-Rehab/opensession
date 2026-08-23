@@ -49,6 +49,13 @@ struct SettingsView: View {
                     isAdmin = status.admin != false
                 }
             }
+            .onChange(of: config.activeId) { _, _ in
+                serverURL = config.baseURLString
+                userName = config.userName
+                token = config.token
+                showingConnection = !config.isConfigured
+                checkResult = nil
+            }
             .onChange(of: signIn.flow?.deviceCode) { _, deviceCode in
                 copiedCode = false
                 if deviceCode == nil, config.token != token {
@@ -70,6 +77,22 @@ struct SettingsView: View {
 
     private var settingsHome: some View {
         List {
+            Section("This app") {
+                settingsLink("Organizations", icon: "building.2.crop.circle") {
+                    OrganizationsSettingsView()
+                }
+                Button {
+                    signIn.cancel()
+                    config.addAccount()
+                    serverURL = config.baseURLString
+                    userName = config.userName
+                    token = config.token
+                    showingConnection = true
+                } label: {
+                    Label("Add organization", systemImage: "plus.circle")
+                }
+            }
+
             // Groups mirror the web nav (src/frontend/components/Settings.tsx):
             // what one person owns first, then what the whole instance does.
             Section("Personal") {

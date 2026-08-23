@@ -881,6 +881,8 @@ struct SessionsListView: View {
     /// the app menu (Cmd+,), where Mac users expect it.
     private var macSidebarHeader: some View {
         VStack(alignment: .leading, spacing: 9) {
+            ServerAccountPicker(iconSize: 28, openSettings: { openSettings() })
+
             HStack(spacing: 7) {
                 Text("Sessions")
                     .font(.headline)
@@ -960,23 +962,11 @@ struct SessionsListView: View {
                 .searchable(text: $searchText, prompt: "Search sessions")
                 .toolbar {
                     ToolbarItem(placement: .topLeadingCompat) {
-                        Button {
+                        ServerAccountPicker(iconSize: 32) {
                             showSettings = true
-                        } label: {
-                            // An organization icon fills the existing 44pt
-                            // rounded-square tile. Without one, the bundled
-                            // mark keeps its established inset so its ink sits
-                            // below the nearby 44pt action capsules.
-                            OrganizationAppIcon(size: 44, fallbackScale: 0.88)
                         }
-                        .accessibilityLabel("Settings")
-                        // Hiding the glass background leaves the padding the
-                        // capsule reserved, so pull the tile back onto the
-                        // list's leading column.
-                        .padding(.leading, sidebarMargin - 33.5)
+                        .padding(.leading, sidebarMargin - 20)
                     }
-                    // The bare app tile is the control; the toolbar's glass
-                    // circle around it read as a stray border.
                     .sharedBackgroundVisibility(.hidden)
                     ToolbarItem(placement: .topTrailingCompat) {
                         filterButton

@@ -9,7 +9,55 @@ const $ = (id) => document.getElementById(id);
 // ── State ────────────────────────────────────────────────────────────────────
 
 let defaultServer = "http://127.0.0.1:3850";
-let cfg = { serverUrl: defaultServer, token: "", login: "", name: "" };
+let accountStore = { accounts: [], activeId: "" };
+let cfg = { id: "", label: "Organization", serverUrl: defaultServer, token: "", login: "", name: "", repositories: [], badge: 0 };
+
+function newAccount(serverUrl = "") {
+  return {
+    id: crypto.randomUUID(),
+    label: "Organization",
+    serverUrl,
+    token: "",
+    login: "",
+    name: "",
+    repositories: [],
+    badge: 0,
+  };
+}
+
+async function saveAccounts() {
+  await chrome.storage.local.set({ accountStore });
+}
+
+function renderAccountPicker() {
+  const picker = $("account-picker");
+  picker.replaceChildren();
+  for (const account of accountStore.accounts) {
+    const option = document.createElement("option");
+    option.value = account.id;
+    option.textContent = `${account.label || "Organization"}${account.badge ? ` (${account.badge})` : ""}`;
+    option.selected = account.id === accountStore.activeId;
+    picker.appendChild(option);
+  }
+  $("in-account-label").value = cfg.label || "";
+  $("in-server").value = cfg.serverUrl;
+  $("btn-remove-account").disabled = accountStore.accounts.length === 1;
+}
+
+async function activateAccount(id, { keepView = false } = {}) {
+  const account = accountStore.accounts.find((candidate) => candidate.id === id);
+  if (!account || account.id === accountStore.activeId) return;
+  deviceFlow = null;
+  accountStore.activeId = account.id;
+  account.badge = 0;
+  cfg = account;
+  await saveAccounts();
+  renderAccountPicker();
+  setAuthedUi(!!cfg.token);
+  detail = { id: null, title: "", entryCount: 0, metaTick: 0 };
+  if (!keepView) showView(cfg.token ? "new" : "settings");
+  if (cfg.token) await loadComposerData();
+}
 
 // Captured context for the composer.
 const ctx = {
@@ -89,6 +137,34 @@ async function api(path, opts = {}) {
     throw new Error(msg);
   }
   return res.json();
+}
+
+async function refreshAccountRepoOwners() {
+  await Promise.all(accountStore.accounts.map(async (account) => {
+    if (!account.token || !account.serverUrl) return;
+    try {
+      const root = account.serverUrl.replace(/\/+$/, "");
+      const headers = { Authorization: `Bearer ${account.token}` };
+      const [reposResponse, organizationResponse] = await Promise.all([
+        fetch(`${root}/api/repos`, { credentials: "omit", headers }),
+        fetch(`${root}/api/settings/general`, { credentials: "omit", headers }),
+      ]);
+      if (reposResponse.ok) {
+        const repos = await reposResponse.json();
+        account.repositories = (repos.repos || []).map((repo) => ({
+          id: repo.id,
+          ghRepo: repo.ghRepo || repo.id,
+        }));
+      }
+      if (organizationResponse.ok) {
+        const organization = await organizationResponse.json();
+        if (organization?.organizationName) account.label = organization.organizationName;
+      }
+    } catch {}
+  }));
+  await saveAccounts();
+  renderAccountPicker();
+  guessRepo();
 }
 
 // ── Views ────────────────────────────────────────────────────────────────────
@@ -210,7 +286,29 @@ async function refreshPageChip() {
   guessRepo();
 }
 
-function guessRepo() {}
+async function guessRepo() {
+  const match = /^https?:\/\/(?:www\.)?github\.com\/([^/]+)\/([^/?#]+)/i.exec(ctx.page?.url || "");
+  if (!match) return;
+  const owner = match[1].toLowerCase();
+  const repo = match[2].replace(/\.git$/i, "").toLowerCase();
+  const ghRepo = `${owner}/${repo}`;
+  const matchedAccount = accountStore.accounts.find((account) =>
+    (account.repositories || []).some((candidate) =>
+      String(candidate.ghRepo || "").toLowerCase() === ghRepo,
+    ),
+  );
+  if (matchedAccount && matchedAccount.id !== accountStore.activeId) {
+    await activateAccount(matchedAccount.id, { keepView: true });
+  }
+  const picker = $("sel-repo");
+  const configuredRepo = (cfg.repositories || []).find((candidate) =>
+    String(candidate.ghRepo || "").toLowerCase() === ghRepo,
+  );
+  const option = configuredRepo
+    ? [...picker.options].find((candidate) => candidate.value === configuredRepo.id)
+    : [...picker.options].find((candidate) => candidate.value.toLowerCase() === ghRepo);
+  if (option) picker.value = option.value;
+}
 
 // ── Composer: captures ───────────────────────────────────────────────────────
 
@@ -432,8 +530,10 @@ async function startSession() {
 // ── Sessions list ────────────────────────────────────────────────────────────
 
 async function loadSessions() {
+  const accountID = cfg.id;
   try {
     const sessions = await api("/sessions");
+    if (cfg.id !== accountID) return;
     const list = $("sessions-list");
     list.textContent = "";
     const rows = sessions
@@ -494,8 +594,10 @@ function renderEntry(e) {
 
 async function loadTranscript(initial = false) {
   if (!detail.id) return;
+  const accountID = cfg.id;
   try {
     const entries = await api(`/sessions/${encodeURIComponent(detail.id)}/transcript`);
+    if (cfg.id !== accountID) return;
     if (Array.isArray(entries) && entries.length !== detail.entryCount) {
       detail.entryCount = entries.length;
       const box = $("transcript");
@@ -514,6 +616,7 @@ async function loadTranscript(initial = false) {
     // leave archived ones out — ~46% of the payload on a busy instance. The
     // filter below stays for older servers, which ignore the parameter.
     const sessions = await api("/sessions?archived=exclude");
+      if (cfg.id !== accountID) return;
       const s = sessions.find((x) => x.id === detail.id);
       if (s) {
         $("detail-title").textContent = s.title || detail.title || s.id;
@@ -571,8 +674,21 @@ async function sendFollowup() {
 // ── Composer data (repos/models) ─────────────────────────────────────────────
 
 async function loadComposerData() {
+  const accountID = cfg.id;
   try {
-    const [repos, models] = await Promise.all([api("/repos"), api("/models")]);
+    const [repos, models, organization] = await Promise.all([
+      api("/repos"),
+      api("/models"),
+      api("/settings/general").catch(() => null),
+    ]);
+    if (cfg.id !== accountID) return;
+    cfg.repositories = (repos.repos || []).map((repo) => ({
+      id: repo.id,
+      ghRepo: repo.ghRepo || repo.id,
+    }));
+    if (organization?.organizationName) cfg.label = organization.organizationName;
+    await saveAccounts();
+    renderAccountPicker();
     const rs = $("sel-repo");
     rs.textContent = "";
     for (const r of repos.repos || []) {
@@ -655,7 +771,8 @@ async function pollDeviceFlow(deviceCode) {
       cfg.token = out.token;
       cfg.login = out.login;
       cfg.name = out.name || out.login;
-      await chrome.storage.local.set({ cfg });
+      await saveAccounts();
+      renderAccountPicker();
       setAuthedUi(true);
       loadComposerData();
       showView("new");
@@ -680,7 +797,8 @@ async function signOut() {
   cfg.token = "";
   cfg.login = "";
   cfg.name = "";
-  await chrome.storage.local.set({ cfg });
+  await saveAccounts();
+  renderAccountPicker();
   setAuthedUi(false);
 }
 
@@ -708,13 +826,56 @@ async function init() {
     const deployment = await fetch(chrome.runtime.getURL("deployment.json")).then((res) => res.json());
     if (deployment?.defaultServer) defaultServer = deployment.defaultServer;
   } catch {}
-  const stored = await chrome.storage.local.get("cfg");
-  cfg = { ...cfg, serverUrl: defaultServer, ...(stored.cfg || {}) };
-  $("in-server").value = cfg.serverUrl;
+  const stored = await chrome.storage.local.get(["accountStore", "cfg"]);
+  if (stored.accountStore?.accounts?.length) {
+    accountStore = stored.accountStore;
+  } else {
+    const migrated = { ...newAccount(defaultServer), ...(stored.cfg || {}) };
+    if (!migrated.id) migrated.id = crypto.randomUUID();
+    if (!migrated.label) migrated.label = "Organization";
+    accountStore = { accounts: [migrated], activeId: migrated.id };
+    await saveAccounts();
+    await chrome.storage.local.remove("cfg");
+  }
+  cfg = accountStore.accounts.find((account) => account.id === accountStore.activeId)
+    || accountStore.accounts[0];
+  accountStore.activeId = cfg.id;
+  renderAccountPicker();
 
   $("tab-new").addEventListener("click", () => showView("new"));
   $("tab-sessions").addEventListener("click", () => showView("sessions"));
   $("btn-settings").addEventListener("click", () => showView("settings"));
+  $("account-picker").addEventListener("change", (event) => activateAccount(event.target.value));
+  $("in-account-label").addEventListener("change", async () => {
+    cfg.label = $("in-account-label").value.trim() || "Organization";
+    await saveAccounts();
+    renderAccountPicker();
+  });
+  $("btn-add-account").addEventListener("click", async () => {
+    deviceFlow = null;
+    $("device-flow").hidden = true;
+    const account = newAccount("");
+    accountStore.accounts.push(account);
+    accountStore.activeId = account.id;
+    cfg = account;
+    await saveAccounts();
+    renderAccountPicker();
+    setAuthedUi(false);
+    showView("settings");
+  });
+  $("btn-remove-account").addEventListener("click", async () => {
+    if (accountStore.accounts.length === 1) return;
+    deviceFlow = null;
+    $("device-flow").hidden = true;
+    accountStore.accounts = accountStore.accounts.filter((account) => account.id !== cfg.id);
+    cfg = accountStore.accounts[0];
+    accountStore.activeId = cfg.id;
+    await saveAccounts();
+    renderAccountPicker();
+    setAuthedUi(!!cfg.token);
+    showView(cfg.token ? "new" : "settings");
+    if (cfg.token) await loadComposerData();
+  });
   $("btn-back").addEventListener("click", () => showView("sessions"));
   $("btn-shot").addEventListener("click", captureScreenshot);
   $("btn-pick").addEventListener("click", pickElement);
@@ -736,7 +897,8 @@ async function init() {
       toast("settings-status", "Enter a valid http(s) server URL.", true);
       return;
     }
-    await chrome.storage.local.set({ cfg });
+    await saveAccounts();
+    renderAccountPicker();
   });
   $("prompt").addEventListener("keydown", (e) => {
     if ((e.metaKey || e.ctrlKey) && e.key === "Enter") startSession();
@@ -765,6 +927,7 @@ async function init() {
     loadComposerData();
   }
   applyPendingContext();
+  refreshAccountRepoOwners();
 }
 
 init();

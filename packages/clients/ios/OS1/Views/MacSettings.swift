@@ -219,6 +219,14 @@ struct MacConnectionSettingsView: View {
 
     var body: some View {
         Form {
+            Section("Organizations") {
+                NavigationLink {
+                    OrganizationsSettingsView()
+                } label: {
+                    LabeledContent("Active", value: config.activeAccount.displayLabel)
+                }
+            }
+
             Section("Server") {
                 TextField(
                     "Address",
@@ -303,6 +311,12 @@ struct MacConnectionSettingsView: View {
         }
         .navigationTitle("Connection")
         .onAppear { signIn.nudge() }
+        .onChange(of: config.activeId) { _, _ in
+            serverURL = config.baseURLString
+            userName = config.userName
+            token = config.token
+            checkResult = nil
+        }
         .onChange(of: signIn.flow?.deviceCode) { _, deviceCode in
             copiedCode = false
             // Flow finished: adopt the token it landed in ServerConfig.

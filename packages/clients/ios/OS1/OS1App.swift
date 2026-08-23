@@ -125,7 +125,7 @@ private struct RootSceneLifecycle: View {
     }
 
     private var hydrationID: String {
-        "\(config.baseURLString)|\(config.userName)|\(config.githubLogin)|\(config.token.hashValue)"
+        "\(config.activeId)|\(config.baseURLString)|\(config.userName)|\(config.githubLogin)|\(config.token.hashValue)"
     }
 
     private func hydrate() async {
@@ -152,6 +152,7 @@ struct RootView: View {
 
     var body: some View {
         SessionsListView()
+            .id(config.activeId)
             .tint(OS1VisualStyle.accentInk)
             .os1AccentToggles()
             .background(OS1VisualStyle.background.ignoresSafeArea())
@@ -226,7 +227,7 @@ struct RootView: View {
     }
 
     private var connectionID: String {
-        "\(config.baseURLString)|\(config.userName)|\(config.githubLogin)|\(config.token.hashValue)"
+        "\(config.activeId)|\(config.baseURLString)|\(config.userName)|\(config.githubLogin)|\(config.token.hashValue)"
     }
 
     #if os(iOS)

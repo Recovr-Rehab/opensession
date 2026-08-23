@@ -18,6 +18,7 @@ const {
 } = require("electron");
 const path = require("node:path");
 const fs = require("node:fs");
+const crypto = require("node:crypto");
 const { execFile } = require("node:child_process");
 const { NativeDictation } = require("./native-dictation");
 const packageConfig = require("../package.json").opensession || {};
@@ -133,6 +134,9 @@ let zoomLevel = 0;
 // back.
 
 const serverFile = () => path.join(app.getPath("userData"), "server.json");
+let addingAccount = false;
+let backgroundAccountWindows = new Map();
+let badgeByOrigin = new Map();
 
 // Declarations rather than consts: DEFAULT_URL calls into these while this
 // module is still evaluating, and a const would still be in its dead zone.
@@ -166,23 +170,69 @@ function normalizeServerUrl(raw) {
   }
 }
 
-function readStoredServer() {
+function readStoredAccounts() {
   try {
-    return normalizeServerUrl(JSON.parse(fs.readFileSync(serverFile(), "utf8"))?.url);
-  } catch {
-    return null;
-  }
+    const stored = JSON.parse(fs.readFileSync(serverFile(), "utf8"));
+    if (Array.isArray(stored?.accounts) && stored.accounts.length) {
+      const accounts = stored.accounts.flatMap((account) => {
+        const url = normalizeServerUrl(account?.url);
+        if (!url) return [];
+        return [{
+          id: String(account.id || crypto.randomUUID()),
+          label: String(account.label || new URL(url).host),
+          url,
+        }];
+      });
+      if (accounts.length) {
+        const activeId = accounts.some((account) => account.id === stored.activeId)
+          ? stored.activeId
+          : accounts[0].id;
+        return { accounts, activeId };
+      }
+    }
+    const legacyURL = normalizeServerUrl(stored?.url);
+    if (legacyURL) {
+      const account = {
+        id: crypto.randomUUID(),
+        label: new URL(legacyURL).host,
+        url: legacyURL,
+      };
+      const migrated = { accounts: [account], activeId: account.id };
+      fs.writeFileSync(serverFile(), JSON.stringify(migrated, null, 2));
+      return migrated;
+    }
+  } catch {}
+  return { accounts: [], activeId: null };
 }
 
-function writeStoredServer(url) {
+function writeStoredAccounts(accounts) {
   try {
     fs.mkdirSync(path.dirname(serverFile()), { recursive: true });
-    fs.writeFileSync(serverFile(), JSON.stringify({ url }, null, 2));
+    fs.writeFileSync(serverFile(), JSON.stringify(accounts, null, 2));
     return true;
   } catch (err) {
     console.error("[server] could not save", err);
     return false;
   }
+}
+
+function readStoredServer() {
+  const stored = readStoredAccounts();
+  return stored.accounts.find((account) => account.id === stored.activeId)?.url || null;
+}
+
+function writeStoredServer(url) {
+  const stored = readStoredAccounts();
+  const active = stored.accounts.find((account) => account.id === stored.activeId);
+  if (addingAccount || !active) {
+    const account = { id: crypto.randomUUID(), label: new URL(url).host, url };
+    stored.accounts.push(account);
+    stored.activeId = account.id;
+  } else {
+    active.url = url;
+    if (!active.label) active.label = new URL(url).host;
+  }
+  return writeStoredAccounts(stored);
 }
 
 // A profile that has been used before answered this question by working, so an
@@ -193,10 +243,14 @@ function adoptDefaultForExistingProfile() {
   writeStoredServer(DEFAULT_URL);
 }
 
+function trustedAccountOrigins() {
+  return readStoredAccounts().accounts.map((account) => new URL(account.url).origin);
+}
+
 function setServer(url) {
   APP_URL = url;
   APP_ORIGIN = new URL(url).origin;
-  IN_WINDOW_ORIGINS = [APP_ORIGIN];
+  IN_WINDOW_ORIGINS = [...new Set([APP_ORIGIN, ...trustedAccountOrigins()])];
   blockServiceWorker();
 }
 
@@ -209,7 +263,10 @@ function blockServiceWorker() {
   // A filter is fixed when its listener is registered and a session holds only
   // one of them, so re-registering is how the block follows a server change.
   session.defaultSession.webRequest.onBeforeRequest(
-    { urls: [APP_ORIGIN + "/*sw.js*"] },
+    {
+      urls: [...new Set([APP_ORIGIN, ...trustedAccountOrigins()])]
+        .map((origin) => origin + "/*sw.js*"),
+    },
     (_details, callback) => callback({ cancel: true }),
   );
 }
@@ -246,10 +303,10 @@ function showSetup() {
   clearStallGuard();
   win.loadFile(path.join(__dirname, "setup.html"), {
     query: {
-      url: APP_URL || DEFAULT_URL,
+      url: addingAccount ? "" : APP_URL || DEFAULT_URL,
       // A later visit can be called off; the first run has nothing to go back
       // to.
-      mode: APP_URL ? "change" : "first-run",
+      mode: addingAccount ? "add" : APP_URL ? "change" : "first-run",
     },
   });
 }
@@ -506,6 +563,14 @@ function inWindow(url) {
   }
 }
 
+function inActiveWindow(url) {
+  try {
+    return new URL(url).origin === APP_ORIGIN;
+  } catch {
+    return false;
+  }
+}
+
 // Sign-in pages for external services (e.g. the ChatGPT device-code sign-in
 // from Settings → Providers). The default browser is often not where you're
 // logged into these accounts, so prefer Chrome and fall back to the default
@@ -601,6 +666,19 @@ function openDeepLink(raw) {
     pendingDeepLink = raw;
     return;
   }
+  try {
+    const incoming = new URL(raw);
+    if (incoming.protocol === "http:" || incoming.protocol === "https:") {
+      const stored = readStoredAccounts();
+      const account = stored.accounts.find(
+        (candidate) => new URL(candidate.url).origin === incoming.origin,
+      );
+      if (account && account.id !== stored.activeId) {
+        switchAccount(account.id, raw);
+        return;
+      }
+    }
+  } catch {}
   const url = deepLinkToUrl(raw);
   if (!url) return;
   showWindow();
@@ -739,6 +817,10 @@ function createWindow() {
   win.webContents.on("did-finish-load", () => {
     if (createdWindow.isDestroyed() || win !== createdWindow) return;
     createdWindow.webContents.setZoomLevel(clampZoom(zoomLevel));
+    if (inActiveWindow(createdWindow.webContents.getURL())) {
+      const stored = readStoredAccounts();
+      if (stored.activeId) refreshAccountLabel(stored.activeId, createdWindow.webContents);
+    }
   });
   // A commit means the server answered, so the stall guard's job is done —
   // whatever the page does from here is the app's own to report.
@@ -767,7 +849,7 @@ function createWindow() {
   // Keep app navigation in-window; everything else (the device-code page, PR
   // links, docs, …) goes to the default browser.
   win.webContents.on("will-navigate", (e, url) => {
-    if (!inWindow(url)) {
+    if (!inActiveWindow(url)) {
       e.preventDefault();
       openExternal(url);
       return;
@@ -777,7 +859,7 @@ function createWindow() {
     armStallGuard();
   });
   win.webContents.setWindowOpenHandler(({ url }) => {
-    if (inWindow(url)) return { action: "allow" };
+    if (inActiveWindow(url)) return { action: "allow" };
     openExternal(url);
     return { action: "deny" };
   });
@@ -847,6 +929,79 @@ function createWindow() {
   openHome();
 }
 
+async function refreshAccountLabel(accountID, webContents) {
+  try {
+    const name = await webContents.executeJavaScript(
+      "fetch('/api/settings/general', { credentials: 'include' }).then(r => r.ok ? r.json() : null).then(v => v && v.organizationName)",
+      true,
+    );
+    if (typeof name !== "string" || !name.trim()) return;
+    const stored = readStoredAccounts();
+    const account = stored.accounts.find((candidate) => candidate.id === accountID);
+    if (!account || account.label === name.trim()) return;
+    account.label = name.trim();
+    if (writeStoredAccounts(stored)) buildAppMenu();
+  } catch {}
+}
+
+function syncBackgroundAccountWindows() {
+  if (!appReady) return;
+  const stored = readStoredAccounts();
+  const inactive = stored.accounts.filter((account) => account.id !== stored.activeId);
+  const inactiveIDs = new Set(inactive.map((account) => account.id));
+  for (const [id, accountWindow] of backgroundAccountWindows) {
+    if (!inactiveIDs.has(id) || accountWindow.isDestroyed()) {
+      if (!accountWindow.isDestroyed()) accountWindow.destroy();
+      backgroundAccountWindows.delete(id);
+    }
+  }
+  for (const account of inactive) {
+    if (backgroundAccountWindows.has(account.id)) continue;
+    const accountWindow = new BrowserWindow({
+      show: false,
+      webPreferences: {
+        preload: path.join(__dirname, "preload.js"),
+        sandbox: true,
+        contextIsolation: true,
+        nodeIntegration: false,
+        spellcheck: false,
+        backgroundThrottling: false,
+      },
+    });
+    accountWindow.webContents.setAudioMuted(true);
+    const accountOrigin = new URL(account.url).origin;
+    accountWindow.webContents.on("will-navigate", (event, url) => {
+      try {
+        if (new URL(url).origin !== accountOrigin) event.preventDefault();
+      } catch {
+        event.preventDefault();
+      }
+    });
+    accountWindow.webContents.setWindowOpenHandler(() => ({ action: "deny" }));
+    accountWindow.on("closed", () => backgroundAccountWindows.delete(account.id));
+    accountWindow.webContents.on("did-finish-load", () => {
+      refreshAccountLabel(account.id, accountWindow.webContents);
+    });
+    backgroundAccountWindows.set(account.id, accountWindow);
+    accountWindow.loadURL(account.url).catch(() => {});
+  }
+}
+
+function switchAccount(id, targetURL = null) {
+  const stored = readStoredAccounts();
+  const account = stored.accounts.find((candidate) => candidate.id === id);
+  if (!account || account.id === stored.activeId) return;
+  stored.activeId = account.id;
+  if (!writeStoredAccounts(stored)) return;
+  addingAccount = false;
+  setServer(account.url);
+  syncBackgroundAccountWindows();
+  buildAppMenu();
+  initAutoUpdate();
+  showWindow();
+  loadApp(targetURL && inActiveWindow(targetURL) ? targetURL : account.url);
+}
+
 // What the window opens on: the app once there is a server to open, and the
 // question itself until then.
 function openHome() {
@@ -858,6 +1013,14 @@ function openHome() {
 // standard roles keep all the stock items and shortcuts (edit, view, window).
 function buildAppMenu() {
   if (process.platform !== "darwin") return;
+  const stored = readStoredAccounts();
+  const organizationItems = stored.accounts.map((account, index) => ({
+    label: `${account.label}${badgeByOrigin.get(new URL(account.url).origin) ? ` (${badgeByOrigin.get(new URL(account.url).origin)})` : ""}`,
+    type: "radio",
+    checked: account.id === stored.activeId,
+    accelerator: index < 9 ? `CommandOrControl+Shift+${index + 1}` : undefined,
+    click: () => switchAccount(account.id),
+  }));
   Menu.setApplicationMenu(
     Menu.buildFromTemplate([
       {
@@ -867,11 +1030,27 @@ function buildAppMenu() {
           { label: "Check for Updates…", click: checkForUpdatesFromMenu },
           { type: "separator" },
           {
-            label: "Change Server…",
-            click: () => {
-              showWindow();
-              showSetup();
-            },
+            label: "Organizations",
+            submenu: [
+              ...organizationItems,
+              { type: "separator" },
+              {
+                label: "Add organization…",
+                click: () => {
+                  addingAccount = true;
+                  showWindow();
+                  showSetup();
+                },
+              },
+              {
+                label: "Edit current server…",
+                click: () => {
+                  addingAccount = false;
+                  showWindow();
+                  showSetup();
+                },
+              },
+            ],
           },
           { type: "separator" },
           { role: "services" },
@@ -927,15 +1106,29 @@ app.whenReady().then(async () => {
   );
 
   ipcMain.on("os1:set-badge", (e, count) => {
-    if (!inWindow(e.senderFrame?.url ?? "")) return;
-    app.setBadgeCount(Number.isFinite(count) && count > 0 ? Math.floor(count) : 0);
+    const source = e.senderFrame?.url ?? "";
+    if (!inWindow(source)) return;
+    let origin;
+    try { origin = new URL(source).origin; } catch { return; }
+    const next = Number.isFinite(count) && count > 0 ? Math.floor(count) : 0;
+    if (next) badgeByOrigin.set(origin, next);
+    else badgeByOrigin.delete(origin);
+    const total = [...badgeByOrigin.values()].reduce((sum, value) => sum + value, 0);
+    app.setBadgeCount(total);
+    buildAppMenu();
   });
 
   // The web app asks for this from a notification click handler, where its own
   // window.focus() cannot raise a background app.
   ipcMain.on("os1:focus-window", (e) => {
-    if (!inWindow(e.senderFrame?.url ?? "")) return;
-    showWindow();
+    const source = e.senderFrame?.url ?? "";
+    if (!inWindow(source)) return;
+    let origin;
+    try { origin = new URL(source).origin; } catch { return; }
+    const stored = readStoredAccounts();
+    const account = stored.accounts.find((candidate) => new URL(candidate.url).origin === origin);
+    if (account && account.id !== stored.activeId) switchAccount(account.id, source);
+    else showWindow();
   });
 
   ipcMain.handle("os1:dictation-start", (e, id, sampleRate, language) => {
@@ -982,7 +1175,10 @@ app.whenReady().then(async () => {
     if (fromShellPage(e)) showSetup();
   });
   ipcMain.on("os1:server-cancel", (e) => {
-    if (fromShellPage(e) && APP_URL) loadApp(APP_URL);
+    if (fromShellPage(e) && APP_URL) {
+      addingAccount = false;
+      loadApp(APP_URL);
+    }
   });
   ipcMain.handle("os1:server-probe", async (e, raw) => {
     if (!fromShellPage(e)) return { ok: false };
@@ -1023,6 +1219,7 @@ app.whenReady().then(async () => {
 
   appReady = true;
   createWindow();
+  syncBackgroundAccountWindows();
 
   flushPendingDeepLink();
 

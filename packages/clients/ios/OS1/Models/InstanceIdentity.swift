@@ -15,18 +15,31 @@ final class InstanceIdentity {
     static let shared = InstanceIdentity()
 
     private(set) var personaName = "Agent"
+    private var accountID: String?
     private var loading = false
     private var lastFailureAt: Date?
 
     func ensureLoaded() async {
+        let currentAccountID = ServerConfig.shared.activeId
+        if accountID != currentAccountID {
+            accountID = currentAccountID
+            personaName = "Agent"
+            loading = false
+            lastFailureAt = nil
+        }
         guard personaName == "Agent", !loading else { return }
         if let lastFailureAt, Date().timeIntervalSince(lastFailureAt) < 30 { return }
         loading = true
-        defer { loading = false }
+        defer {
+            if accountID == currentAccountID { loading = false }
+        }
         guard let identity = try? await OS1API.identity() else {
-            lastFailureAt = Date()
+            if accountID == currentAccountID { lastFailureAt = Date() }
             return
         }
+        guard accountID == currentAccountID,
+              ServerConfig.shared.activeId == currentAccountID
+        else { return }
         if let name = identity.personaName?.trimmingCharacters(in: .whitespacesAndNewlines),
            !name.isEmpty {
             personaName = name

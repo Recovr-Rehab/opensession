@@ -15,6 +15,7 @@ final class OrganizationBrand {
     private(set) var settings: OrganizationSettings?
     @ObservationIgnored private var didRequest = false
     @ObservationIgnored private var generation = 0
+    @ObservationIgnored private var accountID: String?
     @ObservationIgnored private var refreshTask: Task<Void, Never>?
 
     private init() {
@@ -33,6 +34,15 @@ final class OrganizationBrand {
     }
 
     func refreshIfNeeded() {
+        let currentAccountID = ServerConfig.shared.activeId
+        if accountID != currentAccountID {
+            refreshTask?.cancel()
+            refreshTask = nil
+            accountID = currentAccountID
+            settings = SettingsCache.value("organization-settings")
+            didRequest = false
+            generation += 1
+        }
         guard !didRequest else { return }
         didRequest = true
         let startedAt = generation
@@ -51,6 +61,9 @@ final class OrganizationBrand {
     private func set(_ next: OrganizationSettings) {
         settings = next
         SettingsCache.save("organization-settings", next)
+        if let name = next.organizationName {
+            ServerConfig.shared.updateActiveLabel(name)
+        }
     }
 }
 
@@ -62,6 +75,7 @@ struct OrganizationAppIcon: View {
 
     @State private var brand = OrganizationBrand.shared
     @State private var imageCache = RepoImageCache.shared
+    @State private var config = ServerConfig.shared
 
     private var bundledIcon: Image {
         #if os(macOS)
@@ -101,7 +115,7 @@ struct OrganizationAppIcon: View {
         }
         .frame(width: size, height: size)
         .clipShape(RoundedRectangle(cornerRadius: size * 0.28, style: .continuous))
-        .task {
+        .task(id: config.activeId) {
             brand.refreshIfNeeded()
         }
         .task(id: iconURL?.absoluteString) {
