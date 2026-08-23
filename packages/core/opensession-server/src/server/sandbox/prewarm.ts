@@ -546,15 +546,23 @@ async function runPrewarmBootstrap(record: PrewarmRecord, adapter: PrewarmAdapte
         setPrewarmStage(entry, "Syncing the latest project image", 72);
         const warmDir = remoteWarmWorkspaceDir(repo.id);
         const cloneUrl = await remoteCloneUrl(repo);
-        const refreshed = await driver.exec(
-          `git remote set-url origin ${shellQuoteWord(cloneUrl)} && ` +
-            `git fetch origin ${shellQuoteWord(repo.defaultBranch)} --quiet && ` +
-            `git reset --hard ${shellQuoteWord(`origin/${repo.defaultBranch}`)}`,
-          { cwd: warmDir, timeoutMs: 10 * 60_000 },
-        );
-        if (refreshed.exitCode !== 0) {
-          throw new Error(`could not refresh ${repo.id} project image: ${(refreshed.stderr || refreshed.stdout).trim().slice(0, 300)}`);
-        }
+        await retryTransientPrewarmStep(`${entry.key} image refresh`, async () => {
+          // A refresh that timed out mid-git (or a snapshot published while
+          // one ran) leaves stale .git lock files that fail every later
+          // refresh with "index.lock: File exists". This prewarm sandbox is
+          // the clone's only writer, so clearing dead locks before syncing
+          // is safe.
+          const refreshed = await driver.exec(
+            `find .git -name "*.lock" -type f -delete 2>/dev/null; ` +
+              `git remote set-url origin ${shellQuoteWord(cloneUrl)} && ` +
+              `git fetch origin ${shellQuoteWord(repo.defaultBranch)} --quiet && ` +
+              `git reset --hard ${shellQuoteWord(`origin/${repo.defaultBranch}`)}`,
+            { cwd: warmDir, timeoutMs: 10 * 60_000 },
+          );
+          if (refreshed.exitCode !== 0) {
+            throw new Error(`could not refresh ${repo.id} project image: ${(refreshed.stderr || refreshed.stdout).trim().slice(0, 300)}`);
+          }
+        });
         await scrubRemoteWarmWorkspaceAuthority(driver, repo, warmDir);
       }
     } else if (adapter.prepare) {
