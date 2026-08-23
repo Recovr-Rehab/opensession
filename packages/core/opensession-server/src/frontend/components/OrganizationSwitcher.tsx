@@ -49,9 +49,11 @@ function organizationBridge(): OrganizationBridge | undefined {
 export function OrganizationSwitcher({
 	connected,
 	onOpenSettings,
+	variant = "sidebar",
 }: {
 	connected: boolean;
 	onOpenSettings: (section?: "general" | "members") => void;
+	variant?: "sidebar" | "topbar";
 }) {
 	const name = useOrganizationName();
 	const bridge = organizationBridge();
@@ -96,25 +98,41 @@ export function OrganizationSwitcher({
 	return (
 		<>
 		<Menu.Root onOpenChange={(open) => open && loadMenu()}>
-			<Menu.Trigger
-				className={`group flex w-full items-center ${SIDEBAR_RAIL_GAP} rounded-row bg-transparent px-[calc(var(--sidebar-icon-left)-var(--sidebar-nav-x))] py-[var(--sidebar-tool-pad)] text-left text-body font-medium text-fg transition-[background-color,scale] hover:bg-hover active:scale-[0.96] phone:py-[13px] desktop:text-item-title motion-reduce:transform-none`}
-				aria-label={`Open organization menu, current: ${name}`}
-			>
-				<span className="relative inline-flex size-[22px] shrink-0 items-center justify-center">
-					<OrganizationAppIcon className="size-[22px] rounded-sm object-cover" />
-					<span
-						className={APP_LOGO_STATUS}
-						style={{ background: connected ? "var(--green)" : "var(--red)" }}
-						title={status}
+			{variant === "topbar" ? (
+				<Menu.Trigger
+					className="focus-ring relative flex size-11 shrink-0 items-center justify-center rounded-control bg-transparent p-0 text-fg transition-[background-color,scale] active:scale-[0.96] active:bg-hover motion-reduce:transform-none"
+					aria-label={`Open organization menu, current: ${name}`}
+				>
+					<span className="relative inline-flex size-10 items-center justify-center">
+						<OrganizationAppIcon className="size-10 rounded-control object-cover" />
+						<span
+							className={APP_LOGO_STATUS}
+							style={{ background: connected ? "var(--green)" : "var(--red)" }}
+							title={status}
+						/>
+					</span>
+				</Menu.Trigger>
+			) : (
+				<Menu.Trigger
+					className={`group flex w-full items-center ${SIDEBAR_RAIL_GAP} rounded-row bg-transparent px-[calc(var(--sidebar-icon-left)-var(--sidebar-nav-x))] py-[var(--sidebar-tool-pad)] text-left text-body font-medium text-fg transition-[background-color,scale] hover:bg-hover active:scale-[0.96] phone:py-[13px] desktop:text-item-title motion-reduce:transform-none`}
+					aria-label={`Open organization menu, current: ${name}`}
+				>
+					<span className="relative inline-flex size-[22px] shrink-0 items-center justify-center">
+						<OrganizationAppIcon className="size-[22px] rounded-sm object-cover" />
+						<span
+							className={APP_LOGO_STATUS}
+							style={{ background: connected ? "var(--green)" : "var(--red)" }}
+							title={status}
+						/>
+					</span>
+					<span className="min-w-0 flex-1 truncate">{name}</span>
+					<IconChevronDown
+						size={16}
+						className="shrink-0 text-faint transition-[color,rotate] group-hover:text-dim group-data-[popup-open]:rotate-180"
+						aria-hidden="true"
 					/>
-				</span>
-				<span className="min-w-0 flex-1 truncate">{name}</span>
-				<IconChevronDown
-					size={16}
-					className="shrink-0 text-faint transition-[color,rotate] group-hover:text-dim group-data-[popup-open]:rotate-180"
-					aria-hidden="true"
-				/>
-			</Menu.Trigger>
+				</Menu.Trigger>
+			)}
 
 			<Menu.Popup
 				side="bottom"

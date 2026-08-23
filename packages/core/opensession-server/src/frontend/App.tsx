@@ -137,6 +137,7 @@ import { MediaLightboxHost } from "./components/MediaLightbox";
 import { ChipHoverCards } from "./components/ChipHoverCard";
 import { ShortcutCheatSheet } from "./components/ShortcutCheatSheet";
 import { UpdatePill } from "./components/UpdatePill";
+import { OrganizationSwitcher } from "./components/OrganizationSwitcher";
 import { DesktopLinkToast } from "./components/DesktopLinkToast";
 import { PERSISTENT_NOTICE_SHELF } from "./lib/notification-classes";
 import {
@@ -4960,10 +4961,10 @@ export function App(
 					<FirstMile onDone={finishFirstMile} />
 				) : (
 				<>
-				{/* Mobile-only top bar. On the sidebar-root page organization identity
-				    lives in the first sidebar row; on a pushed page a Back chevron pops
-				    back to the root, iOS-style. On desktop this bar is hidden. The catch-up
-				    deck renders its own header (back + "N Left" + new-workspace), so we
+				{/* Mobile-only top bar. On the sidebar-root page the organization icon
+				    opens the same switcher as the full sidebar row; on a pushed page a Back
+				    chevron pops back to the root, iOS-style. On desktop this bar is hidden.
+				    The catch-up deck renders its own header (back + "N Left" + new-workspace), so we
 				    suppress this one there to avoid a duplicate back bar. */}
 				{route.view !== "catchup" && (
 				<TopBar
@@ -4992,7 +4993,16 @@ export function App(
 								}
 							/>
 						) : (
-							<UpdatePill addHandler={addHandler} variant="pill" />
+							<>
+								<OrganizationSwitcher
+									variant="topbar"
+									connected={connected}
+									onOpenSettings={(section) =>
+										navigate({ view: "settings", section })
+									}
+								/>
+								<UpdatePill addHandler={addHandler} variant="pill" />
+							</>
 						)}
 					</TopBarLeading>
 					{/* Centered page title on pushed pages, iOS-sheet style. Sessions

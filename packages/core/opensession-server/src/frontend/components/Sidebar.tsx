@@ -4611,16 +4611,18 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 						// reads the same on both clients, shows every tool at once without
 						// a gesture, and takes a quarter of the height per tool.
 						//
-						// The organization row leads this rail now that the old heading is
-						// gone. The top pad sets it off from the chrome; the bottom pad is
-						// the gap to the Workspaces heading.
+						// The organization row leads this rail on desktop now that the old
+						// heading is gone. Phones keep it in the top bar instead, where it
+						// remains reachable while this list scrolls.
 						"flex flex-col gap-0.5 px-[var(--sidebar-nav-x)] pt-2 pb-1.5",
 					)}
 				>
-					<OrganizationSwitcher
-						connected={connected}
-						onOpenSettings={onOpenSettings}
-					/>
+					<div className="phone:hidden">
+						<OrganizationSwitcher
+							connected={connected}
+							onOpenSettings={onOpenSettings}
+						/>
+					</div>
 					{visibleTools.map((tool) => {
 						const rowClass = cn(
 							// One look at both widths. Only the box changes, and only
