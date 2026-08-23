@@ -965,7 +965,6 @@ struct SessionsListView: View {
                         ServerAccountPicker(iconSize: 44, compact: true) {
                             showSettings = true
                         }
-                        .padding(.leading, sidebarMargin - 33.5)
                     }
                     .sharedBackgroundVisibility(.hidden)
                     ToolbarItem(placement: .topTrailingCompat) {
