@@ -2149,11 +2149,32 @@ html[data-theme="light"] .composer-hl .cmp-fence {
 	color: var(--text-dim);
 	cursor: pointer;
 }
-.md-code-copy:hover,
-.md-code-settings-trigger:hover,
-.md-code-settings-trigger[data-open] {
+.md-code-settings-trigger {
+	position: relative;
+	color: var(--text-faint);
+}
+.md-code-settings-trigger::before {
+	content: "";
+	position: absolute;
+	inset: 4px;
+	border-radius: calc(7px * var(--rf)); corner-shape: var(--cs);
+	background: transparent;
+	pointer-events: none;
+}
+.md-code-settings-trigger > svg {
+	position: relative;
+}
+.md-code-copy:hover {
 	background: var(--hover);
 	color: var(--text);
+}
+.md-code-settings-trigger:hover,
+.md-code-settings-trigger[data-open] {
+	color: var(--text-dim);
+}
+.md-code-settings-trigger:hover::before,
+.md-code-settings-trigger[data-open]::before {
+	background: var(--hover);
 }
 .md-code-copy:focus-visible,
 .md-code-settings-trigger:focus-visible {
