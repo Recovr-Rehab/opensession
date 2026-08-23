@@ -6,7 +6,9 @@ import {
 	MOBILE_BACK,
 	MOBILE_CONTROL_GLASS,
 	MOBILE_CONTROL_GLASS_EFFECTS,
+	MOBILE_SEARCH_BTN,
 	appHeader,
+	mobileFilterBtn,
 } from "../lib/app-header-classes";
 import {
 	TAB_ITEM,
@@ -17,6 +19,21 @@ import { REPORTS_COLUMN_HEADER } from "../lib/reports-classes";
 import { infoTopbarClass } from "../lib/session-viewer-classes";
 
 const CSS = new URL("./base.css", import.meta.url);
+
+test("floating phone navigation stays pinned while chat chrome collapses", () => {
+	const floatingHeader = appHeader({ detail: true, floating: true });
+
+	expect(floatingHeader).toContain("phone:fixed");
+	expect(floatingHeader).not.toContain("chrome-collapsed");
+});
+
+test("phone top-bar actions use neutral ink", () => {
+	for (const control of [MOBILE_BACK, MOBILE_SEARCH_BTN, mobileFilterBtn(true)]) {
+		expect(control).toContain("phone:text-fg");
+		expect(control).not.toContain("phone:text-accent");
+	}
+	expect(mobileFilterBtn(false)).toContain("phone:text-dim");
+});
 
 test("phone navigation chrome has no hard divider bars", async () => {
 	const css = await Bun.file(CSS).text();

@@ -79,9 +79,9 @@ export const TAB_STRIP =
 	"phone:absolute phone:inset-x-0 phone:top-[var(--pane-header-h)] phone:z-[6] " +
 	"phone:m-0 phone:py-[5px] " +
 	// Immersive reading: SessionViewer sets body.chrome-collapsed from the
-	// transcript's scroll direction and the bar slides off with the top bar.
-	// `transform`, not the `translate` property, because that is what the
-	// transition names — and what .app-header-overlay animates beside it.
+	// transcript's scroll direction and this secondary strip slides away while
+	// the navigation bar remains pinned. `transform`, not the `translate`
+	// property, because that is what the transition names.
 	"phone:[transition:transform_var(--dur-lg)_var(--ease)] " +
 	"phone:[body.chrome-collapsed_&]:[transform:translateY(calc(-100%_-_var(--pane-header-h)_-_8px))] " +
 	// A lone session with no view tabs has nothing to switch between, so the

@@ -80,20 +80,13 @@ const APP_HEADER_DETAIL = "phone:bg-transparent";
  * The header is a sibling of the pane, so that state is keyed off the nearest
  * common ancestor.
  *
- * Immersive reading: SessionViewer sets `body.chrome-collapsed` from the
- * transcript's scroll direction and the bar slides off-screen. A transform, so
- * the layout never reflows.
+ * SessionViewer can still collapse lower chat chrome while reading, but this
+ * navigation bar stays pinned so Back and its actions never scroll away.
  */
 const APP_HEADER_OVERLAY =
 	"app-header-overlay " +
 	"phone:fixed phone:inset-x-0 phone:top-0 phone:z-40 phone:bg-transparent " +
 	"phone:pointer-events-none phone:*:pointer-events-auto " +
-	"phone:[transition-property:transform] phone:duration-[var(--dur-lg)] " +
-	"phone:ease-[var(--ease)] " +
-	// Spelled as `transform` rather than `-translate-y-full`: that utility moves
-	// the bar with the `translate` property, which the transition above does not
-	// name — the bar would jump off-screen instead of sliding.
-	"phone:[body.chrome-collapsed_&]:[transform:translateY(-100%)] " +
 	"phone:before:absolute phone:before:inset-x-0 phone:before:top-0 " +
 	"phone:before:bottom-auto phone:before:z-[-1] phone:before:h-[calc(100%+30px)] " +
 	"phone:[.app:has(.session-tabs)_&]:before:h-full " +
@@ -180,7 +173,7 @@ export const MOBILE_CONTROL_GLASS =
 export const MOBILE_BACK =
 	"pwa-header-back phone:m-0 phone:inline-flex phone:size-11 phone:items-center phone:justify-center " +
 	`phone:rounded-full phone:border phone:border-[color:var(--mobile-header-control-border)] ${MOBILE_CONTROL_GLASS} phone:p-0 ` +
-	"phone:text-accent phone:shadow-[var(--mobile-header-control-shadow)] " +
+	"phone:text-fg phone:shadow-[var(--mobile-header-control-shadow)] " +
 	"phone:cursor-pointer phone:touch-manipulation " +
 	"phone:[-webkit-tap-highlight-color:transparent] " +
 	"phone:[transition-property:opacity] phone:duration-[var(--dur)] " +
@@ -454,18 +447,19 @@ const MOBILE_BAR_SEGMENT =
  * grouped toolbar item. The air between them is the separation.
  */
 export const MOBILE_SEARCH_BTN =
-	`${MOBILE_BAR_SEGMENT} phone:text-accent ` +
+	`${MOBILE_BAR_SEGMENT} phone:text-fg ` +
 	"phone:[transition-property:opacity] phone:duration-[var(--dur)] " +
 	"phone:ease-[var(--ease)]";
 
 /**
  * Filter, portaled out of the sidebar header into the same capsule. `-order-1`
- * seats it to Search's left. Muted until a filter is actually set.
+ * seats it to Search's left. Muted until a filter is actually set, then raised
+ * to the neutral foreground used by the other bar actions.
  *
  * Two whole strings rather than a shared base plus a colour: two `text-*`
  * utilities on one element are resolved by Tailwind's OUTPUT order, not the
- * order they are written in, so the muted and accented states each spell their
- * own set. Read them through `mobileFilterBtn()`, never build the class name.
+ * order they were written in. Read them through `mobileFilterBtn()`, never
+ * build the class name.
  */
 const MOBILE_FILTER_BTN_BASE =
 	`${MOBILE_BAR_SEGMENT} phone:-order-1 ` +
@@ -473,10 +467,10 @@ const MOBILE_FILTER_BTN_BASE =
 
 const MOBILE_FILTER_BTN = {
 	muted: `${MOBILE_FILTER_BTN_BASE} phone:text-dim`,
-	tinted: `${MOBILE_FILTER_BTN_BASE} phone:text-accent`,
+	active: `${MOBILE_FILTER_BTN_BASE} phone:text-fg`,
 } as const;
 
-/** Tinted while the popover is open or a filter is set. */
+/** Raised to the neutral foreground while the popover is open or filtered. */
 export function mobileFilterBtn(active: boolean): string {
-	return active ? MOBILE_FILTER_BTN.tinted : MOBILE_FILTER_BTN.muted;
+	return active ? MOBILE_FILTER_BTN.active : MOBILE_FILTER_BTN.muted;
 }

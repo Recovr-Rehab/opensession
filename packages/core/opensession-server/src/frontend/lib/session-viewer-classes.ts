@@ -258,11 +258,7 @@ export const VIEWER_MESSAGES =
 	// A non-linear fade mirrored into mask alpha:
 	// hidden for the first fifth, 45% by three fifths, full at the bar height.
 	"phone:[-webkit-mask-image:linear-gradient(to_bottom,transparent_0,transparent_calc(var(--pane-header-h)*0.2),rgba(0,0,0,0.45)_calc(var(--pane-header-h)*0.6),#000_var(--pane-header-h))] " +
-	"phone:[mask-image:linear-gradient(to_bottom,transparent_0,transparent_calc(var(--pane-header-h)*0.2),rgba(0,0,0,0.45)_calc(var(--pane-header-h)*0.6),#000_var(--pane-header-h))] " +
-	// With the header slid away, the revealed rows read at full strength rather
-	// than dissolving into an absent bar.
-	"phone:[body.chrome-collapsed_&]:[-webkit-mask-image:none] " +
-	"phone:[body.chrome-collapsed_&]:[mask-image:none]";
+	"phone:[mask-image:linear-gradient(to_bottom,transparent_0,transparent_calc(var(--pane-header-h)*0.2),rgba(0,0,0,0.45)_calc(var(--pane-header-h)*0.6),#000_var(--pane-header-h))]";
 
 /**
  * The composer floats up over the transcript so the session scrolls UNDER it,
@@ -558,12 +554,10 @@ export const TRANSCRIPT_PILL_SPINNER =
  * same chrome the transcript clears.
  *
  * SessionViewer shows it only within a screenful of the head of the
- * transcript, and scrolling down through that screenful is what collapses the
- * phone chrome, so the pill follows the bar off screen on the header's own
- * transform and timing. Without that it hangs in the space the bar just
- * vacated, which is the floating-over-the-transcript look this pill is
- * supposed to avoid. A transform rather than a moved `top`: it composes with
- * the `translate` property doing the centring, and costs no layout.
+ * transcript. As secondary chrome collapses, the pill follows the docked tabs
+ * upward and tucks behind the still-pinned navigation bar rather than hanging
+ * in the strip's vacated space. A transform rather than a moved `top` composes
+ * with the `translate` property doing the centring and costs no layout.
  */
 export const TRANSCRIPT_PILL_TOP =
 	`pointer-events-none absolute top-3 left-1/2 z-[5] ${PILL_CENTRED} ` +

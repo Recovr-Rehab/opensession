@@ -1980,11 +1980,11 @@ export function SessionViewer({
 		};
 	}, [session.id]);
 
-	// Immersive reading on phones (Safari-style): scrolling down through the
-	// transcript slides the top bar, docked tabs and composer off-screen to
-	// maximize the reading area; scrolling back up, or reaching the very top or
-	// the live edge, brings them back. Toggles body.chrome-collapsed, which the
-	// mobile CSS animates with transforms (inert on desktop / when unscrollable).
+	// Immersive reading on phones: scrolling down through the transcript hides
+	// secondary chat chrome such as docked tabs, while the navigation bar stays
+	// fixed so Back and its actions remain reachable. Scrolling back up, or
+	// reaching the top or live edge, restores the secondary chrome. Toggles
+	// body.chrome-collapsed, which mobile CSS reads (inert on desktop).
 	useEffect(() => {
 		const el = messagesRef.current;
 		if (!el) return;
