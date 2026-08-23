@@ -14,6 +14,7 @@ import { ensureSandboxPortalRelay, mintSandboxPortalGrant, revokeSandboxPortalRe
 import { remoteSandboxCallbackBaseUrl, usesOutboundSandboxPortalRelay } from "./sandbox/config";
 import { shellQuoteWord } from "./sandbox/adapters/bootstrap";
 import { sandboxHttpsPortFor } from "./sandbox/preview-ports";
+import { cacheSandboxPortalRecords } from "./sandbox-portals";
 import { REPO_ROOT } from "../runner-host/protocol";
 import type { Sandbox } from "./sandbox/provider";
 import type { UnifiedSession } from "./types";
@@ -249,7 +250,12 @@ async function startPortal(ops: PortalOps, input: {
 	if (!command || command.length > 8_000) throw new Error("Portal command is required.");
 	const records = await listPortals(ops);
 	const current = records.find((record) => record.name === name);
-	if (current && current.state !== "stopped" && current.state !== "failed") throw new Error(`Portal '${name}' already exists. Restart it instead.`);
+	if (current && current.state !== "stopped" && current.state !== "failed") {
+		const key = validateKey(input.key) ?? portalKey(name);
+		const sameService = current.command === command && current.key === key && (input.port == null || current.port === input.port);
+		if (current.state === "awake" && sameService) return { ...current, url: input.urlFor(current.port) };
+		throw new Error(`Portal '${name}' already exists. Restart it instead.`);
+	}
 	const port = input.port == null ? await input.allocatePort(records) : validatePort(input.port);
 	if (records.some((record) => record.name !== name && record.port === port) || await ops.probePort(port)) throw new Error(`Port ${port} is already in use.`);
 	await input.qualifyPort?.(port, records);
@@ -481,10 +487,13 @@ async function writeSandboxPortalRegistry(sandbox: Sandbox, records: PortalRecor
 	if (response.exitCode !== 0) throw new Error(response.stderr.trim() || "Could not update the Sandbox Portal registry.");
 }
 
-function sandboxPortalOps(sandbox: Sandbox): PortalOps {
+function sandboxPortalOps(sandbox: Sandbox, sessionId?: string): PortalOps {
 	return {
 		readRegistry: async () => (await readSandboxPortalRegistry(sandbox)).records,
-		writeRegistry: (records) => writeSandboxPortalRegistry(sandbox, records),
+		writeRegistry: async (records) => {
+			await writeSandboxPortalRegistry(sandbox, records);
+			if (sessionId) cacheSandboxPortalRecords(sessionId, sandbox.id, records);
+		},
 		probePort: async (port) => (await sandbox.exec(["timeout", "2", "bash", "-c", `exec 3<>/dev/tcp/127.0.0.1/${port}`])).exitCode === 0,
 		pidAlive: async (pid) => {
 			if (!pid || pid < 2) return false;
@@ -552,7 +561,7 @@ export async function startSandboxPortalService(input: {
 	/** Short-lived workload identity for a trusted declared recipe. */
 	env?: Record<string, string>;
 }): Promise<PortalRecord> {
-	const awake = await startPortal(sandboxPortalOps(input.sandbox), {
+	const awake = await startPortal(sandboxPortalOps(input.sandbox, input.sessionId), {
 		...input,
 		ownsProcess: false,
 		allocatePort: (records) => allocateSandboxPort(input.sandbox, records),
@@ -572,7 +581,7 @@ export async function startSandboxPortalService(input: {
 	});
 	await ensureRemoteSandboxPortalAgent({ sessionId: input.sessionId, sandbox: input.sandbox, port: awake.port });
 	if (usesOutboundSandboxPortalRelay(input.sandbox.provider) && !(await waitForSandboxPortalRelay({ sessionId: input.sessionId, sandboxId: input.sandbox.id, port: awake.port }, 15_000))) {
-		await stopPortal(sandboxPortalOps(input.sandbox), awake.name);
+		await stopPortal(sandboxPortalOps(input.sandbox, input.sessionId), awake.name);
 		revokeSandboxPortalRelay(input.sandbox.id, awake.port);
 		forgetRemoteSandboxPortalAgents(input.sandbox.id, awake.port);
 		throw new Error(`Portal relay did not connect within 15 seconds. See sandbox-portal-${awake.port}.log in this session's scratch directory.`);
@@ -585,7 +594,7 @@ export async function startSandboxPortalService(input: {
 }
 
 export async function stopSandboxPortalService(input: { sessionId: string; sandbox: Sandbox; name: string }): Promise<PortalRecord> {
-	const stopped = await stopPortal(sandboxPortalOps(input.sandbox), validateName(input.name));
+	const stopped = await stopPortal(sandboxPortalOps(input.sandbox, input.sessionId), validateName(input.name));
 	revokeSandboxPortalRelay(input.sandbox.id, stopped.port);
 	forgetRemoteSandboxPortalAgents(input.sandbox.id, stopped.port);
 	audit({ msg: "sandbox_portal_stopped", session_id: input.sessionId, sandbox_id: input.sandbox.id, portal: stopped.name, port: stopped.port });

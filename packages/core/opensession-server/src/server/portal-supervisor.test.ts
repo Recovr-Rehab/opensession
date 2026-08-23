@@ -3,12 +3,21 @@ import { existsSync, mkdtempSync, rmSync, writeFileSync } from "fs";
 import { tmpdir } from "os";
 import { join } from "path";
 import { listPortalServices, listSandboxPortalServices, readPortalRegistry, reapOrphanedPortalServices, SANDBOX_PORTAL_AGENT_ENTRY, setPortalPath, startPortalService, startSandboxPortalService, stopPortalService, stopSandboxPortalService } from "./portal-supervisor";
+import { sleepingSandboxPortalStatus } from "./sandbox-portals";
 import type { Sandbox } from "./sandbox/provider";
 
 let worktree = "";
+const previousStateDir = process.env.OPENSESSION_STATE_DIR;
 
-beforeEach(() => { worktree = mkdtempSync(join(tmpdir(), "os-portals-test-")); });
-afterAll(() => { if (worktree) rmSync(worktree, { recursive: true, force: true }); });
+beforeEach(() => {
+	worktree = mkdtempSync(join(tmpdir(), "os-portals-test-"));
+	process.env.OPENSESSION_STATE_DIR = worktree;
+});
+afterAll(() => {
+	if (worktree) rmSync(worktree, { recursive: true, force: true });
+	if (previousStateDir == null) delete process.env.OPENSESSION_STATE_DIR;
+	else process.env.OPENSESSION_STATE_DIR = previousStateDir;
+});
 
 describe("session Portal supervisor", () => {
 	test("launches the remote relay from the current runner layout", () => {
@@ -35,6 +44,11 @@ describe("session Portal supervisor", () => {
 		});
 		expect(portal.state).toBe("awake");
 		expect(portal.url).toContain(`:${port + 6000}`);
+		const repeated = await startPortalService({
+			sessionId: "os-portal-test", worktreeDir: worktree, name: "test-app", port,
+			command: "bun -e 'Bun.serve({port:Number(process.env.PORT),fetch(){return new Response(process.env.PORTAL_SUPERVISOR_TEST_SECRET || \"ok\")}})'",
+		});
+		expect(repeated.pid).toBe(portal.pid);
 		expect(await (await fetch(`http://127.0.0.1:${port}`)).text()).toBe("ok");
 		expect((await listPortalServices(worktree))[0]?.state).toBe("awake");
 		await stopPortalService({ sessionId: "os-portal-test", worktreeDir: worktree, name: "test-app" });
@@ -72,8 +86,14 @@ describe("session Portal supervisor", () => {
 		expect(portal.state).toBe("awake");
 		expect(await (await fetch("http://127.0.0.1:18702")).text()).toBe("sandbox");
 		expect((await listSandboxPortalServices(sandbox))[0]).toMatchObject({ name: "remote-app", state: "awake" });
+		expect(sleepingSandboxPortalStatus("os-sandbox-portal-test", sandbox.id)?.services).toEqual([
+			expect.objectContaining({ name: "remote-app", state: "sleeping", managed: true }),
+		]);
 		await stopSandboxPortalService({ sessionId: "os-sandbox-portal-test", sandbox, name: "remote-app" });
 		expect((await listSandboxPortalServices(sandbox))[0]?.state).toBe("stopped");
+		expect(sleepingSandboxPortalStatus("os-sandbox-portal-test", sandbox.id)?.services).toEqual([
+			expect.objectContaining({ name: "remote-app", state: "stopped", managed: true }),
+		]);
 	});
 });
 
