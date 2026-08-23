@@ -145,11 +145,11 @@ struct SessionView: View {
     @State private var readerMovedTowardHistory = false
     @State private var readerScrollActive = false
 
-    /// Height of the transcript's visible area, from live scroll geometry.
-    /// The content stack is never shorter than this, so a transcript that
-    /// doesn't fill the screen reads from the top instead of hanging off the
-    /// composer.
+    /// Size of the session surface. Height keeps short transcripts pinned to
+    /// the top; width gives custom toolbar content the finite proposal that a
+    /// principal ToolbarItem does not provide on its own.
     @State private var viewportHeight: CGFloat = 0
+    @State private var viewportWidth: CGFloat = 0
 
     /// How close to the bottom (pt) still counts as pinned.
     ///
@@ -692,6 +692,9 @@ struct SessionView: View {
         #endif
 
         let toolbarContent = chromeContent
+            .onGeometryChange(for: CGFloat.self) { $0.size.width } action: {
+                viewportWidth = $0
+            }
             .toolbar {
             #if os(iOS)
             ToolbarItem(placement: .principal) {
@@ -1081,7 +1084,8 @@ struct SessionView: View {
                     }
                     SingleLineFadeText(
                         text: identityTitle,
-                        font: .callout.weight(.semibold)
+                        font: .callout.weight(.semibold),
+                        width: sessionIdentityWidth - 22
                     )
                         .foregroundStyle(OS1VisualStyle.text)
                 }
@@ -1108,8 +1112,13 @@ struct SessionView: View {
         // ToolbarItem would nest another surface in the bar's morph group.
         .buttonBorderShape(.capsule)
         .tint(.primary)
-        .frame(maxWidth: .infinity, alignment: .leading)
+        .frame(width: sessionIdentityWidth, alignment: .leading)
         .accessibilityLabel("Workspace details")
+    }
+
+    private var sessionIdentityWidth: CGFloat {
+        let surfaceWidth = viewportWidth > 0 ? viewportWidth : 390
+        return min(360, max(140, surfaceWidth - 148))
     }
     #endif
 

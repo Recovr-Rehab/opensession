@@ -278,9 +278,9 @@ export const HEADER_TITLE_ROW =
 	"phone:flex phone:min-w-0 phone:max-w-full phone:items-center phone:gap-[7px] " +
 	"phone:text-base phone:leading-4 phone:font-semibold";
 
-/** The name itself, ellipsised, dimming while the pill is pressed. */
+/** The name itself, softly faded if clipped and dimming while pressed. */
 export const HEADER_TITLE_TEXT =
-	"phone:truncate phone:group-active/titlepill:opacity-60";
+	"phone:flex-1 phone:group-active/titlepill:opacity-60";
 
 /**
  * The metadata line's slot under the name — filled by SessionViewer's portal.

@@ -74,13 +74,13 @@ export const VIEWER_TITLE =
 	"flex min-w-0 items-center gap-2.5 font-medium phone:hidden";
 
 /**
- * The workspace name. Capped so a long one truncates instead of eating the
- * whole bar; it still shrinks below that when the row runs out of room. The
- * shell makes the surrounding header a native window drag region, so this opts
- * out — its text stays selectable and copyable.
+ * The workspace name. Capped so a long one clips instead of eating the whole
+ * bar; OverflowFadeText softens that clipped edge. The shell makes the
+ * surrounding header a native window drag region, so this opts out — its text
+ * stays selectable and copyable.
  */
 export const VIEWER_BRANCH =
-	"min-w-0 max-w-[420px] -translate-y-px select-text overflow-hidden text-ellipsis whitespace-nowrap text-item-title " +
+	"min-w-0 max-w-[420px] -translate-y-px select-text overflow-hidden whitespace-nowrap text-item-title " +
 	"[-webkit-touch-callout:default] " +
 	"[html.wco_&]:[-webkit-app-region:no-drag] [html.wco_&]:[app-region:no-drag] " +
 	"[html.desktop-shell_&]:[-webkit-app-region:no-drag] [html.desktop-shell_&]:[app-region:no-drag]";
@@ -92,7 +92,7 @@ export const VIEWER_BRANCH =
  * precedes, since the name is what the bar is about.
  */
 export const VIEWER_CRUMB_UP =
-	"-mx-2 -my-[5px] max-w-[240px] shrink cursor-pointer rounded-[calc(6px*var(--rf))] px-2 py-[5px] " +
+	"-mx-2 -my-[5px] max-w-[240px] shrink cursor-pointer overflow-hidden text-ellipsis rounded-[calc(6px*var(--rf))] px-2 py-[5px] " +
 	"text-label font-medium text-dim transition-colors duration-[var(--dur-micro)] ease-[var(--ease)] " +
 	"hover:bg-hover hover:text-fg";
 

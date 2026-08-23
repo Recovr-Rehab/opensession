@@ -56,6 +56,7 @@ import { Menu, MENU_ICON } from "../ui/menu";
 import { CopyCheck, useCopy } from "../ui/copy";
 import { toast } from "../ui/toast";
 import { Tooltip } from "../ui/tooltip";
+import { OverflowFadeText } from "../ui/overflow-fade-text";
 import { cn } from "../ui/cn";
 import { TopBar, TopBarActions, TopBarLeading } from "../ui/top-bar";
 import {
@@ -882,7 +883,7 @@ export function WorkspacePane({
 						}}
 					/>
 				) : (
-					<span
+					<OverflowFadeText
 						className={cn(
 							VIEWER_BRANCH,
 							onRenameWorkspace && VIEWER_BRANCH_EDITABLE,
@@ -899,7 +900,7 @@ export function WorkspacePane({
 						}
 					>
 						{workspace.name}
-					</span>
+					</OverflowFadeText>
 				)}
 				{workspaceMenu}
 				{!tabStripVisible && onNewSession && (
