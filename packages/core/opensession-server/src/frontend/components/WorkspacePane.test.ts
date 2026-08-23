@@ -131,6 +131,12 @@ test("sidebar Changes shares Review's code display options", () => {
 	expect(diffPanelSource).toContain('<SettingRow label="Code view">');
 	expect(diffPanelSource).toContain("<CodeOrganizationSettings");
 	expect(prPanelSource).toContain("<CodeOrganizationSettings");
+	expect(viewerSource.match(/showFileList=\{false\}/g)?.length).toBe(2);
+	expect(diffPanelSource).toContain(
+		'{showFileList && fileListMode !== "hidden"',
+	);
+	expect(diffPanelSource).toContain("showFileListSetting={showFileList}");
+	expect(codeDisplaySource).toContain("{showFileListSetting && (");
 	expect(prPanelSource).toContain("<DiffSourceSetting");
 	expect(diffPanelSource).toContain("<DiffSourceSetting");
 	expect(viewerSource).toContain('if (next === "pull-request") onOpenReview?.()');

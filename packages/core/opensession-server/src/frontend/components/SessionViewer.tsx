@@ -6554,6 +6554,7 @@ export function SessionViewer({
 												canSend={connected && !isBusy && !noEngine}
 												send={send}
 												diff={diffState}
+												showFileList={false}
 												source={worktreeDiffSource}
 												onSourceChange={changeWorktreeDiffSource}
 											/>
@@ -7826,6 +7827,7 @@ export function SessionViewer({
 										canSend={connected && !isBusy && !noEngine}
 										send={send}
 										diff={diffState}
+										showFileList={false}
 										source={worktreeDiffSource}
 										onSourceChange={changeWorktreeDiffSource}
 									/>

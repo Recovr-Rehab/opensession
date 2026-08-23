@@ -36,10 +36,12 @@ export function CodeOrganizationSettings({
   settings,
   reviewedFilesAvailable,
   defaultOrderLabel,
+  showFileListSetting = true,
 }: {
   settings: CodeOrganizationSettingsState;
   reviewedFilesAvailable: boolean;
   defaultOrderLabel: string;
+  showFileListSetting?: boolean;
 }) {
   const {
     grouping,
@@ -56,20 +58,22 @@ export function CodeOrganizationSettings({
 
   return (
     <>
-      <SettingRow label="File list">
-        <Segmented
-          label="File list"
-          size="sm"
-          value={fileListMode}
-          onValueChange={(next) =>
-            changeFileListMode(next as "flat" | "tree" | "hidden")
-          }
-        >
-          <SegmentedOption value="flat">Flat</SegmentedOption>
-          <SegmentedOption value="tree">Tree</SegmentedOption>
-          <SegmentedOption value="hidden">Hidden</SegmentedOption>
-        </Segmented>
-      </SettingRow>
+      {showFileListSetting && (
+        <SettingRow label="File list">
+          <Segmented
+            label="File list"
+            size="sm"
+            value={fileListMode}
+            onValueChange={(next) =>
+              changeFileListMode(next as "flat" | "tree" | "hidden")
+            }
+          >
+            <SegmentedOption value="flat">Flat</SegmentedOption>
+            <SegmentedOption value="tree">Tree</SegmentedOption>
+            <SegmentedOption value="hidden">Hidden</SegmentedOption>
+          </Segmented>
+        </SettingRow>
+      )}
       <SwitchRow
         label="Hide reviewed"
         checked={hideReviewed && reviewedFilesAvailable}

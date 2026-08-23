@@ -56,6 +56,8 @@ interface Props {
   repo?: string;
   /** Move the diff summary and view controls into a parent review toolbar. */
   toolbarTarget?: HTMLDivElement | null;
+  /** The full review canvas has room for file navigation; side panels do not. */
+  showFileList?: boolean;
   /** Shown when Review can switch between its PR and live worktree diffs. */
   source?: "pull-request" | "worktree";
   onSourceChange?: (source: "pull-request" | "worktree") => void;
@@ -136,6 +138,7 @@ export function DiffPanel({
   diff,
   repo,
   toolbarTarget,
+  showFileList = true,
   source,
   onSourceChange,
 }: Props) {
@@ -383,6 +386,7 @@ export function DiffPanel({
           settings={organizationSettings}
           reviewedFilesAvailable={false}
           defaultOrderLabel="Worktree"
+          showFileListSetting={showFileList}
         />
 
         <div aria-hidden className="mx-2 my-1.5 h-px bg-line" />
@@ -521,7 +525,7 @@ export function DiffPanel({
       {toolbar}
 
       <div className="flex min-h-0 min-w-0 flex-1">
-        {fileListMode !== "hidden" && orderedFiles.length > 0 && (
+        {showFileList && fileListMode !== "hidden" && orderedFiles.length > 0 && (
           <PrFileTree
             files={orderedFiles}
             mode={fileListMode}
