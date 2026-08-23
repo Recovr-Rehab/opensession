@@ -1253,66 +1253,50 @@ export async function setupRemoteWorkspace(
 ): Promise<void> {
   const startedAt = Date.now();
   const mark = (stage: string) => console.log(`[sandbox-remote] workspace ${repoId || cwd}: ${stage} (+${Date.now() - startedAt}ms)`);
-  let boxBranchPrepared = false;
+  let adoptedBranchPrepared = false;
   let cloned = await driver.exec(`test -d ${shellQuoteWord(cwd)}/.git`);
   if (cloned.exitCode !== 0 && repoId) {
     // Adopt the snapshot's warm clone without moving its multi-gigabyte lazy
     // filesystem. Daytona otherwise hydrates every node_modules file during
-    // rename (measured at 155s for tella-fusion). A bind mount is immediate
-    // and keeps the canonical workspace spelling; symlink is the unprivileged
-    // fallback for providers that do not allow mount(2).
+    // rename (measured at 155s for tella-fusion). Box command calls use
+    // short-lived mount namespaces, so it needs a durable symlink; Daytona's
+    // bind mount keeps the canonical workspace spelling.
     const warmDir = remoteWarmWorkspaceDir(repoId);
-    // Box command calls run in short-lived mount namespaces, so a successful
-    // bind disappears before the next git command. Its workspace link must be
-    // a durable symlink. Daytona keeps one namespace and gets the canonical
-    // bind-mounted spelling, with symlink as its fallback.
-    const adoptCommand = identity?.provider === "box"
-      ? `mkdir -p ${shellQuoteWord(dirname(cwd))} && rmdir ${shellQuoteWord(cwd)} 2>/dev/null || true; ` +
-        `test ! -e ${shellQuoteWord(cwd)} && ln -s ${shellQuoteWord(warmDir)} ${shellQuoteWord(cwd)} && ` +
-        `git -C ${shellQuoteWord(cwd)} remote set-url origin ${shellQuoteWord(cloneUrl)} && ` +
-        `if git -C ${shellQuoteWord(cwd)} rev-parse --verify --quiet origin/${shellQuoteWord(branch)} >/dev/null; ` +
-        `then __start=origin/${shellQuoteWord(branch)}; else __start=origin/${shellQuoteWord(defaultBranch)}; fi; ` +
-        `__current=$(git -C ${shellQuoteWord(cwd)} branch --show-current); ` +
-        `if [ "$__current" != ${shellQuoteWord(branch)} ]; then ` +
-        `__sha=$(git -C ${shellQuoteWord(cwd)} rev-parse "$__start") && ` +
-        `mkdir -p ${shellQuoteWord(`${cwd}/.git/refs/heads/${dirname(branch)}`)} && ` +
-        `printf '%s\n' "$__sha" > ${shellQuoteWord(`${cwd}/.git/refs/heads/${branch}`)} && ` +
-        `printf '%s\n' ${shellQuoteWord(`ref: refs/heads/${branch}`)} > ${shellQuoteWord(`${cwd}/.git/HEAD`)}; fi`
+    const attach = identity?.provider === "box"
+      ? `mkdir -p ${shellQuoteWord(dirname(cwd))} && ` +
+        `rmdir ${shellQuoteWord(cwd)} 2>/dev/null || true; ` +
+        `test ! -e ${shellQuoteWord(cwd)} && ` +
+        `ln -s ${shellQuoteWord(warmDir)} ${shellQuoteWord(cwd)}`
       : `mkdir -p ${shellQuoteWord(dirname(cwd))} ${shellQuoteWord(cwd)} && ` +
         `(sudo -n mount --bind ${shellQuoteWord(warmDir)} ${shellQuoteWord(cwd)} 2>/dev/null || ` +
         `(rmdir ${shellQuoteWord(cwd)} && ln -s ${shellQuoteWord(warmDir)} ${shellQuoteWord(cwd)}))`;
-    const adopted = await driver.exec(
-      `test -d ${shellQuoteWord(warmDir)}/.git && (${adoptCommand})`,
-    );
+    // Keep attach + credential restoration + narrow branch sync in one
+    // provider command. A warm adoption previously spent four to six serial
+    // SDK round trips here, and Daytona fetched every remote ref. If the
+    // requested branch is new, start it from the current default branch.
+    const prepare =
+      `test -d ${shellQuoteWord(warmDir)}/.git && (${attach}) && ` +
+      `git -C ${shellQuoteWord(cwd)} remote set-url origin ${shellQuoteWord(cloneUrl)} && ` +
+      `(if git -C ${shellQuoteWord(cwd)} fetch origin ${shellQuoteWord(branch)} --quiet; ` +
+      `then __start=FETCH_HEAD; else ` +
+      `git -C ${shellQuoteWord(cwd)} fetch origin ${shellQuoteWord(defaultBranch)} --quiet && __start=FETCH_HEAD; fi; ` +
+      `git -C ${shellQuoteWord(cwd)} checkout -B ${shellQuoteWord(branch)} "$__start")`;
+    const adopted = await driver.exec(prepare, { timeoutMs: 180_000 });
     if (adopted.exitCode === 0) {
-      boxBranchPrepared = identity?.provider === "box";
+      adoptedBranchPrepared = true;
       console.log(`[sandbox-remote] mounted warm workspace clone for ${repoId} at ${cwd}`);
-      // Repo templates are credential-free at rest. Restore the current
-      // short-lived clone authority only on the session-owned copy. Box did
-      // this together with its durable symlink + branch above to avoid four
-      // serialized command-plane round trips.
-      if (!boxBranchPrepared) {
-        await driver.exec(
-          `git remote set-url origin ${shellQuoteWord(cloneUrl)}`,
-          { cwd },
-        );
-      }
-      // Repository images keep this delta small. Daytona refreshes all refs;
-      // Box fetches only the requested branch so its lazy filesystem hydrates
-      // changed files rather than the full repository. A code session must
-      // never begin on snapshot main when the requested feature branch was not
-      // present when that image was built.
-      const refreshed = identity?.provider === "box"
-        ? await driver.exec(
-            `git fetch origin ${shellQuoteWord(branch)} --quiet && git reset --hard FETCH_HEAD`,
-            { cwd, timeoutMs: 180_000 },
-          )
-        : await driver.exec(`git fetch origin --quiet`, { cwd, timeoutMs: 180_000 });
-      if (refreshed.exitCode !== 0) {
-        throw new Error(`could not sync ${repoId} workspace to ${branch}: ${(refreshed.stderr || refreshed.stdout).trim().slice(0, 300)}`);
-      }
       mark("warm clone fetched");
       cloned = { exitCode: 0, stdout: "", stderr: "" };
+    } else {
+      // A present warm tree with a failed fetch/checkout is not a cold-clone
+      // signal. Falling through would try to clone over the attached tree and
+      // hide the actionable provider/Git error.
+      const warmTree = await driver.exec(`test -d ${shellQuoteWord(warmDir)}/.git`);
+      if (warmTree.exitCode === 0) {
+        throw new Error(
+          `could not sync ${repoId} workspace to ${branch}: ${(adopted.stderr || adopted.stdout).trim().slice(0, 300)}`,
+        );
+      }
     }
   }
   if (cloned.exitCode !== 0) {
@@ -1344,10 +1328,10 @@ export async function setupRemoteWorkspace(
       );
     }
   }
-  const cur = boxBranchPrepared
+  const cur = adoptedBranchPrepared
     ? { exitCode: 0, stdout: branch, stderr: "" }
     : await driver.exec("git branch --show-current", { cwd });
-  if (!boxBranchPrepared && (cur.exitCode !== 0 || cur.stdout.trim() !== branch)) {
+  if (!adoptedBranchPrepared && (cur.exitCode !== 0 || cur.stdout.trim() !== branch)) {
     const hasRemote = await driver.exec(
       `git rev-parse --verify --quiet origin/${shellQuoteWord(branch)}`,
       { cwd },

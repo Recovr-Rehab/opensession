@@ -7,7 +7,7 @@
  * remote bootstrap provides the runner payload and WS dial-back transport.
  */
 
-import type { ModalClient, Sandbox as ModalSandbox } from "modal";
+import type { App as ModalApp, ModalClient, Sandbox as ModalSandbox } from "modal";
 import { getRepo, worktreePathFor } from "../../worktree";
 import { sandboxConfig } from "../config";
 import { getSandboxConnection, sandboxProviderCredential } from "../connections";
@@ -133,6 +133,17 @@ async function modalClient(): Promise<ModalClient> {
   return client;
 }
 
+async function modalApp(client: ModalClient): Promise<ModalApp> {
+  const name = modalConfig().modal?.app || DEFAULT_APP;
+  const cached = (globalThis as any).__opensessionModalApp as
+    | { client: ModalClient; name: string; app: ModalApp }
+    | undefined;
+  if (cached?.client === client && cached.name === name) return cached.app;
+  const app = await client.apps.fromName(name, { createIfMissing: true });
+  (globalThis as any).__opensessionModalApp = { client, name, app };
+  return app;
+}
+
 async function withModalControlDeadline<T>(
   operation: Promise<T>,
   timeoutMs: number,
@@ -246,9 +257,7 @@ export class ModalProvider implements SandboxProvider {
     }
     const cfg = modalConfig();
     const client = await modalClient();
-    const app = await client.apps.fromName(cfg.modal?.app || DEFAULT_APP, {
-      createIfMissing: true,
-    });
+    const app = await modalApp(client);
     let prevState = findRemoteStateBySession(this.id, spec.sessionId);
     await waitForModalCheckpoint(prevState?.sandboxId);
     prevState = findRemoteStateBySession(this.id, spec.sessionId);
@@ -454,7 +463,7 @@ export class ModalProvider implements SandboxProvider {
         const cfg = modalConfig();
         if (!cfg.modal?.publicPreviews || !cfg.previewPorts?.length) return map;
         try {
-          const tunnels = await sandbox.tunnels();
+          const tunnels = await sandbox.tunnels(60_000);
           for (const port of cfg.previewPorts) {
             const tunnel = tunnels[port];
             if (tunnel?.url) map[port] = { url: tunnel.url };
@@ -555,9 +564,7 @@ export const modalPrewarmAdapter: PrewarmAdapter = {
     const repoId = key.startsWith("modal:") ? key.slice("modal:".length) : "";
     if (!repoId) throw new Error(`invalid Modal prewarm key: ${key || "(missing)"}`);
     const client = await modalClient();
-    const app = await client.apps.fromName(cfg.modal?.app || DEFAULT_APP, {
-      createIfMissing: true,
-    });
+    const app = await modalApp(client);
     const template = readRemoteRepoTemplate("modal", repoId);
     const create = async (imageId?: string) => {
       const image = imageId
@@ -628,11 +635,8 @@ export const modalPrewarmAdapter: PrewarmAdapter = {
   },
 
   async listPrewarmed() {
-    const cfg = modalConfig();
     const client = await modalClient();
-    const app = await client.apps.fromName(cfg.modal?.app || DEFAULT_APP, {
-      createIfMissing: true,
-    });
+    const app = await modalApp(client);
     const out: Array<{ id: string; key: string }> = [];
     for await (const sandbox of client.sandboxes.list({
       appId: app.appId,
@@ -656,9 +660,7 @@ export async function qualifyModalConnection(): Promise<void> {
   const cfg = modalConfig();
   const client = await modalClient();
   const suffix = crypto.randomUUID().slice(0, 12);
-  const app = await client.apps.fromName(cfg.modal?.app || DEFAULT_APP, {
-    createIfMissing: true,
-  });
+  const app = await modalApp(client);
   let source: ModalSandbox | undefined;
   let restored: ModalSandbox | undefined;
   let imageId: string | undefined;

@@ -6,6 +6,7 @@ import {
 	bootstrapSignature,
 	loadRemoteWorkspaceSeedFiles,
 	runRemoteLifecycleHook,
+	setupRemoteWorkspace,
 	type RemoteDriver,
 } from "./bootstrap";
 
@@ -127,6 +128,33 @@ describe("remote repo lifecycle", () => {
 		await expect(
 			runRemoteLifecycleHook(d.value, "/work/repo", "resume", "resume"),
 		).rejects.toThrow("not executable");
+	});
+
+	test("adopts and syncs a prepared Daytona workspace in one command", async () => {
+		const d = driver([
+			{ exitCode: 1 },
+			{ exitCode: 0 },
+			{ exitCode: 0, stdout: "absent\n" },
+		]);
+		await setupRemoteWorkspace(
+			d.value,
+			"/work/feature",
+			"https://token@example.test/repo.git",
+			"feature/new-ui",
+			"main",
+			"opensession",
+			{ sandboxId: "sbx-test", provider: "daytona", repoId: "opensession" },
+		);
+
+		expect(d.commands).toHaveLength(3);
+		const adoption = d.commands[1]!;
+		expect(adoption.opts.timeoutMs).toBe(180_000);
+		expect(adoption.command).toContain("mount --bind");
+		expect(adoption.command).toContain("remote set-url origin");
+		expect(adoption.command).toContain("fetch origin feature/new-ui --quiet");
+		expect(adoption.command).toContain("fetch origin main --quiet");
+		expect(adoption.command).toContain("checkout -B feature/new-ui");
+		expect(d.commands.some(({ command }) => command === "git branch --show-current")).toBe(false);
 	});
 });
 
