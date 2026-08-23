@@ -3497,22 +3497,22 @@ private struct SessionInputBar: View {
         // and closing it flashed the pill back as a flat, square-cornered
         // white block. Behind the row instead, the glass is no longer an
         // ancestor of the "+" or the send menu, and the composer stays put.
-        // Same layers in the same order (glass, thick material, page colour,
-        // then the controls).
+        // The surface stays a sibling of the controls.
         .background {
             Color.clear
                 #if os(iOS)
-                // Solid writing surface: the transcript passes BEHIND the
-                // composer, but never through the draft. This resolves to full
-                // white in light appearance and the system background in dark.
+                // Keep the writing surface truly solid so it takes visual
+                // priority over the translucent action bar. Applying glass on
+                // top of this fill tinted the white back toward the canvas.
                 .background(
                     OS1VisualStyle.background,
                     in: composerShape
                 )
-                #endif
+                #else
                 .glassSurface(
                     in: composerShape
                 )
+                #endif
                 // Ask mode is ambient — it lasts the session's whole life, not
                 // one message — so it's said by tinting the surface you write
                 // on rather than by a chip you'd stop seeing. Same green, and
