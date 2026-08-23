@@ -201,6 +201,10 @@ export async function ensureSandboxPortalRelay(input: { sessionId: string; sandb
 	if (!relay) {
 		const server = Bun.serve<{ id: string; connection: Connection; path: string; headers: Record<string, string> }>({
 			hostname: "127.0.0.1", port: 0,
+			// Browser asset bursts wait behind the single-frame sidecar queue.
+			// Bun's 10s default closes those quiet upstream sockets and Caddy turns
+			// the EOF into a misleading 502 before the request reaches its turn.
+			idleTimeout: 120,
 			fetch: (request, relayServer) => {
 				if (request.headers.get("upgrade")?.toLowerCase() !== "websocket") return relayFetch(input, request);
 				const connection = connections.get(id);
