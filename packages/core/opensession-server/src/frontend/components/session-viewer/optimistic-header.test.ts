@@ -3,7 +3,9 @@ import { expect, test } from "bun:test";
 test("the optimistic phone header uses the repo before a worktree exists", async () => {
 	const source = await Bun.file(new URL("../SessionViewer.tsx", import.meta.url)).text();
 
-	expect(source).toContain("(session.desk || session.repo || hasWorkspace)");
+	expect(source).toContain(
+		"(session.archived || session.desk || session.repo || hasWorkspace)",
+	);
 });
 
 test("the optimistic phone header names the model before its catalog loads", async () => {
