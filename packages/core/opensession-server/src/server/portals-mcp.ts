@@ -141,10 +141,20 @@ export function createPortalsMcpServer(ctx: PortalsMcpContext) {
 					const status = await portalStatus(ctx, dir, sandbox);
 					const recipe = status.portalRecipes.find((candidate) => candidate.id === name);
 					if (recipe) {
+						const options = recipeStartOptions(recipe);
+						if (sandbox) {
+							const portal = await restartSandboxPortalService({
+								sessionId: ctx.sessionId,
+								sandbox,
+								...options,
+								env: sandboxPortalEnv(ctx, sandbox),
+							});
+							const refreshed = await portalStatus(ctx, dir, sandbox);
+							return result(`${portal.name} restarted at ${refreshed.services.find((candidate) => candidate.key === portal.key)?.previewUrl ?? "its authenticated Portal URL"}.`);
+						}
 						if (runner?.runner) await stopRunnerPortal({ session: runner, name });
-						else if (sandbox) await stopSandboxPortalService({ sessionId: ctx.sessionId, sandbox, name });
 						else await stopPortalService({ sessionId: ctx.sessionId, worktreeDir: dir, name });
-						return result(await startPortalForContext(ctx, dir, sandbox, recipeStartOptions(recipe)));
+						return result(await startPortalForContext(ctx, dir, sandbox, options));
 					}
 					if (runner?.runner) {
 						const portal = await restartRunnerPortal({ session: runner, name });
