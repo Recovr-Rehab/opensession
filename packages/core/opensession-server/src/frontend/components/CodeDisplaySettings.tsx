@@ -36,7 +36,7 @@ export function CodeDisplaySettings({
         onCheckedChange={changeWrapLines}
       />
       <SwitchRow
-        label="Highlight changed words"
+        label="Highlight edits"
         checked={structuralHighlighting}
         onCheckedChange={changeStructuralHighlighting}
       />
