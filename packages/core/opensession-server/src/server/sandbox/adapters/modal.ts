@@ -56,6 +56,8 @@ const DEFAULT_IMAGE = "daytonaio/sandbox:0.8.0";
 const DEFAULT_IDLE_STOP_MINUTES = 30;
 const MAX_LIFETIME_MS = 24 * 60 * 60 * 1000;
 const RECREATE_BEFORE_EXPIRY_MS = 60 * 60 * 1000;
+const CHECKPOINT_WAIT_MS = 90_000;
+const MAX_TAG_SCAN = 8;
 
 function modalCheckpointLocks(): Map<string, Promise<void>> {
   const g = globalThis as typeof globalThis & {
@@ -66,7 +68,15 @@ function modalCheckpointLocks(): Map<string, Promise<void>> {
 
 async function waitForModalCheckpoint(sandboxId: string | undefined): Promise<void> {
   if (!sandboxId) return;
-  await modalCheckpointLocks().get(sandboxId)?.catch(() => {});
+  const checkpoint = modalCheckpointLocks().get(sandboxId);
+  if (!checkpoint) return;
+  await withModalControlDeadline(
+    checkpoint.catch(() => {}),
+    CHECKPOINT_WAIT_MS,
+    `Modal checkpoint wait (${sandboxId})`,
+  ).catch((error) => {
+    console.warn(`[sandbox:modal] ${error instanceof Error ? error.message : String(error)}; continuing with the last completed checkpoint`);
+  });
 }
 
 function modalConfig(): ReturnType<typeof sandboxConfig> {
@@ -133,14 +143,19 @@ async function modalClient(): Promise<ModalClient> {
   return client;
 }
 
-async function modalApp(client: ModalClient): Promise<ModalApp> {
+function modalApp(client: ModalClient): Promise<ModalApp> {
   const name = modalConfig().modal?.app || DEFAULT_APP;
-  const cached = (globalThis as any).__opensessionModalApp as
-    | { client: ModalClient; name: string; app: ModalApp }
+  const global = globalThis as any;
+  const cached = global.__opensessionModalApp as
+    | { client: ModalClient; name: string; app: Promise<ModalApp> }
     | undefined;
   if (cached?.client === client && cached.name === name) return cached.app;
-  const app = await client.apps.fromName(name, { createIfMissing: true });
-  (globalThis as any).__opensessionModalApp = { client, name, app };
+  const app = client.apps.fromName(name, { createIfMissing: true });
+  const record = { client, name, app };
+  global.__opensessionModalApp = record;
+  app.catch(() => {
+    if (global.__opensessionModalApp === record) delete global.__opensessionModalApp;
+  });
   return app;
 }
 
@@ -149,6 +164,9 @@ async function withModalControlDeadline<T>(
   timeoutMs: number,
   label: string,
 ): Promise<T> {
+  // Promise.race does not cancel its loser. Keep a late control-stream failure
+  // from becoming a process-level unhandled rejection after our deadline won.
+  operation.catch(() => {});
   let timer: ReturnType<typeof setTimeout> | undefined;
   try {
     return await Promise.race([
@@ -257,21 +275,14 @@ export class ModalProvider implements SandboxProvider {
     }
     const cfg = modalConfig();
     const client = await modalClient();
-    const app = await modalApp(client);
     let prevState = findRemoteStateBySession(this.id, spec.sessionId);
-    await waitForModalCheckpoint(prevState?.sandboxId);
-    prevState = findRemoteStateBySession(this.id, spec.sessionId);
-    const trust = resolveTrustPolicy(spec, prevState);
-    const repo = getRepo(spec.repo || prevState?.repoId);
-    const branch = spec.branch || prevState?.branch || repo.defaultBranch;
-    const cwd =
-      spec.cwd || prevState?.cwd || worktreePathFor(branch, repo.id, { isolated: true });
-
     let sandbox: ModalSandbox | null = null;
     let created = false;
-    // The durable O(1) id is the normal path. Modal retains completed
-    // sandboxes in tag listings, so scanning and polling every historical
-    // match first made follow-ups progressively slower.
+    let adoptedPrewarmId: string | undefined;
+
+    // The durable O(1) id is the normal follow-up path. A live sandbox does
+    // not need the previous turn's filesystem image, so never serialize a
+    // warm ensure behind a potentially multi-minute checkpoint.
     if (prevState) {
       try {
         const candidate = await client.sandboxes.fromId(prevState.sandboxId);
@@ -279,13 +290,28 @@ export class ModalProvider implements SandboxProvider {
       } catch {}
     }
     if (!sandbox) {
+      await waitForModalCheckpoint(prevState?.sandboxId);
+      prevState = findRemoteStateBySession(this.id, spec.sessionId);
+    }
+
+    const trust = resolveTrustPolicy(spec, prevState);
+    const repo = getRepo(spec.repo || prevState?.repoId);
+    const branch = spec.branch || prevState?.branch || repo.defaultBranch;
+    const cwd =
+      spec.cwd || prevState?.cwd || worktreePathFor(branch, repo.id, { isolated: true });
+
+    // Durable state is authoritative. If its sandbox is gone, restore its
+    // checkpoint rather than scanning older tag-matched siblings. The bounded
+    // scan only recovers a live sandbox after coordinator state loss.
+    if (!sandbox && !prevState) {
       try {
+        let scanned = 0;
+        const app = await modalApp(client);
         for await (const candidate of client.sandboxes.list({
           appId: app.appId,
           tags: { [SESSION_TAG]: spec.sessionId },
         })) {
-          // Modal keeps completed sandboxes in tag listings. Adopting one makes
-          // every later exec fail and bypasses the retained session checkpoint.
+          if (++scanned > MAX_TAG_SCAN) break;
           if ((await candidate.poll()) === null) {
             sandbox = candidate;
             break;
@@ -326,6 +352,7 @@ export class ModalProvider implements SandboxProvider {
               "opensession.sandbox": "1",
             });
             sandbox = candidate;
+            adoptedPrewarmId = candidate.sandboxId;
             console.log(
               `[sandbox:modal] adopted prewarmed sandbox ${candidate.sandboxId} for ${spec.sessionId}`,
             );
@@ -346,9 +373,12 @@ export class ModalProvider implements SandboxProvider {
       console.log(`[sandbox:modal] creating sandbox for ${spec.sessionId}`);
       const template = readRemoteRepoTemplate("modal", repo.id);
       const create = async (imageId?: string) => {
-        const image = imageId
-          ? await client.images.fromId(imageId)
-          : client.images.fromRegistry(cfg.modal?.image || DEFAULT_IMAGE);
+        const [app, image] = await Promise.all([
+          modalApp(client),
+          imageId
+            ? client.images.fromId(imageId)
+            : Promise.resolve(client.images.fromRegistry(cfg.modal?.image || DEFAULT_IMAGE)),
+        ]);
         return client.sandboxes.create(app, image, {
           tags: { [SESSION_TAG]: spec.sessionId, "opensession.sandbox": "1" },
           timeoutMs: MAX_LIFETIME_MS,
@@ -425,8 +455,11 @@ export class ModalProvider implements SandboxProvider {
       );
     } catch (e) {
       // A failed first bootstrap is not useful and otherwise remains paid
-      // compute for up to 24 hours without a session-side sandbox id.
+      // compute for up to 24 hours without a session-side sandbox id. An
+      // adopted prewarm already lost its pool tags but has no state record yet,
+      // so hand it back to the prewarm cleanup path explicitly.
       if (created) await sandbox.terminate().catch(() => {});
+      else if (adoptedPrewarmId) discardClaimedPrewarm(this.id, adoptedPrewarmId);
       throw e;
     }
     const createdAt = created ? new Date().toISOString() : prevState?.createdAt;

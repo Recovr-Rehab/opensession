@@ -154,7 +154,30 @@ describe("remote repo lifecycle", () => {
 		expect(adoption.command).toContain("fetch origin feature/new-ui --quiet");
 		expect(adoption.command).toContain("fetch origin main --quiet");
 		expect(adoption.command).toContain("checkout -B feature/new-ui");
+		expect(adoption.command).toContain("opensession-adopted-by");
 		expect(d.commands.some(({ command }) => command === "git branch --show-current")).toBe(false);
+	});
+
+	test("cold-clones instead of taking over another workspace's warm clone", async () => {
+		const d = driver([
+			{ exitCode: 1 },
+			{ exitCode: 73 },
+			{ exitCode: 0 },
+			{ exitCode: 0, stdout: "feature/new-ui\n" },
+			{ exitCode: 0, stdout: "absent\n" },
+		]);
+		await setupRemoteWorkspace(
+			d.value,
+			"/work/feature",
+			"https://token@example.test/repo.git",
+			"feature/new-ui",
+			"main",
+			"opensession",
+			{ sandboxId: "sbx-test", provider: "box", repoId: "opensession" },
+		);
+
+		expect(d.commands[1]!.command).toContain("exit 73");
+		expect(d.commands[2]!.command).toContain("git clone --filter=blob:none");
 	});
 });
 
