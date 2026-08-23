@@ -193,15 +193,14 @@ export const TurnBlock = React.memo(function TurnBlock({
         // Baseline, not centre: this row mixes its 14px title with 13px meta
         // runs, and centring aligns boxes rather than text. The chevron carries
         // no baseline of its own, so it keeps centring individually.
-        // The 8px overhang gives the icon-aligned chevron breathing room. Its
-        // asymmetric padding moves the disclosure line into that overhang so
-        // the open rail sits near the transcript edge instead of floating
-        // inside the work column.
-        className="-mx-2 flex w-[calc(100%+16px)] min-w-0 cursor-pointer items-baseline gap-2 rounded-control border-0 bg-transparent py-1 pl-1 pr-3 text-left font-sans text-item-title leading-5 text-dim transition-colors hover:bg-hover/40 hover:text-fg"
+        // The 8px desktop overhang gives the icon-aligned chevron breathing
+        // room. On phones the chevron hangs in the transcript gutter instead,
+        // leaving “Worked” aligned with the answer text below it.
+        className="relative -mx-2 flex w-[calc(100%+16px)] min-w-0 cursor-pointer items-baseline gap-2 rounded-control border-0 bg-transparent py-1 pl-1 pr-3 text-left font-sans text-item-title leading-5 text-dim transition-colors hover:bg-hover/40 hover:text-fg phone:mx-0 phone:w-full phone:pl-0"
       >
         <span
           className={cn(
-            "grid size-5 flex-shrink-0 self-center place-items-center leading-none text-faint transition-transform duration-150",
+            "grid size-5 flex-shrink-0 self-center place-items-center leading-none text-faint transition-transform duration-150 phone:absolute phone:-left-4 phone:top-1/2 phone:-translate-y-1/2",
             !expanded && "-rotate-90"
           )}
         >
@@ -253,8 +252,10 @@ export const TurnBlock = React.memo(function TurnBlock({
             // stays legible however long the fold runs (a divider only marks
             // the seam; the rail says "still inside the work" from any
             // scroll position). The 5px puts the hairline under the chevron's
-            // center after the disclosure line's 8px left shift.
-            "relative mb-2 ml-[5px] border-l border-line pl-2.5"
+            // center after the disclosure line's 8px left shift. On phones it
+            // follows the gutter chevron while its content returns to the text
+            // edge, so opening the fold does not introduce a new indentation.
+            "relative mb-2 ml-[5px] border-l border-line pl-2.5 phone:-ml-1.5 phone:pl-1.5"
           )}
         >
           <button

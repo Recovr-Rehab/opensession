@@ -132,9 +132,9 @@ describe("fake engine through runAgent", () => {
 		expect(sw.switchReason).toBe("out of credits");
 		expect(fake.calls).toHaveLength(2);
 		expect(fake.calls[1].model).toBe("pi/openai/gpt-5.6-sol");
-		// The create path has no early transcript row to name. runAgent assigns
-		// one stable id to the logical turn so both model attempts upsert the same
-		// user entry instead of rendering the opening message twice.
+		// A direct runAgent caller may have no early transcript row to name.
+		// runAgent assigns one stable id to the logical turn so both model attempts
+		// upsert the same user entry instead of rendering the prompt twice.
 		expect(fake.calls[0].opts.promptEntryId).toBeTruthy();
 		expect(fake.calls[1].opts.promptEntryId).toBe(
 			fake.calls[0].opts.promptEntryId,

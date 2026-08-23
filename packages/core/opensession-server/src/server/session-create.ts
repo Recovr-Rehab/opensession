@@ -74,6 +74,7 @@ import { engineSessionPatch } from "./sessions";
 import { commitAuthorFor, userMatchesAny } from "./shared/user-mappings";
 import { sanitizeBranchSlug } from "./suggest-branch";
 import { type NativeSessionFile, type SessionUsage, type UnifiedSession, } from "./types";
+import { storeAppendUserLineEarly, transcriptLineUser } from "./transcript-persistence";
 import { parseImageDataUrls, stageFileAttachments, withUploadsNote, } from "./uploads";
 import { resolvePlainWorkspace } from "./workspace-resolve";
 import { resolveWorkspaceModelPreset } from "./workspace-model-presets";
@@ -226,6 +227,8 @@ export interface ResolvedCreate {
 	title: string;
 	/** The raw prompt the background title/summary is generated from. */
 	titlePrompt: string;
+	/** The person's visible message, before internal context is appended. */
+	displayPrompt: string;
 	/** The fully assembled opening prompt (uploads note, contexts, handoffs). */
 	openingPrompt: string;
 	user?: string;
@@ -646,6 +649,21 @@ export async function openCreatedSession(
 				},
 			], spec.openingPromptEntryId, true, "create");
 			await persist();
+			// The opening prompt is accepted before slow workspace setup. Persist
+			// its visible row at the same boundary so a setup failure cannot leave
+			// a titled but empty session. The runner later upserts this stable id.
+			const displayPrompt = spec.displayPrompt ?? spec.titlePrompt;
+			if (displayPrompt.trim() || spec.images?.length) {
+				storeAppendUserLineEarly(
+					bksId,
+					transcriptLineUser(
+						displayPrompt,
+						openingPromptEntryId,
+						spec.createdAt,
+						spec.images,
+					),
+				);
+			}
 			// A session starting in a workspace consumes its draft. The
 			// composer prompt it held is now this session's opening prompt.
 			// After persist() so this never races the create with a client
@@ -1748,6 +1766,7 @@ export async function handleCreateSessionMessage(
 			id: bksId,
 			title,
 			titlePrompt,
+			displayPrompt: prompt,
 			openingPrompt,
 			user,
 			createdBy: user || "Anonymous",

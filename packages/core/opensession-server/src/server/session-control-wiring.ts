@@ -868,6 +868,7 @@ ${createMentionsNote}`;
 			id: bksId,
 			title,
 			titlePrompt: prompt,
+			displayPrompt: prompt,
 			openingPrompt,
 			user,
 			createdBy: sessionCreatedBy,
