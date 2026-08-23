@@ -159,16 +159,16 @@ export function OrganizationSwitcher({
 					<IconGear size={19} className={MENU_ICON} />
 					<span className="min-w-0 flex-1 truncate">Settings</span>
 				</Menu.Item>
-				<Menu.Item className={itemClass} onClick={() => setInviteOpen(true)}>
-					<IconPlus size={19} className={MENU_ICON} />
-					<span className="min-w-0 flex-1 truncate">Invite member</span>
-				</Menu.Item>
 				<Menu.Item className={itemClass} onClick={() => onOpenSettings("members")}>
 					<IconPeople size={19} className={MENU_ICON} />
 					<span className="min-w-0 flex-1 truncate">Members</span>
 					{memberCount !== null && (
 						<span className="text-label tabular-nums text-faint">{memberCount}</span>
 					)}
+				</Menu.Item>
+				<Menu.Item className={itemClass} onClick={() => setInviteOpen(true)}>
+					<IconPlus size={19} className={MENU_ICON} />
+					<span className="min-w-0 flex-1 truncate">Invite member</span>
 				</Menu.Item>
 				<Menu.Separator />
 				<Menu.Group>
@@ -215,7 +215,7 @@ export function OrganizationSwitcher({
 							<span className="min-w-0 flex-1 truncate">Add organization</span>
 						</Menu.Item>
 					)}
-					{bridge?.manage && (
+					{bridge?.manage && accounts.length > 1 && (
 						<Menu.Item className={itemClass} onClick={() => bridge.manage?.()}>
 							<IconServer size={19} className={MENU_ICON} />
 							<span className="min-w-0 flex-1 truncate">
