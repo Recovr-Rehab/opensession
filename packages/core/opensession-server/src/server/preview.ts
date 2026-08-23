@@ -516,6 +516,10 @@ async function pgidOf(pid: number): Promise<number | null> {
 // deterministic high port, so each session gets its own secure origin.
 
 const caddyAdmin = () => configuredServer().caddyAdmin.replace(/\/+$/, "");
+const caddyFetch = (url: string, init: RequestInit = {}) => fetch(url, {
+  ...init,
+  signal: init.signal ?? AbortSignal.timeout(10_000),
+});
 const g = globalThis as unknown as {
   __previewRoutes?: Map<number, string>;
   __previewHost?: string;
@@ -629,13 +633,13 @@ async function ensurePreviewRoute(
     // this process. Verify the cached route still exists before trusting it,
     // otherwise status can report a URL whose listener was silently removed.
     try {
-      if ((await fetch(path)).ok) return true;
+      if ((await caddyFetch(path)).ok) return true;
     } catch {}
     previewRoutes.delete(httpsPort);
   }
   const server = previewServerConfig(httpsPort, upstream, host);
   const put = () =>
-    fetch(path, {
+    caddyFetch(path, {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(server),
@@ -646,7 +650,7 @@ async function ensurePreviewRoute(
     // recreate so the route always ends up pointing at the current webapp port.
     let res = await put();
     if (res.status === 409) {
-      await fetch(path, { method: "DELETE" }).catch(() => {});
+      await caddyFetch(path, { method: "DELETE" }).catch(() => {});
       res = await put();
     }
     if (!res.ok) return false;
@@ -660,7 +664,7 @@ async function ensurePreviewRoute(
 async function removePreviewRoute(httpsPort: number): Promise<void> {
   if (!previewRoutes.has(httpsPort)) return;
   try {
-    await fetch(`${caddyAdmin()}/config/apps/http/servers/preview_${httpsPort}`, { method: "DELETE" });
+    await caddyFetch(`${caddyAdmin()}/config/apps/http/servers/preview_${httpsPort}`, { method: "DELETE" });
   } catch {}
   previewRoutes.delete(httpsPort);
 }
@@ -1677,7 +1681,7 @@ export async function dropSandboxPreviewRoutes(sandboxId: string, options: { pre
     // right after a restart may miss the cache, so delete unconditionally.
     previewRoutes.delete(httpsPort);
     try {
-      await fetch(`${caddyAdmin()}/config/apps/http/servers/preview_${httpsPort}`, {
+      await caddyFetch(`${caddyAdmin()}/config/apps/http/servers/preview_${httpsPort}`, {
         method: "DELETE",
       });
     } catch {}
