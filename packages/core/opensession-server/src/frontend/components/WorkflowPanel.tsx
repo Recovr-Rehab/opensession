@@ -51,10 +51,12 @@ interface Props {
 	/** Opens a sub-agent's conversation in its own view tab. */
 	onOpenSubagent?: (agentId: string, label: string) => void;
 	/** Set when this renders as a page pushed on top of the workspace panel
-	 *  (the Agents item in its tab strip). Page mode carries a back header and
-	 *  shows the empty state; without it this is a section of the phone info
+	 *  (the Agents item in its tab strip). Page mode shows the empty state and
+	 *  can carry a back header; without it this is a section of the phone info
 	 *  page, which renders nothing until a run exists. */
 	onBack?: () => void;
+	/** The desktop panel's standing tab strip already names this page. */
+	hideHeader?: boolean;
 }
 
 /** A finished run says so with its green marks and its totals, so `done` gets
@@ -256,6 +258,7 @@ export function WorkflowPanel({
 	subagents,
 	onOpenSubagent,
 	onBack,
+	hideHeader = false,
 }: Props) {
 	// Server list + WS prepends both keep newest-first; re-sorting is cheap
 	// insurance against an out-of-order upsert.
@@ -330,17 +333,19 @@ export function WorkflowPanel({
 	if (onBack)
 		return (
 			<>
-				<PanelPageHeader
-					title="Agents"
-					onBack={onBack}
-					trailing={
-						anyRunning && (
-							<Badge tone="warning" dot className="mr-1 animate-pulse">
-								running
-							</Badge>
-						)
-					}
-				/>
+				{!hideHeader && (
+					<PanelPageHeader
+						title="Agents"
+						onBack={onBack}
+						trailing={
+							anyRunning && (
+								<Badge tone="warning" dot className="mr-1 animate-pulse">
+									running
+								</Badge>
+							)
+						}
+					/>
+				)}
 				<div className="grid gap-4 px-2 pt-1 pb-[22px]">
 					{empty ? (
 						<WorkflowsEmptyState />

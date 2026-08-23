@@ -3,12 +3,15 @@ import type { PreviewPortalRecipe, PreviewService, PreviewStatus } from "../lib/
 import { portalTargetFor, type PortalTarget } from "../lib/portals";
 import {
 	INFO_LABEL_CLASS,
-	INFO_LIST_CLASS,
 	INFO_SECTION_CLASS,
 } from "../lib/session-viewer-classes";
 import { cn } from "../ui/cn";
 import { IconArrowUpRight } from "./icons";
 import { PanelPageHeader } from "./PanelPageHeader";
+
+/** A plain divided list. Portal rows do not need a shared grey plate around
+ * them: the panel itself is already their surface. */
+const PORTAL_LIST_CLASS = "grid divide-y divide-line/70";
 
 /** What a service row says on its right: where it is, in one word. */
 function statusLabel(
@@ -97,7 +100,7 @@ export function PortalsPage({
 					{recipes.length ? (
 						<div className={INFO_SECTION_CLASS}>
 							<div className={INFO_LABEL_CLASS}>Start a portal</div>
-							<div className={INFO_LIST_CLASS}>
+							<div className={PORTAL_LIST_CLASS}>
 								{recipes.map((recipe) => {
 									const service = recipe.serviceKey
 										? services.find(
@@ -145,7 +148,7 @@ export function PortalsPage({
 						{recipes.length > 0 && (
 							<div className={INFO_LABEL_CLASS}>Services</div>
 						)}
-						<div className={INFO_LIST_CLASS}>
+						<div className={PORTAL_LIST_CLASS}>
 							{services.length ? (
 								services.map((service) => {
 									const target = portalTargetFor(sessionId, service);

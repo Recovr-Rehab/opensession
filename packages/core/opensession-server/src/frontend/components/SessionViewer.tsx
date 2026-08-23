@@ -244,7 +244,6 @@ import { ArchivedSessionItems } from "./ArchivedSessionItems";
 import { PreviewPane } from "./PreviewPane";
 import { PortalPane } from "./PortalPane";
 import { PortalsPage } from "./PortalsPanel";
-import { PanelPageHeader } from "./PanelPageHeader";
 import { portalTargetFor, type PortalTarget } from "../lib/portals";
 import { StagingLink } from "./StagingLink";
 import {
@@ -7802,6 +7801,7 @@ export function SessionViewer({
 									status={previewStatus}
 									activePortal={portalTarget}
 									onBack={() => setActivePanelOpen(false)}
+									hideHeader
 									onOpenPortal={onOpenPortal}
 									onStartPortal={startDeclaredPortal}
 									onPortalAction={async (name, action) => {
@@ -7818,6 +7818,7 @@ export function SessionViewer({
 									subagents={subagents}
 									onOpenSubagent={openSubagent}
 									onBack={() => setActivePanelOpen(false)}
+									hideHeader
 								/>
 							) : null}
 							{/* Keep terminals mounted while switching panel tabs so their PTYs
@@ -7830,10 +7831,6 @@ export function SessionViewer({
 											: "hidden"
 									}
 								>
-									<PanelPageHeader
-										title="Terminal"
-										onBack={() => setActivePanelOpen(false)}
-									/>
 									<div className="min-h-0 flex-1">
 										<ShellPanel
 											sessionId={session.id}
