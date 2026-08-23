@@ -62,7 +62,7 @@ const FILE_HEADER =
   "group relative flex min-h-9 w-full min-w-0 items-center gap-1.5 px-2 text-left text-fg hover:bg-hover phone:min-h-11 phone:px-2.5";
 const FILE_BODY = "overflow-clip rounded-b-lg";
 const STICKY_FILE_HEADER =
-  "sticky top-[var(--review-file-header-top,0px)] z-[6] bg-bg data-[stuck]:bg-raised data-[stuck]:shadow-[inset_0_-1px_0_var(--divider)]";
+  "sticky top-[var(--review-file-header-top,0px)] z-[6] bg-bg data-[stuck]:bg-raised data-[stuck]:shadow-[inset_0_1px_0_var(--border),inset_0_-1px_0_var(--divider)]";
 const FILE_TOGGLE =
   "focus-ring flex min-w-0 cursor-pointer items-center gap-2 self-stretch border-none bg-transparent p-0 text-left text-fg";
 

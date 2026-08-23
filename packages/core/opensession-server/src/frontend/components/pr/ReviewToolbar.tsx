@@ -4,8 +4,8 @@ import { WS_SUMMARY_REVIEW_BAR_CLEARANCE } from "../../lib/workspace-summary-cla
 /**
  * The floating review toolbar shared by branches with and without a pull
  * request. It stays edge to edge on phone and clears the standing workspace
- * summary on wide review canvases. The sticky outer surface also masks code
- * scrolling through the insets around the bordered toolbar.
+ * summary on wide review canvases. The sticky outer surface masks code through
+ * its insets; a lower layer softens the edge without fading pinned file borders.
  */
 export function ReviewToolbar({
   children,
@@ -15,16 +15,24 @@ export function ReviewToolbar({
   compact: boolean;
 }) {
   const placement = compact
-    ? `sticky top-0 z-20 desktop:mb-0 desktop:ml-2 desktop:pb-2 desktop:after:pointer-events-none desktop:after:absolute desktop:after:inset-x-0 desktop:after:top-full desktop:after:h-3 desktop:after:[background:linear-gradient(to_bottom,var(--bg)_0%,transparent_100%)] desktop:after:content-[''] ${WS_SUMMARY_REVIEW_BAR_CLEARANCE}`
+    ? `sticky top-0 z-20 desktop:mb-0 desktop:ml-2 desktop:pb-2 ${WS_SUMMARY_REVIEW_BAR_CLEARANCE}`
     : "desktop:mx-2 desktop:mb-2";
 
   return (
-    <div className={`relative shrink-0 bg-surface ${placement}`}>
-      <div
-        className={`relative bg-surface desktop:mt-2.5 desktop:rounded-lg desktop:border desktop:border-line ${compact ? "desktop:overflow-hidden" : "desktop:overflow-visible"}`}
-      >
-        {children}
+    <>
+      <div className={`relative shrink-0 bg-surface ${placement}`}>
+        <div
+          className={`relative bg-surface desktop:mt-2.5 desktop:rounded-lg desktop:border desktop:border-line ${compact ? "desktop:overflow-hidden" : "desktop:overflow-visible"}`}
+        >
+          {children}
+        </div>
       </div>
-    </div>
+      {compact && (
+        <div
+          className="pointer-events-none sticky top-[60px] z-[5] hidden h-3 -mb-3 bg-[linear-gradient(to_bottom,var(--bg),transparent)] desktop:block"
+          aria-hidden="true"
+        />
+      )}
+    </>
   );
 }
