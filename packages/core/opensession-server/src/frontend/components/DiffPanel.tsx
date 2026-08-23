@@ -26,7 +26,7 @@ import { AGENT_NAME } from "../lib/brand";
 import { InlineAlert, LoadingState } from "../ui/state";
 import { CodeFlow } from "./CodeFlow";
 import { revealDiffFile } from "../lib/diff-navigation";
-import { IconSliders } from "./icons";
+import { IconRestore, IconSliders } from "./icons";
 import { Popover } from "../ui/popover";
 import { CodeDisplaySettings } from "./CodeDisplaySettings";
 import { useCodeDisplaySettings } from "../hooks/useCodeDisplaySettings";
@@ -309,20 +309,14 @@ export function DiffPanel({
 
   const toolbarContents = (
     <>
-      {groupsLoading ? (
-        <span
-          className="flex items-center gap-1.5 text-dim"
-          role="status"
-          aria-label="Organizing files"
-        >
-          <Spinner className="text-faint" />
-          Organizing…
-        </span>
-      ) : (
-        <span className="text-dim">
-          {d.files.length} file{d.files.length === 1 ? "" : "s"} changed
-        </span>
-      )}
+      <span className="text-dim">
+        {d.files.length} file{d.files.length === 1 ? "" : "s"}
+        {groupsLoading && (
+          <span role="status" aria-label="Organizing files">
+            {" "}(organizing…)
+          </span>
+        )}
+      </span>
       <span className={DIFF_ADD}>+{d.totalAdditions}</span>
       <span className={DIFF_DEL}>−{d.totalDeletions}</span>
       {d.truncated && (
@@ -396,7 +390,7 @@ export function DiffPanel({
           <Button
             variant="ghost"
             size="sm"
-            className="min-h-0 px-1.5 py-0.5 text-sm text-faint hover:text-fg"
+            icon={<IconRestore size={18} />}
             onClick={() => {
               if (view === "flow") {
                 void refreshFlow();
@@ -405,9 +399,7 @@ export function DiffPanel({
               void reload();
             }}
             aria-label="Refresh diff"
-          >
-            ↻
-          </Button>
+          />
         </Tooltip>
       </div>
     </>
