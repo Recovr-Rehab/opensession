@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { handleSandboxPortalRelayUpgrade, mintSandboxPortalGrant, revokeSandboxPortalGrants, revokeSandboxPortalRelay, verifySandboxPortalGrant } from "./sandbox-portal-relay";
+import { createRelayRequestLimiter, handleSandboxPortalRelayUpgrade, mintSandboxPortalGrant, revokeSandboxPortalGrants, revokeSandboxPortalRelay, verifySandboxPortalGrant } from "./sandbox-portal-relay";
 
 test("Sandbox Portal grants bind one session, Sandbox, and port", () => {
 	const grant = mintSandboxPortalGrant({ sessionId: "bks-test", sandboxId: "sandbox-test", port: 4300 });
@@ -16,6 +16,33 @@ test("stopping one Portal revokes only its bound credential", () => {
 	revokeSandboxPortalRelay("sandbox-stop", 4500);
 	expect(verifySandboxPortalGrant(api.token, { sessionId: "bks-stop", sandboxId: "sandbox-stop", port: 4500 })).toBe(false);
 	expect(verifySandboxPortalGrant(web.token, { sessionId: "bks-stop", sandboxId: "sandbox-stop", port: 4501 })).toBe(true);
+});
+
+test("bounds concurrent relay requests without dropping queued work", async () => {
+	const limit = createRelayRequestLimiter(2);
+	const releases: Array<() => void> = [];
+	const started: number[] = [];
+	const tasks = [1, 2, 3, 4].map((id) => limit(async () => {
+		started.push(id);
+		await new Promise<void>((resolve) => releases.push(resolve));
+		return id;
+	}));
+
+	await Bun.sleep(0);
+	expect(started).toEqual([1, 2]);
+	releases.shift()!();
+	await Bun.sleep(0);
+	expect(started).toEqual([1, 2, 3]);
+	releases.shift()!();
+	releases.shift()!();
+	await Bun.sleep(0);
+	expect(started).toEqual([1, 2, 3, 4]);
+	releases.shift()!();
+	expect(await Promise.all(tasks)).toEqual([1, 2, 3, 4]);
+});
+
+test("rejects invalid relay concurrency", () => {
+	expect(() => createRelayRequestLimiter(0)).toThrow("Portal relay concurrency must be positive");
 });
 
 test("relay upgrade rejects an unbound credential before WebSocket upgrade", () => {

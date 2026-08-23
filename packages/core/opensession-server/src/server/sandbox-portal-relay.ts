@@ -11,8 +11,34 @@ export type SandboxPortalGrant = { sessionId: string; sandboxId: string; port: n
 type StoredGrant = Omit<SandboxPortalGrant, "token">;
 const g = globalThis as Record<string, unknown>;
 const grants: Map<string, StoredGrant> = (g.__opensessionSandboxPortalGrants ??= new Map()) as Map<string, StoredGrant>;
-type Connection = { ws: any; sessionId: string; sandboxId: string; port: number; expiresAt: number; expiryTimer: ReturnType<typeof setTimeout>; pending: Map<string, { resolve: (value: RelayResponse) => void; timer: ReturnType<typeof setTimeout> }> };
+type RelayRequestLimiter = <T>(task: () => Promise<T>) => Promise<T>;
+type Connection = { ws: any; sessionId: string; sandboxId: string; port: number; expiresAt: number; expiryTimer: ReturnType<typeof setTimeout>; pending: Map<string, { resolve: (value: RelayResponse) => void; timer: ReturnType<typeof setTimeout> }>; limitRequests: RelayRequestLimiter };
 type RelayResponse = { status: number; headers: Record<string, string>; body?: string };
+
+/** A browser can ask Turbopack for dozens of multi-megabyte chunks at once.
+ * The outbound Portal rides one WebSocket, whose client-side send buffer drops
+ * responses when all of those loopback fetches finish together. Keep fetches
+ * concurrent, but below the measured backpressure cliff (32 fails, 16 passes).
+ * This gate is per Portal connection, so sibling services never block each
+ * other and normal API requests retain useful parallelism. */
+export function createRelayRequestLimiter(maxConcurrent = 12): RelayRequestLimiter {
+	if (!Number.isInteger(maxConcurrent) || maxConcurrent < 1) throw new Error("Portal relay concurrency must be positive");
+	let active = 0;
+	const waiters: Array<() => void> = [];
+	const acquire = (): Promise<void> => {
+		if (active < maxConcurrent) { active += 1; return Promise.resolve(); }
+		return new Promise((resolve) => waiters.push(() => { active += 1; resolve(); }));
+	};
+	const release = () => {
+		active -= 1;
+		waiters.shift()?.();
+	};
+	return async <T>(task: () => Promise<T>): Promise<T> => {
+		await acquire();
+		try { return await task(); }
+		finally { release(); }
+	};
+}
 const connections: Map<string, Connection> = (g.__opensessionSandboxPortalConnections ??= new Map()) as Map<string, Connection>;
 type Relay = { server: ReturnType<typeof Bun.serve>; sessionId: string; sandboxId: string; port: number };
 const relays: Map<string, Relay> = (g.__opensessionSandboxPortalRelays ??= new Map()) as Map<string, Relay>;
@@ -84,7 +110,7 @@ export function sandboxPortalRelayOpen(ws: any): boolean {
 	if (previous) { clearTimeout(previous.expiryTimer); previous.ws?.close?.(1000, "replaced"); }
 	const expiresAt = Number(ws.data.expiresAt);
 	const closeAtExpiry = setTimeout(() => { try { ws.close(1008, "portal credential expired"); } catch {} }, Math.max(0, expiresAt - Date.now()));
-	connections.set(id, { ws, sessionId, sandboxId, port, expiresAt, expiryTimer: closeAtExpiry, pending: new Map() });
+	connections.set(id, { ws, sessionId, sandboxId, port, expiresAt, expiryTimer: closeAtExpiry, pending: new Map(), limitRequests: createRelayRequestLimiter() });
 	return true;
 }
 export function sandboxPortalRelayMessage(ws: any, raw: string | Buffer): boolean {
@@ -141,20 +167,24 @@ export function sandboxPortalRelayClose(ws: any): boolean {
 async function relayFetch(input: { sessionId: string; sandboxId: string; port: number }, request: Request): Promise<Response> {
 	const connection = connections.get(key(input.sessionId, input.sandboxId, input.port));
 	if (!connection) return new Response("Sandbox Portal is not connected", { status: 503 });
-	if (connection.expiresAt <= Date.now()) { try { connection.ws.close(1008, "portal credential expired"); } catch {} return new Response("Sandbox Portal credential expired", { status: 503 }); }
-	const bytes = request.method === "GET" || request.method === "HEAD" ? undefined : new Uint8Array(await request.arrayBuffer());
-	if (bytes && bytes.byteLength > 5 * 1024 * 1024) return new Response("Portal request is too large", { status: 413 });
-	const id = crypto.randomUUID();
-	const result = await new Promise<RelayResponse>((resolve) => {
-		const timer = setTimeout(() => { connection.pending.delete(id); resolve({ status: 504, headers: {} }); }, 60_000);
-		connection.pending.set(id, { resolve, timer });
-		try { connection.ws.send(JSON.stringify({ t: "http", id, method: request.method, path: new URL(request.url).pathname + new URL(request.url).search, headers: safeHeaders(request.headers), ...(bytes ? { body: Buffer.from(bytes).toString("base64") } : {}) })); }
-		catch { clearTimeout(timer); connection.pending.delete(id); resolve({ status: 502, headers: {} }); }
+	return connection.limitRequests(async () => {
+		if (connections.get(key(input.sessionId, input.sandboxId, input.port)) !== connection)
+			return new Response("Sandbox Portal connection changed", { status: 503 });
+		if (connection.expiresAt <= Date.now()) { try { connection.ws.close(1008, "portal credential expired"); } catch {} return new Response("Sandbox Portal credential expired", { status: 503 }); }
+		const bytes = request.method === "GET" || request.method === "HEAD" ? undefined : new Uint8Array(await request.arrayBuffer());
+		if (bytes && bytes.byteLength > 5 * 1024 * 1024) return new Response("Portal request is too large", { status: 413 });
+		const id = crypto.randomUUID();
+		const result = await new Promise<RelayResponse>((resolve) => {
+			const timer = setTimeout(() => { connection.pending.delete(id); resolve({ status: 504, headers: {} }); }, 60_000);
+			connection.pending.set(id, { resolve, timer });
+			try { connection.ws.send(JSON.stringify({ t: "http", id, method: request.method, path: new URL(request.url).pathname + new URL(request.url).search, headers: safeHeaders(request.headers), ...(bytes ? { body: Buffer.from(bytes).toString("base64") } : {}) })); }
+			catch { clearTimeout(timer); connection.pending.delete(id); resolve({ status: 502, headers: {} }); }
+		});
+		const headers = new Headers();
+		for (const [name, value] of Object.entries(result.headers)) if (!HOP_HEADERS.has(name.toLowerCase()) && typeof value === "string") headers.set(name, value);
+		const body = result.body ? Buffer.from(result.body, "base64") : undefined;
+		return new Response(body, { status: result.status, headers });
 	});
-	const headers = new Headers();
-	for (const [name, value] of Object.entries(result.headers)) if (!HOP_HEADERS.has(name.toLowerCase()) && typeof value === "string") headers.set(name, value);
-	const body = result.body ? Buffer.from(result.body, "base64") : undefined;
-	return new Response(body, { status: result.status, headers });
 }
 
 /** Bind the browser-facing Portal route to a local-only server. The Sandbox
