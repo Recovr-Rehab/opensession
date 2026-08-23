@@ -77,12 +77,23 @@ function durableToolRequestId(
         _meta?: { opensessionToolCallId?: unknown };
       }
     | undefined,
+  args?: unknown,
 ): string {
-  const stableCallId =
+  const durableCallId =
     typeof extra?._meta?.opensessionToolCallId === "string"
       ? extra._meta.opensessionToolCallId
-      : extra?.requestId ?? crypto.randomUUID();
-  const raw = `${ctx.currentSessionId || ctx.createdBy}:${toolName}:${String(stableCallId)}`;
+      : undefined;
+  // The JSON-RPC requestId restarts from 1 on every MCP connection, so on
+  // its own it is not unique across callers. Mix the tool arguments into
+  // the fallback id: two different calls that happen to share a requestId
+  // can no longer collide ("command id was reused with another payload"),
+  // while true retries (same requestId, same payload) still deduplicate.
+  const stableCallId =
+    durableCallId ??
+    (extra?.requestId != null
+      ? `${String(extra.requestId)}:${new Bun.CryptoHasher("sha256").update(JSON.stringify(args) ?? "null").digest("hex")}`
+      : crypto.randomUUID());
+  const raw = `${ctx.currentSessionId || ctx.createdBy}:${toolName}:${stableCallId}`;
   const digest = new Bun.CryptoHasher("sha256").update(raw).digest("hex");
   return `mcp-${digest}`;
 }
@@ -665,7 +676,7 @@ export function createSessionsMcpServer(
           const sessionId = ctx.currentSessionId;
           if (!sessionId)
             return text("This run has no Open Session id, so it cannot register a background wait.");
-          const waitId = durableToolRequestId(ctx, "wait_for", extra);
+          const waitId = durableToolRequestId(ctx, "wait_for", extra, args);
           const current = getSessionControl().getSession(sessionId);
           const result =
             args.kind === "timer"
@@ -751,7 +762,7 @@ export function createSessionsMcpServer(
           extra: any,
         ) => {
           const ok = await getSessionControl().answerQuestion(args.id, args.answers, {
-            requestId: durableToolRequestId(ctx, "answer_question", extra),
+            requestId: durableToolRequestId(ctx, "answer_question", extra, args),
           });
           return text(
             ok
@@ -785,7 +796,7 @@ export function createSessionsMcpServer(
             ? payload.content
             : sessionMessagePayload(payload.content);
           const deliveryId =
-            args.delivery_id?.trim() || durableToolRequestId(ctx, "send_to_session", extra);
+            args.delivery_id?.trim() || durableToolRequestId(ctx, "send_to_session", extra, args);
           const res = await getSessionControl().deliverToSession(
             args.id,
             content,
@@ -857,7 +868,7 @@ export function createSessionsMcpServer(
               args.message?.trim() || `Session ${fromId} sent you a file.`,
               `Received asset: \`${file.path}\` (${file.size} bytes). Read it with the opensession-assets tools or open ${download}.`,
             ].join("\n\n");
-            const deliveryId = durableToolRequestId(ctx, "send_file_to_session", extra);
+            const deliveryId = durableToolRequestId(ctx, "send_file_to_session", extra, args);
             const delivered = await ctrl.deliverToSession(
               to.id,
               notification,
@@ -891,7 +902,7 @@ export function createSessionsMcpServer(
         { id: z.string().describe("The session id to cancel.") },
         async (args: { id: string }, extra: any) => {
           const ok = await getSessionControl().cancelSession(args.id, {
-            requestId: durableToolRequestId(ctx, "cancel_session", extra),
+            requestId: durableToolRequestId(ctx, "cancel_session", extra, args),
           });
           if (ok) {
             audit({
@@ -987,7 +998,7 @@ export function createSessionsMcpServer(
             : args.prompt;
           const branch = args.branch;
           const { id, createdBy, createdAt } = await getSessionControl().createSession({
-            requestId: durableToolRequestId(ctx, "create_session", extra),
+            requestId: durableToolRequestId(ctx, "create_session", extra, args),
             requestScope: ctx.currentSessionId || ctx.createdBy,
             prompt,
             repo: args.repo,
@@ -1070,7 +1081,7 @@ export function createSessionsMcpServer(
             args,
             ctx,
             undefined,
-            durableToolRequestId(ctx, "spawn_task", extra),
+            durableToolRequestId(ctx, "spawn_task", extra, args),
           );
           if (!res.ok) return text(res.error);
           return text(
@@ -1097,7 +1108,7 @@ export function createSessionsMcpServer(
             await cancelTaskImpl(
               args,
               undefined,
-              durableToolRequestId(ctx, "cancel_task", extra),
+              durableToolRequestId(ctx, "cancel_task", extra, args),
             ),
           )
       )
