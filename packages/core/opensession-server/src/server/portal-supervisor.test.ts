@@ -108,13 +108,18 @@ describe("session Portal supervisor", () => {
 		expect((await listPortalServices(worktree))[0]?.state).toBe("stopped");
 	});
 
-	test("supervises a Portal through the Sandbox execution boundary", async () => {
+	test("supervises and deduplicates a Portal through the Sandbox execution boundary", async () => {
 		const sandbox = sandboxFor(worktree, 18_702);
-		const portal = await startSandboxPortalService({
+		const input = {
 			sessionId: "os-sandbox-portal-test", sandbox, name: "remote-app", port: 18_702,
 			command: "bun -e 'Bun.serve({port:Number(process.env.PORT),fetch(){return new Response(\"sandbox\")}})'",
-		});
+		};
+		const [portal, duplicate] = await Promise.all([
+			startSandboxPortalService(input),
+			startSandboxPortalService(input),
+		]);
 		expect(portal.state).toBe("awake");
+		expect(duplicate.pid).toBe(portal.pid);
 		expect(await (await fetch("http://127.0.0.1:18702")).text()).toBe("sandbox");
 		expect((await listSandboxPortalServices(sandbox))[0]).toMatchObject({ name: "remote-app", state: "awake" });
 		expect(sleepingSandboxPortalStatus("os-sandbox-portal-test", sandbox.id)?.services).toEqual([

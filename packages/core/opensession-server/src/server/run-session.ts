@@ -53,6 +53,7 @@ import {
 	transcriptLineUser,
 } from "./transcript-persistence";
 import { cacheMissNotice } from "@tellahq/opensession-protocol/notices";
+import { dropSandboxPreviewRoutes } from "./preview";
 import { wrapContext, stripContext, isContextOnly } from "./prompt-context";
 import { takeVoiceHandoff } from "./desk-voice";
 import {
@@ -1355,9 +1356,18 @@ export async function maybeLaunchSandboxedRun(
 		if (isAgentSessionCancelled(session.id, opts.startToken)) return cancelledRun(sandbox);
 		// Remote engine databases live inside the sandbox. A replacement VM cannot
 		// resume the old engine id, even when its git workspace was safely pushed.
+		const previousSandboxId = session.sandbox?.sandboxId;
 		const remoteSandboxReplaced =
 			isRemoteSandboxProvider(sbProvider) &&
-			session.sandbox?.sandboxId !== sandbox.id;
+			previousSandboxId !== sandbox.id;
+		if (remoteSandboxReplaced && previousSandboxId) {
+			// A restored remote workspace keeps its Portal registry but none of the
+			// old sandbox's processes or relays. Remove dead URLs before publishing
+			// the replacement sandbox ID; its declared Portals can then start cleanly.
+			await dropSandboxPreviewRoutes(previousSandboxId).catch((error) =>
+				console.warn(`[sandbox] could not drop stale Portal routes for ${previousSandboxId}:`, error),
+			);
+		}
 		const legacyEngine = (session.sandbox as { engine?: unknown } | undefined)?.engine;
 		if (
 			session.source === "opensession" &&

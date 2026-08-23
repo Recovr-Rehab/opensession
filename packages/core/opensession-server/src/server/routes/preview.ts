@@ -364,9 +364,8 @@ export async function handlePreviewRoutes(
 						await restartSandboxPortalService({
 							sessionId: session.id,
 							sandbox,
-							name: m[2],
+							...(recipe ? recipeStartOptions(recipe) : { name: m[2] }),
 							env,
-							...(recipe?.readyTimeoutSeconds ? { readyTimeoutMs: recipe.readyTimeoutSeconds * 1_000 } : {}),
 						});
 					}
 					return Response.json(await getSandboxPreviewStatus(sandbox, session.worktreeDir!, session.id));
