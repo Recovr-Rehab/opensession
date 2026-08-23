@@ -70,6 +70,7 @@ import {
 	IconPeople,
 	IconPlay,
 	IconPlayRectangle,
+	IconPullRequest,
 	IconRobot,
 	IconStack,
 } from "./icons";
@@ -822,9 +823,18 @@ export function WorkspaceSummaryBody({
 
 			<div className={groupClass}>
 				{/* One review section for both the automated reading and the people asked
-				    to review. The final row owns the picker, so adding or changing a
-				    reviewer never requires opening the workspace panel. */}
+				    to review. The first row opens the complete workspace review; the final
+				    row owns the picker, so neither action requires the workspace panel. */}
 				<div className={WS_SUMMARY_SECTION}>Review</div>
+				{!reviewMode && (
+					<button className={WS_SUMMARY_ROW} onClick={() => go(onOpenPr)}>
+						<span className={WS_SUMMARY_RAIL}>
+							<IconPullRequest size={20} className={WS_SUMMARY_ICON} />
+						</span>
+						<span className={WS_SUMMARY_LABEL}>Workspace review</span>
+						<span className={WS_SUMMARY_ACTION}>Open</span>
+					</button>
+				)}
 			{showOsReview && (
 				<>
 					<button
