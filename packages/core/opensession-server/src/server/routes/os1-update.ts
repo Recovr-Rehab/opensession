@@ -79,13 +79,13 @@ export function isMacReleaseAsset(name: string | undefined): boolean {
 
 export function chromeDownloadTag(path: string): string | null {
 	return path.match(
-		/^\/api\/packages\/clients\/chrome\/download\/(os1-chrome-v[\w.-]+)\.crx$/,
+		/^\/api\/(?:packages\/clients\/chrome|os1-chrome)\/download\/(os1-chrome-v[\w.-]+)\.crx$/,
 	)?.[1] ?? null;
 }
 
 export function macDownloadTag(path: string): string | null {
 	return path.match(
-		/^\/api\/packages\/clients\/mac\/download\/(v\d+\.\d+\.\d+[\w.-]*)\.zip$/,
+		/^\/api\/(?:packages\/clients\/mac|os1-mac)\/download\/(v\d+\.\d+\.\d+[\w.-]*)\.zip$/,
 	)?.[1] ?? null;
 }
 
@@ -241,14 +241,19 @@ export async function handleOs1UpdateRoutes(
 	const { req, url, path } = ctx;
 	if (
 		!path.startsWith("/api/packages/clients/mac/") &&
-		!path.startsWith("/api/packages/clients/chrome/")
+		!path.startsWith("/api/packages/clients/chrome/") &&
+		!path.startsWith("/api/os1-mac/") &&
+		!path.startsWith("/api/os1-chrome/")
 	)
 		return undefined;
 	if (req.method !== "GET") return undefined;
 
 	// Omaha/gupdate feed Chrome's extension updater polls (also the update URL
 	// in ExtensionInstallForcelist). "noupdate" when no release exists yet.
-	if (path === "/api/packages/clients/chrome/updates.xml") {
+	if (
+		path === "/api/packages/clients/chrome/updates.xml" ||
+		path === "/api/os1-chrome/updates.xml"
+	) {
 		const rel = await chromeLatestRelease();
 		const base = configuredServer().publicBaseUrl.replace(/\/$/, "");
 		const app = rel
@@ -288,7 +293,10 @@ export async function handleOs1UpdateRoutes(
 	// Squirrel.Mac static JSON feed. Squirrel compares currentRelease with the
 	// app version itself; unlike the dynamic server mode, this mode cannot use a
 	// 204 response to signal that the app is current.
-	if (path === "/api/packages/clients/mac/update") {
+	if (
+		path === "/api/packages/clients/mac/update" ||
+		path === "/api/os1-mac/update"
+	) {
 		const current = parseVersion(url.searchParams.get("version") || "");
 		const rel = await latestRelease();
 		if (!rel) {

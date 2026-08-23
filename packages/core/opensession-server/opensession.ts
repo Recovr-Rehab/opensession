@@ -394,7 +394,10 @@ const server: import("bun").Server<WSClientData> = hotServe({
 				// these safe to leave open, like /api/health.
 				const openOs1Update =
 					(path.startsWith("/api/packages/clients/mac/") ||
-						path.startsWith("/api/packages/clients/chrome/")) &&
+						path.startsWith("/api/packages/clients/chrome/") ||
+						// v0.4.0 and earlier point Squirrel at this legacy prefix.
+						path.startsWith("/api/os1-mac/") ||
+						path.startsWith("/api/os1-chrome/")) &&
 					req.method === "GET";
 				// A Runner dialling in has no browser session: it registers with a
 				// one-time pairing code and then heartbeats with its own bearer

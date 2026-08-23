@@ -41,9 +41,19 @@ describe("release download routes", () => {
 		).toBe("os1-chrome-v0.4.15");
 	});
 
-	test("rejects legacy and unrelated routes", () => {
-		expect(macDownloadTag("/api/os1-mac/download/v0.4.15.zip")).toBeNull();
-		expect(chromeDownloadTag("/api/os1-chrome/download/v0.4.15.crx")).toBeNull();
+	test("keeps routes used by older clients working", () => {
+		expect(macDownloadTag("/api/os1-mac/download/v0.4.15.zip")).toBe(
+			"v0.4.15",
+		);
+		expect(
+			chromeDownloadTag(
+				"/api/os1-chrome/download/os1-chrome-v0.4.15.crx",
+			),
+		).toBe("os1-chrome-v0.4.15");
+	});
+
+	test("rejects unrelated routes", () => {
 		expect(macDownloadTag("/api/packages/clients/mac/download/latest.zip")).toBeNull();
+		expect(macDownloadTag("/api/other/download/v0.4.15.zip")).toBeNull();
 	});
 });
