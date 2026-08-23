@@ -143,6 +143,8 @@ interface Props {
    *  unavailable, preserving the ordinary flat file list. */
   groups?: DiffFileGroup[];
   groupsLoading?: boolean;
+  /** Hide grouping status when the host presents it elsewhere. */
+  showGroupsStatus?: boolean;
   /** PR review canvases use GitHub's side-by-side presentation; workspace diffs stay unified. */
   diffStyle?: "unified" | "split";
   /** Soft-wrap long lines instead of scrolling each file horizontally. */
@@ -294,6 +296,7 @@ export function CommentableDiff({
   imageSrcs,
   groups,
   groupsLoading,
+  showGroupsStatus = true,
   diffStyle = "unified",
   wrapLines = false,
   structuralHighlighting = true,
@@ -1077,13 +1080,13 @@ export function CommentableDiff({
   const viewedCount = countViewed(viewed, files);
   const controls = (
     <>
-      {groupsLoading && (
+      {showGroupsStatus && groupsLoading && (
         <span className={GROUPS_NOTE} role="status">
           <Spinner className="text-faint" />
           Organizing files…
         </span>
       )}
-      {!groupsLoading && groupedFiles && (
+      {showGroupsStatus && !groupsLoading && groupedFiles && (
         <span
           className={`${GROUPS_NOTE} before:size-[5px] before:rounded-full before:bg-accent before:content-['']`}
         >

@@ -18,6 +18,7 @@ import {
 import { CommentableDiff, type CommentTarget } from "./CommentableDiff";
 import { getCurrentUser } from "./UserPicker";
 import { Segmented, SegmentedOption } from "../ui/segmented";
+import { SettingRow } from "../ui/setting-row";
 import { Tooltip } from "../ui/tooltip";
 import { Button } from "../ui/button";
 import { Spinner } from "../ui/spinner";
@@ -308,9 +309,20 @@ export function DiffPanel({
 
   const toolbarContents = (
     <>
-      <span className="text-dim">
-        {d.files.length} file{d.files.length === 1 ? "" : "s"} changed
-      </span>
+      {groupsLoading ? (
+        <span
+          className="flex items-center gap-1.5 text-dim"
+          role="status"
+          aria-label="Organizing files"
+        >
+          <Spinner className="text-faint" />
+          Organizing…
+        </span>
+      ) : (
+        <span className="text-dim">
+          {d.files.length} file{d.files.length === 1 ? "" : "s"} changed
+        </span>
+      )}
       <span className={DIFF_ADD}>+{d.totalAdditions}</span>
       <span className={DIFF_DEL}>−{d.totalDeletions}</span>
       {d.truncated && (
@@ -330,35 +342,11 @@ export function DiffPanel({
           {handEdited.length === 1 ? "" : "s"}
         </Button>
       )}
-      {/* Keep the viewing controls together. In a narrow viewer the whole
-          cluster takes a second row, so every option stays visible without a
-          sideways toolbar scroll or a popup anchored beyond the viewport. */}
-      <div className="ml-auto flex shrink-0 items-center gap-2 @max-[540px]:w-full @max-[540px]:justify-end">
+      <div className="ml-auto flex shrink-0 items-center gap-2">
         <div
           ref={setDiffControlsTarget}
           className="flex shrink-0 items-center gap-2"
         />
-        <Segmented
-          size="sm"
-          label="Diff view"
-          value={view}
-          onValueChange={(next) => {
-            if (next === "flow") {
-              if (view !== "flow" && flowError) {
-                setFlow(null);
-                setFlowError(null);
-              }
-              setView("flow");
-              return;
-            }
-            setView("files");
-          }}
-        >
-          <SegmentedOption value="files">Files</SegmentedOption>
-          <SegmentedOption value="flow" disabled={!patchVersion}>
-            Code flow
-          </SegmentedOption>
-        </Segmented>
         <Popover.Root>
           <Tooltip label="Code view settings">
             <Popover.Trigger
@@ -378,6 +366,29 @@ export function DiffPanel({
             initialFocus
             className="flex w-[340px] max-w-[calc(100vw-24px)] flex-col gap-0.5 p-3"
           >
+            <SettingRow label="View">
+              <Segmented
+                size="sm"
+                label="Diff view"
+                value={view}
+                onValueChange={(next) => {
+                  if (next === "flow") {
+                    if (view !== "flow" && flowError) {
+                      setFlow(null);
+                      setFlowError(null);
+                    }
+                    setView("flow");
+                    return;
+                  }
+                  setView("files");
+                }}
+              >
+                <SegmentedOption value="files">Files</SegmentedOption>
+                <SegmentedOption value="flow" disabled={!patchVersion}>
+                  Code flow
+                </SegmentedOption>
+              </Segmented>
+            </SettingRow>
             <CodeDisplaySettings {...codeDisplaySettings} />
           </Popover.Popup>
         </Popover.Root>
@@ -403,7 +414,7 @@ export function DiffPanel({
   );
   const toolbar =
     toolbarTarget === undefined ? (
-      <div className="sticky top-0 z-1 flex items-center gap-2.5 overflow-x-auto border-b border-divider bg-panel-surface px-3.5 py-2.5 text-label whitespace-nowrap @max-[540px]:flex-wrap @max-[540px]:gap-y-1.5 @max-[540px]:overflow-x-hidden @max-[540px]:py-2 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+      <div className="sticky top-0 z-1 flex items-center gap-2.5 overflow-x-auto border-b border-divider bg-panel-surface px-3.5 py-2.5 text-label whitespace-nowrap [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
         {toolbarContents}
       </div>
     ) : toolbarTarget ? (
@@ -474,6 +485,7 @@ export function DiffPanel({
               : undefined
           }
           groupsLoading={groupsLoading}
+          showGroupsStatus={false}
           submitLabel={`Send to ${AGENT_NAME}`}
           placeholder={`Leave feedback on these lines. ${AGENT_NAME} picks it up in this session…`}
           disabled={!canSend}
