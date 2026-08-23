@@ -962,27 +962,42 @@ export function WorkspaceSummaryBody({
 							<IconChevronDown size={14} />
 						</span>
 					</Menu.Trigger>
-					<Menu.Popup align="end" sideOffset={6} className="min-w-[200px]">
-					{people.map((person) => (
-						<Menu.Item key={person.name} onClick={() => pickReviewer(person.name)}>
-							<UserAvatar name={person.name} size={22} />
-							<span className="min-w-0 flex-1 truncate">{person.name}</span>
-							<Menu.Check on={selectedReview?.to === person.name} size={20} className="text-dim" />
-						</Menu.Item>
-					))}
-					{reviewTeams.length > 0 && <Menu.Separator />}
-					{reviewTeams.map((team) => (
-						<Menu.Item
-							key={team.github}
-							onClick={() => pickReviewer(team.github, team.members)}
-						>
-							<span className="grid size-[22px] place-items-center text-dim">
-								<IconStack size={20} />
-							</span>
-							<span className="min-w-0 flex-1 truncate">{team.name}</span>
-							<Menu.Check on={selectedReview?.to === team.github} size={20} className="text-dim" />
-						</Menu.Item>
-					))}
+					<Menu.Popup
+						align="end"
+						sideOffset={6}
+						// This menu is portaled to the page, outside the summary's
+						// stacking context, so it needs the child-interaction layer.
+						positionerClassName="z-[2147483647]"
+						className="min-w-[200px]"
+					>
+						{people.map((person) => (
+							<Menu.Item key={person.name} onClick={() => pickReviewer(person.name)}>
+								<UserAvatar name={person.name} size={22} />
+								<span className="min-w-0 flex-1 truncate">{person.name}</span>
+								<Menu.Check
+									on={selectedReview?.to === person.name}
+									size={20}
+									className="text-dim"
+								/>
+							</Menu.Item>
+						))}
+						{reviewTeams.length > 0 && <Menu.Separator />}
+						{reviewTeams.map((team) => (
+							<Menu.Item
+								key={team.github}
+								onClick={() => pickReviewer(team.github, team.members)}
+							>
+								<span className="grid size-[22px] place-items-center text-dim">
+									<IconStack size={20} />
+								</span>
+								<span className="min-w-0 flex-1 truncate">{team.name}</span>
+								<Menu.Check
+									on={selectedReview?.to === team.github}
+									size={20}
+									className="text-dim"
+								/>
+							</Menu.Item>
+						))}
 					</Menu.Popup>
 				</Menu.Root>
 			)}

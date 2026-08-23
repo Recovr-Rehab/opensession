@@ -36,6 +36,7 @@ function Trigger({
 
 function Popup({
 	className,
+	positionerClassName,
 	side,
 	align,
 	sideOffset = 8,
@@ -45,6 +46,8 @@ function Popup({
 	children,
 }: {
 	className?: string;
+	/** Override the portal layer when this menu opens inside a higher popup. */
+	positionerClassName?: string;
 	side?: React.ComponentProps<typeof BaseMenu.Positioner>["side"];
 	align?: React.ComponentProps<typeof BaseMenu.Positioner>["align"];
 	sideOffset?: number;
@@ -70,7 +73,7 @@ function Popup({
 				alignOffset={alignOffset}
 				anchor={anchor}
 				collisionPadding={8}
-				className="z-[10001] outline-none"
+				className={cn("z-[10001] outline-none", positionerClassName)}
 			>
 				<BaseMenu.Popup
 					className={cn(POPUP_HOOK, popupSurfaceClasses, className)}

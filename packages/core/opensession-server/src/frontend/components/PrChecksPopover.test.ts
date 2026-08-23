@@ -9,8 +9,11 @@ const statusBarSource = await Bun.file(
 const summarySource = await Bun.file(
 	new URL("./WorkspaceSummary.tsx", import.meta.url),
 ).text();
+const menuSource = await Bun.file(
+	new URL("../ui/menu.tsx", import.meta.url),
+).text();
 
-test("the summary's checks preview stays open above its parent popup", () => {
+test("the summary's child popups stay open above their parent", () => {
 	const summaryStart = statusBarSource.indexOf('if (variant === "summary")');
 	const summaryEnd = statusBarSource.indexOf('if (variant === "header")');
 	const summary = statusBarSource.slice(summaryStart, summaryEnd);
@@ -22,5 +25,9 @@ test("the summary's checks preview stays open above its parent popup", () => {
 	expect(summarySource).toContain('positionerClassName="z-[2147483646]"');
 	expect(popoverSource).toContain(
 		'positionerClassName={nested ? "z-[2147483647]" : undefined}',
+	);
+	expect(summarySource).toContain('positionerClassName="z-[2147483647]"');
+	expect(menuSource).toContain(
+		'className={cn("z-[10001] outline-none", positionerClassName)}',
 	);
 });
