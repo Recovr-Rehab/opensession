@@ -1,11 +1,18 @@
 import { expect, test } from "bun:test";
-import { createPortalResponseSender, loopbackHeaders, openWebSocket, relayRetryDelayMs, sendWebSocket, type PortalSocketState } from "./sandbox-portal-agent";
+import { cancelPortalRequest, createPortalResponseSender, loopbackHeaders, openWebSocket, relayRetryDelayMs, sendWebSocket, type PortalRequestControllers, type PortalSocketState } from "./sandbox-portal-agent";
 
 test("uses local-dev host semantics and disables upstream compression", () => {
 	const headers = loopbackHeaders({ host: "portal.example:22000", "accept-encoding": "gzip, br", cookie: "session=abc" }, 4300);
 	expect(headers.get("host")).toBe("localhost:4300");
 	expect(headers.get("accept-encoding")).toBe("identity");
 	expect(headers.get("cookie")).toBe("session=abc");
+});
+
+test("aborts loopback fetches when the browser cancels a relayed request", () => {
+	const controller = new AbortController();
+	const requests: PortalRequestControllers = new Map([["request-1", controller]]);
+	cancelPortalRequest(requests, { id: "request-1" });
+	expect(controller.signal.aborted).toBe(true);
 });
 
 test("backs stale relay credentials off instead of flooding public ingress", () => {
