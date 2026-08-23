@@ -108,8 +108,11 @@ function creationPayload<K extends Exclude<
         project: requiredString(kind, value.project, "project"),
         branch: requiredString(kind, value.branch, "branch"),
         worktreePath: requiredString(kind, value.worktreePath, "worktreePath"),
+        // The pre-cutover creator encoded "no stack base" as an empty
+        // string. Normalize those already-durable effects while new producers
+        // omit the field entirely.
         baseBranch:
-          value.baseBranch === undefined
+          value.baseBranch === undefined || value.baseBranch === ""
             ? undefined
             : requiredString(kind, value.baseBranch, "baseBranch"),
         isolated: value.isolated === true,

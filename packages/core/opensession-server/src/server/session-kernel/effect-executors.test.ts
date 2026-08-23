@@ -69,6 +69,9 @@ describe("session effect executor registry", () => {
       project: "opensession",
       branch: "feature/create-one",
       worktreePath: "/worktrees/create-one",
+      // Older clean-install creates persisted an empty optional stack base.
+      // It means "branch from the repo default", not an invalid effect.
+      baseBranch: "",
       isolated: true,
       existingBranch: true,
       credentialPrincipal: "user:alice",

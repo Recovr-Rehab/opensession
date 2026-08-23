@@ -416,7 +416,7 @@ function actorWorktreeMaterializer(input: {
 			project: input.project,
 			branch: input.branch,
 			worktreePath: input.worktreePath,
-			baseBranch: input.baseBranch,
+			baseBranch: input.baseBranch || getRepo(input.project).defaultBranch,
 			isolated: input.isolated,
 			existingBranch: input.existingBranch,
 			credentialPrincipal: input.credentialPrincipal,
@@ -1565,8 +1565,8 @@ export async function handleCreateSessionMessage(
 		// to base on itself.
 		const stackBase =
 			worktreeMode === "stack" && !isAsk && !isScratch
-				? workspace?.branch || ""
-				: "";
+				? workspace?.branch || undefined
+				: undefined;
 		// First code session materializes the workspace's owned worktree so
 		// later share-mode sessions inherit it. Stacked sessions keep their own —
 		// except a "stack" in a workspace with no branch yet, which has no

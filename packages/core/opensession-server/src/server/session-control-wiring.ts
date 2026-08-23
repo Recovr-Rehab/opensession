@@ -676,6 +676,7 @@ registerSessionControl({
 							project: repo.id,
 							branch: plannedBranch,
 							worktreePath: plannedWorktreePath,
+							baseBranch: repo.defaultBranch,
 							isolated: isolatedWorktree === true,
 							credentialPrincipal,
 						});
@@ -977,6 +978,7 @@ ${createMentionsNote}`;
 							project: restoredSpec.repoId!,
 							branch: restoredSpec.branch!,
 							worktreePath: restoredSpec.wtPath!,
+							baseBranch: getRepo(restoredSpec.repoId!).defaultBranch,
 							isolated: restoredSpec.worktreeIsolated === true,
 							credentialPrincipal,
 						});
