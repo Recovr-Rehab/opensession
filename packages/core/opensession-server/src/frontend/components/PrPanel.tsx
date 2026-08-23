@@ -1794,9 +1794,10 @@ export function PrPanel({
           }
         />
       </Tooltip>
-      {/* Two groups, one rule apart: how the code is drawn, then which files
-          are drawn and in what order. Every setting is one row wearing the
-          shape of its answer, which is the vocabulary in `ui/setting-row`. */}
+      {/* The content lens stands alone. File filtering and organization come
+          next; lower-frequency rendering preferences come last. Every setting
+          remains one row wearing the shape of its answer, which is the
+          vocabulary in `ui/setting-row`. */}
       <Popover.Popup
         side="bottom"
         align="end"
@@ -1829,45 +1830,6 @@ export function PrPanel({
             </SegmentedOption>
           </Segmented>
         </SettingRow>
-        <SettingRow label="Diff layout">
-          <Segmented
-            label="Diff layout"
-            size="sm"
-            value={diffStyle}
-            onValueChange={(next) =>
-              changeDiffStyle(next as "unified" | "split")
-            }
-          >
-            <SegmentedOption value="split">Split</SegmentedOption>
-            <SegmentedOption value="unified">Unified</SegmentedOption>
-          </Segmented>
-        </SettingRow>
-        <SettingRow label="Code theme">
-          <Segmented
-            label="Code theme"
-            size="sm"
-            value={codeTheme}
-            onValueChange={(next) =>
-              changeCodeTheme(next as "system" | "light" | "dark")
-            }
-          >
-            <SegmentedOption value="system">Match app</SegmentedOption>
-            <SegmentedOption value="light">Light</SegmentedOption>
-            <SegmentedOption value="dark">Dark</SegmentedOption>
-          </Segmented>
-        </SettingRow>
-        <SwitchRow
-          label="Wrap lines"
-          checked={wrapLines}
-          onCheckedChange={changeWrapLines}
-        />
-        <SwitchRow
-          label="Structural highlighting"
-          checked={structuralSetting === "1"}
-          onCheckedChange={(checked) =>
-            changeStructuralSetting(checked ? "1" : "0")
-          }
-        />
 
         <div aria-hidden className="mx-2 my-1.5 h-px bg-line" />
 
@@ -1885,11 +1847,28 @@ export function PrPanel({
             <SegmentedOption value="hidden">Hidden</SegmentedOption>
           </Segmented>
         </SettingRow>
-        {/* Direction is not a fourth thing to order by, so it sits under the
+        <SwitchRow
+          label="Hide reviewed"
+          checked={hideReviewed}
+          disabled={!reviewedFiles}
+          onCheckedChange={(checked) =>
+            changeHideReviewedSetting(checked ? "1" : "0")
+          }
+        />
+        <ValueRow
+          label="Group by"
+          value={grouping}
+          options={[
+            { value: "none", label: "No grouping" },
+            { value: "ai", label: "Purpose" },
+          ]}
+          onSelect={(next) => changeGrouping(next as "none" | "ai")}
+        />
+        {/* Direction is not a fourth thing to sort by, so it sits under the
             three that are, and the arrow rides the value: which way the list
             runs is worth reading without opening the menu. */}
         <ValueRow
-          label="Order by"
+          label="Sort by"
           value={fileOrder}
           options={[
             { value: "path", label: "Path" },
@@ -1935,30 +1914,55 @@ export function PrPanel({
             </Menu.RadioGroup>
           }
         />
-        <ValueRow
-          label="Grouping"
-          value={grouping}
-          options={[
-            { value: "none", label: "No grouping" },
-            { value: "ai", label: "By purpose" },
-          ]}
-          onSelect={(next) => changeGrouping(next as "none" | "ai")}
+
+        <div aria-hidden className="mx-2 my-1.5 h-px bg-line" />
+
+        <SettingRow label="Layout">
+          <Segmented
+            label="Diff layout"
+            size="sm"
+            value={diffStyle}
+            onValueChange={(next) =>
+              changeDiffStyle(next as "unified" | "split")
+            }
+          >
+            <SegmentedOption value="split">Split</SegmentedOption>
+            <SegmentedOption value="unified">Unified</SegmentedOption>
+          </Segmented>
+        </SettingRow>
+        <SwitchRow
+          label="Wrap lines"
+          checked={wrapLines}
+          onCheckedChange={changeWrapLines}
         />
         <SwitchRow
-          label="Show changed lines per file"
+          label="Highlight changed words"
+          checked={structuralSetting === "1"}
+          onCheckedChange={(checked) =>
+            changeStructuralSetting(checked ? "1" : "0")
+          }
+        />
+        <SwitchRow
+          label="Line counts"
           checked={fileStatsSetting === "1"}
           onCheckedChange={(checked) =>
             changeFileStatsSetting(checked ? "1" : "0")
           }
         />
-        <SwitchRow
-          label="Hide reviewed"
-          checked={hideReviewed}
-          disabled={!reviewedFiles}
-          onCheckedChange={(checked) =>
-            changeHideReviewedSetting(checked ? "1" : "0")
-          }
-        />
+        <SettingRow label="Theme">
+          <Segmented
+            label="Code theme"
+            size="sm"
+            value={codeTheme}
+            onValueChange={(next) =>
+              changeCodeTheme(next as "system" | "light" | "dark")
+            }
+          >
+            <SegmentedOption value="system">Match app</SegmentedOption>
+            <SegmentedOption value="light">Light</SegmentedOption>
+            <SegmentedOption value="dark">Dark</SegmentedOption>
+          </Segmented>
+        </SettingRow>
       </Popover.Popup>
     </Popover.Root>
   );
