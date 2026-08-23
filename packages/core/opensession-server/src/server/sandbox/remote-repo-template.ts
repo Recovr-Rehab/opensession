@@ -10,6 +10,7 @@
  */
 
 import { createHash, randomUUID } from "crypto";
+import { spawnSync } from "child_process";
 import { existsSync, mkdirSync, readFileSync, unlinkSync } from "fs";
 import { join } from "path";
 import { OPENSESSION_SESSIONS_DIR } from "../paths";
@@ -39,14 +40,23 @@ export interface RemoteRepoTemplate {
 
 /** Ramp-style source-image cadence. Compute runs only while replacing an image. */
 export const REMOTE_REPO_TEMPLATE_REFRESH_MS = 30 * 60 * 1_000;
+/** Box counts every create, fork, and resume against a 150 starts/day quota.
+ * Since session adoption fetches the current branch anyway, spending 48 of
+ * those starts per repo/day only to shorten the git delta harms availability
+ * more than it helps latency. Setup-input changes still invalidate instantly. */
+export const BOX_REPO_TEMPLATE_REFRESH_MS = 6 * 60 * 60 * 1_000;
 /** Provider storage backstop where an API requires a finite snapshot TTL. */
 export const REMOTE_REPO_TEMPLATE_TTL_MS = 30 * 24 * 60 * 60 * 1_000;
 
 export function remoteRepoTemplateNeedsRefresh(
-  template: Pick<RemoteRepoTemplate, "createdAt">,
+  template: Pick<RemoteRepoTemplate, "provider" | "createdAt">,
   now = Date.now(),
 ): boolean {
-  return now - Date.parse(template.createdAt) >= REMOTE_REPO_TEMPLATE_REFRESH_MS;
+  const refreshMs =
+    template.provider === "box"
+      ? BOX_REPO_TEMPLATE_REFRESH_MS
+      : REMOTE_REPO_TEMPLATE_REFRESH_MS;
+  return now - Date.parse(template.createdAt) >= refreshMs;
 }
 
 export function remoteRepoTemplateProofPath(repoId: string): string {
@@ -149,18 +159,33 @@ const PROJECT_PREPARATION_INPUTS = [
   "bun.lock",
 ] as const;
 
-/** Hash only files whose bytes affect the reusable prepared filesystem. */
+/** Hash only committed files whose bytes affect the reusable prepared
+ * filesystem. Shared project images are built from repository commits, never
+ * from an operator's dirty worktree. Reading working-tree bytes here made an
+ * unrelated local bun.lock edit invalidate every provider artifact. */
 export function projectPreparationSignature(repoId: string): string {
   const repo = configuredRepos()[repoId];
   const hash = createHash("sha256");
-  hash.update(`project-preparation-v1\0${repoId}\0`);
+  hash.update(`project-preparation-v2\0${repoId}\0`);
   if (!repo) return hash.update("<unregistered>").digest("hex");
+  const hasHead = spawnSync("git", ["-C", repo.repo, "rev-parse", "--verify", "HEAD"], {
+    stdio: "ignore",
+  }).status === 0;
   for (const relative of PROJECT_PREPARATION_INPUTS) {
     hash.update(`${relative}\0`);
-    try {
-      hash.update(readFileSync(join(repo.repo, relative)));
-    } catch {
-      hash.update("<absent>");
+    if (hasHead) {
+      const committed = spawnSync("git", ["-C", repo.repo, "show", `HEAD:${relative}`], {
+        encoding: "buffer",
+        maxBuffer: 32 * 1024 * 1024,
+      });
+      if (committed.status === 0 && committed.stdout) hash.update(committed.stdout);
+      else hash.update("<absent>");
+    } else {
+      try {
+        hash.update(readFileSync(join(repo.repo, relative)));
+      } catch {
+        hash.update("<absent>");
+      }
     }
     hash.update("\0");
   }

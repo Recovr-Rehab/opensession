@@ -45,6 +45,13 @@ describe("remote repo template index", () => {
     expect(mod.readRemoteRepoTemplate("modal", "app", 1_000 + 30 * 60_000)?.artifactId).toBe("im-1");
   });
 
+  test("preserves Box's daily start quota with a six-hour source refresh", async () => {
+    const mod = await import(`./remote-repo-template?box-refresh=${Math.random()}`);
+    const { current } = mod.writeRemoteRepoTemplate("box", "app", "snapshot-1", 1_000);
+    expect(mod.remoteRepoTemplateNeedsRefresh(current, 1_000 + 30 * 60_000)).toBe(false);
+    expect(mod.remoteRepoTemplateNeedsRefresh(current, 1_000 + 6 * 60 * 60_000)).toBe(true);
+  });
+
   test("create-shape changes invalidate the local artifact mapping", async () => {
     const mod = await import(`./remote-repo-template?shape=${Math.random()}`);
     mod.writeRemoteRepoTemplate("modal", "app", "im-1");
