@@ -2045,8 +2045,14 @@ async function runSessionPromptInner(
 	}
 	// Non-image attachments: stage to disk and tell the agent where they landed.
 	prompt = withUploadsNote(prompt, stageFileAttachments(sessionId, rawFiles));
+	// The goal guides the model on every turn, but it is session-level system
+	// context, not text the person added to this message. Fence it so the model
+	// sees it while transcript projections keep the user bubble unchanged.
 	if (session.goal) {
-		prompt += `\n\n[Pinned session goal — keep working toward it and note how this turn advanced it: ${session.goal}]`;
+		prompt = `${wrapContext(
+			`Pinned session goal. Keep working toward it and note how this turn advanced it:\n\n${session.goal}`,
+			"pinned-goal",
+		)}\n\n${prompt}`;
 	}
 
 	// Resuming an automation-owned session must keep that automation's scoping

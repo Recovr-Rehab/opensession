@@ -48,6 +48,7 @@ export type ContextSource =
 	| "restart-recovery"
 	| "steer-note"
 	| "uploads-note"
+	| "pinned-goal"
 	| "unknown";
 
 const SOURCES = new Set<string>([
@@ -63,6 +64,7 @@ const SOURCES = new Set<string>([
 	"restart-recovery",
 	"steer-note",
 	"uploads-note",
+	"pinned-goal",
 	"unknown",
 ]);
 
@@ -101,6 +103,11 @@ export function neutralizeContextSentinels(body: string): string {
 
 const STRIP_RE =
 	/<(?:opensession|backstage):context(?:\s[^>]*)?>[\s\S]*?<\/(?:opensession|backstage):context>\n*/g;
+// Before injected context was fenced, pinned goals were appended directly to
+// user prompts. Keep those stored turns clean too, not only prompts created
+// after the fence migration.
+const LEGACY_PINNED_GOAL_RE =
+	/\n\n\[Pinned session goal — keep working toward it and note how this turn advanced it: [\s\S]*\]\s*$/;
 // A delivery attribution ("[Name] ", added when a prompt is handed to the
 // engine) with nothing left after the fence is stripped: the whole turn was
 // plumbing, so the prefix is all the transcript would carry. Left in, it
@@ -113,10 +120,13 @@ function hasFence(text: string): boolean {
 	return text.includes("<opensession:context") || text.includes("<backstage:context");
 }
 
-/** Remove fenced context blocks (and any trailing blank lines) for display. */
+/** Remove fenced context blocks and legacy unfenced injections for display. */
 export function stripContext(text: string): string {
-	if (!text || !hasFence(text)) return text;
-	const shown = text.replace(STRIP_RE, "").trimStart();
+	if (!text) return text;
+	const withoutLegacyGoal = text.replace(LEGACY_PINNED_GOAL_RE, "");
+	const shown = hasFence(withoutLegacyGoal)
+		? withoutLegacyGoal.replace(STRIP_RE, "").trimStart()
+		: withoutLegacyGoal;
 	return ATTRIBUTION_ONLY_RE.test(shown.trim()) ? "" : shown;
 }
 
