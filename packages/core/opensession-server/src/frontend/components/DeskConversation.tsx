@@ -15,6 +15,7 @@ import { mergeTranscriptEntries } from "../lib/transcript-state";
 import { CONTINUE_AFTER_FAILURE_PROMPT } from "../lib/continue-run";
 import { LiveTurnStore } from "../lib/live-turn-store";
 import { getLiveTypingPref } from "../lib/live-typing-pref";
+import { randomUUID } from "../lib/random-uuid";
 import { isTimelineOnlyRunnerNotice } from "../lib/runner-events";
 import { otherTypingUsers } from "../lib/typing";
 import { cn } from "../ui/cn";
@@ -313,7 +314,7 @@ export function DeskConversation({
 					setEntries((prev) => [
 						...prev,
 						{
-							id: crypto.randomUUID(),
+							id: randomUUID(),
 							type: "system",
 							content: msg.message,
 							timestamp: new Date().toISOString(),
@@ -331,7 +332,7 @@ export function DeskConversation({
 						setEntries((prev) => [
 							...prev,
 							{
-								id: crypto.randomUUID(),
+								id: randomUUID(),
 								type: "system",
 								content: `⚠ Run failed: ${msg.message}`,
 								timestamp: new Date().toISOString(),
@@ -395,7 +396,7 @@ export function DeskConversation({
 			setEntries((prev) => [
 				...prev,
 				{
-					id: crypto.randomUUID(),
+					id: randomUUID(),
 					type: "system",
 					content:
 						"Slash commands aren't supported in the Desk. Run them from a session.",

@@ -25,8 +25,10 @@ export interface EmbeddedFrontend {
 	shell: string;
 	/** Bundle metadata to render index.html at boot, mirrors .bundle-meta.json. */
 	meta: BundleMeta;
-	/** Served asset name (e.g. "App-abc123.js") → in-binary file path. */
+	/** Served bundle asset name (e.g. "App-abc123.js") → in-binary file path. */
 	assets: Record<string, string>;
+	/** Stable source asset name (e.g. "icon.png" or "splash/…") → in-binary file path. */
+	staticAssets: Record<string, string>;
 }
 
 export const EMBEDDED_FRONTEND: EmbeddedFrontend | null = null;

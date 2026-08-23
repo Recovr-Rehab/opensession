@@ -1,4 +1,5 @@
 import type { WSClientMessage } from "./types";
+import { randomUUID } from "./random-uuid";
 
 const MUTATION_TYPES = new Set<WSClientMessage["type"]>([
   "prompt",
@@ -24,5 +25,5 @@ export function withMutationRequestId(
   if (!MUTATION_TYPES.has(message.type)) return message;
   const mutation = message as MessageWithRequestId;
   if (mutation.requestId) return message;
-  return { ...message, requestId: crypto.randomUUID() } as WSClientMessage;
+  return { ...message, requestId: randomUUID() } as WSClientMessage;
 }

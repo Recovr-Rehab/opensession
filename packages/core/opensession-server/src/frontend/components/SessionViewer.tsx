@@ -15,6 +15,7 @@ import { Spinner } from "../ui/spinner";
 import { EmptyState, TranscriptSkeleton } from "../ui/state";
 import { LiveTurnStore } from "../lib/live-turn-store";
 import { getLiveTypingPref } from "../lib/live-typing-pref";
+import { randomUUID } from "../lib/random-uuid";
 import { isTimelineOnlyRunnerNotice } from "../lib/runner-events";
 import { TranscriptViewStore } from "../lib/transcript-view-store";
 import {
@@ -2553,7 +2554,7 @@ export function SessionViewer({
 					transcriptRangeRequestsRef.current.has(key)
 				)
 					continue;
-				const requestId = crypto.randomUUID();
+				const requestId = randomUUID();
 				const timer = setTimeout(() => {
 					transcriptRangeRequestsRef.current.delete(key);
 					setTranscriptRangeRetryGeneration((generation) => generation + 1);
@@ -3125,7 +3126,7 @@ export function SessionViewer({
 					setEntries((prev) => [
 						...prev,
 						{
-							id: crypto.randomUUID(),
+							id: randomUUID(),
 							type: "system",
 							content: msg.message,
 							timestamp: new Date().toISOString(),
@@ -3141,7 +3142,7 @@ export function SessionViewer({
 						setEntries((prev) => [
 							...prev,
 							{
-								id: crypto.randomUUID(),
+								id: randomUUID(),
 								type: "system",
 								content: `⚠ Run failed: ${msg.message}`,
 								timestamp: new Date().toISOString(),

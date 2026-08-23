@@ -46,6 +46,21 @@ export function frontendDistFile(name: string): BunFile | null {
 }
 
 /**
+ * A stable asset served directly from src/frontend in source installs, or from
+ * the compiled binary's embedded static set in one-command installs.
+ */
+export function frontendStaticFile(
+	name: string,
+	sourcePath = join(FRONTEND_SRC, name),
+): BunFile | null {
+	if (EMBEDDED_FRONTEND) {
+		const path = EMBEDDED_FRONTEND.staticAssets[name];
+		return path ? Bun.file(path) : null;
+	}
+	return Bun.file(sourcePath);
+}
+
+/**
  * Name of the newest Tailwind sheet that compiled successfully, so a failed
  * rebuild can keep serving it rather than shipping the app with no utilities
  * at all (see the Tailwind pass in buildFrontend). Parked on globalThis with

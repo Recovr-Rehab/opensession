@@ -73,11 +73,35 @@ function dirBytes(p: string): number {
 	return n;
 }
 
-// Assets Bun should embed: the hashed SPA bundle + the stable-named wasm, plus
-// index.html. Icons/splash/sw.js live under src/frontend and are cosmetic (they
-// 404 under the compiled binary; the app still renders) — deliberately not
-// embedded to keep the binary lean.
+// The hashed SPA bundle and stable source assets both have to travel inside a
+// single-executable install. The latter are requested directly by index.html,
+// the sign-in gate, the PWA manifest and the service worker, so treating them
+// as optional leaves a clean installation with broken images and HTTP 500s.
 const ASSET_RE = /\.(?:js|css|map|wasm)$/;
+const STATIC_ASSET_RE = /\.(?:png|webp|mp4)$/;
+
+function staticFrontendAssets(shellPath: string): Array<{ name: string; path: string }> {
+	const sourceDir = dirname(shellPath);
+	const assets = readdirSync(sourceDir)
+		.filter((name) => STATIC_ASSET_RE.test(name) || name === "sw.js")
+		.map((name) => ({ name, path: join(sourceDir, name) }));
+	const splashDir = join(sourceDir, "splash");
+	if (existsSync(splashDir)) {
+		for (const name of readdirSync(splashDir)) {
+			if (STATIC_ASSET_RE.test(name))
+				assets.push({ name: `splash/${name}`, path: join(splashDir, name) });
+		}
+	}
+	// The web shell uses the desktop icon's transparent-corner variant. It lives
+	// with the Mac client rather than src/frontend, but is still a web asset.
+	assets.push({
+		name: "mac-app-icon.png",
+		path: join(REPO_ROOT, "packages", "clients", "mac", "build", "icon-512.png"),
+	});
+	return assets.filter((asset) => existsSync(asset.path)).sort((a, b) =>
+		a.name.localeCompare(b.name),
+	);
+}
 
 async function buildFrontendDist(): Promise<{
 	version: string;
@@ -110,6 +134,7 @@ function generateEmbedModule(
 	const names = readdirSync(distDir)
 		.filter((n) => !n.startsWith(".") && ASSET_RE.test(n))
 		.sort();
+	const staticAssets = staticFrontendAssets(shellPath);
 	const meta = JSON.parse(readFileSync(metaPath, "utf8"));
 	// The shell is inlined as a string rather than a `with { type: "file" }`
 	// import: Bun treats a `.html` import as an HTML entry point to bundle, not
@@ -136,6 +161,14 @@ function generateEmbedModule(
 		);
 		assetEntries.push(`\t\t${JSON.stringify(name)}: ${ident},`);
 	});
+	const staticAssetEntries: string[] = [];
+	staticAssets.forEach((asset, index) => {
+		const ident = `__s${index}`;
+		lines.push(
+			`import ${ident} from ${JSON.stringify(spec(asset.path))} with { type: "file" };`,
+		);
+		staticAssetEntries.push(`\t\t${JSON.stringify(asset.name)}: ${ident},`);
+	});
 	// The embedded index.html is the NEUTRAL shell; the running server stitches
 	// its own instance config into it at boot via renderIndexHtml(meta).
 	lines.push(
@@ -146,6 +179,9 @@ function generateEmbedModule(
 		`\tmeta: ${JSON.stringify(meta)},`,
 		"\tassets: {",
 		...assetEntries,
+		"\t},",
+		"\tstaticAssets: {",
+		...staticAssetEntries,
 		"\t},",
 		"};",
 		"",
