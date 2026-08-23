@@ -7,6 +7,7 @@ struct ServerAccountPicker: View {
     let openSettings: () -> Void
 
     @State private var config = ServerConfig.shared
+    @State private var presence = PresenceStore.shared
 
     var body: some View {
         Menu {
@@ -55,6 +56,14 @@ struct ServerAccountPicker: View {
                                 .overlay(Circle().stroke(OS1VisualStyle.background, lineWidth: 1.5))
                         }
                     }
+                    .overlay(alignment: .bottomTrailing) {
+                        Circle()
+                            .fill(isConnected ? OS1VisualStyle.green : OS1VisualStyle.textFaint)
+                            .frame(width: 9, height: 9)
+                            .overlay(
+                                Circle().stroke(OS1VisualStyle.background, lineWidth: 1.5)
+                            )
+                    }
                 if !compact {
                     Text(config.activeAccount.displayLabel)
                         .font(.headline)
@@ -68,7 +77,12 @@ struct ServerAccountPicker: View {
         }
         .menuIndicator(.hidden)
         .accessibilityLabel("Organization, \(config.activeAccount.displayLabel)")
+        .accessibilityValue(isConnected ? "Connected" : "Connecting")
         .accessibilityHint("Switch organization or open settings")
+    }
+
+    private var isConnected: Bool {
+        presence.isConnected(accountID: config.activeId)
     }
 
     private var inactiveBadgeCount: Int {

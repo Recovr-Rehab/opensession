@@ -10,6 +10,7 @@ final class PresenceStore {
     static let shared = PresenceStore()
 
     private(set) var bySession: [String: [String]] = [:]
+    private(set) var connectedAccountIDs: Set<String> = []
 
     private var sockets: [String: OS1Socket] = [:]
     private var connectedAccounts: [String: ServerConnection] = [:]
@@ -32,6 +33,10 @@ final class PresenceStore {
             .split(separator: " ").first
         else { return false }
         return presentKeys.contains(first.lowercased())
+    }
+
+    func isConnected(accountID: String) -> Bool {
+        connectedAccountIDs.contains(accountID)
     }
 
     func viewers(of sessions: [Session]) -> [String] {
@@ -58,6 +63,7 @@ final class PresenceStore {
         for id in Array(sockets.keys) where connectedAccounts[id] != desiredConnections[id] {
             sockets.removeValue(forKey: id)?.disconnect()
             connectedAccounts[id] = nil
+            connectedAccountIDs.remove(id)
             reconnectTasks.removeValue(forKey: id)?.cancel()
             presenceByAccount[id] = nil
         }
@@ -76,6 +82,7 @@ final class PresenceStore {
         let connected = sockets.values
         sockets.removeAll()
         connectedAccounts.removeAll()
+        connectedAccountIDs.removeAll()
         for socket in connected { socket.disconnect() }
     }
 
@@ -113,6 +120,8 @@ final class PresenceStore {
     private func received(_ event: ServerEvent, account: ServerAccount) {
         let config = ServerConfig.shared
         switch event {
+        case .hello:
+            connectedAccountIDs.insert(account.id)
         case .globalPresence(let viewing):
             let mapped = mappedPresence(viewing, me: account.userName)
             presenceByAccount[account.id] = mapped
@@ -159,6 +168,7 @@ final class PresenceStore {
     private func socketClosed(accountID: String) {
         sockets[accountID] = nil
         connectedAccounts[accountID] = nil
+        connectedAccountIDs.remove(accountID)
         reconnectTasks[accountID]?.cancel()
         reconnectTasks[accountID] = Task { [weak self] in
             try? await Task.sleep(for: .seconds(3))
