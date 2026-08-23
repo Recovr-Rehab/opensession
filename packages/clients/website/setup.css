@@ -201,7 +201,6 @@
 	grid-template-columns: minmax(0, 1.08fr) minmax(300px, 0.92fr);
 }
 
-.setup-server-list-panel,
 .setup-server-options-panel {
 	border-radius: calc(22px * var(--rf));
 	corner-shape: var(--cs);
@@ -212,7 +211,7 @@
 }
 
 .setup-server-list-panel {
-	padding: 16px;
+	padding: 0;
 }
 
 .setup-server-options-panel {
@@ -1482,7 +1481,6 @@ a.setup-download-card:hover {
 		grid-template-columns: minmax(0, 1fr);
 	}
 
-	.setup-server-list-panel,
 	.setup-server-options-panel,
 	.setup-server-guide,
 	.setup-server-status {
@@ -1491,7 +1489,7 @@ a.setup-download-card:hover {
 	}
 
 	.setup-server-list-panel {
-		padding: 12px;
+		padding: 0;
 	}
 
 	.setup-server-options-panel,
@@ -1600,7 +1598,6 @@ a.setup-download-card:hover {
 	}
 
 	.setup-step-content,
-	.setup-server-list-panel,
 	.setup-server-options-panel,
 	.setup-server-guide,
 	.setup-server-status {
