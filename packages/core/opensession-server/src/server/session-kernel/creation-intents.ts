@@ -57,13 +57,6 @@ type CreationIntentOptions = {
   pollMs?: number;
 };
 
-// Effects share a bounded runtime pool, and branch effects additionally queue
-// behind the process-wide Git worktree lock. A healthy fetch can therefore sit
-// durably queued for longer than the old 30-second gateway deadline when a few
-// sessions start together. Keep the deadline as a fail-safe, not a normal race
-// against work that the durable executor still owns.
-const DEFAULT_EFFECT_WAIT_MS = 5 * 60_000;
-
 function assertIdentity(
   state: DurableCreationState,
   identity: string,
@@ -131,7 +124,7 @@ export async function requestCreationWorkspace(
       );
     state = emitted.state;
   }
-  const deadline = Date.now() + (options.timeoutMs ?? DEFAULT_EFFECT_WAIT_MS);
+  const deadline = Date.now() + (options.timeoutMs ?? 30_000);
   while (!state.completedEffectIds.includes(effectId)) {
     if (Date.now() >= deadline)
       throw new Error(
@@ -188,7 +181,7 @@ export async function requestCreationBranch(
       );
     state = emitted.state;
   }
-  const deadline = Date.now() + (options.timeoutMs ?? DEFAULT_EFFECT_WAIT_MS);
+  const deadline = Date.now() + (options.timeoutMs ?? 30_000);
   while (!state.completedEffectIds.includes(effectId)) {
     if (Date.now() >= deadline)
       throw new Error(`Creation branch effect ${effectId} remains durably pending`);
@@ -238,7 +231,7 @@ export async function requestCreationCredential(
       );
     state = emitted.state;
   }
-  const deadline = Date.now() + (options.timeoutMs ?? DEFAULT_EFFECT_WAIT_MS);
+  const deadline = Date.now() + (options.timeoutMs ?? 30_000);
   while (!state.completedEffectIds.includes(effectId)) {
     if (Date.now() >= deadline)
       throw new Error(
@@ -300,7 +293,7 @@ export async function requestCreationSandbox(
       );
     state = emitted.state;
   }
-  const deadline = Date.now() + (options.timeoutMs ?? DEFAULT_EFFECT_WAIT_MS);
+  const deadline = Date.now() + (options.timeoutMs ?? 30_000);
   while (!state.completedEffectIds.includes(effectId)) {
     if (Date.now() >= deadline)
       throw new Error(
