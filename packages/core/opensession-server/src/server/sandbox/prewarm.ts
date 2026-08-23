@@ -62,6 +62,7 @@ import {
   isWorkspaceSandboxProvider,
   sandboxConnectionReady,
 } from "./connections";
+import { projectPreparationSignature } from "./remote-repo-template";
 import {
   assertDialbackReachable,
   bootstrapRemoteSandbox,
@@ -122,6 +123,8 @@ export interface PrewarmEntry {
   /** Zero-compute standby retained beside the image for providers whose
    * snapshot restore is too slow for an interactive first turn. */
   standby?: boolean;
+  /** Setup/dependency input signature captured by a retained standby. */
+  projectSignature?: string;
 }
 
 /** What the adapters implement so the pool stays provider-agnostic (e2b
@@ -431,7 +434,11 @@ export async function requestPrewarm(
   const p = pool();
   let record = p.get(key);
   let entry = record?.entry;
-  if (entry && entry.signature !== prewarmSignature(provider, resources)) {
+  if (
+    entry &&
+    (entry.signature !== prewarmSignature(provider, resources) ||
+      (entry.standby && entry.projectSignature !== projectPreparationSignature(repoId)))
+  ) {
     await invalidatePrewarm(provider, repoId);
     record = undefined;
     entry = undefined;
@@ -474,7 +481,9 @@ export async function requestPrewarm(
     signature: prewarmSignature(provider, resources),
     user,
     ...(options.refreshTemplate ? { refreshTemplate: true } : {}),
-    ...(standby ? { standby: true } : {}),
+    ...(standby
+      ? { standby: true, projectSignature: projectPreparationSignature(repoId) }
+      : {}),
     ...(resources ? { resources } : {}),
     stage: "Creating sandbox",
     progress: 10,
@@ -713,9 +722,12 @@ export function claimPrewarm(
   const record = p.get(key);
   const entry = record?.entry;
   if (!entry || entry.refreshTemplate || entry.state !== "ready" || !entry.sandboxId) return null;
-  if (entry.signature !== prewarmSignature(provider, entry.resources)) {
-    // Runner pin or provider create-shape changed since this was warmed —
-    // never adopt (stale payload / wrong-sized sandbox).
+  if (
+    entry.signature !== prewarmSignature(provider, entry.resources) ||
+    (entry.standby && entry.projectSignature !== projectPreparationSignature(repoId))
+  ) {
+    // Runner pin, provider create-shape, or project setup input changed since
+    // this was warmed — never adopt stale payload or a wrong-sized sandbox.
     p.delete(key);
     removeFile(entry);
     void destroyRecord(record, "stale bootstrap signature");
@@ -876,6 +888,8 @@ export function restoreReadyPrewarms(now = Date.now()): number {
         !(entry.repoId in REPOS) ||
         fileFor(entry) !== `${dir}/${name}` ||
         entry.signature !== prewarmSignature(entry.provider, entry.resources) ||
+        (entry.standby &&
+          entry.projectSignature !== projectPreparationSignature(entry.repoId)) ||
         (!isKeepReady(entry.provider, entry.repoId) &&
           !(entry.standby && entry.parked) &&
           now - Date.parse(entry.lastTouchedAt) > ttlMs) ||

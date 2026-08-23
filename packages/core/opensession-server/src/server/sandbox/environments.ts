@@ -520,6 +520,19 @@ function maintainSandboxEnvironments(): void {
       continue;
     }
     if (template) {
+      const standby = prewarmStatus(environment.provider, environment.repo);
+      if (
+        (environment.provider === "daytona" || environment.provider === "box") &&
+        standby?.standby &&
+        standby.parked
+      ) {
+        // A stopped standby fetches the current branch when claimed. Replacing
+        // it on a source-only timer creates an avoidable availability gap,
+        // especially while Daytona seals or restores a large snapshot. Setup
+        // input changes invalidate both the template and standby immediately.
+        void derivedEnvironment(environment.repo, environment.provider).then(writeEnvironment);
+        continue;
+      }
       scheduleSandboxEnvironment(environment.repo, environment.provider, {
         refresh: true,
         user: "image-registry-refresh",
