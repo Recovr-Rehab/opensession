@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useRef, useState } from "react";
+import { githubLoginFromInput } from "../lib/github-login";
 import { Button } from "../ui/button";
 import { Field, FieldGrid, Input } from "../ui/input";
 import { MENU_ICON, Menu } from "../ui/menu";
@@ -324,10 +325,10 @@ export function GithubMemberDialog({
 
 	async function submit(event: React.FormEvent) {
 		event.preventDefault();
-		const login = github.trim().replace(/^@+/, "");
-		if (!login || saving) return;
-		if (!/^[a-z\d](?:[a-z\d-]{0,37}[a-z\d])?$/i.test(login)) {
-			setError("Enter a valid GitHub username.");
+		const login = githubLoginFromInput(github);
+		if (saving) return;
+		if (!login) {
+			setError("Enter a GitHub username or profile link.");
 			return;
 		}
 		setSaving(true);
@@ -360,12 +361,12 @@ export function GithubMemberDialog({
 					description="They can sign in with this GitHub account."
 				/>
 				<form className="flex flex-col gap-3" onSubmit={submit}>
-					<Field label="GitHub username">
+					<Field label="GitHub username or profile link">
 						<Input
 							ref={githubRef}
 							value={github}
 							onChange={(event) => setGithub(event.target.value)}
-							placeholder="monalisa"
+							placeholder="monalisa or github.com/monalisa"
 							autoCapitalize="none"
 							autoComplete="off"
 							spellCheck={false}
