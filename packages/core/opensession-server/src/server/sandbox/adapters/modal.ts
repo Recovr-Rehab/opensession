@@ -213,8 +213,12 @@ export class ModalProvider implements SandboxProvider {
         appId: app.appId,
         tags: { [SESSION_TAG]: spec.sessionId },
       })) {
-        sandbox = candidate;
-        break;
+        // Modal keeps completed sandboxes in tag listings. Adopting one makes
+        // every later exec fail and bypasses the retained session checkpoint.
+        if ((await candidate.poll()) === null) {
+          sandbox = candidate;
+          break;
+        }
       }
     } catch (e) {
       console.warn("[sandbox:modal] tag lookup failed (will use local state/create):", e);
