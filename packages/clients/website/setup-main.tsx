@@ -409,7 +409,7 @@ function SetupPage() {
                     </button>
                   ))}
                 </div>
-                <div className="setup-server-option-spec">
+                <div className="setup-server-requirements">
                   <strong>
                     {provider.id === "macmini"
                       ? "Dedicated Mac recommended"

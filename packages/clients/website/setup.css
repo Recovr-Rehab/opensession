@@ -298,20 +298,19 @@
 	font-size: 12px;
 }
 
-.setup-server-option-spec {
+.setup-server-requirements {
 	display: flex;
 	margin-top: 20px;
 	padding-inline: 2px;
-	border: 0;
 	flex-direction: column;
 }
 
-.setup-server-option-spec strong {
+.setup-server-requirements strong {
 	font-size: 13px;
 	font-weight: 600;
 }
 
-.setup-server-option-spec span {
+.setup-server-requirements span {
 	margin-top: 3px;
 	color: var(--muted);
 	font-size: 12px;
