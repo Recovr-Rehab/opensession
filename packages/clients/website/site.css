@@ -342,9 +342,10 @@ summary:focus-visible {
 
 /* The phone, in front of the window near their shared bottom-right origin.
    A small right inset keeps the whole phone edge visible, while its bottom
-   still carries through the stage. Everything here is in cqw, a percentage
-   of the stage's own width, so the pair keeps its composition at every size
-   the stage takes.
+   runs well past the stage: the device is a supporting object, so less of it
+   is in frame than the window beside it. Everything here is in cqw, a
+   percentage of the stage's own width, so the pair keeps its composition at
+   every size the stage takes, and the amount cut off never changes.
 
    The size is not a taste: the window stands for a 14-inch MacBook Pro's
    screen, 302mm across its 94.4cqw, which puts 1mm at 0.313cqw. An iPhone 17
@@ -362,7 +363,7 @@ summary:focus-visible {
 .demo-phone {
 	position: absolute;
 	right: 2.5cqw;
-	bottom: -1px;
+	bottom: -4cqw;
 	width: 22.5cqw;
 	height: 46.9cqw;
 	object-fit: cover;
