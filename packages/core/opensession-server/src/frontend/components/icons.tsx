@@ -113,15 +113,33 @@ export function IconMic(p: IconProps) {
   );
 }
 
+const SLIDERS_PATHS = [
+  "M4.75 8h6",
+  "M15.25 8h4",
+  "M4.75 16h3",
+  "M12.25 16h7",
+];
+const SLIDERS_CIRCLES = [
+  { cx: 13, cy: 8 },
+  { cx: 10, cy: 16 },
+];
+
 export function IconSliders(p: IconProps) {
   return (
     <Svg {...p}>
-      <path {...stroke} d="M4.75 8h6" />
-      <path {...stroke} d="M15.25 8h4" />
-      <circle {...stroke} cx="13" cy="8" r="2.25" fill="none" />
-      <path {...stroke} d="M4.75 16h3" />
-      <path {...stroke} d="M12.25 16h7" />
-      <circle {...stroke} cx="10" cy="16" r="2.25" fill="none" />
+      {SLIDERS_PATHS.map((d) => (
+        <path key={d} {...stroke} d={d} />
+      ))}
+      {SLIDERS_CIRCLES.map(({ cx, cy }) => (
+        <circle
+          key={`${cx}-${cy}`}
+          {...stroke}
+          cx={cx}
+          cy={cy}
+          r="2.25"
+          fill="none"
+        />
+      ))}
     </Svg>
   );
 }
@@ -913,6 +931,18 @@ export function copyIconMarkup(size = MIN_ICON_SIZE): string {
   return iconMarkup(
     `<rect x="8.75" y="8.75" width="10.5" height="10.5" rx="2" ${STROKE_MARKUP}/>` +
       pathsMarkup([COPY_SHEET_PATH]),
+    size,
+  );
+}
+
+/** <IconSliders> as markup. */
+export function slidersIconMarkup(size = MIN_ICON_SIZE): string {
+  return iconMarkup(
+    pathsMarkup(SLIDERS_PATHS) +
+      SLIDERS_CIRCLES.map(
+        ({ cx, cy }) =>
+          `<circle cx="${cx}" cy="${cy}" r="2.25" fill="none" ${STROKE_MARKUP}/>`,
+      ).join(""),
     size,
   );
 }
