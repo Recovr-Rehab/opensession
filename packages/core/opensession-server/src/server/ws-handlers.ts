@@ -16,7 +16,7 @@ import { pendingAskAwaitingAnswer } from "./asks";
 import { resendPendingSlackComposer } from "./slack-compose";
 import { notifyMentions } from "./mentions";
 import { startWatching, stopAllWatchesForClient, transcriptRev, } from "./file-watcher";
-import { INIT_WIRE_CLAMP_BYTES, entriesForWire, parseTranscriptAsync, parseTranscriptTail, parseTranscriptWindow, } from "./jsonl-parser";
+import { INIT_WIRE_CLAMP_BYTES, entriesForWire, parseTranscriptAsync, parseTranscriptTail, parseTranscriptWindow, prepareEntriesForWire, } from "./jsonl-parser";
 import { providerFor } from "./models";
 
 import { appendTranscriptEntries, clearTranscriptStoreDegraded, transcriptLineRunnerNotice } from "./transcript-persistence";
@@ -42,8 +42,6 @@ import { maybeRecapOnReturn } from "./recap";
 import { maybeSuggestRepliesOnReturn, resendReplySuggestions, } from "./reply-suggestions";
 import { unarchiveForHumanTurn } from "./session-unarchive";
 import { resizeTerminal, startSessionTerminal, stopAllTerminals, stopTerminal, writeTerminal, } from "./terminals";
-import { classifyEntries, dropContextInjections, } from "@tellahq/opensession-protocol/notices";
-import { withToolPresentations } from "@tellahq/opensession-protocol/tool-presentation";
 import { subscribeTranscript } from "./transcript-bus";
 import { resumeSessionFeed } from "./session-feed";
 import { type SeqEntry, transcriptStore } from "./transcript-store";
@@ -190,10 +188,11 @@ const v2BgImports: Set<string> = ((globalThis as any).__osTranscriptV2BgImports 
 	new Set());
 
 /**
- * What `entriesForWire` does for every legacy send site, for the v2 store
- * path: classify how each entry reads and say what each tool call is. Store
- * rows are RAW — the marker-derived `noticeKind` is on them, but the `notice`
- * a client renders from is not, and delivery plumbing ("[Name] " prefixes,
+ * What `prepareEntriesForWire` does for every legacy send site, for the v2
+ * store path: strip injected context, classify how each entry reads, and say
+ * what each tool call is. Store rows are RAW — the marker-derived
+ * `noticeKind` is on them, but the `notice` a client renders from is not, and
+ * delivery plumbing ("[Name] " prefixes,
  * worker/session sentinels, the "💬 X answered" header) is still in `content`.
  * The web re-classifies client-side, so this went unnoticed until the native
  * apps moved onto seq paging: they read `notice`/`sender` only, so a recap
@@ -205,9 +204,7 @@ const v2BgImports: Set<string> = ((globalThis as any).__osTranscriptV2BgImports 
  * measures the text a reader actually sees.
  */
 function classifyV2Entries(entries: SeqEntry[]): SeqEntry[] {
-	return withToolPresentations(
-		classifyEntries(dropContextInjections(entries)),
-	) as SeqEntry[];
+	return prepareEntriesForWire(entries) as SeqEntry[];
 }
 
 async function sendTranscriptIndex(

@@ -1197,16 +1197,19 @@ function stripStoredUserContext(entries: TranscriptEntry[]): TranscriptEntry[] {
  * Use this at every send site; `clampEntriesForWire` alone would ship raw
  * plumbing to a client that no longer knows how to parse it.
  */
+export function prepareEntriesForWire(
+  entries: TranscriptEntry[]
+): TranscriptEntry[] {
+  return withToolPresentations(
+    classifyEntries(stripStoredUserContext(dropContextInjections(entries)))
+  );
+}
+
 export function entriesForWire(
   entries: TranscriptEntry[],
   maxBytes: number = WIRE_CLAMP_BYTES
 ): TranscriptEntry[] {
-  return clampEntriesForWire(
-    withToolPresentations(
-      classifyEntries(stripStoredUserContext(dropContextInjections(entries)))
-    ),
-    maxBytes
-  );
+  return clampEntriesForWire(prepareEntriesForWire(entries), maxBytes);
 }
 
 /**
