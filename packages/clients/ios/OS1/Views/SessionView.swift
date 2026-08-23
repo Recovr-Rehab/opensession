@@ -3464,6 +3464,15 @@ private struct SessionInputBar: View {
                 #endif
         }
         #if os(iOS)
+        // Match the web phone composer's quiet edge: 35% of the semantic
+        // border at a half-point, enough to hold the white shape without
+        // competing with the Liquid Glass actions above it.
+        .overlay {
+            composerShape.strokeBorder(
+                OS1VisualStyle.border.opacity(0.35),
+                lineWidth: 0.5
+            )
+        }
         // Growth and the one-row → multi-line morph both want to track the
         // text rather than ease behind it — a snappy, short spring so a fast
         // typist never sees the box lagging the caret.

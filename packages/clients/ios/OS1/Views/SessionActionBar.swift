@@ -61,14 +61,11 @@ struct SessionActionBar: View {
                 .padding(.horizontal, 2)
                 .fixedSize()
                 .clipShape(Capsule())
-                // Clear Liquid Glass keeps these secondary actions lighter
-                // than the solid writing surface directly below. Lower only
-                // the surface opacity so the controls remain crisp.
-                .background {
-                    Color.clear
-                        .glassEffect(.clear, in: Capsule())
-                        .opacity(0.72)
-                }
+                // Regular Liquid Glass keeps these secondary actions floating
+                // above the solid writing surface without flattening either.
+                // It remains a sibling so the menu label never enters the
+                // glass subtree and cannot become its morph source.
+                .background { Color.clear.glassSurface(in: Capsule()) }
                 .frame(maxWidth: .infinity)
                 .padding(.bottom, 6)
                 .transition(
