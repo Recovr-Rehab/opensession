@@ -1,12 +1,18 @@
 import React, { useState } from "react";
 import { useOrganizationName } from "../hooks/useOrganizationIcon";
 import { APP_LOGO_STATUS } from "../lib/app-header-classes";
+import { BASE_PATH } from "../lib/base";
 import { SIDEBAR_RAIL_GAP } from "../lib/sidebar-classes";
+import { Button } from "../ui/button";
 import { Menu, MENU_ICON } from "../ui/menu";
+import { Modal } from "../ui/modal";
+import { toast } from "../ui/toast";
 import { IconTile } from "./BrandTile";
 import { setupRequest } from "./setup-shared";
+import { GithubMemberDialog } from "./SetupTeam";
 import {
 	IconChevronDown,
+	IconCopy,
 	IconGear,
 	IconPeople,
 	IconPlus,
@@ -55,6 +61,9 @@ export function OrganizationSwitcher({
 	]);
 	const [activeId, setActiveId] = useState(fallbackId);
 	const [memberCount, setMemberCount] = useState<number | null>(null);
+	const [inviteOpen, setInviteOpen] = useState(false);
+	const [invitedLogin, setInvitedLogin] = useState<string | null>(null);
+	const [copied, setCopied] = useState(false);
 	const status = connected ? "Connected" : "Reconnecting…";
 
 	function loadMenu() {
@@ -72,8 +81,20 @@ export function OrganizationSwitcher({
 
 	const subtitle = `${status}${memberCount === null ? "" : ` · ${memberCount} ${memberCount === 1 ? "member" : "members"}`}`;
 	const itemClass = "phone:min-h-11";
+	const organizationUrl = `${window.location.origin}${BASE_PATH}/`;
+
+	async function copyOrganizationLink() {
+		try {
+			await navigator.clipboard.writeText(organizationUrl);
+			setCopied(true);
+			toast("Organization link copied", { variant: "success" });
+		} catch {
+			toast("Couldn’t copy the organization link", { variant: "error" });
+		}
+	}
 
 	return (
+		<>
 		<Menu.Root onOpenChange={(open) => open && loadMenu()}>
 			<Menu.Trigger
 				className={`group flex w-full items-center ${SIDEBAR_RAIL_GAP} rounded-row bg-transparent px-[calc(var(--sidebar-icon-left)-var(--sidebar-nav-x))] py-[var(--sidebar-tool-pad)] text-left text-body font-medium text-fg transition-[background-color,scale] hover:bg-hover active:scale-[0.96] phone:py-[13px] desktop:text-item-title motion-reduce:transform-none`}
@@ -119,6 +140,10 @@ export function OrganizationSwitcher({
 				<Menu.Item className={itemClass} onClick={() => onOpenSettings("general")}>
 					<IconGear size={19} className={MENU_ICON} />
 					<span className="min-w-0 flex-1 truncate">Settings</span>
+				</Menu.Item>
+				<Menu.Item className={itemClass} onClick={() => setInviteOpen(true)}>
+					<IconPlus size={19} className={MENU_ICON} />
+					<span className="min-w-0 flex-1 truncate">Invite member</span>
 				</Menu.Item>
 				<Menu.Item className={itemClass} onClick={() => onOpenSettings("members")}>
 					<IconPeople size={19} className={MENU_ICON} />
@@ -183,5 +208,46 @@ export function OrganizationSwitcher({
 				</Menu.Group>
 			</Menu.Popup>
 		</Menu.Root>
+		<GithubMemberDialog
+			open={inviteOpen}
+			onOpenChange={setInviteOpen}
+			title="Invite member"
+			actionLabel="Invite member"
+			onSaved={(login) => {
+				setInviteOpen(false);
+				setInvitedLogin(login);
+				setCopied(false);
+				setMemberCount((count) => (count === null ? count : count + 1));
+			}}
+		/>
+		<Modal.Root
+			open={invitedLogin !== null}
+			onOpenChange={(open) => {
+				if (!open) setInvitedLogin(null);
+			}}
+		>
+			<Modal.Content>
+				<Modal.Header
+					title="Member added"
+					description={`@${invitedLogin || "member"} can now sign in to ${name} with GitHub.`}
+				/>
+				<div className="truncate rounded-control bg-panel px-3 py-2 text-control-label text-dim">
+					{organizationUrl}
+				</div>
+				<Modal.Footer>
+					<Button variant="ghost" onClick={() => setInvitedLogin(null)}>
+						Done
+					</Button>
+					<Button
+						variant="primary"
+						icon={<IconCopy size={18} />}
+						onClick={() => void copyOrganizationLink()}
+					>
+						{copied ? "Copied" : "Copy invite link"}
+					</Button>
+				</Modal.Footer>
+			</Modal.Content>
+		</Modal.Root>
+		</>
 	);
 }

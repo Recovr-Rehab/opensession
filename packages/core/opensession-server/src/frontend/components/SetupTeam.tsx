@@ -298,14 +298,18 @@ function MemberActions({
 	);
 }
 
-function GithubMemberDialog({
+export function GithubMemberDialog({
 	open,
 	onOpenChange,
 	onSaved,
+	title = "Add member",
+	actionLabel = "Add member",
 }: {
 	open: boolean;
 	onOpenChange: (open: boolean) => void;
-	onSaved: () => void | Promise<void>;
+	onSaved: (github: string) => void | Promise<void>;
+	title?: string;
+	actionLabel?: string;
 }) {
 	const [github, setGithub] = useState("");
 	const [saving, setSaving] = useState(false);
@@ -334,7 +338,7 @@ function GithubMemberDialog({
 				json: { name: login, github: login },
 			});
 			toast(`@${login} added`);
-			await onSaved();
+			await onSaved(login);
 		} catch (cause: any) {
 			setError(cause?.message || "Could not add member");
 		} finally {
@@ -352,7 +356,7 @@ function GithubMemberDialog({
 		>
 			<Modal.Content initialFocus={githubRef}>
 				<Modal.Header
-					title="Add member"
+					title={title}
 					description="They can sign in with this GitHub account."
 				/>
 				<form className="flex flex-col gap-3" onSubmit={submit}>
@@ -379,7 +383,7 @@ function GithubMemberDialog({
 							Cancel
 						</Button>
 						<Button variant="primary" type="submit" disabled={!github.trim() || saving}>
-							{saving ? "Adding…" : "Add member"}
+							{saving ? "Adding…" : actionLabel}
 						</Button>
 					</Modal.Footer>
 				</form>
