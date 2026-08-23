@@ -89,6 +89,16 @@ function modalConfig(): ReturnType<typeof sandboxConfig> {
   };
 }
 
+function modalArtifactNotFound(error: unknown): boolean {
+  const detail = error as { name?: string; status?: number; statusCode?: number; message?: string };
+  return (
+    detail?.name === "NotFoundError" ||
+    detail?.status === 404 ||
+    detail?.statusCode === 404 ||
+    /(?:image|artifact).{0,30}not.?found/i.test(detail?.message || "")
+  );
+}
+
 function memoryMiB(value: string | undefined): number | undefined {
   if (!value) return undefined;
   const match = value.trim().match(/^(\d+(?:\.\d+)?)([kmg])b?$/i);
@@ -123,24 +133,54 @@ async function modalClient(): Promise<ModalClient> {
   return client;
 }
 
+async function withModalControlDeadline<T>(
+  operation: Promise<T>,
+  timeoutMs: number,
+  label: string,
+): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  try {
+    return await Promise.race([
+      operation,
+      new Promise<never>((_, reject) => {
+        timer = setTimeout(
+          () => reject(new Error(`${label} did not settle within ${timeoutMs}ms`)),
+          timeoutMs,
+        );
+      }),
+    ]);
+  } finally {
+    if (timer) clearTimeout(timer);
+  }
+}
+
 function modalDriver(sandbox: ModalSandbox): RemoteDriver {
   return {
     async exec(cmd: string, opts?: RemoteExecOpts) {
+      const timeoutMs = opts?.timeoutMs ?? 120_000;
       try {
         // A login shell runs Modal's image profile hooks, which emit OSC
         // terminal-title sequences even without a PTY. Those bytes corrupt
         // machine-readable stdout (and once poisoned a sourced `.ports.conf`).
-        const process = await sandbox.exec(["sh", "-c", cmd], {
-          workdir: opts?.cwd,
-          env: opts?.env,
-          timeoutMs: opts?.timeoutMs ?? 120_000,
-          pty: false,
-        });
-        const [stdout, stderr, exitCode] = await Promise.all([
-          process.stdout.readText(),
-          process.stderr.readText(),
-          process.wait(),
-        ]);
+        const process = await withModalControlDeadline(
+          sandbox.exec(["sh", "-c", cmd], {
+            workdir: opts?.cwd,
+            env: opts?.env,
+            timeoutMs,
+            pty: false,
+          }),
+          Math.min(timeoutMs, 30_000),
+          "Modal exec launch",
+        );
+        const [stdout, stderr, exitCode] = await withModalControlDeadline(
+          Promise.all([
+            process.stdout.readText(),
+            process.stderr.readText(),
+            process.wait(),
+          ]),
+          timeoutMs + 5_000,
+          "Modal exec stream",
+        );
         return { exitCode, stdout, stderr };
       } catch (e: any) {
         return { exitCode: 1, stdout: "", stderr: String(e?.message || e) };
@@ -148,29 +188,41 @@ function modalDriver(sandbox: ModalSandbox): RemoteDriver {
     },
 
     async execBackground(cmd: string, opts?: RemoteExecOpts) {
-      await sandbox.exec(["sh", "-c", cmd], {
-        workdir: opts?.cwd,
-        env: opts?.env,
-        pty: false,
-      });
+      // Modal's exec timeout is the child lifetime, while RemoteDriver's
+      // timeout is the launch deadline. Keep the detached process alive for
+      // the sandbox lifetime, but never let a wedged control stream block the
+      // coordinator. Discard output because callers receive no process handle.
+      await withModalControlDeadline(
+        sandbox.exec(["sh", "-c", `( ${cmd}\n) >/dev/null 2>&1`], {
+          workdir: opts?.cwd,
+          env: opts?.env,
+          timeoutMs: MAX_LIFETIME_MS,
+          pty: false,
+        }),
+        opts?.timeoutMs ?? 30_000,
+        "Modal background exec launch",
+      );
     },
 
     async writeFile(path: string, content: string) {
       // modal@0.9's filesystem.writeText uses ReadableStream.from, which Bun
-      // does not implement. Stream through the process stdin instead.
-      const process = await sandbox.exec([
-        "sh",
-        "-c",
-        `mkdir -p $(dirname ${shellQuoteWord(path)}) && cat > ${shellQuoteWord(path)}`,
-      ], { pty: false });
-      await process.stdin.writeText(content);
-      await process.stdin.close();
-      const exitCode = await process.wait();
-      if (exitCode !== 0) {
-        throw new Error(
-          `modal writeFile(${path}) failed: ${(await process.stderr.readText()).slice(0, 300)}`,
-        );
-      }
+      // does not implement. Stream through process stdin with a local control
+      // deadline so a broken stdio channel cannot wedge all later launches.
+      await withModalControlDeadline((async () => {
+        const process = await sandbox.exec([
+          "sh",
+          "-c",
+          `mkdir -p $(dirname ${shellQuoteWord(path)}) && cat > ${shellQuoteWord(path)}`,
+        ], { pty: false, timeoutMs: 60_000 });
+        await process.stdin.writeText(content);
+        await process.stdin.close();
+        const exitCode = await process.wait();
+        if (exitCode !== 0) {
+          throw new Error(
+            `modal writeFile(${path}) failed: ${(await process.stderr.readText()).slice(0, 300)}`,
+          );
+        }
+      })(), 65_000, `Modal writeFile(${path})`);
     },
 
     async ensureStarted() {
@@ -208,26 +260,31 @@ export class ModalProvider implements SandboxProvider {
 
     let sandbox: ModalSandbox | null = null;
     let created = false;
-    try {
-      for await (const candidate of client.sandboxes.list({
-        appId: app.appId,
-        tags: { [SESSION_TAG]: spec.sessionId },
-      })) {
-        // Modal keeps completed sandboxes in tag listings. Adopting one makes
-        // every later exec fail and bypasses the retained session checkpoint.
-        if ((await candidate.poll()) === null) {
-          sandbox = candidate;
-          break;
-        }
-      }
-    } catch (e) {
-      console.warn("[sandbox:modal] tag lookup failed (will use local state/create):", e);
-    }
-    if (!sandbox && prevState) {
+    // The durable O(1) id is the normal path. Modal retains completed
+    // sandboxes in tag listings, so scanning and polling every historical
+    // match first made follow-ups progressively slower.
+    if (prevState) {
       try {
         const candidate = await client.sandboxes.fromId(prevState.sandboxId);
         if ((await candidate.poll()) === null) sandbox = candidate;
       } catch {}
+    }
+    if (!sandbox) {
+      try {
+        for await (const candidate of client.sandboxes.list({
+          appId: app.appId,
+          tags: { [SESSION_TAG]: spec.sessionId },
+        })) {
+          // Modal keeps completed sandboxes in tag listings. Adopting one makes
+          // every later exec fail and bypasses the retained session checkpoint.
+          if ((await candidate.poll()) === null) {
+            sandbox = candidate;
+            break;
+          }
+        }
+      } catch (e) {
+        console.warn("[sandbox:modal] tag lookup failed (will create/restore):", e);
+      }
     }
     if (sandbox && prevState && sandbox.sandboxId !== prevState.sandboxId) {
       removeRemoteState(this.id, prevState.sandboxId);
@@ -244,6 +301,7 @@ export class ModalProvider implements SandboxProvider {
     ) {
       await this.checkpoint(sandbox.sandboxId);
       prevState = findRemoteStateBySession(this.id, spec.sessionId);
+      await sandbox.setTags({ "opensession.completed": spec.sessionId }).catch(() => {});
       await sandbox.terminate();
       removeRemoteState(this.id, sandbox.sandboxId);
       sandbox = null;
@@ -300,6 +358,7 @@ export class ModalProvider implements SandboxProvider {
       try {
         sandbox = await create(checkpointArtifactId || template?.artifactId);
       } catch (error) {
+        if (!modalArtifactNotFound(error)) throw error;
         if (checkpointArtifactId) {
           restoredCheckpoint = false;
           await client.images.delete(checkpointArtifactId).catch(() => {});
@@ -309,7 +368,7 @@ export class ModalProvider implements SandboxProvider {
           try {
             sandbox = await create(template?.artifactId);
           } catch (templateError) {
-            if (!template) throw templateError;
+            if (!template || !modalArtifactNotFound(templateError)) throw templateError;
             invalidateRemoteRepoTemplate("modal", repo.id);
             sandbox = await create();
           }
@@ -474,6 +533,7 @@ export class ModalProvider implements SandboxProvider {
     const client = await modalClient();
     try {
       const sandbox = await client.sandboxes.fromId(sandboxId);
+      await sandbox.setTags({ "opensession.completed": state?.sessionId || sandboxId }).catch(() => {});
       await sandbox.terminate();
     } catch (e) {
       console.warn(`[sandbox:modal] destroy(${sandboxId}):`, e);
@@ -525,7 +585,7 @@ export const modalPrewarmAdapter: PrewarmAdapter = {
     try {
       sandbox = await create(template?.artifactId);
     } catch (error) {
-      if (!template) throw error;
+      if (!template || !modalArtifactNotFound(error)) throw error;
       invalidateRemoteRepoTemplate("modal", repoId);
       restoredFromTemplate = false;
       sandbox = await create();
@@ -558,6 +618,7 @@ export const modalPrewarmAdapter: PrewarmAdapter = {
     try {
       const client = await modalClient();
       const sandbox = await client.sandboxes.fromId(sandboxId);
+      await sandbox.setTags({ "opensession.completed": sandboxId }).catch(() => {});
       await sandbox.terminate();
     } catch (error) {
       if ((error as { name?: string })?.name !== "NotFoundError") {

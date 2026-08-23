@@ -262,7 +262,10 @@ function prewarmSignature(provider: string, resources?: SandboxMachineSettings):
   return `${bootstrapSignature()}|${shape}|${JSON.stringify(resources || {})}`;
 }
 
-const TRANSIENT_PREWARM_ERROR = /HTTP (?:429|5\d\d)|timed? ?out|timeout|temporar|connection|socket|transport|ECONNRESET|EPIPE/i;
+// 429 is intentionally excluded: a blind 0.5–1s retry cannot clear provider
+// start quotas and can consume more of them. Environment maintenance owns the
+// persisted, provider-aware backoff instead.
+const TRANSIENT_PREWARM_ERROR = /HTTP 5\d\d|timed? ?out|timeout|temporar|connection|socket|transport|ECONNRESET|EPIPE/i;
 
 async function retryTransientPrewarmStep<T>(label: string, run: () => Promise<T>): Promise<T> {
   let last: unknown;
@@ -600,7 +603,11 @@ async function runPrewarmBootstrap(record: PrewarmRecord, adapter: PrewarmAdapte
           setPrewarmStage(entry, "Cloning project and running setup", 55);
           const { warmRemoteWorkspace } = await import("./adapters/bootstrap");
           const prepared = await warmRemoteWorkspace(driver, repo, `${entry.provider}-prewarm`, {
-            installDeps: warm,
+            // A repository setup hook owns the exact dependency/build recipe
+            // for reusable templates. Running a second generic root install
+            // can rewrite bun.lock after setup and makes the sealed workspace
+            // dirty. Legacy non-template prewarms keep their old behavior.
+            installDeps: adapter.publishTemplate ? false : warm,
             runSetup: true,
             identity: {
               sandboxId: entry.sandboxId || `prewarm:${entry.key}`,
