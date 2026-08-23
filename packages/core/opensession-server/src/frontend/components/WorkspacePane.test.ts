@@ -142,6 +142,11 @@ test("sidebar Changes shares Review's code display options", () => {
 	expect(diffPanelSource).toContain(
 		"codeTheme={codeDisplaySettings.codeTheme}",
 	);
+	expect(diffPanelSource).toContain(
+		"stickyFileHeaders={toolbarTarget === undefined}",
+	);
+	expect(diffPanelSource).toContain("--review-file-header-top");
+	expect(viewerSource).toContain("--diff-panel-top");
 	expect(codeDisplaySource).toContain('label="Wrap lines"');
 	expect(codeDisplaySource).toContain('value="split"');
 	expect(codeDisplaySource).toContain('value="unified"');
