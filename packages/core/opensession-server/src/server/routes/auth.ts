@@ -118,7 +118,7 @@ export async function handleAuthRoutes(
 			removeGithubAccount(result.login);
 			return Response.json({
 				status: "error",
-				error: `GitHub account @${result.login} is not on the configured team (identity.team)`,
+				error: `GitHub account @${result.login} is not a workspace member. Add it in Settings > Members before enabling sign-in.`,
 			});
 		}
 		const session = createWebSession(result.login);
