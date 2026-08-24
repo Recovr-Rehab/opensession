@@ -16,7 +16,7 @@ import { TeamSection } from "./SetupTeam";
 import { UserAvatar } from "./UserAvatar";
 import { OrganizationProfileSection } from "./settings/GeneralPanel";
 import { ProviderAccountsSection } from "./settings/ModelAccounts";
-import { IconCheck, IconChevronLeft, IconRepo } from "./icons";
+import { IconCheck, IconChevronLeft, IconGlobe, IconRepo } from "./icons";
 import { githubAuthState, type SetupStatus } from "./setup-shared";
 
 interface FirstMileStep {
@@ -118,6 +118,10 @@ function FirstMileSummary({
 	onSelect: (step: FirstMileStep["id"]) => void;
 }) {
 	const github = githubAuthState(status.github);
+	let serverHost = status.publicBaseUrl;
+	try {
+		serverHost = new URL(status.publicBaseUrl).host;
+	} catch {}
 	let githubOrganization = status.github.appOrg || "";
 	if (!githubOrganization) {
 		try {
@@ -137,6 +141,20 @@ function FirstMileSummary({
 		})),
 	];
 	const tiles = [
+		{
+			title: "Server",
+			step: null,
+			ready: true,
+			label: "Online",
+			preview: (
+				<div className="flex max-w-full items-center gap-1.5 rounded-full bg-bg/65 py-1 pr-2 pl-1 text-meta font-medium text-fg">
+					<span className="flex size-6 shrink-0 items-center justify-center rounded-full bg-bg/85 text-dim">
+						<IconGlobe size={15} />
+					</span>
+					<span className="truncate">{serverHost}</span>
+				</div>
+			),
+		},
 		{
 			title: "GitHub",
 			step: "github" as const,
@@ -225,41 +243,55 @@ function FirstMileSummary({
 	];
 
 	return (
-		<div className="grid grid-cols-4 gap-3 phone:grid-cols-2">
-			{tiles.map((tile) => (
-				<button
-					type="button"
-					key={tile.title}
-					onClick={() => onSelect(tile.step)}
-					aria-label={`Edit ${tile.title}`}
-					className={cn(
-						"focus-ring flex aspect-square min-w-0 cursor-pointer flex-col justify-between rounded-2xl border p-4 text-left backdrop-blur-xl transition-[transform,filter] duration-150 hover:brightness-[0.98] active:scale-[0.96] motion-reduce:transform-none phone:rounded-xl phone:p-3.5",
-						tile.ready
-							? "border-transparent bg-green-soft shadow-[inset_0_1px_0_color-mix(in_srgb,white_45%,transparent),0_12px_28px_-24px_color-mix(in_srgb,var(--green)_45%,transparent)]"
-							: "border-divider-soft bg-settings-plate/65",
-					)}
-				>
-					<div className="flex min-w-0 items-start justify-between gap-2">
-						<div className="min-w-0">{tile.preview}</div>
-						<div
-							className={cn(
-								"flex size-8 shrink-0 items-center justify-center rounded-full",
-								tile.ready ? "bg-bg/60 text-green" : "bg-faint/10 text-faint",
-							)}
-						>
-							{tile.ready ? (
-								<IconCheck size={18} />
-							) : (
-								<span className="size-2 rounded-full bg-current" />
-							)}
+		<div className="grid grid-cols-5 gap-3 phone:grid-cols-2">
+			{tiles.map((tile) => {
+				const className = cn(
+					"flex aspect-square min-w-0 flex-col justify-between rounded-2xl border p-4 text-left backdrop-blur-xl phone:rounded-xl phone:p-3.5",
+					tile.step &&
+						"focus-ring cursor-pointer transition-[transform,filter] duration-150 hover:brightness-[0.98] active:scale-[0.96] motion-reduce:transform-none",
+					tile.ready
+						? "border-transparent bg-green-soft shadow-[inset_0_1px_0_color-mix(in_srgb,white_45%,transparent),0_12px_28px_-24px_color-mix(in_srgb,var(--green)_45%,transparent)]"
+						: "border-divider-soft bg-settings-plate/65",
+				);
+				const content = (
+					<>
+						<div className="flex min-w-0 items-start justify-between gap-2">
+							<div className="min-w-0">{tile.preview}</div>
+							<div
+								className={cn(
+									"flex size-8 shrink-0 items-center justify-center rounded-full",
+									tile.ready ? "bg-bg/60 text-green" : "bg-faint/10 text-faint",
+								)}
+							>
+								{tile.ready ? (
+									<IconCheck size={18} />
+								) : (
+									<span className="size-2 rounded-full bg-current" />
+								)}
+							</div>
 						</div>
+						<div className="min-w-0">
+							<div className="text-item-title font-semibold text-fg">{tile.title}</div>
+							<div className="mt-1 text-supporting leading-snug text-dim">{tile.label}</div>
+						</div>
+					</>
+				);
+				return tile.step ? (
+					<button
+						type="button"
+						key={tile.title}
+						onClick={() => onSelect(tile.step)}
+						aria-label={`Edit ${tile.title}`}
+						className={className}
+					>
+						{content}
+					</button>
+				) : (
+					<div key={tile.title} className={className}>
+						{content}
 					</div>
-					<div className="min-w-0">
-						<div className="text-item-title font-semibold text-fg">{tile.title}</div>
-						<div className="mt-1 text-supporting leading-snug text-dim">{tile.label}</div>
-					</div>
-				</button>
-			))}
+				);
+			})}
 		</div>
 	);
 }
