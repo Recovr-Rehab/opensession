@@ -709,8 +709,9 @@ struct SessionView: View {
                     PresenceFacepile(viewers: viewModel.otherViewers, size: 24)
                 }
             }
-            // Keep the PR action at the trailing edge on both platforms,
-            // preserving the full related-PR series when there is more than one.
+            #if os(macOS)
+            // macOS retains the PR chip in its roomier toolbar; on iOS the
+            // same series lives in the title-opened workspace sheet.
             let prRows = SessionPrSeries.rows(for: viewModel.session)
             let primaryPrNumber = viewModel.prDetails?.number ?? viewModel.session.prNumber
             if let chipRow = prRows.first {
@@ -755,7 +756,6 @@ struct SessionView: View {
                     }
                 }
             }
-            #if os(macOS)
             ToolbarItem(placement: .principal) { macSessionTitle }
             if !workspaceHistoryRows.isEmpty, onRestoreArchivedSession != nil {
                 ToolbarItem(placement: .topTrailingCompat) {
@@ -1108,19 +1108,15 @@ struct SessionView: View {
 
     #if os(iOS)
     /// Use the principal lane for its flexible width, but anchor the title at
-    /// the lane's leading edge so Back, title and PR read left-to-right with
-    /// clear space between all three controls.
+    /// its leading edge so it follows Back and can consume the open right side.
     private var sessionHeaderLane: some View {
-        HStack(spacing: 0) {
-            sessionIdentityButton
-            Spacer(minLength: 0)
-        }
-        .frame(width: sessionHeaderLaneWidth)
+        sessionIdentityButton
+            .frame(width: sessionHeaderLaneWidth, alignment: .leading)
     }
 
     private var sessionHeaderLaneWidth: CGFloat {
         let surfaceWidth = viewportWidth > 0 ? viewportWidth : 390
-        return min(560, max(200, surfaceWidth - 180))
+        return min(560, max(200, surfaceWidth - 160))
     }
 
     /// Mobile web opens workspace details when its title is tapped. Keep the
@@ -1164,7 +1160,7 @@ struct SessionView: View {
             .contentShape(Capsule())
         }
         // Opt this custom identity control into the same Liquid Glass style as
-        // the system Back button and trailing PR action.
+        // the system Back button.
         .buttonStyle(.glass)
         .buttonBorderShape(.capsule)
         .controlSize(.small)
@@ -1175,10 +1171,7 @@ struct SessionView: View {
 
     private var sessionIdentityWidth: CGFloat {
         let surfaceWidth = viewportWidth > 0 ? viewportWidth : 390
-        let hasPullRequest =
-            viewModel.prDetails?.number != nil || viewModel.session.prNumber != nil
-        let trailingReserve: CGFloat = hasPullRequest ? 210 : 148
-        return min(360, max(128, surfaceWidth - trailingReserve))
+        return min(360, max(128, surfaceWidth - 120))
     }
     #endif
 
@@ -1207,8 +1200,16 @@ struct SessionView: View {
     }
 
     private var headerSubtitle: String {
-        let label = catalog?.label(for: currentModel) ?? currentModel
-        return [RepoTile.label(for: viewModel.session.effectiveRepo), label]
+        let repo = RepoTile.label(for: viewModel.session.effectiveRepo)
+        let model = catalog?.label(for: currentModel) ?? currentModel
+        let prNumber = viewModel.prDetails?.number ?? viewModel.session.prNumber
+        let repoAndPR: String
+        if let prNumber {
+            repoAndPR = repo.isEmpty ? "PR #\(prNumber)" : "PR \(repo)#\(prNumber)"
+        } else {
+            repoAndPR = repo
+        }
+        return [repoAndPR, model]
             .filter { !$0.isEmpty }
             .joined(separator: " · ")
     }
