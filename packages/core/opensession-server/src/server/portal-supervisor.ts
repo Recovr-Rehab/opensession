@@ -229,7 +229,12 @@ async function listPortals(ops: PortalOps): Promise<PortalRecord[]> {
 		if (record.state === "stopped" || record.state === "failed") return record;
 		const listening = await ops.probePort(record.port);
 		const alive = await ops.pidAlive(record.pid);
-		const state: PortalState = listening ? "awake" : alive ? "starting" : "failed";
+		// "pid alive but not listening" only means starting while the Portal has
+		// never been awake. Once it WAS awake, losing the listener is a crash even
+		// when a wrapper (just/concurrently) survives its dead dev server —
+		// otherwise the record ghosts as an eternal "starting" stub: invisible as
+		// a live Portal, yet blocking every new start with "already exists".
+		const state: PortalState = listening ? "awake" : alive && record.state !== "awake" ? "starting" : "failed";
 		if (state === record.state) return record;
 		changed = true;
 		return { ...record, state, ...(state === "failed" ? { lastError: "The service is no longer listening." } : {}) };
@@ -270,6 +275,10 @@ async function startPortal(ops: PortalOps, input: {
 		if (current.state === "awake" && sameService) return { ...current, url: input.urlFor(current.port) };
 		throw new Error(`Portal '${name}' already exists. Restart it instead.`);
 	}
+	// A dead record can leave its process group behind (a crashed dev server's
+	// wrapper, watchers, lock holders). Reap it before starting anew so the
+	// fresh start does not collide with orphaned ReScript/Next processes.
+	if (current) await terminatePortalProcess(ops, current.pid);
 	const port = input.port == null ? await input.allocatePort(records) : validatePort(input.port);
 	if (records.some((record) => record.name !== name && record.port === port) || await ops.probePort(port)) throw new Error(`Port ${port} is already in use.`);
 	await input.qualifyPort?.(port, records);
