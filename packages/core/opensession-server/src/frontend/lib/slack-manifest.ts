@@ -2,8 +2,8 @@
  * The Slack app manifest this instance needs, generated from its own config.
  *
  * Setting Slack up by hand is the longest walk in the whole Setup page: create
- * an app, tick seventeen bot scopes one at a time, subscribe to four event
- * types, paste two request URLs, enable interactivity. Every one of those is
+ * an app, tick every bot scope one at a time, subscribe to each event type,
+ * paste two request URLs, enable interactivity. Every one of those is
  * something we already know — the scopes come from the Web API methods the
  * agent calls, the URLs from the instance's own webhook base — so the person
  * should not be transcribing them.
@@ -40,6 +40,10 @@ export const SLACK_SCOPE_GROUPS: { label: string; items: string[] }[] = [
 		items: ["channels:history", "groups:history", "im:history", "mpim:history"],
 	},
 	{
+		label: "Events and links",
+		items: ["app_mentions:read", "links:read", "links:write"],
+	},
+	{
 		label: "Channels and people",
 		items: [
 			"channels:read",
@@ -64,6 +68,7 @@ export const SLACK_BOT_SCOPES: string[] = SLACK_SCOPE_GROUPS.flatMap(
 export const SLACK_BOT_EVENTS: string[] = [
 	"app_mention",
 	"assistant_thread_started",
+	"link_shared",
 	"message.channels",
 	"message.groups",
 	"message.im",
@@ -71,8 +76,10 @@ export const SLACK_BOT_EVENTS: string[] = [
 ];
 
 export interface SlackManifestOptions {
-	/** Instance webhook base, e.g. https://os.example.ts.net. Only used by the
-	 *  HTTP transport; Socket Mode never needs a reachable address. */
+	/** Public UI base whose hostname Slack watches for session-link unfurls. */
+	publicBaseUrl: string;
+	/** Instance webhook base, e.g. https://hooks.example.com. Only used by the
+	 *  HTTP transport; Socket Mode never needs a reachable webhook address. */
 	webhookBaseUrl: string;
 	transport: SlackTransport;
 	/** App and bot display name. Slack caps the app name at 35 characters and
@@ -95,6 +102,10 @@ function actionsUrl(webhookBaseUrl: string): string {
 	return `${webhookBaseUrl.replace(/\/$/, "")}/slack/actions`;
 }
 
+function publicHostname(publicBaseUrl: string): string {
+	return new URL(publicBaseUrl).hostname;
+}
+
 /**
  * The manifest object. Shape follows Slack's app-manifest schema; anything we
  * do not use is left out rather than written as a default, so the generated
@@ -103,7 +114,7 @@ function actionsUrl(webhookBaseUrl: string): string {
 export function buildSlackManifest(
 	options: SlackManifestOptions,
 ): Record<string, unknown> {
-	const { webhookBaseUrl, transport } = options;
+	const { publicBaseUrl, webhookBaseUrl, transport } = options;
 	const appName = clampName(options.appName, 35);
 	const socket = transport === "socket";
 	return {
@@ -113,6 +124,7 @@ export function buildSlackManifest(
 			background_color: "#4a154b",
 		},
 		features: {
+			unfurl_domains: [publicHostname(publicBaseUrl)],
 			bot_user: {
 				display_name: clampName(appName, 80),
 				always_online: true,

@@ -7,16 +7,20 @@ import {
 	slackManifestJson,
 } from "./slack-manifest";
 
-const base = { webhookBaseUrl: "https://os.example.ts.net", appName: "Open Session" };
+const base = {
+	publicBaseUrl: "https://os.example.ts.net",
+	webhookBaseUrl: "https://hooks.example.ts.net",
+	appName: "Open Session",
+};
 
 describe("buildSlackManifest", () => {
 	test("HTTP transport carries both request URLs", () => {
 		const manifest = buildSlackManifest({ ...base, transport: "http" }) as any;
 		expect(manifest.settings.event_subscriptions.request_url).toBe(
-			"https://os.example.ts.net/slack/events",
+			"https://hooks.example.ts.net/slack/events",
 		);
 		expect(manifest.settings.interactivity.request_url).toBe(
-			"https://os.example.ts.net/slack/actions",
+			"https://hooks.example.ts.net/slack/actions",
 		);
 		expect(manifest.settings.socket_mode_enabled).toBe(false);
 	});
@@ -34,11 +38,11 @@ describe("buildSlackManifest", () => {
 	test("a trailing slash on the base URL does not double up", () => {
 		const manifest = buildSlackManifest({
 			...base,
-			webhookBaseUrl: "https://os.example.ts.net/",
+			webhookBaseUrl: "https://hooks.example.ts.net/",
 			transport: "http",
 		}) as any;
 		expect(manifest.settings.event_subscriptions.request_url).toBe(
-			"https://os.example.ts.net/slack/events",
+			"https://hooks.example.ts.net/slack/events",
 		);
 	});
 
@@ -51,6 +55,23 @@ describe("buildSlackManifest", () => {
 		expect(SLACK_BOT_SCOPES).toContain("files:write");
 		expect(SLACK_BOT_SCOPES).toContain("assistant:write");
 		expect(new Set(SLACK_BOT_SCOPES).size).toBe(SLACK_BOT_SCOPES.length);
+	});
+
+	test("subscribing to app mentions also grants their required scope", () => {
+		expect(SLACK_BOT_EVENTS).toContain("app_mention");
+		expect(SLACK_BOT_SCOPES).toContain("app_mentions:read");
+	});
+
+	test("session-link unfurls include their event, scopes, and public UI domain", () => {
+		const manifest = buildSlackManifest({
+			...base,
+			publicBaseUrl: "https://app.example.com:8443/sessions",
+			transport: "socket",
+		}) as any;
+		expect(SLACK_BOT_EVENTS).toContain("link_shared");
+		expect(SLACK_BOT_SCOPES).toContain("links:read");
+		expect(SLACK_BOT_SCOPES).toContain("links:write");
+		expect(manifest.features.unfurl_domains).toEqual(["app.example.com"]);
 	});
 
 	test("names are clamped to Slack's 35-character app-name limit", () => {
@@ -79,7 +100,7 @@ describe("slackCreateAppUrl", () => {
 		expect(url.searchParams.get("new_app")).toBe("1");
 		const parsed = JSON.parse(url.searchParams.get("manifest_json") || "{}");
 		expect(parsed.settings.event_subscriptions.request_url).toBe(
-			"https://os.example.ts.net/slack/events",
+			"https://hooks.example.ts.net/slack/events",
 		);
 	});
 });

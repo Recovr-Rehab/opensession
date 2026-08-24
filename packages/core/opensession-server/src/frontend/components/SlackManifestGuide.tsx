@@ -1,7 +1,7 @@
 import { Button } from "../ui/button";
 import { CopyCheck, useCopy } from "../ui/copy";
 import { Disclosure } from "../ui/disclosure";
-import { PRODUCT_NAME, WEBHOOK_BASE_URL } from "../lib/brand";
+import { PRODUCT_NAME, PUBLIC_BASE_URL, WEBHOOK_BASE_URL } from "../lib/brand";
 import {
 	slackCreateAppUrl,
 	slackManifestJson,
@@ -16,6 +16,7 @@ import { IconCopy } from "./icons";
  */
 export function SlackManifestGuide({ transport }: { transport: SlackTransport }) {
 	const options = {
+		publicBaseUrl: PUBLIC_BASE_URL,
 		webhookBaseUrl: WEBHOOK_BASE_URL,
 		transport,
 		appName: PRODUCT_NAME,
