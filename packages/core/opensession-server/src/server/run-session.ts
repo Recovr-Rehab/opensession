@@ -352,10 +352,17 @@ export function requestTurnCancel(
     source: request.source,
     ...(request.user ? { user: request.user } : {}),
   });
-  settleCreationOpeningForStop(sessionId);
-  stoppedSessions.add(sessionId);
-  persistQueues();
-  broadcastQueue(sessionId);
+  // The durable Stop committed above must not be undone by a concurrent
+  // creation settlement racing this read: terminal settlements are idempotent
+  // (see settleCreationCancelled), so only genuine invariant failures throw.
+  // Bookkeeping below always runs, even when the error propagates.
+  try {
+    settleCreationOpeningForStop(sessionId);
+  } finally {
+    stoppedSessions.add(sessionId);
+    persistQueues();
+    broadcastQueue(sessionId);
+  }
   return { requeued: requeued.length };
 }
 

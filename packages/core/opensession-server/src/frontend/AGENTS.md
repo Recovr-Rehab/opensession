@@ -198,10 +198,13 @@ layout from regressing once it exists.
 
 ## React and verification
 
-- Follow the existing React 19 patterns. Do not add `useMemo` or `useCallback`
-  by default; no React Compiler is configured in the build (Bun.build in
-  frontend-build.ts has no compiler plugin), so memoize manually — and only
-  where a measured re-render cost justifies it.
+- Follow the existing React 19 patterns. The build runs the React Compiler
+  (oxc Rust port, wired as a Bun plugin in `frontend-build.ts`), so components
+  and hooks are auto-memoized: do not add `useMemo`, `useCallback`, or
+  `React.memo` at all — including in new code — unless you have measured a
+  case the compiler cannot see. A function carrying `"use no memo"` opts out.
+  Note the compiler only runs on the prod/release bundle; Bun's dev HMR server
+  has no plugin hook, so dev serves uncompiled sources.
 - Keep component files component-only: put non-component helpers/constants in
   `lib/` or `ui/` modules, because mixed component+helper exports disqualify a
   module from React Fast Refresh and downgrade every edit to a full page
