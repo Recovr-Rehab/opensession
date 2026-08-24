@@ -16,8 +16,8 @@ import {
 } from "../../core/opensession-server/src/frontend/components/icons";
 import "./site.css";
 import { AgentationFeedback } from "./AgentationFeedback";
+import { MarbleField } from "./MarbleField";
 import { ProductDemo } from "./ProductDemo";
-import { TellaBackground } from "./TellaBackground";
 import { assetUrl } from "./asset-url";
 
 const markUrl = assetUrl(markAsset);
@@ -116,9 +116,11 @@ function LandingPage() {
 			</aside>
 
 			<main className="feed">
+				{/* The field is the loud surface now, so the stage goes quiet: one
+				    neutral wash behind the product instead of a second background
+				    competing with the page it sits on. */}
 				<section className="stage">
 					<div className="gradient-fallback" aria-hidden="true" />
-					<TellaBackground />
 					<ProductDemo />
 				</section>
 
@@ -219,6 +221,7 @@ if (!root) throw new Error("Missing landing page root");
 
 createRoot(root).render(
 	<>
+		<MarbleField />
 		<LandingPage />
 		<AgentationFeedback />
 	</>,
