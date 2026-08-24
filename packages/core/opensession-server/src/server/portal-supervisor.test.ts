@@ -72,6 +72,30 @@ describe("session Portal supervisor", () => {
 		expect((await listPortalServices(worktree))[0]?.state).toBe("stopped");
 	});
 
+	test("marks a crashed awake Portal failed instead of an eternal starting ghost", async () => {
+		// A wrapper pid that survives its dead dev server: pid alive, port dead,
+		// recorded state awake. This must surface as failed, not "starting".
+		const wrapper = Bun.spawn(["sleep", "60"]);
+		const record = { name: "web-crashed", key: "WEBAPP_PORT", command: "just dev", port: 18_777, state: "awake", pid: wrapper.pid, startedAt: new Date().toISOString() };
+		writeFileSync(join(worktree, ".ports.conf"), `${PREFIX(record)}\nWEBAPP_PORT=18777\n`);
+		const [portal] = await listPortalServices(worktree);
+		expect(portal?.state).toBe("failed");
+		wrapper.kill();
+	});
+
+	test("starting over a failed Portal reaps its leftover process group", async () => {
+		const leftover = Bun.spawn(["sleep", "60"]);
+		const record = { name: "web-retry", key: "WEBAPP_PORT", command: "just dev", port: 18_778, state: "failed", pid: leftover.pid, lastError: "The service is no longer listening." };
+		writeFileSync(join(worktree, ".ports.conf"), `${PREFIX(record)}\nWEBAPP_PORT=18778\n`);
+		const portal = await startPortalService({
+			sessionId: "os-retry-test", worktreeDir: worktree, name: "web-retry", port: 18_778,
+			command: "bun -e 'Bun.serve({port:Number(process.env.PORT),fetch(){return new Response(\"ok\")}})'",
+		});
+		expect(portal.state).toBe("awake");
+		expect((Bun.spawnSync(["kill", "-0", String(leftover.pid)])).exitCode).not.toBe(0);
+		await stopPortalService({ sessionId: "os-retry-test", worktreeDir: worktree, name: "web-retry" });
+	});
+
 	test("terminates a Portal process group when readiness times out", async () => {
 		const port = 18_704;
 		const pidFile = join(worktree, "timed-out.pid");
