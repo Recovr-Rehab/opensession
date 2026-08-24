@@ -30,6 +30,18 @@
 
 export {}; // module marker so top-level await is allowed
 
+// pi-ai hides its OAuth flow modules behind a variable-specifier dynamic
+// import so bundlers cannot follow them into Node-only flow code. A compiled
+// binary therefore ships without them and every OAuth-derived pi model fails
+// with "Cannot find module './openai-codex.js'". Register the statically
+// bundled flows up front, exactly like pi's own standalone CLI entrypoint.
+{
+  const { registerBunOAuthFlows } = await import(
+    "@earendil-works/pi-ai/bun-oauth"
+  );
+  registerBunOAuthFlows();
+}
+
 // The source install runs through a bash shim that puts the `claude` CLI on
 // PATH before handing off; the compiled binary has no such shim, so do it here.
 // Without this a thin PATH (a non-login shell, cron, the service unit if it
