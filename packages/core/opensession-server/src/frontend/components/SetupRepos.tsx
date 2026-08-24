@@ -22,6 +22,7 @@ import { RepoTile } from "./RepoTile";
 import { REPO_TILE_COLORS, REPO_TILE_INK, repoColor, repoIconFill } from "../lib/repo-colors";
 import { repoLetter } from "../lib/repo-label";
 import { pngFromImageFile } from "../lib/icon-image";
+import { setupRepoDefaultBranch } from "../lib/setup-repo";
 import {
 	fetchRepos,
 	notifyReposChanged,
@@ -174,17 +175,22 @@ function RepositoryRow({
 	onRepoUpdated?: (updated: { id: string; defaultBranch: string }) => void;
 }) {
 	const lifecycle = repoLifecycleState(repo);
-	const [branch, setBranch] = useState(repo.defaultBranch);
+	// A hot frontend rebuild can briefly run against the prior setup-status
+	// payload, which omitted defaultBranch. The repository payload already had
+	// it, so use that as the compatibility fallback instead of crashing while
+	// the backend waits for its deliberate restart.
+	const defaultBranch = setupRepoDefaultBranch(repo, appearance);
+	const [branch, setBranch] = useState(defaultBranch);
 	const [saving, setSaving] = useState(false);
 	const [error, setError] = useState<string | null>(null);
 	const errorId = useId();
 
 	useEffect(() => {
-		setBranch(repo.defaultBranch);
-	}, [repo.defaultBranch]);
+		setBranch(defaultBranch);
+	}, [defaultBranch]);
 
 	const normalized = branch.trim();
-	const changed = normalized !== repo.defaultBranch;
+	const changed = normalized !== defaultBranch;
 
 	async function saveBranch(event: React.FormEvent) {
 		event.preventDefault();
