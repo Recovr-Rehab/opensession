@@ -33,6 +33,9 @@ let fakeEngineMod: typeof import("./testing/fake-engine");
 let ocTranscript: typeof import("./transcript-persistence");
 let transcriptStoreMod: typeof import("./transcript-store");
 let memoryV2: typeof import("./memory-v2/runtime");
+let testSessionListStore: import("./session-list-store").SessionListStore | null =
+	null;
+let restoreSessionListStore: (() => void) | null = null;
 let restoreSessionsDir: (() => void) | null = null;
 let restoreJournal: (() => void) | null = null;
 let redirected = false;
@@ -61,6 +64,14 @@ beforeAll(async () => {
 	const paths = await import("./paths");
 	const prevDir = paths.__setSessionsDirForTest(tmp);
 	restoreSessionsDir = () => paths.__setSessionsDirForTest(prevDir);
+	const sessionListStoreMod = await import("./session-list-store");
+	testSessionListStore = new sessionListStoreMod.SessionListStore(
+		`${tmp}/session-list.sqlite`,
+	);
+	const previousSessionListStore =
+		sessionListStoreMod.__setSessionListStoreForTest(testSessionListStore);
+	restoreSessionListStore = () =>
+		sessionListStoreMod.__setSessionListStoreForTest(previousSessionListStore);
 	const runJournal = await import("./run-journal");
 	const prevJournal = runJournal.__setActiveRunsPathForTest(
 		`${tmp}/active-runs.json`,
@@ -101,6 +112,8 @@ afterAll(() => {
 	agentRunner?.__setEngineForTest(null);
 	restoreJournal?.();
 	restoreSessionsDir?.();
+	restoreSessionListStore?.();
+	testSessionListStore?.close();
 	sessionCache?.invalidateSessionsCache();
 });
 
@@ -144,7 +157,7 @@ describe("fake-engine session runs (consumer loop end-to-end)", () => {
 	test("failed run: lastRunError recorded, FSM failed (still settled)", async () => {
 		if (!redirected) return;
 		const sid = "bks-zz-error";
-		writeSessionFile(sid, { automation: true });
+		writeSessionFile(sid, { automation: "test-fixture" });
 		sessionCache.invalidateSessionsCache();
 		const fake = fakeEngineMod.makeFakeEngine([
 			// Non-transient, non-usage error: surfaces directly (no fallback walk).

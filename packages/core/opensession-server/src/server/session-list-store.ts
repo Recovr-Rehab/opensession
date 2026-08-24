@@ -322,6 +322,16 @@ export function sessionListStore(): SessionListStore {
 	));
 }
 
+/** Swap the process-wide store without opening the default state DB. */
+export function __setSessionListStoreForTest(
+	store: SessionListStore | undefined,
+): SessionListStore | undefined {
+	const previous = g.__osSessionListStore;
+	if (store) g.__osSessionListStore = store;
+	else delete g.__osSessionListStore;
+	return previous;
+}
+
 export function indexedSessions(
 	slice: SessionListSlice = "include",
 ): UnifiedSession[] | null {

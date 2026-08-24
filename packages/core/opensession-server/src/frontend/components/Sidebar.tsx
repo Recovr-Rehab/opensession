@@ -1509,14 +1509,18 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 		const out: Group[] = [];
 		const byAutomation = new Map<string, UnifiedSession[]>();
 		for (const s of sorted) {
-			if (!s.automation) continue;
+			// Session files predate this field's string contract, and a malformed
+			// legacy/test row must not take down the whole sidebar while sorting.
+			const automation =
+				typeof s.automation === "string" ? s.automation.trim() : "";
+			if (!automation) continue;
 			if (activeWorkspaceSubagentIds.has(s.id)) continue;
 			// A run you claimed (or a legacy global override) lives in the
 			// workspace rows instead — don't render it twice.
 			if (isClaimed(s)) continue;
-			const list = byAutomation.get(s.automation) || [];
+			const list = byAutomation.get(automation) || [];
 			list.push(s);
-			byAutomation.set(s.automation, list);
+			byAutomation.set(automation, list);
 		}
 		// Case-insensitive, or ASCII order files every lowercase name after
 		// every capitalised one: "iOS parity check" and "deepsec daily scan"

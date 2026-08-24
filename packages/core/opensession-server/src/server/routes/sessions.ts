@@ -246,7 +246,7 @@ const sessionsResponseRefreshes: Map<
 // fallback, then refresh in the background. The version in the filename is the
 // schema boundary: bump it whenever sessionListRow stops being backward
 // compatible with the current web client.
-const LIVE_LIST_DISK_VERSION = 2;
+const LIVE_LIST_DISK_VERSION = 3;
 const LIVE_LIST_DISK_MAX_AGE_MS = 7 * 24 * 60 * 60_000;
 const LIVE_LIST_DISK_SERVE_MS = 2 * 60_000;
 const LIVE_LIST_DISK_PATH = statePath(
@@ -490,6 +490,11 @@ export function sessionListRow(
 	if (!row.repoLess) delete row.repoLess;
 	if (!row.titleOverridden) delete row.titleOverridden;
 	if (!row.workspacePreparing) delete row.workspacePreparing;
+	// Older hand-written/test session files can violate the current wire type.
+	// Do not let one malformed automation id crash clients sorting the list.
+	if (typeof row.automation !== "string" || !row.automation.trim())
+		delete row.automation;
+	else row.automation = row.automation.trim();
 	delete row.rev;
 
 	return row as SessionListRow;

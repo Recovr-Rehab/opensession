@@ -375,6 +375,17 @@ describe("sessionListRow", () => {
 		expect(sessionListRow(archivedSession())).not.toHaveProperty("ran");
 	});
 
+	test("drops malformed automation ids at the list boundary", () => {
+		const malformed = archivedSession({
+			automation: true as unknown as string,
+		});
+		expect(sessionListRow(malformed)).not.toHaveProperty("automation");
+		expect(
+			sessionListRow(archivedSession({ automation: "  daily scan  " }))
+				.automation,
+		).toBe("daily scan");
+	});
+
 	test("omits defaults while preserving values that change list UI", () => {
 		const row = sessionListRow(
 			archivedSession({
