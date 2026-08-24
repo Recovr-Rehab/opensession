@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { cancelPortalRequest, createPortalResponseSender, loopbackHeaders, openWebSocket, relayRetryDelayMs, sendWebSocket, type PortalRequestControllers, type PortalSocketState } from "./sandbox-portal-agent";
+import { cancelPortalRequest, createPortalResponseSender, loopbackHeaders, openWebSocket, relayRetryDelayMs, sendPortalResponse, sendWebSocket, type PortalRequestControllers, type PortalSocketState } from "./sandbox-portal-agent";
 
 test("uses local-dev host semantics and disables upstream compression", () => {
 	const headers = loopbackHeaders({ host: "portal.example:22000", "accept-encoding": "gzip, br", cookie: "session=abc" }, 4300);
@@ -93,4 +93,50 @@ test("ignores close events from a replaced loopback socket", () => {
 	replacement.close();
 	expect(sockets.has("socket-1")).toBe(false);
 	expect(relayMessages).toEqual([JSON.stringify({ t: "ws_closed", id: "socket-1" })]);
+});
+
+
+test("frames large Portal responses instead of sending one oversized WebSocket message", async () => {
+	const messages: any[] = [];
+	await sendPortalResponse(
+		async (message) => { messages.push(JSON.parse(message)); },
+		"request-1",
+		new Response("abcdefghijklmnop", { status: 200, headers: { "content-type": "text/plain" } }),
+		{ chunkBytes: 5, maxBytes: 20 },
+	);
+
+	expect(messages.map((message) => message.t)).toEqual([
+		"http_result_start",
+		"http_result_chunk",
+		"http_result_chunk",
+		"http_result_chunk",
+		"http_result_chunk",
+		"http_result_end",
+	]);
+	const body = Buffer.concat(messages.filter((message) => message.t === "http_result_chunk").map((message) => Buffer.from(message.body, "base64")));
+	expect(body.toString()).toBe("abcdefghijklmnop");
+	expect(Math.max(...messages.map((message) => message.body ? Buffer.from(message.body, "base64").byteLength : 0))).toBe(5);
+});
+
+test("relays a development asset larger than the former 10 MB ceiling", async () => {
+	const size = 10 * 1024 * 1024 + 1;
+	let received = 0;
+	let frames = 0;
+	await sendPortalResponse(async (message) => {
+		const frame = JSON.parse(message);
+		if (frame.t !== "http_result_chunk") return;
+		frames += 1;
+		received += Buffer.from(frame.body, "base64").byteLength;
+	}, "request-large", new Response(Buffer.alloc(size, 7)));
+	expect(received).toBe(size);
+	expect(frames).toBeGreaterThan(1);
+});
+
+test("rejects Portal responses beyond the bounded total size", async () => {
+	await expect(sendPortalResponse(
+		async () => {},
+		"request-1",
+		new Response("too large"),
+		{ chunkBytes: 4, maxBytes: 8 },
+	)).rejects.toThrow("response too large");
 });

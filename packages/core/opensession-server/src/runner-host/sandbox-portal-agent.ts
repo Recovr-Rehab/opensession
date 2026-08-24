@@ -3,6 +3,8 @@
  * provider URL or network destination beyond Open Session and localhost.
  */
 const HOP = new Set(["connection", "host", "content-length", "transfer-encoding", "upgrade", "keep-alive", "proxy-authenticate", "proxy-authorization", "te", "trailer"]);
+export const PORTAL_RESPONSE_CHUNK_BYTES = 256 * 1024;
+export const PORTAL_RESPONSE_MAX_BYTES = 128 * 1024 * 1024;
 const headersFrom = (value: unknown) => {
 	const headers = new Headers();
 	if (value && typeof value === "object" && !Array.isArray(value)) for (const [name, item] of Object.entries(value as Record<string, unknown>)) if (!HOP.has(name.toLowerCase()) && typeof item === "string" && item.length <= 8192) headers.set(name, item);
@@ -48,6 +50,41 @@ export function cancelPortalRequest(requests: PortalRequestControllers, msg: any
 	if (id) requests.get(id)?.abort();
 }
 
+export async function sendPortalResponse(
+	send: PortalResponseSender,
+	id: string,
+	response: Response,
+	limits: { chunkBytes?: number; maxBytes?: number } = {},
+): Promise<void> {
+	const chunkBytes = limits.chunkBytes ?? PORTAL_RESPONSE_CHUNK_BYTES;
+	const maxBytes = limits.maxBytes ?? PORTAL_RESPONSE_MAX_BYTES;
+	if (!Number.isInteger(chunkBytes) || chunkBytes < 1 || !Number.isInteger(maxBytes) || maxBytes < chunkBytes) throw new Error("Invalid Portal response limits");
+	const declaredLength = Number(response.headers.get("content-length"));
+	if (Number.isFinite(declaredLength) && declaredLength > maxBytes) throw new Error("response too large");
+	const headers: Record<string, string> = {};
+	for (const [name, value] of response.headers) if (!HOP.has(name.toLowerCase())) headers[name] = value;
+	await send(JSON.stringify({ t: "http_result_start", id, status: response.status, headers }));
+	let total = 0;
+	if (response.body) {
+		const reader = response.body.getReader();
+		try {
+			while (true) {
+				const { done, value } = await reader.read();
+				if (done) break;
+				total += value.byteLength;
+				if (total > maxBytes) throw new Error("response too large");
+				for (let offset = 0; offset < value.byteLength; offset += chunkBytes) {
+					const chunk = value.subarray(offset, Math.min(offset + chunkBytes, value.byteLength));
+					await send(JSON.stringify({ t: "http_result_chunk", id, body: Buffer.from(chunk).toString("base64") }));
+				}
+			}
+		} finally {
+			reader.releaseLock();
+		}
+	}
+	await send(JSON.stringify({ t: "http_result_end", id }));
+}
+
 async function respond(send: PortalResponseSender, msg: any, port: number, requests: PortalRequestControllers): Promise<void> {
 	const id = typeof msg.id === "string" ? msg.id : "";
 	const path = typeof msg.path === "string" ? msg.path : "";
@@ -63,13 +100,9 @@ async function respond(send: PortalResponseSender, msg: any, port: number, reque
 		// minutes. Keep the request bounded, but do not sever a healthy Portal
 		// midway through its cold build and turn it into an empty proxy 502.
 		const response = await fetch(`http://127.0.0.1:${port}${path}`, { method, headers: loopbackHeaders(msg.headers, port), body: body && method !== "GET" && method !== "HEAD" ? body : undefined, redirect: "manual", signal: controller.signal });
-		const bytes = new Uint8Array(await response.arrayBuffer());
-		if (bytes.byteLength > 10 * 1024 * 1024) throw new Error("response too large");
-		const headers: Record<string, string> = {};
-		for (const [name, value] of response.headers) if (!HOP.has(name.toLowerCase())) headers[name] = value;
-		await send(JSON.stringify({ t: "http_result", id, status: response.status, headers, body: Buffer.from(bytes).toString("base64") }));
+		await sendPortalResponse(send, id, response);
 	} catch {
-		try { await send(JSON.stringify({ t: "http_result", id, status: controller.signal.aborted ? 499 : 502, headers: {} })); } catch {}
+		try { await send(JSON.stringify({ t: "http_result_abort", id, status: controller.signal.aborted ? 499 : 502 })); } catch {}
 	} finally {
 		clearTimeout(timeout);
 		if (requests.get(id) === controller) requests.delete(id);

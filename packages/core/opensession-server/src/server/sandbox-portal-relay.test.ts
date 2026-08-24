@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { createRelayRequestLimiter, handleSandboxPortalRelayUpgrade, mintSandboxPortalGrant, revokeSandboxPortalGrants, revokeSandboxPortalRelay, verifySandboxPortalGrant } from "./sandbox-portal-relay";
+import { applyRelayResponseFrame, createRelayRequestLimiter, handleSandboxPortalRelayUpgrade, mintSandboxPortalGrant, PORTAL_RESPONSE_CHUNK_BYTES, revokeSandboxPortalGrants, revokeSandboxPortalRelay, verifySandboxPortalGrant, type RelayResponseAssembly } from "./sandbox-portal-relay";
 
 test("Sandbox Portal grants bind one session, Sandbox, and port", () => {
 	const grant = mintSandboxPortalGrant({ sessionId: "bks-test", sandboxId: "sandbox-test", port: 4300 });
@@ -71,4 +71,23 @@ test("relay upgrade rejects an unbound credential before WebSocket upgrade", () 
 	expect(upgraded).toMatchObject({ kind: "sandbox-portal-relay", sessionId: "bks-relay", sandboxId: "sandbox-relay", port: 4400 });
 	const denied = handleSandboxPortalRelayUpgrade(new Request("https://sessions.test/sandbox-portal-ws?session=bks-relay&sandbox=sandbox-relay&port=4401", { headers: { authorization: `Bearer ${grant.token}` } }), server, "/sandbox-portal-ws");
 	expect(denied?.status).toBe(403);
+});
+
+
+test("reassembles bounded Portal response frames", () => {
+	const assembly: RelayResponseAssembly = { headers: {}, chunks: [], byteLength: 0 };
+	expect(applyRelayResponseFrame(assembly, { t: "http_result_start", status: 200, headers: { "content-type": "text/javascript", connection: "close" } })).toBeUndefined();
+	expect(applyRelayResponseFrame(assembly, { t: "http_result_chunk", body: Buffer.from("large ").toString("base64") })).toBeUndefined();
+	expect(applyRelayResponseFrame(assembly, { t: "http_result_chunk", body: Buffer.from("chunk").toString("base64") })).toBeUndefined();
+	const result = applyRelayResponseFrame(assembly, { t: "http_result_end" });
+	expect(result?.status).toBe(200);
+	expect(result?.headers).toEqual({ "content-type": "text/javascript" });
+	expect(result?.body?.toString()).toBe("large chunk");
+});
+
+test("rejects oversized individual Portal response frames", () => {
+	const assembly: RelayResponseAssembly = { status: 200, headers: {}, chunks: [], byteLength: 0 };
+	const result = applyRelayResponseFrame(assembly, { t: "http_result_chunk", body: Buffer.alloc(PORTAL_RESPONSE_CHUNK_BYTES + 1).toString("base64") });
+	expect(result).toEqual({ status: 502, headers: {} });
+	expect(assembly.byteLength).toBe(0);
 });

@@ -12,8 +12,10 @@ type StoredGrant = Omit<SandboxPortalGrant, "token">;
 const g = globalThis as Record<string, unknown>;
 const grants: Map<string, StoredGrant> = (g.__opensessionSandboxPortalGrants ??= new Map()) as Map<string, StoredGrant>;
 type RelayRequestLimiter = <T>(task: () => Promise<T>) => Promise<T>;
-type Connection = { ws: any; sessionId: string; sandboxId: string; port: number; expiresAt: number; expiryTimer: ReturnType<typeof setTimeout>; pending: Map<string, { resolve: (value: RelayResponse) => void; timer: ReturnType<typeof setTimeout> }>; limitRequests: RelayRequestLimiter };
-type RelayResponse = { status: number; headers: Record<string, string>; body?: string };
+export type RelayResponse = { status: number; headers: Record<string, string>; body?: Buffer };
+export type RelayResponseAssembly = { status?: number; headers: Record<string, string>; chunks: Buffer[]; byteLength: number };
+type PendingRelayResponse = RelayResponseAssembly & { resolve: (value: RelayResponse) => void; timer: ReturnType<typeof setTimeout> };
+type Connection = { ws: any; sessionId: string; sandboxId: string; port: number; expiresAt: number; expiryTimer: ReturnType<typeof setTimeout>; pending: Map<string, PendingRelayResponse>; limitRequests: RelayRequestLimiter };
 
 /** A browser can ask Turbopack for dozens of multi-megabyte chunks at once.
  * The outbound Portal rides one WebSocket, whose client-side send buffer drops
@@ -50,6 +52,8 @@ const HOP_HEADERS = new Set(["connection", "host", "content-length", "transfer-e
 // The sidecar aborts its loopback fetch at 240s. Give its final error frame ten
 // seconds to cross the WebSocket before the coordinator declares the request lost.
 const RELAY_REQUEST_TIMEOUT_MS = 250_000;
+export const PORTAL_RESPONSE_CHUNK_BYTES = 256 * 1024;
+export const PORTAL_RESPONSE_MAX_BYTES = 128 * 1024 * 1024;
 
 function key(sessionId: string, sandboxId: string, port: number): string { return `${sessionId}:${sandboxId}:${port}`; }
 
@@ -75,6 +79,43 @@ function safeHeaders(headers: Headers): Record<string, string> {
 	const result: Record<string, string> = {};
 	for (const [name, value] of headers) if (!HOP_HEADERS.has(name.toLowerCase()) && value.length <= 8192) result[name] = value;
 	return result;
+}
+
+function relayResponseHeaders(value: unknown): Record<string, string> {
+	const headers: Record<string, string> = {};
+	if (!value || typeof value !== "object" || Array.isArray(value)) return headers;
+	for (const [name, item] of Object.entries(value as Record<string, unknown>)) {
+		if (!HOP_HEADERS.has(name.toLowerCase()) && typeof item === "string" && item.length <= 8192) headers[name] = item;
+	}
+	return headers;
+}
+
+/** Assemble bounded frames from a sandbox response. Individual WebSocket
+ * messages stay small enough for provider relays while Turbopack may emit
+ * development chunks much larger than the old 10 MB whole-response ceiling. */
+export function applyRelayResponseFrame(assembly: RelayResponseAssembly, message: any): RelayResponse | undefined {
+	if (message.t === "http_result_start") {
+		if (assembly.status !== undefined) return { status: 502, headers: {} };
+		assembly.status = Number.isInteger(message.status) && message.status >= 100 && message.status <= 599 ? message.status : 502;
+		assembly.headers = relayResponseHeaders(message.headers);
+		return;
+	}
+	if (message.t === "http_result_abort") {
+		return { status: Number.isInteger(message.status) && message.status >= 400 && message.status <= 599 ? message.status : 502, headers: {} };
+	}
+	if (assembly.status === undefined) return { status: 502, headers: {} };
+	if (message.t === "http_result_chunk") {
+		if (typeof message.body !== "string" || message.body.length > Math.ceil(PORTAL_RESPONSE_CHUNK_BYTES / 3) * 4 + 4) return { status: 502, headers: {} };
+		const chunk = Buffer.from(message.body, "base64");
+		if (chunk.byteLength > PORTAL_RESPONSE_CHUNK_BYTES || assembly.byteLength + chunk.byteLength > PORTAL_RESPONSE_MAX_BYTES) return { status: 502, headers: {} };
+		assembly.chunks.push(chunk);
+		assembly.byteLength += chunk.byteLength;
+		return;
+	}
+	if (message.t === "http_result_end") {
+		return { status: assembly.status, headers: assembly.headers, ...(assembly.byteLength > 0 ? { body: Buffer.concat(assembly.chunks, assembly.byteLength) } : {}) };
+	}
+	return { status: 502, headers: {} };
 }
 
 export function mintSandboxPortalGrant(input: { sessionId: string; sandboxId: string; port: number; ttlMs?: number }): SandboxPortalGrant {
@@ -169,12 +210,21 @@ export function sandboxPortalRelayMessage(ws: any, raw: string | Buffer): boolea
 		} else { browserSockets.delete(id); try { browser.ws.close(); } catch {} }
 		return true;
 	}
-	if (message.t !== "http_result" || typeof message.id !== "string") return true;
+	if (typeof message.id !== "string" || !["http_result", "http_result_start", "http_result_chunk", "http_result_end", "http_result_abort"].includes(message.t)) return true;
 	if (!connection) return true;
 	const pending = connection.pending.get(message.id);
 	if (!pending) return true;
-	clearTimeout(pending.timer); connection.pending.delete(message.id);
-	pending.resolve({ status: Number.isInteger(message.status) ? message.status : 502, headers: message.headers && typeof message.headers === "object" ? message.headers : {}, body: typeof message.body === "string" ? message.body : undefined });
+	if (message.t === "http_result") {
+		const encoded = typeof message.body === "string" ? message.body : "";
+		const encodedTooLarge = encoded.length > Math.ceil(PORTAL_RESPONSE_MAX_BYTES / 3) * 4 + 4;
+		const body = encoded && !encodedTooLarge ? Buffer.from(encoded, "base64") : undefined;
+		pending.resolve(encodedTooLarge || (body && body.byteLength > PORTAL_RESPONSE_MAX_BYTES)
+			? { status: 502, headers: {} }
+			: { status: Number.isInteger(message.status) ? message.status : 502, headers: relayResponseHeaders(message.headers), ...(body ? { body } : {}) });
+		return true;
+	}
+	const result = applyRelayResponseFrame(pending, message);
+	if (result) pending.resolve(result);
 	return true;
 }
 /** Wait for a newly launched outbound sidecar before redirecting the browser
@@ -238,13 +288,13 @@ async function relayFetch(input: { sessionId: string; sandboxId: string; port: n
 			request.signal.addEventListener("abort", cancel, { once: true });
 			timer = setTimeout(() => finish({ status: 504, headers: {} }), RELAY_REQUEST_TIMEOUT_MS);
 			timer.unref?.();
-			connection.pending.set(id, { resolve: finish, timer });
+			connection.pending.set(id, { resolve: finish, timer, headers: {}, chunks: [], byteLength: 0 });
 			try { connection.ws.send(JSON.stringify({ t: "http", id, method: request.method, path: new URL(request.url).pathname + new URL(request.url).search, headers: safeHeaders(request.headers), ...(bytes ? { body: Buffer.from(bytes).toString("base64") } : {}) })); }
 			catch { clearTimeout(timer); finish({ status: 502, headers: {} }); }
 		});
 		const headers = new Headers();
 		for (const [name, value] of Object.entries(result.headers)) if (!HOP_HEADERS.has(name.toLowerCase()) && typeof value === "string") headers.set(name, value);
-		const body = result.body ? Buffer.from(result.body, "base64") : undefined;
+		const body = result.body ? new Uint8Array(result.body) : undefined;
 		return new Response(body, { status: result.status, headers });
 	});
 }
