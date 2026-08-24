@@ -1000,6 +1000,16 @@
 	gap: 10px;
 }
 
+button.setup-download-card {
+	text-align: left;
+	cursor: pointer;
+	font: inherit;
+}
+
+button.setup-download-card:hover {
+	background: rgba(var(--ink-rgb), 0.052);
+}
+
 .setup-download-card,
 .setup-terminal-option {
 	border: 0;
@@ -1028,6 +1038,7 @@ a.setup-download-card:hover {
 }
 
 .setup-download-card img,
+.setup-download-mark,
 .setup-terminal-mark {
 	display: grid;
 	width: 58px;
@@ -1094,6 +1105,15 @@ a.setup-download-card:hover {
 }
 
 .setup-terminal-mark {
+	background: #1c1c1e;
+	color: #fff;
+}
+
+.setup-download-mark {
+	color: var(--ink);
+}
+
+.setup-download-mark-dark {
 	background: #1c1c1e;
 	color: #fff;
 }
