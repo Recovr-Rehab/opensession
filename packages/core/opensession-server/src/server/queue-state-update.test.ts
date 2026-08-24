@@ -165,7 +165,8 @@ describe("delegated messages are not user messages", () => {
 		expect(isEditableQueueItem(mine)).toBe(true);
 	});
 
-	test("a workflow result attributed to its launcher is not editable", () => {
+	test("a workflow result never enters the client message surface", () => {
+		const workflowSession = `${SESSION}-workflow`;
 		const result = {
 			id: "workflow:wf-1:done",
 			content:
@@ -174,6 +175,19 @@ describe("delegated messages are not user messages", () => {
 		};
 		expect(isWorkflowQueueItem(result)).toBe(true);
 		expect(isEditableQueueItem(result)).toBe(false);
+
+		promptQueues.set(workflowSession, [result]);
+		steeredReceipts.set(workflowSession, [result]);
+		expect(clientVisibleQueuedCount(workflowSession)).toBe(0);
+		expect(queueDisplayState(workflowSession)).toEqual({
+			queued: [],
+			steered: [],
+		});
+		// Filtering is presentation-only: delivery still owns the nudge.
+		expect(promptQueues.get(workflowSession)).toEqual([result]);
+		expect(steeredReceipts.get(workflowSession)).toEqual([result]);
+		promptQueues.delete(workflowSession);
+		steeredReceipts.delete(workflowSession);
 	});
 
 	test("a peer agent message is delegated but not a worker report", () => {

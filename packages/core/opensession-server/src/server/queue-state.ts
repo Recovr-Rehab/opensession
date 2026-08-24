@@ -603,11 +603,16 @@ export function failPromptDispatch(
   return restored;
 }
 
-/** Review handoffs drive an automated turn. They use the prompt queue for
- * ordering and crash recovery, but they are not messages a person sent and
- * must not contribute to any client-facing message count. */
+/** Automated turns stay durable in the queue but are not messages a person
+ * sent. Review handoffs have their own Agents surface; workflow completion
+ * nudges are model-routing plumbing whose eventual transcript row is already
+ * classified as a system notice. Neither belongs in message counts or chips. */
+function isClientVisibleQueueItem(item: QueueItem): boolean {
+	return !item.reviewHandoff && !isWorkflowQueueItem(item);
+}
+
 export function clientVisibleQueuedCount(sessionId: string): number {
-	return (promptQueues.get(sessionId) ?? []).filter((item) => !item.reviewHandoff)
+	return (promptQueues.get(sessionId) ?? []).filter(isClientVisibleQueueItem)
 		.length;
 }
 
@@ -619,7 +624,7 @@ export function clientVisibleQueuedCounts(): Map<string, number> {
 		slot: "queued",
 	})) {
 		const items = value as QueueItem[];
-		const visible = items.filter((item) => !item.reviewHandoff).length;
+		const visible = items.filter(isClientVisibleQueueItem).length;
 		if (visible) counts.set(sessionId, visible);
 	}
 	return counts;
@@ -630,13 +635,13 @@ export function queueDisplayState(sessionId: string) {
 	const steered = queueWithIds(steeredReceipts.get(sessionId));
 	if (queued.length > 0) promptQueues.set(sessionId, queued);
 	if (steered.length > 0) steeredReceipts.set(sessionId, steered);
-	// Display copy only: automated review handoffs remain in the internal queue
-	// until dispatch but never enter a client's message surface. Fenced
+	// Display copy only: automated turns remain in the internal queue until
+	// dispatch but never enter a client's message surface. Fenced
 	// <opensession:context> blocks (e.g. the queued auto-continue nudge) are
 	// model plumbing too, so strip them from the remaining rows. The stored
 	// items keep their full content for delivery.
 	const forDisplay = (items: typeof queued) =>
-		items.filter((i) => !i.reviewHandoff).map((i) => {
+		items.filter(isClientVisibleQueueItem).map((i) => {
 			const shown = stripContext(i.content);
 			return {
 				...i,
