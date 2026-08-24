@@ -227,6 +227,26 @@ function writeStoredAccounts(accounts) {
   }
 }
 
+function activeAccountResumeUrl() {
+  const stored = readStoredAccounts();
+  const account = stored.accounts.find((candidate) => candidate.id === stored.activeId);
+  return account?.lastUrl || account?.url || APP_URL;
+}
+
+// pushState changes the renderer's URL without a document load, so local web
+// state alone is not enough for the shell's next launch. Persist the route of
+// the most recently focused app window whenever it changes.
+function rememberActiveAccountUrl(target) {
+  if (!target || target.isDestroyed() || target !== activeWindow()) return;
+  const stored = readStoredAccounts();
+  const account = stored.accounts.find((candidate) => candidate.id === stored.activeId);
+  if (!account) return;
+  const next = resumableAccountUrl(account.url, target.webContents.getURL());
+  if (!next || next === account.lastUrl) return;
+  account.lastUrl = next;
+  writeStoredAccounts(stored);
+}
+
 function readStoredServer() {
   const stored = readStoredAccounts();
   return stored.accounts.find((account) => account.id === stored.activeId)?.url || null;
@@ -867,6 +887,7 @@ function createWindow(initialURL = null) {
 
   createdWindow.on("focus", () => {
     win = createdWindow;
+    rememberActiveAccountUrl(createdWindow);
   });
   createdWindow.once("ready-to-show", () => {
     if (createdWindow.isDestroyed()) return;
@@ -886,8 +907,15 @@ function createWindow(initialURL = null) {
     }
   });
   // A commit means the server answered, so the stall guard's job is done —
-  // whatever the page does from here is the app's own to report.
-  createdWindow.webContents.on("did-navigate", () => clearStallGuard(createdWindow));
+  // whatever the page does from here is the app's own to report. In-app router
+  // changes are a separate Electron event because they use history.pushState.
+  createdWindow.webContents.on("did-navigate", () => {
+    clearStallGuard(createdWindow);
+    rememberActiveAccountUrl(createdWindow);
+  });
+  createdWindow.webContents.on("did-navigate-in-page", () => {
+    rememberActiveAccountUrl(createdWindow);
+  });
   // Pinch and wheel zoom land in the renderer, so the level has to be read back
   // a tick later; the View menu's roles are picked up by saveWindowState.
   createdWindow.webContents.on("zoom-changed", () => {
@@ -1380,7 +1408,7 @@ app.whenReady().then(async () => {
   buildAppMenu();
 
   appReady = true;
-  createWindow();
+  createWindow(activeAccountResumeUrl());
   syncBackgroundAccountWindows();
 
   flushPendingDeepLink();
@@ -1419,6 +1447,7 @@ app.on("continue-activity", (e, _type, _userInfo, details) => {
 });
 
 app.on("before-quit", () => {
+  rememberActiveAccountUrl(activeWindow());
   quitting = true;
   nativeDictation.cancel();
   saveWindowState();
