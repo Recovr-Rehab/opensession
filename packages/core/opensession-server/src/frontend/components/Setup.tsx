@@ -24,6 +24,7 @@ import { ModelDefaultsSection } from "./Models";
 import { IconArrowUpRight, IconCheck, IconGlobe } from "./icons";
 import {
   integrationState,
+  publicUrlState,
   StateChip,
   type SetupStatus,
 } from "./setup-shared";
@@ -67,13 +68,15 @@ function SetupSummary({
     (integration) => integration.id === "github",
   );
   const githubReady = !!github && integrationState(github).tone === "on";
+  const serverReady = publicUrlState(status.publicBaseUrl).tone === "on";
   const requiredReady =
+    serverReady &&
     githubReady &&
     status.engine.ready &&
     status.repos.length > 0 &&
     status.team.count > 0;
   const steps: { id: SectionId; label: string; complete: boolean }[] = [
-    { id: "server", label: "Server", complete: true },
+    { id: "server", label: "Server", complete: serverReady },
     { id: "github", label: "GitHub", complete: githubReady },
     { id: "organisation", label: "Organisation", complete: true },
     { id: "providers", label: "Providers", complete: status.engine.ready },
@@ -168,6 +171,7 @@ export function SetupPanel({
   const setup = useSetupStatus();
   const { status, failed, refetch } = setup;
   const [aiRevision, setAiRevision] = useState(0);
+  const server = publicUrlState(status?.publicBaseUrl || "");
 
   useEffect(() => {
     document.title = docTitle("Setup");
@@ -212,10 +216,12 @@ export function SetupPanel({
                   />
                   <div className="min-w-0 flex-1">
                     <div className="text-row-title font-medium text-fg">
-                      This server is online
+                      {server.tone === "on"
+                        ? "This server is online"
+                        : "Finish server setup"}
                     </div>
                     <p className="m-0 mt-1 break-words text-supporting leading-relaxed text-dim">
-                      Configured address: {status.publicBaseUrl}
+                      {server.description}
                     </p>
                     <a
                       href="https://opensession.com/setup"
@@ -226,7 +232,7 @@ export function SetupPanel({
                       View server guide <IconArrowUpRight size={16} />
                     </a>
                   </div>
-                  <StateChip tone="on" label="Online" />
+                  <StateChip tone={server.tone} label={server.label} />
                 </div>
               </SettingCard>
               <SettingsHint>
