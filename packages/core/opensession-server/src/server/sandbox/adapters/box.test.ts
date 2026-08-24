@@ -6,6 +6,7 @@ import {
   boxMachineType,
   boxNativeFilePath,
   boxSnapshotSaveIsRecoverable,
+  parseBoxSshEndpoint,
 } from "./box";
 
 describe("Box machine profiles", () => {
@@ -46,6 +47,20 @@ describe("Box persistent file paths", () => {
       "/home/user/.opensession/spec.json",
     );
     expect(boxNativeFilePath("/tmp/output")).toBe("/tmp/output");
+  });
+});
+
+describe("Box SSH control lane", () => {
+  test("prefers the provider's reachable host and port over an IPv6 machine address", () => {
+    expect(parseBoxSshEndpoint("137.74.205.128:19042")).toEqual({
+      host: "137.74.205.128",
+      port: 19042,
+    });
+    expect(parseBoxSshEndpoint("[2001:db8::2]:2200")).toEqual({
+      host: "2001:db8::2",
+      port: 2200,
+    });
+    expect(parseBoxSshEndpoint("2001:db8::2")).toBeNull();
   });
 });
 

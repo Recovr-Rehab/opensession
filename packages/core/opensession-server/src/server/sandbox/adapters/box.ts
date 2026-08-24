@@ -350,13 +350,13 @@ function boxSshTargets(): Map<string, BoxSshTarget> {
   return (global.__opensessionBoxSshTargets ??= new Map());
 }
 
-function parseBoxSshEndpoint(endpoint: string | null | undefined): { host: string; port: number } | null {
+export function parseBoxSshEndpoint(endpoint: string | null | undefined): { host: string; port: number } | null {
   const value = endpoint?.trim();
   if (!value) return null;
   const bracketed = value.match(/^\[([^\]]+)\]:(\d+)$/);
   if (bracketed) return { host: bracketed[1]!, port: Number(bracketed[2]) };
   const separator = value.lastIndexOf(":");
-  if (separator <= 0) return null;
+  if (separator <= 0 || value.slice(0, separator).includes(":")) return null;
   const port = Number(value.slice(separator + 1));
   if (!Number.isInteger(port) || port < 1 || port > 65_535) return null;
   return { host: value.slice(0, separator), port };
