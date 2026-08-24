@@ -1497,10 +1497,22 @@ export async function runRemoteLifecycleHook(
   const identityArgs = Object.entries(identityEnv)
     .map(([key, value]) => `${key}=${shellQuoteWord(value)}`)
     .join(" ");
+  // Setup hooks prepare immutable shared images. A repository-owned `bun
+  // install` must therefore resolve dependencies without rewriting bun.lock.
+  // Keep this guard scoped to setup so ordinary agent/developer Bun behavior
+  // is unchanged, and use a PATH shim rather than requiring every repository
+  // to learn an Open Session-specific flag.
+  const setupBin = `${REMOTE_LIFECYCLE_DIR}/setup-bin`;
+  const bunShim = `#!/bin/sh\nif [ "$1" = install ]; then shift; exec ${REMOTE_BUN} install --frozen-lockfile "$@"; fi\nexec ${REMOTE_BUN} "$@"\n`;
+  const setupGuard = hook === "setup"
+    ? `mkdir -p ${shellQuoteWord(setupBin)} && printf %s ${shellQuoteWord(bunShim)} > ${shellQuoteWord(`${setupBin}/bun`)} && chmod 755 ${shellQuoteWord(`${setupBin}/bun`)} && `
+    : "";
+  const lifecyclePath = hook === "setup" ? `${setupBin}:${REMOTE_PATH}` : REMOTE_PATH;
   const command =
     `mkdir -p ${shellQuoteWord(REMOTE_LIFECYCLE_DIR)} && ` +
+    setupGuard +
     `: > ${shellQuoteWord(log)} && ` +
-    `env HOME=${REMOTE_HOME} PATH=${shellQuoteWord(REMOTE_PATH)} ${identityArgs} ` +
+    `env HOME=${REMOTE_HOME} PATH=${shellQuoteWord(lifecyclePath)} ${identityArgs} ` +
     `OPENSESSION_BOOT_MODE=${shellQuoteWord(bootMode)} ${shellQuoteWord(script)} ` +
     `>> ${shellQuoteWord(log)} 2>&1` +
     (hook === "setup" ? ` && touch ${shellQuoteWord(stamp)}` : "");
