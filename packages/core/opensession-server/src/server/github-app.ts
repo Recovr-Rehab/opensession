@@ -18,15 +18,30 @@
  * same containment story as the App user tokens.
  */
 import { createSign } from "node:crypto";
-import { existsSync } from "node:fs";
+import { existsSync, rmSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { githubUserAuthSettings } from "./github-auth";
 import { configuredIntegration } from "./config";
 import { githubGitCredentialEnv } from "./github-git-credential";
+import { writeFileAtomic } from "./shared/atomic-write";
+import {
+  GITHUB_APP_READ_PERMISSIONS as READ_PERMISSIONS,
+  GITHUB_APP_WRITE_PERMISSIONS as WRITE_PERMISSIONS,
+} from "../shared/github-app-permissions";
 
-const KEY_PATH =
-  process.env.OPENSESSION_GITHUB_APP_KEY || join(homedir(), ".opensession-github-app.pem");
+let keyPathOverride: string | undefined;
+
+function keyPath(): string {
+  return keyPathOverride ||
+    process.env.OPENSESSION_GITHUB_APP_KEY ||
+    join(homedir(), ".opensession-github-app.pem");
+}
+
+/** Test seam: isolate key mutations from the operator's real key file. */
+export function __setGithubAppKeyPathForTest(path: string | undefined): void {
+  keyPathOverride = path;
+}
 
 type AppTokenCache = {
   token: string;
@@ -42,31 +57,13 @@ const g = globalThis as {
   __ghAppTokenWarned?: boolean;
 };
 
-/** Read is strictly weaker than the bot PAT (no write at all). */
-const READ_PERMISSIONS = {
-  checks: "read",
-  statuses: "read",
-  actions: "read",
-  pull_requests: "read",
-  contents: "read",
-  issues: "read",
-  metadata: "read",
-} as const;
-/** Write asks for EXACTLY what the PR agent needs — post reviews and comments
- *  (pull_requests, issues) and push fixes (contents), plus metadata. It does NOT
- *  spread the read set: a mint is all-or-nothing, so requesting a read scope the
- *  App wasn't granted (e.g. checks, which no create flow grants today) would 422
- *  the whole write token even though writes never touch checks. Still
- *  installation-scoped, so an out-of-org write fails at GitHub's side just as the
- *  scoped bot PAT does (security-model.md, GitHub credential scoping). The App
- *  must hold these; if it does not the mint is rejected and the caller falls back
- *  to the PAT. */
-const WRITE_PERMISSIONS = {
-  pull_requests: "write",
-  issues: "write",
-  contents: "write",
-  metadata: "read",
-} as const;
+// READ_PERMISSIONS / WRITE_PERMISSIONS are the canonical sets imported at the
+// top of the file (shared/github-app-permissions) — the same definition the
+// create-app URL grants, so a mint never asks for a scope the App was not
+// granted. Still installation-scoped, so an out-of-org write fails at GitHub's
+// side just as the scoped bot PAT does (security-model.md, GitHub credential
+// scoping). If the App does not hold a set the mint is rejected and the caller
+// falls back to the PAT.
 
 function appJwt(clientId: string, key: string): string {
   const now = Math.floor(Date.now() / 1000);
@@ -89,9 +86,9 @@ export async function githubAppInstallationToken(
   if (cached && cached.expiresAt - Date.now() > 5 * 60_000) return cached.token;
 
   const { clientId } = githubUserAuthSettings();
-  if (!clientId || !existsSync(KEY_PATH)) return null;
+  if (!clientId || !existsSync(keyPath())) return null;
   try {
-    const key = await Bun.file(KEY_PATH).text();
+    const key = await Bun.file(keyPath()).text();
     const jwt = appJwt(clientId, key);
     const headers = { Authorization: `Bearer ${jwt}`, Accept: "application/vnd.github+json" };
 
@@ -188,7 +185,63 @@ export function githubConfiguredCredential(): boolean {
 
 /** Whether a GitHub App can mint installation tokens (client id + private key). */
 export function githubAppConfigured(): boolean {
-  return !!githubUserAuthSettings().clientId && existsSync(KEY_PATH);
+  return !!githubUserAuthSettings().clientId && existsSync(keyPath());
+}
+
+/** Persist the App's private key (0600) at the key path — the piece the device-flow
+ *  setup never captured, so installation tokens (bot/agent, checks-read) could
+ *  never mint. The App-manifest flow returns this PEM at creation. Drops any
+ *  cached installation token, which belonged to a previous key. Honors the
+ *  OPENSESSION_GITHUB_APP_KEY override so an ops-managed key is never clobbered. */
+export function writeGithubAppKey(pem: string): void {
+  if (process.env.OPENSESSION_GITHUB_APP_KEY)
+    throw new Error("OPENSESSION_GITHUB_APP_KEY is set; not overwriting an ops-managed key");
+  writeFileAtomic(keyPath(), pem.endsWith("\n") ? pem : `${pem}\n`, 0o600);
+  g.__ghAppTokenCacheRead = null;
+  g.__ghAppTokenCacheWrite = null;
+}
+
+/** Remove only a UI-managed key. An ops-managed path is external authority and
+ * must never be mutated by the Settings removal flow. */
+export function removeGithubAppKey(): void {
+  // The App config may be UI-managed while its key path is ops-managed. In
+  // that mixed mode, preserve the external file but still invalidate tokens.
+  if (!process.env.OPENSESSION_GITHUB_APP_KEY)
+    rmSync(keyPath(), { force: true });
+  g.__ghAppTokenCacheRead = null;
+  g.__ghAppTokenCacheWrite = null;
+}
+
+/** Keep the key and matching config mutation in one recoverable transaction.
+ * `undefined` leaves the key alone, `null` removes it, and a string replaces
+ * it. If the config commit fails, restore the exact prior key atomically. */
+export async function commitGithubAppKeyMutation<T>(
+  key: string | null | undefined,
+  commitConfig: () => T | Promise<T>,
+): Promise<T> {
+  if (key === undefined || (key === null && process.env.OPENSESSION_GITHUB_APP_KEY)) {
+    if (key === null) {
+      g.__ghAppTokenCacheRead = null;
+      g.__ghAppTokenCacheWrite = null;
+    }
+    return commitConfig();
+  }
+  if (key !== null && process.env.OPENSESSION_GITHUB_APP_KEY)
+    throw new Error("OPENSESSION_GITHUB_APP_KEY is set; not overwriting an ops-managed key");
+
+  const path = keyPath();
+  const previous = existsSync(path) ? await Bun.file(path).text() : null;
+  if (key === null) removeGithubAppKey();
+  else writeGithubAppKey(key);
+  try {
+    return await commitConfig();
+  } catch (error) {
+    if (previous === null) rmSync(path, { force: true });
+    else writeFileAtomic(path, previous, 0o600);
+    g.__ghAppTokenCacheRead = null;
+    g.__ghAppTokenCacheWrite = null;
+    throw error;
+  }
 }
 
 /**
@@ -208,9 +261,9 @@ export async function githubAppRepositoryToken(ghRepo: string): Promise<string |
   const installationId =
     g.__ghAppTokenCacheRead?.installationId || g.__ghAppTokenCacheWrite?.installationId;
   const { clientId } = githubUserAuthSettings();
-  if (!installationId || !clientId || !existsSync(KEY_PATH)) return null;
+  if (!installationId || !clientId || !existsSync(keyPath())) return null;
   try {
-    const key = await Bun.file(KEY_PATH).text();
+    const key = await Bun.file(keyPath()).text();
     const res = await fetch(
       `https://api.github.com/app/installations/${installationId}/access_tokens`,
       {

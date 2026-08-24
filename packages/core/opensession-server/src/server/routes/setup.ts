@@ -22,6 +22,7 @@
  */
 
 import { audit } from "../audit";
+import { GITHUB_APP_GRANT_PERMISSIONS } from "../../shared/github-app-permissions";
 import { envRequired, type IntegrationSpec } from "../integrations/registry";
 import { setupAccessSnapshot } from "../setup-access";
 import { requireWorkspaceAdmin } from "../workspace-auth";
@@ -118,11 +119,10 @@ export function buildOnboardingGithubAppCreateUrl(
     url: homepageUrl.trim() || "http://localhost:3850",
     public: "false",
     webhook_active: "false",
-    contents: "write",
-    issues: "write",
-    pull_requests: "write",
-    members: "read",
-    metadata: "read",
+    // The canonical grant set (checks + statuses + issues included) — the same
+    // permissions the installation token mints request, so a created App is
+    // never born missing a scope the server needs.
+    ...GITHUB_APP_GRANT_PERMISSIONS,
     // Undocumented by GitHub, but supported by the new-App form. The onboarding
     // still tells the person to check it in case GitHub ever drops the parameter.
     device_flow_enabled: "true",
@@ -350,6 +350,7 @@ export async function handleSetupRoutes(
       oauthClientId?: unknown;
       oauthClientSecret?: unknown;
       botCredential?: unknown;
+      privateKey?: unknown;
     } | null;
     if (!body || typeof body !== "object" || Array.isArray(body)) {
       return Response.json({ error: "Invalid JSON body" }, { status: 400 });
@@ -379,15 +380,41 @@ export async function handleSetupRoutes(
         return Response.json({ error: `${field}: ${invalid}` }, { status: 400 });
       }
     }
+    // The private key is a multi-line PEM, so it bypasses validateSetting (single
+    // line). Require a complete block that parses, so a truncated paste cannot
+    // overwrite a working key on disk.
+    const privateKey =
+      typeof body.privateKey === "string" ? body.privateKey.trim() : "";
+    if (privateKey) {
+      const { createPrivateKey } = await import("node:crypto");
+      const wellFormed =
+        /-----BEGIN [A-Z ]*PRIVATE KEY-----[\s\S]+-----END [A-Z ]*PRIVATE KEY-----/.test(
+          privateKey,
+        );
+      let parses = false;
+      if (wellFormed) {
+        try {
+          createPrivateKey(privateKey);
+          parses = true;
+        } catch {
+          parses = false;
+        }
+      }
+      if (!parses)
+        return Response.json(
+          { error: "privateKey must be a valid PEM private key" },
+          { status: 400 },
+        );
+    }
     if (
       body.userPrAuth === undefined &&
       body.oauthClientId === undefined &&
       body.oauthClientSecret === undefined &&
-      body.botCredential === undefined
+      body.botCredential === undefined &&
+      !privateKey
     ) {
       return Response.json({ error: "Nothing to change" }, { status: 400 });
     }
-
     const { rawConfig, persistRawConfig, withConfigMutationLock } =
       await import("../config-mutation");
 
@@ -407,6 +434,19 @@ export async function handleSetupRoutes(
           ? (integrations.github as Record<string, unknown>)
           : {};
       integrations.github = github;
+
+      const nextClientId = body.oauthClientId;
+      const keyMutation = privateKey ||
+        (nextClientId !== undefined && github.oauthClientId !== nextClientId
+          ? null
+          : undefined);
+      const effectiveBotCredential = body.botCredential ?? github.botCredential ?? "pat";
+      if (keyMutation === null && effectiveBotCredential === "app") {
+        return Response.json(
+          { error: "Switch bot actions to the PAT before changing the GitHub App without a replacement key" },
+          { status: 409 },
+        );
+      }
 
       // Turning on the sign-in gate must never strand a personal install with
       // nobody who can pass it. Organization onboarding already rosters people
@@ -473,7 +513,18 @@ export async function handleSetupRoutes(
         if (value === "") delete github[field]; // empty string clears
         else github[field] = value;
       }
-      persistRawConfig(config);
+      try {
+        const { commitGithubAppKeyMutation } = await import("../github-app");
+        await commitGithubAppKeyMutation(
+          keyMutation,
+          () => persistRawConfig(config),
+        );
+      } catch (e) {
+        return Response.json(
+          { error: String((e as Error)?.message || e) },
+          { status: 409 },
+        );
+      }
       audit({
         kind: "setup_github_update",
         fields: (["userPrAuth", "oauthClientId", "oauthClientSecret", "botCredential"] as const).filter(

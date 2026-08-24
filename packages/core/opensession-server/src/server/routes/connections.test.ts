@@ -1,8 +1,12 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "fs";
+import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "fs";
 import { tmpdir } from "os";
 import { join } from "path";
 import { bootstrapUserAuthOnConnect, handleConnectionsRoutes } from "./connections";
+import {
+  __setGithubAppKeyPathForTest,
+  commitGithubAppKeyMutation,
+} from "../github-app";
 import type { RouteContext } from "./context";
 
 // The GitHub connect routes behave differently by mode: operator mode (web
@@ -15,6 +19,7 @@ const ENV_KEYS = [
   "OPENSESSION_CONFIG",
   "OPENSESSION_GITHUB_CLIENT_ID",
   "OPENSESSION_GITHUB_APP_SLUG",
+  "OPENSESSION_GITHUB_APP_KEY",
   "OPENSESSION_GITHUB_AUTH_STORE",
   "OPENSESSION_WEB_SESSIONS_STORE",
 ] as const;
@@ -30,9 +35,11 @@ beforeEach(() => {
   process.env.OPENSESSION_CONFIG = join(dir, "config.json");
   process.env.OPENSESSION_GITHUB_AUTH_STORE = join(dir, "github-auth.json");
   process.env.OPENSESSION_WEB_SESSIONS_STORE = join(dir, "web-sessions.json");
+  __setGithubAppKeyPathForTest(join(dir, "github-app.pem"));
 });
 
 afterEach(() => {
+  __setGithubAppKeyPathForTest(undefined);
   rmSync(dir, { recursive: true, force: true });
   for (const k of ENV_KEYS) {
     if (saved[k] === undefined) delete process.env[k];
@@ -75,6 +82,34 @@ function context(
 }
 
 const DEVICE = "/api/connections/github/device";
+
+
+describe("GitHub App key transaction", () => {
+  test("restores the previous key when config persistence fails", async () => {
+    const keyPath = join(dir, "github-app.pem");
+    writeFileSync(keyPath, "working-key\n", { mode: 0o600 });
+
+    await expect(
+      commitGithubAppKeyMutation("replacement-key", () => {
+        throw new Error("config volume full");
+      }),
+    ).rejects.toThrow("config volume full");
+    expect(readFileSync(keyPath, "utf-8")).toBe("working-key\n");
+  });
+
+  test("removes config while preserving an ops-managed key", async () => {
+    const keyPath = join(dir, "github-app.pem");
+    writeFileSync(keyPath, "ops-key\n", { mode: 0o600 });
+    process.env.OPENSESSION_GITHUB_APP_KEY = keyPath;
+    let committed = false;
+
+    await commitGithubAppKeyMutation(null, () => {
+      committed = true;
+    });
+    expect(committed).toBe(true);
+    expect(readFileSync(keyPath, "utf-8")).toBe("ops-key\n");
+  });
+});
 
 describe("GitHub connect gating", () => {
   test("simple mode without a configured app rejects the connect (400)", async () => {
@@ -209,11 +244,57 @@ describe("GitHub App config (simple mode)", () => {
     ).toBe(400);
   });
 
+  test("cannot strand selected App bot actions by clearing their key", async () => {
+    const path = process.env.OPENSESSION_CONFIG!;
+    writeFileSync(
+      path,
+      JSON.stringify({
+        integrations: {
+          github: {
+            oauthClientId: "Iv1.app-a",
+            appSlug: "app-a",
+            oauthClientSecret: "shh",
+            botCredential: "app",
+          },
+        },
+      }),
+    );
+    const keyPath = join(dir, "github-app.pem");
+    writeFileSync(keyPath, "app-a-key\n", { mode: 0o600 });
+
+    const replace = await handleConnectionsRoutes(
+      context(APP, "POST", null, { clientId: "Iv1.app-b", slug: "app-b", secret: "shh" }),
+    );
+    expect(replace?.status).toBe(409);
+    expect(readFileSync(keyPath, "utf-8")).toBe("app-a-key\n");
+
+    const remove = await handleConnectionsRoutes(context(APP, "DELETE", null));
+    expect(remove?.status).toBe(409);
+    expect(readFileSync(keyPath, "utf-8")).toBe("app-a-key\n");
+  });
+
+  test("changing App identity without a new key clears the previous key", async () => {
+    await handleConnectionsRoutes(
+      context(APP, "POST", null, { clientId: "Iv1.app-a", slug: "app-a", secret: "shh" }),
+    );
+    const keyPath = join(dir, "github-app.pem");
+    writeFileSync(keyPath, "app-a-key\n", { mode: 0o600 });
+
+    const response = await handleConnectionsRoutes(
+      context(APP, "POST", null, { clientId: "Iv1.app-b", slug: "app-b", secret: "shh" }),
+    );
+    expect(response?.status).toBe(200);
+    expect(existsSync(keyPath)).toBe(false);
+  });
+
   test("DELETE clears the App keys but leaves other github config intact", async () => {
     await handleConnectionsRoutes(
       context(APP, "POST", null, { clientId: "Iv1.abc", slug: "my-app", secret: "shh" }),
     );
-    // An unrelated github key, to prove the clear is surgical.
+    // A UI-managed key must be removed with the App; an unrelated github
+    // config key proves the config clear remains surgical.
+    const keyPath = join(dir, "github-app.pem");
+    writeFileSync(keyPath, "old-app-private-key", { mode: 0o600 });
     const path = process.env.OPENSESSION_CONFIG!;
     const cfg = JSON.parse(readFileSync(path, "utf-8"));
     cfg.integrations.github.userPrAuth = false;
@@ -226,6 +307,7 @@ describe("GitHub App config (simple mode)", () => {
     expect(after.integrations.github.oauthClientId).toBeUndefined();
     expect(after.integrations.github.appSlug).toBeUndefined();
     expect(after.integrations.github.userPrAuth).toBe(false);
+    expect(existsSync(keyPath)).toBe(false);
 
     const get = await handleConnectionsRoutes(context(GET, "GET", null));
     expect((await get?.json()).connectAvailable).toBe(false);
