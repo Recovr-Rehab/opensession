@@ -158,6 +158,8 @@ describe("remote repo lifecycle", () => {
 		expect(adoption.command).toContain("fetch --no-tags origin +refs/heads/feature/new-ui:refs/remotes/origin/feature/new-ui --quiet");
 		expect(adoption.command).toContain("fetch --no-tags origin +refs/heads/main:refs/remotes/origin/main --quiet");
 		expect(adoption.command).toContain("__start=origin/feature/new-ui");
+		expect(adoption.command).toContain("update-ref refs/heads/feature/new-ui");
+		expect(adoption.command).toContain("symbolic-ref HEAD refs/heads/feature/new-ui");
 		expect(adoption.command).toContain("checkout -B feature/new-ui");
 		expect(adoption.command).toContain("opensession-adopted-by");
 		expect(d.commands.some(({ command }) => command === "git branch --show-current")).toBe(false);

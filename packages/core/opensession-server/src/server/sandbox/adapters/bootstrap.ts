@@ -1352,7 +1352,10 @@ export async function setupRemoteWorkspace(
       `git -C ${shellQuoteWord(cwd)} remote set-url origin ${shellQuoteWord(cloneUrl)} && ` +
       `(if ${fetchRef(branch)}; then __start=${shellQuoteWord(`origin/${branch}`)}; else ` +
       `${fetchRef(defaultBranch)} && __start=${shellQuoteWord(`origin/${defaultBranch}`)}; fi; ` +
-      `git -C ${shellQuoteWord(cwd)} checkout -B ${shellQuoteWord(branch)} "$__start") && ` +
+      `if [ "$(git -C ${shellQuoteWord(cwd)} rev-parse HEAD)" = "$(git -C ${shellQuoteWord(cwd)} rev-parse "$__start")" ]; then ` +
+      `git -C ${shellQuoteWord(cwd)} update-ref ${shellQuoteWord(`refs/heads/${branch}`)} "$__start" && ` +
+      `git -C ${shellQuoteWord(cwd)} symbolic-ref HEAD ${shellQuoteWord(`refs/heads/${branch}`)}; else ` +
+      `git -C ${shellQuoteWord(cwd)} checkout -B ${shellQuoteWord(branch)} "$__start"; fi) && ` +
       `printf '%s\\n' ${shellQuoteWord(cwd)} > ${shellQuoteWord(owner)}; } || __rc=$?; ` +
       `if [ "$__rc" -ne 0 ]; then ${cleanup}; fi; exit "$__rc"`;
     const adopted = await driver.exec(prepare, { timeoutMs: 180_000 });
