@@ -78,6 +78,7 @@ describe("Box SSH host identity", () => {
 
 describe("Box command readiness", () => {
   test("hydrates a resumed workspace without taking Git locks", () => {
+    expect(boxResumePrimeCommand("/home/ubuntu/worktrees/app")).toContain("xargs -0 -r -n 64 -P 16 stat");
     expect(boxResumePrimeCommand("/home/ubuntu/worktrees/app")).toContain("GIT_OPTIONAL_LOCKS=0 git status --porcelain");
     expect(boxResumePrimeCommand("/home/ubuntu/worktrees/app")).toContain("test -d /home/ubuntu/worktrees/app/.git");
   });
