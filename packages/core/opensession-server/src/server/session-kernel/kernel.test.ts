@@ -1325,6 +1325,54 @@ describe("SessionKernel", () => {
 });
 
 describe("SessionKernel durable runtime", () => {
+	test("admits opening projections beyond the eight-turn engine limit", async () => {
+		const { drainSessionKernelRuntime, waitForSessionKernelRuntimeIdle } =
+			await import("./runtime");
+		const { ensureCreationEffectExecutors } =
+			await import("./creation-effect-executors");
+		const { replaceSessionEffectExecutorForTest } =
+			await import("./effect-executors");
+		ensureCreationEffectExecutors();
+		let started = 0;
+		let release!: () => void;
+		const blocked = new Promise<void>((resolve) => {
+			release = resolve;
+		});
+		const unregister = replaceSessionEffectExecutorForTest(
+			"creation_opening_turn",
+			async () => {
+				started += 1;
+				await blocked;
+			},
+		);
+		try {
+			for (let index = 0; index < 9; index += 1) {
+				const sessionId = `opening-admission-${index}`;
+				const entryId = `entry-${index}`;
+				store.enqueueOutbox(
+					sessionId,
+					"creation_opening_turn",
+					{
+						creationIdentity: `identity-${index}`,
+						creationGeneration: 1,
+						openingPromptEntryId: entryId,
+						runId: `opening:${sessionId}:${entryId}`,
+						runGeneration: 1,
+						mode: "adopt_or_launch",
+					},
+					`effect-${index}`,
+				);
+			}
+			await drainSessionKernelRuntime();
+			await Bun.sleep(10);
+			expect(started).toBe(9);
+		} finally {
+			release();
+			await waitForSessionKernelRuntimeIdle();
+			unregister();
+		}
+	});
+
 	test("fires a durable timer once and removes it after acknowledgement", async () => {
 		const { drainSessionKernelRuntime, registerSessionTimerHandler, waitForSessionKernelRuntimeIdle, } = await import("./runtime");
 		let calls = 0;

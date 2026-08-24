@@ -407,6 +407,38 @@ const activeOpeningCreates = new Map<
 	}
 >();
 
+const OPENING_TURN_CONCURRENCY = 8;
+type OpeningTurnGate = {
+	active: number;
+	waiters: Array<(release: () => void) => void>;
+};
+const creationRuntimeGlobal = globalThis as typeof globalThis & {
+	__opensessionOpeningTurnGate?: OpeningTurnGate;
+};
+const openingTurnGate = (creationRuntimeGlobal.__opensessionOpeningTurnGate ??= {
+	active: 0,
+	waiters: [],
+});
+
+function openingTurnRelease(): () => void {
+	let released = false;
+	return () => {
+		if (released) return;
+		released = true;
+		const next = openingTurnGate.waiters.shift();
+		if (next) next(openingTurnRelease());
+		else openingTurnGate.active = Math.max(0, openingTurnGate.active - 1);
+	};
+}
+
+function acquireOpeningTurn(): Promise<() => void> {
+	if (openingTurnGate.active < OPENING_TURN_CONCURRENCY) {
+		openingTurnGate.active += 1;
+		return Promise.resolve(openingTurnRelease());
+	}
+	return new Promise((resolve) => openingTurnGate.waiters.push(resolve));
+}
+
 export async function waitForCreatedSessionProjection(
 	sessionId: string,
 	identity: string,
@@ -741,17 +773,19 @@ export async function openCreatedSession(
 	// wore the raw first line) and keeps that name for life — later sessions
 	// never rename it, and a manual rename in the meantime wins.
 	const wsToName = spec.autoNameWorkspace;
-	const titlePrompt = await nameKnownSessionReferencesForTitle(spec.titlePrompt);
-	void ensureGeneratedTitle(bksId, titlePrompt, spec.user, spec.model,).then(
-		(t) => {
+	void nameKnownSessionReferencesForTitle(spec.titlePrompt)
+		.then((titlePrompt) =>
+			ensureGeneratedTitle(bksId, titlePrompt, spec.user, spec.model),
+		)
+		.then((t) => {
 			if (!t) return;
 			invalidateSessionsCache();
 			if (!wsToName) return;
 			const cur = getWorkspace(wsToName.id);
 			if (cur && cur.name === wsToName.name)
 				updateWorkspace(wsToName.id, { name: t });
-		}
-	);
+		})
+		.catch(() => {});
 
 	// Set once the session has been announced — a later failure must then
 	// close out the stream instead of leaving the just-opened viewer spinning.
@@ -763,6 +797,7 @@ export async function openCreatedSession(
 	let effectiveProvider = providerFor(effectiveModel);
 	const modelHistory: NonNullable<NativeSessionFile["modelHistory"]> = [];
 	let persisted = false;
+	let releaseOpeningTurn: (() => void) | undefined;
 	// Cumulative token/cost for this new session's opening run.
 	let latestUsage: SessionUsage | undefined;
 	// Extra repos that actually got a worktree (see attachCreateRepos) — what
@@ -946,6 +981,11 @@ export async function openCreatedSession(
 				"prompt",
 				spec.title || "a session",
 			);
+			// Projection is latency-sensitive; the agent turn is capacity-sensitive.
+			// Persist and announce every accepted session first, then wait for one of
+			// the bounded opening-run slots. Keeping the gate here prevents eight long
+			// turns from hiding every later session behind "Setting up workspace".
+			releaseOpeningTurn = await acquireOpeningTurn();
 
 			// Every worktree this session works in, its own first. The extra
 			// repos are cut inside the same gate: they are git work of the same
@@ -1340,6 +1380,8 @@ export async function openCreatedSession(
 			// retire their physical-owner journal. This finally only releases the
 			// in-process admission marker.
 			unmarkSessionStarting(bksId, startToken);
+			releaseOpeningTurn?.();
+			releaseOpeningTurn = undefined;
 			// Safety net for throws before the worktree block's own finally
 			// (persist/announce failures) — must never leak a session stuck
 			// in "Waiting for workspace".

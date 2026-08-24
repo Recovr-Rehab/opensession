@@ -117,7 +117,10 @@ export async function drainSessionKernelRuntime(): Promise<void> {
 			effectKinds.filter((kind) => kind !== openingKind),
 		);
 		if (effectKinds.includes(openingKind)) {
-			const openings = await sessionKernelRuntimeWork([], [openingKind], Date.now(), 8);
+			// Admit enough opening effects to project their session files immediately.
+			// session-create.ts applies the smaller eight-turn engine gate only after
+			// projection, so slow agent turns cannot hide later accepted sessions.
+			const openings = await sessionKernelRuntimeWork([], [openingKind], Date.now(), 100);
 			work.outbox.push(...openings.outbox);
 		}
 		const activeTimers = (runtime.activeTimers ??= new Set());
@@ -157,7 +160,8 @@ export async function drainSessionKernelRuntime(): Promise<void> {
 				item.kind === "creation_opening_turn"
 					? activeOpeningOutbox
 					: activeOutbox;
-			if (active.size >= 8 || active.has(item.id)) continue;
+			const admissionLimit = item.kind === openingKind ? 100 : 8;
+			if (active.size >= admissionLimit || active.has(item.id)) continue;
 			active.add(item.id);
 			void executeSessionEffect(item)
 				.then((executed) => {
