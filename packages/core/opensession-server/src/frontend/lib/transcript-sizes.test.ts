@@ -15,6 +15,9 @@ class StorageStub {
 	setItem(key: string, value: string) {
 		this.values.set(key, value);
 	}
+	removeItem(key: string) {
+		this.values.delete(key);
+	}
 	clear() {
 		this.values.clear();
 	}
@@ -85,10 +88,7 @@ describe("transcript sizes", () => {
 	});
 
 	test("survives corrupt storage", () => {
-		storage.setItem(
-			"opensession.transcript-sizes.v1",
-			"{not json",
-		);
+		storage.setItem("opensession.transcript-sizes.v2:s1", "{not json");
 		expect(loadTranscriptSizes("s1", "wide", storage)).toBeUndefined();
 		saveTranscriptSizes("s1", "wide", sizes({ k: 10 }), storage);
 		expect(loadTranscriptSizes("s1", "wide", storage)).toEqual({ k: 10 });

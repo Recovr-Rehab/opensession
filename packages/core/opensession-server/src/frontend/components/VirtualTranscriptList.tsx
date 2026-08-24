@@ -1,5 +1,5 @@
 import { defaultRangeExtractor, useVirtualizer } from "@tanstack/react-virtual";
-import React, { useCallback, useEffect, useRef } from "react";
+import React, { useEffect, useRef } from "react";
 import {
 	currentTranscriptWidthBucket,
 	loadTranscriptSizes,
@@ -111,7 +111,7 @@ export function VirtualTranscriptList({
 	// also the blocks whose content has not been seen.
 	const rowNodesRef = useRef(new Map<string, HTMLElement>());
 	const rowObserverRef = useRef<ResizeObserver | null>(null);
-	const flushMeasuredSizes = useCallback(() => {
+	const flushMeasuredSizes = () => {
 		if (!sizeCacheKey || measuredSizesRef.current.size === 0) return;
 		saveTranscriptSizes(
 			sizeCacheKey,
@@ -119,20 +119,30 @@ export function VirtualTranscriptList({
 			measuredSizesRef.current,
 		);
 		measuredSizesRef.current = new Map();
-	}, [sizeCacheKey]);
+	};
 	useEffect(() => {
 		if (!sizeCacheKey) return;
 		const timer = window.setInterval(() => {
-			if (measuredSizesRef.current.size >= SIZE_SAVE_DIRTY_THRESHOLD) {
-				flushMeasuredSizes();
-			}
+			if (measuredSizesRef.current.size < SIZE_SAVE_DIRTY_THRESHOLD) return;
+			// Stringifying the session's heights is main-thread work; push it past
+			// the interactions that are probably still happening at this cadence.
+			const idle = (
+				window as typeof window & {
+					requestIdleCallback?: (
+						cb: () => void,
+						opts?: { timeout: number },
+					) => number;
+				}
+			).requestIdleCallback;
+			if (idle) idle(() => flushMeasuredSizes(), { timeout: 2_000 });
+			else flushMeasuredSizes();
 		}, SIZE_SAVE_INTERVAL_MS);
 		return () => {
 			window.clearInterval(timer);
 			flushMeasuredSizes();
 		};
 	}, [sizeCacheKey, flushMeasuredSizes]);
-	const observeRowNode = useCallback((key: string, node: HTMLElement) => {
+	const observeRowNode = (key: string, node: HTMLElement) => {
 		rowNodesRef.current.set(key, node);
 		node.dataset.transcriptKey = key;
 		if (!rowObserverRef.current) {
@@ -152,15 +162,14 @@ export function VirtualTranscriptList({
 			});
 		}
 		rowObserverRef.current.observe(node);
-	}, []);
+	};
 	// Stable per-row ref callbacks. An inline arrow would detach and reattach
 	// on every render, re-running TanStack's measure cleanup for each visible
 	// row; caching by block key keeps attach to real mounts.
 	const rowRefsRef = useRef(
 		new Map<string, (node: HTMLDivElement | null) => void>(),
 	);
-	const rowRef = useCallback(
-		(key: string) => {
+	const rowRef = (key: string) => {
 			let callback = rowRefsRef.current.get(key);
 			if (!callback) {
 				callback = (node) => {
@@ -171,9 +180,7 @@ export function VirtualTranscriptList({
 				rowRefsRef.current.set(key, callback);
 			}
 			return callback;
-		},
-		[virtualizer, sizeCacheKey, observeRowNode],
-	);
+		};
 	useEffect(() => {
 		return () => {
 			rowObserverRef.current?.disconnect();

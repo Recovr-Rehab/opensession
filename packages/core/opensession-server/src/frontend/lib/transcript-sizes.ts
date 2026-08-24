@@ -29,7 +29,11 @@ const MAX_SESSIONS = 24;
 // letting one giant session evict every other cache.
 const MAX_ROWS_PER_SESSION = 8_000;
 
-const STORAGE_KEY = "opensession.transcript-sizes.v1";
+// One key per session rather than one store-wide blob: a visit then reads and
+// writes only its own heights (a few hundred KB at the cap) instead of
+// re-stringifying every cached session on the main thread.
+const KEY_PREFIX = "opensession.transcript-sizes.v2:";
+const INDEX_KEY = `${KEY_PREFIX}index`;
 
 export type TranscriptWidthBucket = "narrow" | "wide";
 
@@ -54,9 +58,9 @@ interface StoredSession {
 	wide?: StoredBucketEntry;
 }
 
-interface StoredShape {
-	sessions?: Record<string, StoredSession>;
-}
+// Tiny recency index shared across all session keys; the entries themselves
+// live under their own keys so pruning never touches their payloads.
+type StoredIndex = Record<string, number>;
 
 function defaultStorage(): SizeStorage | undefined {
 	try {
@@ -96,18 +100,18 @@ export function loadTranscriptSizes(
 	if (!storage || !sessionId) return undefined;
 	let raw: string | null | undefined;
 	try {
-		raw = storage.getItem(STORAGE_KEY);
+		raw = storage.getItem(KEY_PREFIX + sessionId);
 	} catch {
 		return undefined;
 	}
 	if (!raw) return undefined;
-	let parsed: StoredShape;
+	let parsed: StoredSession;
 	try {
-		parsed = JSON.parse(raw) as StoredShape;
+		parsed = JSON.parse(raw) as StoredSession;
 	} catch {
 		return undefined;
 	}
-	const sizes = parsed.sessions?.[sessionId]?.[bucket]?.sizes;
+	const sizes = parsed[bucket]?.sizes;
 	if (!sizes || Object.keys(sizes).length === 0) return undefined;
 	return sizes;
 }
@@ -125,16 +129,14 @@ export function saveTranscriptSizes(
 ): void {
 	if (!storage || !sessionId || measured.size === 0) return;
 	const narrow = bucket === "narrow";
-	let root: StoredShape = {};
+	let stored: StoredSession = {};
 	try {
-		const raw = storage.getItem(STORAGE_KEY);
-		root = raw ? (JSON.parse(raw) as StoredShape) : {};
-		if (typeof root !== "object" || root === null) root = {};
+		const raw = storage.getItem(KEY_PREFIX + sessionId);
+		stored = raw ? (JSON.parse(raw) as StoredSession) : {};
+		if (typeof stored !== "object" || stored === null) stored = {};
 	} catch {
-		root = {};
+		stored = {};
 	}
-	const sessions = (root.sessions ??= {});
-	const stored = (sessions[sessionId] ??= {});
 	// Re-insert existing rows so insertion order doubles as recency within the
 	// session: merged-over keys move to the end with their new value.
 	const previous = stored[narrow ? "narrow" : "wide"]?.sizes ?? {};
@@ -154,19 +156,43 @@ export function saveTranscriptSizes(
 		sizes: merged,
 	};
 
-	// Prune whole sessions beyond the cap, oldest savedAt first.
-	const ids = Object.keys(sessions);
-	if (ids.length > MAX_SESSIONS) {
-		ids
-			.sort((a, b) => bucketRecency(sessions[a]) - bucketRecency(sessions[b]))
-			.slice(0, ids.length - MAX_SESSIONS)
-			.forEach((id) => delete sessions[id]);
-	}
 	try {
-		storage.setItem(STORAGE_KEY, JSON.stringify({ sessions }));
+		storage.setItem(KEY_PREFIX + sessionId, JSON.stringify(stored));
+		pruneSessions(sessionId, stored, storage);
 	} catch {
 		// Quota or privacy failure: caching heights is best-effort.
 	}
+}
+
+/** Drop the oldest sessions' keys beyond the cap, tracked in a tiny index. */
+function pruneSessions(
+	sessionId: string,
+	stored: StoredSession,
+	storage: SizeStorage,
+): void {
+	let index: StoredIndex;
+	try {
+		const raw = storage.getItem(INDEX_KEY);
+		index = raw ? (JSON.parse(raw) as StoredIndex) : {};
+		if (typeof index !== "object" || index === null) index = {};
+	} catch {
+		index = {};
+	}
+	index[sessionId] = bucketRecency(stored);
+	const ids = Object.keys(index);
+	if (ids.length > MAX_SESSIONS) {
+		for (const id of ids
+			.sort((a, b) => (index[a] ?? 0) - (index[b] ?? 0))
+			.slice(0, ids.length - MAX_SESSIONS)) {
+			delete index[id];
+			try {
+				storage.removeItem(KEY_PREFIX + id);
+			} catch {
+				// Best-effort: a leaked key is bounded by the cap overshoot.
+			}
+		}
+	}
+	storage.setItem(INDEX_KEY, JSON.stringify(index));
 }
 
 /** Recency of a whole session: its newest width-bucket write. */
