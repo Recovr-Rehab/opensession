@@ -35,6 +35,7 @@ import {
 	repoLifecycleState,
 	setupRequest,
 	type BrowseRepo,
+	type SetupRepo,
 	type SetupStatus,
 } from "./setup-shared";
 import { Badge } from "../ui/badge";
@@ -56,7 +57,10 @@ export function ReposSection({
 }: {
 	repos: SetupStatus["repos"];
 	onChanged: () => void | Promise<void>;
-	onRepoUpdated?: (updated: { id: string; defaultBranch: string }) => void;
+	onRepoUpdated?: (
+		updated: Pick<SetupRepo, "id"> &
+			Partial<Pick<SetupRepo, "defaultBranch" | "isolatedWorktrees">>,
+	) => void;
 	compact?: boolean;
 }) {
 	const [pickerOpen, setPickerOpen] = useState(false);
@@ -152,9 +156,9 @@ export function ReposSection({
 				)}
 			</SettingCard>
 			<SettingsHint>
-				Registering clones the repo onto the server. Sessions branch from its
-				default branch into isolated worktrees. Commit <code>.agents/</code> scripts
-				to provision those worktrees and boot previews. See docs/repo-lifecycle.md.
+				Registering clones the repo onto the server. Code sessions use isolated
+				worktrees by default. Commit <code>.agents/</code> scripts to provision those
+				worktrees and boot previews. See docs/repo-lifecycle.md.
 			</SettingsHint>
 		</>
 	);
@@ -171,17 +175,29 @@ function RepositoryRow({
 	appearance: RepoInfo | undefined;
 	onAppearanceChanged: () => Promise<void>;
 	onChanged: () => void | Promise<void>;
-	onRepoUpdated?: (updated: { id: string; defaultBranch: string }) => void;
+	onRepoUpdated?: (
+		updated: Pick<SetupRepo, "id"> &
+			Partial<Pick<SetupRepo, "defaultBranch" | "isolatedWorktrees">>,
+	) => void;
 }) {
 	const lifecycle = repoLifecycleState(repo);
 	const [branch, setBranch] = useState(repo.defaultBranch);
-	const [saving, setSaving] = useState(false);
-	const [error, setError] = useState<string | null>(null);
-	const errorId = useId();
+	const [isolatedWorktrees, setIsolatedWorktrees] = useState(
+		repo.isolatedWorktrees,
+	);
+	const [saving, setSaving] = useState<"branch" | "worktrees" | null>(null);
+	const [branchError, setBranchError] = useState<string | null>(null);
+	const [worktreeError, setWorktreeError] = useState<string | null>(null);
+	const branchErrorId = useId();
+	const worktreeErrorId = useId();
+	const worktreeDescriptionId = useId();
 
 	useEffect(() => {
 		setBranch(repo.defaultBranch);
 	}, [repo.defaultBranch]);
+	useEffect(() => {
+		setIsolatedWorktrees(repo.isolatedWorktrees);
+	}, [repo.isolatedWorktrees]);
 
 	const normalized = branch.trim();
 	const changed = normalized !== repo.defaultBranch;
@@ -189,8 +205,8 @@ function RepositoryRow({
 	async function saveBranch(event: React.FormEvent) {
 		event.preventDefault();
 		if (!normalized || !changed || saving) return;
-		setSaving(true);
-		setError(null);
+		setSaving("branch");
+		setBranchError(null);
 		try {
 			const updated = await setupRequest<{
 				id: string;
@@ -204,9 +220,36 @@ function RepositoryRow({
 			else await onChanged();
 			toast(`${repo.label} default branch updated`);
 		} catch (e: any) {
-			setError(e.message);
+			setBranchError(e.message);
 		} finally {
-			setSaving(false);
+			setSaving(null);
+		}
+	}
+
+	async function saveWorktreeMode(next: boolean) {
+		if (saving) return;
+		const previous = isolatedWorktrees;
+		setIsolatedWorktrees(next);
+		setSaving("worktrees");
+		setWorktreeError(null);
+		try {
+			const updated = await setupRequest<{
+				id: string;
+				defaultBranch: string;
+				isolatedWorktrees: boolean;
+			}>(`/api/setup/repos/${encodeURIComponent(repo.id)}`, {
+				method: "PATCH",
+				json: { isolatedWorktrees: next },
+			});
+			setIsolatedWorktrees(updated.isolatedWorktrees);
+			if (onRepoUpdated) onRepoUpdated(updated);
+			else await onChanged();
+			toast(`${repo.label} worktree setting updated`);
+		} catch (e: any) {
+			setIsolatedWorktrees(previous);
+			setWorktreeError(e.message);
+		} finally {
+			setSaving(null);
 		}
 	}
 
@@ -229,11 +272,11 @@ function RepositoryRow({
 							value={branch}
 							onChange={(event) => {
 								setBranch(event.target.value);
-								setError(null);
+								setBranchError(null);
 							}}
-							disabled={saving}
-							aria-invalid={!!error}
-							aria-describedby={error ? errorId : undefined}
+							disabled={!!saving}
+							aria-invalid={!!branchError}
+							aria-describedby={branchError ? branchErrorId : undefined}
 							autoCapitalize="none"
 							autoCorrect="off"
 							spellCheck={false}
@@ -242,14 +285,39 @@ function RepositoryRow({
 					<Button
 						type="submit"
 						size="sm"
-						disabled={!normalized || !changed || saving}
+						disabled={!normalized || !changed || !!saving}
 					>
-						{saving ? "Saving…" : "Save"}
+						{saving === "branch" ? "Saving…" : "Save"}
 					</Button>
 				</form>
-				{error && (
-					<InlineAlert id={errorId} className="mt-1.5">
-						{error}
+				{branchError && (
+					<InlineAlert id={branchErrorId} className="mt-1.5">
+						{branchError}
+					</InlineAlert>
+				)}
+				<div className="mt-3 flex min-h-11 max-w-[36rem] items-center gap-3 py-1">
+					<span className="min-w-0 flex-1">
+						<span className="block text-label font-medium text-fg">
+							Use isolated worktrees
+						</span>
+						<span
+							id={worktreeDescriptionId}
+							className="mt-0.5 block text-meta text-dim"
+						>
+							Create a separate worktree for new code sessions. Existing sessions aren&rsquo;t moved.
+						</span>
+					</span>
+					<Switch
+						aria-label={`Use isolated worktrees for ${repo.label}`}
+						aria-describedby={`${worktreeDescriptionId}${worktreeError ? ` ${worktreeErrorId}` : ""}`}
+						checked={isolatedWorktrees}
+						disabled={!!saving}
+						onCheckedChange={(next) => void saveWorktreeMode(next)}
+					/>
+				</div>
+				{worktreeError && (
+					<InlineAlert id={worktreeErrorId} className="mt-1.5">
+						{worktreeError}
 					</InlineAlert>
 				)}
 			</SettingRowText>

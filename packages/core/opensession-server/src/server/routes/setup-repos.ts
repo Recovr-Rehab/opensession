@@ -5,7 +5,7 @@
  *   GET  /api/setup/github/repos: repos the instance's GitHub credential can
  *                                  see, for the registration picker.
  *   POST /api/setup/repos: clone `owner/name` and register it in config.repos.
- *   PATCH /api/setup/repos/:id: change its default branch.
+ *   PATCH /api/setup/repos/:id: change its default branch or worktree policy.
  */
 
 import { $ } from "bun";
@@ -13,7 +13,13 @@ import { chmodSync, existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } 
 import { tmpdir } from "os";
 import { join } from "path";
 import { audit } from "../audit";
-import { codeStorageConfig, configuredRepos, type RepoSection } from "../config";
+import {
+  codeStorageConfig,
+  configuredRepos,
+  configuredSelfDev,
+  type Repo,
+  type RepoSection,
+} from "../config";
 import { getRepo as getCsRepo, listRepos as listCsRepos } from "../codestorage/client";
 import { cloneCsCheckout } from "../codestorage/remote";
 import {
@@ -516,6 +522,30 @@ async function registerCodestorageRepo(input: {
   }
 }
 
+/**
+ * `selfDev` was the first, instance-wide escape hatch for shared checkouts.
+ * Once someone edits one repository in the UI, preserve every repository's
+ * effective behavior as a per-repo `sharedCheckout` value and retire the
+ * global override. That makes later toggles independent without changing any
+ * repository the person did not touch.
+ */
+function migrateLegacySelfDev(
+  config: Record<string, unknown>,
+  resolvedRepos: Record<string, Repo>,
+): void {
+  if (config.selfDev === undefined) return;
+  const legacyIsolated = config.selfDev === "worktree";
+  const sections = reposForMutation(config, resolvedRepos);
+  for (const repo of Object.values(resolvedRepos)) {
+    if (!repo.sharedCheckout) continue;
+    const section = sections[repo.id];
+    if (section && typeof section === "object" && !Array.isArray(section)) {
+      (section as Record<string, unknown>).sharedCheckout = !legacyIsolated;
+    }
+  }
+  delete config.selfDev;
+}
+
 // ── Routes ───────────────────────────────────────────────────────────────────
 
 export async function handleSetupRepoRoutes(
@@ -674,9 +704,26 @@ export async function handleSetupRepoRoutes(
 
     const body = (await req.json().catch(() => null)) as {
       defaultBranch?: unknown;
+      isolatedWorktrees?: unknown;
     } | null;
-    const defaultBranch = await normalizeDefaultBranch(body?.defaultBranch);
-    if (!defaultBranch) {
+    if (!body) {
+      return Response.json({ error: "expected a JSON body" }, { status: 400 });
+    }
+    const changesBranch = body.defaultBranch !== undefined;
+    const changesWorktrees = body.isolatedWorktrees !== undefined;
+    if (!changesBranch && !changesWorktrees) {
+      return Response.json({ error: "No repository setting provided" }, { status: 400 });
+    }
+    if (changesWorktrees && typeof body.isolatedWorktrees !== "boolean") {
+      return Response.json(
+        { error: "isolatedWorktrees must be a boolean" },
+        { status: 400 },
+      );
+    }
+    const defaultBranch = changesBranch
+      ? await normalizeDefaultBranch(body.defaultBranch)
+      : null;
+    if (changesBranch && !defaultBranch) {
       return Response.json(
         { error: "defaultBranch must be a shell-safe Git branch" },
         { status: 400 },
@@ -688,13 +735,13 @@ export async function handleSetupRepoRoutes(
       return Response.json({ error: `Unknown repository: ${id}` }, { status: 404 });
     }
     const repo = repos[id];
-    if (!(await repoHasBranch(repo.repo, defaultBranch))) {
+    if (defaultBranch && !(await repoHasBranch(repo.repo, defaultBranch))) {
       return Response.json(
         { error: `Branch not found on ${id}'s origin: ${defaultBranch}` },
         { status: 400 },
       );
     }
-    if (repo.sharedCheckout) {
+    if (defaultBranch && repo.sharedCheckout) {
       const current = await repoCurrentBranch(repo.repo);
       if (current !== defaultBranch) {
         return Response.json(
@@ -709,17 +756,28 @@ export async function handleSetupRepoRoutes(
     try {
       const updated = await withConfigMutationLock(async () => {
         const config = rawConfig();
+        if (changesWorktrees) migrateLegacySelfDev(config, repos);
         const section = repoSectionForMutation(config, id);
         if (!section) return null;
-        section.defaultBranch = defaultBranch;
+        if (defaultBranch) section.defaultBranch = defaultBranch;
+        if (changesWorktrees) {
+          section.sharedCheckout = !(body.isolatedWorktrees as boolean);
+        }
         persistRawConfig(config);
-        audit({ kind: "setup_repo_update", id, defaultBranch });
-        return { id, defaultBranch };
+        const result = {
+          id,
+          defaultBranch: defaultBranch || repo.defaultBranch,
+          isolatedWorktrees: changesWorktrees
+            ? (body.isolatedWorktrees as boolean)
+            : !repo.sharedCheckout || configuredSelfDev() === "worktree",
+        };
+        audit({ kind: "setup_repo_update", ...result });
+        return result;
       });
       if (!updated) {
         return Response.json({ error: `Unknown repository: ${id}` }, { status: 404 });
       }
-      if (process.env.NODE_ENV !== "test") {
+      if (defaultBranch && process.env.NODE_ENV !== "test") {
         const [
           { scheduleSandboxEnvironmentInvalidation },
           { invalidateAskCheckoutRefresh },

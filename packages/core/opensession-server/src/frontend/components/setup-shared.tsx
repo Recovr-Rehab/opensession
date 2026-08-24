@@ -59,6 +59,8 @@ export interface SetupRepo {
 	label: string;
 	path: string;
 	defaultBranch: string;
+	/** Where new code sessions run. Existing sessions keep their current checkout. */
+	isolatedWorktrees: boolean;
 	lifecycle: SetupRepoLifecycle;
 }
 

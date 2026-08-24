@@ -204,6 +204,7 @@ export async function handleSetupRoutes(
     const { readEnvFileValues } = await import("../env-file-edit");
     const { repoLifecycle } = await import("../preview");
     const { engineStatus } = await import("../engine-status");
+    const { sharedCheckoutForNewSessions } = await import("../worktree");
     const envValues = readEnvFileValues({ includeUnset: true });
 
     const access = setupAccessSnapshot({ persistedEnv: envValues });
@@ -217,6 +218,7 @@ export async function handleSetupRoutes(
         label: r.label,
         path: r.repo,
         defaultBranch: r.defaultBranch,
+        isolatedWorktrees: !sharedCheckoutForNewSessions(r),
         // Can sessions in this repo provision and boot themselves? Read off
         // the main checkout — worktrees carry the same committed files.
         lifecycle: {
