@@ -21,6 +21,7 @@ const fs = require("node:fs");
 const crypto = require("node:crypto");
 const { execFile } = require("node:child_process");
 const { NativeDictation } = require("./native-dictation");
+const { resumableAccountUrl } = require("./account-navigation");
 const packageConfig = require("../package.json").opensession || {};
 const nativeDictation = new NativeDictation();
 
@@ -182,6 +183,7 @@ function readStoredAccounts() {
           id: String(account.id || crypto.randomUUID()),
           label: String(account.label || new URL(url).host),
           url,
+          lastUrl: resumableAccountUrl(url, account.lastUrl),
         }];
       });
       if (accounts.length) {
@@ -997,7 +999,7 @@ function syncBackgroundAccountWindows() {
       refreshAccountLabel(account.id, accountWindow.webContents);
     });
     backgroundAccountWindows.set(account.id, accountWindow);
-    accountWindow.loadURL(account.url).catch(() => {});
+    accountWindow.loadURL(account.lastUrl || account.url).catch(() => {});
   }
 }
 
@@ -1005,6 +1007,20 @@ function switchAccount(id, targetURL = null) {
   const stored = readStoredAccounts();
   const account = stored.accounts.find((candidate) => candidate.id === id);
   if (!account || account.id === stored.activeId) return;
+
+  // Keep each organization at its exact in-app URL. Loading the account root
+  // delegated this to the web app's generic cold-start fallback, which could
+  // only recover one session id and often selected the workspace's first tab.
+  // Capturing before setServer changes the active origin preserves sessions,
+  // workspace panes, review tabs, and route refinements independently per org.
+  const current = stored.accounts.find((candidate) => candidate.id === stored.activeId);
+  if (current && win && !win.isDestroyed()) {
+    const currentUrl = resumableAccountUrl(current.url, win.webContents.getURL());
+    if (currentUrl) current.lastUrl = currentUrl;
+  }
+  const destination =
+    resumableAccountUrl(account.url, targetURL) || account.lastUrl || account.url;
+  account.lastUrl = destination;
   stored.activeId = account.id;
   if (!writeStoredAccounts(stored)) return;
   addingAccount = false;
@@ -1013,7 +1029,7 @@ function switchAccount(id, targetURL = null) {
   buildAppMenu();
   initAutoUpdate();
   showWindow();
-  loadApp(targetURL && inActiveWindow(targetURL) ? targetURL : account.url);
+  loadApp(destination);
 }
 
 // What the window opens on: the app once there is a server to open, and the
