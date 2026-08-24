@@ -899,10 +899,14 @@ if [ "$ADVANCED" != "1" ] && [ "$server_ready" != "1" ]; then
 else
   step "Done"
 fi
+# The PATH hint has to precede the command list: on a fresh install the shell
+# that launched the installer has not picked up the new PATH entry, so a reader
+# who runs `opensession status` from the top of this list before sourcing their
+# profile hits "command not found".
+show_path_refresh_hint
 info "opensession status    ${D}is the server up?${N}"
 info "opensession doctor    ${D}check the install${N}"
 info "opensession --help    ${D}everything else${N}"
-show_path_refresh_hint
 if [ "$server_ready" = "1" ]; then
   printf '\n  %sOpen %s%s\n' "$B" "$url" "$N"
 fi
