@@ -699,7 +699,7 @@ struct SessionView: View {
             .toolbar {
             #if os(iOS)
             ToolbarItem(placement: .principal) {
-                sessionIdentityButton
+                sessionHeaderControls
             }
             #endif
             // Whoever else has this session open, right before the actions
@@ -756,8 +756,6 @@ struct SessionView: View {
                     }
                 }
             }
-            #endif
-            #if os(macOS)
             ToolbarItem(placement: .principal) { macSessionTitle }
             if !workspaceHistoryRows.isEmpty, onRestoreArchivedSession != nil {
                 ToolbarItem(placement: .topTrailingCompat) {
@@ -1109,6 +1107,21 @@ struct SessionView: View {
     #endif
 
     #if os(iOS)
+    /// Three independent floating controls: the system Back button, this
+    /// identity + PR pair, and the PR pill only when the session has one.
+    /// Glass extends beyond each label and morphs at ordinary HStack spacing;
+    /// this larger gap keeps the title and PR as visibly separate controls.
+    private var sessionHeaderControls: some View {
+        HStack(spacing: 56) {
+            sessionIdentityButton
+            if let prNumber = viewModel.prDetails?.number ?? viewModel.session.prNumber {
+                pullRequestButton(number: prNumber)
+                    .buttonStyle(.glass)
+                    .buttonBorderShape(.capsule)
+            }
+        }
+    }
+
     /// Mobile web opens workspace details when its title is tapped. Keep the
     /// same identity in native navigation and present a SwiftUI details sheet.
     private var sessionIdentityButton: some View {
@@ -1152,9 +1165,9 @@ struct SessionView: View {
             .frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
             .contentShape(Capsule())
         }
-        // Let the toolbar own this control's Liquid Glass and separation
-        // shadow, exactly as it does for Back. Applying a glass effect inside
-        // ToolbarItem would nest another surface in the bar's morph group.
+        // Opt this custom identity control into the same Liquid Glass style as
+        // the system Back button and trailing PR action.
+        .buttonStyle(.glass)
         .buttonBorderShape(.capsule)
         .tint(.primary)
         .frame(width: sessionIdentityWidth, alignment: .leading)
@@ -1163,9 +1176,21 @@ struct SessionView: View {
 
     private var sessionIdentityWidth: CGFloat {
         let surfaceWidth = viewportWidth > 0 ? viewportWidth : 390
-        return min(360, max(140, surfaceWidth - 148))
+        let hasPullRequest =
+            viewModel.prDetails?.number != nil || viewModel.session.prNumber != nil
+        let trailingReserve: CGFloat = hasPullRequest ? 266 : 148
+        return min(360, max(140, surfaceWidth - trailingReserve))
     }
     #endif
+
+    private func pullRequestButton(number: Int) -> some View {
+        Button {
+            showPrPanel = true
+        } label: {
+            PrChipLabel(number: number, summary: viewModel.prDetails?.summary)
+        }
+        .accessibilityLabel(Text(verbatim: "Pull request #\(number)"))
+    }
 
     private var currentModel: String {
         viewModel.model.isEmpty ? (catalog?.defaultModel ?? "") : viewModel.model
