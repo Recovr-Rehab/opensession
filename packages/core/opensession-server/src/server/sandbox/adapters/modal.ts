@@ -104,8 +104,12 @@ function modalArtifactNotFound(error: unknown): boolean {
   return (
     detail?.name === "NotFoundError" ||
     detail?.status === 404 ||
+    detail?.status === 410 ||
+    detail?.status === 412 ||
     detail?.statusCode === 404 ||
-    /(?:image|artifact).{0,30}not.?found/i.test(detail?.message || "")
+    detail?.statusCode === 410 ||
+    detail?.statusCode === 412 ||
+    /(?:image|artifact).{0,30}(?:not.?found|expired|deleted|gone)/i.test(detail?.message || "")
   );
 }
 
@@ -187,11 +191,12 @@ function modalDriver(sandbox: ModalSandbox): RemoteDriver {
   return {
     async exec(cmd: string, opts?: RemoteExecOpts) {
       const timeoutMs = opts?.timeoutMs ?? 120_000;
+      let process: any;
       try {
         // A login shell runs Modal's image profile hooks, which emit OSC
         // terminal-title sequences even without a PTY. Those bytes corrupt
         // machine-readable stdout (and once poisoned a sourced `.ports.conf`).
-        const process = await withModalControlDeadline(
+        process = await withModalControlDeadline(
           sandbox.exec(["sh", "-c", cmd], {
             workdir: opts?.cwd,
             env: opts?.env,
@@ -212,6 +217,16 @@ function modalDriver(sandbox: ModalSandbox): RemoteDriver {
         );
         return { exitCode, stdout, stderr };
       } catch (e: any) {
+        // ContainerProcess has no kill API in modal@0.9. Closing stdin is the
+        // supported cancellation boundary and releases commands such as `cat`
+        // that would otherwise hold the wedged exec stream until its timeout.
+        if (process?.closeStdin) {
+          await withModalControlDeadline(
+            process.closeStdin(),
+            5_000,
+            "Modal exec stdin close",
+          ).catch(() => {});
+        }
         return { exitCode: 1, stdout: "", stderr: String(e?.message || e) };
       }
     },
@@ -237,21 +252,33 @@ function modalDriver(sandbox: ModalSandbox): RemoteDriver {
       // modal@0.9's filesystem.writeText uses ReadableStream.from, which Bun
       // does not implement. Stream through process stdin with a local control
       // deadline so a broken stdio channel cannot wedge all later launches.
-      await withModalControlDeadline((async () => {
-        const process = await sandbox.exec([
-          "sh",
-          "-c",
-          `mkdir -p $(dirname ${shellQuoteWord(path)}) && cat > ${shellQuoteWord(path)}`,
-        ], { pty: false, timeoutMs: 60_000 });
-        await process.stdin.writeText(content);
-        await process.stdin.close();
-        const exitCode = await process.wait();
-        if (exitCode !== 0) {
-          throw new Error(
-            `modal writeFile(${path}) failed: ${(await process.stderr.readText()).slice(0, 300)}`,
-          );
+      let process: any;
+      try {
+        await withModalControlDeadline((async () => {
+          process = await sandbox.exec([
+            "sh",
+            "-c",
+            `mkdir -p $(dirname ${shellQuoteWord(path)}) && cat > ${shellQuoteWord(path)}`,
+          ], { pty: false, timeoutMs: 60_000 });
+          await process.stdin.writeText(content);
+          await process.stdin.close();
+          const exitCode = await process.wait();
+          if (exitCode !== 0) {
+            throw new Error(
+              `modal writeFile(${path}) failed: ${(await process.stderr.readText()).slice(0, 300)}`,
+            );
+          }
+        })(), 65_000, `Modal writeFile(${path})`);
+      } catch (error) {
+        if (process?.closeStdin) {
+          await withModalControlDeadline(
+            process.closeStdin(),
+            5_000,
+            `Modal writeFile(${path}) stdin close`,
+          ).catch(() => {});
         }
-      })(), 65_000, `Modal writeFile(${path})`);
+        throw error;
+      }
     },
 
     async ensureStarted() {
@@ -334,7 +361,13 @@ export class ModalProvider implements SandboxProvider {
       Date.now() - Date.parse(prevState.createdAt) >=
         MAX_LIFETIME_MS - RECREATE_BEFORE_EXPIRY_MS
     ) {
-      await this.checkpoint(sandbox.sandboxId);
+      await withModalControlDeadline(
+        this.checkpoint(sandbox.sandboxId),
+        3 * 60_000,
+        `Modal rotation checkpoint (${sandbox.sandboxId})`,
+      ).catch((error) => {
+        console.warn(`[sandbox:modal] rotation checkpoint failed; rotating before the hard lifetime anyway:`, error);
+      });
       prevState = findRemoteStateBySession(this.id, spec.sessionId);
       await sandbox.setTags({ "opensession.completed": spec.sessionId }).catch(() => {});
       await sandbox.terminate();
@@ -350,6 +383,7 @@ export class ModalProvider implements SandboxProvider {
             await candidate.setTags({
               [SESSION_TAG]: spec.sessionId,
               "opensession.sandbox": "1",
+              "opensession.repo": repo.id,
             });
             sandbox = candidate;
             adoptedPrewarmId = candidate.sandboxId;
@@ -380,7 +414,7 @@ export class ModalProvider implements SandboxProvider {
             : Promise.resolve(client.images.fromRegistry(cfg.modal?.image || DEFAULT_IMAGE)),
         ]);
         return client.sandboxes.create(app, image, {
-          tags: { [SESSION_TAG]: spec.sessionId, "opensession.sandbox": "1" },
+          tags: { [SESSION_TAG]: spec.sessionId, "opensession.sandbox": "1", "opensession.repo": repo.id },
           timeoutMs: MAX_LIFETIME_MS,
           idleTimeoutMs:
             (cfg.idleStopMinutes || DEFAULT_IDLE_STOP_MINUTES) * 60_000,
@@ -535,7 +569,11 @@ export class ModalProvider implements SandboxProvider {
     const locks = modalCheckpointLocks();
     const existing = locks.get(sandboxId);
     if (existing) return existing;
-    const task = this.checkpointInner(sandboxId).finally(() => {
+    const task = withModalControlDeadline(
+      this.checkpointInner(sandboxId),
+      12 * 60_000,
+      `Modal checkpoint (${sandboxId})`,
+    ).finally(() => {
       if (locks.get(sandboxId) === task) locks.delete(sandboxId);
     });
     locks.set(sandboxId, task);

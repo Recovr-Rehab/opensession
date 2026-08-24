@@ -43,6 +43,7 @@ export function createRelayRequestLimiter(maxConcurrent = 2): RelayRequestLimite
 const connections: Map<string, Connection> = (g.__opensessionSandboxPortalConnections ??= new Map()) as Map<string, Connection>;
 type Relay = { server: ReturnType<typeof Bun.serve>; sessionId: string; sandboxId: string; port: number };
 const relays: Map<string, Relay> = (g.__opensessionSandboxPortalRelays ??= new Map()) as Map<string, Relay>;
+const routeOps: Map<string, Promise<void>> = (g.__opensessionSandboxPortalRouteOps ??= new Map()) as Map<string, Promise<void>>;
 type BrowserSocket = { ws: any; connection: Connection };
 const browserSockets: Map<string, BrowserSocket> = (g.__opensessionSandboxPortalBrowserSockets ??= new Map()) as Map<string, BrowserSocket>;
 const HOP_HEADERS = new Set(["connection", "host", "content-length", "transfer-encoding", "upgrade", "keep-alive", "proxy-authenticate", "proxy-authorization", "te", "trailer"]);
@@ -51,6 +52,25 @@ const HOP_HEADERS = new Set(["connection", "host", "content-length", "transfer-e
 const RELAY_REQUEST_TIMEOUT_MS = 250_000;
 
 function key(sessionId: string, sandboxId: string, port: number): string { return `${sessionId}:${sandboxId}:${port}`; }
+
+/** Caddy route removal and replacement are asynchronous. Serialize them per
+ * Portal so a delayed stop cannot delete the route installed by an immediate
+ * restart. */
+function queueRouteOperation<T>(id: string, operation: () => Promise<T>): Promise<T> {
+	const run = (routeOps.get(id) ?? Promise.resolve()).then(operation, operation);
+	const barrier = run.then(() => {}, () => {});
+	routeOps.set(id, barrier);
+	void barrier.then(() => { if (routeOps.get(id) === barrier) routeOps.delete(id); });
+	return run;
+}
+
+function dropPortalRoute(id: string, sandboxId: string, port: number): void {
+	void queueRouteOperation(id, async () => {
+		const { dropAuthenticatedPortalRoute } = await import("./preview");
+		await dropAuthenticatedPortalRoute(sandboxHttpsPortFor(sandboxId, port));
+	}).catch((error) => console.warn(`[sandbox-portal] could not drop route for ${sandboxId}:${port}:`, error));
+}
+
 function safeHeaders(headers: Headers): Record<string, string> {
 	const result: Record<string, string> = {};
 	for (const [name, value] of headers) if (!HOP_HEADERS.has(name.toLowerCase()) && value.length <= 8192) result[name] = value;
@@ -97,7 +117,7 @@ function teardownConnection(connection: Connection, code: number, reason: string
 export function revokeSandboxPortalGrants(sandboxId: string): void {
 	for (const [token, grant] of grants) if (grant.sandboxId === sandboxId) grants.delete(token);
 	for (const [id, connection] of connections) if (connection.sandboxId === sandboxId) { teardownConnection(connection, 1008, "portal revoked"); connections.delete(id); }
-	for (const [id, relay] of relays) if (relay.sandboxId === sandboxId) { try { relay.server.stop(true); } catch {} void import("./preview").then(({ dropAuthenticatedPortalRoute }) => dropAuthenticatedPortalRoute(sandboxHttpsPortFor(sandboxId, relay.port))); relays.delete(id); }
+	for (const [id, relay] of relays) if (relay.sandboxId === sandboxId) { try { relay.server.stop(true); } catch {} dropPortalRoute(id, sandboxId, relay.port); relays.delete(id); }
 }
 
 /** Stop one service's public surface without affecting sibling Portals in the
@@ -105,7 +125,7 @@ export function revokeSandboxPortalGrants(sandboxId: string): void {
 export function revokeSandboxPortalRelay(sandboxId: string, port: number): void {
 	for (const [token, grant] of grants) if (grant.sandboxId === sandboxId && grant.port === port) grants.delete(token);
 	for (const [id, connection] of connections) if (connection.sandboxId === sandboxId && connection.port === port) { teardownConnection(connection, 1008, "portal stopped"); connections.delete(id); }
-	for (const [id, relay] of relays) if (relay.sandboxId === sandboxId && relay.port === port) { try { relay.server.stop(true); } catch {} void import("./preview").then(({ dropAuthenticatedPortalRoute }) => dropAuthenticatedPortalRoute(sandboxHttpsPortFor(sandboxId, port))); relays.delete(id); }
+	for (const [id, relay] of relays) if (relay.sandboxId === sandboxId && relay.port === port) { try { relay.server.stop(true); } catch {} dropPortalRoute(id, sandboxId, port); relays.delete(id); }
 }
 
 /** Upgrade only an outbound Sandbox relay whose expiring grant exactly matches
@@ -258,6 +278,9 @@ export async function ensureSandboxPortalRelay(input: { sessionId: string; sandb
 		});
 		relay = { ...input, server }; relays.set(id, relay);
 	}
-	const { ensureAuthenticatedPortalRoute } = await import("./preview");
-	return ensureAuthenticatedPortalRoute(sandboxHttpsPortFor(input.sandboxId, input.port), `127.0.0.1:${relay.server.port}`);
+	const upstream = `127.0.0.1:${relay.server.port}`;
+	return queueRouteOperation(id, async () => {
+		const { ensureAuthenticatedPortalRoute } = await import("./preview");
+		return ensureAuthenticatedPortalRoute(sandboxHttpsPortFor(input.sandboxId, input.port), upstream);
+	});
 }
