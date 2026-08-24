@@ -6133,14 +6133,15 @@ export function SessionViewer({
 						</>
 					)}
 					{session.archived && (
-						<span
-							className="inline-flex shrink-0 items-center justify-center text-dim"
-							role="img"
-							aria-label="Archived"
-							title="Archived"
-						>
-							<IconArchive size={20} />
-						</span>
+						<Tooltip label="Archived" side="bottom">
+							<span
+								className="inline-flex shrink-0 items-center justify-center text-dim"
+								role="img"
+								aria-label="Archived"
+							>
+								<IconArchive size={20} />
+							</span>
+						</Tooltip>
 					)}
 					{renameDraft !== null ? (
 						<input
