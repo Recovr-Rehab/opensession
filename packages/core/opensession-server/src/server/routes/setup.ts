@@ -213,6 +213,7 @@ export async function handleSetupRoutes(
         id: r.id,
         label: r.label,
         path: r.repo,
+        defaultBranch: r.defaultBranch,
         // Can sessions in this repo provision and boot themselves? Read off
         // the main checkout — worktrees carry the same committed files.
         lifecycle: {

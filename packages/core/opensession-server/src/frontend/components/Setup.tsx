@@ -279,7 +279,11 @@ export function SetupPanel({
               title="Add repositories"
               description="Register the repositories sessions can work in."
             >
-              <ReposSection repos={status.repos} onChanged={refetch} />
+              <ReposSection
+                repos={status.repos}
+                onChanged={refetch}
+                onRepoUpdated={setup.applyRepo}
+              />
             </SetupPageSection>
 
             <SetupPageSection

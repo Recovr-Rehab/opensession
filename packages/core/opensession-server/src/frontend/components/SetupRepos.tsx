@@ -1,5 +1,6 @@
-import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import React, { useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
 import { Button } from "../ui/button";
+import { Field, Input } from "../ui/input";
 import { Modal } from "../ui/modal";
 import { Popover } from "../ui/popover";
 import { Switch } from "../ui/switch";
@@ -50,10 +51,12 @@ import { Badge } from "../ui/badge";
 export function ReposSection({
 	repos,
 	onChanged,
+	onRepoUpdated,
 	compact = false,
 }: {
 	repos: SetupStatus["repos"];
 	onChanged: () => void | Promise<void>;
+	onRepoUpdated?: (updated: { id: string; defaultBranch: string }) => void;
 	compact?: boolean;
 }) {
 	const [pickerOpen, setPickerOpen] = useState(false);
@@ -64,13 +67,14 @@ export function ReposSection({
 	// same payload every tile in the app reads, so what this page shows and
 	// what the sidebar paints can't drift apart.
 	const [appearance, setAppearance] = useState<Map<string, RepoInfo>>(new Map());
+	const repoIds = repos.map((repo) => repo.id).join("\0");
 	const loadAppearance = useCallback(async () => {
 		const list = await fetchRepos().catch(() => []);
 		setAppearance(new Map(list.map((r) => [r.id, r])));
 	}, []);
 	useEffect(() => {
 		loadAppearance();
-	}, [loadAppearance, repos]);
+	}, [loadAppearance, repoIds]);
 	return (
 		<>
 			{/* The label is the count: the page and the wizard step are both
@@ -117,22 +121,29 @@ export function ReposSection({
 						in, so add one above.
 					</EmptyState>
 				) : (
-					repos.map((r) => {
-						const lifecycle = repoLifecycleState(r);
+					repos.map((repo) => {
+						if (!compact) {
+							return (
+								<RepositoryRow
+									key={repo.id}
+									repo={repo}
+									appearance={appearance.get(repo.id)}
+									onAppearanceChanged={loadAppearance}
+									onChanged={onChanged}
+									onRepoUpdated={onRepoUpdated}
+								/>
+							);
+						}
+						const lifecycle = repoLifecycleState(repo);
 						return (
-							<SettingRow key={r.id}>
+							<SettingRow key={repo.id}>
 								<RepoTileButton
-									repo={appearance.get(r.id)}
-									id={r.id}
+									repo={appearance.get(repo.id)}
+									id={repo.id}
 									onChanged={loadAppearance}
 								/>
 								<SettingRowText>
-									<SettingRowTitle>{r.label}</SettingRowTitle>
-									{!compact && (
-										<SettingRowDescription className="truncate font-mono text-meta">
-											{r.path}
-										</SettingRowDescription>
-									)}
+									<SettingRowTitle>{repo.label}</SettingRowTitle>
 								</SettingRowText>
 								<StateChip tone={lifecycle.tone} label={lifecycle.label} />
 							</SettingRow>
@@ -141,11 +152,109 @@ export function ReposSection({
 				)}
 			</SettingCard>
 			<SettingsHint>
-				Registering clones the repo onto the server, and sessions branch into
-				isolated worktrees of it. Commit <code>.agents/</code> scripts to
-				provision those worktrees and boot previews. See docs/repo-lifecycle.md.
+				Registering clones the repo onto the server. Sessions branch from its
+				default branch into isolated worktrees. Commit <code>.agents/</code> scripts
+				to provision those worktrees and boot previews. See docs/repo-lifecycle.md.
 			</SettingsHint>
 		</>
+	);
+}
+
+function RepositoryRow({
+	repo,
+	appearance,
+	onAppearanceChanged,
+	onChanged,
+	onRepoUpdated,
+}: {
+	repo: SetupStatus["repos"][number];
+	appearance: RepoInfo | undefined;
+	onAppearanceChanged: () => Promise<void>;
+	onChanged: () => void | Promise<void>;
+	onRepoUpdated?: (updated: { id: string; defaultBranch: string }) => void;
+}) {
+	const lifecycle = repoLifecycleState(repo);
+	const [branch, setBranch] = useState(repo.defaultBranch);
+	const [saving, setSaving] = useState(false);
+	const [error, setError] = useState<string | null>(null);
+	const errorId = useId();
+
+	useEffect(() => {
+		setBranch(repo.defaultBranch);
+	}, [repo.defaultBranch]);
+
+	const normalized = branch.trim();
+	const changed = normalized !== repo.defaultBranch;
+
+	async function saveBranch(event: React.FormEvent) {
+		event.preventDefault();
+		if (!normalized || !changed || saving) return;
+		setSaving(true);
+		setError(null);
+		try {
+			const updated = await setupRequest<{
+				id: string;
+				defaultBranch: string;
+			}>(`/api/setup/repos/${encodeURIComponent(repo.id)}`, {
+				method: "PATCH",
+				json: { defaultBranch: normalized },
+			});
+			setBranch(updated.defaultBranch);
+			if (onRepoUpdated) onRepoUpdated(updated);
+			else await onChanged();
+			toast(`${repo.label} default branch updated`);
+		} catch (e: any) {
+			setError(e.message);
+		} finally {
+			setSaving(false);
+		}
+	}
+
+	return (
+		<SettingRow className="items-start">
+			<RepoTileButton
+				repo={appearance}
+				id={repo.id}
+				onChanged={onAppearanceChanged}
+			/>
+			<SettingRowText>
+				<SettingRowTitle>{repo.label}</SettingRowTitle>
+				<SettingRowDescription className="truncate font-mono text-meta">
+					{repo.path}
+				</SettingRowDescription>
+				<form className="mt-2 flex flex-wrap items-end gap-2" onSubmit={saveBranch}>
+					<Field label="Default branch" className="w-44">
+						<Input
+							className="font-mono"
+							value={branch}
+							onChange={(event) => {
+								setBranch(event.target.value);
+								setError(null);
+							}}
+							disabled={saving}
+							aria-invalid={!!error}
+							aria-describedby={error ? errorId : undefined}
+							autoCapitalize="none"
+							autoCorrect="off"
+							spellCheck={false}
+						/>
+					</Field>
+					<Button
+						type="submit"
+						size="sm"
+						disabled={!normalized || !changed || saving}
+					>
+						{saving ? "Saving…" : "Save"}
+					</Button>
+				</form>
+				{error && (
+					<InlineAlert id={errorId} className="mt-1.5">
+						{error}
+					</InlineAlert>
+				)}
+			</SettingRowText>
+			<StateChip tone={lifecycle.tone} label={lifecycle.label} />
+		</SettingRow>
 	);
 }
 

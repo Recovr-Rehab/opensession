@@ -78,7 +78,7 @@ function DefaultRepoRow() {
 // registering a repo takes effect immediately.
 
 export function ReposPanel() {
-	const { status, failed, refetch } = useSetupStatus();
+	const { status, failed, refetch, applyRepo } = useSetupStatus();
 	return (
 		<SettingsPanel>
 			<SettingsHeader
@@ -103,7 +103,11 @@ export function ReposPanel() {
 			) : (
 				<>
 					<DefaultRepoRow />
-					<ReposSection repos={status.repos} onChanged={refetch} />
+					<ReposSection
+						repos={status.repos}
+						onChanged={refetch}
+						onRepoUpdated={applyRepo}
+					/>
 				</>
 			)}
 		</SettingsPanel>
