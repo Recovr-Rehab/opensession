@@ -414,7 +414,13 @@ function boxSshArgs(target: BoxSshTarget, command: string): string[] {
     "-o", "StrictHostKeyChecking=accept-new",
     "-o", `UserKnownHostsFile=${boxSshKeyDir}/known_hosts`,
     "-o", "ConnectTimeout=15", "-o", "ServerAliveInterval=15",
-    "-o", "ServerAliveCountMax=2", `${target.user}@${target.host}`, command,
+    "-o", "ServerAliveCountMax=2",
+    // Reuse one host-local authenticated connection for launch material. The
+    // %C hash scopes the socket to user/host/port/key, and OpenSSH falls back
+    // safely when a resumed VM has killed the old master.
+    "-o", "ControlMaster=auto", "-o", "ControlPersist=120",
+    "-o", `ControlPath=${boxSshKeyDir}/cm-%C`,
+    `${target.user}@${target.host}`, command,
   ];
 }
 
