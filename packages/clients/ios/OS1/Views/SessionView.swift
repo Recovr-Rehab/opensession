@@ -1177,7 +1177,7 @@ struct SessionView: View {
         let surfaceWidth = viewportWidth > 0 ? viewportWidth : 390
         let hasPullRequest =
             viewModel.prDetails?.number != nil || viewModel.session.prNumber != nil
-        let trailingReserve: CGFloat = hasPullRequest ? 266 : 148
+        let trailingReserve: CGFloat = hasPullRequest ? 210 : 148
         return min(360, max(128, surfaceWidth - trailingReserve))
     }
     #endif
