@@ -392,19 +392,6 @@ export function WorkspaceSummary({
 		localStorage.setItem(WS_SUMMARY_OPEN_KEY, String(nextOpen));
 		window.dispatchEvent(new Event(WS_SUMMARY_OPEN_EVENT));
 	}
-	/**
-	 * What a row does to the card after it routes somewhere.
-	 *
-	 * An overlay has to go: it is lying across the pane it just navigated, and
-	 * nothing else would dismiss it. A pinned card does not. It is a standing
-	 * view of the workspace, the same one that survives switching sessions, and
-	 * the surface it opens (Review above all) shows it too. Closing it here also
-	 * wrote the preference off, so opening Review from the card un-pinned it in
-	 * every other window and every session opened afterwards.
-	 */
-	function dismissAfterRouting() {
-		if (!canStand) changeOpen(false);
-	}
 	return (
 		<Popover.Root
 			open={open}
@@ -480,7 +467,7 @@ export function WorkspaceSummary({
 					session={session}
 					{...body}
 					reviewMode={reviewMode}
-					close={dismissAfterRouting}
+					close={() => changeOpen(false)}
 				/>
 			</Popover.Popup>
 		</Popover.Root>
