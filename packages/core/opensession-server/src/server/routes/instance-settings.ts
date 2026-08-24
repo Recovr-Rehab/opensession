@@ -10,6 +10,7 @@ import type { RouteContext } from "./context";
 import {
 	configPath,
 	getConfig,
+	organizationDomain,
 	organizationName,
 	personaName,
 	productName,
@@ -31,6 +32,8 @@ import {
 } from "../organization-settings";
 import { requireWorkspaceAdmin } from "../workspace-auth";
 import { testS3AssetStorage } from "../session-assets";
+import { githubCredentialForLogin } from "../github-auth";
+import { fetchWithTimeout } from "../shared/fetch-with-timeout";
 
 const MAX_NAME_LENGTH = 80;
 const MAX_STORAGE_FIELD_LENGTH = 500;
@@ -78,6 +81,7 @@ function generalDto(publicPrefix: string) {
 	const revision = organizationIconRevision();
 	return {
 		organizationName: organizationName(),
+		organizationDomain: organizationDomain(),
 		organizationIconUrl:
 			revision === null
 				? null
@@ -85,6 +89,63 @@ function generalDto(publicPrefix: string) {
 		organizationIconRevision: revision,
 		configPath: configPath(),
 	};
+}
+
+/**
+ * The connected GitHub organization's public profile, so the onboarding
+ * organization step can fill itself in rather than ask for three things the
+ * connection already knows.
+ *
+ * Server-side because the token lives here: the browser never sees it, and an
+ * organization that is private to the installation still resolves. The avatar
+ * is handed back as a URL rather than bytes, since avatars.githubusercontent.com
+ * allows cross-origin reads and the browser already has the canvas path that
+ * turns any picked image into the square PNG the icon endpoint wants.
+ */
+async function githubOrganizationProfile(
+	ctx: RouteContext,
+	login: string,
+): Promise<Response> {
+	const tokens = [
+		ctx.authUser?.login
+			? githubCredentialForLogin(ctx.authUser.login)?.env.GH_TOKEN
+			: undefined,
+		process.env.GITHUB_API_TOKEN,
+	].filter((token): token is string => !!token);
+	const response = await fetchWithTimeout(
+		`https://api.github.com/orgs/${encodeURIComponent(login)}`,
+		{
+			headers: {
+				Accept: "application/vnd.github+json",
+				"User-Agent": "opensession",
+				...(tokens[0] ? { Authorization: `Bearer ${tokens[0]}` } : {}),
+			},
+		},
+	).catch(() => null);
+	const body = (await response?.json().catch(() => null)) as Record<
+		string,
+		unknown
+	> | null;
+	if (!response?.ok || !body) {
+		// A missing or unreadable organization is not an error worth stopping
+		// onboarding for: the fields simply stay empty and editable.
+		return Response.json({ login, name: "", domain: "", avatarUrl: "" });
+	}
+	const str = (value: unknown) => (typeof value === "string" ? value.trim() : "");
+	// The website first, then the public contact address: an org that has set
+	// neither has no domain we could infer without guessing.
+	let domain = "";
+	try {
+		domain = domainField(str(body.blog) || str(body.email)) || "";
+	} catch {
+		domain = "";
+	}
+	return Response.json({
+		login,
+		name: str(body.name) || login,
+		domain,
+		avatarUrl: str(body.avatar_url),
+	});
 }
 
 function assetStorageDto() {
@@ -186,6 +247,31 @@ function nameField(v: unknown, label: string): string | undefined {
 	return v;
 }
 
+/** The team's email domain. Accepts what a person actually types — a bare
+ *  domain, a URL, or their own address — and stores the host alone, so the
+ *  people step can compare an invite against it without parsing again. */
+function domainField(v: unknown): string | undefined {
+	if (v === undefined) return undefined;
+	if (typeof v !== "string") throw new Error("organizationDomain must be a string");
+	const raw = v.trim().toLowerCase();
+	if (!raw) return "";
+	const host = raw
+		.replace(/^[a-z]+:\/\//, "")
+		.replace(/^.*@/, "")
+		.replace(/^www\./, "")
+		.split("/")[0]!
+		.split("?")[0]!;
+	if (host.length > MAX_NAME_LENGTH) {
+		throw new Error(
+			`organizationDomain must be at most ${MAX_NAME_LENGTH} characters`,
+		);
+	}
+	if (!/^[a-z0-9-]+(\.[a-z0-9-]+)+$/.test(host)) {
+		throw new Error("That does not look like a domain, e.g. acme.com");
+	}
+	return host;
+}
+
 function setOrDelete(
 	config: Record<string, unknown>,
 	section: string,
@@ -215,6 +301,19 @@ export async function handleInstanceSettingsRoutes(
 		return Response.json(generalDto(publicPrefix));
 	}
 
+	if (
+		path === "/api/settings/general/github-organization" &&
+		req.method === "GET"
+	) {
+		const forbidden = requireWorkspaceAdmin(ctx);
+		if (forbidden) return forbidden;
+		const login = new URL(req.url).searchParams.get("login")?.trim() || "";
+		if (!/^[A-Za-z0-9](?:[A-Za-z0-9-]{0,38})$/.test(login)) {
+			return Response.json({ error: "login must be a GitHub org" }, { status: 400 });
+		}
+		return githubOrganizationProfile(ctx, login);
+	}
+
 	if (path === "/api/settings/general" && req.method === "PUT") {
 		const forbidden = requireWorkspaceAdmin(ctx);
 		if (forbidden) return forbidden;
@@ -227,9 +326,11 @@ export async function handleInstanceSettingsRoutes(
 		}
 		try {
 			const name = nameField(body.organizationName, "organizationName");
+			const domain = domainField(body.organizationDomain);
 			await withConfigMutationLock(async () => {
 				const config = rawConfig();
 				setOrDelete(config, "organization", "name", name);
+				setOrDelete(config, "organization", "domain", domain);
 				persistRawConfig(config);
 			});
 		} catch (error: any) {

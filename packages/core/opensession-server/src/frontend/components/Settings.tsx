@@ -56,7 +56,6 @@ import { PrewarmingPanel } from "./settings/PrewarmingPanel";
 import { ReposPanel } from "./settings/ReposPanel";
 import { SandboxesPanel } from "./settings/SandboxesPanel";
 import { StoragePanel } from "./settings/StoragePanel";
-import { WaitlistPanel } from "./settings/WaitlistPanel";
 import { RunnersPanel } from "./settings/RunnersPanel";
 import { ReliabilityPanel } from "./settings/ReliabilityPanel";
 import { SettingsAccountCard, SettingsAccountFooter } from "./SettingsAccount";
@@ -249,7 +248,6 @@ function SectionPanel({
 			{section === "storage" && <StoragePanel />}
 			{section === "prewarming" && <PrewarmingPanel />}
 			{section === "papercuts" && <PapercutsPanel />}
-			{section === "waitlist" && <WaitlistPanel />}
 			{section === "deploys" && <DeploysPanel />}
 		</>
 	);

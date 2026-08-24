@@ -184,22 +184,6 @@ summary:focus-visible {
 	line-height: 1.5;
 }
 
-.rail-setup-link {
-	display: flex;
-	width: fit-content;
-	min-height: 40px;
-	align-items: center;
-	gap: 5px;
-	margin-top: 10px;
-	color: var(--muted);
-	font-size: 14px;
-	font-weight: 600;
-	transition: color 160ms ease;
-}
-
-.rail-setup-link:hover {
-	color: var(--ink);
-}
 
 .feed {
 	display: flex;
@@ -553,6 +537,25 @@ summary:focus-visible {
 
 .button-primary:hover {
 	filter: brightness(1.06);
+}
+
+/* The second ask, under the first. Same control, no fill: it carries the same
+   height and corner as the primary so the pair reads as one stack, and only
+   the hairline tells them apart. */
+.button-secondary {
+	margin-top: 10px;
+	border-color: rgba(var(--ink-rgb), 0.14);
+	background: transparent;
+	color: var(--ink);
+	transition:
+		transform 160ms cubic-bezier(0.23, 1, 0.32, 1),
+		border-color 160ms ease,
+		background-color 160ms ease;
+}
+
+.button-secondary:hover {
+	border-color: rgba(var(--ink-rgb), 0.24);
+	background: rgba(var(--ink-rgb), 0.04);
 }
 
 .button:active {

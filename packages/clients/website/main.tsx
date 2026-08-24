@@ -98,7 +98,7 @@ function LandingPage() {
 					>
 						Get started
 					</a>
-					<a className="rail-setup-link" href="setup">
+					<a className="button button-secondary" href="setup">
 						Set up your server <IconChevronRight size={16} />
 					</a>
 					<p className="rail-note">

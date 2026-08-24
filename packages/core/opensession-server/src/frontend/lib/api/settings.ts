@@ -72,20 +72,6 @@ export async function setPapercutsRepoEnabled(
 	});
 }
 
-// ── Waitlist (Settings → Waitlist: website access requests) ──
-
-export interface WaitlistEntryDto {
-	email: string;
-	createdAt: string;
-}
-
-export async function fetchWaitlist(): Promise<{
-	entries: WaitlistEntryDto[];
-	slackChannel: string | null;
-}> {
-	return request("/waitlist", { label: "Failed to fetch the waitlist" });
-}
-
 // ── Tool accounts (Settings → Account: personal sign-in per MCP tool) ──
 
 export interface ToolAccountDto {
@@ -314,6 +300,8 @@ export async function savePersonalPrompt(
 
 export interface OrganizationSettingsDto {
 	organizationName: string;
+	/** "" when nobody has set one: a domain is never guessed. */
+	organizationDomain: string;
 	organizationIconUrl: string | null;
 	organizationIconRevision: string | null;
 	configPath: string;
@@ -325,9 +313,11 @@ export async function fetchOrganizationSettings(): Promise<OrganizationSettingsD
 	});
 }
 
-/** Empty string resets the name to the instance's product name. */
+/** Empty string resets the name to the instance's product name, and clears the
+ *  domain. The server normalizes whatever domain shape was typed. */
 export async function saveOrganizationSettings(patch: {
 	organizationName?: string;
+	organizationDomain?: string;
 }): Promise<OrganizationSettingsDto> {
 	return request("/settings/general", { method: "PUT", body: patch });
 }
@@ -355,6 +345,30 @@ export async function uploadOrganizationIcon(
 
 export async function removeOrganizationIcon(): Promise<OrganizationSettingsDto> {
 	return request("/settings/general/icon", { method: "DELETE" });
+}
+
+/** The connected GitHub organization's public profile, read server-side so the
+ *  token stays there. Empty strings when GitHub had nothing to say. */
+export interface GithubOrganizationProfileDto {
+	login: string;
+	name: string;
+	domain: string;
+	avatarUrl: string;
+}
+
+/** Never throws: onboarding fills what it can and leaves the rest editable, so
+ *  a rate limit or a private org must not stop the step. */
+export async function fetchGithubOrganizationProfile(
+	login: string,
+): Promise<GithubOrganizationProfileDto | null> {
+	try {
+		return await request(
+			`/settings/general/github-organization?login=${encodeURIComponent(login)}`,
+			{ label: "Failed to read the GitHub organization" },
+		);
+	} catch {
+		return null;
+	}
 }
 
 export interface AssetStorageSettingsDto {

@@ -14,7 +14,6 @@ import {
 	IconFileText2,
 	IconHome,
 	IconKeyboard,
-	IconMail,
 	IconPeople,
 	IconPlug,
 	IconRocket,
@@ -57,7 +56,6 @@ export type SettingsSectionKey =
 	| "storage"
 	| "prewarming"
 	| "deploys"
-	| "waitlist"
 	| "papercuts"
 	| "audit"
 	| ToolSectionKey;
@@ -214,13 +212,6 @@ export const SECTIONS: {
 		label: "Deploys",
 		group: "Infrastructure",
 		icon: <IconRocket />,
-	},
-	{
-		key: "waitlist",
-		label: "Waitlist",
-		group: "Activity",
-		adminOnly: true,
-		icon: <IconMail />,
 	},
 	{
 		key: "papercuts",

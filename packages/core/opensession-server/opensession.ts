@@ -381,10 +381,6 @@ const server: import("bun").Server<WSClientData> = hotServe({
 				const openHealth =
 					req.method === "GET" &&
 					(path === "/api/health" || path === "/live" || path === "/ready");
-				// The landing page has one public write: submitting an email. The
-				// matching GET stays behind sign-in and the workspace-admin gate.
-				const openWaitlist =
-					path === "/api/waitlist" && req.method === "POST";
 				const keypadBearer =
 					path === "/api/keypad" &&
 					req.method === "GET" &&
@@ -421,7 +417,6 @@ const server: import("bun").Server<WSClientData> = hotServe({
 				if (
 					!authUser &&
 					!openHealth &&
-					!openWaitlist &&
 					!keypadBearer &&
 					!openOs1Update &&
 					!openRunnerAuth &&

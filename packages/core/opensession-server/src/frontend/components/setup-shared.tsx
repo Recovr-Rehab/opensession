@@ -199,9 +199,10 @@ export function chipDotColor(tone: ChipTone): string {
 export type SetupStepId =
 	| "server"
 	| "github"
-	| "identity"
-	| "engine"
+	| "organization"
+	| "models"
 	| "repos"
+	| "members"
 	| "review";
 
 export function integrationState(i: SetupIntegration): {

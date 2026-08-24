@@ -25,15 +25,34 @@ interface FirstMileStep {
 	title: string;
 }
 
+// GitHub comes first because it supplies the next step's answers: the
+// organization is named, marked and domained from the org you just connected,
+// rather than asked for cold. Members sit after repositories, since an invite
+// is worth more once there is something to join.
 const STEPS: FirstMileStep[] = [
-	{ id: "welcome", label: "Organization", title: `Welcome to ${PRODUCT_NAME}` },
+	{ id: "welcome", label: "Welcome", title: `Welcome to ${PRODUCT_NAME}` },
 	{ id: "github", label: "GitHub", title: "Connect GitHub" },
-	{ id: "organization", label: "Organization", title: "Organization" },
-	{ id: "ai", label: "AI", title: "AI subscriptions" },
+	{ id: "organization", label: "Organization", title: "Your organization" },
+	{ id: "ai", label: "Models", title: "Models" },
 	{ id: "repos", label: "Repositories", title: "Repositories" },
-	{ id: "team", label: "People", title: "Add team members" },
+	{ id: "team", label: "Members", title: "Invite your team" },
 	{ id: "ready", label: "Ready", title: "You’re ready" },
 ];
+
+/** The GitHub organization this instance is wired to, for the organization
+ *  step's defaults. Reads the App's own owner first, then falls back to the
+ *  org named in the App-create URL the wizard built. */
+function connectedGithubOrganization(status: SetupStatus): string {
+	if (status.github.appOrg) return status.github.appOrg;
+	try {
+		const match = new URL(status.github.appCreateUrl).pathname.match(
+			/^\/organizations\/([^/]+)/,
+		);
+		return match?.[1] ? decodeURIComponent(match[1]) : "";
+	} catch {
+		return "";
+	}
+}
 
 function PreviewOverflow({
 	count,
@@ -428,7 +447,11 @@ export function FirstMile({ onDone }: { onDone: () => void }) {
 												onboarding
 											/>
 										)}
-										{step.id === "organization" && <OrganizationProfileSection />}
+										{step.id === "organization" && (
+											<OrganizationProfileSection
+												githubOrganization={connectedGithubOrganization(status)}
+											/>
+										)}
 										{step.id === "team" && (
 											<TeamSection
 												onChanged={refetch}

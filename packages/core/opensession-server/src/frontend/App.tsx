@@ -423,7 +423,6 @@ const SETTINGS_SECTIONS = new Set<SettingsSectionKey>([
 	"storage",
 	"prewarming",
 	"deploys",
-	"waitlist",
 	"papercuts",
 	"audit",
 ]);
