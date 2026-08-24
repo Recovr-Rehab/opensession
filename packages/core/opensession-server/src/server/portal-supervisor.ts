@@ -234,7 +234,11 @@ async function listPortals(ops: PortalOps): Promise<PortalRecord[]> {
 		// when a wrapper (just/concurrently) survives its dead dev server —
 		// otherwise the record ghosts as an eternal "starting" stub: invisible as
 		// a live Portal, yet blocking every new start with "already exists".
-		const state: PortalState = listening ? "awake" : alive && record.state !== "awake" ? "starting" : "failed";
+		// Records poisoned before this rule existed lost their awake history, so
+		// also fail a "starting" record stuck past the maximum readiness window.
+		const startedMs = record.startedAt ? Date.now() - Date.parse(record.startedAt) : 0;
+		const stuckStarting = record.state === "starting" && startedMs > 300_000;
+		const state: PortalState = listening ? "awake" : alive && record.state !== "awake" && !stuckStarting ? "starting" : "failed";
 		if (state === record.state) return record;
 		changed = true;
 		return { ...record, state, ...(state === "failed" ? { lastError: "The service is no longer listening." } : {}) };

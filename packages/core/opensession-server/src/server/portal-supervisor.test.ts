@@ -72,6 +72,17 @@ describe("session Portal supervisor", () => {
 		expect((await listPortalServices(worktree))[0]?.state).toBe("stopped");
 	});
 
+	test("fails a starting record stuck past the readiness window", async () => {
+		// A record poisoned before the awake-history rule: state "starting", pid
+		// alive, started long ago, nothing listening. It must surface as failed.
+		const wrapper = Bun.spawn(["sleep", "60"]);
+		const record = { name: "web-stuck", key: "WEBAPP_PORT", command: "just dev", port: 18_779, state: "starting", pid: wrapper.pid, startedAt: new Date(Date.now() - 20 * 60_000).toISOString() };
+		writeFileSync(join(worktree, ".ports.conf"), `${PREFIX(record)}\nWEBAPP_PORT=18779\n`);
+		const [portal] = await listPortalServices(worktree);
+		expect(portal?.state).toBe("failed");
+		wrapper.kill();
+	});
+
 	test("marks a crashed awake Portal failed instead of an eternal starting ghost", async () => {
 		// A wrapper pid that survives its dead dev server: pid alive, port dead,
 		// recorded state awake. This must surface as failed, not "starting".
