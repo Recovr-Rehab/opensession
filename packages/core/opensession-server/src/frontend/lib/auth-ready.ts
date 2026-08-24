@@ -3,6 +3,18 @@ const USER_KEY = "opensession-user";
 const LEGACY_USER_KEY = "backstage-user";
 export const AUTH_STATUS_EVENT = "opensession-auth-status-changed";
 
+/** True when the instance requires sign-in and this browser holds no accepted
+ *  session — the state in which every authenticated route and the UI WebSocket
+ *  upgrade 401, so the only correct UI is the sign-in card, never a reconnect
+ *  overlay. Shared by UserGate (renders the card) and useWebSocket (stops
+ *  presenting a refused upgrade as a transient disconnect) so the two never
+ *  disagree about what a 401 means. */
+export function authGatesOut(
+	status: { required?: boolean; authenticated?: boolean } | null | undefined,
+): boolean {
+	return !!status?.required && !status.authenticated;
+}
+
 function storedCurrentUser(): string {
 	if (typeof localStorage === "undefined") return "Anonymous";
 	return localStorage.getItem(USER_KEY) || localStorage.getItem(LEGACY_USER_KEY) || "Anonymous";

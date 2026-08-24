@@ -5,7 +5,8 @@ import { countSessionPerf } from "../lib/session-performance";
 import { withMutationRequestId } from "../lib/ws-request-id";
 import { BASE_PATH } from "../lib/base";
 import { toast } from "../ui/toast";
-import { whenCurrentUserReady } from "../lib/auth-ready";
+import { authGatesOut, whenCurrentUserReady } from "../lib/auth-ready";
+import { publishAuthStatus } from "../components/UserPicker";
 import {
   localCommandScope,
   shouldRetireCommandResult,
@@ -313,13 +314,22 @@ export function useWebSocket(presenceActive = true) {
           const response = await fetch(`${API_BASE}/auth/status`);
           const status = response.ok ? await response.json() : null;
           if (status?.local && !status.authenticated) return;
-          // The session stopped being accepted while this tab stayed open:
-          // it expired, or the GitHub grant behind it died. Retrying every 2s
-          // for ever leaves a live-looking app that can reach nothing, so
-          // reload into the gate, which asks for the sign-in that repairs it.
-          if (everOpenRef.current && status?.required && !status.authenticated) {
-            window.location.reload();
-            return;
+          if (authGatesOut(status)) {
+            if (everOpenRef.current) {
+              // The session stopped being accepted while this tab stayed open:
+              // it expired, or the GitHub grant behind it died. Retrying every
+              // 2s for ever leaves a live-looking app that can reach nothing, so
+              // reload into the gate, which asks for the sign-in that repairs it.
+              window.location.reload();
+              return;
+            }
+            // A socket that never opened means a fresh load into a gated
+            // instance (the upgrade 401s immediately). Reloading here would loop
+            // on the sign-in card, whose own socket also 401s, so publish the
+            // gated status instead: UserGate renders the sign-in card over the
+            // optimistically-painted app. Fall through to keep retrying, so a
+            // completed sign-in reconnects without a manual refresh.
+            publishAuthStatus(status);
           }
         } catch {}
       }
