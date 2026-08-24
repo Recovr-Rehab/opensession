@@ -142,6 +142,7 @@ const MACHINE_PROFILES: Record<"daytona" | "box" | "modal" | "microvm", MachineP
 		{ id: "efficient", label: "Efficient", detail: "0.5 physical CPU · 2 GB", settings: { cpu: 0.5, memoryMb: 2048 } },
 		{ id: "balanced", label: "Balanced", detail: "1 physical CPU · 4 GB", settings: { cpu: 1, memoryMb: 4096 } },
 		{ id: "performance", label: "Performance", detail: "2 physical CPUs · 8 GB", settings: { cpu: 2, memoryMb: 8192 } },
+		{ id: "power", label: "Power", detail: "8 physical CPUs · 16 GB", settings: { cpu: 8, memoryMb: 16_384 } },
 	],
 	microvm: [
 		{ id: "compact", label: "Compact", detail: "2 vCPU · 4 GB · 25 GB disk", settings: { cpu: 2, memoryMb: 4096, diskGb: 25 } },
