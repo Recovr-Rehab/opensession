@@ -80,6 +80,7 @@ test("reviews with and without a PR share the floating toolbar", () => {
 	expect(reviewToolbarSource).toContain('"top-[42px] h-5 -mb-5"');
 	expect(reviewToolbarSource).toContain('"top-[52px] h-2.5 -mb-2.5"');
 	expect(reviewToolbarSource).not.toContain("linear-gradient");
+	expect(reviewToolbarSource).toContain("overflow-clip rounded-t-lg");
 	expect(reviewToolbarSource).toContain("desktop:mb-2");
 	expect(reviewToolbarSource).toContain("desktop:overflow-hidden");
 	expect(reviewToolbarSource).toContain("desktop:rounded-lg");

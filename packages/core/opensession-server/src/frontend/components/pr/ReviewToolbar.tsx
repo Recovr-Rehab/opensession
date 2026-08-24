@@ -39,7 +39,7 @@ export function ReviewToolbar({
       </div>
       {compact && (
         <div
-          className={`pointer-events-none sticky z-[5] mx-2 hidden bg-surface desktop:block ${fileMask}`}
+          className={`pointer-events-none sticky z-[5] mx-2 hidden overflow-clip rounded-t-lg bg-surface desktop:block ${fileMask}`}
           aria-hidden="true"
         />
       )}
