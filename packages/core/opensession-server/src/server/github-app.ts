@@ -72,10 +72,16 @@ export async function githubAppInstallationToken(): Promise<string | null> {
       const res = await fetch("https://api.github.com/app/installations", { headers });
       const installs = (await res.json()) as Array<{ id: number; account?: { login?: string } }>;
       if (!Array.isArray(installs) || !installs.length) throw new Error("no installations");
-      const owner =
-        typeof githubConfig.installationOwner === "string"
-          ? githubConfig.installationOwner.toLowerCase()
-          : "";
+      // Prefer an explicit installation owner, then the org captured at setup
+      // (appOrg) — the same precedence setup-team.ts uses. Without the appOrg
+      // fallback, an org App installed on more than one account has no way to
+      // disambiguate and falls back to the bot PAT even though appOrg already
+      // names the intended owner.
+      const owner = (
+        [githubConfig.installationOwner, githubConfig.appOrg].find(
+          (value): value is string => typeof value === "string" && !!value.trim(),
+        ) ?? ""
+      ).toLowerCase();
       const selected = owner
         ? installs.find((installation) => installation.account?.login?.toLowerCase() === owner)
         : installs.length === 1
