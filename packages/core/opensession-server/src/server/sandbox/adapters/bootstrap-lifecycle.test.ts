@@ -87,6 +87,8 @@ describe("remote repo lifecycle", () => {
 		expect(result.log).toContain("/.opensession/lifecycle/");
 		expect(d.commands[2]!.command).toContain("OPENSESSION_BOOT_MODE=fresh");
 		expect(d.commands[2]!.command).toContain("PATH=");
+		expect(d.commands[2]!.command).toContain("setup-bin");
+		expect(d.commands[2]!.command).toContain("install --frozen-lockfile");
 		expect(d.commands[2]!.command).toContain("touch");
 		expect(d.commands[2]!.opts.timeoutMs).toBe(20 * 60_000);
 	});
@@ -118,6 +120,8 @@ describe("remote repo lifecycle", () => {
 			runRemoteLifecycleHook(d.value, "/work/repo", "resume", "resume"),
 		).rejects.toThrow(".agents/resume failed with exit 7");
 		expect(d.commands[2]!.command).not.toContain("setup.done");
+		expect(d.commands[2]!.command).not.toContain("setup-bin");
+		expect(d.commands[2]!.command).not.toContain("install --frozen-lockfile");
 	});
 
 	test("refuses a present non-executable hook", async () => {
