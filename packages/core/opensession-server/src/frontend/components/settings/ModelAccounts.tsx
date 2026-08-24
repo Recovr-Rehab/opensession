@@ -1044,6 +1044,7 @@ export function ProviderAccountsSection({
 	return (
 		<>
 			<SettingsGroupLabel
+				className="phone:[&>span]:w-full phone:[&>div]:w-full phone:[&>div]:flex-wrap"
 				actions={
 				<>
 					<Segmented
