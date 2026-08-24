@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
 	fetchModels,
 	fetchPersonalOutputStyle,
@@ -118,12 +118,12 @@ function DeskVoiceApiKeyRow() {
 	const [busy, setBusy] = useState(false);
 	const [error, setError] = useState<string | null>(null);
 
-	const load = useCallback(() => {
+	const load = () => {
 		fetch(`${BASE_PATH}/api/desk/voice/status`)
 			.then((r) => r.json())
 			.then(setStatus)
 			.catch((e) => setError(e.message));
-	}, []);
+	};
 	useEffect(load, [load]);
 
 	async function put(value: string) {
@@ -317,7 +317,7 @@ function PersonalPromptPanel() {
 	const latest = useRef({ prompt, savedPrompt, user });
 	latest.current = { prompt, savedPrompt, user };
 
-	const commit = useCallback(async () => {
+	const commit = async () => {
 		const { prompt: draft, savedPrompt: saved, user: who } = latest.current;
 		if (draft === null || draft === saved) return;
 		setStatus("saving");
@@ -331,7 +331,7 @@ function PersonalPromptPanel() {
 				variant: "error",
 			});
 		}
-	}, []);
+	};
 
 	useEffect(() => {
 		// Fire-and-forget on the way out — nothing is left to render a result to.

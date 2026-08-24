@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
 	setupRequest,
 	type SetupAccess,
@@ -49,7 +49,7 @@ export function useSetupStatus(): SetupController {
 	const statusRef = useRef<SetupStatus | null>(null);
 	statusRef.current = status;
 
-	const refetch = useCallback(async () => {
+	const refetch = async () => {
 		try {
 			const body = await setupRequest<SetupStatus>("/api/setup/status");
 			setStatus(body);
@@ -59,14 +59,13 @@ export function useSetupStatus(): SetupController {
 			// stale one: better a slightly old page than an empty one.
 			if (!statusRef.current) setFailed(true);
 		}
-	}, []);
+	};
 
 	useEffect(() => {
 		refetch();
 	}, [refetch]);
 
-	const applyIntegration = useCallback(
-		(updated: SetupIntegration, restartRequired: boolean) => {
+	const applyIntegration = (updated: SetupIntegration, restartRequired: boolean) => {
 			setStatus((s) =>
 				s
 					? {
@@ -78,12 +77,9 @@ export function useSetupStatus(): SetupController {
 					: s,
 			);
 			if (restartRequired) setRestartNeeded(true);
-		},
-		[],
-	);
+		};
 
-	const applyAccess = useCallback(
-		(updated: SetupAccess, restartRequired: boolean) => {
+	const applyAccess = (updated: SetupAccess, restartRequired: boolean) => {
 			setStatus((status) =>
 				status
 					? {
@@ -94,20 +90,14 @@ export function useSetupStatus(): SetupController {
 					: status,
 			);
 			if (restartRequired) setRestartNeeded(true);
-		},
-		[],
-	);
+		};
 
-	const applyGithub = useCallback(
-		(updated: SetupGithub, restartRequired: boolean) => {
+	const applyGithub = (updated: SetupGithub, restartRequired: boolean) => {
 			setStatus((s) => (s ? { ...s, github: updated } : s));
 			if (restartRequired) setRestartNeeded(true);
-		},
-		[],
-	);
+		};
 
-	const applyRepo = useCallback(
-		(
+	const applyRepo = (
 			updated: Pick<SetupRepo, "id"> &
 				Partial<Pick<SetupRepo, "defaultBranch" | "isolatedWorktrees">>,
 		) => {
@@ -121,12 +111,9 @@ export function useSetupStatus(): SetupController {
 						}
 					: s,
 			);
-		},
-		[],
-	);
+		};
 
-	const restartServer = useCallback(
-		async (post = true) => {
+	const restartServer = async (post = true) => {
 			setRestartState("working");
 			if (post) {
 				try {
@@ -164,9 +151,7 @@ export function useSetupStatus(): SetupController {
 				await sleep(1000);
 			}
 			setRestartState("failed");
-		},
-		[refetch],
-	);
+		};
 
 	return {
 		status,

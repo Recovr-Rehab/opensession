@@ -48,10 +48,7 @@ function Root<Payload = unknown>({
 	exclusive?: boolean;
 }) {
 	const internalActionsRef = React.useRef<BasePopover.Root.Actions | null>(null);
-	const entry = React.useMemo(
-		() => ({ close: () => internalActionsRef.current?.close() }),
-		[],
-	);
+	const entry = (({ close: () => internalActionsRef.current?.close() }));
 	const group = useExclusivePopup(entry);
 
 	React.useImperativeHandle(

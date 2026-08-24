@@ -1,5 +1,5 @@
 import { BASE_PATH } from "../lib/base";
-import React, { useCallback, useEffect, useRef, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { Button } from "../ui/button";
 import { cn } from "../ui/cn";
 import {
@@ -239,7 +239,7 @@ export function SlackChannelPane({
 		};
 	}, []);
 
-	const loadNewest = useCallback(async () => {
+	const loadNewest = async () => {
 		try {
 			const res = await fetch(
 				`${BASE_PATH}/api/slack/channels/${encodeURIComponent(channelId)}/messages`,
@@ -278,7 +278,7 @@ export function SlackChannelPane({
 		} finally {
 			if (aliveRef.current) setLoading(false);
 		}
-	}, [channelId]);
+	};
 
 	useEffect(() => {
 		setMessages([]);

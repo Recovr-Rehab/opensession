@@ -3,7 +3,7 @@ import {
 	createElement,
 	type ReactNode,
 	useContext,
-	useMemo,
+	
 	useRef,
 } from "react";
 import {
@@ -49,7 +49,7 @@ export function OpenAssetPathsProvider({
 	const paths = useRef(value);
 	paths.current = value;
 	const empty = value.length === 0;
-	const context = useMemo(() => ({ paths }), [empty]);
+	const context = (({ paths }));
 	return createElement(OpenAssetPathsContext.Provider, { value: context }, children);
 }
 

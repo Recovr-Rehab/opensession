@@ -252,12 +252,9 @@ function RangeCalendar({
 	const pendingFocus = React.useRef<IsoDay | null>(null);
 	const gridRef = React.useRef<HTMLDivElement | null>(null);
 
-	const weekStart = React.useMemo(() => weekStartFor(), []);
-	const headings = React.useMemo(() => weekdayHeadings(weekStart), [weekStart]);
-	const months = React.useMemo(
-		() => Array.from({ length: monthCount }, (_, i) => startOfMonth(addMonths(anchor, i))),
-		[anchor, monthCount],
-	);
+	const weekStart = (weekStartFor());
+	const headings = (weekdayHeadings(weekStart));
+	const months = (Array.from({ length: monthCount }, (_, i) => startOfMonth(addMonths(anchor, i))));
 
 	function focusDay(day: IsoDay) {
 		// One button per day across the grids: a day from a neighbouring month is

@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useRef, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { getCurrentUser } from "./UserPicker";
 import { Button } from "../ui/button";
 import { noAutofill } from "../lib/composer-autofill";
@@ -33,14 +33,14 @@ export function SelectionToSession({ sessionId, label, send, children }: Props) 
   const [message, setMessage] = useState("");
   const [sent, setSent] = useState(false);
 
-  const dismiss = useCallback(() => {
+  const dismiss = () => {
     setSel(null);
     setComposing(false);
     setMessage("");
     setSent(false);
-  }, []);
+  };
 
-  const onMouseUp = useCallback(() => {
+  const onMouseUp = () => {
     if (!send) return;
     // Defer so the browser has finalised the selection after mouseup.
     setTimeout(() => {
@@ -57,7 +57,7 @@ export function SelectionToSession({ sessionId, label, send, children }: Props) 
       setMessage("");
       setSent(false);
     }, 0);
-  }, [send]);
+  };
 
   // Dismiss on outside click / Escape.
   useEffect(() => {
@@ -77,7 +77,7 @@ export function SelectionToSession({ sessionId, label, send, children }: Props) 
     };
   }, [sel, dismiss]);
 
-  const doSend = useCallback(() => {
+  const doSend = () => {
     if (!send || !sel) return;
     const user = getCurrentUser();
     const quoted = sel.text
@@ -92,7 +92,7 @@ export function SelectionToSession({ sessionId, label, send, children }: Props) 
     send({ type: "prompt", sessionId, user, content });
     setSent(true);
     setTimeout(dismiss, 1400);
-  }, [send, sel, message, label, sessionId, dismiss]);
+  };
 
   return (
     // display:contents so wrapping a region doesn't disturb its layout.

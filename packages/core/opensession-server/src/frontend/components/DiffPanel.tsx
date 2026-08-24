@@ -1,5 +1,5 @@
 import { repoLabel } from "../lib/repo-label";
-import React, { useEffect, useState, useCallback, useRef } from "react";
+import React, { useEffect, useState, useRef } from "react";
 import { createPortal } from "react-dom";
 import type {
   CodeFlowResult,
@@ -123,9 +123,9 @@ export function useSessionDiff(
       : requestError
         ? "Failed to load diff."
         : null;
-  const reload = useCallback(async () => {
+  const reload = async () => {
     await mutate();
-  }, [mutate]);
+  };
 
   return { repos, loading, error, reload };
 }
@@ -187,7 +187,7 @@ export function DiffPanel({
   const [diffControlsTarget, setDiffControlsTarget] =
     useState<HTMLDivElement | null>(null);
 
-	const loadFlow = useCallback(async () => {
+	const loadFlow = async () => {
     if (!cur || !flowKey) return;
     const generation = ++flowGeneration.current;
     setFlowLoading(true);
@@ -208,16 +208,16 @@ export function DiffPanel({
     } finally {
       if (generation === flowGeneration.current) setFlowLoading(false);
     }
-	}, [sessionId, cur?.repo, flowKey, patchVersion]);
+	};
 
-	const refreshFlow = useCallback(async () => {
+	const refreshFlow = async () => {
 		flowGeneration.current += 1;
 		setFlow(null);
 		setFlowError(null);
 		setFlowLoading(true);
 		await reload();
 		setFlowLoading(false);
-	}, [reload]);
+	};
 
   useEffect(() => {
     if (view !== "flow" || flowLoading || flowError) return;

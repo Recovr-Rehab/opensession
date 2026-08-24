@@ -1,6 +1,6 @@
 import { repoLabel } from "../lib/repo-label";
 import { BASE_PATH } from "../lib/base";
-import React, { useEffect, useState, useCallback } from "react";
+import React, { useEffect, useState, } from "react";
 import {
   fetchSecurity,
   startScanApi,
@@ -103,7 +103,7 @@ export function Security({ onOpenSession }: Props) {
   const [editProfile, setEditProfile] = useState<ScanProfile | "new" | null>(null);
   const [error, setError] = useState<string | null>(null);
 
-  const load = useCallback(async () => {
+  const load = async () => {
     try {
       const data = await fetchSecurity();
       setScans(data.scans);
@@ -119,7 +119,7 @@ export function Security({ onOpenSession }: Props) {
         ),
       );
     } catch {}
-  }, []);
+  };
 
   useEffect(() => {
     document.title = docTitle("Security");

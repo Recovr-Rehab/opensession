@@ -72,7 +72,7 @@ interface Props {
  * reads past. The full file list, with paths rather than bare names, is in the
  * ⋯ menu, which is also where a narrow row's "+N more" resolves.
  */
-export const TurnFooter = React.memo(function TurnFooter({
+export const TurnFooter = function TurnFooter({
   entry,
   durationMs,
   files,
@@ -193,7 +193,7 @@ export const TurnFooter = React.memo(function TurnFooter({
       <TouchedFileChips files={files} max={isPhone ? 1 : MAX_CHIPS} />
     </div>
   );
-}, turnFooterPropsEqual);
+};
 
 /**
  * The files a turn wrote, named with the ±lines each moved, and one count for

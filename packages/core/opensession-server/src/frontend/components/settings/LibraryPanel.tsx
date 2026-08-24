@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type ComponentType, type ReactNode } from "react";
+import { useEffect, useState, type ComponentType, type ReactNode } from "react";
 import {
 	fetchLibrary,
 	type LibraryEntry,
@@ -360,18 +360,14 @@ export function LibraryPanel() {
 	// switches, so mirror rather than own the state.
 	useEffect(() => onSidebarToolsChanged(() => setHiddenTools(readHiddenSidebarTools())), []);
 
-	const visible = useMemo(
-		() =>
-			(entries || []).filter(
+	const visible = ((entries || []).filter(
 				// A tool this width never shows can't be switched on here either.
 				(entry) =>
 					entry.type !== "tool" ||
 					toolFitsViewport(entry.slug as SidebarToolId, isPhone),
-			),
-		[entries, isPhone],
-	);
+			));
 
-	const groups = useMemo(() => {
+	const groups = (() => {
 		const needle = query.trim().toLowerCase();
 		const matched = visible.filter((entry) => {
 			if (filter !== "all" && entry.type !== filter) return false;
@@ -386,7 +382,7 @@ export function LibraryPanel() {
 			type,
 			entries: matched.filter((entry) => entry.type === type),
 		})).filter((group) => group.entries.length > 0);
-	}, [visible, query, filter]);
+	})();
 
 	// What this instance already runs, led by its own mark. The catalog below
 	// says the same thing card by card; this is the one glance that answers

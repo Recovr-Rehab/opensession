@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useEffect, useState } from "react";
 import { BASE_PATH } from "../lib/base";
 
 export type GithubConnectionState =
@@ -15,7 +15,7 @@ export type GithubConnectionState =
 export function useGithubConnectionState(refreshKey: unknown): GithubConnectionState {
 	const [state, setState] = useState<GithubConnectionState>("loading");
 
-	const refresh = useCallback(async () => {
+	const refresh = async () => {
 		try {
 			const response = await fetch(`${BASE_PATH}/api/connections/github`);
 			if (!response.ok) throw new Error(`GitHub connection check failed: ${response.status}`);
@@ -26,7 +26,7 @@ export function useGithubConnectionState(refreshKey: unknown): GithubConnectionS
 			// older server or a transient request failure cannot answer the check.
 			setState("unknown");
 		}
-	}, []);
+	};
 
 	useEffect(() => {
 		void refresh();

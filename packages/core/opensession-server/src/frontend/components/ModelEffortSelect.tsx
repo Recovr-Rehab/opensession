@@ -355,11 +355,11 @@ export function ModelEffortSelect({
 	// on every composer keystroke, so a linear scan per lookup was the picker's
 	// share of the typing budget. First entry wins, matching the `.find()` these
 	// lookups replaced.
-	const modelById = React.useMemo(() => {
+	const modelById = (() => {
 		const byId = new Map<string, ModelOption>();
 		for (const m of models) if (!byId.has(m.id)) byId.set(m.id, m);
 		return byId;
-	}, [models]);
+	})();
 	const modelLabel =
 		modelById.has(effectiveBase) || routedModelParts(effectiveModel)
 			? shortModelLabel(effectiveModel, models)
@@ -454,7 +454,7 @@ export function ModelEffortSelect({
 	// is built once per catalog change rather than per keystroke: splitting the
 	// registry, prettifying a label per entry and re-scanning `models` inside
 	// `optionFor` add up to real work on a list this long.
-	const { primaryFirst, allPrimaryOptions, allOtherOptions } = React.useMemo(() => {
+	const { primaryFirst, allPrimaryOptions, allOtherOptions } = (() => {
 		const optionFor = (id: string): ModelMenuOption => {
 			const info = modelById.get(id);
 			const shortLabel = shortModelLabel(id, models);
@@ -503,7 +503,7 @@ export function ModelEffortSelect({
 					.filter((m) => !PRIMARY_MODEL_ID_SET.has(m.id))
 					.map((m) => optionFor(m.id));
 		return { primaryFirst, allPrimaryOptions, allOtherOptions };
-	}, [models, modelById, defaultModel]);
+	})();
 	// The stored routing prefix narrows the list rather than greying half of it
 	// out: the direct-SDK engines each speak to one vendor, so on those a model
 	// they can't run is noise, not a choice. A null recomposition means "can't
@@ -511,7 +511,7 @@ export function ModelEffortSelect({
 	// Pi serves every configured model; it still meets
 	// the odd unroutable legacy slug, which stays a disabled row below).
 	const { primaryOptions, otherOptions, hiddenOnEngine, otherGroups, groupedPrimary, providerGroups } =
-		React.useMemo(() => {
+		(() => {
 			const filterToEngine = false;
 			const servableHere = (o: ModelMenuOption) =>
 				!filterToEngine || engineModelId(activeEngine, o.id) !== null;
@@ -571,7 +571,7 @@ export function ModelEffortSelect({
 				groupedPrimary,
 				providerGroups,
 			};
-		}, [allPrimaryOptions, allOtherOptions, activeEngine, primaryFirst]);
+		})();
 
 	const isSelected = (option: ModelMenuOption) =>
 		option.value === model ||
@@ -583,7 +583,7 @@ export function ModelEffortSelect({
 		primaryFirst && !primaryOptions.some(isSelected)
 			? otherOptions.find(isSelected)?.label
 			: undefined;
-	const recentOptions = React.useMemo(() => {
+	const recentOptions = (() => {
 		const available = new Map(
 			[...primaryOptions, ...otherOptions].map((option) => [option.id, option]),
 		);
@@ -591,7 +591,7 @@ export function ModelEffortSelect({
 			.map((id) => available.get(id))
 			.filter((option): option is ModelMenuOption => !!option)
 			.slice(0, 3);
-	}, [recentModelIds, primaryOptions, otherOptions]);
+	})();
 
 	const renderModelOption = (option: ModelMenuOption, standalone = false) => {
 		const selected = isSelected(option);

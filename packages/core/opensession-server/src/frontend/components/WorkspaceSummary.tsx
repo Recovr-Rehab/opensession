@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
 	cancelPrReviewApi,
 	setSessionReviewerApi,
@@ -545,7 +545,7 @@ export function WorkspaceSummaryBody({
 	const git = gitResource.data ?? null;
 	const assets = assetsResource.data ?? [];
 	const commits = overviewResource.data?.commits ?? [];
-	const media = useMemo(() => {
+	const media = (() => {
 		const seen = new Set<string>();
 		return [...liveMedia, ...(overviewResource.data?.media ?? [])].filter((item) => {
 			const key = `${item.kind}\0${item.src}\0${item.sessionId}`;
@@ -553,7 +553,7 @@ export function WorkspaceSummaryBody({
 			seen.add(key);
 			return true;
 		});
-	}, [liveMedia, overviewResource.data?.media]);
+	})();
 	const diff =
 		diffResource.data?.repos.reduce(
 			(sum, repo) => ({

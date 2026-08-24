@@ -19,7 +19,7 @@ import {
 } from "./lib/sidebar-collapse";
 import { openWorkspaceSummary } from "./lib/workspace-summary-open";
 import React, {
-	useCallback,
+	
 	useEffect,
 	useLayoutEffect,
 	useRef,
@@ -801,9 +801,9 @@ export function App(
 	// turn") route through the global toast store — stacked, animated, and
 	// firable from anywhere without threading a prop. This wrapper keeps the
 	// existing `onToast`/`showToast` call sites working.
-	const showToast = useCallback((message: string) => {
+	const showToast = (message: string) => {
 		toast(message);
-	}, []);
+	};
 	// Session-reference chips in transcripts (`bks-…`), and the pill the
 	// composer projects a draft id into, label themselves from this registry.
 	// markdown.ts renders to an HTML string rather than React nodes, so it
@@ -916,10 +916,10 @@ export function App(
 	// desktop, where the sidebar + detail are a static split.
 	const detailPaneRef = useRef<HTMLElement | null>(null);
 	const [detailPaneEl, setDetailPaneEl] = useState<HTMLElement | null>(null);
-	const captureDetailPane = useCallback((node: HTMLElement | null) => {
+	const captureDetailPane = (node: HTMLElement | null) => {
 		detailPaneRef.current = node;
 		setDetailPaneEl(node);
-	}, []);
+	};
 	// Desktop-only: collapse the left sidebar entirely (persisted per browser). A
 	// new browser starts collapsed so the workspace summary and conversation lead;
 	// opening it once remains an explicit preference. On mobile the page-stack
@@ -1099,12 +1099,12 @@ export function App(
 			productEmpty &&
 			githubConnectionState === "connected" &&
 			!firstMileIsComplete);
-	const refreshWorkspaces = React.useCallback(() => {
+	const refreshWorkspaces = () => {
 		return fetchWorkspaces()
 			.then(setWorkspaces)
 			.catch(() => {})
 			.finally(() => setWorkspacesLoaded(true));
-	}, []);
+	};
 	useEffect(() => {
 		refreshWorkspaces();
 		const onFocus = () => refreshWorkspaces();
@@ -1166,7 +1166,7 @@ export function App(
 	// The server already does this, but our pin cache is optimistic and never
 	// hears about that write — without this a later savePinsApi re-uploads the
 	// stale list and resurrects the archived pin as an unreachable ghost row.
-	const dropStalePins = React.useCallback((justArchived: UnifiedSession[]) => {
+	const dropStalePins = (justArchived: UnifiedSession[]) => {
 		if (!justArchived.length) return;
 		const archivedIds = new Set(justArchived.map((s) => s.id));
 		const all = sessionsRef.current;
@@ -1183,7 +1183,7 @@ export function App(
 			if (!hasLive) keys.push(`workspace:${pid}`);
 		}
 		setPins(unpin(keys));
-	}, []);
+	};
 
 	// Track the on-screen keyboard via input focus. It's the only reliable iOS
 	// signal: in a standalone PWA visualViewport doesn't shrink, and
@@ -1551,17 +1551,17 @@ export function App(
 	// keyboard is raised from inside the tap rather than a frame later, when iOS
 	// no longer grants it (lib/soft-keyboard). The prompt takes the keyboard over
 	// as soon as it mounts.
-	const setPalette = React.useCallback((next: typeof palette) => {
+	const setPalette = (next: typeof palette) => {
 		if (next.open) primeSoftKeyboard();
 		setPaletteState(next);
-	}, []);
+	};
 	// Bumped by the sidebar's draft row to put the caret back in the empty
 	// state's session input. The row and that card are the same unstarted
 	// session seen from two places.
 	const [draftFocusSeq, setDraftFocusSeq] = useState(0);
 	const paletteOpenRef = useRef(palette.open);
 	paletteOpenRef.current = palette.open;
-	const openPalette = React.useCallback((prompt?: string, mcpServers?: string[]) => {
+	const openPalette = (prompt?: string, mcpServers?: string[]) => {
 		// This is the global new-session action. It must not inherit the workspace
 		// behind it: without workspaceId, NewSession creates a workspace with its
 		// first session. Its model combinations are safe to use as a picker source,
@@ -1577,10 +1577,10 @@ export function App(
 			...(mcpServers?.length ? { mcpServers } : {}),
 			...(modelWorkspaceId ? { modelWorkspaceId } : {}),
 		});
-	}, [route, sessions]);
-	const openPrefilledSession = React.useCallback((prefill: NewSessionPrefill) => {
+	};
+	const openPrefilledSession = (prefill: NewSessionPrefill) => {
 		setPalette({ open: true, ...prefill });
-	}, []);
+	};
 
 	// A "new tab" while a session is open is a *new session in that same session*, not
 	// a whole new session — so it must NOT pop the new-session palette. It's a
@@ -1712,17 +1712,14 @@ export function App(
 	// (below). Without it a stale request would keep redirecting every later
 	// visit to this workspace's Review.
 	const landedFocusSeq = useRef<number | null>(null);
-	const focusReviewPr = React.useCallback(
-		(pr: {
+	const focusReviewPr = (pr: {
 			repo: string;
 			branch?: string;
 			number?: number;
 			workspaceId?: string;
 		}) => {
 			setReviewFocusPr((prev) => ({ ...pr, seq: (prev?.seq ?? 0) + 1 }));
-		},
-		[],
-	);
+		};
 	// Open a PR named in prose (a `repo#123` chip) where it belongs: a Review tab
 	// in its workspace. The standalone /pr/ route is a page, so routing through it
 	// took the whole detail pane, title and tab strip included, for as long as the
@@ -1731,8 +1728,7 @@ export function App(
 	// say where the PR lives), and the ones that do keep the current view up while
 	// they wait rather than blanking it. Only an unresolvable PR falls through to
 	// the standalone route, which is what says there is no such pull request.
-	const openPrByRef = React.useCallback(
-		(repo: string, number: number) => {
+	const openPrByRef = (repo: string, number: number) => {
 			const open = (
 				workspaceId: string,
 				pr: { repo: string; branch?: string; number?: number },
@@ -1765,9 +1761,7 @@ export function App(
 				.catch(() => {
 					navigateRef.current({ view: "pr", repo, number });
 				});
-		},
-		[focusReviewPr, refreshWorkspaces],
-	);
+		};
 	openPrRef.current = openPrByRef;
 	// One-shot guard consumed by the workspace default-pane seeding effect (set
 	// when closing a view tab replaces the workspace URL — see onCloseView).
@@ -1781,14 +1775,14 @@ export function App(
 	const [sessionComposerPrefills, setSessionComposerPrefills] = useState<
 		Record<string, { seq: number; text: string }>
 	>({});
-	const addToSessionInput = React.useCallback((sessionId: string, text: string) => {
+	const addToSessionInput = (sessionId: string, text: string) => {
 		setSessionComposerPrefills((prev) => ({
 			...prev,
 			[sessionId]: { seq: (prev[sessionId]?.seq ?? 0) + 1, text },
 		}));
 		setFocusComposerOnOpen(true);
 		navigate({ view: "session", id: sessionId });
-	}, []);
+	};
 	useEffect(() => {
 		if (focusComposerOnOpen) setFocusComposerOnOpen(false);
 	}, [focusComposerOnOpen]);
@@ -1846,14 +1840,13 @@ export function App(
 	}, [addHandler]);
 	const searchOpenRef = useRef(searchOpen);
 	searchOpenRef.current = searchOpen;
-	const closePalette = React.useCallback(() => {
+	const closePalette = () => {
 		setPalette({ open: false });
 		// A deep link left the URL on <base>/new — return home on close.
 		if (stripBasePath(location.pathname) === "/new") goBack();
-	}, []);
+	};
 
-	const startNewSessionCreate = React.useCallback(
-		(started: NewSessionCreateDraft) => {
+	const startNewSessionCreate = (started: NewSessionCreateDraft) => {
 			const startedAt = new Date().toISOString();
 			const user = getCurrentUser();
 			const draft: PendingCreateDraft = {
@@ -1916,9 +1909,7 @@ export function App(
 				unstick(started.id);
 			}, 120_000);
 			navigate({ view: "session", id: started.id });
-		},
-		[inject, navigate, setPalette, unstick],
-	);
+		};
 
 	useEffect(() => {
 		const onPop = () => {
@@ -3019,18 +3010,15 @@ export function App(
 	// same tab's breadcrumb instead of opening a second one. Stable identity:
 	// it reaches the memoized transcript as a prop, and the tab is never
 	// persisted, so it needs nothing from the render scope.
-	const openSubagent = React.useCallback(
-		(sessionId: string, agentId: string, label: string) => {
+	const openSubagent = (sessionId: string, agentId: string, label: string) => {
 			setSubagentTabs((prev) => {
 				const stack = prev[sessionId] ?? NO_SUBAGENTS;
 				if (stack.some((s) => s.agentId === agentId)) return prev;
 				return { ...prev, [sessionId]: [...stack, { agentId, label }] };
 			});
 			setActiveViewTabState("subagent");
-		},
-		[],
-	);
-	const popSubagent = React.useCallback((sessionId: string) => {
+		};
+	const popSubagent = (sessionId: string) => {
 		setSubagentTabs((prev) => {
 			const stack = prev[sessionId];
 			if (!stack?.length) return prev;
@@ -3039,8 +3027,8 @@ export function App(
 			else next[sessionId] = stack.slice(0, -1);
 			return next;
 		});
-	}, []);
-	const closeSubagentTab = React.useCallback((sessionId: string) => {
+	};
+	const closeSubagentTab = (sessionId: string) => {
 		setSubagentTabs((prev) => {
 			if (!prev[sessionId]) return prev;
 			const next = { ...prev };
@@ -3050,14 +3038,13 @@ export function App(
 		// Same commit as the close, like every other closeXTab — the effect
 		// below only has to catch the session-switch case.
 		setActiveViewTabState((cur) => (cur === "subagent" ? null : cur));
-	}, []);
+	};
 	// The pane read the sub-agent's own name off its transcript — a link carries
 	// ids only, so this is what turns "Sub-agent" into a real label. It fills in
 	// the placeholder and nothing else: a drill-in arrives already named by the
 	// Task call it came from, and that name shouldn't change under the reader a
 	// second after they opened it.
-	const nameSubagent = React.useCallback(
-		(sessionId: string, agentId: string, label: string) => {
+	const nameSubagent = (sessionId: string, agentId: string, label: string) => {
 			setSubagentTabs((prev) => {
 				const stack = prev[sessionId];
 				const at = stack?.findIndex((s) => s.agentId === agentId) ?? -1;
@@ -3067,9 +3054,7 @@ export function App(
 				next[at] = { agentId, label };
 				return { ...prev, [sessionId]: next };
 			});
-		},
-		[],
-	);
+		};
 	// A sub-agent named in the URL after the first load — a Back/Forward across a
 	// drill-in, or an in-app link into one. The initial load is seeded with the
 	// state itself, so this only has to catch the later arrivals.
@@ -3115,8 +3100,7 @@ export function App(
 	// the workspace carries several PRs — each has its own row, and without it
 	// they'd all land on the primary. Falls back to the legacy preview routes if
 	// the resolve fails, so a click is never dead.
-	const openPrWorkspace = React.useCallback(
-		async (item: ReviewQueueItem) => {
+	const openPrWorkspace = async (item: ReviewQueueItem) => {
 			try {
 				const { workspaceId } = await resolveWorkspaceApi({
 					pr: {
@@ -3141,11 +3125,8 @@ export function App(
 				else
 					navigate({ view: "pr", repo: item.pr.repo, branch: item.pr.branch });
 			}
-		},
-		[refreshWorkspaces, focusReviewPr],
-	);
-	const openPrReview = React.useCallback(
-		async (pr: OpenPr) => {
+		};
+	const openPrReview = async (pr: OpenPr) => {
 			try {
 				const { workspaceId } = await resolveWorkspaceApi({
 					pr: {
@@ -3166,13 +3147,10 @@ export function App(
 			} catch {
 				navigate({ view: "pr", repo: pr.repo, branch: pr.branch });
 			}
-		},
-		[refreshWorkspaces, focusReviewPr],
-	);
+		};
 	// Sidebar feed row (a video, a dashboard, …) to the item's ONE workspace, its web
 	// panel foregrounded (the feeds design).
-	const openFeedItemWorkspace = React.useCallback(
-		async (feed: FeedDescriptor, item: FeedItem) => {
+	const openFeedItemWorkspace = async (feed: FeedDescriptor, item: FeedItem) => {
 			try {
 				const { workspaceId } = await resolveWorkspaceApi({
 					externalRef: {
@@ -3188,13 +3166,10 @@ export function App(
 			} catch (e) {
 				console.error("Feed item open failed:", e);
 			}
-		},
-		[refreshWorkspaces],
-	);
+		};
 	// Sidebar Support row → the ticket's ONE workspace, Conversation tab. The
 	// row's title rides along as the workspace-name hint (no Plain round-trip).
-	const openTicketWorkspace = React.useCallback(
-		async (t: SupportThread) => {
+	const openTicketWorkspace = async (t: SupportThread) => {
 			try {
 				const { workspaceId } = await resolveWorkspaceApi({
 					plainThreadId: t.id,
@@ -3206,19 +3181,17 @@ export function App(
 			} catch {
 				navigate({ view: "support", threadId: t.id });
 			}
-		},
-		[refreshWorkspaces],
-	);
+		};
 	// Open a session's Review tab from the sidebar: select it and foreground its
 	// workspace's Review once it lands (pendingReviewOpen survives the
 	// workspace-change reset).
-	const openReviewForSession = React.useCallback((session: UnifiedSession) => {
+	const openReviewForSession = (session: UnifiedSession) => {
 		const key = wsKeyFor(session);
 		if (!key) return;
 		setReviewOpen((prev) => (prev.has(key) ? prev : new Set(prev).add(key)));
 		setPendingReviewOpen(key);
 		navigate({ view: "session", id: session.id });
-	}, []);
+	};
 	currentSessionRef.current = currentSession;
 
 	// Mark the open session read up to its latest activity — both when it's first
@@ -3983,7 +3956,7 @@ export function App(
 		window.addEventListener("keydown", onKeyDown);
 		return () => window.removeEventListener("keydown", onKeyDown);
 	}, [runningCloseConfirmation]);
-	const rememberArchived = useCallback((ids: string[]) => {
+	const rememberArchived = (ids: string[]) => {
 		if (!ids.length) return;
 		setArchiveUndo((prev) =>
 			[
@@ -3997,7 +3970,7 @@ export function App(
 				// An undo affordance, not a history.
 				.slice(-10),
 		);
-	}, []);
+	};
 
 	// Close a tab = archive the session: it leaves the strip and the active list,
 	// but stays recoverable from Archived. An empty session that never ran has

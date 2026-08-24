@@ -1,5 +1,5 @@
 import { repoLabel } from "../lib/repo-label";
-import React, { useCallback, useEffect, useMemo, useState } from "react";
+import React, { useEffect, useState } from "react";
 import type { PrDetails } from "../lib/types";
 import {
 	deriveHeadline,
@@ -267,12 +267,12 @@ function PrCopyItems({ pr }: { pr: PrDetails }) {
 	const [copied, setCopied] = useState<"link" | "number" | null>(null);
 	const provider = providerFromUrl(pr.url);
 
-	const copy = useCallback((kind: "link" | "number", text: string) => {
+	const copy = (kind: "link" | "number", text: string) => {
 		navigator.clipboard?.writeText(text).then(() => {
 			setCopied(kind);
 			setTimeout(() => setCopied(null), 1500);
 		});
-	}, []);
+	};
 
 	return (
 		<>
@@ -466,7 +466,7 @@ export function PrStatusBar({
 	running,
 	refreshTick,
 }: Props) {
-	const presentation = useMemo(() => sessionPrPresentation(prs), [prs]);
+	const presentation = (sessionPrPresentation(prs));
 	// A tab with no PR of its own can receive several workspace PRs from sibling
 	// sessions. Pick one of those explicitly rather than falling through to this
 	// tab's unrelated branch, which made the workspace summary say “Create PR”.
@@ -499,12 +499,12 @@ export function PrStatusBar({
 
 	useEffect(() => setIsArchived(!!archived), [archived]);
 
-	const load = useCallback(async () => {
+	const load = async () => {
 		await Promise.all([
 			prResource.mutate(),
 			promoted ? Promise.resolve() : gitResource.mutate(),
 		]);
-	}, [prResource.mutate, gitResource.mutate, promoted]);
+	};
 
 	// Refetch the instant a turn ends (running→idle) or an auto-push lands
 	// (refreshTick bump), so "Ahead by N commits" clears without waiting on a
@@ -521,7 +521,7 @@ export function PrStatusBar({
 		if (refreshTick) load();
 	}, [refreshTick, load]);
 
-	const headline = useMemo(() => deriveHeadline(pr, git), [pr, git]);
+	const headline = (deriveHeadline(pr, git));
 
 	// Everything except the primary branch's PR (which the headline covers):
 	// attached repos, manual links, and PRs discovered through their body

@@ -3,7 +3,7 @@ import {
 	createContext,
 	useContext,
 	useEffect,
-	useMemo,
+	
 	useRef,
 	useState,
 } from "react";
@@ -66,7 +66,7 @@ export function MarkdownBody({
 	// and a rewrite silently destroys the mermaid/shiki upgrades below. A
 	// stable object keeps unrelated re-renders (visibility flips, parent
 	// updates) from resetting the DOM back to the plain fences.
-	const innerHtml = useMemo(() => ({ __html: html }), [html]);
+	const innerHtml = (({ __html: html }));
 	// The (element, html, theme) combination whose upgrade last completed —
 	// lets the effect skip redoing (and visibly flashing) work whose output is
 	// already in the DOM, e.g. when scrolling a diagram out of and back into

@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import {
   useShortcutKeys,
   useShortcutLabel,
@@ -1080,17 +1080,10 @@ export function Composer({
   const hlRef = useRef<HTMLDivElement>(null);
   const sessionRanges = sessionNames.sessions;
   const hlActive = needsComposerHighlight(displayText, people, sessionRanges);
-  const hlHtml = useMemo(
-    () =>
-      hlActive
+  const hlHtml = (hlActive
         ? composerHighlightHtml(displayText, people, sessionRanges)
-        : "",
-    [hlActive, displayText, people, sessionRanges],
-  );
-  const mentionRanges = useMemo(
-    () => composerMentionRanges(displayText, people),
-    [displayText, people],
-  );
+        : "");
+  const mentionRanges = (composerMentionRanges(displayText, people));
   // A mention pill's padding is bought out of the space beside it, so the draft
   // pays a wider word space only while it holds one. Both the field and the
   // mirror wear it, or the painted text slides off the caret behind it. Session
@@ -1162,9 +1155,7 @@ export function Composer({
   // Base UI positions against an element; a pill is a box of text with no
   // element of its own, so it is handed the box instead. Rebuilt with the
   // menu's own state, which is the only thing that moves it.
-  const pillAnchor = useMemo(
-    () =>
-      pillMenu
+  const pillAnchor = (pillMenu
         ? {
             getBoundingClientRect: () =>
               new DOMRect(
@@ -1174,9 +1165,7 @@ export function Composer({
                 pillMenu.rect.height,
               ),
           }
-        : null,
-    [pillMenu],
-  );
+        : null);
 
   /** Point the reference somewhere else, rather than at nothing. */
   function changePill() {

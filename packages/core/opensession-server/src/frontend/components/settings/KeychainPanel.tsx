@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState, type FormEvent, type RefObject } from "react";
+import { useEffect, useRef, useState, type FormEvent, type RefObject } from "react";
 import {
 	addKeychainCredential,
 	deleteKeychainCredential,
@@ -39,11 +39,11 @@ export function KeychainSection() {
 	const [adding, setAdding] = useState(false);
 	const serviceRef = useRef<HTMLInputElement>(null);
 
-	const reload = useCallback(() => {
+	const reload = () => {
 		fetchKeychain()
 			.then(setData)
 			.catch((e) => setError(e.message));
-	}, []);
+	};
 	useEffect(reload, [reload]);
 
 	// The label, its action and the hint below the card are all static, so they

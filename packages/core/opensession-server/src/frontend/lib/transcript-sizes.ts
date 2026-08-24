@@ -40,7 +40,7 @@ export type TranscriptWidthBucket = "narrow" | "wide";
 export type TranscriptSizes = Record<string, number>;
 
 // The slice of `Storage` the cache needs, so tests can pass a minimal stub.
-type SizeStorage = Pick<Storage, "getItem" | "setItem">;
+type SizeStorage = Pick<Storage, "getItem" | "setItem" | "removeItem">;
 
 interface StoredBucketEntry {
 	savedAt?: number;

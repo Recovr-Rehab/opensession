@@ -1,8 +1,7 @@
 import React, {
-  useMemo,
   useState,
   useRef,
-  useCallback,
+  
   useEffect,
   startTransition,
 } from "react";
@@ -228,6 +227,25 @@ const BASE_OPTIONS = {
   enableLineSelection: true,
 };
 
+/** Parse the patch and keep only the files the visible order names. */
+function parseFileDiffs(
+  patch: string,
+  visibleFileOrder: readonly string[] | undefined,
+): FileDiffMetadata[] {
+  try {
+    const parsed = parsePatchFiles(patch).flatMap((p) => p.files);
+    if (!visibleFileOrder) return parsed;
+    const order = new Map(
+      visibleFileOrder.map((path, index) => [path, index]),
+    );
+    return parsed
+      .filter((file) => order.has(file.name))
+      .sort((a, b) => order.get(a.name)! - order.get(b.name)!);
+  } catch {
+    return [];
+  }
+}
+
 /** Per-file +/- counts, summed from the parsed hunks. */
 function fileStats(file: FileDiffMetadata): { add: number; del: number } {
   let add = 0;
@@ -313,25 +331,12 @@ export function CommentableDiff({
   const reviewMode = pendingComments !== undefined;
   const resolvedTheme = useResolvedTheme();
   const theme = codeTheme === "system" ? resolvedTheme : codeTheme;
-  const files = useMemo<FileDiffMetadata[]>(() => {
-    try {
-      const parsed = parsePatchFiles(patch).flatMap((p) => p.files);
-      if (!visibleFileOrder) return parsed;
-      const order = new Map(
-        visibleFileOrder.map((path, index) => [path, index]),
-      );
-      return parsed
-        .filter((file) => order.has(file.name))
-        .sort((a, b) => order.get(a.name)! - order.get(b.name)!);
-    } catch {
-      return [];
-    }
-  }, [patch, visibleFileOrder]);
+  const files = parseFileDiffs(patch, visibleFileOrder);
 
   // GitHub-backed "Viewed" checkboxes: hidden until the parent's fetch lands.
   const viewedEnabled = !!onToggleViewed && viewedFiles !== undefined;
   const viewed = viewedFiles ?? NO_VIEWED;
-  const stats = useMemo(() => files.map(fileStats), [files]);
+  const stats = (files.map(fileStats));
 
   // Files render collapsed by default (just the header row) — mounting a
   // FileDiff parses + highlights on the main thread, so a large change would
@@ -356,24 +361,24 @@ export function CommentableDiff({
   // How many of the currently-open files may mount their FileDiff. Grows a
   // batch per frame until it covers them all (see MOUNT_FIRST_BATCH).
   const [mountBudget, setMountBudget] = useState(MOUNT_FIRST_BATCH);
-  const toggle = useCallback((i: number) => {
+  const toggle = (i: number) => {
     setExpanded((prev) => {
       const next = new Set(prev);
       if (next.has(i)) next.delete(i);
       else next.add(i);
       return next;
     });
-  }, []);
+  };
   const allOpen = expanded.size >= files.length && files.length > 0;
-  const toggleAll = useCallback(() => {
+  const toggleAll = () => {
     setExpanded((prev) => {
       if (prev.size >= files.length) return new Set();
       setCollapsedGroups(new Set());
       return new Set(files.map((_, i) => i));
     });
-  }, [files]);
+  };
 
-  const groupedFiles = useMemo(() => {
+  const groupedFiles = (() => {
     if (!groups?.length) return null;
     const byPath = new Map(files.map((file, index) => [file.name, index]));
     const used = new Set<number>();
@@ -392,7 +397,7 @@ export function CommentableDiff({
     if (remaining.length)
       resolved.push({ title: "Other", files: [], indices: remaining });
     return resolved.length >= 2 ? resolved : null;
-  }, [files, groups]);
+  })();
 
   useEffect(() => {
     setCollapsedGroups(new Set());
@@ -406,12 +411,11 @@ export function CommentableDiff({
   const disarmTimer = useRef<ReturnType<typeof setTimeout> | undefined>(
     undefined,
   );
-  const disarm = useCallback(() => {
+  const disarm = () => {
     clearTimeout(disarmTimer.current);
     setArmed(null);
-  }, []);
-  const handleDiscard = useCallback(
-    async (file: FileDiffMetadata) => {
+  };
+  const handleDiscard = async (file: FileDiffMetadata) => {
       if (!onDiscard) return;
       const key = file.name;
       if (armed !== key) {
@@ -428,9 +432,7 @@ export function CommentableDiff({
       } finally {
         setDiscarding(null);
       }
-    },
-    [onDiscard, armed],
-  );
+    };
   useEffect(() => () => clearTimeout(disarmTimer.current), []);
 
   // Copying the path is the reliable way to get it out of the diff — text
@@ -441,20 +443,19 @@ export function CommentableDiff({
   const copiedTimer = useRef<ReturnType<typeof setTimeout> | undefined>(
     undefined,
   );
-  const copyPath = useCallback((path: string) => {
+  const copyPath = (path: string) => {
     copyToClipboard(path, () => {
       setCopied(path);
       clearTimeout(copiedTimer.current);
       copiedTimer.current = setTimeout(() => setCopied(null), 1400);
     });
-  }, []);
+  };
   useEffect(() => () => clearTimeout(copiedTimer.current), []);
 
-  const copyMenuValue = useCallback((value: string, message: string) => {
+  const copyMenuValue = (value: string, message: string) => {
     copyToClipboard(value, () => toast(message));
-  }, []);
-  const copyFileContents = useCallback(
-    async (file: FileDiffMetadata) => {
+  };
+  const copyFileContents = async (file: FileDiffMetadata) => {
       if (!fileActions?.loadContents) return;
       try {
         const contents = await fileActions.loadContents(file);
@@ -463,9 +464,7 @@ export function CommentableDiff({
       } catch (error: any) {
         toast(error?.message || "Couldn’t copy file contents");
       }
-    },
-    [fileActions, copyMenuValue],
-  );
+    };
 
   const viewedCollapseKey = useRef<string | null>(null);
   useEffect(() => {
@@ -504,8 +503,7 @@ export function CommentableDiff({
     );
   }, [viewedFiles, patch, files]);
 
-  const toggleViewed = useCallback(
-    (file: FileDiffMetadata, index: number) => {
+  const toggleViewed = (file: FileDiffMetadata, index: number) => {
       if (!onToggleViewed) return;
       const wasViewed = viewed.has(file.name);
       onToggleViewed(file.name, !wasViewed);
@@ -516,9 +514,7 @@ export function CommentableDiff({
         else n.delete(index);
         return n;
       });
-    },
-    [onToggleViewed, viewed],
-  );
+    };
 
   // ---- Edit mode (@pierre/diffs edit) ------------------------------------
   // One file edits at a time. The editor engine is lazy-loaded on first use
@@ -533,25 +529,22 @@ export function CommentableDiff({
   );
   const editorRef = useRef<Editor<Meta> | null>(null);
 
-  const startEdit = useCallback(
-    async (file: FileDiffMetadata, index: number) => {
+  const startEdit = async (file: FileDiffMetadata, index: number) => {
     if (!editModuleRef.current) {
       editModuleRef.current = await import("@pierre/diffs/edit");
     }
     setEditError(null);
     setEditingPath(file.name);
     setExpanded((prev) => new Set(prev).add(index));
-    },
-    [],
-  );
+    };
 
-  const cancelEdit = useCallback(() => {
+  const cancelEdit = () => {
     editorRef.current = null;
     setEditingPath(null);
     setEditError(null);
-  }, []);
+  };
 
-  const saveEdit = useCallback(async () => {
+  const saveEdit = async () => {
     const editor = editorRef.current;
     if (!editor || !editingPath || !editFile || savingEdit) return;
     setSavingEdit(true);
@@ -565,19 +558,18 @@ export function CommentableDiff({
     } finally {
       setSavingEdit(false);
     }
-  }, [editingPath, editFile, savingEdit]);
+  };
 
-  const createEditor = useCallback((options: EditorOptions<Meta>) => {
+  const createEditor = (options: EditorOptions<Meta>) => {
     const editor = new editModuleRef.current!.Editor<Meta>(options);
     editorRef.current = editor;
     return editor;
-  }, []);
+  };
 
   // Full-contents loader for the file being edited: the editor needs whole
   // files, while a patch only carries hunks (saving hunk-only text would
   // truncate the file on disk).
-  const loadDiffFiles = useCallback(
-    async (fd: FileDiffMetadata): Promise<FileDiffLoadedFiles> => {
+  const loadDiffFiles = async (fd: FileDiffMetadata): Promise<FileDiffLoadedFiles> => {
       if (!editFile) throw new Error("Not editable");
       const [oldText, newText] = await Promise.all([
         editFile.load(fd, "base"),
@@ -590,9 +582,7 @@ export function CommentableDiff({
             : { name: fd.prevName || fd.name, contents: oldText },
         newFile: { name: fd.name, contents: newText ?? "" },
       } as FileDiffLoadedFiles;
-    },
-    [editFile],
-  );
+    };
 
   const [draft, setDraft] = useState<Draft | null>(null);
   const [confirmation, setConfirmation] = useState<string | null>(null);
@@ -602,22 +592,18 @@ export function CommentableDiff({
   // selection range is adjusted, without re-rendering the diff on each keystroke.
   const draftTextRef = useRef("");
 
-  const handleSelect = useCallback(
-    (fileIndex: number, path: string, range: SelectedLineRange | null) => {
+  const handleSelect = (fileIndex: number, path: string, range: SelectedLineRange | null) => {
     if (!range) return; // keep the draft on stray deselects; Cancel closes it
     setConfirmation(null);
     setDraft({ fileIndex, path, range });
-    },
-    [],
-  );
+    };
 
-  const closeDraft = useCallback(() => {
+  const closeDraft = () => {
     draftTextRef.current = "";
     setDraft(null);
-  }, []);
+  };
 
-  const submitDraft = useCallback(
-    async (body: string) => {
+  const submitDraft = async (body: string) => {
       const d = draftRef.current;
       if (!d) return;
       const side: "additions" | "deletions" =
@@ -638,12 +624,9 @@ export function CommentableDiff({
         setConfirmation(`${submitLabel} ✓`);
         setTimeout(() => setConfirmation(null), 4000);
       }
-    },
-    [onSubmit, reviewMode, submitLabel],
-  );
+    };
 
-  const renderPending = useCallback(
-    (comment: PendingComment): React.ReactNode => {
+  const renderPending = (comment: PendingComment): React.ReactNode => {
       const lineLabel =
         comment.startLine === comment.endLine
           ? `line ${comment.startLine}`
@@ -673,14 +656,11 @@ export function CommentableDiff({
           </div>
         </div>
       );
-    },
-    [onRemovePending],
-  );
+    };
 
   // Stable across draft/text changes (reads the current draft from the ref), so
   // memoized rows keep their prop identity while the user selects and types.
-  const renderAnnotation = useCallback(
-    (annotation: DiffLineAnnotation<Meta>): React.ReactNode => {
+  const renderAnnotation = (annotation: DiffLineAnnotation<Meta>): React.ReactNode => {
       if (annotation.metadata?.kind === "pending") {
         return renderPending(annotation.metadata.comment);
       }
@@ -703,23 +683,12 @@ export function CommentableDiff({
           onSubmit={submitDraft}
         />
       );
-    },
-    [
-      renderPending,
-      disabled,
-      disabledHint,
-      placeholder,
-      submitLabel,
-      closeDraft,
-      submitDraft,
-    ],
-  );
+    };
 
   // Group pending comments by file once per change, so unaffected files reuse a
   // stable annotations array reference (and their memoized row bails out).
-  const pendingByFile = useMemo(() => {
-    const m = new Map<string, DiffLineAnnotation<Meta>[]>();
-    for (const c of pendingComments || []) {
+  const m = new Map<string, DiffLineAnnotation<Meta>[]>();
+for (const c of pendingComments || []) {
       const arr = m.get(c.path) || [];
       arr.push({
         side: c.side === "deletions" ? "deletions" : "additions",
@@ -728,10 +697,9 @@ export function CommentableDiff({
       });
       m.set(c.path, arr);
     }
-    return m;
-  }, [pendingComments]);
+const pendingByFile = m;
 
-  const resolvedByFile = useMemo(() => {
+  const resolvedByFile = (() => {
     const byPath = new Map<string, PrReviewThread[]>();
     for (const thread of reviewThreads || []) {
       if (!thread.isResolved || !thread.path) continue;
@@ -740,7 +708,7 @@ export function CommentableDiff({
       byPath.set(thread.path, threads);
     }
     return byPath;
-  }, [reviewThreads]);
+  })();
 
   // A file is open when the reader expanded it, or when something inside it
   // has to stay on screen: a comment being written, comments already added, an
@@ -1351,7 +1319,7 @@ function ImageDiffRow({
  * re-render just this form — not the parent diff. Seeds from `textRef` (which
  * the parent keeps) so text survives the form remounting on range changes.
  */
-const CommentForm = React.memo(function CommentForm({
+const CommentForm = function CommentForm({
   targetLabel,
   disabled,
   disabledHint,
@@ -1443,13 +1411,13 @@ const CommentForm = React.memo(function CommentForm({
       )}
     </div>
   );
-});
+};
 
 /**
  * One file's diff. Memoized so an unrelated re-render (another file's selection,
  * typing in the comment form) doesn't re-parse/re-render this file.
  */
-const FileDiffRow = React.memo(function FileDiffRow({
+const FileDiffRow = function FileDiffRow({
   file,
   fileIndex,
   theme,
@@ -1482,8 +1450,7 @@ const FileDiffRow = React.memo(function FileDiffRow({
   createEditor?: (options: EditorOptions<Meta>) => DiffsEditor<Meta>;
   loadDiffFiles?: (fd: FileDiffMetadata) => Promise<FileDiffLoadedFiles>;
 }) {
-  const options = useMemo(
-    () => ({
+  const options = (({
       ...BASE_OPTIONS,
       diffStyle,
       overflow: wrapLines ? ("wrap" as const) : ("scroll" as const),
@@ -1498,19 +1465,7 @@ const FileDiffRow = React.memo(function FileDiffRow({
       ...(loadDiffFiles ? { loadDiffFiles } : {}),
       onLineSelected: (range: SelectedLineRange | null) =>
         onSelect(fileIndex, file.name, range),
-    }),
-    [
-      diffStyle,
-      wrapLines,
-      structuralHighlighting,
-      fileIndex,
-      file.name,
-      onSelect,
-      theme,
-      editing,
-      loadDiffFiles,
-    ],
-  );
+    }));
 
   const fileDiff = (
     <FileDiff<Meta>
@@ -1538,4 +1493,4 @@ const FileDiffRow = React.memo(function FileDiffRow({
   ) : (
     fileDiff
   );
-});
+};

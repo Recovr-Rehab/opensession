@@ -81,15 +81,11 @@ export function AskCard({ questions, onAnswer }: Props) {
 	// Mirrors what we render below. Handing the collection to the root is what
 	// gets item order and answer shortcuts into the first paint, rather than
 	// waiting for each part to register itself.
-	const items = React.useMemo(
-		() =>
-			questions.map((q, i) => ({
+	const items = (questions.map((q, i) => ({
 				name: itemName(i),
 				required: true,
 				choices: (q.options ?? []).map((o) => ({ value: o.label })),
-			})),
-		[questions],
-	);
+			})));
 
 	// A card asking one thing: its header belongs on the status row (below).
 	const lone = questions.length === 1 ? questions[0] : undefined;

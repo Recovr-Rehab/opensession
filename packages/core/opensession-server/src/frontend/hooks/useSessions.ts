@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useMemo, useRef } from "react";
+import { useState, useEffect, useRef } from "react";
 import type { UnifiedSession } from "../lib/types";
 import { fetchSessionsSnapshot } from "../lib/api";
 import {
@@ -188,8 +188,7 @@ export function useSessions({
   // server snapshot without relying on wall-clock timing.
   const runtimeRevisionRef = useRef(0);
 
-  const applyServer = useCallback(
-    (parsed: UnifiedSession[], snapshotRuntimeRevision: number) => {
+  const applyServer = (parsed: UnifiedSession[], snapshotRuntimeRevision: number) => {
       const reconciled = reconcilePendingSessionPatches(
         parsed,
         pendingPatchRef.current,
@@ -206,11 +205,9 @@ export function useSessions({
         }
         return extras.length ? [...next, ...extras] : next;
       });
-    },
-    [],
-  );
+    };
 
-  const poll = useCallback((): Promise<void> => {
+  const poll = (): Promise<void> => {
     if (pollPromiseRef.current?.query === liveQuery)
       return pollPromiseRef.current.promise;
     if (pollPromiseRef.current) pollAbortRef.current?.abort();
@@ -260,7 +257,7 @@ export function useSessions({
     });
     pollPromiseRef.current = { query: liveQuery, promise };
     return promise;
-  }, [applyServer, liveQuery]);
+  };
 
   useEffect(() => {
     mountedRef.current = true;
@@ -298,7 +295,7 @@ export function useSessions({
   const archivedEtagRef = useRef<string | null>(null);
   const archivedPromiseRef = useRef<Promise<void> | null>(null);
 
-  const pollArchived = useCallback((): Promise<void> => {
+  const pollArchived = (): Promise<void> => {
     if (archivedPromiseRef.current) return archivedPromiseRef.current;
     const startedAt = Date.now();
     const promise = (async () => {
@@ -330,7 +327,7 @@ export function useSessions({
     });
     archivedPromiseRef.current = promise;
     return promise;
-  }, []);
+  };
 
   // The sidebar only links to Archived now; it does not render archived rows or
   // their count. Keep this larger index out of the app entirely until that
@@ -363,16 +360,12 @@ export function useSessions({
 
   // One list out of the slices, so every consumer keeps reading `archived`
   // off a single array (see lib/session-slices for why that's the shape).
-  const sessions = useMemo(
-    () =>
-      mergeSessionSlices({
+  const sessions = (mergeSessionSlices({
         live,
         archivedIndex,
         locallyArchived,
         locallyUnarchived,
-      }),
-    [live, archivedIndex, locallyArchived, locallyUnarchived],
-  );
+      }));
   mergedRef.current = sessions;
 
   // Forget the local overrides the server has caught up with.
@@ -411,10 +404,10 @@ export function useSessions({
   ]);
 
   // Expose manual refresh for after deletes
-  const refresh = useCallback(() => {
+  const refresh = () => {
     poll();
     if (loadArchived || archivedIndex !== null) pollArchived();
-  }, [archivedIndex, loadArchived, poll, pollArchived]);
+  };
 
   // Drop a just-created session straight into the list so the UI can render it
   // immediately (e.g. the tab-strip + creating a new session) instead of showing a
@@ -423,8 +416,7 @@ export function useSessions({
   // to register (a new workspace): the injected copy then survives every poll
   // until the server's own copy lands, so the new tab renders instead of a
   // "Starting…" placeholder. Call `unstick` if the create fails.
-  const inject = useCallback(
-    (session: UnifiedSession, opts?: { sticky?: boolean }) => {
+  const inject = (session: UnifiedSession, opts?: { sticky?: boolean }) => {
       // The list no longer matches the last server response — force the next
       // poll to apply (it reconciles the injected copy, same as before).
       lastTextRef.current = null;
@@ -435,21 +427,18 @@ export function useSessions({
           ? prev.map((s) => (s.id === session.id ? session : s))
           : [...prev, session],
       );
-    },
-    [],
-  );
+    };
 
   // Drop a session's sticky status (e.g. its create failed / was abandoned).
   // The session itself stays until the next poll reconciles it away.
-  const unstick = useCallback((id: string) => {
+  const unstick = (id: string) => {
     if (stickyRef.current.delete(id)) {
       lastTextRef.current = null;
       etagRef.current = null;
     }
-  }, []);
+  };
 
-  const patch = useCallback(
-    (id: string, patch: Partial<UnifiedSession>) => {
+  const patch = (id: string, patch: Partial<UnifiedSession>) => {
       lastTextRef.current = null;
       etagRef.current = null;
       if (sessionPatchNeedsAcknowledgement(patch)) {
@@ -499,11 +488,9 @@ export function useSessions({
         if (loadArchived || archivedIndex !== null) void pollArchived();
       }
       setLive((prev) => prev.map((s) => (s.id === id ? { ...s, ...patch } : s)));
-    },
-    [archivedIndex, loadArchived, pollArchived],
-  );
+    };
 
-  const remove = useCallback((id: string) => {
+  const remove = (id: string) => {
     lastTextRef.current = null;
     etagRef.current = null;
     archivedTextRef.current = null;
@@ -520,7 +507,7 @@ export function useSessions({
     setArchivedIndex((prev) => prev && prev.filter((s) => s.id !== id));
     setLocallyArchived(drop);
     setLocallyUnarchived(drop);
-  }, []);
+  };
 
   return {
     sessions,

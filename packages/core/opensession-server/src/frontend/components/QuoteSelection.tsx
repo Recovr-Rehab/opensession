@@ -1,5 +1,5 @@
 import React, {
-	useCallback,
+	
 	useEffect,
 	useLayoutEffect,
 	useRef,
@@ -82,13 +82,13 @@ export function QuoteSelection({
 	const [offer, setOffer] = useState<Offer | null>(null);
 	const [placement, setPlacement] = useState<OfferPlacement | null>(null);
 
-	const clear = useCallback(() => {
+	const clear = () => {
 		window.getSelection()?.removeAllRanges();
 		stagedRef.current = null;
 		onClear();
-	}, [onClear]);
+	};
 
-	const capture = useCallback(() => {
+	const capture = () => {
 		const container = containerRef.current;
 		if (!container || disabled) return;
 		const selection = window.getSelection();
@@ -112,9 +112,9 @@ export function QuoteSelection({
 		if (!boxes) return;
 		offerRangeRef.current = range.cloneRange();
 		setOffer({ text, ...boxes });
-	}, [containerRef, disabled]);
+	};
 
-	const add = useCallback(() => {
+	const add = () => {
 		const range = offerRangeRef.current;
 		if (!range || !offer) return;
 		stagedRef.current = range;
@@ -122,14 +122,14 @@ export function QuoteSelection({
 		window.getSelection()?.removeAllRanges();
 		setOffer(null);
 		onInputIntent?.();
-	}, [offer, onQuote, onInputIntent]);
+	};
 
-	const startNewChat = useCallback(() => {
+	const startNewChat = () => {
 		if (!offer) return;
 		window.getSelection()?.removeAllRanges();
 		setOffer(null);
 		onStartNewChat(newQuote(offer.text));
-	}, [offer, onStartNewChat]);
+	};
 
 	useEffect(() => {
 		if (disabled) return;

@@ -2,7 +2,7 @@ import { AGENT_NAME } from "../lib/brand";
 import React, {
 	useEffect,
 	useLayoutEffect,
-	useMemo,
+	
 	useRef,
 	useState,
 } from "react";
@@ -242,8 +242,7 @@ export function WorkspacePane({
 	// those requests in edit order so a slower text write cannot resurrect a
 	// draft after its later deletion has landed.
 	const serverDraftWrites = useRef<Promise<void>>(Promise.resolve());
-	const pushServerDraft = React.useCallback(
-		(text: string) => {
+	const pushServerDraft = (text: string) => {
 			const patch = workspaceDraftPatch(
 				text,
 				new Date().toISOString(),
@@ -264,9 +263,7 @@ export function WorkspacePane({
 				// Autosave must never block typing. A flaky connection just means
 				// the next keystroke's debounce tries again.
 				.catch(() => {});
-		},
-		[workspace.id, draftAutoName],
-	);
+		};
 	useEffect(() => {
 		saveDraft(draftKey, { text: prompt, images, files });
 	}, [draftKey, prompt, images, files]);
@@ -347,8 +344,7 @@ export function WorkspacePane({
 	}, [addHandler, draftKey]);
 	useEffect(() => () => clearTimeout(startTimer.current), []);
 
-	const addWorkspaceAttachments = React.useCallback(
-		async (picked: FileList | File[]) => {
+	const addWorkspaceAttachments = async (picked: FileList | File[]) => {
 			const selected = Array.from(picked);
 			const batch = countStaging(selected);
 			setStaging((current) => addStaging(current, batch));
@@ -367,9 +363,7 @@ export function WorkspacePane({
 			} finally {
 				setStaging((current) => subtractStaging(current, batch));
 			}
-		},
-		[draftKey],
-	);
+		};
 
 	useEffect(() => {
 		if (tab !== null || !connected || starting) {
@@ -446,33 +440,25 @@ export function WorkspacePane({
 			? { repo: workspace.repo || "repository", branch: workspace.branch }
 			: null;
 	useEffect(() => setReviewPage("files"), [reviewTarget?.repo, reviewTarget?.branch]);
-	const reviewSessions = useMemo(() => {
+	const reviewSessions = (() => {
 		if (!reviewTarget) return [];
 		return sessions.filter(
 			(s) =>
 				s.workspaceId === workspace.id && sessionCarriesPr(s, reviewTarget),
 		);
-	}, [sessions, workspace.id, reviewTarget?.repo, reviewTarget?.branch]);
+	})();
 	// PR APIs can use the freshest carrier, while workspace presentation belongs
 	// to the human conversation that produced the change. Keeping those roles
 	// separate prevents a newer bks-ghpr automation session from replacing the
 	// walkthrough, assets and summary of the implementation session.
-	const reviewSession = useMemo(
-		() =>
-			[...reviewSessions].sort((a, b) =>
+	const reviewSession = ([...reviewSessions].sort((a, b) =>
 				(b.lastActivity || "").localeCompare(a.lastActivity || ""),
-			)[0] || null,
-		[reviewSessions],
-	);
-	const listedPresentationSession = useMemo(
-		() =>
-			mainSession(
+			)[0] || null);
+	const listedPresentationSession = (mainSession(
 				[...reviewSessions].sort((a, b) =>
 					(a.createdAt || "").localeCompare(b.createdAt || ""),
 				),
-			) ?? null,
-		[reviewSessions],
-	);
+			) ?? null);
 	const [hydratedPresentationSession, setHydratedPresentationSession] =
 		useState<UnifiedSession | null>(null);
 	useEffect(() => {

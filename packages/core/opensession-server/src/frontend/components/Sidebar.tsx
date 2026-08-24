@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useEffect, useLayoutEffect, useRef } from "react";
+import React, { useState, useEffect, useLayoutEffect, useRef } from "react";
 import { createPortal } from "react-dom";
 import type {
 	UnifiedSession,
@@ -765,10 +765,9 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 	useEffect(() => onRecentsChanged(() => setRecents(getRecents())), []);
 	useEffect(() => onReadsChanged(() => setReads(getReads())), []);
 	// Sessions where a teammate tagged you. Server-owned, so it re-renders on
-	// the socket push as well as on your own clears. The counter is a memo
-	// dependency, not just a re-render trigger: the rows read mentionFor()
-	// inside useMemo, so a push that changes nothing else would otherwise
-	// leave the badge out until an unrelated change rebuilt them.
+	// the socket push as well as on your own clears. The counter is a render
+	// trigger: the rows read mentionFor() during render, so a push that
+	// changes nothing else must still rebuild them.
 	const [mentionsRev, setMentionsRev] = useState(0);
 	useEffect(() => onMentionsChanged(() => setMentionsRev((n) => n + 1)), []);
 	// Re-render when a composer draft appears/disappears — rows check hasDraft()
@@ -844,7 +843,7 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 	// Catch-up badge: how many of *my* unread workspaces the deck would walk
 	// through (distinct workspace groups, same grouping the deck uses) — so the
 	// count matches the "N Left" it opens on.
-	const catchUpCount = useMemo(() => {
+	const catchUpCount = (() => {
 		const user = currentUser.toLowerCase();
 		const groups = new Set<string>();
 		for (const s of sessions) {
@@ -854,7 +853,7 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 			groups.add(s.workspaceId ? `ws:${s.workspaceId}` : `session:${s.id}`);
 		}
 		return groups.size;
-	}, [sessions, currentUser, reads]);
+	})();
 
 	// The repo-wide open-PR list (every open PR, session or not), from the
 	// server's batched cache. Null until the first fetch lands — the rows memo
@@ -935,24 +934,21 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 			alive = false;
 		};
 	}, []);
-	const visibleFeeds = useMemo(
-		() => feeds.filter((feed) => !hiddenFeeds.has(feed.id)),
-		[feeds, hiddenFeeds],
-	);
+	const visibleFeeds = (feeds.filter((feed) => !hiddenFeeds.has(feed.id)));
 
 	// The Support queue now arrives through the generic feeds poll: the plain
 	// feed's items carry the full SupportThreadSummary in meta, so all the
 	// bespoke Support UI (SupportRow, filters, Tinder hand-offs) keeps working
 	// off the same derived shape (the feeds design W5).
-	const supportThreads = useMemo<SupportThread[] | null>(() => {
+	const supportThreads = (() => {
 		const items = feedItems["plain"];
 		if (!items) return null;
 		return items.map((i) => i.meta as unknown as SupportThread);
-	}, [feedItems]);
+	})();
 
 	// Newest live session per feed item (keyed `<kind>:<id>`) — a feed row with
 	// one wears that session's status dot.
-	const feedSessionByRef = useMemo(() => {
+	const feedSessionByRef = (() => {
 		const m = new Map<string, UnifiedSession>();
 		for (const s of sessions) {
 			if (s.archived || !s.externalRefs?.length) continue;
@@ -963,7 +959,7 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 			}
 		}
 		return m;
-	}, [sessions]);
+	})();
 
 	// Per-feed filter selections (generic — see FeedFilterMenu). Arg-mode
 	// changes refetch that feed immediately; meta/builtin ones just re-derive.
@@ -1023,7 +1019,7 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 
 	// Newest live session per Plain thread — a Support row with one opens that
 	// session instead of the session-less ticket preview.
-	const supportSessionByThread = useMemo(() => {
+	const supportSessionByThread = (() => {
 		const m = new Map<string, UnifiedSession>();
 		for (const s of sessions) {
 			if (s.archived || !s.plainThreadId) continue;
@@ -1032,12 +1028,12 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 				m.set(s.plainThreadId, s);
 		}
 		return m;
-	}, [sessions]);
+	})();
 
 	// Distinct repos across the (non-archived) sessions, most-used first, for the
 	// Repo filter dropdown. Built off every session (not the search-filtered set)
 	// so the options don't churn while you type.
-	const discoveredRepos = useMemo(() => {
+	const discoveredRepos = (() => {
 		const counts = new Map<string, number>();
 		for (const repo of registeredRepos) counts.set(repo, 0);
 		for (const s of sessions) {
@@ -1052,12 +1048,9 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 		return Array.from(counts.entries())
 			.sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
 			.map(([name]) => name);
-	}, [registeredRepos, sessions, openPrs]);
-	const repos = useMemo(
-		() => mergeRepoOrder(repoOrderDraft ?? savedRepoOrder, discoveredRepos),
-		[repoOrderDraft, savedRepoOrder, discoveredRepos],
-	);
-	const completeRepoOrder = useMemo(() => {
+	})();
+	const repos = (mergeRepoOrder(repoOrderDraft ?? savedRepoOrder, discoveredRepos));
+	const completeRepoOrder = (() => {
 		const next = normalizeRepoOrder(savedRepoOrder);
 		const seen = new Set(next);
 		for (const repo of discoveredRepos) {
@@ -1067,7 +1060,7 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 			}
 		}
 		return next;
-	}, [savedRepoOrder, discoveredRepos]);
+	})();
 	useEffect(() => {
 		if (
 			savedRepoOrder.length > 0 &&
@@ -1083,8 +1076,8 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 	// first name from the web and a full name from chat. Built off every
 	// session so options don't churn on search.
 	const roster = usePeople();
-	const canonical = useMemo(() => canonicalNames(roster), [roster]);
-	const people = useMemo(() => {
+	const canonical = (canonicalNames(roster));
+	const people = (() => {
 		const entries = sessionOwners(
 			sessions.filter((s) => !s.archived),
 			canonical,
@@ -1098,7 +1091,7 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 			entries.push({ key: pr.person, label: personNameForKey(pr.person) });
 		}
 		return entries;
-	}, [sessions, openPrs, canonical]);
+	})();
 
 	// A borrowed sidebar: someone else's lanes, everyone's, or the unassigned
 	// pile. It looks exactly like your own, so the rail changes shape while you
@@ -1125,7 +1118,7 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 	// concluded. Re-read when automation activity moves rather than on a timer:
 	// a report is published by a run, so a run landing in the list is the only
 	// thing that can have produced a new one.
-	const automationActivityKey = useMemo(() => {
+	const automationActivityKey = (() => {
 		let newest = "";
 		let count = 0;
 		for (const s of sessions) {
@@ -1134,39 +1127,33 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 			if (s.lastActivity > newest) newest = s.lastActivity;
 		}
 		return `${count}:${newest}`;
-	}, [sessions]);
+	})();
 	const automationOverview = useAutomationOverview(automationActivityKey);
 
 	// The agent is a person in the picker as well as a name on a row: it holds
 	// every automation nobody has taken, and those are still editing the
 	// codebase unattended. Offered only once there is something behind it, and
 	// merged with the agent's own sessions where it has started any.
-	const peopleWithAgent = useMemo(() => {
+	const peopleWithAgent = (() => {
 		const unowned = Array.from(automationOverview.values()).some(
 			(a) => !a.owner,
 		);
 		if (!unowned || people.some((p) => p.key === AGENT_PERSON_KEY))
 			return people;
 		return [...people, { key: AGENT_PERSON_KEY, label: AGENT_NAME }];
-	}, [people, automationOverview]);
+	})();
 
 	// Child sessions are contextual navigation for the workspace that is open,
 	// not another person/status lane. Derive them from the complete live list so
 	// a teammate or search lens cannot cut a running worker out from under its
 	// selected parent row.
-	const activeWorkspaceSubagents = useMemo(
-		() => activeSubagentsForWorkspace(sessions, selectedWorkspaceId),
-		[sessions, selectedWorkspaceId],
-	);
-	const activeWorkspaceSubagentIds = useMemo(
-		() => new Set(activeWorkspaceSubagents.map(({ session }) => session.id)),
-		[activeWorkspaceSubagents],
-	);
+	const activeWorkspaceSubagents = (activeSubagentsForWorkspace(sessions, selectedWorkspaceId));
+	const activeWorkspaceSubagentIds = (new Set(activeWorkspaceSubagents.map(({ session }) => session.id)));
 
 	// Every non-archived session, narrowed by the repo/person filters and search.
 	// Rows are built per-workspace below; a session matching the filter surfaces its
 	// whole workspace row.
-	const filtered = useMemo(() => {
+	const filtered = (() => {
 		let visible = sessions.filter((s) => !s.archived);
 		if (filter.repo !== "all") {
 			// A workspace can span repos, and a session's own repo is just the
@@ -1210,27 +1197,27 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 				(s.startedBy || "").toLowerCase().includes(q) ||
 				(s.automation || "").toLowerCase().includes(q),
 		);
-	}, [sessions, workspaces, search, filter.repo, filter.person, canonical]);
+	})();
 
 	// Sort order applied to every group's items: newest activity or newest
 	// creation first. Groups read from this pre-sorted list so ordering is uniform.
-	const sorted = useMemo(() => {
+	const sorted = (() => {
 		const key = filter.sort === "created" ? "createdAt" : "lastActivity";
 		return [...filtered].sort(
 			(a, b) => new Date(b[key]).getTime() - new Date(a[key]).getTime(),
 		);
-	}, [filtered, filter.sort]);
+	})();
 
 	// PRs with an automated Open Session review in flight, keyed `repo\nbranch`
 	// — the same signal the PR rows spell out as "Review running". The review
 	// itself runs in a `bks-ghpr-*` session that lives in the Automations band, so
 	// the workspace lanes below can't see it in their own sessions.
-	const activeReviewPrKeys = useMemo(() => {
+	const activeReviewPrKeys = (() => {
 		const keys = new Set<string>();
 		for (const pr of openPrs || [])
 			if (pr.reviewActive) keys.add(`${pr.repo}\n${pr.branch}`);
 		return keys;
-	}, [openPrs]);
+	})();
 
 	// ── Workspace rows ──────────────────────────────────────────────────────
 	// The row shape itself is WsRow in lib/sidebar-types.
@@ -1249,7 +1236,7 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 		MINE_STATUS_META.map((m) => [m.key, m.dotColor]),
 	) as Record<MineStatus, string>;
 
-	const allWsRows = useMemo(() => {
+	const allWsRows = (() => {
 		const rows: WsRow[] = [];
 		const byWs = new Map<string, UnifiedSession[]>();
 		const solo: UnifiedSession[] = [];
@@ -1450,7 +1437,7 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 		return rows;
 		// `lanes` feeds mineStatus/pinnedLane (read via the lib cache), and
 		// `mentionsRev` the @-mention badge (mentionFor, same cache pattern).
-	}, [filtered, sessions, workspaces, selectedId, reads, search, filter, lanes, activeReviewPrKeys, mentionsRev, activeWorkspaceSubagentIds, selectedWorkspaceId, canonical]);
+	})();
 	const rowOwnsSelection = (row: WsRow) =>
 		workspaceRowOwnsSelection(row, selectedSession, selectedWorkspaceId);
 	const selectionBelongsToWorkspaceRow = allWsRows.some(rowOwnsSelection);
@@ -1481,16 +1468,10 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 	// Otherwise the viewer offers "Add to sidebar" when you open a hidden
 	// session through a link or ⌘K. There is no Hidden band: hiding is removal
 	// from your sidebar, not a folder to browse.
-	const { hiddenKeys: hiddenRowKeys, resurfaced: resurfacedRows } = useMemo(
-		() => partitionHidden(allWsRows, hides),
-		[allWsRows, hides],
-	);
+	const { hiddenKeys: hiddenRowKeys, resurfaced: resurfacedRows } = (partitionHidden(allWsRows, hides));
 	// Opening a deep link must not undo a personal hide. The viewer owns the
 	// recovery action while the row stays absent.
-	const wsRows = useMemo(
-		() => allWsRows.filter((r) => !hiddenRowKeys.has(r.key)),
-		[allWsRows, hiddenRowKeys],
-	);
+	const wsRows = (allWsRows.filter((r) => !hiddenRowKeys.has(r.key)));
 	// Consume the hide of any row that just resurfaced (blocked on a question),
 	// marking its sessions unread so the return reads as fresh activity — the same
 	// shape as the snooze wake above. Idempotent: clearHides ignores keys that
@@ -1506,7 +1487,7 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 	// The band narrows with the same person and repo lenses the rest of the
 	// sidebar uses, read off the automation rather than off its runs: a run is
 	// started by nobody, so the audience is the automation's own.
-	const groups = useMemo(() => {
+	const groups = (() => {
 		const out: Group[] = [];
 		const byAutomation = new Map<string, UnifiedSession[]>();
 		for (const s of sorted) {
@@ -1557,15 +1538,7 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 		}
 		return out;
 		// `lanes` feeds pinnedLane (read via the lib cache).
-	}, [
-		sorted,
-		lanes,
-		automationOverview,
-		activeWorkspaceSubagentIds,
-		filter.person,
-		filter.repo,
-		currentUser,
-	]);
+	})();
 
 	// The DOM is the source of truth for visual order. Section mode, project
 	// grouping, collapse state, pins, PRs and feeds can all put rendered rows in
@@ -1647,14 +1620,14 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 	// lanes) and parks in the Snoozed section, soonest wake first. The sweep
 	// below prunes lapsed entries — marking the row's sessions unread first, so
 	// the wake surfaces like fresh activity — which re-derives membership.
-	const activeSnoozeKeys = useMemo(() => {
+	const activeSnoozeKeys = (() => {
 		const now = Date.now();
 		return new Set(
 			Object.entries(snoozes)
 				.filter(([, until]) => snoozeIsActive(until, now))
 				.map(([key]) => key),
 		);
-	}, [snoozes]);
+	})();
 	useEffect(() => {
 		if (Object.keys(snoozes).length === 0) return;
 		const sweep = () => {
@@ -1676,10 +1649,7 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 	const mePersonKey = personKey(currentUser);
 	// Feed workspaces only join status lanes when they demand attention. Idle
 	// rows are already represented by their feed band.
-	const feedRefKinds = useMemo(
-		() => new Set(feeds.map((f) => f.refKind)),
-		[feeds],
-	);
+	const feedRefKinds = (new Set(feeds.map((f) => f.refKind)));
 	const rowIsFeedOnly = (r: WsRow) =>
 		!r.workspace?.repo &&
 		!!r.workspace?.externalRefs?.length &&
@@ -1687,7 +1657,7 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 
 	// Every row receives exactly one primary placement. Pinned remains an
 	// orthogonal quick-access facet and is derived separately below.
-	const { placedWsRows, autoCreatedRows } = useMemo(() => {
+	const { placedWsRows, autoCreatedRows } = (() => {
 		const focus =
 			filter.person === "me" ? currentUser.toLowerCase() : filter.person;
 		// Whether a row belongs in the lanes at all, asked twice: once as the
@@ -1740,16 +1710,7 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 				: entry.placement === "outside" && inScope(entry.row, true)),
 		).length;
 		return { placedWsRows: placed, autoCreatedRows: moved };
-	}, [
-		wsRows,
-		activeSnoozeKeys,
-		filter.person,
-		filter.autoCreated,
-		currentUser,
-		selectedSession,
-		lanes,
-		feedRefKinds,
-	]);
+	})();
 	const needsReviewRows = rowsAtPlacement(placedWsRows, "needs-review");
 	const approvedReviewRows = rowsAtPlacement(placedWsRows, "approved-review");
 	const awaitingReviewRows = rowsAtPlacement(placedWsRows, "awaiting-review");
@@ -1763,7 +1724,7 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 			return Date.parse(aUntil || "") - Date.parse(bUntil || "");
 		},
 	);
-	const pinnedWsRows = useMemo(() => {
+	const pinnedWsRows = (() => {
 		const pinSet = new Set(pins);
 		const pinIdx = new Map(pins.map((p, i) => [p, i] as const));
 		// Pinned is quick access, not a status: review rows stay visible here as
@@ -1786,56 +1747,36 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 					(pinSet.has(r.key) || r.sessions.some((c) => pinSet.has(c.id))),
 			)
 			.sort((a, b) => rowIdx(a) - rowIdx(b));
-	}, [wsRows, pins, activeSnoozeKeys]);
+	})();
 
 	// ── Inbox rows ──────────────────────────────────────────────────────────
 	// Snoozed rows already left `focusWsRows` through placement. The remaining
 	// inbox stays stable by creation time, and pinned rows keep their dedicated
 	// quick-access copy rather than repeating directly under it.
-	const pinnedRowKeys = useMemo(
-		() => new Set(pinnedWsRows.map((row) => row.key)),
-		[pinnedWsRows],
-	);
-	const activeFocusWsRows = useMemo(
-		() =>
-			sortInboxByCreation(
+	const pinnedRowKeys = (new Set(pinnedWsRows.map((row) => row.key)));
+	const activeFocusWsRows = (sortInboxByCreation(
 				focusWsRows.filter((row) => !pinnedRowKeys.has(row.key)),
-			),
-		[focusWsRows, pinnedRowKeys],
-	);
+			));
 	// ── PR rows in the project lanes ────────────────────────────────────────
 	// The retired standalone Pull-requests band dissolved into the project
 	// groups: every open PR classifies into a lane (ready → Ready to merge,
 	// attention → In progress, drafts → Backlog, the rest → In progress).
 	const githubLogin = githubLoginFor(currentUser);
-	const reviewQueueItems = useMemo(
-		() => buildReviewQueue(openPrs || [], sessions, currentUser, githubLogin),
-		[openPrs, sessions, currentUser, githubLogin],
-	);
-	const workspaceRowsInView = useMemo(
-		() => [
+	const reviewQueueItems = (buildReviewQueue(openPrs || [], sessions, currentUser, githubLogin));
+	const workspaceRowsInView = ([
 			...activeFocusWsRows,
 			...pinnedWsRows,
 			...snoozedWsRows,
 			...needsReviewRows,
 			...awaitingReviewRows,
 			...approvedReviewRows,
-		],
-		[
-			activeFocusWsRows,
-			pinnedWsRows,
-			snoozedWsRows,
-			needsReviewRows,
-			awaitingReviewRows,
-			approvedReviewRows,
-		],
-	);
+		]);
 	// A PR already represented by a workspace belongs to that workspace row.
 	// Match both the workspace's own PR identity and every PR carried by its
 	// sessions, including linked and cross-repo PRs. Dedupe is against rows in
 	// view so a teammate's hidden workspace can still surface through the PR
 	// filter.
-	const workspaceCoveredPrUrls = useMemo(() => {
+	const workspaceCoveredPrUrls = (() => {
 		const covered = new Set<string>();
 		for (const item of reviewQueueItems) {
 			if (
@@ -1848,8 +1789,8 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 				covered.add(item.pr.url);
 		}
 		return covered;
-	}, [reviewQueueItems, workspaceRowsInView]);
-	const prRowItems = useMemo(() => {
+	})();
+	const prRowItems = (() => {
 		if (!workspaceDataReady || filter.prs === "none") return [];
 		const q = search.trim().toLowerCase();
 		return reviewQueueItems.filter((item) => {
@@ -1872,15 +1813,7 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 			if (filter.prs === "all") return true;
 			return item.source === "mine" || item.source === "requested";
 		});
-	}, [
-		reviewQueueItems,
-		workspaceCoveredPrUrls,
-		workspaceDataReady,
-		filter.repo,
-		filter.person,
-		filter.prs,
-		search,
-	]);
+	})();
 
 	// Which lane a PR row files under: ready → Ready to merge, everything else
 	// → Backlog. In progress is reserved for live runs — a PR that needs a
@@ -1966,8 +1899,7 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 
 	// Workspace rows in their primary placement order. This supports operations
 	// that need row membership; archive navigation reads the rendered DOM below.
-	const wsRowOrder = useMemo(
-		() => {
+	const wsRowOrder = (() => {
 			// Review placements can still overlap Pinned; dedupe by key so the
 			// archive-next walk sees each workspace once.
 			const seen = new Set<string>();
@@ -1981,16 +1913,7 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 				),
 				...snoozedWsRows,
 			].filter((r) => (seen.has(r.key) ? false : (seen.add(r.key), true)));
-		},
-		[
-			needsReviewRows,
-			approvedReviewRows,
-			awaitingReviewRows,
-			pinnedWsRows,
-			activeFocusWsRows,
-			snoozedWsRows,
-		],
-	);
+		})();
 	// Project bands are independent from the section mode. Inbox, Activity,
 	// and Status can each render globally or inside every project.
 	const groupsByRepo = filter.byProject;

@@ -18,7 +18,7 @@ import {
 	ARCHIVED_SECTION_LABEL,
 	ARCHIVED_SECTION_ROWS,
 } from "../lib/archived-classes";
-import React, { useState, useMemo, useEffect, useRef } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { createPortal } from "react-dom";
 import type { UnifiedSession } from "../lib/types";
 import { relativeTime, archiveSessionApi } from "../lib/api";
@@ -196,10 +196,7 @@ export function Archived({
 		};
 	}, []);
 
-	const allArchived = useMemo(
-		() => sessions.filter((s) => s.archived),
-		[sessions],
-	);
+	const allArchived = (sessions.filter((s) => s.archived));
 	const hasAutoArchived = allArchived.some(isAutoReason);
 	const activeFilterCount =
 		(owner !== "everyone" ? 1 : 0) + (repo !== "all" ? 1 : 0) + (reason !== "all" ? 1 : 0);
@@ -208,14 +205,11 @@ export function Archived({
 	// beyond you. Built from the whole archived set, not the filtered one, so
 	// choosing a person doesn't empty the list you chose them from.
 	const meKey = currentUser.toLowerCase();
-	const canonical = useMemo(() => canonicalNames(roster), [roster]);
-	const people = useMemo(
-		() => sessionOwners(allArchived, canonical, meKey),
-		[allArchived, canonical, meKey],
-	);
+	const canonical = (canonicalNames(roster));
+	const people = (sessionOwners(allArchived, canonical, meKey));
 
 	// Repos present in the archived set, most-used first — the repo dropdown options.
-	const repos = useMemo(() => {
+	const repos = (() => {
 		const counts = new Map<string, number>();
 		for (const s of allArchived) {
 			const p = sessionRepo(s);
@@ -224,7 +218,7 @@ export function Archived({
 		return Array.from(counts.entries())
 			.sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
 			.map(([name]) => name);
-	}, [allArchived]);
+	})();
 
 	// If the inherited repo isn't among the archived sessions, fall back to "all"
 	// so the list isn't mysteriously empty on open.
@@ -244,7 +238,7 @@ export function Archived({
 			setOwner("everyone");
 	}, [owner, people]);
 
-	const archived = useMemo(() => {
+	const archived = (() => {
 		let list = allArchived;
 		if (owner !== "everyone") {
 			const user = owner === "mine" ? meKey : owner;
@@ -267,7 +261,7 @@ export function Archived({
 			);
 		}
 		return list;
-	}, [allArchived, owner, repo, reason, search, meKey, canonical]);
+	})();
 	const visibleArchived = archived.slice(0, PAGE_SIZE);
 	const sections = archiveSections(visibleArchived);
 

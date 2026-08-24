@@ -1,7 +1,7 @@
 import { AGENT_NAME, GITHUB_BOT_NAME } from "../lib/brand";
 import { BASE_PATH } from "../lib/base";
 import { commitPrompt } from "../lib/commit-prompt";
-import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { parsePatchFiles } from "@pierre/diffs";
 import type { FileDiffMetadata } from "@pierre/diffs";
 import { FileDiff } from "@pierre/diffs/react";
@@ -343,12 +343,9 @@ function CommentCard({
 	onAddToInput?: (text: string) => void;
 }) {
 	const repo = useMarkdownRepo();
-	const html = useMemo(
-		() => renderMarkdown(cleanCommentMarkdown(comment.body), { repo }),
-		[comment.body, repo],
-	);
+	const html = (renderMarkdown(cleanCommentMarkdown(comment.body), { repo }));
 	// The one-line label: lead with the comment's title/first words, flattened.
-	const title = useMemo(() => plainComment(comment.body), [comment.body]);
+	const title = (plainComment(comment.body));
 
 	const addBtn = onAddToInput && (
 		<button
@@ -488,14 +485,11 @@ function FileRow({
 	const slash = file.path.lastIndexOf("/");
 	const dir = slash >= 0 ? file.path.slice(0, slash + 1) : "";
 	const base = slash >= 0 ? file.path.slice(slash + 1) : file.path;
-	const options = useMemo(
-		() => ({
+	const options = (({
 			...PREVIEW_DIFF_OPTIONS,
 			theme: theme === "light" ? "pierre-light" : "pierre-dark",
 			themeType: theme,
-		}),
-		[theme],
-	);
+		}));
 	const stats = (
 		<span className="inline-flex shrink-0 items-center gap-1 text-meta font-semibold tabular-nums">
 			{file.additions > 0 && (
@@ -674,13 +668,9 @@ function AgentReviewCard({
 				.find((comment) => comment.body.trim().startsWith("<!-- os-review -->"))
 		: undefined;
 	const reviewMessage = reviewComment?.body.replace(/^<!-- os-review -->\s*/, "");
-	const reviewHtml = useMemo(
-		() =>
-			reviewMessage
+	const reviewHtml = (reviewMessage
 				? renderMarkdown(cleanCommentMarkdown(reviewMessage), { repo })
-				: "",
-		[reviewMessage, repo],
-	);
+				: "");
 
 	// Keep the just-started state latched until a later PR refresh observes the
 	// run or its new result; otherwise the button flashes idle after the POST.
@@ -1477,22 +1467,18 @@ export function WorkspaceInfo({
 	// regex passes per comment, and this component re-renders on every live
 	// media frame while a session streams, which is not a reason to flatten
 	// the same markdown again.
-	const comments = useMemo(
-		() =>
-			(pr?.comments ?? [])
+	const comments = ((pr?.comments ?? [])
 				.filter((c) => !isMachinePrComment(c))
 				.filter((c) => !isOutdatedReviewComment(c.body))
 				.map((c) => ({ ...c, preview: plainComment(c.body) }))
-				.filter((c) => c.preview.length > 0),
-		[pr?.comments],
-	);
+				.filter((c) => c.preview.length > 0));
 	const changed = files ?? [];
 	const totalAdd = changed.reduce((n, f) => n + (f.additions || 0), 0);
 	const totalDel = changed.reduce((n, f) => n + (f.deletions || 0), 0);
 	// Parse the raw patch once into a path→file-diff map so each file row can
 	// hover-reveal its own hunks (same @pierre/diffs parse the Changes tab uses).
 	const diffTheme = useResolvedTheme();
-	const diffByPath = useMemo(() => {
+	const diffByPath = (() => {
 		const m = new Map<string, FileDiffMetadata>();
 		if (!rawPatch.trim()) return m;
 		try {
@@ -1502,12 +1488,12 @@ export function WorkspaceInfo({
 			/* malformed patch — rows just fall back to a plain click. */
 		}
 		return m;
-	}, [rawPatch]);
+	})();
 	// Live media leads, so a frame the overview has since caught up on keeps its
 	// first (live) position. One pass over a seen-set rather than a findIndex
 	// per item: this list runs to the hundreds on a long workspace, and it was
 	// rebuilt quadratically on every frame of a streaming run.
-	const media = useMemo(() => {
+	const media = (() => {
 		const seen = new Set<string>();
 		const out: WorkspaceMediaItem[] = [];
 		for (const m of [...liveMedia, ...(data?.media || [])]) {
@@ -1519,7 +1505,7 @@ export function WorkspaceInfo({
 			out.push(m);
 		}
 		return out;
-	}, [liveMedia, data?.media]);
+	})();
 
 	// A picture or a recording an agent wrote is shown, not listed: its name and
 	// size say nothing about it. A page, a report or a data file is the

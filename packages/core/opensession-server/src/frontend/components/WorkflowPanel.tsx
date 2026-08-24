@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useState } from "react";
+import React, { useEffect, useState } from "react";
 import { BASE_PATH } from "../lib/base";
 import type {
 	WorkflowAgentSnapshot,
@@ -262,14 +262,10 @@ export function WorkflowPanel({
 }: Props) {
 	// Server list + WS prepends both keep newest-first; re-sorting is cheap
 	// insurance against an out-of-order upsert.
-	const ordered = useMemo(
-		() =>
-			[...runs].sort(
+	const ordered = ([...runs].sort(
 				(a, b) =>
 					new Date(b.startedAt).getTime() - new Date(a.startedAt).getTime(),
-			),
-		[runs],
-	);
+			));
 	const subs = subagents ?? [];
 	const anyRunning =
 		ordered.some((r) => r.status === "running") ||
@@ -288,17 +284,14 @@ export function WorkflowPanel({
 		runId: string;
 		seq: number;
 	} | null>(null);
-	const onOpenAgent = useCallback(
-		(runId: string, seq: number) => setOpenConvo({ runId, seq }),
-		[],
-	);
-	const closeConvo = useCallback(() => setOpenConvo(null), []);
-	const convoAgent = useMemo(() => {
+	const onOpenAgent = (runId: string, seq: number) => setOpenConvo({ runId, seq });
+	const closeConvo = () => setOpenConvo(null);
+	const convoAgent = (() => {
 		if (!openConvo) return undefined;
 		return ordered
 			.find((r) => r.runId === openConvo.runId)
 			?.agents.find((a) => a.seq === openConvo.seq);
-	}, [openConvo, ordered]);
+	})();
 
 	if (openConvo && convoAgent)
 		return (
@@ -528,7 +521,7 @@ function RunCard({
 
 	// Phase order: meta-seeded titles first, then first-seen agent phases;
 	// agents without a phase render as a leading ungrouped block.
-	const groups = useMemo(() => {
+	const groups = (() => {
 		const order: string[] = [];
 		const seen = new Set<string>();
 		for (const t of run.phases)
@@ -549,19 +542,18 @@ function RunCard({
 			else loose.push(a);
 		}
 		return { order, byPhase, loose };
-	}, [run.phases, run.agents]);
+	})();
 
-	const toggleAgent = useCallback((seq: number) => {
+	const toggleAgent = (seq: number) => {
 		setOpenAgents((prev) => {
 			const next = new Set(prev);
 			if (next.has(seq)) next.delete(seq);
 			else next.add(seq);
 			return next;
 		});
-	}, []);
+	};
 
-	const loadDetail = useCallback(
-		async (seq: number) => {
+	const loadDetail = async (seq: number) => {
 			setDetails((prev) => ({ ...prev, [seq]: "loading" }));
 			try {
 				const res = await fetch(
@@ -583,9 +575,7 @@ function RunCard({
 			} catch {
 				setDetails((prev) => ({ ...prev, [seq]: "missing" }));
 			}
-		},
-		[run.runId],
-	);
+		};
 
 	const startMs = new Date(run.startedAt).getTime();
 	const elapsedMs =
@@ -615,10 +605,7 @@ function RunCard({
 	if (elapsedMs > 0 || run.status === "running")
 		meta.push(fmtDuration(elapsedMs));
 
-	const openConversation = useCallback(
-		(seq: number) => onOpenAgent(run.runId, seq),
-		[onOpenAgent, run.runId],
-	);
+	const openConversation = (seq: number) => onOpenAgent(run.runId, seq);
 
 	function agentRow(a: WorkflowAgentSnapshot) {
 		return (
@@ -816,7 +803,7 @@ function RunCard({
  *  of nodes per second. The drill-in body mounts only while expanded: the 0fr
  *  grid wrapper stays mounted so the expand still animates (enter-only —
  *  collapse unmounts the content immediately). */
-const AgentRow = React.memo(function AgentRow({
+const AgentRow = function AgentRow({
 	a,
 	open,
 	detail,
@@ -938,4 +925,4 @@ const AgentRow = React.memo(function AgentRow({
 			</div>
 		</>
 	);
-});
+};

@@ -415,12 +415,12 @@ function DismissiblePhoneSurface({
 	const [open, setOpen] = React.useState(true);
 	const closingRef = React.useRef(false);
 
-	const dismiss = React.useCallback(() => {
+	const dismiss = () => {
 		if (closingRef.current) return;
 		closingRef.current = true;
 		setOpen(false);
 		setTimeout(onClose, SHEET_MS);
-	}, [onClose]);
+	};
 
 	return (
 		<ResponsiveDialog

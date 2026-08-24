@@ -1,4 +1,3 @@
-import { useMemo } from "react";
 import { canonicalToolName } from "../ToolCallBlock";
 import { parsePlanItems, type PlanItem } from "@tellahq/opensession-protocol/todo-plan";
 import type { TranscriptEntry } from "../../lib/types";
@@ -19,11 +18,7 @@ const MIN_PLAN_ITEMS = 3;
  * on `running` means a half-checked list can never outlive its turn above the
  * composer, where it would read as work still in flight.
  */
-export function useLivePlan(
-	entries: TranscriptEntry[],
-	running: boolean,
-): PlanItem[] {
-	return useMemo(() => {
+function livePlan(entries: TranscriptEntry[], running: boolean): PlanItem[] {
 		if (!running) return NO_PLAN;
 		for (let i = entries.length - 1; i >= 0; i--) {
 			const e = entries[i];
@@ -36,6 +31,12 @@ export function useLivePlan(
 			if (items.length === 0) continue;
 			return items.length >= MIN_PLAN_ITEMS ? items : NO_PLAN;
 		}
-		return NO_PLAN;
-	}, [entries, running]);
+	return NO_PLAN;
+}
+
+export function useLivePlan(
+	entries: TranscriptEntry[],
+	running: boolean,
+): PlanItem[] {
+	return livePlan(entries, running);
 }

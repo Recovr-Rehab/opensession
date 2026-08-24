@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { AnimatePresence } from "motion/react";
 import type {
 	UnifiedSession,
@@ -118,7 +118,7 @@ export function CatchUpDeck({
 	// to <base>/catchup mounts before `sessions` arrives, and freezing []
 	// there would strand the deck on "All caught up" forever.
 	const frozen = useRef<CatchupCard[] | null>(null);
-	const cards = useMemo<CatchupCard[]>(() => {
+	const cards = (() => {
 		if (frozen.current) return frozen.current;
 		const reads = getReads();
 		const me = currentUser.toLowerCase();
@@ -178,7 +178,7 @@ export function CatchUpDeck({
 		// genuine "all caught up"). While it's still empty we keep recomputing.
 		if (sessions.length > 0) frozen.current = out;
 		return out;
-	}, [sessions, currentUser, workspaces]);
+	})();
 
 	const [index, setIndex] = useState(0);
 	const [dir, setDir] = useState<Action | null>(null);
@@ -678,11 +678,9 @@ function CatchUpComposer({
  * falling back to lastActivity for external runs that never stamped one.
  */
 function CatchupWorking({ target }: { target: UnifiedSession }) {
-	const since = useMemo(() => {
-		const raw = target.runStartedAt || target.lastActivity;
-		const t = raw ? Date.parse(raw) : NaN;
-		return Number.isNaN(t) ? Date.now() : t;
-	}, [target.runStartedAt, target.lastActivity]);
+	const raw = target.runStartedAt || target.lastActivity;
+const t = raw ? Date.parse(raw) : NaN;
+const since = Number.isNaN(t) ? Date.now() : t;
 	const [now, setNow] = useState(() => Date.now());
 	useEffect(() => {
 		const id = setInterval(() => setNow(Date.now()), 1000);

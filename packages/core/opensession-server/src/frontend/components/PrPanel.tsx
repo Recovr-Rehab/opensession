@@ -4,8 +4,8 @@ import { randomUUID } from "../lib/random-uuid";
 import React, {
   useEffect,
   useState,
-  useCallback,
-  useMemo,
+  
+  
   useRef,
 } from "react";
 import type {
@@ -348,9 +348,7 @@ export function PrPanel({
   // every render for the (common) session with none.
   const linked = linkedLocal ?? linkedPrs ?? NO_LINKED_PRS;
   const [targetPickerOpen, setTargetPickerOpen] = useState(false);
-  const targets = useMemo<PrTarget[]>(
-    () =>
-      dedupeTargets([
+  const targets = (dedupeTargets([
       ...(previewTarget
         ? [
             {
@@ -389,9 +387,7 @@ export function PrPanel({
           ? `${repoLabel(dp.repo)} #${dp.number}`
           : `${repoLabel(dp.repo)}:${dp.branch}`,
       })),
-    ]),
-    [repos, linked, discoveredPrs, previewTarget?.repo, previewTarget?.branch],
-  );
+    ]));
   const [activeKey, setActiveKey] = useState<string | undefined>(
     () => (targets.find((t) => t.primary) ?? targets[0])?.key,
   );
@@ -491,13 +487,10 @@ export function PrPanel({
    */
   const [localPage, setLocalPage] = useState<PrReviewPage>("files");
   const page = controlledPage ?? localPage;
-  const setPage = useCallback(
-    (next: PrReviewPage) => {
+  const setPage = (next: PrReviewPage) => {
       setLocalPage(next);
       onPageChange?.(next);
-    },
-    [onPageChange],
-  );
+    };
   const [codeView, setCodeView] = useState<"all" | "guide" | "flow">("all");
   const [diffSource, setDiffSource] = useState<DiffSource>("pull-request");
   const worktreeAvailable =
@@ -577,10 +570,10 @@ export function PrPanel({
   const [headerCompact, setHeaderCompact] = useState(
     () => window.matchMedia("(max-width: 720px)").matches,
   );
-  const setRoot = useCallback((el: HTMLDivElement | null) => {
+  const setRoot = (el: HTMLDivElement | null) => {
     rootRef.current = el;
     setRootEl(el);
-  }, []);
+  };
   useEffect(() => {
     if (!rootEl || typeof ResizeObserver === "undefined") return;
     const observer = new ResizeObserver(([entry]) => {
@@ -598,8 +591,7 @@ export function PrPanel({
   } | null>(null);
   activeLoadTargetRef.current = loadTargetKey;
 
-  const load = useCallback(
-    (force = false): Promise<void> => {
+  const load = (force = false): Promise<void> => {
       if (loadTargetKey !== activeLoadTargetRef.current)
         return Promise.resolve();
     const existing = loadInFlightRef.current;
@@ -701,17 +693,7 @@ export function PrPanel({
           loadInFlightRef.current = null;
     });
     return promise;
-    },
-    [
-    sessionId,
-    loadTargetKey,
-    active?.repo,
-    active?.branch,
-    active?.linked,
-    previewTarget?.repo,
-    previewTarget?.branch,
-    ],
-  );
+    };
 
   useEffect(() => {
     setLoading(true);
@@ -822,7 +804,7 @@ export function PrPanel({
   // A guide belongs to one target's head commit: the key is what makes a
   // guide from the PR the panel just left read as absent rather than current.
   const guideKey = diff ? `${loadTargetKey}\0${diff.headRefOid}` : "";
-  const loadGuide = useCallback(async () => {
+  const loadGuide = async () => {
     if (!guideKey) return;
     const generation = ++guideGenerationRef.current;
     setGuideLoading(true);
@@ -839,21 +821,14 @@ export function PrPanel({
     } finally {
       if (generation === guideGenerationRef.current) setGuideLoading(false);
     }
-  }, [
-    sessionId,
-    active?.repo,
-    active?.branch,
-    previewTarget?.repo,
-    previewTarget?.branch,
-    guideKey,
-  ]);
+  };
 
   const prPatchVersion = diff?.diffVersion || "";
   const codeFlowKey =
     diff && prPatchVersion
       ? `${loadTargetKey}\0${diff.headRefOid}\0${prPatchVersion}`
       : "";
-  const loadCodeFlow = useCallback(async () => {
+  const loadCodeFlow = async () => {
     if ((!diff?.patch && !diff?.skippedFiles) || !codeFlowKey) return;
     const generation = ++codeFlowGenerationRef.current;
     setCodeFlowLoading(true);
@@ -881,25 +856,16 @@ export function PrPanel({
       if (generation === codeFlowGenerationRef.current)
         setCodeFlowLoading(false);
     }
-  }, [
-    sessionId,
-    active?.repo,
-    active?.branch,
-    previewTarget?.repo,
-    previewTarget?.branch,
-    diff?.patch,
-    prPatchVersion,
-    codeFlowKey,
-  ]);
+  };
 
-  const refreshCodeFlow = useCallback(async () => {
+  const refreshCodeFlow = async () => {
     codeFlowGenerationRef.current += 1;
     setCodeFlow(null);
     setCodeFlowError(null);
     setCodeFlowLoading(true);
     await load(true);
     setCodeFlowLoading(false);
-  }, [load]);
+  };
 
   // The guide is generated on demand (the first request per head commit takes
   // the model a while) — only fetch once the reviewer opens the Guide tab, and
@@ -960,20 +926,17 @@ export function PrPanel({
   // together when the reviewer finishes the review (the provider's native flow).
   // Both are stable: they ride diffProps into every mounted file row, so a new
   // identity here re-renders the whole diff.
-  const handleAddPending = useCallback(
-    async (target: CommentTarget, text: string) => {
+  const handleAddPending = async (target: CommentTarget, text: string) => {
       setPending((prev) => [
         ...prev,
         { ...target, text, id: randomUUID() },
       ]);
     setReviewDone(null);
-    },
-    [],
-  );
+    };
 
-  const handleRemovePending = useCallback((id: string) => {
+  const handleRemovePending = (id: string) => {
     setPending((prev) => prev.filter((c) => c.id !== id));
-  }, []);
+  };
 
   function handleFixChecks(summary: string) {
     if (!send || !pr) return;
@@ -1116,7 +1079,7 @@ export function PrPanel({
   // Roll the per-check list up into headline counts, and split deployments
   // (Vercel previews & friends) from CI checks — failing and running entries
   // sort first within each group.
-  const checkSummary = useMemo(() => {
+  const checkSummary = (() => {
     const checks = pr?.checks || [];
     const s = summarize(checks);
     const rank = (c: PrCheck) => {
@@ -1135,9 +1098,9 @@ export function PrPanel({
       deployments: sorted.filter(isDeployment),
       checks: sorted.filter((c) => !isDeployment(c)),
     };
-  }, [pr]);
+  })();
 
-  const bodyHtml = useMemo(() => {
+  const bodyHtml = (() => {
     if (!pr?.body) return "";
     // The mirrored walkthrough section is for GitHub readers; here
     // WalkthroughCard renders the real thing, so drop the mirror.
@@ -1152,8 +1115,8 @@ export function PrPanel({
     return stripped
       ? renderPrCommentMarkdown(stripped, { repo: markdownRepo })
       : "";
-  }, [pr?.body, markdownRepo]);
-  const provider = useMemo(() => providerFromUrl(pr?.url), [pr?.url]);
+  })();
+  const provider = (providerFromUrl(pr?.url));
   // Host capability gating: absent (GitHub, older cache entries) means all
   // true, so nothing GitHub-shaped ever disappears. code.storage payloads
   // carry an explicit set (no checks/reviewers/comments/viewed state/stacks).
@@ -1163,8 +1126,7 @@ export function PrPanel({
   // location) has to wait: the code page may not be mounted yet, and its diff
   // loads on its own clock. Park the path and let the effect below spend it
   // once both are true, rather than revealing into a tree that isn't there.
-  const scrollToFile = useCallback(
-    (path: string) => {
+  const scrollToFile = (path: string) => {
       if (page === "files" && codeView !== "flow") {
         revealDiffFile(rootRef.current, path);
         return;
@@ -1172,9 +1134,7 @@ export function PrPanel({
       setPage("files");
       if (codeView === "flow") setCodeView("all");
       setPendingReveal(path);
-    },
-    [page, codeView],
-  );
+    };
   useEffect(() => {
     if (
       !pendingReveal ||
@@ -1197,21 +1157,18 @@ export function PrPanel({
   const prBase = pr?.baseRefName;
   const prHead = pr?.headRefName;
   const activeRepoId = active?.repo;
-  const prImageSrcs = useCallback(
-    (file: FileDiffMetadata) => {
+  const prImageSrcs = (file: FileDiffMetadata) => {
       const src = (ref: string, p: string) =>
         `${API_BASE}/pr-image?${activeRepoId ? `repo=${encodeURIComponent(activeRepoId)}&` : ""}ref=${encodeURIComponent(ref)}&path=${encodeURIComponent(p)}`;
       return {
         oldSrc: prBase ? src(prBase, file.prevName || file.name) : undefined,
         newSrc: prHead ? src(prHead, file.name) : undefined,
       };
-    },
-    [prBase, prHead, activeRepoId],
-  );
+    };
   // The pr-image endpoint serves blobs through the GitHub API — on hosts
   // without it, image files fall back to the plain binary-diff placeholder.
   const imageSrcs = caps.images ? prImageSrcs : undefined;
-  const fileActions = useMemo(() => {
+  const fileActions = (() => {
     const ref = pr?.headRefOid || pr?.headRefName;
     const prUrl = pr?.url;
     return {
@@ -1236,7 +1193,7 @@ export function PrPanel({
           ? (file: FileDiffMetadata) => fetchPrFile(activeRepoId, ref, file.name)
           : undefined,
     };
-  }, [pr?.headRefOid, pr?.headRefName, pr?.url, provider, activeRepoId]);
+  })();
 
   // In-place edit mode on the review canvas. Only targets backed by one of the
   // session's own worktrees qualify (primary/attached repos — their worktree is
@@ -1249,9 +1206,7 @@ export function PrPanel({
   useEffect(() => setHandEdited([]), [sessionId, activeRepoId]);
   const worktreeEditable =
     !!editGate && !previewTarget && !!active && !active.branch;
-  const editFile = useMemo(
-    () =>
-      worktreeEditable
+  const editFile = (worktreeEditable
         ? {
             load: (file: FileDiffMetadata, side: "new" | "base") =>
               fetchWorktreeFile(
@@ -1272,10 +1227,8 @@ export function PrPanel({
                 .catch(() => {});
             },
           }
-        : undefined,
-    [worktreeEditable, sessionId, activeRepoId],
-  );
-  const tellAgentAboutEdits = useCallback(() => {
+        : undefined);
+  const tellAgentAboutEdits = () => {
     if (!send || !handEdited.length) return;
     const list = handEdited.map((p) => `- \`${p}\``).join("\n");
     send({
@@ -1288,7 +1241,7 @@ export function PrPanel({
         `Review the edits, keep them (don't revert them unless they're clearly broken), and commit + push them on this branch so the pull request picks them up.`,
     });
     setHandEdited([]);
-  }, [send, handEdited, sessionId, activeRepoId]);
+  };
 
   // GitHub "Viewed" state: fetched per PR (and refetched when the head moves,
   // since a push flips changed files to DIRTY = unviewed on GitHub's side).
@@ -1315,7 +1268,7 @@ export function PrPanel({
     };
   }, [viewedKey, diff?.headRefOid, caps.viewedState]);
 
-  const handleToggleViewed = useCallback((path: string, next: boolean) => {
+  const handleToggleViewed = (path: string, next: boolean) => {
     const info = prViewedRef.current;
     if (!info) return;
     const apply = (set: ReadonlySet<string>, add: boolean) => {
@@ -1333,7 +1286,7 @@ export function PrPanel({
           : prev,
       );
     });
-  }, []);
+  };
 
   function handleLinked(all: LinkedPrEntry[], justLinked: LinkedPrEntry) {
     setLinkedLocal(all);
@@ -1358,18 +1311,14 @@ export function PrPanel({
   // Sessions linked to the shown PR — only when the caller wires the list.
   // Matched against the ACTIVE target (linked PRs carry their own branch; the
   // primary/attached branch resolves through the loaded PR's headRefName).
-  const relatedSessions = useMemo(
-    () =>
-      sessions && active
+  const relatedSessions = (sessions && active
         ? prRelatedSessions(sessions, active.repo, active.branch, pr)
-        : [],
-    [sessions, active?.repo, active?.branch, pr?.number, pr?.headRefName],
-  );
+        : []);
 
   const files = pr?.files ?? NO_PR_FILES;
   const reviewedFiles =
     prViewed?.key === viewedKey ? prViewed.viewed : undefined;
-  const reviewFiles = useMemo(() => {
+  const reviewFiles = (() => {
     const visible =
       hideReviewed && reviewedFiles
         ? files.filter((file) => !reviewedFiles.has(file.path))
@@ -1384,31 +1333,22 @@ export function PrPanel({
           : left.path.localeCompare(right.path);
       return (result || left.path.localeCompare(right.path)) * direction;
     });
-  }, [files, reviewedFiles, hideReviewed, fileOrder, sortDirection]);
-  const visibleFileOrder = useMemo(
-    () => reviewFiles.map((file) => file.path),
-    [reviewFiles],
-  );
+  })();
+  const visibleFileOrder = (reviewFiles.map((file) => file.path));
 
   const currentGuide = guide?.key === guideKey ? guide.data : null;
   // Slicing the patch per section walks every byte of it, so it cannot run on
   // renders it has nothing to do with — while the guide is the open lens, that
   // would be once per keystroke in the review summary.
-  const guideSections = useMemo(
-    () =>
-      currentGuide && diff?.patch
+  const guideSections = (currentGuide && diff?.patch
         ? sectionsWithPatches(currentGuide, diff.patch)
-        : [],
-    [currentGuide, diff?.patch],
-  );
+        : []);
 
   // Every diff on the code page is the same commentable surface; only the
   // patch it is handed differs (the whole PR, or one guide section). Memoized
   // because it is the props object of every mounted file row: rebuilding it
   // re-renders the whole diff, however unrelated the state change was.
-  const diffProps = useMemo(
-    () =>
-      diff && {
+  const diffProps = (diff && {
         diffStyle,
         controlsTarget: codeView === "all" ? diffControlsTarget : undefined,
         showViewedProgress: false,
@@ -1439,36 +1379,7 @@ export function PrPanel({
         imageSrcs,
         fileActions,
         editFile,
-      },
-    [
-      diff,
-      diffStyle,
-      codeView,
-      diffControlsTarget,
-      wrapLines,
-      structuralHighlighting,
-      showFileStats,
-      codeTheme,
-      visibleFileOrder,
-      prViewed,
-      viewedKey,
-      handleToggleViewed,
-      reviewing,
-      caps.reviewComments,
-      provider.name,
-      pending,
-      handleRemovePending,
-      reviewThreads,
-      loadTargetKey,
-      markdownRepo,
-      handleAddPending,
-      imageSrcs,
-      fileActions,
-      editFile,
-      diffLoadPolicy.defaultExpandedFiles,
-      diffLoadPolicy.allowExpandAll,
-    ],
-  );
+      });
 
   const showBar = targets.length > 1;
   const targetPicker = showBar ? (

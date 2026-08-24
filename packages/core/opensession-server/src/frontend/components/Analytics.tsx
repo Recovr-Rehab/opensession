@@ -1,5 +1,5 @@
 import { repoLabel } from "../lib/repo-label";
-import React, { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import React, { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { PRODUCT_NAME, docTitle } from "../lib/brand";
 import { fetchAnalytics } from "../lib/api";
 import type { AnalyticsPerson, AnalyticsPersonRepo, AnalyticsSummary } from "../lib/types";
@@ -750,7 +750,7 @@ export function Analytics() {
 		};
 	}, [from, to]);
 
-	const derived = useMemo(() => {
+	const derived = (() => {
 		if (!data) return null;
 		const labels = data.days.map((d) => d.date);
 
@@ -886,7 +886,7 @@ export function Analytics() {
 		const splitDate = labels[Math.floor(labels.length / 2)] || "";
 
 		return { labels, engineLabels, unmeasuredDays, kindSeries, kindValues, modelSeries, modelValues, tokenSeries, tokenValues, totalTokens, costSeries, costValues, costUsd, requests, hasCost, prSeries, prValues, turnSeries, turnValues, factorySeries, factoryValues, rq, reviewSeries, reviewValues, splitDate, repoColor, coloredRepos };
-	}, [data]);
+	})();
 
 	// The per-person bars: rebuilt per metric and per filter rather than held
 	// in `derived`, so switching either does not rebuild every other chart.

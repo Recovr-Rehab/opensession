@@ -1,5 +1,5 @@
 import { BASE_PATH } from "../lib/base";
-import React, { useCallback, useEffect, useState } from "react";
+import React, { useEffect, useState } from "react";
 import { cn } from "../ui/cn";
 import { Button } from "../ui/button";
 import { Modal } from "../ui/modal";
@@ -89,7 +89,7 @@ export function ProjectsSection() {
 	const [open, setOpen] = useState(false);
 	const [error, setError] = useState<string | null>(null);
 
-	const load = useCallback(async () => {
+	const load = async () => {
 		try {
 			const res = await fetch(`${BASE_PATH}/api/feeds`);
 			if (res.ok) setFeeds((await res.json()).feeds || []);
@@ -102,7 +102,7 @@ export function ProjectsSection() {
 			const res = await fetch(`${BASE_PATH}/api/projects`);
 			if (res.ok) setProjects((await res.json()).projects || []);
 		} catch {}
-	}, []);
+	};
 	useEffect(() => {
 		void load();
 	}, [load]);

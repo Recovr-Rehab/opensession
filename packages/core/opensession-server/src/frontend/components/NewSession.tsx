@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useCallback } from "react";
+import React, { useState, useEffect, useRef, } from "react";
 import { AnimatePresence, motion } from "motion/react";
 import { fetchWorktrees, fetchModels, fetchToolAccounts, fetchSandboxStatus, requestSandboxPrewarm, suggestBranch, suggestRepos, type RepoSuggestion, configuredNewSessionRepo, fetchProviderAccounts, fetchRepos, cachedRepos, type RepoInfo, createWorkspaceApi, updateWorkspaceApi, deleteWorkspaceApi, ApiError, type ProviderAccountOption, type ModelOption, type SandboxStatusInfo } from "../lib/api";
 import { getCurrentUser } from "./UserPicker";
@@ -648,11 +648,11 @@ export function NewSession({ onBack, inline, focusSeq, send, addHandler, connect
   const [staging, setStaging] = useState<StagingCount>(NOTHING_STAGING);
   const [fileDragActive, setFileDragActive] = useState(false);
   const fileDragWatchdogRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const adoptDraftAttachments = useCallback(() => {
+  const adoptDraftAttachments = () => {
     const stored = loadDraft(DRAFT_KEY);
     setImages((prev) => (sameImages(prev, stored.images) ? prev : stored.images));
     setFiles((prev) => (sameFiles(prev, stored.files) ? prev : stored.files));
-  }, []);
+  };
   // An upload that lands while this palette is open belongs on screen even
   // though it was staged by the instance that closed: the store fires on an
   // attachment change for exactly this.

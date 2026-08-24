@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo, useRef } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import type { TranscriptEntry } from "../lib/types";
 import {
   assetToolPath,
@@ -62,7 +62,7 @@ interface Props {
 // reuses objects), so compare element-wise — and only the results this block's
 // items actually read — letting untouched history blocks skip re-rendering on
 // each stream event.
-export const TurnBlock = React.memo(function TurnBlock({
+export const TurnBlock = function TurnBlock({
   items,
   toolResults,
   live,
@@ -129,7 +129,7 @@ export const TurnBlock = React.memo(function TurnBlock({
   // Memoized against the house rule: a live turn re-renders on every stream
   // event, and this walks every step it has taken so far (collectTouchedFiles
   // skips non-tool entries itself, so `items` and `tools` give the same set).
-  const editedFiles = useMemo(() => collectTouchedFiles(items), [items]);
+  const editedFiles = (collectTouchedFiles(items));
   // Presentation stats cover code-writing tools that do not expose their input
   // as a plain Edit or Write call. Keep the parsed files for the hover card,
   // but let the server-derived aggregate own the summary's total.
@@ -304,7 +304,7 @@ export const TurnBlock = React.memo(function TurnBlock({
       )}
     </div>
   );
-}, turnBlockPropsEqual);
+};
 
 const COMPACT_TOOL_FAMILIES = new Set([
   "run",
@@ -542,7 +542,7 @@ interface ToolRunAggregate {
 
 // Keyed on the run's LAST entry, the way turnTouchedFiles is, because the
 // caller has no stable array to key on: ToolSection rebuilds its runs in its
-// render body, so a useMemo inside the block could never hit. Entries are
+// render body, so a hook there could never hold. Entries are
 // replaced rather than mutated when they change (mergeTranscriptEntries), so
 // identity is a sound key. But a call earlier in the run can be replaced while
 // the last one stands, and so can the RESULT a call is waiting on, which is

@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { AnimatePresence, motion } from "motion/react";
 import type { TranscriptEntry } from "../lib/types";
 import { useWebSocket } from "../hooks/useWebSocket";
@@ -112,7 +112,7 @@ export function DeskConversation({
 	// Stick to the live edge only while the reader is already there, so a
 	// streaming reply doesn't yank them up from scrollback.
 	const followRef = useRef(true);
-	const liveTurnStore = useMemo(() => new LiveTurnStore(), [sessionId]);
+	const liveTurnStore = (new LiveTurnStore());
 
 	useEffect(() => {
 		if (!autoFocus) return;
@@ -359,10 +359,10 @@ export function DeskConversation({
 		});
 		return unsubscribe;
 	}, [liveTurnStore]);
-	const relayoutLive = React.useCallback(() => {
+	const relayoutLive = () => {
 		const el = bodyRef.current;
 		if (el && followRef.current) el.scrollTop = el.scrollHeight;
-	}, []);
+	};
 
 	// Keep a following reader pinned to the live edge as content lands. With no
 	// conversation the pane holds the board instead, which is read top-down —

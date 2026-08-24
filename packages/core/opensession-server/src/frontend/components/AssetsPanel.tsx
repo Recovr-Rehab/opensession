@@ -9,7 +9,7 @@
  * best fits each surface.
  */
 
-import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { FileTree, useFileTree } from "@pierre/trees/react";
 import type { SessionAssetFile } from "../lib/api";
 import { useSessionAssetsResource } from "../hooks/useApiResources";
@@ -26,9 +26,9 @@ export function useSessionAssets(
 	addHandler: (h: (msg: WSServerMessage) => void) => () => void,
 ) {
 	const { data: files = [], mutate } = useSessionAssetsResource(sessionId);
-	const refresh = useCallback(() => {
+	const refresh = () => {
 		void mutate();
-	}, [mutate]);
+	};
 	useEffect(
 		() =>
 			addHandler((msg) => {
@@ -93,11 +93,8 @@ export function AssetsPanel({
 	onSelectPath: (path: string | null) => void;
 	onOpenNewSession: (prefill: NewSessionPrefill) => void;
 }) {
-	const paths = useMemo(() => files.map((f) => f.path), [files]);
-	const selected = useMemo(
-		() => resolvedAssetPath(paths, selectedPath),
-		[paths, selectedPath],
-	);
+	const paths = (files.map((f) => f.path));
+	const selected = (resolvedAssetPath(paths, selectedPath));
 	// Keep SessionViewer aligned with tree navigation. Without this, promoting
 	// the same overlay twice can be a React no-op after the tree selected
 	// another file in between.

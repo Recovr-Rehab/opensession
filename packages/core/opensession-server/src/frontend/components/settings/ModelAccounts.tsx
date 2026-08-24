@@ -1,5 +1,5 @@
 import { BASE_PATH } from "../../lib/base";
-import React, { useEffect, useRef, useState, useCallback } from "react";
+import React, { useEffect, useRef, useState, } from "react";
 import { usePeople } from "../../lib/people";
 import { providerAccountLabel } from "../../lib/provider-account";
 import { UserAvatar } from "../UserAvatar";
@@ -415,7 +415,7 @@ function useClaudeAccounts() {
 	const [refreshing, setRefreshing] = useState(false);
 	const [error, setError] = useState<string | null>(null);
 
-	const load = useCallback(async (forceUsage = false) => {
+	const load = async (forceUsage = false) => {
 		if (forceUsage) setRefreshing(true);
 		try {
 			const res = forceUsage
@@ -428,7 +428,7 @@ function useClaudeAccounts() {
 			setAccounts((current) => current ?? []);
 		}
 		setRefreshing(false);
-	}, []);
+	};
 
 	useEffect(() => {
 		void load();
@@ -764,7 +764,7 @@ function useCodexAccounts() {
 	const [refreshing, setRefreshing] = useState(false);
 	const [error, setError] = useState<string | null>(null);
 
-	const load = useCallback(async (forceUsage = false) => {
+	const load = async (forceUsage = false) => {
 		if (forceUsage) setRefreshing(true);
 		try {
 			const res = forceUsage
@@ -777,7 +777,7 @@ function useCodexAccounts() {
 			setAccounts((current) => current ?? []);
 		}
 		setRefreshing(false);
-	}, []);
+	};
 
 	useEffect(() => {
 		void load();

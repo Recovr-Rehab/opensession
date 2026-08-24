@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
+import React, { useEffect, useId, useRef, useState } from "react";
 import { Button } from "../ui/button";
 import { Field, Input } from "../ui/input";
 import { Modal } from "../ui/modal";
@@ -73,10 +73,10 @@ export function ReposSection({
 	// what the sidebar paints can't drift apart.
 	const [appearance, setAppearance] = useState<Map<string, RepoInfo>>(new Map());
 	const repoIds = repos.map((repo) => repo.id).join("\0");
-	const loadAppearance = useCallback(async () => {
+	const loadAppearance = async () => {
 		const list = await fetchRepos().catch(() => []);
 		setAppearance(new Map(list.map((r) => [r.id, r])));
-	}, []);
+	};
 	useEffect(() => {
 		loadAppearance();
 	}, [loadAppearance, repoIds]);
@@ -680,14 +680,8 @@ function AddRepoPicker({
 		if (browse || browseFailed) inputRef?.current?.focus();
 	}, [browse, browseFailed, inputRef]);
 
-	const filtered = useMemo(
-		() => filterRepos(browse?.repos ?? [], filter),
-		[browse, filter],
-	);
-	const csFiltered = useMemo(
-		() => filterRepos(csBrowse?.repos ?? [], filter),
-		[csBrowse, filter],
-	);
+	const filtered = (filterRepos(browse?.repos ?? [], filter));
+	const csFiltered = (filterRepos(csBrowse?.repos ?? [], filter));
 	const csConfigured = csBrowse?.source === "org";
 
 	async function addRepo(fullName: string, source: RepoSource = "github") {

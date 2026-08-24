@@ -20,13 +20,9 @@ export function StreamingMessage({
 	);
 	const repo = useMarkdownRepo();
 	const assetPaths = useOpenAssetPaths();
-	const html = React.useMemo(
-		() =>
-			snapshot.text
+	const html = (snapshot.text
 				? renderMarkdown(snapshot.text, { repo, sessionId, assetPaths })
-				: "",
-		[snapshot.text, repo, sessionId, assetPaths],
-	);
+				: "");
 	if (!snapshot.text) return null;
 
 	// Always rendered, never raw source: the server cuts frames at block

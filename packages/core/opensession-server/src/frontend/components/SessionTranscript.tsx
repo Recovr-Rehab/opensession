@@ -21,7 +21,7 @@ type SessionTranscriptProps = Omit<TranscriptBlocksProps, "sessionId"> & {
  * Full sessions and compact session views use this component so markdown,
  * stream reconciliation, and transcript grouping cannot drift apart.
  */
-export const SessionTranscript = React.memo(function SessionTranscript({
+export const SessionTranscript = function SessionTranscript({
 	sessionId,
 	liveTurnStore,
 	onLiveLayout,
@@ -37,7 +37,7 @@ export const SessionTranscript = React.memo(function SessionTranscript({
 			/>
 		</>
 	);
-});
+};
 
 function StreamingMessage({
 	store,
@@ -58,13 +58,9 @@ function StreamingMessage({
 	useLayoutEffect(() => {
 		onLayout?.();
 	}, [snapshot.revision, onLayout]);
-	const html = React.useMemo(
-		() =>
-			snapshot.text
+	const html = (snapshot.text
 				? renderMarkdown(snapshot.text, { repo, sessionId, assetPaths })
-				: "",
-		[snapshot.text, repo, sessionId, assetPaths],
-	);
+				: "");
 	if (!snapshot.text) return null;
 
 	// Always rendered, never raw source: the server cuts frames at block

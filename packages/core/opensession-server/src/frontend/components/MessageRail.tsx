@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import type { SentMessage } from "../lib/sent-messages";
 import { RAIL_EDGE, RAIL_GUTTER, RAIL_W } from "../lib/message-rail";
 import { relativeTime } from "../lib/api";
@@ -149,7 +149,7 @@ export function MessageRail({ messages, containerRef, leaveLatest }: Props) {
 
 	/* -- where the rail can sit ---------------------------------------- */
 
-	const measure = useCallback(() => {
+	const measure = () => {
 		const el = containerRef.current;
 		if (!el) return;
 		const rect = el.getBoundingClientRect();
@@ -169,7 +169,7 @@ export function MessageRail({ messages, containerRef, leaveLatest }: Props) {
 			prev && next && prev.height === next.height ? prev : next,
 		);
 		setScrollable(el.scrollHeight > el.clientHeight + STICK_SLACK);
-	}, [containerRef]);
+	};
 
 	// After every render, because both answers depend on laid-out content: the
 	// transcript's first rows land a commit or two after the rail mounts, and a
@@ -205,8 +205,7 @@ export function MessageRail({ messages, containerRef, leaveLatest }: Props) {
 	// The card hangs off the tick under the pointer, not off the rail, so it
 	// tracks the scrub. A fresh object per position is what re-registers it
 	// with the positioner; a stable function would be memoized and never move.
-	const tickAnchor = useMemo(
-		() => ({
+	const tickAnchor = (({
 			getBoundingClientRect: () => {
 				const rail = railRef.current?.getBoundingClientRect();
 				const left = rail?.left ?? 0;
@@ -222,14 +221,11 @@ export function MessageRail({ messages, containerRef, leaveLatest }: Props) {
 					height: TICK_MAX_H,
 				};
 			},
-		}),
-		// `tickY` is this render's, and reads nothing but `pitch`.
-		[active, pitch],
-	);
+		}));
 
 	/* -- which message the reader is on -------------------------------- */
 
-	const trackCurrent = useCallback(() => {
+	const trackCurrent = () => {
 		const el = containerRef.current;
 		if (!el) return;
 		const order = new Map(latest.current.map((m, i) => [m.id, i]));
@@ -245,7 +241,7 @@ export function MessageRail({ messages, containerRef, leaveLatest }: Props) {
 			index = order.get(node.dataset.eid ?? "") ?? index;
 		}
 		setCurrent((prev) => (prev === index ? prev : index));
-	}, [containerRef]);
+	};
 
 	// Tracked here rather than in the transcript's own scroll handler: that one
 	// is the hot path the scroll-FPS counter watches, and this is a decoration

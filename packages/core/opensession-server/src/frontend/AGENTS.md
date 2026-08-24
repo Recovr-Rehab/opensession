@@ -199,12 +199,25 @@ layout from regressing once it exists.
 ## React and verification
 
 - Follow the existing React 19 patterns. The build runs the React Compiler
-  (oxc Rust port, wired as a Bun plugin in `frontend-build.ts`), so components
-  and hooks are auto-memoized: do not add `useMemo`, `useCallback`, or
-  `React.memo` at all — including in new code — unless you have measured a
-  case the compiler cannot see. A function carrying `"use no memo"` opts out.
-  Note the compiler only runs on the prod/release bundle; Bun's dev HMR server
-  has no plugin hook, so dev serves uncompiled sources.
+  (oxc Rust port, wired as a Bun plugin in `frontend-build.ts`), and all hand
+  memoization has been removed: do not add `useMemo`, `useCallback`, or
+  `React.memo`. The compiler preserves value and callback identity across
+  renders, which is what those hooks were doing by hand. The one measured
+  exception is callback refs passed to DOM elements (`ref={...}`): keep those
+  stable yourself if both calls update state — see `useSessionScroll.ts`.
+  A function carrying `"use no memo"` opts out of compilation.
+  `bun run lint` gates rules-of-hooks as errors in CI (oxlint);
+  exhaustive-deps reports as warnings. Note the compiler only runs on the
+  prod/release bundle; Bun's dev HMR server has no plugin hook, so dev serves
+  uncompiled sources.
+
+  Exception — explicit identities are load-bearing in three files and must not
+  be de-memoized (removing them caused React #185 render loops, and closed the
+  live WebSocket before `transcript_init` could arrive):
+  `components/SessionViewer.tsx`, `hooks/useWebSocket.ts`,
+  `hooks/useSessionScroll.ts`. Leave their `useMemo`/`useCallback` in place.
+  The same care applies anywhere a callback ref sets state: an unstable
+  identity detaches and reattaches the ref every render.
 - Keep component files component-only: put non-component helpers/constants in
   `lib/` or `ui/` modules, because mixed component+helper exports disqualify a
   module from React Fast Refresh and downgrade every edit to a full page

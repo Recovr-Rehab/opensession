@@ -1,4 +1,4 @@
-import { useEffect, useMemo } from "react";
+import { useEffect } from "react";
 import useSWR from "swr";
 import { API_SWR_OPTIONS, apiSWRKey } from "../lib/api-swr";
 import { fetchSession } from "../lib/api";
@@ -48,12 +48,11 @@ export function useHydratedSession(
 		if (sessionId) void mutate();
 	}, [sessionId, at, mutate]);
 
-	// Memoized for its IDENTITY, not its cost: the merge would otherwise mint a
-	// fresh session object on every render of the app, and the viewer hangs
-	// effects off the session it is handed.
-	return useMemo(() => {
-		if (!sessionId) return null;
-		if (!fromList) return have;
-		return mergeSessionDetail(fromList, have);
-	}, [sessionId, fromList, have]);
+	// Identity matters here, not cost: the merge would otherwise mint a fresh
+	// session object on every render of the app, and the viewer hangs effects
+	// off the session it is handed. The React Compiler preserves referential
+	// identity across renders for these inputs.
+	if (!sessionId) return null;
+	if (!fromList) return have;
+	return mergeSessionDetail(fromList, have);
 }

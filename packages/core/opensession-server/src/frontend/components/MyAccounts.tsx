@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useState } from "react";
+import React, { useEffect, useState } from "react";
 import { Button } from "../ui/button";
 import { EmptyState, InlineAlert } from "../ui/state";
 import {
@@ -56,13 +56,13 @@ export function MyAccountsPanel() {
 	const [checking, setChecking] = useState(false);
 	const [error, setError] = useState<string | null>(null);
 
-	const load = useCallback(async () => {
+	const load = async () => {
 		try {
 			const body = await fetchToolAccounts();
 			setTools(body.servers);
 			setChecking(body.pending);
 		} catch {}
-	}, []);
+	};
 
 	useEffect(() => {
 		void load();

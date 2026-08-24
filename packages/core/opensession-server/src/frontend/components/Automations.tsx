@@ -1,5 +1,5 @@
 import { BASE_PATH } from "../lib/base";
-import React, { useEffect, useMemo, useState, useCallback } from "react";
+import React, { useEffect, useState, } from "react";
 import {
   fetchAutomations,
   createAutomationApi,
@@ -204,12 +204,12 @@ export function Automations({ onOpenSession, selectedId, onSelect }: Props) {
   // Leaving/changing the selection always drops back to the read view.
   useEffect(() => setEditMode(false), [selectedId]);
 
-  const load = useCallback(async () => {
+  const load = async () => {
     try {
       setAutomations(await fetchAutomations());
       setLoading(false);
     } catch {}
-  }, []);
+  };
 
   useEffect(() => {
     document.title = docTitle("Automations");
@@ -222,14 +222,10 @@ export function Automations({ onOpenSession, selectedId, onSelect }: Props) {
   }, [load]);
 
   // The routed selection — matched by id, or by name for sidebar deep-links.
-  const sel = useMemo(
-    () =>
-      selectedId
+  const sel = (selectedId
         ? automations.find((a) => a.id === selectedId || a.name === selectedId) ||
           null
-        : null,
-    [automations, selectedId],
-  );
+        : null);
 
   // Escape backs out one layer: inline edit → read view → closed. (The create
   // modal handles its own Escape — don't close both from one keypress.)
@@ -780,7 +776,7 @@ const PLOT_H = 26;
  *  the reserved status tokens (green/yellow/red); per-bar tooltips carry the
  *  counts in text and the expanded run ledger is the table view. */
 function TriggerGraph({ runs, compact }: { runs: AutomationRun[]; compact?: boolean }) {
-  const buckets = useMemo(() => {
+  const buckets = (() => {
     const today = new Date();
     today.setHours(0, 0, 0, 0);
     const out = Array.from({ length: GRAPH_DAYS }, (_, i) => {
@@ -794,7 +790,7 @@ function TriggerGraph({ runs, compact }: { runs: AutomationRun[]; compact?: bool
       if (idx >= 0 && idx < out.length) out[idx][r.status]++;
     }
     return out;
-  }, [runs]);
+  })();
 
   const max = Math.max(1, ...buckets.map((b) => b.ok + b.error + b.running));
   const total = buckets.reduce((n, b) => n + b.ok + b.error + b.running, 0);

@@ -301,7 +301,7 @@ function RunningToolDuration({ entry }: { entry: TranscriptEntry }) {
 // themselves are (mergeTranscriptEntries replaces rather than mutates), and
 // TurnBlock's only caller passes a memoized onOpenSubagent. So a shallow
 // compare bails out for every row the event did not touch.
-export const ToolCallBlock = React.memo(function ToolCallBlock({
+export const ToolCallBlock = function ToolCallBlock({
   entry,
   result,
   pending,
@@ -675,7 +675,7 @@ export const ToolCallBlock = React.memo(function ToolCallBlock({
       )}
     </div>
   );
-});
+};
 
 /** Drop engine acknowledgements when the media itself is the useful result. */
 export function visibleResultContent(

@@ -1,5 +1,5 @@
 import React, {
-	useCallback,
+	
 	useEffect,
 	useImperativeHandle,
 	useLayoutEffect,
@@ -182,17 +182,17 @@ export function NewSessionPrompt({
 	// Non-null exactly while the store is behind the field, which is what makes
 	// "nothing pending" a safe reason for a flush to do nothing.
 	const draftTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-	const writeDraftNow = useCallback(() => {
+	const writeDraftNow = () => {
 		if (draftTimer.current == null) return;
 		clearTimeout(draftTimer.current);
 		draftTimer.current = null;
 		saveDraft(DRAFT_KEY, draft.current);
-	}, []);
-	const dropPendingDraftWrite = useCallback(() => {
+	};
+	const dropPendingDraftWrite = () => {
 		if (draftTimer.current == null) return;
 		clearTimeout(draftTimer.current);
 		draftTimer.current = null;
-	}, []);
+	};
 
 	useEffect(() => {
 		if (draftTimer.current != null) clearTimeout(draftTimer.current);
@@ -313,13 +313,10 @@ export function NewSessionPrompt({
 	// run and bailed on a null ref by the time the textarea exists. That left a
 	// prefilled or restored prompt clipped at its 132px minimum and unscrollable.
 	const [promptBody, setPromptBody] = useState<HTMLDivElement | null>(null);
-	const attachPromptBody = useCallback(
-		(node: HTMLDivElement | null) => {
+	const attachPromptBody = (node: HTMLDivElement | null) => {
 			mentions.inputWrapRef.current = node;
 			setPromptBody(node);
-		},
-		[mentions.inputWrapRef],
-	);
+		};
 
 	useLayoutEffect(() => {
 		const textarea = textareaRef.current;

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useEffect, useState } from "react";
 
 export type DiffStyle = "unified" | "split";
 export type CodeTheme = "system" | "light" | "dark";
@@ -40,8 +40,7 @@ export function useStoredCodeSetting<T extends string>(
     const stored = localStorage.getItem(key) as T | null;
     return stored && allowed.includes(stored) ? stored : fallback;
   });
-  const change = useCallback(
-    (next: T) => {
+  const change = (next: T) => {
       setValue(next);
       try {
         localStorage.setItem(key, next);
@@ -49,9 +48,7 @@ export function useStoredCodeSetting<T extends string>(
           new CustomEvent(SETTING_EVENT, { detail: { key, value: next } }),
         );
       } catch {}
-    },
-    [key],
-  );
+    };
   const allowedKey = allowed.join("\0");
   useEffect(() => {
     const sync = (event: Event) => {

@@ -1,6 +1,6 @@
 import { BASE_PATH } from "../lib/base";
 import { GITHUB_APP_GRANT_PERMISSIONS } from "../../shared/github-app-permissions";
-import React, { useEffect, useState, useCallback, useRef } from "react";
+import React, { useEffect, useState, useRef } from "react";
 import { Menu } from "../ui/menu";
 import { OptionSelect } from "../ui/select";
 import { cn } from "../ui/cn";
@@ -167,14 +167,14 @@ export function Connections() {
   // (Vercel approves only its own list of AI clients).
   const [tokenConnect, setTokenConnect] = useState<McpConnection | null>(null);
 
-  const load = useCallback(async (force = false) => {
+  const load = async (force = false) => {
     if (force) setRefreshing(true);
     try {
       const res = await fetch(`${BASE_PATH}/api/connections${force ? "?refresh=1" : ""}`);
       if (res.ok) setData(await res.json());
     } catch {}
     setRefreshing(false);
-  }, []);
+  };
 
   useEffect(() => {
     document.title = docTitle("Connections");
@@ -196,7 +196,7 @@ export function Connections() {
       }
     >
   >({});
-  const loadOauth = useCallback(async (servers: McpConnection[]) => {
+  const loadOauth = async (servers: McpConnection[]) => {
     const entries = await Promise.all(
       servers
         .map(async (s) => {
@@ -211,7 +211,7 @@ export function Connections() {
         }),
     );
     setOauthByName(Object.fromEntries(entries.filter(Boolean) as any));
-  }, []);
+  };
   useEffect(() => {
     if (data?.mcpServers) void loadOauth(data.mcpServers);
   }, [data, loadOauth]);
@@ -721,9 +721,9 @@ function GithubAppWizard({
 
   // Focus each step's primary control as the user arrives on it (and on open).
   const stepFocusRef = useRef<HTMLElement | null>(null);
-  const setStepFocus = useCallback((el: HTMLElement | null) => {
+  const setStepFocus = (el: HTMLElement | null) => {
     stepFocusRef.current = el;
-  }, []);
+  };
   useEffect(() => {
     if (open) stepFocusRef.current?.focus();
   }, [open, step]);
@@ -1071,12 +1071,12 @@ export function GithubAccounts({ personal = false }: { personal?: boolean } = {}
   // wizard, launched from the App option below.
   const [wizardOpen, setWizardOpen] = useState(false);
 
-  const load = useCallback(async () => {
+  const load = async () => {
     try {
       const res = await fetch(`${BASE_PATH}/api/connections/github`);
       if (res.ok) setData(await res.json());
     } catch {}
-  }, []);
+  };
 
   useEffect(() => {
     load();
@@ -1736,11 +1736,11 @@ function CodeStorageCard() {
   const [showSecret, setShowSecret] = useState(false);
   const [copied, setCopied] = useState<string | null>(null);
 
-  const load = useCallback(async () => {
+  const load = async () => {
     try {
       setStatus(await fetchCodeStorageStatus());
     } catch {}
-  }, []);
+  };
 
   useEffect(() => {
     load();

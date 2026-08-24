@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from "react";
+import React, { useState } from "react";
 import type { TranscriptEntry } from "../lib/types";
 import { renderMarkdown } from "../lib/markdown";
 import { MarkdownBody, useMarkdownRepo } from "./MarkdownBody";
@@ -85,25 +85,21 @@ export function ClampedBody({
 
 	// Cut the eager head at a line boundary so we don't render half a line of
 	// a diff/log as its own paragraph.
-	const head = useMemo(() => {
+	const head = (() => {
 		if (!isLong || showAll) return content;
 		const slice = content.slice(0, EAGER_MD_CHARS);
 		const nl = slice.lastIndexOf("\n");
 		return nl > EAGER_MD_CHARS / 2 ? slice.slice(0, nl) : slice;
-	}, [content, isLong, showAll]);
+	})();
 
 	const shown = showAll ? (fetched ?? content) : head;
 	// Giant expanded payloads skip markdown entirely — see FULL_MD_CHARS.
 	const asMarkdown = shown.length <= FULL_MD_CHARS;
 	const repo = useMarkdownRepo();
 	const assetPaths = useOpenAssetPaths();
-	const html = useMemo(
-		() =>
-			asMarkdown
+	const html = (asMarkdown
 				? renderMarkdown(shown, { repo, sessionId, assetPaths })
-				: "",
-		[asMarkdown, shown, repo, sessionId, assetPaths],
-	);
+				: "");
 
 	const expand = async () => {
 		if (wireClamped && !fetched && entry && sessionId) {
@@ -569,7 +565,7 @@ function EntryFiles({
 // reuses objects) and owner is stable upstream, so a tool event appended to
 // the transcript re-renders only the affected blocks — not every bubble's
 // markdown/highlighting.
-export const MessageBubble = React.memo(function MessageBubble({
+export const MessageBubble = function MessageBubble({
 	entry,
 	owner,
 	sessionId,
@@ -582,7 +578,7 @@ export const MessageBubble = React.memo(function MessageBubble({
 	// (classifyEntry, protocol/notices.ts). Re-running it here is free on an
 	// already-classified entry and keeps the UI correct against a server that
 	// predates the field, which is what a rolling deploy looks like.
-	const e = useMemo(() => classifyEntry(entry), [entry]);
+	const e = (classifyEntry(entry));
 	const displayContent = e.content;
 
 	// An answered question is a durable sent receipt. It keeps the question and
@@ -708,4 +704,4 @@ export const MessageBubble = React.memo(function MessageBubble({
 			<EntryVideos videos={e.videos} />
 		</div>
 	);
-});
+};

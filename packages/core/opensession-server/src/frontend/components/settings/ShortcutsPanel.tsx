@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import { useShortcutsVersion } from "../../hooks/useShortcutBindings";
 import { isApple } from "../../lib/platform";
 import {
@@ -212,7 +212,7 @@ export function ShortcutsPanel() {
 	).length;
 
 	const q = query.trim().toLowerCase();
-	const matches = useMemo(() => {
+	const matches = (() => {
 		if (!q) return SHORTCUT_COMMANDS;
 		return SHORTCUT_COMMANDS.filter((command) => {
 			const chords = shortcutBindings(command.id)
@@ -223,7 +223,7 @@ export function ShortcutsPanel() {
 				.includes(q);
 		});
 		// Bindings feed the haystack, so a rebind re-filters an open search.
-	}, [q, version]);
+	})();
 
 	const referenceMatches = q
 		? SHORTCUT_REFERENCE.filter((r) =>

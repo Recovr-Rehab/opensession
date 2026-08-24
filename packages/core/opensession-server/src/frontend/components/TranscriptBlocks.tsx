@@ -238,18 +238,14 @@ function renderBlockEstimate(block: RenderBlock): number {
 // highlighting across every bubble/work block), and unrelated SessionViewer
 // re-renders — most notably toggling the workspace panel on/off — would
 // otherwise re-render the whole thing synchronously and stall the interaction.
-// With stable props (entries reference unchanged, callbacks memoized upstream)
-// this bails out entirely on a panel toggle. See SessionViewer's useCallbacks.
-export const TranscriptBlocks = React.memo(function TranscriptBlocks(
+// The React Compiler keeps callbacks and entries identity-stable across
+// renders, so this bails out entirely on a panel toggle.
+export const TranscriptBlocks = function TranscriptBlocks(
 	props: Props,
 ) {
-	const entries = React.useMemo(
-		() =>
-			props.optimisticEntries?.length
+	const entries = (props.optimisticEntries?.length
 				? orderTranscriptEntries([...props.entries, ...props.optimisticEntries])
-				: props.entries,
-		[props.entries, props.optimisticEntries],
-	);
+				: props.entries);
 	const renderedProps = entries === props.entries ? props : { ...props, entries };
 	return (
 		<>
@@ -261,9 +257,9 @@ export const TranscriptBlocks = React.memo(function TranscriptBlocks(
 			)}
 		</>
 	);
-});
+};
 
-const LoadedTranscriptBlocks = React.memo(function LoadedTranscriptBlocks({
+const LoadedTranscriptBlocks = function LoadedTranscriptBlocks({
 	entries,
 	live,
 	onFork,
@@ -549,7 +545,7 @@ const LoadedTranscriptBlocks = React.memo(function LoadedTranscriptBlocks({
 			sizeCacheKey={sessionId}
 		/>
 	);
-});
+};
 
 type IndexedTimelineAtom =
 	| {
@@ -587,14 +583,14 @@ function IndexedTranscriptBlocks(props: Props) {
 	const [openedReviewKeys, setOpenedReviewKeys] = React.useState(
 		() => new Set<string>(),
 	);
-	const setReviewOpen = React.useCallback((key: string, open: boolean) => {
+	const setReviewOpen = (key: string, open: boolean) => {
 		setOpenedReviewKeys((current) => {
 			const next = new Set(current);
 			if (open) next.add(key);
 			else next.delete(key);
 			return next;
 		});
-	}, []);
+	};
 	const ranges = buildTranscriptRanges(transcriptIndex);
 	const payloadById = new Map(entries.map((entry) => [entry.id, entry]));
 	const indexedIds = new Set(ranges.flatMap((range) => range.entryIds));
@@ -740,7 +736,6 @@ function IndexedTranscriptBlocks(props: Props) {
 				) : rendersPayload ? (
 					<LoadedTranscriptBlocks
 						{...props}
-						onVisibleRangesSettled={undefined}
 						entries={itemEntries}
 						transcriptIndex={undefined}
 						notes={indexedItemNotes(item)}

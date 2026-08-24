@@ -44,6 +44,12 @@ jobs:
       - name: Type-check
         run: bun run typecheck
 
+      # Rules of hooks are a hard gate: a violation changes what the React
+      # Compiler may assume about every render. exhaustive-deps reports as
+      # warnings and does not fail the build.
+      - name: Lint (rules of hooks)
+        run: bun run lint
+
       # The unit suite is NOT a gate yet, and that is a deliberate call rather
       # than laziness: it is ORDER DEPENDENT, and the order is not stable
       # between identical runs, so neither colour means what a gate needs it to

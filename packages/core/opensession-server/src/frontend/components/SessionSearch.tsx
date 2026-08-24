@@ -1,6 +1,6 @@
 import { repoLabel } from "../lib/repo-label";
 import { FALLBACK_REPO, sessionRepoOr } from "../lib/session-repo";
-import React, { useEffect, useMemo, useRef, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import type { UnifiedSession } from "../lib/types";
 import {
 	fetchOpenPrs,
@@ -324,12 +324,9 @@ export function SessionSearch({
 	}, [query]);
 
 	// Only live sessions are searchable.
-	const pool = useMemo(
-		() => sessions.filter((s) => !s.archived),
-		[sessions],
-	);
+	const pool = (sessions.filter((s) => !s.archived));
 
-	const searchIndex = useMemo(() => sessionSearchIndex(pool), [pool]);
+	const searchIndex = (sessionSearchIndex(pool));
 
 	// Workspace members only. `startedBy` is a free-text name that also carries
 	// workers, goals, integration senders and unmapped Slack ids, so the team
@@ -337,20 +334,17 @@ export function SessionSearch({
 	// person has: "Michiel Westerbeek", "Michiel" and "Kent (loop)" are not
 	// three more teammates (lib/session-owner).
 	const roster = usePeople();
-	const canonical = useMemo(() => canonicalNames(roster), [roster]);
-	const personOptions = useMemo(
-		() => [
+	const canonical = (canonicalNames(roster));
+	const personOptions = ([
 			{ value: "all", label: "Anyone", icon: <IconPeople size={18} /> },
 			...sessionOwners(pool, canonical).map(({ key, label }) => ({
 				value: key,
 				label,
 				icon: <UserAvatar name={label} size={18} edge={false} />,
 			})),
-		],
-		[pool, canonical],
-	);
+		]);
 
-	const repoOptions = useMemo(() => {
+	const repoOptions = (() => {
 		const counts = new Map<string, number>();
 		for (const session of pool) {
 			const project = sessionRepo(session);
@@ -366,10 +360,9 @@ export function SessionSearch({
 					icon: <RepoTile name={value} size={18} />,
 				})),
 		];
-	}, [pool]);
+	})();
 
-	const statusOptions = useMemo(
-		() => [
+	const statusOptions = ([
 			{ value: "all", label: "Any status", icon: <IconStatusRing size={18} /> },
 			...STATUS_ORDER.map((value) => ({
 				value,
@@ -380,14 +373,12 @@ export function SessionSearch({
 					/>
 				),
 			})),
-		],
-		[],
-	);
+		]);
 	const hasSessionFilter = person !== "all" || repo !== "all" || status !== "all";
 
 	// Commands, PRs, and sessions share one flat result list so arrow-key navigation
 	// crosses group boundaries the way a command menu should.
-	const results = useMemo<PaletteResult[]>(() => {
+	const results = (() => {
 		const q = query.trim().toLowerCase();
 		const terms = q.split(/\s+/).filter(Boolean);
 		const matches = (values: Array<string | undefined>) => {
@@ -457,19 +448,7 @@ export function SessionSearch({
 			};
 		});
 		return [...actionResults, ...prResults, ...sessionRows];
-	}, [
-		actions,
-		canonical,
-		hasSessionFilter,
-		openPrs,
-		person,
-		pool,
-		query,
-		repo,
-		searchIndex,
-		snippets,
-		status,
-	]);
+	})();
 	const keyedActive = results.findIndex((result) => resultKey(result) === activeKey);
 	const active = keyedActive >= 0 ? keyedActive : 0;
 

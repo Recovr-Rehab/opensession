@@ -90,6 +90,5 @@ export function onTranscriptDisclosure(listener: () => void): () => void {
 export function notifyTranscriptDisclosure(): void {
 	for (const listener of disclosureListeners) listener();
 }
-}
 
 export const transcriptDisclosureLedger = createTranscriptDisclosureLedger();

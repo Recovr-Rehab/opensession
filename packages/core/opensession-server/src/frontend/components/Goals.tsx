@@ -1,6 +1,6 @@
 import { repoLabel } from "../lib/repo-label";
 import { BASE_PATH } from "../lib/base";
-import React, { useEffect, useMemo, useState, useCallback } from "react";
+import React, { useEffect, useState, } from "react";
 import {
   fetchGoals,
   fetchGoal,
@@ -108,12 +108,12 @@ export function Goals({ onOpenSession, selectedId, onSelect }: Props) {
       .catch(() => {});
   }, []);
 
-  const load = useCallback(async () => {
+  const load = async () => {
     try {
       setGoals(await fetchGoals());
       setLoading(false);
     } catch {}
-  }, []);
+  };
 
   useEffect(() => {
     document.title = docTitle("Goals");
@@ -126,13 +126,9 @@ export function Goals({ onOpenSession, selectedId, onSelect }: Props) {
   }, [load]);
 
   // The routed selection — matched by id, or by name for deep-links.
-  const sel = useMemo(
-    () =>
-      selectedId
+  const sel = (selectedId
         ? goals.find((g) => g.id === selectedId || g.name === selectedId) || null
-        : null,
-    [goals, selectedId],
-  );
+        : null);
 
   // Leaving the selection also leaves edit mode.
   useEffect(() => setEditMode(false), [sel?.id]);

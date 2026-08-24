@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useState } from "react";
 import { createPortal } from "react-dom";
 import type { Workspace, UnifiedSession } from "../lib/types";
 import { fetchHomeStats, fetchRecentPrs, type HomeStats, type RecentPr } from "../lib/api";
@@ -287,10 +287,7 @@ export function Prs({
     };
   }, []);
 
-  const running = useMemo(
-    () => sessions.filter((s) => s.isRunning && !s.archived).length,
-    [sessions],
-  );
+  const running = (sessions.filter((s) => s.isRunning && !s.archived).length);
 
   useEffect(() => {
     let active = true;
@@ -316,13 +313,13 @@ export function Prs({
     };
   }, [person]);
 
-  const allWorktrees = useMemo(() => {
+  const allWorktrees = (() => {
     const prs = new Map(recentPrs.map((pr) => [pr.url, pr]));
     for (const pr of personPrs) prs.set(pr.url, pr);
     return buildWorktreeRows([...prs.values()], sessions);
-  }, [personPrs, recentPrs, sessions]);
+  })();
 
-  const worktrees = useMemo(() => {
+  const worktrees = (() => {
     const needle = query.trim().toLowerCase();
     return allWorktrees
       .filter((row) => {
@@ -338,9 +335,9 @@ export function Prs({
           .toLowerCase()
           .includes(needle);
       });
-  }, [allWorktrees, person, workspaceId, query, repo, showArchived]);
+  })();
 
-  const sections = useMemo(() => {
+  const sections = (() => {
     const definitions: Array<{ state: WorktreeRow["state"]; label: string }> = [
       { state: "OPEN", label: "Open" },
       { state: "MERGED", label: "Merged" },
@@ -356,17 +353,14 @@ export function Prs({
       }
       return [{ ...definition, rows, groups: [...groups.entries()] }];
     });
-  }, [worktrees]);
+  })();
 
-  const workspaceOptions = useMemo(() => {
+  const workspaceOptions = (() => {
     const represented = new Set(sessions.filter((s) => s.prUrl || s.prs?.some((pr) => pr.url)).map((s) => s.workspaceId));
     return workspaces.filter((workspace) => represented.has(workspace.id));
-  }, [workspaces, sessions]);
+  })();
 
-  const repoOptions = useMemo(
-    () => [...new Set(allWorktrees.map((row) => row.repo).filter(Boolean))].sort(),
-    [allWorktrees],
-  );
+  const repoOptions = ([...new Set(allWorktrees.map((row) => row.repo).filter(Boolean))].sort());
 
   // The page's controls, in the window's top bar rather than in a strip of
   // their own. That bar spans the pane and was empty until the heading below
