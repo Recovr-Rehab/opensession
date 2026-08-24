@@ -10,6 +10,7 @@ import type { DurableOutboxItem, DurableTimer } from "./store";
 import {
 	executeSessionEffect,
 	registeredSessionEffectKinds,
+  SessionEffectDeferredError,
 } from "./effect-executors";
 import { legacyGatewayEffect } from "./lifecycle-protocol";
 import { pruneCreatePlans } from "../session-create-plan";
@@ -51,6 +52,7 @@ type RuntimeState = {
 	handle?: ReturnType<typeof setInterval>;
 	draining?: boolean;
 	lastCompactAt?: number;
+	maintenancePending?: boolean;
 	activeTimers?: Set<string>;
 	activeOutbox?: Set<number>;
 	activeOpeningOutbox?: Set<number>;
@@ -116,7 +118,10 @@ export async function drainSessionKernelRuntime(): Promise<void> {
 			effectKinds.filter((kind) => kind !== openingKind),
 		);
 		if (effectKinds.includes(openingKind)) {
-			const openings = await sessionKernelRuntimeWork([], [openingKind], Date.now(), 8);
+			// Admit enough opening effects to project their session files immediately.
+			// session-create.ts applies the smaller eight-turn engine gate only after
+			// projection, so slow agent turns cannot hide later accepted sessions.
+			const openings = await sessionKernelRuntimeWork([], [openingKind], Date.now(), 100);
 			work.outbox.push(...openings.outbox);
 		}
 		const activeTimers = (runtime.activeTimers ??= new Set());
@@ -156,13 +161,18 @@ export async function drainSessionKernelRuntime(): Promise<void> {
 				item.kind === "creation_opening_turn"
 					? activeOpeningOutbox
 					: activeOutbox;
-			if (active.size >= 8 || active.has(item.id)) continue;
+			const admissionLimit = item.kind === openingKind ? 100 : 8;
+			if (active.size >= admissionLimit || active.has(item.id)) continue;
 			active.add(item.id);
 			void executeSessionEffect(item)
 				.then((executed) => {
 					if (executed) sessionKernelStore().ackOutbox(item.id);
 				})
 				.catch((error) => {
+          if (error instanceof SessionEffectDeferredError) {
+            sessionKernelStore().deferOutbox(item.id);
+            return;
+          }
 					const message =
 						error instanceof Error ? error.message : String(error);
 					const settled = sessionKernelStore().noteOutboxFailure(
@@ -182,10 +192,15 @@ export async function drainSessionKernelRuntime(): Promise<void> {
 				.finally(() => active.delete(item.id));
 		}
 		passivateIdleSessionKernels();
-		if (!runtime.lastCompactAt || Date.now() - runtime.lastCompactAt > 60 * 60_000) {
-			await maintainSessionKernel();
-			pruneCreatePlans(sessionKernelStore());
-			runtime.lastCompactAt = Date.now();
+		const maintenanceSweepDue =
+			!runtime.lastCompactAt ||
+			Date.now() - runtime.lastCompactAt > 60 * 60_000;
+		if (runtime.maintenancePending || maintenanceSweepDue) {
+			runtime.maintenancePending = await maintainSessionKernel();
+			if (maintenanceSweepDue) {
+				pruneCreatePlans(sessionKernelStore());
+				runtime.lastCompactAt = Date.now();
+			}
 		}
 	} finally {
 		runtime.draining = false;

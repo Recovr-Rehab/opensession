@@ -8,6 +8,12 @@ describe("shouldOpenCreatedSession", () => {
 		expect(shouldOpenCreatedSession(null, "/session/next", false)).toBe(true);
 	});
 
+	test("does not navigate for a restart-recovery room announcement", () => {
+		expect(
+			shouldOpenCreatedSession(null, "/session/current", false, true),
+		).toBe(false);
+	});
+
 	test("opens a palette create while its origin still owns the foreground", () => {
 		expect(
 			shouldOpenCreatedSession({ originPath: "/session/one" }, "/session/one", true),

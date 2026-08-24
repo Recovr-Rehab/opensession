@@ -35,7 +35,10 @@ export interface SetupController {
 	applyIntegration: (updated: SetupIntegration, restartRequired: boolean) => void;
 	applyAccess: (updated: SetupAccess, restartRequired: boolean) => void;
 	applyGithub: (updated: SetupGithub, restartRequired: boolean) => void;
-	applyRepo: (updated: Pick<SetupRepo, "id" | "defaultBranch">) => void;
+	applyRepo: (
+		updated: Pick<SetupRepo, "id"> &
+			Partial<Pick<SetupRepo, "defaultBranch" | "isolatedWorktrees">>,
+	) => void;
 }
 
 export function useSetupStatus(): SetupController {
@@ -103,18 +106,24 @@ export function useSetupStatus(): SetupController {
 		[],
 	);
 
-	const applyRepo = useCallback((updated: Pick<SetupRepo, "id" | "defaultBranch">) => {
-		setStatus((s) =>
-			s
-				? {
-						...s,
-						repos: s.repos.map((repo) =>
-							repo.id === updated.id ? { ...repo, ...updated } : repo,
-						),
-					}
-				: s,
-		);
-	}, []);
+	const applyRepo = useCallback(
+		(
+			updated: Pick<SetupRepo, "id"> &
+				Partial<Pick<SetupRepo, "defaultBranch" | "isolatedWorktrees">>,
+		) => {
+			setStatus((s) =>
+				s
+					? {
+							...s,
+							repos: s.repos.map((repo) =>
+								repo.id === updated.id ? { ...repo, ...updated } : repo,
+							),
+						}
+					: s,
+			);
+		},
+		[],
+	);
 
 	const restartServer = useCallback(
 		async (post = true) => {

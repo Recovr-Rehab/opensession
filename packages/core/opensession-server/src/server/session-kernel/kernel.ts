@@ -19,6 +19,7 @@ import type {
   DeliveryActorRequest,
   DeliveryActorResult,
 } from "./delivery-protocol";
+import type { TurnActorRequest, TurnActorResult } from "./turn-protocol";
 import { AsyncLocalStorage } from "node:async_hooks";
 import {
 	SessionKernelActorError,
@@ -73,7 +74,9 @@ type CommandContext = {
 };
 const commandContext = new AsyncLocalStorage<CommandContext>();
 
-function compatibilityStoreForTest(domain: "ask" | "creation" | "delivery") {
+function compatibilityStoreForTest(
+  domain: "ask" | "creation" | "delivery" | "turn",
+) {
 	if (process.env.NODE_ENV !== "test")
 		throw new Error(
 			`Session ${domain} mutation requires the authoritative actor`,
@@ -95,6 +98,27 @@ export function sessionAsk<T extends AskActorRequest>(
     result = store.deleteAskRecord(request.sessionId);
   else result = store.clearAskRecords();
   return result as AskActorResult<T>;
+}
+
+export function sessionTurn<T extends TurnActorRequest>(
+  request: T,
+): TurnActorResult<T> {
+  const actor = state.actor;
+  if (actor) return actor.decideTurn(request);
+  const store = compatibilityStoreForTest("turn");
+  if (request.op === "snapshot")
+    return store.turnSnapshot(request.sessionId) as TurnActorResult<T>;
+  if (request.op === "prepare_cancel")
+    return store.prepareTurnCancel(request) as TurnActorResult<T>;
+  if (request.op === "begin_cancel_effect")
+    return store.beginTurnCancelEffect(request) as TurnActorResult<T>;
+  if (request.op === "settle_cancel")
+    return store.settleTurnCancel(request) as TurnActorResult<T>;
+  if (request.op === "prepare_outcome_projection")
+    return store.prepareTurnOutcomeProjection(request) as TurnActorResult<T>;
+  if (request.op === "begin_outcome_projection")
+    return store.beginTurnOutcomeProjection(request) as TurnActorResult<T>;
+  return store.settleTurnOutcomeProjection(request) as TurnActorResult<T>;
 }
 
 export function sessionDelivery<T extends DeliveryActorRequest>(
@@ -138,6 +162,14 @@ export function sessionDelivery<T extends DeliveryActorRequest>(
     result = store.settlePendingSteers();
   else if (request.op === "requeue_steers")
     result = store.requeueSteerDeliveries(request.sessionId, request.items);
+  else if (request.op === "prepare_interrupt")
+    result = store.prepareDeliveryInterrupt(request);
+  else if (request.op === "begin_interrupt_effect")
+    result = store.beginDeliveryInterruptEffect(request);
+  else if (request.op === "settle_interrupt")
+    result = store.settleDeliveryInterrupt(request);
+  else if (request.op === "claim_next_dispatch")
+    result = store.claimNextDeliveryDispatch(request);
   else if (request.op === "claim_dispatch")
     result = store.claimDeliveryDispatch(request);
   else if (request.op === "ack_dispatch")
@@ -166,6 +198,10 @@ export function sessionDeliveryProjection(sessionId: string): DurableDeliverySta
   const cached = projection.get(sessionId);
   if (cached) return cached;
   return sessionDelivery({ op: "snapshot", sessionId });
+}
+
+export function sessionKernelActorActive(): boolean {
+  return !!state.actor;
 }
 
 export function sessionKernelStore(): SessionKernelStoreApi {
@@ -851,9 +887,9 @@ export async function sessionKernelHealth(): Promise<Record<string, unknown>> {
 	return healthRefresh;
 }
 
-export async function maintainSessionKernel(): Promise<void> {
-	if (state.actor) await state.actor.maintainAsync();
-	else sessionKernelStore().maintain();
+export async function maintainSessionKernel(): Promise<boolean> {
+	if (state.actor) return state.actor.maintainAsync();
+	return sessionKernelStore().maintain();
 }
 
 export function sessionKernelOwnsCurrentCommand(sessionId: string): boolean {

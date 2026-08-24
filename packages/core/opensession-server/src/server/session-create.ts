@@ -22,7 +22,7 @@
 import type { ServerWebSocket } from "bun";
 import { randomUUIDv7 } from "bun";
 import { existsSync } from "node:fs";
-import { type StreamEvent, markSessionStarting, runAgent, unmarkSessionStarting, } from "./agent-runner";
+import { currentAgentRunToken, isAgentSessionCancelled, type StreamEvent, markSessionStarting, runAgent, unmarkSessionStarting, } from "./agent-runner";
 import {
 	activeRunRecords,
 	journalClearIfLineage,
@@ -87,6 +87,7 @@ import { resolveWorkspaceModelPreset } from "./workspace-model-presets";
 import { type Workspace, getWorkspace, updateWorkspace, } from "./workspaces";
 import {
 	type CreationOpeningEffectItem,
+	type CreationSetupPlan,
 	SESSION_KERNEL_MAX_OPENING_PLAN_BYTES,
 	ensureCreationPlanned,
 	requestCreationAttachment,
@@ -94,10 +95,13 @@ import {
 	requestCreationCredential,
 	requestCreationOpening,
 	requestCreationSandbox,
+	patchCreationSetupPlan,
 	requestCreationWorkspace,
+	settleCreationCancelled,
 	settleCreationFailed,
 	settleCreationSucceeded,
 	sessionKernel,
+	sessionTurn,
 } from "./session-kernel";
 import { AUTO_REPO, ensureAskCheckout, ensureScratchDir, getRepo, isRegisteredWorktree, listWorktrees, NO_REPO, repoForPath, repoForPathOrNull, resolveUniqueBranch, sharedCheckoutForNewSessions, worktreeHeadBranch, worktreePathFor, } from "./worktree";
 import { type WSClientData, broadcastToSession, preparingWorkspaces, } from "./ws-hub";
@@ -106,11 +110,10 @@ import { isClientSessionId } from "./paths";
 import {
 	clearCreatePlan,
 	createPlanWorkspaceId,
+	readCreatePlan,
 	readCreatePlanForRecovery,
 	restoreResolvedCreate,
 	snapshotOpeningCreate,
-	snapshotResolvedCreate,
-	updateCreatePlan,
 } from "./session-create-plan";
 import {
 	githubCredentialForLogin,
@@ -269,7 +272,7 @@ export interface ResolvedCreate {
 	attachRepos?: { repos: string[]; branch: string };
 	/** Durable, non-secret selector for trusted server-owned worktree fetches. */
 	gitPrincipal?: string;
-	/** Ephemeral capability. snapshotResolvedCreate always strips this field. */
+	/** Ephemeral capability. Durable create snapshots always strip this field. */
 	gitEnv?: Record<string, string>;
 	stackedOn?: { repo: string; branch: string };
 	/** Workspace recorded on the session file. */
@@ -406,6 +409,79 @@ const activeOpeningCreates = new Map<
 	}
 >();
 
+const OPENING_TURN_CONCURRENCY = 8;
+type OpeningTurnGate = {
+	active: number;
+	waiters: Array<(release: () => void) => void>;
+};
+const creationRuntimeGlobal = globalThis as typeof globalThis & {
+	__opensessionOpeningTurnGate?: OpeningTurnGate;
+};
+const openingTurnGate = (creationRuntimeGlobal.__opensessionOpeningTurnGate ??= {
+	active: 0,
+	waiters: [],
+});
+
+function openingTurnRelease(): () => void {
+	let released = false;
+	return () => {
+		if (released) return;
+		released = true;
+		const next = openingTurnGate.waiters.shift();
+		if (next) next(openingTurnRelease());
+		else openingTurnGate.active = Math.max(0, openingTurnGate.active - 1);
+	};
+}
+
+function acquireOpeningTurn(): Promise<() => void> {
+	if (openingTurnGate.active < OPENING_TURN_CONCURRENCY) {
+		openingTurnGate.active += 1;
+		return Promise.resolve(openingTurnRelease());
+	}
+	return new Promise((resolve) => openingTurnGate.waiters.push(resolve));
+}
+
+export async function waitForCreatedSessionProjection(
+	sessionId: string,
+	identity: string,
+	timeoutMs = 24 * 60 * 60_000,
+): Promise<UnifiedSession> {
+	const deadline = Date.now() + timeoutMs;
+	while (true) {
+		const state = sessionKernel(sessionId).creationState();
+		if (!state || state.identity !== identity)
+			throw new Error("Create request identity crossed durable session ownership");
+		const projected = findSession(sessionId);
+		if (projected) return projected;
+		if (state.state === "failed")
+			throw new Error("Session creation failed before it was persisted");
+		if (state.state === "cancelled")
+			throw new Error("Session creation was cancelled before it was persisted");
+		if (Date.now() >= deadline)
+			throw new Error("Session creation remains durably pending");
+		await Bun.sleep(25);
+	}
+}
+
+export function actorCreationSetupPlan(
+	sessionId: string,
+	identity: string,
+): CreationSetupPlan {
+	const state = ensureCreationPlanned(sessionId, identity);
+	if (state.setupPlan || !["planned", "preparing"].includes(state.state))
+		return (state.setupPlan ?? {}) as CreationSetupPlan;
+	const legacy = readCreatePlan(sessionId, identity);
+	if (!legacy) return {};
+	return patchCreationSetupPlan(sessionId, identity, {
+		...(legacy.branch ? { branch: legacy.branch } : {}),
+		...(legacy.workspaceId ? { workspaceId: legacy.workspaceId } : {}),
+		...(legacy.attachments ? { attachments: legacy.attachments } : {}),
+		...(legacy.resolved
+			? { resolved: snapshotOpeningCreate(legacy.resolved) }
+			: {}),
+	});
+}
+
 function snapshotOpeningPlan(spec: ResolvedCreate): Record<string, unknown> {
 	const plan = snapshotOpeningCreate(spec);
 	if (Buffer.byteLength(JSON.stringify(plan)) > SESSION_KERNEL_MAX_OPENING_PLAN_BYTES)
@@ -510,11 +586,12 @@ async function restorePlannedOpening(sessionId: string): Promise<{
 	identity: string;
 } | null> {
 	const creation = sessionKernel(sessionId).creationState();
-	const legacyPlan = creation?.openingPlan
-		? undefined
-		: readCreatePlanForRecovery(sessionId);
-	const openingPlan = creation?.openingPlan ?? legacyPlan?.resolved;
-	const identity = creation?.openingPlan ? creation.identity : legacyPlan?.identity;
+	const actorPlan =
+		creation?.openingPlan ??
+		(creation?.setupPlan?.resolved as Record<string, unknown> | undefined);
+	const legacyPlan = actorPlan ? undefined : readCreatePlanForRecovery(sessionId);
+	const openingPlan = actorPlan ?? legacyPlan?.resolved;
+	const identity = actorPlan ? creation!.identity : legacyPlan?.identity;
 	const dispatch = promptDispatches.get(sessionId);
 	if (!openingPlan || !identity || dispatch?.kind !== "create") return null;
 	const restored = restoreResolvedCreate<ResolvedCreate>(openingPlan);
@@ -553,7 +630,20 @@ async function restorePlannedOpening(sessionId: string): Promise<{
 			needsWorktree: !!materializeWorktree,
 		},
 		io: {
-			announce: () => {},
+			// Recovery has no creator socket, so the announce goes to the session
+			// room: any client already watching (or the sessions poll within 5s)
+			// learns the session exists even while the opening effect is still
+			// queued behind other outbox work. A no-op here left restart-recovered
+			// creates invisible until the slow opening turn finished.
+			announce: (info) => {
+				broadcastToSession(sessionId, {
+					type: "session_created",
+					sessionId,
+					id: info.id,
+					...(info.workspaceId ? { workspaceId: info.workspaceId } : {}),
+				});
+				broadcastToSession(sessionId, { type: "stream_start", sessionId });
+			},
 			emit: (message) =>
 				broadcastToSession(sessionId, { ...message, sessionId }),
 			fail: (message) =>
@@ -566,6 +656,24 @@ async function restorePlannedOpening(sessionId: string): Promise<{
 	};
 }
 
+export function settleStoppedCreationOpening(item: CreationOpeningEffectItem): boolean {
+	const kernel = sessionKernel(item.sessionId);
+	const turn = sessionTurn({ op: "snapshot", sessionId: item.sessionId });
+	if (kernel.runState().state !== "stopped" && !turn.cancel) return false;
+	settleCreationCancelled(
+		item.sessionId,
+		item.payload.creationIdentity,
+		kernel,
+		item.effectKey,
+	);
+	acknowledgePromptDispatch(
+		item.sessionId,
+		item.payload.openingPromptEntryId,
+	);
+	clearCreatePlan(item.sessionId);
+	return true;
+}
+
 export async function executeCreationOpeningEffect(
 	item: CreationOpeningEffectItem,
 ): Promise<void> {
@@ -575,16 +683,20 @@ export async function executeCreationOpeningEffect(
 	if (state.generation !== item.payload.creationGeneration)
 		throw new Error("Opening effect used a stale creation generation");
 	if (
-		(state.state === "ready" || state.state === "failed") &&
+		(state.state === "ready" ||
+			state.state === "failed" ||
+			state.state === "cancelled") &&
 		state.completedEffectIds.includes(item.effectKey)
 	) {
 		acknowledgePromptDispatch(
 			item.sessionId,
 			item.payload.openingPromptEntryId,
 		);
-		if (state.state === "ready") clearCreatePlan(item.sessionId);
+		if (state.state === "ready" || state.state === "cancelled")
+			clearCreatePlan(item.sessionId);
 		return;
 	}
+	if (settleStoppedCreationOpening(item)) return;
 	if (
 		state.state !== "opening_dispatched" ||
 		state.currentEffectId !== item.effectKey
@@ -619,16 +731,20 @@ export async function executeCreationOpeningEffect(
 		while (true) {
 			const recovered = sessionKernel(item.sessionId).creationState();
 			if (
-				(recovered?.state === "ready" || recovered?.state === "failed") &&
+				(recovered?.state === "ready" ||
+					recovered?.state === "failed" ||
+					recovered?.state === "cancelled") &&
 				recovered.completedEffectIds.includes(item.effectKey)
 			) {
 				acknowledgePromptDispatch(
 					item.sessionId,
 					item.payload.openingPromptEntryId,
 				);
-				if (recovered.state === "ready") clearCreatePlan(item.sessionId);
+				if (recovered.state === "ready" || recovered.state === "cancelled")
+					clearCreatePlan(item.sessionId);
 				return;
 			}
+			if (settleStoppedCreationOpening(item)) return;
 			if (
 				!recovered ||
 				recovered.identity !== item.payload.creationIdentity ||
@@ -651,6 +767,7 @@ export async function executeCreationOpeningEffect(
 		throw new Error("Opening effect actor-plan identity changed during recovery");
 	if (restored.spec.openingPromptEntryId !== item.payload.openingPromptEntryId)
 		throw new Error("Opening effect prompt identity changed during recovery");
+	if (settleStoppedCreationOpening(item)) return;
 	await openCreatedSession(
 		restored.spec,
 		restored.io,
@@ -662,18 +779,22 @@ export async function executeCreationOpeningEffect(
 		},
 	);
 	const settled = sessionKernel(item.sessionId).creationState();
-	if (settled?.state === "ready") clearCreatePlan(item.sessionId);
+	if (settled?.state === "ready" || settled?.state === "cancelled")
+		clearCreatePlan(item.sessionId);
 	else if (settled?.state !== "failed")
 		throw new Error("Opening effect returned without terminal actor settlement");
 }
 
 export async function resumePlannedCreate(sessionId: string): Promise<boolean> {
 	const state = sessionKernel(sessionId).creationState();
-	if (state?.state === "ready") {
+	if (state?.state === "ready" || state?.state === "cancelled") {
 		clearCreatePlan(sessionId);
 		return true;
 	}
-	if (state?.state === "failed" || state?.currentEffectId?.startsWith("opening:"))
+	if (
+		state?.state === "failed" ||
+		state?.currentEffectId?.startsWith("opening:")
+	)
 		return true;
 	const restored = await restorePlannedOpening(sessionId);
 	if (!restored) return false;
@@ -700,17 +821,19 @@ export async function openCreatedSession(
 	// wore the raw first line) and keeps that name for life — later sessions
 	// never rename it, and a manual rename in the meantime wins.
 	const wsToName = spec.autoNameWorkspace;
-	const titlePrompt = await nameKnownSessionReferencesForTitle(spec.titlePrompt);
-	void ensureGeneratedTitle(bksId, titlePrompt, spec.user, spec.model,).then(
-		(t) => {
+	void nameKnownSessionReferencesForTitle(spec.titlePrompt)
+		.then((titlePrompt) =>
+			ensureGeneratedTitle(bksId, titlePrompt, spec.user, spec.model),
+		)
+		.then((t) => {
 			if (!t) return;
 			invalidateSessionsCache();
 			if (!wsToName) return;
 			const cur = getWorkspace(wsToName.id);
 			if (cur && cur.name === wsToName.name)
 				updateWorkspace(wsToName.id, { name: t });
-		}
-	);
+		})
+		.catch(() => {});
 
 	// Set once the session has been announced — a later failure must then
 	// close out the stream instead of leaving the just-opened viewer spinning.
@@ -722,6 +845,17 @@ export async function openCreatedSession(
 	let effectiveProvider = providerFor(effectiveModel);
 	const modelHistory: NonNullable<NativeSessionFile["modelHistory"]> = [];
 	let persisted = false;
+	let releaseOpeningTurn: (() => void) | undefined;
+	let startToken = "";
+	let startGeneration = 0;
+	const openingTurnWasCancelled = (): boolean => {
+		if (!startToken || startGeneration < 1) return false;
+		const cancel = sessionTurn({ op: "snapshot", sessionId: bksId }).cancel;
+		return (
+			cancel?.runId === startToken &&
+			cancel.runGeneration === startGeneration
+		);
+	};
 	// Cumulative token/cost for this new session's opening run.
 	let latestUsage: SessionUsage | undefined;
 	// Extra repos that actually got a worktree (see attachCreateRepos) — what
@@ -841,7 +975,20 @@ export async function openCreatedSession(
 		// engine is up. The starting mark keeps a prompt typed in that
 		// window from double-starting a run (same race as
 		// runSessionPrompt).
-		const startToken = markSessionStarting(bksId);
+		startToken = markSessionStarting(
+			bksId,
+			openingRun
+				? runnerOpeningHostId(openingRun.runId, openingRun.generation)
+				: undefined,
+		);
+    if (currentAgentRunToken(bksId) !== startToken) {
+      unmarkSessionStarting(bksId, startToken);
+      throw new Error("Opening turn is already owned by another preparation");
+    }
+		const admittedRun = sessionKernel(bksId).runState();
+		if (admittedRun.currentRunId !== startToken)
+			throw new Error("Opening turn lost actor admission before preparation");
+		startGeneration = admittedRun.generation;
 		const pendingAttach = spec.attachRepos?.repos.length
 			? spec.attachRepos
 			: null;
@@ -905,6 +1052,11 @@ export async function openCreatedSession(
 				"prompt",
 				spec.title || "a session",
 			);
+			// Projection is latency-sensitive; the agent turn is capacity-sensitive.
+			// Persist and announce every accepted session first, then wait for one of
+			// the bounded opening-run slots. Keeping the gate here prevents eight long
+			// turns from hiding every later session behind "Setting up workspace".
+			releaseOpeningTurn = await acquireOpeningTurn();
 
 			// Every worktree this session works in, its own first. The extra
 			// repos are cut inside the same gate: they are git work of the same
@@ -1016,14 +1168,9 @@ export async function openCreatedSession(
 					? await maybeLaunchRunnerRun(created, {
 						prompt: openingPromptForRun,
 						promptEntryId: openingPromptEntryId,
-						...(openingRun
-							? {
-								hostId: runnerOpeningHostId(
-									openingRun.runId,
-									openingRun.generation,
-								),
-							}
-							: {}),
+						hostId: startToken,
+						shouldCancel: () =>
+							isAgentSessionCancelled(bksId, startToken),
 						images: spec.images,
 						mcpServers: spec.runMcpServers ?? [],
 						user: spec.user,
@@ -1066,16 +1213,27 @@ export async function openCreatedSession(
 				recordRunOutcome(bksId, runFailure, {
 					engineSessionId,
 					noticePersisted: failureNoticePersisted,
+					runId: startToken,
+					runGeneration: startGeneration,
+					projectionId: `outcome:${startToken}`,
 				});
 				// This runs in the terminal event's consumer body, before requesting
 				// the generator's next item. Backend generator finally blocks may now
 				// retire their journal/host only after the actor has the receipt.
-				settleCreationSucceeded(
-					bksId,
-					creationIdentity,
-					undefined,
-					creationEffectId,
-				);
+				if (openingTurnWasCancelled())
+					settleCreationCancelled(
+						bksId,
+						creationIdentity,
+						undefined,
+						creationEffectId,
+					);
+				else
+					settleCreationSucceeded(
+						bksId,
+						creationIdentity,
+						undefined,
+						creationEffectId,
+					);
 				creationSettled = true;
 				acknowledgePromptDispatch(bksId, openingPromptEntryId);
 			};
@@ -1299,6 +1457,8 @@ export async function openCreatedSession(
 			// retire their physical-owner journal. This finally only releases the
 			// in-process admission marker.
 			unmarkSessionStarting(bksId, startToken);
+			releaseOpeningTurn?.();
+			releaseOpeningTurn = undefined;
 			// Safety net for throws before the worktree block's own finally
 			// (persist/announce failures) — must never leak a session stuck
 			// in "Waiting for workspace".
@@ -1335,6 +1495,20 @@ export async function openCreatedSession(
 	} catch (e: any) {
 		if (creationSettled) {
 			console.error(`[create] Post-opening follow-up failed for ${bksId}:`, e);
+			return;
+		}
+		if (openingTurnWasCancelled()) {
+			settleCreationCancelled(
+				bksId,
+				creationIdentity,
+				undefined,
+				creationEffectId,
+			);
+			acknowledgePromptDispatch(bksId, openingPromptEntryId);
+			if (announced) {
+				io.emit({ type: "stream_done" });
+				io.emit({ type: "session_status", isRunning: false });
+			}
 			return;
 		}
 		// Failure after the early announce: the client is already in the
@@ -1463,8 +1637,44 @@ export async function handleCreateSessionMessage(
 			? sessionIdForRequest(ws.data?.authLogin || user || "anonymous", requestId)
 			: newSessionId());
 	const createIdentity = requestId || clientSessionId || bksId;
-	let createPlan = updateCreatePlan(bksId, createIdentity);
-	const recoveringSession = findSession(bksId);
+	const durableCreation = sessionKernel(bksId).creationState();
+	if (durableCreation && durableCreation.identity !== createIdentity) {
+		failCreate("Create request identity crossed durable session ownership");
+		return;
+	}
+	let recoveringSession = findSession(bksId);
+	if (
+		durableCreation?.state === "opening_dispatched" ||
+		durableCreation?.state === "ready" ||
+		durableCreation?.state === "failed" ||
+		durableCreation?.state === "cancelled"
+	) {
+		try {
+			recoveringSession = await waitForCreatedSessionProjection(
+				bksId,
+				createIdentity,
+			);
+		} catch (error) {
+			failCreate(error instanceof Error ? error.message : String(error));
+			throw error;
+		}
+		if (
+			durableCreation.state === "ready" ||
+			durableCreation.state === "cancelled"
+		)
+			clearCreatePlan(bksId);
+		const response = {
+			type: "session_created",
+			id: bksId,
+			...(recoveringSession.workspaceId
+				? { workspaceId: recoveringSession.workspaceId }
+				: {}),
+		};
+		sendCreateFrame(attempt, response);
+		finishCreate();
+		return response;
+	}
+	let createPlan = actorCreationSetupPlan(bksId, createIdentity);
 	if (
 		recoveringSession?.claudeSessionId ||
 		recoveringSession?.codexThreadId
@@ -1481,7 +1691,6 @@ export async function handleCreateSessionMessage(
 		finishCreate();
 		return response;
 	}
-	ensureCreationPlanned(bksId, createIdentity);
 	// This WebSocket create is interactive. The raw credential reaches only the
 	// server-owned materializer; recovery persists and resolves its principal.
 	const githubCredential = ws.data.authLogin
@@ -1669,7 +1878,7 @@ export async function handleCreateSessionMessage(
 		const plannedWorkspaceId =
 			createPlan.workspaceId || createPlanWorkspaceId(bksId);
 		if (!createPlan.workspaceId)
-			createPlan = updateCreatePlan(bksId, createIdentity, {
+			createPlan = patchCreationSetupPlan(bksId, createIdentity, {
 				workspaceId: plannedWorkspaceId,
 			});
 		// A code create landing on a branch whose worktree an existing
@@ -1923,7 +2132,7 @@ export async function handleCreateSessionMessage(
 			const plannedWorkspaceId =
 				createPlan.workspaceId || createPlanWorkspaceId(bksId);
 			if (!createPlan.workspaceId)
-				createPlan = updateCreatePlan(bksId, createIdentity, {
+				createPlan = patchCreationSetupPlan(bksId, createIdentity, {
 					workspaceId: plannedWorkspaceId,
 				});
 			await requestCreationWorkspace({
@@ -1965,7 +2174,7 @@ export async function handleCreateSessionMessage(
 		const attachmentSources =
 			createPlan.attachments ?? prepareCreationAttachmentSources(bksId, msg.files);
 		if (!createPlan.attachments && attachmentSources.length)
-			createPlan = updateCreatePlan(bksId, createIdentity, {
+			createPlan = patchCreationSetupPlan(bksId, createIdentity, {
 				attachments: attachmentSources,
 			});
 		for (const attachment of attachmentSources)
@@ -2058,7 +2267,7 @@ export async function handleCreateSessionMessage(
 		}
 
 		if (branch && branch !== createPlan.branch)
-			createPlan = updateCreatePlan(bksId, createIdentity, { branch });
+			createPlan = patchCreationSetupPlan(bksId, createIdentity, { branch });
 		const computedSpec: ResolvedCreate = {
 			id: bksId,
 			title,
@@ -2202,10 +2411,8 @@ export async function handleCreateSessionMessage(
 				}
 			: computedSpec;
 		if (!createPlan.resolved) {
-			const { images: _images, materializeWorktree: _materialize, ...durable } =
-				computedSpec;
-			createPlan = updateCreatePlan(bksId, createIdentity, {
-				resolved: snapshotResolvedCreate(durable),
+			createPlan = patchCreationSetupPlan(bksId, createIdentity, {
+				resolved: snapshotOpeningCreate(computedSpec),
 			});
 		}
 	} catch (e: any) {

@@ -13,6 +13,9 @@ const diffPanelSource = await Bun.file(
 const codeDisplaySource = await Bun.file(
 	new URL("./CodeDisplaySettings.tsx", import.meta.url),
 ).text();
+const commentableDiffSource = await Bun.file(
+	new URL("./CommentableDiff.tsx", import.meta.url),
+).text();
 const reviewToolbarSource = await Bun.file(
 	new URL("./pr/ReviewToolbar.tsx", import.meta.url),
 ).text();
@@ -74,8 +77,13 @@ test("reviews with and without a PR share the floating toolbar", () => {
 		"<ReviewToolbar compact={compactToolbar} flushTop={flushToolbarTop}>\n          <div className={PR_NO_PR_BAR}>",
 	);
 	expect(reviewToolbarSource).toContain(
-		'flushTop ? "" : "desktop:mt-2.5"',
+		'flushTop ? "" : "desktop:pt-2.5"',
 	);
+	expect(reviewToolbarSource).not.toContain("desktop:mt-2.5");
+	expect(reviewToolbarSource).toContain('"top-[42px] h-5 -mb-5"');
+	expect(reviewToolbarSource).toContain('"top-[52px] h-2.5 -mb-2.5"');
+	expect(reviewToolbarSource).not.toContain("linear-gradient");
+	expect(reviewToolbarSource).toContain("overflow-clip rounded-t-lg");
 	expect(reviewToolbarSource).toContain("desktop:mb-2");
 	expect(reviewToolbarSource).toContain("desktop:overflow-hidden");
 	expect(reviewToolbarSource).toContain("desktop:rounded-lg");
@@ -161,6 +169,7 @@ test("sidebar Changes shares Review's code display options", () => {
 		"stickyFileHeaders={toolbarTarget === undefined}",
 	);
 	expect(diffPanelSource).toContain("--review-file-header-top");
+	expect(commentableDiffSource).toContain("data-[stuck]:rounded-t-lg");
 	expect(viewerSource).toContain("--diff-panel-top");
 	expect(codeDisplaySource).toContain('label="Wrap lines"');
 	expect(codeDisplaySource).toContain('value="split"');

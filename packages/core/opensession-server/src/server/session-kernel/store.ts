@@ -20,6 +20,8 @@ import type { StagedCreationActorEffect } from "./creation-effect-protocol";
 import { chmodSync, existsSync, mkdirSync, readFileSync, statSync } from "fs";
 import { dirname } from "path";
 import { sessionsDir } from "../paths";
+import { selectQueueBatch } from "./queue-batch-reducer";
+import type { QueueItem } from "../queue-state";
 
 export type DurableCommandStatus =
   "pending" | "processing" | "completed" | "failed" | "indeterminate";
@@ -69,12 +71,48 @@ export type DurableDeliveryState = {
   revision: number;
   queued: unknown[];
   dispatch?: unknown;
+  interrupt?: {
+    interruptId: string;
+    phase: "prepared" | "executing" | "confirmed";
+    runGeneration: number;
+    dispatchId?: string;
+    anchorId: string;
+    soloId?: string;
+    source?: { slot: "steered"; index: number };
+  };
   steered: unknown[];
   pendingSteers: Array<{ item: unknown; index: number; preparedAt: number }>;
   updatedAt: number;
 };
 
 export type DeliverySlot = "queued" | "dispatch" | "steered";
+
+export type DurableTurnState = {
+  revision: number;
+  cancel?: {
+    cancelId: string;
+    phase: "prepared" | "executing" | "settled";
+    outcome?: "confirmed" | "not_aborted";
+    runId: string;
+    runGeneration: number;
+    requeueIds: string[];
+    source: string;
+    user?: string;
+  };
+  updatedAt: number;
+};
+
+export type DurableTurnOutcomeProjection = {
+  projectionId: string;
+  phase: "pending" | "completed" | "superseded";
+  runId: string;
+  runGeneration: number;
+  errorMessage: string | null;
+  engineSessionId?: string;
+  noticePersisted: boolean;
+  noticeLabel?: string;
+  projectedAt: string;
+};
 
 export interface DurableOutboxItem {
 	id: number;
@@ -91,6 +129,8 @@ export interface DurableOutboxItem {
 }
 
 const json = (value: unknown): string => JSON.stringify(value ?? null);
+const CHANGE_HISTORY_PER_SESSION = 5_000;
+const MAINTENANCE_CHANGE_DELETE_BATCH = 250;
 const digest = (text: string): string =>
 	new Bun.CryptoHasher("sha256").update(text).digest("hex");
 const resultRecord = (value: unknown) => {
@@ -170,9 +210,61 @@ const PROCESS_OWNER_ID = (ownerGlobal.__opensessionSessionKernelOwnerId ??=
 		bootId: linuxBootId(),
 		start: linuxProcessStart(process.pid),
 	} satisfies ProcessOwnerIdentity));
-export const SESSION_KERNEL_SCHEMA_VERSION = 10;
+export const SESSION_KERNEL_SCHEMA_VERSION = 15;
 export const SESSION_KERNEL_MAX_CREATION_EFFECT_RECEIPTS = 256;
 export const SESSION_KERNEL_MAX_OPENING_PLAN_BYTES = 16 * 1024 * 1024;
+
+function validCreationSetupPatch(patch: Record<string, unknown>): boolean {
+  const keys = Object.keys(patch);
+  if (
+    keys.some(
+      (key) =>
+        !["branch", "workspaceId", "attachments", "resolved"].includes(key) ||
+        patch[key] === undefined,
+    )
+  ) return false;
+  if (
+    patch.branch !== undefined &&
+    (typeof patch.branch !== "string" || !patch.branch || patch.branch.length > 512)
+  ) return false;
+  if (
+    patch.workspaceId !== undefined &&
+    (typeof patch.workspaceId !== "string" ||
+      !patch.workspaceId ||
+      patch.workspaceId.length > 256)
+  ) return false;
+  if (patch.attachments !== undefined) {
+    if (!Array.isArray(patch.attachments) || patch.attachments.length > 32)
+      return false;
+    for (const item of patch.attachments) {
+      if (!item || typeof item !== "object" || Array.isArray(item)) return false;
+      const attachment = item as Record<string, unknown>;
+      if (
+        typeof attachment.attachmentId !== "string" ||
+        !/^[A-Za-z0-9_-]{8,128}$/.test(attachment.attachmentId) ||
+        typeof attachment.name !== "string" ||
+        !attachment.name ||
+        attachment.name.length > 1024 ||
+        typeof attachment.sourceRef !== "string" ||
+        !attachment.sourceRef.startsWith("uploads:") ||
+        attachment.sourceRef.length > 8192 ||
+        typeof attachment.digest !== "string" ||
+        !/^sha256:[a-f0-9]{64}$/.test(attachment.digest)
+      ) return false;
+    }
+  }
+  if (patch.resolved !== undefined) {
+    if (
+      !patch.resolved ||
+      typeof patch.resolved !== "object" ||
+      Array.isArray(patch.resolved)
+    ) return false;
+    const resolved = patch.resolved as Record<string, unknown>;
+    if (["gitEnv", "images", "materializeWorktree"].some((key) => key in resolved))
+      return false;
+  }
+  return true;
+}
 
 export function sessionKernelDbPath(): string {
 	// Test processes must never open the live instance state. Tests that need
@@ -197,6 +289,8 @@ export type CreationEventDecision = {
   /** Stable effect emitted by this reduction, when it advances physical work. */
   nextEffectId?: string;
   effect?: StagedCreationActorEffect;
+  /** Write-once setup decisions retained until opening launch is committed. */
+  planPatch?: Record<string, unknown>;
   /** Serializable, non-secret opening input committed with its launch effect. */
   openingPlan?: Record<string, unknown>;
   detail?: Record<string, unknown>;
@@ -208,6 +302,7 @@ export type DurableCreationState = {
   generation: number;
   currentEffectId?: string;
   completedEffectIds: string[];
+  setupPlan?: Record<string, unknown>;
   openingPlan?: Record<string, unknown>;
   changeSeq: number;
   updatedAt: number;
@@ -222,6 +317,8 @@ export type CreationEventDecisionResult = {
     | "identity_mismatch"
     | "stale_effect"
     | "invalid_effect"
+    | "invalid_setup_plan"
+    | "setup_plan_conflict"
     | "invalid_opening_plan"
     | "effect_receipt_capacity";
   state?: DurableCreationState;
@@ -306,6 +403,7 @@ export class SessionKernelStore {
 				generation INTEGER NOT NULL DEFAULT 0,
 				current_effect_id TEXT,
 				completed_effects TEXT NOT NULL DEFAULT '[]',
+				setup_plan TEXT,
 				opening_plan TEXT,
 				change_seq INTEGER NOT NULL DEFAULT 0,
 				updated_at INTEGER NOT NULL
@@ -321,10 +419,27 @@ export class SessionKernelStore {
 				revision INTEGER NOT NULL DEFAULT 0,
 				queued TEXT NOT NULL DEFAULT '[]',
 				dispatch TEXT,
+				interrupt TEXT,
 				steered TEXT NOT NULL DEFAULT '[]',
 				pending_steers TEXT NOT NULL DEFAULT '[]',
 				updated_at INTEGER NOT NULL
 			);
+      CREATE TABLE IF NOT EXISTS session_kernel_turn (
+        session_id TEXT PRIMARY KEY,
+        revision INTEGER NOT NULL DEFAULT 0,
+        cancel TEXT,
+        updated_at INTEGER NOT NULL
+      );
+      CREATE TABLE IF NOT EXISTS session_kernel_turn_projections (
+        session_id TEXT NOT NULL,
+        projection_id TEXT NOT NULL,
+        generation INTEGER NOT NULL,
+        phase TEXT NOT NULL,
+        payload TEXT NOT NULL,
+        updated_at INTEGER NOT NULL,
+        PRIMARY KEY (session_id, projection_id),
+        UNIQUE (session_id, generation)
+      );
 			CREATE TABLE IF NOT EXISTS session_kernel_commands (
 				session_id TEXT NOT NULL,
 				request_id TEXT NOT NULL,
@@ -383,6 +498,15 @@ export class SessionKernelStore {
 			CREATE INDEX IF NOT EXISTS idx_sko_session
 				ON session_kernel_outbox(session_id, id);
 		`);
+    const deliveryColumns = new Set(
+      (
+        this.db
+          .query("PRAGMA table_info(session_kernel_delivery)")
+          .all() as Array<{ name: string }>
+      ).map((column) => column.name),
+    );
+    if (!deliveryColumns.has("interrupt"))
+      this.db.exec("ALTER TABLE session_kernel_delivery ADD COLUMN interrupt TEXT");
     const creationColumns = new Set(
       (
         this.db
@@ -397,6 +521,10 @@ export class SessionKernelStore {
     if (!creationColumns.has("opening_plan"))
       this.db.exec(
         "ALTER TABLE session_kernel_creation ADD COLUMN opening_plan TEXT",
+      );
+    if (!creationColumns.has("setup_plan"))
+      this.db.exec(
+        "ALTER TABLE session_kernel_creation ADD COLUMN setup_plan TEXT",
       );
 		const commandColumns = new Set(
 			(
@@ -629,7 +757,6 @@ export class SessionKernelStore {
       )
 			.all() as Record<string, unknown>[];
 		for (const row of stateRows) {
-			this.dirtyChangeSessions.add(String(row.session_id));
 			this.runStateCache.set(String(row.session_id), {
 				state: String(row.run_state),
 				since: String(row.run_since),
@@ -640,6 +767,18 @@ export class SessionKernelStore {
 				changeSeq: Number(row.change_seq),
 			});
 		}
+		// A restart used to mark every known session dirty. The first runtime
+		// maintenance pass then issued up to 100 FULL-synchronous DELETEs, which
+		// could monopolize the actor for minutes on a large journal. Rebuild only
+		// the actual over-retention candidates; new writes still mark themselves.
+		const compactableChangeRows = this.db
+			.query(
+				`SELECT session_id FROM session_kernel_changes
+				 GROUP BY session_id HAVING COUNT(*) > ?`,
+			)
+			.all(CHANGE_HISTORY_PER_SESSION) as Array<{ session_id: string }>;
+		for (const row of compactableChangeRows)
+			this.dirtyChangeSessions.add(row.session_id);
 	}
 
 	private claimWriter(): void {
@@ -772,7 +911,9 @@ export class SessionKernelStore {
 
 	markProcessing(sessionId: string, requestId: string): void {
 		this.db.run(
-			`UPDATE session_kernel_commands SET status = 'processing', payload = 'null', error = NULL, retryable = NULL,
+			`UPDATE session_kernel_commands SET status = 'processing',
+       payload = CASE WHEN type IN ('cancel_session', 'websocket_command') THEN payload ELSE 'null' END,
+       error = NULL, retryable = NULL,
 				updated_at = ? WHERE session_id = ? AND request_id = ?`,
 			[Date.now(), sessionId, requestId],
 		);
@@ -781,7 +922,8 @@ export class SessionKernelStore {
 	completeCommand(sessionId: string, requestId: string, result: unknown): void {
 		const stored = resultRecord(result);
 		this.db.run(
-			`UPDATE session_kernel_commands SET status = 'completed', payload = 'null',
+			`UPDATE session_kernel_commands SET status = 'completed',
+       payload = CASE WHEN type IN ('cancel_session', 'websocket_command') THEN payload ELSE 'null' END,
 				result = ?, result_hash = ?, result_released = 0, terminal_failure = ?, error = NULL,
 				retryable = NULL, updated_at = ? WHERE session_id = ? AND request_id = ?`,
       [
@@ -802,7 +944,9 @@ export class SessionKernelStore {
 		retryable = false,
 	): void {
 		this.db.run(
-			`UPDATE session_kernel_commands SET status = 'failed', payload = 'null', error = ?, retryable = ?,
+			`UPDATE session_kernel_commands SET status = 'failed',
+       payload = CASE WHEN type IN ('cancel_session', 'websocket_command') THEN payload ELSE 'null' END,
+       error = ?, retryable = ?,
 				updated_at = ? WHERE session_id = ? AND request_id = ?`,
       [
         error.slice(0, 2_000),
@@ -904,7 +1048,7 @@ export class SessionKernelStore {
     const row = this.db
       .query(
         `SELECT identity, state, generation, current_effect_id, completed_effects,
-                opening_plan, change_seq, updated_at
+                setup_plan, opening_plan, change_seq, updated_at
          FROM session_kernel_creation WHERE session_id = ?`,
       )
       .get(sessionId) as Record<string, unknown> | null;
@@ -920,6 +1064,7 @@ export class SessionKernelStore {
       completedEffectIds: [
         ...(parsed<string[]>(row.completed_effects as string) ?? []),
       ],
+      setupPlan: parsed<Record<string, unknown>>(row.setup_plan as string),
       openingPlan: parsed<Record<string, unknown>>(row.opening_plan as string),
       changeSeq: Number(row.change_seq),
       updatedAt: Number(row.updated_at),
@@ -952,6 +1097,7 @@ export class SessionKernelStore {
           "opening_dispatched",
           "succeeded",
           "failed",
+          "cancelled",
         ].includes(input.event);
       if (
         (requiresEffectResult || input.effectId !== undefined) &&
@@ -1027,6 +1173,55 @@ export class SessionKernelStore {
         };
         return;
       }
+      let setupPlan = prior?.setupPlan;
+      if (input.planPatch !== undefined) {
+        const invalidPatch =
+          input.event !== "plan" ||
+          !input.planPatch ||
+          Array.isArray(input.planPatch) ||
+          !validCreationSetupPatch(input.planPatch);
+        if (invalidPatch) {
+          result = {
+            accepted: false,
+            from,
+            to: from,
+            reason: "invalid_setup_plan",
+            state: prior,
+          };
+          return;
+        }
+        const nextSetupPlan = { ...(setupPlan ?? {}) };
+        for (const [key, value] of Object.entries(input.planPatch)) {
+          if (
+            Object.hasOwn(nextSetupPlan, key) &&
+            json(nextSetupPlan[key]) !== json(value)
+          ) {
+            result = {
+              accepted: false,
+              from,
+              to: from,
+              reason: "setup_plan_conflict",
+              state: prior,
+            };
+            return;
+          }
+          nextSetupPlan[key] = value;
+        }
+        if (
+          Buffer.byteLength(json(nextSetupPlan)) >
+          SESSION_KERNEL_MAX_OPENING_PLAN_BYTES
+        ) {
+          result = {
+            accepted: false,
+            from,
+            to: from,
+            reason: "invalid_setup_plan",
+            state: prior,
+          };
+          return;
+        }
+        setupPlan = nextSetupPlan;
+      }
       const openingPlanText =
         input.openingPlan === undefined ? undefined : json(input.openingPlan);
       const invalidOpeningPlan =
@@ -1045,23 +1240,26 @@ export class SessionKernelStore {
         };
         return;
       }
-      const openingPlan = ["ready", "failed"].includes(to)
+      if (["opening_dispatched", "ready", "failed", "cancelled"].includes(to))
+        setupPlan = undefined;
+      const openingPlan = ["ready", "failed", "cancelled"].includes(to)
         ? undefined
         : input.openingPlan ?? prior?.openingPlan;
-      const currentEffectId = ["ready", "failed"].includes(to)
+      const currentEffectId = ["ready", "failed", "cancelled"].includes(to)
         ? undefined
         : effect?.effectKey ??
           (input.effectId === undefined ? prior?.currentEffectId : undefined);
       this.db.run(
         `INSERT INTO session_kernel_creation
           (session_id, identity, state, generation, current_effect_id,
-           completed_effects, opening_plan, change_seq, updated_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+           completed_effects, setup_plan, opening_plan, change_seq, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
          ON CONFLICT(session_id) DO UPDATE SET
           state = excluded.state,
           generation = excluded.generation,
           current_effect_id = excluded.current_effect_id,
           completed_effects = excluded.completed_effects,
+          setup_plan = excluded.setup_plan,
           opening_plan = excluded.opening_plan,
           change_seq = excluded.change_seq,
           updated_at = excluded.updated_at`,
@@ -1072,6 +1270,7 @@ export class SessionKernelStore {
           generation,
           currentEffectId ?? null,
           json(completedEffectIds),
+          setupPlan === undefined ? null : json(setupPlan),
           openingPlan === undefined ? null : json(openingPlan),
           changeSeq,
           now,
@@ -1129,6 +1328,7 @@ export class SessionKernelStore {
         generation,
         currentEffectId,
         completedEffectIds,
+        setupPlan,
         openingPlan,
         changeSeq,
         updatedAt: now,
@@ -1154,6 +1354,24 @@ export class SessionKernelStore {
 		const tx = this.db.transaction(() => {
 			const prior = this.runState(input.sessionId);
 			const from = prior.state as RunState;
+      if (
+        input.runKey &&
+        ["turn_end", "run_failed", "start_failed", "start_aborted"].includes(
+          input.event,
+        ) &&
+        prior.currentRunId !== input.runKey
+      ) {
+        result = {
+          accepted: false,
+          from,
+          to: from,
+          reason: "stale_run",
+          currentRunId: prior.currentRunId,
+          rejectedRunId: input.runKey,
+          state: prior,
+        };
+        return;
+      }
 			const to = nextRunState(from, input.event);
 			if (!to) {
         result = {
@@ -1165,12 +1383,38 @@ export class SessionKernelStore {
         };
 				return;
 			}
+      const canceledDispatch = this.turnSnapshot(input.sessionId).cancel;
+      if (
+        (input.event === "run_registered" ||
+          input.event === "boot_journal_found") &&
+        input.runKey &&
+        canceledDispatch?.runId === input.runKey &&
+        canceledDispatch.runGeneration === prior.generation
+      ) {
+        result = {
+          accepted: false,
+          from,
+          to: from,
+          reason: "stale_run",
+          currentRunId: prior.currentRunId,
+          rejectedRunId: input.runKey,
+          state: prior,
+        };
+        return;
+      }
 			if (
-				input.event === "run_registered" &&
+        (input.event === "prompt" || input.event === "run_registered") &&
 				input.runKey &&
 				prior.currentRunId &&
 				prior.currentRunId !== input.runKey &&
-				["running", "ask_blocked", "interrupted", "reattaching"].includes(from)
+        [
+          "preparing",
+          "starting",
+          "running",
+          "ask_blocked",
+          "interrupted",
+          "reattaching",
+        ].includes(from)
 			) {
 				result = {
 					accepted: false,
@@ -1183,17 +1427,18 @@ export class SessionKernelStore {
 				};
 				return;
 			}
-			const registers =
-				!!input.runKey &&
-        (input.event === "run_registered" ||
+      const claimsRun =
+        !!input.runKey &&
+        (input.event === "prompt" ||
+          input.event === "run_registered" ||
           input.event === "boot_journal_found");
       const generation =
-        registers && prior.currentRunId !== input.runKey
-				? prior.generation + 1
-				: prior.generation;
+        claimsRun && prior.currentRunId !== input.runKey
+          ? prior.generation + 1
+          : prior.generation;
 			const currentRunId = ["idle", "stopped", "failed"].includes(to)
 				? undefined
-        : registers
+        : claimsRun
           ? input.runKey
           : prior.currentRunId;
 			const changeSeq = prior.changeSeq + 1;
@@ -1339,6 +1584,8 @@ export class SessionKernelStore {
         "session_kernel_creation",
         "session_kernel_asks",
         "session_kernel_delivery",
+        "session_kernel_turn",
+        "session_kernel_turn_projections",
 				"session_kernel_commands",
 				"session_kernel_changes",
 				"session_kernel_timers",
@@ -1363,6 +1610,8 @@ export class SessionKernelStore {
         "session_kernel_creation",
         "session_kernel_asks",
         "session_kernel_delivery",
+        "session_kernel_turn",
+        "session_kernel_turn_projections",
 				"session_kernel_commands",
 				"session_kernel_changes",
 				"session_kernel_timers",
@@ -1504,7 +1753,7 @@ export class SessionKernelStore {
   private deliveryRow(sessionId: string): DurableDeliveryState {
     const row = this.db
       .query(
-        "SELECT revision, queued, dispatch, steered, pending_steers, updated_at FROM session_kernel_delivery WHERE session_id = ?",
+        "SELECT revision, queued, dispatch, interrupt, steered, pending_steers, updated_at FROM session_kernel_delivery WHERE session_id = ?",
       )
       .get(sessionId) as Record<string, unknown> | null;
     if (!row)
@@ -1519,6 +1768,7 @@ export class SessionKernelStore {
       revision: Number(row.revision),
       queued: parsed<unknown[]>(String(row.queued)) ?? [],
       dispatch: parsed(row.dispatch as string | null),
+      interrupt: parsed(row.interrupt as string | null),
       steered: parsed<unknown[]>(String(row.steered)) ?? [],
       pendingSteers:
         parsed<Array<{ item: unknown; index: number; preparedAt: number }>>(
@@ -1548,6 +1798,33 @@ export class SessionKernelStore {
     return rows.map((row) => [row.session_id, parsed(row.value)]);
   }
 
+  private writeDeliveryRow(
+    sessionId: string,
+    state: DurableDeliveryState,
+  ): void {
+    this.db.run(
+      `INSERT INTO session_kernel_delivery
+       (session_id, revision, queued, dispatch, interrupt, steered, pending_steers, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+       ON CONFLICT(session_id) DO UPDATE SET
+       revision = excluded.revision, queued = excluded.queued,
+       dispatch = excluded.dispatch, interrupt = excluded.interrupt,
+       steered = excluded.steered,
+       pending_steers = excluded.pending_steers,
+       updated_at = excluded.updated_at`,
+      [
+        sessionId,
+        state.revision,
+        json(state.queued),
+        state.dispatch === undefined ? null : json(state.dispatch),
+        state.interrupt === undefined ? null : json(state.interrupt),
+        json(state.steered),
+        json(state.pendingSteers),
+        state.updatedAt,
+      ],
+    );
+  }
+
   private mutateDelivery(
     sessionId: string,
     kind: string,
@@ -1575,11 +1852,12 @@ export class SessionKernelStore {
       };
       this.db.run(
         `INSERT INTO session_kernel_delivery
-				 (session_id, revision, queued, dispatch, steered, pending_steers, updated_at)
-				 VALUES (?, ?, ?, ?, ?, ?, ?)
+				 (session_id, revision, queued, dispatch, interrupt, steered, pending_steers, updated_at)
+				 VALUES (?, ?, ?, ?, ?, ?, ?, ?)
 				 ON CONFLICT(session_id) DO UPDATE SET
 				 revision = excluded.revision, queued = excluded.queued,
-				 dispatch = excluded.dispatch, steered = excluded.steered,
+				 dispatch = excluded.dispatch, interrupt = excluded.interrupt,
+					 steered = excluded.steered,
 				 pending_steers = excluded.pending_steers,
 				 updated_at = excluded.updated_at`,
         [
@@ -1587,6 +1865,7 @@ export class SessionKernelStore {
           state.revision,
           json(state.queued),
           state.dispatch === undefined ? null : json(state.dispatch),
+          state.interrupt === undefined ? null : json(state.interrupt),
           json(state.steered),
           json(state.pendingSteers),
           now,
@@ -1761,6 +2040,727 @@ export class SessionKernelStore {
     return count;
   }
 
+  turnSnapshot(sessionId: string): DurableTurnState {
+    const row = this.db
+      .query(
+        "SELECT revision, cancel, updated_at FROM session_kernel_turn WHERE session_id = ?",
+      )
+      .get(sessionId) as
+      | { revision: number; cancel: string | null; updated_at: number }
+      | null;
+    return row
+      ? {
+          revision: Number(row.revision),
+          cancel: parsed(row.cancel),
+          updatedAt: Number(row.updated_at),
+        }
+      : { revision: 0, updatedAt: 0 };
+  }
+
+  prepareTurnCancel(input: {
+    sessionId: string;
+    cancelId: string;
+    expectedRunId: string;
+    expectedGeneration: number;
+    dispatchId: string;
+    requeueIds: string[];
+    source: string;
+    user?: string;
+  }): {
+    cancel: NonNullable<DurableTurnState["cancel"]>;
+    runState: DurableRunState;
+  } {
+    if (
+      !input.cancelId ||
+      input.cancelId.length > 256 ||
+      !input.expectedRunId ||
+      input.expectedRunId.length > 256 ||
+      !Number.isSafeInteger(input.expectedGeneration) ||
+      input.expectedGeneration < 0 ||
+      !input.dispatchId ||
+      input.dispatchId.length > 256 ||
+      input.dispatchId !== input.expectedRunId ||
+      input.requeueIds.length > 256 ||
+      input.requeueIds.some((id) => !id || id.length > 256) ||
+      !input.source ||
+      input.source.length > 100 ||
+      (input.user !== undefined &&
+        (!input.user || input.user.length > 200))
+    ) throw new Error("Invalid turn cancel intent");
+    if (this.isTombstoned(input.sessionId))
+      throw new Error(`Session ${input.sessionId} was deleted`);
+    let result!: NonNullable<DurableTurnState["cancel"]>;
+    let nextRun!: DurableRunState;
+    const now = Date.now();
+    const tx = this.db.transaction(() => {
+      const priorTurn = this.turnSnapshot(input.sessionId);
+      if (priorTurn.cancel?.cancelId === input.cancelId) {
+        if (
+          priorTurn.cancel.runId !== input.expectedRunId ||
+          priorTurn.cancel.runGeneration !== input.expectedGeneration ||
+          json(priorTurn.cancel.requeueIds) !== json(input.requeueIds) ||
+          priorTurn.cancel.source !== input.source ||
+          priorTurn.cancel.user !== input.user
+        ) throw new Error("Turn cancel identity was reused with another payload");
+        result = priorTurn.cancel;
+        nextRun = this.runState(input.sessionId);
+        return;
+      }
+      const priorRun = this.runState(input.sessionId);
+      const ownsTarget =
+        priorRun.currentRunId === input.expectedRunId ||
+        (!priorRun.currentRunId &&
+          (priorRun.state === "starting" || priorRun.state === "preparing") &&
+          input.dispatchId === input.expectedRunId);
+      if (!ownsTarget || priorRun.generation !== input.expectedGeneration)
+        throw new Error("The run targeted by this cancel has already changed");
+      const reducedState = nextRunState(priorRun.state as RunState, "cancel");
+      if (!reducedState)
+        throw new Error(`Cannot cancel a run while ${priorRun.state}`);
+      // Explicit Stop parks accepted delivery even when physical setup has not
+      // reached journal registration yet. The generic preparing→cancel reducer
+      // returns idle for non-turn workspace preparation; this operation is the
+      // stronger user intent and remains stopped until their next prompt.
+      const targetState = priorRun.state === "preparing" ? "stopped" : reducedState;
+
+      const priorDelivery = this.deliveryRow(input.sessionId);
+      const steered = priorDelivery.steered as QueueItem[];
+      const requeueIds = new Set(input.requeueIds);
+      const requeued = steered.filter(
+        (item) => typeof item.id === "string" && requeueIds.has(item.id),
+      );
+      if (requeued.length !== requeueIds.size)
+        throw new Error("A cancel requeue receipt is no longer actor-owned");
+      const duplicateIds = new Set(requeued.map((item) => item.id));
+      const delivery: DurableDeliveryState = {
+        ...priorDelivery,
+        revision: priorDelivery.revision + 1,
+        queued: [
+          ...requeued,
+          ...(priorDelivery.queued as QueueItem[]).filter(
+            (item) => !duplicateIds.has(item.id),
+          ),
+        ],
+        steered: [],
+        pendingSteers: [...priorDelivery.pendingSteers],
+        updatedAt: now,
+      };
+      this.writeDeliveryRow(input.sessionId, delivery);
+
+      result = {
+        cancelId: input.cancelId,
+        phase: "prepared",
+        runId: input.expectedRunId,
+        runGeneration: input.expectedGeneration,
+        requeueIds: [...input.requeueIds],
+        source: input.source,
+        ...(input.user ? { user: input.user } : {}),
+      };
+      this.db.run(
+        `INSERT INTO session_kernel_turn (session_id, revision, cancel, updated_at)
+         VALUES (?, ?, ?, ?)
+         ON CONFLICT(session_id) DO UPDATE SET
+         revision = excluded.revision, cancel = excluded.cancel,
+         updated_at = excluded.updated_at`,
+        [input.sessionId, priorTurn.revision + 1, json(result), now],
+      );
+      const changeSeq = priorRun.changeSeq + 1;
+      const since = new Date(now).toISOString();
+      this.db.run(
+        `UPDATE session_kernel_state SET run_state = ?, run_since = ?,
+         last_event = 'cancel', current_run_id = NULL, change_seq = ?, updated_at = ?
+         WHERE session_id = ?`,
+        [targetState, since, changeSeq, now, input.sessionId],
+      );
+      this.db.run(
+        `INSERT INTO session_kernel_changes
+         (session_id, change_seq, kind, payload, created_at)
+         VALUES (?, ?, 'turn_cancel_prepared', ?, ?)`,
+        [
+          input.sessionId,
+          changeSeq,
+          json({
+            cancelId: input.cancelId,
+            runId: input.expectedRunId,
+            runGeneration: input.expectedGeneration,
+            deliveryRevision: delivery.revision,
+            source: input.source,
+            ...(input.user ? { user: input.user } : {}),
+          }),
+          now,
+        ],
+      );
+      this.enqueueOutbox(
+        input.sessionId,
+        "turn_cancel",
+        {
+          cancelId: input.cancelId,
+          dispatchId: input.dispatchId,
+          runGeneration: input.expectedGeneration,
+        },
+        input.cancelId,
+      );
+      nextRun = {
+        ...priorRun,
+        state: targetState,
+        since,
+        lastEvent: "cancel",
+        currentRunId: undefined,
+        changeSeq,
+      };
+    });
+    tx.immediate();
+    this.runStateCache.set(input.sessionId, nextRun);
+    this.dirtyChangeSessions.add(input.sessionId);
+    return { cancel: result, runState: nextRun };
+  }
+
+  beginTurnCancelEffect(input: {
+    sessionId: string;
+    cancelId: string;
+    runGeneration: number;
+  }): "execute" | "retry" | "adopt_confirmed" | "settled" | "missing" {
+    const prior = this.turnSnapshot(input.sessionId).cancel;
+    if (!prior || prior.cancelId !== input.cancelId) return "missing";
+    if (prior.phase === "settled") return "settled";
+    if (
+      prior.runGeneration !== input.runGeneration ||
+      this.runState(input.sessionId).generation !== input.runGeneration
+    ) return "adopt_confirmed";
+    if (prior.phase === "executing") return "retry";
+    this.updateTurnCancel(input.sessionId, { ...prior, phase: "executing" });
+    return "execute";
+  }
+
+  settleTurnCancel(input: {
+    sessionId: string;
+    cancelId: string;
+    outcome: "confirmed" | "not_aborted";
+  }): boolean {
+    const prior = this.turnSnapshot(input.sessionId).cancel;
+    if (!prior || prior.cancelId !== input.cancelId) return false;
+    if (prior.phase === "settled") return true;
+    this.updateTurnCancel(input.sessionId, {
+      ...prior,
+      phase: "settled",
+      outcome: input.outcome,
+    });
+    return true;
+  }
+
+  private turnOutcomeProjection(
+    sessionId: string,
+    projectionId: string,
+  ): DurableTurnOutcomeProjection | undefined {
+    const row = this.db
+      .query(
+        `SELECT phase, payload FROM session_kernel_turn_projections
+         WHERE session_id = ? AND projection_id = ?`,
+      )
+      .get(sessionId, projectionId) as
+      | { phase: "pending" | "completed" | "superseded"; payload: string }
+      | null;
+    if (!row) return undefined;
+    return {
+      ...(parsed(row.payload) as Omit<DurableTurnOutcomeProjection, "phase">),
+      phase: row.phase,
+    };
+  }
+
+  prepareTurnOutcomeProjection(input: {
+    sessionId: string;
+    projectionId: string;
+    runId: string;
+    runGeneration: number;
+    errorMessage: string | null;
+    engineSessionId?: string;
+    noticePersisted: boolean;
+    noticeLabel?: string;
+    projectedAt: string;
+  }): DurableTurnOutcomeProjection | "stale" {
+    if (
+      !input.projectionId ||
+      input.projectionId.length > 256 ||
+      !input.runId ||
+      input.runId.length > 256 ||
+      !Number.isSafeInteger(input.runGeneration) ||
+      input.runGeneration < 1 ||
+      (input.errorMessage !== null && input.errorMessage.length > 500) ||
+      (input.engineSessionId !== undefined &&
+        (!input.engineSessionId || input.engineSessionId.length > 256)) ||
+      typeof input.noticePersisted !== "boolean" ||
+      (input.noticeLabel !== undefined &&
+        (!input.noticeLabel || input.noticeLabel.length > 100)) ||
+      !input.projectedAt ||
+      input.projectedAt.length > 64 ||
+      !Number.isFinite(Date.parse(input.projectedAt))
+    ) throw new Error("Invalid turn outcome projection");
+    if (this.isTombstoned(input.sessionId))
+      throw new Error(`Session ${input.sessionId} was deleted`);
+    const payload: Omit<DurableTurnOutcomeProjection, "phase"> = {
+      projectionId: input.projectionId,
+      runId: input.runId,
+      runGeneration: input.runGeneration,
+      errorMessage: input.errorMessage,
+      ...(input.engineSessionId ? { engineSessionId: input.engineSessionId } : {}),
+      noticePersisted: input.noticePersisted,
+      ...(input.noticeLabel ? { noticeLabel: input.noticeLabel } : {}),
+      projectedAt: input.projectedAt,
+    };
+    const existing = this.turnOutcomeProjection(
+      input.sessionId,
+      input.projectionId,
+    );
+    if (existing) {
+      const { phase: _phase, ...existingPayload } = existing;
+      if (JSON.stringify(existingPayload) !== JSON.stringify(payload))
+        throw new Error("Turn outcome projection identity was reused with another payload");
+      return existing;
+    }
+    const priorRun = this.runState(input.sessionId);
+    const cancel = this.turnSnapshot(input.sessionId).cancel;
+    if (
+      priorRun.generation !== input.runGeneration ||
+      (priorRun.currentRunId !== undefined && priorRun.currentRunId !== input.runId) ||
+      (cancel?.runId === input.runId &&
+        cancel.runGeneration === input.runGeneration &&
+        cancel.phase === "settled" &&
+        cancel.outcome === "confirmed")
+    ) return "stale";
+    const generationOwner = this.db
+      .query(
+        `SELECT projection_id FROM session_kernel_turn_projections
+         WHERE session_id = ? AND generation = ? LIMIT 1`,
+      )
+      .get(input.sessionId, input.runGeneration) as
+      | { projection_id: string }
+      | null;
+    if (generationOwner)
+      throw new Error("Turn outcome projection generation is already owned");
+
+    const now = Date.now();
+    const changeSeq = priorRun.changeSeq + 1;
+    const tx = this.db.transaction(() => {
+      this.db.run(
+        `INSERT INTO session_kernel_turn_projections
+         (session_id, projection_id, generation, phase, payload, updated_at)
+         VALUES (?, ?, ?, 'pending', ?, ?)`,
+        [
+          input.sessionId,
+          input.projectionId,
+          input.runGeneration,
+          json(payload),
+          now,
+        ],
+      );
+      this.db.run(
+        `UPDATE session_kernel_state SET change_seq = ?, updated_at = ?
+         WHERE session_id = ?`,
+        [changeSeq, now, input.sessionId],
+      );
+      this.db.run(
+        `INSERT INTO session_kernel_changes
+         (session_id, change_seq, kind, payload, created_at)
+         VALUES (?, ?, 'turn_outcome_projection_prepared', ?, ?)`,
+        [input.sessionId, changeSeq, json(payload), now],
+      );
+      this.enqueueOutbox(
+        input.sessionId,
+        "turn_outcome_project",
+        payload,
+        input.projectionId,
+      );
+    });
+    tx.immediate();
+    this.runStateCache.set(input.sessionId, { ...priorRun, changeSeq });
+    this.dirtyChangeSessions.add(input.sessionId);
+    return { ...payload, phase: "pending" };
+  }
+
+  beginTurnOutcomeProjection(input: {
+    sessionId: string;
+    projectionId: string;
+    runGeneration: number;
+  }): "execute" | "wait" | "completed" | "missing" {
+    if (this.isTombstoned(input.sessionId)) return "missing";
+    const projection = this.turnOutcomeProjection(
+      input.sessionId,
+      input.projectionId,
+    );
+    if (!projection || projection.runGeneration !== input.runGeneration)
+      return "missing";
+    if (projection.phase === "completed") return "completed";
+    if (projection.phase === "superseded") return "missing";
+    const higherCompleted = this.db
+      .query(
+        `SELECT 1 FROM session_kernel_turn_projections
+         WHERE session_id = ? AND generation > ? AND phase = 'completed'
+         LIMIT 1`,
+      )
+      .get(input.sessionId, input.runGeneration);
+    if (higherCompleted) {
+      this.db.run(
+        `UPDATE session_kernel_turn_projections
+         SET phase = 'superseded', updated_at = ?
+         WHERE session_id = ? AND projection_id = ? AND phase = 'pending'`,
+        [Date.now(), input.sessionId, input.projectionId],
+      );
+      return "missing";
+    }
+    this.db.run(
+      `UPDATE session_kernel_turn_projections AS p
+       SET phase = 'superseded', updated_at = ?
+       WHERE p.session_id = ? AND p.generation < ? AND p.phase = 'pending'
+         AND NOT EXISTS (
+           SELECT 1 FROM session_kernel_outbox o
+           WHERE o.session_id = p.session_id
+             AND o.kind = 'turn_outcome_project'
+             AND o.effect_key = p.projection_id
+             AND o.dead_lettered_at IS NULL
+         )`,
+      [Date.now(), input.sessionId, input.runGeneration],
+    );
+    const predecessor = this.db
+      .query(
+        `SELECT 1 FROM session_kernel_turn_projections p
+         JOIN session_kernel_outbox o
+           ON o.session_id = p.session_id
+          AND o.kind = 'turn_outcome_project'
+          AND o.effect_key = p.projection_id
+         WHERE p.session_id = ? AND p.phase = 'pending'
+           AND p.generation < ? AND o.dead_lettered_at IS NULL
+         LIMIT 1`,
+      )
+      .get(input.sessionId, input.runGeneration);
+    return predecessor ? "wait" : "execute";
+  }
+
+  settleTurnOutcomeProjection(input: {
+    sessionId: string;
+    projectionId: string;
+    runGeneration: number;
+  }): boolean {
+    const projection = this.turnOutcomeProjection(
+      input.sessionId,
+      input.projectionId,
+    );
+    if (!projection || projection.runGeneration !== input.runGeneration)
+      return false;
+    if (projection.phase === "completed") return true;
+    if (projection.phase === "superseded") return false;
+    const priorRun = this.runState(input.sessionId);
+    const now = Date.now();
+    const changeSeq = priorRun.changeSeq + 1;
+    const tx = this.db.transaction(() => {
+      this.db.run(
+        `UPDATE session_kernel_turn_projections
+         SET phase = 'completed', updated_at = ?
+         WHERE session_id = ? AND projection_id = ? AND generation = ?`,
+        [
+          now,
+          input.sessionId,
+          input.projectionId,
+          input.runGeneration,
+        ],
+      );
+      this.db.run(
+        `UPDATE session_kernel_state SET change_seq = ?, updated_at = ?
+         WHERE session_id = ?`,
+        [changeSeq, now, input.sessionId],
+      );
+      this.db.run(
+        `INSERT INTO session_kernel_changes
+         (session_id, change_seq, kind, payload, created_at)
+         VALUES (?, ?, 'turn_outcome_projection_completed', ?, ?)`,
+        [input.sessionId, changeSeq, json(projection), now],
+      );
+    });
+    tx.immediate();
+    this.runStateCache.set(input.sessionId, { ...priorRun, changeSeq });
+    this.dirtyChangeSessions.add(input.sessionId);
+    return true;
+  }
+
+  private updateTurnCancel(
+    sessionId: string,
+    cancel: NonNullable<DurableTurnState["cancel"]>,
+  ): void {
+    const now = Date.now();
+    let nextRunStateCache!: DurableRunState;
+    const tx = this.db.transaction(() => {
+      const priorTurn = this.turnSnapshot(sessionId);
+      const priorRun = this.runState(sessionId);
+      const changeSeq = priorRun.changeSeq + 1;
+      this.db.run(
+        `INSERT INTO session_kernel_turn (session_id, revision, cancel, updated_at)
+         VALUES (?, ?, ?, ?)
+         ON CONFLICT(session_id) DO UPDATE SET
+         revision = excluded.revision, cancel = excluded.cancel,
+         updated_at = excluded.updated_at`,
+        [sessionId, priorTurn.revision + 1, json(cancel), now],
+      );
+      this.db.run(
+        `UPDATE session_kernel_state SET change_seq = ?, updated_at = ?
+         WHERE session_id = ?`,
+        [changeSeq, now, sessionId],
+      );
+      this.db.run(
+        `INSERT INTO session_kernel_changes
+         (session_id, change_seq, kind, payload, created_at)
+         VALUES (?, ?, 'turn_cancel_updated', ?, ?)`,
+        [sessionId, changeSeq, json(cancel), now],
+      );
+      nextRunStateCache = { ...priorRun, changeSeq };
+    });
+    tx.immediate();
+    this.runStateCache.set(sessionId, nextRunStateCache);
+    this.dirtyChangeSessions.add(sessionId);
+  }
+
+  prepareDeliveryInterrupt(input: {
+    sessionId: string;
+    interruptId: string;
+    anchorId: string;
+    dispatchId: string;
+    soloId?: string;
+  }): {
+    interruptId: string;
+    phase: "prepared" | "executing" | "confirmed";
+    runGeneration: number;
+    anchorId: string;
+    soloId?: string;
+  } {
+    if (
+      !input.interruptId ||
+      input.interruptId.length > 256 ||
+      !input.anchorId ||
+      input.anchorId.length > 256 ||
+      !input.dispatchId ||
+      input.dispatchId.length > 256 ||
+      (input.soloId !== undefined &&
+        (!input.soloId || input.soloId.length > 256))
+    ) throw new Error("Invalid prompt interrupt identity");
+    return this.mutateDelivery(
+      input.sessionId,
+      "delivery_interrupt_prepared",
+      (state) => {
+        if (state.dispatch) throw new Error("A prompt dispatch is already active");
+        const queued = state.queued as QueueItem[];
+        const steered = state.steered as QueueItem[];
+        const queuedIndex = queued.findIndex((item) => item.id === input.anchorId);
+        const steeredIndex = steered.findIndex((item) => item.id === input.anchorId);
+        if (queuedIndex < 0 && steeredIndex < 0)
+          throw new Error("Interrupted prompt is no longer delivery-owned");
+        const existing = state.interrupt;
+        if (existing) {
+          if (existing.interruptId === input.interruptId) {
+            if (
+              (existing.dispatchId && existing.dispatchId !== input.dispatchId) ||
+              existing.anchorId !== input.anchorId ||
+              existing.soloId !== input.soloId
+            ) throw new Error("Prompt interrupt identity was reused with another payload");
+            return existing;
+          }
+          throw new Error("A prompt interrupt is already pending");
+        }
+        const runGeneration = this.runState(input.sessionId).generation;
+        const source =
+          queuedIndex < 0 && steeredIndex >= 0
+            ? { slot: "steered" as const, index: steeredIndex }
+            : undefined;
+        if (source) {
+          const [receipt] = steered.splice(steeredIndex, 1);
+          state.queued = [receipt, ...queued];
+          state.steered = steered;
+        }
+        state.interrupt = {
+          interruptId: input.interruptId,
+          phase: "prepared",
+          runGeneration,
+          dispatchId: input.dispatchId,
+          anchorId: input.anchorId,
+          ...(input.soloId ? { soloId: input.soloId } : {}),
+          ...(source ? { source } : {}),
+        };
+        this.enqueueOutbox(
+          input.sessionId,
+          "delivery_interrupt_cancel",
+          {
+            interruptId: input.interruptId,
+            dispatchId: input.dispatchId,
+            runGeneration,
+          },
+          input.interruptId,
+        );
+        return state.interrupt;
+      },
+    ).result as {
+      interruptId: string;
+      phase: "prepared" | "executing" | "confirmed";
+      runGeneration: number;
+      anchorId: string;
+      soloId?: string;
+    };
+  }
+
+  beginDeliveryInterruptEffect(input: {
+    sessionId: string;
+    interruptId: string;
+    runGeneration: number;
+  }): "execute" | "retry" | "adopt_confirmed" | "confirmed" | "settled" {
+    return this.mutateDelivery(
+      input.sessionId,
+      "delivery_interrupt_effect_started",
+      (state) => {
+        const dispatchInterrupt = (
+          state.dispatch as { interrupt?: DurableDeliveryState["interrupt"] } | undefined
+        )?.interrupt;
+        const interrupt = state.interrupt || dispatchInterrupt;
+        if (!interrupt || interrupt.interruptId !== input.interruptId)
+          return "settled" as const;
+        if (interrupt.phase === "confirmed") return "confirmed" as const;
+        if (
+          interrupt.runGeneration !== input.runGeneration ||
+          this.runState(input.sessionId).generation !== input.runGeneration
+        ) return "adopt_confirmed" as const;
+        if (interrupt.phase === "executing") return "retry" as const;
+        state.interrupt = { ...interrupt, phase: "executing" };
+        return "execute" as const;
+      },
+    ).result as
+      | "execute"
+      | "retry"
+      | "adopt_confirmed"
+      | "confirmed"
+      | "settled";
+  }
+
+  settleDeliveryInterrupt(input: {
+    sessionId: string;
+    interruptId: string;
+    outcome: "confirmed" | "not_aborted";
+  }): boolean {
+    return this.mutateDelivery(
+      input.sessionId,
+      "delivery_interrupt_settled",
+      (state) => {
+        const interrupt = state.interrupt;
+        if (!interrupt || interrupt.interruptId !== input.interruptId) return false;
+        if (input.outcome === "not_aborted") {
+          if (interrupt.source?.slot === "steered") {
+            const queued = state.queued as QueueItem[];
+            const index = queued.findIndex((item) => item.id === interrupt.anchorId);
+            if (index >= 0) {
+              const [receipt] = queued.splice(index, 1);
+              const steered = state.steered as QueueItem[];
+              if (!steered.some((item) => item.id === interrupt.anchorId))
+                steered.splice(
+                  Math.min(interrupt.source.index, steered.length),
+                  0,
+                  receipt,
+                );
+              state.queued = queued;
+              state.steered = steered;
+            }
+          }
+          state.interrupt = undefined;
+        } else state.interrupt = { ...interrupt, phase: "confirmed" };
+        return true;
+      },
+    ).result as boolean;
+  }
+
+  claimNextDeliveryDispatch(input: {
+    sessionId: string;
+    promptEntryId: string;
+    stillWorking?: boolean;
+  }):
+    | { kind: "empty"; revision: number }
+    | { kind: "hold"; heldCount: number; revision: number }
+    | {
+        kind: "deliver";
+        promptEntryId: string;
+        items: QueueItem[];
+        interrupted: boolean;
+        revision: number;
+      } {
+    if (!input.promptEntryId || input.promptEntryId.length > 256)
+      throw new Error("Invalid next prompt dispatch identity");
+    const mutation = this.mutateDelivery(
+      input.sessionId,
+      "delivery_next_dispatch_claimed",
+      (state) => {
+        if (state.dispatch) throw new Error("A prompt dispatch is already active");
+        const interrupt = state.interrupt;
+        const queued = state.queued as QueueItem[];
+        if (!queued.length) {
+          state.interrupt = undefined;
+          return { kind: "empty" as const };
+        }
+        const anchorQueued =
+          interrupt !== undefined &&
+          queued.some((item) => item.id === interrupt.anchorId);
+        if (interrupt && !anchorQueued) state.interrupt = undefined;
+        const confirmedInterrupt =
+          anchorQueued && interrupt.phase === "confirmed";
+        const retryDispatchId = queued.find(
+          (item) => item.retryDispatchId,
+        )?.retryDispatchId;
+        const plan = retryDispatchId
+          ? {
+              kind: "deliver" as const,
+              batch: queued.filter(
+                (item) => item.retryDispatchId === retryDispatchId,
+              ),
+              rest: queued.filter(
+                (item) => item.retryDispatchId !== retryDispatchId,
+              ),
+            }
+          : selectQueueBatch(queued, {
+              soloId: confirmedInterrupt ? interrupt.soloId : undefined,
+              interruptMark: confirmedInterrupt,
+              stillWorking: input.stillWorking,
+            });
+        if (plan.kind === "hold") return plan;
+        const batchOwnsInterrupt =
+          anchorQueued &&
+          plan.batch.some((item) => item.id === interrupt.anchorId);
+        if (batchOwnsInterrupt && interrupt.phase !== "confirmed")
+          return { kind: "hold" as const, heldCount: plan.batch.length };
+        const applyInterrupt = confirmedInterrupt && batchOwnsInterrupt;
+        if (applyInterrupt) state.interrupt = undefined;
+        const promptEntryId =
+          retryDispatchId || plan.batch[0]?.promptEntryId || input.promptEntryId;
+        if (!promptEntryId || promptEntryId.length > 256)
+          throw new Error("Invalid claimed prompt dispatch identity");
+        state.queued = plan.rest;
+        state.dispatch = {
+          promptEntryId,
+          items: plan.batch,
+          ...(applyInterrupt ? { interrupt } : {}),
+        };
+        return {
+          kind: "deliver" as const,
+          promptEntryId,
+          items: plan.batch,
+          interrupted: applyInterrupt,
+        };
+      },
+    );
+    return {
+      ...(mutation.result as
+        | { kind: "empty" }
+        | { kind: "hold"; heldCount: number }
+        | {
+            kind: "deliver";
+            promptEntryId: string;
+            items: QueueItem[];
+            interrupted: boolean;
+          }),
+      revision: mutation.state.revision,
+    };
+  }
+
   claimDeliveryDispatch(input: {
     sessionId: string;
     items: Array<{ id?: string; promptEntryId?: string } & Record<string, unknown>>;
@@ -1849,10 +2849,23 @@ export class SessionKernelStore {
     if (current?.promptEntryId !== promptEntryId) return false;
     this.mutateDelivery(sessionId, "delivery_dispatch_failed", (state) => {
       const dispatch = state.dispatch as
-        { promptEntryId?: string; items?: unknown[] } | undefined;
+        | {
+            promptEntryId?: string;
+            items?: unknown[];
+            interrupt?: DurableDeliveryState["interrupt"];
+          }
+        | undefined;
       if (dispatch?.promptEntryId !== promptEntryId)
         throw new Error("Prompt dispatch changed before failure settlement");
-      const restored = dispatch.items ?? [];
+      const restored = (dispatch.items ?? []).map((item, index) =>
+        item && typeof item === "object" && !Array.isArray(item)
+          ? {
+              ...(item as Record<string, unknown>),
+              retryDispatchId: promptEntryId,
+              ...(index === 0 ? { promptEntryId } : {}),
+            }
+          : item,
+      );
       const restoredIds = new Set(
         (restored as Array<{ id?: string }>)
           .map((item) => item.id)
@@ -1864,6 +2877,11 @@ export class SessionKernelStore {
           (item) => !item.id || !restoredIds.has(item.id),
         ),
       ];
+      if (dispatch.interrupt) {
+        if (state.interrupt)
+          throw new Error("A successor prompt interrupt is already pending");
+        state.interrupt = { ...dispatch.interrupt, phase: "confirmed" };
+      }
       state.dispatch = undefined;
     });
     return true;
@@ -2067,7 +3085,8 @@ export class SessionKernelStore {
 		let changeSeq = 0;
 		const tx = this.db.transaction(() => {
 			this.db.run(
-				`UPDATE session_kernel_commands SET status = 'completed', payload = 'null',
+				`UPDATE session_kernel_commands SET status = 'completed',
+         payload = CASE WHEN type IN ('cancel_session', 'websocket_command') THEN payload ELSE 'null' END,
 				 result = ?, result_hash = ?, result_released = 0, terminal_failure = ?, error = NULL,
 				 retryable = NULL, updated_at = ? WHERE session_id = ? AND request_id = ?`,
 				[
@@ -2272,7 +3291,7 @@ export class SessionKernelStore {
 	compact(
 		now = Date.now(),
 		commandRetentionMs = 30 * 24 * 60 * 60_000,
-		changesPerSession = 5_000,
+		changesPerSession = CHANGE_HISTORY_PER_SESSION,
 	): void {
 		// Request fingerprints and completion state are permanent. Large semantic
 		// results stay replayable until the client confirms local receipt, then age
@@ -2305,10 +3324,44 @@ export class SessionKernelStore {
 		}
 	}
 
-	maintain(): void {
+	maintain(): boolean {
 		// Bounded semantic compaction only. VACUUM/optimize/checkpoint are offline
 		// operator work because this actor also serves synchronous compatibility RPCs.
-		this.compact();
+		this.db.run(
+			`UPDATE session_kernel_commands
+			 SET result = '{"__sessionKernelResultReleased":true,"sha256":"' || result_hash || '"}',
+			     result_released = 1
+			 WHERE rowid IN (
+				SELECT rowid FROM session_kernel_commands
+				WHERE status = 'completed' AND terminal_failure = 0
+				  AND acknowledged_at IS NOT NULL AND acknowledged_at < ?
+				  AND result_hash IS NOT NULL AND result_released = 0 AND length(result) > ?
+				LIMIT 50
+			 )`,
+			[Date.now() - 30 * 24 * 60 * 60_000, 64 * 1024],
+		);
+		const sessionId = this.dirtyChangeSessions.values().next().value as
+			| string
+			| undefined;
+		if (!sessionId) return false;
+		const result = this.db.run(
+			`DELETE FROM session_kernel_changes WHERE rowid IN (
+				SELECT rowid FROM session_kernel_changes
+				WHERE session_id = ? AND change_seq <= (
+					SELECT MAX(change_seq) - ? FROM session_kernel_changes WHERE session_id = ?
+				)
+				LIMIT ?
+			 )`,
+			[
+				sessionId,
+				CHANGE_HISTORY_PER_SESSION,
+				sessionId,
+				MAINTENANCE_CHANGE_DELETE_BATCH,
+			],
+		);
+		if (result.changes < MAINTENANCE_CHANGE_DELETE_BATCH)
+			this.dirtyChangeSessions.delete(sessionId);
+		return this.dirtyChangeSessions.size > 0;
 	}
 
 	deadLetters(limit = 100, offset = 0) {
@@ -2518,6 +3571,15 @@ export class SessionKernelStore {
 	ackOutbox(id: number): void {
 		this.db.run("DELETE FROM session_kernel_outbox WHERE id = ?", [id]);
 	}
+
+  deferOutbox(id: number, delayMs = 250): void {
+    const delay = Number.isFinite(delayMs) ? Math.max(1, delayMs) : 250;
+    this.db.run(
+      `UPDATE session_kernel_outbox SET next_attempt_at = ?
+       WHERE id = ? AND dead_lettered_at IS NULL`,
+      [Date.now() + delay, id],
+    );
+  }
 
   noteOutboxFailure(
     id: number,

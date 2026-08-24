@@ -119,6 +119,16 @@ async function fireRecovery(s: GithubPrState, kind: RecoveryKind): Promise<void>
       );
       return;
     }
+    case "pending-auto-fix": {
+      const pending = s.pendingAutoFix!;
+      console.log(`[github] Recovering dropped auto-fix request for PR #${s.prNumber} (from @${pending.requestedBy})`);
+      const { runAutoFix } = await import("./autofix");
+      const ref: PrRef = { number: s.prNumber, headRef: s.headRef, headSha: "", title: `PR #${s.prNumber}`, ...(s.ghRepo ? { ghRepo: s.ghRepo } : {}) };
+      void runAutoFix(ref, pending.requestedBy).catch((e) =>
+        console.error(`[github] dropped auto-fix recovery failed for PR #${s.prNumber}:`, e),
+      );
+      return;
+    }
     case "run": {
       const run = s.activeRun!;
       console.log(`[github] Recovering interrupted ${run.kind} for PR #${s.prNumber}`);
@@ -159,11 +169,11 @@ async function fireRecovery(s: GithubPrState, kind: RecoveryKind): Promise<void>
 }
 
 /**
- * Re-enter the work a restart interrupted: auto-fix loops, one-shot actions
- * (review/simplify/adversarial), conversational @mentions, and mentions that
- * were received but dropped before their run could self-persist — the classic
- * case being a webhook that landed during shutdown drain (acked 200, so GitHub
- * won't redeliver).
+ * Re-enter the work a restart interrupted: auto-fix loops, label requests that
+ * were received before a run could self-persist, one-shot actions
+ * (review/simplify/adversarial), conversational @mentions, and mentions dropped
+ * in the same receipt-to-run window. The classic case is a webhook that landed
+ * during shutdown drain (acked 200, so GitHub won't redeliver).
  *
  * ONE pass over the state files, at most one run fired per PR. These markers
  * legitimately coexist — auto-fix arms `autoFix.active` and its gate review arms
@@ -249,7 +259,7 @@ export class GithubAgent implements AgentModule {
     // the store itself.
     loadGithubDeliveries();
     if (!githubConfigured()) {
-      console.warn("[github] GITHUB_API_TOKEN unset — review/fix/simplify can't post; agent idle");
+      console.warn("[github] no GitHub credential (App install or GITHUB_API_TOKEN) — review/fix/simplify can't post; agent idle");
     }
     if (!GITHUB_WEBHOOK_SECRET) {
       console.warn("[github] GITHUB_WEBHOOK_SECRET unset — PR webhooks won't be verified");
@@ -279,7 +289,7 @@ export class GithubAgent implements AgentModule {
   health(): Record<string, unknown> {
     const { autoEnabled } = resolveReviewConfig();
     return {
-      status: githubConfigured() ? "operational" : "missing GITHUB_API_TOKEN",
+      status: githubConfigured() ? "operational" : "no GitHub credential",
       reviewAutomationEnabled: autoEnabled,
       trackedPrs: listPrStates().length,
       activeCodeLoops: activeCodeLoops(),

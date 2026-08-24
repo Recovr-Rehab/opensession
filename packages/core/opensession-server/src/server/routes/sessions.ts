@@ -8,13 +8,12 @@
 
 import { requestUser, type RouteContext } from "./context";
 import {
-	cancelAgentRun,
 	cancelAgentRunAndWait,
+  currentAgentRunToken,
 	isAgentSessionBusy,
 } from "../agent-runner";
 import { archiveOlderThan, setArchived, unpinArchivedSessions, } from "../archive";
 import { audit } from "../audit";
-import { cancelAgentWait } from "../agent-waits";
 import {
 	pendingAskAwaitingAnswer,
 	pendingAskIdsAwaitingAnswer,
@@ -42,15 +41,13 @@ import {
 import {
 	clientVisibleQueuedCount,
 	clientVisibleQueuedCounts,
-	requeueSteerReceipts,
-	stoppedSessions,
 } from "../queue-state";
 
 import { markPrReviewNotified } from "../pr-review-notifications";
 import { getPrsByRepo } from "../pr-cache";
 import { getReviewRequest, setReviewAccepted, setReviewRequest, } from "../review-requests";
 import { getSessionControl, type SandboxRequest } from "../session-control";
-import { transitionRunState } from "../run-state";
+import { requestTurnCancel } from "../run-session";
 import {
 	enrichSessionRuntime,
 	findSessionAsync,
@@ -73,7 +70,6 @@ import {
 	tombstoneSessionKernel,
 } from "../session-kernel";
 import {
-	canonicalCommandPayload,
 	sessionIdForRequest,
 } from "../session-request-id";
 import { suggestBranchName } from "../suggest-branch";
@@ -85,7 +81,6 @@ import { dropRunnerPortalRoutes } from "../runner-portals";
 import { cleanupRunnerWorkspace } from "../runner-ws";
 import {
 	deleteSession,
-	engineUserTexts,
 	getAllSessions,
 	markCachedPrReviewRequestsCleared,
 	mergedSessionTranscriptAsync,
@@ -857,20 +852,8 @@ export async function handleSessionsRoutes(
 			const requestId = suppliedRequestId || crypto.randomUUID();
 			const actorScope = ctx.authUser?.login || actor || "anonymous";
 			const targetId = sessionIdForRequest(actorScope, requestId);
-			const accepted = await sessionKernel(targetId).dispatchLegacy(
-				legacyGatewayEffect("create_session", {
-					requestId,
-					payload: {
-						targetId,
-						hash: new Bun.CryptoHasher("sha256")
-							.update(canonicalCommandPayload(body))
-							.digest("hex"),
-					},
-					source: "rest",
-					replaySafe: true,
-				}),
-				async () => {
-					return getSessionControl().createSession({
+			const duplicate = !!sessionKernel(targetId).creationState();
+			const created = await getSessionControl().createSession({
 						id: targetId,
 						requestId,
 						requestScope: actorScope,
@@ -900,10 +883,9 @@ export async function handleSessionsRoutes(
 				...(imageUrls.length ? { images: imageUrls } : {}),
 				...(files?.length ? { files } : {}),
 				user: actor,
-					});
-				},);
-			return Response.json({ id: accepted.result.id,
-				...(accepted.duplicate ? { duplicate: true } : {}), });
+			});
+			return Response.json({ id: created.id,
+				...(duplicate ? { duplicate: true } : {}), });
 		} catch (e) {
 			return Response.json(
 				{ error: e instanceof Error ? e.message : String(e) },
@@ -1457,33 +1439,36 @@ export async function handleSessionsRoutes(
 		// here. Graceful Esc-style stop (fall back to hard cancel for runs
 		// with no interrupt support) keeps the transcript clean and resumable
 		// on unarchive.
-		let stoppedRun = false;
-		if (archived) cancelAgentWait(session.id);
-		if (
-			archived &&
-			isAgentSessionBusy(
-				session.claudeSessionId,
-				session.codexThreadId,
-				session.id,
-			)
-		) {
-			// Park the queue so the drain doesn't feed requeued steers into a
-			// fresh run as the stopped one winds down.
-			stoppedSessions.add(session.id);
-			cancelAgentRun(
-				session.claudeSessionId,
-				session.codexThreadId,
-				session.id,
-			);
-			audit({
-				msg: "run_cancelled",
-				session_id: session.id,
-				source: "archive",
-			});
-			transitionRunState(session.id, "cancel", { source: "archive" });
-			requeueSteerReceipts(session.id, engineUserTexts(session));
-			stoppedRun = true;
-		}
+    let stoppedRun = false;
+    if (
+      archived &&
+      isAgentSessionBusy(
+        session.claudeSessionId,
+        session.codexThreadId,
+        session.id,
+      )
+    ) {
+      const target = sessionKernel(session.id).runState();
+      const targetRunId =
+        target.currentRunId ||
+        (target.state === "starting" || target.state === "preparing"
+          ? currentAgentRunToken(session.id)
+          : undefined);
+      if (targetRunId) {
+        requestTurnCancel(session.id, session, {
+          cancelId: `archive-stop:${session.id}:${targetRunId}:${target.generation}`,
+          expectedRunId: targetRunId,
+          expectedGeneration: target.generation,
+          source: "archive",
+        });
+        audit({
+          msg: "run_cancelled",
+          session_id: session.id,
+          source: "archive",
+        });
+        stoppedRun = true;
+      }
+    }
 		sessionKernel(sessionId).applySync("archive_override", () =>
 			setArchived(sessionId, archived),
 		);

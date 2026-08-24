@@ -2,15 +2,19 @@ import { beforeEach, describe, expect, test } from "bun:test";
 import { classifyEntry } from "@tellahq/opensession-protocol/notices";
 import {
 	acknowledgePromptDispatch,
+	beginNextPromptDispatch,
 	beginPromptDispatch,
 	clientVisibleQueuedCount,
 	isDelegatedQueueItem,
 	isEditableQueueItem,
 	isWorkerQueueItem,
+	preparePromptInterrupt,
+	isWorkflowQueueItem,
 	promptDispatches,
 	promptQueues,
 	queueDisplayState,
 	steeredReceipts,
+	settlePromptInterrupt,
 	takeQueuedPrompt,
 	takeSteeredPrompt,
 } from "./queue-state";
@@ -31,6 +35,58 @@ describe("takeQueuedPrompt", () => {
 			},
 			{ id: "q2", content: "second", user: "Michiel" },
 		]);
+	});
+
+	test("selects and claims through the compatibility actor store", () => {
+		const interruptId = preparePromptInterrupt(SESSION, "q2", SESSION, "q2");
+    expect(preparePromptInterrupt(SESSION, "q2", SESSION, "q2")).toBe(
+      interruptId,
+    );
+    expect(() =>
+      preparePromptInterrupt(SESSION, "q2", "another-dispatch", "q2"),
+    ).toThrow("reused with another payload");
+		settlePromptInterrupt(SESSION, interruptId, "confirmed");
+		const claim = beginNextPromptDispatch(
+			SESSION,
+			{ stillWorking: true },
+			false,
+		);
+		expect(claim).toMatchObject({
+			kind: "deliver",
+			batch: [{ id: "q2", content: "second", user: "Michiel" }],
+		});
+		expect(promptQueues.get(SESSION)).toEqual([
+			{
+				id: "q1",
+				content: "first",
+				user: "Kent",
+				images: [PNG],
+				files: [{ name: "brief.pdf", path: "/tmp/brief.pdf" }],
+			},
+		]);
+	});
+
+	test("prepares an interrupt from an already-steered receipt", () => {
+		promptQueues.delete(SESSION);
+		steeredReceipts.set(SESSION, [
+			{ id: "steered", content: "accepted but unread", hold: true },
+		]);
+		const interruptId = preparePromptInterrupt(
+			SESSION,
+			"steered",
+			SESSION,
+			"steered",
+		);
+		expect(promptQueues.get(SESSION)).toMatchObject([{ id: "steered" }]);
+		expect(steeredReceipts.get(SESSION)).toBeUndefined();
+		settlePromptInterrupt(SESSION, interruptId, "confirmed");
+		expect(
+			beginNextPromptDispatch(SESSION, { stillWorking: true }, false),
+		).toMatchObject({
+			kind: "deliver",
+			interrupted: true,
+			batch: [{ id: "steered" }],
+		});
 	});
 
 	test("keeps a selected prompt durable until the runner acknowledges it", () => {
@@ -140,6 +196,31 @@ describe("delegated messages are not user messages", () => {
 		const mine = { id: "q1", content: "ship it", user: "Kent" };
 		expect(isWorkerQueueItem(mine)).toBe(false);
 		expect(isEditableQueueItem(mine)).toBe(true);
+	});
+
+	test("a workflow result never enters the client message surface", () => {
+		const workflowSession = `${SESSION}-workflow`;
+		const result = {
+			id: "workflow:wf-1:done",
+			content:
+				'<!--os:workflow-notice:wf-1-->\n✅ Workflow "review" finished',
+			user: "Kent",
+		};
+		expect(isWorkflowQueueItem(result)).toBe(true);
+		expect(isEditableQueueItem(result)).toBe(false);
+
+		promptQueues.set(workflowSession, [result]);
+		steeredReceipts.set(workflowSession, [result]);
+		expect(clientVisibleQueuedCount(workflowSession)).toBe(0);
+		expect(queueDisplayState(workflowSession)).toEqual({
+			queued: [],
+			steered: [],
+		});
+		// Filtering is presentation-only: delivery still owns the nudge.
+		expect(promptQueues.get(workflowSession)).toEqual([result]);
+		expect(steeredReceipts.get(workflowSession)).toEqual([result]);
+		promptQueues.delete(workflowSession);
+		steeredReceipts.delete(workflowSession);
 	});
 
 	test("a peer agent message is delegated but not a worker report", () => {

@@ -1,6 +1,7 @@
 import type { AskActorRequest } from "./ask-protocol";
 import type { DeliveryActorRequest } from "./delivery-protocol";
 import type { CreationActorEffect } from "./creation-effect-protocol";
+import type { TurnActorRequest } from "./turn-protocol";
 import type {
   CreationEventDecision,
   RunEventDecision,
@@ -16,7 +17,6 @@ import type {
 export const LEGACY_GATEWAY_EFFECT_OPERATIONS = Object.freeze([
   "answer_question",
   "cancel_session",
-  "create_session",
   "delete_session",
   "session_file_updated",
   "submit_prompt",
@@ -24,7 +24,7 @@ export const LEGACY_GATEWAY_EFFECT_OPERATIONS = Object.freeze([
   "websocket_command",
 ] as const);
 
-export const LEGACY_GATEWAY_EFFECT_SITE_BASELINE = 8;
+export const LEGACY_GATEWAY_EFFECT_SITE_BASELINE = 6;
 
 export type LegacyGatewayEffectOperation =
   (typeof LEGACY_GATEWAY_EFFECT_OPERATIONS)[number];
@@ -77,6 +77,11 @@ export type SessionActorReducerCommand =
       kind: "ask";
       commandId: string;
       request: AskActorRequest;
+    }
+  | {
+      kind: "turn";
+      commandId: string;
+      request: TurnActorRequest;
     };
 
 export type SessionActorCommand =
@@ -109,7 +114,47 @@ export type HumanAskDeliverEffect = {
   };
 };
 
-export type SessionActorEffect = HumanAskDeliverEffect | CreationActorEffect;
+export type DeliveryInterruptCancelEffect = {
+  kind: "delivery_interrupt_cancel";
+  payload: {
+    interruptId: string;
+    /** Exact dispatch identity for schema 13+. */
+    dispatchId?: string;
+    /** Schema-12 compatibility for already-durable effects. */
+    runIds?: string[];
+    runGeneration: number;
+  };
+};
+
+export type TurnCancelEffect = {
+  kind: "turn_cancel";
+  payload: {
+    cancelId: string;
+    dispatchId: string;
+    runGeneration: number;
+  };
+};
+
+export type TurnOutcomeProjectEffect = {
+  kind: "turn_outcome_project";
+  payload: {
+    projectionId: string;
+    runId: string;
+    runGeneration: number;
+    errorMessage: string | null;
+    engineSessionId?: string;
+    noticePersisted: boolean;
+    noticeLabel?: string;
+    projectedAt: string;
+  };
+};
+
+export type SessionActorEffect =
+  | HumanAskDeliverEffect
+  | DeliveryInterruptCancelEffect
+  | TurnCancelEffect
+  | TurnOutcomeProjectEffect
+  | CreationActorEffect;
 export type SessionActorEffectKind = SessionActorEffect["kind"];
 export type SessionActorEffectFor<K extends SessionActorEffectKind> = Extract<
   SessionActorEffect,

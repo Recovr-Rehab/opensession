@@ -18,6 +18,10 @@ import {
 	unmarkSessionStarting,
 	isAgentSessionCancelled,
 	cancelAgentRun,
+  cancelAgentRunToken,
+  cancelAgentRunTokenAndWait,
+  currentAgentRunToken,
+  isAgentRunTokenAdmitted,
 	steerAgentRun,
 	engineFamily,
 	interruptAndSteerAgentRun,
@@ -25,6 +29,7 @@ import {
 	type StreamEvent,
 } from "./agent-runner";
 import { syncAgentSessionEngine } from "./agent-session-sync";
+import { cancelAgentWait } from "./agent-waits";
 import { runAgentHosted } from "./host-client";
 import { getRunState, transitionRunState } from "./run-state";
 import { getAutomation } from "./automations";
@@ -58,6 +63,8 @@ import { wrapContext, stripContext, isContextOnly } from "./prompt-context";
 import { takeVoiceHandoff } from "./desk-voice";
 import {
 	activeRunRecords,
+  journalClearIfLineage,
+  journalRetireCancelledAbnormalAfterSettlement,
 	setJournalSetListener,
 	type ActiveRunRecord,
 } from "./run-journal";
@@ -115,6 +122,7 @@ import {
 	persistAutoModelSwitch,
 	retryAutoFallbackModel,
 	recordRunOutcome,
+	applyRunOutcomeProjection,
 	touchNativeSession,
 	SESSIONS_DIR,
 } from "./session-cache";
@@ -123,8 +131,12 @@ import { broadcastToSession, sessionWatchers } from "./ws-hub";
 import { getWorkspace } from "./workspaces";
 import {
 	broadcastQueue,
+	beginNextPromptDispatch,
 	beginPromptDispatch,
 	durableQueueItem,
+	beginPromptInterruptEffect,
+	preparePromptInterrupt,
+	settlePromptInterrupt,
 	acknowledgePromptDispatch,
 	failPromptDispatch,
 	clearSteerReceipts,
@@ -140,6 +152,7 @@ import {
 	requeueSteerReceipts,
 	restorePersistedQueueState,
 	steeredReceipts,
+  isUserStopped,
 	stoppedSessions,
 	takeSteerReceiptForText,
 	undeliveredSteers,
@@ -159,10 +172,211 @@ import {
 import { automationSessionMcp, interactiveMcpServers } from "./interactive-mcp";
 import { makeAskHandler, settleRestoredAskAfterRecovery } from "./asks";
 import {
+	registerSessionEffectExecutor,
+  SessionEffectDeferredError,
+	settleCreationCancelled,
 	settleCreationFailed,
 	settleCreationSucceeded,
 	sessionKernel,
+  sessionTurn,
 } from "./session-kernel";
+
+const interruptExecutorGlobal = globalThis as typeof globalThis & {
+	__opensessionInterruptExecutorRegistered?: boolean;
+  __opensessionTurnCancelExecutorRegistered?: boolean;
+  __opensessionTurnOutcomeProjectionExecutorRegistered?: boolean;
+};
+if (!interruptExecutorGlobal.__opensessionTurnOutcomeProjectionExecutorRegistered) {
+  registerSessionEffectExecutor("turn_outcome_project", async (item) => {
+    const projection = item.payload;
+    const decision = sessionTurn({
+      op: "begin_outcome_projection",
+      sessionId: item.sessionId,
+      projectionId: projection.projectionId,
+      runGeneration: projection.runGeneration,
+    });
+    if (decision === "missing" || decision === "completed") return;
+    if (decision === "wait")
+      throw new SessionEffectDeferredError("Earlier turn outcome is still pending");
+    await applyRunOutcomeProjection(
+      item.sessionId,
+      projection.errorMessage,
+      projection,
+      true,
+    );
+    const settled = sessionTurn({
+      op: "settle_outcome_projection",
+      sessionId: item.sessionId,
+      projectionId: projection.projectionId,
+      runGeneration: projection.runGeneration,
+    });
+    if (!settled)
+      throw new Error("Turn outcome projection ownership changed before settlement");
+  });
+  interruptExecutorGlobal.__opensessionTurnOutcomeProjectionExecutorRegistered = true;
+}
+if (!interruptExecutorGlobal.__opensessionInterruptExecutorRegistered) {
+	registerSessionEffectExecutor("delivery_interrupt_cancel", (item) => {
+    const { interruptId, dispatchId, runIds, runGeneration } = item.payload;
+    const retireConfirmedAbnormal = () => {
+      if (dispatchId)
+        journalRetireCancelledAbnormalAfterSettlement(
+          item.sessionId,
+          dispatchId,
+        );
+    };
+		const decision = beginPromptInterruptEffect(
+			item.sessionId,
+			interruptId,
+			runGeneration,
+		);
+    if (decision === "settled") return;
+    if (decision === "confirmed") {
+      retireConfirmedAbnormal();
+      return;
+    }
+		if (decision === "adopt_confirmed") {
+			settlePromptInterrupt(item.sessionId, interruptId, "confirmed");
+      retireConfirmedAbnormal();
+			return;
+		}
+    const aborted = dispatchId
+      ? cancelAgentRunToken(dispatchId)
+      : cancelAgentRun(...(runIds || []));
+		// A retry follows a durably recorded executing phase. False then means
+		// either the first attempt already cancelled the owner or this retry found
+		// it terminal, so the accepted interrupt is conservatively confirmed.
+    const outcome =
+      aborted || decision === "retry" ? "confirmed" : "not_aborted";
+		settlePromptInterrupt(item.sessionId, interruptId, outcome);
+    if (outcome === "confirmed") retireConfirmedAbnormal();
+	});
+	interruptExecutorGlobal.__opensessionInterruptExecutorRegistered = true;
+}
+if (!interruptExecutorGlobal.__opensessionTurnCancelExecutorRegistered) {
+  registerSessionEffectExecutor("turn_cancel", async (item) => {
+    const { cancelId, dispatchId, runGeneration } = item.payload;
+    const retireAbsentInProcessOwner = () => {
+      const owner = activeRunRecords().find(
+        (run) => run.osSessionId === item.sessionId && run.runKey === dispatchId,
+      );
+      if (
+        owner &&
+        !owner.hostId &&
+        !owner.runnerId &&
+        !owner.sandboxId &&
+        !isAgentRunTokenAdmitted(dispatchId)
+      ) journalClearIfLineage(owner);
+    };
+    const decision = sessionTurn({
+      op: "begin_cancel_effect",
+      sessionId: item.sessionId,
+      cancelId,
+      runGeneration,
+    });
+    if (decision === "missing") return;
+    if (decision === "settled") {
+      journalRetireCancelledAbnormalAfterSettlement(
+        item.sessionId,
+        dispatchId,
+      );
+      retireAbsentInProcessOwner();
+      return;
+    }
+    const settle = (outcome: "confirmed" | "not_aborted"): boolean => {
+      const settled = sessionTurn({
+        op: "settle_cancel",
+        sessionId: item.sessionId,
+        cancelId,
+        outcome,
+      });
+      if (!settled) return false;
+      journalRetireCancelledAbnormalAfterSettlement(
+        item.sessionId,
+        dispatchId,
+      );
+      // An explicit prompt may already be parked behind this cancellation.
+      // Re-arm delivery only after actor settlement removes the cancel gate.
+      watchExternalRunAndDrain(item.sessionId);
+      return true;
+    };
+    if (decision === "adopt_confirmed") {
+      settle("confirmed");
+      return;
+    }
+    const cancelledWait = cancelAgentWait(item.sessionId);
+    const cancelledRun = await cancelAgentRunTokenAndWait(dispatchId);
+    if (!cancelledRun && decision === "retry")
+      throw new Error(
+        `Could not reconcile executing cancellation ${cancelId} for ${dispatchId}`,
+      );
+    const settled = settle(
+      cancelledWait || cancelledRun ? "confirmed" : "not_aborted",
+    );
+    if (!settled) return;
+    // A pre-engine in-process journal cannot have survived this gateway boot.
+    // Retire it only after actor settlement. Detached host/Runner/sandbox
+    // records stay for their attached source to complete naturally.
+    retireAbsentInProcessOwner();
+  });
+  interruptExecutorGlobal.__opensessionTurnCancelExecutorRegistered = true;
+}
+
+export type TurnCancelRequest = {
+  cancelId: string;
+  expectedRunId: string;
+  expectedGeneration: number;
+  source: string;
+  user?: string;
+};
+
+/** Commit Stop ownership before its physical cancel, atomically parking any
+ * undelivered steer receipts with the stopped run generation. */
+export function requestTurnCancel(
+  sessionId: string,
+  session: UnifiedSession,
+  request: TurnCancelRequest,
+): { requeued: number } {
+  const steered = steeredReceipts.get(sessionId) || [];
+  const requeued = undeliveredSteers(steered, engineUserTexts(session));
+  sessionTurn({
+    op: "prepare_cancel",
+    sessionId,
+    cancelId: request.cancelId,
+    expectedRunId: request.expectedRunId,
+    expectedGeneration: request.expectedGeneration,
+    dispatchId: request.expectedRunId,
+    requeueIds: requeued
+      .map((item) => item.id)
+      .filter((id): id is string => typeof id === "string" && id.length > 0),
+    source: request.source,
+    ...(request.user ? { user: request.user } : {}),
+  });
+  settleCreationOpeningForStop(sessionId);
+  stoppedSessions.add(sessionId);
+  persistQueues();
+  broadcastQueue(sessionId);
+  return { requeued: requeued.length };
+}
+
+export function settleCreationOpeningForStop(sessionId: string): boolean {
+	const kernel = sessionKernel(sessionId);
+	const creation = kernel.creationState();
+	const effectId = creation?.currentEffectId;
+	if (
+		creation?.state !== "opening_dispatched" ||
+		!effectId?.startsWith("opening:")
+	)
+		return false;
+	settleCreationCancelled(
+		sessionId,
+		creation.identity,
+		kernel,
+		effectId,
+	);
+	acknowledgePromptDispatch(sessionId, effectId.slice("opening:".length));
+	return true;
+}
 
 export function creationOwnsPrompt(sessionId: string, promptEntryId: string): boolean {
 	const creation = sessionKernel(sessionId).creationState();
@@ -177,6 +391,7 @@ export function settleRecoveredCreationOpening(
 	sessionId: string,
 	promptEntryId: string,
 	failure?: string,
+	runId?: string,
 ): boolean {
 	const creation = sessionKernel(sessionId).creationState();
 	const effectId = `opening:${promptEntryId}`;
@@ -186,7 +401,15 @@ export function settleRecoveredCreationOpening(
 		creation.state !== "opening_dispatched"
 	)
 		return false;
-	if (failure) {
+	const cancel = sessionTurn({ op: "snapshot", sessionId }).cancel;
+	if (runId && cancel?.runId === runId) {
+		settleCreationCancelled(
+			sessionId,
+			creation.identity,
+			sessionKernel(sessionId),
+			effectId,
+		);
+	} else if (failure) {
 		settleCreationFailed(
 			sessionId,
 			creation.identity,
@@ -231,7 +454,6 @@ import {
 	WEDGE_RETRY_PROMPT,
 } from "./auto-continue";
 import { SYSTEM_RESTART_USER } from "./session-actors";
-import { selectQueueBatch } from "./queue-hold";
 
 const g = globalThis as any;
 
@@ -240,7 +462,7 @@ const g = globalThis as any;
 // in a row parks for the human instead of looping. Cleared when a human prompt
 // arrives or a turn does real (tool-calling) work — which also means that while
 // the agent keeps genuinely working through announced steps, queued messages
-// stay held behind fresh auto-continues (the queue-hold in the run-end handler)
+// stay held behind fresh auto-continues (the actor queue hold at run end)
 // until a turn ends without announcing more work.
 const autoContinueNudged: Set<string> = (g.__autoContinueNudged ??= new Set());
 
@@ -256,36 +478,6 @@ const orphanRedeliveredTails: Map<string, string> = (g.__orphanRedeliveredTails 
 // row parks for the human instead of looping. Cleared on any clean turn.
 const wedgeRetriedFailures: Map<string, string> = (g.__wedgeRetriedFailures ??=
 	new Map());
-
-// The session's pending interrupt: its current queue head was armed by
-// aborting the running turn (busy-send). ONE record with ONE ttl, taken once
-// per drain pass — the same mark both waves the batch past the queue hold and
-// appends INTERRUPT_STEER_NOTE, so the model treats the delivery as a mid-task
-// steer instead of a fresh turn it can acknowledge-and-park on. Reading those
-// two halves separately let an expired mark do one without the other: the hold
-// was bypassed (a held human send landed mid-task) and the note was then
-// refused as expired, so it landed unframed too.
-// `soloId` is set when the interrupt targeted a SPECIFIC queued item (the queue
-// chip's send/▲ button) rather than a fresh compose-send: only that item rides
-// this drain, and the rest of the queue stays put for the next natural stopping
-// point. Timestamped so a mark whose drain never happens (the user hits Stop
-// before it fires) expires instead of mislabeling — or solo-delivering — a much
-// later, unrelated prompt.
-const interruptMarks: Map<string, { at: number; soloId?: string }> =
-	(g.__interruptMarks ??= new Map());
-const INTERRUPT_MARK_TTL_MS = 5 * 60_000;
-
-/** Take this session's pending interrupt. Always clears the record, so one
- *  interrupt drives exactly one drain; an expired one reads as no interrupt. */
-function consumeInterruptMark(
-	sessionId: string,
-): { soloId?: string } | undefined {
-	const mark = interruptMarks.get(sessionId);
-	if (!mark) return undefined;
-	interruptMarks.delete(sessionId);
-	if (Date.now() - mark.at >= INTERRUPT_MARK_TTL_MS) return undefined;
-	return mark;
-}
 
 // One "queue held" notice per hold engagement (not one per watcher tick);
 // cleared whenever a drain actually delivers a batch.
@@ -310,7 +502,7 @@ export function runningChildCount(sessionId: string): number {
 
 /** Append a message to a session's drainable queue and persist + broadcast.
  *  `front` puts it ahead of everything already queued — used by the run-end
- *  queue-hold so its auto-continue delivers before the user's queued messages. */
+ *  actor queue hold so its auto-continue delivers before queued user messages. */
 export function enqueuePrompt(
 	sessionId: string,
 	item: QueueItem,
@@ -997,7 +1189,7 @@ async function drainQueueInner(sessionId: string): Promise<void> {
 	while ((queue = promptQueues.get(sessionId)) && queue.length > 0) {
 		// The user pressed stop: leave the queue visible-but-parked until their
 		// next explicit action instead of restarting the run they just stopped.
-		if (stoppedSessions.has(sessionId)) return;
+    if (isUserStopped(sessionId)) return;
 		// Graceful shutdown: park the queue instead of starting a turn. A turn
 		// started after the shutdown snapshot races the drain deadline (an
 		// in-process one is SIGKILLed there and redone from the journal), and
@@ -1023,49 +1215,34 @@ async function drainQueueInner(sessionId: string): Promise<void> {
 			watchExternalRunAndDrain(sessionId);
 			return;
 		}
-		// Batch selection lives in queue-hold.ts (pure, unit-tested): a solo
+		// Batch selection lives in the actor's pure queue reducer: a solo
 		// interrupt (queue chip ▲) delivers one item, a head auto-continue
 		// delivers alone, and while child worker runs are still going, human
 		// composer sends (item.hold) stay parked until the agent FULLY
 		// completes. Orchestration traffic (worker reports, FYIs) keeps
 		// flowing so held items can't wedge the run.
 		//
-		// One read of the pending interrupt per pass: the same record decides
-		// both whether this batch skips the hold and whether it gets the steer
-		// note below, so an expired one can never do one without the other.
-		const interrupt = consumeInterruptMark(sessionId);
-		const plan = selectQueueBatch(queue, {
-			soloId: interrupt?.soloId,
-			interruptMark: interrupt !== undefined,
+		// Selection, interrupt consumption, and claim are one actor reduction.
+		// Queue contents cannot change between choosing a batch and durable
+		// dispatch ownership, and a crash cannot lose or duplicate the interrupt.
+		const claim = beginNextPromptDispatch(sessionId, {
 			stillWorking: runningChildCount(sessionId) > 0,
 		});
-		if (plan.kind === "hold") {
+		if (claim.kind === "empty") continue;
+		if (claim.kind === "hold") {
 			if (!queueHoldNotified.has(sessionId)) {
 				queueHoldNotified.add(sessionId);
 				broadcastToSession(sessionId, {
 					type: "notice",
 					sessionId,
-					message: `Holding ${plan.heldCount} queued message${plan.heldCount === 1 ? "" : "s"} until the agent fully completes (worker sessions still running). Steer sends one in sooner.`,
+					message: `Holding ${claim.heldCount} queued message${claim.heldCount === 1 ? "" : "s"} until the agent fully completes (worker sessions still running). Steer sends one in sooner.`,
 				});
 			}
 			watchExternalRunAndDrain(sessionId);
 			return;
 		}
 		queueHoldNotified.delete(sessionId);
-		const batch = plan.batch;
-		// Claiming removes this exact batch and installs its dispatch in one actor
-		// transaction. A crash cannot leave the items in neither location.
-		// Persist the delivery intent before starting work. If the process dies
-		// after this point but before the runner journals its run, boot restores
-		// this batch to the front of the queue.
-		const promptEntryId = beginPromptDispatch(
-			sessionId,
-			batch,
-			undefined,
-			true,
-			undefined,
-			true,
-		);
+		const { batch, promptEntryId, interrupted } = claim;
 		broadcastQueue(sessionId);
 		let combined = batch
 			.map((m) =>
@@ -1076,7 +1253,7 @@ async function drainQueueInner(sessionId: string): Promise<void> {
 		// append the fenced steer note so the model resumes the interrupted work
 		// instead of acknowledge-and-parking. Fenced, so the transcript shows
 		// only the user's text.
-		if (interrupt) {
+		if (interrupted) {
 			combined = `${combined}\n\n${wrapContext(INTERRUPT_STEER_NOTE, "steer-note")}`;
 		}
 		// Attachments queued alongside the text ride the drained turn: images are
@@ -1120,7 +1297,20 @@ export async function runSessionPromptAndDrain(
 	contextSessions?: string[],
 	slackReplyTo?: { channel: string; threadTs: string },
 ): Promise<void> {
-	await runSessionPrompt(sessionId, content, user, images, rawFiles, contextSessions, slackReplyTo);
+  try {
+    await runSessionPrompt(
+      sessionId,
+      content,
+      user,
+      images,
+      rawFiles,
+      contextSessions,
+      slackReplyTo,
+    );
+  } catch (error) {
+    if (error instanceof RunPreparationDeferredError) return;
+    throw error;
+  }
 	await drainQueue(sessionId);
 }
 
@@ -1164,9 +1354,9 @@ export function watchExternalRunAndDrain(sessionId: string): void {
  * the run's current turn — the same abort the Esc/stop path uses — and let the
  * drain watcher deliver the queue as the immediate next turn on the same
  * engine session. The interrupting message must already be in promptQueues
- * before calling (durability: nothing is lost if the abort races a crash).
- * False = nothing abortable (external CLI/tmux run) — the message stays queued
- * for the run's natural stopping point.
+ * before calling. True means the actor accepted the durable cancel intent. If
+ * the fenced effect proves the owner was not abortable, it records
+ * `not_aborted` and the message stays queued for the natural stopping point.
  */
 export function abortTurnAndDrain(
 	sessionId: string,
@@ -1177,24 +1367,23 @@ export function abortTurnAndDrain(
 		id: string;
 	},
 	/** The one queued item this interrupt targeted (queue chip send/▲), when
-	 *  it targeted one — the rest of the queue stays put for this drain. */
+	 *  it targeted one. The rest of the queue stays put for this drain. */
 	soloId?: string,
+	/** The queued item that fences even a whole-batch composer interrupt. */
+	anchorId?: string,
 ): boolean {
-	const ids = [session.claudeSessionId, session.codexThreadId, session.id];
-	const aborted = cancelAgentRun(...ids);
-	if (!aborted) return false;
-	// The user explicitly asked for delivery now — unpark an earlier Stop, and
-	// fold steer receipts the engine never got back in ahead so nothing is
-	// dropped (landed steers are already in the engine history — requeueing
-	// them would deliver duplicates).
+	const interruptAnchorId = anchorId || soloId;
+	if (!interruptAnchorId)
+		throw new Error("Interrupted prompt is missing its durable queue identity");
+	// Actor preparation and its outbox effect commit before physical cancel.
+	// The effect retries against the fenced run generation after a crash, while
+	// the queue anchor prevents a stale result from crossing into later work.
+  const dispatchId =
+    sessionKernel(sessionId).runState().currentRunId ||
+    currentAgentRunToken(sessionId);
+  if (!dispatchId) return false;
+  preparePromptInterrupt(sessionId, interruptAnchorId, dispatchId, soloId);
 	stoppedSessions.delete(sessionId);
-	requeueSteerReceipts(sessionId, engineUserTexts(session));
-	// The drained batch is an interrupt delivery: record it so the next drain
-	// pass lets it past the queue hold and frames it as a mid-task steer (see
-	// INTERRUPT_STEER_NOTE). Only marked once the abort actually took — a
-	// message left queued for the run's natural stopping point was never
-	// interrupted into anything.
-	interruptMarks.set(sessionId, { at: Date.now(), soloId });
 	watchExternalRunAndDrain(sessionId);
 	return true;
 }
@@ -1654,7 +1843,7 @@ export function maybeQueueAutoContinue(opts: {
 		if (
 			session.source === "opensession" &&
 			!session.automation &&
-			!stoppedSessions.has(sessionId)
+      !isUserStopped(sessionId)
 		) {
 			const trailing = trailingUserTexts(session).filter(
 				(t) =>
@@ -1725,7 +1914,7 @@ export function maybeQueueAutoContinue(opts: {
 	if (runFailure) return suppressed("run_failure");
 	if (session.source !== "opensession") return suppressed(`source_${session.source}`);
 	if (session.automation) return suppressed("automation_session");
-	if (stoppedSessions.has(sessionId)) return suppressed("user_stop");
+  if (isUserStopped(sessionId)) return suppressed("user_stop");
 	if (autoContinueNudged.has(sessionId)) return suppressed("already_nudged");
 	if (!(announcesNextAction(assistantText) || endedOnFabricatedTranscript)) return false;
 	autoContinueNudged.add(sessionId);
@@ -1760,6 +1949,12 @@ export function maybeQueueAutoContinue(opts: {
 		{ front: true },
 	);
 	return true;
+}
+
+class RunPreparationDeferredError extends Error {
+  constructor(sessionId: string) {
+    super(`Session ${sessionId} already has an accepted run preparation`);
+  }
 }
 
 /** Run a prompt against an existing session, broadcasting to all watchers. */
@@ -1802,6 +1997,32 @@ export async function runSessionPrompt(
 	// racing prompts both pass isAgentSessionBusy and the loser's message is
 	// dropped as a "Session is busy" error toast.
 	const startToken = markSessionStarting(sessionId);
+  if (currentAgentRunToken(sessionId) !== startToken) {
+    // A queue-drain caller restores its own claimed dispatch in the catch
+    // below. A direct sandbox dispatch was created here and must be restored
+    // before surfacing the deferral.
+    if (!promptEntryId && durablePromptEntryId) {
+      failPromptDispatch(sessionId, durablePromptEntryId);
+    } else if (!durablePromptEntryId) {
+      enqueuePrompt(sessionId, {
+        content,
+        user,
+        ...(images?.length
+          ? {
+              images: images.map(
+                (image) => `data:${image.mediaType};base64,${image.data}`,
+              ),
+            }
+          : {}),
+        ...(rawFiles !== undefined ? { files: rawFiles } : {}),
+        ...(contextSessions?.length ? { contextSessions } : {}),
+        ...(slackReplyTo ? { slackReplyTo } : {}),
+      });
+    }
+    unmarkSessionStarting(sessionId, startToken);
+    watchExternalRunAndDrain(sessionId);
+    throw new RunPreparationDeferredError(sessionId);
+  }
 	try {
 		await runSessionPromptInner(
 			sessionId,
@@ -2238,8 +2459,11 @@ async function runSessionPromptInner(
 					await readEngineTranscriptAsync(cwd, engineSessionId, "pi")
 				).filter((entry) => entry.id !== durablePromptEntryId)
 			: undefined;
+  if (isAgentSessionCancelled(session.id, startToken)) return;
 	const runnerRun = await maybeLaunchRunnerRun(session, {
 		prompt,
+    hostId: startToken,
+    shouldCancel: () => isAgentSessionCancelled(session.id, startToken),
 		engineSessionId: engineSessionId || undefined,
 		images,
 		mcpServers: mcpServers ?? "all",
@@ -2268,7 +2492,17 @@ async function runSessionPromptInner(
 				? " Daytona: if the launch failed because the sandbox could not dial back, check callbackBaseUrl and your org tier's egress (docs/self-hosting-sandboxes.md)."
 				: "");
 		broadcastToSession(sessionId, { type: "error", sessionId, message: msg });
-		recordRunOutcome(session.id, msg);
+		recordRunOutcome(
+			session.id,
+			msg,
+			startToken
+				? {
+						runId: startToken,
+						runGeneration: sessionKernel(session.id).runState().generation,
+						projectionId: `outcome:${startToken}`,
+					}
+				: undefined,
+		);
 		broadcastToSession(sessionId, { type: "stream_done", sessionId });
 		broadcastToSession(sessionId, {
 			type: "session_status",
@@ -2299,6 +2533,9 @@ async function runSessionPromptInner(
 					osSessionId: session.id,
 					prompt,
 					promptEntryId: durablePromptEntryId,
+          startToken,
+          shouldCancel: () =>
+            isAgentSessionCancelled(session.id, startToken),
 					seedTranscriptEntries: piHostSeedEntries,
 					sessionId: engineSessionId || undefined,
 					cwd,
@@ -2753,6 +2990,13 @@ async function runSessionPromptInner(
 		engineSessionId: finalSessionId || session.claudeSessionId || undefined,
 		noticePersisted: failureNoticePersisted,
 		noticeLabel: failureNoticeLabel,
+		...(startToken
+			? {
+					runId: startToken,
+					runGeneration: sessionKernel(session.id).runState().generation,
+					projectionId: `outcome:${startToken}`,
+				}
+			: {}),
 	});
 
 	// On a clean finish any steered messages already landed in the transcript, so

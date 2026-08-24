@@ -90,15 +90,43 @@ actor is unavailable. The direct store adapter exists only for isolated tests.
 Delivery mutation and dispatch claim, acknowledgement or failure are short typed
 Worker reductions. Mutation replies contain only the operation result and new
 revision. They invalidate the gateway projection instead of returning or eagerly
-refetching the full attachment-bearing aggregate. Claiming a batch removes it from the queue and installs its
-dispatch in one SQLite transaction. Failure atomically restores that exact batch
-ahead of later work. Steering first moves an item to a pending-steer checkpoint,
+refetching the full attachment-bearing aggregate. Queue batching policy (solo
+interrupts, auto-continue, review handoffs, delegated reports and worker holds)
+now runs inside the same actor reduction as the claim. The gateway supplies
+only live policy facts such as whether child workers remain. The actor prepares
+a stable interrupt identity and fenced cancel outbox effect before physical
+cancellation, then records the explicit `confirmed` or `not_aborted` result. An
+`executing` receipt makes cancellation retryable against only the same run
+generation and an immutable physical dispatch identity; ambiguous retry
+conservatively confirms instead of crossing into a successor that reused the
+same session or engine alias. Claiming waits for confirmation and atomically moves
+the interrupt with its selected batch into dispatch ownership. A crash or
+launch failure restores the exact batch and confirmed interrupt together, so
+restart cannot lose the solo target or separate hold bypass from steer framing.
+Failure atomically restores that exact batch
+ahead of later work. Actor-owned boot recovery reconciles each dispatch and
+steer with idempotent reducers and never clears durable slots for a projection
+rebuild. Interrupt preparation may atomically move an accepted-but-unread steer
+receipt into its anchored queue position; `not_aborted` restores its original
+steered position. Steering first moves an item to a pending-steer checkpoint,
 then reports runner acceptance or rejection as a second typed fact. Restart treats
 an unresolved checkpoint as ambiguous acceptance and reconciles it through the
 receipt and transcript path instead of delivering a duplicate turn. The old queue and ask JSON formats are imported once under
 durable migration markers, then deleted. Default-path writers no-op after the
 marker commits; only explicit test/migration fixture paths retain JSON output.
-Resolver closures, timeout handles and the explicit Stop latch
+Explicit Stop is also actor-owned. Preparation atomically records the target run
+and generation, moves only unconfirmed steer receipts back to the queue, parks
+the run state, and emits a `turn_cancel` effect keyed to the immutable physical
+dispatch. `prepared`, `executing`, and settled receipts survive gateway crashes;
+settlement precedes outbox acknowledgement, retries cannot cancel a successor,
+and the durable `stopped` state keeps the queue parked across restart until an
+explicit prompt advances the reducer. Boot recovery preserves and attaches an
+exact journal owner named by a cancel receipt instead of treating `stopped` as
+proof of absence. The effect reissues cancellation when that control appears;
+an executing retry with no positive reconciliation remains failed closed. Small
+run-targeting command payloads remain with their permanent receipts so reconnect
+replay reconstructs the original run id and generation even after actor state
+moves on. Resolver closures and timeout handles
 remain process-local executor state because they are not durable decisions.
 
 ## Creation ownership
@@ -155,10 +183,13 @@ stable prompt dispatch, then atomically moves the creation aggregate to
 `opening_dispatched` with one `creation_opening_turn` effect and the bounded,
 non-secret opening recovery input in the same actor transaction. The executor
 uses the active create registration or reconstructs the specification from that
-actor-owned input after restart. Pre-schema-10 create-plan files remain a
-read-only mixed-version fallback, not authority for new effects. Terminal actor
-settlement clears the large recovery input while retaining the permanent effect
-receipt. It settles `ready` or `failed` through the effect fence before
+actor-owned input after restart. Schema 11 also keeps branch, workspace,
+attachment, and resolved setup decisions as write-once actor state. Opening
+launch atomically retires that setup state in favor of the exact opening input.
+Pre-schema-11 create-plan files remain a read-only mixed-version import fallback;
+production has no create-plan file writer. Terminal actor settlement clears the
+large recovery input while retaining the permanent effect receipt. It settles
+`ready` or `failed` through the effect fence before
 acknowledging the prompt dispatch. Run-journal admission and cold
 queue restoration preserve actor-owned create dispatches until that settlement.
 Boot leaves local openings with the generic run adopter and settles the actor
@@ -181,6 +212,14 @@ live journal with a durable abnormal-completion receipt instead of clearing it;
 boot recovery or the opening executor settles that receipt without relaunching.
 A crash after actor settlement adopts the completed receipt without launching
 another turn. Direct `opening_dispatched` transitions without a typed effect are rejected.
+Schema 15 makes Stop terminal for that opening effect as well as its physical
+turn. The creation actor records a `cancelled` receipt for the exact effect,
+clears its recovery plan, and fences late success. Opening recovery checks the
+durable stopped turn or its retained cancel receipt before launch and while
+awaiting a detached local owner, so a restart cannot resurrect a cancelled
+opening prompt. Runner, sandbox, and local openings use the same stable token
+for actor admission and physical control, letting Stop reach the exact backend
+without giving up restart adoption.
 Non-image create attachments are durably spooled to bounded source references,
 then copied or adopted at deterministic session-owned paths by
 `creation_attachment_stage`; digest crossover fails closed and inline bodies
@@ -197,6 +236,23 @@ responsive even while a gateway command is waiting on external work.
 
 Registering a new run id increments the session generation. Registering the
 same logical run again, such as a detached host reconnect, keeps its generation.
+Prompt preparation also takes the actor decision before installing any gateway
+reservation. A rejected candidate remains a cancelled local token and cannot
+replace or launch ahead of the actor's current run, even when the gateway lost
+its in-memory projection of that owner.
+
+Schema 14 moves normal and opening-turn terminal outcome persistence behind the
+typed `turn_outcome_project` effect. The actor validates the immutable run id and
+generation, durably stores one receipt per generation, and commits the outbox row
+in the same transaction. Stable projection ids and timestamps make transcript
+notices and session-file patches destination-idempotent. Multiple completed turns
+may await projection without overwriting accepted work; execution defers later
+generations behind an earlier live projection without consuming dead-letter
+attempts. The executor commits the transcript, `lastRunError`, and worker-failure
+notification before settling the exact actor receipt and acknowledging the
+outbox. Replays of completed, stale, cancelled, replaced, or tombstoned owners do
+not project onto a successor. Compatibility-only callers without a physical run
+fence still use the old facade while their launch paths migrate.
 
 Detached host events and direct side-effect frames (transcript, asks and failed
 steers) are accepted only while their stable logical run id is current. An
@@ -206,7 +262,8 @@ uncertain journals, refuses to replay persisted `starting` launches with
 execution evidence, and settles durable kernel state only when no recoverable
 journal owner exists. Stop retains that journal until the host reports terminal
 or its launcher proves absence. Cancel and interrupt receipts bind to the run
-generation present at admission, so replay cannot affect a successor.
+generation and immutable dispatch identity present at admission, so replay
+cannot affect a successor that reused its session or engine aliases.
 
 ## Mutation boundaries
 
@@ -253,6 +310,16 @@ Slack `client_msg_id`. Durable timers use the same bounded backoff discipline.
 The runtime starts only after run-host recovery and queue restoration establish
 ownership. Any recovery-gate error fail-stops the gateway before timers or
 outbox effects can run. Shutdown stops the runtime before draining the server.
+
+Background intake observes the same process-wide shutdown fence. New cron,
+automation webhook, GitHub review and queued boot-recovery work cannot start
+after the fence. Automation triggers accepted before the fence write a bounded
+pre-launch intent with a stable session id and acceptance time before setup.
+The intent remains through physical execution: boot defers to an existing run
+journal, while completed projection effects record a terminal receipt that boot can
+settle without model replay. Ledger settlement precedes intent retirement.
+Accepted setup remains part of bounded drain accounting until physical handoff. Review shutdown preserves its active-run/result marker
+rather than treating restart as user cancellation.
 
 ## Read projections
 

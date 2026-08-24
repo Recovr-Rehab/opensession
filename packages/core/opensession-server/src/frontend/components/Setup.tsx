@@ -5,13 +5,11 @@ import { Button } from "../ui/button";
 import { cn } from "../ui/cn";
 import {
   SettingCard,
-  SettingsGroupLabel,
   SettingsHeader,
   SettingsPanel,
 } from "../ui/settings";
 import { LoadingState } from "../ui/state";
 import { SetupChecklist } from "./SetupChecklist";
-import { IdentityCard } from "./SetupIdentity";
 import { IntegrationsList } from "./SetupIntegrations";
 import { ReposSection } from "./SetupRepos";
 import { SetupRestart } from "./SetupRestart";
@@ -231,8 +229,6 @@ export function SetupPanel({
               description="Your organisation's name and mark, and the names this instance and its agent use when they introduce themselves."
             >
               <OrganizationProfileSection />
-              <SettingsGroupLabel>Identity</SettingsGroupLabel>
-              <IdentityCard />
             </SetupPageSection>
 
             <SetupPageSection

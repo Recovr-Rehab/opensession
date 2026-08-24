@@ -3,15 +3,20 @@ import { mkdtempSync, rmSync, writeFileSync } from "fs";
 import { tmpdir } from "os";
 import { join } from "path";
 import {
+	beginNextPromptDispatch,
+	deleteQueuedPrompt,
 	hydratePersistedQueueState,
 	persistQueues,
 	promptDispatches,
 	promptQueues,
+	preparePromptInterrupt,
 	requeueSteerReceipts,
 	restorePersistedQueueState,
 	steeredReceipts,
+	settlePromptInterrupt,
 	undeliveredSteers,
 } from "./queue-state";
+import { sessionKernelStore } from "./session-kernel";
 import { sessionWatchers } from "./ws-hub";
 
 const SESSION = "os-steer-restart-test";
@@ -153,7 +158,7 @@ describe("steer receipt restart persistence", () => {
 		expect(steeredReceipts.has(SESSION)).toBe(false);
 	});
 
-	test("an ordinary unjournaled dispatch is still requeued", () => {
+	test("an ordinary multi-item dispatch keeps its identity after a crash", () => {
 		scratch = mkdtempSync(join(tmpdir(), "os-ordinary-dispatch-"));
 		const storePath = join(scratch, "prompt-queues.json");
 		writeFileSync(
@@ -162,7 +167,10 @@ describe("steer receipt restart persistence", () => {
 				dispatching: {
 					[SESSION]: {
 						promptEntryId: "ordinary-entry",
-						items: [{ id: "ordinary", content: "retry me" }],
+						items: [
+							{ id: "ordinary-one", content: "retry me" },
+							{ id: "ordinary-two", content: "and me" },
+						],
 					},
 				},
 			}),
@@ -175,9 +183,67 @@ describe("steer receipt restart persistence", () => {
 			deliveredUserTexts: () => [],
 			effects: false,
 		});
-		expect(restored.queuedCount).toBe(1);
+		expect(restored.queuedCount).toBe(2);
 		expect(promptQueues.get(SESSION)?.[0]?.promptEntryId).toBe("ordinary-entry");
 		expect(promptDispatches.has(SESSION)).toBe(false);
+		expect(deleteQueuedPrompt(SESSION, "ordinary-one", undefined, false)).toBe(
+			true,
+		);
+		const interruptId = preparePromptInterrupt(
+			SESSION,
+			"ordinary-two",
+			SESSION,
+			"ordinary-two",
+		);
+		settlePromptInterrupt(SESSION, interruptId, "confirmed");
+		expect(
+			beginNextPromptDispatch(SESSION, {}, false),
+		).toMatchObject({
+			kind: "deliver",
+			promptEntryId: "ordinary-entry",
+			batch: [
+				{ id: "ordinary-two", retryDispatchId: "ordinary-entry" },
+			],
+		});
+	});
+
+	test("production boot restores an unjournaled interrupt with its dispatch", () => {
+		sessionKernelStore().markDeliveryMigrationComplete();
+		promptQueues.set(SESSION, [
+			{ id: "interrupt", content: "send now", hold: true },
+		]);
+		promptQueues.set(`${SESSION}-unrelated`, [
+			{ id: "unrelated", content: "must never be globally cleared" },
+		]);
+		const interruptId = preparePromptInterrupt(
+			SESSION,
+			"interrupt",
+			SESSION,
+			"interrupt",
+		);
+		settlePromptInterrupt(SESSION, interruptId, "confirmed");
+		expect(
+			beginNextPromptDispatch(SESSION, { stillWorking: true }, false),
+		).toMatchObject({ kind: "deliver", interrupted: true });
+
+		const restored = restorePersistedQueueState({
+			sessionExists: () => true,
+			journalOwnsPrompt: () => false,
+			runOwnsSteers: () => false,
+			deliveredUserTexts: () => [],
+			effects: false,
+		});
+		expect(restored.queuedCount).toBe(2);
+		expect(promptQueues.get(`${SESSION}-unrelated`)).toMatchObject([
+			{ id: "unrelated" },
+		]);
+		expect(
+			beginNextPromptDispatch(SESSION, { stillWorking: true }, false),
+		).toMatchObject({
+			kind: "deliver",
+			interrupted: true,
+			batch: [{ id: "interrupt" }],
+		});
 	});
 
 	test("a cold restart preserves an actor-owned create dispatch even after journaling", () => {

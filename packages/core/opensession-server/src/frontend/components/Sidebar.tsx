@@ -4597,7 +4597,7 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 				// The organization row leads this rail on desktop now that the old
 				// heading is gone. Pull it slightly closer to the fixed top bar there;
 				// phones keep the original spacing because their first row is a tool.
-				"flex flex-col gap-0.5 px-[var(--sidebar-nav-x)] pt-2 pb-1.5 desktop:pt-1",
+				"flex flex-col gap-0.5 px-[var(--sidebar-nav-x)] pt-2 pb-1.5 desktop:pt-0.5",
 			)}
 		>
 			<div className="phone:hidden">

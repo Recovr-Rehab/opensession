@@ -1,4 +1,25 @@
 import type { DeliverySlot, DurableDeliveryState } from "./store";
+import type { DurableRunTarget } from "./turn-protocol";
+
+export function deliveryInterruptForAnchor(
+  state: DurableDeliveryState,
+  anchorId: string,
+): DurableDeliveryState["interrupt"] {
+  const dispatchInterrupt = (
+    state.dispatch as { interrupt?: DurableDeliveryState["interrupt"] } | undefined
+  )?.interrupt;
+  const interrupt = state.interrupt || dispatchInterrupt;
+  return interrupt?.anchorId === anchorId ? interrupt : undefined;
+}
+
+export function targetForDeliveryInterrupt(
+  interrupt: DurableDeliveryState["interrupt"],
+  anchorId: string,
+): DurableRunTarget | undefined {
+  return interrupt?.anchorId === anchorId && interrupt.dispatchId
+    ? { runId: interrupt.dispatchId, generation: interrupt.runGeneration }
+    : undefined;
+}
 
 type DeliveryItem = {
   id?: string;
@@ -16,6 +37,32 @@ export type DeliveryActorRequest =
   | { op: "reject_steer"; sessionId: string; itemId: string }
   | { op: "settle_pending_steers" }
   | { op: "requeue_steers"; sessionId: string; items: unknown[] }
+  | {
+      op: "prepare_interrupt";
+      sessionId: string;
+      interruptId: string;
+      anchorId: string;
+      dispatchId: string;
+      soloId?: string;
+    }
+  | {
+      op: "begin_interrupt_effect";
+      sessionId: string;
+      interruptId: string;
+      runGeneration: number;
+    }
+  | {
+      op: "settle_interrupt";
+      sessionId: string;
+      interruptId: string;
+      outcome: "confirmed" | "not_aborted";
+    }
+  | {
+      op: "claim_next_dispatch";
+      sessionId: string;
+      promptEntryId: string;
+      stillWorking?: boolean;
+    }
   | {
       op: "claim_dispatch";
       sessionId: string;
@@ -45,6 +92,17 @@ export type DeliveryActorResult<T extends DeliveryActorRequest> =
       ? Array<[string, unknown]>
       : T extends { op: "claim_dispatch" }
         ? { promptEntryId: string; items: unknown[]; revision: number }
+        : T extends { op: "claim_next_dispatch" }
+          ?
+              | { kind: "empty"; revision: number }
+              | { kind: "hold"; heldCount: number; revision: number }
+              | {
+                  kind: "deliver";
+                  promptEntryId: string;
+                  items: unknown[];
+                  interrupted: boolean;
+                  revision: number;
+                }
         : T extends { op: "prepare_steer" }
           ? unknown | undefined
           : T extends {
@@ -58,4 +116,16 @@ export type DeliveryActorResult<T extends DeliveryActorRequest> =
             ? boolean
             : T extends { op: "settle_pending_steers" | "requeue_steers" }
               ? number
-              : void;
+              : T extends { op: "prepare_interrupt" }
+                ? {
+                    interruptId: string;
+                    phase: "prepared" | "executing" | "confirmed";
+                    runGeneration: number;
+                    anchorId: string;
+                    soloId?: string;
+                  }
+                : T extends { op: "begin_interrupt_effect" }
+                  ? "execute" | "retry" | "adopt_confirmed" | "confirmed" | "settled"
+                  : T extends { op: "settle_interrupt" }
+                    ? boolean
+                  : void;

@@ -13,9 +13,12 @@ import {
 	durableSessionCommand,
 	passivateIdleSessionKernels,
 	DeliveryOwnedMap,
+  deliveryInterruptForAnchor,
 	sessionKernel,
 	tombstoneSessionKernel,
 	legacyGatewayEffect,
+  targetForDeliveryInterrupt,
+  targetForTurnCancel,
 	type LegacyGatewayEffect,
 	type LegacyGatewayEffectInput,
 } from ".";
@@ -57,6 +60,83 @@ test("refuses an unsafe schema downgrade", () => {
 	try {
 		expect(() => new SessionKernelStore(path)).toThrow("newer than supported");
 	} finally {
+		rmSync(dir, { recursive: true, force: true });
+	}
+});
+
+test("durable cancel and interrupt receipts restore their original command target", () => {
+  expect(targetForTurnCancel({
+    cancelId: "stop:request-one",
+    phase: "settled",
+    outcome: "confirmed",
+    runId: "dispatch-one",
+    runGeneration: 7,
+    requeueIds: [],
+    source: "test",
+  }, "stop:request-one")).toEqual({ runId: "dispatch-one", generation: 7 });
+  expect(targetForTurnCancel(undefined, "stop:request-one")).toBeUndefined();
+  expect(targetForDeliveryInterrupt({
+    interruptId: "interrupt-one",
+    phase: "confirmed",
+    runGeneration: 8,
+    dispatchId: "dispatch-two",
+    anchorId: "request-two",
+  }, "request-two")).toEqual({ runId: "dispatch-two", generation: 8 });
+  expect(targetForDeliveryInterrupt(undefined, "request-two")).toBeUndefined();
+  expect(deliveryInterruptForAnchor({
+    revision: 1,
+    queued: [],
+    dispatch: {
+      interrupt: {
+        interruptId: "interrupt-two",
+        phase: "confirmed",
+        runGeneration: 9,
+        dispatchId: "dispatch-three",
+        anchorId: "request-three",
+      },
+    },
+    steered: [],
+    pendingSteers: [],
+    updatedAt: 1,
+  }, "request-three")).toMatchObject({
+    interruptId: "interrupt-two",
+    dispatchId: "dispatch-three",
+  });
+});
+
+test("boot maintenance compacts change history in bounded batches", () => {
+	const dir = mkdtempSync(join(tmpdir(), "session-kernel-maintenance-"));
+	const path = join(dir, "kernel.sqlite");
+	const initial = new SessionKernelStore(path);
+	initial.close();
+	const seed = new Database(path);
+	const insert = seed.query(
+		`INSERT INTO session_kernel_changes
+		 (session_id, change_seq, kind, payload, created_at)
+		 VALUES (?, ?, 'test', '{}', ?)`,
+	);
+	seed.transaction(() => {
+		for (let changeSeq = 1; changeSeq <= 5_501; changeSeq += 1)
+			insert.run("busy", changeSeq, changeSeq);
+	})();
+	seed.close();
+	const compacting = new SessionKernelStore(path);
+	try {
+		expect(compacting.maintain()).toBe(true);
+		expect(compacting.maintain()).toBe(true);
+		expect(compacting.maintain()).toBe(false);
+	} finally {
+		compacting.close();
+	}
+	const inspect = new Database(path, { readonly: true });
+	try {
+		expect(
+			(inspect.query("SELECT COUNT(*) AS count FROM session_kernel_changes").get() as {
+				count: number;
+			}).count,
+		).toBe(5_000);
+	} finally {
+		inspect.close();
 		rmSync(dir, { recursive: true, force: true });
 	}
 });
@@ -159,6 +239,26 @@ describe("SessionKernel", () => {
 		expect(calls).toBe(1);
 		expect(durableSessionCommand("s1", "stable")?.status).toBe("completed");
 	});
+
+  test("retains the original run target for command replay", async () => {
+    await sessionKernel("run-target-replay").dispatchLegacy(
+      legacyGatewayEffect("cancel_session", {
+        requestId: "cancel-request",
+        payload: {
+          targetRunId: "dispatch-one",
+          targetRunGeneration: 4,
+        },
+        replaySafe: true,
+      }),
+      () => true,
+    );
+    expect(
+      durableSessionCommand("run-target-replay", "cancel-request")?.payload,
+    ).toEqual({
+      targetRunId: "dispatch-one",
+      targetRunGeneration: 4,
+    });
+  });
 
 	test("keeps completed receipts for clients that reconnect after compaction", async () => {
 		let calls = 0;
@@ -758,6 +858,63 @@ describe("SessionKernel", () => {
 		expect(settled?.completedEffectIds).toContain(effectId);
 	});
 
+	test("settles an exactly cancelled recovered opening without reviving it", async () => {
+		const sessionId = "local-opening-cancel-recovery";
+		const identity = "local-opening-cancel-request";
+		const promptEntryId = "local-opening-cancel-prompt";
+		const effectId = `opening:${promptEntryId}`;
+		const runId = "rh-local-opening-cancel";
+		store.applyCreationEvent({ sessionId, identity, event: "plan" });
+		store.applyCreationEvent({
+			sessionId,
+			identity,
+			event: "preparation_started",
+		});
+		store.applyCreationEvent({
+			sessionId,
+			identity,
+			event: "opening_dispatched",
+			openingPlan: { id: sessionId, openingPrompt: "cancel durable" },
+			nextEffectId: effectId,
+			effect: {
+				kind: "creation_opening_turn",
+				effectKey: effectId,
+				payload: {
+					creationIdentity: identity,
+					creationGeneration: 1,
+					openingPromptEntryId: promptEntryId,
+					runId: `opening:${sessionId}:${promptEntryId}`,
+					runGeneration: 1,
+					mode: "adopt_or_launch",
+				},
+			},
+		});
+		store.applyRunEvent({ sessionId, event: "prompt", runKey: runId });
+		const run = store.runState(sessionId);
+		store.prepareTurnCancel({
+			sessionId,
+			cancelId: `stop:${runId}`,
+			expectedRunId: runId,
+			expectedGeneration: run.generation,
+			dispatchId: runId,
+			requeueIds: [],
+			source: "test",
+		});
+		const { settleRecoveredCreationOpening } = await import("../run-session");
+		expect(
+			settleRecoveredCreationOpening(
+				sessionId,
+				promptEntryId,
+				undefined,
+				runId,
+			),
+		).toBe(true);
+		expect(store.creationState(sessionId)).toMatchObject({
+			state: "cancelled",
+			completedEffectIds: [effectId],
+		});
+	});
+
 	test("clears an accepted creation effect so replay is a stale no-op", () => {
 		const sessionId = "create-result-replay";
 		const identity = "request-result-replay";
@@ -889,6 +1046,15 @@ describe("SessionKernel", () => {
 				identity,
 				event: "preparation_started",
 			});
+			durableStore.applyCreationEvent({
+				sessionId,
+				identity,
+				event: "plan",
+				planPatch: { resolved: openingPlan },
+			});
+			expect(durableStore.creationState(sessionId)?.setupPlan).toEqual({
+				resolved: openingPlan,
+			});
 			expect(durableStore.applyCreationEvent({
 				sessionId,
 				identity,
@@ -910,7 +1076,10 @@ describe("SessionKernel", () => {
 			})).toMatchObject({ accepted: true });
 			durableStore.close();
 			durableStore = new SessionKernelStore(path);
-			expect(durableStore.creationState(sessionId)?.openingPlan).toEqual(openingPlan);
+			expect(durableStore.creationState(sessionId)).toMatchObject({
+				setupPlan: undefined,
+				openingPlan,
+			});
 			durableStore.applyCreationEvent({
 				sessionId,
 				identity,
@@ -922,6 +1091,57 @@ describe("SessionKernel", () => {
 			durableStore.close();
 			rmSync(dir, { recursive: true, force: true });
 		}
+	});
+
+	test("settles a cancelled opening effect and fences its late success", () => {
+		const sessionId = "create-opening-cancelled";
+		const identity = "request-opening-cancelled";
+		const effectId = "opening:entry-cancelled";
+		store.applyCreationEvent({ sessionId, identity, event: "plan" });
+		store.applyCreationEvent({
+			sessionId,
+			identity,
+			event: "preparation_started",
+		});
+		expect(store.applyCreationEvent({
+			sessionId,
+			identity,
+			event: "opening_dispatched",
+			openingPlan: { id: sessionId, openingPrompt: "cancel me" },
+			nextEffectId: effectId,
+			effect: {
+				kind: "creation_opening_turn",
+				effectKey: effectId,
+				payload: {
+					creationIdentity: identity,
+					creationGeneration: 1,
+					openingPromptEntryId: "entry-cancelled",
+					runId: `opening:${sessionId}:entry-cancelled`,
+					runGeneration: 1,
+					mode: "adopt_or_launch",
+				},
+			},
+		})).toMatchObject({ accepted: true });
+		expect(store.applyCreationEvent({
+			sessionId,
+			identity,
+			event: "cancelled",
+			effectId,
+		})).toMatchObject({
+			accepted: true,
+			to: "cancelled",
+			state: {
+				currentEffectId: undefined,
+				openingPlan: undefined,
+				completedEffectIds: [effectId],
+			},
+		});
+		expect(store.applyCreationEvent({
+			sessionId,
+			identity,
+			event: "succeeded",
+			effectId,
+		})).toMatchObject({ accepted: false, reason: "stale_effect" });
 	});
 
 	test("rejects creation effect capacity before accepting more work", () => {
@@ -1059,6 +1279,862 @@ describe("SessionKernel", () => {
 		expect(store.deliverySnapshot("delivery").dispatch).toBeUndefined();
 	});
 
+	test("selects and claims the next queue batch in one actor transaction", () => {
+		store.setDeliverySlot("next-delivery", "queued", [
+			{ id: "held", content: "wait", hold: true },
+			{
+				id: "solo",
+				promptEntryId: "stable-solo-entry",
+				content: "send now",
+				hold: true,
+			},
+		]);
+		expect(store.claimNextDeliveryDispatch({
+			sessionId: "next-delivery",
+			promptEntryId: "unused-entry",
+			stillWorking: true,
+		})).toMatchObject({ kind: "hold", heldCount: 2 });
+		expect(store.deliverySnapshot("next-delivery").queued).toHaveLength(2);
+		store.prepareDeliveryInterrupt({
+			sessionId: "next-delivery",
+			interruptId: "interrupt-next-delivery",
+			anchorId: "solo",
+			dispatchId: "run-owner",
+			soloId: "solo",
+		});
+		store.settleDeliveryInterrupt({
+			sessionId: "next-delivery",
+			interruptId: "interrupt-next-delivery",
+			outcome: "confirmed",
+		});
+		expect(store.claimNextDeliveryDispatch({
+			sessionId: "next-delivery",
+			promptEntryId: "solo-entry",
+			stillWorking: true,
+		})).toMatchObject({
+			kind: "deliver",
+			promptEntryId: "stable-solo-entry",
+			items: [
+				{
+					id: "solo",
+					promptEntryId: "stable-solo-entry",
+					content: "send now",
+					hold: true,
+				},
+			],
+		});
+		expect(store.deliverySnapshot("next-delivery")).toMatchObject({
+			queued: [{ id: "held", content: "wait", hold: true }],
+			dispatch: {
+				promptEntryId: "stable-solo-entry",
+				items: [
+					{
+						id: "solo",
+						promptEntryId: "stable-solo-entry",
+						content: "send now",
+						hold: true,
+					},
+				],
+			},
+		});
+	});
+
+	test("rolls an unabortable steered receipt back to its durable slot", () => {
+		store.setDeliverySlot("steered-interrupt", "steered", [
+			{ id: "before", content: "before" },
+			{ id: "target", content: "accepted but unread" },
+			{ id: "after", content: "after" },
+		]);
+		store.prepareDeliveryInterrupt({
+			sessionId: "steered-interrupt",
+			interruptId: "steered-interrupt-one",
+			anchorId: "target",
+			dispatchId: "run-owner",
+			soloId: "target",
+		});
+		expect(store.deliverySnapshot("steered-interrupt")).toMatchObject({
+			queued: [{ id: "target" }],
+			steered: [{ id: "before" }, { id: "after" }],
+			interrupt: { source: { slot: "steered", index: 1 } },
+		});
+		store.settleDeliveryInterrupt({
+			sessionId: "steered-interrupt",
+			interruptId: "steered-interrupt-one",
+			outcome: "not_aborted",
+		});
+		expect(store.deliverySnapshot("steered-interrupt")).toMatchObject({
+			queued: [],
+			steered: [{ id: "before" }, { id: "target" }, { id: "after" }],
+		});
+		expect(
+			store.deliverySnapshot("steered-interrupt").interrupt,
+		).toBeUndefined();
+	});
+
+	test("does not transfer an interrupt to an earlier retry group", () => {
+		store.setDeliverySlot("interrupt-behind-retry", "queued", [
+			{ id: "retry", retryDispatchId: "older-entry", content: "retry first" },
+			{ id: "anchor", content: "interrupt target", hold: true },
+		]);
+		store.prepareDeliveryInterrupt({
+			sessionId: "interrupt-behind-retry",
+			interruptId: "interrupt-behind-retry",
+			anchorId: "anchor",
+			dispatchId: "run-owner",
+			soloId: "anchor",
+		});
+		store.settleDeliveryInterrupt({
+			sessionId: "interrupt-behind-retry",
+			interruptId: "interrupt-behind-retry",
+			outcome: "confirmed",
+		});
+		expect(store.claimNextDeliveryDispatch({
+			sessionId: "interrupt-behind-retry",
+			promptEntryId: "unused",
+			stillWorking: true,
+		})).toMatchObject({
+			kind: "deliver",
+			promptEntryId: "older-entry",
+			interrupted: false,
+			items: [{ id: "retry" }],
+		});
+		expect(
+			store.deliverySnapshot("interrupt-behind-retry").interrupt,
+		).toMatchObject({ anchorId: "anchor" });
+		store.ackDeliveryDispatch("interrupt-behind-retry", "older-entry");
+		expect(store.claimNextDeliveryDispatch({
+			sessionId: "interrupt-behind-retry",
+			promptEntryId: "anchor-entry",
+			stillWorking: true,
+		})).toMatchObject({
+			kind: "deliver",
+			interrupted: true,
+			items: [{ id: "anchor" }],
+		});
+	});
+
+	test("does not apply a solo interrupt after its target is removed", () => {
+		store.setDeliverySlot("stale-solo-interrupt", "queued", [
+			{ id: "removed", content: "interrupt target", hold: true },
+			{ id: "other", content: "still held", hold: true },
+		]);
+		store.prepareDeliveryInterrupt({
+			sessionId: "stale-solo-interrupt",
+			interruptId: "interrupt-stale-solo-interrupt",
+			anchorId: "removed",
+			dispatchId: "run-owner",
+			soloId: "removed",
+		});
+		store.setDeliverySlot("stale-solo-interrupt", "queued", [
+			{ id: "other", content: "still held", hold: true },
+		]);
+		expect(store.claimNextDeliveryDispatch({
+			sessionId: "stale-solo-interrupt",
+			promptEntryId: "must-not-deliver",
+			stillWorking: true,
+		})).toMatchObject({ kind: "hold", heldCount: 1 });
+		expect(store.deliverySnapshot("stale-solo-interrupt").interrupt).toBeUndefined();
+	});
+
+  test("cancels an admitted starting dispatch before its journal registers", async () => {
+    store.applyRunEvent({ sessionId: "cancel-starting", event: "prompt" });
+    const generation = store.runState("cancel-starting").generation;
+    expect(store.prepareTurnCancel({
+      sessionId: "cancel-starting",
+      cancelId: "cancel-starting",
+      expectedRunId: "dispatch-starting",
+      expectedGeneration: generation,
+      dispatchId: "dispatch-starting",
+      requeueIds: [],
+      source: "test",
+    })).toMatchObject({
+      cancel: { phase: "prepared", runId: "dispatch-starting" },
+      runState: { state: "stopped" },
+    });
+    expect(store.pendingOutbox(Date.now(), 10, ["turn_cancel"])).toEqual([
+      expect.objectContaining({
+        payload: expect.objectContaining({ dispatchId: "dispatch-starting" }),
+      }),
+    ]);
+    const { isUserStopped, liftUserStop } = await import("../queue-state");
+    expect(isUserStopped("cancel-starting")).toBe(true);
+    liftUserStop("cancel-starting");
+    expect(store.runState("cancel-starting").state).toBe("starting");
+    expect(isUserStopped("cancel-starting")).toBe(true);
+    expect(store.applyRunEvent({
+      sessionId: "cancel-starting",
+      event: "run_registered",
+      runKey: "dispatch-starting",
+    })).toMatchObject({ accepted: false, reason: "stale_run" });
+    store.settleTurnCancel({
+      sessionId: "cancel-starting",
+      cancelId: "cancel-starting",
+      outcome: "confirmed",
+    });
+    expect(isUserStopped("cancel-starting")).toBe(false);
+    expect(store.applyRunEvent({
+      sessionId: "cancel-starting",
+      event: "run_registered",
+      runKey: "dispatch-successor",
+    })).toMatchObject({
+      accepted: true,
+      state: { state: "running", currentRunId: "dispatch-successor" },
+    });
+    expect(store.applyRunEvent({
+      sessionId: "cancel-starting",
+      event: "turn_end",
+      runKey: "dispatch-starting",
+    })).toMatchObject({
+      accepted: false,
+      reason: "stale_run",
+      state: { state: "running", currentRunId: "dispatch-successor" },
+    });
+  });
+
+  test("durably projects one exact terminal outcome through the actor outbox", () => {
+    const dir = mkdtempSync(join(tmpdir(), "session-kernel-outcome-"));
+    const path = join(dir, "kernel.sqlite");
+    const first = new SessionKernelStore(path);
+    let effectId = -1;
+    let generation = -1;
+    try {
+      first.applyRunEvent({
+        sessionId: "outcome-restart",
+        event: "prompt",
+        runKey: "run-one",
+      });
+      first.applyRunEvent({
+        sessionId: "outcome-restart",
+        event: "run_registered",
+        runKey: "run-one",
+      });
+      generation = first.runState("outcome-restart").generation;
+      first.applyRunEvent({
+        sessionId: "outcome-restart",
+        event: "run_failed",
+        runKey: "run-one",
+      });
+      const input = {
+        sessionId: "outcome-restart",
+        projectionId: "outcome:run-one",
+        runId: "run-one",
+        runGeneration: generation,
+        errorMessage: "terminal failure",
+        engineSessionId: "engine-one",
+        noticePersisted: false,
+        noticeLabel: "Run failed",
+        projectedAt: "2026-08-24T18:00:00.000Z",
+      } as const;
+      expect(first.prepareTurnOutcomeProjection(input)).toMatchObject({
+        phase: "pending",
+        runId: "run-one",
+        runGeneration: generation,
+      });
+      expect(first.prepareTurnOutcomeProjection(input)).toMatchObject({
+        phase: "pending",
+      });
+      expect(() =>
+        first.prepareTurnOutcomeProjection({
+          ...input,
+          errorMessage: "crossed payload",
+        }),
+      ).toThrow("reused with another payload");
+      const [effect] = first.pendingOutbox(Date.now(), 10);
+      effectId = effect.id;
+      expect(effect).toMatchObject({
+        kind: "turn_outcome_project",
+        effectKey: "outcome:run-one",
+        payload: {
+          projectionId: "outcome:run-one",
+          runId: "run-one",
+          runGeneration: generation,
+          errorMessage: "terminal failure",
+          projectedAt: "2026-08-24T18:00:00.000Z",
+        },
+      });
+    } finally {
+      first.close();
+    }
+
+    const recovered = new SessionKernelStore(path);
+    try {
+      recovered.applyRunEvent({
+        sessionId: "outcome-restart",
+        event: "prompt",
+        runKey: "run-two",
+      });
+      recovered.applyRunEvent({
+        sessionId: "outcome-restart",
+        event: "run_registered",
+        runKey: "run-two",
+      });
+      const secondGeneration = recovered.runState("outcome-restart").generation;
+      recovered.applyRunEvent({
+        sessionId: "outcome-restart",
+        event: "turn_end",
+        runKey: "run-two",
+      });
+      expect(
+        recovered.prepareTurnOutcomeProjection({
+          sessionId: "outcome-restart",
+          projectionId: "outcome:run-two",
+          runId: "run-two",
+          runGeneration: secondGeneration,
+          errorMessage: null,
+          noticePersisted: false,
+          projectedAt: "2026-08-24T18:01:00.000Z",
+        }),
+      ).toMatchObject({ phase: "pending", runGeneration: secondGeneration });
+      const secondEffect = recovered
+        .pendingOutbox(Date.now(), 10)
+        .find((item) => item.effectKey === "outcome:run-two");
+      expect(secondEffect).toBeDefined();
+      expect(
+        recovered.beginTurnOutcomeProjection({
+          sessionId: "outcome-restart",
+          projectionId: "outcome:run-two",
+          runGeneration: secondGeneration,
+        }),
+      ).toBe("wait");
+      expect(
+        recovered.beginTurnOutcomeProjection({
+          sessionId: "outcome-restart",
+          projectionId: "outcome:run-one",
+          runGeneration: generation,
+        }),
+      ).toBe("execute");
+      expect(
+        recovered.settleTurnOutcomeProjection({
+          sessionId: "outcome-restart",
+          projectionId: "outcome:run-one",
+          runGeneration: generation,
+        }),
+      ).toBe(true);
+      expect(
+        recovered.beginTurnOutcomeProjection({
+          sessionId: "outcome-restart",
+          projectionId: "outcome:run-one",
+          runGeneration: generation,
+        }),
+      ).toBe("completed");
+      recovered.ackOutbox(effectId);
+      expect(recovered.pendingOutbox(Date.now(), 10)).toEqual([
+        expect.objectContaining({ effectKey: "outcome:run-two" }),
+      ]);
+      expect(
+        recovered.prepareTurnOutcomeProjection({
+          sessionId: "outcome-restart",
+          projectionId: "outcome:run-one",
+          runId: "run-one",
+          runGeneration: generation,
+          errorMessage: "terminal failure",
+          engineSessionId: "engine-one",
+          noticePersisted: false,
+          noticeLabel: "Run failed",
+          projectedAt: "2026-08-24T18:00:00.000Z",
+        }),
+      ).toMatchObject({ phase: "completed" });
+      expect(
+        recovered.settleTurnOutcomeProjection({
+          sessionId: "outcome-restart",
+          projectionId: "outcome:run-two",
+          runGeneration: secondGeneration,
+        }),
+      ).toBe(true);
+      recovered.ackOutbox(secondEffect?.id ?? -1);
+      expect(recovered.pendingOutbox(Date.now(), 10)).toEqual([]);
+
+      expect(
+        recovered.prepareTurnOutcomeProjection({
+          sessionId: "outcome-restart",
+          projectionId: "outcome:stale-run-one",
+          runId: "run-one",
+          runGeneration: generation,
+          errorMessage: null,
+          noticePersisted: false,
+          projectedAt: "2026-08-24T18:01:00.000Z",
+        }),
+      ).toBe("stale");
+      expect(
+        recovered.beginTurnOutcomeProjection({
+          sessionId: "outcome-restart",
+          projectionId: "missing",
+          runGeneration: generation,
+        }),
+      ).toBe("missing");
+
+      const deadSession = "outcome-dead-predecessor";
+      recovered.applyRunEvent({
+        sessionId: deadSession,
+        event: "prompt",
+        runKey: "dead-run-one",
+      });
+      recovered.applyRunEvent({
+        sessionId: deadSession,
+        event: "run_registered",
+        runKey: "dead-run-one",
+      });
+      const deadGeneration = recovered.runState(deadSession).generation;
+      recovered.applyRunEvent({
+        sessionId: deadSession,
+        event: "run_failed",
+        runKey: "dead-run-one",
+      });
+      recovered.prepareTurnOutcomeProjection({
+        sessionId: deadSession,
+        projectionId: "outcome:dead-run-one",
+        runId: "dead-run-one",
+        runGeneration: deadGeneration,
+        errorMessage: "old failure",
+        noticePersisted: false,
+        projectedAt: "2026-08-24T18:02:00.000Z",
+      });
+      const deadEffect = recovered.pendingOutbox(Date.now(), 10).find(
+        (item) => item.effectKey === "outcome:dead-run-one",
+      );
+      expect(deadEffect).toBeDefined();
+      expect(
+        recovered.noteOutboxFailure(deadEffect?.id ?? -1, "poison", 1),
+      ).toMatchObject({ deadLetteredNow: true });
+      recovered.applyRunEvent({
+        sessionId: deadSession,
+        event: "prompt",
+        runKey: "dead-run-two",
+      });
+      recovered.applyRunEvent({
+        sessionId: deadSession,
+        event: "run_registered",
+        runKey: "dead-run-two",
+      });
+      const newerGeneration = recovered.runState(deadSession).generation;
+      recovered.applyRunEvent({
+        sessionId: deadSession,
+        event: "turn_end",
+        runKey: "dead-run-two",
+      });
+      recovered.prepareTurnOutcomeProjection({
+        sessionId: deadSession,
+        projectionId: "outcome:dead-run-two",
+        runId: "dead-run-two",
+        runGeneration: newerGeneration,
+        errorMessage: null,
+        noticePersisted: false,
+        projectedAt: "2026-08-24T18:03:00.000Z",
+      });
+      expect(
+        recovered.beginTurnOutcomeProjection({
+          sessionId: deadSession,
+          projectionId: "outcome:dead-run-two",
+          runGeneration: newerGeneration,
+        }),
+      ).toBe("execute");
+      expect(
+        recovered.settleTurnOutcomeProjection({
+          sessionId: deadSession,
+          projectionId: "outcome:dead-run-two",
+          runGeneration: newerGeneration,
+        }),
+      ).toBe(true);
+      expect(recovered.retryDeadOutbox(deadEffect?.id ?? -1)).toBe(true);
+      expect(
+        recovered.beginTurnOutcomeProjection({
+          sessionId: deadSession,
+          projectionId: "outcome:dead-run-one",
+          runGeneration: deadGeneration,
+        }),
+      ).toBe("missing");
+      expect(
+        recovered.settleTurnOutcomeProjection({
+          sessionId: deadSession,
+          projectionId: "outcome:dead-run-one",
+          runGeneration: deadGeneration,
+        }),
+      ).toBe(false);
+
+      const cancelledSession = "outcome-cancelled-predecessor";
+      recovered.applyRunEvent({
+        sessionId: cancelledSession,
+        event: "prompt",
+        runKey: "cancelled-run",
+      });
+      recovered.applyRunEvent({
+        sessionId: cancelledSession,
+        event: "run_registered",
+        runKey: "cancelled-run",
+      });
+      const cancelledGeneration = recovered.runState(cancelledSession).generation;
+      recovered.prepareTurnCancel({
+        sessionId: cancelledSession,
+        cancelId: "cancel-outcome",
+        expectedRunId: "cancelled-run",
+        expectedGeneration: cancelledGeneration,
+        dispatchId: "cancelled-run",
+        requeueIds: [],
+        source: "test",
+      });
+      recovered.settleTurnCancel({
+        sessionId: cancelledSession,
+        cancelId: "cancel-outcome",
+        outcome: "confirmed",
+      });
+      expect(
+        recovered.prepareTurnOutcomeProjection({
+          sessionId: cancelledSession,
+          projectionId: "outcome:cancelled-run",
+          runId: "cancelled-run",
+          runGeneration: cancelledGeneration,
+          errorMessage: "must not project",
+          noticePersisted: false,
+          projectedAt: "2026-08-24T18:04:00.000Z",
+        }),
+      ).toBe("stale");
+    } finally {
+      recovered.close();
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  test("durably prepares, retries, and generation-fences explicit turn cancellation", () => {
+    const dir = mkdtempSync(join(tmpdir(), "session-kernel-cancel-"));
+    const path = join(dir, "kernel.sqlite");
+    const first = new SessionKernelStore(path);
+    try {
+      first.applyRunEvent({ sessionId: "cancel-restart", event: "prompt" });
+      first.applyRunEvent({
+        sessionId: "cancel-restart",
+        event: "run_registered",
+        runKey: "run-one",
+      });
+      first.setDeliverySlot("cancel-restart", "queued", [
+        { id: "already-queued", content: "later" },
+      ]);
+      first.setDeliverySlot("cancel-restart", "steered", [
+        { id: "landed", content: "already landed" },
+        { id: "unconfirmed", content: "return me" },
+      ]);
+      const generation = first.runState("cancel-restart").generation;
+      expect(first.prepareTurnCancel({
+        sessionId: "cancel-restart",
+        cancelId: "cancel-one",
+        expectedRunId: "run-one",
+        expectedGeneration: generation,
+        dispatchId: "run-one",
+        requeueIds: ["unconfirmed"],
+        source: "test",
+      })).toMatchObject({
+        cancel: {
+          phase: "prepared",
+          runId: "run-one",
+          runGeneration: generation,
+        },
+        runState: { state: "stopped", generation },
+      });
+      expect(first.prepareTurnCancel({
+        sessionId: "cancel-restart",
+        cancelId: "cancel-one",
+        expectedRunId: "run-one",
+        expectedGeneration: generation,
+        dispatchId: "run-one",
+        requeueIds: ["unconfirmed"],
+        source: "test",
+      })).toMatchObject({ cancel: { phase: "prepared" } });
+      expect(() => first.prepareTurnCancel({
+        sessionId: "cancel-restart",
+        cancelId: "cancel-one",
+        expectedRunId: "run-one",
+        expectedGeneration: generation,
+        dispatchId: "run-one",
+        requeueIds: ["unconfirmed"],
+        source: "another-source",
+      })).toThrow("reused with another payload");
+      expect(first.runState("cancel-restart")).toMatchObject({
+        state: "stopped",
+        generation,
+        currentRunId: undefined,
+      });
+      expect(first.deliverySnapshot("cancel-restart")).toMatchObject({
+        queued: [
+          { id: "unconfirmed", content: "return me" },
+          { id: "already-queued", content: "later" },
+        ],
+        steered: [],
+      });
+      expect(first.pendingOutbox(Date.now(), 10)).toEqual([
+        expect.objectContaining({
+          kind: "turn_cancel",
+          effectKey: "cancel-one",
+          payload: expect.objectContaining({ runGeneration: generation }),
+        }),
+      ]);
+    } finally {
+      first.close();
+    }
+
+    const beforePhysicalCancel = new SessionKernelStore(path);
+    try {
+      const cancel = beforePhysicalCancel.turnSnapshot("cancel-restart").cancel;
+      expect(cancel).toMatchObject({ phase: "prepared", cancelId: "cancel-one" });
+      expect(beforePhysicalCancel.beginTurnCancelEffect({
+        sessionId: "cancel-restart",
+        cancelId: "cancel-one",
+        runGeneration: cancel?.runGeneration ?? -1,
+      })).toBe("execute");
+    } finally {
+      beforePhysicalCancel.close();
+    }
+
+    const duringPhysicalCancel = new SessionKernelStore(path);
+    try {
+      const cancel = duringPhysicalCancel.turnSnapshot("cancel-restart").cancel;
+      expect(cancel).toMatchObject({ phase: "executing" });
+      expect(duringPhysicalCancel.beginTurnCancelEffect({
+        sessionId: "cancel-restart",
+        cancelId: "cancel-one",
+        runGeneration: cancel?.runGeneration ?? -1,
+      })).toBe("retry");
+      duringPhysicalCancel.applyRunEvent({
+        sessionId: "cancel-restart",
+        event: "prompt",
+      });
+      duringPhysicalCancel.applyRunEvent({
+        sessionId: "cancel-restart",
+        event: "run_registered",
+        runKey: "run-two",
+      });
+      expect(duringPhysicalCancel.beginTurnCancelEffect({
+        sessionId: "cancel-restart",
+        cancelId: "cancel-one",
+        runGeneration: cancel?.runGeneration ?? -1,
+      })).toBe("adopt_confirmed");
+      expect(duringPhysicalCancel.settleTurnCancel({
+        sessionId: "cancel-restart",
+        cancelId: "cancel-one",
+        outcome: "confirmed",
+      })).toBe(true);
+      expect(duringPhysicalCancel.turnSnapshot("cancel-restart").cancel).toMatchObject({
+        phase: "settled",
+        outcome: "confirmed",
+      });
+      expect(duringPhysicalCancel.beginTurnCancelEffect({
+        sessionId: "cancel-restart",
+        cancelId: "cancel-one",
+        runGeneration: cancel?.runGeneration ?? -1,
+      })).toBe("settled");
+      const successor = duringPhysicalCancel.runState("cancel-restart");
+      duringPhysicalCancel.prepareTurnCancel({
+        sessionId: "cancel-restart",
+        cancelId: "cancel-two",
+        expectedRunId: "run-two",
+        expectedGeneration: successor.generation,
+        dispatchId: "run-two",
+        requeueIds: [],
+        source: "test",
+      });
+      expect(duringPhysicalCancel.beginTurnCancelEffect({
+        sessionId: "cancel-restart",
+        cancelId: "cancel-one",
+        runGeneration: cancel?.runGeneration ?? -1,
+      })).toBe("missing");
+      expect(duringPhysicalCancel.settleTurnCancel({
+        sessionId: "cancel-restart",
+        cancelId: "cancel-one",
+        outcome: "confirmed",
+      })).toBe(false);
+    } finally {
+      duringPhysicalCancel.close();
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+	test("recovers prepared and claimed interrupts across crashes", () => {
+		const dir = mkdtempSync(join(tmpdir(), "session-kernel-interrupt-"));
+		const path = join(dir, "kernel.sqlite");
+		const first = new SessionKernelStore(path);
+		try {
+			first.setDeliverySlot("restart-interrupt", "queued", [
+				{ id: "held", content: "deliver after restart", hold: true },
+			]);
+			first.prepareDeliveryInterrupt({
+				sessionId: "restart-interrupt",
+				interruptId: "interrupt-restart-interrupt",
+				anchorId: "held",
+				dispatchId: "run-owner",
+			});
+			expect(first.stats().pendingOutbox).toBe(1);
+		} finally {
+			first.close();
+		}
+
+		const recoveredBeforeCancel = new SessionKernelStore(path);
+		try {
+			const interrupt = recoveredBeforeCancel.deliverySnapshot(
+				"restart-interrupt",
+			).interrupt;
+			expect(interrupt).toMatchObject({ phase: "prepared", anchorId: "held" });
+			expect(recoveredBeforeCancel.claimNextDeliveryDispatch({
+				sessionId: "restart-interrupt",
+				promptEntryId: "must-wait-for-cancel",
+				stillWorking: true,
+			})).toMatchObject({ kind: "hold" });
+			expect(recoveredBeforeCancel.beginDeliveryInterruptEffect({
+				sessionId: "restart-interrupt",
+				interruptId: "interrupt-restart-interrupt",
+				runGeneration: interrupt?.runGeneration ?? -1,
+			})).toBe("execute");
+		} finally {
+			recoveredBeforeCancel.close();
+		}
+
+		const recoveredDuringCancel = new SessionKernelStore(path);
+		try {
+			const interrupt = recoveredDuringCancel.deliverySnapshot(
+				"restart-interrupt",
+			).interrupt;
+			expect(interrupt).toMatchObject({ phase: "executing" });
+			expect(recoveredDuringCancel.beginDeliveryInterruptEffect({
+				sessionId: "restart-interrupt",
+				interruptId: "interrupt-restart-interrupt",
+				runGeneration: interrupt?.runGeneration ?? -1,
+			})).toBe("retry");
+			expect(recoveredDuringCancel.settleDeliveryInterrupt({
+				sessionId: "restart-interrupt",
+				interruptId: "interrupt-restart-interrupt",
+				outcome: "confirmed",
+			})).toBe(true);
+      expect(recoveredDuringCancel.beginDeliveryInterruptEffect({
+        sessionId: "restart-interrupt",
+        interruptId: "interrupt-restart-interrupt",
+        runGeneration: interrupt?.runGeneration ?? -1,
+      })).toBe("confirmed");
+			expect(recoveredDuringCancel.claimNextDeliveryDispatch({
+				sessionId: "restart-interrupt",
+				promptEntryId: "restart-entry",
+				stillWorking: true,
+			})).toMatchObject({ kind: "deliver", interrupted: true });
+		} finally {
+			recoveredDuringCancel.close();
+		}
+
+		const recoveredAfterClaim = new SessionKernelStore(path);
+		try {
+			expect(recoveredAfterClaim.failDeliveryDispatch(
+				"restart-interrupt",
+				"restart-entry",
+			)).toBe(true);
+			expect(
+				recoveredAfterClaim.deliverySnapshot("restart-interrupt").interrupt,
+			).toMatchObject({ phase: "confirmed", anchorId: "held" });
+			expect(recoveredAfterClaim.claimNextDeliveryDispatch({
+				sessionId: "restart-interrupt",
+				promptEntryId: "retry-entry",
+				stillWorking: true,
+			})).toMatchObject({ kind: "deliver", interrupted: true });
+      const claimedInterrupt = (
+        recoveredAfterClaim.deliverySnapshot("restart-interrupt").dispatch as {
+          interrupt?: { runGeneration: number };
+        }
+      ).interrupt;
+      expect(recoveredAfterClaim.beginDeliveryInterruptEffect({
+        sessionId: "restart-interrupt",
+        interruptId: "interrupt-restart-interrupt",
+        runGeneration: claimedInterrupt?.runGeneration ?? -1,
+      })).toBe("confirmed");
+		} finally {
+			recoveredAfterClaim.close();
+			rmSync(dir, { recursive: true, force: true });
+		}
+	});
+
+	test("reuses a failed multi-item dispatch identity", () => {
+		store.setDeliverySlot("failed-multi-dispatch", "queued", [
+			{ id: "one", content: "first" },
+			{ id: "two", content: "second" },
+		]);
+		expect(store.claimNextDeliveryDispatch({
+			sessionId: "failed-multi-dispatch",
+			promptEntryId: "stable-batch-entry",
+		})).toMatchObject({
+			kind: "deliver",
+			promptEntryId: "stable-batch-entry",
+			items: [{ id: "one" }, { id: "two" }],
+		});
+		expect(
+			store.failDeliveryDispatch(
+				"failed-multi-dispatch",
+				"stable-batch-entry",
+			),
+		).toBe(true);
+		const restored = store.deliverySnapshot("failed-multi-dispatch").queued;
+		store.setDeliverySlot("failed-multi-dispatch", "queued", [
+			...restored,
+			{ id: "later", content: "must stay later" },
+		]);
+		store.prepareDeliveryInterrupt({
+			sessionId: "failed-multi-dispatch",
+			interruptId: "interrupt-failed-multi-dispatch",
+			anchorId: "two",
+			dispatchId: "run-owner",
+			soloId: "two",
+		});
+		store.settleDeliveryInterrupt({
+			sessionId: "failed-multi-dispatch",
+			interruptId: "interrupt-failed-multi-dispatch",
+			outcome: "confirmed",
+		});
+		expect(store.claimNextDeliveryDispatch({
+			sessionId: "failed-multi-dispatch",
+			promptEntryId: "replacement-must-not-win",
+		})).toMatchObject({
+			kind: "deliver",
+			promptEntryId: "stable-batch-entry",
+			items: [
+				{
+					id: "one",
+					promptEntryId: "stable-batch-entry",
+					retryDispatchId: "stable-batch-entry",
+				},
+				{ id: "two", retryDispatchId: "stable-batch-entry" },
+			],
+		});
+		expect(store.deliverySnapshot("failed-multi-dispatch").queued).toEqual([
+			{ id: "later", content: "must stay later" },
+		]);
+
+		expect(
+			store.failDeliveryDispatch(
+				"failed-multi-dispatch",
+				"stable-batch-entry",
+			),
+		).toBe(true);
+		store.setDeliverySlot(
+			"failed-multi-dispatch",
+			"queued",
+			store
+				.deliverySnapshot("failed-multi-dispatch")
+				.queued.filter((item) => (item as { id?: string }).id !== "one"),
+		);
+		store.prepareDeliveryInterrupt({
+			sessionId: "failed-multi-dispatch",
+			interruptId: "interrupt-failed-multi-dispatch",
+			anchorId: "two",
+			dispatchId: "run-owner",
+			soloId: "two",
+		});
+		store.settleDeliveryInterrupt({
+			sessionId: "failed-multi-dispatch",
+			interruptId: "interrupt-failed-multi-dispatch",
+			outcome: "confirmed",
+		});
+		expect(store.claimNextDeliveryDispatch({
+			sessionId: "failed-multi-dispatch",
+			promptEntryId: "replacement-still-must-not-win",
+		})).toMatchObject({
+			kind: "deliver",
+			promptEntryId: "stable-batch-entry",
+			items: [{ id: "two", retryDispatchId: "stable-batch-entry" }],
+		});
+	});
+
 	test("recovers an ambiguous prepared steer without duplicate queue delivery", () => {
 		store.setDeliverySlot("steer-recovery", "queued", [
 			{ id: "steer-one", content: "fold me in" },
@@ -1156,6 +2232,54 @@ describe("SessionKernel", () => {
 });
 
 describe("SessionKernel durable runtime", () => {
+	test("admits opening projections beyond the eight-turn engine limit", async () => {
+		const { drainSessionKernelRuntime, waitForSessionKernelRuntimeIdle } =
+			await import("./runtime");
+		const { ensureCreationEffectExecutors } =
+			await import("./creation-effect-executors");
+		const { replaceSessionEffectExecutorForTest } =
+			await import("./effect-executors");
+		ensureCreationEffectExecutors();
+		let started = 0;
+		let release!: () => void;
+		const blocked = new Promise<void>((resolve) => {
+			release = resolve;
+		});
+		const unregister = replaceSessionEffectExecutorForTest(
+			"creation_opening_turn",
+			async () => {
+				started += 1;
+				await blocked;
+			},
+		);
+		try {
+			for (let index = 0; index < 9; index += 1) {
+				const sessionId = `opening-admission-${index}`;
+				const entryId = `entry-${index}`;
+				store.enqueueOutbox(
+					sessionId,
+					"creation_opening_turn",
+					{
+						creationIdentity: `identity-${index}`,
+						creationGeneration: 1,
+						openingPromptEntryId: entryId,
+						runId: `opening:${sessionId}:${entryId}`,
+						runGeneration: 1,
+						mode: "adopt_or_launch",
+					},
+					`effect-${index}`,
+				);
+			}
+			await drainSessionKernelRuntime();
+			await Bun.sleep(10);
+			expect(started).toBe(9);
+		} finally {
+			release();
+			await waitForSessionKernelRuntimeIdle();
+			unregister();
+		}
+	});
+
 	test("fires a durable timer once and removes it after acknowledgement", async () => {
 		const { drainSessionKernelRuntime, registerSessionTimerHandler, waitForSessionKernelRuntimeIdle, } = await import("./runtime");
 		let calls = 0;

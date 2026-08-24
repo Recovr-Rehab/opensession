@@ -23,6 +23,7 @@ import {
   type DeliveryMutationReply,
 } from "./delivery-protocol";
 import type { AskActorRequest, AskActorResult } from "./ask-protocol";
+import type { TurnActorRequest, TurnActorResult } from "./turn-protocol";
 import {
   SESSION_KERNEL_ACTOR_VERSION,
   type KernelActorAsyncRequest,
@@ -141,13 +142,14 @@ export class SessionKernelActorClient {
     return response.stats;
   }
 
-  async maintainAsync(): Promise<void> {
+  async maintainAsync(): Promise<boolean> {
     const response = await this.request({
       t: "maintain",
       rpcId: crypto.randomUUID(),
     });
     if (response.t !== "maintain_result")
       throw new Error("Invalid kernel maintenance response");
+    return response.pending;
   }
 
   async runtimeWork(
@@ -308,6 +310,29 @@ export class SessionKernelActorClient {
       `ask ${request.op}`,
       request.op === "snapshot" || request.op === "entries",
     );
+  }
+
+  decideTurn<T extends TurnActorRequest>(request: T): TurnActorResult<T> {
+    const result = this.callSync<TurnActorResult<T>>(
+      {
+        t: "reduce",
+        command: { kind: "turn", commandId: crypto.randomUUID(), request },
+      },
+      `turn ${request.op}`,
+      request.op === "snapshot",
+    );
+    if (request.op === "prepare_cancel") {
+      const prepared = result as TurnActorResult<
+        Extract<TurnActorRequest, { op: "prepare_cancel" }>
+      >;
+      (this.store as RemoteStore).noteRunState(request.sessionId, prepared.runState);
+    } else if (
+      request.op === "prepare_outcome_projection" ||
+      request.op === "settle_outcome_projection"
+    ) {
+      (this.store as RemoteStore).noteChange(request.sessionId);
+    }
+    return result;
   }
 
   decideDelivery<T extends DeliveryActorRequest>(
@@ -643,6 +668,55 @@ class RemoteStore implements SessionKernelStoreApi {
   markDeliveryMigrationComplete() {
     this.call("markDeliveryMigrationComplete");
   }
+  turnSnapshot(sessionId: string) {
+    return this.actor.decideTurn({ op: "snapshot", sessionId });
+  }
+  prepareTurnCancel(
+    input: Parameters<SessionKernelStoreApi["prepareTurnCancel"]>[0],
+  ): ReturnType<SessionKernelStoreApi["prepareTurnCancel"]> {
+    return this.actor.decideTurn({ op: "prepare_cancel", ...input }) as ReturnType<
+      SessionKernelStoreApi["prepareTurnCancel"]
+    >;
+  }
+  beginTurnCancelEffect(
+    input: Parameters<SessionKernelStoreApi["beginTurnCancelEffect"]>[0],
+  ): ReturnType<SessionKernelStoreApi["beginTurnCancelEffect"]> {
+    return this.actor.decideTurn({
+      op: "begin_cancel_effect",
+      ...input,
+    }) as ReturnType<SessionKernelStoreApi["beginTurnCancelEffect"]>;
+  }
+  settleTurnCancel(
+    input: Parameters<SessionKernelStoreApi["settleTurnCancel"]>[0],
+  ): ReturnType<SessionKernelStoreApi["settleTurnCancel"]> {
+    return this.actor.decideTurn({ op: "settle_cancel", ...input }) as ReturnType<
+      SessionKernelStoreApi["settleTurnCancel"]
+    >;
+  }
+  prepareTurnOutcomeProjection(
+    input: Parameters<SessionKernelStoreApi["prepareTurnOutcomeProjection"]>[0],
+  ): ReturnType<SessionKernelStoreApi["prepareTurnOutcomeProjection"]> {
+    return this.actor.decideTurn({
+      op: "prepare_outcome_projection",
+      ...input,
+    }) as ReturnType<SessionKernelStoreApi["prepareTurnOutcomeProjection"]>;
+  }
+  beginTurnOutcomeProjection(
+    input: Parameters<SessionKernelStoreApi["beginTurnOutcomeProjection"]>[0],
+  ): ReturnType<SessionKernelStoreApi["beginTurnOutcomeProjection"]> {
+    return this.actor.decideTurn({
+      op: "begin_outcome_projection",
+      ...input,
+    }) as ReturnType<SessionKernelStoreApi["beginTurnOutcomeProjection"]>;
+  }
+  settleTurnOutcomeProjection(
+    input: Parameters<SessionKernelStoreApi["settleTurnOutcomeProjection"]>[0],
+  ): ReturnType<SessionKernelStoreApi["settleTurnOutcomeProjection"]> {
+    return this.actor.decideTurn({
+      op: "settle_outcome_projection",
+      ...input,
+    }) as ReturnType<SessionKernelStoreApi["settleTurnOutcomeProjection"]>;
+  }
   deliverySnapshot(sessionId: string) {
     return this.actor.decideDelivery({ op: "snapshot", sessionId });
   }
@@ -681,6 +755,38 @@ class RemoteStore implements SessionKernelStoreApi {
       sessionId,
       items,
     });
+  }
+  prepareDeliveryInterrupt(
+    input: Parameters<SessionKernelStoreApi["prepareDeliveryInterrupt"]>[0],
+  ): ReturnType<SessionKernelStoreApi["prepareDeliveryInterrupt"]> {
+    return this.actor.decideDelivery({
+      op: "prepare_interrupt",
+      ...input,
+    }) as ReturnType<SessionKernelStoreApi["prepareDeliveryInterrupt"]>;
+  }
+  beginDeliveryInterruptEffect(
+    input: Parameters<SessionKernelStoreApi["beginDeliveryInterruptEffect"]>[0],
+  ): ReturnType<SessionKernelStoreApi["beginDeliveryInterruptEffect"]> {
+    return this.actor.decideDelivery({
+      op: "begin_interrupt_effect",
+      ...input,
+    }) as ReturnType<SessionKernelStoreApi["beginDeliveryInterruptEffect"]>;
+  }
+  settleDeliveryInterrupt(
+    input: Parameters<SessionKernelStoreApi["settleDeliveryInterrupt"]>[0],
+  ): ReturnType<SessionKernelStoreApi["settleDeliveryInterrupt"]> {
+    return this.actor.decideDelivery({
+      op: "settle_interrupt",
+      ...input,
+    }) as ReturnType<SessionKernelStoreApi["settleDeliveryInterrupt"]>;
+  }
+  claimNextDeliveryDispatch(
+    input: Parameters<SessionKernelStoreApi["claimNextDeliveryDispatch"]>[0],
+  ): ReturnType<SessionKernelStoreApi["claimNextDeliveryDispatch"]> {
+    return this.actor.decideDelivery({
+      op: "claim_next_dispatch",
+      ...input,
+    }) as ReturnType<SessionKernelStoreApi["claimNextDeliveryDispatch"]>;
   }
   claimDeliveryDispatch(
     input: Parameters<SessionKernelStoreApi["claimDeliveryDispatch"]>[0],
@@ -754,7 +860,7 @@ class RemoteStore implements SessionKernelStoreApi {
     this.call("compact", now, retention, changes);
   }
   maintain() {
-    this.call("maintain");
+    return this.call<boolean>("maintain");
   }
   deadLetters(limit?: number, offset?: number) {
     return this.call<ReturnType<SessionKernelStoreApi["deadLetters"]>>(
@@ -795,6 +901,9 @@ class RemoteStore implements SessionKernelStoreApi {
   }
   ackOutbox(id: number) {
     this.call("ackOutbox", id);
+  }
+  deferOutbox(id: number, delayMs?: number) {
+    this.call("deferOutbox", id, delayMs);
   }
   noteTimerFailure(
     sessionId: string,

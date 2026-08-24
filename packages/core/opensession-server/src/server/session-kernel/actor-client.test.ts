@@ -275,6 +275,105 @@ describe("session kernel actor boundary", () => {
     await host.complete(active.executionId!, "done", []);
   });
 
+  test("owns turn cancellation and its physical effect while gateway work is active", async () => {
+    const host = await actor();
+    host.decideRunEvent({ sessionId: "turn-cancel", event: "prompt" });
+    host.decideRunEvent({
+      sessionId: "turn-cancel",
+      event: "run_registered",
+      runKey: "run-one",
+    });
+    host.decideDelivery({
+      op: "set",
+      sessionId: "turn-cancel",
+      slot: "steered",
+      value: [{ id: "steer-one", content: "return me" }],
+    });
+    expect(host.decideTurn({
+      op: "prepare_cancel",
+      sessionId: "turn-cancel",
+      cancelId: "cancel-one",
+      expectedRunId: "run-one",
+      expectedGeneration: 1,
+      dispatchId: "run-one",
+      requeueIds: ["steer-one"],
+      source: "test",
+    })).toMatchObject({
+      cancel: { phase: "prepared", runId: "run-one" },
+      runState: { state: "stopped" },
+    });
+    expect(host.store.runState("turn-cancel")).toMatchObject({
+      state: "stopped",
+    });
+    expect(host.store.runState("turn-cancel").currentRunId).toBeUndefined();
+    expect(host.store.pendingOutbox(Date.now(), 10, ["turn_cancel"])).toEqual([
+      expect.objectContaining({ kind: "turn_cancel", effectKey: "cancel-one" }),
+    ]);
+  });
+
+  test("owns terminal outcome projection and settlement while gateway work is active", async () => {
+    const host = await actor();
+    host.decideRunEvent({
+      sessionId: "turn-outcome",
+      event: "prompt",
+      runKey: "run-one",
+    });
+    host.decideRunEvent({
+      sessionId: "turn-outcome",
+      event: "run_registered",
+      runKey: "run-one",
+    });
+    host.decideRunEvent({
+      sessionId: "turn-outcome",
+      event: "run_failed",
+      runKey: "run-one",
+    });
+    expect(
+      host.decideTurn({
+        op: "prepare_outcome_projection",
+        sessionId: "turn-outcome",
+        projectionId: "outcome:run-one",
+        runId: "run-one",
+        runGeneration: 1,
+        errorMessage: "failed",
+        noticePersisted: false,
+        projectedAt: "2026-08-24T18:00:00.000Z",
+      }),
+    ).toMatchObject({ phase: "pending", runGeneration: 1 });
+    expect(
+      host.store.pendingOutbox(Date.now(), 10, ["turn_outcome_project"]),
+    ).toEqual([
+      expect.objectContaining({
+        kind: "turn_outcome_project",
+        effectKey: "outcome:run-one",
+      }),
+    ]);
+    expect(
+      host.decideTurn({
+        op: "begin_outcome_projection",
+        sessionId: "turn-outcome",
+        projectionId: "outcome:run-one",
+        runGeneration: 1,
+      }),
+    ).toBe("execute");
+    expect(
+      host.decideTurn({
+        op: "settle_outcome_projection",
+        sessionId: "turn-outcome",
+        projectionId: "outcome:run-one",
+        runGeneration: 1,
+      }),
+    ).toBe(true);
+    expect(
+      host.decideTurn({
+        op: "begin_outcome_projection",
+        sessionId: "turn-outcome",
+        projectionId: "outcome:run-one",
+        runGeneration: 1,
+      }),
+    ).toBe("completed");
+  });
+
   test("reduces creation events while gateway work is active", async () => {
     const host = await actor();
     const active = await host.begin(
@@ -511,6 +610,51 @@ describe("session kernel actor boundary", () => {
         .revision,
     ).toBe(1);
     expect(snapshotCalls).toBe(1);
+  });
+
+  test("selects and claims a queue batch through the actor protocol", async () => {
+    const host = await actor();
+    host.decideDelivery({
+      op: "set",
+      sessionId: "actor-next-dispatch",
+      slot: "queued",
+      value: [
+        { id: "held", content: "later", hold: true },
+        { id: "solo", promptEntryId: "stable-entry", content: "now", hold: true },
+      ],
+    });
+    host.decideDelivery({
+      op: "prepare_interrupt",
+      sessionId: "actor-next-dispatch",
+      interruptId: "interrupt-one",
+      anchorId: "solo",
+      dispatchId: "run-owner",
+      soloId: "solo",
+    });
+    host.decideDelivery({
+      op: "settle_interrupt",
+      sessionId: "actor-next-dispatch",
+      interruptId: "interrupt-one",
+      outcome: "confirmed",
+    });
+    expect(host.decideDelivery({
+      op: "claim_next_dispatch",
+      sessionId: "actor-next-dispatch",
+      promptEntryId: "candidate-entry",
+      stillWorking: true,
+    })).toMatchObject({
+      kind: "deliver",
+      promptEntryId: "stable-entry",
+      items: [{ id: "solo", promptEntryId: "stable-entry" }],
+      interrupted: true,
+    });
+    expect(host.decideDelivery({
+      op: "snapshot",
+      sessionId: "actor-next-dispatch",
+    })).toMatchObject({
+      queued: [{ id: "held" }],
+      dispatch: { promptEntryId: "stable-entry" },
+    });
   });
 
   test("keeps actor reducers responsive while gateway effects stay ordered", async () => {

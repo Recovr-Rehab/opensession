@@ -1,4 +1,5 @@
 import { BASE_PATH } from "../lib/base";
+import { GITHUB_APP_GRANT_PERMISSIONS } from "../../shared/github-app-permissions";
 import React, { useEffect, useState, useCallback, useRef } from "react";
 import { Menu } from "../ui/menu";
 import { OptionSelect } from "../ui/select";
@@ -98,6 +99,7 @@ const MCP_BLURBS: Record<string, string> = {
   ahrefs: "SEO, keywords & backlink data",
   github: "Repos, issues & pull requests",
   circle: "Community & support workspace",
+  vercel: "Projects, deployments & logs",
 };
 
 const AGENT_BLURBS: Record<string, string> = {
@@ -161,6 +163,9 @@ export function Connections() {
   const [refreshing, setRefreshing] = useState(false);
   const [showAdd, setShowAdd] = useState(false);
   const [removeError, setRemoveError] = useState<string | null>(null);
+  // Paste-a-token connect for providers that gate OAuth client registration
+  // (Vercel approves only its own list of AI clients).
+  const [tokenConnect, setTokenConnect] = useState<McpConnection | null>(null);
 
   const load = useCallback(async (force = false) => {
     if (force) setRefreshing(true);
@@ -183,7 +188,12 @@ export function Connections() {
   const [oauthByName, setOauthByName] = useState<
     Record<
       string,
-      { shared?: { connectedBy?: string }; users: string[]; capable?: boolean }
+      {
+        shared?: { connectedBy?: string };
+        users: string[];
+        capable?: boolean;
+        manualToken?: boolean;
+      }
     >
   >({});
   const loadOauth = useCallback(async (servers: McpConnection[]) => {
@@ -441,6 +451,13 @@ export function Connections() {
                             <IconPlus size={16} className="text-faint" />
                             Connect my account
                           </Menu.Item>
+                          {s.transport === "http" &&
+                          oauthByName[s.name]?.manualToken ? (
+                            <Menu.Item onClick={() => setTokenConnect(s)}>
+                              <IconPlus size={16} className="text-faint" />
+                              Connect with API token
+                            </Menu.Item>
+                          ) : null}
                           {(oauthByName[s.name]?.shared ||
                             oauthByName[s.name]?.users.length) ? (
                             <Menu.Item
@@ -485,6 +502,14 @@ export function Connections() {
           <PlainRouter />
         </>
       )}
+      <ConnectTokenDialog
+        server={tokenConnect}
+        onClose={() => setTokenConnect(null)}
+        onConnected={() => {
+          setTokenConnect(null);
+          if (data?.mcpServers) void loadOauth(data.mcpServers);
+        }}
+      />
     </SettingsPanel>
   );
 }
@@ -552,10 +577,10 @@ function buildGithubAppCreateUrl(name: string, org: string): string {
     url: "http://localhost:3850",
     public: "false",
     webhook_active: "false",
-    contents: "write",
-    pull_requests: "write",
-    members: "read",
-    metadata: "read",
+    // The canonical grant set — the same permissions the install tokens mint
+    // request, so the App is not born missing `issues` or `checks` (the drift
+    // this builder used to have: no issues, no checks).
+    ...GITHUB_APP_GRANT_PERMISSIONS,
     device_flow_enabled: "true",
   }).toString();
   const base = org.trim()
@@ -608,6 +633,8 @@ function GithubAppWizard({
   setSlug,
   secret,
   setSecret,
+  privateKey,
+  setPrivateKey,
   onSaveApp,
   saving,
   configured,
@@ -628,6 +655,8 @@ function GithubAppWizard({
   setSlug: (v: string) => void;
   secret: string;
   setSecret: (v: string) => void;
+  privateKey: string;
+  setPrivateKey: (v: string) => void;
   onSaveApp: (appOrg: string) => void;
   saving: boolean;
   configured: boolean;
@@ -890,10 +919,25 @@ function GithubAppWizard({
                   copy it (shown once). Required.
                 </span>
               </div>
-            </div>
-            <div className="text-meta leading-snug text-faint">
-              Ignore GitHub's “generate a private key” banner. Open Session uses
-              device flow and doesn't need one.
+              <div className="flex flex-col gap-1">
+                <label className="text-supporting text-fg">Private key (PEM)</label>
+                <textarea
+                  className={cn(settingsInputClass, "min-h-20 resize-y font-mono")}
+                  value={privateKey}
+                  onChange={(e) => setPrivateKey(e.target.value)}
+                  placeholder="-----BEGIN RSA PRIVATE KEY-----"
+                  aria-label="GitHub App private key (PEM)"
+                  autoCapitalize="none"
+                  autoComplete="off"
+                  spellCheck={false}
+                />
+                <span className="text-meta leading-snug text-faint">
+                  In <span className="text-dim">Private keys</span>, click{" "}
+                  <span className="text-dim">Generate a private key</span>, then paste
+                  the downloaded .pem here. Lets the bot and PR checks run on the App;
+                  leave blank for sign-in only.
+                </span>
+              </div>
             </div>
             <Modal.Footer>
               <Button
@@ -1021,6 +1065,7 @@ export function GithubAccounts({ personal = false }: { personal?: boolean } = {}
   const [appClientId, setAppClientId] = useState("");
   const [appSlug, setAppSlug] = useState("");
   const [appSecret, setAppSecret] = useState("");
+  const [appPrivateKey, setAppPrivateKey] = useState("");
   const [savingApp, setSavingApp] = useState(false);
   // The guided "create your app on GitHub, then paste + install + connect"
   // wizard, launched from the App option below.
@@ -1102,6 +1147,7 @@ export function GithubAccounts({ personal = false }: { personal?: boolean } = {}
     const clientId = appClientId.trim();
     const slug = appSlug.trim();
     const secret = appSecret.trim();
+    const privateKey = appPrivateKey.trim();
     // The secret is required: the device-flow token expires and is refreshed
     // with it, so without one the connection would stop after ~8h.
     if (!clientId || !slug || !secret) return;
@@ -1112,14 +1158,16 @@ export function GithubAccounts({ personal = false }: { personal?: boolean } = {}
         method: "POST",
         headers: { "Content-Type": "application/json" },
         // An org owner also records the sign-in intent server-side; a blank org
-        // is a personal, single-user App.
-        body: JSON.stringify({ clientId, slug, secret, appOrg }),
+        // is a personal, single-user App. The private key is optional but is
+        // what lets the bot/agent and checks-read mint installation tokens.
+        body: JSON.stringify({ clientId, slug, secret, appOrg, privateKey }),
       });
       const body = await res.json();
       if (!res.ok) throw new Error(body.error || `Failed: ${res.status}`);
       setAppClientId("");
       setAppSlug("");
       setAppSecret("");
+      setAppPrivateKey("");
       // getConfig() re-reads on the file change, so the reload shows the App as
       // configured and switches the card to its device-flow connect.
       load();
@@ -1425,6 +1473,8 @@ export function GithubAccounts({ personal = false }: { personal?: boolean } = {}
           setSlug={setAppSlug}
           secret={appSecret}
           setSecret={setAppSecret}
+          privateKey={appPrivateKey}
+          setPrivateKey={setAppPrivateKey}
           onSaveApp={saveApp}
           saving={savingApp}
           configured={data.connectAvailable}
@@ -2031,6 +2081,134 @@ function PlainRouter() {
         </div>
       </SettingsSection>
     </>
+  );
+}
+
+const TOKEN_CONNECT_URLS: Record<string, { url: string; label: string }> = {
+  vercel: {
+    url: "https://vercel.com/account/settings/tokens",
+    label: "vercel.com/account/settings/tokens",
+  },
+};
+
+/**
+ * Paste-a-token connect for providers whose hosted MCP gates OAuth client
+ * registration (Vercel approves only clients it has reviewed). Any teammate
+ * can mint a personal token; the server validates it live against the
+ * provider's API before storing it as a grant.
+ */
+function ConnectTokenDialog({
+  server,
+  onClose,
+  onConnected,
+}: {
+  server: McpConnection | null;
+  onClose: () => void;
+  onConnected: () => void;
+}) {
+  const [scope, setScope] = useState<"shared" | "me">("shared");
+  const [token, setToken] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  useEffect(() => {
+    if (server) {
+      setScope("shared");
+      setToken("");
+      setError(null);
+    }
+  }, [server]);
+  if (!server) return null;
+  const active = server;
+  const tokenPage = TOKEN_CONNECT_URLS[active.name];
+
+  async function connect() {
+    if (!token.trim() || saving) return;
+    setSaving(true);
+    setError(null);
+    try {
+      const res = await fetch(
+        `${BASE_PATH}/api/connections/mcp/${encodeURIComponent(active.name)}/token`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ token: token.trim(), scope }),
+        },
+      );
+      const body = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(body.error || `Failed: ${res.status}`);
+      onConnected();
+    } catch (e: any) {
+      setError(e.message);
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <Modal.Root
+      open={!!server}
+      onOpenChange={(next) => {
+        if (!next && !saving) onClose();
+      }}
+    >
+      <Modal.Content widthClassName="max-w-[30rem]">
+        <Modal.Header
+          title={`Connect ${displayName(server.name)} with an API token`}
+          description="The token is checked with the provider, then stored for agent runs."
+        />
+        <div className="flex flex-col gap-4">
+          {tokenPage ? (
+            <div className="text-supporting leading-snug text-dim">
+              Create a token at{" "}
+              <a
+                className="underline hover:text-fg"
+                href={tokenPage.url}
+                target="_blank"
+                rel="noreferrer"
+              >
+                {tokenPage.label}
+              </a>
+              , then paste it here.
+            </div>
+          ) : null}
+          <div className="flex flex-col gap-1.5">
+            <span className="text-supporting text-dim">Connect as</span>
+            <Segmented
+              label="Connect as"
+              size="sm"
+              value={scope}
+              onValueChange={(next) => setScope(next as "shared" | "me")}
+            >
+              <SegmentedOption value="shared">Workspace</SegmentedOption>
+              <SegmentedOption value="me">My account</SegmentedOption>
+            </Segmented>
+          </div>
+          <input
+            type="password"
+            className={cn(settingsInputClass, "font-mono")}
+            value={token}
+            onChange={(e) => setToken(e.target.value)}
+            placeholder="Paste API token"
+            autoComplete="off"
+            spellCheck={false}
+            aria-label="API token"
+          />
+          {error && <InlineAlert>{error}</InlineAlert>}
+          <Modal.Footer>
+            <Button variant="ghost" onClick={onClose}>
+              Cancel
+            </Button>
+            <Button
+              variant="primary"
+              disabled={!token.trim() || saving}
+              onClick={() => void connect()}
+            >
+              {saving ? "Checking" : "Connect"}
+            </Button>
+          </Modal.Footer>
+        </div>
+      </Modal.Content>
+    </Modal.Root>
   );
 }
 

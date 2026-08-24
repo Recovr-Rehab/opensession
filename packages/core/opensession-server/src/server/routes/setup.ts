@@ -22,6 +22,7 @@
  */
 
 import { audit } from "../audit";
+import { GITHUB_APP_GRANT_PERMISSIONS } from "../../shared/github-app-permissions";
 import { envRequired, type IntegrationSpec } from "../integrations/registry";
 import { setupAccessSnapshot } from "../setup-access";
 import { requireWorkspaceAdmin } from "../workspace-auth";
@@ -118,11 +119,10 @@ export function buildOnboardingGithubAppCreateUrl(
     url: homepageUrl.trim() || "http://localhost:3850",
     public: "false",
     webhook_active: "false",
-    contents: "write",
-    issues: "write",
-    pull_requests: "write",
-    members: "read",
-    metadata: "read",
+    // The canonical grant set (checks + statuses + issues included) — the same
+    // permissions the installation token mints request, so a created App is
+    // never born missing a scope the server needs.
+    ...GITHUB_APP_GRANT_PERMISSIONS,
     // Undocumented by GitHub, but supported by the new-App form. The onboarding
     // still tells the person to check it in case GitHub ever drops the parameter.
     device_flow_enabled: "true",
@@ -137,6 +137,8 @@ export function buildOnboardingGithubAppCreateUrl(
 async function githubSnapshot() {
   const { githubUserAuthSettings, githubAppOrg, githubAuthOnConnect } =
     await import("../github-auth");
+  const { githubAppConfigured, githubBotCredentialMode } =
+    await import("../github-app");
   const { configuredServer } = await import("../config");
   const github = githubUserAuthSettings();
   const org = await primaryGithubOrg();
@@ -145,6 +147,8 @@ async function githubSnapshot() {
     clientIdConfigured: !!github.clientId,
     clientSecretConfigured: !!github.clientSecret,
     botTokenPresent: !!process.env.GITHUB_API_TOKEN,
+    botCredential: githubBotCredentialMode(),
+    appCredentialConfigured: githubAppConfigured(),
     // Captured install/app-setup intent: the org the App is owned by, and
     // whether connecting should turn on per-user sign-in. Both are inert until
     // the simple-mode connect handler consumes authOnConnect.
@@ -204,6 +208,7 @@ export async function handleSetupRoutes(
     const { readEnvFileValues } = await import("../env-file-edit");
     const { repoLifecycle } = await import("../preview");
     const { engineStatus } = await import("../engine-status");
+    const { sharedCheckoutForNewSessions } = await import("../worktree");
     const envValues = readEnvFileValues({ includeUnset: true });
 
     const access = setupAccessSnapshot({ persistedEnv: envValues });
@@ -217,6 +222,7 @@ export async function handleSetupRoutes(
         label: r.label,
         path: r.repo,
         defaultBranch: r.defaultBranch,
+        isolatedWorktrees: !sharedCheckoutForNewSessions(r),
         // Can sessions in this repo provision and boot themselves? Read off
         // the main checkout — worktrees carry the same committed files.
         lifecycle: {
@@ -343,12 +349,29 @@ export async function handleSetupRoutes(
       userPrAuth?: unknown;
       oauthClientId?: unknown;
       oauthClientSecret?: unknown;
+      botCredential?: unknown;
+      privateKey?: unknown;
     } | null;
     if (!body || typeof body !== "object" || Array.isArray(body)) {
       return Response.json({ error: "Invalid JSON body" }, { status: 400 });
     }
     if (body.userPrAuth !== undefined && typeof body.userPrAuth !== "boolean") {
       return Response.json({ error: "userPrAuth must be a boolean" }, { status: 400 });
+    }
+    if (
+      body.botCredential !== undefined &&
+      body.botCredential !== "pat" &&
+      body.botCredential !== "app"
+    ) {
+      return Response.json({ error: "botCredential must be pat or app" }, { status: 400 });
+    }
+    if (body.botCredential === "app") {
+      const { githubAppConfigured } = await import("../github-app");
+      if (!githubAppConfigured())
+        return Response.json(
+          { error: "Configure the GitHub App client id and private key before switching" },
+          { status: 409 },
+        );
     }
     for (const field of ["oauthClientId", "oauthClientSecret"] as const) {
       if (body[field] === undefined) continue;
@@ -357,14 +380,41 @@ export async function handleSetupRoutes(
         return Response.json({ error: `${field}: ${invalid}` }, { status: 400 });
       }
     }
+    // The private key is a multi-line PEM, so it bypasses validateSetting (single
+    // line). Require a complete block that parses, so a truncated paste cannot
+    // overwrite a working key on disk.
+    const privateKey =
+      typeof body.privateKey === "string" ? body.privateKey.trim() : "";
+    if (privateKey) {
+      const { createPrivateKey } = await import("node:crypto");
+      const wellFormed =
+        /-----BEGIN [A-Z ]*PRIVATE KEY-----[\s\S]+-----END [A-Z ]*PRIVATE KEY-----/.test(
+          privateKey,
+        );
+      let parses = false;
+      if (wellFormed) {
+        try {
+          createPrivateKey(privateKey);
+          parses = true;
+        } catch {
+          parses = false;
+        }
+      }
+      if (!parses)
+        return Response.json(
+          { error: "privateKey must be a valid PEM private key" },
+          { status: 400 },
+        );
+    }
     if (
       body.userPrAuth === undefined &&
       body.oauthClientId === undefined &&
-      body.oauthClientSecret === undefined
+      body.oauthClientSecret === undefined &&
+      body.botCredential === undefined &&
+      !privateKey
     ) {
       return Response.json({ error: "Nothing to change" }, { status: 400 });
     }
-
     const { rawConfig, persistRawConfig, withConfigMutationLock } =
       await import("../config-mutation");
 
@@ -384,6 +434,19 @@ export async function handleSetupRoutes(
           ? (integrations.github as Record<string, unknown>)
           : {};
       integrations.github = github;
+
+      const nextClientId = body.oauthClientId;
+      const keyMutation = privateKey ||
+        (nextClientId !== undefined && github.oauthClientId !== nextClientId
+          ? null
+          : undefined);
+      const effectiveBotCredential = body.botCredential ?? github.botCredential ?? "pat";
+      if (keyMutation === null && effectiveBotCredential === "app") {
+        return Response.json(
+          { error: "Switch bot actions to the PAT before changing the GitHub App without a replacement key" },
+          { status: 409 },
+        );
+      }
 
       // Turning on the sign-in gate must never strand a personal install with
       // nobody who can pass it. Organization onboarding already rosters people
@@ -443,16 +506,28 @@ export async function handleSetupRoutes(
         }
       }
       if (body.userPrAuth !== undefined) github.userPrAuth = body.userPrAuth;
+      if (body.botCredential !== undefined) github.botCredential = body.botCredential;
       for (const field of ["oauthClientId", "oauthClientSecret"] as const) {
         const value = body[field];
         if (value === undefined) continue;
         if (value === "") delete github[field]; // empty string clears
         else github[field] = value;
       }
-      persistRawConfig(config);
+      try {
+        const { commitGithubAppKeyMutation } = await import("../github-app");
+        await commitGithubAppKeyMutation(
+          keyMutation,
+          () => persistRawConfig(config),
+        );
+      } catch (e) {
+        return Response.json(
+          { error: String((e as Error)?.message || e) },
+          { status: 409 },
+        );
+      }
       audit({
         kind: "setup_github_update",
-        fields: (["userPrAuth", "oauthClientId", "oauthClientSecret"] as const).filter(
+        fields: (["userPrAuth", "oauthClientId", "oauthClientSecret", "botCredential"] as const).filter(
           (f) => body[f] !== undefined,
         ),
       });

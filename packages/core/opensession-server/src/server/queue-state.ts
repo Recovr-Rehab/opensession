@@ -36,6 +36,9 @@ export type QueueItem = {
    * Reusing it lets a recovery upsert the existing visible user line instead
    * of rendering the message twice. */
 	promptEntryId?: string;
+	/** Actor-internal identity for a previously accepted multi-item dispatch.
+	 * The restored group drains atomically before later queue policy can split it. */
+	retryDispatchId?: string;
 	content: string;
 	user?: string;
 	images?: string[];
@@ -116,13 +119,24 @@ export function isDelegatedQueueItem(item?: QueueItem): boolean {
 	return delegatedActorParent(item?.user) !== null;
 }
 
+/** A workflow completion nudge is attributed to the person who launched the
+ * workflow so the model receives the right identity, but it is still system
+ * traffic. The sentinel is the durable origin marker shared with transcript
+ * classification; do not let that attribution turn the nudge into an editable
+ * composer message while it is waiting to land. */
+export function isWorkflowQueueItem(item?: QueueItem): boolean {
+	return /^\s*<!--os:workflow-notice(?::[^\s>]+)?-->/.test(item?.content ?? "");
+}
+
 /** Only ordinary composer messages can be moved back into a draft. Routed
  * items carry queue-only metadata that a composer send cannot reconstruct. */
 export function isEditableQueueItem(item?: QueueItem): boolean {
-	return ( !!item &&
+	return (
+		!!item &&
 		!!item.user &&
 		!isGitHubQueueItem(item) &&
 		!isDelegatedQueueItem(item) &&
+		!isWorkflowQueueItem(item) &&
 		item.user !== AUTO_CONTINUE_USER &&
 		!item.contextSessions?.length &&
 		!item.slackReplyTo &&
@@ -205,9 +219,21 @@ export const steeredReceipts: Map<string, QueueItem[]> = new DeliveryOwnedMap(
 // Sessions whose run the user explicitly stopped. The queue drain skips these:
 // without the flag, stop would requeue the held steers and drainQueue would
 // immediately deliver them into a fresh run — "stop then instantly resume".
-// Cleared by the next explicit action (any new runSessionPrompt). In-memory
-// only: after a real restart a stop is stale anyway, and boot re-drains.
+// The actor's durable `stopped` run state is authoritative across restart;
+// this in-memory projection keeps existing hot-path checks immediate.
 export const stoppedSessions = new EphemeralSessionSet();
+
+/** Durable Stop ownership survives a gateway restart until an explicit prompt
+ * advances the actor run state out of `stopped`. */
+export function isUserStopped(sessionId: string): boolean {
+  const cancel = sessionKernelStore().turnSnapshot(sessionId).cancel;
+  return (
+    stoppedSessions.has(sessionId) ||
+    sessionKernelStore().runState(sessionId).state === "stopped" ||
+    cancel?.phase === "prepared" ||
+    cancel?.phase === "executing"
+  );
+}
 
 /**
  * Lift a Stop so this session's queue can drain again. Call this on any
@@ -218,7 +244,9 @@ export const stoppedSessions = new EphemeralSessionSet();
  * the opening turn is stopped before it settles).
  */
 export function liftUserStop(sessionId: string): void {
-	stoppedSessions.delete(sessionId);
+  stoppedSessions.delete(sessionId);
+  if (sessionKernelStore().runState(sessionId).state === "stopped")
+    sessionKernelStore().applyRunEvent({ sessionId, event: "prompt" });
 }
 
 // Both maps are persisted to disk so a real restart/crash (not just a hot
@@ -395,9 +423,11 @@ export function restorePersistedQueueState(options: {
 	effects?: boolean;
 }): { queuedSessionIds: string[]; queuedCount: number; steeredCount: number } {
 	const storePath = options.storePath ?? QUEUE_STORE;
+	const actorOwned =
+		storePath === QUEUE_STORE &&
+		sessionKernelStore().deliveryMigrationComplete();
   const data: PersistedQueueState =
-    storePath === QUEUE_STORE &&
-    sessionKernelStore().deliveryMigrationComplete()
+    actorOwned
       ? {
           queued: Object.fromEntries(promptQueues),
           steered: Object.fromEntries(steeredReceipts),
@@ -410,6 +440,56 @@ export function restorePersistedQueueState(options: {
     !Object.keys(data.dispatching || {}).length
   )
     return { queuedSessionIds: [], queuedCount: 0, steeredCount: 0 };
+
+	if (actorOwned) {
+		for (const [sessionId] of promptQueues) {
+			if (!options.sessionExists(sessionId)) promptQueues.delete(sessionId);
+		}
+		for (const [sessionId, dispatch] of promptDispatches) {
+			if (!options.sessionExists(sessionId)) {
+				promptDispatches.delete(sessionId);
+				continue;
+			}
+			if (
+				dispatch.kind === "create" &&
+				(options.creationOwnsPrompt?.(sessionId, dispatch.promptEntryId) ||
+					!options.journalOwnsPrompt(sessionId, dispatch.promptEntryId))
+			) continue;
+			if (options.journalOwnsPrompt(sessionId, dispatch.promptEntryId))
+				acknowledgePromptDispatch(sessionId, dispatch.promptEntryId, false);
+			else failPromptDispatch(sessionId, dispatch.promptEntryId, false);
+		}
+
+		let steeredCount = 0;
+		for (const [sessionId, items] of steeredReceipts) {
+			if (!options.sessionExists(sessionId)) {
+				steeredReceipts.delete(sessionId);
+				continue;
+			}
+			const delivered = options.deliveredUserTexts(sessionId);
+			const pending = queueWithIds(undeliveredSteers(items, delivered), sessionId);
+			if (options.runOwnsSteers(sessionId)) {
+				if (pending.length) steeredReceipts.set(sessionId, pending);
+				else steeredReceipts.delete(sessionId);
+				steeredCount += pending.length;
+			} else requeueSteerReceipts(sessionId, delivered);
+		}
+		if (options.effects !== false) {
+			persistQueues(storePath);
+			for (const sessionId of new Set([
+				...promptQueues.keys(),
+				...steeredReceipts.keys(),
+			])) broadcastQueue(sessionId);
+		}
+		return {
+			queuedSessionIds: [...promptQueues.keys()],
+			queuedCount: [...promptQueues.values()].reduce(
+				(count, items) => count + items.length,
+				0,
+			),
+			steeredCount,
+		};
+	}
 
 	const liveDispatches = new Map(promptDispatches);
 	const preservedDispatches = new Map<string, PromptDispatch>();
@@ -453,9 +533,11 @@ export function restorePersistedQueueState(options: {
 		) {
 			continue;
 		}
-		const items = dispatch.items.map((item, index) =>
-			index === 0 ? { ...item, promptEntryId: dispatch.promptEntryId } : item,
-		);
+		const items = dispatch.items.map((item, index) => ({
+			...item,
+			retryDispatchId: dispatch.promptEntryId,
+			...(index === 0 ? { promptEntryId: dispatch.promptEntryId } : {}),
+		}));
 		queued.set(sessionId, [...items, ...(queued.get(sessionId) || [])]);
 	}
 
@@ -497,6 +579,87 @@ export function restorePersistedQueueState(options: {
       0,
     ),
 		steeredCount,
+	};
+}
+
+/** Persist the interrupt before attempting its physical cancellation. */
+export function preparePromptInterrupt(
+	sessionId: string,
+	anchorId: string,
+  dispatchId: string,
+	soloId?: string,
+): string {
+  const interruptId = `interrupt:${new Bun.CryptoHasher("sha256")
+    .update(`${sessionId}\0${anchorId}`)
+    .digest("hex")}`;
+	sessionDelivery({
+		op: "prepare_interrupt",
+		sessionId,
+		interruptId,
+		anchorId,
+    dispatchId,
+		...(soloId ? { soloId } : {}),
+	});
+	return interruptId;
+}
+
+export function beginPromptInterruptEffect(
+	sessionId: string,
+	interruptId: string,
+	runGeneration: number,
+): "execute" | "retry" | "adopt_confirmed" | "confirmed" | "settled" {
+	return sessionDelivery({
+		op: "begin_interrupt_effect",
+		sessionId,
+		interruptId,
+		runGeneration,
+	});
+}
+
+export function settlePromptInterrupt(
+	sessionId: string,
+	interruptId: string,
+	outcome: "confirmed" | "not_aborted",
+): void {
+	const settled = sessionDelivery({
+		op: "settle_interrupt",
+		sessionId,
+		interruptId,
+		outcome,
+	});
+	if (!settled)
+		throw new Error(`Prompt interrupt ${interruptId} lost actor ownership`);
+}
+
+/** Let the actor select and claim the next queue batch in one transaction. */
+export function beginNextPromptDispatch(
+	sessionId: string,
+	opts: {
+		stillWorking?: boolean;
+	},
+	effects = true,
+):
+	| { kind: "empty" }
+	| { kind: "hold"; heldCount: number }
+	| {
+			kind: "deliver";
+			promptEntryId: string;
+			batch: QueueItem[];
+			interrupted: boolean;
+		} {
+	const claimed = sessionDelivery({
+		op: "claim_next_dispatch",
+		sessionId,
+		promptEntryId: crypto.randomUUID(),
+		...opts,
+	});
+	if (claimed.kind !== "deliver") return claimed;
+	if (effects) persistQueues();
+	return {
+		kind: "deliver",
+		promptEntryId: claimed.promptEntryId,
+		batch: claimed.items as QueueItem[],
+		interrupted: claimed.interrupted,
 	};
 }
 
@@ -564,11 +727,16 @@ export function failPromptDispatch(
   return restored;
 }
 
-/** Review handoffs drive an automated turn. They use the prompt queue for
- * ordering and crash recovery, but they are not messages a person sent and
- * must not contribute to any client-facing message count. */
+/** Automated turns stay durable in the queue but are not messages a person
+ * sent. Review handoffs have their own Agents surface; workflow completion
+ * nudges are model-routing plumbing whose eventual transcript row is already
+ * classified as a system notice. Neither belongs in message counts or chips. */
+function isClientVisibleQueueItem(item: QueueItem): boolean {
+	return !item.reviewHandoff && !isWorkflowQueueItem(item);
+}
+
 export function clientVisibleQueuedCount(sessionId: string): number {
-	return (promptQueues.get(sessionId) ?? []).filter((item) => !item.reviewHandoff)
+	return (promptQueues.get(sessionId) ?? []).filter(isClientVisibleQueueItem)
 		.length;
 }
 
@@ -580,7 +748,7 @@ export function clientVisibleQueuedCounts(): Map<string, number> {
 		slot: "queued",
 	})) {
 		const items = value as QueueItem[];
-		const visible = items.filter((item) => !item.reviewHandoff).length;
+		const visible = items.filter(isClientVisibleQueueItem).length;
 		if (visible) counts.set(sessionId, visible);
 	}
 	return counts;
@@ -591,13 +759,13 @@ export function queueDisplayState(sessionId: string) {
 	const steered = queueWithIds(steeredReceipts.get(sessionId));
 	if (queued.length > 0) promptQueues.set(sessionId, queued);
 	if (steered.length > 0) steeredReceipts.set(sessionId, steered);
-	// Display copy only: automated review handoffs remain in the internal queue
-	// until dispatch but never enter a client's message surface. Fenced
+	// Display copy only: automated turns remain in the internal queue until
+	// dispatch but never enter a client's message surface. Fenced
 	// <opensession:context> blocks (e.g. the queued auto-continue nudge) are
 	// model plumbing too, so strip them from the remaining rows. The stored
 	// items keep their full content for delivery.
 	const forDisplay = (items: typeof queued) =>
-		items.filter((i) => !i.reviewHandoff).map((i) => {
+		items.filter(isClientVisibleQueueItem).map((i) => {
 			const shown = stripContext(i.content);
 			return {
 				...i,

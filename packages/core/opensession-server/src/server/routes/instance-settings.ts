@@ -9,6 +9,8 @@
 import type { RouteContext } from "./context";
 import {
 	configPath,
+	configuredRepos,
+	configuredSelfDev,
 	getConfig,
 	organizationDomain,
 	organizationName,
@@ -16,6 +18,7 @@ import {
 	productName,
 	productMark,
 	type ResolvedAssetStorage,
+	type SelfDevMode,
 } from "../config";
 import {
 	persistRawConfig,
@@ -91,6 +94,15 @@ function generalDto(publicPrefix: string) {
 	};
 }
 
+function worktreeSettingsDto() {
+	return {
+		mode: configuredSelfDev(),
+		repos: Object.values(configuredRepos())
+			.filter((repo) => repo.sharedCheckout)
+			.map((repo) => ({ id: repo.id, label: repo.label })),
+	};
+}
+
 /**
  * The connected GitHub organization's public profile, so the onboarding
  * organization step can fill itself in rather than ask for three things the
@@ -106,11 +118,12 @@ async function githubOrganizationProfile(
 	ctx: RouteContext,
 	login: string,
 ): Promise<Response> {
+	const { githubToken } = await import("../github-app");
 	const tokens = [
 		ctx.authUser?.login
 			? githubCredentialForLogin(ctx.authUser.login)?.env.GH_TOKEN
 			: undefined,
-		process.env.GITHUB_API_TOKEN,
+		await githubToken(),
 	].filter((token): token is string => !!token);
 	const response = await fetchWithTimeout(
 		`https://api.github.com/orgs/${encodeURIComponent(login)}`,
@@ -299,6 +312,35 @@ export async function handleInstanceSettingsRoutes(
 
 	if (path === "/api/settings/general" && req.method === "GET") {
 		return Response.json(generalDto(publicPrefix));
+	}
+
+	if (path === "/api/settings/worktrees" && req.method === "GET") {
+		return Response.json(worktreeSettingsDto());
+	}
+
+	if (path === "/api/settings/worktrees" && req.method === "PUT") {
+		const forbidden = requireWorkspaceAdmin(ctx);
+		if (forbidden) return forbidden;
+		const body = (await req.json().catch(() => null)) as Record<
+			string,
+			unknown
+		> | null;
+		if (!body) {
+			return Response.json({ error: "expected a JSON body" }, { status: 400 });
+		}
+		if (body.mode !== "shared" && body.mode !== "worktree") {
+			return Response.json(
+				{ error: "mode must be shared or worktree" },
+				{ status: 400 },
+			);
+		}
+		const mode: SelfDevMode = body.mode;
+		await withConfigMutationLock(async () => {
+			const config = rawConfig();
+			config.selfDev = mode;
+			persistRawConfig(config);
+		});
+		return Response.json(worktreeSettingsDto());
 	}
 
 	if (

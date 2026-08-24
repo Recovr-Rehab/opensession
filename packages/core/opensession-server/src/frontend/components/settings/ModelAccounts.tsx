@@ -13,6 +13,7 @@ import { Field, Input } from "../../ui/input";
 import { Menu } from "../../ui/menu";
 import { Modal } from "../../ui/modal";
 import { Select } from "../../ui/select";
+import { Segmented, SegmentedOption } from "../../ui/segmented";
 import { Button } from "../../ui/button";
 import { DeviceCode } from "../../ui/device-code";
 import { EmptyState, InlineAlert, LoadingState } from "../../ui/state";
@@ -950,9 +951,76 @@ export function CodexAccountsSection({
 	);
 }
 
+/** One provider, collapsed: how many accounts it has and how many can take a
+ * run right now. The accounts themselves stay one click away, so a pool of a
+ * dozen reads as two rows instead of a page of meters. */
+function ProviderSummaryRow({
+	mark,
+	title,
+	accounts,
+	expanded,
+	onToggle,
+	onAdd,
+	children,
+}: {
+	mark: "claude" | "codex";
+	title: string;
+	accounts: { usable: boolean; exhaustedUntil: string | null }[];
+	expanded: boolean;
+	onToggle: () => void;
+	onAdd: () => void;
+	children: React.ReactNode;
+}) {
+	const total = accounts.length;
+	const available = accounts.filter((a) => a.usable && !a.exhaustedUntil).length;
+	return (
+		<>
+			<SettingRow>
+				<IconTile name={mark} size={28} />
+				<SettingRowText>
+					<SettingRowTitle>{title}</SettingRowTitle>
+					<SettingRowDescription>
+						{total === 0
+							? "No accounts yet"
+							: `${total} account${total === 1 ? "" : "s"} · ${available} available`}
+					</SettingRowDescription>
+				</SettingRowText>
+				<SettingRowControl className="flex items-center gap-1.5">
+					{total > 0 && (
+						<Button
+							size="sm"
+							variant="ghost"
+							className="phone:min-h-11"
+							aria-expanded={expanded}
+							onClick={onToggle}
+						>
+							{expanded ? "Hide accounts" : "View accounts"}
+						</Button>
+					)}
+					<Button
+						size="sm"
+						variant="ghost"
+						className="phone:min-h-11"
+						icon={<IconPlus size={16} />}
+						onClick={onAdd}
+					>
+						Add account
+					</Button>
+				</SettingRowControl>
+			</SettingRow>
+			{expanded && children}
+		</>
+	);
+}
+
 /** Every subscription account in one provider-neutral list. Provider marks and
  * metadata preserve where each account comes from without splitting the pool
- * into separate cards. */
+ * into separate cards.
+ *
+ * It opens collapsed — one row per provider with its account count — because
+ * the full list is a page of usage meters and the question people arrive with
+ * is "do we have capacity here". "All accounts" restores the flat list. The
+ * same view switch and inline foldout are used during onboarding. */
 export function ProviderAccountsSection({
 	onboarding = false,
 	onChanged,
@@ -963,25 +1031,11 @@ export function ProviderAccountsSection({
 	const claude = useClaudeAccounts();
 	const codex = useCodexAccounts();
 	const [adding, setAdding] = useState<"claude" | "codex" | null>(null);
+	const [view, setView] = useState<"providers" | "accounts">("providers");
+	const [expanded, setExpanded] = useState<"claude" | "codex" | null>(null);
 	const loading = claude.accounts === null || codex.accounts === null;
 	const empty = !loading && claude.accounts?.length === 0 && codex.accounts?.length === 0;
 	const refreshing = claude.refreshing || codex.refreshing;
-	const onboardingAccounts = [
-		...(claude.accounts || []).map((account) => ({
-			id: `claude-${account.id}`,
-			label: providerAccountLabel(account),
-			provider: "Claude" as const,
-			icon: "claude" as const,
-			ready: account.usable && !account.exhaustedUntil,
-		})),
-		...(codex.accounts || []).map((account) => ({
-			id: `codex-${account.id}`,
-			label: providerAccountLabel(account),
-			provider: "OpenAI" as const,
-			icon: "codex" as const,
-			ready: account.usable && !account.exhaustedUntil,
-		})),
-	];
 
 	function refreshUsage() {
 		void Promise.allSettled([claude.load(true), codex.load(true)]);
@@ -990,8 +1044,18 @@ export function ProviderAccountsSection({
 	return (
 		<>
 			<SettingsGroupLabel
+				className="phone:[&>span]:w-full phone:[&>div]:w-full phone:[&>div]:flex-wrap"
 				actions={
 				<>
+					<Segmented
+						label="Account view"
+						size="sm"
+						value={view}
+						onValueChange={(next) => setView(next as "providers" | "accounts")}
+					>
+						<SegmentedOption value="providers">Providers</SegmentedOption>
+						<SegmentedOption value="accounts">All accounts</SegmentedOption>
+					</Segmented>
 					{!onboarding && (
 						<Button
 							size="sm"
@@ -1077,25 +1141,28 @@ export function ProviderAccountsSection({
 							? "Connect a Claude or OpenAI account to use its subscription."
 							: "No accounts yet. Runs use this server's Claude and Codex sign-ins until you add an Anthropic or OpenAI account."}
 					</EmptyState>
-				) : onboarding ? (
+				) : view === "providers" ? (
 					<>
-						{onboardingAccounts.map((account) => (
-							<SettingRow key={account.id}>
-								<IconTile name={account.icon} size={28} />
-								<SettingRowText>
-									<SettingRowTitle>{account.label}</SettingRowTitle>
-									<div className="mt-0.5 text-meta text-dim">{account.provider}</div>
-								</SettingRowText>
-								<span
-									className={cn(
-										"ml-auto shrink-0 pl-3 text-label font-medium",
-										account.ready ? "text-green" : "text-dim",
-									)}
-								>
-									{account.ready ? "Ready" : "Unavailable"}
-								</span>
-							</SettingRow>
-						))}
+						<ProviderSummaryRow
+							mark="claude"
+							title="Claude"
+							accounts={claude.accounts || []}
+							expanded={expanded === "claude"}
+							onToggle={() => setExpanded(expanded === "claude" ? null : "claude")}
+							onAdd={() => setAdding("claude")}
+						>
+							<ClaudeAccountRows state={claude} />
+						</ProviderSummaryRow>
+						<ProviderSummaryRow
+							mark="codex"
+							title="OpenAI"
+							accounts={codex.accounts || []}
+							expanded={expanded === "codex"}
+							onToggle={() => setExpanded(expanded === "codex" ? null : "codex")}
+							onAdd={() => setAdding("codex")}
+						>
+							<CodexAccountRows state={codex} />
+						</ProviderSummaryRow>
 					</>
 				) : (
 					<>

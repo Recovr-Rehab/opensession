@@ -32,7 +32,6 @@ describe("single session ownership", () => {
 		expect(LEGACY_GATEWAY_EFFECT_OPERATIONS).toEqual([
 			"answer_question",
 			"cancel_session",
-			"create_session",
 			"delete_session",
 			"session_file_updated",
 			"submit_prompt",
@@ -158,6 +157,33 @@ describe("single session ownership", () => {
 		);
 	});
 
+	test("queue selection and dispatch claim execute atomically inside the actor", () => {
+		const run = read("run-session.ts");
+		const queue = read("queue-state.ts");
+		const actor = read("session-kernel/actor-worker.ts");
+		expect(run).toContain("beginNextPromptDispatch(sessionId");
+		expect(run).not.toContain("selectQueueBatch(queue");
+		expect(run).not.toContain("interruptMarks");
+		expect(actor).toContain('delivery.op === "prepare_interrupt"');
+		expect(actor).toContain('delivery.op === "begin_interrupt_effect"');
+		expect(actor).toContain('delivery.op === "settle_interrupt"');
+		expect(actor).toContain('delivery.op === "claim_next_dispatch"');
+		expect(actor).toContain("store.claimNextDeliveryDispatch(delivery)");
+		expect(queue).toContain(
+			"failPromptDispatch(sessionId, dispatch.promptEntryId, false)",
+		);
+		expect(run).toContain(
+			'registerSessionEffectExecutor("delivery_interrupt_cancel"',
+		);
+		const beginEffect = run.indexOf("beginPromptInterruptEffect(");
+    const cancel = run.indexOf("cancelAgentRunToken(dispatchId)", beginEffect);
+		const settle = run.indexOf("settlePromptInterrupt(", cancel);
+		expect(run).toContain("preparePromptInterrupt(sessionId");
+		expect(beginEffect).toBeGreaterThan(-1);
+		expect(beginEffect).toBeLessThan(cancel);
+		expect(cancel).toBeLessThan(settle);
+	});
+
 	test("run-state decisions execute atomically inside the actor", () => {
 		const facade = read("run-state.ts");
 		const actor = read("session-kernel/actor-worker.ts");
@@ -246,13 +272,20 @@ describe("single session ownership", () => {
 		expect(source.match(/deliverAsk\(/g)?.length).toBe(2);
 	});
 
-	test("create and cancel retries keep stable ownership targets", () => {
+	test("creation uses its FSM without nesting inside a legacy mailbox", () => {
 		const ws = read("ws-handlers.ts");
 		expect(ws).toContain('legacyGatewayEffect("websocket_command"');
 		expect(ws).toContain("sessionIdForRequest");
 		expect(ws).toContain('typeof msg.sessionId === "string"');
+		const mailboxCommands = ws.slice(
+			ws.indexOf("const kernelCommands"),
+			ws.indexOf("const requestId"),
+		);
 		const routes = read("routes/sessions.ts");
-		expect(routes).toContain('legacyGatewayEffect("create_session"');
+		const wiring = read("session-control-wiring.ts");
+		expect(mailboxCommands).not.toContain('"create_session"');
+		expect(routes).not.toContain('legacyGatewayEffect("create_session"');
+		expect(wiring).not.toContain('legacyGatewayEffect("create_session"');
 		expect(routes).toContain("id: targetId");
 		expect(read("../../../protocol/src/session.ts")).toContain(
 			'type: "cancel"; sessionId?: string; requestId?: string',
@@ -261,10 +294,11 @@ describe("single session ownership", () => {
 
 	test("interrupted creates resume their environment setup, not only their prompt", () => {
 		const create = read("session-create.ts");
-		expect(create).toContain("const recoveringSession = findSession(bksId)");
+		expect(create).toContain("let recoveringSession = findSession(bksId)");
 		expect(create).toContain('existingBranch: restored.worktreeKind === "existing"');
-		expect(create).toContain("const openingPlan = creation?.openingPlan");
-		expect(create).toContain("const identity = creation?.openingPlan");
+		expect(create).toContain("const actorPlan =");
+		expect(create).toContain("creation?.setupPlan?.resolved");
+		expect(create).toContain("const identity = actorPlan");
 		expect(create.indexOf("openingPromptEntryId = beginPromptDispatch"))
 			.toBeLessThan(create.indexOf("await persist()"));
 		// The direct host run must use the create dispatch's stable transcript id.
@@ -277,11 +311,31 @@ describe("single session ownership", () => {
 		expect(routes).not.toContain("requeuePromptDispatch(targetId)");
 	});
 
-	test("create plans and MCP controls retain stable request identity", () => {
+	test("create replay waits for a resolvable projection before success", () => {
+		const create = read("session-create.ts");
 		const wiring = read("session-control-wiring.ts");
-		expect(wiring).toContain("updateCreatePlan(bksId, createIdentity)");
+		for (const source of [create, wiring]) {
+			expect(source).toContain("waitForCreatedSessionProjection(");
+			expect(source.indexOf("sessionKernel(bksId).creationState()"))
+				.toBeLessThan(source.indexOf("actorCreationSetupPlan(bksId, createIdentity)"));
+		}
+		expect(create).toContain("failCreate(error instanceof Error");
+		expect(create).toContain("if (projected) return projected");
+		expect(create.indexOf("if (projected) return projected")).toBeLessThan(
+			create.indexOf('if (state.state === "failed")'),
+		);
+		const ws = read("ws-handlers.ts");
+		expect(ws).toContain("const kernelDispatchErrors = new Map<string, Error>()");
+		expect(ws).toContain("if (dispatchError) throw dispatchError");
+		expect(ws).toContain("kernelDispatchErrors.set(");
+	});
+
+	test("actor setup plans and MCP controls retain stable request identity", () => {
+		const wiring = read("session-control-wiring.ts");
+		expect(wiring).toContain("patchCreationSetupPlan(bksId, createIdentity");
 		expect(wiring).toContain("createPlan.resolved");
-		expect(wiring).toContain("ensureCreationPlanned(bksId, createIdentity)");
+		expect(wiring).toContain("actorCreationSetupPlan(bksId, createIdentity)");
+		expect(wiring).not.toContain("updateCreatePlan(");
 		expect(wiring).toContain("await requestCreationWorkspace({");
 		expect(wiring.match(/await requestCreationCredential\(\{/g)?.length).toBe(2);
 		expect(wiring.match(/await requestCreationBranch\(\{/g)?.length).toBe(2);
@@ -290,7 +344,11 @@ describe("single session ownership", () => {
 		expect(wiring).not.toMatch(/\bcreateWorktree\(/);
 		const create = read("session-create.ts");
 		expect(create).toContain("createPlan.resolved");
-		expect(create).toContain("ensureCreationPlanned(bksId, createIdentity)");
+		expect(create).toContain("patchCreationSetupPlan(bksId, createIdentity");
+		expect(create).not.toContain("updateCreatePlan(");
+		expect(read("session-create-plan.ts")).not.toContain(
+			"function updateCreatePlan",
+		);
 		expect(create.match(/await requestCreationWorkspace\(\{/g)?.length).toBe(2);
 		expect(create).toContain("actorWorktreeMaterializer({");
 		expect(create).toContain("await requestCreationCredential({");
@@ -365,8 +423,82 @@ describe("single session ownership", () => {
 		expect(ws).toContain("The run targeted by this command has already changed");
 		expect(ws).toContain("sessionId: commandSessionId");
 		expect(ws).toContain('`stop-${msg.requestId}`');
+    expect(ws).toContain("requestTurnCancel(sessionId, session");
+    expect(ws.indexOf("const persistedCancel =")).toBeLessThan(
+      ws.indexOf('legacyGatewayEffect("websocket_command"'),
+    );
+    expect(ws.indexOf("const priorCommandPayload = durableSessionCommand(")).toBeLessThan(
+      ws.indexOf('legacyGatewayEffect("websocket_command"'),
+    );
+    expect(ws.indexOf("const persistedInterrupt =")).toBeLessThan(
+      ws.indexOf('legacyGatewayEffect("websocket_command"'),
+    );
+    expect(ws).not.toContain("cancelAgentRun(");
+    const runSession = read("run-session.ts");
+    expect(runSession).toContain('registerSessionEffectExecutor("turn_cancel"');
+    expect(runSession).toContain("cancelAgentRunToken(dispatchId)");
+    expect(runSession).toContain("cancelAgentRunTokenAndWait(dispatchId)");
+    expect(runSession).toContain(
+      "journalRetireCancelledAbnormalAfterSettlement(",
+    );
+    const turnExecutor = runSession.indexOf(
+      'registerSessionEffectExecutor("turn_cancel"',
+    );
+    const missingCancel = runSession.indexOf(
+      'if (decision === "missing") return;',
+      turnExecutor,
+    );
+    expect(missingCancel).toBeLessThan(
+      runSession.indexOf(
+        "journalRetireCancelledAbnormalAfterSettlement(",
+        missingCancel,
+      ),
+    );
+    expect(runSession).toContain("if (!settled) return false;");
+    const interruptSettle = runSession.indexOf(
+      "settlePromptInterrupt(",
+      runSession.indexOf("beginPromptInterruptEffect("),
+    );
+    expect(runSession.indexOf("retireConfirmedAbnormal();", interruptSettle)).toBeGreaterThan(
+      interruptSettle,
+    );
+    const agentRunner = read("agent-runner.ts");
+    expect(agentRunner).toContain(
+      'if (cancelOwnership === "unknown") {',
+    );
+    expect(agentRunner).toMatch(
+      /if \(cancelOwnership === "unknown"\) \{[\s\S]*?return true;/,
+    );
+    expect(agentRunner).toContain(
+      'while (ownership === "unknown")',
+    );
+    expect(agentRunner).toContain(
+      "ownershipBackoffMs = Math.min(5_000, ownershipBackoffMs * 2)",
+    );
+    const runnerSession = read("runner-session.ts");
+    const runnerLaunch = runnerSession.indexOf("await launcher.launch(hostId, hostDir)");
+    expect(runnerSession.indexOf("opts.shouldCancel?.()", runnerSession.indexOf("new HostHandle"))).toBeLessThan(runnerLaunch);
+    expect(runnerSession.indexOf("opts.shouldCancel?.()", runnerLaunch)).toBeGreaterThan(runnerLaunch);
+    expect(runnerSession.indexOf("opts.shouldCancel?.()", runnerSession.indexOf("await handle.connectWithWait"))).toBeGreaterThan(
+      runnerSession.indexOf("await handle.connectWithWait"),
+    );
+    expect(runnerSession).toContain("journalClearIfLineage(run)");
+    expect(runnerSession).not.toContain("journalClear(session.id)");
+    const wiring = read("session-control-wiring.ts");
+    expect(wiring).toContain("requestTurnCancel(id, session");
+    expect(wiring.indexOf("const persistedCancel =")).toBeLessThan(
+      wiring.indexOf('legacyGatewayEffect("cancel_session"'),
+    );
+    expect(wiring.indexOf("const priorCommandPayload = durableSessionCommand(")).toBeLessThan(
+      wiring.indexOf('legacyGatewayEffect("cancel_session"'),
+    );
+    expect(wiring).not.toContain("cancelAgentRun(");
 		const routes = read("routes/sessions.ts");
 		expect(routes).toContain("await cancelAgentRunAndWait(runIds)");
+    expect(routes).toContain("requestTurnCancel(session.id, session");
+    const prRoutes = read("routes/pr.ts");
+    expect(prRoutes).toContain("requestTurnCancel(bksId, reviewSession");
+    expect(prRoutes).not.toContain("cancelAgentRun(");
 		expect(routes).toMatch(/\.runExclusive\(\s*"delete_session"/);
 	});
 
@@ -376,8 +508,16 @@ describe("single session ownership", () => {
 		expect(queue).toContain("options.creationOwnsPrompt?.(");
 		const runSession = read("run-session.ts");
 		expect(runSession).toContain("resumePlannedCreate(sessionId)");
+    const boot = read("../../opensession.ts");
+    expect(boot).toContain("runId: recoveredRun.runKey");
+    expect(boot).toContain("projectionId: `outcome:${recoveredRun.runKey}`");
+    expect(boot).toContain(
+      "runGeneration: sessionKernel(bksSessionId).runState().generation",
+    );
+    const cache = read("session-cache.ts");
+    expect(cache).toContain('op: "prepare_outcome_projection"');
+    expect(cache).toContain("projectionId: opts.projectionId");
 		expect(runSession).toContain("creationOwnsPrompt(record.osSessionId");
-		const boot = read("../../opensession.ts");
 		expect(boot).toContain(
 			"creationOwnsPrompt(run.osSessionId, run.promptEntryId)",
 		);
@@ -473,6 +613,17 @@ describe("single session ownership", () => {
 			'throw new Error("Opening run ended without a terminal event")',
 		);
 		expect(create).toContain("openingJournal?.terminalFailure");
+		expect(create).toContain("startToken = markSessionStarting(");
+		expect(create).toContain("hostId: startToken");
+		expect(create).toContain("isAgentSessionCancelled(bksId, startToken)");
+		const runSession = read("run-session.ts");
+		const cancelPrepared = runSession.indexOf('op: "prepare_cancel"');
+		const creationCancelled = runSession.indexOf(
+			"settleCreationOpeningForStop(sessionId)",
+			cancelPrepared,
+		);
+		expect(cancelPrepared).toBeGreaterThan(0);
+		expect(creationCancelled).toBeGreaterThan(cancelPrepared);
 		for (const backend of [
 			"host-client.ts",
 			"runner-session.ts",
@@ -487,15 +638,33 @@ describe("single session ownership", () => {
 		const cache = read("session-cache.ts");
 		const outcome = cache.indexOf("if (errorMessage) {");
 		const transcript = cache.indexOf("persistRunFailureNotice(", outcome);
-		const sessionFile = cache.indexOf("void touchNativeSession(id", outcome);
+		const sessionFile = cache.indexOf("await touchNativeSession(id", outcome);
 		expect(transcript).toBeGreaterThan(outcome);
 		expect(sessionFile).toBeGreaterThan(transcript);
+    const run = read("run-session.ts");
+    const projectionExecutor = run.indexOf(
+      'registerSessionEffectExecutor("turn_outcome_project"',
+    );
+    const applyProjection = run.indexOf(
+      "await applyRunOutcomeProjection(",
+      projectionExecutor,
+    );
+    const settleProjection = run.indexOf(
+      'op: "settle_outcome_projection"',
+      applyProjection,
+    );
+    expect(projectionExecutor).toBeGreaterThan(0);
+    expect(applyProjection).toBeGreaterThan(projectionExecutor);
+    expect(settleProjection).toBeGreaterThan(applyProjection);
+    expect(run).toContain("projectionId: `outcome:${startToken}`");
+    expect(create).toContain("projectionId: `outcome:${startToken}`");
 	});
 
 	test("WebSocket session mutations enter the mailbox before dispatch", () => {
 		const source = read("ws-handlers.ts");
 		expect(source).toContain("kernelCommands.has(msg.type)");
-		expect(source).toContain("kernelDispatchTokens.delete");
+		expect(source).toContain("isInternalKernelDispatch(");
+		expect(source).toContain("kernelDispatchTokens.delete(kernelToken)");
 		expect(source).toContain("__sessionKernelToken");
 		expect(source).not.toContain("__sessionKernelOwned");
 		expect(source).toContain('source: "websocket"');

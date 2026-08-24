@@ -91,7 +91,12 @@ import {
 import { transcriptStore } from "./transcript-store";
 import { transcriptForwarder } from "./transcript-forward";
 import { gitIdentityEnv } from "./shared/user-mappings";
-import { githubRunEnv, githubUserLoginForRun } from "./github-auth";
+import {
+  GITHUB_RUN_AUTH_FILE_ENV,
+  githubRunEnv,
+  githubUserLoginForRun,
+  projectedGithubRunEnv,
+} from "./github-auth";
 import { ensureAgentAwsCredsFile } from "./aws-creds";
 import { buildEngineSwitchHandoffNote } from "./fork-handoff";
 import { piAnthropicTransport, piEngineEnabled } from "./pi-config";
@@ -119,6 +124,18 @@ const g = globalThis as any;
 
 const PROVIDER = "pi" as const;
 export const PI_MODEL_PREFIX = "pi/";
+
+/** Fresh authority for an unattended GitHub code run. Host recovery resolves
+ * the selected service credential from the registered cwd; remote runners can
+ * consume only the private run-scoped file projected by their launcher. */
+export async function githubCodeRunEnv(cwd: string): Promise<Record<string, string>> {
+  if (process.env[GITHUB_RUN_AUTH_FILE_ENV]) return projectedGithubRunEnv();
+  const { repoForPathOrNull } = await import("./worktree");
+  const repo = repoForPathOrNull(cwd);
+  if (!repo || repo.host === "codestorage" || !repo.ghRepo) return {};
+  const { githubServiceCredentialEnv } = await import("./github-app");
+  return githubServiceCredentialEnv(repo.ghRepo);
+}
 
 /** State root: server-owned agentDir, per-unified-session pi session dirs,
  *  and the smoke-turn scratch cwd. Never ~/.pi. */
@@ -1423,8 +1440,13 @@ async function* runPiAttempt(
   const isAsk = mode === "ask";
   const isScratch = mode === "scratch";
 
-  const runKey = opts.sessionId || journal?.osSessionId || crypto.randomUUID();
+  // The start token is the immutable physical dispatch identity. Engine and
+  // Open Session ids are reusable aliases, so they must never fence a delayed
+  // cancel against a successor turn.
+  const runKey =
+    opts.startToken || opts.sessionId || journal?.osSessionId || crypto.randomUUID();
   const registeredKeys = new Set<string>([runKey]);
+  if (opts.sessionId) registeredKeys.add(opts.sessionId);
   if (journal?.osSessionId) registeredKeys.add(journal.osSessionId);
   if (opts.transcriptSessionId) registeredKeys.add(opts.transcriptSessionId);
   if ([...registeredKeys].some((key) => activeRuns.has(key))) {
@@ -1598,9 +1620,18 @@ async function* runPiAttempt(
     const githubUserLogin = interactiveGithub
       ? githubUserLoginForRun(user || author?.name)
       : null;
-    const githubEnv = interactiveGithub
-      ? githubRunEnv(user || author?.name)
-      : {};
+    // Only the dedicated GitHub code workflows may inject a service
+    // credential into an unattended run. Other automations remain credential-
+    // free even if a caller accidentally supplies githubEnv.
+    const githubCodeRun =
+      mode === "code" && baseJournalKind(journal?.kind).startsWith("github-");
+    const githubEnv = githubCodeRun
+      ? opts.githubEnv?.GH_TOKEN
+        ? opts.githubEnv
+        : await githubCodeRunEnv(cwd)
+      : interactiveGithub
+        ? githubRunEnv(user || author?.name)
+        : {};
 
     // pi/openai: pick the codex account + build the seeded credential BEFORE
     // the SDK import or any engine work — a dry/unconfigured pool must fail

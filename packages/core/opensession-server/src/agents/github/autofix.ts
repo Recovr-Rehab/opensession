@@ -25,6 +25,10 @@ import { LABEL_AUTOFIX, labelAliases, repoForFullName } from "./constants";
 import { personaName } from "../../server/config";
 import type { PrRef, ReviewResult } from "./review";
 import { defaultRepo } from "../../server/config";
+import {
+  resolveGithubCredential,
+  serviceGithubCredential,
+} from "../../server/github-auth";
 
 const MAX_ITERATIONS = 5;
 const WALL_CLOCK_MS = 60 * 60 * 1000; // abandon a loop running longer than an hour
@@ -44,7 +48,11 @@ const REPO = defaultRepo().ghRepo;
 
 async function headSha(headRef: string, ghRepo: string = REPO): Promise<string> {
   try {
-    const raw = await $`gh pr view ${headRef} --repo ${ghRepo} --json headRefOid`.quiet().text();
+    const credential = await resolveGithubCredential(serviceGithubCredential);
+    const raw = await $`gh pr view ${headRef} --repo ${ghRepo} --json headRefOid`
+      .env({ ...process.env, ...credential.env })
+      .quiet()
+      .text();
     return JSON.parse(raw).headRefOid || "";
   } catch {
     return "";
@@ -140,7 +148,13 @@ export async function runAutoFix(
     return;
   }
 
-  const author = authorForLogin(requestedBy);
+  const receivedState = readPrState(pr.number, pr.ghRepo);
+  const effectiveRequestedBy =
+    requestedBy ||
+    receivedState?.pendingAutoFix?.requestedBy ||
+    receivedState?.autoFix?.requestedBy ||
+    "";
+  const author = authorForLogin(effectiveRequestedBy);
   let statusCommentId: number | undefined;
   // Transient exits (engine/pool error, CI never settled, mergeability probe
   // hung) KEEP the os-auto-fix label so the reconcile sweep retries the loop;
@@ -174,7 +188,7 @@ export async function runAutoFix(
   };
 
   try {
-    const prior = readPrState(pr.number, pr.ghRepo)?.autoFix;
+    const prior = receivedState?.autoFix;
     // Reuse the status comment only when recovering an interrupted loop; a fresh
     // re-trigger posts a new comment instead of editing the previous run's.
     statusCommentId = resuming ? prior?.statusCommentId : undefined;
@@ -187,7 +201,8 @@ export async function runAutoFix(
       pr.number,
       pr.headRef,
       (s) => {
-        s.autoFix = { active: true, iterations, startedAt, statusCommentId, requestedBy, worktreeDir: prior?.worktreeDir, lastPushedSha: prior?.lastPushedSha, steer: effectiveSteer };
+        s.autoFix = { active: true, iterations, startedAt, statusCommentId, requestedBy: effectiveRequestedBy, worktreeDir: prior?.worktreeDir, lastPushedSha: prior?.lastPushedSha, steer: effectiveSteer };
+        delete s.pendingAutoFix;
       },
       pr.ghRepo,
     );
@@ -285,7 +300,7 @@ export async function runAutoFix(
         pr.number,
         pr.headRef,
         (s) => {
-          s.autoFix = { active: true, iterations, startedAt, statusCommentId, requestedBy, worktreeDir, lastPushedSha, steer: effectiveSteer };
+          s.autoFix = { active: true, iterations, startedAt, statusCommentId, requestedBy: effectiveRequestedBy, worktreeDir, lastPushedSha, steer: effectiveSteer };
         },
         pr.ghRepo,
       );

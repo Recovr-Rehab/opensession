@@ -269,8 +269,10 @@ export function GithubAuthCard({
 	// The secret is never echoed; the status exposes presence only.
 	const secretConfigured = github.clientSecretConfigured;
 	const [userPrAuth, setUserPrAuth] = useState(github.userPrAuth);
+	const [botCredential, setBotCredential] = useState(github.botCredential);
 	const [clientId, setClientId] = useState("");
 	const [clientSecret, setClientSecret] = useState("");
+	const [privateKey, setPrivateKey] = useState("");
 	const [clearId, setClearId] = useState(false);
 	const [clearSecret, setClearSecret] = useState(false);
 	const [saving, setSaving] = useState(false);
@@ -279,14 +281,17 @@ export function GithubAuthCard({
 
 	useEffect(() => {
 		setUserPrAuth(github.userPrAuth);
-	}, [github.userPrAuth]);
+		setBotCredential(github.botCredential);
+	}, [github.userPrAuth, github.botCredential]);
 
 	const idCleared = github.clientIdConfigured && clearId && !clientId.trim();
 	const secretCleared = secretConfigured && clearSecret && !clientSecret.trim();
 	const dirty =
 		userPrAuth !== github.userPrAuth ||
+		botCredential !== github.botCredential ||
 		clientId.trim() !== "" ||
 		clientSecret.trim() !== "" ||
+		privateKey.trim() !== "" ||
 		idCleared ||
 		secretCleared;
 
@@ -302,6 +307,7 @@ export function GithubAuthCard({
 				method: "PUT",
 				json: {
 					...(userPrAuth !== github.userPrAuth ? { userPrAuth } : {}),
+					...(botCredential !== github.botCredential ? { botCredential } : {}),
 					...(clientId.trim()
 						? { oauthClientId: clientId.trim() }
 						: idCleared
@@ -312,10 +318,12 @@ export function GithubAuthCard({
 						: secretCleared
 							? { oauthClientSecret: "" }
 							: {}),
+					...(privateKey.trim() ? { privateKey: privateKey.trim() } : {}),
 				},
 			});
 			setClientId("");
 			setClientSecret("");
+			setPrivateKey("");
 			setClearId(false);
 			setClearSecret(false);
 			toast("GitHub sign-in settings saved");
@@ -372,6 +380,25 @@ export function GithubAuthCard({
 				/>
 			</div>
 			<div className="mt-4 flex flex-col gap-4 border-t border-line pt-4">
+				<div className="flex items-center gap-4">
+					<div className="min-w-0 flex-1">
+						<div className="text-item-title font-medium text-fg">Use the GitHub App for bot actions</div>
+						<div className="mt-0.5 text-supporting text-dim">
+							Switches reviews, comments, clones and pushes away from the PAT.
+						</div>
+					</div>
+					<Switch
+						checked={botCredential === "app"}
+						onCheckedChange={(checked) => setBotCredential(checked ? "app" : "pat")}
+						disabled={saving || !github.appCredentialConfigured}
+						aria-label="Use the GitHub App for bot actions"
+					/>
+				</div>
+				{!github.appCredentialConfigured && (
+					<p className="m-0 text-supporting text-faint">
+						Add the App private key before switching credentials.
+					</p>
+				)}
 				<SecretField
 					name="Client id"
 					type="text"
@@ -406,6 +433,25 @@ export function GithubAuthCard({
 						setClientSecret("");
 					}}
 				/>
+				<label className="flex flex-col gap-1">
+					<span className="text-supporting text-fg">Private key (PEM)</span>
+					<textarea
+						className="min-h-20 w-full resize-y rounded-md border border-line bg-surface px-2.5 py-1.5 font-mono text-supporting text-fg outline-none focus-ring"
+						value={privateKey}
+						onChange={(e) => setPrivateKey(e.target.value)}
+						placeholder="-----BEGIN RSA PRIVATE KEY-----"
+						aria-label="GitHub App private key (PEM)"
+						disabled={saving}
+						autoCapitalize="none"
+						autoComplete="off"
+						spellCheck={false}
+					/>
+					<span className="text-meta leading-snug text-faint">
+						In the App&rsquo;s Private keys, Generate a private key and paste the
+						.pem here. Lets the bot and PR checks run on the App; leave blank for
+						sign-in only.
+					</span>
+				</label>
 				<p className="m-0 text-supporting text-faint">
 					Credentials stay on this server and are never shown back.
 				</p>

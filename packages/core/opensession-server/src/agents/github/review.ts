@@ -5,7 +5,8 @@
  * review carrying inline comments (GitHub auto-outdates stale ones across commits).
  * Deduped on head SHA so the same commit isn't reviewed twice.
  */
-import { personaName } from "../../server/config";
+import { isGithubBotLogin, personaName } from "../../server/config";
+import { isShuttingDown } from "../../server/shutdown-state";
 import {
   getPrDetails,
   getPrDetailsFresh,
@@ -43,7 +44,6 @@ import {
   listReviewThreads,
   resolveReviewThread,
   REVIEW_MARKER,
-  BOT_LOGIN,
   type ReviewInlineComment,
 } from "./github-rest";
 import { defaultRepo } from "../../server/config";
@@ -148,6 +148,10 @@ export async function runReview(
   force = false,
   steer?: string,
 ): Promise<ReviewResult | null> {
+  if (isShuttingDown()) {
+    console.log(`[github] PR #${pr.number} review parked during shutdown`);
+    return null;
+  }
   if (!claimLock("review", pr.number, pr.ghRepo)) {
     console.log(`[github] review already running for PR #${pr.number}, skipping`);
     return null;
@@ -341,8 +345,8 @@ export async function runReview(
     const priorReview = isUpdate
       ? priorReviewSection({
           lastReview: state.lastReview,
-          priorFindings: classifyPriorFindings(readFeedback(pr.ghRepo), pr.number, preThreads, BOT_LOGIN),
-          humanThreadLines: openHumanThreadLines(preThreads, BOT_LOGIN),
+          priorFindings: classifyPriorFindings(readFeedback(pr.ghRepo), pr.number, preThreads, isGithubBotLogin),
+          humanThreadLines: openHumanThreadLines(preThreads, isGithubBotLogin),
         })
       : "";
 
@@ -352,7 +356,7 @@ export async function runReview(
       ignoreGlobs: reviewOpts.ignoreGlobs,
       summaryOnly,
       intent: prIntentSection(details),
-      discussion: prDiscussionSection(details, BOT_LOGIN, REVIEW_MARKER),
+      discussion: prDiscussionSection(details, isGithubBotLogin, REVIEW_MARKER),
       priorReview,
       learnedRules: learnedRulesSection(pr.ghRepo),
       lastReviewedSha:
@@ -401,6 +405,11 @@ export async function runReview(
     };
 
     if (cancellationRequested()) return finishCancelled(placeholderId || undefined);
+    if (isShuttingDown()) {
+      preserveRecovery = true;
+      console.log(`[github] PR #${pr.number} review parked for restart`);
+      return null;
+    }
     console.log(`[github] Reviewing PR #${pr.number} @ ${pr.headSha.slice(0, 7)} (${isUpdate ? "update" : "initial"})`);
     let finalResult: GithubRunResult;
     if (recoveredReviewResult) {
@@ -445,6 +454,11 @@ export async function runReview(
     // the review contract. Give the same engine session one bounded chance to
     // turn its completed inspection into a postable verdict.
     if (!finalResult.error && !isCompleteReviewOutput(parsed)) {
+      if (isShuttingDown()) {
+        preserveRecovery = true;
+        console.log(`[github] PR #${pr.number} review repair parked for restart`);
+        return null;
+      }
       console.warn(`[github] PR #${pr.number} review ended without structured output; repairing once`);
       finalResult = await runGithubAgent({
         prNumber: pr.number,
@@ -721,7 +735,7 @@ async function postReview(
   const openBotAnchors = new Set<string>();
   if (!force) {
     for (const t of existingThreads) {
-      if (t.rootAuthor === BOT_LOGIN && !t.isResolved && !t.isOutdated && t.path && t.line != null) {
+      if (isGithubBotLogin(t.rootAuthor) && !t.isResolved && !t.isOutdated && t.path && t.line != null) {
         openBotAnchors.add(`${t.path}:${t.line}`);
       }
     }
@@ -766,7 +780,7 @@ async function postReview(
   // useful. Collapsing them keeps the PR clean without a human resolving by hand.
   // Only ever touches bot-rooted threads; human threads are never resolved here.
   for (const t of existingThreads) {
-    if (!t.isResolved && t.isOutdated && t.rootAuthor === BOT_LOGIN) {
+    if (!t.isResolved && t.isOutdated && isGithubBotLogin(t.rootAuthor)) {
       await resolveReviewThread(t.id).catch(() => {});
     }
   }

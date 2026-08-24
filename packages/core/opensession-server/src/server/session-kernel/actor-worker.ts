@@ -341,6 +341,14 @@ export function startSessionKernelActorWorker(): void {
               delivery.sessionId,
               delivery.items,
             );
+          else if (delivery.op === "prepare_interrupt")
+            result = store.prepareDeliveryInterrupt(delivery);
+          else if (delivery.op === "begin_interrupt_effect")
+            result = store.beginDeliveryInterruptEffect(delivery);
+          else if (delivery.op === "settle_interrupt")
+            result = store.settleDeliveryInterrupt(delivery);
+          else if (delivery.op === "claim_next_dispatch")
+            result = store.claimNextDeliveryDispatch(delivery);
           else if (delivery.op === "claim_dispatch")
             result = store.claimDeliveryDispatch(delivery);
           else if (delivery.op === "ack_dispatch")
@@ -360,6 +368,20 @@ export function startSessionKernelActorWorker(): void {
                 ? { revision: store.deliverySnapshot(delivery.sessionId).revision }
                 : {}),
             };
+        } else if (command.kind === "turn") {
+          const turn = command.request;
+          if (turn.op === "snapshot") result = store.turnSnapshot(turn.sessionId);
+          else if (turn.op === "prepare_cancel")
+            result = store.prepareTurnCancel(turn);
+          else if (turn.op === "begin_cancel_effect")
+            result = store.beginTurnCancelEffect(turn);
+          else if (turn.op === "settle_cancel")
+            result = store.settleTurnCancel(turn);
+          else if (turn.op === "prepare_outcome_projection")
+            result = store.prepareTurnOutcomeProjection(turn);
+          else if (turn.op === "begin_outcome_projection")
+            result = store.beginTurnOutcomeProjection(turn);
+          else result = store.settleTurnOutcomeProjection(turn);
         } else {
           const ask = command.request;
           if (ask.op === "snapshot") result = store.askSnapshot(ask.sessionId);
@@ -445,8 +467,8 @@ export function startSessionKernelActorWorker(): void {
     } else if (request.t === "stats") {
       post({ t: "stats_result", rpcId: request.rpcId, stats: store.stats() });
     } else if (request.t === "maintain") {
-      store.maintain();
-      post({ t: "maintain_result", rpcId: request.rpcId });
+      const pending = store.maintain();
+      post({ t: "maintain_result", rpcId: request.rpcId, pending });
     } else if (request.t === "runtime_work") {
       post({
         t: "runtime_work_result",

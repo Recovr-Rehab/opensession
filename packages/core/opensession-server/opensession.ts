@@ -20,7 +20,7 @@ import { startLiveActivitySync } from "./src/server/live-activities";
 import { kickTranscriptBackfillOnce } from "./src/server/transcript-backfill";
 import { kickOrphanTranscriptSweep } from "./src/server/transcript-orphan-sweep";
 import { makeAskHandler, restorePendingAsks } from "./src/server/asks";
-import { automationResumeMcpForSession, ensureConfiguredAutomations, getWebhookRoutes, setEventSessionCallback, settleResumedAutomationRun, startScheduler } from "./src/server/automations";
+import { activeAutomationPreparationCount, automationResumeMcpForSession, ensureConfiguredAutomations, getWebhookRoutes, resumePendingAutomationRuns, setEventSessionCallback, settleResumedAutomationRun, startScheduler } from "./src/server/automations";
 import { startUsagePoller } from "./src/server/claude-accounts";
 import { startCodexUsagePoller } from "./src/server/codex-accounts";
 import { FRONTEND_SRC, IS_DEV, SPA_HEADERS, ensureFrontendBuilt, frontend, isPrebuiltFrontend, scheduleFrontendRebuild, sharedCheckoutEditors, spaEntry } from "./src/server/frontend-build";
@@ -94,6 +94,7 @@ import { setServiceReadiness } from "./src/server/service-readiness";
 import {
 	reconcileSessionKernelOwnership,
 	reconcileCompatibleCreationBranchEffects,
+  sessionKernel,
 	startSessionKernelActor,
 	startSessionKernelRuntime,
 	stopSessionKernelRuntime,
@@ -658,12 +659,12 @@ if (!g.__opensessionBooted) {
 	}
 
 	// Cron-scheduled automations + internal event bus (agents → automations)
-	startScheduler(() => {
-		invalidateSessionsCache();
-	});
-	setEventSessionCallback(() => {
-		invalidateSessionsCache();
-	});
+	const onAutomationSession = () => invalidateSessionsCache();
+	setEventSessionCallback(onAutomationSession);
+	const resumedAutomationIntents = resumePendingAutomationRuns(onAutomationSession);
+	if (resumedAutomationIntents)
+		console.log(`[automations] Resumed ${resumedAutomationIntents} pre-launch intent(s)`);
+	startScheduler(onAutomationSession);
 	startPrReviewNotificationTicker();
 
 	// Scheduled prompts are durable SessionKernel timers. The runtime starts
@@ -784,6 +785,7 @@ if (!g.__opensessionBooted) {
 									terminalEvent.result ||
 									"Recovered opening run failed"
 								: undefined,
+							recoveredRun.runKey,
 						);
 					}
 					recordRunOutcome(
@@ -798,6 +800,13 @@ if (!g.__opensessionBooted) {
 						// persists that id — so name it here, or the failure chip is
 						// written into the transcript the conversation left behind.
 						{
+              ...(recoveredRun?.runKey
+                ? {
+                    runId: recoveredRun.runKey,
+                    runGeneration: sessionKernel(bksSessionId).runState().generation,
+                    projectionId: `outcome:${recoveredRun.runKey}`,
+                  }
+                : {}),
 							engineSessionId: terminalEvent.sessionId,
 							noticeLabel: terminalEvent.usageLimitExhausted
 								? "Run stopped"
@@ -1045,10 +1054,6 @@ if (!g.__opensessionBooted) {
 				console.error(`[shutdown] ${agent.name} shutdown error:`, e);
 			}
 		}
-		// Stop accepting new HTTP/WS connections; existing ones can finish.
-		try {
-			server.stop();
-		} catch {}
 		// Wait for runner-driven runs (web UI / automations / loops) to settle —
 		// but ONLY the ones a restart would actually kill. Runs on DETACHED
 		// engine servers (pi-detach.ts) survive the restart: their
@@ -1056,7 +1061,10 @@ if (!g.__opensessionBooted) {
 		// executing, and the next boot adopts the servers + reattaches the runs
 		// from the journal. Waiting on those would just delay the restart.
 		const undrainable = () =>
-			Math.max(0, activeAgentRunCount() - activeDetachedAgentRunCount());
+			Math.max(
+				activeAutomationPreparationCount(),
+				Math.max(0, activeAgentRunCount() - activeDetachedAgentRunCount()),
+			);
 		const deadline = timersDead ? 0 : Date.now() + DRAIN_TIMEOUT_MS;
 		let n = undrainable();
 		while (n > 0 && Date.now() < deadline) {
@@ -1077,6 +1085,12 @@ if (!g.__opensessionBooted) {
 				`[shutdown] ${surviving} run(s) continue on detached engine servers — reattaching on next boot`,
 			);
 		}
+		// Keep HTTP available while runs drain. Stopping the listener before the
+		// bounded wait made Caddy return 502 for the full drain window on every
+		// deploy. Shutdown-aware intake above already parks new agent work.
+		try {
+			server.stop();
+		} catch {}
 		process.exit(0);
 	};
 	process.on("SIGTERM", () => void gracefulShutdown("SIGTERM"));

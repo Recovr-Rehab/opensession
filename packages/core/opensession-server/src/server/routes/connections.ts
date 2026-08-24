@@ -223,9 +223,12 @@ export async function handleConnectionsRoutes(
 	// has probed yet comes back null, and `pending` is the client's cue to ask
 	// again once the background probe lands.
 	if (path === "/api/connections/mcp-oauth" && req.method === "GET") {
-		const { cachedOauthCapable, mcpOauthStatus, oauthPresetFor } = await import(
-			"../mcp-oauth"
-		);
+		const {
+			cachedOauthCapable,
+			mcpOauthStatus,
+			oauthPresetFor,
+			supportsManualToken,
+		} = await import("../mcp-oauth");
 		const servers = Object.entries(readMcpConfig().mcpServers).map(
 			([name, cfg]: [string, any]) => {
 				const status = mcpOauthStatus(name);
@@ -242,7 +245,12 @@ export async function handleConnectionsRoutes(
 						: oauthTarget
 							? cachedOauthCapable(oauthTarget)
 							: false;
-				return { name, capable: capable ?? null, ...status };
+				return {
+					name,
+					capable: capable ?? null,
+					manualToken: supportsManualToken(name) && !!cfg?.url,
+					...status,
+				};
 			},
 		);
 		return Response.json({
@@ -275,9 +283,12 @@ export async function handleConnectionsRoutes(
 		/^\/api\/connections\/mcp\/([^/]+)\/oauth$/,
 	);
 	if (mcpOauthMatch && req.method === "GET") {
-		const { mcpOauthStatus, isOauthCapable, oauthPresetFor } = await import(
-			"../mcp-oauth"
-		);
+		const {
+			mcpOauthStatus,
+			isOauthCapable,
+			oauthPresetFor,
+			supportsManualToken,
+		} = await import("../mcp-oauth");
 		const name = decodeURIComponent(mcpOauthMatch[1]);
 		const status = mcpOauthStatus(name);
 		const cfg = (await import("../connections")).readMcpConfig().mcpServers[
@@ -289,7 +300,11 @@ export async function handleConnectionsRoutes(
 		const capable =
 			!!oauthPresetFor(name) ||
 			(oauthTarget ? await isOauthCapable(oauthTarget) : false);
-		return Response.json({ ...status, capable });
+		return Response.json({
+			...status,
+			capable,
+			manualToken: supportsManualToken(name) && !!cfg?.url,
+		});
 	}
 	if (mcpOauthMatch && req.method === "DELETE") {
 		const { removeMcpOauthGrant } = await import("../mcp-oauth");
@@ -340,6 +355,52 @@ export async function handleConnectionsRoutes(
 				{ status: 502 },
 			);
 		}
+	}
+
+	// Connect by pasting a personal API token (providers that gate OAuth
+	// client registration but let any user mint a token, e.g. Vercel).
+	const mcpTokenMatch = path.match(
+		/^\/api\/connections\/mcp\/([^/]+)\/token$/,
+	);
+	if (mcpTokenMatch && req.method === "POST") {
+		const name = decodeURIComponent(mcpTokenMatch[1]);
+		const body = (await req.json().catch(() => ({}))) as {
+			token?: string;
+			scope?: string;
+		};
+		const token = typeof body.token === "string" ? body.token.trim() : "";
+		if (!token) return Response.json({ error: "Paste an API token" }, { status: 400 });
+		const cfg = readMcpConfig().mcpServers[name] as
+			| { url?: string; oauthUrl?: string }
+			| undefined;
+		const target = cfg?.url || cfg?.oauthUrl;
+		if (!target)
+			return Response.json(
+				{ error: "Not a remote MCP server" },
+				{ status: 400 },
+			);
+		const forUser =
+			body.scope === "me"
+				? ctx.authUser?.login || ctx.authUser?.name || undefined
+				: undefined;
+		if (body.scope === "me" && !forUser)
+			return Response.json(
+				{ error: "Sign in to connect your own account" },
+				{ status: 401 },
+			);
+		try {
+			const { saveManualMcpGrant } = await import("../mcp-oauth");
+			await saveManualMcpGrant(name, target, token, {
+				connectedBy: ctx.authUser?.login || ctx.authUser?.name,
+				...(forUser ? { forUser } : {}),
+			});
+		} catch (e: any) {
+			return Response.json(
+				{ error: e?.message || String(e) },
+				{ status: 400 },
+			);
+		}
+		return Response.json({ ok: true });
 	}
 
 	const mcpDelMatch = path.match(
@@ -764,6 +825,7 @@ export async function handleConnectionsRoutes(
 			slug?: unknown;
 			secret?: unknown;
 			appOrg?: unknown;
+			privateKey?: unknown;
 		} | null;
 		const clientId =
 			typeof body?.clientId === "string" ? body.clientId.trim() : "";
@@ -772,6 +834,12 @@ export async function handleConnectionsRoutes(
 		// Present ⇒ the App is owned by an org (owner=Organization); empty/absent ⇒
 		// a personal App (single-user).
 		const appOrg = typeof body?.appOrg === "string" ? body.appOrg.trim() : "";
+		// The App's private key (PEM), generated once in the App's settings UI.
+		// Optional here — an App can be configured for per-user sign-in (device
+		// flow, keyless) alone — but it is what lets installation tokens mint, so
+		// without it the bot/agent and checks-read stay on the PAT.
+		const privateKey =
+			typeof body?.privateKey === "string" ? body.privateKey.trim() : "";
 		// The secret is required on the UI config path: the device-flow token
 		// expires and Open Session refreshes it with the secret, so without one
 		// the connection would silently stop working after ~8h. (Env-configured
@@ -781,11 +849,42 @@ export async function handleConnectionsRoutes(
 				{ error: "clientId, slug and secret are required" },
 				{ status: 400 },
 			);
+		if (privateKey) {
+			// A complete PEM block, and it must actually parse — a header-only or
+			// truncated value would otherwise overwrite a working key on disk.
+			const wellFormed =
+				/-----BEGIN [A-Z ]*PRIVATE KEY-----[\s\S]+-----END [A-Z ]*PRIVATE KEY-----/.test(
+					privateKey,
+				);
+			let parses = false;
+			if (wellFormed) {
+				try {
+					const { createPrivateKey } = await import("node:crypto");
+					createPrivateKey(privateKey);
+					parses = true;
+				} catch {
+					parses = false;
+				}
+			}
+			if (!parses)
+				return Response.json(
+					{ error: "privateKey must be a valid PEM private key" },
+					{ status: 400 },
+				);
+		}
 		const { rawConfig, persistRawConfig, withConfigMutationLock } =
 			await import("../config-mutation");
 		return withConfigMutationLock(async () => {
 			const config = rawConfig();
 			const github = githubIntegrationSection(config, true)!;
+			const keyMutation = privateKey ||
+				(github.oauthClientId !== clientId ? null : undefined);
+			if (keyMutation === null && github.botCredential === "app") {
+				return Response.json(
+					{ error: "Switch bot actions to the PAT before changing the GitHub App without a replacement key" },
+					{ status: 409 },
+				);
+			}
 			github.oauthClientId = clientId;
 			github.appSlug = slug;
 			github.oauthClientSecret = secret;
@@ -804,7 +903,18 @@ export async function handleConnectionsRoutes(
 				delete github.webhookForwardLogin;
 				delete github.webhookForwardLogin;
 			}
-			persistRawConfig(config);
+			try {
+				const { commitGithubAppKeyMutation } = await import("../github-app");
+				await commitGithubAppKeyMutation(
+					keyMutation,
+					() => persistRawConfig(config),
+				);
+			} catch (e) {
+				return Response.json(
+					{ error: String((e as Error)?.message || e) },
+					{ status: 409 },
+				);
+			}
 			return Response.json({ ok: true });
 		});
 	}
@@ -830,6 +940,12 @@ export async function handleConnectionsRoutes(
 		return withConfigMutationLock(async () => {
 			const config = rawConfig();
 			const github = githubIntegrationSection(config, false);
+			if (github?.botCredential === "app") {
+				return Response.json(
+					{ error: "Switch bot actions to the PAT before removing the GitHub App" },
+					{ status: 409 },
+				);
+			}
 			if (github) {
 				// Drop the repo-App keys and the captured sign-in intent
 				// (appOrg/authOnConnect) — removing the App is also how the wizard
@@ -841,7 +957,15 @@ export async function handleConnectionsRoutes(
 				delete github.appOrg;
 				delete github.authOnConnect;
 			}
-			persistRawConfig(config);
+			try {
+				const { commitGithubAppKeyMutation } = await import("../github-app");
+				await commitGithubAppKeyMutation(null, () => persistRawConfig(config));
+			} catch (e) {
+				return Response.json(
+					{ error: String((e as Error)?.message || e) },
+					{ status: 409 },
+				);
+			}
 			return Response.json({ ok: true });
 		});
 	}
