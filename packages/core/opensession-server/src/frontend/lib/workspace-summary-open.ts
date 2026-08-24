@@ -64,19 +64,19 @@ export function workspaceSummaryShift(headerW: number): number {
 	return headerW >= WS_SUMMARY_ROOM_W ? WS_SUMMARY_MAX_SHIFT : 0;
 }
 
-/** Any pane with enough room keeps the summary open, including Review. */
-export function workspaceSummaryCanStand(
-	hasRoom: boolean,
-	_reviewMode: boolean,
-): boolean {
+/**
+ * Whether this pane can hold the card as a standing view.
+ *
+ * Room is the only question. Review used to be excluded here, which is what
+ * made opening it feel like the card had been dismissed: every surface wide
+ * enough shows the card, and Review gives it a column of its own.
+ */
+export function workspaceSummaryCanStand(hasRoom: boolean): boolean {
 	return hasRoom;
 }
 
-/** Place the card directly below the workspace tab strip. Review now gives
- *  the card its own column, so its inner PR bars no longer need clearance. */
-export function workspaceSummarySideOffset(
-	tabStripVisible: boolean,
-	_reviewMode: boolean,
-): number {
+/** Place the card directly below the workspace tab strip. Review gives the
+ *  card its own column, so its inner PR bars need no extra clearance. */
+export function workspaceSummarySideOffset(tabStripVisible: boolean): number {
 	return tabStripVisible ? 49 : 20;
 }

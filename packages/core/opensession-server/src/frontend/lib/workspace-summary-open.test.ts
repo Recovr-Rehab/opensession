@@ -100,14 +100,13 @@ describe("workspace summary preference", () => {
 });
 
 describe("workspace summary in Review", () => {
-	test("inherits the standing preference when the pane has room", () => {
-		expect(workspaceSummaryCanStand(true, true)).toBe(true);
-		expect(workspaceSummaryCanStand(true, false)).toBe(true);
-		expect(workspaceSummaryCanStand(false, true)).toBe(false);
+	test("stands wherever there is room, Review included", () => {
+		expect(workspaceSummaryCanStand(true)).toBe(true);
+		expect(workspaceSummaryCanStand(false)).toBe(false);
 	});
 
-	test("places session and Review summaries below the workspace tabs", () => {
-		expect(workspaceSummarySideOffset(true, false)).toBe(49);
-		expect(workspaceSummarySideOffset(true, true)).toBe(49);
+	test("places every summary below the workspace tabs", () => {
+		expect(workspaceSummarySideOffset(true)).toBe(49);
+		expect(workspaceSummarySideOffset(false)).toBe(20);
 	});
 });

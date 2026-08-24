@@ -329,9 +329,9 @@ export function WorkspaceSummary({
 	 *  every wider window inherits, and dismissing it does not un-pin the card
 	 *  set there. */
 	const [transient, setTransient] = useState(false);
-	// Review is deliberately transient too: it starts clear for reading and only
-	// overlays the canvas after someone asks for the summary.
-	const canStand = forceOpen || workspaceSummaryCanStand(hasRoom, reviewMode);
+	// Room is the only thing that decides this. Review is not a special case:
+	// it is wide, so it keeps the standing card like any other pane.
+	const canStand = forceOpen || workspaceSummaryCanStand(hasRoom);
 	// Mode decides which of the two answers at render rather than in an effect.
 	// An effect would paint one frame of a card the pane should not hold.
 	const open = canStand ? pinned : transient;
@@ -392,6 +392,19 @@ export function WorkspaceSummary({
 		localStorage.setItem(WS_SUMMARY_OPEN_KEY, String(nextOpen));
 		window.dispatchEvent(new Event(WS_SUMMARY_OPEN_EVENT));
 	}
+	/**
+	 * What a row does to the card after it routes somewhere.
+	 *
+	 * An overlay has to go: it is lying across the pane it just navigated, and
+	 * nothing else would dismiss it. A pinned card does not. It is a standing
+	 * view of the workspace, the same one that survives switching sessions, and
+	 * the surface it opens (Review above all) shows it too. Closing it here also
+	 * wrote the preference off, so opening Review from the card un-pinned it in
+	 * every other window and every session opened afterwards.
+	 */
+	function dismissAfterRouting() {
+		if (!canStand) changeOpen(false);
+	}
 	return (
 		<Popover.Root
 			open={open}
@@ -448,7 +461,7 @@ export function WorkspaceSummary({
 				// actions row the card anchors to, whose box ends 8px above the
 				// header's own bottom edge and 37px above the tab strip's: 8 + 12
 				// with no strip, 37 + 12 with one.
-				sideOffset={workspaceSummarySideOffset(Boolean(tabStripVisible), reviewMode)}
+				sideOffset={workspaceSummarySideOffset(Boolean(tabStripVisible))}
 				elevation="sm"
 				// A menu's hairline is right for a strip of rows; on 300px of quiet
 				// text it reads as a box drawn around them rather than the card's own
@@ -467,7 +480,7 @@ export function WorkspaceSummary({
 					session={session}
 					{...body}
 					reviewMode={reviewMode}
-					close={() => changeOpen(false)}
+					close={dismissAfterRouting}
 				/>
 			</Popover.Popup>
 		</Popover.Root>
