@@ -12,11 +12,10 @@ import { whenCurrentUserReady } from "./auth-ready";
 /**
  * Seven accents, ordered as a walk around the hue wheel from the blues.
  *
- * Each fill runs at 92% of the chroma its hue can physically reach in sRGB at
- * its lightness, which is as saturated as the colour gets before it leaves the
- * gamut. That share is flat across the wheel, but the results are not: teal and
- * sky top out near chroma 0.10 and 0.13 where indigo and coral reach 0.22, so
- * the cool end reads calmer than the warm one no matter what is asked of it.
+ * Each chromatic fill stays close to the chroma its hue can physically reach
+ * in sRGB at its lightness, keeping the palette saturated without clipping.
+ * The results vary around the wheel: Sky tops out below Indigo and Coral, so
+ * the cool end reads calmer than the warm one.
  *
  * Two entries sit outside the rule. `lime` (Honey) is a yellow, and yellow only
  * exists at high lightness, so it keeps one value in both appearances; its ink
