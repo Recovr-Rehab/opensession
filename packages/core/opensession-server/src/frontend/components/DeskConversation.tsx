@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import { AnimatePresence, motion } from "motion/react";
 import type { TranscriptEntry } from "../lib/types";
 import { useWebSocket } from "../hooks/useWebSocket";
@@ -112,7 +112,10 @@ export function DeskConversation({
 	// Stick to the live edge only while the reader is already there, so a
 	// streaming reply doesn't yank them up from scrollback.
 	const followRef = useRef(true);
-	const liveTurnStore = (new LiveTurnStore());
+	// One store per session, stable across renders: it sits in effect deps
+	// below, and a fresh instance every render would loop those effects forever
+	// (the compiler bails on this component, so it gets no automatic help).
+	const liveTurnStore = useMemo(() => new LiveTurnStore(), [sessionId]);
 
 	useEffect(() => {
 		if (!autoFocus) return;
