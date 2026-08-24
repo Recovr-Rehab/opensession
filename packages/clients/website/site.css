@@ -226,9 +226,11 @@ summary:focus-visible {
 	gap: 10px;
 }
 
+/* Full white rather than the rail's dimmed ink: this sits directly on the
+   field, where 66% ink lost the line against the brighter bands. */
 .rail-note {
 	margin: 16px 0 0;
-	color: var(--muted);
+	color: #fff;
 	font-size: 14px;
 	line-height: 1.5;
 	text-shadow:
@@ -611,8 +613,10 @@ summary:focus-visible {
 	   24px of air read as a much wider object beside it. */
 	padding: 0 18px;
 	border-color: rgba(var(--ink-rgb), 0.72);
-	background: rgba(var(--ink-rgb), 0.22);
-	backdrop-filter: blur(8px) saturate(120%);
+	background: rgba(var(--ink-rgb), 0.18);
+	/* A real glass blur, so the bands behind it read as diffused paint rather
+	   than through a thin wash. */
+	backdrop-filter: blur(18px) saturate(150%);
 	box-shadow: inset 0 1px 0 rgba(var(--ink-rgb), 0.28);
 	color: var(--ink);
 	transition:
@@ -728,6 +732,12 @@ summary:focus-visible {
 
 	.button {
 		width: 100%;
+	}
+
+	/* The asks are full width here, so the note under them reads as a caption
+	   for the pair rather than a paragraph starting at the left edge. */
+	.rail-note {
+		text-align: center;
 	}
 
 	.feed-foot {
