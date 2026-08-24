@@ -295,17 +295,9 @@ function RepositoryRow({
 						{branchError}
 					</InlineAlert>
 				)}
-				<div className="mt-3 flex min-h-11 max-w-[36rem] items-center gap-3 py-1">
-					<span className="min-w-0 flex-1">
-						<span className="block text-label font-medium text-fg">
-							Use isolated worktrees
-						</span>
-						<span
-							id={worktreeDescriptionId}
-							className="mt-0.5 block text-meta text-dim"
-						>
-							Create a separate worktree for new code sessions. Existing sessions aren&rsquo;t moved.
-						</span>
+				<div className="mt-3 grid min-h-11 max-w-[36rem] grid-cols-[minmax(0,1fr)_auto] items-center gap-x-3 gap-y-1 py-1 phone:-ml-11 phone:max-w-[calc(100%+2.75rem)]">
+					<span className="min-w-0 text-label font-medium text-fg">
+						Use isolated worktrees
 					</span>
 					<Switch
 						aria-label={`Use isolated worktrees for ${repo.label}`}
@@ -314,6 +306,12 @@ function RepositoryRow({
 						disabled={!!saving}
 						onCheckedChange={(next) => void saveWorktreeMode(next)}
 					/>
+					<span
+						id={worktreeDescriptionId}
+						className="col-span-2 text-meta text-dim"
+					>
+						Give new code sessions a separate worktree. Existing sessions stay put.
+					</span>
 				</div>
 				{worktreeError && (
 					<InlineAlert id={worktreeErrorId} className="mt-1.5">
