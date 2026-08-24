@@ -308,6 +308,10 @@ const ASSETS_SHOWN = 6;
 /** How many screenshots the strip carries. It scrolls, so this is about how
  *  many pictures the card is willing to load, not about the room it has. */
 const ASSET_FRAMES_SHOWN = 6;
+/** Past this many commits the card stops listing titles and states the count
+ *  instead. A long session commits dozens of times and the list, unbounded,
+ *  becomes the card. */
+const COMMIT_ROW_LIMIT = 5;
 const NO_LIVE_MEDIA: WorkspaceMediaItem[] = [];
 
 export function WorkspaceSummary({
@@ -852,6 +856,42 @@ export function WorkspaceSummaryBody({
 		);
 	}
 
+	/** A long session commits dozens of times, and the card would spend its whole
+	 *  height listing them. Past a handful the count IS the fact — "16 commits" —
+	 *  and the titles move to hover, where they cost nothing until asked for. */
+	function committedSummaryRow() {
+		const files = commits.reduce((sum, c) => sum + c.filesChanged, 0);
+		return (
+			<Tooltip
+				side="left"
+				align="start"
+				multiline
+				label={
+					<span className="flex flex-col gap-1">
+						{commits.map((commit) => (
+							<span key={commit.sha} className="flex min-w-0 gap-2">
+								<span className="min-w-0 flex-1 truncate">{commit.title}</span>
+								<span className="shrink-0 opacity-60 tabular-nums">
+									{commit.filesChanged}
+								</span>
+							</span>
+						))}
+					</span>
+				}
+			>
+				<div className={cn(WS_SUMMARY_ROW, "cursor-default")}>
+					<span className={WS_SUMMARY_RAIL}>
+						<IconGitCommit size={20} className={WS_SUMMARY_ICON} />
+					</span>
+					<span className={WS_SUMMARY_LABEL}>{commits.length} commits</span>
+					<span className={cn(WS_SUMMARY_STATE, "text-dim tabular-nums")}>
+						{files} file{files === 1 ? "" : "s"}
+					</span>
+				</div>
+			</Tooltip>
+		);
+	}
+
 	const groupClass = embedded
 		? "flex flex-col overflow-hidden rounded-2xl bg-raised py-2 empty:hidden"
 		: "contents";
@@ -1150,7 +1190,9 @@ export function WorkspaceSummaryBody({
 						diffChangeRow(
 							`${changedFiles} file${changedFiles === 1 ? "" : "s"} committed`,
 						)}
-					{commits.map(committedRow)}
+					{commits.length > COMMIT_ROW_LIMIT
+						? committedSummaryRow()
+						: commits.map(committedRow)}
 				</div>
 			)}
 
