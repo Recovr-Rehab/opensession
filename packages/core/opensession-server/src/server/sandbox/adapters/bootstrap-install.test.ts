@@ -2,7 +2,7 @@ import {afterEach, describe, expect, test} from "bun:test";
 import {mkdtempSync, rmSync, writeFileSync} from "fs";
 import {tmpdir} from "os";
 import {join} from "path";
-import {bootstrapRemoteSandbox, type RemoteDriver} from "./bootstrap";
+import {bootstrapRemoteSandbox, bootstrapSignature, type RemoteDriver} from "./bootstrap";
 
 const originalConfig = process.env.OPENSESSION_SANDBOX_CONFIG;
 const scratch: string[] = [];
@@ -14,6 +14,28 @@ afterEach(() => {
 });
 
 describe("remote runner bootstrap", () => {
+  test("repairs the workload identity client after a provider resume", async () => {
+    const commands: string[] = [];
+    const driver: RemoteDriver = {
+      async exec(command) {
+        commands.push(command);
+        if (command.startsWith("cat ")) {
+          return {exitCode: 0, stdout: `${bootstrapSignature()}\n`, stderr: ""};
+        }
+        return {exitCode: 0, stdout: "", stderr: ""};
+      },
+      async execBackground() {},
+      async writeFile() {},
+      async ensureStarted() {},
+    };
+
+    await bootstrapRemoteSandbox(driver, "test");
+
+    expect(commands).toHaveLength(2);
+    expect(commands[1]).toContain("chmod 755 /home/ubuntu/projects/opensession/deploy/sandbox/opensession");
+    expect(commands[1]).toContain("test -x /home/ubuntu/.local/bin/opensession");
+  });
+
   test("creates the user bin directory before linking the workload identity client", async () => {
     const root = mkdtempSync(join(tmpdir(), "opensession-bootstrap-install-"));
     scratch.push(root);

@@ -876,7 +876,22 @@ export async function bootstrapRemoteSandbox(
   const cfg = sandboxConfig();
   const signature = bootstrapSignature();
   const marker = await driver.exec(`cat ${BOOTSTRAP_MARKER} 2>/dev/null`);
-  if (marker.exitCode === 0 && marker.stdout.trim() === signature) return;
+  if (marker.exitCode === 0 && marker.stdout.trim() === signature) {
+    // Box archive/resume reconstructs parts of the filesystem from Git and can
+    // drop an operator-applied executable bit even though the durable bootstrap
+    // marker survives. Repair the tiny workload-identity entrypoint on every
+    // adoption instead of rerunning the full runtime install.
+    need(
+      await driver.exec(
+        `mkdir -p ${REMOTE_HOME}/.local/bin && ` +
+          `chmod 755 ${REMOTE_REPO}/deploy/sandbox/opensession && ` +
+          `ln -sf ${REMOTE_REPO}/deploy/sandbox/opensession ${REMOTE_HOME}/.local/bin/opensession && ` +
+          `test -x ${REMOTE_HOME}/.local/bin/opensession`,
+      ),
+      "workload identity client repair",
+    );
+    return;
+  }
   const log = (msg: string) => console.log(`[sandbox:${label}] bootstrap: ${msg}`);
 
   await bootstrapRemoteBaseRuntime(driver, label);
