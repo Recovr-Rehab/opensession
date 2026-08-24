@@ -14,7 +14,7 @@ export function GithubConnectEmptyState({
 		<EmptyState
 			title={
 				<div className="text-section-title leading-[1.15] font-semibold tracking-[-0.02em] text-balance">
-					Connect GitHub
+					Start your first session
 				</div>
 			}
 			action={
@@ -30,7 +30,7 @@ export function GithubConnectEmptyState({
 			}
 			className={cn("px-6", className)}
 		>
-			Choose a repository to start your first session.
+			Connect a repository to get started.
 		</EmptyState>
 	);
 }
