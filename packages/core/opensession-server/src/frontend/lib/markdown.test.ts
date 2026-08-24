@@ -140,6 +140,14 @@ describe("renderMarkdown session links", () => {
     const html = renderMarkdown("See [GitHub](https://github.com/tella/x).");
     expect(html).toContain('target="_blank"');
   });
+
+  it("opens a portal on the app hostname but another port in a new tab", () => {
+    const html = renderMarkdown(
+      "[Open Tella local preview](http://127.0.0.1:25779/videos)",
+    );
+    expect(html).toContain('target="_blank"');
+    expect(html).toContain('rel="noopener noreferrer"');
+  });
 });
 
 describe("renderMarkdown automation links", () => {
