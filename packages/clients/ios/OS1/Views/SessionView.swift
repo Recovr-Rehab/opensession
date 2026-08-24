@@ -699,7 +699,7 @@ struct SessionView: View {
             .toolbar {
             #if os(iOS)
             ToolbarItem(placement: .principal) {
-                sessionIdentityButton
+                sessionHeaderLane
             }
             #endif
             // Whoever else has this session open, right before the actions
@@ -1107,13 +1107,29 @@ struct SessionView: View {
     #endif
 
     #if os(iOS)
+    /// Use the principal lane for its flexible width, but anchor the title at
+    /// the lane's leading edge so Back, title and PR read left-to-right with
+    /// clear space between all three controls.
+    private var sessionHeaderLane: some View {
+        HStack(spacing: 0) {
+            sessionIdentityButton
+            Spacer(minLength: 0)
+        }
+        .frame(width: sessionHeaderLaneWidth)
+    }
+
+    private var sessionHeaderLaneWidth: CGFloat {
+        let surfaceWidth = viewportWidth > 0 ? viewportWidth : 390
+        return min(560, max(200, surfaceWidth - 180))
+    }
+
     /// Mobile web opens workspace details when its title is tapped. Keep the
     /// same identity in native navigation and present a SwiftUI details sheet.
     private var sessionIdentityButton: some View {
         Button {
             showWorktreeInfo = true
         } label: {
-            VStack(alignment: .leading, spacing: 1) {
+            VStack(alignment: .leading, spacing: 0) {
                 // No run dot up here: the bar is identity and navigation,
                 // and the running state now reads where the work is, in the
                 // clock at the end of the transcript.
@@ -1151,6 +1167,7 @@ struct SessionView: View {
         // the system Back button and trailing PR action.
         .buttonStyle(.glass)
         .buttonBorderShape(.capsule)
+        .controlSize(.small)
         .tint(.primary)
         .frame(width: sessionIdentityWidth, alignment: .leading)
         .accessibilityLabel("Workspace details")
