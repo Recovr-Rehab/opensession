@@ -623,7 +623,7 @@ function SetupPage() {
     </section>,
     <section className="setup-panel" key="install">
       <StepLayout
-        title="Download Open Session"
+        title="Download apps"
         description="Get the Mac app, open it in a browser, or install it on your phone."
       >
         <div className="setup-download-options">
