@@ -624,13 +624,16 @@ async function startSandboxPortalServiceInner(input: SandboxPortalStartInput): P
 		},
 		urlFor: (port) => `https://${configuredServer().previewHost}:${sandboxHttpsPortFor(input.sandbox.id, port)}`,
 		launch: async ({ name, command, port, url }) => {
-			const logPath = `.opensession-portal-${name}.log`;
-			const pidPath = `.opensession-portal-${name}.pid`;
+			const runtimeDir = `/home/ubuntu/.opensession-session-scratch/${input.sessionId}/portals`;
+			const legacyLogPath = `.opensession-portal-${name}.log`;
+			const legacyPidPath = `.opensession-portal-${name}.pid`;
+			const logPath = `${runtimeDir}/${name}.log`;
+			const pidPath = `${runtimeDir}/${name}.pid`;
 			// Provider command endpoints are allowed to reap children when a
 			// synchronous shell returns. Start the service through the provider's
-			// native detached lane, and publish its durable process-group id through
-			// a short-lived workspace marker instead of shelling into the background.
-			const launch = `printf '%s\\n' $$ > ${shellQuoteWord(pidPath)} && HOME=/home/ubuntu PATH=${shellQuoteWord(SANDBOX_PORTAL_PATH)} PORT=${shellQuoteWord(String(port))} PORTAL_URL=${shellQuoteWord(url)} OPENSESSION_PORTAL=${shellQuoteWord(name)} exec setsid bash -c ${shellQuoteWord(`exec ${command}`)} >${shellQuoteWord(logPath)} 2>&1`;
+			// native detached lane. Logs and the short-lived PID marker live in
+			// session scratch, never in the user's Git workspace.
+			const launch = `rm -f ${shellQuoteWord(legacyLogPath)} ${shellQuoteWord(legacyPidPath)} && mkdir -p ${shellQuoteWord(runtimeDir)} && printf '%s\\n' $$ > ${shellQuoteWord(pidPath)} && HOME=/home/ubuntu PATH=${shellQuoteWord(SANDBOX_PORTAL_PATH)} PORT=${shellQuoteWord(String(port))} PORTAL_URL=${shellQuoteWord(url)} OPENSESSION_PORTAL=${shellQuoteWord(name)} exec setsid bash -c ${shellQuoteWord(`exec ${command}`)} >${shellQuoteWord(logPath)} 2>&1`;
 			const launched = await input.sandbox.exec(["bash", "-c", launch], {
 				env: input.env,
 				background: true,

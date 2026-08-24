@@ -121,6 +121,7 @@ describe("session Portal supervisor", () => {
 		expect(portal.state).toBe("awake");
 		expect(duplicate.pid).toBe(portal.pid);
 		expect(await (await fetch("http://127.0.0.1:18702")).text()).toBe("sandbox");
+		expect(existsSync(join(worktree, ".opensession-portal-remote-app.log"))).toBe(false);
 		expect((await listSandboxPortalServices(sandbox))[0]).toMatchObject({ name: "remote-app", state: "awake" });
 		expect(sleepingSandboxPortalStatus("os-sandbox-portal-test", sandbox.id)?.services).toEqual([
 			expect.objectContaining({ name: "remote-app", state: "sleeping", managed: true }),
