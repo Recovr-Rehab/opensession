@@ -12,7 +12,7 @@ import { createPortal } from "react-dom";
 import { AnimatePresence, motion, Reorder } from "motion/react";
 import { duration, ease } from "../ui/motion";
 import { Spinner } from "../ui/spinner";
-import { EmptyState, TranscriptSkeleton } from "../ui/state";
+import { EmptyState, InlineAlert, TranscriptSkeleton } from "../ui/state";
 import { LiveTurnStore } from "../lib/live-turn-store";
 import { getLiveTypingPref } from "../lib/live-typing-pref";
 import { randomUUID } from "../lib/random-uuid";
@@ -4392,6 +4392,21 @@ export function SessionViewer({
 	);
 	const hasLiveConversation =
 		pendingBubbles.length > 0 || liveTurnStore.hasText() || isBusy || !!ask;
+	// recordRunOutcome normally writes a system chip into the transcript. Opening
+	// failures can happen before an engine transcript exists, and a wedged session
+	// mailbox can reject that best-effort append. The session list still carries
+	// the same durable error, so use it as an inline fallback instead of leaving
+	// the conversation blank while only the sidebar hover card explains why.
+	const inlineRunFailure =
+		!isBusy &&
+		session.lastRunError &&
+		!entries.some(
+			(entry) =>
+				entry.type === "system" &&
+				entry.content.includes(session.lastRunError!.message),
+		)
+			? session.lastRunError
+			: null;
 	const shownQueued = queued;
 	// Classified once, read by both the counts and the rows, so the chip's
 	// tally and what each row renders as can't disagree.
@@ -7112,6 +7127,7 @@ export function SessionViewer({
 								<ConversationLoading key="conversation-loading" />
 							) : entries.length === 0 &&
 								!hasLiveConversation &&
+								!inlineRunFailure &&
 								!session.transcriptPath ? (
 								// A fresh session with no run yet is just an empty conversation —
 								// blank canvas, the composer below is the UI. Only a session
@@ -7209,7 +7225,9 @@ export function SessionViewer({
 										Ask a question or describe your task.
 									</EmptyState>
 								)
-							) : entries.length === 0 && !hasLiveConversation ? (
+							) : entries.length === 0 &&
+								!hasLiveConversation &&
+								!inlineRunFailure ? (
 								<div className="py-10 text-center text-faint">Empty transcript</div>
 							) : (
 								<>
@@ -7267,6 +7285,15 @@ export function SessionViewer({
 								</>
 							)}
 							</AnimatePresence>
+
+							{inlineRunFailure && (
+								<InlineAlert
+									title="Run failed"
+									className="mx-auto mt-3 max-w-[var(--session-col)]"
+								>
+									{inlineRunFailure.message}
+								</InlineAlert>
+							)}
 
 							{loadingMoreTranscript && (
 								<div
