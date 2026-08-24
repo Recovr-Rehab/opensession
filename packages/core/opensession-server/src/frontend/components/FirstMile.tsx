@@ -365,7 +365,7 @@ export function FirstMile({ onDone }: { onDone: () => void }) {
 							<button
 								key={item.id}
 								type="button"
-								aria-label={`${itemIndex + 1}. ${item.label}`}
+								aria-label={item.label}
 								aria-current={stepIndex === index ? "step" : undefined}
 								onClick={() => goTo(stepIndex)}
 								className={cn(
