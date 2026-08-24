@@ -9,11 +9,27 @@ const statusBarSource = await Bun.file(
 const summarySource = await Bun.file(
 	new URL("./WorkspaceSummary.tsx", import.meta.url),
 ).text();
-const menuSource = await Bun.file(
-	new URL("../ui/menu.tsx", import.meta.url),
+const popupClassesSource = await Bun.file(
+	new URL("../ui/popup-classes.ts", import.meta.url),
 ).text();
+const floatingPrimitiveSources = await Promise.all([
+	...["menu.tsx", "popover.tsx", "select.tsx", "tooltip.tsx"].map((file) =>
+		Bun.file(new URL(`../ui/${file}`, import.meta.url)).text(),
+	),
+	Bun.file(new URL("./useFileMentions.tsx", import.meta.url)).text(),
+]);
 
-test("the summary's child popups stay open above their parent", () => {
+test("shared floating interactions paint above the workspace summary", () => {
+	expect(summarySource).toContain('positionerClassName="z-[2147483646]"');
+	expect(popupClassesSource).toContain(
+		'export const FLOATING_OVERLAY_LAYER = "z-[2147483647]"',
+	);
+	for (const source of floatingPrimitiveSources) {
+		expect(source).toContain("FLOATING_OVERLAY_LAYER");
+	}
+});
+
+test("the summary's checks preview stays open with its parent", () => {
 	const summaryStart = statusBarSource.indexOf('if (variant === "summary")');
 	const summaryEnd = statusBarSource.indexOf('if (variant === "header")');
 	const summary = statusBarSource.slice(summaryStart, summaryEnd);
@@ -22,12 +38,4 @@ test("the summary's child popups stay open above their parent", () => {
 	expect(summary).toContain("<PrChecksPopover");
 	expect(summary).toContain("nested");
 	expect(popoverSource).toContain("<Popover.Root exclusive={!nested}>");
-	expect(summarySource).toContain('positionerClassName="z-[2147483646]"');
-	expect(popoverSource).toContain(
-		'positionerClassName={nested ? "z-[2147483647]" : undefined}',
-	);
-	expect(summarySource).toContain('positionerClassName="z-[2147483647]"');
-	expect(menuSource).toContain(
-		'className={cn("z-[10001] outline-none", positionerClassName)}',
-	);
 });

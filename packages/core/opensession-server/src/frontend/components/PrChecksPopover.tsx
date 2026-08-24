@@ -51,10 +51,6 @@ export function PrChecksPopover({
 		<Popover.Root exclusive={!nested}>
 			<Popover.Trigger render={trigger} openOnHover delay={200} closeDelay={120} />
 			<Popover.Popup
-				// The workspace summary already owns the app's top workspace layer.
-				// Its hover preview is the child interaction, so it paints later on
-				// that same layer rather than falling behind the card.
-				positionerClassName={nested ? "z-[2147483647]" : undefined}
 				side="left"
 				align="start"
 				sideOffset={10}

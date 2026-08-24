@@ -4,6 +4,7 @@ import { IconCheck, IconChevronDown } from "../components/icons";
 import { cn } from "./cn";
 import { fieldClasses } from "./input";
 import {
+	FLOATING_OVERLAY_LAYER,
 	POPUP_HOOK,
 	popupItemClasses,
 	popupScrollClasses,
@@ -176,7 +177,7 @@ function Popup({
 				// would give this one popup two open behaviours and no
 				// animation. Anchor it below the trigger like every menu.
 				alignItemWithTrigger={false}
-				className="z-[10001] outline-none"
+				className={cn(FLOATING_OVERLAY_LAYER, "outline-none")}
 			>
 				<BaseSelect.Popup
 					finalFocus={() => restoreFocusRef?.current ?? true}

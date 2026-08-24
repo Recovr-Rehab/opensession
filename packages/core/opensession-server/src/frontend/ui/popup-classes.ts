@@ -19,6 +19,13 @@
  */
 export const POPUP_HOOK = "app-menu-popup";
 
+/** The app's top interaction layer. The pinned workspace summary deliberately
+ * sits one step below this, so any menu, select, tooltip, or hover preview a
+ * person opens paints above the card regardless of where its trigger lives.
+ * Keep this on the portaled positioner rather than the popup surface: Base UI
+ * owns positioning and creates the stacking box there. */
+export const FLOATING_OVERLAY_LAYER = "z-[2147483647]";
+
 /** The floating surface itself. `overflow-hidden` keeps the inner scrollbar's
  *  ends clipped to the rounded corner instead of poking past it; the
  *  transition rides Base UI's lifecycle attributes, so exit animates too. */

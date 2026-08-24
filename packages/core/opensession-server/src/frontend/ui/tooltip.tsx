@@ -2,6 +2,7 @@ import * as React from "react";
 import { Tooltip as BaseTooltip } from "@base-ui/react/tooltip";
 import { cn } from "./cn";
 import { ExclusivePopupProvider } from "./exclusive-popups";
+import { FLOATING_OVERLAY_LAYER } from "./popup-classes";
 
 /**
  * Tooltip on Base UI (Tooltip.Root/Trigger/Positioner/Popup), styled with
@@ -70,7 +71,7 @@ export function Tooltip({
 					align={align}
 					sideOffset={offset}
 					collisionPadding={6}
-					className="z-[10001]"
+					className={FLOATING_OVERLAY_LAYER}
 				>
 					<BaseTooltip.Popup
 						className={cn(

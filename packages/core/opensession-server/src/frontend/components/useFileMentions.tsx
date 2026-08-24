@@ -4,6 +4,7 @@ import { createPortal } from "react-dom";
 import type { FileMention } from "../lib/api";
 import { UserAvatar } from "./UserAvatar";
 import { cn } from "../ui/cn";
+import { FLOATING_OVERLAY_LAYER } from "../ui/popup-classes";
 import { IconTile } from "./BrandTile";
 import { displayName as brandDisplayName } from "../brand-logos";
 import { IconBolt, IconFile, IconFolder, IconMessage, IconPlug, IconStack } from "./icons";
@@ -436,7 +437,10 @@ export function useFileMentions({ value, onChange, textareaRef, mentionFetch, pa
   const popup = open && pos ? createPortal(
     <div
       ref={popupRef}
-      className="fixed z-[10500] overflow-y-auto rounded-xl bg-popup-glass [backdrop-filter:var(--popup-blur)] [--smooth-ring-color:var(--popup-ring)] p-1 smooth-shadow-ring-md"
+      className={cn(
+        "fixed overflow-y-auto rounded-xl bg-popup-glass [backdrop-filter:var(--popup-blur)] [--smooth-ring-color:var(--popup-ring)] p-1 smooth-shadow-ring-md",
+        FLOATING_OVERLAY_LAYER,
+      )}
       id={popupId}
       role="listbox"
       style={pos}

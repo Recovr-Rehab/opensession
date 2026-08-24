@@ -1,6 +1,7 @@
 import * as React from "react";
 import { Popover as BasePopover } from "@base-ui/react/popover";
 import { cn } from "./cn";
+import { FLOATING_OVERLAY_LAYER } from "./popup-classes";
 import {
 	useExclusivePopup,
 	useExclusivePopupDelay,
@@ -147,7 +148,7 @@ function Popup({
 				collisionPadding={collisionPadding}
 				// Keep the diamond clear of the popup's rounded corners.
 				arrowPadding={14}
-				className={cn("z-[10001] outline-none", positionerClassName)}
+				className={cn(FLOATING_OVERLAY_LAYER, "outline-none", positionerClassName)}
 			>
 				<BasePopover.Popup
 					initialFocus={initialFocus}

@@ -984,9 +984,6 @@ export function WorkspaceSummaryBody({
 					<Menu.Popup
 						align="end"
 						sideOffset={6}
-						// This menu is portaled to the page, outside the summary's
-						// stacking context, so it needs the child-interaction layer.
-						positionerClassName="z-[2147483647]"
 						className="min-w-[200px]"
 					>
 						{people.map((person) => (

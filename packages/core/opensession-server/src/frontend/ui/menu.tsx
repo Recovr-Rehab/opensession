@@ -4,6 +4,7 @@ import { ContextMenu as BaseContextMenu } from "@base-ui/react/context-menu";
 import { IconCheck } from "../components/icons";
 import { cn } from "./cn";
 import {
+	FLOATING_OVERLAY_LAYER,
 	POPUP_HOOK,
 	popupItemClasses,
 	popupScrollClasses,
@@ -73,7 +74,7 @@ function Popup({
 				alignOffset={alignOffset}
 				anchor={anchor}
 				collisionPadding={8}
-				className={cn("z-[10001] outline-none", positionerClassName)}
+				className={cn(FLOATING_OVERLAY_LAYER, "outline-none", positionerClassName)}
 			>
 				<BaseMenu.Popup
 					className={cn(POPUP_HOOK, popupSurfaceClasses, className)}
@@ -103,7 +104,7 @@ function ContextPopup({
 		<BaseContextMenu.Portal>
 			<BaseContextMenu.Positioner
 				collisionPadding={8}
-				className="z-[10001] outline-none"
+				className={cn(FLOATING_OVERLAY_LAYER, "outline-none")}
 			>
 				<BaseContextMenu.Popup
 					className={cn(POPUP_HOOK, popupSurfaceClasses, className)}
