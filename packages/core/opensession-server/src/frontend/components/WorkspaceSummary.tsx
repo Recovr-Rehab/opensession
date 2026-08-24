@@ -859,15 +859,14 @@ export function WorkspaceSummaryBody({
 
 	/** A long session commits dozens of times, and the card would spend its whole
 	 *  height listing them. Past a handful the count IS the fact — "16 commits" —
-	 *  so the list starts closed behind it. The chevron only appears under the
-	 *  cursor (and while open), so a card at rest still reads as one quiet row. */
+	 *  so the list stays closed behind one row. */
 	function committedSummaryRow() {
 		const files = commits.reduce((sum, c) => sum + c.filesChanged, 0);
 		return (
 			<button
 				className={WS_SUMMARY_ROW}
-				onClick={() => setCommitsOpen((open) => !open)}
-				aria-expanded={commitsOpen}
+				onClick={() => setCommitsOpen(true)}
+				aria-expanded={false}
 			>
 				<span className={WS_SUMMARY_RAIL}>
 					<IconGitCommit size={20} className={WS_SUMMARY_ICON} />
@@ -876,14 +875,6 @@ export function WorkspaceSummaryBody({
 				<span className={cn(WS_SUMMARY_STATE, "text-dim tabular-nums")}>
 					{files} file{files === 1 ? "" : "s"}
 				</span>
-				<IconChevronDown
-					size={14}
-					className={cn(
-						"shrink-0 text-faint transition-[transform,opacity] motion-reduce:transition-none",
-						"opacity-0 group-hover/ws:opacity-100 group-focus-visible/ws:opacity-100",
-						commitsOpen && "rotate-180 opacity-100",
-					)}
-				/>
 			</button>
 		);
 	}
@@ -1181,19 +1172,40 @@ export function WorkspaceSummaryBody({
 
 			{(diffIsCommitted || commits.length > 0) && (
 				<div className={groupClass}>
-					<div className={WS_SUMMARY_SECTION}>Committed</div>
+					{commits.length > COMMIT_ROW_LIMIT ? (
+						/* The heading owns the toggle: it names the band the list belongs
+						   to, so it is the one place to open and close the whole band. The
+						   chevron waits for the cursor, so a card at rest keeps a plain
+						   label like every other section. */
+						<button
+							className={cn(
+								WS_SUMMARY_SECTION,
+								"group/committed w-full cursor-pointer justify-between gap-2",
+								"border-none bg-transparent text-left",
+							)}
+							onClick={() => setCommitsOpen((open) => !open)}
+							aria-expanded={commitsOpen}
+						>
+							<span>Committed</span>
+							<IconChevronDown
+								size={14}
+								className={cn(
+									"shrink-0 transition-[transform,opacity] motion-reduce:transition-none",
+									"opacity-0 group-hover/committed:opacity-100 group-focus-visible/committed:opacity-100",
+									commitsOpen && "rotate-180 opacity-100",
+								)}
+							/>
+						</button>
+					) : (
+						<div className={WS_SUMMARY_SECTION}>Committed</div>
+					)}
 					{diffIsCommitted &&
 						diffChangeRow(
 							`${changedFiles} file${changedFiles === 1 ? "" : "s"} committed`,
 						)}
-					{commits.length > COMMIT_ROW_LIMIT ? (
-						<>
-							{committedSummaryRow()}
-							{commitsOpen && commits.map(committedRow)}
-						</>
-					) : (
-						commits.map(committedRow)
-					)}
+					{commits.length > COMMIT_ROW_LIMIT && !commitsOpen
+						? committedSummaryRow()
+						: commits.map(committedRow)}
 				</div>
 			)}
 
