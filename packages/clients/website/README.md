@@ -22,8 +22,8 @@ The app serves `/`, `/setup`, and `/product-demo`. Compatibility rewrites keep
 tooling.
 
 The landing page uses a deterministic, locally rendered marbled field behind
-its content and a neutral stage behind the product. The iframe overrides
-`fetch` and `WebSocket` before importing the production app, serves fixed
+its content and Tella's neutral Silver Silk loop behind the product. The iframe
+overrides `fetch` and `WebSocket` before importing the production app, serves fixed
 sessions and transcripts, and fails closed for unknown API requests. Visitors
 can navigate the real interface and try the composer without reaching a real
 backend.

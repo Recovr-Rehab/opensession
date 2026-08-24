@@ -301,21 +301,26 @@ summary:focus-visible {
 	background: var(--stage-bg);
 }
 
-.gradient-fallback {
+.gradient-fallback,
+.hero-video {
 	position: absolute;
 	inset: 0;
 	width: 100%;
 	height: 100%;
 }
 
-/* Deliberately the quietest surface on the page. The field behind it is busy
-   enough that a second patterned background made the product hard to find, so
-   the stage is one neutral wash and the window is the only thing in it with
-   any detail. */
+/* Silver Silk stays neutral against the marbled field while adding the gentle
+   movement the static wash was missing. The gradient is its first-paint and
+   reduced-motion fallback. */
 .gradient-fallback {
 	background:
 		radial-gradient(circle at 28% 14%, #f2f3f5 0, transparent 44%),
 		linear-gradient(150deg, #e6e7ea 0%, #d8dade 54%, #c8cad0 100%);
+}
+
+.hero-video {
+	object-fit: cover;
+	pointer-events: none;
 }
 
 .preview-wrap {
@@ -746,6 +751,10 @@ summary:focus-visible {
 }
 
 @media (prefers-reduced-motion: reduce) {
+	.hero-video {
+		display: none;
+	}
+
 	.product-demo-poster,
 	.product-demo-frame {
 		transition: none;
