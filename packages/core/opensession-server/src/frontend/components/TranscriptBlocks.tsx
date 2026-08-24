@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useEffect, useRef } from "react";
 import type { SessionNote, SessionWalkthrough, TranscriptEntry } from "../lib/types";
 import type { TranscriptIndexEntry } from "@tellahq/opensession-protocol/session";
 import {
@@ -92,6 +92,9 @@ interface Props {
 	/** Changes only to re-arm visible range demand after a dropped response. */
 	transcriptRangeRetryGeneration?: number;
 	onLoadTranscriptRanges?: (ranges: TranscriptIndexedRange[]) => void;
+	/** Fired once every range near the viewport renders from real payload
+	 *  rather than an outline placeholder — the open-settle curtain's release. */
+	onVisibleRangesSettled?: () => void;
 	/** Indexed range rows reuse this renderer without nesting a virtualizer. */
 	virtualize?: boolean;
 }
@@ -277,7 +280,17 @@ const LoadedTranscriptBlocks = React.memo(function LoadedTranscriptBlocks({
 	onReviewLoopOpenChange,
 	optimisticEntries,
 	virtualize = true,
+	onVisibleRangesSettled,
 }: Props) {
+	// Top level only (nested per-range instances pass virtualize={false} and are
+	// suppressed): without an outline every block renders real content, so the
+	// first commit already IS the settled state.
+	const settledRef = useRef(false);
+	useEffect(() => {
+		if (!virtualize || settledRef.current) return;
+		settledRef.current = true;
+		onVisibleRangesSettled?.();
+	}, [virtualize, onVisibleRangesSettled]);
 	const optimisticEntryIds = new Set(
 		(optimisticEntries ?? []).map((entry) => entry.id),
 	);
@@ -674,6 +687,11 @@ function IndexedTranscriptBlocks(props: Props) {
 	atoms = sortIndexedTimelineAtoms(atoms);
 	const timeline = groupIndexedReviewLoops(atoms);
 	const lastIndex = timeline.length - 1;
+	// Nothing to window (an empty or fully-absent outline): the curtain lifts
+	// immediately instead of waiting for a demand pass that will never run.
+	useEffect(() => {
+		if (timeline.length === 0) props.onVisibleRangesSettled?.();
+	}, [timeline.length, props.onVisibleRangesSettled]);
 	const items: VirtualTranscriptItem[] = timeline.map((item, index) => {
 		const itemRanges = indexedItemRanges(item);
 		const entryIds = indexedItemEntryIds(item);
@@ -710,6 +728,7 @@ function IndexedTranscriptBlocks(props: Props) {
 				) : item.kind === "entry" ? (
 					<LoadedTranscriptBlocks
 						{...props}
+						onVisibleRangesSettled={undefined}
 						entries={[item.entry]}
 						transcriptIndex={undefined}
 						notes={undefined}
@@ -721,6 +740,7 @@ function IndexedTranscriptBlocks(props: Props) {
 				) : rendersPayload ? (
 					<LoadedTranscriptBlocks
 						{...props}
+						onVisibleRangesSettled={undefined}
 						entries={itemEntries}
 						transcriptIndex={undefined}
 						notes={indexedItemNotes(item)}
@@ -776,7 +796,11 @@ function IndexedTranscriptBlocks(props: Props) {
 					.filter((range) =>
 						range.entryIds.some((id) => !payloadById.has(id)),
 					);
-				if (wanted.length) onLoadTranscriptRanges(wanted);
+				if (wanted.length) {
+					onLoadTranscriptRanges?.(wanted);
+				} else if (visible.length > 0) {
+					props.onVisibleRangesSettled?.();
+				}
 			}}
 		/>
 	);

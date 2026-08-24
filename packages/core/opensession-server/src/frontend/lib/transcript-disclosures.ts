@@ -67,8 +67,29 @@ export function createTranscriptDisclosureLedger(
 				if (oldest === undefined) break;
 				remembered.delete(oldest);
 			}
+			notifyTranscriptDisclosure();
 		},
 	};
+}
+
+// Fold toggles change block heights above the reader, and the scroll glue
+// that follows the live edge reacts to exactly that. Subscribers (today only
+// useSessionScroll's settle suspension) hear about every toggle through this
+// registry: ledger.write is the choke point most fold controls go through,
+// and controls that bypass it (review loops hold open state in component
+// state) call notifyTranscriptDisclosure directly.
+const disclosureListeners = new Set<() => void>();
+
+export function onTranscriptDisclosure(listener: () => void): () => void {
+	disclosureListeners.add(listener);
+	return () => {
+		disclosureListeners.delete(listener);
+	};
+}
+
+export function notifyTranscriptDisclosure(): void {
+	for (const listener of disclosureListeners) listener();
+}
 }
 
 export const transcriptDisclosureLedger = createTranscriptDisclosureLedger();

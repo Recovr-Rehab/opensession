@@ -333,6 +333,7 @@ import { Tooltip } from "../ui/tooltip";
 import { CopyCheck, useCopy } from "../ui/copy";
 import { toast } from "../ui/toast";
 import { copySessionTranscript } from "../lib/transcript-copy";
+import { onTranscriptDisclosure } from "../lib/transcript-disclosures";
 import { takePendingSessionFork } from "../lib/pending-session-fork";
 import { isPinned, togglePin, onPinsChanged } from "../lib/pins";
 import { getLane, onLanesChanged, type Lane } from "../lib/lanes";
@@ -665,6 +666,12 @@ const HIDDEN_REOPEN_MS = 30_000;
 // late: on the iOS PWA the WebSocket only reconnects after visibility, so what
 // streamed while backgrounded arrives moments after the visibilitychange.
 const RESUME_GROWTH_WINDOW_MS = 8_000;
+// Opening a chat paints outline placeholders for ranges that have not
+// hydrated yet, and the first measure-and-hydrate pass reflows them. The
+// transcript stays invisible until the demanded ranges land, or at most this
+// long, so the churn happens behind the curtain instead of in front of the
+// reader. A cap, not a gate: a slow hydrate must still show something.
+const OPEN_SETTLE_MAX_MS = 350;
 // "Jump to the start of the session" walks the backlog a page at a time rather
 // than asking for it in one frame: a multi-thousand-entry transcript would be a
 // tens-of-MB payload and one giant reconciliation. Fat pages keep the number of
@@ -1775,8 +1782,37 @@ export function SessionViewer({
 		leaveLatest,
 		endTurn,
 		relayout,
+		suspendEndMaintenance,
 		onScroll,
 	} = useSessionScroll(true);
+
+	// A fold toggle (turn work blocks, tool-call details, review loops) changes
+	// block heights above the reader. Hold the live-edge glue off for the two
+	// frames the layout needs to settle so it cannot drag the reader off the
+	// block they just opened or read the movement as intent to leave.
+	useEffect(
+		() => onTranscriptDisclosure(suspendEndMaintenance),
+		[suspendEndMaintenance],
+	);
+
+	// Open-settle curtain: armed on mount, lifted when the transcript reports
+	// every visible range rendered from real payload (onVisibleRangesSettled),
+	// or by the cap timer once the transcript actually renders.
+	const [openSettlePending, setOpenSettlePending] = useState(true);
+	const transcriptRendered =
+		!loading && (entries.length > 0 || !!transcriptIndex);
+	useEffect(() => {
+		if (!transcriptRendered) return;
+		const timer = window.setTimeout(
+			() => setOpenSettlePending(false),
+			OPEN_SETTLE_MAX_MS,
+		);
+		return () => window.clearTimeout(timer);
+	}, [transcriptRendered]);
+	const onVisibleRangesSettled = useCallback(
+		() => setOpenSettlePending(false),
+		[],
+	);
 	const [viewerInput, setViewerInput] = useState<HTMLDivElement | null>(null);
 	// The focused phone composer is fixed above the keyboard, so it contributes
 	// no height to the transcript's flex layout. Publish its real height without
@@ -7243,7 +7279,12 @@ export function SessionViewer({
 								!inlineRunFailure ? (
 								<div className="py-10 text-center text-faint">Empty transcript</div>
 							) : (
-								<>
+								<div
+									className={cn(
+										"w-full shrink-0 motion-safe:transition-opacity motion-safe:duration-150",
+										openSettlePending && "opacity-0",
+									)}
+								>
 									<OpenAssetPathsProvider value={assetPaths}>
 										<React.Profiler
 											id="transcript"
@@ -7260,6 +7301,7 @@ export function SessionViewer({
 														transcriptRangeRetryGeneration
 													}
 													onLoadTranscriptRanges={loadTranscriptRanges}
+													onVisibleRangesSettled={onVisibleRangesSettled}
 													live={isBusy}
 													sessionId={session.id}
 													liveTurnStore={liveTurnStore}
@@ -7295,7 +7337,7 @@ export function SessionViewer({
 											</ToolPathRootsProvider>
 										</React.Profiler>
 									</OpenAssetPathsProvider>
-								</>
+								</div>
 							)}
 							</AnimatePresence>
 

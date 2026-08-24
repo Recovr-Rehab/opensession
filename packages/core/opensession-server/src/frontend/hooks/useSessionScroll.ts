@@ -66,6 +66,9 @@ export interface SessionScroll {
   endTurn: () => void;
   /** Call after each content change (run in a layout effect) to keep things in place. */
   relayout: () => void;
+  /** Suspend the live-edge glue for two animation frames so a fold toggle's
+   *  height change settles before any re-glue can move the reader. */
+  suspendEndMaintenance: () => void;
   /** Wire to the container's onScroll to track the live edge. */
   onScroll: () => void;
 }
@@ -140,6 +143,13 @@ export function useSessionScroll(initialFollowing = true): SessionScroll {
   // never stuck. While in flight we only ever re-engage (on arrival); a real
   // gesture (wheel/touch) or the deadline cancels the flight.
   const autoFlightRef = useRef(0);
+  // True for two animation frames after a fold toggle. Expanding or collapsing
+  // a disclosure changes block heights, and at the live edge that reads as
+  // "the bottom moved" — the glue would yank the reader off the fold they just
+  // opened, and the scroll events it generates read as intent to leave. Both
+  // are held off until the layout settles. A real reader gesture cancels it.
+  const disclosureSettleRef = useRef(false);
+  const disclosureSettleFramesRef = useRef<number[]>([]);
   // Timestamps of the last real reader gestures. Scroll events without a
   // recent gesture are layout-driven — the pin's anchor animation, or the
   // clamp when stream text swaps for the final transcript entry — and must
@@ -290,6 +300,22 @@ export function useSessionScroll(initialFollowing = true): SessionScroll {
 
   const endTurn = useCallback(() => { clearSpacer(); }, [clearSpacer]);
 
+  const suspendEndMaintenance = useCallback(() => {
+    for (const frame of disclosureSettleFramesRef.current) cancelAnimationFrame(frame);
+    disclosureSettleFramesRef.current = [];
+    disclosureSettleRef.current = true;
+    // Two frames: one for the fold's own layout pass, one for the follow-up
+    // resize nested content sometimes triggers.
+    const first = requestAnimationFrame(() => {
+      const second = requestAnimationFrame(() => {
+        disclosureSettleRef.current = false;
+        disclosureSettleFramesRef.current = [];
+      });
+      disclosureSettleFramesRef.current = [second];
+    });
+    disclosureSettleFramesRef.current = [first];
+  }, []);
+
   // Run from a layout effect after content changes. Two jobs: keep a following
   // reader glued to the live edge, and maintain the pinned-turn spacer.
   const relayout = useCallback(() => {
@@ -341,10 +367,15 @@ export function useSessionScroll(initialFollowing = true): SessionScroll {
     // Stick to the bottom only while following — and never mid-selection, since a
     // selection is the reader actively working with the text (principle 3).
     if (followingRef.current && !selectionWithin(el)) {
-      el.scrollTop = el.scrollHeight; // instant: a smooth animation per token janks
+      // A fold is settling: its height change IS this relayout's cause, and
+      // gluing now would drag the reader off the block they just toggled.
+      if (!disclosureSettleRef.current) {
+        el.scrollTop = el.scrollHeight; // instant: a smooth animation per token janks
+      }
     } else if (
       hadLayout &&
       !followingRef.current &&
+      !disclosureSettleRef.current &&
       distanceFromBottom() > STICK_THRESHOLD
     ) {
       setNewBelow(true); // content arrived out of view, let the UI announce it
@@ -396,6 +427,9 @@ export function useSessionScroll(initialFollowing = true): SessionScroll {
       scrollbarDragRef.current ||
       now - lastGestureRef.current < 1000 ||
       now - lastTouchRef.current < 6000;
+    // Mid-settle positions carry no reader intent (same rule as autoFlight):
+    // the fold's growth moves scrollTop without the reader touching anything.
+    if (disclosureSettleRef.current && !gestured) return;
     if (scrollbarDragRef.current && gestured) {
       if (movedTowardHistory) towardHistoryGestureRef.current = true;
       else if (movedTowardLatest) towardHistoryGestureRef.current = false;
@@ -420,6 +454,7 @@ export function useSessionScroll(initialFollowing = true): SessionScroll {
     if (!el) return;
     const markGesture = () => {
       autoFlightRef.current = 0;
+      disclosureSettleRef.current = false;
       lastGestureRef.current = performance.now();
     };
     const leaveForGesture = () => {
@@ -547,6 +582,7 @@ export function useSessionScroll(initialFollowing = true): SessionScroll {
     beginTurn,
     endTurn,
     relayout,
+    suspendEndMaintenance,
     onScroll,
   };
 }
