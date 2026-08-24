@@ -28,6 +28,7 @@ type InstanceBrand = {
 	githubBotLogins?: string[];
 	defaultRepoId?: string;
 	plainWorkspaceId?: string;
+	agentationEnabled?: boolean;
 };
 
 const INSTANCE: InstanceBrand =
@@ -61,6 +62,9 @@ export const DEFAULT_REPO_ID = INSTANCE.defaultRepoId || "opensession";
  *  `integrations.plain.workspaceId`). Null when the instance has none —
  *  consumers hide their "open in Plain" affordances. */
 export const PLAIN_WORKSPACE_ID = INSTANCE.plainWorkspaceId || null;
+
+/** Visual page feedback is an operator-only tool, opt-in at server startup. */
+export const AGENTATION_ENABLED = INSTANCE.agentationEnabled === true;
 
 /**
  * A session's origin as shown in the UI. `opensession` — and `backstage`, the

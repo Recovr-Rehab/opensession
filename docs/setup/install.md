@@ -273,6 +273,7 @@ what the code actually reads, by feature:
 | `OPENSESSION_SESSIONS_DIR` | `~/.opensession-sessions` | session store override (mostly a test seam) |
 | `OPENSESSION_WORKTREES_DIR` | `~/.opensession/worktrees` | where session worktrees are created |
 | `OPENSESSION_DEV` | unset | `1` = dev frontend build only; does NOT disable agent loops (a second naive instance double-sends) |
+| `OPENSESSION_AGENTATION` | unset | `1` = enable the Agentation visual feedback overlay on desktop, non-touch clients |
 
 **Engines and models** (details: [engines.md](engines.md))
 

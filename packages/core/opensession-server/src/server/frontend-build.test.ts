@@ -56,6 +56,12 @@ describe("frontendInputsHash", () => {
 });
 
 describe("renderIndexHtml", () => {
+	const previousAgentation = process.env.OPENSESSION_AGENTATION;
+	afterEach(() => {
+		if (previousAgentation === undefined) delete process.env.OPENSESSION_AGENTATION;
+		else process.env.OPENSESSION_AGENTATION = previousAgentation;
+	});
+
 	const meta = {
 		inputsHash: "x",
 		entryName: "App-abc.js",
@@ -77,6 +83,13 @@ describe("renderIndexHtml", () => {
 		const html = renderIndexHtml({ ...meta, twName: null });
 		expect(html).not.toContain('href="/tailwind-');
 		expect(bundleVersion({ ...meta, twName: null })).toBe("App-abc.js|global-def.css|no-tw");
+	});
+
+	it("only enables Agentation through the explicit runtime flag", () => {
+		delete process.env.OPENSESSION_AGENTATION;
+		expect(renderIndexHtml(meta)).not.toContain('"agentationEnabled":true');
+		process.env.OPENSESSION_AGENTATION = "1";
+		expect(renderIndexHtml(meta)).toContain('"agentationEnabled":true');
 	});
 });
 
