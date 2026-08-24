@@ -1222,7 +1222,16 @@ export function resumePendingAutomationRuns(
       if (
         automationPreparations.has(intent.sessionId) ||
         activeAutomationIntentSessions.has(intent.sessionId) ||
-        activeRunRecords().some((run) => run.osSessionId === intent.sessionId)
+        activeRunRecords().some((run) => run.osSessionId === intent.sessionId) ||
+        // Boot may find several durable cron/manual intents for the same
+        // automation. The first starts synchronously before this loop reaches
+        // the next one. Starting that next intent would hit runAutomation's
+        // overlap guard and resolve immediately; its `.finally` below would
+        // then recurse into this recovery scan in the same microtask forever.
+        // Leave it parked instead. Completion of the running recovered intent
+        // invokes this scan again and advances the queue one entry at a time.
+        ((intent.trigger === "cron" || intent.trigger === "manual") &&
+          isAutomationRunning(automation.id))
       ) continue;
       void runAutomation(automation, onSessionCreated, {
         trigger: intent.trigger,

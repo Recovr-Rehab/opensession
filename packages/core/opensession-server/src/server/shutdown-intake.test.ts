@@ -27,6 +27,10 @@ describe("shutdown intake fence", () => {
     expect(source).toContain(
       "activeRunRecords().some((run) => run.osSessionId === intent.sessionId)",
     );
+    expect(source).toContain(
+      '(intent.trigger === "cron" || intent.trigger === "manual") &&',
+    );
+    expect(source).toContain("isAutomationRunning(automation.id)");
     expect(source).toContain("resumePendingAutomationRuns(onSessionCreated)");
     expect(source).toContain("recordAutomationIntentTerminal(");
     const streamAdoption = source.indexOf("for await (const event of events)");
