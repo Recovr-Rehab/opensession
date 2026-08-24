@@ -23,6 +23,7 @@ interface FirstMileStep {
 	id: "welcome" | "github" | "organization" | "team" | "ai" | "repos" | "ready";
 	label: string;
 	title: string;
+	description: string;
 }
 
 // GitHub comes first because it supplies the next step's answers: the
@@ -30,13 +31,48 @@ interface FirstMileStep {
 // rather than asked for cold. Members sit after repositories, since an invite
 // is worth more once there is something to join.
 const STEPS: FirstMileStep[] = [
-	{ id: "welcome", label: "Welcome", title: `Welcome to ${PRODUCT_NAME}` },
-	{ id: "github", label: "GitHub", title: "Connect GitHub" },
-	{ id: "organization", label: "Organization", title: "Your organization" },
-	{ id: "ai", label: "Models", title: "Models" },
-	{ id: "repos", label: "Repositories", title: "Repositories" },
-	{ id: "team", label: "Members", title: "Invite your team" },
-	{ id: "ready", label: "Ready", title: "You’re ready" },
+	{
+		id: "welcome",
+		label: "Welcome",
+		title: `Welcome to ${PRODUCT_NAME}`,
+		description: "Create a new organization or join one your team has already set up.",
+	},
+	{
+		id: "github",
+		label: "GitHub",
+		title: "Connect GitHub",
+		description: "Give sessions access to your repositories and pull requests.",
+	},
+	{
+		id: "organization",
+		label: "Organization",
+		title: "Your organization",
+		description: "Choose how your organization appears to your team in Open Session.",
+	},
+	{
+		id: "ai",
+		label: "Models",
+		title: "Models",
+		description: "Connect the AI subscriptions your team will use to run sessions.",
+	},
+	{
+		id: "repos",
+		label: "Repositories",
+		title: "Repositories",
+		description: "Add the repositories you want sessions to work in.",
+	},
+	{
+		id: "team",
+		label: "Members",
+		title: "Invite your team",
+		description: "Invite teammates from your GitHub organization to work with you.",
+	},
+	{
+		id: "ready",
+		label: "Ready",
+		title: "You’re ready",
+		description: "Review your setup before entering Open Session.",
+	},
 ];
 
 /** The GitHub organization this instance is wired to, for the organization
@@ -400,6 +436,9 @@ export function FirstMile({ onDone }: { onDone: () => void }) {
 									>
 										{step.title}
 									</h1>
+									<p className="mt-3 max-w-[440px] text-pretty text-body leading-relaxed text-dim">
+										{step.description}
+									</p>
 									<div className="mt-7 flex w-full max-w-[300px] flex-col gap-3">
 										<Button
 											variant="primary"
@@ -425,10 +464,13 @@ export function FirstMile({ onDone }: { onDone: () => void }) {
 										<h1
 											ref={headingRef}
 											tabIndex={-1}
-											className="m-0 text-[clamp(1.6rem,2.5vw,2.25rem)] font-title leading-[1.08] tracking-[-0.035em] text-fg outline-none"
+											className="m-0 text-balance text-[clamp(1.6rem,2.5vw,2.25rem)] font-title leading-[1.08] tracking-[-0.035em] text-fg outline-none"
 										>
 											{step.title}
 										</h1>
+										<p className="mt-3 text-pretty text-body leading-relaxed text-dim">
+											{step.description}
+										</p>
 									</div>
 
 									{/* Most steps keep the blue glass wash. GitHub is denser and uses
