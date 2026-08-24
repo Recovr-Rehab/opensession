@@ -332,7 +332,8 @@ export function boxNativeFilePath(path: string): string {
 
 export function boxResumePrimeCommand(cwd: string): string {
   return `if test -d ${shellQuoteWord(cwd)}/.git; then cd ${shellQuoteWord(cwd)} && ` +
-    `GIT_OPTIONAL_LOCKS=0 git status --porcelain >/dev/null 2>&1; fi`;
+    `{ git ls-files -z | xargs -0 -r -n 64 -P 16 stat -c '%n' -- >/dev/null 2>&1; ` +
+    `GIT_OPTIONAL_LOCKS=0 git status --porcelain >/dev/null 2>&1; }; fi`;
 }
 
 function primeBoxWorkspaceAfterResume(driver: RemoteDriver, cwd: string): void {
