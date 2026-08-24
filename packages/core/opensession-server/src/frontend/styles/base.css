@@ -697,8 +697,8 @@ html[data-accent="sky"] {
 }
 
 html[data-accent="indigo"] {
-	--accent-light: #0049e0;
-	--accent-dark: #2869ff;
+	--accent-light: #366ef5;
+	--accent-dark: #5386f6;
 }
 
 html[data-accent="coral"] {
