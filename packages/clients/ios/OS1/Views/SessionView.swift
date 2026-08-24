@@ -699,7 +699,7 @@ struct SessionView: View {
             .toolbar {
             #if os(iOS)
             ToolbarItem(placement: .principal) {
-                sessionHeaderControls
+                sessionIdentityButton
             }
             #endif
             // Whoever else has this session open, right before the actions
@@ -709,9 +709,8 @@ struct SessionView: View {
                     PresenceFacepile(viewers: viewModel.otherViewers, size: 24)
                 }
             }
-            #if os(macOS)
-            // macOS retains the PR chip in its roomier toolbar; on iOS the
-            // same series lives in the title-opened workspace sheet.
+            // Keep the PR action at the trailing edge on both platforms,
+            // preserving the full related-PR series when there is more than one.
             let prRows = SessionPrSeries.rows(for: viewModel.session)
             let primaryPrNumber = viewModel.prDetails?.number ?? viewModel.session.prNumber
             if let chipRow = prRows.first {
@@ -756,6 +755,7 @@ struct SessionView: View {
                     }
                 }
             }
+            #if os(macOS)
             ToolbarItem(placement: .principal) { macSessionTitle }
             if !workspaceHistoryRows.isEmpty, onRestoreArchivedSession != nil {
                 ToolbarItem(placement: .topTrailingCompat) {
@@ -1107,21 +1107,6 @@ struct SessionView: View {
     #endif
 
     #if os(iOS)
-    /// Three independent floating controls: the system Back button, this
-    /// identity + PR pair, and the PR pill only when the session has one.
-    /// Glass extends beyond each label and morphs at ordinary HStack spacing;
-    /// this larger gap keeps the title and PR as visibly separate controls.
-    private var sessionHeaderControls: some View {
-        HStack(spacing: 56) {
-            sessionIdentityButton
-            if let prNumber = viewModel.prDetails?.number ?? viewModel.session.prNumber {
-                pullRequestButton(number: prNumber)
-                    .buttonStyle(.glass)
-                    .buttonBorderShape(.capsule)
-            }
-        }
-    }
-
     /// Mobile web opens workspace details when its title is tapped. Keep the
     /// same identity in native navigation and present a SwiftUI details sheet.
     private var sessionIdentityButton: some View {
@@ -1159,7 +1144,7 @@ struct SessionView: View {
             // Keep the glass visually tighter than its toolbar-owned 44pt tap
             // target while leaving enough height for both identity lines.
             .padding(.horizontal, 8)
-            .frame(maxWidth: .infinity, minHeight: 40, alignment: .leading)
+            .frame(maxWidth: .infinity, minHeight: 34, alignment: .leading)
             .contentShape(Capsule())
         }
         // Opt this custom identity control into the same Liquid Glass style as
@@ -1176,7 +1161,7 @@ struct SessionView: View {
         let hasPullRequest =
             viewModel.prDetails?.number != nil || viewModel.session.prNumber != nil
         let trailingReserve: CGFloat = hasPullRequest ? 266 : 148
-        return min(360, max(140, surfaceWidth - trailingReserve))
+        return min(360, max(128, surfaceWidth - trailingReserve))
     }
     #endif
 
