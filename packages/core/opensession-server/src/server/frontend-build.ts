@@ -7,7 +7,8 @@
 
 import { existsSync, mkdirSync, readFileSync, readdirSync, renameSync, statSync, unlinkSync } from "node:fs";
 import { dirname, join, relative, resolve, sep } from "path";
-import type { BunFile } from "bun";
+import type { BunFile, BunPlugin } from "bun";
+import { transformSync } from "oxc-transform-react";
 import { EMBEDDED_FRONTEND } from "./embedded-frontend";
 import { activeRunRecords } from "./run-journal";
 import { writeFileAtomic } from "./shared/atomic-write";
@@ -183,6 +184,52 @@ function currentMeta(): BundleMeta | null {
 	return (g.__opensessionFrontendMeta as BundleMeta | undefined) ?? null;
 }
 
+// ── React Compiler ──────────────────────────────────────────────────────────
+// The oxc Rust port of the React Compiler runs over every file in
+// src/frontend before bundling, auto-memoizing components and hooks. This is
+// why the frontend convention is "no useMemo/useCallback unless measured":
+// the compiler supplies the memoization. Escape hatches: a function carrying
+// "use no memo" is left alone, and a file the compiler cannot safely compile
+// falls back to its untransformed source rather than failing the build.
+// Dev mode serves through Bun's HMR server, which has no plugin hook, so the
+// compiler only runs here (prod bundle + release artefact).
+function reactCompilerPlugin(count: { n: number }): BunPlugin {
+	return {
+		name: "oxc-react-compiler",
+		setup(build) {
+			build.onLoad({ filter: /\.[jt]sx?$/ }, (args) => {
+				// Only our own sources: vendored deps ship pre-built and must keep
+				// their exact published output.
+				if (!args.path.startsWith(FRONTEND_SRC)) return undefined;
+				const sourceText = readFileSync(args.path, "utf8");
+				const lang = args.path.endsWith(".tsx") ? "tsx" : args.path.endsWith(".ts") ? "ts" : args.path.endsWith(".jsx") ? "jsx" : "js";
+				const result = transformSync(args.path, sourceText, {
+					lang,
+					// Lower TS + JSX here so the bundled loader can be plain js.
+					jsx: { development: false },
+					reactCompiler: { target: "19", panicThreshold: "none" },
+				});
+				if (result.fatal || !result.code) {
+					console.error(
+						`[frontend] React Compiler FAILED on ${relative(FRONTEND_SRC, args.path)} — shipping it uncompiled:`,
+						result.errors.map((e) => `${e.severity}: ${e.message}${e.codeframe ? `\n${e.codeframe}` : ""}`).join("\n") || "unknown",
+					);
+					return { contents: sourceText, loader: lang === "js" || lang === "jsx" ? "jsx" : "tsx" };
+				}
+				for (const e of result.errors) {
+					console.error(`[frontend] React Compiler diagnostic in ${relative(FRONTEND_SRC, args.path)}: ${e.message}`);
+				}
+				count.n++;
+				return { contents: result.code, loader: "js" };
+			});
+		},
+	};
+}
+
+// Lowered + compiler-memoized file counter, shared with the plugin below so
+// compileAssets can report one summary line per build.
+const compilerCount = { n: 0 };
+
 /**
  * Compile the SPA assets into .frontend-dist: the split JS bundle, the
  * hand-concatenated global stylesheet, the Tailwind sheet and the ghostty
@@ -197,6 +244,7 @@ export async function compileAssets(): Promise<BundleMeta> {
 	// Stamped before the build so edits landing mid-build hash as "changed" on
 	// the next boot rather than being masked by a post-build stamp.
 	const inputsHash = frontendInputsHash();
+	compilerCount.n = 0;
 	const result = await Bun.build({
 		entrypoints: [`${FRONTEND_SRC}/App.tsx`],
 		outdir: FRONTEND_DIST,
@@ -212,10 +260,12 @@ export async function compileAssets(): Promise<BundleMeta> {
 			chunk: "[name]-[hash].[ext]",
 			asset: "[name]-[hash].[ext]",
 		},
+		plugins: [reactCompilerPlugin(compilerCount)],
 	});
 	if (!result.success) {
 		throw new AggregateError(result.logs, "frontend build failed");
 	}
+	console.log(`React Compiler memoized ${compilerCount.n} frontend files`);
 	// Bun's HTML-entry splitting mis-points the bootstrap <script> at a leaf
 	// chunk, so we build the JS entry and stitch index.html ourselves: keep the
 	// source shell (icons, splash, manifest links) and point it at the hashed

@@ -83,6 +83,7 @@
     "@types/react-dom": "^19.0.0",
     "@types/web-push": "^3.6.4",
     "agentation": "^3.0.2",
+    "oxc-transform-react": "^0.147.0",
     "tailwindcss": "^4.3.2"
   }
 }
