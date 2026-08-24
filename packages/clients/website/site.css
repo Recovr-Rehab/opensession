@@ -314,7 +314,9 @@ summary:focus-visible {
 	inset: -56px;
 	background: #123ab5 url("./marble-field.svg") center / cover fixed no-repeat;
 	content: "";
-	filter: blur(48px) brightness(0.72) saturate(0.7);
+	/* Lifted rather than dimmed: the stage is the page's one light surface, so
+	   the softened field reads as haze behind the product, not as night. */
+	filter: blur(48px) brightness(1.6) saturate(0.42);
 	pointer-events: none;
 }
 
@@ -332,8 +334,8 @@ summary:focus-visible {
 	z-index: 1;
 	background: linear-gradient(
 		150deg,
-		rgba(242, 243, 245, 0.16),
-		rgba(200, 202, 208, 0.12)
+		rgba(255, 255, 255, 0.5),
+		rgba(236, 238, 242, 0.38)
 	);
 }
 
@@ -435,6 +437,9 @@ summary:focus-visible {
    reaches the same visual weight with a plain arc. */
 .demo-phone {
 	position: absolute;
+	/* Above the window, which now carries a stacking index of its own so it
+	   clears the blurred field layer beneath both. */
+	z-index: 4;
 	right: 2.5cqw;
 	bottom: -4cqw;
 	width: 22.5cqw;
