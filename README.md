@@ -10,8 +10,6 @@ sandboxes — Docker locally, with pluggable adapters for other providers.
   <img alt="Open Session on desktop and phone: a session that added multiplayer workspace presence and opened a pull request" src="docs/hero-light.webp">
 </picture>
 
-<br>
-
 *More: [pull-request review, diffs, automations, mobile →](docs/screenshots.md)*
 
 ## Quickstart
