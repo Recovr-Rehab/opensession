@@ -61,6 +61,43 @@ test("refuses an unsafe schema downgrade", () => {
 	}
 });
 
+test("boot maintenance compacts change history in bounded batches", () => {
+	const dir = mkdtempSync(join(tmpdir(), "session-kernel-maintenance-"));
+	const path = join(dir, "kernel.sqlite");
+	const initial = new SessionKernelStore(path);
+	initial.close();
+	const seed = new Database(path);
+	const insert = seed.query(
+		`INSERT INTO session_kernel_changes
+		 (session_id, change_seq, kind, payload, created_at)
+		 VALUES (?, ?, 'test', '{}', ?)`,
+	);
+	seed.transaction(() => {
+		for (let changeSeq = 1; changeSeq <= 5_501; changeSeq += 1)
+			insert.run("busy", changeSeq, changeSeq);
+	})();
+	seed.close();
+	const compacting = new SessionKernelStore(path);
+	try {
+		expect(compacting.maintain()).toBe(true);
+		expect(compacting.maintain()).toBe(true);
+		expect(compacting.maintain()).toBe(false);
+	} finally {
+		compacting.close();
+	}
+	const inspect = new Database(path, { readonly: true });
+	try {
+		expect(
+			(inspect.query("SELECT COUNT(*) AS count FROM session_kernel_changes").get() as {
+				count: number;
+			}).count,
+		).toBe(5_000);
+	} finally {
+		inspect.close();
+		rmSync(dir, { recursive: true, force: true });
+	}
+});
+
 test("schema 6 upgrades create autonomous creation, delivery and ask state", () => {
 	const dir = mkdtempSync(join(tmpdir(), "session-kernel-schema-"));
 	const path = join(dir, "kernel.sqlite");

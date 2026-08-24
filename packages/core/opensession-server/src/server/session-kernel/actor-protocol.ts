@@ -8,7 +8,7 @@ import type {
   RunEventDecisionResult,
 } from "./store";
 
-export const SESSION_KERNEL_ACTOR_VERSION = 10;
+export const SESSION_KERNEL_ACTOR_VERSION = 11;
 export const SESSION_KERNEL_MAX_WAITERS_PER_COMMAND = 64;
 export const SESSION_KERNEL_MAX_WAITERS_TOTAL = 4096;
 export const SESSION_KERNEL_MAX_EXECUTIONS_PER_SESSION = 128;
@@ -58,13 +58,10 @@ export type KernelActorAsyncResponse =
       result?: unknown;
     }
   | {
-      t:
-        | "complete_result"
-        | "fail_result"
-        | "acknowledge_result"
-        | "maintain_result";
+      t: "complete_result" | "fail_result" | "acknowledge_result";
       rpcId: string;
     }
+  | { t: "maintain_result"; rpcId: string; pending: boolean }
   | {
       t: "stats_result";
       rpcId: string;

@@ -93,6 +93,8 @@ export interface DurableOutboxItem {
 }
 
 const json = (value: unknown): string => JSON.stringify(value ?? null);
+const CHANGE_HISTORY_PER_SESSION = 5_000;
+const MAINTENANCE_CHANGE_DELETE_BATCH = 250;
 const digest = (text: string): string =>
 	new Bun.CryptoHasher("sha256").update(text).digest("hex");
 const resultRecord = (value: unknown) => {
@@ -693,7 +695,6 @@ export class SessionKernelStore {
       )
 			.all() as Record<string, unknown>[];
 		for (const row of stateRows) {
-			this.dirtyChangeSessions.add(String(row.session_id));
 			this.runStateCache.set(String(row.session_id), {
 				state: String(row.run_state),
 				since: String(row.run_since),
@@ -704,6 +705,18 @@ export class SessionKernelStore {
 				changeSeq: Number(row.change_seq),
 			});
 		}
+		// A restart used to mark every known session dirty. The first runtime
+		// maintenance pass then issued up to 100 FULL-synchronous DELETEs, which
+		// could monopolize the actor for minutes on a large journal. Rebuild only
+		// the actual over-retention candidates; new writes still mark themselves.
+		const compactableChangeRows = this.db
+			.query(
+				`SELECT session_id FROM session_kernel_changes
+				 GROUP BY session_id HAVING COUNT(*) > ?`,
+			)
+			.all(CHANGE_HISTORY_PER_SESSION) as Array<{ session_id: string }>;
+		for (const row of compactableChangeRows)
+			this.dirtyChangeSessions.add(row.session_id);
 	}
 
 	private claimWriter(): void {
@@ -2475,7 +2488,7 @@ export class SessionKernelStore {
 	compact(
 		now = Date.now(),
 		commandRetentionMs = 30 * 24 * 60 * 60_000,
-		changesPerSession = 5_000,
+		changesPerSession = CHANGE_HISTORY_PER_SESSION,
 	): void {
 		// Request fingerprints and completion state are permanent. Large semantic
 		// results stay replayable until the client confirms local receipt, then age
@@ -2508,10 +2521,44 @@ export class SessionKernelStore {
 		}
 	}
 
-	maintain(): void {
+	maintain(): boolean {
 		// Bounded semantic compaction only. VACUUM/optimize/checkpoint are offline
 		// operator work because this actor also serves synchronous compatibility RPCs.
-		this.compact();
+		this.db.run(
+			`UPDATE session_kernel_commands
+			 SET result = '{"__sessionKernelResultReleased":true,"sha256":"' || result_hash || '"}',
+			     result_released = 1
+			 WHERE rowid IN (
+				SELECT rowid FROM session_kernel_commands
+				WHERE status = 'completed' AND terminal_failure = 0
+				  AND acknowledged_at IS NOT NULL AND acknowledged_at < ?
+				  AND result_hash IS NOT NULL AND result_released = 0 AND length(result) > ?
+				LIMIT 50
+			 )`,
+			[Date.now() - 30 * 24 * 60 * 60_000, 64 * 1024],
+		);
+		const sessionId = this.dirtyChangeSessions.values().next().value as
+			| string
+			| undefined;
+		if (!sessionId) return false;
+		const result = this.db.run(
+			`DELETE FROM session_kernel_changes WHERE rowid IN (
+				SELECT rowid FROM session_kernel_changes
+				WHERE session_id = ? AND change_seq <= (
+					SELECT MAX(change_seq) - ? FROM session_kernel_changes WHERE session_id = ?
+				)
+				LIMIT ?
+			 )`,
+			[
+				sessionId,
+				CHANGE_HISTORY_PER_SESSION,
+				sessionId,
+				MAINTENANCE_CHANGE_DELETE_BATCH,
+			],
+		);
+		if (result.changes < MAINTENANCE_CHANGE_DELETE_BATCH)
+			this.dirtyChangeSessions.delete(sessionId);
+		return this.dirtyChangeSessions.size > 0;
 	}
 
 	deadLetters(limit = 100, offset = 0) {

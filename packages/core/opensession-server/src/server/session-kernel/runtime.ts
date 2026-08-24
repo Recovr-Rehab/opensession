@@ -51,6 +51,7 @@ type RuntimeState = {
 	handle?: ReturnType<typeof setInterval>;
 	draining?: boolean;
 	lastCompactAt?: number;
+	maintenancePending?: boolean;
 	activeTimers?: Set<string>;
 	activeOutbox?: Set<number>;
 	activeOpeningOutbox?: Set<number>;
@@ -182,10 +183,15 @@ export async function drainSessionKernelRuntime(): Promise<void> {
 				.finally(() => active.delete(item.id));
 		}
 		passivateIdleSessionKernels();
-		if (!runtime.lastCompactAt || Date.now() - runtime.lastCompactAt > 60 * 60_000) {
-			await maintainSessionKernel();
-			pruneCreatePlans(sessionKernelStore());
-			runtime.lastCompactAt = Date.now();
+		const maintenanceSweepDue =
+			!runtime.lastCompactAt ||
+			Date.now() - runtime.lastCompactAt > 60 * 60_000;
+		if (runtime.maintenancePending || maintenanceSweepDue) {
+			runtime.maintenancePending = await maintainSessionKernel();
+			if (maintenanceSweepDue) {
+				pruneCreatePlans(sessionKernelStore());
+				runtime.lastCompactAt = Date.now();
+			}
 		}
 	} finally {
 		runtime.draining = false;

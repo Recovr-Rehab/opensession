@@ -141,13 +141,14 @@ export class SessionKernelActorClient {
     return response.stats;
   }
 
-  async maintainAsync(): Promise<void> {
+  async maintainAsync(): Promise<boolean> {
     const response = await this.request({
       t: "maintain",
       rpcId: crypto.randomUUID(),
     });
     if (response.t !== "maintain_result")
       throw new Error("Invalid kernel maintenance response");
+    return response.pending;
   }
 
   async runtimeWork(
@@ -762,7 +763,7 @@ class RemoteStore implements SessionKernelStoreApi {
     this.call("compact", now, retention, changes);
   }
   maintain() {
-    this.call("maintain");
+    return this.call<boolean>("maintain");
   }
   deadLetters(limit?: number, offset?: number) {
     return this.call<ReturnType<SessionKernelStoreApi["deadLetters"]>>(

@@ -853,9 +853,9 @@ export async function sessionKernelHealth(): Promise<Record<string, unknown>> {
 	return healthRefresh;
 }
 
-export async function maintainSessionKernel(): Promise<void> {
-	if (state.actor) await state.actor.maintainAsync();
-	else sessionKernelStore().maintain();
+export async function maintainSessionKernel(): Promise<boolean> {
+	if (state.actor) return state.actor.maintainAsync();
+	return sessionKernelStore().maintain();
 }
 
 export function sessionKernelOwnsCurrentCommand(sessionId: string): boolean {

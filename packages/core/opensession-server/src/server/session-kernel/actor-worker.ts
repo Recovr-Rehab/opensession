@@ -447,8 +447,8 @@ export function startSessionKernelActorWorker(): void {
     } else if (request.t === "stats") {
       post({ t: "stats_result", rpcId: request.rpcId, stats: store.stats() });
     } else if (request.t === "maintain") {
-      store.maintain();
-      post({ t: "maintain_result", rpcId: request.rpcId });
+      const pending = store.maintain();
+      post({ t: "maintain_result", rpcId: request.rpcId, pending });
     } else if (request.t === "runtime_work") {
       post({
         t: "runtime_work_result",
