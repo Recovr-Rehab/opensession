@@ -59,6 +59,13 @@ export interface GithubPrState {
   /** The last review's conclusion (verdict/confidence), for the UI. */
   lastReview?: LastReviewState;
   autoFix?: AutoFixState;
+  /** A label-triggered request persisted before its async run starts. If the
+   *  process exits during dispatch, reconcile can still attribute the run to
+   *  the person who applied the label. Cleared when runAutoFix takes ownership. */
+  pendingAutoFix?: {
+    requestedBy: string;
+    receivedAt: string;
+  };
   /** Review → owning-session fix rounds (handoff.ts); cleared when a review
    *  comes back satisfied or the PR closes. */
   handoff?: HandoffState;
@@ -298,7 +305,7 @@ export function listPrStates(): GithubPrState[] {
  *  run owns the PR. Outermost first: auto-fix's gate review sets `activeRun`
  *  while `autoFix.active` is still set (that pair is NORMAL, not corruption), so
  *  resuming the fix loop resumes the review with it. */
-export type RecoveryKind = "auto-fix" | "run" | "mention" | "pending-mention";
+export type RecoveryKind = "auto-fix" | "pending-auto-fix" | "run" | "mention" | "pending-mention";
 
 const RECOVERY_MAX_AGE_MS = 24 * 60 * 60 * 1000;
 
@@ -307,6 +314,8 @@ export function recoveryMarkerAt(s: GithubPrState, kind: RecoveryKind): string |
   switch (kind) {
     case "auto-fix":
       return s.autoFix?.startedAt;
+    case "pending-auto-fix":
+      return s.pendingAutoFix?.receivedAt;
     case "run":
       return s.activeRun?.startedAt;
     case "mention":
@@ -319,6 +328,7 @@ export function recoveryMarkerAt(s: GithubPrState, kind: RecoveryKind): string |
 function markersOn(s: GithubPrState): RecoveryKind[] {
   const out: RecoveryKind[] = [];
   if (s.autoFix?.active) out.push("auto-fix");
+  if (s.pendingAutoFix) out.push("pending-auto-fix");
   if (s.activeRun) out.push("run");
   if (s.activeMention) out.push("mention");
   if (s.pendingMention) out.push("pending-mention");
@@ -367,6 +377,9 @@ export function clearRecoveryMarker(s: GithubPrState, kind: RecoveryKind): void 
       switch (kind) {
         case "auto-fix":
           if (st.autoFix) st.autoFix.active = false;
+          break;
+        case "pending-auto-fix":
+          st.pendingAutoFix = undefined;
           break;
         case "run":
           st.activeRun = undefined;

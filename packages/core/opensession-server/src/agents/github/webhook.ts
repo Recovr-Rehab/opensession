@@ -143,6 +143,10 @@ export async function handleGithubPrEvent(event: string, payload: any): Promise<
         // per-SHA retry budget so it can babysit this new attempt too.
         updatePrState(pr.number, ref.headRef, (s) => {
           if (s.reconcile) { s.reconcile.autofixAttempts = 0; s.reconcile.autofixSha = undefined; }
+          // Dispatch below is intentionally async. Persist the actor first so a
+          // shutdown after this webhook is acknowledged cannot make reconcile
+          // restart the run under the checkout's fallback git identity.
+          s.pendingAutoFix = { requestedBy, receivedAt: new Date().toISOString() };
         }, ghRepo);
         void fireAutoFix(ref, requestedBy);
       } else if (labelMatches(label, LABEL_SIMPLIFY)) {

@@ -110,7 +110,10 @@ export async function reconcileOpenPrs(): Promise<void> {
         console.log(
           `[github] reconcile: re-firing auto-fix for PR #${pr.number} @ ${pr.headSha.slice(0, 7)} (attempt ${attempts + 1}/${MAX_ATTEMPTS_PER_SHA})`,
         );
-        void fireAutoFix(ref, state?.autoFix?.requestedBy || "");
+        void fireAutoFix(
+          ref,
+          state?.pendingAutoFix?.requestedBy || state?.autoFix?.requestedBy || "",
+        );
         continue;
       }
 

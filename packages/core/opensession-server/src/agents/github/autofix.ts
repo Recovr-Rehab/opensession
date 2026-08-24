@@ -140,7 +140,13 @@ export async function runAutoFix(
     return;
   }
 
-  const author = authorForLogin(requestedBy);
+  const receivedState = readPrState(pr.number, pr.ghRepo);
+  const effectiveRequestedBy =
+    requestedBy ||
+    receivedState?.pendingAutoFix?.requestedBy ||
+    receivedState?.autoFix?.requestedBy ||
+    "";
+  const author = authorForLogin(effectiveRequestedBy);
   let statusCommentId: number | undefined;
   // Transient exits (engine/pool error, CI never settled, mergeability probe
   // hung) KEEP the os-auto-fix label so the reconcile sweep retries the loop;
@@ -174,7 +180,7 @@ export async function runAutoFix(
   };
 
   try {
-    const prior = readPrState(pr.number, pr.ghRepo)?.autoFix;
+    const prior = receivedState?.autoFix;
     // Reuse the status comment only when recovering an interrupted loop; a fresh
     // re-trigger posts a new comment instead of editing the previous run's.
     statusCommentId = resuming ? prior?.statusCommentId : undefined;
@@ -187,7 +193,8 @@ export async function runAutoFix(
       pr.number,
       pr.headRef,
       (s) => {
-        s.autoFix = { active: true, iterations, startedAt, statusCommentId, requestedBy, worktreeDir: prior?.worktreeDir, lastPushedSha: prior?.lastPushedSha, steer: effectiveSteer };
+        s.autoFix = { active: true, iterations, startedAt, statusCommentId, requestedBy: effectiveRequestedBy, worktreeDir: prior?.worktreeDir, lastPushedSha: prior?.lastPushedSha, steer: effectiveSteer };
+        delete s.pendingAutoFix;
       },
       pr.ghRepo,
     );
@@ -285,7 +292,7 @@ export async function runAutoFix(
         pr.number,
         pr.headRef,
         (s) => {
-          s.autoFix = { active: true, iterations, startedAt, statusCommentId, requestedBy, worktreeDir, lastPushedSha, steer: effectiveSteer };
+          s.autoFix = { active: true, iterations, startedAt, statusCommentId, requestedBy: effectiveRequestedBy, worktreeDir, lastPushedSha, steer: effectiveSteer };
         },
         pr.ghRepo,
       );
