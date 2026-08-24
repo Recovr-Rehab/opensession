@@ -204,9 +204,13 @@ export const WS_SUMMARY_STATE = "shrink-0 text-meta font-medium";
  * text starts 8px below the label's box. A frame has no such slack and would
  * butt straight up against the heading, which reads as a tighter label than
  * the ones over Review and Changes. Pay the 8px here instead.
+ *
+ * `shrink-0` because the card is a capped-height flex column and the strip is
+ * the only child that can shrink: a full card squashed the frames to a
+ * hairline instead of scrolling past them.
  */
 export const WS_SUMMARY_STRIP =
-	"mx-2 flex snap-x snap-mandatory gap-2 overflow-x-auto overflow-y-hidden px-2 pt-2 pb-1 " +
+	"mx-2 flex shrink-0 snap-x snap-mandatory gap-2 overflow-x-auto overflow-y-hidden px-2 pt-2 pb-1 " +
 	"[scroll-padding-left:8px] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden";
 
 /** One frame in that strip: the picture, with its filename under it. */
