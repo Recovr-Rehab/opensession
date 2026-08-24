@@ -1203,10 +1203,11 @@ struct SessionView: View {
         let repo = RepoTile.label(for: viewModel.session.effectiveRepo)
         let model = catalog?.label(for: currentModel) ?? currentModel
         let prNumber = viewModel.prDetails?.number ?? viewModel.session.prNumber
-        var parts = [repo]
+        var parts: [String] = []
         if let prNumber {
             parts.append("#\(prNumber)")
         }
+        parts.append(repo)
         parts.append(model)
         return parts
             .filter { !$0.isEmpty }
