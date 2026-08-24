@@ -38,4 +38,5 @@ test("the summary's checks preview stays open with its parent", () => {
 	expect(summary).toContain("<PrChecksPopover");
 	expect(summary).toContain("nested");
 	expect(popoverSource).toContain("<Popover.Root exclusive={!nested}>");
+	expect(popoverSource).toContain("document.body");
 });
