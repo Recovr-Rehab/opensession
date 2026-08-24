@@ -369,7 +369,17 @@ function existingBoxSshTarget(box: BoxRecord, user = "user"): BoxSshTarget | nul
 }
 
 export function boxKnownHostsKey(target: Pick<BoxSshTarget, "host" | "port">): string {
-  return `[${target.host}]:${target.port}`;
+  return target.port === 22 ? target.host : `[${target.host}]:${target.port}`;
+}
+
+export function boxMachineIpSshEndpoint(machineIp: string | null | undefined): { host: string; port: number } | null {
+  const value = machineIp?.trim();
+  // The documented sshkey response returns a direct IPv4 machineIp and uses
+  // OpenSSH's standard port. IPv6 is not a safe fallback here: Box also
+  // exposes an IPv6 machine address that is not reachable from every host.
+  return value && /^(?:\d{1,3}\.){3}\d{1,3}$/.test(value)
+    ? { host: value, port: 22 }
+    : null;
 }
 
 /** Box regenerates its SSH host key when an archived VM resumes. The endpoint
@@ -767,8 +777,9 @@ async function installBoxSshTarget(
   // The SSH endpoint can appear only after key installation. Refresh once
   // instead of giving up and paying Box's slow per-command HTTP proxy for the
   // whole session. Some API versions also return host:port in machineIp.
-  let endpoint = parseBoxSshEndpoint(response.machineIp) || parseBoxSshEndpoint(box.sshEndpoint);
+  let endpoint = parseBoxSshEndpoint(box.sshEndpoint);
   if (!endpoint) endpoint = parseBoxSshEndpoint((await getBox(cfg, box.id))?.sshEndpoint);
+  if (!endpoint) endpoint = boxMachineIpSshEndpoint(response.machineIp);
   if (!response.success || !endpoint) {
     throw new Error("Box did not return a reachable SSH endpoint");
   }

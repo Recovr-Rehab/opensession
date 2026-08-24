@@ -4,6 +4,7 @@ import {
   boxCommandPlaneUnavailable,
   boxComposeShell,
   boxKnownHostsKey,
+  boxMachineIpSshEndpoint,
   boxMachineType,
   boxNativeFilePath,
   boxSnapshotSaveIsRecoverable,
@@ -68,7 +69,9 @@ describe("Box SSH control lane", () => {
 describe("Box SSH host identity", () => {
   test("scopes a resumed VM host-key rotation to the exact provider endpoint", () => {
     expect(boxKnownHostsKey({ host: "5.135.138.52", port: 19042 })).toBe("[5.135.138.52]:19042");
-    expect(boxKnownHostsKey({ host: "2001:db8::1", port: 22 })).toBe("[2001:db8::1]:22");
+    expect(boxKnownHostsKey({ host: "162.55.60.74", port: 22 })).toBe("162.55.60.74");
+    expect(boxMachineIpSshEndpoint("162.55.60.74")).toEqual({ host: "162.55.60.74", port: 22 });
+    expect(boxMachineIpSshEndpoint("2001:db8::1")).toBeNull();
   });
 });
 
