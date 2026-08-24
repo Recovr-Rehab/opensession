@@ -5,7 +5,7 @@
  * review carrying inline comments (GitHub auto-outdates stale ones across commits).
  * Deduped on head SHA so the same commit isn't reviewed twice.
  */
-import { personaName } from "../../server/config";
+import { isGithubBotLogin, personaName } from "../../server/config";
 import { isShuttingDown } from "../../server/shutdown-state";
 import {
   getPrDetails,
@@ -44,7 +44,6 @@ import {
   listReviewThreads,
   resolveReviewThread,
   REVIEW_MARKER,
-  BOT_LOGIN,
   type ReviewInlineComment,
 } from "./github-rest";
 import { defaultRepo } from "../../server/config";
@@ -346,8 +345,8 @@ export async function runReview(
     const priorReview = isUpdate
       ? priorReviewSection({
           lastReview: state.lastReview,
-          priorFindings: classifyPriorFindings(readFeedback(pr.ghRepo), pr.number, preThreads, BOT_LOGIN),
-          humanThreadLines: openHumanThreadLines(preThreads, BOT_LOGIN),
+          priorFindings: classifyPriorFindings(readFeedback(pr.ghRepo), pr.number, preThreads, isGithubBotLogin),
+          humanThreadLines: openHumanThreadLines(preThreads, isGithubBotLogin),
         })
       : "";
 
@@ -357,7 +356,7 @@ export async function runReview(
       ignoreGlobs: reviewOpts.ignoreGlobs,
       summaryOnly,
       intent: prIntentSection(details),
-      discussion: prDiscussionSection(details, BOT_LOGIN, REVIEW_MARKER),
+      discussion: prDiscussionSection(details, isGithubBotLogin, REVIEW_MARKER),
       priorReview,
       learnedRules: learnedRulesSection(pr.ghRepo),
       lastReviewedSha:
@@ -736,7 +735,7 @@ async function postReview(
   const openBotAnchors = new Set<string>();
   if (!force) {
     for (const t of existingThreads) {
-      if (t.rootAuthor === BOT_LOGIN && !t.isResolved && !t.isOutdated && t.path && t.line != null) {
+      if (isGithubBotLogin(t.rootAuthor) && !t.isResolved && !t.isOutdated && t.path && t.line != null) {
         openBotAnchors.add(`${t.path}:${t.line}`);
       }
     }
@@ -781,7 +780,7 @@ async function postReview(
   // useful. Collapsing them keeps the PR clean without a human resolving by hand.
   // Only ever touches bot-rooted threads; human threads are never resolved here.
   for (const t of existingThreads) {
-    if (!t.isResolved && t.isOutdated && t.rootAuthor === BOT_LOGIN) {
+    if (!t.isResolved && t.isOutdated && isGithubBotLogin(t.rootAuthor)) {
       await resolveReviewThread(t.id).catch(() => {});
     }
   }

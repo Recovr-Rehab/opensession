@@ -23,6 +23,7 @@ import { homedir } from "node:os";
 import { join } from "node:path";
 import { githubUserAuthSettings } from "./github-auth";
 import { configuredIntegration } from "./config";
+import { githubGitCredentialEnv } from "./github-git-credential";
 
 const KEY_PATH =
   process.env.OPENSESSION_GITHUB_APP_KEY || join(homedir(), ".opensession-github-app.pem");
@@ -34,9 +35,38 @@ type AppTokenCache = {
 };
 
 const g = globalThis as {
-  __ghAppTokenCache?: AppTokenCache | null;
+  // Cached per scope: a read-only token and a write token carry different
+  // permission sets, so they cannot share a slot.
+  __ghAppTokenCacheRead?: AppTokenCache | null;
+  __ghAppTokenCacheWrite?: AppTokenCache | null;
   __ghAppTokenWarned?: boolean;
 };
+
+/** Read is strictly weaker than the bot PAT (no write at all). */
+const READ_PERMISSIONS = {
+  checks: "read",
+  statuses: "read",
+  actions: "read",
+  pull_requests: "read",
+  contents: "read",
+  issues: "read",
+  metadata: "read",
+} as const;
+/** Write asks for EXACTLY what the PR agent needs — post reviews and comments
+ *  (pull_requests, issues) and push fixes (contents), plus metadata. It does NOT
+ *  spread the read set: a mint is all-or-nothing, so requesting a read scope the
+ *  App wasn't granted (e.g. checks, which no create flow grants today) would 422
+ *  the whole write token even though writes never touch checks. Still
+ *  installation-scoped, so an out-of-org write fails at GitHub's side just as the
+ *  scoped bot PAT does (security-model.md, GitHub credential scoping). The App
+ *  must hold these; if it does not the mint is rejected and the caller falls back
+ *  to the PAT. */
+const WRITE_PERMISSIONS = {
+  pull_requests: "write",
+  issues: "write",
+  contents: "write",
+  metadata: "read",
+} as const;
 
 function appJwt(clientId: string, key: string): string {
   const now = Math.floor(Date.now() / 1000);
@@ -51,8 +81,11 @@ function appJwt(clientId: string, key: string): string {
  * the app key/client id isn't configured or minting fails. Fail-soft: callers
  * fall back to the bot PAT.
  */
-export async function githubAppInstallationToken(): Promise<string | null> {
-  const cached = g.__ghAppTokenCache;
+export async function githubAppInstallationToken(
+  opts: { write?: boolean } = {},
+): Promise<string | null> {
+  const slot = opts.write ? "__ghAppTokenCacheWrite" : "__ghAppTokenCacheRead";
+  const cached = g[slot];
   if (cached && cached.expiresAt - Date.now() > 5 * 60_000) return cached.token;
 
   const { clientId } = githubUserAuthSettings();
@@ -67,7 +100,11 @@ export async function githubAppInstallationToken(): Promise<string | null> {
       typeof githubConfig.installationId === "number"
         ? githubConfig.installationId
         : undefined;
-    let installationId = configuredInstallationId || cached?.installationId;
+    // Either cache slot can supply the installation id — it does not vary by scope.
+    let installationId =
+      configuredInstallationId ||
+      g.__ghAppTokenCacheRead?.installationId ||
+      g.__ghAppTokenCacheWrite?.installationId;
     if (!installationId) {
       const res = await fetch("https://api.github.com/app/installations", { headers });
       const installs = (await res.json()) as Array<{ id: number; account?: { login?: string } }>;
@@ -97,29 +134,19 @@ export async function githubAppInstallationToken(): Promise<string | null> {
       installationId = selected.id;
     }
 
-    // Downscoped at mint: pr-info only reads, so the token carries no write
-    // permission at all — strictly weaker than the bot PAT even if leaked.
     const res = await fetch(
       `https://api.github.com/app/installations/${installationId}/access_tokens`,
       {
         method: "POST",
         headers,
         body: JSON.stringify({
-          permissions: {
-            checks: "read",
-            statuses: "read",
-            actions: "read",
-            pull_requests: "read",
-            contents: "read",
-            issues: "read",
-            metadata: "read",
-          },
+          permissions: opts.write ? WRITE_PERMISSIONS : READ_PERMISSIONS,
         }),
       }
     );
     const tok = (await res.json()) as { token?: string; expires_at?: string };
     if (!tok.token) throw new Error(`mint failed: ${JSON.stringify(tok).slice(0, 120)}`);
-    g.__ghAppTokenCache = {
+    g[slot] = {
       token: tok.token,
       expiresAt: tok.expires_at ? Date.parse(tok.expires_at) : Date.now() + 55 * 60_000,
       installationId,
@@ -135,6 +162,35 @@ export async function githubAppInstallationToken(): Promise<string | null> {
   }
 }
 
+/** The operator-controlled credential cutover. PAT remains the default so a
+ * deploy cannot silently change the identity or permissions of live GitHub
+ * operations. Selecting `app` is fail-closed: no hidden PAT fallback can mask a
+ * broken App installation after the operator deliberately switches. */
+export function githubBotCredentialMode(): "pat" | "app" {
+  return configuredIntegration("github").botCredential === "app" ? "app" : "pat";
+}
+
+/** The selected GitHub credential for REST/GraphQL calls. */
+export async function githubToken(
+  opts: { write?: boolean } = {},
+): Promise<string | null> {
+  if (githubBotCredentialMode() === "app")
+    return githubAppInstallationToken(opts);
+  return process.env.GITHUB_API_TOKEN || null;
+}
+
+/** Whether the currently selected bot credential is configured. */
+export function githubConfiguredCredential(): boolean {
+  return githubBotCredentialMode() === "app"
+    ? githubAppConfigured()
+    : !!process.env.GITHUB_API_TOKEN;
+}
+
+/** Whether a GitHub App can mint installation tokens (client id + private key). */
+export function githubAppConfigured(): boolean {
+  return !!githubUserAuthSettings().clientId && existsSync(KEY_PATH);
+}
+
 /**
  * A one-repository installation token for Runner workspace materialization.
  * It is intentionally separate from the read-only check token above: the
@@ -143,12 +199,14 @@ export async function githubAppInstallationToken(): Promise<string | null> {
  * session file, host spec, URL, transcript, or Runner registry.
  */
 export async function githubAppRepositoryToken(ghRepo: string): Promise<string | null> {
+  if (githubBotCredentialMode() !== "app") return null;
   const [owner, repo] = ghRepo.split("/");
   if (!owner || !repo || ghRepo.split("/").length !== 2) return null;
   // Resolve the installation id through the existing credential path. It keeps
   // installation selection in one place and may populate the shared cache.
   await githubAppInstallationToken();
-  const installationId = g.__ghAppTokenCache?.installationId;
+  const installationId =
+    g.__ghAppTokenCacheRead?.installationId || g.__ghAppTokenCacheWrite?.installationId;
   const { clientId } = githubUserAuthSettings();
   if (!installationId || !clientId || !existsSync(KEY_PATH)) return null;
   try {
@@ -187,4 +245,19 @@ export async function githubAppRepositoryToken(ghRepo: string): Promise<string |
 export async function githubAppEnv(): Promise<Record<string, string> | null> {
   const token = await githubAppInstallationToken();
   return token ? { GH_TOKEN: token } : null;
+}
+
+/** Ephemeral Git + gh capability for one trusted GitHub code run. The token is
+ * process-local and never written into Git config, URLs, session files, or the
+ * run journal. */
+export async function githubServiceCredentialEnv(
+  ghRepo?: string,
+): Promise<Record<string, string>> {
+  const token =
+    githubBotCredentialMode() === "app"
+      ? ghRepo
+        ? await githubAppRepositoryToken(ghRepo)
+        : await githubAppInstallationToken({ write: true })
+      : process.env.GITHUB_API_TOKEN || null;
+  return token ? githubGitCredentialEnv(token) : {};
 }
