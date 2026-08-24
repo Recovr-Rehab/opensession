@@ -171,7 +171,7 @@ export function SetupPanel({
                       Session.
                     </p>
                     <a
-                      href="https://os.tella.dev/d/opensession-site/setup"
+                      href="https://opensession.com/setup"
                       target="_blank"
                       rel="noreferrer"
                       className="mt-3 inline-flex min-h-11 items-center gap-1.5 text-label font-medium text-blue hover:underline desktop:min-h-0"
