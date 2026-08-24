@@ -1146,7 +1146,7 @@ struct SessionView: View {
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
                 if !dynamicTypeSize.isAccessibilitySize {
-                    Text(headerSubtitle)
+                    headerSubtitleText
                         .font(.footnote)
                         .foregroundStyle(OS1VisualStyle.textDim)
                         .lineLimit(1)
@@ -1211,6 +1211,16 @@ struct SessionView: View {
         return parts
             .filter { !$0.isEmpty }
             .joined(separator: " • ")
+    }
+
+    private var headerSubtitleText: Text {
+        var subtitle = AttributedString(headerSubtitle)
+        if let pr = viewModel.prDetails,
+           let range = subtitle.range(of: "#\(pr.number)")
+        {
+            subtitle[range].foregroundColor = pr.summary.color
+        }
+        return Text(subtitle)
     }
 
     /// Re-pin to the latest for a beat while the transcript settles.
