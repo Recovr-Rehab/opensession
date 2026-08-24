@@ -99,7 +99,7 @@ export const SETTINGS_NAV_LIST =
 export const SETTINGS_NAV_GROUP = `flex flex-col ${SIDEBAR_GROUP}`;
 
 /**
- * A group's caption: Personal, Workspace. The app's band headings in every
+ * A group's caption: Personal, Organization. The app's band headings in every
  * respect that shows: the caption height, 13px semibold, and dim ink rather
  * than faint. It was 11px bold with letterspacing, which is a different
  * typographic idea (a small-caps label) from the one the sidebar uses.

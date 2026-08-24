@@ -72,7 +72,7 @@ import type { Workspace } from "../lib/types";
 //
 // Groups run from what one person owns to what the whole instance does:
 // "Personal" is yours alone: who sessions act as, how the app looks and
-// behaves for you, and what it notifies you about. "Workspace" is shared
+// behaves for you, and what it notifies you about. "Organization" is shared
 // config every session runs under. "Automation" is the standing work the
 // instance does on its own:
 // those are the tool surfaces, grouped by what they are rather than sold as
@@ -266,7 +266,7 @@ export function Settings({
 }: {
 	onBack: () => void;
 	/** Active section, derived from the route (tools have their own URLs).
-	 * Undefined = no explicit section: desktop defaults to General, while the
+	 * Undefined = no explicit section: desktop defaults to Account, while the
 	 * phone sheet stays on its root list of sections. */
 	section?: SettingsSectionKey;
 	/** Navigate to a section — App maps tool keys to their own routes. */
@@ -319,10 +319,9 @@ export function Settings({
 			</MobileSettings>
 		);
 
-	// A bare /settings lands on the workspace's General page on desktop. Keep the
-	// section out of the URL so the same route can remain at the nav root on phones.
-	// General is admin-only, so members without access fall back to Account.
-	const active = visibleSection ?? (auth?.admin === false ? "myAccounts" : "general");
+	// A bare /settings lands on Account, the first personal section, on desktop.
+	// Keep the section out of the URL so phones can stay at the nav root.
+	const active = visibleSection ?? "myAccounts";
 	const shown = filterGroups(groups, query);
 	const firstHit = shown[0]?.hits[0]?.item;
 
