@@ -438,6 +438,30 @@ describe("single session ownership", () => {
     expect(runSession).toContain('registerSessionEffectExecutor("turn_cancel"');
     expect(runSession).toContain("cancelAgentRunToken(dispatchId)");
     expect(runSession).toContain("cancelAgentRunTokenAndWait(dispatchId)");
+    expect(runSession).toContain(
+      "journalRetireCancelledAbnormalAfterSettlement(",
+    );
+    const turnExecutor = runSession.indexOf(
+      'registerSessionEffectExecutor("turn_cancel"',
+    );
+    const missingCancel = runSession.indexOf(
+      'if (decision === "missing") return;',
+      turnExecutor,
+    );
+    expect(missingCancel).toBeLessThan(
+      runSession.indexOf(
+        "journalRetireCancelledAbnormalAfterSettlement(",
+        missingCancel,
+      ),
+    );
+    expect(runSession).toContain("if (!settled) return false;");
+    const interruptSettle = runSession.indexOf(
+      "settlePromptInterrupt(",
+      runSession.indexOf("beginPromptInterruptEffect("),
+    );
+    expect(runSession.indexOf("retireConfirmedAbnormal();", interruptSettle)).toBeGreaterThan(
+      interruptSettle,
+    );
     const agentRunner = read("agent-runner.ts");
     expect(agentRunner).toContain(
       'if (cancelOwnership === "unknown") {',
@@ -485,9 +509,14 @@ describe("single session ownership", () => {
 		const runSession = read("run-session.ts");
 		expect(runSession).toContain("resumePlannedCreate(sessionId)");
     const boot = read("../../opensession.ts");
-    expect(boot).toContain("runId: recoveredRun?.runKey");
+    expect(boot).toContain("runId: recoveredRun.runKey");
+    expect(boot).toContain("projectionId: `outcome:${recoveredRun.runKey}`");
+    expect(boot).toContain(
+      "runGeneration: sessionKernel(bksSessionId).runState().generation",
+    );
     const cache = read("session-cache.ts");
-    expect(cache).toContain("current.currentRunId !== opts.runId");
+    expect(cache).toContain('op: "prepare_outcome_projection"');
+    expect(cache).toContain("projectionId: opts.projectionId");
 		expect(runSession).toContain("creationOwnsPrompt(record.osSessionId");
 		expect(boot).toContain(
 			"creationOwnsPrompt(run.osSessionId, run.promptEntryId)",
@@ -584,6 +613,17 @@ describe("single session ownership", () => {
 			'throw new Error("Opening run ended without a terminal event")',
 		);
 		expect(create).toContain("openingJournal?.terminalFailure");
+		expect(create).toContain("startToken = markSessionStarting(");
+		expect(create).toContain("hostId: startToken");
+		expect(create).toContain("isAgentSessionCancelled(bksId, startToken)");
+		const runSession = read("run-session.ts");
+		const cancelPrepared = runSession.indexOf('op: "prepare_cancel"');
+		const creationCancelled = runSession.indexOf(
+			"settleCreationOpeningForStop(sessionId)",
+			cancelPrepared,
+		);
+		expect(cancelPrepared).toBeGreaterThan(0);
+		expect(creationCancelled).toBeGreaterThan(cancelPrepared);
 		for (const backend of [
 			"host-client.ts",
 			"runner-session.ts",
@@ -598,9 +638,26 @@ describe("single session ownership", () => {
 		const cache = read("session-cache.ts");
 		const outcome = cache.indexOf("if (errorMessage) {");
 		const transcript = cache.indexOf("persistRunFailureNotice(", outcome);
-		const sessionFile = cache.indexOf("void touchNativeSession(id", outcome);
+		const sessionFile = cache.indexOf("await touchNativeSession(id", outcome);
 		expect(transcript).toBeGreaterThan(outcome);
 		expect(sessionFile).toBeGreaterThan(transcript);
+    const run = read("run-session.ts");
+    const projectionExecutor = run.indexOf(
+      'registerSessionEffectExecutor("turn_outcome_project"',
+    );
+    const applyProjection = run.indexOf(
+      "await applyRunOutcomeProjection(",
+      projectionExecutor,
+    );
+    const settleProjection = run.indexOf(
+      'op: "settle_outcome_projection"',
+      applyProjection,
+    );
+    expect(projectionExecutor).toBeGreaterThan(0);
+    expect(applyProjection).toBeGreaterThan(projectionExecutor);
+    expect(settleProjection).toBeGreaterThan(applyProjection);
+    expect(run).toContain("projectionId: `outcome:${startToken}`");
+    expect(create).toContain("projectionId: `outcome:${startToken}`");
 	});
 
 	test("WebSocket session mutations enter the mailbox before dispatch", () => {

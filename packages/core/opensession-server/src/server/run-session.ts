@@ -64,6 +64,7 @@ import { takeVoiceHandoff } from "./desk-voice";
 import {
 	activeRunRecords,
   journalClearIfLineage,
+  journalRetireCancelledAbnormalAfterSettlement,
 	setJournalSetListener,
 	type ActiveRunRecord,
 } from "./run-journal";
@@ -121,6 +122,7 @@ import {
 	persistAutoModelSwitch,
 	retryAutoFallbackModel,
 	recordRunOutcome,
+	applyRunOutcomeProjection,
 	touchNativeSession,
 	SESSIONS_DIR,
 } from "./session-cache";
@@ -171,6 +173,8 @@ import { automationSessionMcp, interactiveMcpServers } from "./interactive-mcp";
 import { makeAskHandler, settleRestoredAskAfterRecovery } from "./asks";
 import {
 	registerSessionEffectExecutor,
+  SessionEffectDeferredError,
+	settleCreationCancelled,
 	settleCreationFailed,
 	settleCreationSucceeded,
 	sessionKernel,
@@ -180,18 +184,60 @@ import {
 const interruptExecutorGlobal = globalThis as typeof globalThis & {
 	__opensessionInterruptExecutorRegistered?: boolean;
   __opensessionTurnCancelExecutorRegistered?: boolean;
+  __opensessionTurnOutcomeProjectionExecutorRegistered?: boolean;
 };
+if (!interruptExecutorGlobal.__opensessionTurnOutcomeProjectionExecutorRegistered) {
+  registerSessionEffectExecutor("turn_outcome_project", async (item) => {
+    const projection = item.payload;
+    const decision = sessionTurn({
+      op: "begin_outcome_projection",
+      sessionId: item.sessionId,
+      projectionId: projection.projectionId,
+      runGeneration: projection.runGeneration,
+    });
+    if (decision === "missing" || decision === "completed") return;
+    if (decision === "wait")
+      throw new SessionEffectDeferredError("Earlier turn outcome is still pending");
+    await applyRunOutcomeProjection(
+      item.sessionId,
+      projection.errorMessage,
+      projection,
+      true,
+    );
+    const settled = sessionTurn({
+      op: "settle_outcome_projection",
+      sessionId: item.sessionId,
+      projectionId: projection.projectionId,
+      runGeneration: projection.runGeneration,
+    });
+    if (!settled)
+      throw new Error("Turn outcome projection ownership changed before settlement");
+  });
+  interruptExecutorGlobal.__opensessionTurnOutcomeProjectionExecutorRegistered = true;
+}
 if (!interruptExecutorGlobal.__opensessionInterruptExecutorRegistered) {
 	registerSessionEffectExecutor("delivery_interrupt_cancel", (item) => {
     const { interruptId, dispatchId, runIds, runGeneration } = item.payload;
+    const retireConfirmedAbnormal = () => {
+      if (dispatchId)
+        journalRetireCancelledAbnormalAfterSettlement(
+          item.sessionId,
+          dispatchId,
+        );
+    };
 		const decision = beginPromptInterruptEffect(
 			item.sessionId,
 			interruptId,
 			runGeneration,
 		);
-		if (decision === "settled") return;
+    if (decision === "settled") return;
+    if (decision === "confirmed") {
+      retireConfirmedAbnormal();
+      return;
+    }
 		if (decision === "adopt_confirmed") {
 			settlePromptInterrupt(item.sessionId, interruptId, "confirmed");
+      retireConfirmedAbnormal();
 			return;
 		}
     const aborted = dispatchId
@@ -200,11 +246,10 @@ if (!interruptExecutorGlobal.__opensessionInterruptExecutorRegistered) {
 		// A retry follows a durably recorded executing phase. False then means
 		// either the first attempt already cancelled the owner or this retry found
 		// it terminal, so the accepted interrupt is conservatively confirmed.
-		settlePromptInterrupt(
-			item.sessionId,
-			interruptId,
-			aborted || decision === "retry" ? "confirmed" : "not_aborted",
-		);
+    const outcome =
+      aborted || decision === "retry" ? "confirmed" : "not_aborted";
+		settlePromptInterrupt(item.sessionId, interruptId, outcome);
+    if (outcome === "confirmed") retireConfirmedAbnormal();
 	});
 	interruptExecutorGlobal.__opensessionInterruptExecutorRegistered = true;
 }
@@ -229,20 +274,31 @@ if (!interruptExecutorGlobal.__opensessionTurnCancelExecutorRegistered) {
       cancelId,
       runGeneration,
     });
+    if (decision === "missing") return;
     if (decision === "settled") {
+      journalRetireCancelledAbnormalAfterSettlement(
+        item.sessionId,
+        dispatchId,
+      );
       retireAbsentInProcessOwner();
       return;
     }
-    const settle = (outcome: "confirmed" | "not_aborted") => {
-      sessionTurn({
+    const settle = (outcome: "confirmed" | "not_aborted"): boolean => {
+      const settled = sessionTurn({
         op: "settle_cancel",
         sessionId: item.sessionId,
         cancelId,
         outcome,
       });
+      if (!settled) return false;
+      journalRetireCancelledAbnormalAfterSettlement(
+        item.sessionId,
+        dispatchId,
+      );
       // An explicit prompt may already be parked behind this cancellation.
       // Re-arm delivery only after actor settlement removes the cancel gate.
       watchExternalRunAndDrain(item.sessionId);
+      return true;
     };
     if (decision === "adopt_confirmed") {
       settle("confirmed");
@@ -254,7 +310,10 @@ if (!interruptExecutorGlobal.__opensessionTurnCancelExecutorRegistered) {
       throw new Error(
         `Could not reconcile executing cancellation ${cancelId} for ${dispatchId}`,
       );
-    settle(cancelledWait || cancelledRun ? "confirmed" : "not_aborted");
+    const settled = settle(
+      cancelledWait || cancelledRun ? "confirmed" : "not_aborted",
+    );
+    if (!settled) return;
     // A pre-engine in-process journal cannot have survived this gateway boot.
     // Retire it only after actor settlement. Detached host/Runner/sandbox
     // records stay for their attached source to complete naturally.
@@ -293,10 +352,30 @@ export function requestTurnCancel(
     source: request.source,
     ...(request.user ? { user: request.user } : {}),
   });
+  settleCreationOpeningForStop(sessionId);
   stoppedSessions.add(sessionId);
   persistQueues();
   broadcastQueue(sessionId);
   return { requeued: requeued.length };
+}
+
+export function settleCreationOpeningForStop(sessionId: string): boolean {
+	const kernel = sessionKernel(sessionId);
+	const creation = kernel.creationState();
+	const effectId = creation?.currentEffectId;
+	if (
+		creation?.state !== "opening_dispatched" ||
+		!effectId?.startsWith("opening:")
+	)
+		return false;
+	settleCreationCancelled(
+		sessionId,
+		creation.identity,
+		kernel,
+		effectId,
+	);
+	acknowledgePromptDispatch(sessionId, effectId.slice("opening:".length));
+	return true;
 }
 
 export function creationOwnsPrompt(sessionId: string, promptEntryId: string): boolean {
@@ -312,6 +391,7 @@ export function settleRecoveredCreationOpening(
 	sessionId: string,
 	promptEntryId: string,
 	failure?: string,
+	runId?: string,
 ): boolean {
 	const creation = sessionKernel(sessionId).creationState();
 	const effectId = `opening:${promptEntryId}`;
@@ -321,7 +401,15 @@ export function settleRecoveredCreationOpening(
 		creation.state !== "opening_dispatched"
 	)
 		return false;
-	if (failure) {
+	const cancel = sessionTurn({ op: "snapshot", sessionId }).cancel;
+	if (runId && cancel?.runId === runId) {
+		settleCreationCancelled(
+			sessionId,
+			creation.identity,
+			sessionKernel(sessionId),
+			effectId,
+		);
+	} else if (failure) {
 		settleCreationFailed(
 			sessionId,
 			creation.identity,
@@ -2404,7 +2492,17 @@ async function runSessionPromptInner(
 				? " Daytona: if the launch failed because the sandbox could not dial back, check callbackBaseUrl and your org tier's egress (docs/self-hosting-sandboxes.md)."
 				: "");
 		broadcastToSession(sessionId, { type: "error", sessionId, message: msg });
-		recordRunOutcome(session.id, msg);
+		recordRunOutcome(
+			session.id,
+			msg,
+			startToken
+				? {
+						runId: startToken,
+						runGeneration: sessionKernel(session.id).runState().generation,
+						projectionId: `outcome:${startToken}`,
+					}
+				: undefined,
+		);
 		broadcastToSession(sessionId, { type: "stream_done", sessionId });
 		broadcastToSession(sessionId, {
 			type: "session_status",
@@ -2892,6 +2990,13 @@ async function runSessionPromptInner(
 		engineSessionId: finalSessionId || session.claudeSessionId || undefined,
 		noticePersisted: failureNoticePersisted,
 		noticeLabel: failureNoticeLabel,
+		...(startToken
+			? {
+					runId: startToken,
+					runGeneration: sessionKernel(session.id).runState().generation,
+					projectionId: `outcome:${startToken}`,
+				}
+			: {}),
 	});
 
 	// On a clean finish any steered messages already landed in the transcript, so

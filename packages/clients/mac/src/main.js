@@ -115,18 +115,28 @@ function adoptLegacyUserData() {
 // ready: Chromium reads these files as it opens the session.
 adoptLegacyUserData();
 
+// Visible app windows share Chromium's profile (auth, preferences and drafts),
+// but each renderer owns its own route so two windows can stay in different
+// workspaces. `win` is the most recently focused one and is only a fallback for
+// actions, such as deep links and app-menu commands, that do not name a window.
 let win = null;
+const appWindows = new Set();
+const windowData = new WeakMap();
 let quitting = false;
 let appReady = false;
 let pendingDeepLink = null;
-let windowReady = false;
-// Chromium keeps a zoom level per origin for the life of the process only, and
-// the View menu's zoom roles change it without any event we can subscribe to
-// (zoom-changed only covers pinch/wheel). So the level is mirrored here, read
-// back whenever window state is written, and re-applied after every load: on a
-// scaled display the app is unreadable at 100% and the setting has to survive
-// both an in-app navigation and a relaunch.
-let zoomLevel = 0;
+
+function activeWindow() {
+  const focused = BrowserWindow.getFocusedWindow();
+  if (focused && appWindows.has(focused) && !focused.isDestroyed()) return focused;
+  if (win && appWindows.has(win) && !win.isDestroyed()) return win;
+  return [...appWindows].findLast((candidate) => !candidate.isDestroyed()) || null;
+}
+
+function eventWindow(event) {
+  const owner = BrowserWindow.fromWebContents(event.sender);
+  return owner && appWindows.has(owner) && !owner.isDestroyed() ? owner : null;
+}
 
 // ---- Choosing a server ------------------------------------------------------
 // Which server this shell talks to belongs to the person using it, not to
@@ -135,8 +145,6 @@ let zoomLevel = 0;
 // back.
 
 const serverFile = () => path.join(app.getPath("userData"), "server.json");
-let addingAccount = false;
-let setupReturnDestination = "app";
 let backgroundAccountWindows = new Map();
 let badgeByOrigin = new Map();
 
@@ -224,7 +232,7 @@ function readStoredServer() {
   return stored.accounts.find((account) => account.id === stored.activeId)?.url || null;
 }
 
-function writeStoredServer(url) {
+function writeStoredServer(url, addingAccount = false) {
   const stored = readStoredAccounts();
   const active = stored.accounts.find((account) => account.id === stored.activeId);
   if (addingAccount || !active) {
@@ -313,11 +321,15 @@ async function resolveServer(raw) {
   return { ...reached, url };
 }
 
-function showSetup(returnDestination = "app") {
-  if (!win || win.isDestroyed()) return;
-  setupReturnDestination = returnDestination;
-  clearStallGuard();
-  win.loadFile(path.join(__dirname, "setup.html"), {
+function showSetup(returnDestination = "app", target = activeWindow(), addingAccount = false) {
+  if (!target || target.isDestroyed()) return;
+  const data = windowData.get(target);
+  if (data) {
+    data.setupReturnDestination = returnDestination;
+    data.addingAccount = addingAccount;
+  }
+  clearStallGuard(target);
+  target.loadFile(path.join(__dirname, "setup.html"), {
     query: {
       url: addingAccount ? "" : APP_URL || DEFAULT_URL,
       // A later visit can be called off; the first run has nothing to go back
@@ -338,8 +350,8 @@ let updateState = { state: "idle", version: null };
 
 function setUpdateState(next) {
   updateState = next;
-  if (win && !win.isDestroyed()) {
-    win.webContents.send("os1:update-state", updateState);
+  for (const target of appWindows) {
+    if (!target.isDestroyed()) target.webContents.send("os1:update-state", updateState);
   }
 }
 
@@ -524,6 +536,22 @@ function onScreenBounds(saved) {
   return bounds;
 }
 
+function cascadeWindowBounds(bounds) {
+  if (!appWindows.size) return bounds;
+  const area = screen.getDisplayMatching(bounds).workArea;
+  const offset = 24 * (1 + ((appWindows.size - 1) % 6));
+  const shift = (position, size, start, available) => {
+    if (position + size + offset <= start + available) return position + offset;
+    if (position - offset >= start) return position - offset;
+    return position;
+  };
+  return {
+    ...bounds,
+    x: shift(bounds.x, bounds.width, area.x, area.width),
+    y: shift(bounds.y, bounds.height, area.y, area.height),
+  };
+}
+
 function loadWindowState() {
   let saved = null;
   try {
@@ -543,32 +571,35 @@ function clampZoom(value) {
   return Number.isFinite(value) ? Math.min(4, Math.max(-3, value)) : 0;
 }
 
-function saveWindowState() {
-  if (!win || win.isDestroyed()) return;
+function saveWindowState(target = activeWindow()) {
+  if (!target || target.isDestroyed()) return;
+  const data = windowData.get(target);
+  let currentZoom = data?.zoomLevel ?? 0;
   try {
-    if (!win.webContents.isDestroyed()) {
-      zoomLevel = win.webContents.getZoomLevel();
+    if (!target.webContents.isDestroyed()) {
+      currentZoom = target.webContents.getZoomLevel();
+      if (data) data.zoomLevel = currentZoom;
     }
   } catch {}
   try {
     const state = {
-      ...win.getNormalBounds(),
-      maximized: win.isMaximized(),
-      fullScreen: win.isFullScreen(),
-      zoomLevel: clampZoom(zoomLevel),
+      ...target.getNormalBounds(),
+      maximized: target.isMaximized(),
+      fullScreen: target.isFullScreen(),
+      zoomLevel: clampZoom(currentZoom),
     };
     fs.writeFileSync(stateFile(), JSON.stringify(state));
   } catch {}
 }
 
-// Written whenever the window settles, not only at quit: a force quit, a crash
+// Written whenever a window settles, not only at quit: a force quit, a crash
 // or an update restart would otherwise throw away the size you just set, and
 // opening where you left off is the whole point of saving it.
-let saveTimer = null;
-
-function scheduleSaveWindowState() {
-  clearTimeout(saveTimer);
-  saveTimer = setTimeout(saveWindowState, 400);
+function scheduleSaveWindowState(target) {
+  const data = windowData.get(target);
+  if (!data) return;
+  clearTimeout(data.saveTimer);
+  data.saveTimer = setTimeout(() => saveWindowState(target), 400);
 }
 
 function inWindow(url) {
@@ -697,8 +728,7 @@ function openDeepLink(raw) {
   } catch {}
   const url = deepLinkToUrl(raw);
   if (!url) return;
-  showWindow();
-  loadApp(url);
+  loadApp(url, showWindow());
 }
 
 // Answers whether there was one, so a caller that would otherwise load the app
@@ -711,25 +741,28 @@ function flushPendingDeepLink() {
   return true;
 }
 
-function showWindow() {
-  if (!win || win.isDestroyed()) {
-    if (appReady) createWindow();
-  } else if (windowReady) {
+function showWindow(target = activeWindow()) {
+  if (!target || target.isDestroyed()) {
+    return appReady ? createWindow() : null;
+  }
+  const data = windowData.get(target);
+  if (data?.ready) {
     // show() alone leaves a minimized window in the Dock, so a deep link or a
     // notification click would land on a window nobody can see.
-    if (win.isMinimized()) win.restore();
-    win.show();
-    win.focus();
+    if (target.isMinimized()) target.restore();
+    target.show();
+    target.focus();
     // The window is only half of it on macOS: an app that is not frontmost
     // stays behind the one that is until it asks for the activation itself.
     app.focus({ steal: true });
   }
+  return target;
 }
 
-function showStatusPage() {
-  if (!win || win.isDestroyed()) return;
-  clearStallGuard();
-  win.loadFile(path.join(__dirname, "offline.html"), {
+function showStatusPage(target = activeWindow()) {
+  if (!target || target.isDestroyed()) return;
+  clearStallGuard(target);
+  target.loadFile(path.join(__dirname, "offline.html"), {
     query: { url: APP_URL },
   });
 }
@@ -745,39 +778,39 @@ function showStatusPage() {
 // shell blocks that worker (Electron 43's renderer crashes on Cache Storage
 // writes), so it needs a deadline of its own.
 const LOAD_STALL_MS = 8000;
-let stallTimer = null;
 
-function clearStallGuard() {
-  if (!stallTimer) return;
-  clearTimeout(stallTimer);
-  stallTimer = null;
+function clearStallGuard(target) {
+  const data = windowData.get(target);
+  if (!data?.stallTimer) return;
+  clearTimeout(data.stallTimer);
+  data.stallTimer = null;
 }
 
 // The deadline is on the main frame committing, not on the page finishing to
 // load: once the document arrives its splash paints, and a big bundle on a slow
 // but working connection must not be swapped out for the status page.
-function armStallGuard() {
-  clearStallGuard();
-  stallTimer = setTimeout(() => {
-    stallTimer = null;
-    showStatusPage();
+function armStallGuard(target) {
+  const data = windowData.get(target);
+  if (!data) return;
+  clearStallGuard(target);
+  data.stallTimer = setTimeout(() => {
+    data.stallTimer = null;
+    showStatusPage(target);
   }, LOAD_STALL_MS);
 }
 
 // Every main-frame load the shell starts goes through here, so a hung
 // navigation always has a way back.
-function loadApp(url) {
-  if (!win || win.isDestroyed()) return;
-  armStallGuard();
-  win.loadURL(url);
+function loadApp(url, target = activeWindow()) {
+  if (!target || target.isDestroyed()) return;
+  armStallGuard(target);
+  target.loadURL(url);
 }
 
-function createWindow() {
+function createWindow(initialURL = null) {
   const state = loadWindowState();
-  zoomLevel = state.zoomLevel;
-  windowReady = false;
-  win = new BrowserWindow({
-    ...state.bounds,
+  const createdWindow = new BrowserWindow({
+    ...cascadeWindowBounds(state.bounds),
     minWidth: MIN_WIDTH,
     minHeight: MIN_HEIGHT,
     fullscreen: state.fullScreen,
@@ -807,7 +840,19 @@ function createWindow() {
     },
   });
 
-  if (state.maximized && !state.fullScreen) win.maximize();
+  const data = {
+    ready: false,
+    zoomLevel: state.zoomLevel,
+    stallTimer: null,
+    saveTimer: null,
+    addingAccount: false,
+    setupReturnDestination: "app",
+  };
+  appWindows.add(createdWindow);
+  windowData.set(createdWindow, data);
+  win = createdWindow;
+
+  if (state.maximized && !state.fullScreen) createdWindow.maximize();
 
   for (const settled of [
     "resize",
@@ -817,22 +862,24 @@ function createWindow() {
     "enter-full-screen",
     "leave-full-screen",
   ]) {
-    win.on(settled, scheduleSaveWindowState);
+    createdWindow.on(settled, () => scheduleSaveWindowState(createdWindow));
   }
 
-  const createdWindow = win;
+  createdWindow.on("focus", () => {
+    win = createdWindow;
+  });
   createdWindow.once("ready-to-show", () => {
-    if (createdWindow.isDestroyed() || win !== createdWindow) return;
-    windowReady = true;
+    if (createdWindow.isDestroyed()) return;
+    data.ready = true;
     createdWindow.show();
     createdWindow.focus();
   });
 
   // Chromium drops the zoom level on a cross-origin load (the status page is
   // one), so it is restored per load rather than once at startup.
-  win.webContents.on("did-finish-load", () => {
-    if (createdWindow.isDestroyed() || win !== createdWindow) return;
-    createdWindow.webContents.setZoomLevel(clampZoom(zoomLevel));
+  createdWindow.webContents.on("did-finish-load", () => {
+    if (createdWindow.isDestroyed()) return;
+    createdWindow.webContents.setZoomLevel(clampZoom(data.zoomLevel));
     if (inActiveWindow(createdWindow.webContents.getURL())) {
       const stored = readStoredAccounts();
       if (stored.activeId) refreshAccountLabel(stored.activeId, createdWindow.webContents);
@@ -840,31 +887,37 @@ function createWindow() {
   });
   // A commit means the server answered, so the stall guard's job is done —
   // whatever the page does from here is the app's own to report.
-  win.webContents.on("did-navigate", clearStallGuard);
+  createdWindow.webContents.on("did-navigate", () => clearStallGuard(createdWindow));
   // Pinch and wheel zoom land in the renderer, so the level has to be read back
   // a tick later; the View menu's roles are picked up by saveWindowState.
-  win.webContents.on("zoom-changed", () => {
+  createdWindow.webContents.on("zoom-changed", () => {
     setTimeout(() => {
-      if (!win || win.isDestroyed() || win !== createdWindow) return;
-      zoomLevel = clampZoom(win.webContents.getZoomLevel());
+      if (createdWindow.isDestroyed()) return;
+      data.zoomLevel = clampZoom(createdWindow.webContents.getZoomLevel());
     }, 0);
   });
 
-  win.on("close", (e) => {
-    saveWindowState();
-    if (!quitting) {
-      e.preventDefault();
-      win.hide();
+  createdWindow.on("close", (event) => {
+    if (quitting) return;
+    saveWindowState(createdWindow);
+    // Keep the established Mac behavior for the last workspace: closing it
+    // hides the app without discarding its route or drafts. Extra windows close
+    // normally so hidden renderers do not accumulate.
+    if (appWindows.size === 1) {
+      event.preventDefault();
+      createdWindow.hide();
     }
   });
-  win.on("closed", () => {
-    windowReady = false;
-    win = null;
+  createdWindow.on("closed", () => {
+    clearTimeout(data.saveTimer);
+    clearStallGuard(createdWindow);
+    appWindows.delete(createdWindow);
+    if (win === createdWindow) win = activeWindow();
   });
 
   // Keep app navigation in-window; everything else (the device-code page, PR
   // links, docs, …) goes to the default browser.
-  win.webContents.on("will-navigate", (e, url) => {
+  createdWindow.webContents.on("will-navigate", (e, url) => {
     if (!inActiveWindow(url)) {
       e.preventDefault();
       openExternal(url);
@@ -872,17 +925,20 @@ function createWindow() {
     }
     // The status page navigates back to the app on its own, and that retry can
     // stall the same way the first load did.
-    armStallGuard();
+    armStallGuard(createdWindow);
   });
-  win.webContents.setWindowOpenHandler(({ url }) => {
-    if (inActiveWindow(url)) return { action: "allow" };
+  createdWindow.webContents.setWindowOpenHandler(({ url }) => {
+    if (inActiveWindow(url)) {
+      createWindow(url);
+      return { action: "deny" };
+    }
     openExternal(url);
     return { action: "deny" };
   });
 
   // Native right-click menu (copy link, copy, paste, …) — Electron shows
   // nothing by default.
-  win.webContents.on("context-menu", (_e, params) => {
+  createdWindow.webContents.on("context-menu", (_e, params) => {
     const items = [];
 
     if (params.linkURL) {
@@ -901,7 +957,10 @@ function createWindow() {
 
     if (params.hasImageContents && params.srcURL) {
       items.push(
-        { label: "Copy Image", click: () => win.webContents.copyImageAt(params.x, params.y) },
+        {
+          label: "Copy Image",
+          click: () => createdWindow.webContents.copyImageAt(params.x, params.y),
+        },
         { label: "Copy Image Address", click: () => clipboard.writeText(params.srcURL) },
         { type: "separator" },
       );
@@ -922,27 +981,29 @@ function createWindow() {
     // Drop a trailing separator so link-only menus end cleanly.
     while (items.length && items[items.length - 1].type === "separator") items.pop();
     if (!items.length) return;
-    Menu.buildFromTemplate(items).popup({ window: win });
+    Menu.buildFromTemplate(items).popup({ window: createdWindow });
   });
 
   // Show a themed recovery page instead of Chromium's network error.
-  win.webContents.on("did-fail-load", (_e, code, _desc, _url, isMainFrame) => {
+  createdWindow.webContents.on("did-fail-load", (_e, code, _desc, _url, isMainFrame) => {
     if (!isMainFrame) return;
     // A superseded navigation aborts as a matter of course, so ERR_ABORTED is
     // not a failure to report. It must not call off the stall guard either: an
     // abort that commits nothing is the empty window this guards against.
     if (code === -3 /* ERR_ABORTED */) return;
-    showStatusPage();
+    showStatusPage(createdWindow);
   });
 
   // Belt-and-braces: if the renderer ever dies, come back instead of showing
   // a dead window.
-  win.webContents.on("render-process-gone", (_e, details) => {
+  createdWindow.webContents.on("render-process-gone", (_e, details) => {
     if (details.reason === "clean-exit") return;
-    openHome();
+    openHome(createdWindow);
   });
 
-  openHome();
+  if (initialURL && inActiveWindow(initialURL)) loadApp(initialURL, createdWindow);
+  else openHome(createdWindow);
+  return createdWindow;
 }
 
 async function refreshAccountLabel(accountID, webContents) {
@@ -1003,7 +1064,7 @@ function syncBackgroundAccountWindows() {
   }
 }
 
-function switchAccount(id, targetURL = null) {
+function switchAccount(id, targetURL = null, target = activeWindow()) {
   const stored = readStoredAccounts();
   const account = stored.accounts.find((candidate) => candidate.id === id);
   if (!account || account.id === stored.activeId) return;
@@ -1014,8 +1075,8 @@ function switchAccount(id, targetURL = null) {
   // Capturing before setServer changes the active origin preserves sessions,
   // workspace panes, review tabs, and route refinements independently per org.
   const current = stored.accounts.find((candidate) => candidate.id === stored.activeId);
-  if (current && win && !win.isDestroyed()) {
-    const currentUrl = resumableAccountUrl(current.url, win.webContents.getURL());
+  if (current && target && !target.isDestroyed()) {
+    const currentUrl = resumableAccountUrl(current.url, target.webContents.getURL());
     if (currentUrl) current.lastUrl = currentUrl;
   }
   const destination =
@@ -1023,20 +1084,21 @@ function switchAccount(id, targetURL = null) {
   account.lastUrl = destination;
   stored.activeId = account.id;
   if (!writeStoredAccounts(stored)) return;
-  addingAccount = false;
   setServer(account.url);
   syncBackgroundAccountWindows();
   buildAppMenu();
   initAutoUpdate();
-  showWindow();
-  loadApp(destination);
+  const destinationWindow = showWindow(target);
+  for (const appWindow of appWindows) {
+    loadApp(appWindow === destinationWindow ? destination : account.url, appWindow);
+  }
 }
 
-// What the window opens on: the app once there is a server to open, and the
+// What a window opens on: the app once there is a server to open, and the
 // question itself until then.
-function openHome() {
-  if (APP_URL) loadApp(APP_URL);
-  else showSetup();
+function openHome(target = activeWindow()) {
+  if (APP_URL) loadApp(APP_URL, target);
+  else showSetup("app", target);
 }
 
 function organizationAccountMenuItems(stored = readStoredAccounts()) {
@@ -1070,17 +1132,15 @@ function buildAppMenu() {
               {
                 label: "Add organization…",
                 click: () => {
-                  addingAccount = true;
-                  showWindow();
-                  showSetup();
+                  const target = showWindow();
+                  showSetup("app", target, true);
                 },
               },
               {
                 label: "Edit current server…",
                 click: () => {
-                  addingAccount = false;
-                  showWindow();
-                  showSetup();
+                  const target = showWindow();
+                  showSetup("app", target);
                 },
               },
             ],
@@ -1095,7 +1155,17 @@ function buildAppMenu() {
           { role: "quit" },
         ],
       },
-      { role: "fileMenu" },
+      {
+        label: "File",
+        submenu: [
+          {
+            label: "New Window",
+            accelerator: "CommandOrControl+N",
+            click: () => createWindow(),
+          },
+          { role: "close" },
+        ],
+      },
       { role: "editMenu" },
       { role: "viewMenu" },
       { role: "windowMenu" },
@@ -1160,13 +1230,14 @@ app.whenReady().then(async () => {
     try { origin = new URL(source).origin; } catch { return; }
     const stored = readStoredAccounts();
     const account = stored.accounts.find((candidate) => new URL(candidate.url).origin === origin);
-    if (account && account.id !== stored.activeId) switchAccount(account.id, source);
-    else showWindow();
+    const target = eventWindow(e) || activeWindow();
+    if (account && account.id !== stored.activeId) switchAccount(account.id, source, target);
+    else showWindow(target);
   });
 
   const fromActiveOrganizationPicker = (e) => {
     const source = e.senderFrame?.url ?? "";
-    return !!win && e.sender === win.webContents && inActiveWindow(source);
+    return !!eventWindow(e) && inActiveWindow(source);
   };
   ipcMain.handle("os1:organizations-list", (e) => {
     if (!fromActiveOrganizationPicker(e)) return null;
@@ -1182,7 +1253,9 @@ app.whenReady().then(async () => {
     };
   });
   ipcMain.on("os1:organizations-switch", (e, id) => {
-    if (fromActiveOrganizationPicker(e) && typeof id === "string") switchAccount(id);
+    if (fromActiveOrganizationPicker(e) && typeof id === "string") {
+      switchAccount(id, null, eventWindow(e));
+    }
   });
   ipcMain.handle("os1:organizations-add", async (e, raw, check = true) => {
     if (!fromActiveOrganizationPicker(e)) return { ok: false };
@@ -1213,13 +1286,13 @@ app.whenReady().then(async () => {
     }
     // Let invoke resolve before navigation destroys its renderer, then activate
     // the new account through the normal switch path.
-    setImmediate(() => switchAccount(account.id));
+    const target = eventWindow(e);
+    setImmediate(() => switchAccount(account.id, null, target));
     return { ok: true };
   });
   ipcMain.on("os1:organizations-manage", (e) => {
     if (!fromActiveOrganizationPicker(e)) return;
-    addingAccount = false;
-    showSetup();
+    showSetup("app", eventWindow(e));
   });
 
   ipcMain.handle("os1:dictation-start", (e, id, sampleRate, language) => {
@@ -1251,8 +1324,8 @@ app.whenReady().then(async () => {
   ipcMain.on("os1:update-install", (e) => {
     if (!inWindow(e.senderFrame?.url ?? "")) return;
     if (updateState.state !== "downloaded") return;
-    // quitAndInstall closes every window; flip `quitting` first so the
-    // close-to-hide handler doesn't cancel the relaunch.
+    // quitAndInstall closes every window; flip `quitting` first so the last
+    // window's close-to-hide behavior does not cancel the relaunch.
     quitting = true;
     autoUpdater.quitAndInstall();
   });
@@ -1263,13 +1336,14 @@ app.whenReady().then(async () => {
   const fromShellPage = (e) => (e.senderFrame?.url ?? "").startsWith("file://");
 
   ipcMain.on("os1:server-open", (e) => {
-    if (fromShellPage(e)) showSetup("status");
+    if (fromShellPage(e)) showSetup("status", eventWindow(e));
   });
   ipcMain.on("os1:server-cancel", (e) => {
     if (!fromShellPage(e) || !APP_URL) return;
-    addingAccount = false;
-    if (setupReturnDestination === "status") showStatusPage();
-    else loadApp(APP_URL);
+    const target = eventWindow(e);
+    const data = target && windowData.get(target);
+    if (data?.setupReturnDestination === "status") showStatusPage(target);
+    else loadApp(APP_URL, target);
   });
   ipcMain.handle("os1:server-probe", async (e, raw) => {
     if (!fromShellPage(e)) return { ok: false };
@@ -1277,9 +1351,13 @@ app.whenReady().then(async () => {
   });
   ipcMain.handle("os1:server-save", (e, raw) => {
     if (!fromShellPage(e)) return { ok: false };
+    const target = eventWindow(e);
+    const data = target && windowData.get(target);
     const url = normalizeServerUrl(raw);
     if (!url) return { ok: false, error: "That doesn't look like a server address." };
-    if (!writeStoredServer(url)) return { ok: false, error: "Couldn't save that address." };
+    if (!writeStoredServer(url, data?.addingAccount)) {
+      return { ok: false, error: "Couldn't save that address." };
+    }
     // A change reaches a running app by restarting it. The service-worker
     // block, the update feed, the origins this window keeps and the page
     // already loaded were all wired to the old address, and one restart is
@@ -1293,7 +1371,9 @@ app.whenReady().then(async () => {
     }
     setServer(url);
     initAutoUpdate();
-    if (!flushPendingDeepLink()) openHome();
+    if (!flushPendingDeepLink()) {
+      for (const appWindow of appWindows) openHome(appWindow);
+    }
     return { ok: true };
   });
 
@@ -1307,16 +1387,20 @@ app.whenReady().then(async () => {
 
   initAutoUpdate();
 
-  app.on("activate", showWindow);
+  app.on("activate", () => showWindow());
 
   // Waking with the network still down is how the shell lands on the status
   // page in the first place, and that page can only retry while it is the page
   // on screen. A loaded app reconnects on its own and would lose drafts and
   // scroll position on a reload, so only the status page is retried here.
   powerMonitor.on("resume", () => {
-    if (!win || win.isDestroyed() || !APP_URL) return;
-    // Named rather than any file:// page: the setup page is someone typing.
-    if (win.webContents.getURL().includes("offline.html")) loadApp(APP_URL);
+    if (!APP_URL) return;
+    for (const appWindow of appWindows) {
+      // Named rather than any file:// page: the setup page is someone typing.
+      if (appWindow.webContents.getURL().includes("offline.html")) {
+        loadApp(APP_URL, appWindow);
+      }
+    }
   });
 });
 
