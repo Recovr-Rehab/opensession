@@ -707,9 +707,10 @@ export function bootstrapSignature(): string {
   );
 }
 
-function remoteRunnerInstallCommand(): string {
+function remoteRunnerInstallCommand(force = false): string {
   const temporary = `${REMOTE_RUNNER_BINARY}.tmp`;
   return (
+    `${force ? `rm -f ${shellQuoteWord(REMOTE_RUNNER_BINARY)} && ` : ""}` +
     `test -x ${shellQuoteWord(REMOTE_RUNNER_BINARY)} || { ` +
     `cd ${shellQuoteWord(REMOTE_REPO)} && rm -f ${shellQuoteWord(temporary)} && ` +
     `HOME=${REMOTE_HOME} ${REMOTE_BUN} build --compile ` +
@@ -1019,7 +1020,7 @@ export async function bootstrapRemoteSandbox(
   );
   log("compiling the single-file runner host…");
   need(
-    await driver.exec(remoteRunnerInstallCommand(), { timeoutMs: 600_000 }),
+    await driver.exec(remoteRunnerInstallCommand(true), { timeoutMs: 600_000 }),
     "compiled runner host install",
   );
 
