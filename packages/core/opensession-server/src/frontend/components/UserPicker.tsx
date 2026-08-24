@@ -11,7 +11,7 @@ import { cn } from "../ui/cn";
 import { DeviceCode } from "../ui/device-code";
 import { InlineAlert } from "../ui/state";
 import { PulseDot } from "../ui/status";
-import { AUTH_STATUS_EVENT } from "../lib/auth-ready";
+import { AUTH_STATUS_EVENT, authGatesOut } from "../lib/auth-ready";
 
 /**
  * Mutable compatibility view for older consumers. `usePeople()` owns the
@@ -85,6 +85,14 @@ let authStatusCache: AuthStatus | null = null;
 function setAuthStatusCache(status: AuthStatus) {
   authStatusCache = status;
   window.dispatchEvent(new Event(AUTH_STATUS_EVENT));
+}
+
+/** Publish an auth status discovered outside UserGate — the WebSocket layer
+ *  learns the gate turned on (or that a fresh load landed on a gated instance)
+ *  from a refused upgrade, and drives UserGate to the sign-in card through
+ *  this, without a reload that would loop on the card's own refused socket. */
+export function publishAuthStatus(status: AuthStatus): void {
+  setAuthStatusCache(status);
 }
 
 /** Reactive sign-in state; null until /api/auth/status answers (or when the
@@ -261,6 +269,25 @@ export function UserGate({ children }: { children: React.ReactNode }) {
   useEffect(() => {
 		loadAuth();
   }, []);
+
+	// A refused WebSocket upgrade can reveal the gate is up before this
+	// component's own status resolves (the optimistic paint below) or after it
+	// resolved to no-gate (the gate was enabled under an open tab). Honor that
+	// signal so the sign-in card, not a "reconnecting" overlay, stands in for a
+	// browser the server will no longer accept.
+	const liveAuth = useAuthStatus();
+	if (authGatesOut(liveAuth) && !(auth?.required && auth.authenticated)) {
+		return (
+			<GithubSignIn
+				reconnect={liveAuth!.reconnectRequired === true}
+				login={liveAuth!.login}
+				onSignedIn={(status) => {
+					setAuth(status);
+					setAuthStatusCache(status);
+				}}
+			/>
+		);
+	}
 
 	// Returning visitors already have a local identity. Let the app paint while
 	// the server verifies its HttpOnly session, as it did before this check grew
