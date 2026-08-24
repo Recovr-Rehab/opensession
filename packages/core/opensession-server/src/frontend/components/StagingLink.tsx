@@ -18,16 +18,22 @@ import { useShortcutLabel } from "../hooks/useShortcutBindings";
 // mounts once per layout variant, so a listener here would register several
 // times. All that happens here is advertising whatever it is bound to.
 
-/* The amber pill in the workspace panel. Sized to the Merge button it sits
-   beside (13px/600, 5px 11px, 7px corner) so the two read as one row. The base
-   carries geometry only — each state below brings its own border and ink, so
-   nothing has two competing colour utilities on it. */
+/* The pill in the workspace panel. Sized to the Merge button it sits beside
+   (13px/600, 5px 11px, 7px corner) so the two read as one row. The base carries
+   geometry only — each state below brings its own border and ink, so nothing
+   has two competing colour utilities on it.
+
+   Same three-state colouring as the header globe, because it reports the same
+   thing: green once the deploy is up and the link actually works, amber while
+   one is in flight. */
 const LINK_BASE =
 	"inline-flex items-center gap-[5px] whitespace-nowrap rounded-md border px-[11px] py-[5px] text-label font-semibold no-underline";
-const LINK_READY = "border-yellow/45 text-yellow hover:bg-yellow/12";
-/* Deploy still building — not testable yet, so a plain click is swallowed (see
-   onClick) and the pill reads as not-ready with a spinning globe. */
-const LINK_BUILDING = `${LINK_READY} cursor-default opacity-55`;
+const LINK_READY = "border-green/45 text-green hover:bg-green-soft";
+/* A deploy is in flight. A rebuild still opens the previous deploy, so it stays
+   a live link; a first build is not testable yet, so LINK_BUILDING below
+   swallows the click (see onClick) on top of this. */
+const LINK_DEPLOYING = "border-yellow/45 text-yellow hover:bg-yellow/12";
+const LINK_BUILDING = `${LINK_DEPLOYING} cursor-default opacity-55`;
 /* Nothing to link to yet: quiet, and no hover wash to imply it opens. */
 const LINK_PENDING = "border-line text-dim cursor-default";
 
@@ -439,7 +445,7 @@ export function StagingLink({
 			rel="noopener"
 			onClick={onClick}
 			aria-disabled={building || undefined}
-			className={`${LINK_BASE} ${building ? LINK_BUILDING : LINK_READY}`}
+			className={`${LINK_BASE} ${building ? LINK_BUILDING : rebuilding ? LINK_DEPLOYING : LINK_READY}`}
 			title={`${tooltip("right-click to copy the link")} · ${href}`}
 		>
 			{globe(15, RING_SM)}
