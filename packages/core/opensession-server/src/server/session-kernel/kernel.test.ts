@@ -1142,6 +1142,59 @@ describe("SessionKernel durable runtime", () => {
 		expect(store.stats().deadLetteredOutbox).toBe(0);
 	});
 
+	test("dead-lettered creation effects fail their actor lifecycle", async () => {
+		const {
+			CreationEffectIndeterminateError,
+			ensureCreationEffectExecutors,
+		} = await import("./creation-effect-executors");
+		const {
+			drainSessionKernelRuntime,
+			waitForSessionKernelRuntimeIdle,
+		} = await import("./runtime");
+		const { replaceSessionEffectExecutorForTest } = await import("./effect-executors");
+		ensureCreationEffectExecutors();
+		store.applyCreationEvent({
+			sessionId: "creation-dead",
+			identity: "identity-dead",
+			event: "plan",
+		});
+		store.applyCreationEvent({
+			sessionId: "creation-dead",
+			identity: "identity-dead",
+			event: "preparation_started",
+			nextEffectId: "sandbox:dead",
+			effect: {
+				kind: "creation_sandbox_prepare",
+				effectKey: "sandbox:dead",
+				payload: {
+					creationIdentity: "identity-dead",
+					creationGeneration: 1,
+					provider: "modal",
+					sandboxKey: "creation-dead",
+					mode: "adopt_or_create",
+				},
+			},
+		});
+		const unregister = replaceSessionEffectExecutorForTest(
+			"creation_sandbox_prepare",
+			() => {
+				throw new CreationEffectIndeterminateError("ambiguous sandbox");
+			},
+		);
+		try {
+			await drainSessionKernelRuntime();
+			await waitForSessionKernelRuntimeIdle();
+			expect(store.creationState("creation-dead")).toMatchObject({
+				state: "failed",
+				currentEffectId: undefined,
+				completedEffectIds: ["sandbox:dead"],
+			});
+			expect(store.stats().deadLetteredOutbox).toBe(1);
+		} finally {
+			unregister();
+		}
+	});
+
 	test("re-admits only pre-execution branch compatibility false positives", () => {
 		const sharedPayload = {
 			creationIdentity: "creation-one",
@@ -1181,6 +1234,40 @@ describe("SessionKernel durable runtime", () => {
 			sharedPayload,
 			"different-failure",
 		);
+		const ownEffect = (
+			sessionId: string,
+			effectKey: string,
+			payload: Record<string, unknown>,
+		) => {
+			store.applyCreationEvent({
+				sessionId,
+				identity: String(payload.creationIdentity),
+				event: "plan",
+			});
+			store.applyCreationEvent({
+				sessionId,
+				identity: String(payload.creationIdentity),
+				event: "preparation_started",
+				nextEffectId: effectKey,
+				effect: {
+					kind: "creation_branch_prepare",
+					effectKey,
+					payload: payload as any,
+				},
+			});
+		};
+		ownEffect("shared-session", "shared-branch", sharedPayload);
+		ownEffect("ordinary-session", "ordinary-branch", {
+			...sharedPayload,
+			worktreePath: "/srv/ordinary",
+		});
+		ownEffect("legacy-session", "legacy-empty-base", {
+			...sharedPayload,
+			project: "tella-fusion",
+			worktreePath: "/srv/tella-fusion-feature",
+			baseBranch: "",
+		});
+		ownEffect("different-session", "different-failure", sharedPayload);
 		store.noteOutboxFailure(
 			matching,
 			"Worktree destination /srv/opensession exists without a registered branch",
