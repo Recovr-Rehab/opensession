@@ -616,6 +616,24 @@ export class DaytonaProvider implements SandboxProvider {
     }
   }
 
+  /** Release compute while retaining the session's exact volume workspace. */
+  async pause(sandboxId: string): Promise<void> {
+    const client = await daytonaClient();
+    const sbx = await client.get(sandboxId);
+    if (sbx && stateOf(sbx) === "running") await sbx.stop(120);
+  }
+
+  async resume(sandboxId: string): Promise<Sandbox | null> {
+    const state = readRemoteState(this.id, sandboxId);
+    if (!state) return null;
+    const client = await daytonaClient();
+    const sbx = await client.get(sandboxId);
+    if (!sbx || stateOf(sbx) === "gone") return null;
+    if (stateOf(sbx) !== "running") await sbx.start(120);
+    await daytonaDriver(sbx).ensureStarted();
+    return this.makeHandle(sbx, state.sessionId, state.cwd);
+  }
+
   /** Deletes the sandbox — and with it the volume-style workspace (documented
    *  data loss: push your work). */
   async destroy(sandboxId: string): Promise<void> {
