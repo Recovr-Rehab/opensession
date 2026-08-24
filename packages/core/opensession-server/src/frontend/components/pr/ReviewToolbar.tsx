@@ -5,7 +5,7 @@ import { WS_SUMMARY_REVIEW_BAR_CLEARANCE } from "../../lib/workspace-summary-cla
  * The floating review toolbar shared by branches with and without a pull
  * request. It stays edge to edge on phone and clears the standing workspace
  * summary on wide review canvases. The sticky outer surface masks code through
- * its insets; a lower layer softens the edge without fading pinned file borders.
+ * its inset; an opaque lower mask keeps scrolled code beneath pinned file headers.
  */
 export function ReviewToolbar({
   children,
@@ -20,19 +20,26 @@ export function ReviewToolbar({
   const placement = compact
     ? `sticky top-0 z-20 desktop:mb-0 desktop:ml-2 desktop:pb-2 ${WS_SUMMARY_REVIEW_BAR_CLEARANCE}`
     : "desktop:mx-2 desktop:mb-2";
+  // File headers pin 61px below the scroll edge. Fill everything between the
+  // toolbar and that edge so its code cannot scroll above its own header.
+  const fileMask = flushTop
+    ? "top-[42px] h-5 -mb-5"
+    : "top-[52px] h-2.5 -mb-2.5";
 
   return (
     <>
-      <div className={`relative shrink-0 bg-surface ${placement}`}>
+      <div
+        className={`relative shrink-0 bg-surface ${flushTop ? "" : "desktop:pt-2.5"} ${placement}`}
+      >
         <div
-          className={`relative bg-surface ${flushTop ? "" : "desktop:mt-2.5"} desktop:rounded-lg desktop:border desktop:border-line ${compact ? "desktop:overflow-hidden" : "desktop:overflow-visible"}`}
+          className={`relative bg-surface desktop:rounded-lg desktop:border desktop:border-line ${compact ? "desktop:overflow-hidden" : "desktop:overflow-visible"}`}
         >
           {children}
         </div>
       </div>
       {compact && (
         <div
-          className="pointer-events-none sticky top-[60px] z-[5] mx-2 hidden h-3 -mb-3 overflow-clip rounded-t-lg bg-[linear-gradient(to_bottom,var(--bg),transparent)] desktop:block"
+          className={`pointer-events-none sticky z-[5] mx-2 hidden bg-surface desktop:block ${fileMask}`}
           aria-hidden="true"
         />
       )}

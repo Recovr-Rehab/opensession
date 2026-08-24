@@ -74,8 +74,12 @@ test("reviews with and without a PR share the floating toolbar", () => {
 		"<ReviewToolbar compact={compactToolbar} flushTop={flushToolbarTop}>\n          <div className={PR_NO_PR_BAR}>",
 	);
 	expect(reviewToolbarSource).toContain(
-		'flushTop ? "" : "desktop:mt-2.5"',
+		'flushTop ? "" : "desktop:pt-2.5"',
 	);
+	expect(reviewToolbarSource).not.toContain("desktop:mt-2.5");
+	expect(reviewToolbarSource).toContain('"top-[42px] h-5 -mb-5"');
+	expect(reviewToolbarSource).toContain('"top-[52px] h-2.5 -mb-2.5"');
+	expect(reviewToolbarSource).not.toContain("linear-gradient");
 	expect(reviewToolbarSource).toContain("desktop:mb-2");
 	expect(reviewToolbarSource).toContain("desktop:overflow-hidden");
 	expect(reviewToolbarSource).toContain("desktop:rounded-lg");
