@@ -4,8 +4,8 @@ import { shouldOpenCreatedSession } from "./new-session-navigation";
 const appSource = await Bun.file(new URL("../App.tsx", import.meta.url)).text();
 
 describe("shouldOpenCreatedSession", () => {
-	test("keeps direct creates navigating", () => {
-		expect(shouldOpenCreatedSession(null, "/session/next", false)).toBe(true);
+	test("does not let a replayed creator reply take the foreground", () => {
+		expect(shouldOpenCreatedSession(null, "/session/current", false)).toBe(false);
 	});
 
 	test("does not navigate for a restart-recovery room announcement", () => {
