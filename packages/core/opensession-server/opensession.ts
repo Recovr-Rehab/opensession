@@ -1045,10 +1045,6 @@ if (!g.__opensessionBooted) {
 				console.error(`[shutdown] ${agent.name} shutdown error:`, e);
 			}
 		}
-		// Stop accepting new HTTP/WS connections; existing ones can finish.
-		try {
-			server.stop();
-		} catch {}
 		// Wait for runner-driven runs (web UI / automations / loops) to settle —
 		// but ONLY the ones a restart would actually kill. Runs on DETACHED
 		// engine servers (pi-detach.ts) survive the restart: their
@@ -1080,6 +1076,12 @@ if (!g.__opensessionBooted) {
 				`[shutdown] ${surviving} run(s) continue on detached engine servers — reattaching on next boot`,
 			);
 		}
+		// Keep HTTP available while runs drain. Stopping the listener before the
+		// bounded wait made Caddy return 502 for the full drain window on every
+		// deploy. Shutdown-aware intake above already parks new agent work.
+		try {
+			server.stop();
+		} catch {}
 		process.exit(0);
 	};
 	process.on("SIGTERM", () => void gracefulShutdown("SIGTERM"));
