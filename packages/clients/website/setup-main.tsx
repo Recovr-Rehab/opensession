@@ -128,8 +128,6 @@ function setupOptionsFor(provider: Provider): Array<{
   ];
 }
 
-const installCommand =
-  "curl -fsSL https://raw.githubusercontent.com/tellahq/opensession/main/install.sh | bash";
 const macDownloadUrl =
   "https://github.com/tellahq/opensession/releases/download/v0.4.0/OpenSession-0.4.0-arm64.dmg";
 const tailscaleCommand =
@@ -660,7 +658,7 @@ function SetupPage() {
                 <IconPhone size={26} />
               </span>
               <span className="setup-download-card-copy">
-                <strong>iPhone and iPad</strong>
+                <strong>iPhone and iPad PWA</strong>
                 <small>Add the web app to your home screen</small>
               </span>
               <IconChevronLeft className="setup-terminal-chevron" size={17} />
@@ -697,39 +695,6 @@ function SetupPage() {
             </span>
             <span className="setup-download-action">Coming soon</span>
           </div>
-          <details className="setup-terminal-option">
-            <summary>
-              <span className="setup-terminal-mark" aria-hidden="true">
-                <IconTerminal size={22} />
-              </span>
-              <span className="setup-download-card-copy">
-                <strong>Install via Terminal</strong>
-                <small>Set up the server from the command line</small>
-              </span>
-              <IconChevronLeft className="setup-terminal-chevron" size={17} />
-            </summary>
-            <div className="setup-terminal-content">
-              <CopyCommand command={installCommand} label="install command" />
-              <ol className="setup-mini-steps">
-                <li>
-                  <span className="setup-mini-step-index">1</span>
-                  <span>Run the command as your regular user.</span>
-                </li>
-                <li>
-                  <span className="setup-mini-step-index">2</span>
-                  <span>
-                    Choose the <code>100.x</code> Tailscale address when asked.
-                  </span>
-                </li>
-                <li>
-                  <span className="setup-mini-step-index">3</span>
-                  <span>
-                    Install and start the service when the installer asks.
-                  </span>
-                </li>
-              </ol>
-            </div>
-          </details>
         </div>
       </StepLayout>
     </section>,
