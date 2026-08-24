@@ -656,6 +656,9 @@ function routePath(route: Route): string {
 type NavState = {
 	d: number | null;
 	settingsReturn?: SettingsReturn;
+	/** A PWA cold-launch restore, so an archived remembered session can yield
+	 * back to home without breaking explicit deep links to archived work. */
+	restoredSession?: string;
 } | null;
 function currentNavState(): NavState {
 	const state = history.state as NavState;
@@ -741,7 +744,13 @@ export function App(
 				const restored: Route = { view: "session", id: lastId };
 				// Push rather than replace: the home entry we actually landed on stays
 				// beneath as the root, so Back returns to it instead of out of the app.
-				history.pushState(navState(1), "", routePath(restored));
+				// Mark this as an automatic restore. Explicit deep links intentionally
+				// keep opening archived sessions, but a stale PWA memory should not.
+				history.pushState(
+					{ d: 1, restoredSession: lastId } satisfies NonNullable<NavState>,
+					"",
+					routePath(restored),
+				);
 				return restored;
 			}
 		}
@@ -2063,6 +2072,22 @@ const path = await resolveAnonymousUserPath(
 		route.view === "session" ? route.id : null,
 		listedSession,
 	);
+	// iOS can kill a standalone PWA before the archive navigation commits. Its
+	// next cold launch then restores the stale last-session id from localStorage.
+	// Once hydration proves that an automatic restore is archived, return to the
+	// home entry beneath it. A real URL/deep link has no restoredSession marker
+	// and remains openable, which is the Archived screen's contract.
+	useEffect(() => {
+		if (
+			route.view !== "session" ||
+			!currentSession?.archived ||
+			currentNavState()?.restoredSession !== route.id
+		)
+			return;
+		localStorage.removeItem("opensession-last-session");
+		localStorage.removeItem("opensession-last-session-user");
+		navigate({ view: "prs" }, { replace: true });
+	}, [currentSession?.archived, route]);
 	const shellLoading = loading && !currentSession;
 
 	// Tear down the launch splash (rendered in index.html) once there is
@@ -3987,6 +4012,13 @@ if (siblingCreateRef.current === optimisticId)
 	}, [runningCloseConfirmation]);
 	const rememberArchived = (ids: string[]) => {
 		if (!ids.length) return;
+		// Do not let a successful archive remain the PWA's cold-launch target if
+		// iOS suspends it before the route change paints. A navigation to another
+		// session writes that newer id back through the route effect above.
+		if (ids.includes(localStorage.getItem("opensession-last-session") || "")) {
+			localStorage.removeItem("opensession-last-session");
+			localStorage.removeItem("opensession-last-session-user");
+		}
 		setArchiveUndo((prev) =>
 			[
 				// An id lives in one entry only: archiving a session again moves it to
