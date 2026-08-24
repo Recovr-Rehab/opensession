@@ -2150,8 +2150,14 @@ export function App(
 				return;
 			}
 			if (msg.type === "session_created") {
-				const draft = pendingCreateDraftRef.current;
-				pendingCreateDraftRef.current = null;
+				const pendingDraft = pendingCreateDraftRef.current;
+				// A session-room announcement can arrive from restart recovery through
+				// a watch that was in flight while the person changed routes. It is not
+				// the reply to this browser's create, so it neither consumes that draft
+				// nor gets to take the foreground.
+				const roomScoped = "sessionId" in msg;
+				const draft = pendingDraft?.id === msg.id ? pendingDraft : null;
+				if (draft) pendingCreateDraftRef.current = null;
 				const openedOptimistically =
 					draft?.openImmediately === true && draft.id === msg.id;
 				if (openedOptimistically) {
@@ -2174,6 +2180,7 @@ export function App(
 					draft,
 					routePath(routeRef.current),
 					paletteOpenRef.current,
+					roomScoped,
 				);
 				// Pin the just-created session for its creator (this WS reply is
 				// creator-only, so it never pins a teammate's new session onto my bar).
