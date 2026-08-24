@@ -283,9 +283,12 @@ export async function handleConnectionsRoutes(
 		/^\/api\/connections\/mcp\/([^/]+)\/oauth$/,
 	);
 	if (mcpOauthMatch && req.method === "GET") {
-		const { mcpOauthStatus, isOauthCapable, oauthPresetFor } = await import(
-			"../mcp-oauth"
-		);
+		const {
+			mcpOauthStatus,
+			isOauthCapable,
+			oauthPresetFor,
+			supportsManualToken,
+		} = await import("../mcp-oauth");
 		const name = decodeURIComponent(mcpOauthMatch[1]);
 		const status = mcpOauthStatus(name);
 		const cfg = (await import("../connections")).readMcpConfig().mcpServers[
@@ -297,7 +300,11 @@ export async function handleConnectionsRoutes(
 		const capable =
 			!!oauthPresetFor(name) ||
 			(oauthTarget ? await isOauthCapable(oauthTarget) : false);
-		return Response.json({ ...status, capable });
+		return Response.json({
+			...status,
+			capable,
+			manualToken: supportsManualToken(name) && !!cfg?.url,
+		});
 	}
 	if (mcpOauthMatch && req.method === "DELETE") {
 		const { removeMcpOauthGrant } = await import("../mcp-oauth");
