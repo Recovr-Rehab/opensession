@@ -11,7 +11,7 @@
  * desktop window has, so the swap lands on the same pixels. Re-run it whenever
  * the demo's fixtures or the app's chrome change:
  *
- *   bun scripts/build-website.ts && bun scripts/capture-demo-poster.ts
+ *   bun run website:build && bun scripts/capture-demo-poster.ts
  *
  * One shot per theme, because the preview follows the visitor's system theme.
  */
@@ -25,7 +25,7 @@ import {
 } from "./lib/cdp-browser";
 
 const ROOT = join(import.meta.dir, "..");
-const DIST = join(ROOT, ".website-dist");
+const WEBSITE = join(ROOT, "packages", "clients", "website");
 
 /**
  * The app's layout width in the preview. Keep in step with ProductDemo.tsx.
@@ -90,19 +90,26 @@ async function connect(port: number, targetId: string) {
   return { send, close: () => ws.close() };
 }
 
-if (!(await Bun.file(join(DIST, "product-demo.html")).exists()))
-  throw new Error("no .website-dist — run `bun scripts/build-website.ts` first");
+if (!(await Bun.file(join(WEBSITE, ".next", "BUILD_ID")).exists()))
+  throw new Error("no Next.js build — run `bun run website:build` first");
 
-const server = Bun.serve({
+const reservation = Bun.serve({
   port: 0,
   hostname: "127.0.0.1",
-  async fetch(request) {
-    const path = new URL(request.url).pathname;
-    const file = Bun.file(DIST + (path === "/" ? "/index.html" : path));
-    return (await file.exists()) ? new Response(file) : new Response("", { status: 404 });
-  },
+  fetch: () => new Response(""),
 });
-const base = `http://127.0.0.1:${server.port}`;
+const port = reservation.port;
+reservation.stop(true);
+const nextServer = Bun.spawn(
+  ["bun", "--cwd", WEBSITE, "start", "--port", String(port)],
+  { cwd: ROOT, stdout: "inherit", stderr: "inherit" },
+);
+const base = `http://127.0.0.1:${port}`;
+const deadline = Date.now() + 20_000;
+while (!(await fetch(`${base}/product-demo.html`).then((response) => response.ok).catch(() => false))) {
+  if (Date.now() > deadline) throw new Error("Next.js website did not start");
+  await sleep(100);
+}
 const scratch = mkdtempSync(join(tmpdir(), "demo-poster-"));
 
 const lease = await acquireCdpBrowser();
@@ -176,6 +183,7 @@ try {
   }
 } finally {
   await releaseCdpBrowser(lease);
-  server.stop(true);
+  nextServer.kill();
+  await nextServer.exited;
   rmSync(scratch, { recursive: true, force: true });
 }

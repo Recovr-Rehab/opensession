@@ -535,14 +535,11 @@ summary:focus-visible {
 	transition: transform 160ms cubic-bezier(0.23, 1, 0.32, 1), filter 160ms ease;
 }
 
-/* The filled control, shared by the rail CTA and the modal's submit: the
-   product's blue at the top edge, shading one step deeper at the foot. Still
-   no cast shadow, which is what used to make it read as a marketing badge;
-   the relief comes from the fill itself plus the lit top edge. The shade runs
-   downward, so the deeper foot lifts white text to 5.5:1 instead of pushing
-   it below the top stop's 4.2. */
-.button-primary,
-.waitlist-form button {
+/* The filled control uses the product's blue at the top edge, shading one
+   step deeper at the foot. Still no cast shadow, which is what used to make it
+   read as a marketing badge; the relief comes from the fill itself plus the
+   lit top edge. */
+.button-primary {
 	border: 0;
 	background-color: var(--accent-blue);
 	background-image: linear-gradient(
@@ -554,155 +551,12 @@ summary:focus-visible {
 	color: #fff;
 }
 
-.button-primary:hover,
-.waitlist-form button:hover {
+.button-primary:hover {
 	filter: brightness(1.06);
 }
 
-.button:active,
-.waitlist-form button:active {
+.button:active {
 	transform: scale(0.96);
-}
-
-/* ── Waitlist ─────────────────────────────────────────────────────────── */
-
-.waitlist-form {
-	display: flex;
-	position: relative;
-	min-height: 60px;
-	align-items: center;
-	gap: 8px;
-	margin-top: 20px;
-	padding: 7px 7px 7px 14px;
-	border: 1px solid rgba(var(--ink-rgb), 0.14);
-	border-radius: calc(14px * var(--rf));
-	corner-shape: var(--cs);
-	background: var(--field);
-}
-
-.waitlist-form:focus-within {
-	border-color: rgba(31, 130, 187, 0.55);
-	box-shadow: 0 0 0 3px rgba(31, 130, 187, 0.14);
-}
-
-.waitlist-form input {
-	min-width: 0;
-	flex: 1;
-	padding: 0 4px;
-	border: 0;
-	background: none;
-	color: var(--ink);
-	font-size: 15px;
-	outline: none;
-}
-
-.waitlist-form input::placeholder {
-	color: rgba(var(--ink-rgb), 0.4);
-}
-
-.waitlist-form button {
-	display: inline-flex;
-	height: 44px;
-	align-items: center;
-	justify-content: center;
-	padding: 0 18px;
-	border-radius: calc(12px * var(--rf));
-	corner-shape: var(--cs);
-	letter-spacing: -0.012em;
-	cursor: pointer;
-	font-size: 14px;
-	font-weight: 600;
-	white-space: nowrap;
-	transition: transform 160ms cubic-bezier(0.23, 1, 0.32, 1), filter 160ms ease;
-}
-
-.waitlist-form button:disabled {
-	background-image: none;
-	background-color: #83858b;
-	box-shadow: none;
-	cursor: default;
-}
-
-.waitlist-error {
-	position: absolute;
-	top: calc(100% + 10px);
-	left: 2px;
-	margin: 0;
-	color: var(--err);
-	font-size: 13px;
-}
-
-.waitlist-done {
-	display: flex;
-	min-height: 72px;
-	align-items: center;
-	gap: 8px;
-	margin: 20px 0 0;
-	color: var(--ok);
-	font-size: 16px;
-	font-weight: 600;
-}
-
-.waitlist-dialog {
-	width: min(100% - 32px, 440px);
-	padding: clamp(26px, 4vw, 34px);
-	border: 0;
-	border-radius: calc(25px * var(--rf));
-	corner-shape: var(--cs);
-	background: var(--surface);
-	box-shadow: 0 24px 60px var(--surface-shadow);
-	color: var(--ink);
-}
-
-.waitlist-dialog::backdrop {
-	background: var(--scrim);
-	backdrop-filter: blur(4px);
-}
-
-.waitlist-dialog h2 {
-	margin: 0;
-	font-size: 21px;
-	font-weight: 600;
-	letter-spacing: -0.02em;
-	line-height: 1.2;
-}
-
-.waitlist-dialog-body {
-	margin: 8px 0 0;
-	color: rgba(var(--ink-rgb), 0.6);
-	font-size: 15px;
-	line-height: 1.42;
-}
-
-/* The heading and its dismiss share a row, so the × sits on the title's line
-   rather than floating in the corner above it. */
-.waitlist-dialog-head {
-	display: flex;
-	align-items: center;
-	justify-content: space-between;
-	gap: 12px;
-}
-
-.waitlist-dialog-close {
-	display: grid;
-	width: 30px;
-	height: 30px;
-	flex: none;
-	margin-right: -6px;
-	border: 0;
-	border-radius: 50%;
-	background: none;
-	color: rgba(var(--ink-rgb), 0.45);
-	cursor: pointer;
-	font-size: 22px;
-	line-height: 1;
-	place-items: center;
-	transition: background-color 160ms ease, color 160ms ease;
-}
-
-.waitlist-dialog-close:hover {
-	background: rgba(var(--ink-rgb), 0.06);
-	color: var(--ink);
 }
 
 /* ── Narrower ────────────────────────────────────────────────────────── */
@@ -808,28 +662,9 @@ summary:focus-visible {
 	.feed-foot {
 		justify-content: flex-start;
 	}
-
-	.waitlist-form {
-		align-items: stretch;
-		flex-direction: column;
-		padding: 10px;
-	}
-
-	.waitlist-form input {
-		height: 44px;
-		padding: 0 8px;
-	}
 }
 
 @media (prefers-reduced-motion: no-preference) {
-	.waitlist-dialog[open] {
-		animation: dialog-enter 240ms cubic-bezier(0.23, 1, 0.32, 1);
-	}
-
-	.waitlist-dialog[open]::backdrop {
-		animation: backdrop-enter 240ms ease;
-	}
-
 	.rail > *,
 	.stage {
 		animation: enter 700ms cubic-bezier(0.23, 1, 0.32, 1) both;
@@ -842,14 +677,6 @@ summary:focus-visible {
 
 @keyframes enter {
 	from { opacity: 0; transform: translateY(12px); }
-}
-
-@keyframes dialog-enter {
-	from { opacity: 0; transform: translateY(10px) scale(0.98); }
-}
-
-@keyframes backdrop-enter {
-	from { opacity: 0; }
 }
 
 @media (prefers-reduced-motion: reduce) {

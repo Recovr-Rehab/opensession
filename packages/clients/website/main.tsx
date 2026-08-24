@@ -1,10 +1,8 @@
-import type { FormEvent, ReactNode } from "react";
-import { useEffect, useRef, useState } from "react";
+import type { ReactNode } from "react";
 import { createRoot } from "react-dom/client";
-import markUrl from "../mac/build/icon-512.png";
+import markAsset from "../mac/build/icon-512.png";
 import {
 	IconBranches,
-	IconCheck,
 	IconChevronRight,
 	IconClock,
 	IconGlobe,
@@ -21,125 +19,15 @@ import "./site.css";
 import { AgentationFeedback } from "./AgentationFeedback";
 import { ProductDemo } from "./ProductDemo";
 import { TellaBackground } from "./TellaBackground";
+import { assetUrl } from "./asset-url";
 
-/**
- * The Open Session server stores signups and notifies the configured #os
- * Slack channel. Local website development handles the same route itself and
- * writes the same Markdown format without needing the app server.
- */
-const waitlistEndpoint = "/api/waitlist";
+const markUrl = assetUrl(markAsset);
 
 function Mark() {
 	return (
 		<span className="mark">
 			<img src={markUrl} alt="" />
 		</span>
-	);
-}
-
-function WaitlistForm() {
-	const [email, setEmail] = useState("");
-	const [state, setState] = useState<"idle" | "sending" | "done" | "error">(
-		"idle",
-	);
-
-	async function submit(event: FormEvent) {
-		event.preventDefault();
-		if (state === "sending" || state === "done") return;
-		setState("sending");
-		try {
-			if (!waitlistEndpoint) throw new Error("No waitlist endpoint configured");
-			const response = await fetch(waitlistEndpoint, {
-				method: "POST",
-				headers: { "Content-Type": "application/json" },
-				body: JSON.stringify({ email }),
-			});
-			if (!response.ok) throw new Error(String(response.status));
-			setState("done");
-		} catch {
-			setState("error");
-		}
-	}
-
-	if (state === "done") {
-		return (
-			<p className="waitlist-done" role="status">
-				<IconCheck size={20} /> You are added to the waitlist. We will get in
-				touch when the product is ready.
-			</p>
-		);
-	}
-
-	return (
-		<form className="waitlist-form" onSubmit={submit}>
-			<input
-				type="email"
-				name="email"
-				required
-				autoComplete="email"
-				placeholder="you@company.com"
-				aria-label="Email address"
-				value={email}
-				onChange={(event) => setEmail(event.target.value)}
-			/>
-			<button type="submit" disabled={state === "sending"}>
-				{state === "sending" ? "Sending…" : "Request"}
-			</button>
-			{state === "error" && (
-				<p className="waitlist-error" role="alert">
-					That did not go through. Try again in a moment.
-				</p>
-			)}
-		</form>
-	);
-}
-
-/**
- * The waitlist as a modal, so the CTA fills in the email where it stands
- * instead of scrolling somewhere. A native <dialog>
- * carries the backdrop, focus trap and Escape for free.
- */
-function WaitlistDialog({ open, onClose }: { open: boolean; onClose: () => void }) {
-	const ref = useRef<HTMLDialogElement>(null);
-
-	useEffect(() => {
-		const dialog = ref.current;
-		if (!dialog) return;
-		if (open && !dialog.open) {
-			dialog.showModal();
-			// Otherwise the dialog's own autofocus lands on the close button.
-			dialog.querySelector("input")?.focus();
-		}
-		if (!open && dialog.open) dialog.close();
-	}, [open]);
-
-	return (
-		<dialog
-			ref={ref}
-			className="waitlist-dialog"
-			onClose={onClose}
-			// A click on the backdrop lands on the dialog element itself.
-			onClick={(event) => {
-				if (event.target === ref.current) onClose();
-			}}
-		>
-			<div className="waitlist-dialog-head">
-				<h2>Request access</h2>
-				<button
-					type="button"
-					className="waitlist-dialog-close"
-					onClick={onClose}
-					aria-label="Close"
-				>
-					<span aria-hidden="true">×</span>
-				</button>
-			</div>
-			<p className="waitlist-dialog-body">
-				We will walk you through Open Session running on your own machines, with
-				your team in the same session. Leave your email and we will find a time.
-			</p>
-			<WaitlistForm />
-		</dialog>
 	);
 }
 
@@ -191,8 +79,6 @@ function Question({ q, children }: { q: string; children: ReactNode }) {
  * the ask never scrolls away and the feed never has to repeat it.
  */
 function LandingPage() {
-	const [waitlistOpen, setWaitlistOpen] = useState(false);
-
 	return (
 		<div className="shell">
 			<aside className="rail">
@@ -206,13 +92,12 @@ function LandingPage() {
 				</h1>
 
 				<div className="rail-foot">
-					<button
-						type="button"
+					<a
 						className="button button-primary"
-						onClick={() => setWaitlistOpen(true)}
+						href="https://github.com/tellahq/opensession"
 					>
-						Request access
-					</button>
+						Get started
+					</a>
 					<a className="rail-setup-link" href="setup">
 						Set up your server <IconChevronRight size={16} />
 					</a>
@@ -311,8 +196,8 @@ function LandingPage() {
 							read-only access unless you grant more.
 						</Question>
 						<Question q="When can I use it?">
-							We are opening it to a few teams at a time. Ask for access and we
-							will get in touch when it is your turn.
+							You can use it now. Get started on GitHub and run Open Session on
+							your own infrastructure.
 						</Question>
 					</div>
 				</section>
@@ -321,11 +206,6 @@ function LandingPage() {
 					<span>©2026</span>
 				</footer>
 			</main>
-
-			<WaitlistDialog
-				open={waitlistOpen}
-				onClose={() => setWaitlistOpen(false)}
-			/>
 		</div>
 	);
 }

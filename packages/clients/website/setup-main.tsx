@@ -1,8 +1,8 @@
 import { useEffect, useState } from "react";
 import type { ReactNode } from "react";
 import { createRoot } from "react-dom/client";
-import markUrl from "../mac/build/icon-512.png";
-import nativeMarkUrl from "../ios/OS1/Assets.xcassets/AppIcon.appiconset/AppIcon-1024.png";
+import markAsset from "../mac/build/icon-512.png";
+import nativeMarkAsset from "../ios/OS1/Assets.xcassets/AppIcon.appiconset/AppIcon-1024.png";
 import {
   IconCheck,
   IconCheckCircle,
@@ -16,6 +16,10 @@ import {
 import "./site.css";
 import "./setup.css";
 import { AgentationFeedback } from "./AgentationFeedback";
+import { assetUrl } from "./asset-url";
+
+const markUrl = assetUrl(markAsset);
+const nativeMarkUrl = assetUrl(nativeMarkAsset);
 
 type ProviderId = "hetzner" | "digitalocean" | "aws" | "macmini" | "existing";
 type SetupOptionId =

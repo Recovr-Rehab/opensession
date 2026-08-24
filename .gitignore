@@ -22,6 +22,8 @@ node_modules/.bin/codex
 .website-dist/
 .website-dist-stage/
 packages/clients/website/.demo-tailwind.css
+packages/clients/website/.next/
+packages/clients/website/tsconfig.tsbuildinfo
 node_modules
 __pycache__/
 *.pyc

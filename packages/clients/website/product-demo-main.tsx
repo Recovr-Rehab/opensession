@@ -1,7 +1,10 @@
 import { useEffect } from "react";
 import { createRoot } from "react-dom/client";
 import type { TranscriptEntry, UnifiedSession } from "../../core/opensession-server/src/frontend/lib/types";
-import openSessionMark from "../mac/build/icon-512.png";
+import openSessionMarkAsset from "../mac/build/icon-512.png";
+import { assetUrl } from "./asset-url";
+
+const openSessionMark = assetUrl(openSessionMarkAsset);
 
 /**
  * Fixture clocks are relative to page load, not fixed dates: a hard-coded
