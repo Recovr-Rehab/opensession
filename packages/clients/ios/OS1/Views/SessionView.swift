@@ -1156,13 +1156,10 @@ struct SessionView: View {
                         .frame(maxWidth: .infinity, alignment: .leading)
                 }
             }
-            // Like WhatsApp, identity begins after Back and takes the room up
-            // to the actions. Its 44pt minimum matches the controls on both
-            // sides while still allowing Dynamic Type to make it taller.
-            .padding(.leading, 10)
-            .padding(.trailing, 12)
-            .padding(.vertical, 1)
-            .frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
+            // Keep the glass visually tighter than its toolbar-owned 44pt tap
+            // target while leaving enough height for both identity lines.
+            .padding(.horizontal, 8)
+            .frame(maxWidth: .infinity, minHeight: 40, alignment: .leading)
             .contentShape(Capsule())
         }
         // Opt this custom identity control into the same Liquid Glass style as
