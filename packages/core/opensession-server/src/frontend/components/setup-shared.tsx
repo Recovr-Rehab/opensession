@@ -77,8 +77,20 @@ export interface SetupEngine {
 	fixableInApp: boolean;
 }
 
-export interface SetupStatus {
+export interface SetupAccess {
 	publicBaseUrl: string;
+	/** The separate public webhook origin, or null when integrations fall back to the app. */
+	webhookBaseUrl: string | null;
+	port: number;
+	webhookPort: number;
+	tailnetIp: string | null;
+	caddyInstalled: boolean;
+}
+
+export interface SetupStatus {
+	/** Kept at the top level for tolerant native clients on the shared snapshot. */
+	publicBaseUrl: string;
+	access: SetupAccess;
 	repos: SetupRepo[];
 	engine: SetupEngine;
 	team: { count: number; names: string[] };

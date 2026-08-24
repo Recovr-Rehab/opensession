@@ -7,7 +7,6 @@ import {
   SettingCard,
   SettingsGroupLabel,
   SettingsHeader,
-  SettingsHint,
   SettingsPanel,
 } from "../ui/settings";
 import { LoadingState } from "../ui/state";
@@ -16,16 +15,16 @@ import { IdentityCard } from "./SetupIdentity";
 import { IntegrationsList } from "./SetupIntegrations";
 import { ReposSection } from "./SetupRepos";
 import { SetupRestart } from "./SetupRestart";
+import { SetupServerAccess } from "./SetupServerAccess";
 import { TeamSection } from "./SetupTeam";
 import { OrganizationProfileSection } from "./settings/GeneralPanel";
 import { ProviderAccountsSection } from "./settings/ModelAccounts";
 import { ModelProvidersPanel } from "./ModelProviders";
 import { ModelDefaultsSection } from "./Models";
-import { IconArrowUpRight, IconCheck, IconGlobe } from "./icons";
+import { IconCheck } from "./icons";
 import {
   integrationState,
   publicUrlState,
-  StateChip,
   type SetupStatus,
 } from "./setup-shared";
 
@@ -171,7 +170,6 @@ export function SetupPanel({
   const setup = useSetupStatus();
   const { status, failed, refetch } = setup;
   const [aiRevision, setAiRevision] = useState(0);
-  const server = publicUrlState(status?.publicBaseUrl || "");
 
   useEffect(() => {
     document.title = docTitle("Setup");
@@ -205,40 +203,13 @@ export function SetupPanel({
             <SetupPageSection
               id="server"
               title="Server access"
-              description="Keep the instance private and make it reachable from your devices."
+              description="Add a private app domain and a separate public address for signed webhooks."
               className="mt-0"
             >
-              <SettingCard>
-                <div className="flex items-start gap-3 px-5 py-4">
-                  <IconGlobe
-                    size={22}
-                    className="mt-0.5 shrink-0 text-dim"
-                  />
-                  <div className="min-w-0 flex-1">
-                    <div className="text-row-title font-medium text-fg">
-                      {server.tone === "on"
-                        ? "This server is online"
-                        : "Finish server setup"}
-                    </div>
-                    <p className="m-0 mt-1 break-words text-supporting leading-relaxed text-dim">
-                      {server.description}
-                    </p>
-                    <a
-                      href="https://opensession.com/setup"
-                      target="_blank"
-                      rel="noreferrer"
-                      className="mt-3 inline-flex min-h-11 items-center gap-1.5 text-label font-medium text-blue hover:underline desktop:min-h-0"
-                    >
-                      View server guide <IconArrowUpRight size={16} />
-                    </a>
-                  </div>
-                  <StateChip tone={server.tone} label={server.label} />
-                </div>
-              </SettingCard>
-              <SettingsHint>
-                This instance currently opens at {status.publicBaseUrl}. Keep
-                ports 3848 and 3850 closed to the public internet.
-              </SettingsHint>
+              <SetupServerAccess
+                access={status.access}
+                onSaved={setup.applyAccess}
+              />
             </SetupPageSection>
 
             <SetupPageSection
