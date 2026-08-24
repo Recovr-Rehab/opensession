@@ -77,6 +77,8 @@ describe("remote runner bootstrap", () => {
 
     const install = commands.find((command) => command.includes(".local/bin/opensession"));
     expect(install).toStartWith("mkdir -p /home/ubuntu/.local/bin && ");
+    const compile = commands.find((command) => command.includes("bun build --compile"));
+    expect(compile).toContain("rm -f /home/ubuntu/.local/bin/opensession-runner");
     const ghInstall = commands.find((command) => command.includes("releases/download/v2.83.1"));
     expect(ghInstall).toContain("sha256sum -c -");
     expect(ghInstall).toContain("/usr/local/bin/gh");
