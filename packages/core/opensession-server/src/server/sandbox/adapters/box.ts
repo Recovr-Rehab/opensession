@@ -676,7 +676,7 @@ export function boxDriver(cfg: BoxClientConfig, boxId: string): RemoteDriver {
       // Its per-command HTTP proxy can report box_direct_failed while the VM
       // and durable disk are healthy. Reuse the installed key and the current
       // IPv4 endpoint after coordinator restarts and archive/resume rotations.
-      const existingSsh = existingBoxSshTarget(box);
+      const existingSsh = boxSshTargets().get(boxId) || existingBoxSshTarget(box);
       if (existingSsh) {
         const probe = await boxSshExec(existingSsh, "true", 20_000);
         if (probe.exitCode === 0) {
