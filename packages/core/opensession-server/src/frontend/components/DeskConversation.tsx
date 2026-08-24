@@ -136,17 +136,17 @@ export function DeskConversation({
 		const selected = Array.from(picked);
 		const batch = countStaging(selected);
 		setDropStaging((current) => addStaging(current, batch));
-		try {
-			const { images: addedImages, files: addedFiles, rejected } =
+		await (async () => {
+const { images: addedImages, files: addedFiles, rejected } =
 				await splitAttachments(selected);
 			if (addedImages.length)
 				setImages((current) => [...current, ...addedImages]);
 			if (addedFiles.length)
 				setFiles((current) => [...current, ...addedFiles]);
 			if (rejected.length) alert(`Couldn't attach:\n${rejected.join("\n")}`);
-		} finally {
-			setDropStaging((current) => subtractStaging(current, batch));
-		}
+})().finally(async () => {
+setDropStaging((current) => subtractStaging(current, batch));
+});
 	}
 
 	function resetFileDrag() {

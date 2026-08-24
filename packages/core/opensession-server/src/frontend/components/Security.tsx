@@ -104,21 +104,25 @@ export function Security({ onOpenSession }: Props) {
   const [error, setError] = useState<string | null>(null);
 
   const load = async () => {
-    try {
-      const data = await fetchSecurity();
+    await (async () => {
+const data = await fetchSecurity();
       setScans(data.scans);
       setProfiles(data.profiles);
       setRepos(data.repos);
       setLoading(false);
-    } catch {}
-    try {
-      const autos = await fetchAutomations();
+})().catch(async () => {
+
+});
+    await (async () => {
+const autos = await fetchAutomations();
       setRecurring(
         (autos as RecurringScan[]).filter((a) =>
           /deepsec|security scan/i.test(a.name),
         ),
       );
-    } catch {}
+})().catch(async () => {
+
+});
   };
 
   useEffect(() => {
@@ -133,22 +137,22 @@ export function Security({ onOpenSession }: Props) {
 
   async function handleDeleteScan(s: SecurityScan) {
     if (!confirm("Remove this scan record? Its sessions are left as-is.")) return;
-    try {
-      await deleteScanApi(s.id);
+    await (async () => {
+await deleteScanApi(s.id);
       load();
-    } catch (e: any) {
-      setError(e.message);
-    }
+})().catch(async (e: any) => {
+setError(e.message);
+});
   }
 
   async function handleDeleteProfile(p: ScanProfile) {
     if (!confirm(`Delete profile "${p.name}"?`)) return;
-    try {
-      await deleteScanProfileApi(p.id);
+    await (async () => {
+await deleteScanProfileApi(p.id);
       load();
-    } catch (e: any) {
-      setError(e.message);
-    }
+})().catch(async (e: any) => {
+setError(e.message);
+});
   }
 
   return (
@@ -452,8 +456,8 @@ function NewScanModal({
   async function handleStart() {
     setStarting(true);
     setError(null);
-    try {
-      const res = await startScanApi({
+    await (async () => {
+const res = await startScanApi({
         repos: scope === "all" ? "all" : [repo],
         profileId: profileId || undefined,
         instructions: instructions.trim() || undefined,
@@ -462,10 +466,10 @@ function NewScanModal({
         createdBy: getCurrentUser(),
       });
       onStarted(res.sessionId);
-    } catch (e: any) {
-      setError(e.message);
+})().catch(async (e: any) => {
+setError(e.message);
       setStarting(false);
-    }
+});
   }
 
   return (
@@ -641,14 +645,14 @@ function ProfileModal({
   async function handleSave() {
     setSaving(true);
     setError(null);
-    try {
-      if (initial) await updateScanProfileApi(initial.id, { name, prompt });
+    await (async () => {
+if (initial) await updateScanProfileApi(initial.id, { name, prompt });
       else await createScanProfileApi({ name, prompt, createdBy: getCurrentUser() });
       onSaved();
-    } catch (e: any) {
-      setError(e.message);
+})().catch(async (e: any) => {
+setError(e.message);
       setSaving(false);
-    }
+});
   }
 
   return (

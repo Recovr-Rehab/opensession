@@ -73,8 +73,8 @@ export function SetupServerAccess({
 		if (!dirty || saving) return;
 		setSaving(true);
 		setError(null);
-		try {
-			const result = await setupRequest<{
+		await (async () => {
+const result = await setupRequest<{
 				access: SetupAccess;
 				restartRequired: boolean;
 			}>("/api/setup/access", {
@@ -86,11 +86,11 @@ export function SetupServerAccess({
 			});
 			onSaved(result.access, result.restartRequired !== false);
 			toast("Server addresses saved", { variant: "success" });
-		} catch (cause) {
-			setError(cause instanceof Error ? cause.message : "Could not save server addresses");
-		} finally {
-			setSaving(false);
-		}
+})().catch(async (cause) => {
+setError(cause instanceof Error ? cause.message : "Could not save server addresses");
+}).finally(async () => {
+setSaving(false);
+});
 	}
 
 	return (

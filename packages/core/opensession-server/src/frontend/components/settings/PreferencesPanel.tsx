@@ -129,8 +129,8 @@ function DeskVoiceApiKeyRow() {
 	async function put(value: string) {
 		setBusy(true);
 		setError(null);
-		try {
-			const res = await fetch(`${BASE_PATH}/api/desk/voice/key`, {
+		await (async () => {
+const res = await fetch(`${BASE_PATH}/api/desk/voice/key`, {
 				method: "PUT",
 				headers: { "Content-Type": "application/json" },
 				body: JSON.stringify({ apiKey: value }),
@@ -139,11 +139,11 @@ function DeskVoiceApiKeyRow() {
 			if (!res.ok) throw new Error(body.error || `Failed: ${res.status}`);
 			setStatus(body);
 			setApiKey("");
-		} catch (e: any) {
-			setError(e.message || "Failed to save the API key");
-		} finally {
-			setBusy(false);
-		}
+})().catch(async (e: any) => {
+setError(e.message || "Failed to save the API key");
+}).finally(async () => {
+setBusy(false);
+});
 	}
 
 	return (
@@ -251,16 +251,16 @@ function PersonalOutputStyleRow() {
 		setStyle(next);
 		setSaving(true);
 		setError(null);
-		try {
-			const saved = await savePersonalOutputStyle(user, next);
+		await (async () => {
+const saved = await savePersonalOutputStyle(user, next);
 			setStyle(saved.outputStyle);
-		} catch (e: any) {
-			setStyle(previous);
+})().catch(async (e: any) => {
+setStyle(previous);
 			setError(e?.message || "Failed to save output style");
 			toast(e?.message || "Failed to save output style", { variant: "error" });
-		} finally {
-			setSaving(false);
-		}
+}).finally(async () => {
+setSaving(false);
+});
 	}
 
 	return (
@@ -321,16 +321,16 @@ function PersonalPromptPanel() {
 		const { prompt: draft, savedPrompt: saved, user: who } = latest.current;
 		if (draft === null || draft === saved) return;
 		setStatus("saving");
-		try {
-			const r = await savePersonalPrompt(who, draft);
+		await (async () => {
+const r = await savePersonalPrompt(who, draft);
 			setSavedPrompt(r.prompt);
 			setStatus("saved");
-		} catch (e: any) {
-			setStatus("idle");
+})().catch(async (e: any) => {
+setStatus("idle");
 			toast(e?.message || "Failed to save personal prompt", {
 				variant: "error",
 			});
-		}
+});
 	};
 
 	useEffect(() => {

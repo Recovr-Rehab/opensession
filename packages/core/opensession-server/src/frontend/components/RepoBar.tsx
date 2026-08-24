@@ -95,25 +95,25 @@ export function RepoBar({
   async function attach(repo: string) {
     setBusy("Attaching…");
     setError(null);
-    try {
-      setAttached(await attachRepoApi(sessionId, repo, branch || undefined));
-    } catch (e: any) {
-      setError(e.message || String(e));
-    } finally {
-      setBusy(null);
-    }
+    await (async () => {
+setAttached(await attachRepoApi(sessionId, repo, branch || undefined));
+})().catch(async (e: any) => {
+setError(e.message || String(e));
+}).finally(async () => {
+setBusy(null);
+});
   }
 
   async function detach(repo: string) {
     setBusy("Detaching…");
     setError(null);
-    try {
-      setAttached(await detachRepoApi(sessionId, repo));
-    } catch (e: any) {
-      setError(e.message || String(e));
-    } finally {
-      setBusy(null);
-    }
+    await (async () => {
+setAttached(await detachRepoApi(sessionId, repo));
+})().catch(async (e: any) => {
+setError(e.message || String(e));
+}).finally(async () => {
+setBusy(null);
+});
   }
 
   function switchPrimary(repo: string) {
@@ -134,13 +134,13 @@ export function RepoBar({
     setConfirmOpen(false);
     setBusy("Switching…");
     setError(null);
-    try {
-      const res = await switchPrimaryRepoApi(sessionId, repo, hasWork);
+    await (async () => {
+const res = await switchPrimaryRepoApi(sessionId, repo, hasWork);
       setPrimary(res.repo);
       setHasWork(false); // the new worktree starts fresh
       setAttached((prev) => prev.filter((r) => r.repo !== res.repo));
-    } catch (e: any) {
-      setError(e.message || String(e));
+})().catch(async (e: any) => {
+setError(e.message || String(e));
       // Resync in case a concurrent turn changed the session's state.
       fetchRepoSwitchable(sessionId)
         .then(({ switchable, hasWork }) => {
@@ -148,9 +148,9 @@ export function RepoBar({
           setHasWork(hasWork);
         })
         .catch(() => {});
-    } finally {
-      setBusy(null);
-    }
+}).finally(async () => {
+setBusy(null);
+});
   }
 
   // Static (non-menu-item) row — current repo when it can't switch, attached rows.

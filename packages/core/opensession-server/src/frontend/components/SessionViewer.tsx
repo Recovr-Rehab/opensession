@@ -774,7 +774,7 @@ export function SessionViewer({
 				primary: false,
 			})),
 		],
-		[reviewReposKey], // eslint-disable-line react-hooks/exhaustive-deps
+		[reviewReposKey]
 	);
 	const prPresentation = useMemo(
 		() => sessionPrPresentation(session.prs),
@@ -805,7 +805,7 @@ export function SessionViewer({
 		: "";
 	const mergedPr = useMemo(
 		() => mergedPrValue,
-		[mergedPrKey], // eslint-disable-line react-hooks/exhaustive-deps
+		[mergedPrKey]
 	);
 	const [shippedChangeStatus, setShippedChangeStatus] = useState<
 		"idle" | "sharing"
@@ -932,7 +932,7 @@ export function SessionViewer({
 					url: ref.url,
 					title: ref.title,
 				})),
-		[discoveredPrsKey], // eslint-disable-line react-hooks/exhaustive-deps
+		[discoveredPrsKey]
 	);
 	// Which PR the Review tab should open on, set by the PR chips in the
 	// Workspace strip (seq lets the same chip re-focus after a manual switch).
@@ -980,7 +980,7 @@ export function SessionViewer({
 					label: repo.repo,
 				})),
 			].filter((root) => Boolean(root.dir)),
-		[toolPathRootsKey], // eslint-disable-line react-hooks/exhaustive-deps
+		[toolPathRootsKey]
 	);
 	const githubReviewRepos = reviewRepos;
 	// With no session-owned primary, workspace PRs are the only real review
@@ -1459,7 +1459,7 @@ export function SessionViewer({
 		: "";
 	const sessionWalkthrough = useMemo(
 		() => session.walkthrough,
-		[walkthroughKey], // eslint-disable-line react-hooks/exhaustive-deps
+		[walkthroughKey]
 	);
 	// The PR verdict on the transcript's last review loop, keyed the same way:
 	// it is built fresh from the polled session on every render, and an
@@ -1468,7 +1468,7 @@ export function SessionViewer({
 	const reviewResultKey = JSON.stringify(reviewResultValue ?? null);
 	const reviewResult = useMemo(
 		() => reviewResultValue,
-		[reviewResultKey], // eslint-disable-line react-hooks/exhaustive-deps
+		[reviewResultKey]
 	);
 	// Open state + width of the right panel. Browser-level, and shared with the
 	// session-less workspace route so the chosen summary card or panel follows
@@ -3799,7 +3799,7 @@ export function SessionViewer({
 		: "";
 	const shippedSent = useMemo(
 		() => shippedSentValue,
-		[shippedSentKey], // eslint-disable-line react-hooks/exhaustive-deps
+		[shippedSentKey]
 	);
 	const shippedChangeShare = useMemo(
 		() =>

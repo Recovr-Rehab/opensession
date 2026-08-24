@@ -254,19 +254,19 @@ export function Prs({
     if (!preview || addingToSidebar) return;
     const target = preview;
     setAddingToSidebar(true);
-    try {
-      const workspaceId = await onAddToSidebar(target);
+    await (async () => {
+const workspaceId = await onAddToSidebar(target);
       setPreview((current) =>
         current?.repo === target.repo && current.branch === target.branch
           ? { ...current, workspaceId }
           : current,
       );
       toast("Added to sidebar");
-    } catch {
-      toast("Couldn't add to sidebar");
-    } finally {
-      setAddingToSidebar(false);
-    }
+})().catch(async () => {
+toast("Couldn't add to sidebar");
+}).finally(async () => {
+setAddingToSidebar(false);
+});
   }
 
   useEffect(() => {

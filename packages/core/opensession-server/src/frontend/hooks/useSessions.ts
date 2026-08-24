@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import type { UnifiedSession } from "../lib/types";
 import { fetchSessionsSnapshot } from "../lib/api";
 import {
@@ -151,16 +151,20 @@ export function useSessions({
   // live poll will drop. Assigned during render, like App.tsx's own *Ref
   // mirrors — a callback can't close over state without re-creating itself.
   const liveRef = useRef<UnifiedSession[]>(live);
-  liveRef.current = live;
+  useLayoutEffect(() => {
+    liveRef.current = live;
+  });
   // The merged list, for the reverse move: unarchiving a session that is only
   // in the archived index has nothing in `live` to flip, so `patch` puts it
   // there. Assigned below, once the merge has run.
   const mergedRef = useRef<UnifiedSession[]>(live);
   // Read by the poll to decide whether anything is waiting on `liveAt`.
   const locallyArchivedRef = useRef(locallyArchived);
-  locallyArchivedRef.current = locallyArchived;
   const locallyUnarchivedRef = useRef(locallyUnarchived);
-  locallyUnarchivedRef.current = locallyUnarchived;
+  useLayoutEffect(() => {
+    locallyArchivedRef.current = locallyArchived;
+    locallyUnarchivedRef.current = locallyUnarchived;
+  });
   // Raw JSON text of the last applied poll. When a poll returns byte-identical
   // data (the common case every 5s), skip setSessions entirely — a fresh array
   // identity would otherwise re-render the whole app (Sidebar memos, the open
@@ -221,8 +225,8 @@ export function useSessions({
     const startedAt = Date.now();
     const snapshotRuntimeRevision = runtimeRevisionRef.current;
     const promise = (async () => {
-      try {
-        const snapshot = await fetchSessionsSnapshot({
+      await (async () => {
+const snapshot = await fetchSessionsSnapshot({
           etag: etagRef.current,
           signal: controller.signal,
           query: liveQuery,
@@ -243,13 +247,13 @@ export function useSessions({
           setLiveAt(startedAt);
         setLoading(false);
         setError(null);
-      } catch (e: any) {
-        if (e?.name === "AbortError") return;
+})().catch(async (e: any) => {
+if (e?.name === "AbortError") return;
         if (mountedRef.current) {
           setError(e.message);
           setLoading(false);
         }
-      }
+});
     })().finally(() => {
       if (pollPromiseRef.current?.promise === promise)
         pollPromiseRef.current = null;
@@ -299,8 +303,8 @@ export function useSessions({
     if (archivedPromiseRef.current) return archivedPromiseRef.current;
     const startedAt = Date.now();
     const promise = (async () => {
-      try {
-        const snapshot = await fetchSessionsSnapshot({
+      await (async () => {
+const snapshot = await fetchSessionsSnapshot({
           etag: archivedEtagRef.current,
           query: ARCHIVED_QUERY,
         });
@@ -318,10 +322,10 @@ export function useSessions({
           locallyUnarchivedRef.current.size > 0
         )
           setArchivedIndexAt(startedAt);
-      } catch {
-        // Never surfaced as the app's error: the live list is what the app is
+})().catch(async () => {
+// Never surfaced as the app's error: the live list is what the app is
         // for, and a failed index just leaves Archived showing what it had.
-      }
+});
     })().finally(() => {
       if (archivedPromiseRef.current === promise) archivedPromiseRef.current = null;
     });
@@ -366,7 +370,9 @@ export function useSessions({
         locallyArchived,
         locallyUnarchived,
       }));
-  mergedRef.current = sessions;
+  useLayoutEffect(() => {
+    mergedRef.current = sessions;
+  });
 
   // Forget the local overrides the server has caught up with.
   useEffect(() => {

@@ -1,4 +1,4 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useLayoutEffect, useRef } from "react";
 import useSWR, { type SWRConfiguration, type SWRResponse } from "swr";
 import {
 	fetchDiff,
@@ -118,7 +118,9 @@ export function useSessionOverviewResource(
 ): SWRResponse<WorkspaceOverview> {
 	const { enabled = true, refreshInterval = 0, revision, compare } = options;
 	const sessionRef = useRef(session);
-	sessionRef.current = session;
+	useLayoutEffect(() => {
+		sessionRef.current = session;
+	});
 	const cacheKey = `sessions:${session.id}`;
 	const resource = useSWR<WorkspaceOverview>(
 		enabled ? apiSWRKey.workspaceOverview(cacheKey) : null,
@@ -137,7 +139,9 @@ export function useWorkspaceOverviewResource(
 ): SWRResponse<WorkspaceOverview> {
 	const { enabled = true, refreshInterval = 0, revision, compare } = options;
 	const sessionsRef = useRef(sessions);
-	sessionsRef.current = sessions;
+	useLayoutEffect(() => {
+		sessionsRef.current = sessions;
+	});
 	const resource = useSWR<WorkspaceOverview>(
 		enabled ? apiSWRKey.workspaceOverview(cacheKey) : null,
 		() => loadOverview(workspaceId, sessionsRef.current),

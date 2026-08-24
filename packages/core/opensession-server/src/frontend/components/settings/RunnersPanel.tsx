@@ -42,42 +42,54 @@ export function RunnersPanel() {
 	const [busyId, setBusyId] = useState<string | null>(null);
 
 	const load = async () => {
-		try {
-			const data = await fetchRunners();
+		await (async () => {
+const data = await fetchRunners();
 			setRunners(data.runners);
 			setAdmin(data.admin);
-		} catch (error) {
-			toast(error instanceof Error ? error.message : "Failed to load Runners", { variant: "error" });
-		} finally { setLoading(false); }
+})().catch(async (error) => {
+toast(error instanceof Error ? error.message : "Failed to load Runners", { variant: "error" });
+}).finally(async () => {
+setLoading(false);
+});
 	};
 
 	useEffect(() => { void load(); }, []);
 
 	const pair = async () => {
-		try { setPairing(await createRunnerPairing()); setConnectChoice(null); }
-		catch (error) { toast(error instanceof Error ? error.message : "Could not create pairing", { variant: "error" }); }
+		await (async () => {
+setPairing(await createRunnerPairing()); setConnectChoice(null);
+})().catch(async (error) => {
+toast(error instanceof Error ? error.message : "Could not create pairing", { variant: "error" });
+});
 	};
 	const chooseBootstrap = async (kind: "ssh" | "kubernetes") => {
-		try {
-			const targets = await fetchRunnerBootstrapTargets();
+		await (async () => {
+const targets = await fetchRunnerBootstrapTargets();
 			setBootstrapTargets(targets);
 			setBootstrapTargetId(targets[kind][0]?.id || "");
 			setConnectChoice(kind);
-		} catch (error) { toast(error instanceof Error ? error.message : "Could not load Runner connection options", { variant: "error" }); }
+})().catch(async (error) => {
+toast(error instanceof Error ? error.message : "Could not load Runner connection options", { variant: "error" });
+});
 	};
 	const startBootstrap = async () => {
 		if (!connectChoice || connectChoice === "choices" || !bootstrapTargetId) return;
-		try {
-			const result = await bootstrapRunner(connectChoice, bootstrapTargetId);
+		await (async () => {
+const result = await bootstrapRunner(connectChoice, bootstrapTargetId);
 			setConnectChoice(null);
 			toast(`${result.target} is connecting. It appears here when its Runner channel is online.`, { variant: "success" });
 			void load();
-		} catch (error) { toast(error instanceof Error ? error.message : "Could not start Runner migration", { variant: "error" }); }
+})().catch(async (error) => {
+toast(error instanceof Error ? error.message : "Could not start Runner migration", { variant: "error" });
+});
 	};
 	const copy = async () => {
 		if (!pairing) return;
-		try { await navigator.clipboard.writeText(pairingCommand(pairing.code)); toast("Pairing command copied", { variant: "success" }); }
-		catch { toast("Copy the command from this page", { variant: "error" }); }
+		await (async () => {
+await navigator.clipboard.writeText(pairingCommand(pairing.code)); toast("Pairing command copied", { variant: "success" });
+})().catch(async () => {
+toast("Copy the command from this page", { variant: "error" });
+});
 	};
 	const change = async (runner: RunnerInfo, patch: Parameters<typeof updateRunner>[1]) => {
 		setBusyId(runner.id);
@@ -91,9 +103,13 @@ export function RunnersPanel() {
 	const revoke = async (runner: RunnerInfo) => {
 		if (!confirm(`Revoke ${runner.label || runner.name}? It disconnects immediately.`)) return;
 		setBusyId(runner.id);
-		try { await revokeRunner(runner.id); setRunners((items) => items.filter((item) => item.id !== runner.id)); }
-		catch (error) { toast(error instanceof Error ? error.message : "Could not revoke Runner", { variant: "error" }); }
-		finally { setBusyId(null); }
+		await (async () => {
+await revokeRunner(runner.id); setRunners((items) => items.filter((item) => item.id !== runner.id));
+})().catch(async (error) => {
+toast(error instanceof Error ? error.message : "Could not revoke Runner", { variant: "error" });
+}).finally(async () => {
+setBusyId(null);
+});
 	};
 
 	return <SettingsPanel>

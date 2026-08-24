@@ -901,8 +901,8 @@ export function Composer({
       : selected.filter(allowed);
     const batch = countStaging(accepted);
     setLocalStaging((current) => addStaging(current, batch));
-    try {
-      const { images: newImgs, files: newFls, rejected } =
+    await (async () => {
+const { images: newImgs, files: newFls, rejected } =
         await splitAttachments(accepted);
       // Images ride the vision channel; other files need a dedicated file channel
       // (if the parent only wired images, non-image files are simply ignored).
@@ -918,9 +918,9 @@ export function Composer({
         ),
       ];
       if (failures.length) alert(`Couldn't attach:\n${failures.join("\n")}`);
-    } finally {
-      setLocalStaging((current) => subtractStaging(current, batch));
-    }
+})().finally(async () => {
+setLocalStaging((current) => subtractStaging(current, batch));
+});
   }
 
   function handlePaste(e: React.ClipboardEvent) {

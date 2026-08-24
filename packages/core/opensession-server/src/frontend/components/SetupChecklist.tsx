@@ -56,18 +56,18 @@ export function EngineRow({
 
 	async function enable() {
 		setEnabling(true);
-		try {
-			await setupRequest("/api/settings/pi-engine", {
+		await (async () => {
+await setupRequest("/api/settings/pi-engine", {
 				method: "PUT",
 				json: { enabled: true },
 			});
 			await onChanged();
 			toast("Engine enabled");
-		} catch (e: any) {
-			toast(e?.message || "Couldn't enable the engine");
-		} finally {
-			setEnabling(false);
-		}
+})().catch(async (e: any) => {
+toast(e?.message || "Couldn't enable the engine");
+}).finally(async () => {
+setEnabling(false);
+});
 	}
 
 	const pool =

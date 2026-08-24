@@ -21,7 +21,9 @@ test("the same focus that flags the keyboard measures it, for every surface", as
 	expect(start).toBeGreaterThan(-1);
 	// One owner, so the palette sheet and the session composer cannot disagree
 	// about how tall the keyboard is.
-	expect(effect).toContain("releaseInset ??= trackKeyboardInset();");
+	expect(effect).toContain(
+		"if (releaseInset === null) releaseInset = trackKeyboardInset();",
+	);
 	expect(effect).toContain("releaseInset = null;");
 });
 

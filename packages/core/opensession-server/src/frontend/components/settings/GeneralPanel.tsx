@@ -62,19 +62,19 @@ export function OrganizationProfileSection({
 
 	async function load(cancelled?: () => boolean) {
 		setLoadError(null);
-		try {
-			const next = await fetchOrganizationSettings();
+		await (async () => {
+const next = await fetchOrganizationSettings();
 			if (cancelled?.()) return;
 			setSettings(next);
 			setDraft(next.organizationName);
 			setDomainDraft(next.organizationDomain);
 			rememberOrganizationIcon(next);
-		} catch (error: any) {
-			if (cancelled?.()) return;
+})().catch(async (error: any) => {
+if (cancelled?.()) return;
 			const message = error?.message || "Couldn’t load organization settings";
 			setLoadError(message);
 			toast(message, { variant: "error" });
-		}
+});
 	}
 
 	useEffect(() => {
@@ -88,25 +88,25 @@ export function OrganizationProfileSection({
 	async function update(work: () => Promise<OrganizationSettingsDto>, message: string) {
 		if (busy) return;
 		setBusy(true);
-		try {
-			const next = await work();
+		await (async () => {
+const next = await work();
 			setSettings(next);
 			setDraft(next.organizationName);
 			setDomainDraft(next.organizationDomain);
 			setIconFailed(false);
 			rememberOrganizationIcon(next);
 			toast(message, { variant: "success" });
-		} catch (error: any) {
-			toast(error?.message || "Couldn’t save organization settings", {
+})().catch(async (error: any) => {
+toast(error?.message || "Couldn’t save organization settings", {
 				variant: "error",
 			});
 			if (settings) {
 				setDraft(settings.organizationName);
 				setDomainDraft(settings.organizationDomain);
 			}
-		} finally {
-			setBusy(false);
-		}
+}).finally(async () => {
+setBusy(false);
+});
 	}
 
 	async function commitName() {

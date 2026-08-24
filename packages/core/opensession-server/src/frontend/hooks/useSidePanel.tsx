@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { PANEL_RESIZE } from "../lib/session-panel-classes";
 import {
 	SIDE_PANEL_OPEN_KEY,
@@ -62,8 +62,8 @@ export function useSidePanel(): SidePanel {
 		return stored >= MIN_W && stored <= MAX_W ? stored : 0;
 	});
 	const widthRef = useRef(width);
-	widthRef.current = width;
-
+	useLayoutEffect(() => {		widthRef.current = width;
+	});
 	function startResize(e: React.MouseEvent) {
 		e.preventDefault();
 		const right =

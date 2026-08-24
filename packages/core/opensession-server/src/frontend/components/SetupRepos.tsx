@@ -213,8 +213,8 @@ function RepositoryRow({
 		if (!normalized || !changed || saving) return;
 		setSaving("branch");
 		setBranchError(null);
-		try {
-			const updated = await setupRequest<{
+		await (async () => {
+const updated = await setupRequest<{
 				id: string;
 				defaultBranch: string;
 			}>(`/api/setup/repos/${encodeURIComponent(repo.id)}`, {
@@ -225,11 +225,11 @@ function RepositoryRow({
 			if (onRepoUpdated) onRepoUpdated(updated);
 			else await onChanged();
 			toast(`${repo.label} default branch updated`);
-		} catch (e: any) {
-			setBranchError(e.message);
-		} finally {
-			setSaving(null);
-		}
+})().catch(async (e: any) => {
+setBranchError(e.message);
+}).finally(async () => {
+setSaving(null);
+});
 	}
 
 	async function saveWorktreeMode(next: boolean) {
@@ -238,8 +238,8 @@ function RepositoryRow({
 		setIsolatedWorktrees(next);
 		setSaving("worktrees");
 		setWorktreeError(null);
-		try {
-			const updated = await setupRequest<{
+		await (async () => {
+const updated = await setupRequest<{
 				id: string;
 				defaultBranch: string;
 				isolatedWorktrees: boolean;
@@ -251,12 +251,12 @@ function RepositoryRow({
 			if (onRepoUpdated) onRepoUpdated(updated);
 			else await onChanged();
 			toast(`${repo.label} worktree setting updated`);
-		} catch (e: any) {
-			setIsolatedWorktrees(previous);
+})().catch(async (e: any) => {
+setIsolatedWorktrees(previous);
 			setWorktreeError(e.message);
-		} finally {
-			setSaving(null);
-		}
+}).finally(async () => {
+setSaving(null);
+});
 	}
 
 	return (
@@ -367,14 +367,14 @@ function RepoTileButton({
 		if (busy) return;
 		setBusy(true);
 		setError(null);
-		try {
-			await work();
+		await (async () => {
+await work();
 			await onChanged();
-		} catch (e: any) {
-			setError(e.message);
-		} finally {
-			setBusy(false);
-		}
+})().catch(async (e: any) => {
+setError(e.message);
+}).finally(async () => {
+setBusy(false);
+});
 	}
 
 	const apply = (patch: { color?: string | null; icon?: "github" | null }) =>
@@ -648,26 +648,26 @@ function AddRepoPicker({
 	useEffect(() => {
 		let cancelled = false;
 		(async () => {
-			try {
-				const body = await setupRequest<BrowseResult>("/api/setup/github/repos");
+			await (async () => {
+const body = await setupRequest<BrowseResult>("/api/setup/github/repos");
 				if (!cancelled) setBrowse(body);
-			} catch {
-				if (!cancelled) setBrowseFailed(true);
-			}
+})().catch(async () => {
+if (!cancelled) setBrowseFailed(true);
+});
 		})();
 		(async () => {
-			try {
-				const body = await setupRequest<CsBrowseResult>(
+			await (async () => {
+const body = await setupRequest<CsBrowseResult>(
 					"/api/setup/codestorage/repos",
 				);
 				if (!cancelled) setCsBrowse(body);
-			} catch (e: any) {
-				// A throw means configured-but-failing (the route answers 200 with
+})().catch(async (e: any) => {
+// A throw means configured-but-failing (the route answers 200 with
 				// source: null when unconfigured) — surface the server's error
 				// instead of silently hiding the section. GitHub is unaffected.
 				if (!cancelled)
 					setCsError(e?.message || "Couldn’t reach code.storage right now.");
-			}
+});
 		})();
 		return () => {
 			cancelled = true;
@@ -689,8 +689,8 @@ function AddRepoPicker({
 		const key = `${source}:${fullName}`;
 		setAddingRepo(key);
 		setError(null);
-		try {
-			// Registering clones server-side — can take tens of seconds. No client
+		await (async () => {
+// Registering clones server-side — can take tens of seconds. No client
 			// timeout; the button holds its working state until the server answers.
 			// code.storage repos reuse the same submit shape with a source marker.
 			await setupRequest("/api/setup/repos", {
@@ -703,11 +703,11 @@ function AddRepoPicker({
 			toast(`${fullName} registered`);
 			notifyReposChanged();
 			await onAdded();
-		} catch (e: any) {
-			setError(e.message);
-		} finally {
-			setAddingRepo(null);
-		}
+})().catch(async (e: any) => {
+setError(e.message);
+}).finally(async () => {
+setAddingRepo(null);
+});
 	}
 
 	const manualValid = /^[^/\s]+\/[^/\s]+$/.test(manual.trim());

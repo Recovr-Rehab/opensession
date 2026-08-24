@@ -152,33 +152,33 @@ function ProfileCard({
 			return;
 		}
 		setBusy("picture");
-		try {
-			const { image } = await uploadProfileImage(file, profile.user);
+		await (async () => {
+const { image } = await uploadProfileImage(file, profile.user);
 			onChange({ ...profile, image });
 			await refreshPeople();
 			toast("Picture updated");
-		} catch (e: any) {
-			setError(e.message);
-		} finally {
-			setBusy(null);
+})().catch(async (e: any) => {
+setError(e.message);
+}).finally(async () => {
+setBusy(null);
 			// Clear the input or picking the same file twice does nothing.
 			if (fileRef.current) fileRef.current.value = "";
-		}
+});
 	}
 
 	async function removePicture() {
 		setBusy("picture");
 		setError(null);
-		try {
-			await removeProfileImage(profile.user);
+		await (async () => {
+await removeProfileImage(profile.user);
 			onChange({ ...profile, image: "" });
 			await refreshPeople();
 			toast("Picture removed");
-		} catch (e: any) {
-			setError(e.message);
-		} finally {
-			setBusy(null);
-		}
+})().catch(async (e: any) => {
+setError(e.message);
+}).finally(async () => {
+setBusy(null);
+});
 	}
 
 	async function submit(event: React.FormEvent) {
@@ -186,8 +186,8 @@ function ProfileCard({
 		if (!name.trim() || busy || !dirty) return;
 		setBusy("fields");
 		setError(null);
-		try {
-			const saved = await saveProfile(
+		await (async () => {
+const saved = await saveProfile(
 				{ name: name.trim(), email: email.trim(), timezone: timezone.trim() },
 				profile.user,
 			);
@@ -199,11 +199,11 @@ function ProfileCard({
 					: "Profile saved",
 			);
 			setEditing(false);
-		} catch (e: any) {
-			setError(e.message);
-		} finally {
-			setBusy(null);
-		}
+})().catch(async (e: any) => {
+setError(e.message);
+}).finally(async () => {
+setBusy(null);
+});
 	}
 
 	return (

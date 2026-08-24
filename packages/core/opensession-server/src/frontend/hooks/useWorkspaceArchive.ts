@@ -35,18 +35,18 @@ export function useWorkspaceArchive(
 		let active = true;
 		const controller = new AbortController();
 		void (async () => {
-			try {
-				const sessions = await fetchWorkspaceArchivedSessions(
+			await (async () => {
+const sessions = await fetchWorkspaceArchivedSessions(
 					workspaceId,
 					controller.signal,
 				);
 				if (!active) return;
 				setRows(sessions);
-			} catch {
-				// The history menu is an extra; a failed fetch just leaves it out
+})().catch(async () => {
+// The history menu is an extra; a failed fetch just leaves it out
 				// rather than putting an error in front of the session someone
 				// came here to read.
-			}
+});
 		})();
 		return () => {
 			active = false;

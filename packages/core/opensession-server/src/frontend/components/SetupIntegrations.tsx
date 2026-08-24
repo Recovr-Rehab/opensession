@@ -54,8 +54,8 @@ function IntegrationCard({
 
 	async function toggle(enabled: boolean) {
 		setToggling(true);
-		try {
-			const body = await setupRequest<{
+		await (async () => {
+const body = await setupRequest<{
 				integration: SetupIntegration;
 				restartRequired: boolean;
 			}>(`/api/setup/integrations/${encodeURIComponent(integration.id)}`, {
@@ -64,13 +64,13 @@ function IntegrationCard({
 			});
 			toast(`${integration.label} ${enabled ? "enabled" : "disabled"}`);
 			onSaved(body.integration, body.restartRequired !== false);
-		} catch (cause) {
-			toast(cause instanceof Error ? cause.message : `Could not update ${integration.label}`, {
+})().catch(async (cause) => {
+toast(cause instanceof Error ? cause.message : `Could not update ${integration.label}`, {
 				variant: "error",
 			});
-		} finally {
-			setToggling(false);
-		}
+}).finally(async () => {
+setToggling(false);
+});
 	}
 
 	return (
@@ -299,8 +299,8 @@ export function GithubAuthCard({
 		if (!dirty || saving) return;
 		setSaving(true);
 		setError(null);
-		try {
-			const body = await setupRequest<{
+		await (async () => {
+const body = await setupRequest<{
 				github: SetupGithub;
 				restartRequired: boolean;
 			}>("/api/setup/github", {
@@ -329,19 +329,19 @@ export function GithubAuthCard({
 			toast("GitHub sign-in settings saved");
 			onSaved(body.github, body.restartRequired === true);
 			setSetupOpen(false);
-		} catch (e: any) {
-			setError(e.message);
-		} finally {
-			setSaving(false);
-		}
+})().catch(async (e: any) => {
+setError(e.message);
+}).finally(async () => {
+setSaving(false);
+});
 	}
 
 	async function handleToggle(next: boolean) {
 		if (saving) return;
 		setSaving(true);
 		setError(null);
-		try {
-			const body = await setupRequest<{
+		await (async () => {
+const body = await setupRequest<{
 				github: SetupGithub;
 				restartRequired: boolean;
 			}>("/api/setup/github", {
@@ -351,13 +351,13 @@ export function GithubAuthCard({
 			setUserPrAuth(body.github.userPrAuth);
 			toast(`GitHub sign-in ${next ? "enabled" : "disabled"}`);
 			onSaved(body.github, body.restartRequired === true);
-		} catch (cause) {
-			toast(cause instanceof Error ? cause.message : "Could not update GitHub sign-in", {
+})().catch(async (cause) => {
+toast(cause instanceof Error ? cause.message : "Could not update GitHub sign-in", {
 				variant: "error",
 			});
-		} finally {
-			setSaving(false);
-		}
+}).finally(async () => {
+setSaving(false);
+});
 	}
 
 	// One form, two homes: the settings dialog opens it on demand, while

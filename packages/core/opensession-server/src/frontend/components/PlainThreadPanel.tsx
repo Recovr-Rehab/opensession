@@ -304,14 +304,14 @@ export function PlainThreadActions({
 		if (busy) return;
 		setBusy(true);
 		setError(null);
-		try {
-			await fn();
+		await (async () => {
+await fn();
 			onChanged();
-		} catch (e: any) {
-			setError(e?.message || "Plain update failed");
-		} finally {
-			setBusy(false);
-		}
+})().catch(async (e: any) => {
+setError(e?.message || "Plain update failed");
+}).finally(async () => {
+setBusy(false);
+});
 	}
 
 	const status = thread.status;
@@ -731,8 +731,8 @@ export function PlainReplyBox({
 		}
 		setSending(true);
 		setError(null);
-		try {
-			const attachmentIds: string[] = [];
+		await (async () => {
+const attachmentIds: string[] = [];
 			for (const file of attachments) {
 				attachmentIds.push(await uploadPlainAttachmentApi(threadId, file, kind));
 			}
@@ -744,11 +744,11 @@ export function PlainReplyBox({
 			clearTimeout(sentTimer.current);
 			sentTimer.current = setTimeout(() => setSent(false), 3000);
 			onSent?.();
-		} catch (e: any) {
-			setError(e?.message || "Failed to send");
-		} finally {
-			setSending(false);
-		}
+})().catch(async (e: any) => {
+setError(e?.message || "Failed to send");
+}).finally(async () => {
+setSending(false);
+});
 	}
 
 	// The same wash a team note takes in a session transcript (lib/tinted-surface).

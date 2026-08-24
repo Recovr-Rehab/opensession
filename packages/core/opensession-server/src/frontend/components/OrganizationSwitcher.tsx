@@ -108,11 +108,12 @@ export function OrganizationSwitcher({
 	}
 
 	async function addOrganization(check: boolean) {
-		if (!bridge?.add || !serverAddress.trim() || adding) return;
+		const add = bridge?.add;
+		if (!add || !serverAddress.trim() || adding) return;
 		setAdding(true);
 		setAddError(null);
-		try {
-			const result = await bridge.add(serverAddress, check);
+		await (async () => {
+const result = await add(serverAddress, check);
 			if (result.ok) {
 				setAddOpen(false);
 				return;
@@ -120,21 +121,21 @@ export function OrganizationSwitcher({
 			if (result.url) setServerAddress(result.url);
 			setCanAddAnyway(!!result.canAddAnyway);
 			setAddError(result.error || "Couldn’t add that organization.");
-		} catch {
-			setAddError("Couldn’t add that organization.");
-		} finally {
-			setAdding(false);
-		}
+})().catch(async () => {
+setAddError("Couldn’t add that organization.");
+}).finally(async () => {
+setAdding(false);
+});
 	}
 
 	async function copyOrganizationLink() {
-		try {
-			await navigator.clipboard.writeText(organizationUrl);
+		await (async () => {
+await navigator.clipboard.writeText(organizationUrl);
 			setCopied(true);
 			toast("Organization link copied", { variant: "success" });
-		} catch {
-			toast("Couldn’t copy the organization link", { variant: "error" });
-		}
+})().catch(async () => {
+toast("Couldn’t copy the organization link", { variant: "error" });
+});
 	}
 
 	return (

@@ -192,8 +192,8 @@ export function DiffPanel({
     const generation = ++flowGeneration.current;
     setFlowLoading(true);
     setFlowError(null);
-    try {
-      const data = await fetchCodeFlow(sessionId, cur.repo);
+    await (async () => {
+const data = await fetchCodeFlow(sessionId, cur.repo);
       if (!data) throw new Error("Code flow isn't available for these changes.");
       if (data.diffVersion !== patchVersion) {
         if (generation === flowGeneration.current) {
@@ -202,12 +202,12 @@ export function DiffPanel({
         return;
       }
       if (generation === flowGeneration.current) setFlow({ key: flowKey, data });
-    } catch (error: any) {
-      if (generation === flowGeneration.current)
+})().catch(async (error: any) => {
+if (generation === flowGeneration.current)
         setFlowError(error?.message || "Couldn't load code flow.");
-    } finally {
-      if (generation === flowGeneration.current) setFlowLoading(false);
-    }
+}).finally(async () => {
+if (generation === flowGeneration.current) setFlowLoading(false);
+});
 	};
 
 	const refreshFlow = async () => {

@@ -169,14 +169,14 @@ export function RestartOverlay({ connected, addHandler }: Props) {
     const iv = setInterval(async () => {
       const started = disconnectedAt.current ?? Date.now();
       if (Date.now() - started < ESCALATE_AFTER_MS) return;
-      try {
-        await fetchHealthStatus();
-      } catch {
-        if (!cancelled) {
+      await (async () => {
+await fetchHealthStatus();
+})().catch(async () => {
+if (!cancelled) {
           sawDown.current = true;
           setPhase("crashed");
         }
-      }
+});
     }, 3000);
     return () => {
       cancelled = true;
@@ -195,10 +195,12 @@ export function RestartOverlay({ connected, addHandler }: Props) {
         resolveRestart();
         return;
       }
-      try {
-        const d = await fetchHealthStatus();
+      await (async () => {
+const d = await fetchHealthStatus();
         if (!cancelled) handleHealth(d);
-      } catch {}
+})().catch(async () => {
+
+});
     }, 1500);
     return () => {
       cancelled = true;
@@ -211,13 +213,15 @@ export function RestartOverlay({ connected, addHandler }: Props) {
     if (phase !== "crashed") return;
     let cancelled = false;
     const iv = setInterval(async () => {
-      try {
-        await fetchHealthStatus();
+      await (async () => {
+await fetchHealthStatus();
         if (!cancelled) {
           setBackOnline(true);
           setTimeout(() => location.reload(), 700);
         }
-      } catch {}
+})().catch(async () => {
+
+});
     }, 1500);
     return () => {
       cancelled = true;

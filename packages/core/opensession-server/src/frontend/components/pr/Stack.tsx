@@ -28,15 +28,15 @@ export function StackLinkSection({
 	const link = async () => {
 		setLinking(true);
 		setError(null);
-		try {
-			await linkPrStackApi(sessionId);
+		await (async () => {
+await linkPrStackApi(sessionId);
 			toast("Linked into a stack");
 			onLinked();
-		} catch (e: any) {
-			setError(e?.message || "Couldn't link the stack");
-		} finally {
-			setLinking(false);
-		}
+})().catch(async (e: any) => {
+setError(e?.message || "Couldn't link the stack");
+}).finally(async () => {
+setLinking(false);
+});
 	};
 
 	return (

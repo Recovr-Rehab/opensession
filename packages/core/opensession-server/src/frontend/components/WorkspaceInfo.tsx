@@ -688,14 +688,14 @@ function AgentReviewCard({
 		if (!pr.reviewActive || reviewCancelling) return;
 		setReviewCancelling(true);
 		setError(null);
-		try {
-			await cancelPrReviewApi(sessionId, getCurrentUser(), repo);
+		await (async () => {
+await cancelPrReviewApi(sessionId, getCurrentUser(), repo);
 			setReviewCancelRequested(true);
-		} catch (error: any) {
-			setError(error?.message || "Couldn't cancel the review");
-		} finally {
-			setReviewCancelling(false);
-		}
+})().catch(async (error: any) => {
+setError(error?.message || "Couldn't cancel the review");
+}).finally(async () => {
+setReviewCancelling(false);
+});
 	}
 
 	async function run(action: (typeof PR_AGENT_ACTIONS)[number]) {
@@ -703,8 +703,8 @@ function AgentReviewCard({
 		setBusy(action.kind);
 		setError(null);
 		setDone(null);
-		try {
-			const res = await triggerPrActionApi(
+		await (async () => {
+const res = await triggerPrActionApi(
 				sessionId,
 				action.kind,
 				getCurrentUser(),
@@ -721,11 +721,11 @@ function AgentReviewCard({
 				}
 				setDone({ label: action.label, bksId: res.bksId, session: res.session });
 			} else setError(res.error || res.message || "Couldn't start");
-		} catch (e: any) {
-			setError(e?.message || "Couldn't start");
-		} finally {
-			setBusy(null);
-		}
+})().catch(async (e: any) => {
+setError(e?.message || "Couldn't start");
+}).finally(async () => {
+setBusy(null);
+});
 	}
 
 	// One action on the row, all of them in the menu: the row offers whichever

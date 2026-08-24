@@ -54,19 +54,19 @@ export function TeamSection({
 	const [githubSyncError, setGithubSyncError] = useState<string | null>(null);
 
 	const load = async () => {
-		try {
-			const body = await setupRequest<{ members: TeamMember[] }>("/api/setup/team");
+		await (async () => {
+const body = await setupRequest<{ members: TeamMember[] }>("/api/setup/team");
 			setMembers(body.members);
 			setLoadFailed(false);
-		} catch {
-			setLoadFailed(true);
-		}
+})().catch(async () => {
+setLoadFailed(true);
+});
 	};
 
 	const syncGithubMembers = async () => {
 		setGithubSyncError(null);
-		try {
-			const body = await setupRequest<{
+		await (async () => {
+const body = await setupRequest<{
 				organization: string | null;
 				synced: boolean;
 				added: number;
@@ -77,10 +77,10 @@ export function TeamSection({
 			setLoadFailed(false);
 			setGithubOrganization(body.synced ? body.organization : null);
 			setGithubSyncError(body.error ?? null);
-		} catch {
-			await load();
+})().catch(async () => {
+await load();
 			setGithubSyncError("GitHub members weren’t added. Add them manually.");
-		}
+});
 	};
 
 	useEffect(() => {
@@ -233,16 +233,16 @@ function MemberActions({
 
 	async function remove() {
 		setBusy(true);
-		try {
-			await setupRequest(`/api/setup/team/${encodeURIComponent(member.name)}/remove`, {
+		await (async () => {
+await setupRequest(`/api/setup/team/${encodeURIComponent(member.name)}/remove`, {
 				method: "POST",
 			});
 			toast(`${member.name} removed`);
 			await onRemoved();
-		} catch (e: any) {
-			toast(e.message, { variant: "error" });
+})().catch(async (e: any) => {
+toast(e.message, { variant: "error" });
 			setBusy(false);
-		}
+});
 	}
 
 	return (
@@ -333,18 +333,18 @@ export function GithubMemberDialog({
 		}
 		setSaving(true);
 		setError(null);
-		try {
-			await setupRequest("/api/setup/team", {
+		await (async () => {
+await setupRequest("/api/setup/team", {
 				method: "POST",
 				json: { name: login, github: login },
 			});
 			toast(`@${login} added`);
 			await onSaved(login);
-		} catch (cause: any) {
-			setError(cause?.message || "Could not add member");
-		} finally {
-			setSaving(false);
-		}
+})().catch(async (cause: any) => {
+setError(cause?.message || "Could not add member");
+}).finally(async () => {
+setSaving(false);
+});
 	}
 
 	return (
@@ -437,8 +437,8 @@ function MemberDialog({
 		if (!trimmed || saving) return;
 		setSaving(true);
 		setError(null);
-		try {
-			if (!member) {
+		await (async () => {
+if (!member) {
 				const body: Record<string, unknown> = { name: trimmed };
 				if (email.trim()) body.email = email.trim();
 				if (github.trim()) body.github = github.trim();
@@ -476,10 +476,10 @@ function MemberDialog({
 			}
 			setSaving(false);
 			await onSaved();
-		} catch (e: any) {
-			setError(e.message);
+})().catch(async (e: any) => {
+setError(e.message);
 			setSaving(false);
-		}
+});
 	}
 
 	return (

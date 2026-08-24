@@ -106,11 +106,11 @@ function useHydratedTranscriptEntry(
         const detail = (await res.json()) as FullEntryDetail;
         let toolInput = detail.toolInput;
         if (legacyVoiceInput && toolInput === undefined && detail.content) {
-          try {
-            toolInput = JSON.parse(detail.content);
-          } catch {
-            toolInput = detail.content;
-          }
+          await (async () => {
+toolInput = JSON.parse(detail.content);
+})().catch(async () => {
+toolInput = detail.content;
+});
         }
         setHydrated({
           sessionId,

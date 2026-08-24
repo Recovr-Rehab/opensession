@@ -1845,17 +1845,17 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 		if (!window.confirm(`Close PR #${item.pr.number} without merging it?`))
 			return;
 		setClosingPrUrls((current) => new Set(current).add(item.pr.url));
-		try {
-			await closePrPreviewApi(item.pr.repo, item.pr.branch);
-		} catch (error: any) {
-			onToast?.(error.message || `Failed to close PR #${item.pr.number}.`);
-		} finally {
-			setClosingPrUrls((current) => {
+		await (async () => {
+await closePrPreviewApi(item.pr.repo, item.pr.branch);
+})().catch(async (error: any) => {
+onToast?.(error.message || `Failed to close PR #${item.pr.number}.`);
+}).finally(async () => {
+setClosingPrUrls((current) => {
 				const next = new Set(current);
 				next.delete(item.pr.url);
 				return next;
 			});
-		}
+});
 	}
 
 	// A PR row is selected while the open workspace carries its PR.
@@ -3367,15 +3367,15 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 			...prev,
 			plain: (prev.plain || []).filter((x) => x.id !== threadId),
 		}));
-		try {
-			await setPlainThreadStatusApi(threadId, "done", { user: currentUser });
-		} catch {
-			fetchFeedItems("plain")
+		await (async () => {
+await setPlainThreadStatusApi(threadId, "done", { user: currentUser });
+})().catch(async () => {
+fetchFeedItems("plain")
 				.then((items) =>
 					setFeedItems((prev) => ({ ...prev, plain: items })),
 				)
 				.catch(() => {});
-		}
+});
 	}
 
 	// A Support row: one TODO Plain ticket. The dot wears the linked session's

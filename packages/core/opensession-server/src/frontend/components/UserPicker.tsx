@@ -109,9 +109,11 @@ export function useAuthStatus(): AuthStatus | null {
 
 /** Sign out of the GitHub web session and return to the sign-in screen. */
 export async function signOut(): Promise<void> {
-  try {
-    await fetch(`${BASE_PATH}/api/auth/logout`, { method: "POST" });
-  } catch {}
+  await (async () => {
+await fetch(`${BASE_PATH}/api/auth/logout`, { method: "POST" });
+})().catch(async () => {
+
+});
   window.location.reload();
 }
 
@@ -405,8 +407,8 @@ function GithubSignIn({
     let intervalMs = Math.max(flow.interval, 5) * 1000;
     let timer: ReturnType<typeof setTimeout>;
     const tick = async () => {
-      try {
-        const res = await fetch(`${BASE_PATH}/api/auth/device/poll`, {
+      await (async () => {
+const res = await fetch(`${BASE_PATH}/api/auth/device/poll`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ deviceCode: flow.deviceCode }),
@@ -424,7 +426,9 @@ function GithubSignIn({
           setFlow(null);
           return;
         }
-      } catch {}
+})().catch(async () => {
+
+});
       if (!cancelled) timer = setTimeout(tick, intervalMs);
     };
     timer = setTimeout(tick, intervalMs);
@@ -437,14 +441,14 @@ function GithubSignIn({
   async function start() {
     setError(null);
     setStarting(true);
-    try {
-      const res = await fetch(`${BASE_PATH}/api/auth/device`, { method: "POST" });
+    await (async () => {
+const res = await fetch(`${BASE_PATH}/api/auth/device`, { method: "POST" });
       const body = await res.json();
       if (!res.ok) throw new Error(body.error || `Failed: ${res.status}`);
       setFlow(body);
-    } catch (e: any) {
-      setError(e.message);
-    }
+})().catch(async (e: any) => {
+setError(e.message);
+});
     setStarting(false);
   }
 

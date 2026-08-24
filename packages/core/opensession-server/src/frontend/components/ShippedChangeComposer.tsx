@@ -61,11 +61,11 @@ export function SlackSentNotice({
 							disabled={undoing}
 							onClick={async () => {
 								setUndoing(true);
-								try {
-									await onUndo();
-								} finally {
-									setUndoing(false);
-								}
+								await (async () => {
+await onUndo();
+})().finally(async () => {
+setUndoing(false);
+});
 							}}
 						/>
 					</Tooltip>
@@ -186,19 +186,19 @@ export function ShippedChangeComposer({
 			.slice(0, 10 - screenshots.length);
 		if (!images.length) return;
 		setUploading(true);
-		try {
-			const uploaded = await Promise.all(images.map((file) => uploadFile(file)));
+		await (async () => {
+const uploaded = await Promise.all(images.map((file) => uploadFile(file)));
 			setScreenshots((current) => [...new Set([
 				...current,
 				...uploaded.map((file) => file.path),
 			])].slice(0, 10));
-		} catch (error) {
-			toast(error instanceof Error ? error.message : "Couldn't add that image", {
+})().catch(async (error) => {
+toast(error instanceof Error ? error.message : "Couldn't add that image", {
 				variant: "error",
 			});
-		} finally {
-			setUploading(false);
-		}
+}).finally(async () => {
+setUploading(false);
+});
 	};
 	const mediaUrl = (path: string) => path.startsWith("/media?")
 		? path
@@ -206,8 +206,8 @@ export function ShippedChangeComposer({
 	const reconnect = async () => {
 		if (!onReconnectSlack) return;
 		setAwaitingSlack(true);
-		try {
-			await onReconnectSlack();
+		await (async () => {
+await onReconnectSlack();
 			for (let attempt = 0; attempt < 24; attempt += 1) {
 				await new Promise((resolve) => setTimeout(resolve, 5_000));
 				const result = await (loadChannels ? loadChannels() : fetchShippedChangeChannels(sessionId));
@@ -216,11 +216,11 @@ export function ShippedChangeComposer({
 				if (result.canUploadImages !== false) return;
 			}
 			toast("Slack access is still waiting for approval", { variant: "error" });
-		} catch (error) {
-			toast(error instanceof Error ? error.message : "Couldn't reconnect Slack", { variant: "error" });
-		} finally {
-			setAwaitingSlack(false);
-		}
+})().catch(async (error) => {
+toast(error instanceof Error ? error.message : "Couldn't reconnect Slack", { variant: "error" });
+}).finally(async () => {
+setAwaitingSlack(false);
+});
 	};
 
 	if (sent && !composingAfterSent) {

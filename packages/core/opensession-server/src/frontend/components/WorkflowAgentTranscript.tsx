@@ -50,8 +50,8 @@ export function WorkflowAgentTranscript({ runId, agent, onBack }: Props) {
 
 		async function poll(initial: boolean) {
 			if (initial) setLoad({ kind: "loading" });
-			try {
-				const res = await fetch(
+			await (async () => {
+const res = await fetch(
 					`${BASE_PATH}/api/workflows/${encodeURIComponent(runId)}/agents/${agent.seq}/transcript`,
 				);
 				if (cancelled) return;
@@ -64,8 +64,8 @@ export function WorkflowAgentTranscript({ runId, agent, onBack }: Props) {
 					if (cancelled) return;
 					setLoad({ kind: "ready", entries: data?.entries ?? [] });
 				}
-			} catch (e) {
-				if (cancelled) return;
+})().catch(async (e) => {
+if (cancelled) return;
 				// A transient miss on a live agent just retries on the next tick.
 				if (initial || !running)
 					setLoad({
@@ -73,7 +73,7 @@ export function WorkflowAgentTranscript({ runId, agent, onBack }: Props) {
 						message:
 							e instanceof Error ? e.message : "Failed to load the transcript",
 					});
-			}
+});
 			// Keep watching only while the agent is still working.
 			if (!cancelled && running)
 				timer = setTimeout(() => poll(false), POLL_MS);

@@ -67,14 +67,14 @@ export function StoragePanel() {
 
 	async function load(cancelled?: () => boolean) {
 		setError(null);
-		try {
-			const next = await fetchAssetStorageSettings();
+		await (async () => {
+const next = await fetchAssetStorageSettings();
 			if (cancelled?.()) return;
 			setSaved(next);
 			setDraft(draftFrom(next));
-		} catch (cause: any) {
-			if (!cancelled?.()) setError(cause?.message || "Couldn’t load asset storage");
-		}
+})().catch(async (cause: any) => {
+if (!cancelled?.()) setError(cause?.message || "Couldn’t load asset storage");
+});
 	}
 
 	useEffect(() => {
@@ -94,24 +94,24 @@ export function StoragePanel() {
 		if (!draft || busy) return;
 		setBusy("test");
 		setError(null);
-		try {
-			await testAssetStorageSettings(payload(draft));
+		await (async () => {
+await testAssetStorageSettings(payload(draft));
 			setTested(true);
 			toast("Storage connection works.", { variant: "success" });
-		} catch (cause: any) {
-			setTested(false);
+})().catch(async (cause: any) => {
+setTested(false);
 			setError(cause?.message || "Couldn’t connect to storage");
-		} finally {
-			setBusy(null);
-		}
+}).finally(async () => {
+setBusy(null);
+});
 	}
 
 	async function save() {
 		if (!draft || busy) return;
 		setBusy("save");
 		setError(null);
-		try {
-			const next = await saveAssetStorageSettings(payload(draft));
+		await (async () => {
+const next = await saveAssetStorageSettings(payload(draft));
 			setSaved(next);
 			setDraft(draftFrom(next));
 			setTested(next.provider === "s3");
@@ -121,11 +121,11 @@ export function StoragePanel() {
 					: "Local asset storage enabled.",
 				{ variant: "success" },
 			);
-		} catch (cause: any) {
-			setError(cause?.message || "Couldn’t save asset storage");
-		} finally {
-			setBusy(null);
-		}
+})().catch(async (cause: any) => {
+setError(cause?.message || "Couldn’t save asset storage");
+}).finally(async () => {
+setBusy(null);
+});
 	}
 
 	const changed = !!draft && !!saved && (

@@ -218,30 +218,30 @@ function AssetMenu({
 	const name = file.path.split("/").pop() || "asset";
 
 	async function onDownload() {
-		try {
-			await saveFileWithNativeShare(sessionAssetDownloadUrl(sessionId, file), name);
-		} catch (error) {
-			if (!nativeShareWasCancelled(error)) toast("Could not save that file");
-		}
+		await (async () => {
+await saveFileWithNativeShare(sessionAssetDownloadUrl(sessionId, file), name);
+})().catch(async (error) => {
+if (!nativeShareWasCancelled(error)) toast("Could not save that file");
+});
 	}
 
 	async function onOpen() {
-		try {
-			await shareURL(rawUrl);
-		} catch (error) {
-			if (!nativeShareWasCancelled(error)) toast("Could not share that link");
-		}
+		await (async () => {
+await shareURL(rawUrl);
+})().catch(async (error) => {
+if (!nativeShareWasCancelled(error)) toast("Could not share that link");
+});
 	}
 
 	async function onDelete() {
 		if (!confirm(`Delete ${file.path}?`)) return;
-		try {
-			await deleteSessionAssetApi(sessionId, file.path);
+		await (async () => {
+await deleteSessionAssetApi(sessionId, file.path);
 			refresh?.();
 			onClose?.();
-		} catch {
-			toast("Could not delete that file");
-		}
+})().catch(async () => {
+toast("Could not delete that file");
+});
 	}
 
 	return (
@@ -336,19 +336,19 @@ function AssetOverlayActionBar({
 	const actionLabel = (label: string) => (phone ? null : label);
 
 	async function download() {
-		try {
-			await saveFileWithNativeShare(downloadUrl, name);
-		} catch (error) {
-			if (!nativeShareWasCancelled(error)) toast("Could not save that file");
-		}
+		await (async () => {
+await saveFileWithNativeShare(downloadUrl, name);
+})().catch(async (error) => {
+if (!nativeShareWasCancelled(error)) toast("Could not save that file");
+});
 	}
 
 	async function open() {
-		try {
-			await shareURL(rawUrl);
-		} catch (error) {
-			if (!nativeShareWasCancelled(error)) toast("Could not share that link");
-		}
+		await (async () => {
+await shareURL(rawUrl);
+})().catch(async (error) => {
+if (!nativeShareWasCancelled(error)) toast("Could not share that link");
+});
 	}
 
 	return (

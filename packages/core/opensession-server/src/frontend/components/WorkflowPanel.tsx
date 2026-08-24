@@ -555,8 +555,8 @@ function RunCard({
 
 	const loadDetail = async (seq: number) => {
 			setDetails((prev) => ({ ...prev, [seq]: "loading" }));
-			try {
-				const res = await fetch(
+			await (async () => {
+const res = await fetch(
 					`${BASE_PATH}/api/workflows/${encodeURIComponent(run.runId)}/agents/${seq}`,
 				);
 				if (!res.ok) throw new Error(String(res.status));
@@ -572,9 +572,9 @@ function RunCard({
 				if (!entry || typeof entry.prompt !== "string")
 					throw new Error("bad shape");
 				setDetails((prev) => ({ ...prev, [seq]: entry }));
-			} catch {
-				setDetails((prev) => ({ ...prev, [seq]: "missing" }));
-			}
+})().catch(async () => {
+setDetails((prev) => ({ ...prev, [seq]: "missing" }));
+});
 		};
 
 	const startMs = new Date(run.startedAt).getTime();

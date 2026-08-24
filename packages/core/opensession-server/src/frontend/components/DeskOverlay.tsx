@@ -100,8 +100,8 @@ function DeskBody({
 	useEffect(() => {
 		let cancelled = false;
 		(async () => {
-			try {
-				const res = await fetch(`${BASE_PATH}/api/desk/ensure`, {
+			await (async () => {
+const res = await fetch(`${BASE_PATH}/api/desk/ensure`, {
 					method: "POST",
 					headers: { "Content-Type": "application/json" },
 					body: JSON.stringify({ user }),
@@ -119,9 +119,9 @@ function DeskBody({
 					effort: data.session?.effort,
 				});
 				if (data.clearedAt) setClearedAt(data.clearedAt);
-			} catch (e: any) {
-				if (!cancelled) setEnsureError(e?.message || "Failed to open the Desk");
-			}
+})().catch(async (e: any) => {
+if (!cancelled) setEnsureError(e?.message || "Failed to open the Desk");
+});
 		})();
 		return () => {
 			cancelled = true;
@@ -129,15 +129,17 @@ function DeskBody({
 	}, [user]);
 
 	async function clearSession() {
-		try {
-			const res = await fetch(`${BASE_PATH}/api/desk/clear`, {
+		await (async () => {
+const res = await fetch(`${BASE_PATH}/api/desk/clear`, {
 				method: "POST",
 				headers: { "Content-Type": "application/json" },
 				body: JSON.stringify({ user }),
 			});
 			const data = (await res.json()) as { clearedAt?: string };
 			if (data.clearedAt) setClearedAt(data.clearedAt);
-		} catch {}
+})().catch(async () => {
+
+});
 	}
 
 	return (

@@ -109,10 +109,12 @@ export function Goals({ onOpenSession, selectedId, onSelect }: Props) {
   }, []);
 
   const load = async () => {
-    try {
-      setGoals(await fetchGoals());
+    await (async () => {
+setGoals(await fetchGoals());
       setLoading(false);
-    } catch {}
+})().catch(async () => {
+
+});
   };
 
   useEffect(() => {
@@ -148,12 +150,12 @@ export function Goals({ onOpenSession, selectedId, onSelect }: Props) {
   }, [!!sel, editMode, onSelect]);
 
   async function act(fn: () => Promise<unknown>, refreshDelay = 400) {
-    try {
-      await fn();
+    await (async () => {
+await fn();
       setTimeout(load, refreshDelay);
-    } catch (e: any) {
-      setError(e.message);
-    }
+})().catch(async (e: any) => {
+setError(e.message);
+});
   }
 
   async function handleDelete(g: Goal) {
@@ -611,17 +613,17 @@ function GoalForm({
       minWakeMinutes: Number(minWakeMinutes) || undefined,
       maxWakes: maxWakes.trim() ? Number(maxWakes) : undefined,
     };
-    try {
-      if (initial) {
+    await (async () => {
+if (initial) {
         await updateGoalApi(initial.id, payload);
       } else {
         await createGoalApi({ ...payload, createdBy: getCurrentUser() });
       }
       onSaved();
-    } catch (e: any) {
-      setError(e.message);
+})().catch(async (e: any) => {
+setError(e.message);
       setSaving(false);
-    }
+});
   }
 
   const fields = (

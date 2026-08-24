@@ -687,27 +687,27 @@ export function WorkspaceSummaryBody({
 		if (!pr?.reviewActive || reviewCancelling) return;
 		setReviewCancelling(true);
 		setReviewError(null);
-		try {
-			await cancelPrReviewApi(session.id, getCurrentUser(), session.repo || undefined);
+		await (async () => {
+await cancelPrReviewApi(session.id, getCurrentUser(), session.repo || undefined);
 			// The stop request is durable before the API answers. Return to the last
 			// completed result immediately while the worker unwinds in the background.
 			void prResource.mutate(
 				{ ...pr, reviewActive: false },
 				{ revalidate: false },
 			);
-		} catch (error: any) {
-			setReviewError(error?.message || "Couldn't cancel the review");
-		} finally {
-			setReviewCancelling(false);
-		}
+})().catch(async (error: any) => {
+setReviewError(error?.message || "Couldn't cancel the review");
+}).finally(async () => {
+setReviewCancelling(false);
+});
 	}
 
 	async function fixOsReview() {
 		if (!canFixOsReview || fixBusy) return;
 		setFixBusy(true);
 		setFixError(null);
-		try {
-			const result = await triggerPrActionApi(
+		await (async () => {
+const result = await triggerPrActionApi(
 				session.id,
 				"autofix",
 				getCurrentUser(),
@@ -717,11 +717,11 @@ export function WorkspaceSummaryBody({
 			if (result.openSession && result.bksId && onOpenSession) {
 				go(() => onOpenSession(result.bksId!, result.session ?? null));
 			}
-		} catch (error: any) {
-			setFixError(error?.message || "Couldn't start Auto-fix");
-		} finally {
-			setFixBusy(false);
-		}
+})().catch(async (error: any) => {
+setFixError(error?.message || "Couldn't start Auto-fix");
+}).finally(async () => {
+setFixBusy(false);
+});
 	}
 
 	function pickReviewer(name: string | null, recipients?: string[]) {

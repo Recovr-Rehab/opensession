@@ -387,8 +387,8 @@ export function VoiceInput({
 
     // Live level meter for the waveform is progressive enhancement. Recording
     // works fine without it.
-    try {
-      const Ctx = window.AudioContext || (window as any).webkitAudioContext;
+    await (async () => {
+const Ctx = window.AudioContext || (window as any).webkitAudioContext;
       const ctx: AudioContext = new Ctx();
       audioCtxRef.current = ctx;
       const analyser = ctx.createAnalyser();
@@ -410,9 +410,9 @@ export function VoiceInput({
           ]);
         }, 90),
       );
-    } catch {
-      // no waveform, no problem
-    }
+})().catch(async () => {
+// no waveform, no problem
+});
 
     const startedAt = Date.now();
     setLevels([]);
@@ -473,8 +473,8 @@ export function VoiceInput({
     browserResult: Promise<string> | null,
   ) {
     let restoreFocus = false;
-    try {
-      // A live browser result avoids uploading and reprocessing the complete
+    await (async () => {
+// A live browser result avoids uploading and reprocessing the complete
       // clip. The existing server transcription remains the fallback, so an
       // unsupported browser or a speech-service outage behaves as before.
       const liveText = (await browserResult?.catch(() => ""))?.trim() || "";
@@ -490,18 +490,18 @@ export function VoiceInput({
         callbacks.onText(text);
         restoreFocus = true;
       }
-    } catch (e: any) {
-      if (request !== requestRef.current) return;
+})().catch(async (e: any) => {
+if (request !== requestRef.current) return;
       setError(e?.message || "Transcription failed");
       restoreFocus = true;
-    } finally {
-      if (request === requestRef.current) {
+}).finally(async () => {
+if (request === requestRef.current) {
         sendRef.current = false;
         setLiveTranscript("");
         setPhase("idle");
         if (restoreFocus) restoreEditorFocus();
       }
-    }
+});
   }
 
   const overlay = phase !== "idle" && (

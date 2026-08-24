@@ -308,14 +308,14 @@ export function SessionSearch({
 		setSearching(true);
 		const ctrl = new AbortController();
 		const t = setTimeout(async () => {
-			try {
-				const matches = await searchTranscripts(q, ctrl.signal);
+			await (async () => {
+const matches = await searchTranscripts(q, ctrl.signal);
 				setSnippets(new Map(matches.map((m) => [m.id, m.snippet])));
-			} catch (e) {
-				if (!ctrl.signal.aborted) setSnippets(new Map());
-			} finally {
-				if (!ctrl.signal.aborted) setSearching(false);
-			}
+})().catch(async (e) => {
+if (!ctrl.signal.aborted) setSnippets(new Map());
+}).finally(async () => {
+if (!ctrl.signal.aborted) setSearching(false);
+});
 		}, 250);
 		return () => {
 			clearTimeout(t);

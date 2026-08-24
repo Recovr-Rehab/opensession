@@ -16,16 +16,16 @@ export function useGithubConnectionState(refreshKey: unknown): GithubConnectionS
 	const [state, setState] = useState<GithubConnectionState>("loading");
 
 	const refresh = async () => {
-		try {
-			const response = await fetch(`${BASE_PATH}/api/connections/github`);
+		await (async () => {
+const response = await fetch(`${BASE_PATH}/api/connections/github`);
 			if (!response.ok) throw new Error(`GitHub connection check failed: ${response.status}`);
 			const body = (await response.json()) as { accounts?: unknown[] };
 			setState(body.accounts?.length ? "connected" : "disconnected");
-		} catch {
-			// Do not lock an existing local setup out of session creation when an
+})().catch(async () => {
+// Do not lock an existing local setup out of session creation when an
 			// older server or a transient request failure cannot answer the check.
 			setState("unknown");
-		}
+});
 	};
 
 	useEffect(() => {

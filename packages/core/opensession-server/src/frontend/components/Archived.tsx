@@ -268,12 +268,12 @@ export function Archived({
 	async function handleUnarchive(e: React.MouseEvent, id: string) {
 		e.stopPropagation();
 		setBusy(id);
-		try {
-			await archiveSessionApi(id, false);
+		await (async () => {
+await archiveSessionApi(id, false);
 			onChanged();
-		} finally {
-			setBusy(null);
-		}
+})().finally(async () => {
+setBusy(null);
+});
 	}
 
 	function closeRestoreSwipe() {

@@ -296,8 +296,8 @@ export function IntegrationSetupDialog({
 		if (!dirty || saving) return;
 		setSaving(true);
 		setError(null);
-		try {
-			const env: Record<string, string> = {};
+		await (async () => {
+const env: Record<string, string> = {};
 			for (const name of typedKeys) env[name] = (typed[name] ?? "").replace(/\s+/g, "");
 			for (const name of clearedKeys) env[name] = "";
 			const body = await setupRequest<{
@@ -315,11 +315,11 @@ export function IntegrationSetupDialog({
 			toast(`${integration.label} saved`);
 			onSaved(body.integration, body.restartRequired !== false);
 			onOpenChange(false);
-		} catch (cause) {
-			setError(cause instanceof Error ? cause.message : `Could not save ${integration.label}`);
-		} finally {
-			setSaving(false);
-		}
+})().catch(async (cause) => {
+setError(cause instanceof Error ? cause.message : `Could not save ${integration.label}`);
+}).finally(async () => {
+setSaving(false);
+});
 	}
 
 	return (

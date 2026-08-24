@@ -1629,20 +1629,20 @@ function MediaLightbox({
 	const saveItem = async () => {
 		if (saving) return;
 		setSavingSrc(item.src);
-		try {
-			await saveFileWithNativeShare(downloadHref(item), suggestedName(item));
-		} catch (error) {
-			if (!nativeShareWasCancelled(error)) toast("Could not save that file");
-		} finally {
-			setSavingSrc(null);
-		}
+		await (async () => {
+await saveFileWithNativeShare(downloadHref(item), suggestedName(item));
+})().catch(async (error) => {
+if (!nativeShareWasCancelled(error)) toast("Could not save that file");
+}).finally(async () => {
+setSavingSrc(null);
+});
 	};
 	const openItem = async () => {
-		try {
-			await shareURL(item.src);
-		} catch (error) {
-			if (!nativeShareWasCancelled(error)) toast("Could not share that link");
-		}
+		await (async () => {
+await shareURL(item.src);
+})().catch(async (error) => {
+if (!nativeShareWasCancelled(error)) toast("Could not share that link");
+});
 	};
 	const copyImage = () => {
 		void copyImageToClipboard(item.src).then(
@@ -1655,27 +1655,28 @@ function MediaLightbox({
 		canCommentOnImageRegion(item.commentSessionId);
 	const sendRegionComment = async () => {
 		const text = commentText.trim();
-		if (!item.commentSessionId || !selection || !text || sendingCommentRef.current)
+		const { commentSessionId, src } = item;
+		if (!commentSessionId || !selection || !text || sendingCommentRef.current)
 			return;
 		sendingCommentRef.current = true;
 		setSendingComment(true);
 		setCommentError(null);
-		try {
-			await submitImageRegionComment({
-				sessionId: item.commentSessionId,
-				src: item.src,
+		await (async () => {
+await submitImageRegionComment({
+				sessionId: commentSessionId,
+				src,
 				region: selection,
 				text,
 			});
 			onClose(false);
-		} catch (error) {
-			setCommentError(
+})().catch(async (error) => {
+setCommentError(
 				error instanceof Error ? error.message : "Could not send this comment",
 			);
-		} finally {
-			sendingCommentRef.current = false;
+}).finally(async () => {
+sendingCommentRef.current = false;
 			setSendingComment(false);
-		}
+});
 	};
 
 	useEffect(() => {

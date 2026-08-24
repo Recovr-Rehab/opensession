@@ -104,19 +104,19 @@ export function ClampedBody({
 	const expand = async () => {
 		if (wireClamped && !fetched && entry && sessionId) {
 			setFetching(true);
-			try {
-				const res = await fetch(
+			await (async () => {
+const res = await fetch(
 					`${BASE_PATH}/api/sessions/${encodeURIComponent(sessionId)}/entry/${encodeURIComponent(entry.id)}`,
 				);
 				if (res.ok) {
 					const data = await res.json();
 					if (typeof data?.content === "string") setFetched(data.content);
 				}
-			} catch {
-				// keep the wire-clamped text — the tail just stays truncated
-			} finally {
-				setFetching(false);
-			}
+})().catch(async () => {
+// keep the wire-clamped text — the tail just stays truncated
+}).finally(async () => {
+setFetching(false);
+});
 		}
 		setShowAll(true);
 	};

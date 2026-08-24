@@ -64,10 +64,12 @@ export function ModelProvidersPanel() {
 	const [showAdd, setShowAdd] = useState(false);
 
 	const load = async () => {
-		try {
-			const res = await fetch(`${BASE_PATH}/api/settings/model-providers`);
+		await (async () => {
+const res = await fetch(`${BASE_PATH}/api/settings/model-providers`);
 			if (res.ok) setProviders((await res.json()).providers);
-		} catch {}
+})().catch(async () => {
+
+});
 	};
 
 	useEffect(() => {
@@ -83,8 +85,8 @@ export function ModelProvidersPanel() {
 			)
 		)
 			return;
-		try {
-			const res = await fetch(
+		await (async () => {
+const res = await fetch(
 				`${BASE_PATH}/api/settings/model-providers/${encodeURIComponent(p.id)}`,
 				{ method: "DELETE" },
 			);
@@ -92,9 +94,9 @@ export function ModelProvidersPanel() {
 			if (!res.ok) throw new Error(body.error || `Failed: ${res.status}`);
 			toast(`Provider ${p.id} removed`);
 			load();
-		} catch (e: any) {
-			toast(e.message, { variant: "error" });
-		}
+})().catch(async (e: any) => {
+toast(e.message, { variant: "error" });
+});
 	}
 
 	return (
@@ -212,8 +214,8 @@ function AddProviderForm({
 	async function handleSave() {
 		setSaving(true);
 		setError(null);
-		try {
-			const modelIds = models
+		await (async () => {
+const modelIds = models
 				.split(/[\s,]+/)
 				.map((m) => m.trim())
 				.filter(Boolean);
@@ -234,10 +236,10 @@ function AddProviderForm({
 			if (!res.ok) throw new Error(body.error || `Failed: ${res.status}`);
 			toast(`Provider ${cleanId} saved`);
 			onSaved();
-		} catch (e: any) {
-			setError(e.message);
+})().catch(async (e: any) => {
+setError(e.message);
 			setSaving(false);
-		}
+});
 	}
 
 	return (

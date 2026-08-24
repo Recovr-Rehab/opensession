@@ -217,8 +217,8 @@ function ConnectDialog({
 
 	async function connect() {
 		setSaving(true);
-		try {
-			const response = await connectSandbox(connection.provider, {
+		await (async () => {
+const response = await connectSandbox(connection.provider, {
 				...(apiKey ? { apiKey } : {}),
 				...(tokenId ? { tokenId } : {}),
 				...(tokenSecret ? { tokenSecret } : {}),
@@ -235,29 +235,29 @@ function ConnectDialog({
 			onChanged(response);
 			onOpenChange(false);
 			toast(`${provider.label} connection check started`, { variant: "success" });
-		} catch (error) {
-			toast(error instanceof Error ? error.message : `Failed to connect ${provider.label}`, {
+})().catch(async (error) => {
+toast(error instanceof Error ? error.message : `Failed to connect ${provider.label}`, {
 				variant: "error",
 			});
-		} finally {
-			setSaving(false);
-		}
+}).finally(async () => {
+setSaving(false);
+});
 	}
 
 	async function disconnect() {
 		setSaving(true);
-		try {
-			const response = await disconnectSandbox(connection.provider);
+		await (async () => {
+const response = await disconnectSandbox(connection.provider);
 			onChanged(response);
 			onOpenChange(false);
 			toast(`${provider.label} disconnected`, { variant: "success" });
-		} catch (error) {
-			toast(error instanceof Error ? error.message : `Failed to disconnect ${provider.label}`, {
+})().catch(async (error) => {
+toast(error instanceof Error ? error.message : `Failed to disconnect ${provider.label}`, {
 				variant: "error",
 			});
-		} finally {
-			setSaving(false);
-		}
+}).finally(async () => {
+setSaving(false);
+});
 	}
 
 	const exists = connection.state !== "not_configured";
@@ -430,28 +430,28 @@ function ConnectionCard({
 
 	async function testAgain() {
 		setBusy(true);
-		try {
-			onChanged(await testSandboxConnection(connection.provider));
-		} catch (error) {
-			toast(error instanceof Error ? error.message : `Failed to test ${provider.label}`, {
+		await (async () => {
+onChanged(await testSandboxConnection(connection.provider));
+})().catch(async (error) => {
+toast(error instanceof Error ? error.message : `Failed to test ${provider.label}`, {
 				variant: "error",
 			});
-		} finally {
-			setBusy(false);
-		}
+}).finally(async () => {
+setBusy(false);
+});
 	}
 
 	async function toggle(enabled: boolean) {
 		setBusy(true);
-		try {
-			onChanged(await updateSandboxConnection(connection.provider, { enabled }));
-		} catch (error) {
-			toast(error instanceof Error ? error.message : `Failed to update ${provider.label}`, {
+		await (async () => {
+onChanged(await updateSandboxConnection(connection.provider, { enabled }));
+})().catch(async (error) => {
+toast(error instanceof Error ? error.message : `Failed to update ${provider.label}`, {
 				variant: "error",
 			});
-		} finally {
-			setBusy(false);
-		}
+}).finally(async () => {
+setBusy(false);
+});
 	}
 
 	const checking = connection.state === "checking" || operation?.status === "running";
@@ -589,20 +589,20 @@ function ProjectEnvironmentDialog({
 		if (!selected) return;
 		const settings = machineProfiles(provider).find((candidate) => candidate.id === profile)?.settings;
 		setSaving(true);
-		try {
-			const response = await rebuildSandboxEnvironment(selected.repo, provider, settings);
+		await (async () => {
+const response = await rebuildSandboxEnvironment(selected.repo, provider, settings);
 			onStarted(response.operation, selected, settings);
 			onOpenChange(false);
 			toast(`${providerLabel(provider)} snapshot build started for ${selected.repo}`, {
 				variant: "success",
 			});
-		} catch (error) {
-			toast(error instanceof Error ? error.message : "Failed to build project snapshot", {
+})().catch(async (error) => {
+toast(error instanceof Error ? error.message : "Failed to build project snapshot", {
 				variant: "error",
 			});
-		} finally {
-			setSaving(false);
-		}
+}).finally(async () => {
+setSaving(false);
+});
 	}
 
 	return (

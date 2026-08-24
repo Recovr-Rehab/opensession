@@ -76,18 +76,18 @@ export function Reports({
 	isPhoneRef.current = isPhone;
 
 	async function loadGroups() {
-		try {
-			const next = await fetchReportGroups();
+		await (async () => {
+const next = await fetchReportGroups();
 			setGroups(next);
 			setError("");
 			// On phones the bare /reports route IS the list page, so don't
 			// auto-select — that would skip straight past it into the detail.
 			if (!selectionRef.current && !isPhoneRef.current && next[0])
 				onSelect(next[0].automationId);
-		} catch (e: any) {
-			setError(e?.message || "Failed to load reports");
+})().catch(async (e: any) => {
+setError(e?.message || "Failed to load reports");
 			setGroups([]);
-		}
+});
 	}
 
 	useEffect(() => {

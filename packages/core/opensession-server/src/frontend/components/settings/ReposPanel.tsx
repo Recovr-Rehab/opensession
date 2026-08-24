@@ -69,14 +69,14 @@ function SharedCheckoutSetting() {
 		setSettings({ ...previous, mode });
 		setSaving(true);
 		setError(null);
-		try {
-			setSettings(await setSharedCheckoutMode(mode));
-		} catch (cause: any) {
-			setSettings(previous);
+		await (async () => {
+setSettings(await setSharedCheckoutMode(mode));
+})().catch(async (cause: any) => {
+setSettings(previous);
 			setError(cause?.message || "Couldn’t save where sessions make changes");
-		} finally {
-			setSaving(false);
-		}
+}).finally(async () => {
+setSaving(false);
+});
 	}
 
 	return (

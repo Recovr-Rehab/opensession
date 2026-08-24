@@ -278,7 +278,6 @@ function RangeCalendar({
 	// unmounts on close, so there is no later state for this to disagree with.
 	React.useEffect(() => {
 		focusDay(end);
-		// eslint-disable-next-line react-hooks/exhaustive-deps
 	}, []);
 
 	// A viewport that crosses the phone breakpoint while the popup is open can

@@ -669,16 +669,16 @@ export function PrPanel({
       });
       const reviewThreadsRequest = prRequest.then(async () => {
         if (!prResult) return;
-        try {
-          const threads = await fetchPrReviewThreads(
+        await (async () => {
+const threads = await fetchPrReviewThreads(
             active?.repo,
             prResult.number,
           );
           if (isCurrent()) setReviewThreads({ key: loadTargetKey, threads });
-        } catch {
-          // Resolved threads are supporting context. A provider or credential
+})().catch(async () => {
+// Resolved threads are supporting context. A provider or credential
           // failure must not block the diff itself.
-        }
+});
       });
 
       const promise = Promise.allSettled([
@@ -809,18 +809,18 @@ export function PrPanel({
     const generation = ++guideGenerationRef.current;
     setGuideLoading(true);
     setGuideFailed(false);
-    try {
-      const data = previewTarget
+    await (async () => {
+const data = previewTarget
         ? await fetchPrPreviewGuide(previewTarget.repo, previewTarget.branch)
         : await fetchReviewGuide(sessionId, active?.repo, active?.branch);
       if (generation !== guideGenerationRef.current) return;
       if (data) setGuide({ key: guideKey, data });
       else setGuideFailed(true);
-    } catch {
-      if (generation === guideGenerationRef.current) setGuideFailed(true);
-    } finally {
-      if (generation === guideGenerationRef.current) setGuideLoading(false);
-    }
+})().catch(async () => {
+if (generation === guideGenerationRef.current) setGuideFailed(true);
+}).finally(async () => {
+if (generation === guideGenerationRef.current) setGuideLoading(false);
+});
   };
 
   const prPatchVersion = diff?.diffVersion || "";
@@ -833,8 +833,8 @@ export function PrPanel({
     const generation = ++codeFlowGenerationRef.current;
     setCodeFlowLoading(true);
     setCodeFlowError(null);
-    try {
-      const data = previewTarget
+    await (async () => {
+const data = previewTarget
         ? await fetchPrPreviewCodeFlow(previewTarget.repo, previewTarget.branch)
         : await fetchPrCodeFlow(sessionId, active?.repo, active?.branch);
       if (!data)
@@ -849,13 +849,13 @@ export function PrPanel({
       }
       if (generation === codeFlowGenerationRef.current)
         setCodeFlow({ key: codeFlowKey, data });
-    } catch (error: any) {
-      if (generation === codeFlowGenerationRef.current)
+})().catch(async (error: any) => {
+if (generation === codeFlowGenerationRef.current)
         setCodeFlowError(error?.message || "Couldn't load code flow.");
-    } finally {
-      if (generation === codeFlowGenerationRef.current)
+}).finally(async () => {
+if (generation === codeFlowGenerationRef.current)
         setCodeFlowLoading(false);
-    }
+});
   };
 
   const refreshCodeFlow = async () => {
@@ -962,8 +962,8 @@ export function PrPanel({
     }
     setSubmitting(true);
     setReviewError(null);
-    try {
-      const payload = {
+    await (async () => {
+const payload = {
         user: getCurrentUser(),
         event: reviewEvent,
         summary: summary.trim() || undefined,
@@ -986,8 +986,8 @@ export function PrPanel({
         : await submitPrReviewApi(sessionId, payload);
       let merged = false;
       if (reviewEvent === "APPROVE" && mergeAfterReview) {
-        try {
-          if (previewTarget)
+        await (async () => {
+if (previewTarget)
             await mergePrPreviewApi(
               previewTarget.repo,
               previewTarget.branch,
@@ -996,11 +996,11 @@ export function PrPanel({
           else
             await mergePrApi(sessionId, "squash", active?.repo, active?.branch);
           merged = true;
-        } catch (e: any) {
-          setMergeError(
+})().catch(async (e: any) => {
+setMergeError(
             `Review approved, but merge failed: ${e.message || "unknown error"}`,
           );
-        }
+});
       }
       if (actionTargetKey !== activeLoadTargetRef.current) return;
       setPending([]);
@@ -1015,12 +1015,12 @@ export function PrPanel({
         setReviewing(false);
       }, 6000);
       await load(true);
-    } catch (e: any) {
-      if (actionTargetKey === activeLoadTargetRef.current)
+})().catch(async (e: any) => {
+if (actionTargetKey === activeLoadTargetRef.current)
         setReviewError(e.message || "Failed to submit review");
-    } finally {
-      setSubmitting(false);
-    }
+}).finally(async () => {
+setSubmitting(false);
+});
   }
 
   function handleMerge() {
@@ -1033,8 +1033,8 @@ export function PrPanel({
     setMergeError(null);
     const actionTargetKey = loadTargetKey;
     scheduleDeferredMerge(mergeKey, async () => {
-      try {
-        if (previewTarget)
+      await (async () => {
+if (previewTarget)
           await mergePrPreviewApi(
             previewTarget.repo,
             previewTarget.branch,
@@ -1042,13 +1042,13 @@ export function PrPanel({
           );
         else await mergePrApi(sessionId, "squash", active?.repo, active?.branch);
         if (actionTargetKey === activeLoadTargetRef.current) await load(true);
-      } catch (e: any) {
-        if (actionTargetKey === activeLoadTargetRef.current) {
+})().catch(async (e: any) => {
+if (actionTargetKey === activeLoadTargetRef.current) {
           const message = e.message || "Merge failed";
           setMergeError(message);
           toast(message);
         }
-      }
+});
     });
   }
 
@@ -1063,17 +1063,17 @@ export function PrPanel({
     setClosing(true);
     setCloseError(null);
     const actionTargetKey = loadTargetKey;
-    try {
-      if (previewTarget)
+    await (async () => {
+if (previewTarget)
         await closePrPreviewApi(previewTarget.repo, previewTarget.branch);
       else await closePrApi(sessionId, active?.repo, active?.branch);
       if (actionTargetKey === activeLoadTargetRef.current) await load(true);
-    } catch (e: any) {
-      if (actionTargetKey === activeLoadTargetRef.current)
+})().catch(async (e: any) => {
+if (actionTargetKey === activeLoadTargetRef.current)
         setCloseError(e.message || "Failed to close pull request");
-    } finally {
-      setClosing(false);
-    }
+}).finally(async () => {
+setClosing(false);
+});
   }
 
   // Roll the per-check list up into headline counts, and split deployments
@@ -1294,15 +1294,15 @@ export function PrPanel({
   }
 
   async function handleUnlink(t: PrTarget) {
-    try {
-      const res = await unlinkPrApi(sessionId, t.repo, t.branch!);
+    await (async () => {
+const res = await unlinkPrApi(sessionId, t.repo, t.branch!);
       setLinkedLocal(res.all);
       if (activeKey === t.key)
         setActiveKey((targets.find((x) => x.primary) ?? targets[0])?.key);
       toast("PR unlinked");
-    } catch (e: any) {
-      toast(e.message || "Couldn't unlink the PR");
-    }
+})().catch(async (e: any) => {
+toast(e.message || "Couldn't unlink the PR");
+});
   }
 
   // Tab bar across the top: one tab per PR (primary repo, attached repos,

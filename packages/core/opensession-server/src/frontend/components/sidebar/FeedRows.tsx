@@ -360,7 +360,6 @@ export function FeedFilterMenu({
 				)
 				.catch(() => {});
 		}
-		// eslint-disable-next-line react-hooks/exhaustive-deps
 	}, [opened, feed.id]);
 
 	const active = Object.entries(values).some(

@@ -205,10 +205,12 @@ export function Automations({ onOpenSession, selectedId, onSelect }: Props) {
   useEffect(() => setEditMode(false), [selectedId]);
 
   const load = async () => {
-    try {
-      setAutomations(await fetchAutomations());
+    await (async () => {
+setAutomations(await fetchAutomations());
       setLoading(false);
-    } catch {}
+})().catch(async () => {
+
+});
   };
 
   useEffect(() => {
@@ -243,41 +245,41 @@ export function Automations({ onOpenSession, selectedId, onSelect }: Props) {
   }, [!!sel, showModal, editMode, onSelect]);
 
   async function handleToggle(a: Automation) {
-    try {
-      await updateAutomationApi(a.id, { enabled: !a.enabled });
+    await (async () => {
+await updateAutomationApi(a.id, { enabled: !a.enabled });
       load();
-    } catch (e: any) {
-      setError(e.message);
-    }
+})().catch(async (e: any) => {
+setError(e.message);
+});
   }
 
   async function handleDelete(a: Automation) {
     if (!confirm(`Delete automation "${a.name}"?`)) return;
-    try {
-      await deleteAutomationApi(a.id);
+    await (async () => {
+await deleteAutomationApi(a.id);
       if (sel?.id === a.id) onSelect("");
       load();
-    } catch (e: any) {
-      setError(e.message);
-    }
+})().catch(async (e: any) => {
+setError(e.message);
+});
   }
 
   async function handleRunNow(a: Automation) {
-    try {
-      await runAutomationApi(a.id);
+    await (async () => {
+await runAutomationApi(a.id);
       setTimeout(load, 800);
-    } catch (e: any) {
-      setError(e.message);
-    }
+})().catch(async (e: any) => {
+setError(e.message);
+});
   }
 
   async function handleRetrigger(sessionId: string) {
-    try {
-      await retriggerAutomationApi(sessionId);
+    await (async () => {
+await retriggerAutomationApi(sessionId);
       setTimeout(load, 800);
-    } catch (e: any) {
-      setError(e.message);
-    }
+})().catch(async (e: any) => {
+setError(e.message);
+});
   }
 
   return (
@@ -1073,12 +1075,12 @@ function TypeChooser({
     if (description.trim().length < 10 || drafting) return;
     setDrafting(true);
     setError(null);
-    try {
-      onPick(await draftAutomationApi(description), "classic");
-    } catch (e: any) {
-      setError(e.message);
+    await (async () => {
+onPick(await draftAutomationApi(description), "classic");
+})().catch(async (e: any) => {
+setError(e.message);
       setDrafting(false);
-    }
+});
   }
 
   return (
@@ -1742,8 +1744,8 @@ function AutomationForm({
   async function handleSave() {
     setSaving(true);
     setError(null);
-    try {
-      const slackWatch = isWatch
+    await (async () => {
+const slackWatch = isWatch
         ? { channel: watchChannel.trim().toUpperCase() }
         : initial?.slackWatch
           ? { channel: "" } // editing a watch automation into a classic one clears it
@@ -1793,10 +1795,10 @@ function AutomationForm({
         });
       }
       onSaved();
-    } catch (e: any) {
-      setError(e.message);
+})().catch(async (e: any) => {
+setError(e.message);
       setSaving(false);
-    }
+});
   }
 
   return (

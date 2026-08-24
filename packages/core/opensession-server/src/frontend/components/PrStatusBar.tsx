@@ -621,14 +621,14 @@ export function PrStatusBar({
 		if (busy) return;
 		setBusy(name);
 		setError(null);
-		try {
-			await fn();
+		await (async () => {
+await fn();
 			await load();
-		} catch (e: any) {
-			setError(e.message || `${name} failed`);
-		} finally {
-			setBusy(null);
-		}
+})().catch(async (e: any) => {
+setError(e.message || `${name} failed`);
+}).finally(async () => {
+setBusy(null);
+});
 	}
 
 	// Merging a stack layer means merging everything under it — GitHub takes the

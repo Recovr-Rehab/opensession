@@ -51,12 +51,12 @@ export function PreviewPane({
 
 	async function stop() {
 		setStopping(true);
-		try {
-			await stopPreviewApi(session.id);
+		await (async () => {
+await stopPreviewApi(session.id);
 			onClose();
-		} finally {
-			setStopping(false);
-		}
+})().finally(async () => {
+setStopping(false);
+});
 	}
 
 	return (

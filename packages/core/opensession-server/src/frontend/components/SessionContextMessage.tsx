@@ -77,18 +77,18 @@ export function SessionContextMessage({ sessionId }: { sessionId: string }) {
 		setOpen(true);
 		if (content != null || loading) return;
 		setLoading(true);
-		try {
-			const response = await fetch(
+		await (async () => {
+const response = await fetch(
 				`${BASE_PATH}/api/sessions/${encodeURIComponent(sessionId)}/session-context?content=1`,
 			);
 			if (!response.ok) throw new Error("context request failed");
 			const value = (await response.json()) as SessionContextMetadata;
 			setContent(value.content ?? "");
-		} catch {
-			setContent("Couldn’t load the session context.");
-		} finally {
-			setLoading(false);
-		}
+})().catch(async () => {
+setContent("Couldn’t load the session context.");
+}).finally(async () => {
+setLoading(false);
+});
 	};
 
 	return (

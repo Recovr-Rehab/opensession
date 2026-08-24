@@ -290,7 +290,6 @@ export function WorkspacePane({
 					pushServerDraft(promptRef.current);
 			}
 		};
-		// eslint-disable-next-line react-hooks/exhaustive-deps
 	}, []);
 	const [models, setModels] = useState<ModelOption[]>([]);
 	const [defaultModel, setDefaultModel] = useState("");
@@ -348,8 +347,8 @@ export function WorkspacePane({
 			const selected = Array.from(picked);
 			const batch = countStaging(selected);
 			setStaging((current) => addStaging(current, batch));
-			try {
-				const { rejected, applied } = await attachToDraft(draftKey, selected);
+			await (async () => {
+const { rejected, applied } = await attachToDraft(draftKey, selected);
 				if (applied) {
 					const stored = loadDraft(draftKey);
 					setImages((current) =>
@@ -360,9 +359,9 @@ export function WorkspacePane({
 					);
 				}
 				if (rejected.length) alert(`Couldn't attach:\n${rejected.join("\n")}`);
-			} finally {
-				setStaging((current) => subtractStaging(current, batch));
-			}
+})().finally(async () => {
+setStaging((current) => subtractStaging(current, batch));
+});
 		};
 
 	useEffect(() => {
@@ -466,8 +465,8 @@ export function WorkspacePane({
 		if (listedPresentationSession || tab !== "review") return;
 		let stale = false;
 		const load = async () => {
-			try {
-				// The overview is already workspace-scoped on the server and includes
+			await (async () => {
+// The overview is already workspace-scoped on the server and includes
 				// archived/filtered members. Its opening prompt identifies the human
 				// session even when the sidebar's live slice cannot see that session.
 				const overview = await fetchWorkspaceOverview(workspace.id);
@@ -480,9 +479,9 @@ export function WorkspacePane({
 						return;
 					}
 				}
-			} catch {
-				// A genuinely session-less PR still renders through preview APIs.
-			}
+})().catch(async () => {
+// A genuinely session-less PR still renders through preview APIs.
+});
 		};
 		void load();
 		return () => {
@@ -637,17 +636,17 @@ export function WorkspacePane({
 	async function deletePresentationSession(cleanWorktree: boolean) {
 		if (!presentationSession || !onDeleteSession || deleting) return;
 		setDeleting(true);
-		try {
-			await onDeleteSession(presentationSession, cleanWorktree);
+		await (async () => {
+await onDeleteSession(presentationSession, cleanWorktree);
 			setOverflowOpen(false);
 			setShowDeleteConfirm(false);
-		} catch (error) {
-			toast(error instanceof Error ? error.message : "Delete failed", {
+})().catch(async (error) => {
+toast(error instanceof Error ? error.message : "Delete failed", {
 				variant: "error",
 			});
-		} finally {
-			setDeleting(false);
-		}
+}).finally(async () => {
+setDeleting(false);
+});
 	}
 
 	// One workspace menu, placed in the title cluster on desktop and portaled

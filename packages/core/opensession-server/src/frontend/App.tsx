@@ -784,7 +784,9 @@ export function App(
 	const githubConnectionState = useGithubConnectionState(route.view);
 	const { connected, send, setTyping, addHandler } = useWebSocket();
 	const sessionsRef = useRef(sessions);
+	useLayoutEffect(() => {
 	sessionsRef.current = sessions;
+	});
 	type PendingCreateDraft = NewSessionCreateDraft & {
 		startedAt: string;
 		user: string;
@@ -992,7 +994,9 @@ export function App(
 		return v >= 200 && v <= 480 ? v : 280;
 	});
 	const sidebarWidthRef = useRef(sidebarWidth);
+	useLayoutEffect(() => {
 	sidebarWidthRef.current = sidebarWidth;
+	});
 	// The column the width lands on, so a drag can write it without a render.
 	const sidebarColRef = useRef<HTMLDivElement>(null);
 	function startSidebarResize(e: React.MouseEvent) {
@@ -1085,7 +1089,9 @@ export function App(
 	// Read by the PR-link opener, which runs from a document-level listener and
 	// therefore can't close over the render's value.
 	const workspacesRef = useRef(workspaces);
+	useLayoutEffect(() => {
 	workspacesRef.current = workspaces;
+	});
 	const productEmpty =
 		!loading &&
 		workspacesLoaded &&
@@ -1209,7 +1215,7 @@ export function App(
 		const onIn = (e: FocusEvent) => {
 			if (!isText(e.target as Element)) return;
 			document.body.classList.add("kb-open");
-			releaseInset ??= trackKeyboardInset();
+			if (releaseInset === null) releaseInset = trackKeyboardInset();
 		};
 		const onOut = () => {
 			// activeElement updates a tick after focusout; defer so moving between
@@ -1252,7 +1258,9 @@ export function App(
 	const sidebarRef = useRef<SidebarHandle>(null);
 	const nextChatRef = useRef<() => void>(() => {});
 	const [nextChatAvailable, setNextChatAvailable] = useState(false);
+	useLayoutEffect(() => {
 	routeRef.current = route;
+	});
 	// The mobile layout is an iOS-style navigation stack: the sidebar is the root
 	// (depth 0) and each panel is pushed over it. Every entry carries its own
 	// depth (see `entryDepth`), so opening one panel from another stacks a real
@@ -1299,7 +1307,9 @@ export function App(
 		setRoute(next);
 	}
 	const navigateRef = useRef(navigate);
+	useLayoutEffect(() => {
 	navigateRef.current = navigate;
+	});
 	// Set below, once the review-focus callback it needs exists.
 	const openPrRef = useRef<(repo: string, number: number) => void>(() => {});
 
@@ -1429,22 +1439,25 @@ export function App(
 	// without walking back through every panel we pushed on the way. Cold-loaded
 	// into a panel there is no root to pop to, so replace to home instead and the
 	// stack never grows.
-	function goBack() {
+	const goBack = () => {
 		// A worker session sits a level below the session that spawned it, and it
 		// has no tab to leave by. Back therefore goes UP one level rather than out
 		// to the sidebar: it is the phone's spelling of the header breadcrumb, and
 		// the edge swipe gets it for free.
+		// Reads through the ref: this closure initializes before `currentSession`
+		// does, and the compiler rejects a direct read of a later binding.
+		const live = currentSessionRef.current;
 		const parentId =
-			route.view === "session" ? currentSession?.parentSessionId : undefined;
+			route.view === "session" ? live?.parentSessionId : undefined;
 		if (parentId) {
 			navigate({ view: "session", id: parentId });
 			return;
-		}
+		};
 		const depth = entryDepth();
 		if (depth !== null && depth > 0)
 			popOr(depth, () => navigate({ view: "prs" }, { replace: true }));
 		else navigate({ view: "prs" }, { replace: true });
-	}
+	};
 
 	// Leave a full-page deck (catch-up, PR, support) for wherever you came from,
 	// rather than popping to the root the way `goBack` does. The root is the
@@ -1485,7 +1498,9 @@ export function App(
 	// handler below is installed once, so it reads the current closer through a
 	// ref; null when Settings is not the open surface.
 	const leaveSettingsRef = useRef<(() => void) | null>(null);
+	useLayoutEffect(() => {
 	leaveSettingsRef.current = settingsActive ? leaveSettings : null;
+	});
 
 	// Edge-swipe-from-left pops the pushed page back to the sidebar on phones.
 	useBackSwipe({
@@ -1560,7 +1575,9 @@ export function App(
 	// session seen from two places.
 	const [draftFocusSeq, setDraftFocusSeq] = useState(0);
 	const paletteOpenRef = useRef(palette.open);
+	useLayoutEffect(() => {
 	paletteOpenRef.current = palette.open;
+	});
 	const openPalette = (prompt?: string, mcpServers?: string[]) => {
 		// This is the global new-session action. It must not inherit the workspace
 		// behind it: without workspaceId, NewSession creates a workspace with its
@@ -1707,7 +1724,9 @@ export function App(
 		seq: number;
 	} | null>(null);
 	const reviewFocusPrRef = useRef(reviewFocusPr);
+	useLayoutEffect(() => {
 	reviewFocusPrRef.current = reviewFocusPr;
+	});
 	// The `seq` the workspace landing effect has already used to pick a session
 	// (below). Without it a stale request would keep redirecting every later
 	// visit to this workspace's Review.
@@ -1762,7 +1781,9 @@ export function App(
 					navigateRef.current({ view: "pr", repo, number });
 				});
 		};
+	useLayoutEffect(() => {
 	openPrRef.current = openPrByRef;
+	});
 	// One-shot guard consumed by the workspace default-pane seeding effect (set
 	// when closing a view tab replaces the workspace URL — see onCloseView).
 	const suppressWsSeedRef = useRef(false);
@@ -1820,14 +1841,16 @@ export function App(
 	useEffect(() => {
 		let stale = false;
 		const load = async () => {
-			try {
-				const path = await resolveAnonymousUserPath(
+			await (async () => {
+const path = await resolveAnonymousUserPath(
 					`${BASE_PATH}/api/todos?user=${encodeURIComponent(getCurrentUser())}`,
 				);
 				const res = await fetch(path);
 				const data = (await res.json()) as { todos?: unknown[] };
 				if (!stale) setTaskCount(data.todos?.length ?? 0);
-			} catch {}
+})().catch(async () => {
+
+});
 		};
 		void load();
 		const unsub = addHandler((msg) => {
@@ -1839,7 +1862,9 @@ export function App(
 		};
 	}, [addHandler]);
 	const searchOpenRef = useRef(searchOpen);
+	useLayoutEffect(() => {
 	searchOpenRef.current = searchOpen;
+	});
 	const closePalette = () => {
 		setPalette({ open: false });
 		// A deep link left the URL on <base>/new — return home on close.
@@ -2477,7 +2502,6 @@ export function App(
 				setActiveViewTab("review");
 			}
 		}
-		// eslint-disable-next-line react-hooks/exhaustive-deps
 	}, [
 		route.view === "workspace" ? `${route.id}:${route.tab ?? ""}` : null,
 		workspacesLoaded,
@@ -2580,7 +2604,6 @@ export function App(
 		return () => {
 			stale = true;
 		};
-		// eslint-disable-next-line react-hooks/exhaustive-deps
 	}, [route, loading]);
 	// The current code session's Review pane, surfaced as a leftmost view-tab in
 	// the top strip (siblings share the worktree/PR, so one Review tab suffices).
@@ -3101,8 +3124,8 @@ export function App(
 	// they'd all land on the primary. Falls back to the legacy preview routes if
 	// the resolve fails, so a click is never dead.
 	const openPrWorkspace = async (item: ReviewQueueItem) => {
-			try {
-				const { workspaceId } = await resolveWorkspaceApi({
+			await (async () => {
+const { workspaceId } = await resolveWorkspaceApi({
 					pr: {
 						repo: item.pr.repo,
 						number: item.pr.number,
@@ -3120,15 +3143,15 @@ export function App(
 					workspaceId,
 				});
 				navigate({ view: "workspace", id: workspaceId, tab: "review" });
-			} catch {
-				if (item.sessionId) navigate({ view: "reviews", id: item.sessionId });
+})().catch(async () => {
+if (item.sessionId) navigate({ view: "reviews", id: item.sessionId });
 				else
 					navigate({ view: "pr", repo: item.pr.repo, branch: item.pr.branch });
-			}
+});
 		};
 	const openPrReview = async (pr: OpenPr) => {
-			try {
-				const { workspaceId } = await resolveWorkspaceApi({
+			await (async () => {
+const { workspaceId } = await resolveWorkspaceApi({
 					pr: {
 						repo: pr.repo,
 						number: pr.number,
@@ -3144,15 +3167,15 @@ export function App(
 					workspaceId,
 				});
 				navigate({ view: "workspace", id: workspaceId, tab: "review" });
-			} catch {
-				navigate({ view: "pr", repo: pr.repo, branch: pr.branch });
-			}
+})().catch(async () => {
+navigate({ view: "pr", repo: pr.repo, branch: pr.branch });
+});
 		};
 	// Sidebar feed row (a video, a dashboard, …) to the item's ONE workspace, its web
 	// panel foregrounded (the feeds design).
 	const openFeedItemWorkspace = async (feed: FeedDescriptor, item: FeedItem) => {
-			try {
-				const { workspaceId } = await resolveWorkspaceApi({
+			await (async () => {
+const { workspaceId } = await resolveWorkspaceApi({
 					externalRef: {
 						kind: feed.refKind,
 						id: item.id,
@@ -3163,24 +3186,24 @@ export function App(
 				});
 				refreshWorkspaces();
 				navigate({ view: "workspace", id: workspaceId, tab: "video" });
-			} catch (e) {
-				console.error("Feed item open failed:", e);
-			}
+})().catch(async (e) => {
+console.error("Feed item open failed:", e);
+});
 		};
 	// Sidebar Support row → the ticket's ONE workspace, Conversation tab. The
 	// row's title rides along as the workspace-name hint (no Plain round-trip).
 	const openTicketWorkspace = async (t: SupportThread) => {
-			try {
-				const { workspaceId } = await resolveWorkspaceApi({
+			await (async () => {
+const { workspaceId } = await resolveWorkspaceApi({
 					plainThreadId: t.id,
 					name:
 						t.title || t.customer.name || t.customer.email || undefined,
 				});
 				refreshWorkspaces();
 				navigate({ view: "workspace", id: workspaceId, tab: "conversation" });
-			} catch {
-				navigate({ view: "support", threadId: t.id });
-			}
+})().catch(async () => {
+navigate({ view: "support", threadId: t.id });
+});
 		};
 	// Open a session's Review tab from the sidebar: select it and foreground its
 	// workspace's Review once it lands (pendingReviewOpen survives the
@@ -3192,7 +3215,9 @@ export function App(
 		setPendingReviewOpen(key);
 		navigate({ view: "session", id: session.id });
 	};
+	useLayoutEffect(() => {
 	currentSessionRef.current = currentSession;
+	});
 
 	// Mark the open session read up to its latest activity — both when it's first
 	// opened and as new activity streams in while it stays open — so the sidebar's
@@ -3224,15 +3249,17 @@ export function App(
 			activeViewTab === "video")
 			? workspacePanePath(activeWorkspaceId, activeViewTab)
 			: null;
-	copyLinkPathRef.current =
-		activeWorkspacePane ??
-		(route.view === "session" && currentSession
-			? sessionPath(currentSession) + openSubagentPath
-			: route.view === "workspace"
-				? routePath(route)
-				: route.view === "pr"
+	useLayoutEffect(() => {
+		copyLinkPathRef.current =
+			activeWorkspacePane ??
+			(route.view === "session" && currentSession
+				? sessionPath(currentSession) + openSubagentPath
+				: route.view === "workspace"
 					? routePath(route)
-					: null);
+					: route.view === "pr"
+						? routePath(route)
+						: null);
+	});
 
 	// Canonicalize the open session's URL to /workspace/<wsId>/session/<sessionId> once
 	// its workspace is known (replaceState: same history depth, so Back and the
@@ -3636,11 +3663,11 @@ export function App(
 				morphingSessionId={newTabMorph?.id}
 				morphOrigin={newTabMorph?.origin}
 				onRename={async (id, title) => {
-					try {
-						await renameSessionApi(id, title);
-					} catch (e) {
-						console.error("Rename failed:", e);
-					}
+					await (async () => {
+await renameSessionApi(id, title);
+})().catch(async (e) => {
+console.error("Rename failed:", e);
+});
 					refresh();
 				}}
 				onClose={closeSession}
@@ -3656,11 +3683,11 @@ export function App(
 	/** Un-archive a closed session, back among the workspace's tabs. Shared by
 	 *  the strip's history button and the header ⋯ menu that stands in for it. */
 	async function restoreSession(s: UnifiedSession) {
-		try {
-			await archiveSessionApi(s.id, false);
-		} catch (e) {
-			console.error("Restore failed:", e);
-		}
+		await (async () => {
+await archiveSessionApi(s.id, false);
+})().catch(async (e) => {
+console.error("Restore failed:", e);
+});
 		refresh();
 	}
 	const archivedSessions: UnifiedSession[] = workspaceArchivedSessions({
@@ -3743,8 +3770,8 @@ export function App(
 		}, 30_000);
 		navigate({ view: "session", id });
 
-		try {
-			const source = await persistedSource;
+		return await (async () => {
+const source = await persistedSource;
 			const created = await newSessionApi(source.id, user, mode, id);
 			const createdId = created.id;
 			if (abandonedSessionCreatesRef.current.delete(id)) {
@@ -3781,8 +3808,8 @@ export function App(
 			if (createdId !== id) navigate({ view: "session", id: createdId });
 			refresh();
 			return createdId;
-		} catch (error) {
-			clearTimeout(pendingTimer.current);
+})().catch(async (error) => {
+clearTimeout(pendingTimer.current);
 			setPendingSessionId((pending) => (pending === id ? null : pending));
 			setOptimisticSession((pending) => (pending?.id === id ? null : pending));
 			unstick(id);
@@ -3795,7 +3822,7 @@ export function App(
 				}
 			}
 			throw error;
-		}
+});
 	}
 
 	function openNewSessionInWorkspace(
@@ -3866,13 +3893,13 @@ export function App(
 			// take several seconds, but it is needed only when the server persists it.
 			src = workspaceSessionSeed(wsRecord, getCurrentUser());
 			persistedSource = (async () => {
-				try {
-					const archived = await fetchWorkspaceArchivedSessions(activeWorkspaceId);
+				await (async () => {
+const archived = await fetchWorkspaceArchivedSessions(activeWorkspaceId);
 					const source = newSessionSource(null, [], archived);
 					if (source) return source;
-				} catch {
-					// Fall through to the existing session-less composer below.
-				}
+})().catch(async () => {
+// Fall through to the existing session-less composer below.
+});
 				throw new MissingWorkspaceSessionSourceError();
 			})();
 		}
@@ -3886,8 +3913,8 @@ export function App(
 		setActiveViewTab(null);
 		const optimisticId = newClientSessionId();
 		siblingCreateRef.current = optimisticId;
-		try {
-			const id = await createNewSessionFrom(
+		await (async () => {
+const id = await createNewSessionFrom(
 				src,
 				mode,
 				optimisticId,
@@ -3900,20 +3927,22 @@ export function App(
 					right: [...activeTabSplit.right, id],
 					rightActive: id,
 				});
-		} catch (error) {
-			if (error instanceof MissingWorkspaceSessionSourceError) {
+})().catch(async (error) => {
+if (error instanceof MissingWorkspaceSessionSourceError) {
 				openSessionlessWorkspaceComposer();
 			} else {
 				console.error("New session failed:", error);
 				showToast("Couldn't create a new tab.");
 			}
-		} finally {
-			if (siblingCreateRef.current === optimisticId)
+}).finally(async () => {
+if (siblingCreateRef.current === optimisticId)
 				siblingCreateRef.current = null;
-		}
+});
 	};
 	const handleNewSessionRef = useRef(handleNewSession);
+	useLayoutEffect(() => {
 	handleNewSessionRef.current = handleNewSession;
+	});
 
 	// Lanes are per-user (lib/lanes.ts): setting one moves the row in YOUR
 	// sidebar only, so teammates can hold the same workspace in their own
@@ -4088,7 +4117,9 @@ export function App(
 		void closeSessionNow(empty, next);
 	};
 	const closeSessionRef = useRef(closeSession);
+	useLayoutEffect(() => {
 	closeSessionRef.current = closeSession;
+	});
 	// Bring archived sessions back. Optimistic like the archive paths: the local
 	// list flips first so it feels instant, and rolls back if the server refuses.
 	const unarchiveSessions = async (sessions: UnifiedSession[]): Promise<boolean> => {
@@ -4133,7 +4164,9 @@ export function App(
 		return [];
 	})();
 	const restorableArchivedRef = useRef(restorableArchived);
+	useLayoutEffect(() => {
 	restorableArchivedRef.current = restorableArchived;
+	});
 
 	// ⌘Z (and the palette's "Reopen closed session"): undo the last archive and
 	// land on what came back. The entry is only dropped once the server agrees,
@@ -4154,7 +4187,9 @@ export function App(
 		navigate({ view: "session", id: sessions[0].id });
 	};
 	const reopenLastArchivedRef = useRef(reopenLastArchived);
+	useLayoutEffect(() => {
 	reopenLastArchivedRef.current = reopenLastArchived;
+	});
 
 	/**
 	 * Foreground a tab by its strip id — a session or a pane, since the strip
@@ -4194,7 +4229,9 @@ export function App(
 		return activateStripTab(id);
 	}
 	const tabNavRef = useRef({ stepStripTab, jumpStripTab });
+	useLayoutEffect(() => {
 	tabNavRef.current = { stepStripTab, jumpStripTab };
+	});
 
 	// ⌘⌥←/→ walk the workspace's tab strip (⌃⌥ on Chromium, which takes the ⌘⌥
 	// pair for its own tabs), and ⌥1…⌥9 jump straight to one. Both read the
@@ -4704,7 +4741,9 @@ export function App(
 		next.scrollIntoView({ block: "nearest" });
 		next.click();
 	};
+	useLayoutEffect(() => {
 	nextChatRef.current = openNextChat;
+	});
 	const renderSessionPane = (
 		viewerSession: UnifiedSession,
 		socket: ReturnType<typeof useWebSocket>,
@@ -4877,11 +4916,11 @@ export function App(
 					patch(id, { reviewRequest: request ?? undefined })
 				}
 				onRename={async (id, title) => {
-					try {
-						await renameSessionApi(id, title);
-					} catch (error) {
-						console.error("Rename failed:", error);
-					}
+					await (async () => {
+await renameSessionApi(id, title);
+})().catch(async (error) => {
+console.error("Rename failed:", error);
+});
 					refresh();
 				}}
 				workspaceName={
@@ -4892,11 +4931,11 @@ export function App(
 				onRenameWorkspace={
 					activeWorkspaceId
 						? async (name) => {
-								try {
-									await updateWorkspaceApi(activeWorkspaceId, { name });
-								} catch (error) {
-									console.error("Rename workspace failed:", error);
-								}
+								await (async () => {
+await updateWorkspaceApi(activeWorkspaceId, { name });
+})().catch(async (error) => {
+console.error("Rename workspace failed:", error);
+});
 								refreshWorkspaces();
 							}
 						: undefined
@@ -5352,21 +5391,21 @@ export function App(
 								}
 							}}
 							onRenameWorkspace={async (id, name) => {
-								try {
-									await updateWorkspaceApi(id, { name });
+								await (async () => {
+await updateWorkspaceApi(id, { name });
 									refreshWorkspaces();
-								} catch (e) {
-									console.error("Rename workspace failed:", e);
-								}
+})().catch(async (e) => {
+console.error("Rename workspace failed:", e);
+});
 							}}
 							onDeleteWorkspace={async (id) => {
 								const wasOpen = route.view === "workspace" && route.id === id;
-								try {
-									await deleteWorkspaceApi(id);
-								} catch (e) {
-									console.error("Delete workspace failed:", e);
+								await (async () => {
+await deleteWorkspaceApi(id);
+})().catch(async (e) => {
+console.error("Delete workspace failed:", e);
 									throw e;
-								}
+});
 								refreshWorkspaces();
 								refresh();
 								if (wasOpen) navigate({ view: "prs" });
@@ -5439,11 +5478,11 @@ export function App(
 								confirmRunningCloses(sessions, () => void archive());
 							}}
 							onRename={async (s, title) => {
-								try {
-									await renameSessionApi(s.id, title);
-								} catch (e) {
-									console.error("Rename failed:", e);
-								}
+								await (async () => {
+await renameSessionApi(s.id, title);
+})().catch(async (e) => {
+console.error("Rename failed:", e);
+});
 								refresh();
 							}}
 							onSetStatus={setSessionLanes}
@@ -5575,11 +5614,11 @@ export function App(
 									topbarEl={topbarEl}
 									headerActionsEl={headerActionsEl}
 									onRenameWorkspace={async (name) => {
-										try {
-											await updateWorkspaceApi(routeWorkspace.id, { name });
-										} catch (error) {
-											console.error("Rename workspace failed:", error);
-										}
+										await (async () => {
+await updateWorkspaceApi(routeWorkspace.id, { name });
+})().catch(async (error) => {
+console.error("Rename workspace failed:", error);
+});
 										refreshWorkspaces();
 									}}
 									onArchiveSession={(session, archived) => {
@@ -5699,17 +5738,17 @@ export function App(
 								connected={connected}
 								onArchive={(sessions) => {
 									const archive = async () => {
-										try {
-											await Promise.all(
+										await (async () => {
+await Promise.all(
 												sessions.map((c) => archiveSessionApi(c.id, true)),
 											);
 											// Swiping through the deck archives fast — one entry per
 											// card keeps ⌘Z an undo of the last swipe, not of the
 											// whole session.
 											rememberArchived(sessions.map((c) => c.id));
-										} catch (e) {
-											console.error("Archive failed:", e);
-										}
+})().catch(async (e) => {
+console.error("Archive failed:", e);
+});
 										refresh();
 									};
 									confirmRunningCloses(sessions, () => void archive());

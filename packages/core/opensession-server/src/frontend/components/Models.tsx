@@ -75,8 +75,8 @@ function DefaultModelRow({
 		if (id === current) return;
 		setSaving(true);
 		setError(null);
-		try {
-			const res = await fetch(`${BASE_PATH}/api/models/default`, {
+		await (async () => {
+const res = await fetch(`${BASE_PATH}/api/models/default`, {
 				method: "PUT",
 				headers: { "Content-Type": "application/json" },
 				body: JSON.stringify({ model: id }),
@@ -85,9 +85,9 @@ function DefaultModelRow({
 			if (!res.ok) throw new Error(body.error || `Failed: ${res.status}`);
 			setCurrent(body.default);
 			await onChanged?.();
-		} catch (e: any) {
-			setError(e.message);
-		}
+})().catch(async (e: any) => {
+setError(e.message);
+});
 		setSaving(false);
 	}
 
@@ -190,8 +190,8 @@ function AutoFallbackRow() {
 		setError(null);
 		const prev = auto;
 		setAuto(next); // optimistic
-		try {
-			const res = await fetch(`${BASE_PATH}/api/models/auto-fallback`, {
+		await (async () => {
+const res = await fetch(`${BASE_PATH}/api/models/auto-fallback`, {
 				method: "PUT",
 				headers: { "Content-Type": "application/json" },
 				body: JSON.stringify({ auto: next }),
@@ -199,10 +199,10 @@ function AutoFallbackRow() {
 			const body = await res.json();
 			if (!res.ok) throw new Error(body.error || `Failed: ${res.status}`);
 			setAuto(body.autoFallback);
-		} catch (e: any) {
-			setError(e.message);
+})().catch(async (e: any) => {
+setError(e.message);
 			setAuto(prev ?? null);
-		}
+});
 		setSaving(false);
 	}
 

@@ -427,11 +427,11 @@ export function CommentableDiff({
       clearTimeout(disarmTimer.current);
       setArmed(null);
       setDiscarding(key);
-      try {
-        await onDiscard(file.name, file.prevName);
-      } finally {
-        setDiscarding(null);
-      }
+      await (async () => {
+await onDiscard(file.name, file.prevName);
+})().finally(async () => {
+setDiscarding(null);
+});
     };
   useEffect(() => () => clearTimeout(disarmTimer.current), []);
 
@@ -456,14 +456,15 @@ export function CommentableDiff({
     copyToClipboard(value, () => toast(message));
   };
   const copyFileContents = async (file: FileDiffMetadata) => {
-      if (!fileActions?.loadContents) return;
-      try {
-        const contents = await fileActions.loadContents(file);
+    const loadContents = fileActions?.loadContents;
+    if (!loadContents) return;
+    await (async () => {
+const contents = await loadContents(file);
         if (contents == null) throw new Error("File is not available at this revision");
         copyMenuValue(contents, "File contents copied");
-      } catch (error: any) {
-        toast(error?.message || "Couldn’t copy file contents");
-      }
+})().catch(async (error: any) => {
+toast(error?.message || "Couldn’t copy file contents");
+});
     };
 
   const viewedCollapseKey = useRef<string | null>(null);
@@ -549,15 +550,15 @@ export function CommentableDiff({
     if (!editor || !editingPath || !editFile || savingEdit) return;
     setSavingEdit(true);
     setEditError(null);
-    try {
-      await editFile.save(editingPath, editor.getText());
+    await (async () => {
+await editFile.save(editingPath, editor.getText());
       editorRef.current = null;
       setEditingPath(null);
-    } catch (e: any) {
-      setEditError(e?.message || "Failed to save");
-    } finally {
-      setSavingEdit(false);
-    }
+})().catch(async (e: any) => {
+setEditError(e?.message || "Failed to save");
+}).finally(async () => {
+setSavingEdit(false);
+});
   };
 
   const createEditor = (options: EditorOptions<Meta>) => {
@@ -1347,13 +1348,13 @@ const CommentForm = function CommentForm({
     if (!body || sending) return;
     setSending(true);
     setError(null);
-    try {
-      await onSubmit(body);
+    await (async () => {
+await onSubmit(body);
       // Success unmounts this form (parent clears the draft) — don't touch state.
-    } catch (e: any) {
-      setError(e.message || "Failed to submit");
+})().catch(async (e: any) => {
+setError(e.message || "Failed to submit");
       setSending(false);
-    }
+});
   }
 
   return (

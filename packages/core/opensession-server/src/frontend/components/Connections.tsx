@@ -169,10 +169,12 @@ export function Connections() {
 
   const load = async (force = false) => {
     if (force) setRefreshing(true);
-    try {
-      const res = await fetch(`${BASE_PATH}/api/connections${force ? "?refresh=1" : ""}`);
+    await (async () => {
+const res = await fetch(`${BASE_PATH}/api/connections${force ? "?refresh=1" : ""}`);
       if (res.ok) setData(await res.json());
-    } catch {}
+})().catch(async () => {
+
+});
     setRefreshing(false);
   };
 
@@ -220,8 +222,8 @@ export function Connections() {
   // account) and open the consent in a new tab; re-poll status for a while
   // so the badge appears once they approve.
   async function handleOauthConnect(s: McpConnection, scope: "shared" | "me") {
-    try {
-      const res = await fetch(
+    await (async () => {
+const res = await fetch(
         `${BASE_PATH}/api/connections/mcp/${encodeURIComponent(s.name)}/oauth/start`,
         {
           method: "POST",
@@ -237,36 +239,36 @@ export function Connections() {
         if (++polls > 24 || !data?.mcpServers) return clearInterval(t);
         void loadOauth(data.mcpServers);
       }, 5000);
-    } catch (e: any) {
-      setRemoveError(e.message);
-    }
+})().catch(async (e: any) => {
+setRemoveError(e.message);
+});
   }
 
   async function handleOauthDisconnect(s: McpConnection, scope: "shared" | "me") {
-    try {
-      const res = await fetch(
+    await (async () => {
+const res = await fetch(
         `${BASE_PATH}/api/connections/mcp/${encodeURIComponent(s.name)}/oauth${scope === "me" ? "?scope=me" : ""}`,
         { method: "DELETE" },
       );
       if (!res.ok) throw new Error((await res.json()).error || `Failed: ${res.status}`);
       if (data?.mcpServers) void loadOauth(data.mcpServers);
-    } catch (e: any) {
-      setRemoveError(e.message);
-    }
+})().catch(async (e: any) => {
+setRemoveError(e.message);
+});
   }
 
   async function handleRemove(name: string) {
     if (!confirm(`Remove MCP server "${name}"? New sessions will no longer get its tools.`)) return;
-    try {
-      const res = await fetch(`${BASE_PATH}/api/connections/mcp/${encodeURIComponent(name)}`, {
+    await (async () => {
+const res = await fetch(`${BASE_PATH}/api/connections/mcp/${encodeURIComponent(name)}`, {
         method: "DELETE",
       });
       const body = await res.json();
       if (!res.ok) throw new Error(body.error || `Failed: ${res.status}`);
       load(true);
-    } catch (e: any) {
-      setRemoveError(e.message);
-    }
+})().catch(async (e: any) => {
+setRemoveError(e.message);
+});
   }
 
   async function handleRestrict(s: McpConnection) {
@@ -281,8 +283,8 @@ export function Connections() {
       .split(",")
       .map((u) => u.trim())
       .filter(Boolean);
-    try {
-      const res = await fetch(`${BASE_PATH}/api/connections/mcp/${encodeURIComponent(s.name)}`, {
+    await (async () => {
+const res = await fetch(`${BASE_PATH}/api/connections/mcp/${encodeURIComponent(s.name)}`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ allowedUsers }),
@@ -290,9 +292,9 @@ export function Connections() {
       const body = await res.json();
       if (!res.ok) throw new Error(body.error || `Failed: ${res.status}`);
       load(true);
-    } catch (e: any) {
-      setRemoveError(e.message);
-    }
+})().catch(async (e: any) => {
+setRemoveError(e.message);
+});
   }
 
   return (
@@ -691,7 +693,6 @@ function GithubAppWizard({
       setAppOwner(intentOrg ? "org" : "you");
       setAppOrg(intentOrg ?? "");
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open]);
   // Saving the client id flips `configured`; carry the user from paste to
   // install without a manual step.
@@ -716,7 +717,6 @@ function GithubAppWizard({
     if (!open || connectStartedRef.current) return;
     connectStartedRef.current = true;
     if (!flow) onConnect();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, step]);
 
   // Focus each step's primary control as the user arrives on it (and on open).
@@ -1072,10 +1072,12 @@ export function GithubAccounts({ personal = false }: { personal?: boolean } = {}
   const [wizardOpen, setWizardOpen] = useState(false);
 
   const load = async () => {
-    try {
-      const res = await fetch(`${BASE_PATH}/api/connections/github`);
+    await (async () => {
+const res = await fetch(`${BASE_PATH}/api/connections/github`);
       if (res.ok) setData(await res.json());
-    } catch {}
+})().catch(async () => {
+
+});
   };
 
   useEffect(() => {
@@ -1089,8 +1091,8 @@ export function GithubAccounts({ personal = false }: { personal?: boolean } = {}
     let intervalMs = Math.max(flow.interval, 5) * 1000;
     let timer: ReturnType<typeof setTimeout>;
     const tick = async () => {
-      try {
-        const res = await fetch(`${BASE_PATH}/api/connections/github/device/poll`, {
+      await (async () => {
+const res = await fetch(`${BASE_PATH}/api/connections/github/device/poll`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ deviceCode: flow.deviceCode }),
@@ -1118,7 +1120,9 @@ export function GithubAccounts({ personal = false }: { personal?: boolean } = {}
           setFlowState("idle");
           return;
         }
-      } catch {}
+})().catch(async () => {
+
+});
       if (!cancelled) timer = setTimeout(tick, intervalMs);
     };
     timer = setTimeout(tick, intervalMs);
@@ -1131,16 +1135,16 @@ export function GithubAccounts({ personal = false }: { personal?: boolean } = {}
   async function startConnect() {
     setError(null);
     setFlowState("starting");
-    try {
-      const res = await fetch(`${BASE_PATH}/api/connections/github/device`, { method: "POST" });
+    await (async () => {
+const res = await fetch(`${BASE_PATH}/api/connections/github/device`, { method: "POST" });
       const body = await res.json();
       if (!res.ok) throw new Error(body.error || `Failed: ${res.status}`);
       setFlow(body);
       setFlowState("waiting");
-    } catch (e: any) {
-      setError(e.message);
+})().catch(async (e: any) => {
+setError(e.message);
       setFlowState("idle");
-    }
+});
   }
 
   async function saveApp(appOrg: string) {
@@ -1153,8 +1157,8 @@ export function GithubAccounts({ personal = false }: { personal?: boolean } = {}
     if (!clientId || !slug || !secret) return;
     setError(null);
     setSavingApp(true);
-    try {
-      const res = await fetch(`${BASE_PATH}/api/connections/github/app`, {
+    await (async () => {
+const res = await fetch(`${BASE_PATH}/api/connections/github/app`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         // An org owner also records the sign-in intent server-side; a blank org
@@ -1171,11 +1175,11 @@ export function GithubAccounts({ personal = false }: { personal?: boolean } = {}
       // getConfig() re-reads on the file change, so the reload shows the App as
       // configured and switches the card to its device-flow connect.
       load();
-    } catch (e: any) {
-      setError(e.message);
-    } finally {
-      setSavingApp(false);
-    }
+})().catch(async (e: any) => {
+setError(e.message);
+}).finally(async () => {
+setSavingApp(false);
+});
   }
 
   async function removeApp() {
@@ -1186,24 +1190,24 @@ export function GithubAccounts({ personal = false }: { personal?: boolean } = {}
     )
       return;
     setError(null);
-    try {
-      const res = await fetch(`${BASE_PATH}/api/connections/github/app`, {
+    await (async () => {
+const res = await fetch(`${BASE_PATH}/api/connections/github/app`, {
         method: "DELETE",
       });
       const body = await res.json();
       if (!res.ok) throw new Error(body.error || `Failed: ${res.status}`);
       load();
-    } catch (e: any) {
-      setError(e.message);
-    }
+})().catch(async (e: any) => {
+setError(e.message);
+});
   }
 
   // Switching the wizard owner back to "You" clears the captured org intent
   // (appOrg + authOnConnect) so a later connect stays single-user. The DELETE
   // /app route clears both; at intent stage there are no App keys yet to remove.
   async function clearOrgIntent() {
-    try {
-      const res = await fetch(`${BASE_PATH}/api/connections/github/app`, {
+    await (async () => {
+const res = await fetch(`${BASE_PATH}/api/connections/github/app`, {
         method: "DELETE",
       });
       if (!res.ok) {
@@ -1211,24 +1215,24 @@ export function GithubAccounts({ personal = false }: { personal?: boolean } = {}
         throw new Error(body?.error || `Failed: ${res.status}`);
       }
       load();
-    } catch (e: any) {
-      setError(e.message);
-    }
+})().catch(async (e: any) => {
+setError(e.message);
+});
   }
 
   async function disconnect(login: string) {
     if (!confirm(`Disconnect @${login}? Your GitHub actions will be unavailable until you reconnect.`)) return;
-    try {
-      const res = await fetch(
+    await (async () => {
+const res = await fetch(
         `${BASE_PATH}/api/connections/github/account/${encodeURIComponent(login)}`,
         { method: "DELETE" },
       );
       const body = await res.json();
       if (!res.ok) throw new Error(body.error || `Failed: ${res.status}`);
       load();
-    } catch (e: any) {
-      setError(e.message);
-    }
+})().catch(async (e: any) => {
+setError(e.message);
+});
   }
 
   if (!data) return null;
@@ -1737,9 +1741,11 @@ function CodeStorageCard() {
   const [copied, setCopied] = useState<string | null>(null);
 
   const load = async () => {
-    try {
-      setStatus(await fetchCodeStorageStatus());
-    } catch {}
+    await (async () => {
+setStatus(await fetchCodeStorageStatus());
+})().catch(async () => {
+
+});
   };
 
   useEffect(() => {
@@ -1757,18 +1763,18 @@ function CodeStorageCard() {
     setConnecting(true);
     setError(null);
     setNote(null);
-    try {
-      const res = await connectCodeStorage(org.trim(), pem);
+    await (async () => {
+const res = await connectCodeStorage(org.trim(), pem);
       setPem("");
       setNote(
         `Connected. ${res.repoCount} repo${res.repoCount === 1 ? "" : "s"} visible. Register them under Settings → Setup → Repositories.`,
       );
-    } catch (e: any) {
-      setError(e.message);
-    } finally {
-      setConnecting(false);
+})().catch(async (e: any) => {
+setError(e.message);
+}).finally(async () => {
+setConnecting(false);
       await load();
-    }
+});
   }
 
   async function disconnect() {
@@ -1779,13 +1785,13 @@ function CodeStorageCard() {
     )
       return;
     setError(null);
-    try {
-      const res = await disconnectCodeStorage();
+    await (async () => {
+const res = await disconnectCodeStorage();
       setNote(res.note || "Disconnected.");
       await load();
-    } catch (e: any) {
-      setError(e.message);
-    }
+})().catch(async (e: any) => {
+setError(e.message);
+});
   }
 
   function copy(value: string, which: string) {
@@ -2002,8 +2008,8 @@ function PlainRouter() {
   async function save(patch: { prompt?: string; basicModel?: string }) {
     setSaving(true);
     setError(null);
-    try {
-      const res = await fetch(`${BASE_PATH}/api/connections/plain-router`, {
+    await (async () => {
+const res = await fetch(`${BASE_PATH}/api/connections/plain-router`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(patch),
@@ -2013,9 +2019,9 @@ function PlainRouter() {
       setCfg((c) => (c ? { ...c, ...body } : c));
       if ("prompt" in patch) setDraft(body.prompt);
       setSavedAt(Date.now());
-    } catch (e: any) {
-      setError(e.message);
-    }
+})().catch(async (e: any) => {
+setError(e.message);
+});
     setSaving(false);
   }
 
@@ -2125,8 +2131,8 @@ function ConnectTokenDialog({
     if (!token.trim() || saving) return;
     setSaving(true);
     setError(null);
-    try {
-      const res = await fetch(
+    await (async () => {
+const res = await fetch(
         `${BASE_PATH}/api/connections/mcp/${encodeURIComponent(active.name)}/token`,
         {
           method: "POST",
@@ -2137,11 +2143,11 @@ function ConnectTokenDialog({
       const body = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(body.error || `Failed: ${res.status}`);
       onConnected();
-    } catch (e: any) {
-      setError(e.message);
-    } finally {
-      setSaving(false);
-    }
+})().catch(async (e: any) => {
+setError(e.message);
+}).finally(async () => {
+setSaving(false);
+});
   }
 
   return (
@@ -2226,8 +2232,8 @@ function AddMcpForm({ onClose, onAdded }: { onClose: () => void; onAdded: () => 
   async function handleAdd() {
     setSaving(true);
     setError(null);
-    try {
-      const envObj: Record<string, string> = {};
+    await (async () => {
+const envObj: Record<string, string> = {};
       for (const line of env.split("\n")) {
         const trimmed = line.trim();
         if (!trimmed) continue;
@@ -2254,10 +2260,10 @@ function AddMcpForm({ onClose, onAdded }: { onClose: () => void; onAdded: () => 
       const body = await res.json();
       if (!res.ok) throw new Error(body.error || `Failed: ${res.status}`);
       onAdded();
-    } catch (e: any) {
-      setError(e.message);
+})().catch(async (e: any) => {
+setError(e.message);
       setSaving(false);
-    }
+});
   }
 
   const valid =

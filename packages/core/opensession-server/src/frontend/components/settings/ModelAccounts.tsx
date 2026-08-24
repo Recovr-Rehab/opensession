@@ -417,16 +417,16 @@ function useClaudeAccounts() {
 
 	const load = async (forceUsage = false) => {
 		if (forceUsage) setRefreshing(true);
-		try {
-			const res = forceUsage
+		await (async () => {
+const res = forceUsage
 				? await fetch(`${BASE_PATH}/api/claude-accounts/refresh`, { method: "POST" })
 				: await fetch(`${BASE_PATH}/api/claude-accounts`);
 			if (!res.ok) throw new Error(`Could not load Anthropic accounts (${res.status})`);
 			setAccounts((await res.json()).accounts);
-		} catch (cause: any) {
-			setError(cause.message || "Could not load Anthropic accounts");
+})().catch(async (cause: any) => {
+setError(cause.message || "Could not load Anthropic accounts");
 			setAccounts((current) => current ?? []);
-		}
+});
 		setRefreshing(false);
 	};
 
@@ -438,23 +438,23 @@ function useClaudeAccounts() {
 
 	async function remove(account: ClaudeAccountInfo) {
 		if (!confirm(`Remove Claude account "${providerAccountLabel(account)}"? Runs will stop using this account.`)) return;
-		try {
-			const res = await fetch(
+		await (async () => {
+const res = await fetch(
 				`${BASE_PATH}/api/claude-accounts/${encodeURIComponent(account.id)}`,
 				{ method: "DELETE" },
 			);
 			const body = await res.json();
 			if (!res.ok) throw new Error(body.error || `Failed: ${res.status}`);
 			void load();
-		} catch (cause: any) {
-			setError(cause.message);
-		}
+})().catch(async (cause: any) => {
+setError(cause.message);
+});
 	}
 
 	async function setOwner(account: ClaudeAccountInfo, owner: string) {
 		if (owner === (account.owner || "")) return;
-		try {
-			const res = await fetch(
+		await (async () => {
+const res = await fetch(
 				`${BASE_PATH}/api/claude-accounts/${encodeURIComponent(account.id)}`,
 				{
 					method: "PUT",
@@ -465,9 +465,9 @@ function useClaudeAccounts() {
 			const body = await res.json();
 			if (!res.ok) throw new Error(body.error || `Failed: ${res.status}`);
 			void load();
-		} catch (cause: any) {
-			setError(cause.message);
-		}
+})().catch(async (cause: any) => {
+setError(cause.message);
+});
 	}
 
 	async function setCredentialsPath(account: ClaudeAccountInfo) {
@@ -479,8 +479,8 @@ function useClaudeAccounts() {
 			current,
 		);
 		if (credentialsPath === null) return;
-		try {
-			const res = await fetch(
+		await (async () => {
+const res = await fetch(
 				`${BASE_PATH}/api/claude-accounts/${encodeURIComponent(account.id)}`,
 				{
 					method: "PUT",
@@ -491,9 +491,9 @@ function useClaudeAccounts() {
 			const body = await res.json();
 			if (!res.ok) throw new Error(body.error || `Failed: ${res.status}`);
 			void load(true);
-		} catch (cause: any) {
-			setError(cause.message);
-		}
+})().catch(async (cause: any) => {
+setError(cause.message);
+});
 	}
 
 	return {
@@ -766,16 +766,16 @@ function useCodexAccounts() {
 
 	const load = async (forceUsage = false) => {
 		if (forceUsage) setRefreshing(true);
-		try {
-			const res = forceUsage
+		await (async () => {
+const res = forceUsage
 				? await fetch(`${BASE_PATH}/api/codex-accounts/refresh`, { method: "POST" })
 				: await fetch(`${BASE_PATH}/api/codex-accounts`);
 			if (!res.ok) throw new Error(`Could not load OpenAI accounts (${res.status})`);
 			setAccounts((await res.json()).accounts);
-		} catch (cause: any) {
-			setError(cause.message || "Could not load OpenAI accounts");
+})().catch(async (cause: any) => {
+setError(cause.message || "Could not load OpenAI accounts");
 			setAccounts((current) => current ?? []);
-		}
+});
 		setRefreshing(false);
 	};
 
@@ -787,8 +787,8 @@ function useCodexAccounts() {
 
 	async function setOwner(account: CodexAccountInfo, owner: string) {
 		if (owner === (account.owner || "")) return;
-		try {
-			const res = await fetch(
+		await (async () => {
+const res = await fetch(
 				`${BASE_PATH}/api/codex-accounts/${encodeURIComponent(account.id)}`,
 				{
 					method: "PUT",
@@ -799,24 +799,24 @@ function useCodexAccounts() {
 			const body = await res.json();
 			if (!res.ok) throw new Error(body.error || `Failed: ${res.status}`);
 			void load();
-		} catch (cause: any) {
-			setError(cause.message);
-		}
+})().catch(async (cause: any) => {
+setError(cause.message);
+});
 	}
 
 	async function remove(account: CodexAccountInfo) {
 		if (!confirm(`Remove Codex account "${providerAccountLabel(account)}"? Runs will stop using it.`)) return;
-		try {
-			const res = await fetch(
+		await (async () => {
+const res = await fetch(
 				`${BASE_PATH}/api/codex-accounts/${encodeURIComponent(account.id)}`,
 				{ method: "DELETE" },
 			);
 			const body = await res.json();
 			if (!res.ok) throw new Error(body.error || `Failed: ${res.status}`);
 			void load();
-		} catch (cause: any) {
-			setError(cause.message);
-		}
+})().catch(async (cause: any) => {
+setError(cause.message);
+});
 	}
 
 	return { accounts, error, load, refreshing, remove, setError, setOwner };
@@ -1203,8 +1203,8 @@ function AddClaudeAccountForm({
 		if (!account) return;
 		let cancelled = false;
 		void (async () => {
-			try {
-				const res = await fetch(`${BASE_PATH}/api/claude-accounts/oauth-login`, {
+			await (async () => {
+const res = await fetch(`${BASE_PATH}/api/claude-accounts/oauth-login`, {
 					method: "POST",
 					headers: { "Content-Type": "application/json" },
 					body: JSON.stringify({ accountId: account.id }),
@@ -1212,9 +1212,9 @@ function AddClaudeAccountForm({
 				const body = await res.json();
 				if (!res.ok) throw new Error(body.error || `Failed: ${res.status}`);
 				if (!cancelled) setLogin(body);
-			} catch (cause: any) {
-				if (!cancelled) setError(cause.message);
-			}
+})().catch(async (cause: any) => {
+if (!cancelled) setError(cause.message);
+});
 		})();
 		return () => {
 			cancelled = true;
@@ -1230,8 +1230,8 @@ function AddClaudeAccountForm({
 	async function handleAddToken() {
 		setSaving(true);
 		setError(null);
-		try {
-			const res = await fetch(`${BASE_PATH}/api/claude-accounts`, {
+		await (async () => {
+const res = await fetch(`${BASE_PATH}/api/claude-accounts`, {
 				method: "POST",
 				headers: { "Content-Type": "application/json" },
 				body: JSON.stringify({
@@ -1244,9 +1244,9 @@ function AddClaudeAccountForm({
 			if (!res.ok) throw new Error(body.error || `Failed: ${res.status}`);
 			setAccount(body);
 			onAccountAdded();
-		} catch (cause: any) {
-			setError(cause.message);
-		}
+})().catch(async (cause: any) => {
+setError(cause.message);
+});
 		setSaving(false);
 	}
 
@@ -1254,8 +1254,8 @@ function AddClaudeAccountForm({
 		if (!login) return;
 		setSaving(true);
 		setError(null);
-		try {
-			const res = await fetch(
+		await (async () => {
+const res = await fetch(
 				`${BASE_PATH}/api/claude-accounts/oauth-login/${encodeURIComponent(login.id)}`,
 				{
 					method: "POST",
@@ -1277,10 +1277,10 @@ function AddClaudeAccountForm({
 			);
 			onAccountAdded();
 			onDone();
-		} catch (cause: any) {
-			setError(cause.message);
+})().catch(async (cause: any) => {
+setError(cause.message);
 			setSaving(false);
-		}
+});
 	}
 
 	if (account) {
@@ -1427,8 +1427,8 @@ function ClaudeSignInForm({
 	useEffect(() => {
 		let cancelled = false;
 		(async () => {
-			try {
-				const res = await fetch(`${BASE_PATH}/api/claude-accounts/oauth-login`, {
+			await (async () => {
+const res = await fetch(`${BASE_PATH}/api/claude-accounts/oauth-login`, {
 					method: "POST",
 					headers: { "Content-Type": "application/json" },
 					body: JSON.stringify({ accountId: account.id }),
@@ -1436,9 +1436,9 @@ function ClaudeSignInForm({
 				const body = await res.json();
 				if (!res.ok) throw new Error(body.error || `Failed: ${res.status}`);
 				if (!cancelled) setLogin(body);
-			} catch (e: any) {
-				if (!cancelled) setError(e.message);
-			}
+})().catch(async (e: any) => {
+if (!cancelled) setError(e.message);
+});
 		})();
 		return () => {
 			cancelled = true;
@@ -1458,8 +1458,8 @@ function ClaudeSignInForm({
 		if (!login) return;
 		setBusy(true);
 		setError(null);
-		try {
-			const res = await fetch(
+		await (async () => {
+const res = await fetch(
 				`${BASE_PATH}/api/claude-accounts/oauth-login/${encodeURIComponent(login.id)}`,
 				{
 					method: "POST",
@@ -1471,10 +1471,10 @@ function ClaudeSignInForm({
 			if (!res.ok) throw new Error(body.error || `Failed: ${res.status}`);
 			toast(`Usage tracking connected for ${providerAccountLabel(account)}`);
 			onDone();
-		} catch (e: any) {
-			setError(e.message);
+})().catch(async (e: any) => {
+setError(e.message);
 			setBusy(false);
-		}
+});
 	}
 
 	return (
@@ -1561,8 +1561,8 @@ function AddCodexAccountForm({ onAdded }: { onAdded: () => void }) {
 	useEffect(() => {
 		if (!login || login.state === "done" || login.state === "error") return;
 		const t = setInterval(async () => {
-			try {
-				const res = await fetch(
+			await (async () => {
+const res = await fetch(
 					`${BASE_PATH}/api/codex-accounts/device-login/${encodeURIComponent(login.id)}`
 				);
 				if (!res.ok) return;
@@ -1572,7 +1572,9 @@ function AddCodexAccountForm({ onAdded }: { onAdded: () => void }) {
 					pending.current.done = true;
 					onAdded();
 				}
-			} catch {}
+})().catch(async () => {
+
+});
 		}, 2000);
 		return () => clearInterval(t);
 	}, [login?.id, login?.state]);
@@ -1580,8 +1582,8 @@ function AddCodexAccountForm({ onAdded }: { onAdded: () => void }) {
 	async function handleStartDeviceLogin() {
 		setSaving(true);
 		setError(null);
-		try {
-			const res = await fetch(`${BASE_PATH}/api/codex-accounts/device-login`, {
+		await (async () => {
+const res = await fetch(`${BASE_PATH}/api/codex-accounts/device-login`, {
 				method: "POST",
 				headers: { "Content-Type": "application/json" },
 				body: JSON.stringify({
@@ -1591,9 +1593,9 @@ function AddCodexAccountForm({ onAdded }: { onAdded: () => void }) {
 			const body = await res.json();
 			if (!res.ok) throw new Error(body.error || `Failed: ${res.status}`);
 			setLogin(body);
-		} catch (e: any) {
-			setError(e.message);
-		}
+})().catch(async (e: any) => {
+setError(e.message);
+});
 		setSaving(false);
 	}
 
@@ -1625,8 +1627,8 @@ function AddCodexAccountForm({ onAdded }: { onAdded: () => void }) {
 	async function handleStartOauth() {
 		setSaving(true);
 		setError(null);
-		try {
-			const res = await fetch(`${BASE_PATH}/api/codex-accounts/oauth-login`, {
+		await (async () => {
+const res = await fetch(`${BASE_PATH}/api/codex-accounts/oauth-login`, {
 				method: "POST",
 				headers: { "Content-Type": "application/json" },
 				body: JSON.stringify({
@@ -1636,9 +1638,9 @@ function AddCodexAccountForm({ onAdded }: { onAdded: () => void }) {
 			const body = await res.json();
 			if (!res.ok) throw new Error(body.error || `Failed: ${res.status}`);
 			setOauth(body);
-		} catch (e: any) {
-			setError(e.message);
-		}
+})().catch(async (e: any) => {
+setError(e.message);
+});
 		setSaving(false);
 	}
 
@@ -1670,8 +1672,8 @@ function AddCodexAccountForm({ onAdded }: { onAdded: () => void }) {
 	async function handleAdd() {
 		setSaving(true);
 		setError(null);
-		try {
-			const res = await fetch(`${BASE_PATH}/api/codex-accounts`, {
+		await (async () => {
+const res = await fetch(`${BASE_PATH}/api/codex-accounts`, {
 				method: "POST",
 				headers: { "Content-Type": "application/json" },
 				body: JSON.stringify({
@@ -1685,10 +1687,10 @@ function AddCodexAccountForm({ onAdded }: { onAdded: () => void }) {
 			if (!res.ok) throw new Error(body.error || `Failed: ${res.status}`);
 			pending.current.done = true;
 			onAdded();
-		} catch (e: any) {
-			setError(e.message);
+})().catch(async (e: any) => {
+setError(e.message);
 			setSaving(false);
-		}
+});
 	}
 
 	const loginPending = login && (login.state === "starting" || login.state === "awaiting_code");

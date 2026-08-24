@@ -46,8 +46,8 @@ export function ReportTasksDialog({
 	async function start() {
 		setStarting(true);
 		setFailed([]);
-		try {
-			const results = await startReportSessions(
+		await (async () => {
+const results = await startReportSessions(
 				report.automationId,
 				report.id,
 				[...picked].sort((a, b) => a - b),
@@ -64,11 +64,11 @@ export function ReportTasksDialog({
 			if (!errors.length) return onClose();
 			setFailed(errors);
 			setPicked(new Set(errors.map((result) => result.task)));
-		} catch (e: any) {
-			setFailed([{ task: -1, title: "", error: e?.message || "Failed to start sessions" }]);
-		} finally {
-			setStarting(false);
-		}
+})().catch(async (e: any) => {
+setFailed([{ task: -1, title: "", error: e?.message || "Failed to start sessions" }]);
+}).finally(async () => {
+setStarting(false);
+});
 	}
 
 	return (

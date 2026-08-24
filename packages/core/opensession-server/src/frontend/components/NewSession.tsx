@@ -1058,17 +1058,17 @@ export function NewSession({ onBack, inline, focusSeq, send, addHandler, connect
   async function addAttachments(picked: FileList | File[]) {
     const staging = countStaging(picked);
     setStaging((current) => addStaging(current, staging));
-    try {
-      // The staging commits to the draft store itself, so a screenshot pasted
+    await (async () => {
+// The staging commits to the draft store itself, so a screenshot pasted
       // while the app is still loading survives this palette closing before
       // its upload lands. Adopt the store rather than the result: it is the
       // one place that has both these files and anything else that arrived.
       const { rejected } = await attachToDraft(DRAFT_KEY, picked);
       adoptDraftAttachments();
       if (rejected.length) alert(`Couldn't attach:\n${rejected.join("\n")}`);
-    } finally {
-      setStaging((current) => subtractStaging(current, staging));
-    }
+})().finally(async () => {
+setStaging((current) => subtractStaging(current, staging));
+});
   }
 
   // Leaving the palette with an unsent prompt saves it, rather than asking you
@@ -1094,8 +1094,8 @@ export function NewSession({ onBack, inline, focusSeq, send, addHandler, connect
     const operation: PendingDraftPark = { text, workspaceId, consumed: false };
     pendingDraftParks.add(operation);
     const draft = { text, updatedAt: new Date().toISOString(), by: getCurrentUser() };
-    try {
-      const createWorkspace = () =>
+    await (async () => {
+const createWorkspace = () =>
         createWorkspaceApi({
           name: firstNonEmptyLine(text).slice(0, 80) || "Draft",
           ...(repo && repo !== NO_REPO ? { repo } : {}),
@@ -1139,18 +1139,18 @@ export function NewSession({ onBack, inline, focusSeq, send, addHandler, connect
         });
       }
       window.dispatchEvent(new Event("opensession:workspaces-changed"));
-    } catch (e) {
-      if (!operation.consumed) {
+})().catch(async (e) => {
+if (!operation.consumed) {
         toast(
           e instanceof ApiError
             ? `Couldn't save the draft: ${e.message}`
             : "Couldn't save the draft. It is still in the composer.",
         );
       }
-    } finally {
-      pendingDraftParks.delete(operation);
+}).finally(async () => {
+pendingDraftParks.delete(operation);
       parkingDraftRef.current = false;
-    }
+});
   }
 
   /** The latest `handleCreate`, for a caller that has to wait a render before

@@ -272,44 +272,44 @@ function MemoryRow({
 			return;
 		}
 		setBusy(true);
-		try {
-			await updateMemoryRecord(row.scoped.scope.key, row.entry.id, { summary: text });
+		await (async () => {
+await updateMemoryRecord(row.scoped.scope.key, row.entry.id, { summary: text });
 			setEditing(false);
 			onChanged();
-		} catch (error: any) {
-			toast(error?.message || "Failed to update memory", { variant: "error" });
-		} finally {
-			setBusy(false);
-		}
+})().catch(async (error: any) => {
+toast(error?.message || "Failed to update memory", { variant: "error" });
+}).finally(async () => {
+setBusy(false);
+});
 	}
 
 	async function permanentlyDelete() {
 		setBusy(true);
-		try {
-			await permanentlyDeleteMemory(row.scoped.scope.key, row.entry.id);
+		await (async () => {
+await permanentlyDeleteMemory(row.scoped.scope.key, row.entry.id);
 			toast("Memory forgotten", { variant: "success" });
 			onChanged();
-		} catch (error: any) {
-			toast(error?.message || "Failed to delete memory", { variant: "error" });
+})().catch(async (error: any) => {
+toast(error?.message || "Failed to delete memory", { variant: "error" });
 			setBusy(false);
-		}
+});
 	}
 
 	async function expand() {
 		setExpanded(true);
 		if (details !== undefined || !row.entry.hasDetails) return;
-		try {
-			const response = await readMemoryRecord(row.scoped.scope.key, row.entry.id);
+		await (async () => {
+const response = await readMemoryRecord(row.scoped.scope.key, row.entry.id);
 			setDetails(response.entry.details || "");
-		} catch (error: any) {
-			toast(error?.message || "Failed to load memory details", { variant: "error" });
-		}
+})().catch(async (error: any) => {
+toast(error?.message || "Failed to load memory details", { variant: "error" });
+});
 	}
 
 	async function act(action: "pin" | "unpin" | "confirm" | "archive" | "restore") {
 		setBusy(true);
-		try {
-			await mutateMemoryRecord(row.scoped.scope.key, row.entry.id, action);
+		await (async () => {
+await mutateMemoryRecord(row.scoped.scope.key, row.entry.id, action);
 			toast(
 				action === "pin" ? "Memory pinned" :
 				action === "unpin" ? "Memory unpinned" :
@@ -318,11 +318,11 @@ function MemoryRow({
 				{ variant: "success" },
 			);
 			onChanged();
-		} catch (error: any) {
-			toast(error?.message || `Failed to ${action} memory`, { variant: "error" });
-		} finally {
-			setBusy(false);
-		}
+})().catch(async (error: any) => {
+toast(error?.message || `Failed to ${action} memory`, { variant: "error" });
+}).finally(async () => {
+setBusy(false);
+});
 	}
 
 	return <>
@@ -570,8 +570,8 @@ function AddMemoryDialog({
 		const text = draft.trim();
 		if (!scopeKey || !text) return;
 		setBusy(true);
-		try {
-			await addStructuredMemory({
+		await (async () => {
+await addStructuredMemory({
 				scopeKey,
 				summary: text,
 				kind,
@@ -581,11 +581,11 @@ function AddMemoryDialog({
 			toast("Memory saved", { variant: "success" });
 			onOpenChange(false);
 			onChanged();
-		} catch (error: any) {
-			toast(error?.message || "Failed to add memory", { variant: "error" });
-		} finally {
-			setBusy(false);
-		}
+})().catch(async (error: any) => {
+toast(error?.message || "Failed to add memory", { variant: "error" });
+}).finally(async () => {
+setBusy(false);
+});
 	}
 
 	return (
@@ -671,8 +671,8 @@ function MergeMemoryDialog({
 
 	async function merge() {
 		setBusy(true);
-		try {
-			await mergeMemoryRecords({
+		await (async () => {
+await mergeMemoryRecords({
 				scopeKey,
 				ids,
 				summary: summary.trim(),
@@ -682,11 +682,11 @@ function MergeMemoryDialog({
 			toast("Memories merged", { variant: "success" });
 			onOpenChange(false);
 			onChanged();
-		} catch (error: any) {
-			toast(error?.message || "Failed to merge memories", { variant: "error" });
-		} finally {
-			setBusy(false);
-		}
+})().catch(async (error: any) => {
+toast(error?.message || "Failed to merge memories", { variant: "error" });
+}).finally(async () => {
+setBusy(false);
+});
 	}
 
 	return (

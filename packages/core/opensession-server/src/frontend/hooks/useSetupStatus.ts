@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import {
 	setupRequest,
 	type SetupAccess,
@@ -47,18 +47,18 @@ export function useSetupStatus(): SetupController {
 	const [restartNeeded, setRestartNeeded] = useState(false);
 	const [restartState, setRestartState] = useState<RestartState>("idle");
 	const statusRef = useRef<SetupStatus | null>(null);
-	statusRef.current = status;
-
+	useLayoutEffect(() => {		statusRef.current = status;
+	});
 	const refetch = async () => {
-		try {
-			const body = await setupRequest<SetupStatus>("/api/setup/status");
+		await (async () => {
+const body = await setupRequest<SetupStatus>("/api/setup/status");
 			setStatus(body);
 			setFailed(false);
-		} catch {
-			// A refetch that fails while a status is already on screen keeps the
+})().catch(async () => {
+// A refetch that fails while a status is already on screen keeps the
 			// stale one: better a slightly old page than an empty one.
 			if (!statusRef.current) setFailed(true);
-		}
+});
 	};
 
 	useEffect(() => {
@@ -116,8 +116,8 @@ export function useSetupStatus(): SetupController {
 	const restartServer = async (post = true) => {
 			setRestartState("working");
 			if (post) {
-				try {
-					const res = await fetch(`${BASE_PATH}/api/setup/restart`, {
+				await (async () => {
+const res = await fetch(`${BASE_PATH}/api/setup/restart`, {
 						method: "POST",
 					});
 					// 409 = nothing would revive this process, so it refused. Say so
@@ -128,16 +128,16 @@ export function useSetupStatus(): SetupController {
 						toast(body?.error || "This server can't restart itself.");
 						return;
 					}
-				} catch {
-					// The connection can drop as the server goes down — that's fine,
+})().catch(async () => {
+// The connection can drop as the server goes down — that's fine,
 					// the health poll below is the real signal.
-				}
+});
 			}
 			const deadline = Date.now() + 30_000;
 			await sleep(1000);
 			while (Date.now() < deadline) {
-				try {
-					const res = await fetch(`${BASE_PATH}/api/health`, {
+				await (async () => {
+const res = await fetch(`${BASE_PATH}/api/health`, {
 						cache: "no-store",
 					});
 					if (res.ok) {
@@ -147,7 +147,9 @@ export function useSetupStatus(): SetupController {
 						toast("Server restarted. Changes applied.");
 						return;
 					}
-				} catch {}
+})().catch(async () => {
+
+});
 				await sleep(1000);
 			}
 			setRestartState("failed");

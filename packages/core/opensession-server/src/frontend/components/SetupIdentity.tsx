@@ -43,13 +43,13 @@ function IdentityInput({
 			return;
 		}
 		setSaving(true);
-		try {
-			await onSave(next);
-		} catch {
-			setDraft(value);
-		} finally {
-			setSaving(false);
-		}
+		await (async () => {
+await onSave(next);
+})().catch(async () => {
+setDraft(value);
+}).finally(async () => {
+setSaving(false);
+});
 	};
 	return (
 		<input
@@ -84,15 +84,15 @@ export function IdentityRows() {
 		};
 	}, []);
 	const save = async (patch: { personaName?: string; productName?: string }) => {
-		try {
-			setIdentity(await saveInstanceIdentity(patch));
+		await (async () => {
+setIdentity(await saveInstanceIdentity(patch));
 			toast("Saved. Open tabs update after the next rebuild.", {
 				variant: "success",
 			});
-		} catch (e: any) {
-			toast(e?.message || "Failed to save", { variant: "error" });
+})().catch(async (e: any) => {
+toast(e?.message || "Failed to save", { variant: "error" });
 			throw e;
-		}
+});
 	};
 
 	return (

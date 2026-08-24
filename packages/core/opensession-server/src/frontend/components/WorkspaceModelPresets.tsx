@@ -290,8 +290,8 @@ export function WorkspaceModelPresets({
 	const save = async () => {
 		setSaving(true);
 		setError(null);
-		try {
-			const clean = {
+		await (async () => {
+const clean = {
 				...settings,
 				presets: presets
 					.map((preset) => ({
@@ -307,11 +307,11 @@ export function WorkspaceModelPresets({
 			await updateWorkspaceApi(workspace.id, { modelSettings: clean });
 			onSaved();
 			onOpenChange(false);
-		} catch (e) {
-			setError(e instanceof Error ? e.message : "Could not save model presets.");
-		} finally {
-			setSaving(false);
-		}
+})().catch(async (e) => {
+setError(e instanceof Error ? e.message : "Could not save model presets.");
+}).finally(async () => {
+setSaving(false);
+});
 	};
 	return (
 		<Modal.Root open={open} onOpenChange={onOpenChange}>

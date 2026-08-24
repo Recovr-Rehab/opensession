@@ -94,7 +94,6 @@ export function SchedulePromptButton({
     load();
     const id = setInterval(load, 60_000);
     return () => clearInterval(id);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [sessionId]);
 
   // Close menu on outside click; Escape closes menu or dialog.
@@ -153,8 +152,8 @@ export function SchedulePromptButton({
     if (!prompt || saving) return;
     setSaving(true);
     setError(null);
-    try {
-      await createScheduledPromptApi(sessionId, {
+    await (async () => {
+await createScheduledPromptApi(sessionId, {
         prompt,
         at: at.toISOString(),
         user: getCurrentUser(),
@@ -163,9 +162,9 @@ export function SchedulePromptButton({
       setCustomOpen(false);
       onScheduled?.();
       await load();
-    } catch (e: any) {
-      setError(e.message);
-    }
+})().catch(async (e: any) => {
+setError(e.message);
+});
     setSaving(false);
   }
 
@@ -275,10 +274,12 @@ export function SchedulePromptButton({
                     className="ml-auto shrink-0 text-meta text-faint hover:text-red"
                     title="Cancel this scheduled message"
                     onClick={async () => {
-                      try {
-                        await deleteScheduledPromptApi(p.id);
+                      await (async () => {
+await deleteScheduledPromptApi(p.id);
                         load();
-                      } catch {}
+})().catch(async () => {
+
+});
                     }}
                   >
                     ✕
