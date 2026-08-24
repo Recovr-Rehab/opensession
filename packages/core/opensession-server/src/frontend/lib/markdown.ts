@@ -4,7 +4,7 @@ import { sanitizeHtmlFragment } from "./html-sanitize";
 import { prStatusMark, type PrStatusInput } from "./pr-status";
 import { repoLabel } from "./repo-label";
 import { cleanSessionTitle } from "./session-title";
-import { INTERNAL_HOSTS, UUIDV7, internalUrlTarget } from "./session-url";
+import { INTERNAL_ORIGINS, UUIDV7, internalUrlTarget } from "./session-url";
 import { sessionAssetRawUrl } from "./api/sessions";
 
 // Dedicated marked instance for session messages so this config doesn't leak
@@ -166,9 +166,7 @@ function assetLinkTarget(href: string | null | undefined): string | null {
   } catch {
     return null;
   }
-  const sameOrigin =
-    typeof location !== "undefined" && url.origin === location.origin;
-  if (!sameOrigin && !INTERNAL_HOSTS.has(url.hostname)) return null;
+  if (!INTERNAL_ORIGINS.has(url.origin)) return null;
   const match = /\/api\/sessions\/([^/]+)\/assets\/raw\/(.+)$/.exec(url.pathname);
   if (!match) return null;
   // Another session's scratch folder is not this session's to open over.

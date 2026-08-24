@@ -34,16 +34,17 @@ export function isMintedSessionId(id: string): boolean {
 	return MINTED_SESSION_ID.test(id);
 }
 
-// Links into OS1 itself must not open a new window — it's the same app. Known
-// public hosts cover links pasted as absolute URLs viewed from another origin
-// (e.g. the ts.net entry); same-origin covers everything else, prefix included
-// (stripBasePath-style legacy /opensession + /backstage forms).
-export const INTERNAL_HOSTS = new Set(
+// Links into Open Session itself stay in this app. Match the complete origin,
+// not only the hostname: portal previews deliberately use another port on the
+// same host (`os.tella.dev:25779`), and those are external pages that must open
+// in a new tab. The configured public origin remains trusted while the app is
+// viewed through another entry URL (for example its ts.net address).
+export const INTERNAL_ORIGINS = new Set(
 	[
-		typeof location === "undefined" ? "" : location.hostname,
+		typeof location === "undefined" ? "" : location.origin,
 		(() => {
 			try {
-				return new URL(PUBLIC_BASE_URL).hostname;
+				return new URL(PUBLIC_BASE_URL).origin;
 			} catch {
 				return "";
 			}
@@ -65,9 +66,7 @@ export function internalUrlTarget(href: string | null | undefined): {
 	} catch {
 		return null;
 	}
-	const sameOrigin =
-		typeof location !== "undefined" && url.origin === location.origin;
-	if (!sameOrigin && !INTERNAL_HOSTS.has(url.hostname)) return null;
+	if (!INTERNAL_ORIGINS.has(url.origin)) return null;
 	const path = url.pathname.replace(/^\/(?:opensession|backstage)(?=\/)/, "");
 	// The path already says "session", so both prefixes take the loose shape here.
 	const m =
