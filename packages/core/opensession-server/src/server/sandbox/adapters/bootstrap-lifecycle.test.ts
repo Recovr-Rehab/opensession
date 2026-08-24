@@ -153,7 +153,8 @@ describe("remote repo lifecycle", () => {
 		expect(d.commands).toHaveLength(3);
 		const adoption = d.commands[1]!;
 		expect(adoption.opts.timeoutMs).toBe(180_000);
-		expect(adoption.command).toContain("mount --bind");
+		expect(adoption.command).toContain("ln -s");
+		expect(adoption.command).not.toContain("mount --bind");
 		expect(adoption.command).toContain("remote set-url origin");
 		expect(adoption.command).toContain("fetch --no-tags origin +refs/heads/feature/new-ui:refs/remotes/origin/feature/new-ui --quiet");
 		expect(adoption.command).toContain("fetch --no-tags origin +refs/heads/main:refs/remotes/origin/main --quiet");

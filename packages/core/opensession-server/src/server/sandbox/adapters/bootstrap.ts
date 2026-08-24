@@ -1287,25 +1287,16 @@ export async function scrubRemoteWarmWorkspaceAuthority(
   }
 }
 
-const EPHEMERAL_MOUNT_NAMESPACE_PROVIDERS = new Set(["box"]);
-
-function warmWorkspaceAttachCommand(
-  provider: string | undefined,
-  warmDir: string,
-  cwd: string,
-): string {
-  if (provider && EPHEMERAL_MOUNT_NAMESPACE_PROVIDERS.has(provider)) {
-    return (
-      `mkdir -p ${shellQuoteWord(dirname(cwd))} && ` +
-      `rmdir ${shellQuoteWord(cwd)} 2>/dev/null || true; ` +
-      `test ! -e ${shellQuoteWord(cwd)} && ` +
-      `ln -s ${shellQuoteWord(warmDir)} ${shellQuoteWord(cwd)}`
-    );
-  }
+function warmWorkspaceAttachCommand(warmDir: string, cwd: string): string {
+  // A symlink is durable across every provider's command namespace and keeps
+  // realpath-sensitive build caches (notably ReScript's compiler-info) on the
+  // exact path where the project image prepared them. Bind-mounting Daytona's
+  // warm tree under a new real path invalidated all 3,165 compiled modules.
   return (
-    `mkdir -p ${shellQuoteWord(dirname(cwd))} ${shellQuoteWord(cwd)} && ` +
-    `(sudo -n mount --bind ${shellQuoteWord(warmDir)} ${shellQuoteWord(cwd)} 2>/dev/null || ` +
-    `(rmdir ${shellQuoteWord(cwd)} && ln -s ${shellQuoteWord(warmDir)} ${shellQuoteWord(cwd)}))`
+    `mkdir -p ${shellQuoteWord(dirname(cwd))} && ` +
+    `rmdir ${shellQuoteWord(cwd)} 2>/dev/null || true; ` +
+    `test ! -e ${shellQuoteWord(cwd)} && ` +
+    `ln -s ${shellQuoteWord(warmDir)} ${shellQuoteWord(cwd)}`
   );
 }
 
@@ -1330,10 +1321,9 @@ export async function setupRemoteWorkspace(
   let cloned = workspaceState === "cwd";
   if (!cloned && workspaceState === "warm" && warmDir && repoId) {
     // Adopt the snapshot's warm clone without moving its multi-gigabyte lazy
-    // filesystem. Daytona otherwise hydrates every node_modules file during
-    // rename (measured at 155s for tella-fusion). Box command calls use
-    // short-lived mount namespaces, so it needs a durable symlink.
-    const attach = warmWorkspaceAttachCommand(identity?.provider, warmDir, cwd);
+    // filesystem. Moving it hydrates every node_modules file (measured at
+    // 155s for tella-fusion); a symlink also preserves prepared cache paths.
+    const attach = warmWorkspaceAttachCommand(warmDir, cwd);
     const owner = `${warmDir}/.git/opensession-adopted-by`;
     const fetchRef = (ref: string) =>
       `git -C ${shellQuoteWord(cwd)} -c protocol.version=2 fetch --no-tags origin ` +
