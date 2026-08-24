@@ -330,6 +330,17 @@ export function boxNativeFilePath(path: string): string {
   return path;
 }
 
+export function boxResumePrimeCommand(cwd: string): string {
+  return `if test -d ${shellQuoteWord(cwd)}/.git; then cd ${shellQuoteWord(cwd)} && ` +
+    `GIT_OPTIONAL_LOCKS=0 git status --porcelain >/dev/null 2>&1; fi`;
+}
+
+function primeBoxWorkspaceAfterResume(driver: RemoteDriver, cwd: string): void {
+  void driver.execBackground(boxResumePrimeCommand(cwd), { timeoutMs: 15_000 }).catch((error) => {
+    console.warn(`[sandbox:box] could not start resumed workspace hydration:`, error);
+  });
+}
+
 export const BOX_RUNTIME_HOME_COMMAND =
   "test -d /home/user && test -w /home/user && " +
   "if mountpoint -q /home/ubuntu; then " +
@@ -929,8 +940,12 @@ export class BoxProvider implements SandboxProvider {
     });
 
     const driver = boxDriver(cfg, box.id);
+    const resumingExistingWorkspace = Boolean(
+      prevState && prevState.sandboxId === box.id && stateOf(box) !== "running",
+    );
     await driver.ensureStarted();
     mark("box started");
+    if (resumingExistingWorkspace) primeBoxWorkspaceAfterResume(driver, cwd);
     // Cheap dial-back probe BEFORE the expensive bootstrap — same rationale
     // as daytona: a box that can't reach our callback URL can never run.
     await assertDialbackReachable(driver, "box");
@@ -1053,7 +1068,8 @@ export class BoxProvider implements SandboxProvider {
     const cfg = boxClientConfig();
     const box = await getBox(cfg, sandboxId);
     if (!box) return null;
-    if (!LIVE_STATES.has(String(box.state || ""))) {
+    const resumed = !LIVE_STATES.has(String(box.state || ""));
+    if (resumed) {
       if (String(box.state || "") === "archived") {
         await boxApi(cfg, "POST", `/boxes/${sandboxId}/resume`, {
           noEnv: true,
@@ -1062,7 +1078,9 @@ export class BoxProvider implements SandboxProvider {
       }
       await waitForLive(cfg, sandboxId, 300_000);
     }
-    await boxDriver(cfg, sandboxId).ensureStarted();
+    const driver = boxDriver(cfg, sandboxId);
+    await driver.ensureStarted();
+    if (resumed) primeBoxWorkspaceAfterResume(driver, state.cwd);
     return this.makeHandle(cfg, sandboxId, state.sessionId, state.cwd);
   }
 

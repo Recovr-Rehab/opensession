@@ -7,6 +7,7 @@ import {
   boxMachineIpSshEndpoint,
   boxMachineType,
   boxNativeFilePath,
+  boxResumePrimeCommand,
   boxSnapshotSaveIsRecoverable,
   parseBoxSshEndpoint,
 } from "./box";
@@ -76,6 +77,11 @@ describe("Box SSH host identity", () => {
 });
 
 describe("Box command readiness", () => {
+  test("hydrates a resumed workspace without taking Git locks", () => {
+    expect(boxResumePrimeCommand("/home/ubuntu/worktrees/app")).toContain("GIT_OPTIONAL_LOCKS=0 git status --porcelain");
+    expect(boxResumePrimeCommand("/home/ubuntu/worktrees/app")).toContain("test -d /home/ubuntu/worktrees/app/.git");
+  });
+
   test("keeps command temporary files inside the bind-mounted home", () => {
     expect(boxComposeShell("printf ok")).toStartWith(
       "mkdir -p /home/ubuntu/.tmp && export TMPDIR=/home/ubuntu/.tmp && ",
