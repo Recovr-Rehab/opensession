@@ -1,5 +1,10 @@
 import { existsSync } from "fs";
+import { resolve } from "path";
 import type { GithubCredential } from "../github-auth";
+import type {
+  Sandbox,
+  SandboxSessionSpec,
+} from "../sandbox/provider";
 import { createWorkspace, getWorkspace, type Workspace } from "../workspaces";
 import type { WorktreeInfo } from "../worktree";
 import { registerSessionEffectExecutor } from "./effect-executors";
@@ -13,6 +18,7 @@ import type {
 type WorkspaceEffect = SessionActorEffectFor<"creation_workspace_prepare">;
 type BranchEffect = SessionActorEffectFor<"creation_branch_prepare">;
 type CredentialEffect = SessionActorEffectFor<"creation_credential_resolve">;
+type SandboxEffect = SessionActorEffectFor<"creation_sandbox_prepare">;
 export type CreationWorkspaceEffectItem = Omit<
   DurableOutboxItem,
   "kind" | "payload"
@@ -25,6 +31,10 @@ export type CreationCredentialEffectItem = Omit<
   DurableOutboxItem,
   "kind" | "payload"
 > & CredentialEffect;
+export type CreationSandboxEffectItem = Omit<
+  DurableOutboxItem,
+  "kind" | "payload"
+> & SandboxEffect;
 
 export class CreationEffectIndeterminateError extends Error {
   readonly indeterminate = true;
@@ -129,6 +139,10 @@ type BranchExecutorDependencies = {
   ) => Promise<string>;
   resolveCredential?: (principal: string) => Promise<GithubCredential | null>;
   destinationExists?: (path: string) => boolean;
+  isSharedCheckoutDestination?: (
+    project: string,
+    path: string,
+  ) => Promise<boolean>;
   result: (item: CreationBranchEffectItem) => CreationEventDecisionResult;
   afterDestinationAccepted?: (worktreePath: string) => void;
 };
@@ -166,6 +180,15 @@ async function createExistingWorktree(
   );
 }
 
+async function isSharedCheckoutDestination(
+  project: string,
+  path: string,
+): Promise<boolean> {
+  const { getRepo, sharedCheckoutForNewSessions } = await import("../worktree");
+  const repo = getRepo(project);
+  return sharedCheckoutForNewSessions(repo) && resolve(repo.repo) === resolve(path);
+}
+
 const defaultBranchDependencies: BranchExecutorDependencies = {
   listWorktrees: async (project) =>
     (await import("../worktree")).listWorktrees(project),
@@ -174,6 +197,7 @@ const defaultBranchDependencies: BranchExecutorDependencies = {
   createWorktreeForExistingBranch: createExistingWorktree,
   resolveCredential: resolveCurrentCredential,
   destinationExists: existsSync,
+  isSharedCheckoutDestination,
   result: defaultBranchResult,
 };
 
@@ -194,15 +218,23 @@ export async function executeCreationBranchPrepare(
     throw new CreationEffectIndeterminateError(
       `Worktree ${payload.worktreePath} belongs to another branch`,
     );
+  const sharedCheckout =
+    !byBranch &&
+    await (dependencies.isSharedCheckoutDestination ??
+      isSharedCheckoutDestination)(
+      payload.project,
+      payload.worktreePath,
+    );
   if (
     !byPath &&
+    !sharedCheckout &&
     (dependencies.destinationExists ?? existsSync)(payload.worktreePath)
   )
     throw new CreationEffectIndeterminateError(
       `Worktree destination ${payload.worktreePath} exists without a registered branch`,
     );
   let credential: GithubCredential | null = null;
-  if (!byBranch && payload.credentialPrincipal) {
+  if (!byBranch && !sharedCheckout && payload.credentialPrincipal) {
     credential = await (dependencies.resolveCredential ??
       resolveCurrentCredential)(payload.credentialPrincipal);
     if (!credential)
@@ -214,7 +246,9 @@ export async function executeCreationBranchPrepare(
         `Credential selector ${payload.credentialPrincipal} resolved to another principal`,
       );
   }
-  const acceptedPath = byBranch?.path ?? (payload.existingBranch
+  const acceptedPath = byBranch?.path ?? (sharedCheckout
+    ? payload.worktreePath
+    : payload.existingBranch
     ? await (dependencies.createWorktreeForExistingBranch ??
         createExistingWorktree)(
         payload.branch,
@@ -239,6 +273,76 @@ export async function executeCreationBranchPrepare(
   if (result.accepted || result.reason === "stale_effect") return;
   throw new CreationEffectIndeterminateError(
     `Branch effect ${item.effectId} result was rejected: ${result.reason || "unknown"}`,
+  );
+}
+
+type SandboxExecutorDependencies = {
+  ensure: (
+    provider: string,
+    spec: SandboxSessionSpec,
+  ) => Promise<Pick<Sandbox, "id" | "provider">>;
+  result: (item: CreationSandboxEffectItem, sandboxId: string) => CreationEventDecisionResult;
+  afterDestinationAccepted?: (sandbox: Pick<Sandbox, "id" | "provider">) => void;
+};
+
+function defaultSandboxResult(
+  item: CreationSandboxEffectItem,
+  sandboxId: string,
+): CreationEventDecisionResult {
+  return sessionKernel(item.sessionId).applyCreationEvent({
+    identity: item.payload.creationIdentity,
+    event: "preparation_started",
+    effectId: item.effectKey,
+    detail: {
+      provider: item.payload.provider,
+      sandboxKey: item.payload.sandboxKey,
+      sandboxId,
+    },
+  });
+}
+
+const defaultSandboxDependencies: SandboxExecutorDependencies = {
+  ensure: async (providerId, spec) => {
+    const [{ getSandboxProvider }, { ensureSandboxWithTransientRetry }] =
+      await Promise.all([
+        import("../sandbox"),
+        import("../sandbox/reliability"),
+      ]);
+    return ensureSandboxWithTransientRetry(getSandboxProvider(providerId), spec);
+  },
+  result: defaultSandboxResult,
+};
+
+/** Create or adopt the provider resource keyed by this canonical session. */
+export async function executeCreationSandboxPrepare(
+  item: CreationSandboxEffectItem,
+  dependencies: SandboxExecutorDependencies = defaultSandboxDependencies,
+): Promise<void> {
+  const payload = item.payload;
+  if (payload.sandboxKey !== item.sessionId)
+    throw new CreationEffectIndeterminateError(
+      `Sandbox key ${payload.sandboxKey} crossed session ownership`,
+    );
+  const sandbox = await dependencies.ensure(payload.provider, {
+    sessionId: payload.sandboxKey,
+    repo: payload.repo,
+    branch: payload.branch,
+    mode: payload.sessionMode,
+    cwd: payload.cwd,
+    base: payload.base,
+    attachedDirs: payload.attachedDirs,
+    trustProfile: payload.trustProfile,
+    egressAllowlist: payload.egressAllowlist,
+  });
+  if (sandbox.provider !== payload.provider)
+    throw new CreationEffectIndeterminateError(
+      `Sandbox ${sandbox.id} was returned by another provider`,
+    );
+  dependencies.afterDestinationAccepted?.(sandbox);
+  const result = dependencies.result(item, sandbox.id);
+  if (result.accepted || result.reason === "stale_effect") return;
+  throw new CreationEffectIndeterminateError(
+    `Sandbox effect ${item.effectId} result was rejected: ${result.reason || "unknown"}`,
   );
 }
 
@@ -293,6 +397,7 @@ const registrationGlobal = globalThis as typeof globalThis & {
   __opensessionCreationWorkspaceExecutorRegistered?: boolean;
   __opensessionCreationBranchExecutorRegistered?: boolean;
   __opensessionCreationCredentialExecutorRegistered?: boolean;
+  __opensessionCreationSandboxExecutorRegistered?: boolean;
 };
 
 export function ensureCreationEffectExecutors(): void {
@@ -309,6 +414,13 @@ export function ensureCreationEffectExecutors(): void {
       executeCreationBranchPrepare,
     );
     registrationGlobal.__opensessionCreationBranchExecutorRegistered = true;
+  }
+  if (!registrationGlobal.__opensessionCreationSandboxExecutorRegistered) {
+    registerSessionEffectExecutor(
+      "creation_sandbox_prepare",
+      executeCreationSandboxPrepare,
+    );
+    registrationGlobal.__opensessionCreationSandboxExecutorRegistered = true;
   }
   if (!registrationGlobal.__opensessionCreationCredentialExecutorRegistered) {
     registerSessionEffectExecutor(

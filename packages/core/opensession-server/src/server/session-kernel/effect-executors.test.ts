@@ -36,12 +36,16 @@ describe("session effect executor registry", () => {
     const registry = new SessionEffectExecutorRegistry();
     let credential: unknown;
     let branch: unknown;
+    let sandbox: unknown;
     let attachment: unknown;
     registry.register("creation_credential_resolve", (item) => {
       credential = item.payload;
     });
     registry.register("creation_branch_prepare", (item) => {
       branch = item.payload;
+    });
+    registry.register("creation_sandbox_prepare", (item) => {
+      sandbox = item.payload;
     });
     registry.register("creation_attachment_stage", (item) => {
       attachment = item.payload;
@@ -65,6 +69,9 @@ describe("session effect executor registry", () => {
       project: "opensession",
       branch: "feature/create-one",
       worktreePath: "/worktrees/create-one",
+      // Older clean-install creates persisted an empty optional stack base.
+      // It means "branch from the repo default", not an invalid effect.
+      baseBranch: "",
       isolated: true,
       existingBranch: true,
       credentialPrincipal: "user:alice",
@@ -79,6 +86,33 @@ describe("session effect executor registry", () => {
       isolated: true,
       existingBranch: true,
       credentialPrincipal: "user:alice",
+      mode: "adopt_or_create",
+    });
+    expect(await registry.execute(outbox({
+      ...fence,
+      provider: "modal",
+      sandboxKey: "session-one",
+      repo: "opensession",
+      branch: "feature/create-one",
+      sessionMode: "code",
+      cwd: "/worktrees/create-one",
+      attachedDirs: ["/worktrees/attached"],
+      trustProfile: "interactive",
+      egressAllowlist: ["github.com"],
+      mode: "adopt_or_create",
+      token: "must-not-cross",
+    }, "creation_sandbox_prepare"))).toBe(true);
+    expect(sandbox).toEqual({
+      ...fence,
+      provider: "modal",
+      sandboxKey: "session-one",
+      repo: "opensession",
+      branch: "feature/create-one",
+      sessionMode: "code",
+      cwd: "/worktrees/create-one",
+      attachedDirs: ["/worktrees/attached"],
+      trustProfile: "interactive",
+      egressAllowlist: ["github.com"],
       mode: "adopt_or_create",
     });
     expect(await registry.execute(outbox({

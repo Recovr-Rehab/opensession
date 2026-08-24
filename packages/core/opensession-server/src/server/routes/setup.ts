@@ -380,6 +380,64 @@ export async function handleSetupRoutes(
           ? (integrations.github as Record<string, unknown>)
           : {};
       integrations.github = github;
+
+      // Turning on the sign-in gate must never strand a personal install with
+      // nobody who can pass it. Organization onboarding already rosters people
+      // before enabling the gate; the Settings toggle also serves single-user
+      // installs, where the only identity is the GitHub account they connected.
+      // Promote that sole, verified account to the first workspace admin in the
+      // SAME config write as userPrAuth. If neither a sign-in-capable admin nor a
+      // connected account exists, refuse the flip and leave the instance open.
+      if (body.userPrAuth === true && github.userPrAuth !== true) {
+        const { rawTeam } = await import("./setup-team");
+        const team = rawTeam(config);
+        const explicitRoles = team.some((member) => member.admin !== undefined);
+        const hasSigninAdmin = team.some(
+          (member) =>
+            typeof member.github === "string" &&
+            !!member.github.trim() &&
+            (!explicitRoles || member.admin === true),
+        );
+        if (!hasSigninAdmin) {
+          const { connectedGithubAccounts, soleGithubLogin } = await import(
+            "../github-auth"
+          );
+          const login = soleGithubLogin();
+          const account = login
+            ? connectedGithubAccounts().find(
+                (candidate) => candidate.login.toLowerCase() === login.toLowerCase(),
+              )
+            : undefined;
+          if (!login || !account) {
+            return Response.json(
+              {
+                error:
+                  "Connect one GitHub account or add a team member before enabling GitHub sign-in",
+              },
+              { status: 409 },
+            );
+          }
+          const key = login.toLowerCase();
+          const displayName = account.name?.trim() || login;
+          const existing = team.find(
+            (member) =>
+              (typeof member.github === "string" &&
+                member.github.trim().toLowerCase() === key) ||
+              (typeof member.name === "string" &&
+                member.name.trim().toLowerCase() === displayName.toLowerCase()),
+          );
+          if (existing) {
+            existing.github = login;
+            existing.admin = true;
+            if (typeof existing.name !== "string" || !existing.name.trim())
+              existing.name = displayName;
+          } else {
+            team.push({ name: displayName, github: login, admin: true });
+          }
+          (config.identity as Record<string, unknown>).team = team;
+          github.webhookForwardLogin = login;
+        }
+      }
       if (body.userPrAuth !== undefined) github.userPrAuth = body.userPrAuth;
       for (const field of ["oauthClientId", "oauthClientSecret"] as const) {
         const value = body[field];

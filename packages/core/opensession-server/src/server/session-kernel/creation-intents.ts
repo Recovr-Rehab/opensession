@@ -32,6 +32,20 @@ export type CreationCredentialIntent = {
   scope: string;
 };
 
+export type CreationSandboxIntent = {
+  sessionId: string;
+  identity: string;
+  provider: string;
+  repo?: string;
+  branch?: string;
+  sessionMode?: "ask" | "code" | "scratch";
+  cwd?: string;
+  base?: string;
+  attachedDirs?: string[];
+  trustProfile?: "interactive" | "automation";
+  egressAllowlist?: string[];
+};
+
 type CreationIntentKernel = Pick<
   ReturnType<typeof sessionKernel>,
   "creationState" | "applyCreationEvent"
@@ -229,6 +243,66 @@ export async function requestCreationCredential(
       throw new Error(
         "Creation state disappeared while credential work was pending",
       );
+    assertIdentity(current, input.identity);
+    state = current;
+  }
+  return state;
+}
+
+/** Ensure a session-keyed sandbox and wait only for its actor receipt. */
+export async function requestCreationSandbox(
+  input: CreationSandboxIntent,
+  options: CreationIntentOptions = {},
+): Promise<DurableCreationState> {
+  const kernel = options.kernel ?? sessionKernel(input.sessionId);
+  let state = ensureCreationPlanned(input.sessionId, input.identity, kernel);
+  const effectId = `sandbox:${input.provider}:${input.sessionId}`;
+  if (state.completedEffectIds.includes(effectId)) return state;
+  if (state.currentEffectId && state.currentEffectId !== effectId)
+    throw new Error(
+      `Creation effect ${state.currentEffectId} must settle before ${effectId}`,
+    );
+  if (!state.currentEffectId) {
+    const emitted = kernel.applyCreationEvent({
+      identity: input.identity,
+      event: "preparation_started",
+      nextEffectId: effectId,
+      effect: {
+        kind: "creation_sandbox_prepare",
+        effectKey: effectId,
+        payload: {
+          creationIdentity: input.identity,
+          creationGeneration: state.generation,
+          provider: input.provider,
+          sandboxKey: input.sessionId,
+          repo: input.repo,
+          branch: input.branch,
+          sessionMode: input.sessionMode,
+          cwd: input.cwd,
+          base: input.base,
+          attachedDirs: input.attachedDirs,
+          trustProfile: input.trustProfile,
+          egressAllowlist: input.egressAllowlist,
+          mode: "adopt_or_create",
+        },
+      },
+    });
+    if (!emitted.accepted || !emitted.state)
+      throw new Error(
+        `Creation sandbox intent was rejected: ${emitted.reason || "unknown"}`,
+      );
+    state = emitted.state;
+  }
+  const deadline = Date.now() + (options.timeoutMs ?? 30_000);
+  while (!state.completedEffectIds.includes(effectId)) {
+    if (Date.now() >= deadline)
+      throw new Error(
+        `Creation sandbox effect ${effectId} remains durably pending`,
+      );
+    await Bun.sleep(options.pollMs ?? 25);
+    const current = kernel.creationState();
+    if (!current)
+      throw new Error("Creation state disappeared while sandbox work was pending");
     assertIdentity(current, input.identity);
     state = current;
   }

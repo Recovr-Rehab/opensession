@@ -34,6 +34,20 @@ function requiredString(
   return value;
 }
 
+function optionalStringList(
+  kind: string,
+  value: unknown,
+  field: string,
+): string[] | undefined {
+  if (value === undefined) return undefined;
+  if (
+    !Array.isArray(value) ||
+    value.some((entry) => typeof entry !== "string" || entry.length === 0)
+  )
+    throw new Error(`Invalid ${kind} effect payload: ${field}`);
+  return [...value];
+}
+
 function creationBase(kind: string, value: Record<string, unknown>) {
   if (
     typeof value.creationIdentity !== "string" ||
@@ -94,8 +108,11 @@ function creationPayload<K extends Exclude<
         project: requiredString(kind, value.project, "project"),
         branch: requiredString(kind, value.branch, "branch"),
         worktreePath: requiredString(kind, value.worktreePath, "worktreePath"),
+        // The pre-cutover creator encoded "no stack base" as an empty
+        // string. Normalize those already-durable effects while new producers
+        // omit the field entirely.
         baseBranch:
-          value.baseBranch === undefined
+          value.baseBranch === undefined || value.baseBranch === ""
             ? undefined
             : requiredString(kind, value.baseBranch, "baseBranch"),
         isolated: value.isolated === true,
@@ -110,12 +127,49 @@ function creationPayload<K extends Exclude<
         mode: value.mode,
       } as SessionActorEffectFor<K>["payload"];
     case "creation_sandbox_prepare":
-      if (value.mode !== "adopt_or_create")
+      if (
+        value.mode !== "adopt_or_create" ||
+        (value.sessionMode !== undefined &&
+          value.sessionMode !== "ask" &&
+          value.sessionMode !== "code" &&
+          value.sessionMode !== "scratch") ||
+        (value.trustProfile !== undefined &&
+          value.trustProfile !== "interactive" &&
+          value.trustProfile !== "automation")
+      )
         throw new Error(`Invalid ${kind} effect payload: mode`);
       return {
         ...base,
         provider: requiredString(kind, value.provider, "provider"),
         sandboxKey: requiredString(kind, value.sandboxKey, "sandboxKey"),
+        repo:
+          value.repo === undefined
+            ? undefined
+            : requiredString(kind, value.repo, "repo"),
+        branch:
+          value.branch === undefined
+            ? undefined
+            : requiredString(kind, value.branch, "branch"),
+        sessionMode: value.sessionMode,
+        cwd:
+          value.cwd === undefined
+            ? undefined
+            : requiredString(kind, value.cwd, "cwd"),
+        base:
+          value.base === undefined
+            ? undefined
+            : requiredString(kind, value.base, "base"),
+        attachedDirs: optionalStringList(
+          kind,
+          value.attachedDirs,
+          "attachedDirs",
+        ),
+        trustProfile: value.trustProfile,
+        egressAllowlist: optionalStringList(
+          kind,
+          value.egressAllowlist,
+          "egressAllowlist",
+        ),
         mode: value.mode,
       } as SessionActorEffectFor<K>["payload"];
     case "creation_credential_resolve":

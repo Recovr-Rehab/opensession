@@ -128,7 +128,13 @@ describe("single session ownership", () => {
 			'registerSessionEffectExecutor(\n      "creation_branch_prepare"',
 		);
 		expect(creationExecutors).toContain(
+			'"creation_sandbox_prepare",\n      executeCreationSandboxPrepare',
+		);
+		expect(creationExecutors).toContain(
 			'"creation_credential_resolve",\n      executeCreationCredentialResolve',
+		);
+		expect(creationExecutors).toContain(
+			"payload.sandboxKey !== item.sessionId",
 		);
 		expect(creationExecutors).toContain("resolveCurrentCredential");
 		expect(creationExecutors).not.toContain("payload.gitEnv");
@@ -264,6 +270,7 @@ describe("single session ownership", () => {
 		expect(wiring).toContain("await requestCreationWorkspace({");
 		expect(wiring.match(/await requestCreationCredential\(\{/g)?.length).toBe(2);
 		expect(wiring.match(/await requestCreationBranch\(\{/g)?.length).toBe(2);
+		expect(wiring.match(/baseBranch: .*defaultBranch/g)?.length).toBe(2);
 		expect(wiring).not.toMatch(/\bcreateWorkspace\(/);
 		expect(wiring).not.toMatch(/\bcreateWorktree\(/);
 		const create = read("session-create.ts");
@@ -273,6 +280,9 @@ describe("single session ownership", () => {
 		expect(create).toContain("actorWorktreeMaterializer({");
 		expect(create).toContain("await requestCreationCredential({");
 		expect(create).toContain("await requestCreationBranch({");
+		expect(create).toContain(
+			"baseBranch: input.baseBranch || getRepo(input.project).defaultBranch",
+		);
 		expect(create).not.toMatch(/\bcreateWorkspace\(/);
 		expect(create).not.toMatch(/\bcreateWorktree\(/);
 		expect(create).not.toMatch(/\bcreateWorktreeForExistingBranch\(/);

@@ -143,9 +143,14 @@ creates emit the credential receipt before the credential-bound branch intent.
 WebSocket creates and cold create-plan recovery use the same actor materializer,
 including an explicit existing-branch flag for PR heads. No create entry point
 calls Git worktree creation directly.
-Sandbox, attachment, and opening-turn executors are not yet registered. Wiring
-those adapters and removing the remaining create-plan
-authority are the next cutovers; the presence or absence of a plan file is not
+Sandbox preparation now has a production executor and stable receipt intent. Its
+durable effect carries the complete non-secret provider/session specification;
+the provider's idempotent `ensure` adopts resources by canonical session key.
+Session-key or returned-provider crossover is indeterminate, and a crash after
+provider acceptance re-enters the same ensure before returning the fenced actor
+receipt. Create entry points do not emit this effect yet. Attachment and
+opening-turn executors plus removal of the remaining create-plan authority are
+the next cutovers; the presence or absence of a plan file is not
 actor lifecycle evidence.
 
 ## Run ownership

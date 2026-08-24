@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test";
 import {
   requestCreationBranch,
   requestCreationCredential,
+  requestCreationSandbox,
   requestCreationWorkspace,
 } from "./creation-intents";
 import {
@@ -287,6 +288,58 @@ describe("creation credential intents", () => {
         {
           kind: "creation_branch_prepare",
           payload: { credentialPrincipal: "user:alice" },
+        },
+      ]);
+    } finally {
+      store.close();
+    }
+  });
+});
+
+describe("creation sandbox intents", () => {
+  test("persists one session-keyed provider spec and waits for its receipt", async () => {
+    const input = {
+      sessionId: "create-sandbox-intent",
+      identity: "request-sandbox-intent",
+      provider: "modal",
+      repo: "opensession",
+      branch: "feature/sandbox-intent",
+      sessionMode: "code" as const,
+      cwd: "/worktrees/sandbox-intent",
+      base: "main",
+      attachedDirs: ["/worktrees/attached"],
+      trustProfile: "interactive" as const,
+      egressAllowlist: ["github.com"],
+    };
+    const { store, kernel } = harness(input.sessionId);
+    try {
+      setTimeout(() => {
+        store.applyCreationEvent({
+          sessionId: input.sessionId,
+          identity: input.identity,
+          event: "preparation_started",
+          effectId: `sandbox:${input.provider}:${input.sessionId}`,
+        });
+      }, 5);
+      const state = await requestCreationSandbox(input, {
+        kernel,
+        timeoutMs: 200,
+        pollMs: 1,
+      });
+      expect(state.completedEffectIds).toEqual([
+        `sandbox:${input.provider}:${input.sessionId}`,
+      ]);
+      expect(store.pendingOutbox()).toMatchObject([
+        {
+          kind: "creation_sandbox_prepare",
+          payload: {
+            sandboxKey: input.sessionId,
+            provider: "modal",
+            repo: "opensession",
+            sessionMode: "code",
+            attachedDirs: ["/worktrees/attached"],
+            egressAllowlist: ["github.com"],
+          },
         },
       ]);
     } finally {
