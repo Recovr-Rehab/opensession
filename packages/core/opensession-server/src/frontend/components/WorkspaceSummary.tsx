@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import {
 	cancelPrReviewApi,
 	setSessionReviewerApi,
@@ -323,7 +323,9 @@ export function WorkspaceSummary({
 	/** The standing preference: whether this person keeps the card up. */
 	const [pinned, setPinned] = useState(workspaceSummaryOpen);
 	const pinnedRef = useRef(pinned);
-	pinnedRef.current = pinned;
+	useLayoutEffect(() => {
+		pinnedRef.current = pinned;
+	});
 	/** A card opened by hand on a pane too narrow to keep one. Held apart from
 	 *  the preference so an overlay opened here does not become the setting
 	 *  every wider window inherits, and dismissing it does not un-pin the card

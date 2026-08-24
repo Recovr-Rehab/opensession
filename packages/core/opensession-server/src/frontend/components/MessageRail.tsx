@@ -305,7 +305,8 @@ export function MessageRail({ messages, containerRef, leaveLatest }: Props) {
 		let settled = 0;
 		const correct = () => {
 			settled = settle() ? settled + 1 : 0;
-			if (settled >= 2 || ++frames >= SETTLE_FRAMES) return;
+			frames += 1;
+			if (settled >= 2 || frames >= SETTLE_FRAMES) return;
 			requestAnimationFrame(correct);
 		};
 		correct();

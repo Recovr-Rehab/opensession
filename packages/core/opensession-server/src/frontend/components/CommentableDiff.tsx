@@ -1,10 +1,4 @@
-import React, {
-  useState,
-  useRef,
-  
-  useEffect,
-  startTransition,
-} from "react";
+import React, { startTransition, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { parsePatchFiles } from "@pierre/diffs";
 import { EditProvider, FileDiff } from "@pierre/diffs/react";
@@ -528,12 +522,18 @@ toast(error?.message || "Couldn’t copy file contents");
   const editModuleRef = useRef<typeof import("@pierre/diffs/edit") | null>(
     null,
   );
-  const editorRef = useRef<Editor<Meta> | null>(null);
+  // Loaded lazily on first edit; the loader lives at module scope because the
+// compiler cannot lower dynamic imports inside components.
+let editModulePromise: Promise<typeof import("@pierre/diffs/edit")> | null = null;
+function loadEditModule() {
+	editModulePromise ??= import("@pierre/diffs/edit");
+	return editModulePromise;
+}
+
+const editorRef = useRef<Editor<Meta> | null>(null);
 
   const startEdit = async (file: FileDiffMetadata, index: number) => {
-    if (!editModuleRef.current) {
-      editModuleRef.current = await import("@pierre/diffs/edit");
-    }
+    editModuleRef.current ??= await loadEditModule();
     setEditError(null);
     setEditingPath(file.name);
     setExpanded((prev) => new Set(prev).add(index));
@@ -588,7 +588,9 @@ setSavingEdit(false);
   const [draft, setDraft] = useState<Draft | null>(null);
   const [confirmation, setConfirmation] = useState<string | null>(null);
   const draftRef = useRef<Draft | null>(null);
-  draftRef.current = draft;
+  useLayoutEffect(() => {
+    draftRef.current = draft;
+  });
   // Draft text is held in a ref so it survives the form remounting when the
   // selection range is adjusted, without re-rendering the diff on each keystroke.
   const draftTextRef = useRef("");

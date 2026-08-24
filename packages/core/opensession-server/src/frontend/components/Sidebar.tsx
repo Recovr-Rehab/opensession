@@ -2220,12 +2220,12 @@ setClosingPrUrls((current) => {
 		source: HTMLButtonElement;
 	} | null>(null);
 
-	function cancelWsHoverTimers() {
+	const cancelWsHoverTimers = () => {
 		if (wsHoverOpenT.current) clearTimeout(wsHoverOpenT.current);
 		if (wsHoverCloseT.current) clearTimeout(wsHoverCloseT.current);
 		wsHoverOpenT.current = null;
 		wsHoverCloseT.current = null;
-	}
+	};
 	function wsRowHoverEnter(row: WsRow, el: HTMLElement) {
 		if (rowRenameEditing(row) || !pointerCanHover()) return;
 		cancelWsHoverTimers();

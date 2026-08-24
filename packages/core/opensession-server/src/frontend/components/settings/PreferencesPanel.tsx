@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import {
 	fetchModels,
 	fetchPersonalOutputStyle,
@@ -315,7 +315,9 @@ function PersonalPromptPanel() {
 	// latest values live in a ref because the unmount effect must run once (a
 	// dependency on `prompt` would re-fire the cleanup on every keystroke).
 	const latest = useRef({ prompt, savedPrompt, user });
-	latest.current = { prompt, savedPrompt, user };
+	useLayoutEffect(() => {
+		latest.current = { prompt, savedPrompt, user };
+	});
 
 	const commit = async () => {
 		const { prompt: draft, savedPrompt: saved, user: who } = latest.current;

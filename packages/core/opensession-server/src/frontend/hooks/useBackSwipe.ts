@@ -1,4 +1,4 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useLayoutEffect, useRef } from "react";
 
 import { PHONE_QUERY } from "../lib/breakpoints";
 
@@ -339,13 +339,15 @@ export function useBackSwipe({ active, onBack, paneRef, priority = 0 }: Opts) {
   // (any re-render, e.g. a WebSocket session update), the manager would drop
   // the in-flight drag and strand the pane on its inline transform.
   const activeRef = useRef(active);
-  activeRef.current = active;
   const onBackRef = useRef(onBack);
-  onBackRef.current = onBack;
+  useLayoutEffect(() => {
+    activeRef.current = active;
+    onBackRef.current = onBack;
+  });
 
   useEffect(() => {
     const layer: Layer = {
-      seq: ++seqCounter,
+      seq: (seqCounter += 1),
       priority,
       activeRef,
       onBackRef,

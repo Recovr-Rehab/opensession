@@ -236,7 +236,8 @@ const res = await fetch(
       window.open(body.url, "_blank", "noopener");
       let polls = 0;
       const t = setInterval(() => {
-        if (++polls > 24 || !data?.mcpServers) return clearInterval(t);
+        polls += 1;
+        if (polls > 24 || !data?.mcpServers) return clearInterval(t);
         void loadOauth(data.mcpServers);
       }, 5000);
 })().catch(async (e: any) => {

@@ -1180,7 +1180,7 @@ function ZoomableMedia({
 		onPointerEnd(e);
 	}
 
-	function onPointerEnd(e: React.PointerEvent) {
+	const onPointerEnd = (e: React.PointerEvent) => {
 		const selecting = regionGesture.current;
 		if (selecting?.pointerId === e.pointerId) {
 			const region = regionForGesture(selecting, e.clientX, e.clientY);
@@ -1287,7 +1287,7 @@ function ZoomableMedia({
 		}
 		// A clean tap beside the media keeps the existing backdrop behavior.
 		if (g.downTarget === wrapRef.current && t.current.s === 1) onTapBackdrop();
-	}
+	};
 
 	// Wheel/trackpad zoom. Native non-passive listener — React's onWheel can be
 	// passive, and preventDefault must win or the page behind rubber-bands.

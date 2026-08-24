@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from "react";
+import React, { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { AnimatePresence } from "motion/react";
 import type { PlainThread, SupportThread } from "../lib/types";
 import {
@@ -87,7 +87,9 @@ export function SupportTinder({ onExit, onOpenSession }: Props) {
 	const [busy, setBusy] = useState(false);
 	// The busy flag, readable from long-lived closures (toast undo buttons).
 	const busyRef = useRef(false);
-	busyRef.current = busy;
+	useLayoutEffect(() => {
+		busyRef.current = busy;
+	});
 	// Undo stack, newest last. Lives in a ref so toast/keyboard closures always
 	// see the current stack; the length mirror re-renders the header ↩ button.
 	const historyRef = useRef<UndoEntry[]>([]);

@@ -1,11 +1,4 @@
-import {
-	createContext,
-	createElement,
-	type ReactNode,
-	useContext,
-	
-	useRef,
-} from "react";
+import { createContext, createElement, useContext, useLayoutEffect, useRef, type ReactNode } from "react";
 import {
 	assetToolPath,
 	parseMcpTool,
@@ -47,7 +40,9 @@ export function OpenAssetPathsProvider({
 	children: ReactNode;
 }) {
 	const paths = useRef(value);
-	paths.current = value;
+	useLayoutEffect(() => {
+		paths.current = value;
+	});
 	const empty = value.length === 0;
 	const context = (({ paths }));
 	return createElement(OpenAssetPathsContext.Provider, { value: context }, children);

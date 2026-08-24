@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from "react";
+import React, { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { docTitle } from "../lib/brand";
 import { fetchReportGroups, fetchReports } from "../lib/api";
 import type { ReportGroup, ReportMeta } from "../lib/types";
@@ -71,9 +71,11 @@ export function Reports({
 	// loadGroups is also invoked from the mount-scoped ws handler, where props
 	// from that first render would be stale — read the live values via refs.
 	const selectionRef = useRef(selectedAutomationId);
-	selectionRef.current = selectedAutomationId;
 	const isPhoneRef = useRef(isPhone);
-	isPhoneRef.current = isPhone;
+	useLayoutEffect(() => {
+		selectionRef.current = selectedAutomationId;
+		isPhoneRef.current = isPhone;
+	});
 
 	async function loadGroups() {
 		await (async () => {

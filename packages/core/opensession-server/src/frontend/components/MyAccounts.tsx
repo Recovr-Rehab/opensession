@@ -77,7 +77,8 @@ const body = await fetchToolAccounts();
 		if (!checking) return;
 		let tries = 0;
 		const t = setInterval(() => {
-			if (++tries >= 4) clearInterval(t);
+			tries += 1;
+			if (tries >= 4) clearInterval(t);
 			void load();
 		}, 1500);
 		return () => clearInterval(t);
@@ -90,7 +91,8 @@ const { url } = await startToolConnect(name);
 			// Re-poll for a while so the row flips once they approve the consent.
 			let polls = 0;
 			const t = setInterval(() => {
-				if (++polls > 24) return clearInterval(t);
+				polls += 1;
+				if (polls > 24) return clearInterval(t);
 				void load();
 			}, 5000);
 })().catch(async (e: any) => {

@@ -126,7 +126,9 @@ export function useSessionNameProjection({
 	}
 	const projection = projectionFor(text);
 	const projectionRef = useRef(projection);
-	projectionRef.current = projection;
+	useLayoutEffect(() => {
+		projectionRef.current = projection;
+	});
 	const displayText = projection.displayText;
 	const pendingCanonicalSelection = useRef<{
 		start: number;

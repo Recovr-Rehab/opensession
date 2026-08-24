@@ -318,7 +318,7 @@ export function VoiceInput({
     );
   }
 
-  async function start() {
+  const start = async () => {
     setError(null);
     // getUserMedia only exists in secure contexts. Over plain http (the
     // :3850 hostname) the mic simply isn't there.
@@ -432,7 +432,7 @@ const Ctx = window.AudioContext || (window as any).webkitAudioContext;
       stream,
     );
     setPhase("recording");
-  }
+  };
 
   function finishCancellation() {
     setLiveTranscript("");

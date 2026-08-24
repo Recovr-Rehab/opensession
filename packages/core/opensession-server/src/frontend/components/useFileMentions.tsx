@@ -150,13 +150,15 @@ export function useFileMentions({ value, onChange, textareaRef, mentionFetch, pa
   // them directly would re-run the fetch effect on every render — which loops
   // (fetch → setSuggestions → render → new closure → fetch) while open.
   const mentionFetchRef = useRef(mentionFetch);
-  mentionFetchRef.current = mentionFetch;
   const paletteFetchRef = useRef(paletteFetch);
-  paletteFetchRef.current = paletteFetch;
   const skillsFetchRef = useRef(skillsFetch);
-  skillsFetchRef.current = skillsFetch;
   const actionsRef = useRef(actions);
-  actionsRef.current = actions;
+  useLayoutEffect(() => {
+    mentionFetchRef.current = mentionFetch;
+    paletteFetchRef.current = paletteFetch;
+    skillsFetchRef.current = skillsFetch;
+    actionsRef.current = actions;
+  });
   const inputWrapRef = useRef<HTMLDivElement>(null);
   const popupRef = useRef<HTMLDivElement>(null);
   // Fixed viewport coordinates for the portaled popup, measured from the

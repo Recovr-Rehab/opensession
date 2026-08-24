@@ -9,7 +9,7 @@
  * best fits each surface.
  */
 
-import React, { useEffect, useRef, useState } from "react";
+import React, { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { FileTree, useFileTree } from "@pierre/trees/react";
 import type { SessionAssetFile } from "../lib/api";
 import { useSessionAssetsResource } from "../hooks/useApiResources";
@@ -61,7 +61,9 @@ function AssetsTree({
 	onSelect: (path: string) => void;
 }) {
 	const onSelectRef = useRef(onSelect);
-	onSelectRef.current = onSelect;
+	useLayoutEffect(() => {
+		onSelectRef.current = onSelect;
+	});
 	const { model } = useFileTree({
 		paths,
 		initialExpandedPaths: allDirs(paths),

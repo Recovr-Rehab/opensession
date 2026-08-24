@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import { AnimatePresence } from "motion/react";
 import type {
 	UnifiedSession,
@@ -117,9 +117,8 @@ export function CatchUpDeck({
 	// session list has actually loaded, NOT on the very first mount: a deep-link
 	// to <base>/catchup mounts before `sessions` arrives, and freezing []
 	// there would strand the deck on "All caught up" forever.
-	const frozen = useRef<CatchupCard[] | null>(null);
-	const cards = (() => {
-		if (frozen.current) return frozen.current;
+	const [frozen, setFrozen] = useState<CatchupCard[] | null>(null);
+	const live = useMemo(() => {
 		const reads = getReads();
 		const me = currentUser.toLowerCase();
 		const unread = sessions.filter(
@@ -174,11 +173,14 @@ export function CatchUpDeck({
 			};
 		});
 		out.sort((a, b) => (b.lastActivity || "").localeCompare(a.lastActivity || ""));
-		// Freeze once the list has loaded (even to an empty queue — that's a
-		// genuine "all caught up"). While it's still empty we keep recomputing.
-		if (sessions.length > 0) frozen.current = out;
 		return out;
-	})();
+	}, [sessions, getReads, currentUser, workspaces]);
+	const cards = frozen ?? live;
+	// Freeze once the list has loaded (even to an empty queue — that's a
+	// genuine "all caught up"). While it's still empty we keep recomputing.
+	useEffect(() => {
+		if (frozen === null && sessions.length > 0) setFrozen(live);
+	}, [frozen, sessions.length, live]);
 
 	const [index, setIndex] = useState(0);
 	const [dir, setDir] = useState<Action | null>(null);
@@ -419,10 +421,12 @@ function CardBody({
 	// reader scrolls away from the bottom themselves.
 	useEffect(() => {
 		if (!scrollEl || !contentEl) return;
-		let last = scrollEl.scrollTop;
+		// Wrapped in an object so the closures below mutate a property, not a
+		// captured binding (which the compiler rejects).
+		const pos = { last: scrollEl.scrollTop };
 		const toBottom = () => {
 			scrollEl.scrollTop = scrollEl.scrollHeight;
-			last = scrollEl.scrollTop;
+			pos.last = scrollEl.scrollTop;
 		};
 		toBottom();
 		// Unpin on the reader moving UP, never on distance alone. A running
@@ -431,10 +435,10 @@ function CardBody({
 		// reader walking away, and the card stops following after one tick.
 		const onScroll = () => {
 			const top = scrollEl.scrollTop;
-			if (top < last - 1) pinned.current = false;
+			if (top < pos.last - 1) pinned.current = false;
 			else if (scrollEl.scrollHeight - scrollEl.clientHeight - top <= 24)
 				pinned.current = true;
-			last = top;
+			pos.last = top;
 		};
 		scrollEl.addEventListener("scroll", onScroll, { passive: true });
 		const observer = new ResizeObserver(() => {

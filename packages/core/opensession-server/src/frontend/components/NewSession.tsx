@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, } from "react";
+import React, { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { AnimatePresence, motion } from "motion/react";
 import { fetchWorktrees, fetchModels, fetchToolAccounts, fetchSandboxStatus, requestSandboxPrewarm, suggestBranch, suggestRepos, type RepoSuggestion, configuredNewSessionRepo, fetchProviderAccounts, fetchRepos, cachedRepos, type RepoInfo, createWorkspaceApi, updateWorkspaceApi, deleteWorkspaceApi, ApiError, type ProviderAccountOption, type ModelOption, type SandboxStatusInfo } from "../lib/api";
 import { getCurrentUser } from "./UserPicker";
@@ -955,7 +955,8 @@ export function NewSession({ onBack, inline, focusSeq, send, addHandler, connect
   useEffect(() => {
     if (mode !== "code" || selectedWorktree !== "__new__" || branchEdited) return;
     if (settledPrompt.trim().length < 10) return;
-    const seq = ++suggestSeqRef.current;
+    suggestSeqRef.current += 1;
+    const seq = suggestSeqRef.current;
     void (async () => {
       const branch = await suggestBranch(settledPrompt.trim());
       // Drop if superseded by a newer prompt or the user grabbed the field.

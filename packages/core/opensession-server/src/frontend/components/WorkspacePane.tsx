@@ -230,12 +230,13 @@ export function WorkspacePane({
 	// An ordinary sessionless workspace still never invents a server draft.
 	const parksServerDraft = useRef(!!workspace.draft).current;
 	const draftAutoNameRef = useRef(workspace.draft?.autoName);
-	if (workspace.draft) draftAutoNameRef.current = workspace.draft.autoName;
-	const draftAutoName = draftAutoNameRef.current;
 	const promptRef = useRef(prompt);
-	promptRef.current = prompt;
 	const currentUserRef = useRef(currentUser);
-	currentUserRef.current = currentUser;
+	useLayoutEffect(() => {
+		if (workspace.draft) draftAutoNameRef.current = workspace.draft.autoName;
+		promptRef.current = prompt;
+		currentUserRef.current = currentUser;
+	});
 	const serverDraftPresentRef = useRef(!!workspace.draft);
 	const serverDraftTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
 	// Emptying a draft writes null, while typing again writes an object. Keep
@@ -247,7 +248,7 @@ export function WorkspacePane({
 				text,
 				new Date().toISOString(),
 				currentUserRef.current,
-				draftAutoName,
+				draftAutoNameRef.current,
 			);
 			serverDraftWrites.current = serverDraftWrites.current
 				.then(async () => {
