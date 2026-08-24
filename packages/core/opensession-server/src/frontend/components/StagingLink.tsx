@@ -1,4 +1,3 @@
-import { useEffect, useState } from "react";
 import { PR_WEBHOOK_FALLBACK_POLL_MS } from "../lib/poll";
 import { useSessionPrResource } from "../hooks/useApiResources";
 import type { PrCheck, UnifiedSession } from "../lib/types";
@@ -10,7 +9,7 @@ import { cn } from "../ui/cn";
 import { Tooltip } from "../ui/tooltip";
 import { toast } from "../ui/toast";
 import { CopyCheck, useCopy } from "../ui/copy";
-import { IconArrowUpRight, IconGlobe, IconLink } from "./icons";
+import { IconArrowUpRight, IconGlobe } from "./icons";
 import { checkClass, isDeployment } from "./PrPanel";
 import { useShortcutLabel } from "../hooks/useShortcutBindings";
 
@@ -114,20 +113,6 @@ export function StagingLink({
 	refreshTick?: number;
 }) {
 	const { copied, copy } = useCopy();
-	const [copyModifierHeld, setCopyModifierHeld] = useState(false);
-	useEffect(() => {
-		const syncModifier = (e: KeyboardEvent) =>
-			setCopyModifierHeld(e.metaKey || e.ctrlKey);
-		const clearModifier = () => setCopyModifierHeld(false);
-		window.addEventListener("keydown", syncModifier);
-		window.addEventListener("keyup", syncModifier);
-		window.addEventListener("blur", clearModifier);
-		return () => {
-			window.removeEventListener("keydown", syncModifier);
-			window.removeEventListener("keyup", syncModifier);
-			window.removeEventListener("blur", clearModifier);
-		};
-	}, []);
 	// Read up here with the other hooks, not beside the tooltip it feeds. Every
 	// state below this line returns early, so a call further down runs on some
 	// renders and not others: the render where the URL lands would add a hook the
@@ -281,17 +266,22 @@ export function StagingLink({
 	// The globe carries a spinning ring while any deploy is in flight — first
 	// build (link dead until it lands) and rebuild (link opens the previous
 	// deploy) alike. While a ⌘-copy is fresh the globe morphs into a drawing
-	// checkmark; holding the copy modifier previews the link action, and the
-	// globe remains the resting (optionally spinning) state.
+	// checkmark and then settles back to the globe.
+	//
+	// The glyph deliberately does NOT preview the ⌘-copy action by turning into a
+	// link icon. Holding a modifier is not a state this control should repaint
+	// for: the deploy's status is the only thing it exists to report, and a
+	// transient keypress was hiding both the globe and its spinner behind a chain
+	// link (a macOS screenshot chord holds ⌘, so captures never showed the real
+	// state either). ⌘-click still copies — see onClick — and the tooltip says so.
 	const spinning = building || rebuilding;
-	const restingIcon = (size: number) =>
-		copyModifierHeld ? <IconLink size={size} /> : <IconGlobe size={size} />;
+	const restingIcon = (size: number) => <IconGlobe size={size} />;
 	const globe = (size: number, ring: string) =>
 		copied ? (
 			<CopyCheck copied size={size} idle={restingIcon(size)} />
 		) : (
 			<span className="relative inline-flex items-center justify-center">
-				{spinning && !copyModifierHeld && (
+				{spinning && (
 					<span
 						className={`${RING_BASE} ${RING_MOTION} ${ring}`}
 						aria-hidden="true"
@@ -375,10 +365,11 @@ export function StagingLink({
 					className={cn(
 						SUMMARY_MARK,
 						SUMMARY_MARK_PAIR,
-						// Amber only while a deploy is in flight. A card of quiet rows
-						// keeps its colour for the ones with something to report, and a
-						// preview that is simply up has nothing.
-						spinning ? "text-yellow" : WS_SUMMARY_ICON,
+						// Same three-state colouring as the header globe, because it is
+						// the same control moved into the card: green once the preview is
+						// up and testable, amber while a deploy is in flight. "Up" is the
+						// state you act on here, so it is not the state that goes quiet.
+						spinning ? "text-yellow" : "text-green",
 						building ? "cursor-default" : SUMMARY_MARK_HOVER,
 					)}
 				>
