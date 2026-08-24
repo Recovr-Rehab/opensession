@@ -5,6 +5,7 @@ import {
 	SettingCardSkeleton,
 	SettingsGroupLabel,
 	SettingsHeader,
+	SettingsHint,
 	SettingsPanel,
 } from "../../ui/settings";
 import { Select, SettingRow } from "./shared";
@@ -17,12 +18,13 @@ import {
 	setNewSessionRepoApi,
 	setSharedCheckoutMode,
 	type RepoInfo,
+	type SharedCheckoutMode,
 	type WorktreeSettings,
 } from "../../lib/api";
 import { AUTO_REPO } from "../../lib/session-repo";
 import { RepoTile } from "../RepoTile";
 import { IconSparkle } from "../icons";
-import { Switch } from "../../ui/switch";
+import { Radio, RadioGroup } from "../../ui/radio";
 
 /**
  * Where a new session starts for everyone who hasn't set their own preference
@@ -61,19 +63,17 @@ function SharedCheckoutSetting() {
 	if (!settings.repos.length) return null;
 
 	const repoNames = settings.repos.map((repo) => repo.label).join(", ");
-	const isolated = settings.mode === "worktree";
-
-	async function setIsolated(next: boolean) {
+	async function setMode(mode: SharedCheckoutMode) {
 		const previous = settings;
-		if (!previous) return;
-		setSettings({ ...previous, mode: next ? "worktree" : "shared" });
+		if (!previous || mode === previous.mode) return;
+		setSettings({ ...previous, mode });
 		setSaving(true);
 		setError(null);
 		try {
-			setSettings(await setSharedCheckoutMode(next ? "worktree" : "shared"));
+			setSettings(await setSharedCheckoutMode(mode));
 		} catch (cause: any) {
 			setSettings(previous);
-			setError(cause?.message || "Couldn’t save the worktree setting");
+			setError(cause?.message || "Couldn’t save where sessions make changes");
 		} finally {
 			setSaving(false);
 		}
@@ -81,22 +81,43 @@ function SharedCheckoutSetting() {
 
 	return (
 		<>
-			<SettingsGroupLabel>Shared checkouts</SettingsGroupLabel>
+			<SettingsGroupLabel>How sessions make changes</SettingsGroupLabel>
 			{error && <InlineAlert onDismiss={() => setError(null)}>{error}</InlineAlert>}
 			<SettingCard>
-				<SettingRow
-					title="Use isolated worktrees"
-					desc={`Create a separate worktree for new sessions in ${repoNames}. When off, they use the registered checkout. Existing sessions aren't moved.`}
-					control={
-						<Switch
-							aria-label="Use isolated worktrees for shared checkouts"
-							checked={isolated}
-							disabled={saving}
-							onCheckedChange={(next) => void setIsolated(next)}
-						/>
-					}
-				/>
+				<RadioGroup
+					aria-label="How sessions make changes"
+					value={settings.mode}
+					disabled={saving}
+					onValueChange={(mode) => void setMode(mode as SharedCheckoutMode)}
+					className="[&>*+*]:relative [&>*+*]:before:pointer-events-none [&>*+*]:before:absolute [&>*+*]:before:inset-x-5 [&>*+*]:before:top-0 [&>*+*]:before:h-px [&>*+*]:before:bg-line [&>*+*]:before:content-['']"
+				>
+					<label className="flex min-h-11 cursor-pointer items-start gap-3 px-5 py-4 transition-[background-color] hover:bg-hover">
+						<Radio value="shared" className="mt-0.5" />
+						<span className="min-w-0">
+							<span className="block text-item-title font-medium text-fg">
+								Local checkout
+							</span>
+							<span className="mt-1 block text-supporting text-dim">
+								Edit {repoNames} directly. Changes appear there right away, and
+								sessions share the same files.
+							</span>
+						</span>
+					</label>
+					<label className="flex min-h-11 cursor-pointer items-start gap-3 px-5 py-4 transition-[background-color] hover:bg-hover">
+						<Radio value="worktree" className="mt-0.5" />
+						<span className="min-w-0">
+							<span className="block text-item-title font-medium text-fg">
+								Separate pull request branch
+							</span>
+							<span className="mt-1 block text-supporting text-dim">
+								Give each session an isolated Git worktree and branch. Changes
+								stay separate from the local checkout, ready for a pull request.
+							</span>
+						</span>
+					</label>
+				</RadioGroup>
 			</SettingCard>
+			<SettingsHint>Only applies to new sessions.</SettingsHint>
 		</>
 	);
 }
