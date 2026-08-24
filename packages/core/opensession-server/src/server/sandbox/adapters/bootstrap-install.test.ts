@@ -2,7 +2,7 @@ import {afterEach, describe, expect, test} from "bun:test";
 import {mkdtempSync, rmSync, writeFileSync} from "fs";
 import {tmpdir} from "os";
 import {join} from "path";
-import {bootstrapRemoteSandbox, bootstrapSignature, type RemoteDriver} from "./bootstrap";
+import {bootstrapRemoteSandbox, bootstrapSignature, remoteRunnerHostCommand, REMOTE_RUNNER_BINARY, type RemoteDriver} from "./bootstrap";
 
 const originalConfig = process.env.OPENSESSION_SANDBOX_CONFIG;
 const scratch: string[] = [];
@@ -32,8 +32,17 @@ describe("remote runner bootstrap", () => {
     await bootstrapRemoteSandbox(driver, "test");
 
     expect(commands).toHaveLength(2);
-    expect(commands[1]).toContain("chmod 755 /home/ubuntu/projects/opensession/deploy/sandbox/opensession");
+    expect(commands[1]).toContain("/deploy/sandbox/opensession");
     expect(commands[1]).toContain("test -x /home/ubuntu/.local/bin/opensession");
+    expect(commands[1]).toContain("bun build --compile");
+    expect(commands[1]).toContain(REMOTE_RUNNER_BINARY);
+  });
+
+  test("prefers the compiled runner host with a source fallback", () => {
+    const command = remoteRunnerHostCommand("/runs/rh-test/spec.json");
+    expect(command).toContain(`${REMOTE_RUNNER_BINARY} runner-host /runs/rh-test/spec.json`);
+    expect(command).toContain("bun run");
+    expect(command).toContain("/packages/core/opensession-server/src/runner-host/host.ts");
   });
 
   test("creates the user bin directory before linking the workload identity client", async () => {

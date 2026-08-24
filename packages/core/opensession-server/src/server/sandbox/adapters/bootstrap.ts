@@ -149,6 +149,7 @@ const REMOTE_JUST_VERSION = "1.43.1";
 const REMOTE_GH_VERSION = "2.83.1";
 const REMOTE_RUNTIME_REVISION = "workspace-runtime-v7";
 const REMOTE_REPO = REPO_ROOT; // /home/ubuntu/projects/opensession
+export const REMOTE_RUNNER_BINARY = `${REMOTE_HOME}/.local/bin/opensession-runner`;
 const BOOTSTRAP_MARKER = `${REMOTE_HOME}/.bks-bootstrapped`;
 /** Where per-launch openai seed material lands in-sandbox — threaded to the
  *  run host via the OPENSESSION_OPENAI_SEED_DIR env (openaiRemoteSeedDir()),
@@ -706,6 +707,26 @@ export function bootstrapSignature(): string {
   );
 }
 
+function remoteRunnerInstallCommand(): string {
+  const temporary = `${REMOTE_RUNNER_BINARY}.tmp`;
+  return (
+    `test -x ${shellQuoteWord(REMOTE_RUNNER_BINARY)} || { ` +
+    `cd ${shellQuoteWord(REMOTE_REPO)} && rm -f ${shellQuoteWord(temporary)} && ` +
+    `HOME=${REMOTE_HOME} ${REMOTE_BUN} build --compile ` +
+    `packages/core/opensession-server/src/main.ts --outfile ${shellQuoteWord(temporary)} ` +
+    `--external sharp --external ${shellQuoteWord("@img/*")} && ` +
+    `chmod 755 ${shellQuoteWord(temporary)} && mv ${shellQuoteWord(temporary)} ${shellQuoteWord(REMOTE_RUNNER_BINARY)}; }`
+  );
+}
+
+export function remoteRunnerHostCommand(specPath: string): string {
+  return (
+    `if [ -x ${shellQuoteWord(REMOTE_RUNNER_BINARY)} ]; then ` +
+    `exec ${shellQuoteWord(REMOTE_RUNNER_BINARY)} runner-host ${shellQuoteWord(specPath)}; ` +
+    `else exec ${REMOTE_BUN} run ${shellQuoteWord(HOST_ENTRY)} ${shellQuoteWord(specPath)}; fi`
+  );
+}
+
 /** Install the portable base tools needed before the full runner payload. */
 async function bootstrapRemoteBaseRuntime(
   driver: RemoteDriver,
@@ -886,7 +907,8 @@ export async function bootstrapRemoteSandbox(
         `mkdir -p ${REMOTE_HOME}/.local/bin && ` +
           `chmod 755 ${REMOTE_REPO}/deploy/sandbox/opensession && ` +
           `ln -sf ${REMOTE_REPO}/deploy/sandbox/opensession ${REMOTE_HOME}/.local/bin/opensession && ` +
-          `test -x ${REMOTE_HOME}/.local/bin/opensession`,
+          `test -x ${REMOTE_HOME}/.local/bin/opensession && ` +
+          `(${remoteRunnerInstallCommand()})`,
       ),
       "workload identity client repair",
     );
@@ -994,6 +1016,11 @@ export async function bootstrapRemoteSandbox(
         `chmod 755 ${REMOTE_REPO}/deploy/sandbox/opensession ${REMOTE_HOME}/.local/bin/opensession`,
     ),
     "workload identity client install",
+  );
+  log("compiling the single-file runner host…");
+  need(
+    await driver.exec(remoteRunnerInstallCommand(), { timeoutMs: 600_000 }),
+    "compiled runner host install",
   );
 
   log("ensuring claude CLI…");
@@ -1805,7 +1832,7 @@ function makeRemoteLauncher(
         dispatchAttempted = true;
         onDispatching?.();
         const bg = driver.execBackground(
-          `${envPrefix(env)}${REMOTE_BUN} run ${HOST_ENTRY} ${dir}/${HOST_SPEC_NAME} >> ${dir}/host.log 2>&1`,
+          `${envPrefix(env)}sh -c ${shellQuoteWord(remoteRunnerHostCommand(`${dir}/${HOST_SPEC_NAME}`))} >> ${dir}/host.log 2>&1`,
         );
         const bgTimeout = new Promise<"timeout">((r) => setTimeout(() => r("timeout"), 30_000));
         const raced = await Promise.race([bg.then(() => "ok" as const), bgTimeout]);
