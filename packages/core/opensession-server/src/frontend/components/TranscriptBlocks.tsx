@@ -533,6 +533,7 @@ const LoadedTranscriptBlocks = React.memo(function LoadedTranscriptBlocks({
 			items={virtualItems}
 			trailingMounted={TRAILING_MOUNTED_BLOCKS}
 			enabled={virtualize}
+			sizeCacheKey={sessionId}
 		/>
 	);
 });
@@ -761,6 +762,7 @@ function IndexedTranscriptBlocks(props: Props) {
 		<VirtualTranscriptList
 			items={items}
 			trailingMounted={TRAILING_MOUNTED_BLOCKS}
+			sizeCacheKey={props.sessionId}
 			onVisibleItems={(visible) => {
 				if (!onLoadTranscriptRanges) return;
 				const keys = new Set(visible.map((item) => item.key));
