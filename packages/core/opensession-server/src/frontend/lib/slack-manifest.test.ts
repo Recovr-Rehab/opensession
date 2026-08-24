@@ -62,6 +62,10 @@ describe("buildSlackManifest", () => {
 		expect(SLACK_BOT_SCOPES).toContain("app_mentions:read");
 	});
 
+	test("custom workspace emoji grant their required scope", () => {
+		expect(SLACK_BOT_SCOPES).toContain("emoji:read");
+	});
+
 	test("session-link unfurls include their event, scopes, and public UI domain", () => {
 		const manifest = buildSlackManifest({
 			...base,

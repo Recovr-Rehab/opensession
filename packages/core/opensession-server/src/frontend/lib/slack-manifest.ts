@@ -40,8 +40,8 @@ export const SLACK_SCOPE_GROUPS: { label: string; items: string[] }[] = [
 		items: ["channels:history", "groups:history", "im:history", "mpim:history"],
 	},
 	{
-		label: "Events and links",
-		items: ["app_mentions:read", "links:read", "links:write"],
+		label: "Events, links, and emoji",
+		items: ["app_mentions:read", "links:read", "links:write", "emoji:read"],
 	},
 	{
 		label: "Channels and people",

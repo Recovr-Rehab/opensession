@@ -115,6 +115,7 @@ Bot token scopes to grant:
 - `reactions:write`
 - `app_mentions:read`
 - `links:read`, `links:write` (session-link unfurls)
+- `emoji:read` (custom workspace emoji)
 - `channels:history`, `groups:history`, `im:history`, `mpim:history`
 - `channels:read`, `groups:read`, `im:read`
 - `channels:manage`, `groups:write` (create/archive/topic/invite worktree
