@@ -767,9 +767,10 @@ export function claimPrewarm(
  * bks-019f4729, 2026-07-09). Waiting the remaining ~15-40s is both faster
  * than a fresh cold create and halves the sandbox count.
  *
- *  - Only waits for entries younger than `maxAgeMs` (default 60s): an older
- *    bootstrapping entry means a pathological cold bun-install — don't hold
- *    the user's prompt hostage on it, cold-create in parallel as before.
+ *  - Demand/typing entries older than `maxAgeMs` (default 60s) are skipped: an
+ *    old bootstrap is probably a pathological cold install. Project standbys
+ *    are zero-compute prepared capacity and remain worth the bounded wait; a
+ *    maintenance refill often finishes seconds after a session asks for it.
  *  - The wait itself is bounded by `maxWaitMs` (default 180s) as a backstop;
  *    a finished-but-failed bootstrap resolves immediately and claims null.
  *  - Two concurrent ensures can both wait; claimPrewarm's atomic arbitration
@@ -797,7 +798,7 @@ export async function claimPrewarmOrWait(
     return null;
   }
   const age = Date.now() - Date.parse(entry.createdAt);
-  if (!Number.isFinite(age) || age > (opts?.maxAgeMs ?? 60_000)) {
+  if (!Number.isFinite(age) || (!entry.standby && age > (opts?.maxAgeMs ?? 60_000))) {
     console.log(
       `[sandbox-prewarm] ensure(${sessionId.slice(0, 20)}…) skipping old ${key} prewarm (${Math.round(age / 1000)}s old)`,
     );
