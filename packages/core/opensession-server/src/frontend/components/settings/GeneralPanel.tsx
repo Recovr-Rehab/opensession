@@ -20,7 +20,6 @@ import {
 	SettingRowControl,
 	SettingRowText,
 	SettingRowTitle,
-	SettingsGroupLabel,
 	SettingsHeader,
 	SettingsHint,
 	SettingsPanel,
@@ -29,7 +28,7 @@ import {
 import { toast } from "../../ui/toast";
 import { InlineAlert } from "../../ui/state";
 import { IconArrowUpToLine, IconTrash } from "../icons";
-import { IdentityCard } from "../SetupIdentity";
+import { IdentityRows } from "../SetupIdentity";
 
 const NAME_INPUT_CLASS = cn(settingsInputClass, "w-[220px] max-w-full");
 
@@ -289,6 +288,7 @@ export function OrganizationProfileSection({
 								aria-label="Organization email domain"
 							/>
 						</SettingRow>
+						<IdentityRows />
 					</SettingCard>
 					<SettingsHint>
 						Shared by everyone in this organization. Clearing the name restores the
@@ -308,8 +308,6 @@ export function GeneralPanel() {
 		<SettingsPanel>
 			<SettingsHeader title="General" className="phone:hidden" />
 			<OrganizationProfileSection />
-			<SettingsGroupLabel>Identity</SettingsGroupLabel>
-			<IdentityCard />
 		</SettingsPanel>
 	);
 }
