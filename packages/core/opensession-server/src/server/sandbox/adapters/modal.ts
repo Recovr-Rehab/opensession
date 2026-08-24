@@ -406,6 +406,11 @@ export class ModalProvider implements SandboxProvider {
       if (prevState) removeRemoteState(this.id, prevState.sandboxId);
       console.log(`[sandbox:modal] creating sandbox for ${spec.sessionId}`);
       const template = readRemoteRepoTemplate("modal", repo.id);
+      // The per-repo environment shape (Settings -> Sandboxes machine profile)
+      // must reach session creation, not only prewarm — otherwise a 16 GB
+      // profile silently launches on the connection default (measured: 8 GB).
+      const { sandboxEnvironmentSettings } = await import("../environments");
+      const projectResources = sandboxEnvironmentSettings(repo.id, "modal");
       const create = async (imageId?: string) => {
         const [app, image] = await Promise.all([
           modalApp(client),
@@ -418,10 +423,10 @@ export class ModalProvider implements SandboxProvider {
           timeoutMs: MAX_LIFETIME_MS,
           idleTimeoutMs:
             (cfg.idleStopMinutes || DEFAULT_IDLE_STOP_MINUTES) * 60_000,
-          cpu: cfg.cpus,
-          cpuLimit: cfg.cpus,
-          memoryMiB: memoryMiB(cfg.memory),
-          memoryLimitMiB: memoryMiB(cfg.memory),
+          cpu: projectResources?.cpu || cfg.cpus,
+          cpuLimit: projectResources?.cpu || cfg.cpus,
+          memoryMiB: projectResources?.memoryMb || memoryMiB(cfg.memory),
+          memoryLimitMiB: projectResources?.memoryMb || memoryMiB(cfg.memory),
           regions: cfg.modal?.region ? [cfg.modal.region] : undefined,
           cloud: cfg.modal?.cloud,
           encryptedPorts: cfg.modal?.publicPreviews ? cfg.previewPorts : undefined,
