@@ -3,7 +3,6 @@ import { createRoot } from "react-dom/client";
 import markAsset from "../mac/build/icon-512.png";
 import {
 	IconBranches,
-	IconChevronRight,
 	IconClock,
 	IconGlobe,
 	IconPeople,
@@ -92,15 +91,20 @@ function LandingPage() {
 				</h1>
 
 				<div className="rail-foot">
-					<a
-						className="button button-primary"
-						href="https://github.com/tellahq/opensession"
-					>
-						Get started
-					</a>
-					<a className="button button-secondary" href="setup">
-						Set up your server <IconChevronRight size={16} />
-					</a>
+					{/* The two asks sit on one line with a real gap between them. No
+					    chevron on the second: an arrow on one of a pair makes it read as
+					    a link that wandered into a button. */}
+					<div className="rail-cta">
+						<a
+							className="button button-primary"
+							href="https://github.com/tellahq/opensession"
+						>
+							View on GitHub
+						</a>
+						<a className="button button-secondary" href="setup">
+							Set up your server
+						</a>
+					</div>
 					<p className="rail-note">
 						Open source and self-hosted.
 						<br />

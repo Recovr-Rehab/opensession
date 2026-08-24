@@ -37,17 +37,20 @@
 	display: none;
 }
 
+/* The way out sits where a back control belongs: the top left, ahead of the
+   step dots, rather than opposite them. On phones it moves to the right, since
+   the wizard's own Back button takes this corner there. */
 .setup-home-link {
 	display: inline-flex;
 	min-height: 40px;
 	align-items: center;
-	justify-self: end;
+	justify-self: start;
 	padding: 0 12px;
 	border-radius: calc(10px * var(--rf));
 	color: var(--muted);
 	font-size: 12px;
 	font-weight: 600;
-	grid-column: 3;
+	grid-column: 1;
 	transition: background-color 160ms ease, color 160ms ease;
 }
 
@@ -1403,6 +1406,9 @@ a.setup-download-card:hover {
 	.setup-home-link {
 		min-width: 44px;
 		padding-inline: 8px;
+		/* The Back button owns the left corner at this width. */
+		justify-self: end;
+		grid-column: 3;
 	}
 
 	.setup-home-wide {

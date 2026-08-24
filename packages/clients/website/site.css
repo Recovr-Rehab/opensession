@@ -177,6 +177,15 @@ summary:focus-visible {
 	padding-top: 40px;
 }
 
+/* The two asks, side by side. They wrap rather than shrink, so a narrow rail
+   stacks them at full width instead of squeezing the labels. */
+.rail-cta {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	gap: 10px;
+}
+
 .rail-note {
 	margin: 16px 0 0;
 	color: var(--muted);
@@ -543,7 +552,9 @@ summary:focus-visible {
    height and corner as the primary so the pair reads as one stack, and only
    the hairline tells them apart. */
 .button-secondary {
-	margin-top: 10px;
+	/* Tighter than the filled control: it carries no fill, so the same 24px of
+	   air read as a much wider object beside it. */
+	padding: 0 18px;
 	border-color: rgba(var(--ink-rgb), 0.14);
 	background: transparent;
 	color: var(--ink);
