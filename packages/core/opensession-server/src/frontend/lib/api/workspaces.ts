@@ -15,11 +15,24 @@ export interface WorkspaceMediaItem {
 	at: string;
 }
 
+export interface WorkspaceCommit {
+	repo: string;
+	sha: string;
+	title: string;
+	url?: string;
+	committedAt: string;
+	filesChanged: number;
+	additions: number;
+	deletions: number;
+}
+
 export interface WorkspaceOverview {
 	prompt: { content: string; sessionId: string; at: string } | null;
 	/** Latest assistant text across the workspace's sessions. Optional because a
 	 *  server that hasn't restarted onto the new overview code omits the key. */
 	lastMessage?: { content: string; sessionId: string; at: string } | null;
+	/** Commits attributed to this workspace. Optional for older servers. */
+	commits?: WorkspaceCommit[];
 	media: WorkspaceMediaItem[];
 }
 

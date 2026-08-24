@@ -13,6 +13,7 @@ import {
 	triggerPrActionApi,
 	sessionAssetPreviewUrl,
 	type PrAgentAction,
+	type WorkspaceCommit,
 	type WorkspaceMediaItem,
 	type SessionAssetFile,
 } from "../lib/api";
@@ -70,6 +71,7 @@ import {
 	IconCheck,
 	IconChevronDown,
 	IconFile,
+	IconGitCommit,
 	IconPeople,
 	IconPlay,
 	IconPlayRectangle,
@@ -428,13 +430,50 @@ const PREVIEW_DIFF_OPTIONS = {
 	enableLineSelection: false,
 };
 
+/** One commit attributed to this workspace. The title is the useful identity;
+ * the file count confirms that completed work still exists after the branch
+ * diff becomes empty. */
+function CommitRow({ commit }: { commit: WorkspaceCommit }) {
+	const content = (
+		<>
+			<span className="grid size-4 shrink-0 place-items-center text-faint">
+				<IconGitCommit size={20} />
+			</span>
+			<span className="min-w-0 flex-1 truncate text-label text-fg">
+				{commit.title}
+			</span>
+			<span className="shrink-0 text-meta font-medium text-dim tabular-nums">
+				{commit.filesChanged} file{commit.filesChanged === 1 ? "" : "s"}
+			</span>
+		</>
+	);
+	const title = `${commit.title} · ${commit.sha.slice(0, 8)} · ${fullTime(commit.committedAt)}`;
+	const className =
+		"flex min-w-0 items-center gap-2 rounded-md px-2 py-[5px] text-left no-underline transition-colors hover:bg-hover";
+	return commit.url ? (
+		<a
+			className={className}
+			href={commit.url}
+			target="_blank"
+			rel="noopener"
+			title={title}
+		>
+			{content}
+		</a>
+	) : (
+		<div className={className} title={title}>
+			{content}
+		</div>
+	);
+}
+
 /**
-* One "file changed" row. Hovering reveals a floated card with the file's actual
-* diff (parsed from the primary repo's patch), mirroring the PR-comment hover in
-* the same panel; clicking still jumps to the full Changes tab. Rows whose file
-* isn't in the parsed patch (binary, or a not-yet-loaded/truncated patch) simply
-* don't open a popover.
-*/
+ * One "file changed" row. Hovering reveals a floated card with the file's actual
+ * diff (parsed from the primary repo's patch), mirroring the PR-comment hover in
+ * the same panel; clicking still jumps to the full Changes tab. Rows whose file
+ * isn't in the parsed patch (binary, or a not-yet-loaded/truncated patch) simply
+ * don't open a popover.
+ */
 function FileRow({
 	file,
 	meta,
@@ -1217,7 +1256,7 @@ function GitStatusRows({
 
 	return (
 		<div className={INFO_SECTION_CLASS}>
-			<div className={INFO_LABEL_CLASS}>Git status</div>
+			<div className={INFO_LABEL_CLASS}>Uncommitted</div>
 			<div className={INFO_LIST_CLASS}>
 				<div className={`${GIT_ROW} py-2`}>
 					<span className={`${GIT_DOT} ${GIT_DOT_BG.yellow}`} aria-hidden />
@@ -1412,6 +1451,7 @@ export function WorkspaceInfo({
 		revision: liveMediaCount,
 	});
 	const data = overviewResource.data ?? null;
+	const commits = data?.commits ?? [];
 	const pr = prState ? (prResource.data ?? null) : null;
 	const primaryDiff =
 		diffResource.data?.repos.find((entry) => entry.primary) ||
@@ -1495,6 +1535,7 @@ export function WorkspaceInfo({
 	const showGit = Boolean(git && git.uncommittedFiles > 0);
 	const hasBody = Boolean(
 		comments.length > 0 ||
+		commits.length > 0 ||
 		changed.length > 0 ||
 		media.length > 0 ||
 		assets.length > 0,
@@ -1593,6 +1634,16 @@ export function WorkspaceInfo({
 											: `View all ${comments.length} comments`}
 									</button>
 								)}
+							</div>
+						</div>
+					)}
+					{commits.length > 0 && (
+						<div className={INFO_SECTION_CLASS}>
+							<div className={INFO_LABEL_CLASS}>Committed</div>
+							<div className={INFO_LIST_CLASS}>
+								{commits.map((commit) => (
+									<CommitRow key={commit.sha} commit={commit} />
+								))}
 							</div>
 						</div>
 					)}

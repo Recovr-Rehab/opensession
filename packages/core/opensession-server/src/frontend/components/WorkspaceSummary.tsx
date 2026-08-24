@@ -4,6 +4,7 @@ import {
 	setSessionReviewerApi,
 	sessionAssetPreviewUrl,
 	triggerPrActionApi,
+	type WorkspaceCommit,
 	type WorkspaceMediaItem,
 } from "../lib/api";
 import {
@@ -67,6 +68,7 @@ import {
 	IconChevronDown,
 	IconClock,
 	IconFile,
+	IconGitCommit,
 	IconListCircles,
 	IconPeople,
 	IconPlay,
@@ -542,6 +544,7 @@ export function WorkspaceSummaryBody({
 	const pr = prResource.data ?? null;
 	const git = gitResource.data ?? null;
 	const assets = assetsResource.data ?? [];
+	const commits = overviewResource.data?.commits ?? [];
 	const media = useMemo(() => {
 		const seen = new Set<string>();
 		return [...liveMedia, ...(overviewResource.data?.media ?? [])].filter((item) => {
@@ -577,6 +580,11 @@ export function WorkspaceSummaryBody({
 	const deletions = pr ? pr.deletions : (diff?.deletions ?? 0);
 	const changedFiles = pr ? pr.changedFiles : (diff?.files ?? 0);
 	const dirty = git?.uncommittedFiles ?? 0;
+	// A PR diff is committed by definition. Without a PR, an ahead branch with
+	// no dirty files is also wholly committed. Mixed work stays labelled
+	// "Changes" rather than pretending its line totals belong to one state.
+	const diffIsCommitted =
+		changedFiles > 0 && Boolean(pr || ((git?.ahead ?? 0) > 0 && dirty === 0));
 
 	/** Route somewhere else and get out of the way. A card that stayed open
 	 *  over the thing it just opened would have to be dismissed by hand. */
@@ -729,6 +737,100 @@ export function WorkspaceSummaryBody({
 				setReviewError(error?.message || "Failed to set reviewer");
 			})
 			.finally(() => setReviewBusy(false));
+	}
+
+	function diffChangeRow(label: string) {
+		return (
+			<>
+				<button
+					className={WS_SUMMARY_ROW}
+					// Review already owns the full Files canvas. Keep the summary in
+					// place and reveal its filenames here; elsewhere open Changes.
+					onClick={() =>
+						reviewMode
+							? setChangesOpen((open) => !open)
+							: onOpenPanelTab("changes")
+					}
+					aria-expanded={reviewMode ? changesOpen : undefined}
+				>
+					<span className={WS_SUMMARY_RAIL}>
+						<IconFile size={20} className={WS_SUMMARY_ICON} />
+					</span>
+					<span className={WS_SUMMARY_LABEL}>{label}</span>
+					<span className={WS_SUMMARY_COUNT}>
+						<span className="text-green">+{additions}</span>{" "}
+						<span className="text-red">−{deletions}</span>
+					</span>
+					{reviewMode && (
+						<IconChevronDown
+							size={14}
+							className={cn(
+								"shrink-0 text-faint transition-transform motion-reduce:transition-none",
+								changesOpen && "rotate-180",
+							)}
+						/>
+					)}
+				</button>
+				{reviewMode && changesOpen && pr?.files?.length ? (
+					<div className="pb-1">
+						{pr.files.map((file) => (
+							<div
+								key={file.path}
+								className="mx-2 flex min-h-7 min-w-0 items-center gap-1.5 px-2 text-label text-dim"
+							>
+								<span className={WS_SUMMARY_RAIL} aria-hidden />
+								<span className={WS_SUMMARY_LABEL} title={file.path}>
+									{file.path}
+								</span>
+								<span className={WS_SUMMARY_COUNT}>
+									{file.additions > 0 && (
+										<span className="text-green">+{file.additions}</span>
+									)}{" "}
+									{file.deletions > 0 && (
+										<span className="text-red">−{file.deletions}</span>
+									)}
+								</span>
+							</div>
+						))}
+					</div>
+				) : null}
+			</>
+		);
+	}
+
+	function committedRow(commit: WorkspaceCommit) {
+		const content = (
+			<>
+				<span className={WS_SUMMARY_RAIL}>
+					<IconGitCommit size={20} className={WS_SUMMARY_ICON} />
+				</span>
+				<span className={WS_SUMMARY_LABEL}>{commit.title}</span>
+				<span className={cn(WS_SUMMARY_STATE, "text-dim tabular-nums")}>
+					{commit.filesChanged} file{commit.filesChanged === 1 ? "" : "s"}
+				</span>
+			</>
+		);
+		const title = `${commit.title} · ${commit.sha.slice(0, 8)}`;
+		return commit.url ? (
+			<a
+				key={commit.sha}
+				className={cn(WS_SUMMARY_ROW, "no-underline")}
+				href={commit.url}
+				target="_blank"
+				rel="noopener"
+				title={title}
+			>
+				{content}
+			</a>
+		) : (
+			<div
+				key={commit.sha}
+				className={cn(WS_SUMMARY_ROW, "cursor-default")}
+				title={title}
+			>
+				{content}
+			</div>
+		);
 	}
 
 	const groupClass = embedded
@@ -1022,85 +1124,44 @@ export function WorkspaceSummaryBody({
 				)}
 			</div>
 
-			{(changedFiles > 0 || dirty > 0) && (
+			{(diffIsCommitted || commits.length > 0) && (
+				<div className={groupClass}>
+					<div className={WS_SUMMARY_SECTION}>Committed</div>
+					{diffIsCommitted &&
+						diffChangeRow(
+							`${changedFiles} file${changedFiles === 1 ? "" : "s"} committed`,
+						)}
+					{commits.map(committedRow)}
+				</div>
+			)}
+
+			{changedFiles > 0 && !diffIsCommitted && (
 				<div className={groupClass}>
 					<div className={WS_SUMMARY_SECTION}>Changes</div>
-					{changedFiles > 0 && (
-						<>
-							<button
-								className={WS_SUMMARY_ROW}
-								// Review already owns the full Files changed canvas. Keep the
-								// summary in place and reveal its filenames here; elsewhere this
-								// row still opens the workspace Changes panel.
-								onClick={() =>
-									reviewMode
-										? setChangesOpen((open) => !open)
-										: onOpenPanelTab("changes")
-								}
-								aria-expanded={reviewMode ? changesOpen : undefined}
-							>
-								<span className={WS_SUMMARY_RAIL}>
-									<IconFile size={20} className={WS_SUMMARY_ICON} />
-								</span>
-								<span className={WS_SUMMARY_LABEL}>
-									{changedFiles} file{changedFiles === 1 ? "" : "s"} changed
-								</span>
-								<span className={WS_SUMMARY_COUNT}>
-									<span className="text-green">+{additions}</span>{" "}
-									<span className="text-red">−{deletions}</span>
-								</span>
-								{reviewMode && (
-									<IconChevronDown
-										size={14}
-										className={cn(
-											"shrink-0 text-faint transition-transform motion-reduce:transition-none",
-											changesOpen && "rotate-180",
-										)}
-									/>
-								)}
-							</button>
-							{reviewMode && changesOpen && pr?.files?.length ? (
-								<div className="pb-1">
-									{pr.files.map((file) => (
-										<div
-											key={file.path}
-											className="mx-2 flex min-h-7 min-w-0 items-center gap-1.5 px-2 text-label text-dim"
-										>
-											<span className={WS_SUMMARY_RAIL} aria-hidden />
-											<span className={WS_SUMMARY_LABEL} title={file.path}>
-												{file.path}
-											</span>
-											<span className={WS_SUMMARY_COUNT}>
-												{file.additions > 0 && (
-													<span className="text-green">+{file.additions}</span>
-												)}{" "}
-												{file.deletions > 0 && (
-													<span className="text-red">−{file.deletions}</span>
-												)}
-											</span>
-										</div>
-									))}
-								</div>
-							) : null}
-						</>
+					{diffChangeRow(
+						`${changedFiles} file${changedFiles === 1 ? "" : "s"} changed`,
 					)}
-					{dirty > 0 && (
-						<button
-							className={WS_SUMMARY_ROW}
-							onClick={askCommit}
-							disabled={!send}
-						>
-							<span className={WS_SUMMARY_RAIL}>
-								<IconClock size={20} className={WS_SUMMARY_ICON} />
-							</span>
-							<span className={WS_SUMMARY_LABEL}>
-								{prompted
-									? "Asked to commit"
-									: `${dirty} file${dirty === 1 ? "" : "s"} uncommitted`}
-							</span>
-							{!prompted && <span className={WS_SUMMARY_ACTION}>Commit</span>}
-						</button>
-					)}
+				</div>
+			)}
+
+			{dirty > 0 && (
+				<div className={groupClass}>
+					<div className={WS_SUMMARY_SECTION}>Uncommitted</div>
+					<button
+						className={WS_SUMMARY_ROW}
+						onClick={askCommit}
+						disabled={!send}
+					>
+						<span className={WS_SUMMARY_RAIL}>
+							<IconClock size={20} className={WS_SUMMARY_ICON} />
+						</span>
+						<span className={WS_SUMMARY_LABEL}>
+							{prompted
+								? "Asked to commit"
+								: `${dirty} file${dirty === 1 ? "" : "s"} uncommitted`}
+						</span>
+						{!prompted && <span className={WS_SUMMARY_ACTION}>Commit</span>}
+					</button>
 				</div>
 			)}
 
