@@ -132,7 +132,7 @@ describe("remote repo lifecycle", () => {
 
 	test("adopts and syncs a prepared Daytona workspace in one command", async () => {
 		const d = driver([
-			{ exitCode: 1 },
+			{ exitCode: 0, stdout: "warm\n" },
 			{ exitCode: 0 },
 			{ exitCode: 0, stdout: "absent\n" },
 		]);
@@ -151,8 +151,9 @@ describe("remote repo lifecycle", () => {
 		expect(adoption.opts.timeoutMs).toBe(180_000);
 		expect(adoption.command).toContain("mount --bind");
 		expect(adoption.command).toContain("remote set-url origin");
-		expect(adoption.command).toContain("fetch origin feature/new-ui --quiet");
-		expect(adoption.command).toContain("fetch origin main --quiet");
+		expect(adoption.command).toContain("fetch --no-tags origin +refs/heads/feature/new-ui:refs/remotes/origin/feature/new-ui --quiet");
+		expect(adoption.command).toContain("fetch --no-tags origin +refs/heads/main:refs/remotes/origin/main --quiet");
+		expect(adoption.command).toContain("__start=origin/feature/new-ui");
 		expect(adoption.command).toContain("checkout -B feature/new-ui");
 		expect(adoption.command).toContain("opensession-adopted-by");
 		expect(d.commands.some(({ command }) => command === "git branch --show-current")).toBe(false);
@@ -160,7 +161,7 @@ describe("remote repo lifecycle", () => {
 
 	test("cold-clones instead of taking over another workspace's warm clone", async () => {
 		const d = driver([
-			{ exitCode: 1 },
+			{ exitCode: 0, stdout: "warm\n" },
 			{ exitCode: 73 },
 			{ exitCode: 0 },
 			{ exitCode: 0, stdout: "feature/new-ui\n" },
@@ -176,7 +177,34 @@ describe("remote repo lifecycle", () => {
 			{ sandboxId: "sbx-test", provider: "box", repoId: "opensession" },
 		);
 
+		expect(d.commands[0]!.command).toContain("echo cwd");
+		expect(d.commands[0]!.command).toContain("echo warm");
 		expect(d.commands[1]!.command).toContain("exit 73");
+		expect(d.commands[1]!.command).toContain("ln -s");
+		expect(d.commands[1]!.command).not.toContain("mount --bind");
+		expect(d.commands[2]!.command).toContain("git clone --filter=blob:none");
+	});
+
+	test("cleans up a failed warm attach before cold-cloning", async () => {
+		const d = driver([
+			{ exitCode: 0, stdout: "warm\n" },
+			{ exitCode: 1, stderr: "fetch failed" },
+			{ exitCode: 0 },
+			{ exitCode: 0, stdout: "feature/new-ui\n" },
+			{ exitCode: 0, stdout: "absent\n" },
+		]);
+		await setupRemoteWorkspace(
+			d.value,
+			"/work/feature",
+			"https://token@example.test/repo.git",
+			"feature/new-ui",
+			"main",
+			"opensession",
+			{ sandboxId: "sbx-test", provider: "daytona", repoId: "opensession" },
+		);
+
+		expect(d.commands[1]!.command).toContain("umount /work/feature");
+		expect(d.commands[1]!.command).toContain("rm -f /work/feature");
 		expect(d.commands[2]!.command).toContain("git clone --filter=blob:none");
 	});
 });

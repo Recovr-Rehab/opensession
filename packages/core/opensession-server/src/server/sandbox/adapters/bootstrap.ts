@@ -1259,6 +1259,28 @@ export async function scrubRemoteWarmWorkspaceAuthority(
   }
 }
 
+const EPHEMERAL_MOUNT_NAMESPACE_PROVIDERS = new Set(["box"]);
+
+function warmWorkspaceAttachCommand(
+  provider: string | undefined,
+  warmDir: string,
+  cwd: string,
+): string {
+  if (provider && EPHEMERAL_MOUNT_NAMESPACE_PROVIDERS.has(provider)) {
+    return (
+      `mkdir -p ${shellQuoteWord(dirname(cwd))} && ` +
+      `rmdir ${shellQuoteWord(cwd)} 2>/dev/null || true; ` +
+      `test ! -e ${shellQuoteWord(cwd)} && ` +
+      `ln -s ${shellQuoteWord(warmDir)} ${shellQuoteWord(cwd)}`
+    );
+  }
+  return (
+    `mkdir -p ${shellQuoteWord(dirname(cwd))} ${shellQuoteWord(cwd)} && ` +
+    `(sudo -n mount --bind ${shellQuoteWord(warmDir)} ${shellQuoteWord(cwd)} 2>/dev/null || ` +
+    `(rmdir ${shellQuoteWord(cwd)} && ln -s ${shellQuoteWord(warmDir)} ${shellQuoteWord(cwd)}))`
+  );
+}
+
 export async function setupRemoteWorkspace(
   driver: RemoteDriver,
   cwd: string,
@@ -1270,58 +1292,55 @@ export async function setupRemoteWorkspace(
 ): Promise<void> {
   const startedAt = Date.now();
   const mark = (stage: string) => console.log(`[sandbox-remote] workspace ${repoId || cwd}: ${stage} (+${Date.now() - startedAt}ms)`);
+  const warmDir = repoId ? remoteWarmWorkspaceDir(repoId) : undefined;
+  const probe = warmDir
+    ? `if test -d ${shellQuoteWord(cwd)}/.git; then echo cwd; ` +
+      `elif test -d ${shellQuoteWord(warmDir)}/.git; then echo warm; else echo none; fi`
+    : `if test -d ${shellQuoteWord(cwd)}/.git; then echo cwd; else echo none; fi`;
+  const workspaceState = (await driver.exec(probe)).stdout.trim();
   let adoptedBranchPrepared = false;
-  let cloned = await driver.exec(`test -d ${shellQuoteWord(cwd)}/.git`);
-  if (cloned.exitCode !== 0 && repoId) {
+  let cloned = workspaceState === "cwd";
+  if (!cloned && workspaceState === "warm" && warmDir && repoId) {
     // Adopt the snapshot's warm clone without moving its multi-gigabyte lazy
     // filesystem. Daytona otherwise hydrates every node_modules file during
     // rename (measured at 155s for tella-fusion). Box command calls use
-    // short-lived mount namespaces, so it needs a durable symlink; Daytona's
-    // bind mount keeps the canonical workspace spelling.
-    const warmDir = remoteWarmWorkspaceDir(repoId);
-    const attach = identity?.provider === "box"
-      ? `mkdir -p ${shellQuoteWord(dirname(cwd))} && ` +
-        `rmdir ${shellQuoteWord(cwd)} 2>/dev/null || true; ` +
-        `test ! -e ${shellQuoteWord(cwd)} && ` +
-        `ln -s ${shellQuoteWord(warmDir)} ${shellQuoteWord(cwd)}`
-      : `mkdir -p ${shellQuoteWord(dirname(cwd))} ${shellQuoteWord(cwd)} && ` +
-        `(sudo -n mount --bind ${shellQuoteWord(warmDir)} ${shellQuoteWord(cwd)} 2>/dev/null || ` +
-        `(rmdir ${shellQuoteWord(cwd)} && ln -s ${shellQuoteWord(warmDir)} ${shellQuoteWord(cwd)}))`;
-    // Keep attach + credential restoration + narrow branch sync in one
-    // provider command. A warm adoption previously spent four to six serial
-    // SDK round trips here, and Daytona fetched every remote ref. If the
-    // requested branch is new, start it from the current default branch.
+    // short-lived mount namespaces, so it needs a durable symlink.
+    const attach = warmWorkspaceAttachCommand(identity?.provider, warmDir, cwd);
     const owner = `${warmDir}/.git/opensession-adopted-by`;
+    const fetchRef = (ref: string) =>
+      `git -C ${shellQuoteWord(cwd)} -c protocol.version=2 fetch --no-tags origin ` +
+      `${shellQuoteWord(`+refs/heads/${ref}:refs/remotes/origin/${ref}`)} --quiet`;
+    const cleanup =
+      `sudo -n umount ${shellQuoteWord(cwd)} 2>/dev/null || true; ` +
+      `if [ -L ${shellQuoteWord(cwd)} ]; then rm -f ${shellQuoteWord(cwd)}; ` +
+      `else rmdir ${shellQuoteWord(cwd)} 2>/dev/null || true; fi`;
+    // Attach, scoped credential restoration, and narrow branch sync remain one
+    // provider round trip. If anything after attach fails, remove the mount or
+    // symlink before the cold-clone fallback. Otherwise a transient warm fetch
+    // failure poisons the fallback with an already-existing destination.
     const prepare =
-      `test -d ${shellQuoteWord(warmDir)}/.git && ` +
       `{ if [ -f ${shellQuoteWord(owner)} ] && [ "$(cat ${shellQuoteWord(owner)})" != ${shellQuoteWord(cwd)} ]; then exit 73; fi; } && ` +
-      `(${attach}) && ` +
+      `__rc=0; { (${attach}) && ` +
       `git -C ${shellQuoteWord(cwd)} remote set-url origin ${shellQuoteWord(cloneUrl)} && ` +
-      `(if git -C ${shellQuoteWord(cwd)} fetch origin ${shellQuoteWord(branch)} --quiet; ` +
-      `then __start=FETCH_HEAD; else ` +
-      `git -C ${shellQuoteWord(cwd)} fetch origin ${shellQuoteWord(defaultBranch)} --quiet && __start=FETCH_HEAD; fi; ` +
+      `(if ${fetchRef(branch)}; then __start=${shellQuoteWord(`origin/${branch}`)}; else ` +
+      `${fetchRef(defaultBranch)} && __start=${shellQuoteWord(`origin/${defaultBranch}`)}; fi; ` +
       `git -C ${shellQuoteWord(cwd)} checkout -B ${shellQuoteWord(branch)} "$__start") && ` +
-      `printf '%s\\n' ${shellQuoteWord(cwd)} > ${shellQuoteWord(owner)}`;
+      `printf '%s\\n' ${shellQuoteWord(cwd)} > ${shellQuoteWord(owner)}; } || __rc=$?; ` +
+      `if [ "$__rc" -ne 0 ]; then ${cleanup}; fi; exit "$__rc"`;
     const adopted = await driver.exec(prepare, { timeoutMs: 180_000 });
     if (adopted.exitCode === 0) {
       adoptedBranchPrepared = true;
+      cloned = true;
       console.log(`[sandbox-remote] mounted warm workspace clone for ${repoId} at ${cwd}`);
       mark("warm clone fetched");
-      cloned = { exitCode: 0, stdout: "", stderr: "" };
     } else if (adopted.exitCode !== 73) {
-      // A present warm tree with a failed fetch/checkout is not a cold-clone
-      // signal. Falling through would try to clone over the attached tree and
-      // hide the actionable provider/Git error. Exit 73 is the explicit
-      // already-owned signal and safely falls through before attach.
-      const warmTree = await driver.exec(`test -d ${shellQuoteWord(warmDir)}/.git`);
-      if (warmTree.exitCode === 0) {
-        throw new Error(
-          `could not sync ${repoId} workspace to ${branch}: ${(adopted.stderr || adopted.stdout).trim().slice(0, 300)}`,
-        );
-      }
+      console.warn(
+        `[sandbox-remote] warm workspace sync failed for ${repoId}; falling back to a clean clone: ` +
+        `${(adopted.stderr || adopted.stdout).trim().slice(0, 300)}`,
+      );
     }
   }
-  if (cloned.exitCode !== 0) {
+  if (!cloned) {
     console.log(`[sandbox-remote] cloning ${redactUrl(cloneUrl)} into ${cwd}`);
     // Blobless partial clone: full history/refs but blobs fetched lazily via
     // the persisted (tokenized) origin URL. A large repo's full .git can be
