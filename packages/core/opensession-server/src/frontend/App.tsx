@@ -113,6 +113,7 @@ import { UserGate, getCurrentUser, useAuthStatus, useCurrentUser } from "./compo
 import { PreviewWait, matchPreviewWaitRoute } from "./components/PreviewWait";
 import { TitleBar } from "./components/TitleBar";
 import { FirstMile } from "./components/FirstMile";
+import { GithubConnectEmptyState } from "./components/GithubConnectEmptyState";
 import {
 	completeFirstMile,
 	firstMileComplete,
@@ -168,6 +169,7 @@ import {
 } from "./components/icons";
 import { DeskOverlay } from "./components/DeskOverlay";
 import { sidebarSessionsQuery, useSessions } from "./hooks/useSessions";
+import { useGithubConnectionState } from "./hooks/useGithubConnectionState";
 import { useHydratedSession } from "./hooks/useHydratedSession";
 import { hasDraft } from "./lib/drafts";
 import { sessionWasAgentStarted } from "./lib/sidebar-placement";
@@ -781,6 +783,7 @@ export function App(
 		useState(firstMileComplete);
 	const [forceFirstMile, setForceFirstMile] = useState(landedOnFirstMile);
 	const auth = useAuthStatus();
+	const githubConnectionState = useGithubConnectionState(route.view);
 	const { connected, send, setTyping, addHandler } = useWebSocket();
 	const sessionsRef = useRef(sessions);
 	sessionsRef.current = sessions;
@@ -1095,9 +1098,14 @@ export function App(
 		workspacesLoaded &&
 		sessions.length === 0 &&
 		workspaces.length === 0;
+	const githubConnectionRequired =
+		productEmpty && githubConnectionState === "disconnected";
 	const firstMileActive =
 		forceFirstMile ||
-		(auth?.admin !== false && productEmpty && !firstMileIsComplete);
+		(auth?.admin !== false &&
+			productEmpty &&
+			githubConnectionState === "connected" &&
+			!firstMileIsComplete);
 	const refreshWorkspaces = React.useCallback(() => {
 		return fetchWorkspaces()
 			.then(setWorkspaces)
@@ -5289,9 +5297,18 @@ export function App(
 							onOpenReview={openReviewForSession}
 							onOpenTicket={openTicketWorkspace}
 						onOpenFeedItem={openFeedItemWorkspace}
-							onNewSession={() => openPalette()}
-							showDraftRow={productEmpty}
+							onNewSession={() =>
+								githubConnectionRequired
+									? navigate({ view: "settings", section: "myAccounts" })
+									: openPalette()
+							}
+							showDraftRow={
+								productEmpty &&
+								githubConnectionState !== "loading" &&
+								!githubConnectionRequired
+							}
 							draftRowActive={productEmpty && route.view === "prs"}
+							githubConnectionRequired={githubConnectionRequired}
 							onOpenDraft={() => {
 								// The row and the panel's card are one unstarted session, so
 								// pressing the row is "put me back in it": return to the panel
@@ -5842,6 +5859,15 @@ export function App(
 							>
 								Check the connection to this server.
 							</EmptyState>
+						) : githubConnectionRequired ? (
+							<GithubConnectEmptyState
+								onConnect={() =>
+									navigate({ view: "settings", section: "myAccounts" })
+								}
+								className="min-h-0 flex-1"
+							/>
+						) : productEmpty && githubConnectionState === "loading" ? (
+							<LoadingState className="min-h-0 flex-1">Checking GitHub…</LoadingState>
 						) : productEmpty ? (
 							/* With nothing to open, the page IS the new-session card: the
 							   same palette rendered in place, so the empty state is
