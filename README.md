@@ -28,14 +28,8 @@ and installs and starts a per-user service (a LaunchAgent on macOS, a `systemd
 by default <http://127.0.0.1:3850>. Budget 5 to 15 minutes, mostly unattended
 download.
 
-Give it a model account, then run something:
-
-```sh
-claude setup-token     # on a Claude Max login; copy the sk-ant-… it prints
-```
-
-Open the URL, paste that token into Workspace → Providers, pick a repo, write a
-prompt, and create the session. A turn that actually runs is the proof the
+Open the URL, add a model account in Workspace → Providers, pick a repo, write
+a prompt, and create the session. A turn that actually runs is the proof the
 install works, not a health check. Connect GitHub and the other integrations
 later from Settings → Connections; see
 [docs/setup/github.md](docs/setup/github.md).
