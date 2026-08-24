@@ -1019,7 +1019,8 @@ function ProviderSummaryRow({
  *
  * It opens collapsed — one row per provider with its account count — because
  * the full list is a page of usage meters and the question people arrive with
- * is "do we have capacity here". "All accounts" restores the flat list. */
+ * is "do we have capacity here". "All accounts" restores the flat list. The
+ * same view switch and inline foldout are used during onboarding. */
 export function ProviderAccountsSection({
 	onboarding = false,
 	onChanged,
@@ -1035,22 +1036,6 @@ export function ProviderAccountsSection({
 	const loading = claude.accounts === null || codex.accounts === null;
 	const empty = !loading && claude.accounts?.length === 0 && codex.accounts?.length === 0;
 	const refreshing = claude.refreshing || codex.refreshing;
-	const onboardingAccounts = [
-		...(claude.accounts || []).map((account) => ({
-			id: `claude-${account.id}`,
-			label: providerAccountLabel(account),
-			provider: "Claude" as const,
-			icon: "claude" as const,
-			ready: account.usable && !account.exhaustedUntil,
-		})),
-		...(codex.accounts || []).map((account) => ({
-			id: `codex-${account.id}`,
-			label: providerAccountLabel(account),
-			provider: "OpenAI" as const,
-			icon: "codex" as const,
-			ready: account.usable && !account.exhaustedUntil,
-		})),
-	];
 
 	function refreshUsage() {
 		void Promise.allSettled([claude.load(true), codex.load(true)]);
@@ -1061,17 +1046,15 @@ export function ProviderAccountsSection({
 			<SettingsGroupLabel
 				actions={
 				<>
-					{!onboarding && (
-						<Segmented
-							label="Account view"
-							size="sm"
-							value={view}
-							onValueChange={(next) => setView(next as "providers" | "accounts")}
-						>
-							<SegmentedOption value="providers">Providers</SegmentedOption>
-							<SegmentedOption value="accounts">All accounts</SegmentedOption>
-						</Segmented>
-					)}
+					<Segmented
+						label="Account view"
+						size="sm"
+						value={view}
+						onValueChange={(next) => setView(next as "providers" | "accounts")}
+					>
+						<SegmentedOption value="providers">Providers</SegmentedOption>
+						<SegmentedOption value="accounts">All accounts</SegmentedOption>
+					</Segmented>
 					{!onboarding && (
 						<Button
 							size="sm"
@@ -1157,26 +1140,6 @@ export function ProviderAccountsSection({
 							? "Connect a Claude or OpenAI account to use its subscription."
 							: "No accounts yet. Runs use this server's Claude and Codex sign-ins until you add an Anthropic or OpenAI account."}
 					</EmptyState>
-				) : onboarding ? (
-					<>
-						{onboardingAccounts.map((account) => (
-							<SettingRow key={account.id}>
-								<IconTile name={account.icon} size={28} />
-								<SettingRowText>
-									<SettingRowTitle>{account.label}</SettingRowTitle>
-									<div className="mt-0.5 text-meta text-dim">{account.provider}</div>
-								</SettingRowText>
-								<span
-									className={cn(
-										"ml-auto shrink-0 pl-3 text-label font-medium",
-										account.ready ? "text-green" : "text-dim",
-									)}
-								>
-									{account.ready ? "Ready" : "Unavailable"}
-								</span>
-							</SettingRow>
-						))}
-					</>
 				) : view === "providers" ? (
 					<>
 						<ProviderSummaryRow
