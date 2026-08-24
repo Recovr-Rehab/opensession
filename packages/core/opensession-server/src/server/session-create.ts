@@ -525,14 +525,29 @@ export function runOpeningCreateOnce(
 	);
 	if (openingPromptEntryId !== spec.openingPromptEntryId)
 		throw new Error("Opening prompt identity changed before actor dispatch");
-	const done = requestCreationOpening({
-		sessionId: spec.id,
-		identity: creationIdentity,
-		openingPromptEntryId,
-		runId: `opening:${spec.id}:${openingPromptEntryId}`,
-		runGeneration: 1,
-		openingPlan,
-	}).then(() => undefined).finally(() => {
+	const done = (async () => {
+		// The creation actor owns one physical effect at a time. Materialize the
+		// primary worktree before dispatching the long-running opening effect;
+		// otherwise openCreatedSession would try to emit a branch effect while the
+		// opening already held the creation fence. The later call inside
+		// openCreatedSession adopts this completed receipt and remains restart-safe.
+		if (spec.needsWorktree && spec.materializeWorktree) {
+			try {
+				await spec.materializeWorktree();
+			} catch (error) {
+				io.fail(error instanceof Error ? error.message : String(error));
+				throw error;
+			}
+		}
+		await requestCreationOpening({
+			sessionId: spec.id,
+			identity: creationIdentity,
+			openingPromptEntryId,
+			runId: `opening:${spec.id}:${openingPromptEntryId}`,
+			runGeneration: 1,
+			openingPlan,
+		});
+	})().finally(() => {
 		if (activeOpeningCreates.get(spec.id)?.done === done)
 			activeOpeningCreates.delete(spec.id);
 	});
