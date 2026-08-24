@@ -289,6 +289,7 @@ summary:focus-visible {
    makes the product feel larger than a screenshot centred in a frame. */
 .stage {
 	position: relative;
+	isolation: isolate;
 	overflow: hidden;
 	/* A size container, so the window inside can be inset by one value that
 	   means the same number of pixels on all four sides. A percentage cannot:
@@ -303,6 +304,20 @@ summary:focus-visible {
 	background: var(--stage-bg);
 }
 
+/* A matching copy of the page field, aligned to the viewport and blurred
+   directly. This deliberately does not use backdrop-filter: browsers can
+   report support for that property while silently dropping its blur. The
+   oversized layer gives the filter enough paint beyond the stage's crop. */
+.stage::before {
+	position: absolute;
+	z-index: 0;
+	inset: -56px;
+	background: #123ab5 url("./marble-field.svg") center / cover fixed no-repeat;
+	content: "";
+	filter: blur(48px) brightness(0.72) saturate(0.7);
+	pointer-events: none;
+}
+
 .gradient-fallback,
 .hero-video {
 	position: absolute;
@@ -311,21 +326,19 @@ summary:focus-visible {
 	height: 100%;
 }
 
-/* The marble now remains the stage's ground. This layer blurs the marble
-   itself, rather than only softening the video above it, so the effect is
-   visible even while Silver Silk is at ten percent opacity. The prefixed form
-   keeps the same glass effect in Safari. */
+/* A neutral wash over the softened field. Silver Silk stays faint enough that
+   its movement feels embedded in the background rather than laid on top. */
 .gradient-fallback {
+	z-index: 1;
 	background: linear-gradient(
 		150deg,
-		rgba(242, 243, 245, 0.12),
-		rgba(200, 202, 208, 0.08)
+		rgba(242, 243, 245, 0.16),
+		rgba(200, 202, 208, 0.12)
 	);
-	-webkit-backdrop-filter: blur(24px) brightness(0.82);
-	backdrop-filter: blur(24px) brightness(0.82);
 }
 
 .hero-video {
+	z-index: 2;
 	object-fit: cover;
 	opacity: 0.1;
 	filter: blur(18px);
@@ -336,6 +349,7 @@ summary:focus-visible {
 .preview-wrap {
 	--demo-scale: 1;
 	position: absolute;
+	z-index: 3;
 	/* Keep one quiet inset above and to the left, then let the window continue
 	   through the stage's bottom-right corner. This enlarges the product without
 	   shrinking its fixed app layout, and the stage itself supplies the crop. */
