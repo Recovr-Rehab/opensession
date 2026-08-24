@@ -1,108 +1,81 @@
 import { beforeEach, describe, expect, test } from "bun:test";
 import {
 	loadTranscriptSizes,
-	saveTranscriptSizes,
+	resetTranscriptSizes,
+	recordTranscriptSizes,
 	seededBlockEstimate,
-	transcriptWidthBucket,
-	type TranscriptWidthBucket,
 } from "./transcript-sizes";
 
-class StorageStub {
-	private values = new Map<string, string>();
-	getItem(key: string) {
-		return this.values.get(key) ?? null;
-	}
-	setItem(key: string, value: string) {
-		this.values.set(key, value);
-	}
-	removeItem(key: string) {
-		this.values.delete(key);
-	}
-	clear() {
-		this.values.clear();
-	}
+beforeEach(() => resetTranscriptSizes());
+
+function measure(
+	sessionId: string,
+	width: number,
+	entries: Record<string, number>,
+) {
+	const cache = loadTranscriptSizes(sessionId);
+	recordTranscriptSizes(cache, width, Object.entries(entries));
+	return cache;
 }
-
-const storage = new StorageStub();
-
-function sizes(entries: Record<string, number>) {
-	return new Map(Object.entries(entries));
-}
-
-beforeEach(() => storage.clear());
 
 describe("transcript sizes", () => {
-	test("width buckets split phone from desktop", () => {
-		expect(transcriptWidthBucket(true)).toBe<TranscriptWidthBucket>("narrow");
-		expect(transcriptWidthBucket(false)).toBe<TranscriptWidthBucket>("wide");
+	test("round-trips measured heights within a page visit", () => {
+		measure("s1", 800, { "range:a": 120.4 });
+		expect(loadTranscriptSizes("s1").blockHeights.get("range:a")).toBe(120);
 	});
 
-	test("round-trips measured heights per session and bucket", () => {
-		saveTranscriptSizes("s1", "wide", sizes({ "range:a": 120.4 }), storage);
-		expect(loadTranscriptSizes("s1", "wide", storage)).toEqual({
-			"range:a": 120,
-		});
-		// The other bucket and other sessions stay untouched.
-		expect(loadTranscriptSizes("s1", "narrow", storage)).toBeUndefined();
-		expect(loadTranscriptSizes("s2", "wide", storage)).toBeUndefined();
+	test("clears a session's heights when the layer width changes", () => {
+		measure("s1", 800, { "range:a": 100, "range:b": 200 });
+		measure("s1", 390, { "range:c": 90 });
+		const cache = loadTranscriptSizes("s1");
+		expect(cache.width).toBe(390);
+		expect(cache.blockHeights.has("range:a")).toBe(false);
+		expect(cache.blockHeights.has("range:b")).toBe(false);
+		expect(cache.blockHeights.get("range:c")).toBe(90);
 	});
 
-	test("merges over the previous visit without dropping unseen rows", () => {
-		saveTranscriptSizes(
-			"s1",
-			"wide",
-			sizes({ "range:a": 100, "range:b": 200 }),
-			storage,
-		);
-		saveTranscriptSizes("s1", "wide", sizes({ "range:b": 240 }), storage);
-		expect(loadTranscriptSizes("s1", "wide", storage)).toEqual({
-			"range:a": 100,
-			"range:b": 240,
-		});
+	test("tolerates scrollbar-and-rounding jitter without clearing", () => {
+		measure("s1", 800, { "range:a": 100 });
+		measure("s1", 801, { "range:b": 140 });
+		const cache = loadTranscriptSizes("s1");
+		expect(cache.blockHeights.get("range:a")).toBe(100);
+		expect(cache.blockHeights.get("range:b")).toBe(140);
 	});
 
-	test("ignores empty, non-finite, and non-positive measurements", () => {
-		saveTranscriptSizes("s1", "wide", new Map(), storage);
-		expect(loadTranscriptSizes("s1", "wide", storage)).toBeUndefined();
-		saveTranscriptSizes(
-			"s1",
-			"wide",
-			sizes({ bad: Number.NaN, zero: 0 }),
-			storage,
-		);
-		expect(loadTranscriptSizes("s1", "wide", storage)).toBeUndefined();
+	test("ignores non-finite and non-positive measurements", () => {
+		const cache = measure("s1", 800, { bad: Number.NaN, zero: 0 });
+		expect(cache.blockHeights.size).toBe(0);
+		recordTranscriptSizes(cache, Number.NaN, [["k", 10]]);
+		expect(cache.blockHeights.size).toBe(0);
 	});
 
-	test("evicts the oldest session beyond the cap", () => {
-		for (let index = 0; index < 25; index++) {
-			saveTranscriptSizes(`s${index}`, "wide", sizes({ k: index }), storage);
+	test("evicts the least-recently-used session beyond the cap", () => {
+		// Fill the store to exactly its cap.
+		for (let index = 0; index < 16; index++) {
+			measure(`s${index}`, 800, { k: 100 + index });
 		}
-		expect(loadTranscriptSizes("s0", "wide", storage)).toBeUndefined();
-		expect(loadTranscriptSizes("s24", "wide", storage)).toEqual({ k: 24 });
-		// Revisiting refreshes recency, so it survives the next eviction.
-		saveTranscriptSizes("s1", "wide", sizes({ k: 1 }), storage);
-		for (let index = 25; index < 26; index++) {
-			saveTranscriptSizes(`s${index}`, "wide", sizes({ k: index }), storage);
-		}
-		expect(loadTranscriptSizes("s1", "wide", storage)).toEqual({ k: 1 });
-	});
-
-	test("survives corrupt storage", () => {
-		storage.setItem("opensession.transcript-sizes.v2:s1", "{not json");
-		expect(loadTranscriptSizes("s1", "wide", storage)).toBeUndefined();
-		saveTranscriptSizes("s1", "wide", sizes({ k: 10 }), storage);
-		expect(loadTranscriptSizes("s1", "wide", storage)).toEqual({ k: 10 });
+		// Re-loading refreshes recency, so s0 outlives its older peers.
+		loadTranscriptSizes("s0");
+		// One more session pushes past the cap; the oldest untouched entry goes.
+		measure("s16", 800, { k: 16 });
+		expect(loadTranscriptSizes("s0").blockHeights.get("k")).toBe(100);
+		expect(loadTranscriptSizes("s16").blockHeights.get("k")).toBe(16);
+		expect(loadTranscriptSizes("s1").blockHeights.size).toBe(0);
+		expect(loadTranscriptSizes("s15").blockHeights.get("k")).toBe(115);
 	});
 });
 
 describe("seededBlockEstimate", () => {
 	test("prefers a positive measured seed over the heuristic", () => {
-		expect(seededBlockEstimate(96, { k: 312 }, "k")).toBe(312);
+		const cache = loadTranscriptSizes("seeded");
+		cache.blockHeights.set("k", 312);
+		expect(seededBlockEstimate(96, cache, "k")).toBe(312);
 	});
 
 	test("falls back to the heuristic without a usable seed", () => {
 		expect(seededBlockEstimate(96, undefined, "k")).toBe(96);
-		expect(seededBlockEstimate(96, {}, "k")).toBe(96);
-		expect(seededBlockEstimate(96, { k: 0 }, "k")).toBe(96);
+		expect(seededBlockEstimate(96, loadTranscriptSizes("empty"), "k")).toBe(
+			96,
+		);
 	});
 });

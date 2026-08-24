@@ -1,9 +1,8 @@
 import { defaultRangeExtractor, useVirtualizer } from "@tanstack/react-virtual";
 import React, { useEffect, useRef } from "react";
 import {
-	currentTranscriptWidthBucket,
 	loadTranscriptSizes,
-	saveTranscriptSizes,
+	recordTranscriptSizes,
 	seededBlockEstimate,
 	type TranscriptSizes,
 } from "../lib/transcript-sizes";
@@ -31,16 +30,13 @@ interface Props {
 	onVisibleItems?: (items: VirtualTranscriptItem[]) => void;
 	/** Range children reuse the renderer without nesting another virtualizer. */
 	enabled?: boolean;
-	/** Session identity for the persisted measured-height cache. When present,
-	 *  block heights measured on a previous visit seed this visit's first
-	 *  estimates, so reopening a chat does not shift while estimates correct. */
+	/** Session identity for the measured-height cache. When present, block
+	 *  heights recorded on an earlier look at this session seed the next one's
+	 *  first estimates, so reopening a chat does not shift while estimates
+	 *  correct. The cache is in-memory only and clears when the layer width
+	 *  changes (see lib/transcript-sizes.ts). */
 	sizeCacheKey?: string;
 }
-
-// Write measured heights through at most this often while a session is open.
-const SIZE_SAVE_INTERVAL_MS = 5_000;
-// ...and sooner once a visit has accumulated this many fresh measurements.
-const SIZE_SAVE_DIRTY_THRESHOLD = 40;
 
 /** Loaded transcript blocks, windowed against their nearest message scroller. */
 export function VirtualTranscriptList({
@@ -51,11 +47,7 @@ export function VirtualTranscriptList({
 	sizeCacheKey,
 }: Props) {
 	const rootRef = useRef<HTMLDivElement>(null);
-	// Heights this visit has observed so far, written through to the persisted
-	// store on a short throttle. Declared before the seed block below so a
-	// session switch can clear it alongside the seeds it replaces.
-	const measuredSizesRef = useRef(new Map<string, number>());
-	// Heights measured on an earlier visit of sizeCacheKey, loaded once per
+	// Heights recorded on an earlier look at sizeCacheKey, resolved once per
 	// session switch. estimateSize reads them before falling back to the
 	// outline heuristic, so a reopened chat starts at its true size instead of
 	// correcting visible content into place.
@@ -65,12 +57,8 @@ export function VirtualTranscriptList({
 	if (sizeCacheKey && seededRef.current?.session !== sizeCacheKey) {
 		seededRef.current = {
 			session: sizeCacheKey,
-			sizes: loadTranscriptSizes(
-				sizeCacheKey,
-				currentTranscriptWidthBucket(),
-			),
+			sizes: loadTranscriptSizes(sizeCacheKey),
 		};
-		measuredSizesRef.current = new Map();
 	}
 	const virtualizer = useVirtualizer<HTMLDivElement, HTMLDivElement>({
 		count: items.length,
@@ -106,59 +94,35 @@ export function VirtualTranscriptList({
 
 	// The recording half of the size cache. Rows that really mount are observed
 	// here alongside TanStack's own measurement; their stable block keys map to
-	// the heights that become the next visit's seeds. Rows never mounted carry
-	// no measurement and keep their heuristic, which is exactly right: they are
-	// also the blocks whose content has not been seen.
-	const rowNodesRef = useRef(new Map<string, HTMLElement>());
+	// the heights that become the next look's seeds. Writes land straight in
+	// the in-memory cache — nothing to schedule or flush. Rows never mounted
+	// carry no measurement and keep their heuristic, which is exactly right:
+	// they are also the blocks whose content has not been seen.
 	const rowObserverRef = useRef<ResizeObserver | null>(null);
-	const flushMeasuredSizes = () => {
-		if (!sizeCacheKey || measuredSizesRef.current.size === 0) return;
-		saveTranscriptSizes(
-			sizeCacheKey,
-			currentTranscriptWidthBucket(),
-			measuredSizesRef.current,
-		);
-		measuredSizesRef.current = new Map();
-	};
-	useEffect(() => {
-		if (!sizeCacheKey) return;
-		const timer = window.setInterval(() => {
-			if (measuredSizesRef.current.size < SIZE_SAVE_DIRTY_THRESHOLD) return;
-			// Stringifying the session's heights is main-thread work; push it past
-			// the interactions that are probably still happening at this cadence.
-			const idle = (
-				window as typeof window & {
-					requestIdleCallback?: (
-						cb: () => void,
-						opts?: { timeout: number },
-					) => number;
-				}
-			).requestIdleCallback;
-			if (idle) idle(() => flushMeasuredSizes(), { timeout: 2_000 });
-			else flushMeasuredSizes();
-		}, SIZE_SAVE_INTERVAL_MS);
-		return () => {
-			window.clearInterval(timer);
-			flushMeasuredSizes();
-		};
-	}, [sizeCacheKey, flushMeasuredSizes]);
 	const observeRowNode = (key: string, node: HTMLElement) => {
-		rowNodesRef.current.set(key, node);
 		node.dataset.transcriptKey = key;
 		if (!rowObserverRef.current) {
-			const recorded = measuredSizesRef.current;
+			// Resolve the cache per callback so the observer never holds a stale
+			// session's store after a session switch.
 			rowObserverRef.current = new ResizeObserver((entries) => {
+				const cache = seededRef.current?.sizes;
+				if (!cache || entries.length === 0) return;
+				const measured: Array<readonly [string, number]> = [];
+				let width = 0;
 				for (const entry of entries) {
-					const entryKey = (entry.target as HTMLElement).dataset
-						.transcriptKey;
-					if (!entryKey) continue;
-					const size =
+					const target = entry.target as HTMLElement;
+					const entryKey = target.dataset.transcriptKey;
+					const height =
 						entry.borderBoxSize?.[0]?.blockSize ??
-						entry.target.getBoundingClientRect().height;
-					if (Number.isFinite(size) && size > 0) {
-						recorded.set(entryKey, size);
+						target.getBoundingClientRect().height;
+					if (entryKey && Number.isFinite(height) && height > 0) {
+						measured.push([entryKey, height]);
 					}
+					// Rows span the column, so their inline size IS the width the
+					// heights were measured at.
+					width ||= entry.borderBoxSize?.[0]?.inlineSize ?? target.offsetWidth;
 				}
+				recordTranscriptSizes(cache, width, measured);
 			});
 		}
 		rowObserverRef.current.observe(node);
@@ -170,22 +134,21 @@ export function VirtualTranscriptList({
 		new Map<string, (node: HTMLDivElement | null) => void>(),
 	);
 	const rowRef = (key: string) => {
-			let callback = rowRefsRef.current.get(key);
-			if (!callback) {
-				callback = (node) => {
-					virtualizer.measureElement(node);
-					if (sizeCacheKey && node) observeRowNode(key, node);
-				};
-				if (rowRefsRef.current.size > 1_000) rowRefsRef.current.clear();
-				rowRefsRef.current.set(key, callback);
-			}
-			return callback;
-		};
+		let callback = rowRefsRef.current.get(key);
+		if (!callback) {
+			callback = (node) => {
+				virtualizer.measureElement(node);
+				if (sizeCacheKey && node) observeRowNode(key, node);
+			};
+			if (rowRefsRef.current.size > 1_000) rowRefsRef.current.clear();
+			rowRefsRef.current.set(key, callback);
+		}
+		return callback;
+	};
 	useEffect(() => {
 		return () => {
 			rowObserverRef.current?.disconnect();
 			rowObserverRef.current = null;
-			rowNodesRef.current.clear();
 		};
 	}, []);
 
