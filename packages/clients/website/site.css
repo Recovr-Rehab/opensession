@@ -311,15 +311,18 @@ summary:focus-visible {
 	height: 100%;
 }
 
-/* The marble now remains the stage's ground. Silver Silk is only a faint,
-   softened wash over it, so its movement feels embedded in the field instead
-   of replacing it. The translucent wash is also the reduced-motion fallback. */
+/* The marble now remains the stage's ground. This layer blurs the marble
+   itself, rather than only softening the video above it, so the effect is
+   visible even while Silver Silk is at ten percent opacity. The prefixed form
+   keeps the same glass effect in Safari. */
 .gradient-fallback {
 	background: linear-gradient(
 		150deg,
 		rgba(242, 243, 245, 0.12),
 		rgba(200, 202, 208, 0.08)
 	);
+	-webkit-backdrop-filter: blur(24px) brightness(0.82);
+	backdrop-filter: blur(24px) brightness(0.82);
 }
 
 .hero-video {
@@ -619,9 +622,10 @@ summary:focus-visible {
 	padding: 0 18px;
 	border-color: rgba(var(--ink-rgb), 0.72);
 	background: rgba(var(--ink-rgb), 0.18);
-	/* A real glass blur, so the bands behind it read as diffused paint rather
-	   than through a thin wash. */
-	backdrop-filter: blur(18px) saturate(150%);
+	/* Blur the field behind the control, not its own fill. Safari still exposes
+	   this through the prefixed property, so both forms are intentional. */
+	-webkit-backdrop-filter: blur(24px) saturate(140%);
+	backdrop-filter: blur(24px) saturate(140%);
 	box-shadow: inset 0 1px 0 rgba(var(--ink-rgb), 0.28);
 	color: var(--ink);
 	transition:
