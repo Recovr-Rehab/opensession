@@ -13,6 +13,9 @@ const diffPanelSource = await Bun.file(
 const codeDisplaySource = await Bun.file(
 	new URL("./CodeDisplaySettings.tsx", import.meta.url),
 ).text();
+const commentableDiffSource = await Bun.file(
+	new URL("./CommentableDiff.tsx", import.meta.url),
+).text();
 const reviewToolbarSource = await Bun.file(
 	new URL("./pr/ReviewToolbar.tsx", import.meta.url),
 ).text();
@@ -166,6 +169,7 @@ test("sidebar Changes shares Review's code display options", () => {
 		"stickyFileHeaders={toolbarTarget === undefined}",
 	);
 	expect(diffPanelSource).toContain("--review-file-header-top");
+	expect(commentableDiffSource).toContain("data-[stuck]:rounded-t-lg");
 	expect(viewerSource).toContain("--diff-panel-top");
 	expect(codeDisplaySource).toContain('label="Wrap lines"');
 	expect(codeDisplaySource).toContain('value="split"');
