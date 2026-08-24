@@ -368,6 +368,23 @@ function existingBoxSshTarget(box: BoxRecord, user = "user"): BoxSshTarget | nul
   return { ...endpoint, user, privateKeyPath: boxSshPrivateKey };
 }
 
+export function boxKnownHostsKey(target: Pick<BoxSshTarget, "host" | "port">): string {
+  return `[${target.host}]:${target.port}`;
+}
+
+/** Box regenerates its SSH host key when an archived VM resumes. The endpoint
+ * comes from Box's authenticated API and we install our public key in that
+ * same API call, so forget only this exact host:port before accepting the new
+ * provider key. */
+async function forgetBoxSshHostKey(target: Pick<BoxSshTarget, "host" | "port">): Promise<void> {
+  const knownHosts = `${boxSshKeyDir}/known_hosts`;
+  if (!existsSync(knownHosts)) return;
+  const process = Bun.spawn([
+    "ssh-keygen", "-q", "-R", boxKnownHostsKey(target), "-f", knownHosts,
+  ], { stdin: "ignore", stdout: "ignore", stderr: "ignore" });
+  await process.exited;
+}
+
 function boxSshArgs(target: BoxSshTarget, command: string): string[] {
   return [
     "ssh", "-p", String(target.port), "-i", target.privateKeyPath,
@@ -747,15 +764,21 @@ async function installBoxSshTarget(
     { key: key.publicKey },
     60_000,
   );
-  const endpoint = parseBoxSshEndpoint(box.sshEndpoint);
+  // The SSH endpoint can appear only after key installation. Refresh once
+  // instead of giving up and paying Box's slow per-command HTTP proxy for the
+  // whole session. Some API versions also return host:port in machineIp.
+  let endpoint = parseBoxSshEndpoint(response.machineIp) || parseBoxSshEndpoint(box.sshEndpoint);
+  if (!endpoint) endpoint = parseBoxSshEndpoint((await getBox(cfg, box.id))?.sshEndpoint);
   if (!response.success || !endpoint) {
     throw new Error("Box did not return a reachable SSH endpoint");
   }
-  return {
+  const target = {
     ...endpoint,
     user: response.sshUser || "user",
     privateKeyPath: key.privateKeyPath,
   };
+  await forgetBoxSshHostKey(target);
+  return target;
 }
 
 /** Wake a Box and install Open Session's dedicated public key for a real
