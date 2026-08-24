@@ -4413,6 +4413,13 @@ export function SessionViewer({
 	const queuedClassified = shownQueued.map((item) =>
 		classifyQueuedContent(item.content, item.user),
 	);
+	const steeredClassified = visibleSteered.map((item) =>
+		classifyQueuedContent(item.content, item.user),
+	);
+	const steeredWorkflowCount = steeredClassified.filter(
+		(c) => c.notice?.kind === "workflow",
+	).length;
+	const steeredMessageCount = visibleSteered.length - steeredWorkflowCount;
 	const queuedReviewCount = queuedClassified.filter(
 		(c) => c.notice?.kind === "review-handoff",
 	).length;
@@ -4456,8 +4463,11 @@ export function SessionViewer({
 				queuedSessionMessageCount
 					? `${queuedSessionMessageCount} session ${queuedSessionMessageCount === 1 ? "message" : "messages"} waiting`
 					: null,
-				visibleSteered.length
-					? `${visibleSteered.length} steering into the current turn`
+				steeredWorkflowCount
+					? `${steeredWorkflowCount} workflow ${steeredWorkflowCount === 1 ? "result" : "results"} steering into the current turn`
+					: null,
+				steeredMessageCount
+					? `${steeredMessageCount} ${steeredMessageCount === 1 ? "message" : "messages"} steering into the current turn`
 					: null,
 			]
 				.filter(Boolean)
@@ -4473,8 +4483,10 @@ export function SessionViewer({
 			>
 				<div className={composerQueueTitle}>{queueTitle}</div>
 				{visibleSteered.map((s, i) => {
-					const c = classifyQueuedContent(s.content, s.user);
+					const c = steeredClassified[i];
+					const isWorkflow = c.notice?.kind === "workflow";
 					const canEdit =
+						!isWorkflow &&
 						s.editable === true &&
 						personKey(s.user || "") === personKey(currentUser);
 					return (
@@ -4490,10 +4502,20 @@ export function SessionViewer({
 							)}
 						>
 							<div className={composerQueueActions}>
-								<Tooltip label="The run has this message and folds it in when the current step finishes. A long tool call, like a test run, can hold it for a few minutes.">
+								<Tooltip
+									label={
+										isWorkflow
+											? "The run has this workflow result and folds it in when the current step finishes. A long tool call, like a test run, can hold it for a few minutes."
+											: "The run has this message and folds it in when the current step finishes. A long tool call, like a test run, can hold it for a few minutes."
+									}
+								>
 									<span className={composerQueuePill}>
-										<IconCrosshair size={20} />
-										Steering
+										{isWorkflow ? (
+											<IconCheck size={20} />
+										) : (
+											<IconCrosshair size={20} />
+										)}
+										{isWorkflow ? "Workflow" : "Steering"}
 										<SteerWaiting since={s.steeredAt} />
 									</span>
 								</Tooltip>
@@ -4533,10 +4555,20 @@ export function SessionViewer({
 									</Tooltip>
 								)}
 								{s.id && (
-									<Tooltip label="Dismiss. The run keeps going and this message won't be re-sent.">
+									<Tooltip
+										label={
+											isWorkflow
+												? "Dismiss. The run keeps going and this workflow result won't be re-sent."
+												: "Dismiss. The run keeps going and this message won't be re-sent."
+										}
+									>
 										<button
 											type="button"
-											aria-label="Dismiss steering message"
+											aria-label={
+												isWorkflow
+													? "Dismiss workflow result"
+													: "Dismiss steering message"
+											}
 											className={cn(
 												composerQueueAction,
 												composerQueueActionDanger,

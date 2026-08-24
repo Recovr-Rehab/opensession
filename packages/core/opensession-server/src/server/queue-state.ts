@@ -116,13 +116,24 @@ export function isDelegatedQueueItem(item?: QueueItem): boolean {
 	return delegatedActorParent(item?.user) !== null;
 }
 
+/** A workflow completion nudge is attributed to the person who launched the
+ * workflow so the model receives the right identity, but it is still system
+ * traffic. The sentinel is the durable origin marker shared with transcript
+ * classification; do not let that attribution turn the nudge into an editable
+ * composer message while it is waiting to land. */
+export function isWorkflowQueueItem(item?: QueueItem): boolean {
+	return /^\s*<!--os:workflow-notice(?::[^\s>]+)?-->/.test(item?.content ?? "");
+}
+
 /** Only ordinary composer messages can be moved back into a draft. Routed
  * items carry queue-only metadata that a composer send cannot reconstruct. */
 export function isEditableQueueItem(item?: QueueItem): boolean {
-	return ( !!item &&
+	return (
+		!!item &&
 		!!item.user &&
 		!isGitHubQueueItem(item) &&
 		!isDelegatedQueueItem(item) &&
+		!isWorkflowQueueItem(item) &&
 		item.user !== AUTO_CONTINUE_USER &&
 		!item.contextSessions?.length &&
 		!item.slackReplyTo &&

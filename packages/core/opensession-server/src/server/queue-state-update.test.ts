@@ -8,6 +8,7 @@ import {
 	isDelegatedQueueItem,
 	isEditableQueueItem,
 	isWorkerQueueItem,
+	isWorkflowQueueItem,
 	promptDispatches,
 	promptQueues,
 	queueDisplayState,
@@ -162,6 +163,17 @@ describe("delegated messages are not user messages", () => {
 		const mine = { id: "q1", content: "ship it", user: "Kent" };
 		expect(isWorkerQueueItem(mine)).toBe(false);
 		expect(isEditableQueueItem(mine)).toBe(true);
+	});
+
+	test("a workflow result attributed to its launcher is not editable", () => {
+		const result = {
+			id: "workflow:wf-1:done",
+			content:
+				'<!--os:workflow-notice:wf-1-->\n✅ Workflow "review" finished',
+			user: "Kent",
+		};
+		expect(isWorkflowQueueItem(result)).toBe(true);
+		expect(isEditableQueueItem(result)).toBe(false);
 	});
 
 	test("a peer agent message is delegated but not a worker report", () => {
