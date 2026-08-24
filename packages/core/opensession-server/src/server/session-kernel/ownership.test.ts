@@ -618,12 +618,42 @@ describe("single session ownership", () => {
 		expect(create).toContain("isAgentSessionCancelled(bksId, startToken)");
 		const runSession = read("run-session.ts");
 		const cancelPrepared = runSession.indexOf('op: "prepare_cancel"');
-		const creationCancelled = runSession.indexOf(
-			"settleCreationOpeningForStop(sessionId)",
+		const settleGuarded = runSession.indexOf(
+			"try {\n    settleCreationOpeningForStop(sessionId);",
 			cancelPrepared,
 		);
+		const bookkeeping = runSession.indexOf("} finally {", settleGuarded);
 		expect(cancelPrepared).toBeGreaterThan(0);
-		expect(creationCancelled).toBeGreaterThan(cancelPrepared);
+		expect(settleGuarded).toBeGreaterThan(cancelPrepared);
+		expect(bookkeeping).toBeGreaterThan(settleGuarded);
+		// A racing opening settlement must never undo the committed durable
+		// cancel or skip queue persistence/broadcast — but genuine invariant
+		// failures still propagate after the bookkeeping ran.
+		const bookkeptInFinally = runSession.indexOf(
+			"stoppedSessions.add(sessionId)",
+			bookkeeping,
+		);
+		expect(bookkeptInFinally).toBeGreaterThan(bookkeeping);
+		// A retained cancel receipt fences only the exact run it cancelled:
+		// the receipt records the admitted physical token, deterministically
+		// derived from the effect payload's logical run id and generation.
+		expect(create).toContain(
+			"runnerOpeningHostId(item.payload.runId, item.payload.runGeneration)",
+		);
+		expect(create).toContain(
+			"cancel.runGeneration === item.payload.runGeneration",
+		);
+		// Losing actor admission releases the process reservation it just took.
+		const admissionLoss = create.indexOf(
+			'"Opening turn lost actor admission before preparation"',
+		);
+		const unmarkBeforeThrow = create.lastIndexOf(
+			"unmarkSessionStarting(bksId, startToken);",
+			admissionLoss,
+		);
+		expect(admissionLoss).toBeGreaterThan(0);
+		expect(unmarkBeforeThrow).toBeGreaterThan(0);
+		expect(unmarkBeforeThrow).toBeLessThan(admissionLoss);
 		for (const backend of [
 			"host-client.ts",
 			"runner-session.ts",

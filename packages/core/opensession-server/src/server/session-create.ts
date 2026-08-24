@@ -674,7 +674,19 @@ async function restorePlannedOpening(sessionId: string): Promise<{
 export function settleStoppedCreationOpening(item: CreationOpeningEffectItem): boolean {
 	const kernel = sessionKernel(item.sessionId);
 	const turn = sessionTurn({ op: "snapshot", sessionId: item.sessionId });
-	if (kernel.runState().state !== "stopped" && !turn.cancel) return false;
+	// Exact cancel identity, matching openingTurnWasCancelled(): a retained
+	// receipt fences only the exact run it cancelled. The receipt records the
+	// admitted physical token derived from the effect payload, so recompute it
+	// here. `stopped` alone still fences because creation is single-shot —
+	// while it is opening_dispatched the opening turn is the only run Stop
+	// could have targeted.
+	const cancel = turn.cancel;
+	const exactCancel =
+		cancel != null &&
+		cancel.runId ===
+			runnerOpeningHostId(item.payload.runId, item.payload.runGeneration) &&
+		cancel.runGeneration === item.payload.runGeneration;
+	if (kernel.runState().state !== "stopped" && !exactCancel) return false;
 	settleCreationCancelled(
 		item.sessionId,
 		item.payload.creationIdentity,
@@ -1001,8 +1013,12 @@ export async function openCreatedSession(
       throw new Error("Opening turn is already owned by another preparation");
     }
 		const admittedRun = sessionKernel(bksId).runState();
-		if (admittedRun.currentRunId !== startToken)
+		if (admittedRun.currentRunId !== startToken) {
+			// Release the process reservation before failing: this throw lands
+			// outside the inner try/finally that would otherwise unmark it.
+			unmarkSessionStarting(bksId, startToken);
 			throw new Error("Opening turn lost actor admission before preparation");
+		}
 		startGeneration = admittedRun.generation;
 		const pendingAttach = spec.attachRepos?.repos.length
 			? spec.attachRepos
