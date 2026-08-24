@@ -582,6 +582,7 @@ export function WorkspaceSummaryBody({
 		) ?? null;
 	const [prompted, setPrompted] = useState(false);
 	const [changesOpen, setChangesOpen] = useState(false);
+	const [commitsOpen, setCommitsOpen] = useState(false);
 	const [selectedReview, setSelectedReview] = useState(reviewRequest ?? null);
 	const [reviewError, setReviewError] = useState<string | null>(null);
 	const [reviewBusy, setReviewBusy] = useState(false);
@@ -858,37 +859,32 @@ export function WorkspaceSummaryBody({
 
 	/** A long session commits dozens of times, and the card would spend its whole
 	 *  height listing them. Past a handful the count IS the fact — "16 commits" —
-	 *  and the titles move to hover, where they cost nothing until asked for. */
+	 *  so the list starts closed behind it. The chevron only appears under the
+	 *  cursor (and while open), so a card at rest still reads as one quiet row. */
 	function committedSummaryRow() {
 		const files = commits.reduce((sum, c) => sum + c.filesChanged, 0);
 		return (
-			<Tooltip
-				side="left"
-				align="start"
-				multiline
-				label={
-					<span className="flex flex-col gap-1">
-						{commits.map((commit) => (
-							<span key={commit.sha} className="flex min-w-0 gap-2">
-								<span className="min-w-0 flex-1 truncate">{commit.title}</span>
-								<span className="shrink-0 opacity-60 tabular-nums">
-									{commit.filesChanged}
-								</span>
-							</span>
-						))}
-					</span>
-				}
+			<button
+				className={WS_SUMMARY_ROW}
+				onClick={() => setCommitsOpen((open) => !open)}
+				aria-expanded={commitsOpen}
 			>
-				<div className={cn(WS_SUMMARY_ROW, "cursor-default")}>
-					<span className={WS_SUMMARY_RAIL}>
-						<IconGitCommit size={20} className={WS_SUMMARY_ICON} />
-					</span>
-					<span className={WS_SUMMARY_LABEL}>{commits.length} commits</span>
-					<span className={cn(WS_SUMMARY_STATE, "text-dim tabular-nums")}>
-						{files} file{files === 1 ? "" : "s"}
-					</span>
-				</div>
-			</Tooltip>
+				<span className={WS_SUMMARY_RAIL}>
+					<IconGitCommit size={20} className={WS_SUMMARY_ICON} />
+				</span>
+				<span className={WS_SUMMARY_LABEL}>{commits.length} commits</span>
+				<span className={cn(WS_SUMMARY_STATE, "text-dim tabular-nums")}>
+					{files} file{files === 1 ? "" : "s"}
+				</span>
+				<IconChevronDown
+					size={14}
+					className={cn(
+						"shrink-0 text-faint transition-[transform,opacity] motion-reduce:transition-none",
+						"opacity-0 group-hover/ws:opacity-100 group-focus-visible/ws:opacity-100",
+						commitsOpen && "rotate-180 opacity-100",
+					)}
+				/>
+			</button>
 		);
 	}
 
@@ -1190,9 +1186,14 @@ export function WorkspaceSummaryBody({
 						diffChangeRow(
 							`${changedFiles} file${changedFiles === 1 ? "" : "s"} committed`,
 						)}
-					{commits.length > COMMIT_ROW_LIMIT
-						? committedSummaryRow()
-						: commits.map(committedRow)}
+					{commits.length > COMMIT_ROW_LIMIT ? (
+						<>
+							{committedSummaryRow()}
+							{commitsOpen && commits.map(committedRow)}
+						</>
+					) : (
+						commits.map(committedRow)
+					)}
 				</div>
 			)}
 
