@@ -1196,6 +1196,11 @@ function makeDockerSandbox(
       const mark = (step: string) =>
         console.log(`[sandbox] launch ${spec.hostId.slice(0, 11)}: ${step} (+${Date.now() - t0}ms)`);
       try {
+        // Construct (and register) the control BEFORE dispatch so exact-token
+        // Stop reaches the launching host: cancelAgentRunTokenAndWait sees
+        // hostRunBusy(token) during the launch await, and cancelHost's stop
+        // backstop plus the cancelled startup marker fence the dispatch race.
+        handle = new HostHandle(dir, spec, callbacks, launcher);
         await launcher.launch(spec.hostId, dir, () => {
           record.launchPhase = "launching";
           journalSet(record);
@@ -1203,13 +1208,20 @@ function makeDockerSandbox(
         record.launchPhase = "started";
         journalSet(record);
         mark("host exec dispatched");
-        handle = new HostHandle(dir, spec, callbacks, launcher);
+        if (handle.cancelled)
+          throw new HostLaunchNotDispatchedError(
+            `${spec.hostId} was cancelled while launching`,
+          );
         await handle.connectWithWait(30_000);
         mark("host attached");
       } catch (error) {
         const definitelyNotDispatched =
           record.launchPhase === "prepared" ||
-          error instanceof HostLaunchNotDispatchedError;
+          error instanceof HostLaunchNotDispatchedError ||
+          // A stop backstop that proved absence during the launch/connect
+          // await already finished this handle: retire it like a
+          // never-dispatched launch instead of reconciling an ended owner.
+          handle?.ended === true;
         if (definitelyNotDispatched) {
           journalClearIfLineage(record);
           handle?.abandon();

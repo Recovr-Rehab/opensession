@@ -104,6 +104,7 @@ import { writeJsonAtomic } from "../../shared/atomic-write";
 import { createWorkloadIdentityEnv, type WorkloadIdentityContext } from "../../workload-identity";
 import {
   HostHandle,
+  HostLaunchNotDispatchedError,
   reconcileUncertainHostEvents,
   type HandleCallbacks,
   type HostLauncher,
@@ -2156,17 +2157,35 @@ export function makeRemoteSandbox(parts: RemoteSandboxParts): Sandbox {
         mark("spec written");
         // A crash after journal admission must recover from the full spec.
         journalSet(record);
+        // Construct (and register) the control BEFORE dispatch so exact-token
+        // Stop reaches the launching host: cancelAgentRunTokenAndWait sees
+        // hostRunBusy(token) during the launch await, and cancelHost's stop
+        // backstop plus the cancelled startup marker fence the dispatch race.
+        handle = new HostHandle(dir, spec, callbacks, launcher);
         await launcher.launch(spec.hostId, dir, () => {
           record.launchPhase = "launching";
           journalSet(record);
         });
         record.launchPhase = "started";
         journalSet(record);
-        handle = new HostHandle(dir, spec, callbacks, launcher);
+        if (handle.cancelled)
+          throw new HostLaunchNotDispatchedError(
+            `${spec.hostId} was cancelled while launching`,
+          );
         await handle.connectWithWait(45_000);
         mark("host attached");
       } catch (error) {
-        if (record.launchPhase === "prepared") {
+        // A cancelled launch is provably absent (startup marker or stop
+        // backstop), exactly like a never-dispatched one: retire it instead
+        // of handing an ended handle to uncertain-launch reconciliation.
+        if (
+          record.launchPhase === "prepared" ||
+          error instanceof HostLaunchNotDispatchedError ||
+          // A stop backstop that proved absence during the launch/connect
+          // await already finished this handle: retire it like a
+          // never-dispatched launch instead of reconciling an ended owner.
+          handle?.ended === true
+        ) {
           journalClearIfLineage(record);
           handle?.abandon();
           unregisterRunToken(spec.rpcToken);
