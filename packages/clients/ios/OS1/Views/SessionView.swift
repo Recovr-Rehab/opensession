@@ -1171,7 +1171,7 @@ struct SessionView: View {
 
     private var sessionIdentityWidth: CGFloat {
         let surfaceWidth = viewportWidth > 0 ? viewportWidth : 390
-        return min(360, max(128, surfaceWidth - 120))
+        return min(360, max(128, surfaceWidth - 128))
     }
     #endif
 
