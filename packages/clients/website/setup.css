@@ -1070,18 +1070,23 @@ a.setup-download-card:hover {
 }
 
 .setup-download-action {
-	padding: 7px 15px;
-	border-radius: 999px;
-	background: var(--accent-blue);
-	color: #fff;
-	font-size: 12px;
+	display: inline-flex;
+	height: 36px;
+	align-items: center;
+	justify-content: center;
+	padding: 0 18px;
+	border-radius: calc(11px * var(--rf));
+	corner-shape: var(--cs);
+	background: var(--ink);
+	color: var(--page);
+	font-size: 13px;
 	font-weight: 600;
 	white-space: nowrap;
 	transition: filter 160ms ease;
 }
 
 .setup-download-card:hover .setup-download-action {
-	filter: brightness(1.08);
+	filter: brightness(1.12);
 }
 
 .setup-download-card[aria-disabled="true"] .setup-download-action {
