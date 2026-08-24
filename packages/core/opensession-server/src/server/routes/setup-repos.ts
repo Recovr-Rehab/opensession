@@ -326,10 +326,12 @@ async function configureGithubCredentialHelper(checkoutPath: string): Promise<vo
  * non-git directory, or a checkout of a DIFFERENT repo — still throws, since
  * adopting it would silently register the wrong code.
  */
+type InspectedRepo = Awaited<ReturnType<typeof inspectRepo>>;
+
 export async function adoptExistingCheckout(
   dest: string,
-  matches: (inspected: Awaited<ReturnType<typeof inspectRepo>>) => boolean,
-): Promise<Awaited<ReturnType<typeof inspectRepo>> | null> {
+  matches: (inspected: InspectedRepo) => boolean,
+): Promise<InspectedRepo | null> {
   if (!existsSync(dest)) return null;
   const inspected = await inspectRepo(dest).catch(() => null);
   if (!inspected || !matches(inspected)) {
@@ -407,6 +409,17 @@ export function validCsRepoId(value: unknown): value is string {
   return typeof value === "string" && CS_REPO_ID_RE.test(value);
 }
 
+export function matchesCodeStorageCheckout(
+  inspected: InspectedRepo,
+  org: string,
+  repoId: string,
+): boolean {
+  return (
+    inspected.cs?.org.toLowerCase() === org.toLowerCase() &&
+    inspected.cs.repoId.toLowerCase() === repoId.toLowerCase()
+  );
+}
+
 async function registerCodestorageRepo(input: {
   repoId: string;
   id?: string;
@@ -428,7 +441,7 @@ async function registerCodestorageRepo(input: {
   const dest = `${root}/${id}`;
   const adopted = await adoptExistingCheckout(
     dest,
-    (i) => (i.cs?.repoId || "").toLowerCase() === csRepo.toLowerCase(),
+    (i) => matchesCodeStorageCheckout(i, cfg.org, csRepo),
   );
   mkdirSync(root, { recursive: true });
   try {

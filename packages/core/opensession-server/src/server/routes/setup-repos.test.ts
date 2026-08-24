@@ -6,6 +6,7 @@ import { join } from "path";
 import {
   adoptExistingCheckout,
   githubCredentialHelperCommand,
+  matchesCodeStorageCheckout,
   validGithubFullName,
 } from "./setup-repos";
 
@@ -96,6 +97,24 @@ describe("adoptExistingCheckout", () => {
     );
     expect(adopted?.ghRepo).toBe("acme/widget");
     expect(adopted?.defaultBranch).toBe("main");
+  });
+
+  test("only adopts a code.storage checkout from the configured organization", async () => {
+    const dest = await makeCheckout(
+      join(tmpRoot(), "widget"),
+      "https://old-org.code.storage/acme/widget.git",
+    );
+    const inspected = await adoptExistingCheckout(
+      dest,
+      (i) => matchesCodeStorageCheckout(i, "old-org", "acme/widget"),
+    );
+    expect(inspected?.cs).toEqual({ org: "old-org", repoId: "acme/widget" });
+    expect(
+      adoptExistingCheckout(
+        dest,
+        (i) => matchesCodeStorageCheckout(i, "new-org", "acme/widget"),
+      ),
+    ).rejects.toThrow(/Clone destination already exists/);
   });
 
   test("refuses a checkout of a different repo", async () => {
