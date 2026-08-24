@@ -169,7 +169,7 @@ test("sidebar Changes shares Review's code display options", () => {
 		"stickyFileHeaders={toolbarTarget === undefined}",
 	);
 	expect(diffPanelSource).toContain("--review-file-header-top");
-	expect(commentableDiffSource).toContain("data-[stuck]:rounded-t-lg");
+	expect(commentableDiffSource).toContain("z-[6] rounded-t-lg bg-bg");
 	expect(viewerSource).toContain("--diff-panel-top");
 	expect(codeDisplaySource).toContain('label="Wrap lines"');
 	expect(codeDisplaySource).toContain('value="split"');
