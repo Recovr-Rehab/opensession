@@ -580,11 +580,17 @@ export function WorkspaceSummaryBody({
 	const deletions = pr ? pr.deletions : (diff?.deletions ?? 0);
 	const changedFiles = pr ? pr.changedFiles : (diff?.files ?? 0);
 	const dirty = git?.uncommittedFiles ?? 0;
+	// A shared checkout can have different local and remote commit hashes after
+	// a cherry-pick even when their files are identical. Once provenance names
+	// the session's commits, that branch diff is a duplicate rather than another
+	// state to show. Keep a real PR or feature-branch diff unchanged.
+	const showDiffChanges =
+		changedFiles > 0 && !(git?.sharedCheckout && commits.length > 0);
 	// A PR diff is committed by definition. Without a PR, an ahead branch with
 	// no dirty files is also wholly committed. Mixed work stays labelled
 	// "Changes" rather than pretending its line totals belong to one state.
 	const diffIsCommitted =
-		changedFiles > 0 && Boolean(pr || ((git?.ahead ?? 0) > 0 && dirty === 0));
+		showDiffChanges && Boolean(pr || ((git?.ahead ?? 0) > 0 && dirty === 0));
 
 	/** Route somewhere else and get out of the way. A card that stayed open
 	 *  over the thing it just opened would have to be dismissed by hand. */
@@ -1135,7 +1141,7 @@ export function WorkspaceSummaryBody({
 				</div>
 			)}
 
-			{changedFiles > 0 && !diffIsCommitted && (
+			{showDiffChanges && !diffIsCommitted && (
 				<div className={groupClass}>
 					<div className={WS_SUMMARY_SECTION}>Changes</div>
 					{diffChangeRow(
