@@ -55,7 +55,7 @@
 	--ink-rgb: 0, 0, 0;
 	/* Surfaces that are not the page or a card: the demo window, the modal, the
 	   email field, and the two states the form can end in. */
-	--stage-bg: #cfcdc8;
+	--stage-bg: transparent;
 	--window: #f6f6f4;
 	--window-shadow: rgba(28, 34, 40, 0.24);
 	--surface: #fff;
@@ -311,17 +311,22 @@ summary:focus-visible {
 	height: 100%;
 }
 
-/* Silver Silk stays neutral against the marbled field while adding the gentle
-   movement the static wash was missing. The gradient is its first-paint and
-   reduced-motion fallback. */
+/* The marble now remains the stage's ground. Silver Silk is only a faint,
+   softened wash over it, so its movement feels embedded in the field instead
+   of replacing it. The translucent wash is also the reduced-motion fallback. */
 .gradient-fallback {
-	background:
-		radial-gradient(circle at 28% 14%, #f2f3f5 0, transparent 44%),
-		linear-gradient(150deg, #e6e7ea 0%, #d8dade 54%, #c8cad0 100%);
+	background: linear-gradient(
+		150deg,
+		rgba(242, 243, 245, 0.12),
+		rgba(200, 202, 208, 0.08)
+	);
 }
 
 .hero-video {
 	object-fit: cover;
+	opacity: 0.1;
+	filter: blur(18px);
+	transform: scale(1.08);
 	pointer-events: none;
 }
 
@@ -786,7 +791,7 @@ summary:focus-visible {
 		--line: rgba(255, 255, 255, 0.07);
 		--muted: #939397;
 		--ink-rgb: 255, 255, 255;
-		--stage-bg: #14171d;
+		--stage-bg: transparent;
 		--window: #0d0d0f;
 		--window-shadow: rgba(0, 0, 0, 0.5);
 		--surface: #151517;
@@ -798,7 +803,9 @@ summary:focus-visible {
 	}
 
 	.gradient-fallback {
-		background:
-			radial-gradient(circle at 28% 14%, #2a2d33 0, transparent 44%),
-			linear-gradient(150deg, #23262b 0%, #1a1d22 54%, #121418 100%);
+		background: linear-gradient(
+			150deg,
+			rgba(42, 45, 51, 0.12),
+			rgba(18, 20, 24, 0.08)
+		);
 	}

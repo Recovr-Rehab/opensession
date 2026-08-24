@@ -117,8 +117,8 @@ function LandingPage() {
 			</aside>
 
 			<main className="feed">
-				{/* The field is the loud surface now, so the stage uses the neutral
-				    Silver Silk loop instead of another colourful background. */}
+				{/* Silver Silk is a faint, blurred wash here: the marbled field remains
+				    visible beneath it instead of being replaced by a second background. */}
 				<section className="stage">
 					<div className="gradient-fallback" aria-hidden="true" />
 					<TellaBackground />
