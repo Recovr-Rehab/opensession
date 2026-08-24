@@ -82,12 +82,13 @@ asked.
 
 ## Architecture
 
-- `src/main.js` — one visible sandboxed `BrowserWindow` for the active server
-  plus hidden sandboxed windows for inactive organizations (`contextIsolation`,
-  no Node in the renderer). In-window
-  navigation is limited to the active app origin; everything else opens in the
-  default browser. Window close hides to the dock; state persists across
-  launches.
+- `src/main.js` — sandboxed `BrowserWindow`s for the active server plus hidden
+  sandboxed windows for inactive organizations (`contextIsolation`, no Node in
+  the renderer). Use **File → New Window** or ⌘N to keep different workspaces
+  open side by side. In-window navigation is limited to the active app origin;
+  everything else opens in the default browser. Additional windows close
+  normally; closing the last one hides it to the Dock so its route and drafts
+  stay intact. Window state persists across launches.
 - `src/preload.js`: exposes `window.os1` (`desktop`, `setBadge`, `clearBadge`,
   `updates`, `dictation`) for the frontend to feature-detect and mirror its app
   badge to the dock, plus `server` for the two shell pages below. The main
