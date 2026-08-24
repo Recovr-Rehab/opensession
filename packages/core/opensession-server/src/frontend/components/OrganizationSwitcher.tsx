@@ -209,10 +209,10 @@ export function OrganizationSwitcher({
 					)}
 				</Menu.Item>
 				<Menu.Item
-					className={`${itemClass} text-purple`}
+					className={`${itemClass} text-accent`}
 					onClick={() => setInviteOpen(true)}
 				>
-					<IconPlus size={19} className="text-purple" />
+					<IconPlus size={19} className="text-accent" />
 					<span className="min-w-0 flex-1 truncate">Invite member</span>
 				</Menu.Item>
 				<Menu.Separator />
@@ -256,10 +256,10 @@ export function OrganizationSwitcher({
 					</Menu.RadioGroup>
 					{bridge?.inlineAdd && bridge.add && (
 						<Menu.Item
-							className={`${itemClass} text-blue`}
+							className={`${itemClass} text-accent`}
 							onClick={openAddOrganization}
 						>
-							<IconPlus size={19} className="text-blue" />
+							<IconPlus size={19} className="text-accent" />
 							<span className="min-w-0 flex-1 truncate">Add organization</span>
 						</Menu.Item>
 					)}
