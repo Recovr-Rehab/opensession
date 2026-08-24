@@ -3,6 +3,7 @@ import {
   BOX_RUNTIME_HOME_COMMAND,
   boxCommandPlaneUnavailable,
   boxComposeShell,
+  boxKnownHostsKey,
   boxMachineType,
   boxNativeFilePath,
   boxSnapshotSaveIsRecoverable,
@@ -61,6 +62,13 @@ describe("Box SSH control lane", () => {
       port: 2200,
     });
     expect(parseBoxSshEndpoint("2001:db8::2")).toBeNull();
+  });
+});
+
+describe("Box SSH host identity", () => {
+  test("scopes a resumed VM host-key rotation to the exact provider endpoint", () => {
+    expect(boxKnownHostsKey({ host: "5.135.138.52", port: 19042 })).toBe("[5.135.138.52]:19042");
+    expect(boxKnownHostsKey({ host: "2001:db8::1", port: 22 })).toBe("[2001:db8::1]:22");
   });
 });
 
