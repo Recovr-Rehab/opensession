@@ -626,7 +626,20 @@ async function restorePlannedOpening(sessionId: string): Promise<{
 			needsWorktree: !!materializeWorktree,
 		},
 		io: {
-			announce: () => {},
+			// Recovery has no creator socket, so the announce goes to the session
+			// room: any client already watching (or the sessions poll within 5s)
+			// learns the session exists even while the opening effect is still
+			// queued behind other outbox work. A no-op here left restart-recovered
+			// creates invisible until the slow opening turn finished.
+			announce: (info) => {
+				broadcastToSession(sessionId, {
+					type: "session_created",
+					sessionId,
+					id: info.id,
+					...(info.workspaceId ? { workspaceId: info.workspaceId } : {}),
+				});
+				broadcastToSession(sessionId, { type: "stream_start", sessionId });
+			},
 			emit: (message) =>
 				broadcastToSession(sessionId, { ...message, sessionId }),
 			fail: (message) =>
