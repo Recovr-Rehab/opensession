@@ -487,6 +487,23 @@ describe("claimPrewarmOrWait (adopt a mid-bootstrap prewarm)", () => {
     release();
   });
 
+  test.skipIf(killSwitch)("waits for an old project standby instead of racing a cold restore", async () => {
+    let release!: () => void;
+    const gate = new Promise<void>((resolve) => (release = resolve));
+    const fake = makeFakeAdapter({ gate });
+    fake.adapter.park = async () => {};
+    await requestPrewarm("daytona", "tella-fusion", undefined, { standby: true });
+    const entry = readyEntry()!;
+    entry.createdAt = new Date(Date.now() - 15 * 60_000).toISOString();
+    const waiting = claimPrewarmOrWait("daytona", "tella-fusion", "bks-standby");
+    let settled = false;
+    void waiting.then(() => (settled = true));
+    await new Promise((resolve) => setTimeout(resolve, 30));
+    expect(settled).toBe(false);
+    release();
+    expect((await waiting)?.sandboxId).toBe(fake.created[0]);
+  });
+
   test.skipIf(killSwitch)("ready entry claims without waiting", async () => {
     const fake = makeFakeAdapter();
     await requestPrewarm("daytona", "tella-fusion");
