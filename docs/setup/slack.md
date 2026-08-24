@@ -4,6 +4,24 @@ The Slack agent (`packages/core/opensession-server/src/agents/slack/`) is the ma
 @-mentions become agent runs, worktree channels drive coding sessions, and
 watched channels fire automations.
 
+## Creating the app (manifest)
+
+Don't tick seventeen scopes by hand. **Settings → Setup → Slack** generates an
+app manifest from this instance's own configuration and opens Slack's
+"Create new app → From a manifest" flow with it pre-loaded
+(`src/frontend/lib/slack-manifest.ts`). The manifest carries the bot scopes,
+the bot event subscriptions, interactivity, and — for the HTTP transport — the
+two request URLs derived from the instance's webhook base.
+
+Pick the transport in that dialog before creating the app: **Socket Mode**
+emits `socket_mode_enabled: true` and no request URLs, **HTTP** emits
+both `/slack/events` and `/slack/actions`. The JSON is also copyable, for
+pasting into an existing app under **App Manifest**.
+
+A manifest cannot carry credentials. After creating and installing the app you
+still paste the bot token (and either the app-level token or the signing
+secret) into the setup dialog by hand.
+
 ## Tokens and env vars
 
 Outbound Web API calls always use the **bot token** (`xoxb-…`). Event intake
