@@ -374,6 +374,7 @@ import {
 	SCROLL_ACTION_CLEARANCE,
 	SUGGESTIONS_CLEARANCE,
 	TRANSCRIPT_ICON_BUTTON,
+	TRANSCRIPT_LOADING_MORE,
 	TRANSCRIPT_PILL_BUTTON,
 	TRANSCRIPT_PILL_LOADING,
 	TRANSCRIPT_PILL_SPINNER,
@@ -2870,7 +2871,7 @@ export function SessionViewer({
 					setLoadingHistory(false);
 					setLoading(false);
 					// Indexed mode still owes the complete outline after this bounded
-					// tail. Keep the quiet footer spinner until that frame arrives.
+					// tail. Keep the quiet anchored spinner until that frame arrives.
 					if (!v2) setLoadingMoreTranscript(false);
 					// A whole-history walk ends here when the server answers with the
 					// whole transcript — the legacy path's only way to serve a backlog,
@@ -7433,16 +7434,6 @@ export function SessionViewer({
 								</InlineAlert>
 							)}
 
-							{loadingMoreTranscript && (
-								<div
-									role="status"
-									aria-label="Loading more messages"
-									className="mx-auto flex max-w-[var(--session-col)] justify-center py-3 text-faint"
-								>
-									<Spinner />
-								</div>
-							)}
-
 							{isBusy && !settingUpWorkspace && (
 								<BusyInline
 									since={busySince}
@@ -7502,6 +7493,21 @@ export function SessionViewer({
                 reply streams into the space below; sized by the scroll hook. */}
 							<div ref={spacerRef} className={TURN_SPACER} aria-hidden="true" />
 						</div>
+
+							{loadingMoreTranscript && (
+								<div
+									role="status"
+									aria-label="Loading more messages"
+									className={cn(
+										TRANSCRIPT_LOADING_MORE,
+										summaryStep > 0 && VIEWER_SUMMARY_STEP,
+									)}
+								>
+									<div className="mx-auto flex w-full max-w-[calc(var(--session-col)+40px)]">
+										<Spinner />
+									</div>
+								</div>
+							)}
 
 							{/* Sibling of the scroller, not a child: a press on the rail
 							    must never reach the transcript container, whose scroll hook

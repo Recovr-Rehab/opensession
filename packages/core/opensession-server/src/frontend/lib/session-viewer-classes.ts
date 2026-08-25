@@ -216,6 +216,16 @@ export const VIEWER_REVIEW_MAIN =
 export const VIEWER_MESSAGES_REGION = "relative flex min-h-0 flex-1 flex-col";
 
 /**
+ * Background transcript hydration sits in the clear strip immediately above
+ * the composer instead of becoming the transcript's last row. Absolute
+ * placement keeps both the scroll height and the reader's position stable.
+ * The action-band clearance lifts it past any replies or navigation controls;
+ * its child mirrors the composer's width at the call site.
+ */
+export const TRANSCRIPT_LOADING_MORE =
+	"pointer-events-none absolute inset-x-0 bottom-[calc(20px+var(--suggestions-under,0px))] z-[5] px-5 text-faint phone:px-3";
+
+/**
  * The scroll container.
  *
  * Never a sideways-pannable session: anything internally wide (code, tables)
