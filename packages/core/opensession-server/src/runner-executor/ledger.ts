@@ -1,6 +1,7 @@
 import type {
   ExecutorOperationOutcome,
   ExecutorReceipt,
+  ExecutorStreamEvent,
 } from "@tellahq/opensession-protocol/executor";
 
 export interface LedgerRecord {
@@ -8,6 +9,7 @@ export interface LedgerRecord {
   idempotencyKey?: string;
   receipt: ExecutorReceipt;
   outcome?: ExecutorOperationOutcome;
+  events?: ExecutorStreamEvent[];
   error?: { code: string; message: string };
 }
 

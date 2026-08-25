@@ -206,7 +206,7 @@ export type ExecutorErrorCode =
 export type ExecutorServerMessage =
   | (ExecutorMessageBase & ExecutorConnectionIdentity & { t: "hello"; accepted: true })
   | (ExecutorMessageBase & { t: "receipt"; receipt: ExecutorReceipt })
-  | (ExecutorMessageBase & { t: "receipt_status"; receipt: ExecutorReceipt; outcome?: ExecutorOperationOutcome })
+  | (ExecutorMessageBase & { t: "receipt_status"; receipt: ExecutorReceipt; outcome?: ExecutorOperationOutcome; eventsComplete?: true })
   | (ExecutorMessageBase & { t: "event"; event: ExecutorStreamEvent })
   | (ExecutorMessageBase & { t: "error"; code: ExecutorErrorCode; message: string; receipt?: ExecutorReceipt });
 

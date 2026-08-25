@@ -207,19 +207,16 @@ export class RemoteExecutorConnection implements Executor {
     }
     if (value.t === "event") {
       pending.events.push(value.event);
-      if (pending.outcome && "eof" in value.event && value.event.eof)
-        this.#finish(value.requestId, pending);
       return;
     }
     if (value.t === "receipt_status" && value.outcome) {
       pending.outcome = value.outcome;
       const streamId =
         "streamId" in value.outcome ? value.outcome.streamId : undefined;
-      if (value.outcome.kind === "fs.read" && streamId) {
+      if (streamId && !value.eventsComplete)
         await this.#credit(value.requestId, streamId);
-      } else {
+      if (value.eventsComplete || !streamId)
         this.#finish(value.requestId, pending);
-      }
     }
   }
 
@@ -311,7 +308,7 @@ function isServerMessage(
     );
   if (message.t === "receipt_status")
     return (
-      hasOnly(["receipt", "outcome"]) &&
+      hasOnly(["receipt", "outcome", "eventsComplete"]) &&
       !!message.receipt &&
       typeof message.receipt === "object"
     );

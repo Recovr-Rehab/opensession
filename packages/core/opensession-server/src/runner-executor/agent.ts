@@ -205,9 +205,11 @@ export class RunnerExecutorAgent {
           this.#options.now?.() ?? Date.now(),
         ).toISOString(),
       };
+      const events = cancelled ? [] : (result.events ?? []);
       await this.#options.ledger.update(receipt.receiptId, {
         receipt: completed,
         outcome: result.outcome,
+        ...(events.length ? { events } : {}),
       });
       await this.#send({
         t: "receipt_status",
@@ -215,9 +217,19 @@ export class RunnerExecutorAgent {
         requestId: message.requestId,
         receipt: completed,
         outcome: result.outcome,
+        ...(events.length ? {} : { eventsComplete: true as const }),
       });
-      if (!cancelled)
-        await this.#queueEvents(message.requestId, result.events ?? []);
+      if (events.length) {
+        await this.#queueEvents(message.requestId, events);
+        await this.#send({
+          t: "receipt_status",
+          version: EXECUTOR_PROTOCOL_VERSION,
+          requestId: message.requestId,
+          receipt: completed,
+          outcome: result.outcome,
+          eventsComplete: true,
+        });
+      }
     } catch (cause) {
       const failure =
         cause instanceof ExecutorFailure
@@ -348,7 +360,19 @@ export class RunnerExecutorAgent {
       requestId,
       receipt: record.receipt,
       ...(record.outcome ? { outcome: record.outcome } : {}),
+      ...(record.events?.length ? {} : { eventsComplete: true as const }),
     });
+    if (record.events?.length) {
+      await this.#queueEvents(requestId, record.events);
+      await this.#send({
+        t: "receipt_status",
+        version: EXECUTOR_PROTOCOL_VERSION,
+        requestId,
+        receipt: record.receipt,
+        ...(record.outcome ? { outcome: record.outcome } : {}),
+        eventsComplete: true,
+      });
+    }
   }
 
   async #error(
