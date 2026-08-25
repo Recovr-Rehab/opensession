@@ -430,13 +430,11 @@ summary:focus-visible {
 	width: 100%;
 	min-width: 0;
 	max-width: 100%;
-	overflow: hidden;
 	color: #ededed;
 	font-family: ui-monospace, "SFMono-Regular", Consolas, monospace;
 	font-size: 11.5px;
 	line-height: 1.4;
-	text-overflow: ellipsis;
-	white-space: nowrap;
+	overflow-wrap: anywhere;
 }
 
 .landing-install-command button {
@@ -1003,8 +1001,17 @@ summary:focus-visible {
 		font-size: 11px;
 	}
 
+	.landing-install-command {
+		grid-template-columns: minmax(0, 1fr);
+	}
+
 	.landing-install-command code {
 		font-size: 11px;
+	}
+
+	.landing-install-command button {
+		height: 44px;
+		justify-self: end;
 	}
 
 	.pwa-guide {

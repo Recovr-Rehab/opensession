@@ -29,8 +29,11 @@ const markUrl = assetUrl(markAsset);
 const nativeMarkUrl = assetUrl(nativeMarkAsset);
 const macDownloadUrl =
 	"https://github.com/tellahq/opensession/releases/download/v0.4.22/OpenSession-0.4.22-arm64.dmg";
-const installCommand =
-	"curl -fsSL https://raw.githubusercontent.com/tellahq/opensession/main/install.sh | bash";
+const installCommandLines = [
+	"curl -fsSL https://raw.githubusercontent.com",
+	"/tellahq/opensession/main/install.sh | bash",
+] as const;
+const installCommand = installCommandLines.join("");
 
 function Mark() {
 	return (
@@ -233,7 +236,11 @@ function InstallCommand() {
 
 	return (
 		<div className="landing-install-command">
-			<code>{installCommand}</code>
+			<code>
+				{installCommandLines[0]}
+				<wbr />
+				{installCommandLines[1]}
+			</code>
 			<button
 				type="button"
 				onClick={async () => {
