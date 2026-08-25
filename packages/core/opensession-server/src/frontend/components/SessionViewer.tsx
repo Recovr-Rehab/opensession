@@ -183,7 +183,10 @@ import {
 	onHidesChanged,
 	unhideForSession,
 } from "../lib/hides";
-import { reconcilePending } from "../lib/pending-reconcile";
+import {
+	markPendingStarted,
+	reconcilePending,
+} from "../lib/pending-reconcile";
 import {
 	promptOutbox,
 	type PromptOutboxItem,
@@ -1373,12 +1376,30 @@ export function SessionViewer({
 	);
 	useEffect(() => {
 		const stopObserving = promptOutbox.observeDelivery((item, result) => {
-			if (item.sessionId !== session.id || result.status !== "handled") return;
+			if (item.sessionId !== session.id) return;
+			const pendingId = `outbox-${item.clientId}`;
+			if (result.status === "started") {
+				// Placement guessed from local running state can lose a turn-end race.
+				// The server started a turn, so this is an optimistic transcript bubble,
+				// not a queued row. Restore it if a transient admission-queue echo had
+				// already claimed it before the REST response arrived.
+				setPending((current) =>
+					markPendingStarted(current, {
+						id: pendingId,
+						content: item.content,
+						user: item.user || getCurrentUser(),
+						sentAt: item.createdAt,
+						...(item.images?.length ? { images: item.images } : {}),
+					}),
+				);
+				setIsRunningLive(true);
+				return;
+			}
+			if (result.status !== "handled") return;
 			// Slash commands are consumed by Open Session, so no user transcript
 			// entry or queue echo will ever reconcile their optimistic row. The old
 			// WebSocket composer received an inline notice; preserve that feedback
 			// now that sends travel through the durable REST outbox.
-			const pendingId = `outbox-${item.clientId}`;
 			setPending((current) =>
 				current.filter((entry) => entry.id !== pendingId),
 			);

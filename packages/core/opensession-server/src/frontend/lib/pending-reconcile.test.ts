@@ -1,5 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import {
+	markPendingStarted,
+	type OptimisticPendingPrompt,
 	PENDING_GIVE_UP_MS,
 	reconcilePending,
 } from "./pending-reconcile";
@@ -15,6 +17,30 @@ const entry = (content: string, at = SENT) => ({
 	type: "user",
 	content,
 	timestamp: new Date(at).toISOString(),
+});
+
+describe("markPendingStarted", () => {
+	const started: OptimisticPendingPrompt = {
+		id: "outbox-a",
+		content: "ship it",
+		user: "michiel",
+		sentAt: SENT,
+	};
+
+	test("moves a stale busy send from the queue back to the transcript", () => {
+		expect(
+			markPendingStarted([{ ...started, busyMode: "queue" as const }], started),
+		).toEqual([started]);
+	});
+
+	test("restores a bubble claimed by the transient admission queue", () => {
+		expect(markPendingStarted([], started)).toEqual([started]);
+	});
+
+	test("leaves an already-correct transcript bubble alone", () => {
+		const current = [started];
+		expect(markPendingStarted(current, started)).toBe(current);
+	});
 });
 
 describe("reconcilePending", () => {

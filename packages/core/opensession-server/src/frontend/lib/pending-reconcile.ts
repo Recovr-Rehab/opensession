@@ -22,6 +22,33 @@ export interface PendingPrompt {
 	sentAt: number;
 }
 
+export interface OptimisticPendingPrompt extends PendingPrompt {
+	images?: string[];
+	busyMode?: "queue" | "steer";
+}
+
+/**
+ * The composer places a new optimistic prompt from its last-known running
+ * state. The server can make the opposite decision in the send race: a run
+ * that looked busy may finish before intake, so the authoritative result is
+ * `started`. Move that prompt back to the transcript surface. If a transient
+ * queue echo already claimed and removed it, restore the bubble until its real
+ * transcript entry arrives.
+ */
+export function markPendingStarted<T extends OptimisticPendingPrompt>(
+	pending: T[],
+	started: T,
+): T[] {
+	const index = pending.findIndex((item) => item.id === started.id);
+	if (index < 0) return [...pending, started];
+	if (!pending[index].busyMode) return pending;
+	const next = pending.slice();
+	const transcriptBubble = { ...pending[index] };
+	delete transcriptBubble.busyMode;
+	next[index] = transcriptBubble;
+	return next;
+}
+
 export interface ReconcileResult {
 	/** Confirmed by the server. Safe to retire every optimistic record of it. */
 	landed: Set<string>;
