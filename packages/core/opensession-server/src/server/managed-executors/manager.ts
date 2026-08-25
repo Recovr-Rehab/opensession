@@ -127,13 +127,17 @@ export class ExecutorManager {
         transition,
       );
       try {
-        const started = await provider.start(resourceRef(transition));
+        const started = await provider.start(
+          resourceRef(current),
+          transition.instanceGeneration,
+        );
         let active = transition;
         if (started) {
           active = {
             ...transition,
             resourceId: started.resourceId,
             workspaceId: started.workspaceId,
+            resourceGeneration: transition.instanceGeneration,
             updatedAtMs: this.#now(),
           };
           await this.#store.compareAndSwap(
@@ -169,7 +173,7 @@ export class ExecutorManager {
       );
       try {
         await this.#revoke(transition);
-        await provider.stop(resourceRef(transition));
+        await provider.stop(resourceRef(current));
         const sleeping = settleTransition(transition, "sleeping", this.#now());
         await this.#store.compareAndSwap(
           transition.executorId,
@@ -231,13 +235,14 @@ export class ExecutorManager {
         await this.#revoke(transition);
         if (current.resourceId) {
           const oldProvider = this.#providers.get(current.provider);
-          await oldProvider.destroy(resourceRef(transition));
+          await oldProvider.destroy(resourceRef(current));
         }
         // Persist the replacement intent with no old provider resource before create.
         const replacementIntent: ExecutorRecord = {
           ...transition,
           resourceId: undefined,
           workspaceId: undefined,
+          resourceGeneration: undefined,
           updatedAtMs: this.#now(),
         };
         await this.#store.compareAndSwap(
@@ -275,7 +280,9 @@ export class ExecutorManager {
       if (
         !record ||
         record.provider !== providerId ||
-        record.resourceId !== resource.resourceId
+        record.resourceId !== resource.resourceId ||
+        record.sessionId !== resource.sessionId ||
+        record.resourceGeneration !== resource.generation
       ) {
         throw new UnknownExecutorResourceError(resource.resourceId);
       }
@@ -307,8 +314,8 @@ export class ExecutorManager {
       }
       try {
         await this.#revoke(transition);
-        if (transition.resourceId) {
-          await provider.destroy(resourceRef(transition));
+        if (current.resourceId) {
+          await provider.destroy(resourceRef(current));
         }
         await this.#store.delete(
           transition.executorId,
@@ -347,6 +354,7 @@ export class ExecutorManager {
       ...record,
       resourceId: created.resourceId,
       workspaceId: created.workspaceId,
+      resourceGeneration: record.instanceGeneration,
       updatedAtMs: this.#now(),
     };
     await this.#store.compareAndSwap(
@@ -421,12 +429,14 @@ export class ExecutorManager {
 }
 
 function resourceRef(record: ExecutorRecord): ExecutorResourceRef {
-  if (!record.resourceId) throw new Error("Executor has no provider resource");
+  if (!record.resourceId || !record.resourceGeneration) {
+    throw new Error("Executor has no provider resource identity");
+  }
   return {
     resourceId: record.resourceId,
     executorId: record.executorId,
     sessionId: record.sessionId,
-    generation: record.instanceGeneration,
+    generation: record.resourceGeneration,
   };
 }
 

@@ -19,6 +19,10 @@ class FakeProvider implements ExecutorProvider {
   readonly id: ExecutorProviderId;
   readonly events: string[];
   managed: ExecutorResourceRef[] = [];
+  starts: Array<{ resource: ExecutorResourceRef; nextGeneration: number }> = [];
+  stops: ExecutorResourceRef[] = [];
+  destroys: ExecutorResourceRef[] = [];
+  ensures: ExecutorResourceRef[] = [];
   createError?: Error;
   beforeCreate?: () => Promise<void> | void;
   beforeEnsure?: () => Promise<void> | void;
@@ -43,22 +47,31 @@ class FakeProvider implements ExecutorProvider {
     return { state: "awake" };
   }
 
-  async start(): Promise<CreatedExecutorResource | void> {
+  async start(
+    resource: ExecutorResourceRef,
+    nextGeneration: number,
+  ): Promise<CreatedExecutorResource | void> {
     this.events.push("start");
+    this.starts.push({ resource, nextGeneration });
     await this.beforeStart?.();
     return this.startReplacement;
   }
 
-  async stop(): Promise<void> {
+  async stop(resource: ExecutorResourceRef): Promise<void> {
     this.events.push("stop");
+    this.stops.push(resource);
   }
 
-  async destroy(): Promise<void> {
+  async destroy(resource: ExecutorResourceRef): Promise<void> {
     this.events.push("destroy");
+    this.destroys.push(resource);
   }
 
-  async ensureExecutor(): Promise<EnsuredExecutor> {
+  async ensureExecutor(
+    resource: ExecutorResourceRef,
+  ): Promise<EnsuredExecutor> {
     this.events.push("ensure");
+    this.ensures.push(resource);
     await this.beforeEnsure?.();
     return {
       executorId: "executor-1",
@@ -211,6 +224,46 @@ describe("ExecutorManager", () => {
     expect(events.filter((event) => event === "destroy")).toHaveLength(0);
   });
 
+  test("keeps persistent resource identity separate from lifecycle generations", async () => {
+    const provider = new FakeProvider();
+    const { manager } = setup({ provider });
+    const awake = await create(manager);
+    expect(awake).toMatchObject({
+      instanceGeneration: 1,
+      resourceGeneration: 1,
+    });
+
+    const sleeping = await manager.pause({
+      executorId: awake.executorId,
+      expectedGeneration: awake.instanceGeneration,
+    });
+    expect(sleeping).toMatchObject({
+      instanceGeneration: 2,
+      resourceGeneration: 1,
+    });
+    expect(provider.stops.at(-1)?.generation).toBe(1);
+
+    const rewoken = await manager.wake({
+      executorId: sleeping.executorId,
+      expectedGeneration: sleeping.instanceGeneration,
+    });
+    expect(rewoken).toMatchObject({
+      instanceGeneration: 3,
+      resourceGeneration: 1,
+    });
+    expect(provider.starts.at(-1)).toMatchObject({
+      resource: { generation: 1 },
+      nextGeneration: 3,
+    });
+    expect(provider.ensures.at(-1)?.generation).toBe(1);
+
+    await manager.destroy({
+      executorId: rewoken.executorId,
+      expectedGeneration: rewoken.instanceGeneration,
+    });
+    expect(provider.destroys.at(-1)?.generation).toBe(1);
+  });
+
   test("records a replacement resource when an ephemeral provider wakes", async () => {
     const provider = new FakeProvider("modal");
     const { manager } = setup({ provider });
@@ -231,6 +284,8 @@ describe("ExecutorManager", () => {
       resourceId: "resource-modal-replacement",
       workspaceId: "workspace-replacement",
       lifecycle: "awake",
+      instanceGeneration: 3,
+      resourceGeneration: 3,
     });
   });
 
@@ -259,6 +314,32 @@ describe("ExecutorManager", () => {
       expectedGeneration: sleeping.instanceGeneration,
     });
     expect(events).toEqual(["revoke", "destroy"]);
+  });
+
+  test("destroys the old resource identity before a cross-provider rebuild", async () => {
+    const box = new FakeProvider("box");
+    const { manager, registry } = setup({ provider: box });
+    const daytona = new FakeProvider("daytona");
+    registry.register(daytona);
+    const awake = await create(manager);
+
+    const rebuilt = await manager.rebuild({
+      executorId: awake.executorId,
+      expectedGeneration: awake.instanceGeneration,
+      provider: "daytona",
+    });
+
+    expect(box.destroys.at(-1)).toMatchObject({
+      resourceId: "resource-box",
+      generation: 1,
+    });
+    expect(rebuilt).toMatchObject({
+      provider: "daytona",
+      resourceId: "resource-daytona",
+      instanceGeneration: 2,
+      resourceGeneration: 2,
+      lifecycle: "awake",
+    });
   });
 
   test("blocks destructive rebuild without a durable checkpoint", async () => {

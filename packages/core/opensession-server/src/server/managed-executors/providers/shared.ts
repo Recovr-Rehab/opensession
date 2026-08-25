@@ -109,11 +109,23 @@ export function assertInstalledIdentity(
 }
 
 export function assertCreatedResource(
-  resource: Pick<ProviderResource, "id" | "workspaceId">,
+  provider: ExecutorProviderId,
+  resource: ProviderResource,
+  identity: Readonly<{
+    executorId: string;
+    sessionId: string;
+    generation: number;
+  }>,
 ): void {
   if (!resource.id.trim() || !resource.workspaceId.trim()) {
     throw new Error("provider returned an invalid Executor resource");
   }
+  assertResourceIdentity(provider, resource, {
+    resourceId: resource.id,
+    executorId: identity.executorId,
+    sessionId: identity.sessionId,
+    generation: identity.generation,
+  });
 }
 
 function assertIdentity(value: string, name: string): void {

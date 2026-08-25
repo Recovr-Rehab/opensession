@@ -15,6 +15,9 @@ export interface ExecutorRecord {
   provider: ExecutorProviderId;
   resourceId?: string;
   workspaceId?: string;
+  /** Generation written into the current provider resource's managed metadata. */
+  resourceGeneration?: number;
+  /** Monotonic control-plane revision and execution-authority fence. */
   instanceGeneration: number;
   lifecycle: ExecutorLifecycle;
   project: ExecutorProjectState;

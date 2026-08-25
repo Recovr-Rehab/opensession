@@ -122,23 +122,48 @@ export class ModalExecutorProvider implements ExecutorProvider {
     return { state: mapModalState(found) };
   }
 
-  start(resource: ExecutorResourceRef): Promise<CreatedExecutorResource> {
+  async start(
+    resource: ExecutorResourceRef,
+    nextGeneration: number,
+  ): Promise<CreatedExecutorResource> {
+    const found = await this.#client.get(resource.resourceId);
+    if (found) {
+      assertResourceIdentity(this.id, found, resource);
+      if (mapModalState(found) !== "missing") {
+        throw new Error(
+          `Modal resource ${resource.resourceId} is not terminated`,
+        );
+      }
+    }
     // A stopped Modal resource is terminated. Workspace portability is owned by
     // the manager's durable delta, never by a provider checkpoint.
-    return this.#createReplacement(resource);
+    return this.#createReplacement({
+      executorId: resource.executorId,
+      sessionId: resource.sessionId,
+      generation: nextGeneration,
+    });
   }
 
   async stop(resource: ExecutorResourceRef): Promise<void> {
+    const found = await this.#client.get(resource.resourceId);
+    if (!found) return;
+    assertResourceIdentity(this.id, found, resource);
     await this.#client.terminate(resource.resourceId);
   }
 
   async destroy(resource: ExecutorResourceRef): Promise<void> {
+    const found = await this.#client.get(resource.resourceId);
+    if (!found) return;
+    assertResourceIdentity(this.id, found, resource);
     await this.#client.terminate(resource.resourceId);
   }
 
-  async ensureExecutor(resource: ExecutorResourceRef): Promise<EnsuredExecutor> {
+  async ensureExecutor(
+    resource: ExecutorResourceRef,
+  ): Promise<EnsuredExecutor> {
     const found = await this.#client.get(resource.resourceId);
-    if (!found) throw new Error(`Modal resource ${resource.resourceId} is missing`);
+    if (!found)
+      throw new Error(`Modal resource ${resource.resourceId} is missing`);
     assertResourceIdentity(this.id, found, resource);
     return assertInstalledIdentity(
       await this.#installExecutor(found, resource),
@@ -161,7 +186,7 @@ export class ModalExecutorProvider implements ExecutorProvider {
       tags: executorMetadata(this.id, identity),
       lifetime: modalLifetimeMetadata(this.#now(), this.#lifetimePolicy),
     });
-    assertCreatedResource(resource);
+    assertCreatedResource(this.id, resource, identity);
     return { resourceId: resource.id, workspaceId: resource.workspaceId };
   }
 }

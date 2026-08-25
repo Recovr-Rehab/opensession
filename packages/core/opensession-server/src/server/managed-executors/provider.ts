@@ -36,7 +36,10 @@ export interface ExecutorProvider {
   inspect(resource: ExecutorResourceRef): Promise<ExecutorResourceInspection>;
   /** Persistent providers return void. Ephemeral providers may replace the
    * stopped resource and return its new durable identity. */
-  start(resource: ExecutorResourceRef): Promise<CreatedExecutorResource | void>;
+  start(
+    resource: ExecutorResourceRef,
+    nextGeneration: number,
+  ): Promise<CreatedExecutorResource | void>;
   stop(resource: ExecutorResourceRef): Promise<void>;
   destroy(resource: ExecutorResourceRef): Promise<void>;
   ensureExecutor(resource: ExecutorResourceRef): Promise<EnsuredExecutor>;

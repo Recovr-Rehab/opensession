@@ -63,7 +63,9 @@ export class DaytonaExecutorProvider implements ExecutorProvider {
       !Number.isSafeInteger(dependencies.autoStopIntervalMinutes) ||
       dependencies.autoStopIntervalMinutes < 1
     ) {
-      throw new TypeError("Daytona auto-stop interval must be a positive integer");
+      throw new TypeError(
+        "Daytona auto-stop interval must be a positive integer",
+      );
     }
     this.#client = dependencies.client;
     this.#installExecutor = dependencies.installExecutor;
@@ -77,7 +79,7 @@ export class DaytonaExecutorProvider implements ExecutorProvider {
       labels: executorMetadata(this.id, input),
       autoStopIntervalMinutes: this.#autoStopIntervalMinutes,
     });
-    assertCreatedResource(resource);
+    assertCreatedResource(this.id, resource, input);
     return { resourceId: resource.id, workspaceId: resource.workspaceId };
   }
 
@@ -90,18 +92,25 @@ export class DaytonaExecutorProvider implements ExecutorProvider {
   }
 
   async start(resource: ExecutorResourceRef): Promise<void> {
+    await this.#requireResource(resource);
     await this.#client.start(resource.resourceId);
   }
 
   async stop(resource: ExecutorResourceRef): Promise<void> {
+    await this.#requireResource(resource);
     await this.#client.stop(resource.resourceId);
   }
 
   async destroy(resource: ExecutorResourceRef): Promise<void> {
+    const found = await this.#client.get(resource.resourceId);
+    if (!found) return;
+    assertResourceIdentity(this.id, found, resource);
     await this.#client.delete(resource.resourceId);
   }
 
-  async ensureExecutor(resource: ExecutorResourceRef): Promise<EnsuredExecutor> {
+  async ensureExecutor(
+    resource: ExecutorResourceRef,
+  ): Promise<EnsuredExecutor> {
     const found = await this.#client.get(resource.resourceId);
     if (!found) {
       throw new Error(`Daytona resource ${resource.resourceId} is missing`);
@@ -119,5 +128,16 @@ export class DaytonaExecutorProvider implements ExecutorProvider {
       const ref = managedResourceRef(this.id, resource);
       return ref ? [ref] : [];
     });
+  }
+
+  async #requireResource(
+    resource: ExecutorResourceRef,
+  ): Promise<DaytonaResource> {
+    const found = await this.#client.get(resource.resourceId);
+    if (!found) {
+      throw new Error(`Daytona resource ${resource.resourceId} is missing`);
+    }
+    assertResourceIdentity(this.id, found, resource);
+    return found;
   }
 }

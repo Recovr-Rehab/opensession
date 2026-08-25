@@ -38,6 +38,7 @@ export interface BoxClient {
 export interface BoxPollOptions {
   now(): number;
   sleep(milliseconds: number): Promise<void>;
+  withTimeout<T>(operation: Promise<T>, timeoutMs: number): Promise<T>;
   timeoutMs: number;
   intervalMs: number;
 }
@@ -58,25 +59,40 @@ export function mapBoxState(
 }
 
 /** Polls a Box transition without owning a timer or clock. */
-export async function pollBoxResource(
+export function pollBoxResource(
+  client: Pick<BoxClient, "get">,
+  resourceId: string,
+  expected: "awake" | "sleeping",
+  options: BoxPollOptions,
+): Promise<BoxResource> {
+  assertPollOptions(options);
+  return options.withTimeout(
+    pollBoxResourceUntilSettled(client, resourceId, expected, options),
+    options.timeoutMs,
+  );
+}
+
+async function pollBoxResourceUntilSettled(
   client: Pick<BoxClient, "get">,
   resourceId: string,
   expected: "awake" | "sleeping",
   options: BoxPollOptions,
 ): Promise<BoxResource> {
   const deadline = options.now() + options.timeoutMs;
-  while (true) {
+  const maxAttempts = Math.ceil(options.timeoutMs / options.intervalMs) + 1;
+  for (let attempt = 0; attempt < maxAttempts; attempt++) {
     const resource = await client.get(resourceId);
     const state = mapBoxState(resource);
     if (state === expected && resource) return resource;
     if (state === "missing" || state === "unknown") {
       throw new Error(`Box transition entered ${state} state`);
     }
-    if (options.now() >= deadline) {
+    if (options.now() >= deadline || attempt === maxAttempts - 1) {
       throw new Error(`Box transition timed out waiting for ${expected}`);
     }
     await options.sleep(options.intervalMs);
   }
+  throw new Error(`Box transition timed out waiting for ${expected}`);
 }
 
 export class BoxExecutorProvider implements ExecutorProvider {
@@ -90,6 +106,7 @@ export class BoxExecutorProvider implements ExecutorProvider {
     installExecutor: InstallExecutor<BoxResource>;
     poll: BoxPollOptions;
   }) {
+    assertPollOptions(dependencies.poll);
     this.#client = dependencies.client;
     this.#installExecutor = dependencies.installExecutor;
     this.#poll = dependencies.poll;
@@ -102,7 +119,7 @@ export class BoxExecutorProvider implements ExecutorProvider {
       name: boxResourceName(input),
       labels: executorMetadata(this.id, input),
     });
-    assertCreatedResource(resource);
+    assertCreatedResource(this.id, resource, input);
     return { resourceId: resource.id, workspaceId: resource.workspaceId };
   }
 
@@ -115,26 +132,33 @@ export class BoxExecutorProvider implements ExecutorProvider {
   }
 
   async start(resource: ExecutorResourceRef): Promise<void> {
+    await this.#requireResource(resource);
     await this.#client.resume(resource.resourceId);
-    await pollBoxResource(
+    const started = await pollBoxResource(
       this.#client,
       resource.resourceId,
       "awake",
       this.#poll,
     );
+    assertResourceIdentity(this.id, started, resource);
   }
 
   async stop(resource: ExecutorResourceRef): Promise<void> {
+    await this.#requireResource(resource);
     await this.#client.archive(resource.resourceId);
-    await pollBoxResource(
+    const stopped = await pollBoxResource(
       this.#client,
       resource.resourceId,
       "sleeping",
       this.#poll,
     );
+    assertResourceIdentity(this.id, stopped, resource);
   }
 
   async destroy(resource: ExecutorResourceRef): Promise<void> {
+    const found = await this.#client.get(resource.resourceId);
+    if (!found) return;
+    assertResourceIdentity(this.id, found, resource);
     // Box has no hard delete. Archiving and removing the managed labels makes
     // the resource inert and prevents a later reconciliation from adopting it.
     await this.#client.archive(resource.resourceId, {
@@ -142,9 +166,12 @@ export class BoxExecutorProvider implements ExecutorProvider {
     });
   }
 
-  async ensureExecutor(resource: ExecutorResourceRef): Promise<EnsuredExecutor> {
+  async ensureExecutor(
+    resource: ExecutorResourceRef,
+  ): Promise<EnsuredExecutor> {
     const found = await this.#client.get(resource.resourceId);
-    if (!found) throw new Error(`Box resource ${resource.resourceId} is missing`);
+    if (!found)
+      throw new Error(`Box resource ${resource.resourceId} is missing`);
     assertResourceIdentity(this.id, found, resource);
     return assertInstalledIdentity(
       await this.#installExecutor(found, resource),
@@ -158,5 +185,24 @@ export class BoxExecutorProvider implements ExecutorProvider {
       const ref = managedResourceRef(this.id, resource);
       return ref ? [ref] : [];
     });
+  }
+
+  async #requireResource(resource: ExecutorResourceRef): Promise<BoxResource> {
+    const found = await this.#client.get(resource.resourceId);
+    if (!found)
+      throw new Error(`Box resource ${resource.resourceId} is missing`);
+    assertResourceIdentity(this.id, found, resource);
+    return found;
+  }
+}
+
+function assertPollOptions(options: BoxPollOptions): void {
+  if (
+    !Number.isSafeInteger(options.timeoutMs) ||
+    options.timeoutMs < 1 ||
+    !Number.isSafeInteger(options.intervalMs) ||
+    options.intervalMs < 1
+  ) {
+    throw new TypeError("Box polling intervals must be positive safe integers");
   }
 }
