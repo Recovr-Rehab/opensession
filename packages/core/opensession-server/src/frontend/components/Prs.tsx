@@ -4,6 +4,12 @@ import type { Workspace, UnifiedSession } from "../lib/types";
 import { fetchHomeStats, fetchRecentPrs, type HomeStats, type RecentPr } from "../lib/api";
 import { prStatusMark } from "../lib/pr-status";
 import {
+  expandPrRenderWindow,
+  INITIAL_PR_ROWS,
+  PR_ROWS_PAGE,
+  visiblePrRowLimit,
+} from "../lib/pr-render-window";
+import {
   buildWorktreeRows,
   compactAge,
   compactDiff,
@@ -244,6 +250,12 @@ export function Prs({
   const [personPrs, setPersonPrs] = useState<RecentPr[]>([]);
   const [stats, setStats] = useState<HomeStats | null>(readCachedHomeStats);
   const [preview, setPreview] = useState<PrPreviewTarget | null>(null);
+  const renderScope = [query, workspaceId, repo, person, String(showArchived)].join("\0");
+  const [renderWindow, setRenderWindow] = useState(() => ({
+    scope: renderScope,
+    limit: INITIAL_PR_ROWS,
+  }));
+  const rowLimit = visiblePrRowLimit(renderWindow, renderScope);
   const [addingToSidebar, setAddingToSidebar] = useState(false);
 
   function openPreviewTarget(repo: string, branch: string) {
@@ -337,6 +349,9 @@ setAddingToSidebar(false);
       });
   })();
 
+  const visibleWorktrees = worktrees.slice(0, rowLimit);
+  const remainingRows = Math.max(0, worktrees.length - visibleWorktrees.length);
+
   const sections = (() => {
     const definitions: Array<{ state: WorktreeRow["state"]; label: string }> = [
       { state: "OPEN", label: "Open" },
@@ -344,14 +359,15 @@ setAddingToSidebar(false);
       { state: "CLOSED", label: "Closed" },
     ];
     return definitions.flatMap((definition) => {
-      const rows = worktrees.filter((row) => row.state === definition.state);
+      const total = worktrees.filter((row) => row.state === definition.state).length;
+      const rows = visibleWorktrees.filter((row) => row.state === definition.state);
       if (!rows.length) return [];
       const groups = new Map<string, WorktreeRow[]>();
       for (const row of rows) {
         const label = dateGroup(row.updatedAt);
         groups.set(label, [...(groups.get(label) || []), row]);
       }
-      return [{ ...definition, rows, groups: [...groups.entries()] }];
+      return [{ ...definition, rows, total, groups: [...groups.entries()] }];
     });
   })();
 
@@ -603,7 +619,7 @@ setAddingToSidebar(false);
               <section key={section.state} className="mb-8">
                 <h2 className={PR_SECTION_LABEL}>
                   {section.label}
-                  <span className="text-label font-medium text-faint">{section.rows.length}</span>
+                  <span className="text-label font-medium text-faint">{section.total}</span>
                 </h2>
                 {section.groups.map(([label, rows]) => (
                   <div key={label} className="mb-5">
@@ -674,6 +690,18 @@ setAddingToSidebar(false);
                 ))}
               </section>
             ))}
+            {remainingRows > 0 && (
+              <div className="flex justify-center pb-4">
+                <Button
+                  variant="ghost"
+                  onClick={() =>
+                    setRenderWindow(expandPrRenderWindow(renderScope, rowLimit))
+                  }
+                >
+                  Show {Math.min(remainingRows, PR_ROWS_PAGE)} more
+                </Button>
+              </div>
+            )}
           </div>
         )}
       </div>

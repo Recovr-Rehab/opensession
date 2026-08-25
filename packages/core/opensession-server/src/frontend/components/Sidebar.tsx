@@ -69,7 +69,6 @@ import {
 	SIDEBAR_WS_ACTIONS,
 	SIDEBAR_WS_ACTIONS_HOVER,
 	SIDEBAR_WS_ACTIONS_TOUCH,
-	SIDEBAR_WS_DRAFT,
 	SIDEBAR_WS_FACE,
 	SIDEBAR_WS_FACES,
 	SIDEBAR_WS_ROW,
@@ -98,6 +97,7 @@ import {
 	type PrClosedDetail,
 	type OpenPr,
 } from "../lib/api";
+import { sameOpenPrSnapshot } from "../lib/open-pr-snapshot";
 import { useCurrentUser } from "./UserPicker";
 import { getLane, getLanes, onLanesChanged } from "../lib/lanes";
 import { getPins, onPinsChanged, togglePin, reorderPins, unpin } from "../lib/pins";
@@ -125,7 +125,6 @@ import { pickUnreadWorkspaceSession } from "../lib/sidebar-unread-session";
 import { mentionFor, onMentionsChanged } from "../lib/mentions";
 import { TeamLensMenu, useTeamPresence } from "./TeamPresence";
 import { sessionPath, absoluteLink, copyToClipboard } from "../lib/share-link";
-import { hasDraft, onDraftsChanged } from "../lib/drafts";
 import { getWsTimePref, onWsTimeChanged } from "../lib/workspace-time";
 import {
 	getSidebarDensity,
@@ -314,6 +313,7 @@ import { OriginMark } from "./sidebar/OriginMark";
 import { AutomationReportRow } from "./sidebar/AutomationReportRow";
 import { ActiveSubagentRows } from "./sidebar/ActiveSubagentRows";
 import { DraftRow } from "./sidebar/DraftRow";
+import { WorkspaceDraftIndicator } from "./sidebar/WorkspaceDraftIndicator";
 import { SidebarCtxMenu } from "./sidebar/SidebarCtxMenu";
 import { SidebarToolRows, SidebarToolsMenu } from "./sidebar/SidebarToolsMenu";
 import { SidebarCustomizeDialog } from "./sidebar/SidebarCustomizeDialog";
@@ -963,10 +963,8 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 	// changes nothing else must still rebuild them.
 	const [mentionsRev, setMentionsRev] = useState(0);
 	useEffect(() => onMentionsChanged(() => setMentionsRev((n) => n + 1)), []);
-	// Re-render when a composer draft appears/disappears — rows check hasDraft()
-	// during render to show the Slack-style "unsent draft" pencil.
-	const [, setDraftsRev] = useState(0);
-	useEffect(() => onDraftsChanged(() => setDraftsRev((v) => v + 1)), []);
+	// Draft pencils subscribe per workspace row, so typing into one composer does
+	// not rebuild the complete sidebar inventory.
 	// Opt-in "last used" time badge on workspace rows (off / always / on hover).
 	const [wsTimePref, setWsTimePref] = useState(getWsTimePref);
 	useEffect(() => onWsTimeChanged(() => setWsTimePref(getWsTimePref())), []);
@@ -1060,6 +1058,7 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 	useEffect(() => {
 		let alive = true;
 		const load = () => {
+			if (document.hidden) return Promise.resolve();
 			const requestSequence = ++openPrRequestSequence.current;
 			const requestGeneration = prCloseGeneration.current;
 			return (
@@ -1072,8 +1071,11 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 							if (closeGeneration <= requestGeneration)
 								closedPrTombstones.current.delete(url);
 						}
-						setOpenPrs(
-							prs.filter((pr) => !closedPrTombstones.current.has(pr.url)),
+						const next = prs.filter(
+							(pr) => !closedPrTombstones.current.has(pr.url),
+						);
+						setOpenPrs((current) =>
+							sameOpenPrSnapshot(current, next) ? current : next,
 						);
 					})
 					.catch(() => {})
@@ -1085,10 +1087,15 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 		// The response is backed by the server's PR cache, but also carries live
 		// Open Session review state. Poll it often enough that a PR moves in and out
 		// of "Review running" promptly without triggering extra GitHub requests.
+		const onVisibilityChange = () => {
+			if (!document.hidden) void load();
+		};
+		document.addEventListener("visibilitychange", onVisibilityChange);
 		const t = setInterval(load, 15_000);
 		return () => {
 			alive = false;
 			clearInterval(t);
+			document.removeEventListener("visibilitychange", onVisibilityChange);
 			window.removeEventListener(PR_REVIEW_SUBMITTED_EVENT, onReviewSubmitted);
 		};
 	}, []);
@@ -3418,21 +3425,10 @@ setClosingPrUrls((current) => {
 					)}
 				{/* Slack-style pencil: a session here holds an unsent draft — come back
 				    and finish it. Yields to the hover actions like the count/time. */}
-				{row.sessions.some((c) => hasDraft(`session:${c.id}`)) && (
-					<span
-						className={cn(
-							SIDEBAR_WS_DRAFT,
-							// The pencil pins itself to the row's right edge unless a
-							// ticker or a snooze countdown already did that pushing.
-							showRunDuration || snoozeIso ? "ml-1.5" : "ml-auto",
-							"group-hover:hidden",
-						)}
-						data-ws-draft=""
-						aria-label="Unsent draft. Return to finish it."
-					>
-						<IconPencil size={20} />
-					</span>
-				)}
+				<WorkspaceDraftIndicator
+					sessionIdsKey={row.sessions.map((session) => session.id).join("\0")}
+					pushed={showRunDuration || Boolean(snoozeIso)}
+				/>
 				{/* Hover actions stay in one predictable order: Pin, Snooze, Archive. */}
 				<span
 					className={cn(
