@@ -906,8 +906,16 @@ if (!g.__opensessionBooted) {
 		// Re-admit only historical branch effects rejected before execution by
 		// retired compatibility checks. Do this behind the recovery gate so the
 		// runtime cannot race the dead-letter transition.
+		// This compatibility repair scans every isolated session database. It is
+		// maintenance work, not a boot invariant: running it after the server has
+		// accepted traffic monopolizes the actor lane long enough to make ordinary
+		// per-session reads time out and can restart the gateway in a loop. Keep it
+		// available as an explicit one-off while old deployments are being repaired,
+		// but never put it on the production recovery critical path by default.
 		const reconciledBranchEffects =
-			await reconcileCompatibleCreationBranchEffects();
+			process.env.OPENSESSION_RECONCILE_CREATION_BRANCH_DEAD_LETTERS === "1"
+				? await reconcileCompatibleCreationBranchEffects()
+				: [];
 		if (reconciledBranchEffects.length)
 			console.warn(
 				`[session-kernel] Reconciled ${reconciledBranchEffects.length} compatible branch effect(s)`,
