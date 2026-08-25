@@ -152,13 +152,22 @@ async function githubSnapshot() {
     await import("../github-auth");
   const { githubAppConfigured, githubBotCredentialMode } =
     await import("../github-app");
-  const { configuredServer } = await import("../config");
+  const { configuredIntegration, configuredServer, personaName } = await import("../config");
   const github = githubUserAuthSettings();
   const org = await primaryGithubOrg();
+  const configuredHandles = configuredIntegration("github").mentionHandles;
+  const mentionHandle = (
+    process.env.GITHUB_MENTION_HANDLES?.split(",")[0] ||
+    (Array.isArray(configuredHandles)
+      ? configuredHandles.find((value): value is string => typeof value === "string")
+      : "") ||
+    personaName().toLowerCase().replace(/[^a-z0-9-]/g, "")
+  ).trim().replace(/^@/, "");
   return {
     userPrAuth: github.enabled,
     clientIdConfigured: !!github.clientId,
     clientSecretConfigured: !!github.clientSecret,
+    mentionHandle,
     botTokenPresent: !!process.env.GITHUB_API_TOKEN,
     botCredential: githubBotCredentialMode(),
     appCredentialConfigured: githubAppConfigured(),
@@ -209,8 +218,39 @@ export async function handleSetupRoutes(
   const { req, path } = ctx;
   if (!path.startsWith("/api/setup/")) return undefined;
 
+  // This one boolean is safe for every signed-in teammate to read. It must sit
+  // before the admin gate so a completed instance never sends non-admins into
+  // an onboarding flow they cannot configure.
+  if (path === "/api/setup/onboarding" && req.method === "GET") {
+    // Read the file directly rather than the mtime-cached resolved config: a GET
+    // immediately after the completion PUT must observe that write even on a
+    // filesystem whose timestamp resolution folds both operations together.
+    const { rawConfig } = await import("../config-mutation");
+    // Older instances predate the flag and have already been in use. Only the
+    // installer-written explicit false represents a first run.
+    return Response.json({ completed: rawConfig().onboardingCompleted !== false });
+  }
+
   const forbidden = requireWorkspaceAdmin(ctx);
   if (forbidden) return forbidden;
+
+  if (path === "/api/setup/onboarding" && req.method === "PUT") {
+    const body = (await req.json().catch(() => null)) as { completed?: unknown } | null;
+    if (body?.completed !== true) {
+      return Response.json({ error: "completed must be true" }, { status: 400 });
+    }
+    const { rawConfig, persistRawConfig, withConfigMutationLock } =
+      await import("../config-mutation");
+    return withConfigMutationLock(async () => {
+      const config = rawConfig();
+      if (config.onboardingCompleted !== true) {
+        config.onboardingCompleted = true;
+        persistRawConfig(config);
+        audit({ kind: "setup_onboarding_complete", by: ctx.authUser?.login || null });
+      }
+      return Response.json({ completed: true });
+    });
+  }
 
   if (path === "/api/setup/status" && req.method === "GET") {
     const { configuredRepos, configuredIdentity } = await import("../config");
@@ -362,6 +402,7 @@ export async function handleSetupRoutes(
       userPrAuth?: unknown;
       oauthClientId?: unknown;
       oauthClientSecret?: unknown;
+      mentionHandle?: unknown;
       botCredential?: unknown;
       privateKey?: unknown;
     } | null;
@@ -393,6 +434,20 @@ export async function handleSetupRoutes(
         return Response.json({ error: `${field}: ${invalid}` }, { status: 400 });
       }
     }
+    const mentionHandle =
+      typeof body.mentionHandle === "string"
+        ? body.mentionHandle.trim().replace(/^@/, "")
+        : body.mentionHandle;
+    if (
+      mentionHandle !== undefined &&
+      (typeof mentionHandle !== "string" ||
+        (mentionHandle !== "" && !/^[a-z\d](?:[a-z\d-]{0,37}[a-z\d])?$/i.test(mentionHandle)))
+    ) {
+      return Response.json(
+        { error: "mentionHandle must be a valid GitHub handle" },
+        { status: 400 },
+      );
+    }
     // The private key is a multi-line PEM, so it bypasses validateSetting (single
     // line). Require a complete block that parses, so a truncated paste cannot
     // overwrite a working key on disk.
@@ -423,6 +478,7 @@ export async function handleSetupRoutes(
       body.userPrAuth === undefined &&
       body.oauthClientId === undefined &&
       body.oauthClientSecret === undefined &&
+      mentionHandle === undefined &&
       body.botCredential === undefined &&
       !privateKey
     ) {
@@ -520,6 +576,10 @@ export async function handleSetupRoutes(
       }
       if (body.userPrAuth !== undefined) github.userPrAuth = body.userPrAuth;
       if (body.botCredential !== undefined) github.botCredential = body.botCredential;
+      if (mentionHandle !== undefined) {
+        if (mentionHandle) github.mentionHandles = [mentionHandle];
+        else delete github.mentionHandles;
+      }
       for (const field of ["oauthClientId", "oauthClientSecret"] as const) {
         const value = body[field];
         if (value === undefined) continue;
@@ -540,7 +600,7 @@ export async function handleSetupRoutes(
       }
       audit({
         kind: "setup_github_update",
-        fields: (["userPrAuth", "oauthClientId", "oauthClientSecret", "botCredential"] as const).filter(
+        fields: (["userPrAuth", "oauthClientId", "oauthClientSecret", "mentionHandle", "botCredential"] as const).filter(
           (f) => body[f] !== undefined,
         ),
       });
@@ -551,7 +611,8 @@ export async function handleSetupRoutes(
       // createdByLogin boot migration waits for the next restart.)
       return Response.json({
         github: await githubSnapshot(),
-        restartRequired: false,
+        // Mention matching is initialized with the GitHub agent at boot.
+        restartRequired: mentionHandle !== undefined,
       });
     });
   }

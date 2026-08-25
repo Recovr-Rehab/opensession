@@ -114,11 +114,7 @@ import { UserGate, getCurrentUser, useAuthStatus, useCurrentUser } from "./compo
 import { PreviewWait, matchPreviewWaitRoute } from "./components/PreviewWait";
 import { TitleBar } from "./components/TitleBar";
 import { FirstMile } from "./components/FirstMile";
-import {
-	completeFirstMile,
-	firstMileComplete,
-	onFirstMileChanged,
-} from "./lib/first-mile-pref";
+import { useOnboarding } from "./hooks/useOnboarding";
 import {
 	settingsPaletteActions,
 	type SettingsSectionKey,
@@ -787,8 +783,7 @@ export function App(
 	// chips need the registered set to resolve, so without it the first paint of
 	// a transcript renders `opensession#128` as plain text and relinks a beat later.
 	const [registeredRepoInfo, setRegisteredRepoInfo] = useState(cachedRepos);
-	const [firstMileIsComplete, setFirstMileIsComplete] =
-		useState(firstMileComplete);
+	const onboarding = useOnboarding();
 	const [forceFirstMile, setForceFirstMile] = useState(landedOnFirstMile);
 	const auth = useAuthStatus();
 	const githubConnectionState = useGithubConnectionState(route.view);
@@ -1107,12 +1102,7 @@ export function App(
 		workspacesLoaded &&
 		sessions.length === 0 &&
 		workspaces.length === 0;
-	const firstMileActive =
-		forceFirstMile ||
-		(auth?.admin !== false &&
-			productEmpty &&
-			githubConnectionState === "connected" &&
-			!firstMileIsComplete);
+	const firstMileActive = forceFirstMile || onboarding.state === "required";
 	// This identity is observable: both subscriptions below depend on it. Keep it
 	// stable even if the compiler bails out on this large component, otherwise a
 	// completed fetch updates state, retriggers the effect, and starts another fetch.
@@ -1134,11 +1124,12 @@ export function App(
 		return () => window.removeEventListener("opensession:workspaces-changed", onWorkspaceSettingsChanged);
 	}, [refreshWorkspaces]);
 	useEffect(() => {
-		const sync = () => setFirstMileIsComplete(firstMileComplete());
-		const unsubscribe = onFirstMileChanged(sync);
-		sync();
-		return unsubscribe;
-	}, []);
+		if (onboarding.state !== "required" || forceFirstMile) return;
+		// The onboarding gate owns the first incomplete load, including deep links.
+		// Replace rather than push so Back cannot escape a required walkthrough.
+		history.replaceState(history.state ?? navState(0), "", `${BASE_PATH}/welcome`);
+		setForceFirstMile(true);
+	}, [onboarding.state, forceFirstMile]);
 
 	function openFirstMile() {
 		// Keep the settings entry below the walkthrough so browser Back returns to
@@ -1148,8 +1139,15 @@ export function App(
 		setForceFirstMile(true);
 	}
 
-	function finishFirstMile() {
-		completeFirstMile();
+	async function finishFirstMile() {
+		try {
+			await onboarding.complete();
+		} catch (cause) {
+			toast(cause instanceof Error ? cause.message : "Could not finish onboarding", {
+				variant: "error",
+			});
+			return;
+		}
 		if (forceFirstMile) {
 			const url = new URL(location.href);
 			url.searchParams.delete("firstmile");
@@ -5024,7 +5022,16 @@ console.error("Rename workspace failed:", error);
 				</Modal.Content>
 			</Modal.Root>
 			<div className="app">
-				{firstMileActive ? (
+				{!forceFirstMile && onboarding.state === "loading" ? (
+					<div className="flex h-[100dvh] items-center justify-center bg-bg">
+						<LoadingState>Preparing Open Session…</LoadingState>
+					</div>
+				) : !forceFirstMile && onboarding.state === "failed" ? (
+					<div className="flex h-[100dvh] flex-col items-center justify-center gap-4 bg-bg px-6 text-center">
+						<LoadingState>Couldn&rsquo;t check onboarding.</LoadingState>
+						<Button onClick={() => void onboarding.refetch()}>Try again</Button>
+					</div>
+				) : firstMileActive ? (
 					<FirstMile onDone={finishFirstMile} />
 				) : (
 				<>

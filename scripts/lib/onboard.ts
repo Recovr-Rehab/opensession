@@ -221,6 +221,9 @@ export function buildConfig(a: Answers): Record<string, unknown> {
     };
   }
   return {
+    // The web walkthrough owns the rest of first-run setup. It flips this only
+    // after the operator reaches the final confirmation step.
+    onboardingCompleted: false,
     server: {
       host: a.host,
       port: a.port,
