@@ -99,8 +99,8 @@ requires Bun and git.
 - [docs/setup/](docs/setup/README.md) — overview, requirements, trust model
 - [docs/setup/install.md](docs/setup/install.md) — bare box → running service
 - [docs/setup/ec2.md](docs/setup/ec2.md) — provisioning a clean EC2 box
-- [docs/setup/networking.md](docs/setup/networking.md) — private team access,
-  public callbacks, domains, and TLS
+- [docs/setup/networking.md](docs/setup/networking.md) — Tailscale, a custom
+  domain, and verifying you are not public
 - [CLIENTS.md](CLIENTS.md) — web UI, PWA, desktop shell, native app, extension
 - [docs/worktrees.md](docs/worktrees.md) — how sessions map to git worktrees,
   and where the disk goes

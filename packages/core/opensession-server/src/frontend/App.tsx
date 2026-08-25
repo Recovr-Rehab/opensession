@@ -83,8 +83,6 @@ import {
 } from "./components/NewSession";
 import { clearDraft, saveDraft, NEW_SESSION_DRAFT_KEY } from "./lib/drafts";
 import { dropStagingAttachments } from "./lib/attachments";
-import { IconTile } from "./components/BrandTile";
-import { displayName } from "./brand-logos";
 import type { NewSessionPrefill } from "./lib/new-session-link";
 import {
 	shouldApplyCreatedSessionReply,
@@ -92,10 +90,11 @@ import {
 } from "./lib/new-session-navigation";
 import { primeSoftKeyboard } from "./lib/soft-keyboard";
 import { trackKeyboardInset } from "./lib/keyboard-inset";
+import type { CommandPaletteAction } from "./components/SessionSearch";
 import {
-	SessionSearch,
-	type CommandPaletteAction,
-} from "./components/SessionSearch";
+	CommandMenuHost,
+	type CommandMenuHandle,
+} from "./components/CommandMenuHost";
 import { Prs } from "./components/Prs";
 import { Feed } from "./components/Feed";
 import { CatchUpDeck } from "./components/CatchUpDeck";
@@ -194,8 +193,6 @@ import {
 	deleteWorkspaceApi,
 	fetchRepos,
 	cachedRepos,
-	fetchToolAccounts,
-	knownToolAccounts,
 	REPOS_CHANGED_EVENT,
 	resolveWorkspaceApi,
 	type OpenPr,
@@ -1834,24 +1831,10 @@ export function App(
 		if (focusComposerOnOpen) setFocusComposerOnOpen(false);
 	}, [focusComposerOnOpen]);
 
-	// The ⌘K command palette. Sessions, PRs, and app actions share one overlay
-	// driven by its own state so it can open over any view.
-	const [searchOpen, setSearchOpen] = useState(false);
-	const [commandMcpServers, setCommandMcpServers] = useState<string[]>(() =>
-		(knownToolAccounts() || []).map((server) => server.name),
-	);
-	useEffect(() => {
-		if (!searchOpen) return;
-		let live = true;
-		fetchToolAccounts()
-			.then(({ servers }) => {
-				if (live) setCommandMcpServers(servers.map((server) => server.name));
-			})
-			.catch(() => {});
-		return () => {
-			live = false;
-		};
-	}, [searchOpen]);
+	// The command menu owns its open/query state below App, so toggling it does
+	// not reconcile the active route, viewer, and sidebar before the overlay can
+	// paint.
+	const commandMenuRef = useRef<CommandMenuHandle>(null);
 	// The Desk overlay (⌘J / the floating desk button): a standing concierge
 	// session on top of whatever view is open. Its entrance origin follows the
 	// invocation: the corner launcher is spatial, while the shortcut is not.
@@ -1887,10 +1870,6 @@ const path = await resolveAnonymousUserPath(
 			unsub();
 		};
 	}, [addHandler]);
-	const searchOpenRef = useRef(searchOpen);
-	useLayoutEffect(() => {
-	searchOpenRef.current = searchOpen;
-	});
 	const closePalette = () => {
 		setPalette({ open: false });
 		// A deep link left the URL on <base>/new — return home on close.
@@ -1992,7 +1971,7 @@ const path = await resolveAnonymousUserPath(
 		const onKey = (e: KeyboardEvent) => {
 			if (matchesShortcut(e, "command-menu")) {
 				e.preventDefault();
-				setSearchOpen((o) => !o);
+				commandMenuRef.current?.toggle();
 				return;
 			}
 			if (matchesShortcut(e, "desk")) {
@@ -2042,7 +2021,7 @@ const path = await resolveAnonymousUserPath(
 				return;
 			}
 			if (e.key === "Escape") {
-				if (searchOpenRef.current) setSearchOpen(false);
+				if (commandMenuRef.current?.isOpen()) commandMenuRef.current.close();
 				else if (paletteOpenRef.current) hotkeyClosePalette();
 				else if (leaveSettingsRef.current) {
 					// A field, a menu or a modal inside Settings owns the keystroke
@@ -4772,21 +4751,6 @@ if (siblingCreateRef.current === optimisticId)
 				run: () => navigate({ view: "settings", section }),
 			}),
 		),
-		...commandMcpServers
-			.slice()
-			.sort((a, b) => displayName(a).localeCompare(displayName(b)))
-			.map((server) => {
-				const name = displayName(server);
-				return {
-					id: `new-session-with-${server}`,
-					label: `New session with ${name}`,
-					description: `Start a session with only ${name} connected`,
-					category: "Tools" as const,
-					keywords: [server, name, "tool", "service", "connected"],
-					icon: <IconTile name={server} size={18} />,
-					run: () => openPalette(undefined, [server]),
-				};
-			}),
 	];
 	const openSession = (id: string, created?: UnifiedSession | null) => {
 		const known = sessions.some(
@@ -5220,7 +5184,7 @@ console.error("Rename workspace failed:", error);
 						{!mobileDetail && (
 							<button
 								className={MOBILE_SEARCH_BTN}
-								onClick={() => setSearchOpen(true)}
+								onClick={() => commandMenuRef.current?.open()}
 								aria-label="Open command menu"
 							>
 								<IconSearch size={22} />
@@ -5363,7 +5327,7 @@ console.error("Rename workspace failed:", error);
 									</button>
 								</Tooltip>
 							</div>
-							<TitleBar onSearch={() => setSearchOpen(true)} />
+							<TitleBar onSearch={() => commandMenuRef.current?.open()} />
 						</div>
 						<Sidebar
 							ref={sidebarRef}
@@ -6117,15 +6081,14 @@ console.error("Archive failed:", e);
 				/>
 
 				{/* ⌘K command palette — actions, PRs, and sessions across every view. */}
-				{searchOpen && (
-					<SessionSearch
-						sessions={sessions}
-						actions={commandActions}
-						onSelectSession={(id) => navigate({ view: "session", id })}
-						onSelectPr={(pr) => void openPrReview(pr)}
-						onClose={() => setSearchOpen(false)}
-					/>
-				)}
+				<CommandMenuHost
+					ref={commandMenuRef}
+					sessions={sessions}
+					actions={commandActions}
+					onSelectSession={(id) => navigate({ view: "session", id })}
+					onSelectPr={(pr) => void openPrReview(pr)}
+					onOpenWithMcp={(server) => openPalette(undefined, [server])}
+				/>
 
 				{/* New-session palette overlays every view. */}
 				{palette.open && (
