@@ -1544,7 +1544,7 @@ describe("SessionKernel", () => {
     const { isUserStopped, liftUserStop } = await import("../queue-state");
     expect(isUserStopped("cancel-starting")).toBe(true);
     liftUserStop("cancel-starting");
-    expect(store.runState("cancel-starting").state).toBe("starting");
+    expect(store.runState("cancel-starting").state).toBe("idle");
     expect(isUserStopped("cancel-starting")).toBe(true);
     expect(store.applyRunEvent({
       sessionId: "cancel-starting",
@@ -1557,6 +1557,14 @@ describe("SessionKernel", () => {
       outcome: "confirmed",
     });
     expect(isUserStopped("cancel-starting")).toBe(false);
+    expect(store.applyRunEvent({
+      sessionId: "cancel-starting",
+      event: "prompt",
+      runKey: "dispatch-successor",
+    })).toMatchObject({
+      accepted: true,
+      state: { state: "starting", currentRunId: "dispatch-successor" },
+    });
     expect(store.applyRunEvent({
       sessionId: "cancel-starting",
       event: "run_registered",
