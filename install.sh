@@ -28,6 +28,10 @@
 #                                              sign-in); off by default
 #   --tailscale           WITH_TAILSCALE=1     also install Tailscale (off by
 #                                              default; --no-tailscale still accepted)
+#   --caddy               WITH_CADDY=1         install Caddy for custom-domain
+#                                              public ingress
+#   --cloudflare          WITH_CLOUDFLARE=1    install cloudflared for Tunnel
+#                                              public ingress
 #   --org <name>          OPENSESSION_ORG      set this instance up for a GitHub
 #                                              org: an org-owned GitHub App plus
 #                                              per-user sign-in, turned on when
@@ -73,6 +77,8 @@ NO_ENGINE="${NO_ENGINE:-0}"
 IS_BINARY=0
 WITH_CODEX="${WITH_CODEX:-0}"
 WITH_TAILSCALE="${WITH_TAILSCALE:-0}"
+WITH_CADDY="${WITH_CADDY:-0}"
+WITH_CLOUDFLARE="${WITH_CLOUDFLARE:-0}"
 ADVANCED=0
 NO_PROMPT="${NO_PROMPT:-0}"
 DO_UNINSTALL=0
@@ -92,6 +98,8 @@ while [ $# -gt 0 ]; do
     --codex) WITH_CODEX=1; shift ;;
     --tailscale) WITH_TAILSCALE=1; shift ;;
     --no-tailscale) WITH_TAILSCALE=0; shift ;;
+    --caddy) WITH_CADDY=1; shift ;;
+    --cloudflare) WITH_CLOUDFLARE=1; shift ;;
     --advanced) ADVANCED=1; shift ;;
     --yes|-y) NO_PROMPT=1; shift ;;
     --uninstall) DO_UNINSTALL=1; shift ;;
@@ -682,6 +690,52 @@ else
       muted "To share Open Session, connect this box to your tailnet:"
       info "1. ${C}sudo tailscale up${N}"
       info "2. ${C}opensession bind${N}"
+    fi
+  fi
+fi
+
+# Public ingress is configured in /welcome or Settings after the service is
+# running. These flags only put the selected connector on the box so that flow
+# can complete without sending the operator back to package-manager docs.
+if [ "$WITH_CADDY" = "1" ] || [ "$WITH_CLOUDFLARE" = "1" ]; then
+  step "Public ingress tools"
+fi
+
+if [ "$WITH_CADDY" = "1" ]; then
+  if command -v caddy >/dev/null 2>&1; then
+    good "caddy $(caddy version 2>/dev/null | head -1 || echo installed)"
+  elif install_package caddy && command -v caddy >/dev/null 2>&1; then
+    good "caddy $(caddy version 2>/dev/null | head -1 || echo installed)"
+  else
+    warn "could not install Caddy automatically"
+    muted "install it from https://caddyserver.com/docs/install and reload /welcome"
+  fi
+fi
+
+if [ "$WITH_CLOUDFLARE" = "1" ]; then
+  if command -v cloudflared >/dev/null 2>&1; then
+    good "cloudflared $(cloudflared --version 2>/dev/null | head -1 || echo installed)"
+  elif [ "$OS" = "Darwin" ]; then
+    if install_package cloudflared && command -v cloudflared >/dev/null 2>&1; then
+      good "cloudflared $(cloudflared --version 2>/dev/null | head -1 || echo installed)"
+    else
+      warn "could not install cloudflared automatically"
+      muted "install it with: brew install cloudflared"
+    fi
+  else
+    case "$(uname -m)" in
+      x86_64|amd64) cf_arch="amd64" ;;
+      aarch64|arm64) cf_arch="arm64" ;;
+      *) cf_arch="" ;;
+    esac
+    mkdir -p "$HOME/.local/bin"
+    if [ -n "$cf_arch" ] && curl -fsSL "https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-$cf_arch" -o "$HOME/.local/bin/cloudflared"; then
+      chmod +x "$HOME/.local/bin/cloudflared"
+      export PATH="$HOME/.local/bin:$PATH"
+      good "cloudflared $(cloudflared --version 2>/dev/null | head -1 || echo installed)"
+    else
+      warn "could not install cloudflared automatically"
+      muted "install it from https://developers.cloudflare.com/cloudflare-one/connections/connect-networks/downloads/"
     fi
   fi
 fi
