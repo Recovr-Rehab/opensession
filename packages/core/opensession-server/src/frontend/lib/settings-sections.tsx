@@ -13,6 +13,7 @@ import {
 	IconDatabase,
 	IconFileText2,
 	IconHome,
+	IconGlobe,
 	IconKeyboard,
 	IconPeople,
 	IconPlug,
@@ -54,6 +55,7 @@ export type SettingsSectionKey =
 	| "connections"
 	| "memory"
 	| "storage"
+	| "ingress"
 	| "prewarming"
 	| "deploys"
 	| "papercuts"
@@ -193,6 +195,13 @@ export const SECTIONS: {
 		label: "Security",
 		group: "Automation",
 		icon: <IconShieldCheck />,
+	},
+	{
+		key: "ingress",
+		label: "Public ingress",
+		group: "Infrastructure",
+		adminOnly: true,
+		icon: <IconGlobe />,
 	},
 	{
 		key: "storage",

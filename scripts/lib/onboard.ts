@@ -227,7 +227,6 @@ export function buildConfig(a: Answers): Record<string, unknown> {
     server: {
       host: a.host,
       port: a.port,
-      webhookPort: 3848,
       publicBaseUrl: a.publicBaseUrl,
     },
     paths: {
@@ -268,7 +267,6 @@ function buildEnv(a: Answers): string {
     "# --- core server ---",
     `HOST=${a.host}`,
     `PORT=${a.port}`,
-    "WEBHOOK_PORT=3848",
     `OPENSESSION_UI_BASE=${a.publicBaseUrl}`,
     `OPENSESSION_WORKTREES_DIR=${a.worktreesDir}`,
     "",

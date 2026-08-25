@@ -134,14 +134,15 @@ binds to, so bind the proxy to the tailnet address too.
 
 ```sh
 # What is Open Session listening on? Should be 127.0.0.1 or a 100.x tailnet IP.
-ss -tlnp | grep -E '3850|3848'
+ss -tlnp | grep -E '3850|3860'
 
 # From somewhere off the tailnet (your phone on cellular, a cloud shell):
 curl -m 5 http://<public-ip>:3850/    # must fail
 ```
 
 On a cloud box, also check the firewall — the security group or firewall rules
-should not open 3850 or 3848 at all. See [ec2.md](ec2.md#networking).
+should not open 3850 or 3860 directly. Funnel, Cloudflare Tunnel, or Caddy
+terminates TLS in front of loopback 3860. See [ec2.md](ec2.md#networking).
 
 ## A custom domain (os.company.dev)
 
@@ -257,77 +258,76 @@ logins listed in `identity.team` can sign in. See
 Even then, prefer keeping the network boundary. Sign-in protects the UI and
 API; it is not a reason to put an agent runner on the public internet.
 
-## The webhook server is separate
+## Public ingress is separate
 
-The webhook server (default port **3848**) is a second HTTP listener for
-inbound GitHub, Linear, Plain and Stripe events. If you use those integrations,
-*that* port needs to be reachable by the provider — which means it cannot live
-on the tailnet alone.
+Open Session binds one fail-closed public gateway on `127.0.0.1:3860`. It
+serves exact registered webhook and OAuth routes, remote Sandbox WebSockets,
+and workload identity. Unknown methods and paths return 404. The private app
+on 3850 is not part of this listener and must not be routed through the public
+origin.
 
-Expose 3848 only, never 3850, and only through something that terminates TLS.
-Every webhook route verifies a signature (`GITHUB_WEBHOOK_SECRET`,
-`LINEAR_WEBHOOK_SECRET`, `PLAIN_WEBHOOK_SECRET`, `STRIPE_WEBHOOK_SECRET`), so
-set those — an unsigned webhook endpoint is an open door into your automations.
+Every webhook route still verifies its provider signature
+(`GITHUB_WEBHOOK_SECRET`, `LINEAR_WEBHOOK_SECRET`, `PLAIN_WEBHOOK_SECRET`,
+`STRIPE_WEBHOOK_SECRET`). The network boundary and signature checks are both
+required.
 
-When the UI stays on a private hostname, give callbacks their own public origin:
+Configure the canonical origin in Settings → Public ingress or directly:
 
 ```json
 {
   "server": {
-    "publicBaseUrl": "https://sessions.tailnet.example.com",
-    "webhookBaseUrl": "https://ingress.example.com"
+    "publicBaseUrl": "https://sessions.tailnet.example.com"
+  },
+  "ingress": {
+    "publicBaseUrl": "https://ingress.example.com",
+    "exposure": "custom"
   }
 }
 ```
 
-`OPENSESSION_WEBHOOK_BASE` overrides the config value. Setup guides, secret
-automation URLs, and Linear's default OAuth callback use this origin; session
-links and authenticated app callbacks continue to use `publicBaseUrl`.
+`OPENSESSION_INGRESS_BASE` overrides the configured ingress URL. Setup guides,
+webhook URLs, remote Sandbox callbacks, and the workload-identity issuer all
+use this origin. Session links and authenticated app callbacks continue to use
+the independent private app origin.
 
-Workspace Settings → Setup → Server access writes both values to the config and
-service environment. It also generates the two Caddy site blocks for the
-current ports. Caddy runs on the Open Session machine by default. Keep its app
-site bound to the Tailscale address, and expose only the separate webhook site
-on the public interface.
+### Tailscale Funnel
 
-If you do not use inbound webhooks, leave 3848 on `127.0.0.1` and forget it
-exists.
+Choose Tailscale Funnel in Settings for automatic HTTPS without DNS records or
+inbound firewall ports. Open Session routes the machine's `*.ts.net` Funnel
+hostname to `127.0.0.1:3860`. Funnel cannot serve a custom hostname.
 
-### Remote-sandbox ingress
+### Cloudflare Tunnel
 
-Daytona and Modal also need the isolated sandbox callback and workload-identity
-routes on the webhook
-hostname. They terminate on the isolated listener at `127.0.0.1:3860`; they
-must never expose the main UI on 3850:
+Create a named tunnel, enter its UUID and public URL in Settings, then point the
+public hostname at the tunnel and set its service to:
+
+```text
+http://127.0.0.1:3860
+```
+
+The required DNS record is:
+
+```text
+CNAME ingress.example.com <tunnel-id>.cfargotunnel.com
+```
+
+Only the ingress gateway belongs in the tunnel. Never add port 3850 unless you
+have separately decided to make the authenticated app public.
+
+### Custom domain with Caddy
+
+Point the hostname's A/AAAA records at the server, then choose Custom domain in
+Settings. Open Session writes its marked Caddy section, validates the complete
+Caddyfile, reloads Caddy, verifies the public health route, and restores the
+prior file on failure. The resulting site is intentionally simple because the
+application owns the exact public route allowlist:
 
 ```caddy
 ingress.example.com {
-    handle /run-ws/* {
-        reverse_proxy 127.0.0.1:3860
-    }
-    handle /rpc-ws {
-        reverse_proxy 127.0.0.1:3860
-    }
-    handle /ingress-health {
-        reverse_proxy 127.0.0.1:3860
-    }
-    handle /workload-identity/* {
-        reverse_proxy 127.0.0.1:3860
-    }
     handle {
-        reverse_proxy 127.0.0.1:3848
+        reverse_proxy 127.0.0.1:3860
     }
 }
 ```
 
-Workspace → Sandboxes generates this block for the selected origin. The
-repository CLI finds the matching host in `/etc/caddy/Caddyfile`, owns a marked
-route section inside it (or creates the host), backs up the file, validates,
-reloads and publicly verifies it:
-
-```sh
-opensession sandbox ingress install https://ingress.example.com
-```
-
-On any failure it restores and reloads the complete prior Caddyfile. The same
-maintained example lives at `deploy/caddy/sandbox-ingress.caddy.example`.
+The maintained example lives at `deploy/caddy/sandbox-ingress.caddy.example`.

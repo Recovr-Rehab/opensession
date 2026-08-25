@@ -43,7 +43,7 @@ import {
 import { displayName } from "../brand-logos";
 import { IconTile } from "./BrandTile";
 import { UserAvatar } from "./UserAvatar";
-import { docTitle, DEFAULT_DOC_TITLE } from "../lib/brand";
+import { docTitle, DEFAULT_DOC_TITLE, WEBHOOK_BASE_URL } from "../lib/brand";
 import { ProjectsSection } from "./ProjectsSection";
 
 interface McpConnection {
@@ -501,7 +501,8 @@ function buildGithubAppCreateUrl(name: string, org: string): string {
     name,
     url: "http://localhost:3850",
     public: "false",
-    webhook_active: "false",
+    hook_url: `${WEBHOOK_BASE_URL.replace(/\/$/, "")}/github/webhook`,
+    webhook_active: "true",
     // The canonical grant set — the same permissions the install tokens mint
     // request, so the App is not born missing `issues` or `checks` (the drift
     // this builder used to have: no issues, no checks).

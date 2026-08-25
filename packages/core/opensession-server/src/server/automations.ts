@@ -1913,8 +1913,8 @@ export function startScheduler(onSessionCreated?: (sessionId: string) => void): 
 }
 
 // ── Webhook trigger ──────────────────────────────────────────
-// POST /automations/<id>/<secret> on the public webhook server (3848,
-// proxied by Caddy). The secret in the path is the only auth, so it's
+// POST /automations/<id>/<secret> on the fail-closed public ingress gateway.
+// The secret in the path is the only auth, so it's
 // long-random and rotatable by editing the automation file.
 
 export function getWebhookRoutes(

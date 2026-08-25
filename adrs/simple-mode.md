@@ -97,7 +97,7 @@ On a fresh macOS or Ubuntu box with only `curl` and `git`:
 ## R2. First run in the browser, not the terminal
 
 - **R2.1** The installer writes `config.json` + `.env` with all defaults
-  (product name, `127.0.0.1:3850`, webhook `3848`, worktrees dir, no
+  (product name, private app `127.0.0.1:3850`, ingress `3860`, worktrees dir, no
   integrations, no automations) and starts the server. `opensession onboard`
   becomes `--advanced` mode; the ten questions still exist there. The
   no-flag installer runs `onboard --defaults` (no questions, service
@@ -155,21 +155,19 @@ On a fresh macOS or Ubuntu box with only `curl` and `git`:
 ## R4. Webhooks without a public server
 
 Inbound webhooks are fundamental (Slack, GitHub, Linear, Plain, Stripe all
-land on the loopback webhook server on `:3848`) and a simple-mode box has no
-public hostname. Prior art splits two ways; we need both.
+land on the fail-closed loopback ingress gateway on `:3860`) and a simple-mode
+box has no public hostname. The same gateway serves remote Sandbox callbacks
+and workload identity.
 
-- **R4.1 `opensession expose`**: one command that gives `:3848` a public
-  HTTPS URL, stores it as the webhook base, and prints paste-ready URLs for
-  every integration. Backends, in preference order:
-  1. **Tailscale Funnel** (`tailscale funnel --bg 3848`): stable URL, real
-     cert, survives reboots; needs a tailnet + the `funnel` ACL attribute,
-     which the command links to.
-  2. **Cloudflare quick tunnel** (`cloudflared tunnel --url`): no account,
-     random hostname; good enough to try Slack for ten minutes. Named tunnel
-     with a free account for stability.
-  Only `:3848` is exposed. The UI on `:3850` never is: every exposed route
-  is HMAC-verified and fail-closed, the UI has no auth. `doctor` reports the
-  tunnel's state and whether the stored base URL still resolves to us.
+- **R4.1 Settings → Public ingress**: choose an exposure method that gives
+  `:3860` a public HTTPS URL and stores one canonical origin:
+  1. **Tailscale Funnel** (`tailscale funnel --bg 3860`): stable `*.ts.net`
+     URL, real certificate, no DNS records or inbound ports.
+  2. **Cloudflare Tunnel**: a named tunnel with a CNAME to
+     `<tunnel-id>.cfargotunnel.com`, also without inbound ports.
+  3. **Custom domain**: A/AAAA records plus a managed Caddy site.
+  Only `:3860` is exposed. The private app on `:3850` never is: the gateway
+  dispatches exact registered routes and returns 404 for everything else.
 - **R4.2 Integration setup screens show the URLs.** Enabling Slack/GitHub/
   Linear/Plain/Stripe in the UI shows *this install's* event URL(s) and the
   secret fields, and verifies the first inbound event, instead of linking to

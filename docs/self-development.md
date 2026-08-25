@@ -14,7 +14,7 @@ A dev instance is `bun run packages/core/opensession-server/opensession.ts` with
   `.frontend-dist` bundle. It gated nothing on the backend. With the dev boot
   gate, `OPENSESSION_DEV=1` additionally skips every boot side effect that
   talks to the outside world or to shared state: integration agents
-  (Slack/Linear/Plain/GitHub/Stripe/Grafana), the webhook server, the cron
+  (Slack/Linear/Plain/GitHub/Stripe/Grafana), public webhook intake, the cron
   automation scheduler and all background tickers/sweeps, the public-ingress
   listener, detached-engine-server adoption, run resume/redelivery, and the
   seed writes to automations. What remains is the web server, the

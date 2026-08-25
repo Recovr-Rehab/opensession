@@ -65,7 +65,7 @@ import {
 	type WebIdentity,
 	webAuthRequired,
 } from "./src/server/web-auth";
-import { startWebhookServer } from "./src/server/webhook-server";
+import { configureWebhookRoutes } from "./src/server/webhook-server";
 import { prImagePublicRoutes } from "./src/server/pr-images";
 import {
 	sessionHtmlWithSocialMeta,
@@ -601,17 +601,6 @@ if (!g.__opensessionBooted) {
 	if (!devInstance) {
 	startLiveActivitySync();
 
-	// Public dial-back ingress for remote sandboxes (src/server/public-ingress.ts):
-	// a second, isolated listener serving ONLY the run-ws/rpc-ws upgrades +
-	// /ingress-health. No-op unless ~/.opensession-sandbox.json enables
-	// publicIngress; starting/stopping it or changing its port needs a real
-	// restart (the config's other values stay read-fresh-per-run).
-	try {
-		startPublicIngress();
-	} catch (e) {
-		console.error("[public-ingress] failed to start:", e);
-	}
-
 	// Restore completed sandbox prewarms and maintain any explicit keep-ready
 	// targets. This is a boot hook rather than a module-scope side effect.
 	void import("./src/server/sandbox/prewarm")
@@ -625,8 +614,9 @@ if (!g.__opensessionBooted) {
 		})
 		.catch((e) => console.error("[sandbox-prewarm] startup failed:", e));
 
-	// Start webhook server with enabled agents + automation webhook triggers
-	// + the public PR-image capability URLs (comment_on_pr_with_images).
+	// Build the exact public route allowlist before binding the one isolated
+	// ingress gateway. Webhooks, sandbox callbacks and workload identity share
+	// :3860; the private app on :3850 is never part of this listener.
 	agents = await loadAgents();
 	g.__agents = agents;
 	const webhookRoutes = getWebhookRoutes(() => {
@@ -638,8 +628,12 @@ if (!g.__opensessionBooted) {
 	for (const [key, handler] of sessionSocialCardPublicRoutes()) {
 		webhookRoutes.set(key, handler);
 	}
-	const webhookServer = startWebhookServer(agents, webhookRoutes);
-	void webhookServer;
+	configureWebhookRoutes(agents, webhookRoutes);
+	try {
+		startPublicIngress();
+	} catch (e) {
+		console.error("[public-ingress] failed to start:", e);
+	}
 
 	// Optional instance seed pack. Generic installations start empty; existing
 	// records and anything created through the UI are unaffected.

@@ -419,6 +419,7 @@ const SETTINGS_SECTIONS = new Set<SettingsSectionKey>([
 	"integrations",
 	"connections",
 	"memory",
+	"ingress",
 	"storage",
 	"prewarming",
 	"deploys",

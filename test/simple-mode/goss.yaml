@@ -71,7 +71,7 @@ port:
   tcp:{{.Vars.port}}:
     listening: true
     ip: ["127.0.0.1"]
-  tcp:{{.Vars.webhookPort}}:
+  tcp:{{.Vars.ingressPort}}:
     listening: true
     ip: ["127.0.0.1"]
 http:

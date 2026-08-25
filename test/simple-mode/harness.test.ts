@@ -49,7 +49,7 @@ const SOURCE = process.env.SIMPLE_MODE_SOURCE === "1";
 const CLAUDE_TOKEN = process.env.OPENSESSION_TEST_CLAUDE_TOKEN;
 
 const PORT = 3850;
-const WEBHOOK_PORT = 3848;
+const INGRESS_PORT = 3860;
 const GUEST_MOUNT = "/mnt/simple-mode";
 const MINUTES = 60_000;
 const GOSS_VERSION = "v0.4.10";
@@ -119,7 +119,7 @@ async function goss(file: string): Promise<string> {
   const home = await guestHome();
   const user = await guestUser();
   const vars =
-    `home: ${home}\nuser: ${user}\nport: ${PORT}\nwebhookPort: ${WEBHOOK_PORT}\n` +
+    `home: ${home}\nuser: ${user}\nport: ${PORT}\ningressPort: ${INGRESS_PORT}\n` +
     `source: ${SOURCE}\ntoken: ${CLAUDE_TOKEN ? "true" : ""}\n`;
   const varsPath = await putInGuest("vars.yaml", vars);
   const r = await guest(

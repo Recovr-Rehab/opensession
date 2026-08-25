@@ -89,7 +89,6 @@ jobs:
           OPENSESSION_STATE_DIR="$root/state" \
           OPENSESSION_SANDBOX_CONFIG="$root/sandbox.json" \
           OPENSESSION_MCP_HTTP_PORT=43852 \
-          WEBHOOK_PORT=43848 \
           HOST=127.0.0.1 \
           PORT=43850 \
           OPENSESSION_PUBLIC_URL=http://127.0.0.1:43850 \

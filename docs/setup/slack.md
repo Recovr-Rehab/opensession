@@ -82,8 +82,8 @@ With `SLACK_APP_TOKEN` present the agent registers no `/slack/events` or
 ### HTTP Events API
 
 Leave `SLACK_APP_TOKEN` unset and the agent registers routes on the
-[webhook server](install.md#webhook-server) (default `127.0.0.1:3848`,
-behind your TLS proxy):
+[public ingress gateway](install.md#public-ingress) (`127.0.0.1:3860`
+behind Funnel, Cloudflare Tunnel, or Caddy):
 
 - `POST /slack/events` — Events API callbacks (handles Slack's
   `url_verification` challenge)

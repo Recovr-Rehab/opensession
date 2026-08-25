@@ -319,9 +319,9 @@ what the code actually reads, by feature:
 | Var | Default | Purpose |
 | --- | --- | --- |
 | `HOST` | `127.0.0.1` | bind address for the main server. Bind to a Tailscale IP to share it with your team — there is no auth layer (see the [trust model](README.md#trust-model-read-this)) |
-| `PORT` | `3850` | main server (UI + API at the server root) |
-| `WEBHOOK_PORT` | `3848` | second HTTP server for inbound webhooks |
-| `OPENSESSION_UI_BASE` | `http://127.0.0.1:<port>` | public base URL used in links posted to Slack/Linear/notes |
+| `PORT` | `3850` | private app server (UI + API at the server root) |
+| `OPENSESSION_UI_BASE` | `http://127.0.0.1:<port>` | private app base used in session links |
+| `OPENSESSION_INGRESS_BASE` | unset | public origin for webhooks, remote Sandbox callbacks and workload identity |
 | `OPENSESSION_CONFIG` | `~/.opensession/config.json` | config-file path override |
 | `SHUTDOWN_DRAIN_MS` | `60000` | graceful-shutdown drain window for in-flight runs |
 | `OPENSESSION_SESSIONS_DIR` | `~/.opensession/sessions` | session store override (mostly a test seam) |
@@ -560,17 +560,17 @@ after the backend change rather than after every save.
 - Wire up integrations: [slack.md](slack.md), [github.md](github.md),
   [linear.md](linear.md), [plain.md](plain.md),
   [integrations-misc.md](integrations-misc.md). Inbound webhooks all land on
-  the webhook server — see below.
+  Public ingress — see below.
 - Sandboxed execution: [../self-hosting-sandboxes.md](../self-hosting-sandboxes.md).
 
-## Webhook server
+## Public ingress
 
-One detail every integration page references: `packages/core/opensession-server/src/server/webhook-server.ts`
-runs a second `Bun.serve` on `127.0.0.1:${WEBHOOK_PORT}` (default 3848).
-Agents register their own routes on it (`/slack/events`, `/slack/actions`,
-`/github/webhook`, `/webhook` (Linear), `/plain/webhook`, `/stripe/webhook`,
-`/oauth/*`, `/worktree/*`). It's loopback-only: you need a TLS-terminating
-reverse proxy on a public hostname in front of it (Caddy works well) for
-Slack/GitHub/Linear/Plain/Stripe to reach it. All
-signature checks are HMAC-SHA256 and fail-closed — a missing secret rejects
-everything rather than letting it through.
+`packages/core/opensession-server/src/server/public-ingress.ts` binds the one
+fail-closed public gateway on `127.0.0.1:3860`. Agents register exact webhook
+methods and paths into it; the same listener owns remote Sandbox WebSockets and
+workload identity. Everything else returns 404, including all private app/API
+routes.
+
+Choose Tailscale Funnel, Cloudflare Tunnel, or a Caddy-managed custom domain in
+Settings → Public ingress. All provider signature checks remain fail-closed: a
+missing secret rejects the webhook rather than allowing unsigned intake.

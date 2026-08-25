@@ -27,8 +27,8 @@ flowchart LR
 
   subgraph bun["opensession.ts — one Bun process"]
     direction TB
-    http["main server :3850<br/>web UI · REST API · WebSockets"]
-    wh["webhook server :3848"]
+    http["private app :3850<br/>web UI · REST API · WebSockets"]
+    wh["public ingress :3860<br/>exact webhooks · Sandbox callbacks · OIDC"]
     agents["integration agents<br/>slack · linear · plain · github · stripe"]
     autos["automations + schedulers"]
     runner["runner layer<br/>pi-runner → detached host"]
@@ -45,9 +45,9 @@ flowchart LR
   runner --> mcp["MCP servers (mcp-config.json)<br/>Linear · Plain · Stripe · WorkOS · Sentry · …"]
 ```
 
-A second small HTTP server (the webhook server, default port 3848) receives
-GitHub/Linear/Plain/Stripe webhooks; the main server (default 3850) serves the
-UI and API at the root of your instance URL.
+The fail-closed public ingress gateway on 3860 receives exact registered
+webhooks, remote Sandbox callbacks and workload identity. The independent app
+server on 3850 serves the private UI and API.
 
 ## Minimum requirements
 
@@ -69,8 +69,9 @@ UI and API at the root of your instance URL.
   installs it with `--tailscale` (the default install binds loopback only);
   joining a network is a separate step that needs your account.
 - Optional: **Docker** (sandboxed sessions —
-  [self-hosting-sandboxes](../self-hosting-sandboxes.md)), **Caddy** (TLS for
-  live previews), `whisper.cpp`/Groq/OpenAI key (voice dictation).
+  [self-hosting-sandboxes](../self-hosting-sandboxes.md)), **Caddy** (custom
+  ingress domains and TLS for live previews), **cloudflared** (public ingress
+  without inbound ports), `whisper.cpp`/Groq/OpenAI key (voice dictation).
 
 ## Trust model (read this)
 
@@ -118,7 +119,7 @@ when adding anything that touches this.
 | [ec2.md](ec2.md) | provisioning a clean EC2 box, networking, SSH debugging |
 | [../../recipes/README.md](../../recipes/README.md) | bundled automation recipes, and what belongs in the repo |
 | [slack.md](slack.md) | Slack app, token, scopes, event intake, admin gating |
-| [github.md](github.md) | GitHub token, webhook server, PR agent, deploy pipeline |
+| [github.md](github.md) | GitHub App, public ingress, PR agent, deploy pipeline |
 | [codestorage.md](codestorage.md) | code.storage as an alternative git host — signing key, repos, branch reviews |
 | [linear.md](linear.md) | Linear OAuth app, webhooks, the Linear agent |
 | [plain.md](plain.md) | Plain support tickets, the triage automation |

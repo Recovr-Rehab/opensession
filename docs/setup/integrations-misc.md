@@ -31,7 +31,7 @@ the agent is skipped entirely (no route worth exposing).
 Two separate pieces:
 
 1. **Dispute webhook agent** (`packages/core/opensession-server/src/agents/stripe/`): route `POST
-   /stripe/webhook` on the [webhook server](install.md#webhook-server),
+   /stripe/webhook` on [Public ingress](install.md#public-ingress),
    verified with `STRIPE_WEBHOOK_SECRET`. It only acts on
    `charge.dispute.created`, firing the `stripe:charge.dispute.created`
    automation event with a minimal payload (the automation re-fetches details

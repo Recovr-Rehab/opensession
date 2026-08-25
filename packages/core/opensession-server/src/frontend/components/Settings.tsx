@@ -45,6 +45,7 @@ import { AuthenticationPanel } from "./settings/AuthenticationPanel";
 import { DeploysPanel } from "./settings/DeploysPanel";
 import { GeneralPanel } from "./settings/GeneralPanel";
 import { IntegrationsPanel } from "./settings/IntegrationsPanel";
+import { IngressPanel } from "./settings/IngressPanel";
 import { LibraryPanel } from "./settings/LibraryPanel";
 import { MembersPanel } from "./settings/MembersPanel";
 import { MemoryPanel } from "./settings/MemoryPanel";
@@ -245,6 +246,7 @@ function SectionPanel({
 			{section === "connections" && <Connections />}
 			{section === "myAccounts" && <MyAccountsPanel />}
 			{section === "memory" && <MemoryPanel />}
+			{section === "ingress" && <IngressPanel />}
 			{section === "storage" && <StoragePanel />}
 			{section === "prewarming" && <PrewarmingPanel />}
 			{section === "papercuts" && <PapercutsPanel />}

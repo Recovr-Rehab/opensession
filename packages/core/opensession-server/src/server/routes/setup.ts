@@ -27,7 +27,6 @@ import { envRequired, type IntegrationSpec } from "../integrations/registry";
 import { setupAccessSnapshot } from "../setup-access";
 import { requireWorkspaceAdmin } from "../workspace-auth";
 import type { RouteContext } from "./context";
-import { handleSetupAccessRoutes } from "./setup-access";
 import { handleSetupCodestorageRoutes } from "./setup-codestorage";
 import { handleSetupRepoRoutes } from "./setup-repos";
 import { handleSetupTeamRoutes } from "./setup-team";
@@ -112,13 +111,15 @@ async function primaryGithubOrg(): Promise<string | undefined> {
 export function buildOnboardingGithubAppCreateUrl(
   org: string | undefined,
   homepageUrl: string,
+  ingressUrl: string,
   appName = `Open Session (${Math.random().toString(36).slice(2, 6)})`,
 ): string {
   const params = new URLSearchParams({
     name: appName,
     url: homepageUrl.trim() || "http://localhost:3850",
     public: "false",
-    webhook_active: "false",
+    hook_url: `${ingressUrl.replace(/\/$/, "")}/github/webhook`,
+    webhook_active: "true",
     // The canonical grant set (checks + statuses + issues included) — the same
     // permissions the installation token mints request, so a created App is
     // never born missing a scope the server needs.
@@ -176,6 +177,7 @@ async function githubSnapshot() {
     appCreateUrl: buildOnboardingGithubAppCreateUrl(
       org,
       configuredServer().publicBaseUrl,
+      configuredServer().webhookBaseUrl,
     ),
   };
 }
@@ -697,10 +699,9 @@ export async function handleSetupRoutes(
     return Response.json({ restarting: true });
   }
 
-  // ── Sibling modules: /api/setup/{access,team*,github/repos,repos},
+  // ── Sibling modules: /api/setup/{team*,github/repos,repos},
   //    /api/setup/codestorage/{connect,status,disconnect} ───────────────────
   return (
-    (await handleSetupAccessRoutes(ctx)) ??
     (await handleSetupTeamRoutes(ctx)) ??
     (await handleSetupRepoRoutes(ctx)) ??
     (await handleSetupCodestorageRoutes(ctx))

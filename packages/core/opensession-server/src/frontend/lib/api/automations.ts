@@ -316,7 +316,7 @@ export interface SandboxOperationInfo {
 export interface SandboxIngressInfo {
 	configuredUrl?: string;
 	proposedUrl?: string;
-	source: "sandbox_config" | "caddy_webhook" | "public_ui" | "none";
+	source: "config" | "caddy" | "none";
 	health: "ready" | "unreachable" | "not_configured";
 	caddyAdminReachable: boolean;
 	generatedSnippet: string;

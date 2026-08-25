@@ -29,19 +29,11 @@ and records Ready in the shared connection store. Re-running it is safe.
 `opensession sandbox disable <provider>` stops future use without deleting
 live sandboxes.
 
-Remote providers need the isolated public callback listener. Settings discovers
-an existing webhook Caddy origin and provides the exact route snippet plus:
-
-```sh
-opensession sandbox ingress install https://ingress.example.com
-```
-
-The installer owns a clearly marked route section inside the matching public
-host block, or creates that host block when it does not exist. It backs up the
-Caddyfile, validates and reloads Caddy, verifies the public route, and restores
-the complete prior Caddyfile on failure. Re-running it updates the same marked
-section. Connecting a provider or changing its callback origin does not restart
-Open Session.
+Remote providers use the workspace's canonical Public ingress origin. Configure
+it once under Settings → Public ingress with Tailscale Funnel, Cloudflare
+Tunnel, or a Caddy-managed custom domain. The same fail-closed listener receives
+signed integration webhooks, Sandbox callbacks, and workload identity; the
+private app is never part of that public listener.
 
 None remains a first-class personal and per-session choice. If a chosen
 provider later becomes unavailable, creation or the next turn fails clearly;
@@ -276,17 +268,6 @@ to `provider: "local"` (today's host behavior). Env override for the path:
   // Default derives from the server's HOST:PORT bind.
   "callbackBaseUrl": "ws://<your-tailnet-ip>:3850",
 
-  // Isolated PUBLIC dial-back listener for remote providers — see the
-  // "Public dial-back ingress" section below. When enabled with a
-  // publicBaseUrl, remote providers dial IT back instead of
-  // callbackBaseUrl; docker always stays on callbackBaseUrl.
-  "publicIngress": {
-    "enabled": false,          // start the listener at boot (needs restart)
-    "port": 3860,              // listen port (default 3860)
-    "host": "127.0.0.1",       // bind (default loopback — front with Caddy/tunnel)
-    "publicBaseUrl": "wss://your.domain"  // what sandboxes dial
-  },
-
   // ── Experimental conformance providers ─────────────────────────────
   "e2b": {
     "apiKey": "e2b_…",         // falls back to E2B_API_KEY
@@ -423,80 +404,45 @@ first-token time no slower than worktrees, and no turn-failure regression over
 two percentage points. It never changes configuration: a human still approves
 any future default flip.
 
-## Public dial-back ingress (remote providers)
+## Public ingress (remote providers)
 
-Remote sandboxes (Daytona/E2B/Box/Modal/Lambda MicroVMs) run on remote compute and must dial back
-to opensession's `/run-ws/<hostId>` and `/rpc-ws`
-WebSocket routes from the **public internet**. The main server binds the
-tailnet and carries the whole app — never expose it. Instead,
-`packages/core/opensession-server/src/server/public-ingress.ts` runs a **second, isolated Bun.serve** when
-`publicIngress.enabled` is set:
-
-**What it serves:**
+Remote sandboxes must dial back from the public internet. They use the same
+canonical public origin as signed integration webhooks and workload identity.
+`packages/core/opensession-server/src/server/public-ingress.ts` binds the one
+fail-closed gateway on `127.0.0.1:3860`.
 
 | Path | What |
 | --- | --- |
-| `/run-ws/<hostId>` | WS upgrade — the run host's event stream |
-| `/rpc-ws?host=…` | WS upgrade — the opensession-* MCP proxy channel |
-| `/ingress-health` | bare `200 ok` (monitors/probes) |
-| `/workload-identity/.well-known/openid-configuration` | public OIDC discovery |
-| `/workload-identity/jwks.json` | public signing keys |
-| `/workload-identity/token` | bearer-gated sandbox token exchange |
+| registered webhook/OAuth paths | signature-checked integration intake |
+| `/run-ws/<hostId>` | authenticated run-host event stream |
+| `/rpc-ws?host=…` | authenticated MCP proxy channel |
+| `/sandbox-portal-ws` | authenticated remote Portal relay |
+| `/ingress-health` | bare `200 ok` |
+| `/workload-identity/*` | OIDC discovery, JWKS and token exchange |
 
-Every other path is a **bodyless 404**. The listener never exposes app routes,
-the general API, or the frontend. Auth is run-ws.ts's own (shared functions, not copies):
-per-launch `wsToken`s keyed by hostId, registered only by ws-transport
-launches, constant-time compared **before** the upgrade. With no sandboxed
-runs in flight the token registry is empty and every upgrade is a 403.
-Being internet-facing it additionally rate-limits upgrades and workload-token
-exchange attempts **per client IP: 30/min → 429** (X-Forwarded-For-aware behind a local
-reverse proxy; discovery, JWKS, and health are exempt). The main :3850 server keeps serving the
-same routes for the tailnet path (docker-ws) — the ingress is additive.
+Every other method/path is a bodyless 404. The listener never exposes app
+routes, the general API, or the frontend. Sandbox upgrades use per-launch
+tokens and internet-facing upgrade/token attempts are rate-limited per client
+IP.
 
-The listener binds `127.0.0.1:3860` by default: something must terminate
-TLS in front of it and forward only those paths. The workload-identity issuer
-is this same public HTTPS origin plus `/workload-identity`; an external relying
-party must be able to fetch its discovery document and JWKS. Two permanent options:
+Settings → Public ingress offers three exposure methods:
 
-1. **Public IP + DNS + Caddy path routes** (needs :443 open in the security
-   group and an A record):
+1. **Tailscale Funnel** routes the machine's HTTPS `*.ts.net` hostname to
+   `127.0.0.1:3860`. It needs no DNS records or inbound ports.
+2. **Cloudflare Tunnel** uses a named tunnel and a CNAME to
+   `<tunnel-id>.cfargotunnel.com`; its only service must be
+   `http://127.0.0.1:3860`.
+3. **Custom domain** points A/AAAA records at the host and lets Open Session
+   manage a Caddy site that reverse-proxies the whole origin to 3860. The
+   application, not Caddy, remains the exact route allowlist.
 
-   ```caddyfile
-   your.domain {
-       handle /run-ws/* {
-           reverse_proxy localhost:3860
-       }
-       handle /rpc-ws {
-           reverse_proxy localhost:3860
-       }
-       handle /ingress-health {
-           reverse_proxy localhost:3860
-       }
-       handle /workload-identity/* {
-           reverse_proxy localhost:3860
-       }
-       # …whatever else the domain serves stays in its own handle blocks;
-       # the ingress paths never reach it.
-   }
-   ```
+The workload-identity issuer is the canonical public origin plus
+`/workload-identity`. An external relying party must be able to fetch discovery
+and JWKS from that exact issuer. Changing the origin therefore also requires
+updating external trust policies.
 
-   Caddy fetches/renews the certificate itself; set
-   `"publicBaseUrl": "wss://your.domain"`.
-
-2. **Named Cloudflare tunnel** (no inbound ports at all): a `cloudflared`
-   service with an `ingress` rule mapping a hostname to
-   `http://127.0.0.1:3860`, `publicBaseUrl` = that hostname. Survives
-   restarts, no security-group changes; adds Cloudflare as a dependency in
-   the dial-back path. (For one-off testing, a QUICK tunnel —
-   `cloudflared tunnel --url http://127.0.0.1:3860`, ephemeral URL, no
-   account — also works: pass it as `SBX_CONF_PUBLIC_BASE` to the
-   conformance suite.)
-
-Enabling/disabling the listener or changing its port/host is a **restart**
-(it starts once at boot); `publicBaseUrl` is read per launch like the rest
-of the config. Hosted-Daytona reminder: the sandbox side of this dial-back
-needs **Tier 3 / self-hosted** egress — lower tiers block outbound traffic
-so no ingress URL is reachable from inside.
+Hosted-Daytona reminder: the sandbox side needs Tier 3 / self-hosted egress;
+lower tiers block outbound traffic, so no ingress URL is reachable from inside.
 
 ## Known gaps (remote providers)
 
@@ -531,9 +477,9 @@ path are **runner internals** and need a service restart:
 - First-time enablement, provider/transport code changes, anything under
   `packages/core/opensession-server/src/server/sandbox/`, `packages/core/opensession-server/src/runner-host/`, run-ws/rpc-ws → real
   `systemctl restart opensession`.
-- The publicIngress listener starts once at boot: enabling/disabling it or
-  changing `port`/`host` → restart (`publicBaseUrl` value tweaks apply to
-  the next launch without one).
+- The public ingress gateway starts once at boot on loopback port 3860.
+  Changing code or its internal bind requires a restart; changing the canonical
+  public URL applies to new remote launches immediately.
 - Transport flips (`socket` ↔ `ws`) apply to NEW sandbox launches, but the
   transport code itself must already be live (restart once, then flip
   freely).

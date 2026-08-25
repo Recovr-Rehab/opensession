@@ -1,7 +1,7 @@
 # GitHub
 
 The GitHub integration has three parts: one GitHub App for bot and teammate
-credentials, webhook intake on the [webhook server](install.md#webhook-server),
+credentials, webhook intake on [Public ingress](install.md#public-ingress),
 and the `gh` CLI used inside trusted runs. Installation and App user tokens are
 the only GitHub credentials Open Session accepts.
 
@@ -86,10 +86,10 @@ rewritten to HTTPS for that process so host keys cannot bypass the App.
 
 ## Webhook intake
 
-The webhook server (`packages/core/opensession-server/src/server/webhook-server.ts`) listens on
-`127.0.0.1:${WEBHOOK_PORT}` (default 3848). You need a
-TLS-terminating proxy in front of it for GitHub to reach it — Tella, for
-example, uses Caddy on a public hostname.
+The fail-closed public ingress gateway listens on `127.0.0.1:3860`. Choose
+Tailscale Funnel, Cloudflare Tunnel, or a Caddy-managed custom domain under
+Settings → Public ingress. Never route the private app port through that public
+origin.
 
 - Route: `POST /github/webhook` (registered by the GitHub agent,
   `packages/core/opensession-server/src/agents/github/index.ts`). For an existing Slack-only deployment with
@@ -140,8 +140,9 @@ run for the **default repo only**.
 ## Webhook reachability
 
 PR comments, labels, and other event-driven behavior need GitHub to reach the
-public webhook URL. Set `server.webhookBaseUrl` (or the webhook origin in
-Settings), terminate TLS there, and configure the organization webhook above.
+public webhook URL. Configure Public ingress in Settings and use its
+`/github/webhook` URL. The generated Create GitHub App link enables that webhook
+and fills the URL automatically.
 A private-only instance can still reconcile missed PR reviews by polling, but
 it cannot discover conversational comments without webhook delivery.
 

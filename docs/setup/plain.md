@@ -36,7 +36,7 @@ config, or the `ENABLE_PLAIN_AGENT` env flag (which wins when set — see
 ## Webhook intake
 
 Point a Plain webhook at `POST /plain/webhook` on the
-[webhook server](install.md#webhook-server). Signature header:
+[public ingress gateway](install.md#public-ingress). Signature header:
 `plain-request-signature` (HMAC-SHA256, timing-safe).
 
 Consumed events (`packages/core/opensession-server/src/agents/plain/handlers.ts`):
