@@ -185,6 +185,7 @@ import {
 } from "../lib/hides";
 import {
 	markPendingStarted,
+	type OptimisticPendingPrompt,
 	reconcilePending,
 } from "../lib/pending-reconcile";
 import {
@@ -1346,16 +1347,7 @@ export function SessionViewer({
 	// turn lands (transcript) or the server confirms it as queued (busy path).
 	// `busyMode` marks a send made while the run was busy: it renders inside the
 	// queue flap (as "Queueing…") instead of as a transcript bubble.
-	const [pending, setPending] = useState<
-		Array<{
-			id: string;
-			content: string;
-			user: string;
-			sentAt: number;
-			images?: string[];
-			busyMode?: "queue" | "steer";
-		}>
-	>(() =>
+	const [pending, setPending] = useState<OptimisticPendingPrompt[]>(() =>
 		initialPending
 			? [{ id: `pending-initial-${session.id}`, ...initialPending }]
 			: [],
@@ -4557,8 +4549,19 @@ export function SessionViewer({
 			: null;
 	// Server-side filtering is authoritative; this guard keeps model-routing
 	// plumbing out of the message surface during a rolling deploy.
-	const shownQueued = queued.filter((item) =>
-		isClientVisibleQueuedContent(item.content, item.user),
+	// A `started` delivery is temporarily present in the server queue while its
+	// dispatch is claimed. Keep that receipt from duplicating the authoritative
+	// optimistic transcript bubble. If the bubble expires, the durable queue row
+	// becomes visible again rather than hiding a genuinely stalled message.
+	const startedPendingDeliveryIds = new Set(
+		pendingBubbles
+			.filter((item) => item.serverStarted)
+			.map((item) => item.id.replace(/^outbox-/, "")),
+	);
+	const shownQueued = queued.filter(
+		(item) =>
+			!startedPendingDeliveryIds.has(item.id || "") &&
+			isClientVisibleQueuedContent(item.content, item.user),
 	);
 	// Classified once, read by both the counts and the rows, so the chip's
 	// tally and what each row renders as can't disagree.
