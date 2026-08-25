@@ -205,6 +205,144 @@ describe("Agent Host transport", () => {
     client.close();
   });
 
+  test("stop aborts and fences a pending generation reservation", async () => {
+    const dir = await mkdtemp(
+      join(tmpdir(), "agent-host-reservation-stop-test-"),
+    );
+    const socketPath = join(dir, "host.sock");
+    let resolveAuthority!: (allowed: boolean) => void;
+    let signal: AbortSignal | undefined;
+    let created = 0;
+    const authority = new Promise<boolean>((resolve) => {
+      resolveAuthority = resolve;
+    });
+    const host = createAgentHost({
+      socketPath,
+      createDriver: () => {
+        created += 1;
+        return new FakeDriver();
+      },
+      authorizeGeneration: (_fence, candidateSignal) => {
+        signal = candidateSignal;
+        return authority;
+      },
+    });
+    resources.push({ host, dir });
+    await host.start();
+    const client = new AgentHostClient({ socketPath });
+    await client.connect();
+    const starting = client.startTurn(spec).catch((error: unknown) => error);
+    await tick();
+    await host.stop();
+    expect(String(await starting)).toContain("disconnected");
+    expect(signal?.aborted).toBe(true);
+    resolveAuthority(true);
+    await tick();
+    expect(created).toBe(0);
+    client.close();
+  });
+
+  test("disconnect aborts a reservation and ignores late authorization", async () => {
+    const dir = await mkdtemp(
+      join(tmpdir(), "agent-host-reservation-close-test-"),
+    );
+    const socketPath = join(dir, "host.sock");
+    let resolveAuthority!: (allowed: boolean) => void;
+    let signal: AbortSignal | undefined;
+    let created = 0;
+    const authority = new Promise<boolean>((resolve) => {
+      resolveAuthority = resolve;
+    });
+    const host = createAgentHost({
+      socketPath,
+      createDriver: () => {
+        created += 1;
+        return new FakeDriver();
+      },
+      authorizeGeneration: (_fence, candidateSignal) => {
+        signal = candidateSignal;
+        return authority;
+      },
+    });
+    resources.push({ host, dir });
+    await host.start();
+    const client = new AgentHostClient({ socketPath });
+    await client.connect();
+    const starting = client.startTurn(spec).catch((error: unknown) => error);
+    await tick();
+    client.close();
+    expect(String(await starting)).toContain("closed");
+    await tick();
+    expect(signal?.aborted).toBe(true);
+    resolveAuthority(true);
+    await tick();
+    expect(created).toBe(0);
+  });
+
+  test("authorization timeout poisons the epoch and ignores late resolution", async () => {
+    const dir = await mkdtemp(
+      join(tmpdir(), "agent-host-reservation-timeout-test-"),
+    );
+    const socketPath = join(dir, "host.sock");
+    let resolveAuthority!: (allowed: boolean) => void;
+    let signal: AbortSignal | undefined;
+    let created = 0;
+    const authority = new Promise<boolean>((resolve) => {
+      resolveAuthority = resolve;
+    });
+    const host = createAgentHost({
+      socketPath,
+      createDriver: () => {
+        created += 1;
+        return new FakeDriver();
+      },
+      authorizeGeneration: (_fence, candidateSignal) => {
+        signal = candidateSignal;
+        return authority;
+      },
+      authorizationDeadlineMs: 10,
+    });
+    resources.push({ host, dir });
+    await host.start();
+    const client = new AgentHostClient({ socketPath, timeoutMs: 100 });
+    await client.connect();
+    await expect(client.startTurn(spec)).rejects.toThrow(
+      "authorization timed out",
+    );
+    expect(signal?.aborted).toBe(true);
+    resolveAuthority(true);
+    await tick();
+    expect(created).toBe(0);
+    await expect(client.startTurn(spec)).rejects.toThrow("host_busy");
+    client.close();
+  });
+
+  test("shutdown bypasses a nonsettling generation authority", async () => {
+    const dir = await mkdtemp(
+      join(tmpdir(), "agent-host-reservation-shutdown-test-"),
+    );
+    const socketPath = join(dir, "host.sock");
+    let signal: AbortSignal | undefined;
+    const host = createAgentHost({
+      socketPath,
+      createDriver: () => new FakeDriver(),
+      authorizeGeneration: (_fence, candidateSignal) => {
+        signal = candidateSignal;
+        return new Promise(() => undefined);
+      },
+    });
+    resources.push({ host, dir });
+    await host.start();
+    const client = new AgentHostClient({ socketPath });
+    await client.connect();
+    const starting = client.startTurn(spec);
+    await tick();
+    client.shutdown();
+    await expect(starting).rejects.toThrow("disconnected");
+    expect(signal?.aborted).toBe(true);
+    client.close();
+  });
+
   test("rejects a stale generation and keeps the active turn", async () => {
     const { driver, socketPath } = await setup();
     const client = new AgentHostClient({ socketPath });
