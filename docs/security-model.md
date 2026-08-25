@@ -116,6 +116,33 @@ two people who should see it.
   `allowedUsers` is neither enforced nor stripped — so restart after wiring a
   restricted server.
 
+## GitHub webhook actor trust (public repositories)
+
+A valid webhook signature proves that GitHub sent an event. It does **not**
+prove that the GitHub user who caused it is trusted. This distinction is
+critical for public repositories, where anyone can open or update a PR, write a
+PR comment, or submit a review.
+
+The GitHub agent therefore treats `identity.team[].github` as its human trust
+roster and `policy.githubBotLogins` as its machine trust roster. Actor-driven
+entry points fail closed before starting an agent run or steering a session:
+
+- PR and inline-review `@mention` commands require the comment author's exact
+  GitHub login on the team roster. `author_association` is never accepted as a
+  substitute.
+- label-triggered review, auto-fix, simplify, and adversarial runs require the
+  label actor on the roster.
+- automatic review on open/reopen/push/ready events requires a rostered sender
+  or configured bot. The reconcile sweep applies the same gate and will not
+  infer trust merely from a label that lacks a persisted trusted requester.
+- merge automations and deploy-workflow session notifications require a
+  rostered actor or configured bot.
+- startup recovery revalidates persisted requesters, so a previously accepted
+  public event cannot bypass the boundary after a restart.
+
+Keep every trusted GitHub login in the identity roster. An empty roster disables
+human GitHub commands rather than making the integration public.
+
 ## GitHub credential scoping (out-of-org writes fail server-side)
 
 The "repositories outside your org require confirmation" rule in AGENTS.md is

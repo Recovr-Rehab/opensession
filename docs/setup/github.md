@@ -97,6 +97,22 @@ the code consumes (`packages/core/opensession-server/src/agents/github/webhook.t
 | `pull_request_review` | refreshes PR state; when the Slack agent is enabled, review → Slack notification |
 | `workflow_run` | notifies sessions waiting on a merged PR's deploy |
 
+### Public-repository actor gate
+
+The webhook secret authenticates GitHub, not the person who caused an event.
+Before an event can command the agent, the actor's exact login must appear in
+`identity.team[].github`; the configured `policy.githubBotLogins` are trusted
+separately for machine-originated events. This gate covers PR comments and
+inline comments, labels, automatic review events, merge automations, workflow
+notifications, Slack review notifications, reconcile retries, and restart
+recovery. Unknown actors are ignored. GitHub's `author_association` field is
+not a trust source.
+
+This means a public contributor can still open a PR and receive ordinary
+credential-free GitHub Actions CI, but cannot wake the Open Session agent,
+spend its model budget, push code, steer a session, or trigger a privileged PR
+behavior. Keep the team GitHub roster current; an empty roster fails closed.
+
 **Multi-repo**: events are accepted for **any repo in the config registry**
 (`repos` in `~/.opensession/config.json`, matched by `ghRepo`) — a repo joins
 the PR agent by existing in config and pointing its own GitHub webhook (same

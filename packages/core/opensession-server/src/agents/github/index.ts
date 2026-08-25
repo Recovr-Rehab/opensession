@@ -41,6 +41,7 @@ import {
 } from "./state";
 import { feedbackStats } from "./feedback";
 import type { PrRef } from "./review";
+import { isTrustedGithubLogin, isTrustedUser } from "../../server/shared/user-mappings";
 
 const GITHUB_WEBHOOK_SECRET = process.env.GITHUB_WEBHOOK_SECRET || "";
 
@@ -109,6 +110,28 @@ function ensureDocsSyncAutomation(): void {
 
 /** Fire the one recovery `planRecovery` picked for this PR. */
 async function fireRecovery(s: GithubPrState, kind: RecoveryKind): Promise<void> {
+  const requester =
+    kind === "auto-fix"
+      ? s.autoFix?.requestedBy
+      : kind === "pending-auto-fix"
+        ? s.pendingAutoFix?.requestedBy
+        : kind === "run"
+          ? s.activeRun?.requestedBy
+          : kind === "mention"
+            ? s.activeMention?.author
+            : s.pendingMention?.author;
+  const requesterTrusted =
+    kind === "mention" || kind === "pending-mention"
+      ? isTrustedGithubLogin(requester)
+      : isTrustedUser(requester);
+  if (!requesterTrusted) {
+    console.warn(
+      `[github] Refusing ${kind} recovery for PR #${s.prNumber} from untrusted @${requester || "unknown"}`,
+    );
+    clearRecoveryMarker(s, kind);
+    return;
+  }
+
   switch (kind) {
     case "auto-fix": {
       console.log(`[github] Recovering interrupted auto-fix loop for PR #${s.prNumber}`);
