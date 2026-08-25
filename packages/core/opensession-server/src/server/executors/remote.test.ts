@@ -483,9 +483,9 @@ describe("remote Executor connection", () => {
 });
 
 describe("remote Executor registry", () => {
-  test("rejects duplicate and stale incarnations and unregisters explicitly", () => {
+  test("rejects duplicates, reconnects exact incarnations, and fences generations", () => {
     const registry = new RemoteExecutorRegistry();
-    registry.register({
+    const first = registry.register({
       ...identity,
       capabilities: [...identity.capabilities],
       transport: new ManualTransport(),
@@ -501,6 +501,13 @@ describe("remote Executor registry", () => {
       }),
     ).toThrow(RemoteExecutorRegistrationError);
     registry.disconnect(identity.executorId);
+    const reconnect = registry.register({
+      ...identity,
+      capabilities: [...identity.capabilities],
+      transport: new ManualTransport(),
+      grant,
+    });
+    expect(registry.unregisterConnection(first)).toBe(false);
     expect(() =>
       registry.register({
         ...identity,
@@ -519,6 +526,8 @@ describe("remote Executor registry", () => {
       transport: new ManualTransport(),
       grant,
     });
+    expect(reconnect.connected).toBe(false);
+    expect(registry.unregisterConnection(reconnect)).toBe(false);
     expect(registry.unregister(identity.executorId, "next", 4)).toBe(true);
     expect(next.connected).toBe(false);
   });

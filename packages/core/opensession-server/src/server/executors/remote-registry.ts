@@ -1,8 +1,4 @@
-import type {
-  ExecutorConnectionIdentity,
-  ExecutorGrant,
-} from "@tellahq/opensession-protocol/executor";
-import type { DuplexJsonTransport } from "../../runner-executor/agent";
+import type { RemoteExecutorConnectionOptions } from "./remote";
 import { RemoteExecutorConnection } from "./remote";
 
 export class RemoteExecutorRegistrationError extends Error {
@@ -15,10 +11,7 @@ export class RemoteExecutorRegistrationError extends Error {
   }
 }
 
-export interface RemoteExecutorRegistration extends ExecutorConnectionIdentity {
-  transport: DuplexJsonTransport;
-  grant: ExecutorGrant;
-}
+export type RemoteExecutorRegistration = RemoteExecutorConnectionOptions;
 
 /** Explicit registry with one active incarnation per executor and no import-time effects. */
 export class RemoteExecutorRegistry {
@@ -34,19 +27,16 @@ export class RemoteExecutorRegistry {
         "executor generation is stale",
       );
     }
-    if (active && active.connected) {
-      throw new RemoteExecutorRegistrationError(
-        registration.generation === active.identity.generation
-          ? "duplicate_incarnation"
-          : "stale_generation",
-        "executor already has an active incarnation",
-      );
-    }
-    if (highest !== undefined && registration.generation === highest) {
-      throw new RemoteExecutorRegistrationError(
-        "duplicate_incarnation",
-        "executor generation was already registered",
-      );
+    if (active?.connected) {
+      if (registration.generation <= active.identity.generation) {
+        throw new RemoteExecutorRegistrationError(
+          registration.generation === active.identity.generation
+            ? "duplicate_incarnation"
+            : "stale_generation",
+          "executor already has an active incarnation",
+        );
+      }
+      active.disconnect("superseded by a higher executor generation");
     }
     const connection = new RemoteExecutorConnection(registration);
     this.#active.set(registration.executorId, connection);
@@ -59,7 +49,7 @@ export class RemoteExecutorRegistry {
 
   get(executorId: string): RemoteExecutorConnection | undefined {
     const connection = this.#active.get(executorId);
-    return connection?.connected ? connection : undefined;
+    return connection?.connected && connection.isReady ? connection : undefined;
   }
 
   disconnect(executorId: string, reason?: unknown): boolean {
@@ -67,6 +57,14 @@ export class RemoteExecutorRegistry {
     if (!connection) return false;
     connection.disconnect(reason);
     this.#active.delete(executorId);
+    return true;
+  }
+
+  unregisterConnection(connection: RemoteExecutorConnection): boolean {
+    if (this.#active.get(connection.identity.executorId) !== connection)
+      return false;
+    connection.disconnect("unregistered");
+    this.#active.delete(connection.identity.executorId);
     return true;
   }
 

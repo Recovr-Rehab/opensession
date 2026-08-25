@@ -67,6 +67,7 @@ export class RemoteExecutorConnection implements Executor {
   #resolveReady!: () => void;
   #rejectReady!: (error: Error) => void;
   #connected = true;
+  #isReady = false;
   #helloTimeout: ReturnType<typeof setTimeout>;
   #off: Array<() => void>;
 
@@ -99,6 +100,9 @@ export class RemoteExecutorConnection implements Executor {
   }
   get pendingCount(): number {
     return this.#pending.size;
+  }
+  get isReady(): boolean {
+    return this.#isReady;
   }
   ready(): Promise<void> {
     return this.#ready;
@@ -233,6 +237,7 @@ export class RemoteExecutorConnection implements Executor {
         accepted: true,
       } satisfies ExecutorServerMessage);
       clearTimeout(this.#helloTimeout);
+      this.#isReady = true;
       this.#resolveReady();
       return;
     }
