@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from "react";
+import { Badge } from "../ui/badge";
 import { Button } from "../ui/button";
 import { cn } from "../ui/cn";
 import { Disclosure } from "../ui/disclosure";
@@ -462,13 +463,17 @@ setSaving(false);
 					</div>
 				</label>
 				<label className="flex flex-col gap-1">
-					<span className="text-supporting text-fg">Private key (PEM)</span>
+					<span className="flex items-center justify-between gap-2">
+						<span className="text-label font-medium text-dim">Private key (PEM)</span>
+						<Badge tone="warning">Required</Badge>
+					</span>
 					<textarea
 						className="min-h-20 w-full resize-y rounded-md border border-line bg-surface px-2.5 py-1.5 font-mono text-supporting text-fg outline-none focus-ring"
 						value={privateKey}
 						onChange={(e) => setPrivateKey(e.target.value)}
 						placeholder="-----BEGIN RSA PRIVATE KEY-----"
 						aria-label="GitHub App private key (PEM)"
+						required
 						disabled={saving}
 						autoCapitalize="none"
 						autoComplete="off"
@@ -476,8 +481,7 @@ setSaving(false);
 					/>
 					<span className="text-meta leading-snug text-faint">
 						In the App&rsquo;s Private keys, Generate a private key and paste the
-						.pem here. Lets the bot and PR checks run on the App; leave blank for
-						sign-in only.
+						.pem here. Lets the bot and PR checks run through the App.
 					</span>
 				</label>
 				<p className="m-0 text-supporting text-faint">
