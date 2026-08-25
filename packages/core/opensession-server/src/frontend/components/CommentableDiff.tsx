@@ -56,7 +56,7 @@ const FILE_HEADER =
   "group relative flex min-h-9 w-full min-w-0 items-center gap-1.5 overflow-clip px-2 text-left text-fg hover:bg-hover phone:min-h-11 phone:px-2.5";
 const FILE_BODY = "relative z-0 max-w-full overflow-clip";
 const STICKY_FILE_HEADER =
-  "sticky top-[var(--review-file-header-top,0px)] z-[6] rounded-t-lg bg-bg data-[stuck]:shadow-[inset_0_-1px_0_var(--divider)]";
+  "sticky top-[var(--review-file-header-top,0px)] z-[6] rounded-t-lg bg-bg data-[stuck]:overflow-visible";
 const FILE_TOGGLE =
   "focus-ring flex min-w-0 cursor-pointer items-center gap-2 self-stretch border-none bg-transparent p-0 text-left text-fg";
 
@@ -789,10 +789,16 @@ const pendingByFile = m;
           data-sticky-edge={stickyFileHeaders ? "" : undefined}
         >
           {stickyFileHeaders && (
-            <span
-              aria-hidden="true"
-              className="pointer-events-none absolute inset-0 hidden rounded-t-lg shadow-[inset_0_0_0_1px_var(--border),inset_0_-1px_0_var(--divider)] group-data-[stuck]:block"
-            />
+            <>
+              <span
+                aria-hidden="true"
+                className="pointer-events-none absolute -inset-x-px inset-y-0 -z-[1] hidden bg-bg group-data-[stuck]:block"
+              />
+              <span
+                aria-hidden="true"
+                className="pointer-events-none absolute -inset-x-px inset-y-0 z-[1] hidden rounded-t-lg border border-line [border-bottom-color:var(--divider)] group-data-[stuck]:block"
+              />
+            </>
           )}
           <button
             type="button"
