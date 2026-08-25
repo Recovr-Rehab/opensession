@@ -130,7 +130,7 @@ setBusy(null);
     void doSwitch(repo);
   }
 
-  async function doSwitch(repo: string) {
+  const doSwitch = async (repo: string) => {
     setConfirmOpen(false);
     setBusy("Switching…");
     setError(null);
@@ -151,7 +151,7 @@ setError(e.message || String(e));
 }).finally(async () => {
 setBusy(null);
 });
-  }
+  };
 
   // Static (non-menu-item) row — current repo when it can't switch, attached rows.
   const staticRow = "flex items-center gap-2 rounded-md px-2.5 py-2 text-control-label text-fg";

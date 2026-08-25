@@ -93,6 +93,25 @@ const IMAGE =
   "block max-h-[360px] max-w-full rounded-md border border-line bg-[repeating-conic-gradient(rgba(128,128,128,0.18)_0%_25%,transparent_0%_50%)] bg-[length:16px_16px]";
 const IMAGE_CAPTION = "mt-1 text-meta text-dim";
 
+class CommentDraftText {
+  private value = "";
+  read() {
+    return this.value;
+  }
+  write(value: string) {
+    this.value = value;
+  }
+  clear() {
+    this.value = "";
+  }
+}
+
+let editModulePromise: Promise<typeof import("@pierre/diffs/edit")> | null = null;
+function loadEditModule() {
+  if (!editModulePromise) editModulePromise = import("@pierre/diffs/edit");
+  return editModulePromise;
+}
+
 export interface CommentTarget {
   path: string;
   startLine: number;
@@ -522,18 +541,10 @@ toast(error?.message || "Couldn’t copy file contents");
   const editModuleRef = useRef<typeof import("@pierre/diffs/edit") | null>(
     null,
   );
-  // Loaded lazily on first edit; the loader lives at module scope because the
-// compiler cannot lower dynamic imports inside components.
-let editModulePromise: Promise<typeof import("@pierre/diffs/edit")> | null = null;
-function loadEditModule() {
-	editModulePromise ??= import("@pierre/diffs/edit");
-	return editModulePromise;
-}
-
-const editorRef = useRef<Editor<Meta> | null>(null);
+  const editorRef = useRef<Editor<Meta> | null>(null);
 
   const startEdit = async (file: FileDiffMetadata, index: number) => {
-    editModuleRef.current ??= await loadEditModule();
+    if (!editModuleRef.current) editModuleRef.current = await loadEditModule();
     setEditError(null);
     setEditingPath(file.name);
     setExpanded((prev) => new Set(prev).add(index));
@@ -591,9 +602,9 @@ setSavingEdit(false);
   useLayoutEffect(() => {
     draftRef.current = draft;
   });
-  // Draft text is held in a ref so it survives the form remounting when the
-  // selection range is adjusted, without re-rendering the diff on each keystroke.
-  const draftTextRef = useRef("");
+  // Kept outside React render state so text survives a range-change remount
+  // without making the full diff tree rerender on every textarea keystroke.
+  const [draftText] = useState(() => new CommentDraftText());
 
   const handleSelect = (fileIndex: number, path: string, range: SelectedLineRange | null) => {
     if (!range) return; // keep the draft on stray deselects; Cancel closes it
@@ -602,7 +613,7 @@ setSavingEdit(false);
     };
 
   const closeDraft = () => {
-    draftTextRef.current = "";
+    draftText.clear();
     setDraft(null);
   };
 
@@ -620,7 +631,7 @@ setSavingEdit(false);
         },
         body,
       );
-      draftTextRef.current = "";
+      draftText.clear();
       setDraft(null);
       // In review mode the pending card is the confirmation; skip the toast.
       if (!reviewMode) {
@@ -681,7 +692,7 @@ setSavingEdit(false);
           disabledHint={disabledHint}
           placeholder={placeholder}
           submitLabel={submitLabel}
-          textRef={draftTextRef}
+          textStore={draftText}
           onCancel={closeDraft}
           onSubmit={submitDraft}
         />
@@ -1324,9 +1335,9 @@ function ImageDiffRow({
 }
 
 /**
- * Inline comment form with its OWN text/sending/error state, so keystrokes
- * re-render just this form — not the parent diff. Seeds from `textRef` (which
- * the parent keeps) so text survives the form remounting on range changes.
+ * Inline comment form with its own React state, so keystrokes stay local. A
+ * tiny non-rendering store preserves text if a selected-range change remounts
+ * the form.
  */
 const CommentForm = function CommentForm({
   targetLabel,
@@ -1334,7 +1345,7 @@ const CommentForm = function CommentForm({
   disabledHint,
   placeholder,
   submitLabel,
-  textRef,
+  textStore,
   onCancel,
   onSubmit,
 }: {
@@ -1343,11 +1354,11 @@ const CommentForm = function CommentForm({
   disabledHint?: string;
   placeholder: string;
   submitLabel: string;
-  textRef: React.MutableRefObject<string>;
+  textStore: CommentDraftText;
   onCancel: () => void;
   onSubmit: (body: string) => Promise<void>;
 }) {
-  const [text, setText] = useState(textRef.current);
+  const [text, setText] = useState(() => textStore.read());
   const [sending, setSending] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -1356,13 +1367,11 @@ const CommentForm = function CommentForm({
     if (!body || sending) return;
     setSending(true);
     setError(null);
-    await (async () => {
-await onSubmit(body);
-      // Success unmounts this form (parent clears the draft) — don't touch state.
-})().catch(async (e: any) => {
-setError(e.message || "Failed to submit");
+    await onSubmit(body).catch((error: any) => {
+      setError(error.message || "Failed to submit");
       setSending(false);
-});
+    });
+    // Success unmounts this form (parent clears the draft), so do not touch state.
   }
 
   return (
@@ -1386,7 +1395,7 @@ setError(e.message || "Failed to submit");
             value={text}
             onChange={(e) => {
               setText(e.target.value);
-              textRef.current = e.target.value;
+              textStore.write(e.target.value);
             }}
             onKeyDown={(e) => {
               if ((e.metaKey || e.ctrlKey) && e.key === "Enter") {

@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useCallback } from "react";
+import { useState, useEffect, useLayoutEffect, useRef, useCallback } from "react";
 import type { WSServerMessage, WSClientMessage } from "../lib/types";
 import { API_BASE, getWebSocketUrl } from "../lib/api";
 import { countSessionPerf } from "../lib/session-performance";
@@ -82,7 +82,9 @@ export function useWebSocket(presenceActive = true) {
   // teammates its owner is looking at that session.
   const awayRef = useRef(false);
   const presenceActiveRef = useRef(presenceActive);
-  presenceActiveRef.current = presenceActive;
+  useLayoutEffect(() => {
+    presenceActiveRef.current = presenceActive;
+  }, [presenceActive]);
   const syncPresenceRef = useRef<() => void>(() => {});
   const idleTimer = useRef<ReturnType<typeof setTimeout> | undefined>(
     undefined,
@@ -104,6 +106,7 @@ export function useWebSocket(presenceActive = true) {
   );
   const OUTBOX_MAX = 50;
   const OUTBOX_TTL_MS = 30_000;
+  const connectRef = useRef<() => void>(() => {});
 
   const connect = useCallback(() => {
     // Already open OR mid-handshake — don't stack a second socket.
@@ -334,11 +337,14 @@ export function useWebSocket(presenceActive = true) {
         } catch {}
       }
       if (disposedRef.current || wsRef.current !== ws) return;
-      reconnectTimer.current = setTimeout(connect, 2000);
+      reconnectTimer.current = setTimeout(() => connectRef.current(), 2000);
     };
 
     ws.onerror = () => ws.close();
   }, []);
+  useLayoutEffect(() => {
+    connectRef.current = connect;
+  }, [connect]);
 
   useEffect(() => {
     disposedRef.current = false;

@@ -321,7 +321,8 @@ export function MediaLightboxHost() {
 	const activeSourceCleanup = useRef<(() => void) | null>(null);
 	useEffect(() => {
 		const open = (request: LightboxRequest) => {
-			const id = ++nextLightboxId;
+			nextLightboxId += 1;
+			const id = nextLightboxId;
 			const origin = mediaElement(request.origin);
 			const next: LightboxState = {
 				...request,

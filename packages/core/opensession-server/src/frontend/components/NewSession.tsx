@@ -950,7 +950,9 @@ export function NewSession({ onBack, inline, focusSeq, send, addHandler, connect
   // this is the one thing here that reads what the draft SAYS, so it is handed
   // the text once it has held still rather than on every character.
   const branchEditedRef = useRef(branchEdited);
-  branchEditedRef.current = branchEdited;
+  useLayoutEffect(() => {
+    branchEditedRef.current = branchEdited;
+  }, [branchEdited]);
   const suggestSeqRef = useRef(0);
   useEffect(() => {
     if (mode !== "code" || selectedWorktree !== "__new__" || branchEdited) return;
@@ -1154,13 +1156,6 @@ pendingDraftParks.delete(operation);
 });
   }
 
-  /** The latest `handleCreate`, for a caller that has to wait a render before
-   *  it can create. The dictation bar's ↑ is the one: it writes the transcript
-   *  through the prompt's own state, so a closure captured at the moment of
-   *  the press would still be looking at the draft as it was. */
-  const createRef = useRef<() => void>(() => {});
-  createRef.current = handleCreate;
-
   function handleCreate() {
     if (!canCreate) return;
     const prompt = promptText.current.trim();
@@ -1311,6 +1306,15 @@ pendingDraftParks.delete(operation);
     !sandboxModelWarning &&
     (hasPromptText || images.length > 0 || files.length > 0) &&
     (mode === "ask" || mode === "scratch" || selectedWorktree !== "");
+
+  /** The latest `handleCreate`, for a caller that has to wait a render before
+   *  it can create. The dictation bar's ↑ is the one: it writes the transcript
+   *  through the prompt's own state, so a closure captured at the moment of
+   *  the press would still be looking at the draft as it was. */
+  const createRef = useRef<() => void>(() => {});
+  useLayoutEffect(() => {
+    createRef.current = handleCreate;
+  }, [handleCreate]);
 
   // The base a code session branches off. It sits in the footer's overflow
   // menu rather than the header: a fresh branch is what almost every session

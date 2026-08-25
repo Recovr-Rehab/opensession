@@ -177,6 +177,10 @@ export function VoiceInput({
   const [error, setError] = useState<string | null>(null);
   const [levels, setLevels] = useState<number[]>([]);
   const [liveTranscript, setLiveTranscript] = useState("");
+  const [overlayTarget, setOverlayTarget] = useState<HTMLElement | null>(null);
+  useLayoutEffect(() => {
+    setOverlayTarget(overlayTargetRef?.current ?? null);
+  }, [overlayTargetRef]);
   const recRef = useRef<MediaRecorder | null>(null);
   const speechRef = useRef<BrowserDictation | null>(null);
   const speechResultRef = useRef<Promise<string> | null>(null);
@@ -185,9 +189,11 @@ export function VoiceInput({
   const requestRef = useRef(0);
   const returnFocusRef = useRef<HTMLElement | null>(null);
   const callbacksRef = useRef({ onText, onTextSend });
-  callbacksRef.current = { onText, onTextSend };
   const activeChangeRef = useRef(onActiveChange);
-  activeChangeRef.current = onActiveChange;
+  useLayoutEffect(() => {
+    callbacksRef.current = { onText, onTextSend };
+    activeChangeRef.current = onActiveChange;
+  }, [onText, onTextSend, onActiveChange]);
   const chunksRef = useRef<BlobPart[]>([]);
   const streamRef = useRef<MediaStream | null>(null);
   const audioCtxRef = useRef<AudioContext | null>(null);
@@ -207,6 +213,204 @@ export function VoiceInput({
     audioCtxRef.current = null;
     recRef.current = null;
   }
+  function restoreEditorFocus() {
+    // The first frame lets React remove `inert`; the second restores the caret
+    // after that commit instead of trying to focus an inert textarea.
+    requestAnimationFrame(() =>
+      requestAnimationFrame(() =>
+        returnFocusRef.current?.focus({ preventScroll: true }),
+      ),
+    );
+  }
+
+  function finishCancellation() {
+    setLiveTranscript("");
+    setPhase("cancelling");
+    timersRef.current.push(
+      window.setTimeout(() => {
+        setPhase("idle");
+        restoreEditorFocus();
+      }, duration.large * 1000),
+    );
+  }
+
+  function stop(accept: boolean, send = false) {
+    if (phase === "requesting") {
+      requestRef.current++;
+      finishCancellation();
+      return;
+    }
+    const rec = recRef.current;
+    if (!rec || rec.state === "inactive") return;
+    acceptRef.current = accept;
+    sendRef.current = accept && send;
+    const speech = speechRef.current;
+    speechRef.current = null;
+    if (accept) {
+      setPhase("transcribing");
+      speechResultRef.current = speech?.finish() ?? null;
+    } else {
+      speech?.cancel();
+      speechResultRef.current = null;
+    }
+    rec.stop();
+  }
+
+  async function finish(
+    blob: Blob,
+    request: number,
+    browserResult: Promise<string> | null,
+  ) {
+    let restoreFocus = false;
+    await (async () => {
+      // A live browser result avoids uploading and reprocessing the complete
+      // clip. The existing server transcription remains the fallback, so an
+      // unsupported browser or a speech-service outage behaves as before.
+      const liveText = (await browserResult?.catch(() => ""))?.trim() || "";
+      const text = liveText || (await transcribeClip(blob));
+      if (request !== requestRef.current) return;
+      const callbacks = callbacksRef.current;
+      if (!text) {
+        setError("Heard nothing. Try again.");
+        restoreFocus = true;
+      } else if (sendRef.current && callbacks.onTextSend) {
+        callbacks.onTextSend(text);
+      } else {
+        callbacks.onText(text);
+        restoreFocus = true;
+      }
+    })()
+      .catch((error: any) => {
+        if (request !== requestRef.current) return;
+        setError(error?.message || "Transcription failed");
+        restoreFocus = true;
+      })
+      .finally(() => {
+        if (request === requestRef.current) {
+          sendRef.current = false;
+          setLiveTranscript("");
+          setPhase("idle");
+          if (restoreFocus) restoreEditorFocus();
+        }
+      });
+  }
+
+  const start = async () => {
+    setError(null);
+    // getUserMedia only exists in secure contexts. Over plain http (the
+    // :3850 hostname) the mic simply isn't there.
+    if (!navigator.mediaDevices?.getUserMedia || typeof MediaRecorder === "undefined") {
+      setError(`Mic needs HTTPS. Open ${PRODUCT_NAME} at its ts.net URL.`);
+      return;
+    }
+    // Take over the field in the same gesture that asked for the mic. Waiting
+    // for a permission round trip first made the button appear unresponsive.
+    const request = ++requestRef.current;
+    speechRef.current?.cancel();
+    speechRef.current = null;
+    speechResultRef.current = null;
+    setLiveTranscript("");
+    setPhase("requesting");
+    // The bar hides the field, so the caret must leave it too: a keystroke
+    // into text nobody can see is an edit made blind, and the dictation is
+    // about to append to that same draft.
+    const focused = document.activeElement as HTMLElement | null;
+    returnFocusRef.current = editTargetRef?.current ?? focused;
+    focused?.blur?.();
+
+    let stream: MediaStream;
+    try {
+      stream = await navigator.mediaDevices.getUserMedia({
+        audio: { echoCancellation: true, noiseSuppression: true },
+      });
+    } catch {
+      if (request === requestRef.current) {
+        setError("Microphone permission denied");
+        setPhase("idle");
+        restoreEditorFocus();
+      }
+      return;
+    }
+    if (request !== requestRef.current) {
+      stream.getTracks().forEach((track) => track.stop());
+      return;
+    }
+    streamRef.current = stream;
+    // Chrome/Firefox record webm/opus; iOS Safari only does mp4/AAC. The
+    // server transcodes whatever container we send.
+    const mime =
+      ["audio/webm;codecs=opus", "audio/webm", "audio/mp4"].find((m) =>
+        MediaRecorder.isTypeSupported?.(m),
+      ) || "";
+    const rec = new MediaRecorder(stream, mime ? { mimeType: mime } : undefined);
+    recRef.current = rec;
+    chunksRef.current = [];
+    acceptRef.current = false;
+    sendRef.current = false;
+    rec.ondataavailable = (e) => {
+      if (e.data.size) chunksRef.current.push(e.data);
+    };
+    rec.onstop = () => {
+      const accepted = acceptRef.current;
+      const browserResult = speechResultRef.current;
+      speechResultRef.current = null;
+      const blob = new Blob(chunksRef.current, {
+        type: rec.mimeType || mime || "audio/webm",
+      });
+      cleanup();
+      if (accepted) void finish(blob, request, browserResult);
+      else finishCancellation();
+    };
+
+    // Live level meter for the waveform is progressive enhancement. Recording
+    // works fine without it.
+    await (async () => {
+      const Ctx = window.AudioContext || (window as any).webkitAudioContext;
+      const ctx: AudioContext = new Ctx();
+      audioCtxRef.current = ctx;
+      const analyser = ctx.createAnalyser();
+      analyser.fftSize = 512;
+      ctx.createMediaStreamSource(stream).connect(analyser);
+      const buf = new Uint8Array(analyser.fftSize);
+      timersRef.current.push(
+        window.setInterval(() => {
+          analyser.getByteTimeDomainData(buf);
+          let sum = 0;
+          for (let i = 0; i < buf.length; i++) {
+            const v = (buf[i] - 128) / 128;
+            sum += v * v;
+          }
+          const rms = Math.sqrt(sum / buf.length);
+          setLevels((prev) => [
+            ...prev.slice(-(MAX_BAR_COUNT - 1)),
+            Math.min(1, rms * 4),
+          ]);
+        }, 90),
+      );
+    })().catch(() => {
+      // No waveform, no problem.
+    });
+
+    const startedAt = Date.now();
+    setLevels([]);
+    timersRef.current.push(
+      window.setInterval(() => {
+        if (Date.now() - startedAt >= MAX_SECONDS * 1000) stop(true);
+      }, 1000),
+    );
+    rec.start(250);
+    // Browser speech recognition streams partial text while the clip is still
+    // being recorded. The audio blob remains the accuracy-preserving fallback
+    // when the browser service is absent or fails.
+    speechRef.current = startBrowserDictation(
+      (text) => {
+        if (request === requestRef.current) setLiveTranscript(text);
+      },
+      stream,
+    );
+    setPhase("recording");
+  };
+
   useEffect(
     () => () => {
       requestRef.current++;
@@ -287,7 +491,7 @@ export function VoiceInput({
     };
   }, [active]);
   useEffect(() => {
-    const target = overlayTargetRef?.current;
+    const target = overlayTarget;
     const parent = target?.parentElement;
     if (!active || !target || !parent) return;
     const siblings = Array.from(parent.children).filter(
@@ -299,7 +503,7 @@ export function VoiceInput({
     return () => {
       for (const [element, inert] of previous) element.inert = inert;
     };
-  }, [active, overlayTargetRef]);
+  }, [active, overlayTarget]);
 
   // Errors show as a small bubble above the control; clear themselves.
   useEffect(() => {
@@ -307,202 +511,6 @@ export function VoiceInput({
     const t = setTimeout(() => setError(null), 5000);
     return () => clearTimeout(t);
   }, [error]);
-
-  function restoreEditorFocus() {
-    // The first frame lets React remove `inert`; the second restores the caret
-    // after that commit instead of trying to focus an inert textarea.
-    requestAnimationFrame(() =>
-      requestAnimationFrame(() =>
-        returnFocusRef.current?.focus({ preventScroll: true }),
-      ),
-    );
-  }
-
-  const start = async () => {
-    setError(null);
-    // getUserMedia only exists in secure contexts. Over plain http (the
-    // :3850 hostname) the mic simply isn't there.
-    if (!navigator.mediaDevices?.getUserMedia || typeof MediaRecorder === "undefined") {
-      setError(`Mic needs HTTPS. Open ${PRODUCT_NAME} at its ts.net URL.`);
-      return;
-    }
-    // Take over the field in the same gesture that asked for the mic. Waiting
-    // for a permission round trip first made the button appear unresponsive.
-    const request = ++requestRef.current;
-    speechRef.current?.cancel();
-    speechRef.current = null;
-    speechResultRef.current = null;
-    setLiveTranscript("");
-    setPhase("requesting");
-    // The bar hides the field, so the caret must leave it too: a keystroke
-    // into text nobody can see is an edit made blind, and the dictation is
-    // about to append to that same draft.
-    const focused = document.activeElement as HTMLElement | null;
-    returnFocusRef.current = editTargetRef?.current ?? focused;
-    focused?.blur?.();
-
-    let stream: MediaStream;
-    try {
-      stream = await navigator.mediaDevices.getUserMedia({
-        audio: { echoCancellation: true, noiseSuppression: true },
-      });
-    } catch {
-      if (request === requestRef.current) {
-        setError("Microphone permission denied");
-        setPhase("idle");
-        restoreEditorFocus();
-      }
-      return;
-    }
-    if (request !== requestRef.current) {
-      stream.getTracks().forEach((track) => track.stop());
-      return;
-    }
-    streamRef.current = stream;
-    // Chrome/Firefox record webm/opus; iOS Safari only does mp4/AAC. The
-    // server transcodes whatever container we send.
-    const mime =
-      ["audio/webm;codecs=opus", "audio/webm", "audio/mp4"].find((m) =>
-        MediaRecorder.isTypeSupported?.(m),
-      ) || "";
-    const rec = new MediaRecorder(stream, mime ? { mimeType: mime } : undefined);
-    recRef.current = rec;
-    chunksRef.current = [];
-    acceptRef.current = false;
-    sendRef.current = false;
-    rec.ondataavailable = (e) => {
-      if (e.data.size) chunksRef.current.push(e.data);
-    };
-    rec.onstop = () => {
-      const accepted = acceptRef.current;
-      const browserResult = speechResultRef.current;
-      speechResultRef.current = null;
-      const blob = new Blob(chunksRef.current, {
-        type: rec.mimeType || mime || "audio/webm",
-      });
-      cleanup();
-      if (accepted) void finish(blob, request, browserResult);
-      else finishCancellation();
-    };
-
-    // Live level meter for the waveform is progressive enhancement. Recording
-    // works fine without it.
-    await (async () => {
-const Ctx = window.AudioContext || (window as any).webkitAudioContext;
-      const ctx: AudioContext = new Ctx();
-      audioCtxRef.current = ctx;
-      const analyser = ctx.createAnalyser();
-      analyser.fftSize = 512;
-      ctx.createMediaStreamSource(stream).connect(analyser);
-      const buf = new Uint8Array(analyser.fftSize);
-      timersRef.current.push(
-        window.setInterval(() => {
-          analyser.getByteTimeDomainData(buf);
-          let sum = 0;
-          for (let i = 0; i < buf.length; i++) {
-            const v = (buf[i] - 128) / 128;
-            sum += v * v;
-          }
-          const rms = Math.sqrt(sum / buf.length);
-          setLevels((prev) => [
-            ...prev.slice(-(MAX_BAR_COUNT - 1)),
-            Math.min(1, rms * 4),
-          ]);
-        }, 90),
-      );
-})().catch(async () => {
-// no waveform, no problem
-});
-
-    const startedAt = Date.now();
-    setLevels([]);
-    timersRef.current.push(
-      window.setInterval(() => {
-        if (Date.now() - startedAt >= MAX_SECONDS * 1000) stop(true);
-      }, 1000),
-    );
-    rec.start(250);
-    // Browser speech recognition streams partial text while the clip is still
-    // being recorded. The audio blob remains the accuracy-preserving fallback
-    // when the browser service is absent or fails.
-    speechRef.current = startBrowserDictation(
-      (text) => {
-        if (request === requestRef.current) setLiveTranscript(text);
-      },
-      stream,
-    );
-    setPhase("recording");
-  };
-
-  function finishCancellation() {
-    setLiveTranscript("");
-    setPhase("cancelling");
-    timersRef.current.push(
-      window.setTimeout(() => {
-        setPhase("idle");
-        restoreEditorFocus();
-      }, duration.large * 1000),
-    );
-  }
-
-  function stop(accept: boolean, send = false) {
-    if (phase === "requesting") {
-      requestRef.current++;
-      finishCancellation();
-      return;
-    }
-    const rec = recRef.current;
-    if (!rec || rec.state === "inactive") return;
-    acceptRef.current = accept;
-    sendRef.current = accept && send;
-    const speech = speechRef.current;
-    speechRef.current = null;
-    if (accept) {
-      setPhase("transcribing");
-      speechResultRef.current = speech?.finish() ?? null;
-    } else {
-      speech?.cancel();
-      speechResultRef.current = null;
-    }
-    rec.stop();
-  }
-
-  async function finish(
-    blob: Blob,
-    request: number,
-    browserResult: Promise<string> | null,
-  ) {
-    let restoreFocus = false;
-    await (async () => {
-// A live browser result avoids uploading and reprocessing the complete
-      // clip. The existing server transcription remains the fallback, so an
-      // unsupported browser or a speech-service outage behaves as before.
-      const liveText = (await browserResult?.catch(() => ""))?.trim() || "";
-      const text = liveText || (await transcribeClip(blob));
-      if (request !== requestRef.current) return;
-      const callbacks = callbacksRef.current;
-      if (!text) {
-        setError("Heard nothing. Try again.");
-        restoreFocus = true;
-      } else if (sendRef.current && callbacks.onTextSend) {
-        callbacks.onTextSend(text);
-      } else {
-        callbacks.onText(text);
-        restoreFocus = true;
-      }
-})().catch(async (e: any) => {
-if (request !== requestRef.current) return;
-      setError(e?.message || "Transcription failed");
-      restoreFocus = true;
-}).finally(async () => {
-if (request === requestRef.current) {
-        sendRef.current = false;
-        setLiveTranscript("");
-        setPhase("idle");
-        if (restoreFocus) restoreEditorFocus();
-      }
-});
-  }
 
   const overlay = phase !== "idle" && (
     <div
@@ -660,8 +668,6 @@ if (request === requestRef.current) {
       )}
     </div>
   );
-  const overlayTarget = overlayTargetRef?.current;
-
   return (
     <>
       <Tooltip label="Dictate" shortcut={dictateKeys ?? undefined}>

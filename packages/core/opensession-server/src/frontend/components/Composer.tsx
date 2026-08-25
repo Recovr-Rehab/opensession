@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from "react";
+import React, { useEffect, useLayoutEffect, useRef, useState } from "react";
 import {
   useShortcutKeys,
   useShortcutLabel,
@@ -116,6 +116,33 @@ import { motion, AnimatePresence } from "motion/react";
 import { composerMorph, composerChipMotion } from "../ui/motion";
 import { ModelEffortSelect, shortModelLabel } from "./ModelEffortSelect";
 import type { SessionUsage } from "../lib/types";
+
+type ComposerPressButtonProps = Omit<
+  React.ComponentPropsWithoutRef<"button">,
+  "onClick" | "onTouchEnd"
+> & { onPress: () => void };
+
+const ComposerPressButton = React.forwardRef<
+  HTMLButtonElement,
+  ComposerPressButtonProps
+>(function ComposerPressButton({ onPress, ...props }, ref) {
+  const touchFiredAt = useRef(0);
+  return (
+    <button
+      {...props}
+      ref={ref}
+      onTouchEnd={(event) => {
+        event.preventDefault();
+        touchFiredAt.current = Date.now();
+        onPress();
+      }}
+      onClick={() => {
+        if (Date.now() - touchFiredAt.current < 700) return;
+        onPress();
+      }}
+    />
+  );
+});
 
 interface Props {
   /**
@@ -763,7 +790,9 @@ export function Composer({
   // the dialog goes away with it rather than stopping the NEXT turn.
   const [stopConfirm, setStopConfirm] = useState(false);
   const busyRef = useRef(busy);
-  busyRef.current = busy;
+  useLayoutEffect(() => {
+    busyRef.current = busy;
+  });
   useEffect(() => {
     if (!busy) setStopConfirm(false);
   }, [busy]);
@@ -814,22 +843,15 @@ export function Composer({
   // synthesized mousedown → textarea blur → keyboard dismiss → click) makes
   // toolbar taps close the keyboard and, on an empty draft, collapse the
   // composer mid-tap. Cancelling pointerdown does NOT stop that on iOS — the
-  // only reliable point is touchend itself. tapProps(action) fires the action
-  // on touchend and cancels the mouse synthesis; onClick stays for mouse/pen,
-  // guarded by the shared timestamp against browsers that still send both.
-  const touchFiredAt = useRef(0);
-  function tapProps(action: () => void) {
-    return {
-      onTouchEnd: (e: React.TouchEvent) => {
-        e.preventDefault();
-        touchFiredAt.current = Date.now();
-        action();
-      },
-      onClick: () => {
-        if (Date.now() - touchFiredAt.current < 700) return;
-        action();
-      },
-    };
+  // only reliable point is touchend itself. ComposerPressButton fires the
+  // action there and cancels mouse synthesis; mouse and pen still use click.
+  function attachFilesFromMenu() {
+    setMenu(null);
+    fileInputRef.current?.click();
+  }
+  function mentionFileFromMenu() {
+    setMenu(null);
+    startMention();
   }
 
   // Modal editing on the draft (Settings → Preferences → Vim mode). The engine
@@ -842,7 +864,14 @@ export function Composer({
   });
 
   // "@"-mention file autocomplete (shared with the New-session prompt field).
-  const mentions = useFileMentions({
+  const {
+    inputWrapRef: mentionInputWrapRef,
+    popup: mentionPopup,
+    inputProps: mentionInputProps,
+    sync: syncMentions,
+    handleKeyDown: handleMentionKeyDown,
+    close: closeMentions,
+  } = useFileMentions({
     value: displayText,
     onChange: setDisplayText,
     textareaRef,
@@ -964,7 +993,7 @@ setLocalStaging((current) => subtractStaging(current, batch));
         t.focus();
         t.selectionStart = t.selectionEnd = at + 1;
       }
-      mentions.sync();
+      syncMentions();
     });
   }
 
@@ -1179,7 +1208,7 @@ setLocalStaging((current) => subtractStaging(current, batch));
       // typing searches for the person to put there instead. Selecting the
       // `@` too would end the mention the moment the first letter replaced it.
       el.setSelectionRange(start + 1, end);
-      mentions.sync();
+      syncMentions();
     } else {
       // A session has no picker to re-open: the whole token stays selected,
       // and typing or pasting another link over it replaces the reference
@@ -1322,7 +1351,7 @@ setLocalStaging((current) => subtractStaging(current, batch));
     // An undo that has to cross a session token replays canonical state; every
     // other ⌘Z is left to the field's own history.
     if (sessionNames.handleUndoRedoKey(e)) return;
-    if (mentions.handleKeyDown(e)) return;
+    if (handleMentionKeyDown(e)) return;
     if ((e.nativeEvent as any).isComposing) return;
     if (
       (e.key === "Backspace" || e.key === "Delete") &&
@@ -1595,9 +1624,9 @@ setLocalStaging((current) => subtractStaging(current, batch));
             "relative",
             minimized && "order-2 min-w-0 flex-auto",
           )}
-          ref={mentions.inputWrapRef}
+          ref={mentionInputWrapRef}
         >
-          {mentions.popup}
+          {mentionPopup}
           {hlActive && (
             // `composer-hl` stays as a hook: the tint spans inside this mirror
             // are written as innerHTML by lib/composer-highlight.ts, so their
@@ -1633,7 +1662,7 @@ setLocalStaging((current) => subtractStaging(current, batch));
           )}
           <textarea
             ref={textareaRef}
-            {...mentions.inputProps}
+            {...mentionInputProps}
             // `composer-textarea` stays as a class NAME hook: the sidebar swipe
             // guard (lib/sidebar-swipe.ts) and SessionViewer's global keys both
             // ask whether the caret is in a composer by looking for it.
@@ -1685,10 +1714,10 @@ setLocalStaging((current) => subtractStaging(current, batch));
               onTyping?.(e.currentTarget.value.length > 0);
             }}
             onKeyDown={handleKeyDown}
-            onKeyUp={mentions.sync}
+            onKeyUp={syncMentions}
             onClick={(e) => {
               if (openPillMenu(e.currentTarget, e.clientX, e.clientY)) return;
-              mentions.sync();
+              syncMentions();
             }}
             onMouseMove={(e) => updatePillHover(e.clientX, e.clientY)}
             onMouseLeave={() => updatePillHover(-1, -1)}
@@ -1709,7 +1738,7 @@ setLocalStaging((current) => subtractStaging(current, batch));
                 setInnerValue((current) => (current === remote ? current : remote));
               }
               // Let a click on a suggestion (mousedown) win the race first.
-              setTimeout(mentions.close, 120);
+              setTimeout(closeMentions, 120);
             }}
             onCopy={sessionNames.handleCopy}
             onCut={sessionNames.handleCut}
@@ -1764,7 +1793,7 @@ setLocalStaging((current) => subtractStaging(current, batch));
           // keyboard. Cancelling pointerdown covers pointer-event browsers,
           // but NOT iOS Safari — there the blur rides the touchend→mousedown
           // synthesis, which only touchend's own preventDefault stops. That's
-          // what tapProps() on the individual buttons is for; this handler is
+          // what ComposerPressButton does for each button; this handler is
           // the non-iOS half.
           onPointerDown={(e) => {
             if (isPhone) e.preventDefault();
@@ -1792,7 +1821,7 @@ setLocalStaging((current) => subtractStaging(current, batch));
               )}
             >
               <Tooltip label="Attach files and session options">
-                <button
+                <ComposerPressButton
                   type="button"
                   // The "+" is a 40px target around a 22px glyph, so aligning
                   // its BOX with the composer's padding parks the visible ink
@@ -1801,13 +1830,13 @@ setLocalStaging((current) => subtractStaging(current, batch));
                   // sits about where the send circle does. The resting pill
                   // insets everything by 4px already, so it stays put there.
                   className={addButtonClass}
-                  {...tapProps(() => setMenu(menu === "add" ? null : "add"))}
+                  onPress={() => setMenu(menu === "add" ? null : "add")}
                   disabled={disabled}
                   aria-label="Attach files and session options"
                   aria-expanded={menu === "add"}
                 >
                   <IconPlus size={22} />
-                </button>
+                </ComposerPressButton>
               </Tooltip>
               {menu === "add" && (
                 <div
@@ -1818,13 +1847,10 @@ setLocalStaging((current) => subtractStaging(current, batch));
                   )}
                 >
                   {canAttach && (
-                    <button
+                    <ComposerPressButton
                       type="button"
                       className={composerMenuItem}
-                      {...tapProps(() => {
-                        setMenu(null);
-                        fileInputRef.current?.click();
-                      })}
+                      onPress={attachFilesFromMenu}
                     >
                       <span className={composerMenuIcon}>
                         <IconPaperclip size={22} />
@@ -1835,16 +1861,13 @@ setLocalStaging((current) => subtractStaging(current, batch));
                       {!isPhone && attachChord && (
                         <MenuShortcut>{attachChord}</MenuShortcut>
                       )}
-                    </button>
+                    </ComposerPressButton>
                   )}
                   {canAttach && mentionFetch && (
-                    <button
+                    <ComposerPressButton
                       type="button"
                       className={composerMenuItem}
-                      {...tapProps(() => {
-                        setMenu(null);
-                        startMention();
-                      })}
+                      onPress={mentionFileFromMenu}
                     >
                       <span className={composerMenuIcon}>
                         <IconAtSign size={22} />
@@ -1855,15 +1878,15 @@ setLocalStaging((current) => subtractStaging(current, batch));
                           Hidden on phones, where there are no keys to press —
                           the same call the Enter hint under the field makes. */}
                       {!isPhone && <MenuShortcut>@</MenuShortcut>}
-                    </button>
+                    </ComposerPressButton>
                   )}
                   {onSetGoal && (
-                    <button
+                    <ComposerPressButton
                       type="button"
                       className={composerMenuItem}
                       // Opens the goal editor: `menu` is single-valued, so this
                       // closes the add menu and opens the modal in one step.
-                      {...tapProps(() => setMenu("goal"))}
+                      onPress={() => setMenu("goal")}
                       title={goal ? `Goal: ${goal}` : undefined}
                     >
                       <span className={composerMenuIcon}>
@@ -1872,16 +1895,16 @@ setLocalStaging((current) => subtractStaging(current, batch));
                       <span className="grow whitespace-nowrap">
                         {goal ? "Edit goal" : "Set a goal"}
                       </span>
-                    </button>
+                    </ComposerPressButton>
                   )}
                   {onNoteModeChange && (
-                    <button
+                    <ComposerPressButton
                       type="button"
                       className={composerMenuItem}
-                      {...tapProps(() => {
+                      onPress={() => {
                         setMenu(null);
                         onNoteModeChange(!noteMode);
-                      })}
+                      }}
                       title={
                         noteMode
                           ? "Prompt the agent again (⌘N)"
@@ -1897,7 +1920,7 @@ setLocalStaging((current) => subtractStaging(current, batch));
                       {!isPhone && (
                         <MenuShortcut>{isApple ? "⌘N" : "Ctrl N"}</MenuShortcut>
                       )}
-                    </button>
+                    </ComposerPressButton>
                   )}
                   {menuExtra?.({ close: () => setMenu(null) })}
                   {sendMenu?.({
@@ -2047,7 +2070,7 @@ setLocalStaging((current) => subtractStaging(current, batch));
               // side by side in one badge row would read as a single one.
               shortcut={stopKeys ?? undefined}
             >
-              <button
+              <ComposerPressButton
                 type="button"
                 className={cn(
                   composerSend,
@@ -2060,12 +2083,12 @@ setLocalStaging((current) => subtractStaging(current, batch));
                   // down. Not `disabled` — pressing again re-sends the cancel.
                   stopping && "opacity-60",
                 )}
-                {...tapProps(() => onStop())}
+                onPress={onStop}
                 disabled={disabled}
                 aria-label={stopping ? "Stopping current turn" : "Stop current turn"}
               >
                 <IconStopSquare size={24} />
-              </button>
+              </ComposerPressButton>
             </Tooltip>
           )}
           {/* One busy-send button: the Enter follow-up preference (Settings →
@@ -2107,7 +2130,7 @@ setLocalStaging((current) => subtractStaging(current, batch));
                 >
                   <ContextMenu.Trigger
                     render={
-                      <button
+                      <ComposerPressButton
                         className={cn(
                           composerSend,
                           // A note posts straight away, so it keeps the plain
@@ -2121,12 +2144,12 @@ setLocalStaging((current) => subtractStaging(current, batch));
                                 : composerSendDefault,
                           minimized && composerSendMinimizedFill,
                         )}
-                        {...tapProps(() =>
+                        onPress={() =>
                           fireSend(
                             onSend,
                             steerSend ? { steer: true } : undefined,
-                          ),
-                        )}
+                          )
+                        }
                         disabled={disabled || isSendDisabled}
                         aria-label={
                           noteMode
@@ -2212,7 +2235,7 @@ setLocalStaging((current) => subtractStaging(current, batch));
                 ["→", "ArrowRight"],
               ] as const
             ).map(([label, key]) => (
-              <button
+              <ComposerPressButton
                 key={key}
                 type="button"
                 className={`h-8 flex-1 select-none rounded-md border border-line bg-surface text-label font-semibold text-dim active:bg-panel ${
@@ -2220,11 +2243,11 @@ setLocalStaging((current) => subtractStaging(current, batch));
                     ? "border-accent text-fg"
                     : ""
                 }`}
-                {...tapProps(() => vim.injectKey(key))}
+                onPress={() => vim.injectKey(key)}
                 aria-label={key}
               >
                 {label}
-              </button>
+              </ComposerPressButton>
             ))}
           </div>
         )}

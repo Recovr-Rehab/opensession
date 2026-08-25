@@ -27,6 +27,8 @@ import {
 	TAB_FACES_MORE,
 	TAB_GROUP,
 	TAB_HISTORY,
+	TAB_ITEM,
+	TAB_ITEM_DRAGGING,
 	TAB_NEW,
 	TAB_RENAME,
 	TAB_SCROLL,
@@ -190,6 +192,46 @@ type TabMember =
 	| { kind: "session"; id: string; session: UnifiedSession }
 	| { kind: "view"; id: string; view: ViewTab };
 
+function ReorderTabItem({
+	tabKey,
+	nextActive,
+	draggable,
+	dragging,
+	onPointerDown,
+	onDragStart,
+	onDragEnd,
+	onClickCapture,
+	children,
+}: {
+	tabKey: string;
+	nextActive: boolean;
+	draggable: boolean;
+	dragging: boolean;
+	onPointerDown: (key: string, event: React.PointerEvent) => void;
+	onDragStart: (key: string) => void;
+	onDragEnd: (key: string) => void;
+	onClickCapture: (event: React.MouseEvent) => void;
+	children: React.ReactNode;
+}) {
+	return (
+		<Reorder.Item
+			as="div"
+			value={tabKey}
+			data-tab-key={tabKey}
+			data-next-active={nextActive ? "" : undefined}
+			dragListener={draggable}
+			onPointerDown={(event) => onPointerDown(tabKey, event)}
+			onDragStart={() => onDragStart(tabKey)}
+			onDragEnd={() => onDragEnd(tabKey)}
+			whileDrag={{ scale: 1.02, zIndex: 3 }}
+			onClickCapture={onClickCapture}
+			className={dragging ? `${TAB_ITEM} ${TAB_ITEM_DRAGGING}` : TAB_ITEM}
+		>
+			{children}
+		</Reorder.Item>
+	);
+}
+
 /** Apply the edge fade only when the title is genuinely clipped. Keeping this
  * as a DOM attribute avoids rerendering the full tab strip for presentation. */
 function TabTitle({
@@ -264,8 +306,18 @@ export function SessionTabs({
 
 	// A lone unsplit tab has nowhere to move. Split bars remain draggable so their
 	// final tab can cross into the other column.
-	const tabDrag = useTabReorder({
-		enabled: !isPhone && (inSplit || tabs.length + viewTabs.length > 1),
+	const tabDragEnabled = !isPhone && (inSplit || tabs.length + viewTabs.length > 1);
+	const {
+		draftOrder,
+		dropSlot,
+		groupRef,
+		handleReorder,
+		handleItemPointerDown,
+		handleItemDragStart,
+		handleItemDragEnd,
+		handleItemClickCapture,
+	} = useTabReorder({
+		enabled: tabDragEnabled,
 		editingId: editKey,
 		onReorder: onReorderTabs,
 		onSplitDrag,
@@ -283,7 +335,7 @@ export function SessionTabs({
 		...tabs.map((session): TabMember => ({ kind: "session", id: session.id, session })),
 		...viewTabs.map((view): TabMember => ({ kind: "view", id: view.id, view })),
 	];
-	const rank = new Map((tabDrag.draftOrder ?? tabOrder).map((id, i) => [id, i] as const));
+	const rank = new Map((draftOrder ?? tabOrder).map((id, i) => [id, i] as const));
 	const orderedMembers = members
 		.map((member, natural) => ({ member, natural }))
 		.sort((a, b) => {
@@ -430,18 +482,18 @@ export function SessionTabs({
 				<Reorder.Group
 					as="div"
 					axis="x"
-					ref={tabDrag.groupRef}
+					ref={groupRef}
 					className={TAB_GROUP}
 					values={orderedKeys}
-					onReorder={tabDrag.handleReorder}
+					onReorder={handleReorder}
 				>
 					{/* First child so the tabs sliding over it paint on top. */}
-					{tabDrag.dropSlot && (
+					{dropSlot && (
 						<div
 							className={TAB_DROP_SLOT}
 							style={{
-								left: tabDrag.dropSlot.left,
-								width: tabDrag.dropSlot.width,
+								left: dropSlot.left,
+								width: dropSlot.width,
 							}}
 							aria-hidden="true"
 						/>
@@ -456,7 +508,17 @@ export function SessionTabs({
 						if (member.kind === "view") {
 							const v = member.view;
 							return (
-								<Reorder.Item key={key} {...tabDrag.itemProps(key, nextActive)}>
+								<ReorderTabItem
+								key={key}
+								tabKey={key}
+								nextActive={nextActive}
+								draggable={tabDragEnabled && editKey !== key}
+								dragging={dropSlot?.key === key}
+								onPointerDown={handleItemPointerDown}
+								onDragStart={handleItemDragStart}
+								onDragEnd={handleItemDragEnd}
+								onClickCapture={handleItemClickCapture}
+							>
 									<div
 										role="tab"
 										aria-selected={v.active}
@@ -491,7 +553,7 @@ export function SessionTabs({
 											</button>
 										)}
 									</div>
-								</Reorder.Item>
+								</ReorderTabItem>
 							);
 						}
 						const session = member.session;
@@ -529,7 +591,17 @@ export function SessionTabs({
 								</TabTitle>
 							);
 						return (
-							<Reorder.Item key={key} {...tabDrag.itemProps(key, nextActive)}>
+							<ReorderTabItem
+								key={key}
+								tabKey={key}
+								nextActive={nextActive}
+								draggable={tabDragEnabled && editKey !== key}
+								dragging={dropSlot?.key === key}
+								onPointerDown={handleItemPointerDown}
+								onDragStart={handleItemDragStart}
+								onDragEnd={handleItemDragEnd}
+								onClickCapture={handleItemClickCapture}
+							>
 								<ContextMenu.Root>
 									<ContextMenu.Trigger
 										render={
@@ -711,7 +783,7 @@ export function SessionTabs({
 										</ContextMenu.Item>
 									</ContextMenu.Popup>
 								</ContextMenu.Root>
-							</Reorder.Item>
+							</ReorderTabItem>
 						);
 					})}
 				</Reorder.Group>

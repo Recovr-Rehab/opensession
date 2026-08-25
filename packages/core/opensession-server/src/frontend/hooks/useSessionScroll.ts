@@ -207,9 +207,10 @@ export function useSessionScroll(initialFollowing = true): SessionScroll {
   // together: the "Load all" pill at the head of the transcript and the return
   // control at its foot. Each one belongs to an end the reader can't see, and
   // showing either from anywhere else leaves it floating over live content.
-  const updateEdges = useCallback((isFollowing = followingRef.current) => {
+  const updateEdges = useCallback((isFollowing?: boolean) => {
+    const resolvedFollowing = isFollowing ?? followingRef.current;
     const el = containerRef.current;
-    setShowScrollToBottom(Boolean(el && !isFollowing && !latestMessageVisible(el)));
+    setShowScrollToBottom(Boolean(el && !resolvedFollowing && !latestMessageVisible(el)));
     setAtTop(
       Boolean(el && el.scrollTop <= Math.min(el.clientHeight, TOP_THRESHOLD))
     );

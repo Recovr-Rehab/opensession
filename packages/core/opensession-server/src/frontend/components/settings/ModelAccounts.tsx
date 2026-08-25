@@ -1,5 +1,5 @@
 import { BASE_PATH } from "../../lib/base";
-import React, { useEffect, useRef, useState, } from "react";
+import React, { useEffect, useEffectEvent, useLayoutEffect, useRef, useState } from "react";
 import { usePeople } from "../../lib/people";
 import { providerAccountLabel } from "../../lib/provider-account";
 import { UserAvatar } from "../UserAvatar";
@@ -1197,7 +1197,9 @@ function AddClaudeAccountForm({
 	const [saving, setSaving] = useState(false);
 	const [error, setError] = useState<string | null>(null);
 	const pending = useRef<{ id?: string; done: boolean }>({ done: false });
-	pending.current.id = login?.id;
+	useLayoutEffect(() => {
+		pending.current.id = login?.id;
+	});
 
 	useEffect(() => {
 		if (!account) return;
@@ -1556,6 +1558,27 @@ function AddCodexAccountForm({ onAdded }: { onAdded: () => void }) {
 	// sign-in: open the URL anywhere, paste back the localhost redirect.
 	const [oauth, setOauth] = useState<{ id: string; url: string } | null>(null);
 	const [oauthCode, setOauthCode] = useState("");
+	const [pendingDone, setPendingDone] = useState(false);
+
+	// Abandoning a half-finished sign-in has to release it server-side, and the
+	// dialog can now be dismissed by Escape or the backdrop as well as by
+	// Cancel. The Effect Event gives unmount cleanup the latest committed login.
+	const cleanupPendingLogin = useEffectEvent(() => {
+		if (pendingDone) return;
+		const loginId =
+			login && (login.state === "starting" || login.state === "awaiting_code")
+				? login.id
+				: undefined;
+		if (loginId)
+			fetch(`${BASE_PATH}/api/codex-accounts/device-login/${encodeURIComponent(loginId)}`, {
+				method: "DELETE",
+			}).catch(() => {});
+		if (oauth?.id)
+			fetch(`${BASE_PATH}/api/codex-accounts/oauth-login/${encodeURIComponent(oauth.id)}`, {
+				method: "DELETE",
+			}).catch(() => {});
+	});
+	useEffect(() => () => cleanupPendingLogin(), []);
 
 	// Poll an in-flight device sign-in until it lands (or fails).
 	useEffect(() => {
@@ -1569,7 +1592,7 @@ const res = await fetch(
 				const next: CodexDeviceLogin = await res.json();
 				setLogin(next);
 				if (next.state === "done") {
-					pending.current.done = true;
+					setPendingDone(true);
 					onAdded();
 				}
 })().catch(async () => {
@@ -1599,31 +1622,6 @@ setError(e.message);
 		setSaving(false);
 	}
 
-	// Abandoning a half-finished sign-in has to release it server-side, and the
-	// dialog can now be dismissed by Escape or the backdrop as well as by
-	// Cancel. So the cleanup hangs off unmount, which every one of those paths
-	// goes through, rather than off the Cancel handler alone the way it used to
-	// (dismissing any other way leaked the pending login).
-	const pending = useRef<{ login?: string; oauth?: string; done: boolean }>({ done: false });
-	pending.current.login =
-		login && (login.state === "starting" || login.state === "awaiting_code") ? login.id : undefined;
-	pending.current.oauth = oauth?.id;
-	useEffect(
-		() => () => {
-			const { login: loginId, oauth: oauthId, done } = pending.current;
-			if (done) return;
-			if (loginId)
-				fetch(`${BASE_PATH}/api/codex-accounts/device-login/${encodeURIComponent(loginId)}`, {
-					method: "DELETE",
-				}).catch(() => {});
-			if (oauthId)
-				fetch(`${BASE_PATH}/api/codex-accounts/oauth-login/${encodeURIComponent(oauthId)}`, {
-					method: "DELETE",
-				}).catch(() => {});
-		},
-		[],
-	);
-
 	async function handleStartOauth() {
 		setSaving(true);
 		setError(null);
@@ -1648,32 +1646,32 @@ setError(e.message);
 		if (!oauth) return;
 		setSaving(true);
 		setError(null);
-		try {
-			const res = await fetch(
-				`${BASE_PATH}/api/codex-accounts/oauth-login/${encodeURIComponent(oauth.id)}`,
-				{
-					method: "POST",
-					headers: { "Content-Type": "application/json" },
-					body: JSON.stringify({ code: oauthCode }),
-				},
-			);
-			const body = await res.json();
-			if (!res.ok) throw new Error(body.error || `Failed: ${res.status}`);
-			toast(`Codex account ${providerAccountLabel(body.account)} added to the pool`);
-			pending.current.done = true;
-			onAdded();
-			return;
-		} catch (e: any) {
-			setError(e.message);
-		}
-		setSaving(false);
+		await fetch(
+			`${BASE_PATH}/api/codex-accounts/oauth-login/${encodeURIComponent(oauth.id)}`,
+			{
+				method: "POST",
+				headers: { "Content-Type": "application/json" },
+				body: JSON.stringify({ code: oauthCode }),
+			},
+		)
+			.then(async (res) => {
+				const body = await res.json();
+				if (!res.ok) throw new Error(body.error || `Failed: ${res.status}`);
+				toast(`Codex account ${providerAccountLabel(body.account)} added to the pool`);
+				setPendingDone(true);
+				onAdded();
+			})
+			.catch((error: any) => {
+				setError(error.message);
+				setSaving(false);
+			});
 	}
 
 	async function handleAdd() {
 		setSaving(true);
 		setError(null);
 		await (async () => {
-const res = await fetch(`${BASE_PATH}/api/codex-accounts`, {
+			const res = await fetch(`${BASE_PATH}/api/codex-accounts`, {
 				method: "POST",
 				headers: { "Content-Type": "application/json" },
 				body: JSON.stringify({
@@ -1685,12 +1683,12 @@ const res = await fetch(`${BASE_PATH}/api/codex-accounts`, {
 			});
 			const body = await res.json();
 			if (!res.ok) throw new Error(body.error || `Failed: ${res.status}`);
-			pending.current.done = true;
+			setPendingDone(true);
 			onAdded();
-})().catch(async (e: any) => {
-setError(e.message);
+		})().catch((error: any) => {
+			setError(error.message);
 			setSaving(false);
-});
+		});
 	}
 
 	const loginPending = login && (login.state === "starting" || login.state === "awaiting_code");

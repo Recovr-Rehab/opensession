@@ -99,6 +99,8 @@ interface Options {
 interface FileMentions {
   /** Ref for the wrapper the popup is measured against. */
   inputWrapRef: React.RefObject<HTMLDivElement | null>;
+  /** Compiler-safe callback ref for hosts that also own the wrapper node. */
+  setInputWrap: (node: HTMLDivElement | null) => void;
   /** The suggestion popup (portaled to <body>), or null when closed. */
   popup: React.ReactNode;
   /** True while the popup is open (suggestions visible). */
@@ -160,6 +162,9 @@ export function useFileMentions({ value, onChange, textareaRef, mentionFetch, pa
     actionsRef.current = actions;
   });
   const inputWrapRef = useRef<HTMLDivElement>(null);
+  const setInputWrap = (node: HTMLDivElement | null) => {
+    inputWrapRef.current = node;
+  };
   const popupRef = useRef<HTMLDivElement>(null);
   // Fixed viewport coordinates for the portaled popup, measured from the
   // wrapper. Null until the first measure after opening.
@@ -565,5 +570,14 @@ export function useFileMentions({ value, onChange, textareaRef, mentionFetch, pa
       : {}),
   };
 
-  return { inputWrapRef, popup, open, inputProps, sync, handleKeyDown, close };
+  return {
+    inputWrapRef,
+    setInputWrap,
+    popup,
+    open,
+    inputProps,
+    sync,
+    handleKeyDown,
+    close,
+  };
 }

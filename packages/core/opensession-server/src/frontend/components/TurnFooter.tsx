@@ -457,13 +457,15 @@ const MAX_CARD_FILES = 4;
  */
 export function TurnLineStatsCard({
   files,
-  additions = files.reduce((n, f) => n + f.additions, 0),
-  deletions = files.reduce((n, f) => n + f.deletions, 0),
+  additions: additionsProp,
+  deletions: deletionsProp,
 }: {
   files: TouchedFile[];
   additions?: number;
   deletions?: number;
 }) {
+  const additions = additionsProp ?? files.reduce((n, file) => n + file.additions, 0);
+  const deletions = deletionsProp ?? files.reduce((n, file) => n + file.deletions, 0);
   const roots = useToolPathRoots();
   const [open, setOpen] = useState(false);
   const anchor = useRef<HTMLSpanElement | null>(null);

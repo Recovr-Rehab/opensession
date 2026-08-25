@@ -324,6 +324,191 @@ export type { SidebarHandle } from "../lib/sidebar-types";
 
 const AUTOMATION_COLOR = "#d29922";
 
+type WorkspaceMenuTarget = {
+	id: string;
+	x: number;
+	y: number;
+	source: HTMLButtonElement;
+};
+
+function WorkspaceContextMenu({
+	menu,
+	workspace,
+	row,
+	pins,
+	currentUser,
+	activeSnoozeKeys,
+	snoozes,
+	hiddenRowKeys,
+	onPinsChange,
+	onSetStatus,
+	onSnooze,
+	onStartWorkspaceRename,
+	onStartSessionRename,
+	onToast,
+	onOpenReview,
+	onHide,
+	onArchive,
+	onDeleteDraft,
+	onClose,
+}: {
+	menu: WorkspaceMenuTarget;
+	workspace?: Workspace;
+	row?: WsRow;
+	pins: string[];
+	currentUser: string;
+	activeSnoozeKeys: Set<string>;
+	snoozes: Record<string, string>;
+	hiddenRowKeys: Set<string>;
+	onPinsChange: (pins: string[]) => void;
+	onSetStatus: Props["onSetStatus"];
+	onSnooze: (row: WsRow, until: string | null) => void;
+	onStartWorkspaceRename: (workspace: Workspace) => void;
+	onStartSessionRename: (session: UnifiedSession) => void;
+	onToast?: (message: string) => void;
+	onOpenReview: (session: UnifiedSession) => void;
+	onHide: (row: WsRow, hidden: boolean) => void;
+	onArchive: (row: WsRow, source: HTMLButtonElement) => void;
+	onDeleteDraft: (workspace: Workspace) => void;
+	onClose: () => void;
+}) {
+	const sessions = row?.sessions ?? [];
+	const first = sessions[0];
+	const pinKey = workspace ? `workspace:${workspace.id}` : menu.id;
+	const pinnedKeys = [
+		pinKey,
+		...(row
+			? [
+					row.key,
+					...row.sessions.flatMap((session) => [
+						session.id,
+						...(session.aliasIds || []),
+					]),
+				]
+			: []),
+	].filter((key, index, all) => pins.includes(key) && all.indexOf(key) === index);
+	const pinned = pinnedKeys.length > 0;
+	const togglePinNow = () => {
+		if (!pinned) {
+			onPinsChange(togglePin(pinKey));
+			return;
+		}
+		let next = pins;
+		for (const key of pinnedKeys) next = togglePin(key);
+		onPinsChange(next);
+	};
+	const anyManual = sessions.some((session) => pinnedLane(session));
+	const sharedManual =
+		anyManual &&
+		sessions.every((session) => pinnedLane(session) === pinnedLane(sessions[0]))
+			? (pinnedLane(sessions[0]) ?? null)
+			: null;
+	const entries: CtxEntry[] = [];
+	const rowUnread = row?.unread ?? false;
+	if (sessions.length > 0)
+		entries.push({
+			kind: "item",
+			icon: <IconMail size={20} />,
+			label: rowUnread ? "Mark as read" : "Mark as unread",
+			onClick: () =>
+				sessions.forEach((session) =>
+					rowUnread
+						? markRead(session.id, session.lastActivity)
+						: markUnread(session.id),
+				),
+		});
+	const rowClaimed = sessions.some((session) => isClaimed(session));
+	const rowMine = sessions.some((session) => ownedBy(session, currentUser));
+	if (sessions.length > 0 && (!rowMine || rowClaimed))
+		entries.push({
+			kind: "item",
+			icon: <IconInbox size={20} />,
+			label: rowClaimed ? "Remove from my workspaces" : "Add to my workspaces",
+			onClick: () => onSetStatus(sessions, rowClaimed ? null : "mine"),
+		});
+	entries.push({
+		kind: "item",
+		icon: <IconPin size={20} fill={pinned ? "currentColor" : "none"} />,
+		label: pinned ? "Unpin" : "Pin",
+		onClick: togglePinNow,
+	});
+	if (sessions.length > 0)
+		entries.push({
+			kind: "status",
+			current: sharedManual,
+			onPick: (status) => onSetStatus(sessions, status),
+		});
+	if (row && sessions.length > 0)
+		entries.push({
+			kind: "snooze",
+			until: activeSnoozeKeys.has(row.key) ? (snoozes[row.key] ?? null) : null,
+			onPick: (until) => onSnooze(row, until),
+		});
+	if (workspace)
+		entries.push({
+			kind: "item",
+			icon: <IconPencil size={20} />,
+			label: "Rename",
+			onClick: () => onStartWorkspaceRename(workspace),
+		});
+	else if (first)
+		entries.push({
+			kind: "item",
+			icon: <IconPencil size={20} />,
+			label: "Rename",
+			onClick: () => onStartSessionRename(first),
+		});
+	if (first)
+		entries.push({
+			kind: "item",
+			icon: <IconLink size={20} />,
+			label: "Copy link",
+			shortcut: shortcutLabel("session-copy-link") ?? undefined,
+			onClick: () =>
+				copyToClipboard(absoluteLink(sessionPath(first)), () => onToast?.("Link copied")),
+		});
+	if (first && (first.worktreeDir || first.branch))
+		entries.push({
+			kind: "item",
+			icon: <IconEye size={20} />,
+			label: "Open review",
+			onClick: () => onOpenReview(first),
+		});
+	if (row && sessions.length > 0) {
+		entries.push({ kind: "sep" });
+		const hidden = hiddenRowKeys.has(row.key);
+		entries.push({
+			kind: "item",
+			icon: hidden ? <IconEye size={20} /> : <IconEyeOff size={20} />,
+			label: hidden ? "Restore to my sidebar" : "Hide from my sidebar",
+			onClick: () => onHide(row, hidden),
+		});
+		entries.push({
+			kind: "item",
+			icon: <IconArchive size={20} />,
+			label: "Archive",
+			onClick: () => onArchive(row, menu.source),
+		});
+	} else if (workspace) {
+		entries.push({ kind: "sep" });
+		entries.push({
+			kind: "item",
+			icon: <IconTrash size={20} />,
+			danger: true,
+			label: "Delete draft",
+			onClick: () => onDeleteDraft(workspace),
+		});
+	}
+	return (
+		<SidebarCtxMenu
+			x={menu.x}
+			y={menu.y}
+			entries={entries}
+			onClose={onClose}
+		/>
+	);
+}
+
 export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 	sessions,
 	registeredRepos,
@@ -707,10 +892,11 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 	const filter = useSidebarFilter();
 	const [filterOpen, setFilterOpen] = useState(false);
 	const [customizeOpen, setCustomizeOpen] = useState(false);
-	const filterBtnRef = useRef<HTMLButtonElement>(null);
+	const [filterButton, setFilterButton] = useState<HTMLButtonElement | null>(null);
 	// The phone stand-in for the header filter button (portaled into the top
 	// bar next to Search). The popover anchors to whichever button is live.
-	const mobileFilterBtnRef = useRef<HTMLButtonElement>(null);
+	const [mobileFilterButton, setMobileFilterButton] =
+		useState<HTMLButtonElement | null>(null);
 	// The active repo-filter chip prefers to sit inline in the "My sessions"
 	// header (right after the title); it drops to its own row only when the
 	// sidebar is too narrow to fit it there. `repoInline` is decided by measuring
@@ -728,7 +914,9 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 	// the server hasn't stamped runStartedAt yet (external CLI runs, or the brief
 	// gap between isRunning flipping via WS and the next sessions poll). Entries
 	// are pruned once a row stops running so a later run starts its clock fresh.
-	const runStartSeen = useRef<Map<string, number>>(new Map());
+	const [runStartSeen, setRunStartSeen] = useState<Map<string, number>>(
+		() => new Map(),
+	);
 	useLayoutEffect(() => {
 		if (filter.repo === "all") return;
 		const measure = () => {
@@ -966,9 +1154,7 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 	const [feedFilters, setFeedFiltersState] = useState<
 		Record<string, FeedFilterValues>
 	>(readFeedFilters);
-	const feedFiltersRef = useRef(feedFilters);
-	feedFiltersRef.current = feedFilters;
-	const argFiltersFor = (feed: FeedDescriptor, all = feedFiltersRef.current) =>
+	const argFiltersFor = (feed: FeedDescriptor, all: Record<string, FeedFilterValues>) =>
 		Object.fromEntries(
 			(feed.filters || [])
 				.filter((f) => f.mode !== "meta")
@@ -1002,7 +1188,7 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 		let alive = true;
 		const load = () => {
 			for (const feed of enabledFeeds) {
-				fetchFeedItems(feed.id, argFiltersFor(feed))
+				fetchFeedItems(feed.id, argFiltersFor(feed, feedFilters))
 					.then((items) => {
 						if (alive)
 							setFeedItems((prev) => ({ ...prev, [feed.id]: items }));
@@ -1473,6 +1659,24 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 	// Opening a deep link must not undo a personal hide. The viewer owns the
 	// recovery action while the row stays absent.
 	const wsRows = (allWsRows.filter((r) => !hiddenRowKeys.has(r.key)));
+	useEffect(() => {
+		setRunStartSeen((current) => {
+			const next = new Map(current);
+			let changed = false;
+			for (const row of wsRows) {
+				const hasServerStart = row.sessions.some(
+					(session) => session.isRunning && session.runStartedAt,
+				);
+				if (row.running && !hasServerStart && !next.has(row.key)) {
+					next.set(row.key, Date.now());
+					changed = true;
+				} else if ((!row.running || hasServerStart) && next.delete(row.key)) {
+					changed = true;
+				}
+			}
+			return changed ? next : current;
+		});
+	}, [wsRows]);
 	// Consume the hide of any row that just resurfaced (blocked on a question),
 	// marking its sessions unread so the return reads as fresh activity — the same
 	// shape as the snooze wake above. Idempotent: clearHides ignores keys that
@@ -1945,6 +2149,8 @@ setClosingPrUrls((current) => {
 		return !!row.workspace?.draft && row.sessions.length === 0;
 	}
 
+	const wsSwipeOffset = useRef(0);
+
 	function deleteDraftWsRow(row: WsRow) {
 		const ws = row.workspace;
 		if (!ws) return;
@@ -2080,6 +2286,57 @@ setClosingPrUrls((current) => {
 	const pinShortcutKeys = useShortcutKeys("session-pin");
 	const archiveShortcutKeys = useShortcutKeys("session-archive");
 
+	// ── Workspace hover card ────────────────────────────────────────────────
+	// The same card every sidebar row raises, driven by hand: workspace rows
+	// come out of a render function rather than a component, so one card serves
+	// the whole list (only one row can be dwelled on at a time) and the hovered
+	// row is its anchor. The card carries actions (Archive, PR link,
+	// thumbnails), so leaving the row schedules the close with a short grace
+	// period and entering the card cancels it — the pointer can travel the 8px
+	// gap without the card vanishing under it.
+	const wsHoverOpenT = useRef<ReturnType<typeof setTimeout> | null>(null);
+	const wsHoverCloseT = useRef<ReturnType<typeof setTimeout> | null>(null);
+	// The row element itself is the anchor — the popover tracks it, so a
+	// scrolling list repositions the card instead of dropping it.
+	const [wsHover, setWsHover] = useState<{ row: WsRow; el: HTMLElement } | null>(
+		null,
+	);
+	// Mobile long-press sheet (the touch stand-in for the hover card).
+	const [wsSheet, setWsSheet] = useState<{
+		row: WsRow;
+		source: HTMLButtonElement;
+	} | null>(null);
+
+	const cancelWsHoverTimers = () => {
+		if (wsHoverOpenT.current) clearTimeout(wsHoverOpenT.current);
+		if (wsHoverCloseT.current) clearTimeout(wsHoverCloseT.current);
+		wsHoverOpenT.current = null;
+		wsHoverCloseT.current = null;
+	};
+	function wsRowHoverEnter(row: WsRow, el: HTMLElement) {
+		if (rowRenameEditing(row) || !pointerCanHover()) return;
+		cancelWsHoverTimers();
+		if (wsHover) {
+			setWsHover({ row, el });
+			return;
+		}
+		wsHoverOpenT.current = setTimeout(() => {
+			setWsHover({ row, el });
+		}, 380);
+	}
+	function scheduleWsHoverClose() {
+		if (wsHoverOpenT.current) clearTimeout(wsHoverOpenT.current);
+		wsHoverOpenT.current = null;
+		if (wsHoverCloseT.current) clearTimeout(wsHoverCloseT.current);
+		wsHoverCloseT.current = setTimeout(() => setWsHover(null), 140);
+	}
+	function closeWsHover() {
+		cancelWsHoverTimers();
+		setWsHover(null);
+	}
+	useEffect(() => cancelWsHoverTimers, []);
+
+
 	// ⌘E (or the legacy ⌘⇧A) archives the open session and lands on the next entry
 	// in the sidebar, rather than dropping back to Home. This lives here (not in
 	// the viewer) because the sidebar owns the row ordering that defines "next".
@@ -2197,55 +2454,6 @@ setClosingPrUrls((current) => {
 		return () => window.removeEventListener("keydown", onKeyDown);
 	}, []);
 
-	// ── Workspace hover card ────────────────────────────────────────────────
-	// The same card every sidebar row raises, driven by hand: workspace rows
-	// come out of a render function rather than a component, so one card serves
-	// the whole list (only one row can be dwelled on at a time) and the hovered
-	// row is its anchor. The card carries actions (Archive, PR link,
-	// thumbnails), so leaving the row schedules the close with a short grace
-	// period and entering the card cancels it — the pointer can travel the 8px
-	// gap without the card vanishing under it.
-	const wsHoverOpenT = useRef<ReturnType<typeof setTimeout> | null>(null);
-	const wsHoverCloseT = useRef<ReturnType<typeof setTimeout> | null>(null);
-	// The row element itself is the anchor — the popover tracks it, so a
-	// scrolling list repositions the card instead of dropping it.
-	const [wsHover, setWsHover] = useState<{ row: WsRow; el: HTMLElement } | null>(
-		null,
-	);
-	// Mobile long-press sheet (the touch stand-in for the hover card).
-	const [wsSheet, setWsSheet] = useState<{
-		row: WsRow;
-		source: HTMLButtonElement;
-	} | null>(null);
-
-	const cancelWsHoverTimers = () => {
-		if (wsHoverOpenT.current) clearTimeout(wsHoverOpenT.current);
-		if (wsHoverCloseT.current) clearTimeout(wsHoverCloseT.current);
-		wsHoverOpenT.current = null;
-		wsHoverCloseT.current = null;
-	};
-	function wsRowHoverEnter(row: WsRow, el: HTMLElement) {
-		if (rowRenameEditing(row) || !pointerCanHover()) return;
-		cancelWsHoverTimers();
-		if (wsHover) {
-			setWsHover({ row, el });
-			return;
-		}
-		wsHoverOpenT.current = setTimeout(() => {
-			setWsHover({ row, el });
-		}, 380);
-	}
-	function scheduleWsHoverClose() {
-		if (wsHoverOpenT.current) clearTimeout(wsHoverOpenT.current);
-		wsHoverOpenT.current = null;
-		if (wsHoverCloseT.current) clearTimeout(wsHoverCloseT.current);
-		wsHoverCloseT.current = setTimeout(() => setWsHover(null), 140);
-	}
-	function closeWsHover() {
-		cancelWsHoverTimers();
-		setWsHover(null);
-	}
-	useEffect(() => cancelWsHoverTimers, []);
 
 	// Mobile: tap-to-open a workspace row fires from `touchend`, not the
 	// synthesized click — same trick as SessionRow. The row has :hover styles
@@ -2264,7 +2472,6 @@ setClosingPrUrls((current) => {
 		null,
 	);
 	const wsSwiping = useRef(false);
-	const wsSwipeOffset = useRef(0);
 	const [wsSwipe, setWsSwipe] = useState<SwipeState | null>(null);
 	const [wsDraggingKey, setWsDraggingKey] = useState<string | null>(null);
 	// Which action the in-flight drag is revealing. Split from wsSwipe so a
@@ -2804,15 +3011,8 @@ setClosingPrUrls((current) => {
 				.filter((c) => c.isRunning && c.runStartedAt)
 				.map((c) => Date.parse(c.runStartedAt!))
 				.filter((n) => !Number.isNaN(n));
-			if (stamps.length) {
-				runStartMs = Math.min(...stamps);
-				runStartSeen.current.set(row.key, runStartMs);
-			} else {
-				runStartMs = runStartSeen.current.get(row.key) ?? Date.now();
-				runStartSeen.current.set(row.key, runStartMs);
-			}
-		} else {
-			runStartSeen.current.delete(row.key);
+			if (stamps.length) runStartMs = Math.min(...stamps);
+			else runStartMs = runStartSeen.get(row.key) ?? null;
 		}
 		// The yellow duration is a live status, not a sort key. Stable creation
 		// ordering makes that distinction honest without taking the useful timer
@@ -3813,6 +4013,74 @@ fetchFeedItems("plain")
 	// Scratch workspaces stay in one unlabelled group above them:
 	// they have no project, even when an older workspace record carries a stale
 	// repo. A collapsed band wears a count of the urgent rows it hides. Repos
+	// Drag handlers stay outside the render helper so refs are reached only from
+	// deferred browser events, never while the helper builds its JSX.
+	function moveDraggedRepo(
+		targetRepo: string,
+		order: string[],
+		fullOrder: string[],
+		event: React.DragEvent<HTMLDivElement>,
+	) {
+		const draggedRepo = repoDragging.current;
+		if (!draggedRepo || targetRepo === ASK_BAND) return;
+		event.preventDefault();
+		if (draggedRepo === targetRepo) return;
+		const visibleOrder = [
+			...(repoVisualOrder.current ?? order.filter((repo) => repo !== ASK_BAND)),
+		];
+		const from = visibleOrder.indexOf(draggedRepo);
+		if (from < 0) return;
+		visibleOrder.splice(from, 1);
+		let target = visibleOrder.indexOf(targetRepo);
+		if (target < 0) return;
+		const header = event.currentTarget.querySelector<HTMLElement>(
+			":scope > [data-sticky-head]",
+		);
+		const rect = (header ?? event.currentTarget).getBoundingClientRect();
+		if (event.clientY > rect.top + rect.height / 2) target++;
+		visibleOrder.splice(target, 0, draggedRepo);
+		if (JSON.stringify(visibleOrder) === JSON.stringify(repoVisualOrder.current)) return;
+		repoVisualOrder.current = visibleOrder;
+		const baseline = repoOrderAtDragStart.current ?? fullOrder;
+		const next = replaceVisibleRepoOrder(baseline, visibleOrder);
+		repoOrderPending.current = next;
+		setRepoOrderDraft(next);
+	}
+	function finishRepoDrag(commit: boolean) {
+		stopRepoAutoScroll();
+		repoJustDragged.current = true;
+		setTimeout(() => {
+			repoJustDragged.current = false;
+		}, 0);
+		repoOrderAtDragStart.current = null;
+		repoVisualOrder.current = null;
+		repoDragging.current = null;
+		setRepoDragKey(null);
+		const pending = repoOrderPending.current;
+		repoOrderPending.current = null;
+		setRepoOrderDraft(null);
+		if (commit && pending) setRepoOrder(pending);
+	}
+	function startRepoDrag(
+		repo: string,
+		fullOrder: string[],
+		order: string[],
+		event: React.DragEvent<HTMLButtonElement>,
+	) {
+		repoDragging.current = repo;
+		setRepoDragKey(repo);
+		repoOrderAtDragStart.current = [...fullOrder];
+		repoOrderPending.current = null;
+		repoVisualOrder.current = order.filter((item) => item !== ASK_BAND);
+		event.dataTransfer.effectAllowed = "move";
+		event.dataTransfer.setData("text/plain", repo);
+	}
+	function swallowRepoDragClick(event: React.MouseEvent) {
+		if (!repoJustDragged.current) return;
+		event.preventDefault();
+		event.stopPropagation();
+	}
+
 	// are ordered by the user's shared preference (`repos`), with newly seen
 	// repositories appended in frequency order; a band is force-open while it
 	// holds the selected row so the open session never hides inside a collapsed repo.
@@ -3917,55 +4185,6 @@ fetchFeedItems("plain")
 			!isPhone &&
 			filter.repo === "all" &&
 			order.filter((r) => r !== ASK_BAND).length > 1;
-		const moveDraggedRepo = (
-			targetRepo: string,
-			event: React.DragEvent<HTMLDivElement>,
-		) => {
-			const draggedRepo = repoDragging.current;
-			if (!draggedRepo) return;
-			// Ask is pinned: it is neither a drag source nor a drop target, and
-			// letting it into `visibleOrder` would write the sentinel into the
-			// saved repo order via replaceVisibleRepoOrder's append.
-			if (targetRepo === ASK_BAND) return;
-			event.preventDefault();
-			if (draggedRepo === targetRepo) return;
-			const visibleOrder = [
-				...(repoVisualOrder.current ?? order.filter((r) => r !== ASK_BAND)),
-			];
-			const from = visibleOrder.indexOf(draggedRepo);
-			if (from < 0) return;
-			visibleOrder.splice(from, 1);
-			let target = visibleOrder.indexOf(targetRepo);
-			if (target < 0) return;
-			const header = event.currentTarget.querySelector<HTMLElement>(
-				":scope > [data-sticky-head]",
-			);
-			const rect = (header ?? event.currentTarget).getBoundingClientRect();
-			if (event.clientY > rect.top + rect.height / 2) target++;
-			visibleOrder.splice(target, 0, draggedRepo);
-			if (JSON.stringify(visibleOrder) === JSON.stringify(repoVisualOrder.current))
-				return;
-			repoVisualOrder.current = visibleOrder;
-			const baseline = repoOrderAtDragStart.current ?? fullOrder;
-			const next = replaceVisibleRepoOrder(baseline, visibleOrder);
-			repoOrderPending.current = next;
-			setRepoOrderDraft(next);
-		};
-		const finishRepoDrag = (commit: boolean) => {
-			stopRepoAutoScroll();
-			repoJustDragged.current = true;
-			setTimeout(() => {
-				repoJustDragged.current = false;
-			}, 0);
-			repoOrderAtDragStart.current = null;
-			repoVisualOrder.current = null;
-			repoDragging.current = null;
-			setRepoDragKey(null);
-			const pending = repoOrderPending.current;
-			repoOrderPending.current = null;
-			setRepoOrderDraft(null);
-			if (commit && pending) setRepoOrder(pending);
-		};
 		return (
 			<>
 				{(scratchRows.length > 0 || scratchSnoozedRows.length > 0) && (
@@ -4031,16 +4250,12 @@ fetchFeedItems("plain")
 						)}
 						key={gkey}
 						data-repo-id={repo}
-						onDragOver={(event) => moveDraggedRepo(repo, event)}
+						onDragOver={(event) => moveDraggedRepo(repo, order, fullOrder, event)}
 						onDrop={(event) => {
 							event.preventDefault();
 							finishRepoDrag(true);
 						}}
-						onClickCapture={(event: React.MouseEvent) => {
-							if (!repoJustDragged.current) return;
-							event.preventDefault();
-							event.stopPropagation();
-						}}
+						onClickCapture={swallowRepoDragClick}
 					>
 						<button
 							className={cn(
@@ -4058,15 +4273,7 @@ fetchFeedItems("plain")
 									? "Drag to reorder repositories"
 									: undefined
 							}
-							onDragStart={(event) => {
-								repoDragging.current = repo;
-								setRepoDragKey(repo);
-								repoOrderAtDragStart.current = [...fullOrder];
-								repoOrderPending.current = null;
-								repoVisualOrder.current = order.filter((r) => r !== ASK_BAND);
-								event.dataTransfer.effectAllowed = "move";
-								event.dataTransfer.setData("text/plain", repo);
-							}}
+							onDragStart={(event) => startRepoDrag(repo, fullOrder, order, event)}
 							onDragEnd={() => finishRepoDrag(false)}
 							onClick={() => toggleGroup(gkey)}
 						>
@@ -4722,9 +4929,7 @@ fetchFeedItems("plain")
 					    the close control gets a full touch target. */}
 					<div
 						className="flex min-w-0 flex-1 items-center gap-2 text-sm text-fg phone:text-base"
-						ref={(node) => {
-							titleRef.current = node;
-						}}
+						ref={titleRef as React.RefObject<HTMLDivElement | null>}
 					>
 						{filter.person === "everyone" ? (
 							<IconPeople
@@ -4790,9 +4995,7 @@ fetchFeedItems("plain")
 						"shrink-0 text-label font-semibold text-dim group-hover/wshead:text-fg",
 						isPhone && "hidden",
 					)}
-					ref={(node) => {
-						titleRef.current = node;
-					}}
+					ref={titleRef as React.RefObject<HTMLSpanElement | null>}
 				>
 					Workspaces
 				</span>
@@ -4838,7 +5041,7 @@ fetchFeedItems("plain")
 			>
 				<Tooltip label="Group, filter & sort">
 				<button
-					ref={filterBtnRef}
+					ref={setFilterButton}
 					className={cn(
 						SIDEBAR_HEADER_BTN,
 						isPhone
@@ -4902,6 +5105,17 @@ fetchFeedItems("plain")
 	</div>
 	</div>
 	);
+
+	const workspaceMenuWorkspace = workspaceMenu
+		? workspaces.find((workspace) => workspace.id === workspaceMenu.id)
+		: undefined;
+	const workspaceMenuRow = workspaceMenu
+		? wsRows.find((row) =>
+				workspaceMenuWorkspace
+					? row.workspace?.id === workspaceMenuWorkspace.id
+					: row.key === workspaceMenu.id,
+			)
+		: undefined;
 
 	return (
 		<>
@@ -4970,7 +5184,7 @@ fetchFeedItems("plain")
 				createPortal(
 					<>
 						<button
-							ref={mobileFilterBtnRef}
+							ref={setMobileFilterButton}
 							className={mobileFilterBtn(filterOpen)}
 							onClick={() => setFilterOpen((o) => !o)}
 							aria-label="Group, filter & sort"
@@ -4983,11 +5197,7 @@ fetchFeedItems("plain")
 
 			{filterOpen && (
 				<FilterPopover
-					anchor={
-						isPhone
-							? mobileFilterBtnRef.current
-							: filterBtnRef.current
-					}
+					anchor={isPhone ? mobileFilterButton : filterButton}
 					filter={filter}
 					repos={repos}
 					people={peopleWithAgent}
@@ -5001,197 +5211,38 @@ fetchFeedItems("plain")
 				/>
 			)}
 
-			{workspaceMenu &&
-				(() => {
-					// The menu id is a real workspace id, or a row key for a
-					// workspace-less row (solo session / shared-worktree group).
-					const ws = workspaces.find((p) => p.id === workspaceMenu.id);
-					const menuRow = wsRows.find((r) =>
-						ws ? r.workspace?.id === ws.id : r.key === workspaceMenu.id,
-					);
-					const sessions = menuRow?.sessions ?? [];
-					const first = sessions[0];
-					const pinKey = ws ? `workspace:${ws.id}` : workspaceMenu.id;
-					// A row can be pinned via its own key or a legacy pin on any member
-					// session (incl. alias ids) — unpin clears all of them.
-					const pinnedKeys = [
-						pinKey,
-						...(menuRow
-							? [
-									menuRow.key,
-									...menuRow.sessions.flatMap((c) => [
-										c.id,
-										...(c.aliasIds || []),
-									]),
-								]
-							: []),
-					].filter((k, i, a) => pins.includes(k) && a.indexOf(k) === i);
-					const pinned = pinnedKeys.length > 0;
-					const togglePinNow = () => {
-						if (pinned) {
-							let next = pins;
-							for (const k of pinnedKeys) next = togglePin(k);
-							setPins(next);
-						} else {
-							setPins(togglePin(pinKey));
-						}
-					};
-					const anyManual = sessions.some((c) => pinnedLane(c));
-					const sharedManual =
-						anyManual &&
-						sessions.every((c) => pinnedLane(c) === pinnedLane(sessions[0]))
-							? (pinnedLane(sessions[0]) ?? null)
-							: null;
-
-					const entries: CtxEntry[] = [];
-					// Offer the move you can actually make: a row with unread
-					// activity reads, an already-read one goes back to unread.
-					const rowUnread = menuRow?.unread ?? false;
-					if (sessions.length > 0)
-						entries.push({
-							kind: "item",
-							icon: <IconMail size={20} />,
-							label: rowUnread ? "Mark as read" : "Mark as unread",
-							onClick: () =>
-								sessions.forEach((c) =>
-									rowUnread
-										? markRead(c.id, c.lastActivity)
-										: markUnread(c.id),
-								),
-						});
-					// Claim someone else's work — an automation run, a teammate's
-					// workspace — into your own lanes, where it then behaves like
-					// your sessions do (In progress while running, Backlog when
-					// idle). Rows you started are already there, so they don't
-					// offer it; the full lane picker stays in the flyout below.
-					const rowClaimed = sessions.some((c) => isClaimed(c));
-					const rowMine = sessions.some((c) => ownedBy(c, currentUser));
-					if (sessions.length > 0 && (!rowMine || rowClaimed))
-						entries.push({
-							kind: "item",
-							icon: <IconInbox size={20} />,
-							label: rowClaimed
-								? "Remove from my workspaces"
-								: "Add to my workspaces",
-							onClick: () =>
-								onSetStatus(sessions, rowClaimed ? null : "mine"),
-						});
-					entries.push({
-						kind: "item",
-						icon: (
-							<IconPin size={20} fill={pinned ? "currentColor" : "none"} />
-						),
-						label: pinned ? "Unpin" : "Pin",
-						onClick: togglePinNow,
-					});
-					if (sessions.length > 0)
-						entries.push({
-							kind: "status",
-							current: sharedManual,
-							// Applies the pin to every session so the aggregated row lands
-							// in the chosen lane; "Auto" clears it back to the derived one.
-							onPick: (s) => onSetStatus(sessions, s),
-						});
-					if (menuRow && sessions.length > 0) {
-						entries.push({
-							kind: "snooze",
-							until: activeSnoozeKeys.has(menuRow.key)
-								? (snoozes[menuRow.key] ?? null)
-								: null,
-							// Parks the row in the Snoozed section until the chosen time;
-							// null unsnoozes it back to its derived lane.
-							onPick: (until) =>
-								until
-									? setSnooze(menuRow.key, until)
-									: clearSnooze(menuRow.key),
-						});
+			{workspaceMenu && (
+				<WorkspaceContextMenu
+					menu={workspaceMenu}
+					workspace={workspaceMenuWorkspace}
+					row={workspaceMenuRow}
+					pins={pins}
+					currentUser={currentUser}
+					activeSnoozeKeys={activeSnoozeKeys}
+					snoozes={snoozes}
+					hiddenRowKeys={hiddenRowKeys}
+					onPinsChange={setPins}
+					onSetStatus={onSetStatus}
+					onSnooze={(row, until) =>
+						until ? setSnooze(row.key, until) : clearSnooze(row.key)
 					}
-					if (ws)
-						entries.push({
-							kind: "item",
-							icon: <IconPencil size={20} />,
-							label: "Rename",
-							onClick: () => {
-								setWorkspaceDraft(ws.name);
-								setEditingWorkspaceId(ws.id);
-							},
-						});
-					else if (first)
-						entries.push({
-							kind: "item",
-							icon: <IconPencil size={20} />,
-							label: "Rename",
-							onClick: () => startSessionRename(first),
-						});
-					if (first)
-						entries.push({
-							kind: "item",
-							icon: <IconLink size={20} />,
-							label: "Copy link",
-							shortcut: shortcutLabel("session-copy-link") ?? undefined,
-							onClick: () =>
-								copyToClipboard(absoluteLink(sessionPath(first)), () =>
-									onToast?.("Link copied"),
-								),
-						});
-					// A session that owns a worktree/branch (and thus a PR/diff) can open
-					// its Review tab here — it's off by default in the viewer.
-					if (first && (first.worktreeDir || first.branch))
-						entries.push({
-							kind: "item",
-							icon: <IconEye size={20} />,
-							label: "Open review",
-							onClick: () => onOpenReview(first),
-						});
-					// Archive is the removal action here (a session/workspace is finished
-					// by archiving, never inferred-deleted). A sessionless workspace has
-					// nothing to archive, so it keeps Delete as its only removal.
-					if (menuRow && sessions.length > 0) {
-						entries.push({ kind: "sep" });
-						// Hide sits above Archive as the gentler removal: Archive is
-						// global (it ends the work for the whole team), Hide only
-						// clears it off your own sidebar while a teammate keeps
-						// working in it. On an already-hidden row — which you can
-						// only be looking at because you searched for it — the same
-						// slot offers the way back, since there's no Hidden band.
-						const rowHidden = hiddenRowKeys.has(menuRow.key);
-						entries.push({
-							kind: "item",
-							icon: rowHidden ? <IconEye size={20} /> : <IconEyeOff size={20} />,
-							label: rowHidden
-								? "Restore to my sidebar"
-								: "Hide from my sidebar",
-							onClick: () =>
-								rowHidden ? clearHides([menuRow.key]) : hideRow(menuRow),
-						});
-						entries.push({
-							kind: "item",
-							icon: <IconArchive size={20} />,
-							label: "Archive",
-							onClick: () =>
-								archiveWorkspaceWithNext(menuRow, workspaceMenu.source),
-						});
-					} else if (ws) {
-						entries.push({ kind: "sep" });
-						entries.push({
-							kind: "item",
-							icon: <IconTrash size={20} />,
-							danger: true,
-							label: "Delete draft",
-							onClick: () =>
-								confirmDeleteDraft(() => onDeleteWorkspace(ws.id)),
-						});
+					onStartWorkspaceRename={(workspace) => {
+						setWorkspaceDraft(workspace.name);
+						setEditingWorkspaceId(workspace.id);
+					}}
+					onStartSessionRename={startSessionRename}
+					onToast={onToast}
+					onOpenReview={onOpenReview}
+					onHide={(row, hidden) =>
+						hidden ? clearHides([row.key]) : hideRow(row)
 					}
-
-					return (
-						<SidebarCtxMenu
-							x={workspaceMenu.x}
-							y={workspaceMenu.y}
-							entries={entries}
-							onClose={() => setWorkspaceMenu(null)}
-						/>
-					);
-				})()}
+					onArchive={archiveWorkspaceWithNext}
+					onDeleteDraft={(workspace) =>
+						confirmDeleteDraft(() => onDeleteWorkspace(workspace.id))
+					}
+					onClose={() => setWorkspaceMenu(null)}
+				/>
+			)}
 			{workspacesOpen && (
 				<div
 					className={cn(

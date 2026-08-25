@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AnimatePresence } from "motion/react";
 import type {
 	UnifiedSession,
@@ -92,6 +92,7 @@ export function CatchUpDeck({
 	onNewWorkspace,
 	onExit,
 }: Props) {
+
 	const currentUser = useCurrentUser();
 
 	// Model / subscription options for the reply composer (fetched once, shared
@@ -390,10 +391,21 @@ function CardBody({
 }) {
 	const target = replyTarget(card);
 	const [entries, setEntries] = useState<TranscriptEntry[] | null>(null);
-	// Held in state, not a ref, so the pinning effect below runs once the nodes
-	// actually exist rather than on a null ref.
-	const [scrollEl, setScrollEl] = useState<HTMLDivElement | null>(null);
-	const [contentEl, setContentEl] = useState<HTMLDivElement | null>(null);
+	const scrollElRef = useRef<HTMLDivElement | null>(null);
+	const contentElRef = useRef<HTMLDivElement | null>(null);
+	const [nodesVersion, setNodesVersion] = useState(0);
+	// These callback refs update state, so their identities must remain stable:
+	// React detaches an old callback ref with null before attaching a new one.
+	const setScrollEl = useCallback((node: HTMLDivElement | null) => {
+		if (scrollElRef.current === node) return;
+		scrollElRef.current = node;
+		setNodesVersion((version) => version + 1);
+	}, []);
+	const setContentEl = useCallback((node: HTMLDivElement | null) => {
+		if (contentElRef.current === node) return;
+		contentElRef.current = node;
+		setNodesVersion((version) => version + 1);
+	}, []);
 	const pinned = useRef(true);
 
 	useEffect(() => {
@@ -420,6 +432,8 @@ function CardBody({
 	// leaving the last message below the fold. Follow the content until the
 	// reader scrolls away from the bottom themselves.
 	useEffect(() => {
+		const scrollEl = scrollElRef.current;
+		const contentEl = contentElRef.current;
 		if (!scrollEl || !contentEl) return;
 		// Wrapped in an object so the closures below mutate a property, not a
 		// captured binding (which the compiler rejects).
@@ -450,7 +464,7 @@ function CardBody({
 			observer.disconnect();
 			scrollEl.removeEventListener("scroll", onScroll);
 		};
-	}, [scrollEl, contentEl]);
+	}, [nodesVersion]);
 
 	const meta = [
 		card.repo,

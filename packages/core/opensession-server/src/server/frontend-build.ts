@@ -188,9 +188,8 @@ function currentMeta(): BundleMeta | null {
 // The oxc Rust port of the React Compiler runs over every file in
 // src/frontend before bundling, auto-memoizing components and hooks. This is
 // why the frontend convention is "no useMemo/useCallback unless measured":
-// the compiler supplies the memoization. Escape hatches: a function carrying
-// "use no memo" is left alone, and a file the compiler cannot safely compile
-// falls back to its untransformed source rather than failing the build.
+// the compiler supplies the memoization. A compiler diagnostic fails the build
+// rather than silently shipping a function whose identities are unstable.
 // Dev mode serves through Bun's HMR server, which has no plugin hook, so the
 // compiler only runs here (prod bundle + release artefact).
 function reactCompilerPlugin(count: { n: number }): BunPlugin {
@@ -209,15 +208,17 @@ function reactCompilerPlugin(count: { n: number }): BunPlugin {
 					jsx: { development: false },
 					reactCompiler: { target: "19", panicThreshold: "none" },
 				});
-				if (result.fatal || !result.code) {
-					console.error(
-						`[frontend] React Compiler FAILED on ${relative(FRONTEND_SRC, args.path)} — shipping it uncompiled:`,
-						result.errors.map((e) => `${e.severity}: ${e.message}${e.codeframe ? `\n${e.codeframe}` : ""}`).join("\n") || "unknown",
+				if (result.fatal || !result.code || result.errors.length > 0) {
+					const details =
+						result.errors
+							.map(
+								(error) =>
+									`${error.severity}: ${error.message}${error.codeframe ? `\n${error.codeframe}` : ""}`,
+							)
+							.join("\n") || "unknown compiler failure";
+					throw new Error(
+						`React Compiler failed on ${relative(FRONTEND_SRC, args.path)}:\n${details}`,
 					);
-					return { contents: sourceText, loader: lang === "js" || lang === "jsx" ? "jsx" : "tsx" };
-				}
-				for (const e of result.errors) {
-					console.error(`[frontend] React Compiler diagnostic in ${relative(FRONTEND_SRC, args.path)}: ${e.message}`);
 				}
 				count.n++;
 				return { contents: result.code, loader: "js" };

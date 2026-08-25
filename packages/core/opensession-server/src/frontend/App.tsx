@@ -1445,6 +1445,10 @@ export function App(
 		};
 	}, []);
 
+	// The current session is declared before the navigation callbacks that read
+	// it. A layout effect below keeps it synchronized once session data resolves.
+	const currentSessionRef = useRef<UnifiedSession | null>(null);
+
 	// Pop back to the sidebar root. With the root beneath us, one `history.go`
 	// lands on it directly — keeping the browser/OS back button in lockstep
 	// without walking back through every panel we pushed on the way. Cold-loaded
@@ -2332,9 +2336,6 @@ const path = await resolveAnonymousUserPath(
 		}
 	}, [route, pendingSessionId, unstick]);
 
-	// The open session, read by the mount-once tab-shortcut handler (⌘⌥C / ⌘W —
-	// see the effect next to closeSession below).
-	const currentSessionRef = useRef<UnifiedSession | null>(null);
 	// Stable key the view-tab state (Review/Preview/Assets panes) is stored
 	// under: the workspace id, the shared isolated worktree, or the lone session
 	// id — the same grouping rule as the tab strip (tabOrderKey below), so a
@@ -3276,16 +3277,15 @@ navigate({ view: "support", threadId: t.id });
 			activeViewTab === "video")
 			? workspacePanePath(activeWorkspaceId, activeViewTab)
 			: null;
+	const copyLinkPath =
+		activeWorkspacePane ??
+		(route.view === "session" && currentSession
+			? sessionPath(currentSession) + openSubagentPath
+			: route.view === "workspace" || route.view === "pr"
+				? routePath(route)
+				: null);
 	useLayoutEffect(() => {
-		copyLinkPathRef.current =
-			activeWorkspacePane ??
-			(route.view === "session" && currentSession
-				? sessionPath(currentSession) + openSubagentPath
-				: route.view === "workspace"
-					? routePath(route)
-					: route.view === "pr"
-						? routePath(route)
-						: null);
+		copyLinkPathRef.current = copyLinkPath;
 	});
 
 	// Canonicalize the open session's URL to /workspace/<wsId>/session/<sessionId> once
@@ -4520,7 +4520,7 @@ if (siblingCreateRef.current === optimisticId)
 					},
 				]
 			: []),
-		...(copyLinkPathRef.current
+		...(copyLinkPath
 			? [
 					{
 						id: "copy-link",
@@ -4530,11 +4530,8 @@ if (siblingCreateRef.current === optimisticId)
 						keywords: ["url", "share", "clipboard"],
 						shortcut: shortcutPrimaryKeys("session-copy-link") ?? undefined,
 						icon: <IconCopy size={18} />,
-						run: () => {
-							const path = copyLinkPathRef.current;
-							if (path)
-								copyToClipboard(absoluteLink(path), () => showToast("Link copied"));
-						},
+						run: () =>
+							copyToClipboard(absoluteLink(copyLinkPath), () => showToast("Link copied")),
 					},
 				]
 			: []),
@@ -4783,8 +4780,10 @@ if (siblingCreateRef.current === optimisticId)
 		socket: ReturnType<typeof useWebSocket>,
 		focused: boolean,
 		splitMode: boolean,
-		surfaceId = viewerSession.id,
-	) => (
+		requestedSurfaceId?: string,
+	) => {
+		const surfaceId = requestedSurfaceId ?? viewerSession.id;
+		return (
 		// A `#5528` written anywhere in this pane's transcript means a PR in the
 		// pane's OWN repo — which is why the context is per pane rather than
 		// app-wide: a split view can hold two sessions on two different repos.
@@ -4798,11 +4797,10 @@ if (siblingCreateRef.current === optimisticId)
 				hideRightPanel={splitMode && !focused}
 				onBack={goBack}
 				onNextChat={focused && nextChatAvailable ? openNextChat : undefined}
-				onArchive={() =>
-					focused
-						? sidebarRef.current?.archiveSelected()
-						: closeSession(viewerSession)
-				}
+				onArchive={() => {
+					if (focused) sidebarRef.current?.archiveSelected();
+					else closeSession(viewerSession);
+				}}
 				onArchived={() => {
 					// Only fires when the viewer archived on its own — with onArchive
 					// passed (a focused pane) it defers to the sidebar path instead, so
@@ -4976,7 +4974,8 @@ console.error("Rename workspace failed:", error);
 				}
 			/>
 		</MarkdownRepoProvider>
-	);
+		);
+	};
 
 	return (
 		<UserGate>

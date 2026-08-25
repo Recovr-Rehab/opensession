@@ -3,9 +3,8 @@ import { AGENT_NAME } from "../lib/brand";
 import { randomUUID } from "../lib/random-uuid";
 import React, {
   useEffect,
+  useLayoutEffect,
   useState,
-  
-  
   useRef,
 } from "react";
 import type {
@@ -392,33 +391,6 @@ export function PrPanel({
     () => (targets.find((t) => t.primary) ?? targets[0])?.key,
   );
   const active = targets.find((t) => t.key === activeKey) ?? targets[0];
-  // A PR chip — in the Workspace strip, or a `repo#123` mention in prose —
-  // opened the Review tab on a specific PR. Keyed on `seq` so re-clicking the
-  // same chip re-focuses it, and so a re-render never fights a tab the reader
-  // picked by hand.
-  //
-  // A request waits for the target it names instead of being dropped: the PRs
-  // arrive with the session, so a `/pr/<number>` link followed cold resolves
-  // long before there is anything to select, and giving up on the first pass
-  // is exactly what leaves the reader on the primary PR.
-  const focusApplied = useRef<{ target?: number; checks?: number }>({});
-  useEffect(() => {
-    if (!focusTarget) return;
-    const { seq } = focusTarget;
-    if (focusTarget.repo && focusApplied.current.target !== seq) {
-      const match = matchFocusTarget(targets, focusTarget);
-      if (match) {
-        focusApplied.current.target = seq;
-        setActiveKey(match.key);
-      }
-    }
-    // Checks stopped being a page of their own: reveal them where they live.
-    if (focusTarget.view === "checks" && focusApplied.current.checks !== seq) {
-      focusApplied.current.checks = seq;
-      setPage("overview");
-      setFocusChecksSeq((prev) => prev + 1);
-    }
-  }, [focusTarget?.seq, targets]);
   const loadTargetKey = previewTarget
     ? `preview:${previewTarget.repo}:${previewTarget.branch}`
     : active?.key || sessionId;
@@ -501,6 +473,25 @@ export function PrPanel({
   useEffect(() => setDiffSource("pull-request"), [loadTargetKey]);
   /** A check chip elsewhere in the app asked for the checks (focusTarget). */
   const [focusChecksSeq, setFocusChecksSeq] = useState(0);
+  // A PR chip or prose link can request a target before session PRs arrive.
+  // Apply each request once after both the page setters and targets exist.
+  const focusApplied = useRef<{ target?: number; checks?: number }>({});
+  useEffect(() => {
+    if (!focusTarget) return;
+    const { seq } = focusTarget;
+    if (focusTarget.repo && focusApplied.current.target !== seq) {
+      const match = matchFocusTarget(targets, focusTarget);
+      if (match) {
+        focusApplied.current.target = seq;
+        setActiveKey(match.key);
+      }
+    }
+    if (focusTarget.view === "checks" && focusApplied.current.checks !== seq) {
+      focusApplied.current.checks = seq;
+      setPage("overview");
+      setFocusChecksSeq((prev) => prev + 1);
+    }
+  }, [focusTarget?.seq, targets]);
   /** A file picked on Overview, waiting for the code page to have its diff. */
   const [pendingReveal, setPendingReveal] = useState<string | null>(null);
   const phoneLayout = window.matchMedia("(max-width: 720px)").matches;
@@ -548,7 +539,9 @@ export function PrPanel({
     viewed: ReadonlySet<string>;
   } | null>(null);
   const prViewedRef = useRef(prViewed);
-  prViewedRef.current = prViewed;
+  useLayoutEffect(() => {
+    prViewedRef.current = prViewed;
+  }, [prViewed]);
   const [reviewThreads, setReviewThreads] = useState<{
     key: string;
     threads: PrReviewThread[];
@@ -589,7 +582,9 @@ export function PrPanel({
     key: string;
     promise: Promise<void>;
   } | null>(null);
-  activeLoadTargetRef.current = loadTargetKey;
+  useLayoutEffect(() => {
+    activeLoadTargetRef.current = loadTargetKey;
+  }, [loadTargetKey]);
 
   const load = (force = false): Promise<void> => {
       if (loadTargetKey !== activeLoadTargetRef.current)

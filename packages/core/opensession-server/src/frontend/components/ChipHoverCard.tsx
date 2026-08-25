@@ -104,7 +104,9 @@ export function ChipHoverCards({ sessions }: { sessions: UnifiedSession[] }) {
 	const closeTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 	// The listeners below are bound once; this is how they read current state.
 	const hoverRef = useRef(hover);
-	hoverRef.current = hover;
+	useLayoutEffect(() => {
+		hoverRef.current = hover;
+	});
 
 	function cancelTimers() {
 		if (openTimer.current) clearTimeout(openTimer.current);

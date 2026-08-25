@@ -653,6 +653,48 @@ interface Props {
 // the memoized transcript a fresh array on every render.
 const NO_SUBAGENTS: SubagentRef[] = [];
 const NO_WORKFLOW_RUNS: WorkflowRunSnapshot[] = [];
+
+class SessionShellTiming {
+	private recorded = false;
+	constructor(private readonly startedAt: number) {}
+	record() {
+		if (this.recorded) return;
+		this.recorded = true;
+		measureSessionPerf("shell_to_transcript_ms", this.startedAt);
+	}
+}
+
+function reviewReposFromKey(key: string) {
+	return key.split("\u0000").map((repo, index) => ({
+		repo,
+		primary: index === 0,
+	}));
+}
+
+function discoveredPrsFromKey(key: string) {
+	if (!key) return [];
+	return key.split("\u0001").map((encoded) => {
+		const [repo, branch, number, url, title] = encoded.split("\u0000");
+		return {
+			repo,
+			branch,
+			number: number ? Number(number) : undefined,
+			url: url || undefined,
+			title: title || undefined,
+		};
+	});
+}
+
+function toolPathRootsFromKey(key: string) {
+	const [primaryDir = "", ...attached] = key.split("\u0001");
+	return [
+		{ dir: primaryDir },
+		...attached.map((encoded) => {
+			const [dir, label] = encoded.split("\u0000");
+			return { dir, label };
+		}),
+	].filter((root) => Boolean(root.dir));
+}
 // Same reason: the empty row is set on every stream_start, and a fresh array
 // each time would re-render the composer block for nothing.
 const EMPTY_SUGGESTIONS: ReplySuggestion[] = [];
@@ -768,14 +810,8 @@ export function SessionViewer({
 		...(session.attachedRepos || []).map((repo) => repo.repo),
 	].join("\u0000");
 	const reviewRepos = useMemo(
-		() => [
-			{ repo: session.repo || "repository", primary: true },
-			...(session.attachedRepos || []).map((repo) => ({
-				repo: repo.repo,
-				primary: false,
-			})),
-		],
-		[reviewReposKey]
+		() => reviewReposFromKey(reviewReposKey),
+		[reviewReposKey],
 	);
 	const prPresentation = useMemo(
 		() => sessionPrPresentation(session.prs),
@@ -923,17 +959,8 @@ export function SessionViewer({
 		)
 		.join("\u0001");
 	const discoveredPrs = useMemo(
-		() =>
-			(session.prs || [])
-				.filter((ref) => ref.source === "discovered")
-				.map((ref) => ({
-					repo: ref.repo,
-					branch: ref.branch,
-					number: ref.number,
-					url: ref.url,
-					title: ref.title,
-				})),
-		[discoveredPrsKey]
+		() => discoveredPrsFromKey(discoveredPrsKey),
+		[discoveredPrsKey],
 	);
 	// Which PR the Review tab should open on, set by the PR chips in the
 	// Workspace strip (seq lets the same chip re-focus after a manual switch).
@@ -973,15 +1000,8 @@ export function SessionViewer({
 		),
 	].join("\u0001");
 	const toolPathRoots = useMemo(
-		() =>
-			[
-				{ dir: session.worktreeDir || "" },
-				...(session.attachedRepos || []).map((repo) => ({
-					dir: repo.dir,
-					label: repo.repo,
-				})),
-			].filter((root) => Boolean(root.dir)),
-		[toolPathRootsKey]
+		() => toolPathRootsFromKey(toolPathRootsKey),
+		[toolPathRootsKey],
 	);
 	const githubReviewRepos = reviewRepos;
 	// With no session-owned primary, workspace PRs are the only real review
@@ -991,18 +1011,7 @@ export function SessionViewer({
 		!prPresentation.primary && prPresentation.additional.length > 0;
 	const panelReviewRepos =
 		promotedPr || workspaceOnlyPrs ? NO_REVIEW_REPOS : githubReviewRepos;
-	const shellTimingRef = useRef({
-		sessionId: session.id,
-		startedAt: performance.now(),
-		recorded: false,
-	});
-	if (shellTimingRef.current.sessionId !== session.id) {
-		shellTimingRef.current = {
-			sessionId: session.id,
-			startedAt: performance.now(),
-			recorded: false,
-		};
-	}
+	const [shellTiming] = useState(() => new SessionShellTiming(performance.now()));
 	// A full-width view-tab (Review, Staging, Assets, a sub-agent) takes over the
 	// session column, so the session DOM isn't mounted while any is up — the scroll /
 	// history / scroll-restore effects below must bail in all cases.
@@ -1018,7 +1027,9 @@ export function SessionViewer({
 		(showConversation && !!conversationThreadId) ||
 		(showVideo && !!videoPanel);
 	const [cachedTranscript] = useState(() => peekCachedTranscriptView(session.id));
-	const transcriptViewStore = useMemo(
+	// App keys SessionViewer by session id, so this store is created once for
+	// the mounted session and cannot be replaced by polling model metadata.
+	const [transcriptViewStore] = useState(
 		() =>
 			new TranscriptViewStore(
 				withModelSwitches(
@@ -1026,7 +1037,6 @@ export function SessionViewer({
 					session.modelHistory,
 				),
 			),
-		[session.id],
 	);
 	const entries = useSyncExternalStore(
 		transcriptViewStore.subscribe,
@@ -1148,7 +1158,9 @@ export function SessionViewer({
 			: null,
 	);
 	const transcriptIndexStateRef = useRef(transcriptIndexState);
-	transcriptIndexStateRef.current = transcriptIndexState;
+	useLayoutEffect(() => {
+		transcriptIndexStateRef.current = transcriptIndexState;
+	}, [transcriptIndexState]);
 	const [transcriptIndexExpected, setTranscriptIndexExpected] = useState(
 		Boolean(cachedTranscript?.index),
 	);
@@ -1236,11 +1248,13 @@ export function SessionViewer({
 	// surface revalidates immediately.
 	const [gitRefreshTick, setGitRefreshTick] = useState(0);
 	const sessionPrTargetsRef = useRef<Set<string>>(new Set());
-	sessionPrTargetsRef.current = new Set([
-		`${session.repo || "repository"}\0${session.branch}`,
-		...(session.attachedRepos || []).map((r) => `${r.repo}\0${r.branch}`),
-		...(session.prs || []).map((r) => `${r.repo}\0${r.branch}`),
-	]);
+	useLayoutEffect(() => {
+		sessionPrTargetsRef.current = new Set([
+			`${session.repo || "repository"}\0${session.branch}`,
+			...(session.attachedRepos || []).map((repo) => `${repo.repo}\0${repo.branch}`),
+			...(session.prs || []).map((ref) => `${ref.repo}\0${ref.branch}`),
+		]);
+	}, [session.repo, session.branch, session.attachedRepos, session.prs]);
 	const [viewers, setViewers] = useState<string[]>([]);
 	const [typingUsers, setTypingUsers] = useState<string[]>([]);
 	// The create run is still preparing this session's worktree (new workspaces
@@ -1320,7 +1334,9 @@ export function SessionViewer({
 	);
 	// Read by the reconcile effect below, which must not re-run on every send.
 	const pendingRef = useRef(pending);
-	pendingRef.current = pending;
+	useLayoutEffect(() => {
+		pendingRef.current = pending;
+	}, [pending]);
 	// Pending ids the server has CONFIRMED (transcript entry or queue/steer
 	// receipt). Their durable outbox row is hidden, so one message can't render
 	// as a transcript bubble and a "Sending" flap row at the same time.
@@ -1529,7 +1545,9 @@ export function SessionViewer({
 	// render, and this reaches the memoized transcript as a context value —
 	// an unstable one would re-render the whole thing on every sessions poll.
 	const openAssetsRef = useRef(onOpenAssets);
-	openAssetsRef.current = onOpenAssets;
+	useLayoutEffect(() => {
+		openAssetsRef.current = onOpenAssets;
+	}, [onOpenAssets]);
 	const openAssetFromTranscript = useCallback((path: string) => {
 		setOverlayAssetPath(path);
 	}, []);
@@ -1563,7 +1581,7 @@ export function SessionViewer({
 			: selected;
 		const batch = countStaging(accepted);
 		setUploadStaging((current) => addStaging(current, batch));
-		try {
+		await (async () => {
 			const { rejected, applied } = await attachToDraft(draftKey, accepted);
 			if (applied) {
 				const stored = loadDraft(draftKey);
@@ -1582,9 +1600,9 @@ export function SessionViewer({
 				),
 			];
 			if (failures.length) alert(`Couldn't attach:\n${failures.join("\n")}`);
-		} finally {
+		})().finally(() => {
 			setUploadStaging((current) => subtractStaging(current, batch));
-		}
+		});
 	}
 
 	function resetFileDrag() {
@@ -1966,6 +1984,62 @@ export function SessionViewer({
 		const el = messagesRef.current;
 		if (el) el.style.overflowAnchor = "";
 	}, [messagesRef]);
+	// Ref mirror keeps rapid clicks from sending duplicate history requests
+	// before React re-renders with the disabled button.
+	const loadingHistoryRef = useRef(false);
+	useEffect(() => {
+		loadingHistoryRef.current = loadingHistory;
+	}, [loadingHistory]);
+	// One page request. `whole` is the whole-history variant: a fat page in seq
+	// mode, and in legacy mode the deliberately cursor-less request the server
+	// answers with the entire transcript in one transcript_init — byte-window
+	// paging has no cheap way to walk a backlog, and that full resend has always
+	// been its fallback.
+	const requestHistoryPage = useCallback(
+		(whole = false) => {
+			const seqState = transcriptSeqRef.current;
+			if (seqState?.sessionId === session.id) {
+				// Seq mode (transcript v2): page backwards from the earliest seq we
+				// hold. Without a usable cursor the server falls back to a full
+				// legacy resend, same as the legacy no-offset case below.
+				send({
+					type: "load_history",
+					sessionId: session.id,
+					...(seqState.firstSeq !== null && seqState.firstSeq > 1
+						? { beforeSeq: seqState.firstSeq }
+						: {}),
+					limit: whole ? JUMP_PAGE_ENTRIES : HISTORY_PAGE_ENTRIES,
+				});
+				return;
+			}
+			const cursor = transcriptCursorRef.current;
+			send({
+				type: "load_history",
+				sessionId: session.id,
+				...(!whole &&
+				historyStartRef.current !== null &&
+				historyStartRef.current > 0
+					? {
+							beforeOffset: historyStartRef.current,
+							beforeRev:
+								cursor?.sessionId === session.id ? cursor.rev : undefined,
+						}
+					: {}),
+			});
+		},
+		[send, session.id],
+	);
+	// The whole backlog, one click: each page's arrival schedules the next (see
+	// the transcript_history handler). `loadingHistory` deliberately stays true
+	// across the gaps, which is what keeps the auto-load sentinel and a second
+	// click from interleaving requests of their own.
+	const finishHistoryWalk = useCallback(() => {
+		if (!historyWalkRef.current) return;
+		historyWalkRef.current = null;
+		setLoadingAllHistory(false);
+		stopHistoryHold();
+	}, [stopHistoryHold]);
+
 	const startHistoryHold = useCallback(
 		(
 			node: HTMLElement,
@@ -2551,23 +2625,20 @@ export function SessionViewer({
 	// clear the composer and jump to the live edge. We skip the first run (and
 	// session switches, which remount this with whatever the counter's at) and
 	// only react to real bumps from the tab-bar +.
-	const lastNewSessionSeq = useRef(newSessionSeq);
-	// Drop the persisted draft during render, before the key={newSessionSeq}
-	// remount below re-reads it — in an effect the fresh Composer's state
-	// initializer would already have restored the old text. Idempotent, so
-	// running on the renders between the bump and the effect below is fine.
-	if (newSessionSeq !== lastNewSessionSeq.current) clearDraft(draftKey);
-	useEffect(() => {
-		if (newSessionSeq === lastNewSessionSeq.current) return;
-		lastNewSessionSeq.current = newSessionSeq;
+	const [composerResetSeq, setComposerResetSeq] = useState(newSessionSeq);
+	useLayoutEffect(() => {
+		if (newSessionSeq === composerResetSeq) return;
+		// Clear storage before changing the Composer key. The layout update causes
+		// its replacement to initialize only after the stale draft is gone.
+		clearDraft(draftKey);
 		dropStagingAttachments(draftKey);
-		// The composer's text draft resets via its key={newSessionSeq} remount.
 		setImages([]);
 		setFiles([]);
 		setForkFrom(null);
+		setComposerResetSeq(newSessionSeq);
 		scrollToLatest("smooth");
 		composerRef.current?.focus();
-	}, [newSessionSeq, scrollToLatest]);
+	}, [newSessionSeq, composerResetSeq, draftKey, scrollToLatest]);
 
 	// Browser tab title follows the workspace, the same name the header shows.
 	// The session's own title names a tab inside it, not the page.
@@ -2578,6 +2649,12 @@ export function SessionViewer({
 			document.title = DEFAULT_DOC_TITLE;
 		};
 	}, [focused, workspaceName, session.title]);
+
+	// "Add session transcripts" chips on a fresh session's blank canvas: sibling
+	// workspace sessions the user can attach as context — selected ids ride the
+	// first send as `contextSessions` and the server inlines a fenced transcript
+	// digest of each. One-shot: cleared once a send consumes them.
+	const [contextSessions, setContextSessions] = useState<string[]>([]);
 
 	// Subscribe to WebSocket messages
 	const loadTranscriptRanges = useCallback(
@@ -2750,13 +2827,7 @@ export function SessionViewer({
 							finishHistoryWalk();
 						}
 					}
-					if (!shellTimingRef.current.recorded) {
-						shellTimingRef.current.recorded = true;
-						measureSessionPerf(
-							"shell_to_transcript_ms",
-							shellTimingRef.current.startedAt,
-						);
-					}
+					shellTiming.record();
 					// Pagination cursor for "load earlier" (the byte offset the shipped
 					// tail begins at). Each history page arrives as transcript_history
 					// below. Seq mode pages with
@@ -3370,10 +3441,11 @@ export function SessionViewer({
 	// so a short watch window catches late arrivals. A real reader gesture
 	// cancels the pending jump — their hands on the transcript always win.
 	const lastEntryIdRef = useRef<string | null>(null);
-	lastEntryIdRef.current =
-		entries.length > 0 ? entries[entries.length - 1].id : null;
 	const streamLenRef = useRef(0);
-	streamLenRef.current = liveTurnStore.textLength();
+	useLayoutEffect(() => {
+		lastEntryIdRef.current = entries.length > 0 ? entries[entries.length - 1].id : null;
+		streamLenRef.current = liveTurnStore.textLength();
+	}, [entries, liveTurnStore]);
 	const hiddenSnapRef = useRef<{
 		at: number;
 		lastEntryId: string | null;
@@ -3470,51 +3542,6 @@ export function SessionViewer({
 		relayout();
 	}, [entries, queued, visibleSteered, pending, relayout]);
 
-	// Ref mirror keeps rapid clicks from sending duplicate history requests
-	// before React re-renders with the disabled button.
-	const loadingHistoryRef = useRef(false);
-	useEffect(() => {
-		loadingHistoryRef.current = loadingHistory;
-	}, [loadingHistory]);
-	// One page request. `whole` is the whole-history variant: a fat page in seq
-	// mode, and in legacy mode the deliberately cursor-less request the server
-	// answers with the entire transcript in one transcript_init — byte-window
-	// paging has no cheap way to walk a backlog, and that full resend has always
-	// been its fallback.
-	const requestHistoryPage = useCallback(
-		(whole = false) => {
-			const seqState = transcriptSeqRef.current;
-			if (seqState?.sessionId === session.id) {
-				// Seq mode (transcript v2): page backwards from the earliest seq we
-				// hold. Without a usable cursor the server falls back to a full
-				// legacy resend, same as the legacy no-offset case below.
-				send({
-					type: "load_history",
-					sessionId: session.id,
-					...(seqState.firstSeq !== null && seqState.firstSeq > 1
-						? { beforeSeq: seqState.firstSeq }
-						: {}),
-					limit: whole ? JUMP_PAGE_ENTRIES : HISTORY_PAGE_ENTRIES,
-				});
-				return;
-			}
-			const cursor = transcriptCursorRef.current;
-			send({
-				type: "load_history",
-				sessionId: session.id,
-				...(!whole &&
-				historyStartRef.current !== null &&
-				historyStartRef.current > 0
-					? {
-							beforeOffset: historyStartRef.current,
-							beforeRev:
-								cursor?.sessionId === session.id ? cursor.rev : undefined,
-						}
-					: {}),
-			});
-		},
-		[send, session.id],
-	);
 	// Shared preamble: stop tracking the live edge, and pin the reader to the
 	// content they're on while the page prepends above it.
 	const beginHistoryLoad = useCallback((holdMs = 8000) => {
@@ -3582,16 +3609,6 @@ export function SessionViewer({
 		beginHistoryLoad(60_000);
 		requestHistoryPage(true);
 	}, [beginHistoryLoad, historyTruncated, requestHistoryPage, session.id]);
-	// The whole backlog, one click: each page's arrival schedules the next (see
-	// the transcript_history handler). `loadingHistory` deliberately stays true
-	// across the gaps, which is what keeps the auto-load sentinel and a second
-	// click from interleaving requests of their own.
-	const finishHistoryWalk = useCallback(() => {
-		if (!historyWalkRef.current) return;
-		historyWalkRef.current = null;
-		setLoadingAllHistory(false);
-		stopHistoryHold();
-	}, [stopHistoryHold]);
 
 	// Preserve the fast opening snapshot, then download one fuller page once the
 	// browser has had time to paint it. This only runs at the live edge in seq
@@ -3614,7 +3631,8 @@ export function SessionViewer({
 			if (!el || el.scrollHeight - el.scrollTop - el.clientHeight > 4) {
 				// Opening scroll restoration can settle after the first transcript
 				// paint. Give it a short window without chasing a reader who moved up.
-				if (++attempts < 12) timer = window.setTimeout(tryPrefetch, 500);
+				attempts += 1;
+				if (attempts < 12) timer = window.setTimeout(tryPrefetch, 500);
 				return;
 			}
 			backgroundHistoryAttemptedRef.current = true;
@@ -3832,6 +3850,7 @@ export function SessionViewer({
 			mergedPr,
 			shippedSlackReconnectRequired,
 			shippedScreenshot,
+			session.id,
 			session.walkthrough?.summary,
 			sendShippedChangeToSlack,
 			reconnectShippedSlack,
@@ -3949,11 +3968,6 @@ export function SessionViewer({
 		[onOpenSession, openAssetFromTranscript],
 	);
 
-	// "Add session transcripts" chips on a fresh session's blank canvas: sibling
-	// workspace sessions the user can attach as context — selected ids ride the
-	// first send as `contextSessions` and the server inlines a fenced transcript
-	// digest of each. One-shot: cleared once a send consumes them.
-	const [contextSessions, setContextSessions] = useState<string[]>([]);
 
 	// The transcript passage explicitly attached to the next message. It stays
 	// highlighted until the message sends or the person removes it.
@@ -3971,13 +3985,15 @@ export function SessionViewer({
 		quote,
 		contextSessions,
 	});
-	composerDraftRef.current = {
-		draftKey,
-		images,
-		files,
-		quote,
-		contextSessions,
-	};
+	useLayoutEffect(() => {
+		composerDraftRef.current = {
+			draftKey,
+			images,
+			files,
+			quote,
+			contextSessions,
+		};
+	}, [draftKey, images, files, quote, contextSessions]);
 	const composerHasDraft = useCallback(() => {
 		const current = composerDraftRef.current;
 		const stored = loadDraft(current.draftKey);
@@ -4040,7 +4056,7 @@ export function SessionViewer({
 	// reviewers ride alongside as `prReviewRequested`, since being added as a
 	// reviewer on the PR is the other way a review lands on you. It writes no
 	// Open Session request — only the picker does that — so the chip reads both.
-	const effectiveReview = useMemo(() => {
+	const effectiveReview = (() => {
 		const owner = session.reviewRequest
 			? session
 			: (workspaceSessions || []).find((c) => c.reviewRequest);
@@ -4065,15 +4081,7 @@ export function SessionViewer({
 				),
 			],
 		};
-	}, [
-		session.reviewRequest,
-		session.id,
-		session.prReviewedBy,
-		session.prReviewRequested,
-		session.prUpdatedAt,
-		session.prState,
-		workspaceSessions,
-	]);
+	})();
 
 	// Returns true when the message was consumed, so the (uncontrolled)
 	// Composer knows to clear its draft; false keeps it for a retry.
@@ -4225,16 +4233,17 @@ export function SessionViewer({
 	const imageRegionCommentRef = useRef<
 		(request: ImageRegionCommentRequest) => Promise<void>
 	>(async () => {});
-	imageRegionCommentRef.current = async (request) => {
-		if (request.sessionId !== session.id) throw new Error("That session changed");
-		const crop = await cropImageRegionFile(request.src, request.region);
-		const staged = await splitAttachments([crop]);
-		if (staged.images.length === 0) {
-			throw new Error(staged.rejected[0] || "Could not attach the selected image");
-		}
-		const sent = await handleSend(request.text, undefined, staged.images);
-		if (!sent) throw new Error("Could not send this comment");
-	};
+	useLayoutEffect(() => {
+		imageRegionCommentRef.current = async (request) => {
+			if (request.sessionId !== session.id) throw new Error("That session changed");
+			const crop = await cropImageRegionFile(request.src, request.region);
+			const staged = await splitAttachments([crop]);
+			if (staged.images.length === 0)
+				throw new Error(staged.rejected[0] || "Could not attach the selected image");
+			const sent = await handleSend(request.text, undefined, staged.images);
+			if (!sent) throw new Error("Could not send this comment");
+		};
+	}, [session.id, handleSend]);
 	useEffect(() => {
 		if (noEngine) return;
 		return registerImageRegionCommentHandler(session.id, (request) =>
@@ -4244,6 +4253,13 @@ export function SessionViewer({
 
 	function queueHasFiles(item: QueueReceipt): boolean {
 		return Array.isArray(item.files) && item.files.length > 0;
+	}
+
+	function discardOutbox(item: PromptOutboxItem) {
+		setPending((current) =>
+			current.filter((entry) => entry.id !== `outbox-${item.clientId}`),
+		);
+		promptOutbox.discard(item.clientId);
 	}
 
 	function editOutboxInComposer(item: PromptOutboxItem) {
@@ -4257,13 +4273,6 @@ export function SessionViewer({
 			text: item.content,
 		}));
 		discardOutbox(item);
-	}
-
-	function discardOutbox(item: PromptOutboxItem) {
-		setPending((current) =>
-			current.filter((entry) => entry.id !== `outbox-${item.clientId}`),
-		);
-		promptOutbox.discard(item.clientId);
 	}
 
 	/** What removing a queued row means, said in its own terms: a person's
@@ -4404,19 +4413,16 @@ export function SessionViewer({
 	const pendingBubbles = visiblePending.filter(
 		(p) => !p.busyMode && !settingUpWorkspace,
 	);
-	const optimisticTranscriptEntries = useMemo<TranscriptEntry[]>(
-		() =>
-			pendingBubbles.length === 0
-				? EMPTY_TRANSCRIPT_ENTRIES
-				: pendingBubbles.map((pending) => ({
-				id: pending.id,
-				type: "user",
-				content: pending.content,
-				timestamp: new Date(pending.sentAt).toISOString(),
+	const optimisticTranscriptEntries: TranscriptEntry[] =
+		pendingBubbles.length === 0
+			? EMPTY_TRANSCRIPT_ENTRIES
+			: pendingBubbles.map((pending) => ({
+					id: pending.id,
+					type: "user",
+					content: pending.content,
+					timestamp: new Date(pending.sentAt).toISOString(),
 					...(pending.images?.length ? { images: pending.images } : {}),
-				})),
-		[pendingBubbles],
-	);
+				}));
 	// The durable row covers a prompt the store still holds: one this tab never
 	// showed a bubble for (another tab's send, or a reload), or one whose bubble
 	// is still up. A prompt already confirmed by the server is dropped from the
@@ -5124,9 +5130,8 @@ export function SessionViewer({
 			);
 		} catch (error) {
 			toast(error instanceof Error ? error.message : "Could not move to a branch");
-		} finally {
-			setBranchActionBusy(null);
 		}
+		setBranchActionBusy(null);
 	}
 
 	function requestCreatePr() {
@@ -5158,9 +5163,8 @@ export function SessionViewer({
 					? error.message
 					: "Could not move to a branch",
 			);
-		} finally {
-			setBranchActionBusy(null);
 		}
+		setBranchActionBusy(null);
 	}
 	// Left-edge swipe on phones pops the topmost overlay before the page stack:
 	// the info page registers as a higher-priority back-swipe layer, so the
@@ -5300,7 +5304,15 @@ export function SessionViewer({
 			alert(`${next ? "Archive" : "Unarchive"} failed: ${e.message}`);
 			setArchiving(false);
 		}
-	}, [onArchive, onArchived, onBack, session.archived, session.id]);
+	}, [
+		onArchive,
+		onArchived,
+		onBack,
+		session.archived,
+		session.id,
+		setArchiving,
+		setOverflowOpen,
+	]);
 
 	useEffect(() => {
 		function onKeyDown(e: KeyboardEvent) {
@@ -7639,8 +7651,8 @@ export function SessionViewer({
 								<Composer
 									// Uncontrolled: the draft lives in the Composer (persisted
 									// per session via draftKey). Remount on the tab-bar +
-									// (newSessionSeq) to clear it for the fresh session.
-									key={newSessionSeq ?? 0}
+									// after its persisted draft has been cleared.
+									key={composerResetSeq ?? 0}
 									draftKey={draftKey}
 									onSend={handleSend}
 									onTyping={(active) => setTyping(session.id, active)}
