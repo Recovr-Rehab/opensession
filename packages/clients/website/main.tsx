@@ -290,7 +290,7 @@ function SetupOverview() {
 							<span aria-hidden="true">2. </span>Expose it safely
 						</strong>
 						<span>
-							Optional. Needed to connect from your phone or share Open Session with
+							Use a Tailscale network to connect from phone or share Open Session with
 							your team.
 						</span>
 					</div>
