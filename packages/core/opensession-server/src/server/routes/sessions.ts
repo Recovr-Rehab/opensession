@@ -12,7 +12,7 @@ import {
   currentAgentRunToken,
 	isAgentSessionBusy,
 } from "../agent-runner";
-import { archiveOlderThan, setArchived, unpinArchivedSessions, } from "../archive";
+import { archiveOlderThan, isArchivedId, setArchived, unpinArchivedSessions, } from "../archive";
 import { audit } from "../audit";
 import {
 	pendingAskAwaitingAnswer,
@@ -257,9 +257,26 @@ function readDiskLiveList(): SessionsResponseSnapshot | null {
 		if (!existsSync(LIVE_LIST_DISK_PATH)) return null;
 		const sourceMtime = statSync(LIVE_LIST_DISK_PATH).mtimeMs;
 		if (Date.now() - sourceMtime > LIVE_LIST_DISK_MAX_AGE_MS) return null;
-		const text = readFileSync(LIVE_LIST_DISK_PATH, "utf8");
+		let text = readFileSync(LIVE_LIST_DISK_PATH, "utf8");
 		if (!text.startsWith("[")) return null;
+		// The snapshot can predate an archive whose refresh never ran — e.g. the
+		// archive landed in the previous process's shutdown window, or between
+		// its last persist and SIGKILL. Installing it as-is would put
+		// just-archived sessions back in the live sidebar until the cold scan
+		// finishes (up to LIVE_LIST_DISK_SERVE_MS plus refresh delay), which
+		// reads to the person as "I archived this and it came back". The
+		// registry is the durable truth, so drop archived rows before serving.
+		let rewrote = false;
+		try {
+			const rows = JSON.parse(text) as Array<{ id?: string }>;
+			const live = rows.filter((row) => !row.id || !isArchivedId(row.id));
+			if (live.length !== rows.length) {
+				text = JSON.stringify(live);
+				rewrote = true;
+			}
+		} catch {}
 		const haveMatchingGzip =
+			!rewrote &&
 			existsSync(LIVE_LIST_DISK_GZIP_PATH) &&
 			statSync(LIVE_LIST_DISK_GZIP_PATH).mtimeMs >= sourceMtime;
 		return {
@@ -1455,18 +1472,25 @@ export async function handleSessionsRoutes(
           ? currentAgentRunToken(session.id)
           : undefined);
       if (targetRunId) {
-        requestTurnCancel(session.id, session, {
-          cancelId: `archive-stop:${session.id}:${targetRunId}:${target.generation}`,
-          expectedRunId: targetRunId,
-          expectedGeneration: target.generation,
-          source: "archive",
-        });
-        audit({
-          msg: "run_cancelled",
-          session_id: session.id,
-          source: "archive",
-        });
-        stoppedRun = true;
+        try {
+          requestTurnCancel(session.id, session, {
+            cancelId: `archive-stop:${session.id}:${targetRunId}:${target.generation}`,
+            expectedRunId: targetRunId,
+            expectedGeneration: target.generation,
+            source: "archive",
+          });
+          audit({
+            msg: "run_cancelled",
+            session_id: session.id,
+            source: "archive",
+          });
+          stoppedRun = true;
+        } catch {
+          // The actor fences cancels by run id + generation; losing the race
+          // (the run settled between our busy check and prepare) throws out
+          // of requestTurnCancel. That must not fail the archive — the usual
+          // case is the run having finished anyway.
+        }
       }
     }
 		sessionKernel(sessionId).applySync("archive_override", () =>
