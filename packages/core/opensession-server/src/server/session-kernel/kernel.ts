@@ -262,6 +262,11 @@ export function sessionKernelActorActive(): boolean {
   return !!state.actor;
 }
 
+export function sessionIsQuarantined(sessionId: string): boolean {
+  if (state.actor) return !!state.actor.quarantinedSession(sessionId);
+  return !!compatibilityStoreForTest("quarantine read").quarantinedSession(sessionId);
+}
+
 export function sessionKernelStore(): SessionKernelStoreApi {
   if (state.store) return state.store;
   if (process.env.NODE_ENV === "test")

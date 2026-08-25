@@ -177,8 +177,8 @@ import {
 	settleCreationCancelled,
 	settleCreationFailed,
 	settleCreationSucceeded,
+	sessionIsQuarantined,
 	sessionKernel,
-	sessionKernelStore,
   sessionTurn,
 } from "./session-kernel";
 
@@ -764,7 +764,7 @@ export function restorePromptQueues(resumedSessionIds: Set<string>): void {
 		// session during queue restoration so boot does not try to mutate its
 		// delivery projection and turn one isolated failure into a restart loop.
 		sessionExists: (sessionId) =>
-			!!findSession(sessionId) && !sessionKernelStore().quarantinedSession(sessionId),
+			!!findSession(sessionId) && !sessionIsQuarantined(sessionId),
 		journalOwnsPrompt: (sessionId, promptEntryId) =>
 			active.some(
 				(run) =>
