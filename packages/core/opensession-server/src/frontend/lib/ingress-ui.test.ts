@@ -4,6 +4,7 @@ import {
 	configuredIngressDrafts,
 	customCaddyConfig,
 	customDnsRecords,
+	INGRESS_METHODS,
 	ingressHostname,
 	privateAppCaddyConfig,
 	privateAppDnsRecord,
@@ -23,6 +24,26 @@ const settings = {
 } as PublicIngressSettings;
 
 describe("public ingress form", () => {
+	test("presents three distinct ways to publish the same callback endpoint", () => {
+		expect(INGRESS_METHODS).toEqual([
+			{
+				value: "tailscale",
+				label: "Tailscale Funnel",
+				description: "Generated .ts.net URL. No DNS records or inbound ports.",
+			},
+			{
+				value: "cloudflare",
+				label: "Cloudflare Tunnel",
+				description: "Your domain through Cloudflare. No inbound ports.",
+			},
+			{
+				value: "custom",
+				label: "Direct HTTPS with Caddy",
+				description: "Your domain with any DNS provider. Requires ports 80 and 443.",
+			},
+		]);
+	});
+
 	test("keeps one draft per exposure method", () => {
 		expect(configuredIngressDrafts(settings)).toEqual({
 			tailscale: "https://server.example.ts.net",

@@ -11,16 +11,30 @@ On a default install, anyone who reaches the app can start sessions that
 execute code on your box, read registered repositories, and use your model
 subscriptions. Treat the bind address as the security boundary.
 
-## The short version
+## Two separate connections
+
+Open Session has a private app for people and a separate public endpoint for
+external services. Configuring one never exposes the other.
+
+| Connection | Used by | Address | Setup |
+| --- | --- | --- | --- |
+| **Private app** | Teammates and server administrators | A Tailscale address, optionally with a friendly private domain | Connect the server and teammates to the same tailnet |
+| **Public callbacks** | GitHub webhooks and remote Sandboxes | A different public HTTPS address | Choose exactly one: Tailscale Funnel, Cloudflare Tunnel, or Direct HTTPS with Caddy |
+
+Tailscale and Tailscale Funnel have different jobs. Tailscale keeps teammate and
+server traffic private. Funnel publishes only the restricted callback listener,
+not the app.
+
+### Private app quick reference
 
 | | |
 | --- | --- |
-| Default | binds `127.0.0.1` — reachable only from the box itself |
+| Default | binds `127.0.0.1`, reachable only from the box itself |
 | Sharing with a team | bind a **Tailscale** IP |
 | Occasional access | leave it on `127.0.0.1`, use an **SSH tunnel** |
 | Never | expose port 3850 publicly with `HOST=0.0.0.0` or a public reverse proxy |
 
-## Tailscale (recommended)
+## Tailscale for private access (recommended)
 
 [Tailscale](https://tailscale.com) puts your machines on a private WireGuard
 network. Authorized tailnet devices can reach one another without opening a
@@ -153,7 +167,7 @@ On a cloud box, also check the firewall — the security group or firewall rules
 should not open 3850 or 3860 directly. Funnel, Cloudflare Tunnel, or Caddy
 terminates TLS in front of loopback 3860. See [ec2.md](ec2.md#networking).
 
-## A custom domain (os.company.dev)
+## An optional friendly private domain (os.company.dev)
 
 `http://100.64.12.34:3850` works but is unpleasant to type and impossible to
 remember. You can put a real name and a real certificate in front of it without
@@ -178,11 +192,11 @@ a CNAME would need something else already resolving to it.
 you `<machine>.<tailnet>.ts.net` for free with no public record. You lose the
 custom name and gain slightly more privacy.)
 
-### 2. Get a certificate
+### 2. Get a Let’s Encrypt certificate
 
-Your host is not reachable from the internet, so the usual HTTP-01 ACME
-challenge cannot work — Let's Encrypt cannot connect to it. Use **DNS-01**,
-which proves control of the domain by writing a TXT record instead.
+Your host is not reachable from the internet, so the usual HTTP-01 challenge
+cannot work. Use **DNS-01**, which proves control of the domain by writing a TXT
+record instead.
 
 With [lego](https://go-acme.github.io/lego/) and, say, Cloudflare DNS:
 
@@ -298,6 +312,14 @@ bodyless 404. The private app on 3850 is not part of this listener and must not
 be routed through the public origin. Upgrade and workload-token exchange
 attempts are limited to 30 per client IP per minute.
 
+Choose exactly one way to publish that callback listener:
+
+| Method | Address | Inbound ports | Best when |
+| --- | --- | --- | --- |
+| **Tailscale Funnel** | Generated `.ts.net` URL | None | You want the shortest setup and do not need your own hostname |
+| **Cloudflare Tunnel** | Your domain | None | Your DNS is on Cloudflare and you do not want to open ports |
+| **Direct HTTPS with Caddy** | Your domain | 80 and 443 | You use any DNS provider and can expose the server directly |
+
 Each registered route keeps its own authentication. Provider webhooks verify
 their configured signatures, including `GITHUB_WEBHOOK_SECRET`,
 `SLACK_SIGNING_SECRET`, `LINEAR_WEBHOOK_SECRET`, `PLAIN_WEBHOOK_SECRET`,
@@ -306,7 +328,7 @@ public routes use OAuth state, path secrets, or short-lived tokens as
 appropriate. Routes that require credentials reject missing credentials;
 `/ingress-health` is intentionally public.
 
-Configure the canonical origin in Settings → Public ingress or directly. It
+Configure the canonical origin in **Settings → Domains and ingress → Public callbacks** or directly. It
 must be a public HTTPS origin on a hostname different from the private app,
 with no path, credentials, or custom port:
 
@@ -356,11 +378,11 @@ CNAME ingress.example.com <tunnel-id>.cfargotunnel.com
 Only the ingress gateway belongs in the tunnel. Never add port 3850 unless you
 have separately decided to make the authenticated app public.
 
-### Custom domain with Caddy
+### Direct HTTPS with Caddy
 
 Install Caddy, point the hostname's A/AAAA records at the server's **public**
-address, and allow inbound TCP 80 and 443. Then choose Custom domain in
-Settings. Managed setup requires passwordless `sudo` for the service user. It
+address, and allow inbound TCP 80 and 443. Then choose Direct HTTPS with Caddy in
+**Settings → Domains and ingress → Public callbacks**. Managed setup requires passwordless `sudo` for the service user. It
 backs up and updates `/etc/caddy/Caddyfile`, validates the complete file, and
 reloads Caddy; validation, install, reload, or config-save failures restore the
 prior file. DNS may still be propagating afterward, so health remains

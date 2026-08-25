@@ -8,17 +8,17 @@ export const INGRESS_METHODS: Array<{
 	{
 		value: "tailscale",
 		label: "Tailscale Funnel",
-		description: "Uses Tailscale’s generated .ts.net URL. No DNS records or inbound firewall ports.",
+		description: "Generated .ts.net URL. No DNS records or inbound ports.",
 	},
 	{
 		value: "cloudflare",
 		label: "Cloudflare Tunnel",
-		description: "An outbound connector through Cloudflare. No inbound firewall ports are required.",
+		description: "Your domain through Cloudflare. No inbound ports.",
 	},
 	{
 		value: "custom",
-		label: "Custom domain with Caddy",
-		description: "Works with any DNS provider. Your server must accept public traffic on ports 80 and 443.",
+		label: "Direct HTTPS with Caddy",
+		description: "Your domain with any DNS provider. Requires ports 80 and 443.",
 	},
 ];
 

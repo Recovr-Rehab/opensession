@@ -153,9 +153,10 @@ curl -fsSL https://raw.githubusercontent.com/tellahq/opensession/main/install.sh
 
 Useful flags: `--dir <path>` to install elsewhere, `--channel <ref>` to track
 a branch or tag, `--advanced` for the wizard, `--org <name>` to set up an org
-install, `--tailscale` to install Tailscale, `--codex` for the ChatGPT sign-in
-CLI, `--no-engine` to skip the model CLI, `--yes` to never prompt, and
-`--uninstall` to remove it. `--help` lists them all.
+install, `--tailscale` to install Tailscale, `--cloudflare` to install
+`cloudflared`, `--caddy` to install Caddy, `--codex` for the ChatGPT sign-in CLI,
+`--no-engine` to skip the model CLI, `--yes` to never prompt, and `--uninstall`
+to remove it. `--help` lists them all.
 
 The Pi engine is compiled into the release binary and runs in-process, so
 there is no separate engine to seed or version. A release tarball carries the
@@ -617,6 +618,8 @@ webhook and OAuth methods and paths into it; the same listener owns remote
 Sandbox WebSockets and workload identity. Everything else returns 404,
 including all private app/API routes.
 
-Choose Tailscale Funnel, Cloudflare Tunnel, or a Caddy-managed custom domain in
-Settings → Public ingress. All provider signature checks remain fail-closed: a
-missing secret rejects the webhook rather than allowing unsigned intake.
+Choose Tailscale Funnel, Cloudflare Tunnel, or Direct HTTPS with Caddy in
+**Settings → Domains and ingress → Public callbacks**. These are three
+alternatives for the same restricted endpoint. All provider signature checks
+remain fail-closed: a missing secret rejects the webhook rather than allowing
+unsigned intake.

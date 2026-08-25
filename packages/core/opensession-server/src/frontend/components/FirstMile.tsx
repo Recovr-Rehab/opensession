@@ -27,7 +27,7 @@ interface FirstMileStep {
 	description: string;
 }
 
-// Public ingress comes before GitHub so the generated App form carries a
+// Public callbacks come before GitHub so the generated App form carries a
 // working webhook URL. GitHub then supplies the organization step's answers:
 // the organization is named and marked from the org you just connected rather
 // than asked for cold. Members sit after repositories, since an invite is worth
@@ -43,9 +43,9 @@ const STEPS: FirstMileStep[] = [
 	},
 	{
 		id: "ingress",
-		label: "Domains",
-		title: "Set up domains",
-		description: "Choose where your team opens Open Session and how external services reach it.",
+		label: "Network",
+		title: "Connect Open Session",
+		description: "Keep the app private for your team, then choose how external services reach its public callback endpoint.",
 	},
 	{
 		id: "github",

@@ -25,7 +25,7 @@ import { useSetupStatus, type SetupController } from "../../hooks/useSetupStatus
 import { Button } from "../../ui/button";
 import { CopyCheck, useCopy } from "../../ui/copy";
 import { Input } from "../../ui/input";
-import { OptionSelect } from "../../ui/select";
+import { Radio, RadioGroup } from "../../ui/radio";
 import { Segmented, SegmentedOption } from "../../ui/segmented";
 import {
 	SettingCard,
@@ -124,9 +124,12 @@ function PrivateAppSetup({
 				</SettingRow>
 			</SettingCard>
 			<SettingsForm className="mt-3">
-				<p className="m-0 text-supporting leading-relaxed text-dim">
-					Give your team a memorable HTTPS address while keeping the app on your private Tailscale network.
-				</p>
+				<div>
+					<div className="text-item-title font-medium text-fg">Optional friendly domain</div>
+					<p className="mt-1 mb-0 text-supporting leading-relaxed text-dim">
+						Give your team a memorable HTTPS address while keeping the app on your private Tailscale network.
+					</p>
+				</div>
 				<SetupSteps>
 					<SetupStep number={1} title="Choose the app domain">
 						<SettingsField className="mb-0">
@@ -139,8 +142,8 @@ function PrivateAppSetup({
 						<p className="m-0">Add this DNS-only record at your provider. It points to the server’s Tailscale IP, so the hostname resolves everywhere but only devices on your tailnet can connect.</p>
 						{dnsRecord ? <CodeBlock>{dnsRecord}</CodeBlock> : <InlineAlert>Connect this server to Tailscale first, then reload this page.</InlineAlert>}
 					</SetupStep>
-					<SetupStep number={3} title="Issue a private app certificate">
-						<p className="m-0">Use your DNS provider’s DNS-01 challenge to issue and automatically renew a certificate. Store it at these paths:</p>
+					<SetupStep number={3} title="Get a Let’s Encrypt certificate">
+						<p className="m-0">Use your DNS provider’s DNS-01 challenge because the private address cannot use HTTP validation. Set up automatic renewal and store the certificate at these paths:</p>
 						<CodeBlock>{`/etc/opensession/tls/${ingressHostname(domain, "os.example.com")}.crt`}</CodeBlock>
 						<CodeBlock>{`/etc/opensession/tls/${ingressHostname(domain, "os.example.com")}.key`}</CodeBlock>
 					</SetupStep>
@@ -183,7 +186,7 @@ export function IngressPanel({
 	const localSetup = useSetupStatus();
 	const setup = parentSetup || localSetup;
 	const [settings, setSettings] = useState<PublicIngressSettings | null>(null);
-	const [surface, setSurface] = useState<"app" | "ingress">("app");
+	const [surface, setSurface] = useState<"app" | "ingress">(onboarding ? "ingress" : "app");
 	const [method, setMethod] = useState<IngressExposure>("tailscale");
 	const [appDomain, setAppDomain] = useState("");
 	const [drafts, setDrafts] = useState<Record<IngressExposure, string>>(EMPTY_DRAFTS);
@@ -246,7 +249,7 @@ export function IngressPanel({
 				void onChanged?.();
 			})
 			.catch((cause: unknown) => {
-				setError(cause instanceof Error ? cause.message : "Public ingress could not be updated");
+				setError(cause instanceof Error ? cause.message : "Public callbacks could not be updated");
 			})
 			.finally(() => setBusy(null));
 	}
@@ -277,7 +280,7 @@ export function IngressPanel({
 			await run(
 				"apply",
 				() => installPublicIngressCaddy(url),
-				(next) => next.health === "ready" ? "Public ingress is ready" : "Caddy configured. Waiting for DNS",
+				(next) => next.health === "ready" ? "Public callbacks are ready" : "Caddy configured. Waiting for DNS",
 			);
 			return;
 		}
@@ -292,7 +295,6 @@ export function IngressPanel({
 		);
 	}
 
-	const methodInfo = INGRESS_METHODS.find((option) => option.value === method)!;
 	const records = settings ? customDnsRecords(settings, drafts.custom) : [];
 	const missingTool = settings && (
 		(method === "tailscale" && !settings.tailscale.installed) ||
@@ -308,7 +310,7 @@ export function IngressPanel({
 			{!onboarding && (
 				<SettingsHeader
 					title="Domains and ingress"
-					description="Set up a private app address and a separate public ingress."
+					description="Keep the app private, then choose one way to receive public callbacks."
 				/>
 			)}
 
@@ -320,7 +322,7 @@ export function IngressPanel({
 					<div className="mb-5 px-5">
 						<Segmented label="Domain setup" value={surface} onValueChange={(value) => setSurface(value as "app" | "ingress")} className="w-full">
 							<SegmentedOption value="app" className="min-h-10 flex-1 justify-center phone:min-h-11">Private app</SegmentedOption>
-							<SegmentedOption value="ingress" className="min-h-10 flex-1 justify-center phone:min-h-11">Public ingress</SegmentedOption>
+							<SegmentedOption value="ingress" className="min-h-10 flex-1 justify-center phone:min-h-11">Public callbacks</SegmentedOption>
 						</Segmented>
 					</div>
 					{surface === "app" ? (
@@ -333,7 +335,7 @@ export function IngressPanel({
 								onSave={() => void saveAppDomain()}
 							/>
 							{onboarding && settings.health !== "ready" && (
-								<SettingsHint className="mt-4">Set up Public ingress before continuing to GitHub.</SettingsHint>
+								<SettingsHint className="mt-4">A friendly private domain is optional. Public callbacks must be ready before GitHub.</SettingsHint>
 							)}
 						</>
 					) : (
@@ -368,24 +370,34 @@ export function IngressPanel({
 						className={onboarding ? "mt-0" : undefined}
 						actions={onboarding ? <StatusChip label={busy === "apply" ? "Setting up" : ingressHealthLabel(settings.health)} dot={busy === "apply" ? "var(--yellow)" : ingressHealthDot(settings.health)} /> : undefined}
 					>
-						Public ingress
+						Public callbacks
 					</SettingsGroupLabel>
 					<SettingsForm>
 						<p className="m-0 text-supporting leading-relaxed text-dim">
-							A public endpoint for webhooks and remote Sandboxes. It never serves the app.
+							A separate public endpoint for webhooks and remote Sandboxes. It never serves the app.
 						</p>
-						<SettingsField>
-							Method
-							<OptionSelect
-								label="Ingress exposure method"
-								value={method}
-								options={INGRESS_METHODS}
-								disabled={!!busy || !settings.canManage}
-								className="w-full"
-								onChange={(next) => setMethod(next as IngressExposure)}
-							/>
-						</SettingsField>
-						<p className="-mt-3 m-0 text-supporting text-dim">{methodInfo.description}</p>
+						<div className="grid gap-2">
+							<div className="text-label font-medium text-dim">How external services connect</div>
+							<SettingCard>
+								<RadioGroup
+									aria-label="Public callback method"
+									value={method}
+									disabled={!!busy || !settings.canManage}
+									onValueChange={(next) => setMethod(next as IngressExposure)}
+									className="[&>*+*]:relative [&>*+*]:before:pointer-events-none [&>*+*]:before:absolute [&>*+*]:before:inset-x-5 [&>*+*]:before:top-0 [&>*+*]:before:h-px [&>*+*]:before:bg-line [&>*+*]:before:content-['']"
+								>
+									{INGRESS_METHODS.map((option) => (
+										<label key={option.value} className="flex min-h-11 cursor-pointer items-start gap-3 px-5 py-4 transition-[background-color] hover:bg-hover">
+											<Radio value={option.value} className="mt-0.5" />
+											<span className="min-w-0">
+												<span className="block text-item-title font-medium text-fg">{option.label}</span>
+												<span className="mt-1 block text-supporting text-dim">{option.description}</span>
+											</span>
+										</label>
+									))}
+								</RadioGroup>
+							</SettingCard>
+						</div>
 
 						{method === "tailscale" && (
 							<SetupSteps>
@@ -400,7 +412,7 @@ export function IngressPanel({
 										Public URL
 										<Input value={settings.tailscale.suggestedUrl} readOnly className="font-mono" placeholder="Connect Tailscale to discover the URL" />
 									</SettingsField>
-									<p className="m-0">A CNAME cannot replace this address because Funnel’s certificate and routing use the .ts.net hostname. For your own domain, use Cloudflare Tunnel or Custom domain with Caddy.</p>
+									<p className="m-0">A CNAME cannot replace this address because Funnel’s certificate and routing use the .ts.net hostname. For your own domain, use Cloudflare Tunnel or Direct HTTPS with Caddy.</p>
 								</SetupStep>
 							</SetupSteps>
 						)}
@@ -498,7 +510,7 @@ export function IngressPanel({
 						)}
 
 						<SettingsFormActions className="phone:flex-col-reverse">
-							<Button variant="soft" disabled={!!busy || !settings.canManage || !settings.publicBaseUrl} className="phone:min-h-11 phone:w-full phone:justify-center" onClick={() => void run("test", testPublicIngress, (next) => next.health === "ready" ? "Public ingress is reachable" : "Public ingress is not ready yet") }>
+							<Button variant="soft" disabled={!!busy || !settings.canManage || !settings.publicBaseUrl} className="phone:min-h-11 phone:w-full phone:justify-center" onClick={() => void run("test", testPublicIngress, (next) => next.health === "ready" ? "Public callbacks are reachable" : "Public callbacks are not ready yet") }>
 								{busy === "test" ? "Checking…" : settings.health === "waiting_dns" ? "Check again" : "Test connection"}
 							</Button>
 							<Button variant="primary" disabled={!!busy || !settings.canManage || !!missingTool || invalidInput} className="phone:min-h-11 phone:w-full phone:justify-center" onClick={() => void applyMethod()}>
