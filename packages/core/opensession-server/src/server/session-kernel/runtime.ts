@@ -294,7 +294,11 @@ export function reconcileSessionKernelOwnership(
 	]);
 	const settled: string[] = [];
 	for (const state of sessionKernelStore().runStates()) {
-		if (!unsettled.has(state.state) || ownedSessionIds.has(state.sessionId))
+		if (
+			!unsettled.has(state.state) ||
+			ownedSessionIds.has(state.sessionId) ||
+			sessionKernelStore().quarantinedSession(state.sessionId)
+		)
 			continue;
 		sessionKernel(state.sessionId).applyRunEvent({
 			event: "boot_owner_missing",
