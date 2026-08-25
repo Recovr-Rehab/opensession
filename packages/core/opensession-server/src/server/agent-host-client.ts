@@ -145,33 +145,42 @@ export class AgentHostClient {
   private socket?: Socket;
   private connecting?: Promise<void>;
   private fence?: AgentTurnFence;
-  private desynchronized = false;
+  private ready = false;
+  private uncertain = false;
   private readonly pending = new Map<string, PendingRequest>();
   private requestSequence = 0;
 
   constructor(private readonly options: AgentHostClientOptions) {}
 
   connect(): Promise<void> {
-    if (this.socket && !this.socket.destroyed) {
-      if (this.desynchronized)
-        throw new Error("Agent Host client requires a fresh connection");
-      return Promise.resolve();
-    }
+    if (this.uncertain)
+      throw new Error(
+        "Agent Host ownership is uncertain; retry after host replacement",
+      );
     if (this.connecting) return this.connecting;
-    this.connecting = new Promise<void>((resolve, reject) => {
+    if (this.ready && this.socket && !this.socket.destroyed)
+      return Promise.resolve();
+    this.connecting = new Promise<void>((resolveConnect, rejectConnect) => {
       const socket = connect(this.options.socketPath);
       const decoder = new BoundedNdjsonDecoder(
         this.options.maxFrameBytes ?? AGENT_HOST_MAX_FRAME_BYTES,
       );
       this.socket = socket;
-      this.desynchronized = false;
+      this.ready = false;
       let settled = false;
+      const timeout = setTimeout(
+        () => failConnect(new Error("Agent Host connect timed out")),
+        this.options.timeoutMs ?? 5_000,
+      );
+      timeout.unref?.();
       const failConnect = (error: Error) => {
+        clearTimeout(timeout);
+        this.fail(error, socket);
+        this.disposeSocket(socket);
         if (!settled) {
           settled = true;
-          reject(error);
+          rejectConnect(error);
         }
-        this.fail(error, socket);
       };
       socket.on("connect", () => {
         const requestId = this.nextRequestId();
@@ -180,12 +189,12 @@ export class AgentHostClient {
           version: AGENT_HOST_PROTOCOL_VERSION,
           requestId,
         }).then(() => {
-          if (!settled && this.socket === socket) {
-            settled = true;
-            this.desynchronized = false;
-            this.fence = undefined;
-            resolve();
-          }
+          if (settled || this.socket !== socket) return;
+          settled = true;
+          clearTimeout(timeout);
+          this.ready = true;
+          this.fence = undefined;
+          resolveConnect();
         }, failConnect);
       });
       socket.on("data", (chunk) => {
@@ -193,14 +202,14 @@ export class AgentHostClient {
           for (const value of decoder.push(Buffer.from(chunk)))
             this.receive(socket, value);
         } catch {
-          socket.destroy(new Error("Malformed Agent Host frame"));
+          failConnect(new Error("Malformed Agent Host frame"));
         }
       });
       socket.on("end", () => {
         try {
           decoder.finish();
         } catch {
-          socket.destroy();
+          failConnect(new Error("Malformed Agent Host frame"));
         }
       });
       socket.on("error", failConnect);
@@ -214,8 +223,8 @@ export class AgentHostClient {
   }
 
   async startTurn(spec: AgentTurnSpec): Promise<void> {
-    if (!this.socket || this.socket.destroyed)
-      throw new Error("Agent Host is not connected");
+    if (this.connecting || !this.ready || !this.socket || this.socket.destroyed)
+      throw new Error("Agent Host handshake is not complete");
     if (this.fence) throw new Error("Agent Host client already owns a turn");
     const requestId = this.nextRequestId();
     this.fence = { ...spec.fence };
@@ -227,7 +236,7 @@ export class AgentHostClient {
         spec,
       });
     } catch (error) {
-      if (!this.desynchronized) this.fence = undefined;
+      if (!this.uncertain) this.fence = undefined;
       throw error;
     }
   }
@@ -252,11 +261,13 @@ export class AgentHostClient {
 
   close(): void {
     const socket = this.socket;
-    socket?.destroy();
-    if (socket) this.fail(new Error("Agent Host client closed"), socket);
+    if (socket) {
+      this.fail(new Error("Agent Host client closed"), socket);
+      this.disposeSocket(socket);
+    }
     this.socket = undefined;
+    this.ready = false;
     this.fence = undefined;
-    this.desynchronized = false;
   }
 
   private sendFenced(message: Record<string, unknown>): string {
@@ -302,7 +313,7 @@ export class AgentHostClient {
   }
 
   private receive(socket: Socket, value: unknown): void {
-    if (socket !== this.socket || this.desynchronized) return;
+    if (socket !== this.socket || this.uncertain) return;
     const message = decodeServerMessage(value);
     if (!message) {
       this.socket?.destroy(new Error("Invalid Agent Host message"));
@@ -337,8 +348,9 @@ export class AgentHostClient {
 
   private desynchronize(error: Error): void {
     const socket = this.socket;
-    if (!socket || this.desynchronized) return;
-    this.desynchronized = true;
+    if (!socket || this.uncertain) return;
+    this.uncertain = true;
+    this.ready = false;
     if (this.fence && socket.writable) {
       const requestId = this.nextRequestId();
       try {
@@ -353,6 +365,7 @@ export class AgentHostClient {
             this.options.maxFrameBytes,
           ),
         );
+        socket.destroySoon();
       } catch {
         socket.destroy();
       }
@@ -370,7 +383,13 @@ export class AgentHostClient {
     }
     this.pending.clear();
     this.socket = undefined;
+    this.ready = false;
     if (!preserveFence) this.fence = undefined;
+  }
+
+  private disposeSocket(socket: Socket): void {
+    socket.removeAllListeners();
+    socket.destroy();
   }
 
   private nextRequestId(): string {

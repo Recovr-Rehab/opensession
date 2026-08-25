@@ -1,5 +1,14 @@
-import { chmod, lstat, mkdir, unlink } from "node:fs/promises";
-import { dirname, isAbsolute, parse, resolve } from "node:path";
+import {
+  chmod,
+  lstat,
+  mkdir,
+  readFile,
+  rename,
+  rm,
+  unlink,
+  writeFile,
+} from "node:fs/promises";
+import { dirname, isAbsolute, join, parse, resolve } from "node:path";
 import { createServer, connect, type Server, type Socket } from "node:net";
 import {
   AGENT_HOST_PROTOCOL_VERSION,
@@ -49,6 +58,10 @@ interface ActiveTurn {
   pendingAppendId?: string;
   askIds: Set<string>;
   abandonTimer?: ReturnType<typeof setTimeout>;
+  cancelling: boolean;
+  cancelSettled: boolean;
+  runSettled: boolean;
+  result?: AgentTurnResult;
 }
 
 interface SocketIdentity {
@@ -262,6 +275,9 @@ export class AgentHost {
   private stopping?: Promise<void>;
   private active?: ActiveTurn;
   private socketIdentity?: SocketIdentity;
+  private claimOwned = false;
+  private poisoned = false;
+  private readonly highWaterGenerations = new Map<string, number>();
   private readonly connections = new Set<ConnectionState>();
 
   constructor(private readonly options: AgentHostOptions) {}
@@ -285,35 +301,37 @@ export class AgentHost {
   }
 
   private async startListening(): Promise<void> {
-    await this.prepareSocketPath();
-    for (let attempt = 0; attempt < 2; attempt += 1) {
+    if (this.poisoned)
+      throw new Error("Agent Host requires process replacement");
+    await this.prepareSocketParent();
+    await this.acquireClaim();
+    try {
+      await this.removeStaleSocketWhileClaimed();
       const server = createServer((socket) => this.accept(socket));
       this.server = server;
-      try {
-        await new Promise<void>((resolveListen, rejectListen) => {
-          const onError = (error: Error) => rejectListen(error);
-          server.once("error", onError);
-          server.listen(this.options.socketPath, () => {
-            server.off("error", onError);
-            resolveListen();
-          });
+      await new Promise<void>((resolveListen, rejectListen) => {
+        const onError = (error: Error) => rejectListen(error);
+        server.once("error", onError);
+        server.listen(this.options.socketPath, () => {
+          server.off("error", onError);
+          resolveListen();
         });
-        const socketStat = await lstat(this.options.socketPath);
-        if (!socketStat.isSocket() || socketStat.isSymbolicLink())
-          throw new Error("Agent Host socket path is unsafe");
-        await chmod(this.options.socketPath, 0o600);
-        this.socketIdentity = { dev: socketStat.dev, ino: socketStat.ino };
-        return;
-      } catch (error) {
-        this.server = undefined;
-        if (server.listening)
-          await new Promise<void>((resolveClose) =>
-            server.close(() => resolveClose()),
-          );
-        const code = (error as NodeJS.ErrnoException).code;
-        if (code !== "EADDRINUSE" || attempt > 0) throw error;
-        await this.removeStaleSocket();
-      }
+      });
+      const socketStat = await lstat(this.options.socketPath);
+      if (!socketStat.isSocket() || socketStat.isSymbolicLink())
+        throw new Error("Agent Host socket path is unsafe");
+      await chmod(this.options.socketPath, 0o600);
+      this.socketIdentity = { dev: socketStat.dev, ino: socketStat.ino };
+    } catch (error) {
+      const server = this.server;
+      this.server = undefined;
+      if (server?.listening)
+        await new Promise<void>((resolveClose) =>
+          server.close(() => resolveClose()),
+        );
+      await this.unlinkOwnedSocket();
+      await this.releaseClaim();
+      throw error;
     }
   }
 
@@ -323,8 +341,9 @@ export class AgentHost {
     this.server = undefined;
     const active = this.active;
     if (active) {
-      this.fence(active);
-      this.invokeDriver(() => active.driver.cancel());
+      this.poisoned = true;
+      this.beginCancellation(active);
+      this.clearAbandonTimer(active);
       this.invokeDriver(() => active.driver.shutdown());
     }
     for (const connection of this.connections) {
@@ -338,41 +357,92 @@ export class AgentHost {
         server.close(() => resolveClose()),
       );
     await this.unlinkOwnedSocket();
+    if (!active) await this.releaseClaim();
   }
 
-  private async prepareSocketPath(): Promise<void> {
+  private async prepareSocketParent(): Promise<void> {
     const socketPath = this.options.socketPath;
     if (!isAbsolute(socketPath) || resolve(socketPath) !== socketPath)
       throw new Error("Agent Host socket path must be absolute and normalized");
     const parent = dirname(socketPath);
-    if (parent === parse(parent).root)
+    const root = parse(parent).root;
+    if (parent === root)
       throw new Error(
         "Agent Host socket parent must not be the filesystem root",
       );
-    await mkdir(parent, { recursive: true, mode: 0o700 });
-    await this.rejectSymlinkComponents(parent);
+    let current = root;
+    for (const part of parent.slice(root.length).split("/").filter(Boolean)) {
+      current = resolve(current, part);
+      try {
+        const currentStat = await lstat(current);
+        if (!currentStat.isDirectory() || currentStat.isSymbolicLink())
+          throw new Error(
+            "Agent Host socket path contains an unsafe component",
+          );
+      } catch (error) {
+        if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
+        await mkdir(current, { mode: 0o700 });
+        const created = await lstat(current);
+        if (!created.isDirectory() || created.isSymbolicLink())
+          throw new Error("Agent Host socket parent creation raced a symlink");
+      }
+    }
     const parentStat = await lstat(parent);
-    if (!parentStat.isDirectory() || parentStat.isSymbolicLink())
-      throw new Error("Agent Host socket parent is unsafe");
     const uid = process.getuid?.();
     if (uid !== undefined && parentStat.uid !== uid)
       throw new Error("Agent Host socket parent has a different owner");
     await chmod(parent, 0o700);
-    await this.removeStaleSocket();
   }
 
-  private async rejectSymlinkComponents(path: string): Promise<void> {
-    const root = parse(path).root;
-    const relative = path.slice(root.length).split("/").filter(Boolean);
-    let current = root;
-    for (const part of relative) {
-      current = resolve(current, part);
-      if ((await lstat(current)).isSymbolicLink())
-        throw new Error("Agent Host socket path contains a symlink");
+  private get claimPath(): string {
+    return `${this.options.socketPath}.claim`;
+  }
+
+  private async acquireClaim(): Promise<void> {
+    for (;;) {
+      try {
+        await mkdir(this.claimPath, { mode: 0o700 });
+        this.claimOwned = true;
+        await writeFile(join(this.claimPath, "owner"), String(process.pid), {
+          flag: "wx",
+          mode: 0o600,
+        });
+        return;
+      } catch (error) {
+        if ((error as NodeJS.ErrnoException).code !== "EEXIST") {
+          if (this.claimOwned) await this.releaseClaim();
+          throw error;
+        }
+      }
+      const claimStat = await lstat(this.claimPath);
+      if (!claimStat.isDirectory() || claimStat.isSymbolicLink())
+        throw new Error("Agent Host claim path is unsafe");
+      const owner = Number(
+        await readFile(join(this.claimPath, "owner"), "utf8"),
+      );
+      if (!Number.isSafeInteger(owner) || owner < 1)
+        throw new Error("Agent Host claim owner is invalid");
+      try {
+        process.kill(owner, 0);
+        throw Object.assign(new Error("Agent Host socket is already claimed"), {
+          code: "EADDRINUSE",
+        });
+      } catch (error) {
+        if ((error as NodeJS.ErrnoException).code !== "ESRCH") throw error;
+      }
+      const quarantine = `${this.claimPath}.stale-${crypto.randomUUID()}`;
+      try {
+        await rename(this.claimPath, quarantine);
+      } catch (error) {
+        if ((error as NodeJS.ErrnoException).code === "ENOENT") continue;
+        throw error;
+      }
+      await rm(quarantine, { recursive: true, force: true });
     }
   }
 
-  private async removeStaleSocket(): Promise<void> {
+  private async removeStaleSocketWhileClaimed(): Promise<void> {
+    if (!this.claimOwned) throw new Error("Agent Host socket is not claimed");
     let socketStat;
     try {
       socketStat = await lstat(this.options.socketPath);
@@ -386,10 +456,9 @@ export class AgentHost {
       throw Object.assign(new Error("Agent Host socket is already live"), {
         code: "EADDRINUSE",
       });
-    const current = await lstat(this.options.socketPath);
-    if (current.dev !== socketStat.dev || current.ino !== socketStat.ino)
-      throw new Error("Agent Host socket changed during stale recovery");
-    await unlink(this.options.socketPath);
+    const stalePath = `${this.options.socketPath}.stale-${crypto.randomUUID()}`;
+    await rename(this.options.socketPath, stalePath);
+    await unlink(stalePath);
   }
 
   private socketAcceptsConnections(): Promise<boolean> {
@@ -428,19 +497,28 @@ export class AgentHost {
   private async unlinkOwnedSocket(): Promise<void> {
     const identity = this.socketIdentity;
     this.socketIdentity = undefined;
-    if (!identity) return;
+    if (!identity || !this.claimOwned) return;
     try {
       const current = await lstat(this.options.socketPath);
       if (
-        current.isSocket() &&
-        !current.isSymbolicLink() &&
-        current.dev === identity.dev &&
-        current.ino === identity.ino
+        !current.isSocket() ||
+        current.isSymbolicLink() ||
+        current.dev !== identity.dev ||
+        current.ino !== identity.ino
       )
-        await unlink(this.options.socketPath);
+        return;
+      const cleanupPath = `${this.options.socketPath}.cleanup-${crypto.randomUUID()}`;
+      await rename(this.options.socketPath, cleanupPath);
+      await unlink(cleanupPath);
     } catch (error) {
       if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
     }
+  }
+
+  private async releaseClaim(): Promise<void> {
+    if (!this.claimOwned) return;
+    this.claimOwned = false;
+    await rm(this.claimPath, { recursive: true, force: false });
   }
 
   private positiveDeadline(
@@ -563,7 +641,7 @@ export class AgentHost {
           await active.driver.answer(message.askId, message.result);
           break;
         case "cancel":
-          await active.driver.cancel();
+          this.beginCancellation(active);
           break;
         case "transcript_ack":
           if (active.pendingAppendId !== message.appendId)
@@ -575,8 +653,7 @@ export class AgentHost {
           );
           break;
         case "shutdown":
-          this.fence(active);
-          this.invokeDriver(() => active.driver.cancel());
+          this.beginCancellation(active);
           this.invokeDriver(() => active.driver.shutdown());
           this.close(connection);
           void this.stop();
@@ -598,6 +675,28 @@ export class AgentHost {
     requestId: string,
     spec: AgentTurnSpec,
   ): void {
+    if (this.poisoned) {
+      this.error(
+        owner,
+        requestId,
+        "host_busy",
+        "Agent Host requires process replacement",
+        spec.fence,
+      );
+      return;
+    }
+    const lineage = this.lineageKey(spec.fence);
+    const highWater = this.highWaterGenerations.get(lineage);
+    if (highWater !== undefined && spec.fence.generation <= highWater) {
+      this.error(
+        owner,
+        requestId,
+        "stale_generation",
+        "Agent Host generation was already observed",
+        spec.fence,
+      );
+      return;
+    }
     if (this.active) {
       const code =
         sameLineage(this.active.fence, spec.fence) &&
@@ -632,69 +731,74 @@ export class AgentHost {
       owner,
       requestId,
       askIds: new Set(),
+      cancelling: false,
+      cancelSettled: false,
+      runSettled: false,
     };
     this.active = active;
+    this.highWaterGenerations.set(lineage, spec.fence.generation);
     this.send(owner, {
       t: "turn_started",
       version: AGENT_HOST_PROTOCOL_VERSION,
       requestId,
       fence: active.fence,
     });
-    void driver
-      .run(spec, {
-        event: (event) => this.emitFor(active, { t: "event", event }),
-        proposeTranscript: (appendId, entries) => {
-          if (!nonempty(appendId) || active.pendingAppendId)
-            throw new Error(
-              "Transcript proposal requires its prior acknowledgement",
-            );
-          if (
-            Buffer.byteLength(JSON.stringify(entries)) >
-            spec.transcriptPolicy.maxAppendBytes
-          )
-            throw new Error("Transcript proposal exceeds maxAppendBytes");
-          if (
-            !this.emitFor(active, {
-              t: "transcript_proposal",
-              appendId,
-              entries,
-            })
-          )
-            throw new Error("Transcript proposal owner is disconnected");
-          active.pendingAppendId = appendId;
-        },
-        ask: (askId, input) => {
-          if (!nonempty(askId) || active.askIds.has(askId))
-            throw new Error("Invalid askId");
-          if (!this.emitFor(active, { t: "ask", askId, input }))
-            throw new Error("Ask owner is disconnected");
-          active.askIds.add(askId);
-        },
-      })
-      .then(
-        (result) => this.finishTurn(active, result),
-        (error) =>
-          this.finishTurn(active, {
-            status: "failed",
-            error: error instanceof Error ? error.message : String(error),
-          }),
+    let run: Promise<AgentTurnResult>;
+    try {
+      run = Promise.resolve(
+        driver.run(spec, {
+          event: (event) => this.emitFor(active, { t: "event", event }),
+          proposeTranscript: (appendId, entries) => {
+            if (!nonempty(appendId) || active.pendingAppendId)
+              throw new Error(
+                "Transcript proposal requires its prior acknowledgement",
+              );
+            if (
+              Buffer.byteLength(JSON.stringify(entries)) >
+              spec.transcriptPolicy.maxAppendBytes
+            )
+              throw new Error("Transcript proposal exceeds maxAppendBytes");
+            if (
+              !this.emitFor(active, {
+                t: "transcript_proposal",
+                appendId,
+                entries,
+              })
+            )
+              throw new Error("Transcript proposal owner is disconnected");
+            active.pendingAppendId = appendId;
+          },
+          ask: (askId, input) => {
+            if (!nonempty(askId) || active.askIds.has(askId))
+              throw new Error("Invalid askId");
+            if (!this.emitFor(active, { t: "ask", askId, input }))
+              throw new Error("Ask owner is disconnected");
+            active.askIds.add(askId);
+          },
+        }),
       );
+    } catch (error) {
+      run = Promise.reject(error);
+    }
+    void run.then(
+      (result) => this.finishTurn(active, result),
+      (error) =>
+        this.finishTurn(active, {
+          status: "failed",
+          error: error instanceof Error ? error.message : String(error),
+        }),
+    );
   }
 
   private finishTurn(active: ActiveTurn, result: AgentTurnResult): void {
-    if (this.active !== active) return;
-    this.fence(active);
-    this.send(active.owner, {
-      t: "turn_finished",
-      version: AGENT_HOST_PROTOCOL_VERSION,
-      requestId: active.requestId,
-      fence: active.fence,
-      ...result,
-    });
+    active.runSettled = true;
+    active.result = result;
+    this.completeIfDrained(active);
   }
 
   private emitFor(active: ActiveTurn, message: DriverEmission): boolean {
-    if (this.active !== active || active.owner.closed) return false;
+    if (this.active !== active || active.cancelling || active.owner.closed)
+      return false;
     return this.send(active.owner, {
       ...message,
       version: AGENT_HOST_PROTOCOL_VERSION,
@@ -746,11 +850,21 @@ export class AgentHost {
     connection.closed = true;
     this.connections.delete(connection);
     const active = this.active;
-    if (active?.owner !== connection || active.abandonTimer) return;
-    this.invokeDriver(() => active.driver.cancel());
+    if (active?.owner === connection) this.beginCancellation(active);
+  }
+
+  private beginCancellation(active: ActiveTurn): void {
+    if (this.active !== active || active.cancelling) return;
+    active.cancelling = true;
     const setTimer = this.options.setTimeout ?? globalThis.setTimeout;
     active.abandonTimer = setTimer(
-      () => this.fence(active),
+      () => {
+        if (
+          this.active === active &&
+          (!active.runSettled || !active.cancelSettled)
+        )
+          this.poisoned = true;
+      },
       this.positiveDeadline(
         this.options.cancellationDeadlineMs,
         5_000,
@@ -758,6 +872,44 @@ export class AgentHost {
       ),
     );
     active.abandonTimer.unref?.();
+    let cancel: Promise<void>;
+    try {
+      cancel = Promise.resolve(active.driver.cancel());
+    } catch (error) {
+      cancel = Promise.reject(error);
+    }
+    void cancel.then(
+      () => {
+        active.cancelSettled = true;
+        this.completeIfDrained(active);
+      },
+      () => {
+        active.cancelSettled = true;
+        this.completeIfDrained(active);
+      },
+    );
+  }
+
+  private completeIfDrained(active: ActiveTurn): void {
+    if (this.active !== active || !active.runSettled) return;
+    if (active.cancelling && !active.cancelSettled) return;
+    this.clearAbandonTimer(active);
+    this.active = undefined;
+    if (active.result)
+      this.send(active.owner, {
+        t: "turn_finished",
+        version: AGENT_HOST_PROTOCOL_VERSION,
+        requestId: active.requestId,
+        fence: active.fence,
+        ...active.result,
+      });
+  }
+
+  private clearAbandonTimer(active: ActiveTurn): void {
+    if (!active.abandonTimer) return;
+    const clearTimer = this.options.clearTimeout ?? globalThis.clearTimeout;
+    clearTimer(active.abandonTimer);
+    active.abandonTimer = undefined;
   }
 
   private invokeDriver(action: () => void | Promise<void>): void {
@@ -766,13 +918,8 @@ export class AgentHost {
     } catch {}
   }
 
-  private fence(active: ActiveTurn): void {
-    if (active.abandonTimer) {
-      const clearTimer = this.options.clearTimeout ?? globalThis.clearTimeout;
-      clearTimer(active.abandonTimer);
-      active.abandonTimer = undefined;
-    }
-    if (this.active === active) this.active = undefined;
+  private lineageKey(fence: AgentTurnFence): string {
+    return `${fence.sessionId}\0${fence.runId}\0${fence.turnId}`;
   }
 }
 

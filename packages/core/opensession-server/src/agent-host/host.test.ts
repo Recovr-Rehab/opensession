@@ -133,6 +133,23 @@ describe("Agent Host transport", () => {
     client.close();
   });
 
+  test("rejects replay at or below the lineage generation high-water mark", async () => {
+    const { driver, socketPath } = await setup();
+    const client = new AgentHostClient({ socketPath });
+    await client.connect();
+    await client.startTurn(spec);
+    driver.finish();
+    await tick();
+    await expect(client.startTurn(spec)).rejects.toThrow("stale_generation");
+    await expect(
+      client.startTurn({
+        ...spec,
+        fence: { ...fence, generation: fence.generation - 1 },
+      }),
+    ).rejects.toThrow("stale_generation");
+    client.close();
+  });
+
   test("rejects a stale generation and keeps the active turn", async () => {
     const { driver, socketPath } = await setup();
     const client = new AgentHostClient({ socketPath });
@@ -192,9 +209,38 @@ describe("Agent Host transport", () => {
       createDriver: () => new FakeDriver(),
     });
     resources.push({ host: second, dir: join(socketPath, "..") });
-    await expect(second.start()).rejects.toThrow("already live");
+    await expect(second.start()).rejects.toThrow("already claimed");
     expect((await stat(socketPath)).isSocket()).toBe(true);
     await host.start();
+  });
+
+  test("serializes concurrent contenders and permits a successor after cleanup", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "agent-host-contender-test-"));
+    const socketPath = join(dir, "host.sock");
+    const hosts = [
+      createAgentHost({ socketPath, createDriver: () => new FakeDriver() }),
+      createAgentHost({ socketPath, createDriver: () => new FakeDriver() }),
+    ];
+    try {
+      const starts = await Promise.allSettled(
+        hosts.map((host) => host.start()),
+      );
+      expect(
+        starts.filter((result) => result.status === "fulfilled"),
+      ).toHaveLength(1);
+      expect(
+        starts.filter((result) => result.status === "rejected"),
+      ).toHaveLength(1);
+      const winner = hosts[starts[0]!.status === "fulfilled" ? 0 : 1]!;
+      const loser = hosts[winner === hosts[0] ? 1 : 0]!;
+      await winner.stop();
+      await loser.start();
+      expect((await stat(socketPath)).isSocket()).toBe(true);
+      await loser.stop();
+    } finally {
+      await Promise.all(hosts.map((host) => host.stop()));
+      await rm(dir, { recursive: true, force: true });
+    }
   });
 
   test("rejects a symlink at the final socket path", async () => {
@@ -238,7 +284,7 @@ describe("Agent Host transport", () => {
     expect((await stat(socketPath)).isSocket()).toBe(true);
   });
 
-  test("bounds abandoned ownership and fences late driver output", async () => {
+  test("poisons abandoned ownership instead of overlapping a successor", async () => {
     const dir = await mkdtemp(join(tmpdir(), "agent-host-fence-test-"));
     const socketPath = join(dir, "host.sock");
     const drivers = [new FakeDriver(), new FakeDriver()];
@@ -267,25 +313,90 @@ describe("Agent Host transport", () => {
     expect(abandon).toBeDefined();
     abandon!();
 
-    const messages: AgentHostServerMessage[] = [];
-    const second = new AgentHostClient({
-      socketPath,
-      onMessage: (message) => messages.push(message),
-    });
+    const second = new AgentHostClient({ socketPath });
     await second.connect();
-    await second.startTurn({
-      ...spec,
-      fence: { ...fence, turnId: "turn-2", generation: 4 },
-    });
+    await expect(
+      second.startTurn({
+        ...spec,
+        fence: { ...fence, turnId: "turn-2", generation: 4 },
+      }),
+    ).rejects.toThrow("host_busy");
     drivers[0]!.output!.event({ type: "text_chunk", text: "late" });
     drivers[0]!.finish();
     await tick();
     expect(drivers[0]!.cancelled).toBe(1);
-    expect(messages).toEqual([]);
-    drivers[1]!.finish();
-    await tick();
-    expect(messages.map((message) => message.t)).toEqual(["turn_finished"]);
+    expect(created).toBe(1);
+    await expect(
+      second.startTurn({
+        ...spec,
+        fence: { ...fence, turnId: "turn-3", generation: 5 },
+      }),
+    ).rejects.toThrow("host_busy");
     second.close();
+  });
+
+  test("retains its claim when stop cannot drain physical work", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "agent-host-stop-poison-test-"));
+    const socketPath = join(dir, "host.sock");
+    const driver = new FakeDriver();
+    driver.nonsettlingCancel = true;
+    const host = createAgentHost({ socketPath, createDriver: () => driver });
+    resources.push({ host, dir });
+    await host.start();
+    const client = new AgentHostClient({ socketPath });
+    await client.connect();
+    await client.startTurn(spec);
+    await host.stop();
+
+    const contender = createAgentHost({
+      socketPath,
+      createDriver: () => new FakeDriver(),
+    });
+    resources.push({ host: contender, dir });
+    await expect(contender.start()).rejects.toThrow("already claimed");
+    client.close();
+  });
+
+  test("keeps the receive queue responsive to a nonsettling in-band cancel", async () => {
+    const { driver, socketPath } = await setup();
+    driver.nonsettlingCancel = true;
+    const messages = await rawExchange(
+      socketPath,
+      [
+        {
+          t: "hello",
+          version: AGENT_HOST_PROTOCOL_VERSION,
+          requestId: "hello",
+        },
+        {
+          t: "start_turn",
+          version: AGENT_HOST_PROTOCOL_VERSION,
+          requestId: "start",
+          spec,
+        },
+        {
+          t: "cancel",
+          version: AGENT_HOST_PROTOCOL_VERSION,
+          requestId: "cancel",
+          fence,
+        },
+        {
+          t: "answer",
+          version: AGENT_HOST_PROTOCOL_VERSION,
+          requestId: "after-cancel",
+          fence,
+          askId: "missing",
+          result: { behavior: "deny", message: "no" },
+        },
+      ],
+      3,
+    );
+    expect(messages.map((message) => message.t)).toEqual([
+      "hello",
+      "turn_started",
+      "error",
+    ]);
+    expect(driver.cancelled).toBe(1);
   });
 
   test("does not retain a transcript proposal when its owner is unwritable", async () => {
@@ -307,6 +418,49 @@ describe("Agent Host transport", () => {
     expect(() => driver.output!.proposeTranscript("append-2", [entry])).toThrow(
       "owner is disconnected",
     );
+  });
+
+  test("shares one bounded connect handshake and blocks premature turns", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "agent-host-connect-test-"));
+    const socketPath = join(dir, "host.sock");
+    const sockets = new Set<Socket>();
+    let connections = 0;
+    const server = createServer((socket) => {
+      sockets.add(socket);
+      connections += 1;
+      socket.on("close", () => sockets.delete(socket));
+      const decoder = new BoundedNdjsonDecoder();
+      socket.on("data", (chunk) => {
+        for (const message of decoder.push(
+          Buffer.from(chunk),
+        ) as AgentHostClientMessage[]) {
+          if (message.t === "hello")
+            setTimeout(
+              () =>
+                socket.write(encodeNdjsonFrame({ ...message, accepted: true })),
+              20,
+            );
+        }
+      });
+      socket.on("error", () => undefined);
+    });
+    await new Promise<void>((resolve) => server.listen(socketPath, resolve));
+    const client = new AgentHostClient({ socketPath, timeoutMs: 100 });
+    try {
+      const first = client.connect();
+      const second = client.connect();
+      expect(second).toBe(first);
+      await expect(client.startTurn(spec)).rejects.toThrow(
+        "handshake is not complete",
+      );
+      await Promise.all([first, second]);
+      expect(connections).toBe(1);
+    } finally {
+      client.close();
+      for (const socket of sockets) socket.destroy();
+      await new Promise<void>((resolve) => server.close(() => resolve()));
+      await rm(dir, { recursive: true, force: true });
+    }
   });
 
   test("start timeout closes the generation and ignores its late acknowledgement", async () => {
@@ -357,11 +511,8 @@ describe("Agent Host transport", () => {
       );
       await new Promise((resolve) => setTimeout(resolve, 65));
       expect(outbound.map((message) => message.t)).toContain("cancel");
-      await client.connect();
-      await client.startTurn({
-        ...spec,
-        fence: { ...fence, turnId: "turn-fresh", generation: 4 },
-      });
+      expect(() => client.connect()).toThrow("ownership is uncertain");
+      expect(connectionNumber).toBe(1);
       expect(seen).toEqual([]);
     } finally {
       client.close();
