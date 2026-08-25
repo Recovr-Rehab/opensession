@@ -273,7 +273,7 @@ function SetupOverview() {
 					</span>
 					<div className="landing-setup-step-copy">
 						<strong>
-							<span aria-hidden="true">2. </span>Install Tailscale
+							<span aria-hidden="true">2. </span>Expose it safely
 						</strong>
 						<span>Join the server and every device to the same internal network.</span>
 					</div>
