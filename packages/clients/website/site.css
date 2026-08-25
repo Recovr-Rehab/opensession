@@ -937,9 +937,9 @@ summary:focus-visible {
 .announcement-dialog,
 .announcement-page-panel {
 	position: relative;
-	width: min(1600px, calc(100% - 32px));
+	width: calc(100% - 32px);
 	height: calc(100dvh - 32px);
-	max-width: none;
+	max-width: 1400px;
 	max-height: none;
 	padding: 0;
 	border: 0;
@@ -969,7 +969,7 @@ summary:focus-visible {
 }
 
 .announcement-page-panel {
-	width: min(1600px, 100%);
+	width: 100%;
 }
 
 .announcement-scroll {
