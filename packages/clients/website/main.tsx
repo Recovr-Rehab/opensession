@@ -297,7 +297,7 @@ function LandingPage() {
 						View on GitHub
 					</a>
 					<p className="rail-note">
-						Open source, self-hosted, and compatible with any model provider.
+						Open source. Self-hosted. Any model provider.
 					</p>
 				</div>
 			</aside>
