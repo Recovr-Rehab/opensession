@@ -44,6 +44,7 @@ class FakeDriver implements AgentTurnDriver {
   cancelled = 0;
   shutdowns = 0;
   nonsettlingCancel = false;
+  nonsettlingSteer = false;
   private resolve!: (result: AgentTurnResult) => void;
   readonly completion = new Promise<AgentTurnResult>((resolve) => {
     this.resolve = resolve;
@@ -52,8 +53,9 @@ class FakeDriver implements AgentTurnDriver {
     this.output = output;
     return this.completion;
   }
-  steer(input: { steerId: string; text: string }) {
+  steer(input: { steerId: string; text: string }): void | Promise<void> {
     this.steers.push(`${input.steerId}:${input.text}`);
+    if (this.nonsettlingSteer) return new Promise(() => undefined);
   }
   answer(askId: string) {
     this.answers.push(askId);
@@ -85,7 +87,11 @@ async function setup() {
   const dir = await mkdtemp(join(tmpdir(), "agent-host-test-"));
   const socketPath = join(dir, "host.sock");
   const driver = new FakeDriver();
-  const host = createAgentHost({ socketPath, createDriver: () => driver });
+  const host = createAgentHost({
+    socketPath,
+    createDriver: () => driver,
+    authorizeGeneration: () => true,
+  });
   resources.push({ host, dir });
   await host.start();
   return { host, driver, socketPath };
@@ -147,6 +153,55 @@ describe("Agent Host transport", () => {
         fence: { ...fence, generation: fence.generation - 1 },
       }),
     ).rejects.toThrow("stale_generation");
+    client.close();
+  });
+
+  test("fails closed without durable generation authority", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "agent-host-no-authority-test-"));
+    const socketPath = join(dir, "host.sock");
+    const driver = new FakeDriver();
+    const host = createAgentHost({
+      socketPath,
+      createDriver: () => driver,
+    });
+    resources.push({ host, dir });
+    await host.start();
+    const client = new AgentHostClient({ socketPath });
+    await client.connect();
+    await expect(client.startTurn(spec)).rejects.toThrow(
+      "Durable generation authority is required",
+    );
+    expect(driver.output).toBeUndefined();
+    client.close();
+  });
+
+  test("requires and consults durable generation authority when configured", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "agent-host-authority-test-"));
+    const socketPath = join(dir, "host.sock");
+    const driver = new FakeDriver();
+    let durableFloor = fence.generation;
+    const host = createAgentHost({
+      socketPath,
+      createDriver: () => driver,
+      requireDurableGenerationAuthority: true,
+      authorizeGeneration: async (candidate) => {
+        if (candidate.generation <= durableFloor) return false;
+        durableFloor = candidate.generation;
+        return true;
+      },
+    });
+    resources.push({ host, dir });
+    await host.start();
+    const client = new AgentHostClient({ socketPath });
+    await client.connect();
+    await expect(client.startTurn(spec)).rejects.toThrow("stale_generation");
+    await client.startTurn({
+      ...spec,
+      fence: { ...fence, generation: fence.generation + 1 },
+    });
+    driver.finish();
+    await tick();
+    expect(durableFloor).toBe(fence.generation + 1);
     client.close();
   });
 
@@ -243,6 +298,39 @@ describe("Agent Host transport", () => {
     }
   });
 
+  test("atomically admits only one concurrent process claim", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "agent-host-process-claim-test-"));
+    const socketPath = join(dir, "host.sock");
+    const script = `const {createAgentHost}=await import(process.env.HOST_MODULE);const host=createAgentHost({socketPath:process.env.SOCKET_PATH,createDriver:()=>{throw new Error("unused")}});try{await host.start();console.log("acquired");await new Promise(r=>setTimeout(r,500));await host.stop()}catch(error){console.log(String(error).includes("already claimed")?"claimed":"unexpected:"+error)}`;
+    const spawn = () =>
+      Bun.spawn({
+        cmd: [process.execPath, "-e", script],
+        env: {
+          ...process.env,
+          HOST_MODULE: join(import.meta.dir, "host.ts"),
+          SOCKET_PATH: socketPath,
+        },
+        stdout: "pipe",
+        stderr: "pipe",
+      });
+    const children = [spawn(), spawn()];
+    try {
+      const output = await Promise.all(
+        children.map((child) => new Response(child.stdout).text()),
+      );
+      await Promise.all(children.map((child) => child.exited));
+      expect(output.filter((value) => value.includes("acquired"))).toHaveLength(
+        1,
+      );
+      expect(output.filter((value) => value.includes("claimed"))).toHaveLength(
+        1,
+      );
+    } finally {
+      for (const child of children) child.kill();
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+
   test("rejects a symlink at the final socket path", async () => {
     const dir = await mkdtemp(join(tmpdir(), "agent-host-symlink-test-"));
     const socketPath = join(dir, "host.sock");
@@ -255,16 +343,20 @@ describe("Agent Host transport", () => {
     await expect(host.start()).rejects.toThrow("unsafe");
   });
 
-  test("recovers a socket left stale by a crashed process", async () => {
+  test("fails closed on a crashed claim until supervisor cleanup", async () => {
     const dir = await mkdtemp(join(tmpdir(), "agent-host-stale-test-"));
     const socketPath = join(dir, "host.sock");
     const child = Bun.spawn({
       cmd: [
         process.execPath,
         "-e",
-        `const {createServer}=require("node:net");const server=createServer();server.listen(process.env.SOCKET_PATH,()=>process.stdout.write("ready\\n"));`,
+        `const {createAgentHost}=await import(process.env.HOST_MODULE);const host=createAgentHost({socketPath:process.env.SOCKET_PATH,createDriver:()=>{throw new Error("unused")}});await host.start();console.log("ready");await new Promise(()=>{});`,
       ],
-      env: { ...process.env, SOCKET_PATH: socketPath },
+      env: {
+        ...process.env,
+        HOST_MODULE: join(import.meta.dir, "host.ts"),
+        SOCKET_PATH: socketPath,
+      },
       stdout: "pipe",
       stderr: "pipe",
     });
@@ -280,6 +372,10 @@ describe("Agent Host transport", () => {
       createDriver: () => new FakeDriver(),
     });
     resources.push({ host, dir });
+    await expect(host.start()).rejects.toThrow("already claimed");
+
+    // The supervisor must verify that the prior process is dead before this.
+    await rm(`${socketPath}.claim`);
     await host.start();
     expect((await stat(socketPath)).isSocket()).toBe(true);
   });
@@ -299,6 +395,7 @@ describe("Agent Host transport", () => {
       socketPath,
       createDriver: () => drivers[created++]!,
       cancellationDeadlineMs: 15,
+      authorizeGeneration: () => true,
       setTimeout: setHostTimeout,
       clearTimeout: (() => undefined) as unknown as typeof clearTimeout,
     });
@@ -340,7 +437,11 @@ describe("Agent Host transport", () => {
     const socketPath = join(dir, "host.sock");
     const driver = new FakeDriver();
     driver.nonsettlingCancel = true;
-    const host = createAgentHost({ socketPath, createDriver: () => driver });
+    const host = createAgentHost({
+      socketPath,
+      createDriver: () => driver,
+      authorizeGeneration: () => true,
+    });
     resources.push({ host, dir });
     await host.start();
     const client = new AgentHostClient({ socketPath });
@@ -354,6 +455,20 @@ describe("Agent Host transport", () => {
     });
     resources.push({ host: contender, dir });
     await expect(contender.start()).rejects.toThrow("already claimed");
+    client.close();
+  });
+
+  test("lets cancel bypass a nonsettling driver control", async () => {
+    const { driver, socketPath } = await setup();
+    driver.nonsettlingSteer = true;
+    const client = new AgentHostClient({ socketPath });
+    await client.connect();
+    await client.startTurn(spec);
+    client.steer("blocked", "steer-blocked");
+    client.cancel();
+    await tick();
+    expect(driver.steers).toEqual(["steer-blocked:blocked"]);
+    expect(driver.cancelled).toBe(1);
     client.close();
   });
 

@@ -1,14 +1,14 @@
 import {
   chmod,
+  link,
   lstat,
   mkdir,
   readFile,
   rename,
-  rm,
   unlink,
   writeFile,
 } from "node:fs/promises";
-import { dirname, isAbsolute, join, parse, resolve } from "node:path";
+import { dirname, isAbsolute, parse, resolve } from "node:path";
 import { createServer, connect, type Server, type Socket } from "node:net";
 import {
   AGENT_HOST_PROTOCOL_VERSION,
@@ -41,6 +41,9 @@ export interface AgentHostOptions {
   livenessProbeTimeoutMs?: number;
   setTimeout?: typeof globalThis.setTimeout;
   clearTimeout?: typeof globalThis.clearTimeout;
+  authorizeGeneration?: (fence: AgentTurnFence) => boolean | Promise<boolean>;
+  requireDurableGenerationAuthority?: boolean;
+  controlDeadlineMs?: number;
 }
 
 interface ConnectionState {
@@ -61,6 +64,9 @@ interface ActiveTurn {
   cancelling: boolean;
   cancelSettled: boolean;
   runSettled: boolean;
+  pendingControls: number;
+  controlTimers: Set<ReturnType<typeof setTimeout>>;
+  shutdownStarted: boolean;
   result?: AgentTurnResult;
 }
 
@@ -275,8 +281,9 @@ export class AgentHost {
   private stopping?: Promise<void>;
   private active?: ActiveTurn;
   private socketIdentity?: SocketIdentity;
-  private claimOwned = false;
+  private claimNonce?: string;
   private poisoned = false;
+  private reserving = false;
   private readonly highWaterGenerations = new Map<string, number>();
   private readonly connections = new Set<ConnectionState>();
 
@@ -344,7 +351,9 @@ export class AgentHost {
       this.poisoned = true;
       this.beginCancellation(active);
       this.clearAbandonTimer(active);
-      this.invokeDriver(() => active.driver.shutdown());
+      this.clearControlTimers(active);
+      if (!active.shutdownStarted)
+        this.invokeDriver(() => active.driver.shutdown());
     }
     for (const connection of this.connections) {
       connection.closed = true;
@@ -399,50 +408,31 @@ export class AgentHost {
   }
 
   private async acquireClaim(): Promise<void> {
-    for (;;) {
-      try {
-        await mkdir(this.claimPath, { mode: 0o700 });
-        this.claimOwned = true;
-        await writeFile(join(this.claimPath, "owner"), String(process.pid), {
-          flag: "wx",
-          mode: 0o600,
-        });
-        return;
-      } catch (error) {
-        if ((error as NodeJS.ErrnoException).code !== "EEXIST") {
-          if (this.claimOwned) await this.releaseClaim();
-          throw error;
-        }
-      }
-      const claimStat = await lstat(this.claimPath);
-      if (!claimStat.isDirectory() || claimStat.isSymbolicLink())
-        throw new Error("Agent Host claim path is unsafe");
-      const owner = Number(
-        await readFile(join(this.claimPath, "owner"), "utf8"),
-      );
-      if (!Number.isSafeInteger(owner) || owner < 1)
-        throw new Error("Agent Host claim owner is invalid");
-      try {
-        process.kill(owner, 0);
+    const nonce = crypto.randomUUID();
+    const temporary = `${this.claimPath}.tmp-${nonce}`;
+    await writeFile(temporary, JSON.stringify({ pid: process.pid, nonce }), {
+      flag: "wx",
+      mode: 0o600,
+    });
+    await chmod(temporary, 0o400);
+    try {
+      await link(temporary, this.claimPath);
+      this.claimNonce = nonce;
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code === "EEXIST")
         throw Object.assign(new Error("Agent Host socket is already claimed"), {
           code: "EADDRINUSE",
         });
-      } catch (error) {
-        if ((error as NodeJS.ErrnoException).code !== "ESRCH") throw error;
-      }
-      const quarantine = `${this.claimPath}.stale-${crypto.randomUUID()}`;
-      try {
-        await rename(this.claimPath, quarantine);
-      } catch (error) {
-        if ((error as NodeJS.ErrnoException).code === "ENOENT") continue;
-        throw error;
-      }
-      await rm(quarantine, { recursive: true, force: true });
+      throw error;
+    } finally {
+      await unlink(temporary).catch((error: NodeJS.ErrnoException) => {
+        if (error.code !== "ENOENT") throw error;
+      });
     }
   }
 
   private async removeStaleSocketWhileClaimed(): Promise<void> {
-    if (!this.claimOwned) throw new Error("Agent Host socket is not claimed");
+    if (!this.claimNonce) throw new Error("Agent Host socket is not claimed");
     let socketStat;
     try {
       socketStat = await lstat(this.options.socketPath);
@@ -497,7 +487,7 @@ export class AgentHost {
   private async unlinkOwnedSocket(): Promise<void> {
     const identity = this.socketIdentity;
     this.socketIdentity = undefined;
-    if (!identity || !this.claimOwned) return;
+    if (!identity || !this.claimNonce) return;
     try {
       const current = await lstat(this.options.socketPath);
       if (
@@ -516,9 +506,17 @@ export class AgentHost {
   }
 
   private async releaseClaim(): Promise<void> {
-    if (!this.claimOwned) return;
-    this.claimOwned = false;
-    await rm(this.claimPath, { recursive: true, force: false });
+    const nonce = this.claimNonce;
+    if (!nonce) return;
+    const claim = JSON.parse(await readFile(this.claimPath, "utf8")) as {
+      nonce?: unknown;
+    };
+    if (claim.nonce !== nonce) {
+      this.poisoned = true;
+      throw new Error("Agent Host claim ownership changed");
+    }
+    await unlink(this.claimPath);
+    this.claimNonce = undefined;
   }
 
   private positiveDeadline(
@@ -608,7 +606,7 @@ export class AgentHost {
       return;
     }
     if (message.t === "start_turn") {
-      this.startTurn(connection, message.requestId, message.spec);
+      await this.startTurn(connection, message.requestId, message.spec);
       return;
     }
     const active = this.active;
@@ -629,16 +627,20 @@ export class AgentHost {
     try {
       switch (message.t) {
         case "steer":
-          await active.driver.steer({
-            steerId: message.steerId,
-            text: message.text,
-            images: message.images,
-          });
+          this.dispatchControl(active, connection, message.requestId, () =>
+            active.driver.steer({
+              steerId: message.steerId,
+              text: message.text,
+              images: message.images,
+            }),
+          );
           break;
         case "answer":
           if (!active.askIds.delete(message.askId))
             throw new Error("Unknown askId");
-          await active.driver.answer(message.askId, message.result);
+          this.dispatchControl(active, connection, message.requestId, () =>
+            active.driver.answer(message.askId, message.result),
+          );
           break;
         case "cancel":
           this.beginCancellation(active);
@@ -647,14 +649,16 @@ export class AgentHost {
           if (active.pendingAppendId !== message.appendId)
             throw new Error("Unknown appendId");
           active.pendingAppendId = undefined;
-          await active.driver.transcriptAck(
-            message.appendId,
-            message.changeSeq,
+          this.dispatchControl(active, connection, message.requestId, () =>
+            active.driver.transcriptAck(message.appendId, message.changeSeq),
           );
           break;
         case "shutdown":
           this.beginCancellation(active);
-          this.invokeDriver(() => active.driver.shutdown());
+          active.shutdownStarted = true;
+          this.dispatchControl(active, connection, message.requestId, () =>
+            active.driver.shutdown(),
+          );
           this.close(connection);
           void this.stop();
           break;
@@ -670,21 +674,76 @@ export class AgentHost {
     }
   }
 
-  private startTurn(
+  private async startTurn(
     owner: ConnectionState,
     requestId: string,
     spec: AgentTurnSpec,
-  ): void {
-    if (this.poisoned) {
+  ): Promise<void> {
+    if (this.poisoned || this.reserving || this.active) {
       this.error(
         owner,
         requestId,
         "host_busy",
-        "Agent Host requires process replacement",
+        this.poisoned
+          ? "Agent Host requires process replacement"
+          : "Agent Host already owns or is authorizing a turn",
         spec.fence,
       );
       return;
     }
+    this.reserving = true;
+    try {
+      const requireAuthority =
+        this.options.requireDurableGenerationAuthority ?? true;
+      if (!this.options.authorizeGeneration) {
+        if (requireAuthority)
+          this.error(
+            owner,
+            requestId,
+            "turn_failed",
+            "Durable generation authority is required",
+            spec.fence,
+          );
+        if (requireAuthority) return;
+      } else if (!(await this.options.authorizeGeneration(spec.fence))) {
+        this.error(
+          owner,
+          requestId,
+          "stale_generation",
+          "Durable generation authority rejected the turn",
+          spec.fence,
+        );
+        return;
+      }
+      if (this.poisoned || this.active) {
+        this.error(
+          owner,
+          requestId,
+          "host_busy",
+          "Agent Host became busy while authorizing the turn",
+          spec.fence,
+        );
+        return;
+      }
+      this.startAuthorizedTurn(owner, requestId, spec);
+    } catch (error) {
+      this.error(
+        owner,
+        requestId,
+        "turn_failed",
+        error instanceof Error ? error.message : String(error),
+        spec.fence,
+      );
+    } finally {
+      this.reserving = false;
+    }
+  }
+
+  private startAuthorizedTurn(
+    owner: ConnectionState,
+    requestId: string,
+    spec: AgentTurnSpec,
+  ): void {
     const lineage = this.lineageKey(spec.fence);
     const highWater = this.highWaterGenerations.get(lineage);
     if (highWater !== undefined && spec.fence.generation <= highWater) {
@@ -734,6 +793,9 @@ export class AgentHost {
       cancelling: false,
       cancelSettled: false,
       runSettled: false,
+      pendingControls: 0,
+      controlTimers: new Set(),
+      shutdownStarted: false,
     };
     this.active = active;
     this.highWaterGenerations.set(lineage, spec.fence.generation);
@@ -890,8 +952,66 @@ export class AgentHost {
     );
   }
 
+  private dispatchControl(
+    active: ActiveTurn,
+    connection: ConnectionState,
+    requestId: string,
+    action: () => void | Promise<void>,
+  ): void {
+    if (this.active !== active) return;
+    active.pendingControls += 1;
+    const setTimer = this.options.setTimeout ?? globalThis.setTimeout;
+    const clearTimer = this.options.clearTimeout ?? globalThis.clearTimeout;
+    let settled = false;
+    const timer = setTimer(
+      () => {
+        active.controlTimers.delete(timer);
+        if (settled) return;
+        this.poisoned = true;
+      },
+      this.positiveDeadline(
+        this.options.controlDeadlineMs ?? this.options.cancellationDeadlineMs,
+        5_000,
+        "controlDeadlineMs",
+      ),
+    );
+    timer.unref?.();
+    active.controlTimers.add(timer);
+    let control: Promise<void>;
+    try {
+      control = Promise.resolve(action());
+    } catch (error) {
+      control = Promise.reject(error);
+    }
+    void control.then(
+      () => settle(),
+      (error) => settle(error),
+    );
+    const settle = (error?: unknown) => {
+      if (settled) return;
+      settled = true;
+      clearTimer(timer);
+      active.controlTimers.delete(timer);
+      active.pendingControls -= 1;
+      if (error !== undefined && this.active === active)
+        this.error(
+          connection,
+          requestId,
+          "invalid_request",
+          error instanceof Error ? error.message : String(error),
+          active.fence,
+        );
+      this.completeIfDrained(active);
+    };
+  }
+
   private completeIfDrained(active: ActiveTurn): void {
-    if (this.active !== active || !active.runSettled) return;
+    if (
+      this.active !== active ||
+      !active.runSettled ||
+      active.pendingControls > 0
+    )
+      return;
     if (active.cancelling && !active.cancelSettled) return;
     this.clearAbandonTimer(active);
     this.active = undefined;
@@ -903,6 +1023,12 @@ export class AgentHost {
         fence: active.fence,
         ...active.result,
       });
+  }
+
+  private clearControlTimers(active: ActiveTurn): void {
+    const clearTimer = this.options.clearTimeout ?? globalThis.clearTimeout;
+    for (const timer of active.controlTimers) clearTimer(timer);
+    active.controlTimers.clear();
   }
 
   private clearAbandonTimer(active: ActiveTurn): void {
