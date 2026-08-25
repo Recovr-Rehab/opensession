@@ -28,6 +28,7 @@ import { configuredIntegration } from "./src/server/config";
 import { initHumanAsks } from "./src/server/human-asks";
 import { interactiveMcpServers } from "./src/server/interactive-mcp";
 import { homeDir, OPENSESSION_SESSIONS_DIR } from "./src/server/paths";
+import { shouldRedirectLegacyPublicPath } from "./src/server/legacy-public-prefix";
 import { startPlainArchiveSweep } from "./src/server/plain-archive";
 import { devInstanceBootError, isDevInstance } from "./src/server/dev-mode";
 import { startPrReviewNotificationTicker } from "./src/server/pr-review-notifications";
@@ -313,9 +314,11 @@ const server: import("bun").Server<WSClientData> = hotServe({
 			if (publicPrefix) {
 				path = path.slice(publicPrefix.length) || "/";
 				if (
-					(req.method === "GET" || req.method === "HEAD") &&
-					!req.headers.get("upgrade") &&
-					!path.startsWith("/api/")
+					shouldRedirectLegacyPublicPath(
+						req.method,
+						req.headers.get("upgrade"),
+						path,
+					)
 				) {
 					return Response.redirect(path + url.search, 301);
 				}
