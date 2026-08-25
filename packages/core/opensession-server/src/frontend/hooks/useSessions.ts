@@ -57,6 +57,17 @@ export function sessionPatchNeedsAcknowledgement(
   return "archived" in patch || "isRunning" in patch;
 }
 
+/** A sidebar response is scoped to the route that requested it. Navigating
+ * while an older request is in flight must fence that response out: its
+ * selected-session exception can otherwise put the session just archived on
+ * the previous route back into the live list. */
+export function liveSnapshotMatchesQuery(
+  requestQuery: string,
+  currentQuery: string,
+): boolean {
+  return requestQuery === currentQuery;
+}
+
 export interface PendingSessionPatch {
   values: Partial<UnifiedSession>;
   /** Runtime revision when a WebSocket status frame was applied. */
@@ -177,6 +188,16 @@ export function useSessions({
     promise: Promise<void>;
   } | null>(null);
   const pollAbortRef = useRef<AbortController | null>(null);
+  // Fence the previous route's scoped response before passive effects start its
+  // replacement poll. Abort is best-effort; the query comparison after await is
+  // the authority when a completed fetch wins the race with cancellation.
+  useLayoutEffect(() => {
+    if (appliedLiveQueryRef.current === liveQuery) return;
+    appliedLiveQueryRef.current = liveQuery;
+    etagRef.current = null;
+    lastTextRef.current = null;
+    pollAbortRef.current?.abort();
+  }, [liveQuery]);
   // Optimistically-injected sessions the server hasn't caught up to yet (a
   // just-created workspace/session). A plain poll replaces the whole array and
   // would drop the injected copy — flashing a loading placeholder until the
@@ -212,11 +233,12 @@ export function useSessions({
     };
 
   const poll = (): Promise<void> => {
-    if (pollPromiseRef.current?.query === liveQuery)
+    const requestQuery = liveQuery;
+    if (pollPromiseRef.current?.query === requestQuery)
       return pollPromiseRef.current.promise;
     if (pollPromiseRef.current) pollAbortRef.current?.abort();
-    if (appliedLiveQueryRef.current !== liveQuery) {
-      appliedLiveQueryRef.current = liveQuery;
+    if (appliedLiveQueryRef.current !== requestQuery) {
+      appliedLiveQueryRef.current = requestQuery;
       etagRef.current = null;
       lastTextRef.current = null;
     }
@@ -229,9 +251,16 @@ export function useSessions({
 const snapshot = await fetchSessionsSnapshot({
           etag: etagRef.current,
           signal: controller.signal,
-          query: liveQuery,
+          query: requestQuery,
         });
-        if (!mountedRef.current) return;
+        if (
+          !mountedRef.current ||
+          !liveSnapshotMatchesQuery(
+            requestQuery,
+            appliedLiveQueryRef.current,
+          )
+        )
+          return;
         if (!snapshot.notModified && snapshot.text !== null) {
           etagRef.current = snapshot.etag;
           if (snapshot.text !== lastTextRef.current) {
@@ -259,7 +288,7 @@ if (e?.name === "AbortError") return;
         pollPromiseRef.current = null;
       if (pollAbortRef.current === controller) pollAbortRef.current = null;
     });
-    pollPromiseRef.current = { query: liveQuery, promise };
+    pollPromiseRef.current = { query: requestQuery, promise };
     return promise;
   };
 

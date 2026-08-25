@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import type { UnifiedSession } from "../lib/types";
 import {
+  liveSnapshotMatchesQuery,
   reconcilePendingSessionPatches,
   sessionPatchNeedsAcknowledgement,
   sidebarSessionsQuery,
@@ -23,6 +24,28 @@ describe("sidebarSessionsQuery", () => {
     ).toBe(
       "?archived=exclude&view=sidebar&user=Ada+Lovelace&person=me&repo=tella+fusion&autoCreated=hide&session=os-1",
     );
+  });
+});
+
+describe("liveSnapshotMatchesQuery", () => {
+  test("fences a response scoped to the previously selected session", () => {
+    const archivedRoute = sidebarSessionsQuery({
+      user: "Ada Lovelace",
+      person: "me",
+      repo: "all",
+      autoCreated: "hide",
+      selectedSessionId: "archived-session",
+    });
+    const nextRoute = sidebarSessionsQuery({
+      user: "Ada Lovelace",
+      person: "me",
+      repo: "all",
+      autoCreated: "hide",
+      selectedSessionId: "next-session",
+    });
+
+    expect(liveSnapshotMatchesQuery(archivedRoute, nextRoute)).toBe(false);
+    expect(liveSnapshotMatchesQuery(nextRoute, nextRoute)).toBe(true);
   });
 });
 
