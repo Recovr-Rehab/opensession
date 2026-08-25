@@ -14,6 +14,15 @@ test("fresh transcript ranges reaffirm a cached reader's live edge", () => {
 	);
 });
 
+test("late action clearance keeps a following transcript at the bottom", () => {
+	const clearanceEffect = viewer.match(
+		/useLayoutEffect\(\(\) => \{\s*if \(readFollowingLive\(followingLive\)\) scrollToLatest\("auto"\);\s*\}, \[actionClearance, followingLive, scrollToLatest\]\);/,
+	)?.[0];
+
+	expect(clearanceEffect).toBeDefined();
+	expect(viewer).toContain("actionClearance,");
+});
+
 test("the stable callback reads current live-edge intent when it runs", () => {
 	const following = { current: true };
 	expect(readFollowingLive(following)).toBe(true);

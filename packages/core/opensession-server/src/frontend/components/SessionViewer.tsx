@@ -5659,6 +5659,21 @@ export function SessionViewer({
 	const nextAction = showNextChatButton && !!onNextChat;
 	const scrollAction = showScrollToBottom && entries.length > 0;
 	const actionBand = quickReplies || nextAction || scrollAction || isPhone;
+	const actionClearance = !actionBand
+		? undefined
+		: nextAction || isPhone
+			? isPhone && quickReplies
+				? ACTION_WITH_REPLIES_CLEARANCE
+				: ACTION_CLEARANCE
+			: scrollAction
+				? SCROLL_ACTION_CLEARANCE
+				: SUGGESTIONS_CLEARANCE;
+	// This class changes the scroller's bottom padding. Session metadata can make
+	// Next appear after a cached transcript has already settled; re-pin before
+	// that larger scroll height paints, but never move a reader in history.
+	useLayoutEffect(() => {
+		if (readFollowingLive(followingLive)) scrollToLatest("auto");
+	}, [actionClearance, followingLive, scrollToLatest]);
 
 	const pickReplySuggestion = (text: string) => {
 		setComposerPrefill((current) => ({
@@ -6992,14 +7007,7 @@ export function SessionViewer({
 					   pill's offset. Set here so both read one value. */
 					className={cn(
 						"flex min-h-0 min-w-0 flex-1 flex-col [--session-under:16px]",
-						actionBand &&
-							(nextAction || isPhone
-								? isPhone && quickReplies
-									? ACTION_WITH_REPLIES_CLEARANCE
-									: ACTION_CLEARANCE
-								: scrollAction
-									? SCROLL_ACTION_CLEARANCE
-									: SUGGESTIONS_CLEARANCE),
+						actionClearance,
 					)}
 				>
 					{showPortal && portalTarget ? (
