@@ -98,13 +98,14 @@ describe("piSteeringBoundaryTools", () => {
       "sequential",
       "sequential",
     ]);
-    await tools[0].execute("call-1", {}, undefined, undefined);
+    await tools[0].execute("call-1", {}, undefined, undefined, {} as any);
     steeringPending = true;
     const skipped = await tools[1].execute(
       "call-2",
       {},
       undefined,
       undefined,
+      {} as any,
     );
 
     expect(executed).toEqual(["first"]);
