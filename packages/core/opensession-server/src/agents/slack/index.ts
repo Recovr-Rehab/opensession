@@ -6,6 +6,9 @@
  */
 
 import { configuredIntegration, defaultRepo, personaName } from "../../server/config";
+import {
+  githubConfiguredCredential,
+} from "../../server/github-app";
 import { mkdirSync, existsSync, unlinkSync } from "fs";
 import { timingSafeEqual } from "crypto";
 import type { AgentModule } from "../types";
@@ -831,7 +834,8 @@ export class SlackAgent implements AgentModule {
     const githubWebhookHealth = githubWebhookCompatibilityFallbackEnabled()
       ? {
           githubWebhookConfigured: !!process.env.GITHUB_WEBHOOK_SECRET,
-          githubApiTokenConfigured: !!process.env.GITHUB_API_TOKEN,
+          githubCredentialConfigured: githubConfiguredCredential(),
+          githubCredentialMode: "app",
           githubWebhooksReceived: githubWebhookCount(),
         }
       : {};

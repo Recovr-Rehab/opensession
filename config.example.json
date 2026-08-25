@@ -107,9 +107,6 @@
   "policy": {
     "githubWriteOwners": [
       "acme"
-    ],
-    "githubBotLogins": [
-      "acme-automation"
     ]
   },
   "integrations": {
@@ -117,11 +114,9 @@
       "enabled": false,
       "userPrAuth": false,
       "oauthClientId": "",
+      "oauthClientSecret": "",
       "appSlug": "",
-      "mentionHandles": [
-        "assistant",
-        "acme-automation"
-      ],
+      "installationOwner": "acme",
       "previewEnvironment": "Preview",
       "shippedChangesChannel": "C0123456789"
     },

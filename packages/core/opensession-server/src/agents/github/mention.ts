@@ -7,7 +7,7 @@
  * posts), and only act when the body actually mentions a configured handle — so
  * the bot's replies (which don't mention itself) never re-trigger.
  */
-import { getPrDetails, type PrDetails } from "../../server/pr-info";
+import { getPrAutomationDetails, type PrAutomationDetails } from "../../server/pr-info";
 import { listAutomations } from "../../server/automations";
 import { createWorktreeForPrBranch, createWorktreeForFollowup } from "../../server/worktree";
 import {
@@ -36,21 +36,43 @@ import { classifyPrActionIntent } from "../slack/mention-intent";
 import { configuredIntegration, isGithubBotLogin, personaName } from "../../server/config";
 import { isTrustedGithubLogin } from "../../server/shared/user-mappings";
 
-const configuredMentionHandles = configuredIntegration("github").mentionHandles;
-const defaultMentionHandles = [
-  personaName().toLowerCase().replace(/[^a-z0-9-]/g, ""),
-  BOT_LOGIN,
-].filter(Boolean).join(",");
-const MENTION_HANDLES = (
-  process.env.GITHUB_MENTION_HANDLES ||
-  (Array.isArray(configuredMentionHandles)
-    ? configuredMentionHandles.filter((value): value is string => typeof value === "string").join(",")
-    : defaultMentionHandles)
-)
-  .split(",")
-  .map((h) => h.trim().replace(/^@/, "").toLowerCase())
-  .filter(Boolean);
-const MENTION_RE = new RegExp(`@(${MENTION_HANDLES.join("|")})\\b`, "i");
+export function githubMentionHandles(input: {
+  persona: string;
+  appSlug?: string;
+  botLogin?: string;
+  configured?: unknown;
+  environment?: string;
+}): string[] {
+  return [
+    input.persona.toLowerCase().replace(/[^a-z0-9-]/g, ""),
+    input.appSlug || "",
+    (input.botLogin || "").replace(/\[bot\]$/i, ""),
+    ...(Array.isArray(input.configured)
+      ? input.configured.filter((value): value is string => typeof value === "string")
+      : []),
+    ...(input.environment || "").split(","),
+  ]
+    .map((handle) =>
+      handle.trim().replace(/^@/, "").replace(/\[bot\]$/i, "").toLowerCase(),
+    )
+    .filter((handle, index, handles) => !!handle && handles.indexOf(handle) === index);
+}
+
+const githubIntegration = configuredIntegration("github");
+const configuredAppSlug =
+  process.env.OPENSESSION_GITHUB_APP_SLUG?.trim() ||
+  (typeof githubIntegration.appSlug === "string" ? githubIntegration.appSlug.trim() : "");
+const MENTION_HANDLES = githubMentionHandles({
+  persona: personaName(),
+  appSlug: configuredAppSlug,
+  botLogin: BOT_LOGIN,
+  configured: githubIntegration.mentionHandles,
+  environment: process.env.GITHUB_MENTION_HANDLES,
+});
+const MENTION_RE = new RegExp(
+  `@(${MENTION_HANDLES.map((handle) => handle.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")).join("|")})\\b`,
+  "i",
+);
 
 function mentionsAgent(body: string): boolean {
   if (!body) return false;
@@ -133,10 +155,41 @@ export async function handleMention(kind: MentionKind, payload: any): Promise<vo
     },
     ghRepo,
   );
+  // Acknowledge through REST before any metadata/model work. The durable marker
+  // remains queued if dispatch fails, and this comment is reused on retry.
+  const receiptId = await postIssueComment(
+    prNumber,
+    `${REPLY_MARKER}
+Queued @${authorLogin}'s request. I'll retry automatically if GitHub metadata is temporarily unavailable.`,
+    ghRepo,
+  ).catch(() => null);
+  if (receiptId) {
+    const pending = readPrState(prNumber, ghRepo)?.pendingMention;
+    if (pending && pending.commentId === comment.id) {
+      setPendingMention(prNumber, { ...pending, progressCommentId: receiptId }, ghRepo);
+    }
+  }
   try {
     await dispatchMention({ prNumber, kind, body, author: authorLogin, replyToId, inline, ghRepo });
-  } finally {
+    const stillPending = readPrState(prNumber, ghRepo)?.pendingMention;
+    if (receiptId && stillPending?.commentId === comment.id) {
+      await editIssueComment(
+        receiptId,
+        `${REPLY_MARKER}
+Request accepted.`,
+        ghRepo,
+      ).catch(() => {});
+    }
     clearPendingMention(prNumber, ghRepo);
+  } catch (error) {
+    if (receiptId)
+      await editIssueComment(
+        receiptId,
+        `${REPLY_MARKER}
+Queued @${authorLogin}'s request. GitHub metadata is temporarily unavailable, so I'll retry automatically.`,
+        ghRepo,
+      ).catch(() => {});
+    throw error;
   }
 }
 
@@ -209,8 +262,9 @@ export async function runConversationalMention(
     return;
   }
   let headRef = "";
+  let runOwnsRecovery = false;
   try {
-    const details = await getPrDetails(String(prNumber), ghRepo || undefined);
+    const details = await getPrAutomationDetails(String(prNumber), ghRepo || undefined);
     if (!details) return;
     // Merged/closed PR: you can't push to it, but a mention like "fix this in a
     // follow-up PR" (Kent's case) should still spin up a session — off a fresh
@@ -235,9 +289,10 @@ export async function runConversationalMention(
     const prior = readPrState(prNumber, ghRepo);
     // Reuse the progress comment only when recovering an interrupted run.
     const reuseId = recovering ? prior?.activeMention?.progressCommentId : undefined;
+    const pendingReceiptId = readPrState(prNumber, ghRepo)?.pendingMention?.progressCommentId;
     const progressId = await postOrEditComment(
       prNumber,
-      reuseId,
+      reuseId ?? pendingReceiptId,
       `${REPLY_MARKER}\n🔄 On it — working on @${args.author}'s request… · ${link}`,
       ghRepo,
     );
@@ -260,6 +315,8 @@ export async function runConversationalMention(
       },
       ghRepo,
     );
+
+    runOwnsRecovery = true;
 
     // Code mode in the PR-branch worktree so the agent can make + push changes if asked.
     const worktreeDir = await createWorktreeForPrBranch(
@@ -305,6 +362,9 @@ export async function runConversationalMention(
     }
   } catch (e) {
     console.error(`[github] mention reply error for PR #${prNumber}:`, e);
+    // Before activeMention takes ownership, leave pendingMention durable and
+    // tell the receipt path to retry. Once owned, existing recovery semantics apply.
+    if (!runOwnsRecovery) throw e;
   } finally {
     // Clear recovery state on completion; a killed process leaves it set so the
     // github agent re-runs the mention on startup.
@@ -327,7 +387,7 @@ export async function runConversationalMention(
  */
 async function runFollowupMention(
   args: ConversationalMentionArgs,
-  details: PrDetails,
+  details: PrAutomationDetails,
 ): Promise<void> {
   const { prNumber, ghRepo } = args;
   const baseRef = details.baseRefName || "main";
