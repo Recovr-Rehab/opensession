@@ -1,4 +1,10 @@
-import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import {
+	useCallback,
+	useEffect,
+	useLayoutEffect,
+	useRef,
+	useState,
+} from "react";
 import {
 	setupRequest,
 	type SetupGithub,
@@ -47,7 +53,10 @@ export function useSetupStatus(): SetupController {
 	const statusRef = useRef<SetupStatus | null>(null);
 	useLayoutEffect(() => {		statusRef.current = status;
 	});
-	const refetch = async () => {
+	// Stable identity: the body only reads refs and calls setters, so the
+	// mount effect can list it without ever refiring, and callers outside
+	// this hook can invoke the same fetch.
+	const refetch = useCallback(async () => {
 		await (async () => {
 const body = await setupRequest<SetupStatus>("/api/setup/status");
 			setStatus(body);
@@ -57,11 +66,11 @@ const body = await setupRequest<SetupStatus>("/api/setup/status");
 			// stale one: better a slightly old page than an empty one.
 			if (!statusRef.current) setFailed(true);
 });
-	};
+	}, []);
 
 	useEffect(() => {
 		refetch();
-	}, [refetch]);
+	}, []);
 
 	const applyIntegration = (updated: SetupIntegration, restartRequired: boolean) => {
 			setStatus((s) =>

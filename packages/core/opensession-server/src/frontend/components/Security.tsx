@@ -1,6 +1,6 @@
 import { repoLabel } from "../lib/repo-label";
 import { BASE_PATH } from "../lib/base";
-import React, { useEffect, useState, } from "react";
+import React, { useCallback, useEffect, useState } from "react";
 import {
   fetchSecurity,
   startScanApi,
@@ -103,7 +103,9 @@ export function Security({ onOpenSession }: Props) {
   const [editProfile, setEditProfile] = useState<ScanProfile | "new" | null>(null);
   const [error, setError] = useState<string | null>(null);
 
-  const load = async () => {
+  // Stable identity: only setters and module functions are captured, so the
+  // polling effect can list `load` without ever refiring from re-renders.
+  const load = useCallback(async () => {
     await (async () => {
 const data = await fetchSecurity();
       setScans(data.scans);
@@ -123,7 +125,7 @@ const autos = await fetchAutomations();
 })().catch(async () => {
 
 });
-  };
+  }, []);
 
   useEffect(() => {
     document.title = docTitle("Security");
