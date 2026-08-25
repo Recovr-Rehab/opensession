@@ -12,6 +12,7 @@ import { fetchWithTimeout } from "../../server/shared/fetch-with-timeout";
 import { defaultRepo, githubBotLogins, isGithubBotLogin, personaName } from "../../server/config";
 import { githubConfiguredCredential, githubToken } from "../../server/github-app";
 import { ghRateLimited, isGhRateLimitMsg, noteGhRateLimited } from "../../server/github-limit";
+import { noteGithubGraphqlCall } from "../../server/github-budget";
 /** The PR agent's target — the instance's default repo (config-driven). */
 export const GITHUB_REPO = defaultRepo().ghRepo;
 /** The bot account our token posts as — used to recognise our own comments/events. */
@@ -113,6 +114,7 @@ async function githubGraphQL<T = any>(
   const token = await githubToken({ write: true });
   if (!token) return null;
   if (ghRateLimited()) return null;
+  const started = Date.now();
   try {
     const resp = await fetchWithTimeout("https://api.github.com/graphql", {
       method: "POST",
@@ -124,6 +126,7 @@ async function githubGraphQL<T = any>(
     });
     const json: any = await resp.json().catch(() => null);
     if (!resp.ok || !json || json.errors) {
+      noteGithubGraphqlCall("github-agent:review-threads", Date.now() - started, false);
       const msg = json?.errors?.map((e: any) => e.message).join("; ") || `GitHub GraphQL ${resp.status}`;
       console.warn(`[github] graphql → ${resp.status}: ${msg}`);
       if (json?.errors?.some((e: any) => e.type === "RATE_LIMITED") || isGhRateLimitMsg(msg)) {
@@ -131,8 +134,10 @@ async function githubGraphQL<T = any>(
       }
       return null;
     }
+    noteGithubGraphqlCall("github-agent:review-threads", Date.now() - started, true);
     return json.data as T;
   } catch (e: any) {
+    noteGithubGraphqlCall("github-agent:review-threads", Date.now() - started, false);
     console.warn(`[github] graphql error:`, e);
     return null;
   }

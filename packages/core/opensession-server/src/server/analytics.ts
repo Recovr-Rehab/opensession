@@ -490,9 +490,17 @@ async function fetchRepoPrs(repoId: string, ghRepo: string, fromDate: string): P
 	// search ceiling): a busy repo alone can open 400+ PRs in a 30-day window.
 	for (const search of [`created:>=${fromDate}`, `merged:>=${fromDate}`]) {
 		try {
-			const raw = await $`gh pr list --repo ${ghRepo} --state all --limit 1000 --search ${search} --json ${fields}`
-				.quiet()
-				.text();
+			const queryStarted = Date.now();
+			let raw: string;
+			try {
+				raw = await $`gh pr list --repo ${ghRepo} --state all --limit 1000 --search ${search} --json ${fields}`
+					.quiet()
+					.text();
+				noteGithubGraphqlCall("analytics:pr-list", Date.now() - queryStarted, true, { ambient: true });
+			} catch (error) {
+				noteGithubGraphqlCall("analytics:pr-list", Date.now() - queryStarted, false, { ambient: true });
+				throw error;
+			}
 			for (const pr of JSON.parse(raw)) {
 				seen.set(pr.number, {
 					repo: repoId,
