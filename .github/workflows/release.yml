@@ -83,22 +83,34 @@ jobs:
           version="${TAG#v}"
           root="$RUNNER_TEMP/release-smoke"
           log="$root/server.log"
+          kernel_log="$root/session-kernel.log"
           mkdir -p "$root"
           printf '%s\n' '{"provider":"local","publicIngress":{"enabled":true,"port":43860,"host":"127.0.0.1"}}' > "$root/sandbox.json"
           binary="$RUNNER_TEMP/release/stage/opensession-$version-linux-x64/opensession"
-          OPENSESSION_STATE_DIR="$root/state" \
-          OPENSESSION_SANDBOX_CONFIG="$root/sandbox.json" \
-          OPENSESSION_MCP_HTTP_PORT=43852 \
-          HOST=127.0.0.1 \
-          PORT=43850 \
-          OPENSESSION_PUBLIC_URL=http://127.0.0.1:43850 \
+          common_env=(
+            OPENSESSION_STATE_DIR="$root/state"
+            OPENSESSION_SANDBOX_CONFIG="$root/sandbox.json"
+            OPENSESSION_SESSION_KERNEL_PORT=43849
+            OPENSESSION_SESSION_KERNEL_TOKEN=release-smoke-token
+          )
+          env "${common_env[@]}" "$binary" session-kernel-service > "$kernel_log" 2>&1 &
+          kernel_pid=$!
+          env "${common_env[@]}" \
+            OPENSESSION_MCP_HTTP_PORT=43852 \
+            HOST=127.0.0.1 \
+            PORT=43850 \
+            OPENSESSION_PUBLIC_URL=http://127.0.0.1:43850 \
             "$binary" server > "$log" 2>&1 &
           pid=$!
           cleanup() {
             status=$?
-            kill "$pid" 2>/dev/null || true
+            kill "$pid" "$kernel_pid" 2>/dev/null || true
             wait "$pid" 2>/dev/null || true
-            if [ "$status" -ne 0 ]; then cat "$log"; fi
+            wait "$kernel_pid" 2>/dev/null || true
+            if [ "$status" -ne 0 ]; then
+              cat "$kernel_log"
+              cat "$log"
+            fi
             exit "$status"
           }
           trap cleanup EXIT
