@@ -16,7 +16,6 @@ import {
 } from "../../core/opensession-server/src/frontend/components/icons";
 import "./site.css";
 import { AgentationFeedback } from "./AgentationFeedback";
-import { MarbleField } from "./MarbleField";
 import { ProductDemo } from "./ProductDemo";
 import { TellaBackground } from "./TellaBackground";
 import { assetUrl } from "./asset-url";
@@ -117,8 +116,6 @@ function LandingPage() {
 			</aside>
 
 			<main className="feed">
-				{/* Silver Silk is a faint, blurred wash here: the marbled field remains
-				    visible beneath it instead of being replaced by a second background. */}
 				<section className="stage">
 					<div className="gradient-fallback" aria-hidden="true" />
 					<TellaBackground />
@@ -222,7 +219,6 @@ if (!root) throw new Error("Missing landing page root");
 
 createRoot(root).render(
 	<>
-		<MarbleField />
 		<LandingPage />
 		<AgentationFeedback />
 	</>,
