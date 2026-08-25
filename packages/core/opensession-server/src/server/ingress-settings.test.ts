@@ -6,11 +6,14 @@ import {
   displayedServerAddresses,
   normalizeCustomIngressOrigin,
   normalizeIngressOrigin,
+  normalizePrivateAppOrigin,
   publicIngressHealth,
+  savePrivateAppOrigin,
   savePublicIngress,
 } from "./ingress-settings";
 
 const previous = process.env.OPENSESSION_CONFIG;
+const previousEnvFile = process.env.OPENSESSION_ENV_FILE;
 const dirs: string[] = [];
 
 function fixture() {
@@ -24,14 +27,19 @@ function fixture() {
       webhookPort: 3848,
     },
   }));
+  const envPath = join(dir, ".opensession.env");
+  writeFileSync(envPath, "OPENSESSION_UI_BASE=https://app.example.test\n");
   process.env.OPENSESSION_CONFIG = path;
+  process.env.OPENSESSION_ENV_FILE = envPath;
   delete process.env.OPENSESSION_INGRESS_BASE;
-  return path;
+  return { path, envPath };
 }
 
 afterEach(() => {
   if (previous === undefined) delete process.env.OPENSESSION_CONFIG;
   else process.env.OPENSESSION_CONFIG = previous;
+  if (previousEnvFile === undefined) delete process.env.OPENSESSION_ENV_FILE;
+  else process.env.OPENSESSION_ENV_FILE = previousEnvFile;
   for (const dir of dirs.splice(0)) rmSync(dir, { recursive: true, force: true });
 });
 
@@ -65,8 +73,16 @@ describe("public ingress settings", () => {
     expect(displayedServerAddresses({ a: [], aaaa: [] }, dns, "unreachable")).toEqual({ a: [], aaaa: [] });
   });
 
+  test("saves a bare private app domain to config and the service environment", async () => {
+    const { path, envPath } = fixture();
+    expect(normalizePrivateAppOrigin("team.example.test")).toBe("https://team.example.test");
+    await savePrivateAppOrigin("team.example.test");
+    expect(JSON.parse(readFileSync(path, "utf8")).server.publicBaseUrl).toBe("https://team.example.test");
+    expect(readFileSync(envPath, "utf8")).toContain("OPENSESSION_UI_BASE=https://team.example.test");
+  });
+
   test("writes one canonical owner and removes retired server fields", async () => {
-    const path = fixture();
+    const { path } = fixture();
     await savePublicIngress({
       publicBaseUrl: "https://ingress.example.test",
       exposure: "cloudflare",

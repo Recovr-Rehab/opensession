@@ -43,9 +43,9 @@ const STEPS: FirstMileStep[] = [
 	},
 	{
 		id: "ingress",
-		label: "Ingress",
-		title: "Set up public ingress",
-		description: "Create the narrow public endpoint GitHub webhooks and remote Sandboxes use to reach this server. The app itself stays private.",
+		label: "Domains",
+		title: "Set up domains",
+		description: "Choose where your team opens Open Session and how external services reach it.",
 	},
 	{
 		id: "github",
@@ -534,6 +534,7 @@ export function FirstMile({ onDone }: { onDone: () => Promise<void> }) {
 										{step.id === "ingress" && (
 											<IngressPanel
 												onboarding
+												setup={setup}
 												onChanged={refetch}
 												onStatusChange={(ingress) => {
 													if (ingress.health !== "ready") {

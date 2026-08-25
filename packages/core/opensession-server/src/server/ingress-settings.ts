@@ -20,6 +20,8 @@ import { isBlockedAddress } from "./shared/network-address";
 import { caddyIngressSnippet, upsertCaddyIngress } from "./sandbox/caddy-ingress";
 import { stateDir } from "./paths";
 import { writeFileAtomic } from "./shared/atomic-write";
+import { prepareEnvFileEdits } from "./env-file-edit";
+import { detectedTailnetIpv4, normalizeAppOrigin } from "./setup-access";
 
 export const PUBLIC_INGRESS_PORT = 3860;
 const CADDYFILE = process.env.OPENSESSION_CADDYFILE || "/etc/caddy/Caddyfile";
@@ -36,6 +38,7 @@ export interface IngressStatus {
   health: "ready" | "waiting_dns" | "unreachable" | "not_configured";
   localUrl: string;
   hostname: string;
+  app: { publicBaseUrl: string; hostname: string; tailnetIpv4: string | null };
   server: { ipv4: string[]; ipv6: string[] };
   dns: { a: string[]; aaaa: string[]; suggested: string[] };
   tailscale: { installed: boolean; dnsName: string; suggestedUrl: string };
@@ -94,6 +97,22 @@ export function normalizeIngressOrigin(value: string): string {
 export function normalizeCustomIngressOrigin(value: string): string {
   const trimmed = value.trim();
   return normalizeIngressOrigin(trimmed.includes("://") ? trimmed : `https://${trimmed}`);
+}
+
+/** A private app custom domain is always HTTPS, but the form asks for the
+ * hostname rather than making people type protocol syntax. */
+export function normalizePrivateAppOrigin(value: string): string {
+  const trimmed = value.trim();
+  const origin = normalizeAppOrigin(trimmed.includes("://") ? trimmed : `https://${trimmed}`);
+  if (new URL(origin).protocol !== "https:") throw new Error("Private app domain must use HTTPS");
+  const ingressHost = (() => {
+    try { return new URL(configuredIngress().publicBaseUrl).hostname.toLowerCase(); }
+    catch { return ""; }
+  })();
+  if (new URL(origin).hostname.toLowerCase() === ingressHost) {
+    throw new Error("Private app and public ingress must use different domains");
+  }
+  return origin;
 }
 
 async function command(argv: string[]): Promise<{ code: number; stdout: string; stderr: string }> {
@@ -231,8 +250,14 @@ export function displayedServerAddresses(
   return server.a.length || server.aaaa.length || health !== "ready" ? server : dns;
 }
 
-export async function publicIngressStatus(canManage: boolean): Promise<IngressStatus> {
+export async function publicIngressStatus(
+  canManage: boolean,
+  options: { appBaseUrl?: string } = {},
+): Promise<IngressStatus> {
   const configured = configuredIngress();
+  const appBaseUrl = options.appBaseUrl || configuredServer().publicBaseUrl;
+  let appHostname = "";
+  try { appHostname = new URL(appBaseUrl).hostname; } catch {}
   let hostname = "";
   try { hostname = new URL(configured.publicBaseUrl).hostname; } catch {}
   const [dns, tsName, probedHealth, serverAddresses] = await Promise.all([
@@ -255,6 +280,11 @@ export async function publicIngressStatus(canManage: boolean): Promise<IngressSt
     health,
     localUrl: `http://127.0.0.1:${PUBLIC_INGRESS_PORT}`,
     hostname,
+    app: {
+      publicBaseUrl: appBaseUrl.replace(/\/+$/, ""),
+      hostname: appHostname,
+      tailnetIpv4: detectedTailnetIpv4(),
+    },
     server: { ipv4: displayedAddresses.a, ipv6: displayedAddresses.aaaa },
     dns: {
       ...dns,
@@ -281,6 +311,27 @@ export async function publicIngressStatus(canManage: boolean): Promise<IngressSt
       generatedConfig: caddyIngressSnippet(configured.publicBaseUrl || "https://ingress.example.com"),
     },
   };
+}
+
+export async function savePrivateAppOrigin(value: string): Promise<string> {
+  const publicBaseUrl = normalizePrivateAppOrigin(value);
+  await withConfigMutationLock(async () => {
+    const raw = rawConfig();
+    const server = raw.server && typeof raw.server === "object" && !Array.isArray(raw.server)
+      ? raw.server as Record<string, unknown>
+      : {};
+    raw.server = server;
+    server.publicBaseUrl = publicBaseUrl;
+    const envEdit = prepareEnvFileEdits({ OPENSESSION_UI_BASE: publicBaseUrl });
+    envEdit.commit();
+    try {
+      persistRawConfig(raw);
+    } catch (error) {
+      envEdit.rollback();
+      throw error;
+    }
+  });
+  return publicBaseUrl;
 }
 
 export async function savePublicIngress(input: {

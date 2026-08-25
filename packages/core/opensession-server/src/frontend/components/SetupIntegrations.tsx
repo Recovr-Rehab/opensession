@@ -258,8 +258,8 @@ function githubSetupSteps(): React.ReactNode[] {
 const GITHUB_ONBOARDING_STEPS: React.ReactNode[] = [
 	<>Create a GitHub App in your organization.</>,
 	<>
-		Open the prefilled form. The Homepage URL and public-ingress webhook URL are
-		already filled in; change the app name if you want.
+		Open the prefilled form. The Homepage and webhook URLs are already filled in;
+		change the app name if you want.
 	</>,
 	<>
 		Confirm <strong>Device Flow</strong> is on.

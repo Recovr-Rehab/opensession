@@ -59,6 +59,27 @@ export function customCaddyConfig(value: string): string {
 	return `${ingressHostname(value)} {\n    # BEGIN OPENSESSION SANDBOX INGRESS\n    handle {\n        reverse_proxy 127.0.0.1:3860\n    }\n    # END OPENSESSION SANDBOX INGRESS\n}`;
 }
 
+export function configuredAppDomain(settings: PublicIngressSettings): string {
+	try {
+		const url = new URL(settings.app.publicBaseUrl);
+		return url.protocol === "https:" ? url.hostname : "";
+	} catch {
+		return "";
+	}
+}
+
+export function privateAppDnsRecord(settings: PublicIngressSettings, value: string): string | null {
+	return settings.app.tailnetIpv4
+		? `A ${ingressHostname(value, "os.example.com")} ${settings.app.tailnetIpv4}`
+		: null;
+}
+
+export function privateAppCaddyConfig(settings: PublicIngressSettings, value: string): string {
+	const hostname = ingressHostname(value, "os.example.com");
+	const bind = settings.app.tailnetIpv4 || "<tailscale-ip>";
+	return `${hostname} {\n    bind ${bind}\n    tls /etc/opensession/tls/${hostname}.crt /etc/opensession/tls/${hostname}.key\n    reverse_proxy 127.0.0.1:3850 {\n        lb_try_duration 15s\n        lb_try_interval 250ms\n    }\n}`;
+}
+
 export function configuredIngressDrafts(settings: PublicIngressSettings): Record<IngressExposure, string> {
 	return {
 		tailscale: settings.tailscale.suggestedUrl,

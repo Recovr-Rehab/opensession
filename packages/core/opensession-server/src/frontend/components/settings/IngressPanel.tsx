@@ -4,11 +4,13 @@ import {
 	enablePublicIngressFunnel,
 	fetchPublicIngress,
 	installPublicIngressCaddy,
+	savePrivateAppDomain,
 	testPublicIngress,
 	type IngressExposure,
 	type PublicIngressSettings,
 } from "../../lib/api";
 import {
+	configuredAppDomain,
 	configuredIngressDrafts,
 	customCaddyConfig,
 	customDnsRecords,
@@ -16,11 +18,15 @@ import {
 	ingressHealthDot,
 	ingressHealthLabel,
 	ingressHostname,
+	privateAppCaddyConfig,
+	privateAppDnsRecord,
 } from "../../lib/ingress-ui";
+import { useSetupStatus, type SetupController } from "../../hooks/useSetupStatus";
 import { Button } from "../../ui/button";
 import { CopyCheck, useCopy } from "../../ui/copy";
 import { Input } from "../../ui/input";
 import { OptionSelect } from "../../ui/select";
+import { Segmented, SegmentedOption } from "../../ui/segmented";
 import {
 	SettingCard,
 	SettingCardSkeleton,
@@ -40,6 +46,7 @@ import {
 import { InlineAlert } from "../../ui/state";
 import { toast } from "../../ui/toast";
 import { IconCopy } from "../icons";
+import { SetupRestart } from "../SetupRestart";
 
 const EMPTY_DRAFTS: Record<IngressExposure, string> = {
 	tailscale: "",
@@ -84,21 +91,105 @@ function SetupStep({ number, title, children }: { number: number; title: string;
 	);
 }
 
+function PrivateAppSetup({
+	settings,
+	domain,
+	busy,
+	onChange,
+	onSave,
+}: {
+	settings: PublicIngressSettings;
+	domain: string;
+	busy: boolean;
+	onChange: (value: string) => void;
+	onSave: () => void;
+}) {
+	const savedDomain = configuredAppDomain(settings);
+	const dnsRecord = privateAppDnsRecord(settings, domain);
+	const dirty = domain.trim() !== savedDomain;
+	return (
+		<>
+			<SettingsGroupLabel
+				className="mt-0"
+				actions={<StatusChip label={savedDomain ? "Custom domain" : "Local address"} dot={savedDomain ? "var(--green)" : "var(--text-faint)"} />}
+			>
+				Private app
+			</SettingsGroupLabel>
+			<SettingCard>
+				<SettingRow>
+					<SettingRowText>
+						<SettingRowTitle>Current address</SettingRowTitle>
+						<SettingRowDescription className="break-all font-mono">{settings.app.publicBaseUrl}</SettingRowDescription>
+					</SettingRowText>
+				</SettingRow>
+			</SettingCard>
+			<SettingsForm className="mt-3">
+				<p className="m-0 text-supporting leading-relaxed text-dim">
+					Give your team a memorable HTTPS address while keeping the app on your private Tailscale network.
+				</p>
+				<SetupSteps>
+					<SetupStep number={1} title="Choose the app domain">
+						<SettingsField className="mb-0">
+							Domain
+							<Input value={domain} placeholder="os.example.com" disabled={busy} autoCapitalize="none" spellCheck={false} onChange={(event) => onChange(event.target.value)} />
+						</SettingsField>
+						<p className="m-0">Enter only the hostname. Open Session stores it as an HTTPS address. Use a different domain from public ingress.</p>
+					</SetupStep>
+					<SetupStep number={2} title="Point DNS to Tailscale">
+						<p className="m-0">Add this DNS-only record at your provider. It points to the server’s Tailscale IP, so the hostname resolves everywhere but only devices on your tailnet can connect.</p>
+						{dnsRecord ? <CodeBlock>{dnsRecord}</CodeBlock> : <InlineAlert>Connect this server to Tailscale first, then reload this page.</InlineAlert>}
+					</SetupStep>
+					<SetupStep number={3} title="Issue a private app certificate">
+						<p className="m-0">Use your DNS provider’s DNS-01 challenge to issue and automatically renew a certificate. Store it at these paths:</p>
+						<CodeBlock>{`/etc/opensession/tls/${ingressHostname(domain, "os.example.com")}.crt`}</CodeBlock>
+						<CodeBlock>{`/etc/opensession/tls/${ingressHostname(domain, "os.example.com")}.key`}</CodeBlock>
+					</SetupStep>
+					<SetupStep number={4} title="Add the private Caddy site">
+						<p className="m-0">This binds Caddy only to the Tailscale address and forwards the app to its loopback port.</p>
+						{!settings.custom.caddyInstalled && <CodeBlock>{"curl -fsSL https://raw.githubusercontent.com/tellahq/opensession/main/install.sh | bash -s -- --caddy --no-onboard"}</CodeBlock>}
+					</SetupStep>
+				</SetupSteps>
+				<details className="rounded-lg bg-surface p-3 text-meta text-dim">
+					<summary className="cursor-pointer font-medium text-fg">Generated Caddy configuration</summary>
+					<pre className="mt-2 overflow-x-auto whitespace-pre-wrap font-mono text-meta">{privateAppCaddyConfig(settings, domain)}</pre>
+				</details>
+				<div className="grid gap-2">
+					<div className="text-label font-medium text-dim">Apply Caddy</div>
+					<CodeBlock>sudo caddy validate --config /etc/caddy/Caddyfile</CodeBlock>
+					<CodeBlock>sudo systemctl reload caddy</CodeBlock>
+				</div>
+				<SettingsFormActions>
+					<Button variant="primary" disabled={busy || !dirty || !domain.trim() || !dnsRecord || !settings.custom.caddyInstalled || !settings.canManage} className="phone:min-h-11 phone:w-full phone:justify-center" onClick={onSave}>
+						{busy ? "Saving…" : "Save app domain"}
+					</Button>
+				</SettingsFormActions>
+			</SettingsForm>
+			<SettingsHint>Open the new address before saving. A restart updates links generated by Open Session; it does not change DNS or Caddy.</SettingsHint>
+		</>
+	);
+}
+
 export function IngressPanel({
 	onboarding = false,
 	onChanged,
 	onStatusChange,
+	setup: parentSetup,
 }: {
 	onboarding?: boolean;
 	onChanged?: () => void | Promise<void>;
 	onStatusChange?: (settings: PublicIngressSettings) => void;
+	setup?: SetupController;
 } = {}) {
+	const localSetup = useSetupStatus();
+	const setup = parentSetup || localSetup;
 	const [settings, setSettings] = useState<PublicIngressSettings | null>(null);
+	const [surface, setSurface] = useState<"app" | "ingress">("app");
 	const [method, setMethod] = useState<IngressExposure>("tailscale");
+	const [appDomain, setAppDomain] = useState("");
 	const [drafts, setDrafts] = useState<Record<IngressExposure, string>>(EMPTY_DRAFTS);
 	const [tunnelId, setTunnelId] = useState("");
 	const [tunnelToken, setTunnelToken] = useState("");
-	const [busy, setBusy] = useState<"apply" | "test" | null>(null);
+	const [busy, setBusy] = useState<"app" | "apply" | "test" | null>(null);
 	const [error, setError] = useState<string | null>(null);
 	const loaded = useRef(false);
 	const url = drafts[method];
@@ -107,6 +198,7 @@ export function IngressPanel({
 		setSettings(next);
 		onStatusChange?.(next);
 		if (!loaded.current) {
+			setAppDomain(configuredAppDomain(next));
 			setDrafts(configuredIngressDrafts(next));
 			loaded.current = true;
 		} else if (next.exposure) {
@@ -159,6 +251,23 @@ export function IngressPanel({
 			.finally(() => setBusy(null));
 	}
 
+	async function saveAppDomain() {
+		if (busy || !settings) return;
+		setBusy("app");
+		setError(null);
+		await savePrivateAppDomain(appDomain)
+			.then((next) => {
+				apply(next);
+				setup.requireRestart();
+				toast("Private app domain saved", { variant: "success" });
+				void onChanged?.();
+			})
+			.catch((cause: unknown) => {
+				setError(cause instanceof Error ? cause.message : "Private app domain could not be saved");
+			})
+			.finally(() => setBusy(null));
+	}
+
 	async function applyMethod() {
 		if (method === "tailscale") {
 			await run("apply", enablePublicIngressFunnel, "Tailscale Funnel started");
@@ -195,11 +304,11 @@ export function IngressPanel({
 		method === "cloudflare" && (!tunnelId.trim() || (!tunnelToken.trim() && !settings?.cloudflare.tokenConfigured));
 
 	return (
-		<SettingsPanel className={onboarding ? "mx-auto" : undefined}>
+		<SettingsPanel className={onboarding ? "mx-auto" : "relative"}>
 			{!onboarding && (
 				<SettingsHeader
-					title="Public ingress"
-					description="Create a separate public HTTPS endpoint for signed webhooks, remote Sandbox callbacks, and workload identity. The app itself stays private."
+					title="Domains and ingress"
+					description="Set up a private app address and a separate public ingress."
 				/>
 			)}
 
@@ -208,6 +317,27 @@ export function IngressPanel({
 				<SettingCardSkeleton rows={3} label="Loading public ingress" />
 			) : (
 				<>
+					<div className="mb-5 px-5">
+						<Segmented label="Domain setup" value={surface} onValueChange={(value) => setSurface(value as "app" | "ingress")} className="w-full">
+							<SegmentedOption value="app" className="min-h-10 flex-1 justify-center phone:min-h-11">Private app</SegmentedOption>
+							<SegmentedOption value="ingress" className="min-h-10 flex-1 justify-center phone:min-h-11">Public ingress</SegmentedOption>
+						</Segmented>
+					</div>
+					{surface === "app" ? (
+						<>
+							<PrivateAppSetup
+								settings={settings}
+								domain={appDomain}
+								busy={busy === "app"}
+								onChange={(value) => { setAppDomain(value); setError(null); }}
+								onSave={() => void saveAppDomain()}
+							/>
+							{onboarding && settings.health !== "ready" && (
+								<SettingsHint className="mt-4">Set up Public ingress before continuing to GitHub.</SettingsHint>
+							)}
+						</>
+					) : (
+					<>
 					{!onboarding && (
 						<>
 							<SettingsGroupLabel
@@ -238,11 +368,11 @@ export function IngressPanel({
 						className={onboarding ? "mt-0" : undefined}
 						actions={onboarding ? <StatusChip label={busy === "apply" ? "Setting up" : ingressHealthLabel(settings.health)} dot={busy === "apply" ? "var(--yellow)" : ingressHealthDot(settings.health)} /> : undefined}
 					>
-						Exposure
+						Public ingress
 					</SettingsGroupLabel>
 					<SettingsForm>
 						<p className="m-0 text-supporting leading-relaxed text-dim">
-							GitHub and remote Sandboxes need one narrow endpoint they can reach from the public internet. Choose how traffic reaches the isolated listener on this server.
+							A public endpoint for webhooks and remote Sandboxes. It never serves the app.
 						</p>
 						<SettingsField>
 							Method
@@ -377,6 +507,9 @@ export function IngressPanel({
 					<SettingsHint>
 						Unknown methods and paths return 404. This endpoint never serves sessions, APIs, or the app UI.
 					</SettingsHint>
+					</>
+					)}
+					{!onboarding && <SetupRestart setup={setup} />}
 				</>
 			)}
 		</SettingsPanel>

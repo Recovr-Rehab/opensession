@@ -3,8 +3,10 @@ import {
   enableTailscaleFunnel,
   installManagedCaddy,
   publicIngressStatus,
+  savePrivateAppOrigin,
   savePublicIngress,
 } from "../ingress-settings";
+import { audit } from "../audit";
 import { requireWorkspaceAdmin, workspaceAdminAuthorized } from "../workspace-auth";
 import type { IngressExposure } from "../config";
 import { refreshIndexHtml } from "../frontend-build";
@@ -21,6 +23,22 @@ export async function handleIngressRoutes(ctx: RouteContext): Promise<Response |
   const { path, req } = ctx;
   if (path === "/api/ingress" && req.method === "GET") {
     return Response.json(await publicIngressStatus(workspaceAdminAuthorized(ctx)));
+  }
+  if (path === "/api/ingress/app" && req.method === "POST") {
+    const forbidden = requireWorkspaceAdmin(ctx);
+    if (forbidden) return forbidden;
+    const body = (await req.json().catch(() => null)) as Record<string, unknown> | null;
+    try {
+      const appBaseUrl = await savePrivateAppOrigin(String(body?.domain || ""));
+      audit({ kind: "ingress_private_app_update", publicBaseUrl: appBaseUrl });
+      refreshIndexHtml("private app domain changed");
+      return Response.json({
+        ...(await publicIngressStatus(true, { appBaseUrl })),
+        restartRequired: true,
+      });
+    } catch (error) {
+      return errorResponse(error);
+    }
   }
   if (path === "/api/ingress" && req.method === "PUT") {
     const forbidden = requireWorkspaceAdmin(ctx);

@@ -198,7 +198,7 @@ export const SECTIONS: {
 	},
 	{
 		key: "ingress",
-		label: "Public ingress",
+		label: "Domains and ingress",
 		group: "Infrastructure",
 		adminOnly: true,
 		icon: <IconGlobe />,
