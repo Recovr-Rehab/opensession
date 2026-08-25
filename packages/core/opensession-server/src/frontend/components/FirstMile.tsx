@@ -27,8 +27,8 @@ interface FirstMileStep {
 }
 
 // GitHub comes first because it supplies the next step's answers: the
-// organization is named, marked and domained from the org you just connected,
-// rather than asked for cold. Members sit after repositories, since an invite
+// organization is named and marked from the org you just connected rather than
+// asked for cold. Members sit after repositories, since an invite
 // is worth more once there is something to join.
 const STEPS: FirstMileStep[] = [
 	{
@@ -516,7 +516,6 @@ export function FirstMile({ onDone }: { onDone: () => Promise<void> }) {
 										{step.id === "organization" && (
 											<OrganizationProfileSection
 												githubOrganization={connectedGithubOrganization(status)}
-												showDomain={false}
 											/>
 										)}
 										{step.id === "team" && (

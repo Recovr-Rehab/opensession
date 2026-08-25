@@ -33,25 +33,22 @@ import { IdentityRows } from "../SetupIdentity";
 const NAME_INPUT_CLASS = cn(settingsInputClass, "w-[220px] max-w-full");
 
 /**
- * The organization's name, mark and email domain.
+ * The organization's name and mark.
  *
  * In onboarding this step runs directly after GitHub, and `githubOrganization`
- * is the org that was just connected. Rather than ask for three things the
+ * is the org that was just connected. Rather than ask for two things the
  * connection already knows, the first render of a fresh instance fills them in
- * from GitHub — the org's display name, its avatar, and the domain off its
- * profile — and leaves every field editable. It only ever fills a field nobody
- * has set, so re-opening onboarding cannot overwrite a rename.
+ * from GitHub: the org's display name and avatar. It leaves both editable and
+ * only fills values nobody has set, so re-opening onboarding cannot overwrite
+ * a rename.
  */
 export function OrganizationProfileSection({
 	githubOrganization,
-	showDomain = true,
 }: {
 	githubOrganization?: string;
-	showDomain?: boolean;
 } = {}) {
 	const [settings, setSettings] = useState<OrganizationSettingsDto | null>(null);
 	const [draft, setDraft] = useState("");
-	const [domainDraft, setDomainDraft] = useState("");
 	const [busy, setBusy] = useState(false);
 	const [loadError, setLoadError] = useState<string | null>(null);
 	const [iconFailed, setIconFailed] = useState(false);
@@ -67,7 +64,6 @@ const next = await fetchOrganizationSettings();
 			if (cancelled?.()) return;
 			setSettings(next);
 			setDraft(next.organizationName);
-			setDomainDraft(next.organizationDomain);
 			rememberOrganizationIcon(next);
 })().catch(async (error: any) => {
 if (cancelled?.()) return;
@@ -92,7 +88,6 @@ if (cancelled?.()) return;
 const next = await work();
 			setSettings(next);
 			setDraft(next.organizationName);
-			setDomainDraft(next.organizationDomain);
 			setIconFailed(false);
 			rememberOrganizationIcon(next);
 			toast(message, { variant: "success" });
@@ -100,10 +95,7 @@ const next = await work();
 toast(error?.message || "Couldn’t save organization settings", {
 				variant: "error",
 			});
-			if (settings) {
-				setDraft(settings.organizationName);
-				setDomainDraft(settings.organizationDomain);
-			}
+			if (settings) setDraft(settings.organizationName);
 }).finally(async () => {
 setBusy(false);
 });
@@ -121,8 +113,8 @@ setBusy(false);
 		);
 	}
 
-	// Fill only what is still unset. A fresh install has no icon, no domain, and
-	// a name that is still the product's own.
+	// Fill only what is still unset. A fresh install has no icon and a name that
+	// is still the product's own.
 	// The body reads `update` through an effect event: the trigger set stays the
 	// org/settings state, while the call always reaches the latest closure.
 	const maybePrefillFromGithub = useEffectEvent(() => {
@@ -131,8 +123,7 @@ setBusy(false);
 		const needsName =
 			!settings.organizationName || settings.organizationName === PRODUCT_NAME;
 		const needsIcon = !settings.organizationIconUrl;
-		const needsDomain = !settings.organizationDomain;
-		if (!needsName && !needsIcon && !needsDomain) return;
+		if (!needsName && !needsIcon) return;
 		prefilled.current = true;
 		void (async () => {
 			const profile = await fetchGithubOrganizationProfile(login);
@@ -143,9 +134,6 @@ setBusy(false);
 				}
 				return saveOrganizationSettings({
 					...(needsName ? { organizationName: profile?.name || login } : {}),
-					...(needsDomain && profile?.domain
-						? { organizationDomain: profile.domain }
-						: {}),
 				});
 			}, `Filled in from ${login} on GitHub.`);
 		})();
@@ -153,18 +141,6 @@ setBusy(false);
 	useEffect(() => {
 		maybePrefillFromGithub();
 	}, [githubOrganization, settings, busy]);
-
-	async function commitDomain() {
-		const next = domainDraft.trim();
-		if (!settings || next === settings.organizationDomain || busy) {
-			if (settings) setDomainDraft(settings.organizationDomain);
-			return;
-		}
-		await update(
-			() => saveOrganizationSettings({ organizationDomain: next }),
-			next ? "Organization domain saved." : "Organization domain cleared.",
-		);
-	}
 
 	async function upload(file: File) {
 		await update(async () => {
@@ -271,38 +247,11 @@ setBusy(false);
 								aria-label="Organization name"
 							/>
 						</SettingRow>
-						{showDomain && (
-							<SettingRow>
-								<SettingRowText>
-									<SettingRowTitle>Email domain</SettingRowTitle>
-								</SettingRowText>
-								<input
-									className={NAME_INPUT_CLASS}
-									value={domainDraft}
-									maxLength={80}
-									disabled={busy}
-									placeholder="acme.com"
-									inputMode="url"
-									autoCapitalize="none"
-									autoCorrect="off"
-									spellCheck={false}
-									onChange={(event) => setDomainDraft(event.target.value)}
-									onBlur={() => void commitDomain()}
-									onKeyDown={(event) => {
-										if (event.key === "Enter") event.currentTarget.blur();
-										else if (event.key === "Escape")
-											setDomainDraft(settings.organizationDomain);
-									}}
-									aria-label="Organization email domain"
-								/>
-							</SettingRow>
-						)}
 						<IdentityRows />
 					</SettingCard>
 					<SettingsHint>
 						Shared by everyone in this organization. Clearing the name restores the
-						product name. The domain is who belongs here, so an invite outside it
-						stands out.
+						product name.
 					</SettingsHint>
 				</>
 			) : (

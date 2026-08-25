@@ -204,10 +204,6 @@ export interface PersonaSection {
 export interface OrganizationSection {
   /** Workspace name shown to everyone using the instance. */
   name?: string;
-  /** Email domain the team shares, e.g. "acme.com". Onboarding reads it from
-   *  the connected GitHub organization, and the people step uses it to tell an
-   *  invite that belongs here from one that does not. */
-  domain?: string;
 }
 
 /** Instance branding — what the *platform itself* is called in the UI
@@ -546,7 +542,6 @@ function parseConfig(text: string): OpenSessionConfig {
     if (organization) {
       cfg.organization = defined({
         name: str(organization.name),
-        domain: str(organization.domain),
       });
     }
     const persona = obj(raw.persona);
@@ -842,13 +837,6 @@ export function productMark(): string {
  * the product name until an administrator names the organization. */
 export function organizationName(): string {
   return getConfig().organization?.name || productName();
-}
-
-/** The team's email domain, or "" when nobody has set one. Unlike the name
- *  there is no sensible fallback: guessing a domain would invite the wrong
- *  people. */
-export function organizationDomain(): string {
-  return getConfig().organization?.domain || "";
 }
 
 export interface IdentityPatch {
