@@ -406,18 +406,36 @@ describe("session kernel actor boundary", () => {
     });
   });
 
-  test("fails sync calls fast and stays alive when the actor is unresponsive", () => {
-    class NeverRespondingWorker {
+  test("isolates an unresponsive session behind its own sync breaker", () => {
+    class SelectivelyRespondingWorker {
       listeners = new Map<string, (event: never) => void>();
       postCount = 0;
       addEventListener(type: string, listener: (event: never) => void) {
         this.listeners.set(type, listener);
       }
       removeEventListener() {}
-      postMessage() { this.postCount += 1; }
+      postMessage(message: {
+        t: string;
+        command?: { request?: { sessionId?: string } };
+        args?: unknown[];
+        control: SharedArrayBuffer;
+        output: SharedArrayBuffer;
+      }) {
+        this.postCount += 1;
+        const sessionId = message.t === "reduce"
+          ? message.command?.request?.sessionId
+          : message.args?.[0];
+        if (sessionId === "slow-actor") return;
+        const response = new TextEncoder().encode(JSON.stringify({ ok: true }));
+        new Uint8Array(message.output, 0, response.length).set(response);
+        const control = new Int32Array(message.control);
+        Atomics.store(control, 1, response.length);
+        Atomics.store(control, 0, 1);
+        Atomics.notify(control, 0);
+      }
       terminate() {}
     }
-    const worker = new NeverRespondingWorker();
+    const worker = new SelectivelyRespondingWorker();
     const onFatal: Array<Error> = [];
     const previousTimeout = process.env.OPENSESSION_SYNC_KERNEL_TIMEOUT_MS;
     process.env.OPENSESSION_SYNC_KERNEL_TIMEOUT_MS = "50";
@@ -458,6 +476,11 @@ describe("session kernel actor boundary", () => {
       ).toThrow("breaker");
       expect(Date.now() - startedAt).toBeLessThan(40);
       expect(worker.postCount).toBe(1);
+
+      // The kernel service has independent session lanes. A timeout in one
+      // lane must not refuse work for an unrelated healthy session.
+      expect(host.store.creationState("healthy-session")).toBeUndefined();
+      expect(worker.postCount).toBe(2);
 
       // A slow actor is degradation, not a lost authority: the client stays
       // alive and no fatal handler fired.

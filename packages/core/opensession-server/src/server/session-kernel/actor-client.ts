@@ -30,6 +30,8 @@ import {
   type KernelActorClientRequest,
   type KernelActorClientResponse,
 } from "./actor-protocol";
+import { sessionActorReducerRoute } from "./actor-routing";
+import { sessionKernelStoreRoute } from "./store-routing";
 
 const SMALL_OUTPUT_BYTES = 256 * 1024;
 const LARGE_OUTPUT_BYTES = 8 * 1024 * 1024;
@@ -93,10 +95,27 @@ type Pending = {
   reject: (error: Error) => void;
 };
 
+type SyncRequest =
+  | { t: "store"; method: string; args: unknown[] }
+  | { t: "reduce"; command: SessionActorReducerCommand };
+
+type SyncBreaker = {
+  consecutiveTimeouts: number;
+  openUntil: number;
+};
+
+function syncBreakerScope(request: SyncRequest): string {
+  const route = request.t === "reduce"
+    ? sessionActorReducerRoute(request.command)
+    : sessionKernelStoreRoute(request.method, request.args);
+  if (route.scope === "session") return `session:${route.sessionId}`;
+  if (route.scope === "outbox") return `outbox:${route.id}`;
+  return "global";
+}
+
 export class SessionKernelActorClient {
   private readonly pending = new Map<string, Pending>();
-  private syncConsecutiveTimeouts = 0;
-  private syncBreakerOpenUntil = 0;
+  private readonly syncBreakers = new Map<string, SyncBreaker>();
   private deadError?: Error;
   // Synchronous calls cannot overlap on the gateway thread: Atomics.wait
   // blocks until the actor finishes. Reuse their shared response buffers
@@ -384,20 +403,21 @@ export class SessionKernelActorClient {
   }
 
   private callSync<TResult>(
-    request:
-      | { t: "store"; method: string; args: unknown[] }
-      | { t: "reduce"; command: SessionActorReducerCommand },
+    request: SyncRequest,
     label: string,
     large = false,
     outputBytes = large ? LARGE_OUTPUT_BYTES : SMALL_OUTPUT_BYTES,
   ): TResult {
     if (this.deadError) throw this.deadError;
-    if (this.syncBreakerOpenUntil > Date.now()) {
+    const breakerScope = syncBreakerScope(request);
+    const breaker = this.syncBreakers.get(breakerScope);
+    if (breaker && breaker.openUntil > Date.now()) {
       throw new SessionKernelActorError(
         "Session kernel actor is unresponsive; sync call refused by breaker",
         true,
       );
     }
+    if (breaker) this.syncBreakers.delete(breakerScope);
     const controlBuffer = this.syncControlBuffer;
     const outputBuffer =
       outputBytes === SMALL_OUTPUT_BYTES
@@ -430,16 +450,19 @@ export class SessionKernelActorClient {
         this.syncSmallOutputBuffer = new SharedArrayBuffer(SMALL_OUTPUT_BYTES);
       else if (outputBytes === LARGE_OUTPUT_BYTES)
         this.syncLargeOutputBuffer = undefined;
-      this.syncConsecutiveTimeouts += 1;
-      if (this.syncConsecutiveTimeouts >= SYNC_BREAKER_AFTER_TIMEOUTS)
-        this.syncBreakerOpenUntil = Date.now() + SYNC_BREAKER_OPEN_MS;
+      const consecutiveTimeouts = (breaker?.consecutiveTimeouts ?? 0) + 1;
+      this.syncBreakers.set(breakerScope, {
+        consecutiveTimeouts,
+        openUntil: consecutiveTimeouts >= SYNC_BREAKER_AFTER_TIMEOUTS
+          ? Date.now() + SYNC_BREAKER_OPEN_MS
+          : 0,
+      });
       throw new SessionKernelActorError(
         `Session kernel actor timed out in ${label}`,
         true,
       );
     }
-    this.syncConsecutiveTimeouts = 0;
-    this.syncBreakerOpenUntil = 0;
+    this.syncBreakers.delete(breakerScope);
     const status = Atomics.load(control, 0);
     const length = Atomics.load(control, 1);
     if (status === 2) {
