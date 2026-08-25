@@ -13,9 +13,18 @@ export function AnnouncementArticle({ showMark = false }: { showMark?: boolean }
 			</p>
 
 			<p>
-				We built Open Session because we wanted an orchestrator that fit our
-				exact needs. We found existing apps to be either the wrong fit or too
-				expensive. It’s also just fun to build your own tools.
+				Open Session was built by{" "}
+				<a
+					className="announcement-inline-link"
+					href="https://tella.com"
+					target="_blank"
+					rel="noopener noreferrer"
+				>
+					Tella
+				</a>
+				. We wanted an orchestrator that fit our team’s exact needs. We found
+				existing apps to be either the wrong fit or too expensive. It’s also just
+				fun to build your own tools.
 			</p>
 
 			<p>
@@ -191,6 +200,13 @@ export function AnnouncementArticle({ showMark = false }: { showMark?: boolean }
 			</p>
 
 			<p>Have fun!</p>
+
+			<a
+				className="button button-primary announcement-cta"
+				href="https://github.com/tellahq/opensession"
+			>
+				View on GitHub
+			</a>
 		</article>
 	);
 }

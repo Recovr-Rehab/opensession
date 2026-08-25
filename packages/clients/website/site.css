@@ -1129,6 +1129,24 @@ summary:focus-visible {
 	font-weight: 650;
 }
 
+.announcement-inline-link {
+	color: inherit;
+	text-decoration-line: underline;
+	text-decoration-thickness: from-font;
+	text-underline-offset: 0.14em;
+	text-decoration-skip-ink: auto;
+	transition: color 140ms ease;
+}
+
+.announcement-inline-link:hover {
+	color: var(--accent-blue);
+}
+
+.announcement-cta {
+	width: fit-content;
+	margin-top: 56px;
+}
+
 /* ── Narrower ────────────────────────────────────────────────────────── */
 
 @media (max-width: 1120px) {
