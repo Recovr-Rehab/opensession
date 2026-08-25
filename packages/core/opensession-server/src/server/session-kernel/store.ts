@@ -2120,6 +2120,27 @@ export class SessionKernelStore {
         steered: [...priorDelivery.steered],
         pendingSteers: [...priorDelivery.pendingSteers],
       };
+      // Creation owns its opening dispatch until the opening effect settles.
+      // A crash can commit that terminal settlement before the follow-up
+      // ack_dispatch runs. Leaving the create dispatch behind permanently blocks
+      // every later idle prompt with "A prompt dispatch is already active".
+      // Retire only an exactly completed opening effect, never an ambiguous one.
+      const dispatch = working.dispatch as
+        | { promptEntryId?: string; kind?: string }
+        | undefined;
+      const openingEffectId = dispatch?.promptEntryId
+        ? `opening:${dispatch.promptEntryId}`
+        : undefined;
+      if (dispatch?.kind === "create" && openingEffectId) {
+        const creation = this.creationState(sessionId);
+        if (
+          creation &&
+          ["ready", "failed", "cancelled"].includes(creation.state) &&
+          creation.completedEffectIds.includes(openingEffectId)
+        ) {
+          working.dispatch = undefined;
+        }
+      }
       result = mutate(working);
       state = {
         ...working,

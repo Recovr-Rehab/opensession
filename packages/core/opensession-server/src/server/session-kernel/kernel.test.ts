@@ -1161,6 +1161,73 @@ describe("SessionKernel", () => {
 		expect(store.deliverySnapshot("delivery").dispatch).toBeUndefined();
 	});
 
+	test("retires a terminal creation dispatch before a later prompt drains", () => {
+		const sessionId = "failed-opening-follow-up";
+		const identity = "failed-opening-request";
+		const promptEntryId = "failed-opening-prompt";
+		const effectId = `opening:${promptEntryId}`;
+		store.claimDeliveryDispatch({
+			sessionId,
+			items: [{ id: "opening", content: "start" }],
+			promptEntryId,
+			kind: "create",
+		});
+		store.applyCreationEvent({ sessionId, identity, event: "plan" });
+		store.applyCreationEvent({
+			sessionId,
+			identity,
+			event: "preparation_started",
+		});
+		store.applyCreationEvent({
+			sessionId,
+			identity,
+			event: "opening_dispatched",
+			openingPlan: { id: sessionId, openingPrompt: "start" },
+			nextEffectId: effectId,
+			effect: {
+				kind: "creation_opening_turn",
+				effectKey: effectId,
+				payload: {
+					creationIdentity: identity,
+					creationGeneration: 1,
+					openingPromptEntryId: promptEntryId,
+					runId: `opening:${sessionId}:${promptEntryId}`,
+					runGeneration: 1,
+					mode: "adopt_or_launch",
+				},
+			},
+		});
+		store.setDeliverySlot(sessionId, "queued", [
+			{ id: "follow-up", content: "try again" },
+		]);
+		expect(() =>
+			store.claimNextDeliveryDispatch({
+				sessionId,
+				promptEntryId: "too-early",
+			}),
+		).toThrow("A prompt dispatch is already active");
+		expect(store.applyCreationEvent({
+			sessionId,
+			identity,
+			event: "failed",
+			effectId,
+		})).toMatchObject({ accepted: true, to: "failed" });
+
+		// This is the first later send. Its queue mutation repairs the missed
+		// creation ack, so claiming the follow-up cannot remain parked forever.
+		store.setDeliverySlot(sessionId, "queued", [
+			{ id: "follow-up", content: "try again" },
+		]);
+		expect(store.deliverySnapshot(sessionId).dispatch).toBeUndefined();
+		expect(store.claimNextDeliveryDispatch({
+			sessionId,
+			promptEntryId: "follow-up-entry",
+		})).toMatchObject({
+			kind: "deliver",
+			items: [{ id: "follow-up", content: "try again" }],
+		});
+	});
+
 	test("selects and claims the next queue batch in one actor transaction", () => {
 		store.setDeliverySlot("next-delivery", "queued", [
 			{ id: "held", content: "wait", hold: true },

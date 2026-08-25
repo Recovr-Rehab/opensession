@@ -3426,20 +3426,22 @@ export function SessionViewer({
 		});
 	}, [steered, entries]);
 
-	// Forget optimistic bubbles and any leftover stream state when switching
-	// sessions — the component isn't remounted per session, so a streaming
-	// bubble (now kept alive briefly past stream_done) would otherwise bleed
-	// into the next session's view.
+	// Forget optimistic bubbles and live state when switching sessions. This
+	// component is retained between tabs, so carrying a busy flag from the prior
+	// session makes an idle prompt render as queued until the new watch handshake
+	// arrives. Reset in layout, before the next session can accept input, so an
+	// idle send paints directly in the transcript on its first frame.
 	const resetOptimisticState = useEffectEvent(() => {
 		setPending(
 			initialPending
 				? [{ id: `pending-initial-${session.id}`, ...initialPending }]
 				: [],
 		);
+		setIsRunningLive(session.isRunning);
 		liveTurnStore.clear();
 		setIsStreaming(false);
 	});
-	useEffect(() => {
+	useLayoutEffect(() => {
 		resetOptimisticState();
 	}, [session.id, liveTurnStore]);
 
