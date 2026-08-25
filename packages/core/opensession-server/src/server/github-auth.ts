@@ -38,7 +38,7 @@
  * (runner) or a 403 (web mutation routes).
  */
 
-import { homeDir } from "./paths";
+import { stateDir } from "./paths";
 import { isDevInstance } from "./dev-mode";
 import { chmodSync, readFileSync, statSync } from "fs";
 import { audit } from "./audit";
@@ -47,11 +47,9 @@ import { writeJsonAtomic } from "./shared/atomic-write";
 import { fetchWithTimeout } from "./shared/fetch-with-timeout";
 import { githubGitCredentialEnv } from "./github-git-credential";
 
-const HOME = homeDir();
-
 /** Env override is for tests/sandboxes; read per call so it can change. */
 function storePath(): string {
-  return process.env.OPENSESSION_GITHUB_AUTH_STORE || `${HOME}/.opensession-github-auth.json`;
+  return process.env.OPENSESSION_GITHUB_AUTH_STORE || stateDir("github-auth.json");
 }
 
 /** Classic OAuth needs `repo` for private-repository PR writes and

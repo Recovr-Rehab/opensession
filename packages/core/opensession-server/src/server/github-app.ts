@@ -19,9 +19,8 @@
  */
 import { createSign } from "node:crypto";
 import { existsSync, rmSync } from "node:fs";
-import { homedir } from "node:os";
-import { join } from "node:path";
 import { githubUserAuthSettings } from "./github-auth";
+import { stateDir } from "./paths";
 import { configuredIntegration } from "./config";
 import { githubGitCredentialEnv } from "./github-git-credential";
 import { writeFileAtomic } from "./shared/atomic-write";
@@ -36,7 +35,7 @@ let keyPathOverride: string | undefined;
 function keyPath(): string {
   return keyPathOverride ||
     process.env.OPENSESSION_GITHUB_APP_KEY ||
-    join(homedir(), ".opensession-github-app.pem");
+    stateDir("github-app.pem");
 }
 
 /** Test seam: isolate key mutations from the operator's real key file. */

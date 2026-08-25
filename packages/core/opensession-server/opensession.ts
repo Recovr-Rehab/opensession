@@ -27,7 +27,7 @@ import { FRONTEND_SRC, IS_DEV, SPA_HEADERS, ensureFrontendBuilt, frontend, isPre
 import { configuredIntegration } from "./src/server/config";
 import { initHumanAsks } from "./src/server/human-asks";
 import { interactiveMcpServers } from "./src/server/interactive-mcp";
-import { homeDir, OPENSESSION_SESSIONS_DIR } from "./src/server/paths";
+import { homeDir, OPENSESSION_SESSIONS_DIR, stateDir } from "./src/server/paths";
 import { shouldRedirectLegacyPublicPath } from "./src/server/legacy-public-prefix";
 import { startPlainArchiveSweep } from "./src/server/plain-archive";
 import { devInstanceBootError, isDevInstance } from "./src/server/dev-mode";
@@ -78,7 +78,6 @@ import {
 	broadcastToAll,
 } from "./src/server/ws-hub";
 import { mkdirSync, watch, writeFileSync } from "fs";
-import { homedir } from "node:os";
 import { join } from "node:path";
 
 // Side-effect modules: these must be loaded even when the entry references
@@ -1023,11 +1022,10 @@ if (!g.__opensessionBooted) {
 		// post-restart toast; the `by` here feeds the pre-restart overlay.
 		const restartBy = sharedCheckoutEditors();
 		try {
-			// homedir-shared state (does not follow OPENSESSION_STATE_DIR) — a
-			// dev instance must not overwrite the production restart marker.
+			// A dev instance must not overwrite the production restart marker.
 			if (!devInstance) {
 				writeFileSync(
-					join(homedir(), ".opensession-last-restart.json"),
+					stateDir("last-restart.json"),
 					JSON.stringify({ by: restartBy || "", at: new Date().toISOString(), signal }),
 				);
 			}

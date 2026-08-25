@@ -36,7 +36,13 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_DIR="${OPENSESSION_DEPLOY_CHECKOUT:-$(dirname "$SCRIPT_DIR")}"
-STATE_DIR="${OPENSESSION_DEPLOY_STATE:-$HOME/.opensession-deploy}"
+if [ -n "${OPENSESSION_DEPLOY_STATE:-}" ]; then
+  STATE_DIR="$OPENSESSION_DEPLOY_STATE"
+elif [ -e "$HOME/.opensession/deploy" ] || [ ! -e "$HOME/.opensession-deploy" ]; then
+  STATE_DIR="$HOME/.opensession/deploy"
+else
+  STATE_DIR="$HOME/.opensession-deploy"
+fi
 HEALTH_URL="${OPENSESSION_HEALTH_URL:-http://127.0.0.1:3850/ready}"
 LEGACY_HEALTH_URL="${OPENSESSION_LEGACY_HEALTH_URL:-http://127.0.0.1:3850/api/health}"
 ALLOW_RESET="${OPENSESSION_DEPLOY_ALLOW_RESET:-0}"

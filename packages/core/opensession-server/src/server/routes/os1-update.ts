@@ -23,7 +23,7 @@
  * ignores prereleases, so the two release streams can share the repo.
  */
 
-import { homeDir } from "../paths";
+import { stateDir } from "../paths";
 import { existsSync, mkdirSync, readdirSync, rmSync } from "fs";
 import { $ } from "bun";
 import type { RouteContext } from "./context";
@@ -32,8 +32,7 @@ import { configuredIntegration, configuredServer } from "../config";
 const updates = () => configuredIntegration("updates");
 const releaseRepo = () =>
 	typeof updates().releaseRepo === "string" ? updates().releaseRepo as string : "";
-const HOME = homeDir();
-const CACHE_DIR = `${HOME}/.opensession-os1-mac-updates`;
+const CACHE_DIR = stateDir("os1-mac-updates");
 const LATEST_TTL_MS = 5 * 60 * 1000;
 
 // os1-chrome: stable extension ID derived from the signing key
@@ -44,7 +43,7 @@ const chromeExtensionId = () =>
 		? updates().chromeExtensionId as string
 		: "";
 const CHROME_TAG_PREFIX = "os1-chrome-v";
-const CHROME_CACHE_DIR = `${HOME}/.opensession-os1-chrome-updates`;
+const CHROME_CACHE_DIR = stateDir("os1-chrome-updates");
 
 interface LatestRelease {
 	tag: string; // e.g. "v0.2.0"

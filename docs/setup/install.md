@@ -208,10 +208,16 @@ URL, your first repository, and which integrations to turn on. It writes:
 | `~/.opensession/config.json` | instance config — re-read on change, no restart |
 | `~/.opensession.env` | secrets and feature flags, `0600` |
 | `~/.config/systemd/user/opensession.service` | the user-scope systemd unit, rendered for this box (Linux) |
-| `~/.opensession-model-providers.json` | engine config — created as `{"enabled": true}` when absent, so the Anthropic bridge is on out of the box ([engines.md](engines.md)) |
+| `~/.opensession/model-providers.json` | engine config — created as `{"enabled": true}` when absent, so the Anthropic bridge is on out of the box ([engines.md](engines.md)) |
 
 Re-run it any time with `opensession onboard --force`; the previous files are
 backed up to `.bak-<n>` first.
+
+State created by a fresh installation is grouped under `~/.opensession/`, for
+example `sessions/`, `audit/`, `automations/`, and `model-providers.json`.
+Existing top-level paths such as `~/.opensession-sessions` remain supported:
+Open Session uses a legacy entry when it exists and the corresponding grouped
+path does not. If both exist, the grouped path wins.
 
 Then check the result:
 
@@ -270,7 +276,7 @@ what the code actually reads, by feature:
 | `OPENSESSION_UI_BASE` | `http://127.0.0.1:<port>` | public base URL used in links posted to Slack/Linear/notes |
 | `OPENSESSION_CONFIG` | `~/.opensession/config.json` | config-file path override |
 | `SHUTDOWN_DRAIN_MS` | `60000` | graceful-shutdown drain window for in-flight runs |
-| `OPENSESSION_SESSIONS_DIR` | `~/.opensession-sessions` | session store override (mostly a test seam) |
+| `OPENSESSION_SESSIONS_DIR` | `~/.opensession/sessions` | session store override (mostly a test seam) |
 | `OPENSESSION_WORKTREES_DIR` | `~/.opensession/worktrees` | where session worktrees are created |
 | `OPENSESSION_DEV` | unset | `1` = dev frontend build only; does NOT disable agent loops (a second naive instance double-sends) |
 | `OPENSESSION_AGENTATION` | unset | `1` = enable the Agentation visual feedback overlay on desktop, non-touch clients |
@@ -280,7 +286,7 @@ what the code actually reads, by feature:
 | Var | Default | Purpose |
 | --- | --- | --- |
 | `OPENSESSION_CLAUDE_BIN` | `claude` found on `PATH` | Claude Code CLI the Meridian bridge spawns for Anthropic models |
-| `OPENSESSION_CLAUDE_ACCOUNTS_PATH` | `~/.opensession-claude-accounts.json` | Claude account store override |
+| `OPENSESSION_CLAUDE_ACCOUNTS_PATH` | `~/.opensession/claude-accounts.json` | Claude account store override |
 | `OPENSESSION_PI_BIN` / `OPENSESSION_MODEL_PROVIDERS_CONFIG` | see engines.md | Pi binary / config path |
 | `OPENSESSION_MODEL` | `claude-fable-5` | default model (below the UI override file) |
 | `OPENSESSION_FALLBACK_MODEL` | unset | global fallback model; `none` disables |

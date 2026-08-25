@@ -50,8 +50,7 @@ import { githubReconnectRequired } from "./github-auth";
 import { refreshWebIdentity } from "./web-auth";
 import { BOOT_ID, allClients, broadcastToAll, broadcastToSession, globalPresenceFrame, joinSession, leaveSession, markClientSeen, setClientAway, setClientTyping, } from "./ws-hub";
 import { existsSync, readFileSync, statSync, watch } from "fs";
-import { homedir } from "node:os";
-import { join } from "node:path";
+import { stateDir } from "./paths";
 import { isInternalKernelDispatch } from "./session-kernel/ws-command-bridge";
 import {
 	acknowledgeSessionCommand,
@@ -76,7 +75,7 @@ function lastRestartBy(): string {
 		g.__lastRestartBy = "";
 		try {
 			const d = JSON.parse(
-				readFileSync(join(homedir(), ".opensession-last-restart.json"), "utf8"),
+				readFileSync(stateDir("last-restart.json"), "utf8"),
 			);
 			if (d?.by && Date.now() - Date.parse(d.at) < 10 * 60_000)
 				g.__lastRestartBy = String(d.by);

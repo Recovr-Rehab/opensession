@@ -44,6 +44,15 @@ read_env_value() {
   printf '%s' "$value"
 }
 
+default_state_path() {
+  local base="$1" current="$SERVICE_HOME_DIR/.opensession/$1" legacy="$SERVICE_HOME_DIR/.opensession-$1"
+  if [ -e "$current" ] || [ ! -e "$legacy" ]; then
+    printf '%s' "$current"
+  else
+    printf '%s' "$legacy"
+  fi
+}
+
 executor_ready() {
   local ready_pid main_pid
   ready_pid="$(cat /run/opensession-executor/ready 2>/dev/null || true)"
@@ -148,7 +157,7 @@ if [ -z "$SESSIONS_DIR" ]; then
   if [ -n "$STATE_DIR" ]; then
     SESSIONS_DIR="$STATE_DIR/.opensession-sessions"
   else
-    SESSIONS_DIR="$SERVICE_HOME_DIR/.opensession-sessions"
+    SESSIONS_DIR="$(default_state_path sessions)"
   fi
 fi
 case "$SESSIONS_DIR" in
@@ -159,7 +168,7 @@ esac
   "$SERVICE_USER" "$REPO_DIR" "$EXECUTOR_BUN" "$SERVICE_HOME_DIR" \
   "$RUN_HOST_ENV_FILE" \
   "$SESSIONS_DIR/run-hosts" "$EXECUTOR_PATH" \
-  "$REPO_DIR" "$SERVICE_HOME_DIR/.opensession-deploy" \
+  "$REPO_DIR" "$(default_state_path deploy)" \
   "${OPENSESSION_DEPLOY_ALLOW_RESET:-0}" "$HEALTH_URL" \
   source "$EXECUTOR_BUN"
 run_as_service_user sudo -n /usr/local/libexec/opensession-run-host check

@@ -201,7 +201,8 @@ if [ "$DO_UNINSTALL" = "1" ]; then
   #    config `paths.worktreesDir` > $OPENSESSION_HOME/worktrees) — which can
   #    sit at a `~/.opensession-*` path, so a `~/.opensession-*` glob would
   #    delete it and the scan would miss it;
-  #  - scratch workspace directories under ~/.opensession-scratch/<id> — plain
+  #  - scratch workspace directories under ~/.opensession/scratch/<id> (or the
+  #    legacy ~/.opensession-scratch/<id>) — plain
   #    (non-git) working dirs holding downloaded and edited files.
   #
   # So: resolve the real worktrees dir and scan it for unsaved git work,
@@ -236,7 +237,11 @@ EOT
   fi
 
   # A non-empty scratch dir holds workspace files, not app state.
-  scratch_state="$HOME/.opensession-scratch"
+  if [ -d "$OPENSESSION_HOME/scratch" ]; then
+    scratch_state="$OPENSESSION_HOME/scratch"
+  else
+    scratch_state="$HOME/.opensession-scratch"
+  fi
   scratch_has_data=0
   [ -d "$scratch_state" ] && [ -n "$(ls -A "$scratch_state" 2>/dev/null)" ] && scratch_has_data=1
 
@@ -246,9 +251,10 @@ EOT
     # its worktrees branch from; keep the whole thing if any of its worktrees is
     # unsaved. A worktrees dir configured OUTSIDE the home is preserved on its
     # own in the state sweep below.
-    if [ -n "$dirty_worktrees" ] && case "$worktrees_dir" in "$OPENSESSION_HOME"/*) true ;; *) false ;; esac; then
-      warn "keeping $OPENSESSION_HOME: session worktrees have unsaved work"
-      printf '%s' "$dirty_worktrees" | sed '/^$/d'
+    if { [ -n "$dirty_worktrees" ] && case "$worktrees_dir" in "$OPENSESSION_HOME"/*) true ;; *) false ;; esac; } || \
+       { [ "$scratch_has_data" = "1" ] && case "$scratch_state" in "$OPENSESSION_HOME"/*) true ;; *) false ;; esac; }; then
+      warn "keeping $OPENSESSION_HOME: session worktrees or scratch files have unsaved work"
+      [ -n "$dirty_worktrees" ] && printf '%s' "$dirty_worktrees" | sed '/^$/d'
       kept_any=1
     else
       rm -rf "$OPENSESSION_HOME"
@@ -256,8 +262,9 @@ EOT
     fi
     rm -f "$HOME/.opensession.env"
 
-    # State lives across a growing set of ~/.opensession-* names (sessions,
-    # audit, accounts, automations, github, …). Remove them all EXCEPT the two
+    # Legacy state lives across a growing set of ~/.opensession-* names
+    # (sessions, audit, accounts, automations, github, …). New state was removed
+    # with $OPENSESSION_HOME above. Remove legacy entries too, EXCEPT the two
     # that can hold user work: a non-empty scratch workspace dir, and a
     # worktrees dir configured at a ~/.opensession-* path that has unsaved work.
     # Classifying by what to KEEP (not an ever-growing list of what to delete)

@@ -86,6 +86,12 @@ function envFileValue(name: string): string | undefined {
   return raw;
 }
 
+function defaultStatePath(base: string): string {
+  const current = join(HOME, ".opensession", base);
+  const legacy = join(HOME, `.opensession-${base}`);
+  return existsSync(current) || !existsSync(legacy) ? current : legacy;
+}
+
 function runHostsRoot(): string {
   const sessionsDir =
     process.env.OPENSESSION_SESSIONS_DIR ||
@@ -96,7 +102,7 @@ function runHostsRoot(): string {
             envFileValue("OPENSESSION_STATE_DIR")!,
           ".opensession-sessions",
         )
-      : join(HOME, ".opensession-sessions"));
+      : defaultStatePath("sessions"));
   return join(sessionsDir, "run-hosts");
 }
 
@@ -626,8 +632,7 @@ export async function install(
             runHostsRoot(),
             pathValue,
             process.env.OPENSESSION_DEPLOY_CHECKOUT || serviceWorkdir(),
-            process.env.OPENSESSION_DEPLOY_STATE ||
-              join(HOME, ".opensession-deploy"),
+            process.env.OPENSESSION_DEPLOY_STATE || defaultStatePath("deploy"),
             process.env.OPENSESSION_DEPLOY_ALLOW_RESET === "1" ? "1" : "0",
             process.env.OPENSESSION_HEALTH_URL ||
               "http://127.0.0.1:3850/api/health",

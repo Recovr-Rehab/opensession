@@ -24,7 +24,7 @@ import { resolve as resolvePath } from "path";
 import { z } from "zod";
 import { createSdkMcpServer, tool } from "./inprocess-mcp";
 import { RUN_HOST_HELPER } from "../executor/host-unit";
-import { homeDir } from "./paths";
+import { homeDir, stateDir } from "./paths";
 import { isDevInstance } from "./dev-mode";
 
 const REPO_ROOT = resolvePath(import.meta.dir, "../../../../..");
@@ -39,7 +39,7 @@ export function deployCheckout(): string {
 /** Where the script keeps its pin/marker/result/log files. Must match the
  *  script's OPENSESSION_DEPLOY_STATE default. */
 export function deployStateDir(): string {
-	return process.env.OPENSESSION_DEPLOY_STATE || `${homeDir()}/.opensession-deploy`;
+	return process.env.OPENSESSION_DEPLOY_STATE || stateDir("deploy");
 }
 
 /** Shape written by deploy/self-deploy.sh's write_result — keep in sync. */
