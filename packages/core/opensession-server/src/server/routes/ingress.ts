@@ -31,13 +31,18 @@ export async function handleIngressRoutes(ctx: RouteContext): Promise<Response |
     if (forbidden) return forbidden;
     const body = (await req.json().catch(() => null)) as Record<string, unknown> | null;
     try {
-      if (body?.provider !== "cloudflare") throw new Error("Cloudflare is the supported automatic DNS provider");
+      const provider = body?.provider === "cloudflare" || body?.provider === "vercel"
+        ? body.provider
+        : null;
+      if (!provider) throw new Error("Choose Cloudflare DNS or Vercel DNS");
       const appBaseUrl = await setupPrivateAppDomain({
-        domain: String(body.domain || ""),
-        email: typeof body.email === "string" ? body.email : undefined,
-        apiToken: typeof body.apiToken === "string" ? body.apiToken : undefined,
+        domain: String(body?.domain || ""),
+        provider,
+        email: typeof body?.email === "string" ? body.email : undefined,
+        apiToken: typeof body?.apiToken === "string" ? body.apiToken : undefined,
+        teamId: typeof body?.teamId === "string" ? body.teamId : undefined,
       });
-      audit({ kind: "ingress_private_app_managed", publicBaseUrl: appBaseUrl, dnsProvider: "cloudflare" });
+      audit({ kind: "ingress_private_app_managed", publicBaseUrl: appBaseUrl, dnsProvider: provider });
       refreshIndexHtml("private app domain changed");
       return Response.json({
         ...(await publicIngressStatus(true, { appBaseUrl })),

@@ -15,7 +15,7 @@ export interface PublicIngressSettings {
 		tailnetIpv4: string | null;
 		domain: {
 			health: "ready" | "waiting_dns" | "unreachable" | "not_configured";
-			dnsProvider: "cloudflare" | null;
+			dnsProvider: "cloudflare" | "vercel" | null;
 			credentialConfigured: boolean;
 			certificateEmailConfigured: boolean;
 			certificateExpiresAt: string;
@@ -42,9 +42,10 @@ export function fetchPublicIngress(): Promise<PublicIngressSettings> {
 
 export function setupPrivateAppDomain(input: {
 	domain: string;
-	provider: "cloudflare";
+	provider: "cloudflare" | "vercel";
 	email?: string;
 	apiToken?: string;
+	teamId?: string;
 }): Promise<PublicIngressSettings & { restartRequired: boolean }> {
 	return request("/ingress/app/setup", {
 		method: "POST",

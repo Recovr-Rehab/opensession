@@ -98,12 +98,16 @@ function PrivateAppSetup({
 	domain,
 	email,
 	apiToken,
+	provider,
+	teamId,
 	mode,
 	busy,
 	action,
 	onDomainChange,
 	onEmailChange,
 	onTokenChange,
+	onProviderChange,
+	onTeamIdChange,
 	onModeChange,
 	onSetup,
 	onVerify,
@@ -113,12 +117,16 @@ function PrivateAppSetup({
 	domain: string;
 	email: string;
 	apiToken: string;
+	provider: "cloudflare" | "vercel";
+	teamId: string;
 	mode: "managed" | "manual";
 	busy: boolean;
 	action: "setup" | "verify" | "save" | null;
 	onDomainChange: (value: string) => void;
 	onEmailChange: (value: string) => void;
 	onTokenChange: (value: string) => void;
+	onProviderChange: (value: "cloudflare" | "vercel") => void;
+	onTeamIdChange: (value: string) => void;
 	onModeChange: (value: "managed" | "manual") => void;
 	onSetup: () => void;
 	onVerify: () => void;
@@ -127,7 +135,7 @@ function PrivateAppSetup({
 	const savedDomain = configuredAppDomain(settings);
 	const dnsRecord = privateAppDnsRecord(settings, domain);
 	const dirty = domain.trim() !== savedDomain;
-	const managedCredential = settings.app.domain.credentialConfigured && domain.trim() === savedDomain;
+	const managedCredential = settings.app.domain.credentialConfigured && domain.trim() === savedDomain && settings.app.domain.dnsProvider === provider;
 	const managedInputMissing = !domain.trim() || (!managedCredential && (!email.trim() || !apiToken.trim()));
 	const status = settings.app.domain.health;
 	const statusLabel = busy ? action === "verify" ? "Checking" : action === "save" ? "Saving" : "Setting up" : ingressHealthLabel(status);
@@ -167,8 +175,8 @@ function PrivateAppSetup({
 					</p>
 				</div>
 				<Segmented label="Private domain setup" value={mode} onValueChange={(value) => onModeChange(value as "managed" | "manual")} className="w-full">
-					<SegmentedOption value="managed" className="min-h-10 flex-1 justify-center phone:min-h-11">Automatic</SegmentedOption>
-					<SegmentedOption value="manual" className="min-h-10 flex-1 justify-center phone:min-h-11">Advanced</SegmentedOption>
+					<SegmentedOption value="managed" className="min-h-10 flex-1 justify-center phone:min-h-11">Managed</SegmentedOption>
+					<SegmentedOption value="manual" className="min-h-10 flex-1 justify-center phone:min-h-11">Bring your own</SegmentedOption>
 				</Segmented>
 
 				{mode === "managed" ? (
@@ -179,21 +187,42 @@ function PrivateAppSetup({
 									Domain
 									<Input value={domain} placeholder="os.example.com" disabled={busy} autoCapitalize="none" spellCheck={false} onChange={(event) => onDomainChange(event.target.value)} />
 								</SettingsField>
-								<p className="m-0">Use a domain managed by Cloudflare and keep it different from public ingress.</p>
+								<p className="m-0">Keep it different from the public callback domain.</p>
 							</SetupStep>
-							<SetupStep number={2} title="Authorize Cloudflare DNS">
+							<SetupStep number={2} title="Authorize the DNS provider">
+								<SettingCard>
+									<RadioGroup aria-label="Private domain DNS provider" value={provider} disabled={busy} onValueChange={(value) => onProviderChange(value as "cloudflare" | "vercel")}>
+										<label className="flex min-h-11 cursor-pointer items-center gap-3 px-4 py-3">
+											<Radio value="cloudflare" />
+											<span className="font-medium text-fg">Cloudflare DNS</span>
+										</label>
+										<label className="flex min-h-11 cursor-pointer items-center gap-3 border-t border-line px-4 py-3">
+											<Radio value="vercel" />
+											<span className="font-medium text-fg">Vercel DNS</span>
+										</label>
+									</RadioGroup>
+								</SettingCard>
 								<p className="m-0">
-									Create a scoped API token with <strong className="font-medium text-fg">Zone:DNS Edit</strong> and <strong className="font-medium text-fg">Zone:Zone Read</strong> for this zone. Open Session protects it with server file permissions and never returns it to the browser.
+									{provider === "cloudflare"
+										? <>Create a token with <strong className="font-medium text-fg">Zone:DNS Edit</strong> and <strong className="font-medium text-fg">Zone:Zone Read</strong> for this zone.</>
+										: <>Create a Vercel token with access to the team that owns this domain.</>}
+									{" "}Open Session protects it with server file permissions and never returns it to the browser.
 								</p>
-								<a className="w-fit text-link hover:underline" href="https://dash.cloudflare.com/profile/api-tokens" target="_blank" rel="noreferrer">Create Cloudflare token</a>
+								<a className="w-fit text-link hover:underline" href={provider === "cloudflare" ? "https://dash.cloudflare.com/profile/api-tokens" : "https://vercel.com/account/settings/tokens"} target="_blank" rel="noreferrer">Create {provider === "cloudflare" ? "Cloudflare" : "Vercel"} token</a>
 								<SettingsField className="mb-0">
 									Certificate email
 									<Input type="email" value={email} placeholder={managedCredential && settings.app.domain.certificateEmailConfigured ? "Leave blank to keep the saved email" : "you@example.com"} disabled={busy} autoCapitalize="none" spellCheck={false} onChange={(event) => onEmailChange(event.target.value)} />
 								</SettingsField>
 								<SettingsField className="mb-0">
-									Cloudflare API token
+									{provider === "cloudflare" ? "Cloudflare" : "Vercel"} API token
 									<Input type="password" value={apiToken} placeholder={managedCredential ? "Leave blank to keep the saved token" : "Paste the scoped token"} disabled={busy} autoComplete="off" onChange={(event) => onTokenChange(event.target.value)} />
 								</SettingsField>
+								{provider === "vercel" && (
+									<SettingsField className="mb-0">
+										Team ID <span className="font-normal text-faint">Optional</span>
+										<Input value={teamId} placeholder="team_…" disabled={busy} autoCapitalize="none" spellCheck={false} onChange={(event) => onTeamIdChange(event.target.value)} />
+									</SettingsField>
+								)}
 							</SetupStep>
 							<SetupStep number={3} title="Set up and verify">
 								<p className="m-0">Open Session creates the DNS-only A record, requests a Let’s Encrypt certificate with DNS-01, configures Caddy, and checks the private address. It checks renewal daily.</p>
@@ -205,7 +234,7 @@ function PrivateAppSetup({
 								)}
 							</SetupStep>
 						</SetupSteps>
-						{status === "waiting_dns" && <InlineAlert>Cloudflare DNS has not reached this server yet. Wait a moment, then verify again.</InlineAlert>}
+						{status === "waiting_dns" && <InlineAlert>DNS has not reached this server yet. Wait a moment, then verify again.</InlineAlert>}
 						{status === "unreachable" && <InlineAlert>DNS points to this server, but the HTTPS app is not reachable. Verify Caddy and the certificate, then try again.</InlineAlert>}
 						<SettingsFormActions className="phone:flex-col-reverse">
 							<Button variant="soft" disabled={busy || !savedDomain || !settings.canManage} className="phone:min-h-11 phone:w-full phone:justify-center" onClick={onVerify}>
@@ -229,8 +258,8 @@ function PrivateAppSetup({
 								<p className="m-0">Add this DNS-only record at your provider. Only devices on your tailnet can connect.</p>
 								{dnsRecord ? <CodeBlock>{dnsRecord}</CodeBlock> : <InlineAlert>Connect this server to Tailscale first, then reload this page.</InlineAlert>}
 							</SetupStep>
-							<SetupStep number={3} title="Provide a certificate">
-								<p className="m-0">Use Let’s Encrypt DNS-01 or another trusted certificate and renew it outside Open Session.</p>
+							<SetupStep number={3} title="Install existing TLS files">
+								<p className="m-0">Only use this path when your infrastructure already issues and renews the certificate.</p>
 								<CodeBlock>{`/etc/opensession/tls/${ingressHostname(domain, "os.example.com")}.crt`}</CodeBlock>
 								<CodeBlock>{`/etc/opensession/tls/${ingressHostname(domain, "os.example.com")}.key`}</CodeBlock>
 							</SetupStep>
@@ -252,7 +281,7 @@ function PrivateAppSetup({
 								{action === "save" ? "Saving…" : "Save app domain"}
 							</Button>
 						</SettingsFormActions>
-						<SettingsHint>Install and verify DNS, TLS, and Caddy before saving. Open Session only updates its generated links in advanced mode.</SettingsHint>
+						<SettingsHint>This is a bring-your-own setup. Managed setup issues and renews the certificate for you.</SettingsHint>
 					</>
 				)}
 			</SettingsForm>
@@ -280,6 +309,8 @@ export function IngressPanel({
 	const [privateMode, setPrivateMode] = useState<"managed" | "manual">("managed");
 	const [certificateEmail, setCertificateEmail] = useState("");
 	const [privateApiToken, setPrivateApiToken] = useState("");
+	const [privateProvider, setPrivateProvider] = useState<"cloudflare" | "vercel">("cloudflare");
+	const [vercelTeamId, setVercelTeamId] = useState("");
 	const [privateAction, setPrivateAction] = useState<"setup" | "verify" | "save" | null>(null);
 	const [drafts, setDrafts] = useState<Record<IngressExposure, string>>(EMPTY_DRAFTS);
 	const [tunnelId, setTunnelId] = useState("");
@@ -294,6 +325,7 @@ export function IngressPanel({
 		onStatusChange?.(next);
 		if (!loaded.current) {
 			setAppDomain(configuredAppDomain(next));
+			setPrivateProvider(next.app.domain.dnsProvider || "cloudflare");
 			setDrafts(configuredIngressDrafts(next));
 			loaded.current = true;
 		} else if (next.exposure) {
@@ -445,18 +477,23 @@ export function IngressPanel({
 								domain={appDomain}
 								email={certificateEmail}
 								apiToken={privateApiToken}
+								provider={privateProvider}
+								teamId={vercelTeamId}
 								mode={privateMode}
 								busy={busy === "app"}
 								action={privateAction}
 								onDomainChange={(value) => { setAppDomain(value); setError(null); }}
 								onEmailChange={setCertificateEmail}
 								onTokenChange={setPrivateApiToken}
+								onProviderChange={(value) => { setPrivateProvider(value); setPrivateApiToken(""); }}
+								onTeamIdChange={setVercelTeamId}
 								onModeChange={setPrivateMode}
 								onSetup={() => void runPrivateApp("setup", () => setupPrivateAppDomain({
 									domain: appDomain,
-									provider: "cloudflare",
+									provider: privateProvider,
 									...(certificateEmail ? { email: certificateEmail } : {}),
 									...(privateApiToken ? { apiToken: privateApiToken } : {}),
+									...(privateProvider === "vercel" && vercelTeamId ? { teamId: vercelTeamId } : {}),
 								}), (next) => next.app.domain.health === "ready" ? "Private app domain is ready" : "Private app domain configured. Verification is still pending")}
 								onVerify={() => void verifyAppDomain()}
 								onSaveManual={() => void runPrivateApp("save", () => savePrivateAppDomain(appDomain), "Private app domain saved")}

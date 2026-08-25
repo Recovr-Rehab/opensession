@@ -177,15 +177,15 @@ The trick is that **a public DNS record may point at a private address.** Anyone
 can resolve `os.company.dev` to `100.64.12.34`; only devices on your tailnet can
 reach it. The name is not the security boundary. Private network reachability is.
 
-### Automatic setup with Cloudflare DNS
+### Managed setup with Cloudflare or Vercel DNS
 
-Open **Settings → Domains and ingress → Private app**, choose **Automatic**, and
+Open **Settings → Domains and ingress → Private app**, choose **Managed**, and
 provide:
 
-1. A domain managed by Cloudflare, such as `os.company.dev`.
+1. A domain managed by Cloudflare or Vercel, such as `os.company.dev`.
 2. An email address for Let’s Encrypt expiry notices.
-3. A Cloudflare API token scoped to **Zone:DNS Edit** and **Zone:Zone Read** for
-   that zone.
+3. A DNS API token scoped to the zone. Cloudflare needs **Zone:DNS Edit** and
+   **Zone:Zone Read**. Vercel needs access to the team that owns the domain.
 
 Then click **Set up private domain**. Open Session:
 
@@ -207,11 +207,11 @@ curl -fsSL https://raw.githubusercontent.com/tellahq/opensession/main/install.sh
   | bash -s -- --caddy --no-onboard
 ```
 
-### Advanced setup with another DNS provider
+### Bring your own certificate
 
-Choose **Advanced** in the same panel when Cloudflare does not host the zone.
-Open Session shows the DNS record, certificate paths, and generated Caddy site,
-but you own certificate issuance and renewal.
+Choose **Bring your own** only when existing infrastructure already issues and
+renews the certificate. Open Session shows the DNS record, certificate paths,
+and generated Caddy site, but does not take over certificate ownership.
 
 Your host is not reachable from the internet, so HTTP-01 cannot work. Use
 **DNS-01**, which proves control of the domain by writing a temporary TXT record.

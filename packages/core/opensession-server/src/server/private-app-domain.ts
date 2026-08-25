@@ -15,7 +15,7 @@ import { stateDir } from "./paths";
 import { writeJsonAtomic } from "./shared/atomic-write";
 import { isTailnetIpv4 } from "./shared/network-address";
 
-export type PrivateAppDnsProvider = "cloudflare";
+export type PrivateAppDnsProvider = "cloudflare" | "vercel";
 export type PrivateAppHealth = "ready" | "waiting_dns" | "unreachable" | "not_configured";
 
 interface PrivateAppCredential {
@@ -24,6 +24,7 @@ interface PrivateAppCredential {
   domain: string;
   email: string;
   apiToken: string;
+  teamId?: string;
 }
 
 export interface PrivateAppDomainStatus {
@@ -51,10 +52,11 @@ function safeCredential(): PrivateAppCredential | null {
     const parsed = JSON.parse(readFileSync(CREDENTIAL_PATH(), "utf8"));
     if (
       parsed?.version !== 1 ||
-      parsed?.provider !== "cloudflare" ||
+      (parsed?.provider !== "cloudflare" && parsed?.provider !== "vercel") ||
       typeof parsed.domain !== "string" ||
       typeof parsed.email !== "string" ||
-      typeof parsed.apiToken !== "string"
+      typeof parsed.apiToken !== "string" ||
+      (parsed.teamId !== undefined && typeof parsed.teamId !== "string")
     ) return null;
     return parsed;
   } catch {
@@ -77,11 +79,16 @@ function legoCertificatePaths(domain: string): { certificate: string; key: strin
 }
 
 function certificateExpiry(domain: string): string {
-  try {
-    return new Date(new X509Certificate(readFileSync(certificatePaths(domain).certificate)).validTo).toISOString();
-  } catch {
-    return "";
+  const candidates = [
+    certificatePaths(domain).certificate,
+    `/etc/lego/certificates/${domain}.crt`,
+  ];
+  for (const path of candidates) {
+    try {
+      return new Date(new X509Certificate(readFileSync(path)).validTo).toISOString();
+    } catch {}
   }
+  return "";
 }
 
 async function runCommand(
@@ -187,21 +194,113 @@ async function upsertCloudflarePrivateRecord(token: string, domain: string, tail
   }
 }
 
+async function vercelRequest(
+  token: string,
+  path: string,
+  init?: { method: "POST" | "DELETE"; body?: Record<string, unknown> },
+): Promise<any> {
+  const response = await fetch(`https://api.vercel.com${path}`, {
+    method: init?.method || "GET",
+    headers: {
+      Authorization: `Bearer ${token}`,
+      "Content-Type": "application/json",
+    },
+    ...(init?.body ? { body: JSON.stringify(init.body) } : {}),
+    signal: AbortSignal.timeout(10_000),
+  });
+  const payload = await response.json().catch(() => null) as any;
+  if (!response.ok || payload?.error) {
+    throw new Error(payload?.error?.message || `Vercel DNS request failed (${response.status})`);
+  }
+  return payload;
+}
+
+function teamQuery(teamId: string | undefined): string {
+  return teamId ? `&teamId=${encodeURIComponent(teamId)}` : "";
+}
+
+export function vercelZoneForDomain(domain: string, zones: string[]): string | null {
+  return zones
+    .map((name) => name.toLowerCase())
+    .filter(Boolean)
+    .sort((left, right) => right.length - left.length)
+    .find((name) => domain === name || domain.endsWith(`.${name}`)) || null;
+}
+
+async function upsertVercelPrivateRecord(
+  token: string,
+  domain: string,
+  tailnetIpv4: string,
+  teamId?: string,
+): Promise<void> {
+  const zoneNames: string[] = [];
+  let cursor = "";
+  for (let page = 0; page < 20; page += 1) {
+    const listed = await vercelRequest(
+      token,
+      `/v5/domains?limit=100${teamQuery(teamId)}${cursor ? `&until=${encodeURIComponent(cursor)}` : ""}`,
+    );
+    const domains = Array.isArray(listed?.domains) ? listed.domains : [];
+    zoneNames.push(...domains.map((entry: any) => String(entry?.name || "")));
+    const next = listed?.pagination?.next;
+    if (next === undefined || next === null || String(next) === cursor) break;
+    cursor = String(next);
+  }
+  const zone = vercelZoneForDomain(domain, zoneNames);
+  if (!zone) throw new Error("The Vercel token cannot access the DNS zone for this domain");
+  const relativeName = domain === zone ? "" : domain.slice(0, -(zone.length + 1));
+  const query = teamQuery(teamId);
+  const listedRecords = await vercelRequest(token, `/v4/domains/${encodeURIComponent(zone)}/records?limit=100${query}`);
+  const records = Array.isArray(listedRecords?.records) ? listedRecords.records : [];
+  const named = records.filter((record: any) => {
+    const name = String(record?.name || "").replace(/\.$/, "").toLowerCase();
+    return name === relativeName || name === domain;
+  });
+  const conflicting = named.find((record: any) => record?.type !== "A");
+  if (conflicting) throw new Error(`${domain} already has a ${String(conflicting.type)} record in Vercel`);
+  if (named.length > 1) throw new Error(`${domain} has more than one A record in Vercel. Remove the extras before setup`);
+  const existing = named[0];
+  if (existing?.value === tailnetIpv4) return;
+  if (existing?.id) {
+    await vercelRequest(token, `/v2/domains/${encodeURIComponent(zone)}/records/${encodeURIComponent(existing.id)}?${query.slice(1)}`, {
+      method: "DELETE",
+    });
+  }
+  await vercelRequest(token, `/v2/domains/${encodeURIComponent(zone)}/records?${query.slice(1)}`, {
+    method: "POST",
+    body: { name: relativeName, type: "A", value: tailnetIpv4, ttl: 60 },
+  });
+}
+
 function validateCredentialInput(input: {
   domain: string;
+  provider: PrivateAppDnsProvider;
   email?: string;
   apiToken?: string;
+  teamId?: string;
 }): PrivateAppCredential {
   const saved = safeCredential();
-  const email = (input.email || (saved?.domain === input.domain ? saved.email : "")).trim();
-  const apiToken = (input.apiToken || (saved?.domain === input.domain ? saved.apiToken : "")).trim();
+  const canReuse = saved?.domain === input.domain && saved.provider === input.provider;
+  const email = (input.email || (canReuse ? saved.email : "")).trim();
+  const apiToken = (input.apiToken || (canReuse ? saved.apiToken : "")).trim();
+  const teamId = (input.teamId || (canReuse ? saved.teamId : "") || "").trim();
   if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) || email.length > 320) {
     throw new Error("A valid certificate email is required");
   }
   if (!apiToken || apiToken.length > 4096 || /\s/.test(apiToken)) {
-    throw new Error("A valid Cloudflare API token is required");
+    throw new Error(`A valid ${input.provider === "cloudflare" ? "Cloudflare" : "Vercel"} API token is required`);
   }
-  return { version: 1, provider: "cloudflare", domain: input.domain, email, apiToken };
+  if (teamId && !/^(team|org)_[A-Za-z0-9]+$/.test(teamId)) {
+    throw new Error("Vercel team ID must start with team_ or org_");
+  }
+  return {
+    version: 1,
+    provider: input.provider,
+    domain: input.domain,
+    email,
+    apiToken,
+    ...(input.provider === "vercel" && teamId ? { teamId } : {}),
+  };
 }
 
 export function privateAppCaddySnippet(
@@ -286,12 +385,18 @@ async function issueCertificate(credential: PrivateAppCredential, renew = false)
     "--path", ACME_PATH(),
     "--email", credential.email,
     "--accept-tos",
-    "--dns", "cloudflare",
+    "--dns", credential.provider,
     "--domains", credential.domain,
     renew ? "renew" : "run",
   ];
   if (renew) args.push("--days", "30");
-  const result = await runCommand(args, commandEnvironment({ CF_DNS_API_TOKEN: credential.apiToken }));
+  const dnsEnvironment: Record<string, string> = credential.provider === "cloudflare"
+    ? { CF_DNS_API_TOKEN: credential.apiToken }
+    : {
+        VERCEL_API_TOKEN: credential.apiToken,
+        ...(credential.teamId ? { VERCEL_TEAM_ID: credential.teamId } : {}),
+      };
+  const result = await runCommand(args, commandEnvironment(dnsEnvironment));
   if (result.code !== 0) {
     throw new Error(result.stderr.trim() || result.stdout.trim() || "Let’s Encrypt certificate request failed");
   }
@@ -392,15 +497,26 @@ export async function privateAppDomainStatus(
 
 export async function configurePrivateAppDomain(input: {
   domain: string;
+  provider: PrivateAppDnsProvider;
   email?: string;
   apiToken?: string;
+  teamId?: string;
   tailnetIpv4: string | null;
 }): Promise<void> {
   if (!input.tailnetIpv4) throw new Error("Connect this server to Tailscale before setting up a private domain");
   if (!Bun.which("caddy")) throw new Error("Caddy is not installed on this server");
   if (!Bun.which("lego")) throw new Error("lego is not installed on this server");
   const credential = validateCredentialInput(input);
-  await upsertCloudflarePrivateRecord(credential.apiToken, credential.domain, input.tailnetIpv4);
+  if (credential.provider === "cloudflare") {
+    await upsertCloudflarePrivateRecord(credential.apiToken, credential.domain, input.tailnetIpv4);
+  } else {
+    await upsertVercelPrivateRecord(
+      credential.apiToken,
+      credential.domain,
+      input.tailnetIpv4,
+      credential.teamId,
+    );
+  }
   await issueCertificate(credential, existsSync(legoCertificatePaths(credential.domain).certificate));
   await installCertificateAndCaddy(credential.domain, input.tailnetIpv4);
   writeJsonAtomic(CREDENTIAL_PATH(), credential, true, 0o600);

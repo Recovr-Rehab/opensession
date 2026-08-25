@@ -3,6 +3,7 @@ import {
   cloudflareZoneCandidates,
   privateAppCaddySnippet,
   upsertPrivateAppCaddy,
+  vercelZoneForDomain,
 } from "./private-app-domain";
 
 describe("managed private app domains", () => {
@@ -12,6 +13,11 @@ describe("managed private app domains", () => {
       "team.example.com",
       "example.com",
     ]);
+  });
+
+  test("selects the most specific Vercel zone for a private hostname", () => {
+    expect(vercelZoneForDomain("os.team.example.com", ["example.com", "team.example.com"])).toBe("team.example.com");
+    expect(vercelZoneForDomain("os.example.net", ["example.com"])).toBeNull();
   });
 
   test("generates a tailnet-bound Caddy site with managed certificate paths", () => {

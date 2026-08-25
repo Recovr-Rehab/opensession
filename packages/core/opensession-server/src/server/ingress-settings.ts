@@ -27,6 +27,7 @@ import {
   privateAppDomainStatus,
   testPrivateAppDomain,
   type PrivateAppDomainStatus,
+  type PrivateAppDnsProvider,
 } from "./private-app-domain";
 
 export const PUBLIC_INGRESS_PORT = 3860;
@@ -329,14 +330,18 @@ export async function publicIngressStatus(
 
 export async function setupPrivateAppDomain(input: {
   domain: string;
+  provider: PrivateAppDnsProvider;
   email?: string;
   apiToken?: string;
+  teamId?: string;
 }): Promise<string> {
   const publicBaseUrl = normalizePrivateAppOrigin(input.domain);
   await configurePrivateAppDomain({
     domain: new URL(publicBaseUrl).hostname,
+    provider: input.provider,
     email: input.email,
     apiToken: input.apiToken,
+    teamId: input.teamId,
     tailnetIpv4: detectedTailnetIpv4(),
   });
   return savePrivateAppOrigin(publicBaseUrl);
