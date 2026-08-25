@@ -608,10 +608,10 @@ export function ModelEffortSelect({
 					: nextEfforts[0]);
 		const recentSettings = standalone
 			? [
-					onFastModeChange
-						? effectiveFastMode && nextModelInfo?.fastModeSupported === true
-							? "Fast"
-							: "Standard"
+					onFastModeChange &&
+					effectiveFastMode &&
+					nextModelInfo?.fastModeSupported === true
+						? "Fast"
 						: undefined,
 					onEffortChange ? EFFORTS.find((e) => e.id === nextEffort)?.label : undefined,
 				].filter((label): label is string => !!label)
