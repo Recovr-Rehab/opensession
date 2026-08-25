@@ -678,9 +678,9 @@ else
         warn "tailscale up failed — check TS_AUTHKEY has not expired"
       fi
     else
-      muted "not joined to a network yet. To finish:"
-      muted "  sudo tailscale up"
-      muted "then 'opensession bind' to move the server onto the tailnet IP"
+      muted "To share Open Session, connect this box to your tailnet:"
+      info "1. ${B}sudo tailscale up${N}"
+      info "2. ${B}opensession bind${N}"
     fi
   fi
 fi
@@ -708,7 +708,7 @@ if command -v gh >/dev/null 2>&1 && [ "$NO_ENGINE" != "1" ]; then
   elif gh extension install github/gh-stack >/dev/null 2>&1; then
     good "gh-stack installed"
   else
-    muted "gh-stack not installed (needed only to link stacked PRs) — gh extension install github/gh-stack"
+    muted "gh-stack unavailable (stacked PR linking is optional)"
   fi
 fi
 
@@ -720,7 +720,7 @@ if [ "$IS_BINARY" = "1" ]; then
   # sits beside the real binary in the release dir, so sharp resolves at run
   # time via the executable's realpath.
   ln -sfn "$DIR/opensession" "$BIN_DIR/opensession"
-  good "opensession -> releases/$rel_name/opensession"
+  good "installed $BIN_DIR/opensession"
 else
   if [ -x "$DIR/bin/bun" ]; then BUN_BIN="$DIR/bin/bun"; else BUN_BIN="$(command -v bun)"; fi
   cat >"$BIN_DIR/opensession" <<EOF
@@ -736,7 +736,7 @@ export PATH="\$(dirname "\$BUN"):\$HOME/.local/bin:\$PATH"
 exec "\$BUN" "$DIR/scripts/cli.ts" "\$@"
 EOF
   chmod +x "$BIN_DIR/opensession"
-  good "opensession -> $DIR/scripts/cli.ts"
+  good "installed $BIN_DIR/opensession"
 fi
 
 # ── PATH ────────────────────────────────────────────────────────────────────
@@ -747,18 +747,25 @@ fi
 PATH_NEEDS_REFRESH=1
 command -v opensession >/dev/null 2>&1 && PATH_NEEDS_REFRESH=0
 PATH_REFRESH_PROFILE=""
+PATH_CONFIGURED_PROFILES=""
 
 add_to_path() {
   config_file="$1"; line="$2"
   if grep -Fxq "$line" "$config_file" 2>/dev/null; then
-    good "PATH already set in $config_file"
+    :
   elif [ -w "$config_file" ] || [ ! -e "$config_file" ]; then
     printf '\n# opensession\n%s\n' "$line" >>"$config_file"
-    good "added to PATH in $config_file"
   else
     warn "add this to $config_file by hand:"
     muted "  $line"
+    return
   fi
+
+  display_profile="$config_file"
+  case "$display_profile" in
+    "$HOME"/*) display_profile="~/${display_profile#"$HOME"/}" ;;
+  esac
+  PATH_CONFIGURED_PROFILES="${PATH_CONFIGURED_PROFILES:+$PATH_CONFIGURED_PROFILES, }$display_profile"
 }
 
 # Write to more than one file on purpose.
@@ -793,6 +800,7 @@ if [ "$NO_MODIFY_PATH" != "1" ]; then
       PATH_REFRESH_PROFILE="$profile"
     fi
   done
+  [ -n "$PATH_CONFIGURED_PROFILES" ] && good "PATH configured in $PATH_CONFIGURED_PROFILES"
 fi
 export PATH="$BIN_DIR:$PATH"
 
@@ -806,9 +814,10 @@ show_path_refresh_hint() {
     case "$display_profile" in
       "$HOME"/*) display_profile="$(printf '\176/%s' "${display_profile#"$HOME"/}")" ;;
     esac
-    info "Run this in your current shell: ${B}source $display_profile${N}"
+    info "To use ${B}opensession${N} in this shell, run:"
+    printf '    %ssource %s%s\n' "$B" "$display_profile" "$N"
   elif [ "$NO_MODIFY_PATH" = "1" ]; then
-    info "Add ${B}$BIN_DIR${N} to PATH before running opensession."
+    info "Add ${B}$BIN_DIR${N} to PATH before running ${B}opensession${N}."
   fi
 }
 
@@ -914,17 +923,10 @@ if [ "$ADVANCED" != "1" ] && [ "$server_ready" != "1" ]; then
 else
   step "Done"
 fi
-# The PATH hint has to precede the command list: on a fresh install the shell
-# that launched the installer has not picked up the new PATH entry, so a reader
-# who runs `opensession status` from the top of this list before sourcing their
-# profile hits "command not found".
-show_path_refresh_hint
-info "opensession status    ${D}is the server up?${N}"
-info "opensession doctor    ${D}check the install${N}"
-info "opensession --help    ${D}everything else${N}"
 if [ "$server_ready" = "1" ]; then
-  printf '\n  %sOpen %s%s\n' "$B" "$url" "$N"
+  info "Open Session is running at ${B}$url${N}"
 fi
+show_path_refresh_hint
 printf '\n'
 
 # Simple mode promises a running server. Do not report a successful install
