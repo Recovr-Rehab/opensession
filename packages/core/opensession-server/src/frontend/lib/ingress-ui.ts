@@ -8,7 +8,7 @@ export const INGRESS_METHODS: Array<{
 	{
 		value: "tailscale",
 		label: "Tailscale Funnel",
-		description: "No DNS records or inbound firewall ports. Best when this server already uses Tailscale.",
+		description: "Uses Tailscale’s generated .ts.net URL. No DNS records or inbound firewall ports.",
 	},
 	{
 		value: "cloudflare",
