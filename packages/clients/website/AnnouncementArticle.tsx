@@ -1,6 +1,9 @@
-export function AnnouncementArticle() {
+export function AnnouncementArticle({ showMark = false }: { showMark?: boolean }) {
 	return (
 		<article className="announcement-article">
+			{showMark && (
+				<img className="announcement-page-mark" src="/icon.png" alt="" />
+			)}
 			<h1 id="announcement-title">Introducing Open Session</h1>
 
 			<p>
@@ -39,6 +42,8 @@ export function AnnouncementArticle() {
 				become the most important tool that our team uses.
 			</p>
 
+			<h2>How does it work</h2>
+
 			<p>
 				Open Session is a self-hosted web app that uses the Pi agent engine. Pi
 				connects sessions to different model providers, while Open Session manages
@@ -57,6 +62,8 @@ export function AnnouncementArticle() {
 				You can also configure branding, identity, repositories, and company
 				routines without maintaining a fork.
 			</p>
+
+			<h2>Sessions</h2>
 
 			<p>
 				Open Session’s most important concept is the session. They’re durable,
@@ -78,6 +85,8 @@ export function AnnouncementArticle() {
 				session starts, you can open its transcript, watch it work, steer it,
 				answer questions, review its changes, and continue the conversation.
 			</p>
+
+			<h2>Your cloud agents</h2>
 
 			<p>
 				Open Session is designed to run in your own cloud (or Mac mini). This means
@@ -109,6 +118,8 @@ export function AnnouncementArticle() {
 				can work faster and with greater flexibility. You can work on more things
 				at the same time, and your whole team can participate.
 			</p>
+
+			<h2>More ideas</h2>
 
 			<p>
 				Open Session has some more experimental features that our team likes and
@@ -146,6 +157,8 @@ export function AnnouncementArticle() {
 				switching. In Open Session you can review the agent’s screenshots and
 				videos and move on.
 			</p>
+
+			<h2>Build your own tools</h2>
 
 			<p>
 				So far in 2026 we’ve used Cursor, Claude Code, Codex, Conductor, custom

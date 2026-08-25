@@ -30,7 +30,7 @@ export default function AnnouncementPage() {
 			<a className="announcement-home" href="/">
 				Home
 			</a>
-			<AnnouncementArticle />
+			<AnnouncementArticle showMark />
 		</main>
 	);
 }
