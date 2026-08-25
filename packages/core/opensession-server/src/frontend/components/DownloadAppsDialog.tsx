@@ -26,7 +26,7 @@ export function DownloadAppsDialog({
 			phone={phone}
 			label="Download apps"
 			backdropClassName="bg-black/25 backdrop-blur-[1px]"
-			modalClassName="w-[calc(100vw-3rem)] max-w-[52rem] max-h-[calc(100dvh-3rem)] rounded-2xl bg-raised p-6"
+			modalClassName="w-[calc(100vw-3rem)] max-w-[42rem] max-h-[calc(100dvh-3rem)] rounded-2xl bg-raised p-10"
 			sheetClassName="max-h-[92dvh] bg-raised"
 		>
 			<div className="flex min-h-0 flex-1 flex-col overflow-y-auto overscroll-contain p-5 pt-2 desktop:overflow-visible desktop:p-0">
@@ -37,7 +37,7 @@ export function DownloadAppsDialog({
 								variant="ghost"
 								size="lg"
 								icon={<IconChevronLeft size={22} />}
-								className="size-11 shrink-0"
+								className="size-11 shrink-0 desktop:size-9"
 								onClick={() => setShowInstallHelp(false)}
 								aria-label="Back to apps"
 							/>
@@ -50,7 +50,7 @@ export function DownloadAppsDialog({
 						variant="soft"
 						size="lg"
 						icon={<IconX size={22} />}
-						className="size-11 shrink-0 rounded-full text-faint"
+						className="size-11 shrink-0 rounded-full text-faint desktop:size-9"
 						onClick={() => onOpenChange(false)}
 						aria-label="Close"
 					/>
@@ -88,7 +88,7 @@ export function DownloadAppsDialog({
 								variant="primary"
 								size="lg"
 								icon={<IconArrowDown size={20} />}
-								className="min-h-12 w-full"
+								className="min-h-10 w-full"
 								render={
 									<a
 										href={`${BASE_PATH}/api/packages/clients/mac/download/latest.dmg`}
@@ -116,7 +116,7 @@ export function DownloadAppsDialog({
 							<Button
 								variant="soft"
 								size="lg"
-								className="min-h-12 w-full"
+								className="min-h-10 w-full"
 								onClick={() => setShowInstallHelp(true)}
 							>
 								How to install
@@ -141,7 +141,7 @@ function AppCard({
 	children: ReactNode;
 }) {
 	return (
-		<section className="flex min-h-[20rem] flex-col overflow-hidden rounded-xl bg-panel desktop:min-h-[22rem]">
+		<section className="flex min-h-[20rem] flex-col overflow-hidden rounded-xl bg-panel desktop:min-h-[19.5rem]">
 			<div className="min-h-0 flex-1">{preview}</div>
 			<div className="relative z-10 flex shrink-0 flex-col px-4 pb-4 desktop:px-5 desktop:pb-5">
 				<h3 className="m-0 text-section-title font-semibold leading-tight text-fg">{title}</h3>
