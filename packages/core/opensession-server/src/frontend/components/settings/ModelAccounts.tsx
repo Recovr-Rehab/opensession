@@ -1596,25 +1596,28 @@ function AddCodexAccountForm({ onAdded }: { onAdded: () => void }) {
 	});
 	useEffect(() => () => cleanupPendingLogin(), []);
 
-	// Poll an in-flight device sign-in until it lands (or fails).
-	useEffect(() => {
-		if (!login || login.state === "done" || login.state === "error") return;
-		const t = setInterval(async () => {
-			await (async () => {
+	// Poll an in-flight device sign-in until it lands (or fails). The tick
+	// reads the live login/onAdded through an effect event; the effect only
+	// re-arms when the login identity or its phase changes.
+	const pollDeviceLoginTick = useEffectEvent(async () => {
+		await (async () => {
 const res = await fetch(
-					`${BASE_PATH}/api/codex-accounts/device-login/${encodeURIComponent(login.id)}`
-				);
-				if (!res.ok) return;
-				const next: CodexDeviceLogin = await res.json();
-				setLogin(next);
-				if (next.state === "done") {
-					setPendingDone(true);
-					onAdded();
-				}
+				`${BASE_PATH}/api/codex-accounts/device-login/${encodeURIComponent(login?.id ?? "")}`
+			);
+			if (!res.ok) return;
+			const next: CodexDeviceLogin = await res.json();
+			setLogin(next);
+			if (next.state === "done") {
+				setPendingDone(true);
+				onAdded();
+			}
 })().catch(async () => {
 
 });
-		}, 2000);
+	});
+	useEffect(() => {
+		if (!login || login.state === "done" || login.state === "error") return;
+		const t = setInterval(() => void pollDeviceLoginTick(), 2000);
 		return () => clearInterval(t);
 	}, [login?.id, login?.state]);
 

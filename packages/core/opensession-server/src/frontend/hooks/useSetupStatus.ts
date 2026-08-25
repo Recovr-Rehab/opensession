@@ -70,7 +70,7 @@ const body = await setupRequest<SetupStatus>("/api/setup/status");
 
 	useEffect(() => {
 		refetch();
-	}, []);
+	}, [refetch]);
 
 	const applyIntegration = (updated: SetupIntegration, restartRequired: boolean) => {
 			setStatus((s) =>

@@ -467,10 +467,15 @@ export function useWebSocket(presenceActive = true) {
     return () => {
       stopPresence();
       cancelInitialConnect();
-      clearTimeout(reconnectTimer.current);
-      clearInterval(heartbeat);
-      clearTimeout(idleTimer.current);
-      clearTimeout(typingRef.current.timer);
+      // Setup-scope helper so teardown clears the latest timers without
+      // touching `.current` directly inside the cleanup body.
+      const clearTimers = () => {
+        clearTimeout(reconnectTimer.current);
+        clearInterval(heartbeat);
+        clearTimeout(idleTimer.current);
+        clearTimeout(typingRef.current.timer);
+      };
+      clearTimers();
       const typing = typingRef.current;
       if (typing.active && wsRef.current?.readyState === WebSocket.OPEN) {
         try {

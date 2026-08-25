@@ -247,8 +247,9 @@ const next = (await fetchAutomations()) as Automation[];
 
   // Escape backs out one layer: inline edit → read view → closed. (The create
   // modal handles its own Escape — don't close both from one keypress.)
+  const hasSelection = !!sel;
   useEffect(() => {
-    if (!sel || showModal) return;
+    if (!hasSelection || showModal) return;
     const onKey = (e: KeyboardEvent) => {
       if (e.key !== "Escape") return;
       const t = e.target as HTMLElement | null;
@@ -258,7 +259,7 @@ const next = (await fetchAutomations()) as Automation[];
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [!!sel, showModal, editMode, onSelect]);
+  }, [hasSelection, showModal, editMode, onSelect]);
 
   async function handleToggle(a: Automation, enabled: boolean) {
     const previous = a.enabled;

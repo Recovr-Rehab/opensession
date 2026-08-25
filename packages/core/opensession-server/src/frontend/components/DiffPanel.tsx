@@ -1,5 +1,5 @@
 import { repoLabel } from "../lib/repo-label";
-import React, { useCallback, useEffect, useState, useRef } from "react";
+import React, { useCallback, useEffect, useEffectEvent, useState, useRef } from "react";
 import { createPortal } from "react-dom";
 import type {
   CodeFlowResult,
@@ -169,11 +169,19 @@ export function DiffPanel({
   const changed = (repos || []).filter(
     (repo) => repo.diff.rawPatch?.trim() || repo.diff.files.length > 0,
   );
-  useEffect(() => {
+  // Content key: re-run only when the repo list's ordering changes, while the
+  // sync reads the live `changed` through an effect event.
+  const changedReposKey = (changed || [])
+    .map((candidate) => candidate.repo)
+    .join("\0");
+  const syncActiveRepo = useEffectEvent(() => {
     if (!repo) return;
     const index = changed.findIndex((candidate) => candidate.repo === repo);
     if (index >= 0) setActive((current) => (current === index ? current : index));
-  }, [repo, changed.map((candidate) => candidate.repo).join("\0")]);
+  });
+  useEffect(() => {
+    syncActiveRepo();
+  }, [repo, changedReposKey]);
   const cur = changed[Math.min(active, changed.length - 1)] || changed[0] || null;
   const groupPatch = cur?.diff.rawPatch || "";
   const groupFileCount = cur?.diff.files.length || 0;
@@ -245,7 +253,7 @@ if (generation === flowGeneration.current) setFlowLoading(false);
     requestAnimationFrame(() => requestAnimationFrame(() => revealDiffFile(panelRef.current, path)));
   }
 
-  useEffect(() => {
+  const loadGroups = useEffectEvent(() => {
     if (grouping !== "ai" || !cur || !groupPatch || groupFileCount < 3) {
       setGroups(null);
       setGroupsLoading(false);
@@ -276,6 +284,9 @@ if (generation === flowGeneration.current) setFlowLoading(false);
       live = false;
       if (retryTimer) clearTimeout(retryTimer);
     };
+  });
+  useEffect(() => {
+    loadGroups();
   }, [sessionId, cur?.repo, groupPatch, groupFileCount, groupsRetry, grouping]);
 
   async function handleDiscard(repo: string, path: string, oldPath?: string) {

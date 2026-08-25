@@ -138,8 +138,9 @@ setGoals(await fetchGoals());
   useEffect(() => setEditMode(false), [sel?.id]);
 
   // Escape backs out one layer: inline edit → read view → closed.
+  const hasSelection = !!sel;
   useEffect(() => {
-    if (!sel) return;
+    if (!hasSelection) return;
     const onKey = (e: KeyboardEvent) => {
       if (e.key !== "Escape") return;
       const t = e.target as HTMLElement | null;
@@ -149,7 +150,7 @@ setGoals(await fetchGoals());
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [!!sel, editMode, onSelect]);
+  }, [hasSelection, editMode, onSelect]);
 
   async function act(fn: () => Promise<unknown>, refreshDelay = 400) {
     await (async () => {

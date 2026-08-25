@@ -157,8 +157,9 @@ export function ResponsiveDialog({
 			if (!panel || panel.contains(document.activeElement)) return;
 			panel.focus();
 		});
-		return () => {
-			cancelAnimationFrame(raf);
+		// Setup-scope helper so teardown reads the latest panel node without
+		// touching `.current` directly inside the cleanup body.
+		const handBackFocus = () => {
 			const prev = restoreTo;
 			if (!prev || !document.body.contains(prev)) return;
 			// Only take focus back if it was still ours — the user may have
@@ -166,6 +167,10 @@ export function ResponsiveDialog({
 			const inside =
 				panelRef.current?.contains(document.activeElement) ?? false;
 			if (inside || document.activeElement === document.body) prev.focus();
+		};
+		return () => {
+			cancelAnimationFrame(raf);
+			handBackFocus();
 		};
 	}, [open, mounted]);
 

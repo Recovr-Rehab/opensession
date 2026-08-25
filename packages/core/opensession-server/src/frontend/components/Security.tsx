@@ -442,18 +442,19 @@ function NewScanModal({
   const canRecur = singleRepo && !interactive;
   const canInteractive = singleRepo && recurrence === "none";
 
+  const firstRepo = repos[0] || "";
   // The dialog stays mounted, so each opening starts from a clean draft.
   useEffect(() => {
     if (!open) return;
     setScope("single");
-    setRepo(repos[0] || "");
+    setRepo(firstRepo);
     setProfileId("");
     setInstructions("");
     setRecurrence("none");
     setInteractive(false);
     setStarting(false);
     setError(null);
-  }, [open, repos[0]]);
+  }, [open, firstRepo]);
 
   async function handleStart() {
     setStarting(true);

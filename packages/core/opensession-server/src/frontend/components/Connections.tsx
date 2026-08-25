@@ -1,6 +1,6 @@
 import { BASE_PATH } from "../lib/base";
 import { GITHUB_APP_GRANT_PERMISSIONS } from "../../shared/github-app-permissions";
-import React, { useCallback, useEffect, useState, useRef } from "react";
+import React, { useCallback, useEffect, useEffectEvent, useState, useRef } from "react";
 import { Menu } from "../ui/menu";
 import { OptionSelect } from "../ui/select";
 import { cn } from "../ui/cn";
@@ -686,7 +686,7 @@ function GithubAppWizard({
   const [appOrg, setAppOrg] = useState("");
   // Opening jumps to where the user actually is (an already-configured app
   // resumes at install, a fresh start begins at create) and mints a fresh name.
-  useEffect(() => {
+  const openReset = useEffectEvent(() => {
     if (open) {
       setStep(configured ? 3 : 1);
       setAppName(generateGithubAppName());
@@ -695,6 +695,9 @@ function GithubAppWizard({
       setAppOwner(intentOrg ? "org" : "you");
       setAppOrg(intentOrg ?? "");
     }
+  });
+  useEffect(() => {
+    openReset();
   }, [open]);
   // Saving the client id flips `configured`; carry the user from paste to
   // install without a manual step.
@@ -711,7 +714,7 @@ function GithubAppWizard({
   // strict mode's double invoke) from opening a second flow; leaving the step
   // rearms it, so Back → Next or a retry can start again.
   const connectStartedRef = useRef(false);
-  useEffect(() => {
+  const maybeConnect = useEffectEvent(() => {
     if (step !== 4) {
       connectStartedRef.current = false;
       return;
@@ -719,6 +722,9 @@ function GithubAppWizard({
     if (!open || connectStartedRef.current) return;
     connectStartedRef.current = true;
     if (!flow) onConnect();
+  });
+  useEffect(() => {
+    maybeConnect();
   }, [open, step]);
 
   // Focus each step's primary control as the user arrives on it (and on open).
