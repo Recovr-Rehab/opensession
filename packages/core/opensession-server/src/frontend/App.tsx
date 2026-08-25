@@ -2410,10 +2410,10 @@ const path = await resolveAnonymousUserPath(
 		reviewDismissed,
 		wsHasLiveSession,
 	);
-	function setActiveViewTab(tab: ActiveViewTab) {
+	const setActiveViewTab = useCallback((tab: ActiveViewTab) => {
 		setActiveViewTabState(tab);
 		if (wsKey) saveActiveViewTab(wsKey, tab);
-	}
+	}, [wsKey]);
 	// Return each workspace to its last foregrounded tab. A workspace without a
 	// saved selection still starts on its normal default surface. Switching sessions
 	// within a workspace records session as the selection via the tab-strip handler.
@@ -2429,7 +2429,7 @@ const path = await resolveAnonymousUserPath(
 					? defaultSessionView
 					: remembered,
 		);
-	}, [wsKey, defaultSessionView]);
+	}, [wsKey, defaultSessionView, routeSubagentStack.length]);
 	// ...unless we just opened Review for that workspace from the sidebar: once
 	// it lands (this render or the one after navigation), foreground Review and
 	// consume the pulse. Runs after the reset effect above, so it wins.
@@ -2438,7 +2438,7 @@ const path = await resolveAnonymousUserPath(
 			setActiveViewTab("review");
 			setPendingReviewOpen(null);
 		}
-	}, [wsKey, pendingReviewOpen]);
+	}, [wsKey, pendingReviewOpen, setActiveViewTab]);
 	// Add the Review view-tab for a workspace. Presence is the OR of reviewOpen
 	// and "PR-backed and not in reviewClosed", but reviewClosed alone feeds
 	// reviewDismissed (and through it defaultSessionWorkspaceView) — so adding
@@ -2458,9 +2458,14 @@ const path = await resolveAnonymousUserPath(
 	// session (or the main session on first visit). A session-less PR workspace still
 	// opens Review. Declared after the wsKey reset effect above so the landing
 	// choice wins the same commit.
+	// Scalars derived from the route so the effect keys on exactly the values
+	// it reacts to (workspace id + explicit tab), not every route object.
+	const landingWsKey = route.view === "workspace" ? route.id : null;
+	const landingExplicitTab =
+		route.view === "workspace" ? (route.tab ?? null) : null;
 	useEffect(() => {
 		if (
-			route.view !== "workspace" ||
+			landingWsKey === null ||
 			!workspaceLandingReady(workspacesLoaded, loading)
 		)
 			return;
@@ -2471,7 +2476,9 @@ const path = await resolveAnonymousUserPath(
 			suppressWsSeedRef.current = false;
 			return;
 		}
-		const p = workspaces.find((x) => x.id === route.id) || null;
+		// Ref read: the trigger set is the route + readiness, and the freshest
+		// committed list is what a landing decision wants anyway.
+		const p = workspacesRef.current.find((x) => x.id === landingWsKey) || null;
 		// Default pane by workspace shape: ticket workspaces open on the
 		// Conversation; everything else — PR-backed included — lands in its
 		// main/last-open session. A PR workspace only defaults to Review when it
@@ -2482,11 +2489,11 @@ const path = await resolveAnonymousUserPath(
 		// no session to land in. Explicit /conversation-/video URLs still win.
 		const hasSession = !!pickLandingSession(
 			sessionsRef.current,
-			route.id,
-			getWorkspaceLastSession(route.id),
+			landingWsKey,
+			getWorkspaceLastSession(landingWsKey),
 		);
 		const tab =
-			route.tab ??
+			landingExplicitTab ??
 			(hasSession
 				? null
 				: p?.plainThreadId
@@ -2494,7 +2501,7 @@ const path = await resolveAnonymousUserPath(
 					: p?.externalRefs?.some((r) => refWebPanel(r))
 						? "video"
 						: null);
-		const key = route.id;
+		const key = landingWsKey;
 		// Landing in the workspace's first session keeps the full session chrome —
 		// including the right sidebar — around the foregrounded pane (wsKey is
 		// unchanged, so the view-tab reset effect doesn't fire). Session-less
@@ -2569,9 +2576,11 @@ const path = await resolveAnonymousUserPath(
 			}
 		}
 	}, [
-		route.view === "workspace" ? `${route.id}:${route.tab ?? ""}` : null,
+		landingWsKey,
+		landingExplicitTab,
 		workspacesLoaded,
 		loading,
+		setActiveViewTab,
 	]);
 	// A PR reference (`/pr/<repo>/<number>`) that GitHub doesn't know: the
 	// number came out of prose, so it can be a typo or an invention.
@@ -2581,6 +2590,9 @@ const path = await resolveAnonymousUserPath(
 	// The old components keep rendering as the in-flight/failure fallback, so
 	// a failed resolve degrades to the previous behavior instead of a dead
 	// link. Bare /reviews goes home — the sidebar bands are the inbox now.
+	// Read through an effect event so the redirect doesn't re-run when the
+	// refresh closure moves.
+	const redirectRefreshWorkspaces = useEffectEvent(refreshWorkspaces);
 	useEffect(() => {
 		let stale = false;
 		const toWorkspace = (
@@ -2588,7 +2600,7 @@ const path = await resolveAnonymousUserPath(
 			tab: "review" | "conversation",
 		) => {
 			if (stale) return;
-			refreshWorkspaces();
+			redirectRefreshWorkspaces();
 			navigate({ view: "workspace", id: workspaceId, tab }, { replace: true });
 		};
 		if (route.view === "pr") {
@@ -3151,7 +3163,9 @@ const path = await resolveAnonymousUserPath(
 		route.view === "session" && route.subagent?.length
 			? `${route.id}${subagentSuffix(route.subagent)}`
 			: null;
-	useEffect(() => {
+	// The sync reads the live route through an effect event, so the trigger
+	// stays the derived sub-agent key rather than every route field.
+	const syncRouteSubagents = useEffectEvent(() => {
 		if (route.view !== "session" || !route.subagent?.length) return;
 		const ids = route.subagent;
 		setSubagentTabs((prev) => {
@@ -3173,6 +3187,10 @@ const path = await resolveAnonymousUserPath(
 			};
 		});
 		setActiveViewTabState("subagent");
+	});
+	useEffect(() => {
+		if (!routeSubagentKey) return;
+		syncRouteSubagents();
 	}, [routeSubagentKey]);
 	// Dropping the last breadcrumb (or switching to a session with no sub-agent
 	// open) leaves nothing to show — fall back to the session itself. Read from
@@ -3288,10 +3306,12 @@ navigate({ view: "support", threadId: t.id });
 	// Mark the open session read up to its latest activity — both when it's first
 	// opened and as new activity streams in while it stays open — so the sidebar's
 	// unread flag clears for whatever you're currently looking at.
+	const currentSessionId = currentSession?.id;
+	const currentSessionActivity = currentSession?.lastActivity;
 	useEffect(() => {
-		if (currentSession)
-			markRead(currentSession.id, currentSession.lastActivity);
-	}, [currentSession?.id, currentSession?.lastActivity]);
+		if (currentSessionId && currentSessionActivity !== undefined)
+			markRead(currentSessionId, currentSessionActivity);
+	}, [currentSessionId, currentSessionActivity]);
 
 	// The tab strip is scoped to the open session's workspace: its sibling sessions
 	// (same workspaceId), oldest first. Sessions with no workspace (slack/linear
