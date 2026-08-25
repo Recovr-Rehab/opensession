@@ -1,5 +1,4 @@
 import type { Metadata } from "next";
-import { IconX } from "../../../../core/opensession-server/src/frontend/components/icons";
 import { AnnouncementArticle } from "../../AnnouncementArticle";
 
 const title = "Introducing Open Session";
@@ -27,18 +26,11 @@ export const metadata: Metadata = {
 
 export default function AnnouncementPage() {
 	return (
-		<main className="announcement-page">
-			<section
-				className="announcement-page-panel"
-				aria-labelledby="announcement-title"
-			>
-				<a className="announcement-close" href="/" aria-label="Close announcement">
-					<IconX size={24} />
-				</a>
-				<div className="announcement-scroll">
-					<AnnouncementArticle />
-				</div>
-			</section>
+		<main className="announcement-page" aria-labelledby="announcement-title">
+			<a className="announcement-home" href="/">
+				Home
+			</a>
+			<AnnouncementArticle />
 		</main>
 	);
 }
