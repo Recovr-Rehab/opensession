@@ -84,7 +84,10 @@ import { dropStagingAttachments } from "./lib/attachments";
 import { IconTile } from "./components/BrandTile";
 import { displayName } from "./brand-logos";
 import type { NewSessionPrefill } from "./lib/new-session-link";
-import { shouldOpenCreatedSession } from "./lib/new-session-navigation";
+import {
+	shouldApplyCreatedSessionReply,
+	shouldOpenCreatedSession,
+} from "./lib/new-session-navigation";
 import { primeSoftKeyboard } from "./lib/soft-keyboard";
 import { trackKeyboardInset } from "./lib/keyboard-inset";
 import {
@@ -2205,6 +2208,14 @@ const path = await resolveAnonymousUserPath(
 				const roomScoped = "sessionId" in msg;
 				const draft = pendingDraft?.id === msg.id ? pendingDraft : null;
 				if (draft) pendingCreateDraftRef.current = null;
+				if (!shouldApplyCreatedSessionReply(msg.replayed, !!draft)) {
+					// The durable command outbox replayed a create that this page already
+					// finished. Its real row may be live or archived; either way the lists,
+					// not a repo-less optimistic shell, are the authority now.
+					refresh();
+					refreshWorkspaces();
+					return;
+				}
 				const openedOptimistically =
 					draft?.openImmediately === true && draft.id === msg.id;
 				if (openedOptimistically) {
