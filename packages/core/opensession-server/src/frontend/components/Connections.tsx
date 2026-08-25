@@ -8,7 +8,7 @@ import { Button } from "../ui/button";
 import { DeviceCode } from "../ui/device-code";
 import { Modal } from "../ui/modal";
 import { Segmented, SegmentedOption } from "../ui/segmented";
-import { InlineAlert, Skeleton, SkeletonBar } from "../ui/state";
+import { InlineAlert } from "../ui/state";
 import { PulseDot } from "../ui/status";
 import {
   SettingCard,
@@ -27,7 +27,6 @@ import {
   SettingsHeader,
   SettingsHint,
   SettingsPanel,
-  SettingsSection,
   StatusChip,
   rowMenuTriggerClasses,
   settingsInputClass,
@@ -44,15 +43,8 @@ import {
 import { displayName } from "../brand-logos";
 import { IconTile } from "./BrandTile";
 import { UserAvatar } from "./UserAvatar";
-import { AGENT_NAME, docTitle, DEFAULT_DOC_TITLE } from "../lib/brand";
+import { docTitle, DEFAULT_DOC_TITLE } from "../lib/brand";
 import { ProjectsSection } from "./ProjectsSection";
-import {
-  connectCodeStorage,
-  disconnectCodeStorage,
-  fetchCodeStorageStatus,
-  relativeTime,
-  type CodeStorageStatus,
-} from "../lib/api";
 
 interface McpConnection {
   name: string;
@@ -65,15 +57,8 @@ interface McpConnection {
   allowedUsers?: string[];
 }
 
-interface AgentHealth {
-  status?: string;
-  activeSessions?: number;
-  [key: string]: unknown;
-}
-
 interface ConnectionsData {
   mcpServers: McpConnection[];
-  agents: Record<string, AgentHealth>;
 }
 
 const STATUS_META: Record<McpConnection["status"], { label: string; dot: string; bad?: boolean }> = {
@@ -102,16 +87,6 @@ const MCP_BLURBS: Record<string, string> = {
   vercel: "Projects, deployments & logs",
 };
 
-const AGENT_BLURBS: Record<string, string> = {
-  slack: "Mentions & worktree channels in Slack",
-  linear: "Delegated Linear issues become sessions",
-  plain: "Support escalations from Plain",
-  stripe: "Inbound billing events",
-  "grafana-poller": "Polls Grafana alerts into sessions",
-  github: "Inbound repository events",
-  codestorage: "Branch pushes & sync events from code.storage",
-};
-
 function LockIcon({ size = 12 }: { size?: number }) {
   return (
     <svg width={size} height={size} viewBox="0 0 24 24" fill="none" aria-hidden="true">
@@ -134,24 +109,6 @@ export function SectionHeading({
 function ConnectionsSkeleton() {
   return (
     <>
-      <SectionHeading>Agents: how work reaches {AGENT_NAME}</SectionHeading>
-      <Skeleton
-        label="Checking connections"
-        className="grid grid-cols-[repeat(auto-fill,minmax(230px,1fr))] gap-2.5"
-      >
-        {Array.from({ length: 3 }, (_, index) => (
-          <SettingsSection key={index} className="flex flex-col gap-2 p-3.5">
-            <div className="flex items-center gap-2.5">
-              <SkeletonBar className="size-[30px] shrink-0 rounded-control" />
-              <SkeletonBar className="w-[38%]" />
-              <SkeletonBar className="ml-auto h-5 w-16 rounded-[999px]" />
-            </div>
-            <SkeletonBar className="h-2.5 w-[72%]" />
-            <SkeletonBar className="h-2.5 w-[34%]" />
-          </SettingsSection>
-        ))}
-      </Skeleton>
-
       <SectionHeading>MCP servers: tools inside every session</SectionHeading>
       <SettingCardSkeleton rows={5} icon={40} label="Checking connections" />
     </>
@@ -342,36 +299,6 @@ setRemoveError(e.message);
         <ConnectionsSkeleton />
       ) : (
         <>
-          <SectionHeading>Agents: how work reaches {AGENT_NAME}</SectionHeading>
-          <div className="grid grid-cols-[repeat(auto-fill,minmax(230px,1fr))] gap-2.5">
-            {Object.entries(data.agents).map(([name, health]) => {
-              const ok = health?.status === "operational";
-              const count = typeof health?.activeSessions === "number" ? health.activeSessions : null;
-              return (
-                <SettingsSection key={name} className="flex flex-col gap-2 p-3.5">
-                  <div className="flex items-center gap-2.5">
-                    <IconTile name={name} size={30} />
-                    <span className="min-w-0 flex-1 truncate text-item-title font-medium text-fg">
-                      {displayName(name)}
-                    </span>
-                    <StatusChip
-                      label={ok ? "Operational" : String(health?.status || "down")}
-                      dot={ok ? "var(--green)" : "var(--red)"}
-                    />
-                  </div>
-                  <div className="text-label leading-snug text-dim">
-                    {AGENT_BLURBS[name] || "Inbound agent"}
-                  </div>
-                  {count !== null && (
-                    <div className="text-label text-faint">
-                      {count.toLocaleString()} active session{count === 1 ? "" : "s"}
-                    </div>
-                  )}
-                </SettingsSection>
-              );
-            })}
-          </div>
-
           <SectionHeading>MCP servers: tools inside every session</SectionHeading>
           <SettingCard>
             {data.mcpServers.map((s) => {
@@ -497,13 +424,7 @@ setRemoveError(e.message);
             })}
           </SettingCard>
 
-          <GithubAccounts />
-
-          <CodeStorageCard />
-
           <ProjectsSection />
-
-          <PlainRouter />
         </>
       )}
       <ConnectTokenDialog
@@ -1728,374 +1649,6 @@ setError(e.message);
             : "Personal GitHub sign-in is not enabled for this workspace. Pull requests use the workspace bot."}
         </SettingsHint>
       )}
-    </>
-  );
-}
-
-/**
- * code.storage (Pierre) — connect the org + signing key entirely from this
- * card, no config-file editing. Disconnected: org + pasted PKCS8 PEM →
- * POST /api/setup/codestorage/connect. Connected: repo count (or the server's
- * precise error), plus the webhook receiver info the Pierre dashboard needs
- * (path, HMAC secret) and live delivery status from GET status.
- */
-function CodeStorageCard() {
-  const [status, setStatus] = useState<CodeStorageStatus | null>(null);
-  const [org, setOrg] = useState("");
-  const [pem, setPem] = useState("");
-  const [connecting, setConnecting] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [note, setNote] = useState<string | null>(null);
-  const [showSecret, setShowSecret] = useState(false);
-  const [copied, setCopied] = useState<string | null>(null);
-
-  // Stable identity: only setters are captured.
-  const load = useCallback(async () => {
-    await (async () => {
-setStatus(await fetchCodeStorageStatus());
-})().catch(async () => {
-
-});
-  }, []);
-
-  useEffect(() => {
-    load();
-  }, [load]);
-
-  // Keep the delivery status live while the card shows the webhook section.
-  useEffect(() => {
-    if (!status?.configured) return;
-    const t = setInterval(load, 30_000);
-    return () => clearInterval(t);
-  }, [status?.configured, load]);
-
-  async function connect() {
-    setConnecting(true);
-    setError(null);
-    setNote(null);
-    await (async () => {
-const res = await connectCodeStorage(org.trim(), pem);
-      setPem("");
-      setNote(
-        `Connected. ${res.repoCount} repo${res.repoCount === 1 ? "" : "s"} visible. Register them under Settings → Setup → Repositories.`,
-      );
-})().catch(async (e: any) => {
-setError(e.message);
-}).finally(async () => {
-setConnecting(false);
-      await load();
-});
-  }
-
-  async function disconnect() {
-    if (
-      !confirm(
-        "Disconnect code.storage? Sessions on code.storage repos lose push/pull until you reconnect. The key file stays on disk.",
-      )
-    )
-      return;
-    setError(null);
-    await (async () => {
-const res = await disconnectCodeStorage();
-      setNote(res.note || "Disconnected.");
-      await load();
-})().catch(async (e: any) => {
-setError(e.message);
-});
-  }
-
-  function copy(value: string, which: string) {
-    navigator.clipboard?.writeText(value).then(() => {
-      setCopied(which);
-      setTimeout(() => setCopied((c) => (c === which ? null : c)), 1500);
-    });
-  }
-
-  if (!status) return null;
-  const connected = status.configured;
-  const wh = status.webhook;
-  const last = wh?.lastDelivery ?? null;
-
-  return (
-    <>
-      <SectionHeading>Code Storage: branch-based repo host</SectionHeading>
-      {error && <InlineAlert onDismiss={() => setError(null)}>{error}</InlineAlert>}
-      <SettingCard>
-        <div className="flex items-center gap-3 px-5 py-3">
-          <IconTile name="codestorage" size={30} />
-          <div className="min-w-0 flex-1">
-            <div className="text-item-title font-medium text-fg">code.storage (Pierre)</div>
-            <div className="text-label leading-snug text-dim">
-              {!connected
-                ? "Host repos on code.storage, where sessions review branch diffs instead of PRs. Paste the org's signing key to connect; nothing else to configure."
-                : status.error
-                  ? `Configured for org "${status.org}", but the last check failed.`
-                  : `Connected to org "${status.org}"${
-                      typeof status.repoCount === "number"
-                        ? ` · ${status.repoCount} repo${status.repoCount === 1 ? "" : "s"} visible`
-                        : ""
-                    }. Register repos under Settings → Setup → Repositories.`}
-            </div>
-          </div>
-          <StatusChip
-            label={connected ? (status.error ? "Error" : "Connected") : "Not connected"}
-            dot={
-              connected
-                ? status.error
-                  ? "var(--red)"
-                  : "var(--green)"
-                : "var(--line-strong, var(--text-faint))"
-            }
-          />
-          {connected && (
-            <Button
-              size="sm"
-              className="flex-shrink-0 hover:border-red hover:text-red"
-              onClick={disconnect}
-            >
-              Disconnect
-            </Button>
-          )}
-        </div>
-
-        {note && <div className="px-5 py-2.5 text-label text-dim">{note}</div>}
-
-        {!connected ? (
-          <div className="flex flex-col gap-3 border-t border-line px-5 py-3">
-            <SettingsFormRow>
-              <SettingsField>
-                Organization
-                <input
-                  className={settingsInputClass}
-                  value={org}
-                  onChange={(e) => setOrg(e.target.value)}
-                  placeholder="acme"
-                  autoCapitalize="none"
-                  spellCheck={false}
-                  aria-label="code.storage organization"
-                />
-              </SettingsField>
-            </SettingsFormRow>
-            <SettingsField>
-              Private key (PKCS8 PEM, its public half registered with the org in the
-              Pierre dashboard)
-              <textarea
-                className={cn(settingsInputClass, "resize-y font-mono")}
-                value={pem}
-                onChange={(e) => setPem(e.target.value)}
-                rows={5}
-                spellCheck={false}
-                placeholder={"-----BEGIN PRIVATE KEY-----\n…"}
-                aria-label="code.storage private key PEM"
-              />
-            </SettingsField>
-            <div className="flex items-center gap-2.5">
-              <Button
-                variant="primary"
-                disabled={connecting || !org.trim() || !pem.trim()}
-                onClick={connect}
-              >
-                {connecting ? "Connecting…" : "Connect"}
-              </Button>
-              <span className="text-supporting text-faint">
-                The key is stored on this server (mode 0600) and never leaves it.
-              </span>
-            </div>
-          </div>
-        ) : (
-          <>
-            {status.error && (
-              <div className="border-t border-line px-5 py-2.5 text-label leading-snug text-red">
-                {status.error}
-              </div>
-            )}
-            {wh && (
-              <div className="flex flex-col gap-2 border-t border-line px-5 py-3">
-                <div className="text-label font-medium text-fg">Webhook receiver</div>
-                <div className="flex flex-wrap items-center gap-2 text-label text-dim">
-                  <code className="rounded-sm bg-active px-1.5 py-0.5 font-mono text-fg">
-                    POST {wh.path}
-                  </code>
-                  <span>
-                    on the webhook server (127.0.0.1:{wh.port}, behind your TLS proxy)
-                  </span>
-                  <Button size="sm" variant="ghost" onClick={() => copy(wh.path, "path")}>
-                    {copied === "path" ? "Copied" : "Copy path"}
-                  </Button>
-                </div>
-                <div className="flex flex-wrap items-center gap-2 text-label text-dim">
-                  <span>Secret</span>
-                  <code className="max-w-[340px] truncate rounded-sm bg-active px-1.5 py-0.5 font-mono text-fg">
-                    {showSecret ? wh.secret : "••••••••••••••••"}
-                  </code>
-                  <Button size="sm" variant="ghost" onClick={() => setShowSecret((s) => !s)}>
-                    {showSecret ? "Hide" : "Reveal"}
-                  </Button>
-                  <Button size="sm" variant="ghost" onClick={() => copy(wh.secret, "secret")}>
-                    {copied === "secret" ? "Copied" : "Copy"}
-                  </Button>
-                </div>
-                <div className="text-supporting leading-snug text-faint">
-                  Paste your public URL for this path plus the secret into the Pierre
-                  dashboard → Webhooks, subscribed to push and repo.sync events.
-                </div>
-                <div
-                  className={cn(
-                    "text-meta",
-                    last && !last.ok ? "text-red" : "text-faint",
-                  )}
-                >
-                  {!last
-                    ? "No verified deliveries received yet."
-                    : last.ok
-                      ? `Last event: ${last.event}${last.ref ? ` ${last.ref}` : ""}${last.repo ? ` (${last.repo})` : ""}, ${relativeTime(last.at)}`
-                      : `Last delivery failed (${last.error}), ${relativeTime(last.at)}`}
-                </div>
-                {wh.lastRejected && (
-                  <div className="text-supporting leading-snug text-red">
-                    {wh.rejectedCount} unauthenticated request
-                    {wh.rejectedCount === 1 ? "" : "s"} rejected ({wh.lastRejected.error}
-                    ), last {relativeTime(wh.lastRejected.at)}. If these are your Pierre
-                    deliveries, check that the secret in the dashboard matches; otherwise
-                    it's internet noise and verified deliveries above are unaffected.
-                  </div>
-                )}
-                {wh.syncFailures.map((f) => (
-                  <div key={f.repo} className="text-meta text-red">
-                    Sync failing for {f.repo}: {f.error} ({relativeTime(f.at)})
-                  </div>
-                ))}
-              </div>
-            )}
-          </>
-        )}
-      </SettingCard>
-    </>
-  );
-}
-
-interface ModelInfo {
-  id: string;
-  provider: "claude" | "codex";
-  label: string;
-  aliases: string[];
-}
-
-/**
- * Plain triage router — the pre-triage classifier that spam-gates new tickets
- * and routes very basic asks (simple refunds, how-do-I) to a cheaper model,
- * keeping Fable for tickets that benefit from real investigation. The prompt
- * is editable here; the JSON output contract is enforced in code.
- */
-function PlainRouter() {
-  const [cfg, setCfg] = useState<{
-    prompt: string;
-    isCustom: boolean;
-    basicModel: string;
-    defaultPrompt: string;
-    defaultBasicModel: string;
-  } | null>(null);
-  const [models, setModels] = useState<ModelInfo[]>([]);
-  const [draft, setDraft] = useState("");
-  const [saving, setSaving] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [savedAt, setSavedAt] = useState(0);
-
-  useEffect(() => {
-    fetch(`${BASE_PATH}/api/connections/plain-router`)
-      .then((r) => r.json())
-      .then((b) => {
-        setCfg(b);
-        setDraft(b.prompt);
-      })
-      .catch(() => {});
-    fetch(`${BASE_PATH}/api/models`)
-      .then((r) => r.json())
-      .then((b) => setModels((b.models || []).filter((m: ModelInfo) => m.provider === "claude")))
-      .catch(() => {});
-  }, []);
-
-  async function save(patch: { prompt?: string; basicModel?: string }) {
-    setSaving(true);
-    setError(null);
-    await (async () => {
-const res = await fetch(`${BASE_PATH}/api/connections/plain-router`, {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(patch),
-      });
-      const body = await res.json();
-      if (!res.ok) throw new Error(body.error || `Failed: ${res.status}`);
-      setCfg((c) => (c ? { ...c, ...body } : c));
-      if ("prompt" in patch) setDraft(body.prompt);
-      setSavedAt(Date.now());
-})().catch(async (e: any) => {
-setError(e.message);
-});
-    setSaving(false);
-  }
-
-  if (!cfg) return null;
-  const dirty = draft !== cfg.prompt;
-
-  return (
-    <>
-      <SectionHeading>Plain triage router: spam gate and model routing</SectionHeading>
-      {error && (
-        <InlineAlert onDismiss={() => setError(null)}>{error}</InlineAlert>
-      )}
-      <SettingsSection className="min-w-0 max-w-[720px]">
-        <div className="mb-2 text-supporting leading-[1.45] text-dim">
-          Every new Plain ticket goes through one cheap Haiku call before triage: spam is skipped
-          entirely, a very basic ask (simple refund, how-do-I) runs triage on the model below, and
-          everything else runs on the triage automation's own model. Router errors fail open to
-          full triage. Applies to the next ticket, with no restart.
-        </div>
-        <div className="flex min-w-0 items-center gap-2.5 text-meta text-faint">
-          <span className="whitespace-nowrap">Model for basic tickets:</span>
-          <OptionSelect
-            className="min-w-0 flex-1"
-            label="Model for basic tickets"
-            value={cfg.basicModel}
-            disabled={saving}
-            options={models.map((m) => ({ value: m.id, label: m.label }))}
-            onChange={(basicModel) => save({ basicModel })}
-          />
-        </div>
-        <textarea
-          value={draft}
-          onChange={(e) => setDraft(e.target.value)}
-          rows={12}
-          spellCheck={false}
-          aria-label="Routing prompt"
-          className={cn(settingsInputClass, "mt-2 resize-y text-body")}
-        />
-        <div className="mt-1.5 flex min-w-0 items-center gap-2.5 text-meta text-faint">
-          <Button
-            variant="primary"
-            disabled={saving || !dirty}
-            onClick={() => save({ prompt: draft })}
-          >
-            {saving ? "Saving…" : "Save prompt"}
-          </Button>
-          <Button
-            variant="soft"
-            disabled={saving || (!cfg.isCustom && !dirty)}
-            onClick={() => save({ prompt: "" })}
-          >
-            Reset to default
-          </Button>
-          <span className="min-w-0 truncate whitespace-nowrap">
-            {dirty
-              ? "Unsaved changes"
-              : savedAt
-                ? "Saved."
-                : cfg.isCustom
-                  ? "Custom prompt active"
-                  : "Using the built-in default"}
-          </span>
-        </div>
-      </SettingsSection>
     </>
   );
 }

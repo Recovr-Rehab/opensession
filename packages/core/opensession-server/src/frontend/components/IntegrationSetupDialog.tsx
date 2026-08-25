@@ -16,6 +16,8 @@ import {
 	type SlackTransport,
 } from "../lib/slack-setup";
 import { IconTile } from "./BrandTile";
+import { CodeStorageConfiguration } from "./CodeStorageConfiguration";
+import { PlainRouterConfiguration } from "./PlainRouterConfiguration";
 import { SlackManifestGuide } from "./SlackManifestGuide";
 import {
 	Code,
@@ -204,7 +206,7 @@ function guideFor(
 				steps: [
 					<>Create or choose your organization in code.storage.</>,
 					<>Generate a PKCS8 ES256 or RS256 keypair. Register the public key with the organization and keep the private key on this Open Session host.</>,
-					<>Open <strong>Workspace → Connections</strong>, choose Code Storage, enter the organization id, and paste the private key. Open Session stores it with mode 0600 and verifies the connection.</>,
+					<>Enter the organization id and private key above. Open Session stores the key with mode 0600 and verifies the connection.</>,
 					<>Register or clone a code.storage repository from the Repositories setup page.</>,
 				],
 				permissions: [
@@ -285,11 +287,18 @@ export function IntegrationSetupDialog({
 	const dirty =
 		enabled !== integration.enabled || typedKeys.length > 0 || clearedKeys.length > 0;
 
-	// Code Storage is configured under Workspace → Connections, so this dialog
-	// documents it rather than switching it on — the same carve-out the
-	// integration card makes.
+	// code.storage owns its enabled state through the organization connection
+	// below rather than the registry's generic switch.
 	const canToggle = integration.id !== "codestorage";
 	const configured = integration.env.some((envVar) => envVar.present);
+
+	async function refreshIntegration() {
+		const body = await setupRequest<{ integrations: SetupIntegration[] }>(
+			"/api/setup/status",
+		);
+		const updated = body.integrations.find((item) => item.id === integration.id);
+		if (updated) onSaved(updated, false);
+	}
 
 	async function save() {
 		if (!dirty || saving) return;
@@ -435,6 +444,11 @@ setSaving(false);
 						)}
 					</SettingsSection>
 				)}
+
+				{integration.id === "codestorage" && (
+					<CodeStorageConfiguration onChanged={refreshIntegration} />
+				)}
+				{integration.id === "plain" && <PlainRouterConfiguration />}
 
 				{/* Open on a first setup, closed once there are credentials to keep:
 				    the recipe is a one-time read, the fields are not. */}
