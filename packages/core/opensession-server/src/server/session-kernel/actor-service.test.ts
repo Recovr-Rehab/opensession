@@ -539,6 +539,69 @@ describe("session kernel actor service", () => {
     }
   });
 
+  test("a global barrier fails fast while a session mailbox is wedged", async () => {
+    const sessionId = "barrier-timeout-session";
+    await rpc({
+      t: "call",
+      rpcId: "barrier-timeout-seed",
+      outputBytes: 256 * 1024,
+      request: {
+        t: "store",
+        method: "setRunState",
+        args: [{ sessionId, state: "idle", event: "seed" }],
+      },
+    });
+    const isolatedRoot = join(stateDir, "sessions", "session-kernel-sessions");
+    const lock = new Database(sessionKernelSessionDbPath(sessionId, isolatedRoot));
+    lock.exec("PRAGMA busy_timeout = 50; BEGIN IMMEDIATE;");
+    try {
+      const active = rpc({
+        t: "call",
+        rpcId: "barrier-timeout-active",
+        outputBytes: 256 * 1024,
+        request: {
+          t: "store",
+          method: "setRunState",
+          args: [{ sessionId, state: "idle", event: "active" }],
+        },
+      });
+      await Bun.sleep(25);
+      const startedAt = Date.now();
+      const response = await fetch(`${service.url}/rpc`, {
+        method: "POST",
+        headers: {
+          authorization: `Bearer ${token}`,
+          "content-type": "application/json",
+        },
+        body: JSON.stringify({
+          version: SESSION_KERNEL_TRANSPORT_VERSION,
+          actorVersion: SESSION_KERNEL_ACTOR_VERSION,
+          serviceEpoch,
+          request: {
+            t: "runtime_work",
+            rpcId: "barrier-timeout-global",
+            now: Date.now(),
+            timerKinds: [],
+            effectKinds: [],
+            limit: 100,
+          },
+        }),
+      });
+      expect(response.status).toBe(429);
+      expect(Date.now() - startedAt).toBeLessThan(400);
+      expect(await response.json()).toMatchObject({
+        error: expect.stringContaining("global barrier timed out"),
+      });
+      lock.exec("COMMIT;");
+      expect(await active).toMatchObject({ t: "call_result", status: 1 });
+    } finally {
+      try {
+        lock.exec("ROLLBACK;");
+      } catch {}
+      lock.close();
+    }
+  });
+
   test("priority bursts yield to an ordinary turn", async () => {
     const sessionId = "priority-fairness-session";
     await rpc({

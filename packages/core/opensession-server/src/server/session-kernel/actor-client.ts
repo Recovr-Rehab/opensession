@@ -82,10 +82,10 @@ const SYNC_CALL_TIMEOUT_MS_FLOOR = 25;
 function syncCallTimeoutMs(): number {
   return Math.max(
     SYNC_CALL_TIMEOUT_MS_FLOOR,
-    Number(process.env.OPENSESSION_SYNC_KERNEL_TIMEOUT_MS ?? 5_000),
+    Number(process.env.OPENSESSION_SYNC_KERNEL_TIMEOUT_MS ?? 500),
   );
 }
-const SYNC_BREAKER_AFTER_TIMEOUTS = 2;
+const SYNC_BREAKER_AFTER_TIMEOUTS = 1;
 const SYNC_BREAKER_OPEN_MS = 10_000;
 
 type Pending = {

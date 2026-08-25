@@ -90,6 +90,7 @@ type RuntimeState = {
 	activeTimers?: Set<string>;
 	activeOutbox?: Set<number>;
 	activeOpeningOutbox?: Set<number>;
+	lastRuntimePollErrorAt?: number;
 };
 
 const globalRuntime = globalThis as typeof globalThis & {
@@ -305,7 +306,14 @@ export function startSessionKernelRuntime(intervalMs = 1_000): void {
 	ensureCreationEffectExecutors();
 	const drain = () => {
 		void drainSessionKernelRuntime().catch((error) => {
-			console.error("[session-kernel] runtime poll failed; retrying:", error);
+			const now = Date.now();
+			if (
+				!runtime.lastRuntimePollErrorAt ||
+				now - runtime.lastRuntimePollErrorAt >= 30_000
+			) {
+				runtime.lastRuntimePollErrorAt = now;
+				console.error("[session-kernel] runtime poll failed; retrying:", error);
+			}
 		});
 	};
 	runtime.handle = setInterval(() => {

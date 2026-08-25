@@ -445,7 +445,9 @@ describe("session kernel actor boundary", () => {
       expect((first as SessionKernelActorError).retryable).toBe(true);
       expect(worker.postCount).toBe(1);
 
-      // The breaker opens after consecutive timeouts and refuses immediately.
+      // One event-loop-blocking timeout opens the breaker. The refused call
+      // must never add more work to the already degraded actor lane.
+      const startedAt = Date.now();
       expect(() =>
         host.decideGateway({
           op: "request",
@@ -453,19 +455,9 @@ describe("session kernel actor boundary", () => {
           requestId: "two",
           operation: "websocket_command",
         }),
-      ).toThrow(SessionKernelActorError);
-      expect(worker.postCount).toBe(2);
-      const startedAt = Date.now();
-      expect(() =>
-        host.decideGateway({
-          op: "request",
-          sessionId: "slow-actor",
-          requestId: "three",
-          operation: "websocket_command",
-        }),
       ).toThrow("breaker");
       expect(Date.now() - startedAt).toBeLessThan(40);
-      expect(worker.postCount).toBe(2);
+      expect(worker.postCount).toBe(1);
 
       // A slow actor is degradation, not a lost authority: the client stays
       // alive and no fatal handler fired.

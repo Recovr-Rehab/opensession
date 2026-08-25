@@ -27,6 +27,7 @@ const MAX_NORMAL_SESSION_TURNS = 8;
 const MAX_PRIORITY_SESSION_TURNS = 8;
 const MAX_PRIORITY_BURST = 4;
 const MAX_GLOBAL_TURNS = 64;
+const GLOBAL_BARRIER_TIMEOUT_MS = 100;
 const RESERVED_PRIORITY_TURNS = 64;
 const MAX_LANE_QUEUE = 16;
 const RESERVED_LANE_PRIORITY_TURNS = 4;
@@ -594,7 +595,27 @@ export async function startSessionKernelService(
     const active = [...sessionMailboxes.values()].map((mailbox) => mailbox.tail);
     const operation = globalGate
       .catch(() => {})
-      .then(() => Promise.all(active))
+      .then(() => new Promise<void>((resolve, reject) => {
+        if (active.length === 0) {
+          resolve();
+          return;
+        }
+        const timeout = setTimeout(() => {
+          reject(new RetryableActorHostError(
+            `Session kernel global barrier timed out waiting for ${active.length} mailbox(es)`,
+          ));
+        }, GLOBAL_BARRIER_TIMEOUT_MS);
+        void Promise.all(active).then(
+          () => {
+            clearTimeout(timeout);
+            resolve();
+          },
+          (error) => {
+            clearTimeout(timeout);
+            reject(error);
+          },
+        );
+      }))
       .then(() => sendToSlot(slots[0], request));
     globalGate = operation.then(() => {}, () => {});
     barrierGeneration += 1;
