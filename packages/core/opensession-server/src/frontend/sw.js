@@ -36,28 +36,35 @@ self.addEventListener("install", (event) => {
   );
 });
 self.addEventListener("activate", (event) =>
-  event.waitUntil(
-    Promise.all([
-      self.clients.claim(),
-      // Drop caches left by older worker versions (names carry a -v suffix).
-      caches
-        .keys()
-        .then((keys) =>
-          Promise.all(
-            keys
-              .filter(
-                (k) =>
-                  k.startsWith("os1-shell-") &&
-                  k !== HTML_CACHE &&
-                  k !== ASSET_CACHE &&
-                  k !== GATE_CACHE,
-              )
-              .map((k) => caches.delete(k)),
-          ),
-        ),
-    ]),
-  ),
+  event.waitUntil(activateWorker()),
 );
+
+async function activateWorker() {
+  const keys = await caches.keys();
+  const retired = keys.filter(
+    (key) =>
+      key.startsWith("os1-shell-") &&
+      key !== HTML_CACHE &&
+      key !== ASSET_CACHE &&
+      key !== GATE_CACHE,
+  );
+  await Promise.all([
+    self.clients.claim(),
+    ...retired.map((key) => caches.delete(key)),
+  ]);
+
+  // A page that installed this migration is still running the bundle from the
+  // v1 shell we just removed. Reload only those clients, once, so the user does
+  // not need a second close/open cycle for v2 to become visible.
+  if (!retired.includes("os1-shell-html-v1")) return;
+  const windows = await self.clients.matchAll({
+    type: "window",
+    includeUncontrolled: true,
+  });
+  await Promise.all(
+    windows.map((client) => client.navigate(client.url).catch(() => {})),
+  );
+}
 
 /* ── App-shell caching ────────────────────────────────────────────────────
  * Navigations are NETWORK-FIRST: freshness stays authoritative — an in-process

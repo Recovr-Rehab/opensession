@@ -11,6 +11,7 @@ function workerHarness(scopePath = "/", existingCacheNames: string[] = []) {
   const listeners = new Map<string, WorkerListener>();
   const added: string[] = [];
   const deletedCacheNames: string[] = [];
+  const navigated: string[] = [];
   const entries = new Map<string, Response>();
   const cache = {
     async add(input: string) {
@@ -58,7 +59,14 @@ function workerHarness(scopePath = "/", existingCacheNames: string[] = []) {
     clients: {
       async claim() {},
       async matchAll() {
-        return [];
+        return [
+          {
+            url: scope,
+            async navigate(url: string) {
+              navigated.push(url);
+            },
+          },
+        ];
       },
       async openWindow() {},
     },
@@ -77,7 +85,7 @@ function workerHarness(scopePath = "/", existingCacheNames: string[] = []) {
     networkFetch,
   );
 
-  return { added, deletedCacheNames, listeners };
+  return { added, deletedCacheNames, listeners, navigated };
 }
 
 async function runWorkerLifecycleEvent(
@@ -113,6 +121,20 @@ describe("service worker navigation freshness", () => {
     await runWorkerLifecycleEvent(harness, "activate");
 
     expect(harness.deletedCacheNames).toEqual(["os1-shell-html-v1"]);
+    expect(harness.navigated).toEqual(["https://os.test/"]);
+  });
+
+  test("does not reload clients after an ordinary worker update", async () => {
+    const harness = workerHarness("/", [
+      "os1-shell-html-v2",
+      "os1-shell-assets-v1",
+      "os1-shell-gate-v1",
+    ]);
+
+    await runWorkerLifecycleEvent(harness, "activate");
+
+    expect(harness.deletedCacheNames).toEqual([]);
+    expect(harness.navigated).toEqual([]);
   });
 });
 
