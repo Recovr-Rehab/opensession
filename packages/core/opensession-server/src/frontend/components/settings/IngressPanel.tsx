@@ -392,6 +392,7 @@ export function IngressPanel({
 								<SetupStep number={1} title="Connect this server to Tailscale">
 									<p className="m-0">The server must have a Tailscale DNS name. Funnel may also need to be allowed in your tailnet policy.</p>
 									{!settings.tailscale.installed && <CodeBlock>{"curl -fsSL https://raw.githubusercontent.com/tellahq/opensession/main/install.sh | bash -s -- --tailscale --no-onboard"}</CodeBlock>}
+									<CodeBlock>sudo tailscale up</CodeBlock>
 								</SetupStep>
 								<SetupStep number={2} title="Start Funnel">
 									<p className="m-0">Open Session sends public HTTPS traffic only to its isolated listener. No DNS records or inbound ports are needed.</p>
