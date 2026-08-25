@@ -296,6 +296,15 @@ summary:focus-visible {
 	background: rgba(var(--ink-rgb), 0.82);
 }
 
+.landing-setup-step-action-secondary {
+	background: rgba(var(--ink-rgb), 0.075);
+	color: var(--ink);
+}
+
+.landing-setup-step-action-secondary:hover {
+	background: rgba(var(--ink-rgb), 0.12);
+}
+
 .landing-setup-step-action:active {
 	transform: scale(0.96);
 }

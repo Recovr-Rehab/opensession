@@ -166,11 +166,13 @@ function SetupGuide({
 	triggerLabel,
 	title,
 	description,
+	secondary = false,
 	children,
 }: {
 	triggerLabel: string;
 	title: string;
 	description: string;
+	secondary?: boolean;
 	children: ReactNode;
 }) {
 	const dialogRef = useRef<HTMLDialogElement>(null);
@@ -180,7 +182,7 @@ function SetupGuide({
 		<>
 			<button
 				type="button"
-				className="landing-setup-step-action"
+				className={`landing-setup-step-action${secondary ? " landing-setup-step-action-secondary" : ""}`}
 				onClick={() => dialogRef.current?.showModal()}
 			>
 				{triggerLabel}
@@ -277,6 +279,7 @@ function SetupOverview() {
 						triggerLabel="Run installer"
 						title="Install Open Session"
 						description="Run one command on Linux, macOS, or WSL2."
+						secondary
 					>
 						<InstallCommand />
 					</SetupGuide>
@@ -295,7 +298,7 @@ function SetupOverview() {
 						</span>
 					</div>
 					<a
-						className="landing-setup-step-action"
+						className="landing-setup-step-action landing-setup-step-action-secondary"
 						href="https://tailscale.com/download"
 						target="_blank"
 						rel="noreferrer"
