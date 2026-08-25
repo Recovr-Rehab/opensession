@@ -1,18 +1,23 @@
-import type { ReactNode } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { createRoot } from "react-dom/client";
 import markAsset from "../mac/build/icon-512.png";
+import nativeMarkAsset from "../ios/OS1/Assets.xcassets/AppIcon.appiconset/AppIcon-1024.png";
 import {
 	IconBranches,
+	IconCheck,
 	IconClock,
+	IconCopy,
 	IconGlobe,
 	IconPeople,
 	IconPhone,
 	IconPullRequest,
 	IconRepo,
 	IconRobot,
+	IconServer,
 	IconSparkle,
 	IconStack,
 	IconTerminal,
+	IconX,
 } from "../../core/opensession-server/src/frontend/components/icons";
 import "./site.css";
 import { AgentationFeedback } from "./AgentationFeedback";
@@ -21,6 +26,11 @@ import { TellaBackground } from "./TellaBackground";
 import { assetUrl } from "./asset-url";
 
 const markUrl = assetUrl(markAsset);
+const nativeMarkUrl = assetUrl(nativeMarkAsset);
+const macDownloadUrl =
+	"https://github.com/tellahq/opensession/releases/download/v0.4.22/OpenSession-0.4.22-arm64.dmg";
+const installCommand =
+	"curl -fsSL https://raw.githubusercontent.com/tellahq/opensession/main/install.sh | bash";
 
 function Mark() {
 	return (
@@ -72,6 +82,194 @@ function Question({ q, children }: { q: string; children: ReactNode }) {
 	);
 }
 
+function PwaGuide() {
+	const dialogRef = useRef<HTMLDialogElement>(null);
+
+	return (
+		<>
+			<button
+				type="button"
+				className="landing-setup-app"
+				onClick={() => dialogRef.current?.showModal()}
+			>
+				<span className="landing-setup-app-mark landing-setup-app-mark-web" aria-hidden="true">
+					<IconGlobe size={24} />
+				</span>
+				<span className="landing-setup-app-copy">
+					<strong>PWA</strong>
+					<small>Install from your browser</small>
+				</span>
+				<span className="landing-setup-app-action">How to install</span>
+			</button>
+
+			<dialog
+				ref={dialogRef}
+				className="pwa-guide"
+				aria-labelledby="pwa-guide-title"
+				onClick={(event) => {
+					if (event.target === event.currentTarget) event.currentTarget.close();
+				}}
+			>
+				<div className="pwa-guide-panel">
+					<button
+						type="button"
+						className="pwa-guide-close"
+						aria-label="Close"
+						onClick={() => dialogRef.current?.close()}
+					>
+						<IconX size={20} />
+					</button>
+					<span className="pwa-guide-mark" aria-hidden="true">
+						<IconGlobe size={26} />
+					</span>
+					<h2 id="pwa-guide-title">Install the PWA</h2>
+					<p>Open your HTTPS Open Session address in a browser, then:</p>
+					<div className="pwa-guide-options">
+						<div>
+							<strong>Mac or PC</strong>
+							<span>
+								In Chrome or Edge, select the install icon in the address bar.
+								In Safari, choose File → Add to Dock.
+							</span>
+						</div>
+						<div>
+							<strong>iPhone or iPad</strong>
+							<span>
+								In Safari, tap Share, then Add to Home Screen and Add.
+							</span>
+						</div>
+					</div>
+					<p className="pwa-guide-note">
+						Want a standalone Electron app instead? Download the Mac app.
+					</p>
+				</div>
+			</dialog>
+		</>
+	);
+}
+
+function InstallCommand() {
+	const [copyState, setCopyState] = useState<"idle" | "copied" | "failed">(
+		"idle",
+	);
+
+	useEffect(() => {
+		if (copyState === "idle") return;
+		const timeout = window.setTimeout(() => setCopyState("idle"), 2000);
+		return () => window.clearTimeout(timeout);
+	}, [copyState]);
+
+	const copyLabel =
+		copyState === "copied"
+			? "Copied"
+			: copyState === "failed"
+				? "Try again"
+				: "Copy";
+
+	return (
+		<div className="landing-install-command">
+			<code>{installCommand}</code>
+			<button
+				type="button"
+				onClick={async () => {
+				try {
+					await navigator.clipboard.writeText(installCommand);
+					setCopyState("copied");
+				} catch {
+					setCopyState("failed");
+				}
+			}}
+			>
+				{copyState === "copied" ? (
+					<IconCheck size={16} />
+				) : (
+					<IconCopy size={16} />
+				)}
+				<span aria-live="polite">{copyLabel}</span>
+			</button>
+		</div>
+	);
+}
+
+function SetupOverview() {
+	return (
+		<section className="card landing-setup-overview">
+			<div className="landing-setup-overview-head">
+				<h2>Set up Open Session</h2>
+				<p>Run it on your own machine and keep access private.</p>
+			</div>
+
+			<ol className="landing-setup-steps">
+				<li>
+					<span className="landing-setup-step-index">1</span>
+					<span className="landing-setup-step-icon" aria-hidden="true">
+						<IconServer size={22} />
+					</span>
+					<div className="landing-setup-step-copy">
+						<strong>Get a server or Mac mini</strong>
+						<span>Use a machine you can leave powered on and connected.</span>
+					</div>
+				</li>
+				<li>
+					<span className="landing-setup-step-index">2</span>
+					<span className="landing-setup-step-icon" aria-hidden="true">
+						<IconGlobe size={22} />
+					</span>
+					<div className="landing-setup-step-copy">
+						<strong>Install Tailscale</strong>
+						<span>Join the server and every device to the same tailnet.</span>
+					</div>
+					<a
+						className="landing-setup-step-action"
+						href="https://tailscale.com/download"
+						target="_blank"
+						rel="noreferrer"
+					>
+						Download
+					</a>
+				</li>
+				<li className="landing-setup-step-apps">
+					<span className="landing-setup-step-index">3</span>
+					<span className="landing-setup-step-icon" aria-hidden="true">
+						<IconPhone size={22} />
+					</span>
+					<div className="landing-setup-step-copy">
+						<strong>Download the apps</strong>
+						<span>Each app connects to the server you just installed.</span>
+					</div>
+					<div className="landing-setup-apps">
+						<a className="landing-setup-app" href={macDownloadUrl}>
+							<img src={markUrl} alt="" />
+							<span className="landing-setup-app-copy">
+								<strong>Mac app</strong>
+								<small>Electron · Apple silicon</small>
+							</span>
+							<span className="landing-setup-app-action">Download</span>
+						</a>
+						<PwaGuide />
+						<div className="landing-setup-app" aria-disabled="true">
+							<img src={nativeMarkUrl} alt="" />
+							<span className="landing-setup-app-copy">
+								<strong>iOS app</strong>
+								<small>Native app · App Store</small>
+							</span>
+							<span className="landing-setup-app-action">Coming soon</span>
+						</div>
+					</div>
+				</li>
+			</ol>
+
+			<div className="landing-install-option">
+				<div>
+					<strong>Or install from Terminal</strong>
+					<span>Run one command on Linux, macOS or WSL2.</span>
+				</div>
+				<InstallCommand />
+			</div>
+		</section>
+	);
+}
+
 /**
  * The page: a rail that stays put, and a feed that explains the product one
  * quiet card at a time. The rail holds the whole pitch and the only CTA, so
@@ -91,20 +289,12 @@ function LandingPage() {
 				</h1>
 
 				<div className="rail-foot">
-					{/* The two asks sit on one line with a real gap between them. No
-					    chevron on the second: an arrow on one of a pair makes it read as
-					    a link that wandered into a button. */}
-					<div className="rail-cta">
-						<a
-							className="button button-primary"
-							href="https://github.com/tellahq/opensession"
-						>
-							View on GitHub
-						</a>
-						<a className="button button-secondary" href="setup">
-							Set up your server
-						</a>
-					</div>
+					<a
+						className="button button-primary"
+						href="https://github.com/tellahq/opensession"
+					>
+						View on GitHub
+					</a>
 					<p className="rail-note">
 						Open source. Self-hosted.
 						<br />
@@ -119,6 +309,8 @@ function LandingPage() {
 					<TellaBackground />
 					<ProductDemo />
 				</section>
+
+				<SetupOverview />
 
 				<section className="card">
 					<div className="features">
