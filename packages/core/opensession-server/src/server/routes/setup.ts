@@ -45,12 +45,25 @@ async function integrationSnapshot(
     envValues && name in envValues
       ? envValues[name] !== ""
       : !!process.env[name];
-  const env = spec.env.map((e) => ({
-    name: e.name,
-    required: envRequired(e, present),
-    description: e.description,
-    present: present(e.name),
-  }));
+  let githubAppSuppliesBotCredential = false;
+  if (spec.id === "github") {
+    const { githubAppConfigured, githubBotCredentialMode } =
+      await import("../github-app");
+    githubAppSuppliesBotCredential =
+      githubBotCredentialMode() === "app" && githubAppConfigured();
+  }
+  const env = spec.env.map((e) => {
+    const retiredGithubPat =
+      e.name === "GITHUB_API_TOKEN" && githubAppSuppliesBotCredential;
+    return {
+      name: e.name,
+      required: retiredGithubPat ? false : envRequired(e, present),
+      description: retiredGithubPat
+        ? "legacy PAT; not used while the GitHub App is selected"
+        : e.description,
+      present: present(e.name),
+    };
+  });
   // Registry links are static; instance-dependent ones are computed here.
   const links = [...(spec.links ?? [])];
   if (spec.id === "grafana") {
