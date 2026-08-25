@@ -141,6 +141,31 @@ test("marks a rejected delivery failed without losing its editable payload", asy
 	outbox.dispose();
 });
 
+test("a terminally rejected item does not block a later follow-up", async () => {
+	const delivered: string[] = [];
+	const outbox = new PromptOutbox({
+		storage: memoryStorage(),
+		scope: "rejected-head",
+		deliver: async (_sessionId, body) => {
+			delivered.push(body.content);
+			if (body.content === "bad image") {
+				throw Object.assign(new Error("Unsupported image"), { status: 400 });
+			}
+			return { status: "queued", message: "ok" };
+		},
+	});
+	const failed = outbox.enqueue({ sessionId: "s1", content: "bad image" });
+	await outbox.flush();
+	outbox.enqueue({ sessionId: "s1", content: "follow up" });
+	await outbox.flush();
+
+	expect(delivered).toEqual(["bad image", "follow up"]);
+	expect(outbox.list("s1")).toEqual([
+		expect.objectContaining({ clientId: failed.clientId, state: "failed" }),
+	]);
+	outbox.dispose();
+});
+
 test("resumes a persisted send after the tab that started it closes", async () => {
 	const storage = memoryStorage();
 	storage.setItem(
