@@ -114,7 +114,6 @@ import { UserGate, getCurrentUser, useAuthStatus, useCurrentUser } from "./compo
 import { PreviewWait, matchPreviewWaitRoute } from "./components/PreviewWait";
 import { TitleBar } from "./components/TitleBar";
 import { FirstMile } from "./components/FirstMile";
-import { GithubConnectEmptyState } from "./components/GithubConnectEmptyState";
 import {
 	completeFirstMile,
 	firstMileComplete,
@@ -1108,8 +1107,6 @@ export function App(
 		workspacesLoaded &&
 		sessions.length === 0 &&
 		workspaces.length === 0;
-	const githubConnectionRequired =
-		productEmpty && githubConnectionState === "disconnected";
 	const firstMileActive =
 		forceFirstMile ||
 		(auth?.admin !== false &&
@@ -5350,19 +5347,12 @@ console.error("Rename workspace failed:", error);
 							onSelect={(s) => navigate({ view: "session", id: s.id })}
 							onOpenReview={openReviewForSession}
 							onOpenTicket={openTicketWorkspace}
-						onOpenFeedItem={openFeedItemWorkspace}
-							onNewSession={() =>
-								githubConnectionRequired
-									? navigate({ view: "settings", section: "myAccounts" })
-									: openPalette()
-							}
+							onOpenFeedItem={openFeedItemWorkspace}
+							onNewSession={() => openPalette()}
 							showDraftRow={
-								productEmpty &&
-								githubConnectionState !== "loading" &&
-								!githubConnectionRequired
+								productEmpty && githubConnectionState !== "loading"
 							}
 							draftRowActive={productEmpty && route.view === "prs"}
-							githubConnectionRequired={githubConnectionRequired}
 							onOpenDraft={() => {
 								// The row and the panel's card are one unstarted session, so
 								// pressing the row is "put me back in it": return to the panel
@@ -5913,13 +5903,6 @@ console.error("Archive failed:", e);
 							>
 								Check the connection to this server.
 							</EmptyState>
-						) : githubConnectionRequired ? (
-							<GithubConnectEmptyState
-								onConnect={() =>
-									navigate({ view: "settings", section: "myAccounts" })
-								}
-								className="min-h-0 flex-1"
-							/>
 						) : productEmpty && githubConnectionState === "loading" ? (
 							<LoadingState className="min-h-0 flex-1">Checking GitHub…</LoadingState>
 						) : productEmpty ? (
