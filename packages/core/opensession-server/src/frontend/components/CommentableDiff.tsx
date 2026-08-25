@@ -796,7 +796,7 @@ const pendingByFile = m;
               />
               <span
                 aria-hidden="true"
-                className="pointer-events-none absolute -inset-x-px inset-y-0 z-[1] hidden rounded-t-lg border border-line [border-bottom-color:var(--divider)] group-data-[stuck]:block"
+                className="pointer-events-none absolute -inset-x-px inset-y-0 z-[1] hidden rounded-t-lg border-x border-b border-line [border-bottom-color:var(--divider)] group-data-[stuck]:block"
               />
             </>
           )}
