@@ -100,7 +100,6 @@ function PrivateAppSetup({
 	apiToken,
 	provider,
 	teamId,
-	mode,
 	busy,
 	action,
 	onDomainChange,
@@ -108,7 +107,6 @@ function PrivateAppSetup({
 	onTokenChange,
 	onProviderChange,
 	onTeamIdChange,
-	onModeChange,
 	onSetup,
 	onVerify,
 	onSaveManual,
@@ -119,7 +117,6 @@ function PrivateAppSetup({
 	apiToken: string;
 	provider: "cloudflare" | "vercel";
 	teamId: string;
-	mode: "managed" | "manual";
 	busy: boolean;
 	action: "setup" | "verify" | "save" | null;
 	onDomainChange: (value: string) => void;
@@ -127,7 +124,6 @@ function PrivateAppSetup({
 	onTokenChange: (value: string) => void;
 	onProviderChange: (value: "cloudflare" | "vercel") => void;
 	onTeamIdChange: (value: string) => void;
-	onModeChange: (value: "managed" | "manual") => void;
 	onSetup: () => void;
 	onVerify: () => void;
 	onSaveManual: () => void;
@@ -174,14 +170,10 @@ function PrivateAppSetup({
 						Give your team a memorable HTTPS address while keeping the app on your private Tailscale network.
 					</p>
 				</div>
-				<Segmented label="Private domain setup" value={mode} onValueChange={(value) => onModeChange(value as "managed" | "manual")} className="w-full">
-					<SegmentedOption value="managed" className="min-h-10 flex-1 justify-center phone:min-h-11">Managed</SegmentedOption>
-					<SegmentedOption value="manual" className="min-h-10 flex-1 justify-center phone:min-h-11">Bring your own</SegmentedOption>
-				</Segmented>
-
-				{mode === "managed" ? (
-					<>
-						<SetupSteps>
+				{status === "ready" && !settings.app.domain.credentialConfigured && (
+					<InlineAlert>This address is already working. Its certificate is managed outside Open Session.</InlineAlert>
+				)}
+				<SetupSteps>
 							<SetupStep number={1} title="Choose the app domain">
 								<SettingsField className="mb-0">
 									Domain
@@ -243,10 +235,10 @@ function PrivateAppSetup({
 							<Button variant="primary" disabled={busy || managedInputMissing || !dnsRecord || !settings.custom.caddyInstalled || !settings.app.domain.legoInstalled || !settings.canManage} className="phone:min-h-11 phone:w-full phone:justify-center" onClick={onSetup}>
 								{action === "setup" ? "Setting up…" : managedCredential ? "Update setup" : "Set up private domain"}
 							</Button>
-						</SettingsFormActions>
-					</>
-				) : (
-					<>
+				</SettingsFormActions>
+				<details className="rounded-lg bg-surface p-3 text-meta text-dim">
+					<summary className="cursor-pointer font-medium text-fg">Use an externally managed certificate</summary>
+					<div className="mt-3 grid gap-4">
 						<SetupSteps>
 							<SetupStep number={1} title="Choose the app domain">
 								<SettingsField className="mb-0">
@@ -281,9 +273,9 @@ function PrivateAppSetup({
 								{action === "save" ? "Saving…" : "Save app domain"}
 							</Button>
 						</SettingsFormActions>
-						<SettingsHint>This is a bring-your-own setup. Managed setup issues and renews the certificate for you.</SettingsHint>
-					</>
-				)}
+						<SettingsHint>Only use this when existing infrastructure already issues and renews the certificate.</SettingsHint>
+					</div>
+				</details>
 			</SettingsForm>
 		</>
 	);
@@ -306,7 +298,6 @@ export function IngressPanel({
 	const [surface, setSurface] = useState<"app" | "ingress">(onboarding ? "ingress" : "app");
 	const [method, setMethod] = useState<IngressExposure>("tailscale");
 	const [appDomain, setAppDomain] = useState("");
-	const [privateMode, setPrivateMode] = useState<"managed" | "manual">("managed");
 	const [certificateEmail, setCertificateEmail] = useState("");
 	const [privateApiToken, setPrivateApiToken] = useState("");
 	const [privateProvider, setPrivateProvider] = useState<"cloudflare" | "vercel">("cloudflare");
@@ -479,7 +470,6 @@ export function IngressPanel({
 								apiToken={privateApiToken}
 								provider={privateProvider}
 								teamId={vercelTeamId}
-								mode={privateMode}
 								busy={busy === "app"}
 								action={privateAction}
 								onDomainChange={(value) => { setAppDomain(value); setError(null); }}
@@ -487,7 +477,6 @@ export function IngressPanel({
 								onTokenChange={setPrivateApiToken}
 								onProviderChange={(value) => { setPrivateProvider(value); setPrivateApiToken(""); }}
 								onTeamIdChange={setVercelTeamId}
-								onModeChange={setPrivateMode}
 								onSetup={() => void runPrivateApp("setup", () => setupPrivateAppDomain({
 									domain: appDomain,
 									provider: privateProvider,
