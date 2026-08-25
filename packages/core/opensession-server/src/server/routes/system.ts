@@ -51,33 +51,39 @@ export async function handleSystemRoutes(
 				id?: unknown;
 				action?: unknown;
 			} | null;
-			const validAction = body?.action === "retry" || body?.action === "discard";
+			const validDeadLetterAction = body?.action === "retry" || body?.action === "discard";
 			const validTimer =
-				body?.type === "timer" &&
+				validDeadLetterAction && body?.type === "timer" &&
 				typeof body.sessionId === "string" && body.sessionId.trim().length > 0 &&
 				typeof body.timerId === "string" && body.timerId.trim().length > 0 &&
 				body.id === undefined;
 			const validOutbox =
-				body?.type === "outbox" &&
+				validDeadLetterAction && body?.type === "outbox" &&
 				Number.isSafeInteger(body.id) && Number(body.id) > 0 &&
 				body.sessionId === undefined && body.timerId === undefined;
-			if (!validAction || (!validTimer && !validOutbox))
+			const validQuarantine =
+				body?.type === "quarantine" && body.action === "release" &&
+				typeof body.sessionId === "string" && body.sessionId.trim().length > 0 &&
+				body.timerId === undefined && body.id === undefined;
+			if (!validTimer && !validOutbox && !validQuarantine)
 				return Response.json(
 					{ error: "invalid_dead_letter_action" },
 					{ status: 400 },
 				);
 			const discard = body.action === "discard";
-			const changed = validTimer
-				? discard
-					? sessionKernelStore().discardDeadTimer(body.sessionId as string, body.timerId as string)
-					: sessionKernelStore().retryDeadTimer(body.sessionId as string, body.timerId as string)
-				: discard
-					? sessionKernelStore().discardDeadOutbox(Number(body.id))
-					: sessionKernelStore().retryDeadOutbox(Number(body.id));
+			const changed = validQuarantine
+				? sessionKernelStore().releaseQuarantine(body.sessionId as string)
+				: validTimer
+					? discard
+						? sessionKernelStore().discardDeadTimer(body.sessionId as string, body.timerId as string)
+						: sessionKernelStore().retryDeadTimer(body.sessionId as string, body.timerId as string)
+					: discard
+						? sessionKernelStore().discardDeadOutbox(Number(body.id))
+						: sessionKernelStore().retryDeadOutbox(Number(body.id));
 			audit({
 				msg: "session_kernel_dead_letter_changed",
 				user: requestUser(ctx),
-				action: discard ? "discard" : "retry",
+				action: validQuarantine ? "release" : discard ? "discard" : "retry",
 				kind: body?.type,
 				session_id:
 					typeof body?.sessionId === "string" ? body.sessionId : undefined,
@@ -86,7 +92,7 @@ export async function handleSystemRoutes(
 				changed,
 			});
 			return Response.json(
-				{ changed, action: discard ? "discard" : "retry" },
+				{ changed, action: validQuarantine ? "release" : discard ? "discard" : "retry" },
 				{ status: changed ? 200 : 404 },
 			);
 		}

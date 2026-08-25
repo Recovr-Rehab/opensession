@@ -1,23 +1,25 @@
 import type { SessionActorReducerCommand } from "./lifecycle-protocol";
-import type {
-  CreationEventDecision,
-  CreationEventDecisionResult,
-  DurableCommandRecord,
-  DurableCreationState,
-  DurableDeliveryState,
-  DurableOutboxItem,
-  DeliverySlot,
-  DurableRunState,
-  DurableTimer,
-  RunEventDecision,
-  RunEventDecisionResult,
-  SessionKernelStoreApi,
-} from "./store";
 import {
-  isDeliveryReadRequest,
-  type DeliveryActorRequest,
-  type DeliveryActorResult,
-  type DeliveryMutationReply,
+  SessionKernelStore,
+  sessionKernelDbPath,
+  type CreationEventDecision,
+  type CreationEventDecisionResult,
+  type DurableCommandRecord,
+  type DurableCreationState,
+  type DurableDeliveryState,
+  type DurableSessionQuarantine,
+  type DurableOutboxItem,
+  type DeliverySlot,
+  type DurableRunState,
+  type DurableTimer,
+  type RunEventDecision,
+  type RunEventDecisionResult,
+  type SessionKernelStoreApi,
+} from "./store";
+import type {
+  DeliveryActorRequest,
+  DeliveryActorResult,
+  DeliveryMutationReply,
 } from "./delivery-protocol";
 import type { AskActorRequest, AskActorResult } from "./ask-protocol";
 import type { TurnActorRequest, TurnActorResult } from "./turn-protocol";
@@ -26,7 +28,6 @@ import type { GatewayCommandRequest, GatewayCommandResult } from "./gateway-comm
 import type { CoreActorRequest, CoreActorResult } from "./core-protocol";
 import {
   SESSION_KERNEL_ACTOR_VERSION,
-  isCriticalSettlementCommand,
   type KernelActorAsyncRequest,
   type KernelActorAsyncResponse,
 } from "./actor-protocol";
@@ -35,11 +36,16 @@ const SMALL_OUTPUT_BYTES = 256 * 1024;
 const LARGE_OUTPUT_BYTES = 8 * 1024 * 1024;
 const MAX_DYNAMIC_OUTPUT_BYTES = 128 * 1024 * 1024;
 const LARGE_STORE_RESPONSES = new Set([
+  "askEntries",
+  "askSnapshot",
   "changesSince",
   "creationState",
+  "deliveryEntries",
+  "deliverySnapshot",
   "pendingOutbox",
   "dueTimers",
   "runStates",
+  "turnSnapshot",
 ]);
 
 export class SessionKernelActorError extends Error {
@@ -49,6 +55,16 @@ export class SessionKernelActorError extends Error {
   ) {
     super(message);
     this.name = "SessionKernelActorError";
+  }
+}
+
+export class SessionKernelQuarantinedError extends SessionKernelActorError {
+  constructor(
+    readonly sessionId: string,
+    message: string,
+  ) {
+    super(message, false);
+    this.name = "SessionKernelQuarantinedError";
   }
 }
 
@@ -115,6 +131,7 @@ export class SessionKernelActorClient {
       response.version !== SESSION_KERNEL_ACTOR_VERSION
     )
       throw new Error("Session kernel actor handshake failed");
+    (this.store as RemoteStore).openReadMirror();
     (this.store as RemoteStore).hydrateRunStates();
   }
 
@@ -172,24 +189,28 @@ export class SessionKernelActorClient {
   }
 
   decideAsk<T extends AskActorRequest>(request: T): AskActorResult<T> {
+    if (request.op === "snapshot")
+      return (this.store as RemoteStore).askSnapshot(request.sessionId) as AskActorResult<T>;
+    if (request.op === "entries")
+      return (this.store as RemoteStore).askEntries() as AskActorResult<T>;
     return this.callSync<AskActorResult<T>>(
       {
         t: "reduce",
         command: { kind: "ask", commandId: crypto.randomUUID(), request },
       },
       `ask ${request.op}`,
-      request.op === "snapshot" || request.op === "entries",
     );
   }
 
   decideTurn<T extends TurnActorRequest>(request: T): TurnActorResult<T> {
+    if (request.op === "snapshot")
+      return (this.store as RemoteStore).turnSnapshot(request.sessionId) as TurnActorResult<T>;
     const result = this.callSync<TurnActorResult<T>>(
       {
         t: "reduce",
         command: { kind: "turn", commandId: crypto.randomUUID(), request },
       },
       `turn ${request.op}`,
-      request.op === "snapshot",
     );
     if (request.op === "prepare_cancel") {
       const prepared = result as TurnActorResult<
@@ -240,6 +261,10 @@ export class SessionKernelActorClient {
   decideDelivery<T extends DeliveryActorRequest>(
     request: T,
   ): DeliveryActorResult<T> {
+    if (request.op === "snapshot")
+      return (this.store as RemoteStore).deliverySnapshot(request.sessionId) as DeliveryActorResult<T>;
+    if (request.op === "entries")
+      return (this.store as RemoteStore).deliveryEntries(request.slot) as DeliveryActorResult<T>;
     const response = this.callSync<
       DeliveryActorResult<T> | DeliveryMutationReply<DeliveryActorResult<T>>
     >(
@@ -252,12 +277,8 @@ export class SessionKernelActorClient {
         },
       },
       `delivery ${request.op}`,
-      isDeliveryReadRequest(request),
     );
-    return (isDeliveryReadRequest(request)
-      ? response
-      : (response as DeliveryMutationReply<DeliveryActorResult<T>>).result
-    ) as DeliveryActorResult<T>;
+    return (response as DeliveryMutationReply<DeliveryActorResult<T>>).result;
   }
 
   decideCreationEvent(
@@ -356,17 +377,22 @@ export class SessionKernelActorClient {
       ok: boolean;
       result?: TResult;
       error?: string;
+      code?: string;
+      sessionId?: string;
     };
     if (!response.ok) {
-      const error = new Error(response.error || `Session kernel ${label} failed`);
-      if (request.t === "reduce" && isCriticalSettlementCommand(request.command))
-        this.markDead(error);
+      const message = response.error || `Session kernel ${label} failed`;
+      if (response.code === "session_quarantined" && response.sessionId)
+        throw new SessionKernelQuarantinedError(response.sessionId, message);
+      const error = new Error(message);
+      if (response.code === "actor_fatal") this.markDead(error);
       throw error;
     }
     return response.result as TResult;
   }
 
   terminate(): void {
+    this.store.close();
     this.markDead(new Error("Session kernel actor stopped"), false);
     this.worker.terminate();
   }
@@ -418,17 +444,24 @@ export class SessionKernelActorClient {
 
 class RemoteStore implements SessionKernelStoreApi {
   private readonly runStateCache = new Map<string, DurableRunState>();
+  private readStore?: SessionKernelStore;
   private statsCache?: {
     at: number;
     value: ReturnType<SessionKernelStoreApi["stats"]>;
   };
   constructor(private readonly actor: SessionKernelActorClient) {}
+  openReadMirror(): void {
+    const path = sessionKernelDbPath();
+    if (path === ":memory:") return;
+    this.readStore?.close();
+    this.readStore = new SessionKernelStore(path, { readonly: true });
+  }
   hydrateRunStates(): void {
     this.runStateCache.clear();
-    for (const state of this.call<
+    const states = this.readStore?.runStates() ?? this.call<
       Array<DurableRunState & { sessionId: string }>
-    >("runStates"))
-      this.runStateCache.set(state.sessionId, state);
+    >("runStates");
+    for (const state of states) this.runStateCache.set(state.sessionId, state);
   }
   noteRunState(sessionId: string, state: DurableRunState): void {
     this.runStateCache.set(sessionId, state);
@@ -448,13 +481,34 @@ class RemoteStore implements SessionKernelStoreApi {
   private call<T>(method: string, ...args: unknown[]): T {
     return this.actor.callStore<T>(method, args);
   }
-  close(): void {}
+  close(): void {
+    this.readStore?.close();
+    this.readStore = undefined;
+  }
   command(sessionId: string, requestId: string) {
-    return this.call<DurableCommandRecord | undefined>(
-      "command",
-      sessionId,
-      requestId,
-    );
+    return this.readStore
+      ? this.readStore.command(sessionId, requestId)
+      : this.call<DurableCommandRecord | undefined>(
+          "command",
+          sessionId,
+          requestId,
+        );
+  }
+  quarantinedSession(sessionId: string) {
+    return this.readStore
+      ? this.readStore.quarantinedSession(sessionId)
+      : this.call<DurableSessionQuarantine | undefined>("quarantinedSession", sessionId);
+  }
+  quarantinedSessions(limit?: number, offset?: number) {
+    return this.readStore
+      ? this.readStore.quarantinedSessions(limit, offset)
+      : this.call<DurableSessionQuarantine[]>("quarantinedSessions", limit, offset);
+  }
+  quarantineSession(sessionId: string, reason: string, commandKind: string) {
+    return this.call<DurableSessionQuarantine>("quarantineSession", sessionId, reason, commandKind);
+  }
+  releaseQuarantine(sessionId: string) {
+    return this.call<boolean>("releaseQuarantine", sessionId);
   }
   acceptCommand(input: {
     sessionId: string;
@@ -485,10 +539,9 @@ class RemoteStore implements SessionKernelStoreApi {
     this.call("failCommand", sessionId, requestId, error, retryable);
   }
   creationState(sessionId: string): DurableCreationState | undefined {
-    return this.call<DurableCreationState | undefined>(
-      "creationState",
-      sessionId,
-    );
+    return this.readStore
+      ? this.readStore.creationState(sessionId)
+      : this.call<DurableCreationState | undefined>("creationState", sessionId);
   }
   applyCreationEvent(input: CreationEventDecision) {
     return this.actor.decideCreationEvent(input);
@@ -516,12 +569,14 @@ class RemoteStore implements SessionKernelStoreApi {
     return seq;
   }
   changesSince(sessionId: string, after: number, limit?: number) {
-    return this.call<ReturnType<SessionKernelStoreApi["changesSince"]>>(
-      "changesSince",
-      sessionId,
-      after,
-      limit,
-    );
+    return this.readStore
+      ? this.readStore.changesSince(sessionId, after, limit)
+      : this.call<ReturnType<SessionKernelStoreApi["changesSince"]>>(
+          "changesSince",
+          sessionId,
+          after,
+          limit,
+        );
   }
   applyRunEvent(input: RunEventDecision) {
     return this.actor.decideRunEvent(input);
@@ -532,7 +587,9 @@ class RemoteStore implements SessionKernelStoreApi {
     return next;
   }
   isTombstoned(sessionId: string, now?: number) {
-    return this.call<boolean>("isTombstoned", sessionId, now);
+    return this.readStore
+      ? this.readStore.isTombstoned(sessionId, now)
+      : this.call<boolean>("isTombstoned", sessionId, now);
   }
   tombstoneSession(sessionId: string) {
     this.call("tombstoneSession", sessionId);
@@ -543,16 +600,22 @@ class RemoteStore implements SessionKernelStoreApi {
     this.runStateCache.delete(sessionId);
   }
   askMigrationComplete() {
-    return this.call<boolean>("askMigrationComplete");
+    return this.readStore
+      ? this.readStore.askMigrationComplete()
+      : this.call<boolean>("askMigrationComplete");
   }
   markAskMigrationComplete() {
     this.call("markAskMigrationComplete");
   }
   askSnapshot(sessionId: string) {
-    return this.actor.decideAsk({ op: "snapshot", sessionId });
+    return this.readStore
+      ? this.readStore.askSnapshot(sessionId)
+      : this.call<ReturnType<SessionKernelStoreApi["askSnapshot"]>>("askSnapshot", sessionId);
   }
   askEntries() {
-    return this.actor.decideAsk({ op: "entries" });
+    return this.readStore
+      ? this.readStore.askEntries()
+      : this.call<ReturnType<SessionKernelStoreApi["askEntries"]>>("askEntries");
   }
   setAskRecord(sessionId: string, value: unknown) {
     this.actor.decideAsk({ op: "set", sessionId, value });
@@ -578,13 +641,17 @@ class RemoteStore implements SessionKernelStoreApi {
     this.actor.decideAsk({ op: "clear" });
   }
   deliveryMigrationComplete() {
-    return this.call<boolean>("deliveryMigrationComplete");
+    return this.readStore
+      ? this.readStore.deliveryMigrationComplete()
+      : this.call<boolean>("deliveryMigrationComplete");
   }
   markDeliveryMigrationComplete() {
     this.call("markDeliveryMigrationComplete");
   }
   turnSnapshot(sessionId: string) {
-    return this.actor.decideTurn({ op: "snapshot", sessionId });
+    return this.readStore
+      ? this.readStore.turnSnapshot(sessionId)
+      : this.call<ReturnType<SessionKernelStoreApi["turnSnapshot"]>>("turnSnapshot", sessionId);
   }
   requestTurnCancelCommand(
     input: Parameters<SessionKernelStoreApi["requestTurnCancelCommand"]>[0],
@@ -687,10 +754,14 @@ class RemoteStore implements SessionKernelStoreApi {
     return this.actor.decideDelivery({ op: "fail_submit_command", ...input });
   }
   deliverySnapshot(sessionId: string) {
-    return this.actor.decideDelivery({ op: "snapshot", sessionId });
+    return this.readStore
+      ? this.readStore.deliverySnapshot(sessionId)
+      : this.call<ReturnType<SessionKernelStoreApi["deliverySnapshot"]>>("deliverySnapshot", sessionId);
   }
   deliveryEntries(slot: DeliverySlot) {
-    return this.actor.decideDelivery({ op: "entries", slot });
+    return this.readStore
+      ? this.readStore.deliveryEntries(slot)
+      : this.call<ReturnType<SessionKernelStoreApi["deliveryEntries"]>>("deliveryEntries", slot);
   }
   setDeliverySlot(sessionId: string, slot: DeliverySlot, value: unknown) {
     this.actor.decideDelivery({ op: "set", sessionId, slot, value });
@@ -800,7 +871,9 @@ class RemoteStore implements SessionKernelStoreApi {
     this.call("scheduleTimer", timer);
   }
   timer(sessionId: string, timerId: string) {
-    return this.call<DurableTimer | undefined>("timer", sessionId, timerId);
+    return this.readStore
+      ? this.readStore.timer(sessionId, timerId)
+      : this.call<DurableTimer | undefined>("timer", sessionId, timerId);
   }
   cancelTimer(sessionId: string, timerId: string) {
     this.call("cancelTimer", sessionId, timerId);
@@ -809,7 +882,9 @@ class RemoteStore implements SessionKernelStoreApi {
     return this.call<boolean>("settleTimerSuccess", sessionId, timerId, token);
   }
   dueTimers(now?: number, limit?: number, kinds?: readonly string[]) {
-    return this.call<DurableTimer[]>("dueTimers", now, limit, kinds);
+    return this.readStore
+      ? this.readStore.dueTimers(now, limit, kinds)
+      : this.call<DurableTimer[]>("dueTimers", now, limit, kinds);
   }
   enqueueOutbox(
     sessionId: string,
@@ -832,13 +907,21 @@ class RemoteStore implements SessionKernelStoreApi {
     return this.call<number[]>("enqueueOutboxMany", sessionId, effects);
   }
   pendingOutbox(now?: number, limit?: number, kinds?: readonly string[]) {
-    return this.call<DurableOutboxItem[]>("pendingOutbox", now, limit, kinds);
+    return this.readStore
+      ? this.readStore.pendingOutbox(now, limit, kinds)
+      : this.call<DurableOutboxItem[]>("pendingOutbox", now, limit, kinds);
+  }
+  outboxSessionId(id: number) {
+    return this.readStore
+      ? this.readStore.outboxSessionId(id)
+      : this.call<string | undefined>("outboxSessionId", id);
   }
   stats() {
     if (this.statsCache && Date.now() - this.statsCache.at < 5_000)
       return this.statsCache.value;
-    const value =
-      this.call<ReturnType<SessionKernelStoreApi["stats"]>>("stats");
+    const value = this.readStore
+      ? this.readStore.stats()
+      : this.call<ReturnType<SessionKernelStoreApi["stats"]>>("stats");
     this.statsCache = { at: Date.now(), value };
     return value;
   }
@@ -852,11 +935,13 @@ class RemoteStore implements SessionKernelStoreApi {
     return this.call<boolean>("maintain");
   }
   deadLetters(limit?: number, offset?: number) {
-    return this.call<ReturnType<SessionKernelStoreApi["deadLetters"]>>(
-      "deadLetters",
-      limit,
-      offset,
-    );
+    return this.readStore
+      ? this.readStore.deadLetters(limit, offset)
+      : this.call<ReturnType<SessionKernelStoreApi["deadLetters"]>>(
+          "deadLetters",
+          limit,
+          offset,
+        );
   }
   discardDeadTimer(sessionId: string, timerId: string) {
     return this.call<boolean>("discardDeadTimer", sessionId, timerId);

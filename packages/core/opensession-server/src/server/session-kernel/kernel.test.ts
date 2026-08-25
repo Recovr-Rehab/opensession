@@ -57,6 +57,27 @@ test("refuses an unsafe schema downgrade", () => {
 	}
 });
 
+test("read-only mirrors observe later WAL commits and cannot mutate", () => {
+	const dir = mkdtempSync(join(tmpdir(), "session-kernel-read-mirror-"));
+	const path = join(dir, "kernel.sqlite");
+	const writer = new SessionKernelStore(path);
+	const mirror = new SessionKernelStore(path, { readonly: true });
+	try {
+		expect(mirror.deliverySnapshot("mirror").queued).toEqual([]);
+		writer.setDeliverySlot("mirror", "queued", [{ id: "committed" }]);
+		expect(mirror.deliverySnapshot("mirror").queued).toEqual([
+			{ id: "committed" },
+		]);
+		expect(() =>
+			mirror.setDeliverySlot("mirror", "queued", [{ id: "forbidden" }]),
+		).toThrow();
+	} finally {
+		mirror.close();
+		writer.close();
+		rmSync(dir, { recursive: true, force: true });
+	}
+});
+
 test("durable cancel and interrupt receipts restore their original command target", () => {
   expect(targetForTurnCancel({
     cancelId: "stop:request-one",

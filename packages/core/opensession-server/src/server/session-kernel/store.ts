@@ -211,7 +211,7 @@ const PROCESS_OWNER_ID = (ownerGlobal.__opensessionSessionKernelOwnerId ??=
 		bootId: linuxBootId(),
 		start: linuxProcessStart(process.pid),
 	} satisfies ProcessOwnerIdentity));
-export const SESSION_KERNEL_SCHEMA_VERSION = 20;
+export const SESSION_KERNEL_SCHEMA_VERSION = 21;
 export const SESSION_KERNEL_MAX_CREATION_EFFECT_RECEIPTS = 256;
 export const SESSION_KERNEL_MAX_OPENING_PLAN_BYTES = 16 * 1024 * 1024;
 
@@ -309,6 +309,13 @@ export type DurableCreationState = {
   updatedAt: number;
 };
 
+export type DurableSessionQuarantine = {
+  sessionId: string;
+  reason: string;
+  commandKind: string;
+  quarantinedAt: number;
+};
+
 export type CreationEventDecisionResult = {
   accepted: boolean;
   from?: CreationState;
@@ -342,8 +349,25 @@ export class SessionKernelStore {
 	private readonly dirtyChangeSessions = new Set<string>();
 	private readonly path: string;
 
-	constructor(path = sessionKernelDbPath()) {
+	constructor(path = sessionKernelDbPath(), options: { readonly?: boolean } = {}) {
 		this.path = path;
+		if (options.readonly) {
+			if (path === ":memory:")
+				throw new Error("A read-only session kernel store requires a file path");
+			this.db = new Database(path, { readonly: true });
+			this.closeable = true;
+			this.db.exec("PRAGMA query_only = ON; PRAGMA busy_timeout = 50;");
+			const schemaVersion = Number(
+				(this.db.query("PRAGMA user_version").get() as { user_version: number })
+					.user_version,
+			);
+			if (schemaVersion !== SESSION_KERNEL_SCHEMA_VERSION)
+				throw new Error(
+					`Session kernel read mirror schema ${schemaVersion} does not match supported ${SESSION_KERNEL_SCHEMA_VERSION}`,
+				);
+			this.hydrateRunStateCache();
+			return;
+		}
 		if (path !== ":memory:") {
 			const dir = dirname(path);
 			if (!existsSync(dir)) mkdirSync(dir, { recursive: true });
@@ -386,6 +410,12 @@ export class SessionKernelStore {
 			CREATE TABLE IF NOT EXISTS session_kernel_tombstones (
 				session_id TEXT PRIMARY KEY,
 				deleted_at INTEGER NOT NULL
+			);
+			CREATE TABLE IF NOT EXISTS session_kernel_quarantine (
+				session_id TEXT PRIMARY KEY,
+				reason TEXT NOT NULL,
+				command_kind TEXT NOT NULL,
+				quarantined_at INTEGER NOT NULL
 			);
 			CREATE TABLE IF NOT EXISTS session_kernel_state (
 				session_id TEXT PRIMARY KEY,
@@ -751,23 +781,7 @@ export class SessionKernelStore {
 			"UPDATE session_kernel_commands SET status = 'indeterminate', error = 'actor restarted after execution began', retryable = 0, updated_at = ? WHERE status = 'processing'",
 			[Date.now()],
 		);
-		const stateRows = this.db
-      .query(
-        `SELECT session_id, run_state, run_since, last_event, generation,
-				current_run_id, change_seq FROM session_kernel_state`,
-      )
-			.all() as Record<string, unknown>[];
-		for (const row of stateRows) {
-			this.runStateCache.set(String(row.session_id), {
-				state: String(row.run_state),
-				since: String(row.run_since),
-				lastEvent: row.last_event == null ? undefined : String(row.last_event),
-				generation: Number(row.generation),
-				currentRunId:
-					row.current_run_id == null ? undefined : String(row.current_run_id),
-				changeSeq: Number(row.change_seq),
-			});
-		}
+		this.hydrateRunStateCache();
 		// A restart used to mark every known session dirty. The first runtime
 		// maintenance pass then issued up to 100 FULL-synchronous DELETEs, which
 		// could monopolize the actor for minutes on a large journal. Rebuild only
@@ -780,6 +794,26 @@ export class SessionKernelStore {
 			.all(CHANGE_HISTORY_PER_SESSION) as Array<{ session_id: string }>;
 		for (const row of compactableChangeRows)
 			this.dirtyChangeSessions.add(row.session_id);
+	}
+
+	private hydrateRunStateCache(): void {
+		this.runStateCache.clear();
+		const stateRows = this.db
+			.query(
+				`SELECT session_id, run_state, run_since, last_event, generation,
+				 current_run_id, change_seq FROM session_kernel_state`,
+			)
+			.all() as Record<string, unknown>[];
+		for (const row of stateRows)
+			this.runStateCache.set(String(row.session_id), {
+				state: String(row.run_state),
+				since: String(row.run_since),
+				lastEvent: row.last_event == null ? undefined : String(row.last_event),
+				generation: Number(row.generation),
+				currentRunId:
+					row.current_run_id == null ? undefined : String(row.current_run_id),
+				changeSeq: Number(row.change_seq),
+			});
 	}
 
 	private claimWriter(): void {
@@ -828,6 +862,62 @@ export class SessionKernelStore {
 
 	close(): void {
 		if (this.closeable) this.db.close();
+	}
+
+	quarantineSession(
+		sessionId: string,
+		reason: string,
+		commandKind: string,
+	): DurableSessionQuarantine {
+		const quarantinedAt = Date.now();
+		this.db.run(
+			`INSERT INTO session_kernel_quarantine
+			 (session_id, reason, command_kind, quarantined_at)
+			 VALUES (?, ?, ?, ?)
+			 ON CONFLICT(session_id) DO NOTHING`,
+			[sessionId, reason.slice(0, 2_000), commandKind.slice(0, 200), quarantinedAt],
+		);
+		return this.quarantinedSession(sessionId)!;
+	}
+
+	quarantinedSession(sessionId: string): DurableSessionQuarantine | undefined {
+		const row = this.db
+			.query(
+				`SELECT session_id, reason, command_kind, quarantined_at
+				 FROM session_kernel_quarantine WHERE session_id = ?`,
+			)
+			.get(sessionId) as Record<string, unknown> | null;
+		return row
+			? {
+					sessionId: String(row.session_id),
+					reason: String(row.reason),
+					commandKind: String(row.command_kind),
+					quarantinedAt: Number(row.quarantined_at),
+				}
+			: undefined;
+	}
+
+	quarantinedSessions(limit = 100, offset = 0): DurableSessionQuarantine[] {
+		const rows = this.db
+			.query(
+				`SELECT session_id, reason, command_kind, quarantined_at
+				 FROM session_kernel_quarantine
+				 ORDER BY quarantined_at DESC LIMIT ? OFFSET ?`,
+			)
+			.all(limit, offset) as Record<string, unknown>[];
+		return rows.map((row) => ({
+			sessionId: String(row.session_id),
+			reason: String(row.reason),
+			commandKind: String(row.command_kind),
+			quarantinedAt: Number(row.quarantined_at),
+		}));
+	}
+
+	releaseQuarantine(sessionId: string): boolean {
+		return this.db.run(
+			"DELETE FROM session_kernel_quarantine WHERE session_id = ?",
+			[sessionId],
+		).changes > 0;
 	}
 
   command(
@@ -1587,6 +1677,7 @@ export class SessionKernelStore {
         "session_kernel_delivery",
         "session_kernel_turn",
         "session_kernel_turn_projections",
+				"session_kernel_quarantine",
 				"session_kernel_commands",
 				"session_kernel_changes",
 				"session_kernel_timers",
@@ -1613,6 +1704,7 @@ export class SessionKernelStore {
         "session_kernel_delivery",
         "session_kernel_turn",
         "session_kernel_turn_projections",
+				"session_kernel_quarantine",
 				"session_kernel_commands",
 				"session_kernel_changes",
 				"session_kernel_timers",
@@ -3414,7 +3506,11 @@ export class SessionKernelStore {
 				`SELECT session_id, timer_id, kind, due_at, token, payload, attempts, next_attempt_at,
 					last_error, dead_lettered_at, created_at
 				 FROM session_kernel_timers
-				 WHERE due_at <= ? AND next_attempt_at <= ? AND dead_lettered_at IS NULL${kindFilter}
+				 WHERE due_at <= ? AND next_attempt_at <= ? AND dead_lettered_at IS NULL
+				   AND NOT EXISTS (
+					 SELECT 1 FROM session_kernel_quarantine q
+					 WHERE q.session_id = session_kernel_timers.session_id
+				   )${kindFilter}
 				 ORDER BY next_attempt_at, due_at LIMIT ?`,
 			)
 			.all(now, now, ...(kinds || []), limit) as Record<string, unknown>[];
@@ -3588,7 +3684,11 @@ export class SessionKernelStore {
 				`SELECT id, effect_id, effect_key, session_id, kind, payload, attempts,
          next_attempt_at, last_error, dead_lettered_at, created_at
          FROM session_kernel_outbox
-         WHERE dead_lettered_at IS NULL AND next_attempt_at <= ?${kindFilter}
+         WHERE dead_lettered_at IS NULL AND next_attempt_at <= ?
+           AND NOT EXISTS (
+             SELECT 1 FROM session_kernel_quarantine q
+             WHERE q.session_id = session_kernel_outbox.session_id
+           )${kindFilter}
          ORDER BY next_attempt_at, id LIMIT ?`,
       )
 			.all(now, ...(kinds || []), limit) as Record<string, unknown>[];
@@ -3610,6 +3710,7 @@ export class SessionKernelStore {
 
 	stats(): {
 		sessions: number;
+		quarantinedSessions: number;
 		pendingCommands: number;
 		indeterminateCommands: number;
 		pendingTimers: number;
@@ -3661,6 +3762,7 @@ export class SessionKernelStore {
 		};
 		return {
 			sessions: count("session_kernel_state"),
+			quarantinedSessions: count("session_kernel_quarantine"),
 			pendingCommands: count(
 				"session_kernel_commands",
 				"WHERE status IN ('pending', 'processing')",
@@ -3810,7 +3912,9 @@ export class SessionKernelStore {
 			 ORDER BY dead_lettered_at DESC LIMIT ? OFFSET ?`,
       )
       .all(limit, offset) as Record<string, unknown>[];
+		const quarantines = this.quarantinedSessions(limit, offset);
 		return {
+			quarantines,
 			timers: timers.map((row) => ({
 				sessionId: String(row.session_id),
 				timerId: String(row.timer_id),
@@ -3835,6 +3939,13 @@ export class SessionKernelStore {
 				deadLetteredAt: Number(row.dead_lettered_at),
 			})),
 			totals: {
+				quarantines: Number(
+					(
+						this.db
+							.query("SELECT COUNT(*) AS n FROM session_kernel_quarantine")
+							.get() as { n: number }
+					).n,
+				),
         timers: Number(
           (
             this.db
@@ -3855,7 +3966,9 @@ export class SessionKernelStore {
         ),
 			},
 			nextOffset:
-				timers.length === limit || outbox.length === limit
+				quarantines.length === limit ||
+				timers.length === limit ||
+				outbox.length === limit
 					? offset + limit
 					: undefined,
 		};
@@ -3997,6 +4110,13 @@ export class SessionKernelStore {
 		});
 		tx.immediate();
 		return retried;
+	}
+
+	outboxSessionId(id: number): string | undefined {
+		const row = this.db
+			.query("SELECT session_id FROM session_kernel_outbox WHERE id = ?")
+			.get(id) as { session_id: string } | null;
+		return row?.session_id;
 	}
 
 	ackOutbox(id: number): void {

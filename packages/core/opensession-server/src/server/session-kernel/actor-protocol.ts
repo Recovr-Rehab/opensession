@@ -5,7 +5,7 @@ import type {
   RunEventDecisionResult,
 } from "./store";
 
-export const SESSION_KERNEL_ACTOR_VERSION = 20;
+export const SESSION_KERNEL_ACTOR_VERSION = 21;
 export const SESSION_KERNEL_TRANSPORT_VERSION = 1;
 export const SESSION_KERNEL_MAX_REQUEST_BYTES = 16 * 1024 * 1024;
 export const SESSION_KERNEL_MAX_RESPONSE_BYTES = 128 * 1024 * 1024;
@@ -80,8 +80,9 @@ export type KernelActorSyncRequest =
 
 export type KernelActorRunEventResult = RunEventDecisionResult;
 
-/** Settlement follows a physical or externally visible action. Any rejected
- * settlement is ambiguous, so both the client and actor fail-stop. */
+/** Settlement follows a physical or externally visible action. A rejected
+ * session-scoped settlement quarantines that session. Infrastructure failures
+ * still fail-stop the whole actor because commit state may be unknowable. */
 export function isCriticalSettlementCommand(
   command: SessionActorReducerCommand,
 ): boolean {

@@ -1,5 +1,8 @@
 import { afterEach, describe, expect, test } from "bun:test";
-import { SessionKernelActorClient } from "./actor-client";
+import {
+  SessionKernelActorClient,
+  SessionKernelQuarantinedError,
+} from "./actor-client";
 import {
   __setSessionKernelStoreForTest,
   installSessionKernelActor,
@@ -376,7 +379,7 @@ describe("session kernel actor boundary", () => {
     })).toThrow("actor stopped");
   });
 
-  test("fail-stops the actor client after ambiguous typed settlement", async () => {
+  test("quarantines one session after ambiguous typed settlement", async () => {
     const host = await actor();
     host.decideGateway({
       op: "request",
@@ -390,17 +393,45 @@ describe("session kernel actor boundary", () => {
       "receipt changed",
       false,
     ]);
-    expect(() => host.decideGateway({
-      op: "complete",
+    let settlementError: unknown;
+    try {
+      host.decideGateway({
+        op: "complete",
+        sessionId: "ambiguous-settlement",
+        requestId: "one",
+        operation: "websocket_command",
+        result: "done",
+      });
+    } catch (error) {
+      settlementError = error;
+    }
+    expect(settlementError).toBeInstanceOf(SessionKernelQuarantinedError);
+    expect(host.store.quarantinedSession("ambiguous-settlement")).toMatchObject({
+      reason: "receipt changed",
+      commandKind: "gateway:complete",
+    });
+
+    expect(host.decideDelivery({
+      op: "snapshot",
       sessionId: "ambiguous-settlement",
-      requestId: "one",
-      operation: "websocket_command",
-      result: "done",
-    })).toThrow("receipt changed");
+    })).toMatchObject({ revision: 0, queued: [] });
     expect(() => host.decideDelivery({
+      op: "set",
+      sessionId: "ambiguous-settlement",
+      slot: "queued",
+      value: [],
+    })).toThrow(SessionKernelQuarantinedError);
+
+    expect(host.decideDelivery({
+      op: "set",
+      sessionId: "other-session",
+      slot: "queued",
+      value: [{ id: "still-live" }],
+    })).toBeUndefined();
+    expect(host.decideDelivery({
       op: "snapshot",
       sessionId: "other-session",
-    })).toThrow("receipt changed");
+    })).toMatchObject({ queued: [{ id: "still-live" }] });
   });
 
   test("returns a terminal failure instead of re-executing it", async () => {
@@ -441,6 +472,29 @@ describe("session kernel actor boundary", () => {
     });
     await host.acknowledgeCommand("ack", "one");
     expect(host.store.command("ack", "one")?.acknowledgedAt).toBeNumber();
+  });
+
+  test("does not dispatch runtime work for a quarantined session", async () => {
+    const host = await actor();
+    host.store.scheduleTimer({
+      sessionId: "quarantined-work",
+      timerId: "wake",
+      kind: "known_timer",
+      dueAt: Date.now() - 1,
+      payload: null,
+    });
+    host.store.enqueueOutbox("quarantined-work", "known_effect", null, "known");
+    host.store.quarantineSession("quarantined-work", "settlement failed", "timer:complete");
+
+    const work = await host.runtimeWork(["known_timer"], ["known_effect"]);
+    expect(work).toEqual({ timers: [], outbox: [] });
+    expect(host.store.stats().quarantinedSessions).toBe(1);
+    expect(host.store.deadLetters().quarantines).toHaveLength(1);
+
+    expect(host.store.releaseQuarantine("quarantined-work")).toBe(true);
+    const released = await host.runtimeWork(["known_timer"], ["known_effect"]);
+    expect(released.timers).toHaveLength(1);
+    expect(released.outbox).toHaveLength(1);
   });
 
   test("loads registered runtime work through async IPC", async () => {

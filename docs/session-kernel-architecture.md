@@ -33,12 +33,14 @@ filesystem, network, process, and model effects remain in the independently
 supervised executors. Their active receipts do not hold the actor mailbox, so
 Stop, steering, and fenced run events remain responsive.
 
-The gateway retains a Worker bridge for bounded synchronous reads and typed
-reductions. That bridge performs authenticated bounded HTTP RPC and wakes the
-gateway through its existing `SharedArrayBuffer`; it never opens the store. A
-missing credential, actor/transport/incarnation mismatch, service failure, or
-invalid response fail-stops the gateway. There is no in-process actor or direct
-writer fallback in production.
+The gateway retains a Worker bridge for typed reductions. Mutations perform
+authenticated bounded HTTP RPC and wake the gateway through its existing
+`SharedArrayBuffer`. Pure reads use a physically read-only, `query_only` SQLite
+WAL mirror in the gateway, avoiding an IPC round trip and event-loop wait on hot
+read paths. The mirror does not claim writer ownership, run migrations, or
+admit commands. A missing credential, actor/transport/incarnation mismatch,
+service failure, or invalid response fail-stops the gateway. There is no
+in-process actor or direct writer fallback in production.
 
 Systemd stops the old gateway before starting or restarting the actor service,
 then starts the new gateway. This sequencing prevents mixed releases from
@@ -66,6 +68,7 @@ a model run or gateway callback before processing the next state fact.
 - A monotonic session change stream.
 - Durable timers.
 - A retrying effect outbox.
+- Durable per-session quarantine records for ambiguous settlements.
 
 Completed request ids are retained permanently because clients retain unresolved
 intents without an expiry. Payloads become SHA-256 fingerprints after admission. Large semantic results
@@ -374,24 +377,29 @@ and replay committed changes without becoming another session owner.
 
 ## Process boundary
 
-The writable `SessionKernelStore` and autonomous per-session coordinator run in
-`session-kernel-worker.ts`, a separate JavaScript actor isolate. The gateway
-starts and handshakes that actor before hydrating projections.
+The writable `SessionKernelStore` and autonomous session coordinators currently
+run in one `session-kernel-worker.ts` JavaScript isolate over one SQLite store.
+The gateway starts and handshakes that actor before hydrating projections. This
+is not yet one process or database per session. A failed session-scoped critical
+settlement durably quarantines only that session, suppresses its timer and
+outbox dispatch, and leaves reads and unrelated sessions available. SQLite
+infrastructure failures still fail-stop the whole actor.
 
 A command admission is a short bounded reduction: the actor fingerprints and
 persists the intent, then immediately returns `execute`, `in_progress`, or the
 committed result. It never awaits filesystem, network, process, sandbox, Runner,
-or model work. Different command intents can therefore be reduced concurrently,
-and Stop or steering remains responsive while physical continuations are queued
-or running. A restart re-admits replay-safe intent and marks ambiguous
+or model work. Different command intents are interleaved as short serialized
+reductions, and Stop or steering remains responsive while physical continuations
+are queued or running. A restart re-admits replay-safe intent and marks ambiguous
 non-replay-safe execution indeterminate.
 
 Physical continuations run in gateway or executor workers outside the actor.
 Their per-session mutex can queue physical work, but it does not hold the actor
 mailbox. An exact retry of executing work receives `in_progress` immediately
 rather than attaching an actor-held waiter. Typed completion and failure
-reductions settle immutable receipts; settlement ambiguity fail-stops the actor
-client rather than committing over a successor.
+reductions settle immutable receipts. A session-scoped settlement ambiguity
+quarantines that session rather than committing over a successor or killing
+unrelated sessions. Infrastructure ambiguity still fail-stops the actor client.
 
 Transcript and session-file projections use typed admission and settlement
 receipts, then mutate their specialized destination stores on the gateway thread.

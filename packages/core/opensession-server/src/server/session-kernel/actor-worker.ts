@@ -9,6 +9,73 @@ import {
   type KernelActorSyncRequest,
 } from "./actor-protocol";
 import { isDeliveryReadRequest } from "./delivery-protocol";
+import type { SessionActorReducerCommand } from "./lifecycle-protocol";
+
+class SessionQuarantinedError extends Error {
+  readonly code = "session_quarantined";
+
+  constructor(
+    readonly sessionId: string,
+    readonly reason: string,
+  ) {
+    super(`Session ${sessionId} is quarantined: ${reason}`);
+    this.name = "SessionQuarantinedError";
+  }
+}
+
+function reducerSessionId(
+  command: SessionActorReducerCommand,
+  store: SessionKernelStore,
+): string | undefined {
+  if (command.kind === "creation_event") return command.decision.sessionId;
+  if (command.kind === "run_event") return command.decision.sessionId;
+  if (command.kind === "delivery" || command.kind === "turn" || command.kind === "timer" || command.kind === "gateway")
+    return "sessionId" in command.request ? command.request.sessionId : undefined;
+  if (command.kind === "ask")
+    return "sessionId" in command.request ? command.request.sessionId : undefined;
+  if ("sessionId" in command.request) return command.request.sessionId;
+  return store.outboxSessionId(command.request.id);
+}
+
+function isReadReducer(command: SessionActorReducerCommand): boolean {
+  if (command.kind === "ask")
+    return command.request.op === "snapshot" || command.request.op === "entries";
+  if (command.kind === "delivery") return isDeliveryReadRequest(command.request);
+  return command.kind === "turn" && command.request.op === "snapshot";
+}
+
+function storeMutationSessionId(
+  method: string,
+  args: unknown[],
+  store: SessionKernelStore,
+): string | undefined {
+  if ([
+    "markProcessing", "completeCommand", "failCommand", "appendChange",
+    "tombstoneSession", "clearSession", "cancelTimer", "settleTimerSuccess",
+    "enqueueOutbox", "enqueueOutboxMany", "acknowledgeCommand", "noteTimerFailure",
+    "discardDeadTimer", "retryDeadTimer",
+  ].includes(method)) return typeof args[0] === "string" ? args[0] : undefined;
+  if (["acceptCommand", "completeCommandDecision", "setRunState", "scheduleTimer"].includes(method)) {
+    const input = args[0];
+    return input && typeof input === "object" && "sessionId" in input && typeof input.sessionId === "string"
+      ? input.sessionId
+      : undefined;
+  }
+  if (["ackOutbox", "deferOutbox", "noteOutboxFailure", "discardDeadOutbox", "retryDeadOutbox"].includes(method))
+    return typeof args[0] === "number" ? store.outboxSessionId(args[0]) : undefined;
+  return undefined;
+}
+
+function infrastructureFailure(error: unknown): boolean {
+  const code =
+    error && typeof error === "object" && "code" in error
+      ? String((error as { code?: unknown }).code ?? "")
+      : "";
+  if (code.startsWith("SQLITE_") && !code.startsWith("SQLITE_CONSTRAINT"))
+    return true;
+  const message = error instanceof Error ? error.message : String(error);
+  return /database is locked|disk i\/o|disk full|database.*(?:malformed|corrupt)|not a database|readonly database/i.test(message);
+}
 
 export function startSessionKernelActorWorker(): void {
   const store = new SessionKernelStore();
@@ -23,6 +90,11 @@ export function startSessionKernelActorWorker(): void {
       let result: unknown;
       if (request.t === "reduce") {
         const command = request.command;
+        const sessionId = reducerSessionId(command, store);
+        if (!isReadReducer(command) && sessionId) {
+          const quarantine = store.quarantinedSession(sessionId);
+          if (quarantine) throw new SessionQuarantinedError(sessionId, quarantine.reason);
+        }
         if (command.kind === "creation_event")
           result = store.applyCreationEvent(command.decision);
         else if (command.kind === "run_event")
@@ -173,6 +245,12 @@ export function startSessionKernelActorWorker(): void {
           else result = store.clearAskRecords();
         }
       } else {
+        const sessionId = storeMutationSessionId(request.method, request.args, store);
+        if (sessionId) {
+          const quarantine = store.quarantinedSession(sessionId);
+          if (quarantine)
+            throw new SessionQuarantinedError(sessionId, quarantine.reason);
+        }
         const method = (
           store as unknown as Record<string, (...args: unknown[]) => unknown>
         )[request.method];
@@ -195,17 +273,44 @@ export function startSessionKernelActorWorker(): void {
         Atomics.store(control, 0, 1);
       }
     } catch (error) {
+      let failStop = false;
+      let responseCode: "actor_fatal" | "session_quarantined" | undefined;
+      let responseSessionId: string | undefined;
+      if (request.t === "reduce" && isCriticalSettlementCommand(request.command)) {
+        const sessionId = reducerSessionId(request.command, store);
+        if (!sessionId || infrastructureFailure(error)) {
+          failStop = true;
+          responseCode = "actor_fatal";
+        } else {
+          try {
+            store.quarantineSession(
+              sessionId,
+              error instanceof Error ? error.message : String(error),
+              `${request.command.kind}:${"request" in request.command ? request.command.request.op : "event"}`,
+            );
+            responseCode = "session_quarantined";
+            responseSessionId = sessionId;
+          } catch {
+            failStop = true;
+            responseCode = "actor_fatal";
+          }
+        }
+      } else if (error instanceof SessionQuarantinedError) {
+        responseCode = error.code;
+        responseSessionId = error.sessionId;
+      }
       const bytes = new TextEncoder().encode(
         JSON.stringify({
           ok: false,
-          error: error instanceof Error ? error.message : String(error),
+          error: (error instanceof Error ? error.message : String(error)).slice(0, 8_000),
+          ...(responseCode ? { code: responseCode } : {}),
+          ...(responseSessionId ? { sessionId: responseSessionId } : {}),
         }),
       );
       output.set(bytes.subarray(0, output.length));
       Atomics.store(control, 1, Math.min(bytes.length, output.length));
       Atomics.store(control, 0, -1);
-      if (request.t === "reduce" && isCriticalSettlementCommand(request.command))
-        queueMicrotask(() => self.close());
+      if (failStop) queueMicrotask(() => self.close());
     }
     Atomics.notify(control, 0);
   }

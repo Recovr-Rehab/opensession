@@ -518,6 +518,7 @@ export async function sessionKernelHealth(): Promise<Record<string, unknown>> {
 			active: state.kernels?.size ?? 0,
 			...stats,
 			degraded:
+				stats.quarantinedSessions > 0 ||
 				stats.deadLetteredOutbox > 0 ||
 				stats.deadLetteredTimers > 0 ||
 				(stats.pendingCommands > 0 &&
