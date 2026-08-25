@@ -14,6 +14,17 @@ test("fresh transcript ranges reaffirm a cached reader's live edge", () => {
 	);
 });
 
+test("opening transcripts stay hidden for the full settle window", () => {
+	expect(viewer).toContain("const OPEN_SETTLE_MS = 350");
+	const settled = viewer.match(
+		/const onVisibleRangesSettled = useCallback\([\s\S]*?\}, \[followingLive, scrollToLatest, transcriptIndex\]\);/,
+	)?.[0];
+	expect(settled).not.toContain("setOpenSettlePending(false)");
+	expect(viewer).toContain(
+		'"w-full shrink-0 motion-safe:transition-opacity motion-safe:duration-150"',
+	);
+});
+
 test("late action clearance keeps a following transcript at the bottom", () => {
 	const clearanceEffect = viewer.match(
 		/useLayoutEffect\(\(\) => \{\s*if \(readFollowingLive\(followingLive\)\) scrollToLatest\("auto"\);\s*\}, \[actionClearance, followingLive, scrollToLatest\]\);/,

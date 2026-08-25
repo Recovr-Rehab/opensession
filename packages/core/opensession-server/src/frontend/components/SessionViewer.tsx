@@ -717,11 +717,11 @@ const HIDDEN_REOPEN_MS = 30_000;
 // streamed while backgrounded arrives moments after the visibilitychange.
 const RESUME_GROWTH_WINDOW_MS = 8_000;
 // Opening a chat paints outline placeholders for ranges that have not
-// hydrated yet, and the first measure-and-hydrate pass reflows them. The
-// transcript stays invisible until the demanded ranges land, or at most this
-// long, so the churn happens behind the curtain instead of in front of the
-// reader. A cap, not a gate: a slow hydrate must still show something.
-const OPEN_SETTLE_MAX_MS = 350;
+// hydrated yet, and the first measure-and-hydrate pass reflows them. Keep the
+// transcript behind its opacity curtain for this whole settling window instead
+// of lifting it on the first "ranges ready" signal: nested row measurements and
+// the final live-edge correction can still move it for a few paints afterward.
+const OPEN_SETTLE_MS = 350;
 // "Jump to the start of the session" walks the backlog a page at a time rather
 // than asking for it in one frame: a multi-thousand-entry transcript would be a
 // tens-of-MB payload and one giant reconciliation. Fat pages keep the number of
@@ -1888,9 +1888,10 @@ export function SessionViewer({
 		[suspendEndMaintenance],
 	);
 
-	// Open-settle curtain: armed on mount, lifted when the transcript reports
-	// every visible range rendered from real payload (onVisibleRangesSettled),
-	// or by the cap timer once the transcript actually renders.
+	// Open-settle curtain: armed on mount and held for a short beat after the
+	// transcript first renders. Visible-range hydration can report ready before
+	// nested row measurements and the final scroll correction have painted, so
+	// that signal reaffirms position below but does not lift the curtain early.
 	const [openSettlePending, setOpenSettlePending] = useState(true);
 	const transcriptRendered =
 		!loading && (entries.length > 0 || !!transcriptIndex);
@@ -1898,13 +1899,12 @@ export function SessionViewer({
 		if (!transcriptRendered) return;
 		const timer = window.setTimeout(
 			() => setOpenSettlePending(false),
-			OPEN_SETTLE_MAX_MS,
+			OPEN_SETTLE_MS,
 		);
 		return () => window.clearTimeout(timer);
 	}, [transcriptRendered]);
 	const settledIndexRef = useRef<TranscriptIndexEntry[] | null>(null);
 	const onVisibleRangesSettled = useCallback(() => {
-		setOpenSettlePending(false);
 		// Keep the pre-refresh message anchor through the final row measurements.
 		// Two paints later every visible real row has reported its geometry, so the
 		// bounded index hold can retire without letting a last correction jump the
