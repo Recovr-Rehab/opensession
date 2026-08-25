@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, test } from "bun:test";
+import { ChildProcess } from "node:child_process";
 import { mkdtemp, readFile, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -274,7 +275,10 @@ describe("LocalExecutor", () => {
     const spawned = await execute(executor, {
       kind: "process.spawn",
       executable: "/usr/bin/python3",
-      args: ["-c", "import os; [os.write(1,b'x') for _ in range(200000)]"],
+      args: [
+        "-c",
+        "import os,time\nfor i in range(1000000):\n os.write(1,b'x')\n if i%10000==0: time.sleep(.001)",
+      ],
       idempotencyKey: "tiny",
     });
     if (spawned.outcome.kind !== "process")
@@ -308,7 +312,7 @@ describe("LocalExecutor", () => {
     ).rejects.toMatchObject({ code: "executor_busy" });
   });
 
-  test("normalizes every status batch and retries terminal status idempotently", async () => {
+  test("uses unique batch streams and retries terminal status idempotently", async () => {
     const { executor } = await setup();
     const spawned = await execute(executor, {
       kind: "process.spawn",
@@ -326,16 +330,28 @@ describe("LocalExecutor", () => {
       kind: "process.status",
       processId: spawned.outcome.processId,
     });
+    if (first.outcome.kind !== "process") throw new Error("unexpected outcome");
+    const firstStreamId = first.outcome.streamId;
     expect(first.events?.map((event) => event.sequence)).toEqual([0]);
+    expect(
+      first.events?.every((event) => event.streamId === firstStreamId),
+    ).toBe(true);
     await Bun.sleep(100);
     const terminal = await execute(executor, {
       kind: "process.status",
       processId: spawned.outcome.processId,
     });
+    if (terminal.outcome.kind !== "process")
+      throw new Error("unexpected outcome");
+    const terminalStreamId = terminal.outcome.streamId;
     expect(terminal.outcome).toMatchObject({ state: "exited", exitCode: 0 });
+    expect(terminalStreamId).not.toBe(firstStreamId);
     expect(terminal.events?.map((event) => event.sequence)).toEqual(
       terminal.events?.map((_, index) => index),
     );
+    expect(
+      terminal.events?.every((event) => event.streamId === terminalStreamId),
+    ).toBe(true);
     expect(
       await execute(executor, {
         kind: "process.status",
@@ -344,7 +360,7 @@ describe("LocalExecutor", () => {
     ).toEqual(terminal);
   });
 
-  test("does not evict unobserved completion, then evicts observed tombstone", async () => {
+  test("evicts a terminal tombstone only after durable acknowledgement", async () => {
     const { executor } = await setup({ maxTrackedProcesses: 1 });
     const first = await execute(executor, {
       kind: "process.spawn",
@@ -362,14 +378,24 @@ describe("LocalExecutor", () => {
         idempotencyKey: "blocked",
       }),
     ).rejects.toMatchObject({ code: "executor_busy" });
-    expect(
-      (
-        await execute(executor, {
-          kind: "process.status",
-          processId: first.outcome.processId,
-        })
-      ).outcome,
-    ).toMatchObject({ state: "exited" });
+    const terminal = await execute(executor, {
+      kind: "process.status",
+      processId: first.outcome.processId,
+    });
+    expect(terminal.outcome).toMatchObject({ state: "exited" });
+    await expect(
+      execute(executor, {
+        kind: "process.spawn",
+        executable: "/bin/true",
+        args: [],
+        idempotencyKey: "still-blocked",
+      }),
+    ).rejects.toMatchObject({ code: "executor_busy" });
+    executor.acknowledgeDurableTerminal(
+      context,
+      { kind: "process.status", processId: first.outcome.processId },
+      terminal.outcome,
+    );
     await execute(executor, {
       kind: "process.spawn",
       executable: "/bin/true",
@@ -382,6 +408,17 @@ describe("LocalExecutor", () => {
         processId: first.outcome.processId,
       }),
     ).rejects.toMatchObject({ code: "not_found" });
+  });
+
+  test("sinks an immediate spawn error during close", async () => {
+    const { executor } = await setup();
+    await execute(executor, {
+      kind: "process.spawn",
+      executable: "/definitely/missing/local-executor-command",
+      args: [],
+      idempotencyKey: "enoent-close",
+    });
+    await expect(executor.close()).resolves.toBeUndefined();
   });
 
   test("close fences an in-flight spawn admission", async () => {
@@ -412,6 +449,59 @@ describe("LocalExecutor", () => {
     const started = performance.now();
     await executor.close();
     expect(performance.now() - started).toBeLessThan(500);
+  });
+
+  test("falls back to direct child kill when group kill fails", async () => {
+    const { executor } = await setup();
+    await execute(executor, {
+      kind: "process.spawn",
+      executable: "/bin/sleep",
+      args: ["30"],
+      idempotencyKey: "direct-fallback",
+    });
+    const originalKill = process.kill;
+    process.kill = (() => {
+      const error = new Error("denied") as NodeJS.ErrnoException;
+      error.code = "EPERM";
+      throw error;
+    }) as typeof process.kill;
+    try {
+      await expect(executor.close()).resolves.toBeUndefined();
+    } finally {
+      process.kill = originalKill;
+    }
+  });
+
+  test("reports failure when direct child termination cannot be confirmed", async () => {
+    const { executor } = await setup();
+    await execute(executor, {
+      kind: "process.spawn",
+      executable: "/bin/sleep",
+      args: ["30"],
+      idempotencyKey: "kill-failure",
+    });
+    const originalProcessKill = process.kill;
+    const originalChildKill = ChildProcess.prototype.kill;
+    let groupPid: number | undefined;
+    process.kill = ((pid: number) => {
+      groupPid = pid;
+      throw new Error("group kill failed");
+    }) as typeof process.kill;
+    ChildProcess.prototype.kill = (() =>
+      false) as typeof ChildProcess.prototype.kill;
+    try {
+      await expect(executor.close()).rejects.toMatchObject({
+        code: "operation_failed",
+      });
+    } finally {
+      process.kill = originalProcessKill;
+      ChildProcess.prototype.kill = originalChildKill;
+      if (groupPid !== undefined) {
+        try {
+          originalProcessKill(groupPid, "SIGKILL");
+        } catch {}
+      }
+    }
   });
 
   test("kill errors do not poison close cleanup", async () => {

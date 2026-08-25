@@ -38,13 +38,23 @@ const DEFAULT_MAX_PENDING_OUTPUT_BYTES_PER_PROCESS = 1024 * 1024;
 const DEFAULT_MAX_PENDING_OUTPUT_BYTES_OVERALL = 8 * 1024 * 1024;
 const MAX_TEXT_EVENT_BYTES = 256 * 1024;
 const MAX_PENDING_TEXT_EVENTS = 4_094;
+const CLOSE_EXIT_TIMEOUT_MS = 250;
 const TRUNCATION_NOTICE = "[truncated]\n";
 const TRUNCATION_NOTICE_BYTES = Buffer.byteLength(TRUNCATION_NOTICE);
+
+type PendingEvent =
+  | {
+      kind: "text";
+      channel: "stdout" | "stderr";
+      chunks: string[];
+      bytes: number;
+    }
+  | Extract<ExecutorStreamEvent, { kind: "exit" }>;
 
 interface LocalProcess {
   child: ChildProcess;
   streamId: string;
-  pending: ExecutorStreamEvent[];
+  pending: PendingEvent[];
   pendingBytes: number;
   outputLimit: number;
   decoders: Record<"stdout" | "stderr", TextDecoder>;
@@ -52,13 +62,16 @@ interface LocalProcess {
     stdout: (chunk: Buffer) => void;
     stderr: (chunk: Buffer) => void;
     error: (error: Error) => void;
+    errorSink: () => void;
+    exit: () => void;
     close: (code: number | null, signal: NodeJS.Signals | null) => void;
   };
   truncated: boolean;
   exitCode?: number;
   signal?: string;
   exited: boolean;
-  observed: boolean;
+  directExited: boolean;
+  acknowledged: boolean;
   terminalResult?: ExecutorSuccess;
   completedOrder?: number;
 }
@@ -189,6 +202,29 @@ export class LocalExecutor implements Executor {
     }
   }
 
+  /** Mark a terminal status durable after its ledger transition commits. */
+  acknowledgeDurableTerminal(
+    _context: ExecutorContext,
+    operation: ExecutorOperation,
+    outcome: ExecutorOperationOutcome,
+  ): void {
+    if (
+      (operation.kind !== "process.status" &&
+        operation.kind !== "process.signal") ||
+      outcome.kind !== "process" ||
+      outcome.state !== "exited" ||
+      operation.processId !== outcome.processId
+    )
+      return;
+    const tracked = this.#processes.get(outcome.processId);
+    if (!tracked?.terminalResult)
+      throw new ExecutorFailure(
+        "conflict",
+        "process terminal status is not ready to acknowledge",
+      );
+    tracked.acknowledged = true;
+  }
+
   /** Explicit test/shutdown cleanup; no process or timer is created at import time. */
   async close(): Promise<void> {
     if (this.#closePromise) return this.#closePromise;
@@ -198,22 +234,44 @@ export class LocalExecutor implements Executor {
         this.#admissionsDrained ??= promiseWithResolvers();
         await this.#admissionsDrained.promise;
       }
+      let results: PromiseSettledResult<void>[] = [];
       try {
-        for (const tracked of this.#processes.values()) {
-          if (!tracked.exited) {
-            try {
-              if (tracked.child.pid)
-                globalThis.process.kill(-tracked.child.pid, "SIGKILL");
-              else tracked.child.kill("SIGKILL");
-            } catch {}
-          }
-        }
+        results = await Promise.allSettled(
+          [...this.#processes.values()].map((tracked) =>
+            this.#terminateDirectChild(tracked),
+          ),
+        );
       } finally {
         for (const tracked of this.#processes.values()) this.#detach(tracked);
         this.#processes.clear();
       }
+      const failures = results.filter(
+        (result): result is PromiseRejectedResult =>
+          result.status === "rejected",
+      );
+      if (failures.length)
+        throw new ExecutorFailure(
+          "operation_failed",
+          `failed to confirm termination of ${failures.length} local process(es)`,
+        );
     })();
     return this.#closePromise;
+  }
+
+  // This confirms only the direct child. Escaped descendants require a future
+  // cgroup/Job Object containment backend and are not claimed terminated here.
+  async #terminateDirectChild(tracked: LocalProcess): Promise<void> {
+    if (tracked.directExited) return;
+    if (tracked.child.pid) {
+      try {
+        globalThis.process.kill(-tracked.child.pid, "SIGKILL");
+      } catch {}
+    }
+    try {
+      tracked.child.kill("SIGKILL");
+    } catch {}
+    if (!tracked.directExited)
+      await waitForChildExit(tracked.child, CLOSE_EXIT_TIMEOUT_MS);
   }
 
   #beginAdmission(): void {
@@ -488,13 +546,19 @@ export class LocalExecutor implements Executor {
       listeners: {} as LocalProcess["listeners"],
       truncated: false,
       exited: false,
-      observed: false,
+      directExited: false,
+      acknowledged: false,
     };
     tracked.listeners = {
       stdout: (chunk) => this.#collect(tracked, "stdout", Buffer.from(chunk)),
       stderr: (chunk) => this.#collect(tracked, "stderr", Buffer.from(chunk)),
       error: (error) => this.#appendText(tracked, "stderr", error.message),
+      errorSink: () => {},
+      exit: () => {
+        tracked.directExited = true;
+      },
       close: (code, signal) => {
+        tracked.directExited = true;
         this.#flushDecoder(tracked, "stdout");
         this.#flushDecoder(tracked, "stderr");
         tracked.exited = true;
@@ -513,7 +577,9 @@ export class LocalExecutor implements Executor {
     this.#processes.set(processId, tracked);
     child.stdout?.on("data", tracked.listeners.stdout);
     child.stderr?.on("data", tracked.listeners.stderr);
+    child.on("error", tracked.listeners.errorSink);
     child.once("error", tracked.listeners.error);
+    child.once("exit", tracked.listeners.exit);
     child.once("close", tracked.listeners.close);
     return {
       outcome: { kind: "process", processId, state: "running", streamId },
@@ -526,7 +592,8 @@ export class LocalExecutor implements Executor {
       throw new ExecutorFailure("not_found", "process was not found");
     if (tracked.terminalResult) return tracked.terminalResult;
 
-    const events = normalizeSequences(tracked.pending);
+    const streamId = crypto.randomUUID();
+    const events = materializeEvents(tracked.pending, streamId);
     tracked.pending.length = 0;
     tracked.pendingBytes = 0;
     const result: ExecutorSuccess = {
@@ -537,12 +604,11 @@ export class LocalExecutor implements Executor {
         ...(tracked.exitCode !== undefined
           ? { exitCode: tracked.exitCode }
           : {}),
-        streamId: tracked.streamId,
+        streamId,
       },
       ...(events.length ? { events } : {}),
     };
     if (tracked.exited) {
-      tracked.observed = true;
       tracked.terminalResult = result;
       this.#detach(tracked);
     } else if (tracked.truncated) {
@@ -558,7 +624,7 @@ export class LocalExecutor implements Executor {
       let oldest: [string, LocalProcess] | undefined;
       for (const entry of this.#processes) {
         if (
-          entry[1].observed &&
+          entry[1].acknowledged &&
           entry[1].completedOrder !== undefined &&
           (!oldest ||
             entry[1].completedOrder < (oldest[1].completedOrder ?? Infinity))
@@ -627,9 +693,10 @@ export class LocalExecutor implements Executor {
     if (
       last?.kind === "text" &&
       last.channel === channel &&
-      Buffer.byteLength(last.data) + bytes <= MAX_TEXT_EVENT_BYTES
+      last.bytes + bytes <= MAX_TEXT_EVENT_BYTES
     ) {
-      last.data += data;
+      last.chunks.push(data);
+      last.bytes += bytes;
       tracked.pendingBytes += bytes;
       return true;
     }
@@ -637,10 +704,9 @@ export class LocalExecutor implements Executor {
       return false;
     tracked.pending.push({
       kind: "text",
-      streamId: tracked.streamId,
-      sequence: 0,
       channel,
-      data,
+      chunks: [data],
+      bytes,
     });
     tracked.pendingBytes += bytes;
     return true;
@@ -657,6 +723,7 @@ export class LocalExecutor implements Executor {
     tracked.child.stdout?.removeListener("data", tracked.listeners.stdout);
     tracked.child.stderr?.removeListener("data", tracked.listeners.stderr);
     tracked.child.removeListener("error", tracked.listeners.error);
+    tracked.child.removeListener("exit", tracked.listeners.exit);
     tracked.child.removeListener("close", tracked.listeners.close);
     tracked.child.stdout?.destroy();
     tracked.child.stderr?.destroy();
@@ -786,6 +853,49 @@ export class LocalExecutor implements Executor {
   }
 }
 
+function waitForChildExit(
+  child: ChildProcess,
+  timeoutMs: number,
+): Promise<void> {
+  if (child.exitCode !== null || child.signalCode !== null)
+    return Promise.resolve();
+  return new Promise((resolveWait, rejectWait) => {
+    const finish = () => {
+      clearTimeout(timeout);
+      child.removeListener("exit", finish);
+      child.removeListener("close", finish);
+      resolveWait();
+    };
+    const timeout = setTimeout(() => {
+      child.removeListener("exit", finish);
+      child.removeListener("close", finish);
+      rejectWait(
+        new Error("direct child did not terminate before close deadline"),
+      );
+    }, timeoutMs);
+    timeout.unref?.();
+    child.once("exit", finish);
+    child.once("close", finish);
+  });
+}
+
+function materializeEvents(
+  pending: readonly PendingEvent[],
+  streamId: string,
+): ExecutorStreamEvent[] {
+  return pending.map((event, sequence) =>
+    event.kind === "text"
+      ? {
+          kind: "text",
+          streamId,
+          sequence,
+          channel: event.channel,
+          data: event.chunks.join(""),
+        }
+      : { ...event, streamId, sequence },
+  );
+}
+
 function promiseWithResolvers(): {
   promise: Promise<void>;
   resolve: () => void;
@@ -795,12 +905,6 @@ function promiseWithResolvers(): {
     resolve = resolvePromise;
   });
   return { promise, resolve };
-}
-
-function normalizeSequences(
-  events: readonly ExecutorStreamEvent[],
-): ExecutorStreamEvent[] {
-  return events.map((event, sequence) => ({ ...event, sequence }));
 }
 
 function positiveInteger(
