@@ -29,7 +29,9 @@ interface FirstMileStep {
 // GitHub comes first because it supplies the next step's answers: the
 // organization is named and marked from the org you just connected rather than
 // asked for cold. Members sit after repositories, since an invite
-// is worth more once there is something to join.
+// is worth more once there is something to join. The members step is removed
+// when GitHub sign-in is not connected, because that step imports and invites
+// people through the connected GitHub organization.
 const STEPS: FirstMileStep[] = [
 	{
 		id: "welcome",
@@ -75,6 +77,10 @@ const STEPS: FirstMileStep[] = [
 	},
 ];
 
+function githubTeamOnboardingEnabled(status: SetupStatus | null): boolean {
+	return Boolean(status?.github.userPrAuth && status.github.clientIdConfigured);
+}
+
 /** The GitHub organization this instance is wired to, for the organization
  *  step's defaults. Reads the App's own owner first, then falls back to the
  *  org named in the App-create URL the wizard built. */
@@ -118,6 +124,7 @@ function FirstMileSummary({
 	onSelect: (step: FirstMileStep["id"]) => void;
 }) {
 	const github = githubAuthState(status.github);
+	const showTeam = githubTeamOnboardingEnabled(status);
 	let serverHost = status.publicBaseUrl;
 	try {
 		serverHost = new URL(status.publicBaseUrl).host;
@@ -240,10 +247,15 @@ function FirstMileSummary({
 				</div>
 			),
 		},
-	];
+	].filter((tile) => tile.step !== "team" || showTeam);
 
 	return (
-		<div className="grid grid-cols-5 gap-3 phone:grid-cols-2">
+		<div
+			className={cn(
+				"grid gap-3 phone:grid-cols-2",
+				showTeam ? "grid-cols-5" : "grid-cols-4",
+			)}
+		>
 			{tiles.map((tile) => {
 				const className = cn(
 					"flex aspect-square min-w-0 flex-col justify-between rounded-2xl border p-4 text-left backdrop-blur-xl phone:rounded-xl phone:p-3.5",
@@ -306,7 +318,10 @@ export function FirstMile({ onDone }: { onDone: () => Promise<void> }) {
 	const headingRef = useRef<HTMLHeadingElement>(null);
 	const mainRef = useRef<HTMLElement>(null);
 	const reducedMotion = useReducedMotion();
-	const step = STEPS[index]!;
+	const steps = githubTeamOnboardingEnabled(status)
+		? STEPS
+		: STEPS.filter((item) => item.id !== "team");
+	const step = steps[index]!;
 
 	useEffect(() => {
 		document.title = `Welcome to ${PRODUCT_NAME}`;
@@ -340,7 +355,7 @@ export function FirstMile({ onDone }: { onDone: () => Promise<void> }) {
 	}, [index, status]);
 
 	function goTo(next: number) {
-		const nextIndex = Math.min(Math.max(next, 0), STEPS.length - 1);
+		const nextIndex = Math.min(Math.max(next, 0), steps.length - 1);
 		if (nextIndex === index) return;
 		setDirection(nextIndex > index ? 1 : -1);
 		setIndex(nextIndex);
@@ -399,7 +414,7 @@ export function FirstMile({ onDone }: { onDone: () => Promise<void> }) {
 					)}
 					aria-label="Onboarding progress"
 				>
-					{STEPS.slice(1).map((item, itemIndex) => {
+					{steps.slice(1).map((item, itemIndex) => {
 						const stepIndex = itemIndex + 1;
 						return (
 							<button
@@ -421,7 +436,7 @@ export function FirstMile({ onDone }: { onDone: () => Promise<void> }) {
 					})}
 				</nav>
 
-				{index > 0 && index < STEPS.length - 1 ? (
+				{index > 0 && index < steps.length - 1 ? (
 					<button
 						type="button"
 						onClick={() => goTo(index + 1)}
@@ -542,7 +557,7 @@ export function FirstMile({ onDone }: { onDone: () => Promise<void> }) {
 											<FirstMileSummary
 												status={status}
 												onSelect={(stepId) =>
-													goTo(STEPS.findIndex((item) => item.id === stepId))
+													goTo(steps.findIndex((item) => item.id === stepId))
 												}
 											/>
 										)}
@@ -580,7 +595,7 @@ export function FirstMile({ onDone }: { onDone: () => Promise<void> }) {
 						variant="primary"
 						size="lg"
 						onClick={() => {
-							if (index === STEPS.length - 1) void finish();
+							if (index === steps.length - 1) void finish();
 							else goTo(index + 1);
 						}}
 						disabled={!status || finishing}
@@ -588,11 +603,11 @@ export function FirstMile({ onDone }: { onDone: () => Promise<void> }) {
 					>
 						{index === 0
 							? "Continue"
-							: index === STEPS.length - 1
+							: index === steps.length - 1
 								? finishing
 									? "Finishing…"
 									: `Enter ${PRODUCT_NAME}`
-								: index === STEPS.length - 2
+								: index === steps.length - 2
 									? "Review"
 									: "Next"}
 					</Button>
