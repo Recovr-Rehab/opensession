@@ -148,6 +148,55 @@ function PwaGuide() {
 	);
 }
 
+function SetupGuide({
+	triggerLabel,
+	title,
+	description,
+	children,
+}: {
+	triggerLabel: string;
+	title: string;
+	description: string;
+	children: ReactNode;
+}) {
+	const dialogRef = useRef<HTMLDialogElement>(null);
+	const titleId = `setup-guide-${title.toLowerCase().replaceAll(" ", "-")}`;
+
+	return (
+		<>
+			<button
+				type="button"
+				className="landing-setup-step-action"
+				onClick={() => dialogRef.current?.showModal()}
+			>
+				{triggerLabel}
+			</button>
+			<dialog
+				ref={dialogRef}
+				className="pwa-guide setup-guide"
+				aria-labelledby={titleId}
+				onClick={(event) => {
+					if (event.target === event.currentTarget) event.currentTarget.close();
+				}}
+			>
+				<div className="pwa-guide-panel">
+					<button
+						type="button"
+						className="pwa-guide-close"
+						aria-label="Close"
+						onClick={() => dialogRef.current?.close()}
+					>
+						<IconX size={20} />
+					</button>
+					<h2 id={titleId}>{title}</h2>
+					<p>{description}</p>
+					{children}
+				</div>
+			</dialog>
+		</>
+	);
+}
+
 function InstallCommand() {
 	const [copyState, setCopyState] = useState<"idle" | "copied" | "failed">(
 		"idle",
@@ -194,33 +243,39 @@ function InstallCommand() {
 function SetupOverview() {
 	return (
 		<section className="card landing-setup-overview">
-			<div className="landing-setup-overview-head">
-				<h2>Set up Open Session</h2>
-				<p>Run it on your own machine and keep access private.</p>
-			</div>
+			<h2>Set up is easy</h2>
 
 			<ol className="landing-setup-steps">
 				<li>
-					<span className="landing-setup-step-index">1</span>
 					<span className="landing-setup-step-icon" aria-hidden="true">
 						<IconServer size={22} />
 					</span>
 					<div className="landing-setup-step-copy">
-						<strong>Get a server</strong>
+						<strong>
+							<span aria-hidden="true">1. </span>Get a server
+						</strong>
 						<span>
 							Use a machine (VPS, Hetzner, or Mac mini) you can leave powered on
 							and connected.
 						</span>
 					</div>
+					<SetupGuide
+						triggerLabel="Run installer"
+						title="Install Open Session"
+						description="Run one command on Linux, macOS, or WSL2."
+					>
+						<InstallCommand />
+					</SetupGuide>
 				</li>
 				<li>
-					<span className="landing-setup-step-index">2</span>
 					<span className="landing-setup-step-icon" aria-hidden="true">
 						<IconGlobe size={22} />
 					</span>
 					<div className="landing-setup-step-copy">
-						<strong>Install Tailscale</strong>
-						<span>Join the server and every device to the same tailnet.</span>
+						<strong>
+							<span aria-hidden="true">2. </span>Install Tailscale
+						</strong>
+						<span>Join the server and every device to the same internal network.</span>
 					</div>
 					<a
 						className="landing-setup-step-action"
@@ -228,48 +283,46 @@ function SetupOverview() {
 						target="_blank"
 						rel="noreferrer"
 					>
-						Download
+						Install Tailscale
 					</a>
 				</li>
 				<li>
-					<span className="landing-setup-step-index">3</span>
 					<span className="landing-setup-step-icon" aria-hidden="true">
 						<IconPhone size={22} />
 					</span>
 					<div className="landing-setup-step-copy">
-						<strong>Download the apps</strong>
+						<strong>
+							<span aria-hidden="true">3. </span>Download the apps
+						</strong>
 						<span>Each app connects to the server you just installed.</span>
 					</div>
+					<SetupGuide
+						triggerLabel="Download apps"
+						title="Download the apps"
+						description="Choose how you want to connect to your Open Session server."
+					>
+						<div className="landing-setup-apps">
+							<a className="landing-setup-app" href={macDownloadUrl}>
+								<img src={markUrl} alt="" />
+								<span className="landing-setup-app-copy">
+									<strong>Mac app</strong>
+									<small>Electron · Apple silicon</small>
+								</span>
+								<span className="landing-setup-app-action">Download</span>
+							</a>
+							<PwaGuide />
+							<div className="landing-setup-app" aria-disabled="true">
+								<img src={nativeMarkUrl} alt="" />
+								<span className="landing-setup-app-copy">
+									<strong>iOS app</strong>
+									<small>Native app · App Store</small>
+								</span>
+								<span className="landing-setup-app-action">Coming soon</span>
+							</div>
+						</div>
+					</SetupGuide>
 				</li>
 			</ol>
-
-			<div className="landing-setup-apps">
-				<a className="landing-setup-app" href={macDownloadUrl}>
-					<img src={markUrl} alt="" />
-					<span className="landing-setup-app-copy">
-						<strong>Mac app</strong>
-						<small>Electron · Apple silicon</small>
-					</span>
-					<span className="landing-setup-app-action">Download</span>
-				</a>
-				<PwaGuide />
-				<div className="landing-setup-app" aria-disabled="true">
-					<img src={nativeMarkUrl} alt="" />
-					<span className="landing-setup-app-copy">
-						<strong>iOS app</strong>
-						<small>Native app · App Store</small>
-					</span>
-					<span className="landing-setup-app-action">Coming soon</span>
-				</div>
-			</div>
-
-			<div className="landing-install-option">
-				<div>
-					<strong>Or install from Terminal</strong>
-					<span>Run one command on Linux, macOS or WSL2.</span>
-				</div>
-				<InstallCommand />
-			</div>
 		</section>
 	);
 }
