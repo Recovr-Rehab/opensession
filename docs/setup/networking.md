@@ -171,101 +171,78 @@ terminates TLS in front of loopback 3860. See [ec2.md](ec2.md#networking).
 
 `http://100.64.12.34:3850` works but is unpleasant to type and impossible to
 remember. You can put a real name and a real certificate in front of it without
-exposing anything.
+exposing the app.
 
 The trick is that **a public DNS record may point at a private address.** Anyone
 can resolve `os.company.dev` to `100.64.12.34`; only devices on your tailnet can
-reach it. Publishing the name costs you nothing, because the name was never the
-security boundary — reachability is.
+reach it. The name is not the security boundary. Private network reachability is.
 
-### 1. Point the name at the tailnet address
+### Automatic setup with Cloudflare DNS
+
+Open **Settings → Domains and ingress → Private app**, choose **Automatic**, and
+provide:
+
+1. A domain managed by Cloudflare, such as `os.company.dev`.
+2. An email address for Let’s Encrypt expiry notices.
+3. A Cloudflare API token scoped to **Zone:DNS Edit** and **Zone:Zone Read** for
+   that zone.
+
+Then click **Set up private domain**. Open Session:
+
+- creates or updates a DNS-only A record pointing to the server's Tailscale IP;
+- requests a Let's Encrypt certificate using DNS-01;
+- stores the certificate and private key with restricted filesystem permissions;
+- adds a Caddy site bound only to the Tailscale address;
+- verifies the HTTPS address; and
+- checks renewal daily, reloading Caddy when the certificate changes.
+
+The DNS token is stored at `~/.opensession/private-app-dns.json` with mode 0600.
+It is used only for the selected domain's DNS record and ACME challenge, is never
+returned by the API, and should be restricted to that one Cloudflare zone.
+
+Install the required tools before setup if they are not already present:
 
 ```sh
-tailscale ip -4        # e.g. 100.64.12.34
+curl -fsSL https://raw.githubusercontent.com/tellahq/opensession/main/install.sh \
+  | bash -s -- --caddy --no-onboard
 ```
 
-Create an **A record** for `os.company.dev` with that value, at whatever DNS
-provider you use. An A record, not a CNAME — you are pointing at an address, and
-a CNAME would need something else already resolving to it.
+### Advanced setup with another DNS provider
 
-(If you would rather not publish the mapping at all, Tailscale's MagicDNS gives
-you `<machine>.<tailnet>.ts.net` for free with no public record. You lose the
-custom name and gain slightly more privacy.)
+Choose **Advanced** in the same panel when Cloudflare does not host the zone.
+Open Session shows the DNS record, certificate paths, and generated Caddy site,
+but you own certificate issuance and renewal.
 
-### 2. Get a Let’s Encrypt certificate
+Your host is not reachable from the internet, so HTTP-01 cannot work. Use
+**DNS-01**, which proves control of the domain by writing a temporary TXT record.
+Most DNS providers are supported by [lego](https://go-acme.github.io/lego/).
+Store the resulting files at:
 
-Your host is not reachable from the internet, so the usual HTTP-01 challenge
-cannot work. Use **DNS-01**, which proves control of the domain by writing a TXT
-record instead.
-
-With [lego](https://go-acme.github.io/lego/) and, say, Cloudflare DNS:
-
-```sh
-sudo env CLOUDFLARE_DNS_API_TOKEN=... lego \
-  --path /etc/lego \
-  --email you@company.dev \
-  --dns cloudflare \
-  --domains os.company.dev \
-  run
+```text
+/etc/opensession/tls/os.company.dev.crt
+/etc/opensession/tls/os.company.dev.key
 ```
 
-Most providers have a lego plugin; Caddy and Traefik can also do DNS-01
-themselves with the matching plugin, which avoids running lego separately.
-Ensure the Caddy service user can read the resulting private key without making
-it world-readable.
-
-Renewal is the part people forget. Put renewal, key permissions, and a Caddy
-reload on a timer.
-
-### 3. Terminate TLS in front of the server
-
-Keep Open Session on `127.0.0.1:3850` and let a proxy hold the certificate. If
-it currently binds the tailnet address, run `opensession bind 127.0.0.1`
-first. Then configure Caddy to bind only the tailnet address:
+Keep Open Session on `127.0.0.1:3850` and bind Caddy only to the Tailscale
+address:
 
 ```caddy
 os.company.dev {
     bind 100.64.12.34
-    tls /etc/lego/certificates/os.company.dev.crt /etc/lego/certificates/os.company.dev.key
+    tls /etc/opensession/tls/os.company.dev.crt /etc/opensession/tls/os.company.dev.key
     reverse_proxy 127.0.0.1:3850
 }
 ```
 
-The `bind` line is the important one. Without it Caddy listens on every
-interface, which quietly undoes the whole arrangement — the certificate makes it
-look secure while the port is open to the world.
+The `bind` line is essential. Without it Caddy may listen on every interface,
+quietly undoing the private-network boundary. A TLS proxy adds encryption, not
+authentication.
 
-**A TLS proxy adds encryption, not authentication.** Anything that can reach the
-proxy can use Open Session.
+After verifying the address, save it in the Advanced flow. Open Session updates
+`server.publicBaseUrl` and `OPENSESSION_UI_BASE`; restart once to update links
+generated by the server.
 
-### 4. Tell Open Session its own name
-
-Set the durable app origin in `~/.opensession/config.json`:
-
-```json
-{
-  "server": {
-    "publicBaseUrl": "https://os.company.dev"
-  }
-}
-```
-
-A normal onboarded service also has this environment override, so update it
-too:
-
-```sh
-# ~/.opensession.env
-OPENSESSION_UI_BASE=https://os.company.dev
-```
-
-Then run `opensession restart`; the environment file is loaded only when the
-service starts. Links posted into Slack, Linear and notes are built from this
-origin. Get it wrong and shared links point somewhere unreachable.
-
-The clients (Chrome extension, Electron shell, Swift app) each take a server
-address too — see [instance-configuration.md](../instance-configuration.md).
-
-### 5. Check it from outside
+### Verify it from outside
 
 ```sh
 # on the tailnet

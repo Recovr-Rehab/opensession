@@ -34,6 +34,7 @@ import { devInstanceBootError, isDevInstance } from "./src/server/dev-mode";
 import { startPrReviewNotificationTicker } from "./src/server/pr-review-notifications";
 import { startPublicIngress } from "./src/server/public-ingress";
 import { ensureCloudflareTunnel } from "./src/server/ingress-settings";
+import { startPrivateAppCertificateRenewal } from "./src/server/private-app-domain";
 import { creationOwnsPrompt, readActiveShutdownSnapshot, recoverableLocalHostSnapshotRecords, recordRecoveredRunEvent, restorePromptQueues, resumeDrainedSessions, settleRecoveredCreationOpening, snapshotActiveSessions, startLoopTicker } from "./src/server/run-session";
 import { startMcpHttpServer, startRunRpcServer } from "./src/server/run-rpc";
 import { handleSandboxWsUpgrade, startTimerPoisonHeartbeat, timerPoisonRequestCheck } from "./src/server/run-ws";
@@ -633,6 +634,7 @@ if (!g.__opensessionBooted) {
 	try {
 		startPublicIngress();
 		ensureCloudflareTunnel();
+		startPrivateAppCertificateRenewal();
 	} catch (e) {
 		console.error("[public-ingress] failed to start:", e);
 	}

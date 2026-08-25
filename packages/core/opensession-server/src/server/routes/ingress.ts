@@ -5,6 +5,8 @@ import {
   publicIngressStatus,
   savePrivateAppOrigin,
   savePublicIngress,
+  setupPrivateAppDomain,
+  verifyPrivateAppDomain,
 } from "../ingress-settings";
 import { audit } from "../audit";
 import { requireWorkspaceAdmin, workspaceAdminAuthorized } from "../workspace-auth";
@@ -23,6 +25,36 @@ export async function handleIngressRoutes(ctx: RouteContext): Promise<Response |
   const { path, req } = ctx;
   if (path === "/api/ingress" && req.method === "GET") {
     return Response.json(await publicIngressStatus(workspaceAdminAuthorized(ctx)));
+  }
+  if (path === "/api/ingress/app/setup" && req.method === "POST") {
+    const forbidden = requireWorkspaceAdmin(ctx);
+    if (forbidden) return forbidden;
+    const body = (await req.json().catch(() => null)) as Record<string, unknown> | null;
+    try {
+      if (body?.provider !== "cloudflare") throw new Error("Cloudflare is the supported automatic DNS provider");
+      const appBaseUrl = await setupPrivateAppDomain({
+        domain: String(body.domain || ""),
+        email: typeof body.email === "string" ? body.email : undefined,
+        apiToken: typeof body.apiToken === "string" ? body.apiToken : undefined,
+      });
+      audit({ kind: "ingress_private_app_managed", publicBaseUrl: appBaseUrl, dnsProvider: "cloudflare" });
+      refreshIndexHtml("private app domain changed");
+      return Response.json({
+        ...(await publicIngressStatus(true, { appBaseUrl })),
+        restartRequired: true,
+      });
+    } catch (error) {
+      return errorResponse(error);
+    }
+  }
+  if (path === "/api/ingress/app/test" && req.method === "POST") {
+    const forbidden = requireWorkspaceAdmin(ctx);
+    if (forbidden) return forbidden;
+    try {
+      return Response.json(await verifyPrivateAppDomain());
+    } catch (error) {
+      return errorResponse(error);
+    }
   }
   if (path === "/api/ingress/app" && req.method === "POST") {
     const forbidden = requireWorkspaceAdmin(ctx);

@@ -22,6 +22,12 @@ import { stateDir } from "./paths";
 import { writeFileAtomic } from "./shared/atomic-write";
 import { prepareEnvFileEdits } from "./env-file-edit";
 import { detectedTailnetIpv4, normalizeAppOrigin } from "./setup-access";
+import {
+  configurePrivateAppDomain,
+  privateAppDomainStatus,
+  testPrivateAppDomain,
+  type PrivateAppDomainStatus,
+} from "./private-app-domain";
 
 export const PUBLIC_INGRESS_PORT = 3860;
 const CADDYFILE = process.env.OPENSESSION_CADDYFILE || "/etc/caddy/Caddyfile";
@@ -38,7 +44,12 @@ export interface IngressStatus {
   health: "ready" | "waiting_dns" | "unreachable" | "not_configured";
   localUrl: string;
   hostname: string;
-  app: { publicBaseUrl: string; hostname: string; tailnetIpv4: string | null };
+  app: {
+    publicBaseUrl: string;
+    hostname: string;
+    tailnetIpv4: string | null;
+    domain: PrivateAppDomainStatus;
+  };
   server: { ipv4: string[]; ipv6: string[] };
   dns: { a: string[]; aaaa: string[]; suggested: string[] };
   tailscale: { installed: boolean; dnsName: string; suggestedUrl: string };
@@ -260,11 +271,13 @@ export async function publicIngressStatus(
   try { appHostname = new URL(appBaseUrl).hostname; } catch {}
   let hostname = "";
   try { hostname = new URL(configured.publicBaseUrl).hostname; } catch {}
-  const [dns, tsName, probedHealth, serverAddresses] = await Promise.all([
+  const tailnetIpv4 = detectedTailnetIpv4();
+  const [dns, tsName, probedHealth, serverAddresses, appDomain] = await Promise.all([
     currentDns(hostname),
     tailscaleDnsName(),
     ingressHealth(configured.publicBaseUrl),
     publicServerAddresses(),
+    privateAppDomainStatus(appBaseUrl, tailnetIpv4),
   ]);
   const health = publicIngressHealth(configured.exposure, probedHealth, dns, serverAddresses);
   // A healthy direct Caddy origin proves its resolved addresses reach this
@@ -283,7 +296,8 @@ export async function publicIngressStatus(
     app: {
       publicBaseUrl: appBaseUrl.replace(/\/+$/, ""),
       hostname: appHostname,
-      tailnetIpv4: detectedTailnetIpv4(),
+      tailnetIpv4,
+      domain: appDomain,
     },
     server: { ipv4: displayedAddresses.a, ipv6: displayedAddresses.aaaa },
     dns: {
@@ -311,6 +325,25 @@ export async function publicIngressStatus(
       generatedConfig: caddyIngressSnippet(configured.publicBaseUrl || "https://ingress.example.com"),
     },
   };
+}
+
+export async function setupPrivateAppDomain(input: {
+  domain: string;
+  email?: string;
+  apiToken?: string;
+}): Promise<string> {
+  const publicBaseUrl = normalizePrivateAppOrigin(input.domain);
+  await configurePrivateAppDomain({
+    domain: new URL(publicBaseUrl).hostname,
+    email: input.email,
+    apiToken: input.apiToken,
+    tailnetIpv4: detectedTailnetIpv4(),
+  });
+  return savePrivateAppOrigin(publicBaseUrl);
+}
+
+export async function verifyPrivateAppDomain(): Promise<PrivateAppDomainStatus> {
+  return testPrivateAppDomain(configuredServer().publicBaseUrl, detectedTailnetIpv4());
 }
 
 export async function savePrivateAppOrigin(value: string): Promise<string> {

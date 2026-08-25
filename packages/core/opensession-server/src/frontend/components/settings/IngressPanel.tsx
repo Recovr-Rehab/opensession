@@ -5,6 +5,8 @@ import {
 	fetchPublicIngress,
 	installPublicIngressCaddy,
 	savePrivateAppDomain,
+	setupPrivateAppDomain,
+	testPrivateAppDomain,
 	testPublicIngress,
 	type IngressExposure,
 	type PublicIngressSettings,
@@ -94,24 +96,47 @@ function SetupStep({ number, title, children }: { number: number; title: string;
 function PrivateAppSetup({
 	settings,
 	domain,
+	email,
+	apiToken,
+	mode,
 	busy,
-	onChange,
-	onSave,
+	action,
+	onDomainChange,
+	onEmailChange,
+	onTokenChange,
+	onModeChange,
+	onSetup,
+	onVerify,
+	onSaveManual,
 }: {
 	settings: PublicIngressSettings;
 	domain: string;
+	email: string;
+	apiToken: string;
+	mode: "managed" | "manual";
 	busy: boolean;
-	onChange: (value: string) => void;
-	onSave: () => void;
+	action: "setup" | "verify" | "save" | null;
+	onDomainChange: (value: string) => void;
+	onEmailChange: (value: string) => void;
+	onTokenChange: (value: string) => void;
+	onModeChange: (value: "managed" | "manual") => void;
+	onSetup: () => void;
+	onVerify: () => void;
+	onSaveManual: () => void;
 }) {
 	const savedDomain = configuredAppDomain(settings);
 	const dnsRecord = privateAppDnsRecord(settings, domain);
 	const dirty = domain.trim() !== savedDomain;
+	const managedCredential = settings.app.domain.credentialConfigured && domain.trim() === savedDomain;
+	const managedInputMissing = !domain.trim() || (!managedCredential && (!email.trim() || !apiToken.trim()));
+	const status = settings.app.domain.health;
+	const statusLabel = busy ? action === "verify" ? "Checking" : action === "save" ? "Saving" : "Setting up" : ingressHealthLabel(status);
+	const statusDot = ingressHealthDot(status);
 	return (
 		<>
 			<SettingsGroupLabel
 				className="mt-0"
-				actions={<StatusChip label={savedDomain ? "Custom domain" : "Local address"} dot={savedDomain ? "var(--green)" : "var(--text-faint)"} />}
+				actions={<StatusChip label={statusLabel} dot={busy ? "var(--yellow)" : statusDot} />}
 			>
 				Private app
 			</SettingsGroupLabel>
@@ -122,6 +147,17 @@ function PrivateAppSetup({
 						<div className="mt-1 break-all font-mono text-supporting text-dim">{settings.app.publicBaseUrl}</div>
 					</SettingRowText>
 				</SettingRow>
+				{settings.app.domain.certificateExpiresAt && (
+					<SettingRow>
+						<SettingRowText>
+							<SettingRowTitle>Certificate</SettingRowTitle>
+							<SettingRowDescription>
+								Valid until {new Date(settings.app.domain.certificateExpiresAt).toLocaleDateString()}
+								{settings.app.domain.credentialConfigured ? ". Renewal is automatic." : ". Managed outside Open Session."}
+							</SettingRowDescription>
+						</SettingRowText>
+					</SettingRow>
+				)}
 			</SettingCard>
 			<SettingsForm className="mt-3">
 				<div>
@@ -130,44 +166,96 @@ function PrivateAppSetup({
 						Give your team a memorable HTTPS address while keeping the app on your private Tailscale network.
 					</p>
 				</div>
-				<SetupSteps>
-					<SetupStep number={1} title="Choose the app domain">
-						<SettingsField className="mb-0">
-							Domain
-							<Input value={domain} placeholder="os.example.com" disabled={busy} autoCapitalize="none" spellCheck={false} onChange={(event) => onChange(event.target.value)} />
-						</SettingsField>
-						<p className="m-0">Enter only the hostname. Open Session stores it as an HTTPS address. Use a different domain from public ingress.</p>
-					</SetupStep>
-					<SetupStep number={2} title="Point DNS to Tailscale">
-						<p className="m-0">Add this DNS-only record at your provider. It points to the server’s Tailscale IP, so the hostname resolves everywhere but only devices on your tailnet can connect.</p>
-						{dnsRecord ? <CodeBlock>{dnsRecord}</CodeBlock> : <InlineAlert>Connect this server to Tailscale first, then reload this page.</InlineAlert>}
-					</SetupStep>
-					<SetupStep number={3} title="Get a Let’s Encrypt certificate">
-						<p className="m-0">Use your DNS provider’s DNS-01 challenge because the private address cannot use HTTP validation. Set up automatic renewal and store the certificate at these paths:</p>
-						<CodeBlock>{`/etc/opensession/tls/${ingressHostname(domain, "os.example.com")}.crt`}</CodeBlock>
-						<CodeBlock>{`/etc/opensession/tls/${ingressHostname(domain, "os.example.com")}.key`}</CodeBlock>
-					</SetupStep>
-					<SetupStep number={4} title="Add the private Caddy site">
-						<p className="m-0">This binds Caddy only to the Tailscale address and forwards the app to its loopback port.</p>
-						{!settings.custom.caddyInstalled && <CodeBlock>{"curl -fsSL https://raw.githubusercontent.com/tellahq/opensession/main/install.sh | bash -s -- --caddy --no-onboard"}</CodeBlock>}
-					</SetupStep>
-				</SetupSteps>
-				<details className="rounded-lg bg-surface p-3 text-meta text-dim">
-					<summary className="cursor-pointer font-medium text-fg">Generated Caddy configuration</summary>
-					<pre className="mt-2 overflow-x-auto whitespace-pre-wrap font-mono text-meta">{privateAppCaddyConfig(settings, domain)}</pre>
-				</details>
-				<div className="grid gap-2">
-					<div className="text-label font-medium text-dim">Apply Caddy</div>
-					<CodeBlock>sudo caddy validate --config /etc/caddy/Caddyfile</CodeBlock>
-					<CodeBlock>sudo systemctl reload caddy</CodeBlock>
-				</div>
-				<SettingsFormActions>
-					<Button variant="primary" disabled={busy || !dirty || !domain.trim() || !dnsRecord || !settings.custom.caddyInstalled || !settings.canManage} className="phone:min-h-11 phone:w-full phone:justify-center" onClick={onSave}>
-						{busy ? "Saving…" : "Save app domain"}
-					</Button>
-				</SettingsFormActions>
+				<Segmented label="Private domain setup" value={mode} onValueChange={(value) => onModeChange(value as "managed" | "manual")} className="w-full">
+					<SegmentedOption value="managed" className="min-h-10 flex-1 justify-center phone:min-h-11">Automatic</SegmentedOption>
+					<SegmentedOption value="manual" className="min-h-10 flex-1 justify-center phone:min-h-11">Advanced</SegmentedOption>
+				</Segmented>
+
+				{mode === "managed" ? (
+					<>
+						<SetupSteps>
+							<SetupStep number={1} title="Choose the app domain">
+								<SettingsField className="mb-0">
+									Domain
+									<Input value={domain} placeholder="os.example.com" disabled={busy} autoCapitalize="none" spellCheck={false} onChange={(event) => onDomainChange(event.target.value)} />
+								</SettingsField>
+								<p className="m-0">Use a domain managed by Cloudflare and keep it different from public ingress.</p>
+							</SetupStep>
+							<SetupStep number={2} title="Authorize Cloudflare DNS">
+								<p className="m-0">
+									Create a scoped API token with <strong className="font-medium text-fg">Zone:DNS Edit</strong> and <strong className="font-medium text-fg">Zone:Zone Read</strong> for this zone. Open Session protects it with server file permissions and never returns it to the browser.
+								</p>
+								<a className="w-fit text-link hover:underline" href="https://dash.cloudflare.com/profile/api-tokens" target="_blank" rel="noreferrer">Create Cloudflare token</a>
+								<SettingsField className="mb-0">
+									Certificate email
+									<Input type="email" value={email} placeholder={managedCredential && settings.app.domain.certificateEmailConfigured ? "Leave blank to keep the saved email" : "you@example.com"} disabled={busy} autoCapitalize="none" spellCheck={false} onChange={(event) => onEmailChange(event.target.value)} />
+								</SettingsField>
+								<SettingsField className="mb-0">
+									Cloudflare API token
+									<Input type="password" value={apiToken} placeholder={managedCredential ? "Leave blank to keep the saved token" : "Paste the scoped token"} disabled={busy} autoComplete="off" onChange={(event) => onTokenChange(event.target.value)} />
+								</SettingsField>
+							</SetupStep>
+							<SetupStep number={3} title="Set up and verify">
+								<p className="m-0">Open Session creates the DNS-only A record, requests a Let’s Encrypt certificate with DNS-01, configures Caddy, and checks the private address. It checks renewal daily.</p>
+								{(!settings.custom.caddyInstalled || !settings.app.domain.legoInstalled) && (
+									<>
+										<InlineAlert>Install Caddy and the certificate helper first, then reload this page.</InlineAlert>
+										<CodeBlock>{"curl -fsSL https://raw.githubusercontent.com/tellahq/opensession/main/install.sh | bash -s -- --caddy --no-onboard"}</CodeBlock>
+									</>
+								)}
+							</SetupStep>
+						</SetupSteps>
+						{status === "waiting_dns" && <InlineAlert>Cloudflare DNS has not reached this server yet. Wait a moment, then verify again.</InlineAlert>}
+						{status === "unreachable" && <InlineAlert>DNS points to this server, but the HTTPS app is not reachable. Verify Caddy and the certificate, then try again.</InlineAlert>}
+						<SettingsFormActions className="phone:flex-col-reverse">
+							<Button variant="soft" disabled={busy || !savedDomain || !settings.canManage} className="phone:min-h-11 phone:w-full phone:justify-center" onClick={onVerify}>
+								{action === "verify" ? "Checking…" : "Verify address"}
+							</Button>
+							<Button variant="primary" disabled={busy || managedInputMissing || !dnsRecord || !settings.custom.caddyInstalled || !settings.app.domain.legoInstalled || !settings.canManage} className="phone:min-h-11 phone:w-full phone:justify-center" onClick={onSetup}>
+								{action === "setup" ? "Setting up…" : managedCredential ? "Update setup" : "Set up private domain"}
+							</Button>
+						</SettingsFormActions>
+					</>
+				) : (
+					<>
+						<SetupSteps>
+							<SetupStep number={1} title="Choose the app domain">
+								<SettingsField className="mb-0">
+									Domain
+									<Input value={domain} placeholder="os.example.com" disabled={busy} autoCapitalize="none" spellCheck={false} onChange={(event) => onDomainChange(event.target.value)} />
+								</SettingsField>
+							</SetupStep>
+							<SetupStep number={2} title="Point DNS to Tailscale">
+								<p className="m-0">Add this DNS-only record at your provider. Only devices on your tailnet can connect.</p>
+								{dnsRecord ? <CodeBlock>{dnsRecord}</CodeBlock> : <InlineAlert>Connect this server to Tailscale first, then reload this page.</InlineAlert>}
+							</SetupStep>
+							<SetupStep number={3} title="Provide a certificate">
+								<p className="m-0">Use Let’s Encrypt DNS-01 or another trusted certificate and renew it outside Open Session.</p>
+								<CodeBlock>{`/etc/opensession/tls/${ingressHostname(domain, "os.example.com")}.crt`}</CodeBlock>
+								<CodeBlock>{`/etc/opensession/tls/${ingressHostname(domain, "os.example.com")}.key`}</CodeBlock>
+							</SetupStep>
+							<SetupStep number={4} title="Configure Caddy">
+								<p className="m-0">Bind Caddy only to the Tailscale address and forward the app to loopback.</p>
+							</SetupStep>
+						</SetupSteps>
+						<details className="rounded-lg bg-surface p-3 text-meta text-dim">
+							<summary className="cursor-pointer font-medium text-fg">Generated Caddy configuration</summary>
+							<pre className="mt-2 overflow-x-auto whitespace-pre-wrap font-mono text-meta">{privateAppCaddyConfig(settings, domain)}</pre>
+						</details>
+						<div className="grid gap-2">
+							<div className="text-label font-medium text-dim">Apply Caddy</div>
+							<CodeBlock>sudo caddy validate --config /etc/caddy/Caddyfile</CodeBlock>
+							<CodeBlock>sudo systemctl reload caddy</CodeBlock>
+						</div>
+						<SettingsFormActions>
+							<Button variant="primary" disabled={busy || !dirty || !domain.trim() || !dnsRecord || !settings.custom.caddyInstalled || !settings.canManage} className="phone:min-h-11 phone:w-full phone:justify-center" onClick={onSaveManual}>
+								{action === "save" ? "Saving…" : "Save app domain"}
+							</Button>
+						</SettingsFormActions>
+						<SettingsHint>Install and verify DNS, TLS, and Caddy before saving. Open Session only updates its generated links in advanced mode.</SettingsHint>
+					</>
+				)}
 			</SettingsForm>
-			<SettingsHint>Open the new address before saving. A restart updates links generated by Open Session; it does not change DNS or Caddy.</SettingsHint>
 		</>
 	);
 }
@@ -189,6 +277,10 @@ export function IngressPanel({
 	const [surface, setSurface] = useState<"app" | "ingress">(onboarding ? "ingress" : "app");
 	const [method, setMethod] = useState<IngressExposure>("tailscale");
 	const [appDomain, setAppDomain] = useState("");
+	const [privateMode, setPrivateMode] = useState<"managed" | "manual">("managed");
+	const [certificateEmail, setCertificateEmail] = useState("");
+	const [privateApiToken, setPrivateApiToken] = useState("");
+	const [privateAction, setPrivateAction] = useState<"setup" | "verify" | "save" | null>(null);
 	const [drafts, setDrafts] = useState<Record<IngressExposure, string>>(EMPTY_DRAFTS);
 	const [tunnelId, setTunnelId] = useState("");
 	const [tunnelToken, setTunnelToken] = useState("");
@@ -223,16 +315,16 @@ export function IngressPanel({
 		});
 	}, []);
 
-	// A custom-domain setup is complete before public DNS necessarily reaches
-	// this server. Keep the explicit waiting state current without making the
-	// operator repeatedly click a probe while their provider propagates it.
+	// A custom-domain setup is complete before DNS necessarily reaches this
+	// server. Keep either explicit waiting state current without requiring a
+	// repeated manual probe while the provider propagates it.
 	useEffect(() => {
-		if (settings?.health !== "waiting_dns") return;
+		if (settings?.health !== "waiting_dns" && settings?.app.domain.health !== "waiting_dns") return;
 		const timer = window.setInterval(() => {
 			void fetchPublicIngress().then((next) => applyFromEffect(next, false)).catch(() => {});
 		}, 5_000);
 		return () => window.clearInterval(timer);
-	}, [settings?.health]);
+	}, [settings?.health, settings?.app.domain.health]);
 
 	async function run(
 		kind: "apply" | "test",
@@ -254,21 +346,42 @@ export function IngressPanel({
 			.finally(() => setBusy(null));
 	}
 
-	async function saveAppDomain() {
+	async function runPrivateApp(
+		action: "setup" | "save",
+		work: () => Promise<PublicIngressSettings & { restartRequired: boolean }>,
+		message: string | ((next: PublicIngressSettings) => string),
+	) {
 		if (busy || !settings) return;
 		setBusy("app");
+		setPrivateAction(action);
 		setError(null);
-		await savePrivateAppDomain(appDomain)
+		await work()
 			.then((next) => {
 				apply(next);
+				setPrivateApiToken("");
 				if (next.restartRequired) setup.requireRestart();
-				toast("Private app domain saved", { variant: "success" });
+				const notice = typeof message === "function" ? message(next) : message;
+				toast(notice, { variant: next.app.domain.health === "ready" ? "success" : "default" });
 				void onChanged?.();
 			})
 			.catch((cause: unknown) => {
-				setError(cause instanceof Error ? cause.message : "Private app domain could not be saved");
+				setError(cause instanceof Error ? cause.message : "Private app domain could not be updated");
 			})
-			.finally(() => setBusy(null));
+			.finally(() => { setBusy(null); setPrivateAction(null); });
+	}
+
+	async function verifyAppDomain() {
+		if (busy || !settings) return;
+		setBusy("app");
+		setPrivateAction("verify");
+		setError(null);
+		await testPrivateAppDomain()
+			.then((domain) => {
+				setSettings((current) => current ? { ...current, app: { ...current.app, domain } } : current);
+				toast(domain.health === "ready" ? "Private address is reachable" : "Private address is not ready yet", { variant: domain.health === "ready" ? "success" : "default" });
+			})
+			.catch((cause: unknown) => setError(cause instanceof Error ? cause.message : "Private app domain could not be verified"))
+			.finally(() => { setBusy(null); setPrivateAction(null); });
 	}
 
 	async function applyMethod() {
@@ -330,9 +443,23 @@ export function IngressPanel({
 							<PrivateAppSetup
 								settings={settings}
 								domain={appDomain}
+								email={certificateEmail}
+								apiToken={privateApiToken}
+								mode={privateMode}
 								busy={busy === "app"}
-								onChange={(value) => { setAppDomain(value); setError(null); }}
-								onSave={() => void saveAppDomain()}
+								action={privateAction}
+								onDomainChange={(value) => { setAppDomain(value); setError(null); }}
+								onEmailChange={setCertificateEmail}
+								onTokenChange={setPrivateApiToken}
+								onModeChange={setPrivateMode}
+								onSetup={() => void runPrivateApp("setup", () => setupPrivateAppDomain({
+									domain: appDomain,
+									provider: "cloudflare",
+									...(certificateEmail ? { email: certificateEmail } : {}),
+									...(privateApiToken ? { apiToken: privateApiToken } : {}),
+								}), (next) => next.app.domain.health === "ready" ? "Private app domain is ready" : "Private app domain configured. Verification is still pending")}
+								onVerify={() => void verifyAppDomain()}
+								onSaveManual={() => void runPrivateApp("save", () => savePrivateAppDomain(appDomain), "Private app domain saved")}
 							/>
 							{onboarding && settings.health !== "ready" && (
 								<SettingsHint className="mt-4">A friendly private domain is optional. Public callbacks must be ready before GitHub.</SettingsHint>

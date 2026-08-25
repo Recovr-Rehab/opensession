@@ -9,7 +9,19 @@ export interface PublicIngressSettings {
 	health: "ready" | "waiting_dns" | "unreachable" | "not_configured";
 	localUrl: string;
 	hostname: string;
-	app: { publicBaseUrl: string; hostname: string; tailnetIpv4: string | null };
+	app: {
+		publicBaseUrl: string;
+		hostname: string;
+		tailnetIpv4: string | null;
+		domain: {
+			health: "ready" | "waiting_dns" | "unreachable" | "not_configured";
+			dnsProvider: "cloudflare" | null;
+			credentialConfigured: boolean;
+			certificateEmailConfigured: boolean;
+			certificateExpiresAt: string;
+			legoInstalled: boolean;
+		};
+	};
 	server: { ipv4: string[]; ipv6: string[] };
 	dns: { a: string[]; aaaa: string[]; suggested: string[] };
 	tailscale: { installed: boolean; dnsName: string; suggestedUrl: string };
@@ -26,6 +38,26 @@ export interface PublicIngressSettings {
 
 export function fetchPublicIngress(): Promise<PublicIngressSettings> {
 	return request("/ingress", { label: "Failed to load public ingress" });
+}
+
+export function setupPrivateAppDomain(input: {
+	domain: string;
+	provider: "cloudflare";
+	email?: string;
+	apiToken?: string;
+}): Promise<PublicIngressSettings & { restartRequired: boolean }> {
+	return request("/ingress/app/setup", {
+		method: "POST",
+		body: input,
+		label: "Failed to set up private app domain",
+	});
+}
+
+export function testPrivateAppDomain(): Promise<PublicIngressSettings["app"]["domain"]> {
+	return request("/ingress/app/test", {
+		method: "POST",
+		label: "Failed to verify private app domain",
+	});
 }
 
 export function savePrivateAppDomain(domain: string): Promise<PublicIngressSettings & { restartRequired: boolean }> {

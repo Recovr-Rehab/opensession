@@ -154,8 +154,9 @@ curl -fsSL https://raw.githubusercontent.com/tellahq/opensession/main/install.sh
 Useful flags: `--dir <path>` to install elsewhere, `--channel <ref>` to track
 a branch or tag, `--advanced` for the wizard, `--org <name>` to set up an org
 install, `--tailscale` to install Tailscale, `--cloudflare` to install
-`cloudflared`, `--caddy` to install Caddy, `--codex` for the ChatGPT sign-in CLI,
-`--no-engine` to skip the model CLI, `--yes` to never prompt, and `--uninstall`
+`cloudflared`, `--caddy` to install Caddy and the lego certificate helper,
+`--codex` for the ChatGPT sign-in CLI, `--no-engine` to skip the model CLI,
+`--yes` to never prompt, and `--uninstall`
 to remove it. `--help` lists them all.
 
 The Pi engine is compiled into the release binary and runs in-process, so

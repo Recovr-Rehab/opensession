@@ -28,8 +28,8 @@
 #                                              sign-in); off by default
 #   --tailscale           WITH_TAILSCALE=1     also install Tailscale (off by
 #                                              default; --no-tailscale still accepted)
-#   --caddy               WITH_CADDY=1         install Caddy for custom-domain
-#                                              public ingress
+#   --caddy               WITH_CADDY=1         install Caddy and lego for managed
+#                                              private or public custom domains
 #   --cloudflare          WITH_CLOUDFLARE=1    install cloudflared for Tunnel
 #                                              public ingress
 #   --org <name>          OPENSESSION_ORG      set this instance up for a GitHub
@@ -709,6 +709,38 @@ if [ "$WITH_CADDY" = "1" ]; then
   else
     warn "could not install Caddy automatically"
     muted "install it from https://caddyserver.com/docs/install and reload /welcome"
+  fi
+
+  # Private custom domains cannot use HTTP-01 because they terminate on a
+  # Tailscale address. lego handles Let's Encrypt DNS-01 and renewal while
+  # stock Caddy continues to serve the resulting certificate.
+  if command -v lego >/dev/null 2>&1; then
+    good "lego $(lego --version 2>/dev/null | head -1 || echo installed)"
+  elif install_package lego && command -v lego >/dev/null 2>&1; then
+    good "lego $(lego --version 2>/dev/null | head -1 || echo installed)"
+  elif [ "$OS" = "Darwin" ]; then
+    warn "could not install lego automatically"
+    muted "install it with: brew install lego"
+  else
+    case "$(uname -m)" in
+      x86_64|amd64) lego_arch="amd64" ;;
+      aarch64|arm64) lego_arch="arm64" ;;
+      *) lego_arch="" ;;
+    esac
+    lego_version="${LEGO_VERSION:-4.26.0}"
+    lego_tmp="$(mktemp -d)"
+    mkdir -p "$HOME/.local/bin"
+    if [ -n "$lego_arch" ] \
+      && curl -fsSL "https://github.com/go-acme/lego/releases/download/v${lego_version}/lego_v${lego_version}_linux_${lego_arch}.tar.gz" -o "$lego_tmp/lego.tar.gz" \
+      && tar -xzf "$lego_tmp/lego.tar.gz" -C "$lego_tmp" lego \
+      && install -m 0755 "$lego_tmp/lego" "$HOME/.local/bin/lego"; then
+      export PATH="$HOME/.local/bin:$PATH"
+      good "lego $(lego --version 2>/dev/null | head -1 || echo installed)"
+    else
+      warn "could not install lego automatically"
+      muted "install it from https://go-acme.github.io/lego/installation/"
+    fi
+    rm -rf "$lego_tmp"
   fi
 fi
 
