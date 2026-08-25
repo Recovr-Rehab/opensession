@@ -26,7 +26,7 @@ export function DownloadAppsDialog({
 			phone={phone}
 			label="Download apps"
 			backdropClassName="bg-black/25 backdrop-blur-[1px]"
-			modalClassName="w-[calc(100vw-3rem)] max-w-[42rem] max-h-[calc(100dvh-3rem)] rounded-2xl bg-raised p-10"
+			modalClassName="w-[calc(100vw-3rem)] max-w-[48rem] max-h-[calc(100dvh-3rem)] rounded-2xl bg-raised p-10"
 			sheetClassName="max-h-[92dvh] bg-raised"
 		>
 			<div className="flex min-h-0 flex-1 flex-col overflow-y-auto overscroll-contain p-5 pt-2 desktop:overflow-visible desktop:p-0">
@@ -141,7 +141,7 @@ function AppCard({
 	children: ReactNode;
 }) {
 	return (
-		<section className="flex min-h-[20rem] flex-col overflow-hidden rounded-xl bg-panel desktop:min-h-[19.5rem]">
+		<section className="flex min-h-[20rem] flex-col overflow-hidden rounded-xl bg-panel desktop:h-[22rem] desktop:min-h-0">
 			<div className="min-h-0 flex-1">{preview}</div>
 			<div className="relative z-10 flex shrink-0 flex-col px-4 pb-4 desktop:px-5 desktop:pb-5">
 				<h3 className="m-0 text-section-title font-semibold leading-tight text-fg">{title}</h3>
