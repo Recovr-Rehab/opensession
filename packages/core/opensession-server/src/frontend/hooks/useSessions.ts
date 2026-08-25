@@ -242,7 +242,9 @@ export function useSessions({
 
   // Stable per query: refs, setters and module fns otherwise. The polling
   // effect below can list it without re-arming on unrelated re-renders.
-  const poll = useCallback((): Promise<void> => {
+  // Named function expression so the invalidation re-poll can recurse
+  // without the compiler seeing a read of `poll` mid-initialization.
+  const poll = useCallback(async function pollSelf(): Promise<void> {
     const requestQuery = liveQuery;
     if (pollPromiseRef.current?.query === requestQuery)
       return pollPromiseRef.current.promise;
@@ -303,7 +305,7 @@ if (e?.name === "AbortError") return;
         document.visibilityState !== "hidden" &&
         invalidationRevisionRef.current !== invalidationRevision
       )
-        void poll();
+        void pollSelf();
     });
     pollPromiseRef.current = { query: requestQuery, promise };
     return promise;
@@ -347,7 +349,7 @@ if (e?.name === "AbortError") return;
   const archivedEtagRef = useRef<string | null>(null);
   const archivedPromiseRef = useRef<Promise<void> | null>(null);
 
-  const pollArchived = useCallback((): Promise<void> => {
+  const pollArchived = useCallback(async function pollArchivedSelf(): Promise<void> {
     if (archivedPromiseRef.current) return archivedPromiseRef.current;
     const startedAt = Date.now();
     const invalidationRevision = invalidationRevisionRef.current;
@@ -382,7 +384,7 @@ const snapshot = await fetchSessionsSnapshot({
         document.visibilityState !== "hidden" &&
         invalidationRevisionRef.current !== invalidationRevision
       )
-        void pollArchived();
+        void pollArchivedSelf();
     });
     archivedPromiseRef.current = promise;
     return promise;
