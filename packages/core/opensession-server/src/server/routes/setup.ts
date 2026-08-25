@@ -45,25 +45,12 @@ async function integrationSnapshot(
     envValues && name in envValues
       ? envValues[name] !== ""
       : !!process.env[name];
-  let githubAppSuppliesBotCredential = false;
-  if (spec.id === "github") {
-    const { githubAppConfigured, githubBotCredentialMode } =
-      await import("../github-app");
-    githubAppSuppliesBotCredential =
-      githubBotCredentialMode() === "app" && githubAppConfigured();
-  }
-  const env = spec.env.map((e) => {
-    const retiredGithubPat =
-      e.name === "GITHUB_API_TOKEN" && githubAppSuppliesBotCredential;
-    return {
-      name: e.name,
-      required: retiredGithubPat ? false : envRequired(e, present),
-      description: retiredGithubPat
-        ? "legacy PAT; not used while the GitHub App is selected"
-        : e.description,
-      present: present(e.name),
-    };
-  });
+  const env = spec.env.map((e) => ({
+    name: e.name,
+    required: envRequired(e, present),
+    description: e.description,
+    present: present(e.name),
+  }));
   // Registry links are static; instance-dependent ones are computed here.
   const links = [...(spec.links ?? [])];
   if (spec.id === "grafana") {
@@ -148,12 +135,17 @@ export function buildOnboardingGithubAppCreateUrl(
 }
 
 async function githubSnapshot() {
-  const { githubUserAuthSettings, githubAppOrg, githubAuthOnConnect } =
-    await import("../github-auth");
-  const { githubAppConfigured, githubBotCredentialMode } =
-    await import("../github-app");
+  const {
+    githubAppIdentity,
+    githubUserAuthSettings,
+    githubAppOrg,
+    githubAuthOnConnect,
+  } = await import("../github-auth");
+  const { githubAppConfigured } = await import("../github-app");
   const { configuredIntegration, configuredServer, personaName } = await import("../config");
   const github = githubUserAuthSettings();
+  const app = githubAppIdentity();
+  const integration = configuredIntegration("github");
   const org = await primaryGithubOrg();
   const configuredHandles = configuredIntegration("github").mentionHandles;
   const mentionHandle = (
@@ -168,9 +160,12 @@ async function githubSnapshot() {
     clientIdConfigured: !!github.clientId,
     clientSecretConfigured: !!github.clientSecret,
     mentionHandle,
-    botTokenPresent: !!process.env.GITHUB_API_TOKEN,
-    botCredential: githubBotCredentialMode(),
     appCredentialConfigured: githubAppConfigured(),
+    appSlug: app.slug,
+    installationOwner:
+      typeof integration.installationOwner === "string"
+        ? integration.installationOwner
+        : null,
     // Captured install/app-setup intent: the org the App is owned by, and
     // whether connecting should turn on per-user sign-in. Both are inert until
     // the simple-mode connect handler consumes authOnConnect.
@@ -402,8 +397,9 @@ export async function handleSetupRoutes(
       userPrAuth?: unknown;
       oauthClientId?: unknown;
       oauthClientSecret?: unknown;
+      appSlug?: unknown;
+      installationOwner?: unknown;
       mentionHandle?: unknown;
-      botCredential?: unknown;
       privateKey?: unknown;
     } | null;
     if (!body || typeof body !== "object" || Array.isArray(body)) {
@@ -412,22 +408,12 @@ export async function handleSetupRoutes(
     if (body.userPrAuth !== undefined && typeof body.userPrAuth !== "boolean") {
       return Response.json({ error: "userPrAuth must be a boolean" }, { status: 400 });
     }
-    if (
-      body.botCredential !== undefined &&
-      body.botCredential !== "pat" &&
-      body.botCredential !== "app"
-    ) {
-      return Response.json({ error: "botCredential must be pat or app" }, { status: 400 });
-    }
-    if (body.botCredential === "app") {
-      const { githubAppConfigured } = await import("../github-app");
-      if (!githubAppConfigured())
-        return Response.json(
-          { error: "Configure the GitHub App client id and private key before switching" },
-          { status: 409 },
-        );
-    }
-    for (const field of ["oauthClientId", "oauthClientSecret"] as const) {
+    for (const field of [
+      "oauthClientId",
+      "oauthClientSecret",
+      "appSlug",
+      "installationOwner",
+    ] as const) {
       if (body[field] === undefined) continue;
       const invalid = await validateSetting(body[field]);
       if (invalid) {
@@ -478,8 +464,9 @@ export async function handleSetupRoutes(
       body.userPrAuth === undefined &&
       body.oauthClientId === undefined &&
       body.oauthClientSecret === undefined &&
+      body.appSlug === undefined &&
+      body.installationOwner === undefined &&
       mentionHandle === undefined &&
-      body.botCredential === undefined &&
       !privateKey
     ) {
       return Response.json({ error: "Nothing to change" }, { status: 400 });
@@ -509,10 +496,62 @@ export async function handleSetupRoutes(
         (nextClientId !== undefined && github.oauthClientId !== nextClientId
           ? null
           : undefined);
-      const effectiveBotCredential = body.botCredential ?? github.botCredential ?? "pat";
-      if (keyMutation === null && effectiveBotCredential === "app") {
+      const { githubAppIdentity } = await import("../github-auth");
+      const { githubAppConfigured } = await import("../github-app");
+      const effectiveAppSlug =
+        body.appSlug !== undefined
+          ? String(body.appSlug).trim()
+          : githubAppIdentity().slug;
+      const appSettingsChanging =
+        body.oauthClientId !== undefined ||
+        body.oauthClientSecret !== undefined ||
+        body.appSlug !== undefined ||
+        body.installationOwner !== undefined ||
+        !!privateKey;
+      if ((appSettingsChanging || body.userPrAuth === true) && !effectiveAppSlug) {
         return Response.json(
-          { error: "Switch bot actions to the PAT before changing the GitHub App without a replacement key" },
+          { error: "Configure the GitHub App slug" },
+          { status: 409 },
+        );
+      }
+      if (keyMutation === null) {
+        return Response.json(
+          { error: "Changing the GitHub App client id requires its replacement private key" },
+          { status: 409 },
+        );
+      }
+      const effectiveClientId =
+        body.oauthClientId !== undefined
+          ? String(body.oauthClientId).trim()
+          : typeof github.oauthClientId === "string"
+            ? github.oauthClientId
+            : "";
+      const effectiveOwner =
+        body.installationOwner !== undefined
+          ? String(body.installationOwner).trim()
+          : typeof github.installationOwner === "string"
+            ? github.installationOwner
+            : typeof github.appOrg === "string"
+              ? github.appOrg
+              : "";
+      const effectiveSecret =
+        body.oauthClientSecret !== undefined
+          ? String(body.oauthClientSecret).trim()
+          : typeof github.oauthClientSecret === "string"
+            ? github.oauthClientSecret
+            : "";
+      if (
+        (appSettingsChanging || body.userPrAuth === true) &&
+        (!effectiveClientId || !effectiveOwner || (!privateKey && !githubAppConfigured()))
+      ) {
+        return Response.json(
+          { error: "Client id, installation owner and private key are required for the GitHub App" },
+          { status: 409 },
+        );
+      }
+      if (body.userPrAuth === true && !effectiveSecret) {
+        return Response.json(
+          { error: "A client secret is required for GitHub authentication" },
           { status: 409 },
         );
       }
@@ -571,16 +610,19 @@ export async function handleSetupRoutes(
             team.push({ name: displayName, github: login, admin: true });
           }
           (config.identity as Record<string, unknown>).team = team;
-          github.webhookForwardLogin = login;
         }
       }
       if (body.userPrAuth !== undefined) github.userPrAuth = body.userPrAuth;
-      if (body.botCredential !== undefined) github.botCredential = body.botCredential;
       if (mentionHandle !== undefined) {
         if (mentionHandle) github.mentionHandles = [mentionHandle];
         else delete github.mentionHandles;
       }
-      for (const field of ["oauthClientId", "oauthClientSecret"] as const) {
+      for (const field of [
+        "oauthClientId",
+        "oauthClientSecret",
+        "appSlug",
+        "installationOwner",
+      ] as const) {
         const value = body[field];
         if (value === undefined) continue;
         if (value === "") delete github[field]; // empty string clears
@@ -600,7 +642,14 @@ export async function handleSetupRoutes(
       }
       audit({
         kind: "setup_github_update",
-        fields: (["userPrAuth", "oauthClientId", "oauthClientSecret", "mentionHandle", "botCredential"] as const).filter(
+        fields: ([
+          "userPrAuth",
+          "oauthClientId",
+          "oauthClientSecret",
+          "appSlug",
+          "installationOwner",
+          "mentionHandle",
+        ] as const).filter(
           (f) => body[f] !== undefined,
         ),
       });
