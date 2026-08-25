@@ -531,7 +531,12 @@ export function FirstMile({ onDone }: { onDone: () => Promise<void> }) {
 											<ProviderAccountsSection onboarding onChanged={refetch} />
 										)}
 										{step.id === "repos" && (
-											<ReposSection repos={status.repos} onChanged={refetch} compact />
+											<ReposSection
+												repos={status.repos}
+												onChanged={refetch}
+												compact
+												showLifecycleStatus={false}
+											/>
 										)}
 										{step.id === "ready" && (
 											<FirstMileSummary
