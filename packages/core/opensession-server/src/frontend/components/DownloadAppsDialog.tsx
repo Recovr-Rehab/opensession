@@ -26,11 +26,11 @@ export function DownloadAppsDialog({
 			phone={phone}
 			label="Download apps"
 			backdropClassName="bg-black/25 backdrop-blur-[1px]"
-			modalClassName="w-[calc(100vw-4rem)] max-w-[75rem] max-h-[calc(100dvh-4rem)] rounded-2xl bg-raised p-10"
+			modalClassName="w-[calc(100vw-3rem)] max-w-[52rem] max-h-[calc(100dvh-3rem)] rounded-2xl bg-raised p-6"
 			sheetClassName="max-h-[92dvh] bg-raised"
 		>
 			<div className="flex min-h-0 flex-1 flex-col overflow-y-auto overscroll-contain p-5 pt-2 desktop:overflow-visible desktop:p-0">
-				<header className="mb-6 flex shrink-0 items-center justify-between gap-4 desktop:mb-8">
+				<header className="mb-5 flex shrink-0 items-center justify-between gap-4">
 					<div className="flex min-w-0 items-center gap-1">
 						{showInstallHelp && (
 							<Button
@@ -69,7 +69,7 @@ export function DownloadAppsDialog({
 						</InstallStep>
 					</div>
 				) : (
-					<div className="grid min-h-0 flex-1 gap-4 desktop:grid-cols-[3fr_2fr] desktop:gap-6">
+					<div className="grid min-h-0 flex-1 gap-4 desktop:grid-cols-[3fr_2fr]">
 						<AppCard
 							preview={
 								<div className="relative h-full overflow-hidden bg-blue-soft">
@@ -141,11 +141,11 @@ function AppCard({
 	children: ReactNode;
 }) {
 	return (
-		<section className="flex min-h-[24rem] flex-col overflow-hidden rounded-xl bg-panel desktop:min-h-[31rem]">
+		<section className="flex min-h-[20rem] flex-col overflow-hidden rounded-xl bg-panel desktop:min-h-[22rem]">
 			<div className="min-h-0 flex-1">{preview}</div>
-			<div className="relative z-10 flex shrink-0 flex-col px-5 pb-5 desktop:px-7 desktop:pb-7">
+			<div className="relative z-10 flex shrink-0 flex-col px-4 pb-4 desktop:px-5 desktop:pb-5">
 				<h3 className="m-0 text-section-title font-semibold leading-tight text-fg">{title}</h3>
-				<p className="mb-5 mt-1 text-body font-medium text-dim">{subtitle}</p>
+				<p className="mb-4 mt-1 text-body font-medium text-dim">{subtitle}</p>
 				{children}
 			</div>
 		</section>
@@ -162,7 +162,7 @@ function InstallStep({
 	children: ReactNode;
 }) {
 	return (
-		<section className="flex min-h-48 flex-col rounded-xl bg-panel p-5 desktop:min-h-72 desktop:p-7">
+		<section className="flex min-h-48 flex-col rounded-xl bg-panel p-5 desktop:min-h-60">
 			<div className="mb-auto flex size-10 items-center justify-center rounded-control bg-accent text-body font-semibold text-on-accent">
 				{number}
 			</div>
