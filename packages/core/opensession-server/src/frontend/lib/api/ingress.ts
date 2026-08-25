@@ -16,6 +16,8 @@ export interface PublicIngressSettings {
 		tunnelId: string;
 		cnameTarget: string;
 		connectorTarget: string;
+		tokenConfigured: boolean;
+		connectorRunning: boolean;
 	};
 	custom: { caddyInstalled: boolean; generatedConfig: string };
 }
@@ -40,6 +42,18 @@ export function enablePublicIngressFunnel(): Promise<PublicIngressSettings> {
 	return request("/ingress/tailscale", {
 		method: "POST",
 		label: "Failed to enable Tailscale Funnel",
+	});
+}
+
+export function configurePublicIngressCloudflare(input: {
+	publicBaseUrl: string;
+	tunnelId: string;
+	token?: string;
+}): Promise<PublicIngressSettings> {
+	return request("/ingress/cloudflare", {
+		method: "POST",
+		body: input,
+		label: "Failed to configure Cloudflare Tunnel",
 	});
 }
 

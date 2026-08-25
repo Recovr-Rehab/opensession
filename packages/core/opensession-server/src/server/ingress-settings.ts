@@ -1,6 +1,6 @@
 /** Public-ingress configuration, discovery and managed exposure helpers. */
 import { randomBytes } from "crypto";
-import { mkdtempSync, readFileSync, rmSync } from "fs";
+import { existsSync, mkdtempSync, readFileSync, rmSync } from "fs";
 import { networkInterfaces } from "os";
 import { join } from "path";
 import { tmpdir } from "os";
@@ -17,9 +17,16 @@ import {
 } from "./config-mutation";
 import { isBlockedAddress } from "./shared/network-address";
 import { caddyIngressSnippet, upsertCaddyIngress } from "./sandbox/caddy-ingress";
+import { stateDir } from "./paths";
+import { writeFileAtomic } from "./shared/atomic-write";
 
 export const PUBLIC_INGRESS_PORT = 3860;
 const CADDYFILE = process.env.OPENSESSION_CADDYFILE || "/etc/caddy/Caddyfile";
+const CLOUDFLARE_TOKEN_PATH = stateDir("cloudflared-tunnel-token");
+const runtime = globalThis as typeof globalThis & {
+  __opensessionCloudflared?: ReturnType<typeof Bun.spawn>;
+  __opensessionCloudflaredRestart?: ReturnType<typeof setTimeout>;
+};
 
 export interface IngressStatus {
   canManage: boolean;
@@ -35,6 +42,8 @@ export interface IngressStatus {
     tunnelId: string;
     cnameTarget: string;
     connectorTarget: string;
+    tokenConfigured: boolean;
+    connectorRunning: boolean;
   };
   custom: { caddyInstalled: boolean; generatedConfig: string };
 }
@@ -175,6 +184,8 @@ export async function publicIngressStatus(canManage: boolean): Promise<IngressSt
       tunnelId,
       cnameTarget: tunnelId ? `${tunnelId}.cfargotunnel.com` : "<tunnel-id>.cfargotunnel.com",
       connectorTarget: `http://127.0.0.1:${PUBLIC_INGRESS_PORT}`,
+      tokenConfigured: existsSync(CLOUDFLARE_TOKEN_PATH),
+      connectorRunning: cloudflareConnectorRunning(),
     },
     custom: {
       caddyInstalled: Bun.which("caddy") !== null,
@@ -211,6 +222,14 @@ export async function savePublicIngress(input: {
     }
     persistRawConfig(raw);
   });
+  if (input.exposure !== "cloudflare") {
+    if (runtime.__opensessionCloudflaredRestart) {
+      clearTimeout(runtime.__opensessionCloudflaredRestart);
+      runtime.__opensessionCloudflaredRestart = undefined;
+    }
+    runtime.__opensessionCloudflared?.kill();
+    runtime.__opensessionCloudflared = undefined;
+  }
 }
 
 export async function enableTailscaleFunnel(): Promise<string> {
@@ -239,6 +258,58 @@ export async function enableTailscaleFunnel(): Promise<string> {
   if (!healthy) throw new Error("Funnel started, but the public health check did not become ready");
   await savePublicIngress({ publicBaseUrl: origin, exposure: "tailscale" });
   return origin;
+}
+
+function cloudflareConnectorRunning(): boolean {
+  return runtime.__opensessionCloudflared?.exitCode === null;
+}
+
+/** Start or reuse the named Cloudflare connector. Called explicitly at boot
+ * and after Settings stores a token; importing this module has no effects. */
+export function ensureCloudflareTunnel(): boolean {
+  if (configuredIngress().exposure !== "cloudflare") return false;
+  if (cloudflareConnectorRunning()) return true;
+  const binary = Bun.which("cloudflared");
+  if (!binary || !existsSync(CLOUDFLARE_TOKEN_PATH)) return false;
+  if (runtime.__opensessionCloudflaredRestart) {
+    clearTimeout(runtime.__opensessionCloudflaredRestart);
+    runtime.__opensessionCloudflaredRestart = undefined;
+  }
+  const child = Bun.spawn(
+    [binary, "tunnel", "--no-autoupdate", "run", "--token-file", CLOUDFLARE_TOKEN_PATH],
+    { stdin: "ignore", stdout: "inherit", stderr: "inherit", env: process.env },
+  );
+  runtime.__opensessionCloudflared = child;
+  console.log("[public-ingress] Cloudflare Tunnel connector started");
+  void child.exited.then((code) => {
+    if (runtime.__opensessionCloudflared !== child) return;
+    runtime.__opensessionCloudflared = undefined;
+    console.error(`[public-ingress] Cloudflare Tunnel connector exited (${code})`);
+    if (configuredIngress().exposure === "cloudflare") {
+      runtime.__opensessionCloudflaredRestart = setTimeout(() => ensureCloudflareTunnel(), 5_000);
+    }
+  });
+  return true;
+}
+
+export async function configureCloudflareTunnel(input: {
+  publicBaseUrl: string;
+  tunnelId: string;
+  token?: string;
+}): Promise<void> {
+  const token = (input.token || "").trim();
+  if (/\s/.test(token) || token.length > 4096) throw new Error("Cloudflare tunnel token is invalid");
+  if (!token && !existsSync(CLOUDFLARE_TOKEN_PATH)) {
+    throw new Error("Cloudflare tunnel token is required");
+  }
+  if (!Bun.which("cloudflared")) throw new Error("cloudflared is not installed on this server");
+  if (token) writeFileAtomic(CLOUDFLARE_TOKEN_PATH, `${token}\n`, 0o600);
+  await savePublicIngress({
+    publicBaseUrl: input.publicBaseUrl,
+    exposure: "cloudflare",
+    cloudflareTunnelId: input.tunnelId,
+  });
+  if (!ensureCloudflareTunnel()) throw new Error("Could not start the Cloudflare Tunnel connector");
 }
 
 export async function installManagedCaddy(originValue: string): Promise<void> {

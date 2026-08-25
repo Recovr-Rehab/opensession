@@ -1,4 +1,5 @@
 import {
+  configureCloudflareTunnel,
   enableTailscaleFunnel,
   installManagedCaddy,
   publicIngressStatus,
@@ -44,6 +45,22 @@ export async function handleIngressRoutes(ctx: RouteContext): Promise<Response |
     if (forbidden) return forbidden;
     try {
       await enableTailscaleFunnel();
+      refreshIndexHtml("public ingress changed");
+      return Response.json(await publicIngressStatus(true));
+    } catch (error) {
+      return errorResponse(error);
+    }
+  }
+  if (path === "/api/ingress/cloudflare" && req.method === "POST") {
+    const forbidden = requireWorkspaceAdmin(ctx);
+    if (forbidden) return forbidden;
+    const body = (await req.json().catch(() => null)) as Record<string, unknown> | null;
+    try {
+      await configureCloudflareTunnel({
+        publicBaseUrl: String(body?.publicBaseUrl || ""),
+        tunnelId: String(body?.tunnelId || ""),
+        token: typeof body?.token === "string" ? body.token : undefined,
+      });
       refreshIndexHtml("public ingress changed");
       return Response.json(await publicIngressStatus(true));
     } catch (error) {

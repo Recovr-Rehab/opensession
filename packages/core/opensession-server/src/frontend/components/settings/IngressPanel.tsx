@@ -1,9 +1,9 @@
 import { useEffect, useState } from "react";
 import {
+	configurePublicIngressCloudflare,
 	enablePublicIngressFunnel,
 	fetchPublicIngress,
 	installPublicIngressCaddy,
-	savePublicIngress,
 	testPublicIngress,
 	type IngressExposure,
 	type PublicIngressSettings,
@@ -74,7 +74,8 @@ export function IngressPanel() {
 	const [method, setMethod] = useState<IngressExposure>("tailscale");
 	const [url, setUrl] = useState("");
 	const [tunnelId, setTunnelId] = useState("");
-	const [busy, setBusy] = useState<"save" | "apply" | "test" | null>(null);
+	const [tunnelToken, setTunnelToken] = useState("");
+	const [busy, setBusy] = useState<"apply" | "test" | null>(null);
 	const [error, setError] = useState<string | null>(null);
 
 	function apply(next: PublicIngressSettings) {
@@ -82,6 +83,7 @@ export function IngressPanel() {
 		setMethod(next.exposure || (next.tailscale.installed ? "tailscale" : "custom"));
 		setUrl(next.publicBaseUrl || next.tailscale.suggestedUrl);
 		setTunnelId(next.cloudflare.tunnelId);
+		setTunnelToken("");
 	}
 
 	useEffect(() => {
@@ -90,7 +92,7 @@ export function IngressPanel() {
 		});
 	}, []);
 
-	async function run(kind: "save" | "apply" | "test", work: () => Promise<PublicIngressSettings>, message: string) {
+	async function run(kind: "apply" | "test", work: () => Promise<PublicIngressSettings>, message: string) {
 		if (busy) return;
 		setBusy(kind);
 		setError(null);
@@ -105,14 +107,6 @@ export function IngressPanel() {
 			.finally(() => setBusy(null));
 	}
 
-	async function save() {
-		await run(
-			"save",
-			() => savePublicIngress({ publicBaseUrl: url, exposure: method, cloudflareTunnelId: tunnelId }),
-			"Public ingress saved",
-		);
-	}
-
 	async function applyMethod() {
 		if (method === "tailscale") {
 			await run("apply", enablePublicIngressFunnel, "Tailscale Funnel enabled");
@@ -122,7 +116,15 @@ export function IngressPanel() {
 			await run("apply", () => installPublicIngressCaddy(url), "Custom ingress enabled");
 			return;
 		}
-		await save();
+		await run(
+			"apply",
+			() => configurePublicIngressCloudflare({
+				publicBaseUrl: url,
+				tunnelId,
+				...(tunnelToken ? { token: tunnelToken } : {}),
+			}),
+			"Cloudflare Tunnel enabled",
+		);
 	}
 
 	return (
@@ -206,6 +208,17 @@ export function IngressPanel() {
 									Tunnel ID
 									<Input value={tunnelId} placeholder="00000000-0000-0000-0000-000000000000" disabled={!!busy} className="font-mono" onChange={(event) => setTunnelId(event.target.value)} />
 								</SettingsField>
+								<SettingsField>
+									Tunnel token
+									<Input
+										type="password"
+										value={tunnelToken}
+										disabled={!!busy}
+										autoComplete="off"
+										placeholder={settings.cloudflare.tokenConfigured ? "Leave blank to keep the saved token" : "Paste the connector token"}
+										onChange={(event) => setTunnelToken(event.target.value)}
+									/>
+								</SettingsField>
 								<div className="grid gap-2">
 									<div className="text-label font-medium text-dim">DNS record</div>
 									<CodeBlock>{`CNAME ${draftHostname(url)} ${tunnelId || "<tunnel-id>"}.cfargotunnel.com`}</CodeBlock>
@@ -215,7 +228,8 @@ export function IngressPanel() {
 								<p className="m-0 text-supporting text-dim">
 									Only this ingress service belongs in the tunnel. Do not add the private app port.
 								</p>
-								{!settings.cloudflare.installed && <InlineAlert>cloudflared is not installed on this server. Save the tunnel here after its connector is running.</InlineAlert>}
+								{settings.cloudflare.connectorRunning && <StatusChip label="Connector running" dot="var(--green)" />}
+								{!settings.cloudflare.installed && <InlineAlert>cloudflared is not installed on this server.</InlineAlert>}
 							</>
 						)}
 
@@ -241,8 +255,8 @@ export function IngressPanel() {
 							<Button variant="soft" disabled={!!busy || !settings.canManage || !settings.publicBaseUrl} onClick={() => void run("test", testPublicIngress, "Public ingress is reachable")}>
 								{busy === "test" ? "Testing…" : "Test"}
 							</Button>
-							<Button variant="primary" disabled={!!busy || !settings.canManage || (method !== "tailscale" && !url.trim()) || (method === "cloudflare" && !tunnelId.trim())} onClick={() => void applyMethod()}>
-								{busy === "apply" || busy === "save" ? "Saving…" : method === "tailscale" ? "Enable Funnel" : method === "custom" ? "Set up domain" : "Save tunnel"}
+							<Button variant="primary" disabled={!!busy || !settings.canManage || (method !== "tailscale" && !url.trim()) || (method === "cloudflare" && (!tunnelId.trim() || (!tunnelToken.trim() && !settings.cloudflare.tokenConfigured)))} onClick={() => void applyMethod()}>
+								{busy === "apply" ? "Saving…" : method === "tailscale" ? "Enable Funnel" : method === "custom" ? "Set up domain" : "Enable tunnel"}
 							</Button>
 						</SettingsFormActions>
 					</SettingsForm>

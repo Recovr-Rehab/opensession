@@ -298,8 +298,10 @@ hostname to `127.0.0.1:3860`. Funnel cannot serve a custom hostname.
 
 ### Cloudflare Tunnel
 
-Create a named tunnel, enter its UUID and public URL in Settings, then point the
-public hostname at the tunnel and set its service to:
+Create a named tunnel, then enter its UUID, connector token and public URL in
+Settings. Open Session stores the token write-only, runs `cloudflared` with the
+token file, and restarts the connector if it exits. Point the public hostname
+at the tunnel and set its only service to:
 
 ```text
 http://127.0.0.1:3860

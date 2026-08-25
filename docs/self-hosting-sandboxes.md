@@ -429,9 +429,9 @@ Settings → Public ingress offers three exposure methods:
 
 1. **Tailscale Funnel** routes the machine's HTTPS `*.ts.net` hostname to
    `127.0.0.1:3860`. It needs no DNS records or inbound ports.
-2. **Cloudflare Tunnel** uses a named tunnel and a CNAME to
-   `<tunnel-id>.cfargotunnel.com`; its only service must be
-   `http://127.0.0.1:3860`.
+2. **Cloudflare Tunnel** stores a named tunnel's connector token write-only,
+   runs `cloudflared`, and uses a CNAME to `<tunnel-id>.cfargotunnel.com`;
+   its only service must be `http://127.0.0.1:3860`.
 3. **Custom domain** points A/AAAA records at the host and lets Open Session
    manage a Caddy site that reverse-proxies the whole origin to 3860. The
    application, not Caddy, remains the exact route allowlist.
