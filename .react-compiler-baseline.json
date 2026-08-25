@@ -12,7 +12,6 @@
   "components/NewSession.tsx": 2,
   "components/NewSessionPrompt.tsx": 4,
   "components/TurnFooter.tsx": 2,
-  "components/WorkspacePane.tsx": 2,
   "components/RepoBar.tsx": 1,
   "components/Composer.tsx": 7,
   "components/Sidebar.tsx": 1,

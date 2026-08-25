@@ -228,7 +228,7 @@ export function WorkspacePane({
 	// it. Keep that ownership for this mount after the text is cleared, so typing
 	// again can restore the row instead of leaving an unreachable local draft.
 	// An ordinary sessionless workspace still never invents a server draft.
-	const parksServerDraft = useRef(!!workspace.draft).current;
+	const [parksServerDraft] = useState(() => !!workspace.draft);
 	const draftAutoNameRef = useRef(workspace.draft?.autoName);
 	const promptRef = useRef(prompt);
 	const currentUserRef = useRef(currentUser);
