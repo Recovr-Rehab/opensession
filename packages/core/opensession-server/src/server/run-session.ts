@@ -760,11 +760,10 @@ export function interruptQueuedPrompt(
 export function restorePromptQueues(resumedSessionIds: Set<string>): void {
 	const active = activeRunRecords();
 	const restored = restorePersistedQueueState({
-		// A quarantined session is intentionally inert. Treat it like a missing
-		// session during queue restoration so boot does not try to mutate its
-		// delivery projection and turn one isolated failure into a restart loop.
-		sessionExists: (sessionId) =>
-			!!findSession(sessionId) && !sessionIsQuarantined(sessionId),
+		sessionExists: (sessionId) => !!findSession(sessionId),
+		// Preserve quarantined queue state without projecting or mutating it. A
+		// quarantine is intentionally inert until an operator releases it.
+		sessionQuarantined: sessionIsQuarantined,
 		journalOwnsPrompt: (sessionId, promptEntryId) =>
 			active.some(
 				(run) =>

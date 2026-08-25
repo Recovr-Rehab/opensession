@@ -423,6 +423,7 @@ export function hydratePersistedQueueState(storePath = QUEUE_STORE): number {
 export function restorePersistedQueueState(options: {
 	storePath?: string;
 	sessionExists: (sessionId: string) => boolean;
+	sessionQuarantined?: (sessionId: string) => boolean;
 	journalOwnsPrompt: (sessionId: string, promptEntryId: string) => boolean;
 	creationOwnsPrompt?: (sessionId: string, promptEntryId: string) => boolean;
 	runOwnsSteers: (sessionId: string) => boolean;
@@ -449,10 +450,13 @@ export function restorePersistedQueueState(options: {
     return { queuedSessionIds: [], queuedCount: 0, steeredCount: 0 };
 
 	if (actorOwned) {
+		const restorable = (sessionId: string) => !options.sessionQuarantined?.(sessionId);
 		for (const [sessionId] of promptQueues) {
+			if (!restorable(sessionId)) continue;
 			if (!options.sessionExists(sessionId)) promptQueues.delete(sessionId);
 		}
 		for (const [sessionId, dispatch] of promptDispatches) {
+			if (!restorable(sessionId)) continue;
 			if (!options.sessionExists(sessionId)) {
 				promptDispatches.delete(sessionId);
 				continue;
@@ -469,6 +473,7 @@ export function restorePersistedQueueState(options: {
 
 		let steeredCount = 0;
 		for (const [sessionId, items] of steeredReceipts) {
+			if (!restorable(sessionId)) continue;
 			if (!options.sessionExists(sessionId)) {
 				steeredReceipts.delete(sessionId);
 				continue;
@@ -486,12 +491,13 @@ export function restorePersistedQueueState(options: {
 			for (const sessionId of new Set([
 				...promptQueues.keys(),
 				...steeredReceipts.keys(),
-			])) broadcastQueue(sessionId);
+			])) if (restorable(sessionId)) broadcastQueue(sessionId);
 		}
+		const queuedSessionIds = [...promptQueues.keys()].filter(restorable);
 		return {
-			queuedSessionIds: [...promptQueues.keys()],
-			queuedCount: [...promptQueues.values()].reduce(
-				(count, items) => count + items.length,
+			queuedSessionIds,
+			queuedCount: queuedSessionIds.reduce(
+				(count, sessionId) => count + (promptQueues.get(sessionId)?.length ?? 0),
 				0,
 			),
 			steeredCount,
