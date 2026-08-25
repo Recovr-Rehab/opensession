@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import {
 	classifyQueuedContent,
+	isClientVisibleQueuedContent,
 	mergeTranscriptEntries,
 	normalizeLegacyVoiceToolEntries,
 	orderTranscriptEntries,
@@ -127,10 +128,9 @@ describe("transcript client state", () => {
 	});
 
 	test("classifies a queued workflow result as system traffic", () => {
-		const classified = classifyQueuedContent(
-			'<!--os:workflow-notice:wf-1-->\n✅ Workflow "review" finished',
-			"Kent",
-		);
+		const content =
+			'<!--os:workflow-notice:wf-1-->\n✅ Workflow "review" finished';
+		const classified = classifyQueuedContent(content, "Kent");
 
 		expect(classified.content).toBe('Workflow "review" finished');
 		expect(classified.notice).toMatchObject({
@@ -139,6 +139,14 @@ describe("transcript client state", () => {
 		});
 		expect(classified.sender).toBeUndefined();
 		expect(queueAttribution(classified, "Michiel")).toBeNull();
+		expect(isClientVisibleQueuedContent(content, "Kent")).toBe(false);
+	});
+
+	test("never exposes auto-continues as queued messages", () => {
+		expect(isClientVisibleQueuedContent("(auto-continue)", "auto-continue")).toBe(
+			false,
+		);
+		expect(isClientVisibleQueuedContent("Please continue", "Kent")).toBe(true);
 	});
 
 	test("classifies queued peer-session messages as notices", () => {

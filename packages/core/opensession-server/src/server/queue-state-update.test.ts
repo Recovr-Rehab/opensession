@@ -18,6 +18,7 @@ import {
 	takeQueuedPrompt,
 	takeSteeredPrompt,
 } from "./queue-state";
+import { AUTO_CONTINUE_USER } from "./auto-continue";
 import { agentActor, workerActor } from "./session-actors";
 
 const SESSION = "os-queue-state-update-test";
@@ -133,7 +134,7 @@ describe("takeQueuedPrompt", () => {
 	});
 });
 
-describe("review handoffs are not user messages", () => {
+describe("automated turns are not user messages", () => {
 	test("keeps review work queued without exposing it to clients", () => {
 		promptQueues.set(SESSION, [
 			{ id: "human", content: "Please fix this", user: "Kent" },
@@ -154,6 +155,38 @@ describe("review handoffs are not user messages", () => {
 			"human",
 			"review",
 		]);
+	});
+
+	test("keeps auto-continues queued without exposing them to clients", () => {
+		const autoContinue = {
+			id: "auto-continue",
+			content: "<opensession:context>Continue working.</opensession:context>",
+			user: AUTO_CONTINUE_USER,
+		};
+		promptQueues.set(SESSION, [
+			{ id: "human", content: "Please continue", user: "Kent" },
+			autoContinue,
+		]);
+		steeredReceipts.set(SESSION, [autoContinue]);
+
+		expect(clientVisibleQueuedCount(SESSION)).toBe(1);
+		expect(queueDisplayState(SESSION)).toEqual({
+			queued: [
+			{
+				id: "human",
+				content: "Please continue",
+				user: "Kent",
+				editable: true,
+			},
+			],
+			steered: [],
+		});
+		// Filtering is presentation-only. Dispatch still owns the nudge.
+		expect(promptQueues.get(SESSION)).toEqual([
+			{ id: "human", content: "Please continue", user: "Kent" },
+			autoContinue,
+		]);
+		expect(steeredReceipts.get(SESSION)).toEqual([autoContinue]);
 	});
 });
 

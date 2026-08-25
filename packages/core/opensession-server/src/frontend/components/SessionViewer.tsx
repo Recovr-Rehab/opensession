@@ -47,6 +47,7 @@ import type {
 } from "../lib/types";
 import {
 	classifyQueuedContent,
+	isClientVisibleQueuedContent,
 	mergeTranscriptEntries,
 	orderTranscriptEntries,
 	queueAttribution,
@@ -3252,14 +3253,9 @@ export function SessionViewer({
 			.filter((e) => e.type === "user")
 			.map((e) => e.content.trim());
 		return steered.filter((s) => {
-			// Workflow completion nudges are model-routing plumbing. Their durable
-			// transcript row is classified as a system notice once it lands; while
-			// pending they do not belong in the person's steering surface. Keep this
-			// client-side guard for rolling deploys with an older server.
-			if (
-				classifyQueuedContent(s.content, s.user).notice?.kind === "workflow"
-			)
-				return false;
+			// Model-routing messages do not belong in the person's steering surface.
+			// Keep this client-side guard for rolling deploys with an older server.
+			if (!isClientVisibleQueuedContent(s.content, s.user)) return false;
 			const raw = s.content.trim();
 			// Same attribution prefix as the transcript entry — match either form.
 			const attributed = s.user ? `[${s.user}] ${raw}` : raw;
@@ -4451,11 +4447,10 @@ export function SessionViewer({
 		)
 			? session.lastRunError
 			: null;
-	// Server-side filtering is authoritative; this guard keeps workflow plumbing
-	// out of the message surface during a rolling deploy with an older server.
-	const shownQueued = queued.filter(
-		(item) =>
-			classifyQueuedContent(item.content, item.user).notice?.kind !== "workflow",
+	// Server-side filtering is authoritative; this guard keeps model-routing
+	// plumbing out of the message surface during a rolling deploy.
+	const shownQueued = queued.filter((item) =>
+		isClientVisibleQueuedContent(item.content, item.user),
 	);
 	// Classified once, read by both the counts and the rows, so the chip's
 	// tally and what each row renders as can't disagree.

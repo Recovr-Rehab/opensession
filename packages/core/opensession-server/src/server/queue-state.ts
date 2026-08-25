@@ -729,10 +729,14 @@ export function failPromptDispatch(
 
 /** Automated turns stay durable in the queue but are not messages a person
  * sent. Review handoffs have their own Agents surface; workflow completion
- * nudges are model-routing plumbing whose eventual transcript row is already
- * classified as a system notice. Neither belongs in message counts or chips. */
+ * nudges and auto-continues are model-routing plumbing. None belongs in message
+ * counts or chips. */
 function isClientVisibleQueueItem(item: QueueItem): boolean {
-	return !item.reviewHandoff && !isWorkflowQueueItem(item);
+	return (
+		!item.reviewHandoff &&
+		!isWorkflowQueueItem(item) &&
+		item.user !== AUTO_CONTINUE_USER
+	);
 }
 
 export function clientVisibleQueuedCount(sessionId: string): number {
@@ -760,10 +764,9 @@ export function queueDisplayState(sessionId: string) {
 	if (queued.length > 0) promptQueues.set(sessionId, queued);
 	if (steered.length > 0) steeredReceipts.set(sessionId, steered);
 	// Display copy only: automated turns remain in the internal queue until
-	// dispatch but never enter a client's message surface. Fenced
-	// <opensession:context> blocks (e.g. the queued auto-continue nudge) are
-	// model plumbing too, so strip them from the remaining rows. The stored
-	// items keep their full content for delivery.
+	// dispatch but never enter a client's message surface. Strip fenced
+	// <opensession:context> blocks from the remaining human-authored rows. The
+	// stored items keep their full content for delivery.
 	const forDisplay = (items: typeof queued) =>
 		items.filter(isClientVisibleQueueItem).map((i) => {
 			const shown = stripContext(i.content);
