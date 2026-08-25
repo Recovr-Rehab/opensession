@@ -11,20 +11,27 @@ import type {
 } from "../server/executors/contract";
 import { RemoteExecutorConnection } from "../server/executors/remote";
 import { RunnerExecutorAgent, type DuplexJsonTransport } from "./agent";
-import { InMemoryCommandLedger, LedgerFullError } from "./ledger";
+import {
+  InMemoryCommandLedger,
+  LedgerFullError,
+  operationDigest,
+} from "./ledger";
 
 class FakeEnd implements DuplexJsonTransport {
   peer?: FakeEnd;
+  constructor(readonly macrotask = false) {}
   messages: unknown[] = [];
   #message = new Set<(message: unknown) => void | Promise<void>>();
   #close = new Set<(reason?: unknown) => void>();
   send(message: unknown): void {
     this.messages.push(structuredClone(message));
-    queueMicrotask(() => {
+    const deliver = () => {
       if (!this.peer) return;
       for (const handler of this.peer.#message)
-        void handler(structuredClone(message));
-    });
+        void Promise.resolve(handler(structuredClone(message))).catch(() => {});
+    };
+    if (this.macrotask) setTimeout(deliver, 0);
+    else queueMicrotask(deliver);
   }
   onMessage(handler: (message: unknown) => void | Promise<void>): () => void {
     this.#message.add(handler);
@@ -39,9 +46,9 @@ class FakeEnd implements DuplexJsonTransport {
     if (this.peer) for (const handler of this.peer.#close) handler(reason);
   }
 }
-function pair(): [FakeEnd, FakeEnd] {
-  const a = new FakeEnd();
-  const b = new FakeEnd();
+function pair(macrotask = false): [FakeEnd, FakeEnd] {
+  const a = new FakeEnd(macrotask);
+  const b = new FakeEnd(macrotask);
   a.peer = b;
   b.peer = a;
   return [a, b];
@@ -98,6 +105,7 @@ describe("runner Executor agent", () => {
       transport: daemon,
       executor: backend,
       ledger: new InMemoryCommandLedger(),
+      validateGrant: () => true,
       createId: () => "hello-1",
     });
     const remote = new RemoteExecutorConnection({
@@ -125,6 +133,106 @@ describe("runner Executor agent", () => {
     expect(eventIndex).toBeGreaterThan(-1);
   });
 
+  test("waits for credit-gated macrotask event delivery before eventsComplete", async () => {
+    const [control, daemon] = pair(true);
+    const agent = new RunnerExecutorAgent({
+      ...identity,
+      capabilities: [...identity.capabilities],
+      rootId: "root-1",
+      transport: daemon,
+      executor: {
+        execute: async () => ({
+          outcome: {
+            kind: "fs.read",
+            streamId: "stream-1",
+            size: 6,
+            binary: false,
+          },
+          events: [
+            {
+              kind: "text",
+              streamId: "stream-1",
+              sequence: 0,
+              channel: "file",
+              data: "abc",
+            },
+            {
+              kind: "text",
+              streamId: "stream-1",
+              sequence: 1,
+              channel: "file",
+              data: "def",
+              eof: true,
+            },
+          ],
+        }),
+      },
+      ledger: new InMemoryCommandLedger(),
+      validateGrant: () => true,
+    });
+    const remote = new RemoteExecutorConnection({
+      ...identity,
+      capabilities: [...identity.capabilities],
+      transport: control,
+      grant,
+      initialStreamCreditBytes: 3,
+    });
+    await agent.start();
+    await remote.ready();
+    await expect(
+      remote.execute(context, { kind: "fs.read", path: "x" }),
+    ).resolves.toMatchObject({
+      events: [{ data: "abc" }, { data: "def" }],
+    });
+    const terminal = daemon.messages.findIndex(
+      (message: any) =>
+        message.t === "receipt_status" && message.eventsComplete,
+    );
+    const lastEvent = daemon.messages.findLastIndex(
+      (message: any) => message.t === "event",
+    );
+    expect(lastEvent).toBeGreaterThan(-1);
+    expect(terminal).toBeGreaterThan(lastEvent);
+    const executeFrame = control.messages.find(
+      (message: any) => message.t === "execute",
+    ) as any;
+    const credits = control.messages.filter(
+      (message: any) => message.t === "stream_credit",
+    ) as any[];
+    expect(credits.length).toBeGreaterThan(1);
+    expect(credits.at(-1).fence.deadlineMs).toBeGreaterThanOrEqual(
+      executeFrame.fence.deadlineMs,
+    );
+  });
+
+  test("fails closed when grant validation throws", async () => {
+    const [control, daemon] = pair();
+    const backend = new RecordingExecutor();
+    const agent = new RunnerExecutorAgent({
+      ...identity,
+      capabilities: [...identity.capabilities],
+      rootId: "root-1",
+      transport: daemon,
+      executor: backend,
+      ledger: new InMemoryCommandLedger(),
+      validateGrant: () => {
+        throw new Error("validator unavailable");
+      },
+    });
+    const remote = new RemoteExecutorConnection({
+      ...identity,
+      capabilities: [...identity.capabilities],
+      transport: control,
+      grant,
+    });
+    await agent.start();
+    await remote.ready();
+    await expect(
+      remote.execute(context, { kind: "fs.read", path: "x" }),
+    ).rejects.toMatchObject({ code: "invalid_grant" });
+    expect(backend.calls).toBe(0);
+  });
+
   test("deduplicates accepted mutations by stable idempotency key", async () => {
     const [control, daemon] = pair();
     const backend: Executor = {
@@ -144,6 +252,7 @@ describe("runner Executor agent", () => {
       transport: daemon,
       executor: counted,
       ledger: new InMemoryCommandLedger(),
+      validateGrant: () => true,
     });
     const remote = new RemoteExecutorConnection({
       ...identity,
@@ -173,6 +282,75 @@ describe("runner Executor agent", () => {
     expect(calls).toBe(1);
   });
 
+  test("preserves committed success when sending the terminal status fails", async () => {
+    const [control, daemon] = pair();
+    const ledger = new InMemoryCommandLedger();
+    const originalSend = daemon.send.bind(daemon);
+    daemon.send = (message: unknown) => {
+      originalSend(message);
+      if (
+        (message as any)?.t === "receipt_status" &&
+        (message as any)?.receipt?.state === "succeeded"
+      )
+        throw new Error("transport failed after commit");
+    };
+    const agent = new RunnerExecutorAgent({
+      ...identity,
+      capabilities: [...identity.capabilities],
+      rootId: "root-1",
+      transport: daemon,
+      executor: {
+        execute: async () => ({ outcome: { kind: "fs.changed", path: "x" } }),
+      },
+      ledger,
+      validateGrant: () => true,
+      createId: (() => {
+        const ids = ["hello-send-failure", "receipt-send-failure"];
+        return () => ids.shift()!;
+      })(),
+    });
+    await agent.start();
+    control.send({
+      ...identity,
+      capabilities: [...identity.capabilities],
+      t: "hello",
+      accepted: true,
+      version: EXECUTOR_PROTOCOL_VERSION,
+      requestId: "accept",
+    });
+    await tick();
+    control.send({
+      t: "execute",
+      version: EXECUTOR_PROTOCOL_VERSION,
+      requestId: "send-failure-request",
+      grant,
+      fence: {
+        rootId: context.rootId,
+        sessionId: context.sessionId,
+        runId: context.runId,
+        generation: context.generation,
+        deadlineMs: Date.now() + 10_000,
+      },
+      operation: {
+        kind: "fs.write",
+        path: "x",
+        data: "a",
+        encoding: "utf8",
+        idempotencyKey: "send-failure-key",
+      },
+    });
+    await tick();
+    await tick();
+    expect(
+      (
+        await ledger.get(
+          { executorId: identity.executorId, ...context },
+          "receipt-send-failure",
+        )
+      )?.receipt.state,
+    ).toBe("succeeded");
+  });
+
   test("supports reconnect hello and receipt query without replay", async () => {
     const ledger = new InMemoryCommandLedger();
     const receipt = {
@@ -183,12 +361,55 @@ describe("runner Executor agent", () => {
       completedAt: "2026-01-01T00:00:01.000Z",
       idempotencyKey: "stable",
     };
-    await ledger.put({
-      requestId: "old-request",
+    const operation = {
+      kind: "fs.write" as const,
+      path: "x",
+      data: "a",
+      encoding: "utf8" as const,
       idempotencyKey: "stable",
-      receipt,
-      outcome: { kind: "fs.changed", path: "x" },
-    });
+    };
+    await ledger.claim(
+      {
+        executorId: identity.executorId,
+        rootId: context.rootId,
+        sessionId: context.sessionId,
+        runId: context.runId,
+        generation: context.generation,
+        requestId: "old-request",
+        idempotencyKey: "stable",
+        operation,
+        operationDigest: operationDigest(operation),
+      },
+      { ...receipt, state: "queued", completedAt: undefined },
+    );
+    await ledger.transition(
+      {
+        executorId: identity.executorId,
+        rootId: context.rootId,
+        sessionId: context.sessionId,
+        runId: context.runId,
+        generation: context.generation,
+      },
+      receipt.receiptId,
+      "queued",
+      { state: "running" },
+    );
+    await ledger.transition(
+      {
+        executorId: identity.executorId,
+        rootId: context.rootId,
+        sessionId: context.sessionId,
+        runId: context.runId,
+        generation: context.generation,
+      },
+      receipt.receiptId,
+      "running",
+      {
+        state: "succeeded",
+        completedAt: receipt.completedAt,
+        outcome: { kind: "fs.changed", path: "x" },
+      },
+    );
     const [control, daemon] = pair();
     const agent = new RunnerExecutorAgent({
       ...identity,
@@ -201,6 +422,7 @@ describe("runner Executor agent", () => {
         },
       },
       ledger,
+      validateGrant: () => true,
     });
     await agent.start();
     control.send({
@@ -236,6 +458,83 @@ describe("runner Executor agent", () => {
     ).toBe(true);
   });
 
+  test("keeps cancellation advisory when physical execution later succeeds", async () => {
+    const [control, daemon] = pair();
+    let finish!: () => void;
+    const execution = new Promise<ExecutorSuccess>((resolve) => {
+      finish = () => resolve({ outcome: { kind: "fs.changed", path: "x" } });
+    });
+    const agent = new RunnerExecutorAgent({
+      ...identity,
+      capabilities: [...identity.capabilities],
+      rootId: "root-1",
+      transport: daemon,
+      executor: { execute: async () => execution },
+      ledger: new InMemoryCommandLedger(),
+      validateGrant: () => true,
+    });
+    await agent.start();
+    control.send({
+      ...identity,
+      capabilities: [...identity.capabilities],
+      t: "hello",
+      accepted: true,
+      version: EXECUTOR_PROTOCOL_VERSION,
+      requestId: "accept",
+    });
+    await tick();
+    const fence = {
+      rootId: context.rootId,
+      sessionId: context.sessionId,
+      runId: context.runId,
+      generation: context.generation,
+      deadlineMs: Date.now() + 10_000,
+    };
+    control.send({
+      t: "execute",
+      version: EXECUTOR_PROTOCOL_VERSION,
+      requestId: "physical-operation",
+      grant,
+      fence,
+      operation: {
+        kind: "fs.write",
+        path: "x",
+        data: "a",
+        encoding: "utf8",
+        idempotencyKey: "physical-key",
+      },
+    });
+    await tick();
+    control.send({
+      t: "cancel",
+      version: EXECUTOR_PROTOCOL_VERSION,
+      requestId: "cancel-advisory",
+      grant,
+      fence,
+      target: { requestId: "physical-operation" },
+      idempotencyKey: "cancel-key",
+    });
+    await tick();
+    finish();
+    await tick();
+    expect(
+      daemon.messages.some(
+        (message: any) =>
+          message.t === "error" &&
+          message.requestId === "cancel-advisory" &&
+          message.message.includes("may continue"),
+      ),
+    ).toBe(true);
+    expect(
+      daemon.messages.some(
+        (message: any) =>
+          message.t === "receipt_status" &&
+          message.requestId === "physical-operation" &&
+          message.receipt.state === "succeeded",
+      ),
+    ).toBe(true);
+  });
+
   test("records cancellation without replaying a mutation", async () => {
     const [control, daemon] = pair();
     const agent = new RunnerExecutorAgent({
@@ -245,6 +544,7 @@ describe("runner Executor agent", () => {
       transport: daemon,
       executor: new RecordingExecutor(),
       ledger: new InMemoryCommandLedger(),
+      validateGrant: () => true,
     });
     await agent.start();
     control.send({
@@ -291,6 +591,7 @@ describe("runner Executor agent", () => {
       transport: daemon,
       executor: new RecordingExecutor(),
       ledger: new InMemoryCommandLedger(),
+      validateGrant: () => true,
     });
     await agent.start();
     control.send({
@@ -347,25 +648,5 @@ describe("runner Executor agent", () => {
           message.t === "error" && message.requestId === "missing-key",
       ),
     ).toBe(true);
-  });
-});
-
-describe("command ledger", () => {
-  test("is bounded and keeps stable receipts", async () => {
-    const ledger = new InMemoryCommandLedger(1);
-    const receipt = {
-      receiptId: "r1",
-      requestId: "q1",
-      state: "queued" as const,
-      acceptedAt: "now",
-    };
-    await ledger.put({ requestId: "q1", receipt });
-    expect((await ledger.find("q1"))?.receipt.receiptId).toBe("r1");
-    await expect(
-      ledger.put({
-        requestId: "q2",
-        receipt: { ...receipt, receiptId: "r2", requestId: "q2" },
-      }),
-    ).rejects.toBeInstanceOf(LedgerFullError);
   });
 });

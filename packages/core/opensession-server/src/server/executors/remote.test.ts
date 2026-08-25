@@ -92,7 +92,8 @@ describe("remote Executor connection", () => {
         receiptId: "r",
         requestId: "request-1",
         state: "succeeded",
-        acceptedAt: "now",
+        acceptedAt: "2026-08-22T12:00:00.000Z",
+        completedAt: "2026-08-22T12:00:01.000Z",
       },
       outcome: { kind: "fs.stat", entry: { path: "x", type: "file", size: 1 } },
     });
@@ -152,12 +153,111 @@ describe("remote Executor connection", () => {
         receiptId: "r",
         requestId: "request-1",
         state: "queued",
-        acceptedAt: "now",
+        acceptedAt: "2026-08-22T12:00:00.000Z",
         idempotencyKey: "k2",
       },
     });
     afterTransport.drop();
     await expect(afterResult).rejects.toMatchObject({ ambiguous: true });
+  });
+
+  test("times out stalled accepted mutations as ambiguous and clears pending", async () => {
+    const transport = new ManualTransport();
+    const remote = new RemoteExecutorConnection({
+      ...identity,
+      capabilities: [...identity.capabilities],
+      transport,
+      grant,
+      deadlineMs: () => Date.now() + 10,
+    });
+    transport.receive(hello);
+    await remote.ready();
+    const result = remote.execute(context, {
+      kind: "fs.write",
+      path: "x",
+      data: "a",
+      encoding: "utf8",
+      idempotencyKey: "timeout-key",
+    });
+    await tick();
+    transport.receive({
+      t: "receipt",
+      version: EXECUTOR_PROTOCOL_VERSION,
+      requestId: context.requestId,
+      receipt: {
+        receiptId: "timeout-receipt",
+        requestId: context.requestId,
+        state: "queued",
+        acceptedAt: "2026-08-22T12:00:00.000Z",
+        idempotencyKey: "timeout-key",
+      },
+    });
+    await expect(result).rejects.toMatchObject({
+      code: "deadline_exceeded",
+      ambiguous: true,
+    });
+    expect(remote.pendingCount).toBe(0);
+  });
+
+  test("rejects terminal failed receipt status instead of hanging", async () => {
+    const transport = new ManualTransport();
+    const remote = new RemoteExecutorConnection({
+      ...identity,
+      capabilities: [...identity.capabilities],
+      transport,
+      grant,
+    });
+    transport.receive(hello);
+    await remote.ready();
+    const result = remote.execute(context, { kind: "fs.read", path: "x" });
+    await tick();
+    transport.receive({
+      t: "receipt_status",
+      version: EXECUTOR_PROTOCOL_VERSION,
+      requestId: context.requestId,
+      receipt: {
+        receiptId: "failed-receipt",
+        requestId: context.requestId,
+        state: "failed",
+        acceptedAt: "2026-08-22T12:00:00.000Z",
+        completedAt: "2026-08-22T12:00:01.000Z",
+      },
+      error: { code: "operation_failed", message: "recovered uncertainty" },
+      eventsComplete: true,
+    });
+    await expect(result).rejects.toMatchObject({
+      code: "operation_failed",
+      ambiguous: false,
+    });
+    expect(remote.pendingCount).toBe(0);
+  });
+
+  test("disconnects on hostile malformed receipt payloads", async () => {
+    const transport = new ManualTransport();
+    const remote = new RemoteExecutorConnection({
+      ...identity,
+      capabilities: [...identity.capabilities],
+      transport,
+      grant,
+    });
+    transport.receive(hello);
+    await remote.ready();
+    const result = remote.execute(context, { kind: "fs.read", path: "x" });
+    await tick();
+    transport.receive({
+      t: "receipt_status",
+      version: EXECUTOR_PROTOCOL_VERSION,
+      requestId: context.requestId,
+      receipt: {
+        receiptId: "bad-receipt",
+        requestId: context.requestId,
+        state: "succeeded",
+        acceptedAt: "not-a-date",
+      },
+      outcome: { kind: "fs.read", streamId: {}, size: -1, binary: false },
+    });
+    await expect(result).rejects.toMatchObject({ code: "operation_failed" });
+    expect(remote.connected).toBe(false);
   });
 
   test("treats read disconnects as retryable uncertainty", async () => {
@@ -179,7 +279,7 @@ describe("remote Executor connection", () => {
         receiptId: "r",
         requestId: "request-1",
         state: "queued",
-        acceptedAt: "now",
+        acceptedAt: "2026-08-22T12:00:00.000Z",
       },
     });
     transport.drop();

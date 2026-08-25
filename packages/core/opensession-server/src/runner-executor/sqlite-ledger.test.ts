@@ -1,15 +1,14 @@
 import { afterEach, describe, expect, test } from "bun:test";
 import { Database } from "bun:sqlite";
-import {
-  mkdtempSync,
-  readFileSync,
-  rmSync,
-  statSync,
-  writeFileSync,
-} from "node:fs";
+import { mkdirSync, mkdtempSync, rmSync, statSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import type { LedgerRecord } from "./ledger";
+import {
+  LedgerFullError,
+  operationDigest,
+  type LedgerCommandIdentity,
+  type LedgerScope,
+} from "./ledger";
 import {
   openSQLiteCommandLedger,
   type SQLiteCommandLedger,
@@ -17,292 +16,315 @@ import {
 
 const roots: string[] = [];
 const ledgers: SQLiteCommandLedger[] = [];
-
 afterEach(() => {
   for (const ledger of ledgers.splice(0)) ledger.close();
   for (const root of roots.splice(0))
     rmSync(root, { recursive: true, force: true });
 });
-
-function pathFor(name = "ledger.sqlite"): string {
+function pathFor(): string {
   const root = mkdtempSync(join(tmpdir(), "sqlite-ledger-"));
   roots.push(root);
-  return join(root, "private", name);
+  return join(root, "private", "ledger.sqlite");
 }
-
-function open(
-  dbPath = pathFor(),
-  options: Record<string, number> = {},
-): SQLiteCommandLedger {
+function open(dbPath = pathFor(), options: Record<string, number> = {}) {
   const ledger = openSQLiteCommandLedger({ dbPath, ...options });
   ledgers.push(ledger);
   return ledger;
 }
-
-function record(
-  requestId: string,
-  receiptId: string,
-  idempotencyKey?: string,
-): LedgerRecord {
-  return {
-    requestId,
-    ...(idempotencyKey ? { idempotencyKey } : {}),
-    receipt: {
-      receiptId,
-      requestId,
-      ...(idempotencyKey ? { idempotencyKey } : {}),
-      state: "queued",
-      acceptedAt: "2026-08-22T12:00:00.000Z",
-    },
-  };
-}
-
-function close(ledger: SQLiteCommandLedger): void {
+function close(ledger: SQLiteCommandLedger) {
   ledger.close();
   ledgers.splice(ledgers.indexOf(ledger), 1);
 }
+const baseScope: LedgerScope = {
+  executorId: "executor-1",
+  rootId: "root-1",
+  sessionId: "session-1",
+  runId: "run-1",
+  generation: 1,
+};
+function command(
+  requestId: string,
+  options: { key?: string; scope?: Partial<LedgerScope>; data?: string } = {},
+): LedgerCommandIdentity {
+  const operation = options.key
+    ? {
+        kind: "fs.write" as const,
+        path: "x",
+        data: options.data ?? "a",
+        encoding: "utf8" as const,
+        idempotencyKey: options.key,
+      }
+    : ({ kind: "fs.read" as const, path: "x" } as const);
+  return {
+    ...baseScope,
+    ...options.scope,
+    requestId,
+    ...(options.key ? { idempotencyKey: options.key } : {}),
+    operation,
+    operationDigest: operationDigest(operation),
+  };
+}
+function receipt(identity: LedgerCommandIdentity, id: string) {
+  return {
+    receiptId: id,
+    requestId: identity.requestId,
+    state: "queued" as const,
+    acceptedAt: "2026-08-22T12:00:00.000Z",
+    ...(identity.idempotencyKey
+      ? { idempotencyKey: identity.idempotencyKey }
+      : {}),
+  };
+}
+async function claim(
+  ledger: SQLiteCommandLedger,
+  identity: LedgerCommandIdentity,
+  id: string,
+) {
+  return ledger.claim(identity, receipt(identity, id));
+}
+async function running(
+  ledger: SQLiteCommandLedger,
+  identity: LedgerCommandIdentity,
+  id: string,
+) {
+  await claim(ledger, identity, id);
+  return ledger.transition(identity, id, "queued", { state: "running" });
+}
+
+const completedAt = "2026-08-22T12:00:01.000Z";
 
 describe("SQLiteCommandLedger", () => {
-  test("persists receipts and complete replay data across reopen", async () => {
-    const dbPath = pathFor();
-    const first = open(dbPath);
-    const initial = record("request-1", "receipt-1", "mutation-1");
-    await first.put(initial);
-    await first.update("receipt-1", {
-      receipt: {
-        ...initial.receipt,
-        state: "succeeded",
-        completedAt: "2026-08-22T12:00:01.000Z",
-      },
-      outcome: { kind: "fs.changed", path: "/workspace/a.txt" },
-      events: [
-        {
-          kind: "text",
-          streamId: "stream-1",
-          sequence: 0,
-          channel: "stdout",
-          data: "done",
-          eof: true,
-        },
-      ],
-    });
-    const expected = await first.get("receipt-1");
-    close(first);
-
-    const reopened = open(dbPath);
-    expect(
-      await reopened.find("a-different-retry-request", "mutation-1"),
-    ).toEqual(expected);
-    expect(await reopened.get("receipt-1")).toEqual(expected);
-  });
-
-  test("allows only an exact duplicate put and fails closed on conflicts", async () => {
-    const ledger = open();
-    const original = record("request-1", "receipt-1", "mutation-1");
-    await ledger.put(original);
-    await ledger.put(structuredClone(original));
-    await expect(
-      ledger.put(record("request-2", "receipt-2", "mutation-1")),
-    ).rejects.toThrow("different ledger record");
-    await expect(
-      ledger.put(record("request-2", "receipt-1", "mutation-2")),
-    ).rejects.toThrow("receipt already belongs");
-    expect(await ledger.get("receipt-1")).toEqual(original);
-  });
-
-  test("mutation identity ignores request ID while reads are request-unique", async () => {
-    const ledger = open();
-    const mutation = record("request-1", "receipt-1", "mutation-1");
-    const read = record("request-read", "receipt-read");
-    await ledger.put(mutation);
-    await ledger.put(read);
-    expect(await ledger.find("request-2", "mutation-1")).toEqual(mutation);
-    expect(await ledger.find("request-read")).toEqual(read);
-    expect(await ledger.find("request-other")).toBeUndefined();
-  });
-
-  test("updates atomically and rolls back invalid identity or payload", async () => {
-    const ledger = open(undefined, { maxStringBytes: 32 });
-    const original = record("request-1", "receipt-1", "mutation-1");
-    await ledger.put(original);
-    await expect(
-      ledger.update("receipt-1", {
-        receipt: {
-          ...original.receipt,
-          requestId: "request-2",
-          state: "running",
-        },
-      }),
-    ).rejects.toThrow("immutable");
-    await expect(
-      ledger.update("receipt-1", {
-        receipt: {
-          ...original.receipt,
-          state: "failed",
-          completedAt: "2026-08-22T12:00:01.000Z",
-        },
-        error: { code: "operation_failed", message: "x".repeat(33) },
-      }),
-    ).rejects.toThrow("invalid ledger error");
-    expect(await ledger.get("receipt-1")).toEqual(original);
-  });
-
-  test("reports missing receipts", async () => {
-    const ledger = open();
-    expect(await ledger.get("receipt-missing")).toBeUndefined();
-    await expect(
-      ledger.update("receipt-missing", {
-        receipt: record("request-1", "receipt-missing").receipt,
-      }),
-    ).rejects.toThrow("receipt not found");
-  });
-
-  test("capacity exhaustion never evicts active or mutation records", async () => {
-    const ledger = open(undefined, { capacity: 2 });
-    const mutation = record("request-1", "receipt-1", "mutation-1");
-    const running = record("request-2", "receipt-2");
-    running.receipt.state = "running";
-    await ledger.put(mutation);
-    await ledger.put(running);
-    await expect(
-      ledger.put(record("request-3", "receipt-3")),
-    ).rejects.toMatchObject({ name: "LedgerFullError" });
-    expect(await ledger.find("retry", "mutation-1")).toEqual(mutation);
-    expect(await ledger.get("receipt-2")).toEqual(running);
-  });
-
-  test("serializes concurrent connections and preserves one mutation identity", async () => {
+  test("atomically returns one stable mutation receipt and detects digest conflicts", async () => {
     const dbPath = pathFor();
     const a = open(dbPath);
     const b = open(dbPath);
-    const attempts = await Promise.allSettled([
-      a.put(record("request-a", "receipt-a", "mutation-shared")),
-      b.put(record("request-b", "receipt-b", "mutation-shared")),
+    const left = command("request-a", { key: "shared" });
+    const right = command("request-b", { key: "shared" });
+    const results = await Promise.all([
+      claim(a, left, "receipt-a"),
+      claim(b, right, "receipt-b"),
     ]);
-    expect(
-      attempts.filter((result) => result.status === "fulfilled"),
-    ).toHaveLength(1);
-    expect(
-      attempts.filter((result) => result.status === "rejected"),
-    ).toHaveLength(1);
-    const saved = await a.find("retry", "mutation-shared");
-    expect(saved).toBeDefined();
-    expect(["receipt-a", "receipt-b"]).toContain(saved!.receipt.receiptId);
-    expect(await b.find("retry", "mutation-shared")).toEqual(saved);
+    expect(results.filter((result) => result.claimed)).toHaveLength(1);
+    expect(results[0]!.record.receipt.receiptId).toBe(
+      results[1]!.record.receipt.receiptId,
+    );
+    await expect(
+      claim(
+        a,
+        command("request-c", { key: "shared", data: "different" }),
+        "receipt-c",
+      ),
+    ).rejects.toMatchObject({ name: "LedgerConflictError" });
   });
 
-  test("rejects malformed JSON and inconsistent persisted rows", async () => {
+  test("scopes key reuse by executor/root/run/generation and reads by request", async () => {
+    const ledger = open();
+    const variants = [
+      command("a", { key: "same" }),
+      command("b", { key: "same", scope: { rootId: "root-2" } }),
+      command("c", { key: "same", scope: { runId: "run-2" } }),
+      command("d", { key: "same", scope: { generation: 2 } }),
+    ];
+    for (const [index, identity] of variants.entries())
+      expect((await claim(ledger, identity, `r${index}`)).claimed).toBe(true);
+    expect((await claim(ledger, command("read-1"), "read-r1")).claimed).toBe(
+      true,
+    );
+    expect((await claim(ledger, command("read-2"), "read-r2")).claimed).toBe(
+      true,
+    );
+  });
+
+  test("requires exact scope ownership for receipt lookup", async () => {
+    const ledger = open();
+    const identity = command("request");
+    await claim(ledger, identity, "receipt");
+    expect(await ledger.get(identity, "receipt")).toBeDefined();
+    expect(
+      await ledger.get({ ...identity, rootId: "other-root" }, "receipt"),
+    ).toBeUndefined();
+  });
+
+  test("recovers queued and running work without replay and marks mutations ambiguous", async () => {
+    const ledger = open();
+    const read = command("read");
+    const mutation = command("mutation", { key: "key" });
+    await claim(ledger, read, "read-r");
+    await running(ledger, mutation, "mutation-r");
+    expect(await ledger.recover()).toBe(2);
+    const recoveredRead = await ledger.get(read, "read-r");
+    expect(recoveredRead).toMatchObject({
+      receipt: { state: "failed" },
+      error: { code: "operation_failed" },
+    });
+    expect(recoveredRead?.error?.ambiguous).toBeUndefined();
+    expect(await ledger.get(mutation, "mutation-r")).toMatchObject({
+      receipt: { state: "failed" },
+      error: { ambiguous: true },
+    });
+    expect(await ledger.recover()).toBe(0);
+  });
+
+  test("enforces monotonic CAS transitions and coherent terminal payloads", async () => {
+    const ledger = open();
+    const identity = command("request");
+    await running(ledger, identity, "receipt");
+    const succeeded = await ledger.transition(identity, "receipt", "running", {
+      state: "succeeded",
+      completedAt,
+      outcome: { kind: "fs.changed", path: "x" },
+    });
+    expect(succeeded.error).toBeUndefined();
+    await expect(
+      ledger.transition(identity, "receipt", "running", {
+        state: "failed",
+        completedAt,
+        error: { code: "operation_failed", message: "late send failure" },
+      }),
+    ).rejects.toMatchObject({ name: "LedgerTransitionError" });
+    expect((await ledger.get(identity, "receipt"))?.receipt.state).toBe(
+      "succeeded",
+    );
+  });
+
+  test("failed transitions contain no stale outcome or events", async () => {
+    const ledger = open();
+    const identity = command("request");
+    await running(ledger, identity, "receipt");
+    const failed = await ledger.transition(identity, "receipt", "running", {
+      state: "failed",
+      completedAt,
+      error: { code: "operation_failed", message: "failed" },
+    });
+    expect(failed).toMatchObject({ receipt: { state: "failed" } });
+    expect(failed.outcome).toBeUndefined();
+    expect(failed.events).toBeUndefined();
+  });
+
+  test("reclaims oldest terminal reads but never mutations or active rows", async () => {
+    const ledger = open(undefined, { capacity: 2 });
+    const oldRead = command("old-read");
+    await running(ledger, oldRead, "old-r");
+    await ledger.transition(oldRead, "old-r", "running", {
+      state: "succeeded",
+      completedAt,
+      outcome: { kind: "fs.changed", path: "x" },
+    });
+    const mutation = command("mutation", { key: "key" });
+    await claim(ledger, mutation, "mutation-r");
+    const nextRead = command("next-read");
+    await claim(ledger, nextRead, "next-r");
+    expect(await ledger.get(oldRead, "old-r")).toBeUndefined();
+    expect(await ledger.get(mutation, "mutation-r")).toBeDefined();
+    await expect(
+      claim(ledger, command("last-read"), "last-r"),
+    ).rejects.toBeInstanceOf(LedgerFullError);
+  });
+
+  test("rejects noncanonical base64 and byteLength mismatch atomically", async () => {
+    const ledger = open();
+    const identity = command("request");
+    await running(ledger, identity, "receipt");
+    await expect(
+      ledger.transition(identity, "receipt", "running", {
+        state: "succeeded",
+        completedAt,
+        outcome: { kind: "fs.read", streamId: "stream", size: 1, binary: true },
+        events: [
+          {
+            kind: "binary",
+            streamId: "stream",
+            sequence: 0,
+            offset: 0,
+            data: "YQ==",
+            metadata: { encoding: "base64", byteLength: 2 },
+          },
+        ],
+      }),
+    ).rejects.toThrow("invalid stream event");
+    expect((await ledger.get(identity, "receipt"))?.receipt.state).toBe(
+      "running",
+    );
+    await expect(
+      ledger.transition(identity, "receipt", "running", {
+        state: "succeeded",
+        completedAt,
+        outcome: {
+          kind: "fs.read",
+          streamId: "expected-stream",
+          size: 1,
+          binary: false,
+        },
+        events: [
+          {
+            kind: "text",
+            streamId: "other-stream",
+            sequence: 0,
+            channel: "file",
+            data: "a",
+          },
+        ],
+      }),
+    ).rejects.toThrow("does not match outcome");
+  });
+
+  test("versions and strictly validates the schema", () => {
+    const dbPath = pathFor();
+    mkdirSync(join(dbPath, ".."), { recursive: true });
+    const raw = new Database(dbPath, { create: true });
+    raw.exec("CREATE TABLE runner_command_ledger (receipt_id TEXT)");
+    raw.close();
+    expect(() => open(dbPath)).toThrow("unversioned existing ledger table");
+
+    const versionedPath = pathFor();
+    mkdirSync(join(versionedPath, ".."), { recursive: true });
+    const raw2 = new Database(versionedPath, { create: true });
+    raw2.exec("PRAGMA user_version = 99");
+    raw2.close();
+    expect(() => open(versionedPath)).toThrow(
+      "unsupported ledger schema version 99",
+    );
+
+    const unknownPath = pathFor();
+    mkdirSync(join(unknownPath, ".."), { recursive: true });
+    const raw3 = new Database(unknownPath, { create: true });
+    raw3.exec("CREATE TABLE unrelated (value TEXT)");
+    raw3.close();
+    expect(() => open(unknownPath)).toThrow(
+      "unknown existing ledger database tables",
+    );
+  });
+
+  test("rejects malformed persisted state/payload rows", async () => {
     const dbPath = pathFor();
     const ledger = open(dbPath);
-    await ledger.put(record("request-1", "receipt-1"));
+    const identity = command("request");
+    await claim(ledger, identity, "receipt");
     close(ledger);
     const raw = new Database(dbPath);
     raw
       .query(
-        "UPDATE runner_command_ledger SET payload = ? WHERE receipt_id = ?",
+        "UPDATE runner_command_ledger SET state = 'running' WHERE receipt_id = 'receipt'",
       )
-      .run("{bad", "receipt-1");
+      .run();
     raw.close();
-    const corrupt = open(dbPath);
-    await expect(corrupt.get("receipt-1")).rejects.toThrow(
-      "malformed ledger JSON",
-    );
-    close(corrupt);
-
-    const raw2 = new Database(dbPath);
-    raw2
-      .query(
-        "UPDATE runner_command_ledger SET payload = ? WHERE receipt_id = ?",
-      )
-      .run(JSON.stringify(record("other-request", "receipt-1")), "receipt-1");
-    raw2.close();
-    const inconsistent = open(dbPath);
-    await expect(inconsistent.get("receipt-1")).rejects.toThrow(
+    const reopened = open(dbPath);
+    await expect(reopened.get(identity, "receipt")).rejects.toThrow(
       "identity mismatch",
     );
   });
 
-  test("rejects malformed protocol values and oversized records on write and read", async () => {
+  test("persists across reopen and secures database paths", async () => {
     const dbPath = pathFor();
-    const ledger = open(dbPath, {
-      maxRecordBytes: 700,
-      maxStringBytes: 64,
-      maxEvents: 1,
-    });
-    const invalid = record("request-1", "receipt-1") as LedgerRecord & {
-      unexpected?: boolean;
-    };
-    invalid.unexpected = true;
-    await expect(ledger.put(invalid)).rejects.toThrow("invalid ledger record");
-
-    const tooMany = record("request-2", "receipt-2");
-    tooMany.events = [
-      {
-        kind: "text",
-        streamId: "s",
-        sequence: 0,
-        channel: "stdout",
-        data: "a",
-      },
-      {
-        kind: "text",
-        streamId: "s",
-        sequence: 1,
-        channel: "stdout",
-        data: "b",
-      },
-    ];
-    await expect(ledger.put(tooMany)).rejects.toThrow("invalid ledger events");
-    await expect(
-      ledger.put({
-        ...record("request-3", "receipt-3"),
-        outcome: { kind: "fs.changed", path: "x".repeat(65) },
-      }),
-    ).rejects.toThrow("invalid outcome");
-
-    const valid = record("request-4", "receipt-4");
-    await ledger.put(valid);
-    close(ledger);
-    const raw = new Database(dbPath);
-    raw
-      .query(
-        "UPDATE runner_command_ledger SET payload = ? WHERE receipt_id = ?",
-      )
-      .run(" ".repeat(701), "receipt-4");
-    raw.close();
-    const reopened = open(dbPath, {
-      maxRecordBytes: 700,
-      maxStringBytes: 64,
-      maxEvents: 1,
-    });
-    await expect(reopened.get("receipt-4")).rejects.toThrow(
-      "exceeds byte limit",
+    const identity = command("request", { key: "key" });
+    const first = open(dbPath);
+    await claim(first, identity, "receipt");
+    close(first);
+    const reopened = open(dbPath);
+    expect((await reopened.get(identity, "receipt"))?.operation).toEqual(
+      identity.operation,
     );
-  });
-
-  test("has an explicit close boundary and secures directory/database modes", async () => {
-    const dbPath = pathFor();
-    const ledger = open(dbPath);
-    expect(statSync(join(dbPath, "..")).mode & 0o777).toBe(0o700);
     expect(statSync(dbPath).mode & 0o777).toBe(0o600);
-    close(ledger);
-    await expect(ledger.get("receipt-1")).rejects.toThrow("closed");
-  });
-
-  test("import is inert", () => {
-    const root = mkdtempSync(join(tmpdir(), "sqlite-ledger-import-"));
-    roots.push(root);
-    const marker = join(root, "before");
-    writeFileSync(marker, "unchanged");
-    const modulePath = join(import.meta.dir, "sqlite-ledger.ts");
-    const result = Bun.spawnSync(
-      [process.execPath, "-e", `await import(${JSON.stringify(modulePath)})`],
-      { cwd: root },
-    );
-    expect(result.exitCode).toBe(0);
-    expect(readFileSync(marker, "utf8")).toBe("unchanged");
-    expect(Array.from(new Bun.Glob("**/*").scanSync({ cwd: root }))).toEqual([
-      "before",
-    ]);
+    expect(statSync(join(dbPath, "..")).mode & 0o777).toBe(0o700);
   });
 });

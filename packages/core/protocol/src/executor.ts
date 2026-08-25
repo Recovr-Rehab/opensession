@@ -31,8 +31,17 @@ export interface ExecutorFence {
 }
 
 const MAX_GRANT_BYTES = 16 * 1024;
+export const MAX_EXECUTOR_FILE_WRITE_BYTES = 4 * 1024 * 1024;
+export const MAX_EXECUTOR_TERMINAL_WRITE_BYTES = 1024 * 1024;
+const MAX_EXECUTOR_FIELD_BYTES = 256 * 1024;
+const MAX_EXECUTOR_ARGUMENT_BYTES = 1024 * 1024;
+const MAX_EXECUTOR_ARGUMENTS = 4_096;
 const ID_RE = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,255}$/;
 const textEncoder = new TextEncoder();
+
+export function decodeExecutorId(value: unknown): string | undefined {
+  return typeof value === "string" && ID_RE.test(value) ? value : undefined;
+}
 
 /** Validate an opaque grant without inspecting or depending on its format. */
 export function decodeExecutorGrant(value: unknown): ExecutorGrant | undefined {
@@ -203,17 +212,29 @@ export type ExecutorOperation =
 const operationKeys = (value: Record<string, unknown>, keys: string[]) =>
   Object.keys(value).every((key) => keys.includes(key));
 const nonemptyString = (value: unknown): value is string =>
-  typeof value === "string" && value.length > 0;
+  typeof value === "string" &&
+  value.length > 0 &&
+  textEncoder.encode(value).byteLength <= MAX_EXECUTOR_FIELD_BYTES;
 const optionalBoolean = (value: unknown) =>
   value === undefined || typeof value === "boolean";
 const optionalString = (value: unknown) =>
-  value === undefined || typeof value === "string";
+  value === undefined ||
+  (typeof value === "string" &&
+    textEncoder.encode(value).byteLength <= MAX_EXECUTOR_FIELD_BYTES);
+const stringArguments = (value: unknown): value is string[] =>
+  Array.isArray(value) &&
+  value.length <= MAX_EXECUTOR_ARGUMENTS &&
+  value.every((arg) => typeof arg === "string") &&
+  value.reduce((bytes, arg) => bytes + textEncoder.encode(arg).byteLength, 0) <=
+    MAX_EXECUTOR_ARGUMENT_BYTES;
 const nonnegativeInteger = (value: unknown) =>
   Number.isSafeInteger(value) && (value as number) >= 0;
 const positiveInteger = (value: unknown) =>
   Number.isSafeInteger(value) && (value as number) > 0;
 const mutationKey = (value: Record<string, unknown>) =>
   nonemptyString(value.idempotencyKey);
+const operationStringWithin = (value: unknown, maxBytes: number) =>
+  typeof value === "string" && textEncoder.encode(value).byteLength <= maxBytes;
 
 /** Strictly decode the untrusted operation union before classifying retries. */
 export function decodeExecutorOperation(
@@ -255,7 +276,7 @@ export function decodeExecutorOperation(
           "idempotencyKey",
         ]) &&
         nonemptyString(value.path) &&
-        typeof value.data === "string" &&
+        operationStringWithin(value.data, MAX_EXECUTOR_FILE_WRITE_BYTES) &&
         (value.encoding === "utf8" || value.encoding === "base64") &&
         optionalBoolean(value.create) &&
         mutationKey(value)
@@ -299,8 +320,7 @@ export function decodeExecutorOperation(
           "idempotencyKey",
         ]) &&
         nonemptyString(value.executable) &&
-        Array.isArray(value.args) &&
-        value.args.every((arg) => typeof arg === "string") &&
+        stringArguments(value.args) &&
         optionalString(value.cwd) &&
         (value.stdin === undefined ||
           value.stdin === "pipe" ||
@@ -344,9 +364,7 @@ export function decodeExecutorOperation(
           "idempotencyKey",
         ]) &&
         optionalString(value.executable) &&
-        (value.args === undefined ||
-          (Array.isArray(value.args) &&
-            value.args.every((arg) => typeof arg === "string"))) &&
+        (value.args === undefined || stringArguments(value.args)) &&
         optionalString(value.cwd) &&
         positiveInteger(value.columns) &&
         positiveInteger(value.rows) &&
@@ -363,7 +381,7 @@ export function decodeExecutorOperation(
           "idempotencyKey",
         ]) &&
         nonemptyString(value.terminalId) &&
-        typeof value.data === "string" &&
+        operationStringWithin(value.data, MAX_EXECUTOR_TERMINAL_WRITE_BYTES) &&
         mutationKey(value)
       )
         return value as ExecutorOperation;
@@ -404,8 +422,7 @@ export function decodeExecutorOperation(
         ]) &&
         nonemptyString(value.name) &&
         nonemptyString(value.executable) &&
-        Array.isArray(value.args) &&
-        value.args.every((arg) => typeof arg === "string") &&
+        stringArguments(value.args) &&
         optionalString(value.cwd) &&
         mutationKey(value)
       )
@@ -576,6 +593,7 @@ export type ExecutorServerMessage =
       t: "receipt_status";
       receipt: ExecutorReceipt;
       outcome?: ExecutorOperationOutcome;
+      error?: { code: ExecutorErrorCode; message: string; ambiguous?: boolean };
       eventsComplete?: true;
     })
   | (ExecutorMessageBase & { t: "event"; event: ExecutorStreamEvent })
@@ -585,6 +603,341 @@ export type ExecutorServerMessage =
       message: string;
       receipt?: ExecutorReceipt;
     });
+
+const executorErrorCodes = new Set<ExecutorErrorCode>([
+  "unsupported_version",
+  "invalid_request",
+  "invalid_grant",
+  "stale_generation",
+  "deadline_exceeded",
+  "not_found",
+  "conflict",
+  "cancelled",
+  "operation_failed",
+  "executor_busy",
+  "unsupported",
+]);
+
+/** Strictly decode untrusted non-handshake messages from an Executor. */
+export function decodeExecutorServerMessage(
+  value: unknown,
+): Exclude<ExecutorServerMessage, { t: "hello" }> | undefined {
+  if (!plainRecord(value)) return undefined;
+  const common = ["t", "version", "requestId"];
+  const only = (extra: string[]) =>
+    Object.keys(value).every(
+      (key) => common.includes(key) || extra.includes(key),
+    );
+  if (
+    value.version !== EXECUTOR_PROTOCOL_VERSION ||
+    !decodeExecutorId(value.requestId)
+  )
+    return undefined;
+  if (value.t === "receipt") {
+    const receipt = decodeReceipt(value.receipt);
+    return receipt && only(["receipt"])
+      ? {
+          t: "receipt",
+          version: EXECUTOR_PROTOCOL_VERSION,
+          requestId: value.requestId as string,
+          receipt,
+        }
+      : undefined;
+  }
+  if (value.t === "event") {
+    const event = decodeStreamEvent(value.event);
+    return event && only(["event"])
+      ? {
+          t: "event",
+          version: EXECUTOR_PROTOCOL_VERSION,
+          requestId: value.requestId as string,
+          event,
+        }
+      : undefined;
+  }
+  if (value.t === "error") {
+    const receipt =
+      value.receipt === undefined ? undefined : decodeReceipt(value.receipt);
+    if (
+      !only(["code", "message", "receipt"]) ||
+      typeof value.code !== "string" ||
+      !executorErrorCodes.has(value.code as ExecutorErrorCode) ||
+      !boundedWireString(value.message, 256 * 1024, true) ||
+      (value.receipt !== undefined && !receipt)
+    )
+      return undefined;
+    return {
+      t: "error",
+      version: EXECUTOR_PROTOCOL_VERSION,
+      requestId: value.requestId as string,
+      code: value.code as ExecutorErrorCode,
+      message: value.message,
+      ...(receipt ? { receipt } : {}),
+    };
+  }
+  if (value.t === "receipt_status") {
+    const receipt = decodeReceipt(value.receipt);
+    const outcome =
+      value.outcome === undefined ? undefined : decodeOutcome(value.outcome);
+    const error =
+      value.error === undefined ? undefined : decodeTerminalError(value.error);
+    if (
+      !receipt ||
+      !only(["receipt", "outcome", "error", "eventsComplete"]) ||
+      (value.eventsComplete !== undefined && value.eventsComplete !== true) ||
+      (value.outcome !== undefined && !outcome) ||
+      (value.error !== undefined && !error)
+    )
+      return undefined;
+    if (
+      receipt.state === "succeeded"
+        ? !outcome || !!error
+        : receipt.state === "failed" || receipt.state === "cancelled"
+          ? !error || !!outcome
+          : !!outcome || !!error
+    )
+      return undefined;
+    return {
+      t: "receipt_status",
+      version: EXECUTOR_PROTOCOL_VERSION,
+      requestId: value.requestId as string,
+      receipt,
+      ...(outcome ? { outcome } : {}),
+      ...(error ? { error } : {}),
+      ...(value.eventsComplete === true ? { eventsComplete: true } : {}),
+    };
+  }
+  return undefined;
+}
+
+function decodeReceipt(value: unknown): ExecutorReceipt | undefined {
+  if (
+    !plainRecord(value) ||
+    Object.keys(value).some(
+      (key) =>
+        ![
+          "receiptId",
+          "requestId",
+          "state",
+          "acceptedAt",
+          "idempotencyKey",
+          "completedAt",
+        ].includes(key),
+    ) ||
+    !decodeExecutorId(value.receiptId) ||
+    !decodeExecutorId(value.requestId) ||
+    !["queued", "running", "succeeded", "failed", "cancelled"].includes(
+      value.state as string,
+    ) ||
+    !isoWireDate(value.acceptedAt) ||
+    (value.idempotencyKey !== undefined &&
+      !boundedWireString(value.idempotencyKey, 256 * 1024, true))
+  )
+    return undefined;
+  const terminal =
+    value.state === "succeeded" ||
+    value.state === "failed" ||
+    value.state === "cancelled";
+  if (
+    terminal !== (value.completedAt !== undefined) ||
+    (value.completedAt !== undefined && !isoWireDate(value.completedAt))
+  )
+    return undefined;
+  return value as unknown as ExecutorReceipt;
+}
+function decodeOutcome(value: unknown): ExecutorOperationOutcome | undefined {
+  if (!plainRecord(value) || typeof value.kind !== "string") return undefined;
+  const only = (keys: string[]) =>
+    Object.keys(value).every((key) => keys.includes(key));
+  const id = (input: unknown) => !!decodeExecutorId(input);
+  if (
+    value.kind === "fs.read" &&
+    only(["kind", "streamId", "size", "binary"]) &&
+    id(value.streamId) &&
+    nonnegativeInteger(value.size) &&
+    typeof value.binary === "boolean"
+  )
+    return value as unknown as ExecutorOperationOutcome;
+  if (
+    value.kind === "fs.list" &&
+    only(["kind", "entries"]) &&
+    Array.isArray(value.entries) &&
+    value.entries.length <= 4096 &&
+    value.entries.every(
+      (e) =>
+        plainRecord(e) &&
+        Object.keys(e).every((k) => ["path", "type", "size"].includes(k)) &&
+        boundedWireString(e.path, 256 * 1024, true) &&
+        ["file", "directory", "symlink"].includes(e.type as string) &&
+        (e.size === undefined || nonnegativeInteger(e.size)),
+    )
+  )
+    return value as unknown as ExecutorOperationOutcome;
+  if (
+    value.kind === "fs.stat" &&
+    only(["kind", "entry"]) &&
+    plainRecord(value.entry) &&
+    Object.keys(value.entry).every((k) =>
+      ["path", "type", "size", "modifiedAt"].includes(k),
+    ) &&
+    boundedWireString(value.entry.path, 256 * 1024, true) &&
+    ["file", "directory", "symlink"].includes(value.entry.type as string) &&
+    nonnegativeInteger(value.entry.size) &&
+    (value.entry.modifiedAt === undefined ||
+      isoWireDate(value.entry.modifiedAt))
+  )
+    return value as unknown as ExecutorOperationOutcome;
+  if (
+    value.kind === "fs.changed" &&
+    only(["kind", "path"]) &&
+    boundedWireString(value.path, 256 * 1024, true)
+  )
+    return value as unknown as ExecutorOperationOutcome;
+  const ids: Record<string, string> = {
+    process: "processId",
+    terminal: "terminalId",
+    service: "serviceId",
+    portal: "portalId",
+  };
+  const states: Record<string, string[]> = {
+    process: ["starting", "running", "exited"],
+    terminal: ["open", "closed"],
+    service: ["starting", "running", "stopped", "failed"],
+    portal: ["opening", "open", "closed", "failed"],
+  };
+  const idKey = ids[value.kind];
+  if (!idKey) return undefined;
+  const allowed = [
+    "kind",
+    idKey,
+    "state",
+    ...(value.kind === "portal" ? [] : ["streamId"]),
+    ...(value.kind === "process" ? ["exitCode"] : []),
+  ];
+  if (
+    only(allowed) &&
+    id(value[idKey]) &&
+    states[value.kind]!.includes(value.state as string) &&
+    (value.streamId === undefined || id(value.streamId)) &&
+    (value.exitCode === undefined || Number.isSafeInteger(value.exitCode))
+  )
+    return value as unknown as ExecutorOperationOutcome;
+  return undefined;
+}
+function decodeStreamEvent(value: unknown): ExecutorStreamEvent | undefined {
+  if (
+    !plainRecord(value) ||
+    !decodeExecutorId(value.streamId) ||
+    !nonnegativeInteger(value.sequence)
+  )
+    return undefined;
+  const only = (keys: string[]) =>
+    Object.keys(value).every((key) => keys.includes(key));
+  const eof = value.eof === undefined || typeof value.eof === "boolean";
+  if (
+    value.kind === "text" &&
+    only(["kind", "streamId", "sequence", "channel", "data", "eof"]) &&
+    ["stdout", "stderr", "terminal", "file"].includes(
+      value.channel as string,
+    ) &&
+    boundedWireString(value.data, 256 * 1024) &&
+    eof
+  )
+    return value as unknown as ExecutorStreamEvent;
+  if (
+    value.kind === "exit" &&
+    only(["kind", "streamId", "sequence", "exitCode", "signal"]) &&
+    (value.exitCode === null || Number.isSafeInteger(value.exitCode)) &&
+    (value.signal === undefined || boundedWireString(value.signal, 256, true))
+  )
+    return value as unknown as ExecutorStreamEvent;
+  if (
+    value.kind === "binary" &&
+    only([
+      "kind",
+      "streamId",
+      "sequence",
+      "offset",
+      "data",
+      "metadata",
+      "eof",
+    ]) &&
+    nonnegativeInteger(value.offset) &&
+    boundedWireString(value.data, 256 * 1024) &&
+    eof &&
+    plainRecord(value.metadata) &&
+    Object.keys(value.metadata).every((k) =>
+      ["encoding", "byteLength", "mediaType", "sha256"].includes(k),
+    ) &&
+    value.metadata.encoding === "base64" &&
+    nonnegativeInteger(value.metadata.byteLength) &&
+    canonicalBase64(
+      value.data as string,
+      value.metadata.byteLength as number,
+    ) &&
+    (value.metadata.mediaType === undefined ||
+      boundedWireString(value.metadata.mediaType, 256, true)) &&
+    (value.metadata.sha256 === undefined ||
+      (typeof value.metadata.sha256 === "string" &&
+        /^[a-f0-9]{64}$/.test(value.metadata.sha256)))
+  )
+    return value as unknown as ExecutorStreamEvent;
+  return undefined;
+}
+function decodeTerminalError(
+  value: unknown,
+):
+  | { code: ExecutorErrorCode; message: string; ambiguous?: boolean }
+  | undefined {
+  if (
+    !plainRecord(value) ||
+    Object.keys(value).some(
+      (key) => !["code", "message", "ambiguous"].includes(key),
+    ) ||
+    typeof value.code !== "string" ||
+    !executorErrorCodes.has(value.code as ExecutorErrorCode) ||
+    !boundedWireString(value.message, 256 * 1024, true) ||
+    (value.ambiguous !== undefined && typeof value.ambiguous !== "boolean")
+  )
+    return undefined;
+  return value as {
+    code: ExecutorErrorCode;
+    message: string;
+    ambiguous?: boolean;
+  };
+}
+function canonicalBase64(value: string, length: number): boolean {
+  try {
+    const binary = atob(value);
+    return binary.length === length && btoa(binary) === value;
+  } catch {
+    return false;
+  }
+}
+function plainRecord(value: unknown): value is Record<string, unknown> {
+  return (
+    !!value &&
+    typeof value === "object" &&
+    !Array.isArray(value) &&
+    Object.getPrototypeOf(value) === Object.prototype
+  );
+}
+function boundedWireString(
+  value: unknown,
+  max: number,
+  nonempty = false,
+): value is string {
+  return (
+    typeof value === "string" &&
+    (!nonempty || value.length > 0) &&
+    textEncoder.encode(value).byteLength <= max
+  );
+}
+function isoWireDate(value: unknown): value is string {
+  if (typeof value !== "string" || value.length > 32) return false;
+  const time = Date.parse(value);
+  return Number.isFinite(time) && new Date(time).toISOString() === value;
+}
 
 /** Decode only the handshake because version negotiation must fail before work. */
 export function decodeExecutorHello(

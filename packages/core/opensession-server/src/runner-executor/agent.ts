@@ -2,6 +2,7 @@ import {
   EXECUTOR_PROTOCOL_VERSION,
   decodeExecutorFence,
   decodeExecutorGrant,
+  decodeExecutorId,
   decodeExecutorOperation,
   type ExecutorClientMessage,
   type ExecutorConnectionIdentity,
@@ -18,8 +19,10 @@ import {
 } from "../server/executors/contract";
 import {
   LedgerFullError,
+  operationDigest,
   type DurableCommandLedger,
   type LedgerRecord,
+  type LedgerScope,
 } from "./ledger";
 
 export interface DuplexJsonTransport {
@@ -36,7 +39,7 @@ export interface RunnerExecutorAgentOptions extends ExecutorConnectionIdentity {
   ledger: DurableCommandLedger;
   now?: () => number;
   createId?: () => string;
-  validateGrant?: (
+  validateGrant: (
     grant: string,
     fence: ExecutorFence,
   ) => boolean | Promise<boolean>;
@@ -51,7 +54,7 @@ export class RunnerExecutorAgent {
     string,
     Array<{ requestId: string; event: ExecutorStreamEvent; bytes: number }>
   >();
-  readonly #cancelled = new Set<string>();
+  readonly #streamWaiters = new Map<string, Array<() => void>>();
   #queuedBytes = 0;
   #accepted = false;
   #stopped = false;
@@ -63,6 +66,8 @@ export class RunnerExecutorAgent {
 
   async start(): Promise<void> {
     if (this.#off.length) throw new Error("agent already started");
+    // No frame may be accepted until inherited active claims are durably failed.
+    await this.#options.ledger.recover();
     this.#off = [
       this.#options.transport.onMessage((message) => this.#receive(message)),
       this.#options.transport.onClose(() => this.stop()),
@@ -84,6 +89,8 @@ export class RunnerExecutorAgent {
     for (const off of this.#off.splice(0)) off();
     this.#credits.clear();
     this.#events.clear();
+    this.#streamWaiters.clear();
+    this.#queuedBytes = 0;
   }
 
   async #receive(value: unknown): Promise<void> {
@@ -115,12 +122,16 @@ export class RunnerExecutorAgent {
       );
       return;
     }
-    if (
-      !(await (this.#options.validateGrant?.(
+    let grantAccepted = false;
+    try {
+      grantAccepted = await this.#options.validateGrant(
         message.grant as string,
         message.fence,
-      ) ?? true))
-    ) {
+      );
+    } catch {
+      grantAccepted = false;
+    }
+    if (!grantAccepted) {
       await this.#error(
         message.requestId,
         "invalid_grant",
@@ -133,7 +144,7 @@ export class RunnerExecutorAgent {
         await this.#execute(message);
         break;
       case "receipt_status":
-        await this.#query(message.requestId, message.receiptId);
+        await this.#query(message.requestId, message.receiptId, message.fence);
         break;
       case "cancel":
         await this.#cancel(message);
@@ -150,31 +161,36 @@ export class RunnerExecutorAgent {
     const key = isMutation(message.operation)
       ? message.operation.idempotencyKey
       : undefined;
-    const existing = await this.#options.ledger.find(message.requestId, key);
-    if (existing) {
-      await this.#replayState(message.requestId, existing);
-      return;
-    }
-    const now = new Date(this.#options.now?.() ?? Date.now()).toISOString();
+    const scope = this.#scope(message.fence);
     const receipt: ExecutorReceipt = {
       receiptId: this.#id(),
       requestId: message.requestId,
       state: "queued",
-      acceptedAt: now,
+      acceptedAt: new Date(this.#options.now?.() ?? Date.now()).toISOString(),
       ...(key ? { idempotencyKey: key } : {}),
     };
+    let claim;
     try {
-      await this.#options.ledger.put({
-        requestId: message.requestId,
-        ...(key ? { idempotencyKey: key } : {}),
+      claim = await this.#options.ledger.claim(
+        {
+          ...scope,
+          requestId: message.requestId,
+          ...(key ? { idempotencyKey: key } : {}),
+          operationDigest: operationDigest(message.operation),
+          operation: message.operation,
+        },
         receipt,
-      });
+      );
     } catch (cause) {
       await this.#error(
         message.requestId,
         cause instanceof LedgerFullError ? "executor_busy" : "conflict",
-        String(cause),
+        cause instanceof Error ? cause.message : String(cause),
       );
+      return;
+    }
+    if (!claim.claimed) {
+      await this.#replayState(message.requestId, claim.record);
       return;
     }
     await this.#send({
@@ -183,10 +199,12 @@ export class RunnerExecutorAgent {
       requestId: message.requestId,
       receipt,
     });
-    const running = { ...receipt, state: "running" as const };
-    await this.#options.ledger.update(receipt.receiptId, { receipt: running });
+    await this.#options.ledger.transition(scope, receipt.receiptId, "queued", {
+      state: "running",
+    });
+    let result;
     try {
-      const result = await this.#options.executor.execute(
+      result = await this.#options.executor.execute(
         {
           rootId: message.fence.rootId,
           sessionId: message.fence.sessionId,
@@ -196,41 +214,6 @@ export class RunnerExecutorAgent {
         },
         message.operation,
       );
-      const cancelled =
-        this.#cancelled.delete(receipt.receiptId) ||
-        this.#cancelled.delete(message.requestId);
-      const completed = {
-        ...running,
-        state: cancelled ? ("cancelled" as const) : ("succeeded" as const),
-        completedAt: new Date(
-          this.#options.now?.() ?? Date.now(),
-        ).toISOString(),
-      };
-      const events = cancelled ? [] : (result.events ?? []);
-      await this.#options.ledger.update(receipt.receiptId, {
-        receipt: completed,
-        outcome: result.outcome,
-        ...(events.length ? { events } : {}),
-      });
-      await this.#send({
-        t: "receipt_status",
-        version: EXECUTOR_PROTOCOL_VERSION,
-        requestId: message.requestId,
-        receipt: completed,
-        outcome: result.outcome,
-        ...(events.length ? {} : { eventsComplete: true as const }),
-      });
-      if (events.length) {
-        await this.#queueEvents(message.requestId, events);
-        await this.#send({
-          t: "receipt_status",
-          version: EXECUTOR_PROTOCOL_VERSION,
-          requestId: message.requestId,
-          receipt: completed,
-          outcome: result.outcome,
-          eventsComplete: true,
-        });
-      }
     } catch (cause) {
       const failure =
         cause instanceof ExecutorFailure
@@ -239,28 +222,54 @@ export class RunnerExecutorAgent {
               "operation_failed",
               cause instanceof Error ? cause.message : String(cause),
             );
-      const failed = {
-        ...running,
-        state: "failed" as const,
-        completedAt: new Date(
-          this.#options.now?.() ?? Date.now(),
-        ).toISOString(),
-      };
-      await this.#options.ledger.update(receipt.receiptId, {
-        receipt: failed,
-        error: { code: failure.code, message: failure.message },
-      });
+      const failed = await this.#options.ledger.transition(
+        scope,
+        receipt.receiptId,
+        "running",
+        {
+          state: "failed",
+          completedAt: new Date(
+            this.#options.now?.() ?? Date.now(),
+          ).toISOString(),
+          error: { code: failure.code, message: failure.message },
+        },
+      );
       await this.#error(
         message.requestId,
         wireCode(failure.code),
         failure.message,
-        failed,
+        failed.receipt,
       );
+      return;
     }
+    const completedAt = new Date(
+      this.#options.now?.() ?? Date.now(),
+    ).toISOString();
+    const completed = await this.#options.ledger.transition(
+      scope,
+      receipt.receiptId,
+      "running",
+      {
+        state: "succeeded",
+        completedAt,
+        outcome: result.outcome,
+        events: result.events,
+      },
+    );
+    // Sending is deliberately outside the execute/commit catch. A transport
+    // failure after this point must never rewrite a committed success.
+    await this.#replayState(message.requestId, completed);
   }
 
-  async #query(requestId: string, receiptId: string): Promise<void> {
-    const record = await this.#options.ledger.get(receiptId);
+  async #query(
+    requestId: string,
+    receiptId: string,
+    fence: ExecutorFence,
+  ): Promise<void> {
+    const record = await this.#options.ledger.get(
+      this.#scope(fence),
+      receiptId,
+    );
     if (!record)
       return this.#error(requestId, "not_found", "receipt was not found");
     await this.#replayState(requestId, record);
@@ -269,49 +278,63 @@ export class RunnerExecutorAgent {
   async #cancel(
     message: Extract<ExecutorClientMessage, { t: "cancel" }>,
   ): Promise<void> {
-    const target =
-      "requestId" in message.target
-        ? message.target.requestId
-        : "receiptId" in message.target
-          ? message.target.receiptId
-          : message.target.streamId;
-    this.#cancelled.add(target);
     if ("streamId" in message.target)
-      this.#events.delete(message.target.streamId);
+      this.#clearStream(message.target.streamId);
     const record =
       "receiptId" in message.target
-        ? await this.#options.ledger.get(message.target.receiptId)
+        ? await this.#options.ledger.get(
+            this.#scope(message.fence),
+            message.target.receiptId,
+          )
         : undefined;
     if (record) await this.#replayState(message.requestId, record);
     else
       await this.#error(
         message.requestId,
         "cancelled",
-        "cancellation recorded",
+        "cancellation requested; the operation may continue until abort support is available",
       );
   }
 
   async #queueEvents(
     requestId: string,
     events: ExecutorStreamEvent[],
-  ): Promise<void> {
+  ): Promise<boolean> {
     const max = this.#options.maxQueuedEventBytes ?? 4 * 1024 * 1024;
-    for (const event of events) {
-      const bytes = eventBytes(event);
-      if (this.#queuedBytes + bytes > max) {
-        await this.#error(
-          requestId,
-          "executor_busy",
-          "stream event queue is full",
-        );
-        return;
-      }
+    const additions = events.map((event) => ({
+      event,
+      bytes: eventBytes(event),
+    }));
+    if (
+      additions.reduce((total, item) => total + item.bytes, this.#queuedBytes) >
+      max
+    ) {
+      await this.#error(
+        requestId,
+        "executor_busy",
+        "stream event queue is full",
+      );
+      return false;
+    }
+    for (const { event, bytes } of additions) {
       const queue = this.#events.get(event.streamId) ?? [];
       queue.push({ requestId, event, bytes });
       this.#events.set(event.streamId, queue);
       this.#queuedBytes += bytes;
-      await this.#flush(event.streamId);
     }
+    const streams = [...new Set(events.map((event) => event.streamId))];
+    await Promise.all(
+      streams.map(
+        (streamId) =>
+          new Promise<void>((resolve) => {
+            const queue = this.#streamWaiters.get(streamId) ?? [];
+            queue.push(resolve);
+            this.#streamWaiters.set(streamId, queue);
+            void this.#flush(streamId);
+          }),
+      ),
+    );
+    return true;
   }
 
   async #credit(
@@ -351,7 +374,21 @@ export class RunnerExecutorAgent {
       });
     }
     this.#credits.set(streamId, credit);
-    if (!queue.length) this.#events.delete(streamId);
+    if (!queue.length) {
+      this.#events.delete(streamId);
+      this.#credits.delete(streamId);
+      for (const resolve of this.#streamWaiters.get(streamId) ?? []) resolve();
+      this.#streamWaiters.delete(streamId);
+    }
+  }
+
+  #clearStream(streamId: string): void {
+    for (const item of this.#events.get(streamId) ?? [])
+      this.#queuedBytes -= item.bytes;
+    this.#events.delete(streamId);
+    this.#credits.delete(streamId);
+    for (const resolve of this.#streamWaiters.get(streamId) ?? []) resolve();
+    this.#streamWaiters.delete(streamId);
   }
 
   async #replayState(requestId: string, record: LedgerRecord): Promise<void> {
@@ -361,16 +398,18 @@ export class RunnerExecutorAgent {
       requestId,
       receipt: record.receipt,
       ...(record.outcome ? { outcome: record.outcome } : {}),
+      ...(record.error ? { error: record.error } : {}),
       ...(record.events?.length ? {} : { eventsComplete: true as const }),
     });
     if (record.events?.length) {
-      await this.#queueEvents(requestId, record.events);
+      if (!(await this.#queueEvents(requestId, record.events))) return;
       await this.#send({
         t: "receipt_status",
         version: EXECUTOR_PROTOCOL_VERSION,
         requestId,
         receipt: record.receipt,
         ...(record.outcome ? { outcome: record.outcome } : {}),
+        ...(record.error ? { error: record.error } : {}),
         eventsComplete: true,
       });
     }
@@ -385,7 +424,7 @@ export class RunnerExecutorAgent {
     await this.#send({
       t: "error",
       version: EXECUTOR_PROTOCOL_VERSION,
-      requestId: typeof requestId === "string" ? requestId : "invalid",
+      requestId: decodeExecutorId(requestId) ?? "invalid",
       code,
       message,
       ...(receipt ? { receipt } : {}),
@@ -396,6 +435,16 @@ export class RunnerExecutorAgent {
     message: ExecutorClientMessage | ExecutorServerMessage,
   ): Promise<void> {
     await this.#options.transport.send(message);
+  }
+
+  #scope(fence: ExecutorFence): LedgerScope {
+    return {
+      executorId: this.#options.executorId,
+      rootId: fence.rootId,
+      sessionId: fence.sessionId,
+      runId: fence.runId,
+      generation: fence.generation,
+    };
   }
 
   #id(): string {
@@ -451,8 +500,7 @@ function decodeWorkMessage(
       (key) => !common.includes(key) && !extras[messageType]!.includes(key),
     ) ||
     value.version !== EXECUTOR_PROTOCOL_VERSION ||
-    typeof value.requestId !== "string" ||
-    !value.requestId
+    !decodeExecutorId(value.requestId)
   )
     return undefined;
   const grant = decodeExecutorGrant(value.grant);
@@ -467,14 +515,14 @@ function decodeWorkMessage(
       >;
     }
   }
-  if (value.t === "receipt_status" && typeof value.receiptId === "string")
+  if (value.t === "receipt_status" && decodeExecutorId(value.receiptId))
     return { ...value, grant, fence } as Exclude<
       ExecutorClientMessage,
       { t: "hello" }
     >;
   if (
     value.t === "cancel" &&
-    isObject(value.target) &&
+    validCancelTarget(value.target) &&
     typeof value.idempotencyKey === "string"
   )
     return { ...value, grant, fence } as Exclude<
@@ -483,7 +531,7 @@ function decodeWorkMessage(
     >;
   if (
     value.t === "stream_credit" &&
-    typeof value.streamId === "string" &&
+    decodeExecutorId(value.streamId) &&
     typeof value.bytes === "number"
   )
     return { ...value, grant, fence } as Exclude<
@@ -492,6 +540,13 @@ function decodeWorkMessage(
     >;
   return undefined;
 }
+function validCancelTarget(value: unknown): boolean {
+  if (!isObject(value) || Object.keys(value).length !== 1) return false;
+  return ["requestId", "receiptId", "streamId"].some(
+    (key) => decodeExecutorId(value[key]) !== undefined,
+  );
+}
+
 const FORBIDDEN_FIELDS = new Set([
   "prompt",
   "model",

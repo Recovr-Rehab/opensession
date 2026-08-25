@@ -9,18 +9,30 @@ import {
   openSync,
 } from "node:fs";
 import { dirname, parse, resolve } from "node:path";
-import type {
-  ExecutorOperationOutcome,
-  ExecutorReceipt,
-  ExecutorStreamEvent,
+import {
+  decodeExecutorOperation,
+  type ExecutorOperationOutcome,
+  type ExecutorReceipt,
+  type ExecutorStreamEvent,
 } from "@tellahq/opensession-protocol/executor";
 import {
+  LedgerConflictError,
   LedgerFullError,
+  LedgerNotFoundError,
+  LedgerTransitionError,
+  applyTransition,
+  operationDigest,
+  recoveryError,
   type DurableCommandLedger,
+  type LedgerCommandIdentity,
   type LedgerRecord,
+  type LedgerScope,
+  type LedgerTerminalTransition,
 } from "./ledger";
 
+const SCHEMA_VERSION = 1;
 const ID_RE = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,255}$/;
+const DIGEST_RE = /^[a-f0-9]{64}$/;
 const STATES = new Set([
   "queued",
   "running",
@@ -46,7 +58,18 @@ type StoredRow = {
   receipt_id: unknown;
   command_kind: unknown;
   command_key: unknown;
+  executor_id: unknown;
+  root_id: unknown;
+  session_id: unknown;
+  run_id: unknown;
+  generation: unknown;
+  request_id: unknown;
+  operation_digest: unknown;
+  state: unknown;
+  accepted_at: unknown;
+  completed_at: unknown;
   payload: unknown;
+  ordinal: unknown;
 };
 
 export interface SQLiteCommandLedgerOptions {
@@ -57,7 +80,6 @@ export interface SQLiteCommandLedgerOptions {
   maxStringBytes?: number;
   maxEvents?: number;
 }
-
 type Limits = Required<
   Pick<
     SQLiteCommandLedgerOptions,
@@ -65,10 +87,6 @@ type Limits = Required<
   >
 >;
 
-/**
- * Opens a durable ledger. Importing this module is inert; callers own this
- * explicit open/close boundary.
- */
 export function openSQLiteCommandLedger(
   options: SQLiteCommandLedgerOptions,
 ): SQLiteCommandLedger {
@@ -98,7 +116,7 @@ export class SQLiteCommandLedger implements DurableCommandLedger {
     );
     const limits = {
       maxRecordBytes: positiveInteger(
-        options.maxRecordBytes ?? 1024 * 1024,
+        options.maxRecordBytes ?? 8 * 1024 * 1024,
         "record byte limit",
       ),
       maxStringBytes: positiveInteger(
@@ -111,27 +129,18 @@ export class SQLiteCommandLedger implements DurableCommandLedger {
       throw new Error(
         "a filesystem database path is required for a durable ledger",
       );
-
     const dbPath = resolve(options.dbPath);
     preparePrivateDatabasePath(dbPath);
-
+    preflightSidecars(dbPath);
     const db = new Database(dbPath, { create: true, strict: true });
     try {
       chmodSync(dbPath, 0o600);
-      db.exec(`
-        PRAGMA journal_mode = WAL;
-        PRAGMA synchronous = FULL;
-        PRAGMA busy_timeout = ${busyTimeoutMs};
-        PRAGMA foreign_keys = ON;
-        CREATE TABLE IF NOT EXISTS runner_command_ledger (
-          receipt_id TEXT PRIMARY KEY NOT NULL,
-          command_kind TEXT NOT NULL CHECK(command_kind IN ('request', 'mutation')),
-          command_key TEXT NOT NULL,
-          state TEXT NOT NULL CHECK(state IN ('queued', 'running', 'succeeded', 'failed', 'cancelled')),
-          payload TEXT NOT NULL,
-          UNIQUE(command_kind, command_key)
-        );
-      `);
+      db.exec(
+        `PRAGMA busy_timeout = ${busyTimeoutMs}; PRAGMA foreign_keys = ON;`,
+      );
+      initializeOrValidateSchema(db);
+      // Sidecars were checked before this pragma is allowed to create/open them.
+      db.exec("PRAGMA journal_mode = WAL; PRAGMA synchronous = FULL;");
       secureDatabaseFiles(dbPath);
       return new SQLiteCommandLedger(db, capacity, limits);
     } catch (cause) {
@@ -140,129 +149,220 @@ export class SQLiteCommandLedger implements DurableCommandLedger {
     }
   }
 
-  async find(
-    requestId: string,
-    idempotencyKey?: string,
-  ): Promise<LedgerRecord | undefined> {
+  async claim(
+    identity: LedgerCommandIdentity,
+    receipt: ExecutorReceipt,
+  ): Promise<{ record: LedgerRecord; claimed: boolean }> {
     this.#assertOpen();
-    validateId(requestId, "requestId");
-    if (idempotencyKey !== undefined)
-      validateCommandKey(idempotencyKey, this.#limits.maxStringBytes);
-    const kind = idempotencyKey === undefined ? "request" : "mutation";
-    const key = idempotencyKey ?? requestId;
-    const row = this.#db
-      .query(
-        "SELECT receipt_id, command_kind, command_key, payload FROM runner_command_ledger WHERE command_kind = ? AND command_key = ?",
-      )
-      .get(kind, key) as StoredRow | null;
-    return row ? decodeRow(row, this.#limits, kind, key) : undefined;
-  }
-
-  async put(record: LedgerRecord): Promise<void> {
-    this.#assertOpen();
-    const encoded = encodeRecord(record, this.#limits);
-    const kind = record.idempotencyKey === undefined ? "request" : "mutation";
-    const key = record.idempotencyKey ?? record.requestId;
-    this.#writeTransaction(() => {
-      const byCommand = this.#db
-        .query(
-          "SELECT receipt_id, command_kind, command_key, payload FROM runner_command_ledger WHERE command_kind = ? AND command_key = ?",
-        )
-        .get(kind, key) as StoredRow | null;
-      if (byCommand) {
-        const current = decodeRow(byCommand, this.#limits, kind, key);
-        if (JSON.stringify(current) === encoded) return;
-        throw new Error("command already has a different ledger record");
+    const initial: LedgerRecord = { ...identity, receipt };
+    const encoded = encodeRecord(initial, this.#limits);
+    const kind = identity.idempotencyKey === undefined ? "request" : "mutation";
+    const key = identity.idempotencyKey ?? identity.requestId;
+    return this.#writeTransaction(() => {
+      const existing = this.#selectCommand(identity, kind, key);
+      if (existing) {
+        const record = decodeRow(existing, this.#limits);
+        if (record.operationDigest !== identity.operationDigest)
+          throw new LedgerConflictError();
+        return { record, claimed: false };
       }
-      const byReceipt = this.#db
-        .query(
-          "SELECT receipt_id, command_kind, command_key, payload FROM runner_command_ledger WHERE receipt_id = ?",
-        )
-        .get(record.receipt.receiptId) as StoredRow | null;
-      if (byReceipt) {
-        decodeRow(byReceipt, this.#limits);
-        throw new Error("receipt already belongs to a different command");
+      const collision = this.#selectReceipt(receipt.receiptId);
+      if (collision) {
+        decodeRow(collision, this.#limits);
+        throw new LedgerConflictError(
+          "receipt already belongs to another command",
+        );
       }
-      const count = this.#db
-        .query("SELECT COUNT(*) AS count FROM runner_command_ledger")
-        .get() as { count: number };
-      if (count.count >= this.#capacity) throw new LedgerFullError();
+      this.#makeRoom();
+      const ordinal = (
+        this.#db
+          .query(
+            "SELECT COALESCE(MAX(ordinal), 0) + 1 AS value FROM runner_command_ledger",
+          )
+          .get() as { value: number }
+      ).value;
       this.#db
         .query(
-          "INSERT INTO runner_command_ledger (receipt_id, command_kind, command_key, state, payload) VALUES (?, ?, ?, ?, ?)",
+          `INSERT INTO runner_command_ledger
+        (receipt_id, command_kind, command_key, executor_id, root_id, session_id, run_id, generation,
+         request_id, operation_digest, state, accepted_at, completed_at, payload, ordinal)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, ?, ?)`,
         )
         .run(
-          record.receipt.receiptId,
+          receipt.receiptId,
           kind,
           key,
-          record.receipt.state,
+          identity.executorId,
+          identity.rootId,
+          identity.sessionId,
+          identity.runId,
+          identity.generation,
+          identity.requestId,
+          identity.operationDigest,
+          receipt.state,
+          receipt.acceptedAt,
           encoded,
+          ordinal,
         );
+      return { record: structuredClone(initial), claimed: true };
     });
   }
 
-  async update(
+  async transition(
+    scope: LedgerScope,
     receiptId: string,
-    update: Partial<Omit<LedgerRecord, "requestId" | "receipt">> & {
-      receipt: ExecutorReceipt;
-    },
-  ): Promise<void> {
+    expected: "queued" | "running",
+    next: { state: "running" } | LedgerTerminalTransition,
+  ): Promise<LedgerRecord> {
     this.#assertOpen();
+    validateScope(scope);
     validateId(receiptId, "receiptId");
-    this.#writeTransaction(() => {
-      const row = this.#db
-        .query(
-          "SELECT receipt_id, command_kind, command_key, payload FROM runner_command_ledger WHERE receipt_id = ?",
-        )
-        .get(receiptId) as StoredRow | null;
-      if (!row) throw new Error("receipt not found");
+    return this.#writeTransaction(() => {
+      const row = this.#selectReceipt(receiptId);
+      if (!row) throw new LedgerNotFoundError();
       const current = decodeRow(row, this.#limits);
-      if (
-        update.receipt.receiptId !== receiptId ||
-        update.receipt.requestId !== current.requestId ||
-        update.receipt.idempotencyKey !== current.idempotencyKey ||
-        ("idempotencyKey" in update &&
-          update.idempotencyKey !== current.idempotencyKey)
-      )
-        throw new Error("ledger identity is immutable");
-      const merged: LedgerRecord = {
-        ...current,
-        ...update,
-        requestId: current.requestId,
-        idempotencyKey: current.idempotencyKey,
-        receipt: update.receipt,
-      };
-      if (current.idempotencyKey === undefined) delete merged.idempotencyKey;
-      const encoded = encodeRecord(merged, this.#limits);
-      this.#db
+      if (!sameScopeValues(current, scope)) throw new LedgerNotFoundError();
+      if (current.receipt.state !== expected)
+        throw new LedgerTransitionError(
+          current.receipt.state,
+          expected,
+          next.state,
+        );
+      const updated = applyTransition(current, next);
+      const encoded = encodeRecord(updated, this.#limits);
+      const result = this.#db
         .query(
-          "UPDATE runner_command_ledger SET state = ?, payload = ? WHERE receipt_id = ?",
+          `UPDATE runner_command_ledger SET state = ?, completed_at = ?, payload = ?
+        WHERE receipt_id = ? AND executor_id = ? AND root_id = ? AND session_id = ? AND run_id = ? AND generation = ? AND state = ?`,
         )
-        .run(merged.receipt.state, encoded, receiptId);
+        .run(
+          updated.receipt.state,
+          updated.receipt.completedAt ?? null,
+          encoded,
+          receiptId,
+          scope.executorId,
+          scope.rootId,
+          scope.sessionId,
+          scope.runId,
+          scope.generation,
+          expected,
+        );
+      if (result.changes !== 1)
+        throw new LedgerTransitionError(
+          current.receipt.state,
+          expected,
+          next.state,
+        );
+      return updated;
     });
   }
 
-  async get(receiptId: string): Promise<LedgerRecord | undefined> {
+  async get(
+    scope: LedgerScope,
+    receiptId: string,
+  ): Promise<LedgerRecord | undefined> {
     this.#assertOpen();
+    validateScope(scope);
     validateId(receiptId, "receiptId");
     const row = this.#db
       .query(
-        "SELECT receipt_id, command_kind, command_key, payload FROM runner_command_ledger WHERE receipt_id = ?",
+        `SELECT * FROM runner_command_ledger WHERE receipt_id = ? AND executor_id = ?
+      AND root_id = ? AND session_id = ? AND run_id = ? AND generation = ?`,
       )
-      .get(receiptId) as StoredRow | null;
+      .get(
+        receiptId,
+        scope.executorId,
+        scope.rootId,
+        scope.sessionId,
+        scope.runId,
+        scope.generation,
+      ) as StoredRow | null;
     return row ? decodeRow(row, this.#limits) : undefined;
   }
 
-  close(): void {
-    if (this.#closed) return;
-    this.#closed = true;
-    this.#db.close();
+  async recover(): Promise<number> {
+    this.#assertOpen();
+    return this.#writeTransaction(() => {
+      const rows = this.#db
+        .query(
+          "SELECT * FROM runner_command_ledger WHERE state IN ('queued', 'running') ORDER BY ordinal",
+        )
+        .all() as StoredRow[];
+      const completedAt = new Date().toISOString();
+      for (const row of rows) {
+        const current = decodeRow(row, this.#limits);
+        const updated = applyTransition(current, {
+          state: "failed",
+          completedAt,
+          error: recoveryError(current.idempotencyKey !== undefined),
+        });
+        this.#db
+          .query(
+            "UPDATE runner_command_ledger SET state = 'failed', completed_at = ?, payload = ? WHERE receipt_id = ? AND state = ?",
+          )
+          .run(
+            completedAt,
+            encodeRecord(updated, this.#limits),
+            current.receipt.receiptId,
+            current.receipt.state,
+          );
+      }
+      return rows.length;
+    });
   }
 
+  close(): void {
+    if (!this.#closed) {
+      this.#closed = true;
+      this.#db.close();
+    }
+  }
   #assertOpen(): void {
     if (this.#closed) throw new Error("command ledger is closed");
   }
-
+  #selectReceipt(receiptId: string): StoredRow | null {
+    return this.#db
+      .query("SELECT * FROM runner_command_ledger WHERE receipt_id = ?")
+      .get(receiptId) as StoredRow | null;
+  }
+  #selectCommand(
+    identity: LedgerCommandIdentity,
+    kind: string,
+    key: string,
+  ): StoredRow | null {
+    return this.#db
+      .query(
+        `SELECT * FROM runner_command_ledger WHERE executor_id = ? AND root_id = ?
+      AND session_id = ? AND run_id = ? AND generation = ? AND command_kind = ? AND command_key = ?`,
+      )
+      .get(
+        identity.executorId,
+        identity.rootId,
+        identity.sessionId,
+        identity.runId,
+        identity.generation,
+        kind,
+        key,
+      ) as StoredRow | null;
+  }
+  #makeRoom(): void {
+    const count = (
+      this.#db
+        .query("SELECT COUNT(*) AS count FROM runner_command_ledger")
+        .get() as { count: number }
+    ).count;
+    if (count < this.#capacity) return;
+    const reclaim = this.#db
+      .query(
+        `SELECT receipt_id FROM runner_command_ledger
+      WHERE command_kind = 'request' AND state IN ('succeeded', 'failed', 'cancelled') ORDER BY ordinal LIMIT 1`,
+      )
+      .get() as { receipt_id: string } | null;
+    if (!reclaim) throw new LedgerFullError();
+    this.#db
+      .query("DELETE FROM runner_command_ledger WHERE receipt_id = ?")
+      .run(reclaim.receipt_id);
+  }
   #writeTransaction<T>(operation: () => T): T {
     this.#db.exec("BEGIN IMMEDIATE");
     try {
@@ -272,12 +372,82 @@ export class SQLiteCommandLedger implements DurableCommandLedger {
     } catch (cause) {
       try {
         this.#db.exec("ROLLBACK");
-      } catch {
-        /* preserve the original failure */
-      }
+      } catch {}
       throw cause;
     }
   }
+}
+
+function initializeOrValidateSchema(db: Database): void {
+  const version = (
+    db.query("PRAGMA user_version").get() as { user_version: number }
+  ).user_version;
+  const userTables = db
+    .query(
+      "SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%' ORDER BY name",
+    )
+    .all() as Array<{ name: string }>;
+  const table = userTables.some(({ name }) => name === "runner_command_ledger");
+  if (!table) {
+    if (userTables.length)
+      throw new Error("unknown existing ledger database tables");
+    if (version !== 0)
+      throw new Error(`unsupported ledger schema version ${version}`);
+    db.exec(`CREATE TABLE runner_command_ledger (
+      receipt_id TEXT PRIMARY KEY NOT NULL,
+      command_kind TEXT NOT NULL CHECK(command_kind IN ('request', 'mutation')),
+      command_key TEXT NOT NULL, executor_id TEXT NOT NULL, root_id TEXT NOT NULL,
+      session_id TEXT NOT NULL, run_id TEXT NOT NULL, generation INTEGER NOT NULL,
+      request_id TEXT NOT NULL, operation_digest TEXT NOT NULL,
+      state TEXT NOT NULL CHECK(state IN ('queued', 'running', 'succeeded', 'failed', 'cancelled')),
+      accepted_at TEXT NOT NULL, completed_at TEXT, payload TEXT NOT NULL, ordinal INTEGER NOT NULL,
+      UNIQUE(executor_id, root_id, session_id, run_id, generation, command_kind, command_key)
+    ) STRICT; PRAGMA user_version = ${SCHEMA_VERSION};`);
+  } else if (version !== SCHEMA_VERSION) {
+    throw new Error(
+      version === 0
+        ? "unversioned existing ledger table"
+        : `unsupported ledger schema version ${version}`,
+    );
+  }
+  const expected = [
+    ["receipt_id", "TEXT", 1, 1],
+    ["command_kind", "TEXT", 1, 0],
+    ["command_key", "TEXT", 1, 0],
+    ["executor_id", "TEXT", 1, 0],
+    ["root_id", "TEXT", 1, 0],
+    ["session_id", "TEXT", 1, 0],
+    ["run_id", "TEXT", 1, 0],
+    ["generation", "INTEGER", 1, 0],
+    ["request_id", "TEXT", 1, 0],
+    ["operation_digest", "TEXT", 1, 0],
+    ["state", "TEXT", 1, 0],
+    ["accepted_at", "TEXT", 1, 0],
+    ["completed_at", "TEXT", 0, 0],
+    ["payload", "TEXT", 1, 0],
+    ["ordinal", "INTEGER", 1, 0],
+  ];
+  const actual = db
+    .query("PRAGMA table_info(runner_command_ledger)")
+    .all() as Array<{
+    name: string;
+    type: string;
+    notnull: number;
+    pk: number;
+  }>;
+  if (
+    actual.length !== expected.length ||
+    actual.some((column, index) => {
+      const wanted = expected[index]!;
+      return (
+        column.name !== wanted[0] ||
+        column.type !== wanted[1] ||
+        column.notnull !== wanted[2] ||
+        column.pk !== wanted[3]
+      );
+    })
+  )
+    throw new Error("ledger schema columns do not match version 1");
 }
 
 function encodeRecord(record: LedgerRecord, limits: Limits): string {
@@ -287,25 +457,34 @@ function encodeRecord(record: LedgerRecord, limits: Limits): string {
     throw new Error("ledger record exceeds byte limit");
   return encoded;
 }
-
-function decodeRow(
-  row: StoredRow,
-  limits: Limits,
-  expectedKind?: string,
-  expectedKey?: string,
-): LedgerRecord {
+function decodeRow(row: StoredRow, limits: Limits): LedgerRecord {
+  for (const key of [
+    "receipt_id",
+    "command_kind",
+    "command_key",
+    "executor_id",
+    "root_id",
+    "session_id",
+    "run_id",
+    "request_id",
+    "operation_digest",
+    "state",
+    "accepted_at",
+    "payload",
+  ] as const)
+    if (typeof row[key] !== "string") throw new Error("malformed ledger row");
   if (
-    typeof row.receipt_id !== "string" ||
-    typeof row.command_kind !== "string" ||
-    typeof row.command_key !== "string" ||
-    typeof row.payload !== "string"
+    !Number.isSafeInteger(row.generation) ||
+    !Number.isSafeInteger(row.ordinal) ||
+    (row.completed_at !== null && typeof row.completed_at !== "string")
   )
     throw new Error("malformed ledger row");
-  if (encoder.encode(row.payload).byteLength > limits.maxRecordBytes)
+  const payload = row.payload as string;
+  if (encoder.encode(payload).byteLength > limits.maxRecordBytes)
     throw new Error("persisted ledger record exceeds byte limit");
   let value: unknown;
   try {
-    value = JSON.parse(row.payload);
+    value = JSON.parse(payload);
   } catch {
     throw new Error("malformed ledger JSON");
   }
@@ -317,8 +496,16 @@ function decodeRow(
     row.receipt_id !== record.receipt.receiptId ||
     row.command_kind !== kind ||
     row.command_key !== key ||
-    (expectedKind !== undefined && row.command_kind !== expectedKind) ||
-    (expectedKey !== undefined && row.command_key !== expectedKey)
+    row.executor_id !== record.executorId ||
+    row.root_id !== record.rootId ||
+    row.session_id !== record.sessionId ||
+    row.run_id !== record.runId ||
+    row.generation !== record.generation ||
+    row.request_id !== record.requestId ||
+    row.operation_digest !== record.operationDigest ||
+    row.state !== record.receipt.state ||
+    row.accepted_at !== record.receipt.acceptedAt ||
+    row.completed_at !== (record.receipt.completedAt ?? null)
   )
     throw new Error("ledger row identity mismatch");
   return structuredClone(record);
@@ -331,8 +518,15 @@ function validateRecord(
   if (
     !plainObject(value) ||
     !onlyKeys(value, [
+      "executorId",
+      "rootId",
+      "sessionId",
+      "runId",
+      "generation",
       "requestId",
       "idempotencyKey",
+      "operationDigest",
+      "operation",
       "receipt",
       "outcome",
       "events",
@@ -340,32 +534,64 @@ function validateRecord(
     ])
   )
     throw new Error("invalid ledger record");
+  validateScope(value as unknown as LedgerScope);
   validateId(value.requestId, "requestId");
-  if (value.idempotencyKey !== undefined)
-    validateCommandKey(value.idempotencyKey, limits.maxStringBytes);
+  if (
+    value.idempotencyKey !== undefined &&
+    !boundedString(value.idempotencyKey, limits.maxStringBytes, true)
+  )
+    throw new Error("invalid idempotencyKey");
+  if (
+    typeof value.operationDigest !== "string" ||
+    !DIGEST_RE.test(value.operationDigest)
+  )
+    throw new Error("invalid operation digest");
+  const operation = decodeExecutorOperation(value.operation);
+  if (
+    !operation ||
+    operationDigest(operation) !== value.operationDigest ||
+    ("idempotencyKey" in operation ? operation.idempotencyKey : undefined) !==
+      value.idempotencyKey
+  )
+    throw new Error("operation identity mismatch");
   validateReceipt(value.receipt, value.requestId, value.idempotencyKey);
   if (value.outcome !== undefined) validateOutcome(value.outcome, limits);
   if (value.events !== undefined) {
-    if (!Array.isArray(value.events) || value.events.length > limits.maxEvents)
-      throw new Error("invalid ledger events");
-    for (const event of value.events) validateEvent(event, limits);
+    validateEvents(value.events, limits);
+    const outcome = value.outcome as unknown;
+    const streamId =
+      plainObject(outcome) && typeof outcome.streamId === "string"
+        ? outcome.streamId
+        : undefined;
+    if (!streamId || value.events.some((event) => event.streamId !== streamId))
+      throw new Error("ledger event stream does not match outcome");
   }
-  if (value.error !== undefined) {
-    if (
-      !plainObject(value.error) ||
-      !onlyKeys(value.error, ["code", "message"]) ||
-      typeof value.error.code !== "string" ||
-      !ERROR_CODES.has(value.error.code) ||
-      !boundedString(value.error.message, limits.maxStringBytes, true)
-    )
-      throw new Error("invalid ledger error");
-  }
+  if (value.error !== undefined) validateError(value.error, limits);
+  const state = (value.receipt as ExecutorReceipt).state;
+  if (
+    (state === "queued" || state === "running") &&
+    (value.outcome !== undefined ||
+      value.events !== undefined ||
+      value.error !== undefined)
+  )
+    throw new Error("active record has terminal payload");
+  if (
+    state === "succeeded" &&
+    (value.outcome === undefined || value.error !== undefined)
+  )
+    throw new Error("succeeded record is incoherent");
+  if (
+    (state === "failed" || state === "cancelled") &&
+    (value.error === undefined ||
+      value.outcome !== undefined ||
+      value.events !== undefined)
+  )
+    throw new Error("failed record is incoherent");
 }
-
 function validateReceipt(
   value: unknown,
   requestId: string,
-  idempotencyKey: string | undefined,
+  key: string | undefined,
 ): asserts value is ExecutorReceipt {
   if (
     !plainObject(value) ||
@@ -380,23 +606,32 @@ function validateReceipt(
   )
     throw new Error("invalid receipt");
   validateId(value.receiptId, "receiptId");
-  if (
-    value.requestId !== requestId ||
-    value.idempotencyKey !== idempotencyKey ||
-    typeof value.state !== "string" ||
-    !STATES.has(value.state) ||
-    !isoDate(value.acceptedAt) ||
-    (value.completedAt !== undefined && !isoDate(value.completedAt))
-  )
-    throw new Error("invalid receipt identity or fields");
   const terminal =
     value.state === "succeeded" ||
     value.state === "failed" ||
     value.state === "cancelled";
-  if (terminal !== (value.completedAt !== undefined))
-    throw new Error("receipt completion does not match state");
+  if (
+    value.requestId !== requestId ||
+    value.idempotencyKey !== key ||
+    typeof value.state !== "string" ||
+    !STATES.has(value.state) ||
+    !isoDate(value.acceptedAt) ||
+    terminal !== (value.completedAt !== undefined) ||
+    (value.completedAt !== undefined && !isoDate(value.completedAt))
+  )
+    throw new Error("invalid receipt identity or fields");
 }
-
+function validateError(value: unknown, limits: Limits): void {
+  if (
+    !plainObject(value) ||
+    !onlyKeys(value, ["code", "message", "ambiguous"]) ||
+    typeof value.code !== "string" ||
+    !ERROR_CODES.has(value.code) ||
+    !boundedString(value.message, limits.maxStringBytes, true) ||
+    (value.ambiguous !== undefined && typeof value.ambiguous !== "boolean")
+  )
+    throw new Error("invalid ledger error");
+}
 function validateOutcome(
   value: unknown,
   limits: Limits,
@@ -404,170 +639,182 @@ function validateOutcome(
   if (!plainObject(value) || typeof value.kind !== "string")
     throw new Error("invalid outcome");
   const id = (v: unknown) => boundedString(v, 256, true);
-  switch (value.kind) {
-    case "fs.read":
-      if (
-        onlyKeys(value, ["kind", "streamId", "size", "binary"]) &&
-        id(value.streamId) &&
-        nonnegative(value.size) &&
-        typeof value.binary === "boolean"
-      )
-        return;
-      break;
-    case "fs.list":
-      if (
-        onlyKeys(value, ["kind", "entries"]) &&
-        Array.isArray(value.entries) &&
-        value.entries.length <= limits.maxEvents &&
-        value.entries.every(
-          (entry) =>
-            plainObject(entry) &&
-            onlyKeys(entry, ["path", "type", "size"]) &&
-            boundedString(entry.path, limits.maxStringBytes, true) &&
-            ["file", "directory", "symlink"].includes(entry.type as string) &&
-            (entry.size === undefined || nonnegative(entry.size)),
-        )
-      )
-        return;
-      break;
-    case "fs.stat": {
-      const entry = value.entry;
-      if (
-        onlyKeys(value, ["kind", "entry"]) &&
-        plainObject(entry) &&
-        onlyKeys(entry, ["path", "type", "size", "modifiedAt"]) &&
-        boundedString(entry.path, limits.maxStringBytes, true) &&
-        ["file", "directory", "symlink"].includes(entry.type as string) &&
-        nonnegative(entry.size) &&
-        (entry.modifiedAt === undefined || isoDate(entry.modifiedAt))
-      )
-        return;
-      break;
-    }
-    case "fs.changed":
-      if (
-        onlyKeys(value, ["kind", "path"]) &&
-        boundedString(value.path, limits.maxStringBytes, true)
-      )
-        return;
-      break;
-    case "process":
-      if (
-        onlyKeys(value, [
-          "kind",
-          "processId",
-          "state",
-          "exitCode",
-          "streamId",
-        ]) &&
-        id(value.processId) &&
-        ["starting", "running", "exited"].includes(value.state as string) &&
-        (value.exitCode === undefined ||
-          Number.isSafeInteger(value.exitCode)) &&
-        (value.streamId === undefined || id(value.streamId))
-      )
-        return;
-      break;
-    case "terminal":
-      if (
-        onlyKeys(value, ["kind", "terminalId", "state", "streamId"]) &&
-        id(value.terminalId) &&
-        ["open", "closed"].includes(value.state as string) &&
-        (value.streamId === undefined || id(value.streamId))
-      )
-        return;
-      break;
-    case "service":
-      if (
-        onlyKeys(value, ["kind", "serviceId", "state", "streamId"]) &&
-        id(value.serviceId) &&
-        ["starting", "running", "stopped", "failed"].includes(
-          value.state as string,
-        ) &&
-        (value.streamId === undefined || id(value.streamId))
-      )
-        return;
-      break;
-    case "portal":
-      if (
-        onlyKeys(value, ["kind", "portalId", "state"]) &&
-        id(value.portalId) &&
-        ["opening", "open", "closed", "failed"].includes(value.state as string)
-      )
-        return;
-      break;
-  }
-  throw new Error("invalid outcome");
-}
-
-function validateEvent(
-  value: unknown,
-  limits: Limits,
-): asserts value is ExecutorStreamEvent {
   if (
-    !plainObject(value) ||
-    typeof value.kind !== "string" ||
-    !boundedString(value.streamId, 256, true) ||
-    !nonnegative(value.sequence)
-  )
-    throw new Error("invalid stream event");
-  const eof = value.eof === undefined || typeof value.eof === "boolean";
-  if (
-    value.kind === "text" &&
-    onlyKeys(value, [
-      "kind",
-      "streamId",
-      "sequence",
-      "channel",
-      "data",
-      "eof",
-    ]) &&
-    ["stdout", "stderr", "terminal", "file"].includes(
-      value.channel as string,
-    ) &&
-    boundedString(value.data, limits.maxStringBytes) &&
-    eof
+    value.kind === "fs.read" &&
+    onlyKeys(value, ["kind", "streamId", "size", "binary"]) &&
+    id(value.streamId) &&
+    nonnegative(value.size) &&
+    typeof value.binary === "boolean"
   )
     return;
   if (
-    value.kind === "exit" &&
-    onlyKeys(value, ["kind", "streamId", "sequence", "exitCode", "signal"]) &&
-    (value.exitCode === null || Number.isSafeInteger(value.exitCode)) &&
-    (value.signal === undefined || boundedString(value.signal, 256, true))
+    value.kind === "fs.list" &&
+    onlyKeys(value, ["kind", "entries"]) &&
+    Array.isArray(value.entries) &&
+    value.entries.length <= limits.maxEvents &&
+    value.entries.every(
+      (e) =>
+        plainObject(e) &&
+        onlyKeys(e, ["path", "type", "size"]) &&
+        boundedString(e.path, limits.maxStringBytes, true) &&
+        ["file", "directory", "symlink"].includes(e.type as string) &&
+        (e.size === undefined || nonnegative(e.size)),
+    )
   )
     return;
   if (
-    value.kind === "binary" &&
-    onlyKeys(value, [
-      "kind",
-      "streamId",
-      "sequence",
-      "offset",
-      "data",
-      "metadata",
-      "eof",
-    ]) &&
-    nonnegative(value.offset) &&
-    boundedString(value.data, limits.maxStringBytes) &&
-    eof
-  ) {
-    const metadata = value.metadata;
+    value.kind === "fs.stat" &&
+    onlyKeys(value, ["kind", "entry"]) &&
+    plainObject(value.entry) &&
+    onlyKeys(value.entry, ["path", "type", "size", "modifiedAt"]) &&
+    boundedString(value.entry.path, limits.maxStringBytes, true) &&
+    ["file", "directory", "symlink"].includes(value.entry.type as string) &&
+    nonnegative(value.entry.size) &&
+    (value.entry.modifiedAt === undefined || isoDate(value.entry.modifiedAt))
+  )
+    return;
+  if (
+    value.kind === "fs.changed" &&
+    onlyKeys(value, ["kind", "path"]) &&
+    boundedString(value.path, limits.maxStringBytes, true)
+  )
+    return;
+  const specs: Record<string, [string, string, string[], string]> = {
+    process: [
+      "processId",
+      "state",
+      ["starting", "running", "exited"],
+      "exitCode",
+    ],
+    terminal: ["terminalId", "state", ["open", "closed"], ""],
+    service: [
+      "serviceId",
+      "state",
+      ["starting", "running", "stopped", "failed"],
+      "",
+    ],
+    portal: ["portalId", "state", ["opening", "open", "closed", "failed"], ""],
+  };
+  const spec = specs[value.kind];
+  if (spec) {
+    const [idKey, stateKey, states, exitKey] = spec;
+    const allowed = ["kind", idKey, stateKey];
+    if (value.kind !== "portal") allowed.push("streamId");
+    if (exitKey) allowed.push(exitKey);
     if (
-      plainObject(metadata) &&
-      onlyKeys(metadata, ["encoding", "byteLength", "mediaType", "sha256"]) &&
-      metadata.encoding === "base64" &&
-      nonnegative(metadata.byteLength) &&
-      (metadata.mediaType === undefined ||
-        boundedString(metadata.mediaType, 256, true)) &&
-      (metadata.sha256 === undefined ||
-        (typeof metadata.sha256 === "string" &&
-          /^[a-f0-9]{64}$/.test(metadata.sha256)))
+      onlyKeys(value, allowed) &&
+      id(value[idKey]) &&
+      states.includes(value[stateKey] as string) &&
+      (value.streamId === undefined || id(value.streamId)) &&
+      (!exitKey ||
+        value[exitKey] === undefined ||
+        Number.isSafeInteger(value[exitKey]))
     )
       return;
   }
-  throw new Error("invalid stream event");
+  throw new Error("invalid outcome");
 }
-
+function validateEvents(
+  value: unknown,
+  limits: Limits,
+): asserts value is ExecutorStreamEvent[] {
+  if (!Array.isArray(value) || value.length > limits.maxEvents)
+    throw new Error("invalid ledger events");
+  const sequences = new Map<string, number>();
+  for (const event of value) {
+    if (
+      !plainObject(event) ||
+      !boundedString(event.streamId, 256, true) ||
+      !nonnegative(event.sequence) ||
+      event.sequence !== (sequences.get(event.streamId) ?? 0)
+    )
+      throw new Error("invalid stream event sequence");
+    sequences.set(event.streamId, event.sequence + 1);
+    const eof = event.eof === undefined || typeof event.eof === "boolean";
+    if (
+      event.kind === "text" &&
+      onlyKeys(event, [
+        "kind",
+        "streamId",
+        "sequence",
+        "channel",
+        "data",
+        "eof",
+      ]) &&
+      ["stdout", "stderr", "terminal", "file"].includes(
+        event.channel as string,
+      ) &&
+      boundedString(event.data, limits.maxStringBytes) &&
+      eof
+    )
+      continue;
+    if (
+      event.kind === "exit" &&
+      onlyKeys(event, ["kind", "streamId", "sequence", "exitCode", "signal"]) &&
+      (event.exitCode === null || Number.isSafeInteger(event.exitCode)) &&
+      (event.signal === undefined || boundedString(event.signal, 256, true))
+    )
+      continue;
+    if (
+      event.kind === "binary" &&
+      onlyKeys(event, [
+        "kind",
+        "streamId",
+        "sequence",
+        "offset",
+        "data",
+        "metadata",
+        "eof",
+      ]) &&
+      nonnegative(event.offset) &&
+      boundedString(event.data, limits.maxStringBytes) &&
+      eof &&
+      validBinary(event)
+    )
+      continue;
+    throw new Error("invalid stream event");
+  }
+}
+function validBinary(event: Record<string, unknown>): boolean {
+  const metadata = event.metadata;
+  if (
+    !plainObject(metadata) ||
+    !onlyKeys(metadata, ["encoding", "byteLength", "mediaType", "sha256"]) ||
+    metadata.encoding !== "base64" ||
+    !nonnegative(metadata.byteLength) ||
+    (metadata.mediaType !== undefined &&
+      !boundedString(metadata.mediaType, 256, true)) ||
+    (metadata.sha256 !== undefined &&
+      (typeof metadata.sha256 !== "string" || !DIGEST_RE.test(metadata.sha256)))
+  )
+    return false;
+  try {
+    const decoded = Buffer.from(event.data as string, "base64");
+    return (
+      decoded.toString("base64") === event.data &&
+      decoded.byteLength === metadata.byteLength
+    );
+  } catch {
+    return false;
+  }
+}
+function validateScope(value: LedgerScope): void {
+  validateId(value.executorId, "executorId");
+  validateId(value.rootId, "rootId");
+  validateId(value.sessionId, "sessionId");
+  validateId(value.runId, "runId");
+  if (!Number.isSafeInteger(value.generation) || value.generation < 0)
+    throw new Error("invalid generation");
+}
+function sameScopeValues(a: LedgerScope, b: LedgerScope): boolean {
+  return (
+    a.executorId === b.executorId &&
+    a.rootId === b.rootId &&
+    a.sessionId === b.sessionId &&
+    a.runId === b.runId &&
+    a.generation === b.generation
+  );
+}
 function plainObject(value: unknown): value is Record<string, unknown> {
   return (
     !!value &&
@@ -593,15 +840,6 @@ function boundedString(
 function validateId(value: unknown, name: string): asserts value is string {
   if (typeof value !== "string" || !ID_RE.test(value))
     throw new Error(`invalid ${name}`);
-}
-function validateCommandKey(
-  value: unknown,
-  maxBytes: number,
-): asserts value is string {
-  // The executor wire model deliberately permits any nonempty string here.
-  // Keep that model intact while applying this persistence boundary's byte cap.
-  if (!boundedString(value, maxBytes, true))
-    throw new Error("invalid idempotencyKey");
 }
 function nonnegative(value: unknown): value is number {
   return Number.isSafeInteger(value) && (value as number) >= 0;
@@ -646,7 +884,13 @@ function preparePrivateDatabasePath(dbPath: string): void {
     closeSync(descriptor);
   }
 }
-
+function preflightSidecars(path: string): void {
+  for (const file of [`${path}-wal`, `${path}-shm`]) {
+    const stat = lstatSync(file, { throwIfNoEntry: false });
+    if (stat && (stat.isSymbolicLink() || !stat.isFile()))
+      throw new Error(`unsafe ledger SQLite file: ${file}`);
+  }
+}
 function secureDatabaseFiles(path: string): void {
   for (const file of [path, `${path}-wal`, `${path}-shm`]) {
     const stat = lstatSync(file, { throwIfNoEntry: false });
@@ -656,6 +900,4 @@ function secureDatabaseFiles(path: string): void {
     chmodSync(file, 0o600);
   }
 }
-
-// Accommodate the repository's conventional `Sqlite*` spelling too.
 export { SQLiteCommandLedger as SqliteCommandLedger };

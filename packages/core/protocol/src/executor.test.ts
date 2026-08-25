@@ -1,10 +1,13 @@
 import { describe, expect, test } from "bun:test";
 import {
   EXECUTOR_PROTOCOL_VERSION,
+  MAX_EXECUTOR_FILE_WRITE_BYTES,
+  MAX_EXECUTOR_TERMINAL_WRITE_BYTES,
   decodeExecutorFence,
   decodeExecutorGrant,
   decodeExecutorHello,
   decodeExecutorOperation,
+  decodeExecutorServerMessage,
   type ExecutorClientMessage,
   type ExecutorOperation,
 } from "./executor";
@@ -130,6 +133,75 @@ describe("executor operations", () => {
         idempotencyKey: "write-1",
       }),
     ).toBeDefined();
+  });
+
+  test("bounds raw operation payloads by encoded bytes", () => {
+    expect(
+      decodeExecutorOperation({
+        kind: "fs.write",
+        path: "a",
+        data: "x".repeat(MAX_EXECUTOR_FILE_WRITE_BYTES + 1),
+        encoding: "utf8",
+        idempotencyKey: "write",
+      }),
+    ).toBeUndefined();
+    expect(
+      decodeExecutorOperation({
+        kind: "terminal.write",
+        terminalId: "terminal",
+        data: "x".repeat(MAX_EXECUTOR_TERMINAL_WRITE_BYTES + 1),
+        idempotencyKey: "terminal-write",
+      }),
+    ).toBeUndefined();
+    expect(
+      decodeExecutorOperation({
+        kind: "process.spawn",
+        executable: "echo",
+        args: ["x".repeat(1024 * 1024 + 1)],
+        idempotencyKey: "process",
+      }),
+    ).toBeUndefined();
+  });
+
+  test("strictly rejects malformed server receipts, outcomes, and binary events", () => {
+    const base = {
+      version: EXECUTOR_PROTOCOL_VERSION,
+      requestId: "request-1",
+    };
+    expect(
+      decodeExecutorServerMessage({
+        ...base,
+        t: "receipt_status",
+        receipt: {
+          receiptId: "receipt-1",
+          requestId: "request-1",
+          state: "failed",
+          acceptedAt: "2026-08-22T12:00:00.000Z",
+          completedAt: "2026-08-22T12:00:01.000Z",
+        },
+      }),
+    ).toBeUndefined();
+    expect(
+      decodeExecutorServerMessage({
+        ...base,
+        t: "event",
+        event: {
+          kind: "binary",
+          streamId: "stream-1",
+          sequence: 0,
+          offset: 0,
+          data: "YQ==",
+          metadata: { encoding: "base64", byteLength: 2 },
+        },
+      }),
+    ).toBeUndefined();
+    expect(
+      decodeExecutorServerMessage({
+        ...base,
+        t: "receipt",
+        receipt: { receiptId: {}, requestId: "request-1" },
+      }),
+    ).toBeUndefined();
   });
 
   test("cover each structured tool/workspace family", () => {

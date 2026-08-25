@@ -1,6 +1,8 @@
 import {
   EXECUTOR_PROTOCOL_VERSION,
   decodeExecutorHello,
+  decodeExecutorId,
+  decodeExecutorServerMessage,
   type ExecutorCapability,
   type ExecutorClientMessage,
   type ExecutorConnectionIdentity,
@@ -42,6 +44,7 @@ interface Pending {
   receipt?: ExecutorReceipt;
   outcome?: ExecutorSuccess["outcome"];
   events: ExecutorStreamEvent[];
+  timeout: ReturnType<typeof setTimeout>;
   resolve: (result: ExecutorSuccess) => void;
   reject: (error: ExecutorFailure) => void;
 }
@@ -117,6 +120,8 @@ export class RemoteExecutorConnection implements Executor {
         "remote executor pending request limit reached",
       );
     const requestId = context.requestId || this.#id();
+    if (!decodeExecutorId(requestId))
+      throw new ExecutorFailure("invalid_request", "request ID is malformed");
     if (this.#pending.has(requestId))
       throw new ExecutorFailure("conflict", "request is already pending");
     const grant =
@@ -126,6 +131,21 @@ export class RemoteExecutorConnection implements Executor {
     const deadlineMs =
       this.#options.deadlineMs?.(context) ?? Date.now() + 30_000;
     return new Promise<ExecutorSuccess>((resolve, reject) => {
+      const timeout = setTimeout(
+        () => {
+          const pending = this.#pending.get(requestId);
+          if (!pending) return;
+          this.#pending.delete(requestId);
+          pending.reject(
+            new ExecutorFailure(
+              "deadline_exceeded",
+              "remote executor did not produce a result before the deadline",
+              isMutation(operation) && pending.accepted,
+            ),
+          );
+        },
+        Math.min(2_147_483_647, Math.max(0, deadlineMs - Date.now())),
+      );
       this.#pending.set(requestId, {
         operation,
         context,
@@ -133,6 +153,7 @@ export class RemoteExecutorConnection implements Executor {
         deadlineMs,
         accepted: false,
         events: [],
+        timeout,
         resolve,
         reject,
       });
@@ -155,6 +176,7 @@ export class RemoteExecutorConnection implements Executor {
         const pending = this.#pending.get(requestId);
         if (!pending) return;
         this.#pending.delete(requestId);
+        clearTimeout(pending.timeout);
         pending.reject(disconnectedFailure(operation, pending.accepted, cause));
       });
     });
@@ -165,10 +187,12 @@ export class RemoteExecutorConnection implements Executor {
     this.#connected = false;
     this.#rejectReady(new Error("remote executor disconnected before hello"));
     for (const off of this.#off.splice(0)) off();
-    for (const pending of this.#pending.values())
+    for (const pending of this.#pending.values()) {
+      clearTimeout(pending.timeout);
       pending.reject(
         disconnectedFailure(pending.operation, pending.accepted, reason),
       );
+    }
     this.#pending.clear();
   }
 
@@ -185,51 +209,109 @@ export class RemoteExecutorConnection implements Executor {
       this.#resolveReady();
       return;
     }
-    if (!isServerMessage(value))
+    const message = decodeExecutorServerMessage(value);
+    if (!message || containsForbiddenField(message))
       return this.disconnect("malformed executor frame");
-    const pending = this.#pending.get(value.requestId);
+    const pending = this.#pending.get(message.requestId);
     if (!pending) return;
-    if (value.t === "receipt") {
+    if (message.t === "receipt") {
+      const expectedKey = isMutation(pending.operation)
+        ? pending.operation.idempotencyKey
+        : undefined;
+      if (
+        message.receipt.requestId !== message.requestId ||
+        message.receipt.idempotencyKey !== expectedKey ||
+        (message.receipt.state !== "queued" &&
+          message.receipt.state !== "running")
+      )
+        return this.disconnect("receipt identity mismatch");
       pending.accepted = true;
-      pending.receipt = value.receipt;
+      pending.receipt = message.receipt;
       return;
     }
-    if (value.t === "error") {
-      this.#pending.delete(value.requestId);
+    if (message.t === "error") {
+      this.#pending.delete(message.requestId);
+      clearTimeout(pending.timeout);
       pending.reject(
         new ExecutorFailure(
-          value.code === "unsupported_version" ? "invalid_request" : value.code,
-          value.message,
+          message.code === "unsupported_version"
+            ? "invalid_request"
+            : message.code,
+          message.message,
           isMutation(pending.operation) && pending.accepted,
         ),
       );
       return;
     }
-    if (value.t === "event") {
-      pending.events.push(value.event);
+    if (message.t === "event") {
+      const previous = pending.events
+        .filter((event) => event.streamId === message.event.streamId)
+        .at(-1);
+      if (message.event.sequence !== (previous?.sequence ?? -1) + 1)
+        return this.disconnect("event sequence mismatch");
+      pending.events.push(message.event);
+      const bytes = eventBytes(message.event);
+      if (bytes > 0)
+        await this.#credit(message.requestId, message.event.streamId, bytes);
       return;
     }
-    if (value.t === "receipt_status" && value.outcome) {
-      pending.outcome = value.outcome;
+    if (message.t === "receipt_status") {
+      const expectedKey = isMutation(pending.operation)
+        ? pending.operation.idempotencyKey
+        : undefined;
+      if (
+        message.receipt.idempotencyKey !== expectedKey ||
+        (expectedKey === undefined &&
+          message.receipt.requestId !== message.requestId)
+      )
+        return this.disconnect("receipt status identity mismatch");
+      pending.accepted = true;
+      pending.receipt = message.receipt;
+      if (
+        message.receipt.state === "failed" ||
+        message.receipt.state === "cancelled"
+      ) {
+        this.#pending.delete(message.requestId);
+        clearTimeout(pending.timeout);
+        pending.reject(
+          new ExecutorFailure(
+            message.error!.code === "unsupported_version"
+              ? "invalid_request"
+              : message.error!.code,
+            message.error!.message,
+            isMutation(pending.operation),
+          ),
+        );
+        return;
+      }
+      if (!message.outcome) return;
+      pending.outcome = message.outcome;
       const streamId =
-        "streamId" in value.outcome ? value.outcome.streamId : undefined;
-      if (streamId && !value.eventsComplete)
-        await this.#credit(value.requestId, streamId);
-      if (value.eventsComplete || !streamId)
-        this.#finish(value.requestId, pending);
+        "streamId" in message.outcome ? message.outcome.streamId : undefined;
+      if (pending.events.some((event) => event.streamId !== streamId))
+        return this.disconnect("event stream mismatch");
+      if (streamId && !message.eventsComplete)
+        await this.#credit(message.requestId, streamId);
+      if (message.eventsComplete || !streamId)
+        this.#finish(message.requestId, pending);
     }
   }
 
   #finish(requestId: string, pending: Pending): void {
     if (!pending.outcome) return;
     this.#pending.delete(requestId);
+    clearTimeout(pending.timeout);
     pending.resolve({
       outcome: pending.outcome,
       ...(pending.events.length ? { events: pending.events } : {}),
     });
   }
 
-  async #credit(requestId: string, streamId: string): Promise<void> {
+  async #credit(
+    requestId: string,
+    streamId: string,
+    bytes = this.#options.initialStreamCreditBytes ?? 4 * 1024 * 1024,
+  ): Promise<void> {
     const pending = this.#pending.get(requestId);
     if (!pending) return;
     await this.#options.transport.send({
@@ -242,10 +324,10 @@ export class RemoteExecutorConnection implements Executor {
         sessionId: pending.context.sessionId,
         runId: pending.context.runId,
         generation: pending.context.generation,
-        deadlineMs: pending.deadlineMs,
+        deadlineMs: Date.now() + 30_000,
       },
       streamId,
-      bytes: this.#options.initialStreamCreditBytes ?? 4 * 1024 * 1024,
+      bytes,
     } satisfies ExecutorClientMessage);
   }
 
@@ -265,6 +347,14 @@ function sameIdentity(
     left.capabilities.join("\0") === right.capabilities.join("\0")
   );
 }
+function eventBytes(event: ExecutorStreamEvent): number {
+  return event.kind === "text"
+    ? new TextEncoder().encode(event.data).byteLength
+    : event.kind === "binary"
+      ? event.metadata.byteLength
+      : 0;
+}
+
 function disconnectedFailure(
   operation: ExecutorOperation,
   accepted: boolean,
@@ -279,51 +369,6 @@ function disconnectedFailure(
     mutationAmbiguous,
   );
 }
-function isServerMessage(
-  value: unknown,
-): value is Exclude<ExecutorServerMessage, { t: "hello" }> {
-  if (
-    !value ||
-    typeof value !== "object" ||
-    Array.isArray(value) ||
-    containsForbiddenField(value)
-  )
-    return false;
-  const message = value as Record<string, unknown>;
-  if (
-    message.version !== EXECUTOR_PROTOCOL_VERSION ||
-    typeof message.requestId !== "string"
-  )
-    return false;
-  const common = ["t", "version", "requestId"];
-  const hasOnly = (extras: string[]) =>
-    Object.keys(message).every(
-      (key) => common.includes(key) || extras.includes(key),
-    );
-  if (message.t === "receipt")
-    return (
-      hasOnly(["receipt"]) &&
-      !!message.receipt &&
-      typeof message.receipt === "object"
-    );
-  if (message.t === "receipt_status")
-    return (
-      hasOnly(["receipt", "outcome", "eventsComplete"]) &&
-      !!message.receipt &&
-      typeof message.receipt === "object"
-    );
-  if (message.t === "event")
-    return (
-      hasOnly(["event"]) && !!message.event && typeof message.event === "object"
-    );
-  return (
-    message.t === "error" &&
-    hasOnly(["code", "message", "receipt"]) &&
-    typeof message.code === "string" &&
-    typeof message.message === "string"
-  );
-}
-
 const FORBIDDEN_FIELDS = new Set([
   "prompt",
   "model",
