@@ -17,10 +17,17 @@ import {
 } from "./models";
 
 const originalPiConfig = process.env.OPENSESSION_PI_CONFIG;
+const originalModelProvidersConfig =
+  process.env.OPENSESSION_MODEL_PROVIDERS_CONFIG;
 let pickerConfigDir = "";
 afterEach(() => {
   if (originalPiConfig === undefined) delete process.env.OPENSESSION_PI_CONFIG;
   else process.env.OPENSESSION_PI_CONFIG = originalPiConfig;
+  if (originalModelProvidersConfig === undefined)
+    delete process.env.OPENSESSION_MODEL_PROVIDERS_CONFIG;
+  else
+    process.env.OPENSESSION_MODEL_PROVIDERS_CONFIG =
+      originalModelProvidersConfig;
   refreshPickerModels();
   if (pickerConfigDir) rmSync(pickerConfigDir, { recursive: true, force: true });
   pickerConfigDir = "";
@@ -61,6 +68,37 @@ describe("Pi-only model routing", () => {
   test("resolves provider paths and Pi ids", () => {
     expect(resolveModel("pi/anthropic/claude-opus-5")?.provider).toBe("pi");
     expect(resolveModel("wafer/glm-5.2")?.id).toBe("pi/wafer/glm-5.2");
+  });
+
+  test("resolves an unambiguous provider model by its visible slug", () => {
+    pickerConfigDir = mkdtempSync(join(tmpdir(), "pi-provider-alias-"));
+    process.env.OPENSESSION_PI_CONFIG = join(pickerConfigDir, "pi.json");
+    process.env.OPENSESSION_MODEL_PROVIDERS_CONFIG = join(
+      pickerConfigDir,
+      "providers.json",
+    );
+    writeFileSync(
+      process.env.OPENSESSION_PI_CONFIG,
+      JSON.stringify({
+        enabled: true,
+        pickerModels: ["pi/openrouter/stealth/ox-alpha"],
+      }),
+    );
+    writeFileSync(
+      process.env.OPENSESSION_MODEL_PROVIDERS_CONFIG,
+      JSON.stringify({
+        enabled: true,
+        providers: { openrouter: { apiKey: "test-key" } },
+      }),
+    );
+    refreshPickerModels();
+
+    expect(resolveModel("ox-alpha")?.id).toBe(
+      "pi/openrouter/stealth/ox-alpha",
+    );
+    expect(resolveModel("Ox Alpha")?.id).toBe(
+      "pi/openrouter/stealth/ox-alpha",
+    );
   });
 
   test("selects the account pool from Pi's upstream provider", () => {

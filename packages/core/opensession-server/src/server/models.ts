@@ -1036,6 +1036,17 @@ export function resolveModel(input: string): ModelInfo | null {
         : model;
     }
   }
+  // Provider-backed picker ids can carry extra routing segments that are not
+  // part of the model's human name (`pi/openrouter/stealth/ox-alpha`). Agents
+  // naturally pass the visible final slug (`ox-alpha`) to create_session. Let
+  // that shorthand resolve when it names exactly one selectable Pi model;
+  // collisions stay rejected rather than silently choosing a provider.
+  const pickerAlias = value.replace(/\s+/g, "-");
+  const pickerMatches = KNOWN_MODELS.filter(
+    (model) =>
+      model.provider === "pi" && model.id.split("/").at(-1) === pickerAlias,
+  );
+  if (pickerMatches.length === 1) return pickerMatches[0];
   if (value.startsWith("dial/") || value.startsWith("orchestrator/")) {
     const preset = modelPreset(value);
     return preset

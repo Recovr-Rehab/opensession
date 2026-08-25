@@ -177,15 +177,6 @@ summary:focus-visible {
 	padding-top: 40px;
 }
 
-/* The two asks, side by side. They wrap rather than shrink, so a narrow rail
-   stacks them at full width instead of squeezing the labels. */
-.rail-cta {
-	display: flex;
-	flex-wrap: wrap;
-	align-items: center;
-	gap: 10px;
-}
-
 .rail-note {
 	margin: 16px 0 0;
 	color: var(--muted);
@@ -224,6 +215,350 @@ summary:focus-visible {
 	color: var(--muted);
 	font-size: 15px;
 	line-height: 1.42;
+}
+
+/* ── Setup overview ─────────────────────────────────────────────────── */
+
+.landing-setup-overview-head p {
+	margin: 9px 0 0;
+	color: var(--muted);
+	font-size: 15px;
+	line-height: 1.45;
+}
+
+.landing-setup-steps {
+	margin: 24px 0 0;
+	padding: 0;
+	list-style: none;
+}
+
+.landing-setup-steps > li {
+	display: grid;
+	min-width: 0;
+	align-items: center;
+	gap: 12px;
+	padding: 18px 0;
+	border-top: 1px solid var(--line);
+	grid-template-columns: 22px 40px minmax(0, 1fr) auto;
+}
+
+.landing-setup-step-index {
+	color: rgba(var(--ink-rgb), 0.38);
+	font-size: 12px;
+	font-variant-numeric: tabular-nums;
+	text-align: center;
+}
+
+.landing-setup-step-icon,
+.landing-setup-app-mark {
+	display: grid;
+	width: 40px;
+	height: 40px;
+	border-radius: calc(12px * var(--rf));
+	corner-shape: var(--cs);
+	background: rgba(var(--ink-rgb), 0.055);
+	color: rgba(var(--ink-rgb), 0.62);
+	place-items: center;
+}
+
+.landing-setup-step-copy {
+	display: flex;
+	min-width: 0;
+	flex-direction: column;
+	gap: 3px;
+}
+
+.landing-setup-step-copy strong,
+.landing-setup-app-copy strong,
+.landing-install-option > div > strong {
+	font-size: 15px;
+	font-weight: 600;
+	line-height: 1.3;
+}
+
+.landing-setup-step-copy > span,
+.landing-install-option > div > span {
+	color: var(--muted);
+	font-size: 13px;
+	line-height: 1.42;
+}
+
+.landing-setup-step-action,
+.landing-setup-app-action {
+	color: var(--accent-blue);
+	font-size: 12px;
+	font-weight: 600;
+	white-space: nowrap;
+}
+
+.landing-setup-step-action {
+	display: inline-flex;
+	min-height: 40px;
+	align-items: center;
+	padding-inline: 8px;
+	border-radius: calc(10px * var(--rf));
+	corner-shape: var(--cs);
+}
+
+.landing-setup-step-action:hover {
+	background: rgba(var(--ink-rgb), 0.05);
+}
+
+.landing-setup-apps {
+	display: grid;
+	min-width: 0;
+	gap: 8px;
+	margin-top: 4px;
+	grid-column: 3 / -1;
+}
+
+.landing-setup-app {
+	display: grid;
+	width: 100%;
+	min-height: 60px;
+	align-items: center;
+	gap: 12px;
+	padding: 8px 12px 8px 10px;
+	border: 0;
+	border-radius: calc(15px * var(--rf));
+	corner-shape: var(--cs);
+	background: rgba(var(--ink-rgb), 0.04);
+	color: var(--ink);
+	cursor: pointer;
+	text-align: left;
+	grid-template-columns: 40px minmax(0, 1fr) auto;
+	transition: background-color 160ms ease, transform 160ms cubic-bezier(0.23, 1, 0.32, 1);
+}
+
+.landing-setup-app:hover {
+	background: rgba(var(--ink-rgb), 0.075);
+}
+
+.landing-setup-app:active {
+	transform: scale(0.98);
+}
+
+.landing-setup-app[aria-disabled="true"] {
+	cursor: default;
+	opacity: 0.58;
+}
+
+.landing-setup-app[aria-disabled="true"]:hover {
+	background: rgba(var(--ink-rgb), 0.04);
+}
+
+.landing-setup-app[aria-disabled="true"]:active {
+	transform: none;
+}
+
+.landing-setup-app > img {
+	display: block;
+	width: 40px;
+	height: 40px;
+	border-radius: calc(10px * var(--rf));
+	corner-shape: var(--cs);
+}
+
+.landing-setup-app-mark-web {
+	background: #fff;
+	color: #111;
+	box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.08);
+}
+
+.landing-setup-app-copy {
+	display: flex;
+	min-width: 0;
+	flex-direction: column;
+	gap: 2px;
+}
+
+.landing-setup-app-copy small {
+	overflow: hidden;
+	color: var(--muted);
+	font-size: 12px;
+	font-weight: 500;
+	line-height: 1.35;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+.landing-install-option {
+	display: grid;
+	align-items: end;
+	gap: 14px;
+	padding-top: 22px;
+	border-top: 1px solid var(--line);
+	grid-template-columns: minmax(160px, 0.42fr) minmax(0, 1fr);
+}
+
+.landing-install-option > div {
+	display: flex;
+	flex-direction: column;
+	gap: 4px;
+}
+
+.landing-install-command {
+	display: grid;
+	min-width: 0;
+	min-height: 56px;
+	align-items: center;
+	gap: 10px;
+	padding: 7px 7px 7px 13px;
+	border-radius: calc(15px * var(--rf));
+	corner-shape: var(--cs);
+	background: #161719;
+	box-shadow: 0 8px 22px rgba(10, 11, 13, 0.09);
+	grid-template-columns: minmax(0, 1fr) auto;
+}
+
+.landing-install-command code {
+	display: block;
+	width: 100%;
+	min-width: 0;
+	max-width: 100%;
+	overflow: hidden;
+	color: #ededed;
+	font-family: ui-monospace, "SFMono-Regular", Consolas, monospace;
+	font-size: 11.5px;
+	line-height: 1.4;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+.landing-install-command button {
+	display: inline-flex;
+	min-width: 74px;
+	height: 42px;
+	align-items: center;
+	justify-content: center;
+	gap: 6px;
+	padding: 0 11px;
+	border: 0;
+	border-radius: calc(10px * var(--rf));
+	corner-shape: var(--cs);
+	background: #2a2c30;
+	color: #fff;
+	cursor: pointer;
+	font-size: 12px;
+	font-weight: 600;
+	transition: background-color 160ms ease, transform 160ms cubic-bezier(0.23, 1, 0.32, 1);
+}
+
+.landing-install-command button:hover {
+	background: #36383d;
+}
+
+.landing-install-command button:active {
+	transform: scale(0.96);
+}
+
+/* The browser supplies focus trapping, Escape handling and top-layer
+   placement. The panel is separate so clicking the backdrop can dismiss it. */
+.pwa-guide {
+	width: min(520px, calc(100% - 32px));
+	max-height: calc(100dvh - 32px);
+	padding: 0;
+	border: 0;
+	background: transparent;
+	color: var(--ink);
+	overflow: visible;
+}
+
+.pwa-guide::backdrop {
+	background: var(--scrim);
+	backdrop-filter: blur(8px);
+}
+
+.pwa-guide-panel {
+	position: relative;
+	padding: 30px;
+	border-radius: calc(24px * var(--rf));
+	corner-shape: var(--cs);
+	background: var(--surface);
+	box-shadow: 0 24px 70px var(--surface-shadow);
+}
+
+.pwa-guide-close {
+	display: grid;
+	position: absolute;
+	top: 14px;
+	right: 14px;
+	width: 44px;
+	height: 44px;
+	padding: 0;
+	border: 0;
+	border-radius: calc(12px * var(--rf));
+	corner-shape: var(--cs);
+	background: transparent;
+	color: var(--muted);
+	cursor: pointer;
+	place-items: center;
+}
+
+.pwa-guide-close:hover {
+	background: rgba(var(--ink-rgb), 0.06);
+	color: var(--ink);
+}
+
+.pwa-guide-mark {
+	display: grid;
+	width: 46px;
+	height: 46px;
+	margin-bottom: 20px;
+	border-radius: calc(14px * var(--rf));
+	corner-shape: var(--cs);
+	background: rgba(var(--ink-rgb), 0.055);
+	color: rgba(var(--ink-rgb), 0.68);
+	place-items: center;
+}
+
+.pwa-guide h2 {
+	margin: 0;
+	font-size: 24px;
+	font-weight: 600;
+	letter-spacing: -0.012em;
+	line-height: 1.15;
+}
+
+.pwa-guide h2 + p {
+	margin: 9px 0 20px;
+	color: var(--muted);
+	font-size: 14px;
+	line-height: 1.45;
+}
+
+.pwa-guide-options {
+	overflow: hidden;
+	border-radius: calc(16px * var(--rf));
+	corner-shape: var(--cs);
+	background: rgba(var(--ink-rgb), 0.045);
+}
+
+.pwa-guide-options > div {
+	display: flex;
+	flex-direction: column;
+	gap: 5px;
+	padding: 16px;
+}
+
+.pwa-guide-options > div + div {
+	border-top: 1px solid var(--line);
+}
+
+.pwa-guide-options strong {
+	font-size: 14px;
+	font-weight: 600;
+}
+
+.pwa-guide-options span,
+.pwa-guide-note {
+	color: var(--muted);
+	font-size: 13px;
+	line-height: 1.48;
+}
+
+.pwa-guide-note {
+	margin: 18px 2px 0;
 }
 
 /* ── The product, on its own background ──────────────────────────────── */
@@ -548,27 +883,6 @@ summary:focus-visible {
 	filter: brightness(1.06);
 }
 
-/* The second ask, under the first. Same control, no fill: it carries the same
-   height and corner as the primary so the pair reads as one stack, and only
-   the hairline tells them apart. */
-.button-secondary {
-	/* Tighter than the filled control: it carries no fill, so the same 24px of
-	   air read as a much wider object beside it. */
-	padding: 0 18px;
-	border-color: rgba(var(--ink-rgb), 0.14);
-	background: transparent;
-	color: var(--ink);
-	transition:
-		transform 160ms cubic-bezier(0.23, 1, 0.32, 1),
-		border-color 160ms ease,
-		background-color 160ms ease;
-}
-
-.button-secondary:hover {
-	border-color: rgba(var(--ink-rgb), 0.24);
-	background: rgba(var(--ink-rgb), 0.04);
-}
-
 .button:active {
 	transform: scale(0.96);
 }
@@ -643,6 +957,68 @@ summary:focus-visible {
 		font-size: 22px;
 	}
 
+	.landing-setup-steps > li {
+		align-items: start;
+		gap: 10px;
+		grid-template-columns: 18px 40px minmax(0, 1fr);
+	}
+
+	.landing-setup-step-index {
+		padding-top: 12px;
+	}
+
+	.landing-setup-step-action {
+		min-height: 36px;
+		margin: 4px 0 0 68px;
+		padding-inline: 0;
+		grid-column: 1 / -1;
+	}
+
+	.landing-setup-step-action:hover {
+		background: transparent;
+	}
+
+	.landing-setup-apps {
+		margin-top: 6px;
+		grid-column: 1 / -1;
+	}
+
+	.landing-setup-app {
+		padding-right: 10px;
+	}
+
+	.landing-setup-app-action {
+		font-size: 11px;
+	}
+
+	.landing-install-option {
+		align-items: stretch;
+		grid-template-columns: minmax(0, 1fr);
+	}
+
+	.landing-install-command code {
+		font-size: 11px;
+	}
+
+	.pwa-guide {
+		width: calc(100% - 24px);
+		max-height: calc(100dvh - 24px);
+	}
+
+	.pwa-guide-panel {
+		padding: 24px;
+		border-radius: calc(22px * var(--rf));
+	}
+
+	.pwa-guide-close {
+		top: 10px;
+		right: 10px;
+	}
+
+	.pwa-guide h2 {
+		font-size: 22px;
+	}
+
 	.demo-phone {
 		display: none;
 	}
@@ -684,6 +1060,10 @@ summary:focus-visible {
 		animation: enter 700ms cubic-bezier(0.23, 1, 0.32, 1) both;
 	}
 
+	.pwa-guide[open] .pwa-guide-panel {
+		animation: dialog-enter 220ms cubic-bezier(0.23, 1, 0.32, 1) both;
+	}
+
 	.rail > :nth-child(2) { animation-delay: 60ms; }
 	.rail > :nth-child(3) { animation-delay: 110ms; }
 	.stage { animation-delay: 150ms; }
@@ -691,6 +1071,10 @@ summary:focus-visible {
 
 @keyframes enter {
 	from { opacity: 0; transform: translateY(12px); }
+}
+
+@keyframes dialog-enter {
+	from { opacity: 0; transform: translateY(10px) scale(0.98); }
 }
 
 @media (prefers-reduced-motion: reduce) {

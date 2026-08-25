@@ -61,6 +61,10 @@ export interface PendingAsk {
 	escalationWaitStarted?: boolean;
 	answerReceived?: boolean;
 	earlyAnswer?: Record<string, string> | null;
+	/** Durable answer receipt recorded by the actor before the gateway
+	 * resolver ran. Preserved through restore so retry identity and the
+	 * committed payload survive a restart. */
+	answer?: { requestId: string; answers: Record<string, string> | null };
 	restored?: boolean;
 	/** Test/isolated-instance seam; live asks use pendingAskStorePath(). */
 	storePath?: string;
@@ -96,6 +100,7 @@ type PersistedPendingAsk = {
 	escalatedPersonName?: string;
 	answerReceived?: boolean;
 	earlyAnswer?: Record<string, string> | null;
+	answer?: { requestId: string; answers: Record<string, string> | null };
 };
 
 type PendingAskTimer = {
@@ -142,6 +147,7 @@ export function persistPendingAsks(storePath = pendingAskStorePath()): void {
 				...(ask.answerReceived
 					? { answerReceived: true, earlyAnswer: ask.earlyAnswer ?? null }
 					: {}),
+				...(ask.answer ? { answer: ask.answer } : {}),
 			});
 		}
 		writeJsonAtomic(storePath, { asks }, false, 0o600);
@@ -577,9 +583,19 @@ export function restorePendingAsks(
         ...(ask.escalatedPersonName
           ? { escalatedPersonName: ask.escalatedPersonName }
           : {}),
-        ...(ask.answerReceived
-          ? { answerReceived: true, earlyAnswer: ask.earlyAnswer ?? null }
+        ...(ask.answerReceived || ask.answer
+          ? {
+              answerReceived: true,
+              earlyAnswer:
+                ask.earlyAnswer ?? ask.answer?.answers ?? null,
+            }
           : {}),
+        ...(ask.answer ? { answer: ask.answer } : {}),
+        // A crash between the actor's durable answer commit and the gateway
+        // resolver leaves answerReceived unset; project the committed answer
+        // so recovery consumes it instead of re-asking. The answer rides the
+        // restored record so its retry identity survives the rewrite.
+        ...(ask.answer ? { answer: ask.answer } : {}),
       })),
     };
   } else {
@@ -620,12 +636,16 @@ export function restorePendingAsks(
 			...(saved.escalatedPersonName
 				? { escalatedPersonName: saved.escalatedPersonName }
 				: {}),
-			...(saved.answerReceived
+			...(saved.answerReceived || saved.answer
 				? {
 						answerReceived: true,
-						earlyAnswer: saved.earlyAnswer ?? null,
+						earlyAnswer:
+							saved.earlyAnswer ??
+							saved.answer?.answers ??
+							null,
 					}
 				: {}),
+			...(saved.answer ? { answer: saved.answer } : {}),
 			restored: true,
 			storePath,
 			resolve: (answers) =>
@@ -799,6 +819,9 @@ export function makeAskHandler(sessionId: string) {
 								earlyAnswer: existing!.earlyAnswer ?? null,
 							}
 						: {}),
+					// Preserve the durable answer receipt across adoption so retry
+					// identity and the committed payload survive the rewrite.
+					...(adopted && existing!.answer ? { answer: existing!.answer } : {}),
 					...(adopted && existing!.storePath
 						? { storePath: existing!.storePath }
 						: {}),
