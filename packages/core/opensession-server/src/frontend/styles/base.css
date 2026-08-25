@@ -2964,6 +2964,24 @@ html[data-theme="light"] span.commit-ref:hover {
 	}
 }
 
+/* A transcript block arriving at the live edge fades up into place instead of
+   popping. Applied one-shot via VirtualTranscriptList's `enter` flag (see
+   newTailBlockKeys): only blocks whose key was not mounted by the previous
+   build play it, so opening a session, hydrating history, and virtualizer
+   remounts never re-run it. Travel matches session-info-in; duration --dur
+   because a whole block arriving is anchored movement, not an in-place
+   change. prefers-reduced-motion freezes it in the global block above. */
+@keyframes transcript-enter {
+	from {
+		opacity: 0;
+		transform: translateY(8px);
+	}
+	to {
+		opacity: 1;
+		transform: translateY(0);
+	}
+}
+
 /* Edge fades so a tab clipped by the scroll boundary reads as "there's more this
    way" rather than as a broken, half-drawn tab — the strip hides its scrollbar,
    so without this an overflowing strip gives no hint that it scrolls at all.

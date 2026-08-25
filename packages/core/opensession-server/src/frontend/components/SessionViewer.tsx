@@ -1872,6 +1872,7 @@ export function SessionViewer({
 		showScrollToBottom,
 		atTop,
 		scrollToLatest,
+		glideToLatest,
 		leaveLatest,
 		endTurn,
 		relayout,
@@ -1913,8 +1914,8 @@ export function SessionViewer({
 		}
 		if (settledIndexRef.current === transcriptIndex) return;
 		settledIndexRef.current = transcriptIndex;
-		if (readFollowingLive(followingLive)) scrollToLatest("auto");
-	}, [followingLive, scrollToLatest, transcriptIndex, transcriptOutlineReady]);
+		if (readFollowingLive(followingLive)) glideToLatest();
+	}, [followingLive, glideToLatest, transcriptIndex, transcriptOutlineReady]);
 	const [viewerInput, setViewerInput] = useState<HTMLDivElement | null>(null);
 	// The focused phone composer is fixed above the keyboard, so it contributes
 	// no height to the transcript's flex layout. Publish its real height without
@@ -1947,7 +1948,11 @@ export function SessionViewer({
 		pendingIndexPositionRef.current = null;
 		const container = messagesRef.current;
 		if (pending.keepLiveEdge) {
-			scrollToLatest("auto");
+			// An index epoch restructured the outline under a following reader.
+			// Sweep to the new bottom rather than teleporting; the one case that
+			// must stay instant — first positioning on open — has nothing to
+			// sweep across, so the glide exits immediately there anyway.
+			glideToLatest();
 		} else if (container && pending.bottomGap !== null) {
 			container.scrollTop = Math.max(
 				0,
@@ -1976,9 +1981,9 @@ export function SessionViewer({
 			setTranscriptRangeRetryGeneration((generation) => generation + 1);
 		});
 	}, [
+		glideToLatest,
 		leaveLatest,
 		messagesRef,
-		scrollToLatest,
 		transcriptIndexState,
 	]);
 
@@ -3061,7 +3066,7 @@ export function SessionViewer({
 						}
 						historyRevealRef.current = null;
 					}
-					if (backgroundHistoryRef.current) scrollToLatest("auto");
+					if (backgroundHistoryRef.current) glideToLatest();
 					backgroundHistoryRef.current = false;
 					loadingHistoryRef.current = false;
 					setLoadingHistory(false);

@@ -3,13 +3,13 @@ import { readFollowingLive } from "./transcript-anchor";
 
 const viewer = await Bun.file(new URL("../SessionViewer.tsx", import.meta.url)).text();
 const settledCallback = viewer.match(
-	/const onVisibleRangesSettled = useCallback\([\s\S]*?\}, \[followingLive, scrollToLatest, transcriptIndex, transcriptOutlineReady\]\);/,
+	/const onVisibleRangesSettled = useCallback\([\s\S]*?\}, \[followingLive, glideToLatest, transcriptIndex, transcriptOutlineReady\]\);/,
 )?.[0];
 
 test("fresh transcript ranges reaffirm a cached reader's live edge", () => {
 	expect(settledCallback).toContain("settledIndexRef.current = transcriptIndex");
 	expect(settledCallback).toContain(
-		'if (readFollowingLive(followingLive)) scrollToLatest("auto")',
+		"if (readFollowingLive(followingLive)) glideToLatest()",
 	);
 });
 
