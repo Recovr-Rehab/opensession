@@ -1,5 +1,5 @@
 import { defaultRangeExtractor, useVirtualizer } from "@tanstack/react-virtual";
-import React, { useEffect, useRef } from "react";
+import React, { useEffect, useLayoutEffect, useRef } from "react";
 import {
 	loadTranscriptSizes,
 	recordTranscriptSizes,
@@ -28,6 +28,18 @@ interface Props {
 	/** Keep the live-edge tail mounted inside the same virtual coordinate space. */
 	trailingMounted: number;
 	onVisibleItems?: (items: VirtualTranscriptItem[]) => void;
+	/** Fired when the reader climbs near the top of what is mounted, so a
+	 *  caller loading history incrementally can hydrate the next page; rows
+	 *  prepended for it grow this list's scrollable area upward. */
+	onTopApproach?: () => void;
+	/** Re-evaluate top demand after the caller enables or retries loading. */
+	topApproachGeneration?: number;
+	/** Head of the incrementally hydrated range window. It can differ from the
+	 *  first item when a standalone decoration precedes loaded history. */
+	topGrowthKey?: string | null;
+	/** Loaded-row count while the head range is partial. Its final hydration can
+	 *  grow above the reader without changing topGrowthKey. */
+	topGrowthVersion?: number;
 	/** Range children reuse the renderer without nesting another virtualizer. */
 	enabled?: boolean;
 	/** Session identity for the measured-height cache. When present, block
@@ -43,6 +55,10 @@ export function VirtualTranscriptList({
 	items,
 	trailingMounted,
 	onVisibleItems,
+	onTopApproach,
+	topApproachGeneration,
+	topGrowthKey,
+	topGrowthVersion,
 	enabled = true,
 	sizeCacheKey,
 }: Props) {
@@ -89,6 +105,7 @@ export function VirtualTranscriptList({
 		instance,
 	) => shouldAdjustTranscriptScroll(item.end, instance.scrollOffset ?? 0);
 	const virtualItems = virtualizer.getVirtualItems();
+	const firstItemKey = items[0]?.key;
 	const canVirtualize =
 		enabled && typeof ResizeObserver !== "undefined" && items.length > 0;
 
@@ -173,6 +190,83 @@ export function VirtualTranscriptList({
 		};
 		return registerTranscriptVirtualNavigation(container, navigation);
 	}, [items, virtualizer]);
+
+	// Hydrating older history prepends rows above the reader. Hand the height
+	// the prepend added back to scrollTop so the block being read stays in view
+	// while the scrollable area grows above it. Tracked across commits by the
+	// range head rather than items[0], because a standalone decoration can sit
+	// before the hydrated window. A new head with the old one still present
+	// means rows were prepended; a version change finishes a partial head range.
+	// Appends and session switches must not move the reader.
+	const prependAnchorRef = useRef<{
+		growthKey: string;
+		growthVersion?: number;
+		height: number;
+	} | null>(null);
+	useLayoutEffect(() => {
+		const container =
+			rootRef.current?.closest<HTMLDivElement>(".viewer-messages");
+		if (!container) return;
+		const previous = prependAnchorRef.current;
+		const growthKey = topGrowthKey ?? items[0]?.key ?? "";
+		prependAnchorRef.current = {
+			growthKey,
+			growthVersion: topGrowthVersion,
+			height: container.scrollHeight,
+		};
+		if (!previous || !growthKey) return;
+		const prependedRange =
+			growthKey !== previous.growthKey &&
+			items.some((item) => item.key === previous.growthKey);
+		const completedPartialRange =
+			growthKey === previous.growthKey &&
+			previous.growthVersion !== undefined &&
+			topGrowthVersion !== previous.growthVersion;
+		if (!prependedRange && !completedPartialRange) return;
+		const delta = container.scrollHeight - previous.height;
+		if (delta > 0) container.scrollTop += delta;
+	});
+
+	// Growth-on-demand: report when the reader has climbed to the top of the
+	// mounted window so the caller can hydrate the next page of history. Check
+	// once on attachment too: a short opening page has no scrollbar to produce
+	// the first scroll event, and SessionViewer's generation re-arms demand once
+	// the index-position hold is ready. A cooldown keeps momentum scrolls from
+	// stacking requests; the caller deduplicates what is already in flight.
+	useEffect(() => {
+		if (!onTopApproach || !canVirtualize) return;
+		const container =
+			rootRef.current?.closest<HTMLDivElement>(".viewer-messages");
+		if (!container) return;
+		let timer: number | null = null;
+		let lastFire = Number.NEGATIVE_INFINITY;
+		const evaluate = () => {
+			if (container.scrollTop > container.clientHeight) return;
+			const now = performance.now();
+			if (now - lastFire < 900) return;
+			lastFire = now;
+			onTopApproach();
+		};
+		const onScroll = () => {
+			if (timer !== null) return;
+			timer = window.setTimeout(() => {
+				timer = null;
+				evaluate();
+			}, 100);
+		};
+		evaluate();
+		container.addEventListener("scroll", onScroll, { passive: true });
+		return () => {
+			container.removeEventListener("scroll", onScroll);
+			if (timer !== null) window.clearTimeout(timer);
+		};
+	}, [
+		onTopApproach,
+		canVirtualize,
+		topApproachGeneration,
+		items.length,
+		firstItemKey,
+	]);
 
 	useEffect(() => {
 		if (!onVisibleItems || virtualItems.length === 0) return;
