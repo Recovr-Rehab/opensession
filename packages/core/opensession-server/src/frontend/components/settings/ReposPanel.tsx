@@ -62,11 +62,10 @@ function SharedCheckoutSetting() {
 	}
 	if (!settings.repos.length) return null;
 
-	const repoNames = new Intl.ListFormat("en", {
-		style: "long",
-		type: "conjunction",
-	}).format(settings.repos.map((repo) => repo.label));
-	const groupLabel = `How sessions make changes to ${repoNames}`;
+	const repoNames = settings.repos
+		.map((repo) => `"${repo.label}"`)
+		.join(", ");
+	const groupLabel = "How sessions make changes to shared checkouts";
 	async function setMode(mode: SharedCheckoutMode) {
 		const previous = settings;
 		if (!previous || mode === previous.mode) return;
@@ -102,8 +101,8 @@ setSaving(false);
 								Local checkout
 							</span>
 							<span className="mt-1 block text-supporting text-dim">
-								Edit {repoNames} directly. Changes appear there right away, and
-								sessions share the same files.
+								Edit shared checkouts directly. Changes appear there right away,
+								and sessions share the same files.
 							</span>
 						</span>
 					</label>
