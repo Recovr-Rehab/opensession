@@ -3,11 +3,23 @@ import { BASE_PATH } from "../lib/base";
 
 export type OnboardingState = "loading" | "required" | "complete" | "failed";
 
-async function request(init?: RequestInit): Promise<boolean> {
-	const response = await fetch(`${BASE_PATH}/api/setup/onboarding`, init);
+export async function onboardingResponseCompleted(
+	response: Response,
+	missingIsComplete = false,
+): Promise<boolean> {
+	// During a source upgrade the frontend can hot-rebuild before the server is
+	// restarted with this route. That server predates the first-run flag, so it
+	// has the same semantics as a config with no flag: already onboarded.
+	if (missingIsComplete && response.status === 404) return true;
 	const body = await response.json().catch(() => null);
 	if (!response.ok) throw new Error(body?.error || `Request failed (${response.status})`);
 	return body?.completed === true;
+}
+
+async function request(init?: RequestInit): Promise<boolean> {
+	const response = await fetch(`${BASE_PATH}/api/setup/onboarding`, init);
+	const method = init?.method?.toUpperCase() ?? "GET";
+	return onboardingResponseCompleted(response, method === "GET");
 }
 
 /** The instance-wide first-run gate. Unlike a UI preference, this follows the
