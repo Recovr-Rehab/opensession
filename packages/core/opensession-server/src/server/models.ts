@@ -537,14 +537,19 @@ export function refreshPickerModels(): void {
     // entries. Surface their Pi ids whenever Pi is enabled; the models route
     // filters them to the account providers actually configured on this server.
     const bridgeModels = piEngineEnabled() ? DEFAULT_BRIDGE_PICKER_MODELS : [];
-    const ids = new Set([
+    const configuredModels = [
       ...bridgeModels,
       ...piPickerModels(),
       ...configuredPickerModels(),
-    ]);
-    for (const configured of ids) {
+    ];
+    // Deduplicate after routing: the seeded native id `gpt-5.6-sol` and a
+    // retained compatibility id `pi/openai/gpt-5.6-sol` are different input
+    // strings, but both become the same picker row.
+    const ids = new Set<string>();
+    for (const configured of configuredModels) {
       const id = toPiModel(configured);
-      if (!id || !usable(id)) continue;
+      if (!id || !usable(id) || ids.has(id)) continue;
+      ids.add(id);
       KNOWN_MODELS.push({ id, provider: "pi", label: piModelLabel(id), aliases: [] });
     }
   } catch {}

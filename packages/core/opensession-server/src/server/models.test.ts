@@ -103,4 +103,20 @@ describe("Pi-only model routing", () => {
     expect(pickerIds).toContain("pi/openai/gpt-5.6-sol");
     expect(pickerIds).toContain("pi/anthropic/claude-fable-5");
   });
+
+  test("deduplicates retired pickerModels after routing", () => {
+    pickerConfigDir = mkdtempSync(join(tmpdir(), "pi-picker-models-"));
+    const path = join(pickerConfigDir, "pi.json");
+    writeFileSync(path, JSON.stringify({
+      enabled: true,
+      pickerModels: ["pi/openai/gpt-5.6-sol"],
+    }));
+    process.env.OPENSESSION_PI_CONFIG = path;
+
+    refreshPickerModels();
+
+    expect(
+      KNOWN_MODELS.filter((model) => model.id === "pi/openai/gpt-5.6-sol"),
+    ).toHaveLength(1);
+  });
 });
