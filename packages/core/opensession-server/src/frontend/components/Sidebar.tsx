@@ -1751,12 +1751,9 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 
 	// ── Inbox rows ──────────────────────────────────────────────────────────
 	// Snoozed rows already left `focusWsRows` through placement. The remaining
-	// inbox stays stable by creation time, and pinned rows keep their dedicated
-	// quick-access copy rather than repeating directly under it.
-	const pinnedRowKeys = (new Set(pinnedWsRows.map((row) => row.key)));
-	const activeFocusWsRows = (sortInboxByCreation(
-				focusWsRows.filter((row) => !pinnedRowKeys.has(row.key)),
-			));
+	// inbox stays stable by creation time. Pinned is an orthogonal quick-access
+	// facet, so a pinned row still keeps its primary Active/status placement.
+	const activeFocusWsRows = sortInboxByCreation(focusWsRows);
 	// ── PR rows in the project lanes ────────────────────────────────────────
 	// The retired standalone Pull-requests band dissolved into the project
 	// groups: every open PR classifies into a lane (ready → Ready to merge,
