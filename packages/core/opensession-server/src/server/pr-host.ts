@@ -283,6 +283,7 @@ export const githubPrHost: PrHost = {
 				noteGhRateLimited(
 					"pr-cache-rest",
 					Number.isFinite(reset) ? reset : undefined,
+					"rest",
 				);
 			}
 			return { changed: true, cursor };

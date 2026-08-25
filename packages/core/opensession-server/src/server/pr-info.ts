@@ -52,6 +52,75 @@ export type {
   PrStaging,
 } from "./pr-contract";
 
+export interface PrAutomationDetails {
+  number: number;
+  title: string;
+  url: string;
+  state: "OPEN" | "MERGED" | "CLOSED";
+  isDraft: boolean;
+  baseRefName: string;
+  headRefName: string;
+  headRefOid: string;
+  author: string;
+}
+
+/**
+ * Minimum PR metadata needed to acknowledge and queue event-driven work.
+ * REST on purpose: review and @mention intake must remain available when the
+ * installation's independently-metered GraphQL bucket is empty.
+ */
+export async function getPrAutomationDetails(
+  selector: string,
+  repo: string = DEFAULT_REPO(),
+): Promise<PrAutomationDetails | null> {
+  if (ghRateLimited("rest")) throw new Error(GH_REST_RATE_LIMIT_MESSAGE);
+  const token = await githubToken();
+  if (!token) throw new Error("The selected GitHub bot credential is unavailable");
+  const numeric = /^\d+$/.test(selector);
+  const path = numeric
+    ? `/repos/${repo}/pulls/${selector}`
+    : `/repos/${repo}/pulls?state=all&head=${encodeURIComponent(`${repo.split("/")[0]}:${selector}`)}&per_page=1`;
+  const started = Date.now();
+  const response = await fetch(`https://api.github.com${path}`, {
+    headers: {
+      Authorization: `Bearer ${token}`,
+      Accept: "application/vnd.github+json",
+      "X-GitHub-Api-Version": "2022-11-28",
+      "User-Agent": "opensession",
+    },
+    signal: AbortSignal.timeout(10_000),
+  });
+  const body = await response.json().catch(() => null) as any;
+  console.log(
+    `[github-budget] lane=rest consumer=pr-automation status=${response.status} durationMs=${Date.now() - started} remaining=${response.headers.get("x-ratelimit-remaining") || "unknown"}`,
+  );
+  if (response.status === 404) return null;
+  if (!response.ok) {
+    const message = String(body?.message || `GitHub REST ${response.status}`);
+    if (
+      (response.status === 403 || response.status === 429) &&
+      (response.headers.get("x-ratelimit-remaining") === "0" || isGhRateLimitMsg(message))
+    ) {
+      const reset = Number(response.headers.get("x-ratelimit-reset")) * 1000;
+      noteGhRateLimited("pr-automation", Number.isFinite(reset) ? reset : undefined, "rest");
+    }
+    throw new Error(prApiErrorMessage(message));
+  }
+  const pr = Array.isArray(body) ? body[0] : body;
+  if (!pr) return null;
+  return {
+    number: pr.number,
+    title: pr.title || `PR #${pr.number}`,
+    url: pr.html_url || "",
+    state: pr.merged_at ? "MERGED" : String(pr.state || "closed").toUpperCase(),
+    isDraft: !!pr.draft,
+    baseRefName: pr.base?.ref || "",
+    headRefName: pr.head?.ref || "",
+    headRefOid: pr.head?.sha || "",
+    author: pr.user?.login || "",
+  };
+}
+
 export function latestWorkflowChecks(checks: PrCheck[]): PrCheck[] {
   const latest = new Map<string, PrCheck>();
   const statusContexts: PrCheck[] = [];
@@ -255,6 +324,21 @@ const cache = new Map<string, { data: PrDetails | null; ts: number }>();
 // GraphQL budget (2026-07-23). Action gates that must not act on stale data
 // use getPrDetailsFresh, which bypasses this cache entirely.
 const TTL = 5 * 60_000;
+// A durable snapshot is deliberately allowed to stay stale during the first
+// ten minutes of a process. Webhooks and the bulk REST/ETag cache keep
+// open/merge state coherent; delaying rich GraphQL revalidation prevents a
+// restart loop from replaying one expensive detail query per open UI/session.
+const RESTART_REFRESH_GRACE_MS = 10 * 60_000;
+const detailsSnapshotLoadedAt = Date.now();
+
+export function shouldRefreshPrDetails(
+  entryTs: number,
+  now = Date.now(),
+  loadedAt = detailsSnapshotLoadedAt,
+): boolean {
+  if (now - entryTs < TTL) return false;
+  return now - loadedAt >= RESTART_REFRESH_GRACE_MS;
+}
 
 // The details cache is snapshotted to disk (debounced) and seeded on boot —
 // without this, a restart during a GitHub outage or rate-limit window boots
@@ -441,7 +525,7 @@ export async function getPrDiff(
 ): Promise<PrDiffData | null> {
   const key = cacheKey(repo, branch);
   const hit = maxPatchBytes ? undefined : diffCache.get(key);
-  if (hit && Date.now() - hit.ts < TTL) return hit.data;
+  if (hit && !shouldRefreshPrDetails(hit.ts)) return hit.data;
   const inflightKey = maxPatchBytes ? `${key}\0bounded:${maxPatchBytes}` : key;
   const running = diffInflight.get(inflightKey);
   if (running) return running;
@@ -950,7 +1034,7 @@ export async function getPrDetails(
 ): Promise<PrDetails | null> {
   const key = cacheKey(repo, branch);
   const hit = cache.get(key);
-  if (hit && Date.now() - hit.ts < TTL) return hit.data;
+  if (hit && !shouldRefreshPrDetails(hit.ts)) return hit.data;
   // Known backoff window: serve any cached answer, and with nothing cached
   // fail fast with the friendly message rather than spawning a doomed gh call.
   if (ghRateLimited()) {
@@ -999,7 +1083,9 @@ export function isNoPrError(msg: string): boolean {
 }
 
 export const GH_RATE_LIMIT_MESSAGE =
-  "GitHub's API rate limit has been reached. Try again after it resets.";
+  "GitHub GraphQL is rate-limited. Cached pull request data will refresh after it resets.";
+export const GH_REST_RATE_LIMIT_MESSAGE =
+  "GitHub REST is rate-limited. This pull request action will retry after it resets.";
 
 export function prApiErrorMessage(msg: string): string {
   if (/rate limit/i.test(msg)) return GH_RATE_LIMIT_MESSAGE;

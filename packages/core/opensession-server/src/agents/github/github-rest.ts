@@ -90,8 +90,8 @@ export async function githubRequest<T = any>(
         (resp.headers.get("x-ratelimit-remaining") === "0" || isGhRateLimitMsg(String(error)))
       ) {
         const resetHeader = resp.headers.get("x-ratelimit-reset");
-        if (resetHeader) noteGhRateLimited("github-rest", Number(resetHeader) * 1000);
-        else noteGhRateLimited("github-rest");
+        if (resetHeader) noteGhRateLimited("github-rest", Number(resetHeader) * 1000, "rest");
+        else noteGhRateLimited("github-rest", undefined, "rest");
       }
       return { ok: false, status: resp.status, data, error };
     }

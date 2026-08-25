@@ -65,6 +65,8 @@ export interface GithubPrState {
   pendingAutoFix?: {
     requestedBy: string;
     receivedAt: string;
+    /** REST-posted receipt, reused as the run progress comment after a retry. */
+    progressCommentId?: number;
   };
   /** Review → owning-session fix rounds (handoff.ts); cleared when a review
    *  comes back satisfied or the PR closes. */
@@ -129,6 +131,8 @@ export interface GithubPrState {
     replyToId?: number;
     inline?: { path: string; line?: number; diffHunk?: string };
     receivedAt: string;
+    /** REST-posted receipt, reused as the run progress comment after a retry. */
+    progressCommentId?: number;
   };
   updatedAt: string;
 }
