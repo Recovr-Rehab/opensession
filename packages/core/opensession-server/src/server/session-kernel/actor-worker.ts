@@ -1,4 +1,8 @@
-import { SessionKernelStore } from "./store";
+import {
+  isSessionKernelCentralStoreFailure,
+  isSessionKernelInfrastructureFailure,
+  SessionKernelStoreHost,
+} from "./store-host";
 import {
   SESSION_KERNEL_ACTOR_VERSION,
   SESSION_KERNEL_MAX_RESPONSE_BYTES,
@@ -25,7 +29,7 @@ class SessionQuarantinedError extends Error {
 
 function reducerSessionId(
   command: SessionActorReducerCommand,
-  store: SessionKernelStore,
+  host: SessionKernelStoreHost,
 ): string | undefined {
   if (command.kind === "creation_event") return command.decision.sessionId;
   if (command.kind === "run_event") return command.decision.sessionId;
@@ -34,7 +38,7 @@ function reducerSessionId(
   if (command.kind === "ask")
     return "sessionId" in command.request ? command.request.sessionId : undefined;
   if ("sessionId" in command.request) return command.request.sessionId;
-  return store.outboxSessionId(command.request.id);
+  return host.outboxSessionId(command.request.id);
 }
 
 function isReadReducer(command: SessionActorReducerCommand): boolean {
@@ -47,13 +51,13 @@ function isReadReducer(command: SessionActorReducerCommand): boolean {
 function storeMutationSessionId(
   method: string,
   args: unknown[],
-  store: SessionKernelStore,
+  host: SessionKernelStoreHost,
 ): string | undefined {
   if ([
     "markProcessing", "completeCommand", "failCommand", "appendChange",
     "tombstoneSession", "clearSession", "cancelTimer", "settleTimerSuccess",
     "enqueueOutbox", "enqueueOutboxMany", "acknowledgeCommand", "noteTimerFailure",
-    "discardDeadTimer", "retryDeadTimer",
+    "discardDeadTimer", "retryDeadTimer", "quarantineSession", "releaseQuarantine",
   ].includes(method)) return typeof args[0] === "string" ? args[0] : undefined;
   if (["acceptCommand", "completeCommandDecision", "setRunState", "scheduleTimer"].includes(method)) {
     const input = args[0];
@@ -62,23 +66,12 @@ function storeMutationSessionId(
       : undefined;
   }
   if (["ackOutbox", "deferOutbox", "noteOutboxFailure", "discardDeadOutbox", "retryDeadOutbox"].includes(method))
-    return typeof args[0] === "number" ? store.outboxSessionId(args[0]) : undefined;
+    return typeof args[0] === "number" ? host.outboxSessionId(args[0]) : undefined;
   return undefined;
 }
 
-function infrastructureFailure(error: unknown): boolean {
-  const code =
-    error && typeof error === "object" && "code" in error
-      ? String((error as { code?: unknown }).code ?? "")
-      : "";
-  if (code.startsWith("SQLITE_") && !code.startsWith("SQLITE_CONSTRAINT"))
-    return true;
-  const message = error instanceof Error ? error.message : String(error);
-  return /database is locked|disk i\/o|disk full|database.*(?:malformed|corrupt)|not a database|readonly database/i.test(message);
-}
-
 export function startSessionKernelActorWorker(): void {
-  const store = new SessionKernelStore();
+  const host = new SessionKernelStoreHost();
   function post(message: KernelActorServiceResponse): void {
     self.postMessage(message);
   }
@@ -86,15 +79,20 @@ export function startSessionKernelActorWorker(): void {
   function syncStore(request: KernelActorSyncRequest): void {
     const control = new Int32Array(request.control);
     const output = new Uint8Array(request.output);
+    let store = host.central;
+    let requestSessionId: string | undefined;
     try {
       let result: unknown;
       if (request.t === "reduce") {
         const command = request.command;
-        const sessionId = reducerSessionId(command, store);
+        const sessionId = reducerSessionId(command, host);
+        requestSessionId = sessionId;
         if (!isReadReducer(command) && sessionId) {
-          const quarantine = store.quarantinedSession(sessionId);
+          const quarantine = host.quarantinedSession(sessionId);
           if (quarantine) throw new SessionQuarantinedError(sessionId, quarantine.reason);
         }
+        if (sessionId)
+          store = host.storeForSession(sessionId, !isReadReducer(command));
         if (command.kind === "creation_event")
           result = store.applyCreationEvent(command.decision);
         else if (command.kind === "run_event")
@@ -104,7 +102,7 @@ export function startSessionKernelActorWorker(): void {
           if (delivery.op === "snapshot")
             result = store.deliverySnapshot(delivery.sessionId);
           else if (delivery.op === "entries")
-            result = store.deliveryEntries(delivery.slot);
+            result = host.allDeliveryEntries(delivery.slot);
           else if (delivery.op === "request_submit_command")
             result = store.requestSubmitPromptCommand(delivery);
           else if (delivery.op === "complete_submit_command")
@@ -120,7 +118,7 @@ export function startSessionKernelActorWorker(): void {
           else if (delivery.op === "delete")
             result = store.deleteDeliverySlot(delivery.sessionId, delivery.slot);
           else if (delivery.op === "clear_slot")
-            result = store.clearDeliverySlot(delivery.slot);
+            result = host.call("clearDeliverySlot", [delivery.slot]);
           else if (delivery.op === "prepare_steer")
             result = store.prepareSteerDelivery(
               delivery.sessionId,
@@ -138,7 +136,7 @@ export function startSessionKernelActorWorker(): void {
               delivery.itemId,
             );
           else if (delivery.op === "settle_pending_steers")
-            result = store.settlePendingSteers();
+            result = host.call("settlePendingSteers", []);
           else if (delivery.op === "requeue_steers")
             result = store.requeueSteerDeliveries(
               delivery.sessionId,
@@ -187,14 +185,16 @@ export function startSessionKernelActorWorker(): void {
               core.payload,
               core.effectKey,
             );
-          else if (core.op === "ack_outbox") result = store.ackOutbox(core.id);
-          else if (core.op === "defer_outbox") result = store.deferOutbox(core.id);
+          else if (core.op === "ack_outbox")
+            result = host.call("ackOutbox", [core.id]);
+          else if (core.op === "defer_outbox")
+            result = host.call("deferOutbox", [core.id]);
           else if (core.op === "fail_outbox")
-            result = store.noteOutboxFailure(
+            result = host.call("noteOutboxFailure", [
               core.id,
               core.error,
               core.maxAttempts,
-            );
+            ]);
           else if (core.op === "clear") result = store.clearSession(core.sessionId);
           else result = store.tombstoneSession(core.sessionId);
         } else if (command.kind === "turn") {
@@ -230,7 +230,7 @@ export function startSessionKernelActorWorker(): void {
         } else {
           const ask = command.request;
           if (ask.op === "snapshot") result = store.askSnapshot(ask.sessionId);
-          else if (ask.op === "entries") result = store.askEntries();
+          else if (ask.op === "entries") result = host.allAskEntries();
           else if (ask.op === "set")
             result = store.setAskRecord(ask.sessionId, ask.value);
           else if (ask.op === "answer")
@@ -242,21 +242,21 @@ export function startSessionKernelActorWorker(): void {
             );
           else if (ask.op === "delete")
             result = store.deleteAskRecord(ask.sessionId);
-          else result = store.clearAskRecords();
+          else result = host.call("clearAskRecords", []);
         }
       } else {
-        const sessionId = storeMutationSessionId(request.method, request.args, store);
-        if (sessionId) {
-          const quarantine = store.quarantinedSession(sessionId);
+        const sessionId = storeMutationSessionId(request.method, request.args, host);
+        requestSessionId = sessionId;
+        if (
+          sessionId &&
+          request.method !== "quarantineSession" &&
+          request.method !== "releaseQuarantine"
+        ) {
+          const quarantine = host.quarantinedSession(sessionId);
           if (quarantine)
             throw new SessionQuarantinedError(sessionId, quarantine.reason);
         }
-        const method = (
-          store as unknown as Record<string, (...args: unknown[]) => unknown>
-        )[request.method];
-        if (typeof method !== "function")
-          throw new Error(`Unknown store method ${request.method}`);
-        result = method.apply(store, request.args);
+        result = host.call(request.method, request.args);
       }
       const bytes = new TextEncoder().encode(
         JSON.stringify({ ok: true, result }),
@@ -276,17 +276,28 @@ export function startSessionKernelActorWorker(): void {
       let failStop = false;
       let responseCode: "actor_fatal" | "session_quarantined" | undefined;
       let responseSessionId: string | undefined;
-      if (request.t === "reduce" && isCriticalSettlementCommand(request.command)) {
-        const sessionId = reducerSessionId(request.command, store);
-        if (!sessionId || infrastructureFailure(error)) {
+      const sessionId = requestSessionId;
+      const infrastructure = isSessionKernelInfrastructureFailure(error);
+      const critical = request.t === "reduce" &&
+        isCriticalSettlementCommand(request.command);
+      if (infrastructure || critical) {
+        if (
+          !sessionId ||
+          isSessionKernelCentralStoreFailure(error) ||
+          (infrastructure && !host.isIsolated(sessionId))
+        ) {
           failStop = true;
           responseCode = "actor_fatal";
         } else {
           try {
-            store.quarantineSession(
+            const commandKind = request.t === "reduce"
+              ? `${request.command.kind}:${"request" in request.command ? request.command.request.op : "event"}`
+              : `store:${request.method}`;
+            host.quarantineSession(
               sessionId,
               error instanceof Error ? error.message : String(error),
-              `${request.command.kind}:${"request" in request.command ? request.command.request.op : "event"}`,
+              commandKind,
+              infrastructure,
             );
             responseCode = "session_quarantined";
             responseSessionId = sessionId;
@@ -375,24 +386,54 @@ export function startSessionKernelActorWorker(): void {
         });
       return;
     }
-    if (request.t === "acknowledge") {
-      store.acknowledgeCommand(request.sessionId, request.requestId);
-      post({ t: "acknowledge_result", rpcId: request.rpcId });
-    } else if (request.t === "stats") {
-      post({ t: "stats_result", rpcId: request.rpcId, stats: store.stats() });
-    } else if (request.t === "maintain") {
-      const pending = store.maintain();
-      post({ t: "maintain_result", rpcId: request.rpcId, pending });
-    } else if (request.t === "runtime_work") {
+    try {
+      if (request.t === "acknowledge") {
+        const quarantine = host.quarantinedSession(request.sessionId);
+        if (quarantine)
+          throw new SessionQuarantinedError(request.sessionId, quarantine.reason);
+        host.call("acknowledgeCommand", [request.sessionId, request.requestId]);
+        post({ t: "acknowledge_result", rpcId: request.rpcId });
+      } else if (request.t === "stats") {
+        post({ t: "stats_result", rpcId: request.rpcId, stats: host.stats() });
+      } else if (request.t === "maintain") {
+        const pending = host.maintain();
+        post({ t: "maintain_result", rpcId: request.rpcId, pending });
+      } else if (request.t === "runtime_work") {
+        post({
+          t: "runtime_work_result",
+          rpcId: request.rpcId,
+          ...host.runtimeWork(
+            request.now,
+            request.timerKinds,
+            request.effectKinds,
+            request.limit,
+          ),
+        });
+      }
+    } catch (error) {
+      const sessionId = request.t === "acknowledge" ? request.sessionId : undefined;
+      const isolatedFailure =
+        !!sessionId &&
+        isSessionKernelInfrastructureFailure(error) &&
+        host.isIsolated(sessionId);
+      if (isolatedFailure) {
+        try {
+          host.quarantineSession(
+            sessionId,
+            error instanceof Error ? error.message : String(error),
+            "command:acknowledge",
+            true,
+          );
+        } catch {
+          queueMicrotask(() => self.close());
+        }
+      } else if (!(error instanceof SessionQuarantinedError)) {
+        queueMicrotask(() => self.close());
+      }
       post({
-        t: "runtime_work_result",
+        t: "error",
         rpcId: request.rpcId,
-        timers: store.dueTimers(request.now, request.limit, request.timerKinds),
-        outbox: store.pendingOutbox(
-          request.now,
-          request.limit,
-          request.effectKinds,
-        ),
+        error: error instanceof Error ? error.message : String(error),
       });
     }
   };
