@@ -316,10 +316,35 @@ describe("runner Executor agent", () => {
       },
       operation: { kind: "fs.read", path: "x", prompt: "forbidden" },
     });
+    control.send({
+      t: "execute",
+      version: EXECUTOR_PROTOCOL_VERSION,
+      requestId: "missing-key",
+      grant,
+      fence: {
+        rootId: "root-1",
+        sessionId: "session-1",
+        runId: "run-1",
+        generation: 1,
+        deadlineMs: Date.now() + 10_000,
+      },
+      operation: {
+        kind: "fs.write",
+        path: "x",
+        data: "x",
+        encoding: "utf8",
+      },
+    });
     await tick();
     expect(
       daemon.messages.some(
         (message: any) => message.t === "error" && message.requestId === "bad",
+      ),
+    ).toBe(true);
+    expect(
+      daemon.messages.some(
+        (message: any) =>
+          message.t === "error" && message.requestId === "missing-key",
       ),
     ).toBe(true);
   });

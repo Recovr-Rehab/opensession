@@ -78,6 +78,34 @@ describe("ExecutorBroker", () => {
     expect(calls).toBe(2);
   });
 
+  test("rejects malformed mutation and read payloads before dispatch", async () => {
+    let calls = 0;
+    const { broker, grant } = setup({
+      execute: async () => {
+        calls++;
+        return { outcome: { kind: "fs.changed", path: "a" } };
+      },
+    });
+    const missingKey = await broker.dispatch(
+      request(grant, {
+        kind: "fs.write",
+        path: "a",
+        data: "x",
+        encoding: "utf8",
+      } as unknown as ExecutorOperation),
+    );
+    const strayKey = await broker.dispatch(
+      request(grant, {
+        kind: "fs.read",
+        path: "a",
+        idempotencyKey: "stray",
+      } as unknown as ExecutorOperation),
+    );
+    expect(missingKey.ok).toBe(false);
+    expect(strayKey.ok).toBe(false);
+    expect(calls).toBe(0);
+  });
+
   test("replays a successful mutation receipt without executing twice", async () => {
     let calls = 0;
     const { broker, grant } = setup({
@@ -120,6 +148,25 @@ describe("ExecutorBroker", () => {
     }
     expect(replay).toEqual(first);
     expect(calls).toBe(1);
+  });
+
+  test("marks typed Executor mutation failures ambiguous after acceptance", async () => {
+    const { broker, grant } = setup({
+      execute: async () => {
+        throw new ExecutorFailure("operation_failed", "partial write");
+      },
+    });
+    const result = await broker.dispatch(
+      request(grant, {
+        kind: "fs.write",
+        path: "a",
+        data: "x",
+        encoding: "utf8",
+        idempotencyKey: "partial",
+      }),
+    );
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.error.ambiguous).toBe(true);
   });
 
   test("rejects reuse of an idempotency key for a different mutation", async () => {

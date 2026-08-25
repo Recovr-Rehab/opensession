@@ -1,4 +1,5 @@
 import { spawn, type ChildProcess } from "node:child_process";
+import { O_CREAT, O_NOFOLLOW, O_RDWR, O_TRUNC, O_WRONLY } from "node:constants";
 import {
   lstat,
   mkdir,
@@ -9,7 +10,6 @@ import {
   rename,
   rm,
   stat,
-  writeFile,
 } from "node:fs/promises";
 import { isAbsolute, relative, resolve, sep } from "node:path";
 import type {
@@ -284,16 +284,16 @@ export class LocalExecutor implements Executor {
       operation.encoding === "base64"
         ? Buffer.from(operation.data, "base64")
         : Buffer.from(operation.data, "utf8");
-    if (operation.create === false) {
-      const handle = await open(target, "r+");
-      try {
-        await handle.truncate(0);
-        await handle.writeFile(data);
-      } finally {
-        await handle.close();
-      }
-    } else {
-      await writeFile(target, data, { flag: "w" });
+    const flags =
+      operation.create === false
+        ? O_RDWR | O_NOFOLLOW
+        : O_WRONLY | O_CREAT | O_TRUNC | O_NOFOLLOW;
+    const handle = await open(target, flags, 0o666);
+    try {
+      if (operation.create === false) await handle.truncate(0);
+      await handle.writeFile(data);
+    } finally {
+      await handle.close();
     }
     await this.#existingPath(operation.path, true);
     return {
@@ -516,7 +516,22 @@ export class LocalExecutor implements Executor {
     if (lexical === this.#root) return lexical;
     await this.#assertParentConfined(lexical);
     try {
-      await this.#assertRealConfined(await realpath(lexical));
+      const targetStat = await lstat(lexical);
+      if (targetStat.isSymbolicLink()) {
+        try {
+          await this.#assertRealConfined(await realpath(lexical));
+        } catch (cause) {
+          if ((cause as NodeJS.ErrnoException)?.code === "ENOENT") {
+            throw new ExecutorFailure(
+              "invalid_request",
+              "dangling symlink write targets are not allowed",
+            );
+          }
+          throw cause;
+        }
+      } else {
+        await this.#assertRealConfined(await realpath(lexical));
+      }
     } catch (cause) {
       if ((cause as NodeJS.ErrnoException)?.code !== "ENOENT") throw cause;
     }

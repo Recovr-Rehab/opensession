@@ -200,6 +200,261 @@ export type ExecutorOperation =
   | ExecutorServiceOperation
   | ExecutorPortalOperation;
 
+const operationKeys = (value: Record<string, unknown>, keys: string[]) =>
+  Object.keys(value).every((key) => keys.includes(key));
+const nonemptyString = (value: unknown): value is string =>
+  typeof value === "string" && value.length > 0;
+const optionalBoolean = (value: unknown) =>
+  value === undefined || typeof value === "boolean";
+const optionalString = (value: unknown) =>
+  value === undefined || typeof value === "string";
+const nonnegativeInteger = (value: unknown) =>
+  Number.isSafeInteger(value) && (value as number) >= 0;
+const positiveInteger = (value: unknown) =>
+  Number.isSafeInteger(value) && (value as number) > 0;
+const mutationKey = (value: Record<string, unknown>) =>
+  nonemptyString(value.idempotencyKey);
+
+/** Strictly decode the untrusted operation union before classifying retries. */
+export function decodeExecutorOperation(
+  input: unknown,
+): ExecutorOperation | undefined {
+  if (!input || typeof input !== "object" || Array.isArray(input))
+    return undefined;
+  const value = input as Record<string, unknown>;
+  switch (value.kind) {
+    case "fs.read":
+      if (
+        operationKeys(value, ["kind", "path", "offset", "length"]) &&
+        nonemptyString(value.path) &&
+        (value.offset === undefined || nonnegativeInteger(value.offset)) &&
+        (value.length === undefined || nonnegativeInteger(value.length))
+      )
+        return value as ExecutorOperation;
+      break;
+    case "fs.list":
+      if (
+        operationKeys(value, ["kind", "path", "recursive"]) &&
+        nonemptyString(value.path) &&
+        optionalBoolean(value.recursive)
+      )
+        return value as ExecutorOperation;
+      break;
+    case "fs.stat":
+      if (operationKeys(value, ["kind", "path"]) && nonemptyString(value.path))
+        return value as ExecutorOperation;
+      break;
+    case "fs.write":
+      if (
+        operationKeys(value, [
+          "kind",
+          "path",
+          "data",
+          "encoding",
+          "create",
+          "idempotencyKey",
+        ]) &&
+        nonemptyString(value.path) &&
+        typeof value.data === "string" &&
+        (value.encoding === "utf8" || value.encoding === "base64") &&
+        optionalBoolean(value.create) &&
+        mutationKey(value)
+      )
+        return value as ExecutorOperation;
+      break;
+    case "fs.mkdir":
+    case "fs.remove":
+      if (
+        operationKeys(value, ["kind", "path", "recursive", "idempotencyKey"]) &&
+        nonemptyString(value.path) &&
+        optionalBoolean(value.recursive) &&
+        mutationKey(value)
+      )
+        return value as ExecutorOperation;
+      break;
+    case "fs.move":
+      if (
+        operationKeys(value, [
+          "kind",
+          "from",
+          "to",
+          "replace",
+          "idempotencyKey",
+        ]) &&
+        nonemptyString(value.from) &&
+        nonemptyString(value.to) &&
+        optionalBoolean(value.replace) &&
+        mutationKey(value)
+      )
+        return value as ExecutorOperation;
+      break;
+    case "process.spawn":
+      if (
+        operationKeys(value, [
+          "kind",
+          "executable",
+          "args",
+          "cwd",
+          "stdin",
+          "idempotencyKey",
+        ]) &&
+        nonemptyString(value.executable) &&
+        Array.isArray(value.args) &&
+        value.args.every((arg) => typeof arg === "string") &&
+        optionalString(value.cwd) &&
+        (value.stdin === undefined ||
+          value.stdin === "pipe" ||
+          value.stdin === "closed") &&
+        mutationKey(value)
+      )
+        return value as ExecutorOperation;
+      break;
+    case "process.status":
+      if (
+        operationKeys(value, ["kind", "processId"]) &&
+        nonemptyString(value.processId)
+      )
+        return value as ExecutorOperation;
+      break;
+    case "process.signal":
+      if (
+        operationKeys(value, [
+          "kind",
+          "processId",
+          "signal",
+          "idempotencyKey",
+        ]) &&
+        nonemptyString(value.processId) &&
+        (value.signal === "interrupt" ||
+          value.signal === "terminate" ||
+          value.signal === "kill") &&
+        mutationKey(value)
+      )
+        return value as ExecutorOperation;
+      break;
+    case "terminal.open":
+      if (
+        operationKeys(value, [
+          "kind",
+          "executable",
+          "args",
+          "cwd",
+          "columns",
+          "rows",
+          "idempotencyKey",
+        ]) &&
+        optionalString(value.executable) &&
+        (value.args === undefined ||
+          (Array.isArray(value.args) &&
+            value.args.every((arg) => typeof arg === "string"))) &&
+        optionalString(value.cwd) &&
+        positiveInteger(value.columns) &&
+        positiveInteger(value.rows) &&
+        mutationKey(value)
+      )
+        return value as ExecutorOperation;
+      break;
+    case "terminal.write":
+      if (
+        operationKeys(value, [
+          "kind",
+          "terminalId",
+          "data",
+          "idempotencyKey",
+        ]) &&
+        nonemptyString(value.terminalId) &&
+        typeof value.data === "string" &&
+        mutationKey(value)
+      )
+        return value as ExecutorOperation;
+      break;
+    case "terminal.resize":
+      if (
+        operationKeys(value, [
+          "kind",
+          "terminalId",
+          "columns",
+          "rows",
+          "idempotencyKey",
+        ]) &&
+        nonemptyString(value.terminalId) &&
+        positiveInteger(value.columns) &&
+        positiveInteger(value.rows) &&
+        mutationKey(value)
+      )
+        return value as ExecutorOperation;
+      break;
+    case "terminal.close":
+      if (
+        operationKeys(value, ["kind", "terminalId", "idempotencyKey"]) &&
+        nonemptyString(value.terminalId) &&
+        mutationKey(value)
+      )
+        return value as ExecutorOperation;
+      break;
+    case "service.start":
+      if (
+        operationKeys(value, [
+          "kind",
+          "name",
+          "executable",
+          "args",
+          "cwd",
+          "idempotencyKey",
+        ]) &&
+        nonemptyString(value.name) &&
+        nonemptyString(value.executable) &&
+        Array.isArray(value.args) &&
+        value.args.every((arg) => typeof arg === "string") &&
+        optionalString(value.cwd) &&
+        mutationKey(value)
+      )
+        return value as ExecutorOperation;
+      break;
+    case "service.status":
+      if (
+        operationKeys(value, ["kind", "serviceId"]) &&
+        nonemptyString(value.serviceId)
+      )
+        return value as ExecutorOperation;
+      break;
+    case "service.stop":
+      if (
+        operationKeys(value, ["kind", "serviceId", "idempotencyKey"]) &&
+        nonemptyString(value.serviceId) &&
+        mutationKey(value)
+      )
+        return value as ExecutorOperation;
+      break;
+    case "portal.open":
+      if (
+        operationKeys(value, ["kind", "name", "port", "idempotencyKey"]) &&
+        nonemptyString(value.name) &&
+        positiveInteger(value.port) &&
+        (value.port as number) <= 65_535 &&
+        mutationKey(value)
+      )
+        return value as ExecutorOperation;
+      break;
+    case "portal.status":
+      if (
+        operationKeys(value, ["kind", "portalId"]) &&
+        nonemptyString(value.portalId)
+      )
+        return value as ExecutorOperation;
+      break;
+    case "portal.close":
+      if (
+        operationKeys(value, ["kind", "portalId", "idempotencyKey"]) &&
+        nonemptyString(value.portalId) &&
+        mutationKey(value)
+      )
+        return value as ExecutorOperation;
+      break;
+  }
+  return undefined;
+}
+
 export type ExecutorReceiptState =
   "queued" | "running" | "succeeded" | "failed" | "cancelled";
 
@@ -310,7 +565,8 @@ export type ExecutorErrorCode =
   | "conflict"
   | "cancelled"
   | "operation_failed"
-  | "executor_busy";
+  | "executor_busy"
+  | "unsupported";
 
 export type ExecutorServerMessage =
   | (ExecutorMessageBase &

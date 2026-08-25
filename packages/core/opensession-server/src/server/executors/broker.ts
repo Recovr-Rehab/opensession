@@ -1,6 +1,9 @@
-import type {
-  ExecutorOperation,
-  ExecutorReceipt,
+import {
+  decodeExecutorFence,
+  decodeExecutorGrant,
+  decodeExecutorOperation,
+  type ExecutorOperation,
+  type ExecutorReceipt,
 } from "@tellahq/opensession-protocol/executor";
 import {
   ExecutorFailure,
@@ -65,7 +68,8 @@ export class ExecutorBroker {
     request: ExecutorDispatchRequest,
   ): Promise<ExecutorDispatchResult> {
     try {
-      this.#validateRequest(request);
+      const operation = this.#validateRequest(request);
+      const validatedRequest = { ...request, operation };
       this.grants.validate(request.grant, request.fence);
       const implementationId = this.#roots.get(request.fence.rootId);
       if (!implementationId)
@@ -80,50 +84,53 @@ export class ExecutorBroker {
           "bound executor implementation is unavailable",
         );
 
-      if (isMutation(request.operation)) {
+      if (isMutation(operation)) {
         return await this.#dispatchMutation(
           implementation,
-          request,
-          request.operation,
+          validatedRequest,
+          operation,
         );
       }
-      return await this.#dispatchRead(implementation, request);
+      if (isReadOperation(operation)) {
+        return await this.#dispatchRead(implementation, validatedRequest);
+      }
+      throw new ExecutorFailure(
+        "invalid_request",
+        "executor operation kind is unknown",
+      );
     } catch (cause) {
       return { ok: false, error: normalizeFailure(cause) };
     }
   }
 
-  #validateRequest(request: ExecutorDispatchRequest): void {
+  #validateRequest(request: ExecutorDispatchRequest): ExecutorOperation {
     if (typeof request.requestId !== "string" || !request.requestId) {
       throw new ExecutorFailure("invalid_request", "requestId is required");
     }
-    const fence = request.fence;
     if (
-      !fence ||
-      typeof fence.rootId !== "string" ||
-      !fence.rootId ||
-      typeof fence.sessionId !== "string" ||
-      !fence.sessionId ||
-      typeof fence.runId !== "string" ||
-      !fence.runId ||
-      !Number.isSafeInteger(fence.generation) ||
-      fence.generation < 0 ||
-      !Number.isSafeInteger(fence.deadlineMs)
+      request.fence &&
+      Number.isSafeInteger(request.fence.deadlineMs) &&
+      request.fence.deadlineMs <= this.#now()
     ) {
-      throw new ExecutorFailure("invalid_request", "executor fence is invalid");
-    }
-    if (fence.deadlineMs <= this.#now()) {
       throw new ExecutorFailure(
         "deadline_exceeded",
         "executor request deadline has passed",
       );
     }
-    if (!request.operation || typeof request.operation.kind !== "string") {
+    if (!decodeExecutorFence(request.fence, this.#now())) {
+      throw new ExecutorFailure("invalid_request", "executor fence is invalid");
+    }
+    if (!decodeExecutorGrant(request.grant)) {
+      throw new ExecutorFailure("invalid_grant", "executor grant is invalid");
+    }
+    const operation = decodeExecutorOperation(request.operation);
+    if (!operation) {
       throw new ExecutorFailure(
         "invalid_request",
         "executor operation is invalid",
       );
     }
+    return operation;
   }
 
   async #dispatchRead(
@@ -140,11 +147,7 @@ export class ExecutorBroker {
         return { ok: true, ...success };
       } catch (cause) {
         lastFailure = normalizeFailure(cause);
-        if (
-          !isReadOperation(request.operation) ||
-          !isRetryableReadFailure(lastFailure)
-        )
-          break;
+        if (!isRetryableReadFailure(lastFailure)) break;
       }
     }
     return {
@@ -262,7 +265,10 @@ function normalizeFailure(
   cause: unknown,
   ambiguousUnknown = false,
 ): ExecutorFailure {
-  if (cause instanceof ExecutorFailure) return cause;
+  if (cause instanceof ExecutorFailure) {
+    if (!ambiguousUnknown || cause.ambiguous) return cause;
+    return new ExecutorFailure(cause.code, cause.message, true);
+  }
   return new ExecutorFailure(
     "operation_failed",
     cause instanceof Error ? cause.message : String(cause),

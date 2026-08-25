@@ -4,6 +4,7 @@ import {
   decodeExecutorFence,
   decodeExecutorGrant,
   decodeExecutorHello,
+  decodeExecutorOperation,
   type ExecutorClientMessage,
   type ExecutorOperation,
 } from "./executor";
@@ -104,6 +105,33 @@ describe("executor authority fencing", () => {
 });
 
 describe("executor operations", () => {
+  test("rejects malformed operations before retry classification", () => {
+    expect(
+      decodeExecutorOperation({
+        kind: "fs.write",
+        path: "a",
+        data: "x",
+        encoding: "utf8",
+      }),
+    ).toBeUndefined();
+    expect(
+      decodeExecutorOperation({
+        kind: "fs.read",
+        path: "a",
+        idempotencyKey: "stray",
+      }),
+    ).toBeUndefined();
+    expect(
+      decodeExecutorOperation({
+        kind: "fs.write",
+        path: "a",
+        data: "x",
+        encoding: "utf8",
+        idempotencyKey: "write-1",
+      }),
+    ).toBeDefined();
+  });
+
   test("cover each structured tool/workspace family", () => {
     const operations: ExecutorOperation[] = [
       { kind: "fs.read", path: "src/index.ts" },

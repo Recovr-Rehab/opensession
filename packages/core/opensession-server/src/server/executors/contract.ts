@@ -69,12 +69,38 @@ export type ExecutorDispatchResult =
     }
   | { ok: false; error: ExecutorFailure; receipt?: ExecutorReceipt };
 
+const mutationKinds = new Set<ExecutorOperation["kind"]>([
+  "fs.write",
+  "fs.mkdir",
+  "fs.remove",
+  "fs.move",
+  "process.spawn",
+  "process.signal",
+  "terminal.open",
+  "terminal.write",
+  "terminal.resize",
+  "terminal.close",
+  "service.start",
+  "service.stop",
+  "portal.open",
+  "portal.close",
+]);
+
+const readKinds = new Set<ExecutorOperation["kind"]>([
+  "fs.read",
+  "fs.list",
+  "fs.stat",
+  "process.status",
+  "service.status",
+  "portal.status",
+]);
+
 export function isMutation(
   operation: ExecutorOperation,
 ): operation is ExecutorOperation & { idempotencyKey: string } {
-  return "idempotencyKey" in operation;
+  return mutationKinds.has(operation.kind);
 }
 
 export function isReadOperation(operation: ExecutorOperation): boolean {
-  return !isMutation(operation);
+  return readKinds.has(operation.kind);
 }

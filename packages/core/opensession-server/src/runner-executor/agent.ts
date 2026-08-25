@@ -2,6 +2,7 @@ import {
   EXECUTOR_PROTOCOL_VERSION,
   decodeExecutorFence,
   decodeExecutorGrant,
+  decodeExecutorOperation,
   type ExecutorClientMessage,
   type ExecutorConnectionIdentity,
   type ExecutorErrorCode,
@@ -457,15 +458,15 @@ function decodeWorkMessage(
   const grant = decodeExecutorGrant(value.grant);
   const fence = decodeExecutorFence(value.fence, now);
   if (!grant || !fence) return undefined;
-  if (
-    value.t === "execute" &&
-    isObject(value.operation) &&
-    typeof value.operation.kind === "string"
-  )
-    return { ...value, grant, fence } as Exclude<
-      ExecutorClientMessage,
-      { t: "hello" }
-    >;
+  if (value.t === "execute") {
+    const operation = decodeExecutorOperation(value.operation);
+    if (operation) {
+      return { ...value, grant, fence, operation } as Exclude<
+        ExecutorClientMessage,
+        { t: "hello" }
+      >;
+    }
+  }
   if (value.t === "receipt_status" && typeof value.receiptId === "string")
     return { ...value, grant, fence } as Exclude<
       ExecutorClientMessage,

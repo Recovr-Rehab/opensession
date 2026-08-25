@@ -113,6 +113,7 @@ describe("LocalExecutor", () => {
     roots.push(outside);
     await writeFile(join(outside, "secret"), "secret");
     await symlink(outside, join(root, "escape"));
+    await symlink(join(outside, "dangling.txt"), join(root, "dangling"));
 
     for (const operation of [
       { kind: "fs.read", path: "../secret" },
@@ -125,10 +126,18 @@ describe("LocalExecutor", () => {
         encoding: "utf8",
         idempotencyKey: "escape-write",
       },
+      {
+        kind: "fs.write",
+        path: "dangling",
+        data: "bad",
+        encoding: "utf8",
+        idempotencyKey: "dangling-write",
+      },
     ] satisfies ExecutorOperation[]) {
       await expect(execute(executor, operation)).rejects.toThrow();
     }
     await expect(readFile(join(outside, "new/deep.txt"))).rejects.toThrow();
+    await expect(readFile(join(outside, "dangling.txt"))).rejects.toThrow();
   });
 
   test("spawns native argv without a shell and reports process output", async () => {
