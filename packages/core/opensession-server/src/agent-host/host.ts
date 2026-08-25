@@ -1,4 +1,6 @@
-import { createServer, type Server, type Socket } from "node:net";
+import { chmod, lstat, mkdir, unlink } from "node:fs/promises";
+import { dirname, isAbsolute, parse, resolve } from "node:path";
+import { createServer, connect, type Server, type Socket } from "node:net";
 import {
   AGENT_HOST_PROTOCOL_VERSION,
   decodeAgentHostHello,
@@ -26,6 +28,10 @@ export interface AgentHostOptions {
   socketPath: string;
   createDriver: AgentTurnDriverFactory;
   maxFrameBytes?: number;
+  cancellationDeadlineMs?: number;
+  livenessProbeTimeoutMs?: number;
+  setTimeout?: typeof globalThis.setTimeout;
+  clearTimeout?: typeof globalThis.clearTimeout;
 }
 
 interface ConnectionState {
@@ -42,6 +48,12 @@ interface ActiveTurn {
   requestId: string;
   pendingAppendId?: string;
   askIds: Set<string>;
+  abandonTimer?: ReturnType<typeof setTimeout>;
+}
+
+interface SocketIdentity {
+  dev: number;
+  ino: number;
 }
 
 type DriverEmission =
@@ -247,7 +259,9 @@ function decodeMessage(value: unknown): AgentHostClientMessage | undefined {
 export class AgentHost {
   private server?: Server;
   private starting?: Promise<void>;
+  private stopping?: Promise<void>;
   private active?: ActiveTurn;
+  private socketIdentity?: SocketIdentity;
   private readonly connections = new Set<ConnectionState>();
 
   constructor(private readonly options: AgentHostOptions) {}
@@ -255,38 +269,189 @@ export class AgentHost {
   start(): Promise<void> {
     if (this.server?.listening) return Promise.resolve();
     if (this.starting) return this.starting;
-    const server = createServer((socket) => this.accept(socket));
-    this.server = server;
-    this.starting = new Promise<void>((resolve, reject) => {
-      const onError = (error: Error) => {
-        this.server = undefined;
-        reject(error);
-      };
-      server.once("error", onError);
-      server.listen(this.options.socketPath, () => {
-        server.off("error", onError);
-        resolve();
-      });
-    }).finally(() => {
+    if (this.stopping) throw new Error("Agent Host is stopping");
+    this.starting = this.startListening().finally(() => {
       this.starting = undefined;
     });
     return this.starting;
   }
 
-  async stop(): Promise<void> {
+  stop(): Promise<void> {
+    if (this.stopping) return this.stopping;
+    this.stopping = this.stopInternal().finally(() => {
+      this.stopping = undefined;
+    });
+    return this.stopping;
+  }
+
+  private async startListening(): Promise<void> {
+    await this.prepareSocketPath();
+    for (let attempt = 0; attempt < 2; attempt += 1) {
+      const server = createServer((socket) => this.accept(socket));
+      this.server = server;
+      try {
+        await new Promise<void>((resolveListen, rejectListen) => {
+          const onError = (error: Error) => rejectListen(error);
+          server.once("error", onError);
+          server.listen(this.options.socketPath, () => {
+            server.off("error", onError);
+            resolveListen();
+          });
+        });
+        const socketStat = await lstat(this.options.socketPath);
+        if (!socketStat.isSocket() || socketStat.isSymbolicLink())
+          throw new Error("Agent Host socket path is unsafe");
+        await chmod(this.options.socketPath, 0o600);
+        this.socketIdentity = { dev: socketStat.dev, ino: socketStat.ino };
+        return;
+      } catch (error) {
+        this.server = undefined;
+        if (server.listening)
+          await new Promise<void>((resolveClose) =>
+            server.close(() => resolveClose()),
+          );
+        const code = (error as NodeJS.ErrnoException).code;
+        if (code !== "EADDRINUSE" || attempt > 0) throw error;
+        await this.removeStaleSocket();
+      }
+    }
+  }
+
+  private async stopInternal(): Promise<void> {
     await this.starting?.catch(() => undefined);
     const server = this.server;
-    if (!server) return;
     this.server = undefined;
     const active = this.active;
     if (active) {
-      this.active = undefined;
-      await Promise.resolve(active.driver.shutdown()).catch(() => undefined);
+      this.fence(active);
+      this.invokeDriver(() => active.driver.cancel());
+      this.invokeDriver(() => active.driver.shutdown());
     }
-    for (const connection of this.connections) connection.socket.destroy();
+    for (const connection of this.connections) {
+      connection.closed = true;
+      connection.socket.removeAllListeners();
+      connection.socket.destroy();
+    }
     this.connections.clear();
-    if (!server.listening) return;
-    await new Promise<void>((resolve) => server.close(() => resolve()));
+    if (server?.listening)
+      await new Promise<void>((resolveClose) =>
+        server.close(() => resolveClose()),
+      );
+    await this.unlinkOwnedSocket();
+  }
+
+  private async prepareSocketPath(): Promise<void> {
+    const socketPath = this.options.socketPath;
+    if (!isAbsolute(socketPath) || resolve(socketPath) !== socketPath)
+      throw new Error("Agent Host socket path must be absolute and normalized");
+    const parent = dirname(socketPath);
+    if (parent === parse(parent).root)
+      throw new Error(
+        "Agent Host socket parent must not be the filesystem root",
+      );
+    await mkdir(parent, { recursive: true, mode: 0o700 });
+    await this.rejectSymlinkComponents(parent);
+    const parentStat = await lstat(parent);
+    if (!parentStat.isDirectory() || parentStat.isSymbolicLink())
+      throw new Error("Agent Host socket parent is unsafe");
+    const uid = process.getuid?.();
+    if (uid !== undefined && parentStat.uid !== uid)
+      throw new Error("Agent Host socket parent has a different owner");
+    await chmod(parent, 0o700);
+    await this.removeStaleSocket();
+  }
+
+  private async rejectSymlinkComponents(path: string): Promise<void> {
+    const root = parse(path).root;
+    const relative = path.slice(root.length).split("/").filter(Boolean);
+    let current = root;
+    for (const part of relative) {
+      current = resolve(current, part);
+      if ((await lstat(current)).isSymbolicLink())
+        throw new Error("Agent Host socket path contains a symlink");
+    }
+  }
+
+  private async removeStaleSocket(): Promise<void> {
+    let socketStat;
+    try {
+      socketStat = await lstat(this.options.socketPath);
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code === "ENOENT") return;
+      throw error;
+    }
+    if (socketStat.isSymbolicLink() || !socketStat.isSocket())
+      throw new Error("Agent Host socket path is unsafe");
+    if (await this.socketAcceptsConnections())
+      throw Object.assign(new Error("Agent Host socket is already live"), {
+        code: "EADDRINUSE",
+      });
+    const current = await lstat(this.options.socketPath);
+    if (current.dev !== socketStat.dev || current.ino !== socketStat.ino)
+      throw new Error("Agent Host socket changed during stale recovery");
+    await unlink(this.options.socketPath);
+  }
+
+  private socketAcceptsConnections(): Promise<boolean> {
+    return new Promise((resolveProbe, rejectProbe) => {
+      const socket = connect(this.options.socketPath);
+      const setTimer = this.options.setTimeout ?? globalThis.setTimeout;
+      const clearTimer = this.options.clearTimeout ?? globalThis.clearTimeout;
+      let settled = false;
+      const settle = (live: boolean, error?: Error) => {
+        if (settled) return;
+        settled = true;
+        clearTimer(timer);
+        socket.destroy();
+        if (error) rejectProbe(error);
+        else resolveProbe(live);
+      };
+      const timeoutMs = this.positiveDeadline(
+        this.options.livenessProbeTimeoutMs,
+        250,
+        "livenessProbeTimeoutMs",
+      );
+      const timer = setTimer(
+        () => settle(false, new Error("Agent Host liveness probe timed out")),
+        timeoutMs,
+      );
+      timer.unref?.();
+      socket.once("connect", () => settle(true));
+      socket.once("error", (error: NodeJS.ErrnoException) => {
+        if (error.code === "ECONNREFUSED" || error.code === "ENOENT")
+          settle(false);
+        else settle(false, error);
+      });
+    });
+  }
+
+  private async unlinkOwnedSocket(): Promise<void> {
+    const identity = this.socketIdentity;
+    this.socketIdentity = undefined;
+    if (!identity) return;
+    try {
+      const current = await lstat(this.options.socketPath);
+      if (
+        current.isSocket() &&
+        !current.isSymbolicLink() &&
+        current.dev === identity.dev &&
+        current.ino === identity.ino
+      )
+        await unlink(this.options.socketPath);
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
+    }
+  }
+
+  private positiveDeadline(
+    configured: number | undefined,
+    fallback: number,
+    name: string,
+  ): number {
+    const value = configured ?? fallback;
+    if (!Number.isFinite(value) || value <= 0)
+      throw new Error(`${name} must be a positive finite number`);
+    return value;
   }
 
   private accept(socket: Socket): void {
@@ -410,8 +575,9 @@ export class AgentHost {
           );
           break;
         case "shutdown":
-          await active.driver.shutdown();
-          if (this.active === active) this.active = undefined;
+          this.fence(active);
+          this.invokeDriver(() => active.driver.cancel());
+          this.invokeDriver(() => active.driver.shutdown());
           this.close(connection);
           void this.stop();
           break;
@@ -487,14 +653,22 @@ export class AgentHost {
             spec.transcriptPolicy.maxAppendBytes
           )
             throw new Error("Transcript proposal exceeds maxAppendBytes");
+          if (
+            !this.emitFor(active, {
+              t: "transcript_proposal",
+              appendId,
+              entries,
+            })
+          )
+            throw new Error("Transcript proposal owner is disconnected");
           active.pendingAppendId = appendId;
-          this.emitFor(active, { t: "transcript_proposal", appendId, entries });
         },
         ask: (askId, input) => {
           if (!nonempty(askId) || active.askIds.has(askId))
             throw new Error("Invalid askId");
+          if (!this.emitFor(active, { t: "ask", askId, input }))
+            throw new Error("Ask owner is disconnected");
           active.askIds.add(askId);
-          this.emitFor(active, { t: "ask", askId, input });
         },
       })
       .then(
@@ -509,7 +683,7 @@ export class AgentHost {
 
   private finishTurn(active: ActiveTurn, result: AgentTurnResult): void {
     if (this.active !== active) return;
-    this.active = undefined;
+    this.fence(active);
     this.send(active.owner, {
       t: "turn_finished",
       version: AGENT_HOST_PROTOCOL_VERSION,
@@ -519,9 +693,9 @@ export class AgentHost {
     });
   }
 
-  private emitFor(active: ActiveTurn, message: DriverEmission): void {
-    if (this.active !== active || active.owner.closed) return;
-    this.send(active.owner, {
+  private emitFor(active: ActiveTurn, message: DriverEmission): boolean {
+    if (this.active !== active || active.owner.closed) return false;
+    return this.send(active.owner, {
       ...message,
       version: AGENT_HOST_PROTOCOL_VERSION,
       requestId: active.requestId,
@@ -549,11 +723,17 @@ export class AgentHost {
   private send(
     connection: ConnectionState,
     message: AgentHostServerMessage,
-  ): void {
-    if (!connection.closed && connection.socket.writable)
+  ): boolean {
+    if (connection.closed || !connection.socket.writable) return false;
+    try {
       connection.socket.write(
         encodeNdjsonFrame(message, this.options.maxFrameBytes),
       );
+      return true;
+    } catch {
+      this.close(connection);
+      return false;
+    }
   }
 
   private close(connection: ConnectionState): void {
@@ -566,8 +746,33 @@ export class AgentHost {
     connection.closed = true;
     this.connections.delete(connection);
     const active = this.active;
-    if (active?.owner === connection)
-      void Promise.resolve(active.driver.cancel()).catch(() => undefined);
+    if (active?.owner !== connection || active.abandonTimer) return;
+    this.invokeDriver(() => active.driver.cancel());
+    const setTimer = this.options.setTimeout ?? globalThis.setTimeout;
+    active.abandonTimer = setTimer(
+      () => this.fence(active),
+      this.positiveDeadline(
+        this.options.cancellationDeadlineMs,
+        5_000,
+        "cancellationDeadlineMs",
+      ),
+    );
+    active.abandonTimer.unref?.();
+  }
+
+  private invokeDriver(action: () => void | Promise<void>): void {
+    try {
+      void Promise.resolve(action()).catch(() => undefined);
+    } catch {}
+  }
+
+  private fence(active: ActiveTurn): void {
+    if (active.abandonTimer) {
+      const clearTimer = this.options.clearTimeout ?? globalThis.clearTimeout;
+      clearTimer(active.abandonTimer);
+      active.abandonTimer = undefined;
+    }
+    if (this.active === active) this.active = undefined;
   }
 }
 

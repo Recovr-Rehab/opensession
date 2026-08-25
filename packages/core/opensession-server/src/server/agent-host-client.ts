@@ -145,13 +145,18 @@ export class AgentHostClient {
   private socket?: Socket;
   private connecting?: Promise<void>;
   private fence?: AgentTurnFence;
+  private desynchronized = false;
   private readonly pending = new Map<string, PendingRequest>();
   private requestSequence = 0;
 
   constructor(private readonly options: AgentHostClientOptions) {}
 
   connect(): Promise<void> {
-    if (this.socket && !this.socket.destroyed) return Promise.resolve();
+    if (this.socket && !this.socket.destroyed) {
+      if (this.desynchronized)
+        throw new Error("Agent Host client requires a fresh connection");
+      return Promise.resolve();
+    }
     if (this.connecting) return this.connecting;
     this.connecting = new Promise<void>((resolve, reject) => {
       const socket = connect(this.options.socketPath);
@@ -159,13 +164,14 @@ export class AgentHostClient {
         this.options.maxFrameBytes ?? AGENT_HOST_MAX_FRAME_BYTES,
       );
       this.socket = socket;
+      this.desynchronized = false;
       let settled = false;
       const failConnect = (error: Error) => {
         if (!settled) {
           settled = true;
           reject(error);
         }
-        this.fail(error);
+        this.fail(error, socket);
       };
       socket.on("connect", () => {
         const requestId = this.nextRequestId();
@@ -174,8 +180,10 @@ export class AgentHostClient {
           version: AGENT_HOST_PROTOCOL_VERSION,
           requestId,
         }).then(() => {
-          if (!settled) {
+          if (!settled && this.socket === socket) {
             settled = true;
+            this.desynchronized = false;
+            this.fence = undefined;
             resolve();
           }
         }, failConnect);
@@ -183,7 +191,7 @@ export class AgentHostClient {
       socket.on("data", (chunk) => {
         try {
           for (const value of decoder.push(Buffer.from(chunk)))
-            this.receive(value);
+            this.receive(socket, value);
         } catch {
           socket.destroy(new Error("Malformed Agent Host frame"));
         }
@@ -219,7 +227,7 @@ export class AgentHostClient {
         spec,
       });
     } catch (error) {
-      this.fence = undefined;
+      if (!this.desynchronized) this.fence = undefined;
       throw error;
     }
   }
@@ -243,9 +251,12 @@ export class AgentHostClient {
   }
 
   close(): void {
-    this.socket?.destroy();
+    const socket = this.socket;
+    socket?.destroy();
+    if (socket) this.fail(new Error("Agent Host client closed"), socket);
     this.socket = undefined;
-    this.fail(new Error("Agent Host client closed"));
+    this.fence = undefined;
+    this.desynchronized = false;
   }
 
   private sendFenced(message: Record<string, unknown>): string {
@@ -268,7 +279,9 @@ export class AgentHostClient {
     return new Promise<void>((resolve, reject) => {
       const timer = setTimeout(() => {
         this.pending.delete(requestId);
-        reject(new Error(`Agent Host ${expected} timed out`));
+        const error = new Error(`Agent Host ${expected} timed out`);
+        if (expected === "turn_started") this.desynchronize(error);
+        reject(error);
       }, this.options.timeoutMs ?? 5_000);
       timer.unref?.();
       this.pending.set(requestId, { expected, resolve, reject, timer });
@@ -288,7 +301,8 @@ export class AgentHostClient {
     this.socket.write(encodeNdjsonFrame(message, this.options.maxFrameBytes));
   }
 
-  private receive(value: unknown): void {
+  private receive(socket: Socket, value: unknown): void {
+    if (socket !== this.socket || this.desynchronized) return;
     const message = decodeServerMessage(value);
     if (!message) {
       this.socket?.destroy(new Error("Invalid Agent Host message"));
@@ -321,14 +335,42 @@ export class AgentHostClient {
       this.options.onMessage?.(message);
   }
 
-  private fail(error: Error): void {
+  private desynchronize(error: Error): void {
+    const socket = this.socket;
+    if (!socket || this.desynchronized) return;
+    this.desynchronized = true;
+    if (this.fence && socket.writable) {
+      const requestId = this.nextRequestId();
+      try {
+        socket.end(
+          encodeNdjsonFrame(
+            {
+              t: "cancel",
+              version: AGENT_HOST_PROTOCOL_VERSION,
+              requestId,
+              fence: this.fence,
+            },
+            this.options.maxFrameBytes,
+          ),
+        );
+      } catch {
+        socket.destroy();
+      }
+    } else {
+      socket.destroy();
+    }
+    this.fail(error, socket, true);
+  }
+
+  private fail(error: Error, socket: Socket, preserveFence = false): void {
+    if (socket !== this.socket) return;
     for (const pending of this.pending.values()) {
       clearTimeout(pending.timer);
       pending.reject(error);
     }
     this.pending.clear();
     this.socket = undefined;
-    this.fence = undefined;
+    if (!preserveFence) this.fence = undefined;
   }
 
   private nextRequestId(): string {
