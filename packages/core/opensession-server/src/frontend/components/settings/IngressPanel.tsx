@@ -356,8 +356,8 @@ export function IngressPanel({
 								</SettingRow>
 								<SettingRow>
 									<SettingRowText>
-										<SettingRowTitle>What it exposes</SettingRowTitle>
-										<SettingRowDescription>Only signed webhooks, Sandbox callbacks, and workload identity. Sessions, APIs, and the app UI stay private.</SettingRowDescription>
+										<SettingRowTitle>Public services</SettingRowTitle>
+										<SettingRowDescription>Webhooks, remote Sandbox callbacks, and workload identity. Never the app.</SettingRowDescription>
 									</SettingRowText>
 								</SettingRow>
 							</SettingCard>
