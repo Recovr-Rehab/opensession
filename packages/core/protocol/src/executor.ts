@@ -51,11 +51,15 @@ export function decodeExecutorFence(
   value: unknown,
   nowMs = Date.now(),
 ): ExecutorFence | undefined {
-  if (!value || typeof value !== "object" || Array.isArray(value)) return undefined;
+  if (!value || typeof value !== "object" || Array.isArray(value))
+    return undefined;
   const fence = value as Record<string, unknown>;
   if (
     Object.keys(fence).some(
-      (key) => !["rootId", "sessionId", "runId", "generation", "deadlineMs"].includes(key),
+      (key) =>
+        !["rootId", "sessionId", "runId", "generation", "deadlineMs"].includes(
+          key,
+        ),
     ) ||
     typeof fence.rootId !== "string" ||
     !ID_RE.test(fence.rootId) ||
@@ -84,7 +88,8 @@ interface ExecutorMessageBase {
   requestId: string;
 }
 
-export type ExecutorCapability = "fs" | "process" | "terminal" | "service" | "portal";
+export type ExecutorCapability =
+  "fs" | "process" | "terminal" | "service" | "portal";
 
 /** Public incarnation metadata. Authentication happens before this frame is accepted. */
 export interface ExecutorConnectionIdentity {
@@ -115,24 +120,71 @@ export type ExecutorFsOperation =
   | { kind: "fs.read"; path: string; offset?: number; length?: number }
   | { kind: "fs.list"; path: string; recursive?: boolean }
   | { kind: "fs.stat"; path: string }
-  | ({ kind: "fs.write"; path: string; data: string; encoding: "utf8" | "base64"; create?: boolean } & ExecutorMutation)
+  | ({
+      kind: "fs.write";
+      path: string;
+      data: string;
+      encoding: "utf8" | "base64";
+      create?: boolean;
+    } & ExecutorMutation)
   | ({ kind: "fs.mkdir"; path: string; recursive?: boolean } & ExecutorMutation)
-  | ({ kind: "fs.remove"; path: string; recursive?: boolean } & ExecutorMutation)
-  | ({ kind: "fs.move"; from: string; to: string; replace?: boolean } & ExecutorMutation);
+  | ({
+      kind: "fs.remove";
+      path: string;
+      recursive?: boolean;
+    } & ExecutorMutation)
+  | ({
+      kind: "fs.move";
+      from: string;
+      to: string;
+      replace?: boolean;
+    } & ExecutorMutation);
 
 export type ExecutorProcessOperation =
-  | ({ kind: "process.spawn"; executable: string; args: string[]; cwd?: string; stdin?: "pipe" | "closed" } & ExecutorMutation)
+  | ({
+      kind: "process.spawn";
+      executable: string;
+      args: string[];
+      cwd?: string;
+      stdin?: "pipe" | "closed";
+    } & ExecutorMutation)
   | { kind: "process.status"; processId: string }
-  | ({ kind: "process.signal"; processId: string; signal: "interrupt" | "terminate" | "kill" } & ExecutorMutation);
+  | ({
+      kind: "process.signal";
+      processId: string;
+      signal: "interrupt" | "terminate" | "kill";
+    } & ExecutorMutation);
 
 export type ExecutorTerminalOperation =
-  | ({ kind: "terminal.open"; executable?: string; args?: string[]; cwd?: string; columns: number; rows: number } & ExecutorMutation)
-  | ({ kind: "terminal.write"; terminalId: string; data: string } & ExecutorMutation)
-  | ({ kind: "terminal.resize"; terminalId: string; columns: number; rows: number } & ExecutorMutation)
+  | ({
+      kind: "terminal.open";
+      executable?: string;
+      args?: string[];
+      cwd?: string;
+      columns: number;
+      rows: number;
+    } & ExecutorMutation)
+  | ({
+      kind: "terminal.write";
+      terminalId: string;
+      data: string;
+    } & ExecutorMutation)
+  | ({
+      kind: "terminal.resize";
+      terminalId: string;
+      columns: number;
+      rows: number;
+    } & ExecutorMutation)
   | ({ kind: "terminal.close"; terminalId: string } & ExecutorMutation);
 
 export type ExecutorServiceOperation =
-  | ({ kind: "service.start"; name: string; executable: string; args: string[]; cwd?: string } & ExecutorMutation)
+  | ({
+      kind: "service.start";
+      name: string;
+      executable: string;
+      args: string[];
+      cwd?: string;
+    } & ExecutorMutation)
   | { kind: "service.status"; serviceId: string }
   | ({ kind: "service.stop"; serviceId: string } & ExecutorMutation);
 
@@ -149,11 +201,7 @@ export type ExecutorOperation =
   | ExecutorPortalOperation;
 
 export type ExecutorReceiptState =
-  | "queued"
-  | "running"
-  | "succeeded"
-  | "failed"
-  | "cancelled";
+  "queued" | "running" | "succeeded" | "failed" | "cancelled";
 
 export interface ExecutorReceipt {
   receiptId: string;
@@ -166,18 +214,74 @@ export interface ExecutorReceipt {
 
 export type ExecutorOperationOutcome =
   | { kind: "fs.read"; streamId: string; size: number; binary: boolean }
-  | { kind: "fs.list"; entries: Array<{ path: string; type: "file" | "directory" | "symlink"; size?: number }> }
-  | { kind: "fs.stat"; entry: { path: string; type: "file" | "directory" | "symlink"; size: number; modifiedAt?: string } }
+  | {
+      kind: "fs.list";
+      entries: Array<{
+        path: string;
+        type: "file" | "directory" | "symlink";
+        size?: number;
+      }>;
+    }
+  | {
+      kind: "fs.stat";
+      entry: {
+        path: string;
+        type: "file" | "directory" | "symlink";
+        size: number;
+        modifiedAt?: string;
+      };
+    }
   | { kind: "fs.changed"; path: string }
-  | { kind: "process"; processId: string; state: "starting" | "running" | "exited"; exitCode?: number; streamId?: string }
-  | { kind: "terminal"; terminalId: string; state: "open" | "closed"; streamId?: string }
-  | { kind: "service"; serviceId: string; state: "starting" | "running" | "stopped" | "failed"; streamId?: string }
-  | { kind: "portal"; portalId: string; state: "opening" | "open" | "closed" | "failed" };
+  | {
+      kind: "process";
+      processId: string;
+      state: "starting" | "running" | "exited";
+      exitCode?: number;
+      streamId?: string;
+    }
+  | {
+      kind: "terminal";
+      terminalId: string;
+      state: "open" | "closed";
+      streamId?: string;
+    }
+  | {
+      kind: "service";
+      serviceId: string;
+      state: "starting" | "running" | "stopped" | "failed";
+      streamId?: string;
+    }
+  | {
+      kind: "portal";
+      portalId: string;
+      state: "opening" | "open" | "closed" | "failed";
+    };
 
 export type ExecutorStreamEvent =
-  | { kind: "text"; streamId: string; sequence: number; channel: "stdout" | "stderr" | "terminal" | "file"; data: string; eof?: boolean }
-  | { kind: "binary"; streamId: string; sequence: number; offset: number; data: string; metadata: ExecutorBinaryStreamMetadata; eof?: boolean }
-  | { kind: "exit"; streamId: string; sequence: number; exitCode: number | null; signal?: string };
+  | {
+      kind: "text";
+      streamId: string;
+      sequence: number;
+      channel: "stdout" | "stderr" | "terminal" | "file";
+      data: string;
+      eof?: boolean;
+    }
+  | {
+      kind: "binary";
+      streamId: string;
+      sequence: number;
+      offset: number;
+      data: string;
+      metadata: ExecutorBinaryStreamMetadata;
+      eof?: boolean;
+    }
+  | {
+      kind: "exit";
+      streamId: string;
+      sequence: number;
+      exitCode: number | null;
+      signal?: string;
+    };
 
 /** Exact-version handshake followed by fenced, capability-authorized work. */
 export type ExecutorClientMessage =
@@ -186,10 +290,15 @@ export type ExecutorClientMessage =
   | (ExecutorAuthorizedMessage & { t: "receipt_status"; receiptId: string })
   | (ExecutorAuthorizedMessage & {
       t: "cancel";
-      target: { requestId: string } | { receiptId: string } | { streamId: string };
+      target:
+        { requestId: string } | { receiptId: string } | { streamId: string };
       idempotencyKey: string;
     })
-  | (ExecutorAuthorizedMessage & { t: "stream_credit"; streamId: string; bytes: number });
+  | (ExecutorAuthorizedMessage & {
+      t: "stream_credit";
+      streamId: string;
+      bytes: number;
+    });
 
 export type ExecutorErrorCode =
   | "unsupported_version"
@@ -204,17 +313,39 @@ export type ExecutorErrorCode =
   | "executor_busy";
 
 export type ExecutorServerMessage =
-  | (ExecutorMessageBase & ExecutorConnectionIdentity & { t: "hello"; accepted: true })
+  | (ExecutorMessageBase &
+      ExecutorConnectionIdentity & { t: "hello"; accepted: true })
   | (ExecutorMessageBase & { t: "receipt"; receipt: ExecutorReceipt })
-  | (ExecutorMessageBase & { t: "receipt_status"; receipt: ExecutorReceipt; outcome?: ExecutorOperationOutcome; eventsComplete?: true })
+  | (ExecutorMessageBase & {
+      t: "receipt_status";
+      receipt: ExecutorReceipt;
+      outcome?: ExecutorOperationOutcome;
+      eventsComplete?: true;
+    })
   | (ExecutorMessageBase & { t: "event"; event: ExecutorStreamEvent })
-  | (ExecutorMessageBase & { t: "error"; code: ExecutorErrorCode; message: string; receipt?: ExecutorReceipt });
+  | (ExecutorMessageBase & {
+      t: "error";
+      code: ExecutorErrorCode;
+      message: string;
+      receipt?: ExecutorReceipt;
+    });
 
 /** Decode only the handshake because version negotiation must fail before work. */
-export function decodeExecutorHello(value: unknown): Extract<ExecutorClientMessage, { t: "hello" }> | undefined {
-  if (!value || typeof value !== "object" || Array.isArray(value)) return undefined;
+export function decodeExecutorHello(
+  value: unknown,
+): Extract<ExecutorClientMessage, { t: "hello" }> | undefined {
+  if (!value || typeof value !== "object" || Array.isArray(value))
+    return undefined;
   const message = value as Record<string, unknown>;
-  const allowed = ["t", "version", "requestId", "executorId", "instanceId", "generation", "capabilities"];
+  const allowed = [
+    "t",
+    "version",
+    "requestId",
+    "executorId",
+    "instanceId",
+    "generation",
+    "capabilities",
+  ];
   if (
     Object.keys(message).some((key) => !allowed.includes(key)) ||
     message.t !== "hello" ||
@@ -229,7 +360,10 @@ export function decodeExecutorHello(value: unknown): Extract<ExecutorClientMessa
     (message.generation as number) < 0 ||
     !Array.isArray(message.capabilities) ||
     message.capabilities.some(
-      (capability) => !["fs", "process", "terminal", "service", "portal"].includes(capability as string),
+      (capability) =>
+        !["fs", "process", "terminal", "service", "portal"].includes(
+          capability as string,
+        ),
     ) ||
     new Set(message.capabilities).size !== message.capabilities.length
   ) {
@@ -254,12 +388,7 @@ export function decodeExecutorHello(value: unknown): Extract<ExecutorClientMessa
 
 /** @deprecated Transitional local run-host launch state. */
 export type ExecutorLaunchState =
-  | "starting"
-  | "started"
-  | "stopped"
-  | "failed"
-  | "uncertain"
-  | "unknown";
+  "starting" | "started" | "stopped" | "failed" | "uncertain" | "unknown";
 
 /** @deprecated Transitional local run-host launch status. */
 export interface ExecutorHostStatus {

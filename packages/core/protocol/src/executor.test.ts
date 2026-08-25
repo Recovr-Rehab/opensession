@@ -28,9 +28,14 @@ type ForbiddenExecutorLeaf =
   | "apiKey"
   | "authorization"
   | "env";
-type ForbiddenLeaves = Extract<DeepKeys<ExecutorClientMessage>, ForbiddenExecutorLeaf>;
+type ForbiddenLeaves = Extract<
+  DeepKeys<ExecutorClientMessage>,
+  ForbiddenExecutorLeaf
+>;
 type Assert<T extends true> = T;
-type _ExecutorPayloadHasNoForbiddenLeaves = Assert<ForbiddenLeaves extends never ? true : false>;
+type _ExecutorPayloadHasNoForbiddenLeaves = Assert<
+  ForbiddenLeaves extends never ? true : false
+>;
 
 const fence = {
   rootId: "root-1",
@@ -53,26 +58,48 @@ describe("executor versioning", () => {
 
   test("accepts only an exact-v2 incarnation hello", () => {
     expect(decodeExecutorHello(hello)).toEqual(hello);
-    expect(decodeExecutorHello({ ...hello, version: EXECUTOR_PROTOCOL_VERSION - 1 })).toBeUndefined();
-    expect(decodeExecutorHello({ ...hello, minVersion: 1, maxVersion: EXECUTOR_PROTOCOL_VERSION })).toBeUndefined();
-    expect(decodeExecutorHello({ ...hello, enrollmentToken: "forbidden" })).toBeUndefined();
-    expect(decodeExecutorHello({ ...hello, capabilities: ["fs", "fs"] })).toBeUndefined();
+    expect(
+      decodeExecutorHello({ ...hello, version: EXECUTOR_PROTOCOL_VERSION - 1 }),
+    ).toBeUndefined();
+    expect(
+      decodeExecutorHello({
+        ...hello,
+        minVersion: 1,
+        maxVersion: EXECUTOR_PROTOCOL_VERSION,
+      }),
+    ).toBeUndefined();
+    expect(
+      decodeExecutorHello({ ...hello, enrollmentToken: "forbidden" }),
+    ).toBeUndefined();
+    expect(
+      decodeExecutorHello({ ...hello, capabilities: ["fs", "fs"] }),
+    ).toBeUndefined();
   });
 });
 
 describe("executor authority fencing", () => {
   test("treats grants as bounded opaque values", () => {
-    expect(decodeExecutorGrant("opaque.capability") as string).toBe("opaque.capability");
+    expect(decodeExecutorGrant("opaque.capability") as string).toBe(
+      "opaque.capability",
+    );
     expect(decodeExecutorGrant("")).toBeUndefined();
     expect(decodeExecutorGrant("x".repeat(16 * 1024 + 1))).toBeUndefined();
   });
 
   test("requires a live, non-negative generation fence", () => {
     expect(decodeExecutorFence(fence, 1_000)).toEqual(fence);
-    expect(decodeExecutorFence({ ...fence, generation: -1 }, 1_000)).toBeUndefined();
-    expect(decodeExecutorFence({ ...fence, deadlineMs: 1_000 }, 1_000)).toBeUndefined();
-    expect(decodeExecutorFence({ ...fence, runId: "../run" }, 1_000)).toBeUndefined();
-    expect(decodeExecutorFence({ ...fence, turnId: "turn-1" }, 1_000)).toBeUndefined();
+    expect(
+      decodeExecutorFence({ ...fence, generation: -1 }, 1_000),
+    ).toBeUndefined();
+    expect(
+      decodeExecutorFence({ ...fence, deadlineMs: 1_000 }, 1_000),
+    ).toBeUndefined();
+    expect(
+      decodeExecutorFence({ ...fence, runId: "../run" }, 1_000),
+    ).toBeUndefined();
+    expect(
+      decodeExecutorFence({ ...fence, turnId: "turn-1" }, 1_000),
+    ).toBeUndefined();
   });
 });
 
