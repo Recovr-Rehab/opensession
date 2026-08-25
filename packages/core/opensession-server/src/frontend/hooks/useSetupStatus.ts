@@ -1,7 +1,6 @@
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import {
 	setupRequest,
-	type SetupAccess,
 	type SetupGithub,
 	type SetupIntegration,
 	type SetupRepo,
@@ -33,7 +32,6 @@ export interface SetupController {
 	restartServer: (post?: boolean) => Promise<void>;
 	/** Fold a saved integration back into the cached status. */
 	applyIntegration: (updated: SetupIntegration, restartRequired: boolean) => void;
-	applyAccess: (updated: SetupAccess, restartRequired: boolean) => void;
 	applyGithub: (updated: SetupGithub, restartRequired: boolean) => void;
 	applyRepo: (
 		updated: Pick<SetupRepo, "id"> &
@@ -75,19 +73,6 @@ const body = await setupRequest<SetupStatus>("/api/setup/status");
 							),
 						}
 					: s,
-			);
-			if (restartRequired) setRestartNeeded(true);
-		};
-
-	const applyAccess = (updated: SetupAccess, restartRequired: boolean) => {
-			setStatus((status) =>
-				status
-					? {
-							...status,
-							publicBaseUrl: updated.publicBaseUrl,
-							access: updated,
-						}
-					: status,
 			);
 			if (restartRequired) setRestartNeeded(true);
 		};
@@ -163,7 +148,6 @@ const res = await fetch(`${BASE_PATH}/api/health`, {
 		restartState,
 		restartServer,
 		applyIntegration,
-		applyAccess,
 		applyGithub,
 		applyRepo,
 	};
