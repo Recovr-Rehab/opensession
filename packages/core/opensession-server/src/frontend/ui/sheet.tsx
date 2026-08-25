@@ -118,7 +118,6 @@ export function ResponsiveDialog({
 	const animated = phone || desktopTransition !== "none";
 	const phase = usePhase(open, animated, phone ? SHEET_MS : MODAL_MS);
 	const panelRef = React.useRef<HTMLDivElement>(null);
-	const restoreRef = React.useRef<HTMLElement | null>(null);
 
 	const [booted, setBooted] = React.useState(open);
 	React.useEffect(() => {
@@ -150,7 +149,9 @@ export function ResponsiveDialog({
 	// to whatever opened us on close.
 	React.useEffect(() => {
 		if (!open || !mounted) return;
-		restoreRef.current = document.activeElement as HTMLElement | null;
+		// A local in effect scope (not a ref) so teardown hands focus back to
+		// exactly the element this open parked.
+		let restoreTo = document.activeElement as HTMLElement | null;
 		const raf = requestAnimationFrame(() => {
 			const panel = panelRef.current;
 			if (!panel || panel.contains(document.activeElement)) return;
@@ -158,8 +159,7 @@ export function ResponsiveDialog({
 		});
 		return () => {
 			cancelAnimationFrame(raf);
-			const prev = restoreRef.current;
-			restoreRef.current = null;
+			const prev = restoreTo;
 			if (!prev || !document.body.contains(prev)) return;
 			// Only take focus back if it was still ours — the user may have
 			// clicked into the page behind us.

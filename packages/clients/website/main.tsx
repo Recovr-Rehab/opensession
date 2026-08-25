@@ -289,7 +289,10 @@ function SetupOverview() {
 						<strong>
 							<span aria-hidden="true">2. </span>Expose it safely
 						</strong>
-						<span>Join the server and every device to the same internal network.</span>
+						<span>
+							Optional. Needed to connect from your phone or share Open Session with
+							your team.
+						</span>
 					</div>
 					<a
 						className="landing-setup-step-action"

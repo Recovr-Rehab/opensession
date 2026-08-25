@@ -1,5 +1,5 @@
 import { BASE_PATH } from "../lib/base";
-import React, { useEffect, useState, } from "react";
+import React, { useCallback, useEffect, useState } from "react";
 import {
   fetchAutomations,
   createAutomationApi,
@@ -208,7 +208,9 @@ export function Automations({ onOpenSession, selectedId, onSelect }: Props) {
   // Leaving/changing the selection always drops back to the read view.
   useEffect(() => setEditMode(false), [selectedId]);
 
-  const load = async () => {
+  // Stable identity: only refs and setters are captured, so the polling
+  // effect can list `load` without ever refiring from re-renders.
+  const load = useCallback(async () => {
     await (async () => {
 const next = (await fetchAutomations()) as Automation[];
       setAutomations(
@@ -225,7 +227,7 @@ const next = (await fetchAutomations()) as Automation[];
 })().catch(async () => {
 
 });
-  };
+  }, []);
 
   useEffect(() => {
     document.title = docTitle("Automations");

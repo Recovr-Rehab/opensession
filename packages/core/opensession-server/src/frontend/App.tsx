@@ -19,7 +19,9 @@ import {
 } from "./lib/sidebar-collapse";
 import { openWorkspaceSummary } from "./lib/workspace-summary-open";
 import React, {
+	useCallback,
 	useEffect,
+	useEffectEvent,
 	useLayoutEffect,
 	useRef,
 	useState,
@@ -770,6 +772,7 @@ export function App(
 		archivedLoaded,
 		refreshArchived,
 		refresh,
+		refreshInvalidated,
 		inject,
 		unstick,
 		patch,
@@ -788,6 +791,14 @@ export function App(
 	const auth = useAuthStatus();
 	const githubConnectionState = useGithubConnectionState(route.view);
 	const { connected, send, setTyping, addHandler } = useWebSocket();
+	// A disconnected socket may miss list invalidations. The first connection
+	// races the initial list load and needs no extra fetch; later reconnects do.
+	const webSocketConnectedOnceRef = useRef(false);
+	useEffect(() => {
+		if (!connected) return;
+		if (webSocketConnectedOnceRef.current) refresh();
+		else webSocketConnectedOnceRef.current = true;
+	}, [connected, refresh]);
 	const sessionsRef = useRef(sessions);
 	useLayoutEffect(() => {
 	sessionsRef.current = sessions;
@@ -808,9 +819,9 @@ export function App(
 	// turn") route through the global toast store — stacked, animated, and
 	// firable from anywhere without threading a prop. This wrapper keeps the
 	// existing `onToast`/`showToast` call sites working.
-	const showToast = (message: string) => {
+	const showToast = useCallback((message: string) => {
 		toast(message);
-	};
+	}, []);
 	// Session-reference chips in transcripts (`bks-…`), and the pill the
 	// composer projects a draft id into, label themselves from this registry.
 	// markdown.ts renders to an HTML string rather than React nodes, so it
@@ -1970,6 +1981,11 @@ const path = await resolveAnonymousUserPath(
 	// Esc closes whichever palette is open (search's
 	// own input also handles Esc, but this covers the case where focus has left
 	// it).
+	// The three component handlers are read through effect events, so the
+	// listener subscribes once and still reaches the latest closures.
+	const hotkeyOpenPalette = useEffectEvent(() => openPalette());
+	const hotkeyClosePalette = useEffectEvent(() => closePalette());
+	const hotkeyToast = useEffectEvent((message: string) => showToast(message));
 	useEffect(() => {
 		const onKey = (e: KeyboardEvent) => {
 			if (matchesShortcut(e, "command-menu")) {
@@ -2009,7 +2025,7 @@ const path = await resolveAnonymousUserPath(
 				// are already in. ⌘S is free to take because there is no document
 				// here to save, so the browser's Save does nothing worth keeping.
 				e.preventDefault();
-				openPalette();
+				hotkeyOpenPalette();
 				return;
 			}
 			if (matchesShortcut(e, "session-copy-link")) {
@@ -2020,12 +2036,12 @@ const path = await resolveAnonymousUserPath(
 				const path = copyLinkPathRef.current;
 				if (!path) return;
 				e.preventDefault();
-				copyToClipboard(absoluteLink(path), () => showToast("Link copied"));
+				copyToClipboard(absoluteLink(path), () => hotkeyToast("Link copied"));
 				return;
 			}
 			if (e.key === "Escape") {
 				if (searchOpenRef.current) setSearchOpen(false);
-				else if (paletteOpenRef.current) closePalette();
+				else if (paletteOpenRef.current) hotkeyClosePalette();
 				else if (leaveSettingsRef.current) {
 					// A field, a menu or a modal inside Settings owns the keystroke
 					// first: only an unclaimed Escape closes the whole surface.
@@ -2044,7 +2060,7 @@ const path = await resolveAnonymousUserPath(
 		};
 		window.addEventListener("keydown", onKey);
 		return () => window.removeEventListener("keydown", onKey);
-	}, [openPalette, closePalette, showToast]);
+	}, []);
 
 	// Remember the last session so a cold relaunch can restore it (see above);
 	// clear it when the user deliberately goes home so we don't force them back in.
@@ -2135,8 +2151,16 @@ const path = await resolveAnonymousUserPath(
 	}, [shellLoading]);
 
 	// When a session is created from the New Session form or Ask box, jump straight into it
+	// The handler reads `inject`/`navigate` through effect events, so the
+	// subscription doesn't re-arm just because their closures moved.
+	const socketInject = useEffectEvent(inject);
+	const socketNavigate = useEffectEvent(navigate);
 	useEffect(() => {
 		return addHandler((msg) => {
+			if (msg.type === "sessions_invalidated") {
+				refreshInvalidated();
+				return;
+			}
 			if (msg.type === "error") {
 				const draft = pendingCreateDraftRef.current;
 				const errorSessionId = "sessionId" in msg ? msg.sessionId : undefined;
@@ -2248,7 +2272,7 @@ const path = await resolveAnonymousUserPath(
 					const now = new Date().toISOString();
 					const user = draft?.user || getCurrentUser();
 					const createdAt = draft?.startedAt || now;
-					inject({
+					socketInject({
 						id: msg.id,
 						claudeSessionId: null,
 						source: "opensession",
@@ -2313,10 +2337,18 @@ const path = await resolveAnonymousUserPath(
 				}
 				refresh();
 				refreshWorkspaces();
-				if (stillOwnsForeground) navigate({ view: "session", id: msg.id });
+				if (stillOwnsForeground) socketNavigate({ view: "session", id: msg.id });
 			}
 		});
-	}, [addHandler, navigate, patch, refresh, refreshWorkspaces, remove, unstick]);
+	}, [
+		addHandler,
+		patch,
+		refresh,
+		refreshInvalidated,
+		refreshWorkspaces,
+		remove,
+		unstick,
+	]);
 
 	// Drop the pending flag once we've navigated away from the pending session (its
 	// fallback timeout clears it otherwise). We deliberately DON'T clear it the
