@@ -187,6 +187,10 @@ function useProviderAccounts(): ProviderAccountOption[] {
 
 export function Automations({ onOpenSession, selectedId, onSelect }: Props) {
   const [automations, setAutomations] = useState<Automation[]>([]);
+  const pendingToggles = React.useRef(
+    new Map<string, { enabled: boolean; request: number }>(),
+  );
+  const toggleRequest = React.useRef(0);
   const [defaultModel, setDefaultModel] = useState("");
   const [loading, setLoading] = useState(true);
   const providerAccounts = useProviderAccounts();
@@ -206,7 +210,17 @@ export function Automations({ onOpenSession, selectedId, onSelect }: Props) {
 
   const load = async () => {
     await (async () => {
-setAutomations(await fetchAutomations());
+const next = (await fetchAutomations()) as Automation[];
+      setAutomations(
+        next.map((automation) =>
+          pendingToggles.current.has(automation.id)
+            ? {
+                ...automation,
+                enabled: pendingToggles.current.get(automation.id)!.enabled,
+              }
+            : automation,
+        ),
+      );
       setLoading(false);
 })().catch(async () => {
 
@@ -244,12 +258,36 @@ setAutomations(await fetchAutomations());
     return () => window.removeEventListener("keydown", onKey);
   }, [!!sel, showModal, editMode, onSelect]);
 
-  async function handleToggle(a: Automation) {
+  async function handleToggle(a: Automation, enabled: boolean) {
+    const previous = a.enabled;
+    const request = ++toggleRequest.current;
+    pendingToggles.current.set(a.id, { enabled, request });
+    setError(null);
+    setAutomations((current) =>
+      current.map((automation) =>
+        automation.id === a.id ? { ...automation, enabled } : automation,
+      ),
+    );
+
     await (async () => {
-await updateAutomationApi(a.id, { enabled: !a.enabled });
-      load();
+await updateAutomationApi(a.id, { enabled });
+      // A second click may have superseded this request. Only the latest intent
+      // gets to reconcile the optimistic state with the server response.
+      if (pendingToggles.current.get(a.id)?.request !== request) return;
+      await load();
+      if (pendingToggles.current.get(a.id)?.request === request)
+        pendingToggles.current.delete(a.id);
 })().catch(async (e: any) => {
-setError(e.message);
+if (pendingToggles.current.get(a.id)?.request !== request) return;
+      pendingToggles.current.delete(a.id);
+      setAutomations((current) =>
+        current.map((automation) =>
+          automation.id === a.id && automation.enabled === enabled
+            ? { ...automation, enabled: previous }
+            : automation,
+        ),
+      );
+      setError(e.message);
 });
   }
 
@@ -410,7 +448,7 @@ setError(e.message);
                   size="sm"
                   className="relative"
                   checked={a.enabled}
-                  onCheckedChange={() => handleToggle(a)}
+                  onCheckedChange={(enabled) => handleToggle(a, enabled)}
                   aria-label={`${a.name} · ${a.enabled ? "on" : "off"}`}
                 />
               </div>
@@ -492,7 +530,7 @@ setError(e.message);
                 <div className="flex items-center gap-2.5">
                   <Switch
                     checked={sel.enabled}
-                    onCheckedChange={() => handleToggle(sel)}
+                    onCheckedChange={(enabled) => handleToggle(sel, enabled)}
                     aria-label={`${sel.name} · ${sel.enabled ? "on" : "off"}`}
                   />
                   <span className="text-dim text-label">
