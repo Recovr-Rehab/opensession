@@ -934,7 +934,7 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 			alive = false;
 		};
 	}, []);
-	const visibleFeeds = (feeds.filter((feed) => !hiddenFeeds.has(feed.id)));
+	const visibleFeeds = feeds.filter((feed) => !hiddenFeeds.has(feed.id));
 
 	// The Support queue now arrives through the generic feeds poll: the plain
 	// feed's items carry the full SupportThreadSummary in meta, so all the
@@ -997,10 +997,11 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 	// Items use the same gentle 60s cadence as Support (the server caches ~60s).
 	// Re-enabling a source loads it immediately; hiding one tears its timer down.
 	useEffect(() => {
-		if (visibleFeeds.length === 0) return;
+		const enabledFeeds = feeds.filter((feed) => !hiddenFeeds.has(feed.id));
+		if (enabledFeeds.length === 0) return;
 		let alive = true;
 		const load = () => {
-			for (const feed of visibleFeeds) {
+			for (const feed of enabledFeeds) {
 				fetchFeedItems(feed.id, argFiltersFor(feed))
 					.then((items) => {
 						if (alive)
@@ -1015,7 +1016,7 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 			alive = false;
 			clearInterval(timer);
 		};
-	}, [visibleFeeds]);
+	}, [feeds, hiddenFeeds]);
 
 	// Newest live session per Plain thread — a Support row with one opens that
 	// session instead of the session-less ticket preview.
