@@ -1,7 +1,7 @@
 export function AnnouncementArticle() {
 	return (
 		<article className="announcement-article">
-			<h1 id="announcement-title">Open Session is open source</h1>
+			<h1 id="announcement-title">Introducing Open Session</h1>
 
 			<p>
 				Open Session is an open-source cloud-based agent orchestrator. It has

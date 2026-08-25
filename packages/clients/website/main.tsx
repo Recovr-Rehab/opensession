@@ -427,7 +427,7 @@ function LandingPage() {
 
 	useEffect(() => {
 		document.title = announcementOpen
-			? "Open Session is open source · Open Session"
+			? "Introducing Open Session · Open Session"
 			: "Open Session · Your team’s control room for coding agents";
 	}, [announcementOpen]);
 

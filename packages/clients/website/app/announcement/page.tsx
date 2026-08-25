@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import { IconX } from "../../../../core/opensession-server/src/frontend/components/icons";
 import { AnnouncementArticle } from "../../AnnouncementArticle";
 
-const title = "Open Session is open source";
+const title = "Introducing Open Session";
 const description =
 	"Why we built Open Session, how our team uses it, and why we are open-sourcing our cloud-based agent orchestrator.";
 
