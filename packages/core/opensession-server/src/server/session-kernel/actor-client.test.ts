@@ -7,6 +7,7 @@ import {
   __setSessionKernelStoreForTest,
   installSessionKernelActor,
   sessionDelivery,
+  sessionIsQuarantined,
   sessionKernel,
 } from "./kernel";
 
@@ -29,6 +30,15 @@ async function actor(): Promise<SessionKernelActorClient> {
 }
 
 describe("session kernel actor boundary", () => {
+  test("reads per-session quarantine state through the actor", async () => {
+    const host = await actor();
+    installSessionKernelActor(host);
+
+    expect(sessionIsQuarantined("quarantine-read")).toBe(false);
+    host.store.quarantineSession("quarantine-read", "ambiguous", "test");
+    expect(sessionIsQuarantined("quarantine-read")).toBe(true);
+  });
+
   test("reconciles compatible branch dead letters inside the actor store", async () => {
     const host = await actor();
     const id = host.store.enqueueOutbox(

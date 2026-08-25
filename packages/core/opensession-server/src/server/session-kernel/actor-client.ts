@@ -148,6 +148,10 @@ export class SessionKernelActorClient {
       throw new Error("Invalid kernel acknowledgement response");
   }
 
+  quarantinedSession(sessionId: string): DurableSessionQuarantine | undefined {
+    return this.store.quarantinedSession(sessionId);
+  }
+
   async statsAsync(): Promise<ReturnType<SessionKernelStoreApi["stats"]>> {
     const response = await this.request({
       t: "stats",
