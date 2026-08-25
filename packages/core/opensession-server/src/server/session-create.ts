@@ -44,6 +44,7 @@ import { newSessionId } from "./paths";
 import { wrapContext } from "./prompt-context";
 import {
 	acknowledgePromptDispatch,
+	acknowledgeSteerDelivery,
 	beginPromptDispatch,
 	promptDispatches,
 	promptQueues,
@@ -1358,6 +1359,12 @@ export async function openCreatedSession(
 				startToken,
 				onAskUser: makeAskHandler(bksId),
 			})) {
+				// Opening turns use this event ladder instead of run-session's
+				// follow-up ladder. Consume Pi's exact boundary acknowledgement here
+				// too, including context-only steers that transcript parsing hides.
+				if (event.type === "steer_delivered" && event.steerId) {
+					acknowledgeSteerDelivery(bksId, event.steerId);
+				}
 				if (event.type === "init") {
 					engineSessionId = event.sessionId || "";
 					if (event.provider) effectiveProvider = event.provider;
