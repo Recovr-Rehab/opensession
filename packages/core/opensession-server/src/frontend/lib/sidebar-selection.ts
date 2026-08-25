@@ -14,6 +14,8 @@ export function previewSidebarSelection(
 		"button[data-sidebar-row][data-selected]",
 	)) {
 		selected.removeAttribute("data-selected");
+		selected.classList.remove("bg-selected");
 	}
 	row.setAttribute("data-selected", "");
+	row.classList.add("bg-selected");
 }
