@@ -230,6 +230,66 @@ describe("LocalExecutor", () => {
     ).toBe("€");
   });
 
+  test("resumes buffering after a truncation backlog is observed", async () => {
+    const { executor } = await setup({
+      maxTrackedProcesses: 1,
+      maxPendingOutputBytesPerProcess: 64,
+      maxPendingOutputBytesOverall: 64,
+    });
+    const spawned = await execute(executor, {
+      kind: "process.spawn",
+      executable: "/usr/bin/python3",
+      args: [
+        "-c",
+        "import os,time; os.write(1,b'x'*1000); time.sleep(.1); os.write(1,b'later')",
+      ],
+      idempotencyKey: "resume",
+    });
+    if (spawned.outcome.kind !== "process")
+      throw new Error("unexpected outcome");
+    await Bun.sleep(30);
+    const first = await execute(executor, {
+      kind: "process.status",
+      processId: spawned.outcome.processId,
+    });
+    expect(
+      first.events?.some(
+        (event) => event.kind === "text" && event.data.includes("[truncated]"),
+      ),
+    ).toBe(true);
+    await Bun.sleep(120);
+    const terminal = await execute(executor, {
+      kind: "process.status",
+      processId: spawned.outcome.processId,
+    });
+    expect(
+      terminal.events
+        ?.flatMap((event) => (event.kind === "text" ? [event.data] : []))
+        .join(""),
+    ).toContain("later");
+  });
+
+  test("coalesces tiny writes and bounds retained event count", async () => {
+    const { executor } = await setup();
+    const spawned = await execute(executor, {
+      kind: "process.spawn",
+      executable: "/usr/bin/python3",
+      args: ["-c", "import os; [os.write(1,b'x') for _ in range(200000)]"],
+      idempotencyKey: "tiny",
+    });
+    if (spawned.outcome.kind !== "process")
+      throw new Error("unexpected outcome");
+    await Bun.sleep(300);
+    const status = await execute(executor, {
+      kind: "process.status",
+      processId: spawned.outcome.processId,
+    });
+    expect(status.events?.length).toBeLessThanOrEqual(4096);
+    expect(status.events?.map((event) => event.sequence)).toEqual(
+      status.events?.map((_, index) => index),
+    );
+  });
+
   test("rejects new work at active capacity", async () => {
     const { executor } = await setup({ maxTrackedProcesses: 1 });
     await execute(executor, {
@@ -248,68 +308,133 @@ describe("LocalExecutor", () => {
     ).rejects.toMatchObject({ code: "executor_busy" });
   });
 
-  test("keeps completed status until observed, then reaps it", async () => {
+  test("normalizes every status batch and retries terminal status idempotently", async () => {
     const { executor } = await setup();
     const spawned = await execute(executor, {
       kind: "process.spawn",
-      executable: "/bin/true",
-      args: [],
-      idempotencyKey: "complete",
+      executable: "/usr/bin/python3",
+      args: [
+        "-c",
+        "import os,time; os.write(1,b'a'); time.sleep(.08); os.write(2,b'b')",
+      ],
+      idempotencyKey: "batches",
     });
     if (spawned.outcome.kind !== "process")
       throw new Error("unexpected outcome");
-    await Bun.sleep(20);
-    const status = await execute(executor, {
+    await Bun.sleep(30);
+    const first = await execute(executor, {
       kind: "process.status",
       processId: spawned.outcome.processId,
     });
-    expect(status.outcome).toMatchObject({ state: "exited", exitCode: 0 });
-    await expect(
-      execute(executor, {
+    expect(first.events?.map((event) => event.sequence)).toEqual([0]);
+    await Bun.sleep(100);
+    const terminal = await execute(executor, {
+      kind: "process.status",
+      processId: spawned.outcome.processId,
+    });
+    expect(terminal.outcome).toMatchObject({ state: "exited", exitCode: 0 });
+    expect(terminal.events?.map((event) => event.sequence)).toEqual(
+      terminal.events?.map((_, index) => index),
+    );
+    expect(
+      await execute(executor, {
         kind: "process.status",
         processId: spawned.outcome.processId,
       }),
-    ).rejects.toMatchObject({ code: "not_found" });
+    ).toEqual(terminal);
   });
 
-  test("evicts the oldest completed process to admit new work", async () => {
-    const { executor } = await setup({ maxTrackedProcesses: 2 });
+  test("does not evict unobserved completion, then evicts observed tombstone", async () => {
+    const { executor } = await setup({ maxTrackedProcesses: 1 });
     const first = await execute(executor, {
       kind: "process.spawn",
       executable: "/bin/true",
       args: [],
       idempotencyKey: "first",
     });
+    if (first.outcome.kind !== "process") throw new Error("unexpected outcome");
     await Bun.sleep(20);
-    const second = await execute(executor, {
-      kind: "process.spawn",
-      executable: "/bin/true",
-      args: [],
-      idempotencyKey: "second",
-    });
-    await Bun.sleep(20);
+    await expect(
+      execute(executor, {
+        kind: "process.spawn",
+        executable: "/bin/true",
+        args: [],
+        idempotencyKey: "blocked",
+      }),
+    ).rejects.toMatchObject({ code: "executor_busy" });
+    expect(
+      (
+        await execute(executor, {
+          kind: "process.status",
+          processId: first.outcome.processId,
+        })
+      ).outcome,
+    ).toMatchObject({ state: "exited" });
     await execute(executor, {
       kind: "process.spawn",
       executable: "/bin/true",
       args: [],
-      idempotencyKey: "third",
+      idempotencyKey: "admitted",
     });
-    if (first.outcome.kind !== "process" || second.outcome.kind !== "process")
-      throw new Error("unexpected outcome");
     await expect(
       execute(executor, {
         kind: "process.status",
         processId: first.outcome.processId,
       }),
     ).rejects.toMatchObject({ code: "not_found" });
-    expect(
-      (
-        await execute(executor, {
-          kind: "process.status",
-          processId: second.outcome.processId,
-        })
-      ).outcome,
-    ).toMatchObject({ state: "exited" });
+  });
+
+  test("close fences an in-flight spawn admission", async () => {
+    const { executor } = await setup();
+    const spawning = execute(executor, {
+      kind: "process.spawn",
+      executable: "/bin/sleep",
+      args: ["30"],
+      idempotencyKey: "racing",
+    });
+    const closing = executor.close();
+    await expect(spawning).rejects.toMatchObject({ code: "operation_failed" });
+    await closing;
+  });
+
+  test("close is bounded when a descendant inherits output streams", async () => {
+    const { executor } = await setup();
+    await execute(executor, {
+      kind: "process.spawn",
+      executable: "/usr/bin/python3",
+      args: [
+        "-c",
+        "import os,time; p=os.fork(); time.sleep(30) if p==0 else None",
+      ],
+      idempotencyKey: "inherited-stream",
+    });
+    await Bun.sleep(30);
+    const started = performance.now();
+    await executor.close();
+    expect(performance.now() - started).toBeLessThan(500);
+  });
+
+  test("kill errors do not poison close cleanup", async () => {
+    const { executor } = await setup();
+    await execute(executor, {
+      kind: "process.spawn",
+      executable: "/bin/sleep",
+      args: ["30"],
+      idempotencyKey: "kill-error",
+    });
+    const originalKill = process.kill;
+    process.kill = ((pid: number, signal?: NodeJS.Signals | number) => {
+      originalKill(pid, signal);
+      const error = new Error("denied") as NodeJS.ErrnoException;
+      error.code = "EPERM";
+      throw error;
+    }) as typeof process.kill;
+    try {
+      await expect(executor.close()).resolves.toBeUndefined();
+      await expect(executor.close()).resolves.toBeUndefined();
+    } finally {
+      process.kill = originalKill;
+    }
   });
 
   test("close terminates children, clears tracking, and is idempotent", async () => {
