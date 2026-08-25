@@ -5,6 +5,7 @@ import {
   SESSION_KERNEL_TRANSPORT_VERSION,
   type KernelActorAsyncRequest,
   type KernelActorAsyncResponse,
+  type KernelActorClientRequest,
   type KernelActorServiceCall,
   type KernelActorServiceResponse,
   type KernelActorSyncRequest,
@@ -123,11 +124,67 @@ function settleSync(
   Atomics.notify(control, 0);
 }
 
+const ASYNC_DEFAULT_OUTPUT_BYTES = 8 * 1024 * 1024;
+const ASYNC_MAX_OUTPUT_BYTES = 128 * 1024 * 1024;
+
 self.onmessage = (
-  event: MessageEvent<KernelActorAsyncRequest | KernelActorSyncRequest>,
+  event: MessageEvent<KernelActorClientRequest | KernelActorSyncRequest>,
 ) => {
   const request = event.data;
   if (request.t === "store" || request.t === "reduce") {
+    // Async variant: carries an rpcId instead of a SharedArrayBuffer
+    // handshake, so the gateway can await instead of blocking its thread.
+    if ("rpcId" in request) {
+      const rpcId = request.rpcId;
+      const buildCall = (outputBytes: number): KernelActorServiceCall => ({
+        t: "call",
+        rpcId,
+        outputBytes,
+        request:
+          request.t === "store"
+            ? { t: "store", method: request.method, args: request.args }
+            : { t: "reduce", command: request.command },
+      });
+      void (async () => {
+        let outputBytes = ASYNC_DEFAULT_OUTPUT_BYTES;
+        for (;;) {
+          const response = await rpc(buildCall(outputBytes));
+          if (response.t !== "call_result") {
+            self.postMessage({
+              t: "error",
+              rpcId,
+              error: "Invalid kernel call response",
+            } satisfies KernelActorAsyncResponse);
+            return;
+          }
+          if (
+            request.t === "store" &&
+            response.status === 2 &&
+            typeof response.length === "number" &&
+            response.length > outputBytes &&
+            response.length <= ASYNC_MAX_OUTPUT_BYTES
+          ) {
+            // Exactly-sized retry for large read-only snapshots. Reductions
+            // are never retried, so this cannot replay a committed mutation.
+            outputBytes = response.length;
+            continue;
+          }
+          self.postMessage(response);
+          return;
+        }
+      })().catch((error: unknown) => {
+        self.postMessage({
+          t: "error",
+          rpcId,
+          error: error instanceof Error ? error.message : String(error),
+          retryable:
+            !!error &&
+            typeof error === "object" &&
+            (error as { retryable?: boolean }).retryable === true,
+        });
+      });
+      return;
+    }
     const call: KernelActorServiceCall = {
       t: "call",
       rpcId: crypto.randomUUID(),

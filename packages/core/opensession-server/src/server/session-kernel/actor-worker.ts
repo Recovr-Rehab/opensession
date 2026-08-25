@@ -167,17 +167,24 @@ export function startSessionKernelActorWorker(): void {
               core.payload,
               core.effectKey,
             );
-          else if (core.op === "ack_outbox")
-            result = host.call("ackOutbox", [core.id]);
-          else if (core.op === "defer_outbox")
-            result = host.call("deferOutbox", [core.id]);
-          else if (core.op === "fail_outbox")
-            result = host.call("noteOutboxFailure", [
+          else if (core.op === "ack_outbox") {
+            if (store.outboxSessionId(core.id) !== core.sessionId)
+              throw new Error(`Outbox ${core.id} crossed session ownership`);
+            result = store.ackOutbox(core.id);
+          } else if (core.op === "defer_outbox") {
+            if (store.outboxSessionId(core.id) !== core.sessionId)
+              throw new Error(`Outbox ${core.id} crossed session ownership`);
+            result = store.deferOutbox(core.id);
+          } else if (core.op === "fail_outbox") {
+            if (store.outboxSessionId(core.id) !== core.sessionId)
+              throw new Error(`Outbox ${core.id} crossed session ownership`);
+            result = store.noteOutboxFailure(
               core.id,
               core.error,
               core.maxAttempts,
-            ]);
-          else if (core.op === "clear") result = store.clearSession(core.sessionId);
+            );
+          } else if (core.op === "clear")
+            result = store.clearSession(core.sessionId);
           else result = store.tombstoneSession(core.sessionId);
         } else if (command.kind === "turn") {
           const turn = command.request;

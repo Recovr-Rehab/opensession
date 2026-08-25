@@ -43,6 +43,12 @@ export type KernelActorAsyncResponse =
     }
   | { t: "error"; rpcId: string; error: string; retryable?: boolean };
 
+/** Gateway-worker-only async call. The transport wraps this in a service call;
+ * it never crosses the independently supervised service boundary directly. */
+export type KernelActorClientCallRequest =
+  | { t: "store"; rpcId: string; method: string; args: unknown[] }
+  | { t: "reduce"; rpcId: string; command: SessionActorReducerCommand };
+
 export type KernelActorServiceCall = {
   t: "call";
   rpcId: string;
@@ -61,6 +67,14 @@ export type KernelActorServiceResponse =
       length: number;
       body?: string;
     };
+
+export type KernelActorClientRequest =
+  | KernelActorAsyncRequest
+  | KernelActorClientCallRequest;
+
+export type KernelActorClientResponse =
+  | KernelActorAsyncResponse
+  | Extract<KernelActorServiceResponse, { t: "call_result" }>;
 
 export type KernelActorTransportEnvelope = {
   version: number;

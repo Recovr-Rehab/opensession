@@ -1,9 +1,11 @@
 import { afterEach, describe, expect, test } from "bun:test";
 import {
   SessionKernelActorClient,
+  SessionKernelActorError,
   SessionKernelQuarantinedError,
   isFatalSessionKernelAsyncTimeout,
 } from "./actor-client";
+import { SESSION_KERNEL_ACTOR_VERSION } from "./actor-protocol";
 import {
   __setSessionKernelStoreForTest,
   installSessionKernelActor,
@@ -47,7 +49,7 @@ describe("session kernel actor boundary", () => {
     expect(isFatalSessionKernelAsyncTimeout({
       t: "hello",
       rpcId: "hello",
-      version: 23,
+      version: SESSION_KERNEL_ACTOR_VERSION,
     })).toBe(true);
     expect(isFatalSessionKernelAsyncTimeout({
       t: "acknowledge",
@@ -402,6 +404,77 @@ describe("session kernel actor boundary", () => {
       generation: 4,
       currentRunId: "run-4",
     });
+  });
+
+  test("fails sync calls fast and stays alive when the actor is unresponsive", () => {
+    class NeverRespondingWorker {
+      listeners = new Map<string, (event: never) => void>();
+      postCount = 0;
+      addEventListener(type: string, listener: (event: never) => void) {
+        this.listeners.set(type, listener);
+      }
+      removeEventListener() {}
+      postMessage() { this.postCount += 1; }
+      terminate() {}
+    }
+    const worker = new NeverRespondingWorker();
+    const onFatal: Array<Error> = [];
+    const previousTimeout = process.env.OPENSESSION_SYNC_KERNEL_TIMEOUT_MS;
+    process.env.OPENSESSION_SYNC_KERNEL_TIMEOUT_MS = "50";
+    try {
+      const host = new SessionKernelActorClient(
+        worker as unknown as Worker,
+        (error) => onFatal.push(error),
+      );
+      client = host;
+
+      const first = (() => {
+        try {
+          host.decideGateway({
+            op: "request",
+            sessionId: "slow-actor",
+            requestId: "one",
+            operation: "websocket_command",
+          });
+          return undefined;
+        } catch (error) {
+          return error;
+        }
+      })();
+      expect(first).toBeInstanceOf(SessionKernelActorError);
+      expect((first as SessionKernelActorError).retryable).toBe(true);
+      expect(worker.postCount).toBe(1);
+
+      // The breaker opens after consecutive timeouts and refuses immediately.
+      expect(() =>
+        host.decideGateway({
+          op: "request",
+          sessionId: "slow-actor",
+          requestId: "two",
+          operation: "websocket_command",
+        }),
+      ).toThrow(SessionKernelActorError);
+      expect(worker.postCount).toBe(2);
+      const startedAt = Date.now();
+      expect(() =>
+        host.decideGateway({
+          op: "request",
+          sessionId: "slow-actor",
+          requestId: "three",
+          operation: "websocket_command",
+        }),
+      ).toThrow("breaker");
+      expect(Date.now() - startedAt).toBeLessThan(40);
+      expect(worker.postCount).toBe(2);
+
+      // A slow actor is degradation, not a lost authority: the client stays
+      // alive and no fatal handler fired.
+      expect(onFatal).toEqual([]);
+    } finally {
+      if (previousTimeout === undefined)
+        delete process.env.OPENSESSION_SYNC_KERNEL_TIMEOUT_MS;
+      else process.env.OPENSESSION_SYNC_KERNEL_TIMEOUT_MS = previousTimeout;
+    }
   });
 
   test("fails new requests immediately after the actor stops", async () => {

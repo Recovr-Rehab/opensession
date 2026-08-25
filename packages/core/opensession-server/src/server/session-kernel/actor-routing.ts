@@ -48,17 +48,11 @@ export function sessionActorReducerRoute(
           }
         : { scope: "global" };
     case "core":
-      return "sessionId" in command.request
-        ? {
-            scope: "session",
-            sessionId: command.request.sessionId,
-            mutation: true,
-          }
-        : {
-            scope: "outbox",
-            id: command.request.id,
-            mutation: true,
-          };
+      return {
+        scope: "session",
+        sessionId: command.request.sessionId,
+        mutation: true,
+      };
     default: {
       const exhaustive: never = command;
       return exhaustive;

@@ -19,10 +19,52 @@ import { MAX_UPLOAD_BYTES, stageHttpUpload } from "../uploads";
 import { systemStats } from "../system-stats";
 import { BOOT_ID, broadcastToAll } from "../ws-hub";
 import { executorClientHealth, executorClientReady } from "../executor-client";
-import { sessionKernelHealth, sessionKernelStore } from "../session-kernel";
+import {
+	sessionKernelHealth,
+	sessionKernelReadinessSnapshot,
+	sessionKernelStore,
+} from "../session-kernel";
 import { requireWorkspaceAdmin } from "../workspace-auth";
 import { audit } from "../audit";
 import { serviceReadiness } from "../service-readiness";
+
+// Each dead-letter listing fans out across every isolated session database on
+// the actor's catalog lane, and the synchronous bridge blocks the gateway for
+// the duration. Polling this endpoint therefore amplifies actor load exactly
+// when the actor is already degraded. Serve a short-TTL snapshot with
+// single-flight refresh instead; mutations invalidate it immediately.
+const DEAD_LETTERS_CACHE_TTL_MS = 5_000;
+let deadLettersCache: {
+	at: number;
+	refresh: Promise<unknown>;
+	value?: unknown;
+} | undefined;
+
+function deadLettersSnapshot(limit: number, offset: number): Promise<unknown> {
+	const now = Date.now();
+	const cached = deadLettersCache;
+	if (cached && now - cached.at < DEAD_LETTERS_CACHE_TTL_MS) return cached.refresh;
+	const priorValue = cached?.value;
+	const refresh = (async () => {
+		try {
+			const value = sessionKernelStore().deadLetters(limit, offset);
+			deadLettersCache = { at: Date.now(), refresh: Promise.resolve(value), value };
+			return value;
+		} catch (error) {
+			// A degraded actor must not take the reliability view down with it:
+			// keep serving the last good snapshot until a refresh succeeds.
+			if (priorValue === undefined) throw error;
+			deadLettersCache = {
+				at: Date.now(),
+				refresh: Promise.resolve(priorValue),
+				value: priorValue,
+			};
+			return priorValue;
+		}
+	})();
+	deadLettersCache = { at: now, refresh };
+	return refresh;
+}
 
 export async function handleSystemRoutes(
 	ctx: RouteContext,
@@ -41,7 +83,7 @@ export async function handleSystemRoutes(
 				0,
 				Math.trunc(Number(url.searchParams.get("offset"))) || 0,
 			);
-			return Response.json(sessionKernelStore().deadLetters(limit, offset));
+			return Response.json(await deadLettersSnapshot(limit, offset));
 		}
 		if (req.method === "POST") {
 			const body = (await req.json().catch(() => null)) as {
@@ -91,6 +133,7 @@ export async function handleSystemRoutes(
 				outbox_id: Number.isSafeInteger(body?.id) ? Number(body?.id) : undefined,
 				changed,
 			});
+			if (changed) deadLettersCache = undefined;
 			return Response.json(
 				{ changed, action: validQuarantine ? "release" : discard ? "discard" : "retry" },
 				{ status: changed ? 200 : 404 },
@@ -104,7 +147,7 @@ export async function handleSystemRoutes(
 
 	if (path === "/ready" && req.method === "GET") {
 		try {
-			const kernel = await sessionKernelHealth();
+			const kernel = sessionKernelReadinessSnapshot();
 			const executor = executorClientHealth();
 			const executorReadiness = await executorClientReady();
 			const readiness = serviceReadiness();

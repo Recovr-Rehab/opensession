@@ -161,6 +161,13 @@ export function sessionCore<T extends CoreActorRequest>(
   return store.tombstoneSession(request.sessionId) as CoreActorResult<T>;
 }
 
+export async function sessionCoreAsync<T extends CoreActorRequest>(
+  request: T,
+): Promise<CoreActorResult<T>> {
+  if (state.actor) return state.actor.decideCoreAsync(request);
+  return sessionCore(request);
+}
+
 export function sessionGatewayCommand<T extends GatewayCommandRequest>(
   request: T,
 ): GatewayCommandResult<T> {
@@ -513,6 +520,17 @@ export async function sessionKernelRuntimeWork(
 
 let healthCache: { at: number; value: Record<string, unknown> } | undefined;
 let healthRefresh: Promise<Record<string, unknown>> | undefined;
+
+/** Readiness must never enqueue the all-session stats fanout. The gateway is
+ * coupled fail-closed to the actor service, so its local phase is the liveness
+ * authority; include the last detailed sample only when one already exists. */
+export function sessionKernelReadinessSnapshot(): Record<string, unknown> {
+  return healthCache?.value ?? {
+    active: state.kernels?.size ?? 0,
+    statsPending: true,
+  };
+}
+
 export async function sessionKernelHealth(): Promise<Record<string, unknown>> {
   if (healthCache && Date.now() - healthCache.at < 5_000)
     return healthCache.value;

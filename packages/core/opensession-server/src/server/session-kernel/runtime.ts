@@ -1,7 +1,7 @@
 /** Runtime wake-ups for durable timers and outbox effects. */
 import {
 	passivateIdleSessionKernels,
-  sessionCore,
+	sessionCoreAsync,
 	sessionKernel,
 	sessionKernelRuntimeWork,
 	sessionKernelStore,
@@ -223,46 +223,64 @@ export async function drainSessionKernelRuntime(): Promise<void> {
 			if (active.size >= admissionLimit || active.has(item.id)) continue;
 			active.add(item.id);
 			void executeSessionEffect(item)
-				.then((executed) => {
-					if (executed) sessionCore({ op: "ack_outbox", id: item.id });
+				.then(async (executed) => {
+					if (executed)
+						await sessionCoreAsync({
+							op: "ack_outbox",
+							id: item.id,
+							sessionId: item.sessionId,
+						});
 				})
-				.catch((error) => {
-          if (error instanceof SessionKernelQuarantinedError) {
-            console.error(
-              `[session-kernel] outbox ${item.kind}/${item.id} frozen with quarantined session ${item.sessionId}:`,
-              error,
-            );
-            return;
-          }
-          try {
-            if (error instanceof SessionEffectDeferredError) {
-              sessionCore({ op: "defer_outbox", id: item.id });
-              return;
-            }
-            const message =
-              error instanceof Error ? error.message : String(error);
-            const settled = sessionCore({
-              op: "fail_outbox",
-              id: item.id,
-              error: message,
-              maxAttempts: error instanceof CreationEffectIndeterminateError ? 1 : 20,
-            });
-            if (settled.deadLetteredNow) {
-              failDeadCreationEffect(item, message);
-              audit({ msg: "session_kernel_dead_lettered", kind: "outbox", session_id: item.sessionId, outbox_id: item.id, error: message });
-            }
-            console.error(
-              `[session-kernel] outbox ${item.kind}/${item.id} failed:`, error,
-            );
-          } catch (settlementError) {
-            // Session quarantine freezes accepted work in place. Catalog/actor
-            // failures are handled by the actor client's fail-closed callback;
-            // neither may escape this detached promise as an unhandled rejection.
-            console.error(
-              `[session-kernel] outbox ${item.kind}/${item.id} could not settle its failure:`,
-              settlementError,
-            );
-          }
+				.catch(async (error) => {
+					if (error instanceof SessionKernelQuarantinedError) {
+						console.error(
+							`[session-kernel] outbox ${item.kind}/${item.id} frozen with quarantined session ${item.sessionId}:`,
+							error,
+						);
+						return;
+					}
+					try {
+						if (error instanceof SessionEffectDeferredError) {
+							await sessionCoreAsync({
+							op: "defer_outbox",
+							id: item.id,
+							sessionId: item.sessionId,
+						});
+							return;
+						}
+						const message =
+							error instanceof Error ? error.message : String(error);
+						const settled = await sessionCoreAsync({
+							op: "fail_outbox",
+							id: item.id,
+							sessionId: item.sessionId,
+							error: message,
+							maxAttempts:
+								error instanceof CreationEffectIndeterminateError ? 1 : 20,
+						});
+						if (settled.deadLetteredNow) {
+							failDeadCreationEffect(item, message);
+							audit({
+								msg: "session_kernel_dead_lettered",
+								kind: "outbox",
+								session_id: item.sessionId,
+								outbox_id: item.id,
+								error: message,
+							});
+						}
+						console.error(
+							`[session-kernel] outbox ${item.kind}/${item.id} failed:`,
+							error,
+						);
+					} catch (settlementError) {
+						// Session quarantine freezes accepted work in place. Catalog/actor
+						// failures are handled by the actor client's fail-closed callback;
+						// neither may escape this detached promise as an unhandled rejection.
+						console.error(
+							`[session-kernel] outbox ${item.kind}/${item.id} could not settle its failure:`,
+							settlementError,
+						);
+					}
 				})
 				.finally(() => active.delete(item.id));
 		}
@@ -285,11 +303,16 @@ export async function drainSessionKernelRuntime(): Promise<void> {
 export function startSessionKernelRuntime(intervalMs = 1_000): void {
 	if (runtime.handle) return;
 	ensureCreationEffectExecutors();
+	const drain = () => {
+		void drainSessionKernelRuntime().catch((error) => {
+			console.error("[session-kernel] runtime poll failed; retrying:", error);
+		});
+	};
 	runtime.handle = setInterval(() => {
-		void drainSessionKernelRuntime();
+		drain();
 	}, intervalMs);
 	runtime.handle.unref?.();
-	void drainSessionKernelRuntime();
+	drain();
 }
 
 export function stopSessionKernelRuntime(): void {

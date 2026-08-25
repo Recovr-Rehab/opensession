@@ -120,6 +120,106 @@ describe("session kernel actor service", () => {
     }
   });
 
+  test("settles outbox work asynchronously on its session lane", async () => {
+    const previousToken = process.env.OPENSESSION_SESSION_KERNEL_TOKEN;
+    const previousUrl = process.env.OPENSESSION_SESSION_KERNEL_URL;
+    process.env.OPENSESSION_SESSION_KERNEL_TOKEN = token;
+    process.env.OPENSESSION_SESSION_KERNEL_URL = service.url;
+    const worker = new Worker(
+      new URL("../../session-kernel-transport-worker.ts", import.meta.url),
+      { type: "module" },
+    );
+    try {
+      const send = (message: Record<string, unknown>) =>
+        new Promise<Record<string, any>>((resolve, reject) => {
+          const timeout = setTimeout(
+            () => reject(new Error(`transport request ${message.rpcId} timed out`)),
+            2_000,
+          );
+          const onMessage = (event: MessageEvent) => {
+            const response = event.data as Record<string, any>;
+            if (response.rpcId !== message.rpcId) return;
+            clearTimeout(timeout);
+            worker.removeEventListener("message", onMessage);
+            resolve(response);
+          };
+          worker.addEventListener("message", onMessage);
+          worker.postMessage(message);
+        });
+      const result = (response: Record<string, any>) => {
+        expect(response.t).toBe("call_result");
+        expect(response.body).toBeString();
+        return JSON.parse(response.body as string) as {
+          ok: boolean;
+          result?: unknown;
+          error?: string;
+        };
+      };
+      await send({
+        t: "hello",
+        rpcId: "async-settlement-hello",
+        version: SESSION_KERNEL_ACTOR_VERSION,
+      });
+      const sessionId = "async-outbox-settlement";
+      const enqueued = result(await send({
+        t: "store",
+        rpcId: "async-settlement-enqueue",
+        method: "enqueueOutbox",
+        args: [
+          sessionId,
+          "human_ask_deliver",
+          { askId: "ask-one", skipUi: false },
+          "deliver-one",
+        ],
+      }));
+      expect(enqueued.ok).toBe(true);
+      const id = Number(enqueued.result);
+
+      const wrongSession = result(await send({
+        t: "reduce",
+        rpcId: "async-settlement-wrong-session",
+        command: {
+          kind: "core",
+          commandId: crypto.randomUUID(),
+          request: { op: "ack_outbox", id, sessionId: "wrong-session" },
+        },
+      }));
+      expect(wrongSession).toMatchObject({
+        ok: false,
+        error: `Outbox ${id} crossed session ownership`,
+      });
+
+      const settled = result(await send({
+        t: "reduce",
+        rpcId: "async-settlement-correct-session",
+        command: {
+          kind: "core",
+          commandId: crypto.randomUUID(),
+          request: { op: "ack_outbox", id, sessionId },
+        },
+      }));
+      expect(settled.ok).toBe(true);
+
+      const pending = result(await send({
+        t: "store",
+        rpcId: "async-settlement-pending",
+        method: "pendingOutbox",
+        args: [Date.now(), 100, ["human_ask_deliver"]],
+      }));
+      expect(pending.ok).toBe(true);
+      expect((pending.result as Array<{ id: number }>).some((item) => item.id === id))
+        .toBe(false);
+    } finally {
+      worker.terminate();
+      if (previousToken === undefined)
+        delete process.env.OPENSESSION_SESSION_KERNEL_TOKEN;
+      else process.env.OPENSESSION_SESSION_KERNEL_TOKEN = previousToken;
+      if (previousUrl === undefined)
+        delete process.env.OPENSESSION_SESSION_KERNEL_URL;
+      else process.env.OPENSESSION_SESSION_KERNEL_URL = previousUrl;
+    }
+  });
+
   test("reports liveness and readiness without exposing the RPC", async () => {
     const live = await fetch(`${service.url}/live`);
     const ready = await fetch(`${service.url}/ready`);

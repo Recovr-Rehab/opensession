@@ -27,8 +27,8 @@ import type { GatewayCommandRequest, GatewayCommandResult } from "./gateway-comm
 import type { CoreActorRequest, CoreActorResult } from "./core-protocol";
 import {
   SESSION_KERNEL_ACTOR_VERSION,
-  type KernelActorAsyncRequest,
-  type KernelActorAsyncResponse,
+  type KernelActorClientRequest,
+  type KernelActorClientResponse,
 } from "./actor-protocol";
 
 const SMALL_OUTPUT_BYTES = 256 * 1024;
@@ -68,27 +68,44 @@ export class SessionKernelQuarantinedError extends SessionKernelActorError {
 }
 
 export function isFatalSessionKernelAsyncTimeout(
-  request: KernelActorAsyncRequest,
+  request: KernelActorClientRequest,
 ): boolean {
   return request.t === "hello" || request.t === "acknowledge";
 }
 
+// The synchronous bridge blocks the gateway event loop while it waits. A slow
+// actor must therefore surface as fast failures, not stacked multi-second
+// waits: every concurrent UI request otherwise serializes behind each one and
+// can starve process timers past the watchdog threshold.
+const SYNC_CALL_TIMEOUT_MS_FLOOR = 25;
+
+function syncCallTimeoutMs(): number {
+  return Math.max(
+    SYNC_CALL_TIMEOUT_MS_FLOOR,
+    Number(process.env.OPENSESSION_SYNC_KERNEL_TIMEOUT_MS ?? 5_000),
+  );
+}
+const SYNC_BREAKER_AFTER_TIMEOUTS = 2;
+const SYNC_BREAKER_OPEN_MS = 10_000;
+
 type Pending = {
-  resolve: (value: KernelActorAsyncResponse) => void;
+  resolve: (value: KernelActorClientResponse) => void;
   reject: (error: Error) => void;
 };
 
 export class SessionKernelActorClient {
   private readonly pending = new Map<string, Pending>();
+  private syncConsecutiveTimeouts = 0;
+  private syncBreakerOpenUntil = 0;
   private deadError?: Error;
   // Synchronous calls cannot overlap on the gateway thread: Atomics.wait
   // blocks until the actor finishes. Reuse their shared response buffers
   // instead of allocating and faulting 256 KiB for every map read. Session
   // list enrichment alone performs hundreds of small reads.
-  private readonly syncControlBuffer = new SharedArrayBuffer(
+  private syncControlBuffer = new SharedArrayBuffer(
     Int32Array.BYTES_PER_ELEMENT * 2,
   );
-  private readonly syncSmallOutputBuffer = new SharedArrayBuffer(
+  private syncSmallOutputBuffer = new SharedArrayBuffer(
     SMALL_OUTPUT_BYTES,
   );
   private syncLargeOutputBuffer?: SharedArrayBuffer;
@@ -99,7 +116,7 @@ export class SessionKernelActorClient {
     private readonly onFatal?: (error: Error) => void,
   ) {
     worker.addEventListener("message", (event: MessageEvent) => {
-      const response = event.data as KernelActorAsyncResponse;
+      const response = event.data as KernelActorClientResponse;
       const pending = this.pending.get(response.rpcId);
       if (!pending) return;
       this.pending.delete(response.rpcId);
@@ -255,6 +272,37 @@ export class SessionKernelActorClient {
     );
   }
 
+  async decideCoreAsync<T extends CoreActorRequest>(
+    request: T,
+  ): Promise<CoreActorResult<T>> {
+    const response = await this.request({
+      t: "reduce",
+      rpcId: crypto.randomUUID(),
+      command: { kind: "core", commandId: crypto.randomUUID(), request },
+    });
+    if (response.t !== "call_result" || !response.body)
+      throw new SessionKernelActorError(
+        `Invalid async core ${request.op} response`,
+        true,
+      );
+    const body = JSON.parse(response.body) as {
+      ok: boolean;
+      result?: CoreActorResult<T>;
+      error?: string;
+      code?: string;
+      sessionId?: string;
+    };
+    if (!body.ok) {
+      const message = body.error || `Session kernel core ${request.op} failed`;
+      if (body.code === "session_quarantined" && body.sessionId)
+        throw new SessionKernelQuarantinedError(body.sessionId, message);
+      const error = new SessionKernelActorError(message, false);
+      if (body.code === "actor_fatal") this.markDead(error);
+      throw error;
+    }
+    return body.result as CoreActorResult<T>;
+  }
+
   decideGateway<T extends GatewayCommandRequest>(
     request: T,
   ): GatewayCommandResult<T> {
@@ -344,6 +392,12 @@ export class SessionKernelActorClient {
     outputBytes = large ? LARGE_OUTPUT_BYTES : SMALL_OUTPUT_BYTES,
   ): TResult {
     if (this.deadError) throw this.deadError;
+    if (this.syncBreakerOpenUntil > Date.now()) {
+      throw new SessionKernelActorError(
+        "Session kernel actor is unresponsive; sync call refused by breaker",
+        true,
+      );
+    }
     const controlBuffer = this.syncControlBuffer;
     const outputBuffer =
       outputBytes === SMALL_OUTPUT_BYTES
@@ -361,12 +415,31 @@ export class SessionKernelActorClient {
       control: controlBuffer,
       output: outputBuffer,
     });
-    const waited = Atomics.wait(control, 0, 0, 10_000);
+    const waited = Atomics.wait(control, 0, 0, syncCallTimeoutMs());
     if (waited === "timed-out") {
-      const error = new Error(`Session kernel actor timed out in ${label}`);
-      this.markDead(error);
-      throw error;
+      // A slow actor is a retryable degradation, not a lost authority: the
+      // actor service fail-stops itself on real ambiguity, and the worker
+      // error/close listeners still mark the client dead on true failures.
+      // Killing the client here would turn every slowdown into a gateway
+      // restart. Abandon these handshake buffers so a late reply settles into
+      // an orphan instead of being misattributed to the next call.
+      this.syncControlBuffer = new SharedArrayBuffer(
+        Int32Array.BYTES_PER_ELEMENT * 2,
+      );
+      if (outputBytes === SMALL_OUTPUT_BYTES)
+        this.syncSmallOutputBuffer = new SharedArrayBuffer(SMALL_OUTPUT_BYTES);
+      else if (outputBytes === LARGE_OUTPUT_BYTES)
+        this.syncLargeOutputBuffer = undefined;
+      this.syncConsecutiveTimeouts += 1;
+      if (this.syncConsecutiveTimeouts >= SYNC_BREAKER_AFTER_TIMEOUTS)
+        this.syncBreakerOpenUntil = Date.now() + SYNC_BREAKER_OPEN_MS;
+      throw new SessionKernelActorError(
+        `Session kernel actor timed out in ${label}`,
+        true,
+      );
     }
+    this.syncConsecutiveTimeouts = 0;
+    this.syncBreakerOpenUntil = 0;
     const status = Atomics.load(control, 0);
     const length = Atomics.load(control, 1);
     if (status === 2) {
@@ -407,8 +480,8 @@ export class SessionKernelActorClient {
   }
 
   private request(
-    request: KernelActorAsyncRequest,
-  ): Promise<KernelActorAsyncResponse> {
+    request: KernelActorClientRequest,
+  ): Promise<KernelActorClientResponse> {
     if (this.deadError) return Promise.reject(this.deadError);
     return new Promise((resolve, reject) => {
       const timeout = setTimeout(() => {
