@@ -421,7 +421,11 @@ export function IngressPanel({
 									</SetupStep>
 									<SetupStep number={2} title="Create a named tunnel">
 										<CodeBlock>cloudflared tunnel create opensession</CodeBlock>
-										<p className="m-0">Copy the UUID printed by this command into Tunnel ID below.</p>
+										<p className="m-0">Copy the UUID printed by this command.</p>
+										<SettingsField className="mb-0">
+											Tunnel ID
+											<Input value={tunnelId} placeholder="00000000-0000-0000-0000-000000000000" disabled={!!busy} className="font-mono" onChange={(event) => setTunnelId(event.target.value)} />
+										</SettingsField>
 									</SetupStep>
 									<SetupStep number={3} title="Add the DNS route">
 										<SettingsField className="mb-0">
@@ -432,24 +436,20 @@ export function IngressPanel({
 									</SetupStep>
 									<SetupStep number={4} title="Generate the connector token">
 										<CodeBlock>cloudflared tunnel token opensession</CodeBlock>
-										<p className="m-0">Paste the printed token below. Open Session stores it on this server and starts the connector for you.</p>
+										<p className="m-0">Paste the printed token. Open Session stores it on this server and starts the connector for you.</p>
+										<SettingsField className="mb-0">
+											Tunnel token
+											<Input
+												type="password"
+												value={tunnelToken}
+												disabled={!!busy}
+												autoComplete="off"
+												placeholder={settings.cloudflare.tokenConfigured ? "Leave blank to keep the saved token" : "Paste the connector token"}
+												onChange={(event) => setTunnelToken(event.target.value)}
+											/>
+										</SettingsField>
 									</SetupStep>
 								</SetupSteps>
-								<SettingsField>
-									Tunnel ID
-									<Input value={tunnelId} placeholder="00000000-0000-0000-0000-000000000000" disabled={!!busy} className="font-mono" onChange={(event) => setTunnelId(event.target.value)} />
-								</SettingsField>
-								<SettingsField>
-									Tunnel token
-									<Input
-										type="password"
-										value={tunnelToken}
-										disabled={!!busy}
-										autoComplete="off"
-										placeholder={settings.cloudflare.tokenConfigured ? "Leave blank to keep the saved token" : "Paste the connector token"}
-										onChange={(event) => setTunnelToken(event.target.value)}
-									/>
-								</SettingsField>
 								<div className="grid gap-2">
 									<div className="text-label font-medium text-dim">Tunnel destination</div>
 									<CodeBlock>{settings.cloudflare.connectorTarget}</CodeBlock>
