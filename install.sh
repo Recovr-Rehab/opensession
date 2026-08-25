@@ -818,6 +818,8 @@ add_to_path() {
 
   display_profile="$config_file"
   case "$display_profile" in
+    # Intentional display text, not an expandable path.
+    # shellcheck disable=SC2088
     "$HOME"/*) display_profile="~/${display_profile#"$HOME"/}" ;;
   esac
   PATH_CONFIGURED_PROFILES="${PATH_CONFIGURED_PROFILES:+$PATH_CONFIGURED_PROFILES, }$display_profile"
