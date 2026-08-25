@@ -171,7 +171,7 @@ function PrivateAppSetup({
 					</p>
 				</div>
 				{status === "ready" && !settings.app.domain.credentialConfigured && (
-					<InlineAlert>This address is already working. Its certificate is managed outside Open Session.</InlineAlert>
+					<SettingsHint className="m-0">This address is already working. Its certificate is managed outside Open Session.</SettingsHint>
 				)}
 				<SetupSteps>
 							<SetupStep number={1} title="Choose the app domain">
