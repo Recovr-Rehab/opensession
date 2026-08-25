@@ -24,12 +24,15 @@ afterEach(async () => {
   );
 });
 
-async function setup() {
+async function setup(
+  options: Partial<Parameters<typeof LocalExecutor.create>[0]> = {},
+) {
   const root = await mkdtemp(join(tmpdir(), "local-executor-"));
   roots.push(root);
   const executor = await LocalExecutor.create({
     rootId: context.rootId,
     rootPath: root,
+    ...options,
   });
   executors.push(executor);
   return { root, executor };
@@ -173,6 +176,159 @@ describe("LocalExecutor", () => {
     expect(exited).toBe(true);
     expect(output).toBe(literal);
     await expect(readFile(join(root, "should-not-exist"))).rejects.toThrow();
+  });
+
+  test("caps verbose output and explicitly reports truncation", async () => {
+    const { executor } = await setup({
+      maxTrackedProcesses: 1,
+      maxPendingOutputBytesPerProcess: 64,
+      maxPendingOutputBytesOverall: 64,
+    });
+    const spawned = await execute(executor, {
+      kind: "process.spawn",
+      executable: "/usr/bin/printf",
+      args: ["%01000d", "1"],
+      idempotencyKey: "verbose",
+    });
+    if (spawned.outcome.kind !== "process")
+      throw new Error("unexpected outcome");
+    await Bun.sleep(20);
+    const status = await execute(executor, {
+      kind: "process.status",
+      processId: spawned.outcome.processId,
+    });
+    const output =
+      status.events
+        ?.flatMap((event) => (event.kind === "text" ? [event.data] : []))
+        .join("") ?? "";
+    expect(Buffer.byteLength(output)).toBeLessThanOrEqual(64);
+    expect(output).toContain("[truncated]\n");
+  });
+
+  test("preserves UTF-8 characters split across output chunks", async () => {
+    const { executor } = await setup();
+    const spawned = await execute(executor, {
+      kind: "process.spawn",
+      executable: "/usr/bin/python3",
+      args: [
+        "-c",
+        "import os,time; os.write(1,b'\\xe2\\x82'); time.sleep(.02); os.write(1,b'\\xac')",
+      ],
+      idempotencyKey: "utf8",
+    });
+    if (spawned.outcome.kind !== "process")
+      throw new Error("unexpected outcome");
+    await Bun.sleep(50);
+    const status = await execute(executor, {
+      kind: "process.status",
+      processId: spawned.outcome.processId,
+    });
+    expect(
+      status.events
+        ?.flatMap((event) => (event.kind === "text" ? [event.data] : []))
+        .join(""),
+    ).toBe("€");
+  });
+
+  test("rejects new work at active capacity", async () => {
+    const { executor } = await setup({ maxTrackedProcesses: 1 });
+    await execute(executor, {
+      kind: "process.spawn",
+      executable: "/bin/sleep",
+      args: ["30"],
+      idempotencyKey: "running",
+    });
+    await expect(
+      execute(executor, {
+        kind: "process.spawn",
+        executable: "/bin/true",
+        args: [],
+        idempotencyKey: "busy",
+      }),
+    ).rejects.toMatchObject({ code: "executor_busy" });
+  });
+
+  test("keeps completed status until observed, then reaps it", async () => {
+    const { executor } = await setup();
+    const spawned = await execute(executor, {
+      kind: "process.spawn",
+      executable: "/bin/true",
+      args: [],
+      idempotencyKey: "complete",
+    });
+    if (spawned.outcome.kind !== "process")
+      throw new Error("unexpected outcome");
+    await Bun.sleep(20);
+    const status = await execute(executor, {
+      kind: "process.status",
+      processId: spawned.outcome.processId,
+    });
+    expect(status.outcome).toMatchObject({ state: "exited", exitCode: 0 });
+    await expect(
+      execute(executor, {
+        kind: "process.status",
+        processId: spawned.outcome.processId,
+      }),
+    ).rejects.toMatchObject({ code: "not_found" });
+  });
+
+  test("evicts the oldest completed process to admit new work", async () => {
+    const { executor } = await setup({ maxTrackedProcesses: 2 });
+    const first = await execute(executor, {
+      kind: "process.spawn",
+      executable: "/bin/true",
+      args: [],
+      idempotencyKey: "first",
+    });
+    await Bun.sleep(20);
+    const second = await execute(executor, {
+      kind: "process.spawn",
+      executable: "/bin/true",
+      args: [],
+      idempotencyKey: "second",
+    });
+    await Bun.sleep(20);
+    await execute(executor, {
+      kind: "process.spawn",
+      executable: "/bin/true",
+      args: [],
+      idempotencyKey: "third",
+    });
+    if (first.outcome.kind !== "process" || second.outcome.kind !== "process")
+      throw new Error("unexpected outcome");
+    await expect(
+      execute(executor, {
+        kind: "process.status",
+        processId: first.outcome.processId,
+      }),
+    ).rejects.toMatchObject({ code: "not_found" });
+    expect(
+      (
+        await execute(executor, {
+          kind: "process.status",
+          processId: second.outcome.processId,
+        })
+      ).outcome,
+    ).toMatchObject({ state: "exited" });
+  });
+
+  test("close terminates children, clears tracking, and is idempotent", async () => {
+    const { executor } = await setup();
+    const spawned = await execute(executor, {
+      kind: "process.spawn",
+      executable: "/bin/sleep",
+      args: ["30"],
+      idempotencyKey: "close",
+    });
+    if (spawned.outcome.kind !== "process")
+      throw new Error("unexpected outcome");
+    await Promise.all([executor.close(), executor.close()]);
+    await expect(
+      execute(executor, {
+        kind: "process.status",
+        processId: spawned.outcome.processId,
+      }),
+    ).rejects.toMatchObject({ code: "operation_failed" });
   });
 
   test("returns unsupported for terminal, service, and portal families", async () => {

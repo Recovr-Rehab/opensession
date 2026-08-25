@@ -28,16 +28,37 @@ export interface LocalExecutorOptions {
   rootId: string;
   rootPath: string;
   environment?: Readonly<Record<string, string>>;
+  maxTrackedProcesses?: number;
+  maxPendingOutputBytesPerProcess?: number;
+  maxPendingOutputBytesOverall?: number;
 }
+
+const DEFAULT_MAX_TRACKED_PROCESSES = 64;
+const DEFAULT_MAX_PENDING_OUTPUT_BYTES_PER_PROCESS = 1024 * 1024;
+const DEFAULT_MAX_PENDING_OUTPUT_BYTES_OVERALL = 8 * 1024 * 1024;
+const MAX_TEXT_EVENT_BYTES = 256 * 1024;
+const TRUNCATION_NOTICE = "[truncated]\n";
+const TRUNCATION_NOTICE_BYTES = Buffer.byteLength(TRUNCATION_NOTICE);
 
 interface LocalProcess {
   child: ChildProcess;
   streamId: string;
   sequence: number;
   pending: ExecutorStreamEvent[];
+  pendingBytes: number;
+  outputLimit: number;
+  decoders: Record<"stdout" | "stderr", TextDecoder>;
+  listeners: {
+    stdout: (chunk: Buffer) => void;
+    stderr: (chunk: Buffer) => void;
+    error: (error: Error) => void;
+    close: (code: number | null, signal: NodeJS.Signals | null) => void;
+  };
+  truncated: boolean;
   exitCode?: number;
   signal?: string;
   exited: boolean;
+  completedOrder?: number;
 }
 
 /** Structured local filesystem/process backend confined to one real root. */
@@ -45,11 +66,40 @@ export class LocalExecutor implements Executor {
   readonly #rootId: string;
   readonly #root: string;
   readonly #environment: Readonly<Record<string, string>>;
+  readonly #maxTrackedProcesses: number;
+  readonly #processOutputLimit: number;
   readonly #processes = new Map<string, LocalProcess>();
+  #completedOrder = 0;
+  #closed = false;
+  #closePromise?: Promise<void>;
 
   private constructor(options: LocalExecutorOptions, realRoot: string) {
     this.#rootId = options.rootId;
     this.#root = realRoot;
+    this.#maxTrackedProcesses = positiveInteger(
+      options.maxTrackedProcesses,
+      DEFAULT_MAX_TRACKED_PROCESSES,
+      "maxTrackedProcesses",
+    );
+    const perProcess = positiveInteger(
+      options.maxPendingOutputBytesPerProcess,
+      DEFAULT_MAX_PENDING_OUTPUT_BYTES_PER_PROCESS,
+      "maxPendingOutputBytesPerProcess",
+    );
+    const overall = positiveInteger(
+      options.maxPendingOutputBytesOverall,
+      DEFAULT_MAX_PENDING_OUTPUT_BYTES_OVERALL,
+      "maxPendingOutputBytesOverall",
+    );
+    this.#processOutputLimit = Math.min(
+      perProcess,
+      Math.floor(overall / this.#maxTrackedProcesses),
+    );
+    if (this.#processOutputLimit < TRUNCATION_NOTICE_BYTES) {
+      throw new Error(
+        "pending output limits must reserve a truncation notice for every tracked process",
+      );
+    }
     this.#environment = Object.freeze({
       PATH: "/usr/local/bin:/usr/bin:/bin",
       HOME: realRoot,
@@ -76,6 +126,8 @@ export class LocalExecutor implements Executor {
         "invalid_grant",
         "executor root binding does not match",
       );
+    if (this.#closed)
+      throw new ExecutorFailure("operation_failed", "executor is closed");
     try {
       switch (operation.kind) {
         case "fs.read":
@@ -130,21 +182,31 @@ export class LocalExecutor implements Executor {
 
   /** Explicit test/shutdown cleanup; no process or timer is created at import time. */
   async close(): Promise<void> {
-    const waits: Promise<unknown>[] = [];
-    for (const process of this.#processes.values()) {
-      if (!process.exited && process.child.pid) {
-        try {
-          globalThis.process.kill(-process.child.pid, "SIGKILL");
-        } catch {}
-        waits.push(
-          new Promise((resolveWait) =>
-            process.child.once("close", resolveWait),
-          ),
-        );
+    if (this.#closePromise) return this.#closePromise;
+    this.#closed = true;
+    this.#closePromise = (async () => {
+      const waits: Promise<unknown>[] = [];
+      for (const tracked of this.#processes.values()) {
+        if (!tracked.exited) {
+          waits.push(
+            new Promise((resolveWait) =>
+              tracked.child.once("close", resolveWait),
+            ),
+          );
+          try {
+            if (tracked.child.pid)
+              globalThis.process.kill(-tracked.child.pid, "SIGKILL");
+            else tracked.child.kill("SIGKILL");
+          } catch (cause) {
+            if ((cause as NodeJS.ErrnoException)?.code !== "ESRCH") throw cause;
+          }
+        }
       }
-    }
-    await Promise.allSettled(waits);
-    this.#processes.clear();
+      await Promise.allSettled(waits);
+      for (const tracked of this.#processes.values()) this.#detach(tracked);
+      this.#processes.clear();
+    })();
+    return this.#closePromise;
   }
 
   async #read(
@@ -376,6 +438,7 @@ export class LocalExecutor implements Executor {
         "invalid_request",
         "process cwd is not a directory",
       );
+    this.#makeProcessRoom();
     const child = spawn(operation.executable, operation.args, {
       cwd,
       env: { ...this.#environment } as NodeJS.ProcessEnv,
@@ -394,41 +457,41 @@ export class LocalExecutor implements Executor {
       streamId,
       sequence: 0,
       pending: [],
+      pendingBytes: 0,
+      outputLimit: this.#processOutputLimit,
+      decoders: {
+        stdout: new TextDecoder(),
+        stderr: new TextDecoder(),
+      },
+      listeners: {} as LocalProcess["listeners"],
+      truncated: false,
       exited: false,
     };
-    this.#processes.set(processId, tracked);
-    const collect = (channel: "stdout" | "stderr", chunk: Buffer) => {
-      tracked.pending.push({
-        kind: "text",
-        streamId,
-        sequence: tracked.sequence++,
-        channel,
-        data: chunk.toString("utf8"),
-      });
+    tracked.listeners = {
+      stdout: (chunk) => this.#collect(tracked, "stdout", Buffer.from(chunk)),
+      stderr: (chunk) => this.#collect(tracked, "stderr", Buffer.from(chunk)),
+      error: (error) => this.#appendText(tracked, "stderr", error.message),
+      close: (code, signal) => {
+        this.#flushDecoder(tracked, "stdout");
+        this.#flushDecoder(tracked, "stderr");
+        tracked.exited = true;
+        tracked.completedOrder = this.#completedOrder++;
+        if (code !== null) tracked.exitCode = code;
+        if (signal) tracked.signal = signal;
+        tracked.pending.push({
+          kind: "exit",
+          streamId,
+          sequence: tracked.sequence++,
+          exitCode: code,
+          ...(signal ? { signal } : {}),
+        });
+      },
     };
-    child.stdout?.on("data", (chunk) => collect("stdout", Buffer.from(chunk)));
-    child.stderr?.on("data", (chunk) => collect("stderr", Buffer.from(chunk)));
-    child.once("error", (error) => {
-      tracked.pending.push({
-        kind: "text",
-        streamId,
-        sequence: tracked.sequence++,
-        channel: "stderr",
-        data: error.message,
-      });
-    });
-    child.once("close", (code, signal) => {
-      tracked.exited = true;
-      if (code !== null) tracked.exitCode = code;
-      if (signal) tracked.signal = signal;
-      tracked.pending.push({
-        kind: "exit",
-        streamId,
-        sequence: tracked.sequence++,
-        exitCode: code,
-        ...(signal ? { signal } : {}),
-      });
-    });
+    this.#processes.set(processId, tracked);
+    child.stdout?.on("data", tracked.listeners.stdout);
+    child.stderr?.on("data", tracked.listeners.stderr);
+    child.once("error", tracked.listeners.error);
+    child.once("close", tracked.listeners.close);
     return {
       outcome: { kind: "process", processId, state: "running", streamId },
     };
@@ -439,7 +502,8 @@ export class LocalExecutor implements Executor {
     if (!tracked)
       throw new ExecutorFailure("not_found", "process was not found");
     const events = tracked.pending.splice(0);
-    return {
+    tracked.pendingBytes = 0;
+    const result: ExecutorSuccess = {
       outcome: {
         kind: "process",
         processId,
@@ -451,6 +515,96 @@ export class LocalExecutor implements Executor {
       },
       ...(events.length ? { events } : {}),
     };
+    if (tracked.exited) this.#reap(processId, tracked);
+    return result;
+  }
+
+  #makeProcessRoom(): void {
+    while (this.#processes.size >= this.#maxTrackedProcesses) {
+      let oldest: [string, LocalProcess] | undefined;
+      for (const entry of this.#processes) {
+        if (
+          entry[1].completedOrder !== undefined &&
+          (!oldest ||
+            entry[1].completedOrder < (oldest[1].completedOrder ?? Infinity))
+        )
+          oldest = entry;
+      }
+      if (!oldest)
+        throw new ExecutorFailure(
+          "executor_busy",
+          "local process capacity is exhausted",
+        );
+      this.#reap(...oldest);
+    }
+  }
+
+  #collect(
+    tracked: LocalProcess,
+    channel: "stdout" | "stderr",
+    chunk: Buffer,
+  ): void {
+    if (tracked.truncated) return;
+    this.#appendText(
+      tracked,
+      channel,
+      tracked.decoders[channel].decode(chunk, { stream: true }),
+    );
+  }
+
+  #flushDecoder(tracked: LocalProcess, channel: "stdout" | "stderr"): void {
+    if (!tracked.truncated)
+      this.#appendText(tracked, channel, tracked.decoders[channel].decode());
+  }
+
+  #appendText(
+    tracked: LocalProcess,
+    channel: "stdout" | "stderr",
+    text: string,
+  ): void {
+    if (!text || tracked.truncated) return;
+    const available =
+      tracked.outputLimit - tracked.pendingBytes - TRUNCATION_NOTICE_BYTES;
+    const { selected, complete } = utf8Prefix(text, Math.max(0, available));
+    for (const part of splitUtf8(selected, MAX_TEXT_EVENT_BYTES)) {
+      const bytes = Buffer.byteLength(part);
+      tracked.pending.push({
+        kind: "text",
+        streamId: tracked.streamId,
+        sequence: tracked.sequence++,
+        channel,
+        data: part,
+      });
+      tracked.pendingBytes += bytes;
+    }
+    if (!complete) {
+      tracked.pending.push({
+        kind: "text",
+        streamId: tracked.streamId,
+        sequence: tracked.sequence++,
+        channel,
+        data: TRUNCATION_NOTICE,
+      });
+      tracked.pendingBytes += TRUNCATION_NOTICE_BYTES;
+      tracked.truncated = true;
+    }
+  }
+
+  #reap(processId: string, tracked: LocalProcess): void {
+    this.#detach(tracked);
+    tracked.pending.length = 0;
+    tracked.pendingBytes = 0;
+    this.#processes.delete(processId);
+  }
+
+  #detach(tracked: LocalProcess): void {
+    tracked.child.stdout?.removeListener("data", tracked.listeners.stdout);
+    tracked.child.stderr?.removeListener("data", tracked.listeners.stderr);
+    tracked.child.removeListener("error", tracked.listeners.error);
+    tracked.child.removeListener("close", tracked.listeners.close);
+    tracked.child.stdout?.destroy();
+    tracked.child.stderr?.destroy();
+    tracked.child.stdin?.destroy();
   }
 
   #signal(
@@ -574,6 +728,45 @@ export class LocalExecutor implements Executor {
   #relativePath(target: string): string {
     return relative(this.#root, target).split(sep).join("/") || ".";
   }
+}
+
+function positiveInteger(
+  value: number | undefined,
+  fallback: number,
+  name: string,
+): number {
+  const selected = value ?? fallback;
+  if (!Number.isSafeInteger(selected) || selected <= 0)
+    throw new Error(`${name} must be a positive safe integer`);
+  return selected;
+}
+
+function utf8Prefix(
+  text: string,
+  maxBytes: number,
+): { selected: string; complete: boolean } {
+  let bytes = 0;
+  let end = 0;
+  for (const character of text) {
+    const characterBytes = Buffer.byteLength(character);
+    if (bytes + characterBytes > maxBytes)
+      return { selected: text.slice(0, end), complete: false };
+    bytes += characterBytes;
+    end += character.length;
+  }
+  return { selected: text, complete: true };
+}
+
+function splitUtf8(text: string, maxBytes: number): string[] {
+  const parts: string[] = [];
+  let rest = text;
+  while (rest) {
+    const { selected } = utf8Prefix(rest, maxBytes);
+    if (!selected) break;
+    parts.push(selected);
+    rest = rest.slice(selected.length);
+  }
+  return parts;
 }
 
 function normalizeLocalError(cause: unknown): ExecutorFailure {
