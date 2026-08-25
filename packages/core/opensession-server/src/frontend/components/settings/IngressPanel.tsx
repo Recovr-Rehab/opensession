@@ -119,7 +119,7 @@ function PrivateAppSetup({
 				<SettingRow>
 					<SettingRowText>
 						<SettingRowTitle>Current address</SettingRowTitle>
-						<SettingRowDescription className="break-all font-mono">{settings.app.publicBaseUrl}</SettingRowDescription>
+						<div className="mt-1 break-all font-mono text-supporting text-dim">{settings.app.publicBaseUrl}</div>
 					</SettingRowText>
 				</SettingRow>
 			</SettingCard>
