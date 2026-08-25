@@ -191,8 +191,8 @@ describe("LocalExecutor", () => {
   test("caps verbose output and explicitly reports truncation", async () => {
     const { executor } = await setup({
       maxTrackedProcesses: 1,
-      maxPendingOutputBytesPerProcess: 64,
-      maxPendingOutputBytesOverall: 64,
+      maxPendingOutputBytesPerProcess: 1024,
+      maxPendingOutputBytesOverall: 1024,
     });
     const spawned = await execute(executor, {
       kind: "process.spawn",
@@ -211,7 +211,7 @@ describe("LocalExecutor", () => {
       status.events
         ?.flatMap((event) => (event.kind === "text" ? [event.data] : []))
         .join("") ?? "";
-    expect(Buffer.byteLength(output)).toBeLessThanOrEqual(64);
+    expect(Buffer.byteLength(output)).toBeLessThanOrEqual(1024);
     expect(output).toContain("[truncated]\n");
   });
 
@@ -243,8 +243,8 @@ describe("LocalExecutor", () => {
   test("resumes buffering after a truncation backlog is observed", async () => {
     const { executor } = await setup({
       maxTrackedProcesses: 1,
-      maxPendingOutputBytesPerProcess: 64,
-      maxPendingOutputBytesOverall: 64,
+      maxPendingOutputBytesPerProcess: 1024,
+      maxPendingOutputBytesOverall: 1024,
     });
     const spawned = await execute(executor, {
       kind: "process.spawn",
@@ -323,6 +323,33 @@ describe("LocalExecutor", () => {
     expect(
       executor.bufferedProcessStats(spawned.outcome.processId).chunks,
     ).toBe(1);
+  });
+
+  test("charges alternating channel chunks and metadata to the retained budget", async () => {
+    const { executor } = await setup({
+      maxTrackedProcesses: 1,
+      maxPendingOutputBytesPerProcess: 4096,
+      maxPendingOutputBytesOverall: 4096,
+    });
+    const spawned = await execute(executor, {
+      kind: "process.spawn",
+      executable: "/usr/bin/python3",
+      args: [
+        "-c",
+        "import os,time\nfor i in range(400):\n os.write(1 if i%2==0 else 2,b'x')\n time.sleep(.0005)",
+      ],
+      idempotencyKey: "alternating-tiny",
+    });
+    if (spawned.outcome.kind !== "process")
+      throw new Error("unexpected outcome");
+    await Bun.sleep(300);
+    const stats = executor.bufferedProcessStats(spawned.outcome.processId);
+    expect(stats.retainedBytes).toBe(
+      stats.allocatedBytes + stats.metadataBytes,
+    );
+    expect(stats.retainedBytes).toBeLessThanOrEqual(4096);
+    expect(stats.events).toBeLessThanOrEqual(4096);
+    expect(stats.chunks).toBeLessThanOrEqual(8192);
   });
 
   test("rejects new work at active capacity", async () => {
@@ -489,6 +516,41 @@ describe("LocalExecutor", () => {
       alive = await processIsLive(descendantPid);
     }
     expect(alive).toBe(false);
+  });
+
+  test("does not signal a stale saved process group after exit and close", async () => {
+    const { executor } = await setup();
+    const spawned = await execute(executor, {
+      kind: "process.spawn",
+      executable: "/bin/true",
+      args: [],
+      idempotencyKey: "stale-pgid",
+    });
+    if (spawned.outcome.kind !== "process")
+      throw new Error("unexpected outcome");
+    await Bun.sleep(20);
+    await execute(executor, {
+      kind: "process.status",
+      processId: spawned.outcome.processId,
+    });
+    const originalProcessKill = process.kill;
+    const originalChildKill = ChildProcess.prototype.kill;
+    let signals = 0;
+    process.kill = (() => {
+      signals++;
+      throw new Error("stale process group was signalled");
+    }) as typeof process.kill;
+    ChildProcess.prototype.kill = (() => {
+      signals++;
+      return false;
+    }) as typeof ChildProcess.prototype.kill;
+    try {
+      await expect(executor.close()).resolves.toBeUndefined();
+      expect(signals).toBe(0);
+    } finally {
+      process.kill = originalProcessKill;
+      ChildProcess.prototype.kill = originalChildKill;
+    }
   });
 
   test("falls back to direct child kill when group kill fails", async () => {

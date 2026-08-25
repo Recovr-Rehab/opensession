@@ -37,9 +37,15 @@ const DEFAULT_MAX_TRACKED_PROCESSES = 64;
 const DEFAULT_MAX_PENDING_OUTPUT_BYTES_PER_PROCESS = 1024 * 1024;
 const DEFAULT_MAX_PENDING_OUTPUT_BYTES_OVERALL = 8 * 1024 * 1024;
 const MAX_TEXT_EVENT_BYTES = 256 * 1024;
-const TEXT_BLOCK_BYTES = 4 * 1024;
-const MAX_PENDING_TEXT_EVENTS = 4_094;
-const MAX_PENDING_TEXT_CHUNKS = 4_094;
+const MAX_TEXT_CHUNK_BYTES = 4 * 1024;
+const MIN_TEXT_CHUNK_BYTES = 64;
+const MAX_PENDING_EVENTS_OVERALL = 4_096;
+const MAX_PENDING_CHUNKS_OVERALL = 8_192;
+const EVENT_METADATA_BYTES = 128;
+const CHUNK_METADATA_BYTES = 64;
+const TRUNCATION_RETAINED_RESERVE =
+  EVENT_METADATA_BYTES + CHUNK_METADATA_BYTES + MIN_TEXT_CHUNK_BYTES;
+const EXIT_RETAINED_RESERVE = EVENT_METADATA_BYTES;
 const CLOSE_EXIT_TIMEOUT_MS = 250;
 const TRUNCATION_NOTICE = "[truncated]\n";
 const TRUNCATION_NOTICE_BYTES = Buffer.byteLength(TRUNCATION_NOTICE);
@@ -60,8 +66,12 @@ interface LocalProcess {
   streamId: string;
   pending: PendingEvent[];
   pendingBytes: number;
+  pendingAllocatedBytes: number;
+  pendingMetadataBytes: number;
   pendingChunks: number;
   outputLimit: number;
+  eventLimit: number;
+  chunkLimit: number;
   decoders: Record<"stdout" | "stderr", TextDecoder>;
   listeners: {
     stdout: (chunk: Buffer) => void;
@@ -76,6 +86,7 @@ interface LocalProcess {
   signal?: string;
   exited: boolean;
   directExited: boolean;
+  directClosed: boolean;
   acknowledged: boolean;
   terminalResult?: ExecutorSuccess;
   completedOrder?: number;
@@ -88,6 +99,8 @@ export class LocalExecutor implements Executor {
   readonly #environment: Readonly<Record<string, string>>;
   readonly #maxTrackedProcesses: number;
   readonly #processOutputLimit: number;
+  readonly #processEventLimit: number;
+  readonly #processChunkLimit: number;
   readonly #processes = new Map<string, LocalProcess>();
   #completedOrder = 0;
   #closed = false;
@@ -103,6 +116,16 @@ export class LocalExecutor implements Executor {
       DEFAULT_MAX_TRACKED_PROCESSES,
       "maxTrackedProcesses",
     );
+    if (this.#maxTrackedProcesses > MAX_PENDING_EVENTS_OVERALL / 2)
+      throw new Error(
+        `maxTrackedProcesses cannot exceed ${MAX_PENDING_EVENTS_OVERALL / 2}`,
+      );
+    this.#processEventLimit = Math.floor(
+      MAX_PENDING_EVENTS_OVERALL / this.#maxTrackedProcesses,
+    );
+    this.#processChunkLimit = Math.floor(
+      MAX_PENDING_CHUNKS_OVERALL / this.#maxTrackedProcesses,
+    );
     const perProcess = positiveInteger(
       options.maxPendingOutputBytesPerProcess,
       DEFAULT_MAX_PENDING_OUTPUT_BYTES_PER_PROCESS,
@@ -117,9 +140,12 @@ export class LocalExecutor implements Executor {
       perProcess,
       Math.floor(overall / this.#maxTrackedProcesses),
     );
-    if (this.#processOutputLimit < TRUNCATION_NOTICE_BYTES) {
+    if (
+      this.#processOutputLimit <
+      TRUNCATION_RETAINED_RESERVE + EXIT_RETAINED_RESERVE
+    ) {
       throw new Error(
-        "pending output limits must reserve a truncation notice for every tracked process",
+        "pending output limits must reserve truncation and exit events for every tracked process",
       );
     }
     this.#environment = Object.freeze({
@@ -210,6 +236,9 @@ export class LocalExecutor implements Executor {
   /** Diagnostics for verifying bounded buffering without materializing output. */
   bufferedProcessStats(processId: string): {
     bytes: number;
+    allocatedBytes: number;
+    metadataBytes: number;
+    retainedBytes: number;
     events: number;
     chunks: number;
   } {
@@ -218,6 +247,10 @@ export class LocalExecutor implements Executor {
       throw new ExecutorFailure("not_found", "process was not found");
     return {
       bytes: tracked.pendingBytes,
+      allocatedBytes: tracked.pendingAllocatedBytes,
+      metadataBytes: tracked.pendingMetadataBytes,
+      retainedBytes:
+        tracked.pendingAllocatedBytes + tracked.pendingMetadataBytes,
       events: tracked.pending.length,
       chunks: tracked.pendingChunks,
     };
@@ -279,16 +312,23 @@ export class LocalExecutor implements Executor {
     return this.#closePromise;
   }
 
-  // This confirms only the direct child. Descendants that call setsid escape
-  // the saved process group and require a future cgroup/Job Object containment
-  // backend; they are not claimed terminated here.
+  // Descendants that detach or close inherited FDs can outlive both direct-child
+  // events, and setsid descendants escape the saved process group entirely.
+  // Confirming those requires a future cgroup/Job Object containment backend.
   async #terminateDirectChild(tracked: LocalProcess): Promise<void> {
-    if (tracked.processGroupId) {
+    if (
+      tracked.processGroupId &&
+      (!tracked.directExited || !tracked.directClosed)
+    ) {
       try {
         globalThis.process.kill(-tracked.processGroupId, "SIGKILL");
       } catch {}
     }
-    if (tracked.directExited) return;
+    if (
+      tracked.directExited ||
+      (!tracked.processGroupId && tracked.directClosed)
+    )
+      return;
     try {
       tracked.child.kill("SIGKILL");
     } catch {}
@@ -561,8 +601,12 @@ export class LocalExecutor implements Executor {
       streamId,
       pending: [],
       pendingBytes: 0,
+      pendingAllocatedBytes: 0,
+      pendingMetadataBytes: 0,
       pendingChunks: 0,
       outputLimit: this.#processOutputLimit,
+      eventLimit: this.#processEventLimit,
+      chunkLimit: this.#processChunkLimit,
       decoders: {
         stdout: new TextDecoder(),
         stderr: new TextDecoder(),
@@ -571,6 +615,7 @@ export class LocalExecutor implements Executor {
       truncated: false,
       exited: false,
       directExited: false,
+      directClosed: false,
       acknowledged: false,
     };
     tracked.listeners = {
@@ -582,7 +627,7 @@ export class LocalExecutor implements Executor {
         tracked.directExited = true;
       },
       close: (code, signal) => {
-        tracked.directExited = true;
+        tracked.directClosed = true;
         this.#flushDecoder(tracked, "stdout");
         this.#flushDecoder(tracked, "stderr");
         tracked.exited = true;
@@ -596,6 +641,7 @@ export class LocalExecutor implements Executor {
           exitCode: code,
           ...(signal ? { signal } : {}),
         });
+        tracked.pendingMetadataBytes += EVENT_METADATA_BYTES;
       },
     };
     this.#processes.set(processId, tracked);
@@ -620,6 +666,8 @@ export class LocalExecutor implements Executor {
     const events = materializeEvents(tracked.pending, streamId);
     tracked.pending.length = 0;
     tracked.pendingBytes = 0;
+    tracked.pendingAllocatedBytes = 0;
+    tracked.pendingMetadataBytes = 0;
     tracked.pendingChunks = 0;
     const result: ExecutorSuccess = {
       outcome: {
@@ -721,7 +769,9 @@ export class LocalExecutor implements Executor {
       last.bytes + encoded.byteLength <= MAX_TEXT_EVENT_BYTES
     )
       return this.#appendEncoded(tracked, last, encoded, notice);
-    if (!notice && tracked.pending.length >= MAX_PENDING_TEXT_EVENTS)
+    const normalEventLimit = tracked.eventLimit - 2;
+    if (!notice && tracked.pending.length >= normalEventLimit) return false;
+    if (!this.#reserveRetained(tracked, EVENT_METADATA_BYTES, notice))
       return false;
     const event: Extract<PendingEvent, { kind: "text" }> = {
       kind: "text",
@@ -730,9 +780,9 @@ export class LocalExecutor implements Executor {
       bytes: 0,
       lastChunkBytes: 0,
     };
-    if (!this.#appendEncoded(tracked, event, encoded, notice)) return false;
     tracked.pending.push(event);
-    return true;
+    tracked.pendingMetadataBytes += EVENT_METADATA_BYTES;
+    return this.#appendEncoded(tracked, event, encoded, notice);
   }
 
   #appendEncoded(
@@ -741,25 +791,46 @@ export class LocalExecutor implements Executor {
     data: Buffer,
     notice: boolean,
   ): boolean {
-    const tailSpace = event.chunks.length
-      ? TEXT_BLOCK_BYTES - event.lastChunkBytes
-      : 0;
-    const newChunks = Math.ceil(
-      Math.max(0, data.byteLength - tailSpace) / TEXT_BLOCK_BYTES,
-    );
-    if (!notice && tracked.pendingChunks + newChunks > MAX_PENDING_TEXT_CHUNKS)
-      return false;
     let offset = 0;
     while (offset < data.byteLength) {
-      if (!event.chunks.length || event.lastChunkBytes === TEXT_BLOCK_BYTES) {
-        event.chunks.push(Buffer.allocUnsafe(TEXT_BLOCK_BYTES));
+      let target = event.chunks.at(-1);
+      if (target && event.lastChunkBytes === target.byteLength) {
+        if (target.byteLength < MAX_TEXT_CHUNK_BYTES) {
+          const capacity = Math.min(
+            MAX_TEXT_CHUNK_BYTES,
+            Math.max(
+              target.byteLength * 2,
+              target.byteLength + data.byteLength - offset,
+            ),
+          );
+          const delta = capacity - target.byteLength;
+          if (!this.#reserveRetained(tracked, delta, notice)) return false;
+          const grown = Buffer.allocUnsafe(capacity);
+          target.copy(grown);
+          event.chunks[event.chunks.length - 1] = grown;
+          tracked.pendingAllocatedBytes += delta;
+          target = grown;
+        } else target = undefined;
+      }
+      if (!target) {
+        const normalChunkLimit = tracked.chunkLimit - 1;
+        if (!notice && tracked.pendingChunks >= normalChunkLimit) return false;
+        const capacity = Math.min(
+          MAX_TEXT_CHUNK_BYTES,
+          Math.max(MIN_TEXT_CHUNK_BYTES, data.byteLength - offset),
+        );
+        const retained = capacity + CHUNK_METADATA_BYTES;
+        if (!this.#reserveRetained(tracked, retained, notice)) return false;
+        target = Buffer.allocUnsafe(capacity);
+        event.chunks.push(target);
         event.lastChunkBytes = 0;
         tracked.pendingChunks++;
+        tracked.pendingAllocatedBytes += capacity;
+        tracked.pendingMetadataBytes += CHUNK_METADATA_BYTES;
       }
-      const target = event.chunks.at(-1)!;
       const length = Math.min(
         data.byteLength - offset,
-        TEXT_BLOCK_BYTES - event.lastChunkBytes,
+        target.byteLength - event.lastChunkBytes,
       );
       data.copy(target, event.lastChunkBytes, offset, offset + length);
       event.lastChunkBytes += length;
@@ -770,10 +841,26 @@ export class LocalExecutor implements Executor {
     return true;
   }
 
+  #reserveRetained(
+    tracked: LocalProcess,
+    bytes: number,
+    notice: boolean,
+  ): boolean {
+    const reserve = notice
+      ? EXIT_RETAINED_RESERVE
+      : TRUNCATION_RETAINED_RESERVE + EXIT_RETAINED_RESERVE;
+    return (
+      tracked.pendingAllocatedBytes + tracked.pendingMetadataBytes + bytes <=
+      tracked.outputLimit - reserve
+    );
+  }
+
   #reap(processId: string, tracked: LocalProcess): void {
     this.#detach(tracked);
     tracked.pending.length = 0;
     tracked.pendingBytes = 0;
+    tracked.pendingAllocatedBytes = 0;
+    tracked.pendingMetadataBytes = 0;
     tracked.pendingChunks = 0;
     this.#processes.delete(processId);
   }
