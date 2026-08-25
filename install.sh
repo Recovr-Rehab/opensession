@@ -105,12 +105,13 @@ done
 # ── output ──────────────────────────────────────────────────────────────────
 
 if [ -t 1 ] && [ -z "${NO_COLOR:-}" ]; then
-  B=$'\033[1m'; D=$'\033[2m'; G=$'\033[32m'; Y=$'\033[33m'; R=$'\033[31m'; N=$'\033[0m'
+  B=$'\033[1m'; D=$'\033[2m'; G=$'\033[32m'; Y=$'\033[33m'; R=$'\033[31m'; C=$'\033[36m'; N=$'\033[0m'
 else
-  B=""; D=""; G=""; Y=""; R=""; N=""
+  B=""; D=""; G=""; Y=""; R=""; C=""; N=""
 fi
 
 step() { printf '%s\n' "${B}$1${N}"; }
+success() { printf '%s\n' "${B}${G}$1${N}"; }
 # Strip credentials out of a URL before printing it. A tokenised clone URL in
 # terminal scrollback or CI logs is a leaked credential.
 redact() { printf '%s' "$1" | sed -E 's#(://)[^/@]*@#\1***@#'; }
@@ -679,8 +680,8 @@ else
       fi
     else
       muted "To share Open Session, connect this box to your tailnet:"
-      info "1. ${B}sudo tailscale up${N}"
-      info "2. ${B}opensession bind${N}"
+      info "1. ${C}sudo tailscale up${N}"
+      info "2. ${C}opensession bind${N}"
     fi
   fi
 fi
@@ -814,10 +815,10 @@ show_path_refresh_hint() {
     case "$display_profile" in
       "$HOME"/*) display_profile="$(printf '\176/%s' "${display_profile#"$HOME"/}")" ;;
     esac
-    info "To use ${B}opensession${N} in this shell, run:"
-    printf '    %ssource %s%s\n' "$B" "$display_profile" "$N"
+    info "To use ${C}opensession${N} in this shell, run:"
+    printf '    %ssource %s%s\n' "$C" "$display_profile" "$N"
   elif [ "$NO_MODIFY_PATH" = "1" ]; then
-    info "Add ${B}$BIN_DIR${N} to PATH before running ${B}opensession${N}."
+    info "Add ${C}$BIN_DIR${N} to PATH before running ${C}opensession${N}."
   fi
 }
 
@@ -825,8 +826,8 @@ show_path_refresh_hint() {
 
 if [ "$NO_ONBOARD" = "1" ]; then
   printf '\n'
-  step "Installed"
-  info "Next: ${B}opensession onboard${N}"
+  success "Installed"
+  info "Next: ${C}opensession onboard${N}"
   show_path_refresh_hint
   exit 0
 fi
@@ -910,23 +911,25 @@ if [ -f "$OPENSESSION_HOME/config.json" ]; then
 fi
 
 printf '\n'
-if [ "$ADVANCED" != "1" ] && [ "$server_ready" != "1" ]; then
+success "Installed"
+show_path_refresh_hint
+
+if [ "$server_ready" = "1" ]; then
+  printf '\n'
+  success "Started"
+  info "Open Session is running at ${C}$url${N}"
+elif [ "$ADVANCED" != "1" ]; then
+  printf '\n'
   step "Needs attention"
   if [ -z "$url" ]; then
     warn "the installer did not create the server configuration"
   else
     warn "the server did not start at $health_url"
-    info "Expected URL: ${B}$url${N}"
+    info "Expected URL: ${C}$url${N}"
   fi
-  info "Inspect the failure: ${B}$BIN_DIR/opensession logs -n 80${N}"
-  info "Retry installation:  ${B}$BIN_DIR/opensession service install${N}"
-else
-  step "Done"
+  info "Inspect the failure: ${C}$BIN_DIR/opensession logs -n 80${N}"
+  info "Retry installation:  ${C}$BIN_DIR/opensession service install${N}"
 fi
-if [ "$server_ready" = "1" ]; then
-  info "Open Session is running at ${B}$url${N}"
-fi
-show_path_refresh_hint
 printf '\n'
 
 # Simple mode promises a running server. Do not report a successful install
