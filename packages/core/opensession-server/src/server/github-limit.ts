@@ -16,14 +16,12 @@ export type GithubRateResource = "graphql" | "rest";
 interface GhLimitState {
   backoffUntil: Record<GithubRateResource, number>;
   probe: Record<GithubRateResource, Promise<void> | null>;
-  botToken: string | null | undefined;
 }
 
 const state: GhLimitState = ((globalThis as any).__osGhLimitStateV2 ||= (() => {
   const s: GhLimitState = {
     backoffUntil: { graphql: 0, rest: 0 },
     probe: { graphql: null, rest: null },
-    botToken: undefined,
   };
   try {
     if (existsSync(PERSIST_PATH)) {
@@ -122,18 +120,10 @@ export function noteGhRateLimited(
   })();
 }
 
-export async function botGhToken(opts: { write?: boolean } = {}): Promise<string | null> {
-  const { githubBotCredentialMode, githubToken } = await import("./github-app");
-  const primary = await githubToken(opts);
-  if (primary) return primary;
-  if (githubBotCredentialMode() === "app") return null;
-  if (state.botToken !== undefined) return state.botToken;
-  try {
-    const proc = Bun.spawn(["gh", "auth", "token"], { stdout: "pipe", stderr: "ignore" });
-    const raw = await new Response(proc.stdout).text();
-    state.botToken = (await proc.exited) === 0 && raw.trim() ? raw.trim() : null;
-  } catch {
-    state.botToken = null;
-  }
-  return state.botToken;
+/** Service token for direct REST calls. Missing App authority fails closed. */
+export async function botGhToken(
+  opts: { write?: boolean } = {},
+): Promise<string | null> {
+  const { githubToken } = await import("./github-app");
+  return githubToken(opts);
 }

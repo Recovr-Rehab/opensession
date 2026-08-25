@@ -1,5 +1,5 @@
 /** Lightweight, credential-safe GitHub API budget telemetry. */
-import { githubBotCredentialMode, githubToken } from "./github-app";
+import { githubToken } from "./github-app";
 
 type Sample = { calls: number; failures: number; durationMs: number };
 const samples = new Map<string, Sample>();
@@ -51,7 +51,7 @@ export function noteGithubGraphqlCall(
       )
       .join(" ");
     console.log(
-      `[github-budget] graphql credential=${githubBotCredentialMode()} ${budget} consumers=${totals || "none"}`,
+      `[github-budget] graphql credential=app ${budget} consumers=${totals || "none"}`,
     );
     samples.clear();
     probe = null;

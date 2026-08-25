@@ -28,6 +28,7 @@ beforeEach(() => {
         alice: {
           login: "alice",
           token: "ghu_simple_alice",
+          source: "device",
           connectedAt: "2026-08-20T00:00:00.000Z",
         },
       },
