@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import type { UnifiedSession } from "../lib/types";
 import { fetchSessionsSnapshot } from "../lib/api";
 import {
@@ -240,7 +240,9 @@ export function useSessions({
       });
     };
 
-  const poll = (): Promise<void> => {
+  // Stable per query: refs, setters and module fns otherwise. The polling
+  // effect below can list it without re-arming on unrelated re-renders.
+  const poll = useCallback((): Promise<void> => {
     const requestQuery = liveQuery;
     if (pollPromiseRef.current?.query === requestQuery)
       return pollPromiseRef.current.promise;
@@ -305,7 +307,7 @@ if (e?.name === "AbortError") return;
     });
     pollPromiseRef.current = { query: requestQuery, promise };
     return promise;
-  };
+  }, [liveQuery]);
 
   useEffect(() => {
     mountedRef.current = true;
@@ -345,7 +347,7 @@ if (e?.name === "AbortError") return;
   const archivedEtagRef = useRef<string | null>(null);
   const archivedPromiseRef = useRef<Promise<void> | null>(null);
 
-  const pollArchived = (): Promise<void> => {
+  const pollArchived = useCallback((): Promise<void> => {
     if (archivedPromiseRef.current) return archivedPromiseRef.current;
     const startedAt = Date.now();
     const invalidationRevision = invalidationRevisionRef.current;
@@ -384,7 +386,7 @@ const snapshot = await fetchSessionsSnapshot({
     });
     archivedPromiseRef.current = promise;
     return promise;
-  };
+  }, []);
 
   // The sidebar only links to Archived now; it does not render archived rows or
   // their count. Keep this larger index out of the app entirely until that

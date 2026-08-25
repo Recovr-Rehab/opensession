@@ -1,6 +1,6 @@
 import { BASE_PATH } from "../lib/base";
 import { GITHUB_APP_GRANT_PERMISSIONS } from "../../shared/github-app-permissions";
-import React, { useEffect, useState, useRef } from "react";
+import React, { useCallback, useEffect, useState, useRef } from "react";
 import { Menu } from "../ui/menu";
 import { OptionSelect } from "../ui/select";
 import { cn } from "../ui/cn";
@@ -167,7 +167,8 @@ export function Connections() {
   // (Vercel approves only its own list of AI clients).
   const [tokenConnect, setTokenConnect] = useState<McpConnection | null>(null);
 
-  const load = async (force = false) => {
+  // Stable identity: only setters are captured.
+  const load = useCallback(async (force = false) => {
     if (force) setRefreshing(true);
     await (async () => {
 const res = await fetch(`${BASE_PATH}/api/connections${force ? "?refresh=1" : ""}`);
@@ -176,7 +177,7 @@ const res = await fetch(`${BASE_PATH}/api/connections${force ? "?refresh=1" : ""
 
 });
     setRefreshing(false);
-  };
+  }, []);
 
   useEffect(() => {
     document.title = docTitle("Connections");
@@ -198,7 +199,7 @@ const res = await fetch(`${BASE_PATH}/api/connections${force ? "?refresh=1" : ""
       }
     >
   >({});
-  const loadOauth = async (servers: McpConnection[]) => {
+  const loadOauth = useCallback(async (servers: McpConnection[]) => {
     const entries = await Promise.all(
       servers
         .map(async (s) => {
@@ -213,7 +214,7 @@ const res = await fetch(`${BASE_PATH}/api/connections${force ? "?refresh=1" : ""
         }),
     );
     setOauthByName(Object.fromEntries(entries.filter(Boolean) as any));
-  };
+  }, []);
   useEffect(() => {
     if (data?.mcpServers) void loadOauth(data.mcpServers);
   }, [data, loadOauth]);
@@ -1072,14 +1073,15 @@ export function GithubAccounts({ personal = false }: { personal?: boolean } = {}
   // wizard, launched from the App option below.
   const [wizardOpen, setWizardOpen] = useState(false);
 
-  const load = async () => {
+  // Stable identity: only setters are captured.
+  const load = useCallback(async () => {
     await (async () => {
 const res = await fetch(`${BASE_PATH}/api/connections/github`);
       if (res.ok) setData(await res.json());
 })().catch(async () => {
 
 });
-  };
+  }, []);
 
   useEffect(() => {
     load();
@@ -1741,13 +1743,14 @@ function CodeStorageCard() {
   const [showSecret, setShowSecret] = useState(false);
   const [copied, setCopied] = useState<string | null>(null);
 
-  const load = async () => {
+  // Stable identity: only setters are captured.
+  const load = useCallback(async () => {
     await (async () => {
 setStatus(await fetchCodeStorageStatus());
 })().catch(async () => {
 
 });
-  };
+  }, []);
 
   useEffect(() => {
     load();
