@@ -364,7 +364,7 @@ describe("remote Executor connection", () => {
     expect(remote.connected).toBe(false);
   });
 
-  test("disconnects on a semantically incompatible outcome", async () => {
+  test("disconnects on a wrong-target same-family outcome", async () => {
     const transport = new ManualTransport();
     const remote = new RemoteExecutorConnection({
       ...identity,
@@ -374,7 +374,12 @@ describe("remote Executor connection", () => {
     });
     transport.receive(hello);
     await remote.ready();
-    const result = remote.execute(context, { kind: "fs.read", path: "x" });
+    const result = remote.execute(context, {
+      kind: "fs.move",
+      from: "from",
+      to: "to",
+      idempotencyKey: "move-key",
+    });
     await tick();
     transport.receive({
       t: "receipt_status",
@@ -386,21 +391,27 @@ describe("remote Executor connection", () => {
         state: "succeeded",
         acceptedAt: "2026-08-22T12:00:00.000Z",
         completedAt: "2026-08-22T12:00:01.000Z",
+        idempotencyKey: "move-key",
       },
-      outcome: { kind: "fs.changed", path: "x" },
+      outcome: { kind: "fs.changed", path: "from" },
     });
     await expect(result).rejects.toMatchObject({ code: "operation_failed" });
     expect(remote.connected).toBe(false);
   });
 
-  test("sends scoped stream cleanup on repeated timeouts", async () => {
+  test("sends scoped stream cleanup with fresh grants on repeated timeouts", async () => {
     const transport = new ManualTransport();
+    let cleanupGrants = 0;
     const remote = new RemoteExecutorConnection({
       ...identity,
       capabilities: [...identity.capabilities],
       transport,
       grant,
       deadlineMs: () => Date.now() + 8,
+      cleanupGrant: () => {
+        cleanupGrants++;
+        return decodeExecutorGrant(`cleanup-${cleanupGrants}`) as ExecutorGrant;
+      },
     });
     transport.receive(hello);
     await remote.ready();
@@ -433,6 +444,10 @@ describe("remote Executor connection", () => {
     }
     const cleanups = transport.sent.filter((message) => message.t === "cancel");
     expect(cleanups).toHaveLength(2);
+    expect(cleanups.map((message) => message.grant as string)).toEqual([
+      "cleanup-1",
+      "cleanup-2",
+    ]);
     expect(cleanups.map((message) => message.target.requestId)).toEqual([
       "cleanup-request-0",
       "cleanup-request-1",

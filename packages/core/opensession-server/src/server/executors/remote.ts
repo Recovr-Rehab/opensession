@@ -35,6 +35,11 @@ export interface RemoteExecutorConnectionOptions extends ExecutorConnectionIdent
   maxPending?: number;
   initialStreamCreditBytes?: number;
   helloTimeoutMs?: number;
+  /** Required by ingress before streaming work can safely outlive its operation grant. */
+  cleanupGrant?: (
+    context: ExecutorContext,
+    streamId: string,
+  ) => ExecutorGrant | Promise<ExecutorGrant>;
   createId?: () => string;
 }
 
@@ -378,13 +383,21 @@ export class RemoteExecutorConnection implements Executor {
   }
 
   async #cleanupStreams(requestId: string, pending: Pending): Promise<void> {
+    if (pending.streamIds.size && !this.#options.cleanupGrant) {
+      this.disconnect("fresh stream cleanup grant is unavailable");
+      return;
+    }
     for (const streamId of pending.streamIds) {
       try {
+        const cleanupGrant = await this.#options.cleanupGrant!(
+          pending.context,
+          streamId,
+        );
         await this.#options.transport.send({
           t: "cancel",
           version: EXECUTOR_PROTOCOL_VERSION,
           requestId: this.#id(),
-          grant: pending.grant,
+          grant: cleanupGrant,
           fence: {
             rootId: pending.context.rootId,
             sessionId: pending.context.sessionId,
@@ -396,7 +409,8 @@ export class RemoteExecutorConnection implements Executor {
           idempotencyKey: `cleanup:${this.#id()}`,
         } satisfies ExecutorClientMessage);
       } catch {
-        // The peer's close handler clears all queues when transport is gone.
+        this.disconnect("fresh stream cleanup authorization failed");
+        return;
       }
     }
     pending.streamIds.clear();

@@ -264,6 +264,39 @@ describe("SQLiteCommandLedger", () => {
     expect(await ledger.get(active, "active-receipt")).toBeDefined();
   });
 
+  test("persists compact retired-scope replay tombstones until permanent purge", async () => {
+    const dbPath = pathFor();
+    const identity = command("retire-me", { key: "retire-key" });
+    const first = open(dbPath);
+    await running(first, identity, "retire-receipt");
+    await first.transition(identity, "retire-receipt", "running", {
+      state: "succeeded",
+      completedAt,
+      outcome: { kind: "fs.changed", path: "x" },
+    });
+    await first.retireScope(identity);
+    close(first);
+
+    const reopened = open(dbPath);
+    await expect(
+      claim(
+        reopened,
+        command("replay", { key: "retire-key" }),
+        "replay-receipt",
+      ),
+    ).rejects.toMatchObject({ name: "LedgerScopeRetiredError" });
+    expect(await reopened.purgeRetiredScope(identity)).toBe(true);
+    expect(
+      (
+        await claim(
+          reopened,
+          command("after-horizon", { key: "retire-key" }),
+          "after-horizon-receipt",
+        )
+      ).claimed,
+    ).toBe(true);
+  });
+
   test("rejects semantically incompatible outcomes", async () => {
     const ledger = open();
     const identity = command("write", { key: "write-key" });
@@ -272,12 +305,7 @@ describe("SQLiteCommandLedger", () => {
       ledger.transition(identity, "receipt", "running", {
         state: "succeeded",
         completedAt,
-        outcome: {
-          kind: "fs.read",
-          streamId: "stream",
-          size: 0,
-          binary: false,
-        },
+        outcome: { kind: "fs.changed", path: "wrong-target" },
       }),
     ).rejects.toThrow("incompatible");
     expect((await ledger.get(identity, "receipt"))?.receipt.state).toBe(
@@ -383,6 +411,15 @@ describe("SQLiteCommandLedger", () => {
     raw.exec("CREATE TABLE runner_command_ledger (receipt_id TEXT)");
     raw.close();
     expect(() => open(dbPath)).toThrow("unversioned existing ledger table");
+
+    const oldPath = pathFor();
+    mkdirSync(join(oldPath, ".."), { recursive: true });
+    const old = new Database(oldPath, { create: true });
+    old.exec(
+      "CREATE TABLE runner_command_ledger (receipt_id TEXT); PRAGMA user_version = 1",
+    );
+    old.close();
+    expect(() => open(oldPath)).toThrow("unsupported ledger schema version 1");
 
     const versionedPath = pathFor();
     mkdirSync(join(versionedPath, ".."), { recursive: true });

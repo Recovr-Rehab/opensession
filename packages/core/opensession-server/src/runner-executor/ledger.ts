@@ -76,14 +76,18 @@ export interface DurableCommandLedger {
   /**
    * Delete terminal history only after the control plane has acknowledged that
    * the entire scope is permanently retired. Active scopes fail closed.
+   * Ingress wiring is required and must prove that acknowledgment before call.
    */
   retireScope(scope: LedgerScope): Promise<number>;
+  /** Permanently forget a retired scope only after its replay horizon is gone. */
+  purgeRetiredScope(scope: LedgerScope): Promise<boolean>;
 }
 
 /** Bounded reference ledger with the same atomic/state semantics as SQLite. */
 export class InMemoryCommandLedger implements DurableCommandLedger {
   readonly #byReceipt = new Map<string, LedgerRecord>();
   readonly #byCommand = new Map<string, string>();
+  readonly #retiredScopes = new Set<string>();
   #serial: Promise<void> = Promise.resolve();
 
   constructor(readonly capacity = 100_000) {
@@ -97,6 +101,8 @@ export class InMemoryCommandLedger implements DurableCommandLedger {
   ): Promise<{ record: LedgerRecord; claimed: boolean }> {
     return this.#exclusive(() => {
       assertClaimCoherent(identity, receipt);
+      if (this.#retiredScopes.has(scopeKey(identity)))
+        throw new LedgerScopeRetiredError();
       const key = commandKey(identity);
       const existingId = this.#byCommand.get(key);
       if (existingId) {
@@ -184,8 +190,13 @@ export class InMemoryCommandLedger implements DurableCommandLedger {
         this.#byReceipt.delete(receiptId);
         this.#byCommand.delete(commandKey(record));
       }
+      this.#retiredScopes.add(scopeKey(scope));
       return scoped.length;
     });
+  }
+
+  async purgeRetiredScope(scope: LedgerScope): Promise<boolean> {
+    return this.#exclusive(() => this.#retiredScopes.delete(scopeKey(scope)));
   }
 
   get size(): number {
@@ -229,6 +240,12 @@ export class LedgerConflictError extends Error {
   ) {
     super(message);
     this.name = "LedgerConflictError";
+  }
+}
+export class LedgerScopeRetiredError extends Error {
+  constructor() {
+    super("command scope was retired and cannot be replayed");
+    this.name = "LedgerScopeRetiredError";
   }
 }
 export class LedgerScopeActiveError extends Error {
@@ -350,14 +367,18 @@ function identityFields(record: LedgerRecord): LedgerCommandIdentity {
   };
 }
 
-function commandKey(identity: LedgerCommandIdentity): string {
-  const scope = JSON.stringify([
+function scopeKey(identity: LedgerScope): string {
+  return JSON.stringify([
     identity.executorId,
     identity.rootId,
     identity.sessionId,
     identity.runId,
     identity.generation,
   ]);
+}
+
+function commandKey(identity: LedgerCommandIdentity): string {
+  const scope = scopeKey(identity);
   return identity.idempotencyKey === undefined
     ? `${scope}:request:${identity.requestId}`
     : `${scope}:mutation:${identity.idempotencyKey}`;

@@ -21,6 +21,7 @@ import {
   LedgerFullError,
   LedgerNotFoundError,
   LedgerScopeActiveError,
+  LedgerScopeRetiredError,
   LedgerTransitionError,
   applyTransition,
   operationDigest,
@@ -32,7 +33,7 @@ import {
   type LedgerTerminalTransition,
 } from "./ledger";
 
-const SCHEMA_VERSION = 1;
+const SCHEMA_VERSION = 2;
 const ID_RE = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,255}$/;
 const DIGEST_RE = /^[a-f0-9]{64}$/;
 const STATES = new Set([
@@ -161,6 +162,7 @@ export class SQLiteCommandLedger implements DurableCommandLedger {
     const kind = identity.idempotencyKey === undefined ? "request" : "mutation";
     const key = identity.idempotencyKey ?? identity.requestId;
     return this.#writeTransaction(() => {
+      if (this.#isRetired(identity)) throw new LedgerScopeRetiredError();
       const existing = this.#selectCommand(identity, kind, key);
       if (existing) {
         const record = decodeRow(existing, this.#limits);
@@ -337,8 +339,32 @@ export class SQLiteCommandLedger implements DurableCommandLedger {
           AND session_id = ? AND run_id = ? AND generation = ? AND state IN ('succeeded', 'failed', 'cancelled')`,
         )
         .run(...parameters);
+      this.#db
+        .query(
+          `INSERT OR IGNORE INTO runner_retired_scopes
+          (executor_id, root_id, session_id, run_id, generation) VALUES (?, ?, ?, ?, ?)`,
+        )
+        .run(...parameters);
       return result.changes;
     });
+  }
+
+  async purgeRetiredScope(scope: LedgerScope): Promise<boolean> {
+    this.#assertOpen();
+    validateScope(scope);
+    const result = this.#db
+      .query(
+        `DELETE FROM runner_retired_scopes WHERE executor_id = ? AND root_id = ?
+        AND session_id = ? AND run_id = ? AND generation = ?`,
+      )
+      .run(
+        scope.executorId,
+        scope.rootId,
+        scope.sessionId,
+        scope.runId,
+        scope.generation,
+      );
+    return result.changes === 1;
   }
 
   close(): void {
@@ -349,6 +375,20 @@ export class SQLiteCommandLedger implements DurableCommandLedger {
   }
   #assertOpen(): void {
     if (this.#closed) throw new Error("command ledger is closed");
+  }
+  #isRetired(scope: LedgerScope): boolean {
+    return !!this.#db
+      .query(
+        `SELECT 1 AS retired FROM runner_retired_scopes WHERE executor_id = ? AND root_id = ?
+        AND session_id = ? AND run_id = ? AND generation = ?`,
+      )
+      .get(
+        scope.executorId,
+        scope.rootId,
+        scope.sessionId,
+        scope.runId,
+        scope.generation,
+      );
   }
   #selectReceipt(receiptId: string): StoredRow | null {
     return this.#db
@@ -432,7 +472,13 @@ function initializeOrValidateSchema(db: Database): void {
       state TEXT NOT NULL CHECK(state IN ('queued', 'running', 'succeeded', 'failed', 'cancelled')),
       accepted_at TEXT NOT NULL, completed_at TEXT, payload TEXT NOT NULL, ordinal INTEGER NOT NULL,
       UNIQUE(executor_id, root_id, session_id, run_id, generation, command_kind, command_key)
-    ) STRICT; PRAGMA user_version = ${SCHEMA_VERSION};`);
+    ) STRICT;
+    CREATE TABLE runner_retired_scopes (
+      executor_id TEXT NOT NULL, root_id TEXT NOT NULL, session_id TEXT NOT NULL,
+      run_id TEXT NOT NULL, generation INTEGER NOT NULL,
+      PRIMARY KEY(executor_id, root_id, session_id, run_id, generation)
+    ) STRICT;
+    PRAGMA user_version = ${SCHEMA_VERSION};`);
   } else if (version !== SCHEMA_VERSION) {
     throw new Error(
       version === 0
@@ -440,6 +486,19 @@ function initializeOrValidateSchema(db: Database): void {
         : `unsupported ledger schema version ${version}`,
     );
   }
+  const tableNames = (
+    db
+      .query(
+        "SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%' ORDER BY name",
+      )
+      .all() as Array<{ name: string }>
+  ).map(({ name }) => name);
+  if (
+    tableNames.length !== 2 ||
+    !tableNames.includes("runner_command_ledger") ||
+    !tableNames.includes("runner_retired_scopes")
+  )
+    throw new Error("ledger schema tables do not match version 2");
   const expected = [
     ["receipt_id", "TEXT", 1, 1],
     ["command_kind", "TEXT", 1, 0],
@@ -477,7 +536,35 @@ function initializeOrValidateSchema(db: Database): void {
       );
     })
   )
-    throw new Error("ledger schema columns do not match version 1");
+    throw new Error("ledger schema columns do not match version 2");
+  const retiredExpected = [
+    ["executor_id", "TEXT", 1, 1],
+    ["root_id", "TEXT", 1, 2],
+    ["session_id", "TEXT", 1, 3],
+    ["run_id", "TEXT", 1, 4],
+    ["generation", "INTEGER", 1, 5],
+  ];
+  const retiredActual = db
+    .query("PRAGMA table_info(runner_retired_scopes)")
+    .all() as Array<{
+    name: string;
+    type: string;
+    notnull: number;
+    pk: number;
+  }>;
+  if (
+    retiredActual.length !== retiredExpected.length ||
+    retiredActual.some((column, index) => {
+      const wanted = retiredExpected[index]!;
+      return (
+        column.name !== wanted[0] ||
+        column.type !== wanted[1] ||
+        column.notnull !== wanted[2] ||
+        column.pk !== wanted[3]
+      );
+    })
+  )
+    throw new Error("retired scope schema columns do not match version 2");
 }
 
 function encodeRecord(record: LedgerRecord, limits: Limits): string {

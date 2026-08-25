@@ -443,6 +443,7 @@ describe("runner Executor agent", () => {
       get: (...args) => base.get(...args),
       recover: () => base.recover(),
       retireScope: (...args) => base.retireScope(...args),
+      purgeRetiredScope: (...args) => base.purgeRetiredScope(...args),
     };
     const agent = new RunnerExecutorAgent({
       ...identity,
@@ -605,6 +606,7 @@ describe("runner Executor agent", () => {
       get: (...args) => base.get(...args),
       recover: () => base.recover(),
       retireScope: (...args) => base.retireScope(...args),
+      purgeRetiredScope: (...args) => base.purgeRetiredScope(...args),
     };
     const agent = new RunnerExecutorAgent({
       ...identity,

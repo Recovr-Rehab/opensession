@@ -224,6 +224,27 @@ describe("executor operations", () => {
         { kind: "fs.changed", path: "x" },
       ),
     ).toBe(false);
+    expect(
+      isExecutorOutcomeCompatible(
+        { kind: "process.status", processId: "expected" },
+        {
+          kind: "process",
+          processId: "other",
+          state: "running",
+        },
+      ),
+    ).toBe(false);
+    expect(
+      isExecutorOutcomeCompatible(
+        {
+          kind: "fs.move",
+          from: "from",
+          to: "to",
+          idempotencyKey: "move",
+        },
+        { kind: "fs.changed", path: "from" },
+      ),
+    ).toBe(false);
   });
 
   test("cover each structured tool/workspace family", () => {

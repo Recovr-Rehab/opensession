@@ -545,25 +545,39 @@ export function isExecutorOutcomeCompatible(
     case "fs.write":
     case "fs.mkdir":
     case "fs.remove":
+      return outcome.kind === "fs.changed" && outcome.path === operation.path;
     case "fs.move":
-      return outcome.kind === "fs.changed";
+      return outcome.kind === "fs.changed" && outcome.path === operation.to;
     case "process.spawn":
+      return outcome.kind === "process";
     case "process.status":
     case "process.signal":
-      return outcome.kind === "process";
+      return (
+        outcome.kind === "process" && outcome.processId === operation.processId
+      );
     case "terminal.open":
+      return outcome.kind === "terminal";
     case "terminal.write":
     case "terminal.resize":
     case "terminal.close":
-      return outcome.kind === "terminal";
+      return (
+        outcome.kind === "terminal" &&
+        outcome.terminalId === operation.terminalId
+      );
     case "service.start":
+      return outcome.kind === "service";
     case "service.status":
     case "service.stop":
-      return outcome.kind === "service";
+      return (
+        outcome.kind === "service" && outcome.serviceId === operation.serviceId
+      );
     case "portal.open":
+      return outcome.kind === "portal";
     case "portal.status":
     case "portal.close":
-      return outcome.kind === "portal";
+      return (
+        outcome.kind === "portal" && outcome.portalId === operation.portalId
+      );
   }
 }
 
