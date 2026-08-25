@@ -716,12 +716,6 @@ const HIDDEN_REOPEN_MS = 30_000;
 // late: on the iOS PWA the WebSocket only reconnects after visibility, so what
 // streamed while backgrounded arrives moments after the visibilitychange.
 const RESUME_GROWTH_WINDOW_MS = 8_000;
-// Opening a chat paints outline placeholders for ranges that have not
-// hydrated yet, and the first measure-and-hydrate pass reflows them. Keep the
-// transcript behind its opacity curtain for this whole settling window instead
-// of lifting it on the first "ranges ready" signal: nested row measurements and
-// the final live-edge correction can still move it for a few paints afterward.
-const OPEN_SETTLE_MS = 350;
 // "Jump to the start of the session" walks the backlog a page at a time rather
 // than asking for it in one frame: a multi-thousand-entry transcript would be a
 // tens-of-MB payload and one giant reconciliation. Fat pages keep the number of
@@ -1200,6 +1194,12 @@ export function SessionViewer({
 			: null;
 	const transcriptIndexEpochRef = useRef<number | null>(
 		cachedTranscript?.indexEpoch ?? null,
+	);
+	// A bounded v2 init only describes its loaded tail. The full outline is what
+	// proves every unloaded range lies above or below the opening fold, so do not
+	// accept a virtualizer "visible rows ready" signal until that frame arrives.
+	const [transcriptOutlineReady, setTranscriptOutlineReady] = useState(
+		!cachedTranscript?.index || cachedTranscript.indexEpoch !== null,
 	);
 	const transcriptRangeDemandReadyRef = useRef(false);
 	const [transcriptRangeRetryGeneration, setTranscriptRangeRetryGeneration] =
@@ -1888,23 +1888,15 @@ export function SessionViewer({
 		[suspendEndMaintenance],
 	);
 
-	// Open-settle curtain: armed on mount and held for a short beat after the
-	// transcript first renders. Visible-range hydration can report ready before
-	// nested row measurements and the final scroll correction have painted, so
-	// that signal reaffirms position below but does not lift the curtain early.
+	// Open-settle curtain: armed on mount and lifted by positive proof below: the
+	// complete outline is known and every structural range spanning the
+	// virtualizer's near-visible window has payload. Missing ranges known to sit
+	// wholly above or below that window do not hold the chat back.
 	const [openSettlePending, setOpenSettlePending] = useState(true);
-	const transcriptRendered =
-		!loading && (entries.length > 0 || !!transcriptIndex);
-	useEffect(() => {
-		if (!transcriptRendered) return;
-		const timer = window.setTimeout(
-			() => setOpenSettlePending(false),
-			OPEN_SETTLE_MS,
-		);
-		return () => window.clearTimeout(timer);
-	}, [transcriptRendered]);
 	const settledIndexRef = useRef<TranscriptIndexEntry[] | null>(null);
 	const onVisibleRangesSettled = useCallback(() => {
+		if (!transcriptOutlineReady) return;
+		setOpenSettlePending(false);
 		// Keep the pre-refresh message anchor through the final row measurements.
 		// Two paints later every visible real row has reported its geometry, so the
 		// bounded index hold can retire without letting a last correction jump the
@@ -1922,7 +1914,7 @@ export function SessionViewer({
 		if (settledIndexRef.current === transcriptIndex) return;
 		settledIndexRef.current = transcriptIndex;
 		if (readFollowingLive(followingLive)) scrollToLatest("auto");
-	}, [followingLive, scrollToLatest, transcriptIndex]);
+	}, [followingLive, scrollToLatest, transcriptIndex, transcriptOutlineReady]);
 	const [viewerInput, setViewerInput] = useState<HTMLDivElement | null>(null);
 	// The focused phone composer is fixed above the keyboard, so it contributes
 	// no height to the transcript's flex layout. Publish its real height without
@@ -2844,6 +2836,7 @@ export function SessionViewer({
 							: null;
 					transcriptIndexExpectedRef.current = v2;
 					setTranscriptIndexExpected(v2);
+					setTranscriptOutlineReady(!v2);
 					if (v2) {
 						transcriptSeqRef.current = {
 							sessionId: session.id,
@@ -2961,6 +2954,7 @@ export function SessionViewer({
 					transcriptIndexExpectedRef.current = true;
 					setTranscriptIndexExpected(true);
 					transcriptIndexEpochRef.current = msg.epoch;
+					setTranscriptOutlineReady(true);
 					setTranscriptIndexState({ sessionId: session.id, entries: msg.entries });
 					setLoadingMoreTranscript(false);
 					setHistoryTruncated(false);
