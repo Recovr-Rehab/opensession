@@ -1,6 +1,4 @@
 import { useEffect, useState, type ReactNode } from "react";
-import macPreview from "../download-mac.webp";
-import phonePreview from "../download-phone.webp";
 import { useIsPhone } from "../hooks/useIsPhone";
 import { BASE_PATH } from "../lib/base";
 import { Button } from "../ui/button";
@@ -76,7 +74,7 @@ export function DownloadAppsDialog({
 							preview={
 								<div className="relative h-full overflow-hidden bg-blue-soft">
 									<img
-										src={macPreview}
+										src={`${BASE_PATH}/download-mac.webp`}
 										alt="Open Session running on Mac"
 										className="h-full w-full object-cover object-top"
 									/>
@@ -105,7 +103,7 @@ export function DownloadAppsDialog({
 							preview={
 								<div className="relative flex h-full justify-center overflow-hidden bg-green-soft px-5 pt-5">
 									<img
-										src={phonePreview}
+										src={`${BASE_PATH}/download-phone.webp`}
 										alt="Open Session installed as a phone web app"
 										className="h-full w-auto max-w-full object-contain object-top smooth-shadow-lg"
 									/>

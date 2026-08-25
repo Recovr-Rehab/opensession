@@ -11,6 +11,8 @@ test("serves every stable shell asset family", async () => {
 		["/icon.png", "image/png"],
 		["/signin-bg.webp", "image/webp"],
 		["/signin-bg.mp4", "video/mp4"],
+		["/download-mac.webp", "image/webp"],
+		["/download-phone.webp", "image/webp"],
 		["/sw.js", "text/javascript; charset=utf-8"],
 		["/splash/apple-splash-1206-2622.png", "image/png"],
 	] as const) {
