@@ -227,22 +227,43 @@ summary:focus-visible {
 }
 
 .landing-setup-steps {
+	display: grid;
 	margin: 24px 0 0;
 	padding: 0;
+	gap: 18px;
+	grid-template-columns: repeat(3, minmax(0, 1fr));
 	list-style: none;
 }
 
+/* Three equal boxes make the setup read left to right. The arrow lives in the
+   gap rather than inside either box, so every card still has one clear edge. */
 .landing-setup-steps > li {
-	display: grid;
+	display: flex;
+	position: relative;
 	min-width: 0;
-	align-items: center;
-	gap: 12px;
-	padding: 18px 0;
-	border-top: 1px solid var(--line);
-	grid-template-columns: 22px 40px minmax(0, 1fr) auto;
+	flex-direction: column;
+	align-items: stretch;
+	padding: 20px;
+	border-radius: calc(18px * var(--rf));
+	corner-shape: var(--cs);
+	background: rgba(var(--ink-rgb), 0.04);
+}
+
+.landing-setup-steps > li:not(:last-child)::after {
+	position: absolute;
+	z-index: 1;
+	top: 29px;
+	right: -14px;
+	color: rgba(var(--ink-rgb), 0.3);
+	content: "→";
+	font-size: 18px;
+	line-height: 1;
 }
 
 .landing-setup-step-index {
+	position: absolute;
+	top: 20px;
+	right: 20px;
 	color: rgba(var(--ink-rgb), 0.38);
 	font-size: 12px;
 	font-variant-numeric: tabular-nums;
@@ -265,7 +286,8 @@ summary:focus-visible {
 	display: flex;
 	min-width: 0;
 	flex-direction: column;
-	gap: 3px;
+	gap: 5px;
+	margin-top: 18px;
 }
 
 .landing-setup-step-copy strong,
@@ -295,7 +317,9 @@ summary:focus-visible {
 	display: inline-flex;
 	min-height: 40px;
 	align-items: center;
-	padding-inline: 8px;
+	align-self: flex-start;
+	margin-top: auto;
+	padding: 18px 8px 0;
 	border-radius: calc(10px * var(--rf));
 	corner-shape: var(--cs);
 }
@@ -308,8 +332,8 @@ summary:focus-visible {
 	display: grid;
 	min-width: 0;
 	gap: 8px;
-	margin-top: 4px;
-	grid-column: 3 / -1;
+	margin-top: 18px;
+	grid-template-columns: repeat(3, minmax(0, 1fr));
 }
 
 .landing-setup-app {
@@ -386,6 +410,7 @@ summary:focus-visible {
 	display: grid;
 	align-items: end;
 	gap: 14px;
+	margin-top: 22px;
 	padding-top: 22px;
 	border-top: 1px solid var(--line);
 	grid-template-columns: minmax(160px, 0.42fr) minmax(0, 1fr);
@@ -942,6 +967,26 @@ summary:focus-visible {
 	}
 }
 
+@media (max-width: 720px) {
+	.landing-setup-steps,
+	.landing-setup-apps {
+		grid-template-columns: minmax(0, 1fr);
+	}
+
+	.landing-setup-steps {
+		gap: 20px;
+	}
+
+	.landing-setup-steps > li:not(:last-child)::after {
+		top: auto;
+		right: auto;
+		bottom: -19px;
+		left: 50%;
+		content: "↓";
+		transform: translateX(-50%);
+	}
+}
+
 @media (max-width: 560px) {
 	.shell {
 		width: min(100% - 32px, 1400px);
@@ -958,20 +1003,18 @@ summary:focus-visible {
 	}
 
 	.landing-setup-steps > li {
-		align-items: start;
-		gap: 10px;
-		grid-template-columns: 18px 40px minmax(0, 1fr);
+		padding: 18px;
 	}
 
 	.landing-setup-step-index {
-		padding-top: 12px;
+		top: 18px;
+		right: 18px;
 	}
 
 	.landing-setup-step-action {
 		min-height: 36px;
-		margin: 4px 0 0 68px;
-		padding-inline: 0;
-		grid-column: 1 / -1;
+		margin-top: 14px;
+		padding: 0;
 	}
 
 	.landing-setup-step-action:hover {
@@ -979,8 +1022,7 @@ summary:focus-visible {
 	}
 
 	.landing-setup-apps {
-		margin-top: 6px;
-		grid-column: 1 / -1;
+		margin-top: 16px;
 	}
 
 	.landing-setup-app {

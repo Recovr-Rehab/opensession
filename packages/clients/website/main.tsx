@@ -228,7 +228,7 @@ function SetupOverview() {
 						Download
 					</a>
 				</li>
-				<li className="landing-setup-step-apps">
+				<li>
 					<span className="landing-setup-step-index">3</span>
 					<span className="landing-setup-step-icon" aria-hidden="true">
 						<IconPhone size={22} />
@@ -237,27 +237,28 @@ function SetupOverview() {
 						<strong>Download the apps</strong>
 						<span>Each app connects to the server you just installed.</span>
 					</div>
-					<div className="landing-setup-apps">
-						<a className="landing-setup-app" href={macDownloadUrl}>
-							<img src={markUrl} alt="" />
-							<span className="landing-setup-app-copy">
-								<strong>Mac app</strong>
-								<small>Electron · Apple silicon</small>
-							</span>
-							<span className="landing-setup-app-action">Download</span>
-						</a>
-						<PwaGuide />
-						<div className="landing-setup-app" aria-disabled="true">
-							<img src={nativeMarkUrl} alt="" />
-							<span className="landing-setup-app-copy">
-								<strong>iOS app</strong>
-								<small>Native app · App Store</small>
-							</span>
-							<span className="landing-setup-app-action">Coming soon</span>
-						</div>
-					</div>
 				</li>
 			</ol>
+
+			<div className="landing-setup-apps">
+				<a className="landing-setup-app" href={macDownloadUrl}>
+					<img src={markUrl} alt="" />
+					<span className="landing-setup-app-copy">
+						<strong>Mac app</strong>
+						<small>Electron · Apple silicon</small>
+					</span>
+					<span className="landing-setup-app-action">Download</span>
+				</a>
+				<PwaGuide />
+				<div className="landing-setup-app" aria-disabled="true">
+					<img src={nativeMarkUrl} alt="" />
+					<span className="landing-setup-app-copy">
+						<strong>iOS app</strong>
+						<small>Native app · App Store</small>
+					</span>
+					<span className="landing-setup-app-action">Coming soon</span>
+				</div>
+			</div>
 
 			<div className="landing-install-option">
 				<div>
@@ -296,9 +297,7 @@ function LandingPage() {
 						View on GitHub
 					</a>
 					<p className="rail-note">
-						Open source. Self-hosted.
-						<br />
-						Use any model provider.
+						Open source, self-hosted, and compatible with any model provider.
 					</p>
 				</div>
 			</aside>
@@ -309,8 +308,6 @@ function LandingPage() {
 					<TellaBackground />
 					<ProductDemo />
 				</section>
-
-				<SetupOverview />
 
 				<section className="card">
 					<div className="features">
@@ -359,6 +356,8 @@ function LandingPage() {
 						</Feature>
 					</div>
 				</section>
+
+				<SetupOverview />
 
 				<section className="card">
 					<h2>Common questions</h2>
