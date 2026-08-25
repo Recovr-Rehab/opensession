@@ -258,7 +258,7 @@ export function IngressPanel({
 		await savePrivateAppDomain(appDomain)
 			.then((next) => {
 				apply(next);
-				setup.requireRestart();
+				if (next.restartRequired) setup.requireRestart();
 				toast("Private app domain saved", { variant: "success" });
 				void onChanged?.();
 			})
