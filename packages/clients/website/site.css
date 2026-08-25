@@ -184,6 +184,12 @@ summary:focus-visible {
 	gap: 10px;
 }
 
+.rail-actions .button {
+	min-width: max-content;
+	flex: 1 1 0;
+	white-space: nowrap;
+}
+
 .rail-note {
 	margin: 16px 0 0;
 	color: var(--muted);
@@ -1252,6 +1258,10 @@ summary:focus-visible {
 	.rail-actions {
 		align-items: stretch;
 		flex-direction: column;
+	}
+
+	.rail-actions .button {
+		flex: none;
 	}
 
 	.feed-foot {
