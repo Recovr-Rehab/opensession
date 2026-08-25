@@ -35,6 +35,7 @@ import { AUTO_REPO, NO_REPO } from "../lib/session-repo";
 import { getDefaultRepoPref, setDefaultRepoPref } from "../lib/default-repo-pref";
 import { repoSelectionHint, toggleRepoSelection } from "../lib/repo-selection";
 import { fallbackBranchName } from "../lib/workspace-draft";
+import { newSessionDefaultRepo } from "../lib/new-session-repo";
 import {
   NewSessionPrompt,
   type NewSessionPromptHandle,
@@ -525,17 +526,10 @@ export function NewSession({ onBack, inline, focusSeq, send, addHandler, connect
     }));
   // The workspace's configured choice (which may itself be Auto) is what a
   // user with no preference of their own starts on; the repo flagged
-  // `default` is only the last resort behind it.
-  const resolveDefaultRepo = (options: RepoOption[]): string => {
-    const workspaceChoice = configuredNewSessionRepo();
-    return (
-      (workspaceChoice === AUTO_REPO || options.some((i) => i.id === workspaceChoice)
-        ? workspaceChoice
-        : "") ||
-      options.find((item) => item.default)?.id ||
-      AUTO_REPO
-    );
-  };
+  // `default` is only the last resort behind it. With no registered repos,
+  // start in Scratch instead.
+  const resolveDefaultRepo = (options: RepoOption[]): string =>
+    newSessionDefaultRepo(options, configuredNewSessionRepo());
   // Seeded from the repos this browser saw last (lib/repo-cache) so the picker
   // opens on the real list, and the palette settles on the right default,
   // without waiting for /repos. The fetch below still runs and corrects both.
