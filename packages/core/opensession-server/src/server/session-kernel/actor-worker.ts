@@ -144,6 +144,8 @@ export function startSessionKernelActorWorker(): void {
               delivery.sessionId,
               delivery.promptEntryId,
             );
+          if (!isDeliveryReadRequest(delivery) && "sessionId" in delivery)
+            host.refreshCachedDeliveryEntries(delivery.sessionId);
           if (!isDeliveryReadRequest(delivery))
             result = {
               result,

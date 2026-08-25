@@ -129,7 +129,7 @@ export class SessionKernelStoreHost {
           commandKind,
         );
     this.removeCachedAskEntry(sessionId);
-    this.deliveryEntriesCache.clear();
+    this.removeCachedDeliveryEntries(sessionId);
     return quarantine;
   }
 
@@ -199,7 +199,7 @@ export class SessionKernelStoreHost {
       );
       if (centralReleased || isolatedReleased) {
         this.refreshCachedAskEntry(sessionId);
-        this.deliveryEntriesCache.clear();
+        this.refreshCachedDeliveryEntries(sessionId);
       }
       return centralReleased || isolatedReleased;
     }
@@ -229,7 +229,23 @@ export class SessionKernelStoreHost {
         method === "clearSession" ||
         method === "tombstoneSession"
       ) this.refreshCachedAskEntry(route.sessionId);
-      this.deliveryEntriesCache.clear();
+      if (
+        method === "setDeliverySlot" ||
+        method === "deleteDeliverySlot" ||
+        method === "prepareSteerDelivery" ||
+        method === "acceptSteerDelivery" ||
+        method === "rejectSteerDelivery" ||
+        method === "requeueSteerDeliveries" ||
+        method === "ackDeliveryDispatch" ||
+        method === "failDeliveryDispatch" ||
+        method === "prepareDeliveryInterrupt" ||
+        method === "beginDeliveryInterruptEffect" ||
+        method === "settleDeliveryInterrupt" ||
+        method === "claimNextDeliveryDispatch" ||
+        method === "claimDeliveryDispatch" ||
+        method === "clearSession" ||
+        method === "tombstoneSession"
+      ) this.refreshCachedDeliveryEntries(route.sessionId);
     }
     return result;
   }
@@ -248,6 +264,31 @@ export class SessionKernelStoreHost {
     if (value === undefined) return;
     this.askEntriesCache.push([sessionId, structuredClone(value)]);
     this.askEntriesCache.sort(([left], [right]) => left.localeCompare(right));
+  }
+
+  private removeCachedDeliveryEntries(sessionId: string): void {
+    for (const [slot, entries] of this.deliveryEntriesCache)
+      this.deliveryEntriesCache.set(
+        slot,
+        entries.filter(([cachedSessionId]) => cachedSessionId !== sessionId),
+      );
+  }
+
+  refreshCachedDeliveryEntries(sessionId: string): void {
+    if (this.deliveryEntriesCache.size === 0) return;
+    this.removeCachedDeliveryEntries(sessionId);
+    const state = this.storeForSession(sessionId).deliverySnapshot(sessionId);
+    for (const [slot, entries] of this.deliveryEntriesCache) {
+      const value = slot === "queued"
+        ? state.queued
+        : slot === "steered"
+          ? state.steered
+          : state.dispatch;
+      if (value === undefined || (Array.isArray(value) && value.length === 0))
+        continue;
+      entries.push([sessionId, structuredClone(value)]);
+      entries.sort(([left], [right]) => left.localeCompare(right));
+    }
   }
 
   allRunStates(): Array<DurableRunState & { sessionId: string }> {

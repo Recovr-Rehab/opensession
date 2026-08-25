@@ -354,12 +354,21 @@ describe("per-session session kernel storage", () => {
         throw new Error("cached ask entries must not rescan isolated stores");
       },
     });
+    Object.defineProperty(host.storeForSession("cache-session"), "deliveryEntries", {
+      configurable: true,
+      value: () => {
+        throw new Error("cached delivery entries must not rescan isolated stores");
+      },
+    });
     host.call("setRunState", [{
       sessionId: "cache-session",
       state: "running",
       event: "cache-test",
     }]);
     expect(host.allAskEntries()[0]![1]).toMatchObject({ questionId: "ask-one" });
+    expect(host.allDeliveryEntries("queued")[0]![1]).toMatchObject([
+      { id: "queue-one", content: "First" },
+    ]);
 
     host.call("deleteAskRecord", ["cache-session"]);
     host.call("setDeliverySlot", [
