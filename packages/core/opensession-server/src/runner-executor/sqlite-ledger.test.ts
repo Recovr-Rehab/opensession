@@ -172,7 +172,7 @@ describe("SQLiteCommandLedger", () => {
     const succeeded = await ledger.transition(identity, "receipt", "running", {
       state: "succeeded",
       completedAt,
-      outcome: { kind: "fs.changed", path: "x" },
+      outcome: { kind: "fs.read", streamId: "stream", size: 0, binary: false },
     });
     expect(succeeded.error).toBeUndefined();
     await expect(
@@ -208,7 +208,7 @@ describe("SQLiteCommandLedger", () => {
     await ledger.transition(oldRead, "old-r", "running", {
       state: "succeeded",
       completedAt,
-      outcome: { kind: "fs.changed", path: "x" },
+      outcome: { kind: "fs.read", streamId: "stream", size: 0, binary: false },
     });
     const mutation = command("mutation", { key: "key" });
     await claim(ledger, mutation, "mutation-r");
@@ -219,6 +219,114 @@ describe("SQLiteCommandLedger", () => {
     await expect(
       claim(ledger, command("last-read"), "last-r"),
     ).rejects.toBeInstanceOf(LedgerFullError);
+  });
+
+  test("retires only acknowledged terminal scopes and restores capacity", async () => {
+    const ledger = open(undefined, { capacity: 2 });
+    const retired = command("retired", { key: "retired-key" });
+    await running(ledger, retired, "retired-receipt");
+    await ledger.transition(retired, "retired-receipt", "running", {
+      state: "succeeded",
+      completedAt,
+      outcome: { kind: "fs.changed", path: "x" },
+    });
+    const active = command("active", {
+      key: "active-key",
+      scope: { runId: "active-run" },
+    });
+    await claim(ledger, active, "active-receipt");
+    await expect(ledger.retireScope(active)).rejects.toMatchObject({
+      name: "LedgerScopeActiveError",
+    });
+    await expect(
+      claim(
+        ledger,
+        command("blocked", {
+          key: "blocked-key",
+          scope: { runId: "blocked-run" },
+        }),
+        "blocked-receipt",
+      ),
+    ).rejects.toBeInstanceOf(LedgerFullError);
+    expect(await ledger.retireScope(retired)).toBe(1);
+    expect(
+      (
+        await claim(
+          ledger,
+          command("restored", {
+            key: "restored-key",
+            scope: { runId: "restored-run" },
+          }),
+          "restored-receipt",
+        )
+      ).claimed,
+    ).toBe(true);
+    expect(await ledger.get(active, "active-receipt")).toBeDefined();
+  });
+
+  test("rejects semantically incompatible outcomes", async () => {
+    const ledger = open();
+    const identity = command("write", { key: "write-key" });
+    await running(ledger, identity, "receipt");
+    await expect(
+      ledger.transition(identity, "receipt", "running", {
+        state: "succeeded",
+        completedAt,
+        outcome: {
+          kind: "fs.read",
+          streamId: "stream",
+          size: 0,
+          binary: false,
+        },
+      }),
+    ).rejects.toThrow("incompatible");
+    expect((await ledger.get(identity, "receipt"))?.receipt.state).toBe(
+      "running",
+    );
+  });
+
+  test("accepts a contiguous stream batch starting after sequence zero", async () => {
+    const ledger = open();
+    const operation = { kind: "process.status" as const, processId: "process" };
+    const identity: LedgerCommandIdentity = {
+      ...baseScope,
+      requestId: "process-status",
+      operation,
+      operationDigest: operationDigest(operation),
+    };
+    await running(ledger, identity, "process-receipt");
+    const result = await ledger.transition(
+      identity,
+      "process-receipt",
+      "running",
+      {
+        state: "succeeded",
+        completedAt,
+        outcome: {
+          kind: "process",
+          processId: "process",
+          state: "running",
+          streamId: "process-stream",
+        },
+        events: [
+          {
+            kind: "text",
+            streamId: "process-stream",
+            sequence: 5,
+            channel: "stdout",
+            data: "later batch",
+          },
+          {
+            kind: "text",
+            streamId: "process-stream",
+            sequence: 6,
+            channel: "stdout",
+            data: "continued",
+          },
+        ],
+      },
+    );
+    expect(result.events?.map((event) => event.sequence)).toEqual([5, 6]);
   });
 
   test("rejects noncanonical base64 and byteLength mismatch atomically", async () => {

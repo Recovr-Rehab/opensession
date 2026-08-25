@@ -33,6 +33,7 @@ export interface ExecutorFence {
 const MAX_GRANT_BYTES = 16 * 1024;
 export const MAX_EXECUTOR_FILE_WRITE_BYTES = 4 * 1024 * 1024;
 export const MAX_EXECUTOR_TERMINAL_WRITE_BYTES = 1024 * 1024;
+export const MAX_EXECUTOR_STREAM_EVENT_BYTES = 256 * 1024;
 const MAX_EXECUTOR_FIELD_BYTES = 256 * 1024;
 const MAX_EXECUTOR_ARGUMENT_BYTES = 1024 * 1024;
 const MAX_EXECUTOR_ARGUMENTS = 4_096;
@@ -529,6 +530,43 @@ export type ExecutorOperationOutcome =
       state: "opening" | "open" | "closed" | "failed";
     };
 
+/** Reject plausible-looking outcomes that do not belong to the requested operation family. */
+export function isExecutorOutcomeCompatible(
+  operation: ExecutorOperation,
+  outcome: ExecutorOperationOutcome,
+): boolean {
+  switch (operation.kind) {
+    case "fs.read":
+      return outcome.kind === "fs.read";
+    case "fs.list":
+      return outcome.kind === "fs.list";
+    case "fs.stat":
+      return outcome.kind === "fs.stat";
+    case "fs.write":
+    case "fs.mkdir":
+    case "fs.remove":
+    case "fs.move":
+      return outcome.kind === "fs.changed";
+    case "process.spawn":
+    case "process.status":
+    case "process.signal":
+      return outcome.kind === "process";
+    case "terminal.open":
+    case "terminal.write":
+    case "terminal.resize":
+    case "terminal.close":
+      return outcome.kind === "terminal";
+    case "service.start":
+    case "service.status":
+    case "service.stop":
+      return outcome.kind === "service";
+    case "portal.open":
+    case "portal.status":
+    case "portal.close":
+      return outcome.kind === "portal";
+  }
+}
+
 export type ExecutorStreamEvent =
   | {
       kind: "text";
@@ -563,7 +601,9 @@ export type ExecutorClientMessage =
   | (ExecutorAuthorizedMessage & {
       t: "cancel";
       target:
-        { requestId: string } | { receiptId: string } | { streamId: string };
+        | { requestId: string }
+        | { receiptId: string }
+        | { streamId: string; requestId: string };
       idempotencyKey: string;
     })
   | (ExecutorAuthorizedMessage & {

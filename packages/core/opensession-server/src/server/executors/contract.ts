@@ -51,6 +51,16 @@ export interface Executor {
     context: ExecutorContext,
     operation: ExecutorOperation,
   ): Promise<ExecutorSuccess>;
+  /**
+   * Internal lifecycle acknowledgement for executor-owned terminal tombstones.
+   * The agent calls this only after the exact fenced success is durable.
+   */
+  acknowledgeDurableTerminal?(
+    context: ExecutorContext,
+    operation: ExecutorOperation,
+    outcome: ExecutorOperationOutcome,
+    receipt: ExecutorReceipt,
+  ): void | Promise<void>;
 }
 
 export interface ExecutorDispatchRequest {

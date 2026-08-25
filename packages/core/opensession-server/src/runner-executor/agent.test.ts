@@ -13,8 +13,8 @@ import { RemoteExecutorConnection } from "../server/executors/remote";
 import { RunnerExecutorAgent, type DuplexJsonTransport } from "./agent";
 import {
   InMemoryCommandLedger,
-  LedgerFullError,
   operationDigest,
+  type DurableCommandLedger,
 } from "./ledger";
 
 class FakeEnd implements DuplexJsonTransport {
@@ -175,7 +175,7 @@ describe("runner Executor agent", () => {
       capabilities: [...identity.capabilities],
       transport: control,
       grant,
-      initialStreamCreditBytes: 3,
+      initialStreamCreditBytes: 1,
     });
     await agent.start();
     await remote.ready();
@@ -205,6 +205,97 @@ describe("runner Executor agent", () => {
     );
   });
 
+  test("scopes same-named stream queues and credits by request", async () => {
+    const [control, daemon] = pair();
+    const agent = new RunnerExecutorAgent({
+      ...identity,
+      capabilities: [...identity.capabilities],
+      rootId: "root-1",
+      transport: daemon,
+      executor: {
+        execute: async (executionContext) => ({
+          outcome: {
+            kind: "fs.read",
+            streamId: "shared-stream",
+            size: 1,
+            binary: false,
+          },
+          events: [
+            {
+              kind: "text",
+              streamId: "shared-stream",
+              sequence: 10,
+              channel: "file",
+              data: executionContext.requestId,
+              eof: true,
+            },
+          ],
+        }),
+      },
+      ledger: new InMemoryCommandLedger(),
+      validateGrant: () => true,
+    });
+    await agent.start();
+    control.send({
+      ...identity,
+      capabilities: [...identity.capabilities],
+      t: "hello",
+      accepted: true,
+      version: EXECUTOR_PROTOCOL_VERSION,
+      requestId: "accept",
+    });
+    await tick();
+    const fence = {
+      rootId: context.rootId,
+      sessionId: context.sessionId,
+      runId: context.runId,
+      generation: context.generation,
+      deadlineMs: Date.now() + 10_000,
+    };
+    for (const requestId of ["stream-request-a", "stream-request-b"])
+      control.send({
+        t: "execute",
+        version: EXECUTOR_PROTOCOL_VERSION,
+        requestId,
+        grant,
+        fence,
+        operation: { kind: "fs.read", path: requestId },
+      });
+    await tick();
+    await tick();
+    control.send({
+      t: "stream_credit",
+      version: EXECUTOR_PROTOCOL_VERSION,
+      requestId: "stream-request-a",
+      grant,
+      fence,
+      streamId: "shared-stream",
+      bytes: 100,
+    });
+    await tick();
+    expect(
+      daemon.messages.filter((message: any) => message.t === "event"),
+    ).toEqual([
+      expect.objectContaining({
+        requestId: "stream-request-a",
+        event: expect.objectContaining({ data: "stream-request-a" }),
+      }),
+    ]);
+    control.send({
+      t: "stream_credit",
+      version: EXECUTOR_PROTOCOL_VERSION,
+      requestId: "stream-request-b",
+      grant,
+      fence,
+      streamId: "shared-stream",
+      bytes: 100,
+    });
+    await tick();
+    expect(
+      daemon.messages.filter((message: any) => message.t === "event"),
+    ).toHaveLength(2);
+  });
+
   test("fails closed when grant validation throws", async () => {
     const [control, daemon] = pair();
     const backend = new RecordingExecutor();
@@ -231,6 +322,176 @@ describe("runner Executor agent", () => {
       remote.execute(context, { kind: "fs.read", path: "x" }),
     ).rejects.toMatchObject({ code: "invalid_grant" });
     expect(backend.calls).toBe(0);
+  });
+
+  test("rejects operations outside its advertised capability before execution", async () => {
+    const [control, daemon] = pair();
+    const backend = new RecordingExecutor();
+    const agent = new RunnerExecutorAgent({
+      ...identity,
+      capabilities: [...identity.capabilities],
+      rootId: "root-1",
+      transport: daemon,
+      executor: backend,
+      ledger: new InMemoryCommandLedger(),
+      validateGrant: () => true,
+    });
+    await agent.start();
+    control.send({
+      ...identity,
+      capabilities: [...identity.capabilities],
+      t: "hello",
+      accepted: true,
+      version: EXECUTOR_PROTOCOL_VERSION,
+      requestId: "accept",
+    });
+    await tick();
+    control.send({
+      t: "execute",
+      version: EXECUTOR_PROTOCOL_VERSION,
+      requestId: "unsupported-operation",
+      grant,
+      fence: {
+        rootId: context.rootId,
+        sessionId: context.sessionId,
+        runId: context.runId,
+        generation: context.generation,
+        deadlineMs: Date.now() + 10_000,
+      },
+      operation: {
+        kind: "process.status",
+        processId: "process-1",
+      },
+    });
+    await tick();
+    expect(
+      daemon.messages.some(
+        (message: any) =>
+          message.t === "error" &&
+          message.requestId === "unsupported-operation" &&
+          message.code === "unsupported",
+      ),
+    ).toBe(true);
+    expect(backend.calls).toBe(0);
+  });
+
+  test("rechecks the deadline after asynchronous grant validation", async () => {
+    const [control, daemon] = pair();
+    const backend = new RecordingExecutor();
+    let now = 1_000;
+    const agent = new RunnerExecutorAgent({
+      ...identity,
+      capabilities: [...identity.capabilities],
+      rootId: "root-1",
+      transport: daemon,
+      executor: backend,
+      ledger: new InMemoryCommandLedger(),
+      now: () => now,
+      validateGrant: async () => {
+        now = 2_000;
+        return true;
+      },
+    });
+    await agent.start();
+    control.send({
+      ...identity,
+      capabilities: [...identity.capabilities],
+      t: "hello",
+      accepted: true,
+      version: EXECUTOR_PROTOCOL_VERSION,
+      requestId: "accept",
+    });
+    await tick();
+    control.send({
+      t: "execute",
+      version: EXECUTOR_PROTOCOL_VERSION,
+      requestId: "expired-after-grant",
+      grant,
+      fence: {
+        rootId: context.rootId,
+        sessionId: context.sessionId,
+        runId: context.runId,
+        generation: context.generation,
+        deadlineMs: 2_000,
+      },
+      operation: { kind: "fs.read", path: "x" },
+    });
+    await tick();
+    expect(
+      daemon.messages.some(
+        (message: any) =>
+          message.t === "error" &&
+          message.requestId === "expired-after-grant" &&
+          message.code === "deadline_exceeded",
+      ),
+    ).toBe(true);
+    expect(backend.calls).toBe(0);
+  });
+
+  test("rechecks the deadline after the durable claim", async () => {
+    const [control, daemon] = pair();
+    const backend = new RecordingExecutor();
+    const base = new InMemoryCommandLedger();
+    let now = 1_000;
+    const ledger: DurableCommandLedger = {
+      claim: async (...args) => {
+        const claimed = await base.claim(...args);
+        now = 2_000;
+        return claimed;
+      },
+      transition: (...args) => base.transition(...args),
+      get: (...args) => base.get(...args),
+      recover: () => base.recover(),
+      retireScope: (...args) => base.retireScope(...args),
+    };
+    const agent = new RunnerExecutorAgent({
+      ...identity,
+      capabilities: [...identity.capabilities],
+      rootId: "root-1",
+      transport: daemon,
+      executor: backend,
+      ledger,
+      now: () => now,
+      validateGrant: () => true,
+      createId: (() => {
+        const ids = ["deadline-hello", "deadline-receipt"];
+        return () => ids.shift()!;
+      })(),
+    });
+    await agent.start();
+    control.send({
+      ...identity,
+      capabilities: [...identity.capabilities],
+      t: "hello",
+      accepted: true,
+      version: EXECUTOR_PROTOCOL_VERSION,
+      requestId: "accept",
+    });
+    await tick();
+    control.send({
+      t: "execute",
+      version: EXECUTOR_PROTOCOL_VERSION,
+      requestId: "expired-after-claim",
+      grant,
+      fence: {
+        rootId: context.rootId,
+        sessionId: context.sessionId,
+        runId: context.runId,
+        generation: context.generation,
+        deadlineMs: 2_000,
+      },
+      operation: { kind: "fs.read", path: "x" },
+    });
+    await tick();
+    expect(backend.calls).toBe(0);
+    expect(
+      (
+        await base.get(
+          { executorId: identity.executorId, ...context },
+          "deadline-receipt",
+        )
+      )?.receipt.state,
+    ).toBe("failed");
   });
 
   test("deduplicates accepted mutations by stable idempotency key", async () => {
@@ -280,6 +541,119 @@ describe("runner Executor agent", () => {
       },
     );
     expect(calls).toBe(1);
+  });
+
+  test("acknowledges executor terminal persistence only after ledger commit", async () => {
+    const [control, daemon] = pair();
+    const ledger = new InMemoryCommandLedger();
+    let acknowledgedState: string | undefined;
+    const backend: Executor = {
+      execute: async () => ({
+        outcome: {
+          kind: "fs.read",
+          streamId: "ack-stream",
+          size: 0,
+          binary: false,
+        },
+      }),
+      acknowledgeDurableTerminal: async (
+        executionContext,
+        _operation,
+        _outcome,
+        receipt,
+      ) => {
+        acknowledgedState = (
+          await ledger.get(
+            { executorId: identity.executorId, ...executionContext },
+            receipt.receiptId,
+          )
+        )?.receipt.state;
+      },
+    };
+    const agent = new RunnerExecutorAgent({
+      ...identity,
+      capabilities: [...identity.capabilities],
+      rootId: "root-1",
+      transport: daemon,
+      executor: backend,
+      ledger,
+      validateGrant: () => true,
+    });
+    const remote = new RemoteExecutorConnection({
+      ...identity,
+      capabilities: [...identity.capabilities],
+      transport: control,
+      grant,
+    });
+    await agent.start();
+    await remote.ready();
+    await remote.execute(context, { kind: "fs.read", path: "x" });
+    expect(acknowledgedState).toBe("succeeded");
+  });
+
+  test("does not acknowledge executor persistence when terminal ledger commit fails", async () => {
+    const [control, daemon] = pair();
+    const base = new InMemoryCommandLedger();
+    let acknowledgements = 0;
+    const ledger: DurableCommandLedger = {
+      claim: (...args) => base.claim(...args),
+      transition: async (...args) => {
+        if (args[3].state === "succeeded")
+          throw new Error("ledger unavailable");
+        return base.transition(...args);
+      },
+      get: (...args) => base.get(...args),
+      recover: () => base.recover(),
+      retireScope: (...args) => base.retireScope(...args),
+    };
+    const agent = new RunnerExecutorAgent({
+      ...identity,
+      capabilities: [...identity.capabilities],
+      rootId: "root-1",
+      transport: daemon,
+      executor: {
+        execute: async () => ({
+          outcome: {
+            kind: "fs.read",
+            streamId: "failed-ack-stream",
+            size: 0,
+            binary: false,
+          },
+        }),
+        acknowledgeDurableTerminal: () => {
+          acknowledgements++;
+        },
+      },
+      ledger,
+      validateGrant: () => true,
+    });
+    await agent.start();
+    control.send({
+      ...identity,
+      capabilities: [...identity.capabilities],
+      t: "hello",
+      accepted: true,
+      version: EXECUTOR_PROTOCOL_VERSION,
+      requestId: "accept",
+    });
+    await tick();
+    control.send({
+      t: "execute",
+      version: EXECUTOR_PROTOCOL_VERSION,
+      requestId: "failed-terminal-commit",
+      grant,
+      fence: {
+        rootId: context.rootId,
+        sessionId: context.sessionId,
+        runId: context.runId,
+        generation: context.generation,
+        deadlineMs: Date.now() + 10_000,
+      },
+      operation: { kind: "fs.read", path: "x" },
+    });
+    await tick();
+    await tick();
+    expect(acknowledgements).toBe(0);
   });
 
   test("preserves committed success when sending the terminal status fails", async () => {
@@ -522,7 +896,8 @@ describe("runner Executor agent", () => {
         (message: any) =>
           message.t === "error" &&
           message.requestId === "cancel-advisory" &&
-          message.message.includes("may continue"),
+          message.code === "unsupported" &&
+          message.message.includes("operation continues"),
       ),
     ).toBe(true);
     expect(
@@ -577,7 +952,7 @@ describe("runner Executor agent", () => {
         (message: any) =>
           message.t === "error" &&
           message.requestId === "cancel-1" &&
-          message.code === "cancelled",
+          message.code === "unsupported",
       ),
     ).toBe(true);
   });

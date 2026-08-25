@@ -77,7 +77,7 @@ describe("remote Executor connection", () => {
       accepted: true,
       generation: 3,
     });
-    const first = remote.execute(context, { kind: "fs.read", path: "x" });
+    const first = remote.execute(context, { kind: "fs.stat", path: "x" });
     await expect(
       remote.execute(
         { ...context, requestId: "request-2" },
@@ -258,6 +258,186 @@ describe("remote Executor connection", () => {
     });
     await expect(result).rejects.toMatchObject({ code: "operation_failed" });
     expect(remote.connected).toBe(false);
+  });
+
+  test("times out physical readiness when hello never arrives", async () => {
+    const transport = new ManualTransport();
+    const remote = new RemoteExecutorConnection({
+      ...identity,
+      capabilities: [...identity.capabilities],
+      transport,
+      grant,
+      helloTimeoutMs: 5,
+    });
+    await expect(remote.ready()).rejects.toThrow("hello timed out");
+    expect(remote.connected).toBe(false);
+  });
+
+  test("treats a matching top-level error receipt as accepted mutation ambiguity", async () => {
+    const transport = new ManualTransport();
+    const remote = new RemoteExecutorConnection({
+      ...identity,
+      capabilities: [...identity.capabilities],
+      transport,
+      grant,
+    });
+    transport.receive(hello);
+    await remote.ready();
+    const result = remote.execute(context, {
+      kind: "fs.write",
+      path: "x",
+      data: "a",
+      encoding: "utf8",
+      idempotencyKey: "error-key",
+    });
+    await tick();
+    transport.receive({
+      t: "error",
+      version: EXECUTOR_PROTOCOL_VERSION,
+      requestId: context.requestId,
+      code: "deadline_exceeded",
+      message: "expired after claim",
+      receipt: {
+        receiptId: "error-receipt",
+        requestId: context.requestId,
+        state: "failed",
+        acceptedAt: "2026-08-22T12:00:00.000Z",
+        completedAt: "2026-08-22T12:00:01.000Z",
+        idempotencyKey: "error-key",
+      },
+    });
+    await expect(result).rejects.toMatchObject({
+      code: "deadline_exceeded",
+      ambiguous: true,
+    });
+  });
+
+  test("disconnects when an error receipt changes accepted identity", async () => {
+    const transport = new ManualTransport();
+    const remote = new RemoteExecutorConnection({
+      ...identity,
+      capabilities: [...identity.capabilities],
+      transport,
+      grant,
+    });
+    transport.receive(hello);
+    await remote.ready();
+    const result = remote.execute(context, {
+      kind: "fs.write",
+      path: "x",
+      data: "a",
+      encoding: "utf8",
+      idempotencyKey: "identity-key",
+    });
+    await tick();
+    transport.receive({
+      t: "receipt",
+      version: EXECUTOR_PROTOCOL_VERSION,
+      requestId: context.requestId,
+      receipt: {
+        receiptId: "original-receipt",
+        requestId: context.requestId,
+        state: "queued",
+        acceptedAt: "2026-08-22T12:00:00.000Z",
+        idempotencyKey: "identity-key",
+      },
+    });
+    transport.receive({
+      t: "error",
+      version: EXECUTOR_PROTOCOL_VERSION,
+      requestId: context.requestId,
+      code: "operation_failed",
+      message: "mismatched",
+      receipt: {
+        receiptId: "different-receipt",
+        requestId: context.requestId,
+        state: "failed",
+        acceptedAt: "2026-08-22T12:00:00.000Z",
+        completedAt: "2026-08-22T12:00:01.000Z",
+        idempotencyKey: "identity-key",
+      },
+    });
+    await expect(result).rejects.toMatchObject({
+      code: "operation_failed",
+      ambiguous: true,
+    });
+    expect(remote.connected).toBe(false);
+  });
+
+  test("disconnects on a semantically incompatible outcome", async () => {
+    const transport = new ManualTransport();
+    const remote = new RemoteExecutorConnection({
+      ...identity,
+      capabilities: [...identity.capabilities],
+      transport,
+      grant,
+    });
+    transport.receive(hello);
+    await remote.ready();
+    const result = remote.execute(context, { kind: "fs.read", path: "x" });
+    await tick();
+    transport.receive({
+      t: "receipt_status",
+      version: EXECUTOR_PROTOCOL_VERSION,
+      requestId: context.requestId,
+      receipt: {
+        receiptId: "incompatible-receipt",
+        requestId: context.requestId,
+        state: "succeeded",
+        acceptedAt: "2026-08-22T12:00:00.000Z",
+        completedAt: "2026-08-22T12:00:01.000Z",
+      },
+      outcome: { kind: "fs.changed", path: "x" },
+    });
+    await expect(result).rejects.toMatchObject({ code: "operation_failed" });
+    expect(remote.connected).toBe(false);
+  });
+
+  test("sends scoped stream cleanup on repeated timeouts", async () => {
+    const transport = new ManualTransport();
+    const remote = new RemoteExecutorConnection({
+      ...identity,
+      capabilities: [...identity.capabilities],
+      transport,
+      grant,
+      deadlineMs: () => Date.now() + 8,
+    });
+    transport.receive(hello);
+    await remote.ready();
+    for (let index = 0; index < 2; index++) {
+      const requestId = `cleanup-request-${index}`;
+      const result = remote.execute(
+        { ...context, requestId },
+        { kind: "fs.read", path: "x" },
+      );
+      await tick();
+      transport.receive({
+        t: "receipt_status",
+        version: EXECUTOR_PROTOCOL_VERSION,
+        requestId,
+        receipt: {
+          receiptId: `cleanup-receipt-${index}`,
+          requestId,
+          state: "succeeded",
+          acceptedAt: "2026-08-22T12:00:00.000Z",
+          completedAt: "2026-08-22T12:00:01.000Z",
+        },
+        outcome: {
+          kind: "fs.read",
+          streamId: "shared-stream",
+          size: 10,
+          binary: false,
+        },
+      });
+      await expect(result).rejects.toMatchObject({ code: "deadline_exceeded" });
+    }
+    const cleanups = transport.sent.filter((message) => message.t === "cancel");
+    expect(cleanups).toHaveLength(2);
+    expect(cleanups.map((message) => message.target.requestId)).toEqual([
+      "cleanup-request-0",
+      "cleanup-request-1",
+    ]);
+    expect(remote.pendingCount).toBe(0);
   });
 
   test("treats read disconnects as retryable uncertainty", async () => {

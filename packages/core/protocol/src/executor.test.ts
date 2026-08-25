@@ -8,6 +8,7 @@ import {
   decodeExecutorHello,
   decodeExecutorOperation,
   decodeExecutorServerMessage,
+  isExecutorOutcomeCompatible,
   type ExecutorClientMessage,
   type ExecutorOperation,
 } from "./executor";
@@ -202,6 +203,27 @@ describe("executor operations", () => {
         receipt: { receiptId: {}, requestId: "request-1" },
       }),
     ).toBeUndefined();
+  });
+
+  test("matches outcomes to the original operation family", () => {
+    expect(
+      isExecutorOutcomeCompatible(
+        {
+          kind: "fs.write",
+          path: "x",
+          data: "a",
+          encoding: "utf8",
+          idempotencyKey: "write",
+        },
+        { kind: "fs.changed", path: "x" },
+      ),
+    ).toBe(true);
+    expect(
+      isExecutorOutcomeCompatible(
+        { kind: "fs.read", path: "x" },
+        { kind: "fs.changed", path: "x" },
+      ),
+    ).toBe(false);
   });
 
   test("cover each structured tool/workspace family", () => {

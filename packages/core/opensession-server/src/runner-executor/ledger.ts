@@ -1,6 +1,7 @@
 import {
   decodeExecutorId,
   decodeExecutorOperation,
+  isExecutorOutcomeCompatible,
   type ExecutorErrorCode,
   ExecutorOperation,
   ExecutorOperationOutcome,
@@ -72,6 +73,11 @@ export interface DurableCommandLedger {
   get(scope: LedgerScope, receiptId: string): Promise<LedgerRecord | undefined>;
   /** Fail all work inherited from a prior process before accepting new frames. */
   recover(): Promise<number>;
+  /**
+   * Delete terminal history only after the control plane has acknowledged that
+   * the entire scope is permanently retired. Active scopes fail closed.
+   */
+  retireScope(scope: LedgerScope): Promise<number>;
 }
 
 /** Bounded reference ledger with the same atomic/state semantics as SQLite. */
@@ -80,7 +86,7 @@ export class InMemoryCommandLedger implements DurableCommandLedger {
   readonly #byCommand = new Map<string, string>();
   #serial: Promise<void> = Promise.resolve();
 
-  constructor(readonly capacity = 1_024) {
+  constructor(readonly capacity = 100_000) {
     if (!Number.isSafeInteger(capacity) || capacity < 1)
       throw new Error("ledger capacity must be positive");
   }
@@ -167,6 +173,21 @@ export class InMemoryCommandLedger implements DurableCommandLedger {
     });
   }
 
+  async retireScope(scope: LedgerScope): Promise<number> {
+    return this.#exclusive(() => {
+      const scoped = [...this.#byReceipt.entries()].filter(([, record]) =>
+        sameScope(record, scope),
+      );
+      if (scoped.some(([, record]) => !isTerminal(record.receipt.state)))
+        throw new LedgerScopeActiveError();
+      for (const [receiptId, record] of scoped) {
+        this.#byReceipt.delete(receiptId);
+        this.#byCommand.delete(commandKey(record));
+      }
+      return scoped.length;
+    });
+  }
+
   get size(): number {
     return this.#byReceipt.size;
   }
@@ -208,6 +229,12 @@ export class LedgerConflictError extends Error {
   ) {
     super(message);
     this.name = "LedgerConflictError";
+  }
+}
+export class LedgerScopeActiveError extends Error {
+  constructor() {
+    super("cannot retire a ledger scope while it has active commands");
+    this.name = "LedgerScopeActiveError";
   }
 }
 export class LedgerNotFoundError extends Error {
@@ -286,6 +313,8 @@ export function applyTransition(
     completedAt: next.completedAt,
   };
   if (next.state === "succeeded") {
+    if (!isExecutorOutcomeCompatible(current.operation, next.outcome))
+      throw new Error("executor outcome is incompatible with operation");
     return {
       ...identityFields(current),
       receipt,

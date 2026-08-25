@@ -11,6 +11,7 @@ import {
 import { dirname, parse, resolve } from "node:path";
 import {
   decodeExecutorOperation,
+  isExecutorOutcomeCompatible,
   type ExecutorOperationOutcome,
   type ExecutorReceipt,
   type ExecutorStreamEvent,
@@ -19,6 +20,7 @@ import {
   LedgerConflictError,
   LedgerFullError,
   LedgerNotFoundError,
+  LedgerScopeActiveError,
   LedgerTransitionError,
   applyTransition,
   operationDigest,
@@ -107,7 +109,7 @@ export class SQLiteCommandLedger implements DurableCommandLedger {
 
   static open(options: SQLiteCommandLedgerOptions): SQLiteCommandLedger {
     const capacity = positiveInteger(
-      options.capacity ?? 1_024,
+      options.capacity ?? 100_000,
       "ledger capacity",
     );
     const busyTimeoutMs = positiveInteger(
@@ -308,6 +310,34 @@ export class SQLiteCommandLedger implements DurableCommandLedger {
           );
       }
       return rows.length;
+    });
+  }
+
+  async retireScope(scope: LedgerScope): Promise<number> {
+    this.#assertOpen();
+    validateScope(scope);
+    return this.#writeTransaction(() => {
+      const parameters = [
+        scope.executorId,
+        scope.rootId,
+        scope.sessionId,
+        scope.runId,
+        scope.generation,
+      ] as const;
+      const active = this.#db
+        .query(
+          `SELECT COUNT(*) AS count FROM runner_command_ledger WHERE executor_id = ? AND root_id = ?
+          AND session_id = ? AND run_id = ? AND generation = ? AND state IN ('queued', 'running')`,
+        )
+        .get(...parameters) as { count: number };
+      if (active.count) throw new LedgerScopeActiveError();
+      const result = this.#db
+        .query(
+          `DELETE FROM runner_command_ledger WHERE executor_id = ? AND root_id = ?
+          AND session_id = ? AND run_id = ? AND generation = ? AND state IN ('succeeded', 'failed', 'cancelled')`,
+        )
+        .run(...parameters);
+      return result.changes;
     });
   }
 
@@ -555,7 +585,11 @@ function validateRecord(
   )
     throw new Error("operation identity mismatch");
   validateReceipt(value.receipt, value.requestId, value.idempotencyKey);
-  if (value.outcome !== undefined) validateOutcome(value.outcome, limits);
+  if (value.outcome !== undefined) {
+    validateOutcome(value.outcome, limits);
+    if (!isExecutorOutcomeCompatible(operation, value.outcome))
+      throw new Error("executor outcome is incompatible with operation");
+  }
   if (value.events !== undefined) {
     validateEvents(value.events, limits);
     const outcome = value.outcome as unknown;
@@ -722,14 +756,18 @@ function validateEvents(
     throw new Error("invalid ledger events");
   const sequences = new Map<string, number>();
   for (const event of value) {
+    const previousSequence = plainObject(event)
+      ? sequences.get(event.streamId as string)
+      : undefined;
     if (
       !plainObject(event) ||
       !boundedString(event.streamId, 256, true) ||
       !nonnegative(event.sequence) ||
-      event.sequence !== (sequences.get(event.streamId) ?? 0)
+      (previousSequence !== undefined &&
+        event.sequence !== previousSequence + 1)
     )
       throw new Error("invalid stream event sequence");
-    sequences.set(event.streamId, event.sequence + 1);
+    sequences.set(event.streamId, event.sequence);
     const eof = event.eof === undefined || typeof event.eof === "boolean";
     if (
       event.kind === "text" &&
@@ -885,10 +923,23 @@ function preparePrivateDatabasePath(dbPath: string): void {
   }
 }
 function preflightSidecars(path: string): void {
+  // SQLite does not expose a no-follow VFS here. This narrows symlink races but
+  // cannot defend against a malicious same-UID process replacing files later.
   for (const file of [`${path}-wal`, `${path}-shm`]) {
     const stat = lstatSync(file, { throwIfNoEntry: false });
-    if (stat && (stat.isSymbolicLink() || !stat.isFile()))
+    if (!stat) continue;
+    if (stat.isSymbolicLink() || !stat.isFile())
       throw new Error(`unsafe ledger SQLite file: ${file}`);
+    const descriptor = openSync(
+      file,
+      constants.O_RDWR | (constants.O_NOFOLLOW ?? 0),
+    );
+    try {
+      if (!fstatSync(descriptor).isFile())
+        throw new Error(`unsafe ledger SQLite file: ${file}`);
+    } finally {
+      closeSync(descriptor);
+    }
   }
 }
 function secureDatabaseFiles(path: string): void {
