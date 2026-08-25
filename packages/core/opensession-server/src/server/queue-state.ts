@@ -750,7 +750,11 @@ function isClientVisibleQueueItem(item: QueueItem): boolean {
 	return (
 		!item.reviewHandoff &&
 		!isWorkflowQueueItem(item) &&
-		item.user !== AUTO_CONTINUE_USER
+		item.user !== AUTO_CONTINUE_USER &&
+		// Background waits and other fenced system context are runner plumbing,
+		// not messages a person queued. If transcript sanitization leaves no
+		// visible body, do not expose the receipt as "(auto-continue)".
+		stripContext(item.content).trim().length > 0
 	);
 }
 
@@ -842,6 +846,26 @@ export function rejectQueuedSteer(sessionId: string, itemId: string): boolean {
 		broadcastQueue(sessionId);
 	}
 	return rejected;
+}
+
+/** Retire one exact receipt when the engine reports that it crossed the step
+ * boundary. This is authoritative even when the delivered message is fenced
+ * system context that transcript parsing intentionally hides. */
+export function acknowledgeSteerDelivery(
+	sessionId: string,
+	steerId: string,
+	effects = true,
+): boolean {
+	const steered = steeredReceipts.get(sessionId);
+	if (!steered?.some((item) => item.id === steerId)) return false;
+	const remaining = steered.filter((item) => item.id !== steerId);
+	if (remaining.length > 0) steeredReceipts.set(sessionId, remaining);
+	else steeredReceipts.delete(sessionId);
+	if (effects) {
+		persistQueues();
+		broadcastQueue(sessionId);
+	}
+	return true;
 }
 
 /** Clear a session's steer receipts once the run that owned them is done. */

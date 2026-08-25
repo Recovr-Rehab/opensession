@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, test } from "bun:test";
 import { classifyEntry } from "@tellahq/opensession-protocol/notices";
 import {
 	acknowledgePromptDispatch,
+	acknowledgeSteerDelivery,
 	beginNextPromptDispatch,
 	beginPromptDispatch,
 	clientVisibleQueuedCount,
@@ -157,6 +158,22 @@ describe("automated turns are not user messages", () => {
 		]);
 	});
 
+	test("hides context-only system steers even without an auto-continue sender", () => {
+		const backgroundWait = {
+			id: "background-wait",
+			content:
+				'<opensession:context source="background-wait">Continue after the timer.</opensession:context>',
+		};
+		promptQueues.set(SESSION, [backgroundWait]);
+		steeredReceipts.set(SESSION, [backgroundWait]);
+
+		expect(clientVisibleQueuedCount(SESSION)).toBe(0);
+		expect(queueDisplayState(SESSION)).toEqual({ queued: [], steered: [] });
+		// Presentation filtering must not remove the runner-owned delivery.
+		expect(promptQueues.get(SESSION)).toEqual([backgroundWait]);
+		expect(steeredReceipts.get(SESSION)).toEqual([backgroundWait]);
+	});
+
 	test("keeps auto-continues queued without exposing them to clients", () => {
 		const autoContinue = {
 			id: "auto-continue",
@@ -187,6 +204,25 @@ describe("automated turns are not user messages", () => {
 			autoContinue,
 		]);
 		expect(steeredReceipts.get(SESSION)).toEqual([autoContinue]);
+	});
+});
+
+describe("steer delivery acknowledgement", () => {
+	test("retires the exact receipt even when its context is absent from the transcript", () => {
+		steeredReceipts.set(SESSION, [
+			{
+				id: "hidden",
+				content:
+					'<opensession:context source="background-wait">Continue.</opensession:context>',
+			},
+			{ id: "human", content: "Keep this receipt", user: "Kent" },
+		]);
+
+		expect(acknowledgeSteerDelivery(SESSION, "hidden", false)).toBe(true);
+		expect(steeredReceipts.get(SESSION)?.map((item) => item.id)).toEqual([
+			"human",
+		]);
+		expect(acknowledgeSteerDelivery(SESSION, "missing", false)).toBe(false);
 	});
 });
 

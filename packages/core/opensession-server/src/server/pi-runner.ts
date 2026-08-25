@@ -2639,6 +2639,15 @@ async function* runPiAttempt(
                 if (idx === -1 && pendingSteers.length > 0) idx = 0;
                 if (idx !== -1) {
                   const steer = pendingSteers.splice(idx, 1)[0];
+                  // Transcript parsing deliberately strips fenced system
+                  // context. A background-wait steer can therefore be fully
+                  // delivered yet leave no visible user entry for receipt
+                  // reconciliation. Acknowledge the exact queue id at the
+                  // engine boundary instead of making UI state infer delivery
+                  // from display-sanitized transcript text.
+                  if (steer.steerId) {
+                    push({ type: "steer_delivered", steerId: steer.steerId });
+                  }
                   audit({
                     ...auditBase,
                     direction: "in",

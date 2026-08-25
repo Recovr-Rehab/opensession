@@ -138,6 +138,7 @@ import {
 	preparePromptInterrupt,
 	settlePromptInterrupt,
 	acknowledgePromptDispatch,
+	acknowledgeSteerDelivery,
 	failPromptDispatch,
 	clearSteerReceipts,
 	isGitHubQueueItem,
@@ -2856,6 +2857,12 @@ async function runSessionPromptInner(
 							: {}),
 					},
 				});
+				break;
+			case "steer_delivered":
+				// Exact engine acknowledgement, consumed internally. Context-only
+				// system steers are intentionally absent from the visible transcript,
+				// so transcript matching alone cannot retire their receipts.
+				if (event.steerId) acknowledgeSteerDelivery(sessionId, event.steerId);
 				break;
 			case "usage_snapshot":
 				// Live mid-run cost/context — same fold as `done`, recomputed from
