@@ -1,4 +1,4 @@
-// Sphere replacement owns checkpoint publication, while the portable format
+// Executor replacement owns checkpoint publication, while the portable format
 // remains provider-neutral and reusable by every executor.
 export {
   InMemoryWorkspaceCheckpointMetadataStore,

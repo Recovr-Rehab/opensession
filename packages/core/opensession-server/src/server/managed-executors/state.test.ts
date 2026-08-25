@@ -1,9 +1,9 @@
 import { describe, expect, test } from "bun:test";
 import { desiredLifecycleEffect } from "./lifecycle";
-import { InMemorySphereStateStore } from "./state";
+import { InMemoryExecutorStateStore } from "./state";
 
 const record = {
-  sphereId: "sphere-1",
+  executorId: "executor-1",
   sessionId: "session-1",
   provider: "box" as const,
   instanceGeneration: 1,
@@ -17,15 +17,15 @@ const record = {
   updatedAtMs: 1_000,
 };
 
-describe("Sphere state", () => {
-  test("indexes deterministic records by Sphere and session and enforces CAS", async () => {
-    const store = new InMemorySphereStateStore();
+describe("Managed Executor state", () => {
+  test("indexes deterministic records by Executor and session and enforces CAS", async () => {
+    const store = new InMemoryExecutorStateStore();
     await store.insertIntent(record);
-    expect(await store.getBySphereId("sphere-1")).toEqual(record);
+    expect(await store.getByExecutorId("executor-1")).toEqual(record);
     expect(await store.getBySessionId("session-1")).toEqual(record);
 
     await expect(
-      store.compareAndSwap("sphere-1", 2, {
+      store.compareAndSwap("executor-1", 2, {
         ...record,
         instanceGeneration: 3,
       }),

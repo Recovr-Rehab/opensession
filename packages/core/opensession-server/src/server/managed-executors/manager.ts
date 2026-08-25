@@ -1,75 +1,74 @@
 import { beginTransition, settleTransition } from "./lifecycle";
 import type {
-  CreatedSphereResource,
-  SphereProvider,
-  SphereProviderId,
-  SphereResourceRef,
+  CreatedExecutorResource,
+  ExecutorProvider,
+  ExecutorProviderId,
+  ExecutorResourceRef,
 } from "./provider";
-import { SphereProviderRegistry } from "./registry";
+import { ExecutorProviderRegistry } from "./registry";
 import {
-  type SphereProjectState,
-  type SphereRecord,
-  type SphereStateStore,
+  type ExecutorProjectState,
+  type ExecutorRecord,
+  type ExecutorStateStore,
 } from "./state";
 
-export interface RevokeSphereAuthorityInput {
-  sphereId: string;
-  executorId?: string;
+export interface RevokeExecutorAuthorityInput {
+  executorId: string;
   throughGeneration: number;
 }
 
-export interface DurableWorkspaceCheckpoint extends SphereProjectState {
+export interface DurableWorkspaceCheckpoint extends ExecutorProjectState {
   durable: true;
 }
 
-export interface SphereManagerDependencies {
-  store: SphereStateStore;
-  providers: SphereProviderRegistry;
-  revokeExecutionAuthority(input: RevokeSphereAuthorityInput): Promise<void>;
+export interface ExecutorManagerDependencies {
+  store: ExecutorStateStore;
+  providers: ExecutorProviderRegistry;
+  revokeExecutionAuthority(input: RevokeExecutorAuthorityInput): Promise<void>;
   checkpointWorkspace(
-    record: SphereRecord,
+    record: ExecutorRecord,
   ): Promise<DurableWorkspaceCheckpoint>;
   now?: () => number;
 }
 
-export interface CreateSphereInput {
-  sphereId: string;
+export interface CreateExecutorInput {
+  executorId: string;
   sessionId: string;
-  provider: SphereProviderId;
-  project: SphereProjectState;
+  provider: ExecutorProviderId;
+  project: ExecutorProjectState;
 }
 
-export interface SphereTransitionInput {
-  sphereId: string;
+export interface ExecutorTransitionInput {
+  executorId: string;
   expectedGeneration: number;
 }
 
-export interface RebuildSphereInput extends SphereTransitionInput {
-  provider?: SphereProviderId;
+export interface RebuildExecutorInput extends ExecutorTransitionInput {
+  provider?: ExecutorProviderId;
 }
 
-export interface ForceDestroySphereInput extends SphereTransitionInput {
+export interface ForceDestroyExecutorInput extends ExecutorTransitionInput {
   operatorId: string;
   reason: string;
 }
 
-export class UnknownManagedSphereResourceError extends Error {
+export class UnknownExecutorResourceError extends Error {
   constructor(resourceId: string) {
     super(`refusing to adopt unknown managed resource: ${resourceId}`);
-    this.name = "UnknownManagedSphereResourceError";
+    this.name = "UnknownExecutorResourceError";
   }
 }
 
 /** Provider-neutral lifecycle coordinator. It is inert until constructed and called. */
-export class SphereManager {
-  readonly #store: SphereStateStore;
-  readonly #providers: SphereProviderRegistry;
-  readonly #revokeExecutionAuthority: SphereManagerDependencies["revokeExecutionAuthority"];
-  readonly #checkpointWorkspace: SphereManagerDependencies["checkpointWorkspace"];
+export class ExecutorManager {
+  readonly #store: ExecutorStateStore;
+  readonly #providers: ExecutorProviderRegistry;
+  readonly #revokeExecutionAuthority: ExecutorManagerDependencies["revokeExecutionAuthority"];
+  readonly #checkpointWorkspace: ExecutorManagerDependencies["checkpointWorkspace"];
   readonly #now: () => number;
   readonly #queues = new Map<string, Promise<void>>();
 
-  constructor(dependencies: SphereManagerDependencies) {
+  constructor(dependencies: ExecutorManagerDependencies) {
     this.#store = dependencies.store;
     this.#providers = dependencies.providers;
     this.#revokeExecutionAuthority = dependencies.revokeExecutionAuthority;
@@ -77,14 +76,14 @@ export class SphereManager {
     this.#now = dependencies.now ?? Date.now;
   }
 
-  create(input: CreateSphereInput): Promise<SphereRecord> {
-    return this.#serialized(input.sphereId, async () => {
-      assertIdentity(input.sphereId, "sphereId");
+  create(input: CreateExecutorInput): Promise<ExecutorRecord> {
+    return this.#serialized(input.executorId, async () => {
+      assertIdentity(input.executorId, "executorId");
       assertIdentity(input.sessionId, "sessionId");
       const provider = this.#providers.get(input.provider);
       const now = this.#now();
-      const intent: SphereRecord = {
-        sphereId: input.sphereId,
+      const intent: ExecutorRecord = {
+        executorId: input.executorId,
         sessionId: input.sessionId,
         provider: input.provider,
         instanceGeneration: 1,
@@ -97,7 +96,7 @@ export class SphereManager {
       await this.#store.insertIntent(intent);
       try {
         const created = await provider.create({
-          sphereId: intent.sphereId,
+          executorId: intent.executorId,
           sessionId: intent.sessionId,
           generation: intent.instanceGeneration,
         });
@@ -105,7 +104,7 @@ export class SphereManager {
         return await this.#ensureAndSettle(provider, attached);
       } catch (error) {
         await this.#recordFailureIfCurrent(
-          intent.sphereId,
+          intent.executorId,
           intent.instanceGeneration,
           error,
         );
@@ -114,25 +113,39 @@ export class SphereManager {
     });
   }
 
-  wake(input: SphereTransitionInput): Promise<SphereRecord> {
-    return this.#serialized(input.sphereId, async () => {
+  wake(input: ExecutorTransitionInput): Promise<ExecutorRecord> {
+    return this.#serialized(input.executorId, async () => {
       const current = await this.#expect(input);
       if (current.lifecycle !== "sleeping" || !current.resourceId) {
-        throw new Error("only a sleeping Sphere with a resource can wake");
+        throw new Error("only a sleeping Executor with a resource can wake");
       }
       const provider = this.#providers.get(current.provider);
       const transition = beginTransition(current, "waking", this.#now());
       await this.#store.compareAndSwap(
-        current.sphereId,
+        current.executorId,
         current.instanceGeneration,
         transition,
       );
       try {
-        await provider.start(resourceRef(transition));
-        return await this.#ensureAndSettle(provider, transition);
+        const started = await provider.start(resourceRef(transition));
+        let active = transition;
+        if (started) {
+          active = {
+            ...transition,
+            resourceId: started.resourceId,
+            workspaceId: started.workspaceId,
+            updatedAtMs: this.#now(),
+          };
+          await this.#store.compareAndSwap(
+            transition.executorId,
+            transition.instanceGeneration,
+            active,
+          );
+        }
+        return await this.#ensureAndSettle(provider, active);
       } catch (error) {
         await this.#recordFailureIfCurrent(
-          transition.sphereId,
+          transition.executorId,
           transition.instanceGeneration,
           error,
         );
@@ -141,16 +154,16 @@ export class SphereManager {
     });
   }
 
-  pause(input: SphereTransitionInput): Promise<SphereRecord> {
-    return this.#serialized(input.sphereId, async () => {
+  pause(input: ExecutorTransitionInput): Promise<ExecutorRecord> {
+    return this.#serialized(input.executorId, async () => {
       const current = await this.#expect(input);
       if (current.lifecycle !== "awake" || !current.resourceId) {
-        throw new Error("only an awake Sphere with a resource can pause");
+        throw new Error("only an awake Executor with a resource can pause");
       }
       const provider = this.#providers.get(current.provider);
       const transition = beginTransition(current, "preparing", this.#now());
       await this.#store.compareAndSwap(
-        current.sphereId,
+        current.executorId,
         current.instanceGeneration,
         transition,
       );
@@ -159,14 +172,14 @@ export class SphereManager {
         await provider.stop(resourceRef(transition));
         const sleeping = settleTransition(transition, "sleeping", this.#now());
         await this.#store.compareAndSwap(
-          transition.sphereId,
+          transition.executorId,
           transition.instanceGeneration,
           sleeping,
         );
         return sleeping;
       } catch (error) {
         await this.#recordFailureIfCurrent(
-          transition.sphereId,
+          transition.executorId,
           transition.instanceGeneration,
           error,
         );
@@ -175,11 +188,11 @@ export class SphereManager {
     });
   }
 
-  destroy(input: SphereTransitionInput): Promise<void> {
+  destroy(input: ExecutorTransitionInput): Promise<void> {
     return this.#destroy(input, undefined);
   }
 
-  forceDestroy(input: ForceDestroySphereInput): Promise<void> {
+  forceDestroy(input: ForceDestroyExecutorInput): Promise<void> {
     if (!input.operatorId.trim() || !input.reason.trim()) {
       return Promise.reject(
         new Error("forceDestroy requires an operator and reason"),
@@ -191,8 +204,8 @@ export class SphereManager {
     });
   }
 
-  rebuild(input: RebuildSphereInput): Promise<SphereRecord> {
-    return this.#serialized(input.sphereId, async () => {
+  rebuild(input: RebuildExecutorInput): Promise<ExecutorRecord> {
+    return this.#serialized(input.executorId, async () => {
       const current = await this.#expect(input);
       const replacement = this.#providers.get(
         input.provider ?? current.provider,
@@ -200,7 +213,7 @@ export class SphereManager {
       const checkpoint = await this.#checkpointWorkspace(current);
       assertDurableCheckpoint(checkpoint);
 
-      const transition: SphereRecord = {
+      const transition: ExecutorRecord = {
         ...beginTransition(current, "preparing", this.#now()),
         provider: replacement.id,
         project: {
@@ -210,7 +223,7 @@ export class SphereManager {
         },
       };
       await this.#store.compareAndSwap(
-        current.sphereId,
+        current.executorId,
         current.instanceGeneration,
         transition,
       );
@@ -221,20 +234,19 @@ export class SphereManager {
           await oldProvider.destroy(resourceRef(transition));
         }
         // Persist the replacement intent with no old provider resource before create.
-        const replacementIntent: SphereRecord = {
+        const replacementIntent: ExecutorRecord = {
           ...transition,
           resourceId: undefined,
-          executorId: undefined,
           workspaceId: undefined,
           updatedAtMs: this.#now(),
         };
         await this.#store.compareAndSwap(
-          transition.sphereId,
+          transition.executorId,
           transition.instanceGeneration,
           replacementIntent,
         );
         const created = await replacement.create({
-          sphereId: replacementIntent.sphereId,
+          executorId: replacementIntent.executorId,
           sessionId: replacementIntent.sessionId,
           generation: replacementIntent.instanceGeneration,
         });
@@ -245,7 +257,7 @@ export class SphereManager {
         return await this.#ensureAndSettle(replacement, attached);
       } catch (error) {
         await this.#recordFailureIfCurrent(
-          transition.sphereId,
+          transition.executorId,
           transition.instanceGeneration,
           error,
         );
@@ -255,37 +267,37 @@ export class SphereManager {
   }
 
   async assertNoUnknownManagedResources(
-    providerId: SphereProviderId,
+    providerId: ExecutorProviderId,
   ): Promise<void> {
     const provider = this.#providers.get(providerId);
     for (const resource of await provider.listManaged()) {
-      const record = await this.#store.getBySphereId(resource.sphereId);
+      const record = await this.#store.getByExecutorId(resource.executorId);
       if (
         !record ||
         record.provider !== providerId ||
         record.resourceId !== resource.resourceId
       ) {
-        throw new UnknownManagedSphereResourceError(resource.resourceId);
+        throw new UnknownExecutorResourceError(resource.resourceId);
       }
     }
   }
 
   #destroy(
-    input: SphereTransitionInput,
+    input: ExecutorTransitionInput,
     force: { operatorId: string; reason: string } | undefined,
   ): Promise<void> {
-    return this.#serialized(input.sphereId, async () => {
+    return this.#serialized(input.executorId, async () => {
       const current = await this.#expect(input);
       const provider = this.#providers.get(current.provider);
       const transition = beginTransition(current, "preparing", this.#now());
       await this.#store.compareAndSwap(
-        current.sphereId,
+        current.executorId,
         current.instanceGeneration,
         transition,
       );
       if (force) {
         await this.#store.appendAudit({
-          sphereId: transition.sphereId,
+          executorId: transition.executorId,
           generation: transition.instanceGeneration,
           action: "force_destroy",
           operatorId: force.operatorId,
@@ -299,12 +311,12 @@ export class SphereManager {
           await provider.destroy(resourceRef(transition));
         }
         await this.#store.delete(
-          transition.sphereId,
+          transition.executorId,
           transition.instanceGeneration,
         );
       } catch (error) {
         await this.#recordFailureIfCurrent(
-          transition.sphereId,
+          transition.executorId,
           transition.instanceGeneration,
           error,
         );
@@ -313,32 +325,32 @@ export class SphereManager {
     });
   }
 
-  async #expect(input: SphereTransitionInput): Promise<SphereRecord> {
-    const record = await this.#store.getBySphereId(input.sphereId);
-    if (!record) throw new Error(`Sphere ${input.sphereId} does not exist`);
+  async #expect(input: ExecutorTransitionInput): Promise<ExecutorRecord> {
+    const record = await this.#store.getByExecutorId(input.executorId);
+    if (!record) throw new Error(`Executor ${input.executorId} does not exist`);
     if (record.instanceGeneration !== input.expectedGeneration) {
       throw new Error(
-        `stale Sphere generation: expected ${input.expectedGeneration}, current ${record.instanceGeneration}`,
+        `stale Executor generation: expected ${input.expectedGeneration}, current ${record.instanceGeneration}`,
       );
     }
     return record;
   }
 
   async #recordCreatedResource(
-    record: SphereRecord,
-    created: CreatedSphereResource,
-  ): Promise<SphereRecord> {
+    record: ExecutorRecord,
+    created: CreatedExecutorResource,
+  ): Promise<ExecutorRecord> {
     if (!created.resourceId || !created.workspaceId) {
-      throw new Error("provider returned an invalid Sphere resource");
+      throw new Error("provider returned an invalid Executor resource");
     }
-    const attached: SphereRecord = {
+    const attached: ExecutorRecord = {
       ...record,
       resourceId: created.resourceId,
       workspaceId: created.workspaceId,
       updatedAtMs: this.#now(),
     };
     await this.#store.compareAndSwap(
-      record.sphereId,
+      record.executorId,
       record.instanceGeneration,
       attached,
     );
@@ -346,41 +358,42 @@ export class SphereManager {
   }
 
   async #ensureAndSettle(
-    provider: SphereProvider,
-    record: SphereRecord,
-  ): Promise<SphereRecord> {
+    provider: ExecutorProvider,
+    record: ExecutorRecord,
+  ): Promise<ExecutorRecord> {
     const executor = await provider.ensureExecutor(resourceRef(record));
+    if (executor.executorId !== record.executorId) {
+      throw new Error("provider enrolled the wrong Executor identity");
+    }
     const awake = settleTransition(
       {
         ...record,
-        executorId: executor.executorId,
         workspaceId: executor.workspaceId,
       },
       "awake",
       this.#now(),
     );
     await this.#store.compareAndSwap(
-      record.sphereId,
+      record.executorId,
       record.instanceGeneration,
       awake,
     );
     return awake;
   }
 
-  async #revoke(record: SphereRecord): Promise<void> {
+  async #revoke(record: ExecutorRecord): Promise<void> {
     await this.#revokeExecutionAuthority({
-      sphereId: record.sphereId,
       executorId: record.executorId,
       throughGeneration: record.instanceGeneration,
     });
   }
 
   async #recordFailureIfCurrent(
-    sphereId: string,
+    executorId: string,
     generation: number,
     error: unknown,
   ): Promise<void> {
-    const current = await this.#store.getBySphereId(sphereId);
+    const current = await this.#store.getByExecutorId(executorId);
     if (!current || current.instanceGeneration !== generation) return;
     const failed = settleTransition(
       current,
@@ -388,29 +401,31 @@ export class SphereManager {
       this.#now(),
       errorMessage(error),
     );
-    await this.#store.compareAndSwap(sphereId, generation, failed);
+    await this.#store.compareAndSwap(executorId, generation, failed);
   }
 
-  #serialized<T>(sphereId: string, operation: () => Promise<T>): Promise<T> {
-    const previous = this.#queues.get(sphereId) ?? Promise.resolve();
+  #serialized<T>(executorId: string, operation: () => Promise<T>): Promise<T> {
+    const previous = this.#queues.get(executorId) ?? Promise.resolve();
     const result = previous.catch(() => undefined).then(operation);
     const tail = result.then(
       () => undefined,
       () => undefined,
     );
-    this.#queues.set(sphereId, tail);
+    this.#queues.set(executorId, tail);
     void tail.finally(() => {
-      if (this.#queues.get(sphereId) === tail) this.#queues.delete(sphereId);
+      if (this.#queues.get(executorId) === tail)
+        this.#queues.delete(executorId);
     });
     return result;
   }
 }
 
-function resourceRef(record: SphereRecord): SphereResourceRef {
-  if (!record.resourceId) throw new Error("Sphere has no provider resource");
+function resourceRef(record: ExecutorRecord): ExecutorResourceRef {
+  if (!record.resourceId) throw new Error("Executor has no provider resource");
   return {
     resourceId: record.resourceId,
-    sphereId: record.sphereId,
+    executorId: record.executorId,
+    sessionId: record.sessionId,
     generation: record.instanceGeneration,
   };
 }

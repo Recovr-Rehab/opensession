@@ -26,7 +26,7 @@ export interface ExecutorBrokerOptions {
   maxReceipts?: number;
 }
 
-/** Authorizes and dispatches operations without owning Sphere lifecycle. */
+/** Authorizes and dispatches operations without owning managed Executor lifecycle. */
 export class ExecutorBroker {
   readonly #implementations = new Map<string, Executor>();
   readonly #roots = new Map<string, string>();

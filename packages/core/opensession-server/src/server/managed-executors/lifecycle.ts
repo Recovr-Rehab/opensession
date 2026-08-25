@@ -1,14 +1,14 @@
-import type { SphereLifecycle, SphereRecord } from "./state";
+import type { ExecutorLifecycle, ExecutorRecord } from "./state";
 
-export type SphereDesiredState = "awake" | "sleeping" | "destroyed";
-export type SphereLifecycleEffect =
+export type ExecutorDesiredState = "awake" | "sleeping" | "destroyed";
+export type ExecutorLifecycleEffect =
   "none" | "wake" | "pause" | "destroy" | "wait" | "repair";
 
 /** Pure projection for a SessionKernel desired-state effect planner. */
 export function desiredLifecycleEffect(
-  lifecycle: SphereLifecycle,
-  desired: SphereDesiredState,
-): SphereLifecycleEffect {
+  lifecycle: ExecutorLifecycle,
+  desired: ExecutorDesiredState,
+): ExecutorLifecycleEffect {
   if (desired === "destroyed") return "destroy";
   if (lifecycle === "needs_attention") return "repair";
   if (lifecycle === "preparing" || lifecycle === "waking") return "wait";
@@ -17,10 +17,10 @@ export function desiredLifecycleEffect(
 }
 
 export function beginTransition(
-  record: SphereRecord,
+  record: ExecutorRecord,
   lifecycle: "preparing" | "waking",
   nowMs: number,
-): SphereRecord {
+): ExecutorRecord {
   return {
     ...record,
     instanceGeneration: record.instanceGeneration + 1,
@@ -31,11 +31,11 @@ export function beginTransition(
 }
 
 export function settleTransition(
-  record: SphereRecord,
+  record: ExecutorRecord,
   lifecycle: "awake" | "sleeping" | "needs_attention",
   nowMs: number,
   error?: string,
-): SphereRecord {
+): ExecutorRecord {
   return {
     ...record,
     lifecycle,

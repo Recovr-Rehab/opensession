@@ -1,32 +1,36 @@
 import { describe, expect, test } from "bun:test";
 import {
-  SPHERE_PROVIDERS,
-  isSphereProvider,
+  EXECUTOR_PROVIDERS,
+  isExecutorProvider,
   type ExecutionTarget,
   type ProtocolClientMessage,
 } from "./session";
 
-describe("Sphere session protocol", () => {
+describe("Executor session protocol", () => {
   test("has exactly the approved providers", () => {
-    expect([...SPHERE_PROVIDERS]).toEqual(["box", "daytona", "modal"]);
-    expect(SPHERE_PROVIDERS.every(isSphereProvider)).toBe(true);
-    expect(isSphereProvider("other")).toBe(false);
-    expect(isSphereProvider("local")).toBe(false);
+    expect([...EXECUTOR_PROVIDERS]).toEqual(["box", "daytona", "modal"]);
+    expect(EXECUTOR_PROVIDERS.every(isExecutorProvider)).toBe(true);
+    expect(isExecutorProvider("other")).toBe(false);
+    expect(isExecutorProvider("local")).toBe(false);
   });
 
-  test("distinguishes local, Runner, and Sphere execution", () => {
+  test("distinguishes local, Runner, and managed Executor execution", () => {
     const targets: ExecutionTarget[] = [
       { kind: "local" },
       { kind: "runner", executorId: "runner-1", workspaceId: "workspace-1" },
       {
-        kind: "sphere",
+        kind: "executor",
         provider: "daytona",
         executorId: "executor-1",
         workspaceId: "workspace-1",
         lifecycle: "awake",
       },
     ];
-    expect(targets.map(({ kind }) => kind)).toEqual(["local", "runner", "sphere"]);
+    expect(targets.map(({ kind }) => kind)).toEqual([
+      "local",
+      "runner",
+      "executor",
+    ]);
   });
 
   test("keeps this machine as the create-session omission default", () => {
@@ -36,8 +40,8 @@ describe("Sphere session protocol", () => {
       prompt: "Inspect this repository",
       user: "person@example.com",
     };
-    const remote: ProtocolClientMessage = { ...local, sphere: "modal" };
-    expect("sphere" in local).toBe(false);
-    expect(remote).toMatchObject({ sphere: "modal" });
+    const remote: ProtocolClientMessage = { ...local, executor: "modal" };
+    expect("executor" in local).toBe(false);
+    expect(remote).toMatchObject({ executor: "modal" });
   });
 });

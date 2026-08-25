@@ -1,18 +1,17 @@
 import { randomBytes } from "node:crypto";
 
-export interface SphereEnrollmentScope {
-  sphereId: string;
+export interface ExecutorEnrollmentScope {
   executorId: string;
   generation: number;
   expiresAtMs: number;
 }
 
-export interface SphereEnrollmentFence {
-  sphereId: string;
+export interface ExecutorEnrollmentFence {
+  executorId: string;
   generation: number;
 }
 
-export interface SphereEnrollmentAuthorityOptions {
+export interface ExecutorEnrollmentAuthorityOptions {
   now?: () => number;
   maxGrants?: number;
   maxTtlMs?: number;
@@ -22,13 +21,13 @@ const DEFAULT_MAX_GRANTS = 1_000;
 const DEFAULT_MAX_TTL_MS = 5 * 60_000;
 
 /** One-use outbound enrollment grants. Tokens are opaque lookup keys, not claims. */
-export class SphereEnrollmentAuthority {
-  readonly #grants = new Map<string, SphereEnrollmentScope>();
+export class ExecutorEnrollmentAuthority {
+  readonly #grants = new Map<string, ExecutorEnrollmentScope>();
   readonly #now: () => number;
   readonly #maxGrants: number;
   readonly #maxTtlMs: number;
 
-  constructor(options: SphereEnrollmentAuthorityOptions = {}) {
+  constructor(options: ExecutorEnrollmentAuthorityOptions = {}) {
     this.#now = options.now ?? Date.now;
     this.#maxGrants = options.maxGrants ?? DEFAULT_MAX_GRANTS;
     this.#maxTtlMs = options.maxTtlMs ?? DEFAULT_MAX_TTL_MS;
@@ -40,7 +39,7 @@ export class SphereEnrollmentAuthority {
     }
   }
 
-  issue(scope: SphereEnrollmentScope): string {
+  issue(scope: ExecutorEnrollmentScope): string {
     assertScope(scope);
     const now = this.#now();
     if (scope.expiresAtMs <= now || scope.expiresAtMs - now > this.#maxTtlMs) {
@@ -60,7 +59,10 @@ export class SphereEnrollmentAuthority {
     return token;
   }
 
-  consume(token: string, fence: SphereEnrollmentFence): SphereEnrollmentScope {
+  consume(
+    token: string,
+    fence: ExecutorEnrollmentFence,
+  ): ExecutorEnrollmentScope {
     const scope = this.#grants.get(token);
     if (!scope)
       throw new Error("enrollment grant is invalid, consumed, or revoked");
@@ -68,8 +70,8 @@ export class SphereEnrollmentAuthority {
       this.#grants.delete(token);
       throw new Error("enrollment grant has expired");
     }
-    if (scope.sphereId !== fence.sphereId) {
-      throw new Error("enrollment grant does not authorize this Sphere");
+    if (scope.executorId !== fence.executorId) {
+      throw new Error("enrollment grant does not authorize this Executor");
     }
     if (scope.generation !== fence.generation) {
       throw new Error("enrollment grant generation is stale");
@@ -82,10 +84,10 @@ export class SphereEnrollmentAuthority {
     return this.#grants.delete(token);
   }
 
-  revokeGeneration(sphereId: string, generation: number): number {
+  revokeGeneration(executorId: string, generation: number): number {
     let revoked = 0;
     for (const [token, scope] of this.#grants) {
-      if (scope.sphereId === sphereId && scope.generation === generation) {
+      if (scope.executorId === executorId && scope.generation === generation) {
         this.#grants.delete(token);
         revoked++;
       }
@@ -104,9 +106,8 @@ export class SphereEnrollmentAuthority {
   }
 }
 
-function assertScope(scope: SphereEnrollmentScope): void {
+function assertScope(scope: ExecutorEnrollmentScope): void {
   if (
-    !scope.sphereId ||
     !scope.executorId ||
     !Number.isSafeInteger(scope.generation) ||
     scope.generation < 1 ||

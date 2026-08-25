@@ -2,8 +2,8 @@
  * Local Unix-socket contract between the control plane and an Agent Host.
  *
  * The Agent Host owns one model turn loop. It receives policy and a single
- * opaque Executor capability, but never provisions or destroys a Sphere.
- * Sphere/provider lifecycle remains outside this protocol.
+ * opaque Executor capability, but never provisions or destroys a managed Executor.
+ * Managed Executor provider lifecycle remains outside this protocol.
  */
 
 import type { ImageInput, StreamEvent } from "./events";
@@ -112,7 +112,12 @@ export type AgentHostServerMessage =
     })
   | (AgentHostMessageBase & {
       t: "error";
-      code: "unsupported_version" | "invalid_request" | "stale_generation" | "host_busy" | "turn_failed";
+      code:
+        | "unsupported_version"
+        | "invalid_request"
+        | "stale_generation"
+        | "host_busy"
+        | "turn_failed";
       message: string;
       fence?: AgentTurnFence;
     });
@@ -135,10 +140,13 @@ export function isAgentTurnFence(value: unknown): value is AgentTurnFence {
 export function decodeAgentHostHello(
   value: unknown,
 ): Extract<AgentHostClientMessage, { t: "hello" }> | undefined {
-  if (!value || typeof value !== "object" || Array.isArray(value)) return undefined;
+  if (!value || typeof value !== "object" || Array.isArray(value))
+    return undefined;
   const message = value as Record<string, unknown>;
   if (
-    Object.keys(message).some((key) => !["t", "version", "requestId"].includes(key)) ||
+    Object.keys(message).some(
+      (key) => !["t", "version", "requestId"].includes(key),
+    ) ||
     message.t !== "hello" ||
     message.version !== AGENT_HOST_PROTOCOL_VERSION ||
     typeof message.requestId !== "string" ||

@@ -24,16 +24,12 @@
 import type { AnsweredAskData, EntryNotice, NoticeKind } from "./notices";
 import type { ToolPresentation } from "./tool-presentation";
 
-/** The complete set of supported Sphere providers. */
-export const SPHERE_PROVIDERS = ["box", "daytona", "modal"] as const;
-export type SphereProvider = (typeof SPHERE_PROVIDERS)[number];
+/** The complete set of managed Executor providers. */
+export const EXECUTOR_PROVIDERS = ["box", "daytona", "modal"] as const;
+export type ExecutorProvider = (typeof EXECUTOR_PROVIDERS)[number];
 
-export type SphereLifecycle =
-  | "preparing"
-  | "awake"
-  | "sleeping"
-  | "waking"
-  | "needs_attention";
+export type ExecutorLifecycle =
+  "preparing" | "awake" | "sleeping" | "waking" | "needs_attention";
 
 /** Where tool and workspace operations execute. This state contains no model
  * or conversation identity. Omission at creation normalizes to `local`. */
@@ -41,17 +37,20 @@ export type ExecutionTarget =
   | { kind: "local" }
   | { kind: "runner"; executorId: string; workspaceId: string }
   | {
-      kind: "sphere";
-      provider: SphereProvider;
+      kind: "executor";
+      provider: ExecutorProvider;
       executorId: string;
       workspaceId: string;
       instanceId?: string;
-      lifecycle: SphereLifecycle;
+      lifecycle: ExecutorLifecycle;
       durableDeltaId?: string;
     };
 
-export function isSphereProvider(value: unknown): value is SphereProvider {
-  return typeof value === "string" && (SPHERE_PROVIDERS as readonly string[]).includes(value);
+export function isExecutorProvider(value: unknown): value is ExecutorProvider {
+  return (
+    typeof value === "string" &&
+    (EXECUTOR_PROVIDERS as readonly string[]).includes(value)
+  );
 }
 
 /** One rendered line of a session's durable transcript (the jsonl record). */
@@ -321,8 +320,18 @@ export type ProtocolClientMessage =
       queueId?: string;
       queueIndex?: number;
     }
-  | { type: "take_queued_prompt"; sessionId: string; requestId?: string; queueId: string; }
-  | { type: "take_steered_prompt"; sessionId: string; requestId?: string; queueId: string; }
+  | {
+      type: "take_queued_prompt";
+      sessionId: string;
+      requestId?: string;
+      queueId: string;
+    }
+  | {
+      type: "take_steered_prompt";
+      sessionId: string;
+      requestId?: string;
+      queueId: string;
+    }
   | {
       /** @deprecated Current clients take the item back into the composer. */
       type: "update_queued_prompt";
@@ -382,9 +391,9 @@ export type ProtocolClientMessage =
       model?: string;
       /** Optional MCP server allowlist for the opening run. [] means none. */
       mcpServers?: string[];
-      /** Execute in a Sphere from this provider. Omit to use this machine. */
-      sphere?: SphereProvider;
-      /** @deprecated Transitional pre-Spheres selection. Use sphere. */
+      /** Execute on a managed Executor from this provider. Omit to use this machine. */
+      executor?: ExecutorProvider;
+      /** @deprecated Transitional pre-Executor selection. Use executor. */
       sandbox?: boolean | string;
       images?: string[];
       /** Non-image composer attachments, staged server-side or kept inline. */
@@ -563,7 +572,13 @@ export type ProtocolServerMessage =
     }
   // The create run finished (or failed) preparing the session's worktree.
   | { type: "workspace_status"; sessionId: string; ready: boolean }
-  | { type: "model_changed"; sessionId: string; model: string; from?: string; by?: string; }
+  | {
+      type: "model_changed";
+      sessionId: string;
+      model: string;
+      from?: string;
+      by?: string;
+    }
   | {
       type: "queue_update";
       sessionId: string;
@@ -616,7 +631,8 @@ export type ProtocolServerMessage =
       ts?: string;
     }
   | { type: "command_ack_result"; sessionId: string; requestId: string }
-  | { type: "command_result";
+  | {
+      type: "command_result";
       sessionId: string;
       requestId: string;
       status: "completed" | "failed";

@@ -24,8 +24,8 @@ class MemoryBlobStore implements BlobStore {
   }
 }
 
-describe("Sphere workspace checkpoints", () => {
-  test("exposes the provider-neutral publication barrier to sphere replacement", async () => {
+describe("Executor workspace checkpoints", () => {
+  test("exposes the provider-neutral publication barrier to Executor replacement", async () => {
     const content = new TextEncoder().encode("durable change");
     const digest = digestBytes(content);
     const manifest = createWorkspaceDeltaManifest({

@@ -1,37 +1,38 @@
 import { describe, expect, test } from "bun:test";
-import { SphereManager } from "./manager";
+import { ExecutorManager } from "./manager";
 import type {
-  CreateSphereResourceInput,
-  CreatedSphereResource,
-  EnsuredSphereExecutor,
-  SphereProvider,
-  SphereProviderId,
-  SphereResourceRef,
+  CreateExecutorResourceInput,
+  CreatedExecutorResource,
+  EnsuredExecutor,
+  ExecutorProvider,
+  ExecutorProviderId,
+  ExecutorResourceRef,
 } from "./provider";
-import { SphereProviderRegistry } from "./registry";
+import { ExecutorProviderRegistry } from "./registry";
 import {
-  InMemorySphereStateStore,
-  type SphereRecord,
-  type SphereStateStore,
+  InMemoryExecutorStateStore,
+  type ExecutorRecord,
+  type ExecutorStateStore,
 } from "./state";
 
-class FakeProvider implements SphereProvider {
-  readonly id: SphereProviderId;
+class FakeProvider implements ExecutorProvider {
+  readonly id: ExecutorProviderId;
   readonly events: string[];
-  managed: SphereResourceRef[] = [];
+  managed: ExecutorResourceRef[] = [];
   createError?: Error;
   beforeCreate?: () => Promise<void> | void;
   beforeEnsure?: () => Promise<void> | void;
   beforeStart?: () => Promise<void> | void;
+  startReplacement?: CreatedExecutorResource;
 
-  constructor(id: SphereProviderId = "box", events: string[] = []) {
+  constructor(id: ExecutorProviderId = "box", events: string[] = []) {
     this.id = id;
     this.events = events;
   }
 
   async create(
-    input: CreateSphereResourceInput,
-  ): Promise<CreatedSphereResource> {
+    input: CreateExecutorResourceInput,
+  ): Promise<CreatedExecutorResource> {
     this.events.push(`create:${input.generation}`);
     await this.beforeCreate?.();
     if (this.createError) throw this.createError;
@@ -42,9 +43,10 @@ class FakeProvider implements SphereProvider {
     return { state: "awake" };
   }
 
-  async start(): Promise<void> {
+  async start(): Promise<CreatedExecutorResource | void> {
     this.events.push("start");
     await this.beforeStart?.();
+    return this.startReplacement;
   }
 
   async stop(): Promise<void> {
@@ -55,13 +57,16 @@ class FakeProvider implements SphereProvider {
     this.events.push("destroy");
   }
 
-  async ensureExecutor(): Promise<EnsuredSphereExecutor> {
+  async ensureExecutor(): Promise<EnsuredExecutor> {
     this.events.push("ensure");
     await this.beforeEnsure?.();
-    return { executorId: "executor-1", workspaceId: "workspace-1" };
+    return {
+      executorId: "executor-1",
+      workspaceId: this.startReplacement?.workspaceId ?? "workspace-1",
+    };
   }
 
-  async listManaged(): Promise<readonly SphereResourceRef[]> {
+  async listManaged(): Promise<readonly ExecutorResourceRef[]> {
     return this.managed;
   }
 }
@@ -75,17 +80,17 @@ const project = {
 function setup(
   options: {
     provider?: FakeProvider;
-    store?: SphereStateStore;
+    store?: ExecutorStateStore;
     events?: string[];
     checkpoint?: () => Promise<any>;
   } = {},
 ) {
   const events = options.events ?? [];
   const provider = options.provider ?? new FakeProvider("box", events);
-  const store = options.store ?? new InMemorySphereStateStore();
-  const registry = new SphereProviderRegistry();
+  const store = options.store ?? new InMemoryExecutorStateStore();
+  const registry = new ExecutorProviderRegistry();
   registry.register(provider);
-  const manager = new SphereManager({
+  const manager = new ExecutorManager({
     store,
     providers: registry,
     now: () => 1_000,
@@ -99,21 +104,24 @@ function setup(
   return { events, manager, provider, registry, store };
 }
 
-async function create(manager: SphereManager): Promise<SphereRecord> {
+async function create(
+  manager: ExecutorManager,
+  provider: ExecutorProviderId = "box",
+): Promise<ExecutorRecord> {
   return manager.create({
-    sphereId: "sphere-1",
+    executorId: "executor-1",
     sessionId: "session-1",
-    provider: "box",
+    provider,
     project,
   });
 }
 
-describe("SphereManager", () => {
+describe("ExecutorManager", () => {
   test("writes durable intent before create and records the resource before executor setup", async () => {
-    const backing = new InMemorySphereStateStore();
+    const backing = new InMemoryExecutorStateStore();
     const events: string[] = [];
-    const store: SphereStateStore = {
-      getBySphereId: (id) => backing.getBySphereId(id),
+    const store: ExecutorStateStore = {
+      getByExecutorId: (id) => backing.getByExecutorId(id),
       getBySessionId: (id) => backing.getBySessionId(id),
       insertIntent: async (record) => {
         events.push("intent");
@@ -128,12 +136,12 @@ describe("SphereManager", () => {
     };
     const provider = new FakeProvider("box", events);
     provider.beforeCreate = async () => {
-      expect((await backing.getBySphereId("sphere-1"))?.lifecycle).toBe(
+      expect((await backing.getByExecutorId("executor-1"))?.lifecycle).toBe(
         "preparing",
       );
     };
     provider.beforeEnsure = async () => {
-      expect((await backing.getBySphereId("sphere-1"))?.resourceId).toBe(
+      expect((await backing.getByExecutorId("executor-1"))?.resourceId).toBe(
         "resource-box",
       );
     };
@@ -156,12 +164,14 @@ describe("SphereManager", () => {
     const { manager, store } = setup({ provider });
 
     await expect(create(manager)).rejects.toThrow("provider unavailable");
-    expect(await store.getBySphereId("sphere-1")).toMatchObject({
+    expect(await store.getByExecutorId("executor-1")).toMatchObject({
       lifecycle: "needs_attention",
       error: "provider unavailable",
       instanceGeneration: 1,
     });
-    expect((await store.getBySphereId("sphere-1"))?.resourceId).toBeUndefined();
+    expect(
+      (await store.getByExecutorId("executor-1"))?.resourceId,
+    ).toBeUndefined();
   });
 
   test("serializes concurrent wake and destroy and fences the stale request", async () => {
@@ -181,24 +191,47 @@ describe("SphereManager", () => {
     const { manager, events } = setup({ provider });
     const awake = await create(manager);
     const sleeping = await manager.pause({
-      sphereId: awake.sphereId,
+      executorId: awake.executorId,
       expectedGeneration: awake.instanceGeneration,
     });
 
     const wake = manager.wake({
-      sphereId: sleeping.sphereId,
+      executorId: sleeping.executorId,
       expectedGeneration: sleeping.instanceGeneration,
     });
     await startEntered;
     const destroy = manager.destroy({
-      sphereId: sleeping.sphereId,
+      executorId: sleeping.executorId,
       expectedGeneration: sleeping.instanceGeneration,
     });
     releaseStart();
 
     expect((await wake).lifecycle).toBe("awake");
-    await expect(destroy).rejects.toThrow("stale Sphere generation");
+    await expect(destroy).rejects.toThrow("stale Executor generation");
     expect(events.filter((event) => event === "destroy")).toHaveLength(0);
+  });
+
+  test("records a replacement resource when an ephemeral provider wakes", async () => {
+    const provider = new FakeProvider("modal");
+    const { manager } = setup({ provider });
+    const awake = await create(manager, "modal");
+    const sleeping = await manager.pause({
+      executorId: awake.executorId,
+      expectedGeneration: awake.instanceGeneration,
+    });
+    provider.startReplacement = {
+      resourceId: "resource-modal-replacement",
+      workspaceId: "workspace-replacement",
+    };
+    const replaced = await manager.wake({
+      executorId: sleeping.executorId,
+      expectedGeneration: sleeping.instanceGeneration,
+    });
+    expect(replaced).toMatchObject({
+      resourceId: "resource-modal-replacement",
+      workspaceId: "workspace-replacement",
+      lifecycle: "awake",
+    });
   });
 
   test("rejects stale generations before provider effects", async () => {
@@ -206,8 +239,8 @@ describe("SphereManager", () => {
     const awake = await create(manager);
     const before = [...events];
     await expect(
-      manager.pause({ sphereId: awake.sphereId, expectedGeneration: 99 }),
-    ).rejects.toThrow("stale Sphere generation");
+      manager.pause({ executorId: awake.executorId, expectedGeneration: 99 }),
+    ).rejects.toThrow("stale Executor generation");
     expect(events).toEqual(before);
   });
 
@@ -215,14 +248,14 @@ describe("SphereManager", () => {
     const { manager, events } = setup();
     const awake = await create(manager);
     const sleeping = await manager.pause({
-      sphereId: awake.sphereId,
+      executorId: awake.executorId,
       expectedGeneration: awake.instanceGeneration,
     });
     expect(events.indexOf("revoke")).toBeLessThan(events.indexOf("stop"));
 
     events.length = 0;
     await manager.destroy({
-      sphereId: sleeping.sphereId,
+      executorId: sleeping.executorId,
       expectedGeneration: sleeping.instanceGeneration,
     });
     expect(events).toEqual(["revoke", "destroy"]);
@@ -237,7 +270,7 @@ describe("SphereManager", () => {
 
     await expect(
       manager.rebuild({
-        sphereId: awake.sphereId,
+        executorId: awake.executorId,
         expectedGeneration: awake.instanceGeneration,
       }),
     ).rejects.toThrow("durable workspace checkpoint");
@@ -245,19 +278,19 @@ describe("SphereManager", () => {
   });
 
   test("records an operator audit marker for force destroy", async () => {
-    const store = new InMemorySphereStateStore();
+    const store = new InMemoryExecutorStateStore();
     const { manager } = setup({ store });
     const awake = await create(manager);
 
     await manager.forceDestroy({
-      sphereId: awake.sphereId,
+      executorId: awake.executorId,
       expectedGeneration: awake.instanceGeneration,
       operatorId: "operator-1",
       reason: "remove orphaned billing resource",
     });
     expect(store.auditEntries()).toEqual([
       {
-        sphereId: "sphere-1",
+        executorId: "executor-1",
         generation: 2,
         action: "force_destroy",
         operatorId: "operator-1",
@@ -273,7 +306,12 @@ describe("SphereManager", () => {
     expect(() => registry.get("modal")).toThrow("unconfigured");
 
     provider.managed = [
-      { sphereId: "legacy", resourceId: "legacy-resource", generation: 1 },
+      {
+        executorId: "legacy",
+        sessionId: "legacy-session",
+        resourceId: "legacy-resource",
+        generation: 1,
+      },
     ];
     await expect(
       manager.assertNoUnknownManagedResources("box"),
