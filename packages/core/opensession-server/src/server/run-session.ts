@@ -178,6 +178,7 @@ import {
 	settleCreationFailed,
 	settleCreationSucceeded,
 	sessionKernel,
+	sessionKernelStore,
   sessionTurn,
 } from "./session-kernel";
 
@@ -759,7 +760,11 @@ export function interruptQueuedPrompt(
 export function restorePromptQueues(resumedSessionIds: Set<string>): void {
 	const active = activeRunRecords();
 	const restored = restorePersistedQueueState({
-		sessionExists: (sessionId) => !!findSession(sessionId),
+		// A quarantined session is intentionally inert. Treat it like a missing
+		// session during queue restoration so boot does not try to mutate its
+		// delivery projection and turn one isolated failure into a restart loop.
+		sessionExists: (sessionId) =>
+			!!findSession(sessionId) && !sessionKernelStore().quarantinedSession(sessionId),
 		journalOwnsPrompt: (sessionId, promptEntryId) =>
 			active.some(
 				(run) =>
