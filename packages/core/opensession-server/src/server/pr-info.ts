@@ -20,6 +20,7 @@ import {
 } from "./github-auth";
 import { githubBotCredentialMode, githubToken } from "./github-app";
 import { reviewRequestRemovalSpecs } from "./github-review-requests";
+import { noteGithubGraphqlCall } from "./github-budget";
 import { getPrStack, unmergedLayersBelow } from "./pr-stack";
 import type {
   MergeMethod,
@@ -52,17 +53,7 @@ export type {
   PrStaging,
 } from "./pr-contract";
 
-export interface PrAutomationDetails {
-  number: number;
-  title: string;
-  url: string;
-  state: "OPEN" | "MERGED" | "CLOSED";
-  isDraft: boolean;
-  baseRefName: string;
-  headRefName: string;
-  headRefOid: string;
-  author: string;
-}
+export type PrAutomationDetails = PrDetails;
 
 /**
  * Minimum PR metadata needed to acknowledge and queue event-driven work.
@@ -108,16 +99,51 @@ export async function getPrAutomationDetails(
   }
   const pr = Array.isArray(body) ? body[0] : body;
   if (!pr) return null;
+  const key = cacheKey(repo, pr.head?.ref || selector);
+  const cached = cache.get(key)?.data;
+  const state: PrDetails["state"] = pr.merged_at
+    ? "MERGED"
+    : pr.state === "open"
+      ? "OPEN"
+      : "CLOSED";
   return {
+    ...(cached || {
+      number: pr.number,
+      title: "",
+      url: "",
+      state,
+      isDraft: false,
+      baseRefName: "",
+      headRefName: "",
+      additions: 0,
+      deletions: 0,
+      changedFiles: 0,
+      reviewDecision: "",
+      author: "",
+      body: "",
+      checks: [],
+      comments: [],
+      commits: [],
+      files: [],
+      reviewers: [],
+      mergeable: "UNKNOWN",
+      mergeStateStatus: "",
+      staging: null,
+    }),
     number: pr.number,
     title: pr.title || `PR #${pr.number}`,
     url: pr.html_url || "",
-    state: pr.merged_at ? "MERGED" : String(pr.state || "closed").toUpperCase(),
+    state,
     isDraft: !!pr.draft,
     baseRefName: pr.base?.ref || "",
     headRefName: pr.head?.ref || "",
     headRefOid: pr.head?.sha || "",
+    additions: Number(pr.additions) || cached?.additions || 0,
+    deletions: Number(pr.deletions) || cached?.deletions || 0,
+    changedFiles: Number(pr.changed_files) || cached?.changedFiles || 0,
     author: pr.user?.login || "",
+    body: typeof pr.body === "string" ? pr.body : cached?.body || "",
+    mergeable: pr.mergeable === true ? "MERGEABLE" : pr.mergeable === false ? "CONFLICTING" : cached?.mergeable || "UNKNOWN",
   };
 }
 
@@ -1083,7 +1109,7 @@ export function isNoPrError(msg: string): boolean {
 }
 
 export const GH_RATE_LIMIT_MESSAGE =
-  "GitHub GraphQL is rate-limited. Cached pull request data will refresh after it resets.";
+  "GitHub's API rate limit has been reached. Try again after it resets.";
 export const GH_REST_RATE_LIMIT_MESSAGE =
   "GitHub REST is rate-limited. This pull request action will retry after it resets.";
 
@@ -1179,13 +1205,16 @@ async function fetchPrDetails(
         "number,title,url,state,isDraft,baseRefName,headRefName,headRefOid,additions,deletions,changedFiles,reviewDecision,author,body,mergeable,mergeStateStatus,comments,commits,files,latestReviews,reviewRequests";
       const includeRollup = appSelected || !skipStatusCheckRollup;
       const fields = includeRollup ? `${baseFields},statusCheckRollup` : baseFields;
+      const queryStarted = Date.now();
       try {
         raw = await $`gh pr view ${branch} --repo ${repo} --json ${fields}`
           .env({ ...process.env, ...selectedEnv })
           .quiet()
           .text();
+        noteGithubGraphqlCall("pr-info:details", Date.now() - queryStarted, true);
         break;
       } catch (e: any) {
+        noteGithubGraphqlCall("pr-info:details", Date.now() - queryStarted, false);
         const msg = String(e?.stderr || e?.message || e).slice(0, 300);
         // Keyed on THIS call's field list, not the global flag — a concurrent
         // fetch may trip the flag while our rollup-carrying request is in

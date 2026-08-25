@@ -36,6 +36,7 @@ import {
   clearRecoveryMarker,
   planRecovery,
   recoveryMarkerAt,
+  readPrState,
   type GithubPrState,
   type RecoveryKind,
 } from "./state";
@@ -224,7 +225,19 @@ async function retryPendingMentions(): Promise<void> {
       inline: p.inline,
       ghRepo: s.ghRepo,
     }).then(
-      () => clearPendingMention(s.prNumber, s.ghRepo),
+      async () => {
+        const stillPending = readPrState(s.prNumber, s.ghRepo)?.pendingMention;
+        if (stillPending?.progressCommentId) {
+          const { editIssueComment, REPLY_MARKER } = await import("./github-rest");
+          await editIssueComment(
+            stillPending.progressCommentId,
+            `${REPLY_MARKER}
+Request accepted.`,
+            s.ghRepo,
+          ).catch(() => {});
+        }
+        clearPendingMention(s.prNumber, s.ghRepo);
+      },
       (error) => console.warn(`[github] pending mention remains queued for PR #${s.prNumber}:`, error),
     );
   }

@@ -177,6 +177,7 @@ function reviewMutationKey(
 // is read from the right place by an explicit loadPrCacheSnapshot() call.
 const prCacheFile = () => statePath(".opensession-pr-cache.json");
 const PR_CACHE_VERSION = 5;
+const DURABLE_CACHE_MAX_AGE_MS = 30 * 60_000;
 const probeEtags = new Map<string, string>(); // ghRepo → last seen ETag
 const lastFullRefresh = new Map<string, number>(); // repo id → epoch ms
 /**
@@ -220,7 +221,7 @@ try {
         refreshedAt <= now + 60_000
       ) {
         lastFullRefresh.set(repo.id, refreshedAt);
-        if (now - refreshedAt < PROBE_MAX_SKIP_MS) durableRepos++;
+        if (now - refreshedAt < DURABLE_CACHE_MAX_AGE_MS) durableRepos++;
       }
     }
     // Keep the snapshot hot across a restart only when every configured repo is

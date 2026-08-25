@@ -143,11 +143,21 @@ Queued @${authorLogin}'s request. I'll retry automatically if GitHub metadata is
   ).catch(() => null);
   if (receiptId) {
     const pending = readPrState(prNumber, ghRepo)?.pendingMention;
-    if (pending?.commentId === comment.id)
+    if (pending && pending.commentId === comment.id) {
       setPendingMention(prNumber, { ...pending, progressCommentId: receiptId }, ghRepo);
+    }
   }
   try {
     await dispatchMention({ prNumber, kind, body, author: authorLogin, replyToId, inline, ghRepo });
+    const stillPending = readPrState(prNumber, ghRepo)?.pendingMention;
+    if (receiptId && stillPending?.commentId === comment.id) {
+      await editIssueComment(
+        receiptId,
+        `${REPLY_MARKER}
+Request accepted.`,
+        ghRepo,
+      ).catch(() => {});
+    }
     clearPendingMention(prNumber, ghRepo);
   } catch (error) {
     if (receiptId)
