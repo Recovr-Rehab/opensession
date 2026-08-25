@@ -400,7 +400,7 @@ export function IngressPanel({
 										Public URL
 										<Input value={settings.tailscale.suggestedUrl} readOnly className="font-mono" placeholder="Connect Tailscale to discover the URL" />
 									</SettingsField>
-									<p className="m-0">A CNAME cannot replace this address because Funnel’s certificate and routing use the .ts.net hostname. For a custom domain without open ports, use Cloudflare Tunnel.</p>
+									<p className="m-0">A CNAME cannot replace this address because Funnel’s certificate and routing use the .ts.net hostname. For your own domain, use Cloudflare Tunnel or Custom domain with Caddy.</p>
 								</SetupStep>
 							</SetupSteps>
 						)}
