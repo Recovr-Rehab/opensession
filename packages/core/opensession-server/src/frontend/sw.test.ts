@@ -88,6 +88,12 @@ async function installWorker(harness: ReturnType<typeof workerHarness>) {
   await Promise.all(tasks);
 }
 
+describe("service worker navigation freshness", () => {
+  test("bypasses WebKit's HTTP cache before falling back to its own shell", () => {
+    expect(workerSource).toContain('fetch(req, { cache: "no-store" })');
+  });
+});
+
 describe("service worker gate assets", () => {
   test("precaches the icon and still backgrounds during installation", async () => {
     const harness = workerHarness();

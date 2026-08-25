@@ -653,6 +653,10 @@ export function ensureFrontendBuilt(): Promise<void> {
 
 export const SPA_HEADERS = {
 	"Content-Type": "text/html; charset=utf-8",
+	// The service worker owns the offline shell. The browser's separate HTTP
+	// cache must never pin an older content-hashed bundle name, especially in an
+	// installed iOS PWA where reloads still pass through the worker.
+	"Cache-Control": "no-store",
 	"Content-Security-Policy": "frame-ancestors 'none'",
 	"X-Frame-Options": "DENY",
 };

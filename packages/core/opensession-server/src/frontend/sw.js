@@ -149,7 +149,10 @@ async function gateAsset(req, event) {
 async function shellNavigate(req) {
   const cache = await caches.open(HTML_CACHE);
   const cached = await cache.match(SHELL_KEY);
-  const network = fetch(req).then((res) => {
+  // Bypass WebKit's HTTP cache. The worker's own shell cache is the only
+  // intentional fallback; accepting a browser-cached 200 here can keep an
+  // installed PWA on an old App-<hash>.js after a successful reload.
+  const network = fetch(req, { cache: "no-store" }).then((res) => {
     // Tee only genuine SPA-shell responses into the cache; API/media
     // navigations (non-HTML) pass through untouched.
     const type = res.headers.get("content-type") || "";
