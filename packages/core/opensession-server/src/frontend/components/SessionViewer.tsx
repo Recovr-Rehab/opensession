@@ -217,6 +217,7 @@ import {
 import {
 	holdTranscriptAnchor,
 	pickScrollAnchor,
+	readFollowingLive,
 } from "./session-viewer/transcript-anchor";
 import { useLivePlan } from "./session-viewer/use-live-plan";
 import {
@@ -1888,10 +1889,13 @@ export function SessionViewer({
 		);
 		return () => window.clearTimeout(timer);
 	}, [transcriptRendered]);
-	const onVisibleRangesSettled = useCallback(
-		() => setOpenSettlePending(false),
-		[],
-	);
+	const settledIndexRef = useRef<TranscriptIndexEntry[] | null>(null);
+	const onVisibleRangesSettled = useCallback(() => {
+		setOpenSettlePending(false);
+		if (settledIndexRef.current === transcriptIndex) return;
+		settledIndexRef.current = transcriptIndex;
+		if (readFollowingLive(followingLive)) scrollToLatest("auto");
+	}, [followingLive, scrollToLatest, transcriptIndex]);
 	const [viewerInput, setViewerInput] = useState<HTMLDivElement | null>(null);
 	// The focused phone composer is fixed above the keyboard, so it contributes
 	// no height to the transcript's flex layout. Publish its real height without
@@ -2001,7 +2005,7 @@ export function SessionViewer({
 		cacheTranscriptView(session.id, {
 			...cached,
 			scrollTop: el.scrollTop,
-			following: followingLive.current,
+			following: readFollowingLive(followingLive),
 			anchorEid: anchor?.dataset.eid ?? null,
 			anchorTop: anchor
 				? anchor.getBoundingClientRect().top - el.getBoundingClientRect().top
@@ -2134,7 +2138,7 @@ export function SessionViewer({
 				const h = historyHoldRef.current;
 				const c = messagesRef.current;
 				if (!h || h !== hold || !c) return;
-				if (performance.now() > h.until || followingLive.current) {
+				if (performance.now() > h.until || readFollowingLive(followingLive)) {
 					stopHistoryHold();
 					return;
 				}
