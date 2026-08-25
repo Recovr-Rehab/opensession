@@ -499,12 +499,15 @@ browser sockets, session state, or active hosts. See
 On macOS the service is a per-user **LaunchAgent**. The Linux executor sidecar
 and systemd run-host helper do not apply there.
 
-On a cloud instance the user service is not installed by default because its
-in-process agent children can reach the metadata endpoint at
-169.254.169.254. `service install` prints the controls when something answers:
-install the hardened system scope, add a host firewall rule for the service
-uid, or set `OPENSESSION_ALLOW_IMDS=1` on a box with no role worth protecting.
-See [integrations-misc.md](integrations-misc.md#aws-creds-for-runs-agent_aws_region).
+On EC2 and other cloud instances, the installer refuses to install or start
+the user service while 169.254.169.254 is reachable. Rootless agents could use
+that metadata endpoint to obtain the instance's role credentials. The failure
+prints the exact uid-scoped `iptables` rule. Apply that host firewall rule and
+rerun the same installation command. Only on an instance with no cloud role
+credentials to protect, rerun with `OPENSESSION_ALLOW_IMDS=1` to explicitly
+skip the check. The installer exits nonzero at this point instead of presenting
+the configured but stopped server as a partly successful installation. See
+[integrations-misc.md](integrations-misc.md#aws-creds-for-runs-agent_aws_region).
 
 The repo's `opensession.service` and `opensession-executor.service` are
 templates, not files to copy verbatim. `opensession service install` rewrites
