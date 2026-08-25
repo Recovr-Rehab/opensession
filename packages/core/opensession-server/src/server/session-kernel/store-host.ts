@@ -128,7 +128,7 @@ export class SessionKernelStoreHost {
           reason,
           commandKind,
         );
-    this.askEntriesCache = undefined;
+    this.removeCachedAskEntry(sessionId);
     this.deliveryEntriesCache.clear();
     return quarantine;
   }
@@ -198,7 +198,7 @@ export class SessionKernelStoreHost {
         () => this.central.releaseQuarantine(sessionId),
       );
       if (centralReleased || isolatedReleased) {
-        this.askEntriesCache = undefined;
+        this.refreshCachedAskEntry(sessionId);
         this.deliveryEntriesCache.clear();
       }
       return centralReleased || isolatedReleased;
@@ -222,10 +222,32 @@ export class SessionKernelStoreHost {
       args,
     );
     if (route.mutation) {
-      this.askEntriesCache = undefined;
+      if (
+        method === "setAskRecord" ||
+        method === "answerAskRecord" ||
+        method === "deleteAskRecord" ||
+        method === "clearSession" ||
+        method === "tombstoneSession"
+      ) this.refreshCachedAskEntry(route.sessionId);
       this.deliveryEntriesCache.clear();
     }
     return result;
+  }
+
+  private removeCachedAskEntry(sessionId: string): void {
+    if (!this.askEntriesCache) return;
+    this.askEntriesCache = this.askEntriesCache.filter(
+      ([cachedSessionId]) => cachedSessionId !== sessionId,
+    );
+  }
+
+  private refreshCachedAskEntry(sessionId: string): void {
+    if (!this.askEntriesCache) return;
+    this.removeCachedAskEntry(sessionId);
+    const value = this.storeForSession(sessionId).askSnapshot(sessionId);
+    if (value === undefined) return;
+    this.askEntriesCache.push([sessionId, structuredClone(value)]);
+    this.askEntriesCache.sort(([left], [right]) => left.localeCompare(right));
   }
 
   allRunStates(): Array<DurableRunState & { sessionId: string }> {
@@ -571,7 +593,7 @@ export class SessionKernelStoreHost {
     }
     if (method === "clearAskRecords") {
       this.mapStores("global:clear-asks", (store) => store.clearAskRecords());
-      this.askEntriesCache = undefined;
+      this.askEntriesCache = [];
       return;
     }
     if (method === "clearDeliverySlot") {

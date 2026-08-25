@@ -348,6 +348,19 @@ describe("per-session session kernel storage", () => {
       { id: "queue-one", content: "First" },
     ]);
 
+    Object.defineProperty(host.storeForSession("cache-session"), "askEntries", {
+      configurable: true,
+      value: () => {
+        throw new Error("cached ask entries must not rescan isolated stores");
+      },
+    });
+    host.call("setRunState", [{
+      sessionId: "cache-session",
+      state: "running",
+      event: "cache-test",
+    }]);
+    expect(host.allAskEntries()[0]![1]).toMatchObject({ questionId: "ask-one" });
+
     host.call("deleteAskRecord", ["cache-session"]);
     host.call("setDeliverySlot", [
       "cache-session",
