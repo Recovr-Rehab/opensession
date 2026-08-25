@@ -69,7 +69,10 @@ self.addEventListener("activate", (event) =>
  * and served immutable, so those are CACHE-FIRST: a cached entry can never be
  * stale, a new build simply asks for new names.
  */
-const HTML_CACHE = "os1-shell-html-v1";
+// v2 deliberately retires the pre-no-store shell. Keeping that v1 entry let
+// an updated worker's stall fallback resurrect an app bundle from before live
+// sessions were split from archived ones.
+const HTML_CACHE = "os1-shell-html-v2";
 const ASSET_CACHE = "os1-shell-assets-v1";
 // One shell entry per prefix (both registrations share the origin's caches).
 const SHELL_KEY = PREFIX + "/__app-shell__";

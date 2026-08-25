@@ -5,11 +5,12 @@ const workerSource = readFileSync(new URL("./sw.js", import.meta.url), "utf8");
 
 type WorkerListener = (event: Record<string, unknown>) => void;
 
-function workerHarness(scopePath = "/") {
+function workerHarness(scopePath = "/", existingCacheNames: string[] = []) {
   const origin = "https://os.test";
   const scope = new URL(scopePath, origin).href;
   const listeners = new Map<string, WorkerListener>();
   const added: string[] = [];
+  const deletedCacheNames: string[] = [];
   const entries = new Map<string, Response>();
   const cache = {
     async add(input: string) {
@@ -37,9 +38,10 @@ function workerHarness(scopePath = "/") {
       return cache;
     },
     async keys() {
-      return [];
+      return existingCacheNames;
     },
-    async delete() {
+    async delete(name: string) {
+      deletedCacheNames.push(name);
       return true;
     },
   };
@@ -75,12 +77,15 @@ function workerHarness(scopePath = "/") {
     networkFetch,
   );
 
-  return { added, listeners };
+  return { added, deletedCacheNames, listeners };
 }
 
-async function installWorker(harness: ReturnType<typeof workerHarness>) {
+async function runWorkerLifecycleEvent(
+  harness: ReturnType<typeof workerHarness>,
+  type: "install" | "activate",
+) {
   const tasks: Promise<unknown>[] = [];
-  harness.listeners.get("install")?.({
+  harness.listeners.get(type)?.({
     waitUntil(task: Promise<unknown>) {
       tasks.push(task);
     },
@@ -88,9 +93,26 @@ async function installWorker(harness: ReturnType<typeof workerHarness>) {
   await Promise.all(tasks);
 }
 
+async function installWorker(harness: ReturnType<typeof workerHarness>) {
+  await runWorkerLifecycleEvent(harness, "install");
+}
+
 describe("service worker navigation freshness", () => {
   test("bypasses WebKit's HTTP cache before falling back to its own shell", () => {
     expect(workerSource).toContain('fetch(req, { cache: "no-store" })');
+  });
+
+  test("retires the shell cached before navigations bypassed WebKit", async () => {
+    const harness = workerHarness("/", [
+      "os1-shell-html-v1",
+      "os1-shell-html-v2",
+      "os1-shell-assets-v1",
+      "os1-shell-gate-v1",
+    ]);
+
+    await runWorkerLifecycleEvent(harness, "activate");
+
+    expect(harness.deletedCacheNames).toEqual(["os1-shell-html-v1"]);
   });
 });
 
