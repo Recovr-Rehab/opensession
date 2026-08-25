@@ -106,11 +106,9 @@ function LandingPage() {
 						</a>
 					</div>
 					<p className="rail-note">
-						Open source and self-hosted.
+						Open source. Self-hosted.
 						<br />
-						Any model, on machines you own.
-						<br />
-						Available on macOS, iOS and web.
+						Use any model provider.
 					</p>
 				</div>
 			</aside>
