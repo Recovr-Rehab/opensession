@@ -1,3 +1,4 @@
+import { Database } from "bun:sqlite";
 import { afterEach, describe, expect, test } from "bun:test";
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -87,6 +88,58 @@ describe("per-session session kernel storage", () => {
     host.close();
   });
 
+  test("cuts a legacy session over without dual authority", () => {
+    const path = paths();
+    const sessionId = "legacy-cutover";
+    const seed = new SessionKernelStore(path.central);
+    seed.setRunState({
+      sessionId,
+      state: "running",
+      event: "prompt",
+      currentRunId: "legacy-run",
+    });
+    seed.setDeliverySlot(sessionId, "queued", [{ id: "queued", content: "later" }]);
+    seed.scheduleTimer({
+      sessionId,
+      timerId: "wake",
+      kind: "known_timer",
+      dueAt: Date.now() - 1,
+      payload: { stable: true },
+    });
+    const outboxId = seed.enqueueOutbox(
+      sessionId,
+      "known_effect",
+      { stable: true },
+      "legacy-effect",
+    );
+    seed.close();
+
+    const host = new SessionKernelStoreHost(path.central, path.isolated);
+    expect(host.migrateLegacySessions(1)).toBe(1);
+    expect(host.central.sessionPlacement(sessionId)).toMatchObject({
+      placement: "isolated",
+      needsScan: true,
+    });
+    expect(host.central.hasSessionDurableState(sessionId)).toBe(false);
+    expect(host.central.isolatedOutboxSessionId(outboxId)).toBe(sessionId);
+    expect(host.storeForSession(sessionId).runState(sessionId)).toMatchObject({
+      state: "running",
+      currentRunId: "legacy-run",
+    });
+    expect(host.storeForSession(sessionId).deliverySnapshot(sessionId).queued)
+      .toEqual([{ id: "queued", content: "later" }]);
+    expect(host.storeForSession(sessionId).timer(sessionId, "wake")).toBeTruthy();
+    expect(host.storeForOutbox(outboxId).outboxSessionId(outboxId)).toBe(sessionId);
+    expect(host.call("ackOutbox", [outboxId])).toBeUndefined();
+    expect(host.central.isolatedOutboxSessionId(outboxId)).toBeUndefined();
+    host.close();
+
+    const reopened = new SessionKernelStoreHost(path.central, path.isolated);
+    expect(reopened.storeForSession(sessionId).runState(sessionId).state).toBe("running");
+    expect(reopened.central.hasSessionDurableState(sessionId)).toBe(false);
+    reopened.close();
+  });
+
   test("quarantines one unreadable session database without blocking global stats", () => {
     const path = paths();
     const first = new SessionKernelStoreHost(path.central, path.isolated);
@@ -112,7 +165,7 @@ describe("per-session session kernel storage", () => {
       quarantinedSessions: 1,
     });
     expect(recovered.quarantinedSession("broken-session")).toMatchObject({
-      commandKind: "storage:open",
+      commandKind: "global:stats",
     });
     expect(recovered.storeForSession("healthy-session").runState("healthy-session").state)
       .toBe("running");
@@ -193,6 +246,31 @@ describe("per-session session kernel storage", () => {
     host.close();
   });
 
+  test("lazily reactivates a passivated session store", () => {
+    const path = paths();
+    const host = new SessionKernelStoreHost(path.central, path.isolated, 1);
+    host.call("setRunState", [{
+      sessionId: "first-session",
+      state: "running",
+      event: "first",
+      currentRunId: "first-run",
+    }]);
+    const firstActivation = host.storeForSession("first-session");
+
+    host.call("setRunState", [{
+      sessionId: "second-session",
+      state: "running",
+      event: "second",
+      currentRunId: "second-run",
+    }]);
+    expect(() => firstActivation.command("first-session", "missing")).toThrow();
+
+    expect(host.storeForSession("first-session").runState("first-session"))
+      .toMatchObject({ state: "running", currentRunId: "first-run" });
+    expect(host.stats()).toMatchObject({ sessions: 2, quarantinedSessions: 0 });
+    host.close();
+  });
+
   test("pages wake candidates in the catalog instead of rotating a fixed prefix", () => {
     const path = paths();
     const host = new SessionKernelStoreHost(path.central, path.isolated);
@@ -211,6 +289,40 @@ describe("per-session session kernel storage", () => {
     expect(second).toHaveLength(100);
     expect(new Set([...first, ...second]).size).toBe(200);
     expect(second[0]).toBe("due-100");
+    host.close();
+  });
+
+  test("fails closed on conflicting central and isolated outbox routes", () => {
+    const path = paths();
+    const host = new SessionKernelStoreHost(path.central, path.isolated);
+    const id = host.call("enqueueOutbox", [
+      "isolated-route-session",
+      "known_effect",
+      null,
+      "isolated-effect",
+    ]) as number;
+    const central = new Database(path.central);
+    central.run(`
+      INSERT INTO session_kernel_outbox
+        (id, effect_id, effect_key, session_id, kind, payload, attempts,
+         next_attempt_at, created_at)
+      VALUES (?, ?, ?, ?, ?, 'null', 0, 0, ?)
+    `, [
+      id,
+      "central-conflict:known_effect:central-effect",
+      "central-effect",
+      "central-conflict",
+      "known_effect",
+      Date.now(),
+    ]);
+    central.close();
+
+    expect(() => host.outboxSessionId(id)).toThrow(
+      "conflicting central and isolated route evidence",
+    );
+    expect(() => host.storeForOutbox(id)).toThrow(
+      "conflicting central and isolated route evidence",
+    );
     host.close();
   });
 

@@ -28,15 +28,21 @@ startup generates an inline token shared only with its child service. `/live`
 reports process/actor liveness and `/ready` reports whether the actor handshake
 completed. Neither endpoint exposes RPC data.
 
-The network frontend and the actor are separate isolates. The frontend bounds
-requests at 16 MiB, responses at 128 MiB, and outstanding calls at 1024, then
-forwards typed messages to the actor Worker. After startup ownership checks, actor
-turns perform bounded SQLite reductions only. They do not bind sockets, perform
-filesystem or process work, invoke models, or execute outbox effects. Physical
-filesystem, network, process, and model work remains in gateway continuations,
-the executor service, run hosts, sandboxes, or Runners. Active effect receipts
-do not hold the actor mailbox, so Stop, steering, and fenced run events remain
-responsive.
+The network frontend and actors are separate isolates. The frontend bounds
+requests at 16 MiB, responses at 128 MiB, and outstanding calls at 1024. A
+catalog lane plus a configurable bounded pool of session Worker lanes host typed
+messages. The service owns one serial promise mailbox per canonical session ID
+and gives that actor stable lane affinity, so process-local reducer caches remain
+coherent and two turns for one session cannot overlap. Many actors share each
+lane, while the short isolated SQLite wait bound leaves unrelated lanes
+available. A failed lane is restarted without stopping healthy lanes;
+system-catalog ambiguity still fail-stops the service. After startup ownership
+checks, actor turns perform bounded SQLite
+reductions only. They do not bind sockets, perform filesystem or process work,
+invoke models, or execute outbox effects. Physical filesystem, network,
+process, and model work remains in gateway continuations, the executor service,
+run hosts, sandboxes, or Runners. Active effect receipts do not hold the actor
+mailbox, so Stop, steering, and fenced run events remain responsive.
 
 The gateway retains a Worker bridge for typed reductions. Mutations and durable
 reads perform authenticated bounded HTTP RPC and wake the gateway through its
@@ -79,9 +85,10 @@ does not exist. `OPENSESSION_SESSIONS_DIR` overrides the sessions directory
 directly. Without that override, `OPENSESSION_STATE_DIR` places it at
 `<state-dir>/.opensession-sessions/`.
 
-- `session-kernel.sqlite` is the legacy store and the placement/wake catalog.
+- `session-kernel.sqlite` is the placement/wake catalog and temporary source for
+  not-yet-migrated legacy rows.
 - `session-kernel-sessions/<prefix>/<sha256>.sqlite` is the authoritative
-  database for each newly claimed session.
+  database for each placed session.
 
 Each authoritative session database contains:
 
@@ -406,14 +413,19 @@ and replay committed changes without becoming another session owner.
 
 ## Process boundary
 
-The writable stores and autonomous session coordinators currently run in one
-`session-kernel-worker.ts` JavaScript isolate behind a `SessionKernelStoreHost`.
+The writable stores and autonomous session coordinators run in the bounded
+actor-host Worker pool behind `SessionKernelStoreHost`. The service mailbox is
+the logical actor: it is created on first routing, serializes one session's
+turns, and disappears when its queue drains. Worker-local SQLite connections
+activate lazily and are passivated by a bounded LRU. The pool defaults to four
+session lanes plus a compatibility catalog lane and is bounded to 32 lanes.
 A session with no legacy durable rows is claimed in the placement catalog before
-its first mutation, then writes only its own SQLite database. Existing sessions
-remain on the legacy central database until the explicit migration pass moves
-them; the router never dual-writes authoritative state. Isolated outbox rows use
-a globally reserved numeric identity allocated by the catalog so existing
-settlement protocols remain additive and mixed-version safe.
+its first mutation, then writes only its own SQLite database. The schema-23
+offline deploy migrator runs after gateway and actor shutdown, verifies each
+unpublished target, and atomically switches placement while removing central
+rows. The router never dual-writes authoritative state. Isolated outbox
+rows use a globally reserved numeric identity allocated by the catalog so
+existing settlement protocols remain additive and mixed-version safe.
 
 Before every isolated mutation, the host durably marks that session's catalog
 wake record dirty. A crash can therefore leave an extra scan but cannot hide a
@@ -427,10 +439,13 @@ sessions available. An isolated database infrastructure failure is recorded as
 a catalog quarantine for that session. Catalog or legacy-store infrastructure
 ambiguity still fail-stops the whole actor.
 
-This step provides one authoritative SQLite database per new session, but the
-host still runs one JavaScript mailbox. A bounded pool of independently queued
-logical session actors and crash-safe migration of legacy sessions are the next
-placement step.
+Sessions therefore converge on distinct physical databases and logical
+mailboxes inside a bounded, independently supervised pool. A locked isolated
+database has a 250 ms SQLite busy bound, after which that session is quarantined;
+the compatibility gateway's synchronous bridge cannot inherit the central
+store's five-second wait. Catalog-wide compatibility scans use read-only transient connections and paged
+maintenance; their final decomposition is cleanup rather than an authority
+change.
 
 A command admission is a short bounded reduction: the actor fingerprints and
 persists the intent, then immediately returns `execute`, `in_progress`, or the
