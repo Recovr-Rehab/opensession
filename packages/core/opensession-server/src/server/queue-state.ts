@@ -60,9 +60,9 @@ export type QueueItem = {
 	reviewHandoff?: boolean;
 	/** When the engine ACCEPTED this message as a steer (epoch ms). Set by
    * acceptQueuedSteer, read by the clients to show how long the fold-in has been
-   * waiting. Acceptance is not delivery: the agent loop polls its steering
-   * queue only after the current assistant message and its whole tool batch
-   * finish, so a long tool call holds the message for minutes. */
+   * waiting. Acceptance is not delivery: the current tool or assistant message
+   * must reach its boundary, so a long tool call can hold the message for
+   * minutes. */
 	steeredAt?: number;
 };
 export const promptQueues: Map<string, QueueItem[]> = new DeliveryOwnedMap(

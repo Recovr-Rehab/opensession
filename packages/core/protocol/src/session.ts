@@ -179,10 +179,9 @@ export interface QueuedPrompt {
   editable?: boolean;
   /**
    * When the engine ACCEPTED this message as a steer (epoch ms). Acceptance
-   * is not delivery: the agent loop only polls its steering queue after the
-   * current assistant message and its whole tool batch have finished, so the
-   * wait is routinely seconds and occasionally minutes (a long test run, a
-   * subagent). Clients count from here so a still chip cannot read as a hang.
+   * is not delivery: the current tool or assistant message must still reach
+   * its boundary. A long test run or subagent can therefore hold it for
+   * minutes. Clients count from here so a still chip cannot read as a hang.
    */
   steeredAt?: number;
 }

@@ -31,9 +31,11 @@ import {
   makePiBashTool,
   parsePiModel,
   PI_STATE_DIR,
+  PI_STEER_TOOL_SKIP,
   piDialOracleAgent,
   piGateReason,
   piStreamEventBlocksAccountRotation,
+  piSteeringBoundaryTools,
   piToolNames,
   resolvePiPresetWiring,
   resolvePiRoutedModel,
@@ -59,6 +61,56 @@ describe("acceptSteerOnce", () => {
     expect(acceptSteerOnce(accepted, "one", () => { calls += 1; })).toBe(true);
     expect(acceptSteerOnce(accepted, "one", () => { calls += 1; })).toBe(true);
     expect(calls).toBe(1);
+  });
+});
+
+describe("piSteeringBoundaryTools", () => {
+  test("runs calls sequentially and skips work that has not started after a steer", async () => {
+    const executed: string[] = [];
+    let steeringPending = false;
+    const tools = piSteeringBoundaryTools(
+      [
+        {
+          name: "first",
+          label: "first",
+          description: "first",
+          parameters: {} as any,
+          async execute() {
+            executed.push("first");
+            return { content: [{ type: "text", text: "first result" }], details: {} };
+          },
+        },
+        {
+          name: "second",
+          label: "second",
+          description: "second",
+          parameters: {} as any,
+          async execute() {
+            executed.push("second");
+            return { content: [{ type: "text", text: "second result" }], details: {} };
+          },
+        },
+      ],
+      () => steeringPending,
+    );
+
+    expect(tools.map((tool) => tool.executionMode)).toEqual([
+      "sequential",
+      "sequential",
+    ]);
+    await tools[0].execute("call-1", {}, undefined, undefined);
+    steeringPending = true;
+    const skipped = await tools[1].execute(
+      "call-2",
+      {},
+      undefined,
+      undefined,
+    );
+
+    expect(executed).toEqual(["first"]);
+    expect(skipped.content).toEqual([
+      { type: "text", text: PI_STEER_TOOL_SKIP },
+    ]);
   });
 });
 

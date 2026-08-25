@@ -475,6 +475,38 @@ export function piToolNames(
   return customTools.map((tool) => tool.name);
 }
 
+export const PI_STEER_TOOL_SKIP =
+  "Skipped because new steering instructions arrived. Read them before choosing the next tool.";
+
+/**
+ * Pi polls its steer queue after an assistant message's whole tool batch. That
+ * is too late for Open Session's step-boundary contract: a model can emit a
+ * long batch, leaving a steer parked behind several not-yet-started tools.
+ *
+ * Force each batch to execute sequentially and turn every not-yet-started call
+ * into a cheap result once a steer is waiting. Pi can then satisfy the model
+ * protocol's one-result-per-call requirement and inject the steer without
+ * starting stale work.
+ */
+export function piSteeringBoundaryTools(
+  tools: readonly ToolDefinition<any, any, any>[],
+  steeringPending: () => boolean,
+): ToolDefinition<any, any, any>[] {
+  return tools.map((tool) => ({
+    ...tool,
+    executionMode: "sequential",
+    async execute(toolCallId, params, signal, onUpdate, ctx) {
+      if (steeringPending()) {
+        return {
+          content: [{ type: "text", text: PI_STEER_TOOL_SKIP }],
+          details: {},
+        };
+      }
+      return tool.execute(toolCallId, params, signal, onUpdate, ctx);
+    },
+  }));
+}
+
 export function cancelPiRun(id: string): boolean {
   const handle = activeRuns.get(id);
   if (!handle) return false;
@@ -482,8 +514,8 @@ export function cancelPiRun(id: string): boolean {
   return true;
 }
 
-/** Native mid-turn steer: session.steer() queues the text for delivery after
- *  the current assistant step's in-flight tool calls, before the next LLM
+/** Native mid-turn steer: session.steer() queues the text for delivery at the
+ *  next completed tool or assistant-message boundary, before the next LLM
  *  call. True = a live run accepted it; false = nothing steerable (caller
  *  queues for the next turn instead). */
 export function acceptSteerOnce(
@@ -2036,14 +2068,15 @@ async function* runPiAttempt(
     // back to its in-process built-ins for a name without an override, so a
     // separately maintained enabled-name list would be a containment escape.
     const guardedOps = makeGuardedToolOps(cwd);
-    const customTools: ToolDefinition<any, any, any>[] = [
+    let steeringBoundaryPending = false;
+    const baseCustomTools: ToolDefinition<any, any, any>[] = [
       ...mcpBridge.discoveryTools,
       ...(dialOracleAgent ? [makePiDialOracleTool(dialOracleAgent, user)] : []),
     ];
     for (const name of localTools) {
       switch (name) {
         case "read":
-          customTools.push(
+          baseCustomTools.push(
             sdk.createReadToolDefinition(cwd, {
               operations: guardedOps.read,
             }) as ToolDefinition<any, any, any>
@@ -2051,42 +2084,42 @@ async function* runPiAttempt(
           break;
         case "grep": {
           const base = sdk.createGrepToolDefinition(cwd);
-          customTools.push({
+          baseCustomTools.push({
             ...base,
             execute: makeGuardedGrepExecute(cwd, bashEnv, guardedOps.guard),
           } as ToolDefinition<any, any, any>);
           break;
         }
         case "find":
-          customTools.push(
+          baseCustomTools.push(
             sdk.createFindToolDefinition(cwd, {
               operations: guardedOps.find,
             }) as ToolDefinition<any, any, any>
           );
           break;
         case "ls":
-          customTools.push(
+          baseCustomTools.push(
             sdk.createLsToolDefinition(cwd, {
               operations: guardedOps.ls,
             }) as ToolDefinition<any, any, any>
           );
           break;
         case "edit":
-          customTools.push(
+          baseCustomTools.push(
             sdk.createEditToolDefinition(cwd, {
               operations: guardedOps.edit,
             }) as ToolDefinition<any, any, any>
           );
           break;
         case "write":
-          customTools.push(
+          baseCustomTools.push(
             sdk.createWriteToolDefinition(cwd, {
               operations: guardedOps.write,
             }) as ToolDefinition<any, any, any>
           );
           break;
         case "bash":
-          customTools.push(
+          baseCustomTools.push(
             makePiBashTool({
               cwd,
               env: bashEnv,
@@ -2111,6 +2144,10 @@ async function* runPiAttempt(
           break;
       }
     }
+    const customTools = piSteeringBoundaryTools(
+      baseCustomTools,
+      () => steeringBoundaryPending,
+    );
 
     // The repo owning this run's cwd, or undefined for a repo-less one (a
     // scratch dir, a repo-less ask session). Dynamic import to avoid a static
@@ -2408,6 +2445,7 @@ async function* runPiAttempt(
       // text so the delivery match stays exact; the audit line below still
       // records what the person typed.
       const steerText = expandSkillCommand(text, loader.getSkills().skills);
+      steeringBoundaryPending = true;
       pendingSteers.push({ text: steerText, images, steerId });
       void liveSession.steer(steerText, piImages(images)).catch((e) => {
         console.warn("[pi-runner] steer failed:", e);
@@ -2419,6 +2457,7 @@ async function* runPiAttempt(
         // Pi exposes exact delivery identity only in our wrapper. Rebuild its
         // whole queue from our richer copy so duplicate text and images keep
         // their original order while the selected id disappears.
+        steeringBoundaryPending = remaining.length > 0;
         liveSession.clearQueue();
         for (const steer of remaining) {
           void liveSession.steer(steer.text, piImages(steer.images)).catch((e) => {
@@ -2639,6 +2678,7 @@ async function* runPiAttempt(
                 if (idx === -1 && pendingSteers.length > 0) idx = 0;
                 if (idx !== -1) {
                   const steer = pendingSteers.splice(idx, 1)[0];
+                  steeringBoundaryPending = pendingSteers.length > 0;
                   // Transcript parsing deliberately strips fenced system
                   // context. A background-wait steer can therefore be fully
                   // delivered yet leave no visible user entry for receipt
