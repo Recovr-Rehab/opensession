@@ -43,6 +43,15 @@ async function execute(executor: LocalExecutor, operation: ExecutorOperation) {
   return executor.execute(context, operation);
 }
 
+async function processIsLive(pid: number): Promise<boolean> {
+  try {
+    const value = await readFile(`/proc/${pid}/stat`, "utf8");
+    return value[value.lastIndexOf(")") + 2] !== "Z";
+  } catch {
+    return false;
+  }
+}
+
 describe("LocalExecutor", () => {
   test("performs structured filesystem operations", async () => {
     const { root, executor } = await setup();
@@ -284,6 +293,9 @@ describe("LocalExecutor", () => {
     if (spawned.outcome.kind !== "process")
       throw new Error("unexpected outcome");
     await Bun.sleep(300);
+    expect(
+      executor.bufferedProcessStats(spawned.outcome.processId).chunks,
+    ).toBeLessThanOrEqual(4095);
     const status = await execute(executor, {
       kind: "process.status",
       processId: spawned.outcome.processId,
@@ -292,6 +304,25 @@ describe("LocalExecutor", () => {
     expect(status.events?.map((event) => event.sequence)).toEqual(
       status.events?.map((_, index) => index),
     );
+  });
+
+  test("merges deliberately spaced tiny callbacks into bounded blocks", async () => {
+    const { executor } = await setup();
+    const spawned = await execute(executor, {
+      kind: "process.spawn",
+      executable: "/usr/bin/python3",
+      args: [
+        "-c",
+        "import os,time\nfor _ in range(200):\n os.write(1,b'x')\n time.sleep(.001)",
+      ],
+      idempotencyKey: "spaced-tiny",
+    });
+    if (spawned.outcome.kind !== "process")
+      throw new Error("unexpected outcome");
+    await Bun.sleep(300);
+    expect(
+      executor.bufferedProcessStats(spawned.outcome.processId).chunks,
+    ).toBe(1);
   });
 
   test("rejects new work at active capacity", async () => {
@@ -434,21 +465,30 @@ describe("LocalExecutor", () => {
     await closing;
   });
 
-  test("close is bounded when a descendant inherits output streams", async () => {
-    const { executor } = await setup();
+  test("close kills same-group descendants with inherited streams", async () => {
+    const { root, executor } = await setup();
     await execute(executor, {
       kind: "process.spawn",
       executable: "/usr/bin/python3",
       args: [
         "-c",
-        "import os,time; p=os.fork(); time.sleep(30) if p==0 else None",
+        "import os,time\np=os.fork()\nif p==0:\n open('descendant.pid','w').write(str(os.getpid()))\n time.sleep(30)",
       ],
       idempotencyKey: "inherited-stream",
     });
     await Bun.sleep(30);
+    const descendantPid = Number(
+      await readFile(join(root, "descendant.pid"), "utf8"),
+    );
     const started = performance.now();
     await executor.close();
     expect(performance.now() - started).toBeLessThan(500);
+    let alive = await processIsLive(descendantPid);
+    for (let attempt = 0; attempt < 20 && alive; attempt++) {
+      await Bun.sleep(10);
+      alive = await processIsLive(descendantPid);
+    }
+    expect(alive).toBe(false);
   });
 
   test("falls back to direct child kill when group kill fails", async () => {

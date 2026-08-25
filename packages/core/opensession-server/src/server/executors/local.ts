@@ -37,7 +37,9 @@ const DEFAULT_MAX_TRACKED_PROCESSES = 64;
 const DEFAULT_MAX_PENDING_OUTPUT_BYTES_PER_PROCESS = 1024 * 1024;
 const DEFAULT_MAX_PENDING_OUTPUT_BYTES_OVERALL = 8 * 1024 * 1024;
 const MAX_TEXT_EVENT_BYTES = 256 * 1024;
+const TEXT_BLOCK_BYTES = 4 * 1024;
 const MAX_PENDING_TEXT_EVENTS = 4_094;
+const MAX_PENDING_TEXT_CHUNKS = 4_094;
 const CLOSE_EXIT_TIMEOUT_MS = 250;
 const TRUNCATION_NOTICE = "[truncated]\n";
 const TRUNCATION_NOTICE_BYTES = Buffer.byteLength(TRUNCATION_NOTICE);
@@ -46,16 +48,19 @@ type PendingEvent =
   | {
       kind: "text";
       channel: "stdout" | "stderr";
-      chunks: string[];
+      chunks: Buffer[];
       bytes: number;
+      lastChunkBytes: number;
     }
   | Extract<ExecutorStreamEvent, { kind: "exit" }>;
 
 interface LocalProcess {
   child: ChildProcess;
+  processGroupId?: number;
   streamId: string;
   pending: PendingEvent[];
   pendingBytes: number;
+  pendingChunks: number;
   outputLimit: number;
   decoders: Record<"stdout" | "stderr", TextDecoder>;
   listeners: {
@@ -202,6 +207,22 @@ export class LocalExecutor implements Executor {
     }
   }
 
+  /** Diagnostics for verifying bounded buffering without materializing output. */
+  bufferedProcessStats(processId: string): {
+    bytes: number;
+    events: number;
+    chunks: number;
+  } {
+    const tracked = this.#processes.get(processId);
+    if (!tracked)
+      throw new ExecutorFailure("not_found", "process was not found");
+    return {
+      bytes: tracked.pendingBytes,
+      events: tracked.pending.length,
+      chunks: tracked.pendingChunks,
+    };
+  }
+
   /** Mark a terminal status durable after its ledger transition commits. */
   acknowledgeDurableTerminal(
     _context: ExecutorContext,
@@ -258,15 +279,16 @@ export class LocalExecutor implements Executor {
     return this.#closePromise;
   }
 
-  // This confirms only the direct child. Escaped descendants require a future
-  // cgroup/Job Object containment backend and are not claimed terminated here.
+  // This confirms only the direct child. Descendants that call setsid escape
+  // the saved process group and require a future cgroup/Job Object containment
+  // backend; they are not claimed terminated here.
   async #terminateDirectChild(tracked: LocalProcess): Promise<void> {
-    if (tracked.directExited) return;
-    if (tracked.child.pid) {
+    if (tracked.processGroupId) {
       try {
-        globalThis.process.kill(-tracked.child.pid, "SIGKILL");
+        globalThis.process.kill(-tracked.processGroupId, "SIGKILL");
       } catch {}
     }
+    if (tracked.directExited) return;
     try {
       tracked.child.kill("SIGKILL");
     } catch {}
@@ -535,9 +557,11 @@ export class LocalExecutor implements Executor {
     const streamId = crypto.randomUUID();
     const tracked: LocalProcess = {
       child,
+      processGroupId: child.pid,
       streamId,
       pending: [],
       pendingBytes: 0,
+      pendingChunks: 0,
       outputLimit: this.#processOutputLimit,
       decoders: {
         stdout: new TextDecoder(),
@@ -596,6 +620,7 @@ export class LocalExecutor implements Executor {
     const events = materializeEvents(tracked.pending, streamId);
     tracked.pending.length = 0;
     tracked.pendingBytes = 0;
+    tracked.pendingChunks = 0;
     const result: ExecutorSuccess = {
       outcome: {
         kind: "process",
@@ -688,27 +713,60 @@ export class LocalExecutor implements Executor {
     data: string,
     notice = false,
   ): boolean {
-    const bytes = Buffer.byteLength(data);
+    const encoded = Buffer.from(data);
     const last = tracked.pending.at(-1);
     if (
       last?.kind === "text" &&
       last.channel === channel &&
-      last.bytes + bytes <= MAX_TEXT_EVENT_BYTES
-    ) {
-      last.chunks.push(data);
-      last.bytes += bytes;
-      tracked.pendingBytes += bytes;
-      return true;
-    }
+      last.bytes + encoded.byteLength <= MAX_TEXT_EVENT_BYTES
+    )
+      return this.#appendEncoded(tracked, last, encoded, notice);
     if (!notice && tracked.pending.length >= MAX_PENDING_TEXT_EVENTS)
       return false;
-    tracked.pending.push({
+    const event: Extract<PendingEvent, { kind: "text" }> = {
       kind: "text",
       channel,
-      chunks: [data],
-      bytes,
-    });
-    tracked.pendingBytes += bytes;
+      chunks: [],
+      bytes: 0,
+      lastChunkBytes: 0,
+    };
+    if (!this.#appendEncoded(tracked, event, encoded, notice)) return false;
+    tracked.pending.push(event);
+    return true;
+  }
+
+  #appendEncoded(
+    tracked: LocalProcess,
+    event: Extract<PendingEvent, { kind: "text" }>,
+    data: Buffer,
+    notice: boolean,
+  ): boolean {
+    const tailSpace = event.chunks.length
+      ? TEXT_BLOCK_BYTES - event.lastChunkBytes
+      : 0;
+    const newChunks = Math.ceil(
+      Math.max(0, data.byteLength - tailSpace) / TEXT_BLOCK_BYTES,
+    );
+    if (!notice && tracked.pendingChunks + newChunks > MAX_PENDING_TEXT_CHUNKS)
+      return false;
+    let offset = 0;
+    while (offset < data.byteLength) {
+      if (!event.chunks.length || event.lastChunkBytes === TEXT_BLOCK_BYTES) {
+        event.chunks.push(Buffer.allocUnsafe(TEXT_BLOCK_BYTES));
+        event.lastChunkBytes = 0;
+        tracked.pendingChunks++;
+      }
+      const target = event.chunks.at(-1)!;
+      const length = Math.min(
+        data.byteLength - offset,
+        TEXT_BLOCK_BYTES - event.lastChunkBytes,
+      );
+      data.copy(target, event.lastChunkBytes, offset, offset + length);
+      event.lastChunkBytes += length;
+      event.bytes += length;
+      tracked.pendingBytes += length;
+      offset += length;
+    }
     return true;
   }
 
@@ -716,6 +774,7 @@ export class LocalExecutor implements Executor {
     this.#detach(tracked);
     tracked.pending.length = 0;
     tracked.pendingBytes = 0;
+    tracked.pendingChunks = 0;
     this.#processes.delete(processId);
   }
 
@@ -890,7 +949,7 @@ function materializeEvents(
           streamId,
           sequence,
           channel: event.channel,
-          data: event.chunks.join(""),
+          data: Buffer.concat(event.chunks, event.bytes).toString("utf8"),
         }
       : { ...event, streamId, sequence },
   );
