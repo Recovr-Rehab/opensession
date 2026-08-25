@@ -784,6 +784,7 @@ describe("runPi pi/openai account wiring (fake engine, no network)", () => {
     );
 
     const usedProviderAccounts: string[] = [];
+    const transportSettings: Array<Record<string, unknown>> = [];
     const fakeSdk = {
       ModelRuntime: {
         create: async ({ credentials }: any) => {
@@ -801,7 +802,12 @@ describe("runPi pi/openai account wiring (fake engine, no network)", () => {
           return runtime;
         },
       },
-      SettingsManager: { inMemory: () => ({}) },
+      SettingsManager: {
+        inMemory: (settings: Record<string, unknown>) => {
+          transportSettings.push(settings);
+          return {};
+        },
+      },
       DefaultResourceLoader: class {
         async reload() {}
         getSkills() {
@@ -870,6 +876,10 @@ describe("runPi pi/openai account wiring (fake engine, no network)", () => {
         disableLocalWorkspaceTools: true,
       });
       expect(usedProviderAccounts).toEqual(["provider-a", "provider-b"]);
+      // Subscription traffic skips the experimental ChatGPT WebSocket, whose
+      // mid-stream 1006 failures otherwise force a visible whole-step retry.
+      // The API-key rotation still uses Pi's ordinary provider defaults.
+      expect(transportSettings).toEqual([{ transport: "sse" }, {}]);
       expect(events.filter((event) => event.type === "init")).toHaveLength(2);
       expect(events.filter((event) => event.type === "error")).toHaveLength(0);
       expect(events.find((event) => event.type === "done")).toMatchObject({

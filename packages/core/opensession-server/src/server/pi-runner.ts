@@ -2199,7 +2199,16 @@ async function* runPiAttempt(
     mkdirSync(agentDir, { recursive: true });
     mkdirSync(sessionDir, { recursive: true });
 
-    const settingsManager = sdk.SettingsManager.inMemory({});
+    // Pi's `auto` transport tries the experimental ChatGPT WebSocket first.
+    // A mid-response 1006 cannot safely fall back in-place after output has
+    // streamed, so Pi has to replay the whole LLM step through its visible
+    // auto-retry path. Start subscription-backed Codex turns on SSE instead:
+    // it keeps the same session prompt-cache key without the fragile persistent
+    // socket. Raw OpenAI API keys use Pi's ordinary provider and retain its
+    // default transport selection.
+    const settingsManager = sdk.SettingsManager.inMemory(
+      seededOpenaiCredential ? { transport: "sse" } : {},
+    );
     const workspaceRoot = resolve(cwd);
     const loader = new sdk.DefaultResourceLoader({
       cwd,
