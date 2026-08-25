@@ -17,7 +17,8 @@
     "./tool-presentation": "./src/tool-presentation.ts",
     "./identity": "./src/identity.ts",
     "./workspace-group": "./src/workspace-group.ts",
-    "./executor": "./src/executor.ts"
+    "./executor": "./src/executor.ts",
+    "./agent-host": "./src/agent-host.ts"
   },
   "repository": {
     "type": "git",

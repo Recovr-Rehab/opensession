@@ -24,6 +24,36 @@
 import type { AnsweredAskData, EntryNotice, NoticeKind } from "./notices";
 import type { ToolPresentation } from "./tool-presentation";
 
+/** The complete set of supported Sphere providers. */
+export const SPHERE_PROVIDERS = ["box", "daytona", "modal"] as const;
+export type SphereProvider = (typeof SPHERE_PROVIDERS)[number];
+
+export type SphereLifecycle =
+  | "preparing"
+  | "awake"
+  | "sleeping"
+  | "waking"
+  | "needs_attention";
+
+/** Where tool and workspace operations execute. This state contains no model
+ * or conversation identity. Omission at creation normalizes to `local`. */
+export type ExecutionTarget =
+  | { kind: "local" }
+  | { kind: "runner"; executorId: string; workspaceId: string }
+  | {
+      kind: "sphere";
+      provider: SphereProvider;
+      executorId: string;
+      workspaceId: string;
+      instanceId?: string;
+      lifecycle: SphereLifecycle;
+      durableDeltaId?: string;
+    };
+
+export function isSphereProvider(value: unknown): value is SphereProvider {
+  return typeof value === "string" && (SPHERE_PROVIDERS as readonly string[]).includes(value);
+}
+
 /** One rendered line of a session's durable transcript (the jsonl record). */
 export interface TranscriptEntry {
   id: string;
@@ -352,8 +382,9 @@ export type ProtocolClientMessage =
       model?: string;
       /** Optional MCP server allowlist for the opening run. [] means none. */
       mcpServers?: string[];
-      /** Run in a sandbox: true = server's default provider, or an explicit
-       *  configured provider id. Omit = host. */
+      /** Execute in a Sphere from this provider. Omit to use this machine. */
+      sphere?: SphereProvider;
+      /** @deprecated Transitional pre-Spheres selection. Use sphere. */
       sandbox?: boolean | string;
       images?: string[];
       /** Non-image composer attachments, staged server-side or kept inline. */
