@@ -4,7 +4,7 @@ import { UserAvatar } from "./UserAvatar";
 import { IconArrowUpRight } from "./icons";
 import { BASE_PATH } from "../lib/base";
 import { PRODUCT_NAME } from "../lib/brand";
-import { usePeople } from "../lib/people";
+import { ensurePeople, getPeople, usePeople } from "../lib/people";
 import { effectiveTheme, onThemeChanged } from "../lib/theme";
 import { Button } from "../ui/button";
 import { cn } from "../ui/cn";
@@ -254,15 +254,22 @@ export function UserGate({ children }: { children: React.ReactNode }) {
 				if (!r.ok) throw new Error(`Authentication status failed: ${r.status}`);
 				return r.json();
 			})
-			.then((body: AuthStatus | null) => {
+			.then(async (body: AuthStatus | null) => {
 				if (!body) throw new Error("Authentication status was empty");
-				setAuth(body);
 				if (body.required && body.authenticated && body.name) {
 					const user = body.name.split(" ")[0];
 					setStoredUser(user);
+				} else if (!body.required && getCurrentUser() === "Anonymous") {
+					// A fresh local instance has nobody to choose between. Wait for the
+					// roster so a configured team still gets its picker, then enter an
+					// empty or single-person instance directly into first-mile setup.
+					await ensurePeople();
+					const people = getPeople();
+					if (people.length <= 1) setStoredUser(people[0]?.name ?? "Local User");
 				}
-				// Publish readiness after localStorage carries the verified name so
-				// deferred per-user stores hydrate the authenticated account.
+				setAuth(body);
+				// Publish readiness after localStorage carries the verified or local
+				// name so deferred per-user stores hydrate the right account.
 				setAuthStatusCache(body);
 			})
 			.catch(() => setAuthFailed(true));
@@ -332,10 +339,8 @@ export function UserGate({ children }: { children: React.ReactNode }) {
 
   if (user !== "Anonymous") return <>{children}</>;
 
-  // No sign-in configured, which is the default for a fresh instance: the
-  // server cannot verify anyone, so this name is a label rather than an
-  // identity. It is also the bootstrap path, since an admin has to get in
-  // here before there is a GitHub app to sign in with.
+  // No sign-in configured with more than one rostered person. Fresh and
+  // single-person instances are assigned above and skip this choice entirely.
   return (
     <AuthCard title="Who are you?">
       <AuthCopy>
