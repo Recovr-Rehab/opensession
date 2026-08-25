@@ -59,6 +59,7 @@ import {
   deliveryInterruptForAnchor,
   durableSessionCommand,
 	isRetryableSessionCommandError,
+  sessionProjectionOr,
   sessionGatewayCommand,
   sessionDelivery,
 	sessionKernel,
@@ -97,7 +98,10 @@ function sendWatchExtras(
 	sessionId: string,
 	session: NonNullable<Awaited<ReturnType<typeof findSessionAsync>>>,
 ): void {
-	const pendingAsk = pendingAskAwaitingAnswer(sessionId);
+	const pendingAsk = sessionProjectionOr(
+		() => pendingAskAwaitingAnswer(sessionId),
+		undefined,
+	);
 	if (pendingAsk) {
 		ws.send(
 			JSON.stringify({
@@ -113,16 +117,22 @@ function sendWatchExtras(
 
 	// Older in-memory rows may lack ids; assign and persist them before
 	// sending so edit/delete/steer actions can address the same row.
-	const { queued: queuedPrompts, steered: steeredPrompts } = queueDisplayState(sessionId);
-	if (queuedPrompts.length > 0 || steeredPrompts.length > 0) persistQueues();
-	ws.send(
-		JSON.stringify({
-			type: "queue_update",
-			sessionId,
-			queued: queuedPrompts,
-			steered: steeredPrompts,
-		}),
+	const queueState = sessionProjectionOr(
+		() => queueDisplayState(sessionId),
+		undefined,
 	);
+	if (queueState) {
+		const { queued: queuedPrompts, steered: steeredPrompts } = queueState;
+		if (queuedPrompts.length > 0 || steeredPrompts.length > 0) persistQueues();
+		ws.send(
+			JSON.stringify({
+				type: "queue_update",
+				sessionId,
+				queued: queuedPrompts,
+				steered: steeredPrompts,
+			}),
+		);
+	}
 
 	ws.send(
 		JSON.stringify({

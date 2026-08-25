@@ -12,6 +12,7 @@ import {
   sessionDelivery,
   sessionIsQuarantined,
   sessionKernel,
+  sessionProjectionOr,
 } from "./kernel";
 
 let client: SessionKernelActorClient | undefined;
@@ -33,6 +34,19 @@ async function actor(): Promise<SessionKernelActorClient> {
 }
 
 describe("session kernel actor boundary", () => {
+	test("degrades optional projections only for retryable kernel failures", () => {
+		expect(
+			sessionProjectionOr(() => {
+				throw new SessionKernelActorError("temporarily slow", true);
+			}, "fallback"),
+		).toBe("fallback");
+		expect(() =>
+			sessionProjectionOr(() => {
+				throw new SessionKernelActorError("authority lost", false);
+			}, "fallback")
+		).toThrow("authority lost");
+	});
+
   test("keeps polling timeouts retryable while fencing handshake ambiguity", () => {
     expect(isFatalSessionKernelAsyncTimeout({
       t: "runtime_work",

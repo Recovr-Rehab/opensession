@@ -68,6 +68,7 @@ import {
   sessionGatewayCommand,
 	sessionKernel,
 	sessionKernelStore,
+	sessionProjectionOr,
 	tombstoneSessionKernel,
 } from "../session-kernel";
 import { withSessionMutationLock } from "../session-mutation-lock";
@@ -424,10 +425,13 @@ function enrichSession(
 			: {}),
 		waitingForInput: signals
 			? signals.waitingForInput.has(s.id)
-			: !!pendingAskAwaitingAnswer(s.id),
+			: !!sessionProjectionOr(
+					() => pendingAskAwaitingAnswer(s.id),
+					undefined,
+				),
 		queuedCount: signals
 			? signals.queuedCounts.get(s.id) || 0
-			: clientVisibleQueuedCount(s.id),
+			: sessionProjectionOr(() => clientVisibleQueuedCount(s.id), 0),
 		// Present on the list AND on the detail response, so one rule reads the
 		// same either side of a hydrate. `undefined` rather than `false`: it is
 		// dropped by JSON.stringify, and a session object a client builds

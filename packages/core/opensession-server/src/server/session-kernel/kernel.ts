@@ -45,6 +45,18 @@ export function isRetryableSessionCommandError(error: unknown): boolean {
   );
 }
 
+/** Optional read-model data must not take its owning surface down while the
+ * kernel lane is briefly degraded. Mutations and authoritative reads stay
+ * strict; callers use this only for replaceable UI projections. */
+export function sessionProjectionOr<T>(read: () => T, fallback: T): T {
+	try {
+		return read();
+	} catch (error) {
+		if (!isRetryableSessionCommandError(error)) throw error;
+		return fallback;
+	}
+}
+
 type GlobalKernelState = {
 	store?: SessionKernelStoreApi;
 	actor?: SessionKernelActorClient;
