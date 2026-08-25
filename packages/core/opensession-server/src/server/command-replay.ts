@@ -5,6 +5,18 @@ type CommandResultRecord = Record<string, unknown>;
  * command without presenting the historical result as a brand-new session.
  * Other command results keep their existing wire shape.
  */
+export function replayedSessionCreatedResult(
+	id: string,
+	workspaceId?: string | null,
+): Record<string, unknown> {
+	return {
+		type: "session_created",
+		id,
+		...(workspaceId ? { workspaceId } : {}),
+		replayed: true,
+	};
+}
+
 export function markReplayedCommandResult(result: unknown): unknown {
 	if (
 		!result ||
