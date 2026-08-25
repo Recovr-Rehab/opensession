@@ -1,6 +1,12 @@
 import { afterEach, describe, expect, test } from "bun:test";
 import { Database } from "bun:sqlite";
-import { mkdtempSync, readFileSync, rmSync } from "node:fs";
+import {
+  lstatSync,
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  symlinkSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { scanModuleSideEffects } from "../../../../../../scripts/check-module-side-effects";
@@ -10,7 +16,8 @@ import { SqliteExecutorStateStore } from "./sqlite-state";
 const roots: string[] = [];
 
 afterEach(() => {
-  for (const root of roots.splice(0)) rmSync(root, { recursive: true, force: true });
+  for (const root of roots.splice(0))
+    rmSync(root, { recursive: true, force: true });
 });
 
 function databasePath(): string {
@@ -53,7 +60,9 @@ describe("SqliteExecutorStateStore", () => {
     first.close();
 
     const reopened = new SqliteExecutorStateStore(path);
-    expect(await reopened.getByExecutorId(expected.executorId)).toEqual(expected);
+    expect(await reopened.getByExecutorId(expected.executorId)).toEqual(
+      expected,
+    );
     expect(await reopened.getBySessionId(expected.sessionId)).toEqual(expected);
     reopened.close();
   });
@@ -64,9 +73,9 @@ describe("SqliteExecutorStateStore", () => {
     const second = new SqliteExecutorStateStore(path);
     await first.insertIntent(record());
 
-    await expect(second.insertIntent(record({ sessionId: "session-2" }))).rejects.toBeInstanceOf(
-      ExecutorStateConflictError,
-    );
+    await expect(
+      second.insertIntent(record({ sessionId: "session-2" })),
+    ).rejects.toBeInstanceOf(ExecutorStateConflictError);
     await expect(
       second.insertIntent(record({ executorId: "executor-2" })),
     ).rejects.toThrow("already has a managed Executor");
@@ -84,7 +93,9 @@ describe("SqliteExecutorStateStore", () => {
     await expect(
       store.compareAndSwap("missing", 1, record({ executorId: "missing" })),
     ).rejects.toThrow("does not exist");
-    await expect(store.delete("executor-1", 2)).rejects.toThrow("generation is stale");
+    await expect(store.delete("executor-1", 2)).rejects.toThrow(
+      "generation is stale",
+    );
     await expect(store.delete("missing", 1)).rejects.toThrow("does not exist");
     store.close();
   });
@@ -135,33 +146,44 @@ describe("SqliteExecutorStateStore", () => {
     reopened.close();
   });
 
-  test("keeps resource generation independent from the instance generation", async () => {
+  test("keeps resource generation independent without exceeding the authority fence", async () => {
     const store = new SqliteExecutorStateStore(databasePath());
-    await store.insertIntent(record({ resourceGeneration: 1 }));
-    const next = record({
-      resourceGeneration: 8,
+    const attached = record({
+      resourceId: "resource-1",
+      workspaceId: "workspace-1",
+      resourceGeneration: 1,
+    });
+    await store.insertIntent(attached);
+    const next = {
+      ...attached,
       instanceGeneration: 2,
       updatedAtMs: 2_000,
-    });
+    };
     await store.compareAndSwap("executor-1", 1, next);
     expect(await store.getByExecutorId("executor-1")).toEqual(next);
 
-    const withoutResourceGeneration = record({
+    await expect(
+      store.compareAndSwap("executor-1", 2, {
+        ...next,
+        resourceGeneration: 4,
+        instanceGeneration: 3,
+        updatedAtMs: 3_000,
+      }),
+    ).rejects.toThrow("resourceGeneration exceeds instanceGeneration");
+
+    const withoutResourceIdentity = record({
       instanceGeneration: 3,
       updatedAtMs: 3_000,
     });
-    await store.compareAndSwap("executor-1", 2, withoutResourceGeneration);
+    await store.compareAndSwap("executor-1", 2, withoutResourceIdentity);
     expect(await store.getByExecutorId("executor-1")).toEqual(
-      withoutResourceGeneration,
+      withoutResourceIdentity,
     );
     store.close();
   });
 
   test("fails closed when persisted fields are malformed", async () => {
-    const corruptions: Array<[
-      string,
-      string | number | Uint8Array,
-    ]> = [
+    const corruptions: Array<[string, string | number | Uint8Array]> = [
       ["provider", "unknown"],
       ["lifecycle", "destroyed"],
       ["resource_generation", 0],
@@ -188,13 +210,63 @@ describe("SqliteExecutorStateStore", () => {
     }
   });
 
+  test("rejects partial resource identities and backward chronology", async () => {
+    const store = new SqliteExecutorStateStore(databasePath());
+    await expect(
+      store.insertIntent(record({ resourceGeneration: 1 })),
+    ).rejects.toThrow("provider resource identity must be complete");
+    await expect(
+      store.insertIntent(record({ updatedAtMs: 999 })),
+    ).rejects.toThrow("updatedAtMs precedes createdAtMs");
+    store.close();
+  });
+
+  test("creates private files and rejects a symlink database path", () => {
+    const path = databasePath();
+    const store = new SqliteExecutorStateStore(path);
+    expect(lstatSync(path).mode & 0o777).toBe(0o600);
+    expect(lstatSync(join(path, "..")).mode & 0o777).toBe(0o700);
+    store.close();
+
+    const link = `${path}.link`;
+    symlinkSync(path, link);
+    expect(() => new SqliteExecutorStateStore(link)).toThrow();
+  });
+
+  test("rejects unknown and unversioned schemas", () => {
+    const newerPath = databasePath();
+    new SqliteExecutorStateStore(newerPath).close();
+    const newer = new Database(newerPath);
+    newer.exec("PRAGMA user_version = 2");
+    newer.close();
+    expect(() => new SqliteExecutorStateStore(newerPath)).toThrow(
+      "unsupported managed Executor schema version",
+    );
+
+    const legacyPath = databasePath();
+    new SqliteExecutorStateStore(legacyPath).close();
+    const legacy = new Database(legacyPath);
+    legacy.exec(`
+      DROP TABLE managed_executors;
+      DROP TABLE managed_executor_force_destroy_audit;
+      PRAGMA user_version = 0;
+      CREATE TABLE managed_executors (executor_id TEXT);
+    `);
+    legacy.close();
+    expect(() => new SqliteExecutorStateStore(legacyPath)).toThrow(
+      "unversioned managed Executor schema",
+    );
+  });
+
   test("supports concurrent durable writes from separate connections", async () => {
     const path = databasePath();
     const first = new SqliteExecutorStateStore(path);
     const second = new SqliteExecutorStateStore(path);
     await Promise.all([
       first.insertIntent(record()),
-      second.insertIntent(record({ executorId: "executor-2", sessionId: "session-2" })),
+      second.insertIntent(
+        record({ executorId: "executor-2", sessionId: "session-2" }),
+      ),
     ]);
     expect(await first.getBySessionId("session-2")).toEqual(
       record({ executorId: "executor-2", sessionId: "session-2" }),

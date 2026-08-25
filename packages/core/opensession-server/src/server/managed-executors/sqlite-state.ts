@@ -1,6 +1,14 @@
 import { Database } from "bun:sqlite";
-import { mkdirSync } from "node:fs";
-import { dirname } from "node:path";
+import {
+  chmodSync,
+  closeSync,
+  constants,
+  fstatSync,
+  lstatSync,
+  mkdirSync,
+  openSync,
+} from "node:fs";
+import { dirname, parse, resolve } from "node:path";
 import { EXECUTOR_PROVIDER_IDS, type ExecutorProviderId } from "./provider";
 import {
   ExecutorStateConflictError,
@@ -51,6 +59,33 @@ const RECORD_COLUMNS = `
   created_at_ms, updated_at_ms, error
 `;
 
+const SCHEMA_VERSION = 1;
+const RECORD_COLUMN_NAMES = [
+  "executor_id",
+  "session_id",
+  "provider",
+  "resource_id",
+  "workspace_id",
+  "resource_generation",
+  "instance_generation",
+  "lifecycle",
+  "project_revision",
+  "project_base_commit",
+  "project_durable_delta",
+  "created_at_ms",
+  "updated_at_ms",
+  "error",
+] as const;
+const AUDIT_COLUMN_NAMES = [
+  "id",
+  "executor_id",
+  "generation",
+  "action",
+  "operator_id",
+  "reason",
+  "at_ms",
+] as const;
+
 /**
  * Durable managed Executor state. Construction is the explicit open boundary;
  * merely importing this module performs no filesystem or database work.
@@ -62,52 +97,32 @@ export class SqliteExecutorStateStore implements ExecutorStateStore {
     if (typeof dbPath !== "string" || dbPath.length === 0) {
       throw new TypeError("Executor state database path must be explicit");
     }
-    if (dbPath !== ":memory:") {
-      mkdirSync(dirname(dbPath), { recursive: true, mode: 0o700 });
-    }
+    if (dbPath !== ":memory:") preparePrivateDatabasePath(dbPath);
 
-    this.#db = new Database(dbPath);
-    this.#db.exec("PRAGMA busy_timeout = 5000;");
-    this.#db.exec("PRAGMA foreign_keys = ON;");
-    this.#db.exec("PRAGMA journal_mode = WAL;");
-    // Executor intent and audit records fence external provider side effects.
-    this.#db.exec("PRAGMA synchronous = FULL;");
-    this.#db.exec(`
-      CREATE TABLE IF NOT EXISTS managed_executors (
-        executor_id TEXT PRIMARY KEY NOT NULL,
-        session_id TEXT NOT NULL UNIQUE,
-        provider TEXT NOT NULL CHECK(provider IN ('box', 'daytona', 'modal')),
-        resource_id TEXT,
-        workspace_id TEXT,
-        resource_generation INTEGER,
-        instance_generation INTEGER NOT NULL CHECK(instance_generation >= 1),
-        lifecycle TEXT NOT NULL CHECK(lifecycle IN ('preparing', 'awake', 'sleeping', 'waking', 'needs_attention')),
-        project_revision TEXT NOT NULL,
-        project_base_commit TEXT NOT NULL,
-        project_durable_delta TEXT NOT NULL,
-        created_at_ms INTEGER NOT NULL,
-        updated_at_ms INTEGER NOT NULL,
-        error TEXT
-      );
-      CREATE TABLE IF NOT EXISTS managed_executor_force_destroy_audit (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        executor_id TEXT NOT NULL,
-        generation INTEGER NOT NULL CHECK(generation >= 1),
-        action TEXT NOT NULL CHECK(action = 'force_destroy'),
-        operator_id TEXT NOT NULL,
-        reason TEXT NOT NULL,
-        at_ms INTEGER NOT NULL
-      );
-      CREATE INDEX IF NOT EXISTS managed_executor_audit_executor_idx
-        ON managed_executor_force_destroy_audit(executor_id, id);
-    `);
+    let db: Database | undefined;
+    try {
+      db = new Database(dbPath);
+      db.exec("PRAGMA busy_timeout = 5000;");
+      db.exec("PRAGMA foreign_keys = ON;");
+      db.exec("PRAGMA journal_mode = WAL;");
+      // Executor intent and audit records fence external provider side effects.
+      db.exec("PRAGMA synchronous = FULL;");
+      initializeSchema(db);
+      if (dbPath !== ":memory:") secureSqliteFiles(dbPath);
+      this.#db = db;
+    } catch (error) {
+      db?.close();
+      throw error;
+    }
   }
 
   close(): void {
     this.#db.close();
   }
 
-  async getByExecutorId(executorId: string): Promise<ExecutorRecord | undefined> {
+  async getByExecutorId(
+    executorId: string,
+  ): Promise<ExecutorRecord | undefined> {
     assertIdentity(executorId, "executorId");
     const row = this.#db
       .query<ExecutorRow, [string]>(
@@ -156,8 +171,13 @@ export class SqliteExecutorStateStore implements ExecutorStateStore {
     if (next.executorId !== executorId) {
       throw new ExecutorStateConflictError("Executor identity is immutable");
     }
-    if (next.instanceGeneration < expectedGeneration) {
-      throw new ExecutorStateConflictError("Executor generation cannot decrease");
+    if (
+      next.instanceGeneration < expectedGeneration ||
+      next.instanceGeneration > expectedGeneration + 1
+    ) {
+      throw new ExecutorStateConflictError(
+        "Executor generation must remain current or advance exactly once",
+      );
     }
 
     const swap = this.#db.transaction(() => {
@@ -174,6 +194,16 @@ export class SqliteExecutorStateStore implements ExecutorStateStore {
       if (next.sessionId !== decoded.sessionId) {
         throw new ExecutorStateConflictError(
           "Executor and session identity are immutable",
+        );
+      }
+      if (next.createdAtMs !== decoded.createdAtMs) {
+        throw new ExecutorStateConflictError(
+          "Executor creation timestamp is immutable",
+        );
+      }
+      if (next.updatedAtMs < decoded.updatedAtMs) {
+        throw new ExecutorStateConflictError(
+          "Executor update timestamp cannot move backward",
         );
       }
       this.#db
@@ -235,22 +265,25 @@ export class SqliteExecutorStateStore implements ExecutorStateStore {
   }
 
   /** Reads force-destroy audit entries in durable append order. */
-  async auditEntries(executorId?: string): Promise<readonly ExecutorAuditEntry[]> {
+  async auditEntries(
+    executorId?: string,
+  ): Promise<readonly ExecutorAuditEntry[]> {
     if (executorId !== undefined) assertIdentity(executorId, "executorId");
-    const rows = executorId === undefined
-      ? this.#db
-          .query<AuditRow, []>(
-            `SELECT executor_id, generation, action, operator_id, reason, at_ms
+    const rows =
+      executorId === undefined
+        ? this.#db
+            .query<AuditRow, []>(
+              `SELECT executor_id, generation, action, operator_id, reason, at_ms
              FROM managed_executor_force_destroy_audit ORDER BY id`,
-          )
-          .all()
-      : this.#db
-          .query<AuditRow, [string]>(
-            `SELECT executor_id, generation, action, operator_id, reason, at_ms
+            )
+            .all()
+        : this.#db
+            .query<AuditRow, [string]>(
+              `SELECT executor_id, generation, action, operator_id, reason, at_ms
              FROM managed_executor_force_destroy_audit
              WHERE executor_id = ? ORDER BY id`,
-          )
-          .all(executorId);
+            )
+            .all(executorId);
     return rows.map(decodeAuditEntry);
   }
 
@@ -263,19 +296,23 @@ export class SqliteExecutorStateStore implements ExecutorStateStore {
   }
 
   #hasExecutor(executorId: string): boolean {
-    return this.#db
-      .query<{ present: number }, [string]>(
-        "SELECT 1 AS present FROM managed_executors WHERE executor_id = ?",
-      )
-      .get(executorId) !== null;
+    return (
+      this.#db
+        .query<{ present: number }, [string]>(
+          "SELECT 1 AS present FROM managed_executors WHERE executor_id = ?",
+        )
+        .get(executorId) !== null
+    );
   }
 
   #hasSession(sessionId: string): boolean {
-    return this.#db
-      .query<{ present: number }, [string]>(
-        "SELECT 1 AS present FROM managed_executors WHERE session_id = ?",
-      )
-      .get(sessionId) !== null;
+    return (
+      this.#db
+        .query<{ present: number }, [string]>(
+          "SELECT 1 AS present FROM managed_executors WHERE session_id = ?",
+        )
+        .get(sessionId) !== null
+    );
   }
 
   #insertRecord(record: ExecutorRecord): void {
@@ -307,7 +344,9 @@ function recordValues(record: ExecutorRecord): (string | number | null)[] {
   ];
 }
 
-function recordValuesForUpdate(record: ExecutorRecord): (string | number | null)[] {
+function recordValuesForUpdate(
+  record: ExecutorRecord,
+): (string | number | null)[] {
   const values = recordValues(record);
   return values.slice(2);
 }
@@ -332,7 +371,10 @@ function decodeRecord(row: ExecutorRow): ExecutorRecord {
     "instance_generation",
   );
   const revision = decodeString(row.project_revision, "project_revision");
-  const baseCommit = decodeString(row.project_base_commit, "project_base_commit");
+  const baseCommit = decodeString(
+    row.project_base_commit,
+    "project_base_commit",
+  );
   const durableDelta = decodeString(
     row.project_durable_delta,
     "project_durable_delta",
@@ -341,7 +383,7 @@ function decodeRecord(row: ExecutorRow): ExecutorRecord {
   const updatedAtMs = decodeTimestamp(row.updated_at_ms, "updated_at_ms");
   const error = decodeOptionalString(row.error, "error");
 
-  return {
+  const record: ExecutorRecord = {
     executorId,
     sessionId,
     provider,
@@ -355,6 +397,8 @@ function decodeRecord(row: ExecutorRow): ExecutorRecord {
     updatedAtMs,
     ...(error === undefined ? {} : { error }),
   };
+  assertRecordRelationships(record);
+  return record;
 }
 
 function decodeAuditEntry(row: AuditRow): ExecutorAuditEntry {
@@ -377,15 +421,49 @@ function assertRecord(record: ExecutorRecord): void {
   decodeEnum(record.lifecycle, LIFECYCLES, "lifecycle");
   decodeOptionalIdentity(record.resourceId ?? null, "resourceId");
   decodeOptionalIdentity(record.workspaceId ?? null, "workspaceId");
-  decodeOptionalGeneration(record.resourceGeneration ?? null, "resourceGeneration");
+  decodeOptionalGeneration(
+    record.resourceGeneration ?? null,
+    "resourceGeneration",
+  );
   assertGeneration(record.instanceGeneration, "instanceGeneration");
-  if (!record.project || typeof record.project !== "object") throw corrupt("project");
+  if (!record.project || typeof record.project !== "object")
+    throw corrupt("project");
   decodeString(record.project.revision, "project.revision");
   decodeString(record.project.baseCommit, "project.baseCommit");
   decodeString(record.project.durableDelta, "project.durableDelta");
   decodeTimestamp(record.createdAtMs, "createdAtMs");
   decodeTimestamp(record.updatedAtMs, "updatedAtMs");
   decodeOptionalString(record.error ?? null, "error");
+  assertRecordRelationships(record);
+}
+
+function assertRecordRelationships(record: ExecutorRecord): void {
+  const resourceFields = [
+    record.resourceId,
+    record.workspaceId,
+    record.resourceGeneration,
+  ];
+  const present = resourceFields.filter((value) => value !== undefined).length;
+  if (present !== 0 && present !== resourceFields.length) {
+    throw corrupt("provider resource identity must be complete");
+  }
+  if (
+    record.resourceGeneration !== undefined &&
+    record.resourceGeneration > record.instanceGeneration
+  ) {
+    throw corrupt("resourceGeneration exceeds instanceGeneration");
+  }
+  if (
+    (record.lifecycle === "awake" ||
+      record.lifecycle === "sleeping" ||
+      record.lifecycle === "waking") &&
+    present === 0
+  ) {
+    throw corrupt(`${record.lifecycle} Executor has no provider resource`);
+  }
+  if (record.updatedAtMs < record.createdAtMs) {
+    throw corrupt("updatedAtMs precedes createdAtMs");
+  }
 }
 
 function assertAuditEntry(entry: ExecutorAuditEntry): void {
@@ -398,40 +476,60 @@ function assertAuditEntry(entry: ExecutorAuditEntry): void {
   decodeTimestamp(entry.atMs, "atMs");
 }
 
-function assertIdentity(value: unknown, field: string): asserts value is string {
+function assertIdentity(
+  value: unknown,
+  field: string,
+): asserts value is string {
   decodeIdentity(value, field);
 }
 
 function decodeIdentity(value: unknown, field: string): string {
-  if (typeof value !== "string" || value.length === 0 || value.trim() !== value) {
+  if (
+    typeof value !== "string" ||
+    value.length === 0 ||
+    value.length > 512 ||
+    value.trim() !== value ||
+    /[\u0000-\u001f\u007f]/u.test(value)
+  ) {
     throw corrupt(field);
   }
   return value;
 }
 
-function decodeOptionalIdentity(value: unknown, field: string): string | undefined {
+function decodeOptionalIdentity(
+  value: unknown,
+  field: string,
+): string | undefined {
   return value === null || value === undefined
     ? undefined
     : decodeIdentity(value, field);
 }
 
-function assertGeneration(value: unknown, field: string): asserts value is number {
+function assertGeneration(
+  value: unknown,
+  field: string,
+): asserts value is number {
   decodeGeneration(value, field);
 }
 
 function decodeGeneration(value: unknown, field: string): number {
-  if (!Number.isSafeInteger(value) || (value as number) < 1) throw corrupt(field);
+  if (!Number.isSafeInteger(value) || (value as number) < 1)
+    throw corrupt(field);
   return value as number;
 }
 
-function decodeOptionalGeneration(value: unknown, field: string): number | undefined {
+function decodeOptionalGeneration(
+  value: unknown,
+  field: string,
+): number | undefined {
   return value === null || value === undefined
     ? undefined
     : decodeGeneration(value, field);
 }
 
 function decodeTimestamp(value: unknown, field: string): number {
-  if (!Number.isSafeInteger(value) || (value as number) < 0) throw corrupt(field);
+  if (!Number.isSafeInteger(value) || (value as number) < 0)
+    throw corrupt(field);
   return value as number;
 }
 
@@ -440,7 +538,10 @@ function decodeString(value: unknown, field: string): string {
   return value;
 }
 
-function decodeOptionalString(value: unknown, field: string): string | undefined {
+function decodeOptionalString(
+  value: unknown,
+  field: string,
+): string | undefined {
   if (value === null || value === undefined) return undefined;
   return decodeString(value, field);
 }
@@ -450,12 +551,149 @@ function decodeEnum<const T extends readonly string[]>(
   allowed: T,
   field: string,
 ): T[number] {
-  if (typeof value !== "string" || !allowed.includes(value)) throw corrupt(field);
+  if (typeof value !== "string" || !allowed.includes(value))
+    throw corrupt(field);
   return value as T[number];
 }
 
 function corrupt(field: string): TypeError {
   return new TypeError(`Malformed managed Executor state: ${field}`);
+}
+
+function initializeSchema(db: Database): void {
+  const version = db
+    .query<{ user_version: number }, []>("PRAGMA user_version")
+    .get()?.user_version;
+  if (version !== 0 && version !== SCHEMA_VERSION) {
+    throw new Error(`unsupported managed Executor schema version: ${version}`);
+  }
+
+  if (version === 0) {
+    const existing = db
+      .query<{ name: string }, []>(
+        `SELECT name FROM sqlite_master
+         WHERE type = 'table'
+           AND name IN ('managed_executors', 'managed_executor_force_destroy_audit')
+         LIMIT 1`,
+      )
+      .get();
+    if (existing) {
+      throw new Error("unversioned managed Executor schema is not supported");
+    }
+    db.exec("BEGIN IMMEDIATE;");
+    try {
+      db.exec(`
+        CREATE TABLE managed_executors (
+          executor_id TEXT PRIMARY KEY NOT NULL,
+          session_id TEXT NOT NULL UNIQUE,
+          provider TEXT NOT NULL CHECK(provider IN ('box', 'daytona', 'modal')),
+          resource_id TEXT,
+          workspace_id TEXT,
+          resource_generation INTEGER,
+          instance_generation INTEGER NOT NULL CHECK(instance_generation >= 1),
+          lifecycle TEXT NOT NULL CHECK(lifecycle IN ('preparing', 'awake', 'sleeping', 'waking', 'needs_attention')),
+          project_revision TEXT NOT NULL,
+          project_base_commit TEXT NOT NULL,
+          project_durable_delta TEXT NOT NULL,
+          created_at_ms INTEGER NOT NULL,
+          updated_at_ms INTEGER NOT NULL,
+          error TEXT
+        );
+        CREATE TABLE managed_executor_force_destroy_audit (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          executor_id TEXT NOT NULL,
+          generation INTEGER NOT NULL CHECK(generation >= 1),
+          action TEXT NOT NULL CHECK(action = 'force_destroy'),
+          operator_id TEXT NOT NULL,
+          reason TEXT NOT NULL,
+          at_ms INTEGER NOT NULL
+        );
+        CREATE INDEX managed_executor_audit_executor_idx
+          ON managed_executor_force_destroy_audit(executor_id, id);
+        PRAGMA user_version = ${SCHEMA_VERSION};
+      `);
+      db.exec("COMMIT;");
+    } catch (error) {
+      db.exec("ROLLBACK;");
+      throw error;
+    }
+  }
+
+  assertTableColumns(db, "managed_executors", RECORD_COLUMN_NAMES);
+  assertTableColumns(
+    db,
+    "managed_executor_force_destroy_audit",
+    AUDIT_COLUMN_NAMES,
+  );
+}
+
+function assertTableColumns(
+  db: Database,
+  table: string,
+  expected: readonly string[],
+): void {
+  const columns = db
+    .query<{ name: string }, []>(`PRAGMA table_info('${table}')`)
+    .all()
+    .map((column) => column.name);
+  if (
+    columns.length !== expected.length ||
+    columns.some((column, index) => column !== expected[index])
+  ) {
+    throw new Error(`managed Executor schema mismatch: ${table}`);
+  }
+}
+
+function preparePrivateDatabasePath(dbPath: string): void {
+  const absolutePath = resolve(dbPath);
+  const parent = dirname(absolutePath);
+  mkdirSync(parent, { recursive: true, mode: 0o700 });
+
+  const root = parse(parent).root;
+  let current = root;
+  for (const part of parent
+    .slice(root.length)
+    .split(/[\\/]+/u)
+    .filter(Boolean)) {
+    current = resolve(current, part);
+    const stat = lstatSync(current);
+    if (stat.isSymbolicLink() || !stat.isDirectory()) {
+      throw new Error(
+        `unsafe managed Executor state path component: ${current}`,
+      );
+    }
+  }
+  chmodSync(parent, 0o700);
+
+  const noFollow = constants.O_NOFOLLOW ?? 0;
+  const descriptor = openSync(
+    absolutePath,
+    constants.O_CREAT | constants.O_RDWR | noFollow,
+    0o600,
+  );
+  try {
+    if (!fstatSync(descriptor).isFile()) {
+      throw new Error("managed Executor state path is not a regular file");
+    }
+    chmodSync(absolutePath, 0o600);
+  } finally {
+    closeSync(descriptor);
+  }
+}
+
+function secureSqliteFiles(dbPath: string): void {
+  for (const path of [
+    resolve(dbPath),
+    `${resolve(dbPath)}-wal`,
+    `${resolve(dbPath)}-shm`,
+  ]) {
+    const stat = lstatSync(path, { throwIfNoEntry: false });
+    if (!stat) continue;
+    if (stat.isSymbolicLink() || !stat.isFile()) {
+      throw new Error(`unsafe managed Executor SQLite file: ${path}`);
+    }
+    chmodSync(path, 0o600);
+  }
 }
 
 function staleConflict(
