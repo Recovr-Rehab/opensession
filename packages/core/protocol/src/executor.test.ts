@@ -41,34 +41,22 @@ const fence = {
 };
 
 describe("executor versioning", () => {
-  test("accepts only an exact-version hello", () => {
-    expect(
-      decodeExecutorHello({
-        t: "hello",
-        version: EXECUTOR_PROTOCOL_VERSION,
-        requestId: "request-1",
-      }),
-    ).toEqual({
-      t: "hello",
-      version: EXECUTOR_PROTOCOL_VERSION,
-      requestId: "request-1",
-    });
-    expect(
-      decodeExecutorHello({
-        t: "hello",
-        version: EXECUTOR_PROTOCOL_VERSION - 1,
-        requestId: "request-1",
-      }),
-    ).toBeUndefined();
-    expect(
-      decodeExecutorHello({
-        t: "hello",
-        version: EXECUTOR_PROTOCOL_VERSION,
-        minVersion: 1,
-        maxVersion: EXECUTOR_PROTOCOL_VERSION,
-        requestId: "request-1",
-      }),
-    ).toBeUndefined();
+  const hello = {
+    t: "hello",
+    version: EXECUTOR_PROTOCOL_VERSION,
+    requestId: "request-1",
+    executorId: "executor-1",
+    instanceId: "instance-1",
+    generation: 4,
+    capabilities: ["fs", "process"] as Array<"fs" | "process">,
+  } as const;
+
+  test("accepts only an exact-v2 incarnation hello", () => {
+    expect(decodeExecutorHello(hello)).toEqual(hello);
+    expect(decodeExecutorHello({ ...hello, version: EXECUTOR_PROTOCOL_VERSION - 1 })).toBeUndefined();
+    expect(decodeExecutorHello({ ...hello, minVersion: 1, maxVersion: EXECUTOR_PROTOCOL_VERSION })).toBeUndefined();
+    expect(decodeExecutorHello({ ...hello, enrollmentToken: "forbidden" })).toBeUndefined();
+    expect(decodeExecutorHello({ ...hello, capabilities: ["fs", "fs"] })).toBeUndefined();
   });
 });
 

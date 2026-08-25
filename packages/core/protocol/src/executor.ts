@@ -84,6 +84,16 @@ interface ExecutorMessageBase {
   requestId: string;
 }
 
+export type ExecutorCapability = "fs" | "process" | "terminal" | "service" | "portal";
+
+/** Public incarnation metadata. Authentication happens before this frame is accepted. */
+export interface ExecutorConnectionIdentity {
+  executorId: string;
+  instanceId: string;
+  generation: number;
+  capabilities: ExecutorCapability[];
+}
+
 interface ExecutorAuthorizedMessage extends ExecutorMessageBase {
   grant: ExecutorGrant;
   fence: ExecutorFence;
@@ -171,7 +181,7 @@ export type ExecutorStreamEvent =
 
 /** Exact-version handshake followed by fenced, capability-authorized work. */
 export type ExecutorClientMessage =
-  | (ExecutorMessageBase & { t: "hello" })
+  | (ExecutorMessageBase & ExecutorConnectionIdentity & { t: "hello" })
   | (ExecutorAuthorizedMessage & { t: "execute"; operation: ExecutorOperation })
   | (ExecutorAuthorizedMessage & { t: "receipt_status"; receiptId: string })
   | (ExecutorAuthorizedMessage & {
@@ -194,7 +204,7 @@ export type ExecutorErrorCode =
   | "executor_busy";
 
 export type ExecutorServerMessage =
-  | (ExecutorMessageBase & { t: "hello"; accepted: true })
+  | (ExecutorMessageBase & ExecutorConnectionIdentity & { t: "hello"; accepted: true })
   | (ExecutorMessageBase & { t: "receipt"; receipt: ExecutorReceipt })
   | (ExecutorMessageBase & { t: "receipt_status"; receipt: ExecutorReceipt; outcome?: ExecutorOperationOutcome })
   | (ExecutorMessageBase & { t: "event"; event: ExecutorStreamEvent })
@@ -204,12 +214,24 @@ export type ExecutorServerMessage =
 export function decodeExecutorHello(value: unknown): Extract<ExecutorClientMessage, { t: "hello" }> | undefined {
   if (!value || typeof value !== "object" || Array.isArray(value)) return undefined;
   const message = value as Record<string, unknown>;
+  const allowed = ["t", "version", "requestId", "executorId", "instanceId", "generation", "capabilities"];
   if (
-    Object.keys(message).some((key) => !["t", "version", "requestId"].includes(key)) ||
+    Object.keys(message).some((key) => !allowed.includes(key)) ||
     message.t !== "hello" ||
     message.version !== EXECUTOR_PROTOCOL_VERSION ||
     typeof message.requestId !== "string" ||
-    !message.requestId
+    !ID_RE.test(message.requestId) ||
+    typeof message.executorId !== "string" ||
+    !ID_RE.test(message.executorId) ||
+    typeof message.instanceId !== "string" ||
+    !ID_RE.test(message.instanceId) ||
+    !Number.isSafeInteger(message.generation) ||
+    (message.generation as number) < 0 ||
+    !Array.isArray(message.capabilities) ||
+    message.capabilities.some(
+      (capability) => !["fs", "process", "terminal", "service", "portal"].includes(capability as string),
+    ) ||
+    new Set(message.capabilities).size !== message.capabilities.length
   ) {
     return undefined;
   }
@@ -217,6 +239,10 @@ export function decodeExecutorHello(value: unknown): Extract<ExecutorClientMessa
     t: "hello",
     version: EXECUTOR_PROTOCOL_VERSION,
     requestId: message.requestId,
+    executorId: message.executorId,
+    instanceId: message.instanceId,
+    generation: message.generation as number,
+    capabilities: message.capabilities as ExecutorCapability[],
   };
 }
 
