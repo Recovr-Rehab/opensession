@@ -551,44 +551,70 @@ export async function getPrDiff(
 ): Promise<PrDiffData | null> {
   const key = cacheKey(repo, branch);
   const hit = maxPatchBytes ? undefined : diffCache.get(key);
-  if (hit && !shouldRefreshPrDetails(hit.ts)) return hit.data;
+  if (hit && Date.now() - hit.ts < TTL) return hit.data;
   const inflightKey = maxPatchBytes ? `${key}\0bounded:${maxPatchBytes}` : key;
   const running = diffInflight.get(inflightKey);
   if (running) return running;
   // Known backoff window: stale answer if we have one, fast friendly failure
   // if we don't — never a doomed gh spawn.
-  if (ghRateLimited()) {
+  if (ghRateLimited("rest")) {
     if (hit) return hit.data;
-    throw new Error(GH_RATE_LIMIT_MESSAGE);
+    throw new Error(GH_REST_RATE_LIMIT_MESSAGE);
   }
 
   const refresh = (async () => {
     try {
-      const ghEnv = await selectedGhEnv();
-      const readMeta = async () => JSON.parse(
-        await $`gh pr view ${branch} --repo ${repo} --json number,headRefOid,baseRefName,baseRefOid`
-          .env({ ...process.env, ...ghEnv })
-          .quiet()
-          .text(),
-      );
+      const token = await githubToken();
+      if (!token) throw new Error("The selected GitHub bot credential is unavailable");
+      const headers = {
+        Authorization: `Bearer ${token}`,
+        "X-GitHub-Api-Version": "2022-11-28",
+        "User-Agent": "opensession",
+      };
+      const readMeta = async (): Promise<{
+        number: number;
+        headRefOid: string;
+        baseRefName: string;
+        baseRefOid: string;
+      }> => {
+        const numeric = /^\d+$/.test(branch);
+        const path = numeric
+          ? `/repos/${repo}/pulls/${branch}`
+          : `/repos/${repo}/pulls?state=all&head=${encodeURIComponent(`${repo.split("/")[0]}:${branch}`)}&per_page=1`;
+        const response = await fetch(`https://api.github.com${path}`, {
+          headers: { ...headers, Accept: "application/vnd.github+json" },
+          signal: AbortSignal.timeout(10_000),
+        });
+        const body = await response.json().catch(() => null) as any;
+        if (!response.ok) throw new Error(String(body?.message || `GitHub REST ${response.status}`));
+        const pr = Array.isArray(body) ? body[0] : body;
+        if (!pr) throw new Error("no pull requests found");
+        return {
+          number: pr.number,
+          headRefOid: pr.head?.sha || "",
+          baseRefName: pr.base?.ref || "",
+          baseRefOid: pr.base?.sha || "",
+        };
+      };
       for (let attempt = 0; attempt < 2; attempt++) {
         const meta = await readMeta();
         let patch: string;
         let skippedFiles = 0;
         try {
+          const controller = new AbortController();
+          const response = await fetch(`https://api.github.com/repos/${repo}/pulls/${meta.number}`, {
+            headers: { ...headers, Accept: "application/vnd.github.v3.diff" },
+            signal: AbortSignal.any([controller.signal, AbortSignal.timeout(30_000)]),
+          });
+          if (!response.ok) throw new Error(await response.text().catch(() => `GitHub REST ${response.status}`));
+          if (!response.body) throw new Error("GitHub returned an empty PR diff");
           if (maxPatchBytes) {
-            const bounded = await boundedCommandPatch(
-              ["gh", "pr", "diff", String(meta.number), "--repo", repo],
-              maxPatchBytes,
-              ghEnv,
-            );
-            patch = bounded.patch;
-            skippedFiles = bounded.skippedFiles;
+            const bounded = await processPrefix(response.body, maxPatchBytes, () => controller.abort());
+            const complete = completePatchPrefix(bounded.text, bounded.truncated);
+            patch = complete.patch;
+            skippedFiles = complete.skippedFiles;
           } else {
-            patch = await $`gh pr diff ${meta.number} --repo ${repo}`
-              .env({ ...process.env, ...ghEnv })
-              .quiet()
-              .text();
+            patch = await response.text();
           }
         } catch (diffErr: any) {
           // GitHub refuses API diffs over 300 files; reconstruct from the same
@@ -626,7 +652,7 @@ export async function getPrDiff(
     } catch (e: any) {
       const msg = String(e?.stderr || e?.message || e).slice(0, 300);
       if (!isNoPrError(msg)) {
-        if (isGhRateLimitMsg(msg)) noteGhRateLimited("pr-info");
+        if (isGhRateLimitMsg(msg)) noteGhRateLimited("pr-diff", undefined, "rest");
         console.warn(`[pr-info] gh pr diff ${branch} (${repo}) failed: ${msg}`);
         if (hit) return hit.data; // stale beats an error
         throw new Error(prApiErrorMessage(msg));
