@@ -129,7 +129,7 @@ export function IngressPanel() {
 		<SettingsPanel>
 			<SettingsHeader
 				title="Public ingress"
-				description="Expose signed webhooks, remote Sandbox callbacks, and workload identity without exposing the app."
+				description="Expose signed webhooks, remote Sandbox callbacks, and workload identity on a separate endpoint."
 			/>
 
 			<SettingsGroupLabel
@@ -153,10 +153,10 @@ export function IngressPanel() {
 						</SettingRow>
 						<SettingRow>
 							<SettingRowText>
-								<SettingRowTitle>Private app</SettingRowTitle>
-								<SettingRowDescription>Never routed through this public listener.</SettingRowDescription>
+								<SettingRowTitle>App endpoint</SettingRowTitle>
+								<SettingRowDescription>Separate from this public listener.</SettingRowDescription>
 							</SettingRowText>
-							<StatusChip label="Private" dot="var(--green)" />
+							<StatusChip label="Separate" dot="var(--green)" />
 						</SettingRow>
 						<SettingRow>
 							<SettingRowText>
