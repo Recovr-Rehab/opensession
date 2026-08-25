@@ -1,4 +1,10 @@
-import { useEffect, useRef, useState, type ReactNode } from "react";
+import {
+	useEffect,
+	useRef,
+	useState,
+	type MouseEvent as ReactMouseEvent,
+	type ReactNode,
+} from "react";
 import { createRoot } from "react-dom/client";
 import markAsset from "../mac/build/icon-512.png";
 import nativeMarkAsset from "../ios/OS1/Assets.xcassets/AppIcon.appiconset/AppIcon-1024.png";
@@ -21,6 +27,7 @@ import {
 } from "../../core/opensession-server/src/frontend/components/icons";
 import "./site.css";
 import { AgentationFeedback } from "./AgentationFeedback";
+import { AnnouncementArticle } from "./AnnouncementArticle";
 import { ProductDemo } from "./ProductDemo";
 import { TellaBackground } from "./TellaBackground";
 import { assetUrl } from "./asset-url";
@@ -357,12 +364,96 @@ function SetupOverview() {
 	);
 }
 
+function AnnouncementDialog({
+	open,
+	onRequestClose,
+}: {
+	open: boolean;
+	onRequestClose: () => void;
+}) {
+	const dialogRef = useRef<HTMLDialogElement>(null);
+
+	useEffect(() => {
+		const dialog = dialogRef.current;
+		if (!dialog) return;
+		if (open && !dialog.open) dialog.showModal();
+		if (!open && dialog.open) dialog.close();
+	}, [open]);
+
+	return (
+		<dialog
+			ref={dialogRef}
+			className="announcement-dialog"
+			aria-labelledby="announcement-title"
+			onCancel={(event) => {
+				event.preventDefault();
+				onRequestClose();
+			}}
+			onClick={(event) => {
+				if (event.target === event.currentTarget) onRequestClose();
+			}}
+		>
+			<button
+				type="button"
+				className="announcement-close"
+				aria-label="Close announcement"
+				autoFocus
+				onClick={onRequestClose}
+			>
+				<IconX size={24} />
+			</button>
+			<div className="announcement-scroll">
+				<AnnouncementArticle />
+			</div>
+		</dialog>
+	);
+}
+
 /**
  * The page: a rail that stays put, and a feed that explains the product one
- * quiet card at a time. The rail holds the whole pitch and the only CTA, so
- * the ask never scrolls away and the feed never has to repeat it.
+ * quiet card at a time. The rail holds the whole pitch and its CTAs, so the
+ * ask never scrolls away and the feed never has to repeat it.
  */
 function LandingPage() {
+	const [announcementOpen, setAnnouncementOpen] = useState(false);
+
+	useEffect(() => {
+		const syncAnnouncementWithUrl = () => {
+			setAnnouncementOpen(window.location.pathname === "/announcement");
+		};
+		window.addEventListener("popstate", syncAnnouncementWithUrl);
+		return () => window.removeEventListener("popstate", syncAnnouncementWithUrl);
+	}, []);
+
+	useEffect(() => {
+		document.title = announcementOpen
+			? "Open Session is open source · Open Session"
+			: "Open Session · Your team’s control room for coding agents";
+	}, [announcementOpen]);
+
+	const openAnnouncement = (event: ReactMouseEvent<HTMLAnchorElement>) => {
+		if (
+			event.button !== 0 ||
+			event.metaKey ||
+			event.ctrlKey ||
+			event.shiftKey ||
+			event.altKey
+		) {
+			return;
+		}
+		event.preventDefault();
+		window.history.pushState({ announcementModal: true }, "", "/announcement");
+		setAnnouncementOpen(true);
+	};
+
+	const closeAnnouncement = () => {
+		if (window.location.pathname === "/announcement") {
+			window.history.back();
+			return;
+		}
+		setAnnouncementOpen(false);
+	};
+
 	return (
 		<div className="shell">
 			<aside className="rail">
@@ -376,12 +467,21 @@ function LandingPage() {
 				</h1>
 
 				<div className="rail-foot">
-					<a
-						className="button button-primary"
-						href="https://github.com/tellahq/opensession"
-					>
-						View on GitHub
-					</a>
+					<div className="rail-actions">
+						<a
+							className="button button-primary"
+							href="https://github.com/tellahq/opensession"
+						>
+							View on GitHub
+						</a>
+						<a
+							className="button button-secondary"
+							href="/announcement"
+							onClick={openAnnouncement}
+						>
+							Read the announcement
+						</a>
+					</div>
 					<p className="rail-note">
 						Open source. Self-hosted. Any model provider.
 					</p>
@@ -485,6 +585,10 @@ function LandingPage() {
 					<span>©2026</span>
 				</footer>
 			</main>
+			<AnnouncementDialog
+				open={announcementOpen}
+				onRequestClose={closeAnnouncement}
+			/>
 		</div>
 	);
 }

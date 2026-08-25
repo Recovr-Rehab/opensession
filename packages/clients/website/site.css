@@ -177,6 +177,13 @@ summary:focus-visible {
 	padding-top: 40px;
 }
 
+.rail-actions {
+	display: flex;
+	align-items: center;
+	flex-wrap: wrap;
+	gap: 10px;
+}
+
 .rail-note {
 	margin: 16px 0 0;
 	color: var(--muted);
@@ -900,8 +907,150 @@ summary:focus-visible {
 	filter: brightness(1.06);
 }
 
+.button-secondary {
+	border-color: #d1d1d1;
+	background: #fff;
+	color: #0a0a0a;
+}
+
+.button-secondary:hover {
+	background: #f7f7f7;
+	filter: none;
+}
+
 .button:active {
 	transform: scale(0.96);
+}
+
+/* ── Announcement ───────────────────────────────────────────────────── */
+
+/* The same article surface serves two paths. A landing-page click opens the
+   native dialog so the browser owns focus trapping and Escape; a direct visit
+   renders the panel in-page so crawlers and link previews receive the complete
+   announcement in the first response. */
+.announcement-dialog,
+.announcement-page-panel {
+	position: relative;
+	width: min(1600px, calc(100% - 32px));
+	height: calc(100dvh - 32px);
+	max-width: none;
+	max-height: none;
+	padding: 0;
+	border: 0;
+	border-radius: calc(24px * var(--rf));
+	corner-shape: var(--cs);
+	background: #fff;
+	box-shadow: 0 28px 90px rgba(0, 0, 0, 0.28);
+	color: #0a0a0a;
+	overflow: hidden;
+}
+
+.announcement-dialog {
+	margin: auto;
+}
+
+.announcement-dialog::backdrop {
+	background: rgba(10, 10, 10, 0.58);
+	backdrop-filter: blur(12px);
+}
+
+.announcement-page {
+	display: grid;
+	min-height: 100svh;
+	padding: 16px;
+	background: #242424;
+	place-items: center;
+}
+
+.announcement-page-panel {
+	width: min(1600px, 100%);
+}
+
+.announcement-scroll {
+	width: 100%;
+	height: 100%;
+	padding-inline: clamp(20px, 5vw, 72px);
+	background: #fff;
+	overflow-y: auto;
+	overscroll-behavior: contain;
+	scrollbar-gutter: stable;
+}
+
+.announcement-close {
+	display: grid;
+	position: absolute;
+	top: 22px;
+	right: 22px;
+	z-index: 1;
+	width: 44px;
+	height: 44px;
+	padding: 0;
+	border: 0;
+	border-radius: calc(12px * var(--rf));
+	corner-shape: var(--cs);
+	background: rgba(10, 10, 10, 0.055);
+	color: #666;
+	cursor: pointer;
+	place-items: center;
+	transition: background-color 140ms ease, color 140ms ease, transform 140ms cubic-bezier(0.23, 1, 0.32, 1);
+}
+
+.announcement-close:hover {
+	background: rgba(10, 10, 10, 0.1);
+	color: #0a0a0a;
+}
+
+.announcement-close:active {
+	transform: scale(0.96);
+}
+
+.announcement-article {
+	width: 100%;
+	max-width: 760px;
+	margin-inline: auto;
+	padding-block: clamp(92px, 11vh, 124px) 128px;
+	color: #0a0a0a;
+	font-size: 20px;
+	font-weight: 450;
+	letter-spacing: -0.012em;
+	line-height: 1.55;
+}
+
+.announcement-article > * {
+	margin-block: 0;
+}
+
+.announcement-article > * + * {
+	margin-top: 1.5em;
+}
+
+.announcement-article h1 {
+	max-width: 12ch;
+	font-size: clamp(44px, 5vw, 68px);
+	font-weight: 650;
+	letter-spacing: -0.045em;
+	line-height: 1.02;
+	text-wrap: balance;
+}
+
+.announcement-article h1 + * {
+	margin-top: 52px;
+}
+
+.announcement-article ol {
+	padding-inline-start: 1.35em;
+}
+
+.announcement-article li {
+	padding-inline-start: 0.25em;
+}
+
+.announcement-article li + li {
+	margin-top: 0.35em;
+}
+
+.announcement-article strong {
+	font-weight: 650;
 }
 
 /* ── Narrower ────────────────────────────────────────────────────────── */
@@ -1019,6 +1168,43 @@ summary:focus-visible {
 		max-height: calc(100dvh - 24px);
 	}
 
+	.announcement-dialog,
+	.announcement-page-panel {
+		width: calc(100% - 16px);
+		height: calc(100dvh - 16px);
+		border-radius: calc(18px * var(--rf));
+	}
+
+	.announcement-page {
+		padding: 8px;
+	}
+
+	.announcement-page-panel {
+		width: 100%;
+	}
+
+	.announcement-close {
+		top: 12px;
+		right: 12px;
+	}
+
+	.announcement-scroll {
+		padding-inline: 20px;
+		scrollbar-gutter: auto;
+	}
+
+	.announcement-article {
+		padding-block: 78px 88px;
+	}
+
+	.announcement-article h1 {
+		font-size: 38px;
+	}
+
+	.announcement-article h1 + * {
+		margin-top: 40px;
+	}
+
 	.pwa-guide-panel {
 		padding: 24px;
 		border-radius: calc(22px * var(--rf));
@@ -1063,6 +1249,11 @@ summary:focus-visible {
 		width: 100%;
 	}
 
+	.rail-actions {
+		align-items: stretch;
+		flex-direction: column;
+	}
+
 	.feed-foot {
 		justify-content: flex-start;
 	}
@@ -1078,6 +1269,14 @@ summary:focus-visible {
 		animation: dialog-enter 220ms cubic-bezier(0.23, 1, 0.32, 1) both;
 	}
 
+	.announcement-dialog[open] {
+		animation: announcement-enter 180ms cubic-bezier(0.23, 1, 0.32, 1) both;
+	}
+
+	.announcement-dialog[open]::backdrop {
+		animation: announcement-backdrop-enter 180ms ease-out both;
+	}
+
 	.rail > :nth-child(2) { animation-delay: 60ms; }
 	.rail > :nth-child(3) { animation-delay: 110ms; }
 	.stage { animation-delay: 150ms; }
@@ -1089,6 +1288,14 @@ summary:focus-visible {
 
 @keyframes dialog-enter {
 	from { opacity: 0; transform: translateY(10px) scale(0.98); }
+}
+
+@keyframes announcement-enter {
+	from { opacity: 0; transform: translateY(12px) scale(0.985); }
+}
+
+@keyframes announcement-backdrop-enter {
+	from { background: transparent; backdrop-filter: blur(0); }
 }
 
 @media (prefers-reduced-motion: reduce) {
