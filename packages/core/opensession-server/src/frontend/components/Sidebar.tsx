@@ -271,6 +271,7 @@ import {
 	nextRenderedSidebarItem,
 	nextUnreadRenderedWorkspaceItem,
 } from "../lib/sidebar-next";
+import { previewSidebarSelection } from "../lib/sidebar-selection";
 import {
 	LONG_PRESS_MS,
 	LONG_PRESS_SLOP,
@@ -3185,11 +3186,18 @@ setClosingPrUrls((current) => {
 						return;
 					}
 					if (editing) return;
+					// Keyboard activation has no mousedown. Give it the same immediate
+					// selection feedback before the route render reconciles the sidebar.
+					previewSidebarSelection(sidebarScrollRef.current, e.currentTarget);
 					openWsRow(row, review);
 				}}
 					onMouseEnter={(e) => wsRowHoverEnter(row, e.currentTarget)}
 					onMouseLeave={scheduleWsHoverClose}
-					onMouseDown={closeWsHover}
+					onMouseDown={(e) => {
+					closeWsHover();
+					if (e.button === 0 && !editing)
+						previewSidebarSelection(sidebarScrollRef.current, e.currentTarget);
+				}}
 					onTouchStart={(e) => wsRowTouchStart(row, e)}
 					onTouchMove={(e) => wsRowTouchMove(row, e)}
 					onTouchEnd={(e) => wsRowTouchEnd(row, e, review)}

@@ -5380,7 +5380,13 @@ console.error("Rename workspace failed:", error);
 							workspaceDataReady={!loading && workspacesLoaded}
 							workspaces={workspaces}
 							teamViewing={teamViewing}
-							selectedId={currentSession?.id || null}
+							// Selection is navigation state, not hydrated session data. The
+							// route changes synchronously when a row opens; waiting for detail
+							// hydration makes the old row look selected while the new session
+							// is already loading.
+							selectedId={
+								route.view === "session" ? (listedSession?.id ?? route.id) : null
+							}
 							prsActive={route.view === "prs"}
 							onOpenPrs={() => navigate({ view: "prs" })}
 							feedActive={route.view === "feed"}
