@@ -19,7 +19,6 @@ import {
 } from "./lib/sidebar-collapse";
 import { openWorkspaceSummary } from "./lib/workspace-summary-open";
 import React, {
-	
 	useEffect,
 	useLayoutEffect,
 	useRef,
@@ -1114,12 +1113,15 @@ export function App(
 			productEmpty &&
 			githubConnectionState === "connected" &&
 			!firstMileIsComplete);
-	const refreshWorkspaces = () => {
+	// This identity is observable: both subscriptions below depend on it. Keep it
+	// stable even if the compiler bails out on this large component, otherwise a
+	// completed fetch updates state, retriggers the effect, and starts another fetch.
+	const [refreshWorkspaces] = useState(() => () => {
 		return fetchWorkspaces()
 			.then(setWorkspaces)
 			.catch(() => {})
 			.finally(() => setWorkspacesLoaded(true));
-	};
+	});
 	useEffect(() => {
 		refreshWorkspaces();
 		const onFocus = () => refreshWorkspaces();
