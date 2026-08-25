@@ -206,8 +206,11 @@ function SetupOverview() {
 						<IconServer size={22} />
 					</span>
 					<div className="landing-setup-step-copy">
-						<strong>Get a server or Mac mini</strong>
-						<span>Use a machine you can leave powered on and connected.</span>
+						<strong>Get a server</strong>
+						<span>
+							Use a machine (VPS, Hetzner, or Mac mini) you can leave powered on
+							and connected.
+						</span>
 					</div>
 				</li>
 				<li>
