@@ -775,6 +775,7 @@ export function App(
 		archivedLoaded,
 		refreshArchived,
 		refresh,
+		refreshInvalidated,
 		inject,
 		unstick,
 		patch,
@@ -794,6 +795,14 @@ export function App(
 	const auth = useAuthStatus();
 	const githubConnectionState = useGithubConnectionState(route.view);
 	const { connected, send, setTyping, addHandler } = useWebSocket();
+	// A disconnected socket may miss list invalidations. The first connection
+	// races the initial list load and needs no extra fetch; later reconnects do.
+	const webSocketConnectedOnceRef = useRef(false);
+	useEffect(() => {
+		if (!connected) return;
+		if (webSocketConnectedOnceRef.current) refresh();
+		else webSocketConnectedOnceRef.current = true;
+	}, [connected, refresh]);
 	const sessionsRef = useRef(sessions);
 	useLayoutEffect(() => {
 	sessionsRef.current = sessions;
@@ -2142,6 +2151,10 @@ const path = await resolveAnonymousUserPath(
 	// When a session is created from the New Session form or Ask box, jump straight into it
 	useEffect(() => {
 		return addHandler((msg) => {
+			if (msg.type === "sessions_invalidated") {
+				refreshInvalidated();
+				return;
+			}
 			if (msg.type === "error") {
 				const draft = pendingCreateDraftRef.current;
 				const errorSessionId = "sessionId" in msg ? msg.sessionId : undefined;
@@ -2321,7 +2334,16 @@ const path = await resolveAnonymousUserPath(
 				if (stillOwnsForeground) navigate({ view: "session", id: msg.id });
 			}
 		});
-	}, [addHandler, navigate, patch, refresh, refreshWorkspaces, remove, unstick]);
+	}, [
+		addHandler,
+		navigate,
+		patch,
+		refresh,
+		refreshInvalidated,
+		refreshWorkspaces,
+		remove,
+		unstick,
+	]);
 
 	// Drop the pending flag once we've navigated away from the pending session (its
 	// fallback timeout clears it otherwise). We deliberately DON'T clear it the
