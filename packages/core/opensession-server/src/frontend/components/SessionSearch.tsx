@@ -401,6 +401,7 @@ if (!ctrl.signal.aborted) setSearching(false);
 					...(action.shortcut || []),
 				]),
 			)
+			.slice(0, hasQuery ? 24 : 16)
 			.map((action) => ({ type: "action", category: action.category, action }));
 		const prResults: PaletteResult[] = (hasSessionFilter ? [] : openPrs)
 			.filter((pr) =>
