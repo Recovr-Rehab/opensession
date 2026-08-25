@@ -30,7 +30,6 @@ describe("single session ownership", () => {
 		}, 0);
 		expect(sites).toBe(LEGACY_GATEWAY_EFFECT_SITE_BASELINE);
 		expect(LEGACY_GATEWAY_EFFECT_OPERATIONS).toEqual([
-			"answer_question",
 			"cancel_session",
 			"delete_session",
 			"session_file_updated",
@@ -49,6 +48,9 @@ describe("single session ownership", () => {
 		expect(read("queue-state.ts")).toContain("new EphemeralSessionSet");
 		expect(read("asks.ts")).toContain("new AskOwnedMap");
 		expect(read("asks.ts")).toContain("new EphemeralSessionMap");
+		// A committed durable answer survives restore: the projection maps it
+		// to answered state and the rewrite carries its retry identity.
+		expect(read("asks.ts")).toContain("saved.answer ? { answer: saved.answer }");
 		expect(read("queue-state.ts") + read("asks.ts")).not.toContain("SessionOwnedMap");
 		expect(read("session-kernel/kernel.ts")).not.toContain("getRuntime<");
 		expect(read("session-kernel/kernel.ts")).not.toContain("setRuntime<");
@@ -372,7 +374,10 @@ describe("single session ownership", () => {
 		expect(create).not.toMatch(/\bcreateWorktreeForExistingBranch\(/);
 		expect(create).toContain("spec.openingPromptEntryId");
 		expect(wiring).toContain('legacyGatewayEffect("cancel_session"');
-		expect(wiring).toContain('legacyGatewayEffect("answer_question"');
+		// Ask answers settle through the typed actor aggregate, not the
+		// compatibility mailbox.
+		expect(wiring).not.toContain('legacyGatewayEffect("answer_question"');
+		expect(wiring).toContain('op: "answer",');
 		const tools = read("../agents/slack/sessions-tools.ts");
 		expect(tools).toContain("durableToolRequestId");
 		expect(tools).toContain('durableToolRequestId(ctx, "create_session", extra');

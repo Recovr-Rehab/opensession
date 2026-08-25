@@ -388,6 +388,13 @@ export function startSessionKernelActorWorker(): void {
           else if (ask.op === "entries") result = store.askEntries();
           else if (ask.op === "set")
             result = store.setAskRecord(ask.sessionId, ask.value);
+          else if (ask.op === "answer")
+            result = store.answerAskRecord(
+              ask.sessionId,
+              ask.questionId,
+              ask.answers,
+              ask.answeredVia,
+            );
           else if (ask.op === "delete")
             result = store.deleteAskRecord(ask.sessionId);
           else result = store.clearAskRecords();
