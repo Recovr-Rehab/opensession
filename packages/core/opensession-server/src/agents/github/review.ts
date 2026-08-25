@@ -114,6 +114,40 @@ interface ReviewOutput {
   findings?: Finding[];
 }
 
+/**
+ * Derive the contract's 1-5 merge-safety score when a model returns a usable
+ * review in another schema. Codex's `overall_confidence_score` is a 0-1 measure
+ * of certainty, not merge safety, so severity + verdict are the honest fallback.
+ */
+function deriveMergeSafetyScore(verdict: string | undefined, findings: Finding[]): number | undefined {
+  if (!verdict) return undefined;
+
+  let score = verdict === "approve" ? 5 : verdict === "comment" ? 4 : 2;
+  for (const finding of findings) {
+    switch ((finding.severity || "").toLowerCase()) {
+      case "p0":
+        score = Math.min(score, 1);
+        break;
+      case "p1":
+      case "high":
+        score = Math.min(score, 2);
+        break;
+      case "p2":
+      case "medium":
+        score = Math.min(score, 3);
+        break;
+      case "p3":
+      case "low":
+        score = Math.min(score, 4);
+        break;
+      default:
+        // A structured finding with unknown severity is still an unresolved risk.
+        score = Math.min(score, 3);
+    }
+  }
+  return score;
+}
+
 /** What a review concluded, so callers (e.g. auto-fix) can gate on it. */
 export interface ReviewResult {
   verdict?: string;
@@ -888,10 +922,10 @@ export function parseReviewOutput(text: string, cwd?: string): ReviewOutput | nu
               suggestion: typeof f.suggestion === "string" && f.suggestion.trim() ? f.suggestion : undefined,
             }))
         : [];
-      // Contract confidence is merge-safety on a 1-5 scale. An out-of-range value
-      // (typically a 0-1 self-certainty probability) measures a different quantity
-      // — drop it instead of rendering "0.98/5" or letting a scaled-up fraction
-      // satisfy the ≥4/5 "safe to merge" gates on a request_changes review.
+      // Contract confidence is integer merge-safety on a 1-5 scale. An invalid
+      // value (typically Codex's 0-1 self-certainty probability) measures a
+      // different quantity. Derive merge safety from the normalized verdict and
+      // finding severities instead, so every postable review still has a score.
       const rawConfidence = typeof obj.confidence === "number" ? obj.confidence : undefined;
       const verdict =
         typeof obj.verdict === "string"
@@ -901,9 +935,13 @@ export function parseReviewOutput(text: string, cwd?: string): ReviewOutput | nu
             : obj.overall_correctness === "patch is incorrect"
               ? "request_changes"
               : undefined;
+      const confidence =
+        rawConfidence !== undefined && Number.isInteger(rawConfidence) && rawConfidence >= 1 && rawConfidence <= 5
+          ? rawConfidence
+          : deriveMergeSafetyScore(verdict, findings);
       return {
         verdict,
-        confidence: rawConfidence !== undefined && rawConfidence >= 1 && rawConfidence <= 5 ? rawConfidence : undefined,
+        confidence,
         summary_markdown:
           typeof obj.summary_markdown === "string"
             ? obj.summary_markdown
