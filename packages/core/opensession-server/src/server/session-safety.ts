@@ -72,7 +72,7 @@ export function publicSessionSafety(
   return {
     status: "paused_for_safety",
     explanation:
-      "Open Session paused this session because it could not confirm whether the last action finished. Nothing will be retried automatically unless it can be proven safe.",
+      "Open Session paused because it couldn't verify the last action. It won't retry automatically.",
     automaticReconciliationRunning: automaticSafetyReconciliationRunning(
       quarantine.sessionId,
       quarantine,
