@@ -1291,8 +1291,12 @@ summary:focus-visible {
 	}
 
 	.feature-icon {
-		align-self: center;
 		margin-bottom: 0;
+	}
+
+	.feature-icon,
+	.feature-head {
+		align-self: center;
 	}
 
 	.feature-head,
