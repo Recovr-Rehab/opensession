@@ -648,10 +648,14 @@ export function ModelEffortSelect({
 				)}
 			>
 				<span className="flex min-w-0 flex-1 items-center gap-2">
-					{/* The mark's slot is reserved on every row — presets have no vendor
-					    glyph, and their labels must stay on the same x as the models'. */}
+					{/* The slot stays fixed so paired marks can overhang into the gap
+					    without shifting any row labels. */}
 					<span className="flex size-4 shrink-0 items-center justify-center text-dim">
-						<ModelMark id={option.id} provider={option.engine} />
+						<ModelMark
+							id={option.id}
+							provider={option.engine}
+							composition={nextModelInfo?.composition}
+						/>
 					</span>
 					{optionDescription ? (
 						<span className="flex min-w-0 flex-1 flex-col">

@@ -7,7 +7,7 @@ const VENDOR_BRANDS: Record<string, string> = {
 	openai: "codex",
 };
 
-/** Resolve a model id to a brand mark, leaving multi-vendor presets unbranded. */
+/** Resolve one concrete model id to its product-facing brand mark. */
 export function modelBrandKey(id: string, provider?: string): string | null {
 	const vendor = modelVendor(id);
 	if (vendor) {
@@ -19,4 +19,20 @@ export function modelBrandKey(id: string, provider?: string): string | null {
 	if (provider === "codex" || id.startsWith("gpt-") || id.startsWith("codex-"))
 		return "codex";
 	return null;
+}
+
+/**
+ * Resolve every vendor participating in a model choice. Presets carry their
+ * concrete lead/supporting composition from the catalog; repeated vendors
+ * collapse to one mark, while a cross-vendor combo keeps both.
+ */
+export function modelBrandKeys(
+	id: string,
+	provider?: string,
+	composition?: string[],
+): string[] {
+	const keys = (composition?.length ? composition : [id])
+		.map((model) => modelBrandKey(model, provider))
+		.filter((key): key is string => !!key);
+	return [...new Set(keys)];
 }
