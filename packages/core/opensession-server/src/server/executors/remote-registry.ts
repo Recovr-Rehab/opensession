@@ -11,7 +11,8 @@ export class RemoteExecutorRegistrationError extends Error {
   }
 }
 
-export type RemoteExecutorRegistration = RemoteExecutorConnectionOptions;
+export type RemoteExecutorRegistration = RemoteExecutorConnectionOptions &
+  Required<Pick<RemoteExecutorConnectionOptions, "cleanupGrant">>;
 
 /** Explicit registry with one active incarnation per executor and no import-time effects. */
 export class RemoteExecutorRegistry {

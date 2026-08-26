@@ -10,11 +10,15 @@ export interface WebSocketTransportOptions {
   maxFrameBytes?: number;
   maxQueuedBytes?: number;
   bufferedAmountHighWater?: number;
+  maxInboundQueuedBytes?: number;
+  maxInboundQueuedMessages?: number;
 }
 
 const DEFAULT_MAX_FRAME_BYTES = 1_048_576;
 const DEFAULT_MAX_QUEUED_BYTES = 2_097_152;
 const DEFAULT_BUFFERED_HIGH_WATER = 2_097_152;
+const DEFAULT_MAX_INBOUND_QUEUED_BYTES = 2_097_152;
+const DEFAULT_MAX_INBOUND_QUEUED_MESSAGES = 256;
 const encoder = new TextEncoder();
 
 /** Strict JSON transport adapter. It has no effects until Bun dispatches socket events. */
@@ -23,10 +27,16 @@ export class ExecutorWebSocketTransport implements DuplexJsonTransport {
   readonly #maxFrameBytes: number;
   readonly #maxQueuedBytes: number;
   readonly #bufferedHighWater: number;
+  readonly #maxInboundQueuedBytes: number;
+  readonly #maxInboundQueuedMessages: number;
   readonly #messages = new Set<(message: unknown) => void | Promise<void>>();
   readonly #closes = new Set<(reason?: unknown) => void>();
+  readonly #inbound: Array<{ value: unknown; bytes: number }> = [];
   #sendTail: Promise<void> = Promise.resolve();
   #queuedBytes = 0;
+  #inboundBytes = 0;
+  #inboundMessages = 0;
+  #processingInbound = false;
   #closed = false;
 
   constructor(
@@ -46,6 +56,14 @@ export class ExecutorWebSocketTransport implements DuplexJsonTransport {
       options.bufferedAmountHighWater,
       DEFAULT_BUFFERED_HIGH_WATER,
     );
+    this.#maxInboundQueuedBytes = positive(
+      options.maxInboundQueuedBytes,
+      DEFAULT_MAX_INBOUND_QUEUED_BYTES,
+    );
+    this.#maxInboundQueuedMessages = positive(
+      options.maxInboundQueuedMessages,
+      DEFAULT_MAX_INBOUND_QUEUED_MESSAGES,
+    );
   }
 
   onMessage(handler: (message: unknown) => void | Promise<void>): () => void {
@@ -64,23 +82,24 @@ export class ExecutorWebSocketTransport implements DuplexJsonTransport {
     if (this.#closed) return;
     if (typeof data !== "string")
       return this.#fail(1003, "binary frames are not supported");
-    if (encoder.encode(data).byteLength > this.#maxFrameBytes)
+    const bytes = encoder.encode(data).byteLength;
+    if (bytes > this.#maxFrameBytes)
       return this.#fail(1009, "executor frame is too large");
+    if (
+      this.#inboundBytes + bytes > this.#maxInboundQueuedBytes ||
+      this.#inboundMessages + 1 > this.#maxInboundQueuedMessages
+    )
+      return this.#fail(1013, "executor inbound queue is under pressure");
     let value: unknown;
     try {
       value = JSON.parse(data);
     } catch {
       return this.#fail(1007, "executor frame is not valid JSON");
     }
-    for (const handler of [...this.#messages]) {
-      try {
-        void Promise.resolve(handler(value)).catch(() =>
-          this.#fail(1008, "executor frame was rejected"),
-        );
-      } catch {
-        this.#fail(1008, "executor frame was rejected");
-      }
-    }
+    this.#inbound.push({ value, bytes });
+    this.#inboundBytes += bytes;
+    this.#inboundMessages++;
+    void this.#drainInbound();
   }
 
   send(message: unknown): Promise<void> {
@@ -133,6 +152,27 @@ export class ExecutorWebSocketTransport implements DuplexJsonTransport {
     this.#finish(reason);
   }
 
+  async #drainInbound(): Promise<void> {
+    if (this.#processingInbound || this.#closed) return;
+    this.#processingInbound = true;
+    try {
+      while (!this.#closed) {
+        const item = this.#inbound.shift();
+        if (!item) return;
+        try {
+          for (const handler of [...this.#messages]) await handler(item.value);
+        } catch {
+          this.#fail(1008, "executor frame was rejected");
+        } finally {
+          this.#inboundBytes = Math.max(0, this.#inboundBytes - item.bytes);
+          this.#inboundMessages = Math.max(0, this.#inboundMessages - 1);
+        }
+      }
+    } finally {
+      this.#processingInbound = false;
+    }
+  }
+
   #fail(code: number, reason: string): void {
     if (this.#closed) return;
     try {
@@ -145,6 +185,9 @@ export class ExecutorWebSocketTransport implements DuplexJsonTransport {
   #finish(reason?: unknown): void {
     if (this.#closed) return;
     this.#closed = true;
+    this.#inbound.length = 0;
+    this.#inboundBytes = 0;
+    this.#inboundMessages = 0;
     this.#messages.clear();
     for (const handler of [...this.#closes]) handler(reason);
     this.#closes.clear();

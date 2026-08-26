@@ -34,6 +34,10 @@ export interface RemoteExecutorConnectionOptions extends ExecutorConnectionIdent
   deadlineMs?: (context: ExecutorContext) => number;
   maxPending?: number;
   initialStreamCreditBytes?: number;
+  maxRetainedEventBytes?: number;
+  maxRetainedEvents?: number;
+  maxUnknownMessages?: number;
+  cleanupTimeoutMs?: number;
   helloTimeoutMs?: number;
   /** Required by ingress before streaming work can safely outlive its operation grant. */
   cleanupGrant?: (
@@ -53,6 +57,10 @@ interface Pending {
   outcome?: ExecutorSuccess["outcome"];
   events: ExecutorStreamEvent[];
   streamIds: Set<string>;
+  streamCredits: Map<string, number>;
+  streamSequences: Map<string, number>;
+  retainedEventBytes: number;
+  cleanupStarted: boolean;
   timeout: ReturnType<typeof setTimeout>;
   resolve: (result: ExecutorSuccess) => void;
   reject: (error: ExecutorFailure) => void;
@@ -68,6 +76,7 @@ export class RemoteExecutorConnection implements Executor {
   #rejectReady!: (error: Error) => void;
   #connected = true;
   #isReady = false;
+  #unknownMessages = 0;
   #helloTimeout: ReturnType<typeof setTimeout>;
   #off: Array<() => void>;
 
@@ -174,6 +183,10 @@ export class RemoteExecutorConnection implements Executor {
         accepted: false,
         events: [],
         streamIds: new Set(),
+        streamCredits: new Map(),
+        streamSequences: new Map(),
+        retainedEventBytes: 0,
+        cleanupStarted: false,
         timeout,
         resolve,
         reject,
@@ -216,20 +229,29 @@ export class RemoteExecutorConnection implements Executor {
       ),
     );
     for (const off of this.#off.splice(0)) off();
-    void this.#options.transport.close?.("remote executor disconnected");
-    for (const pending of this.#pending.values()) {
+    const cleanup: Promise<void>[] = [];
+    for (const [requestId, pending] of this.#pending) {
       clearTimeout(pending.timeout);
+      cleanup.push(this.#cleanupStreams(requestId, pending));
       pending.reject(
         disconnectedFailure(pending.operation, pending.accepted, reason),
       );
     }
     this.#pending.clear();
+    if (!cleanup.length) {
+      void this.#options.transport.close?.("remote executor disconnected");
+      return;
+    }
+    void Promise.allSettled(cleanup).finally(() =>
+      this.#options.transport.close?.("remote executor disconnected"),
+    );
   }
 
   async #receive(value: unknown): Promise<void> {
     if (!this.#connected) return;
     const hello = decodeExecutorHello(value);
     if (hello) {
+      if (this.#isReady) return this.disconnect("executor hello was repeated");
       if (!sameIdentity(hello, this.identity))
         return this.disconnect("executor hello identity mismatch");
       await this.#options.transport.send({
@@ -245,7 +267,12 @@ export class RemoteExecutorConnection implements Executor {
     if (!message || containsForbiddenField(message))
       return this.disconnect("malformed executor frame");
     const pending = this.#pending.get(message.requestId);
-    if (!pending) return;
+    if (!pending) {
+      this.#unknownMessages++;
+      if (this.#unknownMessages > (this.#options.maxUnknownMessages ?? 32))
+        this.disconnect("too many unknown executor request messages");
+      return;
+    }
     if (message.t === "receipt") {
       if (
         !validReceiptProgression(
@@ -292,16 +319,34 @@ export class RemoteExecutorConnection implements Executor {
       return;
     }
     if (message.t === "event") {
-      const previous = pending.events
-        .filter((event) => event.streamId === message.event.streamId)
-        .at(-1);
-      if (previous && message.event.sequence !== previous.sequence + 1)
-        return this.disconnect("event sequence mismatch");
-      pending.events.push(message.event);
-      pending.streamIds.add(message.event.streamId);
+      const streamId =
+        pending.outcome && "streamId" in pending.outcome
+          ? pending.outcome.streamId
+          : undefined;
       const bytes = eventBytes(message.event);
-      if (bytes > 0)
-        await this.#credit(message.requestId, message.event.streamId, bytes);
+      const retainedBytes = serializedBytes(message.event);
+      const previousSequence = pending.streamSequences.get(
+        message.event.streamId,
+      );
+      if (
+        !streamId ||
+        message.event.streamId !== streamId ||
+        message.event.sequence !== (previousSequence ?? -1) + 1 ||
+        bytes > (pending.streamCredits.get(streamId) ?? 0) ||
+        pending.events.length + 1 >
+          (this.#options.maxRetainedEvents ?? 4_096) ||
+        pending.retainedEventBytes + retainedBytes >
+          (this.#options.maxRetainedEventBytes ?? 4 * 1024 * 1024)
+      )
+        return this.disconnect("executor stream event exceeded its grant");
+      pending.streamCredits.set(
+        streamId,
+        (pending.streamCredits.get(streamId) ?? 0) - bytes,
+      );
+      pending.streamSequences.set(streamId, message.event.sequence);
+      pending.retainedEventBytes += retainedBytes;
+      pending.events.push(message.event);
+      pending.streamIds.add(streamId);
       return;
     }
     if (message.t === "receipt_status") {
@@ -337,13 +382,19 @@ export class RemoteExecutorConnection implements Executor {
       if (!message.outcome) return;
       if (!isExecutorOutcomeCompatible(pending.operation, message.outcome))
         return this.disconnect("outcome is incompatible with operation");
+      const firstOutcome = pending.outcome === undefined;
+      if (
+        pending.outcome &&
+        JSON.stringify(pending.outcome) !== JSON.stringify(message.outcome)
+      )
+        return this.disconnect("executor outcome changed after publication");
       pending.outcome = message.outcome;
       const streamId =
         "streamId" in message.outcome ? message.outcome.streamId : undefined;
       if (pending.events.some((event) => event.streamId !== streamId))
         return this.disconnect("event stream mismatch");
       if (streamId) pending.streamIds.add(streamId);
-      if (streamId && !message.eventsComplete)
+      if (streamId && !message.eventsComplete && firstOutcome)
         await this.#credit(message.requestId, streamId);
       if (message.eventsComplete || !streamId)
         this.#finish(message.requestId, pending);
@@ -360,16 +411,17 @@ export class RemoteExecutorConnection implements Executor {
     });
   }
 
-  async #credit(
-    requestId: string,
-    streamId: string,
-    bytes = Math.max(
-      this.#options.initialStreamCreditBytes ?? 4 * 1024 * 1024,
-      MAX_EXECUTOR_STREAM_EVENT_BYTES,
-    ),
-  ): Promise<void> {
+  async #credit(requestId: string, streamId: string): Promise<void> {
     const pending = this.#pending.get(requestId);
     if (!pending) return;
+    const bytes = Math.min(
+      Math.max(
+        this.#options.initialStreamCreditBytes ?? 4 * 1024 * 1024,
+        MAX_EXECUTOR_STREAM_EVENT_BYTES,
+      ),
+      this.#options.maxRetainedEventBytes ?? 4 * 1024 * 1024,
+    );
+    pending.streamCredits.set(streamId, bytes);
     await this.#options.transport.send({
       t: "stream_credit",
       version: EXECUTOR_PROTOCOL_VERSION,
@@ -388,20 +440,31 @@ export class RemoteExecutorConnection implements Executor {
   }
 
   async #cleanupStreams(requestId: string, pending: Pending): Promise<void> {
-    if (pending.streamIds.size && !this.#options.cleanupGrant) {
-      this.disconnect("fresh stream cleanup grant is unavailable");
-      return;
-    }
-    for (const streamId of pending.streamIds) {
-      try {
+    if (pending.cleanupStarted || !pending.streamIds.size) return;
+    pending.cleanupStarted = true;
+    const streamIds = [...pending.streamIds];
+    pending.streamIds.clear();
+    if (!this.#options.cleanupGrant) return;
+    const reservation = { active: true };
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const timeout = new Promise<void>((resolve) => {
+      timer = setTimeout(() => {
+        reservation.active = false;
+        resolve();
+      }, this.#options.cleanupTimeoutMs ?? 2_000);
+    });
+    const cleanup = Promise.allSettled(
+      streamIds.map(async (streamId) => {
         const cleanupGrant = await this.#options.cleanupGrant!(
           pending.context,
           streamId,
         );
+        if (!reservation.active) return;
+        const cleanupRequestId = this.#id();
         await this.#options.transport.send({
           t: "cancel",
           version: EXECUTOR_PROTOCOL_VERSION,
-          requestId: this.#id(),
+          requestId: cleanupRequestId,
           grant: cleanupGrant,
           fence: {
             rootId: pending.context.rootId,
@@ -411,14 +474,13 @@ export class RemoteExecutorConnection implements Executor {
             deadlineMs: Date.now() + 30_000,
           },
           target: { requestId, streamId },
-          idempotencyKey: `cleanup:${this.#id()}`,
+          idempotencyKey: `cleanup:${cleanupRequestId}`,
         } satisfies ExecutorClientMessage);
-      } catch {
-        this.disconnect("fresh stream cleanup authorization failed");
-        return;
-      }
-    }
-    pending.streamIds.clear();
+      }),
+    ).then(() => {});
+    await Promise.race([cleanup, timeout]);
+    reservation.active = false;
+    if (timer !== undefined) clearTimeout(timer);
   }
 
   #id(): string {
@@ -464,6 +526,9 @@ function sameIdentity(
     left.generation === right.generation &&
     left.capabilities.join("\0") === right.capabilities.join("\0")
   );
+}
+function serializedBytes(value: unknown): number {
+  return new TextEncoder().encode(JSON.stringify(value)).byteLength;
 }
 function eventBytes(event: ExecutorStreamEvent): number {
   return event.kind === "text"

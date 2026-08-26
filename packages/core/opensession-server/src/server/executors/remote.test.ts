@@ -13,6 +13,7 @@ import {
 
 class ManualTransport implements DuplexJsonTransport {
   sent: any[] = [];
+  closeReasons: string[] = [];
   message?: (message: unknown) => void | Promise<void>;
   closed?: (reason?: unknown) => void;
   send(message: unknown): void {
@@ -35,6 +36,9 @@ class ManualTransport implements DuplexJsonTransport {
   }
   drop(reason?: unknown): void {
     this.closed?.(reason);
+  }
+  close(reason?: string): void {
+    this.closeReasons.push(reason ?? "");
   }
 }
 const identity = {
@@ -59,6 +63,43 @@ const hello = {
   requestId: "hello-1",
 };
 const tick = () => new Promise((resolve) => setTimeout(resolve, 0));
+const successWithStream = (eventsComplete: boolean) => ({
+  t: "receipt_status",
+  version: EXECUTOR_PROTOCOL_VERSION,
+  requestId: context.requestId,
+  receipt: {
+    receiptId: "stream-receipt",
+    requestId: context.requestId,
+    state: "succeeded",
+    acceptedAt: "2026-08-22T12:00:00.000Z",
+    completedAt: "2026-08-22T12:00:01.000Z",
+  },
+  outcome: { kind: "fs.read", streamId: "stream-1", size: 2, binary: false },
+  eventsComplete,
+});
+const streamEvent = (sequence: number, data: string) => ({
+  t: "event",
+  version: EXECUTOR_PROTOCOL_VERSION,
+  requestId: context.requestId,
+  event: {
+    kind: "text",
+    streamId: "stream-1",
+    sequence,
+    channel: "file",
+    data,
+  },
+});
+const unknownReceipt = (requestId: string) => ({
+  t: "receipt",
+  version: EXECUTOR_PROTOCOL_VERSION,
+  requestId,
+  receipt: {
+    receiptId: `receipt-${requestId}`,
+    requestId,
+    state: "queued",
+    acceptedAt: "2026-08-22T12:00:00.000Z",
+  },
+});
 
 describe("remote Executor connection", () => {
   test("fences exact incarnation and bounds pending requests", async () => {
@@ -455,6 +496,129 @@ describe("remote Executor connection", () => {
     expect(remote.pendingCount).toBe(0);
   });
 
+  test("rejects repeated hello after readiness", async () => {
+    const transport = new ManualTransport();
+    const remote = new RemoteExecutorConnection({
+      ...identity,
+      capabilities: [...identity.capabilities],
+      transport,
+      grant,
+    });
+    transport.receive(hello);
+    await remote.ready();
+    transport.receive(hello);
+    await tick();
+    expect(remote.connected).toBe(false);
+    expect(transport.closeReasons).toContain("remote executor disconnected");
+  });
+
+  test("fences pre-outcome events, retained floods, credit overruns, and unknown request floods", async () => {
+    const make = (options: Record<string, number> = {}) => {
+      const transport = new ManualTransport();
+      const remote = new RemoteExecutorConnection({
+        ...identity,
+        ...options,
+        capabilities: [...identity.capabilities],
+        transport,
+        grant,
+      });
+      transport.receive(hello);
+      return { transport, remote };
+    };
+    const before = make();
+    await before.remote.ready();
+    const beforeResult = before.remote.execute(context, {
+      kind: "fs.read",
+      path: "x",
+    });
+    void beforeResult.catch(() => {});
+    await tick();
+    expect(before.remote.pendingCount).toBe(1);
+    before.transport.receive({
+      t: "event",
+      version: EXECUTOR_PROTOCOL_VERSION,
+      requestId: context.requestId,
+      event: {
+        kind: "text",
+        streamId: "stream-1",
+        sequence: 0,
+        channel: "file",
+        data: "x",
+      },
+    });
+    await tick();
+    expect(before.remote.connected).toBe(false);
+    expect(before.remote.pendingCount).toBe(0);
+
+    const retained = make({ maxRetainedEvents: 1 });
+    await retained.remote.ready();
+    const retainedResult = retained.remote.execute(context, {
+      kind: "fs.read",
+      path: "x",
+    });
+    void retainedResult.catch(() => {});
+    await tick();
+    retained.transport.receive(successWithStream(false));
+    await tick();
+    retained.transport.receive(streamEvent(0, ""));
+    retained.transport.receive(streamEvent(1, ""));
+    await tick();
+    expect(retained.remote.connected).toBe(false);
+
+    const credit = make({ maxRetainedEventBytes: 64 });
+    await credit.remote.ready();
+    const creditResult = credit.remote.execute(context, {
+      kind: "fs.read",
+      path: "x",
+    });
+    void creditResult.catch(() => {});
+    await tick();
+    credit.transport.receive(successWithStream(false));
+    await tick();
+    credit.transport.receive(streamEvent(0, "x"));
+    await tick();
+    expect(credit.remote.connected).toBe(false);
+
+    const unknown = make({ maxUnknownMessages: 1 });
+    await unknown.remote.ready();
+    unknown.transport.receive(unknownReceipt("unknown-1"));
+    unknown.transport.receive(unknownReceipt("unknown-2"));
+    await tick();
+    expect(unknown.remote.connected).toBe(false);
+  });
+
+  test("bounds disconnect cleanup and fences a late fresh-grant result", async () => {
+    const transport = new ManualTransport();
+    let release!: (grant: ExecutorGrant) => void;
+    const cleanupGrant = new Promise<ExecutorGrant>((resolve) => {
+      release = resolve;
+    });
+    const remote = new RemoteExecutorConnection({
+      ...identity,
+      capabilities: [...identity.capabilities],
+      transport,
+      grant,
+      cleanupGrant: () => cleanupGrant,
+      cleanupTimeoutMs: 5,
+    });
+    transport.receive(hello);
+    await remote.ready();
+    const result = remote.execute(context, { kind: "fs.read", path: "x" });
+    void result.catch(() => {});
+    await tick();
+    transport.receive(successWithStream(false));
+    await tick();
+    remote.disconnect("replaced");
+    expect(remote.pendingCount).toBe(0);
+    await new Promise((resolve) => setTimeout(resolve, 10));
+    expect(transport.closeReasons).toContain("remote executor disconnected");
+    release(grant);
+    await tick();
+    expect(
+      transport.sent.filter((message) => message.t === "cancel"),
+    ).toHaveLength(0);
+  });
+
   test("treats read disconnects as retryable uncertainty", async () => {
     const transport = new ManualTransport();
     const remote = new RemoteExecutorConnection({
@@ -490,6 +654,7 @@ describe("remote Executor registry", () => {
       capabilities: [...identity.capabilities],
       transport: new ManualTransport(),
       grant,
+      cleanupGrant: () => grant,
     });
     expect(() =>
       registry.register({
@@ -498,6 +663,7 @@ describe("remote Executor registry", () => {
         instanceId: "instance-2",
         transport: new ManualTransport(),
         grant,
+        cleanupGrant: () => grant,
       }),
     ).toThrow(RemoteExecutorRegistrationError);
     registry.disconnect(identity.executorId);
@@ -506,6 +672,7 @@ describe("remote Executor registry", () => {
       capabilities: [...identity.capabilities],
       transport: new ManualTransport(),
       grant,
+      cleanupGrant: () => grant,
     });
     expect(registry.unregisterConnection(first)).toBe(false);
     expect(() =>
@@ -516,6 +683,7 @@ describe("remote Executor registry", () => {
         instanceId: "old",
         transport: new ManualTransport(),
         grant,
+        cleanupGrant: () => grant,
       }),
     ).toThrowError(/stale/);
     const next = registry.register({
@@ -525,6 +693,7 @@ describe("remote Executor registry", () => {
       instanceId: "next",
       transport: new ManualTransport(),
       grant,
+      cleanupGrant: () => grant,
     });
     expect(reconnect.connected).toBe(false);
     expect(registry.unregisterConnection(reconnect)).toBe(false);

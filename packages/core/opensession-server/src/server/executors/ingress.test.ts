@@ -69,7 +69,16 @@ function request(
   });
 }
 
-function setup(options: { helloTimeoutMs?: number } = {}) {
+function setup(
+  options: {
+    helloTimeoutMs?: number;
+    claimTimeoutMs?: number;
+    upgradeTimeoutMs?: number;
+    maxPendingUpgrades?: number;
+    createId?: () => string;
+    claimInstance?: ExecutorAuthority["claimInstance"];
+  } = {},
+) {
   const registry = new RemoteExecutorRegistry();
   const consumed = new Set<string>();
   const claimed = new Map<string, { generation: number; instanceId: string }>();
@@ -83,26 +92,29 @@ function setup(options: { helloTimeoutMs?: number } = {}) {
     executorId,
     generation,
     capabilities,
-    claimInstance: (claim) => {
-      const prior = claimed.get(claim.executorId);
-      if (
-        prior &&
-        (claim.generation < prior.generation ||
-          (claim.generation === prior.generation &&
-            claim.instanceId !== prior.instanceId))
-      )
-        return false;
-      claimed.set(claim.executorId, {
-        generation: claim.generation,
-        instanceId: claim.instanceId,
-      });
-      return true;
-    },
+    claimInstance:
+      options.claimInstance ??
+      ((claim) => {
+        const prior = claimed.get(claim.executorId);
+        if (
+          prior &&
+          (claim.generation < prior.generation ||
+            (claim.generation === prior.generation &&
+              claim.instanceId !== prior.instanceId))
+        )
+          return false;
+        claimed.set(claim.executorId, {
+          generation: claim.generation,
+          instanceId: claim.instanceId,
+        });
+        return true;
+      }),
     resolveGrant: () => grant,
+    resolveCleanupGrant: () => grant,
   });
   const ingress = new ExecutorIngress({
     registry,
-    createId: () => `connection-${++nextId}`,
+    createId: options.createId ?? (() => `connection-${++nextId}`),
     now: () => 1_000,
     timers: {
       setTimeout: (callback, milliseconds) =>
@@ -139,7 +151,12 @@ function setup(options: { helloTimeoutMs?: number } = {}) {
       executorId === "not-connectable"
         ? undefined
         : authority(executorId, generation, ["fs", "process"]),
-    connectionPolicy: { helloTimeoutMs: options.helloTimeoutMs ?? 50 },
+    connectionPolicy: {
+      helloTimeoutMs: options.helloTimeoutMs ?? 50,
+      claimTimeoutMs: options.claimTimeoutMs,
+      upgradeTimeoutMs: options.upgradeTimeoutMs,
+      maxPendingUpgrades: options.maxPendingUpgrades,
+    },
   });
   return { ingress, registry, authCalls, consumed };
 }
@@ -206,6 +223,12 @@ describe("Executor ingress HTTP authentication", () => {
         )
       )?.status,
     ).toBe(400);
+    const lowercase = request();
+    lowercase.headers.set("authorization", "bEaReR secret-token");
+    expect((await upgrade(ingress, lowercase)).response).toBeUndefined();
+    const multiple = request();
+    multiple.headers.set("authorization", "Bearer secret-token,Basic other");
+    expect((await upgrade(ingress, multiple)).response?.status).toBe(401);
   });
 
   test("passes runner identity, bearer, and peer address only to injected tailnet+pair auth", async () => {
@@ -245,6 +268,58 @@ describe("Executor ingress HTTP authentication", () => {
       "100.64.0.1",
     );
     expect(response?.status).toBe(400);
+  });
+
+  test("bounds pending upgrades, expires reservations, and refuses connection ID collisions", async () => {
+    const bounded = setup({ maxPendingUpgrades: 1, upgradeTimeoutMs: 50 });
+    expect(
+      await bounded.ingress.handleUpgrade(
+        request(),
+        { upgrade: () => true },
+        "100.64.0.1",
+      ),
+    ).toBeUndefined();
+    expect(
+      (
+        await bounded.ingress.handleUpgrade(
+          request(),
+          { upgrade: () => true },
+          "100.64.0.1",
+        )
+      )?.status,
+    ).toBe(429);
+
+    const colliding = setup({
+      createId: () => "same-connection",
+      maxPendingUpgrades: 2,
+      upgradeTimeoutMs: 5,
+    });
+    expect(
+      await colliding.ingress.handleUpgrade(
+        request(),
+        { upgrade: () => true },
+        "100.64.0.1",
+      ),
+    ).toBeUndefined();
+    expect(
+      (
+        await colliding.ingress.handleUpgrade(
+          request(),
+          { upgrade: () => true },
+          "100.64.0.1",
+        )
+      )?.status,
+    ).toBe(429);
+    await new Promise((resolve) => setTimeout(resolve, 10));
+    expect(
+      await colliding.ingress.handleUpgrade(
+        request(),
+        { upgrade: () => true },
+        "100.64.0.1",
+      ),
+    ).toBeUndefined();
+    colliding.ingress.shutdown();
+    bounded.ingress.shutdown();
   });
 
   test("burns managed enrollment before lifecycle checks and refuses replay, expiry, and record mismatch", async () => {
@@ -288,6 +363,39 @@ describe("Executor ingress socket lifecycle", () => {
     expect((await upgrade(ingress, enrollment)).response?.status).toBe(401);
   });
 
+  test("replaces the hello deadline with a bounded claim reservation and fences late claims", async () => {
+    const delayed = setup({
+      helloTimeoutMs: 5,
+      claimTimeoutMs: 40,
+      claimInstance: async () => {
+        await new Promise((resolve) => setTimeout(resolve, 10));
+        return true;
+      },
+    });
+    const healthy = await upgrade(delayed.ingress);
+    await sendHello(delayed.ingress, healthy.socket!, hello());
+    await new Promise((resolve) => setTimeout(resolve, 10));
+    expect(delayed.registry.get("runner-1")?.isReady).toBe(true);
+    expect(healthy.socket!.closes).toHaveLength(0);
+
+    let release!: (claimed: boolean) => void;
+    const stalled = setup({
+      helloTimeoutMs: 5,
+      claimTimeoutMs: 5,
+      claimInstance: () =>
+        new Promise<boolean>((resolve) => {
+          release = resolve;
+        }),
+    });
+    const late = await upgrade(stalled.ingress);
+    stalled.ingress.websocket.message(late.socket!, JSON.stringify(hello()));
+    await new Promise((resolve) => setTimeout(resolve, 10));
+    expect(late.socket!.closes.at(-1)?.[1]).toContain("claim timed out");
+    release(true);
+    await tick();
+    expect(stalled.registry.get("runner-1")).toBeUndefined();
+  });
+
   test("accepts only exact, policy-bounded hello before exposing a ready remote", async () => {
     const { ingress, registry } = setup();
     const { socket } = await upgrade(ingress);
@@ -298,6 +406,11 @@ describe("Executor ingress socket lifecycle", () => {
       t: "hello",
       accepted: true,
     });
+    ingress.websocket.message(socket!, JSON.stringify(hello()));
+    await tick();
+    expect(socket!.closes.at(-1)?.[1]).toContain(
+      "remote executor disconnected",
+    );
   });
 
   test("rejects unsupported, malformed, forbidden, mismatched, escalating, oversized, and binary hello", async () => {

@@ -42,7 +42,7 @@ export interface ExecutorAuthority {
     context: ExecutorContext,
     operation: ExecutorOperation,
   ) => ExecutorGrant | Promise<ExecutorGrant>;
-  resolveCleanupGrant?: (
+  resolveCleanupGrant: (
     context: ExecutorContext,
     streamId: string,
   ) => ExecutorGrant | Promise<ExecutorGrant>;
@@ -52,6 +52,7 @@ export type ExecutorAuthenticationResult =
   { ok: true; authority: ExecutorAuthority } | { ok: false; status: 401 | 403 };
 
 export interface ExecutorIngressOptions {
+  /** Boot must supply the socket peer address, never a forwarded client header. */
   authenticateRunner: (input: {
     runnerId: string;
     token: string;
@@ -78,6 +79,9 @@ export interface ExecutorIngressOptions {
   }) => boolean | Promise<boolean>;
   connectionPolicy?: WebSocketTransportOptions & {
     helloTimeoutMs?: number;
+    claimTimeoutMs?: number;
+    upgradeTimeoutMs?: number;
+    maxPendingUpgrades?: number;
     maxHeaders?: number;
     maxHeaderBytes?: number;
   };
@@ -94,13 +98,16 @@ export interface ExecutorUpgradeServer {
 interface PendingUpgrade {
   data: ExecutorUpgradeData;
   authority: ExecutorAuthority;
+  timer: unknown;
 }
 
 interface SocketState {
   data: ExecutorUpgradeData;
   transport: ExecutorWebSocketTransport;
   phase: "hello" | "claiming" | "ready" | "closed";
-  helloTimer: unknown;
+  helloTimer?: unknown;
+  claimTimer?: unknown;
+  claimReservation?: object;
   helloOff?: () => void;
   remote?: RemoteExecutorConnection;
 }
@@ -143,6 +150,11 @@ export class ExecutorIngress {
       }))
     )
       return response(429, "too many executor connection attempts");
+    if (
+      this.#pending.size >=
+      (this.#options.connectionPolicy?.maxPendingUpgrades ?? 256)
+    )
+      return response(429, "too many pending executor upgrades");
     const token = bearer(request.headers.get("authorization"));
     if (!token) return response(401, "unauthorized");
 
@@ -173,7 +185,8 @@ export class ExecutorIngress {
       } catch {
         return response(401, "unauthorized");
       }
-      // Consumption intentionally precedes all durable-state checks. Accepted grants burn once.
+      // Consumption intentionally precedes all durable-state checks. Accepted grants burn once;
+      // every retry, including after hello rejection, requires a fresh one-use enrollment.
       if (enrollment.expiresAtMs <= this.#options.now())
         return response(401, "unauthorized");
       if (
@@ -192,16 +205,32 @@ export class ExecutorIngress {
       authority.generation !== generation
     )
       return response(403, "executor authorization does not match");
+    if (
+      this.#pending.size >=
+      (this.#options.connectionPolicy?.maxPendingUpgrades ?? 256)
+    )
+      return response(429, "too many pending executor upgrades");
 
+    const connectionId = this.#connectionId();
+    if (!connectionId) return response(429, "executor connection IDs are busy");
     const data: ExecutorUpgradeData = {
       source,
       executorId,
       generation,
-      connectionId: this.#options.createId(),
+      connectionId,
     };
-    this.#pending.set(data.connectionId, { data, authority });
+    const pending: PendingUpgrade = {
+      data,
+      authority,
+      timer: this.#timers.setTimeout(
+        () => this.#pending.delete(connectionId),
+        this.#options.connectionPolicy?.upgradeTimeoutMs ?? 10_000,
+      ),
+    };
+    this.#pending.set(connectionId, pending);
     if (!server.upgrade(request, { data })) {
-      this.#pending.delete(data.connectionId);
+      this.#timers.clearTimeout(pending.timer);
+      this.#pending.delete(connectionId);
       return response(400, "executor upgrade failed");
     }
     return undefined;
@@ -220,6 +249,8 @@ export class ExecutorIngress {
   shutdown(): void {
     if (this.#shuttingDown) return;
     this.#shuttingDown = true;
+    for (const pending of this.#pending.values())
+      this.#timers.clearTimeout(pending.timer);
     this.#pending.clear();
     for (const state of [...this.#sockets.values()])
       state.transport.close("executor ingress shut down");
@@ -240,6 +271,7 @@ export class ExecutorIngress {
       socket.close(1008, "executor upgrade is not authorized");
       return;
     }
+    this.#timers.clearTimeout(pending.timer);
     this.#pending.delete(socket.data.connectionId);
     const transport = new ExecutorWebSocketTransport(
       socket,
@@ -265,7 +297,15 @@ export class ExecutorIngress {
     socket: BunExecutorSocket,
     data: string | ArrayBuffer | ArrayBufferView,
   ): void {
-    this.#sockets.get(socket.data.connectionId)?.transport.receive(data);
+    const state = this.#sockets.get(socket.data.connectionId);
+    if (!state) return;
+    if (state.phase === "claiming") {
+      state.transport.close(
+        "work is not allowed before executor hello completes",
+      );
+      return;
+    }
+    state.transport.receive(data);
   }
 
   #close(socket: BunExecutorSocket, reason?: unknown): void {
@@ -283,7 +323,6 @@ export class ExecutorIngress {
       );
       return;
     }
-    state.phase = "claiming";
     const hello = decodeExecutorHello(value);
     if (
       !hello ||
@@ -296,6 +335,17 @@ export class ExecutorIngress {
       state.transport.close("executor hello was rejected");
       return;
     }
+    state.phase = "claiming";
+    if (state.helloTimer !== undefined) {
+      this.#timers.clearTimeout(state.helloTimer);
+      state.helloTimer = undefined;
+    }
+    const reservation = {};
+    state.claimReservation = reservation;
+    state.claimTimer = this.#timers.setTimeout(() => {
+      if (state.phase === "claiming" && state.claimReservation === reservation)
+        state.transport.close("executor instance claim timed out");
+    }, this.#options.connectionPolicy?.claimTimeoutMs ?? 10_000);
     let claimed = false;
     try {
       claimed = await authority.claimInstance({
@@ -306,10 +356,20 @@ export class ExecutorIngress {
     } catch {
       // Durable claim failures fail closed.
     }
-    if (!claimed || !this.#sockets.has(state.data.connectionId)) {
+    if (state.claimTimer !== undefined) {
+      this.#timers.clearTimeout(state.claimTimer);
+      state.claimTimer = undefined;
+    }
+    if (
+      !claimed ||
+      !this.#sockets.has(state.data.connectionId) ||
+      state.phase !== "claiming" ||
+      state.claimReservation !== reservation
+    ) {
       state.transport.close("executor instance claim was rejected");
       return;
     }
+    state.claimReservation = undefined;
     state.helloOff?.();
     state.helloOff = undefined;
     try {
@@ -326,8 +386,12 @@ export class ExecutorIngress {
       });
       state.remote = remote;
       state.transport.receive(JSON.stringify(hello));
-      await remote.ready();
-      if (this.#sockets.has(state.data.connectionId)) state.phase = "ready";
+      void remote
+        .ready()
+        .then(() => {
+          if (this.#sockets.has(state.data.connectionId)) state.phase = "ready";
+        })
+        .catch(() => state.transport.close("executor registration failed"));
     } catch (error) {
       state.transport.close(
         error instanceof RemoteExecutorRegistrationError
@@ -340,11 +404,23 @@ export class ExecutorIngress {
   #finish(state: SocketState, reason?: unknown): void {
     if (state.phase === "closed") return;
     state.phase = "closed";
-    this.#timers.clearTimeout(state.helloTimer);
+    if (state.helloTimer !== undefined)
+      this.#timers.clearTimeout(state.helloTimer);
+    if (state.claimTimer !== undefined)
+      this.#timers.clearTimeout(state.claimTimer);
+    state.claimReservation = undefined;
     state.helloOff?.();
     this.#sockets.delete(state.data.connectionId);
     if (state.remote) this.#options.registry.unregisterConnection(state.remote);
     void reason;
+  }
+
+  #connectionId(): string | undefined {
+    for (let attempt = 0; attempt < 8; attempt++) {
+      const id = this.#options.createId();
+      if (id && !this.#pending.has(id) && !this.#sockets.has(id)) return id;
+    }
+    return undefined;
   }
 }
 
@@ -359,6 +435,8 @@ function validateRequest(
     url.search
   )
     return response(400, "invalid executor upgrade request");
+  // Request headers are already normalized by Bun. Boot must enforce equivalent
+  // limits on raw header count/bytes before constructing this Request.
   let count = 0;
   let bytes = 0;
   for (const [name, value] of request.headers) {
@@ -394,8 +472,8 @@ function validateRequest(
 }
 
 function bearer(value: string | null): string | undefined {
-  if (!value || !/^Bearer [\x21-\x7e]{1,4096}$/.test(value)) return undefined;
-  return value.slice(7);
+  const match = value?.match(/^Bearer ([\x21-\x2b\x2d-\x7e]{1,4096})$/i);
+  return match?.[1];
 }
 
 function sameUpgradeData(
