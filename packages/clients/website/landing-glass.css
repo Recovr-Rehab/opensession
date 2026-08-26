@@ -18,11 +18,23 @@
 	--primary-pop-ink: oklch(0.192 0.041 105.17);
 }
 
+/* Safari paints exposed safe-area and rubber-band regions from the root
+   canvas, not from a negative body layer. Put the same artwork on that lowest
+   canvas so those regions cannot fall back to the body's white background. */
+html {
+	min-height: 100%;
+	background-color: var(--page);
+	background-image: var(--page-art);
+	background-position: center;
+	background-repeat: no-repeat;
+	background-size: cover;
+}
+
 body {
 	position: relative;
 	isolation: isolate;
 	min-height: 100vh;
-	background-color: var(--page);
+	background-color: transparent;
 }
 
 body::before {
