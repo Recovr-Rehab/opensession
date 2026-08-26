@@ -530,7 +530,17 @@ export function FirstMile({ onDone }: { onDone: () => Promise<void> }) {
 										</p>
 									</div>
 
-									<div className="w-full max-w-[820px] pb-8 [&_.bg-settings-plate]:rounded-2xl [&_.bg-settings-plate]:border-transparent [&_.bg-settings-plate]:bg-blue-soft/65 [&_.bg-settings-plate]:shadow-[inset_0_1px_0_color-mix(in_srgb,white_45%,transparent),0_18px_46px_-36px_color-mix(in_srgb,var(--blue)_48%,transparent)] [&_[data-setting-description]]:hidden [&_[data-settings-hint]]:hidden">
+									{/* Keep the settings-page plate, hairline, and rhythm. Onboarding
+									    only promotes the type because there is no settings page title
+									    above these groups. */}
+									<div
+										className={cn(
+											"w-full max-w-[820px] pb-8 [&_[data-setting-title]]:text-dialog-title",
+											// First-run fields use the large field step, with extra room
+											// for the fixed-width organization and product names.
+											"[&_input]:h-9 [&_input]:min-h-9 [&_input]:px-3 [&_input]:text-base [&_select]:min-h-9 [&_textarea]:min-h-9 [&_input[data-setup-field]]:w-[240px] [&_input[data-setup-field='org-name']]:w-[320px]",
+										)}
+									>
 										{step.id === "ingress" && (
 											<IngressPanel
 												onboarding
