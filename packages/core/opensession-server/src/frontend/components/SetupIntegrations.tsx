@@ -99,7 +99,7 @@ setToggling(false);
 						<p className="m-0 mt-1 text-supporting leading-relaxed text-dim">
 							{INTEGRATION_DESCRIPTIONS[integration.id] ?? `Connect ${integration.label} to Open Session.`}
 						</p>
-						{integration.missingRequired.length > 0 && (
+						{integration.enabled && integration.missingRequired.length > 0 && (
 							<div className="mt-2 text-meta text-yellow">
 								Missing {integration.missingRequired.join(", ")}
 							</div>
