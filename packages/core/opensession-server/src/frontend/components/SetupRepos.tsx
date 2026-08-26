@@ -21,7 +21,12 @@ import {
 	settingsInputClass,
 } from "../ui/settings";
 import { toast } from "../ui/toast";
-import { IconArrowUpToLine, IconDotsHorizontal, IconPlus } from "./icons";
+import {
+	IconArrowUpToLine,
+	IconBranches,
+	IconDotsHorizontal,
+	IconPlus,
+} from "./icons";
 import { RepoTile } from "./RepoTile";
 import { REPO_TILE_COLORS, REPO_TILE_INK, repoColor, repoIconFill } from "../lib/repo-colors";
 import { repoLetter } from "../lib/repo-label";
@@ -219,11 +224,13 @@ function RepositoryRow({
 	const [isolatedWorktrees, setIsolatedWorktrees] = useState(
 		repo.isolatedWorktrees,
 	);
+	const [branchDialogOpen, setBranchDialogOpen] = useState(false);
 	const [saving, setSaving] = useState<"branch" | "worktrees" | null>(null);
 	const [branchError, setBranchError] = useState<string | null>(null);
 	const [worktreeError, setWorktreeError] = useState<string | null>(null);
 	const branchErrorId = useId();
 	const worktreeErrorId = useId();
+	const branchInputRef = useRef<HTMLInputElement>(null);
 
 	useEffect(() => {
 		setBranch(defaultBranch);
@@ -251,6 +258,7 @@ const updated = await setupRequest<{
 			setBranch(updated.defaultBranch);
 			if (onRepoUpdated) onRepoUpdated(updated);
 			else await onChanged();
+			setBranchDialogOpen(false);
 			toast(`${repo.label} default branch updated`);
 })().catch(async (e: any) => {
 setBranchError(e.message);
@@ -286,85 +294,134 @@ setSaving(null);
 });
 	}
 
+	function openBranchDialog() {
+		setBranch(defaultBranch);
+		setBranchError(null);
+		setBranchDialogOpen(true);
+	}
+
 	return (
-		<SettingRow className="items-start">
-			<RepoTileButton
-				repo={appearance}
-				id={repo.id}
-				onChanged={onAppearanceChanged}
-			/>
-			<SettingRowText>
-				<div className="flex items-center justify-between gap-2">
-					<SettingRowTitle className="min-w-0 truncate">{repo.label}</SettingRowTitle>
-					<span className="hidden shrink-0 phone:inline-flex">
+		<>
+			<SettingRow className="items-start">
+				<RepoTileButton
+					repo={appearance}
+					id={repo.id}
+					onChanged={onAppearanceChanged}
+				/>
+				<SettingRowText>
+					<div className="flex items-center justify-between gap-2">
+						<SettingRowTitle className="min-w-0 truncate">{repo.label}</SettingRowTitle>
+						<span className="hidden shrink-0 phone:inline-flex">
+							<StateChip tone={lifecycle.tone} label={lifecycle.label} />
+						</span>
+					</div>
+					<SettingRowDescription className="truncate font-mono text-meta">
+						{repo.path}
+					</SettingRowDescription>
+					{worktreeError && (
+						<InlineAlert id={worktreeErrorId} className="mt-1.5">
+							{worktreeError}
+						</InlineAlert>
+					)}
+				</SettingRowText>
+				<div className="flex shrink-0 items-center gap-2">
+					<span className="phone:hidden">
 						<StateChip tone={lifecycle.tone} label={lifecycle.label} />
 					</span>
-				</div>
-				<SettingRowDescription className="truncate font-mono text-meta">
-					{repo.path}
-				</SettingRowDescription>
-				<form className="mt-2 flex flex-wrap items-end gap-2" onSubmit={saveBranch}>
-					<Field label="Default branch" className="w-44">
-						<Input
-							className="font-mono"
-							value={branch}
-							onChange={(event) => {
-								setBranch(event.target.value);
-								setBranchError(null);
-							}}
-							disabled={!!saving}
-							aria-invalid={!!branchError}
-							aria-describedby={branchError ? branchErrorId : undefined}
-							autoCapitalize="none"
-							autoCorrect="off"
-							spellCheck={false}
-						/>
-					</Field>
-					<Button
-						type="submit"
-						size="sm"
-						disabled={!normalized || !changed || !!saving}
-					>
-						{saving === "branch" ? "Saving…" : "Save"}
-					</Button>
-				</form>
-				{branchError && (
-					<InlineAlert id={branchErrorId} className="mt-1.5">
-						{branchError}
-					</InlineAlert>
-				)}
-				{worktreeError && (
-					<InlineAlert id={worktreeErrorId} className="mt-1.5">
-						{worktreeError}
-					</InlineAlert>
-				)}
-			</SettingRowText>
-			<div className="flex shrink-0 items-center gap-2">
-				<span className="phone:hidden">
-					<StateChip tone={lifecycle.tone} label={lifecycle.label} />
-				</span>
-				<Menu.Root>
-					<Menu.Trigger
-						className={rowMenuTriggerClasses}
-						aria-label={`Manage ${repo.label}`}
-					>
-						<IconDotsHorizontal size={18} />
-					</Menu.Trigger>
-					<Menu.Popup align="end" sideOffset={4}>
-						<Menu.CheckboxItem
-							checked={isolatedWorktrees}
-							disabled={!!saving}
-							aria-describedby={worktreeError ? worktreeErrorId : undefined}
-							onCheckedChange={(next) => void saveWorktreeMode(next)}
-							closeOnClick
+					<Menu.Root>
+						<Menu.Trigger
+							className={rowMenuTriggerClasses}
+							aria-label={`Manage ${repo.label}`}
 						>
-							<span className="min-w-0 flex-1 truncate">Use isolated worktrees</span>
-							<Menu.Check on={isolatedWorktrees} />
-						</Menu.CheckboxItem>
-					</Menu.Popup>
-				</Menu.Root>
-			</div>
-		</SettingRow>
+							<IconDotsHorizontal size={18} />
+						</Menu.Trigger>
+						<Menu.Popup align="end" sideOffset={4}>
+							<Menu.Item onClick={openBranchDialog}>
+								<IconBranches size={17} className="text-dim" />
+								<span className="min-w-0 flex-1 truncate">Default branch</span>
+								<Menu.Shortcut className="max-w-28 truncate font-mono">
+									{defaultBranch}
+								</Menu.Shortcut>
+							</Menu.Item>
+							<Menu.Separator />
+							<Menu.CheckboxItem
+								checked={isolatedWorktrees}
+								disabled={!!saving}
+								aria-describedby={worktreeError ? worktreeErrorId : undefined}
+								onCheckedChange={(next) => void saveWorktreeMode(next)}
+								closeOnClick
+							>
+								<span className="min-w-0 flex-1 truncate">Use isolated worktrees</span>
+								<Menu.Check on={isolatedWorktrees} />
+							</Menu.CheckboxItem>
+						</Menu.Popup>
+					</Menu.Root>
+				</div>
+			</SettingRow>
+			<Modal.Root
+				open={branchDialogOpen}
+				onOpenChange={(open) => {
+					if (saving === "branch") return;
+					setBranchDialogOpen(open);
+					if (!open) {
+						setBranch(defaultBranch);
+						setBranchError(null);
+					}
+				}}
+				disablePointerDismissal={saving === "branch"}
+			>
+				<Modal.Content initialFocus={branchInputRef}>
+					<form className="flex flex-col gap-4" onSubmit={saveBranch}>
+						<Modal.Header
+							title={
+								<span className="flex items-center gap-2.5">
+									<RepoTile name={repo.id} size={28} />
+									<span className="min-w-0 truncate">Default branch</span>
+								</span>
+							}
+							description={`Choose the branch new sessions use for ${repo.label}.`}
+						/>
+						<Field label="Branch">
+							<Input
+								ref={branchInputRef}
+								className="font-mono phone:min-h-11 phone:text-input-phone"
+								value={branch}
+								onChange={(event) => {
+									setBranch(event.target.value);
+									setBranchError(null);
+								}}
+								disabled={saving === "branch"}
+								aria-invalid={!!branchError}
+								aria-describedby={branchError ? branchErrorId : undefined}
+								autoCapitalize="none"
+								autoCorrect="off"
+								spellCheck={false}
+							/>
+						</Field>
+						{branchError && <InlineAlert id={branchErrorId}>{branchError}</InlineAlert>}
+						<Modal.Footer>
+							<Button
+								type="button"
+								variant="ghost"
+								className="phone:min-h-11"
+								disabled={saving === "branch"}
+								onClick={() => setBranchDialogOpen(false)}
+							>
+								Cancel
+							</Button>
+							<Button
+								type="submit"
+								variant="primary"
+								className="phone:min-h-11"
+								disabled={!normalized || !changed || !!saving}
+							>
+								{saving === "branch" ? "Saving…" : "Save"}
+							</Button>
+						</Modal.Footer>
+					</form>
+				</Modal.Content>
+			</Modal.Root>
+		</>
 	);
 }
 
