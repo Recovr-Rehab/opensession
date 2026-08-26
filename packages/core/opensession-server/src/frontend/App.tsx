@@ -12,6 +12,7 @@ import {
 import { reviewRequestTargetsPerson } from "./lib/review-queue";
 import { repoLabel } from "./lib/repo-label";
 import { NO_REPO } from "./lib/session-repo";
+import { sessionReferenceTitle } from "./lib/session-title";
 import { ASK_BAND } from "./lib/sidebar-workspaces";
 import {
 	sidebarStartsCollapsed,
@@ -828,21 +829,17 @@ export function App(
 	// can't read this from context, so hand it the names we already poll.
 	// No-ops unless a name actually changed.
 	//
-	// The name is the WORKSPACE's, not the session's, for the same reason a
-	// sidebar row takes it (Sidebar.tsx) and the viewer header shows it: a
-	// reference is read as "that piece of work", and clicking one lands on a
-	// page titled after the workspace. Labelling the chip after one of its
-	// tabs promised a name the destination doesn't show. That tab is often a
-	// machine-made per-run label ("Review · PR #5741 …") where the workspace
-	// is what a person recognizes. A session title is the fallback, for a
-	// session whose workspace this client has no name for.
+	// Human sessions name the workspace they open, matching the sidebar and
+	// viewer header. Worker references are different: their session title says
+	// which delegated task the chip opens, while their inherited workspace name
+	// would incorrectly repeat the parent session's subject for every worker.
 	useEffect(() => {
 		setSessionTitles(
 			sessions.map(
 				(s) =>
 					[
 						s.id,
-						s.workspaceName || s.title,
+						sessionReferenceTitle(s),
 						s.isRunning,
 						s.title,
 						s.aliasIds,
@@ -883,7 +880,7 @@ export function App(
 									...(session
 										? {
 												id: session.id,
-												title: session.workspaceName || session.title,
+												title: sessionReferenceTitle(session),
 												tabTitle: session.title,
 												aliases: session.aliasIds,
 												archived: session.archived === true,
