@@ -190,14 +190,15 @@ summary:focus-visible {
 }
 
 .rail-actions .button {
-	flex: 1 1 0;
+	flex: 0 0 auto;
+	padding-inline: 18px;
 	white-space: normal;
 	text-align: center;
 }
 
 .rail-note {
 	margin: 16px 0 0;
-	color: var(--muted);
+	color: rgba(var(--ink-rgb), 0.64);
 	font-size: 14px;
 	line-height: 1.5;
 }
