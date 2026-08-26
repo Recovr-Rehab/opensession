@@ -10,23 +10,22 @@ worktrees or sandboxes.
 
 We take contributions as **human-written text, not code**. Describe the change
 you'd like — a bug, a missing feature, a design objection — informally in a
-`.txt` or `.md` file in [`adrs/`](adrs/), and open a pull request containing
-just that file. If we're aligned, we handle the implementation (this is an
+[GitHub issue](https://github.com/tellahq/opensession/issues). Prompts and
+suggestions are exactly the right shape: say what you'd want, the way you'd
+tell an agent. If we're aligned, we handle the implementation (this is an
 agent-infrastructure project; implementation is what the infrastructure is
-for). Your name stays on the proposal.
+for). Your name stays on the issue.
 
 Plain language beats a spec. Say what's wrong or missing, what you'd expect to
-happen instead, and why it matters to you. A paragraph is enough; see
-[`adrs/README.md`](adrs/README.md) for the little structure there is.
+happen instead, and why it matters to you. A paragraph is enough. For bug
+reports, include what you ran, what happened, and `opensession doctor` output;
+if it is an install problem, the full installer output — it prints every step
+it took.
 
-Two things that should *not* go through `adrs/`:
+One thing that should *not* go through the issue tracker:
 
 - **Vulnerabilities** — report privately, see [SECURITY.md](SECURITY.md).
-  Never a public issue or proposal.
-- **Bug reports** with no opinion about the fix — a regular issue is fine.
-  Include what you ran, what happened, and `opensession doctor` output. If it
-  is an install problem, the full installer output — it prints every step it
-  took.
+  Never a public issue.
 
 Code pull requests aren't the path for outside contributions — forking is.
 The project is MIT-licensed and built to be made your own: instance config
@@ -115,7 +114,7 @@ Comments should explain *why*, particularly when the code looks odd. A lot of
 the stranger-looking decisions here encode a specific incident — `KillMode=mixed`
 in the systemd unit, the `IPAddressDeny` line, the deny-before-allow ordering in
 permission maps. If you find one of those and it has no comment, adding the
-explanation is a genuinely useful contribution (as a proposal, per above).
+explanation is a genuinely useful contribution (as an issue, per above).
 
 Prefer deleting to adding. If a change makes something simpler, say so; that is
 not a small thing.
@@ -137,12 +136,12 @@ layer, never in a prompt:
 - customer-facing and identity-mutating tools are hard-denied for unattended runs
 - money-moving tools are stripped from the model's tool list entirely
 
-If a proposal touches any of that, call it out explicitly. If you find a way
+If a suggestion touches any of that, call it out explicitly. If you find a way
 around it, report it privately — see [SECURITY.md](SECURITY.md), which also
 sets out what counts as a vulnerability here and what is working as designed.
 
 ## License
 
-By contributing — proposals included — you agree that your contributions are
-licensed under the [MIT License](LICENSE), the same license as the
-project.
+By contributing — issues and suggestions included — you agree that your
+contributions are licensed under the [MIT License](LICENSE), the same license
+as the project.

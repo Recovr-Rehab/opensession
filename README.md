@@ -167,10 +167,12 @@ manifest, and the lockfile stay at the root.
 ## Contributing
 
 We take contributions as human-written text, not code — see
-[CONTRIBUTING.md](CONTRIBUTING.md). Describe the change you'd like informally
-in a `.txt` or `.md` file in [`adrs/`](adrs/), and if we're aligned we'll
-handle the implementation. Report vulnerabilities privately — see
-[SECURITY.md](SECURITY.md), not a public issue.
+[CONTRIBUTING.md](CONTRIBUTING.md). Open a
+[GitHub issue](https://github.com/tellahq/opensession/issues) describing the
+change you'd like — a prompt or suggestion in plain language is exactly the
+right shape — and if we're aligned we'll handle the implementation. Report
+vulnerabilities privately — see [SECURITY.md](SECURITY.md), not a public
+issue.
 
 ## License
 
