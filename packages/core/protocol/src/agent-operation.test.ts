@@ -13,6 +13,7 @@ import {
   decodeAgentOperationQueryV1,
   decodeAgentOperationReceiptV1,
   decodeAgentOperationRequestV1,
+  decodeAgentTranscriptReceiptRefV1,
   encodeAgentGatewayDispatchGrant,
   hashAgentMcpArgumentsV1,
   hashAgentMcpPayloadV1,
@@ -251,6 +252,40 @@ describe("Agent operation protocol v1", () => {
       AGENT_MCP_PAYLOAD_DIGEST_DOMAIN,
       AGENT_MCP_ARGUMENTS_DIGEST_DOMAIN,
     ]).toHaveLength(4);
+  });
+
+  test("strictly decodes immutable transcript destination receipt references", () => {
+    const reference = {
+      appendId: "append-1",
+      entryIds: ["entry-1", "entry-2"],
+      firstSeq: 4,
+      lastSeq: 5,
+      throughChangeSeq: 8,
+      requestDigest: d("a"),
+    };
+    const decoded = decodeAgentTranscriptReceiptRefV1(reference);
+    expect(decoded).toEqual(reference);
+    expect(Object.isFrozen(decoded)).toBe(true);
+    expect(Object.isFrozen(decoded!.entryIds)).toBe(true);
+    for (const invalid of [
+      { ...reference, unknown: true },
+      { ...reference, entryIds: [] },
+      { ...reference, entryIds: ["entry-1", "entry-1"] },
+      { ...reference, firstSeq: 0, lastSeq: 1 },
+      { ...reference, lastSeq: 6 },
+      { ...reference, throughChangeSeq: 0 },
+      { ...reference, requestDigest: "sha256:not-a-digest" },
+    ])
+      expect(decodeAgentTranscriptReceiptRefV1(invalid)).toBeUndefined();
+    const accessor = { ...reference };
+    Object.defineProperty(accessor, "lastSeq", {
+      enumerable: true,
+      get: () => 5,
+    });
+    expect(decodeAgentTranscriptReceiptRefV1(accessor)).toBeUndefined();
+    expect(
+      decodeAgentTranscriptReceiptRefV1(new Proxy(reference, {})),
+    ).toBeUndefined();
   });
 
   test("receipts are strict bounded metadata and cannot contain bodies or secrets", () => {

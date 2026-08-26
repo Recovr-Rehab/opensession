@@ -527,10 +527,11 @@ function usage(value: unknown): AgentOperationUsageV1 | undefined {
     return undefined;
   return Object.freeze({ ...value }) as AgentOperationUsageV1;
 }
-function transcriptRef(
+export function decodeAgentTranscriptReceiptRefV1(
   value: unknown,
 ): AgentTranscriptReceiptRefV1 | undefined {
   if (
+    !safeJson(value) ||
     !record(value) ||
     !exact(value, [
       "appendId",
@@ -542,17 +543,31 @@ function transcriptRef(
     ]) ||
     !validId(value.appendId) ||
     !ids(value.entryIds) ||
+    value.entryIds.length === 0 ||
     !time(value.firstSeq) ||
+    value.firstSeq < 1 ||
     !time(value.lastSeq) ||
     value.lastSeq < value.firstSeq ||
+    value.entryIds.length !== value.lastSeq - value.firstSeq + 1 ||
     !time(value.throughChangeSeq) ||
+    value.throughChangeSeq < 1 ||
     !validDigest(value.requestDigest)
   )
     return undefined;
   return Object.freeze({
-    ...value,
+    appendId: value.appendId,
     entryIds: Object.freeze([...value.entryIds]),
-  }) as AgentTranscriptReceiptRefV1;
+    firstSeq: value.firstSeq,
+    lastSeq: value.lastSeq,
+    throughChangeSeq: value.throughChangeSeq,
+    requestDigest: value.requestDigest,
+  });
+}
+
+function transcriptRef(
+  value: unknown,
+): AgentTranscriptReceiptRefV1 | undefined {
+  return decodeAgentTranscriptReceiptRefV1(value);
 }
 export function decodeAgentOperationReceiptV1(
   value: unknown,

@@ -93,6 +93,23 @@ a body or arbitrary metadata column. Schema-28 actor state is strictly
 `admitted -> settled | indeterminate`; gateway-only physical state remains
 `prepared -> executing -> settled | indeterminate`.
 
+Transcript destination receipts have an import-inert exact query and Agent
+reference-validation layer. Generic destination appends retain their existing
+upsert semantics and reject Agent anchors, so a generic receipt cannot later be
+upgraded into an Agent proof. The narrower Agent API requires an authenticated
+anchor identity whose change sequence is the current transcript high-water and
+whose named entries are visible at that boundary. It atomically permits only a
+fresh, unique, dense, request-ordered output append. The anchor digest remains
+opaque to this store; the future gateway must construct and authenticate its
+canonical transcript meaning before calling this API. Recovery binds the
+session, run, turn, generation, append ID, request digest and anchor, then
+revalidates each referenced output row's ID, sequence, change sequence and
+canonical content against the durable request digest. Later unrelated
+transcript entries do not invalidate that historical proof, but changed,
+missing, reordered or malformed referenced output fails closed. Receipt
+queries do not write, publish, invoke hooks or change access timestamps. This
+layer remains production-unwired.
+
 The only durable state progression is `prepared -> executing -> settled |
 indeterminate`. A recovered `prepared` operation may be reauthorized later.
 A recovered `executing` operation is never retried by default. Initial
