@@ -927,7 +927,7 @@ dialog::backdrop {
 /* Landing-page visitors get a native dialog, so the browser owns focus
    trapping and Escape. A compact reading column rather than a near-fullscreen
    sheet: the page stays visible around it. Its material is the same glass as
-   Open Session's sidebar hover cards: 72% paper over a 20px saturated blur,
+   Open Session's sidebar hover cards: dense paper over a 20px saturated blur,
    with their large popup shadow and hairline. Direct visitors get the article
    as a normal, server-rendered page below. */
 .announcement-dialog {
@@ -951,7 +951,7 @@ dialog::backdrop {
 
 @supports (backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px)) {
 	.announcement-dialog {
-		background: rgba(255, 255, 255, 0.72);
+		background: rgba(255, 255, 255, 0.88);
 		-webkit-backdrop-filter: blur(20px) saturate(1.8);
 		backdrop-filter: blur(20px) saturate(1.8);
 	}
