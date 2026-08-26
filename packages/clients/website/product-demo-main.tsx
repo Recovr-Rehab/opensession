@@ -23,7 +23,7 @@ const sessions: UnifiedSession[] = [
 		source: "opensession",
 		branch: "kent/workspace-presence",
 		worktreeDir: "/workspace/opensession",
-		startedBy: "Kent",
+		startedBy: "Grant",
 		title: "Add multiplayer workspace presence",
 		lastActivity: minutesAgo(4),
 		createdAt: minutesAgo(38),
@@ -52,7 +52,7 @@ const sessions: UnifiedSession[] = [
 		source: "opensession",
 		branch: "kent/checkout-recovery",
 		worktreeDir: "/workspace/checkout",
-		startedBy: "Kent",
+		startedBy: "Grant",
 		title: "Review checkout recovery",
 		lastActivity: minutesAgo(1),
 		createdAt: minutesAgo(52),
@@ -70,7 +70,7 @@ const sessions: UnifiedSession[] = [
 		source: "opensession",
 		branch: "kent/mobile-navigation",
 		worktreeDir: "/workspace/mobile",
-		startedBy: "Kent",
+		startedBy: "Grant",
 		title: "Improve mobile navigation",
 		lastActivity: minutesAgo(9),
 		createdAt: minutesAgo(74),
@@ -88,7 +88,7 @@ const sessions: UnifiedSession[] = [
 		source: "opensession",
 		branch: "kent/keyboard-shortcuts",
 		worktreeDir: "/workspace/shortcuts",
-		startedBy: "Kent",
+		startedBy: "Grant",
 		title: "Ship keyboard shortcuts",
 		lastActivity: minutesAgo(21),
 		createdAt: minutesAgo(96),
@@ -111,7 +111,7 @@ const sessions: UnifiedSession[] = [
 		source: "opensession",
 		branch: "kent/faster-session-search",
 		worktreeDir: "/workspace/search",
-		startedBy: "Kent",
+		startedBy: "Grant",
 		title: "Make session search instant",
 		lastActivity: minutesAgo(1),
 		createdAt: minutesAgo(129),
@@ -129,7 +129,7 @@ const sessions: UnifiedSession[] = [
 		source: "opensession",
 		branch: "kent/release-notes",
 		worktreeDir: "/workspace/release",
-		startedBy: "Kent",
+		startedBy: "Grant",
 		title: "Draft the weekly release notes",
 		lastActivity: minutesAgo(47),
 		createdAt: minutesAgo(163),
@@ -163,7 +163,7 @@ const sessions: UnifiedSession[] = [
 		source: "opensession" as const,
 		branch: `kent/${slug}`,
 		worktreeDir: `/workspace/${slug}`,
-		startedBy: "Kent",
+		startedBy: "Grant",
 		title,
 		lastActivity: minutesAgo(activeMinutes),
 		createdAt: minutesAgo(createdMinutes),
@@ -227,6 +227,7 @@ const unreadSessionIds = new Set([
 ]);
 
 const demoPresence = [
+	{ user: "Kent", sessionId: activeSessionId },
 	{ user: "Michiel", sessionId: activeSessionId },
 	{ user: "Jaap", sessionId: activeSessionId },
 	{ user: "Louise", sessionId: "bks-demo-checkout" },
@@ -415,7 +416,7 @@ const projects = sessions.map((session, index) => ({
 	id: session.workspaceId!,
 	name: session.title.replace(/^(Add|Review|Improve|Ship) /, ""),
 	repo: "opensession",
-	createdBy: session.startedBy || "Kent",
+	createdBy: session.startedBy || "Grant",
 	createdAt: session.createdAt,
 	order: index,
 }));
@@ -431,7 +432,7 @@ const responseFor = (url: URL, method: string): Response => {
 	const path = url.pathname.replace(/^\/(opensession|backstage)/, "");
 	if (path === "/api/sessions") return json(sessions, { headers: { ETag: '"demo-v1"' } });
 	if (path === "/api/auth/status")
-		return json({ required: false, authenticated: true, local: true, name: "Kent de Bruin" });
+		return json({ required: false, authenticated: true, local: true, name: "Grant Shaddick" });
 	if (path === "/api/people")
 		return json({
 			people: [
@@ -599,7 +600,10 @@ class DemoWebSocket extends EventTarget {
 				entries,
 				truncated: false,
 			});
-			this.emit({ type: "presence", sessionId: message.sessionId, viewers: ["Michiel", "Jaap"] }, 80);
+			this.emit(
+				{ type: "presence", sessionId: message.sessionId, viewers: ["Kent", "Michiel", "Jaap"] },
+				80,
+			);
 			return;
 		}
 		if (message.type === "prompt") {
@@ -620,7 +624,7 @@ class DemoWebSocket extends EventTarget {
 			};
 			this.emit({ type: "transcript_append", sessionId: message.sessionId, entries: [userEntry] });
 			this.emit({ type: "session_status", sessionId: message.sessionId, isRunning: true }, 60);
-			this.emit({ type: "stream_start", sessionId: message.sessionId, by: "Kent" }, 120);
+			this.emit({ type: "stream_start", sessionId: message.sessionId, by: "Grant" }, 120);
 			this.emit({ type: "stream_text", sessionId: message.sessionId, text: assistantEntry.content }, 260);
 			this.emit({ type: "transcript_append", sessionId: message.sessionId, entries: [assistantEntry] }, 900);
 			this.emit({ type: "stream_done", sessionId: message.sessionId }, 920);
@@ -675,11 +679,11 @@ Object.assign(window, {
 document.documentElement.dataset.platform = "mac";
 document.documentElement.classList.add("wco");
 
-localStorage.setItem("opensession-user", "Kent");
+localStorage.setItem("opensession-user", "Grant");
 localStorage.setItem("opensession-last-session", activeSessionId);
 // The restore is per-user: without the matching owner the demo opens Home
 // instead of the session it was written to show.
-localStorage.setItem("opensession-last-session-user", "Kent");
+localStorage.setItem("opensession-last-session-user", "Grant");
 localStorage.setItem("opensession-panel-open", "false");
 // The workspace summary card is open by default in the product, and it paints
 // over the transcript for the frames before the header is measured. That flash
@@ -695,7 +699,7 @@ localStorage.setItem("opensession-repo-count", "1");
 // unread once it HAS a mark that its activity has since passed, so every other
 // session is marked at its own last activity rather than left unmarked.
 localStorage.setItem(
-	"opensession-reads:kent",
+	"opensession-reads:grant",
 	JSON.stringify(
 		Object.fromEntries(
 			sessions.map((session) => [
