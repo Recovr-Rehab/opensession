@@ -67,6 +67,7 @@ export class ExecutorManager {
   readonly #checkpointWorkspace: ExecutorManagerDependencies["checkpointWorkspace"];
   readonly #now: () => number;
   readonly #queues = new Map<string, Promise<void>>();
+  readonly #admitted = new Set<Promise<void>>();
   #draining = false;
   #drainPromise?: Promise<void>;
 
@@ -279,23 +280,25 @@ export class ExecutorManager {
     });
   }
 
-  async assertNoUnknownManagedResources(
+  assertNoUnknownManagedResources(
     providerId: ExecutorProviderId,
   ): Promise<void> {
     this.#assertAdmitting();
     const provider = this.#providers.get(providerId);
-    for (const resource of await provider.listManaged()) {
-      const record = await this.#store.getByExecutorId(resource.executorId);
-      if (
-        !record ||
-        record.provider !== providerId ||
-        record.resourceId !== resource.resourceId ||
-        record.sessionId !== resource.sessionId ||
-        record.resourceGeneration !== resource.generation
-      ) {
-        throw new UnknownExecutorResourceError(resource.resourceId);
+    return this.#trackAdmitted(async () => {
+      for (const resource of await provider.listManaged()) {
+        const record = await this.#store.getByExecutorId(resource.executorId);
+        if (
+          !record ||
+          record.provider !== providerId ||
+          record.resourceId !== resource.resourceId ||
+          record.sessionId !== resource.sessionId ||
+          record.resourceGeneration !== resource.generation
+        ) {
+          throw new UnknownExecutorResourceError(resource.resourceId);
+        }
       }
-    }
+    });
   }
 
   /** Serializes a synchronous authority issuance against lifecycle transitions. */
@@ -316,9 +319,10 @@ export class ExecutorManager {
   drain(): Promise<void> {
     if (!this.#drainPromise) {
       this.#draining = true;
-      this.#drainPromise = Promise.allSettled([...this.#queues.values()]).then(
-        () => undefined,
-      );
+      this.#drainPromise = Promise.allSettled([
+        ...this.#queues.values(),
+        ...this.#admitted,
+      ]).then(() => undefined);
     }
     return this.#drainPromise;
   }
@@ -448,6 +452,17 @@ export class ExecutorManager {
       errorMessage(error),
     );
     await this.#store.compareAndSwap(executorId, generation, failed);
+  }
+
+  #trackAdmitted(operation: () => Promise<void>): Promise<void> {
+    const result = operation();
+    const settled = result.then(
+      () => undefined,
+      () => undefined,
+    );
+    this.#admitted.add(settled);
+    void settled.finally(() => this.#admitted.delete(settled));
+    return result;
   }
 
   #serialized<T>(executorId: string, operation: () => Promise<T>): Promise<T> {

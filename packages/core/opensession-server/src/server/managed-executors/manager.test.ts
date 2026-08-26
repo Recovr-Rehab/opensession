@@ -27,6 +27,7 @@ class FakeProvider implements ExecutorProvider {
   beforeCreate?: () => Promise<void> | void;
   beforeEnsure?: () => Promise<void> | void;
   beforeStart?: () => Promise<void> | void;
+  beforeListManaged?: () => Promise<void> | void;
   startReplacement?: CreatedExecutorResource;
 
   constructor(id: ExecutorProviderId = "box", events: string[] = []) {
@@ -80,6 +81,7 @@ class FakeProvider implements ExecutorProvider {
   }
 
   async listManaged(): Promise<readonly ExecutorResourceRef[]> {
+    await this.beforeListManaged?.();
     return this.managed;
   }
 }
@@ -260,6 +262,70 @@ describe("ExecutorManager", () => {
     await drain;
     expect(drained).toBe(true);
     expect(manager.drain()).toBe(manager.drain());
+  });
+
+  test("drain waits for an admitted managed-resource scan and its store checks", async () => {
+    let releaseList!: () => void;
+    let listEntered!: () => void;
+    let releaseStore!: () => void;
+    let storeEntered!: () => void;
+    const listGate = new Promise<void>((resolve) => {
+      releaseList = resolve;
+    });
+    const listed = new Promise<void>((resolve) => {
+      listEntered = resolve;
+    });
+    const storeGate = new Promise<void>((resolve) => {
+      releaseStore = resolve;
+    });
+    const storeChecked = new Promise<void>((resolve) => {
+      storeEntered = resolve;
+    });
+    const backing = new InMemoryExecutorStateStore();
+    const store: ExecutorStateStore = {
+      getByExecutorId: async (id) => {
+        storeEntered();
+        await storeGate;
+        return backing.getByExecutorId(id);
+      },
+      getBySessionId: (id) => backing.getBySessionId(id),
+      insertIntent: (record) => backing.insertIntent(record),
+      compareAndSwap: (...args) => backing.compareAndSwap(...args),
+      delete: (...args) => backing.delete(...args),
+      appendAudit: (entry) => backing.appendAudit(entry),
+    };
+    const provider = new FakeProvider();
+    provider.managed = [
+      {
+        executorId: "unknown",
+        sessionId: "unknown-session",
+        resourceId: "unknown-resource",
+        generation: 1,
+      },
+    ];
+    provider.beforeListManaged = async () => {
+      listEntered();
+      await listGate;
+    };
+    const { manager } = setup({ provider, store });
+
+    const scan = manager.assertNoUnknownManagedResources("box");
+    await listed;
+    let drained = false;
+    const drain = manager.drain().then(() => {
+      drained = true;
+    });
+    expect(() => manager.assertNoUnknownManagedResources("box")).toThrow(
+      "draining",
+    );
+    releaseList();
+    await storeChecked;
+    await Promise.resolve();
+    expect(drained).toBe(false);
+    releaseStore();
+    await expect(scan).rejects.toThrow("unknown managed resource");
+    await drain;
+    expect(drained).toBe(true);
   });
 
   test("keeps persistent resource identity separate from lifecycle generations", async () => {

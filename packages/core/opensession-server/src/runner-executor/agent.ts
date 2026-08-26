@@ -39,6 +39,8 @@ export interface DuplexJsonTransport {
 }
 
 export interface RunnerExecutorAgentOptions extends ExecutorConnectionIdentity {
+  /** Immutable authority namespace selected by the daemon connection configuration. */
+  readonly source: ExecutorGrantScope["source"];
   rootId: string;
   transport: DuplexJsonTransport;
   executor: Executor;
@@ -55,6 +57,7 @@ export interface RunnerExecutorAgentOptions extends ExecutorConnectionIdentity {
 /** Provider-neutral remote daemon core. Calling start is the only effectful entrypoint. */
 export class RunnerExecutorAgent {
   readonly #options: RunnerExecutorAgentOptions;
+  readonly #source: ExecutorGrantScope["source"];
   readonly #credits = new Map<string, number>();
   readonly #events = new Map<
     string,
@@ -68,7 +71,10 @@ export class RunnerExecutorAgent {
   #off: Array<() => void> = [];
 
   constructor(options: RunnerExecutorAgentOptions) {
+    if (options.source !== "runner" && options.source !== "managed")
+      throw new TypeError("Executor daemon source must be runner or managed");
     this.#options = options;
+    this.#source = options.source;
   }
 
   async start(): Promise<void> {
@@ -238,7 +244,7 @@ export class RunnerExecutorAgent {
     }
     if (!action || !("fence" in message)) return undefined;
     return {
-      source: "runner",
+      source: this.#source,
       executorId: this.#options.executorId,
       rootId: message.fence.rootId,
       sessionId: message.fence.sessionId,
@@ -498,12 +504,17 @@ export class RunnerExecutorAgent {
         "credit must be positive",
       );
     const key = streamQueueKey(this.#scope(fence), requestId, streamId);
-    if (!this.#events.has(key)) return;
+    if (!this.#credits.has(key) && this.#credits.size >= 10_000) {
+      const oldest = this.#credits.keys().next().value;
+      if (oldest) this.#credits.delete(oldest);
+    }
     this.#credits.set(
       key,
       Math.min(Number.MAX_SAFE_INTEGER, (this.#credits.get(key) ?? 0) + bytes),
     );
-    await this.#flush(key);
+    // Credit can race the event queue immediately after outcome publication.
+    // Retain it until the durable events are queued instead of deadlocking both peers.
+    if (this.#events.has(key)) await this.#flush(key);
   }
 
   async #flush(key: string): Promise<void> {

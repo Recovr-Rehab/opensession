@@ -76,8 +76,8 @@ export interface ExecutorRuntimeOptions {
   maxGrantTtlMs?: number;
   managedEnrollmentTtlMs?: number;
   runnerLedger?: Omit<Parameters<typeof openSQLiteCommandLedger>[0], "dbPath">;
-  /** Optional provider-client shutdown, called only after manager drain. */
-  closeProviders?: () => void | Promise<void>;
+  /** Explicit provider-client shutdown, called only after manager drain. Use a deliberate no-op when appropriate. */
+  closeProviders: () => void | Promise<void>;
 }
 
 /**
@@ -301,7 +301,7 @@ export class ExecutorRuntime {
     this.#closePromise = (async () => {
       try {
         await this.#manager?.drain();
-        await this.#options.closeProviders?.();
+        await this.#options.closeProviders();
       } finally {
         this.#issuedByExecutor.clear();
         this.#executionGrants.revokeAll();
@@ -450,6 +450,7 @@ function assertOptions(options: ExecutorRuntimeOptions): void {
     options.ingress.createId,
     options.ingress.now,
     options.ingress.rateLimit,
+    options.closeProviders,
   ]) {
     if (typeof callback !== "function")
       throw new TypeError("Executor runtime callback is required");
@@ -474,9 +475,4 @@ function assertOptions(options: ExecutorRuntimeOptions): void {
     throw new TypeError(
       "managed enrollment TTL must be between 1ms and 5 minutes",
     );
-  if (
-    options.closeProviders !== undefined &&
-    typeof options.closeProviders !== "function"
-  )
-    throw new TypeError("closeProviders must be a function");
 }

@@ -2,7 +2,15 @@ import { afterEach, describe, expect, test } from "bun:test";
 import { existsSync, mkdirSync, mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { EXECUTOR_PROTOCOL_VERSION } from "@tellahq/opensession-protocol/executor";
+import {
+  EXECUTOR_PROTOCOL_VERSION,
+  type ExecutorGrant,
+} from "@tellahq/opensession-protocol/executor";
+import {
+  RunnerExecutorAgent,
+  type DuplexJsonTransport,
+} from "../../runner-executor/agent";
+import { InMemoryCommandLedger } from "../../runner-executor/ledger";
 import {
   EXECUTOR_GENERATION_HEADER,
   EXECUTOR_ID_HEADER,
@@ -74,7 +82,7 @@ function setup(
       },
       revokeExecutionAuthority: async () => {},
     },
-    closeProviders: overrides.closeProviders,
+    closeProviders: overrides.closeProviders ?? (() => {}),
     ingress: {
       createId: () => crypto.randomUUID(),
       now: Date.now,
@@ -121,12 +129,52 @@ class Socket {
   bufferedAmount = 0;
   sent: string[] = [];
   closes: Array<[number | undefined, string | undefined]> = [];
-  constructor(readonly data: ExecutorUpgradeData) {}
+  constructor(
+    readonly data: ExecutorUpgradeData,
+    readonly onSend?: (value: string) => void,
+    readonly onClose?: (reason?: string) => void,
+  ) {}
   send(value: string): void {
     this.sent.push(value);
+    this.onSend?.(value);
   }
   close(code?: number, reason?: string): void {
     this.closes.push([code, reason]);
+    this.onClose?.(reason);
+  }
+}
+
+class LoopbackAgentTransport implements DuplexJsonTransport {
+  readonly sent: unknown[] = [];
+  readonly received: unknown[] = [];
+  readonly #message = new Set<(message: unknown) => void | Promise<void>>();
+  readonly #close = new Set<(reason?: unknown) => void>();
+
+  constructor(readonly sendToServer: (message: unknown) => void) {}
+
+  send(message: unknown): void {
+    this.sent.push(structuredClone(message));
+    this.sendToServer(structuredClone(message));
+  }
+
+  deliver(message: unknown): void {
+    this.received.push(structuredClone(message));
+    for (const handler of this.#message)
+      void Promise.resolve(handler(structuredClone(message))).catch(() => {});
+  }
+
+  onMessage(handler: (message: unknown) => void | Promise<void>): () => void {
+    this.#message.add(handler);
+    return () => this.#message.delete(handler);
+  }
+
+  onClose(handler: (reason?: unknown) => void): () => void {
+    this.#close.add(handler);
+    return () => this.#close.delete(handler);
+  }
+
+  close(reason?: string): void {
+    for (const handler of this.#close) handler(reason);
   }
 }
 
@@ -371,6 +419,161 @@ describe("ExecutorRuntime", () => {
         .map((value) => JSON.parse(value))
         .filter((value) => value.t === "execute"),
     ).toHaveLength(0);
+    await runtime.close();
+  });
+
+  test("roundtrips a managed agent with managed operation, stream, and cleanup grants", async () => {
+    const { runtime } = setup();
+    await runtime.start();
+    const awake = await runtime.manager.create({
+      executorId: "managed-roundtrip",
+      sessionId: "managed-session",
+      provider: "box",
+      project: {
+        revision: "revision-1",
+        baseCommit: "abc123",
+        durableDelta: "delta-1",
+      },
+    });
+    const token = await runtime.issueManagedEnrollment(awake.executorId);
+    let data: ExecutorUpgradeData | undefined;
+    await runtime.ingress.handleUpgrade(
+      executorRequest(
+        "managed",
+        awake.executorId,
+        awake.instanceGeneration,
+        token,
+      ),
+      {
+        upgrade: (_request, options) => {
+          data = options.data;
+          return true;
+        },
+      },
+      "203.0.113.4",
+    );
+
+    let holdTerminalFor: string | undefined;
+    let eventDelivered!: () => void;
+    const cleanupEvent = new Promise<void>((resolve) => {
+      eventDelivered = resolve;
+    });
+    let transport!: LoopbackAgentTransport;
+    const socket = new Socket(data!, (value) =>
+      transport.deliver(JSON.parse(value)),
+    );
+    transport = new LoopbackAgentTransport((message) => {
+      const frame = message as any;
+      if (
+        frame.t === "receipt_status" &&
+        frame.eventsComplete &&
+        frame.requestId === holdTerminalFor
+      )
+        return;
+      runtime.ingress.websocket.message(socket, JSON.stringify(message));
+      if (frame.t === "event" && frame.requestId === holdTerminalFor)
+        eventDelivered();
+    });
+    runtime.ingress.websocket.open(socket);
+    const agent = new RunnerExecutorAgent({
+      source: "managed",
+      executorId: awake.executorId,
+      instanceId: "managed-instance",
+      generation: awake.instanceGeneration,
+      capabilities: ["fs"],
+      rootId: "root-1",
+      transport,
+      executor: {
+        execute: async (context) => ({
+          outcome: {
+            kind: "fs.read",
+            streamId: `stream-${context.requestId}`,
+            size: 5,
+            binary: false,
+          },
+          events: [
+            {
+              kind: "text",
+              streamId: `stream-${context.requestId}`,
+              sequence: 0,
+              channel: "file",
+              data: "hello",
+              eof: true,
+            },
+          ],
+        }),
+      },
+      ledger: new InMemoryCommandLedger(),
+      validateGrant: (candidate, expected) =>
+        runtime.validateExecutionGrant(candidate as ExecutorGrant, expected),
+    });
+    await agent.start();
+    await tick();
+    await tick();
+    const remote = runtime.registry.get(awake.executorId)!;
+    const baseContext = {
+      rootId: "root-1",
+      sessionId: "managed-session",
+      runId: "run-1",
+      generation: awake.instanceGeneration,
+    };
+    await expect(
+      remote.execute(
+        { ...baseContext, requestId: "managed-success" },
+        { kind: "fs.read", path: "one" },
+      ),
+    ).resolves.toMatchObject({ events: [{ data: "hello", eof: true }] });
+    expect(
+      transport.received.some(
+        (message: any) =>
+          message.t === "stream_credit" &&
+          message.requestId === "managed-success",
+      ),
+    ).toBe(true);
+
+    holdTerminalFor = "managed-cleanup";
+    const interrupted = remote.execute(
+      { ...baseContext, requestId: holdTerminalFor },
+      { kind: "fs.read", path: "two" },
+    );
+    await cleanupEvent;
+    remote.disconnect("test cleanup");
+    await expect(interrupted).rejects.toThrow("disconnected");
+    await tick();
+    const execute = transport.received.find(
+      (message: any) =>
+        message.t === "execute" && message.requestId === holdTerminalFor,
+    ) as any;
+    const cleanup = transport.received.find(
+      (message: any) =>
+        message.t === "cancel" &&
+        message.target?.requestId === holdTerminalFor &&
+        "streamId" in message.target,
+    ) as any;
+    expect(cleanup).toBeDefined();
+    expect(cleanup.grant).not.toBe(execute.grant);
+    expect(
+      runtime.validateExecutionGrant(cleanup.grant, {
+        source: "managed",
+        executorId: awake.executorId,
+        ...cleanup.fence,
+        action: {
+          purpose: "cleanup",
+          requestId: cleanup.requestId,
+          targetRequestId: holdTerminalFor,
+          streamId: cleanup.target.streamId,
+        },
+      }),
+    ).toBe(true);
+    expect(
+      transport.sent.some(
+        (message: any) =>
+          message.t === "error" &&
+          message.requestId === cleanup.requestId &&
+          message.code === "invalid_grant",
+      ),
+    ).toBe(false);
+    agent.stop();
     await runtime.close();
   });
 

@@ -10,7 +10,7 @@ import {
 } from "node:fs";
 import { dirname, parse, resolve } from "node:path";
 
-const SCHEMA_VERSION = 1;
+const SCHEMA_VERSION = 2;
 
 /** Durable Runner incarnation claims and monotonic generation revocations. */
 export class SqliteRunnerExecutorClaims {
@@ -131,6 +131,10 @@ function initialize(db: Database): void {
   const version = db
     .query<{ user_version: number }, []>("PRAGMA user_version")
     .get()!.user_version;
+  if (version === 1)
+    throw new Error(
+      "Runner Executor claims schema version 1 is disposable pre-production state; delete the claims database and restart",
+    );
   if (version !== 0 && version !== SCHEMA_VERSION)
     throw new Error(`unsupported Runner Executor claims schema: ${version}`);
   if (version === 0) {

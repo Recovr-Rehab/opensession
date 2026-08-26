@@ -10,7 +10,11 @@ import type {
   ExecutorSuccess,
 } from "../server/executors/contract";
 import { RemoteExecutorConnection } from "../server/executors/remote";
-import { RunnerExecutorAgent, type DuplexJsonTransport } from "./agent";
+import {
+  RunnerExecutorAgent,
+  type DuplexJsonTransport,
+  type RunnerExecutorAgentOptions,
+} from "./agent";
 import {
   InMemoryCommandLedger,
   operationDigest,
@@ -99,6 +103,7 @@ describe("runner Executor agent", () => {
     const [control, daemon] = pair();
     const backend = new RecordingExecutor();
     const agent = new RunnerExecutorAgent({
+      source: "runner",
       ...identity,
       capabilities: [...identity.capabilities],
       rootId: "root-1",
@@ -136,6 +141,7 @@ describe("runner Executor agent", () => {
   test("waits for credit-gated macrotask event delivery before eventsComplete", async () => {
     const [control, daemon] = pair(true);
     const agent = new RunnerExecutorAgent({
+      source: "runner",
       ...identity,
       capabilities: [...identity.capabilities],
       rootId: "root-1",
@@ -206,6 +212,7 @@ describe("runner Executor agent", () => {
   test("scopes same-named stream queues and credits by request", async () => {
     const [control, daemon] = pair();
     const agent = new RunnerExecutorAgent({
+      source: "runner",
       ...identity,
       capabilities: [...identity.capabilities],
       rootId: "root-1",
@@ -298,7 +305,8 @@ describe("runner Executor agent", () => {
     const [control, daemon] = pair();
     const backend = new RecordingExecutor();
     let validated: unknown;
-    const agent = new RunnerExecutorAgent({
+    const options: RunnerExecutorAgentOptions = {
+      source: "runner",
       ...identity,
       capabilities: [...identity.capabilities],
       rootId: "root-1",
@@ -309,7 +317,9 @@ describe("runner Executor agent", () => {
         validated = expected;
         throw new Error("validator unavailable");
       },
-    });
+    };
+    const agent = new RunnerExecutorAgent(options);
+    (options as { source: "runner" | "managed" }).source = "managed";
     const remote = new RemoteExecutorConnection({
       ...identity,
       capabilities: [...identity.capabilities],
@@ -341,6 +351,7 @@ describe("runner Executor agent", () => {
     const [control, daemon] = pair();
     const backend = new RecordingExecutor();
     const agent = new RunnerExecutorAgent({
+      source: "runner",
       ...identity,
       capabilities: [...identity.capabilities],
       rootId: "root-1",
@@ -393,6 +404,7 @@ describe("runner Executor agent", () => {
     const backend = new RecordingExecutor();
     let now = 1_000;
     const agent = new RunnerExecutorAgent({
+      source: "runner",
       ...identity,
       capabilities: [...identity.capabilities],
       rootId: "root-1",
@@ -459,6 +471,7 @@ describe("runner Executor agent", () => {
       purgeRetiredScope: (...args) => base.purgeRetiredScope(...args),
     };
     const agent = new RunnerExecutorAgent({
+      source: "runner",
       ...identity,
       capabilities: [...identity.capabilities],
       rootId: "root-1",
@@ -521,6 +534,7 @@ describe("runner Executor agent", () => {
       },
     };
     const agent = new RunnerExecutorAgent({
+      source: "runner",
       ...identity,
       capabilities: [...identity.capabilities],
       rootId: "root-1",
@@ -585,6 +599,7 @@ describe("runner Executor agent", () => {
       },
     };
     const agent = new RunnerExecutorAgent({
+      source: "runner",
       ...identity,
       capabilities: [...identity.capabilities],
       rootId: "root-1",
@@ -622,6 +637,7 @@ describe("runner Executor agent", () => {
       purgeRetiredScope: (...args) => base.purgeRetiredScope(...args),
     };
     const agent = new RunnerExecutorAgent({
+      source: "runner",
       ...identity,
       capabilities: [...identity.capabilities],
       rootId: "root-1",
@@ -684,6 +700,7 @@ describe("runner Executor agent", () => {
         throw new Error("transport failed after commit");
     };
     const agent = new RunnerExecutorAgent({
+      source: "runner",
       ...identity,
       capabilities: [...identity.capabilities],
       rootId: "root-1",
@@ -801,6 +818,7 @@ describe("runner Executor agent", () => {
     );
     const [control, daemon] = pair();
     const agent = new RunnerExecutorAgent({
+      source: "runner",
       ...identity,
       capabilities: [...identity.capabilities],
       rootId: "root-1",
@@ -854,6 +872,7 @@ describe("runner Executor agent", () => {
       finish = () => resolve({ outcome: { kind: "fs.changed", path: "x" } });
     });
     const agent = new RunnerExecutorAgent({
+      source: "runner",
       ...identity,
       capabilities: [...identity.capabilities],
       rootId: "root-1",
@@ -928,6 +947,7 @@ describe("runner Executor agent", () => {
   test("records cancellation without replaying a mutation", async () => {
     const [control, daemon] = pair();
     const agent = new RunnerExecutorAgent({
+      source: "runner",
       ...identity,
       capabilities: [...identity.capabilities],
       rootId: "root-1",
@@ -975,6 +995,7 @@ describe("runner Executor agent", () => {
   test("rejects stale, malformed, and forbidden frames", async () => {
     const [control, daemon] = pair();
     const agent = new RunnerExecutorAgent({
+      source: "runner",
       ...identity,
       capabilities: [...identity.capabilities],
       rootId: "root-1",

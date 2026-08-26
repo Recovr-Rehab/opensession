@@ -23,8 +23,24 @@ const claim = (generation: number, instanceId: string) => ({
 });
 
 describe("SqliteRunnerExecutorClaims", () => {
-  test("atomically keeps one instance and a monotonic generation high-water mark", () => {
-    const claims = new SqliteRunnerExecutorClaims(path());
+  test("creates fresh v2 state transactionally and atomically keeps one instance", () => {
+    const dbPath = path();
+    const claims = new SqliteRunnerExecutorClaims(dbPath);
+    const inspection = new Database(dbPath, { readonly: true });
+    expect(
+      inspection
+        .query<{ user_version: number }, []>("PRAGMA user_version")
+        .get()!.user_version,
+    ).toBe(2);
+    expect(
+      inspection
+        .query<{ name: string }, []>(
+          "SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%' ORDER BY name",
+        )
+        .all()
+        .map(({ name }) => name),
+    ).toEqual(["runner_executor_authority", "runner_executor_instance_claims"]);
+    inspection.close();
     expect(claims.claim(claim(4, "instance-1"))).toBe(true);
     expect(claims.claim(claim(4, "instance-1"))).toBe(true);
     expect(claims.claim(claim(4, "instance-2"))).toBe(false);
@@ -63,10 +79,35 @@ describe("SqliteRunnerExecutorClaims", () => {
     );
   });
 
+  test("rejects disposable v1 state instead of misreading its replaced structure", () => {
+    const oldPath = path();
+    const old = new Database(oldPath);
+    old.exec(`
+      CREATE TABLE executor_instance_claims (
+        source TEXT NOT NULL,
+        executor_id TEXT NOT NULL,
+        generation INTEGER NOT NULL,
+        instance_id TEXT NOT NULL,
+        PRIMARY KEY(source, executor_id, generation)
+      ) STRICT;
+      CREATE TABLE executor_generation_revocations (
+        source TEXT NOT NULL,
+        executor_id TEXT NOT NULL,
+        through_generation INTEGER NOT NULL,
+        PRIMARY KEY(source, executor_id)
+      ) STRICT;
+      PRAGMA user_version = 1;
+    `);
+    old.close();
+    expect(() => new SqliteRunnerExecutorClaims(oldPath)).toThrow(
+      "schema version 1 is disposable pre-production state; delete the claims database and restart",
+    );
+  });
+
   test("fails closed on unknown, unversioned, and mismatched schemas", () => {
     const newerPath = path();
     const newer = new Database(newerPath);
-    newer.exec("PRAGMA user_version = 2");
+    newer.exec("PRAGMA user_version = 3");
     newer.close();
     expect(() => new SqliteRunnerExecutorClaims(newerPath)).toThrow(
       "unsupported Runner Executor claims schema",
