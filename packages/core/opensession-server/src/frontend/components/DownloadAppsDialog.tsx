@@ -94,7 +94,12 @@ export function DownloadAppsBody({
 		<div className="grid min-h-0 flex-1 gap-4 desktop:grid-cols-[3fr_2fr]">
 			<AppCard
 				preview={
-					<div className="relative h-full overflow-hidden bg-blue-soft bg-gradient-to-br from-blue-soft via-transparent to-green-soft pl-5 pt-5">
+					<div
+						className="relative h-full overflow-hidden bg-cover bg-center pl-5 pt-5"
+						style={{
+							backgroundImage: `url(${BASE_PATH}/download-background.webp)`,
+						}}
+					>
 						<img
 							src={`${BASE_PATH}/download-mac.webp`}
 							alt="Open Session running on Mac"
@@ -123,13 +128,19 @@ export function DownloadAppsBody({
 
 			<AppCard
 				preview={
-					<div className="relative flex h-full justify-center overflow-hidden bg-green-soft bg-gradient-to-br from-green-soft via-transparent to-blue-soft px-3 pt-6">
+					<div
+						className="relative flex h-full justify-center overflow-hidden bg-cover bg-center px-3 pt-6"
+						style={{
+							backgroundImage: `url(${BASE_PATH}/download-background.webp)`,
+						}}
+					>
+						<div className="pointer-events-none absolute inset-0 bg-[color-mix(in_oklch,var(--green)_70%,var(--yellow))] opacity-60" />
 						<img
 							src={`${BASE_PATH}/download-phone.webp`}
 							alt="Open Session installed as a phone web app"
-							className="h-[115%] w-auto max-w-none origin-top object-contain object-top smooth-shadow-lg"
+							className="relative z-10 h-[115%] w-auto max-w-none origin-top object-contain object-top smooth-shadow-lg"
 						/>
-						<div className="pointer-events-none absolute inset-x-0 bottom-0 h-1/3 bg-gradient-to-b from-transparent to-panel" />
+						<div className="pointer-events-none absolute inset-x-0 bottom-0 z-20 h-1/3 bg-gradient-to-b from-transparent to-panel" />
 					</div>
 				}
 				title="Web"
