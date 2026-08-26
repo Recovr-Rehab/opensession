@@ -151,7 +151,7 @@ export const decodeAgentHostAttachResumeCursorV4 = decodeResume;
 function decodeExpected(value: unknown): ExpectedAgentHostSupervisionBindingsV3 | undefined {
   const keys = ["fence", "planHash", "hostId", "hostGeneration", "hostIncarnation", "supervisorEpoch", "kernelServiceEpoch", "hostChallenge", "nonce", "audience", "purpose", "keyId", "issuedAtMs", "expiresAtMs"];
   if (!record(value) || !exact(value, keys) || !isAgentTurnFence(value.fence) || !digest(value.planHash) || !id(value.hostId) || !positive(value.hostGeneration) || !boundedName(value.hostIncarnation, 256) || !positive(value.supervisorEpoch) || !boundedName(value.kernelServiceEpoch, 256) || typeof value.hostChallenge !== "string" || !SUPERVISION_TOKEN_RE.test(value.hostChallenge) || typeof value.nonce !== "string" || !SUPERVISION_TOKEN_RE.test(value.nonce) || value.audience !== AGENT_HOST_SUPERVISION_AUDIENCE || value.purpose !== AGENT_HOST_SUPERVISION_PURPOSE || !boundedName(value.keyId, 256) || !uint(value.issuedAtMs) || !positive(value.expiresAtMs) || value.expiresAtMs <= value.issuedAtMs) return undefined;
-  return immutable(value) as ExpectedAgentHostSupervisionBindingsV3 | undefined;
+  return immutable(value) as unknown as ExpectedAgentHostSupervisionBindingsV3;
 }
 function decodeCanonicalBase64Url(value: unknown, exactBytes: number | undefined, maxBytes: number): value is string {
   if (typeof value !== "string" || value.length < 2 || value.length % 4 === 1 || value.includes("=") || !/^[A-Za-z0-9_-]+$/.test(value)) return false;
@@ -163,7 +163,7 @@ function decodeCanonicalBase64Url(value: unknown, exactBytes: number | undefined
 }
 function decodeEnvelope(value: unknown): SignedAgentHostSupervisionEnvelopeV1 | undefined {
   if (!record(value) || !exact(value, ["version", "algorithm", "domain", "authorityBytes", "signature"]) || value.version !== 1 || value.algorithm !== "Ed25519" || value.domain !== "opensession.agent-host.supervision.v2" || !decodeCanonicalBase64Url(value.authorityBytes, undefined, 4096) || !decodeCanonicalBase64Url(value.signature, 64, 64)) return undefined;
-  return immutable(value) as SignedAgentHostSupervisionEnvelopeV1 | undefined;
+  return immutable(value) as unknown as SignedAgentHostSupervisionEnvelopeV1;
 }
 function decodeAttachReceipt(value: unknown): AgentHostSignedAttachReceiptV4 | undefined {
   if (!record(value) || !exact(value, ["expected", "envelope"])) return undefined;
