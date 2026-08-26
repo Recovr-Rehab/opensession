@@ -397,7 +397,11 @@ export function FirstMile({ onDone }: { onDone: () => Promise<void> }) {
 			className="relative grid h-[100dvh] w-full grid-rows-[76px_minmax(0,1fr)_84px] overflow-hidden bg-bg text-fg phone:grid-rows-[68px_minmax(0,1fr)_90px] phone:pb-[env(safe-area-inset-bottom)]"
 		>
 			<div
-				className="pointer-events-none absolute inset-0 opacity-70 [background:radial-gradient(circle_at_18%_8%,var(--accent-soft),transparent_34%),radial-gradient(circle_at_82%_92%,var(--blue-soft),transparent_36%)]"
+				// The website's setup flow reads as a tinted room with paper laid on it:
+				// two soft washes across the whole page, and every panel above them white.
+				// Mixed from --blue/--purple rather than the site's raw rgba so the pair
+				// re-tones with the theme instead of glowing on a dark page.
+				className="pointer-events-none absolute inset-0 [background:radial-gradient(circle_at_18%_8%,color-mix(in_srgb,var(--blue)_13%,transparent),transparent_34rem),radial-gradient(circle_at_82%_92%,color-mix(in_srgb,var(--purple)_11%,transparent),transparent_36rem)]"
 				aria-hidden="true"
 			/>
 
@@ -538,9 +542,10 @@ export function FirstMile({ onDone }: { onDone: () => Promise<void> }) {
 											// The split ingress step takes the server chooser's wider canvas;
 											// single-panel steps stay focused at the settings-page measure.
 											step.id === "ingress" ? "max-w-[960px]" : "max-w-[760px]",
-											// The server chooser separates panels with a tinted glass wash and
-											// depth rather than the settings page's neutral fill and outline.
-											"[&_.bg-settings-plate]:rounded-2xl [&_.bg-settings-plate]:border-transparent [&_.bg-settings-plate]:bg-blue-soft [&_.bg-settings-plate]:shadow-[inset_0_1px_0_color-mix(in_srgb,white_45%,transparent),0_18px_46px_-36px_color-mix(in_srgb,var(--blue)_48%,transparent)] [&_.bg-settings-plate]:backdrop-blur-xl",
+											// Panels sit on the wash as paper: the popup surface (white in
+											// light) with a lift instead of the settings page's grey fill and
+											// hairline, which reads as a form once the page behind it is tinted.
+											"[&_.bg-settings-plate]:rounded-2xl [&_.bg-settings-plate]:border-transparent [&_.bg-settings-plate]:bg-popup [&_.bg-settings-plate]:shadow-[0_1px_2px_color-mix(in_srgb,var(--blue)_10%,transparent),0_18px_46px_-30px_color-mix(in_srgb,var(--blue)_42%,transparent)]",
 											// First-run fields use the large field step, with extra room
 											// for the fixed-width organization and product names.
 											"[&_input]:h-9 [&_input]:min-h-9 [&_input]:px-3 [&_input]:text-base [&_select]:min-h-9 [&_textarea]:min-h-9 [&_input[data-setup-field='identity']]:w-[240px] [&_input[data-setup-field='org-name']]:w-[320px]",
