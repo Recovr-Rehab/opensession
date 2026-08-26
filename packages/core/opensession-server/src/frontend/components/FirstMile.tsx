@@ -3,6 +3,7 @@ import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import { BASE_PATH } from "../lib/base";
 import { DEFAULT_DOC_TITLE, PRODUCT_NAME } from "../lib/brand";
 import { useSetupStatus } from "../hooks/useSetupStatus";
+import { effectiveTheme, onThemeChanged } from "../lib/theme";
 import { Button } from "../ui/button";
 import { cn } from "../ui/cn";
 import { duration, ease } from "../ui/motion";
@@ -103,6 +104,38 @@ function connectedGithubOrganization(status: SetupStatus): string {
 	} catch {
 		return "";
 	}
+}
+
+/**
+ * The first-run backdrop: the landing page's own artwork, taken down to a tint.
+ *
+ * The marketing page runs this at full strength because nothing sits on it but
+ * a headline. Onboarding is a form, so the art goes behind a heavy veil of the
+ * page's own surface — enough colour to feel like the same product, not enough
+ * to compete with a column of white panels. Served from our own origin
+ * (routes/static-assets.ts), never the site's CDN: first run happens on a
+ * private server before anything is configured.
+ *
+ * Each theme gets its own cut for the reason the sign-in loop does (see
+ * UserPicker): a dimmed light image is still the brightest thing on a dark
+ * display.
+ */
+function OnboardingBackdrop() {
+	const [theme, setTheme] = useState(effectiveTheme);
+	useEffect(() => onThemeChanged(() => setTheme(effectiveTheme())), []);
+	const art = theme === "dark" ? "onboarding-bg-dark" : "onboarding-bg";
+	return (
+		<div
+			aria-hidden="true"
+			className="pointer-events-none absolute inset-0 select-none bg-surface bg-cover bg-center"
+			style={{ backgroundImage: `url(${BASE_PATH}/${art}.webp)` }}
+		>
+			{/* The veil. `bg-surface` is white in light and charcoal in dark, so one
+			    opacity gives a whitened wash on one side and a darkened one on the
+			    other without a second image or a second rule. */}
+			<div className="absolute inset-0 bg-surface/82" />
+		</div>
+	);
 }
 
 function PreviewOverflow({
@@ -396,14 +429,7 @@ export function FirstMile({ onDone }: { onDone: () => Promise<void> }) {
 			data-first-mile
 			className="relative grid h-[100dvh] w-full grid-rows-[76px_minmax(0,1fr)_84px] overflow-hidden bg-bg text-fg phone:grid-rows-[68px_minmax(0,1fr)_90px] phone:pb-[env(safe-area-inset-bottom)]"
 		>
-			<div
-				// The website's setup flow reads as a tinted room with paper laid on it:
-				// two soft washes across the whole page, and every panel above them white.
-				// Mixed from --blue/--purple rather than the site's raw rgba so the pair
-				// re-tones with the theme instead of glowing on a dark page.
-				className="pointer-events-none absolute inset-0 [background:radial-gradient(circle_at_18%_8%,color-mix(in_srgb,var(--blue)_13%,transparent),transparent_34rem),radial-gradient(circle_at_82%_92%,color-mix(in_srgb,var(--purple)_11%,transparent),transparent_36rem)]"
-				aria-hidden="true"
-			/>
+			<OnboardingBackdrop />
 
 			<TopBar
 				as="header"
