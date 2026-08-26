@@ -510,6 +510,11 @@ describe("session kernel actor service", () => {
       expect(typeof lane.timeouts).toBe("number");
       expect(typeof lane.restarts).toBe("number");
       expect(typeof lane.rejectedFull).toBe("number");
+      expect(typeof lane.kernelStoreCacheMisses).toBe("number");
+      expect(typeof lane.kernelStoreCacheEvictions).toBe("number");
+      expect(typeof lane.transcriptStoreCacheMisses).toBe("number");
+      expect(typeof lane.transcriptStoreCacheEvictions).toBe("number");
+      expect(typeof lane.sqliteBusy).toBe("number");
     }
     // The handshake and at least one call ran somewhere: total completed turns
     // across lanes must have advanced.

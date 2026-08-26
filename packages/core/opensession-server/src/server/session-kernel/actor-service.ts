@@ -20,6 +20,7 @@ import {
 import { READ_METHODS } from "./store-routing";
 import { workerEntry } from "../../runner-host/exe";
 import { chooseSessionLane, type LaneLoad } from "./lane-placement";
+import type { SessionKernelStoreHostMetrics } from "./store-host";
 
 const DEFAULT_HOST = "127.0.0.1";
 const DEFAULT_PORT = 3849;
@@ -75,6 +76,23 @@ type LaneMetrics = {
   timeouts: number;
   restarts: number;
   rejectedFull: number;
+  kernelStoreCacheMisses: number;
+  kernelStoreCacheEvictions: number;
+  transcriptStoreCacheMisses: number;
+  transcriptStoreCacheEvictions: number;
+  sqliteBusy: number;
+};
+
+const EMPTY_WORKER_METRICS: SessionKernelStoreHostMetrics = {
+  kernelStoreCacheMisses: 0,
+  kernelStoreCacheEvictions: 0,
+  transcriptStoreCacheMisses: 0,
+  transcriptStoreCacheEvictions: 0,
+  sqliteBusy: 0,
+};
+
+type KernelActorWorkerResponse = KernelActorResponse & {
+  workerMetrics?: SessionKernelStoreHostMetrics;
 };
 
 type WorkerSlot = {
@@ -87,6 +105,7 @@ type WorkerSlot = {
   restarting: boolean;
   priorityBurst: number;
   metrics: LaneMetrics;
+  workerMetrics: SessionKernelStoreHostMetrics;
 };
 
 type QueuedSessionTurn = {
@@ -258,7 +277,9 @@ export async function startSessionKernelService(
         timeouts: 0,
         restarts: 0,
         rejectedFull: 0,
+        ...EMPTY_WORKER_METRICS,
       },
+      workerMetrics: { ...EMPTY_WORKER_METRICS },
     }),
   );
   const sessionSlots = slots.slice(1);
@@ -503,17 +524,33 @@ export async function startSessionKernelService(
     });
   }
 
+  function collectWorkerMetrics(
+    slot: WorkerSlot,
+    current: SessionKernelStoreHostMetrics,
+  ): void {
+    for (const key of Object.keys(current) as Array<keyof SessionKernelStoreHostMetrics>) {
+      const previous = slot.workerMetrics[key];
+      slot.metrics[key] += current[key] >= previous
+        ? current[key] - previous
+        : current[key];
+    }
+    slot.workerMetrics = current;
+  }
+
   async function startSlot(slot: WorkerSlot): Promise<void> {
     slot.generation += 1;
     const generation = slot.generation;
+    slot.workerMetrics = { ...EMPTY_WORKER_METRICS };
     const worker = new Worker(workerUrl, { type: "module" });
     slot.worker = worker;
     slot.ready = false;
     worker.addEventListener(
       "message",
-      (event: MessageEvent<KernelActorResponse>) => {
+      (event: MessageEvent<KernelActorWorkerResponse>) => {
         if (slot.worker !== worker || generation !== slot.generation) return;
-        const response = event.data;
+        const { workerMetrics, ...actorResponse } = event.data;
+        if (workerMetrics) collectWorkerMetrics(slot, workerMetrics);
+        const response = actorResponse as KernelActorResponse;
         const entry = slot.pending.get(response.rpcId);
         if (!entry) return;
         slot.pending.delete(response.rpcId);

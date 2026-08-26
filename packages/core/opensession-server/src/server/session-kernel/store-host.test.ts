@@ -63,6 +63,29 @@ describe("per-session session kernel storage", () => {
     isolated.close();
   });
 
+  test("reports kernel and transcript cache churn separately", () => {
+    const path = paths();
+    const host = new SessionKernelStoreHost(path.central, path.isolated, 1);
+    for (const sessionId of ["cache-one", "cache-one", "cache-two"]) {
+      host.call("setRunState", [{ sessionId, state: "idle", event: "seed" }]);
+    }
+    for (const sessionId of ["cache-one", "cache-one", "cache-two"]) {
+      host.transcript({ op: "tail", sessionId, limit: 1 });
+    }
+    host.recordSqliteBusy(Object.assign(new Error("locked"), { code: "SQLITE_BUSY" }));
+    host.recordSqliteBusy(new Error("database is locked"));
+    host.recordSqliteBusy(new Error("ordinary failure"));
+
+    expect(host.metrics()).toEqual({
+      kernelStoreCacheMisses: 2,
+      kernelStoreCacheEvictions: 1,
+      transcriptStoreCacheMisses: 2,
+      transcriptStoreCacheEvictions: 1,
+      sqliteBusy: 2,
+    });
+    host.close();
+  });
+
   test("rejects an oversized transcript before claiming placement", () => {
     const path = paths();
     const sessionId = "oversized-transcript";
