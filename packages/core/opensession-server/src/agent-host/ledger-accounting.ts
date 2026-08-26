@@ -50,6 +50,14 @@ const fileBytes = (path: string): number => {
     throw error;
   }
 };
+export interface LedgerPhysicalAccounting {
+  snapshot(dbPath: string): PhysicalSnapshot;
+}
+
+export const nodeLedgerPhysicalAccounting: LedgerPhysicalAccounting = {
+  snapshot: snapshotPhysical,
+};
+
 export function snapshotPhysical(dbPath: string): PhysicalSnapshot {
   const mainBytes = fileBytes(dbPath);
   const walBytes = fileBytes(`${dbPath}-wal`);
@@ -99,6 +107,11 @@ export function conservativeTransactionBound(shape: WriteShape): number {
   return wal + database + (shape.checkpointPossible ? database : 0);
 }
 
+function capacityInteger(value: number, label: string): void {
+  if (!Number.isSafeInteger(value) || value < 0)
+    throw new LedgerCapacityError(`invalid ${label}`);
+}
+
 export function preflightLiability(input: {
   shape: WriteShape;
   writeClass: LedgerWriteClass;
@@ -109,6 +122,14 @@ export function preflightLiability(input: {
   availableBytes: number;
   chargeTurn?: boolean;
 }): Liability {
+  for (const [value, label] of [
+    [input.currentPhysicalBytes, "current physical bytes"],
+    [input.globalChargedBytes, "global charged bytes"],
+    [input.turnChargedBytes, "turn charged bytes"],
+    [input.activeLiabilityBytes, "active liability bytes"],
+    [input.availableBytes, "available bytes"],
+  ] as const)
+    capacityInteger(value, label);
   const bytes = conservativeTransactionBound(input.shape);
   if (
     input.chargeTurn !== false &&

@@ -16,7 +16,8 @@ import {
 import {
   assertCommittedBound,
   preflightLiability,
-  snapshotPhysical,
+  nodeLedgerPhysicalAccounting,
+  type LedgerPhysicalAccounting,
   type LedgerWriteClass,
   type WriteShape,
 } from "./ledger-accounting";
@@ -86,6 +87,16 @@ export interface RecoveryRecord {
   phase: string;
   replayable: boolean;
 }
+export type LedgerFaultBoundary =
+  | "transaction:before-begin"
+  | "transaction:after-begin"
+  | "transaction:before-commit"
+  | "transaction:after-commit"
+  | "checkpoint:before"
+  | "checkpoint:after"
+  | "reserve:before-recreate"
+  | "reserve:after-recreate";
+
 export interface SQLiteHostLedgerOptions {
   dbPath: string;
   keyring: HostLedgerKeyringInput;
@@ -95,6 +106,9 @@ export interface SQLiteHostLedgerOptions {
   verifyPositiveGatewayReceiptProof?: (
     proof: PositiveGatewayReceiptProof,
   ) => boolean;
+  /** Qualification seams. Production callers must use the defaults. */
+  physicalAccounting?: LedgerPhysicalAccounting;
+  injectFault?: (boundary: LedgerFaultBoundary) => void;
 }
 export class HostLedgerConflictError extends Error {
   constructor(message = "Host ledger identity conflict") {
@@ -166,6 +180,8 @@ export class SQLiteHostRecoveryLedger {
   readonly #verifyPositiveProof?: (
     proof: PositiveGatewayReceiptProof,
   ) => boolean;
+  readonly #physical: LedgerPhysicalAccounting;
+  readonly #injectFault: (boundary: LedgerFaultBoundary) => void;
   #closed = false;
   #activeLiability = 0;
 
@@ -181,6 +197,8 @@ export class SQLiteHostRecoveryLedger {
     this.#writerNonce = options.writerNonce;
     this.#now = options.now ?? Date.now;
     this.#verifyPositiveProof = options.verifyPositiveGatewayReceiptProof;
+    this.#physical = options.physicalAccounting ?? nodeLedgerPhysicalAccounting;
+    this.#injectFault = options.injectFault ?? (() => {});
     preparePrivatePath(this.#path);
     preflightSidecars(this.#path);
     const existed = exists(this.#path);
@@ -1203,7 +1221,7 @@ export class SQLiteHostRecoveryLedger {
     try {
       this.#write(
         turnKey,
-        input.kind === "cancel" ? "emergency" : "ordinary",
+        "emergency",
         {
           encryptedPlaintextBytes: bytes?.byteLength ?? 0,
           rowsInserted: 0,
@@ -1282,7 +1300,7 @@ export class SQLiteHostRecoveryLedger {
     fn: () => T,
   ): T {
     this.#open();
-    const before = snapshotPhysical(this.#path);
+    const before = this.#physical.snapshot(this.#path);
     const accounting = this.#db
       .query<{ global_charge: number }, []>(
         "SELECT global_charge FROM accounting WHERE singleton=1",
@@ -1306,53 +1324,104 @@ export class SQLiteHostRecoveryLedger {
       chargeTurn: turnKey !== undefined,
     });
     this.#activeLiability += liability.bytes;
+    this.#injectFault("transaction:before-begin");
     this.#db.exec("BEGIN IMMEDIATE");
+    let committed = false;
     try {
+      this.#injectFault("transaction:after-begin");
       const result = fn();
-      this.#db
-        .query(
-          "UPDATE accounting SET global_charge=global_charge+?,active_liability=0 WHERE singleton=1",
-        )
-        .run(liability.bytes);
-      if (turnKey)
-        this.#db
-          .query(
-            "UPDATE turns SET charged_bytes=charged_bytes+? WHERE turn_key=?",
-          )
-          .run(liability.turnCharge, turnKey);
+      this.#applyCharge(
+        turnKey,
+        liability.bytes,
+        liability.turnCharge,
+        before.totalBytes + liability.bytes,
+      );
+      this.#injectFault("transaction:before-commit");
       this.#db.exec("COMMIT");
-      const after = snapshotPhysical(this.#path);
+      committed = true;
+      this.#injectFault("transaction:after-commit");
+      const after = this.#physical.snapshot(this.#path);
       assertCommittedBound(before, after, liability);
-      this.#db
-        .query(
-          "UPDATE accounting SET physical_high_water=MAX(physical_high_water,?) WHERE singleton=1",
-        )
-        .run(after.totalBytes);
+      if (shape.checkpointPossible) this.#checkpointAndRestoreReserve();
       return result;
     } catch (error) {
-      if (error instanceof CommitThenThrow) {
-        this.#db
-          .query(
-            "UPDATE accounting SET global_charge=global_charge+?,active_liability=0 WHERE singleton=1",
-          )
-          .run(liability.bytes);
-        if (turnKey)
-          this.#db
-            .query(
-              "UPDATE turns SET charged_bytes=charged_bytes+? WHERE turn_key=?",
-            )
-            .run(liability.turnCharge, turnKey);
+      if (error instanceof CommitThenThrow && !committed) {
+        this.#applyCharge(
+          turnKey,
+          liability.bytes,
+          liability.turnCharge,
+          before.totalBytes + liability.bytes,
+        );
+        this.#injectFault("transaction:before-commit");
         this.#db.exec("COMMIT");
-        const after = snapshotPhysical(this.#path);
+        committed = true;
+        this.#injectFault("transaction:after-commit");
+        const after = this.#physical.snapshot(this.#path);
         assertCommittedBound(before, after, liability);
+        if (shape.checkpointPossible) this.#checkpointAndRestoreReserve();
         throw error.rejection;
       }
-      try {
-        this.#db.exec("ROLLBACK");
-      } catch {}
+      if (!committed) {
+        try {
+          this.#db.exec("ROLLBACK");
+        } catch {}
+      }
       throw error;
     } finally {
       this.#activeLiability -= liability.bytes;
+    }
+  }
+  #applyCharge(
+    turnKey: string | undefined,
+    bytes: number,
+    turnCharge: number,
+    physicalUpperBound: number,
+  ) {
+    this.#db
+      .query(
+        "UPDATE accounting SET global_charge=global_charge+?,physical_high_water=MAX(physical_high_water,?),active_liability=0 WHERE singleton=1",
+      )
+      .run(bytes, physicalUpperBound);
+    if (turnKey)
+      this.#db
+        .query(
+          "UPDATE turns SET charged_bytes=charged_bytes+? WHERE turn_key=?",
+        )
+        .run(turnCharge, turnKey);
+  }
+  #checkpointAndRestoreReserve() {
+    this.#injectFault("checkpoint:before");
+    const checkpoint = this.#db
+      .query<{ busy: number; log: number; checkpointed: number }, []>(
+        "PRAGMA wal_checkpoint(TRUNCATE)",
+      )
+      .get();
+    if (
+      !checkpoint ||
+      checkpoint.busy !== 0 ||
+      checkpoint.log !== checkpoint.checkpointed
+    )
+      throw new Error("Host ledger checkpoint did not complete");
+    this.#injectFault("checkpoint:after");
+    const physical = this.#physical.snapshot(this.#path);
+    this.#injectFault("reserve:before-recreate");
+    this.#db.exec("BEGIN IMMEDIATE");
+    let committed = false;
+    try {
+      this.#db
+        .query(
+          "UPDATE accounting SET global_charge=?,physical_high_water=MAX(physical_high_water,?),active_liability=0 WHERE singleton=1",
+        )
+        .run(physical.totalBytes, physical.totalBytes);
+      this.#db.exec("COMMIT");
+      committed = true;
+      this.#injectFault("reserve:after-recreate");
+    } finally {
+      if (!committed) {
+        try {
+          this.#db.exec("ROLLBACK");
+        } catch {}
+      }
     }
   }
   #encrypt(
@@ -1521,7 +1590,7 @@ export class SQLiteHostRecoveryLedger {
     }
   }
   #updatePhysicalHighWater() {
-    const size = snapshotPhysical(this.#path).totalBytes;
+    const size = this.#physical.snapshot(this.#path).totalBytes;
     this.#db
       .query("UPDATE accounting SET physical_high_water=? WHERE singleton=1")
       .run(size);

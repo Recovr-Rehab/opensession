@@ -92,4 +92,99 @@ describe("Host ledger physical accounting", () => {
       ),
     ).toThrow(LedgerAccountingContradictionError);
   });
+  test("accepts exact turn/global/free-space boundaries and rejects one byte beyond", () => {
+    const shape = {
+      encryptedPlaintextBytes: 1,
+      rowsInserted: 1,
+      rowsUpdated: 0,
+      rowsDeleted: 0,
+      affectedIndexes: 1,
+    };
+    const bound = conservativeTransactionBound(shape);
+    const base = {
+      shape,
+      writeClass: "ordinary" as const,
+      currentPhysicalBytes: 0,
+      globalChargedBytes: LEDGER_ORDINARY_PHYSICAL_MAX - bound,
+      turnChargedBytes: 32 * 1024 * 1024 - bound,
+      activeLiabilityBytes: 0,
+      availableBytes: bound,
+    };
+    expect(preflightLiability(base).bytes).toBe(bound);
+    expect(() =>
+      preflightLiability({
+        ...base,
+        turnChargedBytes: base.turnChargedBytes + 1,
+      }),
+    ).toThrow(LedgerCapacityError);
+    expect(() =>
+      preflightLiability({
+        ...base,
+        globalChargedBytes: base.globalChargedBytes + 1,
+      }),
+    ).toThrow(LedgerCapacityError);
+    expect(() =>
+      preflightLiability({ ...base, availableBytes: bound - 1 }),
+    ).toThrow(LedgerCapacityError);
+    const emergency = {
+      ...base,
+      writeClass: "emergency" as const,
+      globalChargedBytes: LEDGER_TOTAL_PHYSICAL_MAX - bound,
+      turnChargedBytes: 0,
+    };
+    expect(preflightLiability(emergency).bytes).toBe(bound);
+    expect(() =>
+      preflightLiability({
+        ...emergency,
+        globalChargedBytes: emergency.globalChargedBytes + 1,
+      }),
+    ).toThrow(LedgerCapacityError);
+  });
+  test("serializes concurrent liabilities at the ordinary boundary", () => {
+    const shape = {
+      encryptedPlaintextBytes: 1,
+      rowsInserted: 1,
+      rowsUpdated: 0,
+      rowsDeleted: 0,
+      affectedIndexes: 1,
+    };
+    const bound = conservativeTransactionBound(shape);
+    const admitted = preflightLiability({
+      shape,
+      writeClass: "ordinary",
+      currentPhysicalBytes: 0,
+      globalChargedBytes: LEDGER_ORDINARY_PHYSICAL_MAX - 2 * bound,
+      turnChargedBytes: 0,
+      activeLiabilityBytes: bound,
+      availableBytes: bound,
+    });
+    expect(admitted.bytes).toBe(bound);
+    expect(() =>
+      preflightLiability({
+        shape,
+        writeClass: "ordinary",
+        currentPhysicalBytes: 0,
+        globalChargedBytes: LEDGER_ORDINARY_PHYSICAL_MAX - 2 * bound + 1,
+        turnChargedBytes: 0,
+        activeLiabilityBytes: bound,
+        availableBytes: bound,
+      }),
+    ).toThrow(LedgerCapacityError);
+  });
+  test("charges checkpoint peak as a second database-page copy", () => {
+    const shape = {
+      encryptedPlaintextBytes: 4096,
+      rowsInserted: 2,
+      rowsUpdated: 1,
+      rowsDeleted: 1,
+      affectedIndexes: 3,
+    };
+    const walOnly = conservativeTransactionBound(shape);
+    const checkpoint = conservativeTransactionBound({
+      ...shape,
+      checkpointPossible: true,
+    });
+    expect(checkpoint - walOnly).toBeGreaterThan(0);
+    expect((checkpoint - walOnly) % 4096).toBe(0);
+  });
 });
