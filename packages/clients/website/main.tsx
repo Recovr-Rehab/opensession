@@ -7,10 +7,12 @@ import {
 } from "react";
 import { createRoot } from "react-dom/client";
 import markAsset from "../mac/build/icon-512.png";
-import nativeMarkAsset from "../ios/OS1/Assets.xcassets/AppIcon.appiconset/AppIcon-1024.png";
+import downloadMacAsset from "./download-mac.webp";
+import downloadPhoneAsset from "./download-phone.webp";
 import {
 	IconBranches,
 	IconCheck,
+	IconChevronLeft,
 	IconClock,
 	IconCopy,
 	IconGlobe,
@@ -33,7 +35,8 @@ import { TellaBackground } from "./TellaBackground";
 import { assetUrl } from "./asset-url";
 
 const markUrl = assetUrl(markAsset);
-const nativeMarkUrl = assetUrl(nativeMarkAsset);
+const downloadMacUrl = assetUrl(downloadMacAsset);
+const downloadPhoneUrl = assetUrl(downloadPhoneAsset);
 const macDownloadUrl =
 	"https://github.com/tellahq/opensession/releases/download/v0.4.22/OpenSession-0.4.22-arm64.dmg";
 const installCommandLines = [
@@ -106,69 +109,81 @@ function Question({ q, children }: { q: string; children: ReactNode }) {
 	);
 }
 
-function PwaGuide() {
-	const dialogRef = useRef<HTMLDialogElement>(null);
+/**
+ * What the download dialog shows: two cards for what you are installing, and
+ * the browser-install steps behind the web card. The site and the app keep
+ * their own copies on purpose - this one is plain CSS on the landing page's
+ * tokens, the app's is built on its own UI primitives.
+ */
+function DownloadAppsCards() {
+	const [help, setHelp] = useState(false);
+
+	if (help)
+		return (
+			<div className="download-steps">
+				<button
+					type="button"
+					className="download-steps-back"
+					onClick={() => setHelp(false)}
+				>
+					<IconChevronLeft size={18} />
+					Back to apps
+				</button>
+				<ol>
+					<li>
+						<strong>Open in your browser</strong>
+						<span>Use Safari on iPhone or iPad, or Chrome on Android and desktop.</span>
+					</li>
+					<li>
+						<strong>Open the browser menu</strong>
+						<span>On iPhone or iPad, tap Share. Elsewhere, open the browser menu.</span>
+					</li>
+					<li>
+						<strong>Add Open Session</strong>
+						<span>Choose Add to Home Screen, Install app, or Add to Dock.</span>
+					</li>
+				</ol>
+			</div>
+		);
 
 	return (
-		<>
-			<button
-				type="button"
-				className="landing-setup-app"
-				onClick={() => dialogRef.current?.showModal()}
-			>
-				<span className="landing-setup-app-mark landing-setup-app-mark-web" aria-hidden="true">
-					<IconGlobe size={24} />
-				</span>
-				<span className="landing-setup-app-copy">
-					<strong>PWA</strong>
-					<small>Install from your browser</small>
-				</span>
-				<span className="landing-setup-app-action">How to install</span>
-			</button>
+		<div className="download-cards">
+			<section className="download-card">
+				<div className="download-card-preview download-card-preview-mac">
+					<img src={downloadMacUrl} alt="Open Session running on Mac" />
+					<span className="download-card-fade" aria-hidden="true" />
+				</div>
+				<div className="download-card-body">
+					<strong>Open Session for Mac</strong>
+					<small>Apple silicon</small>
+					<a className="download-card-action" href={macDownloadUrl}>
+						<AppleMark />
+						Download
+					</a>
+				</div>
+			</section>
 
-			<dialog
-				ref={dialogRef}
-				className="pwa-guide"
-				aria-labelledby="pwa-guide-title"
-				onClick={(event) => {
-					if (event.target === event.currentTarget) event.currentTarget.close();
-				}}
-			>
-				<div className="pwa-guide-panel">
+			<section className="download-card">
+				<div className="download-card-preview download-card-preview-phone">
+					<img
+						src={downloadPhoneUrl}
+						alt="Open Session installed as a phone web app"
+					/>
+					<span className="download-card-fade" aria-hidden="true" />
+				</div>
+				<div className="download-card-body">
+					<strong>Web</strong>
+					<small>Install as a PWA</small>
 					<button
 						type="button"
-						className="pwa-guide-close"
-						aria-label="Close"
-						onClick={() => dialogRef.current?.close()}
+						className="download-card-action download-card-action-soft"
+						onClick={() => setHelp(true)}
 					>
-						<IconX size={20} />
+						How to install
 					</button>
-					<span className="pwa-guide-mark" aria-hidden="true">
-						<IconGlobe size={26} />
-					</span>
-					<h2 id="pwa-guide-title">Install the PWA</h2>
-					<p>Open your HTTPS Open Session address in a browser, then:</p>
-					<div className="pwa-guide-options">
-						<div>
-							<strong>Mac or PC</strong>
-							<span>
-								In Chrome or Edge, select the install icon in the address bar.
-								In Safari, choose File → Add to Dock.
-							</span>
-						</div>
-						<div>
-							<strong>iPhone or iPad</strong>
-							<span>
-								In Safari, tap Share, then Add to Home Screen and Add.
-							</span>
-						</div>
-					</div>
-					<p className="pwa-guide-note">
-						Want a standalone Electron app instead? Download the Mac app.
-					</p>
 				</div>
-			</dialog>
-		</>
+			</section>
+		</div>
 	);
 }
 
@@ -335,28 +350,7 @@ function SetupOverview() {
 						title="Download the apps"
 						description="Choose how you want to connect to your Open Session server."
 					>
-						<div className="landing-setup-apps">
-							<a className="landing-setup-app" href={macDownloadUrl}>
-								<img src={markUrl} alt="" />
-								<span className="landing-setup-app-copy">
-									<strong>Mac app</strong>
-									<small>Electron · Apple silicon</small>
-								</span>
-								<span className="landing-setup-app-action landing-setup-app-download">
-									<AppleMark />
-									Download
-								</span>
-							</a>
-							<PwaGuide />
-							<div className="landing-setup-app" aria-disabled="true">
-								<img src={nativeMarkUrl} alt="" />
-								<span className="landing-setup-app-copy">
-									<strong>iOS app</strong>
-									<small>Native app · App Store</small>
-								</span>
-								<span className="landing-setup-app-action">Coming soon</span>
-							</div>
-						</div>
+						<DownloadAppsCards />
 					</SetupGuide>
 				</li>
 			</ol>

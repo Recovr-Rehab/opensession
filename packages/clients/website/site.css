@@ -1413,3 +1413,221 @@ summary:focus-visible {
 	.hero-video {
 		filter: brightness(0.6) saturate(1.12);
 	}
+
+/* ── The download dialog's two cards ─────────────────────────────────────
+   What you are installing, shown rather than listed: a Mac screenshot and a
+   phone, each on a soft wash that fades into the card so the image has no
+   bottom edge to cut. The app ships the same picture built on its own UI
+   primitives; this is the site's copy, on the site's tokens. */
+/* The cards need more room than the 520px a text guide asks for. Keyed off
+   the content rather than a second class, so the dialog stays one component. */
+.setup-guide:has(.download-cards),
+.setup-guide:has(.download-steps) {
+	width: min(760px, calc(100% - 32px));
+}
+
+.download-cards {
+	display: grid;
+	gap: 14px;
+	grid-template-columns: 3fr 2fr;
+}
+
+.download-card {
+	display: flex;
+	overflow: hidden;
+	flex-direction: column;
+	height: 320px;
+	border-radius: calc(20px * var(--rf));
+	corner-shape: var(--cs);
+	background: rgba(var(--ink-rgb), 0.04);
+}
+
+.download-card-preview {
+	position: relative;
+	min-height: 0;
+	flex: 1;
+	overflow: hidden;
+}
+
+.download-card-preview-mac {
+	padding: 18px 0 0 18px;
+	background: linear-gradient(140deg, rgba(18, 128, 207, 0.16), rgba(0, 170, 90, 0.12));
+}
+
+.download-card-preview-mac img {
+	width: 100%;
+	height: 100%;
+	border-top-left-radius: calc(12px * var(--rf));
+	corner-shape: var(--cs);
+	object-fit: cover;
+	object-position: left top;
+	outline: 1px solid rgba(0, 0, 0, 0.1);
+	outline-offset: -1px;
+}
+
+.download-card-preview-phone {
+	display: flex;
+	padding: 22px 12px 0;
+	justify-content: center;
+	background: linear-gradient(140deg, rgba(0, 170, 90, 0.14), rgba(18, 128, 207, 0.14));
+}
+
+.download-card-preview-phone img {
+	width: auto;
+	max-width: none;
+	height: 115%;
+	filter: drop-shadow(0 14px 30px rgba(16, 18, 22, 0.22));
+	object-fit: contain;
+	object-position: top;
+}
+
+/* The wash runs under the copy, so the screenshot ends in the card rather
+   than against a line. */
+.download-card-fade {
+	position: absolute;
+	right: 0;
+	bottom: 0;
+	left: 0;
+	height: 34%;
+	background: linear-gradient(to bottom, transparent, var(--card));
+	pointer-events: none;
+}
+
+.download-card-body {
+	position: relative;
+	z-index: 1;
+	display: flex;
+	flex: none;
+	flex-direction: column;
+	padding: 0 18px 18px;
+	background: var(--card);
+}
+
+.download-card-body strong {
+	font-size: 17px;
+	font-weight: 600;
+	letter-spacing: -0.01em;
+	line-height: 1.25;
+}
+
+.download-card-body small {
+	margin: 3px 0 14px;
+	color: var(--muted);
+	font-size: 13px;
+	font-weight: 500;
+}
+
+.download-card-action {
+	display: inline-flex;
+	min-height: 40px;
+	align-items: center;
+	justify-content: center;
+	gap: 7px;
+	border: 0;
+	border-radius: calc(11px * var(--rf));
+	corner-shape: var(--cs);
+	background: var(--ink);
+	color: var(--page);
+	cursor: pointer;
+	font-size: 13px;
+	font-weight: 600;
+	transition: background-color 160ms ease, transform 160ms cubic-bezier(0.23, 1, 0.32, 1);
+}
+
+.download-card-action:hover {
+	background: rgba(var(--ink-rgb), 0.82);
+}
+
+.download-card-action:active {
+	transform: scale(0.96);
+}
+
+.download-card-action-soft {
+	background: rgba(var(--ink-rgb), 0.075);
+	color: var(--ink);
+}
+
+.download-card-action-soft:hover {
+	background: rgba(var(--ink-rgb), 0.12);
+}
+
+.download-steps-back {
+	display: inline-flex;
+	align-items: center;
+	gap: 4px;
+	margin-bottom: 16px;
+	padding: 0;
+	border: 0;
+	background: transparent;
+	color: var(--muted);
+	cursor: pointer;
+	font-size: 13px;
+	font-weight: 600;
+}
+
+.download-steps-back:hover {
+	color: var(--ink);
+}
+
+.download-steps ol {
+	display: grid;
+	margin: 0;
+	padding: 0;
+	gap: 10px;
+	grid-template-columns: repeat(3, minmax(0, 1fr));
+	counter-reset: download-step;
+	list-style: none;
+}
+
+.download-steps li {
+	display: flex;
+	flex-direction: column;
+	padding: 18px;
+	border-radius: calc(16px * var(--rf));
+	corner-shape: var(--cs);
+	background: rgba(var(--ink-rgb), 0.04);
+	counter-increment: download-step;
+}
+
+.download-steps li::before {
+	display: grid;
+	width: 30px;
+	height: 30px;
+	margin-bottom: 42px;
+	border-radius: calc(10px * var(--rf));
+	corner-shape: var(--cs);
+	background: var(--ink);
+	color: var(--page);
+	content: counter(download-step);
+	font-size: 13px;
+	font-weight: 600;
+	place-items: center;
+}
+
+.download-steps strong {
+	font-size: 15px;
+	font-weight: 600;
+	line-height: 1.25;
+}
+
+.download-steps span {
+	margin-top: 5px;
+	color: var(--muted);
+	font-size: 13px;
+	line-height: 1.45;
+}
+
+@media (max-width: 560px) {
+	.download-cards,
+	.download-steps ol {
+		grid-template-columns: minmax(0, 1fr);
+	}
+
+	.download-card {
+		height: 300px;
+	}
+
+	.download-steps li::before {
+		margin-bottom: 14px;
+	}
+}
