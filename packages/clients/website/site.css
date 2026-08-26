@@ -1163,7 +1163,7 @@ summary:focus-visible {
 .announcement-feature-collaboration img {
 	top: 7%;
 	left: 7%;
-	width: 93%;
+	width: calc(93% + 2px);
 	border-radius: 0;
 }
 
