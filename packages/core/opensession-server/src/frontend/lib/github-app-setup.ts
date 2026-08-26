@@ -5,6 +5,17 @@ export interface GithubAppCreateOwner {
 	login: string;
 }
 
+/** Enabling the sign-in gate changes the current page's auth contract. Settings
+ * must reload so the root gate can immediately start the device-code flow;
+ * onboarding stays on /welcome until its own finish transition. */
+export function shouldReloadAfterGithubAuthEnabled(
+	previous: boolean,
+	next: boolean,
+	onboarding = false,
+): boolean {
+	return !onboarding && !previous && next;
+}
+
 /** Read the account choice already encoded in GitHub's new-App URL. */
 export function githubAppCreateOwner(value: string): GithubAppCreateOwner {
 	try {

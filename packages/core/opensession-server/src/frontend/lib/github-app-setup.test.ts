@@ -2,7 +2,17 @@ import { describe, expect, test } from "bun:test";
 import {
 	githubAppCreateOwner,
 	githubAppCreateUrlForOwner,
+	shouldReloadAfterGithubAuthEnabled,
 } from "./github-app-setup";
+
+describe("GitHub authentication transition", () => {
+	test("reloads only when settings enable the sign-in gate", () => {
+		expect(shouldReloadAfterGithubAuthEnabled(false, true)).toBe(true);
+		expect(shouldReloadAfterGithubAuthEnabled(true, true)).toBe(false);
+		expect(shouldReloadAfterGithubAuthEnabled(true, false)).toBe(false);
+		expect(shouldReloadAfterGithubAuthEnabled(false, true, true)).toBe(false);
+	});
+});
 
 describe("GitHub App creation owner", () => {
 	test("reads an organization from a prefilled creation URL", () => {

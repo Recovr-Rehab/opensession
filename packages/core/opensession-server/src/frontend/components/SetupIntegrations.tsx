@@ -12,6 +12,7 @@ import { toast } from "../ui/toast";
 import {
 	githubAppCreateOwner,
 	githubAppCreateUrlForOwner,
+	shouldReloadAfterGithubAuthEnabled,
 	type GithubAppOwnerType,
 } from "../lib/github-app-setup";
 import {
@@ -394,6 +395,9 @@ const body = await setupRequest<{
 			toast("GitHub App settings saved");
 			onSaved(body.github, body.restartRequired === true);
 			setSetupOpen(false);
+			if (shouldReloadAfterGithubAuthEnabled(github.userPrAuth, body.github.userPrAuth, onboarding)) {
+				window.location.reload();
+			}
 })().catch(async (e: any) => {
 setError(e.message);
 }).finally(async () => {
@@ -416,6 +420,9 @@ const body = await setupRequest<{
 			setUserPrAuth(body.github.userPrAuth);
 			toast(`GitHub sign-in ${next ? "enabled" : "disabled"}`);
 			onSaved(body.github, body.restartRequired === true);
+			if (shouldReloadAfterGithubAuthEnabled(github.userPrAuth, body.github.userPrAuth, onboarding)) {
+				window.location.reload();
+			}
 })().catch(async (cause) => {
 toast(cause instanceof Error ? cause.message : "Could not update GitHub sign-in", {
 				variant: "error",
