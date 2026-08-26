@@ -21,9 +21,9 @@ const sessions: UnifiedSession[] = [
 		id: activeSessionId,
 		claudeSessionId: "demo-presence",
 		source: "opensession",
-		branch: "alex/workspace-presence",
+		branch: "maya/workspace-presence",
 		worktreeDir: "/workspace/opensession",
-		startedBy: "Alex",
+		startedBy: "Maya",
 		title: "Add multiplayer workspace presence",
 		lastActivity: minutesAgo(4),
 		createdAt: minutesAgo(38),
@@ -50,9 +50,9 @@ const sessions: UnifiedSession[] = [
 		id: "bks-demo-checkout",
 		claudeSessionId: "demo-checkout",
 		source: "opensession",
-		branch: "alex/checkout-recovery",
+		branch: "maya/checkout-recovery",
 		worktreeDir: "/workspace/checkout",
-		startedBy: "Alex",
+		startedBy: "Maya",
 		title: "Review checkout recovery",
 		lastActivity: minutesAgo(1),
 		createdAt: minutesAgo(52),
@@ -68,9 +68,9 @@ const sessions: UnifiedSession[] = [
 		id: "bks-demo-mobile",
 		claudeSessionId: "demo-mobile",
 		source: "opensession",
-		branch: "alex/mobile-navigation",
+		branch: "maya/mobile-navigation",
 		worktreeDir: "/workspace/mobile",
-		startedBy: "Alex",
+		startedBy: "Maya",
 		title: "Improve mobile navigation",
 		lastActivity: minutesAgo(9),
 		createdAt: minutesAgo(74),
@@ -86,9 +86,9 @@ const sessions: UnifiedSession[] = [
 		id: "bks-demo-shortcuts",
 		claudeSessionId: "demo-shortcuts",
 		source: "opensession",
-		branch: "alex/keyboard-shortcuts",
+		branch: "maya/keyboard-shortcuts",
 		worktreeDir: "/workspace/shortcuts",
-		startedBy: "Alex",
+		startedBy: "Maya",
 		title: "Ship keyboard shortcuts",
 		lastActivity: minutesAgo(21),
 		createdAt: minutesAgo(96),
@@ -109,9 +109,9 @@ const sessions: UnifiedSession[] = [
 		id: "bks-demo-search",
 		claudeSessionId: "demo-search",
 		source: "opensession",
-		branch: "alex/faster-session-search",
+		branch: "maya/faster-session-search",
 		worktreeDir: "/workspace/search",
-		startedBy: "Alex",
+		startedBy: "Maya",
 		title: "Make session search instant",
 		lastActivity: minutesAgo(1),
 		createdAt: minutesAgo(129),
@@ -127,9 +127,9 @@ const sessions: UnifiedSession[] = [
 		id: "bks-demo-release",
 		claudeSessionId: "demo-release",
 		source: "opensession",
-		branch: "alex/release-notes",
+		branch: "maya/release-notes",
 		worktreeDir: "/workspace/release",
-		startedBy: "Alex",
+		startedBy: "Maya",
 		title: "Draft the weekly release notes",
 		lastActivity: minutesAgo(47),
 		createdAt: minutesAgo(163),
@@ -161,9 +161,9 @@ const sessions: UnifiedSession[] = [
 		id: `bks-demo-${slug}`,
 		claudeSessionId: `demo-${slug}`,
 		source: "opensession" as const,
-		branch: `alex/${slug}`,
+		branch: `maya/${slug}`,
 		worktreeDir: `/workspace/${slug}`,
-		startedBy: "Alex",
+		startedBy: "Maya",
 		title,
 		lastActivity: minutesAgo(activeMinutes),
 		createdAt: minutesAgo(createdMinutes),
@@ -188,20 +188,20 @@ const sessions: UnifiedSession[] = [
  */
 const shippedCommits = (
 	[
-		["louise", "Louise de Sadeleer", "Keep the composer draft when a session switches", 96, 31, 25],
-		["jaap", "Jaap Frolich", "Batch transcript writes behind one flush", 240, 118, 96],
-		["alex", "Alex Rivera", "Cache repo icons so the sidebar stops flashing", 58, 12, 187],
-		["kent", "Kent de Bruin", "Give the run banner a real elapsed clock", 64, 22, 291],
-		["grant", "Grant Shaddick", "Sign preview links with a short-lived token", 148, 57, 448],
-		["kent", "Kent de Bruin", "Round the session rows to match the panel", 41, 38, 1495],
-		["louise", "Louise de Sadeleer", "Show who else is reading a session", 203, 64, 1602],
-		["alex", "Alex Rivera", "Stop the sidebar jumping to the top on rename", 27, 9, 1744],
-		["jaap", "Jaap Frolich", "Move the diff parser off the main thread", 312, 140, 1860],
-		["grant", "Grant Shaddick", "Add a health check to the deploy workflow", 72, 5, 1938],
-		["louise", "Louise de Sadeleer", "Name the model in the composer footer", 33, 11, 2905],
-		["jaap", "Jaap Frolich", "Drop the duplicate presence broadcast", 18, 96, 3050],
-		["alex", "Alex Rivera", "Write the archive filter into the URL", 88, 26, 3180],
-		["kent", "Kent de Bruin", "Tighten the empty state on the reviews page", 52, 18, 3295],
+		["jordan", "Jordan Lee", "Keep the composer draft when a session switches", 96, 31, 25],
+		["nina", "Nina Patel", "Batch transcript writes behind one flush", 240, 118, 96],
+		["maya", "Maya Chen", "Cache repo icons so the sidebar stops flashing", 58, 12, 187],
+		["theo", "Theo Martin", "Give the run banner a real elapsed clock", 64, 22, 291],
+		["sam", "Sam Rivera", "Sign preview links with a short-lived token", 148, 57, 448],
+		["theo", "Theo Martin", "Round the session rows to match the panel", 41, 38, 1495],
+		["jordan", "Jordan Lee", "Show who else is reading a session", 203, 64, 1602],
+		["maya", "Maya Chen", "Stop the sidebar jumping to the top on rename", 27, 9, 1744],
+		["nina", "Nina Patel", "Move the diff parser off the main thread", 312, 140, 1860],
+		["sam", "Sam Rivera", "Add a health check to the deploy workflow", 72, 5, 1938],
+		["jordan", "Jordan Lee", "Name the model in the composer footer", 33, 11, 2905],
+		["nina", "Nina Patel", "Drop the duplicate presence broadcast", 18, 96, 3050],
+		["maya", "Maya Chen", "Write the archive filter into the URL", 88, 26, 3180],
+		["theo", "Theo Martin", "Tighten the empty state on the reviews page", 52, 18, 3295],
 	] as const
 ).map(([person, author, title, additions, deletions, minutes], index) => ({
 	repo: "opensession",
@@ -227,9 +227,9 @@ const unreadSessionIds = new Set([
 ]);
 
 const demoPresence = [
-	{ user: "Kent", sessionId: activeSessionId },
-	{ user: "Jaap", sessionId: activeSessionId },
-	{ user: "Louise", sessionId: "bks-demo-checkout" },
+	{ user: "Theo", sessionId: activeSessionId },
+	{ user: "Nina", sessionId: activeSessionId },
+	{ user: "Jordan", sessionId: "bks-demo-checkout" },
 ];
 
 const transcripts: Record<string, TranscriptEntry[]> = {
@@ -415,7 +415,7 @@ const projects = sessions.map((session, index) => ({
 	id: session.workspaceId!,
 	name: session.title.replace(/^(Add|Review|Improve|Ship) /, ""),
 	repo: "opensession",
-	createdBy: session.startedBy || "Alex",
+	createdBy: session.startedBy || "Maya",
 	createdAt: session.createdAt,
 	order: index,
 }));
@@ -431,15 +431,17 @@ const responseFor = (url: URL, method: string): Response => {
 	const path = url.pathname.replace(/^\/(opensession|backstage)/, "");
 	if (path === "/api/sessions") return json(sessions, { headers: { ETag: '"demo-v1"' } });
 	if (path === "/api/auth/status")
-		return json({ required: false, authenticated: true, local: true, name: "Alex Rivera" });
+		return json({ required: false, authenticated: true, local: true, name: "Maya Chen" });
 	if (path === "/api/people")
 		return json({
+			// Fictional teammates without remote avatar handles keep every byte of
+			// the preview local. UserAvatar renders their initials instead.
 			people: [
-				{ name: "Alex", fullName: "Alex Rivera", github: "happylinks" },
-				{ name: "Kent", fullName: "Kent de Bruin", github: "kentdebruin" },
-				{ name: "Jaap", fullName: "Jaap Frolich", github: "jfrolich" },
-				{ name: "Grant", fullName: "Grant Shaddick", github: "9ranty" },
-				{ name: "Louise", fullName: "Louise de Sadeleer", github: "louisedesadeleer" },
+				{ name: "Maya", fullName: "Maya Chen" },
+				{ name: "Theo", fullName: "Theo Martin" },
+				{ name: "Nina", fullName: "Nina Patel" },
+				{ name: "Sam", fullName: "Sam Rivera" },
+				{ name: "Jordan", fullName: "Jordan Lee" },
 			],
 		});
 	if (path === "/api/projects") return json({ projects });
@@ -590,17 +592,16 @@ class DemoWebSocket extends EventTarget {
 		}
 		if (message.type === "watch") {
 			const entries = transcripts[message.sessionId] || [];
+			// The fixture serves one complete, in-memory transcript. Legacy mode is
+			// intentional here: seq mode also requires a separately paged transcript
+			// index, which would add machinery without making this small demo richer.
 			this.emit({
 				type: "transcript_init",
 				sessionId: message.sessionId,
 				entries,
 				truncated: false,
-				v2: true,
-				firstSeq: entries[0]?.seq || 0,
-				lastSeq: entries.at(-1)?.seq || 0,
-				lastChangeSeq: entries.at(-1)?.changeSeq || 0,
 			});
-			this.emit({ type: "presence", sessionId: message.sessionId, viewers: ["Kent", "Jaap"] }, 80);
+			this.emit({ type: "presence", sessionId: message.sessionId, viewers: ["Theo", "Nina"] }, 80);
 			return;
 		}
 		if (message.type === "prompt") {
@@ -621,7 +622,7 @@ class DemoWebSocket extends EventTarget {
 			};
 			this.emit({ type: "transcript_append", sessionId: message.sessionId, entries: [userEntry] });
 			this.emit({ type: "session_status", sessionId: message.sessionId, isRunning: true }, 60);
-			this.emit({ type: "stream_start", sessionId: message.sessionId, by: "Alex" }, 120);
+			this.emit({ type: "stream_start", sessionId: message.sessionId, by: "Maya" }, 120);
 			this.emit({ type: "stream_text", sessionId: message.sessionId, text: assistantEntry.content }, 260);
 			this.emit({ type: "transcript_append", sessionId: message.sessionId, entries: [assistantEntry] }, 900);
 			this.emit({ type: "stream_done", sessionId: message.sessionId }, 920);
@@ -676,11 +677,11 @@ Object.assign(window, {
 document.documentElement.dataset.platform = "mac";
 document.documentElement.classList.add("wco");
 
-localStorage.setItem("opensession-user", "Alex");
+localStorage.setItem("opensession-user", "Maya");
 localStorage.setItem("opensession-last-session", activeSessionId);
 // The restore is per-user: without the matching owner the demo opens Home
 // instead of the session it was written to show.
-localStorage.setItem("opensession-last-session-user", "Alex");
+localStorage.setItem("opensession-last-session-user", "Maya");
 localStorage.setItem("opensession-panel-open", "false");
 // The workspace summary card is open by default in the product, and it paints
 // over the transcript for the frames before the header is measured. That flash
@@ -696,7 +697,7 @@ localStorage.setItem("opensession-repo-count", "1");
 // unread once it HAS a mark that its activity has since passed, so every other
 // session is marked at its own last activity rather than left unmarked.
 localStorage.setItem(
-	"opensession-reads:alex",
+	"opensession-reads:maya",
 	JSON.stringify(
 		Object.fromEntries(
 			sessions.map((session) => [

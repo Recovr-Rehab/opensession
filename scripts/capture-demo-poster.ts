@@ -1,11 +1,10 @@
 /**
  * Re-shoot the landing page's product poster.
  *
- * The landing page deliberately does not boot the product. It paints these
- * local files instead, so the hero is immediate and cannot inherit a visitor's
- * server, network, or browser state. This script is the only place that boots
- * the deterministic fixture app, then turns it into the desktop and phone
- * images shipped by the site.
+ * The landing page paints these local files immediately, then fades its
+ * deterministic fixture app over the desktop poster when that app is ready.
+ * This script turns the same isolated fixture into the desktop and phone
+ * images shipped by the site, keeping the first frame aligned with the demo.
  *
  * Re-run it whenever the demo's fixtures or the app's chrome change:
  *

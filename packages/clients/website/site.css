@@ -667,6 +667,7 @@ summary:focus-visible {
 }
 
 .preview-wrap {
+	--demo-scale: 1;
 	position: absolute;
 	/* Keep one quiet inset above and to the left, then let the window continue
 	   through the stage's bottom-right corner. This enlarges the product without
@@ -690,10 +691,9 @@ summary:focus-visible {
 	box-shadow: 0 22px 54px var(--window-shadow);
 }
 
-/* A deterministic product poster, painted from a local file on the first
-   frame. The motion comes from the stage behind it, like a product shot in a
-   moving scene. Nothing here boots the app, reads browser state, or reaches a
-   server, so the landing page cannot open on a loading or empty product view. */
+/* The poster is the immediate first frame. The real client runs over local,
+   deterministic fixtures in the iframe and replaces it only after rendering,
+   so interactivity does not trade away a fast or stable first paint. */
 .product-demo-poster {
 	position: absolute;
 	inset: 0;
@@ -702,8 +702,32 @@ summary:focus-visible {
 	height: 100%;
 	object-fit: cover;
 	object-position: top left;
+	opacity: 1;
 	pointer-events: none;
 	user-select: none;
+	transition: opacity 220ms ease;
+}
+
+.product-demo-frame {
+	display: block;
+	width: calc(100% / var(--demo-scale));
+	height: calc(100% / var(--demo-scale));
+	border: 0;
+	background: var(--window);
+	opacity: 0;
+	pointer-events: none;
+	transform: scale(var(--demo-scale));
+	transform-origin: top left;
+	transition: opacity 180ms ease;
+}
+
+.preview-wrap[data-ready="true"] .product-demo-poster {
+	opacity: 0;
+}
+
+.preview-wrap[data-ready="true"] .product-demo-frame {
+	opacity: 1;
+	pointer-events: auto;
 }
 
 /* The phone, in front of the window near their shared bottom-right origin.
@@ -1371,12 +1395,16 @@ summary:focus-visible {
 		display: none;
 	}
 
+	.product-demo-poster,
+	.product-demo-frame {
+		transition: none;
+	}
 }
 
 /* Dark mode follows the system rather than offering a switch: the page has one
    screen of content and no settings, so a preference the visitor already set
-   is the whole answer. The product poster's picture source reads the same
-   signal, and the hero swaps Tella's Silver Silk loop for Midnight Dust.
+   is the whole answer. The product preview reads the same signal inside its
+   frame, and the hero swaps Tella's Silver Silk loop for Midnight Dust.
    The blue is deliberately unchanged: it is the product's accent, it already
    clears its contrast on white, and it only gains presence on a dark page. */
 @media (prefers-color-scheme: dark) {
