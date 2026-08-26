@@ -91,6 +91,7 @@ export class SessionKernelStoreHost {
   private maintenanceSessionCursor = "";
   private outboxRouteMaintenanceCursor = 0;
   private quarantineCache?: DurableSessionQuarantine[];
+
   constructor(
     private readonly centralPath = sessionKernelDbPath(),
     private readonly isolatedRoot = `${dirname(centralPath)}/session-kernel-sessions`,

@@ -21,8 +21,8 @@ export function SessionSafetyNotice({
       aria-labelledby="session-safety-title"
       className="mx-auto my-4 w-full max-w-[52rem] rounded-xl bg-yellow-soft p-4 text-fg phone:my-3 phone:rounded-lg"
     >
-      <div className="flex items-start gap-3">
-        <div className="flex size-10 shrink-0 items-center justify-center rounded-control bg-panel text-yellow">
+      <div className="flex items-start gap-3 phone:block">
+        <div className="flex size-10 shrink-0 items-center justify-center rounded-control bg-panel text-yellow phone:mb-3">
           <IconShieldCheck size={22} />
         </div>
         <div className="min-w-0 flex-1">
