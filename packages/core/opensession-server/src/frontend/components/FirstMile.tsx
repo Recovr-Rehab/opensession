@@ -325,6 +325,7 @@ export function FirstMile({ onDone }: { onDone: () => Promise<void> }) {
 	const [index, setIndex] = useState(initialFirstMileIndex);
 	const [direction, setDirection] = useState(1);
 	const [footerSeparated, setFooterSeparated] = useState(false);
+	const [progressVisible, setProgressVisible] = useState(false);
 	const [finishing, setFinishing] = useState(false);
 	const [theme, setTheme] = useState(effectiveTheme);
 	const headingRef = useRef<HTMLHeadingElement>(null);
@@ -354,6 +355,7 @@ export function FirstMile({ onDone }: { onDone: () => Promise<void> }) {
 		const update = () => {
 			const remaining = main.scrollHeight - main.scrollTop - main.clientHeight;
 			setFooterSeparated(remaining > 1);
+			setProgressVisible(main.scrollTop > 16);
 		};
 		update();
 		main.addEventListener("scroll", update, { passive: true });
@@ -407,9 +409,12 @@ export function FirstMile({ onDone }: { onDone: () => Promise<void> }) {
 		>
 			<nav
 				className={cn(
-					"absolute left-1/2 top-4 z-20 flex -translate-x-1/2 items-center rounded-[999px] bg-[color-mix(in_srgb,var(--popup-surface)_72%,transparent)] px-1 shadow-[0_12px_32px_-20px_color-mix(in_srgb,var(--fg)_38%,transparent)] [backdrop-filter:blur(18px)_saturate(1.2)] phone:top-[max(12px,env(safe-area-inset-top))]",
-					index === 0 && "invisible",
+					"absolute left-1/2 top-4 z-20 flex -translate-x-1/2 items-center rounded-[999px] bg-[color-mix(in_srgb,var(--popup-surface)_72%,transparent)] px-1 shadow-[0_12px_32px_-20px_color-mix(in_srgb,var(--fg)_38%,transparent)] transition-[opacity,translate] duration-200 [backdrop-filter:blur(18px)_saturate(1.2)] phone:top-[max(12px,env(safe-area-inset-top))] motion-reduce:transition-none",
+					index > 0 && progressVisible
+						? "visible translate-y-0 opacity-100"
+						: "invisible pointer-events-none -translate-y-2 opacity-0",
 				)}
+				aria-hidden={index === 0 || !progressVisible}
 				aria-label="Onboarding progress"
 			>
 				{steps.slice(1).map((item, itemIndex) => {
@@ -466,7 +471,7 @@ export function FirstMile({ onDone }: { onDone: () => Promise<void> }) {
 								"mx-auto flex min-h-full w-full max-w-[960px] flex-col items-center",
 								step.id === "welcome"
 									? "justify-center py-8 pb-16 phone:py-5 phone:pb-10"
-									: "pb-8 pt-24 phone:pb-5 phone:pt-20",
+									: "py-8 phone:py-5",
 							)}
 						>
 							{step.id === "welcome" ? (
