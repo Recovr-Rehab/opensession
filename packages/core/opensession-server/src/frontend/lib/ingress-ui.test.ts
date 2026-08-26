@@ -8,6 +8,7 @@ import {
 	ingressHostname,
 	privateAppCaddyConfig,
 	privateAppDnsRecord,
+	publicUrlForMethod,
 	suggestedPublicIngressDomain,
 } from "./ingress-ui";
 import type { PublicIngressSettings } from "./api/ingress";
@@ -45,12 +46,19 @@ describe("public ingress form", () => {
 		]);
 	});
 
-	test("keeps one draft per exposure method", () => {
+	test("keeps one draft and display URL per exposure method", () => {
 		expect(configuredIngressDrafts(settings)).toEqual({
 			tailscale: "https://server.example.ts.net",
-			cloudflare: "",
+			cloudflare: "https://ingress.example.test",
 			custom: "old.example.test",
 		});
+		expect(publicUrlForMethod(settings, "tailscale", "ignored.example.test")).toBe(
+			"https://server.example.ts.net",
+		);
+		expect(publicUrlForMethod(settings, "cloudflare", "callbacks.example.test")).toBe(
+			"https://callbacks.example.test",
+		);
+		expect(publicUrlForMethod(settings, "custom", "")).toBe("");
 	});
 
 	test("builds private app DNS and Caddy instructions on the tailnet", () => {

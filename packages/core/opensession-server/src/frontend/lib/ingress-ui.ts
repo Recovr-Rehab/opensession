@@ -72,6 +72,16 @@ export function suggestedPublicIngressDomain(privateDomain: string): string {
 	return `ingress.${hostname}`;
 }
 
+export function publicUrlForMethod(
+	settings: PublicIngressSettings,
+	method: IngressExposure,
+	draft: string,
+): string {
+	if (method === "tailscale") return settings.tailscale.suggestedUrl;
+	const hostname = ingressHostname(draft, "");
+	return hostname ? `https://${hostname}` : "";
+}
+
 export function customCaddyConfig(value: string): string {
 	return `${ingressHostname(value)} {\n    # BEGIN OPENSESSION SANDBOX INGRESS\n    handle {\n        reverse_proxy 127.0.0.1:3860\n    }\n    # END OPENSESSION SANDBOX INGRESS\n}`;
 }
@@ -98,12 +108,16 @@ export function privateAppCaddyConfig(settings: PublicIngressSettings, value: st
 }
 
 export function configuredIngressDrafts(settings: PublicIngressSettings): Record<IngressExposure, string> {
+	const suggestedDomain = suggestedPublicIngressDomain(configuredAppDomain(settings));
 	return {
 		tailscale: settings.tailscale.suggestedUrl,
-		cloudflare: settings.exposure === "cloudflare" ? settings.publicBaseUrl : "",
+		cloudflare:
+			settings.exposure === "cloudflare" && settings.publicBaseUrl
+				? settings.publicBaseUrl
+				: suggestedDomain ? `https://${suggestedDomain}` : "",
 		custom:
 			settings.exposure === "custom" && settings.publicBaseUrl
 				? ingressHostname(settings.publicBaseUrl, "")
-				: suggestedPublicIngressDomain(configuredAppDomain(settings)),
+				: suggestedDomain,
 	};
 }

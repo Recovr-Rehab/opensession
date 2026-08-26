@@ -22,6 +22,7 @@ import {
 	ingressHostname,
 	privateAppCaddyConfig,
 	privateAppDnsRecord,
+	publicUrlForMethod,
 } from "../../lib/ingress-ui";
 import { useSetupStatus, type SetupController } from "../../hooks/useSetupStatus";
 import { Button } from "../../ui/button";
@@ -377,6 +378,7 @@ export function IngressPanel({
 			setDrafts((current) => ({
 				...current,
 				...(next.exposure ? { [next.exposure]: saved[next.exposure] } : {}),
+				...(configuredAppDomain(next) && next.exposure !== "cloudflare" ? { cloudflare: saved.cloudflare } : {}),
 				...(!customDraftTouched.current ? { custom: saved.custom } : {}),
 			}));
 		}
@@ -501,6 +503,9 @@ export function IngressPanel({
 		method === "custom" && records.length === 0 ||
 		method === "cloudflare" && (!tunnelId.trim() || (!tunnelToken.trim() && !settings?.cloudflare.tokenConfigured));
 	const selectedMethod = INGRESS_METHODS.find((option) => option.value === method)!;
+	const selectedHealth = settings?.exposure === method ? settings.health : "not_configured";
+	const selectedPublicUrl = settings ? publicUrlForMethod(settings, method, url) : "";
+	const privateDomain = settings ? configuredAppDomain(settings) : "";
 
 	return (
 		<SettingsPanel className={onboarding ? "mx-auto max-w-[960px]" : "relative"}>
@@ -557,7 +562,7 @@ export function IngressPanel({
 					{!onboarding && (
 						<>
 							<SettingsGroupLabel
-								actions={<StatusChip label={busy === "apply" ? "Setting up" : ingressHealthLabel(settings.health)} dot={busy === "apply" ? "var(--yellow)" : ingressHealthDot(settings.health)} />}
+								actions={<StatusChip label={busy === "apply" ? "Setting up" : ingressHealthLabel(selectedHealth)} dot={busy === "apply" ? "var(--yellow)" : ingressHealthDot(selectedHealth)} />}
 							>
 								Status
 							</SettingsGroupLabel>
@@ -566,7 +571,7 @@ export function IngressPanel({
 									<SettingRowText>
 										<SettingRowTitle>Public URL</SettingRowTitle>
 										<SettingRowDescription className="selectable break-all font-mono">
-											{settings.publicBaseUrl || "No public origin configured"}
+											{selectedPublicUrl || "No public origin configured"}
 										</SettingRowDescription>
 									</SettingRowText>
 								</SettingRow>
@@ -582,7 +587,7 @@ export function IngressPanel({
 
 					<SettingsGroupLabel
 						className={onboarding ? "mt-0" : undefined}
-						actions={onboarding ? <StatusChip label={busy === "apply" ? "Setting up" : ingressHealthLabel(settings.health)} dot={busy === "apply" ? "var(--yellow)" : ingressHealthDot(settings.health)} /> : undefined}
+						actions={onboarding ? <StatusChip label={busy === "apply" ? "Setting up" : ingressHealthLabel(selectedHealth)} dot={busy === "apply" ? "var(--yellow)" : ingressHealthDot(selectedHealth)} /> : undefined}
 					>
 						Public callbacks
 					</SettingsGroupLabel>
@@ -683,8 +688,9 @@ export function IngressPanel({
 										<SetupStep number={3} title="Add the DNS route">
 											<SettingsField className="mb-0">
 												Public URL
-												<Input key={method} type="url" value={url} placeholder="https://ingress.example.com" disabled={!!busy} onChange={(event) => setDrafts((current) => ({ ...current, cloudflare: event.target.value }))} />
+												<Input key={method} type="url" value={url} placeholder="https://ingress.example.com" disabled={!!busy} readOnly={!!privateDomain} onChange={(event) => setDrafts((current) => ({ ...current, cloudflare: event.target.value }))} />
 											</SettingsField>
+											{privateDomain && <p className="m-0">Open Session uses a separate <strong className="font-medium text-fg">ingress</strong> hostname alongside the private app address.</p>}
 											<CodeBlock>{`cloudflared tunnel route dns opensession ${ingressHostname(url)}`}</CodeBlock>
 										</SetupStep>
 										<SetupStep number={4} title="Generate the connector token">
@@ -756,7 +762,7 @@ export function IngressPanel({
 							)}
 
 							<SettingsFormActions className="phone:flex-col-reverse">
-								<Button variant="soft" disabled={!!busy || !settings.canManage || !settings.publicBaseUrl} className="phone:min-h-11 phone:w-full phone:justify-center" onClick={() => void run("test", testPublicIngress, (next) => next.health === "ready" ? "Public callbacks are reachable" : "Public callbacks are not ready yet") }>
+								<Button variant="soft" disabled={!!busy || !settings.canManage || settings.exposure !== method || !settings.publicBaseUrl} className="phone:min-h-11 phone:w-full phone:justify-center" onClick={() => void run("test", testPublicIngress, (next) => next.health === "ready" ? "Public callbacks are reachable" : "Public callbacks are not ready yet") }>
 									{busy === "test" ? "Checking…" : settings.health === "waiting_dns" ? "Check again" : "Test connection"}
 								</Button>
 								<Button variant="primary" disabled={!!busy || !settings.canManage || !!missingTool || invalidInput} className="phone:min-h-11 phone:w-full phone:justify-center" onClick={() => void applyMethod()}>
