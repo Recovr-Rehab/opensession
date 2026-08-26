@@ -12,9 +12,12 @@ document is the full reference behind the invariant summary in
 The detached Agent Host design keeps provider and MCP traffic behind the
 gateway and surfaces ambiguous proxy outcomes as visible `indeterminate`
 failures. Hosts and the SessionKernel use separate service users. Blue/green
-Host workers have a 24-hour maximum lifetime. Capacity is bounded to 32 MiB per
-turn and 512 MiB globally, with a separate 64 MiB emergency reserve and 14
-worker slots reserved for control and recovery.
+Host workers have a 24-hour maximum lifetime. Capacity is dynamically admitted
+with no fixed concurrent-turn count. Each turn may accumulate at most 32 MiB of
+actual worst-case physical charge. Ordinary ledger growth stops at 448 MiB; the
+protected 64 MiB for cancel, deletion, indeterminate, quarantine, minimal
+terminal, recovery, and checkpoint work is inside the same 512 MiB physical
+ceiling, not additional capacity.
 
 SessionKernel schema 27 provides transactional `signed_v1` supervision receipt
 storage and a Node-only synchronous Ed25519 signing primitive. The untrusted V3
@@ -33,10 +36,20 @@ This is not composed into production boot or existing Pi routing. Deployment
 still requires separate Host and gateway service identities and peer
 credentials, private signing-key provisioning only to SessionKernel, strict
 public keyring provisioning to Hosts, and a detached Host service deployment.
-The current shared Ubuntu identity is explicitly not that boundary. An
-encrypted Host ledger is deferred.
-Processes sharing a UID can inspect or interfere with each other and are not a
-security boundary.
+The current shared Ubuntu identity is explicitly not that boundary.
+
+An import-inert encrypted Host recovery ledger v1 and conservative physical
+accounting prototype now exist under `src/agent-host/`, but remain entirely
+production-unwired: boot, Host composition, drivers, providers, and MCP routing
+do not open or use it. Recovery-bearing values use application-level
+AES-256-GCM and HMAC-derived opaque lookup keys; this does not encrypt SQLite
+schema, phases, bounded counters, timestamps, key IDs, or opaque keys. It does
+not use SQLCipher or a custom VFS. Bun SQLite does not expose dirty-page or
+checkpoint-peak attribution, so the prototype uses a deliberately conservative
+page/WAL/B-tree bound and post-commit assertions rather than claiming exact
+per-turn measurement. Production wiring remains blocked on calibration and a
+proven checkpoint/ENOSPC emergency implementation. Processes sharing a UID can
+inspect or interfere with each other and are not a security boundary.
 
 ### Agent operation receipt foundation
 

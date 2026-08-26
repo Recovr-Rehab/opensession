@@ -376,9 +376,14 @@ The hardened detached-host target keeps provider and MCP access gateway-proxied;
 ambiguous proxy outcomes are visible `indeterminate` failures rather than
 silent retries. Host workers use blue/green replacement with a 24-hour maximum
 worker lifetime. Kernel and Host services run as separate service users. Host
-budgets are 32 MiB per turn, 512 MiB globally plus a 64 MiB emergency reserve,
-with 14 worker slots reserved for control and recovery. An encrypted Host
-ledger is deferred. Signed challenge leases are required before use, and
+ledger admission has no fixed concurrent-turn count. A turn may accumulate at
+most 32 MiB of actual worst-case physical charge. Ordinary growth stops at
+448 MiB and a protected 64 MiB remains inside, not beyond, the same 512 MiB
+physical ceiling for emergency-class transitions. The import-inert encrypted
+ledger v1 and conservative page/WAL accounting prototype are present but remain
+production-unwired. Bun SQLite cannot expose exact dirty-page/checkpoint-peak
+attribution, so production composition remains blocked on calibration and
+ENOSPC/checkpoint proof. Signed challenge leases are required before use, and
 same-UID processes are explicitly not treated as a security boundary.
 
 ## Run ownership
