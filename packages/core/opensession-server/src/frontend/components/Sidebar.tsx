@@ -1047,21 +1047,10 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 	})();
 
 	// The repo-wide open-PR list (every open PR, session or not), from the
-	// server's batched cache. The endpoint attaches each PR's workspace before
-	// returning it. Null until the first fetch lands — the rows memo falls back
-	// to session-derived PRs if the endpoint is unreachable.
+	// server's batched cache. Null until the first fetch lands — the rows memo
+	// falls back to session-derived PRs so the section still renders if the
+	// endpoint is unreachable.
 	const [openPrs, setOpenPrs] = useState<OpenPr[] | null>(null);
-	const workspaceIdsRef = useRef(new Set(workspaces.map((workspace) => workspace.id)));
-	const requestedWorkspaceRefreshRef = useRef("");
-	useEffect(() => {
-		workspaceIdsRef.current = new Set(workspaces.map((workspace) => workspace.id));
-		const requested = requestedWorkspaceRefreshRef.current;
-		if (
-			requested &&
-			requested.split("\0").every((id) => workspaceIdsRef.current.has(id))
-		)
-			requestedWorkspaceRefreshRef.current = "";
-	}, [workspaces]);
 	const prCloseGeneration = useRef(0);
 	const closedPrTombstones = useRef(new Map<string, number>());
 	const openPrRequestSequence = useRef(0);
@@ -1088,21 +1077,6 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 						setOpenPrs((current) =>
 							sameOpenPrSnapshot(current, next) ? current : next,
 						);
-						// The open-PR and workspace requests race on a cold load. If the PR
-						// response created an attachment after the workspace response landed,
-						// ask App's existing workspace listener to catch up immediately.
-						const missingWorkspaceKey = prs
-							.map((pr) => pr.workspaceId)
-							.filter((id) => !workspaceIdsRef.current.has(id))
-							.sort()
-							.join("\0");
-						if (
-							missingWorkspaceKey &&
-							missingWorkspaceKey !== requestedWorkspaceRefreshRef.current
-						) {
-							requestedWorkspaceRefreshRef.current = missingWorkspaceKey;
-							window.dispatchEvent(new Event("opensession:workspaces-changed"));
-						}
 					})
 					.catch(() => {})
 			);

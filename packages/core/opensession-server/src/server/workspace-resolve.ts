@@ -56,17 +56,6 @@ function newestFirst(sessions: UnifiedSession[]): UnifiedSession[] {
   );
 }
 
-async function worktreeOwnersForRepo(
-  repoId: string,
-): Promise<Map<string, Workspace>> {
-  const byBranch = new Map<string, Workspace>();
-  for (const worktree of await listWorktrees(repoId)) {
-    const workspace = workspaceOwningWorktree(worktree.path);
-    if (workspace) byBranch.set(worktree.branch, workspace);
-  }
-  return byBranch;
-}
-
 function prWorkspaceName(
   number: number | undefined,
   branch: string | undefined,
@@ -177,8 +166,6 @@ export async function resolvePrWorkspace(input: {
   branch?: string;
   title?: string;
   createdBy: string;
-  /** Shared by bulk resolution so each repo shells out to git at most once. */
-  worktreeOwnersByRepo?: Map<string, Promise<Map<string, Workspace>>>;
 }): Promise<ResolvedWorkspace | null> {
   const repoId = getRepo(input.repoId).id;
   return serialized(`pr:${repoId}:${input.number ?? ""}:${input.branch ?? ""}`, async () => {
@@ -241,15 +228,9 @@ export async function resolvePrWorkspace(input: {
         adoptSiblingSessions(stamped.id, matches);
         return { workspace: stamped, created: false, pr };
       }
-      // 3. A workspace owning the PR head branch's worktree. Bulk callers
-      // share this lookup: running `git worktree list` once per open PR made
-      // the first sidebar request take minutes on repos with large queues.
-      let owners = input.worktreeOwnersByRepo?.get(repoId);
-      if (!owners) {
-        owners = worktreeOwnersForRepo(repoId);
-        input.worktreeOwnersByRepo?.set(repoId, owners);
-      }
-      const owner = (await owners).get(branch) || null;
+      // 3. A workspace owning the PR head branch's worktree.
+      const wt = (await listWorktrees(repoId)).find((w) => w.branch === branch);
+      const owner = wt ? workspaceOwningWorktree(wt.path) : null;
       if (owner) {
         const stamped = stampWorkspaceIdentity(owner.id, stamp) || owner;
         adoptSiblingSessions(stamped.id, matches);
@@ -270,44 +251,6 @@ export async function resolvePrWorkspace(input: {
     adoptSiblingSessions(workspace.id, matches);
     return { workspace, created: true, pr };
   });
-}
-
-/**
- * Attach a workspace before an open PR crosses an API boundary. This keeps the
- * sidebar from ever rendering a PR whose destination still has to be minted on
- * click. Sequential resolution avoids spawning one `git worktree list` process
- * per PR on a cold instance; after the first pass every lookup hits its key.
- */
-export async function ensureOpenPrWorkspaces<
-  T extends {
-    repo: string;
-    number: number;
-    branch: string;
-    title: string;
-    author: string;
-    person: string | null;
-  },
->(prs: T[]): Promise<Array<T & { workspaceId: string }>> {
-  const attached: Array<T & { workspaceId: string }> = [];
-  const worktreeOwnersByRepo = new Map<
-    string,
-    Promise<Map<string, Workspace>>
-  >();
-  for (const pr of prs) {
-    const resolved = await resolvePrWorkspace({
-      repoId: pr.repo,
-      number: pr.number,
-      branch: pr.branch,
-      title: pr.title,
-      createdBy: pr.person || pr.author || "GitHub",
-      worktreeOwnersByRepo,
-    });
-    if (!resolved) {
-      throw new Error(`Could not resolve workspace for ${pr.repo}#${pr.number}`);
-    }
-    attached.push({ ...pr, workspaceId: resolved.workspace.id });
-  }
-  return attached;
 }
 
 /**

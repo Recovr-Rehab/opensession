@@ -126,7 +126,7 @@ export function buildWorktreeRows(recentPrs: RecentPr[], sessions: UnifiedSessio
       additions: pr.additions,
       deletions: pr.deletions,
       updatedAt: pr.updatedAt,
-      workspaceId: pr.workspaceId ?? null,
+      workspaceId: null,
       archived: false,
       person: pr.person,
       author: pr.author,

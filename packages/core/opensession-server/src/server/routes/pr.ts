@@ -26,7 +26,6 @@ import {
 } from "../sessions";
 import { githubLoginToPersonKey } from "../shared/user-mappings";
 import { getRepo } from "../worktree";
-import { ensureOpenPrWorkspaces } from "../workspace-resolve";
 import { existsSync, watch } from "fs";
 import {
 	githubCredentialRequiredResponse,
@@ -99,13 +98,10 @@ export async function handlePrRoutes(
 	const { req, url, path, publicPrefix } = ctx;
 
 	// Every open PR in the repo, attributed to teammates via the GitHub
-	// identity table. Attach its adopt-or-create workspace before exposing it:
-	// a sidebar row must always have a stable destination, even when no Open
-	// Session session exists for the PR yet.
+	// identity table — the sidebar's Open PRs section (which must include
+	// PRs that have no Open Session session).
 	if (path === "/api/open-prs" && req.method === "GET") {
-		return conditionalJsonResponse(req, {
-			prs: await ensureOpenPrWorkspaces(getOpenPrs()),
-		});
+		return conditionalJsonResponse(req, { prs: getOpenPrs() });
 	}
 
 	// Resolved review threads shown at the bottom of each file. GitHub's REST
@@ -203,18 +199,7 @@ export async function handlePrRoutes(
 		}
 		const limit = Math.min(5000, Math.max(0, Number(url.searchParams.get("limit")) || 0));
 		if (limit) prs = prs.slice(0, limit);
-		const attachedOpenPrs = await ensureOpenPrWorkspaces(
-			prs.filter((pr) => pr.state === "OPEN"),
-		);
-		const workspaceIdByUrl = new Map(
-			attachedOpenPrs.map((pr) => [pr.url, pr.workspaceId]),
-		);
-		return conditionalJsonResponse(req, {
-			prs: prs.map((pr) => {
-				const workspaceId = workspaceIdByUrl.get(pr.url);
-				return workspaceId ? { ...pr, workspaceId } : pr;
-			}),
-		});
+		return conditionalJsonResponse(req, { prs });
 	}
 
 	// The same window for repos that ship without pull requests: commits on

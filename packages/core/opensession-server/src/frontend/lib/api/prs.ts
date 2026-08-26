@@ -7,8 +7,6 @@ import type {
 
 /** One open PR from the batched repo-wide list (session or not). */
 export interface OpenPr {
-	/** Stable adopt-or-create workspace attached before the PR is exposed. */
-	workspaceId: string;
 	repo: string;
 	branch: string;
 	url: string;
@@ -42,9 +40,7 @@ export async function fetchOpenPrs(): Promise<OpenPr[]> {
 	return data?.prs || [];
 }
 
-export interface RecentPr extends Omit<OpenPr, "workspaceId"> {
-	/** Present for every open PR; historical PRs may predate workspaces. */
-	workspaceId?: string;
+export interface RecentPr extends OpenPr {
 	state: "OPEN" | "MERGED" | "CLOSED";
 	additions: number;
 	deletions: number;
