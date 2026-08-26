@@ -1209,7 +1209,7 @@ summary:focus-visible {
 	}
 }
 
-@media (max-width: 720px) {
+@media (max-width: 1120px) {
 	.landing-setup-steps {
 		gap: 12px;
 		grid-template-columns: minmax(0, 1fr);
