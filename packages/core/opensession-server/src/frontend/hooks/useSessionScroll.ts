@@ -36,25 +36,6 @@ const TOP_THRESHOLD = 600;
 // at an intermediate position.
 const COARSE_POINTER =
   typeof window !== "undefined" && !!window.matchMedia?.("(pointer: coarse)").matches;
-// Content growth past this many pixels glides the reader down instead of
-// snapping. Smaller growth — stream tokens landing a few px at a time — tracks
-// instantly so text keeps pace with the stream; the glide exists for discrete
-// arrivals (a turn mounting, an image loading) whose single-step jump is what
-// reads as abrupt.
-const FOLLOW_GLIDE_MIN_PX = 24;
-// Glide time-constant, in seconds. Each frame closes ~23% of the remaining gap,
-// settling a 100px arrival in roughly 180ms with no overshoot.
-const FOLLOW_GLIDE_TAU_S = 0.06;
-// Velocity ceiling for the glide, px/s. The exponential approach alone scales
-// its speed with distance, so a whole-turn arrival would start at whatever
-// speed the gap demanded; the cap turns that into an ease-out for any height —
-// a 100px bubble and a 1200px turn both begin at a readable pace.
-const FOLLOW_GLIDE_MAX_VEL_PX_S = 1800;
-// The cap ramps in over this many milliseconds, so the sweep eases in as well
-// as out — without it the first frame after a big arrival still lands at full
-// speed and reads as the old jump's first half.
-const FOLLOW_GLIDE_RAMP_MS = 90;
-
 export interface SessionScroll {
   /** Attach to the scrollable transcript container. */
   containerRef: React.RefObject<HTMLDivElement | null>;
@@ -74,9 +55,6 @@ export interface SessionScroll {
   atTop: boolean;
   /** Bring the reader back to the latest reply and resume following. */
   scrollToLatest: (behavior?: ScrollBehavior) => void;
-  /** Re-engage the live edge with an eased sweep instead of a jump — for
-   *  transcript restructures that would otherwise teleport a following reader. */
-  glideToLatest: () => void;
   /** Stop following because the reader is intentionally moving into history. */
   leaveLatest: () => void;
   /** Pin a turn near the top of the viewport (used for reopening at the last turn). */
@@ -195,17 +173,7 @@ export function useSessionScroll(initialFollowing = true): SessionScroll {
   // A cached session can mount while intentionally reading history. Its first
   // relayout describes restored content, not content that arrived below it.
   const hasRelayoutRef = useRef(false);
-  // rAF handle of the live-edge glide: a critically-damped catch-up toward the
-  // growing bottom, so a large arrival glides instead of teleporting.
-  const followGlideRafRef = useRef(0);
   const scrollPerfRef = useRef({ raf: 0, startedAt: 0, frames: 0 });
-
-  const stopFollowGlide = useCallback(() => {
-    if (followGlideRafRef.current) {
-      cancelAnimationFrame(followGlideRafRef.current);
-      followGlideRafRef.current = 0;
-    }
-  }, []);
 
   const distanceFromBottom = useCallback(() => {
     const el = containerRef.current;
@@ -220,9 +188,9 @@ export function useSessionScroll(initialFollowing = true): SessionScroll {
     if (spacerRef.current) spacerRef.current.style.height = "0px";
     // NOTE: overflowAnchor is deliberately NOT restored here. This runs on
     // turn end — exactly when the final-entry restructure lands — and
-    // re-enabling browser anchoring for that layout pass lets it bounce a
-    // following reader up against the glide. relayout owns the flag: "none"
-    // while following, back to the browser once the reader isn't.
+    // re-enabling browser anchoring for that layout pass can move a following
+    // reader away from the edge before relayout runs. relayout owns the flag:
+    // "none" while following, back to the browser once the reader isn't.
   }, []);
 
   const setFollowing = useCallback((v: boolean) => {
@@ -251,7 +219,6 @@ export function useSessionScroll(initialFollowing = true): SessionScroll {
   }, []);
 
   const leaveLatest = useCallback(() => {
-    stopFollowGlide();
     autoFlightRef.current = 0;
     lastGestureRef.current = 0;
     lastTouchRef.current = 0;
@@ -259,7 +226,7 @@ export function useSessionScroll(initialFollowing = true): SessionScroll {
     towardHistoryGestureRef.current = true;
     setFollowing(false);
     updateEdges(false);
-  }, [stopFollowGlide, setFollowing, updateEdges]);
+  }, [setFollowing, updateEdges]);
 
   const scrollToLatest = useCallback(
     (behavior: ScrollBehavior = "smooth") => {
@@ -336,71 +303,6 @@ export function useSessionScroll(initialFollowing = true): SessionScroll {
 
   const endTurn = useCallback(() => { clearSpacer(); }, [clearSpacer]);
 
-  // Chase the growing bottom with a per-frame exponential approach rather than
-  // a native smooth scroll: the target keeps moving under a live stream, and
-  // queued native animations are what janked. Mid-glide scroll positions carry
-  // no reader intent, so the loop holds an autoFlight deadline (refreshed every
-  // frame) for onScroll to honor — same contract as jump-to-latest. Any reader
-  // gesture cancels it via markGesture.
-  const startFollowGlide = useCallback(() => {
-    if (followGlideRafRef.current) return;
-    if (window.matchMedia?.("(prefers-reduced-motion: reduce)").matches) return;
-    // A native flight (jump-to-latest, reopen anchor) owns the scroll; don't
-    // fight it frame-for-frame.
-    if (autoFlightRef.current > performance.now()) return;
-    autoFlightRef.current = performance.now() + 400;
-    const start = performance.now();
-    let last = start;
-    const step = (now: number) => {
-      followGlideRafRef.current = 0;
-      const el = containerRef.current;
-      const dt = Math.min(0.05, (now - last) / 1000);
-      last = now;
-      if (!el || !followingRef.current || pinnedRef.current || selectionWithin(el)) {
-        autoFlightRef.current = 0;
-        return;
-      }
-      const target = el.scrollHeight - el.clientHeight;
-      const delta = target - el.scrollTop;
-      if (Math.abs(delta) <= 1) {
-        el.scrollTop = target;
-        autoFlightRef.current = 0;
-        return;
-      }
-      const eased = Math.abs(delta) * (1 - Math.exp(-dt / FOLLOW_GLIDE_TAU_S));
-      const ramp = Math.min(1, (now - start) / FOLLOW_GLIDE_RAMP_MS);
-      const capped = Math.min(eased, FOLLOW_GLIDE_MAX_VEL_PX_S * ramp * dt);
-      el.scrollTop += delta > 0 ? capped : -capped;
-      autoFlightRef.current = now + 400;
-      followGlideRafRef.current = requestAnimationFrame(step);
-    };
-    followGlideRafRef.current = requestAnimationFrame(step);
-  }, []);
-
-  // Re-engage the live edge over an eased sweep rather than a jump. Used where
-  // a transcript restructure (an index epoch landing) would otherwise teleport
-  // a following reader to the new bottom; relayout's small-delta instant path
-  // still owns stream tracking.
-  const glideToLatest = useCallback(() => {
-    const el = containerRef.current;
-    if (!el) return;
-    clearSpacer();
-    followingRef.current = true;
-    setFollowingState(true);
-    setNewBelow(false);
-    setShowScrollToBottom(false);
-    if (
-      window.matchMedia?.("(prefers-reduced-motion: reduce)").matches ||
-      el.scrollHeight - el.clientHeight - el.scrollTop < FOLLOW_GLIDE_MIN_PX
-    ) {
-      el.scrollTop = el.scrollHeight;
-      updateEdges(true);
-      return;
-    }
-    startFollowGlide();
-    updateEdges(true);
-  }, [clearSpacer, startFollowGlide, updateEdges]);
-
   const suspendEndMaintenance = useCallback(() => {
     for (const frame of disclosureSettleFramesRef.current) cancelAnimationFrame(frame);
     disclosureSettleFramesRef.current = [];
@@ -469,25 +371,16 @@ export function useSessionScroll(initialFollowing = true): SessionScroll {
     // selection is the reader actively working with the text (principle 3).
     if (followingRef.current && !selectionWithin(el)) {
       // Own the scroll while following: browser scroll anchoring compensating
-      // for a block mounting above the edge bounces the reader up against our
-      // glide (measured: an 1138px up-jump at turn end, then a glide back). The
-      // glue IS the anchor while following; hand anchoring back when not.
+      // for a block mounting above the edge can move the reader by the whole
+      // restructure (measured: 1138px at turn end). The glue IS the anchor
+      // while following; hand anchoring back when not.
       el.style.overflowAnchor = "none";
       // A fold is settling: its height change IS this relayout's cause, and
       // gluing now would drag the reader off the block they just toggled.
-      if (!disclosureSettleRef.current) {
-        const delta = el.scrollHeight - el.clientHeight - el.scrollTop;
-        if (
-          delta < FOLLOW_GLIDE_MIN_PX ||
-          window.matchMedia?.("(prefers-reduced-motion: reduce)").matches
-        ) {
-          // Small growth is the stream itself: track it instantly so text
-          // keeps pace instead of perpetually trailing.
-          el.scrollTop = el.scrollHeight;
-        } else {
-          startFollowGlide();
-        }
-      }
+      // Otherwise restore the live-edge invariant before paint. Animating this
+      // correction leaves a following reader visibly stranded above a newly
+      // mounted message, then scrolls the whole conversation under them.
+      if (!disclosureSettleRef.current) el.scrollTop = el.scrollHeight;
     } else if (
       hadLayout &&
       !followingRef.current &&
@@ -500,7 +393,7 @@ export function useSessionScroll(initialFollowing = true): SessionScroll {
       setNewBelow(true); // content arrived out of view, let the UI announce it
     }
     updateEdges();
-  }, [sizeSpacer, anchorToTop, distanceFromBottom, updateEdges, startFollowGlide]);
+  }, [sizeSpacer, anchorToTop, distanceFromBottom, updateEdges]);
 
   // The reader's scroll is the source of truth for following. Reaching the live
   // edge re-engages it; scrolling away disengages it.
@@ -574,7 +467,6 @@ export function useSessionScroll(initialFollowing = true): SessionScroll {
     const markGesture = () => {
       autoFlightRef.current = 0;
       disclosureSettleRef.current = false;
-      stopFollowGlide();
       lastGestureRef.current = performance.now();
     };
     const leaveForGesture = () => {
@@ -643,10 +535,7 @@ export function useSessionScroll(initialFollowing = true): SessionScroll {
       window.removeEventListener("pointercancel", endDrag);
       el.removeEventListener("load", onLoad, true);
     };
-  }, [container, relayout, setFollowing, stopFollowGlide]);
-
-  // The glide loop must not outlive the hook.
-  useEffect(() => stopFollowGlide, [stopFollowGlide]);
+  }, [container, relayout, setFollowing]);
 
   // The viewport can change height with no content change at all: the composer
   // grows a line as the reader types, the queue flap folds out, a panel opens.
@@ -711,7 +600,6 @@ export function useSessionScroll(initialFollowing = true): SessionScroll {
     showScrollToBottom,
     atTop,
     scrollToLatest,
-    glideToLatest,
     leaveLatest,
     anchorToTop,
     beginTurn,
