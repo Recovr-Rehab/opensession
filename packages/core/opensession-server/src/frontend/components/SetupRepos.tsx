@@ -5,6 +5,7 @@ import { Modal } from "../ui/modal";
 import { Popover } from "../ui/popover";
 import { Segmented, SegmentedOption } from "../ui/segmented";
 import { Switch } from "../ui/switch";
+import { Menu } from "../ui/menu";
 import { cn } from "../ui/cn";
 import { EmptyState, InlineAlert, LoadingState } from "../ui/state";
 import { Spinner } from "../ui/spinner";
@@ -16,10 +17,11 @@ import {
 	SettingRowTitle,
 	SettingsGroupLabel,
 	SettingsHint,
+	rowMenuTriggerClasses,
 	settingsInputClass,
 } from "../ui/settings";
 import { toast } from "../ui/toast";
-import { IconArrowUpToLine, IconPlus } from "./icons";
+import { IconArrowUpToLine, IconDotsHorizontal, IconPlus } from "./icons";
 import { RepoTile } from "./RepoTile";
 import { REPO_TILE_COLORS, REPO_TILE_INK, repoColor, repoIconFill } from "../lib/repo-colors";
 import { repoLetter } from "../lib/repo-label";
@@ -222,7 +224,6 @@ function RepositoryRow({
 	const [worktreeError, setWorktreeError] = useState<string | null>(null);
 	const branchErrorId = useId();
 	const worktreeErrorId = useId();
-	const worktreeDescriptionId = useId();
 
 	useEffect(() => {
 		setBranch(defaultBranch);
@@ -293,7 +294,12 @@ setSaving(null);
 				onChanged={onAppearanceChanged}
 			/>
 			<SettingRowText>
-				<SettingRowTitle>{repo.label}</SettingRowTitle>
+				<div className="flex items-center justify-between gap-2">
+					<SettingRowTitle className="min-w-0 truncate">{repo.label}</SettingRowTitle>
+					<span className="hidden shrink-0 phone:inline-flex">
+						<StateChip tone={lifecycle.tone} label={lifecycle.label} />
+					</span>
+				</div>
 				<SettingRowDescription className="truncate font-mono text-meta">
 					{repo.path}
 				</SettingRowDescription>
@@ -327,31 +333,37 @@ setSaving(null);
 						{branchError}
 					</InlineAlert>
 				)}
-				<div className="mt-3 grid min-h-11 max-w-[36rem] grid-cols-[minmax(0,1fr)_auto] items-center gap-x-3 gap-y-1 py-1 phone:-ml-11 phone:max-w-[calc(100%+2.75rem)]">
-					<span className="min-w-0 text-label font-medium text-fg">
-						Use isolated worktrees
-					</span>
-					<Switch
-						aria-label={`Use isolated worktrees for ${repo.label}`}
-						aria-describedby={`${worktreeDescriptionId}${worktreeError ? ` ${worktreeErrorId}` : ""}`}
-						checked={isolatedWorktrees}
-						disabled={!!saving}
-						onCheckedChange={(next) => void saveWorktreeMode(next)}
-					/>
-					<span
-						id={worktreeDescriptionId}
-						className="col-span-2 text-meta text-dim"
-					>
-						Give new code sessions a separate worktree. Existing sessions stay put.
-					</span>
-				</div>
 				{worktreeError && (
 					<InlineAlert id={worktreeErrorId} className="mt-1.5">
 						{worktreeError}
 					</InlineAlert>
 				)}
 			</SettingRowText>
-			<StateChip tone={lifecycle.tone} label={lifecycle.label} />
+			<div className="flex shrink-0 items-center gap-2">
+				<span className="phone:hidden">
+					<StateChip tone={lifecycle.tone} label={lifecycle.label} />
+				</span>
+				<Menu.Root>
+					<Menu.Trigger
+						className={rowMenuTriggerClasses}
+						aria-label={`Manage ${repo.label}`}
+					>
+						<IconDotsHorizontal size={18} />
+					</Menu.Trigger>
+					<Menu.Popup align="end" sideOffset={4}>
+						<Menu.CheckboxItem
+							checked={isolatedWorktrees}
+							disabled={!!saving}
+							aria-describedby={worktreeError ? worktreeErrorId : undefined}
+							onCheckedChange={(next) => void saveWorktreeMode(next)}
+							closeOnClick
+						>
+							<span className="min-w-0 flex-1 truncate">Use isolated worktrees</span>
+							<Menu.Check on={isolatedWorktrees} />
+						</Menu.CheckboxItem>
+					</Menu.Popup>
+				</Menu.Root>
+			</div>
 		</SettingRow>
 	);
 }
