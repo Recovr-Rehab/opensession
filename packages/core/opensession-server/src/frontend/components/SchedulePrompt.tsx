@@ -330,12 +330,12 @@ await deleteScheduledPromptApi(p.id);
         // The class name stays: SessionViewer and Sidebar look for an open
         // overlay by this selector before taking a global key.
         <div
-          className="composer-schedule-modal-backdrop fixed inset-0 z-[300] flex items-center justify-center bg-black/40 p-5"
+          className="composer-schedule-modal-backdrop fixed inset-0 z-[300] flex items-center justify-center bg-dialog-scrim p-5 backdrop-blur-[1px]"
           onMouseDown={(e) => {
             if (e.target === e.currentTarget) setCustomOpen(false);
           }}
         >
-          <div className="w-[420px] max-w-[92vw] rounded-xl border border-line-strong bg-raised p-5 smooth-shadow-lg">
+          <div className="w-[420px] max-w-[92vw] rounded-xl border border-line-strong bg-dialog-glass p-5 smooth-shadow-lg [backdrop-filter:var(--popup-blur)]">
             <div className="flex items-start justify-between gap-3">
               <div>
                 <div className="text-dialog-title font-semibold text-fg">

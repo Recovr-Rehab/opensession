@@ -40,9 +40,8 @@ export function DownloadAppsDialog({
 			onClose={() => onOpenChange(false)}
 			phone={phone}
 			label="Download apps"
-			backdropClassName="bg-black/25 backdrop-blur-[1px]"
-			modalClassName="w-[calc(100vw-3rem)] max-w-[48rem] max-h-[calc(100dvh-3rem)] rounded-[calc(30px*var(--rf))] bg-raised p-10"
-			sheetClassName="max-h-[92dvh] bg-raised"
+			modalClassName="w-[calc(100vw-3rem)] max-w-[48rem] max-h-[calc(100dvh-3rem)] rounded-[calc(30px*var(--rf))] p-10"
+			sheetClassName="max-h-[92dvh]"
 		>
 			<div className="flex min-h-0 flex-1 flex-col overflow-y-auto overscroll-contain p-5 pt-2 desktop:overflow-visible desktop:p-0">
 				<header className="mb-5 flex shrink-0 items-center justify-between gap-4">

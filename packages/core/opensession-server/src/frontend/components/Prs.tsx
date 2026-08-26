@@ -712,7 +712,7 @@ setAddingToSidebar(false);
         phone={isPhone}
         label={preview ? `Pull request: ${preview.title}` : "Pull request"}
         showPhoneGrabber={false}
-        modalClassName="h-[min(820px,85vh)] w-[min(1280px,92vw)] max-w-none bg-surface"
+        modalClassName="h-[min(820px,85vh)] w-[min(1280px,92vw)] max-w-none"
         sheetClassName="top-0 h-[100dvh] max-h-none bg-surface [border-radius:0]! [box-shadow:none]!"
       >
         {preview && (
