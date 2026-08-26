@@ -3,6 +3,8 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
+  hashAgentMcpArgumentsV1,
+  hashAgentMcpPayloadV1,
   hashAgentModelPayloadV1,
   hashAgentOperationDescriptorV1,
   type AgentOperationRequestV1,
@@ -141,9 +143,9 @@ async function fixture(
         };
       },
     }),
-    encodePayload: (_kind, payload) => {
-      if (payload !== "payload") throw new Error();
-      return bytes;
+    decodePayload: (kind, payload) => {
+      if (kind !== "model" || payload !== "payload") return undefined;
+      return Object.freeze({ kind, value: payload, canonicalBytes: bytes });
     },
     appendTerminal: async () => {
       terminalAppends++;
@@ -169,6 +171,155 @@ async function fixture(
     counts: () => ({ executions, terminalAppends, notices }),
   };
 }
+async function mcpFixture(options?: {
+  canonicalArgumentsBytes?: Uint8Array;
+  resolvedAnchor?: {
+    throughChangeSeq: number;
+    entryIds: string[];
+    digest: ReturnType<typeof d>;
+  };
+  decodedValue?: unknown;
+}) {
+  const root = mkdtempSync(join(tmpdir(), "agent-gateway-mcp-"));
+  roots.push(root);
+  const ledger = new SQLiteAgentOperationLedger({
+    dbPath: join(root, "ledger.sqlite"),
+  });
+  let now = 10;
+  const grants = new AgentGatewayGrantRegistry({
+    now: () => now,
+    entropy: () => "m".repeat(43),
+  });
+  const argumentsBytes = new TextEncoder().encode('{"query":"safe"}');
+  const payloadBytes = new TextEncoder().encode(
+    '{"arguments":{"query":"safe"}}',
+  );
+  const transcriptAnchor = {
+    throughChangeSeq: 4,
+    entryIds: ["entry-tool-use"],
+    digest: d("7"),
+  } as const;
+  const descriptor = {
+    version: 1,
+    kind: "mcp",
+    toolUseEntryId: "entry-tool-use",
+    toolUseId: "tool-use-1",
+    server: "search-server",
+    tool: "search",
+    argumentsDigest: await hashAgentMcpArgumentsV1(argumentsBytes),
+    adapterRequestVersion: "v1",
+  } as const;
+  const descriptorDigest = await hashAgentOperationDescriptorV1(descriptor);
+  const payloadDigest = await hashAgentMcpPayloadV1(payloadBytes);
+  const grant = grants.issue({
+    operationId: "operation-mcp-1",
+    kind: "mcp",
+    fence: authority.fence,
+    planHash: d("a"),
+    authorityHash: d("b"),
+    supervisorEpoch: 1,
+    hostId: authority.hostId,
+    hostGeneration: 1,
+    hostIncarnation: authority.hostIncarnation,
+    descriptorDigest,
+    payloadDigest,
+    transcriptAnchor,
+    toolUseEntryId: descriptor.toolUseEntryId,
+    adapterId: "mcp-adapter-1",
+    adapterVersion: "1.0",
+    deadlineMs: 500,
+    authorityExpiresAtMs: 600,
+    policyHandle: encodeAgentGatewayPolicyHandle("mcppolicy00000001"),
+  });
+  const request: AgentOperationRequestV1 = {
+    version: 1,
+    operationId: "operation-mcp-1",
+    kind: "mcp",
+    fence: authority.fence,
+    supervisionEnvelope: envelope,
+    dispatchGrant: grant,
+    descriptor,
+    descriptorDigest,
+  };
+  let admits = 0;
+  let executions = 0;
+  let resolverCalls = 0;
+  let adapterRequest: unknown;
+  const gateway = new AgentOperationGateway({
+    ledger,
+    grants,
+    now: () => ++now,
+    verifySupervision: async () => ({ authority, authorityHash: d("b") }),
+    admission: {
+      async admit() {
+        admits++;
+        return { accepted: true };
+      },
+      async settle() {},
+      async indeterminate() {},
+    },
+    adapterFor: () => ({
+      id: "mcp-adapter-1",
+      version: "1.0",
+      async execute(value) {
+        executions++;
+        adapterRequest = value;
+        return {
+          outcome: { status: "succeeded", outputDigest: d("8") },
+          transcript: { text: "ephemeral" },
+        };
+      },
+    }),
+    decodePayload: (kind, payload) =>
+      Object.freeze({
+        kind: kind as "mcp",
+        value:
+          options && "decodedValue" in options ? options.decodedValue : payload,
+        canonicalBytes: payloadBytes,
+        canonicalArgumentsBytes:
+          options?.canonicalArgumentsBytes ?? argumentsBytes,
+      }),
+    resolveTranscriptAnchor: async (resolvedRequest, toolUseEntryId) => {
+      resolverCalls++;
+      expect(resolvedRequest).toEqual(request);
+      expect(toolUseEntryId).toBe(descriptor.toolUseEntryId);
+      await Promise.resolve();
+      return options?.resolvedAnchor ?? transcriptAnchor;
+    },
+    appendTerminal: async () => {
+      const completed = terminal("append-mcp-terminal", d("8"), "ok");
+      return {
+        refs: completed.refs,
+        kernelTerminal: {
+          outputDigest: d("8"),
+          outcomeCode: "ok",
+          transcriptRefs: completed.refs,
+        },
+      };
+    },
+    appendIndeterminateNotice: async () => {
+      throw new Error("unexpected recovery");
+    },
+  });
+  return {
+    gateway,
+    ledger,
+    request,
+    counts: () => ({ admits, executions, resolverCalls }),
+    adapterRequest: () =>
+      adapterRequest as
+        | {
+            identity: {
+              operationId: string;
+              descriptor: unknown;
+              toolUseEntryId?: string;
+            };
+            payload: unknown;
+          }
+        | undefined,
+  };
+}
+
 function terminal(
   appendId: string,
   outputDigest: `sha256:${string}`,
@@ -278,6 +429,86 @@ describe("Agent operation gateway durable choreography", () => {
     ).rejects.toThrow();
     expect(f.actor.admits).toBe(0);
     expect(f.counts().executions).toBe(0);
+    await f.ledger.close();
+  });
+
+  test("MCP dispatch binds canonical arguments, exact identity, and server anchor", async () => {
+    const payload = { arguments: { query: "safe" } };
+    const f = await mcpFixture({ decodedValue: payload });
+    const settled = await f.gateway.dispatch(f.request, payload);
+    expect(settled.receipt.state).toBe("settled");
+    expect(f.counts()).toEqual({ admits: 1, executions: 1, resolverCalls: 1 });
+    const execution = f.adapterRequest();
+    expect(execution?.identity).toMatchObject({
+      operationId: "operation-mcp-1",
+      descriptor: f.request.descriptor,
+      toolUseEntryId: "entry-tool-use",
+    });
+    expect(execution?.payload).toEqual(payload);
+    expect(execution?.payload).not.toBe(payload);
+    expect(Object.isFrozen(execution?.payload)).toBe(true);
+    expect(
+      Object.isFrozen((execution?.payload as { arguments: object }).arguments),
+    ).toBe(true);
+    await f.ledger.close();
+  });
+
+  test("MCP argument digest mismatch fails before admission or physical work", async () => {
+    const f = await mcpFixture({
+      canonicalArgumentsBytes: new TextEncoder().encode('{"query":"changed"}'),
+    });
+    await expect(
+      f.gateway.dispatch(f.request, { arguments: {} }),
+    ).rejects.toThrow("arguments digest mismatch");
+    expect(f.counts()).toEqual({ admits: 0, executions: 0, resolverCalls: 0 });
+    await f.ledger.close();
+  });
+
+  test("Proxy and getter payloads fail before admission or physical work", async () => {
+    let getterCalls = 0;
+    const getterPayload = Object.defineProperty({}, "arguments", {
+      enumerable: true,
+      get() {
+        getterCalls++;
+        return { query: `mutation-${getterCalls}` };
+      },
+    });
+    const proxyPayload = new Proxy(
+      { arguments: { query: "safe" } },
+      {
+        get(target, property, receiver) {
+          if (property === "arguments") getterCalls++;
+          return Reflect.get(target, property, receiver);
+        },
+      },
+    );
+    for (const payload of [getterPayload, proxyPayload]) {
+      const f = await mcpFixture({ decodedValue: payload });
+      await expect(f.gateway.dispatch(f.request, payload)).rejects.toThrow(
+        "invalid decoded payload",
+      );
+      expect(f.counts()).toEqual({
+        admits: 0,
+        executions: 0,
+        resolverCalls: 0,
+      });
+      await f.ledger.close();
+    }
+    expect(getterCalls).toBe(0);
+  });
+
+  test("wrong MCP tool-use anchor fails before admission or physical work", async () => {
+    const f = await mcpFixture({
+      resolvedAnchor: {
+        throughChangeSeq: 4,
+        entryIds: ["entry-other-tool-use"],
+        digest: d("6"),
+      },
+    });
+    await expect(
+      f.gateway.dispatch(f.request, { arguments: {} }),
+    ).rejects.toThrow();
+    expect(f.counts()).toEqual({ admits: 0, executions: 0, resolverCalls: 1 });
     await f.ledger.close();
   });
 });

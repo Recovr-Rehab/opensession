@@ -454,10 +454,14 @@ export function IntegrationSetupDialog({
 			<Modal.Content widthClassName="max-w-[40rem]">
 				<Modal.Header
 					title={
-						<span className="flex items-center gap-2.5">
-							<IconTile name={integration.id} size={28} />
-							{integration.label}
-						</span>
+						integration.id === "github" ? (
+							integration.label
+						) : (
+							<span className="flex items-center gap-2.5">
+								<IconTile name={integration.id} size={28} />
+								{integration.label}
+							</span>
+						)
 					}
 					description={guide.description}
 				/>
@@ -466,6 +470,9 @@ export function IntegrationSetupDialog({
 					<div className="flex flex-col gap-4">
 						{canToggle && (
 							<SettingsSection className="flex items-center gap-4 border-0 bg-panel p-4">
+								{integration.id === "github" && (
+									<IconTile name="github" size={40} />
+								)}
 								<div className="min-w-0 flex-1">
 									<div className="text-item-title font-medium text-fg">
 										Enable {integration.label}

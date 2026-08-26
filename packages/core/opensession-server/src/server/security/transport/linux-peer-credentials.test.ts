@@ -158,6 +158,122 @@ describe("Linux peer credentials", () => {
     rejecting.close();
   });
 
+  test("rejects mocked root credentials before admission", async () => {
+    const dir = await secureTempDir("os-peer-root-reject-");
+    const path = join(dir, "peer.sock");
+    let backendReads = 0;
+    let admissions = 0;
+    const verifier = createLinuxPeerCredentialVerifierFromBackend({
+      read(fd) {
+        expect(fd).toBeGreaterThanOrEqual(0);
+        backendReads++;
+        return { pid: process.pid, uid: 0, gid: 0 };
+      },
+      close() {},
+    });
+    const server = createVerifiedUnixSocketServer(verifier, { uid }, () => { admissions++; });
+    const pathLock = await createLinuxUnixSocketPathLock(path, { uid, gid, mode: 0o700 });
+    await server.listen({
+      path,
+      parentPolicy: { uid, gid, mode: 0o700 },
+      socketPolicy: { uid, gid, mode: 0o600 },
+      pathLock,
+    });
+    const client = await dial(path);
+    await new Promise<void>((resolve) => client.once("close", resolve));
+    expect(backendReads).toBe(1);
+    expect(admissions).toBe(0);
+    await server.closeAndDrain();
+    verifier.close();
+    await rm(dir, { recursive: true, force: true });
+  });
+
+  test("adopts a multiprocess inherited listener without replacing its path", async () => {
+    const dir = await secureTempDir("os-peer-inherited-");
+    const path = join(dir, "peer.sock");
+    const helper = join(import.meta.dir, "testing/inherited-unix-socket-child.ts");
+    const orchestratorSource = `
+import os, socket, subprocess, sys
+path, bun, helper, uid = sys.argv[1:]
+sock = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+sock.bind(path)
+os.chmod(path, 0o600)
+sock.listen(16)
+env = dict(os.environ, TEST_INHERITED_FD=str(sock.fileno()), TEST_EXPECTED_UID=uid)
+child = subprocess.Popen([bun, helper], pass_fds=(sock.fileno(),), env=env, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+sock.close()
+line = child.stdout.readline()
+if line:
+    print(line, end="", flush=True)
+else:
+    print(child.stderr.read(), file=sys.stderr)
+sys.stdin.buffer.read()
+child.terminate()
+child.wait(timeout=10)
+`;
+    const orchestrator = Bun.spawn(["python3", "-c", orchestratorSource, path, process.execPath, helper, String(uid)], {
+      stdin: "pipe",
+      stdout: "pipe",
+      stderr: "pipe",
+    });
+    const ready = await orchestrator.stdout.getReader().read();
+    expect(new TextDecoder().decode(ready.value)).toContain("ready");
+    const before = await lstat(path);
+    const client = await dial(path);
+    const response = await new Promise<string>((resolve, reject) => {
+      let value = "";
+      client.on("data", (chunk) => { value += chunk.toString(); });
+      client.once("end", () => resolve(value));
+      client.once("error", reject);
+    });
+    expect(response).toBe(`verified:${uid}`);
+    const whileListening = await lstat(path);
+    expect([whileListening.dev, whileListening.ino, whileListening.mode & 0o7777]).toEqual([before.dev, before.ino, 0o600]);
+    orchestrator.stdin.end();
+    expect(await orchestrator.exited).toBe(0);
+    const after = await lstat(path);
+    expect([after.dev, after.ino, after.mode & 0o7777]).toEqual([before.dev, before.ino, 0o600]);
+    await rm(dir, { recursive: true, force: true });
+  });
+
+  test("can require inherited-FD-only composition and rejects root policy or malformed descriptors", async () => {
+    const verifier = createLinuxPeerCredentialVerifierFromBackend({
+      read() { return { pid: process.pid, uid, gid }; },
+      close() {},
+    });
+    const inheritedOnly = createVerifiedUnixSocketServer(
+      verifier,
+      { uid },
+      () => {},
+      undefined,
+      { listenerMode: "inherited-fd-only" },
+    );
+    await expect(inheritedOnly.listen({
+      path: "/must-not-bind.sock",
+      parentPolicy: { uid, gid, mode: 0o700 },
+      socketPolicy: { uid, gid, mode: 0o600 },
+      pathLock: undefined as never,
+    })).rejects.toThrow("requires an inherited listener");
+    await inheritedOnly.closeAndDrain();
+
+    const malformedDescriptor = createVerifiedUnixSocketServer(verifier, { uid }, () => {});
+    await expect(malformedDescriptor.listen({ inheritedFd: 2 })).rejects.toThrow("Malformed inherited");
+    await malformedDescriptor.closeAndDrain();
+
+    const tcp = createServer();
+    await new Promise<void>((resolve) => tcp.listen(0, "127.0.0.1", resolve));
+    const tcpFd = (tcp as unknown as { _handle: { fd: number } })._handle.fd;
+    const wrongDomain = createVerifiedUnixSocketServer(verifier, { uid }, () => {});
+    await expect(wrongDomain.listen({ inheritedFd: tcpFd })).rejects.toThrow("not Unix-domain");
+    await wrongDomain.closeAndDrain();
+    await new Promise<void>((resolve) => tcp.close(() => resolve()));
+
+    const rootPolicy = createVerifiedUnixSocketServer(verifier, { uid: 0, allowRoot: true }, () => {});
+    await expect(rootPolicy.listen({ inheritedFd: 3 })).rejects.toThrow("non-root");
+    await rootPolicy.closeAndDrain();
+    verifier.close();
+  });
+
   test("drains physical sockets even when an accepted handler never settles", async () => {
     const dir = await secureTempDir("os-peer-drain-");
     const path = join(dir, "peer.sock");
