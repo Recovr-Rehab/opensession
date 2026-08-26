@@ -67,6 +67,7 @@
 	--modal-surface: var(--surface);
 	--modal-glass: var(--modal-surface);
 	--modal-blur: none;
+	--modal-ring: transparent;
 	--surface-shadow: rgba(16, 18, 22, 0.22);
 	--scrim: rgba(16, 18, 22, 0.32);
 	--field: #fbfbfa;
@@ -527,7 +528,9 @@ dialog::backdrop {
 	border-radius: calc(32px * var(--rf));
 	corner-shape: var(--cs);
 	background: var(--modal-surface);
-	box-shadow: 0 24px 70px var(--surface-shadow);
+	box-shadow:
+		inset 0 0 0 1px var(--modal-ring),
+		0 24px 70px var(--surface-shadow);
 }
 
 @supports (backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px)) {
@@ -1441,6 +1444,7 @@ dialog::backdrop {
 		--modal-surface: color-mix(in oklch, var(--surface) 90%, var(--ink));
 		--modal-glass: color-mix(in srgb, var(--modal-surface) 78%, transparent);
 		--modal-blur: blur(20px) saturate(1.6);
+		--modal-ring: oklch(1 0 0 / 0.09);
 		--surface-shadow: color-mix(in srgb, black 38%, transparent);
 		--scrim: color-mix(in srgb, black 24%, transparent);
 		--field: #1a1a1d;

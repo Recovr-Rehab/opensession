@@ -399,7 +399,7 @@ function SetupOverview() {
 					<SetupGuide
 						triggerLabel="Download apps"
 						triggerIcon={<AppleMark />}
-						title="Download the apps"
+						title="Download app"
 						dialogRef={downloadDialogRef}
 						triggerRef={downloadTriggerRef}
 					>
