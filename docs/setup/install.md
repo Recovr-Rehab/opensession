@@ -129,8 +129,8 @@ curl -fsSL https://raw.githubusercontent.com/tellahq/opensession/main/install.sh
 This downloads the compiled release for your OS and architecture and unpacks
 it under `~/.opensession/releases` (with `src` linked at it), installs the
 `claude` and `codex` CLIs, puts an `opensession` command on your `PATH`, writes
-a default configuration (127.0.0.1:3850, a scratch repo, no integrations), installs and
-starts the service, and ends with the URL. No questions. If no release is
+a default configuration (127.0.0.1:3850, a scratch repo, no integrations),
+installs and starts the service, and ends with the URL. No questions. If no release is
 published for your platform yet it falls back to a source clone; `--source`
 forces the git checkout, and `--artifact <path|url>` installs a specific
 release tarball. `--advanced` runs the full onboarding wizard instead; replace
