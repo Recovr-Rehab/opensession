@@ -12,6 +12,7 @@ import { toast } from "../ui/toast";
 import {
 	githubAppCreateOwner,
 	githubAppCreateUrlForOwner,
+	githubAppInstallUrlForSlug,
 	shouldReloadAfterGithubAuthEnabled,
 	type GithubAppOwnerType,
 } from "../lib/github-app-setup";
@@ -274,7 +275,10 @@ function githubOnboardingSteps(owner: GithubAppOwnerType): React.ReactNode[] {
 			Confirm <strong>Device Flow</strong> is on.
 		</>,
 		<>Grant the full permission set shown in the setup guide.</>,
-		<>Install it on the {account} entered above.</>,
+		<>
+			After GitHub creates the App, choose <strong>Install App</strong> in its sidebar
+			and install it on the {account} entered above.
+		</>,
 		<>Paste the client id, slug, secret, and private key. The installation owner is already filled in.</>,
 		<>Save, then restart.</>,
 	];
@@ -337,6 +341,7 @@ export function GithubAuthCard({
 		appOwner,
 		installationOwner,
 	);
+	const appInstallUrl = githubAppInstallUrlForSlug(appSlug || github.appSlug);
 	const installationOwnerReady = !!installationOwner.trim();
 	const idCleared = github.clientIdConfigured && clearId && !clientId.trim();
 	const secretCleared = secretConfigured && clearSecret && !clientSecret.trim();
@@ -631,20 +636,31 @@ setSaving(false);
 								</label>
 							</div>
 							<SetupSteps steps={githubOnboardingSteps(appOwner)} />
-							{installationOwnerReady ? (
-								<Button
-									variant="primary"
-									size="lg"
-									className="mt-auto min-h-11 w-full justify-center"
-									render={<a href={appCreateUrl} target="_blank" rel="noreferrer" />}
-								>
-									Create GitHub App
-								</Button>
-							) : (
-								<Button variant="primary" size="lg" className="mt-auto min-h-11 w-full justify-center" disabled>
-									Create GitHub App
-								</Button>
-							)}
+							<div className="mt-auto flex flex-col gap-2">
+								{installationOwnerReady ? (
+									<Button
+										variant="primary"
+										size="lg"
+										className="min-h-11 w-full justify-center"
+										render={<a href={appCreateUrl} target="_blank" rel="noreferrer" />}
+									>
+										Create GitHub App
+									</Button>
+								) : (
+									<Button variant="primary" size="lg" className="min-h-11 w-full justify-center" disabled>
+										Create GitHub App
+									</Button>
+								)}
+								{appInstallUrl && (
+									<Button
+										size="lg"
+										className="min-h-11 w-full justify-center"
+										render={<a href={appInstallUrl} target="_blank" rel="noreferrer" />}
+									>
+										Install GitHub App
+									</Button>
+								)}
+							</div>
 						</SettingsSection>
 						<SettingsSection className="p-4">
 							{configuration}

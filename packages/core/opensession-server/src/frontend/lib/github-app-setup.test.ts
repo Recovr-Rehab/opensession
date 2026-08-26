@@ -2,8 +2,18 @@ import { describe, expect, test } from "bun:test";
 import {
 	githubAppCreateOwner,
 	githubAppCreateUrlForOwner,
+	githubAppInstallUrlForSlug,
 	shouldReloadAfterGithubAuthEnabled,
 } from "./github-app-setup";
+
+describe("GitHub App installation URL", () => {
+	test("opens the repository installation picker for the configured App", () => {
+		expect(githubAppInstallUrlForSlug(" open-session-9lld ")).toBe(
+			"https://github.com/apps/open-session-9lld/installations/new",
+		);
+		expect(githubAppInstallUrlForSlug(null)).toBeNull();
+	});
+});
 
 describe("GitHub authentication transition", () => {
 	test("reloads only when settings enable the sign-in gate", () => {

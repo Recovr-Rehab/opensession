@@ -39,6 +39,7 @@ import {
   withConfigMutationLock,
 } from "../config-mutation";
 import {
+  githubAppInstallUrl,
   githubCredentialForLogin,
   resolveGithubCredential,
   serviceGithubCredential,
@@ -829,6 +830,7 @@ export async function handleSetupRepoRoutes(
         source: null,
         repos: [],
         appConfigured: githubConfiguredCredential(),
+        appInstallUrl: githubAppInstallUrl(),
       });
     }
     const cacheKey = credential.principal;

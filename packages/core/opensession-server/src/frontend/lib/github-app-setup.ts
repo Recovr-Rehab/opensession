@@ -16,6 +16,14 @@ export function shouldReloadAfterGithubAuthEnabled(
 	return !onboarding && !previous && next;
 }
 
+/** GitHub's installation picker for an App that has already been created. */
+export function githubAppInstallUrlForSlug(slug?: string | null): string | null {
+	const normalized = slug?.trim();
+	return normalized
+		? `https://github.com/apps/${encodeURIComponent(normalized)}/installations/new`
+		: null;
+}
+
 /** Read the account choice already encoded in GitHub's new-App URL. */
 export function githubAppCreateOwner(value: string): GithubAppCreateOwner {
 	try {

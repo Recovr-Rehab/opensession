@@ -682,6 +682,7 @@ interface BrowseResult {
 	source: "user" | "app" | null;
 	repos: BrowseRepo[];
 	appConfigured?: boolean;
+	appInstallUrl?: string | null;
 }
 
 /** GET /api/setup/codestorage/repos — `source: null` when the code.storage
@@ -1031,6 +1032,17 @@ function RemoteRepoPicker({
 						)}{" "}
 						You can still register a repo by name:
 					</div>
+					{browse?.appConfigured && browse.appInstallUrl && (
+						<Button
+							className="mt-2.5"
+							variant="primary"
+							render={
+								<a href={browse.appInstallUrl} target="_blank" rel="noreferrer" />
+							}
+						>
+							Install GitHub App
+						</Button>
+					)}
 					<div className="mt-2.5 flex items-center gap-2">
 						<input
 							ref={inputRef}
