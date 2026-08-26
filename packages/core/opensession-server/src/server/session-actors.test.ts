@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test";
+import { productMark } from "./config";
 import {
 	agentActor,
 	delegatedActorParent,
@@ -34,10 +35,9 @@ describe("machine actors", () => {
 	});
 
 	test("matches the agent's own name across an ornament change", () => {
-		// The persona was renamed "OS¹" → "OS"; sessions started under the old
-		// mark must not become a person on the strength of a superscript.
-		expect(isMachineActor("OS¹")).toBe(true);
-		expect(isMachineActor("OS")).toBe(true);
+		const mark = productMark();
+		expect(isMachineActor(`${mark}¹`)).toBe(true);
+		expect(isMachineActor(mark)).toBe(true);
 	});
 
 	test("a delegated sender names its parent", () => {

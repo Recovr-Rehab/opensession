@@ -971,11 +971,11 @@ export function makeGuardedGrepExecute(
     const pattern = String(params?.pattern ?? "");
     if (!pattern) throw new Error("grep: pattern is required");
     if (signal?.aborted) throw new Error("Operation aborted");
-    const rgPath = Bun.which("rg");
-    if (!rgPath) throw new Error("ripgrep (rg) is not available on this host");
     const rawPath = typeof params?.path === "string" && params.path ? params.path : ".";
     const searchPath = resolve(cwd, rawPath);
     guard(searchPath);
+    const rgPath = Bun.which("rg");
+    if (!rgPath) throw new Error("ripgrep (rg) is not available on this host");
     const st = await fsStat(searchPath).catch(() => null);
     if (!st) throw new Error(`Path not found: ${searchPath}`);
     const isDir = st.isDirectory();

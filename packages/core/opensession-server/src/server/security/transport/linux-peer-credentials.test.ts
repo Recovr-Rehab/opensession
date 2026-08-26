@@ -1,5 +1,5 @@
 import { chmod, lstat, mkdir, mkdtemp, rm, symlink } from "node:fs/promises";
-import { tmpdir } from "node:os";
+import { homedir } from "node:os";
 import { join } from "node:path";
 import { connect, createServer, type Socket } from "node:net";
 import { afterEach, describe, expect, test } from "bun:test";
@@ -25,8 +25,14 @@ const gid = process.getgid!();
 const cleanups: Array<() => Promise<void> | void> = [];
 afterEach(async () => { while (cleanups.length) await cleanups.pop()!(); });
 
+async function secureTempDir(prefix: string): Promise<string> {
+  const dir = await mkdtemp(join(homedir(), `.${prefix}`));
+  await chmod(dir, 0o700);
+  return dir;
+}
+
 async function listeningSocket(onConnection?: (socket: Socket) => void) {
-  const dir = await mkdtemp(join(tmpdir(), "os-peer-"));
+  const dir = await secureTempDir("os-peer-");
   const path = join(dir, "peer.sock");
   const server = createServer(onConnection);
   await new Promise<void>((resolve, reject) => server.listen(path, resolve).once("error", reject));
@@ -97,7 +103,7 @@ describe("Linux peer credentials", () => {
   });
 
   test("gate verifies before first byte, destroys rejection, and never transfers identity", async () => {
-    const dir = await mkdtemp(join(tmpdir(), "os-verified-peer-"));
+    const dir = await secureTempDir("os-verified-peer-");
     const path = join(dir, "peer.sock");
     const verifier = await createLinuxPeerCredentialVerifier();
     const events: string[] = [];
@@ -134,7 +140,7 @@ describe("Linux peer credentials", () => {
     expect(() => acceptedSockets[0].assertCurrent()).toThrow("no longer current");
     second.destroy(); await gate.closeAndDrain(); verifier.close();
 
-    const rejectedDir = await mkdtemp(join(tmpdir(), "os-rejected-peer-"));
+    const rejectedDir = await secureTempDir("os-rejected-peer-");
     const rejectedPath = join(rejectedDir, "peer.sock");
     const rejecting = await createLinuxPeerCredentialVerifier();
     const rejectedServer = createVerifiedUnixSocketServer(rejecting, { uid: uid + 1 }, () => { throw new Error("must not run"); });
@@ -153,7 +159,7 @@ describe("Linux peer credentials", () => {
   });
 
   test("drains physical sockets even when an accepted handler never settles", async () => {
-    const dir = await mkdtemp(join(tmpdir(), "os-peer-drain-"));
+    const dir = await secureTempDir("os-peer-drain-");
     const path = join(dir, "peer.sock");
     const verifier = await createLinuxPeerCredentialVerifier();
     const server = createVerifiedUnixSocketServer(verifier, { uid }, () => new Promise<void>(() => {}));
@@ -220,7 +226,7 @@ describe("Unix socket paths", () => {
   });
 
   test("serializes stale removal and bind with a crash-safe path lock", async () => {
-    const dir = await mkdtemp(join(tmpdir(), "os-peer-lock-"));
+    const dir = await secureTempDir("os-peer-lock-");
     cleanups.push(() => rm(dir, { recursive: true, force: true }));
     const path = join(dir, "peer.sock");
     const first = await createLinuxUnixSocketPathLock(path, { uid, gid, mode: 0o700 });
@@ -238,7 +244,7 @@ describe("Unix socket paths", () => {
   });
 
   test("atomically removes only a proven stale socket inode", async () => {
-    const dir = await mkdtemp(join(tmpdir(), "os-peer-stale-"));
+    const dir = await secureTempDir("os-peer-stale-");
     cleanups.push(() => rm(dir, { recursive: true, force: true }));
     const path = join(dir, "stale.sock");
     const child = Bun.spawn([process.execPath, "-e", `const {createServer}=require('node:net');const s=createServer();s.listen(${JSON.stringify(path)},()=>console.log('ready'))`], { stdout: "pipe" });

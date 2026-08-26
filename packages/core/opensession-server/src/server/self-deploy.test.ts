@@ -70,7 +70,7 @@ describe("deployStateDir / deployCheckout", () => {
 		expect(deployCheckout()).toBe("/tmp/x-checkout");
 		delete process.env.OPENSESSION_DEPLOY_STATE;
 		delete process.env.OPENSESSION_DEPLOY_CHECKOUT;
-		expect(deployStateDir().endsWith("/.opensession-deploy")).toBe(true);
+		expect(deployStateDir().endsWith("/.opensession/deploy")).toBe(true);
 		// Default checkout is this repo (the running instance's own tree).
 		expect(deployCheckout()).toBe(resolve(import.meta.dir, "../../../../.."));
 	});

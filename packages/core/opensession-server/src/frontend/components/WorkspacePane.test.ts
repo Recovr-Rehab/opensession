@@ -69,19 +69,14 @@ test("reviews with and without a PR share the floating toolbar", () => {
 	);
 
 	expect(
-		prPanelSource.match(
-			/<ReviewToolbar compact=\{compactToolbar\} flushTop=\{flushToolbarTop\}>/g,
-		)?.length,
+		prPanelSource.match(/<ReviewToolbar compact=\{compactToolbar\}>/g)?.length,
 	).toBe(2);
 	expect(prPanelSource).toContain(
-		"<ReviewToolbar compact={compactToolbar} flushTop={flushToolbarTop}>\n          <div className={PR_NO_PR_BAR}>",
+		"<ReviewToolbar compact={compactToolbar}>\n          <div className={PR_NO_PR_BAR}>",
 	);
-	expect(reviewToolbarSource).toContain(
-		'flushTop ? "" : "desktop:pt-2.5"',
-	);
+	expect(reviewToolbarSource).toContain("desktop:pt-2.5");
 	expect(reviewToolbarSource).not.toContain("desktop:mt-2.5");
-	expect(reviewToolbarSource).toContain('"top-[42px] h-5 -mb-5"');
-	expect(reviewToolbarSource).toContain('"top-[52px] h-2.5 -mb-2.5"');
+	expect(reviewToolbarSource).toContain('"pointer-events-none sticky top-[52px]');
 	expect(reviewToolbarSource).not.toContain("linear-gradient");
 	expect(reviewToolbarSource).toContain("overflow-clip rounded-t-lg");
 	expect(reviewToolbarSource).toContain("desktop:mb-2");

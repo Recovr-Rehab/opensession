@@ -111,7 +111,7 @@ describe("takeQueuedPrompt", () => {
 	});
 
 	test("atomically removes and returns the complete payload", () => {
-		expect(takeQueuedPrompt(SESSION, "q1", "Kent de Bruin", false)).toMatchObject({
+		expect(takeQueuedPrompt(SESSION, "q1", "Kent", false)).toMatchObject({
 			id: "q1",
 			content: "first",
 			images: [PNG],
@@ -235,7 +235,7 @@ describe("takeSteeredPrompt", () => {
 	});
 
 	test("removes one exact pending steer with its complete payload", () => {
-		expect(takeSteeredPrompt(SESSION, "s1", "Kent de Bruin", false)).toMatchObject({
+		expect(takeSteeredPrompt(SESSION, "s1", "Kent", false)).toMatchObject({
 			id: "s1",
 			content: "first",
 			images: [PNG],
