@@ -28,7 +28,6 @@ function sessionKernelToken(): Promise<string> {
 
 function failTransport(message: string): never {
   fatal = true;
-  queueMicrotask(() => self.close());
   throw new Error(message);
 }
 
