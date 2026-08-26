@@ -504,7 +504,7 @@ export function IngressPanel({
 			) : (
 				<>
 					<div className="mb-5 px-5">
-						<Segmented label="Domain setup" value={surface} onValueChange={(value) => setSurface(value as "app" | "ingress")} className="w-full max-w-[480px]">
+						<Segmented label="Domain setup" value={surface} onValueChange={(value) => setSurface(value as "app" | "ingress")} className="mx-auto w-full max-w-[480px]">
 							<SegmentedOption value="app" className="flex min-h-10 flex-1 items-center justify-center phone:min-h-11">Private app</SegmentedOption>
 							<SegmentedOption value="ingress" className="flex min-h-10 flex-1 items-center justify-center phone:min-h-11">Public callbacks</SegmentedOption>
 						</Segmented>
@@ -577,7 +577,7 @@ export function IngressPanel({
 						<SettingsHint className="mt-2 mb-3">Optional. Skip this if you do not need webhooks, remote Sandbox callbacks, or public workload identity.</SettingsHint>
 					)}
 					<div className="grid grid-cols-[minmax(0,300px)_minmax(0,1fr)] items-start gap-3.5 phone:grid-cols-1">
-						<div className="grid content-start gap-2">
+						<SettingsForm className="m-0 min-w-0 gap-2">
 							<div className="px-1 text-label font-medium text-dim">Connection method</div>
 							<RadioGroup
 								aria-label="Public callback method"
@@ -587,7 +587,7 @@ export function IngressPanel({
 								className="grid gap-2"
 							>
 								{INGRESS_METHODS.map((option) => (
-									<label key={option.value} className="flex min-h-20 cursor-pointer items-center gap-3.5 rounded-xl bg-settings-plate px-4 py-3.5 transition-[background-color] hover:bg-hover [&:has([data-checked])]:bg-pressed">
+									<label key={option.value} className="flex min-h-20 cursor-pointer items-center gap-3.5 rounded-xl px-4 py-3.5 transition-[background-color] hover:bg-hover [&:has([data-checked])]:bg-pressed">
 										<MethodMark method={option.value} />
 										<span className="min-w-0 flex-1">
 											<span className="block text-item-title font-medium text-fg">{option.label}</span>
@@ -597,7 +597,7 @@ export function IngressPanel({
 									</label>
 								))}
 							</RadioGroup>
-						</div>
+						</SettingsForm>
 
 						<SettingsForm className="m-0 min-w-0">
 							<div className="flex items-center gap-3">
