@@ -13,12 +13,14 @@ test("fresh transcript ranges reaffirm a cached reader's live edge", () => {
 	);
 });
 
-test("opening transcripts reveal only after their outline and visible payload settle", () => {
+test("opening transcripts never hide rendered rows behind slow hydration", () => {
 	expect(settledCallback).toContain("if (!transcriptOutlineReady) return");
 	expect(settledCallback).toContain("setOpenSettlePending(false)");
 	expect(viewer).toContain("setTranscriptOutlineReady(!v2)");
 	expect(viewer).toContain("setTranscriptOutlineReady(true)");
-	expect(viewer).not.toContain("OPEN_SETTLE_MAX_MS");
+	expect(viewer).toContain("const OPEN_SETTLE_MAX_MS = 350");
+	expect(viewer).toContain("() => setOpenSettlePending(false)");
+	expect(viewer).toContain("OPEN_SETTLE_MAX_MS,");
 	expect(viewer).toContain(
 		'"w-full shrink-0 motion-safe:transition-opacity motion-safe:duration-150"',
 	);

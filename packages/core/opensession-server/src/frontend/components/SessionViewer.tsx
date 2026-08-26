@@ -720,6 +720,11 @@ const HIDDEN_REOPEN_MS = 30_000;
 // late: on the iOS PWA the WebSocket only reconnects after visibility, so what
 // streamed while backgrounded arrives moments after the visibilitychange.
 const RESUME_GROWTH_WINDOW_MS = 8_000;
+// Let fast transcript hydration settle out of sight, but never leave readable
+// rows hidden behind the opening curtain while a slow outline or range request
+// catches up. The virtualizer preserves the live-edge position as that older
+// content grows above it.
+const OPEN_SETTLE_MAX_MS = 350;
 // "Jump to the start of the session" walks the backlog a page at a time rather
 // than asking for it in one frame: a multi-thousand-entry transcript would be a
 // tens-of-MB payload and one giant reconciliation. Fat pages keep the number of
@@ -1890,11 +1895,21 @@ export function SessionViewer({
 		[suspendEndMaintenance],
 	);
 
-	// Open-settle curtain: armed on mount and lifted by positive proof below: the
-	// complete outline is known and every structural range spanning the
-	// virtualizer's near-visible window has payload. Missing ranges known to sit
-	// wholly above or below that window do not hold the chat back.
+	// Open-settle curtain: positive proof lifts it as soon as the complete outline
+	// and near-visible payload settle. The deadline is equally load-bearing: an
+	// incomplete or slow hydration must not turn already-rendered transcript rows
+	// into an apparently empty page.
 	const [openSettlePending, setOpenSettlePending] = useState(true);
+	const transcriptRendered =
+		!loading && (entries.length > 0 || Boolean(transcriptIndex));
+	useEffect(() => {
+		if (!transcriptRendered) return;
+		const timer = window.setTimeout(
+			() => setOpenSettlePending(false),
+			OPEN_SETTLE_MAX_MS,
+		);
+		return () => window.clearTimeout(timer);
+	}, [transcriptRendered]);
 	const settledIndexRef = useRef<TranscriptIndexEntry[] | null>(null);
 	const onVisibleRangesSettled = useCallback(() => {
 		if (!transcriptOutlineReady) return;
