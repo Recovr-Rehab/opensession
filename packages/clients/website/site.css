@@ -59,10 +59,10 @@
 	--window: #f6f6f4;
 	--window-shadow: rgba(28, 34, 40, 0.24);
 	--surface: #fff;
-	/* Every website modal resolves to one stable surface. Keeping the panel
-	   opaque makes that material identical over every part of the landing page;
-	   the shared backdrop and glow carry the depth instead. */
+	/* The shared modal owns one material contract. Pages can tune its fill and
+	   filter without giving individual dialogs their own surface treatment. */
 	--modal-surface: var(--surface);
+	--modal-filter: none;
 	--modal-ring: transparent;
 	--modal-glow: transparent;
 	--surface-shadow: rgba(16, 18, 22, 0.22);
@@ -529,6 +529,8 @@ summary:focus-visible {
 	border-radius: calc(32px * var(--rf));
 	corner-shape: var(--cs);
 	background: var(--modal-surface);
+	-webkit-backdrop-filter: var(--modal-filter);
+	backdrop-filter: var(--modal-filter);
 	box-shadow:
 		inset 0 0 0 1px var(--modal-ring),
 		0 0 72px -10px var(--modal-glow),
@@ -1380,9 +1382,8 @@ summary:focus-visible {
 		--window: #0d0d0f;
 		--window-shadow: rgba(0, 0, 0, 0.5);
 		--surface: #151517;
-		/* Lift the shared modal surface well above the page. The edge and blue
-		   ambient glow separate it without making its fill depend on what happens
-		   to be behind each dialog. */
+		/* Pages without artwork keep a neutral modal surface. The marketing page
+		   overrides this token with the same blue glass used by its sections. */
 		--modal-surface: color-mix(in oklch, var(--surface) 90%, var(--ink));
 		--modal-ring: oklch(1 0 0 / 0.11);
 		--modal-glow: color-mix(in oklch, var(--accent-blue) 32%, transparent);

@@ -6,6 +6,11 @@
 	--page-art: url("./landing-background.webp");
 	--card-glass: oklch(1 0 0 / 0.8);
 	--glass-line: oklch(0 0 0 / 0.07);
+	/* Marketing dialogs use the section material through WebsiteModal rather
+	   than introducing a second, greyer panel treatment. */
+	--modal-surface: var(--card-glass);
+	--modal-filter: blur(14px) saturate(1.08);
+	--modal-ring: var(--glass-line);
 	--button-glass: oklch(1 0 0 / 0.52);
 	--button-glass-hover: oklch(1 0 0 / 0.68);
 	--primary-pop: oklch(0.965 0.179 112.029);
