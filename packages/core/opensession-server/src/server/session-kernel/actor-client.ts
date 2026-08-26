@@ -181,7 +181,7 @@ export class SessionKernelActorClient {
     )
       throw new Error("Session kernel actor handshake failed");
     (this.store as RemoteStore).openReadMirror();
-    (this.store as RemoteStore).hydrateRunStates();
+    await (this.store as RemoteStore).hydrateRunStates();
   }
 
   async acknowledgeCommand(
@@ -806,11 +806,15 @@ class RemoteStore implements SessionKernelStoreApi {
     // databases. Opening only the legacy central WAL here would return stale
     // defaults for isolated sessions and silently violate single authority.
   }
-  hydrateRunStates(): void {
+  async hydrateRunStates(): Promise<void> {
     this.runStateCache.clear();
-    const states = this.readStore?.runStates() ?? this.call<
+    const states = this.readStore?.runStates() ?? await this.actor.callAsync<
       Array<DurableRunState & { sessionId: string }>
-    >("runStates");
+    >(
+      { t: "store", method: "runStates", args: [] },
+      "runStates",
+      LARGE_STORE_RESPONSES.has("runStates"),
+    );
     for (const state of states) this.runStateCache.set(state.sessionId, state);
   }
   noteRunState(sessionId: string, state: DurableRunState): void {
