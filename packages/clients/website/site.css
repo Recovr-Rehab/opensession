@@ -1000,8 +1000,8 @@ summary:focus-visible {
 	position: relative;
 	min-height: 100svh;
 	padding-inline: clamp(20px, 5vw, 72px);
-	background: #fff;
-	color: #0a0a0a;
+	background: var(--page);
+	color: var(--ink);
 }
 
 .announcement-scroll {
@@ -1024,11 +1024,11 @@ summary:focus-visible {
 	align-items: center;
 	justify-content: center;
 	padding: 0 18px;
-	border: 1px solid #d1d1d1;
+	border: 1px solid var(--line);
 	border-radius: calc(12px * var(--rf));
 	corner-shape: var(--cs);
-	background: #fff;
-	color: #0a0a0a;
+	background: var(--surface);
+	color: var(--ink);
 	font-size: 15px;
 	font-weight: 600;
 	letter-spacing: -0.012em;
@@ -1036,7 +1036,7 @@ summary:focus-visible {
 }
 
 .announcement-home:hover {
-	background: #f7f7f7;
+	background: color-mix(in srgb, var(--surface) 94%, var(--ink));
 }
 
 .announcement-home:active {
@@ -1086,7 +1086,7 @@ summary:focus-visible {
 	max-width: 760px;
 	margin-inline: auto;
 	padding-block: clamp(92px, 11vh, 124px) 128px;
-	color: #787878;
+	color: var(--muted);
 	font-size: 20px;
 	font-weight: 450;
 	letter-spacing: -0.012em;
@@ -1102,7 +1102,7 @@ summary:focus-visible {
 }
 
 .announcement-article h1 {
-	color: #0a0a0a;
+	color: var(--ink);
 }
 
 .announcement-article h1 + * {
@@ -1111,7 +1111,7 @@ summary:focus-visible {
 
 .announcement-article h2 {
 	margin-top: 72px;
-	color: #3f3f3f;
+	color: rgba(var(--ink-rgb), 0.75);
 	font-size: 28px;
 	font-weight: 600;
 	letter-spacing: -0.012em;
@@ -1157,8 +1157,8 @@ summary:focus-visible {
 	max-width: none;
 	border-radius: calc(15px * var(--rf));
 	corner-shape: var(--cs);
-	outline: 1px solid oklch(0 0 0 / 0.1);
-	box-shadow: 0 22px 54px rgba(28, 34, 40, 0.24);
+	outline: 1px solid rgba(var(--ink-rgb), 0.1);
+	box-shadow: 0 22px 54px var(--window-shadow);
 }
 
 .announcement-feature-collaboration img {
