@@ -11,6 +11,7 @@ import {
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import type { AgentOperationAuthorizedQuery } from "./authorized-query";
 import type {
   AgentOperationIdentity,
   AgentOperationIndeterminateReason,
@@ -75,6 +76,27 @@ const identity = (
   adapterVersion: "1.0",
   ...overrides,
 });
+const authorizedQuery = (
+  source: AgentOperationIdentity = identity(),
+  overrides: Partial<AgentOperationAuthorizedQuery> = {},
+): AgentOperationAuthorizedQuery =>
+  ({
+    mode: "exact",
+    operationId: source.operationId,
+    kind: source.kind,
+    fence: source.fence,
+    descriptorDigest: source.descriptorDigest,
+    payloadDigest: source.payloadDigest,
+    authority: {
+      planHash: source.planHash,
+      authorityHash: source.authorityHash,
+      supervisorEpoch: source.supervisorEpoch,
+      hostId: source.hostId,
+      hostGeneration: source.hostGeneration,
+      hostIncarnation: source.hostIncarnation,
+    },
+    ...overrides,
+  }) as AgentOperationAuthorizedQuery;
 const transcriptRefs = [
   {
     appendId: "append-1",
@@ -139,6 +161,186 @@ describe("SQLite Agent operation ledger", () => {
       terminal.receipt,
     );
     expect(await ledger.scanActive()).toEqual([]);
+    await ledger.close();
+  });
+
+  test("queries active and terminal receipts across reopen without dispatch grant or policy state", async () => {
+    const dbPath = path();
+    const exact = identity();
+    const query = authorizedQuery(exact);
+    let ledger = new SQLiteAgentOperationLedger({ dbPath });
+    const prepared = (await ledger.claimPrepared(exact, 1)).record;
+    expect(await ledger.queryAuthorized(query)).toEqual(prepared);
+    await ledger.markExecuting(exact, 2);
+    await ledger.close();
+
+    ledger = new SQLiteAgentOperationLedger({ dbPath });
+    expect((await ledger.queryAuthorized(query))?.receipt.state).toBe(
+      "executing",
+    );
+    const terminal = await ledger.settle(exact, settlement);
+    await ledger.close();
+
+    ledger = new SQLiteAgentOperationLedger({ dbPath });
+    expect(await ledger.queryAuthorized(query)).toEqual(terminal);
+    expect(JSON.stringify(query)).not.toMatch(/grant|policy/i);
+    await ledger.close();
+  });
+
+  test("returns no authorized receipt for every identity or authority crossover with zero mutation", async () => {
+    const dbPath = path();
+    const exact = identity();
+    const ledger = new SQLiteAgentOperationLedger({ dbPath });
+    const original = (await ledger.claimPrepared(exact, 1)).record;
+    const base = authorizedQuery(exact);
+    const alternateMcp = identity({
+      operationId: exact.operationId,
+      kind: "mcp",
+      toolUseEntryId: "entry-1",
+      descriptorDigest:
+        "sha256:436fa9871b12e7650a5df3675f2683c79d080d64dcdd81a7632cb1dc9dc0eb1c",
+      descriptor: {
+        version: 1,
+        kind: "mcp",
+        toolUseEntryId: "entry-1",
+        toolUseId: "use-1",
+        server: "server-1",
+        tool: "tool-1",
+        argumentsDigest: d("9"),
+        adapterRequestVersion: "v1",
+      },
+    });
+    const mismatches: AgentOperationAuthorizedQuery[] = [
+      authorizedQuery(exact, { operationId: "operation-2" }),
+      authorizedQuery(exact, {
+        fence: { ...exact.fence, sessionId: "session-2" },
+      }),
+      authorizedQuery(exact, { fence: { ...exact.fence, runId: "run-2" } }),
+      authorizedQuery(exact, {
+        fence: { ...exact.fence, turnId: "turn-2" },
+      }),
+      authorizedQuery(exact, {
+        fence: { ...exact.fence, generation: 2 },
+      }),
+      authorizedQuery(exact, { kind: alternateMcp.kind }),
+      authorizedQuery(exact, { descriptorDigest: d("1") }),
+      authorizedQuery(exact, { payloadDigest: d("2") }),
+      authorizedQuery(exact, {
+        authority: { ...base.authority, planHash: d("3") },
+      }),
+      authorizedQuery(exact, {
+        authority: { ...base.authority, authorityHash: d("4") },
+      }),
+      authorizedQuery(exact, {
+        authority: { ...base.authority, supervisorEpoch: 3 },
+      }),
+      authorizedQuery(exact, {
+        authority: { ...base.authority, hostId: "host-2" },
+      }),
+      authorizedQuery(exact, {
+        authority: { ...base.authority, hostGeneration: 1 },
+      }),
+      authorizedQuery(exact, {
+        authority: {
+          ...base.authority,
+          hostIncarnation: "incarnation-stale",
+        },
+      }),
+    ];
+    for (const mismatch of mismatches)
+      expect(await ledger.queryAuthorized(mismatch)).toBeUndefined();
+
+    const inspection = new Database(dbPath, { readonly: true });
+    expect(
+      inspection
+        .query<{ quarantine_reason: string | null }, []>(
+          "SELECT quarantine_reason FROM agent_operation_receipts",
+        )
+        .get()!.quarantine_reason,
+    ).toBeNull();
+    inspection.close();
+    expect(await ledger.queryAuthorized(base)).toEqual(original);
+    await ledger.close();
+  });
+
+  test("allows payload omission only for explicit recovery without weakening other bindings", async () => {
+    const dbPath = path();
+    const exact = identity();
+    let ledger = new SQLiteAgentOperationLedger({ dbPath });
+    await ledger.claimPrepared(exact, 1);
+    const { payloadDigest: _payload, ...recoveryBase } = authorizedQuery(exact);
+    const recovery = { ...recoveryBase, mode: "recovery" as const };
+    expect((await ledger.queryAuthorized(recovery))?.operationId).toBe(
+      exact.operationId,
+    );
+    await expect(
+      ledger.queryAuthorized({ ...recoveryBase, mode: "exact" } as never),
+    ).rejects.toThrow("requires payload digest");
+    expect(
+      await ledger.queryAuthorized({
+        ...recovery,
+        fence: { ...recovery.fence, generation: 2 },
+      }),
+    ).toBeUndefined();
+    expect(
+      await ledger.queryAuthorized({
+        ...recovery,
+        descriptorDigest: d("8"),
+      }),
+    ).toBeUndefined();
+    expect(
+      await ledger.queryAuthorized({
+        ...recovery,
+        payloadDigest: d("7"),
+      }),
+    ).toBeUndefined();
+    expect(
+      await ledger.queryAuthorized({
+        ...recovery,
+        authority: { ...recovery.authority, hostGeneration: 1 },
+      }),
+    ).toBeUndefined();
+    await ledger.markExecuting(exact, 2);
+    const terminal = await ledger.settle(exact, settlement);
+    await ledger.close();
+    ledger = new SQLiteAgentOperationLedger({ dbPath });
+    expect(await ledger.queryAuthorized(recovery)).toEqual(terminal);
+    await ledger.close();
+  });
+
+  test("strictly rejects prototypes, accessors and diagnostic secrets before reading", async () => {
+    const dbPath = path();
+    const exact = identity();
+    const ledger = new SQLiteAgentOperationLedger({ dbPath });
+    await ledger.claimPrepared(exact, 1);
+    const base = authorizedQuery(exact);
+    let getterCalls = 0;
+    const accessor = { ...base } as Record<string, unknown>;
+    Object.defineProperty(accessor, "operationId", {
+      enumerable: true,
+      get() {
+        getterCalls++;
+        return exact.operationId;
+      },
+    });
+    await expect(ledger.queryAuthorized(accessor as never)).rejects.toThrow(
+      "invalid authorized Agent operation query",
+    );
+    expect(getterCalls).toBe(0);
+
+    const inherited = Object.assign(Object.create({ leaked: true }), base);
+    await expect(ledger.queryAuthorized(inherited)).rejects.toThrow(
+      "invalid authorized Agent operation query",
+    );
+    const secret = { ...base, bearerGrant: "diagnostic-secret-value" };
+    let message = "";
+    try {
+      await ledger.queryAuthorized(secret as never);
+    } catch (error) {
+      message = String(error);
+    }
+    expect(message).not.toContain("diagnostic-secret-value");
+    expect(await ledger.queryAuthorized(base)).toBeDefined();
     await ledger.close();
   });
 
@@ -642,6 +844,21 @@ describe("SQLite Agent operation ledger", () => {
     ledger = new SQLiteAgentOperationLedger({ dbPath: tampered });
     await expect(ledger.scanActive()).rejects.toThrow(
       "corrupt Agent operation ledger row",
+    );
+    await ledger.close();
+
+    const authorizedPath = path();
+    ledger = new SQLiteAgentOperationLedger({ dbPath: authorizedPath });
+    await ledger.claimPrepared(identity(), 1);
+    await ledger.close();
+    const authorizedTamper = new Database(authorizedPath);
+    authorizedTamper
+      .query("UPDATE agent_operation_receipts SET plan_hash=?")
+      .run(d("9"));
+    authorizedTamper.close();
+    ledger = new SQLiteAgentOperationLedger({ dbPath: authorizedPath });
+    await expect(ledger.queryAuthorized(authorizedQuery())).rejects.toThrow(
+      "tampered Agent operation ledger receipt",
     );
     await ledger.close();
 

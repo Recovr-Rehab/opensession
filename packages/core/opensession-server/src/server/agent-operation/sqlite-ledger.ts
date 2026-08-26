@@ -19,6 +19,10 @@ import {
   type AgentOperationReceiptV1,
 } from "@tellahq/opensession-protocol/agent-operation";
 import {
+  decodeAgentOperationAuthorizedQuery,
+  type AgentOperationAuthorizedQuery,
+} from "./authorized-query";
+import {
   AgentOperationConflictError,
   AgentOperationLedgerFullError,
   AgentOperationNotFoundError,
@@ -376,6 +380,22 @@ export class SQLiteAgentOperationLedger implements AgentOperationLedger {
     }
     return record;
   }
+  async queryAuthorized(
+    queryInput: AgentOperationAuthorizedQuery,
+  ): Promise<AgentOperationRecord | undefined> {
+    this.#open();
+    // Snapshot strict data properties before touching SQLite. This rejects
+    // accessors, Proxies with inconsistent descriptors and inherited fields.
+    const query = decodeAgentOperationAuthorizedQuery(queryInput);
+    const row = this.#select(query.fence.sessionId, query.operationId);
+    if (!row) return undefined;
+    // Decode and cross-check the complete durable row before authorization so
+    // corruption never becomes a partial or requester-dependent read.
+    const record = decodeRow(row, this.#maxRowBytes);
+    if (record.quarantineReason || !matchesAuthorizedQuery(record, query))
+      return undefined;
+    return structuredClone(record);
+  }
   async scanActive(): Promise<AgentOperationRecord[]> {
     this.#open();
     return (
@@ -666,6 +686,28 @@ function canonicalDescriptorJson(identity: AgentOperationIdentity): string {
       "descriptor digest does not match canonical descriptor",
     );
   return new TextDecoder().decode(bytes);
+}
+function matchesAuthorizedQuery(
+  record: AgentOperationRecord,
+  query: AgentOperationAuthorizedQuery,
+): boolean {
+  return (
+    record.operationId === query.operationId &&
+    record.kind === query.kind &&
+    record.fence.sessionId === query.fence.sessionId &&
+    record.fence.runId === query.fence.runId &&
+    record.fence.turnId === query.fence.turnId &&
+    record.fence.generation === query.fence.generation &&
+    record.descriptorDigest === query.descriptorDigest &&
+    (query.payloadDigest === undefined ||
+      record.payloadDigest === query.payloadDigest) &&
+    record.planHash === query.authority.planHash &&
+    record.authorityHash === query.authority.authorityHash &&
+    record.supervisorEpoch === query.authority.supervisorEpoch &&
+    record.hostId === query.authority.hostId &&
+    record.hostGeneration === query.authority.hostGeneration &&
+    record.hostIncarnation === query.authority.hostIncarnation
+  );
 }
 function sameIdentity(
   a: AgentOperationIdentity,

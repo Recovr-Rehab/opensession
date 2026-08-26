@@ -12,6 +12,7 @@ import type {
   AgentTranscriptReceiptRefV1,
 } from "@tellahq/opensession-protocol/agent-operation";
 import type { AgentTurnFence } from "@tellahq/opensession-protocol/agent-host";
+import type { AgentOperationAuthorizedQuery } from "./authorized-query";
 
 export interface AgentOperationIdentity {
   operationId: string;
@@ -89,6 +90,13 @@ export interface AgentOperationLedger {
   /** Both the primary key and every expected identity field are required. */
   getExact(
     identity: AgentOperationIdentity,
+  ): Promise<AgentOperationRecord | undefined>;
+  /**
+   * Reads a durable receipt using freshly verified supervision authority.
+   * Authorization mismatch is indistinguishable from absence and never mutates.
+   */
+  queryAuthorized(
+    query: AgentOperationAuthorizedQuery,
   ): Promise<AgentOperationRecord | undefined>;
   scanActive(): Promise<AgentOperationRecord[]>;
   retireSession(sessionId: string): Promise<number>;
