@@ -409,7 +409,7 @@ setSaving(false);
 				{onboarding && (
 					<div className="flex items-center justify-between gap-4 phone:items-start">
 						<div className="min-w-0 flex-1">
-							<div className="text-item-title font-medium text-fg">Sign-in method</div>
+							<div className="text-dialog-title font-medium text-fg">Sign-in method</div>
 							<div className="mt-0.5 text-supporting text-dim">
 								Choose whether teammates sign in with GitHub.
 							</div>
@@ -496,7 +496,12 @@ setSaving(false);
 								onboarding && "self-center",
 							)}
 						>
-							<div className="text-item-title font-semibold text-fg">
+							<div
+								className={cn(
+									"font-semibold text-fg",
+									onboarding ? "text-dialog-title" : "text-item-title",
+								)}
+							>
 								{onboarding ? "GitHub" : "Authentication"}
 							</div>
 							<StateChip tone={state.tone} label={state.label} />
@@ -556,7 +561,7 @@ setSaving(false);
 				{onboarding && (
 					<div className="mt-3 grid grid-cols-2 items-start gap-3 phone:grid-cols-1">
 						<SettingsSection className="flex flex-col gap-3">
-							<div className="text-item-title font-semibold text-fg">How to connect</div>
+							<div className="text-dialog-title font-semibold text-fg">How to connect</div>
 							<SetupSteps steps={GITHUB_ONBOARDING_STEPS} />
 							<Button
 								variant="primary"
