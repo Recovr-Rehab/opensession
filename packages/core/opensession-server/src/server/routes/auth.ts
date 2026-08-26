@@ -14,6 +14,7 @@
  */
 
 import { organizationName } from "../config";
+import { organizationIconRevision } from "../organization-settings";
 import type { RouteContext } from "./context";
 import {
   createWebSession,
@@ -53,6 +54,11 @@ export async function handleAuthRoutes(
 			!identity.automation &&
 			githubReconnectRequired(identity.login);
 		const signedIn = !!identity && !reconnect;
+		// The mark rides along with the name: the gate card shows the
+		// organization's own icon when one is configured. The image itself is a
+		// static asset, already served pre-auth (page loads stay open so the
+		// sign-in screen can render); only the revisioned URL needed a way out.
+		const iconRevision = organizationIconRevision();
 		return Response.json({
 			required: webAuthRequired(),
 			authenticated: signedIn,
@@ -60,6 +66,10 @@ export async function handleAuthRoutes(
 			// it names the server it belongs to from here — every other source of
 			// the organization name sits behind the gate this response unlocks.
 			organizationName: organizationName(),
+			organizationIconUrl:
+				iconRevision === null
+					? null
+					: `${ctx.publicPrefix}/organization-icon.png?v=${iconRevision}`,
 			// When web auth isn't required (a single-user install), there is no
 			// identity to sign in as, but that user administers the workspace —
 			// workspaceAdminAuthorized() says as much. Report it so the admin-only
