@@ -44,11 +44,12 @@ public port. The free tier covers a small team.
 
 ### 1. Install it on the box
 
-For a fresh Open Session install on Linux, pass `--tailscale` to the downloaded
-script after `bash -s --`:
+For a fresh Open Session install on Linux, install Tailscale together with
+Caddy and the lego certificate helper. The latter two prepare the box for the
+private HTTPS and friendly-domain options below:
 
 ```sh
-curl -fsSL https://raw.githubusercontent.com/tellahq/opensession/main/install.sh | bash -s -- --tailscale
+curl -fsSL https://raw.githubusercontent.com/tellahq/opensession/main/install.sh | bash -s -- --tailscale --caddy
 ```
 
 The Open Session installer only installs Tailscale automatically when
@@ -78,7 +79,7 @@ unattended fresh install, it can join with a Tailscale [auth
 key](https://tailscale.com/kb/1085/auth-keys):
 
 ```sh
-curl -fsSL https://raw.githubusercontent.com/tellahq/opensession/main/install.sh | TS_AUTHKEY=tskey-auth-... bash -s -- --tailscale
+curl -fsSL https://raw.githubusercontent.com/tellahq/opensession/main/install.sh | TS_AUTHKEY=tskey-auth-... bash -s -- --tailscale --caddy
 ```
 
 The environment variable belongs before `bash`, not before `curl`, so the

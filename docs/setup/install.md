@@ -24,11 +24,12 @@ curl -fsSL https://raw.githubusercontent.com/tellahq/opensession/main/install.sh
 claude setup-token     # on your Max login; copy the sk-ant-… it prints
 ```
 
-Need access from other devices? Pass `--tailscale` to the downloaded script
-like this:
+Need access from other devices? The recommended remote-access install adds
+Tailscale plus Caddy and the lego certificate helper, which prepare the box for
+private HTTPS and friendly custom domains:
 
 ```sh
-curl -fsSL https://raw.githubusercontent.com/tellahq/opensession/main/install.sh | bash -s -- --tailscale
+curl -fsSL https://raw.githubusercontent.com/tellahq/opensession/main/install.sh | bash -s -- --tailscale --caddy
 ```
 
 The `bash -s --` separator is required: it tells Bash to read the script from
@@ -146,9 +147,9 @@ Because this command pipes the installer into Bash, put installer flags after
 `bash -s --`:
 
 ```sh
-curl -fsSL https://raw.githubusercontent.com/tellahq/opensession/main/install.sh | bash -s -- --tailscale
+curl -fsSL https://raw.githubusercontent.com/tellahq/opensession/main/install.sh | bash -s -- --tailscale --caddy
 # Multiple flags work too:
-curl -fsSL https://raw.githubusercontent.com/tellahq/opensession/main/install.sh | bash -s -- --tailscale --advanced
+curl -fsSL https://raw.githubusercontent.com/tellahq/opensession/main/install.sh | bash -s -- --tailscale --caddy --advanced
 ```
 
 Useful flags: `--dir <path>` to install elsewhere, `--channel <ref>` to track
@@ -172,11 +173,12 @@ needs `codex`.
 Authentication is opt-in (see the [trust
 model](README.md#trust-model-read-this)). A default install trusts everyone who
 can reach it, so the bind address is the access control. It binds `127.0.0.1`
-and needs no network software. To have the Open Session installer add the
-Tailscale client on Linux, pass `--tailscale` after `bash -s --`:
+and needs no network software. For remote access, have the Open Session
+installer add the Tailscale client plus Caddy and lego for private HTTPS and
+friendly custom domains:
 
 ```sh
-curl -fsSL https://raw.githubusercontent.com/tellahq/opensession/main/install.sh | bash -s -- --tailscale
+curl -fsSL https://raw.githubusercontent.com/tellahq/opensession/main/install.sh | bash -s -- --tailscale --caddy
 ```
 
 The installer uses Tailscale's Linux installer when passwordless `sudo` is
@@ -202,7 +204,7 @@ key](https://tailscale.com/kb/1085/auth-keys) and pass it to **Bash**, not to
 the `curl` process on the other side of the pipe:
 
 ```sh
-curl -fsSL https://raw.githubusercontent.com/tellahq/opensession/main/install.sh | TS_AUTHKEY=tskey-auth-... bash -s -- --tailscale
+curl -fsSL https://raw.githubusercontent.com/tellahq/opensession/main/install.sh | TS_AUTHKEY=tskey-auth-... bash -s -- --tailscale --caddy
 ```
 
 #### Add Tailscale after a normal install
