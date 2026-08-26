@@ -1065,7 +1065,10 @@ export function ProviderAccountsSection({
 	return (
 		<>
 			<SettingsGroupLabel
-				className="phone:[&>span]:w-full phone:[&>div]:w-full phone:[&>div]:flex-wrap"
+				className={cn(
+					"phone:[&>span]:w-full phone:[&>div]:w-full phone:[&>div]:flex-wrap",
+					onboarding && "px-6",
+				)}
 				actions={
 				<>
 					{!onboarding && (
@@ -1084,9 +1087,9 @@ export function ProviderAccountsSection({
 						<Menu.Trigger
 							render={
 								<Button
-									size="sm"
+									size={onboarding ? "lg" : "sm"}
 									className="phone:min-h-11"
-									icon={<IconPlus size={16} />}
+									icon={<IconPlus size={onboarding ? 18 : 16} />}
 									caret
 								>
 									Add account
@@ -1155,7 +1158,7 @@ export function ProviderAccountsSection({
 				</Modal.Content>
 			</Modal.Root>
 
-			<SettingCard>
+			<SettingCard className={onboarding ? "p-1" : undefined}>
 				{loading ? (
 					<LoadingState placement="row">Loading accounts…</LoadingState>
 				) : empty ? (
@@ -1194,7 +1197,7 @@ export function ProviderAccountsSection({
 					</>
 				)}
 			</SettingCard>
-			<SettingsHint>
+			<SettingsHint className={onboarding ? "mt-4 px-6" : undefined}>
 				Runs rotate through shared accounts for the selected model. Personal accounts
 				are used only for their owner's runs.
 			</SettingsHint>

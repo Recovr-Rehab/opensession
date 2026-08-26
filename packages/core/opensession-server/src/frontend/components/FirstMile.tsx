@@ -520,12 +520,12 @@ export function FirstMile({ onDone }: { onDone: () => Promise<void> }) {
 									    artwork. Keep the app's settings layout, but use that material here. */}
 									<div
 										className={cn(
-											"w-full pb-8 [&_[data-setting-title]]:text-dialog-title [&_[data-setting-title]]:phone:text-body [&_[data-settings-hint]]:text-dim",
+											"w-full pb-8 [&_[data-setting-title]]:text-dialog-title [&_[data-setting-title]]:phone:text-body [&_[data-settings-group-label]]:text-fg [&_[data-settings-hint]]:text-fg",
 											// The final review uses the full canvas for larger tiles; forms stay focused.
 											step.id === "ready" ? "max-w-[960px]" : "max-w-[780px]",
 											// Match opensession.com's card glass: translucent paper, a quiet
 											// hairline, and the same 14px blur with restrained saturation.
-											"[&_.bg-settings-plate]:rounded-3xl [&_.bg-settings-plate]:border-divider-soft [&_.bg-settings-plate]:bg-[color-mix(in_srgb,var(--popup-surface)_84%,transparent)] [&_.bg-settings-plate]:shadow-[0_18px_46px_-36px_color-mix(in_srgb,var(--blue)_48%,transparent)] [&_.bg-settings-plate]:[backdrop-filter:blur(14px)_saturate(1.08)]",
+											"[&_.bg-settings-plate]:rounded-3xl [&_.bg-settings-plate]:border-divider-soft [&_.bg-settings-plate]:bg-[color-mix(in_srgb,var(--popup-surface)_90%,transparent)] [&_.bg-settings-plate]:shadow-[0_18px_46px_-36px_color-mix(in_srgb,var(--blue)_48%,transparent)] [&_.bg-settings-plate]:[backdrop-filter:blur(14px)_saturate(1.08)]",
 											// First-run fields use the large field step.
 											"[&_input]:h-9 [&_input]:min-h-9 [&_input]:px-3 [&_input]:text-base [&_select]:min-h-9 [&_textarea]:min-h-9",
 										)}
