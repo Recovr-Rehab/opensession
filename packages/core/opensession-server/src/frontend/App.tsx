@@ -5625,7 +5625,10 @@ console.error("Rename failed:", e);
 									</span>
 									{/* Filled by the page, if it has controls to put here. */}
 									<TopBarActions
-										className={DETAIL_TOPBAR_ACTIONS}
+										className={cn(
+											DETAIL_TOPBAR_ACTIONS,
+											route.view === "prs" && "ml-4 flex-1 pl-0",
+										)}
 										ref={setTopbarActionsEl}
 									/>
 								</TopBarTitle>
