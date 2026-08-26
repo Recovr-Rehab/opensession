@@ -1543,7 +1543,9 @@ summary:focus-visible {
 .download-card-preview-phone img {
 	width: auto;
 	max-width: none;
-	height: 115%;
+	height: 125%;
+	border-radius: calc(18px * var(--rf));
+	corner-shape: var(--cs);
 	filter: drop-shadow(0 14px 30px rgba(16, 18, 22, 0.22));
 	object-fit: contain;
 	object-position: top;
