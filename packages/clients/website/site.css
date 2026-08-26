@@ -1450,6 +1450,29 @@ dialog::backdrop {
 	width: min(760px, calc(100% - 32px));
 }
 
+.setup-guide:has(.download-cards) .pwa-guide-panel,
+.setup-guide:has(.download-steps) .pwa-guide-panel {
+	padding: 36px;
+}
+
+.setup-guide:has(.download-cards) .pwa-guide-close,
+.setup-guide:has(.download-steps) .pwa-guide-close {
+	top: 18px;
+	right: 18px;
+	background: rgba(var(--ink-rgb), 0.055);
+}
+
+.setup-guide:has(.download-cards) .pwa-guide-close:hover,
+.setup-guide:has(.download-steps) .pwa-guide-close:hover {
+	background: rgba(var(--ink-rgb), 0.1);
+}
+
+.setup-guide:has(.download-cards) h2,
+.setup-guide:has(.download-steps) h2 {
+	margin-bottom: 24px;
+	padding-right: 48px;
+}
+
 .download-cards {
 	display: grid;
 	gap: 14px;

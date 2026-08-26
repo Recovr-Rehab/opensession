@@ -213,7 +213,7 @@ function SetupGuide({
 	triggerLabel: string;
 	triggerIcon?: ReactNode;
 	title: string;
-	description: string;
+	description?: string;
 	secondary?: boolean;
 	children: ReactNode;
 }) {
@@ -248,7 +248,7 @@ function SetupGuide({
 						<IconX size={22} />
 					</button>
 					<h2 id={titleId}>{title}</h2>
-					<p>{description}</p>
+					{description && <p>{description}</p>}
 					{children}
 				</div>
 			</dialog>
@@ -368,7 +368,6 @@ function SetupOverview() {
 						triggerLabel="Download apps"
 						triggerIcon={<AppleMark />}
 						title="Download the apps"
-						description="Choose how you want to connect to your Open Session server."
 					>
 						<DownloadAppsCards />
 					</SetupGuide>
