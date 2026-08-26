@@ -109,7 +109,7 @@ describe("session kernel actor service", () => {
       const hello = await helloResponse.json() as { serviceEpoch: string };
       expect(helloResponse.status).toBe(200);
 
-      const responses = await Promise.all(Array.from({ length: 12 }, (_, index) =>
+      const responses = await Promise.all(Array.from({ length: 40 }, (_, index) =>
         call({
           t: "call",
           rpcId: `burst-read-${index}`,
@@ -122,7 +122,29 @@ describe("session kernel actor service", () => {
         }, hello.serviceEpoch)
       ));
       expect(responses.map((response) => response.status)).toEqual(
-        Array.from({ length: 12 }, () => 200),
+        Array.from({ length: 40 }, () => 200),
+      );
+
+      const mutations = await Promise.all(Array.from({ length: 10 }, (_, index) =>
+        call({
+          t: "call",
+          rpcId: `burst-mutation-${index}`,
+          outputBytes: 1024,
+          request: {
+            t: "store",
+            method: "setRunState",
+            args: [{
+              sessionId: "busy-session",
+              state: "idle",
+              since: new Date(0).toISOString(),
+              generation: index,
+              changeSeq: index,
+            }],
+          },
+        }, hello.serviceEpoch)
+      ));
+      expect(mutations.map((response) => response.status).sort()).toEqual(
+        [...Array.from({ length: 9 }, () => 200), 429].sort(),
       );
     } finally {
       isolatedService.stop();

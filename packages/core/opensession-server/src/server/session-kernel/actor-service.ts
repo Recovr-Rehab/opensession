@@ -28,7 +28,7 @@ const DEFAULT_SESSION_WORKERS = 4;
 // Reads have small request bodies and bounded response budgets, so absorb a
 // viewer's hydration burst without also allowing mutation payloads to pile up.
 const MAX_MUTATION_SESSION_TURNS = 8;
-const MAX_READ_SESSION_TURNS = 32;
+const MAX_READ_SESSION_TURNS = 128;
 const MAX_PRIORITY_SESSION_TURNS = 8;
 const MAX_PRIORITY_BURST = 4;
 const MAX_GLOBAL_TURNS = 64;
