@@ -231,7 +231,7 @@ describe("Executor ingress HTTP authentication", () => {
     expect((await upgrade(ingress, multiple)).response?.status).toBe(401);
   });
 
-  test("passes runner identity, bearer, and peer address only to injected tailnet+pair auth", async () => {
+  test("passes exact runner identity, generation, bearer, and socket peer to injected auth", async () => {
     const { ingress, authCalls } = setup();
     expect(
       (await upgrade(ingress, request(), "203.0.113.2")).response?.status,
@@ -243,6 +243,7 @@ describe("Executor ingress HTTP authentication", () => {
     expect(accepted.response).toBeUndefined();
     expect(authCalls.at(-1)).toEqual({
       runnerId: "runner-1",
+      generation: 1,
       token: "secret-token",
       remoteAddress: "100.64.0.1",
     });

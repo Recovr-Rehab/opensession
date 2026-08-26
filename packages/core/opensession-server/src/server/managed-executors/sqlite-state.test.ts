@@ -83,6 +83,52 @@ describe("SqliteExecutorStateStore", () => {
     second.close();
   });
 
+  test("atomically claims one instance only while the generation is connectable", async () => {
+    const store = new SqliteExecutorStateStore(databasePath());
+    const awake = record({
+      resourceId: "resource-1",
+      workspaceId: "workspace-1",
+      resourceGeneration: 1,
+      lifecycle: "awake",
+    });
+    await store.insertIntent(awake);
+    expect(
+      await store.claimConnectableInstance({
+        executorId: "executor-1",
+        generation: 1,
+        instanceId: "instance-1",
+      }),
+    ).toBe(true);
+    expect(
+      await store.claimConnectableInstance({
+        executorId: "executor-1",
+        generation: 1,
+        instanceId: "instance-2",
+      }),
+    ).toBe(false);
+    await store.compareAndSwap("executor-1", 1, {
+      ...awake,
+      instanceGeneration: 2,
+      lifecycle: "preparing",
+      updatedAtMs: 2_000,
+    });
+    expect(
+      await store.claimConnectableInstance({
+        executorId: "executor-1",
+        generation: 1,
+        instanceId: "instance-1",
+      }),
+    ).toBe(false);
+    expect(
+      await store.claimConnectableInstance({
+        executorId: "executor-1",
+        generation: 2,
+        instanceId: "instance-2",
+      }),
+    ).toBe(false);
+    store.close();
+  });
+
   test("distinguishes stale and missing CAS and delete conflicts", async () => {
     const store = new SqliteExecutorStateStore(databasePath());
     await store.insertIntent(record());
@@ -233,11 +279,40 @@ describe("SqliteExecutorStateStore", () => {
     expect(() => new SqliteExecutorStateStore(link)).toThrow();
   });
 
+  test("migrates version 1 state with durable instance claims", async () => {
+    const path = databasePath();
+    new SqliteExecutorStateStore(path).close();
+    const legacy = new Database(path);
+    legacy.exec(`
+      DROP TABLE managed_executor_instance_claims;
+      PRAGMA user_version = 1;
+    `);
+    legacy.close();
+
+    const migrated = new SqliteExecutorStateStore(path);
+    await migrated.insertIntent(
+      record({
+        resourceId: "resource-1",
+        workspaceId: "workspace-1",
+        resourceGeneration: 1,
+        lifecycle: "awake",
+      }),
+    );
+    expect(
+      await migrated.claimConnectableInstance({
+        executorId: "executor-1",
+        generation: 1,
+        instanceId: "instance-1",
+      }),
+    ).toBe(true);
+    migrated.close();
+  });
+
   test("rejects unknown and unversioned schemas", () => {
     const newerPath = databasePath();
     new SqliteExecutorStateStore(newerPath).close();
     const newer = new Database(newerPath);
-    newer.exec("PRAGMA user_version = 2");
+    newer.exec("PRAGMA user_version = 3");
     newer.close();
     expect(() => new SqliteExecutorStateStore(newerPath)).toThrow(
       "unsupported managed Executor schema version",

@@ -55,6 +55,7 @@ export interface ExecutorIngressOptions {
   /** Boot must supply the socket peer address, never a forwarded client header. */
   authenticateRunner: (input: {
     runnerId: string;
+    generation: number;
     token: string;
     remoteAddress?: string;
   }) => ExecutorAuthenticationResult | Promise<ExecutorAuthenticationResult>;
@@ -163,6 +164,7 @@ export class ExecutorIngress {
     if (source === "runner") {
       const result = await this.#options.authenticateRunner({
         runnerId: executorId,
+        generation,
         token,
         remoteAddress,
       });

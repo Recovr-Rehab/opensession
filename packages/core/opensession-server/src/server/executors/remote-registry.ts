@@ -86,6 +86,12 @@ export class RemoteExecutorRegistry {
     return true;
   }
 
+  shutdown(reason: unknown = "remote Executor registry shut down"): void {
+    for (const connection of this.#active.values())
+      connection.disconnect(reason);
+    this.#active.clear();
+  }
+
   get size(): number {
     return this.#active.size;
   }

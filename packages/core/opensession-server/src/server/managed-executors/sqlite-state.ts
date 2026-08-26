@@ -59,7 +59,7 @@ const RECORD_COLUMNS = `
   created_at_ms, updated_at_ms, error
 `;
 
-const SCHEMA_VERSION = 1;
+const SCHEMA_VERSION = 2;
 const RECORD_COLUMN_NAMES = [
   "executor_id",
   "session_id",
@@ -241,6 +241,43 @@ export class SqliteExecutorStateStore implements ExecutorStateStore {
         .run(executorId, expectedGeneration);
     });
     remove.immediate();
+  }
+
+  /** Atomically proves lifecycle connectability and claims one same-generation instance. */
+  async claimConnectableInstance(input: {
+    executorId: string;
+    generation: number;
+    instanceId: string;
+  }): Promise<boolean> {
+    assertIdentity(input.executorId, "executorId");
+    assertGeneration(input.generation, "generation");
+    assertIdentity(input.instanceId, "instanceId");
+    const claim = this.#db.transaction(() => {
+      const record = this.#db
+        .query<{ instance_generation: number; lifecycle: string }, [string]>(
+          "SELECT instance_generation, lifecycle FROM managed_executors WHERE executor_id = ?",
+        )
+        .get(input.executorId);
+      if (
+        !record ||
+        record.instance_generation !== input.generation ||
+        record.lifecycle !== "awake"
+      )
+        return false;
+      const existing = this.#db
+        .query<{ instance_id: string }, [string, number]>(
+          "SELECT instance_id FROM managed_executor_instance_claims WHERE executor_id = ? AND generation = ?",
+        )
+        .get(input.executorId, input.generation);
+      if (existing) return existing.instance_id === input.instanceId;
+      this.#db
+        .query(
+          "INSERT INTO managed_executor_instance_claims (executor_id, generation, instance_id) VALUES (?, ?, ?)",
+        )
+        .run(input.executorId, input.generation, input.instanceId);
+      return true;
+    });
+    return claim.immediate();
   }
 
   async appendAudit(entry: ExecutorAuditEntry): Promise<void> {
@@ -564,7 +601,7 @@ function initializeSchema(db: Database): void {
   const version = db
     .query<{ user_version: number }, []>("PRAGMA user_version")
     .get()?.user_version;
-  if (version !== 0 && version !== SCHEMA_VERSION) {
+  if (version !== 0 && version !== 1 && version !== SCHEMA_VERSION) {
     throw new Error(`unsupported managed Executor schema version: ${version}`);
   }
 
@@ -610,6 +647,33 @@ function initializeSchema(db: Database): void {
         );
         CREATE INDEX managed_executor_audit_executor_idx
           ON managed_executor_force_destroy_audit(executor_id, id);
+        CREATE TABLE managed_executor_instance_claims (
+          executor_id TEXT NOT NULL,
+          generation INTEGER NOT NULL CHECK(generation >= 1),
+          instance_id TEXT NOT NULL,
+          PRIMARY KEY(executor_id, generation),
+          FOREIGN KEY(executor_id) REFERENCES managed_executors(executor_id) ON DELETE CASCADE
+        );
+        PRAGMA user_version = ${SCHEMA_VERSION};
+      `);
+      db.exec("COMMIT;");
+    } catch (error) {
+      db.exec("ROLLBACK;");
+      throw error;
+    }
+  }
+
+  if (version === 1) {
+    db.exec("BEGIN IMMEDIATE;");
+    try {
+      db.exec(`
+        CREATE TABLE managed_executor_instance_claims (
+          executor_id TEXT NOT NULL,
+          generation INTEGER NOT NULL CHECK(generation >= 1),
+          instance_id TEXT NOT NULL,
+          PRIMARY KEY(executor_id, generation),
+          FOREIGN KEY(executor_id) REFERENCES managed_executors(executor_id) ON DELETE CASCADE
+        );
         PRAGMA user_version = ${SCHEMA_VERSION};
       `);
       db.exec("COMMIT;");
@@ -625,6 +689,11 @@ function initializeSchema(db: Database): void {
     "managed_executor_force_destroy_audit",
     AUDIT_COLUMN_NAMES,
   );
+  assertTableColumns(db, "managed_executor_instance_claims", [
+    "executor_id",
+    "generation",
+    "instance_id",
+  ]);
 }
 
 function assertTableColumns(

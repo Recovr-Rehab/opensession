@@ -8,9 +8,11 @@ const MODULES = [
   "packages/core/opensession-server/src/server/managed-executors/provider.ts",
   "packages/core/opensession-server/src/server/managed-executors/registry.ts",
   "packages/core/opensession-server/src/server/managed-executors/state.ts",
+  "packages/core/opensession-server/src/server/executors/runtime.ts",
+  "packages/core/opensession-server/src/server/executors/sqlite-claims.ts",
 ];
 
-test("Managed Executor lifecycle modules are import-inert", async () => {
+test("Executor lifecycle and composition modules are import-inert", async () => {
   const scan = await scanModuleSideEffects(MODULES);
   expect(scan.failed).toEqual([]);
   expect(scan.hits).toEqual([]);

@@ -98,6 +98,12 @@ export class ExecutorGrantAuthority {
     return this.#grants.delete(grant);
   }
 
+  revokeAll(): number {
+    const revoked = this.#grants.size;
+    this.#grants.clear();
+    return revoked;
+  }
+
   revokeGeneration(
     input: Pick<
       ExecutorGrantScope,

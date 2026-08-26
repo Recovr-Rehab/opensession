@@ -85,9 +85,21 @@ export class ExecutorEnrollmentAuthority {
   }
 
   revokeGeneration(executorId: string, generation: number): number {
+    return this.revokeThrough(executorId, generation, generation);
+  }
+
+  revokeThrough(
+    executorId: string,
+    throughGeneration: number,
+    fromGeneration = 1,
+  ): number {
     let revoked = 0;
     for (const [token, scope] of this.#grants) {
-      if (scope.executorId === executorId && scope.generation === generation) {
+      if (
+        scope.executorId === executorId &&
+        scope.generation >= fromGeneration &&
+        scope.generation <= throughGeneration
+      ) {
         this.#grants.delete(token);
         revoked++;
       }
